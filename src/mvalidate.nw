@@ -2,41 +2,96 @@
 
 \section{RTL Validation}
 
+[[mvalidate]] checks that all operators are at widths no larger than
+those supported by the target.  If we detect that an RTL cannot be
+compiled then the value returned from [[validate]] is [[Some s]] where
+[[s]] is a string explaining why the RTL is invalid.  Otherwise the
+result is [[None]].
 <<mvalidate.mli>>=
-val validate : ('a, 'b) Target.t -> Rtl.rtl -> string option
+val mvalidate : ('a, 'b) Target.t -> Rtl.rtl -> string option
 @ 
 
 <<mvalidate.ml>>=
-module RP = Rtl.Private
+module RP   = Rtl.Private
 module Down = Rtl.Dn
 module Up   = Rtl.Up
 @ 
 
-Check that all operators are at widths no larger than those supported
-by the target.
+The exception [[RTLInvalid]] is used internally in this module to
+signal that a RTL cannot be compiled---users never see this.
 <<mvalidate.ml>>=
-exception RTLRejected of string
-let validate t r =
+exception RTLInvalid of string
+@ 
+
+<<mvalidate.ml>>=
+let mvalidate t r =
   let m  = t.Target.machine_env.Target.ops in
+  let remove_bits = function
+    | Types.Bits n -> n
+    | Types.Bool   -> 1
+  in
+  let m = List.map (fun (s, bs) -> (s, List.map remove_bits bs)) m in
   let w  = t.Target.wordsize in
   let ns = t.Target.machine_env.Target.literal in
+  let spaces = t.Target.spaces in
+  let name = t.Target.name in
+  let machine_widths opname =
+    let all = List.find_all (fun (opname',_) -> opname = opname') m in
+    List.map (fun (opname, ws) -> ws) all
+  in
+  let xy_or_z tostr xyz =
+    match List.rev xyz with
+    | []       -> raise Not_found
+    | [z]      -> tostr z
+    | z::yx ->
+        let xy = List.rev (List.map tostr yx) in
+        let xy' = String.concat ", " xy in
+        xy'^" or "^tostr z
+  in
+  let sprintf = Printf.sprintf in
+  let imposs = Impossible.impossible in
+  let reject s = raise (RTLInvalid s) in
+  let reg s n p1 p2 =
+    let space =
+      try List.find (fun x -> x.Space.space = s) spaces
+      with Not_found -> reject (p1 s name)
+    in
+    List.mem n space.Space.widths
+    || reject (p2 s (xy_or_z string_of_int space.Space.widths))
+  in
   let rec loc = function
     | RP.Mem(_,_,n,e,_) -> exp e (* not clear what else to do *)
-    | RP.Reg(_,_,n)     -> List.mem n ns
-    | RP.Var(_,_,n)     -> n <= w
-    | RP.Global(_,_,n)  -> true  (* what to check here? *)
-    | RP.Slice(w,_,l)   -> true  (* what to check here? *)
+    | RP.Reg(s,_,n) as e ->
+        reg s n (sprintf "Space '%c' not found in target '%s'")
+                (sprintf "Space '%c' only supports width %s")
+    | RP.Var(x,_,n) -> n <= w
+      || reject 
+          ("Var "^x^" of "^string_of_int n^" bits should be no more than "
+           ^string_of_int w^" bits")
+    | RP.Global(_,_,n) ->
+        reg 'r' n (fun c s -> imposs "Space 'r' must be available")
+                  (fun c -> sprintf "Globals only available at width %s")
+    | RP.Slice(n,_,l)  -> loc l (* what to check here? *)
   and exp = function
-    | RP.Fetch(l, n) -> loc l && n <= w
+    | RP.Fetch(l, n) -> loc l
     | RP.App((opname, ws), es) ->
-        List.for_all exp es
-          (* && lookup op name, ws <= target list *)
+        (* like the widener, we give up on operations not in M *)
+        let op_possible =
+          try
+            let wss' = machine_widths opname in
+            List.exists (fun ws' -> List.for_all2 (fun w w' -> w <= w') ws ws')
+              wss'
+          with Not_found -> true
+        in
+        if op_possible then List.for_all exp es
+        else reject (sprintf "No acceptable widths for %%%s on target '%s'"
+                       opname name)
     | RP.Const c -> const c
   and const = function
     | RP.Link(_,_,n) -> List.exists (fun w -> n <= w) ns
     | RP.Diff(x,y)   -> const x && const y
     | RP.Late(_,n)   -> List.exists (fun w -> n <= w) ns
-    | RP.Bits b      -> Bits.width b <= w
+    | RP.Bits b      -> List.exists (fun w -> Bits.width b <= w) ns
     | RP.Bool _      -> true
   in
   let check (g, eff) =
@@ -49,7 +104,7 @@ let validate t r =
   in
   let RP.Rtl es = Down.rtl r in
   try
-    (List.for_all check es; None)
-  with RTLRejected s -> Some s
+    if List.for_all check es then None
+    else Some "No explanation"
+  with RTLInvalid s -> Some s
 @ 
-
