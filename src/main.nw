@@ -7,11 +7,9 @@ catching of exceptions, and providing the exit code.
 
 The [[Main]] module opens the modules is most frequently uses:
 
-
 <<main.ml>>=
 open Pc                         (* parser combinators for cmd line *)
 open Error			(* error handling *)
-open Cmdline                    (* cmd line abstract syntax *)
 
 @ The module [[Arg]] for command line processing from the standard
 library enforces an imperative programming style and can not be used
@@ -21,8 +19,9 @@ structure of the command line in an abstract syntax tree which then is
 processed. 
 
 The data type [[cmd]] describes the abstract syntax of the command
-line; it is defined in module [[Cmdline]]. Currently the structure is
-very simple:  the command line can ask the program for different actions:
+line; it is defined in module [[Cmdline]].  Currently the structure is
+very simple:  the command line can ask the program for different
+actions:
 
 \begin{enumerate}
 \item Display a usage information.
@@ -33,11 +32,11 @@ very simple:  the command line can ask the program for different actions:
 \end{enumerate}
 
 <<cmdline.mli>>=
-type cmd =        | CMDhelp                                               
-                  | CMDversion                                  
-                  | CMDlex      of string
-                  | CMDasdl     of string
-                  | CMDpp       of string * int
+type cmd =        | Help                                               
+                  | Version                                  
+                  | Lex      of string
+                  | Asdl     of string
+                  | Pp       of string * int
 
 @ The concrete syntax of the command line is specified through the
 parser combinators that recognizes them. The [[Pc]] module defines
@@ -53,19 +52,19 @@ a flag [[-c]] is passed to a function that injects the string into a
 
 let default_width = 72 
 
-let cmd_help      = literal "-help"         --> return CMDhelp
-let cmd_version   = literal "-version"      --> return CMDversion
-let cmd_lex       = literal "-lex" **> any  --> fun s -> CMDlex(s) 
-let cmd_asdl      = literal "-asdl" **> any --> fun s -> CMDasdl(s) 
-let cmd_default   = any                     --> fun s -> CMDpp(s,default_width)
+let cmd_help      = literal "-help"         --> return Cmdline.Help
+let cmd_version   = literal "-version"      --> return Cmdline.Version
+let cmd_lex       = literal "-lex" **> any  --> fun s -> Cmdline.Lex(s) 
+let cmd_asdl      = literal "-asdl" **> any --> fun s -> Cmdline.Asdl(s) 
+let cmd_default   = any                     --> fun s -> Cmdline.Pp(s,default_width)
 
 let cmd_width     = literal "-w" **> any    --> fun s -> 
                     (try int_of_string s with Failure(_) -> default_width)
                     
 let cmd_pp        = (literal "-pp" **> cmd_width *** any --> fun (width,file) -> 
-                    CMDpp(file,width)) 
+                    Cmdline.Pp(file,width)) 
                 ||| literal "-pp" **> any --> fun (file) -> 
-                    CMDpp(file,default_width)
+                    Cmdline.Pp(file,default_width)
                     
 
 @ Each parser recognizes a complete command line.  As an abbreviation
@@ -141,7 +140,7 @@ to stdout.
 
 <<main.ml>>= 
 
-let parse file =
+let asdl file =
     let fd          = try open_in file 
                       with Sys_error(msg) -> fatalExn msg               in
     let finally ()  = close_in fd                                       in
@@ -216,11 +215,11 @@ let main () =
                          exit 1
     in try
             ( match cmd with
-            | CMDhelp               -> usage this
-	    | CMDversion	    -> version ()
-            | CMDlex(file)          -> lex file 
-            | CMDasdl(file)         -> parse file 
-            | CMDpp(file,width)     -> pp file width
+            | Cmdline.Help          -> usage this
+	    | Cmdline.Version	    -> version ()
+            | Cmdline.Lex(file)     -> lex file 
+            | Cmdline.Asdl(file)    -> asdl file 
+            | Cmdline.Pp(file,width)-> pp file width
             );
             exit 0
        with 
