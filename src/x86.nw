@@ -292,6 +292,7 @@ We insist on using most operators at their natural 32-bit width, and
 this function is the forcing function that makes it so.
 <<x86 postexpander>>=
 let at32 = function
+  | "lobits", [32; 32] -> "lobits"
   | opr, [32] -> opr
   | opr, [n]  -> Impossible.unimp ("%" ^ opr ^ string_of_int n ^ "(...)")
   | opr, ws   ->
@@ -314,7 +315,7 @@ well as the expression representation of the register pair.
 I have tried to make [[regpairv]] fairly general; we won't know if this is a success
 until we try it with other versions of the x86 divide instruction.
 <<x86 postexpander>>=
-| "div" ->
+| ("div" | "quot" | "rem") as opname ->  (* cheat until all can get it right *)
     let regpairv w hreg lreg =
       let rval      r = R.fetch (temploc r) w in
       let sxreg     l = R.app (R.opr "sx" [w; w*2]) [rval l] in
@@ -334,7 +335,8 @@ until we try it with other versions of the x86 divide instruction.
     let div = exp_with_flags divflags eax_reg
                              (R.app (R.opr "div" [32;32]) [regpair; tempval y])
                              regpair (tempval y) 32 in
-    move_rtl x eax_reg :: div :: (is @ (move_rtl eax_reg x :: move))
+    let answer = if opname = "rem" then edx_reg else eax_reg in
+    move_rtl x answer :: div :: is @ move_rtl eax_reg x :: move
 @ 
 I don't know why it's safe to clobber ECX here.
 <<x86 postexpander>>=
@@ -385,6 +387,7 @@ let inplace op x move = match at32 op with
 | "neg" -> R.par [R.store (temploc x) (R.app (Up.opr op) [tempval x]) 32;
                   negflags (tempval x) 32]
            :: move
+| "lobits" -> move  (* lobits32 is identity *)
 | _ ->
     R.store (temploc x) (R.app (Up.opr op) [tempval x]) (tempwidth x) :: move
 

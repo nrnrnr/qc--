@@ -159,7 +159,7 @@ let app o w args = match o with
     |  "i2f" 		-> default o w args
     |  "le" 		-> default o w args
     |  "leu" 		-> default o w args
-    |  "lobits" 	-> default o w args
+    |  "lobits" 	-> lobits w args
     |  "lt" 		-> lt w args
     |  "ltu" 		-> ltu w args
     |  "minf" 		-> default o w args
@@ -364,12 +364,18 @@ let sub w = function
 let sx w args   = match (w,args) with
     | [i;j],[RP.Const(RP.Bits(x))]
                 -> const (Bits.Ops.sx j x)
+    | [i;j], [x] when i = j -> x
     | _         -> default "sx" w args
 
 let zx w args   = match (w,args) with
     | [i;j],[RP.Const(RP.Bits(x))]
                 -> const (Bits.Ops.zx j x)
+    | [i;j], [x] when i = j -> x
     | _         -> default "zx" w args
+
+let lobits w args   = match (w,args) with
+    | [i;j], [x] when i = j -> x
+    | _         -> default "lobits" w args
 
 let ltu w = function 
     | [RP.Const(RP.Bits(x)); RP.Const(RP.Bits(y))] 

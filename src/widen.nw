@@ -6,6 +6,10 @@ A simple widener for floating-point values.
 Parameter [[rm]] contains the hardware rounding modes.
 <<widen.mli>>=
 val float : rm:Rtl.exp -> int list -> Rtl.rtl -> Rtl.rtl
+  (* widen all floating-point operations *)
+
+val store_const : int -> Rtl.rtl -> Rtl.rtl
+  (* l := k   =>   l := lobits(k') *)
 @ 
 <<widen.ml>>=
 module R = Rtl
@@ -26,7 +30,7 @@ let float ~rm goodwidths =
   let bestwidth w =
     try List.find (fun w' -> w' >= w) goodwidths
     with Not_found -> Unsupported.widen_float w in
-  <<widening>>
+  <<floating-point widening>>
   rtl
 @ 
 I'm a little shaky what is the postcondition regarding float-to-float
@@ -39,13 +43,16 @@ There may be other errors lurking as well.
 
 Anyway [[f2f']] implements a float-to-float conversion, which may or
 may not combine with a conversion underneath it.
-<<widening>>=
+<<floating-point widening>>=
 let f2f' combine srcw dstw e =
   if srcw = dstw then
     e
   else
     match e with 
     | RP.App(("f2f", [from; to']), [e; rm]) when combine ->
+        assert (to' = srcw);
+        RP.App(("f2f", [from; dstw]), [e; rm])
+    | RP.App(("f2f_bogus", [from; to']), [e]) when combine ->
         assert (to' = srcw);
         RP.App(("f2f", [from; dstw]), [e; rm])
     | e -> 
@@ -56,7 +63,7 @@ let force_f2f = f2f' false in
 Function [[convert]] takes an expression that is known to produce a
 floating-point value, and it changes the width of the expression,
 while rewriting all subexpressions.
-<<widening>>=
+<<floating-point widening>>=
 let rec convert ~(from:int) ~(to':int) e =
   let cvt = convert ~from ~to' in
   match e with
@@ -64,7 +71,9 @@ let rec convert ~(from:int) ~(to':int) e =
       f2f from to' e
   | RP.Fetch(l, w) ->
       f2f from to' (RP.Fetch(loc l, w))
-  | RP.App (("f2f", [f; t]), [x; rm]) ->
+  | RP.App (("f2f" , [f; t]), [x; rm]) ->
+      convert ~from:f ~to' x
+  | RP.App (("f2f_bogus" , [f; t]), [x]) ->
       convert ~from:f ~to' x
   | RP.App (("i2f", [f; t]), [x; rm]) ->
       RP.App (("i2f", [f; to']), [rewrite x; rm])
@@ -76,11 +85,13 @@ let rec convert ~(from:int) ~(to':int) e =
   | RP.App ((("fsqrt") as op, [w]), [x; rm]) -> 
 	assert (w=from);
 	RP.App((op, [to']), [cvt x; rm])
-  | RP.App (_, _) -> Impossible.impossible "float widener widening non-float value"
+  | RP.App ((op, _), _) ->
+      Impossible.impossible
+        ("float widener widening non-float value (applied " ^ op ^ ")")
 @ 
 Function [[rewrite]] rewrites all subexpressions to ensure the postcondition.
 Its major job is to call [[convert]] when it spots a floating-point subexpression.
-<<widening>>=
+<<floating-point widening>>=
 and rewrite e = match e with
   | RP.Const _      -> e
   | RP.Fetch (l, e) -> RP.Fetch(loc l, e)
@@ -98,7 +109,7 @@ and rewrite e = match e with
 @ 
 Function [[loc]] rewrites all subexpressions that appear in a location
 (i.e., in an addressing expression).
-<<widening>>=
+<<floating-point widening>>=
 and loc l = match l with
 | RP.Mem(sp, agg, w, addr, assn)    -> RP.Mem(sp, agg, w, rewrite addr, assn)
 | RP.Slice(w, lsb, l)               -> RP.Slice(w, lsb, loc l)
@@ -106,14 +117,14 @@ and loc l = match l with
 @ 
 Assignment requires that we know whether the right-hand side is a
 floating-point expression.  If so, [[convert]], otherwise [[rewrite]].
-<<widening>>=
+<<floating-point widening>>=
 let is_floating_exp = function
   | RP.App(op, args) -> Rtlop.Types.has_floating_result (Up.opr op)
   | _ -> false in
 let guarded (g, eff) =
   let eff = match eff with
   | RP.Store(l, r, w) ->
-      if is_floating_exp r && bestwidth w <> w then
+      if is_floating_exp r then (* && bestwidth w <> w then *)
         let r = convert ~from:w ~to':(bestwidth w) r in
         RP.Store(loc l, force_f2f (bestwidth w) w r, bestwidth w)
       else
@@ -123,7 +134,7 @@ let guarded (g, eff) =
 @ 
 In the common case where we have no operators that need conversion, we
 avoid rewriting the RTL, thereby reducing the load on the major heap.
-<<widening>>=
+<<floating-point widening>>=
 let rtl r = 
   let needs_conversion op =
     Rtlop.Types.has_floating_result op ||
@@ -135,3 +146,13 @@ let rtl r =
     | RP.Rtl es -> Up.rtl (RP.Rtl (List.map guarded es))
   else
     r in
+@ 
+<<widen.ml>>=
+let store_const goodwidth rtl = match Down.rtl rtl with
+  | RP.Rtl [(g, RP.Store(l, (RP.Const (RP.Bits b) as k), w))] when w < goodwidth ->
+      let widek = RP.App(("zx", [w; goodwidth]), [k]) in
+      let widek = Down.exp (Simplify.exp (Up.exp widek)) in
+      let lobits = RP.App(("lobits", [goodwidth; w]), [widek]) in
+      Up.rtl (RP.Rtl [(g, RP.Store(l, lobits, w))])
+  | _ -> rtl
+
