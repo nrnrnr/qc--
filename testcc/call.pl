@@ -183,7 +183,7 @@ sub c_compare {
         my $v     = shift @_;
         
         print CEE <<EOF;
-        if ($v != $val) {printf("failed ($val)\\n"); return;} 
+        if (*(unsigned*)(&$v) != $val) {printf("failed ($val)\\n"); return;} 
 EOF
     }
 }
@@ -275,8 +275,8 @@ while (defined($sig=<STDIN>)) {
        }     
     }
     # use arg list to emit C-- 
-    my $cmm = sprintf "%s-main-%02d.c--", $name, $i;
-    my $cee = sprintf "%s-callee-%02d.c",   $name, $i;
+    my $cmm = sprintf "%s-main-%03d.c--", $name, $i;
+    my $cee = sprintf "%s-callee-%03d.c", $name, $i;
     $i++;
 
     # emit C-- code, and additioanlly C code, if $emitc is true.
