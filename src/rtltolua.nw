@@ -105,34 +105,37 @@ let rec expr' f e =
 
 <<ToLua>>=
 and location' = function
-    | R.Mem (sp, agg, width, e, ass) ->
-		(match sp with
-        | 'A' -> ("",
-                  argstack,
-                  "_arg",
-                  expr' nopush e)
-        | 'm' -> (expr' push e,
-                  valstack,
-				  "",
-				  string_of_int width ^ "," ^ byteorder agg ^ "," ^ 
-				     alignment ass)
-        | r   -> ("",
-                  commentout,
-				  "_register",
-				  "'" ^ String.make 1 r ^ "'," ^ expr' nopush e))
-    
-    | R.Reg   (sp, i, width)           -> assert false (* ask RO to fix it *)
-    | R.Var   (name, index, width)     -> (""
-                                          , valstack
-                                          , "_local"
-                                          , string_of_int index
-                                          )
+    | R.Mem (sp, agg, width, e, ass) -> 
+		( expr' push e
+        , valstack
+		, ""
+		, string_of_int width ^ "," ^ byteorder agg ^ "," ^ alignment ass
+        )
+
+    | R.Reg   ('A', i, width)        -> 
+		( ""
+		, argstack
+		, "_arg"
+		, string_of_int i
+		)
+
+    | R.Reg   (sp, i, width)         -> 
+		( ""
+		, commentout
+		, "_register"
+	  	, "'" ^ String.make 1 sp ^ "'," ^ string_of_int i)
+                                        
+    | R.Var   (name, index, width)   -> 
+		( ""
+        , valstack
+        , "_local"
+        , string_of_int index
+        )
                                           
     | R.Slice (w, i, loc)              -> 
         let (p, ff, s, a) = location' loc in ("-- slice\n" ^ p, ff, s, a)
 
-(* the last case of Cell is not being properly handled *)
-(* NOTE: R.Slice is not yet being properly handled     *)
+(* NOTE: should R.Slice just fail an assertion? *)
 
 let (<<) f g   = fun x -> f (g x)
 
@@ -166,46 +169,13 @@ need. Therefore I will comment out this code for now.
 <<ToLua>>=
 let rec rtl' fd (R.Rtl gg) = match gg with
 
-    | [] -> 
-        fprintf fd "-- skip\n"
-    
-   (* 
-    | [(_,R.Store(R.Cell('c',_,_,R.Const(R.Bits(i)),_),e,_))] 
-        when Bits.U.to_int i = 0 -> assert false (* goto e *)
-         
-    | [_;(_,R.Store(R.Cell('c',_,_,R.Const(R.Bits(i)),_),e,_))] 
-        when Bits.U.to_int i = 0 -> assert false (* call e *)
-    
-    | [(c,R.Store(R.Cell('c',_,_,R.Const(R.Bits(i)),_),e,_))] 
-        when Bits.U.to_int i = 0 -> assert false (* if c, goto e *)
-    
-    | [(_,R.Store( R.Cell('c',_,_,R.Const(R.Bits(i0)),_)
-                 , R.Fetch(R.Cell('c',_,_,R.Const(R.Bits(i3)),_),_) 
-                 ,_))]    
-        when Bits.U.to_int i0 = 0 && Bits.U.to_int i3 = 3 ->
-        assert false (* return *)    
-    *)
+    | [] -> fprintf fd "-- skip\n"    
+    | _  -> List.iter (print_guarded fd) gg   (* standard RTL *)
 
-(*    
-    | [(_,R.Store(R.Cell('A',_,_,ae,_), e,_));_] ->
-        ( output_string fd ((expr' push) e)
-        ; Printf.fprintf fd "CMM.push_arg("
-        ; Printf.fprintf fd ")\n"
-        )
 
-    | [(_,R.Store(R.Var(_,i,_),R.Fetch (R.Cell('A',_,_,_,_),_),_))] ->
-        ( Printf.fprintf fd "CMM.pop_arg()\n"
-        ; Printf.fprintf fd "CMM.store_local(%d) -- CL\n" i
-        )
-
-    | [(_,R.Store(_,R.Fetch (R.Cell('A',_,_,_,_),_),_))] -> assert false
-*)
-    
-    | _      -> List.iter (print_guarded fd) gg   (* standard RTL *)
-
+(* exported functions *)
 
 let rtl fd = (rtl' fd) << Rtl.Convert.rtl
-
-let exp = expr
+let exp    = expr
 @ 
 
