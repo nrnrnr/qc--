@@ -96,6 +96,25 @@ We can't use [[unimp]] for the following values because the
 [[Impossible.Impossible]] exception would be raised when the module is
 initialized. So we have to use some dummy value.
 
+Here are some useful IEEE 754 constants, taken from C header files:
+
+\begin{tabularx}{\hsize}{llX}
+\tt NaN & \tt 0x7f, 0xc0, 0, 0 & on big endian \\
+\tt NaN & \tt 0, 0, 0xc0, 0x7f & on little endian \\
+\end{tabularx}
+
+\begin{quote}\it
+    Are the results for floating point comparison standardized? It
+    seems that FPUs use the four results outlined below. However, they
+    seem to be free to use any format they want to indicate these. The
+    Intel FPUs for example use 3-bit values to indicate a result. In
+    that case we would be free to define our own 2-bit values. It
+    would be the task for the platform specific implementation of the
+    primitives to present the result in the right form.
+
+    The question and consequences apply to the rounding modes.
+\end{quote}
+
 <<bitops.ml ((evaluating))>>=
 let dummy = Bits.zero 32
 
@@ -104,10 +123,10 @@ let float_gt        = dummy
 let float_eq        = dummy
 let unordered       = dummy
 
-let round_nearest   = dummy
-let round_zero      = dummy
-let round_down      = dummy
-let round_up        = dummy
+let round_nearest   = Bits.of_int 0 2
+let round_down      = Bits.of_int 1 2
+let round_up        = Bits.of_int 2 2
+let round_zero      = Bits.of_int 3 2
 
 let shl  _ _ = unimp "shifts"
 let shra _ _ = unimp "shifts"
