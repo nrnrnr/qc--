@@ -24,7 +24,7 @@ extern void set_address(RBlock, unsigned);
 extern void set_register(RBlock rb, unsigned reg, unsigned regaddr);
 extern unsigned block_reg(RBlock rb);
 extern unsigned block_regaddr(RBlock rb);
-extern RLabel label_new(char *name);
+extern RLabel label_new(const char *name);
 extern void label_define(RLabel lbl, int offset);
 extern void label_define_at(RLabel lbl, RBlock block, unsigned lc);
 extern void (*emitm)(unsigned long value, unsigned n);
@@ -90,7 +90,7 @@ extern int nblocks;             /* instrumentation */
 struct label {
     RBlock block;
     unsigned offset;
-    char *name;
+    const char *name;
 };
 typedef void (*RelocCallback)(void *closure, RAddr reloc);
 typedef void (*RelocEnumerator)(struct rclosure *cp, RelocCallback f, void *closure);

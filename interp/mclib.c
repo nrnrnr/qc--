@@ -441,7 +441,7 @@ void label_define_at(lbl, block, lc) RLabel lbl; RBlock block; unsigned lc; {
     lbl->offset = lc;
 }
 #line 898 "mclib.nw"
-RLabel label_new(name) char *name; {
+RLabel label_new(name) const char *name; {
     RLabel lbl;
 
     lbl = (RLabel) mc_alloc(sizeof(*lbl), RLabel_pool);
