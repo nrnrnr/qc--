@@ -58,11 +58,11 @@ NOWEBBREAKCODE=no
 	\usepackage[dvips]{graphicx}
 	\pagestyle{noweb}
 	`if [ $NOWEBBREAKCODE = yes ]; then echo '\noweboptions{breakcode}'; fi`
+	\input{$TOP/config/macros.tex}
 	\begin{document}
 	\nwfilename{$stem.nw}
 	\tableofcontents
 	\nwbegindocs{}
-	\input{$TOP/config/macros.tex}
 	EOF
 	cat $stem.inc
 	tr '\n' ' ' <<EOF

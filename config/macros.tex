@@ -52,3 +52,85 @@
 % l2h substitution to ->
 % l2h substitution sp sp
 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+% support for noweb boxes
+
+\makeatletter
+% nwboxes --- support for boxed types in ML codes
+
+%% \ProvidesPackage{nwboxes}
+\RequirePackage{noweb}
+
+\let\nwboxes@ostartdef=\nwstartdeflinemarkup
+\let\nwboxes@oenddef=\nwenddeflinemarkup
+
+\newtoks\@nwtyboxes
+\newif\if@nwboxespending
+\@nwboxespendingfalse
+
+\newcommand\@nwboxesnospecials{\@makeother\'\@makeother\_\@makeother\$\obeyspaces}
+
+\newcommand\nwaddbox{%
+  \begingroup\@nwboxesnospecials\@nwaddbox
+}
+\newcommand\@nwaddbox[1]{%
+  \global\@nwboxespendingtrue
+  \global\@nwtyboxes=\expandafter{\the\@nwtyboxes#1\\}%
+  \endgroup
+  \ignorespaces
+}
+
+\newdimen\@nwdeeperboxspace
+\newcommand\deeperbox[1]
+  {\@nwdeeperboxspace=#1\relax\advance\@nwdeeperboxspace by 5.5pt}
+\global\@nwdeeperboxspace=0pt
+
+%% original -- boxes to left of markup
+
+\def\nwstartdeflinemarkup{\nwboxes@ostartdef
+  \if@nwboxespending
+    {\nw@boxfontsize
+     \penalty500\hskip -1em\mbox{}\nobreak\hfill\nobreak
+     \@nwboxesnospecials\nobreak
+     \setlength\fboxsep{1pt}%
+     \smash{\fbox{\begin{tabular}[t]{@{\,}l@{\,}}\the\@nwtyboxes\end{tabular}}}}%
+     \nobreak\vrule width0pt height10.5pt depth\@nwdeeperboxspace
+     \@nwdeeperboxspace=0pt
+  \fi
+  \global\@nwboxespendingfalse
+  \global\@nwtyboxes={}%
+}
+\def\nwenddeflinemarkup{\nobreak\hskip \nwdefspace minus \nwdefspace\nobreak}
+\def\nw@boxfontsize{\small}
+\def\nwboxfontsize#1{\def\nw@boxfontsize{#1}}
+
+%% new: boxes below markup
+
+\let\nwstartdeflinemarkup=\nwboxes@ostartdef
+\def\nwenddeflinemarkup{%
+  \nobreak
+  \if@nwboxespending
+    {\small
+     \@nwboxesnospecials\nobreak
+     \setlength\fboxsep{1pt}%
+     \smash{\llap{%
+       \begin{tabular}[t]{@{}l@{}}\mbox{}\\
+        \fbox{\begin{tabular}[t]{@{\,}l@{\,}}\the\@nwtyboxes\end{tabular}}%
+       \end{tabular}}}}%
+%\showthe\@nwdeeperboxspace
+     \nobreak\vrule width0pt height8.5pt depth \@nwdeeperboxspace
+     \nobreak
+  \fi
+  \hskip\nwdefspace\nobreak
+  \global\@nwboxespendingfalse
+  \global\@nwdeeperboxspace=0pt
+  \global\@nwtyboxes={}%
+}
+
+\makeatother
+
+%       end support for noweb boxes
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
