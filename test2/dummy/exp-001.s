@@ -6,9 +6,16 @@ target
     charset "latin1"
     float "ieee754";
 
-section "data" { align 8; }
+export bits32 \212\029\140\217\143\000\178\004\233\128\t\152\236\248B~;
+
+section "data" { align 1; }
 
 section "data" { sym@Cmm_private_global_area: }
+
+section "data"
+{
+    sym@@212@029@140@217@143@000@178@004@233@128@t@152@236@248B@:
+}
 
 section "data" { bits8[0::bits32]; }
 
@@ -16,15 +23,22 @@ section "text"
 {
     sym@p()
     {
+        $r31 = ($r31+-24);
         ;
-        x = 1::bits32;
-        y = 2::bits32;
-        z = 3::bits32;
+        ;
+        $t1 = $r30;
+        ;
+        initialize continuations:l3:
+        x = 1;
+        y = 2;
+        z = 3;
         total = ((x+y)+z);
-        $m(32B)[($r(32)[31]+32::bits32)] = total;
-        $c(32)[0] = $r(32)[30];
         ;
+        $r0 = total;
         ;
+        $t1 = $t1;
+        $r31 = ($r31+24);
+        $c0 = $t1;
     }
 }
 

@@ -9,12 +9,12 @@ module provides a stage for the compiler's backplane that allows to
 check the types of all {\rtls}.
 
 To embed the function into the back plane it takes a procedure as
-argument. The emedding into Lua is handled by the \module{lualink}
+argument. The embedding into Lua is handled by the \module{lualink}
 module.
 
 
 <<typecheck.mli>>=
-val proc: Proc.t -> unit
+val proc: Ast2ir.proc -> unit
 @
 
 % ------------------------------------------------------------------ 
@@ -22,21 +22,25 @@ val proc: Proc.t -> unit
 % ------------------------------------------------------------------ 
 
 The implementation simply pieces together functionality: module
-\module{rtldebug} provides type checking, and module \module{cfgutil}
+\module{rtldebug.nw} provides type checking, and module \module{cfg.nw}
 traversal of a {\cfg}.
 
 <<typecheck.ml>>=
-let rtl rtl =
-    try
-        Rtldebug.typecheck rtl
-    with
-        Rtldebug.TypeCheck(rtl) ->
-            ( prerr_string "This RTL does not type check:\n"
-            ; prerr_endline (Rtlutil.ToString.rtl rtl)
-            )
+module C = Cfgx.M
 
-let proc proc =
-    let cfg         = proc.Proc.cfg in
-    let iter cfg f  = Cfgutil.fold_fwd cfg (fun n () -> f n) () in
-        iter cfg (fun node -> rtl (Cfg4.instr node))
+let rtl = function
+    | None     -> ()
+    | Some rtl ->
+        try
+            Rtldebug.typecheck rtl
+        with
+            Rtldebug.TypeCheck(rtl) ->
+                ( prerr_string "This RTL does not type check:\n"
+                ; prerr_endline (Rtlutil.ToString.rtl rtl)
+                )
+
+let proc p =
+    let cfg         = p.Proc.cfg in
+    let iter cfg  f = C.fold_layout (fun node () -> f node) () cfg in
+        iter cfg (fun node -> rtl (C.to_instr node))
 @

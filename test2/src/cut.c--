@@ -1,0 +1,41 @@
+target byteorder little;
+
+import bits32 printf;
+export main;
+
+section "data" {
+  nocut: bits8 [] {
+      'n'::bits8, 'o'::bits8, ' '::bits8,
+      'c'::bits8, 'u'::bits8, 't'::bits8, '='::bits8, '%'::bits8, 'd'::bits8,
+      10::bits8, 0::bits8
+  };
+  ret: bits8[] {
+    'r'::bits8, 'e'::bits8, 't'::bits8, 'u'::bits8, 'r'::bits8, 'n'::bits8,
+    10::bits8, 0::bits8};
+}
+
+foreign "C" main("unsigned" bits32 iargc, "address" bits32 iargv) {
+  bits32 n;
+  n=0;
+  f("address" k) also cuts to k;
+  foreign "C" printf("address" nocut, "signed" n);
+  return();
+  continuation k(n):
+  foreign "C" printf("address" (nocut+3), "signed" n);
+  return();
+}
+
+
+f ("address" bits32 k) {
+   foreign "C" g(k) also aborts;
+   foreign "C" printf("address" ret);
+   return();
+}
+foreign "C" g ("address" bits32 k) {
+   h(k) also aborts;
+   foreign "C" printf("address" ret);
+   return();
+}
+h ("address" bits32 k) {
+   cut to k("signed" 99);
+}

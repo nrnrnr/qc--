@@ -9,7 +9,6 @@ This module defines a back end for the {\PAL} interpreter in directory
 [[../interp]]. 
 
 <<interp.mli>>=
-val target:     Target2.t
 val target':    Ast2ir.tgt
 @
 
@@ -30,10 +29,9 @@ However, these {\rtl}s never reach the interpreter but are recognized
 and translated to control-flow instructions the interpreter knows.
 
 <<interp.ml>>=
-module A      = Automaton2
 module AN     = Automaton
 module SS32   = Space.Standard32
-module T      = Target2
+module T      = Target
 module D      = Rtl.Dn  (* Down *)
 module U      = Rtl.Up  (* Up   *)
 module R      = Rtl
@@ -156,9 +154,9 @@ let dec loc       = R.store loc (sub1 loc) wordsize
 let error         = Impossible.impossible
 @
 
-For most control-flow related {\rtl}s, [[Target2.t]] demands we provide
+For most control-flow related {\rtl}s, [[Target.t]] demands we provide
 embedding and projection functions. \emph{As far as I can tell the
-projections are never used and we could simplify [[Target2.t]].}
+projections are never used and we could simplify [[Target.t]].}
 
 <<module Flow>>=
 let bnegate _ = Impossible.unimp "bnegate not implemented"
@@ -212,71 +210,6 @@ let fetch_space sp i w = R.fetch (sp i) w
 @
 
 % ------------------------------------------------------------------ 
-\subsection{Automata}
-% ------------------------------------------------------------------ 
-
-<<interp.ml>>=
-
-class argument_location (index:int): Automaton2.location =
-object
-    method store expr width = Flow.store_space argument index expr
-    method fetch width      = Flow.fetch_space argument index width
-end
-
-class arguments (base:Rtl.exp): Automaton2.automaton =
-object (this)
-    val mutable _block  = Block.at base (*size*) 0 (*align*) 1  
-    val mutable _frozen = false
-
-    val mutable _index  = -1
-    
-    method freeze () =
-        let _ = _frozen <- true in
-        { A.overflow = _block; A.sp_value = base } 
-        (* sp value meaningless to interp *)
-    
-    method allocate width hint = 
-        let ()      = assert (_frozen = false) in          
-        match hint with 
-        | Some x -> Impossible.impossible ("unknown hardware register "^x) 
-        | None   -> ( _index <- _index + 1
-                    ; new argument_location _index
-                    )
-end
-
-class global_location (index:int) (width:int): Automaton2.location =
-    let var = 
-        let s = Printf.sprintf "global_%d" index in 
-        R.var s index width
-in object
-    method store expr width = Flow.store_space global index expr
-    method fetch width      = Flow.fetch_space global index width
-end
-
-
-class globals (base:Rtl.exp): Automaton2.automaton =
-object (this)
-    val mutable _block  = Block.at base (*size*) 0 (*align*) 1  
-    val mutable _frozen = false
-    val mutable _index  = -1
-
-    method freeze () =
-        let _ = _frozen <- true in
-        { A.overflow = _block; A.sp_value = base } 
-        (* sp value meaningless to interp *)
-    
-    method allocate width hint = 
-        let ()      = assert (_frozen = false) in          
-        match hint with 
-        | Some "IEEE 754 rounding mode" -> Automaton2.of_loc fp_mode
-        | Some x -> Impossible.impossible ("unknown hardware register "^x) 
-        | None   -> ( _index <- _index + 1
-                    ; new global_location _index width 
-                    )
-end
-@
-
-% ------------------------------------------------------------------ 
 \subsection{Automata for Calling Conventions and Globals}
 % ------------------------------------------------------------------ 
 
@@ -322,19 +255,6 @@ let globls base = AN.at base (seq glb_reg)  (* for global regs *)
 
 Allmost every aspects of the calling convention is irrelevant because the
 interpreter does not work like a CPU. 
-
-<<interp.ml>>=
-let cc = (* old style *)
-    { T.sp           = sp
-    ; T.return       = Flow.return
-    ; T.proc         = new arguments
-    ; T.cont         = new arguments
-    ; T.ret          = new arguments
-    ; T.allocatable  = []
-    ; T.cutto        = Flow.cutto
-    ; T.stack_slots  = new globals 
-    }
-@
 
 I have to admit, that I don't know what I am doing here.
 
@@ -410,30 +330,6 @@ The [[target]] value is the essential information for the rest of the
 compiler.
 
 <<interp.ml>>=
-let target = (* old style *)
-    { T.name = arch
-      ; T.cc = (fun _ -> cc) 
-      ; T.byteorder    = byte_order
-      ; T.wordsize     = wordsize
-      ; T.pointersize  = wordsize
-      ; T.vfp          = Vfp.mk wordsize
-      ; T.alignment    = 1
-      ; T.memsize      = 8
-      ; T.float        = "ieee754"
-      ; T.charset      = "latin1" 
-      ; T.globals      = new globals
-      ; T.is_rounding_mode = (fun loc -> loc = fp_mode)
-      ; T.spaces       = [ Spaces.m ; Spaces.c ;  Spaces.a ; Spaces.g ]
-      ; T.data_section = "data"
-      ; T.bnegate      = Flow.bnegate
-      ; T.goto         = Flow.goto
-      ; T.jump         = Flow.jump
-      ; T.call         = Flow.call 
-      ; T.branch       = Flow.branch
-      ; T.spill        = (fun _ -> assert false)
-      ; T.reload       = (fun _ -> assert false)
-      }
-
 let target' = (* new style *)
       { T.name = arch
       ; T.cc =           (fun _ -> cc') 

@@ -15,8 +15,7 @@ graph in \textsc{dot} format. The assember constructor receives the
 output channel for the assembler.
 
 <<dotasm.mli>>=
-val asm     : compress:bool -> out_channel -> Proc.t      Asm3.assembler
-val new_asm : compress:bool -> live:bool -> out_channel -> Ast2ir.proc Asm3.assembler
+val asm : compress:bool -> live:bool -> out_channel -> Ast2ir.proc Asm.assembler
 @                      
 
 % ------------------------------------------------------------------ 
@@ -26,14 +25,13 @@ val new_asm : compress:bool -> live:bool -> out_channel -> Ast2ir.proc Asm3.asse
 Most assembler directives do nothing. We are only interested in the
 control-flow-graphs that are part of an instruction. 
 <<dotasm.ml>>=
-module Asm = Asm3
+module Asm = Asm
 
 exception Unsupported of string
 let unsupported msg = raise (Unsupported msg)
 
 <<Make>>
-let asm     ~compress fd = new asm (Cfgutil.cfg2dot     ~compress) fd
-let new_asm ~compress ~live fd = new asm (Cfgutil.new_cfg2dot ~compress ~live) fd
+let asm ~compress ~live fd = new asm (Cfgutil.cfg2dot ~compress ~live) fd
 @
 
 % ------------------------------------------------------------------ 

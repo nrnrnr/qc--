@@ -6,19 +6,15 @@
 % ------------------------------------------------------------------ 
 
 This is an assembler that emits Lua code in the format expected by the
-{\qcc} interpreter.  It implements the [[Asm3.assembler]] interface for
+{\qcc} interpreter.  It implements the [[Asm.assembler]] interface for
 assemblers in the {\qcc} compiler.
 
 <<interpasm.mli>>=
-type tgt   = ((Rtl.exp -> Automaton.t), Call.t) Target2.t'
-type proc' = (Automaton.t, Rtl.rtl Cfgx.M.cfg, Call.t, tgt) Proc.t'
+type tgt   = ((Rtl.exp -> Automaton.t), Call.t) Target.t
+type proc' = (Automaton.t, Rtl.rtl Cfgx.M.cfg, Call.t, tgt) Proc.t
 
-
-
-val asm:    byteorder:Rtl.aggregation -> memsize:int -> ptrsize:int
-            -> out_channel -> Proc.t Asm3.assembler
 val asm':   byteorder:Rtl.aggregation -> memsize:int -> ptrsize:int
-            -> out_channel -> proc'  Asm3.assembler
+            -> out_channel -> proc'  Asm.assembler
 @
 
 % ------------------------------------------------------------------ 
@@ -30,15 +26,14 @@ captured by a functor argument of signature [[PROC]]. I could not get it
 to work with polymorphism allone.
 
 <<interpasm.ml>>=
-module T        = Target2
-module Asm      = Asm3
-module G        = Cfg4
+module T        = Target
+module Asm      = Asm
 module GU       = Cfgutil
-module RL       = Rtltolua
+module RL       = Interpemitrtl
 module RP       = Rtl.Private
 
-type tgt   = ((Rtl.exp -> Automaton.t), Call.t) Target2.t'
-type proc' = (Automaton.t, Rtl.rtl Cfgx.M.cfg, Call.t, tgt) Proc.t'
+type tgt   = ((Rtl.exp -> Automaton.t), Call.t) Target.t
+type proc' = (Automaton.t, Rtl.rtl Cfgx.M.cfg, Call.t, tgt) Proc.t
 
 module type PROC = sig
     type proc
@@ -52,20 +47,6 @@ module Make (P: PROC) = struct
     <<class asm>>
 
     let asm = new asm 
-end
-
-module Old = struct
-    type proc = Proc.t
-    
-    let emit (proc:proc) fd =
-        let fprintf = Printf.fprintf in
-        ( fprintf fd "CMM.procedure ('%s',%d,%d) -- stack data size correct\n" 
-                      (proc.Proc.symbol#mangled_text)
-                      proc.Proc.vars
-                      (Block.size proc.Proc.stackd)
-        ; Cfg4.interp proc.Proc.cfg fd
-        ; fprintf fd "CMM.end_procedure()\n"
-        )
 end
 
 module New = struct
@@ -83,10 +64,7 @@ module New = struct
 end
 
 
-module OldAsm = Make(Old)
 module NewAsm = Make(New)
-
-let asm  = OldAsm.asm
 let asm' = NewAsm.asm
 
 @

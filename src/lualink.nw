@@ -24,16 +24,8 @@ module I : Lua.INTERP
 <<lualink.ml>>=
 <<Linking QC-- Types>>
 
-module Reloc             = Sledlib.MkReloc
-                            (struct type symbol = Symbol.t end)
-
-module OldBackplane = Backplane.M
-module NewBackplane = Backplane.Make(
-  struct
-    type proc = Ast2ir.proc
-    let lua_module_name = "NewBackplane"
-    let lua_type_name = "new backplane action"
-  end)
+module Reloc        = Sledlib.MkReloc (struct type symbol = Symbol.t end)
+module NewBackplane = Backplane.M'
 
 module T1 = Lua.Lib.Combine.T5
                 (DocType)                   (* T1.T1 *)
@@ -42,49 +34,38 @@ module T1 = Lua.Lib.Combine.T5
                 (AstType)                   (* T1.T4 *)
                 (Colorgraph.NewGCT)         (* T1.T5 *)
 
-module T    = Lua.Lib.Combine.T10           (* types *)
-                (T1)
-                (NewBackplane.T)
+module T    = Lua.Lib.Combine.T6            (* types *)
+                (T1)                        (* T1 *)
+                (NewBackplane.T)            (* T2 *)
                 (EnvType)                   (* T3 *)
-                (ProcType)                  (* T4 *)
-                (TargetType)                (* T5 *)
-                (NewProcType)               (* T6 *)
-                (NewTargetType)             (* T7 *)
-                (OldBackplane.T)            (* T8 *)
-                (Colorgraph.GCT)            (* T9 *)
-                (BlockType)                 (* T10 *)
-
+                (NewProcType)               (* T4 *)
+                (NewTargetType)             (* T5 *)
+                (BlockType)                 (* T6 *)
 
 module T1V = Lua.Lib.Lift (T1) (T.T1)
 
-module DocT        = T1V.T1
-module LuaioT      = T1V.T2
-module AsmT        = T1V.T3
-module AstT        = T1V.T4
-module NewColorgraphT = T1V.T5
+module DocT             = T1V.T1
+module LuaioT           = T1V.T2
+module AsmT             = T1V.T3
+module AstT             = T1V.T4
+module NewColorgraphT   = T1V.T5
 
-module NewBackplaneT = T.T2
-module EnvT        = T.T3
-module ProcT       = T.T4
-module TargetT     = T.T5
-module NewProcT    = T.T6
-module NewTargetT  = T.T7
-module BackplaneT  = T.T8
-module ColorgraphT = T.T9
-module BlockT      = T.T10
+module NewBackplaneT    = T.T2
+module EnvT             = T.T3
+module NewProcT         = T.T4
+module NewTargetT       = T.T5
+module BlockT           = T.T6
 
 module IO = Lua.Lib.Extend (LuaioT)
 
 module L1 = 
-  Lua.Lib.Combine.L9                   (* up to 10 libraries *)
+  Lua.Lib.Combine.L6                   (* up to 10 libraries *)
     (Luaiolib.Make (LuaioT))
     (IO (Luastrlib.M))
     (IO (Luamathlib.M))
-    (MakeLib (AsmT) (AstT) (EnvT) (ProcT) (TargetT) (NewProcT) (NewTargetT) (DocT) (LuaioT) (BlockT))
-    (OldBackplane.MakeLua  (BackplaneT) (ProcT))
-    (Colorgraph.Make (BackplaneT) (ColorgraphT) (ProcT))
-    (Colorgraph.NewMake (BackplaneT) (NewColorgraphT) (NewProcT))
-    (Linscan.Make (ProcT))
+    (MakeLib 
+        (AsmT) (AstT) (EnvT) (NewProcT) (NewTargetT) (DocT) (LuaioT) (BlockT))
+    (Colorgraph.NewMake (NewBackplaneT) (NewColorgraphT) (NewProcT))
     (IO (Luautil.MakeLib))
                 
 
@@ -105,17 +86,18 @@ module I =
 % ------------------------------------------------------------------ 
 
 <<Linking QC-- Types>>=
-module Personality = struct
-    type proc = Proc.t
-    let target = Dummy.dummy32b
-    let cfg2ast proc =
-      Cfg4.ast Rtlutil.ToAST.rtl proc.Proc.cfg proc.Proc.symbol#mangled_text
-end
 module NewPersonality = struct
     type proc = Ast2ir.proc
-    let target = Dummy.dummy32b
+    let target      = Dummy.dummy32b'
+    let memsize     = 8
+    let wordsize    = 32
+    let pointersize = wordsize
+    let byteorder   = Rtl.BigEndian
+    let charset     = "latin1"
+    let float       = "ieee754"
+
     let cfg2ast proc =
-      Cfgutil.new_cfg2ast Rtlutil.ToAST.rtl proc.Proc.cfg proc.Proc.symbol#mangled_text
+      Cfgutil.cfg2ast Rtlutil.ToAST.rtl proc.Proc.cfg proc.Proc.symbol#mangled_text
 end
 @
 
@@ -124,11 +106,10 @@ have to supply a target description that defines the sizes of words and
 so forth.
 
 <<Linking QC-- Types>>=
-module AstAsm    = Astasm.Make(Personality)
 module NewAstAsm = Astasm.Make(NewPersonality)
 
 module AsmType = struct
-    type 'a t       = 'a Asm3.assembler
+    type 'a t       = 'a Asm.assembler
     let tname       = "asm"
     let eq _        = fun x y -> x = y
     let to_string _ = fun t -> "<asm>" 
@@ -145,29 +126,17 @@ module EnvType = struct
     let eq _        = fun x y -> x = y
     let to_string _ = fun t -> "<env>" 
 end
-module ProcType = struct
-    type 'a t       = Proc.t
-    let tname       = "proc"
-    let eq _        = fun x y -> x = y
-    let to_string _ = fun t -> ("<proc "^t.Proc.symbol#mangled_text^">") 
-end
 module NewProcType = struct
     type 'a t       = Ast2ir.proc
     let tname       = "new proc"
     let eq _        = fun x y -> x = y
     let to_string _ = fun t -> ("<new proc "^t.Proc.symbol#mangled_text^">") 
 end
-module TargetType = struct
-    type 'a t       = Target2.t
-    let tname       = "target"
-    let eq _        = fun x y -> x = y
-    let to_string _ = fun t -> "<target " ^ t.Target2.name ^ ">" 
-end
 module NewTargetType = struct
     type 'a t       = Ast2ir.tgt
     let tname       = "new target"
     let eq _        = fun x y -> x = y
-    let to_string _ = fun t -> "<new target " ^ t.Target2.name ^ ">" 
+    let to_string _ = fun t -> "<new target " ^ t.Target.name ^ ">" 
 end
 module DocType = struct
     type 'a t       = Pp.doc
@@ -187,10 +156,6 @@ module MakeLib
   (AstV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a AstType.t 
                               and  type 'a combined = 'a AsmV.combined)
   (EnvV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a EnvType.t 
-                              and  type 'a combined = 'a AsmV.combined)
-  (ProcV   : Lua.Lib.TYPEVIEW with type 'a t        = 'a ProcType.t
-                              and  type 'a combined = 'a AsmV.combined)
-  (TargetV : Lua.Lib.TYPEVIEW with type 'a t        = 'a TargetType.t 
                               and  type 'a combined = 'a AsmV.combined)
   (NewProcV   : Lua.Lib.TYPEVIEW with type 'a t     = 'a NewProcType.t
                               and  type 'a combined = 'a AsmV.combined)
@@ -226,26 +191,22 @@ module Map = struct
        ; V.project = (fun x -> lo.V.project (hi.V.project x))
        } 
     let ast       = AstV.makemap    V.userdata V.projection
-    let proc      = ProcV.makemap   V.userdata V.projection
-    let new_proc  = NewProcV.makemap   V.userdata V.projection
+    let proc      = NewProcV.makemap   V.userdata V.projection
     let vasm      = AsmV.makemap    V.userdata V.projection
       (* embeds and projects a V.value assembler *)
     let asm' proc =
-      compose { V.embed =   Asm3.map proc.V.project
-              ; V.project = Asm3.map proc.V.embed }
+      compose { V.embed =   Asm.map proc.V.project
+              ; V.project = Asm.map proc.V.embed }
         vasm
-    let new_asm = asm' new_proc
-    let asm   = asm' proc
+    let asm = asm' proc
     let venv = EnvV.makemap    V.userdata V.projection
     let env' proc =
       compose { V.embed =   Fenv.Clean.map proc.V.project
               ; V.project = Fenv.Clean.map proc.V.embed }
       venv
-    let new_env = env' new_proc
-    let env   = env' proc
+    let env = env' proc
 
     let doc       = DocV.makemap    V.userdata V.projection
-    let target    = TargetV.makemap V.userdata V.projection
     let new_target= NewTargetV.makemap V.userdata V.projection
     let optimize proc = V.closure (proc **-> V.runit)
     let channel   = InOutV.makemap  V.userdata V.projection
@@ -265,28 +226,17 @@ let init g =
 
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Asm"
-  [ "cmm"     , V.efunc (Map.outchan **-> V.result Map.asm) AstAsm.asm     
-  ; "new_cmm" , V.efunc (Map.outchan **-> V.result Map.new_asm) NewAstAsm.asm     
-  ; "ast"     , V.efunc (Map.outchan **-> V.result Map.asm) AstAsm.asm
-  ; "dot"     , V.efunc (Map.outchan **-> V.result Map.asm) (Dotasm.asm ~compress:true)
-  ; "big_dot" , V.efunc (Map.outchan **-> V.result Map.asm) (Dotasm.asm ~compress:false)
-  ; "new_dot" , V.efunc (Map.outchan **-> V.result Map.new_asm) 
-                            (Dotasm.new_asm ~compress:true ~live:false)
-  ; "new_big_dot" , V.efunc (Map.outchan **-> V.result Map.new_asm) 
-                            (Dotasm.new_asm ~compress:false ~live:true)
-  ; "asdl"    , V.efunc (Map.outchan **-> V.result Map.asm) Asdlasm.asm 
-  ; "x86"     , V.efunc (Map.outchan **-> V.result Map.asm) (X86asm.make Cfgutil.emit)
-  ; "new_x86" , V.efunc (Map.outchan **-> V.result Map.new_asm) 
-                            (X86asm.make Cfgutil.new_emit)
+  [ "cmm" , V.efunc (Map.outchan **-> V.result Map.asm) NewAstAsm.asm     
+  ; "dot" , V.efunc (Map.outchan **-> V.result Map.asm) 
+                            (Dotasm.asm ~compress:true ~live:false)
+  ; "big_dot" , V.efunc (Map.outchan **-> V.result Map.asm) 
+                            (Dotasm.asm ~compress:false ~live:true)
+  ; "x86" , V.efunc (Map.outchan **-> V.result Map.asm) 
+                            (X86asm.make Cfgutil.emit)
   ; "interp32l" , V.efunc (Map.outchan **-> V.result Map.asm) 
-            (Interpasm.asm ~byteorder:Rtl.LittleEndian ~memsize:8 ~ptrsize:32)
-  ; "interp32b" , V.efunc (Map.outchan **-> V.result Map.asm) 
-            (Interpasm.asm ~byteorder:Rtl.BigEndian ~memsize:8 ~ptrsize:32)
-  ; "new_interp32l" , V.efunc (Map.outchan **-> V.result Map.new_asm) 
             (Interpasm.asm' ~byteorder:Rtl.LittleEndian ~memsize:8 ~ptrsize:32)
-  ; "new_interp32b" , V.efunc (Map.outchan **-> V.result Map.new_asm) 
+  ; "interp32b" , V.efunc (Map.outchan **-> V.result Map.asm) 
             (Interpasm.asm' ~byteorder:Rtl.BigEndian ~memsize:8 ~ptrsize:32)
-  
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Block" 
@@ -309,7 +259,26 @@ C.register_module "Boot"
    [ "qc--.lua",   V.String                            This.boot
    ; "version",    V.efunc (Map.outchan **-> V.runit)  This.version
    ; "manual",     V.String                            This.manual 
+   ; "byteorder",  V.String                            This.byteorder
+   ; "arch_os",    V.String                            This.arch_os
    ] g;                        
+@
+
+We create a [[Caml]] module for functions that come straight out of
+{\ocaml} libraries. Unlike the other modules, this has two levels, like
+in [[Caml.Filename.checksuffix]].
+
+<<register modules to [[g]] in alphabetical order>>=
+C.register_module "Caml"
+    ["Filename" , V.Table (V.Table.of_list 
+        [ "checksuffix", V.efunc (V.string **-> V.string **-> V.result V.bool)
+                         Filename.check_suffix
+        ; "chopsuffix",  V.efunc (V.string **-> V.result V.string)
+                         Filename.chop_extension
+        ])
+    ] g;
+@
+
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Dataflow" 
    [ "emit_dot",   V.efunc (V.unit **-> V.runit)  Dataflow.Test.emit_dot
@@ -320,102 +289,80 @@ C.register_module "Driver"
   ; "proc_assembler", V.efunc (Map.vasm **-> V.result (Map.stage V.value)) 
                     (fun asm v p -> asm#cfg_instr p ; true)
   ; "check"     , V.efunc (Map.ast **-> Map.asm 
-                                   **-> V.result Map.env)   Driver2.check
-  ; "new_check"     , V.efunc (Map.ast **-> Map.new_asm 
-                                   **-> V.result Map.new_env)   Driver2.check
-  ; "emit_asdl" , V.efunc (Map.ast **-> V.runit)            Driver2.emit_asdl
-  ; "parse"     , V.efunc (V.string**-> V.result Map.ast)   Driver2.parse
+                                   **-> V.result Map.env)   Driver.check
+  ; "emit_asdl" , V.efunc (Map.ast **-> V.runit)            Driver.emit_asdl
+  ; "parse"     , V.efunc (V.string**-> V.result Map.ast)   Driver.parse
   ; "print"     , V.efunc (Map.doc **-> V.int 
                                    **-> Map.outchan
-                                   **-> V.runit)            Driver2.print
-  ; "pretty"    , V.efunc (Map.ast **-> V.result Map.doc)   Driver2.pretty
-  ; "scan"      , V.efunc (V.string**-> V.runit)            Driver2.scan
-  ; "version"   , V.efunc (V.unit  **-> V.runit)            Driver2.version
+                                   **-> V.runit)            Driver.print
+  ; "pretty"    , V.efunc (Map.ast **-> V.result Map.doc)   Driver.pretty
+  ; "scan"      , V.efunc (V.string**-> V.runit)            Driver.scan
+  ; "version"   , V.efunc (V.unit  **-> V.runit)            Driver.version
   ; "stdin"     , Map.inchan.V.embed                        stdin (* hack *)
   ; "stdout"    , Map.outchan.V.embed                       stdout(* hack *)
   ; "compile"   , V.efunc (Map.optimize Map.proc
-                          **-> Map.ast  **-> Map.target 
-                          **-> Map.env  **-> V.result Map.asm) Driver2.compile
-  ; "new_compile"   , V.efunc (Map.optimize Map.new_proc
-                          **-> Map.ast  **-> Map.new_target 
-                          **-> Map.new_env  **-> V.result Map.new_asm) Driver2.new_compile
+                          **-> Map.ast      **-> Map.new_target 
+                          **-> Map.env  **-> V.result Map.asm) 
+                          Driver.compile
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Expander"
-  [ "x86f"     , V.efunc (V.value **-> Map.proc **-> V.result V.bool) X86.X.cfg
-  ; "new_x86f" , V.efunc (V.value **-> Map.new_proc **-> V.result V.bool) X86.X.new_cfg
+  [ "x86f" , V.efunc (V.value **-> Map.proc **-> V.result V.bool) 
+                            X86.X.cfg
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Liveness"
-  [ "liveness", V.efunc (V.value **-> Map.proc **-> V.result V.bool)
-       (fun _ p -> 
-          let module LI = Olive.Make(Cfg4) in LI.liveness p.Proc.cfg; true)
-  ; "new_liveness", V.efunc (V.value **-> Map.new_proc **-> V.result V.bool) 
+  [ "liveness", V.efunc (V.value **-> Map.proc **-> V.result V.bool) 
        (fun _ p -> Cfgx.Live.set_live p.Proc.cfg; true)
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Placevar"
-  [ "fortran", V.efunc (V.value **-> Map.proc **-> V.result V.bool) Placevar.fortran
-  ; "new_fortran", V.efunc (V.value **-> Map.new_proc **-> V.result V.bool) Placevar.fortran'
+  [ "fortran", V.efunc (V.value **-> Map.proc **-> V.result V.bool) 
+                            Placevar.fortran'
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Simplify"
-  [ "compile_time_ops", (V.list V.string).V.embed Rtleval2.compile_time_ops
+  [ "compile_time_ops", (V.list V.string).V.embed Simplify.compile_time_ops
   ] g;
 
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Stack"
-  [ "freeze",     V.efunc (Map.proc **-> Map.block **-> V.runit) Stack.freeze
-  ; "blocks",     V.efunc (Map.proc **-> V.result (V.record V.value))
-                          (Stack.blocks Map.block.V.embed (V.list V.value).V.embed)
-  ; "new_freeze", V.efunc (Map.new_proc **-> Map.block **-> V.runit) Stack.new_freeze
-  ; "new_blocks", V.efunc (Map.new_proc **-> V.result (V.record V.value))
-                          (Stack.new_blocks Map.block.V.embed (V.list V.value).V.embed)
-  ; "ccname",     V.efunc (Map.new_proc **-> V.result (V.string))
-                          (fun p -> p.Proc.cc.Call.name)
+  [ "freeze", V.efunc (Map.proc **-> Map.block **-> V.runit) 
+                  Stack.freeze
+  ; "blocks", V.efunc (Map.proc **-> V.result (V.record V.value))
+                  (Stack.blocks Map.block.V.embed (V.list V.value).V.embed)
+  ; "ccname",     V.efunc (Map.proc **-> V.result (V.string))
+                  (fun p -> p.Proc.cc.Call.name)
   ] g;                    
 @ 
 PERHAPS THIS CODE SHOULD REPLACE THE SOMEWHAT HEAVYWEIGHT [[Asm.dot]]???
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Stages"
-  [ "writedot",  V.efunc (V.value **-> Map.proc **-> V.result V.bool)
+  [ "writedot", V.efunc (V.value **-> Map.proc **-> V.result V.bool)
       (fun _ proc -> 
         prerr_string
-          (Cfgutil.cfg2dot ~compress:true ~name:proc.Proc.symbol#mangled_text proc.Proc.cfg);
+          (Cfgutil.cfg2dot ~compress:true ~live:true ~name:proc.Proc.symbol#mangled_text proc.Proc.cfg);
         flush stderr;
         true)
-  ; "new_writedot", V.efunc (V.value **-> Map.new_proc **-> V.result V.bool)
-      (fun _ proc -> 
-        prerr_string
-          (Cfgutil.new_cfg2dot ~compress:true ~live:true ~name:proc.Proc.symbol#mangled_text proc.Proc.cfg);
-        flush stderr;
-        true)
-  ; "replace_vfp", V.efunc (V.value **-> Map.new_proc **-> V.result V.bool)
+  ; "replace_vfp", V.efunc (V.value **-> Map.proc **-> V.result V.bool)
       (fun _ proc -> proc.Proc.cc.Call.replace_vfp proc.Proc.cfg; true)
   ]  g;
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Targets"
-  [ "dummy32l",     Map.target.V.embed Dummy.dummy32l
-  ; "dummy32b",     Map.target.V.embed Dummy.dummy32b
-  ; "new_dummy32l", Map.new_target.V.embed Dummy.dummy32l'
-  ; "new_dummy32b", Map.new_target.V.embed Dummy.dummy32b'
-  ; "x86",          Map.target.V.embed X86.target
-  ; "new_x86",      Map.new_target.V.embed X86.new_target
-  ; "interp",       Map.target.V.embed Interp.target
-  ; "new_interp",   Map.new_target.V.embed Interp.target'
+  [ "dummy32l", Map.new_target.V.embed Dummy.dummy32l'
+  ; "dummy32b", Map.new_target.V.embed Dummy.dummy32b'
+  ; "x86",      Map.new_target.V.embed X86.target
+  ; "interp",   Map.new_target.V.embed Interp.target'
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Typecheck" 
-  [ "proc",       V.efunc (V.value **-> Map.proc **-> V.result V.int)
-                          (fun _ proc -> Typecheck.proc proc; 1)
-  ] g;                        
-@  
+ [ "proc",       V.efunc (V.value **-> Map.proc **-> V.result V.int)
+                         (fun _ proc -> Typecheck.proc proc; 1)
+ ] g;
+ 
 <<lua initialization>>=
 "Expander.x86 = { fn = Expander.x86f, uses = { 'proper widths', 'no vars' }, \
                   name = 'Expander.x86', creates = { 'x86 invariant' }, \
-                  doc = 'A prototype code expander for the x86' }";
-"Expander.new_x86 = { fn = Expander.new_x86f, uses = { 'proper widths', 'no vars' }, \
-                  name = 'Expander.new_x86', creates = { 'x86 invariant' }, \
                   doc = 'A prototype code expander for the x86 (new proc)' }";
 ""
 @

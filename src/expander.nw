@@ -273,25 +273,29 @@ val don't_touch_me : Rtl.Private.effect list -> bool
 The [[Proc.t]] gives the expander a supply of temporaries.
 <<expander.mli>>=
 module type S = sig
-  val expand : ('a, 'b, 'c, 'd) Proc.t' -> Rtl.rtl -> Rtl.rtl list
-  val cfg    : 'a -> Proc.t ->      bool
-  val new_cfg: 'a -> Ast2ir.proc -> bool
+  val expand : ('a, 'b, 'c, 'd) Proc.t -> Rtl.rtl -> Rtl.rtl list
+  (* support for old code
+   * val cfg    : 'a -> Proc.t ->      bool
+   *)
+  val cfg: 'a -> Ast2ir.proc -> bool
 end 
 module IntFloatAddr (Post : Postexpander.S) : S
 @ 
 Here are some abbreviations and utilities.
 <<expander.ml>>=
 module type S = sig
-  val expand : ('a, 'b, 'c, 'd) Proc.t' -> Rtl.rtl -> Rtl.rtl list
-  val cfg    : 'a -> Proc.t -> bool
-  val new_cfg: 'a -> Ast2ir.proc -> bool
+  val expand : ('a, 'b, 'c, 'd) Proc.t -> Rtl.rtl -> Rtl.rtl list
+  (* support for old code
+   * val cfg    : 'a -> Proc.t -> bool
+   *)
+  val cfg: 'a -> Ast2ir.proc -> bool
 end 
 
 module R  = Rtl
 module RP = Rtl.Private
 module RU = Rtlutil
 module S  = Space
-module T  = Target2
+module T  = Target
 
 module Up   = Rtl.Up
 module Down = Rtl.Dn
@@ -631,7 +635,7 @@ and guarded g left right w =
   | RP.App (cmp, _) ->
       Impossible.unimp "non-binary comparison in guard"
 @ POSSIBLY  REFERENCES TO [[pc_lhs]] SHOULD BE REPLACED BY USING
-[[Target2.goto.project]] AND FRIENDS.  IN GENERAL, WE NEED TO SEE
+[[Target.goto.project]] AND FRIENDS.  IN GENERAL, WE NEED TO SEE
 ABOUT MERGING SIMILAR INFORMATION IN THE [[Target]] AND
 [[Postexpander.S]] INTERFACES.
 @
@@ -794,7 +798,7 @@ and old_loc l =
 @
 \subsection{The flow-graph expander}
 Here we expand every RTL in a flow graph.
-<<generic flow-graph expander>>=
+<<support for old code that can be removed from generic flow-graph expander>>=
 module G  = Cfg4
 module GU = Cfgutil
 let cfg _ proc =
@@ -815,8 +819,9 @@ let cfg _ proc =
   in
   List.iter exp nodes;
   !modified
+
 <<generic flow-graph expander>>=
-let new_cfg _ proc =
+let cfg _ proc =
   let module G = Cfgx.M in
   let g = proc.Proc.cfg in
   let t = proc.Proc.target in

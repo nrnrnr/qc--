@@ -12,7 +12,7 @@
 % ------------------------------------------------------------------ 
 
 This is an assembler that emits {\PAL}. It implements the
-[[Asm3.assembler]] interface for assemblers in the {\qcc} compiler.
+[[Asm.assembler]] interface for assemblers in the {\qcc} compiler.
 
 Since {\PAL} has no natural \emph{native pointer size} like assemblers
 for real machines it receices a functor argument of type [[PERSONALITY]]
@@ -22,7 +22,12 @@ INPUT PROGRAM MATCHES THE COMPILED-IN TARGET.  THE TARGET SHOULD BE A
 DYNAMIC PARAMETER.
 <<PERSONALITY>>=
 module type PERSONALITY = sig
-    val target: Target2.t
+    val wordsize:       int
+    val pointersize:    int
+    val memsize:        int
+    val byteorder:      Rtl.aggregation
+    val float:          string
+    val charset:        string
     type proc
     val cfg2ast : proc -> Ast.proc
 end
@@ -33,7 +38,7 @@ The assembler constructor receices the output channel for the assembler.
 <<S>>=
 module type S = sig
     type proc
-    val asm: out_channel -> proc Asm3.assembler
+    val asm: out_channel -> proc Asm.assembler
 end    
 
 <<astasm.mli>>=
@@ -50,9 +55,9 @@ The implementation provides no surprises. It builds up an {\AST} and
 emits it to [[stdout]] when the [[emit]] method is called.
 
 <<astasm.ml>>=
-module T        = Target2
+module T        = Target
 module A        = Ast
-module Asm      = Asm3
+module Asm      = Asm
 
 <<PERSONALITY>>
 <<S>>
@@ -67,14 +72,14 @@ end
 % ------------------------------------------------------------------ 
 
 <<Make>>=
-let pointer     = A.BitsTy(P.target.T.pointersize)
+let pointer     = A.BitsTy(P.pointersize)
 let bits n      = A.BitsTy n
 let int n       = A.Int( string_of_int n
-                       , Some (bits P.target.T.wordsize)
+                       , Some (bits P.wordsize)
                        )
 let one         = int 1 (* wordsize *)
 let zero        = A.Int( "0"
-                       , Some (bits P.target.T.memsize)
+                       , Some (bits P.memsize)
                        ) (* memsize *)
 
 exception Unsupported of string
@@ -133,7 +138,7 @@ the same width as a pointer.
 
 <<Make>>=
 let reladdr (a:reloc) =
-    let width           = P.target.T.pointersize in
+    let width           = P.pointersize in
     let const (i:int64) = A.Int(Printf.sprintf "%Lx" i, Some pointer) in
     let sym   s         = A.Fetch (A.Name(None,s#mangled_text)) in
         match Reloc.Simple.normalize a with
@@ -226,7 +231,7 @@ object (this)
         this#append (A.Datum(A.Align n))
 
     method  addloc n = 
-        let memsize = P.target.T.memsize in
+        let memsize = P.memsize in
         let ty      = bits memsize            in
         let size    = int n                   in
             this#append (A.Datum(A.MemDecl(ty,A.FixSize(size),None)))
@@ -239,7 +244,7 @@ object (this)
 
     (* emit data *)
     method zeroes (n:int) =
-        let ty      = bits P.target.T.memsize in
+        let ty      = bits P.memsize in
         let size    = int n                   in
         let rec z   = function
             | 0 -> []
@@ -285,16 +290,16 @@ object (this)
     (* Advertise pointer sizes and such for this assembler *)
 
     method private personality =
-        [ A.Memsize P.target.T.memsize
-        ; ( match P.target.T.byteorder with
+        [ A.Memsize P.memsize
+        ; ( match P.byteorder with
           | Rtl.BigEndian    -> A.ByteorderBig
           | Rtl.LittleEndian -> A.ByteorderLittle
           | _                -> assert false
           )
-        ; A.PointerSize P.target.T.pointersize
-        ; A.WordSize    P.target.T.wordsize
-        ; A.Charset     P.target.T.charset
-        ; A.FloatRepr   P.target.T.float
+        ; A.PointerSize P.pointersize
+        ; A.WordSize    P.wordsize
+        ; A.Charset     P.charset
+        ; A.FloatRepr   P.float
         ]
     
     (* emit takes the declarations in toplevel and completes them to a

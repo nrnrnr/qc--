@@ -6,9 +6,16 @@ target
     charset "latin1"
     float "ieee754";
 
-section "data" { align 8; }
+export bits32 \212\029\140\217\143\000\178\004\233\128\t\152\236\248B~;
+
+section "data" { align 1; }
 
 section "data" { sym@Cmm_private_global_area: }
+
+section "data"
+{
+    sym@@212@029@140@217@143@000@178@004@233@128@t@152@236@248B@:
+}
 
 section "data" { bits8[0::bits32]; }
 
@@ -16,22 +23,14 @@ section "data"
 {
     sym@p()
     {
+        $r31 = ($r31+-24);
+        i = $r0;
         ;
-        i = $m(32B)[($r(32)[31]+32::bits32)];
-        $c(32)[0] = sym@loop;
-        sym@loop:
-        i = (i-1::bits32);
-        $c(32)[0] when %ge[32](i, 0::bits32) = sym@p@l5;
-        $c(32)[0] = sym@p@l6;
-        $c(32)[0] = sym@p@l5;
-        sym@p@l6:
-        $c(32)[0] = sym@p@l4;
-        sym@p@l5:
-        $c(32)[0] = sym@loop;
-        sym@p@l4:
-        $c(32)[0] = $r(32)[30];
+        $t1 = $r30;
         ;
-        ;
+        initialize continuations:l3:
+        loop:
+        // dangling pointer in flow graph
     }
 }
 

@@ -109,7 +109,7 @@ The [[empty]] function creates an (almost) empty environment and it the
 only way to create an environment. For every program the compiler
 translates it creates one environment. Upon creation the environment is
 passed to important data structures: a [[Srcmap.map]] value, and an
-assembler [[Asm3.assembler]]. A [[Srcmap.map]] value associates a
+assembler [[Asm.assembler]]. A [[Srcmap.map]] value associates a
 byte-offset in the input with a more readable triple of file name, line,
 and column. An assembler requires symbols to be registered before they
 can be used.  Both the source map and the assembler can be observed from
@@ -118,16 +118,23 @@ an environment.
 IT IS NOT CLEAR TO ME WHY THE TYPE OF THE ASSEMBLER SYMBOL IS ALLOWED
 TO LEAK INTO THE FAT ENVIRONMENT. ---NR
 
+BECAUSE THE FAT ENVIRONMENT HOLDS THE ASSOCIATION BETWEEN A NAME AND ITS
+SYMBOL. WE ALREADY HAVE PLANS TO TO IMPLEMENT A LOOKUP FUNCTION IN THE
+ASSEMBLER AND TO EXPELL THE SYMBOL FROM HERE. --CL
+
+
 <<signature Env>>=
 type 'proc env'
-type env = Proc.t env'
+
+(* type env = Proc.t env'
+ *)
 type scope
 <<types>>
 val map : ('b -> 'a) -> 'a env' -> 'b env'
 
-val empty:      Srcmap.map -> 'proc Asm3.assembler -> 'proc env'   (* empty scope stack *)
+val empty:      Srcmap.map -> 'proc Asm.assembler -> 'proc env'   (* empty scope stack *)
 val srcmap:     'proc env' -> Srcmap.map
-val asm:        'proc env' -> 'proc Asm3.assembler
+val asm:        'proc env' -> 'proc Asm.assembler
 @
 
 
@@ -268,7 +275,7 @@ registers are numbered consecutively.
 <<types>>=
 and  register =     { index:        int
                     ; rhint:        reghint
-                    ; loc:          Automaton2.loc option
+                    ; loc:          Automaton.loc option
                     }
 @
 
@@ -680,7 +687,7 @@ following section.
 <<fenv.ml>>=
 module E            = Error     (* handy abbreviations *)
 module T            = Types
-module Asm          = Asm3    
+module Asm          = Asm    
 @
 
 The [[Arg]] modules captures the diverse aspects of [[Clean]] and
@@ -811,7 +818,9 @@ and stackdata =       { soffset    :    int    (* current offset *)
                       ; smaxalign  :    int    (* max stackdata align constr*)
                       ; sname      :    string (* label for offset *)
                       }
-and env = Proc.t env'
+(*
+ * and env = Proc.t env'
+ *)
 <<types>>
 @
                        
@@ -881,7 +890,7 @@ let map f { scopes      = scopes
           } =
           { scopes      = scopes     
           ; srcmap      = srcmap     
-          ; asm         = Asm3.map f asm        
+          ; asm         = Asm.map f asm        
           ; error       = error      
           ; target      = target     
           ; extern      = extern     

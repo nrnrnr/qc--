@@ -18,13 +18,13 @@ target platform can be chosen at run-time of the compiler.
 Consequently, targets must be described by an {\ocaml} value that can
 be passed at run-time (rather than by a module, which can not). 
 
-<<target2.mli>>=
+<<target.mli>>=
 <<type map>>
 <<type cc>>
 <<type t>>
 
 <<exported functions>>
-val space : ('au, 'cc) t' -> Rtl.space -> Space.t
+val space : ('au, 'cc) t -> Rtl.space -> Space.t
 @ 
 
 The [[space]] function returns information about a particular space.
@@ -32,8 +32,7 @@ It is a checked run-time error to ask about a space not on the list
 for the target.
 
 <<type t>>=
-type ('automaton, 'cc) t' = { <<components of t>> }
-type t = (Automaton2.spec, Automaton2.spec cc') t'
+type ('automaton, 'cc) t = { <<components of t>> }
 @
 
 Every target has a descriptive name.
@@ -77,7 +76,6 @@ type 'automaton cc' =
        AN ADDRESS? *)
     ; stack_slots:  'automaton (* where private data go *)
     }
-type cc = Automaton2.spec cc'
 @ 
 Continuations, spill locations and other private data of a procedures
 lives on the run-time stack. These locations are register-like (????) and
@@ -213,8 +211,8 @@ The register allocator (see \module{linscan}) needs target-specific
 informations about hardware registers and temporaries. In particular:
 
 <<exported functions>>=
-val is_tmp : ('au, 'cc) t' -> Rtl.space -> bool  (* partially apply me *)
-val fits:    ('au, 'cc) t' -> Rtl.space -> Register.t -> bool
+val is_tmp : ('au, 'cc) t -> Rtl.space -> bool  (* partially apply me *)
+val fits:    ('au, 'cc) t -> Rtl.space -> Register.t -> bool
 @
 \begin{itemize}
 \item [[fits t sp r]] is true, if (hardware) register [[r]] can hold any 
@@ -267,7 +265,7 @@ the fat environment (\module{fenv}). The [[check]] function compares an
 actual target with the expectations in an environment and 
 raises an error exception in case of inconsistencies.
 
-<<target2.mli>>=
+<<target.mli>>=
 (*
  * val check: t -> Fenv.Clean.env -> unit  (* Error.ErrorExn *)
  *)
@@ -280,7 +278,7 @@ raises an error exception in case of inconsistencies.
 The implementation does not hold any surprises. We use module [[Map]]
 to implement lookup tables for registers and calling conventions.
 
-<<target2.ml>>=
+<<target.ml>>=
 module R       = Rtl
 module S       = Space
 module RP      = Rtl.Private
@@ -290,10 +288,10 @@ module RP      = Rtl.Private
 
 @
 
-<<target2.ml>>=
+<<target.ml>>=
 let space t s = List.find (fun x -> x.Space.space = s) t.spaces
 @
-<<target2.ml>>=
+<<target.ml>>=
 let is_tmp { spaces = spaces } =
   List.fold_right
     (fun s rest ->
@@ -303,7 +301,7 @@ let is_tmp { spaces = spaces } =
     spaces
     (fun _ -> false)
 @ 
-<<target2.ml>>=
+<<target.ml>>=
 let space_fits tmp =
   match tmp.Space.classification with
   | Space.Temp {Space.stands_for=hw; Space.index_ok=locset} ->

@@ -22,7 +22,7 @@ The module is used to solve for the values of late compile-time
 constants.
 The equations themselves typically arise from constraints in the
 [[Block]] module.
-<<const2.mli>>=
+<<rtleqn.mli>>=
 exception Can'tSolve
 
 type t              (* equation *)
@@ -66,7 +66,7 @@ expression into linear form such that it can be passed to the linear
 equation solver. The general idea is that complicated (and possibly
 non-linear) terms are treated as constant with respect to equation
 solving.
-<<const2.ml>>=
+<<rtleqn.ml>>=
 module D  = Rtl.Dn
 module U  = Rtl.Up
 module RP = Rtl.Private
@@ -81,7 +81,7 @@ We represent an expression as a linear
 sum of terms.  
 A term is a constant, a variable, or one ([[Unit]]). An equation is
 a sum whose value is known to be zero.
-<<const2.ml>>=
+<<rtleqn.ml>>=
 type term =
     | Const of Rtl.exp
     | Var   of string
@@ -91,7 +91,7 @@ type sum = (int * term) list
 type t   = sum                  (* equation, sum == 0 *)
 @
 To aid debugging, we have a printable representation of terms. 
-<<const2.ml>>=
+<<rtleqn.ml>>=
 module ToString = struct
     let term = function
         | Const(exp) -> "(" ^ Rtlutil.ToReadableString.exp exp ^ ")"
@@ -116,7 +116,7 @@ let to_string = ToString.t
 @
 Here are constructor functions for simple sums. We use them when we
 parse an {\rtl} expression into a sum.
-<<const2.ml>>=
+<<rtleqn.ml>>=
 let sym x   = [(1, Var x)]
 let int i   = if i = 0 then [] else [(i, Unit)]
 let const k = [(1, Const (U.exp k))]
@@ -128,7 +128,7 @@ in particular to recognize certain {\rtl} operators. We traverse an
 {\rtl} expression and create a sum representation for it. 
 Any expression we
 don't know how to handle becomes a constant.
-<<const2.ml>>=
+<<rtleqn.ml>>=
 let exp e = 
     let rec exp = function
     | RP.Const(RP.Bits(b))      -> int (Bits.S.to_int b)
@@ -143,7 +143,7 @@ let exp e =
 An equation is a sum whose value is zero. The [[equate]] function
 simply subtract both sides from each other to obtain a sum of value
 zero.
-<<const2.ml>>=
+<<rtleqn.ml>>=
 let equate e1 e2 = sub (exp e1) (exp e2)
 @
 The linear equation solver needs to know about terms. We provide the
@@ -155,7 +155,7 @@ us. The equation solver provides (should be changed):
 \item [[T.make_zero]]: adds a sum that is known to be zero to an
        equation set.
 \end{itemize}
-<<const2.ml>>=
+<<rtleqn.ml>>=
 module T = struct
     type t = term
     let variable = function         (* identify variable *)
@@ -169,7 +169,7 @@ module Solver = Eqn.Make(T)         (* equation solver over terms *)
 The result as it is returned by the equation solver associates a variable
 with a sum. Since we need to return {\rtl} expressions, we have to
 unparse a sum into an expression. 
-<<const2.ml>>=
+<<rtleqn.ml>>=
 let rtl ~(width:int) (e:sum) = 
     let add    = Rtlutil.add width in
     let mult   = Rtl.opr "mul_trunc" [width] in 
@@ -193,7 +193,7 @@ let rtl ~(width:int) (e:sum) =
 Here we solve the equation system. We have a list of sums that we feed
 into the linear equation solver. Once we obtain the result, we translate
 it back to {\rtl}s. 
-<<const2.ml>>=
+<<rtleqn.ml>>=
 let solve ~width sums =
     try
         let eqns   = List.fold_right Solver.make_zero sums Solver.empty in

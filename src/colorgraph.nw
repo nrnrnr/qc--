@@ -142,7 +142,7 @@ procedure Main()\\
 %-------------------------------------------------------------------
 
 <<graph coloring types>>=
-module T = Target2
+module T = Target
 @
 
 <<graph coloring types>>=
@@ -165,7 +165,7 @@ module CompareMoves = struct
 end
 module MS = Set.Make(CompareMoves)
 
-let is_tmp target (s,_,_) = Target2.is_tmp target s 
+let is_tmp target (s,_,_) = Target.is_tmp target s 
 @
 
 Temps and moves are stored in worklists. A temp can only be in one of these
@@ -472,7 +472,7 @@ let possibleColors target cg ((s,_,_) as tmp) =
     with Not_found ->
         if is_tmp target tmp 
         then
-            let colSet = List.fold_left (fun set reg -> if Target2.fits target s reg
+            let colSet = List.fold_left (fun set reg -> if Target.fits target s reg
                                                         then RS.add reg set else set)
                                         RS.empty cg.allColors in
             let () = cg.colors <- SpaceMap.add s colSet cg.colors in
@@ -1093,7 +1093,7 @@ memory location [[mem]], where the value of the spillee is held.
 let update proc (spillee, mem) node =
   let target = proc.Proc.target in
   let reads, writes = reads_writes (G.instr node) spillee in
-  let lookup = Target2.space target in
+  let lookup = Target.space target in
   if reads || writes then
     let tmp   = Talloc.Multiple.reg_like proc.Proc.temps spillee in
     let subst = fun x -> if x = spillee then tmp else x in 
@@ -1164,8 +1164,8 @@ let isMoveInstruction t inst =
   match Rtlutil.RTLType.singleAssignment (G.instr inst) with
 	| Some (((s1,_,_) as r1), ((s2,_,_) as r2)) ->
 	  (not (isVFP r1 || isVFP r2)) &&
-   	  (s1 = s2 || (is_tmp t r1 && Target2.fits t s1 r2)
-               || (is_tmp t r2 && Target2.fits t s2 r1))
+   	  (s1 = s2 || (is_tmp t r1 && Target.fits t s1 r2)
+               || (is_tmp t r2 && Target.fits t s2 r1))
 	| _ -> false
 @
 
@@ -1173,7 +1173,7 @@ let isMoveInstruction t inst =
 The interface provides the modules to embed the graph coloring functions in the
 Lua interpreter.
 
-<<colorgraph.mli>>=
+<<support for old backplane that can be removed from colorgraph.mli>>=
 module GCT : Lua.Lib.USERTYPE
 module Make (BackplaneT : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.M.action)
             (GCT : Lua.Lib.TYPEVIEW with type 'a t = 'a GCT.t
@@ -1182,8 +1182,9 @@ module Make (BackplaneT : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.M.actio
                                   and type 'a combined = 'a BackplaneT.combined)
        : Lua.Lib.TYPEFUL with type 'a combined = 'a BackplaneT.combined
 
+<<colorgraph.mli>>=
 module NewGCT : Lua.Lib.USERTYPE
-module NewMake (BackplaneT : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.M.action)
+module NewMake (BackplaneT : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.M'.action)
             (GCT : Lua.Lib.TYPEVIEW with type 'a t = 'a NewGCT.t
                                   and type 'a combined = 'a BackplaneT.combined)
             (ProcT : Lua.Lib.TYPEVIEW with type 'a t = Ast2ir.proc
@@ -1235,7 +1236,7 @@ module type LIVENESS = sig
   type node
   val live_out : node -> Register.Set.t
 end
-<<colorgraph.ml>>=
+<<old code, remove from colorgraph.ml>>=
 module OldG : GRAPH with type node = Cfg4.node with type cfg = Cfg4.cfg = struct 
   include Cfg4
   let fold_fwd g f z = Cfg4.gm_enumerate g; Cfgutil.fold_fwd g f z
@@ -1244,7 +1245,7 @@ module OldG : GRAPH with type node = Cfg4.node with type cfg = Cfg4.cfg = struct
   let eq = (=)
   let delete = gm_delete_assign
 end
-<<colorgraph.ml>>=
+<<old code, remove from colorgraph.ml>>=
 module OldL : LIVENESS with type node = OldG.node = struct
   module G = Cfg4
   module P = Cfgprop
@@ -1306,8 +1307,8 @@ module type PROC = sig
   type cfg
   type cc
   type automatonspec
-  type tgt = (automatonspec, cc) Target2.t'
-  type t = (automaton, cfg, cc, tgt) Proc.t'
+  type tgt = (automatonspec, cc) Target.t
+  type t = (automaton, cfg, cc, tgt) Proc.t
   val allocatable : cc -> Register.t list
   val spill_slot_for : t -> Register.t -> Automaton.loc
   (* let spill_slot_for (_, _, w) proc = Automaton2.allocate proc.Proc.priv w None *)
@@ -1326,7 +1327,7 @@ module PreMake (G : GRAPH) (LI : LIVENESS with type node = G.node)
       let eq _ x y = x = y
       let to_string vs _ = "<cgInfo>"
   end
-  module Make (BackplaneT : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.M.action)
+  module Make (BackplaneT : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.M'.action)
               (GCT : Lua.Lib.TYPEVIEW with type 'a t = 'a GCT.t
                                     and type 'a combined = 'a BackplaneT.combined)
               (ProcT : Lua.Lib.TYPEVIEW with type 'a t = P.t
@@ -1350,15 +1351,15 @@ module PreMake (G : GRAPH) (LI : LIVENESS with type node = G.node)
       end
     end
 end
-<<colorgraph.ml>>=
+<<support for old backplane, can be removed from colorgraph.ml>>=
 module OldProc = struct
   type automaton = Automaton2.t
   type automatonspec = Automaton2.spec
   type cfg = Cfg4.cfg
-  type cc = Automaton2.spec Target2.cc'
-  type tgt = (Automaton2.spec, cc) Target2.t'
+  type cc = Automaton2.spec Target.cc'
+  type tgt = (Automaton2.spec, cc) Target.t'
   type t = (automaton, cfg, cc, tgt) Proc.t'
-  let allocatable cc = cc.Target2.allocatable
+  let allocatable cc = cc.Target.allocatable
   let spill_slot_for proc (_, _, w)  =
     Automaton.of_old (Automaton2.allocate proc.Proc.priv w None)
 
@@ -1372,17 +1373,19 @@ module NewProc = struct
   type automatonspec = Rtl.exp->Automaton.t
   type cfg = Rtl.rtl Cfgx.M.cfg
   type cc = Call.t
-  type tgt = (automatonspec, cc) Target2.t'
-  type t = (automaton, cfg, cc, tgt) Proc.t'
+  type tgt = (automatonspec, cc) Target.t
+  type t = (automaton, cfg, cc, tgt) Proc.t
   let allocatable cc = RS.elements (cc.C.pre_nvregs ++ cc.C.volregs)
   let spill_slot_for proc (_, _, w)  = Automaton.allocate proc.Proc.priv w ""
 end
 
 module New = PreMake (NewG) (NewL) (NewProc) (struct let name = "NewColorGraph" end)
 @ 
-<<colorgraph.ml>>=
+<<support for olf backplane, can be removed from colorgraph.ml>>=
 module GCT = Old.GCT
 module Make = Old.Make
+
+<<colorgraph.ml>>=
 module NewGCT = New.GCT
 module NewMake = New.Make
 @
@@ -1498,7 +1501,9 @@ function ColorGraph_init (CG, B) -- carefully don't define table
       )
 end
 
-ColorGraph_init (ColorGraph, Backplane)
+-- support for old code that can be removed
+-- ColorGraph_init (ColorGraph, Backplane)
+-- end of old code
 ColorGraph_init (NewColorGraph, NewBackplane)
 @
 

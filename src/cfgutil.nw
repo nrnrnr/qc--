@@ -23,19 +23,9 @@ knowledge of the internal details of \module{cfg3}.
 \end{quote}
 
 <<cfgutil.mli>>=
-type cfg  = Cfg4.cfg
-type node = Cfg4.node
-
-val first   :   cfg -> int        (* number of first node -- req enumerated *)
-val limit   :   cfg -> int        (* limiting number      -- req enumerated *)
-val fold_fwd:   cfg -> (node -> 'a -> 'a) -> 'a -> 'a
-val fold_bwd:   cfg -> (node -> 'a -> 'a) -> 'a -> 'a
-val subst:      cfg -> (Rtl.rtl -> Rtl.rtl) -> unit
-val cfg2dot:    compress:bool -> name:string -> cfg -> string
-val emit    :   cfg -> (Rtl.rtl -> unit) -> (string -> unit) -> unit
-val new_cfg2dot:    compress:bool -> live:bool -> name:string -> Rtl.rtl Cfgx.M.t -> string
-val new_cfg2ast: ('i -> Ast.stmt) -> 'i Cfgx.M.t -> name:string -> Ast.proc
-val new_emit  :   'i Cfgx.M.t -> ('i -> unit) -> (string -> unit) -> unit
+val cfg2dot:    compress:bool -> live:bool -> name:string -> Rtl.rtl Cfgx.M.t -> string
+val cfg2ast: ('i -> Ast.stmt) -> 'i Cfgx.M.t -> name:string -> Ast.proc
+val emit  :   'i Cfgx.M.t -> ('i -> unit) -> (string -> unit) -> unit
 @
 
 WHAT DO new_cfg2ast AND new_emit DO? PLEASE EXPLAIN THE PARAMETERS. --CL
@@ -63,45 +53,8 @@ WHAT DO new_cfg2ast AND new_emit DO? PLEASE EXPLAIN THE PARAMETERS. --CL
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
 
-No surprises here.
-
-<<cfgutil.ml>>=
-module G  = Cfg4
-type cfg  = G.cfg
-type node = G.node
-@
-
-The [[G.fold]] functions use open intervals to specify a region to fold
-over.  
-
-<<cfgutil.ml>>=
-let first cfg = G.number (G.first cfg)     (* smallest number *)
-let limit cfg = G.number (G.last  cfg) + 1 (* highest number + 1 *)
-
-let fold_fwd cfg f unit =
-  G.gm_enumerate cfg;
-  G.scan_fwd cfg ~first:(first cfg) ~limit:(limit cfg) f unit
-
-let fold_bwd cfg f unit =
-  G.gm_enumerate cfg;
-  G.scan_bwd cfg ~first:(first cfg) ~limit:(limit cfg) f unit
-
-let subst cfg (f:Rtl.rtl -> Rtl.rtl) = 
-    fold_fwd cfg (fun node () -> G.upd_instr node f) () 
-@ 
-
 <<cfgutil.ml>>=
 let emit cfg rtl_emit sym_emit =
-    G.gm_enumerate cfg;
-    let visit node () = match G.symbol node with
-        | None   -> rtl_emit (G.instr node) 
-        | Some s -> sym_emit (s#original_text)     (* skip null rtl of label nodes *) 
-    in    
-        fold_fwd cfg visit ()
-        
-
-<<cfgutil.ml>>=
-let new_emit cfg rtl_emit sym_emit =
   let module G = Cfgx.M in
   let labels n = if G.kind n = G.Join then G.labels n else [] in
   let visit node =
@@ -113,36 +66,6 @@ let new_emit cfg rtl_emit sym_emit =
         
 
 <<cfgutil.ml>>=
-let number_and_rtl node =
-    ( string_of_int (G.number node)
-    ^ ": " 
-   (**) 
-    ^ String.escaped (Rtlutil.ToReadableString.rtl (G.instr node))
-    (**)
-    )
-
-let cfg2dot ~compress ~name cfg =
-  let nodename node = Printf.sprintf "\"N%d\"" (G.number node) in
-  let dotnode  node = nodename node ^ " [label=\"" ^ number_and_rtl node ^ "\"]" in
-  let edge_fwd from to' = nodename from ^ " -> " ^ nodename to'  ^ "\n" in
-  let edge_bwd from to' = nodename to'  ^ " -> " ^ nodename from ^
-                         "[dir=back,style=dotted]\n" in
-  let edges_leaving node = (* quadratic! *)
-    let add_edge dir edges n = dir node n ^ edges in
-    let fwd = List.fold_left (add_edge edge_fwd) ""  (G.succ node) in
-    let bwd = List.fold_left (add_edge edge_bwd) "" (G.pred node) in
-    fwd ^ bwd in
-  let _ = G.gm_enumerate cfg in
-  let oldv = Rtlutil.ToAST.verbosity Rtlutil.ToAST.Low in
-  let dotOpenGraph = "digraph " ^ name ^ " {\n" in
-  let pagesize = "  page=\"8,10.5\"\n" in
-  let compress = if compress then "  ratio=compress\n" else "" in
-  let dotCloseGraph = "}\n" in
-  let dotnodes = fold_bwd cfg (fun node rst -> dotnode node ^ "\n" ^ rst) "" in
-  let dotedges = fold_bwd cfg (fun node rst -> edges_leaving node ^ rst) "" in
-  let _ = Rtlutil.ToAST.verbosity oldv in
-    dotOpenGraph ^ pagesize ^ compress ^ dotnodes ^ dotedges ^ dotCloseGraph
-
 let extend_with preds nodes =
   let module G = Cfgx.M in
   let rec add_predecessors visited candidates = match candidates with
@@ -154,7 +77,7 @@ let extend_with preds nodes =
         add_predecessors (node :: visited) (preds node @ candidates) in
   add_predecessors nodes (List.flatten (List.map preds nodes))
 
-let new_cfg2dot ~compress ~live ~name g =
+let cfg2dot ~compress ~live ~name g =
   let module G = Cfgx.M in
   let module L = Cfgx.Live in
   let () = if live then L.set_live g in
@@ -204,7 +127,7 @@ let new_cfg2dot ~compress ~live ~name g =
 THE FOLLOWING CODE IS BOGUS --- IT ACTUALLY NEEDS TO VISIT THE NODES
 IN LAYOUT ORDER.
 <<cfgutil.ml>>=
-let new_cfg2ast instr g ~name =
+let cfg2ast instr g ~name =
   let module G = Cfgx.M in
   let module A = Ast in
   let node n tail = match G.to_instr n with

@@ -19,7 +19,7 @@ routines to evaluate {\rtl} expressions and to simplify {\rtl}s by
 evaluating expressions inside of them. The promise is, that the returned
 {\rtl}s and expressions are simpler as the ones provided.
 
-<<rtleval2.mli>>=
+<<simplify.mli>>=
 val rtl:    Rtl.rtl -> Rtl.rtl
 val exp:    Rtl.exp -> Rtl.exp
 val bits:   Rtl.exp -> Bits.bits    (* Error.ErrorExn, convenient function *)
@@ -31,7 +31,7 @@ evaluate guarding expressions by elimination of registers in relations
 of the form $r+k = r+k'$. However, this elimination is not semantics
 preserving if the $r+k$ would overflow, but $k$ not.  
 
-<<rtleval2.mli>>=
+<<simplify.mli>>=
 module Unsafe: sig
     val rtl:    Rtl.rtl -> Rtl.rtl
 end
@@ -39,7 +39,7 @@ end
 
 We export the list of operators we can evaluate at compile time. 
 
-<<rtleval2.mli>>=
+<<simplify.mli>>=
 val compile_time_ops: string list
 @
 
@@ -52,7 +52,7 @@ expression (or {\rtl}) bottom up as far as possible. The final result
 will tell us whether it needs further ecaluation at link-time or
 run-time.
 
-<<rtleval2.ml>>=
+<<simplify.ml>>=
 module RS = Reloc.Simple
 module R  = Rtl
 module RP = Rtl.Private
@@ -77,7 +77,7 @@ it tries to evaluate guarding relational expressions like $r+k < r+k'$.
 The simplification assumes that it is safe to eliminate the $r$ on both
 sides of the $<$ operator.
 
-<<rtleval2.ml>>=
+<<simplify.ml>>=
 module Unsafe = struct
     <<unsafe RTL simplification>>
 end
@@ -85,7 +85,7 @@ end
 
 The exported function work on the public representation of {\rtl}s
 
-<<rtleval2.ml>>=
+<<simplify.ml>>=
 let rtl r  = try U.rtl (Safe.rtl (D.rtl r))
              with Error msg -> Impossible.impossible msg
 
@@ -239,7 +239,7 @@ let rec app o w args = match Safe.app o w args with
         | Some(r1,k1), Some(r2,k2) when r1 = r2 -> 
             let r      = app op w [k1;k2] in
             let dbg () = Verbose.say 5 [
-                         Printf.sprintf "Rtleval2.Unsafe.app: %s `%s` %s = %s\n"
+                         Printf.sprintf "Simplify2.Unsafe.app: %s `%s` %s = %s\n"
                         (Rtlutil.ToReadableString.exp (Rtl.Up.exp k1))
                         op
                         (Rtlutil.ToReadableString.exp (Rtl.Up.exp k2))

@@ -41,13 +41,13 @@ the less-specific information before the more-specific information.
 The functor parameters and the parameter of type [[string->Call.t]]
 will all go away once the new flow graph ([[Cfg]]) takes over the compiler.
 <<ast2ir.mli>>=
-type tgt  = ((Rtl.exp -> Automaton.t), Call.t) Target2.t'
-type proc = (Automaton.t, Rtl.rtl Cfgx.M.cfg, Call.t, tgt) Proc.t'
+type tgt  = ((Rtl.exp -> Automaton.t), Call.t) Target.t
+type proc = (Automaton.t, Rtl.rtl Cfgx.M.cfg, Call.t, tgt) Proc.t
 val translate :  tgt
                 -> proc Fenv.Clean.env'
                 -> optimizer: (proc -> unit)
                 -> Ast.program 
-                -> proc Asm3.assembler
+                -> proc Asm.assembler
 @
 
 % ------------------------------------------------------------------ 
@@ -69,7 +69,7 @@ module R  = Rtl
 module RP = Rtl.Private
 module RU = Rtlutil
 module RS = Register.Set
-module T  = Target2
+module T  = Target
 module Up = Rtl.Up
 @ 
 Utility functions and so on.
@@ -93,8 +93,8 @@ Some of these type definitions are called for in the interface; others
 are internal.
 The types in module [[K]] are used to translate continuations.
 <<ast2ir.ml>>=
-type tgt = ((Rtl.exp -> Automaton.t), C.t) Target2.t'
-type proc = (Automaton.t, Rtl.rtl G.cfg, C.t, tgt) Proc.t'
+type tgt = ((Rtl.exp -> Automaton.t), C.t) Target.t
+type proc = (Automaton.t, Rtl.rtl G.cfg, C.t, tgt) Proc.t
 <<statement-related types>>
 <<module [[K]], for continution info>>
 <<types for gathering stack and continuation info>>
@@ -198,7 +198,7 @@ let lvalue_name_in_env env x =
   let (_,(denot,t)) = F.findv x env in
   let w = tywidth t                 in
   match denot with
-  | F.Register({F.loc=Some l}) -> AT.of_old l, w
+  | F.Register({F.loc=Some l}) -> l, w
   | F.Register({F.index=i;F.loc=None}) ->
       if F.is_localv x env then
         AT.of_loc (Rtl.var x i w), w
@@ -298,10 +298,10 @@ THE TRANSLATION OF THE LINK-TIME CONSTANTS SHOULD BE DELEGATED TO THE
 ASSEMBLER.
 ONLY AN ASSEMBLER KNOWS WHAT LINK-TIME CONSTANTS IT CAN SUPPORT.
 <<definitions of [[compile_const]], [[eval_const]], and [[link_const]]>>=
-let compile_const exp     = Rtleval2.bits (expr exp)
-and eval_const    asm exp = Rtleval2.exp  (expr exp)  
+let compile_const exp     = Simplify.bits (expr exp)
+and eval_const    asm exp = Simplify.exp  (expr exp)  
 and link_const    asm exp = 
-    match Dn.exp (Rtleval2.exp  (expr exp)) with
+    match Dn.exp (Simplify.exp  (expr exp)) with
     | RP.Const(RP.Bits(b))   -> Reloc.Simple.of_const b
     | RP.Const(RP.Link(l,w)) -> Reloc.Simple.of_sum l (Bits.zero w)
     | RP.App(("add",_),[RP.Const(RP.Link(l,w)); RP.Const(RP.Bits(b))]) ->
@@ -751,7 +751,7 @@ and cutStmt (e, args, conts) =
   let cc    = ccs default_cc in
   let k     = expr e in
   let out   = actuals (cc.C.cut_parms.C.out k) args in
-  let cuti  = Contn.cutto target cc.C.cutto.Target2.embed ~contn:k in
+  let cuti  = Contn.cutto target cc.C.cutto.Target.embed ~contn:k in
   let ()    = add_constraints (Block.constraints out.C.overflow) in
   let conts = continuations cc conts true in
   G.instruction g out.C.shuffle **>
@@ -1161,7 +1161,7 @@ let globals (base:Rtl.exp) names =
                 let ()    = Buffer.add_string decls sign    in
                 let loc   = AT.allocate t w h in
                 let entry = ( rgn
-                            , (F.Register({reg with F.loc = Some (AT.to_old loc)}),ty)
+                            , (F.Register({reg with F.loc = Some loc}),ty)
                             ) in F.rebindv n entry env
             | _ -> impossible ("global register " ^ n ^ " not in environment")
             )

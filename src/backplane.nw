@@ -139,7 +139,10 @@ type outputs = SS.t
 
 <<exported module types>>
 module Make (Arg : ARG) : S with type proc = Arg.proc
+module M' : S with type proc = Ast2ir.proc
+<<support for the old backplane that can be removed>>=
 module M : S with type proc = Proc.t
+
 <<exported module types>>=
 module type ARG = sig
   type proc
@@ -844,10 +847,17 @@ let error_string err =
         spr "  type mismatch: `%s' expects arg of type `%s' but was passed type `%s'"
         fnName formal actual
 @
-<<backplane.ml>>=
+
+<<old backplane definition that can be removed from backplane.ml>>=
 module M = Make(struct
     type proc = Proc.t
     let lua_module_name = "Backplane"
     let lua_type_name = "original backplane action"
+  end)
+<<backplane.ml>>=
+module M' = Make(struct
+    type proc = Ast2ir.proc
+    let lua_module_name = "NewBackplane"
+    let lua_type_name = "new backplane action"
   end)
 

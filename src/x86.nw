@@ -30,8 +30,7 @@ module Spaces : sig
 end
 module Post : Postexpander.S
 module X    : Expander.S
-val target : Target2.t
-val new_target : Ast2ir.tgt
+val target : Ast2ir.tgt
 @ 
 
 \subsection{Name and storage spaces}
@@ -502,7 +501,7 @@ let push e = (* effect of pushing e *)
 @ 
 We now build the standard control flow.
 <<x86.ml>>=
-module T = Target2
+module T = Target
 module F = Mflow.MakeStandard (
   struct
      let pc_lhs = PX.pc_lhs
@@ -532,65 +531,8 @@ let uploc   = Up.loc
 let upexp   = Up.exp
 
 let fpcond n      = Rtl.reg  ('d',n,2)  (* FP modes *)
-
-let t = (* for generic automata, will go away *)
-    { Automaton2.Sample.byteorder = PX.byte_order
-    ; Automaton2.Sample.wordsize  = PX.wordsize
-    ; Automaton2.Sample.memsize   = 8
-    ; Automaton2.Sample.pointersize = PX.wordsize
-    ; Automaton2.Sample.registers =
-            [ "IEEE 754 rounding mode", (fpcond 0)
-            ]
-    }
-
-let target =
-  { T.name = "x86"
-
-  (* basic metrics and spaces are OK *)
-  ; T.byteorder   = PX.byte_order  
-  ; T.wordsize    = PX.wordsize
-  ; T.pointersize = PX.wordsize
-  ; T.vfp         = SS.vfp
-  ; T.alignment = 1
-  ; T.memsize = 8
-  ; T.spaces = [Spaces.m; Spaces.r; Spaces.t; Spaces.f; Spaces.u; Spaces.c]
-
-  (* Does the Pentium really implement IEEE 754?  I think so *)
-  ; T.float = "ieee754"
-
-  (* spill and reload are believed OK *)
-  ; T.spill  = spill
-  ; T.reload = reload
-
-  (* control flow is solid, except [[cutto]] is a lie *)
-  ; T.bnegate = F.bnegate eflags
-  ; T.goto    = F.goto
-  ; T.jump    = F.jump
-  ; T.call    = { T.embed = (fun e -> R.par [F.goto.T.embed e; push (fetch pc)])
-                ; T.project = F.call.T.project (* should be OK *)
-                } 
-  ; T.branch = F.branch
-
-  (* the calling convention is a cruel joke *)
-  ; T.cc = (fun _ -> 
-           { T.sp = PX.esp                                   (* ok *)
-           ; T.return = pop_with (fun ra -> store pc ra)     (* ok *)
-           (* bogus from here down *) 
-           ; T.proc = Automaton2.Sample.stack t
-           ; T.cont = Automaton2.Sample.stack t
-           ; T.ret  = Automaton2.Sample.stack t
-           ; T.allocatable = List.map (fun n -> ('r', n, 32)) [0; 1; 2; 3]
-           ; T.stack_slots = Automaton2.Sample.stack t
-           ; T.cutto = F.cutto PX.esp
-           })
-
-  (* bogosity *)
-  ; T.globals  = Automaton2.Sample.global t
-  ; T.is_rounding_mode = (fun loc -> loc = fpcond 0) (* see globals value *)
-  ; T.data_section = "data" (* NOT REALLY A PROPERTY OF THE TARGET MACHINE... *)
-  ; T.charset = "latin1" (* THIS IS NONSENSE!! NOT A PROPERTY OF THE MACHINE?? *)
-  } 
 @ 
+
 This is an ugly wart.  The only reason we need to distinguish [[cmm]]
 from [[notail]] is to tell whether a tail call is permitted, but this
 information is actually encapsulated in the stack-frame layout,
@@ -611,7 +553,7 @@ let globals base =
   A.at ~start:base **> A.widen width **> A.align_to align **>
   A.overflow ~memsize:8 ~byteorder:PX.byte_order ~growth:Memalloc.Up ~max_alignment:4
 
-let new_target =
+let target =
   { T.name = "x86"
 
   (* basic metrics and spaces are OK *)
@@ -650,8 +592,7 @@ let new_target =
   ; T.charset = "latin1" (* THIS IS NONSENSE!! NOT A PROPERTY OF THE MACHINE?? *)
   } 
 
-type tgt  = ((Rtl.exp -> Automaton.t), Call.t) Target2.t'
-let new_target = (new_target:tgt)
+type tgt  = ((Rtl.exp -> Automaton.t), Call.t) Target.t
 @ 
 \section{Tentative example Lua code}
 

@@ -12,10 +12,6 @@ searched along a search path by an {\ocaml} function in module
 into the {\qcc} binary and executed unless the user has made special
 arrangements.
 
-The Lua 2.5 library function [[strfind]] is unimplemented. We therefore
-use some special purpose functions from the [[Util]] module, implemented
-in \module{luautil.nw}. 
-
 <<qc--.lua>>=
 $debug 1
 -- 
@@ -25,20 +21,25 @@ $debug 1
 -- $Id$
 --
 
-<<Lua Boot Script>>
+<<Lua compiler configuration>>
+<<Lua command line driver>>
 
--- 
--- Evrything starts from here
+--
+-- Global Variables
 --
 
-backend = nil   -- is set in CMD.run, if unset
+backend = nil   -- initialized by command line driver
+
+-- 
+-- Everything starts from here
+--
 
 CMD.cmdline(Sys.argv)
 return CMD.run()
 @
 
 To keep the Lua name space clean, related functionality is grouped into
-tables which are used like modules. By convention, the names or tables
+tables which are used like modules. By convention, the names of tables
 are capitalized.
 
 % ------------------------------------------------------------------ 
@@ -46,16 +47,16 @@ are capitalized.
 % ------------------------------------------------------------------ 
 
 To support the debugging of Lua code we provide at the very beginning of
-the script functions that allow to inspect the interpreter, This way are
-available in the interpreter, even if later parts of the scrip fail to
-load.
+the script functions that allow to inspect the interpreter. This way
+they are available in the interpreter, even if later parts of the scrip
+fail to load.
 
 The module [[Inspect]] provides functions to dump the entire name space of
 the interpreter to stdout.
 
 [[Inspect.type]] returns the type of a table entry. It tries to be smart
 about userdata.
-<<Lua Boot Script>>=
+<<Lua command line driver>>=
 Inspect = Inspect and error('Inspect not empty') or {}
 
 function Inspect.type (val)  -- identify the value
@@ -74,7 +75,7 @@ end
 [[Inspect.globals]] and [[Inspect.table]] dump the table of all global
 variables and a regular table, respectively. Both functions recurse if
 they find a table, which they pass to [[Inspect.table]].
-<<Lua Boot Script>>=
+<<Lua command line driver>>=
 function Inspect.globals ()
     local key,val = nextvar(nil)
     while key do
@@ -106,17 +107,17 @@ function Inspect.valname(tabname, key)
     end
 end
 @
-This script is stored as a string in [[Inspect["Lua Boot Script"]]]. For
+This script is stored as a string in [[Inspect["Lua command line driver"]]]. For
 convenience we provide an [[Inspect.script]] function that dumps it to
 stdout.
-<<Lua Boot Script>>=
-function Inspect.script () write(Boot["Lua Boot Script"]) end    
+<<Lua command line driver>>=
+function Inspect.script () write(Boot["Lua command line driver"]) end    
 @
 
 The [[Inspect.find]] searches trough all tables for a key [[x]] and
 returns the path to first [[x]] it finds as a string, or [[nil]].
 
-<<Lua Boot Script>>=
+<<Lua command line driver>>=
 function Inspect.find(x)
     local i, v, ii, vv
     -- search global tables for x
@@ -147,481 +148,6 @@ function Inspect.find(x)
 end
 @
 
-% ------------------------------------------------------------------ 
-\subsection{Global Variables}
-% ------------------------------------------------------------------ 
-
-<<Lua Boot Script>>=
-backend = nil       -- initialized below
-@
-
-% ------------------------------------------------------------------ 
-\subsection{Compiler Debugging}
-% ------------------------------------------------------------------ 
-
-We have some functionality that once was useful but that we do not have
-found worth to assign an officical command line flag to. All these find
-a new home in our [[Debug]] module.
-
-<<Lua Boot Script>>=
-Debug = Debug and error('Debug not empty') or {}
-
-function Debug.prettyprint(file,out)
-    local linewidth = 72
-    local ast       = Driver.parse(file)
-    local doc       = Driver.pretty(ast)
-    fd              = (not out or out == "-") and Driver.stdout or open_out(out)
-    Driver.print(doc,linewidth,fd)
-    if fd ~= Driver.stdout then close_out(fd) end
-end  
-@
-
-% ------------------------------------------------------------------ 
-\subsection{Backplane and Backplane Stages}
-% ------------------------------------------------------------------ 
-
-The backplane provides primitives to construct stages which implement
-back end phases in the compiler. For notational brevity, we introduce an
-alias here. See \module{backplane.nw} for details.
-<<Lua Boot Script>>=
-B      = Backplane 
-Stages = Stages or {}
-
-function Stages.nullf () return nil end
-Stages.null = B.stage { name="empty stage", fn = Stages.nullf }
-
-function Stages.assert(prop)
-  return NewBackplane.stage { name='assert ' .. prop, creates={prop},
-                              fn = Stages.nullf}
-end
-@
-
-% ------------------------------------------------------------------ 
-\subsection{Stage Patching}
-% ------------------------------------------------------------------ 
-
-Some primitive functions that are registered need to be stages rather
-than functions. We patch the binding in the Lua interpreter here.
-<<Lua Boot Script>>=
-function Stages.make_stage(t, short, long, B)
-  B = B or Backplane
-  if type(t[short]) == 'function' then
-    if type(long) == 'table' then
-      local stage = { fn = t[short] }
-      <<add every key-value pair in [[long]] to [[stage]]>>
-      t[short] = B.stage(stage)
-    else
-      t[short] = B.stage { name=long, fn = t[short] }
-    end
-  end
-end
-
-Stages.make_stage(Stages, 'replace_vfp', {name='replace VFP', uses='no late consts' },
-                  NewBackplane)
-
-Stages.make_stage(Placevar,  'fortran', "fortran variable placer")
-Stages.make_stage(Placevar,  'new_fortran',
-                  {name="new fortran variable placer",creates='no vars'}, NewBackplane)
-Stages.make_stage(Typecheck, 'proc',    'type check RTLs')
--- non longer compiled in:
--- Stages.make_stage(Expander,  'dummy',   'dummy expander')
--- Stages.make_stage(Expander,  'sparc',   'sparc expander')
-<<add every key-value pair in [[long]] to [[stage]]>>=
-local k, v = next(long, nil)
-while k do
-  stage[k] = v
-  k, v = next(long, k)
-end
-@
-
-
-% ------------------------------------------------------------------ 
-\subsection{Stack Layout}
-% ------------------------------------------------------------------ 
-
-A stack layout function must respect the backplane protocol: such a
-function receives two values, where the second is a [[Proc.t]] value,
-and returns boolean value.
-<<Lua Boot Script>>=
-Stack = Stack or error('Stack primitives missing')
-
-function Stack.layout(dummy,proc)
-   -- works only with *old* back end
-    local blocks = Stack.blocks(proc)
-    local layout = 
-                { blocks.oldblocks[1]               -- <-- high addresses
-                , blocks.stackdata
-                , blocks.continuations
-                , Block.relative(blocks.sp, 'six words', 24, 16)   -- size/alignment=24/16
-                , blocks.spills
-                , blocks.youngblocks[1]
-                , blocks.sp                     -- <-- low addresses 
-                }
-    local block = Block.cat(999, layout)
-    Stack.freeze(proc,block)
-    return 1
-end    
-@ 
-
-The new layout supports the virtual frame pointer.
-<<Lua Boot Script>>=
-Debug = Debug or {}
-function Debug.showblocks(blocks, keys)
-  local i = 1
-  while keys[i] do
-    local block = blocks[keys[i]]
-    write(format('block %13s is %d bytes at %s\n',
-                 keys[i], Block.size(block), Block.base(block)))
-    local constraints = Block.constraints(block)
-    local j = 1
-    while constraints[j] do
-      write(format('  where %s\n', constraints[j]))
-      j = j + 1
-    end
-    i = i + 1
-  end
-end
-@ 
-
-
-
-\paragraph{Stack Layout for the Dummy Target} \module{dummy.nw} module
-that defines the dummy target.
-
-<<Lua Boot Script>>=
-Dummy = {} or Dummy
-
-function Dummy.layout(dummy, proc)
-    local blocks = Stack.new_blocks(proc)
-    local layout =
-        { Block.overlap(32,"low",  blocks.oldblocks)  
-        , blocks.stackdata
-        , blocks.vfp
-        , blocks.continuations
-        , Block.relative(blocks.sp, "six words", 24, 16)
-        , blocks.spills
-        , Block.overlap(32,"high", blocks.youngblocks)
-        , blocks.sp
-        }
-    local block = Block.cat(32, layout)
-    Stack.new_freeze(proc, block)
-    return 1
-end
-@
-    
-
-\paragraph{Stack Layout for the $x$86} This code should probably move to
-the x86 module.
-
-<<Lua Boot Script>>=
-X86 = X86 or {}
-X86.layout = { creates='no late consts' }
-
-function X86.layout.fn(dummy,proc) --- dispatch on cc name
-  return X86.layout[Stack.ccname(proc)](dummy, proc)
-end
-
-function X86.layout["C"](dummy,proc) --- really for a C convention only
-    local blocks = Stack.new_blocks(proc)
-    blocks.ra = Block.relative(blocks.vfp, "return address", 4, 4)
-
-    blocks.oldblocks   = Block.overlap(32, "low", blocks.oldblocks)
-    blocks.youngblocks = Block.overlap(32, "low", blocks.youngblocks)
-    local layout = 
-                { blocks.oldblocks               -- <-- high addresses
-                , blocks.ra
-                , blocks.vfp
-                , blocks.stackdata
-                , blocks.continuations
-                , blocks.spills
-                , blocks.youngblocks
-                , blocks.sp                     -- <-- low addresses 
-                }
-    if Debug.stack then
-      write('======= using stack layout for C/notail =======\n')
-      write('****** cc name = ', Stack.ccname(proc), '\n')
-      Debug.showblocks (blocks, {'oldblocks', 'ra', 'vfp', 'stackdata',
-                                 'continuations', 'spills', 'youngblocks', 'sp'})
-    end
-    local block = Block.cat(32, layout)
-    Stack.new_freeze(proc,block)
-    return 1
-end    
-
-X86.layout["notail"] = X86.layout["C"]
-
-function X86.layout["C--"](dummy,proc)
-    local blocks = Stack.new_blocks(proc)
-
-    if Debug.stack then
-      write('======= using stack layout for C-- with tail calls =======\n')
-      local i = 1
-      local keys = { }
-      while blocks.oldblocks[i] do keys[i] = i; i = i + 1 end
-      write('old blocks:\n')
-      Debug.showblocks(blocks.oldblocks, keys)
-      write('\n')
-    end
-
-    blocks.ra = Block.relative(blocks.vfp, "return address", 4, 4)
-    -- first old block is always the incoming parms
-    blocks.oldblocks[1] = Block.cat(32, {blocks.oldblocks[1], blocks.ra, blocks.vfp})
-    blocks.oldblocks   = Block.overlap(32, "high", blocks.oldblocks)
-    blocks.youngblocks = Block.overlap(32, "high", blocks.youngblocks)
-    local layout = 
-                { blocks.oldblocks               -- <-- high addresses
-                --- , blocks.ra  -- joined to incoming block
-                --- , blocks.vfp
-                , blocks.stackdata
-                , blocks.continuations
-                , blocks.spills
-                , blocks.sp                     -- <-- low addresses 
-                , blocks.youngblocks
-                }
-    if Debug.stack then
-      Debug.showblocks (blocks, {'oldblocks', 'ra', 'vfp', 'stackdata',
-                                 'continuations', 'spills', 'sp', 'youngblocks'})
-    end
-    local block = Block.cat(32, layout)
-    Stack.new_freeze(proc,block)
-    return 1
-end    
-@
-
-% ------------------------------------------------------------------ 
-\subsection{Graph-Coloring Register Allocator}
-% ------------------------------------------------------------------ 
-
-Defined in file \texttt{colorgraph.nw}.
-<<Lua Boot Script>>=
-<<Lua startup code for [[Colorgraph]] module>>
-@
-
-% ------------------------------------------------------------------ 
-\subsection{Register Allocators}
-% ------------------------------------------------------------------ 
-
-All register allocators are made available in the table [[Ralloc]].
-
-\emph{The code that defines Ralloc.linscan should move to [[Lualink]].
--- CL}
-
-<<Lua Boot Script>>=
-Ralloc = Ralloc or error('missing primitives in Ralloc')
-
-Ralloc.color    = ColorGraph.color
-Ralloc.new_color = NewColorGraph.color
--- Ralloc.linscan is a primitives. 
-@
-% ------------------------------------------------------------------ 
-\subsection{Optimizer}
-% ------------------------------------------------------------------ 
-
-For the translation of a procedure all back-end related actions, like
-register allocation or variable assignment, are controlled by an
-optimizer. The optimizer has a sequence of stages the procedure passes
-through.
-
-So far, we just have one standard optimizer that receives the current
-backend and an assembler.
-
-<<Lua Boot Script>>=
-Opt = Opt and error('Opt not empty') or {}
-
-function whichB(B)
-  if B == Backplane then return "original backplane"
-  elseif B == NewBackplane then return "new backplane"
-  else return "not a backplane"
-  end
-end
-
-function verbose(s, a, b, c, d, e, f, g, h)
-      print(s,a,b,c,d,e,f,g,h)
-end
-
-function Opt.standard(backend, asm, B)
-  -- verbose('running Opt.standard with third argument ', whichB(B), '\n')
-  B = B or Backplane
-  -- verbose('running Opt.standard with ', whichB(B), '\n')
-  Stages.null = B.stage {name="empty stage for " .. whichB(B), fn=Stages.nullf}
-  local assemble = Driver.proc_assembler(asm) 
-  local x = B.seq
-    { backend.widen      or Stages.null
-    , backend.placevars  or Stages.null
-    , backend.expand     or Stages.null
-    , backend.liveness   or Stages.null
-    , backend.ralloc     or Stages.null
-    , backend.freeze     or Stages.null
-    , backend.rmvfp      or Stages.null
-    , B.stage { name="assemble procedure", fn = assemble }
-    }
-  -- verbose('built a standard optimizer with ', whichB(B), '\n')
-  return x
-end
-@
-% ------------------------------------------------------------------ 
-\subsection{Compiler}
-% ------------------------------------------------------------------ 
-
-The [[Compile.file]] function takes the file name for a {\PAL} source
-file, a backend, and the name of the (assembly) file to produce and
-compiles the file.
- 
-\emph{I do not understand how the optimizer is run here. Maybe some
-clarifying words by the designer are in order. -- CL} 
-
-There is some inconsistency how we deal with files. The [[Driver.parse]]
-function takes a file name, while an assembler expects a file
-descriptor.
-<<Lua Boot Script>>=
-Compile = Compile and error('Compile not empty') or {}
-
-
-function Compile.run_optimizer(self,proc)
-    local B = self.B or Backplane
-    -- verbose('running Compile.run_optimizer with ', whichB(B), '\n')
-
-    -- please keep the following until the bug is fixed
-    if B == NewBackplane then -- demo for a bug in the backplane
-        B.run(B.seq {Stages.assert('fish'),
-                   B.stage {fn=Stages.nullf, uses='fish'}}, proc)
-    end
-
-    B.run(self.action, proc)
-end    
-
-function Compile.file(backend, file, out)
-    local fd  = (not out or out == "-") and Driver.stdout or open_out(out)
-    local ast = Driver.parse(file) 
-    local asm = backend.asm(fd)
-    local env = Driver.check(ast,asm) -- asm is stored in env
-    local opt = { apply  = Compile.run_optimizer
-                , action = Opt.standard(backend, asm) 
-                }
-    Driver.compile(opt, ast, backend.target, env)
-    if backend.emit then backend.emit(asm) end
-    if fd ~= Driver.stdout then close_out(fd) end
-end    
-
-function Compile.new_file(backend, file, out)
-    local fd  = (not out or out == "-") and Driver.stdout or open_out(out)
-    local ast = Driver.parse(file)
-    
---verbose('about to call asm\n')
-    local asm = backend.asm(fd) 
---verbose('about to call Driver.new_check\n')
-    local env = Driver.new_check(ast,asm) -- asm is stored in env
---verbose('about to call Opt.standard\n')
-    local opt = { apply  = Compile.run_optimizer
-                , action = Opt.standard(backend, asm, NewBackplane) 
-                , B = NewBackplane
-                }
-    Driver.new_compile(opt, ast, backend.target, env)
-    if backend.emit then backend.emit(asm) end
-    if fd ~= Driver.stdout then close_out(fd) end -- close fd
-end    
-@
-
-% ------------------------------------------------------------------ 
-\subsection{Backends}
-% ------------------------------------------------------------------ 
-
-A backend value describes everything the compiler needs to know to
-produce code for a particular target. Many values in the description of
-a backend are primitives, and thus cannot be simply constructed in Lua.
-
-The [[compile]] entry selects the function that actually compiles a
-file. For the old backplane targets this is [[Compile.file]], and for
-the new backplane it is [[Compile.new_file]]. Thus, just setting
-[[backplane]] to the desired value will thus be enough to setup the
-compiler.
-
-<<Lua Boot Script>>=
-Backend = Backend and error('Backend not empty') or {}
-
--- make a backend for the old backplane
-function Backend.make(b)
-  return
-    { target    = b.target    or error('target not specified')
-    , widen     = b.widen     or Stages.null
-    , placevars = b.placevars or Stages.null
-    , expand    = b.expand    or Stages.null
-    , liveness  = b.liveness  or Stages.null
-    , ralloc    = b.ralloc    or Stages.null
-    , freeze    = b.freeze    or Stack.layout
-    , asm       = b.asm       or Asm.cmm
-    , emit      = b.emit      or Driver.assemble
-    , compile   = Compile.file
-    }   
-end
-
--- make a backend for the new backplane
-function Backend.new_make(b)
-  return
-    { target    = b.target    or error('target not specified')
-    , widen     = b.widen     or nil
-    , placevars = b.placevars or nil
-    , expand    = b.expand    or nil
-    , liveness  = b.liveness  or nil
-    , ralloc    = b.ralloc    or nil
-    , freeze    = b.freeze    or Dummy.layout
-    , rmvfp     = b.rmvfp     or Stages.replace_vfp  
-    , asm       = b.asm       or Asm.new_cmm
-    , emit      = b.emit      or Driver.assemble
-    , compile   = Compile.new_file
-    }   
-end
-
--- Dummy backends, for new and old backplane
-Backend.dummy32l        = Backend.make      { target = Targets.dummy32l}
-Backend.dummy32b        = Backend.make      { target = Targets.dummy32b}
-Backend.dummy           = Backend.dummy32b      -- alias
-
-Backend.new_dummy32l    = Backend.new_make  { target = Targets.new_dummy32l }
-Backend.new_dummy32b    = Backend.new_make  { target = Targets.new_dummy32b }
-Backend.new_dummy       = Backend.new_dummy32b  -- alias
-
--- Interpreter backends, for new and old backplane
-Backend.interp          = Backend.make      { target = Targets.interp
-                                            , asm    = Asm.interp32l }
-Backend.new_interp      = Backend.new_make  { target = Targets.new_interp
-                                            , asm    = Asm.new_interp32l }
-Backend.debug_interp    = Backend.new_make  { target = Targets.new_interp
-                                            , asm    = Asm.new_cmm}
-
--- x86 backends
-Backend.x86 =     
-  { target    = Targets.x86
-  , widen     = { fn = Stages.nullf, name='assert proper widths',
-                  creates='proper widths'}
-  , placevars = Placevar.fortran
-  , expand    = Expander.x86
-  , liveness  = Liveness.liveness
-  , ralloc    = Ralloc.color
-  , freeze    = Stack.layout
-  , asm       = Asm.x86
-  , emit      = Driver.assemble
-  , compile   = Compile.file
-  }   
-
-Backend.new_x86 =     
-  { target    = Targets.new_x86
-  , widen     = Stages.assert('proper widths')
-  , placevars = Placevar.new_fortran
-  , expand    = Expander.new_x86
-  , liveness  = Liveness.new_liveness
-  , ralloc    = Ralloc.new_color
-  , freeze    = X86.layout
-  , rmvfp     = Stages.replace_vfp
-  , asm       = Asm.new_x86
-  , emit      = Driver.assemble
-  , compile   = Compile.new_file
-  }   
-
-
-
-@
-
 
 % ------------------------------------------------------------------ 
 \subsection{Command Line Handling and Driver}
@@ -634,7 +160,7 @@ what to do and triggers the compilation of all the files on the command
 line. What needs to be done for each file is decided by
 [[CMD.dispatch]]. 
 
-<<Lua Boot Script>>=
+<<Lua command line driver>>=
 Options = Options and error('Options not empty') or {}
 
 Options.to_obj   = nil      -- -c
@@ -659,14 +185,14 @@ The command line driver calls an external assembler [[as]], linker
 [[ld]] and interpreter for linking interpreter files. They have their
 own tables.
 
-<<Lua Boot Script>>=
+<<Lua command line driver>>=
 As = As and error ('As not empty') or {}
 
 As.path    = "as"           -- binary 
 As.options = ""             -- options passed to binary
 
 Ld = Ld and error ('Ld not empty') or {}
-Ld.path     = "ld"          -- binary
+Ld.path     = "cc"          -- binary
 Ld.options  = ""            -- options
 
 Interp = Interp and error('Interp not empty') or {}
@@ -677,7 +203,7 @@ All logic for the command line is encapsulated in the [[CMD]] module.
 \emph{We should define how to deal with errors and in particular whether
 this code should return to {\ocaml}}.
 
-<<Lua Boot Script>>=
+<<Lua command line driver>>=
 CMD = CMD and error('CMD not empty') or {}
 @
 
@@ -685,7 +211,7 @@ CMD = CMD and error('CMD not empty') or {}
 interactive access to the interpreter. This is most useful for debugging
 Lua code.
 
-<<Lua Boot Script>>=
+<<Lua command line driver>>=
 function CMD.interact ()
     local prompt = "\n-- "
     local stmt
@@ -703,7 +229,7 @@ end
 @
 Simple command-line options are implemented in the [[CMD]] module
 directly. 
-<<Lua Boot Script>>=
+<<Lua command line driver>>=
 CMD.help = [[
 qc-- [option | file] ...
 
@@ -761,7 +287,7 @@ We have to be careful when using tables as lists, as tables do not
 guarantee any order when traversed using [[next()]]. Therefore we rely
 on indices. All our tables are indexed by consecutive numbers $1 \dots
 n$.
-<<Lua Boot Script>>=
+<<Lua command line driver>>=
 function CMD.cmdline (args)
     local O = Options
     
@@ -816,14 +342,14 @@ It turned out that compiling for bytecode and native code cannot be
 uinfied gracefully. We therefore have distinct dispatch functions for
 each case.
 
-<<Lua Boot Script>>=
+<<Lua command line driver>>=
 function CMD.run ()
     local O = Options
     
     if O.interp and not backend then
         backend = Backend.interp
     elseif not backend then
-        backend = Backend.dummy
+        backend = Backend.x86
     end -- else backend was set in command line 
     
     if      O.help                     then write(CMD.help)   ; return 0
@@ -887,21 +413,22 @@ The [[CMD.cmm2asm]] does what it names suggest: it takes the name of a
 parameter [[out]] is not [[nil]] it specifies the file name of the
 resulting file. Otherwise the [[cmm2asm]] is free to pick a name. This
 applies to the other functions $x$[[2]]$y$ analogously.
-<<Lua Boot Script>>=
+<<Lua command line driver>>=
 function CMD.compile_dispatch(file,out)
-    if Util.checksuffix (file, ".c--") or Util.checksuffix(file, ".cmm") then 
+    if Caml.Filename.checksuffix(file, ".c--") or 
+       Caml.Filename.checksuffix(file, ".cmm") then 
         if      Options.to_asm -- -S option
         then    return CMD.cmm2asm(file, out) 
         elseif  Options.pretty
         then    return CMD.cmm2pp(file, out)
         else    return CMD.cmm2obj(file, Options.to_obj and out)
         end
-    elseif Util.checksuffix(file, ".s") then 
+    elseif Caml.Filename.checksuffix(file, ".s") then 
         if      Options.to_asm -- -S option
         then    return file    -- what do, if out ~= file?
         else    return CMD.asm2obj(file, Options.to_obj and out)
         end
-    elseif Util.checksuffix(file, ".lua") then 
+    elseif Caml.Filename.checksuffix(file, ".lua") then 
         return dofile(file)
     else -- catches -L* -l* *.o *.a *.so
         return file    
@@ -910,14 +437,15 @@ function CMD.compile_dispatch(file,out)
 end
 
 function CMD.interp_dispatch(file,out)
-    if Util.checksuffix (file, ".c--") or Util.checksuffix(file, ".cmm") then 
+    if Caml.Filename.checksuffix(file, ".c--") or 
+       Caml.Filename.checksuffix(file, ".cmm") then 
         if      Options.pretty
         then    return CMD.cmm2pp(file, out)
         else    return CMD.cmm2qs(file, out)
         end
-    elseif Util.checksuffix(file, ".qs") then
+    elseif Caml.Filename.checksuffix(file, ".qs") then
         return  file
-    elseif Util.checksuffix(file, ".lua") then 
+    elseif Caml.Filename.checksuffix(file, ".lua") then 
         return  dofile(file)
     else -- catches -L* -l* *.o *.a *.so
         CMD.error("don't know what to do with file "..file)
@@ -935,23 +463,23 @@ type $x$, creates a file of type $y$, and returns its name. If the
 [[out]] parameter is not nil, the name of the returned file must be the
 the value of [[out]].
 
-<<Lua Boot Script>>=
+<<Lua command line driver>>=
 function CMD.cmm2pp(file,out)
-    local base = Util.chopsuffix(file)
+    local base = Caml.Filename.chopsuffix(file)
     local pp   = out or base .. ".pp"
     Debug.prettyprint(file,pp)
     return pp
 end
 
 function CMD.cmm2qs(file,out)
-    local base = Util.chopsuffix(file)
+    local base = Caml.Filename.chopsuffix(file)
     local qs   = out or base .. ".qs"
     backend.compile(backend, file, qs)
     return qs
 end
 
 function CMD.cmm2obj(file,out)
-    local base = Util.chopsuffix(file)
+    local base = Caml.Filename.chopsuffix(file)
     local asm  = base .. ".s"
     backend.compile(backend, file, asm)
     local obj  = CMD.asm2obj(asm,out)
@@ -959,14 +487,14 @@ function CMD.cmm2obj(file,out)
 end    
 
 function CMD.cmm2asm(file,out)
-    local base = Util.chopsuffix(file)
+    local base = Caml.Filename.chopsuffix(file)
     local asm  = out or base .. ".s"
     backend.compile(backend, file, asm)
     return asm
 end    
 
 function CMD.asm2obj(file,out)
-    local obj = out or Util.chopsuffix(file) .. ".o"
+    local obj = out or Caml.Filename.chopsuffix(file) .. ".o"
     local cmd = format ("%s %s -o %s %s"
                        , As.path
                        , As.options
@@ -982,7 +510,7 @@ end
 Depending on the verbosity level, commands are silently executed (0),
 shown before executions (1), only shown, but not executed (2).
 
-<<Lua Boot Script>>=
+<<Lua command line driver>>=
 function CMD.exec(cmd)
     if Options.verbose == 1 then write(format("executing: %s\n", cmd)) end
     if Options.verbose == 2 then 
@@ -996,7 +524,7 @@ end
 The linker takes a list of object files in a table [[objs]] and an
 optional output file. 
 
-<<Lua Boot Script>>=
+<<Lua command line driver>>=
 function CMD.obj2exe(objs,out)
     local exe = out or "a.out"
     local cmd 
@@ -1022,7 +550,7 @@ between any two files. The head of the file is a [[#!]] line taken from
 [[Interp.hashbang]]; finally, the resulting file is marked as
 executable.
 
-<<Lua Boot Script>>=
+<<Lua command line driver>>=
 function CMD.qs2exe(objs, out)    
     local exe = out or "a.out"
     local i = 1

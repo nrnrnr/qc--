@@ -52,10 +52,12 @@ all.opt:V:      config qc--.opt interp doc
 
 config:QV:       
                 if [ -f config/config.mk ]; then : ;else
-                    echo "Run the ./configure script first!" 
-                    echo "Alternatively, create config/config.mk"
-                    echo "from config/config.mk.template."
-                    exit 1
+                echo "============================================"
+                echo "Run the ./configure script first!" 
+                echo "Alternatively, create config/config.mk"
+                echo "from config/config.mk.template."
+                echo "============================================"
+                exit 1
                 fi    
 
 qc--:V:         tools lib dirs
@@ -65,7 +67,7 @@ qc--:V:         tools lib dirs
                     (echo "# cd $i" && cd $i && mk $MKFLAGS update) || exit 1
                 done
 
-qc--.opt:V:     tools lib.opt dirs
+qc--.opt:V:     tools.opt lib.opt dirs
                 for i in src 
                 do 
                     (echo "# cd $i" && cd $i && mk $MKFLAGS depend)    || exit 1
@@ -91,6 +93,13 @@ tools:V:        lib dirs
                 do 
                     (echo "# cd $i" && cd $i && mk $MKFLAGS depend) || exit 1
                     (echo "# cd $i" && cd $i && mk $MKFLAGS update) || exit 1
+                done
+
+tools.opt:V:    lib dirs
+                for i in tools camlburg
+                do 
+                    (echo "# cd $i" && cd $i && mk $MKFLAGS depend) || exit 1
+                    (echo "# cd $i" && cd $i && mk $MKFLAGS update.opt) || exit 1
                 done
 
 interp:V:       dirs
@@ -209,13 +218,22 @@ clobber:V:      dirs clean
                         \) -prune -o -type f -exec rm '{}' \;
                 rm -f FILES
                 rm -f config/config.mk
-                
-                
+
 # make sure appropriate empty directories exist
 dirs:V:
                 for i in bin lib man man/man1 lua/std; do
                     [ -d $i ] || mkdir $i
                 done
+                # create symbolic links for renamed files in src/
+                # this will go away
+    [ -h src/asm.nw ]           || ln -s asm3.nw     src/asm.nw
+    [ -h src/driver.nw ]        || ln -s driver2.nw  src/driver.nw
+    [ -h src/main.nw ]          || ln -s main2.nw    src/main.nw
+    [ -h src/simplify.nw ]      || ln -s rtleval2.nw src/simplify.nw
+    [ -h src/rtleqn.nw ]        || ln -s const2.nw   src/rtleqn.nw
+    [ -h src/target.nw ]        || ln -s target2.nw  src/target.nw 
+    [ -h src/interpemitrtl.nw ] || ln -s rtltolua.nw src/interpemitrtl.nw
+    [ -h src/astpp.nw ]         || ln -s ast.nw      src/astpp.nw
 
 # ------------------------------------------------------------------ 
 # build distribution

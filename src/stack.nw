@@ -16,11 +16,8 @@ The functions exported here are bound to Lua functions in module
 \module{lualink}.
 
 <<stack.mli>>=
-val blocks: (Block.t -> 'a) -> ('a list -> 'a) -> Proc.t -> (string * 'a) list
-val freeze: Proc.t -> Block.t -> unit
-
-val new_blocks: (Block.t -> 'a) -> ('a list -> 'a) -> Ast2ir.proc -> (string * 'a) list
-val new_freeze: Ast2ir.proc -> Block.t -> unit
+val blocks: (Block.t -> 'a) -> ('a list -> 'a) -> Ast2ir.proc -> (string * 'a) list
+val freeze: Ast2ir.proc -> Block.t -> unit
 @
 
 % ------------------------------------------------------------------ 
@@ -28,9 +25,8 @@ val new_freeze: Ast2ir.proc -> Block.t -> unit
 % ------------------------------------------------------------------ 
 
 <<stack.ml>>=
-module Target = Target2
+module Target = Target
 module RP     = Rtl.Private
-module AT     = Automaton2
 @
 [[blocks]] builds a list table of (named) blocks taken from the actual
 procedure.  This table will be passed to the Lua function that actually
@@ -55,25 +51,23 @@ let blocks' frozen_block block list p =
         ; "youngblocks"     , list (List.map block p.Proc.youngblocks)
         ]
 
-let new_blocks x = blocks' (fun a -> (Automaton.freeze a).Automaton.overflow) x
-let blocks     x = blocks' Automaton2.freeze x
-        
+let blocks x = blocks' (fun a -> (Automaton.freeze a).Automaton.overflow) x
 
 let freeze' apply_to_cfg p (stack:Block.t) = 
-    let pointer  = p.Proc.target.Target2.pointersize in            
+    let pointer  = p.Proc.target.Target.pointersize in            
     let eqns     = p.Proc.eqns @ (Block.constraints stack) in
     let solution = 
-        try Const2.solve pointer eqns 
-        with Const2.Can'tSolve -> <<complain of unsolved [[eqns]] for [[p]]>> in
+        try Rtleqn.solve pointer eqns 
+        with Rtleqn.Can'tSolve -> <<complain of unsolved [[eqns]] for [[p]]>> in
     let null = function [] -> true | _ :: _ -> false in
-    let ()   = assert (null solution.Const2.dependent)   in
-    let ()   = assert (not (null solution.Const2.known)) in
-    let map  = Strutil.assoc2map solution.Const2.known     in
+    let ()   = assert (null solution.Rtleqn.dependent)   in
+    let ()   = assert (not (null solution.Rtleqn.known)) in
+    let map  = Strutil.assoc2map solution.Rtleqn.known     in
     if Verbose.verbosity >= 4 then
       Verbose.say 4 ("Solutions:\n" ::
                        (List.map (fun (s, e) -> Printf.sprintf "  %20s = %s\n" s
                                                 (Rtlutil.ToReadableString.exp e))
-                          solution.Const2.known));
+                          solution.Rtleqn.known));
     (* The guard protects the subst function. If the guard is true
      * the subst function is applied to an expression *)
     let guard    = function
@@ -91,16 +85,14 @@ let freeze' apply_to_cfg p (stack:Block.t) =
         | x -> x in
     apply_to_cfg (Rtlutil.Subst2.exp ~guard ~map:subst) p.Proc.cfg
 
-let (<<) f g = fun x -> f (g x)
-let freeze = freeze' (fun f g -> Cfgutil.subst g (Rtleval2.rtl << f))
 
-let new_freeze =
+let freeze =
   let module G = Cfgx.M in
-  freeze' (fun f g -> G.iter_nodes (G.update_instr (fun i -> Rtleval2.rtl (f i))) g)
+  freeze' (fun f g -> G.iter_nodes (G.update_instr (fun i -> Simplify.rtl (f i))) g)
   (* unsafe simplifier is not needed until vfp is replaced *)
 @
 <<complain of unsolved [[eqns]] for [[p]]>>=
-let eqns = List.map Const2.to_string eqns in
+let eqns = List.map Rtleqn.to_string eqns in
 Impossible.impossible 
   ("for procedure " ^ p.Proc.symbol#original_text ^ "; can't solve these eqns:\n" ^
    String.concat "\n" eqns)

@@ -1,0 +1,24 @@
+target byteorder little;
+
+import bits32 printf;
+export main;
+
+section "data" {
+  hello: bits8 [] {
+      'h'::bits8, 'e'::bits8, 'l'::bits8, 'l'::bits8, 'o'::bits8, ','::bits8,
+      ' '::bits8, 'w'::bits8, 'o'::bits8, 'r'::bits8, 'l'::bits8, 'd'::bits8,
+      '!'::bits8, 10::bits8, 0::bits8
+  };
+  bye: bits8 [] { 'b'::bits8, 'y'::bits8, 'e'::bits8, '!'::bits8, 10::bits8, 0::bits8};
+}
+
+foreign "C" main("unsigned" bits32 iargc, "address" bits32 iargv) {
+  bits32 iptr;
+  if (iargc > 1) {
+    iptr = bye;
+  } else {
+    iptr = hello;
+  }
+  foreign "C" printf("address" iptr);
+  return();
+}

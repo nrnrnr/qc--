@@ -24,7 +24,6 @@ module type ARCH = sig
 end
 
 module Make(A: ARCH): sig
-    val target  :       Target2.t
     val target' :       Ast2ir.tgt
 end    
 @
@@ -32,8 +31,6 @@ end
 We provide ready-made 32 bit targets.
 
 <<dummy.mli>>=
-val dummy32l:   Target2.t       (* 32 bit, little endian *)
-val dummy32b:   Target2.t       (* 32 bit, big endian    *)
 val dummy32l':  Ast2ir.tgt
 val dummy32b':  Ast2ir.tgt
 @
@@ -45,7 +42,6 @@ val dummy32b':  Ast2ir.tgt
 
 <<dummy.ml>>=
 module AN       = Automaton
-module AT       = Automaton2
 module C        = Call
 module R        = Rtl
 module RP       = Rtl.Private
@@ -53,7 +49,7 @@ module RU       = Rtlutil
 module Up       = Rtl.Up
 module Dn       = Rtl.Dn
 module SS32     = Space.Standard32
-module T        = Target2
+module T        = Target
 module RS       = Register.Set
 
 module type ARCH = sig
@@ -89,55 +85,14 @@ module Make(A: ARCH) = struct
     let store l e   = R.store l e A.wordsize
     let assign      = store
     let return      = store pc (fetch ra)
-    
-    let t = (* for generic automata, will go away *)
-        { Automaton2.Sample.byteorder   = A.byte_order
-        ; Automaton2.Sample.pointersize = A.pointersize
-        ; Automaton2.Sample.wordsize    = A.wordsize
-        ; Automaton2.Sample.memsize     = A.memsize
-        ; Automaton2.Sample.registers =
-            [ "IEEE 754 rounding mode"      , fp_mode
-            ; "IEEE 754 comparison results" , fp_fcmp
-            ]
-        }
- 
+
     <<global register allocation>>
     <<module Flow>>
     <<module Spill>>
     <<module CC for calling conventions>>
 
-    let target =
-        { T.name = A.arch
-        ; T.cc           = (fun _ -> CC.cc)  
-        ; T.byteorder    = A.byte_order
-        ; T.wordsize     = A.wordsize
-        ; T.pointersize  = A.pointersize
-        ; T.vfp          = SS32.vfp
-        ; T.alignment    = 1
-        ; T.memsize      = 8
-        ; T.float        = "ieee754"
-        ; T.charset      = "latin1" 
-        ; T.globals      = Automaton2.Sample.global t
-        ; T.is_rounding_mode = (fun loc -> loc = fp_mode)
-        ; T.spaces       = [ Spaces.m 
-                           ; Spaces.c 
-                           ; Spaces.r 
-                           ; Spaces.f
-                           ; Spaces.t
-                           ; Spaces.u
-                           ]
-        ; T.data_section = "data"
-        ; T.bnegate      = Flow.bnegate eflags
-        ; T.goto         = Flow.goto
-        ; T.jump         = Flow.jump
-        ; T.call         = Flow.call 
-        ; T.branch       = Flow.branch
-        ; T.spill        = Spill.spill
-        ; T.reload       = Spill.reload
-      }
-
-    (* the new-style target *)
-    let target' : ((Rtl.exp -> Automaton.t), Call.t) Target2.t' = 
+        (* the new-style target *)
+    let target' : ((Rtl.exp -> Automaton.t), Call.t) Target.t = 
         { T.name         = A.arch
         ; T.cc           = (fun _ -> CC.cmm)  
         ; T.byteorder    = A.byte_order
@@ -185,9 +140,7 @@ module Dummy32b = Make(struct
     let memsize     = 8
 end)
 
-let dummy32l  = Dummy32l.target
 let dummy32l' = Dummy32l.target'
-let dummy32b  = Dummy32b.target
 let dummy32b' = Dummy32b.target'
 @
 
@@ -296,31 +249,8 @@ end
 
 <<module CC for calling conventions>>=
 module CC = struct
-    <<old-style calling convention>>
     <<calling convention>>
 end
-@
-
-We will expunge the old calling convention and automata model as soon as
-we have made the transition to the new.
-
-<<old-style calling convention>>=
-let cc =
-    { T.sp              = sp
-    ; T.return          = return
-    ; T.proc            = Automaton2.Sample.stack t
-    ; T.cont            = Automaton2.Sample.stack t
-    ; T.ret             = Automaton2.Sample.stack t
-    ; T.stack_slots     = Automaton2.Sample.stack t 
-    ; T.cutto           = cutto
-    ; T.allocatable = List.concat 
-          [ List.map (fun n -> ('r', n, A.wordsize))
-            [0;1;2;3;4;5;6;7;8;9;10;11;12;13;14;15;16;17;18;19;20;21;22;23]
-          ; List.map (fun n -> ('r', n, A.wordsize))
-            [0;1;2;3;4;5;6;7;8;9;10;11;12;13;14;15;16;17;18;19;20;21;22;23]
-          ]  
-                       
-    }
 @
 
 % ------------------------------------------------------------------ 
@@ -494,5 +424,4 @@ let conv name jump specs =
 Finally, we can define a calling convention.
 <<calling convention>>=
 let cmm = conv "cmm" false { call = simple; results=simple; cutto=simple }
-
 @
