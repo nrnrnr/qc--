@@ -21,7 +21,7 @@ Test.files = { "add.c--"
              , "float-000.c--"
              , "float-001.c--"
              , 'float-002.c--'
-             , 'float-003.c--'
+             , { source='float-003.c--' }  -- .outdir will be modified for sparc
 	     , 'f2.c--'
              , { source = { 'global.c--', 'incn.c--' } }
              , "hello.c--"
