@@ -207,9 +207,15 @@ values and values fetched from memory.  A fetch from memory makes the
 [[width]] number of fetched bits explicit.  A label denotes a {\PAL}
 data- or goto-label and its type. 
 
+The width of a [[Bits]] value is stored inside the value of type
+[[Bits.bits]].
+We hope this offers the advantage that mostly the width is static (see
+the careful implementation of [[RTL.bits]]) and yet it can be easily
+grabbed by an automatically generated recognizer.
+
 <<representation exposed in the private interface>>=
 type const      = Bool      of bool
-                | Bits      of Bits.bitvector * width
+                | Bits      of Bits.bits
                 | Link      of string * width         (* link time constant *)
 
 type exp        = Const     of const               
@@ -364,7 +370,12 @@ let guard expr (Rtl geffects) =
 let true'  = Const (Bool true)
 let false' = Const (Bool false)
 let bool p = if p then true' else false'
-
+@ 
+Note that the width used in a bit vector is the [[width]] argument,
+\emph{not} the width buried inside the bit vector itself.
+We do things this way to support type-directed partial evaluation;
+the [[width]] argument is normally static.
+<<definitions of types and functions exported at top level>>=
 let bits (bvector, w) width = (assert (w = width); Const (Bits(bvector,width)))
 let link name width         = Const (Link(name,width))
 let fetch loc width         = Fetch(loc,width)
