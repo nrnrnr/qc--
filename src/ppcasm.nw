@@ -71,7 +71,7 @@ let spec =
         | x when id x -> x
         | _           -> '_' 
         in    
-            { Mangle.preprocess = (fun x -> x)  
+            { Mangle.preprocess = (fun x -> "_" ^ x)  
             ; Mangle.replace    = replace
             ; Mangle.reserved   = reserved
             ; Mangle.avoid      = (fun x -> x ^ "_")
@@ -119,6 +119,10 @@ Maintaining the symbol table suffices.
 method import s = this#new_symbol s
 @
 Exporting requires announcing as global.
+The manual says ``The name of a symbol representing a function that
+conforms to standard C calling conventions is the name of the function with
+an underscore prefix. Thus, the name of the symbol representing the
+function [[main]] would be [[_main]].''
 <<assembly methods>>=
 method export s =
   let sym = this#new_symbol s in
@@ -168,7 +172,7 @@ every section is in the [[__TEXT]] segment.
 <<assembly methods>>=
 method section name =
   _section <- name;
-  fprintf _fd ".section __TEXT,.%s\n" name
+  fprintf _fd ".%s\n" name
 method current = _section
 <<private assembly state>>=
 val mutable _section = "bogus section"
