@@ -1,0 +1,205 @@
+% vim: ts=8 sw=4 et:
+%
+% $Id$
+%
+% Automaton.nw will be replaced by this module. The major difference is
+% that this modules relies on the simple Block abstraction.
+
+% ------------------------------------------------------------------ 
+\section{Automaton-Based Location Allocation}
+% ------------------------------------------------------------------ 
+
+\begin{quote}\it
+    I like to suggest to use objects directly rather than hiding them
+    behind a functional interface. Why make things more complicated than
+    need to be? --CL (Tue May 14 11:30:12 EDT 2002)
+\end{quote}
+
+Allocation of registers for parameter passing and slot allocation can be
+hidden behind an automaton. An automaton knows a set of locations and
+hands them out in response to queries. A location can be a hardware
+register, a memory location, or a combination of both. The details are
+hidden behind a common abstraction.
+
+An \emph{automaton} is imperative; the type [[t]] encapsulates mutable
+state.  After allocation is completed, an automaton is \emph{frozen},
+and it cannot be queried for more locations. While an actual automaton
+is imperative, its \emph{specification} is not. An automaton is created
+from a specification and a base address. The base address designates a
+memory area that the automaton can use for locations. When the automaton
+is frozen, it returns a memory block that exactly describes the memory
+requirements for the locations it handed out.
+
+We have not yet developed a sense what might be good constructor
+functions for an automaton specification. To avoid that we can specify
+(target specific) automata only here, I expose the class types
+[[location]] and [[automaton]] for types that we rather keep completely
+abstract. Now automata can be defined by the targets that they belong
+to.
+
+<<types>>=
+class type location = object
+    method fetch:   (*width*) int -> Rtl.exp
+    method store:   Rtl.exp -> (*width*) int -> Rtl.rtl
+    method to_loc:  Rtl.loc
+end
+
+
+class type automaton = object
+    method allocate:    (*width*) int -> (*hint*) (string option) -> location
+    method freeze:      unit -> Block.t
+end
+
+type spec = Rtl.exp -> automaton    (* specification should be abstract *)
+type loc  = location                (* location      should be abstract *)
+type t    = automaton               (* automaton     should be abstract *)
+@
+
+<<automaton2.mli>>=
+<<types>>
+@
+
+Supply an address of the overflow area, and get back an automaton in
+its initial state.
+
+<<automaton2.mli>>=
+val mk : spec -> address:Rtl.exp -> t           
+@
+
+To allocate a new resource slot, call [[ty]].  It returns a location
+[[[loc]] and change the automaton's internal state.  I think the name
+[[ty]] was poorely chosen. I provide an alias [[allocate]] and hope to
+get rid of [[ty]] in the future.
+
+<<automaton2.mli>>=
+val ty:       t -> width:int -> hint:(string option) -> loc    
+val allocate: t -> width:int -> hint:(string option) -> loc  (* alias for ty *)
+@
+
+A location as returned by an automaton can't be used directly because it
+is  abstract.  To use it for storing and fetching data, use the
+following two functions:
+
+<<automaton2.mli>>=
+val fetch : loc -> width:int -> Rtl.exp
+val store : loc -> Rtl.exp -> width:int -> Rtl.rtl
+@
+
+Because locations are abstract they can handle difficult cases where a
+value is stored in part in a hardware register and in part in memory.
+Some complicated calling conventions may require such concepts of a
+location.  However, the very most cases are much simpler and we like to
+represent those as [[Rtl.loc]] values, which are also very general but
+can't deal with values split into different memory spaces.  The
+following function allows to transform a sufficiently simple [[loc]]
+value to a [[Rtl.loc]] value.  If a conversion is not possible,
+[[Invalid_argument]] is raised as a checked run-time error.
+
+<<automaton2.mli>>=
+val to_loc : loc -> Rtl.loc
+val of_loc : Rtl.loc -> loc
+@
+
+When an automaton [[t]] is frozen, it responds with the memory
+[[Block.t]] that it used for locations it handed out.
+
+<<automaton2.mli>>=
+val freeze : t -> Block.t
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+Until we know better we assume that automata for different platforms
+are probably quite different and a single implementation is unlikely
+to support them all.  We resort to an object-oriented implementation
+that allows to have several implementations for the same interface. 
+
+All real work is done by objects of class [[location]] and
+[[automaton]] that are used as representation for [[loc]] and [[t]]
+respectively. The class types define their shape but we are free to
+provide entirely different implementations.
+
+<<automaton2.ml>>=
+<<types>>
+@
+
+Because the representations for [[t]] and [[loc]] are objects the
+implementations for [[mk]], [[ty]] and so forth just pass their
+arguments to the objects at hand.
+
+<<automaton2.ml>>=
+let mk spec ~address     = spec address
+let ty t ~width ~hint    = t#allocate width hint
+let allocate             = ty
+let freeze t             = t#freeze ()
+
+let fetch loc ~width      = loc#fetch width
+let store loc expr ~width = loc#store expr width
+let to_loc loc            = loc#to_loc
+let of_loc loc            = Impossible.unimp "Automaton.of_rtl_loc"
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Sample Automaton}
+% ------------------------------------------------------------------ 
+
+Automata are usually target specific and thus best implemented outside
+of this module. For demonstration purposes, here is a simple automaton.
+All locations reside in memory.
+
+An automaton maintains a block of memory. When a new slot requests comes
+in, it creates a small new block for the slot and returns its address.
+The block for the slot is concatenated with the internal block and
+becomes the new block. This blocks is returned when the automaton is
+frozen.
+
+Every block for a new slot requires an address. This is taken as an
+offset from the base $b$ of the memory block: $b+v$, where $v$ is a late
+compile-time constant. Equation solving will later find the actual value
+of $v$.
+
+<<automaton2.ml>>=
+module Sample = struct <<Sample>> end
+@
+
+<<Sample>>=
+class loc (loc:Rtl.loc): location =
+object
+    val _loc   = loc
+    
+    method store expr width = Rtl.store _loc expr width 
+    method fetch width      = Rtl.fetch _loc width
+    method to_loc           = _loc
+end
+
+class slots (base:Rtl.exp): automaton =
+    let memsize = 8                 (* constants go here *)
+    and pointer = 32                (* pointer size *)
+    and endianness = Rtl.BigEndian
+in object (this)
+    val mutable _block  = Block.mk base 0 pointer     (* initial block *)
+    val mutable _frozen = false
+    
+    method freeze () =
+        let _ = _frozen <- true in _block  (* return block *)
+    
+    method private memloc addr w = 
+        new loc (Rtl.cell Rtl.none 'm' endianness w addr)
+    
+    method private slotaddress = (* base + v *)
+        let add = Rtl.opr "add" [pointer] in
+        Rtl.app add [base; Rtl.late (Idgen.slot "slots") pointer]
+    
+    method allocate width hint = 
+        let ()      = assert (_frozen = false)           
+        and ()      = assert (width mod memsize = 0) in
+        match hint with 
+        | Some x -> assert false (* hints not supported *)
+        | None ->
+            let slot    = Block.mk this#slotaddress (width / memsize) pointer in
+            let _block  = Block.cat _block slot in
+                this#memloc (Block.base slot) width
+end
+
