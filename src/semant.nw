@@ -52,12 +52,14 @@ type kind       = Register
                 | Constant      of value
 
 type id         = string
-type entry      = Types.ty * kind
 
 
 module ID       = struct type t=id let compare=compare end
 module IDSet    = Set.Make(ID)
 module Symbol   = Env.Make(ID)
+
+type entry      = (Types.ty * kind) Error.error
+type env        = entry Symbol.env
 @
 
 In \C~global symbols are never re-declared.  Thus a global symbol
@@ -174,13 +176,14 @@ multiple definitions of symbols can cause errors in the first phase.
 \begin{table}
     \begin{center}
     \begin{tabular}{lll}
-        Object      & Kind          & Type \\ \hline
-        Procedure   & [[Memory]]    & [[code]]  \\
-        Code Label  & [[Memory]]    & [[code]]  \\
-        Data Label  & [[Memory]]    & [[data]]     \\
-        Register    & [[Register]]  & as declared  \\
-        Import      & [[Memory]]    & as declared  \\
-        Constant    & [[Constant]]  & [[dummy]]    \\
+        Object      & Kind              & Type \\ \hline
+        Procedure   & [[Memory]]        & [[code]]  \\
+        Code Label  & [[Memory]]        & [[code]]  \\
+        Data Label  & [[Memory]]        & [[data]]     \\
+        Register    & [[Register]]      & as declared  \\
+        Import      & [[Memory]]        & as declared  \\
+        Constant    & [[Constant]]      & [[dummy]]    \\
+        Continuation& [[Continuation]]  & [[data]]     \\
     \end{tabular}
     \caption{Informations recored for global symbols}
     \label{tab:phase1}
@@ -516,13 +519,45 @@ end
 
 let foldl = List.fold_left
 
+    
+module Implode = struct
+    let singleton = function
+        | Ok _ -> Ok ()
+        | _    -> Error
+
+    let pair = function
+        | Ok _, Ok _ -> Ok ()
+        | _          -> Error
+
+    let triple = function
+        | Ok _, Ok _, Ok _ -> Ok ()
+        | _                -> Error
+    
+    let quad = function
+        | Ok _, Ok _, Ok _, Ok _ -> Ok ()
+        | _                      -> Error
+
+    let rec list = function
+        | []            -> Ok ()
+        | (Ok _)::xs    -> list xs
+        | _             -> Error 
+
+    let map f l =
+        let ok = Ok () in
+        let rec loop res = function
+            | []    -> res
+            | x::xs -> ( match res with
+                       | Error -> ignore (f x); loop Error xs 
+                       | Ok _  -> loop ok xs
+                       )
+        in
+            loop ok l 
+
+end
+
 let rec is2power = function
     | 1 -> true
     | x -> x > 0 && (x mod 2) = 0 && is2power (x/2)
-    
-let strip = function
-    | Ok(x) -> x
-    | Error -> error "Error found - aborting"
 
 let constExpr env e =
     let set      = IDSet.empty in
@@ -538,87 +573,106 @@ let rec ty = function
 
 let rec tyFetch env = function
     | LValueAt(v,_) -> tyFetch env v
-    | Var(id)       -> let t, kind = strip (lookup id env) in t
+    | Var(id)       -> ( match lookup id env with
+                       | Error       -> Error 
+                       | Ok(ty,kind) -> Ok(ty)
+                       )
     | Mem (t,e,a)   -> 
         let tye   = tyExpr env e in
         let align = match a with
                     | None   -> 1
                     | Some a when is2power a -> a 
                     | Some a -> error "alignment not a power of 2"  
-        in match tye with
-           | t when t = data -> t
-           | otherwise          -> error "expression is not of pointer type"
+        in ( match tye with
+           | Error               -> Error
+           | Ok(t) when t = data -> Ok(t)
+           | Ok(otherwise)       -> error "expression is not of pointer type"
+           )
 
+and applTy' opTy argTys =
+   let s = ( try Types.unify opTy (proc argTys bool) (Types.empty) with
+           | Types.UnifyExn -> error "type error in application"
+           ) 
+   in
+        ( match Types.subst s opTy with
+        | Types.Procedure(_,r) -> r
+        | _                    -> assert false
+        )  
+
+and applTy opTy argTys = emap (applTy' opTy) argTys
+           
 and tyPrimOp env op args =
     let at    = List.map (tyExpr env) args in
     let ot    = lookup op primOps  in
-    let sigma = ( try Types.unify ot (proc at bool) (Types.empty) with
-                | Types.UnifyExn -> error "type error in application"
-                ) in
-        ( match Types.subst sigma ot with
-        | Types.Procedure(_,r) -> r
-        | _                    -> assert false
-        ) 
+        applTy ot (Raise.list at)
 
-and tyExpr env = function
-    | ExprAt(x,_)           -> tyExpr env x
-    | Int( i, None)         -> word
-    | Int( i, Some size)    -> bits size 
-    | Float( f, None)       -> word
-    | Float( f, Some size)  -> bits size 
-    | Char( c, None)        -> char
-    | Char( c, Some size)   -> bits size 
+and tyExpr (env: env) = function
+    | ExprAt(x,r)           -> catch (errorRegPrt r) (tyExpr env) x
+    | Int( i, None)         -> Ok(word)
+    | Int( i, Some size)    -> Ok(bits size) 
+    | Float( f, None)       -> Ok(word)
+    | Float( f, Some size)  -> Ok(bits size) 
+    | Char( c, None)        -> Ok(char)
+    | Char( c, Some size)   -> Ok(bits size) 
     | Fetch(v)              -> tyFetch env v
     | BinOp(l,op,r)         -> tyPrimOp env op [l;r]
     | UnOp(op,e)            -> tyPrimOp env op [e]
     | PrimOp(op,xs)         -> tyPrimOp env op (List.map snd xs)
-    
+
 
 let rec init env = function
     | InitAt(x,_)   -> init env x
-    | InitExprs(es) -> List.map (tyExpr env) es
-    | InitStr(s)    -> [char]
-    | InitUStr(s)   -> [bits 16]
+    | InitExprs(es) -> Raise.list (List.map (tyExpr env) es)
+    | InitStr(s)    -> Ok ([char])
+    | InitUStr(s)   -> Ok ([uchar])
 
 let memsize env = function
-    | NoSize    -> Some 1
-    | DynSize   -> None
+    | NoSize    -> Ok(Some 1)
+    | DynSize   -> Ok(None)
     | FixSize e -> 
-        ( match strip (constExpr env e) with
-        | Types.Bits(x), IntConst(size) when size > 0 -> Some size
-        | Types.Bits(x), _  -> error "not a positive size"
-        | otherwise         -> error "not a proper size constant"
-        )
+        let f' = function
+            | Types.Bits(x), IntConst(size) when size > 0 -> Some size
+            | Types.Bits(x), _  -> error "not a positive size"
+            | otherwise         -> error "not a proper size constant" in
+        let f x = emap f' x in
+            f (constExpr env e) 
 
          
 let memdecl env ty size = function
-    | None   -> ( ignore (memsize env size) 
-                ; ()
-                )
+    | None   -> 
+        ( match memsize env size with
+        | Ok _  -> Ok()
+        | Error -> Error
+        )
     | Some (i) -> 
-        let tys        = init env i in
-        let n          = List.length tys in
-        let consistent = foldl (fun res t -> res && ty = t) true tys
-        in
+        ( match init env i with
+        | Error  -> Error
+        | Ok tys ->
+            let n           = List.length tys in
+            let consistent  = foldl (fun res t -> res && ty = t) true tys in
+        
             if not consistent then
                 error "initial values have types different from declared type" 
             else if n < 1 then
                 assert false (* the grammar prevents this *)
-            else match memsize env size with
-                | Some m when n > m ->  error "too many initial values"
-                | Some m            ->  ()
-                | None              ->  ()
+            else ( match memsize env size with
+                 | Ok(Some m) when n > m ->  error "too many initial values"
+                 | Ok(Some m)            ->  Ok ()
+                 | Ok(None)              ->  Ok ()
+                 | Error                 ->  Error
+                 )
+        )
     
 
 let rec datum env = function
-    | DatumAt(x,_)   -> datum env x
-    | Label(n)       -> ()
-    | Align(a)       -> if is2power a then () 
+    | DatumAt(x,r)   -> catch (errorRegPrt r) (datum env) x
+    | Label(n)       -> Ok ()
+    | Align(a)       -> if is2power a then Ok () 
                         else error ("illegal alignment: " ^ string_of_int a)
     | MemDecl(t,m,i) -> memdecl env (ty t) m i
 
 let rec stackdatum env = function
-    | DatumAt(x,_)      -> stackdatum env x
+    | DatumAt(x,r)      -> catch' env (errorRegPrt r) (stackdatum env) x
     | Label(n)          -> env
     | Align(a)          -> if is2power a then env
                            else error ("illegal alignment: " ^ string_of_int a)
@@ -626,51 +680,55 @@ let rec stackdatum env = function
     | MemDecl(t,m,_   ) -> error "no initial values allowed for stackdata"
 
 let checkJumpTarget env x =
-    match strip (lookup x env) with
-    | t, Memory when t = code    -> ()
-    | otherwise                  -> error (x^" is not a label")
+    match lookup x env with
+    | Error                         ->  Error
+    | Ok(t, Memory) when t = code   ->  Ok ()
+    | otherwise                     ->  error (x^" is not a label")
     
-let targets env ts = List.iter (checkJumpTarget env) ts 
+let targets env ts = Implode.map (checkJumpTarget env) ts 
 
 let checkFlowTarget env x =
-    if snd (strip (lookup x env)) = Continuation then
-        ()
-    else 
-        error (x^" is not a continuation")
+    match lookup x env with
+    | Error              -> Error
+    | Ok(_,Continuation) -> Ok()
+    | _                  -> error (x^" is not a continuation")
        
 
 let rec flow env = function
-    | FlowAt(x,r)     -> flow env x
-    | CutsTo(ns)      -> List.iter (checkFlowTarget env) ns 
-    | UnwindsTo(ns)   -> List.iter (checkFlowTarget env) ns 
-    | ReturnsTo(ns)   -> List.iter (checkFlowTarget env) ns 
-    | Aborts          -> ()
+    | FlowAt(x,r)     -> catch (errorRegPrt r) (flow env) x
+    | CutsTo(ns)      -> Implode.map (checkFlowTarget env) ns 
+    | UnwindsTo(ns)   -> Implode.map (checkFlowTarget env) ns 
+    | ReturnsTo(ns)   -> Implode.map (checkFlowTarget env) ns 
+    | Aborts          -> Ok ()
 
-let flows env fs = List.iter (flow env) fs
+let flows env fs = Implode.map (flow env) fs
 
 let conv env = function
     | Some cc       -> () 
     | None          -> ()
 
-let rec lvalue env = function
-    | LValueAt (lv, r)   -> lvalue env lv
-    | Var(name)          -> lookup name env
-    | Mem(t, e, a)      -> 
-        if tyExpr env e != data then 
-            error "expression is not a pointer type"
-        else 
-        ( match a with
+let rec lvalue env lv =
+    let align x = function
         | Some a when not (is2power a) -> error "alignment not a power of 2"
-        | Some _
-        | None                         -> Ok(ty t, Memory)
-        )
+        | Some _ (* ok *)
+        | None                         -> x
+    in match lv with 
+    | LValueAt (lv, r)   -> catch (errorRegPrt r) (lvalue env) lv
+    | Var(name)          -> lookup name env
+    | Mem(t, e, a)       -> 
+        match tyExpr env e with
+        | Ok(et) when et <> data -> error "expression is not a pointer type"
+        | Error                  -> Error
+        | Ok(et)                 -> align (Ok (ty t, Memory)) a
 
 let rec lhs env = function
-    | LValueAt (lv, r)   -> lhs env lv
-    | Var(name)          -> ( match strip (lookup name env) with
-                            | t, Register -> t
-                            | otherwise   -> error "lvalue must be a register"
-                            )
+    | LValueAt (lv, r)   -> catch (errorRegPrt r) (lhs env) lv
+    | Var(name)          -> 
+        ( match lookup name env with
+        | Ok(t,Register) -> Ok(t)
+        | Error          -> Error
+        | otherwise      -> error "lvalue must be a register"
+        )
     | Mem(t, e, a)       -> error "lvalue must be a register"
     
 
@@ -688,137 +746,129 @@ let rec collectCont env ss =
         foldl loop env ss
 
 let rec ifStmt env e ss1 ss2 =
-    let ty = tyExpr env e in
-        if ty != bool then
-            error "if-expression must be of type bool"
-        else
-            ( stmts env ss1
-            ; stmts env ss2
-            )
+    match tyExpr env e with
+    | Error                 -> Error
+    | Ok(ty) when ty = bool -> Implode.pair (stmts env ss1, stmts env ss2)
+    | otherwise             -> error "if-expression must be of type bool"
     
 and spanStmt env e1 e2 ss =
-    let t1, x1 = strip (constExpr env e1) in
-    let t2, x2 = strip (constExpr env e2) in
-         ( stmts env ss
-         ; if (t1 != word) then
-                error "span key must be a natural word"
-           else if (t2 != word) then
-                error "span value must be a natural word"
-         ) 
+    let f = function
+        | Error                         -> Error
+        | Ok (ty,kind) when ty != word  -> error "span arguments must be words"
+        | Ok (_)                        -> Ok ()
+    in
+        Implode.triple ( f (constExpr env e1)
+                       , f (constExpr env e2)
+                       , stmts env ss
+                       )
 
 and gotoStmt env e ts = 
-    ( targets env ts
-    ; let et = tyExpr env e in
-        if et != code then
-            error "goto-expression does not evaluate to a pointer" 
-        else
-            ()
-    )
+    let t = targets env ts in
+    let e = match tyExpr env e with
+            | Error               -> Error
+            | Ok(t) when t = code -> Ok()
+            | _                   -> 
+                error "goto-expression does not evaluate to a pointer" 
+    in
+        Implode.pair (e,t)
 
 and cutStmt env n args fs =
-    ( flows env fs
-    ; let _ = List.map (tyExpr env) (List.map snd args) in
-      match strip (lookup n env) with
-      | _, Continuation     -> ()
-      | otherwise           -> error ("not a continuation: "^n)
-    ) 
+    let f    = flows env fs in
+    let args = List.map (tyExpr env) (List.map snd args) in
+    let nt   = match lookup n env with
+                | Ok(_, Continuation) -> Ok ()
+                | otherwise           -> error ("not a continuation: "^n)
+    in
+        Implode.triple (f,Raise.list args,nt)
     
 and jumpStmt env cc e args ts =
-    ( targets env ts
-    ; let _  = List.map (tyExpr env) (List.map snd args) in
-      match tyExpr env e with
-      | t when t = code      -> ()
-      | otherwise            -> error "jump target is not a pointer"
-    )
+    let t    = targets env ts in
+    let args = List.map (tyExpr env) (List.map snd args) in
+    let et   = match tyExpr env e with
+                | Ok(t) when t = code  -> Ok ()
+                | otherwise            -> error "jump target is not a pointer"
+    in
+        Implode.triple (t,Raise.list args, et)
 
 and contStmt env n ns = 
     let check n = 
         let f = function
-            | _, Register -> ()
-            | otherwise   -> 
+            | Ok(_, Register) -> Ok ()
+            | Error           -> Error
+            | otherwise       -> 
                 error ("formal continuation parameter not a register: "^n)
         in
-            f (strip (lookup n env))
+            f (lookup n env)
     in
-        List.iter check ns
+        Implode.list (List.map check ns)
     
 and returnStmt env cc alt args =
-    let args' = List.map snd args in
-    let tys   = List.map (tyExpr env) args' in
-    match alt with
-    | None         -> ()
-    | Some (e1,e2) ->
-        let t1,x1 = strip (constExpr env e1)  in
-        let t2,x2 = strip (constExpr env e2)  in
-        let x =
-            ( match t1, x1 with
-            | word, IntConst(x) -> x
-            | otherwise         -> error "first argument in <x/y> not a number"
-            ) in
-        let y =
-            ( match t2, x2 with
-            | word, IntConst(y) -> y
-            | otherwise         -> error "second argument in <x/y> not a number"
-            ) in
-            if (x < 0 || y < 0 || x > y) then
-                error "illegal numbers in <x/y>"
-            else
-                ()  
-           
-            
+    let args  = List.map snd args  in
+    let tys   = Implode.list (List.map (tyExpr env) args) in
+    let f     = function
+                | (tx, IntConst(x)),(ty, IntConst(y)) ->
+                   tx = word && ty = word && x >= 0 && y >= 0 && x <= y    
+                | otherwise -> error "<x/y> illegal values" 
+    in 
+        match alt with
+        | None         -> tys
+        | Some (e1,e2) -> let e1' = constExpr env e1 in
+                          let e2' = constExpr env e2 in
+                          ( match emap f (Raise.pair (e1',e2')) with
+                          | Ok(true)  -> tys
+                          | Ok(false) -> error "illegal <x/y> comnination"
+                          | Error     -> Error
+                          )
+                
 
 and assignStmt env pairs =
     let pair (lhs,expr) =  
-        let tr    = tyExpr env expr        in
-        match strip (lvalue env lhs) with
-        | t, Register when t = tr -> ()
-        | t, Memory   when t = tr -> ()
+        match lvalue env lhs, tyExpr env expr with
+        | Ok (t, Register), Ok(tr) when t = tr -> Ok()
+        | Ok (t, Memory  ), Ok(tr) when t = tr -> Ok()
+        | Error           , _                  -> Error
+        | _               , Error              -> Error
         | otherwise   -> error "type mismatch in assignment"
     in
-        List.iter pair pairs
+        Implode.map pair pairs
 
-and callStmt env (l,cc,e,args,ts,fs) =
-    let lt    = List.map (lhs env) l     in
-    let et    = tyExpr env e             in
-    let args' = List.map snd args        in
-    let _     = targets env ts           in
-    let _     = flows env fs             in
-    let at    = List.map (tyExpr env) args' in
-        if et != code then
-            error "call-expression is not a pointer"
-        else 
-            ()
+
+and callStmt (env: env) (l,cc,e,args,ts,fs) =
+    let lt      = Implode.map (lhs env) l        in
+    let ts'     = targets env ts                 in
+    let fs'     = flows env fs                   in
+    let args'   = List.map snd args              in
+    let argsTy  = Implode.map (tyExpr env) args' in
+        match tyExpr env e with
+        | Error               -> Error
+        | Ok(t) when t = code -> Implode.quad (lt,ts',fs',argsTy)
+        | otherwise           -> error "call-expression is not a pointer"
              
 and primStmt env (l,cc,op,args,fs) =
-    let lt    = List.map (lhs env) l     in
-    let ot    = lookup op primOps        in
-    let args' = List.map snd args        in
-    let _     = flows env fs             in
-    let at    = List.map (tyExpr env) args' in
-    let sigma = ( try Types.unify ot (proc at bool) (Types.empty) with
-                | Types.UnifyExn -> error "type error in application"
-                ) in
-        ( match Types.subst sigma ot with
-        | Types.Procedure(_,r) -> ()
-        | _                    -> assert false
-        ) 
+    let l      = Implode.map (lhs env) l in
+    let fs     = flows env fs                    in
+    let opTy   = lookup op primOps               in
+    let args'  = List.map snd args               in
+    let argsTy = List.map (tyExpr env) args'     in
+    let rTy    = applTy opTy (Raise.list argsTy) in
+        Implode.triple (l,fs,rTy)
 
 and stmt env = function
-    | StmtAt(x,_)                         -> stmt env x
-    | IfStmt ( e, ss1, ss2)               -> ifStmt env e ss1 ss2
-    | SpanStmt(e1,e2,ss)                  -> spanStmt env e1 e2 ss
-    | AssignStmt(xs)                      -> assignStmt env xs
-    | CallStmt call                       -> callStmt env call
-    | PrimStmt call                       -> primStmt env call
-    | GotoStmt(e,ts)                      -> gotoStmt env e ts
-    | CutStmt(n, args, fs)                -> cutStmt env n args fs
-    | ReturnStmt(cc, alt, args)           -> returnStmt env cc alt args
-    | JumpStmt(cc,e,args,ts)              -> jumpStmt env cc e args ts
-    | ContStmt(n,ns)                      -> contStmt env n ns
-    | LabelStmt(n)                        -> ()
-    | EmptyStmt                           -> ()
+    | StmtAt(x,r)                 -> catch (errorRegPrt r) (stmt env) x
+    | IfStmt ( e, ss1, ss2)       -> ifStmt env e ss1 ss2
+    | SpanStmt(e1,e2,ss)          -> spanStmt env e1 e2 ss
+    | AssignStmt(xs)              -> assignStmt env xs
+    | CallStmt call               -> callStmt env call
+    | PrimStmt call               -> primStmt env call
+    | GotoStmt(e,ts)              -> gotoStmt env e ts
+    | CutStmt(n, args, fs)        -> cutStmt env n args fs
+    | ReturnStmt(cc, alt, args)   -> returnStmt env cc alt args
+    | JumpStmt(cc,e,args,ts)      -> jumpStmt env cc e args ts
+    | ContStmt(n,ns)              -> contStmt env n ns
+    | LabelStmt(n)                -> Ok ()
+    | EmptyStmt                   -> Ok ()
 
-and stmts env ss = List.iter (stmt env) ss
+and stmts env ss = Implode.map (stmt env) ss
 
 let formal env (hint, inv, t, name) =
     shadow_ok name (ty t, Register) env
@@ -830,15 +880,12 @@ let register env (inv, t, name, reg) =
 
 let registers env rs = foldl register env rs
 
-
 let rec decl env = function
-    | DeclAt (d, r)     -> decl env d
+    | DeclAt (d, r)     -> catch' env (errorRegPrt r) (decl env) d
     | LRegisters rs     -> registers env rs
     | Stackdata ds      -> foldl stackdatum env ds
 
-let decls env ds =
-    foldl decl env ds
-
+let decls env ds = foldl decl env ds
 
 let procedure env cc fs ds ss = 
     let env1  = formals env fs in
@@ -847,7 +894,7 @@ let procedure env cc fs ds ss =
         stmts env3 ss  
 
      
-let export_ env t n (t',kind) =
+let export' env t n (t',kind) =
     ( match t, t', kind with
     | Some t , t', Memory when ty t = t' -> ()
     | None   , t', Memory                -> ()
@@ -855,30 +902,31 @@ let export_ env t n (t',kind) =
     | otherwise            -> error ("value "^n^" can't be exported")
     )
     
-let export env ty n = 
-    export_ env ty n (strip (lookup n env))
+let export env ty n = emap (export' env ty n) (lookup n env) 
     
    
 let rec section env = function
-    | SectionAt(x,_)             -> section env x
-    | SSpan( e1, e2, ss)         -> List.iter (section env) ss
+    | SectionAt(x,r)             -> catch (errorRegPrt r) (section env) x
+    | SSpan( e1, e2, ss)         -> Implode.map (section env) ss
     | Datum( d)                  -> datum env d
-    | SExport (t, ns)            -> List.iter (export env t) ns
+    | SExport (t, ns)            -> Implode.map (export env t) ns
     | Procedure(cc,n,fs, ds, ss) -> procedure env cc fs ds ss
     
+
 let rec topdecl env = function
-    | TopDeclAt(x,r)  -> topdecl env x
-    | Import( t, ns)  -> ()
-    | Export( t, ns)  -> List.iter (export env t) ns
-    | Const ( cs)     -> () 
-    | Section( n, ss) -> List.iter (section env) ss
-    | Registers( rs)  -> ()
-    | Pragma          -> ()
+    | TopDeclAt(x,r)  -> catch (errorRegPrt r) (topdecl env) x
+    | Import( t, ns)  -> Ok ()
+    | Export( t, ns)  -> Implode.map (export env t) ns
+    | Const ( cs)     -> Ok () 
+    | Section( n, ss) -> Implode.map (section env) ss
+    | Registers( rs)  -> Ok ()
+    | Pragma          -> Ok ()
     | TopProcedure(n,cc,fs,ds,ss) -> procedure env cc fs ds ss 
                                             
 let program env ds srcmap =
-    ignore (List.map (topdecl env) ds) ; Ok ()  
+        Implode.map (topdecl env) ds
 @
+
 
 
 % ------------------------------------------------------------------  

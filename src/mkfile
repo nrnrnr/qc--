@@ -43,6 +43,9 @@ MANDIR =    ../man
 # compiler flags used by the rules just included
 #
 
+# we compile byte code for profiling
+# OCAMLC =        ocamlcp -p a    
+
 OCAMLC_FLAGS =  -I $LIBDIR
 OCAMLO_FLAGS =  -I $LIBDIR
 
@@ -52,7 +55,9 @@ OCAMLO_FLAGS =  -I $LIBDIR
 
 all:V:          $NAME
 
-update:V:       $BINDIR/$NAME $MANDIR/man1/$NAME.1
+update:V:       $BINDIR/$NAME           \
+                $BINDIR/$NAME.byte      \
+                $MANDIR/man1/$NAME.1    \
 
 clean:V:        nwclean 
                 rm -f $CMO $CMX $CMI $OBJ
@@ -243,6 +248,9 @@ $NAME.opt:      $CMX
 # ------------------------------------------------------------------ 
 
 $BINDIR/$NAME:          $NAME.opt
+                        cp $prereq $target
+
+$BINDIR/$NAME.byte:     $NAME
                         cp $prereq $target
 
 $MANDIR/man1/$NAME.1:   $NAME.1
