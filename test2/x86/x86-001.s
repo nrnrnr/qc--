@@ -208,7 +208,7 @@ join_l7:
 	movl 72(%esp),%ecx
 	cmpl %eax,%ecx
 	jbe join_l5
-join_l14:
+join_l15:
 	jmp L
 join_l5:
 	jmp L

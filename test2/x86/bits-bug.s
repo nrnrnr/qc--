@@ -77,11 +77,11 @@ callee:
 	movl (%ecx),%edx
 	leal 4(%esp), %ecx
 	movl %edx,(%ecx)
-initialize_continuations_l13:
+initialize_continuations_l15:
 	movl $-1420500317,%ecx
 	cmpl %ecx,%eax
-	jne join_l22
-join_l23:
+	jne join_l24
+join_l25:
 	nop
 	leal success,%eax
 	movl $-4,%ecx
@@ -90,7 +90,7 @@ join_l23:
 	movl %eax,(%edx)
 	nop
 	call printf
-join_l17:
+join_l19:
 	nop
 	nop
 	nop
@@ -104,7 +104,7 @@ join_l17:
 	movl %eax,(%edx)
 	leal 4(%esp), %esp
 	ret
-join_l22:
+join_l24:
 	nop
 	leal failed,%eax
 	movl $-4,%ecx
@@ -113,7 +113,7 @@ join_l22:
 	movl %eax,(%edx)
 	nop
 	call printf
-join_l21:
+join_l23:
 	nop
 	nop
 	nop

@@ -141,24 +141,24 @@ join_l14:
 	ret
 .text
 f:
-	leal -4(%esp), %esp
+	leal -8(%esp), %esp
 	nop
-	leal 4(%esp), %ecx
+	leal 8(%esp), %ecx
 	movl (%ecx),%ecx
-	movl %ecx,(%esp)
-initialize_continuations_l26:
-	leal -4(%esp), %esp
+	movl %ecx,4(%esp)
+initialize_continuations_l27:
+	nop
 	movl $-8,%ecx
 	leal 8(%esp), %edx
 	addl %ecx,%edx
 	movl %eax,(%edx)
 	nop
 	call g
-join_l33:
+join_l34:
 	nop
 	nop
 	nop
-	leal -4(%esp), %esp
+	nop
 	leal ret,%eax
 	movl $-8,%ecx
 	leal 8(%esp), %edx
@@ -166,18 +166,18 @@ join_l33:
 	movl %eax,(%edx)
 	nop
 	call printf
-join_l30:
+join_l31:
 	nop
 	nop
 	nop
 	nop
 	nop
 	movl $0,%ecx
-	leal 4(%esp), %eax
+	leal 8(%esp), %eax
 	addl %ecx,%eax
-	movl (%esp),%ecx
+	movl 4(%esp),%ecx
 	movl %ecx,(%eax)
-	leal 4(%esp), %esp
+	leal 8(%esp), %esp
 	ret
 .text
 g:
@@ -191,11 +191,11 @@ g:
 	movl (%ecx),%edx
 	leal 4(%esp), %ecx
 	movl %edx,(%ecx)
-initialize_continuations_l39:
+initialize_continuations_l41:
 	nop
 	nop
 	call h
-join_l46:
+join_l48:
 	nop
 	nop
 	nop
@@ -207,7 +207,7 @@ join_l46:
 	movl %eax,(%edx)
 	nop
 	call printf
-join_l43:
+join_l45:
 	nop
 	nop
 	nop
@@ -228,7 +228,7 @@ h:
 	nop
 	movl %esp,%eax
 	movl (%eax),%eax
-initialize_continuations_l52:
+initialize_continuations_l55:
 	movl $99,%eax
 	movl $4,%ebx
 	movl %ecx,%edx
