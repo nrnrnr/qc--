@@ -1000,16 +1000,35 @@ and spanStmt env e1 e2 bb =
                          , f (constExpr env e2)
                          , E.Implode.map (body env) bb
                          )
+@ 
+
+The target list of a [[goto]] statement may be empty only if the
+expression is a label.
+                         
 <<>>=
 and gotoStmt env e ts = 
-    let t = targets env ts in
-    let e = match tyExpr env e with
-            | E.Error                 -> E.Error
-            | E.Ok(t) when t = T.code -> E.Ok()
-            | _                       -> 
-                E.error "goto-expression does not evaluate to a code pointer" 
+    let t' = targets env ts in
+    let e' = match tyExpr env e with
+        | E.Error                 -> E.Error
+        | E.Ok(t) when t = T.code -> E.Ok()
+        | _                       -> 
+            E.error "goto-expression does not evaluate to a code pointer" in
+    let rec isLocalLabel = function
+        | A.ExprAt(x,_)            -> isLocalLabel x
+        | A.Fetch(A.LValueAt(x,_)) -> isLocalLabel (A.Fetch x)
+        | A.Fetch(A.Var(x))        -> 
+              ( match F.findv x env with
+              | _       ,E.Error                 ->  false
+              | F.Local ,E.Ok(F.Label(F.Code),_) ->  true
+              | _                                ->  false
+              )        
+        | _                        -> false
     in
-        E.Implode.pair (e,t)
+        if ts = [] && not (isLocalLabel e) then
+            E.error "target list is empty"
+        else
+            E.Implode.pair (e',t')
+
 <<>>=
 and cutStmt env e args fs =
     let f    = flows env fs in
