@@ -69,21 +69,20 @@ module LocSet: Set.S with type elt = Rtl.loc
 module LocMap: Map.S with type key = Rtl.loc
 @
 
-The [[subst map rtl]] function substitutes locations in [[rtl]].  The
-[[map]] argument associates locations to be substituted and the
-respective substitutes.  Locations not in the domain of [[map]] are
-left untouched by the [[subst]].
+The [[loc f rtl]] function substitutes locations in [[rtl]].  Every
+location used in [[rtl]] is presented to [[f]] which can substitute it
+for a different one.
 
 <<rtlutil.mli>>=
-val subst: Rtl.loc LocMap.t -> Rtl.rtl -> Rtl.rtl
-
 module Subst : sig
-  val reg : (Register.t -> Register.t) -> Rtl.rtl -> Rtl.rtl
+    val loc: (Rtl.loc    -> Rtl.loc)    -> Rtl.rtl -> Rtl.rtl
+    val reg: (Register.t -> Register.t) -> Rtl.rtl -> Rtl.rtl
 end
 @
     
 The predicate [[uses locs rtl]] is true, if and only if [[rtl]]
-contains any of the locations in the set [[locs]].
+contains any of the locations in the set [[locs]].  \emph{This should
+also go into a separate sub-module}.
 
 <<rtlutil.mli>>=
 val uses : LocSet.t -> Rtl.rtl -> bool
@@ -92,7 +91,6 @@ val uses : LocSet.t -> Rtl.rtl -> bool
 
 <<obsolete and deprecated?>>=
 val width:      Rtl.exp -> int                 (* width of expression *)
-  (* often faults with assertion failure *)
 val assign:     Rtl.loc -> Rtl.exp -> Rtl.rtl
 @
 
@@ -153,18 +151,22 @@ let read_write_lists (read:'a regfun) (write:'a regfun) =
   in  fun r z -> rtl z (Rtl.Convert.rtl r)
 @
 
-The [[subst map rtl]] function substitutes all locations in [[rtl]] that
-have an entry in [[map]].
+The [[subst map rtl]] function substitutes all locations in [[rtl]] by
+passing locations to the [[map]] function.
 
 <<rtlutil.ml>>=
+module Subst = struct
+    <<module Subst struct>>
+end
+@
+
+<<module Subst struct>>=
 let rec subst_exp map = function
     | RP.Fetch (loc, width) -> RP.Fetch(subst_loc map loc, width)
     | RP.App(opr, exprs)    -> RP.App(opr, List.map (subst_exp map) exprs)
     | x                     -> x
     
-and subst_loc map loc  =  
-    try Rtl.Convert.loc (LocMap.find (Rtl.Revert.loc loc) map)
-    with Not_found -> loc
+and subst_loc map loc  = Rtl.Convert.loc (map (Rtl.Revert.loc loc)) 
     
 and subst_effect map = function
     | RP.Store (loc,exp,width) -> 
@@ -177,15 +179,17 @@ and subst_guarded map (exp,eff) =
 
 and subst' map (RP.Rtl rtl) = RP.Rtl (List.map (subst_guarded map) rtl)
 
-let subst map rtl = Rtl.Revert.rtl (subst' map (Rtl.Convert.rtl rtl))
+let loc map rtl = Rtl.Revert.rtl (subst' map (Rtl.Convert.rtl rtl))
 @    
-<<rtlutil.ml>>=
-module Subst = struct
-  let reg f rtl = assert false
-end
-@ 
 
+The [[reg]] function substitutes registers in {\rtl}s and could be
+imolemented in terms of [[subst]] because a register is a special case
+of a location. However, the details
+detected? 
 
+<<module Subst struct>>=
+let reg f rtl = assert false 
+@
     
 The predicate [[uses locs rtl]] is true, if and only if [[rtl]]
 contains any of the locations in the set [[locs]].
