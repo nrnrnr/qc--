@@ -78,13 +78,13 @@ qc--.opt:VQ:     tools.opt lib.opt dirs
 	done
 
 lib:VQ:          dirs
-	for i in cllib asdl gen lua rtl; do 
+	for i in runtime cllib asdl gen lua rtl; do 
 	  (echo "# cd $i" && cd $i && mk $MKFLAGS depend && mk $MKFLAGS update) ||
 	  exit 1
 	done
 
 lib.opt:QV:      dirs
-	for i in cllib asdl gen lua rtl
+	for i in runtime cllib asdl gen lua rtl
 	do 
 	  (echo "# cd $i" && cd $i && mk $MKFLAGS depend && mk $MKFLAGS update.opt) ||
 	  exit 1
