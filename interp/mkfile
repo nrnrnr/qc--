@@ -1,19 +1,55 @@
-BINDIR=/home/lair/olinsky/bin
-LIBDIR=/home/lair/olinsky/lib
+#
+# Quick C-- Interpreter
+#
 
-INCLUDES=-Iinclude -Iinclude/cii -I.
+NAME     = qc--interp
+VERSION  = `date +%Y%m%d`
 
-CC=gcc
-CFLAGS=-g -ansi -pedantic -Wall
-LIBS=-lm
+# ------------------------------------------------------------------
+# paths
+# ------------------------------------------------------------------
 
-NOTANGLEOPTS='-L'
+TOP      = ..
+LIBDIR   = /home/lair/olinsky/lib
+BINDIR   = ../bin
 
-TOOLS=$BINDIR/tools
-DEPEND=$CC -MM $INCLUDES
+LUALIBS  = $LIBDIR/liblua.a $LIBDIR/liblualib.a
+TOOLS    = /home/lair/olinsky/bin/tools
+
+# ------------------------------------------------------------------
+# main targets
+# ------------------------------------------------------------------
+
+INTERP   = evaluating
+DEPEND   = $CC -MM $INCLUDES
+
+all:V:     $NAME
+update:V:  $BINDIR/$NAME
+
+depend:V:  $DEPEND
+
+test:VQ:
+           cd test/
+           mk $MKFLAGS test
+           cd ..
+
+clean:V:
+           rm -f *.o clients/*.o
+
+clobber:V: clean
+	       rm -f *.blg *.log *.dvi *.inc *.toc *.aux 
+           rm -f clients/*.blg clients/*.inc
+	       rm -f $NWTEXFILES interfaces.nw clients/gc.tex prof.out core *~
+           rm -f $NAME clients/gc_client
+           rm -f *.m *.i decode.fetch bytecode.sled clients/*.i
+           rm -f $COREHDRS $INTERPSRCS
+           rm -f $CLIENTHDRS $CLIENTSRCS
+
+# ------------------------------------------------------------------
+# important file sets
+# ------------------------------------------------------------------
 
 NWFILES    = `echo *.nw`
-NWTEXFILES = ${NWFILES:%.nw=%.tex}
 
 COREHDRS   = activation.h \
              assemblyunit.h \
@@ -36,24 +72,6 @@ COREHDRS   = activation.h \
              types.h \
              uid.h \
              value.h
-
-INTERFACES = activation.nw \
-             assemblyunit.nw \
-             ccall.nw \
-             controlflow.nw \
-             disasm.nw \
-             encoding.nw \
-             intervals.nw \
-             label.nw \
-             lualink.nw \
-             operator.nw \
-             span.nw \
-             stack.nw \
-             table.nw \
-             thread.nw \
-             types.nw \
-             uid.nw \
-             value.nw
 
 EXTSRCS    = arena.c \
              assert.c \
@@ -90,30 +108,59 @@ CLIENTSRCS = client.c clients/gc.c
 HDRS       = $COREHDRS $CLIENTHDRS
 SRCS       = $CORESRCS $CLIENTSRCS
 
-TOP=..
-INTERP=evaluating
+code:V:      $SRCS $HDRS
+
+# ------------------------------------------------------------------
+# rules and tools 
+# ------------------------------------------------------------------
+
+<../config/c.mk
+
+LIBS         = -L$LIBDIR -lm
+INCLUDES     = -Iinclude -Iinclude/cii -I.
+
+CFLAGS       = -g -ansi -pedantic -Wall $INCLUDES
 
 <../config/noweb.mk
+<../config/man.mk
 
-all:V: interp gc
+NOTANGLEOPTS = -L
 
-gc:V:  clients/gc_client
+# ------------------------------------------------------------------
+# copy files to their official directories
+# ------------------------------------------------------------------
 
-lcc-interp:V:
-       mk clean
-       mk code $MKFLAGS
-       mk interp CC=lcc CFLAGS='-g -A -A -b'
-       mk clients/gc_client CC=lcc CFLAGS='-g -A -A -b'
+$BINDIR/$NAME:  $NAME
+                cp $prereq $target
+
+# ------------------------------------------------------------------
+# binaries
+# ------------------------------------------------------------------
+
+gc:V:     clients/gc_client
+interp:V: $NAME
+
+$NAME:    $COREOBJS client.o
+    $CC $CFLAGS $LIBS -o $target $COREOBJS client.o $LUALIBS
+
+clients/gc_client: $COREOBJS clients/gc.o
+    $CC $CFLAGS $LIBS -o $target $COREOBJS clients/gc.o $LUALIBS
+
+###
+###
+### alternately built binaries (for sparc, lcc, etc.)
+
+lcc-interp:V: clean
+    mk code $MKFLAGS
+    mk $NAME CC=lcc CFLAGS='-g -A -A -b' $MKFLAGS
+    mk clients/gc_client CC=lcc CFLAGS='-g -A -A -b' $MKFLAGS
 
 sparc-interp:V:
-       mk all $MKFLAGS MACHINE=sparc BINDIR=/home/lair/olinsky/bin/sparc
+    mk $NAME $MKFLAGS MACHINE=sparc TOOLS=/home/lair/olinsky/bin/sparc/tools
 
-code:V: $SRCS $HDRS
-
-test:V: interp
-       cd test/
-       mk test
-       cd ..
+# ------------------------------------------------------------------
+# documentation-related files
+# ------------------------------------------------------------------
 
 interfaces:V: interfaces.dvi
 
@@ -130,50 +177,46 @@ interfaces.nw: $INTERFACES
        sed -e '/section{Implementation/d' >> interfaces.nw
     done
 
+NWTEXFILES = ${NWFILES:%.nw=%.tex}
+
+INTERFACES = activation.nw \
+             assemblyunit.nw \
+             ccall.nw \
+             controlflow.nw \
+             disasm.nw \
+             encoding.nw \
+             intervals.nw \
+             label.nw \
+             lualink.nw \
+             operator.nw \
+             span.nw \
+             stack.nw \
+             table.nw \
+             thread.nw \
+             types.nw \
+             uid.nw \
+             value.nw
+
+interp.tex: interp.nw
+	$NOWEAVE -delay -autodefs c -index $prereq > $target
+
+### some old documentation files
+
 design.tex: design.inc
 	echo "\input{design.inc}" > $target
 
 state.tex: state.inc
     echo "\input{state.inc}" > $target
 
-interp.tex: interp.nw
-	$NOWEAVE -delay -autodefs c -index $prereq > $target
-
-depend:V: $SRCS $HDRS
-    cp mkfile mkfile.bak
-    sed '/^# DO NOT DELETE/q' mkfile.bak > mkfile
-    $DEPEND $SRCS | sed 's/gc\.o:/clients\/gc\.o:/' >> mkfile
-
-clean:V: clean-tex clean-code clean-obj
-	rm -f $NWTEXFILES interfaces.nw clients/gc.tex interp clients/gc_client \
-          prof.out core *~
-
-clean-tex:V:
-	rm -f *.blg *.log *.dvi *.inc *.toc *.aux clients/*.blg clients/*.inc
-
-clean-code:V:
-    rm -f *.m *.i decode.fetch bytecode.sled clients/*.i
-    rm -f $COREHDRS $INTERPSRCS
-    rm -f $CLIENTHDRS $CLIENTSRCS
-
-clean-obj:V:
-    rm -f *.o clients/*.o
-
-#
+# ------------------------------------------------------------------ 
 # source code targets
-#
+# ------------------------------------------------------------------ 
+
 bytecode.sled:D: interp.nw
 	$NOTANGLE $NOTANGLEOPTS -R$target $prereq | $CPIF $target
 
 decode.fetch:D: interp.nw
     $NOTANGLE $NOTANGLEOPTS -R$target $prereq | $CPIF $target
-
-#decode.fetch:D: interp.nw
-#    if [ -n "$MACHINE" ]; then
-#      $NOTANGLE $NOTANGLEOPTS -R$target.$MACHINE $prereq | $CPIF $target;
-#    else
-#      $NOTANGLE $NOTANGLEOPTS -R$target.x86 $prereq | $CPIF $target;
-#    fi
 
 machine.h:D: interp.nw
     if [ -n "$MACHINE" ]; then
@@ -198,21 +241,28 @@ encode.c encode.h: bytecode.sled
 %.m:D: %.nw
     $NOTANGLE -R$target $prereq | $CPIF $target
 
-#
+# ------------------------------------------------------------------ 
+# recalculate dependencies
+# ------------------------------------------------------------------ 
+
+depend:V: $SRCS $HDRS
+    cp mkfile mkfile.bak
+    sed '/^# DO NOT DELETE/q' mkfile.bak > mkfile
+    $DEPEND $SRCS | sed 's/gc\.o:/clients\/gc\.o:/' >> mkfile
+
+# ------------------------------------------------------------------ 
 # intermediate code targets
+# ------------------------------------------------------------------ 
 #
+# for development and debugging only
+
 '(([^/]*/)*)(.*)\.i$':RD:       '\1\3.c' $HDRS
     $CC -P -E $INCLUDES $stem3.c > $target
 
-#
-# object code targets
-#
-%.o: %.c
-    $CC $CFLAGS -c $INCLUDES -o $target $stem.c
+# ------------------------------------------------------------------ 
+# operator generator targets (experimental, and not currently used)
+# ------------------------------------------------------------------ 
 
-#
-# operator generator targets (not currently used)
-#
 opgen:	opgen.icn
 	icont -o $target $prereq
 
@@ -225,19 +275,13 @@ optest:V: opgen
 %-ops.c:D: %.ops opgen
 	./opgen $stem.ops > $target
 
-#
-# compiled targets
-#
-interp: $COREOBJS client.o
-    $CC $CFLAGS $LIBS -L$LIBDIR -o $target $COREOBJS client.o \
-                                   $LIBDIR/liblua.a $LIBDIR/liblualib.a
-
-clients/gc_client: $COREOBJS clients/gc.o
-    $CC $CFLAGS $LIBS -L$LIBDIR -o $target $COREOBJS clients/gc.o \
-                                   $LIBDIR/liblua.a $LIBDIR/liblualib.a
 
 #
-# dependencies 
+# -- end of mkfile --
+#
+
+#
+# [dependencies]
 #
 # DO NOT DELETE THIS LINE -- mk depend depends on it
 arena.o: arena.c include/cii/assert.h include/cii/except.h \
