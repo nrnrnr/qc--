@@ -61,7 +61,6 @@ val compile :
   Ast2ir.tgt -> (Ast2ir.proc -> unit) -> bool -> (Srcmap.map * Ast.program)
   -> Ast2ir.proc Asm.assembler -> unit
    (* raises Error.ErrorExn *)
-val reinit    : unit -> unit
 @
 
 % ------------------------------------------------------------------ 
@@ -181,13 +180,6 @@ let ocompile opt exportglobals (map,ast) target env  =
 <<driver.ml>>=
 let pretty (map,ast) = Astpp.program ast
 let print doc width channel = Pp.ppToFile channel width doc
-@
-If multiple files are ocmpiled in a single pass, we do not want to
-output to depend on the sequence in which the files are processed.
-Calling [[reinit]] will reset any mutable state that can effect the
-output. Currently only [[Idgen]] is known to have this problem.
-<<driver.ml>>=
-let reinit() = Idgen.reset()
 @ 
 \subsection{Driver support for the new front end}
 

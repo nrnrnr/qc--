@@ -1,0 +1,20 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+\section{Reinitialization}
+
+If multiple files are compiled in a single pass, we do not want to
+output to depend on the sequence in which the files are processed.
+Calling [[Reinit.reset]] will reset any mutable state that can effect the
+output.
+@
+A module can ask to be reinitialized when the driver is reinitialized.
+Any function registered with [[at]] is called by [[reset]].
+<<reinit.mli>>=
+val at : (unit -> unit) -> unit
+val reset : unit -> unit
+@ 
+<<reinit.ml>>=
+let tasks = ref ([] : (unit -> unit) list)
+let at f = tasks := f :: !tasks
+let reset () = List.iter (fun f -> f ()) (!tasks)
+@ 

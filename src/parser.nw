@@ -749,6 +749,21 @@ let p  ()  = (Parsing.symbol_start (), Parsing.symbol_end())
 let pn n   = (Parsing.rhs_start n, Parsing.rhs_end n)
 let px ()  = (Parsing.symbol_start ())
 
+let dep deprecated msg =
+  fun x ->
+    if not (!deprecated) then
+      begin
+        Printf.eprintf "C-- warning: %s\n" msg;
+        deprecated := true;
+      end;
+    x
+let rd = ref false
+let ned = ref false
+let _ = Reinit.at (fun () -> (rd := false; ned := false))
+
+let rdep = dep rd "Use of 'register' keyword is deprecated"
+let noeqdep = dep ned "Hardware register name without '=' is deprecated"
+
 let rev    = List.rev
 
 <<helper functions>>=
@@ -867,14 +882,14 @@ You might hope to have a nonterminal for an optional type, but this
 little optimization leads to shift-reduce conflicts.
 <<parse.mly>>=
 declAt      :   decl                           { A.DeclAt($1,p()) }   
-decl        :   INVARIANT REGISTER registers SEMI
-                    { A.Registers(mkRegs A.Invariant $3) }
-            |   INVARIANT /*----*/ registers SEMI
+decl        :   INVARIANT /*----*/ registers SEMI
                     { A.Registers(mkRegs A.Invariant $2) }
-            |   /*-----*/ REGISTER registers SEMI
-                    { A.Registers(mkRegs A.Variant $2)   }
             |   /*-----*/ /*----*/ registers SEMI
                     { A.Registers(mkRegs A.Variant $1)   }
+            |   INVARIANT REGISTER registers SEMI
+                    { rdep (A.Registers(mkRegs A.Invariant $3)) }
+            |   /*-----*/ REGISTER registers SEMI
+                    { rdep (A.Registers(mkRegs A.Variant $2))   }
           
             |   EXPORT ty exports  SEMI        { A.Export(Some $2, $3) }
             |   EXPORT    exports  SEMI        { A.Export(None,$2)    }
@@ -918,10 +933,13 @@ registers   :   STR    tyAt regs               { Some $1, $2, rev $3 }
             |          tyAt regs COMMA         { None   , $1, rev $2 }
             |          tyAt regs               { None   , $1, rev $2 }
 
-regs        :   regs COMMA ID STR              { ($3, Some $4)::$1 }
+regs        :   regs COMMA ID optEq STR        { ($3, Some $5)::$1 }
             |   regs COMMA ID                  { ($3, None   )::$1 }
-            |   ID STR                         { [($1,Some $2)]    }
+            |   ID optEq STR                   { [($1,Some $3)]    }
             |   ID                             { [($1,None   )]    }
+
+optEq       :   { noeqdep () }
+            |   EQUAL  { () }
 
 <<parse.mly>>=
 size        :   LBRACKET exprAt RBRACKET       { A.FixSize($2) }
