@@ -17,7 +17,7 @@ when elaborating a {\PAL} program or when bootstrapping a [[Target.t]].
 <<metrics.mli>>=
 <<exposed types>>
 val default : t
-val of_ast  : Ast.arch list -> t Error.error
+val of_ast  : Srcmap.map -> (Ast.region * Ast.arch) list -> t Error.error
 @ 
 
 Field [[alignment]] is the alignment required to load or store a word
@@ -34,6 +34,7 @@ type t = {
 @
 \section{Implementation}
 <<metrics.ml>>=
+module A = Ast
 <<exposed types>>
 let default = {
   byteorder   = Rtl.Identity;
@@ -44,4 +45,51 @@ let default = {
   charset     = "latin1";
 }
 
-let of_ast l = Error.Error
+let of_ast map =
+  let errorf rgn =
+    Printf.kprintf (fun s -> (Error.errorRegionPrt (map, rgn) s; Error.Error)) in
+  let def default = function
+    | Error.Ok (Some (r, v)) -> v
+    | Error.Ok None          -> default
+    | Error.Error            -> assert false in
+  let merge r prt what v = function
+    | Error.Ok (Some (r', v')) as m when v = v' -> m
+    | Error.Ok (Some (r', v')) ->
+        errorf r "%s %s inconsistent with previous declaration of %s at %s"
+          what (prt v) (prt v') (Srcmap.Str.region (map, r'))
+    | Error.Ok None -> Error.Ok (Some (r, v))
+    | Error.Error -> Error.Error in
+  let mergei r what i v =
+    if i > 0 then merge r string_of_int what i v
+    else errorf r "%s must be a positive integer" what in
+  let bos = function Rtl.LittleEndian -> "little" | _ -> "big" in
+  let mergebo r v = merge r bos "byte order" v in
+  let merges r = merge r (fun s -> s) in
+  let is_ok = function  Error.Ok _ -> true | Error.Error -> false in
+
+  let rec metrics bo w p m f c aa = match aa with
+  | [] -> if is_ok bo && is_ok w && is_ok p && is_ok m && is_ok f && is_ok c then
+            match bo with
+            | Error.Ok (Some (_, bo)) -> 
+                Error.Ok { byteorder   = bo;
+                           wordsize    = def default.wordsize    w;
+                           pointersize = def default.pointersize p;
+                           memsize     = def default.memsize     m;
+                           float       = def default.float       f;
+                           charset     = def default.charset     c;
+                         }
+            | Error.Ok None ->
+                (Error.errorPrt "target byte order not specified"; Error.Error)
+            | Error.Error   ->
+                assert false
+          else
+            Error.Error
+  | (r,A.Memsize i)      :: aa -> metrics bo w p (mergei r "memsize" i m) f c aa
+  | (r,A.ByteorderBig)   :: aa -> metrics (mergebo r Rtl.BigEndian    bo) w p m f c aa
+  | (r,A.ByteorderLittle):: aa -> metrics (mergebo r Rtl.LittleEndian bo) w p m f c aa
+  | (r,A.FloatRepr s)    :: aa -> metrics bo w p m (merges r "float" s f) c aa
+  | (r,A.WordSize i)     :: aa -> metrics bo (mergei r "wordsize" i w) p m f c aa
+  | (r,A.PointerSize i)  :: aa -> metrics bo w (mergei r "pointersize" i p) m f c aa
+  | (r,A.Charset s)      :: aa -> metrics bo w p m f (merges r "charset" s c) aa in
+  let n = Error.Ok None in
+  metrics n n n n n n
