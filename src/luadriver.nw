@@ -408,12 +408,12 @@ function CMD.translate_files(files, txtab)
     if type(files) == 'string' then
       local ext = CMD.canonical_extension(files)
       if not Options.stop[ext] then
-        CMD.translate_files(CMD.translate(files))
+        CMD.translate_files(CMD.translate(files, txtab), txtab)
       end
     else
       local i = 1
       while files[i] do
-        CMD.translate_files(files[i])
+        CMD.translate_files(files[i], txtab)
         i = i+1
       end
     end
@@ -422,9 +422,10 @@ end
 @ 
 Translating a single file dispatches on its canonical extension in [[CMD.txtab]].
 <<Lua command-line driver>>=
-function CMD.translate(file)
-  if CMD.txtab[CMD.canonical_extension(file)] then
-    return CMD.txtab[CMD.canonical_extension(file)](file)
+function CMD.translate(file, txtab)
+  txtab = txtab or CMD.txtab
+  if txtab[CMD.canonical_extension(file)] then
+    return txtab[CMD.canonical_extension(file)](file)
   else
     CMD.error('qc-- does not recognize extension of file ' .. file)
   end

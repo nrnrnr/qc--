@@ -10,7 +10,7 @@ This is more my idea of an elaborated representation.
 <<exposed types>>=
 type bits = Bits.bits
 type exp  = Rtl.exp
-type loc  = Rtl.loc (* optimism *)
+type loc  = Rtl.loc
 type rtl  = Rtl.rtl
 type name = string
 type size = int
@@ -19,16 +19,9 @@ type index = int
 type convention = string
 type procname   = string
 type label      = string
+type linktime   = Bits.bits Reloc.Simple.relocatable
 
-type oty = Ty of int  (* bits$n$ *)
 type ty = Types.ty
-@ 
-Initialized and uninitialized data have the same type.
-<<exposed types>>=
-type init =
-  | ExpData    of exp list
-  | StringData of string
-
 @ 
 Here we have register variables (which double as formal parameters),
 continuation parameters, actual parameters.
@@ -39,63 +32,30 @@ type register = runtime_access * hint * ty * name (* ? *)
 type cformal  = hint * name
 type actual   = hint * exp
 @ 
-Flow annotations on calls and cut to.
-<<exposed types>>=
-type flow = {
-    cuts_to : name list;
-    unwinds_to : name list;
-    returns_to : name list;
-    aborts : bool;
-    returns : bool;
-  }
-
-type cflow = {
-    ccuts_to : name list;
-    caborts : bool;
-  }
-@
-Statements.  We push as close to RTLs as possible.
-<<exposed types>>=
-  (* N.B. Switch and prim not implemented *)
-type stmt =
-  | IfStmt     of exp * stmt list * stmt list
-  | LabelStmt  of name
-  | ContStmt   of name * cformal list
-  | SpanStmt   of bits * exp * stmt list
-  | AssignStmt of rtl
-  | CallStmt   of loc list * convention * exp * actual list * procname list * flow
-  | GotoStmt   of exp * label list
-  | JumpStmt   of convention * exp * actual list * procname list
-  | CutStmt    of exp * actual list * cflow 
-  | ReturnStmt of convention * int * int * actual list
-@ 
 Procedures and sections in nice normal form.
+I'm concerned that formals and locals don't have the same type.
 <<exposed types>>=
-type proc =
-  { env : unit Fenv.Dirty.env';
+type 'a proc =
+  { env : 'a Fenv.Dirty.env';
     cc  : name;
     name : name;
+    spans : (Bits.bits * linktime) list;  (* enclose whole procedure *)
     formals : (index * hint * Ast.variance * Types.ty * name) list;
-    locals  : unit list;
-    continuations : unit list;
+    locals  : Fenv.Dirty.variable list;
+    continuations : Fenv.Dirty.continuation list;
     stackmem      : Block.t;
     stacklabels   : Rtl.exp list;
-    code          : (Rtl.loc, Rtl.exp, Rtl.rtl) Nast.stmt list;
+    code          : Elabstmt.stmt list;
   } 
 
-type datum =
+type 'a datum =
   | Datalabel         of name
   | Align             of int
   | InitializedData   of (exp * ty) list
   | UninitializedData of int  (* counts the number of mems *)
-  | Procedure         of proc
+  | Procedure         of 'a proc
 
-type spans = (bits * exp) list
-
-type section = {
-    sname : string;
-    contents: (datum * spans) list;
-  }
+type 'a section = name * 'a datum list
 @ 
 And last, the target and compilation unit.
 <<exposed types>>=
@@ -109,17 +69,23 @@ type xtarget = {
 }
 type target = Ofenv.Clean.target
 
-type compunit = {
+type 'a compunit = {
+(*
     target  : target;
     imports : name list;
     exports : name list;
-    globals : register list;
+*)
+    globals : Fenv.Dirty.variable list;
+(*
     constants : (name * bits) list;     (* maybe unnecessary *)
-    sections : section list;
+*)
+    sections : 'a section list;
   }
 @ 
 <<nelab.mli>>=
 <<exposed types>>
+val program : Srcmap.map -> 'a Asm.assembler -> Nast.t ->
+  ('a Fenv.Dirty.env' * 'a compunit) Error.error
 @ 
 % ------------------------------------------------------------------ 
 \section{Checking Static Semantics}
@@ -226,7 +192,6 @@ module Dn = Rtl.Dn
 module Up = Rtl.Up
 module T  = Types
 
-let unimp = Impossible.unimp
 let impossf fmt = Printf.kprintf Impossible.impossible fmt
 
 <<nelab.ml>>=
@@ -247,36 +212,6 @@ the [[Topsort.Make]] functor, which is parameterized over the
 declarations being sorted.  In the case of type declarations, for
 example, module [[Typedef.Decl]] provides the necessary informations
 about type declarations. 
-@
-<<xxxnelab.ml>>=
-module Env = struct
-    <<module Env>>
-    let global (env:'a Ofenv.Dirty.env') (program:Ast.program) =
-(*        let env = Pass1.global env program in *)
-(*        let env = setDefaults env in  *)
-        let env = Typedefs.bindTypeDefns env in 
-        let env = Consts.bindConstants env in 
-        let env = foldl (toplevel Srcmap.null) env program in
-        env 
-
-    let local env (_,_,ff,bb as proc) =
-(*        let env = Pass1.local env bb in *)
-        let env = Typedefs.bindTypeDefns env in
-        let env = Consts.bindConstants env in
-        let env = foldl (formal Srcmap.null)       env ff  in
-        let env = foldl (body   Srcmap.null Local) env bb  in
-        env
-end
-@
-\paragraph{Check}. The [[Check]] module implements the check of the
-static semantics with the help of the fat environment that was built
-up using the peceding modules.
-<<xxxnelab.ml>>=
-module Check = struct
-    <<module Check>>
-end
-@
-
 @ 
 % ------------------------------------------------------------------ 
 \subsection{Auxiliaries}
@@ -312,37 +247,10 @@ reporting function for [[E.catch]]:
 <<auxiliaries>>=
 let error r env msg = E.errorRegionPrt (F.srcmap env,r) msg 
 @
-The static semantics of procedures are checked after everything
-else has been checked. The following function returns the list of
-procedures of a program.
+Alignments must be a power of two.  This predicates is true, iff its
+argument is a positive power of two.
 <<auxiliaries>>=
-let procedures ast = 
-  let rec section acc = function
-    | A.SectionAt(x,_)     -> section acc x
-    | A.Decl(d)            -> acc
-    | A.Datum( d)          -> acc
-    | A.Procedure(p)       -> p::acc
-    | A.SSpan( e1, e2, ss) -> List.fold_left section acc ss in   
-  let rec toplevel acc = function
-    | A.ToplevelAt(x, _)   -> toplevel acc x
-    | A.Section(name, ss)  -> List.fold_left section acc ss
-    | A.TopDecl(d)         -> acc
-    | A.TopProcedure(p)    -> p::acc in
-  List.fold_left toplevel [] ast
-@    
-The interface to [[Ofenv]] has changed and somtimes the old interface
-was just more convenient. Here are some handy conversion functions.
-<<auxiliaries>>=
-let bindv name x y env = F.bindv name (x,y) env 
-let bindt name x y env = F.bindt name (x,y) env 
-let findv name     env = let (_,scope),entry = F.findv name env in scope,entry
-let findt name     env = let (_,scope),entry = F.findt name env in scope,entry
-@
-Project a [[Rtl.exp]] value to a [[Bits.bits]] value.
-<<auxiliaries>>=
-let to_bits e = match Dn.exp e with
-    | RP.Const (RP.Bits b) -> b
-    | _                    -> impossf "expression deemed constant wasn't Bits"
+let is2power x = x > 0 && x land (x - 1) = 0
 @
 % ------------------------------------------------------------------ 
 \subsection{Sorting and binding type and constant declarations}
@@ -443,7 +351,7 @@ this is not permitted. The optionally provided type must match the
 actual type of the defining expression.
 <<nelab.ml>>=
 module Const = struct
-  type d = Ast.expr N.constdefn
+  type d = N.constdefn
   <<utility functions for constants>>
   module Decl = struct
     type decl = d N.marked
@@ -611,8 +519,8 @@ imports and exports have two effects
 
 <<nelab.ml>>=
 type scope = Local | Global
-let elab lvalue typed_expr srcmap asm ast =
-  E.ematch (Metrics.of_ast srcmap ast.N.target) (fun metrics ->
+let program srcmap asm ast =
+  E.seq (Metrics.of_ast srcmap ast.N.target) (fun metrics ->
     let flag = function E.Error -> F.flagError | E.Ok _ -> (fun env -> env) in
     let eprint r s = E.errorRegionPrt (srcmap, r) s in
     let errorf r   = Printf.kprintf (fun s -> eprint r s; E.Error) in
@@ -623,41 +531,46 @@ let elab lvalue typed_expr srcmap asm ast =
     <<definitions of name-binding functions>>
     <<definitions of elaboration functions>>
     let env = F.empty srcmap metrics asm in
+    let env = F.push env (F.emptyscope) in  (* weird, but so it is *)
     let env = TypeSortBind. bind_sortable_definitions env ast.N.udecls.N.types in
     let env = ConstSortBind.bind_sortable_definitions env ast.N.udecls.N.constants in
     let env = foldl bind_and_remember_import env ast.N.imports in
     let env = foldl remember_export          env ast.N.exports in
-    let env = registers_from Global 0 ast.N.globals env in
+    let env, globals = registers_from Global 0 ast.N.globals env in
     let env = foldl (foldl bind_code_label) env ast.N.code_labels in
     let env = foldl bind_section_names env ast.N.sections in
     let ss  = E.Raise.list (List.map (section env) ast.N.sections) in
     let env = flag ss env in
     let env = foldl check_export env ast.N.exports in
-    env, ss)
+    E.ematch2 globals ss (fun globals ss ->
+      (env, { globals = globals; sections = ss })))
 @
 In a procedure, labels have global scope, but they are bound a
 second time in the local environment. This has the following advantages:
 \begin{itemize}
 \item The second binding clashes with any other local binding that
-      might shadows the global binding.
+      might shadow the global binding.
 
 \item A [[goto]] must have a local target. Now is is possible to test
-      for this. 
+      for this by looking up the name of the target and using the
+      predicate [[F.is_localv]].
 \end{itemize}
 <<definitions of procedure-processing functions>>=
-let proc env p =
+let proc env spans p =
   let env = F.push env F.emptyscope in
   let env = TypeSortBind. bind_sortable_definitions env p.N.pdecls.N.types in
   let env = ConstSortBind.bind_sortable_definitions env p.N.pdecls.N.constants in
   let env, n, formals = formals_from 0 p.N.formals env in
-  let env = registers_from Local n p.N.locals env in
-  let env = foldl bind_code_label env p.N.labels in  (* odd -- explain *)
-  let env = foldl bind_continuation env p.N.continuations in
+  let env, locals = registers_from Local n p.N.locals env in
+  let env = foldl bind_code_label env p.N.labels in  (* odd -- explained above *)
+  let env, conts = bind_and_return_continuations env p.N.continuations in
   let stackmem, stacklabels, env = stackdata env p.N.stackdata in
-  E.Ok (Procedure
-  { env = env; cc = p.N.cc; name = p.N.name; formals = formals;
-    locals = unimp "locals"; continuations = unimp "continuations";
-    stackmem = stackmem; stacklabels = stacklabels; code = unimp "code"; }) in
+  let code = Elabstmt.elab_stmts env p.N.code in
+  E.ematch3 code locals (E.Raise.list spans) (fun code locals spans ->
+    Procedure
+      { env = env; cc = p.N.cc; name = p.N.name; formals = formals;
+        locals = locals; continuations = conts; spans = spans;
+        stackmem = stackmem; stacklabels = stacklabels; code = code; }) in
 @ 
 A continuation knows its address (in the form of an empty, unaligned
 block).
@@ -665,12 +578,16 @@ It also maintains some mutable data, filled in by [[Elabexp]] and
 [[Elabstmt]], that tells if the continuation is used in an expression
 or an annotation.
 <<definitions of name-binding functions>>=
-let bind_continuation env (r, name) =
-  let addrblock =
-    Block.relative vfp ("continuation " ^ name) Block.at ~size:0 ~alignment:1 in
-  let k = { F.base = addrblock; F.escapes = false;
-            F.cut_to = false; F.unwound_to = false; F.returned_to = false } in
-  F.bindv name (r, E.Ok (F.Continuation k, pointerty)) env in
+let bind_and_return_continuations env conts =
+  let rec bind prev' env = function
+    | [] -> env, List.rev prev'
+    | (r, name) :: ks ->
+        let addrblock =
+          Block.relative vfp ("continuation " ^ name) Block.at ~size:0 ~alignment:1 in
+        let k = { F.base = addrblock; F.escapes = false;
+                  F.cut_to = false; F.unwound_to = false; F.returned_to = false } in
+        bind (k::prev') (F.bindv name (r, E.Ok(F.Continuation k, pointerty)) env) ks in
+  bind [] env conts in
 @ 
 \subsubsection{Easy stuff}
 
@@ -702,21 +619,25 @@ let bind_code_label env (r, n) =
 @ 
 \subsubsection{Register variables and formal parameters}
 <<definitions of name-binding functions>>=
-let rec registers_from scope n rs env =
-  let register env (rgn, (v,hint,t,name,hwreg)) k =
-    let reg h = { F.index = n; F.rhint = h; F.loc = None; F.variance = v } in
-    let den h = E.Ok (F.Variable (reg h)) in
-    let den = match hint, hwreg with
-    | Some _, Some _ -> errorf rgn "can't have hint and hardware register"
-    | None,   Some r ->
-        if scope = Local then errorf rgn "local register can't be mapped to hardware"
-        else den (F.RReg r)
-    | Some _, None   -> errorf rgn "hints permissible only on formal parameters" 
-    | None,   None   -> den F.RNone in
-    k (F.bindv name (rgn, E.Raise.pair (den, Elabexp.elab_ty env t)) env) in
-  match rs with
-  | [] -> env
-  | r :: rs -> register env r (registers_from scope (n+1) rs) in
+let registers_from scope n rs env =
+  let rec regs_from prev' n rs env = match rs with
+  | [] ->
+      let regs = E.ematch (E.Raise.list (List.rev prev')) (fun rs ->
+        List.map (function F.Variable r -> r | _ -> impossf "non-register") rs) in
+      env, regs
+  | (rgn, (v, hint, t, name, hwreg)) :: rs ->
+      let reg h = { F.index = n; F.rhint = h; F.loc = None; F.variance = v } in
+      let den h = E.Ok (F.Variable (reg h)) in
+      let den = match hint, hwreg with
+      | Some _, Some _ -> errorf rgn "can't have hint and hardware register"
+      | None,   Some r ->
+          if scope = Local then errorf rgn "local register can't be mapped to hardware"
+          else den (F.RReg r)
+      | Some _, None   -> errorf rgn "hints permissible only on formal parameters" 
+      | None,   None   -> den F.RNone in
+      let env = F.bindv name (rgn, E.Raise.pair (den, Elabexp.elab_ty env t)) env in
+      regs_from (den::prev') (n+1) rs env in
+  regs_from [] n rs env in
 <<definitions of name-binding functions>>=
 let formals_from n rs env =
   let rec formals prev' n rs env = match rs with
@@ -740,7 +661,7 @@ let bind_section_names env (secname, ds) =
 let section env (secname, ds) =
   <<definitions of procedure-processing functions>>
   <<definitions of elaboration functions for data>>
-  unimp "elaboration of section" in
+  E.Raise.right (secname, E.Raise.list (data [] [] ds)) in
 @ 
 \subsection{Translation of \texttt{stackdata} declarations, accumulating labels}
 
@@ -787,7 +708,6 @@ and stackdatum mem stacklabels' env (r, d) k =
   | N.ReserveMem(ty,size,Some _) -> errorf "initialization not permitted for stackdata"
   | N.ReserveMem(ty,A.DynSize,_) -> errorf "illegal size for stackdata"
   | N.ReserveMem(ty,size,None) ->
-      unimp "memdecl check";
       (match Elabexp.elab_ty env ty with
       | E.Error -> k mem stacklabels' env
       | E.Ok Types.Bool -> impossf "boolean type in abstract syntax"
@@ -808,6 +728,8 @@ and stackdatum mem stacklabels' env (r, d) k =
       )
   | N.Procedure _ -> impossf "nested procedures"
   | N.SSpan (_, _, _) -> impossf "span in stackdata"
+@
+
 @
 \paragraph{Export checking}
 
@@ -844,7 +766,6 @@ let check_export env (r, ty, pairs) =
   | None -> env in
   foldl check_pair env pairs in
 @
-
 \subsubsection{Initialized data and other sectionish things}
 
 Top-level data are more complicated than stackdata.
@@ -853,7 +774,7 @@ Any error flags the environment and continues.
 The only environment operation for a toplevel datum is to bind labels.
 The rest should be drawn from ast2ir.
 <<definitions of name-binding functions for data>>=
-let datum env (r, d) =
+let rec datum env (r, d) =
   let errorf fmt = Printf.kprintf (fun s -> eprint r s; F.flagError env) fmt in
   match d with
   | N.Datalabel l ->
@@ -864,19 +785,32 @@ let datum env (r, d) =
   | N.Procedure p ->
       let den = F.Label (F.Proc (F.symbol env p.N.name)) in
       F.bindv p.N.name (r, E.Ok (den, pointerty)) env
-  | N.SSpan (_, _, _) -> unimp "section span" in
+  | N.SSpan (_, _, ds) -> foldl datum env ds in
 @ 
 <<definitions of elaboration functions for data>>=
-let rec data prev' ds = match ds with
-| [] -> List.rev prev'
+let metrics = F.metrics env in
+let rec data spans tail ds = match ds with
+| [] -> tail
 | (r, d) :: ds ->
-    let finish x = data (x::prev') ds in
+    let tail = data spans tail ds in
     match d with
-    | N.Datalabel l -> finish (E.Ok (Datalabel l))
-    | N.Align n     -> finish (E.Ok (Align n))      (* checked earlier *)
-    | N.Procedure p -> finish (proc env p)
-    | N.ReserveMem(ty,size,init) -> finish (reserve_mem r ty size init)
-    | N.SSpan (_, _, _) -> unimp "section span" 
+    | N.Datalabel l -> E.Ok (Datalabel l) :: tail
+    | N.Align n     -> E.Ok (Align n)     :: tail     (* checked earlier *)
+    | N.Procedure p -> proc env spans p   :: tail
+    | N.ReserveMem(ty,size,init) -> reserve_mem r ty size init :: tail
+    | N.SSpan (k, v, ds) ->
+        let span = E.seq2 (Elabexp.elab_con env k) (Elabexp.elab_link env v)
+          (fun (k, kw) (v, vw) ->
+            if kw <> metrics.Metrics.wordsize then
+              errorf r "span token (key) must be a bit vector of native word size" 
+            else if vw <> metrics.Metrics.pointersize then
+              errorf r "span value must be a bit vector of native pointer size"
+            else
+              E.Ok (k, v)) in
+        data (span::spans) tail ds
+@ It's unfortunate that spans are elaborated both here and in
+\module{elabstmt}, but to reuse the error messages would be more
+trouble than it is worth.
 @
 A memory declaration has a type, a type, and optionally a number of
 expressions to initialize the memory.  The number of expressions must
@@ -901,6 +835,27 @@ and reserve_mem r ty size idata =
             if      rcount > lcount then errorf r "too many initial values"
             else if rcount < rcount then errorf r "too few initial values"
             else E.Ok (InitializedData inits)))
+@ 
+A memory declaration has a type, a type, and optionally a number of
+expressions to initialize the memory.  The number of expressions must
+match the size specification, and the type of the expressions must
+match the declared type.
+
+<<check>>=
+let memdecl env ty size init_exprs =
+    let t = evalTy env ty    in
+    let n = memsize env size in
+    match init_exprs with
+    | None   -> E.seq' (F.flagError env) (E.Raise.pair   (t,n)) (fun _ -> env)
+    | Some i -> E.seq' (F.flagError env) (E.Raise.triple (t,n,init env t i))
+        ( function 
+        | t, Some n, m when m > n -> E.error "too many initial values"
+        | t, Some n, m when m < n -> E.error "foo few initial values"
+        | t, Some n, _            -> env
+        | t, None  , _            -> env
+        )
+@
+
 @
 The [[init_size]] function returns the number of objects to reserve
 memory for. Any given number must be nonnegative.
@@ -927,7 +882,7 @@ and init r ty i =
   match i with
   | A.InitAt (x,r) -> E.catch (error r env) (init r ty) x
   | A.InitExprs(es)  ->
-      E.seq (E.Raise.list (List.map (typed_expr env) es)) (fun tes ->
+      E.seq (E.Raise.list (List.map (Elabexp.elab_exp env) es)) (fun tes ->
         if List.for_all (fun (e, t) -> t = ty) tes then
           E.Ok tes
         else
@@ -940,170 +895,8 @@ and init r ty i =
         errorf r "initialized string must specify type bits8"
   | A.InitUStr(s) ->
       if ty = T.Bits 16 then
-        unimp "Unicode"
+        Impossible.unimp "Unicode"
       else
         errorf r "initialized Unicode string must specify type bits16" in
 @ 
-================================================================
 
-NEXT: HANDLE CONTINUATIONS BY GIVING EACH ONE A PAIR CONSISTING OF A
-FRESH, UNBOUND, EMPTY BLOCK AND A MUTABLE BOOLEAN INDICATING WHETHER
-THE CONTINUATION ESCAPES (HAS A DYNAMIC VALUE).
-
-@
-A procedure opens a local scope:  the procedure's parameters and all
-local [[typedef]], [[const]], [[continuation]] belong to the local
-scope.  When collecting the global values only the procedure's name is
-bound in the environment and the [[goto]] labels in its body.
-@
-
-% ------------------------------------------------------------------ 
-\subsection{Checking the static semantics}
-% ------------------------------------------------------------------ 
-
-After all global names for types and values are bound in the fat
-environment the static semantics can be checked.  This essentially
-means to walk over the abstract syntax and check all the constraints
-defined by the static semantics.  In case of an error we like to
-report it but continue to check the rest of a program.  
-<<module Check>>=
-<<Check auxiliaries>>
-<<type check expression>>
-<<check>>
-@
-Alignments must be a power of two.  This predicates is true, iff its
-argument is a positive power of two.
-<<auxiliaries>>=
-let is2power x = x > 0 && x land (x - 1) = 0
-@
-
-% ------------------------------------------------------------------ 
-\subsubsection{Expression types}
-% ------------------------------------------------------------------ 
-
-We use the generic functionality of module [[Expcheck]] for checking
-the static semantics of expressions. 
-<<type check expression>>=
-let tyExpr env e =
-  let typed_expr, _ = Expcheck.exprfuns (fun _ -> Rtl.late "continuation?!" 99) env in
-  E.ematch (typed_expr e) snd
-@
-% ------------------------------------------------------------------ 
-\subsubsection{Checking the static semantics}
-% ------------------------------------------------------------------ 
-
-Checking the static semantics really starts here.  We traverse the
-abstract syntax and check all the constraints.  The result of checking
-the static semantics is an environment; in case error are found by the
-check they are manifest in the returned environment.  So every
-function that takes part in checking the static semantics receives and
-returns an environment.
-
-THERE IS AN IMPORTANT PIECE MISSING HERE: THE CONTROL-FLOW
-RESTRICTIONS ARE NOT CHECKED.  IT WILL BE NECESSARY TO EXTEND THE
-ENVIRONMENT SO THAT WHEN A STATEMENT IS CHECKED, THE CHECKER KNOWS
-WHETHER CONTROL CAN FALL THROUGH TO THAT STATEMENT.
-IF THE ANSWER IS YES, THE STATEMENT HAD BETTER NOT BE A CONTINUATION.
-SIMILARLY, IT HAD BETTER NOT BE THE END OF THE PROCEDURE BODY EITHER.
-
-To evaluate constant expressions we use the code from [[Const.Eval]];
-the returned value has type [[(Types.ty * F.value) E.error]]
-<<check>>=
-let constExpr env e = Consts.evalExpr env e
-@
-The type of range-expressions in a [[switch]] statement must match the
-type [[t]] of the [[switch]] expression.  The parameter [[t]] is in
-the [[E.error]] domain and thus function from the [[E]] module are
-used for access. 
-<<check>>=
-and range t env r =
-    let msg1 = "Range type does not match expression type" in
-    E.seq' (F.flagError env) t
-    ( fun t -> match r with
-    | A.Point(e) -> 
-        E.seq' (F.flagError env) (constExpr env e)
-        ( function
-        | (t',v) when t=t'   -> env
-        | otherwise          -> E.error msg1
-        )
-
-    | A.Range(e1,e2) -> 
-        let e1e2 = E.Raise.pair (constExpr env e1, constExpr env e2) in
-        E.seq' (F.flagError env) e1e2
-        ( function 
-        | (t1,v1), (t2,v2) 
-           when t1=t && t2=t -> env
-        | otherwise          -> E.error msg1
-        )
-    )
-@
-All ranges that guard a [[switch]] arm must match the type of the
-[[switch]]-expression
-<<check>>=
-and arm t env = function
-    | A.ArmAt(x,r)   -> E.catch' (F.flagError env) (error r env) (arm t env) x
-    | A.Case(rr, ss) ->
-        let env = foldl body env ss              in 
-        let env = foldl (range t) env rr         in 
-            ( match rr with 
-            | [] -> E.error "must specify range for this arm"
-            | _  -> env
-            )
-@
-A top level [[span]] contains [[section]]s but otherwise behaves like a
-[[span]] statement: the two expressions [[e1]] and [[e2]] must denote a
-word and a (data) pointer. The latter must be also a link-time constant
-which is currently \emph{not} checked.
-<<check>>=
-and topSpan r env (e1,e2,ss) =
-    let msg1 = "span token must be a constant word" in
-    let msg2 = "span value must be a data pointer " in
-    let env  = foldl (section r) env ss                 in
-        E.seq' env (Error.Raise.quad ( constExpr env e1
-                                     , tyExpr env e2
-                                     , wordTy env
-                                     , pointerTy env
-                                     ))
-        ( function
-        | (t1,v1), _ ,w, p when t1 <> w -> E.error msg1
-        | _      , t2,w, p when t2 <> p -> E.error msg2
-        | _                        -> env
-        )
-@
-A procedure opens a new scope which contains additional local names.
-The [[Env.local]] functions computes this environment which is used by
-the functions that check the body of a procedure. Errors recorded in
-the local environment must be copied to the global environment.
-
-A procedure numbers its local parameters and registers starting from~0.
-We must save the actual value of [[F.getIndex]] and set it later
-such that the global counter for indexing registers is maintained
-across procedures.
-\begin{quote}\it
-    Can't this be tied to opening a new scope? Looks like a
-    historic legancy from the time when we had no first-class scopes.
-    --CL 
-\end{quote}
-
-The local environment for the procedure is bound in the fat
-environment such that it can be re-used later.  This function updates
-the existing entry for the procedure in the fat environment. 
-<<check>>=
-and proc r env (_,name,_,bb as p) =
-    let env   = F.push env F.emptyscope  (* open new scope *)   in 
-    let env   = Env.local env p                                 in
-    let env   = foldl body env bb (* traverse body *)           in
-    let index = F.getIndex env                                  in
-    let scope = F.top env                                       in
-    let env   = F.pop env                                       in
-    let r,x   = try F.findv name env (* lookup this proc *)  
-                with Not_found -> assert false                  in
-    let entry = E.ematch x
-               ( function
-               | (F.Label(F.Proc(sym,None,_)),t) -> (* update denotation *)
-                    F.Label(F.Proc(sym,Some scope,index)),t
-               | _ -> assert false
-               )                                            
-    in
-        F.rebindv name (r,entry) env (* update proc entry *)
-@

@@ -164,22 +164,11 @@ function Test.clear_status_line()
   end
 end
 @ 
-Lua does not have a printf like function.
+We use [[Util.call]] to log as a printf-like function.
 <<testdrv.lua>>=
 function Test.log(...)
   if not Test.verbose then return end
-  local i = 2
-  local cmd = "\"" .. arg[1] .. "\""
-  while arg[i] do
-    if type(arg[i]) == "string" then
-      cmd = cmd .. format(",\"%s\"", arg[i])
-    else
-      cmd = cmd .. "," .. arg[i]
-    end
-    i = i + 1
-  end
-  cmd = "print(\"## \" .. format(" .. cmd .. "))"
-  dostring(cmd)
+  print(Util.call(format, arg))
 end
 @ 
 Lua tmpname places files all around the filesystem.
@@ -264,7 +253,71 @@ function Test.compile_file(file)
     Test.log("Compilation errors detected")
   end
 
-  return { s_file, so, se }
+  return s_file, so, se
+end
+@ 
+This function runs both front ends, directing messages to different
+files.
+The basename of the files is left in [[Test.lastoutname]].
+If the two front ends give inconsistent results, the one that rejected
+the input is left in [[Test.compare_failed]], which is otherwise left [[nil]].
+<<testdrv.lua>>=
+function Test.run_both_front_ends(file) 
+  if Options.verbose > 0 then write('Comparing front ends on ', file, '\n') end
+  if Options.verbose < 2 then
+    local ast = Driver.parse(file) 
+    local fd  = open_out('/dev/null')
+    local asm = backend.asm(fd)
+    local outname = Test.temp_name(".s1")
+    Test.lastoutname = outname
+    Util.redirect_stderr(outname .. "-new")
+    local passed = Util.catch(Driver.new_ok, ast, asm)
+    Util.redirect_stderr(outname .. "-old")
+    local env = Util.catch(Driver.check, ast, asm) -- asm is stored in env
+    Util.redirect_stderr()
+    if not passed == not env then
+      Test.compare_failed = nil
+    else
+      if passed then Test.compare_failed = "Old" else Test.compare_failed = "New" end
+    end
+    if fd ~= Driver.stdout then close_out(fd) end -- close fd
+    return nil
+  end
+end
+@ 
+This function is intended as a drop-in replacement for [[Test.run_test_case]].
+It compares error messages from old and new front ends.
+<<testdrv.lua>>=
+function Test.compare_front_ends(inputs)
+  local file = inputs["source"]
+  Test.log("comparing front ends on %s", file)
+
+  Driver.reinit()
+
+  local t = Util.tcopy(CMD.compilertab)
+  t['.c--'] = Test.run_both_front_ends
+  CMD.translate_files(file, t)
+  local outname = Test.lastoutname 
+  local old, new = outname .. "-old", outname .. "-new"
+  local diff = not (Util.files_nonwhite_equivalent (old, new))
+
+  if Test.compare_failed or diff then
+    if not Test.verbose then
+      local why
+      if Test.compare_failed then why = "front ends differ" 
+      else                        why = "msgs only"
+      end      
+      Test.clear_status_line()
+      print(format("../bin/qc-- -v testdrv.lua newfe.lua %s %s.test \t# %s",
+                   Test.tst_file, inputs["name"], why))
+    else
+      if diff then Test.on_error[".s"](old, new) end
+      if Test.compare_failed then
+        write('=> ', Test.compare_failed, ' rejected ', file,
+              ' but the other did not\n')
+      end
+    end
+  end
 end
 @ 
 Call [[cc]] to build a final executable file. Calling the [[qc--]]
@@ -297,7 +350,7 @@ function Test.run_exe(exe_file, stdin)
   Test.log(cmd)
   execute(cmd)
 
-  return { so, se }
+  return so, se
 end
 @ 
 Rename does not work across filesystem boundaries.
@@ -331,8 +384,8 @@ function Test.check_update_file(inputs, file)
   elseif ext == ".1"  then exp = inputs["stdout"]
   elseif ext == ".2"  then exp = inputs["stderr"] end
     
-  local status = Util.catch(Util.compare_files, exp, file)
-  if not status then
+  local equiv = Util.catch(Util.files_nonwhite_equivalent, exp, file)
+  if not equiv then
     if Test.update then
       print(format("%s \thas changed \t\t!! updating !!", exp))
       if not Test.copy_file(file, exp) then
@@ -365,14 +418,10 @@ then all outputs are generated.
 <<testdrv.lua>>=
 function Test.run_test_case(inputs)
   local file = inputs["source"]
-  local files = Test.compile_file(file)
-  if not files then return end
+  local s_file, so, se = Test.compile_file(file)
+  if not s_file then return end
 
   inputs["diffs"] = ""
-
-  local s_file = files[1]
-  local so = files[2]
-  local se = files[3]
 
   local status = Test.check_update_file(inputs, s_file)
                + Test.check_update_file(inputs, so)
@@ -382,9 +431,7 @@ function Test.run_test_case(inputs)
   then
     local exe_file = Test.build_exe(inputs, s_file)
     if exe_file then
-      files = Test.run_exe(exe_file, inputs["stdin"])
-      local pso = files[1]
-      local pse = files[2]
+      local pso, pse = Test.run_exe(exe_file, inputs["stdin"])
       local s = Test.check_update_file(inputs, pso)
               + Test.check_update_file(inputs, pse)
       if s == 0  and Test.trust_exe then
@@ -592,7 +639,7 @@ while i <= Options.argc do
   if ext ~= ".lua" and ext ~= ".tst" then
     Test.skip_files = 1
     if ext ~= ".test" and ext ~= ".record" then
-      error("invalid command line arguments")
+      error("invalid command-line arguments")
     end
   elseif ext == ".tst" then
     Test.tst_file = Options.argv[i]

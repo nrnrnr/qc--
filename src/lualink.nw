@@ -463,11 +463,16 @@ C.register_module "Dataflow"
    [ "emit_dot",   V.efunc (V.unit **->> V.unit)  Dataflow.Test.emit_dot
    ] g;                        
 <<register modules to [[g]] in alphabetical order>>=
+let new_ok (map,ast) asm =
+  match Nelab.program map asm (Nast.program ast) with
+  | Error.Error -> false
+  | Error.Ok (env, _) -> not (Fenv.Dirty.errorFlag env) in
 C.register_module "Driver" 
   [ "assemble"  , V.efunc (Map.vasm **->> V.unit)   (fun asm -> asm#emit)
   ; "proc_assembler", V.efunc (Map.vasm **->> (Map.stage V.value)) 
                     (fun asm v p -> asm#cfg_instr p ; true)
   ; "check"     , V.efunc (Map.ast **-> Map.asm **->> Map.env) Driver.check
+  ; "new_ok"    , V.efunc (Map.ast **-> Map.asm **->> V.bool)  new_ok
   ; "emit_asdl" , V.efunc (Map.ast **->> V.unit)               Driver.emit_asdl
   ; "parse"     , V.efunc (V.string**->> Map.ast)              Driver.parse
   ; "print"     , V.efunc (Map.doc **-> V.int **-> Map.outchan **->> V.unit)

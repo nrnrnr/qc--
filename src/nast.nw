@@ -11,6 +11,8 @@
 
 This is an AST, except we sort and organize everything.
 <<exposed types>>=
+type exp = Ast.expr
+type loc = Ast.name_or_mem
 type name = string
 type hint = string
 type convention = string
@@ -20,64 +22,33 @@ type label      = string
 type range = Ast.range
 type ty = Ast.ty
 @ 
-<<wishful thinking>>=
-type size = int
-type bits = Bits.bits
-type exp  = Rtl.exp
-type loc  = Rtl.loc (* optimism *)
-type rtl  = Rtl.rtl
-type ty'  = Ty of int  (* bits$n$ *)
-type init =
-  | ExpData    of exp list
-  | StringData of string
-@ 
 Here we have register variables,
 continuation parameters, actual parameters.
-<<wishful thinking>>=
-type runtime_access = Invisible | Invariant | Variant
-
-type xregister = runtime_access * hint * ty * name (* ? *)
 <<exposed types>>=
-type register  = Ast.register
-type cformal   = hint * name
-type 'e actual = hint * 'e
+type register = Ast.register
+type cformal  = hint * name
+type actual   = hint * exp
 @ 
 Flow annotations on calls and cut to.
-<<wishful thinking>>=
-type iflow = {
-    cuts_to : name marked list;
-    unwinds_to : name marked list;
-    returns_to : name marked list;
-    aborts : bool;
-    returns : bool;
-  }
-type cflow = {
-    ccuts_to : name list;
-    caborts : bool;
-  }
 <<exposed types>>=
 type flow  = Ast.flow list
-type cflow = flow
 @
-Statements.  Types [['l]], [['e]], and [['a]] are locations,
-expressions, and assignments, which we expect to be [[Ast]] types
-first and [[Rtl]] types later.
-THIS TYPE PARAMETERIZATION SEEMED NICE, BUT IT WILL HAVE TO GO EVENTUALLY.
+Statements.  
 <<exposed types>>=
-type ('l, 'e, 'a) stmt =
-  | StmtAt of ('l, 'e, 'a) stmt * Ast.region
-  | If     of 'e * ('l, 'e, 'a) stmt list * ('l, 'e, 'a) stmt list
-  | Switch of range option * 'e * (range list * ('l, 'e, 'a) stmt list) list
+type stmt =
+  | StmtAt of stmt * Ast.region
+  | If     of exp * stmt list * stmt list
+  | Switch of range option * exp * (range list * stmt list) list
   | Label  of name
   | Cont   of name * cformal list
-  | Span   of 'e * 'e * ('l, 'e, 'a) stmt list
-  | Assign of 'a
-  | Call   of 'l list * convention * 'e   * 'e actual list * procname list * flow
-  | Prim   of 'l list * convention * name * 'e actual list * flow
-  | Goto   of 'e * label list
-  | Jump   of convention * 'e * 'e actual list * procname list
-  | Cut    of convention * 'e * 'e actual list * cflow 
-  | Return of convention * ('e * 'e) option * 'e actual list
+  | Span   of exp * exp * stmt list
+  | Assign of Ast.name_or_mem list * Ast.guarded list
+  | Call   of loc list * convention * exp  * actual list * procname list * flow
+  | Prim   of loc list * convention * name * actual list * flow
+  | Goto   of exp * label list
+  | Jump   of convention * exp * actual list * procname list
+  | Cut    of convention * exp * actual list * flow 
+  | Return of convention * (exp * exp) option * actual list
 @ 
 Both compilation units and procedures can contain type and constant definitions.
 Because these are scoped, we accumulate these definitions in each
@@ -85,58 +56,46 @@ procedure \emph{and} in the unit as a whole.
 Therefore they have their own type.
 <<exposed types>>=
 type typedefn     = ty * string list
-type 'e constdefn = ty option * string * 'e
+type constdefn = ty option * string * exp
 type 'a marked    = Ast.region * 'a
-type 'e compile_time_defns = {
-    types     : typedefn marked list;
-    constants : 'e constdefn marked list;
+type compile_time_defns = {
+    types     : typedefn  marked list;
+    constants : constdefn marked list;
   }
 @ 
 Here is a normalized form of procedures and of (possibly initialized) data.
 Initialized data, as well as data in the form of [[SSpan]] and
 [[Procedure]], are found only at top level.
 <<exposed types>>=
-type ('l, 'e, 'a) proc = {
+type proc = {
     cc            : convention;
     name          : name;
     formals       : (hint * Ast.variance * ty * name) marked list;
     locals        : register marked list;
-    pdecls        : 'e compile_time_defns;
+    pdecls        : compile_time_defns;
     continuations : name marked list;
     labels        : name marked list;  (* code labels *)
-    stackdata     : (void, void, void) datum marked list;
-    code          : ('l, 'e, 'a) stmt list;
+    stackdata     : datum marked list;
+    code          : stmt list;
   }
-and ('l, 'e, 'a)  datum =
+and  datum =
   | Datalabel  of name
   | Align      of int
   | ReserveMem of ty * Ast.memsize * Ast.init option (*init always none on stackdata*)
-  | Procedure  of ('l, 'e, 'a) proc
-  | SSpan      of 'e * 'e * ('l, 'e, 'a) datum marked list
+  | Procedure  of proc
+  | SSpan      of exp * exp * datum marked list
 and void = Void of void
 @ 
 And last, the normal form of a compilation unit.
-<<wishful thinking>>=
-type section = unit
-type extref  = { internal : name; external' : name }
-type 'e t' = {
-    target  : Metrics.t;
-    imports : extref marked list;
-    exports : extref marked list;
-    globals : register marked list;
-    udecls  : 'e compile_time_defns;
-    sections : section list;
-  }
 <<exposed types>>=
-type assign  = (Ast.name_or_mem list * Ast.guarded list)
-type section = name * (Ast.expr, Ast.name_or_mem, assign) datum marked list
+type section = name * datum marked list
 type t = {
     target   : Ast.arch marked list;
     imports  : (Ast.region * Ast.ty option * Ast.import list) list;
     exports  : (Ast.region * Ast.ty option * Ast.export list) list;
     globals  : register marked list;
     code_labels : name marked list list;
-    udecls   : Ast.expr compile_time_defns;
+    udecls   : compile_time_defns;
     sections : section list
   }
 @ 

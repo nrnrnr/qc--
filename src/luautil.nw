@@ -47,12 +47,13 @@ without any arguments will reset standard out the its original value.
 
 See description for [[Util.redirect_stdout(filename)]] above.
 
-\item [[Util.compare_files(file1, file2)]]
+\item [[Util.files_nonwhite_equivalent(filename1, filename2)]]
 
-The [[compare_files]] function compares two files ignoring differences
-in whitespace. If the two files are identical then [[true]] is
-returned. If the files are different or an error occurs, then
-[[false]] is returned.
+The [[files_nonwhite_equivalent]] function compares two files,
+ignoring whitespace entirely. 
+It returns [[true]] if and only 
+if the two files contain identical nonwhite characters.
+If a file cannot be opened, an exception is raised as by [[open_in]].
 
 \item [[Util.tcopy(table)]]
 
@@ -90,7 +91,10 @@ module MakeLib (C: Lua.Lib.CORE) = struct
       ; "catch",           V.caml_func catch_lua
       ; "redirect_stdout", V.efunc (V.option V.string **-> V.runit) redirect_stdout
       ; "redirect_stderr", V.efunc (V.option V.string **-> V.runit) redirect_stderr
-      ; "compare_files",   V.efunc (V.string **-> V.string **-> V.result V.bool) compare_files
+      ; "files_nonwhite_equivalent",   V.efunc (V.string **-> V.string **-> V.result V.bool) files_nonwhite_equivalent
+      ; "call",            V.efunc (V.value **-> V.list V.value **-> V.values)
+                           (function V.Function (_, f) -> f
+                                   | v -> V.projection v "function")
       ] g;
 end
 @
@@ -193,8 +197,10 @@ let redirect_stdout = redir U.stdout
 let redirect_stderr = redir U.stderr
 @
 Compare files ignoring whitespace.
+It would probably be better not to ignore whitespace completely but to
+treat only nonempty sequences of whitespace characters as equivalent.
 <<utility functions>>=
-let compare_files f1 f2 =
+let files_nonwhite_equivalent f1 f2 =
   let ch1 = open_in f1
   and ch2 = open_in f2 in
   let ws = function

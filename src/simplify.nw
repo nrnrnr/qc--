@@ -93,16 +93,29 @@ let rtl r  = try U.rtl (Safe.rtl (D.rtl r))
 let exp e  = try U.exp (Safe.exp (D.exp e))
              with Error msg -> Impossible.impossible msg
 
-let bits e = match Safe.exp (D.exp e) with
-             | RP.Const(RP.Bits(b)) -> b
-             | _                    -> Error.error "not a constant value"
+let bits e =
+  let rec cvt = function
+    | RP.Const (RP.Bits b) -> b
+    | RP.Const (RP.Bool _) -> Error.error "a constant expression may not be a Boolean"
+    | RP.Const (RP.Link (s, _)) ->
+        Error.errorf "constant %s not resolvable until link time" s#original_text
+    | RP.Const (RP.Diff (_, _)) ->
+        Error.errorf "difference of two constants not resolvable until link time"
+    | RP.Const (RP.Late (s, _)) ->
+        Error.errorf "late compile-time constant %s is not a constant yet" s
+    | RP.Fetch (_, _) ->
+        Error.error "a constant expression may not refer to memory or a variable"
+    | RP.App ((opr, _), es) ->
+        List.iter (fun e -> ignore (cvt e)) es;
+        Error.error "cannot evaluate operator %%%s at compile time" opr in
+  cvt (Safe.exp (D.exp e))
              
 let bool e = match Safe.exp (D.exp e) with
              | RP.Const(RP.Bool(b)) -> b
              | _                    -> Error.error "not a constant condition"
 
 let link e = match Safe.exp (D.exp e) with
-| RP.Const(RP.Bits(b))   -> Reloc.Simple.of_const b
+| RP.Const(RP.Bits b)   -> Reloc.Simple.of_const b
 | RP.Const(RP.Link(l,w)) -> Reloc.Simple.of_sum l (Bits.zero w)
 | RP.Const(RP.Diff(c1,c2)) ->
     Impossible.unimp "difference of link-time constants"
@@ -114,7 +127,6 @@ let link e = match Safe.exp (D.exp e) with
     Impossible.unimp "difference of link-time constants"
 | _ ->
     Error.error ("Bad link-time constant " ^ Rtlutil.ToReadableString.exp e)
-
 
 let compile_time_ops = 
     [ "add"; "and"; "div"; "eq"; "mul"; "neg"; "ne"; "shl"; "shra";

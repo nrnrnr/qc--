@@ -21,29 +21,32 @@ type actual = hint * exp * Rtl.width
 type name = string
 type linktime = Bits.bits Reloc.Simple.relocatable
 type 'a hinted = hint * 'a
-type range = int * int   (* lo <= x < hi *)
+type range = Bits.bits * Bits.bits   (* lo `leu` x `leu` hi, as in manual *)
 type procname = string
 type 'a flow = { cuts : 'a list; unwinds : 'a list; areturns : 'a list;
               returns : bool; aborts : bool }
+type 'a cflow = {
+    ccuts : 'a list;
+    caborts : bool;
+  }
+
 type stmt =
   | If     of exp * stmt list * stmt list
   | Label  of name
   | Switch of range option * exp * (range list * stmt list) list
   | Cont   of name * name hinted list
-  | Span   of Bits.bits * linktime * stmt list
+  | Span   of (Bits.bits * linktime) * stmt list
   | Assign of rtl
   | Call   of loc hinted list * convention * exp * actual list * procname list
             * name flow
   | Goto   of exp * name list
   | Jump   of convention * exp * actual list * procname list
-  | Cut    of convention * exp * actual list * name flow 
+  | Cut    of convention * exp * actual list * name cflow 
   | Return of convention * int * int * actual list
 @
 <<elabstmt.mli>>=
 <<exposed types>>
-val elab_stmts :
-  'a Fenv.Dirty.env' -> (Ast.name_or_mem, Ast.expr, Nast.assign) Nast.stmt list ->
-  stmt list Error.error
+val elab_stmts : 'a Fenv.Dirty.env' -> Nast.stmt list -> stmt list Error.error
 @ The [[elab_*]] functions work with incomplete information,
 indicated by [[Error.Error]] values.  The policy is as follows:
 \begin{itemize}
@@ -70,23 +73,24 @@ module E  = Error
 module F  = Fenv.Dirty
 module N  = Nast
 let impossf fmt = Printf.kprintf Impossible.impossible fmt
-let unimp = Impossible.unimp
 let is2power x = x > 0 && x land (x - 1) = 0
 @
 
 <<elabstmt.ml>>=
 module M = Metrics
-<<utilities>>
-@ 
-<<utilities>>=
 @ 
 Parameter [[reachable]] means the statement is reachable by ordinary
 control flow (i.e., not by continuation).
+It is used to check the control-flow
+restrictions: if a statement is reachable by ordinary control flow, it
+ had better not be a continuation.
+Similarly, it had better not be the end of the procedure body.
 <<elabstmt.ml>>=
 let elab_stmts env =
   let eprint r = E.errorRegionPrt (F.srcmap env, r) in
   let errorf r = Printf.kprintf (fun s -> eprint r s; E.Error) in
   let exp = Elabexp.elab_exp env in
+  let con = Elabexp.elab_con env in
   let loc = Elabexp.elab_loc env in
   let metrics = F.metrics env in
   let rec full_stmt r reachable s =
@@ -95,7 +99,7 @@ let elab_stmts env =
     let rec stmt s = match s with
     | N.StmtAt (s, r) -> E.catch (eprint r) (full_stmt r reachable) s
     | N.If (c, t, f) -> 
-        E.ematch3 (exp c) (stmts r t) (stmts r f) (fun (c, cty) t f ->
+        E.ematch3 (exp c) (stmts r true t) (stmts r true f) (fun (c, cty) t f ->
           match cty with
           | Types.Bool -> If (c, t, f)
           | Types.Bits n -> E.error "condition in `if' is not a Boolean")
@@ -108,17 +112,17 @@ let elab_stmts env =
           E.error "control can fall through to continuation"
         else
           c
-    | N.Span (k, v, ss) -> span k v ss
+    | N.Span (k, v, ss)   -> span k v (stmts r reachable ss)
     | N.Assign (lhs, rhs) -> assign lhs rhs
-    | N.Goto (tgt, tgts) -> goto tgt tgts
+    | N.Goto (tgt, tgts)  -> goto tgt tgts
     | N.Call (lhs, conv, p, args, tgts, flow) -> call lhs conv p args tgts flow
-    | N.Jump (conv, p, args, tgts) -> jump conv p args tgts
-    | N.Cut  (conv, k, args, flow) -> cut conv k args flow
-    | N.Prim (lhs, conv, p, args, flow) -> prim lhs conv p args flow
-    | N.Return (conv, altcont, args) -> return conv altcont args in
+    | N.Jump (conv, p, args, tgts)            -> jump conv p args tgts
+    | N.Cut  (conv, k, args, flow)            -> cut conv k args flow
+    | N.Prim (lhs, conv, p, args, flow)       -> prim lhs conv p args flow
+    | N.Return (conv, altcont, args)          -> return conv altcont args in
     stmt s
-  and stmts r ss = stmts' false r ss
-  and stmts' procbody r ss =
+  and stmts r reachable ss = stmts' false r reachable ss
+  and stmts' procbody r reachable ss =
     let rec stmts reachable = function
       | [] -> if procbody && reachable then
                 [errorf r "control falls off end of procedure"]
@@ -126,13 +130,13 @@ let elab_stmts env =
                 []
       | N.Span (_, _, []) :: ss -> stmts reachable ss
       | s :: ss -> full_stmt r reachable s :: stmts (not (jumps s)) ss in
-    Error.Raise.list (stmts true ss)
+    Error.Raise.list (stmts reachable ss)
   and jumps = function N.Goto _ | N.Jump _ | N.Cut _ | N.Return _  -> true
                      | N.Call (_, _, _, _, _, fl) -> List.mem Ast.NeverReturns fl
                      | N.StmtAt (s, _) -> jumps s
                      | N.Span (_, _, ss) -> jumps (Aux.last ss)
                      | _ -> false in
-  stmts' true Srcmap.null
+  stmts' true Srcmap.null true
 @ 
 Here are a couple of basic utilities.
 We sometimes do extra checking if an expression is just a name.
@@ -167,10 +171,55 @@ The type of the switch expression must be matched by the guarding
 ranges of the arms.  An empty switch-statement is an error because no
 arm can match the value of the switch-expression at run-time.
 <<definitions of elaboration functions>>=
-let switch range e arms =
-  match arms with
-  | [] -> E.error "empty switch statement"
-  | _ :: _ -> unimp "switch statements" in
+let switch rg e arms =
+  let rg = E.Raise.option (Aux.Option.map range rg) in
+  let arms = E.Raise.list (List.map arm arms) in
+  E.ematch3 (exp e) rg arms (fun (e, et) rg arms ->
+    match et with
+    | Types.Bool -> E.error "switch statement scrutinee is a Boolean"
+    | Types.Bits w ->
+        let rg = Aux.Option.map (striprange w) rg in
+        let arms = striparms w arms in
+        if null arms then E.error "empty switch statement"
+        else Switch(rg, e, arms)) in
+@
+A range has two constant expressions of the same width.
+<<elaboration utilities>>=
+let range = function
+  | A.Range (l, h) -> E.ematch2 (con l) (con l) (fun (l, lw) (h, hw) ->
+      if lw = hw then (l, h), lw
+      else E.errorf "constants in range %s..%s have different types bits%d and bits%d"
+          (Bits.to_string l) (Bits.to_string h) lw hw)
+  | A.Point e -> E.ematch (con e) (fun (n, w) -> (n, n), w) in
+@ 
+An arm is guarded by a nonempty list of ranges, each of the same width.
+<<elaboration utilities>>=
+let arm (rgs, ss) =
+  E.ematch2 (E.Raise.list (List.map range rgs)) (stmts r true ss) (fun rgs ss ->
+    match rgs with
+    | [] -> impossf "parser produced case arm with empty range list"
+    | (rg, w) :: rgs ->
+        let strip w (rg, w') = if w = w' then rg else <<exn on range type mismatch>> in
+        ((rg :: List.map (strip w) rgs), ss), w) in
+@ 
+The width of every range that appears in a [[switch]] arm must match
+the type of the scrutinee ([[switch]]-expression).
+We check this requirement and strip the width off everything in sight.
+<<elaboration utilities>>=
+let striprange w (rg, w') =
+  if w = w' then rg else <<exn on case range type mismatch>> in
+let striparms w =
+  let strip (arm, w') = if w = w' then arm else <<exn on arm type mismatch>> in
+  List.map strip in
+<<exn on range type mismatch>>=
+E.errorf "ranges in case arm have different types bits%d and bits%d" w w'
+<<exn on arm type mismatch>>=
+E.errorf "case arm uses range of type bits%d but scrutinee has type bits%d" w' w
+<<exn on case range type mismatch>>=
+E.errorf "switch statement range has type bits%d but scrutinee has type bits%d" w' w
+@ 
+
+
 @ 
 A [[span]] statement has key and value expressions.
 The key must be a constant native word and the value a link-time (data)
@@ -178,17 +227,11 @@ pointer.  Of course, all statement inside the span must be checked as
 well. Currently we don't check the link-time property of [[e2]].
 <<definitions of elaboration functions>>=
 let span k v ss =
-  let ok f x = E.Ok (f x) in
-  let const k = E.seq (exp k) (fun (k, kt) ->
-    let k = E.catch (eprint r) (ok Simplify.bits) k in
-    match kt with
-    | Types.Bits n when n = metrics.M.wordsize -> k
-    | _ -> errorf r "span token (key) must be a bit vector of native word size") in
-  let linktime v = E.seq (exp v) (fun (v, vt) ->
-    insist_pointer "span value" vt;
-    E.catch (eprint r) (ok Simplify.link) v) in
-  E.ematch3 (const k) (linktime v) (stmts r ss) (fun k v ss ->
-    Span (k, v, ss)) in
+  E.ematch3 (con k) (Elabexp.elab_link env v) ss (fun (k, kw) (v, vw) ss ->
+    if kw <> metrics.M.wordsize then
+      E.error "span token (key) must be a bit vector of native word size";
+    insist_pointer "span value" (Types.Bits vw);
+    Span ((k, v), ss)) in
 @
 Two two sides of an assign statement must match: the number and types
 of lvalues and expressions are checked against each other.  For
@@ -383,8 +426,10 @@ let cut_flow r fs =
       errorf r "'also unwinds to' is meaningless on a 'cut to'"
     else if not (null f.areturns) then
       errorf r "'also returns to' is meaningless on a 'cut to'"
+    else if f.returns then
+      impossf "a 'cut to' returns? I think not!"
     else
-      E.Ok f) in
+      E.Ok { ccuts = f.cuts; caborts = f.aborts }) in
 @ 
 A call target must be either a procedure or an imported symbol with
 the native pointer type.

@@ -22,9 +22,12 @@ optional hint is expected.
 ONE PROBLEM REMAINS: WE COULD ACCEPT A HINT ON A PRIMITIVE CALL.
 <<elabexp.mli>>=
 type nm_or_mem = Ast.name_or_mem
+type link = Bits.bits Reloc.Simple.relocatable
 val elab_ty : 'a Fenv.Dirty.env' -> Ast.ty   -> Types.ty                    Error.error
-val elab_exp: 'a Fenv.Dirty.env' -> Ast.expr -> (Rtl.exp * Types.ty)        Error.error
 val elab_loc: 'a Fenv.Dirty.env' -> nm_or_mem-> (Automaton.loc * Rtl.width) Error.error
+val elab_exp: 'a Fenv.Dirty.env' -> Ast.expr -> (Rtl.exp       * Types.ty)  Error.error
+val elab_con: 'a Fenv.Dirty.env' -> Ast.expr -> (Bits.bits     * Rtl.width) Error.error
+val elab_link:'a Fenv.Dirty.env' -> Ast.expr -> (link          * Rtl.width) Error.error
 val elab_hinted_name: 
   'a Fenv.Dirty.env' -> nm_or_mem -> (string * (Automaton.loc * Rtl.width)) Error.error
 
@@ -52,6 +55,7 @@ module AT = Automaton
 module E = Error
 module F = Fenv.Dirty
 type nm_or_mem = Ast.name_or_mem
+type link = Bits.bits Reloc.Simple.relocatable
 
 let impossf fmt = Printf.kprintf Impossible.impossible fmt
 
@@ -74,10 +78,21 @@ let exprfuns env =
   <<definition of [[lvalue_name]]>>
   <<definition of [[rvalue_name]]>>
   <<mutually recursive nest of [[typed_expr]] and [[lvalue]]>> in
-  catch Srcmap.null typed_expr, catch Srcmap.null lvalue, catch Srcmap.null hinted_name
-let elab_exp         env = let f, _, _ = exprfuns env in f
-let elab_loc         env = let _, f, _ = exprfuns env in f
-let elab_hinted_name env = let _, _, f = exprfuns env in f
+  let constant simp e = E.ematch (typed_expr e) (fun (k, kt) ->
+    match kt with
+    | Types.Bits w -> simp k, w
+    | _ -> E.error "constant expression may not be a Boolean") in
+  let caught r f x = catch (r x) f x in
+  let e = function A.ExprAt     (_, r) -> r | _ -> Srcmap.null in
+  let l = function A.NameOrMemAt(_, r) -> r | _ -> Srcmap.null in
+  caught e typed_expr, caught l lvalue, caught l hinted_name,
+  caught e (constant Simplify.bits), caught e (constant Simplify.link)
+
+let elab_exp         env = let f, _, _, _, _ = exprfuns env in f
+let elab_loc         env = let _, f, _, _, _ = exprfuns env in f
+let elab_hinted_name env = let _, _, f, _, _ = exprfuns env in f
+let elab_con         env = let _, _, _, f, _ = exprfuns env in f
+let elab_link        env = let _, _, _, _, f = exprfuns env in f
 @
 
 There are four interesting syntactic categories here:
