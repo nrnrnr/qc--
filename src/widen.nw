@@ -927,10 +927,10 @@ let ast_combine m solns = function
       (mksolutions_lit_bits m.literals S e) @
       (mksolutions_lit_bits m.literals H e)
   | (RP.Fetch(RP.Mem(_, _, mcell as ms,c,addr,a),_)) as e ->
-      let all  = List.concat solns in
+      let all  = match solns with [s] -> s | _ -> impossf "mem arity" in
       let best = List.filter (fun s -> fill s =*= Z && s.w = m.pointer) all in
       if null best then
-        impossf "ast_combine couldn't widen %s" (Rtlutil.ToString.exp (Up.exp e));
+        impossf "couldn't widen address in %s" (Rtlutil.ToString.exp (Up.exp e));
       let best = minimum_cost best in
       let w = Cell.to_width mcell c in
       [{best with e  = e;
