@@ -39,23 +39,24 @@ main:
 	leal 4(%esp), %edx
 	addl %ecx,%edx
 	movl (%edx),%ecx
-initialize_continuations_l3:
+initialize_continuations_l4:
+proc_body_start_l3:
 	movl $1,%ecx
 	cmpl %ecx,%eax
-	ja join_l9
-join_l10:
+	ja join_l10
+join_l11:
 	leal hello,%eax
-	jmp join_l8
-join_l9:
+	jmp join_l9
+join_l10:
 	leal bye,%eax
-	jmp join_l8
-join_l8:
+	jmp join_l9
+join_l9:
 	movl $-4,%ecx
 	leal 4(%esp), %edx
 	addl %ecx,%edx
 	movl %eax,(%edx)
 	call printf
-join_l7:
+join_l8:
 	leal 4(%esp), %eax
 	movl $0,%ecx
 	leal 4(%esp), %edx
@@ -65,17 +66,17 @@ join_l7:
 	leal 4(%esp), %esp
 	ret
 .section .pcmap_data
-stackdata_l17:
+stackdata_l18:
 .long 0
 .section .pcmap
-.long join_l7
-.long frame_l18
+.long join_l8
+.long frame_l19
 .section .pcmap_data
-frame_l18:
+frame_l19:
 .long 0xfffffffc
 .long 0x80000004
 .long 0x80000000
-.long stackdata_l17
+.long stackdata_l18
 .long 0x80000008
 .long 0x80000003
 .long 0x80000000

@@ -22,7 +22,8 @@ section "text"
     {
         $r31 = ($r31+-24);
         $t1 = $r30;
-        initialize continuations:l4:
+        initialize continuations:l5:
+        proc body start:l4:
         i = j;
         i = bits32[j];
         bits32[i] = j;
@@ -53,18 +54,18 @@ section "text"
         bits32[i] = %and[32](j, bits32[k]);
         bits32[i] = %or[32](j, bits32[k]);
         bits32[i] = %xor[32](j, bits32[k]);
-        $c0 when %ltu[32](j, k) = sym@join@l9;
-        join:l10:
+        $c0 when %ltu[32](j, k) = sym@join@l10;
+        join:l11:
+        $c0 when %leu[32](j, k) = sym@join@l8;
+        join:l9:
         $c0 when %leu[32](j, k) = sym@join@l7;
-        join:l8:
-        $c0 when %leu[32](j, k) = sym@join@l6;
-        join:l15:
-        $c0 = sym@L;
-        join:l6:
+        join:l16:
         $c0 = sym@L;
         join:l7:
         $c0 = sym@L;
-        join:l9:
+        join:l8:
+        $c0 = sym@L;
+        join:l10:
         $c0 = sym@L;
         L:
         $r0 = 99;

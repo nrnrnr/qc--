@@ -23,13 +23,14 @@ section "text"
         $r31 = ($r31+-24);
         i, j = $r0, $r1;
         $t1 = $r30;
-        initialize continuations:l4:
-        $c0 when %not[](%lt[32](i, j)) = sym@join@l7;
-        join:l8:
+        initialize continuations:l5:
+        proc body start:l4:
+        $c0 when %not[](%lt[32](i, j)) = sym@join@l8;
+        join:l9:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l7:
+        join:l8:
         $r0 = 1;
         $r31 = ($r31+24);
         $c0 = $t1;

@@ -6,7 +6,7 @@ target
     charset "latin1"
     float "ieee754";
 
-import bits32
+import  bits32
 _Class,
     __IO_2_1_stderr_,
     __IO_2_1_stdin_,
@@ -552,119 +552,120 @@ section "text"
         $r31 = ($r31+-24);
         @i_argc, @i_argv = $r0, $r1;
         $t1 = $r30;
-        initialize continuations:l4:
+        initialize continuations:l5:
+        proc body start:l4:
         $r0 = bits32[sym@@i_18];
         $c0, $r30 = bits32[sym@_osinit], ($c0+4);
-        join:l93:
+        join:l94:
         $r31 = $r31;
         // the preceding node is merely asserted
         $r0, $r1, $r2 = bits32[($r31+28)], 72, 1;
         $c0, $r30 = bits32[sym@_xlbegin], ($c0+4);
-        join:l90:
+        join:l91:
         $r31 = $r31;
         // the preceding node is merely asserted
         $r0 = bits32[($r31+36)];
         $c0, $r30 = bits32[sym@__setjmp], ($c0+4);
-        join:l87:
+        join:l88:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_1 = $r0;
-        $c0 when %eq[32](@i_1, 0) = sym@join@l83;
-        join:l84:
+        $c0 when %eq[32](@i_1, 0) = sym@join@l84;
+        join:l85:
         $r0 = bits32[sym@@i_22];
         $c0, $r30 = bits32[sym@_printf], ($c0+4);
-        join:l82:
+        join:l83:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0, $r30 = bits32[sym@_osfinish], ($c0+4);
-        join:l79:
+        join:l80:
         $r31 = $r31;
         // the preceding node is merely asserted
         $r0 = 1;
         $c0, $r30 = bits32[sym@_exit], ($c0+4);
-        join:l76:
+        join:l77:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_19;
-        join:l83:
+        join:l84:
         $c0 = sym@@i_19;
         @i_19:
         $c0, $r30 = bits32[sym@_xlinit], ($c0+4);
-        join:l73:
+        join:l74:
         $r31 = $r31;
         // the preceding node is merely asserted
         $r0 = bits32[($r31+28)];
         $c0, $r30 = bits32[sym@_xlend], ($c0+4);
-        join:l70:
+        join:l71:
         $r31 = $r31;
         // the preceding node is merely asserted
         $r0, $r1, $r2
             = bits32[($r31+28)], 72, bits32[bits32[sym@_true]];
         $c0, $r30 = bits32[sym@_xlbegin], ($c0+4);
-        join:l67:
+        join:l68:
         $r31 = $r31;
         // the preceding node is merely asserted
         $r0 = bits32[($r31+36)];
         $c0, $r30 = bits32[sym@__setjmp], ($c0+4);
-        join:l64:
+        join:l65:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_2 = $r0;
-        $c0 when %ne[32](@i_2, 0) = sym@join@l60;
-        join:l61:
+        $c0 when %ne[32](@i_2, 0) = sym@join@l61;
+        join:l62:
         @i_3 = 0;
         $r0, $r1, $r2 = bits32[sym@@i_26], @i_3, @i_3;
         $c0, $r30 = bits32[sym@_xlload], ($c0+4);
-        join:l59:
+        join:l60:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_23;
-        join:l60:
+        join:l61:
         $c0 = sym@@i_23;
         @i_23:
         $r0 = bits32[($r31+36)];
         $c0, $r30 = bits32[sym@__setjmp], ($c0+4);
-        join:l56:
+        join:l57:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_4 = $r0;
-        $c0 when %ne[32](@i_4, 0) = sym@join@l52;
-        join:l53:
+        $c0 when %ne[32](@i_4, 0) = sym@join@l53;
+        join:l54:
         @i_i = 1;
         $c0 = sym@@i_33;
         @i_33:
-        $c0 when %lt[32](@i_i, @i_argc) = sym@join@l43;
-        join:l97:
+        $c0 when %lt[32](@i_i, @i_argc) = sym@join@l44;
+        join:l98:
         $c0 = sym@@i_27;
-        join:l43:
+        join:l44:
         $c0 = sym@@i_30;
         @i_30:
         $r0, $r1, $r2 = bits32[(%shl[32](@i_i, 2)+@i_argv)], 1, 0;
         $c0, $r30 = bits32[sym@_xlload], ($c0+4);
-        join:l51:
+        join:l52:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_5 = $r0;
-        $c0 when %ne[32](@i_5, 0) = sym@join@l47;
-        join:l48:
+        $c0 when %ne[32](@i_5, 0) = sym@join@l48;
+        join:l49:
         $r0 = bits32[sym@@i_36];
         $c0, $r30 = bits32[sym@_xlfail], ($c0+4);
-        join:l46:
+        join:l47:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_34;
-        join:l47:
+        join:l48:
         $c0 = sym@@i_34;
         @i_34:
         @i_31:
         @i_i = (@i_i+1);
         $c0 = sym@@i_33;
-        join:l52:
+        join:l53:
         $c0 = sym@@i_27;
         @i_27:
         $r0, $r1 = bits32[($r31+24)], 0;
         $c0, $r30 = bits32[sym@_xlsave], ($c0+4);
-        join:l42:
+        join:l43:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_38;
@@ -673,77 +674,77 @@ section "text"
         @i_37:
         $r0 = bits32[($r31+36)];
         $c0, $r30 = bits32[sym@__setjmp], ($c0+4);
-        join:l39:
+        join:l40:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_6 = $r0;
         @i_i = @i_6;
-        $c0 when %eq[32](@i_6, 0) = sym@join@l35;
-        join:l36:
-        $c0 when %ne[32](@i_i, 64) = sym@join@l33;
-        join:l34:
+        $c0 when %eq[32](@i_6, 0) = sym@join@l36;
+        join:l37:
+        $c0 when %ne[32](@i_i, 64) = sym@join@l34;
+        join:l35:
         $r0 = bits32[sym@@i_45];
         $c0, $r30 = bits32[sym@_stdputstr], ($c0+4);
-        join:l32:
+        join:l33:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_43;
-        join:l33:
+        join:l34:
         $c0 = sym@@i_43;
         @i_43:
         bits32[(bits32[bits32[sym@_s_evalhook]]+8)] = 0;
         bits32[(bits32[bits32[sym@_s_applyhook]]+8)] = 0;
         bits32[sym@_xldebug] = 0;
         $c0, $r30 = bits32[sym@_xlflush], ($c0+4);
-        join:l29:
+        join:l30:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_40;
-        join:l35:
+        join:l36:
         $c0 = sym@@i_40;
         @i_40:
         $r0, $r1, $r2
             = bits32[(bits32[bits32[sym@_s_stdin]]+8)],
             bits32[($r31+24)], 0;
         $c0, $r30 = bits32[sym@_xlread], ($c0+4);
-        join:l26:
+        join:l27:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_7 = $r0;
-        $c0 when %ne[32](@i_7, 0) = sym@join@l22;
-        join:l23:
+        $c0 when %ne[32](@i_7, 0) = sym@join@l23;
+        join:l24:
         $c0 = sym@@i_39;
         @i_39:
         $r0 = bits32[($r31+28)];
         $c0, $r30 = bits32[sym@_xlend], ($c0+4);
-        join:l15:
+        join:l16:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0, $r30 = bits32[sym@_osfinish], ($c0+4);
-        join:l12:
+        join:l13:
         $r31 = $r31;
         // the preceding node is merely asserted
         $r0 = 0;
         $c0, $r30 = bits32[sym@_exit], ($c0+4);
-        join:l9:
+        join:l10:
         $r31 = $r31;
         // the preceding node is merely asserted
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l22:
+        join:l23:
         $c0 = sym@@i_46;
         @i_46:
         $r0 = bits32[bits32[($r31+24)]];
         $c0, $r30 = bits32[sym@_xleval], ($c0+4);
-        join:l21:
+        join:l22:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_8 = $r0;
         bits32[($r31+24)] = @i_8;
         $r0 = bits32[bits32[($r31+24)]];
         $c0, $r30 = bits32[sym@_stdprint], ($c0+4);
-        join:l18:
+        join:l19:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@@i_38;
@@ -757,16 +758,17 @@ section "text"
         $r31 = ($r31+-24);
         @i_expr = $r0;
         $t1 = $r30;
-        initialize continuations:l101:
+        initialize continuations:l103:
+        proc body start:l102:
         $r0, $r1, $r2
             = bits32[(bits32[bits32[sym@_s_stdout]]+8)], @i_expr, 1;
         $c0, $r30 = bits32[sym@_xlprint], ($c0+4);
-        join:l108:
+        join:l110:
         $r31 = $r31;
         // the preceding node is merely asserted
         $r0 = bits32[(bits32[bits32[sym@_s_stdout]]+8)];
         $c0, $r30 = bits32[sym@_xlterpri], ($c0+4);
-        join:l105:
+        join:l107:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_48:
@@ -782,10 +784,11 @@ section "text"
         $r31 = ($r31+-24);
         @i_str = $r0;
         $t1 = $r30;
-        initialize continuations:l115:
+        initialize continuations:l118:
+        proc body start:l117:
         $r0, $r1 = bits32[(bits32[bits32[sym@_s_stdout]]+8)], @i_str;
         $c0, $r30 = bits32[sym@_xlputstr], ($c0+4);
-        join:l119:
+        join:l122:
         $r31 = $r31;
         // the preceding node is merely asserted
         @i_49:

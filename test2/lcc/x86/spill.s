@@ -23,7 +23,8 @@ Cmm.global_area:
 .section .text
 main:
 	leal -4(%esp), %esp
-initialize_continuations_l3:
+initialize_continuations_l4:
+proc_body_start_l3:
 	movl $0,%eax
 	leal 4(%esp), %edx
 	movl $0,%ecx
@@ -36,7 +37,7 @@ initialize_continuations_l3:
 	leal 4(%esp), %esp
 	ret
 .section .pcmap_data
-stackdata_l13:
+stackdata_l14:
 .long 0
 .section .text
 f:
@@ -45,12 +46,13 @@ f:
 	leal 8(%esp), %ecx
 	addl %eax,%ecx
 	movl (%ecx),%eax
-initialize_continuations_l16:
+initialize_continuations_l18:
+proc_body_start_l17:
 	call f
-join_l24:
+join_l26:
 	movl %eax,(%esp)
 	call f
-join_l21:
+join_l23:
 	movl (%esp),%ecx
 	addl %eax,%ecx
 	movl $0,%eax
@@ -65,17 +67,17 @@ join_l21:
 	leal 8(%esp), %esp
 	ret
 .section .pcmap_data
-stackdata_l31:
+stackdata_l33:
 .long 0
 .section .pcmap
-.long join_l24
-.long frame_l32
+.long join_l26
+.long frame_l34
 .section .pcmap_data
-frame_l32:
+frame_l34:
 .long 0xfffffff8
 .long 0x80000004
 .long 0x80000000
-.long stackdata_l31
+.long stackdata_l33
 .long 0x80000008
 .long 0x80000003
 .long 0x80000000
@@ -92,14 +94,14 @@ frame_l32:
 .long 0
 .long 0
 .section .pcmap
-.long join_l21
-.long frame_l33
+.long join_l23
+.long frame_l35
 .section .pcmap_data
-frame_l33:
+frame_l35:
 .long 0xfffffff8
 .long 0x80000004
 .long 0x80000000
-.long stackdata_l31
+.long stackdata_l33
 .long 0x80000008
 .long 0x80000003
 .long 0x80000000
@@ -122,20 +124,21 @@ f2:
 	leal 12(%esp), %ecx
 	addl %eax,%ecx
 	movl (%ecx),%eax
-initialize_continuations_l36:
+initialize_continuations_l39:
+proc_body_start_l38:
 	movl %eax,(%esp)
 	call f
-join_l46:
+join_l49:
 	movl $0,%ecx
 	movl (%esp),%edx
 	cmpl %ecx,%edx
-	je join_l42
-join_l43:
+	je join_l45
+join_l46:
 	movl %eax,4(%esp)
 	call f
-join_l41:
+join_l44:
 	jmp L.8
-join_l42:
+join_l45:
 	jmp L.7
 L.7:
 	movl $1,%ecx
@@ -158,17 +161,17 @@ L.8:
 	leal 12(%esp), %esp
 	ret
 .section .pcmap_data
-stackdata_l53:
+stackdata_l56:
 .long 0
 .section .pcmap
-.long join_l46
-.long frame_l54
+.long join_l49
+.long frame_l57
 .section .pcmap_data
-frame_l54:
+frame_l57:
 .long 0xfffffff4
 .long 0x80000004
 .long 0x80000000
-.long stackdata_l53
+.long stackdata_l56
 .long 0x80000008
 .long 0x80000004
 .long 0x80000000
@@ -186,14 +189,14 @@ frame_l54:
 .long 0
 .long 0
 .section .pcmap
-.long join_l41
-.long frame_l55
+.long join_l44
+.long frame_l58
 .section .pcmap_data
-frame_l55:
+frame_l58:
 .long 0xfffffff4
 .long 0x80000004
 .long 0x80000000
-.long stackdata_l53
+.long stackdata_l56
 .long 0x80000008
 .long 0x80000004
 .long 0x80000000
@@ -221,7 +224,8 @@ f3:
 	leal 12(%esp), %eax
 	addl %ecx,%eax
 	movl (%eax),%ecx
-initialize_continuations_l58:
+initialize_continuations_l62:
+proc_body_start_l61:
 	movl $0,%eax
 	movl $0,%eax
 	movl $0,%eax
@@ -239,13 +243,13 @@ initialize_continuations_l58:
 	movl $0,%edx
 	movl (%esp),%eax
 	cmpl %edx,%eax
-	je join_l64
-join_l65:
+	je join_l68
+join_l69:
 	movl %ecx,4(%esp)
 	call f
-join_l63:
+join_l67:
 	jmp L.15
-join_l64:
+join_l68:
 	jmp L.14
 L.14:
 	movl $0,%eax
@@ -266,17 +270,17 @@ L.15:
 	leal 12(%esp), %esp
 	ret
 .section .pcmap_data
-stackdata_l72:
+stackdata_l76:
 .long 0
 .section .pcmap
-.long join_l63
-.long frame_l73
+.long join_l67
+.long frame_l77
 .section .pcmap_data
-frame_l73:
+frame_l77:
 .long 0xfffffff4
 .long 0x80000004
 .long 0x80000000
-.long stackdata_l72
+.long stackdata_l76
 .long 0x80000008
 .long 0x8000000f
 .long 0x80000000
@@ -307,7 +311,8 @@ frame_l73:
 .section .text
 f4:
 	leal -36(%esp), %esp
-initialize_continuations_l76:
+initialize_continuations_l81:
+proc_body_start_l80:
 	movl $0,%edx
 	movl $0,%edx
 	movl $0,%edx
@@ -361,13 +366,13 @@ initialize_continuations_l76:
 	fstsw %ax
 	andb $69,%ah
 	xorb $64,%ah
-	jz join_l83
-join_l84:
+	jz join_l88
+join_l89:
 	movl $0,%edx
 	movl 28(%esp),%ebp
 	cmpl %edx,%ebp
-	je join_l81
-join_l82:
+	je join_l86
+join_l87:
 	movl $-20,%edx
 	leal 36(%esp), %ebp
 	addl %edx,%ebp
@@ -385,15 +390,15 @@ join_l82:
 	fstsw %ax
 	andb $69,%ah
 	xorb $64,%ah
-	jz join_l79
-join_l80:
+	jz join_l84
+join_l85:
 	movl $1,%eax
 	jmp L.32
-join_l79:
+join_l84:
 	jmp L.31
-join_l81:
+join_l86:
 	jmp L.31
-join_l83:
+join_l88:
 	jmp L.31
 L.31:
 	movl $0,%eax
@@ -413,12 +418,13 @@ L.32:
 	leal 36(%esp), %esp
 	ret
 .section .pcmap_data
-stackdata_l92:
+stackdata_l97:
 .long 0
 .section .text
 f5:
 	leal -36(%esp), %esp
-initialize_continuations_l95:
+initialize_continuations_l101:
+proc_body_start_l100:
 	leal x,%edx
 	leal k,%eax
 	movl (%eax),%ecx
@@ -495,7 +501,7 @@ initialize_continuations_l95:
 	leal 36(%esp), %esp
 	ret
 .section .pcmap_data
-stackdata_l105:
+stackdata_l111:
 .long 0
 .section .text
 .section .bss

@@ -22,7 +22,8 @@ section "text"
     {
         $r31 = ($r31+-24);
         $t1 = $r30;
-        initialize continuations:l4:
+        initialize continuations:l5:
+        proc body start:l4:
         x = 1;
         y = 2;
         z = 3;

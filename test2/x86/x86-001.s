@@ -8,7 +8,8 @@ p:
 	leal -20(%esp), %esp
 	leal 20(%esp), %eax
 	movl (%eax),%eax
-initialize_continuations_l3:
+initialize_continuations_l4:
+proc_body_start_l3:
 	movl %edx,(%esp)
 	movl %ecx,%edx
 	movl (%ecx),%edx
@@ -106,20 +107,20 @@ initialize_continuations_l3:
 	movl %ebx,(%edx)
 	movl (%esp),%edx
 	cmpl %edx,%eax
-	jb join_l8
-join_l9:
+	jb join_l9
+join_l10:
+	cmpl %edx,%eax
+	jbe join_l7
+join_l8:
 	cmpl %edx,%eax
 	jbe join_l6
-join_l7:
-	cmpl %edx,%eax
-	jbe join_l5
-join_l16:
-	jmp L
-join_l5:
+join_l17:
 	jmp L
 join_l6:
 	jmp L
-join_l8:
+join_l7:
+	jmp L
+join_l9:
 	jmp L
 L:
 	movl $99,%eax
@@ -132,6 +133,6 @@ L:
 	leal 20(%esp), %esp
 	ret
 .section .pcmap_data
-stackdata_l17:
+stackdata_l18:
 .long 0
 .section .text
