@@ -94,8 +94,33 @@ module Lower :
                                             * 'c error 
                                             * 'd error
   end
+@ 
 
-@ At the point where an error occurs the first time the [[ErrorExn]]
+The functions of the [[Implode]] module destroy informations by
+reducing complex [['a error] values to [[unit error]]. They come in
+handy when are there are only good and bad results. Whenever an
+any argument of a function contains an [[Error]] value the outcome is
+[[Error]] and [[Ok()]] otherwise. 
+
+The [[list]] function is similar to [[Raise.list]] as is raises the
+[[error]] type to the top level.  The [[map]] function is greedy:  it
+does not stop when it encounters the first [[Error]] but traverses the
+whole list.  The motivation is to give detect possible bad values in
+the list such that the [[ErrorExn]] can be raised for them. 
+
+<<>>=
+module Implode :
+  sig
+    val singleton : 'a error                                  -> unit error
+    val pair :      'a error * 'b error                       -> unit error
+    val triple :    'a error * 'b error * 'c error            -> unit error
+    val quad :      'a error * 'b error * 'c error * 'd error -> unit error
+    val list :      'a error list                             -> unit error
+    val map :       ('a -> 'b error) -> 'a list               -> unit error
+  end
+@
+
+At the point where an error occurs the first time the [[ErrorExn]]
 is raised.  When the exception is caught is is turned into an
 [[Error]] value and from there on the [[Error]] value is propagated. 
 Catching the exception is done with [[catch]] in the special case, and
@@ -226,9 +251,56 @@ module Lower = struct
         | Ok (a,b,c,d)          -> Ok a , Ok b , Ok c , Ok d
         | Error                 -> Error, Error, Error, Error
 end
+@ 
 
-@ We provide functions to raise the error ([[ErrorExn]]) exception and
+@ Sometimes it is sufficient to distinguish between good and bad
+values. Any complex value that has a bad value in it is itself bad.
+The [[Implode]] module reduces everything to [[unit Error]] values
+which means it (carefully) destroys informations.
+
+<<>>=
+module Implode = struct
+    let singleton = function
+        | Ok _ -> Ok ()
+        | _    -> Error
+
+    let pair = function
+        | Ok _, Ok _ -> Ok ()
+        | _          -> Error
+
+    let triple = function
+        | Ok _, Ok _, Ok _ -> Ok ()
+        | _                -> Error
+    
+    let quad = function
+        | Ok _, Ok _, Ok _, Ok _ -> Ok ()
+        | _                      -> Error
+
+    let rec list = function
+        | []            -> Ok ()
+        | (Ok _)::xs    -> list xs
+        | _             -> Error 
+
+    let map f l =
+        let ok = Ok () in
+        let rec loop res = function
+            | []    -> res
+            | x::xs -> ( match res, f x with
+                       | Error, _     -> loop Error xs 
+                       |    _ , Error -> loop Error xs
+                       | _            -> loop ok    xs
+                       )
+        in
+            loop ok l 
+
+end
+@
+
+
+We provide functions to raise the error ([[ErrorExn]]) exception and
 issue warnings.
+
+                
 
 <<error.ml>>=
 

@@ -508,10 +508,13 @@ listed in the symbol Table. Symbols with an erroneous definition have
 value [[Error]] in the symbol table. Now the static semantics of the
 entire compilation unit can be checked.
 
+The strategy is to check as much as possible even when an error was
+found. Thus errors are marked but checking goes on in the hope to find
+more errors.
+
 <<phase3 module>>=
 module Phase3 = struct
     open Prim
-
     <<phase3>>
 end
 
@@ -519,46 +522,22 @@ end
 
 let foldl = List.fold_left
 
-    
-module Implode = struct
-    let singleton = function
-        | Ok _ -> Ok ()
-        | _    -> Error
+@
+Alignments must be a power of two. This predicates is true, iff its argument
+is a positive power of two.
 
-    let pair = function
-        | Ok _, Ok _ -> Ok ()
-        | _          -> Error
-
-    let triple = function
-        | Ok _, Ok _, Ok _ -> Ok ()
-        | _                -> Error
-    
-    let quad = function
-        | Ok _, Ok _, Ok _, Ok _ -> Ok ()
-        | _                      -> Error
-
-    let rec list = function
-        | []            -> Ok ()
-        | (Ok _)::xs    -> list xs
-        | _             -> Error 
-
-    let map f l =
-        let ok = Ok () in
-        let rec loop res = function
-            | []    -> res
-            | x::xs -> ( match res, f x with
-                       | Error, _     -> loop Error xs 
-                       |    _ , Error -> loop Error xs
-                       | _            -> loop ok    xs
-                       )
-        in
-            loop ok l 
-
-end
-
+<<>>=
 let rec is2power = function
     | 1 -> true
     | x -> x > 0 && (x mod 2) = 0 && is2power (x/2)
+@
+
+The code for evaluating constant expressions is in [[Phase2]] where it
+was needed for the evaluation of [[const]] blocks.  It is easiest to
+reuse it by supplying an empty [[set]] to it.  The set is used to
+detect circular constant definitions which no longer exist.
+
+<<>>=
 
 let constExpr env e =
     let set      = IDSet.empty in
@@ -566,7 +545,15 @@ let constExpr env e =
         | Error        -> Error
         | Ok(ty, x, _) -> Ok(ty, x)
         )
+@
+        
+Expressions are type checked.  In [[Phase2]] constant definitions were
+already type checked and there is some code for this.  But the
+evaluation of constants interleaced type checking and evaluations in a
+lazy style which has lead to relatively complicated functions.  It is
+easier and cleaner to implement the type checking functions again.
 
+<<>>=
 let rec ty = function
     | TyAt(x,_)       -> ty x
     | BitsTy(n)       -> Types.Bits(n)
@@ -620,6 +607,7 @@ and tyExpr (env: env) = function
     | UnOp(op,e)            -> tyPrimOp env op [e]
     | PrimOp(op,xs)         -> tyPrimOp env op (List.map snd xs)
 
+    
 
 let rec init env = function
     | InitAt(x,_)   -> init env x
