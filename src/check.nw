@@ -26,7 +26,7 @@ following steps:
 \end{enumerate}
 
 % ------------------------------------------------------------------ 
-\section{Building the type environment}
+\subsection{Implementation}
 % ------------------------------------------------------------------ 
 
 <<check.ml>>=
@@ -37,25 +37,22 @@ module F = Fatenv
 (* f:('a -> 'b -> 'a) -> init:'a -> 'b list -> 'a *)
 let foldl = List.fold_left
 
-<<>>=
-module TypeEnv = struct
-    module T = struct
-        <<module T>>
-    end
-    module TSort = Topsort.Make(T)
-    
-    <<build type env>>
-end
+<<building the type environment>>
+<<building the value environment>>
 
 <<check file>>
 @
+
+% ------------------------------------------------------------------ 
+\subsection{Building the type environment}
+% ------------------------------------------------------------------ 
 
 The [[TSort.sort]] function knows very few things about (type)
 declarations: it can ask for the names a declaration [[defines]], and
 the declared names it [[uses]]. For error reporting declarations are
 enriched with optional source coude positions.
 
-<<module T>>=
+<<module TT>>=
 type decl = A.decl * A.region option
 
 let rec defines = function
@@ -74,6 +71,18 @@ To build the global type environment global type declarations must be
 collected. Type declarations ([[typedef]]) on the top-level and the
 section-level are global; [[foldGlobalTypeDecls]] collects them from
 the abstract syntax.
+
+<<building the type environment>>=
+module TypeEnv = struct
+    module TT = struct
+        <<module TT>>
+    end
+    module TSort = Topsort.Make(TT)
+    
+    <<build type env>>
+end
+@
+
         
 <<build type env>>=
 let rec decl r dd = function
@@ -109,7 +118,7 @@ Names defined by declarations found in cycles are bound to [[E.Error]]
 in the (fat) environment.
 <<>>=
 let bindError scope env decls = 
-    let names = List.concat (List.map T.defines decls) in 
+    let names = List.concat (List.map TT.defines decls) in 
         foldl (fun env name -> F.bindtError name scope env) env names
 @
 
@@ -175,8 +184,95 @@ let doGlobalTypes env program =
         bindAll dd
 @
 
+% ------------------------------------------------------------------ 
+\subsection{Building the value environment}
+% ------------------------------------------------------------------ 
+
+The top-level scope of a compilation unit includes the top-level
+itself and all sections.  Values declared on either level are visible
+in the entire compilation unit.  Before the static semantics of a
+program can be checked these global declarations must be bound in an
+environment.  Additionally constant declarations are type checked and
+evaluated.  The values for them are also bound in the environment,
+too.
+
+Except for constants all other values like labels, continuations, or
+registers, are completely known at the place where they are defined or
+declared.  Constants can refer to other constants and thus processing
+them takes some care.  Like for type declarations constants must be
+processed in a (topological) order such that less dependent
+declarations are processed first. 
+
+Conceptually all declarations and language constructs that create a
+named value could be treated as a declaration -- most of them
+depending on no other.  But to improve performance constant
+delarations are treated separately because only they require a
+topological sort.  We thus traverse the abstract syntax and bind all
+non-constant values into the environment.  Then we collect all
+constant declarations, sort and process them.  Because sorting fails
+in the presence of cyclic declarations and must be re-done keeping the
+list to be sorted small is advantageous.
+
+<<building the value environment>>=
+module ValueEnv = struct
+    module TV = struct
+        <<module TV>>
+    end
+    module TSort = Topsort.Make(TV)
+end
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Preparing Constant Declarations for Sorting}
 % ------------------------------------------------------------------  
-\subsection{Checking a File}
+
+Module [[T]] captures what is important to sort declarations:  A
+declaration defines a name (multiple in general) and refers to other
+names.  As said before we only sort constant declarations. 
+
+<<module TV>>=
+type decl = A.decl * A.region option
+
+let rec defines = function
+    | A.DeclAt(d,r)        , _   -> defines (d,Some r)
+    | A.Const(t,name,expr) , _   -> [name]
+    | _                    , _   -> []
+@
+
+A constant expression can refer to other constant and link-time
+constants.  To find the right topological order it is only important
+to find other constants.  Of course, these can be syntactically no be
+distinguished and so we will collect all free variables of an
+expression.  This leads to used names, that are not constants and that
+appear to be defined from the perspective of the topological [[sort]]
+function.  But [[sort]] assumes that these undeclared names do not
+depend on any constant---which is correct.
+
+<<>>=
+let rec freeExprVars = function
+    | A.ExprAt(x,r)     -> freeExprVars x
+    | A.Fetch(lvalue)   -> freeLValueVars lvalue
+    | A.BinOp(e1,_,e2)  -> (freeExprVars e1) @ (freeExprVars e2)
+    | A.UnOp(_,e)       -> freeExprVars e
+    | A.PrimOp(_,args)  -> 
+        List.concat (List.map (fun (_,e) -> freeExprVars e) args)
+    | _                 -> []
+<<>>=
+and freeLValueVars = function
+    | A.LValueAt(x,r)   -> freeLValueVars x
+    | A.Mem(_,e,_)      -> freeExprVars e
+    | A.Var(name)       -> [name]
+       
+let rec uses = function
+    | A.DeclAt(d,r)        , _   -> uses (d,Some r)
+    | A.Const(t,name,expr) , _   -> freeExprVars expr
+    | _                    , _   -> []
+@
+    
+
+
+% ------------------------------------------------------------------ 
+\subsection{Checking a whole file}
 % ------------------------------------------------------------------ 
 
 To actually scan, parse, and check a file we provide a function
