@@ -36,13 +36,18 @@ The new graph for [[spill r region m g]] is computed as follows:
 xx\=xx\=xx\=xx\=xx\=xx\=xx\=xx\=\kill
 for each node [[n]] in [[g]] such that [[member region n]] do\\
 \> choose a fresh temporary [[t]]\\
+\> for each node [[p]] in [[pred n]] such that %\\ \> 
+[[not (member region p)]] and [[r]] is live before [[n]] do\\
+\>\> insert [[m := r]] on the edge from [[p]] to [[n]]\\
 \> if [[n]] reads [[r]], insert [[t := m]] before [[n]]\\
 \> if [[n]] writes [[r]], insert [[m := t]] after [[n]]\\
 \> substitute [[t]] for [[r]] in [[n]]\\
-\> for each node [[p]] in [[pred n]] such that\\ 
-\> and [[not (member region p)]] and [[r]] is live before [[n]] do\\
-\>\> insert [[m := r]] on the edge from [[p]] to [[n]]\\
-\> for each node [[s]] in [[succ n]] such that\\ 
-\> and [[not (member region p)]] and [[r]] is live before [[s]] do\\
+\> for each node [[s]] in [[succ n]] such that % \\ \> 
+[[not (member region p)]] and [[r]] is live before [[s]] do\\
 \>\> insert [[r := m]] on the edge from [[n]] to [[s]]\\
 \end{tabbing}
+It would be highly desirable to be able to separate the liveness tests
+here, so for example we could always insert [[r := m]] or [[m := r]]
+on edges that cross region boundaries, and then remove the unnecessary
+instructions with a post-pass.
+
