@@ -1,0 +1,353 @@
+
+\input{macros.tex}
+
+% l2h substitution dots ...
+% l2h substitution ast AST
+% l2h substitution rtl RTL
+% l2h substitution ir IR
+% l2h substitution noweb NOWEB
+% l2h substitution qcc QC--
+% l2h substitution C C--
+% l2h substitution PAL C--
+% l2h substitution pal C--
+% l2h substitution asdl ASDL
+% l2h substitution ocaml OCaml
+% l2h substitution forall forall
+% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
+
+% l2h substitution mapsto ->
+% l2h substitution cup +
+% l2h substitution not not
+% l2h substitution gets <-
+% l2h substitution dom dom
+
+
+
+% ------------------------------------------------------------------ 
+\section{Mapping {\PAL} Names to Assembly Names}
+% ------------------------------------------------------------------ 
+
+A translation of {\PAL} to assembly code must create assembly level
+\emph{symbols} for {\PAL} \emph{names} that represent addresses:
+
+\begin{itemize}
+\item Procedures
+\item Goto-Labels
+\item Data-Labels
+\end{itemize} 
+
+Since names for all objects above have global scope, they are unique
+for every compilation unit and thus can, in principle, be used for
+their assembly-level symbols, which also have a compilation-unit
+scope.  A name from outside a compilation unit can be used after it
+was imported; likewise can a compilation unit export a name to make it
+accessible for others.  Import and export declarations in {\PAL} allow
+to re-name an imported or exported object:
+
+\begin{quote}
+    [[import]] $a$ as $c$\\
+    [[export]] $c$ as $a$
+\end{quote}
+
+The {\PAL} name $c$ corresponds to the assembly level symbol $a$.  In
+the presence of re-naming, a {\PAL} name $x$ need not to not
+correspond to the same symbol $x$ on the assembly level.  Even worse,
+imports and exports using the [[as]] feature have non-local effects:
+
+\begin{quote}
+\begin{verbatim}
+import print as p;
+print () { ... }
+\end{verbatim}
+\end{quote}
+
+The assembly symbol [[print]] is already used, although [[p]] is used
+on the {\PAL} side to refer to it.  Consequently, a {\PAL} procedure
+[[print]] can still be defined, but the name [[print]] can no longer
+be used as its assembly symbol.  The {\qcc} compiler must manage names
+in order to avoid name clashes caused by re-naming.  The main idea is
+to find and record a corresponding assembly symbol for every {\PAL}
+name.  To make debugging easier, corresponding names on the {\PAL} and
+the assembly side should resemble each other as much as possible.
+
+% ------------------------------------------------------------------ 
+\subsection{The Rules}
+% ------------------------------------------------------------------ 
+
+Before we go into the details how name conflicts are found and
+resolved we like to state the rules that {\PAL} names and assembly
+symbols most adhere to.  The following rules apply both for {\PAL}
+names and assembler symbols inside a compilation units.
+
+\begin{itemize}
+\item A name (symbol) is either imported, or defined, but not both. 
+      Every name (symbol) is exactly defined once.  An exported name
+      (symbol) must be defined.
+
+\item It is illegal to export a name (symbol) that is imported or to
+      import a name that is also exported.
+\end{itemize}
+
+According to the rules it is legal to import the same symbol under
+different names in {\PAL}:
+
+\begin{quote}
+\begin{verbatim}
+import f as g;
+import f as h;
+\end{verbatim}
+\end{quote}
+
+A naive translation of the following code could lead to assembly code
+that violates the second rule. 
+
+\begin{quote}
+\begin{verbatim}
+import f as g;
+export print as f;
+print () { ... }
+\end{verbatim}
+\end{quote}
+
+On the assembly level [[f]] is both imported and exported, because the
+corresponding symbol for [[print]] is [[f]]. The {\qcc} compiler must
+detect this problem only by looking at the {\PAL} code and reject this
+program. 
+
+% ------------------------------------------------------------------ 
+\subsection{Design}
+% ------------------------------------------------------------------ 
+
+This section sketches how assembly symbols are computed for {\PAL}
+names and how an implementation fits into the current compiler
+architecture.  For the rest of this section we assume that [[import]]
+$a$ is a shortcut for [[import]] $a$ [[as]] $a$, and [[export]] $c$ a
+shortcut for [[export]] $c$ [[as]] $c$.
+
+An early pass over the abstract syntax is added to the code that
+checks the static semantics.  This pass records all [[include]] and
+[[export]] declarations of a compilation unit.  More precisely, two
+sets and one map are built:
+
+\begin{itemize}
+\item Set $I$ of assembly symbols imported by a {\PAL}
+      compilation unit:  [[import g]] adds [[g]] to $I$, 
+      The symbol [[g]] must not be element of set $E$ (see
+      below). 
+    
+\item Set $E$ of assembly symbols exported by a {\PAL}
+      compilation unit: [[export f as g]] adds [[g]] to $E$,
+      where [[g]] must be not in $I$.
+    
+\item A map $m$ from {\PAL} names to their corresponding assembly
+      level symbols:
+      
+      \begin{center}
+      \begin{tabular}{ll}
+      {\PAL} & added to map $m$ \\ \hline
+      [[import f]]      & [[f]] $\mapsto$ [[f]] \\
+      [[import g as f]] & [[f]] $\mapsto$ [[g]] \\
+      [[export f]]      & [[f]] $\mapsto$ [[f]] \\
+      [[export f as g]] & [[f]] $\mapsto$ [[g]] 
+      \end{tabular}
+      \end{center}
+
+\item The following equations relates $I$, $E$, and $m$:
+      $\mathit{range}(m) = I \cup E$. 
+\end{itemize}      
+
+The sets $I$ and $E$ together contain the symbols which are determined
+by the outside of a module and thus can not be used (in general) for
+assembly symbols stemming from {\PAL} names.  Recording them in two
+sets is necessary to detect symbols on the assembly side that are
+imported and exported at the same time.  The map must be used during
+translation of names.
+
+To translate a {\PAL} program to assembly language, not only the
+symbols for imported or exported objects must be known but for all
+{\PAL} objects that have a corresponding symbol.  The following
+algorithm extends the map $m$ such that it maps all relevant {\PAL}
+names to their symbols.
+
+The algorithm uses a set $M$ that contains all assembly symbols used
+by a program.  Initially it contains the union of $I$ and $E$:  $M
+\gets I \cup M$.  Next, the algorithm visits all \emph{definitions} of
+objects that have a corresponding symbol and matches them against the
+left hand side of the following table. After visiting all definitions,
+$m$ contains a mapping from {\PAL} names to assembly symbols.
+
+\begin{center}
+\def\dom{\mathit{dom}}
+\begin{tabularx}{\hsize}{lX}
+    Definition of $c$               & Action \\
+    \hline
+    [[import]] $c$                  & none \\
+    [[import]] $x$ [[as]] $c$       & none \\
+    label $c$, $c \in\dom(m)$       & none ($c$ is exported) \\
+    label $c$, $c \in M$            & invent a new name $a \not\in M$, 
+                                      $M \gets M \cup \{a\}$, 
+                                      $m \gets m + (c \mapsto a)$\\
+    label $c$                       & $m \gets m + (c \mapsto c)$\\
+\end{tabularx}
+\end{center}
+
+Imports can be skipped because they are already considered in the
+initial map $m$.  The same is true for labels that are exported.  In
+most cases the name defined by a label can also be used as a symbol. 
+Only when the name symbol is already in use an new symbol must be
+invented and marked as used in $M$.
+
+% ------------------------------------------------------------------ 
+\subsection{Name Mangling in {\qcc}}
+% ------------------------------------------------------------------ 
+
+The algorithm presented in the previous section is simple, but the
+real thing is more complicated.  Not all characters legal in {\PAL}
+may be legal in every assembler used by {\qcc}, assembler may reserve
+words that can not be used for symbols, and so on.  The name mangler
+presented in this section tries to take the idiosyncrasies of
+assemblers into account.
+
+% ------------------------------------------------------------------ 
+\subsection{Interface}
+% ------------------------------------------------------------------ 
+
+From the outside, a [[mangler]] is simple:  is takes a {\PAL} name and
+returns a symbol.  Because it remembers the mapping for past names,
+the same name is always mapped to the same symbol.  Otherwise it takes
+care of the specific needs of the assembler at hand.
+
+<<mangle.mli>>=
+type mangler = string -> string
+@
+
+The characteristics of symbols of an assembler are captured by a
+[[symbol]] value.  In implements a number of tactics to create symbols
+from names:
+
+<<>>=
+type symbol = { preprocess:  string -> string
+              ; replace:     char -> char
+              ; reserved:    string list
+              ; avoid:       string -> string
+              }
+@
+
+\begin{enumerate}
+\item A name is first [[preprocess]]'ed in some unspecified way. This might
+      include limiting its length, or removing some prefix.
+
+\item In the resulting name illegal characters are [[replace]]'d by
+      legal characters. 
+
+\item If the resulting name is a [[reserved]] name this collision is
+      resolved by applying it repeatedly to [[avoid]]. 
+\end{enumerate}
+
+The previous sections present the rich inner life of a [[mangler]]. 
+It is created from a [[symbol]] value, and an initial [[strmap]] from
+imported or exported {\PAL} names to their corresponding symbols.
+
+<<>>=
+module StrMap: Map.S with type key = string
+
+type strmap = string StrMap.t
+             
+val make:   symbol -> strmap -> mangler
+val simple: symbol
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+The implementation is fairly imperative, although this is mostly
+hidden to clients (except for the memory of used mappings).  But first
+things first:  here are the types and modules declared in the
+interface, which provide no surprises.
+
+<<mangle.ml>>=
+module Comparable   = struct type t = string let compare = compare end
+module StrSet       = Set.Make(Comparable)
+module StrMap       = Map.Make(Comparable)
+
+type strset         = StrSet.t
+type strmap         = string StrMap.t
+
+type mangler        = string -> string
+type symbol         = { preprocess:  string -> string
+                      ; replace:     char -> char
+                      ; reserved:    string list
+                      ; avoid:       string -> string
+                      }
+@
+
+A [[mangler]] is made from a [[symbol]] value and an initial map.  The
+initial set $M$ used in the abstract description of the algorithm can
+be calculated from the map:
+
+<<>>=
+let range map =
+    let add name sym set = StrSet.add sym set in
+        StrMap.fold add map StrSet.empty
+@
+
+A [[mangler]] must maintain some state: the set of used symbols, and the
+map of names to symbols.                       
+
+<<>>=
+type state          = { mutable used: strset
+                      ; mutable map:  strmap 
+                      }
+@
+
+                      
+All reseved symbols are simply added to the set of used symbols to
+make sure they are never used for a name. If a name can not be found
+in [[state.map]] it must be mangled and the new mapping together with
+the new symbol are recorded in the mutable state.
+
+<<>>=
+let make symbol map =
+    let state    = { used = List.fold_right 
+                                StrSet.add symbol.reserved (range map) 
+                   ; map  = map
+                   } 
+    in
+    
+    let rec avoid s  =
+            if   StrSet.mem s state.used 
+            then avoid (symbol.avoid s)
+            else s 
+    in
+
+    let newMangle s =
+        let s'   = symbol.preprocess s in
+        let _    = for i = 0 to (String.length s') - 1 do
+                     String.set s' i (symbol.replace (String.get s' i))
+                   done in
+        let s'   = avoid s' in
+            ( state.used <- StrSet.add s' state.used
+            ; state.map  <- StrMap.add s s' state.map
+            ; s'
+            )
+    in         
+    let mangle s = 
+        try  StrMap.find s state.map 
+        with Not_found -> newMangle s
+    in
+        mangle
+@
+
+Here is a simple [[symbol]] for testing a mangler.
+        
+<<>>=       
+let simple =
+    { preprocess = (fun x -> x)
+    ; replace    = (function  '_' -> '.' | x -> x)
+    ; reserved   = ["foo";"bar"]
+    ; avoid      = (fun x -> x ^ "$")
+    }
+@
+    
+                      
