@@ -364,28 +364,24 @@ place each temp at a node.
 <<updating preferences>>
 let rpo_dfs (state, prefs) =
   let (_, postorder) = G.postorder_dfs (fun n (i, map) -> (i+1, NM.add n i map))
-                                       (0, NM.empty) cfg                             in
+                                       (0, NM.empty) cfg                              in
   let rec visit (state, prefs) node prev_delays =
-    let state = mark_visited state node                                              in
-    let prefs = update_prefs_at_node prefs node                                      in
-    let preds = G.preds node                                                         in
-    let unvis_preds = List.filter (fun p -> not (is_visited state p)) preds          in
+    let state = mark_visited state node                                               in
+    let prefs = update_prefs_at_node prefs node                                       in
+    let preds = G.preds node                                                          in
+    let unvis_preds = List.filter (fun p -> not (is_visited state p)) preds           in
     (* Not_found case only for nodes unreachable from entry node... *)
-    let node_num = try NM.find node postorder with Not_found -> 0                    in
+    let node_num = try NM.find node postorder with Not_found -> 0                     in
     let (to_vis, to_delay) =
-      let comparep p =
-        try NM.find p postorder > node_num
-        with Not_found -> Printf.eprintf "node %d not found\n" (G.num p);
-                false
-                (*Impossible.impossible "node accessible from proc exit but not
-                 entry"*) in
-      List.partition comparep unvis_preds           in
+      (* Not_found case only for nodes unreachable from entry node... *)
+      let comparep p = try NM.find p postorder > node_num with Not_found -> false     in
+      List.partition comparep unvis_preds                                             in
 
     let visit_pred (state, delays) node =
       let prefs = update_pref_varmap state prefs
-                                     (List.filter (is_allocated state) preds)        in
-      visit (state, prefs) node delays                                               in
-    let (state, delays) = List.fold_left visit_pred (state, prev_delays) to_vis in
+                                     (List.filter (is_allocated state) preds)         in
+      visit (state, prefs) node delays                                                in
+    let (state, delays) = List.fold_left visit_pred (state, prev_delays) to_vis       in
     (alloc_node state prefs node, (List.map (fun d -> (prefs,d)) to_delay) :: delays) in
   let rec handle_delays (state, ds) = match List.concat ds with
     | []  -> state
