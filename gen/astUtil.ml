@@ -200,9 +200,9 @@
             | "ast_Float" -> let string1 = (StdPrimsUtil.sexp_rd_std_string s_) in
               let ty_opt1 = (SexpPkl.rd_option sexp_rd_ty s_) in
               Ast.Float(string1, ty_opt1)
-            | "ast_Char" -> let string1 = (StdPrimsUtil.sexp_rd_std_string s_) in
+            | "ast_Char" -> let int1 = (StdPrimsUtil.sexp_rd_std_int s_) in
               let ty_opt1 = (SexpPkl.rd_option sexp_rd_ty s_) in
-              Ast.Char(string1, ty_opt1)
+              Ast.Char(int1, ty_opt1)
             | "ast_Fetch" -> let name_or_mem1 = (sexp_rd_name_or_mem s_) in
               Ast.Fetch(name_or_mem1)
             | "ast_BinOp" -> let expr1 = (sexp_rd_expr s_) in
@@ -954,10 +954,10 @@
             (SexpPkl.wr_option sexp_wr_ty ty_opt1 s_);
             (SexpPkl.wr_rp s_)
           end
-        | (Ast.Char(string1, ty_opt1)) -> begin
+        | (Ast.Char(int1, ty_opt1)) -> begin
             (SexpPkl.wr_lp s_);
             (SexpPkl.wr_sym "ast_Char" s_);
-            (StdPrimsUtil.sexp_wr_std_string string1 s_);
+            (StdPrimsUtil.sexp_wr_std_int int1 s_);
             (SexpPkl.wr_option sexp_wr_ty ty_opt1 s_);
             (SexpPkl.wr_rp s_)
           end

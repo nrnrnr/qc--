@@ -71,7 +71,7 @@ to [[Srcmap.loc]]:
 let location lexbuf map =
     Srcmap.location map (Lexing.lexeme_start lexbuf)
      
-let error lexbuf map msg = Error.error msg
+let error lexbuf msg = Error.error msg
 
 @ We define some helpers; [[get]] returns the matched string and is
 quite intuitive when called as [[get lexbuf]].
@@ -234,7 +234,7 @@ rule token = parse
                         ; token lexbuf map
                         )
                   else
-                        error lexbuf map "illegal character" 
+                        error lexbuf "illegal character" 
                 }
   | ";"         { fun map -> P.SEMI         }
   | ":"         { fun map -> P.COLON        }
@@ -305,39 +305,82 @@ the reserved word [[pragma]] the [[PRAGMA]] token is returned by
   | "\""        { fun map -> string  lexbuf map (Buffer.create 80) }
   | "'"         { fun map -> character lexbuf map } 
  
-  | _           { fun map -> error lexbuf map "illegal character" }
+  | _           { fun map -> error lexbuf "illegal character" }
 @
 
 % ------------------------------------------------------------------  
 \subsection{Character Literals}
 % ------------------------------------------------------------------  
 
-The interpretation functions for escaped characters are not yet
-written. Currently the string representation is returned. The string
-representation \emph{includes} the delimiting single quotes! 
+We decode charcter literals to integers here, using some helper
+functions from the prolog. We use a continuation style: the result is
+passed to the [[character_end]] leser which should recognize the end of
+the literal and return the value. This way we can write a lexer for
+escape sequences that we can re-use for strings.
 
 <<scan.mll>>=
 and character = parse
-    printable      "'"          { fun map -> 
-                                  let s = get lexbuf in
-                                  P.CHAR  ("'"^s)
+    printable                   { fun map -> 
+                                  let c = getchar lexbuf 0 in
+                                  character_end lexbuf map (Char.code c)   
                                 }
   
-  | '\\' escape    "'"          { fun map -> 
-                                  let s = get lexbuf in
-                                  P.CHAR  ("'"^s)
-                                }
-
-  
-  | '\\' ['x' 'X'] hex+ "'"     { fun map -> 
-                                  let s = get lexbuf in
-                                  P.CHAR  ("'"^s)
-                                }
+  | '\\'                        { fun map ->
+                                  let i = escape lexbuf in
+                                  if i >= 256 then
+                                    error lexbuf "character literal too large"
+                                  else  
+                                    character_end lexbuf map i
+                                }  
                                   
   | _                           { fun map ->
-                                  error lexbuf map "illegal character literal" 
+                                  error lexbuf "illegal character literal" 
                                 }
 
+and character_end = parse
+    "'"                         { fun map i -> P.CHAR(i)           }
+  | _                           { fun map i -> 
+                                  error lexbuf "illegal character literal" 
+                                }  
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Escape Sequences}
+% ------------------------------------------------------------------ 
+
+<<scan.mll>>=
+and escape = parse
+    |  escape                   { decode_escape (getchar lexbuf 0) }
+    |  ['x' 'X'] hex            { decode_hex (getchar lexbuf 1)    }
+    |  ['x' 'X'] hex hex        { decode_hex (getchar lexbuf 1) * 16 + 
+                                  decode_hex (getchar lexbuf 2) }
+    |  octal                    { decode_hex (getchar lexbuf 0) }
+    |  octal octal              { decode_hex (getchar lexbuf 0) * 8 +
+                                  decode_hex (getchar lexbuf 1) }
+    |  octal octal octal        { decode_hex (getchar lexbuf 0) * 64 +
+                                  decode_hex (getchar lexbuf 1) * 8  +
+                                  decode_hex (getchar lexbuf 2) }
+    | _                         { error lexbuf "illegal escape sequence" }
+
+<<prolog>>=
+let rec decode_escape = function
+    | 'a'  -> 7
+    | 'b'  -> 8
+    | 'n'  -> 10
+    | 'r'  -> 13
+    | 't'  -> 9
+    | '\\' -> 92
+    | '\'' -> 39
+    | '"'  -> 34
+    | '?'  -> 63
+    |  _   -> Impossible.impossible "unknown escape sequence"
+
+let decode_hex c = match c with 
+    | 'a' .. 'f' -> Char.code c - Char.code 'a' 
+    | 'A' .. 'F' -> Char.code c - Char.code 'A' 
+    | '0' .. '9' -> Char.code c - Char.code '0'
+    | _          -> Impossible.impossible 
+                        ("not a hexadecimal character: "^Char.escaped c)
 @
 % ------------------------------------------------------------------  
 \subsection{Comments}
@@ -353,7 +396,7 @@ implemented with a separate scanner context but inlined.
 <<scan.mll>>=
 and comment1 = parse
     eof                         { fun map ->
-                                  error lexbuf map "unterminated comment" 
+                                  error lexbuf "unterminated comment" 
                                 }
   | [^ '*' '\n' '\t' '/']+      { fun map ->
                                   comment1 lexbuf map
@@ -383,13 +426,16 @@ and comment1 = parse
 \subsection{Strings}
 % ------------------------------------------------------------------  
 
-Escapes do not yet work; calls to the decoding function must be added 
-where [[XXX]] marked.
+All escape sequences are handled by the [[escape]] scanner. When the
+escape scanner returns we simply continue to scan the string until we
+reach the double quote. A string must only contain printable characters;
+unfortuntaley, the lexer specification does not allow to use the
+[[printable]] definition inside a character class.
 
 <<scan.mll>>=
 and string = parse
     eof                         { fun map buf -> 
-                                  error lexbuf map "unterminated string" 
+                                  error lexbuf "unterminated string" 
                                 }
   | "\""                        { fun map buf -> P.STR (Buffer.contents buf) 
                                   (* we are done *)
@@ -403,31 +449,18 @@ and string = parse
                                   ; string lexbuf map buf
                                   )
                                 }
-  | '\\' octal+                 { fun map buf -> 
-                                  let s = substr 1 0 (get lexbuf) in
-                                  ( Buffer.add_string buf s (* XXX *)
-                                  ; string lexbuf map buf
-                                  )
-                                }
-  | '\\' ['x' 'X'] hex+         { fun map buf -> 
-                                  let s = substr 2 0 (get lexbuf) in
-                                  ( Buffer.add_string buf s (* XXX *)
-                                  ; string lexbuf map buf
-                                  )
-                                }  
-  | '\\' escape                 { fun map buf ->
-                                  let c    = getchar lexbuf 1       in
-                                  ( Buffer.add_char buf c   (* XXX *)
-                                  ; string lexbuf map buf
-                                  )
-                                }
-  | '\\' _                      { fun map buf ->
-                                  error lexbuf map "illegal character escape"
-                                }
+  | '\\'                        { fun map buf -> 
+                                  let i = escape lexbuf in
+                                  if i >= 256 then
+                                    error lexbuf "character literal too large"
+                                  else
+                                    ( Buffer.add_char buf (Char.chr(i))
+                                    ; string lexbuf map buf
+                                    )
+                                }    
   | _                           { fun map buf ->
-                                  error lexbuf map "illegal character in string"
+                                  error lexbuf "illegal character in string"
                                 }
-
 @
 
 % ------------------------------------------------------------------  
@@ -472,13 +505,13 @@ and pragma1 = parse
                           with Not_found -> pragma2 lexbuf map s
                         }
   | _                   { fun map -> 
-                          error lexbuf map "id for pragma expected" 
+                          error lexbuf "id for pragma expected" 
                         }
 
 
 and pragma2 = parse
     eof                 { fun map id -> 
-                          error lexbuf map "pragma body expected" 
+                          error lexbuf "pragma body expected" 
                         }
   | ws+                 { fun map id -> pragma2 lexbuf map id }
   | tab                 { fun map id -> tab lexbuf map; pragma2 lexbuf map id}
@@ -487,7 +520,7 @@ and pragma2 = parse
                           pragma3 lexbuf map 0 
                         }
   | _                   { fun map id -> 
-                          error lexbuf map "pragma body expected" 
+                          error lexbuf "pragma body expected" 
                         }
 @
 
@@ -509,7 +542,7 @@ for the details but must consider only the following cases:
 <<scan.mll>>=
 and pragma3 = parse
     eof                         { fun map level ->
-                                  error lexbuf map "unterminated pragma" 
+                                  error lexbuf "unterminated pragma" 
                                 }
   | [^ '{' '}'  '\n' '\t' 
        '/' '\'' '"']+           { fun map level ->
@@ -584,7 +617,7 @@ fact that the line number must come first.
 <<scan.mll>>=
 and line = parse 
     eof                 { fun map l ->
-                          error lexbuf map "unterminated line directive" 
+                          error lexbuf "unterminated line directive" 
                         }
   | ws+                 { fun map l -> line lexbuf map l }
   | tab                 { fun map l -> line lexbuf map l }
@@ -610,7 +643,7 @@ and line = parse
                           line lexbuf map l
                         }
   | _                   { fun map l -> 
-                          error lexbuf map 
+                          error lexbuf 
                           "illegal character in line directive"
                         }
 @
@@ -722,7 +755,7 @@ together with their positions.
     | P.PRIMOP(s)         -> "PRIMOP(" ^    s ^ ")"
     | P.INT(s)            -> "INT(" ^       s ^ ")"
     | P.FLT(s)            -> "FLT(" ^       s ^ ")"
-    | P.CHAR(s)           -> "CHAR(" ^      s ^ ")"
+    | P.CHAR(i)           -> "CHAR(" ^ Char.escaped (Char.chr i) ^ ")"
 
     | P.BITSn(i)          -> "BITSn(" ^ string_of_int i ^ ")"
 
@@ -821,7 +854,7 @@ let str2int str =
 
 %token <string>         INT
 %token <string>         FLT
-%token <string>         CHAR
+%token <int>            CHAR
 @
 
 The precedence of tokens from lowest to highest precedence.

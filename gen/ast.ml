@@ -33,7 +33,7 @@
         ExprAt of (expr * region)
       | Int of (StdPrims.std_string * ty option)
       | Float of (StdPrims.std_string * ty option)
-      | Char of (StdPrims.std_string * ty option)
+      | Char of (StdPrims.std_int * ty option)
       | Fetch of (name_or_mem)
       | BinOp of (expr * op * expr)
       | UnOp of (op * expr)

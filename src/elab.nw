@@ -957,7 +957,16 @@ which are cought by [[F.findv]].  The following functions type check
 and evaluate constants in a single step.  Each function returns a pair
 of a type and a value. 
 
+[[literalExpr]] must be outside the [[let rec]] because it is
+polymorphic.
 
+<<module Eval>>=
+let literalExpr env v ty cvt  =
+    E.ematch ty
+    ( function 
+    | T.Bool            -> E.error "a value must have type bitsXX"
+    | T.Bits width as t -> (t, R.bits (cvt v width) width) 
+    )
 
 <<module Eval>>=
 let rec evalFetch env = function
@@ -999,22 +1008,14 @@ know the exact type and thus are able to parse the literal into a
 [[Bits.bits]] value.
 
 <<module Eval>>=
-and literalExpr env str ty (cvt: string -> int -> Bits.bits) =
-    E.ematch ty
-    ( function 
-    | T.Bool            -> E.error "a value must have type bitsXX"
-    | T.Bits width as t -> (t, R.bits (cvt str width) width) 
-    )
-    
-<<module Eval>>=
 and evalExpr env = function
     | A.ExprAt(x,r)       -> E.catch (error r env) (evalExpr env) x
     | A.Int  (n  , Some t)-> literalExpr env n (evalTy env t) B.U.of_string
     | A.Int  (n  , None)  -> literalExpr env n (wordTy env)   B.U.of_string
     | A.Float(n  , Some t)-> literalExpr env n (evalTy env t) B.U.of_string
     | A.Float(n  , None)  -> literalExpr env n (wordTy env)   B.U.of_string
-    | A.Char (n  , Some t)-> literalExpr env n (evalTy env t) B.U.of_string
-    | A.Char (n  , None)  -> literalExpr env n (E.Ok(T.bits 8)) B.U.of_string
+    | A.Char (n  , Some t)-> literalExpr env n (evalTy env t) B.U.of_int
+    | A.Char (n  , None)  -> literalExpr env n (E.Ok(T.bits 8)) B.U.of_int
     
     | A.Fetch  (v)        -> evalFetch env v
     | A.BinOp  (l,op,r)   -> evalPrimOp env op [l;r]

@@ -271,7 +271,7 @@ and typed_expr exp =
     let arges, argtys = List.split (List.map typed_expr args) in
     let resty,  opr   = Rtlop.Translate.operator op argtys    in
     Rtl.app opr arges, resty in
-  let literal str width cvt = Rtl.bits (cvt str width) width, Types.Bits width in
+  let literal v width cvt = Rtl.bits (cvt v width) width, Types.Bits width in
   let const default_width = function
     | Some ty -> astwidth env ty
     | None    -> default_width in
@@ -280,8 +280,10 @@ and typed_expr exp =
   | A.ExprAt(x,_)     -> typed_expr x
   | A.Int(str,t)      -> literal str (const wordsize t) Bits.U.of_string
   | A.Float(str,t)    -> literal str (const wordsize t) Bits.U.of_string
-  | A.Char(str,t)     -> literal str (const        8 t) Bits.U.of_string
-      (* perhaps suprisingly, [[Bits.U.of_string]] copes with all literal formats *)
+  | A.Char(int,t)     -> literal int (const        8 t) Bits.U.of_int
+      (* perhaps suprisingly, [[Bits.U.of_string]] copes with all 
+         literal formats. Update: I have changed the type of A.Char, it
+         now contains an integer. -- CL *)
   | A.Fetch(v)        -> rvalue_name_or_mem v
   | A.BinOp (l,op,r)  -> apply op [l;r]
   | A.UnOp  (op,e)    -> apply op [e]
@@ -1087,14 +1089,19 @@ let rec datum asm =
     | A.Align(a)            -> asm#align a 
     | A.MemDecl(t,m,init)   -> memdecl asm t m init
 @ 
-Initialized data is handled by the [[init]] function.
+Initialized data is handled by the [[init]] function. \emph{Should 
+the assembler interface offer a function to emit strings?. --CL}
+
 <<support functions for initialized and uninitialized data>>=
 let rec initialized_data asm expr = asm#addr (link_const asm expr)
-and init asm = function
+and init asm data = 
+    let char2int c      = A.Char(Char.code c, None)         in 
+    let emit_char c     = initialized_data asm (char2int c) in 
+    match data with
     | A.InitAt(x,_)   -> init asm x
     | A.InitExprs(es) -> List.iter (initialized_data asm) es
-    | A.InitUStr(_)      
-    | A.InitStr(_)    -> Impossible.unimp "strings as initialized data"
+    | A.InitStr(s)    -> String.iter emit_char s
+    | A.InitUStr(_)   -> Impossible.unimp "strings as initialized data"   
 @
 Uninitialized data gets an amount of memory equal to
 the size of the base type times the

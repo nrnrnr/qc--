@@ -141,6 +141,7 @@ Todo:  write functions that escape unprintable characters in literals.
 
 <<astpp.ml>>=
 let str s       = P.text ("\"" ^ String.escaped s ^ "\"")
+let char i      = P.text ("'"  ^ Char.escaped(Char.chr i) ^ "'")
 
 <<astpp.ml>>=
 let rec ty = function
@@ -186,8 +187,9 @@ and expr = function
     | A.Int( i, Some t)         -> P.text i ^^ P.text "::" ^^ ty t
     | A.Float( f, None)         -> P.text f
     | A.Float( f, Some t)       -> P.text f ^^ P.text "::" ^^ ty t
-    | A.Char( c, None)          -> P.text c 
-    | A.Char( c, Some t)        -> P.text c ^^ P.text "::" ^^ ty t
+    | A.Char( i, None)          -> char i
+    | A.Char( i, Some t)        -> char i
+                                ^^ P.text "::" ^^ ty t
     | A.Fetch(v)                -> lvalue v
     | A.BinOp(l,op,r)           -> P.agrp begin
                                  ~~ P.text "(" ^^ expr l
