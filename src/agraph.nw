@@ -34,14 +34,14 @@ instead, we add a new type:  [[unode]], for ``unmarked node.'' We then
 use [[bind]] to add properties.
 
 <<>>=
-module Props : sig (* property stuff *)
+module Props : sig 
     <<signature Props>>
 end
 @ 
 
 <<>>=
-type node
-type unode (* a node without any properties *)
+type node  (* node with properties *)
+type unode (* node w/o  properties *)
 val bind : Props.properties -> unode -> node
 @ 
 
@@ -111,15 +111,15 @@ val assign  : Rtl.rtl  -> node -> unode
 val copy_in  : Fgraph.formal list -> Fgraph.context -> Fgraph.convention -> node -> unode
 val copy_out : Fgraph.actual list -> Fgraph.context -> Fgraph.convention -> node -> unode
 @ 
+
 To return from a {\PAL} procedure, you have to say which return
 continuation you want and what the total is.
 
 <<constructor functions>>=
 type continuation = int
-type count = int
+type count        = int
 val return : graph -> continuation -> count -> unode
 @ 
-Let's just do tail calls.
 
 
 An abstract continuation bundle contains a node for the normal
@@ -127,7 +127,6 @@ continuation and the names for all other. The type declaration is put
 into a {\noweb} chunk so it can be re-used in the implementation.
 
 <<constructor functions>>=
-<<cont type>>
 <<cont type>>=
 type cont = { normal  : node
             ; cuts    : string list
@@ -138,9 +137,21 @@ type cont = { normal  : node
 @
 
 <<constructor functions>>=
+<<cont type>>
+val empty_cont : node -> cont
+
+
+<<constructor functions>>=
 val call : Rtl.expr -> cont -> unode
 val jump : graph -> Rtl.expr -> label list -> unode
 @ 
+
+A [[goto]] label in the source code introduces a label in the flow
+graph. The node to be labeled is passed to [[label]].
+
+<<constructor functions>>=
+val label : label -> node -> unode
+@
 
 % ------------------------------------------------------------------ 
 \subsection{Implementation}
@@ -220,6 +231,14 @@ abstract [[cont]] value to a [[Fgraph.cont]] value.
 
 <<>>=
 <<cont type>>
+let empty_cont node =
+    { normal  = node
+    ; cuts    = []
+    ; unwinds = []
+    ; returns = []
+    ; aborts  = false (* ??? *)
+    } 
+
 let cont c =
     ( c.normal.node
     , targets c.cuts
@@ -338,6 +357,17 @@ let copy_out actuals context cc node =
               , node.node
               )
     }
+@
+
+A labeled node must be recorded in the graph. Aside from that, the
+same node is returned with its properties striped off.
+
+<<>>=
+let label l node =
+    let graph = node.graph              in
+    let l     = F.Name l                in
+    let _     = G.add graph l node.node in (* side effect *)
+        { node with props = Props.empty }
     
 <<>>=
 let return   graph cont count           = unode ()

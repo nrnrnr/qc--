@@ -67,13 +67,19 @@ let default_memory      = 'm'    (* Rtl.space *)
 @
 
 <<>>=
-let dummy_expression    = Rtl.Const(Rtl.Bits(Bits.zero 32))
+let dummy_expression    = Rtl.Const(Rtl.Bits(Bits.zero 32, 32))
+@
+
+[[bits]] extracts a [[width]] from a type, i.e.~the number of bits.
+This must be never applied to a [[bool]] type.
 
 <<>>=
 let bits = function
     | T.Bits n -> n
     | _        -> assert false
 @
+
+[[byteorder]] returns the byteorder as recorded in the environment. 
 
 <<>>=
 let byteorder env = match F.findEndianness env with
@@ -103,6 +109,8 @@ let rec ty env = function
                            | attr, T.Bits n -> n
                            | _              -> assert false
                            )
+
+let tyOf n env = match F.findv n env with attr, (denot,ty) -> bits ty
                              
 <<>>=
 let actuals env ir xs = true
@@ -110,8 +118,9 @@ let actual env (hint, e) = (dummy_expression, 99, hint)
 @
  
 An assignment is an effect what captured by an {\rtl}.  The lvalue of
-an assignment becomes a {\rtl} location.  We currently ignore
+an assignment becomes a {\rtl} [[location]].  We currently ignore
 alignments and hints.
+
 
 <<>>=
 let rec lvalue env = function
@@ -125,22 +134,27 @@ let rec lvalue env = function
                              , expr env e
                              , default_assertion
                              )
+<<>>=
+and primOp env op args =
+    let o = Expr.op env op args 
+    in
+        Rtl.App(o, List.map (expr env) args)
 
 <<>>=
-and expr env e = 
-    let width env expr = 77                                  in
-    match e with
-    | A.ExprAt(x,_)             -> expr env x
-    | A.Int( i, None)           -> dummy_expression
-    | A.Int( i, Some t)         -> dummy_expression
-    | A.Float( f, None)         -> dummy_expression
-    | A.Float( f, Some t)       -> dummy_expression
-    | A.Char( c, None)          -> dummy_expression
-    | A.Char( c, Some t)        -> dummy_expression
-    | A.Fetch(v)                -> dummy_expression
-    | A.BinOp(l,op,r)           -> dummy_expression
-    | A.UnOp(op,e)              -> dummy_expression
-    | A.PrimOp(n,xs)            -> dummy_expression
+and expr env = function 
+    | A.ExprAt(x,_)         -> expr env x
+    | A.Int( i, None)       -> Rtl.Const(Rtl.Bits(i,bits T.word))
+    | A.Int( i, Some t)     -> Rtl.Const(Rtl.Bits(i,ty env t))
+    | A.Float( f, None)     -> Rtl.Const(Rtl.Bits(f,bits T.word))
+    | A.Float( f, Some t)   -> Rtl.Const(Rtl.Bits(f,ty env t))
+    | A.Char( c, None)      -> Rtl.Const(Rtl.Bits(c,bits T.word))
+    | A.Char( c, Some t)    -> Rtl.Const(Rtl.Bits(c, ty env t))
+    | A.Fetch(v)            -> let width = bits (Expr.tyFetch env v) in 
+                               Rtl.Fetch(lvalue env v,width)
+    | A.BinOp(l,op,r)       -> primOp env op [l;r]
+    | A.UnOp(op,e)          -> primOp env op [e]
+    | A.PrimOp(op,xs)       -> primOp env op (List.map snd xs) (* ignore hints*)
+    
 
 
 <<>>=
@@ -182,7 +196,6 @@ let rec flow env ir = function
     | A.Aborts          -> true
 
 <<>>=
-let flows env ir       = true
 let conv env ir        = true
 let export env ir t ns = true
 
@@ -192,6 +205,16 @@ let range env ir = function
     | A.Range(e1,e2)    -> true
 
 @ 
+
+<<>>=
+let rec flows cont = function 
+| (A.FlowAt (x,_)):: xx -> flows cont (x::xx)
+| (A.CutsTo n)    :: xx -> flows {cont with GM.cuts    = n @ cont.GM.cuts } xx
+| (A.UnwindsTo n) :: xx -> flows {cont with GM.unwinds = n @ cont.GM.unwinds} xx 
+| (A.ReturnsTo n) :: xx -> flows {cont with GM.returns = n @ cont.GM.unwinds} xx 
+| (A.Aborts)      :: xx -> flows {cont with GM.aborts  = true } xx
+| []                    -> cont     
+@
 
 % ------------------------------------------------------------------ 
 \paragraph{Statements} 
@@ -226,10 +249,6 @@ let body env props graph s =
     let n2 = List.fold_right stmt ss2 after in
     props (GM.branch (expr env e) n1 n2)
 @
-[[un_const]] should take a compile-time constant expression and
-produce a small itneger.  [[un_const]] is surely the wrong name.
-
-We have omitted the hints!!!
 
 <<cases for translating statements>>=
 | A.ReturnStmt(cc, alt, args) ->
@@ -239,11 +258,34 @@ We have omitted the hints!!!
         props (GM.copy_out (List.map (actual env) args) Fgraph.ProcResults cc (
         props (GM.return graph (un_const cont) (un_const count))))
 
+<<cases for translating statements>>=
+| A.LabelStmt(n)                       -> props (GM.label n after)
+    
+@
+
+A call [[x,y = f()]] is translated into a [[Call]]-node, followed by a
+[[CopyIn]] node for the locations [[x]] and [[y]].  Since we build the
+graph backwards the [[CopyIn]] node comes first.  The lvalue of a call
+is guaranteed to be a variable.  It must be translated into a
+[[Rtl.formal]] value which is done by the local [[lvalue]] function. 
+
+
+<<cases for translating statements>>=
+| A.CallStmt(lhs, cc, e, args, ts, fs) ->
+    let rec lvalue = function
+        | A.LValueAt(x,_) -> lvalue x
+        | A.Var(hint,n)   -> (n,tyOf n env ,hint)
+        | A.Mem _         -> assert false
+    in     
+    let cc   = Aux.Option.get default_convention cc in
+    let copy = GM.copy_in (List.map lvalue lhs) Fgraph.ProcResults cc after in 
+    let cont = GM.empty_cont (props copy)           in
+    let call = GM.call (expr env e) cont            in
+        props call
+    
 <<more cases for translating statements>>=
-| A.LabelStmt(n)                       -> true
 | A.ContStmt(n,ns)                     -> true
 | A.SpanStmt(e1,e2,ss)                 -> true
-| A.CallStmt(lhs, cc, e, args, ts, fs) -> true
 | A.PrimStmt(lhs, cc, n, args, fs)     -> true
 | A.GotoStmt(e,ts)                     -> true
 | A.CutStmt(e, args, fs)               -> true
@@ -321,11 +363,55 @@ The translation of {\PAL} expressions to {\rtl} expressions requires
 the types of {\PAL} expression and sometimes their values as well. 
 There is code for both in the \module{elab} module.  Unfortunately
 they are implemented against the [[Fenv.Dirty]] environment. 
-Factoring this out is no small job. For the moment we provide some new
-code here.
+Factoring this out is no small job.  For the moment we provide some
+new code here.
 
 <<module Expr>>=
+let rec evalTy env = function
+    | A.TyAt(x,r)    -> evalTy env x
+    | A.BitsTy(size) -> Types.Bits size
+    | A.AliasTy(n)   -> snd (F.findt n env)
+
+let rec tyFetch env = function
+    | A.LValueAt(x,r) -> tyFetch env x
+    | A.Var(hint,id)  -> (match F.findv id env with (attr,(_,t)) -> t)
+    | A.Mem (t,e,a)   -> 
+        let te    = tyExpr env e       in       (* unused *)
+        let t'    = evalTy env t       in       
+        let align = Aux.Option.get 1 a in
+            t'
+@       
+
+For now we are using the types of the primitive constant operators. 
+All primitive runtime operators will go into their own module
+[[Primitives]].  So we have to fix the [[lookup]] later.
+
+<<>>=
+and tyPrimOp env op args =
+    let at = List.map (tyExpr env) args          in
+    let ot = snd (Value.Ops.lookup op Value.ops) in
+        Types.appl ot at
+
+and op env o args =
+    let at = List.map (tyExpr env) args          in
+    let ot = snd (Value.Ops.lookup o Value.ops) in
+        o,Types.widthlist ot at
+
+<<>>=
+and tyExpr env = function
+    | A.ExprAt(x,r)            -> tyExpr env x
+    | A.Int   (str, Some t)    -> evalTy env t
+    | A.Int   (str, None)      -> T.word
+    | A.Float (str, Some t)    -> evalTy env t
+    | A.Float (str, None)      -> T.word
+    | A.Char  (str, Some t)    -> evalTy env t
+    | A.Char  (str, None)      -> T.word
+    | A.Fetch (v)              -> tyFetch env v
+    | A.BinOp (l,op,r)         -> tyPrimOp env op [l;r]
+    | A.UnOp  (op,expr)        -> tyPrimOp env op [expr]
+    | A.PrimOp(op,args)        -> tyPrimOp env op (List.map snd args)
 @
+
 
 % ------------------------------------------------------------------ 
 \subsubsection{Exported top-level functions}

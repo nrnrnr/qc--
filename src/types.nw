@@ -70,7 +70,8 @@ be violated.
 exception MatchExn
 
 <<appl>>=
-val appl   : tyscheme -> ty list -> ty (* raises matchExn *)
+val appl      : tyscheme -> ty list -> ty       (* raises matchExn *)
+val widthlist : tyscheme -> ty list -> int list (* raises matchExn *)
 @
 
 Some operators encode the size of their return values in their name: 
@@ -202,8 +203,9 @@ let widthlist (args',r) args =
     let sigma  = ( try List.fold_left match' sigma pairs with
                  | MatchExn -> E.error "type error in application"
                  )                                           in
-       List.sort (fun (key1,val1) (key2,val2) -> compare key1 key2) 
-                 (S.dump sigma) 
+    let sorted = List.sort (fun (key1,val1) (key2,val2) -> compare key1 key2) 
+                 (S.dump sigma)                              in
+        List.map snd sorted
 @
 
 
