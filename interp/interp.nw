@@ -9,6 +9,10 @@
 \pagestyle{noweb} 
 \input{../config/macros.tex}
 
+\def\remark#1{\marginpar{\raggedright\hbadness=10000
+        \def\baselinestretch{0.8}\scriptsize
+        \it #1\par}}
+
 \input{interp-macros.tex}
 
 \begin{document}
@@ -25,9 +29,11 @@ This document has been thoroughly restructured, but the content (i.e. the code) 
 \section{The Quick~{\PAL} Interpreter Assembly Language}
 
 \subsection{Source Code Functions}
-The Quick~{\PAL} Interpreter, in its present state, reads in Lua source code that may make use of standard Lua functions as well as the following {\PAL} related functions:\\
-\\
-\begin{tabularx}{\linewidth}{|lX|X|}\hline
+The Quick~{\PAL} Interpreter, in its present state, reads in Lua
+source code that may make use of standard Lua functions as well as the
+following {\PAL} related functions:\\ 
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}%
+\begin{tabularx}{\linewidth}{|lY|Y|}\hline
 [[CMM_section]]             &$(string$ [[name]]$)$                  &
 Begins the definition of a section named [[name]].
 \\\hline
@@ -497,7 +503,13 @@ typedef enum {
   ROUND_ZERO    = 03U
 } rounding_mode;
 @ 
-So the interpreter can properly simulate the execution of {\PAL} code on a target machine, we must also keep track of such architecture-related information as byte-order.
+So the interpreter can properly simulate the execution of {\PAL} code
+on a target machine, we must also keep track of such
+architecture-related information as byte-order. 
+\remark{There should be some sort of check at startup time to ensure
+that byte order is consistent with the machine running the
+interpreter.
+That check should be written here.}
 <<architecture information types>>=
 typedef enum {
   LITTLE,

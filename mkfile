@@ -17,6 +17,14 @@ SRC     =       src
 LIBSRC  =       cllib lua asdl rtl gen camlburg tools
 SUBDIRS =       $LIBSRC $SRC
 
+# A note on profiling.  Profiling is controlled in subdirectories by a
+# PROFILE variable in each mkfile.  Profiling is turned on by default,
+# but it is not clear whether this is a sensible default.  It might
+# even be sensible for different directories to have different
+# defaults.  Since we use profiling only for native-code binaries,
+# maybe it just doesn't matter.
+
+
 # ------------------------------------------------------------------ 
 # high level targets
 # ------------------------------------------------------------------ 
