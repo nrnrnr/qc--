@@ -110,9 +110,10 @@ let saved_nvr temps =
 
 \paragraph{Conventions}
 
-The documentation of the calling convention is incomplete. The alignment
-of the stack pointer is not explicitly mentioned but I assume it to be
-4-byte aligned and each element on the stack also to be 4-byte aligned.
+Stack pointer alignment is tricky. It is not mentioned in the
+architecture manual and also seems to depend on the operating system.
+The SGI IRIX 5.x require 8-byte alignment, SGI IRIX 6.x 16-byte
+alignment. LCC therefore always uses 16-byte alignment.
 
 <<mipscall.ml>>=
 let ra        = R.reg (r 31)            (* return address *)
@@ -120,7 +121,7 @@ let sp        = R.reg (r 29)            (* stack pointer  *)
 let spval     = R.fetch sp 32
 let growth    = Memalloc.Down           (* stack grows down *)
 let byteorder = R.LittleEndian         
-let sp_align  = 4                       (* SP always 4-byte aligned *)
+let sp_align  = 16                      (* SP always 16-byte aligned *)
 
 let std_sp_location = 
     RU.add 32 vfp (R.late "minus frame size" 32)
