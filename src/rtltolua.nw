@@ -49,7 +49,8 @@ let push   kind c = luafunc ("push_" ^ kind) c
 let nopush kind c = c
 
 let valstack   op s = op ^ s
-let argstack        = valstack
+let argspace        = valstack
+let globalspace     = valstack
 let commentout _  _ = "comment"
 
 let tybits b = 
@@ -66,8 +67,8 @@ let const f c =
     | R.Bits b        -> f "literal" (hexbits b ^ "," ^ 
                                       string_of_int (Bits.width b))
 
-    | R.Link(sym, w)  -> f "symbol" (quoted sym#text)
-    | R.Late(name, w) -> f "symbol" (quoted name)
+    | R.Link(sym,  _) -> f "symbol" (quoted sym#text)
+    | R.Late(name, _) -> f "symbol" (quoted name)
 @ 
 
 <<ToLua>>=
@@ -91,6 +92,17 @@ let alignment _ = "0"
 let rec expr' f e =
 	match e with
     | R.Const c           -> const f c
+
+	| R.Fetch(R.Mem (_,_,_,R.App(_,(R.Fetch(R.Reg('c',1,_),_))::ee),_), _) -> 
+        let examine appexp =
+          match appexp with
+		  |	(R.Const (R.Bool _)) -> ""
+	      | (R.Const (R.Bits _)) -> ""        
+          | (R.Const c)          -> const f c
+          | (_)                  -> ""
+        in
+            (String.concat "\n" (List.map examine ee))
+
     | R.Fetch(loc, _)     -> 
 		let (prefix, func_f, func_suffix, args) = location' loc in
 		prefix ^ luafunc (func_f "fetch" func_suffix) args
@@ -109,10 +121,17 @@ and location' = function
 
     | R.Reg   ('A', i, width)        -> 
 		( ""
-		, argstack
+		, argspace
 		, "_arg"
 		, string_of_int i
 		)
+
+    | R.Reg   ('G', i, width)        ->
+        ( ""
+        , globalspace
+        , "_global"
+        , string_of_int i
+        )
 
     | R.Reg   (sp, i, width)         -> 
 		( ""
@@ -126,7 +145,14 @@ and location' = function
         , "_local"
         , string_of_int index
         )
-                                          
+                         
+    | R.Slice (2, 0, R.Reg ('c', 4, w)) ->
+        ( "-- "             (* we comment out for now *)
+        , valstack
+        , "_roundmode"
+        , ""
+        )
+                 
     | R.Slice (w, i, loc)              -> 
         let (p, ff, s, a) = location' loc in ("-- slice\n" ^ p, ff, s, a)
 
@@ -163,8 +189,8 @@ need. Therefore I will comment out this code for now.
 
 <<ToLua>>=
 let rec rtl' fd (R.Rtl gg) = match gg with
-
     | [] -> fprintf fd "-- skip\n"    
+
     | _  -> List.iter (print_guarded fd) gg   (* standard RTL *)
 
 

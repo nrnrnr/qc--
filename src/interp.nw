@@ -188,8 +188,8 @@ description is quite inaccurate \emph{and need to be improved.}
 let argument x  = R.reg ('A', x, 1)
 let global   x  = R.reg ('G', x, 1)
 
-let store_arg i e  = R.store (argument i) e (ewidth e)
-let fetch_arg i w  = R.fetch (argument i) w
+let store_space sp i e = R.store (sp i) e (ewidth e)
+let fetch_space sp i w = R.fetch (sp i) w
 @
 
 % ------------------------------------------------------------------ 
@@ -201,8 +201,8 @@ let fp_mode               = Rtl.reg('d',0,2)           (* FP rounding mode *)
 
 class argument_location (index:int): Automaton2.location =
 object
-    method store expr width = Flow.store_arg index expr
-    method fetch width      = Flow.fetch_arg index width
+    method store expr width = Flow.store_space Flow.argument index expr
+    method fetch width      = Flow.fetch_space Flow.argument index width
     method to_loc           = assert false
 end
 
@@ -241,8 +241,8 @@ class global_location (index:int) (width:int): Automaton2.location =
         let s = Printf.sprintf "global_%d" index in 
         R.var s index width
 in object
-    method store expr width = R.store var expr width
-    method fetch width      = R.fetch var width
+    method store expr width = Flow.store_space Flow.global index expr
+    method fetch width      = Flow.fetch_space Flow.global index width
     method to_loc           = var
 end
 
@@ -251,8 +251,8 @@ class globals (base:Rtl.exp): Automaton2.automaton =
 object (this)
     val mutable _block  = Block.at base (*size*) 0 (*align*) 1  
     val mutable _frozen = false
-    val mutable _index  = 0
-    
+    val mutable _index  = -1
+
     method freeze () =
         let _ = _frozen <- true in
         { A.overflow = _block; A.sp_value = base } 
@@ -264,7 +264,7 @@ object (this)
         | Some "IEEE 754 rounding mode" -> new loc fp_mode
         | Some x -> Impossible.impossible ("unknown hardware register "^x) 
         | None   -> ( _index <- _index + 1
-                    ; new global_location _index width
+                    ; new global_location _index width 
                     )
 end
 @
