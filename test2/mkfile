@@ -15,25 +15,17 @@
 # To add a new test case 'foo':
 #
 #   (1) add src/foo.c--
-#   (2) add src/foo.0       if the compiled foo needs input from stdin
-#   (3) mk  src/foo.record  runs foo.c-- for all targets, records outputs
+#   (2) add src/foo.0           if the compiled foo needs input from stdin
+#   (3) mk  -a src/foo.record   runs foo.c-- for all targets, records outputs
 #   (4) cvs add src/foo.* target/foo.*
 #
 # To run an individual test src/foo.c-- on all targets: 
 #
 #   mk src/foo.test  
 #
-# Note: the command line of qc-- will change and we will have to update
-# both this mkfile and testqc to do the right thing. In particular, one 
-# the -o flag works, we will also have to update all test cases.
-#
 # ------------------------------------------------------------------ 
 # Variables
 # ------------------------------------------------------------------ 
-
-#
-#
-
 
 TOP =           ..
 <               $TOP/config/noweb.mk
@@ -53,7 +45,7 @@ TESTFLAGS =
 # ------------------------------------------------------------------ 
 # High level virtual targets. 
 # all            - run all test on all targets
-# *.record       - update test cases for a target; use with care
+# *.record       - update test cases for a target; use with care and -a
 # ------------------------------------------------------------------ 
 
 all:V:              dummy-test x86-test
@@ -92,7 +84,7 @@ dummy-test:QV:  testqc
                 echo -n "# "
                 for f in $TESTS; do
                     ./testqc $TESTFLAGS -target=dummy $f
-                    echo -n '.'
+                    echo -n '#'
                 done
                 echo 
 
@@ -101,7 +93,7 @@ x86-test:QV:    testqc
                 echo -n "# "
                 for f in $TESTS; do
                     ./testqc $TESTFLAGS -target=x86 $f
-                    echo -n '.'
+                    echo -n '#'
                 done
                 echo
 
