@@ -110,8 +110,9 @@ function Debug.showblocks(blocks, keys, prefix)
     if type(block) == 'table' then
       Debug.showblocks(block, {'caller', 'callee'}, keys[i] .. '.')
     else
-      write(format('block %17s is %d bytes at %s\n',
-                   (prefix or '') .. keys[i], Block.size(block), Block.base(block)))
+      write(format('block %17s is %2d bytes aligned %2d at %s\n',
+                   (prefix or '') .. keys[i], Block.size(block),
+		   Block.alignment(block), Block.base(block)))
       local constraints = Block.constraints(block)
       local j = 1
       while constraints[j] do
@@ -533,7 +534,14 @@ function Interp.layout(dummy, proc)
     return 1
 end
 @
+
+% ------------------------------------------------------------------ 
+\paragraph{Stack Layouts Elsewhere}
+% ------------------------------------------------------------------ 
  
+<<Lua compiler configuration>>=
+<<PPC stack layout in Lua>>
+@ 
 
 % ------------------------------------------------------------------ 
 \subsection{Graph-Coloring Register Allocator}
@@ -951,7 +959,7 @@ Backend.ppc =
   , expand    = Expander.ppc
   , liveness  = Liveness.liveness
   , ralloc    = Ralloc.dls
-  , freeze    = Dummy.layout
+  , freeze    = PPC.layout
   , rmvfp     = NewBackplane.seq
 		   { Stages.replace_vfp,
 		     Optimize.remove_nops }

@@ -389,30 +389,32 @@ bit by using the dummy module. I have changed that fields that both
 need to be different, and that I understand.
 <<transformations>>=
 let autoAt = A.at ~memsize:Post.memsize ~byteorder:Post.byte_order in 
+let linkage_base r = addk (Block.base r.A.overflow) (-24) in
 let call_actuals  =
   C.outgoing ~growth ~sp
     ~mkauto:(fun () -> Block.srelative vfp "out call parms" autoAt specs.A.call)
-    ~autosp:(fun r  -> Block.base r.A.overflow)
+    ~autosp:linkage_base
     ~postsp:(fun _ sp -> sp)
 and prolog  =
   let autosp = (fun _ -> vfp) in
   C.incoming ~growth ~sp
-    ~mkauto:(fun () -> Block.srelative vfp "in call parms" autoAt specs.A.call)
+    ~mkauto:(fun () -> autoAt (addk vfp 24) specs.A.call)
+       (* specific address is redundant, but eqn solver should take in stride *)
     ~autosp
     ~postsp:(fun _ _ -> std_sp_location)
     ~insp:(fun a _ _ -> autosp a)
 and call_results  =
-  let autosp = (fun r -> Block.base r.A.overflow) in
   C.incoming ~growth ~sp
     ~mkauto:(fun () -> Block.srelative vfp "in ovfl results" autoAt specs.A.results)
-    ~autosp
+    ~autosp:linkage_base
     ~postsp:(fun _ _ -> std_sp_location) (* irrelevant? *)
-    ~insp:(fun a _ _ -> autosp a)
+    ~insp:(fun a _ _ -> linkage_base a)
 and epilog  =
   C.outgoing ~growth ~sp
     ~mkauto:(fun () -> Block.srelative vfp "out ovfl results" autoAt specs.A.results)
-    ~autosp:(fun r -> Block.base r.A.overflow)
-    ~postsp:(fun _ _ -> vfp)  (* irrelevant *)
+    ~autosp:linkage_base
+    ~postsp:(fun _ r -> addk r (-99))  (* debugging with 99 *)
+(*    ~postsp:(fun _ r -> vfp)*)  (* irrelevant *)
 and also_cuts_to =
   let autosp = (fun r -> std_sp_location) in
   C.incoming ~growth ~sp
@@ -433,7 +435,8 @@ let cconv name specs =
   let ws              = Post.wordsize
   and growth          = Memalloc.Down
   and spval           = R.fetch sp 32
-  and std_sp_location = RU.add 32 vfp (R.late "minus frame size" 32)
+  and addk            = RU.addk 32
+  and std_sp_location = RU.add  32 vfp (R.late "minus frame size" 32)
   in <<transformations>> in
   { C.name             = name
   ; C.overflow_alloc   = { C.parameter_deallocator = C.Caller
@@ -507,60 +510,62 @@ A.register_cc(Backend.ppc.target,"C'"    ,PPC.cc["C"  ])
 A.register_cc(Backend.ppc.target,"C--"   ,PPC.cc["C--"])
 A.register_cc(Backend.ppc.target,"notail",PPC.cc["C--"])
 @ 
-<<PPC calling convention automata in Lua>>=
+<<PPC stack layout in Lua>>=
+PPC = PPC or {}
 PPC.layout = { creates='no late consts' }
 
-function PPC.layout["C"](dummy, proc)
-    local blocks       = Stack.blocks(proc)
-    blocks.oldblocks.callee   = Block.overlap_low(32,blocks.oldblocks.callee)
-    blocks.oldblocks.caller   = Block.overlap_low(32,blocks.oldblocks.caller)
-    blocks.youngblocks.callee = Block.overlap_low(32,blocks.youngblocks.callee)
-    blocks.youngblocks.caller = Block.overlap_low(32,blocks.youngblocks.caller)
-
-    local linkage =
-      { caller = Block.relative(blocks.vfp, "caller's linkage area", 24, 16)
-      , callee = Block.relative(blocks.vfp, "our linkage area", 24, 16)
-      }      -- Mach-O Runtime Conventions for PowerPC, pp47--48
-
-    -- assert that blocks.oldblocks.callee is empty
-    -- assert that blocks.youngblocks.callee is empty
-
-    local layout =
-        { blocks.oldblocks.caller  -- caller's parameter area
-        , linkage.caller
-        , blocks.vfp
-        , blocks.spills
-        , blocks.continuations
-        , blocks.stackdata
-        , blocks.youngblocks.caller -- callee's parameter area
-        , linkage.callee
-        , blocks.sp
-        }
-
-    if Debug.stack then
-        blocks.caller_linkage = linkage.caller
-        blocks.callee_linkage = linkage.callee
-        write('****** cc name = ', Stack.ccname(proc), '\n')
-        Debug.showblocks (blocks, { 'oldblocks'
-                                  , 'caller_linkage'
-                                  , 'vfp'
-                                  , 'continuations'
-                                  , 'spills'
-                                  , 'stackdata'
-                                  , 'youngblocks'
-                                  , 'callee_linkage'
-                                  , 'sp'
-                                  })
-    end
-    local block = Block.cat(32, layout)
-    block = Block.adjust(block)
-    Stack.freeze(proc, block)
-    return 1
+function PPC.layout.fn(dummy,proc) --- dispatch on cc name
+  return PPC.layout[Stack.ccname(proc)](dummy, proc)
 end
 
+function PPC.layout["C"](dummy, proc)
+  local blocks  = Stack.blocks(proc)
+
+  local old, young = blocks.oldblocks, blocks.youngblocks
+  old.callee   = Block.overlap_high(32, old.callee)
+  old.caller   = Block.overlap_low (32, old.caller)
+  young.callee = Block.overlap_high(32, young.callee)
+  young.caller = Block.overlap_low (32, young.caller)
+
+  local linkage =
+      { caller = Block.relative(blocks.vfp, "caller's linkage area", 24, 16)
+      , callee = Block.relative(blocks.sp , "our linkage area"     , 24, 16)
+      }     -- Mach-O Runtime Conventions for PowerPC, pp47--48
 
 
+  local layout =
+      { Block.cat (32, {old.caller, old.callee, linkage.caller})
+      , blocks.vfp
+      , blocks.spills
+      , blocks.continuations
+      , blocks.stackdata
+      , Block.cat (32, {young.caller, young.callee, linkage.callee})
+      , blocks.sp
+      }
+
+  if Debug.stack then
+      blocks.caller_linkage = linkage.caller
+      blocks.callee_linkage = linkage.callee
+      write('****** cc name = ', Stack.ccname(proc), '\n')
+      Debug.showblocks (blocks, { 'oldblocks'
+                                , 'caller_linkage'
+                                , 'vfp'
+                                , 'spills'
+                                , 'continuations'
+                                , 'stackdata'
+                                , 'youngblocks'
+                                , 'callee_linkage'
+                                , 'sp'
+                                })
+  end
+
+  local block = Block.cat(32, layout)
+  block = Block.adjust(block)
+  Stack.freeze(proc, block)
+  return 1
+end
 @ 
+
 % ---------------------------------------------------------------------------
 \section{Target Specification}
 % ---------------------------------------------------------------------------
