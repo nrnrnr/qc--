@@ -13,7 +13,7 @@ interval_list *interval_list_new   (void);
 interval_list *interval_list_add   (interval_list *list, unsigned long lower,
                                     unsigned long upper);
 interval_list *interval_list_remove(interval_list *list, unsigned long i);
-long           interval_list_member(interval_list *list, unsigned long i);
+int            interval_list_member(interval_list *list, unsigned long i);
 void           interval_list_free  (interval_list *list);
 void           interval_list_print (interval_list *list);
 void           interval_list_print_file(interval_list *list, FILE *out_file);
@@ -162,13 +162,13 @@ interval_list *interval_list_add(interval_list *list, unsigned long lower,
 	  return list;
       }
   } else {
-      beg->next  = NULL;
-      beg->upper = max(last->upper, upper);
-
       for (free_temp = beg->next, free_last = NULL; 
 	      free_temp != NULL && free_temp != temp;
 	      free_last = free_temp, free_temp = free_temp->next)
 	  free(free_last);
+
+      beg->next  = NULL;
+      beg->upper = max(last->upper, upper);
 
       return list;
   }
@@ -197,18 +197,20 @@ interval_list *interval_list_remove(interval_list *list, unsigned long i) {
 	    return list;
 	}
 
-	if (i > list->lower && i < list->upper) {
+	if (i > temp->lower && i < temp->upper) {
+
 	    new = (interval_list *) malloc(sizeof(interval_list));
 	    assert(new != NULL);
 	    new->next   = temp->next;
-	    new->lower  = temp->lower;
-	    new->upper  = i - 1;
-	    temp->lower = i + 1;
+	    new->lower  = i + 1;
+        new->upper  = temp->upper;
+
+        temp->next  = new;
+	    temp->upper = i - 1;
 
 	    if (last == NULL)
-		return new;
+		  return temp;
 
-	    last->next = new;
 	    return list;
 	}
     }
@@ -216,7 +218,7 @@ interval_list *interval_list_remove(interval_list *list, unsigned long i) {
     return list;
 }
 
-long interval_list_member(interval_list *list, unsigned long i) {
+int interval_list_member(interval_list *list, unsigned long i) {
     for ( ; list != NULL; list = list->next)
 	if (i >= list->lower && i <= list->upper)
 	    return 1;
