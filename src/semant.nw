@@ -79,7 +79,12 @@ let enter_ok key v env = enter key (Ok v) env
 let replace key v env =
     Symbol.enter key v env
 
-let lookup = Symbol.lookup
+let lookup x env = 
+    ( try Symbol.lookup x env with 
+    | ErrorExn _ -> error ("unkown identifier: "^x)
+    )
+
+
 @
 
 
@@ -349,7 +354,8 @@ The evaluation of the constants in the symbol table starts by
 collecting all (global) names in the symbol table that refer to
 constants and then passing them to [[evalConst]] one by one. Once a
 constant is evaluatated and type checked its entry in the symbol is
-replaced by the correct type and value.
+replaced by the correct type and value. When the evaluation of a
+constant fails its definition is replaced by [[Error]].
 
 <<driver>>=
 let eval env =
@@ -462,6 +468,161 @@ and evalConstID set env id =
         
 @
 
+% ------------------------------------------------------------------ 
+\subsection{Checking Static Semantics}
+% ------------------------------------------------------------------ 
+
+After phase two the symbol table contains all global symbols and their
+types and kinds. Constants have been evaluated such that their actual value is
+listed in the symbol Table. Symbols with an erroneous definition have
+value [[Error]] in the symbol table. Now the static semantics of the
+entire compilation unit can be checked.
+
+<<phase3 module>>=
+module Phase3 = struct
+    <<phase3>>
+end
+
+<<phase3>>=
+
+let foldl = List.fold_left
+
+let rec ty = function
+    | TyAt(x,_)       -> ty x
+    | BitsTy(n)       -> Types.Bits(n)
+    | FloatTy(n)      -> Types.Bits(n)
+    
+let rec lvalue env = function
+    | LValueAt(x,_)   -> Ok ()
+    | Var(x)          -> Ok ()
+    | Mem(t,e,a)      -> Ok ()
+                        
+and actual env = function
+    | ( Some hint, e) -> Ok ()
+    | ( None     , e) -> Ok ()
+
+and actuals env xs = env
+    
+and expr env = function
+    | ExprAt(x,_)             -> Ok () 
+    | Int( i, None)           -> Ok () 
+    | Int( i, Some size)      -> Ok () 
+    | Float( f, None)         -> Ok () 
+    | Float( f, Some size)    -> Ok () 
+    | Char( c, None)          -> Ok () 
+    | Char( c, Some size)     -> Ok () 
+    | Fetch(v)                -> Ok () 
+    | BinOp(l,op,r)           -> Ok () 
+    | UnOp(op,e)              -> Ok () 
+    | PrimOp(n,xs)            -> Ok () 
+
+let memsize env = function
+    | NoSize        -> Ok () 
+    | DynSize       -> Ok () 
+    | FixSize(e)    -> Ok () 
+
+let rec init env = function
+    | InitAt(x,_)   -> Ok ()
+    | InitExprs(es) -> Ok ()
+    | InitStr(s)    -> Ok ()
+    | InitUStr(s)   -> Ok ()
+
+let rec datum env = function
+    | DatumAt(x,_)        -> datum env x
+    | Label(n)            -> Ok ()
+    | Align(a)            -> Ok ()
+    | MemDecl(t,m,Some i) -> Ok ()
+    | MemDecl(t,m,None)   -> Ok ()
+
+let formal env ( h, v, t, n) = Ok ()
+let formals env xs = Ok()
+
+let register env ( v , t, n, reg) = Ok ()
+
+let rec decl env = function
+    | DeclAt(x,_)    -> Ok ()
+    | LRegisters(rs) -> Ok ()
+    | Stackdata( dd) -> Ok ()               
+
+let targets env = function
+    | []    -> Ok ()
+    | ts    -> Ok ()
+    
+let rec flow env = function
+    | FlowAt(x,_)     -> Ok ()
+    | CutsTo(ns)      -> Ok ()
+    | UnwindsTo(ns)   -> Ok ()
+    | ReturnsTo(ns)   -> Ok ()
+    | Aborts          -> Ok ()
+
+let flows env = function
+    | []    ->  Ok ()
+    | xs    ->  Ok ()
+
+
+let conv env = function
+    | Some cc       -> Ok () 
+    | None          -> Ok ()
+
+let rec stmt env = function
+    | StmtAt(x,_)                         -> stmt env x
+    | IfStmt ( e, ss1, ss2)               -> Ok ()
+    | LabelStmt(n)                        -> Ok ()
+    | ContStmt(n,ns)                      -> Ok ()
+    | SpanStmt(e1,e2,ss)                  -> Ok ()
+    | AssignStmt(xs)                      -> Ok ()
+    | CallStmt( lhs, cc, e, args, ts, fs) -> Ok ()
+    | PrimStmt( lhs, cc, n, args, fs)     -> Ok ()
+    | GotoStmt(e,ts)                      -> Ok ()
+    | CutStmt(n, args, fs)                -> Ok ()
+    | ReturnStmt(cc, alt, args)           -> Ok ()
+    | JumpStmt(cc,e,args,ts)              -> Ok ()
+    | EmptyStmt                           -> Ok ()
+
+let stmts env ss = foldl stmt env ss
+
+let constant env (name,expr) = Ok ()
+
+let procedure cc fs ds ss = Ok ()
+    
+let rec section env = function
+    | SectionAt(x,_)             -> section env x
+    | SSpan( e1, e2, ss)         -> foldl section env ss
+    | Datum( d)                  -> Ok () (* datum env d *)
+    | SExport (t, ns)            -> Ok ()
+    | Procedure(cc,n,fs, ds, ss) -> procedure cc fs ds ss
+
+     
+let export' env t n (t',kind) =
+    ( match t, t', kind with
+    | Some t , t', Memory when ty t = t'    -> ()
+    | None   , t', Memory                   -> ()
+    | Some t , t', Memory                   -> 
+        error "declared type does not match actual type"
+    | otherwise                         ->      
+        error ("value "^n^" can't be exported")
+    )
+
+let export env ty n = emap (export' env ty n) (lookup n env) 
+    
+
+let rec topdecl env = function
+    | TopDeclAt(x,r)  -> catch (errorRegPrt r) (topdecl env) x
+    | Import( t, ns)  -> Ok ()
+    | Export( t, ns)  -> ignore (List.map (export env t) ns) ; Ok ()
+    | Const ( cs)     -> Ok ()
+    | Section( n, ss) -> Ok ()
+    | Registers( rs)  -> Ok () (* already checked in phase 1 *)
+    | Pragma          -> Ok () (* nothing to do *)
+    | TopProcedure(n,cc,fs,ds,ss) -> Ok()
+
+let program' env ds srcmap = 
+    List.map (topdecl env) ds  
+                                            
+let program env ds srcmap =
+    Raise.list (program' env ds srcmap)            
+@
+
 % ------------------------------------------------------------------  
 \subsection{Checking a File}
 % ------------------------------------------------------------------ 
@@ -483,7 +644,11 @@ let check file =
             ; let ast  = Parse.program scanner lexbuf in
               let env  = Phase1.program ast map in
               let env' = Phase2.eval env        in
-                    Ok (ppToFile stdout 72 (Print.ppEnv env'))
+                  ( match Phase3.program env' ast map with
+                  | Error -> Error
+                  | _     -> Ok ()
+                  )
+                    
             ) 
         with
             | Parsing.Parse_error -> 
@@ -524,6 +689,7 @@ open Error
 <<print module>>
 <<phase1 module>>
 <<phase2 module>>
+<<phase3 module>>
 
 <<check>>
 
