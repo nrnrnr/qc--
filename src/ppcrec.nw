@@ -186,6 +186,9 @@ inst : Guarded(OvSet(Fetch(xerl,32)), Goto(lconst))
 \paragraph{Arithmetic instructions}
 
 <<rules>>=
+inst:  Store(dst:regl, Zx(Fetch(Mem(Fetch(src:regl,32)),8)), 32)
+       {: "lbz " ^ dst ^ ",0(" ^ src ^ ")" :}
+
 inst:  Store(regl, Add(x:reg,y:reg), w:int)
        {: "add "  ^ regl ^ "," ^ x    ^ "," ^ y     :}
 inst:  Store(regl, Add(x:reg,y:const16), w:int)
@@ -234,6 +237,8 @@ any : Late(string, w) {: "Late(" ^ string ^ "," ^ string_of_int w ^")" :}
 any : Bits(bits)     {: sprintf "Bits(%s)" (Bits.to_string bits) :}
 
 any : Fetch (any, w:int) {: "Fetch(" ^ any ^ "," ^ string_of_int w ^ ")" :}
+
+any : Zx(any) {: "Zx(" ^ any ^ ")"  :}
 
 any : Add(x:any, y:any) {: "Add(" ^ x ^ ", " ^ y ^ ")" :}
 any : Sub(x:any, y:any) {: "Sub(" ^ x ^ ", " ^ y ^ ")" :}
@@ -288,6 +293,7 @@ let cmp = ["eq";"ge";"geu";"gt";"gtu";"le";"leu";"lt";"ltu";"ne"]
 let rec exp = function
   | RP.Const(k)               -> const (k)
   | RP.Fetch(l,w)             -> conFetch (loc l) w
+  | RP.App(("zx",   ws), [x])    -> conZx (exp x)
   | RP.App(("add",  ws), [x; y]) -> conAdd  (exp x) (exp y)
   | RP.App(("sub",  ws), [x; y]) -> conSub  (exp x) (exp y)
   | RP.App(("mul",  ws), [x; y]) -> conMul (exp x) (exp y)
