@@ -194,7 +194,8 @@ every section is in the [[__TEXT]] segment.
 <<assembly methods>>=
 method section name =
   _section <- name;
-  fprintf _fd ".%s\n" name
+  if name = "text" then fprintf _fd ".text\n"
+  else fprintf _fd ".section __DATA,%s\n" name
 method current = _section
 <<private assembly state>>=
 val mutable _section = "bogus section"
@@ -266,9 +267,12 @@ This means layering the abstraction with a common subtype for
 instruction-based assemblers.
 <<assembly methods>>=
 method private instruction rtl =
-  output_string _fd "\t";
-  output_string _fd (Ppcrec.M.to_asm rtl (!imports));
-  output_string _fd "\n"
+  let Rtl.Private.Rtl es = Rtl.Dn.rtl rtl in
+  match es with
+  | [] -> ()
+  | _  -> output_string _fd "\t";
+          output_string _fd (Ppcrec.M.to_asm rtl (!imports));
+          output_string _fd "\n"
 
 method private emit_pic symbol =
   let label = "L" ^ symbol#original_text in
