@@ -1,0 +1,32 @@
+target byteorder little wordsize 32;
+
+import bits32 printf;
+
+export main;
+
+section "data"
+{
+    align 8;
+    success:
+    bits8[] "success\n\000";
+    align 8;
+    failed:
+    bits8[] "failed\n\000";
+}
+
+foreign "C" main("unsigned" bits32 iargc, "address" bits32 iargv)
+{
+    foreign "C" callee ("int" 0xab54e2a3::bits32);
+    return ();
+}
+
+foreign "C" callee("int" bits32 i0)
+{
+    if (i0!=0xab54e2a3::bits32)
+    {
+        foreign "C" printf ("address" failed);
+        return ();
+    }
+    foreign "C" printf ("address" success);
+    return ();
+}
