@@ -10,6 +10,15 @@ functor parameter.
 This interface is a key for clients because it not only specifies what
 a Lua value is, but also provides higher-order embedding/projection
 pairs so that Caml values can be mapped to Lua values and back again.
+
+We begin with embedding/projection, which is shared among all modules
+matching [[Luavalue.S]].
+We need a synonym because to re-export [[ep]] and [[ep]] would be
+consider a circular type defintion.
+<<signatures>>=
+type ('a, 'b) ep = { embed : 'a -> 'b; project : 'b -> 'a }
+type ('a, 'b) synonym_for_ep = ('a, 'b) ep = { embed : 'a -> 'b; project : 'b -> 'a }
+@ 
 <<signatures>>=
 module type S = sig
   type 'a userdata'
@@ -61,9 +70,11 @@ interface found in~C.
 Instead, we use higher-order functions to whip up functionality as needed.
 If a projection fails, it raises [[Projection]] giving the value it
 tried to project and a string indicating what it tried to project to.
+We re-export [[ep]] to make it easier for clients to get the [[embed]]
+and [[project]] fields from the locations of their choice.
 <<signatures>>=
   exception Projection of value * string
-  type ('a,'b) ep = { embed : 'a -> 'b; project : 'b -> 'a }
+  type ('a, 'b) ep = ('a, 'b) synonym_for_ep = { embed : 'a -> 'b; project : 'b -> 'a }
   type 'a map  = ('a, value) ep
   type 'a mapf  (* used to build function maps that curry/uncurry *)
 @ 
@@ -263,7 +274,7 @@ let activation_strings g ((uid, file, line) as info, current) =
 Now, for embedding and projection.  More repeats.
 <<value toplevel>>=
 exception Projection of value * string
-type ('a,'b) ep = { embed : 'a -> 'b; project : 'b -> 'a }
+type ('a,'b) ep = ('a, 'b) synonym_for_ep = { embed : 'a -> 'b; project : 'b -> 'a }
 type 'a map  = ('a, value) ep
 type 'a mapf = ('a, value list -> value list) ep
 @
