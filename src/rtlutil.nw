@@ -76,18 +76,7 @@ Register allocation requires to re-write an {\rtl} by substituting
 registers inside. The translation of a procedure creates expressions
 that contain [[Rtl.link]] values that later must be substituted for
 compile-time constants. Substitutions for locations, registers. and
-expressions are provided by the [[Subst]] sub-module:
-
-<<rtlutil.mli>>=
-module Subst: sig       (* DEPRECATED *)
-    val loc:    (Rtl.loc    -> Rtl.loc)    -> Rtl.rtl -> Rtl.rtl
-    val reg:    (Register.t -> Register.t) -> Rtl.rtl -> Rtl.rtl
-    val exp:    (Rtl.exp    -> Rtl.exp)    -> Rtl.rtl -> Rtl.rtl
-end
-@
-
-The substitution module [[Subst2]] is a replacement for [[Subst]] and
-is hopefully easier to use. 
+expressions are provided by the [[Subst2]] sub-module:
 
 <<rtlutil.mli>>=
 module Subst2: sig
@@ -111,10 +100,8 @@ new location. The location returned by [[map]] is taken literally and
 not further traversed by [[loc]]. If a location fails to pass the
 [[guard]] it is recursively traversed to substitute locations within.
 
-
 Function [[exp]] works like [[loc]], except that it substitutes
 expressions.
-
 
 Function [[reg]] substitutes registers in an {\rtl}. It takes a
 [[lookup]] function for [[Rtl.spaces]] and a [[map]] function that
@@ -186,10 +173,6 @@ end
 module ReadWrite = struct
     <<ReadWrite>>
 end
-
-module Subst = struct
-    <<Subst>>
-end    
 
 module Subst2 = struct
     <<Subst2>>
@@ -283,126 +266,6 @@ let sets (rtl:Rtl.rtl) =
         (left, Register.Set.add (reg space index width) right) in
     let empty = (Register.Set.empty, Register.Set.empty) in
         fold ~read:add_left ~write:add_right rtl empty
-@
-
-% ------------------------------------------------------------------ 
-\subsection{Substitutions inside RTLs}
-% ------------------------------------------------------------------ 
-
-<<Subst>>=
-let loc map rtl = 
-    let rec exp = function
-        | RP.Fetch (l, width)    -> RP.Fetch(loc l, width)
-        | RP.App(opr, exprs)     -> RP.App(opr, List.map exp exprs)
-        | x                      -> x
-    and loc l                    = Rtl.Convert.loc (map (Rtl.Revert.loc l)) 
-    and effect = function
-        | RP.Store (l,e,width)   -> RP.Store(loc l, exp e, width)
-        | RP.Kill  (l)           -> RP.Kill (loc l)
-    and guarded (e,eff)          = (exp e, effect eff)
-    and subst (RP.Rtl rtl)       = RP.Rtl (List.map guarded rtl)
-    in    
-        Rtl.Revert.rtl (subst (Rtl.Convert.rtl rtl))
-@
-
-A register is a special kind of location. The [[reg]] function uses
-[[loc]] to traverse an {\rtl}. The register transformation function
-[[f]] is itself transformed into an location transformation function
-[[aux]] that is passed to [[loc]].
-
-<<Subst>>=
-let reg (f:Register.t -> Register.t) rtl = 
-    let rec auxExp sp width exp = match exp with
-      | RP.Const (RP.Bits bits) ->      (* what happens here? -CL? *)
-            let register            = (sp, Bits.to_int bits, width)  in
-            let index_width         = Bits.width bits                in
-            let (_,index',_)        = f register (* transform! *)    in
-                RP.Const (RP.Bits (Bits.of_std_int index' index_width))
-      | RP.Fetch(l, w) ->
-                RP.Fetch(Rtl.Convert.loc (aux (Rtl.Revert.loc l)), w)
-      | RP.App(opr, exps) ->
-                RP.App(opr, List.map (auxExp sp width) exps)
-      | x -> x  (* not a register *)
-    
-    and aux = fun loc -> 
-        ( match Rtl.Convert.loc loc with
-        | Rtl.Private.Cell ( sp
-                           , agg
-                           , width
-                           , (RP.Const(RP.Bits bits) as exp)
-                           , ass
-                           ) ->
-            ( try
-                let register            = (sp, Bits.to_int bits, width)  in
-                let index_width         = Bits.width bits                in
-                let (sp',index',width') = f register (* transform! *)    in
-                let loc' = Rtl.Private.Cell
-                    ( sp'
-                    , agg
-                    , width'
-                    , auxExp sp width exp
-                    , ass
-                    ) 
-                in 
-                    Rtl.Revert.loc loc'
-              with Bits.Overflow -> loc (* not a register *)
-            )
-        | Rtl.Private.Cell (sp, agg, width, (RP.Fetch _ as exp), ass) ->
-                Rtl.Revert.loc (Rtl.Private.Cell ( sp
-                                                 , agg 
-                                                 , width 
-                                                 , auxExp sp width exp 
-                                                 , ass))
-        | Rtl.Private.Cell (sp, agg, width, (RP.App(opr, exps) as exp), ass) ->
-                Rtl.Revert.loc (Rtl.Private.Cell ( sp
-                                                 , agg 
-                                                 , width 
-                                                 , auxExp sp width exp 
-                                                 , ass))
-        | _                    -> loc   (* not a register *)
-        )
-    in
-        loc aux rtl
-@
-
-<<Subst>>=
-let exp map rtl =
-    let rec exp' e                 = Rtl.Convert.exp (map (Rtl.Revert.exp e)) 
-    and loc = function
-        | RP.Cell (ap,agg,w,e,ass) -> RP.Cell(ap, agg, w, exp' e, ass)
-        | RP.Slice (w,i,l)         -> RP.Slice(w,i,loc l)
-        | x                        -> x
-    and effect = function
-        | RP.Store (l,e,width)     -> RP.Store(loc l, exp' e, width)
-        | RP.Kill  (l)             -> RP.Kill (loc l)
-    and guarded (e,eff)            = (exp' e, effect eff)
-    and subst (RP.Rtl rtl)         = RP.Rtl (List.map guarded rtl)
-    in    
-        Rtl.Revert.rtl (subst (Rtl.Convert.rtl rtl))
-@
-
-
-<<RTLType>>=
-let singleAssignment rtl =
-    let rec firstAssignment rtls = match rtls with
-    | [] -> (None, [])
-    | (RP.Const(RP.Bool true), RP.Store(loc1, RP.Fetch(loc2, _), _))::rst ->
-        (try (Some (Register.of_loc (Rtl.Revert.loc loc1),
-                    Register.of_loc (Rtl.Revert.loc loc2)),
-              rst)
-        with Invalid_argument _ -> (None, []))
-    | _::rst -> firstAssignment rst in
-    let getFirstAssignment (RP.Rtl guardeds) = firstAssignment guardeds in
-
-    let isKill rtl = match rtl with
-    | (RP.Const(RP.Bool true), RP.Kill _) -> true
-    | _ -> false in
-    let rec allKills rtls = List.for_all isKill rtls in
-
-    let (assign, rst) = getFirstAssignment (Rtl.Convert.rtl rtl) in
-        match assign with
-        | Some _ when allKills rst -> assign
-        | _ -> None
 @
 
 % ------------------------------------------------------------------ 

@@ -247,7 +247,7 @@ let context t =
   fun e -> if is_float_exp e then float_temp else first_temp
 @ 
 <<expander.ml>>=
-module G  = Cfg3
+module G  = Cfg4
 module GU = Cfgutil
 let cfg _ proc =
   let g = proc.Proc.cfg in
@@ -257,10 +257,10 @@ let cfg _ proc =
   let expand = expand proc.Proc.temps (context t) in
   let modified = ref false in
   let exp n =
-    match expand (G.rtl n) with
+    match expand (G.instr n) with
     | last :: preds ->
         ignore (List.fold_left (fun n i -> G.gm_insert_assign_before i n) n preds);
-        G.set_rtl n (fun _ -> last);
+        G.upd_instr n (fun _ -> last);
         (match preds with [] -> () | _ :: _ -> modified := true)
     | [] -> assert false in
   List.iter exp nodes;

@@ -40,21 +40,9 @@ node in a control flow graph denotes the variables that are live
 The [[liveness]] function annotates the nodes in a control-flow graph
 [[cfg]] with the set of live registers \emph{after} that node.
 
-<<CFG>>=
-module type CFG = Cfg3.S with type locs = Register.Set.t          
-@
-
-\begin{quote}\it
-    Should [[Cfg3.S]] provide an equality predicate for [[Cfg3.loc]]
-    values? Here we are basically breaking the abstraction of
-    locations. --CL
-\end{quote}
-
-
 <<live.mli>>=
-<<CFG>>
-module Make(G: CFG): sig
-    val liveness: G.t -> unit
+module Make(G: Cfg4.S): sig
+    val liveness: G.rtlcfg -> unit
 end
 @
 
@@ -65,8 +53,7 @@ end
 
 
 <<live.ml>>=
-<<CFG>>
-module Make (G: CFG) = struct 
+module Make (G: Cfg4.S) = struct 
     module R = Register.Set
     module P = Cfgprop (* node properties *)
     <<struct Make>>
@@ -101,7 +88,7 @@ $$\mathit{live} =
 $$
 
 <<struct Make>>=
-let rec live (node:G.node) =
+let rec live node =
     let ( ++ ) = Register.Set.union in
     let ( -- ) = Register.Set.diff in
     let live_in n =

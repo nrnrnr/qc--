@@ -17,6 +17,7 @@ combined = 'a BackplaneT.combined)
     type 'a combined = 'a BackplaneT.combined
     module M (Interp : Lua.Lib.CORE with type 'a V.userdata' = 'a BackplaneT.combined) = struct
         module V = Interp.V
+        module G = Cfg4
     
         <<builtins>>
 
@@ -33,8 +34,8 @@ combined = 'a BackplaneT.combined)
 	let placeVars _ {Proc.cfg = cfg; Proc.target = target; Proc.temps = temps} =
 		<<walk RTL>>
 		let updateNode node tMap = 
-			let newRtl, tMap' = walkRtl (Cfg3.rtl node) tMap in
-			let _ = Cfg3.set_rtl node (fun _ -> newRtl) in
+			let newRtl, tMap' = walkRtl (G.instr node) tMap in
+			let _ = G.upd_instr node (fun _ -> newRtl) in
 				tMap' in
 		let _ = Cfgutil.fold_fwd cfg updateNode TM.empty in
         true

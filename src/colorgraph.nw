@@ -136,7 +136,7 @@ procedure Main()\\
 %-------------------------------------------------------------------
 
 <<graph coloring types>>=
-module G        = Cfg3
+module G        = Cfg4
 module T        = Target2
 module P        = Cfgprop
 module RM       = Register.Map
@@ -151,7 +151,7 @@ module CompareEdge = struct
 end
 module EdgeSet = Set.Make(CompareEdge)
 
-type move = G.node
+type move = G.rtlnode
 module CompareMoves = struct
     type t = move
     let compare = compare
@@ -214,7 +214,7 @@ type color = Register.t
 type colorGraph = { mutable adjSet : EdgeSet.t
                   ; mutable adjListMap : Register.t list RM.t
                   ; mutable degreeMap : int RM.t
-                  ; mutable moveListMap : G.node list RM.t
+                  ; mutable moveListMap : G.rtlnode list RM.t
                   ; mutable aliasMap : Register.t RM.t
                   ; mutable colorMap : color RM.t
                   ; mutable precolored : Register.t list
@@ -836,9 +836,9 @@ let applyColors cg {Proc.cfg = cfg; Proc.target = target} =
             (fun node () ->
                cfgSay [ string_of_int (G.number node)
                       ; ": "
-                      ; Rtlutil.ToString.rtl (Cfg3.rtl node)
+                      ; Rtlutil.ToString.rtl (G.instr node)
                       ; "\n"];
-               G.set_rtl node (Rtlutil.Subst2.reg ~lookup ~map:subst)) ()
+               G.upd_instr node (Rtlutil.Subst2.reg ~lookup ~map:subst)) ()
         ; true)
 let applyColors cg = applyColors (project cg)
 @
@@ -896,18 +896,18 @@ temp.
 let removeCoalescedMoves cfg coalescedMoves =
 (*
     let _ = cfgSay ["CoalescedMoves\n===========\n"] in
-        List.iter (fun n -> cfgSay [ string_of_int (Cfg3.number n)
+        List.iter (fun n -> cfgSay [ string_of_int (G.number n)
                                    ; " "
                                    ; Register.print (source n)
                                    ; " -> "
                                    ; Register.print (dest n)
                                    ; " "
-                                   ; Rtlutil.ToString.rtl (Cfg3.rtl n)
+                                   ; Rtlutil.ToString.rtl (G.instr n)
                                    ; "\n"
                                    ]
                                    ;
 *)
-        List.iter (fun n -> Cfg3.gm_delete_assign n) coalescedMoves
+        List.iter (fun n -> G.gm_delete_assign n) coalescedMoves
 
 let updateProgram cg {Proc.cfg = cfg} =
     let _ = removeCoalescedMoves cfg cg.coalescedMoves in
@@ -947,7 +947,7 @@ memory location [[mem]], where the value of the spillee is held.
 <<insert spills>>=
     let update proc (spillee, mem) node =
         let target = proc.Proc.target in
-        let reads, writes = reads_writes (G.rtl node) spillee in
+        let reads, writes = reads_writes (G.instr node) spillee in
         let lookup = Target2.space target in
             if reads || writes then
                     ( let tmp   = Talloc.Multiple.reg_like proc.Proc.temps
@@ -959,7 +959,7 @@ memory location [[mem]], where the value of the spillee is held.
                       ; if writes then 
                             (cfg_ins_lst_after  
                                 (target.T.spill  (T.space target) tmp mem) node)
-                      ; G.set_rtl node (Rtlutil.Subst2.reg ~lookup ~map:subst)
+                      ; G.upd_instr node (Rtlutil.Subst2.reg ~lookup ~map:subst)
                       )
                     ; Some tmp
                     )
@@ -1040,11 +1040,11 @@ where both are in the same register space.
 
 <<node observers>>=
     let source inst =
-        match Rtlutil.RTLType.singleAssignment (G.rtl inst) with
+        match Rtlutil.RTLType.singleAssignment (G.instr inst) with
         | Some (s, _) -> s
         | _ -> assert false
     let dest inst =
-        match Rtlutil.RTLType.singleAssignment (G.rtl inst) with
+        match Rtlutil.RTLType.singleAssignment (G.instr inst) with
         | Some (_, d) -> d
         | _ -> assert false
 
@@ -1055,7 +1055,7 @@ where both are in the same register space.
      *)
     let is_tmp (s,_,_) target = Target2.is_tmp target s 
     let isMoveInstruction inst t =
-        match Rtlutil.RTLType.singleAssignment (G.rtl inst) with
+        match Rtlutil.RTLType.singleAssignment (G.instr inst) with
         | Some ((s1,_,_) as r1, (s2,_,_) as r2)
             when is_tmp r1 t -> s1 = s2
         | _ -> false
@@ -1302,7 +1302,7 @@ let printCGInfo param _ = match project param with cg ->
 <<print CGInfo>>=
     let print_cfg cfg =
         cfgSay ["CFG\n===\n"];
-        fold_fwd cfg (fun n () -> cfgSay [Cfg3.print_node n; "\n"]) ();
+        fold_fwd cfg (fun n () -> cfgSay [(* Cfg3.print_node n;*) "\n"]) ();
         cfgSay ["END CFG\n===\n"]
     let pCFG _ {Proc.cfg = cfg} = print_cfg cfg; false
 @

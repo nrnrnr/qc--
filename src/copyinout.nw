@@ -71,7 +71,7 @@ convention.  Both are used at the translation of the caller and the
 callee to determine the location for the values being passed.
 
 <<copyinout.mli>>=
-module Make (G: Cfg3.S): sig
+module Make (G: Cfg4.S): sig        (* why is this a functor? -CL *)
     <<Make sig>>
 end
 
@@ -86,9 +86,9 @@ type formal =   { width:    Rtl.width
                 
 <<Make sig>>=
 <<type formal>>
-val copyin: G.t -> formal list -> Automaton.spec 
-                -> addr:Rtl.exp -> succ:G.node 
-                -> G.node * Area.t * Register.Set.t (* uses *)
+val copyin: G.rtlcfg -> formal list -> Automaton.spec 
+                -> addr:Rtl.exp -> succ:G.rtlnode 
+                -> G.rtlnode * Area.t * Register.Set.t (* uses *)
 @             
 
 The [[copyin]] function creates a linear sequence of assign-nodes for
@@ -152,9 +152,9 @@ type actual     = Rtl.exp               (* value to pass      *)
 
 <<Make sig>>=
 <<type actual>>
-val copyout: G.t -> actual list -> Automaton.spec 
-                 -> addr:Rtl.exp -> succ:G.node 
-                 -> G.node * Area.t * Register.Set.t (* defs *)
+val copyout: G.rtlcfg -> actual list -> Automaton.spec 
+                 -> addr:Rtl.exp -> succ:G.rtlnode 
+                 -> G.rtlnode * Area.t * Register.Set.t (* defs *)
 @
 
 The head node of the sequence is returned together with the area for
@@ -225,7 +225,7 @@ statement. A data-flow node expresses inter-procedural data-flow.}
 % ------------------------------------------------------------------ 
 
 <<copyinout.ml>>=
-module Make (G: Cfg3.S) = struct
+module Make (G: Cfg4.S) = struct
     <<type formal>>
     <<type actual>>
     <<copyin>>

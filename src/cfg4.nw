@@ -1,72 +1,54 @@
 % vim: ts=8 sw=4 et: 
-% Daddy, why are we hiding from the police? They use Emacs, my son, we use Vi.
+% Daddy, why are we hiding from the police? They use Emacs, son, we use Vi.
+% 
+% $Id$
 
 % ------------------------------------------------------------------ 
 \section{Control-Flow Graph}
 % ------------------------------------------------------------------ 
 
 The executable part of a procedure is represented as a control-flow
-graph (\cfg). The graph is functorized over instructions that are part
-of the {\cfg}.
-
-<<module type Instr>>=
-module type Instr = sig
-    type t
-    val nop:        t                               (* does nothing *)
-    val defs:       t -> Register.Set.t             (* defines *)
-    val uses:       t -> Register.Set.t             (* uses    *)
-    val kills:      t -> Register.Set.t             (* kills   *)
-    val to_ast:     t -> Ast.body list              (* AST representation *)
-    val to_string:  t -> string                     (* only for debugging *)
-end
+graph (\cfg). The graph is polymorphic over instructions that are
+embedded into its nodes. The most important specialization is when
+{\rtl}s are used as instruction representation.
 
 <<cfg4.mli>>=
 module type S = sig
     <<interface>>
 end
-
-<<module type Instr>>
-module Make(I: Instr): S
+<<interface>>
 @
-
-Everything except the target specific back ends use {\rtl}s as
-instruction representation. We provide the appropriate instantiation
-here:
-
-<<cfg4.mli>>=
-module Rtl: (S with type i = Rtl.rtl)
-@
-
-% ------------------------------------------------------------------ 
-\subsection{Types}
-% ------------------------------------------------------------------ 
 
 <<interface>>=
-type i          (* instruction *)
-type cfg        
-type node       (* node inside a cfg *)
-type conts      (* continuation bundle *)
+type 'i cfg        (* 'i = instruction represenstation *)
+type 'i node       (* node inside a cfg *)
+type 'i conts      (* continuation bundle *)
 
-type t          = cfg
 type locs       = Register.Set.t    (* locations for liveness analysis *)
 type property   = Cfgprop.t         (* mutable data inside node *)
+
+type rtlcfg     = Rtl.rtl cfg       (* important special case *)
+type rtlnode    = Rtl.rtl node      (* important special case *)
 @
 
 % ------------------------------------------------------------------ 
 \subsection{Functions}
 % ------------------------------------------------------------------ 
 
+The [[mk]] function that creates a {\cfg} receives an instruction
+denoting a no-op instruction.
+
 <<interface>>=
-val mk:         unit -> cfg                 (* create empty cfg *)
-val lookup:     cfg -> string -> node       (* lookup label *)
+val mk:         nop:'i -> 'i cfg                (* create empty cfg *)
+val lookup:     'i cfg -> string -> 'i node     (* lookup label *)
 @
 
 Every {\cfg} has two special nodes: [[entry]] and [[exit]]. They cannot
 be removed.
 
 <<interface>>=
-val entry:      cfg -> node   
-val exit:       cfg -> node
+val entry:      'i cfg -> 'i node   
+val exit:       'i cfg -> 'i node
 @
 
 The nodes in a {\cfg} can be enumerated with integers $0, \dots, n$. An
@@ -75,7 +57,7 @@ enumeration is destroyed by functions that mutate the structure of the
 node can be observed with [[number]].
 
 <<interface>>=
-val gm_enumerate:   cfg -> unit     (* post: enumerated cfg *)
+val gm_enumerate:   'i cfg -> unit     (* post: enumerated cfg *)
 @
 
 Traversal of a {\cfg} requires it to be enumerated. All traversal is
@@ -86,12 +68,14 @@ changes will \emph{not} be taken into account during the active
 traversal.
 
 <<interface>>=
-val first:      cfg -> node (* wrt numbering *)
-val last:       cfg -> node (* wrt numbering *)
-val scan_fwd:   cfg -> first:int -> limit:int -> (node -> 'a -> 'a) -> 'a -> 'a 
-val scan_bwd:   cfg -> first:int -> limit:int -> (node -> 'a -> 'a) -> 'a -> 'a
-val next:       node -> node option
-val prev:       node -> node option
+val first:      'i cfg -> 'i node (* wrt numbering *)
+val last:       'i cfg -> 'i node (* wrt numbering *)
+val scan_fwd:   'i cfg -> first:int -> limit:int 
+                       -> ('i node -> 'a -> 'a) -> 'a -> 'a 
+val scan_bwd:   'i cfg -> first:int -> limit:int 
+                       -> ('i node -> 'a -> 'a) -> 'a -> 'a
+val next:       'i node -> 'i node option
+val prev:       'i node -> 'i node option
 @
 
 We have just one node type, but specific functions to create them. This
@@ -100,63 +84,63 @@ helps to minimize errors with the right number of successors. Except for
 one predecessor.
 
 <<interface>>=
-val gm_label:   cfg -> string -> Reladdr.symbol -> succ:node -> node 
-val gm_assign:  cfg -> i -> succ:node -> node
-val gm_return:  cfg -> i -> int * int -> node
-val gm_goto:    cfg -> i -> node list -> node
-val gm_jump:    cfg -> i -> string list -> node
-val gm_cutto:   cfg -> i -> conts -> node
-val gm_call:    cfg -> i -> conts -> succ:node -> node
-val gm_branch:  cfg -> i -> ifso:node -> ifnot:node -> node
+val gm_label:   'i cfg -> string -> Reladdr.symbol -> succ:'i node -> 'i node 
+val gm_assign:  'i cfg -> 'i -> succ:'i node -> 'i node
+val gm_return:  'i cfg -> 'i -> int * int -> 'i node
+val gm_goto:    'i cfg -> 'i -> 'i node list -> 'i node
+val gm_jump:    'i cfg -> 'i -> string list -> 'i node
+val gm_cutto:   'i cfg -> 'i -> 'i conts -> 'i node
+val gm_call:    'i cfg -> 'i -> 'i conts -> succ:'i node -> 'i node
+val gm_branch:  'i cfg -> 'i -> ifso:'i node -> ifnot:'i node -> 'i node
 @
 
-A continuation bundle is basically a list of nodes.
+A continuation bundle is basically a vector of nodes.
 
 <<interface>>=
-val conts: cuts:node list -> unwinds:node list -> 
-           returns:node list -> aborts: bool -> conts 
+val conts: cuts:'i node list -> unwinds:'i node list -> 
+           returns:'i node list -> aborts: bool -> 'i conts 
 @
 
 Nodes have observable properties.
 
 <<interface>>=
-val cfg:        node -> cfg             (* cfg this node belongs to *)
-val instr:      node -> i             (* embedded instruction *)
-val symbol:     node -> Reladdr.symbol option (* labels have symbols *)
-val succ:       node -> node list       (* wrt. cf *)
-val pred:       node -> node list       (* wrt. cf *)
-val property:   node -> property
-val number:     node -> int             (* pre: enumerated cfg *)
-val defs:       node -> locs            (* locs defined by node *)
-val uses:       node -> locs            (* locs used by node    *)
-val kills:      node -> locs            (* locs killed by node  *)
+val cfg:        'i node -> 'i cfg       (* cfg this node belongs to *)
+val instr:      'i node -> 'i           (* embedded instruction *)
+val symbol:     'i node -> Reladdr.symbol option (* labels have symbols *)
+val succ:       'i node -> 'i node list (* wrt. cf *)
+val pred:       'i node -> 'i node list (* wrt. cf *)
+val property:   'i node -> property
+val number:     'i node -> int          (* pre: enumerated cfg *)
+val defs:       rtlnode -> locs         (* locs defined by node *)
+val uses:       rtlnode -> locs         (* locs used by node    *)
+val kills:      rtlnode -> locs         (* locs killed by node  *)
 @
 
 The instruction inside a node can be updated using [[upd_instr]]. The
 function doing the replacement is handed the existing instruction.
 
 <<interface>>=
-val upd_instr:   node -> (i -> i) -> unit
+val upd_instr:   'i node -> ('i -> 'i) -> unit
 @
 
 Several code expansion steps require to modify an existing {\cfg}. All
 these functions invalidate an existing enumeration. Beware that 
 
 <<interface>>=
-val gm_delete_assign:           node (* must be assign node! *) -> unit
-val gm_redirect_all:            src:node -> olddst:node -> newdst:node -> unit
-val gm_insert_assign_after:     node -> i -> node (* after assign! *)
-val gm_insert_assign_before:    i -> node -> node (* any node   *)
-val gm_insert_assign_between:   i -> src:node -> dst:node -> node
+val gm_delete_assign:           'i node (* must be assign node! *) -> unit
+val gm_redirect_all:    src:'i node -> olddst:'i node -> newdst:'i node -> unit
+val gm_insert_assign_after:     'i node -> 'i  -> 'i node (* after assign! *)
+val gm_insert_assign_before:    'i -> 'i node -> 'i node (* any node   *)
+val gm_insert_assign_between:   'i -> src:'i node -> dst:'i node -> 'i node
 val gm_insert_dataflow_between: defs:locs -> uses:locs -> kills:locs ->
-                                src:node -> dst:node -> unit
+                                src:'i node -> dst:'i node -> unit
 @
 
 An {\cfg} can be translated back into a procedure. This is mostly a
 debugging feature to visualize a {\cfg}. 
 
 <<interface>>=
-val ast:    cfg -> name:string -> Ast.proc
+val ast:    ('i -> Ast.stmt) -> 'i cfg -> name:string -> Ast.proc
 @
 
 % ------------------------------------------------------------------ 
@@ -169,28 +153,26 @@ above directly. The consequence is, that [[nodes]] internally are
 objects with different behavior. However, these behavioral differences
 are hidden from the user.
 
-<<cfg4.ml>>=
-module Property = Cfgprop
-module A        = Ast
+The polymorphic nature of nodes comes at a prize: we can only use
+polymorphic data structures to store notes and cannot build more
+efficient ones using functors.
 
+<<cfg4.ml>>=
 module type S = sig
     <<interface>>
+end    
+
+module Property = Cfgprop
+module A        = Ast
+    
+type locs       = Register.Set.t    (* locations for liveness analysis *)
+type property   = Cfgprop.t         (* mutable data inside node *)
+
+module OO = struct
+    <<OO>>  (* low level object-oriented implementation *)
 end
 
-<<module type Instr>> 
-
-module Make (I: Instr): (S with type i = I.t) = struct
-    type locs       = Register.Set.t    (* locations for liveness analysis *)
-    type property   = Cfgprop.t         (* mutable data inside node *)
-
-    module OO = struct
-        <<OO>>  (* low level object-oriented implementation *)
-    end
-
-    <<FP>>      (* high level functional implementation *)
-end
-
-module Rtl = Make (Rtlinstr)
+<<FP>>      (* high level functional implementation *)
 @
 
 % ------------------------------------------------------------------ 
@@ -202,55 +184,58 @@ for nodes, and [[labl]] for label, where [[labl]] is a sub-type of
 [[node]]. 
 
 <<OO>>=
-class type cfg = object
-    method entry:       node            (* entry node of this *)
-    method exit:        node            (* exit node of this *)
-    method lookup:      string -> node  (* find labeled node *)
-    method label:       string -> Reladdr.symbol -> node -> node
-                                        (* insert label before node *)
+class type ['i] cfg = object
+    method nop:         'i                  (* the nop instruction *)
+    method entry:       'i node             (* entry node of this *)
+    method exit:        'i node             (* exit node of this *)
+    method lookup:      string -> 'i node   (* find labeled node *)
+    method label:       string -> Reladdr.symbol -> 'i node -> 'i node
+                                            (* insert label before node *)
     
-    method add:         node -> unit    (* add node to this; 
-                                           est: enumerated = false *)
-    method delete:      node -> unit    (* remove node *)
-    method enumerate:   unit            (* enumerate all node in this *)
-    method enumerated:  bool            (* true, iff nodes are enumerated *)
-    method enumeration: node array      (* req: enumerated *)
-    method get_id:      unit -> int     (* unique *)
-    method test:        unit            (* test integrity of this *)
-    method ast:         Ast.body list 
-    method nodes:       node list       (* for debugging *)
+    method add:         'i node -> unit     (* add node to this; 
+                                               est: enumerated = false *)
+    method delete:      'i node -> unit     (* remove node *)
+    method enumerate:   unit                (* enumerate all node in this *)
+    method enumerated:  bool                (* true, iff nodes are enumerated *)
+    method enumeration: 'i node array       (* req: enumerated *)
+    method get_id:      unit -> int         (* unique *)
+    method test:        unit                (* test integrity of this *)
+    method ast:         ('i -> Ast.stmt) -> Ast.stmt list 
+    method nodes:       'i node list        (* for debugging *)
 end
 @
 
 <<OO>>=
-and node = object
-    method cfg:         cfg             (* cfg this belongs to *)
-    method instr:       I.t             (* symbol = [] => rtl=null *)
-    method symbol:      Reladdr.symbol option (* symbols of this *)
+and ['i] node = object
+    method cfg:         'i cfg          (* cfg this belongs to *)
+    method instr:       'i              (* embedded instruction *)
+    method symbol:      Reladdr.symbol option 
+                                        (* symbols of this *)
     method id:          int             (* int of this *)
     method number:      int             (* number of this; req:cfg enumerated *)
-    method succ:        node list       (* cf successors of this *)
-    method pred:        node list       (* cf predecessors of this *)
+    method succ:        'i node list    (* cf successors of this *)
+    method pred:        'i node list    (* cf predecessors of this *)
     method property:    property        (* property of this *)
 
-    method link_pred:   node -> unit    (* add    in-edge from to pred node *)
-    method unlink_pred: node -> unit    (* remove in-edge from to pred node *) 
+    method link_pred:   'i node -> unit (* add    in-edge from to pred node *)
+    method unlink_pred: 'i node -> unit (* remove in-edge from to pred node *) 
     method unlink:      unit            (* unlink this from all other nodes *)
-    method upd_succ:    (node -> node) -> unit (* redirect succs of this *)
-    method upd_instr:   I.t -> unit     (* set instr to new value *)
+    method upd_succ:    ('i node -> 'i node) -> unit 
+                                        (* redirect succs of this *)
+    method upd_instr:   'i -> unit      (* set instr to new value *)
     method set_number:  int -> unit     (* defines number *)
 
     method defs:        locs            (* defined by this *)
     method uses:        locs            (* used by this    *)
     method kills:       locs            (* killed by this  *)
     
-    method insert_assign_before:        I.t -> node (* returns new node *)
-    method insert_assign_after :        I.t -> node (* returns new node *)  
-    method insert_assign_on_edges_from: I.t -> before:node -> node 
+    method insert_assign_before:        'i -> 'i node (* returns new node *)
+    method insert_assign_after :        'i -> 'i node (* returns new node *)  
+    method insert_assign_on_edges_from: 'i -> before:'i node -> 'i node 
 
     method comment:     string          (* included into ast *)
-    method ast:         Ast.body list
-    method linorder:    node option * node list (* default/other succs *)
+    method ast:         ('i -> Ast.stmt) -> Ast.stmt
+    method linorder:    'i node option * 'i node list (* default/other succs *)
 
     (* for debugging only *)
     method test:        unit            (* test integrity of this *)
@@ -258,16 +243,16 @@ end
 @
 
 <<OO>>=
-class type labl = object
-    inherit node 
-    method set_succ:    node -> unit       (* set succ for this *)
+class type ['i] labl = object
+    inherit ['i] node 
+    method set_succ:    'i node -> unit       (* set succ for this *)
     method set_symbol:  Reladdr.symbol -> unit
 end
 
 <<OO>>=
-type conts =    { cuts    : node list
-                ; unwinds : node list
-                ; returns : node list
+type 'i conts = { cuts    : 'i node list
+                ; unwinds : 'i node list
+                ; returns : 'i node list
                 ; aborts  : bool
                 }
 @
@@ -285,7 +270,7 @@ destination.  We create a function that does this by side-effect from
 the client supplied [[map]]:
 
 <<OO>>=
-let upd (this:node) (map:node->node) = fun n -> 
+let upd (this:'i node) (map:'i node->'i node) = fun n -> 
     let n' = map n in
         if n' <> n then         (* edge gets redirected *)
             ( n  #unlink_pred this
@@ -326,10 +311,6 @@ let uniq nodes = nodup compare (List.sort compare nodes)
 \subsection{Graph Implementation}
 % ------------------------------------------------------------------ 
 
-<<OO>>=
-module NodeSet = Set.Make(struct type t=node   let compare=compare end)
-@
-
 A [[graph]] is an implementation of the [[cfg]] class type. Its main
 purpose is to provide a container for all nodes and to manage named
 labels.  The problem at hand is, that labels can be used before they are
@@ -337,24 +318,27 @@ defined. In that case a label node is created, but is successor is
 unknown. It is patched in by the method that defines labels. 
 
 <<OO>>=
-class graph: cfg =
+class ['i] graph nop : ['i] cfg =
 object (this)
-    val         _labels         = (Hashtbl.create 47: (string,labl) Hashtbl.t)
-    val mutable _nodes          = NodeSet.empty
+    val         _nop            = (nop: 'i)
+    val         _labels         = (Hashtbl.create 47: 
+                                    (string,'i labl) Hashtbl.t)
+    val mutable _nodes          = ([]: 'i node list) 
     val mutable _id             = 0
-    val mutable _enumeration    = (None: node array option)
-    val mutable _entry          = (None: node option)
-    val mutable _exit           = (None: node option)
+    val mutable _enumeration    = (None: 'i node array option)
+    val mutable _entry          = (None: 'i node option)
+    val mutable _exit           = (None: 'i node option)
 
     initializer
-        let bot = new exit  (this:>cfg)     in
-        let top = new entry (this:>cfg) bot in
+        let bot = new exit  (this:>'i cfg)     in
+        let top = new entry (this:>'i cfg) bot in
             ( _entry <- Some top
             ; _exit  <- Some bot 
-            ; _nodes <- NodeSet.add top _nodes
-            ; _nodes <- NodeSet.add bot _nodes
+            ; _nodes <- top :: _nodes
+            ; _nodes <- bot :: _nodes
             )
 
+    method nop = _nop
     <<graph methods>>
 end
 @
@@ -382,9 +366,9 @@ the successor.
 method private lookup_label name =
     try Hashtbl.find _labels name
     with Not_found -> 
-        let (d:label) = new label (this :> cfg) in
+        let d = new label (this :> 'i cfg) in
             ( Hashtbl.add _labels name d 
-            ; this#add (d :> node)
+            ; this#add (d :> 'i node)
             ; d (* this is a LABEL, subtype of NODE *)
             )
 @
@@ -394,7 +378,7 @@ is created if no such label is defined.
 
 <<graph methods>>=
 method lookup name = 
-    (this#lookup_label name :> node)
+    (this#lookup_label name :> 'i node)
 @
 
 Add a label node in front of a node, i.e. the label node's successor is
@@ -402,11 +386,11 @@ the [[node]] passed into the method.
    
 <<graph methods>>=       
 method label name symbol node =
-    assert (NodeSet.mem node _nodes);       (* node#cfg = (this:>cfg) *)
+    assert (List.mem node _nodes);      
     let label = this#lookup_label name in
         ( label#set_succ   node
         ; label#set_symbol symbol
-        ; (label :> node)
+        ; (label :> 'i node)
         )
 @
 
@@ -415,7 +399,7 @@ Add a node to [[this]] {\cfg}. Any enumeration is destroyed.
 <<graph methods>>=       
 method add node =
     ( _enumeration <- None
-    ; _nodes <- NodeSet.add node _nodes
+    ; _nodes <- node :: _nodes
     )
 @
 
@@ -428,11 +412,11 @@ delayed successor when no immediate successor is available.
 
 <<graph methods>>=
 method enumerate =
-    let rec loop (i:int) (acc: node list) visited todo = match todo with
+    let rec loop (i:int) (acc: 'i node list) visited todo = match todo with
             | []                               -> acc
-            | n::nn when NodeSet.mem n visited -> loop i acc visited nn
+            | n::nn when List.mem n visited -> loop i acc visited nn
             | n::nn -> 
-                let visited = NodeSet.add n visited in
+                let visited = n :: visited in
                 let acc     = n::acc in     (* reverse order *)
                 let i       = i+1 in
                 let ()      = n#set_number i in
@@ -443,7 +427,7 @@ method enumerate =
                     | None  , tt -> loop i acc visited (nn@tt)    (*XXX*) 
                     ) in
         let entry = match _entry with None -> assert false | Some n -> n  in          
-        let nodes = loop 0 [] NodeSet.empty [entry] in
+        let nodes = loop 0 [] [] [entry] in
         let nodes = List.rev nodes in
              _enumeration <- Some (Array.of_list nodes)
 @
@@ -478,7 +462,7 @@ adjacent nodes.
 
 <<graph methods>>=
 method delete node =
-    ( _nodes <- NodeSet.remove node _nodes
+    ( _nodes <- List.filter (fun n -> n <> node) _nodes
     ; _enumeration <- None
     ; node#unlink
     )
@@ -487,8 +471,7 @@ method delete node =
 [[Nodes]] returns the list of all nodes.
 
 <<graph methods>>=
-method nodes =
-    NodeSet.elements _nodes
+method nodes = _nodes
 @
 
 The [[test]] methods checks the integrity of a {\cfg}. Most work is done
@@ -498,18 +481,18 @@ at the individual nodes.
 method test =
     ( assert (_entry <> None)
     ; assert (_exit  <> None)
-    ; NodeSet.iter (fun n -> n#test) _nodes
+    ; List.iter (fun n -> n#test) _nodes
     )
 @
 
 [[Ast]] returns an {\AST} representation of this {\cfg}.
 
 <<graph methods>>=
-method ast  =
-    let this = (this :> cfg) in
+method ast i2ast =
+    let this = (this :> 'i cfg) in
         ( if not this#enumerated then this#enumerate else ()
-        ; let f node result = node#ast :: result in
-            List.concat (Array.fold_right f this#enumeration [])
+        ; let f node result = node#ast i2ast:: result in
+            Array.fold_right f this#enumeration []
         )
 @
 % ------------------------------------------------------------------ 
@@ -520,23 +503,23 @@ Each node is implemented as a separate class, but all nodes are derived
 from a virtual class [[vnode]] which implements common behavior.
 
 <<OO>>=
-and virtual vnode cfg instr =
+and  virtual ['i] vnode cfg instr =
 object (this)
-    val mutable _pred   = NodeSet.empty
-    val mutable _instr  = (instr: I.t)
+    val mutable _pred   = []
+    val mutable _instr  = (instr: 'i)
     val         _cfg    = cfg
     val mutable _id     = (cfg#get_id ())
     val mutable _num    = -1 
     val mutable _prop   = (Property.empty ())       (* default properties *)
     
     initializer
-        _cfg#add (this :> node)
+        _cfg#add (this :> 'i node)
 
     method cfg      = _cfg
     method instr    = _instr
     method symbol   = None   (* overridden in label node *)
-    method pred     = NodeSet.elements _pred
-    method succ     = ([]: node list)   (* make virtual? *)
+    method pred     = _pred
+    method succ     = ([]: 'i node list)   (* make virtual? *)
     method id       = _id
     
     method number   = 
@@ -550,34 +533,34 @@ object (this)
         assert false    (* not defined in the general case! *)
 
     method link_pred node =
-        _pred <- NodeSet.add node _pred
+        _pred <- node :: _pred
         
     method unlink_pred node =
-        assert (NodeSet.mem node _pred);
-        _pred <- NodeSet.remove node _pred
+        assert (List.mem node _pred);
+        _pred <- List.filter (fun n -> n <> node) _pred
 
-    method upd_instr (i:I.t) = _instr <- i
-    method defs         = I.defs _instr
-    method uses         = I.uses _instr
+    method upd_instr (i:'i) = _instr <- i
+    method defs         = Register.Set.empty (* I.defs _instr *)
+    method uses         = Register.Set.empty (* I.uses _instr *)
     method kills        = Register.Set.empty
     method set_number i = _num <- i
     method property     = _prop
     
-    method insert_assign_before (instr:I.t) =
-        let this        = (this :> node) in
+    method insert_assign_before (instr:'i) =
+        let this        = (this :> 'i node) in
         let assign      = new assign _cfg instr (_cfg#exit) in 
         let redirect n  = if n = this then assign else n in
-            ( NodeSet.iter  (fun n -> n#upd_succ redirect) _pred
+            ( List.iter  (fun n -> n#upd_succ redirect) _pred
             ; assign#upd_succ (fun n -> this)
             ; assign (* the new node *)
             )
 
-    method insert_assign_after (instr:I.t) = 
+    method insert_assign_after (instr:'i) = 
         invalid_arg "add_assign_after method for non-assignment node"
 
-    method insert_assign_on_edges_from (instr:I.t) ~(before:node) =
-        let ()          = assert (NodeSet.mem before _pred) in
-        let this        = (this :> node) in
+    method insert_assign_on_edges_from (instr:'i) ~(before:'i node) =
+        let ()          = assert (List.mem before _pred) in
+        let this        = (this :> 'i node) in
         let assign      = new assign _cfg instr this in
         let redirect n  = if n = this then assign else n in
             ( before#upd_succ redirect
@@ -586,21 +569,20 @@ object (this)
     
     (* comment about node kind *)
     method comment = 
-        let this = (this :> node) in
+        let this = (this :> 'i node) in
         let live = (this#property).Property.liveout in 
             Printf.sprintf 
-                "num: %02d id: %d live: %s rtl: %s pred: %s succ: %s "
+                "num: %02d id: %d live: %s pred: %s succ: %s "
                 _num
                 _id
                 (Register.print_set live) 
-                (I.to_string _instr)
                 (String.concat "," 
                     (List.map (fun n -> string_of_int n#id) this#pred))
                 (String.concat "," 
                     (List.map (fun n -> string_of_int n#id) this#succ))
 
-    method ast = I.to_ast _instr
-    method virtual linorder: node option * node list
+    method ast i2ast = i2ast _instr
+    method virtual linorder: 'i node option * 'i node list
 
     (* this node must be in the predecessor list of each successor
      * if this node has more than two predecessors it must be labeled
@@ -609,7 +591,7 @@ object (this)
      *)
 
     method test =
-        let this = (this :> node) in
+        let this = (this :> 'i node) in
         let succ = this#succ in
         let pred = this#pred in
             ( assert (* check link structure *)
@@ -617,7 +599,6 @@ object (this)
                                 true 
                                 succ)
             )
-    
 end (* of vnode class *)
 @
 
@@ -626,9 +607,9 @@ out into the [[vcut]] virtual class, which is itself a sub-class of
 [[vnode]].
 
 <<OO>>=
-and virtual vcut cfg instr (conts: conts) =
+and virtual ['i] vcut cfg instr (conts: 'i conts) =
 object (this)
-    inherit vnode cfg instr as super
+    inherit ['i] vnode cfg instr as super
 
     val mutable _cuts    = conts.cuts
     val mutable _unwinds = conts.unwinds
@@ -637,10 +618,10 @@ object (this)
 
     initializer
         let succ = List.concat [_cuts;_unwinds;_returns] in
-            List.iter (fun n -> n#link_pred (this:>node)) succ
+            List.iter (fun n -> n#link_pred (this:>'i node)) succ
 
-    method virtual succ     : node list
-    method virtual upd_succ : (node -> node) -> unit
+    method virtual succ     : 'i node list
+    method virtual upd_succ : ('i node -> 'i node) -> unit
 end
 @
 
@@ -653,11 +634,11 @@ has a method to update the successor later. This is used to create a
 label that is referenced in the {\cfg} before it is defined. 
 
 <<OO>>=
-and label cfg: labl =
+and ['i] label cfg: ['i] labl =
 object(this)
-    inherit vnode cfg I.nop as super
+    inherit ['i] vnode cfg (cfg#nop) as super
 
-    val mutable _succ   = (None: node option) 
+    val mutable _succ   = (None: 'i node option) 
     val mutable _symbol = (None: Reladdr.symbol option)
     
     method symbol =
@@ -668,7 +649,7 @@ object(this)
     method set_succ node =
         ( assert (_succ = None)
         ; _succ <- Some node
-        ; node#link_pred (this :> node)
+        ; node#link_pred (this :> 'i node)
         )
     
     method set_symbol symbol =
@@ -682,7 +663,7 @@ object(this)
             | Some n -> [n]
     
     method upd_succ map =
-        let map = upd (this :> node) map in
+        let map = upd (this :> 'i node) map in
         match _succ with
             | None   -> ()
             | Some n -> _succ <- Some (map n)
@@ -692,7 +673,7 @@ object(this)
             | Some n -> [n]
     
     method upd_succ map =
-        let map = upd (this :> node) map in
+        let map = upd (this :> 'i node) map in
         match _succ with
             | None   -> ()
             | Some n -> _succ <- Some (map n)
@@ -703,15 +684,14 @@ object(this)
           | x    -> x
         , []
         )
-
-    method ast = 
-        let this    = (this :> node) in
+    method ast i2ast = 
+        let this    = (this :> 'i node) in
             match _symbol with
             | None   -> assert false (* undefined label! *)
-            | Some s -> [stmt (A.LabelStmt (s#text))]
+            | Some s -> A.LabelStmt (s#text)
     
     method test =
-        let this = (this :> labl) in
+        let this = (this :> 'i labl) in
             ( super#test
             ; assert ((List.length this#pred <= 1) || (_symbol <> None)) 
             )
@@ -723,19 +703,19 @@ end
 % ------------------------------------------------------------------ 
 
 <<OO>>=
-and entry cfg exit: node =
+and ['i] entry cfg exit: ['i] node =
 object(this)
-    inherit vnode cfg I.nop as super
+    inherit ['i] vnode cfg cfg#nop as super
 
-    val mutable _succ = (exit:node)
+    val mutable _succ = (exit:'i node)
 
     initializer 
-        _succ # link_pred (this :> node)
+        _succ # link_pred (this :> 'i node)
 
     method linorder = (Some _succ, [])
 
-    method insert_assign_after (instr:I.t) =
-        let this   = (this :> node) in
+    method insert_assign_after (instr: 'i) =
+        let this   = (this :> 'i node) in
         let assign = new assign _cfg instr (_succ) in
             ( _succ#unlink_pred this
             ; _succ <- assign
@@ -745,7 +725,7 @@ object(this)
     
     method succ = [_succ]
     method upd_succ map = 
-        let map = upd (this :> node) map in
+        let map = upd (this :> 'i node) map in
         _succ <- map _succ
 end
 @
@@ -755,9 +735,9 @@ end
 % ------------------------------------------------------------------ 
 
 <<OO>>=
-and exit cfg: node =
+and ['i] exit cfg: ['i] node =
 object(this)
-    inherit vnode cfg I.nop as super
+    inherit ['i] vnode cfg cfg#nop as super
 
     method linorder = (None, [])
 end
@@ -768,23 +748,23 @@ end
 % ------------------------------------------------------------------ 
 
 <<OO>>=
-and assign cfg instr succ : node =
+and ['i] assign cfg instr succ : ['i] node =
 object (this)
-    inherit vnode cfg instr as super
+    inherit ['i] vnode cfg instr as super
 
     val mutable _succ = succ
 
     initializer 
-        succ # link_pred (this :> node)
+        succ # link_pred (this :> 'i node)
 
     method succ = [_succ]
 
     method upd_succ map = 
-        let map = upd (this :> node) map in
+        let map = upd (this :> 'i node) map in
         _succ <- map _succ
 
-    method insert_assign_after (instr:I.t) =
-        let this   = (this :> node) in
+    method insert_assign_after (instr: 'i) =
+        let this   = (this :> 'i node) in
         let assign = new assign _cfg instr (_succ) in
             ( _succ#unlink_pred this
             ; _succ <- assign
@@ -793,9 +773,8 @@ object (this)
             )
     
     method unlink =
-        let this = (this :> node) in
-        let pred = NodeSet.min_elt _pred                in
-        let ()   = assert (pred = NodeSet.max_elt _pred) in
+        let this = (this :> 'i node) in
+        let pred = match _pred with [x] -> x | _ -> assert false in
             ( pred#upd_succ (fun n -> if n = this then _succ else n)
             ; _succ#unlink_pred this
             ; _succ#link_pred pred
@@ -810,21 +789,21 @@ end
 % ------------------------------------------------------------------ 
 
 <<OO>>=
-class return cfg instr (x,y) : node  =
+class ['i] return cfg instr (x,y) : ['i] node  =
 object (this)  
-    inherit vnode cfg instr as super
+    inherit ['i] vnode cfg instr as super
 
     val         _x    = (x:int)
     val         _y    = (y:int)
     val mutable _exit = cfg#exit
 
     initializer 
-        _exit # link_pred (this :> node)
+        _exit # link_pred (this :> 'i node)
     
     method succ = [_exit]
     
     method upd_succ map =
-        let map = upd (this :> node) map in
+        let map = upd (this :> 'i node) map in
         _exit <- map _exit
 
     method comment  = super#comment ^ " return"    
@@ -837,19 +816,19 @@ end
 % ------------------------------------------------------------------ 
 
 <<OO>>=
-class goto cfg instr targets : node =
+class ['i] goto cfg instr targets : ['i] node =
 object (this)
-    inherit vnode cfg instr as super
+    inherit ['i] vnode cfg instr as super
 
     val mutable _targets = targets
 
     initializer
-        List.iter (fun n -> n#link_pred (this :> node)) _targets
+        List.iter (fun n -> n#link_pred (this :> 'i node)) _targets
 
     method succ = uniq _targets      
     
     method upd_succ map =
-        let map = upd (this :> node) map in
+        let map = upd (this :> 'i node) map in
         _targets <- List.map map _targets 
 
     method linorder = (None, _targets)
@@ -861,21 +840,21 @@ end
 % ------------------------------------------------------------------ 
 
 <<OO>>=
-class jump cfg instr (targets:string list) : node =
+class ['i] jump cfg instr (targets:string list) : ['i] node =
 object (this)
-    inherit vnode cfg instr as super
+    inherit ['i] vnode cfg instr as super
 
     val mutable _targets = targets      
     val mutable _exit    = cfg#exit     (* artifical edge to exit *)
     
     initializer
-        _exit#link_pred (this :> node)
+        _exit#link_pred (this :> 'i node)
 
     method succ     = [_exit]   
     method linorder = (None, [_exit])
     
     method upd_succ map =
-        let map = upd (this :> node) map in
+        let map = upd (this :> 'i node) map in
             _exit    <- map _exit
 end
 @
@@ -885,20 +864,20 @@ end
 % ------------------------------------------------------------------ 
 
 <<OO>>=
-class call cfg instr conts ~succ : node =
+class ['i] call cfg instr conts ~succ : ['i] node =
 object (this)
-    inherit vcut cfg instr conts as super
+    inherit ['i] vcut cfg instr conts as super
 
-    val mutable _succ = (succ: node)
+    val mutable _succ = (succ: 'i node)
 
     initializer 
-        succ # link_pred (this :> node)
+        succ # link_pred (this :> 'i node)
 
     method succ =
         uniq (List.concat [ [_succ]; _cuts; _unwinds; _returns])
 
     method upd_succ map = 
-        let map = upd (this :> node) map in
+        let map = upd (this :> 'i node) map in
         ( _cuts     <- List.map map _cuts
         ; _unwinds  <- List.map map _unwinds
         ; _returns  <- List.map map _returns
@@ -918,20 +897,20 @@ end
 
 <<OO>>=
 
-class cutto cfg instr conts : node =
+class ['i] cutto cfg instr conts : ['i] node =
 object (this)
-    inherit vcut cfg instr conts as super
+    inherit ['i] vcut cfg instr conts as super
 
-    val mutable _exit = (cfg#exit: node)       (* artifical edge to exit *)
+    val mutable _exit = (cfg#exit: 'i node)       (* artifical edge to exit *)
 
     initializer
-        _exit # link_pred (this :> node)
+        _exit # link_pred (this :> 'i node)
 
     method succ =
         uniq (List.concat [ [_exit]; _cuts; _unwinds; _returns])
 
     method upd_succ map = 
-        let map = upd (this :> node) map in
+        let map = upd (this :> 'i node) map in
         ( _cuts     <- List.map map _cuts
         ; _unwinds  <- List.map map _unwinds
         ; _returns  <- List.map map _returns
@@ -950,23 +929,23 @@ end
 % ------------------------------------------------------------------ 
 
 <<OO>>=
-class branch cfg instr (ifso:node) (ifnot:node) : node =
+class ['i] branch cfg instr (ifso:'i node) (ifnot:'i node) : ['i] node =
 object (this)
-    inherit vnode cfg instr  as super
+    inherit ['i] vnode cfg instr  as super
 
     val mutable _ifso  = ifso
     val mutable _ifnot = ifnot
 
     initializer
-        ( _ifso  # link_pred (this :> node)
-        ; _ifnot # link_pred (this :> node)
+        ( _ifso  # link_pred (this :> 'i node)
+        ; _ifnot # link_pred (this :> 'i node)
         )
 
     method succ =
         uniq [_ifso;_ifnot]
 
     method upd_succ map =
-        let map = upd (this :> node) map in
+        let map = upd (this :> 'i node) map in
         ( _ifso  <- map _ifso
         ; _ifnot <- map _ifnot
         )
@@ -986,9 +965,10 @@ Dataflow nodes are synthetic nodes to inform the data-flow analysis
 about data flow that otherwise would be missed.
 
 <<OO>>=
-class dataflow cfg (succ:node) (defs:locs) (uses:locs) (kills:locs) : node =
+class ['i] dataflow cfg (succ:'i node) 
+    (defs:locs) (uses:locs) (kills:locs) : ['i] node =
 object (this)
-    inherit vnode cfg I.nop as super
+    inherit ['i] vnode cfg cfg#nop as super
 
     val mutable _succ = succ
     val _defs         = defs
@@ -996,13 +976,13 @@ object (this)
     val _kills       = kills
 
     initializer
-        _succ # link_pred (this:>node)
+        _succ # link_pred (this :> 'i node)
 
     method succ =
         [_succ]
 
     method upd_succ map =
-        let map = upd (this :> node) map in
+        let map = upd (this :> 'i node) map in
         _succ <- map _succ
 
     method defs   = _defs
@@ -1022,11 +1002,11 @@ The high-level implementation delegates most of the work to the
 object-oriented implementation. This applies both to types and values: 
 
 <<FP>>=
-type cfg        = OO.cfg             (* class type cfg  *)
-type node       = OO.node            (* class type node *)
-type t          = OO.cfg             (* alias           *)
-type conts      = OO.conts           (* continuation bundle *)
-type i          = I.t
+type 'i cfg        = 'i OO.cfg             (* class type cfg  *)
+type 'i node       = 'i OO.node            (* class type node *)
+type 'i conts      = 'i OO.conts           (* continuation bundle *)
+type rtlcfg        = Rtl.rtl cfg       (* important special case *)
+type rtlnode       = Rtl.rtl node      (* important special case *)
 @
 
 Constructors for continuation bundles, graphs, and nodes:
@@ -1039,7 +1019,7 @@ let conts ~cuts ~unwinds ~returns ~aborts =
     ; OO.aborts  = aborts
     }
 
-let mk ()       = new OO.graph
+let mk ~nop:n    = new OO.graph n
 let gm_return   = new OO.return
 let gm_goto     = new OO.goto
 let gm_jump     = new OO.jump
@@ -1058,7 +1038,7 @@ let lookup cfg (label:string) = cfg#lookup label
 let entry cfg                 = cfg#entry
 let exit cfg                  = cfg#exit
 
-let gm_label cfg (label:string) (sym:Reladdr.symbol) ~(succ:node) =
+let gm_label cfg (label:string) (sym:Reladdr.symbol) ~(succ:'i node) =
     cfg#label label sym succ
 
 let first cfg = 
@@ -1081,7 +1061,7 @@ iteration and thus any changes to the graph structure is \emph{not}
 taken into account while the iteration is active.
 
 <<FP>>=
-let scan_fwd (cfg:cfg) ~(first:int) ~(limit:int) f zero = 
+let scan_fwd (cfg:'i cfg) ~(first:int) ~(limit:int) f zero = 
     assert (cfg#enumerated);
     assert (first >= 1);
     assert (limit <= ((Array.length (cfg#enumeration)) + 1));
@@ -1095,7 +1075,7 @@ let scan_fwd (cfg:cfg) ~(first:int) ~(limit:int) f zero =
         loop first zero
 
 
-let scan_bwd (cfg:cfg) ~(first:int) ~(limit:int) f zero = 
+let scan_bwd (cfg:'i cfg) ~(first:int) ~(limit:int) f zero = 
     assert (cfg#enumerated);
     assert (first >= 1);
     assert (limit <= ((Array.length (cfg#enumeration)) + 1));
@@ -1108,7 +1088,7 @@ let scan_bwd (cfg:cfg) ~(first:int) ~(limit:int) f zero =
     in
         loop (limit-1) zero
 
-let next (node:node) = 
+let next (node:'i node) = 
     assert (node#cfg#enumerated);
     let n    = node#number     in   (* 1 ... |G|   *)
     let cfg  = node#cfg        in
@@ -1118,7 +1098,7 @@ let next (node:node) =
         else
             None
     
-let prev (node:node) = 
+let prev (node:'i node) = 
     assert (node#cfg#enumerated);
     let n    = node#number     in   (* 1 ... |G|   *)
     let cfg  = node#cfg        in
@@ -1134,23 +1114,26 @@ Node observation functions just delegate the work to the object
 representing the node.
 
 <<FP>>=
-let cfg         (node:node) = node#cfg
-let instr       (node:node) = node#instr
-let symbol      (node:node) = node#symbol
-let succ        (node:node) = node#succ
-let pred        (node:node) = node#pred
-let property    (node:node) = node#property
-let number      (node:node) = node#number
-let defs        (node:node) = node#defs
-let uses        (node:node) = node#uses
-let kills       (node:node) = node#kills
+let cfg         (node:'i node) = node#cfg
+let instr       (node:'i node) = node#instr
+let symbol      (node:'i node) = node#symbol
+let succ        (node:'i node) = node#succ
+let pred        (node:'i node) = node#pred
+let property    (node:'i node) = node#property
+let number      (node:'i node) = node#number
+
+let kills (node:Rtl.rtl node) = Register.Set.empty
+let defs  (node:Rtl.rtl node) = 
+    let _,write = Rtlutil.ReadWrite.sets (instr node) in write
+let uses  (node:Rtl.rtl node) = 
+    let read,_  = Rtlutil.ReadWrite.sets (instr node) in read
 @
 
 [[Upd_instr]] updates the instruction embedded into a node but does not
 change the structure of an {\rtl}.
 
 <<FP>>=
-let upd_instr (node:node) (map:I.t -> I.t) = node#upd_instr (map node#instr)
+let upd_instr (node:'i node) (map:'i -> 'i) = node#upd_instr (map node#instr)
 @
 
 Graph mutators change the structure of a {\cfg} and invalidate any
@@ -1161,13 +1144,13 @@ enumeration. However, they still can be used with [[scan_fwd]] and
 let gm_redirect_all ~src ~olddst ~newdst =
     src#upd_succ (fun n -> if n = olddst then newdst else n)
 
-let gm_insert_assign_before (instr:I.t) (node:node) =
+let gm_insert_assign_before (instr:'i) (node:'i node) =
     node#insert_assign_before instr
 
-let gm_insert_assign_after (node:node) (instr:I.t) =
+let gm_insert_assign_after (node:'i node) (instr:'i) =
     node#insert_assign_after instr
 
-let gm_insert_assign_between (instr:I.t) ~(src:node) ~(dst:node) =
+let gm_insert_assign_between (instr:'i ) ~(src:'i node) ~(dst:'i node) =
     dst#insert_assign_on_edges_from instr src
 
 let gm_insert_dataflow_between ~defs ~uses ~kills ~src ~dst =
@@ -1184,25 +1167,24 @@ let gm_insert_dataflow_between ~defs ~uses ~kills ~src ~dst =
         ; node#upd_succ (fun n -> dst)
         )
 
-let gm_delete_assign (node:node) =
+let gm_delete_assign (node:'i node) =
     let cfg = node#cfg in
         cfg#delete node
 
-let gm_enumerate (cfg:cfg) = 
+let gm_enumerate (cfg:'i cfg) = 
     if cfg#enumerated then      (* risky if out #enumerated lies *)
         ()
     else    
         cfg#enumerate
 
-
-let ast (cfg:cfg) ~(name:string) = 
+let ast i2ast (cfg:'i cfg) ~(name:string) = 
     cfg#test;   (* check integrity *)    
     ( None
     , name
     , []
-    , cfg#ast 
+    , List.map (fun s -> Ast.StmtBody s) (cfg#ast i2ast)
     )
-    
+
 @
 
 

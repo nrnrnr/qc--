@@ -17,8 +17,8 @@ knowledge of the internal details of \module{cfg3}.
 \end{quote}
 
 <<cfgutil.mli>>=
-type cfg  = Cfg3.cfg
-type node = Cfg3.node
+type cfg  = Cfg4.rtlcfg
+type node = Cfg4.rtlnode
 
 val first   :   cfg -> int        (* number of first node -- req enumerated *)
 val limit   :   cfg -> int        (* limiting number      -- req enumerated *)
@@ -36,7 +36,7 @@ val emit    :   cfg -> (Rtl.rtl -> 'a -> 'a)
 \item [[limit]], [[first]]: node numbers for {\cfg} traversing functions 
       in \module{cfg3}.
       
-\item [[fold_fwd]], [[fold_bwd]]: work as their counterparts in [[Cfg3]]
+\item [[fold_fwd]], [[fold_bwd]]: work as their counterparts in [[Cfg]]
       except that they cover the entire {\cfg}. Note, that the [[cfg]]'s
       nodes must be enumerated.
 
@@ -57,9 +57,9 @@ val emit    :   cfg -> (Rtl.rtl -> 'a -> 'a)
 No surprises here.
 
 <<cfgutil.ml>>=
-module G  = Cfg3
-type cfg  = G.cfg
-type node = G.node
+module G  = Cfg4
+type cfg  = G.rtlcfg
+type node = G.rtlnode
 @
 
 The [[G.fold]] functions use open intervals to specify a region to fold
@@ -78,14 +78,14 @@ let fold_bwd cfg f unit =
   G.scan_bwd cfg ~first:(first cfg) ~limit:(limit cfg) f unit
 
 let subst cfg (f:Rtl.rtl -> Rtl.rtl) = 
-    fold_fwd cfg (fun node () -> G.set_rtl node f) () 
+    fold_fwd cfg (fun node () -> G.upd_instr node f) () 
 @ 
 
 <<cfgutil.ml>>=
 let emit cfg rtl_emit sym_emit unit =
     G.gm_enumerate cfg;
     let visit node x = match G.symbol node with
-        | None   -> rtl_emit (G.rtl node) x     
+        | None   -> rtl_emit (G.instr node) x     
         | Some s -> sym_emit s x            (* skip null rtl of label nodes *) 
     in    
         fold_fwd cfg visit unit
@@ -93,7 +93,7 @@ let emit cfg rtl_emit sym_emit unit =
 
 <<cfgutil.ml>>=
 let number_and_rtl node =
-  string_of_int (G.number node) ^ ": " ^ Rtlutil.ToString.rtl (G.rtl node)
+  string_of_int (G.number node) ^ ": " ^ Rtlutil.ToString.rtl (G.instr node)
 
 let cfg2dot ~compress ~name cfg =
   let nodename node = Printf.sprintf "N\"%d\"" (G.number node) in

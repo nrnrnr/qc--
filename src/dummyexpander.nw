@@ -114,7 +114,7 @@ module C  = Camlburg
 module D  = Rtl.Convert      (* Convert Down to private repr. *)
 module U  = Rtl.Revert       (* Convert Up    to abstract repr. *)
 module W  = Rtlutil.Width 
-module G  = Cfg3             (* for expanding all RTLs in a CFG *)
+module G  = Cfg4             (* for expanding all RTLs in a CFG *)
 module GU = Cfgutil
 @
 
@@ -615,10 +615,10 @@ let cfg proc =
     and insert n i  = G.gm_insert_assign_before i n
     and modified    = ref false in
     let expnd node =
-        match expand tmps (G.rtl node) with
+        match expand tmps (G.instr node) with
         | last :: preds ->
             ( ignore (List.fold_left insert node preds)
-            ; G.set_rtl node (fun _ -> last)
+            ; G.upd_instr node (fun _ -> last)
             ; modified := (preds <> [])
             )
         | [] -> assert false 
