@@ -23,6 +23,10 @@ exception RTLInvalid of string
 <<mvalidate.ml>>=
 let () = Debug.register "mvalidate" "debug machine-environment validator"
 let rtl t r =
+  let remove_bits = function
+    | Types.Bits n -> n
+    | Types.Bool   -> 1
+  in
   let impossf fmt = Printf.kprintf Impossible.impossible fmt in
   let imposs = Impossible.impossible in
   let m  = List.map Rtl.Dn.opr t.Target.capabilities.Target.operators in
@@ -69,12 +73,16 @@ let rtl t r =
     | RP.Slice(n,_,l)  -> loc l (* what to check here? *)
   and exp = function
     | RP.Fetch(l, n) -> loc l
+    | RP.App(("or", [resw]), [RP.App(("zx", _), [e]);
+                              RP.App(("shl", _), [RP.App(("zx",_), [e']); k])])
+        when resw mod w = 0 && exp e && exp e' && exp k -> true
+    | RP.App(("lobits", [argw; resw]), [RP.App(("shrl",_), [e; k])]) 
+        when resw mod w = 0 && exp e && exp k -> true
+        (* should also check that k is a constant multiple of wordsize *)
+    | RP.App(("lobits", [argw; resw]), [e]) when resw mod w = 0 && exp e -> true
     | RP.App((opname, ws), es) ->
         let str_of_opty (opname, ws) =
           let (argw, resw) = Rtlop.Types.mono (Rtl.opr opname ws) in
-          let remove_bits = function
-            | Types.Bits n -> n
-            | Types.Bool   -> 1 in
           let argw = List.map remove_bits argw in
           let resw = remove_bits resw in
           String.concat "->" (List.map string_of_int (argw @ [resw]))

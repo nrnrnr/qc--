@@ -65,7 +65,8 @@ let ra   = r 31 (* return address set by CALL instruction, same as %o7 *)
 let fp   = r 30 (* conventionally the same as %fp or %i6 *)
 let sp   = r 14 (* conventionally the same as %sp or %o6 *)
 
-let cwp = Sparcregs.cwp
+let cwp  = Sparcregs.cwp
+let yreg = Sparcregs.y
 
 let rounding_mode_reg = (dspace, 0, R.C 1)
 let rounding_model   = Rtl.reg rounding_mode_reg
@@ -80,9 +81,15 @@ let imposs      = Impossible.impossible
 let unimpf  fmt = Printf.kprintf Impossible.unimp fmt
 let impossf fmt = Printf.kprintf Impossible.impossible fmt
 let mem w addr = R.mem R.none mspace (Cell.to_count mcell w) addr
-let reg_width  = Register.width
+let rwidth  = Register.width
 
-let rfetch t = R.fetch (R.reg t) (Register.width t)
+let rfetch t = R.fetch (R.reg t) (rwidth t)
+let tstore t e = R.store (R.reg t) e (rwidth t)
+
+let at32 = function
+  | opr, [32] -> opr
+  | opr, [n]  -> unimpf "operator %%%s%d(...)" opr n
+  | opr, ws   -> impossf "operator %%%s specialized to %d widths" opr (List.length ws)
 @ 
 % ------------------------------------------------------------------
 \subsection{Control flow}
@@ -151,13 +158,13 @@ let constant_context w = icontext
 @ 
 <<SPARC postexpander>>=
 let load ~dst ~addr assn =
-  let w = reg_width dst in
+  let w = rwidth dst in
   assert (w = wordsize || w = wordsize * 2); 
   rtl (R.store (R.reg dst) (R.fetch (mem w addr) w) w)
 @ 
 <<SPARC postexpander>>=
 let store ~addr ~src assn =
-  let w = reg_width src in
+  let w = rwidth src in
   assert (w = wordsize || w = wordsize * 2);
   rtl (R.store (mem w addr) (rfetch src) w)
 @ 
@@ -165,7 +172,7 @@ let store ~addr ~src assn =
 let extend  op n w e = R.app (R.opr op       [n; w]) [e]
 let lobits     w n e = R.app (R.opr "lobits" [w; n]) [e]
 let xload op ~dst ~addr n assn =
-  let w = reg_width dst in
+  let w = rwidth dst in
   assert (w = wordsize || w = wordsize * 2); 
   rtl (R.store (R.reg dst)
         (extend op n w (R.fetch (R.mem assn mspace (Cell.to_count mcell n) addr) n)) w)
@@ -174,26 +181,55 @@ let sxload = xload "sx"
 let zxload = xload "zx"
 
 let lostore ~addr ~src n assn =
-  let w = reg_width src in
+  let w = rwidth src in
   assert (w = wordsize || w = 2 * wordsize);
   rtl (R.store (R.mem assn mspace (Cell.to_count mcell n) addr)
                (lobits w n (rfetch src)) n)
-@ Block copies are only implemented in powers of 2 up to 64~bytes.
-IT'S NOT CLEAR WHY THE 64-BIT CASE DOESN'T USE [[load]] AND [[store]].
+@ 
 <<SPARC postexpander>>=
-let block_copy ~dst dassn ~src sassn w =
+let rec block_copy ~dst dassn ~src sassn w =
+  let decompose_f dst dassn src sassn x w f =
+    if w - x <= 0 then impossf "block copy attempted to decompose move into %i bits" x
+    else 
+      let d' = talloc 't' 32 in
+      let s' = talloc 't' 32 in
+      let i  = R.bits (Bits.U.of_int (x / 8) 32) 32 in
+      block_copy ~dst dassn ~src sassn x <:>
+      rtl (R.store (R.reg d') (RO.add 32 dst i) 32) <:>
+      rtl (R.store (R.reg s') (RO.add 32 src i) 32) <:>
+      f d' s'
+  in
+  let decompose dst dassn src sassn x w =
+      decompose_f dst dassn src sassn x w 
+        (fun d' s' -> block_copy ~dst:(rfetch d') dassn ~src:(rfetch s') sassn (w - x))
+  in
   match w with
+  | 0 -> PX.Nop
   | 8 | 16 ->
       let t = talloc 't' 32 in
       zxload t src w sassn <:> lostore dst t w dassn
+  | 24 -> decompose dst dassn src sassn 8 24
   | 32 ->
       let t = talloc 't' 32 in
       load t src sassn <:> store dst t dassn
+  | w when w > 32 && w < 64 && w mod 8 = 0 -> decompose dst dassn src sassn 32 w
   | 64 ->
       let q = talloc 'q' 64 in
-      rstore (R.reg q) (R.fetch (mem w src) w) w <:>
-      rstore (mem w dst) (rfetch q) w
-  | _  -> unimpf "general block copies on SPARC"
+      load ~dst:q ~addr:src sassn <:> store ~addr:dst ~src:q dassn
+  | w when w > 64 && (w mod 64) mod 8 = 0 ->
+      let wmod64 = w mod 64 in
+      let f d' s' =
+        let t       = talloc 't' 32 in
+        let i       = R.bits (Bits.U.of_int (64 / 8) 32) 32 in
+        let n64cpys = R.bits (Bits.U.of_int ((w - wmod64) / 8) 32) 32 in
+        rtl (R.store (R.reg t) (RO.add 32 (rfetch d') n64cpys) 32) <:>
+        PX.While(PX.cond (RO.eq 32 (rfetch d') (rfetch t)),
+                 block_copy ~dst:(rfetch d') dassn ~src:(rfetch s') sassn 64 <:>
+                 rtl (R.store (R.reg d') (RO.add 32 (rfetch d') i) 32) <:>
+                 rtl (R.store (R.reg s') (RO.add 32 (rfetch s') i) 32))
+      in
+      decompose_f dst dassn src sassn wmod64 w f
+  | _  -> unimpf "Block copy of %i bits on SPARC" w
 @ 
 We write very strange code in [[if]] in case of the possibility that a
 temporary is \emph{neither} a float nor an integer.
@@ -201,8 +237,8 @@ temporary is \emph{neither} a float nor an integer.
 let is_int   = snd icontext
 let is_float = snd fcontext
 let move ~dst ~src =
-  let w = reg_width src in
-  assert (w = reg_width dst);
+  let w = rwidth src in
+  assert (w = rwidth dst);
   if (if is_int src then is_float dst else is_float src && is_int dst) then
     (* move through stack *)
     let slot = salloc w in
@@ -214,8 +250,8 @@ let move ~dst ~src =
 @ 
 <<SPARC postexpander>>=
 let extract ~dst ~lsb ~src =
-  let w = reg_width src in
-  let n = reg_width dst in
+  let w = rwidth src in
+  let n = rwidth dst in
   let srcval =
     if lsb = 0 then
       RO.lobits w n (rfetch src)
@@ -267,11 +303,11 @@ let li  ~dst const =
       rstore (R.reg dst) (Up.const const) 32
   | ((s, _, _), _, _) as r, RP.Bits b ->
       unimpf "loading immediate %s to a %d-bit register in space %%%c"
-        (Bits.to_string b) (Register.width r) s
+        (Bits.to_string b) (rwidth r) s
   | ((s, _, _), _, _) as r, _ ->
       unimpf "loading symbolic immediate to a %d-bit register in space %%%c"
-        (Register.width r) s
-let lix ~dst e = rtl (R.store (R.reg dst) e (reg_width dst))
+        (rwidth r) s
+let lix ~dst e = rtl (R.store (R.reg dst) e (rwidth dst))
   (* IS THIS REALLY RIGHT? *)
 @ 
 <<SPARC postexpander>>=
@@ -279,21 +315,81 @@ let unop ~dst op x =
   match op with
   | ("zx", _) | ("sx", _) | ("lobits", _) ->
       impossf "%%%s%d reached sparc postexpander" (fst op) (List.nth (snd op) 1)
-  | _ -> rstore (R.reg dst) (R.app (Up.opr op) [rfetch x]) (reg_width dst)
+  | _ -> rstore (R.reg dst) (R.app (Up.opr op) [rfetch x]) (rwidth dst)
+@ 
+[[sparc_mulx_hi]] is intended to do an extended multiply and return the high 32 bits.
+<<SPARC postexpander>>=
+let dblop ~dsthi ~dstlo (op, ws) x y =
+  let xv, yv = rfetch x, rfetch y in
+  rtl (R.par [R.store (R.reg dstlo) (R.app (R.opr "mul" [32]) [xv;yv]) 32;
+              R.store (R.reg yreg)  (R.app (R.opr ("sparc_"^op^"_hi") [32])
+              [xv; yv]) 32])
+    <:> rstore (R.reg dsthi) (rfetch yreg) 32
+(* Unsupported.mulx_and_mulux() *)
+@
 <<SPARC postexpander>>=
 let binop ~dst op x y =
-  let dstw = reg_width dst in
+  let dstw = rwidth dst in
+  let xv, yv = rfetch x, rfetch y in
   match op with
   | "modu", [w] ->
-      PX.Expand.block (rstore (R.reg dst) (Rewrite.modu w (rfetch x) (rfetch y)) dstw)
+      PX.Expand.block (rstore (R.reg dst) (Rewrite.modu w xv yv) dstw)
   | "rem", [w] ->
-      PX.Expand.block (rstore (R.reg dst) (Rewrite.rem w (rfetch x) (rfetch y)) dstw)
-  | _ ->
-      rstore (R.reg dst) (R.app (Up.opr op) [rfetch x; rfetch y]) dstw
+      PX.Expand.block (rstore (R.reg dst) (Rewrite.rem w xv yv) dstw)
+  | "mul", [w] ->
+      (* hoping that a later pass will eliminate the y to y move *)
+      dblop ~dsthi:yreg ~dstlo:dst (Dn.opr (R.opr "mulx" [32])) x y
+  | _ -> rstore (R.reg dst) (R.app (Up.opr op) [xv; yv]) dstw
+@ 
 <<SPARC postexpander>>=
-let dblop ~dsthi ~dstlo op x y = Unsupported.mulx_and_mulux()
-let wrdop  ~dst op x y z = Unsupported.singlebit ~op:(fst op)
-let wrdrop ~dst op x y z = Unsupported.singlebit ~op:(fst op)
+let weird_tmp tmp z = match z with
+| PX.WTemp (Register.Reg t)             -> t, PX.Nop
+| PX.WTemp (Register.Slice (w, 0, t))   -> t, PX.Nop
+| PX.WTemp (Register.Slice (w, lsb, t)) -> 
+    tmp, move tmp t <:> rtl (tstore tmp (RO.shrl 32 (rfetch tmp) (RO.unsigned 32 lsb)))
+| PX.WBits b -> tmp, rtl (tstore tmp (R.bits (Bits.Ops.zx 32 b) 32))
+
+let carrybit = R.app (R.opr "sparc_carrybit" []) [RU.fetch cc]
+let adcflags x y w =
+  R.store cc (R.app (R.opr "sparc_adcflags" [w]) [x; y; carrybit]) 32
+let sbbflags x y w =
+  R.store cc (R.app (R.opr "sparc_sbbflags" [w]) [x; y; carrybit]) 32
+
+let set_carry ~tmp z =
+  let t, is = weird_tmp tmp z in
+  let bit0 = RO.lobits 32 1 (rfetch t) in
+  is <:>
+  rtl (R.store cc (R.app (R.opr "sparc_setcarry" []) [RU.fetch cc; bit0]) 32)
+
+let wrdop ~dst op x y z =
+  let is_add =
+    match at32 op with
+    | "addc"  -> true
+    | "subb" -> false
+    | _ -> impossf "wrdop: %s" (fst op)
+  in
+  let dstv, yv = rfetch dst, rfetch y in
+  let flags = (if is_add then adcflags else sbbflags) dstv yv 32 in
+  set_carry ~tmp:dst z <:>
+  move dst x <:>
+  rtl (R.par [R.store (R.reg dst) (R.app (Up.opr op) [dstv; yv; carrybit]) 32; flags])
+
+let wrdrop ~dst:(fill, dt) op x y z =
+  let shift dst op n = rtl (tstore dst (op 32 (rfetch dst) (RO.unsigned 32 n))) in
+  let is_add =
+    match at32 op with
+    | "carry"  -> true
+    | "borrow" -> false
+    | _ -> impossf "wrdrop: %s" (fst op)
+  in
+  wrdop ~dst:dt ((if is_add then "addc" else "subb"), [32]) x y z <:>
+  (match fill with
+   | PX.HighAny -> PX.Nop
+   | PX.HighZ   -> shift dt RO.shl 31 <:> shift dt RO.shrl 31  (* zxlo *)
+   | PX.HighS   -> shift dt RO.shl 31 <:> shift dt RO.shra 31  (* sxlo *))
+
+(* Unsupported.singlebit ~op:(fst op) *)
+
 <<SPARC postexpander>>=
 let with_rm rm b =
   PX.with_hw ~hard:(Register.Reg rounding_mode_reg) ~soft:rm ~temp:(talloc 't' 32) b
@@ -308,13 +404,13 @@ let f2i op dst x w = match dst, x with
              or float-to-float space\n" dstr xr
 
 let unrm ~dst op x rm   =
-  let w = Register.width dst in
+  let w = rwidth dst in
   match op with
   | "f2i", _ -> with_rm rm  (f2i (Up.opr op) dst x w)
   | _ ->
       with_rm rm (rstore (R.reg dst) (R.app (Up.opr op) [rfetch x; rounding_mode]) w)
 let binrm ~dst op x y rm =
-  let w = Register.width dst in
+  let w = rwidth dst in
   with_rm rm
     (rstore (R.reg dst) (R.app (Up.opr op) [rfetch x; rfetch y; rounding_mode]) w)
 @ 
@@ -361,7 +457,8 @@ let callr ~tgt ~others =
   PX.Nop, R.par (R.store pc_lhs (rfetch tgt)   wordsize :: effects others)
 @ 
 <<SPARC postexpander>>=
-let cut_to effs = PX.Nop, R.par (effects effs)
+let cut_to effs = PX.Rtl (R.store (R.reg cwp) (R.bits (Bits.zero 32) 32) 32),
+                  R.par (effects effs)
 @ 
 If an instruction modifies the current window pointer, it's a save or
 restore, and the generic expander must not touch it.
@@ -382,10 +479,10 @@ module X = Expander.IntFloatAddr(Post)
 \subsection{Target}
 % ------------------------------------------------------------------
 <<sparc.ml>>=
-let spill  p t l = (* assert (reg_width t = Rtlutil.Width.loc l); *)
-  [A.store l (rfetch t) (reg_width t)]
+let spill  p t l = (* assert (rwidth t = Rtlutil.Width.loc l); *)
+  [A.store l (rfetch t) (rwidth t)]
 let reload p t l = 
-  let w = reg_width t in [R.store (R.reg t) (A.fetch l w) w]
+  let w = rwidth t in [R.store (R.reg t) (A.fetch l w) w]
 @ 
 <<sparc.ml>>=
 let ( *> ) = A.( *> )
@@ -435,7 +532,111 @@ let target =
                                    (F.cutto (Rtl.reg sp))
 
     ; T.is_instruction      = Sparcrec.is_instruction
-    ; T.capabilities        = T.incapable
+    ; T.capabilities        = {T.memory = [32; 64]; T.block_copy = true;
+                               T.itemps = [32]; T.ftemps = [32; 64];
+                               T.iwiden = false; T.fwiden = false;
+                               T.literals = [32; 64];
+                               T.operators = List.map Up.opr [
+                                   "sx",      [ 1; 32]
+                                 ; "zx",      [ 1; 32]
+                                 ; "lobits",  [32;  1]
+                                 ; "lobits",  [32; 32]
+                                 ; "add",     [32]
+                                 ; "addc",    [32]
+                                 ; "and",     [32]
+                                 ; "borrow",  [32]
+                                 ; "carry",   [32]
+                                 ; "com",     [32]
+                                 ; "div",     [32]
+                                 ; "divu",    [32]
+                                 ; "mod",     [32]
+                                 ; "modu",    [32]
+                                 ; "mul",     [32]
+                                 ; "mulx",    [32]
+                                 ; "mulux",   [32]
+                                 ; "neg",     [32]
+                                 ; "or",      [32]
+                                 ; "quot",    [32]
+                                 ; "popcnt",  [32]
+                                 ; "rem",     [32]
+                                 ; "rotl",    [32]
+                                 ; "rotr",    [32]
+                                 ; "shl",     [32]
+                                 ; "shra",    [32]
+                                 ; "shrl",    [32]
+                                 ; "sub",     [32]
+                                 ; "subb",    [32]
+                                 ; "xor",     [32]
+                                 ; "eq",      [32]
+                                 ; "ge",      [32]
+                                 ; "geu",     [32]
+                                 ; "gt",      [32]
+                                 ; "gtu",     [32]
+                                 ; "le",      [32]
+                                 ; "leu",     [32]
+                                 ; "lt",      [32]
+                                 ; "ltu",     [32]
+                                 ; "ne",      [32]
+                                 ; "fabs", [32]
+                                 ; "fadd", [32]
+                                 ; "fdiv", [32]
+                                 ; "feq", [32]
+                                 ; "fge", [32]
+                                 ; "fgt", [32]
+                                 ; "fle", [32]
+                                 ; "flt", [32]
+                                 ; "fne", [32]
+                                 ; "fordered", [32]
+                                 ; "fmul", [32]
+                                 ; "fneg", [32]
+                                 ; "funordered", [32]
+                                 ; "fsqrt", [32]
+                                 ; "fsub", [32]
+                                 ; "fabs", [64]
+                                 ; "fadd", [64]
+                                 ; "fdiv", [64]
+                                 ; "feq", [64]
+                                 ; "fge", [64]
+                                 ; "fgt", [64]
+                                 ; "fle", [64]
+                                 ; "flt", [64]
+                                 ; "fne", [64]
+                                 ; "fordered", [64]
+                                 ; "fmul", [64]
+                                 ; "fneg", [64]
+                                 ; "funordered", [64]
+                                 ; "fsqrt", [64]
+                                 ; "fsub", [64]
+                                 ; "f2f", [32; 64]
+                                 ; "f2f", [64; 32]
+                                 ; "i2f", [32; 64]
+                                 ; "f2i", [64; 32]
+                                 ; "minf", [32]  (* from simplifier *)
+                                 ; "minf", [64]  (* from simplifier *)
+                                 ; "pinf", [32]  (* from simplifier *)
+                                 ; "pinf", [64]  (* from simplifier *)
+                                 ; "mzero", [32]  (* from simplifier *)
+                                 ; "mzero", [64]  (* from simplifier *)
+                                 ; "pzero", [32]  (* from simplifier *)
+                                 ; "pzero", [64]  (* from simplifier *)
+                                 ; "round_up", []  (* from simplifier *)
+                                 ; "round_down", []  (* from simplifier *)
+                                 ; "round_zero", []  (* from simplifier *)
+                                 ; "round_nearest", []  (* from simplifier *)
+                                 ; "NaN",   [23; 32]  (* from simplifier *)
+                                 (* ; "NaN",   [52; 64]  from simplifier *)
+                                 ;  "add_overflows",  [32]
+                                 ;  "div_overflows",  [32]
+                                 ;  "mul_overflows",  [32]
+                                 ;  "mulu_overflows", [32]
+                                 ;  "quot_overflows", [32]
+                                 ;  "sub_overflows",  [32]
+                                 ; "not",     []
+                                 ; "bool",    []
+                                 ; "disjoin", []
+                                 ; "conjoin", []
+                                 ; "bit",     []
+                             ]}
     ; T.globals             = globals
     ; T.rounding_mode       = rounding_model (* Rtl.reg rm_reg *)
     ; T.named_locs   = Strutil.assoc2map 

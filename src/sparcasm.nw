@@ -24,6 +24,7 @@ let make emitter fd = new asm emitter fd
 @ 
 <<utilities>>=
 let fprintf = Printf.fprintf
+let unimpf  fmt = Printf.kprintf Impossible.unimp fmt
 @ 
 <<definition of [[manglespec]] (for the name mangler)>>=
 let spec =
@@ -83,34 +84,45 @@ method section name =
 method current = _section
 method org n = Impossible.unimp "no .org in SPARC assembler"
 method align  n = 
-  if n <> 1 then fprintf _fd ".align %d\n" n
+  if n <> 1 then fprintf _fd ".align %d\n" n;
+  _a <- Alignment.align n _a
 method addloc n = 
-  if n <> 0 then fprintf _fd ".skip %d\n"  n
-method zeroes (n:int) = fprintf _fd ".skip %d\n" n
+  if n <> 0 then fprintf _fd ".skip %d\n"  n;
+  _a <- Alignment.add n _a
+method zeroes (n:int) =
+  fprintf _fd ".skip %d\n" n;
+  _a <- Alignment.add n _a
 @ 
 
 <<assembly methods>>=
 method value (v:Bits.bits) = 
   let altfmt = Bits.to_hex_or_decimal_string ~declimit:256 in
-  match Bits.width v with
-  |  8  -> fprintf _fd ".byte %Ld\n" (Bits.S.to_int64 v)
-  | 16  -> fprintf _fd ".half %s\n"  (altfmt v)
-  | 32  -> fprintf _fd ".word %s\n"  (altfmt v)
-  | 64  -> fprintf _fd ".xword %s\n"  (altfmt v)
-  | w -> Impossible.unimp ("emission width " ^ string_of_int w ^ " in SPARC assembler")
+  let w      = Bits.width v in
+  if w / 8 <= Alignment.alignment _a then
+    (* we can emit the value directly *)
+    if w <= 32 then 
+      (* assume it is a power of 2 *)
+      match Bits.width v with
+      |  8 -> fprintf _fd ".byte %Ld\n" (Bits.S.to_int64 v)
+      | 16 -> fprintf _fd ".half %s\n"  (altfmt v)
+      | 32 -> fprintf _fd ".word %s\n"  (altfmt v)
+      | w  -> unimpf "emission width %s in SPARC assembler" (string_of_int w)
+    else
+      (this#value (Bits.Ops.lobits 32 (Bits.Ops.shrl v (Bits.U.of_int (w - 32) w)));
+       this#value (Bits.Ops.lobits (w - 32) v))
+  else
+    (* ex: try to emit word, on half-word boundary *)
+    (* have to emit as smaller chunks *)
+    (this#value (Bits.Ops.lobits 8 (Bits.Ops.shrl v (Bits.U.of_int (w - 8) w)));
+     this#value (Bits.Ops.lobits (w - 8) v))
 @ 
 
-Okay, I'm not quite sure how this function is being called, but at
-least on the SPARC it seems that labels need to be printed differently
-in different contexts---if we refer to a label in a data segment then
-it needs a ``.long'' just like constant data.  Otherwise we want to
-just print the symbol as usual.  For now this function will just print
-the ``.long'' version since I'm not quite sure.
 <<assembly methods>>=
 method addr a =
   match Reloc.Simple.normalize a with
   | None, bits   -> this#value bits
-  | Some s, bits -> 
+  | Some s, bits ->
+      _a <- Alignment.add 4 _a;
       if Bits.Ops.eq bits (Bits.zero 32) then
         fprintf _fd ".word %s\n" s#mangled_text
       else
@@ -122,7 +134,7 @@ method emit = ()
 @ 
 
 <<assembly methods>>=
-method comment s = fprintf _fd "/* %s */\n" s
+method comment s = fprintf _fd "! %s\n" s
 
 method const (s: Symbol.t) (b:Bits.bits) = 
   Impossible.unimp "Don't know how to make a constant for SPARC"
@@ -145,18 +157,17 @@ method private call node =
 
 (* this better be only used for printing out functions... *)
 method cfg_instr proc  = 
-  (* We have to emit a label/whatever for the procedure's 
+  (* We have to emit a label for the procedure's 
      entry point. This is what symbol is for. Simply use this#label?  *)
   let cfg    = proc.Proc.cfg
   and symbol = proc.Proc.symbol in
   let label l = this#label (try SM.find l _syms with Not_found -> this#local l) in
   let numargs = List.length (proc.Proc.formals) in
     this#label symbol;    
-                                    (* in, locals, out, ??? *)
-    (* fprintf _fd "\talloc loc0 = ar.pfs, %d, 2, 8, 0 ;;\n" numargs; *)
     (emitter cfg (this#call) (this#instruction) label : unit)
 @ 
 
 <<private assembly state>>=
+val mutable _a = Alignment.init
 val mutable _section = "bogus section"
 @ 

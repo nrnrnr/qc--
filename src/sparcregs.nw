@@ -10,7 +10,7 @@ module Spaces : sig
   val r : Space.t  (* integer regs *)
   val f : Space.t  (* floating regs *)
   val k : Space.t  (* register-window hardware *)
-  val c : Space.t  (* special registers *)
+  val c : Space.t  (* standard special registers *)
 
   val t : Space.t  (* 32-bit integer temps *)
   val u : Space.t  (* 32-bit floating temps *)
@@ -24,7 +24,7 @@ val npc : Rtl.loc
 val cc  : Rtl.loc
 
 val cwp : Register.t  (* current window pointer *)
-@ 
+val y   : Register.t  (* y register, for multiply *)
 @
 <<sparcregs.ml>>=
 module R  = Rtl
@@ -56,10 +56,6 @@ windows.  Nyarggg.  We pretend that it's actually split between 32 and
                     ; S.widths         = [32; 64]
                     ; S.classification = S.Reg
                     }
-
-(*
- let f = SS.f 32 id [32]
-*)
 @ [[t]] is the temporary space for the [[r]] space.
 <<SPARC spaces>>=
   let t = SS.t   byteorder 32
@@ -91,10 +87,6 @@ windows.  Nyarggg.  We pretend that it's actually split between 32 and
                                ; S.set_doc    = "64-bit floating-point temporaries"
                                }
                     }
-
-(*
-  let u = SS.u    id [32]
-*)
 @ [[c]] is the space for condition codes and the program counter.
 <<SPARC spaces>>=
   let c = SS.c  6 Rtl.Identity [32]  (* pc, npc, cc, ???, fp_mode, fp_fcmp *)
@@ -123,6 +115,17 @@ the rounding mode.
                     ; S.widths         = [2]
                     ; S.classification = Space.Fixed
                     }
+@
+This is just for the Y register which is used for extended multiply.
+<<SPARC spaces>>=
+  let y = S.checked { Space.space          = ('y', Rtl.Identity, Cell.of_size 32)
+                    ; Space.doc            = "Y register"
+                    ; Space.indexwidth     = 32
+                    ; Space.indexlimit     = Some 1
+                    ; Space.widths         = [32]
+                    ; Space.classification = Space.Fixed
+                    }
+@
 <<sparcregs.ml>>=
 let locations = SS.locations Spaces.c
 let pc        = locations.SS.pc
@@ -131,3 +134,4 @@ let npc       = locations.SS.npc
 @ 
 <<sparcregs.ml>>=
 let cwp  = (Spaces.k.Space.space, 0, R.C 1)
+let y    = (Spaces.y.Space.space, 0, R.C 1)

@@ -56,6 +56,8 @@ let spl = RP.Reg(rspace, 14, R.C 1)
 let sp  = RP.Fetch(spl, 32)
 let ral = RP.Reg(rspace, 31, R.C 1)
 let ra  = RP.Fetch(ral, 32)
+let yregl = RP.Reg Sparcregs.y
+let yreg = RP.Fetch(yregl, 32)
 
 let idiomatic_reg_name n =
   if n = 14 then "%sp"
@@ -69,7 +71,7 @@ let idiomatic_reg_name n =
 let positive b = Bits.Ops.gt b (Bits.zero 32)
 let negative b = Bits.Ops.lt b (Bits.zero 32)
 
-let in_proc = ref false
+let in_proc = Reinit.ref false
 @ 
 
 \subsection{Recognizer terminals, nonterminals, and constructors}
@@ -91,6 +93,7 @@ constx : Bits(b:bits) [{: guard (Bits.width b = 64) :}] {: const64 b :}
 
 four   : Bits(bits)   [{: guard (Bits.eq bits (Bits.S.of_int 4 32)) :}] {:():}
 one    : Bits(bits)   [{: guard (Bits.eq bits (Bits.S.of_int 1 32)) :}] {:():}
+zero   : Bits(bits)   [{: guard (Bits.eq bits (Bits.S.of_int 0 32)) :}] {:():}
 @ 
 
 \paragraph{Location Types}
@@ -106,6 +109,9 @@ dregl  : RegPair('f', n:int) {: sprintf "%%f%i" n :}
 
 dregnum   : Fetch(dregnuml, w) {: dregnuml :}
 dregnuml  : RegPair('f', n:int) {: n :}
+
+yreg : Fetch(yregl, w) {: yregl :}
+yregl : Reg('y', n:int) {: "y" :}
 
 -- this is stupid, but we don't know how to deal with
 -- changing register windows at this point, so this allows
@@ -253,6 +259,20 @@ inst : Store(dst:regl, Mul(x:reg_or_const, y:reg), w)
 inst : Store(dst:regl, Mul(x:reg, y:reg_or_const), w)
   {: sprintf "smul %s, %s, %s" x y dst :}
 
+-- mulx
+inst : Par(Store(dst:regl, Mul(x:reg_or_const, y:reg), w),
+           Store(yregl, Sparcmulxhi(x2:reg_or_const, y2:reg), w))
+--  [{: guard (x = x2 && y = y2) :}]
+-- I'd like to check this, but Burg won't let me!
+  {: sprintf "smulx %s, %s, %s" x y dst :}
+
+-- mulux
+inst : Par(Store(dst:regl, Mul(x:reg_or_const, y:reg), w),
+           Store(yregl, Sparcmuluxhi(x2:reg_or_const, y2:reg), w))
+--  [{: guard (x = x2 && y = y2) :}]
+-- I'd like to check this, but Burg won't let me!
+  {: sprintf "umulx %s, %s, %s" x y dst :}
+
 -- quot
 inst : Store(dst:regl, Quot(x:reg, y:reg_or_const), w)
   {: sprintf "sdiv %s, %s, %s" x y dst :}
@@ -366,7 +386,12 @@ restore: Store(cwpl, Add(cwp, one), w) {: () :}
 inst : Par(Goto(ra), restore)
     {: (in_proc := false; "ret\n\trestore") :}
 
-inst : Par(Goto(reg), Store(spl, reg, w)) {: "unimp" :}
+-- Trap 3 tells the OS to flush all reg window data
+inst: Store(cwpl, zero, w) {: "ta 3" :}
+
+-- cut to
+inst : Par(Goto(r:reg), Store(spl, reg, w))
+   {: sprintf "jmp %s\n\tmov %s, %%sp" r reg :}
 
 -- branches
 inst: Goto(target) {: sprintf "ba %s\n\tnop" target :}
@@ -510,6 +535,8 @@ any : Goto(any) {: s "Goto(%s)" any :}
 | RP.App(("sx", [16;32]),    [x]) -> conSxhalf (exp x)
 
 | RP.App(("sparc_subcc", [w]), [x; y]) -> conSparcsubcc (exp x) (exp y)
+| RP.App(("sparc_mulx_hi", [w]), [x; y]) -> conSparcmulxhi (exp x) (exp y)
+| RP.App(("sparc_mulux_hi", [w]), [x; y]) -> conSparcmuluxhi (exp x) (exp y)
 | RP.App(("sparc_eq",    [w]), [x]) -> conSparceq  (exp x)
 | RP.App(("sparc_ne",    [w]), [x]) -> conSparcne  (exp x)
 | RP.App(("sparc_ge",    [w]), [x]) -> conSparcge  (exp x)

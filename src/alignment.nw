@@ -1,0 +1,45 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% vim: ts=8 sw=4 et:
+%
+% Grades     ::=    "%%Grades:" Quality Importance Urgency
+% Quality    ::=    A|B|C|D|E
+% Importance ::=    Central|Subsystem|Peripheral
+% Urgency    ::=    Immediate|Soon|Later
+%
+% Example (at beginning of line): %%Grades: B Central Soon
+%
+
+% ------------------------------------------------------------------ 
+\section{Interface to manipulate alignment constraints}
+% ------------------------------------------------------------------ 
+
+<<alignment.mli>>=
+type t
+
+val init  : t
+
+val add   : int -> t -> t
+val align : int -> t -> t
+
+val alignment : t -> int
+@
+
+\section{Implementation of alignment manipulation}
+
+The first element of the alignment type [[t]] represents the number of
+bytes beyond the alignment we have written.  The second element of the
+alignment type is the last enforced alignment boundary.
+<<alignment.ml>>=
+type t = int * int
+@
+<<alignment.ml>>=
+let init = (0, 1)
+let add i (n, k) = (n + i, k)
+let align k (n', k') = (0, k)
+let alignment (n, k) =
+  let rec gcd n m =
+    if n = 0 then m
+    else if n >= m then gcd (n - m) m
+    else gcd m n
+  in gcd n k
+@

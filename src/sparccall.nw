@@ -39,7 +39,7 @@ let f i = (fspace, i, R.C 1)
 let x i = (fspace, 8+2*i, R.C 2)
 
 let vol_regs    = RS.of_list (List.map r ([1;2;3;4] @ Aux.from 16 ~upto:23))
-let nv_regs     = RS.of_list (List.map r [])
+let nv_regs     = RS.of_list (List.map r [31])
 let vol_fp      = 
    RS.of_list ( List.map f (Aux.from 0 ~upto:7)
               @ List.map x (Aux.from 0 ~upto:7)
@@ -101,7 +101,7 @@ Sparc.cc["C"].call =
 <<SPARC calling convention automata in Lua>>=
 Sparc.cc["C"].cutto =
   { A.widen(32, "multiple")
-  , A.useregs (o(0)..o(5))
+  , A.useregs (r(24)..r(29))
   , A.overflow { growth = "up", max_alignment = Sparc.sp_align }
   }
 @ 
@@ -194,7 +194,8 @@ let cut_actuals auto base =
 @ 
 <<sparccall.ml>>=
 let ra_on_entry block = R.fetch ra wordsize
-let where_to_save_ra ra_on_entry temp = ra
+let where_to_save_ra ra_on_entry temp = Talloc.Multiple.loc temp 't' 32
+(* ra *)
 @ 
 <<sparccall.ml>>=
 (* Really inteded for the C convention *)
