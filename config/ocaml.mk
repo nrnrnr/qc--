@@ -42,7 +42,7 @@ POD2HTML =      pod2html
                 $OCAMLYACC -v $stem.mly
 
 %.sig:          %.ml
-                $OCAMLC $OCAMLC_FLAGS -c -i $stem.ml
+                $OCAMLC $OCAMLC_FLAGS -c -i $stem.ml > $target
 
 %.man:          %.1
                 nroff -man $prereq > $target
