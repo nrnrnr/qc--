@@ -351,12 +351,12 @@ successor, they \emph{all} get updated to the new node.  Hence,
 [[gm_redirect_all]] is not fully general.
 
 \item [[gm_insert_assign_after:    Rtl.rtl list -> node -> unit]]:
-Inserts [[assign]] nodes $a$ after a node $n$, using the
-supplied {\rtl}s.  It is a checked run-time error if the node $n$ was
-not created by the [[gm_assign]] function. This guarantees that it has
-only one outgoing edge and therefore this operation is well defined.
-The (single) successor of $n$ becomes the successor of $a$ and $a$
-becomes the only successor of $n$. 
+Inserts [[assign]] nodes $a$ after a node $n$, using the supplied
+{\rtl}s.  It is a checked run-time error if the node $n$ was not created
+by the [[gm_assign]] function, or is the [[entry]] node. This guarantees
+that it has only one outgoing edge and therefore this operation is well
+defined.  The (single) successor of $n$ becomes the successor of $a$ and
+$a$ becomes the only successor of $n$. 
 
 \item [[gm_insert_assign_before: Rtl.rtl list -> node -> unit]]:
 Places a sequence of [[assign]] nodes bewfore [[node]] such that
@@ -555,8 +555,8 @@ end
 % ------------------------------------------------------------------ 
 
 The implementation of the {\cfg} is layered: the top-layer that
-implements the interface is presented here. It relied heavily on the
-object-oriented implementation of nodes in module [[x]], which
+implements the interface is presented here. It relies heavily on the
+object-oriented implementation of nodes in module [[x]] that
 represents the lower layer.
 
 <<implementation>>=
@@ -950,9 +950,9 @@ end
 
 \item [[insert_assign_after]] creates a new [[assign]] node from an
       [[Rtl.rtl]] after a node and returns it. It is a checked run-time
-      error if [[this]] is not an [[assign]] node. The successor of
-      [[this]] becomes the successor of the new node, which in turn
-      becomes the new successor of [[this]].
+      error if [[this]] is not an [[assign]] or [[entry]] node. The
+      successor of [[this]] becomes the successor of the new node, which
+      in turn becomes the new successor of [[this]].
 
 \item [[insert_assign_between]] creates a new [[assign]] node from an
       [[Rtl.rtl]] and places it between [[this]] node and the node
@@ -1354,9 +1354,9 @@ object(this)
         let this    = (this :> node) in
         let label l = stmt (A.LabelStmt (mangle l)) in
         let labels  = List.map label _labels in
-        let msg     = this#comment in
-        let id      = stmt (A.CommentStmt msg) in 
-             id::labels
+        (* let comment = stmt (A.CommentStmt (this#comment)) in 
+         *)  
+          (* comment :: *) labels
 
     method virtual linorder: node option * node list
 
@@ -1462,6 +1462,15 @@ object(this)
         _succ # link_pred (this :> node)
 
     method linorder = (Some _succ, [])
+
+    method insert_assign_after (rtl:Rtl.rtl) =
+        let this   = (this :> node) in
+        let assign = new assign _cfg rtl (_succ) in
+            ( _succ#unlink_pred this
+            ; _succ <- assign
+            ; _succ#link_pred this
+            ; assign
+            )
     
     method comment = super#comment ^ " entry"    
     method succ = [_succ]

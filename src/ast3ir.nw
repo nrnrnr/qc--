@@ -207,7 +207,14 @@ let rec fetch env target = function
                 (expr env target e)
         in
             Rtl.fetch cell width     
+@
 
+A continuation has two labels: one for its code ([[x]]), and one that is
+used as its value ([[label]]). The label is later re-written to a
+pointer expression that denotes a pair of values in the activation
+record. The label is part of the continuation's denotation.
+
+<<Make expressions>>=
 and variable env target hint x =
     let (_,(denot,t)) = F.findv x env in
     ( match denot with
@@ -217,7 +224,7 @@ and variable env target hint x =
     | F.Label(F.Data  ) -> Rtl.link x (width t)
     | F.Import(None)    -> Rtl.link x (width t)
     | F.Import(Some n)  -> Rtl.link n (width t)
-    | F.Continuation          -> Impossible.impossible "Ast3ir.Make.variable cont"
+    | F.Continuation label  -> Rtl.link label (width t)
     | F.Label(F.Stack(None))  -> Impossible.impossible "Ast3ir.Make.variable"
     | F.Label(F.Stack(Some loc)) ->
         let w    = width t                                   in 
@@ -271,8 +278,7 @@ and expr env target exp =
 \subsection{Constant Evaluation}
 % ------------------------------------------------------------------ 
 
-For constant evaluation constants are translated to {\rtl} expressions
-which then are evaluated.
+We translate constants  to {\rtl} expressions which then evaluate.
 
 <<Make constant evaluation>>=
 module Eval = Rtleval.Make(Asm.RelAddr)
@@ -481,6 +487,7 @@ type state =
     ; inbase:       Rtl.exp          (* addr of INCOMING ares          *)
     ; outgoing:     Area.t list      (* areas to be overlayed in OUTGOING *)   
     ; incoming:     Area.t list      (* ditto for INCOMING *)
+    ; conts:        string list      (* local continuations *)    
     }
 @
     
@@ -721,7 +728,9 @@ and returnStmt state (cconv, kont, args) =
 @
 
 A continuation receives its parameters in the \emph{incoming} area of
-its activation.
+its activation. For the moment we assume that all continuations escape
+and collect them in [[state.conts]]. Therefore we simply add the
+[[label]] of this continuation to the list.
 
 <<Make statements>>=
 and contStmt state (label,args)  = 
@@ -734,8 +743,8 @@ and contStmt state (label,args)  =
     let result  = { state with
                     node     = copy
                   ; incoming = area :: state.incoming
+                  ; conts    = label :: state.conts
                   } in
-
         result
 @
 
@@ -782,6 +791,17 @@ and switchStmt    state x  = Impossible.unimp "switch"
 \end{quote}
 
 <<Make procedure>>=
+let create_cont (a:Automaton.t) (sp:Rtl.loc) (env:F.env) (label:string) =
+    let reference = match F.findv label env with
+        | (_, (F.Continuation(r),_)) -> r
+        | x                          -> assert false in
+    Cont.allocate a sp label reference
+        
+let init_cont (cfg:G.cfg) (c:Cont.t) =
+    G.gm_insert_assign_after (Cont.init c) (G.entry cfg)
+
+
+<<Make procedure>>=
 let proc env target (mangle:string->string)  asm (cconv,name,args,bdy) = 
     let p           = match F.findv name env with
                       | _,(F.Label(F.Proc p),_) -> p
@@ -818,6 +838,7 @@ let proc env target (mangle:string->string)  asm (cconv,name,args,bdy) =
         ; outgoing  = [dummy]    (* overlapping areas in outgoing area *)
         ; inbase    = inb
         ; outbase   = outb
+        ; conts     = []         (* continuations *)
         } in  
     (* translate body of procedure *)
     let state = foldr body bdy state in
@@ -832,6 +853,11 @@ let proc env target (mangle:string->string)  asm (cconv,name,args,bdy) =
         ; incoming = area :: state.incoming
         } in
     let _     = G.gm_redirect_all (G.entry cfg) (G.exit cfg) state.node in
+    (* insert initializing assignements for continuations *)
+    let conts = List.map (create_cont priv cc.Target.sp env) state.conts in
+    let ()    = List.iter (init_cont state.cfg) conts in
+    let eqn   = List.fold_left (fun eqns c->Cont.register c eqns) eqns conts in
+    (* prepare stack *)
     let incoming, eqns = Area.overlap Area.EqualLowEnds state.incoming eqns in
     let outgoing, eqns = Area.overlap Area.EqualLowEnds state.outgoing eqns in
     let i =    

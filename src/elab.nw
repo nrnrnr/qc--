@@ -1201,7 +1201,8 @@ let rec stmt r scope env = function
     | A.SwitchStmt (range,e,arms) ->
         foldl (arm r range scope)  env arms
     | A.ContStmt(n,ee) when scope = Global ->
-        bindv n r (E.ematch (pointerTy env) (fun p -> F.Continuation,p)) env
+        bindv n r (E.ematch (pointerTy env) 
+            (fun p -> F.Continuation(Idgen.cont n),p)) env
     | otherwise                   ->
         env
 
@@ -1593,7 +1594,7 @@ to]] statement when [[isCutTo]] is true.
 let rec checkFlow isCutTo env f =
     let check env x = E.seq' env (snd (F.findv x env))
         ( function
-        | (F.Continuation,_) -> env
+        | (F.Continuation _,_) -> env
         | _                  -> E.error (x^" is not a continuation")
         )     
     in match f with

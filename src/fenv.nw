@@ -211,10 +211,18 @@ capture the structure of values in {\PAL}.
 
 Some care must be taken when dealing with [[goto]] labels and imported
 values because of {\PAL} idiosyncrasies.  Both have global scope, even
-when they are defined inside a procedure.  Consequently, they are
-added to the environment (and bottom scope) during the first pass,
-that enters all globally bound values.  A later pass that enters only
-locally visible values must ignore them. 
+when they are defined inside a procedure.  Consequently, they are added
+to the environment (at the outermost/bottom scope) during the first
+pass, that enters all globally bound values.  A later pass that enters
+only locally visible values must ignore them. 
+
+The denotation of a continuation $x$ includes a label $x'$. It is used
+during translation the translation of an expressions that refer to $x$:
+the reference is first represented as a \emp{symbolic constant}
+(c.f.~\module{const}) $x'$ which is later re-written to a pointer into
+the run-time stack. This re-write steps needs to distinguish between $x$
+and $x'$. 
+ 
 
 <<types>>=
 type proc = 
@@ -239,7 +247,7 @@ and  denotation     = Constant      of Bits.bits
                     | Label         of kind
                     | Import        of string option
                     | Register      of register
-                    | Continuation
+                    | Continuation  of string    
 @
 
 The complete entry [[ventry]] for a value includes not only its
@@ -992,7 +1000,7 @@ let rec clean_venv map  =
                 | Dirty.Label(Dirty.Stack x)      -> Clean.Label(Clean.Stack x)
                 | Dirty.Import(n)                 -> Clean.Import(n)
                 | Dirty.Register(n)               -> Clean.Register(clean_reg n)
-                | Dirty.Continuation              -> Clean.Continuation
+                | Dirty.Continuation(n)           -> Clean.Continuation(n)
             in
                  Str.Map.add key (pos,(denot',ty)) map
         |  _  -> assert false

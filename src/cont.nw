@@ -30,9 +30,9 @@ type t                                  (* a continuation *)
 val allocate:   Automaton.t             (* stack space *)
                 -> sp:Rtl.loc           (* location of stack pointer *)
                 -> label:string         (* label of continuation *)
+                -> reference:string     (* reference to cont *)
                 -> t
                 
-val exp:        t -> Rtl.exp            (* reference to cont *)
 val register:   t -> Const.t -> Const.t (* register t for substitution *)
 val init:       t -> Rtl.rtl list       (* RTLs to fill slots *)
 
@@ -52,18 +52,22 @@ function receives the following parameters:
       also \module{proc} and \module{automaton} how automata are used to
       allocate resources. This value is updated by a side-effect.
 
-\item [[cont:string]]: the label for the continuation the slot is
-      allocated for.      
+\item [[sp]]: the location of the stack pointer.
+
+\item [[label:string]]:     the name of the continuation.
+\item [[reference:string]]: in an expression a continuation is 
+      referred to by [[reference]] (which is distinct from [[label]]).
+      The reference can be found in a continuations denotation in the
+      fat environment.
 \end{itemize}
 
 During the first translation of a procedure addresses on the stack are
-not yet known. Therefore a continuation value is represented by [[exp
-t]] which is a [[Rtl.link]] value, that is later replaced by a pointer
-into the procedure's activation record. To make this substitution happen
-the continuation must be \emph{registered} with the enclosing
-procedure's equation set [[Const.t]]. Each procedure maintains a
-[[Const.t]] value for constraints related to values in its activation
-record.
+not yet known. Therefore a continuation value is represented by
+[[Rtl.link reference]] value,  that is later replaced by a pointer into
+the procedure's activation record. To make this substitution happen the
+continuation must be \emph{registered} with the enclosing procedure's
+equation set [[Const.t]]. Each procedure maintains a [[Const.t]] value
+for constraints related to values in its activation record.
 
 The [[init]] function returns {\rtl}s that fill the stack slot for [[t]]
 with the values for the current activation. We use the {\rtl}s to
@@ -102,17 +106,16 @@ type t =
 \end{itemize}
 
 <<cont.ml>>=
-let allocate (a:Automaton.t) (sp:Rtl.loc) (label:string) =
+let allocate (a:Automaton.t) (sp:Rtl.loc) (label:string) (reference:string) =
     let width = Rtlutil.Width.loc sp in         (* pointer width *)
         { label     = label
-        ; reference = Idgen.cont label
+        ; reference = reference
         ; sp        = sp
         ; cont_sp   = Automaton.to_loc (Automaton.ty a width None)
         ; cont_pc   = Automaton.to_loc (Automaton.ty a width None)
         }
 
-let exp t =
-    Rtl.link t.reference (Rtlutil.Width.loc t.sp)
+let reference t = Rtl.link t.reference (Rtlutil.Width.loc t.sp)
 @
 
 In the body of a procedure we want to replace every symbolic
@@ -132,7 +135,7 @@ equation system.
 let register t const =
     match Rtl.Convert.loc t.cont_pc with
     | Rtl.Private.Cell(_,_,_,e,_) -> 
-        Const.make_equal (Rtl.Revert.exp e) (exp t) const
+        Const.make_equal (Rtl.Revert.exp e) (reference t) const
     | _ -> assert false    
 @
 
