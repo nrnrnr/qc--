@@ -27,8 +27,9 @@ type ('automaton, 'cfg, 'cc, 'tgt) t =
     { symbol:         Symbol.t           (* of procedure *)
     ; cc:             'cc                (* calling convention                   *)
     ; target:         'tgt               (* target of this procedure             *)
+    ; formals:        (int * Ast.formal) list (* formal args w/ indices)         *)
     ; temps:          Talloc.Multiple.t  (* allocator for temporaries            *)
-    ; mk_symbol:      string -> Symbol.t (* allocator for symbols            *)
+    ; mk_symbol:      string -> Symbol.t (* allocator for symbols                *)
     ; cfg:            'cfg               (* control-flow graph                   *)
     ; oldblocks:      overflow           (* stack - incoming parms, outgoing results *)
     ; youngblocks:    overflow           (* stack - outgoing parms, incoming results *)
@@ -38,14 +39,16 @@ type ('automaton, 'cfg, 'cc, 'tgt) t =
     ; priv:           'automaton         (* stack - spill slots etc - still open *)
     ; eqns:           Rtleqn.t list      (* eqns for compile time consts *)
     ; vars:           int                (* number of local vars + parameters *)
-    ; mutable varMap: Rtl.Private.loc VarMap.t (* where variables are stored *)
+    ; varMap:         Automaton.loc option array (* where variables are stored *)
     }
 @
 
 \begin{itemize}
-\item [[symbol]]:               the name of the procedure represented by this.
+\item [[symbol]]:              the name of the procedure represented by this.
 \item [[cc]]:                  calling convention for this procedure.
 \item [[target]]:              the target we are compiling for.    
+\item [[formals]]:             the formal arguments to this procedure (with the index
+                               for each variable)
 \item [[temps]]:               an allocator for temporaries
 \item [[mk_symbol]]:           an allocator for symbols
 \item [[cfg]]:                 the control-flow graph of the procedure.
@@ -76,9 +79,7 @@ incoming overflow results, some deallocated by the
 \end{itemize}
 
 <<proc.mli>>=
-module VarMap : Map.S with type key = int
 <<type t>> 
 <<proc.ml>>= 
-module VarMap = Map.Make (struct type t = int let compare = compare end)
 <<type t>> 
 @

@@ -962,6 +962,11 @@ Then function [[optimize]], which is passed in, runs the rest of the
 compiler. 
 The main thing here is dealing with all the blocks.
 <<definition of [[proc]], which translates one procedure>>=
+  let formals = List.map (fun ((_,_,_,n) as arg) ->
+                            match F.findv n env with
+                            | (_, (F.Variable {F.index = index},_)) -> (index, arg)
+                            | _ -> Impossible.impossible "formal is not a var???")
+                args in
   let i =    
     let symbol, nvars = match F.findv procname env with
       | _, (F.Label(F.Proc (sym,scope,i)),_) -> sym, i
@@ -969,6 +974,7 @@ The main thing here is dealing with all the blocks.
     { Proc.symbol      = symbol
     ; Proc.cc          = proc_cc
     ; Proc.target      = target
+    ; Proc.formals     = formals
     ; Proc.temps       = temps
     ; Proc.mk_symbol   = Fenv.Clean.symbol env
     ; Proc.cfg         = g
@@ -985,7 +991,7 @@ The main thing here is dealing with all the blocks.
     ; Proc.eqns        = List.concat (!constraints)
     ; Proc.conts       = contblocks
     ; Proc.vars        = nvars       (* number of variables *)
-    ; Proc.varMap      = Proc.VarMap.empty
+    ; Proc.varMap      = Array.make nvars None
     } in
   optimizer i (* runs optimizer, freezes, and assembles proc *)
 @ 
