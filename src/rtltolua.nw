@@ -227,10 +227,10 @@ first evaluates the right-hand sides of all stores (having an effect of pushing
 the the values of the right-hand sides on the stack), and then performing the
 stores in reverse-order (because we are using a first-in first-out stack).
 
-Additionally, we take care to deal with guarded stores correctly.
+We take care to deal with guarded stores correctly.
 
 <<ToLua>>=
-let rtl' fd (R.Rtl gg) =
+let rtl' fd gg =
    let get_store = function
                  | (_ , R.Kill _)              -> 
                      Impossible.impossible "rtltolua : Rtl.Kill"
@@ -251,9 +251,20 @@ let rtl' fd (R.Rtl gg) =
 @
 
 As above, we export [[rtl']] as [[rtl]]; and we export [[expr]] as [[exp]].
+Note that [[rtl]] recognizes assignments to the stack pointer (and program
+counter, etc.) and ignores them; all else is sent to [[rtl']].
 
 <<ToLua>>=
 (* exported functions *)
-let rtl fd = (rtl' fd) << Rtl.Dn.rtl
+let rtl fd r = 
+   let clean = fun glist g -> match (glist, g) with
+     | (glist, (gd, R.Store (R.Reg('c', _, _), exp, w))) -> glist
+     | (glist, (gd, R.Store (R.Reg('t', _, _), exp, w))) -> glist
+     | (glist, g                                       ) -> g::glist
+
+   in let (R.Rtl guardeds) = Rtl.Dn.rtl r
+   in let guardeds         = List.fold_left clean [] guardeds
+   in    rtl' fd guardeds
+
 let exp    = expr
 @ 
