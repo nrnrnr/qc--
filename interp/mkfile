@@ -1,15 +1,20 @@
-TOOLS=/home/lair/olinsky/bin/tools
+BINDIR=/home/lair/olinsky/bin
+LIBDIR=/home/lair/olinsky/lib
+INCLUDEDIR=include/
+
+CC=gcc
+CFLAGS=-g
+LDFLAGS=-c
+TOOLS=$BINDIR/tools
 
 TOP=..
 INTERP=evaluating
 
 <../config/noweb.mk
 
-all:V: doc coders
+all:V: interp
 
 doc:V: design.ps state.ps
-
-coders:V: encode.h encode.c interp-dec.c
 
 design.tex: design.inc
 	echo "\input{design.inc}" > $target
@@ -20,55 +25,73 @@ state.tex: state.inc
 interp.tex: interp.nw
 	$NOWEAVE -delay -autodefs c -index $prereq > $target
 
-clean:V: clean-tex
-	rm -f design.tex state.tex bytecode.tex *~
+clean:V: clean-tex clean-code clean-obj
+	rm -f design.tex state.tex bytecode.tex interp.tex intervals.tex opgen.tex interp *~
 
 clean-tex:V:
-	rm -f *.blg *.log *.dvi *.inc *.toc *.aux
+	rm -f *.blg *.log *.dvi *.inc *.toc *.aux 
 
-intervals.c:D: intervals.nw
-        $NOTANGLE -L -R$target $prereq > $target
+clean-code:V:
+    rm -f *.m *.h *.i *-dec.c intervals.c encode.c decode.fetch bytecode.sled
 
-intervals.h:D: intervals.nw
-	$NOTANGLE -L -R$target $prereq > $target
+clean-obj:V:
+    rm -f *.o
+
+#
+# source code targets
+#
+intervals.c: intervals.nw
+    $NOTANGLE -L -R$target $prereq > $target
 
 bytecode.sled:D: interp.nw
 	$NOTANGLE -L -R$target $prereq > $target
 
 decode.fetch:D: interp.nw
-	$NOTANGLE -L -R$target $prereq > $target
-
-bcdis.m:D: interp.nw
-        $NOTANGLE -L -R$target $prereq > $target
-
-interp.m:D: interp.nw
-	$NOTANGLE -L -R$target $prereq > $target
-
-interp.h:D: interp.nw
-        $NOTANGLE -L -R$target $prereq > $target
+    $NOTANGLE -L -R$target $prereq > $target
 
 machine.h:D: interp.nw
-        $NOTANGLE -L -R$target $prereq > $target
+    $NOTANGLE -L -R$target $prereq > $target
 
 encode.c encode.h: bytecode.sled
 	$TOOLS -lc-cons-names -encoder encode $prereq
-
-encode.o: encode.c encode.h
-	gcc -c -I/home/lair/olinsky/include/ -o encode.o encode.c
-
-mclib.o: mclib.c
-        gcc -g -c -I/home/lair/olinsky/include/ -o mclib.o mclib.c
-
-cii:    atom.c mem.c except.c assert.c
-        gcc -c -Iinclude/ -o atom.o   atom.c
-	gcc -c -Iinclude/ -o mem.o    mem.c
-	gcc -c -Iinclude/ -o except.o except.c
-	gcc -c -Iinclude/ -o assert.o assert.c
 
 %-dec.c:D: %.m bytecode.sled decode.fetch
 	$TOOLS -lc-cons-names -decoder $target -matcher $stem.m \
 		bytecode.sled decode.fetch
 
+%.h:D: %.nw
+    $NOTANGLE -L -R$target $prereq > $target
+
+%.m:D: interp.nw
+    $NOTANGLE -L -R$target $prereq > $target
+
+#
+# intermediate preprocessed code (*.i) targets
+#
+interp-dec.i:D: interp-dec.c interp.h
+    $CC -P -E -I$INCLUDEDIR interp-dec.c > $target
+
+#
+# object code targets
+#
+intervals.o: intervals.c intervals.h
+    $CC $CFLAGS -c -o $target intervals.c
+
+interp.o: interp-dec.i intervals.h encode.h machine.h
+    $CC $CFLAGS -c -o $target interp-dec.i
+
+bcdis.o: bcdis-dec.c
+	$CC $CFLAGS -P -E -c -I$INCLUDEDIR -o bcdis-dec.i bcdis-dec.c
+	$CC $CFLAGS -c -o $target bcdis-dec.i
+
+%.o: %.c
+    $CC $CFLAGS -c -I$INCLUDEDIR -o $target $prereq
+
+cii:V: atom.o mem.o except.o assert.o
+
+#
+# operator generator targets (not currently used)
+#
 opgen:	opgen.icn
 	icont -o $target $prereq
 
@@ -81,19 +104,8 @@ optest:V: opgen
 %-ops.c:D: %.ops opgen
 	./opgen $stem.ops > $target
 
-intervals.o: intervals.c intervals.h
-        gcc -g -c -o intervals.o intervals.c
-
-bcdis.o: bcdis-dec.c
-	gcc -P -E -g -c -I/home/lair/olinsky/include/ -o bcdis-dec.i bcdis-dec.c
-	gcc -g -c -o bcdis.o bcdis-dec.i
-
-interp-dec.i:D: interp-dec.c interp.h
-        rm -f $target ; gcc -I/home/lair/olinsky/include/ -E -P interp-dec.c > $target
-
-interp.o: interp-dec.i intervals.h encode.h machine.h
-        gcc -g -c -o interp.o interp-dec.i
-
+#
+# compiled targets
+#
 interp: interp.o intervals.o encode.o mclib.o cii bcdis.o
-        gcc -lm -L/home/lair/olinsky/lib/ -o interp interp.o intervals.o encode.o mclib.o /home/lair/olinsky/lib/liblua.a /home/lair/olinsky/lib/liblualib.a atom.o mem.o except.o assert.o bcdis.o
-
+    $CC -g -lm -L$LIBDIR -o $target interp.o intervals.o encode.o mclib.o $LIBDIR/liblua.a $LIBDIR/liblualib.a atom.o mem.o except.o assert.o bcdis.o
