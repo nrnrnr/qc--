@@ -228,7 +228,7 @@ FILES:          clobber
                         -o -path "./bin/*"         \
                         -o -path "./man/*"         \
                         -o -path "./lib/*"         \
-                        -o -path "./lua-bench/*"   \ 
+                        -o -path "./lua-bench/*"   \
                         -o -name "*.tar*"          \
                         -o -type l                 \
                         \) -prune                  \
