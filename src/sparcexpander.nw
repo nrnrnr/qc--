@@ -126,12 +126,11 @@ let sp = I.reg 'r' 14   (* stack pointer *)
 @
 
 The following address is on the stack and used to move data between 
-integer and floating-point registers.
+integer and floating-point registers. How can we reserve a stack slot
+here? I believe we need access to slots here, not just temporaries.
 
 <<head>>=
-(* let tmp = I.generala fp (I.imode (N.of_int (-8))) *)
-
-let tmp = I.generala fp (I.imode (N.of_int (8)))
+let tmp = I.generala fp (I.imode (N.of_int (8))) (* XXX bogus *)
 @
 
 A synthetic instruction that might be represented by a sequence of
@@ -261,8 +260,8 @@ reg:        Late(string,width) [2]
 @
 
 Memory cell addresses are of either form: $\$r[r_1] + \$r[r_2]$, or
-$\$r[r_1] + c$. The [[addr]] nonterminal captures these addresses and
-chain rules the conversions.
+$\$r[r_1] + c$. The [[addr]] nonterminal captures these addresses, and
+chain rules their conversions.
 
 <<rules>>=
 addr:       App2("add", reg, rc)
@@ -322,14 +321,7 @@ fcell:      Cell(s:char, agg, width, k:const, ass)
             {: return (I.reg s (N.to_int k)) :}
 @
 
-Moves between registers. Data cannot be moved between integer and
-floating-point registers directly but has to go trough memory. I would
-like to use a fixed memory cell for this on the stack that is part of
-the frame layout. The problem is, that I cannot know the offset for this
-slot. A different possibility would be the introduction of temporaries
-that stand for memory locations. But this would cause changes in the
-register allocator. For the moment I assume that $\textit{fp}-8$ is
-reserved.
+Moves between registers.
 
 <<rules>>=
 stmt:       Store(rcell, rc, width) [1]
@@ -337,6 +329,15 @@ stmt:       Store(rcell, rc, width) [1]
             
 stmt:       Store(fcell, freg, width) [1]
             {: fcell >>= fun f1 -> freg >>= fun f2 -> exec (I.fmovs f2 f1) :}
+@ 
+
+Data cannot be moved between integer and floating-point registers
+directly but has to go trough memory. I would like to use a fixed memory
+cell for this on the stack that is part of the frame layout. The problem
+is, that I cannot know the offset for this slot. A different possibility
+would be the introduction of temporaries that stand for memory
+locations. But this would cause changes in the register allocator. For
+the moment I assume that $\textit{fp}-8$ is reserved.
 
 <<rules>>=
 reg:        freg [10] -- penality
@@ -358,109 +359,59 @@ freg:       reg [10] -- penality
             :}
 @
 
-A guard is the conditional expression of a branch and return a
+A guard is the conditional expression of a branch and returns a
 higher-oder function [[(R.loc -> R.rtl) m]].
 
+<<head>>=
+let branch i reg rc =
+    reg >>= fun reg -> rc >>= fun rc ->
+    exec (I.cmp reg rc) >>= fun () ->
+    return i
 
 <<rules>>=
 guard:      True()  {: return I.ba :}
 guard:      False() {: return I.bn :}
 
 <<rules>>=
-guard:      App2("eq", reg, rc) [1]
-            {:  reg >>= fun reg -> rc >>= fun rc ->
-                exec (I.cmp reg rc) >>= fun () -> return I.be
-            :}
-guard:      App2("ge", reg, rc) [1]
-            {:  reg >>= fun reg -> rc >>= fun rc ->
-                exec (I.cmp reg rc) >>= fun () -> return I.bge
-            :}
-guard:      App2("geu", rc, reg) [1] -- reversed args!
-            {:  reg >>= fun reg -> rc >>= fun rc ->
-                exec (I.cmp reg rc) >>= fun () -> return I.bleu
-            :}
-guard:      App2("gt", reg, rc) [1] 
-            {:  reg >>= fun reg -> rc >>= fun rc ->
-                exec (I.cmp reg rc) >>= fun () -> return I.bg
-            :}
-guard:      App2("gtu", reg, rc) [1] 
-            {:  reg >>= fun reg -> rc >>= fun rc ->
-                exec (I.cmp reg rc) >>= fun () -> return I.bgu
-            :}
-guard:      App2("le", reg, rc) [1] 
-            {:  reg >>= fun reg -> rc >>= fun rc ->
-                exec (I.cmp reg rc) >>= fun () -> return I.ble
-            :}
-guard:      App2("leu", reg, rc) [1] 
-            {:  reg >>= fun reg -> rc >>= fun rc ->
-                exec (I.cmp reg rc) >>= fun () -> return I.bleu
-            :}
-guard:      App2("lt", reg, rc) [1] 
-            {:  reg >>= fun reg -> rc >>= fun rc ->
-                exec (I.cmp reg rc) >>= fun () -> return I.bl
-            :}
-guard:      App2("ltu", rc, reg) [1] -- reversed arguments
-            {:  reg >>= fun reg -> rc >>= fun rc ->
-                exec (I.cmp reg rc) >>= fun () -> return I.bgu
-            :}
-guard:      App2("ne", reg, rc) [1] 
-            {:  reg >>= fun reg -> rc >>= fun rc ->
-                exec (I.cmp reg rc) >>= fun () -> return I.bne
-            :}
+guard:      App2("eq",  reg, rc) [1]     {: branch I.be      reg rc :}
+guard:      App2("ge",  reg, rc) [1]     {: branch I.bge     reg rc :}
+guard:      App2("geu", rc, reg) [1]     {: branch I.bleu    reg rc :}
+guard:      App2("gt",  reg, rc) [1]     {: branch I.bg      reg rc :}
+guard:      App2("gtu", reg, rc) [1]     {: branch I.bgu     reg rc :}
+guard:      App2("le",  reg, rc) [1]     {: branch I.ble     reg rc :}
+guard:      App2("leu", reg, rc) [1]     {: branch I.bleu    reg rc :}
+guard:      App2("lt",  reg, rc) [1]     {: branch I.bl      reg rc :}
+guard:      App2("ltu", rc, reg) [1]     {: branch I.bgu     reg rc :}
+guard:      App2("ne",  reg, rc) [1]     {: branch I.bne     reg rc :}
 @
+
 {\PAL}'s primitive operators show up in expressions and are mapped to
 {\sparc} instructions.
 
+<<head>>=
+let iprim2 i reg rc =
+    reg >>= fun r -> rc >>= fun rc -> itmp 32 >>= fun t ->
+    exec (i r rc t) >>= fun () ->
+    return t
+
+let iprim1 i reg =
+    reg >>= fun r -> itmp 32 >>= fun t ->
+    exec (i r t) >>= fun () ->
+    return t
+
 <<rules>>=
-reg:        App2("add", reg, rc) [1]
-            {:
-                reg >>= fun r -> rc >>= fun rc -> itmp 32 >>= fun t ->
-                exec (I.add r rc t) >>= fun () -> return t
-            :}    
-reg:        App2("and", reg, rc) [1]
-            {:
-                reg >>= fun r -> rc >>= fun rc -> itmp 32 >>= fun t ->
-                exec (I.and_ r rc t) >>= fun () -> return t
-            :}    
+reg:        App2("add", reg, rc) [1]    {: iprim2  I.add   reg rc :}
+reg:        App2("and", reg, rc) [1]    {: iprim2  I.and_  reg rc :}
+reg:        App2("sub", reg, rc) [1]    {: iprim2  I.sub   reg rc :}
+reg:        App2("shl", reg, rc) [1]    {: iprim2  I.sll   reg rc :}
+reg:        App2("shra", reg, rc) [1]   {: iprim2  I.sra   reg rc :}
+reg:        App2("shrl", reg, rc) [1]   {: iprim2  I.srl   reg rc :}
+reg:        App2("xor", reg, rc) [1]    {: iprim2  I.xor   reg rc :}
+reg:        App1("com", reg) [1]        {: iprim1  I.not2  reg :}
+reg:        App1("neg", reg) [1]        {: iprim1  I.neg2  reg :}
+@
 
-reg:        App2("sub", reg, rc) [1]
-            {:
-                reg >>= fun r -> rc >>= fun rc' -> itmp 32 >>= fun t ->
-                exec (I.sub r rc' t) >>= fun () -> return t
-            :}    
-
-reg:        App2("shl", reg, rc) [1]
-            {:
-                reg >>= fun r -> rc >>= fun rc -> itmp 32 >>= fun t ->
-                exec (I.sll r rc t) >>= fun () -> return t
-            :}    
-reg:        App2("shra", reg, rc) [1]
-            {:
-                reg >>= fun r -> rc >>= fun rc -> itmp 32 >>= fun t ->
-                exec (I.sra r rc t) >>= fun () -> return t
-            :}    
-reg:        App2("shrl", reg, rc) [1]
-            {:
-                reg >>= fun r -> rc >>= fun rc -> itmp 32 >>= fun t ->
-                exec (I.srl r rc t) >>= fun () -> return t
-            :}    
-reg:        App2("xor", reg, rc) [1]
-            {:
-                reg >>= fun r -> rc >>= fun rc -> itmp 32 >>= fun t ->
-                exec (I.xor r rc t) >>= fun () -> return t
-            :}    
-
-reg:        App1("com", reg) [1] 
-            {:    
-                reg >>= fun r -> itmp 32 >>= fun t ->
-                exec (I.not2 r t) >>= fun () -> return t
-            :}
-
-reg:        App1("neg", reg) [1] 
-            {:    
-                reg >>= fun r -> itmp 32 >>= fun t ->
-                exec (I.neg2 r t) >>= fun () -> return t
-            :}
+Here are rule to cover opeartors we cannot handle.
 
 <<rules>>=
 reg:        App1(o:string, reg)     [2] {: error ("cannot handle "^o) :}
@@ -478,18 +429,10 @@ rtl:        Branch(guard, reloc) [1]
                 exec (I.nop)    (* delay slot *)
             :}
 
-rtl:        Goto(reloc) [1]
-            {:
-                exec (I.ba reloc)
-            :}
-
-rtl:        Return()
-            {:
-                exec (ret) (* jmpl %r31+8, %g0 *)
-            :}
-
-rtl:        Simple(stmt) [1] {: stmt >>= fun s -> return ()   :}    
-rtl:        Nop() [1]        {: exec I.nop  :}
+rtl:        Goto(reloc) [1]     {: exec (I.ba reloc) :}
+rtl:        Return()            {: exec (ret) (* jmpl %r31+8, %g0 *) :}
+rtl:        Simple(stmt) [1]    {: stmt >>= fun s -> return ()   :}    
+rtl:        Nop() [1]           {: exec I.nop  :}
 @
 
 
