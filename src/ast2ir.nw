@@ -670,9 +670,10 @@ the list passed to the runtime system.
 Because stackdata labels are visible at any stopping point in a procedure, we associate
 the spans with the label for the current procedure.
 <<definition of [[proc]], which translates one procedure>>=
-  let sd_labels = ref [] in
-  let stackdata_spans = unimp "stackdata spans" in
-  let _ = add_spans (proc.N.sym#original_text, stackdata_spans) in
+  let _ = 
+    let stackdata_spans =
+      RT.stackdata_to_spans ~wordsize:target.T.wordsize ~vfp proc.N.stacklabels in
+    add_spans (proc.N.sym#original_text, stackdata_spans) in
 @ 
 <<definition of [[proc]], which translates one procedure>>=
 let formals  = convert_parms (fun ((_, h, _, w, _) as parm) -> h, parm)
