@@ -265,7 +265,18 @@ let commablock f xs =
 abstract syntax. Since the overall purpose of this is clear we don't
 comment the code much.
 
+Why does the \ocaml~[[List]] module does not provide [[zip]] and
+[[unzip]]? 
+
 <<astpp.ml>>=
+
+let unzip pairs =
+    let rec loop ((left,right) as result) = function
+        | []            -> result
+        | (l,r)::rest   -> loop (l::left, r::right) rest
+    in
+        loop ([],[]) pairs
+
 
 let id i        = text i
 let int n       = text (string_of_int n)
@@ -279,7 +290,6 @@ escape rules of \C. We must replace them with our own.
 
 let str s       = text ("\"" ^ String.escaped s ^ "\"")
 let char c      = text ("'"  ^ String.escaped c   ^ "'" )
-    
 
 let ty = function
     | BitsTy(_,n)       -> text "bits"  ^^ int n
@@ -430,13 +440,52 @@ let conv = function
 
 let dummy = text "<stmt>;"
 
-let stmt = function
-    | IfStmt (_, e, ss1, [])    -> dummy
-    | IfStmt (_, e, ss1, ss2)   -> dummy
-    | LabelStmt(_,n)            -> dummy
-    | ContStmt(_,n,ns)          -> dummy
-    | SpanStmt(_,e1,e2,ss)      -> dummy
-    | AssignStmt(_,xs)          -> dummy
+let rec stmt = function
+    | IfStmt (_, e, ss1, ss2)    -> 
+        agrp begin
+            ~~ agrp (text "if" ^/ expr e)
+            ^/ block stmt ss1
+            ^^ begin match ss2 with
+               | []     -> empty
+               | ss     -> break ^^ text "else" ^/ block stmt ss
+               end
+        end
+    | LabelStmt(_,n)            -> 
+        agrp begin
+            ~~ id n ^^ text ":"
+        end
+        
+    | ContStmt(_,n,ns)          ->
+        agrp begin
+            ~~ text "continuation"
+            ^/ id n
+            ^/ fgrp (text "(" ^^ commalist id ns ^^ text ")")
+            ^^ text ":"
+        end
+
+    | SpanStmt(_,e1,e2,ss)      -> 
+        agrp begin
+            ~~ agrp (text "span" ^/ expr e1 ^/ expr e2)
+            ^/ block stmt ss
+        end
+    
+    | AssignStmt(_,xs)          -> 
+        let lhs,rhs = unzip xs in
+        agrp begin
+            fgrp begin 
+                ~~ commalist lvalue lhs 
+                ^/ text "="
+            end
+            ^^
+            fgrp begin 
+                nest begin
+                ~~ break
+                ^^ commalist expr rhs
+                ^^ semi
+                end
+            end
+        end
+    
     | CallStmt(_, lhs, cc, e, args, ts, fs) -> dummy
     | PrimStmt(_, lhs, cc, n, args, fs) -> dummy
     | GotoStmt(_,e,ts)          -> dummy
@@ -455,7 +504,14 @@ let rec section = function
             datum d
     | Procedure(_,cc,n,fs, ds, ss)  ->  
             agrp begin 
-                agrp (conv cc ^/ id n ^^ formals fs)
+                agrp begin
+                    begin match cc with 
+                    | Some c -> text "foreign" ^/ str c ^^ break
+                    | None   -> empty
+                    end
+                    ^^ id n
+                    ^^ formals fs
+                end
                 ^/ text "{"
                 ^^ nest begin
                    ~~ break
