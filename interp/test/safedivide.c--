@@ -1,0 +1,134 @@
+// sample.c--
+//
+// this C-- code attempts to implement the following:
+// 
+//   PROCEDURE SafeDivide(dividend, divisor) =
+//   BEGIN
+//     if   divisor = 0 RAISE DivisionByZero();
+//     else return dividend / divisor
+//   END SafeDivide;
+//
+//   PROCEDURE Client(x, y) =
+//   BEGIN
+//     TRY
+//       result = x + y;
+//       result = SafeDivide(result, x - y);
+//       return result;
+//     EXCEPT
+//     | DivisionByZero => exit_with_error();
+//     END;
+//   END Client;
+//
+/// ./regr "./qrun-exn $SELF" $REGRFLAGS -out $BASE.cmm.1 -err $BASE.cmm.2 -x 1
+
+target 
+       byteorder   little
+       memsize     8
+       wordsize    32
+       pointersize 32
+;
+
+export main;
+import bits32 exit;
+import bits32 cmmprint32;
+import bits32 malloc;
+import bits32 free;
+import bits32 dispatch_exn;
+
+import bits32 SaveGlobals, RestoreGlobals;
+
+// tokens for use with spans
+const EXN = 1;  // exception information
+
+// global registers
+register bits32 exn_top;  // top of exception stack
+
+section "data" {
+  globals_backup: bits32;
+
+  // exception information
+  Exn_DivisionByZero: bits8[] {'D'::bits8, 'i'::bits8, 'v'::bits8, 'i'::bits8,
+                               's'::bits8, 'i'::bits8, 'o'::bits8, 'n'::bits8,
+                               ' '::bits8, 'b'::bits8, 'y'::bits8, ' '::bits8,
+                               'z'::bits8, 'e'::bits8, 'r'::bits8, 'o'::bits8,
+                                 0::bits8
+                              };
+
+  // exception handling information
+                  align 8;
+  EXN_client:     bits32[] {1::bits32};          // handler count
+
+                  // first handler
+                  bits32[] {Exn_DivisionByZero}; // exception tag
+                  bits32[] {0::bits32};          // continuation index
+                  bits8[]  {0::bits8 };          // takes an argument?
+}
+
+section "text" {
+  safe_divide (bits32 a, bits32 b) {
+    if b == 0 {
+      raise(Exn_DivisionByZero, 0);
+      // we won't come back here
+    }
+
+    return(%div(a, b));
+  }
+
+  span EXN EXN_client {
+    client(bits32 x, bits32 y) {
+        bits32 result;
+
+        result = x + y;
+        result = safe_divide(result, x - y) also unwinds to k1 
+                                            also aborts;
+
+      finish:
+        return(result);
+
+      continuation k1():
+        RestoreGlobals(bits32[globals_backup]);
+        foreign "C" exit(1);
+        goto finish;  // this won't happen because exit will quit
+    }
+  }
+
+  main (bits32 glob_backup) {
+    bits32 answer;
+    bits32 exn_base;
+
+    bits32[globals_backup] = glob_backup;
+
+    SaveGlobals(bits32[globals_backup]);
+    exn_base = foreign "C" malloc(256);
+    RestoreGlobals(bits32[globals_backup]);
+    exn_top  = exn_base;
+
+    // actual code begins here
+    answer = client(2, 2);
+    SaveGlobals(bits32[globals_backup]);
+    foreign "C" cmmprint32(answer);
+    RestoreGlobals(bits32[globals_backup]);
+    // actual code ends here
+
+    SaveGlobals(bits32[globals_backup]);
+    foreign "C" free(exn_base);
+    RestoreGlobals(bits32[globals_backup]);
+    exn_base = 0;
+    exn_top  = 0;
+
+    return;
+  }
+
+  push_exn_info (bits32 v, bits32 arg) {
+    bits32[exn_top]     = v;
+    bits32[exn_top + 4] = arg;
+    exn_top             = exn_top + 8;
+    return;
+  }
+
+  raise (bits32 tag, bits32 arg) {
+    push_exn_info(tag, arg);
+    SaveGlobals(bits32[globals_backup]);    
+    foreign "C" dispatch_exn();
+  }
+}

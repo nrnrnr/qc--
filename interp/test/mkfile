@@ -31,6 +31,11 @@ CMMRECORD    = ${CMMSRC:%.c--=%.cmmrecord}
 SCRIPTRECORD = ${SCRIPTSRC:%.script=%.scriptrecord}
 VERBOSE      =
 
+GC           = ../clients/gc_client
+EXN          = ../clients/exn_client
+QCMM         = $TOP/bin/qc--
+INTERP       = $TOP/bin/qc--interp
+
 test:VQ:        $LUATEST $CMMTEST $SCRIPTTEST
 luatest:VQ:     $LUATEST
 cmmtest:VQ:     $CMMTEST
@@ -43,7 +48,7 @@ record:VQ:      $LUARECORD $CMMRECORD $SCRIPTRECORD
 # useful targets to create test results
 # ------------------------------------------------------------------ 
 
-%.luatest:VQ:       %.lua ../../bin/qc--interp regr
+%.luatest:VQ:       %.lua $INTERP regr
 		SELF=$stem.lua
 		BASE=$stem
 		MKTARGET=$target
@@ -52,7 +57,7 @@ record:VQ:      $LUARECORD $CMMRECORD $SCRIPTRECORD
                 sed -n 's!^---!!p' $SELF | sh $SHX || true
 		case "$VERBOSE$stem" in -v*) ;; *0) echo "# tested $stem" ;; esac
 
-%.cmmtest:VQ:       %.c-- ../../bin/qc--interp ../clients/gc_client ../../bin/qc-- regr qrun qrun-gc
+%.cmmtest:VQ:       %.c-- $INTERP $GC $EXN $QCMM regr qrun qrun-gc qrun-exn
 		SELF=$stem.c--
 		BASE=$stem
 		MKTARGET=$target
@@ -61,7 +66,7 @@ record:VQ:      $LUARECORD $CMMRECORD $SCRIPTRECORD
                 sed -n 's!^///!!p' $SELF | sh $SHX || true
 		case "$VERBOSE$stem" in -v*) ;; *0) echo "# tested $stem" ;; esac
 
-%.scripttest:VQ:       %.script ../../bin/qc--interp ../clients/gc_client ../../bin/qc-- regr qrun qrun-gc
+%.scripttest:VQ:    %.script $INTERP $GC $EXN $QCMM regr qrun qrun-gc qrun-exn
 		SELF=$stem.script
 		BASE=$stem
 		MKTARGET=$target
@@ -75,7 +80,7 @@ record:VQ:      $LUARECORD $CMMRECORD $SCRIPTRECORD
 # only after you have verified that the factual output is indeed the
 # expected output!
 
-%.luarecord:VQ:     %.lua ../../bin/qc--interp regr       
+%.luarecord:VQ:     %.lua $INTERP regr
 		SELF=$stem.lua
 		BASE=$stem
                 REGRFLAGS="-r"
@@ -83,7 +88,7 @@ record:VQ:      $LUARECORD $CMMRECORD $SCRIPTRECORD
                 sed -n 's!^---!!p' $SELF | sh -x || true
 		# why is there || true on the preceding line??
 
-%.cmmrecord:VQ:     %.c-- ../../bin/qc--interp ../clients/gc_client ../../bin/qc-- regr qrun qrun-gc
+%.cmmrecord:VQ:     %.c-- $INTERP $GC $EXN $QCMM regr qrun qrun-gc qrun-exn
 		SELF=$stem.c--
 		BASE=$stem
                 REGRFLAGS="-r"
@@ -91,7 +96,7 @@ record:VQ:      $LUARECORD $CMMRECORD $SCRIPTRECORD
                 sed -n 's!^///!!p' $SELF | sh -x || true
 		# why is there || true on the preceding line??
 
-%.scriptrecord:VQ:  %.script ../../bin/qc--interp ../clients/gc_client ../../bin/qc-- regr qrun qrun-gc
+%.scriptrecord:VQ:  %.script $INTERP $GC $EXN $QCMM regr qrun qrun-gc qrun-exn
 		SELF=$stem.script
 		BASE=$stem
                 REGRFLAGS="-r"
@@ -99,14 +104,19 @@ record:VQ:      $LUARECORD $CMMRECORD $SCRIPTRECORD
                 sed -n 's!^###!!p' $SELF | sh -x || true
 		# why is there || true on the preceding line??
 
-../../bin/qc--interp:Q:
+$INTERP:Q:
         cd ..
         mk update $MKFLAGS
         cd test
 
-../clients/gc_client:Q:
+$GC:Q:
         cd ..
         mk gc $MKFLAGS
+        cd test
+
+$EXN:Q:
+        cd ..
+        mk exn $MKFLAGS
         cd test
 
 # ------------------------------------------------------------------  
@@ -122,6 +132,10 @@ qrun:           test.nw
                 chmod +x $target
 
 qrun-gc:        test.nw
+                $NOTANGLE -R$target $prereq > $target
+                chmod +x $target
+
+qrun-exn:       test.nw
                 $NOTANGLE -R$target $prereq > $target
                 chmod +x $target
 

@@ -1,0 +1,58 @@
+// rounding.c--
+//
+// this program tests rounding mode manipulation and some basic floating-pt
+// arithmetic with rounding
+//
+/// ./regr "./qrun $SELF" $REGRFLAGS -out $BASE.cmm.1 -err $BASE.cmm.2
+
+target byteorder little;
+
+export main;
+import bits32 cmmprint16;
+import bits32 printf;
+
+bits2 rm "IEEE 754 rounding mode";
+
+section "data" {
+  print_float: bits8[] { '%'::bits8, 'f'::bits8, '\n'::bits8, 0::bits8 };
+  print_int  : bits8[] { '%'::bits8, 'd'::bits8, '\n'::bits8, 0::bits8 };
+}
+
+section "text" {
+  main() {
+    bits2  old_rm;
+    bits32 f;
+    bits32 r;
+
+    // save rounding mode
+    old_rm = rm;
+
+    // f = 1.5
+    f  = %fdiv(%i2f32(3::bits32, rm), %i2f32(2::bits32, rm), rm);
+
+    // print 1
+    rm = %round_down();
+    r  = %f2i32(f, rm);
+    printf(print_int, r);
+
+    // print 2
+    rm = %round_up();
+    r  = %f2i32(f, rm);
+    printf(print_int, r);
+
+    // print 2
+    rm = %round_nearest();
+    r  = %f2i32(f, rm);
+    printf(print_int, r);
+
+    // print 1
+    rm = %round_zero();
+    r  = %f2i32(f, rm);
+    printf(print_int, r);
+
+    // restore old rounding mode
+    rm = old_rm;
+
+    return;
+  }
+}
