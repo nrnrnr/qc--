@@ -63,6 +63,7 @@ end
 %type edx {: unit :}
 %type edx_eax {: unit :}
 %type edi {: unit :}
+%type eflags {: unit :}
 %type eight {: unit :}
 %type eip {: unit :}
 %type esi {: unit :}
@@ -275,9 +276,9 @@ pic    : Diff(c1:lconst,c2:lconst) {: c1 ^ " - " ^ c2 :}
 const  : Bits(b:bits)  [{: guard (Bits.width b = 32) :}]  {: native b :}
 const8 : Bits(b:bits)  [{: guard (Bits.width b = 8) :}]  {: native' 8 b :}
 four   : Bits(b:bits)
-    [{: guard (Bits.Ops.eq (Bits.U.of_int 4 (Bits.width b)) b) :}] {: () :}
+    [{: guard (Bits.width b > 3 && Bits.Ops.eq (Bits.U.of_int 4 (Bits.width b)) b) :}] {: () :}
 minusfour : Bits(b:bits)
-    [{: guard (Bits.Ops.eq (Bits.S.of_int (-4) (Bits.width b)) b) :}] {: () :}
+    [{: guard (Bits.width b > 3 && Bits.Ops.eq (Bits.S.of_int (-4) (Bits.width b)) b) :}] {: () :}
 @ 
 \paragraph{Locations and effective addresses}
 Here are the basic locations.
@@ -422,6 +423,15 @@ inst : Store(dst:regl, disp, w) [{:guard (w = 32):}]
 inst : Llr(dst:regl, "add", const, w) [{:guard (w=32):}]
   {: cat ["leal "; const; "("; dst; ")"; ", "; dst] :}
 
+inst : Withcarryflags(dst:eaddrl, "addc", src:reg, w, "x86_adcflags")
+  {: cat ["adc"; suffix w; " "; src; ","; dst] :}
+
+inst : Withcarryflags(dst:eaddrl, "subb", src:reg, w, "x86_sbbflags")
+  {: cat ["sbb"; suffix w; " "; src; ","; dst] :}
+
+inst : Withcarryzero(dst:eaddrl, "addc", src:reg, w, "x86_adcflags")
+  {: cat ["add"; suffix w; " "; src; ","; dst] :}
+
 inst : Withaflags(dst:eaddrl, "add", src:reg, w, "x86_addflags")
   {: cat ["add"; suffix w; " "; src; ","; dst] :}
 
@@ -499,6 +509,15 @@ inst : Withlflags8H(dst:regabcdl, logical:string, src:reg8H, "x86_logicflags")
 inst : Withlflags8H(dst:regabcdl, logical:string, src:immed8, "x86_logicflags")
   [{: match logical with "and" | "or" | "xor" -> 0 | _ -> infinity :}]
   {: sprintf "%s%s %s,%s" logical (suffix 8) src (hregname dst) :}
+@ 
+\paragraph{Arithmetic with the carry flag}
+<<rules>>=
+eflags : Reg('c', n) [{: guard (n = SS.indices.SS.cc):}] {: () :}
+eaddrbit0 : Lobits(eaddr, w) [{: guard (w=1) :}] {: eaddr :}
+inst : Llr(eflags, "x86_setcarry", eaddrbit0, w)
+  {: sprintf "bt%s $0,%s" (suffix 32) eaddrbit0 :}
+
+inst : Llr(eflags, "x86_setcarry", zero, w) {: "clc" :}
 @ 
 \paragraph{Control flow}
 The simple jumps are easy.
@@ -653,6 +672,9 @@ any : Fsub(x:any, y:any) {: sprintf "Fsub(%s, %s)" x y :}
 any : Fmul(x:any, y:any) {: sprintf "Fmul(%s, %s)" x y :}
 any : Fdiv(x:any, y:any) {: sprintf "Fdiv(%s, %s)" x y :}
 
+any : Singlebit(string, x:any, y:any, z:any)
+    {: sprintf "Singlebit(%s, %s, %s, %s)" string x y z :}
+
 any : Fneg(any) {: sprintf "Fneg(%s)" any :}
 any : Fabs(any) {: sprintf "Fabs(%s)" any :}
 
@@ -727,6 +749,8 @@ constructor for each operator.
 | RP.App(("com", [w]), [x])    -> conCom (exp x)
 | RP.App(("add", [w]), [x; y]) -> conAdd (exp x) (exp y)
 | RP.App(("sub", [w]), [x; y]) -> conSub (exp x) (exp y)
+| RP.App((("addc"|"subb"|"carry"|"borrow") as op, [w]), [x; y; z]) ->
+    conSinglebit op (exp x) (exp y) (exp z)
 (*| RP.App(("neg", [w]), [x])    -> conNeg (exp x)*)
 | RP.App(("mul", [w]), [x; y]) -> conMul (exp x) (exp y)
 | RP.App(("sx",  [n;w]), [x])   -> conSx  (exp x)
@@ -826,6 +850,7 @@ and geffects = function
     | [] -> conNop ()
     | [g, s] -> guarded g s
     <<horrible pattern match for [[Withflags]]>>
+    <<horrible pattern match for [[addc]] and [[subb]]>>
     | (g, s) :: t -> conPar (guarded g s) (geffects t)
 and is8 b =
   Bits.width b > 3 & Bits.Ops.eq b (Bits.U.of_int 8  (Bits.width b))
@@ -909,6 +934,20 @@ RP.Const(RP.Bool true)
 | $c[2] := %%x86_logicflags(%%and(%%bitExtract(8, $r[0]), 69))
 *)
 
+<<horrible pattern match for [[addc]] and [[subb]]>>=
+| [ (<<truepat>>, <<pattern for [[l]] := [[o(l',r,CF)]] at [[w]]>>)
+  ; (<<truepat>>, <<pattern for flags := [[fo]] ([[l'', r', CF]])>>)
+  ] when l =/ l' && l =/ l'' && r =// r' && flag_index = SS.indices.SS.cc &&
+         cf_index1 = flag_index && cf_index2 = flag_index ->
+      conWithcarryflags (loc l) o (exp r) w fo
+
+<<horrible pattern match for [[addc]] and [[subb]]>>=
+| [ (<<truepat>>, <<pattern for [[l]] := [[o(l',r,z1)]] at [[w]]>>)
+  ; (<<truepat>>, <<pattern for flags := [[fo]] ([[l'', r', z2]])>>)
+  ] when l =/ l' && l =/ l'' && r =// r' && flag_index = SS.indices.SS.cc &&
+         Bits.is_zero z1 && Bits.is_zero z2 ->
+      conWithcarryzero (loc l) o (exp r) w fo
+
 <<pattern for [[l]] := [[l']] [[o]] [[r]] at [[w]] at H register>>=
 RP.Store(l, RP.App(("bitInsert", [32; 8]),
                    [RP.Const (RP.Bits eightbits);
@@ -924,6 +963,10 @@ RP.Store(RP.Reg(('c', _, _), flag_index, _), RP.App(("x86_undefflags", _), []), 
 RP.Store(RP.Reg(('c', _, _), flag_index, _), RP.App((fo, _), [flag_left']), _)
 <<pattern for [[l]] := [[l']] [[o]] [[r]] at [[w]]>>=
 RP.Store(l, RP.App((o, _), [RP.Fetch(l',_); r]), w) 
+<<pattern for [[l]] := [[o(l',r,CF)]] at [[w]]>>=
+RP.Store(l, RP.App((o, _), [RP.Fetch(l',_); r; <<cfpat 1>>]), w) 
+<<pattern for [[l]] := [[o(l',r,z1)]] at [[w]]>>=
+RP.Store(l, RP.App((o, _), [RP.Fetch(l',_); r; RP.Const (RP.Bits z1)]), w) 
 <<pattern for [[l2]] := [[l2']] [[o2]] [[r2]] at [[w2]]>>=
 RP.Store(l2, RP.App((o2, _), [RP.Fetch(l2',_); r2]), w2) 
 <<pattern for [[l]] := [[l']] at [[w]]>>=
@@ -931,6 +974,12 @@ RP.Store(l, RP.Fetch(l',_), w)
 <<pattern for flags := [[fo]] ([[l'']], [[r']])>>=
 RP.Store(RP.Reg(('c', _, _), flag_index, _),
          RP.App((fo, _), [RP.Fetch(l'',_); r']), _)
+<<pattern for flags := [[fo]] ([[l'', r', CF]])>>=
+RP.Store(RP.Reg(('c', _, _), flag_index, _),
+         RP.App((fo, _), [RP.Fetch(l'',_); r';<<cfpat 2>>]), _)
+<<pattern for flags := [[fo]] ([[l'', r', z2]])>>=
+RP.Store(RP.Reg(('c', _, _), flag_index, _),
+         RP.App((fo, _), [RP.Fetch(l'',_); r';RP.Const (RP.Bits z2)]), _)
 <<pattern for flags := [[fo]] ([[l'']], [[Const b]])>>=
 RP.Store(RP.Reg(('c', _, _), flag_index, _),
          RP.App((fo, _), [RP.Fetch(l'',_); RP.Const (RP.Bits b)]), _)
@@ -971,6 +1020,11 @@ RP.Store(RP.Reg(('c', _, _), flag_index, _),
 <<pattern for flags := [[fo]] ([[l'']] [[o']] [[r']])>>=
 RP.Store(RP.Reg(('c', _, _), flag_index, _),
          RP.App((fo, _), [RP.App ((o', _), [RP.Fetch(l'',_); r'])]), _)
+
+<<cfpat 1>>=
+RP.App (("x86_carrybit", _), [RP.Fetch(RP.Reg(('c', _, _), cf_index1, _), _)])
+<<cfpat 2>>=
+RP.App (("x86_carrybit", _), [RP.Fetch(RP.Reg(('c', _, _), cf_index2, _), _)])
 @
 \subsection{The exported recognizers}
 

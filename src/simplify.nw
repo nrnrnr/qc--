@@ -238,6 +238,7 @@ let app o w args = match o with
     |  "bitExtract" 	-> default o w args
     |  "bitInsert" 	-> default o w args
     |  "bitTransfer" 	-> default o w args
+    |  "x86_carrybit"   -> x86_carrybit w args
     |  o                -> default o w args
                       
 let rec exp e =
@@ -542,3 +543,11 @@ let nan w args =
   | [n;w], [x] when n = swidth w -> or' [w] [pinf [w] []; zx [n; w] [x]]
   | [n;w], [x] -> impossf "significand in NaN has width %d; should be %d" n (swidth w)
   | _ -> Impossible.impossible "ill-formed NaN"
+@ 
+\subsection{Machine-dependent simplifications}
+<<RTL operator implementations>>=
+let x86_carrybit w args = match args with
+| [RP.App (("x86_setcarry", _), [_; e])] -> e
+| _ -> default "x86_carrybit" w args
+
+    

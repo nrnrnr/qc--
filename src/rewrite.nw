@@ -58,6 +58,11 @@ val modu : width -> exp -> exp -> exp
 
 val rem  : width -> exp -> exp -> exp
   (* uses : quot, mul, sub *)
+<<rewrite.mli>>=
+val sxlo : width -> width -> exp -> exp
+  (* uses : shl, shra *)
+val zxlo : width -> width -> exp -> exp
+  (* uses : shl, shrl *)
 @
 \subsection{Implementation}
 <<rewrite.ml>>=
@@ -82,6 +87,15 @@ let div_overflows w x y =
 let (mod) w x y = O.sub w x (O.mul w y (O.div  w x y))
 let modu  w x y = O.sub w x (O.mul w y (O.divu w x y))
 let rem   w x y = O.sub w x (O.mul w y (O.quot w x y))
+@ 
+<<rewrite.ml>>=
+let sxlo n w x =
+  let shamt = unsigned (w-n) w in
+  O.shra w (O.shl w x shamt) shamt
+
+let zxlo n w x =
+  let shamt = unsigned (w-n) w in
+  O.shrl w (O.shl w x shamt) shamt
 @ 
 \section{Things not to be looked at}
 

@@ -741,28 +741,14 @@ let isStage g stage' = match stage' with
   | _ -> false
 
 let embedStage stage =
-    let stageLabels =
-        [ embedString "name"
-        ; embedString "fn"
-        ; embedString "paramExpected"
-        ; embedString "stateCreated"
-        ; embedString "stateDestroyed"
-        ; embedString "stateUsed"
-        ] in
-    let stageValues =
-        [ embedString stage.name
-        ; stageFn.V.embed stage.fn
-        ; (V.option V.string).V.embed stage.paramExpected
-        ; (V.list V.string).V.embed (SS.elements stage.stateCreated)
-        ; (V.list V.string).V.embed (SS.elements stage.stateDestroyed)
-        ; (V.list V.string).V.embed (SS.elements stage.stateUsed)
-        ] in
-    let newTab = (V.Table.create (List.length stageLabels)) in
-    let _ = List.iter2 
-                (fun key data -> V.Table.bind newTab ~key ~data) 
-                stageLabels stageValues
-    in
-        V.Table newTab
+  (V.record V.value).V.embed 
+  [ "name",           embedString stage.name
+  ; "fn",             stageFn.V.embed stage.fn
+  ; "paramExpected",  (V.option V.string).V.embed stage.paramExpected
+  ; "stateCreated",   (V.list V.string).V.embed (SS.elements stage.stateCreated)  
+  ; "stateDestroyed", (V.list V.string).V.embed (SS.elements stage.stateDestroyed)
+  ; "stateUsed",      (V.list V.string).V.embed (SS.elements stage.stateUsed)     
+  ] 
 @
 We set up wrappers to create the [[action]] types. These functions will
 be the primitives visible in Lua.

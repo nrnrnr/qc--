@@ -193,7 +193,8 @@ and count_exp exp ctxt = match exp with
     let ctxts = match ctxt_parms op with
                 | None    -> List.map (fun s -> None)   exps
                 | Some cs -> List.map (fun c -> Some c) cs   in
-    List.iter2 count_exp exps ctxts in
+    try List.iter2 count_exp exps ctxts
+    with Invalid_argument _ -> Impossible.impossible "bad context in placevar" in
 
 let count_effect effect = match effect with
   | RP.Store (l, (RP.App ((op, _), _) as e), _) ->

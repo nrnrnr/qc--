@@ -46,6 +46,7 @@ type t = bits
 
 val width : t -> width         (* observer *)
 val zero  : width -> t         (* constructor *)
+val is_zero : t -> bool
 @ 
 Comparison is safe even on bit vectors of different widths.
 However, its results are not necessarily meaningful aside from their
@@ -350,6 +351,7 @@ let check w =
   if w <= 0 || w > 64 then Impossible.impossible ("Bits.bits width " ^ string_of_int w)
 let zero w      = check w; (I.zero, w)
 
+
 let to_string (i,w) = Printf.sprintf "0x%Lx::bits%d" i w 
 let to_decimal_string (i,w) = Printf.sprintf "%Ld" i
 let to_hex_or_decimal_string ~declimit (i,w) =
@@ -392,6 +394,7 @@ let compare (b, w) (b', w') =
   match compare w w' with
   | 0 -> Pervasives.compare (sx64 b w) (sx64 b' w)
   | diff -> diff
+let is_zero (b, w) = zx64 b w =*= I.zero
 <<bitwise operators>>=
 let add (b, w) (b', w') =
   assert (w = w');

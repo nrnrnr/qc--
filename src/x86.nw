@@ -74,6 +74,8 @@ module Up   = Rtl.Up
 module Down = Rtl.Dn
 module Rg   = X86regs
 
+let impossf fmt = Printf.kprintf Impossible.impossible fmt
+
 let ( =$  ) = Register.eq
 let ( =/  ) = RU.Eq.loc
 let ( =// ) = RU.Eq.exp
@@ -88,7 +90,6 @@ let {SS.pc = pc; SS.cc = eflags} = SS.locations Spaces.c
 
 let rounding_modesl = R.slice 2 ~lsb:10 Rg.fpuctl  (* OK, SO WHICH IS IT??? *)
 let rounding_modes  = R.fetch rounding_modesl 2
-
 
 module Post = struct
   <<x86 postexpander>>
@@ -157,6 +158,7 @@ let upint32 n = Up.const (RP.Bits(Bits.U.of_int n 32))
 let upint8  n = Up.const (RP.Bits(Bits.U.of_int n 8))
 
 let ah_val = R.fetch Rg.ah 8
+let carrybit = R.app (R.opr "x86_carrybit" []) [RU.fetch eflags]
 @ 
 Here are some invented operators that hide the real truth about what
 happens to the flags.
@@ -221,7 +223,7 @@ let lix ~dst e     = rtl (R.store (temploc dst) e                (tempwidth dst)
 Here are tentative contexts for all the operators.
 Anything that has to do with rounding modes is surely wrong.
 <<x86 postexpander>>=
-let bcontext = (fun x y -> Impossible.impossible "allocate from bcontext")
+let bcontext = (fun x y -> impossf "allocate from bcontext")
                ,fun _ -> false
 let operators = Context.standard icontext fcontext rcontext acontext bcontext
 
@@ -229,12 +231,10 @@ module SM = Strutil.Map
 let resmap = List.fold_left (fun m (n, a, r)-> SM.add n r m) SM.empty operators
 let argmap = List.fold_left (fun m (n, a, r)-> SM.add n a m) SM.empty operators
 
-let arg_contexts   (n, _) = try SM.find n argmap 
-                            with Not_found -> Impossible.impossible 
-                                    ("cannot find arg context for "^n)
-let result_context (n, _) = try SM.find n resmap
-                            with Not_found -> Impossible.impossible
-                                    ("cannot find result context for "^n)
+let arg_contexts   (n, _) =
+  try SM.find n argmap with Not_found -> impossf "cannot find arg context for %s" n
+let result_context (n, _) =
+  try SM.find n resmap with Not_found -> impossf "cannot find result context for %s" n
 let constant_context w = icontext
 @ 
 \subsubsection{Operator implementations (with flags)}
@@ -265,9 +265,7 @@ let at32 = function
   | "lobits", [32; 32] -> "lobits"
   | opr, [32] -> opr
   | opr, [n]  -> Impossible.unimp ("%" ^ opr ^ string_of_int n ^ "(...)")
-  | opr, ws   ->
-      Impossible.impossible
-        (Printf.sprintf "operator %%%s specialized to %d widths" opr (List.length ws))
+  | opr, ws   -> impossf "operator %%%s specialized to %d widths" opr (List.length ws)
 @ 
 We start our implementation with a function that provides binary
 operators in $L \mathrel{:=} L \oplus R$ form. 
@@ -376,10 +374,40 @@ let unop ~dst op x = move dst x <:> inplace op dst
 let rtlop ~dst op args =
   rtl (R.store (temploc dst)
          (R.app (Up.opr op) (List.map tempval args)) (tempwidth dst))
-
+<<x86 postexpander>>=
 let dblop ~dsthi ~dstlo op x y = Unsupported.mulx_and_mulux()
-let wrdop  ~dst op x y z = Unsupported.singlebit ~op:(fst op)
-let wrdrop ~dst op x y z = Unsupported.singlebit ~op:(fst op)
+<<x86 postexpander>>=
+let weird_tmp tmp z = match z with
+| PX.WTemp t -> t, PX.Nop
+| PX.WBits b -> tmp, rtl (R.store (temploc tmp) (R.bits (Bits.Ops.zx 32 b) 32) 32)
+
+let set_carry ~tmp z =
+  let t, is = weird_tmp tmp z in
+  let bit0 = R.app (R.opr "lobits" [32; 1]) [tempval t] in
+  is <:>
+  rtl (R.store eflags (R.app (R.opr "x86_setcarry" []) [RU.fetch eflags; bit0]) 32)
+
+let wrdop  ~dst op x y z =
+  let dv, yv = tempval dst, tempval y in
+  let is_add =
+    match at32 op with "addc" -> true | "subb" -> false | _ -> impossf "wrdop" in
+  let flagop = if is_add then "x86_adcflags" else "x86_sbbflags" in
+  let flags  = R.store eflags (R.app (R.opr flagop []) [dv;yv;carrybit]) 32 in
+  let arith  = R.store (temploc dst) (R.app (Up.opr op) [dv; yv; carrybit]) 32 in
+  set_carry ~tmp:dst z <:> move dst x <:> rtl (R.par [arith; flags])
+<<x86 postexpander>>=
+let rcl _ = impossf "don't do this; you'll lose the carry flag!  use jcs!"
+let wrdrop  ~dst:(fill, dt) op x y z =
+  let is_add =
+    match at32 op with "carry" -> true | "borrow" -> false | _ -> impossf "wrdrop" in
+  let t = talloc 't' 32 in
+  wrdop ~dst:t ((if is_add then "addc" else "subb"), [32]) x y z <:>
+  rtl (R.store (temploc dt) (R.bits (Bits.zero 32) 32) 32) <:>
+  rcl dt 1 <:>
+  match fill with
+  | PX.HighAny | PX.HighZ -> PX.Nop
+  | PX.HighS ->
+      PX.Expand.block (rtl (R.store (temploc dt) (Rewrite.sxlo 1 32 (tempval dt)) 32))
 @ 
 \subsubsection{Control flow}
 
@@ -458,7 +486,7 @@ let bnegate r = match Down.rtl r with
   when RU.Eq.loc pc (Down.loc pc_lhs) && RU.Eq.loc flags (Down.loc eflags) ->
     Up.rtl (RP.Rtl [RP.App((cmpneg cop, [32]), [RP.Fetch (flags, 32)]),
                    RP.Store (pc, tgt, 32)])
-| _ -> Impossible.impossible "ill-formed x86 conditional branch"
+| _ -> impossf "ill-formed x86 conditional branch"
 @ 
 The first ``important'' function converts a {\PAL} operator into the
 corresponding Intel operator.
@@ -479,7 +507,7 @@ let cmpopr = function
   | "mul_overflows"
   | "mulu_overflows"
   | "sub_overflows" -> "x86_o"
-  | _ -> Impossible.impossible "non-comparison in x86 conditional branch"
+  | _ -> impossf "non-comparison in x86 conditional branch"
 @ 
 The second important function negates an Intel operator.
 <<important functions on $x$86 operators>>=
@@ -502,7 +530,7 @@ let cmpneg = function
   | "x86_z"  -> "x86_nz"
   | "x86_o"  -> "x86_no"
   | "x86_no" -> "x86_o"
-  | _ -> Impossible.impossible "bad comparison in expanded x86 conditional branch"
+  | _ -> impossf "bad comparison in expanded x86 conditional branch"
 @ 
 The third important function returns the ``flag set'' function for an
 operator. This is normally just [[cmp]], but in the case of overflow,
@@ -532,7 +560,7 @@ let cmpfun =
   | "mul_overflows"  -> set_flags "mul"
   | "mulu_overflows" -> set_flags "mulux"
   | "sub_overflows"  -> set_flags "sub"
-  | _ -> Impossible.impossible "non-comparison in x86 conditional branch"
+  | _ -> impossf "non-comparison in x86 conditional branch"
 @ 
 \subsection{Stack operations}
 <<x86 postexpander>>=
@@ -584,7 +612,7 @@ let push ~addr assn =
   let memval = R.fetch (R.mem assn mspace 80 addr) 80 in
   [st_push memval] (* bound to break *)
 *)
-Impossible.impossible "push 80-bit float without conversion"
+impossf "push 80-bit float without conversion"
 
 let store_pop ~addr assn = 
   let store regval = R.store (R.mem assn mspace (mcount 80) addr) regval 80 in
@@ -603,11 +631,11 @@ let store_pop_cvt op w ~addr assn =
   let store regval = R.store (R.mem assn mspace (mcount w) addr) (memval regval) w in
   rtl (st_pop_with store)
 <<x86 postexpander>>=
-let pushk _ = Impossible.impossible "load 80-bit floating-point constant"
+let pushk _ = impossf "load 80-bit floating-point constant"
 let pushk_cvt _ _ _ = Impossible.unimp "load floating-point constant"
 <<x86 postexpander>>=
 let stack_op op = match opclass op with
-| PX.Register -> Impossible.impossible "passed register operator to stack_op"
+| PX.Register -> impossf "passed register operator to stack_op"
 | PX.Stack(_, depth) -> (* by lucky accident, depth is arity *)
     let positions = Aux.from 0 (depth-1) in
     let argvals = List.map (fun n -> ffetch (stregplus n)) positions in
@@ -672,7 +700,7 @@ let fpcmpopr = function
   | "fle" | "fge" -> "x86_nc"  (* fle is swapped fge *)
   | "fordered"    -> "x86_np"
   | "funordered"  -> "x86_p"
-  | _ -> Impossible.impossible "floating-point comparison operator"
+  | _ -> impossf "floating-point comparison operator"
 
 let bc_stack op ~ifso ~ifnot = match op with
 | ("fordered"|"funordered"|"flt"|"fgt"|"fle"|"fge"|"feq"|"fne") as opname, [w] ->
@@ -695,8 +723,7 @@ let bc_stack op ~ifso ~ifnot = match op with
     | _ ->
         let sahf = rtl (R.store eflags (R.app (R.opr "x86_ah2flags" []) [ah_val]) 16)in
         PX.Test (setcc <:> fstsw <:> sahf, bc_x86 (fpcmpopr opname) ifso ifnot))
-| _ ->
-    Impossible.impossible "strange operator in x86 bc_stack"
+| _ -> impossf "strange operator in x86 bc_stack"
 @ 
 The general block copy is implemented with the ``x86_repmovs''
 operator which translates to and [[rep movs]] in the recognizer. This
