@@ -23,7 +23,7 @@ module IS = Set.Make (IntMod)
 module IM = Map.Make (IntMod)
 module RM = Register.Map
 module RS = Register.Set
-let printReg (s, i, w) = Printf.sprintf "%c%d" s i
+let printReg (s, i, w) = (*Printf.sprintf "%c%d" s i*) ""
 
 <<register utilities>>
 <<varmap module type>>
@@ -71,7 +71,7 @@ let rpo_dfs alloc_node cfg state =
   (G.postorder_dfs (fun n rst -> (fun s -> rst (alloc_node n s))) (fun s -> s) cfg) state
 
 let dls () ({Proc.cfg = cfg; Proc.cc = cc; Proc.target = target} as proc) =
-  let () = print_cfg cfg in
+(* let () = print_cfg cfg in*)
   <<definition of shuffle>>
   let fits (s,_,_) r = Target.fits target s r  in
   let regs = cc.Call.pre_nvregs ++ cc.Call.volregs in
@@ -79,7 +79,9 @@ let dls () ({Proc.cfg = cfg; Proc.cc = cc; Proc.target = target} as proc) =
   <<alloc_node allocates registers at a single node>>
   let state' = rpo_dfs alloc_node cfg (empty_state ()) in
 	let () = cleanup   cfg in
+	(*
   let () = print_cfg cfg in
+	*)
   true
 
 module V = Interp.V
@@ -101,7 +103,8 @@ To allocate registers at a single node, we follow a simple process:
 \end{enumerate}
 <<alloc_node allocates registers at a single node>>=
 let alloc_node node state =
-  let () = Printf.eprintf "\nAllocating at node %d\n" (G.num node) in
+  (*let () = Printf.eprintf "\nAllocating at node %d\n" (G.num node) in
+	 *)
   let preds = List.filter (visited state.visited) (G.preds node)               in
   let succs = List.filter (visited state.visited) (G.succs node)               in
 
@@ -109,6 +112,7 @@ let alloc_node node state =
   let state = set_varIn  state node varIn                                      in
   let state = set_varOut state node varOut                                     in
 
+	(*
   let () = Printf.eprintf "\nVarmaps for node %d\n" (G.num node) in
   let () = Printf.eprintf "varInMap:\n" in
   let () = VM.print varIn in
@@ -116,6 +120,7 @@ let alloc_node node state =
   let () = VM.print defMap in
   let () = Printf.eprintf "varOutMap:\n" in
   let () = VM.print varOut in
+	*)
 
   let () = rewrite_uses target node varIn                                      in
   let () = rewrite_defs target node defMap                                     in
@@ -151,18 +156,22 @@ let choose_varMaps state node preds succs =
   let uses          = uses node                                in
   let live_in       = Cfgx.Live.live_in  node                  in
   let live_out      = Cfgx.Live.live_out node                  in
+	(*
   let () = Printf.eprintf "Live_in:\n" in
   let () = printTempSet live_in in
   let () = Printf.eprintf "Live_out:\n" in
   let () = printTempSet live_out in
+	*)
 
   let temp_uses,hw_uses = partition_regs target uses           in
   let temp_defs,hw_defs = partition_regs target defs           in
   <<define remove_last_uses, alloc, initial_inmap, and alloc_hw_regs>>
 
   let inmap = initial_inmap state preds succs in
+	(*
   let () = Printf.eprintf "Initial inmap:\n" in
   let () = VM.print inmap in
+	*)
   let reg_classes = VM.classify_inregs target regs inmap node in
   let avail,cheap,hicost,unavail =
     VM.unused reg_classes, VM.used_free_evict reg_classes,
@@ -174,7 +183,7 @@ varmaps because we may have to set a spill location for the temp.
   let spill state temp reg map =
     let spill_slot_for (_,_,w) = Automaton.allocate proc.Proc.priv w "" in
     let (state,spill_loc) =
-      try (state,RM.find temp state.stackMap)
+      try state,RM.find temp state.stackMap
       with Not_found ->
         let l = spill_slot_for temp in
         ({state with stackMap = RM.add temp l state.stackMap},l) in
@@ -195,8 +204,10 @@ This optimization would insert a move instruction instead of a store.
                                     | None   -> (s,map)
                                     | Some t -> spill s t r map)
                       unavail (state,inmap) in
+											(*
   let () = Printf.eprintf "inmap after removing unavailable registers:\n" in
   let () = VM.print inmap in
+	*)
 @
 Check each of the temps that remain to be allocated.
 If a temp is already in a register, then we remove that register from the [[hicost]]
@@ -224,14 +235,18 @@ After this part, this inmap is done.
                    (state, VM.add t (Reg r) map, a, c, RS.remove r h)
                with Not_found -> Impossible.impossible "No register available for temp")
       (state,inmap,avail,cheap,hicost) to_alloc in
+			(*
   let () = Printf.eprintf "inmap after allocation:\n" in
   let () = VM.print inmap in
+	*)
 @
 Now, we expire any temps that die at this node and move on to the defs at the node.
 <<choose_varMaps finds varIn and varOut maps for a node>>=
   let midmap = expire_last_uses inmap in
-  let () = Printf.eprintf "midmap:\n" in
+	(*
+  let () = flush stderr; Printf.printf "midmap:\n" in
   let () = VM.print midmap in
+	*)
 
   let reg_classes = VM.classify_outregs target regs midmap node in
   let avail,cheap,hicost,unavail =
@@ -241,19 +256,23 @@ Now, we expire any temps that die at this node and move on to the defs at the no
                                     | None   -> (s,map)
                                     | Some t -> spill s t r map)
                       unavail (state,midmap) in
+											(*
   let () = Printf.eprintf "unavail regs:\n" in
   let () = printTempSet unavail in
   let () = Printf.eprintf "outmap after removing unavail regs:\n" in
   let () = VM.print outmap in
+	*)
   let to_alloc,cheap,hicost =
     RS.fold (fun t (rst,c,h) -> try let r = choose_reg outmap t in
                                     (rst,RS.remove r c,RS.remove r h)
                                 with Not_found -> (t::rst,c,h))
             temp_defs ([],cheap,hicost) in
+						(*
   let () = Printf.eprintf "\ntemp_defs:\n" in
   let () = printTempSet temp_defs in
   let () = Printf.eprintf "\nto_alloc:\n" in
   let () = printTempSet (setFromList to_alloc)  in
+	*)
   let (state,outmap,_,_,_) =
     List.fold_left
       (fun (state, map, a, c, h) t ->
@@ -269,16 +288,20 @@ Now, we expire any temps that die at this node and move on to the defs at the no
                    (state, VM.add t (Reg r) map, a, c, RS.remove r h)
                with Not_found -> Impossible.impossible "No register available for temp")
       (state,outmap,avail,cheap,hicost) to_alloc in
+			(*
   let () = Printf.eprintf "outmap after allocation:\n" in
   let () = VM.print outmap in
+	*)
 @
 Here's an interesting case. If we have a def that is never used again, then we must
 assign it a register, but we don't want it in the outmap.
 So, we have a separate defmap and outmap, where the defmap keeps any dead definitions.
 <<choose_varMaps finds varIn and varOut maps for a node>>=
   let inmap,outmap = VM.sync_maps inmap outmap in
+	(*
   let () = Printf.eprintf "outmap after syncing:\n" in
   let () = VM.print outmap in
+	*)
   let defmap = outmap in
   let outmap = expire_dead_defs outmap in
   state,inmap,defmap,outmap in
@@ -303,7 +326,6 @@ let initial_inmap state preds succs =
   loads = in succ_vm, but not in pred_vm
   moves = in both, but not in same place
   stores = in pred_vm, but not in succ_vm; live into succ
-@
 We assume each variable is in a maximum of one register and a maximum of one memory
 location.
 <<definition of shuffle>>=
@@ -311,7 +333,8 @@ let do_shuffle effs =
   let () = Printf.eprintf "Shuffles:\n" in
   let () = List.iter (fun r -> Printf.eprintf "%s\n" (Rtlutil.ToReadableString.rtl r)) effs in
 	let () = flush stderr in
-  let strip_store rtl = match Rtl.Dn.rtl rtl with
+	
+  let strip_guard rtl = match Rtl.Dn.rtl rtl with
     | RP.Rtl [(_,RP.Store (l, r, w))] -> (l, r, w)
     | _ -> Impossible.impossible "DLS bug: non-simple rtl in register shuffle" in
   let rec shuffle =
@@ -323,7 +346,7 @@ let do_shuffle effs =
         <<definition of [[try_first_effect]]>>
         try_first_effect effs
           (fun (l, r, w) rest -> shuffle rest @@ assign l r w)
-  in List.map Rtl.Up.effect (shuffle (List.map strip_store effs) []) in
+  in List.rev (List.map Rtl.Up.effect (shuffle (List.map strip_guard effs) [])) in
 <<definition of [[try_first_effect]]>>=
 let try_first_effect effects succ =
   let rec maybe bad = function
@@ -338,11 +361,11 @@ let try_first_effect effects succ =
 @ 
 <<definition of shuffle>>=
 let shuffle state pred succ =
-  let () = Printf.eprintf "Shuffling nodes %d and %d\n" (G.num pred) (G.num succ) in
+(* let () = Printf.eprintf "Shuffling nodes %d and %d\n" (G.num pred) (G.num succ) in*)
   let pred_vm   = IM.find (G.num pred) state.varOutMaps in
-  let () = VM.print pred_vm in
+  (*let () = VM.print pred_vm in*)
   let succ_vm   = IM.find (G.num succ) state.varInMaps  in
-  let () = VM.print succ_vm in
+  (*let () = VM.print succ_vm in*)
 
   let handle_locs temp succ_locs ((ms,ls,ss) as sets) =
     let partition = List.partition (function | Reg _ -> true | Mem _ -> false) in
@@ -368,25 +391,26 @@ let shuffle state pred succ =
     VM.fold (fun temp locs lsts -> handle_locs temp locs lsts)
             succ_vm (RS.empty,RS.empty,RS.empty) in
   <<definition of make_shuffle>>
-  if RS.is_empty loads && RS.is_empty moves && RS.is_empty stores
-  then state
-  else make_shuffle () in
+	(*print_cfg cfg;*)
+	let s = 
+		if RS.is_empty loads && RS.is_empty moves && RS.is_empty stores
+		then state
+		else make_shuffle () in
+  (*print_cfg cfg;*) s in
 @
 
 Make the shuffle instructions and add them into the cfg.
 <<definition of make_shuffle>>=
 let make_shuffle () =
   let spill_slot_for (_,_,w) = Automaton.allocate proc.Proc.priv w "" in
+  let space = Target.space target in
   let state =
     RS.fold (fun t state ->
                if RM.mem t state.stackMap then state
-               else {state with stackMap = RM.add t (spill_slot_for t)
-                                                    state.stackMap})
+               else {state with stackMap = RM.add t (spill_slot_for t) state.stackMap})
             (RS.union loads stores) state in
-  let space = Target.space target in
   let mem_access f vm tempset =
-    RS.fold (fun t rst ->
-              f space (choose_reg vm t) (RM.find t state.stackMap) @ rst)
+    RS.fold (fun t rst -> f space (choose_reg vm t) (RM.find t state.stackMap) @ rst)
             tempset [] in
   let load_rtls  = mem_access target.Target.reload succ_vm loads  in
   let store_rtls = mem_access target.Target.spill  pred_vm stores in
@@ -397,13 +421,14 @@ let make_shuffle () =
             moves [] in
   let nodes = List.map (fun rtl -> G.instruction cfg rtl ~succ:(G.illegal cfg))
 	                     (List.concat [store_rtls; do_shuffle move_rtls; load_rtls]) in
-  let () = if not (null nodes) then Printf.eprintf "SHUFFLE_CFG\n" ; print_cfg cfg in
+ (* let () = if not (null nodes) then Printf.eprintf "SHUFFLE_CFG\n" ; print_cfg cfg
+	in*)
   let _ = List.fold_left
             (fun pred node -> (G.splice_on_every_edge_between ~entry:node ~exit:node
                                                               ~pred ~succ
                               ; node))
             pred nodes in
-  let () = if not (null nodes) then print_cfg cfg in
+  (*let () = if not (null nodes) then print_cfg cfg in*)
   state in
 @
 
@@ -426,9 +451,7 @@ Most of the functions are not even specific to this particular algorithm.
 
 <<register utilities>>=
 exception Evict of Register.t * Register.t
-let is_tmp target (s,_,_) =
-  if Target.is_tmp target s then (prerr_string (String.make 1 s); flush stderr;
-  true) else false
+let is_tmp target (s,_,_) = Target.is_tmp target s
 let rem_regs target temps = RS.filter (is_tmp target) temps
 let get_hw_regs target temps = RS.filter (fun t -> not (is_tmp target t)) temps
 let partition_regs target temps = RS.partition (is_tmp target) temps
@@ -649,10 +672,12 @@ Note: we are folding over the outmap, with the inmap as the accumulating paramet
 Printing is easy.
 <<varmap module type>>=
   let print vm =
+	()(*
     ( Printf.eprintf "\nOneLocVarMap:\n"
     ; RM.iter (fun t l -> Printf.eprintf "%s -> %s\n" (printReg t) (string_of_loc l)) vm
     ; flush stderr
     )
+		*)
 @
 
 We assume that the variable map only contains live variables -- i.e. no information is
@@ -666,7 +691,7 @@ out of date.
 
     let hw_regs    = get_hw_regs target (defs ++ uses ++ live_in ++ live_out)     in
     let regs       = RS.diff regs hw_regs                        in
-    let occupied  =
+    let occupied   =
       RM.fold (fun t l rst -> match l with
                  | Reg r -> RS.add r rst
                  | Mem _ -> rst)
