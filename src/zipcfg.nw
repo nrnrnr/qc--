@@ -79,6 +79,18 @@ Stitch two graphs together:
 val followed_by : graph -> int -> graph -> graph
   (* followed_by g n g' = connect Exit n of g to entry of g' *)
 @ 
+Sometimes we just want to add blocks to an existing graph~[[g]].
+We do it by creating a fresh graph~[[gz]]; the focus should be on the
+entry node, which becomes unreachable.
+The exit node of the new graph should also be unreachable.
+The code is used in [[Ast2ir]] to add a continuation's prolog.
+
+This is pretty ugly; it's a consequence of our being willing to insert
+new nodes only following an entry node.  Maybe something less ugly is
+lurking somewhere.  
+<<zipcfg.mli>>=
+val add_blocks : graph -> zgraph -> graph
+@ 
 Building a graph.
 The entry plays a dual role here; every constructor effectively
 requires the focus be on the entry node and inserts a new node
@@ -108,7 +120,7 @@ val label        : machine -> label -> zgraph -> zgraph  (* spans? *)
 val instruction  : Rtl.rtl -> zgraph -> zgraph
 val stack_adjust : Rtl.rtl -> zgraph -> zgraph
 val assertion    : Rtl.rtl -> zgraph -> zgraph
-val branch       : machine -> target:label -> zgraph -> zgraph
+val branch       : machine -> label -> zgraph -> zgraph
 val jump         : Rtl.rtl -> uses:regs -> targets:string list -> zgraph -> zgraph
 val cbranch      : machine -> Rtl.exp -> ifso:label -> ifnot:label -> zgraph -> zgraph
 val mbranch      : Rtl.rtl -> targets:label list -> zgraph -> zgraph
@@ -260,7 +272,7 @@ let zip = goto_start
 let unzip (n, ns) = Start (n, ns)
 
 let goto_start : zblock -> first * tail = goto_start
-let goto_end   : zblock -> head  *last  = goto_end
+let goto_end   : zblock -> head  * last = goto_end
 let zip   : zblock -> block  = zip
 let unzip : block  -> zblock = unzip
 @ 
@@ -344,8 +356,7 @@ let consl last g = match g with
     (Start (Entry, Last last), blocks)
 | _ -> impossf "focus not on entry node"
 
-let branch machine =
-  let goto = machine.goto in fun ~target -> consl (Branch (goto target, target))
+let branch machine target = consl (Branch (machine.goto target, target))
 let jump rtl ~uses ~targets  = consl (Jump (0, rtl, uses, targets))
 let cbranch machine =
   let f = machine.cbranch in
@@ -441,7 +452,7 @@ let make_target machine ((b, bs) as gz) = match b with
 | Start (Entry, Last (Branch (_, u))) -> u, gz
 | Start (Entry, _) ->
     let lbl = (uid (), Idgen.label "branch target") in
-    let gz = branch machine ~target:lbl **> privatelabel machine lbl **> gz in
+    let gz = branch machine lbl **> privatelabel machine lbl **> gz in
     lbl, gz
 | _ -> impossf "focus not on entry"
 @ 
@@ -471,3 +482,15 @@ let set_spans (bz, blocks) spans = match bz with
 let followed_by g n g' = unimpf "graph stitching"
 let replace_focus gz g = unimpf "node replacement"
 @ 
+<<zipcfg.ml>>=
+let add_blocks blocks (focus, newblocks) =
+  match focus with
+  | Start (Entry, Last (Branch _ | Forbidden _ | Exit _)) ->
+      let rec add block blocks = match goto_end (unzip block) with
+      | (First (Label _), Exit _) -> blocks
+      | (_, Exit _) -> impossf "exit contains nontrivial code"
+      | _ -> Blocks.insert block blocks in
+      Blocks.fold add newblocks blocks
+  | Start (Entry, _) -> impossf "entry contains nontrivial code"
+  | _ -> impossf "focus not on entry"
+

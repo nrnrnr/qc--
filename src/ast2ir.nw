@@ -93,10 +93,9 @@ Utility functions and so on.
 Here are 
 some of the usual suspects.
 <<utilities>>=
-let (<<) f g = fun x -> f (g x) (* function composition *)
-let impossible = Impossible.impossible
-let impossf x  = Printf.kprintf Impossible.impossible x
-let unimpf  x  = Printf.kprintf Impossible.unimp x
+let (<<) f g  = fun x -> f (g x) (* function composition *)
+let impossf x = Printf.kprintf Impossible.impossible x
+let unimpf  x = Printf.kprintf Impossible.unimp x
 @ 
 The [[**>]] function is an infix, right-associative function that
 makes it easy to create sequences of flow-graph nodes.
@@ -243,7 +242,7 @@ module K = struct
     ;         rep         : Contn.t     (* representation as C-- value (incl block) *)
     ;         base        : Block.t     (* base address; to be composed with rep *)
     ;         convention  : string
-    ; mutable succ        : label option      (* filled in by 2nd pass time *)
+    ;         succ        : label       (* filled in by 2nd pass time *)
     ; mutable spans       : (Bits.bits  * Bits.bits Reloc.Simple.relocatable) list
                             (* user-defined spans at the continuation *)
     }
@@ -269,7 +268,7 @@ let mk to_cc name den rep base ~formals ~cut_in ~return_in ~unwind_sp =
   ; formals     = formals
   ; cut_in      = cut_in
   ; return_in   = return_in
-  ; succ        = None
+  ; succ        = genlabel "start of continuation code"
   ; spans       = []
   }
 @ 
@@ -309,11 +308,9 @@ We return an illegal node since nothing may fall through to a continuation.
 <<supporting functions for translating statements>>=
 let rec contStmt2 label succ =
   let k = continuation label in
-  let label = (G.uid(), label) in
   k.K.spans <- props;
-  k.K.succ  <- Some label;
   G.forbidden machine **>
-  G.label machine label **>
+  G.label machine k.K.succ **>
   succ
 @ 
 As continuations appear in flow annotations, we set the [[cut_to]],
@@ -333,7 +330,7 @@ let continuations cc ast =
     { G.defs  = defs; G.kills = allregs -- defs; G.node = k.K.cut_pc } in
   let as_unwinds k =
     { G.defs  = RS.empty; G.kills = volregs; G.node = k.K.unwind_pc } in
-    (* defs are variables and so can't be a register set.  NEED ANOTHER MECHANISM *)
+    (* defs are vars and so can't be a register set. See [[splice_in_unwind_to_entry]] *)
   let as_returns k =
     let pc = K.get_return_pc cc k in
     let defs  = k.K.return_in.C.regs in
@@ -395,67 +392,97 @@ Melrose Hotel, an continuation that is not [[cut to]] should not be used -- and
 therefore, it should not even escape.
 This error should really be detected elsewhere.
 <<functions that translate statements, including [[stmts]]>>=
-let rec finish_compiling_continuation k =
-  begin
+let rec finish_compiling_continuation k g =
+  let g = 
     if k.K.cut_to then
-      generate_cut_to_entry k
+      splice_in_cut_to_entry k g
     else if k.K.escapes then
-      impossible "Continuation escapes but is not annotated with also cuts to";
-    generate_return_to_entries k;
-    if k.K.unwound_to then
-      generate_unwind_to_entry k;
-  end
+      impossf "Continuation escapes but is not annotated with also cuts to"
+    else g in
+  let g = splice_in_return_to_entries k g in
+  let g = if k.K.unwound_to then splice_in_unwind_to_entry k g else g in
+  g
 @ 
 If we cut to a continuation, the overflow parameters live in its
 representation on the stack, so we need only shuffle and manage the
 stack pointer.
+(I really don't believe this any more.  We need to visit the big
+picture of continuations.)
+\begin{itemize}
+\emph
+\item
+Multiple entry points
+\item
+What prolog for each entry point
+\item
+When each prolog is inserted into the graph
+\end{itemize}
 <<functions that translate statements, including [[stmts]]>>=
-and generate_cut_to_entry k =
-unimpf "cut to" (*
+and splice_in_cut_to_entry k g =
   let in' = k.K.cut_in in
-  G.set_succ g (G.non_local_join_labeled g k.K.cut_pc) (
-  G.assertion    g (in'.C.insp (Contn.rep k.K.rep))     **>
-  G.stack_adjust g in'.C.pre_sp   **>
-  G.instruction  g in'.C.shuffle  **>
-  G.stack_adjust g in'.C.post_sp  **>
-  k.K.succ) *)
+  let prolog =
+    G.label machine k.K.cut_pc **>
+    G.assertion (in'.C.insp (Contn.rep k.K.rep))     **>
+    G.stack_adjust in'.C.pre_sp   **>
+    G.instruction  in'.C.shuffle  **>
+    G.stack_adjust in'.C.post_sp  **>
+    G.branch machine k.K.succ     **>
+    G.entry G.empty in
+  G.add_blocks g prolog
 @ 
 If we return to a continuation, we must remember the overflow block.
 <<functions that translate statements, including [[stmts]]>>=
-and generate_return_to_entries k = 
-  unimpf "return to" (*
-  let gen ccname label =
-    let cc  = Call.get_cc target ccname in
+and splice_in_return_to_entries k g = 
+  let gen cc g label =
     let in' = k.K.return_in in
     let ()  = add youngblocks cc.C.overflow_alloc.C.result_allocator in'.C.overflow in
-    G.set_succ g (uid_of label) (
-    G.assertion    g (in'.C.insp in'.C.overflow)    **>
-    G.stack_adjust g in'.C.pre_sp    **>
-    G.instruction  g in'.C.shuffle   **>
-    G.stack_adjust g in'.C.post_sp   **>
-    k.K.succ) in
-  List.iter (fun (ccname, labels) -> List.iter (gen ccname) labels) k.K.return_pcs
-*)
+    let prolog =
+      G.label machine label **>
+      G.assertion    (in'.C.insp in'.C.overflow)    **>
+      G.stack_adjust in'.C.pre_sp    **>
+      G.instruction  in'.C.shuffle   **>
+      G.stack_adjust in'.C.post_sp   **>
+      G.branch machine k.K.succ     **>
+      G.entry G.empty in
+    G.add_blocks g prolog in
+  let gen_labels g (ccname, labels) =
+    List.fold_left (gen (Call.get_cc target ccname)) g labels in
+  List.fold_left gen_labels g k.K.return_pcs
 @ 
-When we unwind, the argument variables are set by the run-time system's unwinding code.
-To ensure that each argument has been placed somewhere (and is live into the
-continuation), we assert an assignment to a bogus location, using each of the
-variables.
-The assignment to the bogus location is probably somewhat bogus.
-THIS ALL LOOKS EXTREMELY BOGUS TO ME.  SHOULDN'T THIS BE DEALT WITH BY
-A LIVENESS EDGE OUT OF THE CALL NODE?
+When we unwind, the argument variables are set by the run-time
+system's unwinding code. 
+It is not possible to represent this fact by [[defs]] on the relevant
+control-flow edge, because the things being defined are {\PAL}
+variables, and the only things we can put on a [[defs]] edge are
+registers.
+
+\begin{quote}
+In an earlier version on the compiler, to ensure that each formal
+parameter had a location, 
+we asserted, for each variable, an assignment of that variable to a
+bogus location. 
+But now instead, we plan to revise the run-time system to do nothing
+if a particular formal happens to be dead.
+
+A more serious question, not solved, is what to do about reaching
+definitions when variables can be mutated by the run-time system.
+\end{quote}
 <<functions that translate statements, including [[stmts]]>>=
-and generate_unwind_to_entry k = 
-unimpf "unwind to" (*
+and splice_in_unwind_to_entry k g = 
+  let prolog =
+    G.label machine k.K.unwind_pc **>
+    G.assertion (proc_cc.C.sp_on_unwind proc_cc.C.stable_sp_loc) **>
+    G.branch machine k.K.succ     **>
+    G.entry G.empty in
+  G.add_blocks g prolog
+(*
   let bogus_space = ('z', Rtl.Identity, Cell.of_size 1) in
   let use_var (h,v,a) succ =
     let w = RU.Width.loc v.FE.loc in
     G.assertion g (RU.store (R.mem R.none bogus_space (R.C w)
                                    (R.bits (Bits.S.of_int 0 w) w))
                             (R.fetch (R.var "" v.FE.index w) w)) succ in
-  G.set_succ g (G.non_local_join_labeled g k.K.unwind_pc)
-  (G.assertion g (proc_cc.C.sp_on_unwind proc_cc.C.stable_sp_loc) **>
-   (List.fold_right use_var k.K.formals k.K.succ))
+  ... (List.fold_right use_var k.K.formals k.K.succ) ...
 *)
 @
 
@@ -506,7 +533,7 @@ and stmt  props s  succ =
       (match Dn.exp e with
       | RP.Const (RP.Link (sym, _, w)) ->
           let lbl = sym#original_text in
-          G.branch machine ~target:(uid_of lbl, lbl) succ
+          G.branch machine (uid_of lbl, lbl) succ
       | _ -> let instr   = target.T.goto.T.embed e in
              let targets = List.map (fun l -> (uid_of l, l)) labels in
              G.mbranch instr targets succ)
@@ -811,7 +838,7 @@ type 'a nvr = { reg : 'a; tmp : 'a }   (* for callee-saves info *)
   let nvr_temps = 
     RS.fold (fun r i -> (r, Some (proc_cc.C.saved_nvr temps r)) :: i) nvregs [] in
   let convert (r,t) = match t with Some t -> {reg = R.reg r; tmp = t}
-                                 | None   -> impossible "Some nvr_temp expected" in
+                                 | None   -> impossf "Some nvr_temp expected" in
   let nvr_info  = List.map convert nvr_temps in
   let save_nvrs =
     R.par (List.map (fun i -> RU.store i.tmp (RU.fetch i.reg)) nvr_info) in
@@ -884,12 +911,15 @@ AND WOULDN'T IT BE NICER JUST TO CONCATENATE BLOCKS DIRECTLY RATHER
 THAN MAKE A LIST AND THEN CONCATENATE?
 <<definition of [[proc]], which translates one procedure>>=
   let g = insert_init_cont_nodes contenv contlbl g in
-  let contblocks =
-    let addblock name k blocks =
-      finish_compiling_continuation k;
-      if k.K.escapes then Block.cathl (Contn.rep k.K.rep) k.K.base :: blocks
-      else blocks in
-    Block.cathl_list pointersize (Strutil.Map.fold addblock contenv []) in
+  let contblocks, g =
+    let addblock name k (blocks, g) =
+      let g = finish_compiling_continuation k g in
+      let blocks =
+        if k.K.escapes then Block.cathl (Contn.rep k.K.rep) k.K.base :: blocks
+        else blocks in
+      blocks, g in
+    let blocks, g = Strutil.Map.fold addblock contenv ([], g) in
+    Block.cathl_list pointersize blocks, g in
 @ 
 \paragraph{Building and optimizing the [[Proc.t]]}
 We take everything we know and combine it into a [[Proc.t]].
@@ -1000,7 +1030,7 @@ let globals (base:Rtl.exp) vars =
           let sig'  = Printf.sprintf "[%s %s]" name hw in            
           let ()    = Buffer.add_string decls sig' in
           (var.FE.index, loc) :: bindings
-        with Not_found -> impossible ("unknown h/w register: "^hw)) in
+        with Not_found -> impossf "unknown hardware register \"%s\"" hw) in
     let bindings = List.fold_left assign [] vars in
     let gmap =
       let var n = try List.assoc n bindings
