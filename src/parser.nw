@@ -27,7 +27,6 @@ sync point for the following character into the source map.
 
 <<scan.mll>>=
 {
-    open Error
     open Parse      (* tokens are defined here *)
 
 
@@ -57,11 +56,8 @@ to [[Srcmap.location]]:
         Srcmap.location map (Lexing.lexeme_start lexbuf)
      
     let lexerror lexbuf map msg = 
-        let (file, line, col) = location lexbuf map in
-        let m = Printf.sprintf "File %s, line %d, column %d: %s"
-                file line col msg
-        in 
-            error m
+        let point = (map, Lexing.lexeme_start lexbuf) in
+            Error.error point [msg]
 
 @ We define some helpers; [[get]] returns the matched string and is
 quite intuitive when called as [[get lexbuf]].
@@ -598,15 +594,14 @@ module [[Ast]].
 
 %{
 
-open Error
 open Ast
 open List
 
-let parse_error = error
+let error pos msg = raise (Error.ParseError(pos,msg))
 
 let localReg region = function
     | (var,ty,id,None) -> DeclAt(Register(var,ty,id),region)
-    | (var,ty,id,_)    -> parse_error "no hint allowed for local variable"
+    | (var,ty,id,_)    -> error (fst region) "no hint allowed for local variable"
 
 @ Multiple assignments are defined as a list of pairs in the abstract syntax
 but two lists in the concrete syntax. The [[assign]] function implements
@@ -614,11 +609,11 @@ the classic [[zip]] function to join them into a list of pairs.
 
 <<parse.mly>>= 
 
-let assign left right = 
+let assign pos left right = 
     let rec loop = function 
         | [], []            -> []
-        | [], rr            -> parse_error "too few lvalues in assignment"
-        | ll, []            -> parse_error "too many lvalues in assignment"
+        | [], rr            -> error pos "too few lvalues in assignment"
+        | ll, []            -> error pos "too many lvalues in assignment"
         | (l::ll),(r::rr)   -> (l,r)::loop (ll,rr) 
     in
         loop (left,right)
@@ -635,6 +630,7 @@ where the leftmost symbol has index 1.
 
 let p  () = (Parsing.symbol_start (), Parsing.symbol_end())
 let pn n  = (Parsing.rhs_start n, Parsing.rhs_end n)
+let px () = (Parsing.symbol_start ())
 
 %}
 
@@ -882,7 +878,7 @@ stmtAt      :   stmt                         { StmtAt($1,p())           }
 stmt        :   SEMI                         { EmptyStmt                }
             |   ID COLON                     { LabelStmt($1)            }
             |   SPAN exprAt exprAt block         { SpanStmt($2,$3,$4)   }
-            |   lvalues EQUAL exprs SEMI     { AssignStmt(assign $1 $3) }
+            |   lvalues EQUAL exprs SEMI     { AssignStmt(assign (px()) $1 $3) }
 
             |   lvalues EQUAL conv PPERCENT ID actls flows SEMI
                         { PrimStmt(          rev $1, $3, $5, $6, $7)          }

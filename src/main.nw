@@ -115,7 +115,7 @@ let usage this =
 (* lex *)
 
 let lex file =
-    let fd          = try open_in file with Sys_error msg -> error msg  in
+    let fd          = open_in file                                      in
     let finally ()  = close_in fd                                       in
     let lexbuf      = Lexing.from_channel fd                            in
     let map         = Srcmap.empty                                      in
@@ -141,28 +141,32 @@ to stdout.
 <<main.ml>>= 
 
 let parse file =
-    let fd          = try open_in file with Sys_error msg -> error msg  in
+    let fd          = open_in file                                      in
     let finally ()  = close_in fd                                       in
     let lexbuf      = Lexing.from_channel fd                            in
     let map         = Srcmap.empty                                      in
-    let scanner     = Scan.scan map                                      in
+    let scanner     = Scan.scan map                                     in
         try
             ( Srcmap.sync map 0 (file,1,1) 
             ; let ast = Parse.program scanner lexbuf in
                  AstUtil.sexp_wr_program ast stdout
             ) 
         with
-            | Parsing.Parse_error | Error(_) ->
+            | Parsing.Parse_error -> 
               ( finally()
-              ; let (file,line,col) = Scan.location lexbuf map in
-                    error (Printf.sprintf "%3d,%2d parse error" line col)
+              ; error (map, Parsing.symbol_start()) ["parse error"]
               )
-            | e ->  ( finally()
-                    ; raise e
-                    )
+            | ParseError(pos,msg) ->
+              ( finally()
+              ; error (map,pos) [msg]
+              )   
+            | e ->  
+              ( finally()
+              ; raise e
+              )
 
 let pp file width =
-    let fd          = try open_in file with Sys_error msg -> error msg  in
+    let fd          = open_in file                                      in
     let finally ()  = close_in fd                                       in
     let lexbuf      = Lexing.from_channel fd                            in
     let map         = Srcmap.empty                                      in
@@ -175,14 +179,18 @@ let pp file width =
                  )
             ) 
         with
-            | Parsing.Parse_error | Error(_) ->
+            | Parsing.Parse_error -> 
               ( finally()
-              ; let (file,line,col) = Scan.location lexbuf map in
-                    error (Printf.sprintf "%3d,%2d parse error" line col)
+              ; error (map, Parsing.symbol_start()) ["parse error"]
               )
-            | e ->  ( finally()
-                    ; raise e
-                    )
+            | ParseError(pos,msg) ->
+              ( finally()
+              ; error (map,pos) [msg]
+              )   
+            | e ->  
+              ( finally()
+              ; raise e
+              )
  
 @ The [[main]] function gets the command line arguments and tries to
 parse them using the [[cmdline]] parser.  It returns the abstract
@@ -213,8 +221,18 @@ let main () =
             );
             exit 0
        with 
-            Error(msg)  -> Printf.eprintf "%s: %s\n" this msg;
-            exit 1
+            | ErrorExn(point,msg)  -> 
+                ( prerr_string (Srcmap.Str.point point)
+                ; prerr_string " Error: "
+                ; List.iter prerr_string msg
+                ; prerr_newline ()
+                ; exit 1
+                )       
+            | Sys_error(msg) ->
+                ( prerr_endline ("Fatal error: " ^ msg )
+                ; exit 1
+                )
+                
 
 @ In \ocaml~no [[main]] function like in C exists but simply all
 values in a module are evaluated.  However, we simulate this by

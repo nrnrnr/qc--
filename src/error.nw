@@ -6,12 +6,12 @@
 The idea is not to stop in all cases after an error but to mark
 results as either good or bad.  Bad values can be used for further
 computation although the overall result will be bad.  The hope is, to
-detect even more errors that are \textit{not} cause by any previous
+detect even more errors that are \textit{not} caused by any previous
 error.  Details of this idea and the following implementation can be
 found in \textit{Eliminating Spurious Error Messages Using Exceptions,
 Polymorphism and Higher-Order Functions} \cite{ramsey:99:compj}.
 
-Technically results are raped in an [['a error]] type; good results
+Technically results are wrapped in an [['a error]] type; good results
 are represented by the [[Ok]] constructor, bad results by [[Error]]. 
 A set of combinators helps to deal with this type of values.
 
@@ -19,7 +19,7 @@ A set of combinators helps to deal with this type of values.
 \subsection{Interface}
 % ------------------------------------------------------------------  
 
-<<error2.mli>>=
+<<error.mli>>=
 
 type 'a error       = Error                     (* bad result  *)
                     | Ok        of 'a           (* good result *)
@@ -27,16 +27,17 @@ type 'a error       = Error                     (* bad result  *)
 @ At some point in a program the processing is finally aborted by
 rasing the [[ErrorExn]] exception.
 
-<<error2.mli>>=
+<<error.mli>>=
 
 type pretty         = string                    (* for the moment *)
 
 exception ErrorExn of    Srcmap.point * pretty list
+exception ParseError of  int * string
 
 @ Combinators to deal with functions that do not naturally expect 
 values of type [[error]].
 
-<<error2.mli>>=
+<<error.mli>>=
 
 val combine     : 'a error error -> 'a error
 val map         : ('a -> 'b) -> 'a error -> 'b error
@@ -48,7 +49,7 @@ a complex value to the top-level. A complex value is bad when one
 of its components is bad and good otherwise. The raising combinators
 deal with the most important data types: options, lists, and tuples.
 
-<<error2.mli>>=
+<<error.mli>>=
 
 module Raise :
   sig
@@ -66,7 +67,7 @@ module Raise :
 constructor from the outer level to the values inside the [[error]]
 value. 
 
-<<error2.mli>>=
+<<error.mli>>=
 module Lower :
   sig
     val pair   : ('a * 'b)           error -> 'a error * 'b error
@@ -76,6 +77,11 @@ module Lower :
                                             * 'c error 
                                             * 'd error
   end
+
+val error   : Srcmap.point -> pretty list -> 'a
+val warning : Srcmap.point -> string list -> unit
+
+  
 @
 
 
@@ -83,13 +89,14 @@ module Lower :
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
 
-<<error2.ml>>=
+<<error.ml>>=
 type 'a error       = Error                     (* bad result  *)
                     | Ok        of 'a           (* good result *)
 
 type pretty         = string                    (* for the moment *)
 
 exception ErrorExn  of    Srcmap.point * pretty list
+exception ParseError of  int * string
 
 let combine = function  
     | Ok x      -> x
@@ -108,7 +115,7 @@ a complex value to the outermost level. A complex value is bad when one
 of its components is bad and good otherwise. The raising combinators
 deal with the most important data types: options, lists, and tuples.
 
-<<error2.ml>>=    
+<<error.ml>>=    
 
 module Raise = struct
 
@@ -151,7 +158,7 @@ end
 constructor from the top-level to the values inside the [[error]]
 value. 
 
-<<error2.ml>>=
+<<error.ml>>=
 
 module Lower = struct
 
@@ -171,7 +178,7 @@ end
 @ We provide functions to raise the error ([[ErrorExn]]) exception and
 issue warnings.
 
-<<error2.ml>>=
+<<error.ml>>=
 
 let error point msg = raise (ErrorExn(point,msg))
 
@@ -179,7 +186,7 @@ let warning point msg =
     ( prerr_string (Srcmap.Str.point point)
     ; prerr_string " Warning: "
     ; List.iter prerr_string msg
-    ; prerr_endline
+    ; prerr_newline ()
     )       
 
 @

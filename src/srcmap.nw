@@ -100,8 +100,9 @@ val empty :         map
 @ A synchronization is announced with [[sync]].  It synchronizes a
 position [[pos]] with a [[location]].  A common case is the
 synchronization for a new line trough [[nl]].  A new line stays in the
-same file as the previous sync point is on the next next.  The [[pos]]
-passed to [[nl]] is the first character of the new line.
+same file as the previous sync point and advances one line.  The
+[[pos]] passed to [[nl]] is that of the first character on the new
+line.
 
 <<srcmap.mli>>=
 val sync :          map -> pos -> location -> unit
@@ -320,7 +321,9 @@ let dump map =
     let point (pos,(file,line,col)) = 
         Printf.printf "%5d: %-32s %4d %3d\n" pos file line col
     in
-        Array.iter point map.points
+        for i=0 to map.top-1 do
+            point map.points.(i)
+        done
 
 @ For reporting locations to the user they must be avaliable as
 strings. The [[Str]] module provides conversions.
