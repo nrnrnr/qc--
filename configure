@@ -71,7 +71,6 @@ $x{build_interp} = ""  ;         # whether we build qc--interp
 @include    = ( "/usr/include"
               , "/usr/local/include"
               , "/usr/include/lua40"
-              , "/usr/local/lua40/include"
               , "/usr/local/include/lua40"
               , "/usr/local/lua/include"
               , "/usr/include/lua"
@@ -81,7 +80,6 @@ $x{build_interp} = ""  ;         # whether we build qc--interp
               , "/usr/lib"
               , "/usr/local/lib"
               , "/usr/local/gnu/lib"
-              , "/usr/local/lua40/lib"
               );
 
 # ------------------------------------------------------------------ 
@@ -166,8 +164,6 @@ sub usage {
     
     ./configure [options]
 
-    --build=.               build in directory .
-
     --prefix=/usr/local     install into the /usr/local hierarchy which
                             is also the default
     -h, --help              this summary
@@ -214,11 +210,8 @@ sub success { bye 0; }
 # We start from here with reading the command line
 # ------------------------------------------------------------------ 
 
-my $build_dir = ".";
-
 foreach (@ARGV) {
     if       (/^--?prefix=(.*)$/)             { $x{prefix}=$1     }
-    elsif    (/^--?build=(.*)$/)              { $build_dir=$1     }  
     elsif    (/^--?h(elp?)$/)                 { usage(); exit 0   }  
     else     { usage(); exit 1 }
 }
@@ -251,10 +244,8 @@ $x{pod2html}        = $x{pod2html}     || search("pod2html",@path);
 $x{lua_h}           = $x{lua_h}        || search("lua.h", @include);
 $x{lualib_h}        = $x{lualib_h}     || search("lualib.h", @include);
 $x{liblua}          = $x{liblua}       || search("liblua.so", @libs) 
-                                       || search("liblua.a", @libs)
                                        || search("liblua40.so", @libs);
 $x{liblualib}       = $x{liblualib}    || search("liblualib.so", @libs) 
-                                       || search("liblualib.a", @libs)
                                        || search("liblualib40.so", @libs);
 
 ($liblua,$path,$suffix) = fileparse($x{liblua},('.so', '.a'));
@@ -384,12 +375,12 @@ EOF
 # ------------------------------------------------------------------ 
 
 
-if ($x{ocaml_version} !~ /3\.08/) {
+if ($x{ocaml_version} !~ /3\.0[45678]/) {
     print <<EOF;
 
     Configuration failed.
     
-    You need OCaml 3.08 to compile Quick C--, but we found 
+    You need OCaml 3.0[4567] to compile Quick C--, but we found 
     $x{ocaml_version}. 
 EOF
     failure();
@@ -430,7 +421,6 @@ my @export = ( "arch"
 
 my @export_upper_base = ( "ocamlc", "ocamlo" );
              
-
 open(OUT,"> $config_mk") || die "cannot open $config_mk";
 print OUT <<EOF;
 #
@@ -500,7 +490,7 @@ install_doc                 = \$config_prefix/doc/qc--
 install_man1                = \$config_prefix/man/man1
 
 # Build directory
-BT="$build_dir"
+BT="."
 
 # do not edit
 HERE = `basename \$PWD`
