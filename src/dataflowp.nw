@@ -1,0 +1,173 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+\section{Support for backward dataflow problems}
+
+
+A dataflow pass is based on a single dataflow fact of type~[['a]], but
+to describe a fully general pass requires not one but three type
+parameters:
+\begin{itemize}
+\item
+Type parameter [['a]] is the pass's dataflow fact.
+Values of type~[['a]] should form a lattice.
+\item
+Type parameter [['i]] is an input, from which it should be possible to
+derived the dataflow fact.
+For example, [['i]] might be equal to~[['a]], or it might be a tuple
+of which one element is~[['a]].
+\item
+Type parameter [['o]] is an output.
+For a pure analysis, [['o]] is equal to~[['a]].
+For a pure transformation, [['o]] is [[graph option]].
+For a combined analysis and transformation, [['o]] 
+is [['a answer]].
+\end{itemize}
+The dataflow engine computes a least solution to a set of dataflow
+equations defined by a pass.
+@
+<<dataflowp.mli>>=
+<<exported module types>>
+module Make (Proplist : PROPLIST with type t = Zipcfg.uid) : S
+<<exported module types>>=
+module type PROPLIST = sig
+  type t
+  type 'a prop = {
+    get : t -> 'a;   (* raises Not_found *)
+    set : t -> 'a -> unit;
+  }
+  val clear : t -> unit (* clear all properties *)
+end
+
+module type S = sig
+  module P : PROPLIST with type t = Zipcfg.uid
+  <<exported types>>
+  <<declarations of exported values>>
+end
+<<exported types>>=
+type uid = Zipcfg.uid
+type 'a answer = Dataflow of 'a | Rewrite of Zipcfg.graph
+
+type ('i, 'a, 'o) pass' =
+ { name      : string;
+   prop      : 'a P.prop;
+   add_info  : 'a -> 'a -> 'a;  (* lattice join (least upper bound) *)
+   changed   : old:'a -> new':'a -> bool;  (* is new one bigger? *)
+   init_info : 'a;  (* lattice bottom element *)
+   last_in   : Zipcfg.Rep.last -> 'o;
+   middle_in : 'i -> Zipcfg.Rep.middle -> 'o;
+   first_in  : 'i -> Zipcfg.Rep.first -> 'o;
+ } 
+
+type 'a analysis = ('a, 'a, 'a) pass'
+type 'a transformation = ('a, unit, Zipcfg.graph option) pass'
+type 'a pass = ('a, 'a, 'a answer) pass'
+@ 
+An analysis sets properties.
+A~full pass sets properties and also rewrites the graph.
+<<declarations of exported values>>=
+val backward_anal : 'a analysis -> Zipcfg.graph -> unit
+val backward_pass : 'a pass -> Zipcfg.graph -> unit
+@
+\section{Implementation}
+
+<<dataflowp.ml>>=
+module G  = Zipcfg
+module GR = Zipcfg.Rep
+module UA = Unique.Array
+let impossf fmt = Printf.kprintf Impossible.impossible fmt
+let unimpf  fmt = Printf.kprintf Impossible.unimp      fmt
+
+<<exported module types>>
+module Make (Proplist : PROPLIST with type t = Zipcfg.uid) : S = struct
+  module P = Proplist
+  <<exported types>>
+  <<definitions of exported functions>>
+end
+@ 
+Revised to use the new flow-graph traversal.
+We go from each head to the next join.
+<<definitions of exported functions>>=
+let backward anal graph =
+  let blocks = List.rev (G.postorder_dfs graph) in
+  let () = List.iter (fun b -> anal.prop.P.set (GR.id b) anal.init_info) blocks in
+  let find = anal.prop.P.get in
+  let changed = ref false in
+  let block b =
+    let h, l = GR.goto_end (GR.unzip b) in
+    let out = anal.last_in l in
+    let rec prev h out = match h with
+      | GR.Head (h, m) -> prev h (anal.middle_in out m)
+      | GR.First f -> anal.first_in out f in
+    let in' = prev h out in
+    let u = GR.id b in
+    let old_in = find u in
+    if anal.changed ~old:old_in ~new':in' then
+      begin
+        anal.prop.P.set u in';
+        changed := true
+      end in
+  let rec iterate n =
+    let () = changed := false in
+    let () = List.iter block blocks in
+    if !changed then
+      if n < 1000 then iterate (n + 1)
+      else impossf "%s didn't converge in %n iterations" anal.name n
+    else
+      Debug.eprintf anal.name "%s converted in %d iterations\n" anal.name n in
+  iterate 1
+let backward_anal = backward
+@ 
+In the general case we solve a graph in the context of a larger subgraph.
+<<definitions of exported functions>>=
+let rec solve_graph anal graph exit_fact =
+  let last' l = match l with
+  | GR.Exit 0 -> Dataflow exit_fact
+  | _ -> anal.last_in l in
+  let anal' = { anal with last_in = last' } in
+  let () = general_backward anal' graph in
+  anal.prop.P.get GR.entry_uid 
+and general_backward anal graph =
+  let blocks = List.rev (G.postorder_dfs graph) in
+  let () = List.iter (fun b -> anal.prop.P.set (GR.id b) anal.init_info) blocks in
+  let find = anal.prop.P.get in
+  let solve_graph = solve_graph anal in
+  <<definition of [[answer]]>>
+  let changed = ref false in
+  let block b =
+    let h, l = GR.goto_end (GR.unzip b) in
+    let out = answerl l in
+    let rec prev h out = match h with
+      | GR.Head (h, m) -> answerm out m (fun a -> prev h a)
+      | GR.First f -> answerf out f in
+    let in' = prev h out in
+    let u = GR.id b in
+    let old_in = find u in
+    if anal.changed ~old:old_in ~new':in' then
+      begin
+        anal.prop.P.set u in';
+        changed := true
+      end in
+  let rec iterate n =
+    let () = changed := false in
+    let () = List.iter block blocks in
+    if !changed then
+      if n < 1000 then iterate (n + 1)
+      else impossf "%s didn't converge in %n iterations" anal.name n
+    else
+      Debug.eprintf anal.name "%s converted in %d iterations\n" anal.name n in
+  iterate 1
+let backward_pass anal graph = general_backward anal graph
+
+<<definition of [[answer]]>>=
+let answerf out f = match anal.first_in out f with
+| Dataflow a -> a
+| Rewrite g -> solve_graph g out in
+
+let answerm out m k = match anal.middle_in out m with
+| Dataflow a -> k a
+| Rewrite g -> solve_graph g out in
+
+let answerl l = match anal.last_in l with
+| Dataflow a -> a
+| Rewrite g -> solve_graph g anal.init_info in
+@
