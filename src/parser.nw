@@ -308,7 +308,7 @@ and character_end = parse
     "'"                         { fun map i -> P.CHAR(i)           }
   | _                           { fun map i -> 
                                   error lexbuf 
-                                    ( "illegal character literal: "
+                                    ( "illegal character literal (too many characters): "
                                     ^  get lexbuf
                                     ) 
                                 }  
@@ -955,12 +955,12 @@ actuals_    :   actuals_ COMMA actual          { $3 :: $1 }
 
 formal      :   bare_formal                    { p(), $1 }
 bare_formal :   STR INVARIANT REGISTER tyAt ID { Some $1, A.Invariant, $4, $5}
-            |   STR           REGISTER tyAt ID { Some $1, A.Variant  , $3, $4}
-            |       INVARIANT REGISTER tyAt ID { None   , A.Invariant, $3, $4}
-            |                 REGISTER tyAt ID { None   , A.Variant  , $2, $3}
             |   STR INVARIANT          tyAt ID { Some $1, A.Invariant, $3, $4}
+            |   STR           REGISTER tyAt ID { Some $1, A.Variant  , $3, $4}
             |   STR                    tyAt ID { Some $1, A.Variant  , $2, $3}
+            |       INVARIANT REGISTER tyAt ID { None   , A.Invariant, $3, $4}
             |       INVARIANT          tyAt ID { None   , A.Invariant, $2, $3}
+            |                 REGISTER tyAt ID { None   , A.Variant  , $2, $3}
             |                          tyAt ID { None   , A.Variant  , $1, $2}
 
 cformal     :   STR ID                         { Some $1, $2 }
@@ -1147,7 +1147,7 @@ expr:       |   sexpr                          { $1                   }
             |   exprAt LEQ        exprAt       { A.BinOp($1,$2,$3) }
             |   exprAt GEQ        exprAt       { A.BinOp($1,$2,$3) }
             |   exprAt GT         exprAt       { A.BinOp($1,$2,$3) }
-            |   exprAt INFIXOP    exprAt       { A.BinOp($1,$2,$3) }
+            |   exprAt INFIXOP    exprAt       { A.PrimOp($2,[None,$1;None,$3]) }
             |   TILDE exprAt %prec TILDE       { A.UnOp($1,$2)     }
             |   MINUS exprAt %prec UMINUS      { A.UnOp($1,$2)     }
 
