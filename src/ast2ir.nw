@@ -55,7 +55,10 @@ module Expr = struct
     <<module Expr>>
 end
 
-module Make (G : Agraph.S) = struct
+module Make
+  (G   : Agraph.S) 
+  (Asm : Asm.S with type instruction = G.graph) = 
+struct
     module GM = G.Make
     <<module Make>> 
 end
@@ -281,23 +284,26 @@ let memsize env ir = function
     | A.DynSize       -> true
     | A.FixSize(e)    -> true
 
-<<>>=
-let rec init env ir = function
-    | A.InitAt(x,_)   -> init env ir x
-    | A.InitExprs(es) -> true
-    | A.InitStr(s)    -> true
-    | A.InitUStr(s)   -> true
+<<module Make>>=
+let initialized_data expr asm =
+  Asm.Emit((fun e -> assert false) expr, assert false) :: asm
 
-<<>>=
-let rec datum env ir = function
-    | A.DatumAt(x,_)        -> datum env ir x
-    | A.Label(n)            -> true
-    | A.Align(a)            -> true
-    | A.MemDecl(t,m,Some i) -> true
-    | A.MemDecl(t,m,None)   -> true
+let rec init env asm = function
+    | A.InitAt(x,_)   -> init env asm x
+    | A.InitExprs(es) -> List.fold_right initialized_data es asm
+    | A.InitStr(s)    -> assert false
+    | A.InitUStr(s)   -> assert false
+
+<<module Make>>=
+let rec datum env asm = function
+    | A.DatumAt(x,_)        -> datum env asm x
+    | A.Label(n)            -> assert false
+    | A.Align(a)            -> Asm.Align a :: asm
+    | A.MemDecl(t,m,Some i) -> assert false
+    | A.MemDecl(t,m,None)   -> assert false
 
 
-<<>>=
+<<unused>>=
 let register env ir (v , t, n, reg)  = true
 @
 
@@ -309,7 +315,7 @@ Flow annotations are translated to continuation bundles of type
 [[Fgraph.cont]].  The [[flows]] function takes a list of flow
 annotations and adds them to a provided [[Fgraph.cont]] value.
 
-<<>>=
+<<module Make>>=
 let rec flows cont = function 
 | (A.FlowAt (x,_)):: xx -> flows cont (x::xx)
 | (A.CutsTo n)    :: xx -> flows {cont with GM.cuts    = n@cont.GM.cuts } xx
@@ -501,7 +507,7 @@ belonging to a procedure.  The local environment [[env]] for a
 procedure is found in its entry in the fat environment.
 
 <<module Make>>=
-and proc env env props graph (cc,n,fs,bb) =  
+and proc env props graph (cc,n,fs,bb) =  
     let decorate n = G.bind props n                       in
     let env        = match F.findv n env with
                      | _,(F.Label(F.Proc e),_) -> e
@@ -533,13 +539,13 @@ and decl env ir = function
     | A.Target (arch)  -> true
     | A.Pragma         -> true
 
-<<>>=
-and section env ir = function
-    | A.SectionAt(x,_)     -> section env ir x
-    | A.Decl(d)            -> true
-    | A.Datum( d)          -> true
-    | A.Procedure(p)       -> true
-    | A.SSpan( e1, e2, ss) -> true
+<<module Make>>=
+let rec section env asm = function
+    | A.SectionAt(x,_)     -> section env asm x
+    | A.Decl(d)            -> assert false
+    | A.Datum( d)          -> assert false
+    | A.Procedure(p)       -> proc env G.Props.empty (GM.graph()) p
+    | A.SSpan( e1, e2, ss) -> assert false
 @            
     
     
@@ -547,7 +553,7 @@ and section env ir = function
 \paragraph{Toplevel}
 % ------------------------------------------------------------------ 
 
-<<>>=
+<<unused>>=
 let rec toplevel env ir = function
     | A.ToplevelAt(x, _)  -> toplevel env ir x
     | A.Section(name, ss) -> true
