@@ -439,6 +439,7 @@ let alloc_block prefs (blockmap, predmap) bid pred_ids =
                                (Rtlutil.ToString.rtl rtl) in
         let defs = defsm m in
         let uses = usesm m in
+        let () = if Debug.on "dls" then printTempSet "liveIn: " live_in in
         let (varIn, varDefs, varOut, spills, reloads) =
           choose_varMaps prefs (Some rtl) inmap 
                          ~defs ~uses ~live_in ~live_out ~live_out_w_spans in
@@ -607,7 +608,7 @@ let expire_last_uses vm =
       let lp = VM.var_locs' vm t in
       if RS.mem t defs then app (VM.remove_mem t) lp.VM.mem vm
       else if RS.mem t live_out then vm
-      else app (VM.remove_reg t) lp.VM.reg vm
+      else app (VM.remove_mem t) lp.VM.mem (app (VM.remove_reg t) lp.VM.reg vm)
     else vm in
   RS.fold expire_one uses vm in
 let expire_dead_defs vm =
@@ -805,12 +806,9 @@ we insert the necessary store instructions before the successor's predecessors.
 We also update each variable map that is changed.
 <<define [[shuffle_around]] and [[shuffle_between]]>>=
 let shuffle_around blockmap predmap pred_id succ_id =
+  let () = Debug.eprintf "dls" "shuffle_around\n" in
   let pred = UM.find pred_id blockmap in
   let succ = UM.find succ_id blockmap in
-  (*
-  VM.print (Printf.sprintf "\npred %s:" (blockname pred)) pred_vm;
-  VM.print (Printf.sprintf "\nsucc %s:" (blockname succ)) succ_vm;
-  *)
 
   let regs temp succ_reg (ts, loads as rst) =
     match (VM.var_locs' pred_vm temp).VM.reg with
@@ -892,6 +890,7 @@ We update the successor's variable map to have each inconsistent temp in memory.
 @
 <<define [[shuffle_around]] and [[shuffle_between]]>>=
 let shuffle_between blockmap predmap pred_id succ_id =
+  let () = Debug.eprintf "dls" "shuffle_between\n" in
   let pred = UM.find pred_id blockmap in
   let succ = UM.find succ_id blockmap in
   let shuffle_err temp =
@@ -917,7 +916,8 @@ let shuffle_between blockmap predmap pred_id succ_id =
     | {VM.reg = None; VM.mem = None} -> shuffle_err temp in
   let moves, loads, stores = VM.fold regs mems succ_vm ([],[],[]) in
   if null loads && null moves && null stores
-  then blockmap, predmap
+  then let () = Debug.eprintf "dls" "  --> no shuffling\n" in
+       blockmap, predmap
   else
     let moves      = shuffle_moves moves in
     let shuffles   = List.concat [ stores ; moves ; loads] in
@@ -956,14 +956,14 @@ let shuffle_between blockmap predmap pred_id succ_id =
           GR.Branch (machine.G.goto new_lbl, new_lbl)
       | GR.Cbranch (rtl, (uidt, _ as lt), (uidf, _ as lf)) ->
           assert (U.eq uidt succ_id || U.eq uidf succ_id);
-          let lt = if U.eq uidt pred_id then new_lbl else lt in
-          let lf = if U.eq uidf pred_id then new_lbl else lf in
+          let lt = if U.eq uidt succ_id then new_lbl else lt in
+          let lf = if U.eq uidf succ_id then new_lbl else lf in
           (* SHOULD BE A machine.cbranch.project *)
           let (cond, _) = proc.P.target.T.branch.T.project rtl in 
           GR.Cbranch (machine.G.cbranch (cond, lt), lt, lf)
       | _ -> impossf "DLS trying to shuffle_between with non-branch pred block" in
     let blockmap = UM.add pred_id (GR.zip (GR.End (head, last))) blockmap in
-  blockmap, predmap in
+    blockmap, predmap in
 @
 To reconcile variable maps, we need to create move, store, and load rtl's.
 <<define [[assign]], [[move]], [[store]], and [[load]]>>=
