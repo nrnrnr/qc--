@@ -73,8 +73,7 @@ type width = Bits.width
 let eq x y = x = y
 let ne x y = x <> y
 
-exception Unimplemented of string
-let unimp s = raise (Unimplemented s)
+let unimp = Impossible.unimp
 
 let lt x y = unimp "lt"
 let le x y = unimp "le"
@@ -91,16 +90,24 @@ let fits_unsigned x w = unimp "fits_unsigned"
 
 let bitExtract _ _ _ = unimp "bitExtract"
 let bitInsert lsb wide narrow = unimp "bitInsert"
+@
 
-let float_lt = unimp "floating-point stuff"
-let float_gt = unimp "floating-point stuff"
-let float_eq = unimp "floating-point stuff"
-let unordered = unimp "floating-point stuff"
+We can't use [[unimp]] for the following values because the
+[[Impossible.Impossible]] exception would be raised when the module is
+initialized. So we have to use some dummy value.
 
-let round_nearest = unimp "floating-point stuff"
-let round_zero = unimp "floating-point stuff"
-let round_down = unimp "floating-point stuff"
-let round_up = unimp "floating-point stuff"
+<<bitops.ml ((evaluating))>>=
+let dummy = Bits.zero 32
+
+let float_lt        = dummy
+let float_gt        = dummy
+let float_eq        = dummy
+let unordered       = dummy
+
+let round_nearest   = dummy
+let round_zero      = dummy
+let round_down      = dummy
+let round_up        = dummy
 
 let shl  _ _ = unimp "shifts"
 let shra _ _ = unimp "shifts"
