@@ -65,28 +65,18 @@ type solution =
 
 val empty: width:int -> t
 
-val register:   Rtl.exp -> t -> t               (* req: Rtl.exp = Rtl.late *)
-val sym:        string -> t -> (t * Rtl.exp)    (* create symb. constant *)
-val make_equal: Rtl.exp -> Rtl.exp -> t -> t 
+val make_equal:  Rtl.exp -> Rtl.exp -> t -> t 
 val make_equal': Rtl.exp -> x:int -> Rtl.exp -> y:int-> t -> t
 
 val solve: t -> solution                        (* Can'tSolve *)
 @
 
-Symbolic compile-time constants, created by [[Rtl.late]],  must be
-[[registered]] in the equation system [[t]] that is used to find their
-values. The reason is, that {\rtl} expressions might contain other
-[[Rtl.late]] values that do not represent compile-time constants.
-Alternatively, [[sym]] creates an [[Rtl.link]] value and registers it in
-one step.  It is a checked run-time error to pass anything but an
-[[Rtl.late]] value to [[register]].
-
 Equations $e_1 = e_2$ are added to an equation system by ([[make_equal]]
 $e_1$ $e_2$). One of the two equations must include at least one
-symbolic (and registered) compile-time constant, otherwise [[solve]]
-will raise [[Can'tSolve]]. All expression must be of the same [[width]]
-(that is typically the native pointer size) that is announced when the
-[[empty]] set of equations is created.
+symbolic  compile-time constant, otherwise [[solve]] will raise
+[[Can'tSolve]]. All expression must be of the same [[width]] (that is
+typically the native pointer size) that is announced when the [[empty]]
+set of equations is created.
 
 The function ([[make_equal']] $e_1$ $x$ $e_2$ $y$) adds the equation
 ($e_1 + x = e_2 + y$) to the equation system. This is a special case of
@@ -94,15 +84,15 @@ The function ([[make_equal']] $e_1$ $x$ $e_2$ $y$) adds the equation
 (c.f.~module \module{area}).
 
 The [[solve]] function takes an equation system [[t]] and tries to
-determine the values of all registered symbolic constants. The
-[[solution]] contains two association lists: [[known]] for all symbolic
-constants whose values are expressed as [[Rtl.exp]] values that do not
-contain any other registered symbolic constants. If the equation system
-is under-specified not all symbolic constants can be eliminated. This
-results in expressions for symbolic constants that depend on other
-symbolic constants. These are reported in the [[dependent]] component.
-Note, that this situation is different from a [[Can'tSolve]] situation.
-In the latter the solver fails to express a variable in terms of
+determine the values of all symbolic constants. The [[solution]]
+contains two association lists: [[known]] for all symbolic constants
+whose values are expressed as [[Rtl.exp]] values that do not contain
+registered symbolic constants. If the equation system is under-specified
+not all symbolic constants can be eliminated. This results in
+expressions for symbolic constants that depend on other symbolic
+constants. These are reported in the [[dependent]] component.  Note,
+that this situation is different from a [[Can'tSolve]] situation.  In
+the latter the solver fails to express a variable in terms of
 expressions at all.
 
 % ------------------------------------------------------------------ 
@@ -150,16 +140,18 @@ end
 <<module type S>>
 module Make(C: CONST): S with type const = C.t
 @
+
 Expressions are sums of symbolic constants, integers, and opaque
 constants. For observation, an expression can be transformed into an
 {\rtl} expression. Since in a sum all components must be of the same
 width, the [[rtl]] function takes the assumed [[width]] and uses it to
-contruct an [[Rtl.exp]] value of that width.  A client-provided function
-[[rtl]] is used to convert an opaque constant into an [[Rtl.exp]] value.
+construct an [[Rtl.exp]] value of that width.  A client-provided
+function [[rtl]] is used to convert an opaque constant into an
+[[Rtl.exp]] value.
 
-Equations $e_1 = e_2$ are created by [[make_equal]] that adds the new
-equation to an equation system [[t]]. An [[empty]] equation system gets
-the process started.
+Equations if the fowm $e_1 = e_2$ are created by [[make_equal]] that
+adds the new equation to an equation system [[t]]. An [[empty]] equation
+system gets the process started.
 
 The [[solve]] function reports the solution as an association list. If
 the equation system is under-specified, expression denoting the value of
@@ -199,15 +191,10 @@ end
 The simple interface of the {\rtl}-centric implementation requires to
 parse the involved {rtl} expression and transform them into a linear
 form, because only linear equation can be solved with the [[Eqn]]
-solver. The low-level interface provides bascially an expression syntax
+solver. The low-level interface provides bascally an expression syntax
 for linear terms that include symbolic constants, literal constants and
 opaque constant for everything that does not fit into one of the former
 categories. Opaque constants are left touched by the equation solver.
-
-Symbolic constants are represented by [[Rtl.link]] values but not every
-[[Rtl.link]] value is a symbolic constant. Therefore the client must
-\emph{register} symbolic constants. The implementation keeps them in a
-set such that only registered [[Rtl.link]] values become symbols.
 
 <<HighLevel>>=
 module RP    = Rtl.Private
@@ -220,8 +207,7 @@ module Eqns = LowLevel.Make(RtlConst)
 exception Can'tSolve
 
 type t = 
-    { symbols:  Strutil.Set.t
-    ; eqns:     Eqns.t
+    { eqns:     Eqns.t
     ; width:    int
     }
 
@@ -231,32 +217,21 @@ type solution =
     }
 
 let empty width =
-    { symbols   = Strutil.Set.empty
-    ; eqns      = Eqns.empty
+    { eqns      = Eqns.empty
     ; width     = width
     }
-
-let register exp t = match Rtl.Convert.exp exp with
-    | RP.Const(RP.Late (x,_)) -> 
-        { t with symbols = Strutil.Set.add x t.symbols }
-    | _                       -> 
-        invalid_arg "Const.HighLevel.register"
-
-
-let sym x t =
-    { t with symbols = Strutil.Set.add x t.symbols }, Rtl.late x t.width 
 @
 
 To convert an [[Rtl.exp]] value into an [[Eqns.exp]] value the
-expression at hand must be parsed. Registered [[Rtl.Link]] values
+expression at hand must be parsed. [[Rtl.Late]] values
 becomes variables, [[Rtl.bits]] values integers, applications of [[add]]
 and [[sub]] sums, and everything else opaque constants.
 
 <<HighLevel>>=
 let const t = function
-    | RP.Bits(b)                                -> Eqns.int (Bits.to_int b)
-    | RP.Late(x,_) when Strutil.Set.mem x t.symbols -> Eqns.sym x
-    | x                                         -> Eqns.const (RP.Const x )
+    | RP.Bits(b)   -> Eqns.int (Bits.to_int b)
+    | RP.Late(x,_) -> Eqns.sym x
+    | x            -> Eqns.const (RP.Const x )
         
                         
 let rec exp t = function

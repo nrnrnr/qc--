@@ -840,11 +840,11 @@ let proc env target optimizer asm (cconv,name,args,bdy) =
     let sp          = Rtl.fetch (cc.Target.sp) pointer in (* stack pointer *)
     let cfg         = G.mk ()   in      (* empty control-flow graph *)
     (* symbolic compile-time constants to be used for stack areas *)
-    let eqns        = Const.empty pointer        in (* eqns over pointers *)
-    let eqns, stack = Const.sym "stackdata" eqns in
-    let eqns, inb   = Const.sym "inbase"    eqns in
-    let eqns, outb  = Const.sym "outbase"   eqns in
-    let eqns, privb = Const.sym "private"   eqns in
+    let eqns        = Const.empty pointer          in (* eqns over pointers *)
+    let stack       = Rtl.late "stackdata" pointer in
+    let inb         = Rtl.late "inbase"    pointer in
+    let outb        = Rtl.late "outbase"   pointer in
+    let privb       = Rtl.late "private"   pointer in
     let eqns        = Const.make_equal sp outb eqns in
     (* calculate amount of user stack data - updates env! *)
     let stackd      = Area.mk stack in
@@ -886,7 +886,6 @@ let proc env target optimizer asm (cconv,name,args,bdy) =
     (* insert initializing assignements for continuations *)
     let conts = List.map (create_cont priv cc.Target.sp env) state.conts in
     let ()    = List.iter (init_cont state.cfg) conts in
-    let eqn   = List.fold_left (fun eqns c->Cont.register c eqns) eqns conts in
     (* prepare stack *)
     let incoming, eqns = Area.overlap Area.EqualLowEnds state.incoming eqns in
     let outgoing, eqns = Area.overlap Area.EqualLowEnds state.outgoing eqns in
