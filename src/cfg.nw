@@ -1,0 +1,124 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% vim: ts=8 sw=4 et: 
+% Daddy, why are we hiding from the police? They use Emacs, son, we use Vi.
+% Cheese it!  The cops!!!
+% Grades     ::=    "%%Grades:" Quality Importance Urgency
+% Quality    ::=    A|B|C|D|E
+% Importance ::=    Central|Subsystem|Peripheral
+% Urgency    ::=    Immediate|Soon|Later
+%
+% Example (at beginning of line): %%Grades: B Central Soon
+% 
+% $Id$
+
+% ------------------------------------------------------------------ 
+\section{Control-Flow Graph}
+% ------------------------------------------------------------------ 
+
+Here are some possible revisions to the flow graph.
+\begin{itemize}
+\item
+Make predecessor and successor fields mutable.
+This change gives a client substantially greater freedom to choose the
+order in which nodes are constructed.
+\item
+Introduce the idea of \emph{layout}.
+A graph \emph{has layout} if the physical order of instructions and
+labels is known.
+A graph must have layout before it is passed to an assembler.
+
+Except for branch nodes as specified below, if a node has a unique
+successor, then the node precedes its successor in the physical layout.
+\item
+Restrict types of nodes in the hopes of simplifying algorithms.
+The grossest classification is by numbers of predecessors and
+successors. 
+\begin{itemize}
+\item
+A \emph{join point} has arbitrarily many precedessors and exactly one
+successor. 
+It is associated with a list of \emph{labels} but no code.
+A join point is the only node with multiple predecessors.
+\remark{Question for Glenn: how to represent the successor list?  How
+much space do you allocate for successors whan you don't yet know how
+many there will be?}
+\item
+An \emph{straight-line code} node has exactly one predecessor and one
+successor. 
+It models computation without interesting control flow.
+\item
+A \emph{branch node} perofrmans a goto but is intended to implement no
+other useful computation.
+It has a unique predecessor and a unique successor.
+Its successor must be a join point.
+If the graph has layout, the branch node also has a layout successor,
+which may be different from its control-flow successor.
+The RTL of a branch node is an unconditional assignment to the program
+counter. 
+\item
+A \emph{jump} node is a lot like a branch except its successor is the
+exit node
+\item
+A \emph{conditional branch} has a unique predecessor and two
+successors, which are labeled true and false.
+Each successor must be a join point.
+It contains an RTL that normally satisfies the following properties:
+\begin{itemize}
+\item
+It contains a single effect, which is a guarded assignment to the
+program counter.
+\item
+The value assigned to the program counter is a label (link-time
+constant) associated with the join point that is the true successor.
+\end{itemize}
+If the second property is not satisfied, we say the node is
+\emph{dirty}.
+The node must be clean before it can be passed to an assembler.
+
+If the graph has layout, the layout successor of a branch node must
+be its false successor.
+
+It is legitimate at any time to perform the following changes as one
+atomic operation:
+\begin{itemize}
+\item
+Swap the true and false successors
+\item
+Negate the condition on the guard
+\item
+Replace the label in the assignment with the new true successor.
+\end{itemize}
+The [[bnegate]] operation in the postexpander interface is useful here.
+\item
+A node with multiple successors is a \emph{multiway branch}.
+It has a unique predecessor.
+There are several kinds of multiway branch.
+\begin{itemize}
+\item
+Call
+\item
+Computed goto
+\item
+\emph{Cut to}.
+Normally has a single successor (the exit) but may have multiple
+successors. 
+\end{itemize}
+\item
+A \emph{dataflow node} has a unique predecessor and successor, but it
+contains no RTL or label and it generates no code.
+It contains definitions, uses, and kills.
+\item
+The entry node has a successor but no predecessor
+\item
+The exit node has a predecessor but no successor (or perhaps it should
+be a join point)?
+\item
+A \emph{sentinel} node has no predecessors and no successors.
+It is used to initialize mutable successor and predecessor fields.
+\end{itemize}
+\item
+An infinite loop must contain an artificial edge so it can reach the
+exit.
+
+\end{itemize}
+
