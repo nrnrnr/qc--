@@ -18,10 +18,10 @@ Test.files = { "add.c--"
              , "cut.c--"
              , "arglist.c--"
              , "conj.c--"
-	           , "divmod.c--"
-	           , "emptyifbody.c--"
-	           , "if-false.c--"
-	           , "if-false2.c--"
+	     , "divmod.c--"
+	     , "emptyifbody.c--"
+	     , "if-false.c--"
+	     , "if-false2.c--"
              , norun("eqasolve-000.c--")
              , "exp-000.c--"
              , norun("exp-001.c--")
@@ -45,6 +45,10 @@ Test.files = { "add.c--"
 	     , { source="spdemo.c--", argv="4" }
              , "sub.c--"
 	     , "switch.c--"
+	     , { name='tadd', source='tadd.c--' }
+	     , { name='tadd22', source='tadd.c--', argv='2 2' }
+	     , { name='tadd100-', source='tadd.c--', argv='100 -1' }
+	     , { name='tadd11', source='tadd.c--', argv='-1 -1' }
 	     , "tail.c--"
              , "tail_from_c.c--"
              , { source = {'tail2.c--', 'call3.c--'} }
