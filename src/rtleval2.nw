@@ -1,5 +1,5 @@
 % -*- mode: Noweb; noweb-code-mode: caml-mode -*-
-% vim: ts=8 sw=4 et: Come for the Emacs, stay for the Vi
+% Come for the emacs, stay for the vim: ts=8 sw=4 et: 
 
 % Grades     ::=    "%%Grades:" Quality Importance Urgency
 % Quality    ::=    A|B|C|D|E
@@ -100,68 +100,95 @@ end (*Lua*)
 \subsection{RTL Traversal}
 % ------------------------------------------------------------------ 
 
+All operator implementations have an easy way out: they just construct a
+run-time expression from their arguments and return it. 
+
+<<RTL operator implementations>>=
+let default op w args = RP.App((op,w),args)
+
 <<traverse RTL>>=   
 let app o w args = match o with
-    |  "add"        -> add w args 
-    |  "and"        -> and' w args 
-    |  "bit"        -> bit w args
-    |  "bool"       -> bool w args
-    |  "borrow"     -> borrow w args
-    |  "carry"      -> carry w args
-    |  "com"        -> com w args
-    |  "conjoin"    -> conjoin w args
-    |  "disjoin"    -> disjoin w args
-    |  "div"        -> div w args
-    |  "divu"       -> divu w args
-    |  "eq"         -> eq w args
-    |  "f2f"        -> f2f w args
-    |  "f2i"        -> f2i w args
-    |  "fadd"       -> fadd w args
-    |  "fcmp"       -> fcmp w args
-    |  "fdiv"       -> fdiv w args
-    |  "float_eq"   -> float_eq w args
-    |  "float_gt"   -> float_gt w args
-    |  "float_lt"   -> float_lt w args
-    |  "fmul"       -> fmul w args
-    |  "fneg"       -> fneg w args
-    |  "fsub"       -> fsub w args
-    |  "ge"         -> ge w args
-    |  "geu"        -> geu w args
-    |  "gt"         -> gt w args
-    |  "gtu"        -> gtu w args
-    |  "i2f"        -> i2f w args
-    |  "le"         -> le w args
-    |  "leu"        -> leu w args
-    |  "lobits"     -> lobits w args
-    |  "lt"         -> lt w args
-    |  "ltu"        -> ltu w args
-    |  "mod"        -> mod' w args
-    |  "modu"       -> modu w args
-    |  "mul"        -> mul w args
-    |  "mul@"       -> mul' w args
-    |  "mulu"       -> mulu w args
-    |  "neg"        -> neg w args
-    |  "ne"         -> ne w args
-    |  "not"        -> not' w args
-    |  "or"         -> or' w args
-    |  "parity"     -> parity w args
-    |  "quot"       -> quot w args
-    |  "rem"        -> rem w args
-    |  "rotl"       -> rotl w args
-    |  "rotr"       -> rotr w args
-    |  "shl"        -> shl w args
-    |  "shra"       -> shra w args
-    |  "shrl"       -> shrl w args
-    |  "sub"        -> sub w args
-    |  "sx"         -> sx w args
-    |  "unordered"  -> unordered w args
-    |  "xor"        -> xor w args
-    |  "zx"         -> zx w args
-    |  "bitExtract" -> bitExtract w args
-    |  "undef"      -> undef w args
-    |  o            -> RP.App ((o, w), args) (* machine-dependend operators OK *)
-    
+    |  "NaN" 		-> default o w args
+    |  "add" 		-> add w args
+    |  "and" 		-> and' w args
+    |  "bit" 		-> bit w args
+    |  "bool" 		-> bool w args
+    |  "borrow" 	-> borrow w args
+    |  "carry" 		-> carry w args
+    |  "com" 		-> com w args
+    |  "conjoin" 	-> conjoin w args
+    |  "disjoin" 	-> disjoin w args
+    |  "div" 		-> div w args
+    |  "divu" 		-> divu w args
+    |  "eq" 		-> eq w args
+    |  "f2f" 		-> f2f w args
+    |  "f2i" 		-> f2i w args
+    |  "fabs" 		-> default o w args
+    |  "fadd" 		-> fadd w args
+    |  "fcmp" 		-> fcmp w args
+    |  "fdiv" 		-> fdiv w args
+    |  "feq" 		-> default o w args
+    |  "fge" 		-> default o w args
+    |  "fgt" 		-> default o w args
+    |  "fle" 		-> default o w args
+    |  "float_eq" 	-> float_eq w args
+    |  "float_gt" 	-> float_gt w args
+    |  "float_lt" 	-> float_lt w args
+    |  "flt" 		-> default o w args
+    |  "fmul" 		-> fmul w args
+    |  "fmulx" 		-> default o w args
+    |  "fne" 		-> default o w args
+    |  "fneg" 		-> fneg w args
+    |  "fordered" 	-> default o w args
+    |  "fsqrt" 		-> default o w args
+    |  "fsub" 		-> fsub w args
+    |  "funordered" 	-> default o w args
+    |  "ge" 		-> ge w args
+    |  "geu" 		-> geu w args
+    |  "gt" 		-> gt w args
+    |  "gtu" 		-> gtu w args
+    |  "i2f" 		-> i2f w args
+    |  "le" 		-> le w args
+    |  "leu" 		-> leu w args
+    |  "lobits" 	-> lobits w args
+    |  "lt" 		-> lt w args
+    |  "ltu" 		-> ltu w args
+    |  "minf" 		-> default o w args
+    |  "mod" 		-> mod' w args
+    |  "modu" 		-> modu w args
+    |  "mul" 		-> mul w args
+    |  "mul_trunc" 	-> mul_trunc w args
+    |  "mulu" 		-> mulu w args
+    |  "mzero" 		-> default o w args
+    |  "ne" 		-> ne w args
+    |  "neg" 		-> neg w args
+    |  "not" 		-> not' w args
+    |  "or" 		-> or' w args
+    |  "pinf" 		-> default o w args
+    |  "popcnt" 	-> default o w args
+    |  "pzero" 		-> default o w args
+    |  "quot" 		-> quot w args
+    |  "rem" 		-> rem w args
+    |  "rotl" 		-> rotl w args
+    |  "rotr" 		-> rotr w args
+    |  "round_down" 	-> round_down w args
+    |  "round_nearest" 	-> round_nearest w args
+    |  "round_up" 	-> round_up w args
+    |  "round_zero" 	-> round_zero w args
+    |  "shl" 		-> shl w args
+    |  "shra" 		-> shra w args
+    |  "shrl" 		-> shrl w args
+    |  "sub" 		-> sub w args
+    |  "sx" 		-> sx w args
+    |  "unordered" 	-> unordered w args
+    |  "xor" 		-> xor w args
+    |  "zx" 		-> zx w args
 
+    |  "bitExtract" 	-> bitExtract w args
+    |  "bitInsert" 	-> default o w args
+    |  "bitTransfer" 	-> default o w args
+    |  o                -> default o w args
+                      
 let rec exp = function
     | RP.Const _ as c               -> c
     | RP.Fetch (l, w)               -> RP.Fetch (loc l, w)
@@ -185,12 +212,9 @@ let rtl (RP.Rtl(es))                = RP.Rtl(List.map guarded es)
 \subsection{RTL Operator Implementations}
 % ------------------------------------------------------------------ 
 
-All operator implementations have an easy way out: they just construct a
-run-time expression from their arguments and return it. 
+Here are some helper functions used below.
 
 <<RTL operator implementations>>=
-let default op w args = RP.App((op,w),args)
-
 let int64 = function
     | RP.Const(RP.Bits(x)) -> Bits.S.to_int64 x
     | _                    -> assert false
@@ -205,6 +229,17 @@ let to_bool b   = RP.Const(RP.Bool(b))
 let is_bits = function
     | RP.Const(RP.Bits(_)) -> true
     | _                    -> false
+@
+
+\paragraph{IEEE 754 Constants} How a rounding mode is represented is
+implementation specific. We just pick four values here.
+
+<<RTL operator implementations>>=
+let round_down    w args = RP.Const(RP.Bits(Bits.U.of_int 3 2))
+let round_up      w args = RP.Const(RP.Bits(Bits.U.of_int 2 2))
+let round_nearest w args = RP.Const(RP.Bits(Bits.U.of_int 1 2))
+let round_zero    w args = RP.Const(RP.Bits(Bits.U.of_int 0 2))
+
 
 let rec add w args = match (w,args) with
     | [w],[RP.App(("add", [w']), [x; RP.Const (RP.Bits k)]); RP.Const (RP.Bits k')] 
@@ -274,10 +309,10 @@ let mul w args  = match (w,args) with
                 -> to_bits (Int64.add (int64 x) (int64 y)) r
     | _         -> default "mul" w args
 
-let mul' w args  = match (w,args) with          (* implements %mul@ *)
+let mul_trunc w args  = match (w,args) with 
     | [n],[x;y] when is_bits x && is_bits y 
                 -> to_bits (Int64.add (int64 x) (int64 y)) n
-    | _         -> default "mul@" w args        (* rewrite to lobits(mul ..)? *)
+    | _         -> default "mul_trunc" w args  
 
 let mulu w args = default "mulu" w args
 
@@ -298,6 +333,7 @@ let quot w args = default "quot" w args
 let rem w args  = default "rem" w args
 let rotl w args = default "rotl" w args
 let rotr w args = default "rotr" w args
+
 let shl w args  = match (w,args) with
     | [w], [x;y] when is_bits x && is_bits y 
                 -> to_bits (Int64.shift_left (int64 x) (int y)) w 
