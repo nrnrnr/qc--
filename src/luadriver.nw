@@ -479,7 +479,6 @@ Options.help     = nil      -- -help
 Options.version  = nil      -- -versions
 Options.interact = nil      -- -i
 Options.interp   = nil      -- -interp
-Options.exec     = nil      -- -e
 -- debug options below
 Options.pretty   = nil      -- -pp
 
@@ -600,9 +599,10 @@ function CMD.cmdline (args)
     local O = Options
     
     local i = 1
-    local v
+    O.original_argc = 0
     while args[i] and type(args[i]) == "string" do
-        v = args[i]
+	O.original_argc = i
+        local v = args[i]
         if     v == "-c"            then O.to_obj       = not nil 
         elseif v == "-S"            then O.to_asm       = not nil 
         elseif v == "-i"            then O.interact     = not nil
@@ -655,7 +655,7 @@ function CMD.run ()
     if      O.help                     then CMD.usage ()  ; return 0
     elseif  O.version                  then CMD.version() ; return 0
     elseif  O.interact                 then CMD.interact(); return 0
-    elseif  O.argc == 0 and not O.exec then CMD.usage ()  ; return 0
+    elseif  O.original_argc == 0       then CMD.usage ()  ; return 0
     
     elseif  O.to_obj  and O.to_asm then 
         CMD.error("Options -c and -S exclude each other")

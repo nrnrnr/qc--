@@ -221,7 +221,7 @@ let rev_postorder_dfs g cons nil =
           dfs_visit nodes visited kont 
         else
           dfs_visit (G.succs node @ nodes) (add node visited)
-            (fun acc -> kont (cons node acc)) in
+            (fun acc -> cons node (kont acc)) in
   dfs_visit [G.entry g] emptyset (fun x -> x)
 @ 
 Here's a version that's longer but avoids the unholy append.
@@ -234,7 +234,7 @@ let rev_postorder_dfs' g cons nil =
           dfs_visit nodes nodess visited kont 
         else
           dfs_visit (G.succs node) (nodes :: nodess) (add node visited)
-            (fun acc -> kont (cons node acc))
+            (fun acc -> cons node (kont acc))
     | [] ->
         match nodess with
         | [] -> kont nil
@@ -254,9 +254,11 @@ let nr_preorder_dfs g cons nil =
           dfs_visit (G.succs node @ nodes) (add node visited) (cons node acc) in
   dfs_visit [G.entry g] emptyset nil
 @ 
-Here's simple postorder DFS.
+Here's simple postorder DFS.  SIMPLE BUT WRONG!!!
+The problem is that the cons has to take place after the successors
+but before the rest of the nodes. 
 <<supporting functions>>=
-let nr_postorder_dfs g cons nil =
+let nr_wrong_postorder_dfs g cons nil =
   let rec dfs_visit nodes visited =
     match nodes with
     | [] -> nil
@@ -267,20 +269,77 @@ let nr_postorder_dfs g cons nil =
           cons node (dfs_visit (G.succs node @ nodes) (add node visited)) in
   dfs_visit [G.entry g] emptyset 
 @ 
-And now, reverse postorder DFS.
+So let's try continuation-passing style.
+A continuation is a function that takes a partial answer and a set of
+visited nodes and produces an answer.
 <<supporting functions>>=
-let nr_rev_postorder_dfs g cons nil =
-  let rec dfs_visit nodes visited =
-    match nodes with
-    | [] -> (fun acc -> acc)
-    | node :: nodes ->
-        if been_visited node visited then
-          dfs_visit nodes visited
-        else
-          let rest = dfs_visit (G.succs node @ nodes) (add node visited) in
-          (fun acc -> rest (cons node acc)) in
-  dfs_visit [G.entry g] emptyset nil
+type 'a cont = 'a -> SS.t -> 'a
+@ An action takes a partial answer, a visited set, a continuation, and
+returns a continuation.   This is not a classic CPS, and I suspect it
+could be simplified, but it works.
+<<supporting functions>>=
+type 'a action = 'a -> SS.t -> 'a cont -> 'a cont
+@ We compose actions by application, more or less.
+<<supporting functions>>=
+let ( **> ) f k = fun ans visited -> f ans visited k
+let postorder_dfs' g extend_answer =
+  let extend node answer visited k = k (extend_answer node answer) visited in
+  let rec vnode node answer visited k =
+         if been_visited node visited then
+           k answer visited
+         else
+           (vnodes (G.succs node) **> extend node **> k) answer (add node visited)
+      and vnodes nodes answer visited k = match nodes with
+      | [] -> k answer visited
+      | node :: nodes -> (vnode node **> vnodes nodes **> k) answer visited in
+  fun answer k -> vnode (G.entry g) answer emptyset k
 @ 
+Now we get forward and reverse postorder DFS in a trice.
+<<supporting functions>>=
+let fwd_postorder_dfs g cons nil = (* type answer = node list *)
+  postorder_dfs' g cons nil (fun x _ -> x)
+
+let bwd_postorder_dfs g cons nil = (* type answer = node list -> node list *)
+  let snoc node build = fun tail -> build (cons node tail) in
+  postorder_dfs' g snoc (fun x -> x) (fun build _ -> build nil)
+@ 
+Now let's try to do the CPS right.
+It turns out to be just a matter of changing the order of arguments.
+<<supporting functions>>=
+type 'a stmt = 'a cont -> 'a cont
+let cps_postorder_dfs' g extend_answer =
+  let ( **> ) f k = f k in
+  let rec foldl f l z = match l with [] -> z | x :: xs -> foldl f xs (f x z) in
+  let visit node k = fun answer vis -> k (extend_answer node answer) vis in
+  let rec vnode node k answer visited =
+    if been_visited node visited then
+      k answer visited
+    else
+      (foldl vnode (G.succs node) **> visit node **> k) answer (add node visited) in
+  fun answer k -> vnode (G.entry g) k answer emptyset
+<<supporting functions>>=
+let fwd_postorder_dfs_cps g cons nil = (* answer = node list *)
+  cps_postorder_dfs' g cons nil (fun x _ -> x)
+
+let bwd_postorder_dfs_cps g cons nil = (* answer = node list -> node list *)
+  let snoc node build = fun tail -> build (cons node tail) in
+  cps_postorder_dfs' g snoc (fun x -> x) (fun build _ -> build nil)
+@ 
+<<supporting functions>>=
+let ( **> ) f k = fun ans visited -> f ans visited k
+let postorder_dfs' g extend_answer =
+  let extend node answer visited k = k (extend_answer node answer) visited in
+  let rec vnode node answer visited k =
+         if been_visited node visited then
+           k answer visited
+         else
+           (vnodes (G.succs node) **> extend node **> k) answer (add node visited)
+      and vnodes nodes answer visited k = match nodes with
+      | [] -> k answer visited
+      | node :: nodes -> (vnode node **> vnodes nodes **> k) answer visited in
+  fun answer k -> vnode (G.entry g) answer emptyset k
+
+
 @ 
 Here's simple preorder BFS.
 <<supporting functions>>=
@@ -326,20 +385,24 @@ module Test = struct
       ["  "; n; " [label=\""; string_of_int (List.length labels + 1); "\"]\n"]
       :: labels in
     let labels = String.concat "" (List.concat (visitor g add_label [])) in
-    let header = String.concat "" ["  head[label=\""; name; "\" shape=box]\n";
-                                   "  head -> "; G.label (G.entry g); "\n"] in
+    let header = String.concat ""
+        ["  head[label=\""; name; "\" shape=box]\n";
+         "  head -> "; G.label (G.entry g); " [style=invis]\n"] in
     List.iter print_string
       ["digraph "; name; " {\n"; labels; header; G.dotedges g; "}\n\n"]
 
-  let edges = ["A", ["B"]; "B", ["C"; "D"]; "C", ["E"]; "D", ["E"]; "E", ["F"];
-               "F", []]
+  let edges = ["A", ["B"]; "B", ["C"; "D"]; "C", ["E"]; "D", ["DX"];
+               "DX", ["E"]; "E", ["F"]; "F", []]
   let emit_dot () =
     List.iter (dotgraph (G.of_edges edges))
-      [ "rev_postorder_dfs", rev_postorder_dfs
+      [ "unnumbered", (fun _ _ l -> l)
+      ; "rev_postorder_dfs", rev_postorder_dfs
       ; "rev_postorder_dfs_prime", rev_postorder_dfs'
+      ; "fwd_postorder_dfs", fwd_postorder_dfs
+      ; "bwd_postorder_dfs", bwd_postorder_dfs 
+      ; "fwd_postorder_dfs_cps", fwd_postorder_dfs_cps
+      ; "bwd_postorder_dfs_cps", bwd_postorder_dfs_cps 
       ; "nr_preorder_dfs", nr_preorder_dfs
-      ; "nr_postorder_dfs", nr_postorder_dfs
-      ; "nr_rev_postorder_dfs", nr_rev_postorder_dfs
       ; "nr_preorder_bfs", nr_preorder_bfs
       ] 
 end
