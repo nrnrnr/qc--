@@ -238,6 +238,7 @@ interpreter. The [[compile]] function receives a lua value such that it
 can call Lua functions while it is active.
 <<export goodies to Lua>>=
 let init g = 
+  let backplane_stage = V.efunc (V.value **-> Map.proc **->> V.bool) in
   <<register modules to [[g]] in alphabetical order>>
   Lua.Lib.StringList.of_list [ <<lua initialization>> ]
 
@@ -363,25 +364,24 @@ in C.register_module "Debug"
 @
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Expander"
-  [ "x86f" , V.efunc (V.value **-> Map.proc **->> V.bool) X86.X.cfg
-  ; "mips" , V.efunc (V.value **-> Map.proc **->> V.bool) Mips.X.cfg
-  ; "alpha", V.efunc (V.value **-> Map.proc **->> V.bool) Alpha.X.cfg
+  [ "x86f" , backplane_stage X86.X.cfg
+  ; "mips" , backplane_stage Mips.X.cfg
+  ; "alpha", backplane_stage Alpha.X.cfg
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Liveness"
-  [ "liveness", V.efunc (V.value **-> Map.proc **->> V.bool) 
+  [ "liveness", backplane_stage 
        (fun _ p -> Cfgx.Live.set_live p.Proc.cfg; true)
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Optimize"
-  [ "trim_unreachable_code",  V.efunc (V.value **-> Map.proc **->> V.bool)
-                                     Optimize.trim_unreachable_code
-  ; "collapse_branch_chains", V.efunc (V.value **-> Map.proc **->> V.bool)
-                                     Optimize.collapse_branch_chains
+  [ "trim_unreachable_code",  backplane_stage Optimize.trim_unreachable_code
+  ; "collapse_branch_chains", backplane_stage Optimize.collapse_branch_chains
+  ; "remove_nops",            backplane_stage Optimize.remove_nops
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Placevar"
-  [ "fortran", V.efunc (V.value **-> Map.proc **->> V.bool) Placevar.fortran'
+  [ "fortran", backplane_stage Placevar.fortran'
   ; "context", V.efunc ((Map.proc --> Map.automaton) **->>  (* currying *)
                         V.func (V.value **-> Map.proc **->> V.bool)) Placevar.context
   ; "x86",     V.efunc (Map.proc **->> Map.automaton)       X86.placevars
@@ -404,14 +404,14 @@ C.register_module "Stack"
 PERHAPS THIS CODE SHOULD REPLACE THE SOMEWHAT HEAVYWEIGHT [[Asm.dot]]???
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Stages"
-  [ "writedot", V.efunc (V.value **-> Map.proc **->> V.bool)
+  [ "writedot", backplane_stage
       (fun _ proc -> 
         prerr_string
           (Cfgutil.cfg2dot ~compress:true ~live:true
              ~name:proc.Proc.symbol#mangled_text proc.Proc.cfg);
         flush stderr;
         true)
-  ; "replace_vfp", V.efunc (V.value **-> Map.proc **->> V.bool)
+  ; "replace_vfp", backplane_stage
       (fun _ proc -> proc.Proc.cc.Call.replace_vfp proc.Proc.cfg; true)
   ]  g;
 <<register modules to [[g]] in alphabetical order>>=
