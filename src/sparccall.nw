@@ -30,15 +30,31 @@ Sparc.cc["C"     ] = Sparc.cc["C"     ] or {}
 \paragraph{SPARC registers and their conventional uses}
 <<sparccall.ml>>=
 let r i = ('r', i, 32)
+let f i = ('f', i, 32)
+let x i = ('x', i, 32)
+
 let vol_regs    = RS.of_list (List.map r ([1; 2; 3; 4]@(Aux.from 16 ~upto:23)))
 let nv_regs     = RS.of_list (List.map r [])
+let vol_fp      = 
+   RS.of_list (List.map f (Aux.from 0 ~upto:7) @
+               List.map x (Aux.from 0 ~upto:7))
 let all_regs    = List.fold_left (fun acc e -> RS.union acc e) RS.empty
-                    [ vol_regs; nv_regs ]
+                    [ vol_regs; nv_regs; vol_fp ]
 
 let saved_nvr temps = 
+    let t = Talloc.Multiple.loc temps 't' in
+    let u = Talloc.Multiple.loc temps 'u' in
+    let q = Talloc.Multiple.loc temps 'q' in
+        function
+        | ('r', _, w) -> t w
+        | ('f', _, w) -> u w
+        | ('x', _, w) -> q w
+        | (s, i, _) -> Impossible.impossible (sprintf "cannot save $%c%d" s i)
+(*
   let t sp = Talloc.Multiple.loc temps sp in
   function
    | (_  , _, w) -> (t 't') w
+*)
 @ 
 
 Stack pointer is doubleword-aligned.
@@ -48,9 +64,13 @@ Sparc.wordsize  = 32
 
 function reg(sp, i, w) return({ space = sp, index = i, width = w }) end
 function r(i) return (reg("r", i, Sparc.wordsize)) end
+function f(i) return (reg("f", i, Sparc.wordsize)) end
+function x(i) return (reg("x", i, Sparc.wordsize * 2)) end
 function o(i) return (reg("o", i, Sparc.wordsize)) end
 function i(i) return (reg("i", i, Sparc.wordsize)) end
 function g(i) return (reg("g", i, Sparc.wordsize)) end
+
+Sparc.vol_fp  = (f(0) .. f(7)) .. (x(0) .. x(7))
 @ 
 
 \paragraph{Conventions governing the stack}
@@ -68,7 +88,9 @@ let bo       = R.BigEndian
 
 <<SPARC calling convention automata in Lua>>=
 Sparc.cc["C"].results =
-  A.choice { A.is_any, { A.widen(32, "multiple") 
+  A.choice { "float",
+               A.useregs { f(0), f(1), f(2), f(3), f(4), f(5), f(6), f(7)},
+             A.is_any, { A.widen(32, "multiple")
                        , A.widths {32}
                        , A.useregs { i(0), i(1), i(2), i(3), i(4), i(5) }
                        } 
@@ -77,7 +99,8 @@ Sparc.cc["C"].results =
 Sparc.cc["C"].call =
   { A.widen(32, "multiple")
   , A.bitcounter("bits")
-  , A.choice { A.is_any, A.regs_by_bits("bits", o(0)..o(5))
+  , A.choice { "float",  A.regs_by_bits("bits", o(0)..o(5))
+             , A.is_any, A.regs_by_bits("bits", o(0)..o(5))
              }
   , A.overflow { growth = "up", max_alignment = Sparc.sp_align }
   }	
