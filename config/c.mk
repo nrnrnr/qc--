@@ -4,7 +4,9 @@
 # rules and tools to compile C source code
 # ------------------------------------------------------------------ 
 
-CC =        gcc
+<           $TOP/config/config.mk
+
+CC =        $config_cc
 CFLAGS =    
 
 %.o:        %.c

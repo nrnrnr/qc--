@@ -10,6 +10,10 @@
 
 use File::Basename;
 
+$verbose = 0;                   # set to 1 for more output
+$config_mk = "config/config.mk";# where output is written
+%x = ();                        # hash for all the values we are looking for
+
 # ------------------------------------------------------------------ 
 # What we are looking for
 # ------------------------------------------------------------------ 
@@ -18,17 +22,15 @@ use File::Basename;
 # variables. You can set them here directly, if the script cannot find
 # them.
 
-$verbose = 0;                   # set to 1 for more output
-%x = ();                        # hash for all the values we are looking for
-
 $x{prefix}     = "/usr/local";  # where we install
 
 $x{lua_h}      = ""   ;         # "/path/to/lua.h"
 $x{lualib_h}   = ""   ;         # "/path/to/lualib.h"    
 $x{liblua}     = ""   ;         # "/path/to/liblua.a"  
 $x{liblualib}  = ""   ;         # "/path/to/liblualib.a"
-$x{lua_inc}    = ""   ;         # cc(1) option for lua.h    "-I/usr/local/include/lua"
-$x{lua_lib}    = ""   ;         # cc(1) option for liblua.a "-L/usr/local/lib"
+$x{lua_inc}    = ""   ;         # -I for lua.h    "-I/usr/local/include/lua"
+$x{lua_lib}    = ""   ;         # -L for liblua.a "-L/usr/local/lib"
+$x{lua_libs}   = ""   ;         # "-llua -llualib" ld(1) flags for Lua libs
 
 # the binaries below are expeced to be on $PATH. It does not make
 # sense to set them since we never use the full PATH. Extend PATH
@@ -55,7 +57,7 @@ $x{sizeof_char}= ""   ;         # 1
 $x{stdc_version}= ""  ;         # 199409 - from     __STDC_VERSION__
 $x{stdc_iec559}= ""  ;          # defined/undefined __STDC_IEC_559__
 $x{arch}       = ""   ;         # x86-linux  
-$x{ocamlv}     = ""   ;         # OCaml Version
+$x{ocaml_version}     = ""   ;         # OCaml Version
 
 # ------------------------------------------------------------------ 
 # important search paths
@@ -187,27 +189,35 @@ EOF
 # compiler also won't find it. The SUN compiler comes to mind.
 #
 
-$x{ocamlc}     = $x{ocamlc}       || search("ocamlc",@path);
-$x{ocamlyacc}  = $x{ocamlyacc}    || search("ocamlyacc",@path);
-$x{ocamlv}     = $x{ocamlc}       && (`$x{ocamlc} -v 2>&1` =~ /(\d\.\d\d)/) 
-                                  && $1;
-$x{notangle}   = $x{notangle}     || search("notangle",@path); 
-$x{cpif}       = $x{cpif}         || search("cpif", @path);
-$x{awk}        = $x{awk}          || search("awk", @path);
-$x{cc}         = $x{cc}           || search("gcc",@path)
-                                  || search("cc",@path) 
-                                  || search("lcc",@path);
-$x{mk}         = $x{mk}           || search("mk",@path); 
-$x{latex}      = $x{latex}        || search("latex",@path); 
-$x{pod2html}   = $x{pod2html}     || search("pod2html",@path);
-$x{lua_h}      = $x{lua_h}        || search("lua.h", @include);
-$x{lualib_h}   = $x{lualib_h}     || search("lualib.h", @include);
-$x{liblua}     = $x{liblua}       || search("liblua.a", @libs) 
-                                  || search("liblua40.a", @libs);
-$x{liblualib}  = $x{liblualib}    || search("liblualib.a", @libs) 
-                                  || search("liblualib40.a", @libs);
-$x{lua_inc}    = $x{lua_inc}      || "-I" . dirname($x{lua_h});
-$x{lua_lib}    = $x{lua_lib}      || "-L" . dirname($x{liblua});
+$x{ocamlc}          = $x{ocamlc}       || search("ocamlc",@path);
+$x{ocamlyacc}       = $x{ocamlyacc}    || search("ocamlyacc",@path);
+$x{ocaml_version}   = $x{ocamlc}       &&(`$x{ocamlc} -v 2>&1` =~ /(\d\.\d\d)/) 
+                                       && $1;
+$x{notangle}        = $x{notangle}     || search("notangle",@path); 
+$x{cpif}            = $x{cpif}         || search("cpif", @path);
+$x{awk}             = $x{awk}          || search("awk", @path);
+$x{cc}              = $x{cc}           || search("gcc",@path) 
+                                       || search("cc",@path)  
+                                       || search("lcc",@path); 
+$x{mk}              = $x{mk}           || search("mk",@path); 
+$x{latex}           = $x{latex}        || search("latex",@path); 
+$x{pod2html}        = $x{pod2html}     || search("pod2html",@path);
+$x{lua_h}           = $x{lua_h}        || search("lua.h", @include);
+$x{lualib_h}        = $x{lualib_h}     || search("lualib.h", @include);
+$x{liblua}          = $x{liblua}       || search("liblua.a", @libs) 
+                                       || search("liblua40.a", @libs);
+$x{liblualib}       = $x{liblualib}    || search("liblualib.a", @libs) 
+                                       || search("liblualib40.a", @libs);
+
+($liblua,$path,$suffix) = fileparse($x{liblua},('.a'));
+$liblua =~ s/^lib/-l/;
+
+($liblualib,$path,$suffix) = fileparse($x{liblualib},('.a'));
+$liblualib =~ s/^lib/-l/;
+
+$x{lua_inc}         = $x{lua_inc}      || "-I" . dirname($x{lua_h});
+$x{lua_lib}         = $x{lua_lib}      || "-L" . $path;
+$x{lua_libs}        = $x{lua_libs}     || "$liblua $liblualib";
 
 # ------------------------------------------------------------------ 
 # Run tests. The config.c test script emits Perl code that sets
@@ -220,6 +230,8 @@ $result = $x{cc} && runtest($x{cc}, "$x{lua_inc} config.c");
 $result && eval($result);
 $x{arch}=`./arch-os`;
 $x{arch} && chop($x{arch});
+
+chdir ("../..") || die "cannot cd back to top level: $!";
 
 # ------------------------------------------------------------------ 
 # Collect undefined configuration variables
@@ -241,7 +253,7 @@ print <<EOF;
     
     OCAML
     ------------------------------------------------------------------ 
-    OCaml Version:  $x{ocamlv}
+    OCaml Version:  $x{ocaml_version}
     ocamlc:         $x{ocamlc}
     ocamlyacc:      $x{ocamlyacc}
     
@@ -273,6 +285,7 @@ print <<EOF;
     liblualib:      $x{liblualib}
     Lua -I          $x{lua_inc}
     Lua -L          $x{lua_lib}
+    ld(1) flags:    $x{lua_lib} $x{lua_libs}
     
     Architecture
     ------------------------------------------------------------------ 
@@ -283,6 +296,7 @@ print <<EOF;
     Installation
     ------------------------------------------------------------------
     Install to:     $x{prefix}
+
 EOF
 
 if (@missing) {
@@ -307,7 +321,8 @@ if (@missing) {
         notangle(1) is part of NoWEB.
 
     (2) If Lua-related variables are undefined, try to enlarge the 
-        list of searched directories at the top of this script.
+        list of searched directories at the top of this script. Then,
+        run the script again.
         Currently, these directories are searched for header files:
 
             @include
@@ -317,8 +332,9 @@ if (@missing) {
             @libs
         
     (3) Edit the config/*.mk files directly. These files contain
-        variables for tools and their options. If your problem is
-        Lua, try config/lua.mk.
+        variables for tools and their options. The central configuration
+        file is config/config.mk. Copy config/config.mk.default to
+        config.mk and edit it.
 EOF
     exit 1;
 }
@@ -329,10 +345,10 @@ EOF
 # ------------------------------------------------------------------ 
 
 
-if ($x{ocamlv} !~ /3\.0[456]/) {
+if ($x{ocaml_version} !~ /3\.0[456]/) {
     print <<EOF;
     
-    You need OCaml 3.0[456] to compile Quick C--. We found $x{ocamlv}.
+    You need OCaml 3.0[456] to compile Quick C--. We found $x{ocaml_version}.
 EOF
     exit 1;
 }
@@ -356,9 +372,64 @@ my @export = ( "arch"
              , "stdc_iec559"
              , "lua_inc"
              , "lua_lib"
+             , "lua_libs"
              , "prefix"
              );
              
+open(OUT,"> $config_mk") || die "cannot open $config_mk";
+print OUT <<EOF;
+#
+# configuration file, created by configure script in top level directory
+#
+# config_arch                 = x86-linux
+# Architecture and OS, used to select the default backends
+#
+# config_endian               = little
+# Also used to select default backends. Alternativ is "big"
+#
+# config_cc                   = /usr/bin/gcc
+# C compiler, mainly for compilation of interpreter
+#
+# config_stdc_version         = 199409
+# __STDC__VERSION__ macro value. The interpreter uses C99 features
+# if available
+#
+# config_stdc_iec559          = 1
+# __STDC_IEC559__ macro value. Used to detect C99 features for the 
+# interpreter.
+#
+# config_lua_inc              = -I/usr/include/lua40
+# Flag passed to cc(1) to find lua.h include file
+#
+# config_lua_lib              = -L/usr/lib/
+# Flag passed to cc(1) to find Lua libraries.
+#
+# config_lua_libs             = -llua40 -llualib40
+# Flags passed to cc(1) to link in Lua libraries.
+#
+# config_prefix               = /usr/local
+# Hierarchy for install target in top-level mkfile
+#
+
+config_arch                 = 
+config_endian               = 
+config_cc                   = gcc
+config_stdc_version         = 
+config_stdc_iec559          = 1
+config_lua_inc              = -I/usr/include/lua40
+config_lua_lib              = -L/usr/lib/
+config_lua_libs             = -llua40 -llualib40
+config_prefix               = /usr/local
+
+EOF
+
+             
 foreach $v (@export) {
-    printf ("config_%-20s = \"%s\"\n", $v, $x{$v});
+    printf OUT ("config_%-20s = %s\n", $v, $x{$v});
 }
+
+close(OUT) || die "cannot close file $config_mk: $!";
+
+write "configuration written to $config_mk\n";
+
+exit(0);

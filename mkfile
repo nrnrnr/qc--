@@ -11,7 +11,9 @@ VERSION =       `date +%Y%m%d`
 # library files.
 #
 
-prefix =        /usr/local
+<               config/config.mk    
+
+prefix =        $config_prefix
 bindir =        $prefix/bin
 man1dir =       $prefix/man/man1
 
@@ -44,9 +46,17 @@ SUBDIRS =       cllib lua asdl rtl gen camlburg tools doc src interp
 # install:      simple-minded install to $prefix, need to call 'all' first
 
 
-all:V:          qc--     interp doc
-all.opt:V:      qc--.opt interp doc
 
+all:V:          config qc--     interp doc
+all.opt:V:      config qc--.opt interp doc
+
+config:QV:       
+                if [ -f config/config.mk ]; then : ;else
+                    echo "Run the ./configure script first!" 
+                    echo "Alternatively, create config/config.mk"
+                    echo "from config/config.mk.template."
+                    exit 1
+                fi    
 
 qc--:V:         tools lib dirs
                 for i in src 
@@ -198,6 +208,7 @@ clobber:V:      dirs clean
                         -o -name '.cvsignore'           \
                         \) -prune -o -type f -exec rm '{}' \;
                 rm -f FILES
+                rm -f config/config.mk
                 
                 
 # make sure appropriate empty directories exist
@@ -248,7 +259,7 @@ FILES:D:          clobber
                         -o -type f -print | sort   > $target 
 
 timestamps:V:   
-                cd interp; mk -t -a disasm-dec interp-dec.c encode.[ch]
+                cd interp; mk -t -a disasm-dec.c interp-dec.c encode.[ch]
 
 tar:V:          $DIR.tar.gz
                 
