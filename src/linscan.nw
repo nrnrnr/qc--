@@ -23,39 +23,31 @@
 \section{Register Allocation}
 % ------------------------------------------------------------------ 
 
-The nodes of a control flow graph initially contain temporary
+The nodes of a control-flow graph (\cfg) initially contain temporary
 registers and hardware registers.  For translation to machine
 instructions the temporary registers must be replaced by hardware
 registers.  The register allocation process re-writes a control flow
 graph such that nodes only use hardware registers.
 
 Lifeness analysis provides the acurate lifetime of each registers. 
-The register allocator tries to map several temporary registers to
-hardware registers such that their lifetimes do not interfere.  If the
-number of available hardware registers is too small to map all
-temporary registers the register allocator runs out registers.  The
-current implementations can't do anything about it and signals this
-with an [[OutOfRegisters]] excpetion.  However, the general solution
-is to store some tempories in memory and re-load them to a hardware
-register only when they are needed.  This is called \emph{spilling}
-and is not yet implemented.
+The register allocator tries to map temporary registers to hardware
+registers such that their lifetimes do not interfere.  If the number
+of available hardware registers is too small to map temporary
+registers the register allocator runs out registers.  The solution is
+to store some tempories in memory and re-load them to a hardware
+register only when they are needed; this is called \emph{spilling}.
 
 The register allocator is a linear-scan allocator, basically modeled
 after Traub et al.~\cite{traub:98:pldi} but without lazy spilling. 
-It turned out that the simpler linear scan register allocator by
+It turned out that the simpler linear-scan register allocator by
 Poletto \cite{poletto:99:toplas} can not handle pre-assigned hardware
 registers as they are required by calling conventions.
 
-Linear scan register allocation requires a linear representation of a
+Linear-scan register allocation requires a linear representation of a
 procedure.  This is provided by numbering nodes in the control-flow
 graph {\cfg}.  Of course, any change to the structure of the {\cfg}
-destroys a numbering.  This happens when code for spilling is inserted
-into a {\cfg}.
-
-<<linscan.mli>>=
-exception OutOfRegisters
-val allocate: Cfg3.cfg -> Cfg3.cfg (* OutOfRegisters *) 
-@
+destroys a numbering.  This happens typically when code for spilling
+is inserted into a {\cfg}.
 
 % ------------------------------------------------------------------ 
 \subsection{Construction of Register Lifetimes}
@@ -63,7 +55,7 @@ val allocate: Cfg3.cfg -> Cfg3.cfg (* OutOfRegisters *)
 
 Liveness analysis (module \module{live}) annotates each node in the
 control-flow graph with the set of registers live \emph{before} that
-node.  From this we like to construct a global view that associates a
+node.  From this we have to construct a global view that associates a
 variable with its lifetime.  A lifetime is a set of nodes where a
 register is life.  To make things easier, lifetimes are represented as
 sets of intervals, where an interval is a sequence of consecutive
@@ -74,28 +66,25 @@ graph and recognize the opening and closing of intervals where a
 particular variable is live.  Liveness intervals are then joined to
 form \emph{lifetime} values.
 
-Nodes in the control-flow graph are visited in a linear order and each
-node is associated with an integer [[Point.t]]. These points mark the
-opening and closing of liveness intervals. Intervals and Lifetimes
-over points are provided by the [[Lifetime.Make]] functor:
+Node in a {\cfg} are numbered with integers, calles \emph{points}
+here.  Points mark the opening and closing of liveness intervals. 
 
 <<linscan.ml>>=
-(* hack for now *)
-exception OutOfRegisters
-let allocate cfg = assert false
-@
 
-<<linscan.ml>>=
 module Point = struct
     type t = int
     let compare = compare
     let zero = 0 
 end
 
-module P = Point
-module I = Interval.Make(Point)
-module L = Lifetime.Make(I)
+module P        = Point
+module I        = Interval.Make(Point)
+module L        = Lifetime.Make(I)
+module M        = Register.Map
 
+type lifetimes  = L.t M.t  (* lt *)  (* map from register to its lifetimes *)
+type loc        = Register.t    
+ 
 <<compute lifetimes>>
 @
 
@@ -116,16 +105,16 @@ Because lifetime intervals are open on the right hand side (cf.~module
 an interval is closed, it can be added to the lifetime of the
 respective variable.
 
+\begin{quote}\it
+    I'm thinking of using a closed-interval semantics for intervals.
+    See module \module{lifetime}. --CL
+\end{quote}
+
 The lifetimes for a control-flow graph are stored in a map that
 associates registers with their lifetime.  An additional map holds the
 opening point for registers that are currently live and have a not yet
 closed their liveness interval.  In the functions traversing the
 control-flow graph they are paired together as a value [[(op,lt)]].
-
-<<compute lifetimes>>=
-type lt = L.t Register.Map.t
-type op = P.t Register.Map.t
-@
 
 The [[open_intv r p state]] function records the opening of an
 interval for register [[t]] in the [[state]].  Dual to that,
@@ -134,6 +123,11 @@ register from [[op]] and adding a new interval to its lifetime in
 [[lt]]. 
 
 <<compute lifetimes>>=
+(* type op    = P.t M.t  (* map from register to opening point *)
+ * type lt    = L.t M.t  (* map from register to lifetime      *)
+ * type state = op * lt   
+ *)
+ 
 let open_intv  point (op,lt) reg = (Register.Map.add reg point op, lt)
 
 let close_intv point (op,lt) reg = 
@@ -148,7 +142,8 @@ let close_intv point (op,lt) reg =
 
 Given a list of registers that open or close an interval we must fold
 this list such that all registers in the list update the current
-state.
+state. The state captures the lifetimes computes so far, plus the
+currently open intervals.
 
 <<compute lifetimes>>=
 let open_regs  point regs state = List.fold_left (open_intv point)  state regs
@@ -159,7 +154,7 @@ The [[lifetimes]] function computes a map that associates a register
 with its lifetime.  The the lifetimes are inferred from the live sets
 that are part of the control-flow graph.  The initial map [[lt]] is
 supplied by the client.  After the last node of the control-flow graph
-is processed, all still open intervals must be closed.
+is processed, all still open intervals must be closed. 
 
 <<compute lifetimes>>=
 let lifetimes cfg lt =
@@ -176,15 +171,21 @@ let lifetimes cfg lt =
                       (set, state)
     in (* close all open intervals after the last node *)
     let (set,(op,lt)) = Cfg3.scan_fwd cfg scan (Register.Set.empty, initial) in
-    let last          = Cfg3.number (Cfg3.last cfg)         in
-    let      (_ ,lt)  = close_regs last (domain op) (op,lt) in 
+    let last          = Cfg3.number (Cfg3.last cfg)             in
+    let      (_ ,lt)  = close_regs (last+1)    (* half open interval! *) 
+                                   (domain op) (op,lt) in 
         lt
-                 
 @
+
+\begin{quote}\it
+    I have to verify that the above code calculates the correct
+    intervals with respect to the open interval semantics for lifetime
+    intervals. --CL
+\end{quote}
 
 
 % ------------------------------------------------------------------ 
-\subsection{Register Allocation}
+\subsection{Register Allocation Algorithm}
 % ------------------------------------------------------------------ 
 
 Register allocation works as follows:  at the start the majority of
@@ -193,18 +194,19 @@ use hardware registers for calling conventions, but most hardware
 register available for register allocation are unused.  We try to
 place a temporary into a hardware register, if the lifetime of the
 temporary fits into a lifetime hole of the register.  If this
-succeeds, the temporary can be replaced by the hardware register in the
-control-flow graph.  At the same time, the the register's lifetime
+succeeds, the temporary can be replaced by the hardware register in
+the control-flow graph.  At the same time, the the register's lifetime
 becomes more dense and it will be more difficult in the future to
 place a temporary into it.  When this case happens, we have to select
 either a temporary or a register and spill it.  As an optimization,
 the chosen register or temporary can be spilled only in parts of the
-procedure (local spilling).  Spilling requires to insert new nodes
-into the control-flow graph and invalidates all liveness information. 
-The overall effect is that a few long liveness intervals are replaced
-by a number of shorter liveness intervals for a number of new
-temporaries.  This makes it easier to place them into registers. 
-
+procedure; this is called \emph{local spilling}.  Spilling requires to
+insert new nodes into the control-flow graph and invalidates all
+liveness information.  The overall effect is that a few long liveness
+intervals are replaced by a number of shorter liveness intervals for a
+number of new temporaries.  This makes it easier to place them into
+registers. The general algorithm and some open questions are outlined
+below. 
 
 \begin{quote}
 \let\mc\multicolumn
@@ -238,9 +240,6 @@ temporaries.  This makes it easier to place them into registers.
 \end{tabular}
 \end{quote}
 
-% ------------------------------------------------------------------  
-\subsubsection{Open Questions}
-% ------------------------------------------------------------------ 
 
 
 \begin{enumerate}
@@ -284,92 +283,60 @@ temporaries.  This makes it easier to place them into registers.
       
 \item How to guarantee termination? Should there be an upper bound for
       spilled temporaries or is there a better way?
-
 \end{enumerate}
 
 
-<<linscan2.mli>>=
+% ------------------------------------------------------------------ 
+\subsection{Register Allocation Implementation}
+% ------------------------------------------------------------------ 
+
+<<linscan.mli>>=
 <<exported module types>>
 module Make (A : Args) : S
 @
 
-The [[Arg]] module summarizes the functionality that we need from out
-environment. Since it is just a type, we can put here whatever we want
-without having to provide an implementation.
+The [[Arg]] module summarizes the functionality that we need from the
+environment.  Since it is just a type, we can put here whatever we
+want without having to provide an implementation. Ultimately, we like
+to implement everything that is provoded by [[Arg]] and get rid of it.
 
-\begin{quote}\it
-    Suggestions for the new [[Cfg]] module. Below in [[Args]] we seem
-    to have different names for similar operations.
-
-    \begin{verbatim}
-    module type Cfg = sig
-        module Node : sig
-            type t
-            val apply: (Rtl.rtl -> Rtl.rtl) -> t -> unit
-        end
-
-        type t
-        val apply: (Rtl.rtl -> Rtl.rtl) -> t -> unit
-    end
-    \end{verbatim}
-
-    We also need a better connection between the control-flow graph
-    and the idea of points describing nodes in a sequence. For
-    example, what are the first and the last point in a graph?
-\end{quote}
 
 <<exported module types>>=
 module type Args = sig
-  module Cfg : sig
-    include Cfg2.S
-    type t = cfg
-    val replace : (Rtl.rtl -> Rtl.rtl) -> node -> unit
-    val mapg : (Rtl.rtl -> Rtl.rtl) -> cfg -> cfg
-  end
-  module Lifetime : Lifetime.S
-  type loc = Register.t
-  module LT : Map.S with type key = loc
-
-  (* fits s r = true, iff r can hold any value from space s *) 
-  val fits : Rtl.space -> Register.t -> bool
+    val fits : Rtl.space -> Register.t -> bool
+        (* fits s r = true, iff r can hold any value from space s *) 
 end
 @
 
 Module type [[S]] summarizes the functionality we implement and export
-for clients.  The [[replace_temporary]] function replaces temporaries
-in a control-flow graph with hardware registers.  The function is
-implemented in a continuation-passing style and expects two
-continuations, [[succeed]] and [[spill]].  The latter is used when no
-hardware register can be found to replace the chosen [[temporary]].
+for clients.  
 
 <<exported module types>>=
-module type S = sig
-  module A : Args
-  type lifetimes = A.Lifetime.t A.LT.t
-  val replace_temporary :
-        graph:A.Cfg.t -> 
-        temporary:A.loc ->
-        lifetimes:lifetimes ->
-        succeed:(A.Cfg.t -> lifetimes -> 'a) ->
-        spill:(A.loc -> A.Lifetime.Interval.t -> A.Cfg.cfg -> 'a)
-        -> 'a
-end
+module type S = sig end (* dummy *)
 @
 
 The implementation must provided all the module types declared in the
 interface. Thanks to literate programming we can refer to the code
 chunk that was used in the interface. 
 
-<<linscan2.ml>>=
+<<linscan.ml>>=
 <<exported module types>>
-
 module Make (A : Args) : S = struct
-type lifetimes = A.Lifetime.t A.LT.t
-module A = A
-open A (* never do this *)
-
-let replace n f = Cfg.replace f n           (* apply f to node n *)
+    module A = A
+    open A
+    <<Make>>
+end
 @
+
+<<Make>>=
+exception Retry of Cfg3.t
+
+(* general purpose functions 
+ * - iter walks over cfg, update RTLs in nodes using f
+ *)
+let iter cfg f = Cfg3.fold cfg (fun node () -> Cfg3.set_rtl node f) () 
+@
+
 Linear scan register allocation works by traversing the nodes of a
 procedure in a linear way.  The [[alloc]] function is passed the
 actual node and is responsible for placing it's temporaries.  Every
@@ -393,18 +360,11 @@ temporaries to the current node and its successors.
 \item Nodes past the current node read and write temporaries.
 \end{enumerate}
 
-\begin{quote}\it
-    The [[Cfg.iter]] function is not suitable for register
-    allocation, because (currently} {\rtl}s can't be updated by
-    side-effect. The [[iter]] function is intended for updating
-    live-sets during liveness analysis.
-\end{quote}
-
-<<linscan2.ml>>=
-exception Retry of Cfg.t
+<<Make>>=
 let linscan cfg lifetimes =
-  let alloc = <<allocator>> in
-  try Cfg.iter cfg alloc with Retry cfg -> raise (Retry cfg)
+    let alloc      = <<allocator>> in
+        try  iter cfg alloc 
+        with Retry cfg -> raise (Retry cfg)
 @
 
 The allocator takes a node and replaces all temporaries by hardware
@@ -414,42 +374,44 @@ registers.
 fun node -> assert false
 @
 
-One step in general-purpose allocation: choose a node containing
-temporaries, and replace a temporary in that node.
+The [[replace_temporary]] function replaces temporaries
+in a control-flow graph with hardware registers.  The function is
+implemented in a continuation-passing style and expects two
+continuations, [[succeed]] and [[spill]].  The latter is used when no
+hardware register can be found to replace the chosen [[temporary]].
 
-<<linscan2.ml>>=
-module L = Lifetime
 
-let lookup table x  = LT.find x table
-let replace_reg t r = fun t' -> if t = t' then r else t'
+<<Make>>=
+let lookup table x       = M.find x table       (* lookup lifetime *)
+let replace_temp tmp reg = fun t -> if t = tmp then reg else t
 @
 
 The [[first_fit]] function searches the domain of [[lifetimes]] to
 find a (hardware) register that can hold temporary [[t]].  It returns
-the \emph{first} register [[r]], that obeys all of the following
-conditions:
+the \emph{first} register [[r]], that respects all of the following
+conditions, or [[None]] otherwise.
 
 \begin{enumerate}
 \item The register [[r]] can hold the same values that [[t]] can hold. 
       This is decided using the target-specifi [[fits]] function.
 \item The bounding box of the lifetime of [[t]] does not overlap the 
       lifetimes of [[r]].      
-\end{enmerate}
+\end{enumerate}
 
-<<linscan2.ml>>=
+<<Make>>=
 let first_fit lifetimes t =
     let fits' (sp,_,_ as t) r = 
         fits sp r &&
-        not (Lifetime.overlaps (Lifetime.bbox (lookup lifetimes t)) 
-                               (lookup lifetimes r))
+        not (L.overlaps (L.bbox (lookup lifetimes t)) 
+                                (lookup lifetimes r))
     in
     let check r lt = function
         | None   when fits' t r -> Some r       
         | x (* otherwise *)     -> x      
     in
-        LT.fold check lifetimes None
+        M.fold check lifetimes None
 
-let find_reg = first_fit
+let find_reg = first_fit        (* first_fit is a possible find_reg impl *)
 @
 
 When no register can be found to hold regsiter [[t]], we have to spill
@@ -458,27 +420,27 @@ The [[find_spillee]] function receives the [[lifetimes]] map and the
 register [[t]] that we could not find a register for.  The function
 returns a register to spill and a region, where to spill it.
 
-<<linscan2.ml>>=
-(*
-val find_spillee : Lifetime.t LT.t -> loc -> loc * Lifetime.Interval.t
-*)
+<<Make>>=
+(* val find_spillee : lifetimes -> loc -> loc * Lifetime.Interval.t 
+ *)
 
-let find_spillee lifetimes t = assert false
+let find_spillee lifetimes tmp = assert false
 @
 
+The [[replace_temporary]] function tries to replace temporary [[t]] in
+[[graph]] with a hardware register. On success, it calls continuation
+[[allocated]], on failure [[spill]].
 
-<<linscan2.ml>>=
+<<Make>>=
 let replace_temporary graph t lifetimes allocated spill =
   let lifetime = lookup lifetimes in
   match find_reg lifetimes t with
   | Some r -> (* successfully found a hardware register *)
-      let lifetimes = LT.add r (L.union (lifetime r) (lifetime r)) lifetimes in
-      let lifetimes = LT.remove t lifetimes in
-      allocated (Cfg.mapg (Rtlutil.Subst.reg (replace_reg t r)) graph) lifetimes
+      let lifetimes = M.add r (L.union (lifetime r) (lifetime r)) lifetimes in
+      let lifetimes = M.remove t lifetimes                             in
+      let ()        = iter graph (Rtlutil.Subst.reg (replace_temp t r)) in
+          allocated graph lifetimes
   | None ->
       let spillee, interval = find_spillee lifetimes t in (* chooses t or a h/w reg *)
-      spill spillee interval graph
-
-
-<<linscan2.ml>>=
-end
+          spill spillee interval graph
+@
