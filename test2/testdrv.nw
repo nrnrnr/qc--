@@ -134,6 +134,7 @@ Test.trust_exe = nil    -- trust exe output for test status
 Test.on_error = {}      -- error handlers
 Test.files = {}         -- input source files
 Test.tst_file = ""      -- name of config file
+-- Test.update = nil       -- update differing files
 @ 
 Lua doee not have a function to get the number of entries in a table/list.
 <<testdrv.lua>>=
@@ -318,7 +319,7 @@ The [[check_update_file]] function compares two files. If the files
 differ, then either the expected file is updated, or an error message
 is generated.
 <<testdrv.lua>>=
-function Test.check_update_file(inputs, file, update)
+function Test.check_update_file(inputs, file)
   local  ext = Caml.Filename.extension(file)
   if     ext == ".s"  then exp = inputs["asm"]
   elseif ext == ".s1" then exp = inputs["asmout"]
@@ -328,7 +329,7 @@ function Test.check_update_file(inputs, file, update)
     
   local status = Util.catch(Util.compare_files, exp, file)
   if not status then
-    if update then
+    if Test.update then
       print(format("%s \thas changed \t\t!! updating !!", exp))
       if not Test.copy_file(file, exp) then
         print(format(" !! error moving file %s to %s !!", file,  exp))
@@ -340,7 +341,7 @@ function Test.check_update_file(inputs, file, update)
     end
     return 1
   else
-    if update then
+    if Test.update then
       print(format("%s \thas not changed", exp))
     else
       Test.log("%s matches output", exp)
@@ -358,7 +359,7 @@ compare the output to what is expected.
 If the expected files are being updated or the [[verbose]] flag is set
 then all outputs are generated.
 <<testdrv.lua>>=
-function Test.run_test_case(inputs, update)
+function Test.run_test_case(inputs)
   local file = inputs["source"]
   local files = Test.compile_file(file)
   if not files then return end
@@ -369,19 +370,19 @@ function Test.run_test_case(inputs, update)
   local so = files[2]
   local se = files[3]
 
-  local status = Test.check_update_file(inputs, s_file, update)
-               + Test.check_update_file(inputs, so, update)
-               + Test.check_update_file(inputs, se, update)
-  if update or (status > 0 and
-               (Test.trust_exe or Test.verbose))
+  local status = Test.check_update_file(inputs, s_file)
+               + Test.check_update_file(inputs, so)
+               + Test.check_update_file(inputs, se)
+  if Test.update or (status > 0 and
+                    (Test.trust_exe or Test.verbose))
   then
     local exe_file = Test.build_exe(inputs, s_file)
     if exe_file then
       files = Test.run_exe(exe_file, inputs["stdin"])
       local pso = files[1]
       local pse = files[2]
-      local s = Test.check_update_file(inputs, pso, update)
-              + Test.check_update_file(inputs, pse, update)
+      local s = Test.check_update_file(inputs, pso)
+              + Test.check_update_file(inputs, pse)
       if s == 0  and Test.trust_exe then
         status = 0
       end
@@ -423,7 +424,7 @@ function Test.compute_filename(files, entry, dir, name)
   end
 end
 <<testdrv.lua>>=
-function Test.process_file(files, update)
+function Test.process_file(files)
   if type(files) == "string" then
     files = { source = files }
   end
@@ -451,7 +452,7 @@ function Test.process_file(files, update)
   Test.compute_filename(files, "asmout", Test.results, name .. ".s1")
   Test.compute_filename(files, "asmerr", Test.results, name .. ".s2")
 
-  Test.run_test_case(files, update)
+  Test.run_test_case(files)
 end
 @ 
 % -------------------------------------------------------------------
@@ -488,7 +489,8 @@ function CMD.compilertab[".record"](file)
   if not entry then
     error("Could not find test case")
   end
-  Test.process_file(entry, 1)
+  Test.update = 1
+  Test.process_file(entry)
 end
 <<testdrv.lua>>=
 if CMD.compilertab[".test"] then
