@@ -74,9 +74,14 @@ We can ask the width of a register.
 We also provide safe comparisons.
 <<register.mli>>=
 <<exported types>>
-val width : t -> int
+val width   : t -> int
 val eq      : t -> t -> bool
 val compare : t -> t -> int
+@ 
+We can also query extended registers.
+<<register.mli>>=
+val widthx : x -> int
+val eqx    : x -> x -> bool
 @ 
 We have two kinds of sets.
 <<register.mli>>=
@@ -264,7 +269,15 @@ end
 @ 
 <<register.ml>>=
 let width ((_, _, ms), _, c) = Cell.to_width ms c
+let widthx = function
+  | Reg r -> width r
+  | Slice (w, _, _) -> w
 
+let rec eqx x x' = match x, x' with
+| Reg r, Reg r' -> eq r r'
+| Slice (w, lsb, r), Slice (w', lsb', r') -> w = w && lsb = lsb && eq r r'
+| Reg _, Slice _ -> false
+| Slice _, Reg _ -> false
 @ 
 If somebody tries to take a slice of a register pair,
 we will go to their house and spit in their food.

@@ -187,6 +187,7 @@ The overall structure of the postexpander is as follows:
 <<exported utility functions for use by the generic expander>>
 <<signature of a postexpander>>
 <<postexpander.ml>>=
+module R  = Rtl
 type uid = int
 <<types for postexpanders>>
 <<signature of a postexpander>>
@@ -436,6 +437,30 @@ module Expand : sig
   val cbranch : cbranch -> cbranch
 end
 @ 
+A~postexpander may want to execute a block with a hardware register in
+a certain state.
+This is easy to do with a pattern of ``save; set; block; restore.''
+But in the case where we want to execute with the hardware register in
+its current state, it is better just to emit ``block.'' 
+The reason is that when code sets a part of a control register, that
+can be pretty baroque, and at least as of October 2004, our optimizer
+is unlikely to discover that the instructions are unnecessary.
+
+When [[hard = soft]], function [[with_hw hard soft temp block]] has the
+effect of [[block]]. 
+Otherwise it has the effect
+\begin{verbatim}
+  temp := zx hard;
+  hard := soft;
+  block;
+  hard := lobits temp
+\end{verbatim}
+Only a postexpander may safely call [[with_hw]];
+to call [[with_hw]] while the generic expander is not active is an
+\emph{unchecked} run-time error.
+<<exported utility functions for postexpanders>>=
+val with_hw : hard:Register.x -> soft:warg -> temp:temp -> block -> block
+@ 
 Sequential composition of blocks is also useful for the generic expander.
 It eliminates [[Nop]].
 <<exported utility functions for postexpanders>>=
@@ -627,6 +652,8 @@ type wtemp = fill * temp
 and  fill  = HighS | HighZ | HighAny  
 and  warg  = WBits of Bits.bits
            | WTemp of Register.x  (* high bits, if any, could contain anything *)
+<<exported utility functions for postexpanders>>=
+val warg_val : warg -> exp
 @ 
 Usage notes:
 \begin{quote}
@@ -1068,6 +1095,36 @@ let empty = []
 let lookup = List.assoc
 let insert i x l = (i, x) :: l
 @ 
+To avoid circularity, these functions are copied from the [[Rewrite]] module.
+<<postexpander.ml>>=
+module RO = struct
+  let lobits w w' x = Rtl.app (Rtl.opr "lobits" [w;w';]) [x; ]
+  let zx w w' x = Rtl.app (Rtl.opr "zx" [w;w';]) [x; ]
+end
+
+<<postexpander.ml>>=
+let warg_val = function
+  | WTemp (Register.Reg t) -> R.fetch (R.reg t) (Register.width t)
+  | WTemp (Register.Slice (w, lsb, t)) -> R.fetch (R.slice w ~lsb (R.reg t)) w
+  | WBits b -> R.bits b (Bits.width b)
+
+let with_hw ~hard ~soft ~temp block = 
+  match soft with
+  | WTemp r when Register.eqx r hard -> block
+  | _ ->
+      let n    = Register.widthx hard in
+      let w    = Register.width temp in
+      let t    = R.reg temp in
+      let tval = R.fetch t w in
+      let hardloc = match hard with
+      | Register.Reg r -> R.reg r
+      | Register.Slice (w, lsb, r) -> R.slice w ~lsb (R.reg r) in
+      let hard = R.fetch hardloc n in
+      let save    = Rtl (R.store t (RO.zx n w hard) w) in
+      let set     = Rtl (R.store hardloc (warg_val soft) n) in
+      let restore = Rtl (R.store hardloc (RO.lobits w n tval) n) in
+      Expand.block (save <:> set) <:> block <:> Expand.block restore
+@
 \subsubsection{Placeholders for machines without stacks}
 <<postexpander.ml>>=
 module Nostack (Address : sig type t val reg : temp -> t end) = struct

@@ -93,6 +93,7 @@ let rounding_model = R.slice 2 ~lsb:10 Rg.fpuctl
 let rounding_mode  = R.fetch rounding_model 2
 let fpuctl_reg = match Dn.loc Rg.fpuctl with
   | RP.Reg r -> r | _ -> impossf "unexpected rep of FPU control register"
+let rounding_mode_reg = Register.Slice (2, 10, fpuctl_reg)
 
 module Post = struct
   <<x86 postexpander>>
@@ -458,39 +459,38 @@ let or32  = R.opr "or"  [32]
 let ten = RO.unsigned 32 10 
 
 let hwset ~dst ~src =
-  match dst with
-  | Register.Slice (2, 10, r) when r =$ fpuctl_reg ->
-      let slot      = PX.Alloc.slot 16 in
-      let t         = PX.Alloc.temp 't' 32 in
-      let t2, ldsrc = weird_tmp (PX.Alloc.temp 't' 32) src in
-      rtl (slot.A.store (R.fetch Rg.fpuctl 16) 16) <:>                  (* fnstcw *)
-      rtl (R.store (temploc t) (RO.zx 16 32 (slot.A.fetch 16)) 32) <:>  (* movzwl *)
-      with_lflags t and32 (tempval t) rmask_clear 32 <:>      (* mask out round bits *)
-      ldsrc <:>
-      rtl (R.store (temploc t2) (RO.shl 32 (tempval t2) ten) 32) <:>
-      with_lflags t or32 (tempval t) (tempval t2) 32 <:>
-      rtl (slot.A.store (RO.lobits 32 16 (tempval t)) 16) <:>      
-      rtl (R.store Rg.fpuctl (slot.A.fetch 16) 16)                   (* fldcw *)
-  | _ -> impossf "setting unexposed hardware register"
+  if Register.eqx dst rounding_mode_reg then
+    let slot      = PX.Alloc.slot 16 in
+    let t         = PX.Alloc.temp 't' 32 in
+    let t2, ldsrc = weird_tmp (PX.Alloc.temp 't' 32) src in
+    rtl (slot.A.store (R.fetch Rg.fpuctl 16) 16) <:>                  (* fnstcw *)
+    rtl (R.store (temploc t) (RO.zx 16 32 (slot.A.fetch 16)) 32) <:>  (* movzwl *)
+    with_lflags t and32 (tempval t) rmask_clear 32 <:>      (* mask out round bits *)
+    ldsrc <:>
+    rtl (R.store (temploc t2) (RO.shl 32 (tempval t2) ten) 32) <:>
+    with_lflags t or32 (tempval t) (tempval t2) 32 <:>
+    rtl (slot.A.store (RO.lobits 32 16 (tempval t)) 16) <:>      
+    rtl (R.store Rg.fpuctl (slot.A.fetch 16) 16)                   (* fldcw *)
+  else
+    impossf "setting unexposed hardware register"
 
 let hwget ~dst:(fill,dt) ~src =
-  match src with
-  | Register.Slice (2, 10, r) when r =$ fpuctl_reg ->
-      let slot      = PX.Alloc.slot 16 in
-      let clear_others = with_lflags dt and32 (tempval dt) rmask_set 32 in
-      let shift op n =
-        rtl (R.store (temploc dt) (op 32 (tempval dt) (RO.unsigned 32 n)) 32) in
-      rtl (slot.A.store (R.fetch Rg.fpuctl 16) 16) <:>                   (* fnstcw *)
-      rtl (R.store (temploc dt) (RO.zx 16 32 (slot.A.fetch 16)) 32) <:>  (* movzwl *)
-      (match fill with
-      | PX.HighAny ->
-          shift RO.shrl 10
-      | PX.HighZ ->
-          clear_others <:> shift RO.shrl 10
-      | PX.HighS ->
-          clear_others <:> shift RO.shl 20 <:> shift RO.shra 30
-      )
-  | _ -> impossf "getting unexposed hardware register"
+  if Register.eqx src rounding_mode_reg then
+    let slot      = PX.Alloc.slot 16 in
+    let clear_others = with_lflags dt and32 (tempval dt) rmask_set 32 in
+    let shift op n =
+      rtl (R.store (temploc dt) (op 32 (tempval dt) (RO.unsigned 32 n)) 32) in
+    rtl (slot.A.store (R.fetch Rg.fpuctl 16) 16) <:>                   (* fnstcw *)
+    rtl (R.store (temploc dt) (RO.zx 16 32 (slot.A.fetch 16)) 32) <:>  (* movzwl *)
+    match fill with
+    | PX.HighAny ->
+        shift RO.shrl 10
+    | PX.HighZ ->
+        clear_others <:> shift RO.shrl 10
+    | PX.HighS ->
+        clear_others <:> shift RO.shl 20 <:> shift RO.shra 30
+  else
+    impossf "getting unexposed hardware register"
 @ 
 \subsubsection{Control flow}
 
@@ -699,23 +699,8 @@ let is_stack_top_proxy = function
 @ 
 Rounding.
 <<x86 postexpander>>=
-let wargval = function
-  | PX.WTemp (Register.Reg t) -> R.fetch (R.reg t) (tempwidth t)
-  | PX.WTemp (Register.Slice (w, lsb, t)) -> R.fetch (R.slice w ~lsb (R.reg t)) w
-  | PX.WBits b -> R.bits b (Bits.width b)
-
-let with_rm rm block = 
-  match rm with
-  | PX.WTemp (Register.Slice (2, 10, r)) when r =$ fpuctl_reg ->
-      block
-  | _ ->
-      let t = talloc 't' 32 in
-      let save    = rtl (R.store (temploc t) (RO.zx 2 32 rounding_mode) 32) in
-      let set     = rtl (R.store rounding_model (wargval rm) 2) in
-      let restore = rtl (R.store rounding_model (RO.lobits 32 2 (tempval t)) 2) in
-      PX.Expand.block (save <:> set) <:> block <:> PX.Expand.block restore
-
-
+let with_rm rm block =
+  PX.with_hw ~hard:rounding_mode_reg ~soft:rm ~temp:(talloc 't' 32) block
 <<x86 postexpander>>=
 let push ~addr assn = 
 (*
