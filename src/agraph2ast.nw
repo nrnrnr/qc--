@@ -74,7 +74,7 @@ end
 
 <<extras>>=
 val blocks: graph -> (Rtl.rtl list) list
-val ast   : graph -> Ast.stmt list
+val stmts : graph -> Ast.stmt list
 @
 
 % ------------------------------------------------------------------ 
@@ -122,7 +122,7 @@ Continuations are also left out, but the interface demands that we
 provide a representation for them.
 
 <<>>=
-type cont =     unit
+type cont =     node
 @
 
 % ------------------------------------------------------------------ 
@@ -193,7 +193,7 @@ an {\rtl}.  These nodes are skipped by simply returning their
 successor.
 
 <<>>=
-let skip n     = n
+let skip n     = fun p -> n
 @
 
 Here are all the terminating node, that end a basic block:
@@ -209,9 +209,9 @@ Copy-out and copy-out nodes are skipped, together with call nodes:
 
 <<>>=
 let make_cont node cuts                 = node
-let copy_in formals context cc node p   = skip node
-let copy_out actuals context cc node p  = skip node
-let call expr node p                    = skip node
+let copy_in formals context cc node p   = skip node p
+let copy_out actuals context cc node p  = skip node p
+let call expr cont p                    = skip cont p 
 @
 
 An [[assign]] node contributes an {\rtl} to the basic block
@@ -247,5 +247,17 @@ let label n node p =
 % ------------------------------------------------------------------ 
 \subsubsection{Extras}
 % ------------------------------------------------------------------ 
+
+The list of basic blocks is returned by [[blocks]]:
+
+<<agraph2ast.ml>>=
+let blocks {bbs' = bb} = List.rev bb
+@
+
+<<>>=
+let stmts {bbs' = bb} = assert false
+@
+
+
 
 
