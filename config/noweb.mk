@@ -1,5 +1,5 @@
 #
-# Rules for Noweb, LaTeX, and HTML
+# Rules for Noweb and HTML
 #
 # Free variables this codes relies on. They must be defined where this
 # code in included.
@@ -7,14 +7,12 @@
 # TOP           - path to top level directory (with INSTALL)
 # INTERP        - residualizing | evaluating
 
+<$TOP/config/latex.mk
+
 NOWEAVE =       noweave
 NOTANGLE =      notangle
 CPIF =          cpif
 LINE =          '# %L "%F"%N'
-
-LATEX =         latex
-PS2PDF=         ps2pdf
-RERUN =         Rerun (LaTeX|to get cross-references right)
 
 NOCOND =        $TOP/config/nocond $INTERP
 OCAMLDEFS =     $TOP/config/autodefs.ocaml
@@ -89,21 +87,3 @@ NOWEBBREAKCODE=no
         cat $TOP/config/macros.tex $prereq |\
         $NOWEAVE -delay -filter $OCAMLDEFS -index -html -filter l2h - > $target
 
-%.bbl:  %.bib %.aux
-        bibtex $stem 
-                    
-%.dvi:  %.tex 
-        $LATEX "\\scrollmode \\input $stem.tex"
-        ltxcount=3
-        while egrep -s "$RERUN" $stem.log && [ $ltxcount -gt 0 ]
-        do
-            $LATEX "\\scrollmode \\input $stem.tex"
-            ltxcount=`expr $ltxcount - 1`
-        done
-
-%.ps:   %.dvi
-        dvips -Ppdf -o $target $prereq
-
-
-%.pdf:  %.ps
-        ps2pdf $prereq
