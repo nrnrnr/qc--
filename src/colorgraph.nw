@@ -158,7 +158,7 @@ module CompareEdge = struct
 end
 module EdgeSet = Set.Make(CompareEdge)
 
-type move = G.node
+type move = Rtl.rtl Cfgx.M.node
 module CompareMoves = struct
     type t = move
     let compare = compare
@@ -1072,12 +1072,7 @@ to call this stage even after graph coloring has succeeded in placing every
 temp.
 <<resetProgram>>=
 let updateProgram cg {Proc.cfg = cfg} =
-  let delete_move n =
-    let succ = G.succ n in
-    G.set_succ n ~succ:(G.illegal cfg);
-    G.set_succ (G.pred n) ~succ;
-    G.delete cfg n                      in
-  let () = ilg_iter (fun n -> delete_move n.v) (!(cg.moveLG CoalescedMove)) in
+  ilg_iter (fun n -> Cfgutil.delete cfg n.v) (!(cg.moveLG CoalescedMove));
   true
 @
 
@@ -1335,7 +1330,9 @@ module type PROC = sig
 end
 
 <<colorgraph.ml>>=
-module PreMake (G : GRAPH) (LI : LIVENESS with type node = G.node) 
+module PreMake (G : GRAPH with type node = Rtl.rtl Cfgx.M.node
+	                        with type cfg  = Rtl.rtl Cfgx.M.cfg)
+               (LI : LIVENESS with type node = G.node) 
                (P : PROC with type cfg = G.cfg) 
                (N : sig val name : string end) = struct
 
