@@ -150,6 +150,8 @@ let default_error_fallback g args =
              prerr_endline "") g.V.callstack;
   raise (Error msg)
 
+<<state dumping>>
+
 let rec fallback fbname g args =
   let call f g args = match f with
   | V.Function (_, f) -> f g args
@@ -162,7 +164,8 @@ let rec fallback fbname g args =
 begin
   prerr_string "no fallback named `";
   prerr_string fbname;
-  prerr_endline "'";
+  prerr_endline "' (probably registered an impure function as pure)";
+  dump_state g;
   assert false (* can't have any unknown fallbacks *)
 end
 @ 
@@ -621,3 +624,24 @@ end
 \section{Caveats}
 
 Builtin [[type]] doesn't return a tag.
+@
+<<state dumping>>=
+let dump_state g = 
+  let err = prerr_string in
+  let int = prerr_int in
+  let rec value = function
+    | V.Table t -> tab t ""
+    | v -> err (V.to_string v)
+  and tab t sfx =
+    err "{"; Luahash.iter (fun k d -> err " "; value k; err "="; value d; err ",") t;
+    err "}"; err sfx in
+  let stab t sfx =
+    err "{"; Hashtbl.iter (fun k d -> err " "; err k; err "="; value d; err ",") t;
+    err "}"; err sfx in
+  err "state is: \n";
+  err "  globals =\n    ";
+  tab g.V.globals "\n";
+  err "  fallbacks =\n    ";
+  stab g.V.fallbacks "\n";
+  default_error_fallback g [V.String "Stack trace is:"]
+
