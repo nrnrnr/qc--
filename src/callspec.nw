@@ -1,0 +1,304 @@
+% vim:ts=8 sw=4 et:
+
+% ------------------------------------------------------------------ 
+\section{Constructing a Calling Convention}
+% ------------------------------------------------------------------ 
+
+A calling convention is represented by a [[Call.t]] value. Since this is
+a quite complicated type, this module provides a client-oriented
+interface to build such a value.
+
+Responsibility for actions on the stack is split between the caller and
+the callee. A [[party]] value identifies one of them.
+
+<<callspec.mli>>=
+type party              = Caller | Callee
+@
+
+In particular, either one can allocate a block for results or deallocate
+the parameter overflow block. Who does what has implications for tail
+calls. We provide two default values.
+
+<<callspec.mli>>=
+type overflow = 
+    { parameter_deallocator:    party
+    ; result_allocator:         party
+    }
+
+val c_overflow:     overflow
+val tail_overflow:  overflow
+@
+
+When a (general) register is spilled, a stack slot must be allocated. A
+[[nvr_saver]] provides a slot for a non-volatile register.
+
+<<callspec.mli>>=
+type nvr_saver = Talloc.Multiple.t -> Register.t -> Rtl.loc
+val save_nvrs: Space.t list -> nvr_saver
+@
+
+\paragraph{Return Address} The return address is the address a procedure
+returns to. It needs to be saved accross calls if it is in a register.
+We have two basic policies:
+
+\begin{itemize}
+\item [[KeepInPlace]] leaves the return address where it is, which is
+      probably on the stack.
+\item [[SaveToTemp(s)]] save the return address to a temporay of space
+      [[s]].  Upon return, the return address is loaded into a fresh,
+      short-lived temporay in [[s]].   
+\end{itemize}
+
+The basic policy cannot express to use coventional location for the
+return address.
+
+<<callspec.mli>>=
+module ReturnAddress: sig
+    type style  =
+        | KeepInPlace               (* leave RA where it is     *)
+        | SaveToTemp  of Rtl.space  (* save RA in a temporary of this space  *)
+    <<suggested functions>>
+end     
+
+NR suggested to provide the following functions. The problem is that an
+implementation needs to know abot which spaces to use for temporaries.
+They are currently unimplemented.
+
+<<suggested functions>>=
+val enter_in_loc    : Rtl.loc -> Block.t -> Rtl.exp 
+val save_in_temp    : Rtl.exp -> Talloc.Multiple.t -> Rtl.loc
+val save_as_is      : Rtl.exp -> Talloc.Multiple.t -> Rtl.loc
+val exit_in_temp    : Rtl.exp -> Block.t -> Talloc.Multiple.t -> Rtl.loc
+val exit_as_is      : Rtl.exp -> Block.t -> Talloc.Multiple.t -> Rtl.loc
+@
+
+\paragraph{The Specification} The following specification decribes a
+calling convention. Passing it to [[to_call]], creates a [[Call.t]]
+value.
+
+<<callspec.mli>>=
+<<type t>>
+<<type t>>=
+type t =
+    { name              : string            (* name this CC *)
+    ; wordsize          : int
+    ; call              : unit -> Automaton.implementation
+    ; results           : unit -> Automaton.implementation
+    ; cutto             : unit -> Automaton.implementation
+    ; stack_growth      : Memalloc.growth   (* up or down *)
+    ; overflow          : overflow          (* overflow handling *)
+    ; sp                : Register.t        (* stack pointer register *)
+    ; sp_align          : int               (* alignment of sp *)
+    ; all_regs          : Register.Set.t    (* regs visible to allocator *)
+    ; nv_regs           : Register.Set.t    (* preserved registers *)
+    ; save_nvr          : nvr_saver         (* how to save registers *)
+    ; ra                : Rtl.loc           (* where is RA, how to treat it *)
+                          * ReturnAddress.style
+    }
+@
+
+A client has to supply the {\rtl}s for the [[cutto]] and alternate
+return instructions.
+
+<<callspec.mli>>=
+val to_call: cutto:Mflow.cut_args Target.map -> 
+             return:(int -> int -> ra:Rtl.exp -> Rtl.rtl) -> 
+             t -> Call.t   
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+<<callspec.ml>>=
+module R  = Rtl
+module RU = Rtlutil
+module W  = Rtlutil.Width
+module T  = Talloc.Multiple
+module C  = Call
+module A  = Automaton
+
+type party    = Caller | Callee
+type overflow = 
+    { parameter_deallocator : party
+    ; result_allocator      : party
+    }
+let tail_overflow = 
+    { parameter_deallocator = Callee
+    ; result_allocator      = Caller
+    }
+
+let c_overflow =
+    { parameter_deallocator = Caller
+    ; result_allocator      = Caller
+    } 
+
+type nvr_saver = Talloc.Multiple.t -> Register.t -> Rtl.loc
+
+let save_nvrs spaces tmp r = assert false
+
+module ReturnAddress = struct
+    type style  =
+        | KeepInPlace                   (* leave RA where it is     *)
+        | SaveToTemp of Rtl.space       (* save RA in a temporary   *)
+end    
+
+<<type t>>
+
+let old_end wordsize growth block = match growth with
+    | Memalloc.Down -> RU.addk wordsize (Block.base block) (Block.size block)
+    | Memalloc.Up   -> Block.base block
+
+let young_end wordsize growth block = match growth with
+    | Memalloc.Down -> Block.base block
+    | Memalloc.Up   -> RU.addk wordsize (Block.base block) (Block.size block) 
+
+
+let vfp wordsize             = Vfp.mk wordsize
+let std_sp_location wordsize = 
+    RU.add wordsize (vfp wordsize) (R.late "minus frame size" wordsize)
+
+let mk_automaton wordsize block_name automaton = fun () ->
+    Block.srelative (vfp wordsize) block_name A.at (automaton ())
+
+let ra t    = fst t.ra
+let style t = snd t.ra
+@
+
+The prolog is independent of the overflow policy. The first step is
+always to allocate the frame for the procedure and to copy the incoming
+parameters. Incoming overflow parameters always are held in a block
+allocated by the caller.
+
+<<callspec.ml>>=
+let prolog t = 
+    C.incoming ~growth:t.stack_growth ~sp:(R.reg t.sp)
+        ~mkauto:(mk_automaton t.wordsize "in call parms" t.call)
+        ~autosp:(fun _ -> vfp t.wordsize)
+        ~postsp:(fun _ _ -> std_sp_location t.wordsize) 
+@
+
+Before the epliog, [[sp]] points at the standard location independent of
+the overflow policy. Whereever the result is placed, it must be
+deallocated by the caller and thus we cannot dealloate it. 
+
+There is one problematic case: when the callee deallocates the
+pamarameter block and the caller allocates the result block, is the
+caller allowed to overlap the result with the parameter block or not?
+Currently the compiler does exactly this and thus we deallocate only up
+to the young end of the result block. But in principle the result block
+could be allocated outside the prameter block and thus we could
+deallocate the paramter block completely.
+
+<<callspec.ml>>=
+let epilog t =
+    C.outgoing ~growth:t.stack_growth ~sp:(R.reg t.sp)
+        ~mkauto:(mk_automaton t.wordsize "out ovfl results" t.results)
+        ~autosp:(fun r -> std_sp_location t.wordsize)
+        ~postsp:(match t.overflow with
+                | {parameter_deallocator=Caller; result_allocator=Caller} ->
+                    (fun _ _ -> vfp t.wordsize) 
+                | {parameter_deallocator=Callee; result_allocator=Caller} 
+                | {parameter_deallocator=Caller; result_allocator=Callee} 
+                | {parameter_deallocator=Callee; result_allocator=Callee} -> 
+                    (fun a _ -> 
+                        young_end t.wordsize t.stack_growth a.A.overflow)
+                )
+@
+
+A call always allocates space for outgoing parameters, independent of
+who deallocates it.  Currently the space for results that the caller
+associates is overlapped with the block for outgoing parameters, so no
+extra action is required. The young end of the outgoing block might or
+might not be the standard location, depending on the stack layout
+specified in Lua. Therefore, the move to the young end might be
+redundant but we cannot test for it here.
+
+<<callspec.ml>>=
+let call_actuals t =
+    C.outgoing ~growth:t.stack_growth ~sp:(R.reg t.sp)
+        ~mkauto:(mk_automaton t.wordsize "out call parms" t.call)
+        ~autosp:(fun r  -> std_sp_location t.wordsize)
+        ~postsp:(fun a sp -> young_end t.wordsize t.stack_growth a.A.overflow)
+@
+
+After a call the stack pointer points at the young end of the result
+overlow block. We have to move it back to the standard location. This
+might or might not be the same. If it is not, this will deallocate a any
+callee-allocated result block.
+
+<<callspec.ml>>=
+let call_results t =
+    C.incoming ~growth:t.stack_growth ~sp:(R.reg t.sp)
+        ~mkauto:(mk_automaton t.wordsize "in ovfl results" t.results)
+        ~autosp:(fun a   -> young_end t.wordsize t.stack_growth a.A.overflow)
+        ~postsp:(fun _ _ -> std_sp_location t.wordsize) 
+@
+
+Parameter passing for cuts is independent of parameter passing for
+procedures.
+
+<<callspec.ml>>=
+let also_cuts_to t =
+    C.incoming ~growth:t.stack_growth ~sp:(R.reg t.sp)
+        ~mkauto:(mk_automaton t.wordsize "in cont parms" t.cutto)
+        ~autosp:(fun r   -> std_sp_location t.wordsize)
+        ~postsp:(fun _ _ -> std_sp_location t.wordsize) 
+
+let cut_actuals t base  =
+    C.outgoing ~growth:t.stack_growth ~sp:(R.reg t.sp) 
+        ~mkauto:(fun ()  -> A.at base (t.cutto ()))
+        ~autosp:(fun r   -> R.fetch (R.reg t.sp) t.wordsize)
+        ~postsp:(fun _ _ -> R.fetch (R.reg t.sp) t.wordsize)
+
+@
+
+On entry, the return address is in the location specified by [[t]]. We
+simply fetch it from there.
+
+<<callspec.ml>>=
+let ra_on_entry t block = R.fetch (ra t) t.wordsize
+@
+
+Under the [[SaveToTemp]] policy we put the return address into a
+\emph{fresh} temporary on exit. The hope is, that this temporary will be
+short lived and not be spilled. Under the [[KeepInPlace]] policy, we
+just keep the current location. The policy cannot express to put the
+return address into a conventional location on exit, as required by the
+Alpha for example.
+
+
+<<callspec.ml>>=
+let ra_on_exit t saved_ra block temp = match style t with
+    | ReturnAddress.KeepInPlace  -> saved_ra 
+    | ReturnAddress.SaveToTemp s -> Talloc.Multiple.loc temp s t.wordsize 
+
+let where_to_save_ra t ra temp = match style t with
+    | ReturnAddress.KeepInPlace  -> 
+        Impossible.impossible "ReturnAddress.KeepInPlace contradicts saving RA"
+    | ReturnAddress.SaveToTemp s -> Talloc.Multiple.loc temp s t.wordsize 
+
+
+let to_call ~cutto ~return t =
+    { C.name          = t.name
+    ; C.jump_ok       = t.overflow.parameter_deallocator = Callee
+    ; C.call_parms    = { C.in' = prolog t       ; C.out = call_actuals t }
+    ; C.cut_parms     = { C.in' = also_cuts_to t ; C.out = cut_actuals t  }
+    ; C.results       = { C.in' = call_results t ; C.out = epilog t       }
+    
+    ; C.stack_growth  = t.stack_growth
+    ; C.stable_sp_loc = std_sp_location t.wordsize
+    ; C.replace_vfp   = Cfgx.Vfp.replace_with ~sp:(R.reg t.sp)
+    ; C.sp_align      = t.sp_align
+    ; C.ra_on_entry   = ra_on_entry t
+    ; C.where_to_save_ra = where_to_save_ra t
+    ; C.ra_on_exit    = ra_on_exit t
+    ; C.pre_nvregs    = t.nv_regs
+    ; C.volregs       = Register.Set.diff t.all_regs t.nv_regs
+    ; C.saved_nvr     = t.save_nvr
+    ; C.cutto         = cutto
+    ; C.return        = return
+    }
+@
+
+
