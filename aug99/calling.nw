@@ -21,3 +21,86 @@ contexts.
 \item
 Register-usage conventions.
 \end{itemize}
+
+
+Facts.
+\begin{itemize}
+\item 
+Overflow parameters must be allocated by caller, because caller
+initializes them.
+\item
+To support jumps without space leaks, it must be possible for the
+\emph{callee} to deallocate overflow parameters in the event of the
+jump.
+Because the caller shouldn't have to know if the callee is going to
+jump before returning, we should \emph{always} plan  for the callee to
+deallocate overflow parameters.
+\item
+Because the return address should live longer than the overflow
+parameters, it should be deallocated after the overflow parameters.
+\item
+We cannot use a call instruction that pushes the return address on the
+stack. 
+Proof by contradiction:
+if we did, the return address would be allocated (by the caller) after
+the overflow parameters.
+As argued above, the return address  must also be \emph{deallocated}
+before the overflow parameters.
+Therefore we cannot use a stack discipline.
+If the calling convention is jump-friendly,
+either the return address must go in a register, or we have to write
+below the stack pointer.
+\item
+CAllee could move RA around, but it can't be in the right place both
+at the call and at the return.
+\emph{But} on the Pentium, the return instruction can bump the stack
+pointer by a compile-time constant up to $2^{16}$ bytes
+\end{itemize}
+
+
+
+
+
+
+Decisions:
+\begin{itemize}
+\item
+Don't attempt to reuse the same space for overflow paramters and
+overflow results.
+Why?  Because a callee that jumps is obligated to deallocated just the
+part of the area that is used for parameters and not results, and
+there is no way for the callee to know how much space is needed for
+results.
+\end{itemize}
+
+
+Questions:
+\begin{itemize}
+\item
+Should invoker or invokee allocate space for overflow parameters of
+continuations?
+
+Possible for invoker to allocate space for overflow parameters of all
+continuations it might invoke.
+This space can be shared with overflow parameters to jumps and
+overflow results.
+(No accident, as these are the three ways to leave a procedure.)
+
+In the case of return and jump, incoming overflow parameters from the
+caller could appear also appear in these same locations---but for a
+clever optimizer, it is OK, because all the locations are known
+statically.
+
+If a procedure invokes a continuation in its caller, the incoming
+overflow parameters could alias with the outgoing overflow parameters
+to the continuation, but they need not.  
+So a clever shuffling implementation seems impossible.
+
+Examples:
+\begin{verbatim}
+f (a, b, c) { return (c, a, b); }  /* clever implementation possible */
+
+global k;
+g (a, b, c) { invoke k (c, a, b); } /* clever implementation impossible */
+\end{verbatim}
+\end{itemize}
