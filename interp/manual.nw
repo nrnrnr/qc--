@@ -1,0 +1,169 @@
+This document contains information about the interpreter.
+
+\section{The Quick~{\PAL} Interpreter Assembly Language}
+
+\subsection{Source Code Functions}
+The Quick~{\PAL} Interpreter, in its present state, reads in Lua
+source code that may make use of standard Lua functions as well as the
+following {\PAL} related functions:\\ 
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}%
+\begin{tabularx}{\linewidth}{|lY|Y|}\hline
+
+[[CMM.comment]]             &$($\ldots$)$&
+Takes an arbitrary number of arguments and does nothing.
+\\\hline\hline
+
+[[CMM.section]]             &$(string$ [[name]]$)$                  &
+Begins the definition of a section named [[name]].
+\\\hline
+[[CMM.end_section]]         &$()$                                   &
+Marks the end of the current section.
+\\\hline
+[[CMM.define_label]]        &$(string$ [[name]]$)$                  &
+Defines the label [[name]] at the current location in the bytecode stream.
+\\\hline
+[[CMM.procedure]]           &$(string$ [[name]]$, number$ [[numLocals]]$, number$ [[stackdataSize]]$)$ &
+Defines the procedure [[name]] with a number of local variables equal to [[numLocals]] and stack-data of size [[stackdataSize]] at the present location.
+\\\hline
+[[CMM.end_procedure]]       &$()$&
+Marks the end of the current procedure.
+\\\hline
+[[CMM.continuation]]        &$(string$ [[name]]$)$ &
+Defines the continuation [[name]].
+\\\hline
+[[CMM.begin_span]] &$(string$ [[token]]$, string$ [[value]]$)$&
+Begins the definition of the [[token]] span.
+\\\hline
+[[CMM.end_span]]   &$(string$ [[token]]$)$&
+Marks the end of the [[token]] span.
+\\\hline\hline
+
+[[CMM.imports]]   &$(stringTable$ [[imports]]$)$&
+Imports the externally defined labels stored as strings in numerically-indexed table [[imports]].
+\\\hline
+[[CMM.exports]]   &$(stringTable$ [[exports]]$)$&
+Exports from this assembly unit the labels stored as strings in numerically-indexed table [[exports]].
+\\\hline\hline
+[[CMM.memsize]]   &$(number$ [[memsize]]$)$&
+Specifies the size of the smallest addressable piece of memory on the target architecture.
+\\\hline
+[[CMM.ptrsize]]   &$(number$ [[ptrsize]]$)$&
+Specifies the size of a pointer on the target architecture.
+\\\hline
+[[CMM.byteorder]] &$(string$ [[byteorder]]$)$&
+Specifies the byte-order of the target architecture (is either [["LITTLE"]] or [["BIG"]]).
+\\\hline
+[[CMM.globals]]   &($number$ [[num_globals]]$)$&
+Specifies the number of global variables used in this assembly unit.
+\\\hline
+\end{tabularx}
+
+\begin{tabularx}{\linewidth}{|lY|Y|}\hline
+[[CMM.align]]     &$(number$ [[align]]$)$&
+Aligns instructions/data that follow this call on an [[align]] [[memsize]] boundary.
+\\\hline
+[[CMM.skip]]      &$(number$ [[n]]$)$&
+Skips (increases emitting location counter) by [[n]] [[memsize]] units.
+\\\hline
+[[CMM.data]]      &$(number$ [[size]]$, table$ [[init]]$)$&
+Reserves space for data of bit-width [[size]]; if [[init]] is a non-nil table, then its numerically-indexed elements (which are each of size [[size]]) are stored in memory at the current location.
+\\\hline
+[[CMM.emit_raddr]] &$(string$ [[s]]$, number$ [[offset]]$)$&
+Emits the address of symbol [[s]], offset by [[offset]] [[memsize]] units.
+\\\hline\hline
+
+
+[[CMM.push_literal]]        &$(string$ [[value]]$)$                 &
+Pushes literal [[value]] onto the value stack.
+\\\hline
+[[CMM.push_symbol]]         &$(string$ [[label]]$)$                 &
+Pushes the value of [[label]] onto the value stack.
+\\\hline
+[[CMM.fetch]]               &$(number$ [[size]]$, string$ [[byte_order]]$, number$ [[align]]$)$ &
+Pops an address off the value stack and fetches [[size]] bits from that address in memory space, using [[byte_order]] byte-order and [[align]] alignment.
+\\\hline
+[[CMM.fetch_local]]         &$(number$ [[index]]$)$                 &
+Fetches local variable [[index]] and pushes it onto the value stack.
+\\\hline
+[[CMM.fetch_global]]        &$(number$ [[index]]$)$                 &
+Fetches global variable [[index]] and pushes it onto the value stack.
+\\\hline
+[[CMM.store]]               &$(number$ [[size]]$, number$ [[byte_order]]$, number$ [[align]]$)$ &
+Pops a value and an address off the value stack, and then stores that value at that address in memory space, using [[byte_order]] byte-order and [[align]] alignment.
+\\\hline
+[[CMM.store_local]]         &$(number$ [[index]]$)$                 &
+Pops a value off the value stack and stores it in local variable [[index]].
+\\\hline
+[[CMM.store_global]]        &$(number$ [[index]]$)$                 &
+Pops a value off the value stack and stores it in global variable [[index]].
+\\\hline
+
+\end{tabularx}
+
+\begin{tabularx}{\linewidth}{|lY|Y|}\hline
+[[CMM.gstore]]              &$(number$ [[size]]$, number$ [[byte_order]]$, number$ [[align]]$)$ &
+Pops a value, an address, and a boolean off the value stack; if the boolean is true, the value is stored at that address in memory space, using [[byte_order]] byte-order and [[align]] alignment.
+\\\hline
+[[CMM.gstore_local]]        &$(number$ [[index]]$)$                 &
+Pops a value and a boolean off the value stack; if the boolean is true, the value is stored in local variable [[index]].
+\\\hline
+[[CMM.gstore_global]]       &$(number$ [[index]]$)$                 &
+Pops a value and a boolean off the value stack; if the boolean is true, the value is stored in global variable [[index]].
+\\\hline
+[[CMM.store_arg]]           &$(number$ [[index]]$)$                 &
+Pops a value off the value stack and stores it in argument space at index [[index]].
+\\\hline
+[[CMM.fetch_arg]]           &$(number$ [[index]]$)$                 &
+Fetches value in argument space at index [[index]] and pushes it onto the value stack.
+\\\hline
+[[CMM.apply_operator]]      &$(string$ [[stem_name]]$, string$ [[bit-widths]]$)$&
+Applies operator [[stem_name]] to some nonnegative number of values atop the value stack (popping any such values off), and pushes the result onto the stack; [[bit-widths]] is a string-based type signature for the operator (e.g., [["bits32,bits16:bits8"]]).
+\\\hline
+[[CMM.goto]]                &$()$                                   &
+Pops an address off the value stack and sets the program counter to the address.
+\\\hline
+[[CMM.cbrancht]]            &$(string$ [[destLabel]]$)$             &
+Pops a boolean off the value stack; if the boolean is true, the program counter is set to the address of label [[destLabel]].  Otherwise, control flow falls through.
+\\\hline
+\end{tabularx}
+
+\begin{tabularx}{\linewidth}{|lY|Y|}\hline
+[[CMM.cbranchf]]            &$(string$ [[destLabel]]$)$             &
+Pops a boolean off the value stack; if the boolean is false, the program counter is set to the address of label [[destLabel]].  Otherwise, control flow falls through.
+\\\hline
+[[CMM.branchtf]]            &$(string$ [[labelT]]$, $ [[labelF]]$)$ &
+Pops a boolean off the value stack; the program counter is set to the address of label [[labelT]] if the boolean is true, and to the address of label [[labelF]] if the boolean is false.
+\\\hline
+[[CMM.call]]            &$(stringTable$ $\kappa_{[[cuts]]}, stringTable$ $\kappa_{[[unwinds]]}, stringTable$ $\kappa_{[[returns]]}, number$ [[aborts]]$)$ &
+Pops an address off the value stack and makes a call to the procedure located at the address, with the given call-site annotations.
+Annotations are ignored if procedure is a foreign C procedure; C procedures must have previously been registered with the interpreter using exported function [[register_c_func]].
+\\\hline
+[[CMM.cmm_tail_call]]       &$()$                                   &
+Pops an address off the value stack and makes a tail call to the {\PAL} procedure located at the address.
+\\\hline
+[[CMM.cmm_return]]          &$(number$ [[index]]$, number$ [[count]]$)$ &
+Returns to alternate return [[index]] of the the current activation's caller, which has [[count]] return sites.
+\\\hline
+[[CMM.cut]]                 &$()$                                   &
+Pops an address off the value stack and cuts to the continuation located at the address.
+\\\hline
+\end{tabularx}
+
+\section{Prerequisites}
+In order to build and use the interpreter, there are a few externally available libraries that you need:
+
+\begin{itemize}
+\item We make use of an embedded Lua interpreter in our C code.  To download the source code and/or binaries for the Lua language, please visit [[http://www.lua.org]].
+We link Lua libraries [[liblua.a]] and [[liblualib.a]] together with our code.
+
+\item We make use of the New Jersey Machine-Code Toolkit to preprocess our C code on its way to the compiler.
+To download the source code and/or binaries for the toolkit, please visit [[http://www.eecs.harvard.edu/~nr/toolkit/]].
+We use the binary [[tools]] to preprocess our code, and link the library [[mclib.o]] together with our code.
+
+\item If you want to build the NJ Machine-Code Toolkit library yourself from the source code, you will need to have access to an Icon compiler or bytecode compiler.
+Visit [[http://www.cs.arizona.edu/icon/]] to download Icon.
+
+\item We make use of David Hanson's \textit{C Interfaces and Implementations} library of C coding idioms.
+Visit [[http://www.cs.princeton.edu/software/cii/]] to download the source code needed to build this library.
+
+\end{itemize}

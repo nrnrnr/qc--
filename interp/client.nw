@@ -1,63 +1,104 @@
-% -*- mode: Noweb; noweb-code-mode: C-mode -*- %
+% -*- mode: Noweb; noweb-code-mode: c-mode -*- %
 This document contains a description of the responsibilities of a client of the Quick~{\PAL} Interpreter.
 Additionally, a sample client implementation may be found at the bottom of this document.
+
+% ----------------------------------------------------------------------------
 \section{Clients of the Interpreter}
+% ----------------------------------------------------------------------------
+
 The Quick~{\PAL} Interpreter is not a standalone application.
 Rather, it works in conjunction with a client (a front-end runtime system).T
 he client must tell the interpreter which files to load as assembly units, which pieces of {\PAL} code to bundle up as ``thread''s, which threads to execute, etc.
 A client is responsible for creating a C function named [[main]].
 This is where control flow begins for the application; this function should drive the interpreter as it sees fit.
+
+% ----------------------------------------------------------------------------
 \subsection{Functions Exported by the Interpreter}
+% ----------------------------------------------------------------------------
+
 Below is a list of the functions that the interpreter exports and makes available for client use.
+
+% ----------------------------------------------------------------------------
 \paragraph{Initialization}
+% ----------------------------------------------------------------------------
+
 To open transactions between the client and the interpreter, the client must call [[Cmm_open]].
 This functions expects two arguments, indicating how much memory the interpreter should allocate for the creation of its value stack and argument-passing space, respectively.
 If given values of 0, [[Cmm_open]] will choose a non-zero, default size.
+
 <<available exported C functions>>=
 int Cmm_open (int valstack_size, int argspace_size);
 @ 
+
 To register C functions with the interpreter so that they may be called from {\PAL} code, the interpreter exports function [[register_c_func]].
 A signature ([[sig]]) of a C function is a string containing a comma-delimited list of the C types of the function's arguments, followed by a colon and the the function's return type.
 An explicit [[void]] should be used in the case of nullary functions.
 For example, the signature for a C function that takes two [[int]]s and returns a [[double]] would be [["int,int:double"]].
+
 <<available exported C functions>>=
 void register_c_func(const char *name, void *f, const char *sig);
 @ 
+
+% ----------------------------------------------------------------------------
 \paragraph{Loading Source Code}
+% ----------------------------------------------------------------------------
+
 To load a source file (in Lua style) into memory, [[load_assembly_unit]] should be called with the name of the source file (or source string).
 Note that code cannot be interpreted until it has been loaded into memory.
 [[load_assembly_unit]] returns 0 if and only if [[filename]] was successfully loaded.
+
 <<available exported C functions>>=
 int load_assembly_unit (char *s, assembly_unit_type ty);
 @ 
+
 [[ty]] may either take on the value [[SRC_STRING]] or [[SRC_FILE]] to indicate whether [[s]] is the name of a file or a Lua source string itself.
+
+% ----------------------------------------------------------------------------
 \paragraph{Examining Source Code}
+% ----------------------------------------------------------------------------
+
 To find the {\PAL} code associated with a certain {\PAL} label (be it a procedure, continuation, or simple code), call on [[cmm_find_export]] with the label in string form.
 Note that this function will only find the code for which you are looking if it has been previously loaded into memory using [[load_assembly_unit]], and if the code's assembly unit specified the label as an export (using the [[CMM.exports]] Lua function).
+
 <<available exported C functions>>=
 Cmm_Dataptr cmm_find_export (const char *arg);
 @ 
+
 For debugging purposes, we also allow clients to disassemble previously loaded code.
 [[disassemble_instructions]] prints out a list of the bytecode instructions it finds stored in memory at a given location.
 To use this function, first call [[cmm_find_export]] to find the [[Dataptr]] associated with an exported {\PAL} label.
+
 <<available exported C functions>>=
 void disassemble_instructions (Cmm_Dataptr loc);
 @ 
+
+% ----------------------------------------------------------------------------
 \paragraph{Shutdown}
+% ----------------------------------------------------------------------------
+
 To shut down the interpreter, [[Cmm_close]] should be called; this will someday free all memory the interpreter allocated.
+
 <<available exported C functions>>=
 void Cmm_close (void);
 @ 
+
+% ----------------------------------------------------------------------------
 \subsection{Functions Exported by the Runtime System}
+% ----------------------------------------------------------------------------
+
 DOCUMENT \emph{For now, look at {\PAL} manual.}
+
+% ----------------------------------------------------------------------------
 \section{A Sample Client Implementation}
+% ----------------------------------------------------------------------------
+
 Below is a sample client implentation; it should be useful for demonstration as well as testing.
 Its implementation is split across files [[client.h]] and [[client.c]].
+
 <<client.h>>=
 #ifndef _CLIENT_H
 #define _CLIENT_H
 
-#include "interp.h"
 #include "runtime.h"
 
 <<constant definitions>>
@@ -65,8 +106,14 @@ Its implementation is split across files [[client.h]] and [[client.c]].
 
 #endif /* _CLIENT_H */
 @ 
+
 <<client.c>>=
 #include "client.h"
+
+#include <stdlib.h>
+#include <string.h>
+#include "disasm.h"
+#include "ccall.h"
 
 <<global variable definitions>>
 
@@ -74,10 +121,39 @@ Its implementation is split across files [[client.h]] and [[client.c]].
 <<utility functions>>
 <<application driver>>
 @
+
+% ----------------------------------------------------------------------------
+\subsection{Using the Client}
+% ----------------------------------------------------------------------------
+
+The interpreter client will present you with a [[>]] prompt.
+The following table describes the commands that the interpreter currently understands.\\
+\\
+\begin{tabularx}{\linewidth}{|l|X|}\hline
+[[verbosity]] & turns on extra debugging output
+\\\hline
+[[help]] & prints a list of available commands
+\\\hline
+[[quit]] & quits the interpreter
+\\\hline\hline
+[[load]] $\{filename\}^{*}$ & loads (assembles into memory) all filenames listed
+\\\hline
+[[disasm]] $\{label\}^{*}$ & disassembles (to stdout) the program bytecode chunks located at each of the labels listed
+\\\hline
+[[run]] $\{label\}^{*}$ & sequentially runs (interprets) the program bytecode chunks located at each of the labels listed
+\\\hline
+\end{tabularx}
+Also note that the client takes command line arguments.
+Look in the source code or type [[./interp --help]] at the command line for information.
+
+% ----------------------------------------------------------------------------
 \subsection{Type Definitions}
+% ----------------------------------------------------------------------------
+
 To manage threads returned by the {\PAL} runtime system, we use a [[typedef]]'d structure: [[Cmm_TCB]].
 A [[Cmm_TCB]] ({\PAL} thread control block) contains the actual thread given us by the {\PAL} runtime system, pointers to the space handed off to the system for use as an activation stack, and a ``cookie'' that points to the limit of the thread's activation stack.
 We use this cookie to tell if we've gone off the end of a stack (perhaps by returning or unwinding from the oldest activation on the stack).
+
 <<type definitions>>=
 typedef struct {
   Cmm_Cont *cont;
@@ -88,13 +164,20 @@ typedef struct {
   void     *limit_cookie;
 } Cmm_TCB;
 @ 
+
+% ----------------------------------------------------------------------------
 \subsection{Utility Functions}
+% ----------------------------------------------------------------------------
+
 We create a few helper functions to create and destroy [[Cmm_TCB]]s.
+
 <<function prototypes>>=
 Cmm_TCB *TCB_new(void);
 void     TCB_free(Cmm_TCB *tcb);
 @ 
+
 [[TCB_new]] allocates space for the interpreter to use as activation stack space; the space is of size [[stack_space]].
+
 <<utility functions>>=
 Cmm_TCB *TCB_new(void) {
   Cmm_Dataptr  data;
@@ -108,6 +191,7 @@ Cmm_TCB *TCB_new(void) {
   return tcb;
 }
 @ 
+
 [[TCB_free]] frees the space [[TCB_new]] allocated for activation stack space.
 <<utility functions>>=
 void TCB_free(Cmm_TCB *tcb) {
@@ -118,7 +202,10 @@ void TCB_free(Cmm_TCB *tcb) {
 }
 @ 
  
+% ----------------------------------------------------------------------------
 \subsection{Interpreter Interaction}
+% ----------------------------------------------------------------------------
+
 In this client, we register a couple of C functions with the interpreter: a simple printing function (that takes an [[int]], prints it, and returns it) and a simple input function.
 
 <<function prototypes>>=
@@ -142,28 +229,36 @@ int cmminput(void) {
 To register the functions, the client simply calls [[register_c_func]].
 
 <<register needed C functions with the interpreter>>=
-  register_c_func("cmmprint", cmmprint, "int:int");
-  register_c_func("cmminput", cmminput, "void:int");
+  register_c_func("cmmprint", (void *) cmmprint, "int:int");
+  register_c_func("cmminput", (void *) cmminput, "void:int");
 @ 
+
+% ----------------------------------------------------------------------------
 \subsection{Application Driver}
+% ----------------------------------------------------------------------------
+
 To drive our sample client application, we have a loop that prompts the user for a command, and acts accordingly--exiting when the user types [[quit]] or an [[EOF]] is sent to the program.
+
 <<constant definitions>>=
 #define BUFF_SIZE     256
 #define VALSTACK_SIZE 256
 #define ARGSPACE_SIZE 256
 @
+
 We parameterize activation stack size, and allow the user to modify the size at runtime.
 We thus keep [[stack_size]] (as well as a [[verbosity]] flag available globally.
+
 <<global variable definitions>>=
 extern int      verbosity;
 static unsigned stack_size = 65536;
 @ 
+
 The driver opens transactions with the {\PAL} interpreter (passing it sizes for the interpreter's value stack and argument-passing space), registers a few C functions with the interpreter (so they may be called from {\PAL}, loops through user commands, and closes interaction with the interpreter.
+
 <<application driver>>=
 int main(int argc, char *argv[]) {
   char        buff[BUFF_SIZE], *c;
   Cmm_Codeptr loc;
-  Cmm_Dataptr *stack_space;
 
   if (Cmm_open(VALSTACK_SIZE, ARGSPACE_SIZE) != 0) {
     exit(1);
@@ -178,9 +273,14 @@ int main(int argc, char *argv[]) {
   }
 
   Cmm_close();
+  return 0;
 }
 @ 
+
+% ----------------------------------------------------------------------------
 \subsubsection{Command Line Arguments}
+% ----------------------------------------------------------------------------
+
 This client allows a small number of command line arguments.
 If any such arguments are given, we do \emph{not} enter the interactive mode defined below (the command loop).
 The table below lists and explains the arguments supported.\\
@@ -198,12 +298,13 @@ The table below lists and explains the arguments supported.\\
 \end{tabularx}
 \\
 Note that if any source files are read in using command line arguments, the interpreter goes ahead and tries to execute exported {\PAL} procedure [[main]] after loading all files.
+
 <<process command line arguments>>=
   {
     int i, files_loaded = 0;
     for (i = 1; i < argc; i++) {
-      if        (strcasecmp(argv[i], "--help") == 0) {
-        printf("Usage: %s {[--help] | [-] | [<filename>]*}\n");
+      if        (strcmp(argv[i], "--help") == 0) {
+        printf("Usage: %s {[--help] | [-] | [<filename>]*}\n", argv[0]);
         printf("Interprets a C-- program as converted into Lua code\n");
         printf("Enters interactive mode unless command line arguments are "
                "given.\n\n");
@@ -213,7 +314,7 @@ Note that if any source files are read in using command line arguments, the inte
         printf("  <filename>*  Read in source files named\n");
 
         break;
-      } else if (strcasecmp(argv[i], "-") == 0) {
+      } else if (strcmp(argv[i], "-") == 0) {
         files_loaded = !load_assembly_unit(NULL, SRC_STDIN) || files_loaded;
       } else {
         /* assume we're given a filename */
@@ -233,9 +334,14 @@ Note that if any source files are read in using command line arguments, the inte
     }
   }
 @ 
+
+% ----------------------------------------------------------------------------
 \subsubsection{The Command Loop}
+% ----------------------------------------------------------------------------
+
 We loop: read characters in from [[stdin]] into a buffer until we reach a newline character or an [[EOF]].
 We then tokenize the line read in and act appropriately.
+
 <<loop and act according to user commands>>=
   printf("Quick C-- Interpreter\n");
   for ( ;; ) {
@@ -257,24 +363,26 @@ We then tokenize the line read in and act appropriately.
     <<process [[command]]>>
   }
 @ 
+
 We process [[command]] with an [[if]] statement.
-We compare strings in a case-insensitive manner.
+We compare strings in a case-sensitive manner.
 Special commands [[verbosity]] and [[stacksize]] allow the user to slightly alter the behavior of the interpreter.
+
 <<process [[command]]>>=
 
-    if        (strcasecmp(command, "help") == 0) {
+    if        (strcmp(command, "help") == 0) {
       printf("legal commands: ");
       printf("{ load {filename}*, disasm {label}*, run {label}*, verbosity, stacksize, quit }\n");
-    } else if (strcasecmp(command, "load") == 0) {
+    } else if (strcmp(command, "load") == 0) {
       while ((arg = strtok(NULL, " ")) != NULL) {
         <<load file [[arg]] as an assembly unit>>
       }
-    } else if (strcasecmp(command, "disasm") == 0) {
+    } else if (strcmp(command, "disasm") == 0) {
       while ((arg = strtok(NULL, " ")) != NULL) {
         <<[[loc]] $\leftarrow$ address of label [[arg]]>>
         <<disassemble code at label [[arg]] (address [[loc]])>>
       }
-    } else if (strcasecmp(command, "run") == 0) {
+    } else if (strcmp(command, "run") == 0) {
       arg = strtok(NULL, " ");
       if (arg != NULL) {
         char *arg_str;
@@ -294,10 +402,10 @@ Special commands [[verbosity]] and [[stacksize]] allow the user to slightly alte
       } else {
           printf("nothing to run!\n");
       }
-    } else if (strcasecmp(command, "verbosity") == 0) {
+    } else if (strcmp(command, "verbosity") == 0) {
       verbosity = !verbosity;
       printf("verbosity is %s\n", (verbosity ? "ON" : "OFF"));
-    } else if (strcasecmp(command, "stacksize") == 0) {
+    } else if (strcmp(command, "stacksize") == 0) {
       if ((arg = strtok(NULL, " ")) != NULL) {
         int i = atoi(arg);
         if (i <= 32)
@@ -306,17 +414,25 @@ Special commands [[verbosity]] and [[stacksize]] allow the user to slightly alte
           stack_size = (unsigned) i;
       }
       printf("stacksize is now %u\n", stack_size);
-    } else if (strcasecmp(command, "quit") == 0) {
+    } else if (strcmp(command, "quit") == 0) {
       break;
     } else
       printf("invalid command, please try again\n");
 @
+
+% ----------------------------------------------------------------------------
 \paragraph{Loading an Assembly Unit}
+% ----------------------------------------------------------------------------
+
 To load a given assembly file, we call on [[load_assembly_unit]].
 <<load file [[arg]] as an assembly unit>>=
   load_assembly_unit(arg, SRC_FILE);
 @
+
+% ----------------------------------------------------------------------------
 \paragraph{Finding Labels and Procedures}
+% ----------------------------------------------------------------------------
+
 To find a label, we call on [[cmm_find_export]].
 <<[[loc]] $\leftarrow$ address of label [[arg]]>>=
 {
@@ -328,17 +444,26 @@ To find a label, we call on [[cmm_find_export]].
   }
 }
 @ 
+
+% ----------------------------------------------------------------------------
 \paragraph{Disassembling Bytecode}
+% ----------------------------------------------------------------------------
+
 Disassembling the bytecode for a sequence of instructions should yield the instructions originally encoded.
 For now [[disassemble_instructions]] sends all output to [[stdout]].
 <<disassemble code at label [[arg]] (address [[loc]])>>=
   /* disassemble instructions */
-  printf("BEGIN LABEL \"%s\" (<address %x>)\n\n", arg, loc);
+  printf("BEGIN LABEL \"%s\" (<address %x>)\n\n", arg, (unsigned) loc);
   disassemble_instructions(loc);
   printf("\n[END CODE]\n");
 @
+
+% ----------------------------------------------------------------------------
 \paragraph{Interpreting the Bytecode}
+% ----------------------------------------------------------------------------
+
 The runtime system takes care of bytecode interpreting, as long as it is passed off a location or thread at which to start.
+
 <<run code at address [[loc]] with possible arg [[arg_int_p]]>>=
   {
   Cmm_TCB     *tcb = TCB_new();
@@ -349,7 +474,9 @@ The runtime system takes care of bytecode interpreting, as long as it is passed 
   TCB_free(tcb);
   }
 @ 
+
 Creating and running a {\PAL} thread with a continuation to execute the code at [[loc]] is as easy as calling runtime library functions [[Cmm_CreateThread]] and [[Cmm_RunThread]] (see [[runtime.nw]] for more information). 
+
 <<[[tcb]] $\leftarrow$ thread to execute program at [[loc]]>>=
   tcb->cont = Cmm_CreateThread(loc, (void *) arg_int_p, tcb->stack_space, 
                                tcb->stack_space_size, &(tcb->limit_cookie));

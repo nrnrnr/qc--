@@ -1,0 +1,64 @@
+% -*- mode: Noweb; noweb-code-mode: c-mode -*- %
+
+This document contains the interface and implementation of {\PAL} primitive operators.
+
+% ----------------------------------------------------------------------------
+\section{Interface}
+% ----------------------------------------------------------------------------
+
+<<value.h>>=
+#ifndef _VALUE_H
+#define _VALUE_H
+
+#include "types.h"
+
+<<type definitions>>
+<<macro definitions>>
+
+#endif /* _VALUE_H */
+@ 
+
+% ----------------------------------------------------------------------------
+\subsection{Datatypes}
+% ----------------------------------------------------------------------------
+
+We define the union type [[value]] to hold {\PAL} values.  The idea is that a {\PAL} value of type $b$ may be fetched from a C [[value v]] by accessing [[v.]]$b$.  Value stacks are represented in C as pointer-style [[value]] arrays, and generic data stacks are represented by pointer-style byte arrays.
+<<type definitions>>=
+typedef union {
+  bool    bool;
+  bits1   bits1;
+  bits8   bits8;
+  bits16  bits16;
+  bits32  bits32;
+  bits64  bits64;
+  float32 float32;
+  float64 float64;
+/*  float96 float96; */
+  void    *ptr;
+} value;
+
+typedef value *stack;    /* value stack */
+typedef value *sptr;     /* stack pointer */
+
+typedef u_int8 *datastack;
+typedef u_int8 *dataptr;
+@
+To ensure that {\PAL} values are properly reconciled with the C type system, we use the [[VIEW]] macro.  
+This macro takes two arguments: [[VIEW(LVALUE, T)]].  
+[[LVALUE]] is some sort of C lvalue and [[T]] is a C type.  
+The macro returns [[LVALUE]], properly viewed as a C value of type [[T]].
+
+% ----------------------------------------------------------------------------
+\section{Implementation}
+% ----------------------------------------------------------------------------
+
+% ----------------------------------------------------------------------------
+\subsection{Utility Macros}
+% ----------------------------------------------------------------------------
+
+We define a number of macros to ease the notational burden of value and stack maniuplation.
+On the simplest level, we need to be able to interpret the bits of a C lvalue as if the value were a different type.
+C type casting does not do the trick, as it actually changes the bit-level value being examined; instead, we define the macro [[VIEW]].
+<<macro definitions>>=
+#define VIEW(LVALUE, T)       (*((T *) (&(LVALUE))))
+@

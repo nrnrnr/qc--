@@ -2,6 +2,10 @@
 
 This document contains the interface and implementation of a simple collection of functions for representing lists of integer intervals in C.
 
+% ----------------------------------------------------------------------------
+\section{Interface}
+% ----------------------------------------------------------------------------
+
 Here is the interface to this collection:
 
 <<function prototypes>>=
@@ -9,11 +13,15 @@ interval_list *interval_list_new   (void);
 interval_list *interval_list_add   (interval_list *list, unsigned long lower,
                                     unsigned long upper);
 interval_list *interval_list_remove(interval_list *list, unsigned long i);
-long            interval_list_member(interval_list *list, unsigned long i);
+long           interval_list_member(interval_list *list, unsigned long i);
 void           interval_list_free  (interval_list *list);
 void           interval_list_print (interval_list *list);
-void           interval_list_print_file (interval_list *list, FILE *out_file);
+void           interval_list_print_file(interval_list *list, FILE *out_file);
 @ 
+
+% ----------------------------------------------------------------------------
+\subsection{A Sample Client}
+% ----------------------------------------------------------------------------
 
 A sample client of this interface might be:
 
@@ -34,6 +42,10 @@ interval_list_free(i);                  /* frees the list                   */
 
 Note that [[interval_list_add]] returns a pointer to the beginning of the list (which might have changed during the add operation).
 
+% ----------------------------------------------------------------------------
+\section{Implementation}
+% ----------------------------------------------------------------------------
+
 And now for the implementation:
 
 <<intervals.h>>=
@@ -41,11 +53,6 @@ And now for the implementation:
 #define _INTERVALS_H
 
 #include <stdio.h>
-#include <stdlib.h>
-#include <assert.h>
-
-#define min(X,Y) ((X) < (Y) ? (X) : (Y))
-#define max(X,Y) ((X) > (Y) ? (X) : (Y))
 
 typedef struct interval_list_t {
   unsigned long lower;
@@ -63,6 +70,12 @@ And the C code:
 
 <<intervals.c>>=
 #include "intervals.h"
+
+#include <stdlib.h>
+#include <assert.h>
+
+#define min(X,Y) ((X) < (Y) ? (X) : (Y))
+#define max(X,Y) ((X) > (Y) ? (X) : (Y))
 
 /* intervals are specified with inclusive endpoints (i.e., [lower, upper]) */
 
@@ -229,7 +242,7 @@ void interval_list_print_file (interval_list *list, FILE *out_file) {
     assert(out_file != NULL); 
 
     for ( ; list != NULL; list = list->next)
-	fprintf(out_file, "[%u, %u]\n", list->lower, list->upper);
+	fprintf(out_file, "[%lu, %lu]\n", list->lower, list->upper);
 }
 
 @ 

@@ -2,9 +2,13 @@
 This document contains the interface and implementation of the {\PAL} run-time system, as explained in CVS revision 1.59 of the {\PAL} Reference Manual.
 Please see the manual for detailed information about the functions contained herein.
 
+% ----------------------------------------------------------------------------
 \section{{\PAL} Runtime System Interface}
+% ----------------------------------------------------------------------------
 
+% ----------------------------------------------------------------------------
 \subsection{Types}
+% ----------------------------------------------------------------------------
 
 <<faux type declarations>>=
 typedef Cmm_Codeptr;
@@ -15,7 +19,9 @@ typedef Cmm_Activation;
 typedef Cmm_Cont;
 @
 
+% ----------------------------------------------------------------------------
 \subsection{Creating and Running a Thread}
+% ----------------------------------------------------------------------------
 
 [[Cmm_CreateThread]] returns a {\PAL} continuation that will execute the {\PAL} call [[f(x)]], when run.
 [[Cmm_RunThread]] commences execution on a {\PAL} continuation (a suspended {\PAL} computation) as returned from [[Cmm_CreateThread]].
@@ -35,7 +41,9 @@ It returns two values: the created thread, and a cookie pointing to the limit of
 bits32 CreateThread(bits32 f, bits32 x, bits32 s, bits32 n, bits32 cookie_ptr);
 @ 
 
+% ----------------------------------------------------------------------------
 \subsection{Walking the Stack}
+% ----------------------------------------------------------------------------
 
 <<function prototypes>>=
 Cmm_Activation *Cmm_YoungestActivation(const Cmm_Cont *t);
@@ -49,7 +57,9 @@ Cmm_Dataptr     Cmm_GetDescriptor(const Cmm_Activation *a, Cmm_Word token);
 Cmm_Cont       *Cmm_GetCont(const Cmm_Activation *a, Cmm_Word token);
 @ 
 
+% ----------------------------------------------------------------------------
 \subsection{The Global Registers}
+% ----------------------------------------------------------------------------
 
 <<faux {\PAL} prototypes>>=
 SaveGlobals( bits32 gp );
@@ -63,7 +73,9 @@ unsigned        Cmm_GlobalCount  (void);
 unsigned        Cmm_GlobalSize   (void);
 @ 
 
+% ----------------------------------------------------------------------------
 \subsection{Controlling the Interpreter}
+% ----------------------------------------------------------------------------
 
 The runtime system exports two functions that allow the interpreter to be started up and shut down.
 [[Cmm_open]] must only be called once, and must be called before any other interpreter-related functions are called.
@@ -74,25 +86,29 @@ int  Cmm_open(int valstack_size, int argspace_size);
 void Cmm_close();
 @ 
 
+% ----------------------------------------------------------------------------
 \section{Implementation for the Interpreter}
+% ----------------------------------------------------------------------------
+
 The header file for the {\PAL} runtime system is contained within [[runtime.h]].
 
 <<runtime.h>>=
 #ifndef _RUNTIME_H
 #define _RUNTIME_H
 
+#include "label.h"
 #include "interp.h"
+#include "thread.h"
 
 <<type definitions>>
 
-<<declarations for external definitions>>
 <<function prototypes>>
 
 #endif /* _RUNTIME_H */
 @ 
 
 We import a few values from [[interp.m]]; namely, the number of globals in the loaded {\PAL} code, the array in which the {\PAL} global values are actually stored, and the Lua tag we use to store [[span]] values in our Lua span tables.
-<<declarations for external definitions>>=
+<<faux declarations for external definitions>>=
 extern int    num_globals;
 extern value *globals;
 extern int    lua_CMM_span_value_tag;
@@ -104,13 +120,22 @@ The implementation of the {\PAL} runtime system is contained within [[runtime.c]
 <<runtime.c>>=
 #include "runtime.h"
 
+#include <stdlib.h>
+#include "value.h"
+#include "activation.h"
+#include "lualink.h"
+#include "ccall.h"
+
 <<thread functions>>
 <<stack-walking functions>>
 <<global register functions>>
 <<controlling the interpreter>>
 @ 
 
+% ----------------------------------------------------------------------------
 \subsection{Types}
+% ----------------------------------------------------------------------------
+
 The types used in the runtime system's interface are all [[typedef]]'d in reality.
 We actually use a [[CMM_label]] to represent a code pointer so that we can easily pass more information than simply a program counter (e.g., we can also pass around [[procedure]] records).
 
@@ -131,7 +156,9 @@ The next type definition is confusing, though.  A [[Cmm_Cont]] is actually a [[t
 typedef thread       Cmm_Cont;
 @ 
 
+% ----------------------------------------------------------------------------
 \subsection{Creating and Running a Thread}
+% ----------------------------------------------------------------------------
 
 The work of creating a thread is farmed out to [[init_thread]], as defined in [[interp.nw]]; and the work of running a thread is taken care of by similarly defined [[run_interp]].
 \emph{FIX: for the moment, it is unclear what exactly [[Cmm_RunThread]] should return, if anything at all.}
@@ -198,7 +225,10 @@ Cmm_Cont *Cmm_CreateThread(Cmm_Codeptr f, Cmm_Dataptr x, void *s, unsigned n,
 
   /* initialize thread */
   t = init_thread(lbl, s, n);
+  *limit_cookie = t->stack_limit;
+  /* STACK REDO
   *limit_cookie = (void *) t->callstack_limit;
+  */
 
   /* initialize f and x placeholders in loaded bootstring unit */
   assert(location_known(CMM_label_raddr((CMM_label *) lbl)));
@@ -239,20 +269,32 @@ void *Cmm_CreateThread_helper(void *f, void *x, void *s, unsigned n,
 }
 @ 
 
+% ----------------------------------------------------------------------------
 \subsection{Walking the Stack}
+% ----------------------------------------------------------------------------
 
 Walking the stack is very easy, given our representation of activation stacks.
 To find the youngest activation, determine if an activation is the oldest in its thread, and to find the activation of a given activation's caller we do some pointer arithmetic; this arithmetic, of course, relies on the stacks' direction of growth.
 
 <<stack-walking functions>>=
 Cmm_Activation *Cmm_YoungestActivation(const Cmm_Cont *t) {
+  assert(t->stack_free > t->stack_base);
+  return (Cmm_Activation *) (((activation *) t->stack_free) - 1);
+
+  /* STACK REDO
   assert(t->callstack_free > t->callstack_base);
   return (Cmm_Activation *) (t->callstack_free - 1);
+  */
 }
 
 int Cmm_isOldestActivation(const Cmm_Activation *a) {
   thread *t = find_thread(a->u);
+
+  return (t->stack_base == a->locals);
+
+  /* STACK REDO
   return (t->callstack_free == t->callstack_base + 1);
+  */
 }
 
 Cmm_Activation *Cmm_NextActivation(const Cmm_Activation *a) {
@@ -260,12 +302,25 @@ Cmm_Activation *Cmm_NextActivation(const Cmm_Activation *a) {
     cmm_err("[runtime system] already at oldest activation in thread");
   }
 
+  return (Cmm_Activation *) (((activation *) (a->locals)) - 1);
+
+  /* STACK REDO
   return (Cmm_Activation *) (a - 1);
+  */
 }
 
 int Cmm_ChangeActivation(Cmm_Activation **a) {
   thread *t = find_thread((*a)->u);
 
+  if (t->stack_base == (*a)->locals)
+    return 0;
+  else {
+    (*a) = ((actptr) ((*a)->locals)) - 1;
+    t->stack_free = (void *) (((actptr) (*a)) + 1);
+    return 1;
+  }
+
+  /* STACK REDO
   if (t->callstack_free == t->callstack_base + 1)
 	return 0;
   else {
@@ -273,6 +328,7 @@ int Cmm_ChangeActivation(Cmm_Activation **a) {
     t->callstack_free--;
     return 1;
   }
+  */
 }
 @ 
 
@@ -299,9 +355,15 @@ void *Cmm_FindDeadLocalVar(const Cmm_Activation *a, unsigned n) {
 
 Cmm_Cont *Cmm_GetCont(const Cmm_Activation *a, Cmm_Word token) {
   thread *t    = find_thread(a->u);
-  lua_State *L = t->span_table.L;
+  lua_State *L; /* = t->span_table.L; */
 
+  /* FIX the definition of L */
+  assert(0);
+
+  /* HAVEN'T REDONE THIS STACK REDO */
+  /* STACK REDO
   t->callstack_free--;
+  */
 
   if (token != 0) {
     Cmm_Activation *act = a - 1;
@@ -322,7 +384,10 @@ Cmm_Cont *Cmm_GetCont(const Cmm_Activation *a, Cmm_Word token) {
     lua_pop(L, 2);
   }
  
+  /* HAVEN'T REDONE THIS :: STACK REDO
   (t->callstack_free - 1)->kappa = NULL;
+  */
+
   return (Cmm_Cont *) t;
 }
 @
@@ -332,6 +397,15 @@ Finding a descriptor is harder.
 
 <<stack-walking functions>>=
 Cmm_Dataptr Cmm_GetDescriptor(const Cmm_Activation *a, Cmm_Word token) {
+  assert(0);
+  return (Cmm_Dataptr) 0;
+}
+@ 
+
+<<OLD!!! stack-walking functions>>=
+Cmm_Dataptr Cmm_GetDescriptor(const Cmm_Activation *a, Cmm_Word token) {
+
+
   thread    *t = find_thread(a->u);
   lua_State *L = t->span_table.L;
   int        n;
@@ -360,11 +434,15 @@ Cmm_Dataptr Cmm_GetDescriptor(const Cmm_Activation *a, Cmm_Word token) {
 }
 @ 
 
+% ----------------------------------------------------------------------------
 \subsection{Returning Control To Client Runtime}
+% ----------------------------------------------------------------------------
 
 \ldots
 
+% ----------------------------------------------------------------------------
 \subsection{The Global Registers}
+% ----------------------------------------------------------------------------
 
 We have full access to the global variables, so these three functions for accesing the global registers are easy to implement in their present form.
 
@@ -401,7 +479,9 @@ void Cmm_RestoreGlobals_helper(unsigned gpu) {
 }
 @ 
 
+% ----------------------------------------------------------------------------
 \subsection{Controlling the Interpreter}
+% ----------------------------------------------------------------------------
 
 So we can better control how the runtime system fits in with the interpreter, we wrap the interpreter's [[cmm_interp_open]] and [[cmm_interp_close]] functions.
 For one thing, this allows us to register select C functions in the runtime system with the interpreter (to be called from {\PAL}), while keeping the interpreter's implementation otherwise ignorant of the runtime system.

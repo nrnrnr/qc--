@@ -3,17 +3,84 @@ LIBDIR=/home/lair/olinsky/lib
 INCLUDEDIR=include/
 
 CC=gcc
-CFLAGS=-g
+CFLAGS=-g -ansi -pedantic -Wall
 LIBS=-lm
 
 TOOLS=$BINDIR/tools
 DEPEND=$CC -MM -I$INCLUDEDIR -I.
 
-HDRS=encode.h interp.h machine.h intervals.h runtime.h client.h clients/gc.h
-SRCS=assert.c atom.c bcdis-dec.c encode.c except.c interp-dec.c intervals.c \
-     mclib.c mem.c runtime.c client.c clients/gc.c
-OBJS=assert.o atom.o bcdis-dec.o encode.o except.o interp-dec.o intervals.o \
-     mclib.o mem.o runtime.o
+NWFILES    = `echo *.nw`
+NWTEXFILES = ${NWFILES:%.nw=%.tex}
+
+COREHDRS   = activation.h \
+             assemblyunit.h \
+             ccall.h \
+             controlflow.h \
+             disasm.h \
+             encode.h \
+             encoding.h \
+             interp.h \
+             intervals.h \
+             label.h \
+             lualink.h \
+             machine.h \
+             operator.h \
+             runtime.h \
+             stack.h \
+             table.h \
+             thread.h \
+             types.h \
+             uid.h \
+             value.h
+
+INTERFACES = activation.nw \
+             assemblyunit.nw \
+             ccall.nw \
+             controlflow.nw \
+             disasm.nw \
+             encoding.nw \
+             intervals.nw \
+             label.nw \
+             lualink.nw \
+             operator.nw \
+             stack.nw \
+             table.nw \
+             thread.nw \
+             types.nw \
+             uid.nw \
+             value.nw
+
+EXTSRCS    = assert.c \
+             atom.c \
+             except.c \
+             mclib.c \
+             mem.c
+
+INTERPSRCS = assemblyunit.c \
+             ccall.c \
+             controlflow.c \
+             disasm-dec.c \
+             encode.c \
+             encoding.c \
+             interp-dec.c \
+             intervals.c \
+             label.c \
+             lualink.c \
+             operator.c \
+             runtime.c \
+             stack.c \
+             table.c \
+             thread.c \
+             uid.c
+
+CORESRCS   = $EXTSRCS $INTERPSRCS
+COREOBJS   = ${CORESRCS:%.c=%.o}
+
+CLIENTHDRS = client.h clients/gc.h
+CLIENTSRCS = client.c clients/gc.c
+
+HDRS       = $COREHDRS $CLIENTHDRS
+SRCS       = $CORESRCS $CLIENTSRCS
 
 TOP=..
 INTERP=evaluating
@@ -26,7 +93,25 @@ gc:V:  clients/gc_client
 
 code:V: $SRCS $HDRS
 
-doc:V: design.ps state.ps
+test:V: interp
+       cd test/
+       mk test
+       cd ..
+
+interfaces:V: interfaces.dvi
+
+interfaces.nw: $INTERFACES
+    rm -f interfaces.nw
+    touch interfaces.nw
+    for i in $INTERFACES;
+    do
+       echo "\section{Interface: [[$i]]}" >> interfaces.nw
+       sed -e '/noweb-code-mode/d' \
+           -e '/^This document contains /d' \
+           -e '/section{Interface/d' \
+           -e '/section{Implementation/q' $i | \
+       sed -e '/section{Implementation/d' >> interfaces.nw
+    done
 
 design.tex: design.inc
 	echo "\input{design.inc}" > $target
@@ -43,13 +128,15 @@ depend:V: $SRCS $HDRS
     $DEPEND $SRCS | sed 's/gc\.o:/clients\/gc\.o:/' >> mkfile
 
 clean:V: clean-tex clean-code clean-obj
-	rm -f design.tex state.tex bytecode.tex interp.tex intervals.tex opgen.tex client.tex clients/gc.tex runtime.tex interp clients/gc_client *~
+	rm -f $NWTEXFILES interfaces.nw clients/gc.tex interp clients/gc_client *~
 
 clean-tex:V:
 	rm -f *.blg *.log *.dvi *.inc *.toc *.aux clients/*.blg clients/*.inc
 
 clean-code:V:
-    rm -f *.m *.h clients/*.h *.i *-dec.c intervals.c encode.c runtime.c client.c decode.fetch bytecode.sled clients/gc.c clients/*.i
+    rm -f *.m *.i decode.fetch bytecode.sled clients/*.i
+    rm -f $COREHDRS $INTERPSRCS
+    rm -f $CLIENTHDRS $CLIENTSRCS
 
 clean-obj:V:
     rm -f *.o clients/*.o
@@ -90,14 +177,17 @@ runtime.c: runtime.nw
 '(([^/]*/)*)(.*)\.h$':RD:       '\1\3.nw'
 	$NOTANGLE -L -R$stem3.h $prereq > $target
 
-%.m:D: interp.nw
+'(([^/]*/)*)(.*)\.c$':RD:       '\1\3.nw'
+	$NOTANGLE -L -R$stem3.c $prereq > $target
+
+%.m:D: %.nw
     $NOTANGLE -R$target $prereq > $target
 
 #
 # intermediate code targets
 #
 '(([^/]*/)*)(.*)\.i$':RD:       '\1\3.c' $HDRS
-    $CC -P -E -I$INCLUDEDIR -I. $prereq > $target
+    $CC -P -E -I$INCLUDEDIR -I. $stem3.c > $target
 
 #
 # object code targets
@@ -123,11 +213,11 @@ optest:V: opgen
 #
 # compiled targets
 #
-interp: $OBJS client.o
-    $CC -g $LIBS -L$LIBDIR -o $target $OBJS client.o $LIBDIR/liblua.a $LIBDIR/liblualib.a
+interp: $COREOBJS client.o
+    $CC $CFLAGS $LIBS -L$LIBDIR -o $target $COREOBJS client.o $LIBDIR/liblua.a $LIBDIR/liblualib.a
 
 clients/gc_client: $OBJS clients/gc.o
-    $CC -g $LIBS -L$LIBDIR -o $target $OBJS clients/gc.o $LIBDIR/liblua.a $LIBDIR/liblualib.a
+    $CC $CFLAGS $LIBS -L$LIBDIR -o $target $COREOBJS clients/gc.o $LIBDIR/liblua.a $LIBDIR/liblualib.a
 
 #
 # dependencies 
@@ -135,17 +225,53 @@ clients/gc_client: $OBJS clients/gc.o
 # DO NOT DELETE THIS LINE -- mk depend depends on it
 assert.o: assert.c
 atom.o: atom.c
-bcdis-dec.o: bcdis-dec.c interp.h intervals.h encode.h machine.h
-encode.o: encode.c encode.h
 except.o: except.c
-interp-dec.o: interp-dec.c interp.h intervals.h include/mclib.h \
- encode.h machine.h
-intervals.o: intervals.c intervals.h
 mclib.o: mclib.c
 mem.o: mem.c
-runtime.o: runtime.c runtime.h interp.h intervals.h include/mclib.h \
- encode.h machine.h
-client.o: client.c client.h interp.h intervals.h include/mclib.h \
- encode.h machine.h runtime.h
-clients/gc.o: clients/gc.c clients/gc.h runtime.h interp.h intervals.h \
- include/mclib.h encode.h machine.h
+assemblyunit.o: assemblyunit.c assemblyunit.h controlflow.h \
+ activation.h table.h types.h machine.h uid.h value.h lualink.h \
+ encoding.h interp.h intervals.h label.h thread.h
+ccall.o: ccall.c ccall.h table.h value.h types.h machine.h label.h \
+ assemblyunit.h controlflow.h activation.h uid.h lualink.h interp.h \
+ intervals.h thread.h
+controlflow.o: controlflow.c controlflow.h activation.h table.h \
+ types.h machine.h uid.h value.h
+disasm-dec.o: disasm-dec.c disasm.h label.h assemblyunit.h \
+ controlflow.h activation.h table.h types.h machine.h uid.h value.h \
+ operator.h
+encode.o: encode.c encode.h
+encoding.o: encoding.c encoding.h table.h assemblyunit.h controlflow.h \
+ activation.h types.h machine.h uid.h value.h encode.h label.h \
+ lualink.h operator.h interp.h intervals.h thread.h
+interp-dec.o: interp-dec.c interp.h activation.h table.h types.h \
+ machine.h uid.h value.h assemblyunit.h controlflow.h intervals.h \
+ label.h thread.h lualink.h encode.h ccall.h operator.h encoding.h \
+ stack.h
+intervals.o: intervals.c intervals.h
+label.o: label.c label.h assemblyunit.h controlflow.h activation.h \
+ table.h types.h machine.h uid.h value.h lualink.h interp.h \
+ intervals.h thread.h
+lualink.o: lualink.c lualink.h table.h interp.h activation.h types.h \
+ machine.h uid.h value.h assemblyunit.h controlflow.h intervals.h \
+ label.h thread.h encoding.h
+operator.o: operator.c operator.h table.h value.h types.h machine.h \
+ stack.h lualink.h interp.h activation.h uid.h assemblyunit.h \
+ controlflow.h intervals.h label.h thread.h
+runtime.o: runtime.c runtime.h label.h assemblyunit.h controlflow.h \
+ activation.h table.h types.h machine.h uid.h value.h interp.h \
+ intervals.h thread.h lualink.h ccall.h
+stack.o: stack.c stack.h value.h types.h machine.h interp.h \
+ activation.h table.h uid.h assemblyunit.h controlflow.h intervals.h \
+ label.h thread.h
+table.o: table.c table.h
+thread.o: thread.c thread.h intervals.h label.h assemblyunit.h \
+ controlflow.h activation.h table.h types.h machine.h uid.h value.h \
+ interp.h
+uid.o: uid.c uid.h intervals.h thread.h label.h assemblyunit.h \
+ controlflow.h activation.h table.h types.h machine.h value.h
+client.o: client.c client.h runtime.h label.h assemblyunit.h \
+ controlflow.h activation.h table.h types.h machine.h uid.h value.h \
+ interp.h intervals.h thread.h disasm.h ccall.h
+clients/gc.o: clients/gc.c clients/gc.h runtime.h label.h assemblyunit.h \
+ controlflow.h activation.h table.h types.h machine.h uid.h value.h \
+ interp.h intervals.h thread.h ccall.h

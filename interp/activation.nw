@@ -1,0 +1,59 @@
+% -*- mode: Noweb; noweb-code-mode: c-mode -*- %
+
+This document contains the interface and implementation of a {\PAL} activation record.
+
+% ----------------------------------------------------------------------------
+\section{Interface}
+% ----------------------------------------------------------------------------
+
+<<activation.h>>=
+#ifndef _ACTIVATION_H
+#define _ACTIVATION_H
+
+#include "table.h"
+#include "types.h"
+#include "uid.h"
+#include "value.h"
+
+<<type definitions>>
+
+#endif /* _ACTIVATION_H */
+@ 
+
+% ----------------------------------------------------------------------------
+\subsection{Data Structures}
+% ----------------------------------------------------------------------------
+
+\paragraph{{\PAL} Call-site Annotations}
+We make use of Lua tables in storing call-site annotations, and thus represent the members of type [[annotations]] with references to Lua tables.
+<<type definitions>>=
+typedef struct {
+  table also_cuts_to;
+  table also_unwinds_to;
+  table also_returns_to;
+  bool  also_aborts;
+} annotations;
+@
+
+\paragraph{Activation Records}
+The [[activation]] type is straightforward; its members are the elements of the formal activation tuple presented above. [[locals_end]] and [[stackdata_end]] point help delimit the space used by an activation's local environment; this becomes important when we need to recover space allocated to dead activations.  Note also that an activation's program counter is stored in an actual pointer into bytecode and not a relocatable address; by the time that activation records are generated (at runtime), program memory is well-addressed.
+<<type definitions>>=
+typedef struct activation_t {
+  bytecodeptr          pc;
+
+  stack                locals;
+  sptr                 locals_end;
+
+  datastack            stackdata;
+  dataptr              stackdata_end;
+
+  annotations         *kappa;
+
+  uid                  u;
+
+  struct activation_t *callee;
+} activation;
+
+typedef activation *actstack;
+typedef activation *actptr;
+@

@@ -1,0 +1,141 @@
+% -*- mode: Noweb; noweb-code-mode: c-mode -*- %
+
+This document contains the interface and implementation of {\PAL} assembly unit representation.
+
+% ----------------------------------------------------------------------------
+\section{Interface}
+% ----------------------------------------------------------------------------
+
+<<assemblyunit.h>>=
+#ifndef _ASSEMBLYUNIT_H
+#define _ASSEMBLYUNIT_H
+
+#include <mclib.h>
+#include <lua.h>
+#include "controlflow.h"
+#include "table.h"
+#include "types.h"
+#include "machine.h"
+
+<<type definitions>>
+
+<<global variable declarations>>
+<<function prototypes>>
+
+#endif /* _ASSEMBLYUNIT_H */
+@ 
+
+% ----------------------------------------------------------------------------
+\subsection{Data Structures}
+% ----------------------------------------------------------------------------
+
+To represent an assembly unit in the interpreter, we create the type [[assembly_unit]] to keep track of all information that is common to code in an assembly unit yet not global to the interpreter.
+
+<<type definitions>>=
+typedef struct {
+  unsigned   int id;
+
+  byte_order byte_order;
+  unsigned   memsize;
+  unsigned   ptrsize;
+
+  RBlock     def_section;
+  table      section_table;
+  table      label_table;
+  table      span_table;
+} assembly_unit;
+@
+
+To distinguish assembly unit source strings from assembly unit source files, we create the [[typedef]]'d [[enum]] type [[assembly_unit_type]].
+
+<<type definitions>>=
+typedef enum {
+  SRC_STRING, SRC_FILE, SRC_STDIN
+} assembly_unit_type;
+@ 
+
+% ----------------------------------------------------------------------------
+\subsection{Utility Functions}
+% ----------------------------------------------------------------------------
+
+To create a new [[assembly_unit]], we provide the function [[new_assembly_unit]] to create and initialize a fresh [[struct]].
+<<function prototypes>>=
+assembly_unit *new_assembly_unit(lua_State *L);
+@ 
+
+% ----------------------------------------------------------------------------
+\subsection{Global Variables}
+% ----------------------------------------------------------------------------
+
+To reduce unnecessary parameter-passing through a myriad of functions, we maintain a global pointer to the [[assembly_unit]] representing the current assembly unit.
+
+<<global variable declarations>>=
+extern assembly_unit *unit;
+extern table          assembly_units_table;
+@ 
+
+<<global variable definitions>>=
+assembly_unit    *unit                 = NULL;
+table             assembly_units_table;
+
+extern procedure *curr_proc;
+@ 
+
+% ----------------------------------------------------------------------------
+\section{Implementation}
+% ----------------------------------------------------------------------------
+
+<<assemblyunit.c>>=
+#include "assemblyunit.h"
+
+#include <stdlib.h>
+#include "lualink.h"
+#include "encoding.h"
+#include "interp.h"
+
+<<global variable definitions>>
+<<function definitions>>
+@
+
+% ----------------------------------------------------------------------------
+\subsection{Utility Functions}
+% ----------------------------------------------------------------------------
+
+To create and initialize an [[assembly_unit]] struct, we must make sure to create empty table references and default target-architecture values.
+We use the constants [[#define]]d in [[machine.h]] to initialize the architecture information.
+<<function definitions>>=
+assembly_unit *new_assembly_unit(lua_State *L) {
+  static unsigned next_au_id = 1;
+
+  assembly_unit *au;
+
+  au = (assembly_unit *) malloc(sizeof(assembly_unit));
+  mem_assert(au);
+
+  au->id          = next_au_id++;
+  au->byte_order  = DEF_BYTE_ORDER;
+  au->memsize     = DEF_MEMSIZE;
+  au->ptrsize     = sizeof(void *) * 8;
+
+  au->def_section     = NULL;
+  au->section_table   = fresh_table();
+  au->label_table     = fresh_table();
+
+  /* store assembly_unit in table */
+  lua_pushtable(L, assembly_units_table);
+  lua_pushnumber(L, (double) au->id);
+  lua_pushusertag(L, (void *) au, lua_assembly_unit_tag);
+  lua_settable(L, -3);
+  lua_pop(L, 1); /* pop the assembly_units_table */
+
+  /* reset global variables */
+  unit      = au;
+  curr_proc = NULL;
+
+  /* create and enter default section */
+  assert(lua_gettop(L) == 0);
+  lua_CMM_section(L);
+
+  return au;
+}
+@

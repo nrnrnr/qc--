@@ -54,6 +54,10 @@ Its implementation is split across files [[gc.h]] and [[gc.c]].
 <<gc.c>>=
 #include "gc.h"
 
+#include <stdlib.h>
+#include <string.h>
+#include "ccall.h"
+
 <<global variable definitions>>
 
 <<garbage collection functions>>
@@ -165,7 +169,7 @@ int cmmprint(int i) {
 @ 
 To register this function, the client simply calls [[register_c_func]].
 <<register needed C functions with the interpreter>>=
-  register_c_func("cmmprint", cmmprint, "int:int");
+  register_c_func("cmmprint", (void *) cmmprint, "int:int");
 @ 
 
 % ------------------------------------------------------------------ 
@@ -195,10 +199,10 @@ may be used.
 @ 
 
 <<global variable definitions>>=
-static void     *fromspace,              /* used only at GC time */
-                *tospace;
-static unsigned  semispacesize;          /* size of each semi-space */
-static void     *hp = NULL, *heaplimit;  /* used for every allocation */
+static unsigned char *fromspace,              /* used only at GC time */
+                     *tospace;
+static unsigned       semispacesize;          /* size of each semi-space */
+static unsigned char *hp = NULL, *heaplimit;  /* used for every allocation */
 
 /* statistics */
 static unsigned int nalloc;
@@ -210,7 +214,7 @@ static unsigned int ncopied;
   semispacesize = GROWTH_UNIT;
 
   fromspace = malloc(semispacesize);  assert(fromspace);
-  tospace   = malloc(semispacesize);  assert(tospace);
+  tospace   = malloc(semispacesize);  assert(tospace  );
 
   heaplimit = fromspace + semispacesize;
   hp        = fromspace;
@@ -244,8 +248,8 @@ DOCUMENTATION HERE
 
 <<garbage collection functions>>=
 void *alloc(void *ty) {
-  void     *m;
-  heap_tag *tag;
+  unsigned char *m;
+  heap_tag      *tag;
 
   unsigned  size = (unsigned) (((u_int8 *) ty)[0]);
 
@@ -272,7 +276,7 @@ void *alloc(void *ty) {
   /* update stats */
   nalloc++;
 
-  return m + sizeof(heap_tag);
+  return (void *) (m + sizeof(heap_tag));
 }
 @ 
 
@@ -336,7 +340,7 @@ void gc_growheap(unsigned new_semispacesize) {
 
   /* allocate new memory */
   newfromspace  = malloc(new_semispacesize);  assert(newfromspace);
-  newtospace    = malloc(new_semispacesize);  assert(newtospace);
+  newtospace    = malloc(new_semispacesize);  assert(newtospace  );
 
   /* copy data */
   tospace       = newfromspace;
@@ -355,7 +359,7 @@ DOCUMENTATION HERE
 
 <<garbage collection functions>>=
 void gc_copy(void) {
-  void           *scanp;
+  unsigned char  *scanp;
   Cmm_Activation *a = Cmm_YoungestActivation(curr_thread);
 
   scanp     = hp = tospace;
@@ -446,8 +450,9 @@ int isinspace(void *ptr, void *semispace);
 DOCUMENTATION
 
 <<macro definitions>>=
-#define isinspace(LOC, SPACE) ((SPACE) <= (LOC) && \
-                               (LOC) < (SPACE) + semispacesize)
+#define isinspace(LOC, SPACE) \
+((SPACE) <= (unsigned char *) (LOC) && \
+(unsigned char *) (LOC) < (SPACE) + semispacesize)
 @ 
 
 DOCUMENTATION
@@ -560,6 +565,8 @@ int main(int argc, char *argv[]) {
   Cmm_close();
 
   <<shut down garbage collection services>>
+
+  return 0;
 }
 @ 
 
@@ -578,7 +585,7 @@ static unsigned int gc_verbosity = 0;
 {
   int i;
   for (i = 1; i < argc; i++) {
-    if (strcasecmp(argv[i], "-v") == 0) {
+    if (strcmp(argv[i], "-v") == 0) {
       gc_verbosity = 1;
     } else {
       if (filename != NULL) {

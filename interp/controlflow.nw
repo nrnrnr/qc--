@@ -1,0 +1,71 @@
+% -*- mode: Noweb; noweb-code-mode: c-mode -*- %
+
+This document contains the interface and implementation of the C  representations of {\PAL} control flow structures.
+
+% ----------------------------------------------------------------------------
+\section{Interface}
+% ----------------------------------------------------------------------------
+
+<<controlflow.h>>=
+#ifndef _CONTROLFLOW_H
+#define _CONTROLFLOW_H
+
+#include <mclib.h>
+#include "activation.h"
+#include "table.h"
+#include "uid.h"
+
+<<type definitions>>
+<<global variable declarations>>
+
+#endif /* _CONTROLFLOW_H */
+@ 
+
+% ----------------------------------------------------------------------------
+\subsection{Procedures and Continuations}
+% ----------------------------------------------------------------------------
+
+The operational semantics for procedure-calling and continuation-calling instructions require more information about procedures and continuations than simple program counters.  
+We create types [[procedure]] and [[continuation]] to encapsulate the necessary information for representing procedures and continuations.  
+Note that we use [[RAddr]]s to represent addresses in program memory, for these structures are used during the interpretation of the input Lua script before sections of program memory are permanently located at addresses.  
+An [[RAddr]] is a relocatable address and is defined by the NJ Machine-Code Toolkit, as will be explained later.
+We must also make sure to store a copy of the uid of the continuation's activation; if a continuation were dead when we tried to cut to it, we would have to look at the continuation's [[u]] and not [[dest_act->u]], which may well have been overwritten by a live activation. 
+
+<<type definitions>>=
+typedef struct continuation {
+  RAddr               raddr;
+  actptr              dest_act;   /* pointer to destination activation  */
+  uid                 u;          /* uid of continuation's activation   */
+
+  struct continuation *next;      /* for use in a procedure's cont_list */
+} continuation;
+
+typedef struct {
+  RAddr         raddr;
+  unsigned int  num_locals;
+  unsigned int  stackdata_size;
+  continuation *cont_list;
+
+  table         span_table;
+} procedure;
+@
+
+% ----------------------------------------------------------------------------
+\section{Implementation}
+% ----------------------------------------------------------------------------
+
+<<controlflow.c>>=
+#include "controlflow.h"
+
+<<global variable definitions>>
+@
+
+To keep track of the current procedure, we use a global pointer.
+
+<<global variable declarations>>=
+extern procedure *curr_proc;
+@ 
+
+<<global variable definitions>>=
+procedure *curr_proc = NULL;
+@

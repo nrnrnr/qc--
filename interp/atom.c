@@ -1,4 +1,3 @@
-static char rcsid[] = "$Id$";
 #include <cii/atom.h>
 #include <string.h>
 #include <cii/assert.h>

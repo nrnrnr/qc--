@@ -1,0 +1,73 @@
+% -*- mode: Noweb; noweb-code-mode: c-mode -*- %
+
+This document contains basic type definitions.
+
+% ----------------------------------------------------------------------------
+\section{Interface}
+% ----------------------------------------------------------------------------
+
+<<types.h>>=
+#ifndef _TYPES_H
+#define _TYPES_H
+
+#include <inttypes.h>
+
+<<type definitions>>
+
+#include "machine.h"
+
+#endif /* _TYPES_H */
+@ 
+
+% ----------------------------------------------------------------------------
+\subsection{Type Definitions}
+% ----------------------------------------------------------------------------
+
+\paragraph{Basic Types}
+To ensure that {\PAL} values are stored in C variables of the correct bit width, we make use of the type definitions in [[<inttypes.h>]], a part of the ISO C99 standard library.  We simply [[typedef]] these types to basic types of our own:
+<<type definitions>>=
+/* unsigned integer types */
+typedef uint8_t  u_int1;
+typedef uint8_t  u_int8;
+typedef uint16_t u_int16;
+typedef uint32_t u_int32;
+typedef uint64_t u_int64;
+
+/* signed integer types */
+typedef int8_t   s_int8;
+typedef int16_t  s_int16;
+typedef int32_t  s_int32;
+typedef int64_t  s_int64;
+
+/* C-- types */
+typedef u_int1   bool;
+typedef u_int1   bits1;
+typedef u_int8   bits8;
+typedef u_int16  bits16;
+typedef u_int32  bits32;
+typedef u_int64  bits64;
+@ 
+We have not been able to find a standard header file that [[typedef]]s standard bit-width floating-point types.
+
+<<type definitions>>=
+typedef u_int8 *bytecodeptr;
+@
+
+For now, then, we store some machine-dependent [[typedef]]s in a separate header file, [[machine.h]].
+See [[interp.nw]] for the definition of [[machine.h]].
+
+\paragraph{Architecture-Information Types}
+
+So the interpreter can properly simulate the execution of {\PAL} code
+on a target machine, we must also keep track of such
+architecture-related information as byte-order. 
+\remark{There should be some sort of check at startup time to ensure
+that byte order is consistent with the machine running the
+interpreter.
+That check should be written here.}
+<<type definitions>>=
+typedef enum {
+  LITTLE,
+  BIG
+} byte_order;
+@
