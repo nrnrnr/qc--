@@ -290,6 +290,7 @@ module Eval = Rtleval.Make(Asm.RelAddr)
 
 let compile_const env target exp = Eval.compile (expr env target exp)
 let link_const    env target exp = Eval.link    (expr env target exp)
+let eval_const    env target exp = Eval.eval    (expr env target exp)
 @
 
 % ------------------------------------------------------------------ 
@@ -1003,12 +1004,14 @@ end (* of module StackData *)
 \end{note}
 
 <<Make memory declarations>>=
-let initialized_data target asm expr = 
-    Impossible.unimp "initialized data in global memory declaration"
+let initialized_data env target asm expr = 
+        match eval_const env target expr with
+        | Eval.LinkTime e    -> asm ++ Asm.addr e
+        | Eval.CompileTime b -> asm ++ Asm.value b
 
 let rec init env target asm = function
     | A.InitAt(x,_)   -> init env target asm x
-    | A.InitExprs(es) -> foldl (initialized_data target) asm es
+    | A.InitExprs(es) -> foldl (initialized_data env target) asm es
     | A.InitUStr(_)      (*XXX*)
     | A.InitStr(_)    -> (*XXX*)
         Impossible.unimp "initialized data in global memory declaration"

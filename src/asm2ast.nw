@@ -377,6 +377,9 @@ let define_const (n,c) b    =
 let define_local (Sym n)    = CurSection(A.Datum(A.Label n))
 @
 
+A link-time constant is an expression of the native pointer type or is
+compile-time constant. Link-time expressions are simple, because very
+operators are defined on link-time values.
 
 <<module make>>=
 module RelAddr = struct
@@ -387,7 +390,7 @@ end
 type t = A.expr
 
 let sym   l = A.Fetch (A.Var(None,l))   (*XXX ?? *)
-let const k = A.Int(k, Some(A.BitsTy(P.target.Target2.pointersize))) 
+let const k = A.Int(k, Some(A.BitsTy(Bits.width k)))
 let add x y = A.PrimOp ("add", [(None,x);(None,y)])
 let sub x y = A.PrimOp ("sub", [(None,x);(None,y)])
 
@@ -418,7 +421,7 @@ let value  v =
         CurSection(A.Datum(A.MemDecl(ty, A.FixSize one, Some init)))
 <<module make>>=
 let addr e  =
-    let ty   = pointer          in
+    let ty   = pointer          in      (* e is of native pointer type *)
     let init = A.InitExprs([e]) in
         CurSection(A.Datum(A.MemDecl(ty, A.FixSize one, Some init)))
 

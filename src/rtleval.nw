@@ -59,8 +59,13 @@ end
 <<module type S>>=
 module type S = sig
     type t
+    type value =
+        | CompileTime of Bits.bits       (* compile-time *)
+        | LinkTime    of t               (* link-time    *)
+        
     val link:           Rtl.exp -> t            (* Error.ErrorExn *)
     val compile:        Rtl.exp -> Bits.bits    (* Error.ErrorExn *)
+    val eval:           Rtl.exp -> value        (* Error.ErrorExn *)
 end    
 @
 
@@ -107,6 +112,10 @@ end
 
 module Make (Exp: EXP) = struct
     type t = Exp.t
+    type value = 
+        | CompileTime of Bits.bits 
+        | LinkTime    of t
+
     <<Make>>
 end
 @
@@ -156,8 +165,6 @@ compile-time ([[CT]]) or link-time ([[LT]]) values.
 <<Make>>=
 type ('a, 'b) choice    = CT of 'a      (* compile-time *)
                         | LT of 'b      (* link-time    *)
-
-type value = (Bits.bits, Exp.t) choice
 @
 
 Every compile-time value can be transformed into a linke-time value
@@ -165,7 +172,7 @@ using [[link_time]]. This is done, when the evaluation detects that a
 value is not a compile-time value.
 
 <<Make>>=
-let link_time (v:value) = match v with
+let link_time v = match v with
     | LT x -> x
     | CT x -> Exp.const x     
 @
@@ -177,7 +184,7 @@ a list of compile-time values, if all values are compile-time values, or
 a list of link-time values, if at least on value is a link-time value.
 
 <<Make>>=
-let lift (values: value list) = (* (Bits.bits list, Exp.t list) choice *)
+let lift values = (* (Bits.bits list, Exp.t list) choice *)
     let rec choose = function
         | (cts, [])                     -> CT (List.rev cts)
         | (cts, (CT x)  :: xs)          -> choose (x::cts, xs)
@@ -210,5 +217,8 @@ let link    e = link_time (exp (Rtl.Convert.exp e))
 let compile e = match exp (Rtl.Convert.exp e) with
     | CT x      -> x
     | LT _      -> E.error "not a compile-time constant expression"
+let eval    e =  match exp (Rtl.Convert.exp e) with
+    | CT x      -> CompileTime x
+    | LT x      -> LinkTime x
 @
 
