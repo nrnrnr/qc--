@@ -18,13 +18,12 @@ This module provides unsigned operations on {\ocaml} [[int64]] values
 and some conversions. The operations just add a new interpretation to
 values of type [[int64]] but no new type is introduced.
 
-
 % ------------------------------------------------------------------ 
 \subsection{Interface}
 % ------------------------------------------------------------------ 
 
 Values of [[int64]] can be converted into [[float]] values by
-re-interpreting the bit-patters of the [[int64]] value. This is a much
+re-interpreting the bit patterns of the [[int64]] value. This is a much
 different operation than provided by the [[Int64]] module which
 converts between [[float]] and [[int64]] by maintaining the numerical
 value. This conversion maintains the bit patters and thus relates two
@@ -32,31 +31,24 @@ very different numerical values.
 
 Primitive functions, called \textit{external}, are implemented in C,
 \textit{internal} functions use them and are implemented in {\ocaml}. 
-
 <<uint64.mli>>=
 <<external functions>>
 <<internal functions>>
 @
-
 Conversion to and from [[float]] values be re-interpretation of the
 bit-patterns.
-
 <<external functions>>=
 external of_float:   float -> int64                  = "uint64_f2i"
 external to_float:   int64 -> float                  = "uint64_i2f"
 @
-
 The function [[of_int]] copies an [[int]] bitwise into an [[int64]]
 value; unlike [[Int64.of_int]] no sign-extension is performed.
-
 <<external functions>>=
 external of_int:     int   -> int64                  = "uint64_i2i"
 @
-
 The following arithmetical operations consider their arguments and
 return values as unsigned integers. Otherwise they implement the
 behavior of the corresponding functions in the [[Int64]] module.
-
 <<external functions>>=
 external cmp:        int64 -> int64 -> int           = "uint64_compare"
 external add:        int64 -> int64 -> int64         = "uint64_add"
@@ -65,13 +57,11 @@ external mul:        int64 -> int64 -> int64         = "uint64_mul"
 external div:        int64 -> int64 -> int64         = "uint64_div"
 external modu:       int64 -> int64 -> int64         = "uint64_mod"
 @
-
 The [[of_string]] function parses a string into a [[int64]] value. 
 Unlike the corresponding function from [[Int64]] it uses the highest
 result bit as well and thus considers the result as an unsigned
 integer. Also unlike [[Int64.of_string]], it considers a number to be
 in octal notation, when it starts with a [[0]].
-
 \begin{quote}
     \begin{tabular}{ll}
         Prefix         & encoding \\
@@ -83,13 +73,10 @@ in octal notation, when it starts with a [[0]].
         else           & decimal     \\
     \end{tabular}
 \end{quote}
-
 <<external functions>>=
 external of_string:  string -> int64                 = "uint64_of_string"
 @
-
-Unisgned comparison of [[int64]] values.
-
+Unsigned comparison of [[int64]] values.
 <<internal functions>>=
 val eq:              int64 -> int64 -> bool     (* equal         *)
 val lt:              int64 -> int64 -> bool     (* less than     *)
@@ -97,9 +84,7 @@ val gt:              int64 -> int64 -> bool     (* greather than *)
 val le:              int64 -> int64 -> bool     (* less equal    *)
 val ge:              int64 -> int64 -> bool     (* greater equal *)
 @
-
 Shift operations for unsigned [[int64]] values.
-
 <<internal functions>>=
 val shl:             int -> int64 -> int64      (* shift left  *)
 val shr:             int -> int64 -> int64      (* shift right *)
@@ -112,27 +97,25 @@ val shr:             int -> int64 -> int64      (* shift right *)
 The implementation is imostly done in C like the implementation of
 [[Int64]].  It simply provides some additional operations in the same
 style as the [[Int64]] implementation. 
-
 <<uint64.ml>>=
 module I = Int64
 <<external functions>>
 @
-
 Comparison functions are implemented with the help of the [[cmp]]
 primitive. 
-
 <<uint64.ml>>=
 let eq  x y =    (cmp x y) = 0
 let lt  x y =    (cmp x y) < 0
 let gt  x y =    (cmp x y) > 0
 let le  x y =    (lt x y) || (eq x y)
 let ge  x y =    (gt x y) || (eq x y)
-@
 
-The shift-operations can be taken from the [[Int64]] module because
+let le  x y =    not (gt x y)
+let ge  x y =    not (lt x y)
+@
+The shift operations can be taken from the [[Int64]] module because
 they are the same for signed and unsigned values.  This applies to
 many other operations as well.
-
 <<uint64.ml>>=
 let shl n x =    I.shift_left x n
 let shr n x =    I.shift_right_logical x n  
@@ -141,14 +124,12 @@ let shr n x =    I.shift_right_logical x n
 % ------------------------------------------------------------------ 
 \subsection{C implementation of the primitives}
 % ------------------------------------------------------------------ 
-
 <<uint64p.c>>=
 #include <caml/fail.h>
 #include <caml/mlvalues.h>
 #include <caml/alloc.h>
 #include <caml/config.h>
 @
-
 Unsigned comparison of [[int64]] values; this implements the
 (mathematical) sign function of the difference of the two values. 
 <<uint64p.c>>=
@@ -196,14 +177,12 @@ Implementation of unsigned arithmetic operators.
 value uint64_add(value v1, value v2)  /* ML */
 { return copy_int64((uint64)Int64_val(v1) + (uint64)Int64_val(v2)); }
 
-<<uint64p.c>>=
 value uint64_sub(value v1, value v2)  /* ML */
 { return copy_int64((uint64)Int64_val(v1) - (uint64)Int64_val(v2)); }
 
-<<uint64p.c>>=
 value uint64_mul(value v1, value v2)  /* ML */
 { return copy_int64((uint64)Int64_val(v1) * (uint64)Int64_val(v2)); }
-
+@ 
 <<uint64p.c>>=
 value uint64_div(value v1, value v2)  /* ML */
 {
@@ -212,7 +191,6 @@ value uint64_div(value v1, value v2)  /* ML */
     return copy_int64((uint64)Int64_val(v1) / (uint64)divisor);
 }
 
-<<uint64p.c>>=
 value uint64_mod(value v1, value v2)  /* ML */
 {
     int64 divisor = Int64_val(v2);
@@ -281,4 +259,3 @@ value uint64_of_string(value s)          /* ML */
     return copy_int64(res);
 }
 @
-
