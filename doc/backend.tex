@@ -15,13 +15,18 @@
 \catcode`\$=3 % dollar sign is math shift
 
 
-\title{Building a Back End for Quick~{\PAL} \addtherevision}
+\title{Hack Compilers in Your Spare Time?\\
+  Build a Back End for Quick~{\PAL}! \addtherevision}
 \author{Norman Ramsey}
 
 \begin{document}
 
 \maketitle
-\tableofcontents
+
+{\small
+\tableofcontents}
+
+\bigskip
 
 This document describes what needs to be done to add a new back end to
 the Quick~{\PAL} compiler.
@@ -98,7 +103,7 @@ recognizer.
 Without some abstraction, it can be hard to write these components by
 hand.
 
-\section{Back-end overview}
+\section{Consider the back end}
 
 The major machine-dependent components of the back end are
 these:\footnote
@@ -121,7 +126,7 @@ In the long run,
 we hope to generate all these components from a \lrtl\ description,
 but this technology is still in the research stages.
 
-\section{Representation of instructions}
+\section{Choose a representation of instructions}
 
 Choose a representation for instructions to be shared by your
 assembler and your recognizer.
@@ -159,7 +164,7 @@ letter of its name.
 As of June 14, 2002, only the FORTRAN placer is implemented.
 It's available from Lua as \texttt{Placevar.fortran}.
 
-\section{Writing your code expander}
+\section{Write your code expander}
 
 Your code expander must not only establish the machine invariant, but
 must also cooperate with your recognizer.
@@ -191,7 +196,7 @@ It might also be reasonable to write a code expander by hand, using
 the ``maximal munch'' style of ML~pattern matching expounded in Andrew
 Appel's compiler text.
 
-\section{Writing your recognizer}
+\section{Write your recognizer}
 
 Our research group has invested substantial effort in hand-writing and
 automatically generating top-down recognizers.
@@ -313,9 +318,10 @@ examples.
 The compiler currently provides no support for splitting arithmetic
 (i.e., simulating large arithmetic on a machine with a small word size).
 
-\section{Calling conventions}
+\section{Call your conventions}
 
-You will want to implement the C~calling conventions, and possibly one
+You will want to implement the C~calling convention.
+You may want one
 or more specialized {\PAL} calling conventions.
 We don't know how to do this yet.
 
@@ -360,7 +366,7 @@ the lifetime of an activation?
 Implement the local C calling convention, or possibly a subset.
 
 
-\section{Global register variables}
+\section{Reserve some global registers}
 
 Develop an automaton for assigning locations to global registers.
 This automaton should probably be designed in concert with the calling
@@ -370,13 +376,19 @@ calling conventions, or at least to detect any inconsistency at
 compile time.}
 
 
-\section{Register allocation}
+\section{Aim at your target}
+
+You have to build a \texttt{Target.t}.
+This code is still an embarrassing mess.
+New module \texttt{Mflow} might help.
+
+\section{Allocate the rest of your registers}
 
 Select and configure a register allocator.
 John Dias will provide instructions and examples for configuring his
 graph-coloring register allocator.
 
-\section{Compiler configuration}
+\section{Configure your compiler}
 
 If you have written components in Caml, export them into Lua.
 For example, the $x$86 back end exports these values:\\
