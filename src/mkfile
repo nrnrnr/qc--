@@ -82,11 +82,11 @@ ML =            uint64.ml    \
                 elab.ml      \
                 rtl.ml       \
                 automaton.ml \
-                agraph.ml    \
+                rtl2ast.ml   \
+                acfg.ml      \
+                cfg.ml       \
                 lowercopy.ml \
                 ast2ir.ml    \
-                rtl2ast.ml   \
-                agraph2ast.ml\
                 asm2ast.ml   \
                 driver.ml    \
                 main.ml      \
@@ -107,8 +107,6 @@ GENERATED =     this.ml     \
                 rtl.mli     \
                 rtlUtil.ml  \
                 rtlUtil.mli \
-                fgraph.ml   \
-                fgraph.mli  \
 
 
 CMO =           `echo $ML       | sed 's/\.ml/.cmo/g'`
@@ -202,10 +200,13 @@ html:V:         $HTML
 # sources generated from noweb sources
 # ------------------------------------------------------------------  
 
-
-agraph2ast.mli  \
-agraph2ast.ml:  agraph2ast.nw
-                eval $OCAMLTANGLE
+lowercopy.mli   \
+lowercopy.ml    \
+acfg.mli        \
+acfg.ml         \
+cfg.mli         \
+cfg.ml:         cfg.nw
+                eval $OCAMLTANGLE 
 
 asm2ast.mli     \
 asm2ast.ml:     asm2ast.nw
@@ -213,13 +214,6 @@ asm2ast.ml:     asm2ast.nw
 
 rtl2ast.mli     \
 rtl2ast.ml:     rtl2ast.nw
-                eval $OCAMLTANGLE
-
-phopt.ml:       phopt.nw
-                eval $OCAMLTANGLE
-
-lowercopy.mli   \
-lowercopy.ml:   lowercopy.nw
                 eval $OCAMLTANGLE
 
 target.mli      \
@@ -257,17 +251,9 @@ ast2ir.mli      \
 ast2ir.ml:      ast2ir.nw
                 eval $OCAMLTANGLE
 
-agraph.ml       \
-agraph.mli:     agraph.nw
-                eval $OCAMLTANGLE
-
 rtl.smlview     \
 rtl.view        \
 rtl.asdl:       rtl.nw
-                eval $MISCTANGLE
-
-fgraph.view     \
-fgraph.asdl:    fgraph.nw
                 eval $MISCTANGLE
 
 bits.mli        \
@@ -369,11 +355,9 @@ uint64p.o:      uint64p.c
 
 ASDL =          ast.asdl        \
                 rtl.asdl        \
-                fgraph.asdl     \
                                 
 VIEWS =         ast.view        \
                 rtl.view        \
-                fgraph.view     \
 
 SMLVIEWS =      rtl.smlview     \
 
@@ -398,12 +382,7 @@ astUtil.mli     \
 rtl.ml          \
 rtl.mli         \
 rtlUtil.ml      \
-rtlUtil.mli     \
-                \
-fgraph.ml       \
-fgraph.mli      \
-fgraphUtil.ml   \
-fgraphUtil.mli: ocaml.asdl                
+rtlUtil.mli:    ocaml.asdl
                 asdlGen --ocaml --pickler=sexp $prereq
 
 ast.sml         \
@@ -414,12 +393,7 @@ astUtil.sig     \
 rtl.sml         \
 rtl.sig         \
 rtlUtil.sml     \
-rtlUtil.sig     \
-                \
-fgraph.sml      \
-fgraph.sig      \
-fgraphUtil.sml  \
-fgraphUtil.sig: sml.asdl                
+rtlUtil.sig     : sml.asdl                
                 asdlGen --sml --pickler=sexp $prereq
 
 # ------------------------------------------------------------------ 

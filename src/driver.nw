@@ -1,8 +1,13 @@
 
 \input{macros.tex}
 
+
+% l2h substitution cfg CFG
+% l2h substitution dots ...
 % l2h substitution AST AST
+% l2h substitution ast AST
 % l2h substitution rtl RTL
+% l2h substitution ir IR
 % l2h substitution noweb NOWEB
 % l2h substitution qcc QC--
 % l2h substitution C C--
@@ -281,8 +286,20 @@ between the various module types in the following code is subtle:
 \end{itemize}
 
 <<>>=
+module Target = struct
+    let t = dummy
+end
+
+module Graph0   = Cfg.Make(Target)
+module Graph1   = Lowercopy.Make(Graph0)
+
+(*
+module Graph0   = Cfgraph.Make(Target)
+module Graph1   = Lowercopy.Make(Graph0)
+
 module Graph0   = Agraph2ast.Graph
 module Graph1   = Lowercopy.Make(Graph0)
+*)
 @
 
 The [[Personality]] structure determines the calling convention,
@@ -300,7 +317,7 @@ end
 
 <<module Personality>>=
 let target          = dummy
-type instr          = Graph1.graph (* = Graph0.graph *)
+type instr          = Graph1.cfg (* = Graph0.cfg *)
 
 let map             = Mangle.StrMap.empty
 let mangle          = Mangle.make cmangle map
@@ -342,7 +359,7 @@ let sdecl name proc =
     
 <<module Personality>>=
 let ext i           = 
-    let (name,proc) = Graph0.ginit i                          in
+    let (name,proc) = Graph0.init i                           in
     let scope       = proc.F.scope                            in  
     let name        = mangle name                             in 
     let stmts       = Graph0.stmts i mangle                   in
@@ -360,6 +377,8 @@ let ext i           =
 module Asm      = Asm2ast.Make(Personality)
 module Ast2IR   = Ast2ir.Make (Graph1) (Asm)
 @
+
+
 
 
 The [[compile]] compiles a source file from {\PAL} to {\PAL}.  The

@@ -402,7 +402,8 @@ only created for informational purposes in this module.  The argument
 passed to [[comment]] must not contain only matching [[/*]] and [[*/]]
 
 <<>>=
-let comment x   = P.text "/* " ^^ P.text x ^^ P.text " */"
+let comment x   = P.vgrp (P.text "// " ^^ P.text x ^^ P.break)
+ 
 @ 
 
 Todo:  write functions that escape unprintable characters in literals.
@@ -559,10 +560,11 @@ let rec flow f =
                          ^/ nest (P.commalist id ns))
     in match f with
     | A.FlowAt(x,_)     -> flow x
-    | A.CutsTo(ns)      -> also "cuts"    ns
-    | A.UnwindsTo(ns)   -> also "unwinds" ns
-    | A.ReturnsTo(ns)   -> also "returns" ns
-    | A.Aborts          -> P.text "also aborts"
+    | A.CutsTo(ns)    when ns <> []     -> also "cuts"    ns
+    | A.UnwindsTo(ns) when ns <> []     -> also "unwinds" ns
+    | A.ReturnsTo(ns) when ns <> []     -> also "returns" ns
+    | A.Aborts                          -> P.text "also aborts"
+    | _                                 -> P.empty
 
 let flows = function
     | []    -> P.empty
@@ -778,7 +780,7 @@ before it is printed.
         ^^ semi
         end
     | A.EmptyStmt      -> semi
-    | A.CommentStmt(s) -> P.vgrp (P.text ("//" ^ s) ^^ P.break)
+    | A.CommentStmt(s) -> comment s
 
     | A.SwitchStmt (r,e,arms) -> 
         P.agrp begin

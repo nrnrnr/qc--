@@ -30,8 +30,8 @@ semantics have been found correct it is translated into abstract
 
 <<ast2ir.mli>>=
 module Make 
-    (G      : Agraph.S with type ginit       = string * Fenv.Clean.proc) 
-    (Asm    : Asm2.S   with type instruction = G.graph
+    (G      : Acfg.S with type    init       = string * Fenv.Clean.proc) 
+    (Asm    : Asm2.S   with type instruction = G.cfg
                        with type init        = unit) :
 sig
     module StrMap: Map.S with type key = string
@@ -69,12 +69,12 @@ end
 
 
 module Make
-  (G         : Agraph.S with type ginit = string * Fenv.Clean.proc)
-  (Asm       : Asm2.S   with type instruction  = G.graph
+  (G         : Acfg.S   with type init = string * Fenv.Clean.proc)
+  (Asm       : Asm2.S   with type instruction  = G.cfg
                         with type init = unit) =
 struct
-    module GM     = G.Make
-    module AG     = Agraph
+    module GM     = G
+    module AG     = Acfg
     module StrMap = Map.Make(struct type t=string let compare=compare end)
     <<module Make>> 
 end
@@ -410,13 +410,18 @@ let rec body env target globals props graph after bb =
     let effects = List.map2 (fun lhs rhs -> effect lhs rhs) lhs rhs
     in 
         decorate (GM.assign (Rtl.Rtl effects) after) 
+@
 
+The first branch of a [[branch]] node must be a label. So we have to
+invent one.
+        
 <<cases for translating statements>>=
 | A.IfStmt ( e, ss1, ss2) ->
-    let node1 = List.fold_right stmt ss1 after  in
-    let node2 = List.fold_right stmt ss2 after  in
-    let e     = expr env target globals e       in
-    let unode = GM.branch e node1 node2         in
+    let node1  = List.fold_right stmt ss1 after  in
+    let node2  = List.fold_right stmt ss2 after  in
+    let label1 = GM.label (Idgen.id ()) node1    in 
+    let e      = expr env target globals e       in
+    let unode  = GM.branch e (decorate label1) node2        in
         decorate unode
 @
 
@@ -426,7 +431,7 @@ let rec body env target globals props graph after bb =
     let (cont,count) = Aux.Option.get (const 0, const 0) alt                 in
     let cc           = find_cc (Aux.Option.get default_convention cc) target in
     let actuals      = List.map (actual env target globals) args             in
-    let cout a       = decorate (GM.copy_out actuals AG.ProcResults cc a)     in
+    let cout a       = decorate (GM.copyo actuals AG.ProcResults cc a)     in
     let ret  a       = decorate (GM.return graph
                                  (un_const cont) (un_const count))           in
         (cout << ret) after
@@ -458,14 +463,16 @@ node.
          | A.Mem _         -> assert false            in
     let cc         = find_cc (Aux.Option.get default_convention cc) target in
     let cout after = if args <> []
-                     then decorate (GM.copy_out 
+                     then decorate (GM.copyo
                                    (List.map (actual env target globals) args)
                                     AG.ProcParameters cc after)
                      else after                                   in
-    let cont after = GM.make_cont after (flows fs)                in
-    let call after = decorate (GM.call (expr env target globals e) (cont after)) in
+    let call after = decorate (GM.call 
+                        (expr env target globals e) 
+                        after
+                        (flows fs)) in
     let cin  after = if lhs <> []
-                     then decorate (GM.copy_in (List.map lvalue lhs)
+                     then decorate (GM.copyi (List.map lvalue lhs)
                                        AG.ProcResults cc after)
                      else after                                   in
         (cout << call << cin) after
@@ -479,7 +486,7 @@ A continuation is represented by a labeled node.  This node is a
     let cc        = find_cc default_convention target in
     let args      = List.map (fun (_,n) -> formal env n) ns          in
     let cin after = if ns <> []
-                    then decorate (GM.copy_in args AG.ContParameters cc after)
+                    then decorate (GM.copyi args AG.ContParameters cc after)
                     else after                        in
     let lbl after = decorate (GM.label n after)       in
         (lbl << cin) after
@@ -500,7 +507,7 @@ sequence of statements.
     let cc         = find_cc (Aux.Option.get default_convention cc) target in
     let args       = List.map (actual env target globals) args             in
     let cout after = if args <> [] then 
-                        decorate (GM.copy_out args AG.ProcParameters cc after)
+                        decorate (GM.copyo    args AG.ProcParameters cc after)
                      else after                               in
     let jump after = decorate (GM.jump graph (expr env target globals e) ts) in
         (cout << jump) after 
@@ -531,11 +538,30 @@ link-time constant.
 @
 
 
+<<cases for translating statements>>=
+| A.CutStmt(e, args, fs) -> 
+    let cc         = find_cc default_convention target in
+    let cout after = if args <> []
+                     then decorate 
+                        ( GM.copyo
+                          (List.map (actual env target globals) args)
+                          AG.ContParameters 
+                          cc 
+                          after
+                        )
+                     else after                                   in
+    let cut  after = decorate 
+                        ( GM.cutto graph 
+                          (expr env target globals e) 
+                          (flows fs)
+                        )                                         in
+        (cout << cut) after        
+@
+
 The following statements are just skipped for the moment.    
 
 <<cases for translating statements>>=
 | A.PrimStmt(lhs, cc, n, args, fs)     -> assert false
-| A.CutStmt(e, args, fs)               -> assert false
 | A.SwitchStmt (r,e,arms)              -> assert false
 @
 
@@ -574,16 +600,16 @@ and proc env (target: Target.info) globals props (asm: Asm.asm) (cc,n,fs,bb) =
                      | _  -> assert false                              in
     let env        = F.push env p.F.scope                              in
     let ginit      = (n, p)                                            in
-    let graph      = GM.graph ginit  (* fresh graph for this proc *)   in
+    let graph      = GM.create ginit  (* fresh graph for this proc *)  in
     let cc         = find_cc (Aux.Option.get default_convention cc) target in
     let entry a    = decorate (GM.entry a)                             in
-    let copy  a    = decorate (GM.copy_in                                  
+    let copy  a    = decorate (GM.copyi                                    
                         (List.map (fun (_,_,_,n) -> formal env n) fs)
                         AG.ProcParameters cc a)                        in
     let bdy   a    = body env target globals props graph a  bb         in
     let exit       = decorate (GM.exit graph)                          in
     let node       = (entry << copy << bdy) exit                       in
-         asm ++ Asm.instr (GM.graph_of node)
+         asm ++ Asm.instr (GM.cfg_of node)
 @
 
 Local declarations are ignored for the moment. 
