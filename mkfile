@@ -167,6 +167,8 @@ clean:V:        dirs
                         -o -name '.cvsignore'           \
                         \) -prune                       \
                         -o -type f -exec rm '{}' \;
+                rm -f *.tar.gz        
+                rm -f config/aux/tst
 
 clean.opt:V:    dirs
                 for i in $SUBDIRS 
@@ -184,6 +186,7 @@ clean.opt:V:    dirs
                         -o -name '*.cmxa'               \
                         \) -exec rm '{}' \;             
                 rm -f *.tar.gz        
+                rm -f config/aux/tst
 
 clobber:V:      dirs clean
                 for i in $SUBDIRS; 

@@ -32,7 +32,7 @@ section "text"
         $c(32)[0] = sym@p@l5;
         sym@p@l5:
         iitotal = (((ii+ij)+ik)+il);
-        $m(32B)[($r(32)[32]+32::bits32)] = iitotal;
+        $m(32B)[($r(32)[31]+32::bits32)] = iitotal;
         $c(32)[0] = $r(32)[30];
         ;
         ;

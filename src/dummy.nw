@@ -23,7 +23,8 @@ module type ARCH = sig
 end
 
 module Make(A: ARCH): sig
-    val target: Target2.t
+    val target  :       Target2.t
+    val target' :       Ast2ir.tgt
 end    
 @
 
@@ -32,6 +33,8 @@ We provide ready-made 32 bit targets.
 <<dummy.mli>>=
 val dummy32l:   Target2.t       (* 32 bit, little endian *)
 val dummy32b:   Target2.t       (* 32 bit, big endian    *)
+val dummy32l':  Ast2ir.tgt
+val dummy32b':  Ast2ir.tgt
 @
 
 
@@ -40,7 +43,9 @@ val dummy32b:   Target2.t       (* 32 bit, big endian    *)
 % ------------------------------------------------------------------ 
 
 <<dummy.ml>>=
+module AN       = Automaton
 module AT       = Automaton2
+module C        = Call
 module R        = Rtl
 module RP       = Rtl.Private
 module RU       = Rtlutil
@@ -48,6 +53,7 @@ module Up       = Rtl.Up
 module Dn       = Rtl.Dn
 module SS32     = Space.Standard32
 module T        = Target2
+module RS       = Register.Set
 
 module type ARCH = sig
     val arch:           string (* name of this architecture *)
@@ -58,12 +64,14 @@ module type ARCH = sig
 end
 
 module Make(A: ARCH) = struct
-    let id = Rtl.Identity
-    let wordsize    = 32
-    let pointersize = 32
+    let id          = Rtl.Identity
+    let wordsize    = A.wordsize
+    let pointersize = A.pointersize
+    let memsize     = A.memsize
 
     <<module Spaces>>
 
+    (* important registers *)
     let {SS32.cc = eflags} = SS32.locations Spaces.c
     let locations   = SS32.locations Spaces.c
     let pc          = locations.SS32.pc
@@ -71,51 +79,93 @@ module Make(A: ARCH) = struct
     let npc         = locations.SS32.npc
     let fp_mode     = locations.SS32.fp_mode
     let fp_fcmp     = locations.SS32.fp_fcmp
+
+    let reg n       = R.reg ('r',n,A.wordsize)
+    let sp          = reg 31                    (* stack pointer  *)
+    let ra          = reg 30                    (* return address *)
+
+    let fetch l     = R.fetch l   A.wordsize
+    let store l e   = R.store l e A.wordsize
+    let assign      = store
+    let return      = store pc (fetch ra)
     
     let t = (* for generic automata, will go away *)
-        { Automaton2.Sample.byteorder = A.byte_order
+        { Automaton2.Sample.byteorder   = A.byte_order
         ; Automaton2.Sample.pointersize = A.pointersize
-        ; Automaton2.Sample.wordsize = A.wordsize
-        ; Automaton2.Sample.memsize = A.memsize
+        ; Automaton2.Sample.wordsize    = A.wordsize
+        ; Automaton2.Sample.memsize     = A.memsize
         ; Automaton2.Sample.registers =
-            [ "IEEE 754 rounding mode", fp_mode
-            ; "IEEE 754 comparison results", fp_fcmp
+            [ "IEEE 754 rounding mode"      , fp_mode
+            ; "IEEE 754 comparison results" , fp_fcmp
             ]
         }
  
+    <<global register allocation>>
     <<module Flow>>
     <<module Spill>>
-    <<calling conventions>>
+    <<module CC for calling conventions>>
 
     let target =
         { T.name = A.arch
-          ; T.cc           = (fun _ -> cc)  
-          ; T.byteorder    = A.byte_order
-          ; T.wordsize     = A.wordsize
-          ; T.pointersize  = A.pointersize
-          ; T.vfp          = Vfp.mk A.wordsize
-          ; T.alignment    = 1
-          ; T.memsize      = 8
-          ; T.float        = "ieee754"
-          ; T.charset      = "latin1" 
-          ; T.globals      = Automaton2.Sample.global t
-          ; T.is_rounding_mode = (fun loc -> loc = fp_mode)
-          ; T.spaces       = [ Spaces.m 
-                             ; Spaces.c 
-                             ; Spaces.r 
-                             ; Spaces.f
-                             ; Spaces.t
-                             ; Spaces.u
-                             ]
-          ; T.data_section = "data"
-          ; T.bnegate      = Flow.bnegate eflags
-          ; T.goto         = Flow.goto
-          ; T.jump         = Flow.jump
-          ; T.call         = Flow.call 
-          ; T.branch       = Flow.branch
-          ; T.spill        = Spill.spill
-          ; T.reload       = Spill.reload
+        ; T.cc           = (fun _ -> CC.cc)  
+        ; T.byteorder    = A.byte_order
+        ; T.wordsize     = A.wordsize
+        ; T.pointersize  = A.pointersize
+        ; T.vfp          = SS32.vfp
+        ; T.alignment    = 1
+        ; T.memsize      = 8
+        ; T.float        = "ieee754"
+        ; T.charset      = "latin1" 
+        ; T.globals      = Automaton2.Sample.global t
+        ; T.is_rounding_mode = (fun loc -> loc = fp_mode)
+        ; T.spaces       = [ Spaces.m 
+                           ; Spaces.c 
+                           ; Spaces.r 
+                           ; Spaces.f
+                           ; Spaces.t
+                           ; Spaces.u
+                           ]
+        ; T.data_section = "data"
+        ; T.bnegate      = Flow.bnegate eflags
+        ; T.goto         = Flow.goto
+        ; T.jump         = Flow.jump
+        ; T.call         = Flow.call 
+        ; T.branch       = Flow.branch
+        ; T.spill        = Spill.spill
+        ; T.reload       = Spill.reload
       }
+
+    (* the new-style target *)
+    let target' : ((Rtl.exp -> Automaton.t), Call.t) Target2.t' = 
+        { T.name         = A.arch
+        ; T.cc           = (fun _ -> CC.cmm)  
+        ; T.byteorder    = A.byte_order
+        ; T.wordsize     = A.wordsize
+        ; T.pointersize  = A.pointersize
+        ; T.vfp          = SS32.vfp
+        ; T.alignment    = 1
+        ; T.memsize      = 8
+        ; T.float        = "ieee754"
+        ; T.globals      = globals
+        ; T.is_rounding_mode = (fun loc -> loc = fp_mode)
+        ; T.spaces       = [ Spaces.m 
+                           ; Spaces.c 
+                           ; Spaces.r 
+                           ; Spaces.f
+                           ; Spaces.t
+                           ; Spaces.u
+                           ]
+        ; T.bnegate      = Flow.bnegate eflags
+        ; T.goto         = Flow.goto
+        ; T.jump         = Flow.jump
+        ; T.call         = Flow.call 
+        ; T.branch       = Flow.branch
+        ; T.spill        = Spill.spill
+        ; T.reload       = Spill.reload
+        (* bogus *)
+        ; T.charset      = "latin1" 
+        ; T.data_section = "data"
+        }
 end
 
 module Dummy32l = Make(struct
@@ -134,9 +184,36 @@ module Dummy32b = Make(struct
     let memsize     = 8
 end)
 
-let dummy32l = Dummy32l.target
-let dummy32b = Dummy32b.target
+let dummy32l  = Dummy32l.target
+let dummy32l' = Dummy32l.target'
+let dummy32b  = Dummy32b.target
+let dummy32b' = Dummy32b.target'
 @
+
+% ------------------------------------------------------------------ 
+\subsection{Global Register Allocation}
+% ------------------------------------------------------------------ 
+
+\emph{Note: after introducing the new Automaton model we discovered 
+that the mechanism for dealing with named hardware registers has to
+change. Therefore, the automaton for global registers no longer deals
+with them.}
+
+<<global register allocation>>=
+let globals base = 
+    let ( **> ) f x = f x in
+    let width w     = if w <= 8 then 8 else if w <= 16 then 16 else
+                      Aux.round_up_to 32 w in
+        AN.mk **> AN.widen width 
+              **> AN.align_to (function 8 -> 1 | 16 -> 2 | _ -> 4)
+              **> AN.overflow ~memsize:A.memsize
+                              ~byteorder:A.byte_order
+                              ~start:base
+                              ~growth:Memalloc.Down
+                              ~max_alignment:4  
+@
+
+
 
 % ------------------------------------------------------------------ 
 \subsection{Spaces}
@@ -159,14 +236,6 @@ end
 
 <<module Flow>>=
 
-let reg n       = R.reg ('r',n,A.wordsize)
-let sp          = reg 32                    (* stack pointer  *)
-let ra          = reg 30                    (* return address *)
-
-let fetch l     = R.fetch l   A.wordsize
-let store l e   = R.store l e A.wordsize
-let assign      = store
-let return      = store pc (fetch ra)
 
 module Flow = Mflow.MakeStandard
     (struct
@@ -224,7 +293,17 @@ end
 \subsection{Calling Conventions}
 % ------------------------------------------------------------------ 
 
-<<calling conventions>>=
+<<module CC for calling conventions>>=
+module CC = struct
+    <<old-style calling convention>>
+    <<calling convention>>
+end
+@
+
+We will expunge the old calling convention and automata model as soon as
+we have made the transition to the new.
+
+<<old-style calling convention>>=
 let cc =
     { T.sp              = sp
     ; T.return          = return
@@ -241,5 +320,176 @@ let cc =
           ]  
                        
     }
- 
+@
+
+\subsubsection{New Target Definition}
+
+
+\paragraph{Important registers}
+
+<<calling convention>>=
+let reg  n   = ('r', n, A.wordsize)
+let freg n   = ('f', n, A.wordsize)
+let vfp      = Vfp.mk A.wordsize
+let regs     = List.map reg  [0;1;2;3;4;5;6;7;8;9;10;11;12;13;14;15]
+let fregs    = List.map freg [0;1;2;3;4;5;6;7;8;9;10;11;12;13;14;15] 
+@
+
+Volatile and non-volatile registers. For simplicity, all registers are
+volatile.
+
+<<calling convention>>=
+let volregs  = RS.union (RS.of_list regs) (RS.of_list fregs)
+let nvolregs = RS.empty     
+@
+
+\paragraph{Conventions}
+
+The documentation for the $x$86 warns to use [[minus frame size]]. I
+hope we are allowed to use it once per target, rather than once per
+compiler.
+
+<<calling convention>>=
+let spval           = fetch sp         
+let sp_align        = 4
+let growth          = Memalloc.Down
+let std_sp_location = RU.add pointersize 
+                        vfp (R.late "minus frame size" pointersize)
+@
+
+\paragraph{Generic Automaton Support}
+
+<<calling convention>>=
+let ( **> ) f x   = f x
+let (  *> ) f g x = f (g x)
+
+let badwidth msg width = 
+    Impossible.impossible 
+        (Printf.sprintf "Unsupported (rounded) width %d in Dummy: %s" width msg)
+
+let error _ = Impossible.impossible "fatal error in automaton for Dummy"
+@
+
+\paragraph{Automata for passing values}
+
+We pass everything in registers, until we run out of them and pass
+remaining parameters in memory. We use 16 floating point and 16 integer
+registers. 
+
+<<calling convention>>=
+let simple ~base =
+    AN.hint_choice
+        [ ((=) "float"),     AN.widen (Aux.round_up_to ~multiple_of:32) 
+                          *> AN.widths  [32]    ~errormsg:(badwidth "simple")
+                          *> AN.useregs fregs   ~errormsg:error
+        ; (fun _ -> true),   AN.widen (Aux.round_up_to ~multiple_of:32)
+                          *> AN.widths  [32]    ~errormsg:(badwidth "simple")
+                          *> AN.useregs  regs   ~errormsg:error
+        ] **> 
+    AN.overflow ~memsize:A.memsize
+                ~byteorder:A.byte_order
+                ~start:base
+                ~growth:Memalloc.Down
+                ~max_alignment:sp_align
+@
+
+
+The [[return]] instruction for a possibly alternate return.
+
+<<calling convention>>= 
+let return k n ~ra =
+    if k = 0 && n = 0 
+    then store pc ra
+    else Impossible.impossible "alternate return is unsupported"
+@
+
+How to save callee-saved registers. 
+
+<<calling convention>>=
+let save_regs temps =
+    let t = Talloc.Multiple.loc temps 't' in
+    let u = Talloc.Multiple.loc temps 'u' in
+        function 
+        | ('r',_,w) -> t w
+        | ('f',_,w) -> u w
+        | _         -> Impossible.impossible "cannot save register"
+@
+
+The [[conv]] function (below) allows to define a convention based on a
+[[specs]] record. This should simplify the definition of multiple
+conventions.
+
+<<calling convention>>=
+type ('a, 'b, 'c) specs = 
+    { call      : 'a
+    ; results   : 'b
+    ; cutto     : 'c 
+    }
+@
+
+I have to admit, that I don't know what I am doing here.
+
+<<transformations>>=
+let call_actuals  =
+  C.outgoing ~growth ~sp
+    ~mkauto:(fun () -> Block.relative vfp "out call parms" specs.call)
+    ~autosp:(fun r  -> Block.base r.AN.overflow)
+    ~postsp:(fun sp -> sp) in  
+
+let prolog  =
+  C.incoming ~growth ~sp
+    ~mkauto:(fun () -> specs.call vfp)
+    ~autosp:(fun _ -> vfp)
+    ~postsp:(fun _ -> std_sp_location) in
+
+let call_results  =
+  C.incoming ~growth ~sp
+    ~mkauto:(fun () -> Block.relative vfp "in ovfl results" specs.results)
+    ~autosp:(fun r -> Block.base r.AN.overflow)
+    ~postsp:(fun _ -> std_sp_location) (* irrelevant? *) in
+
+let epilog  =
+  C.outgoing ~growth ~sp
+    ~mkauto:(fun () -> Block.relative vfp "out ovfl results" specs.results)
+    ~autosp:(fun r -> Block.base r.AN.overflow)
+    ~postsp:(fun _ -> vfp)  (* irrelevant *) in
+
+let also_cuts_to =
+  C.incoming ~growth ~sp
+    ~mkauto:(fun () -> Block.relative vfp "in cont parms" specs.cutto)
+    ~autosp:(fun r -> std_sp_location)
+    ~postsp:(fun _ -> std_sp_location) in
+
+let cut_actuals base  =
+   C.outgoing ~growth ~sp ~mkauto:(fun () -> specs.cutto base)
+     ~autosp:(fun r -> spval)
+     ~postsp:(fun _ -> spval) in
+
+<<calling convention>>=
+let conv name jump specs =
+  <<transformations>>
+  { C.name            = name
+  ; C.jump_ok         = jump
+  ; C.call_parms      = { C.in' = prolog;       C.out = call_actuals}
+  ; C.cut_parms       = { C.in' = also_cuts_to; C.out = cut_actuals}
+  ; C.results         = { C.in' = call_results; C.out = epilog}
+
+  ; C.stack_growth    = Memalloc.Down
+  ; C.stable_sp_loc   = std_sp_location
+  ; C.replace_vfp     = Cfgx.Vfp.replace_with ~sp
+  ; C.sp_align        = sp_align    (* alignment of stack pointer at call/cut *)
+  ; C.ra              = ra          (* where return address is on entry *)
+  ; C.pre_nvregs      = nvolregs    (* registers preserved across calls *)
+  ; C.volregs         = volregs     (* registers not preserved across calls *)
+  ; C.saved_nvr       = save_regs
+  ; C.cutto           = cutto
+  ; C.saved_ra        = (fun _ -> ra)
+  ; C.return          = return
+  } 
+@ 
+
+Finally, we can define a calling convention.
+<<calling convention>>=
+let cmm = conv "cmm" false { call = simple; results=simple; cutto=simple }
+
 @

@@ -21,7 +21,7 @@ section "text"
         y = 2::bits32;
         z = 3::bits32;
         total = ((x+y)+z);
-        $m(32B)[($r(32)[32]+32::bits32)] = total;
+        $m(32B)[($r(32)[31]+32::bits32)] = total;
         $c(32)[0] = $r(32)[30];
         ;
         ;

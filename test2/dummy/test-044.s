@@ -17,7 +17,7 @@ section "data"
     sym@p()
     {
         ;
-        i = $m(32B)[($r(32)[32]+32::bits32)];
+        i = $m(32B)[($r(32)[31]+32::bits32)];
         $c(32)[0] = sym@loop;
         sym@loop:
         i = (i-1::bits32);
