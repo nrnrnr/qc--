@@ -51,7 +51,10 @@ combined = 'a BackplaneT.combined)
 
 <<walk RTL>>=
 (* NOTE: using space 't' is hopeful, but ultimately bogus. *)
-let new_tmp = Talloc.Multiple.loc temps 't' in
+let new_tmp name =
+	if (compare name "i" >= 0) && (compare name "n" <= 0)
+	then Talloc.Multiple.loc temps 't'
+	else Talloc.Multiple.loc temps 'u' in
 let print_var (s, i, w) = Verbose.say 18 ["VAR: "
                                          ; s 
 										 ; " " 
@@ -68,7 +71,7 @@ let rec walkLoc loc tMap = match loc with
 	| RP.Var (s, i, w) ->
 		(try TM.find i tMap, tMap
 		 with Not_found ->
-			let t = Rtl.Convert.loc (new_tmp w) in
+			let t = Rtl.Convert.loc (new_tmp s w) in
 			(t, TM.add i t tMap))
 	| RP.Slice (w, i, l) ->
 		let l', tMap' = walkLoc l tMap in
