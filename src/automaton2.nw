@@ -1,0 +1,240 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+\input{macros.tex}
+
+% l2h substitution dots ...
+% l2h substitution ast AST
+% l2h substitution rtl RTL
+% l2h substitution ir IR
+% l2h substitution noweb NOWEB
+% l2h substitution qcc QC--
+% l2h substitution C C--
+% l2h substitution PAL C--
+% l2h substitution pal C--
+% l2h substitution asdl ASDL
+% l2h substitution ocaml OCaml
+% l2h substitution forall forall
+% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
+
+% ------------------------------------------------------------------ 
+\section{Automata for Resource Allocation}
+% ------------------------------------------------------------------ 
+
+An automaton encapsulates the ability to assign locations.
+Every automaton has a private collection of locations (e.g.,
+registers) that it may use at will, plus an ``overflow area.''
+The overflow area is located in memory, and it must be contiguous.
+
+Automata are imperative; the type [[Automaton.t]] encapsulates mutable
+state.  This state is primarily the private internal state of the
+automaton, but there is one part of state that is public.  When an
+automaton is ``frozen,'' it is no longer possible to get new locations
+from it, but in exchange, one can get the size and alignment
+requirement (and also the address) of its overflow area.
+
+Although an \emph{automaton} is imperative, the \emph{specification}
+of the automaton is not.  To create an automaton, one needs a
+specification, plus the address to be used to point to the overflow
+area.  \emph{Addresses always point to the lowest addressed byte, as
+in the value returned from [[malloc]].} This address may contain
+unbound compile-time constants (see \module{const}).
+
+A mutable automaton [[t]] is made from a specification [[spec]].  When
+run, the automaton returns abstract locations [[loc]].  The type
+abbreviations for alignment, width, and size are only for
+documentation purposes.
+
+<<type abbreviations>>=
+type align = int (* in memsize *)
+type width = int (* in bits    *)
+type size  = int (* in memsize *)
+
+<<automaton2.mli>>=
+<<type abbreviations>>
+type spec  (* specification of an automaton (immutable) *)
+type t     (* an automaton (mutable) *)
+type loc   (* a location provided by an automaton *)
+
+val dummy: spec    (* spec to create a dummy automaton *)
+@
+
+Supply an address of the overflow area, and get back an automaton in
+its initial state.
+
+<<automaton2.mli>>=
+val mk : spec -> Rtl.exp -> t
+@
+
+To allocate a new resource slot, call [[ty]] or [[block]]. Both return
+a location [[[loc]] and change the automaton's internal state.
+
+<<automaton2.mli>>=
+val ty    : t -> width -> string option -> loc    
+val block : t -> width -> align         -> loc    
+@
+
+Location's as returned by an automaton can't be used directly because
+they are abstract. To use them to store and fetch data, use the
+following two functions:
+
+<<automaton2.mli>>=
+val fetch : loc -> width -> Rtl.exp
+val store : loc -> Rtl.exp -> width -> Rtl.rtl
+@
+
+When all allocations are done. [[freeze]] the automaton. In response
+it returns the space allocated in the overflow [[area]]. 
+
+<<automaton2.mli>>=
+type area = 
+    { address : Rtl.exp (* address of memory block *)
+    ; align   : align   (* at run time, must have address mod align = 0 *)
+    ; size    : int
+    } 
+val freeze : t -> area
+@
+
+It's possible that several overflow areas, with disjoint lifetimes,
+can be overlapped in a single location in memory. The result is a new
+[[area]] with more constraints in general. The [[placement]] value deter
+
+<<automaton2.mli>>=
+type placement = EqualHighEnds | EqualLowEnds
+val overlap : placement -> area list -> area
+  (* Overlap several areas into a larger area, forcing constraints on
+     compile-time constants.  May make calls to Const.make_equal, but
+     otherwise has no side effects.  It is a checked run-time error to
+     overlap areas at the high end unless the size of every area is a
+     multiple of its alignment.  N.B. may raise Const.Cannot_solve. *)
+@
+
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+Automatons are used to allocate resources in the context of different
+calling conventions and for global variables.  This makes it difficult
+to come up with one implementation that serves all these purposes
+well.  Fortunately, we have decided to leave the type [[t]] of an
+automaton abstract.  This allows us to use a class type to implement
+[[t]].  Unlike standard types, class-types can have \emph{different}
+implementations.  Since an automaton also have mutable state, an object
+seems to be a nice fit for it. A specification [[spec]] to create a
+new automaton, on the other hand, is a non-mutable data type.
+
+<<automaton2.ml>>=
+<<type abbreviations>>
+
+type spec       = Dummy
+type area =     { address:      Rtl.exp
+                ; align:        align
+                ; size:         size
+                }
+type loc =      { store:    (Rtl.exp -> Rtl.rtl)
+                ; fetch:    Rtl.exp
+                }
+                
+class type automaton = object
+    val mutable frozen: bool
+    method ty:          width -> string option -> loc
+    method block:       width -> align         -> loc
+    method freeze:      area
+end   
+type t = automaton
+let dummy = Dummy
+@
+
+For the moment, we associate with each [[spec]] value a class.  The
+[[mk]] function creates an new instance of that class and returns it. 
+The only class we have at the moment is [[dummy]].  The [[ty]],
+[[block]], and [[freeze]] functions simply call the method of the
+instance.
+
+<<automaton2.ml>>=
+<<class dummy>>
+    
+let mk spec base =
+    match spec with
+    | Dummy -> new dummy base 
+
+let ty     t size  hint    = t#ty    size hint
+let block  t width align   = t#block width align
+let freeze t               = t#freeze
+@
+
+Both [[store]] and [[fetch]] do not check the [[width]] argument.  We
+could make the width part of the [[loc]] type which would allow for an
+easy check when [[fetch]] annd [[store]] are used. 
+
+<<automaton2.ml>>=
+let fetch loc width      = loc.fetch 
+let store loc expr width = loc.store expr 
+@
+
+Everything related to [[area]]s is not yet implemented.
+
+<<automaton2.ml>>=
+type placement = EqualHighEnds | EqualLowEnds
+let overlap placement areas = assert false
+@
+
+
+The [[dummy]] class returns locations of the form $\mathit{base}+k$
+where $k \ge 0$ is increased according to the size and alignment
+requirements of requests.
+
+To find out about pinter sizes we would like to pass in a [[Target.t]]
+value into the class definition.  However, this would make [[Target]]
+and [[Automaton]] mutually dependent which is not allowed.  Therefore
+pointer sizes were factored out into [[Dummy]] from where we obtain
+them.
+
+<<class dummy>>=
+class dummy (base: Rtl.exp) =
+    let wrd = Dummy.wordsize                                in
+    let ptr = Dummy.pointersize                             in
+    let agg = Dummy.byteorder                               in
+    let mem = Dummy.memsize                                 in
+
+    let add           = Rtl.opr "add" [ptr]                 in
+    let addptr    x y = Rtl.app add [x;y]                   in
+    let constptr  k   = Rtl.bits (Bits.of_int k ptr) ptr    in
+    let offset    k w = Rtl.cell Rtl.none 'm' agg w
+                                (addptr base (constptr k))  in
+    let write     k w = fun e -> Rtl.store (offset k w) e w in
+    let read      k w = Rtl.fetch (offset k w) w            in
+    let align x k     = if x mod k = 0
+                        then x
+                        else (x / k + 1) * k                in
+
+    object (self)
+        val mutable frozen    = false
+        val mutable maxalign  = 1
+        val mutable k         = 0
+
+        method block width a =
+            let _    = assert (not frozen)         in
+            let _    = assert (width mod mem = 0)  in
+            let _    = k <- (align k a)            in
+            let _    = maxalign < - max maxalign a in
+            let size = width / mem                 in
+            let loc  = { store = write k width
+                       ; fetch = read k width
+                       }                           in
+            let _    = k <- k + size               in
+                loc
+
+        method ty width (hint: string option) =
+            self#block width 1
+
+        method freeze =
+            let _ = frozen <- true in
+            { address = base
+            ; size    = k
+            ; align   = maxalign
+            }
+            
+    end
+
+@
