@@ -206,9 +206,6 @@ let result_context (n, _) = try SM.find n resmap
                                     ("cannot find result context for "^n)
 let constant_context w = icontext
 
-let rtlop ~dst op tmpl = 
-  let w = tempwidth dst in
-  rtl (R.store (temploc dst) (R.app (Up.opr op) (List.map tempval tmpl)) w)
 let dblop ~dsthi ~dstlo op x y = Unsupported.mulx_and_mulux()
 let wrdop  ~dst op x y z = Unsupported.singlebit ~op:(fst op)
 let wrdrop ~dst op x y z = Unsupported.singlebit ~op:(fst op)
@@ -216,6 +213,8 @@ let wrdrop ~dst op x y z = Unsupported.singlebit ~op:(fst op)
 IT BEGS EXPLANATION WHY INTEGER MULTIPLY IS BEING TRANSLATED INTO A
 FLOATING-POINT MULTIPLY!
 <<ia64 postexpander>>=
+let rtlop ~dst op args =
+  rtl (R.store (temploc dst) (R.app (Up.opr op) (List.map tempval args)) (tempwidth dst))
 let binop ~dst op tmp1 tmp2 = match op with
 | ("mul", ws) ->
     let f1 = talloc 'u' 64 in
@@ -227,6 +226,8 @@ let binop ~dst op tmp1 tmp2 = match op with
 | _ -> rtlop dst op [tmp1;tmp2]
 
 let unop  ~dst op tmp       = rtlop dst op [tmp]
+let unrm  ~dst op x rm   = Impossible.unimp "floating point with rounding mode"
+let binrm ~dst op x y rm = Impossible.unimp "floating point with rounding mode"
 
 let block_copy ~dst assn1 ~src assn2 width = ui "block_copy"
 @

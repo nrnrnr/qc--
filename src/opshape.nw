@@ -48,7 +48,9 @@ type ('temp, 'warg) t =
   | Nullary
 <<opshape.mli>>=
 val of_opr : opr -> (unit, unit) t
-val apply  : (exp -> 'temp) -> (exp -> 'warg) -> opr -> exp list -> ('temp, 'warg) t
+val capply :
+    ('exp -> 'c -> 'temp) ->
+    ('exp -> 'c -> 'warg) -> opr -> 'exp list -> 'c list -> ('temp, 'warg) t
 @ 
 \begingroup
 \def\bits#1{\mathtt{bits}\##1}
@@ -201,15 +203,21 @@ let shape scheme = match scheme with
 | [                         ], (<<'a>>|<<bits2>>)   -> Nullary
 | _ -> impossf "unrecognized operator type %s" (Types.scheme_string scheme)
 
-
-
 let shapetab = Rtlop.Types.fold (fun o t z -> SM.add o (shape t) z) SM.empty
 
 let of_opr (o, _) =
   try SM.find o shapetab with _ -> impossf "operator %%%s has no shape" o
-
+@ 
+Here's the general idea of what we're trying to accomplish.
+It's readable, but it's wrong in two ways:
+\begin{itemize}
+\item
+There are no contexts
+\item
+The order of evaluation is not determined
+\end{itemize}
+<<opshape.ml>>=
 let args () = impossf "wrong number of arguments to operator"
-
 let appfun t w = function
   | Binop  _ -> (function [x; y]    -> Binop  (t x, t y)      | _ -> args())
   | Unop   _ -> (function [x]       -> Unop   (t x)           | _ -> args())
@@ -223,5 +231,91 @@ let appfun t w = function
   | Fpcvt  _ -> (function [x;r ]    -> Fpcvt  (t x, w r)      | _ -> args())
   | Bool     -> (function _         -> Bool)
   | Nullary  -> (function []        -> Nullary                | _ -> args())
+@ 
+Now for the truth, with contexts.
+This code is absolute hell to write (and read?) because we must use
+explicit [[let]] bindings to control the order of evaluation.
+We would have to do the same above except the [[apply]] function is
+not exposed.
+<<opshape.ml>>=
+let cappfun t w = 
+  let binop cs es =
+    match es, cs with
+    | [x; y], [xc; yc] ->
+        let x = t xc x in
+        let y = t yc y in
+        Binop  (x, y)
+    | _ -> args() in
+  let unop cs es =
+    match es, cs with [x], [xc] -> Unop (t xc x) | _ -> args() in
+  let binrm cs es =
+    match es, cs with
+    | [x; y; r], [xc; yc; rc] ->
+        let x = t xc x in
+        let y = t yc y in
+        let r = w rc r in
+        Binrm (x, y, r)
+    | _ -> args() in
+  let unrm cs es =
+    match es, cs with
+    | [x; r], [xc; rc] ->
+        let x = t xc x in
+        let r = w rc r in
+        Unrm (x, r)
+    | _ -> args() in
+  let cmp cs es =
+    match es, cs with
+    | [x; y], [xc; yc] ->
+        let x = t xc x in
+        let y = t yc y in
+        Cmp (x, y)
+    | _ -> args() in
+  let dblop cs es =
+    match es, cs with
+    | [x; y], [xc; yc] ->
+        let x = t xc x in
+        let y = t yc y in
+        Dblop (x, y)
+    | _ -> args() in
+  let wrdop cs es =
+    match es, cs with
+    | [x; y; z], [xc; yc; zc] ->
+        let x = t xc x in
+        let y = t yc y in
+        let z = w zc z in
+        Wrdop(x, y, z)
+    | _ -> args() in
+  let wrdrop cs es =
+    match es, cs with
+    | [x; y; z], [xc; yc; zc] ->
+        let x = t xc x in
+        let y = t yc y in
+        let z = w zc z in
+        Wrdrop(x, y, z)
+    | _ -> args() in
+  let width cs es = 
+    match es, cs with [x], [xc] -> Width | _ -> args() in
+  let fpcvt cs es =
+    match es, cs with
+    | [x; r], [xc; rc] ->
+        let x = t xc x in
+        let r = w rc r in
+        Fpcvt (x, r)
+    | _ -> args() in
+  let nullary cs es = 
+    match es, cs with [], [] -> Width | _ -> args() in
+  function
+  | Binop  _ -> binop
+  | Unop   _ -> unop
+  | Binrm  _ -> binrm
+  | Unrm   _ -> unrm
+  | Cmp    _ -> cmp
+  | Dblop  _ -> dblop
+  | Wrdop  _ -> wrdop
+  | Wrdrop _ -> wrdrop
+  | Width    -> width
+  | Fpcvt  _ -> fpcvt
+  | Bool     -> (fun _ _ -> Bool)
+  | Nullary  -> nullary
 
-let apply to_temp to_warg opr = appfun to_temp to_warg (of_opr opr)
+let capply to_temp to_warg opr = cappfun to_temp to_warg (of_opr opr)

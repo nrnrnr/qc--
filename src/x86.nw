@@ -378,10 +378,10 @@ let inplace op op32 x = match op32 with
 let unop ~dst op x = match at32 op with
 | "popcnt" -> PX.Expand.block (Rewrite.popcnt 32 ~dst:(temploc dst) (tempval x))
 | op32 -> move dst x <:> inplace op op32 dst
-
-let rtlop ~dst op args =
-  rtl (R.store (temploc dst)
-         (R.app (Up.opr op) (List.map tempval args)) (tempwidth dst))
+@ 
+<<x86 postexpander>>=
+let unrm  ~dst op x   = impossf "operator %%%s in register" (fst op)
+let binrm ~dst op x y = impossf "operator %%%s in register" (fst op)
 @ 
 <<x86 postexpander>>=
 let extended_multiply op y =
@@ -403,7 +403,9 @@ let dblop ~dsthi ~dstlo op x y =
 @ 
 <<x86 postexpander>>=
 let weird_tmp tmp z = match z with
-| PX.WTemp t -> t, PX.Nop
+| PX.WTemp (Register.Reg t) -> t, PX.Nop
+| PX.WTemp (Register.Slice (w, 0, t)) -> t, PX.Nop
+| PX.WTemp (Register.Slice (w, lsb, t)) -> Impossible.unimp "weird value in slice"
 | PX.WBits b -> tmp, rtl (R.store (temploc tmp) (R.bits (Bits.Ops.zx 32 b) 32) 32)
 
 let set_carry ~tmp z =
@@ -641,6 +643,28 @@ let stack_top_proxy = R.reg stack_top_proxy_reg
 let is_stack_top_proxy = function
   | RP.Reg r -> Register.eq r stack_top_proxy_reg
   | _ -> false
+@ 
+Rounding.
+<<x86 postexpander>>=
+let wargval = function
+  | PX.WTemp (Register.Reg t) -> R.fetch (R.reg t) (tempwidth t)
+  | PX.WTemp (Register.Slice (w, lsb, t)) -> R.fetch (R.slice w ~lsb (R.reg t)) w
+  | PX.WBits b -> R.bits b (Bits.width b)
+
+let fpuctl_reg = match Dn.loc Rg.fpuctl with
+  | RP.Reg r -> r | _ -> impossf "unexpected rep of FPU control register"
+let with_rm rm block = 
+  match rm with
+  | PX.WTemp (Register.Slice (2, 10, r)) when r =$ fpuctl_reg ->
+      block
+  | _ ->
+      let t = talloc 't' 32 in
+      let save    = rtl (R.store (temploc t) (RO.zx 2 32 rounding_mode) 32) in
+      let set     = rtl (R.store rounding_model (wargval rm) 2) in
+      let restore = rtl (R.store rounding_model (RO.lobits 32 2 (tempval t)) 2) in
+      PX.Expand.block (save <:> set) <:> block <:> PX.Expand.block restore
+
+
 <<x86 postexpander>>=
 let push ~addr assn = 
 (*
@@ -660,11 +684,15 @@ let push_cvt op w ~addr assn =
   let regval = R.app (Up.opr op) [memval; rounding_mode] in
   rtl (st_push regval)
 
+let push_cvt_rm op rm w ~addr assn = with_rm rm (push_cvt op w ~addr assn)
+
 let store_pop_cvt op w ~addr assn =
   assert (Cell.divides mcell w);
   let memval regval = R.app (Up.opr op) [regval; rounding_mode] in
   let store regval = R.store (R.mem assn mspace (mcount w) addr) (memval regval) w in
   rtl (st_pop_with store)
+let store_pop_cvt_rm op rm w ~addr assn =
+  with_rm rm (store_pop_cvt op w ~addr assn)
 <<x86 postexpander>>=
 let pushk _ = impossf "load 80-bit floating-point constant"
 let pushk_cvt _ _ _ = Impossible.unimp "load floating-point constant"
@@ -686,6 +714,7 @@ let stack_op op = match opclass op with
       rtl ( R.store (freg_at next_st) result 80)
     else
       rtl (R.par [ R.store (freg_at next_st) result 80; R.store st next_st 3])
+let stack_op_rm op rm = with_rm rm (stack_op op)
 @ 
 The machine from hell:
 \begin{itemize}

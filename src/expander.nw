@@ -567,18 +567,24 @@ constants, as noted above on page~\pageref{sec:optimism}.
 <<generic expansion operations for register machines>>=
 val lix : dst:temp -> Rtl.exp           -> block
 @ 
-We provide simple shortcuts for binary and unary operators.
-I don't know if the shortcuts are worthwhile.
-N.B.~no operator passed to any of these functions expects or returns a
-Boolean! 
+Some operators are handled in the generic expander or the simplifier,
+most operators reach the postexpander.
+Not all such operators have the same shape, so we provide an interface
+function for each shape.
+@
 Ordinary value operators are expected to be supported by these
 operations, but only at their natural widths.
 Weird value operators such as carry, borrow, or multiply-extended are
 supported by special-purpose functions described further below.
 <<generic expansion operations for register machines>>=
-val binop : dst:temp -> operator -> temp -> temp -> block
 val unop  : dst:temp -> operator -> temp         -> block
-val rtlop : dst:temp -> operator -> temp list    -> block
+val binop : dst:temp -> operator -> temp -> temp -> block
+@ 
+If a unary or binary operator takes rounding modes, it has a slightly
+different shape:
+<<generic expansion operations for register machines>>=
+val unrm  : dst:temp -> operator -> temp         -> warg -> block
+val binrm : dst:temp -> operator -> temp -> temp -> warg -> block
 @ 
 We support the width-doubling weird value operators with the
 [[dblop]] function.
@@ -612,7 +618,7 @@ A~weird argument may also be a literal.
 type wtemp = fill * temp
 and  fill  = HighS | HighZ | HighAny  
 and  warg  = WBits of Bits.bits
-           | WTemp of temp  (* the high bits could contain anything *)
+           | WTemp of Register.x  (* high bits, if any, could contain anything *)
 @ 
 Usage notes:
 \begin{quote}
@@ -833,6 +839,10 @@ We have to give the width of the value in memory.
 <<generic expansion operations for stack machines>>=
 val push_cvt      : operator -> width -> addr:Address.t -> assertion -> block
 val store_pop_cvt : operator -> width -> addr:Address.t -> assertion -> block
+@ And there might be a rounding mode
+<<generic expansion operations for stack machines>>=
+val push_cvt_rm      : operator -> warg -> width -> addr:Address.t -> assertion -> block
+val store_pop_cvt_rm : operator -> warg -> width -> addr:Address.t -> assertion -> block
 @ 
 We can also imagine a whole bunch of stack operations:
 [[stack_copy]], [[dup]], [[exch]], [[pop]], and more.
@@ -845,8 +855,10 @@ val pushk     :                      Rtl.Private.const -> block
 val pushk_cvt : operator -> width -> Rtl.Private.const -> block
 @
 We may operate on the stack.
+Such on operation may need a rounding mode.
 <<generic expansion operations for stack machines>>=
-val stack_op : operator -> block
+val stack_op    : operator         -> block
+val stack_op_rm : operator -> warg -> block
 @
 We may branch conditionally based on the result of a stack operation.
 <<generic expansion operations for stack machines>>=
@@ -1051,18 +1063,22 @@ let insert i x l = (i, x) :: l
 \subsubsection{Placeholders for machines without stacks}
 <<postexpander.ml>>=
 module Nostack (Address : sig type t val reg : temp -> t end) = struct
+  let imposs = Impossible.impossible
   let opclass _ = Register
   let stack_depth = 0
   let stack_width = 0
   let converts_stack_to_temp _ = false
-  let push ~addr _              = Impossible.impossible "stack op on register machine"
-  let store_pop ~addr _         = Impossible.impossible "stack op on register machine"
-  let push_cvt _ _ ~addr _      = Impossible.impossible "stack op on register machine"
-  let store_pop_cvt _ _ ~addr _ = Impossible.impossible "stack op on register machine"
-  let pushk _                   = Impossible.impossible "stack op on register machine"
-  let pushk_cvt _ _ _           = Impossible.impossible "stack op on register machine"
-  let stack_op _                = Impossible.impossible "stack op on register machine"
-  let bc_stack _ ~ifso ~ifnot   = Impossible.impossible "stack op on register machine"
+  let push ~addr _                   = imposs "stack op on register machine"
+  let store_pop ~addr _              = imposs "stack op on register machine"
+  let push_cvt _ _ ~addr _           = imposs "stack op on register machine"
+  let push_cvt_rm _ _ _ ~addr _      = imposs "stack op on register machine"
+  let store_pop_cvt _ _ ~addr _      = imposs "stack op on register machine"
+  let store_pop_cvt_rm _ _ _ ~addr _ = imposs "stack op on register machine"
+  let pushk _                        = imposs "stack op on register machine"
+  let pushk_cvt _ _ _                = imposs "stack op on register machine"
+  let stack_op _                     = imposs "stack op on register machine"
+  let stack_op_rm _                  = imposs "stack op on register machine"
+  let bc_stack _ ~ifso ~ifnot        = imposs "stack op on register machine"
   let stack_top_proxy = Rtl.reg (('\000', Rtl.Identity, Cell.of_size 0), 0, Rtl.C 0)
   let is_stack_top_proxy _ = false
 end
@@ -1083,10 +1099,12 @@ end
 
 module A  = Automaton
 module BO = Bits.Ops
+module O  = Opshape 
 module PX = Postexpander
 module R  = Rtl
 module RP = Rtl.Private
 module RU = Rtlutil
+module Rg = Register
 module S  = Space
 module T  = Target
 
@@ -1399,26 +1417,28 @@ match Post.opclass op with
     let t, is = to_temp room context (fetch_slot slot w) in
     t, assign_slot room slot e w <:> is
 | PX.Register ->
-    let (temps, is) =
-      try
-        List.split (List.map2 (fun c e -> to_temp room (contextmap c) e)
-                      (Post.arg_contexts op) args)
-      with Invalid_argument (_) ->
-        impossf "bad arity for operator %s (args %d vs context %d)"
-          (fst op) (List.length args) (List.length (Post.arg_contexts op)) in
     let w = width e in
-    let t = alloc_direct (Post.result_context op) w in
-    let compute = match temps with
-    | [x; y] -> Post.binop t op x y  (* see note on binary operators below *)
-    | [x]    -> Post.unop  t op x
-    | _      -> Post.rtlop t op temps in
-    temp_in_context t context (block_concat (List.rev is) <:> compute)
-@ The note on binary operators is that eventually the generic expander
-might be extended so it can deal with a two-address target machine.
-The generic expander might (somehow) divine whether the operation is 
-in $L \mathrel{:=} L \oplus R$ form or in $R \mathrel{:=} L \oplus R$ form,
-and it could call appropriate supporting functions in the target.
-On the other hand, we could just rely on peephole optimization\ldots
+let tref = ref None in
+let t() = match !tref with
+| None -> (let t = alloc_direct (Post.result_context op) w in tref := Some t; t)
+| Some t -> t in
+(*    let t = alloc_direct (Post.result_context op) w in *)
+    let temp e c = to_temp room (contextmap c) e in
+    let warg e c = to_warg room (contextmap c) e in
+    let is = match O.capply temp warg op args (Post.arg_contexts op) with
+    | O.Binop ((x, b1), (y, b2))          -> b2 <:> b1 <:>        Post.binop (t()) op x y
+    | O.Unop  ((x, b1))                   -> b1 <:>               Post.unop  (t()) op x
+    | O.Binrm ((x, b1), (y, b2), (r, b3)) -> b3 <:> b2 <:> b1 <:> Post.binrm (t()) op x y r
+    | O.Unrm  ((x, b1), (r, b2))          -> b1 <:> b2 <:>        Post.unrm  (t()) op x r
+    | O.Fpcvt ((x, b1), (r, b2))          -> b1 <:> b2 <:>        Post.unrm  (t()) op x r
+    | O.Dblop ((x, b1), (y, b2))          ->
+        Impossible.unimp "double-width multiply into single temporary"
+    | O.Wrdop ((x, b1), (y, b2), (z, b3)) -> b1 <:> b2 <:> b3 <:> Post.wrdop (t()) op x y z
+    | O.Wrdrop((x, b1), (y, b2), (z, b3)) ->
+        impossf "single-bit result direct into temporary"
+    | O.Cmp _ | O.Width | O.Bool | O.Nullary ->
+        impossf "operator %%%s reached postexpander" (fst op) in
+    temp_in_context (t()) context is 
 @
 <<cases for converting a compile-time constant to a temporary>>=
 | RP.Const k ->
@@ -1497,23 +1517,27 @@ and compile_weird_args room op args = match args, Post.arg_contexts op with
     x, y, z, xis <:> yis <:> zis
 | _ -> impossf "wrong number of args or contexts to %%%s" (fst op)
 @ 
-To compute a weird argument, we have either a literal or a temporary.
-We might have to fetch a weird argument from a hardware register, but
-that's not implemented (yet).
+To compute a weird argument, we have a literal, a temporary, or
+a hardware register.
 <<other generic expander functions>>=
 and to_warg room context e = match e with
+| RP.Const (RP.Bits b) ->
+    PX.WBits b, PX.Nop
 | RP.App (("lobits", [w; n]), [e]) ->
     let t, is = to_temp room context e in
-    (PX.WTemp t), is
+    (PX.WTemp (Rg.Reg t)), is
 | RP.App ((("carry"|"borrow"), [w]) as wrdop, args) ->
     let x, y, z, is = compile_weird_args room wrdop args in
     let t = alloc_direct (Post.result_context wrdop) w in
     let t, is = 
       temp_in_context t context (is <:> Post.wrdrop (PX.HighAny, t) wrdop x y z) in
-    (PX.WTemp t), is
-| RP.Const (RP.Bits b) ->
-    PX.WBits b, PX.Nop
-| RP.Fetch _ -> Impossible.unimp "narrow argument straight from location"
+    (PX.WTemp (Rg.Reg t)), is
+| RP.Fetch (RP.Reg r, w) -> 
+    (PX.WTemp (Rg.Reg r), PX.Nop)
+| RP.Fetch (RP.Slice (w, lsb, (RP.Reg r)), w') ->
+    assert (w = w');
+    (PX.WTemp (Rg.Slice (w, lsb, r)), PX.Nop)
+| RP.Fetch _ -> Impossible.unimp "narrow argument from memory"
 | e -> impossf "trying to put %s into a weird temporary" (RU.ToString.exp (Up.exp e))
 @ 
 <<cases for extending a narrow register (such as rounding mode)>>=
@@ -1606,15 +1630,23 @@ and to_stack' room e =
 Debug.eprintf "expander" "to_stack generic case for %s\n" (D.exp e);
 match Post.opclass op with
 | PX.Stack(dir, depth) ->
-    let args = List.filter is_not_rounding_mode args in (* cheat!!! *)
-        (* ROUNDING *)
-    let args = match dir with PX.LeftFirst -> args | PX.RightFirst -> List.rev args in
-    let push_args room =
+    let push room args =
+      let args = match dir with PX.LeftFirst -> args | PX.RightFirst -> List.rev args in
       let (is, _) = List.fold_left (fun (is,r) e -> (is <:> to_stack r e, r-1))
                     (PX.Nop,room) args in
       is in
-    let compute room = push_args room <:> Post.stack_op op in
-    (* ROUNDING *)
+    let temp e c = e in
+    let warg e c = to_warg room (contextmap c) e in
+    let compute room = match O.capply temp warg op args (Post.arg_contexts op) with
+    | O.Binop (x, y)          -> push room [x; y] <:>       Post.stack_op op
+    | O.Unop  (x)             -> push room [x]    <:>       Post.stack_op op
+    | O.Binrm (x, y, (r, b))  -> push room [x; y] <:> b <:> Post.stack_op_rm op r
+    | O.Unrm  (x, (r, b))     -> push room [x]    <:> b <:> Post.stack_op_rm op r
+    | O.Fpcvt (x, (r, b))     -> impossf "general fpcvt on stack"
+    | O.Dblop _ | O.Wrdop _ | O.Wrdrop _ ->
+        Impossible.unimp "weird value operator on stack"
+    | O.Cmp _ | O.Width | O.Bool | O.Nullary ->
+        impossf "operator %%%s reached postexpander" (fst op) in
     if room >= depth then
       compute room
     else
@@ -1650,9 +1682,11 @@ and restore_stack number_to_keep number_to_restore =
           [RP.Fetch (RP.Mem (('m',agg,ms), c, addr, assn), n'); rm]) ->
     assert (n = n' && n' = Cell.to_width ms c);
     assert (agg =*= Post.byte_order);
-    let a, is = address room addr in
-    is <:> Post.push_cvt op n a (upassn assn)
-    (*ROUNDING*)
+    let rcontext = match Post.arg_contexts op with [_; c] -> c
+                                                 | _ -> impossf "rm context" in
+    let r, is' = to_warg room (contextmap rcontext) rm in
+    let a, is  = address room addr in
+    is <:> is' <:> Post.push_cvt_rm op r n a (upassn assn)
 @ 
 \subsection{Expanding RTLs}
 
@@ -1868,17 +1902,24 @@ RP.App ((("sx" | "zx"), [wsrc; wdst]) as op, [rhs]) ->
   (* what goes wrong if wsrc is not the width of the stack? *)
   let is = to_stack room rhs in
   is <:> is' <:> Post.store_pop_cvt op wdst a (upassn assn)
-| RP.App ((("f2f" | "f2i" | "i2f"), [wsrc; wdst]) as op, [rhs; roundingmode]) ->
+| RP.App ((("f2f" | "f2i" | "i2f"), [wsrc; wdst]) as op, [rhs; rm]) ->
   (* what goes wrong if wsrc is not the width of the stack? *)
   let is = to_stack room rhs in
-  is <:> is' <:> Post.store_pop_cvt op wdst a (upassn assn)
+  let rcontext = match Post.arg_contexts op with [_; c] -> c
+                                               | _ -> impossf "rm context" in
+  let r, is'' = to_warg room (contextmap rcontext) rm in
+  is <:> is' <:> is'' <:> Post.store_pop_cvt_rm op r wdst a (upassn assn)
 <<\emph{pattern [[->]] action} for push-convert, then store-pop>>=
 RP.App ((("f2f"|"f2i"|"i2f"), [n; w]) as op,
-        [RP.Fetch (RP.Mem ((_,agg,ms), c, srcaddr, srcassn), n'); roundingmode]) ->
+        [RP.Fetch (RP.Mem ((_,agg,ms), c, srcaddr, srcassn), n'); rm]) ->
   assert (n = n' && n' = Cell.to_width ms c);
   assert (agg =*= Post.byte_order);
+  let rcontext = match Post.arg_contexts op with [_; c] -> c
+                                               | _ -> impossf "rm context" in
+  let r, is' = to_warg room (contextmap rcontext) rm in
   let srca, is = address room srcaddr in
-  is <:> Post.push_cvt op n srca (upassn srcassn) <:> Post.store_pop a (upassn assn)
+  is <:> is' <:> Post.push_cvt_rm op r n srca (upassn srcassn) <:>
+  Post.store_pop a (upassn assn)
 @ 
 A~splittable right-hand side looks like this: 
 \begin{quote}
