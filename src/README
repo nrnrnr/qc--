@@ -1,4 +1,66 @@
-What needs to be done to add new files to the compiler?
 
-If something changes just in this directory, and we want to recompile, 
-what do we need to do short of running mk in the parent directory?
+Developer's FAQ
+
++ What needs to be done to add new files to the compiler?
+  
+  The standard case is new module foo.nw that provides foo.mli and
+  foo.ml.  If you just want to play with the new module but you don't
+  want it to link into the binary you just have to update the
+  dependencies and once this is done you can compile your module:
+   
+    mk foo.ml foo.mli           extract sources manually for first time
+    mk depend
+    mk foo.cmo
+
+  Once the dependencies are recorded, just "mk foo.cmi" or "mk
+  foo.cmo" should extract the source code from foo.nw and compile it,
+  as well as any dependent file.
+    
+  If the module should be linked into the binary add foo.ml to the ML
+  variable in mkfile:
+
+    ML =            uint64.ml     \
+                    impossible.ml \
+                    ...
+                    foo.ml        \             <---- here
+                    ...
+                    asm2.ml       \
+                    cmdline.ml    \
+                    driver.ml     \
+                    main.ml       \
+
+  Every module that foo depends on must precede it in that list.  This
+  means, high level modules go towards the end of the list.  Every
+  time you modify the mkfile you have to do a "mk depend".
+    
+  A non-standard case contains more modules in one noweb-file, say foo.nw
+  provides foo.ml, foo.mli and bar.ml. In this case you have to add a
+  rule for bar.ml in mkfile that extracts it from foo.nw. The standard
+  rules still deal with foo.ml and foo.mli. Look at cmdline.ml as an
+  example for such a rule.
+
++ The compiler complains inconsistencies of compiled interfaces. What
+  can I do?
+
+  Your dependencies are not up to date. Do a "mk depend" and try again.
+
++ If something changes just in this directory, and we want to recompile, 
+  what do we need to do short of running mk in the parent directory?
+
+  The sub-directories in qc--/ in general depend on each other. In
+  particular does src/ (this direcory) depend on ../cllib/ and
+  ../asdl/. If these are up to date, running mk in this directory
+  builds the compiler as byte-code executable. During development
+  there is little need to step outside of this directory to build the
+  compiler. See the top of mkfile for more targets.
+  
++ How do I create documentation for my module foo.nw?
+
+  The mkfile provides useful rules for documentation:
+
+        mk foo.tex              extract LaTeX documentation
+        mk foo.dvi              create DVI file 
+        mk foo.html             create HTML file
+        mk foo.ps               create PostScript file
+        
+        
