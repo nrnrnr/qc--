@@ -219,7 +219,7 @@ let arguments () =
             ] in
 
     A.first_choice 
-    [ (fun w h -> h = "float"),
+    [ (fun h w -> h = "float"),
         A.widen (Aux.round_up_to ~multiple_of: 32) *>
         A.widths [32;64] ~errormsg:(badwidth "MIPS argument") *>
         A.choice
@@ -365,3 +365,29 @@ let paths_return   = dump Automatongraph.paths (fun () -> results)
 let paths_cutto    = dump Automatongraph.paths (fun () -> cut_args)
 @
 
+@
+<<mipscall.ml>>=
+let bogus () =
+    let ctr = ref 0 in
+    A.widen (Aux.round_up_to ~multiple_of: 32) **>
+    A.widths [32;64] ~errormsg:(badwidth "MIPS argument") **>
+    A.counter ctr **>
+    A.first_choice 
+    [ A.is_hint "float",
+        A.choice
+        [ A.is_hint "float",
+            A.useregs [('f', 12, 64); ('f', 14, 64)] ~errormsg:fatal   
+        ; A.is_any, 
+            A.unit
+        ] 
+    ; A.is_any,
+        A.choice
+        [ (fun h w -> h = "float" && w = 64),
+            A.offsetregs ctr [('f', 12, 64); ('r', 6, 64)]
+        ; A.is_any,
+            A.unit
+        ]  
+    ] **>
+    A.offsetregs ctr [r 4; r 5; r 6; r 7] **>
+    A.overflow 
+        ~memsize:8 ~byteorder ~growth ~max_alignment:sp_align

@@ -350,7 +350,7 @@ If no choice is ever made, the automaton freezes as the first
 alternative.
 It is a checked run-time error if no predicate is satisfied.
 <<automaton.mli>>=
-val first_choice : ((width -> hint -> bool) * stage) list -> stage
+val first_choice : ((hint -> width -> bool) * stage) list -> stage
 @ 
 
 
@@ -778,7 +778,7 @@ let first_choice choices next =
   let freeze regs mems = (!myself).freeze regs mems in
   let first_allocate ~width ~alignment ~hint =
     let choice =
-      try snd (List.find (fun (p, _) -> p width hint) choices)
+      try snd (List.find (fun (p, _) -> p hint width) choices)
       with Not_found -> Impossible.impossible "missing choice" in
     myself := choice;
     allocate width alignment hint in
@@ -849,3 +849,9 @@ class loc' l =
   end
 
 let to_old l = new loc' l
+@ 
+\paragraph{UNIT STUFF --- FIX ME}
+<<automaton.mli>>=
+val unit : stage
+<<automaton.ml>>=
+let unit = wrap (fun next -> next)
