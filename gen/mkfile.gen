@@ -13,12 +13,18 @@ $SLEDSPECDIR/&-names.spec: $SLEDSPECDIR/&.nw
 $TKRTL/&.rtl: $TKRTL/&.nw
 	(cd `dirname $target`; mk `basename $target`)
 
-&.sled: $SLEDSPECDIR/&.spec $SLEDSPECDIR/&-names.spec &.discards
+&.sled:D: $SLEDSPECDIR/&.spec $SLEDSPECDIR/&-names.spec &.discards
 	cat $prereq > $target
 
 
+$SLEDSPECDIR/spent.spec: $SLEDSPECDIR/pentium.nw
+	(cd `dirname $target`; mk `basename $target`)
 
-&.rtl: $TKRTL/&.rtl
+x86i.sled:D: $SLEDSPECDIR/spent.spec x86i.discards
+	# remove discard to work around some foul toolkit bug
+	cat $prereq | grep -vw discard > $target
+
+&.rtl:D: $TKRTL/&.rtl
 	cat $prereq > $target
 
 
@@ -27,10 +33,10 @@ $TKRTL/&.rtl: $TKRTL/&.nw
 # the SLED library
 # ------------------------------------------------------------------ 
 
-sledlib.mli:    $SLEDLIBDIR/caml-lib.nw
+sledlib.mli:D:    $SLEDLIBDIR/caml-lib.nw
 	        notangle -L"$LINE" -R$target $prereq > $target
 
-sledlib.ml:     $SLEDLIBDIR/caml-lib.nw
+sledlib.ml:D:     $SLEDLIBDIR/caml-lib.nw
 	        notangle -L"$LINE" -R$target $prereq > $target
 
 # ------------------------------------------------------------------ 

@@ -11,6 +11,8 @@
 # given, and there is no reference to Lambda-RTL.
 #
 # To use the mkfile in `gen' mode, run `mk MODE=gen'.
+#
+# To add a new target, modify MACHINEREGEX (and probably also mkfile.gen)
 
 # Currently the compilation of sparcrec.ml to native code with ocamlopt
 # fails.  
@@ -38,7 +40,7 @@ TKRTL =         $TKDIR/rtl
 SLEDLIBDIR =    $TKDIR
 RTLSPECDIR =    $TKRTL
 SLEDSPECDIR =   /home/lair/nr/toolkit/www/specs
-LRTLHEAPi =     /usr/share/smlnj/bin/.heap/lrtl.x86-linux
+LRTLHEAP =     /usr/local/smlnj/bin/.heap/lrtl.x86-linux
 
 # ------------------------------------------------------------------ 
 # (high level) virtual targets
@@ -83,7 +85,7 @@ clobber:V:      clean
 <../config/ocaml.mk
 <../config/noweb.mk
 
-MACHINEREGEX=sparc
+MACHINEREGEX=sparc|x86i
 
 <mkfile.$MODE
 
@@ -107,6 +109,8 @@ OCAMLO_FLAGS =  $PROFILE -I $LIBDIR -nolabels
 LOCAL =         sledlib.ml      \
                 sparc.ml        \
                 sparcmkasm.ml   \
+		x86i.ml		\
+		x86imkasm.ml	\
                 # sparcrec.ml   \
                 # sparcrtl.ml   \
                 ast.ml          \
@@ -117,6 +121,8 @@ LOCAL =         sledlib.ml      \
 LOCALI =        sledlib.mli     \
                 sparc.mli       \
                 sparcmkasm.mli  \
+		x86i.mli	\
+		x86imkasm.mli	\
                 ast.mli         \
                 astUtil.mli     \
                 rtlasdl.mli     \
@@ -190,7 +196,7 @@ dirs:VQ:
 # ------------------------------------------------------------------ 
 
 depend:V: $DEPEND
-$DEPEND:        $SCAN
+$DEPEND:D:        $SCAN
                 $OCAMLDEP -I $LIBDIR $SCAN > $DEPEND
 
 # ------------------------------------------------------------------ 
