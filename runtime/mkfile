@@ -63,11 +63,13 @@ clobber:V: clean
 # ------------------------------------------------------------------ 
 
 C = runtime.c pcmap.c gcc-linux.c
+CMM = cut.c--
 H = qc--runtime.h pcmap.h
 
 C = ${C:%.c=$B%.c}
+CMM = ${CMM:%=$B%}
 H = ${H:%.h=$B%.h}
-O = ${C:%.c=%.o}
+O = ${C:%.c=%.o} ${CMM:%.c--=%.o}
 
 SCAN = $C trace.c
 # <$TOP/config/depend.mk
@@ -109,3 +111,12 @@ pcmap.ld:D: pcmap.nw
 
 qc--runtime.h:D: runtime.nw
 	$NOTANGLE -L $prereq -R$target > $target
+
+${B}cut.c--:D: runtime.nw
+	$NOTANGLE -L $prereq -R$target > $target
+
+cut.s: ${B}cut.c-- ../bin/qc--.opt
+	tmp=/tmp/cut$$
+	../bin/qc--.opt -S -o $tmp ${B}cut.c--
+	sed '/globalsig/d;/ref_to_global_area/d' $tmp > $target
+	rm -f $tmp
