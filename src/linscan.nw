@@ -80,12 +80,13 @@ Module type [[S]] summarizes the functionality we implement and export
 for clients.  
 
 <<exported module types>>=
-module type S = sig 
-    val linscan: Cfg3.t -> unit
-end 
+module type G = Cfg3.S with type locs = Register.Set.t
 
 <<linscan.mli>>=
 <<exported module types>>
+module Make (A: Args) (G: G): sig
+    val linscan: G.t -> unit
+end
 @
 
 % ------------------------------------------------------------------ 
@@ -109,24 +110,44 @@ Node in a {\cfg} are numbered with integers, called \emph{points}
 here.  Points mark the opening and closing of liveness intervals. 
 
 <<linscan.ml>>=
-module Point = struct
-    type t = int
-    let compare = compare
-    let zero = 0 
-end
+<<exported module types>>
 
-module G        = Cfg3
-module P        = Point
-module I        = Interval.Make(Point)
-module L        = Lifetime.Make(I)
-module RM       = Register.Map
-module RS       = Register.Set
+module Make (A: Args) (G: G) = struct
 
-type lifetimes  = L.t RM.t  (* lt *)  (* map from register to its lifetimes *)
-type loc        = Register.t    
+    module P = struct
+        type t = int
+        let compare = compare
+        let zero = 0 
+    end
+    
+    module I        = Interval.Make(P)
+    module LT       = Lifetime.Make(I)
+    module LI       = Live.Make(G)
+    module RM       = Register.Map
+    module RS       = Register.Set
  
-<<compute lifetimes>>
+    type lifetimes  = LT.t RM.t  (* lt *)  (* map from register to its lifetimes *)
+    type loc        = Register.t    
+ 
+
+    (* extract live set from a node *)
+    let live (node: G.node) = assert false 
+
+    <<compute lifetimes>>
+    
+    module A = A open A (* never do that *)
+    let lookup table x = RM.find x table       (* lookup lifetime *)
+
+    <<find tmp>>
+    <<find reg>>
+    <<find spillee>>
+    
+    <<replace>> 
+    <<alloc>> 
+    <<linscan>>   
+end
 @
+
 
 To detect the opening and closing of liveness intervals the algorithm
 compares the live-sets of two adjacent nodes $n_i$ and $n_{i+1}$. The
@@ -159,7 +180,7 @@ register from [[op]] and adding a new interval to its lifetime in
 
 <<compute lifetimes>>=
 (* type op    = P.t RM.t  (* map from register to opening point *)
- * type lt    = L.t RM.t  (* map from register to lifetime      *)
+ * type lt    = LT.t RM.t  (* map from register to lifetime      *)
  * type state = op * lt   
  *)
  
@@ -169,9 +190,9 @@ let close_intv point (op,lt) reg =
     let x = try Register.Map.find reg op with Not_found -> assert false in
     let y = point in
     let i = I.mk x y in
-    let l = try Register.Map.find reg lt with Not_found -> L.empty in
+    let l = try Register.Map.find reg lt with Not_found -> LT.empty in
         ( Register.Map.remove reg op
-        , Register.Map.add reg (L.mk i) lt
+        , Register.Map.add reg (LT.mk i) lt
         ) 
 @
 
@@ -197,7 +218,7 @@ let lifetimes cfg lt =
     let domain map  = RM.fold (fun key _ list -> key::list) map [] in
     let scan node (oldset, state) =
         let point   = G.number node                                in
-        let set     = G.live node                                  in
+        let set     = live node                                    in
         let opening = RS.diff set oldset                           in
         let closing = RS.diff oldset set                           in
         let state   = open_regs  point (RS.elements opening) state in
@@ -235,25 +256,8 @@ with code to
 \item and to spill a register in a part of a {\cfg}.
 \end{enumerate}
 
-<<linscan.ml>>=
-<<exported module types>>
-module Make (A : Args) : S = struct
-    module A = A open A (* never do that *)
-
-    let lookup table x = RM.find x table       (* lookup lifetime *)
-
-    <<find tmp>>
-    <<find reg>>
-    <<find spillee>>
-    
-    <<replace>> 
-    <<alloc>> 
-    <<linscan>>
-end
-@
-
 The linear-scan register allocator [[linscan]] visits all nodes of a
-{\cfg} in a linear order and [[alloc]]'tes hardware register for their
+{\cfg} in a linear order and [[alloc]]'ates hardware register for their
 temporaries.  The [[alloc]] function receives two continuations,
 [[loop]] and [[spill]].  It calls the latter, if no hardware register
 can be found for a temporary.  Because spilling mutates the structure
@@ -261,7 +265,7 @@ of a {\cfg}, register allocation starts over after spilling.
 
 <<linscan>>=
 let rec linscan cfg =
-    let _          = Live.liveness cfg     in
+    let _          = LI.liveness cfg     in
     let _          = G.gm_enumerate cfg in
     let rec loop lifetimes = function (* over all nodes *)
         | None      -> ()
@@ -309,7 +313,7 @@ let replace_tmp node tmp lifetimes success spill =
   let cfg         = G.cfg node    in
   match find_reg lifetimes tmp with
   | Some r -> (* successfully found a hardware register *)
-      let lifetimes = RM.add r (L.union (lifetime r) (lifetime r)) lifetimes in
+      let lifetimes = RM.add r (LT.union (lifetime r) (lifetime r)) lifetimes in
       let lifetimes = RM.remove tmp lifetimes                      in
       let ()        = iter cfg (Rtlutil.Subst.reg (replace tmp r)) in
           success lifetimes
@@ -375,7 +379,7 @@ register [[r]], that respects all of the following conditions, or
 let first_fit lifetimes t =
     let fits' (sp,_,_ as t) r = 
         fits sp r &&
-        not (L.overlaps (L.bbox (lookup lifetimes t)) 
+        not (LT.overlaps (LT.bbox (lookup lifetimes t)) 
                                 (lookup lifetimes r))
     in
     let check r lt = function
@@ -417,18 +421,18 @@ spill it from the current node up to the end of the procedure.
 let active point lifetimes =
     let here = I.mk point (point+1) in
     let find = fun loc lt active ->  
-        if L.overlaps here lt then (loc,lt) :: active else active
+        if LT.overlaps here lt then (loc,lt) :: active else active
     in
         RM.fold find lifetimes []
 
 <<longest active type>>=
-G.node -> loc -> lifetimes -> loc * L.t
+G.node -> loc -> lifetimes -> loc * LT.t
 <<find spillee>>=
 let longest_active: <<longest active type>> = fun node tmp lifetimes ->
     let here   = G.number node        in
     let active = active here lifetimes  in
     let max (loc1,lt1 as x) (loc2,lt2 as y) = 
-        if I.behind (L.bbox lt1) (L.bbox lt2) then x else y 
+        if I.behind (LT.bbox lt1) (LT.bbox lt2) then x else y 
     in
         List.fold_left max (tmp,lookup lifetimes tmp) active
 
@@ -550,9 +554,9 @@ and update interval spillee mem node =
             ( let tmp   = A.mkTmp mem in
               let subst = fun x -> if x = spillee then tmp else x in 
               ( if reads  then 
-                    (G.gm_insert_assign_before  node (A.assign_reg tmp mem))
+                    (G.gm_insert_assign_before (A.assign_reg tmp mem) node)
               ; if writes then 
-                    (G.gm_insert_assign_after   node (A.assign_loc mem tmp))
+                    (G.gm_insert_assign_after  (A.assign_loc mem tmp) node)
               ; G.set_rtl node (Rtlutil.Subst.reg subst)
               )
             )

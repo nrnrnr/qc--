@@ -101,7 +101,7 @@ let foldr = List.fold_right
                 ; Expcheck.pointersize = pointer
                 ; Expcheck.tlookup     = tlookup
                 ; Expcheck.vlookup     = vlookup
-                ; Expcheck.ollokup     = olookup
+                ; Expcheck.olookup     = olookup
                 } 
         in try ( match Expcheck.check e exp with
                | Error.Ok(t) -> t
@@ -301,7 +301,7 @@ let actual env target (hint, e) =
     passing. --CL
 \end{quote} 
 
-<<Make formals and actuals>>=
+<<Make formals and actuals (disabled)>>=
 let formal env (khint, n) = (* for continuations *)
     ( match snd (F.findv n env) with 
     | (F.Register {F.index=i;F.loc=None},ty) when F.is_localv n env  -> 
@@ -436,7 +436,8 @@ and gotoStmt state (e,labels) =
     let nodes = List.map (G.lookup state.cfg) labels         in
         {state with node = G.gm_goto state.cfg rtl nodes}
 
-and jumpStmt state (cconv,e,args,labels) =
+and jumpStmt state (cconv,e,args,labels) = assert false
+(*
     let exp     = expr state.env state.target e    in
     let cc      = state.target.Target.cc (Aux.Option.get default_cc cconv) in
     let atm     = Alloc.Reg.mk cc.Target.proc state.outbase     in
@@ -454,6 +455,7 @@ and jumpStmt state (cconv,e,args,labels) =
                 node     = node
             ;   outgoing = Alloc.Reg.freeze atm :: state.outgoing
             }  
+*)
 @
 
 The copy-out code must honor the hints attached to the actual
@@ -462,7 +464,8 @@ parameters, the copy-in code the hints on the l-lvalues.  The
 automaton that guides the parameter passing.
 
 <<Make statements>>=
-and callStmt state (lhs,cconv, e, args, targets, conts) = 
+and callStmt state (lhs,cconv, e, args, targets, conts) = assert false
+(*
     let rec lvalue = function
         | A.LValueAt(x,_) -> lvalue x
         | A.Var x         -> formal state.env x 
@@ -487,8 +490,10 @@ and callStmt state (lhs,cconv, e, args, targets, conts) =
         ;   outgoing = Alloc.Reg.freeze atmo :: state.outgoing
         ;   incoming = Alloc.Reg.freeze atmi :: state.incoming
         }  
+*)
 
-and returnStmt state (cconv, kont, args) =
+and returnStmt state (cconv, kont, args) = assert false
+(*
     let const e   = Bits.to_int (compile_const state.env state.target e)     in
     let cc        = state.target.Target.cc (Aux.Option.get default_cc cconv) in
     let atm       = Alloc.Reg.mk cc.Target.ret state.inbase                 in
@@ -504,9 +509,10 @@ and returnStmt state (cconv, kont, args) =
             node     = ret
         ;   outgoing = Alloc.Reg.freeze atm :: state.outgoing
         }
+*)
 
-
-and contStmt state (label,args)  =
+and contStmt state (label,args)  = assert false
+(*
     let cc        = state.target.Target.cc default_cc               in
     let args      = List.map (formal state.env) args in
     let atm       = Alloc.Reg.mk cc.Target.cont state.inbase       in
@@ -516,8 +522,10 @@ and contStmt state (label,args)  =
             node     = copyi
         ;   incoming = Alloc.Reg.freeze atm :: state.incoming
         }
+*)
 
-and cutStmt state (e, args, conts) = 
+and cutStmt state (e, args, conts) = assert false
+(*
     let cc        = state.target.Target.cc default_cc                  in
     let args      = List.map 
                     (actual state.env state.target) args in
@@ -531,6 +539,7 @@ and cutStmt state (e, args, conts) =
             node     = cut
         ;   incoming = Alloc.Reg.freeze atm :: state.outgoing
         }
+*)
 
 and primStmt      state x  = Impossible.unimp "primitive"
 and spanStmt      state x  = Impossible.unimp "span"
@@ -548,7 +557,8 @@ and switchStmt    state x  = Impossible.unimp "switch"
 *)
 
 <<Make procedure>>=
-let proc env target (*props*) asm (cconv,name,args,bdy) = 
+let proc env target (*props*) asm (cconv,name,args,bdy) = assert false
+(*
     let cfg            = G.mk ()   in 
     let sdbase         = Rtl.link "stack data" target.Target.pointersize in
     let env, stackdata = StackData.proc env target sdbase bdy in
@@ -577,6 +587,7 @@ let proc env target (*props*) asm (cconv,name,args,bdy) =
     (* what to do with all the areas for stack data, parameter passing?
     *)
         asm ++ Asm.instr cfg
+*)
 @
         
    

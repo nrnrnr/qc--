@@ -38,7 +38,10 @@ The [[liveness]] function annotates the nodes in a control-flow graph
 [[cfg]] with the set of live registers \emph{before} that node.
 
 <<live.mli>>=
-val liveness: Cfg3.cfg -> unit
+module Make(G: Cfg3.S with type locs = Register.Set.t
+           ) : sig
+    val liveness: G.t -> unit
+end
 @
 
 % ------------------------------------------------------------------ 
@@ -47,9 +50,10 @@ val liveness: Cfg3.cfg -> unit
 
 
 <<live.ml>>=
-module R = Register.Set
-module G = Cfg3
-<<struct Make>>
+module Make (G: Cfg3.S with type locs = Register.Set.t) = struct
+    module R = Register.Set
+    <<struct Make>>
+end
 @
 
 The set of live variables of a node are basically the union of live
@@ -61,16 +65,21 @@ let (union: Register.Set.t list -> Register.Set.t) =
         List.fold_left R.union R.empty            
 @
 
-The [[live]] function computes the set of variable live \emph{before}
-[[node]].  It does so by looking at the live sets of its successors. 
+Nodes in the control-flow graph {\cfg} carry mutable properties which
+include a set of register live before that node.  The following
+functions allow to read and write this set.
+
+<<struct Make>>=
+let get_live (node:G.node)                      = assert false
+let set_live (node:G.node) (set:Register.Set.t) = assert false
+@
+
+The [[live]] function computes the set of registers live \emph{before}
+[[node]].  It does so by looking at the live sets of its successors
+and the registers defined, killed, and used by the current [[node]]. 
 The idea is, that variables live at successor nodes must be either
 defined by this node, or must be live before this node as well.  The
-details depend on the kind of [[node]].  
-
-Most nodes include an [[rtl]]; we calculate the read/write sets from
-the [[rtl]] using [[rw]].  In the [[standard]] case, the live set can
-be deduced from the [[rtl]] alone whitout looking a the kind of its
-node:
+details depend on the kind of [[node]]. 
 
 \begin{itemize}
 \item A variables live after the node are also live before it,
@@ -78,10 +87,18 @@ node:
 \item plus the variables that are read by the rtl.
 \end{itemize}
 
+\begin{quote}\it
+    What is the difference of \emph{def} and \emph{kill} from the
+    liveness analysis point of view. It seems that both define a
+    location but in the case of a kill the value is unknown. However,
+    the value does not matter for liveness analysis which would make
+    them equivalent. --CL
+\end{quote}
+
 $$\mathit{live} = 
     ( \mathit{after} 
-      \setminus \mathit{written}
-    ) \cup \mathit{read}
+      \setminus \mathit{defined} \setminus \mathit{killed}
+    ) \cup \mathit{used}
 $$
 
 The [[after]] function computes the union of the live sets of a node's
@@ -91,18 +108,16 @@ successors.
 let rec after node = union (List.map live (G.succ node)) 
 @
 
-Not all liveness information can be deduced from nodes' {\rtl}s.  Some
-nodes have additional liveness informations attached, like the
-[[jump]], [[cutto]] and [[return]] node.  They are taken into account
-by the [[live]] function.  In this particular case nodes advertise
-which registers are used such that they are kept live.
+Nodes report the locations they use, define, and kill.
 
 <<struct Make>>=
 and live: G.node -> Register.Set.t = fun node -> 
-    let use          = Register.Set.empty (* dummy *)           in
-    let (read,write) = Rtlutil.read_write_sets (G.rtl node)     in
-    let live         = Register.Set.diff (after node) write     in
-        Register.Set.union live read
+    let defs         = G.defines node                      in
+    let uses         = G.uses    node                      in
+    let kills        = G.kills   node                      in
+    let live         = Register.Set.diff (after node) defs in
+    let live         = Register.Set.diff live kills        in (*XXX*)
+        Register.Set.union live uses
 @
 
 Computing the live sets of a control-flow graph (\cfg) is a fix-point
@@ -114,8 +129,8 @@ currently stored in the node.  If both differ the mutable
 <<struct Make>>=
 let process changed node =
     let l = live node in
-        if l <> G.live node then
-            ( changed := true; G.set_live node l )
+        if l <>  get_live node then
+            ( changed := true; set_live node l )
         else
             ()
 @

@@ -1,7 +1,6 @@
 
 \input{macros.tex}
 
-
 % l2h substitution cfg CFG
 % l2h substitution dots ...
 % l2h substitution AST AST
@@ -23,9 +22,9 @@
 % ------------------------------------------------------------------ 
 
 For code generation, the compiler translates the dynamic part of a
-{\PAL} procedure into a control flow-graph (\cfg).  Each node is
-contains a target-specific register-transfer list {\rtl} that later is
-translated to machine instructions. 
+{\PAL} procedure into a control flow-graph (\cfg).  Each node contains
+a target-specific register-transfer list {\rtl} that later is
+translated into machine instructions. 
  
 Once a procedure is translated into an initial {\cfg} it is analyzed
 and according to the results rewritten gradually in a semantics
@@ -34,60 +33,75 @@ include establishing the machine invariant that every {\rtl} is
 representable by a machine instruction, and modifications resulting
 from register allocation and spilling.
 
+Nodes of a {\cfg} can take part in two relations simultaneously: 
+\begin{enumerate}
+\item Control-flow relation. These are represented by the edges
+      between nodes and model possible flow of control ar run-time. 
+\item Order relation. For the node of a {\cfg} a linear-order can be
+      established. This order is used for code-layout and during
+      analysis phases. 
+\end{enumerate}
+
 % ------------------------------------------------------------------ 
-\subsection{Low-Level Types and Operations}
+\subsection{Abstractions}
 % ------------------------------------------------------------------ 
 
 The {\cfg} abstraction is characterized by the following invariants:
 
 \begin{itemize}
+\item A node belongs to exactly one {\cfg}.
+
 \item A {\cfg} contains nodes, connected by directed edges that model
-      control-flow: $x \to y$ means, $y$ is a successor of $x$;  $y \gets
-      x$ means, $x$ is a predecessor of $y$. 
-\item A {\cfg} has an \emph{entry} and an \emph{exit} node.  A node
-      may be unreachable from either the entry or exit node, or from
-      both.
+      control-flow: $x \to y$ means, $y$ is a successor of $x$.
+
+\item A node has a fixed \emph{kind} that constraints some of its
+      properties, like the number of control-flow successors. In
+      particular, a node's kind is one of the following:
+
+      \begin{tabular}{ll}
+      \it kind & \it represented {\PAL} entity \\ 
+      \hline
+      entry     & unique node in every {\cfg} \\
+      exit      & unique node in every {\cfg} \\
+      assign    & assignment, like [[bits32[x] = y]]\\
+      goto      & [[goto]] \\
+      jump      & [[jump]] \\
+      cutto     & [[cutto]] \\
+      call      & procedure call, [[f(x,y)]]\\
+      branch    & [[if]]-statement\\
+      dummy     & none, used for undefined labels internally\\
+      \end{tabular}
+      
+\item A {\cfg} has unique \emph{entry} and \emph{exit} nodes.  A node
+      may be unreachable from either the entry or the exit node, or
+      from both.
+        
+      \begin{quote}\it
+      Since reachability of all nodes is desirable at least from the
+      entry or the exit node we might introduce \emph{impossible}
+      edges to guarantee this. 
+      \end{quote}
+      
 \item The nodes of a {\cfg} can be numbered $1, \dots,
       |\mathit{cfg}|$.  A numbering for the nodes of a {\cfg} is
       either \emph{present} or \emph{absent}.  If and only if a
       numbering is present, then every node of a {\cfg} has unique
-      number. 
+      number.  The order is used by the code generation phase to
+      define the code layout in memory.
+      
 \item The number of outgoing edges (to successors) is constrained by a
       node's kind. A node can have any number of successors, including
-      zero. 
+      zero, for example:
+      \begin{enumerate}
+      \item An assignment-node has one (control-flow) successor.
+      \item A (conditional) branch-node has two successors.
+      \item A call-node has one default successor and possibly many 
+            exceptional successors.
+      \end{enumerate}
+
+\item A node \emph{defines}, \emph{uses}, and \emph{kills} locations.
+\item A node has mutable properties.
 \end{itemize}
-
-The nodes of a {\cfg} are characterized by the following asbtract
-invariants; 
-      
-\begin{itemize}
-\item A node belongs to exactly one {\cfg}.
-\item A node has a \emph{kind} that defines its behavior and contains
-      a matching {\rtl} defining its semantics.  
-\item A node contains a set of registers live \emph{before} it with
-      respect to the control flow.  i.e.~live on one edge enetring the
-      node.
-      
-%% \item A node and its neighbors, i.e.~its successors and predecessors
-%%    are consistent: if and only if $x \to y$, then $y \gets x$.
-\end{itemize}
-
-\begin{quote}\it
-    Regsiters read and written by a node are deduced from its {\rtl}. 
-    However, sometimes we must pretend that a node manipulates
-    registers that are not present in its {\rtl}: inter-procedural 
-    control and data flow affects registers beyond what is expressed
-    in a {\rtl}. In particular, registers can be \emph{defined},
-    \emph{used}, or \emph{killed} in entry, exit, cutto, jump, and
-    call nodes. We will have to add observers for these sets. --CL
-\end{quote}
-
-\begin{quote}\it
-    This interface does not provide a concept for \emph{node
-    properties} as we had in earlier designs. I'd like to postpone
-    this design decision until we have a better understanding of what
-    we really need. --CL
-\end{quote}
 
 The interface below shows that graphs and nodes have an imperative
 nature.  A control-flow graph is generally built bottom-up:  all
@@ -103,32 +117,34 @@ behaviors, the following name scheme is used:
 \item Observation functions have no special prefix.
 \end{itemize}
 
-\begin{quote}\it
-    NR proposes to hide a node's live-set behinf an abstract type
-    [[node_state]] that is provided by a functor argument. --CL
-\end{quote}
+% ------------------------------------------------------------------ 
+\subsection{Signature}
+% ------------------------------------------------------------------ 
 
 <<types and ops>>=
 type cfg        
-type t = cfg    (* Cfg.t looks JustBetter *)
+type t = cfg                    (* Cfg.t looks JustBetter *)
 type node
-<<type conts>>
-<<type formal>>
-<<type actual>>
+type locs                       (* locations for liveness analysis *)
 
+(* abstract type for data inside nodes *)
+type property
+
+<<type conts>>
+ 
 (* cfg creation *)
 val mk:         unit -> cfg
 
-(* label mutator/oberservation *)
+(* label mutator/observation *)
 val set_label:  cfg -> string -> node -> unit
-val lookup:     cfg -> string -> node                 
+val lookup:     cfg -> string -> node  (* never fails -- see description *)
 
-(* cfg observation *)
+(* cfg observation, fold order unspecified *)
 val entry:      cfg -> node 
 val exit:       cfg -> node 
-
-(* cfg traversal, except fold requires (enumerated cfg)  *)
 val fold:       cfg -> (node -> 'a -> 'a) -> 'a -> 'a (* must not use gm_xxx *)
+
+(* cfg traversal in linear order, requires (enumerated cfg)  *)
 val first:      cfg -> node (* wrt numbering *)
 val last:       cfg -> node (* wrt numbering *)
 val scan_fwd:   cfg -> first:int -> last:int -> (node -> 'a -> 'a) -> 'a -> 'a 
@@ -145,99 +161,140 @@ val gm_cutto:   cfg -> Rtl.rtl -> conts     -> node
 val gm_call:    cfg -> Rtl.rtl -> conts -> succ:node -> node
 val gm_branch:  cfg -> Rtl.rtl -> ifso:node -> ifnot:node -> node
 val gm_dummy:   cfg -> node
+val gm_dataflow: cfg -> def:locs -> use:locs -> kill:locs -> succ:node -> node
+@
 
-(* add linear sequence of assign nodes to cfg, ensures: not (enumerated cfg *)
-val gm_copyi:   cfg -> formal list -> Alloc.Reg.t -> succ:node -> node * Alloc.Reg.t
-val gm_copyo:   cfg -> actual list -> Alloc.Reg.t -> succ:node -> node * Alloc.Reg.t
+% pulled out here
+% add linear sequence of assign nodes to cfg, ensures: not (enumerated cfg
+% val gm_copyin:  cfg -> formal list -> Alloc.Reg.t -> succ:node -> node * Alloc.Reg.t
+% val gm_copyout: cfg -> actual list -> Alloc.Reg.t -> succ:node -> node * Alloc.Reg.t
+%
+<<types and ops>>=
 
 (* cfg mutators, ensures: not (enumerated cfg) *)
-val gm_delete:                  node -> unit
-val gm_redirect_all:            node -> src:node -> dst:node -> unit
-val gm_insert_assign_before:    node -> Rtl.rtl -> unit (* any node *)
-val gm_insert_assign_after:     node -> Rtl.rtl -> unit (* assign node only *)
+val gm_redirect_all:            node -> olddst:node -> newdst:node -> unit
+val gm_insert_assign_before:    Rtl.rtl -> node -> unit (* any node   *)
+val gm_insert_assign_after:     Rtl.rtl -> node -> unit (* see descr! *)
 val gm_insert_assign_between:   Rtl.rtl -> src:node -> dst:node -> unit
 val gm_enumerate:               cfg -> unit (* post: enumerated cfg *)
 
 (* node observation *)
 val cfg:        node -> cfg
 val rtl:        node -> Rtl.rtl
-val succ:       node -> node list       (* no duplicates *)
-val pred:       node -> node list       (* no duplicates *)
-val live:       node -> Register.Set.t
+val succ:       node -> node list 
+val pred:       node -> node list
+val property:   node -> property
 val number:     node -> int             (* pre: enumerated cfg *)
+val defines:    node -> locs            (* locs defined by node *)
+val uses:       node -> locs            (* locs used by node    *)
+val kills:      node -> locs            (* locs killed by node  *)
 
 (* node mutators *)
-val set_live:   node -> Register.Set.t -> unit (* set live set *)
-val set_rtl:    node -> (Rtl.rtl -> Rtl.rtl) -> unit
+val set_rtl:        node -> (Rtl.rtl -> Rtl.rtl) -> unit
+val set_property:   node -> property list -> unit 
 @
+
+% ------------------------------------------------------------------ 
+\subsection{Description}
+% ------------------------------------------------------------------ 
 
 % ------------------------------------------------------------------ 
 \subsubsection{Graph creation}
 % ------------------------------------------------------------------ 
 
-\begin{description}
-\item[mk] 
-    Creates an empty {\cfg} that just contains an entry node connected
-    to an exit node. Numbering of nodes is absent and no labels are defined.
-\end{description}
+\begin{quote}\it
+The typesetting of signatures below is ugly because I'm lacking an
+idea and a \LaTeX~macros to do it better.  Duplicating signatures
+manually is in addition prone to inconsistencies.  --CL 
+\end{quote}
 
-% ------------------------------------------------------------------ 
-\subsection{Graph observation}
-% ------------------------------------------------------------------ 
-
-\begin{description}
-\item[entry]
-    The {\cfg}'s unique entry node.
-\item[exit]     
-    The {\cfg}'s unique exit node.
-
-\item[fold]     
-    Traverses the nodes of the {\cfg} in a ``natural'' order.  It is
-    an unchecked run-time error if the function passed to [[fold]]
-    calls a graph mutator.
-
-\item[scan\_fwd]
-    Scans the nodes in the [[first]] \dots [[last]] interval in enumeration
-    order and passes nodes to the supplied function. Each of the following
-    is a checked run-time error:  absent numbering, [[first]] greater
-    than [[last]]. It is an unchecked run-time error when the supplied
-    function uses any graph mutator.
-
-\item[scan\_bwd]
-    Like [[scan_fwd]], except that the interval in reverse order,
-    from [[last]] to [[first]].
-
-\item[prev/next]
-    Returns the previous/next node with respect to node numbering, or
-    [[None]] if there is no such.  It is a checked run-time error to
-    use this function when numbering is \emph{absent}.
-    
-\end{description}
+\begin{itemize}
+\item [[mk:  unit -> cfg]]:  
+Creates an empty {\cfg} that just contains an entry node connected to
+an exit node.  Numbering of nodes is absent and no labels are defined.
+\end{itemize}
 
 % ------------------------------------------------------------------     
 \subsubsection{Labels}
 % ------------------------------------------------------------------ 
 
-\begin{description}
-\item[set\_label]    
-    Assign a label to a node.  It is a checked run-time error if the
-    node does not belong to the {\cfg}.  It is also a checked run-time
-    error to assign a label twice.
+\begin{itemize}
+\item [[set_label:  cfg -> string -> node -> unit]]: 
+Assigns label to a node.  It is a checked run-time error if the node
+does not belong to the {\cfg}.  It is also a checked run-time error to
+assign a label twice.
 
-\item[lookup]   
-    Lookup a node by name.  If a node has a label of that name, the
-    node is returned, otherwise [[Not_found]] is raised.
-\end{description}
+\item [[lookup:  cfg -> string -> node]]: 
+Looks up a node by a label.  If a node was assigned that label before
+it is returned.  Otherwise a [[dummy]] node is created, labeled, and
+returned.
+\end{itemize}
+
+% ------------------------------------------------------------------ 
+\subsubsection{Graph observation}
+% ------------------------------------------------------------------ 
+
+\begin{itemize}
+\item [[entry: cfg -> node]]:
+The {\cfg}'s unique entry node.
+
+\item [[exit: cfg -> node]]:
+The {\cfg}'s unique exit node.
+\end{itemize}
+
+% ------------------------------------------------------------------ 
+\subsubsection{Graph Traversal}
+% ------------------------------------------------------------------ 
+
+\begin{itemize}
+\item [[fold: cfg -> (node -> 'a -> 'a) -> 'a -> 'a]]:
+Traverses the graph in \emph{unspecified} order and passes each
+[[node]] and an intermediate result [['a]] to the function [[f]] that
+is supplied as the second argument.  It is an \emph{unchecked}
+run-time error if [[f]] calls a graph mutator.
+\end{itemize}
+
+All traversal functions below rely on and respect a numbering that
+must be established by [[gm_enumerate]] before these functions can be
+used.  Using any of the traversal functions without an established
+order is a checked run-time error.  Any use of a graph mutator
+function invalidates an existing numbering.
+
+\begin{itemize}
+\item [[first: cfg -> node]]:
+The first node with respect to numbering.
+
+\item [[last: cfg -> node]]:
+The last node with respect to numbering.
+
+\item [[scan_fwd: cfg -> first:int -> last:int -> (node -> 'a -> 'a) -> 'a -> 'a]]: 
+Applies a function [[f]] to the range of nodes from [[first]] to
+[[last]] and passes an intermediate result.  The nodes are visited in
+increasing order with respect to the numbering.  It is an
+\emph{unchecked} run-time error if [[f]] calls a graph mutator.
+
+\item [[scan_bwd: cfg -> first:int -> last:int -> (node -> 'a -> 'a) -> 'a -> 'a]]:
+Dual function to [[scan_fwd]] in the sense that nodes are visited in
+decreasing order, starting with the node numbered [[last]].
+
+\item [[next: node -> node option]]:
+The node following the argument [[node]] with respect to an
+established node numbering or [[None]] if there is no such node.
+
+\item [[prev: node -> node option]]:
+Dual to [[next]]:  the node prior to the argument with respect to a
+node numbering, or [[None]] if no such node exists.
+\end{itemize}
 
 % ------------------------------------------------------------------ 
 \subsubsection{Node Creation}
 % ------------------------------------------------------------------ 
 
-The kind of a node is encoded into the function that creates it. 
-Depending on its kind, a node takes a number of arguments:  the graph
-it belongs to, an {\rtl} and its successors.  The [[cutto]] and
-[[call]] nodes take a continuation bundle that includes several nodes,
-denoting continuations that can be reached from that node.
+Nodes are created by functions that encode their kinds and depending
+on them take different arguments:  the graph a node belongs to, an
+{\rtl} and its successors.  The [[cutto]] and [[call]] nodes take a
+continuation bundle that includes several nodes, denoting
+continuations that can be reached from that node.
 
 <<type conts>>=
 type conts =    { cuts    : node list
@@ -248,47 +305,63 @@ type conts =    { cuts    : node list
 @
 
 The creation of a node also adds it to the {\cfg}; because of this,
-all node creation functions are marked as graph mutators.  Graph
-mutators must not be called by certain functions that traverse a
-{\cfg}.  All graph mutators cause a node numbering to become
-\emph{absent}.
+all node creating functions are marked as graph mutators.  Graph
+mutators must not be called by traversal functions.  Using a mutator
+causes a node numbering to become \emph{absent}.
 
+\begin{verbatim}
+gm_assign:  cfg -> Rtl.rtl -> succ:node -> node
+gm_return:  cfg -> Rtl.rtl -> int * int -> node
+gm_goto:    cfg -> Rtl.rtl -> node list -> node
+gm_jump:    cfg -> Rtl.rtl -> node list -> node
+gm_cutto:   cfg -> Rtl.rtl -> conts     -> node
+gm_call:    cfg -> Rtl.rtl -> conts -> succ:node -> node
+gm_branch:  cfg -> Rtl.rtl -> ifso:node -> ifnot:node -> node
+gm_dummy:   cfg -> node
+val gm_dataflow: cfg -> def:locs -> use:locs -> kill:locs -> succ:node -> node
+\end{verbatim}
 
-A [[dummy]] node is its own successor.  It is used as a placeholder
-for labeled nodes that are not yet defined.  Use [[redirect]] to
-update its successor. 
+A [[dummy]] node has one successor which is initially set to itself. 
+Use [[gm_redirect_all]] to redirect its outgoing edge to a different
+node.  Dummy nodes are used as place holders for labeled nodes that
+are not yet defined.  
 
-Parameter passing is implemented by sequences of [[assign]] nodes that
-transfer parameters from location determined by calling conventions to
-registers, and vice versa.  These sequences of assignments are created
-by functions \emph{copy-in} and \emph{copy-out} that take their
-successor as argument return the topmost node of the sequence they
-create.  Calling conventions are implemented by automata that are
-passed to the functions and returned in an advanced state.  The
-[[copyi]] function implements receiving parameters, the [[copyo]]
-function passing actual parameters. 
+A [[gm_dataflow]] node has one successor and takes lists for the
+locations it uses, defines, and kills explicitly.  It does not
+generate code but its sole purpose is to provided data-flow
+information.
 
-Formal parameters are implicitly declared local registers when used
-for procedures.  A continuation's formal parameter must be an already
-declared local \emph{or global} register.  Since local registers are
-basically represented as names, but global registers as abstract
-locations of type [[Automaton2.loc]], the [[formal]] type must
-accommodate both.
-
-<<type formal>>=
-type repr       = Local  of  string           (* name            *)
-                | Global of  Alloc.Reg.loc    (* abstr. location *)     
-                
-type formal =   { width:    Rtl.width
-                ; hint:     string option
-                ; repr:     repr              (* representation *)
-                }
-                 
-<<type actual>>=
-type actual     = Rtl.exp 
-                * Rtl.width 
-                * string option               (* hint *)
-@
+% Parameter passing is implemented by sequences of [[assign]] nodes that
+% transfer parameters from location determined by calling conventions to
+% registers, and vice versa.  These sequences of assignments are created
+% by functions \emph{copy-in} and \emph{copy-out} that take their
+% successor as argument return the topmost node of the sequence they
+% create.  Calling conventions are implemented by automata that are
+% passed to the functions and returned in an advanced state.  The
+% [[copyi]] function implements receiving parameters, the [[copyo]]
+% function passing actual parameters. 
+% 
+% Formal parameters are implicitly declared local registers when used
+% for procedures.  A continuation's formal parameter must be an already
+% declared local \emph{or global} register.  Since local registers are
+% basically represented as names, but global registers as abstract
+% locations of type [[Automaton2.loc]], the [[formal]] type must
+% accommodate both.
+% 
+% ((type formal))=
+% type repr       = Local  of  string           (* name            *)
+%                 | Global of  Alloc.Reg.loc    (* abstr. location *)     
+%                 
+% type formal =   { width:    Rtl.width
+%                 ; hint:     string option
+%                 ; repr:     repr              (* representation *)
+%                 }
+%                  
+% ((type actual))=
+% type actual     = Rtl.exp 
+%                 * Rtl.width 
+%                 * string option               (* hint *)
+% @
 
 % ------------------------------------------------------------------ 
 \subsubsection{Graph Mutation}
@@ -297,68 +370,77 @@ type actual     = Rtl.exp
 All graph mutations destroy node \emph{numbering} and must not be used
 while traversing a graph.
 
-\begin{description}
-\item[delete] 
-    Deletes a node from a [[cfg]].  It is a checked run-time
-    error, if:  the node has any successor, is an exit, or is an entry
-    node.
+\begin{itemize}
+\item [[gm_redirect_all: node -> olddst:node -> newdst:node -> unit]]:
+An outgoing edge (to a successor) can be redirected to another node. 
+The current successor [[olddst]] and the new successor [[newdst]] must
+be provided.  It is a checked run-time error if:  nodes belong to
+different {\cfg}s, or [[olddst]] is not an actual successor.
 
-\item[redirect\_all] 
-    An outgoing edge (to a successor) can be redirected to
-    another node.  The current successor and the new successor must be
-    provided.  It is a checked run-time error if:  nodes belong to
-    different {\cfg}s, or the [[from]] node is not an actual
-    predecessor.
+Note, that if several outgoing edges of a node point to the same
+successor, they \emph{all} get updated to the new node.  Hence,
+[[gm_redirect_all]] is not fully general.
 
-    Note, that if several outgoing edges of a node point to the same
-    successor, they \emph{all} get updated to the new node.  Hence,
-    [[redirect]] is not fully general.
-
-\item[insert\_assign\_before] 
-    Inserts an [[assign]] node $a$ before a node $n$,
-    using the supplied {\rtl}.  It is a checked run-time error if the
-    node $n$ was not created by the [[assign]] function.  The
-    successors of $n$ become successors of $a$ and $a$ becomes the
-    only successor of $n$.
+\item [[gm_insert_assign_before:    Rtl.rtl -> node -> unit]]:
+Inserts an [[assign]] node $a$ before a node $n$, using the
+supplied {\rtl}.  It is a checked run-time error if the node $n$
+was not created by the [[gm_assign]] function.  The successors of
+$n$ become successors of $a$ and $a$ becomes the only successor of
+$n$.
                  
-\item[insert\_assign\_after] 
-    Like [[insert_assign_before]], except that the assign node is
-    placed after the node.  Since the node must be an [[assign]] node,
-    it has only one outgoing edge and therefore this operation is well
-    defined.  
+\item [[gm_insert_assign_after: Rtl.rtl -> node -> unit]]:
+Like [[insert_assign_before]], except that the assign node is placed
+after the node which must be an [[assign]] node.  This guarantees that
+it has only one outgoing edge and therefore this operation is well
+defined. 
 
-\item[insert\_assign\_between]
-    Inserts an assign node on every edge leading from [[src]] to
-    [[dst]]. The predecessor/successor relationship of all nodes is
-    updated to reflect the insertion of the assign node on all
-    affected edges. Nothing happens, if no edge between [[src]] and
-    [[dst]] exists.
+\item [[gm_insert_assign_between: Rtl.rtl -> src:node -> dst:node -> unit]]:
+Inserts an assign node on every edge leading from [[src]] to [[dst]]. 
+The predecessor/successor relationship of all nodes is updated to
+reflect the insertion of the assign node on all affected edges. 
+Nothing happens, if no edge between [[src]] and [[dst]] exists.
 
-\item[enumerate]
-    Establishes a numbering for all nodes of a {\cfg}; until a
-    graph mutator is called the numbering is \emph{present}.
-\end{description}
+\item [[gm_enumerate: cfg -> unit]]:
+Establishes a numbering for all nodes of a {\cfg}; until a graph
+mutator is called the numbering is \emph{present}.
+
+\end{itemize}
 
 % ------------------------------------------------------------------ 
 \subsubsection{Node Observation}
 % ------------------------------------------------------------------ 
 
-The observation functions for nodes return the obvious values.  Every
-node contains a (mutable) set of registers; this set is empty in a new
-node. 
+\begin{itemize}
+\item [[cfg: node -> cfg]]: The {\cfg} the [[node]] belongs to.
 
-\begin{description}
-\item[live] 
-    Registers live \emph{before} this node.
+\item [[rtl: node -> Rtl.rtl]]: The {\rtl} that is part of [[node]].
 
-\item[number] 
-    Reports the number of a node. It is a checked run-time
-    error to invoke this function if node numbering is absent,
-    i.e.~if [[numbered]] is [[false]].
-\end{description}
+\item [[succ: node -> node list]]: The list of control-flow successors
+of [[node]].
+
+\item [[pred: node -> node list]]: The list of control-flow
+predecessors of [[node]].
+
+\item [[val property: node -> property]]:
+The property associated with this node.
+
+\item [[number:  node -> int]]:  Reports the number of a node.  It is
+a checked run-time error to invoke this function if node numbering is
+absent.
+
+\item 
+\begin{verbatim}
+defines:    node -> Rtl.loc list    
+uses:       node -> Rtl.loc list    
+kills:      node -> Rtl.loc list    
+\end{verbatim}
+
+Each function returns locations that are defined, uses, or killed by
+[[node]].  
+\end{itemize}
 
 \begin{quote}\it
-    The register allocation phase takes a bit more abstract view 
+    The register allocation phase takes a more abstract view 
     for numbering nodes by using a [[Point.t]] type. A [[Point.t]]
     must provide one value [[Point.zero]] which is never assigned to a
     node. The current design of using integers to number nodes and let
@@ -369,54 +451,27 @@ node.
 \subsubsection{Node Mutators}
 % ------------------------------------------------------------------ 
 
-Node mutators are considered generally ``safe'' because they don't
-interact with other functions. 
+Node mutators update state that is local to a node/ They are safe to
+be used during graph-traversal because they don't interact with other
+functions. 
 
-\begin{description}
-\item[set\_live] 
-    Updates the live-set of a node.
-    
-\item[set\_rtl]
-    Set the {\rtl} of a node to a new value using a maping function.
-\end{description}
+\begin{itemize}
+\item [[set_rtl: node -> (Rtl.rtl -> Rtl.rtl) -> unit]]:
+Set the {\rtl} of a node to a new value using a mapping function.
+
+\item [[set_property:  node -> property -> unit]]:
+Set the properties associated with the [[node]] at hand.
+\end{itemize}
 
 
 % ------------------------------------------------------------------ 
 \subsection{Putting the Interface together}
 % ------------------------------------------------------------------ 
 
-Here are some dummy signatures to make the interface self-contained. 
-This can be used to play with implementation in the {\ocaml}
-interpreter. 
-
-<<dummy sigs>>=
-module Rtl : sig 
-    type rtl 
-    type exp 
-    type width
-    val null: rtl
-end
-
-module Register : sig
-    module Set : sig
-        type t
-    end
-end
-
-module Automaton2 : sig
-    type t
-end
-@
-
-Currently we have some code that expects a signature [[S]] and some
-that doesn't. This should be cleaned up.
-
 <<cfg3.mli>>=
-(** dummy sigs **)
 module type S = sig
     <<types and ops>>
 end
-<<types and ops>>
 @
 
 % ------------------------------------------------------------------ 
