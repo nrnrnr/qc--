@@ -11,13 +11,13 @@
 <<luaiolib.mli>>=
 type 'a t = In of in_channel | Out of out_channel
 val out :
-    ('a t, 'b, 's) Luavalue.ep ->
+    ('a t, 'b) Luavalue.ep ->
     ('b -> string -> out_channel) ->
-    (out_channel, 'b, 's) Luavalue.ep
+    (out_channel, 'b) Luavalue.ep
 val in' :
-    ('a t, 'b, 's) Luavalue.ep ->
+    ('a t, 'b) Luavalue.ep ->
     ('b -> string -> in_channel) ->
-    (in_channel, 'b, 's) Luavalue.ep
+    (in_channel, 'b) Luavalue.ep
 
 module T : Lua.Lib.USERTYPE  with type 'a t = 'a t
 module Make (T : Lua.Lib.TYPEVIEW with type 'a t = 'a t)
@@ -34,11 +34,11 @@ type 'a alias_for_state = 'a state
 <<i/o builtins>>=
 let {V.embed= embed; V.project=project} = T.makemap V.userdata V.projection in
 let infile = { V.embed = (fun f -> embed (In f))
-             ; V.project = (fun g v -> match project g v with
+             ; V.project = (fun v -> match project v with
                                      | In f -> f
                                      | _ -> raise (V.Projection (v, "input file")))} in
 let outfile = { V.embed = (fun f -> embed (Out f))
-              ; V.project = (fun g v -> match project g v with
+              ; V.project = (fun v -> match project v with
                                       | Out f -> f
                                       | _ -> raise (V.Projection (v, "output file")))}
     in
@@ -60,7 +60,7 @@ let readfrom g =
       let c = io.currentin in
       io.currentin <- stdin;
       wrap_err (fun () -> close_in c; [])
-  | [v] -> (io.currentin <- infile.V.project g v; [])
+  | [v] -> (io.currentin <- infile.V.project v; [])
   | _ -> C.fallback "error" g [V.String "bad args to readfrom"] in
               
 let open_out_append s =
@@ -79,13 +79,13 @@ let writeto' append g =
                      finish (if append then open_out_append s else open_out s)))
   | [] ->
       ( close_out io.currentout; io.currentout <- stdout; [])
-  | [v] -> (io.currentout <- outfile.V.project g v; [v])
+  | [v] -> (io.currentout <- outfile.V.project v; [v])
   | _ -> C.fallback "error" g [V.String "bad args to writeto"]  in
               
 let success = [V.String "OK"] in
 
-let unimp s =
-  V.caml_func (fun g _ ->
+let unimp g s =
+  V.caml_func (fun _ ->
     C.fallback "error" g [V.String ("string library does not implement `" ^ s ^ "'")]) in
 
 let read g = function
@@ -94,7 +94,7 @@ let read g = function
               [V.String ("string library does not implement read patterns")]  in
 
 let write_string g v =
-  output_string io.currentout (V.string.V.project g v)  in
+  output_string io.currentout (V.string.V.project v)  in
 
 let getopt x d = match x with Some v -> v | None -> d  in
 
@@ -109,7 +109,7 @@ let date g = function
       let dd = t.Unix.tm_mday in
       [V.String (s mm ^ "/" ^ s dd ^ "/" ^ s yyyy)]  in
 
-let tmpname _ _ =
+let tmpname _ =
   let rec tmp here n =
     let s = "luatmp" ^ string_of_int n in
     let s = if here then s else "/tmp/" ^ s in
@@ -119,36 +119,25 @@ let tmpname _ _ =
       [V.String s]
   in tmp false 238  in
 
-let objname g v =
-  match V.objname g v with
-  | None -> "<anonymous stage>"
-  | Some (V.Fallback s) -> s
-  | Some (V.Global s) -> s
-  | Some (V.Element (s, V.String n)) -> s ^ "." ^ n
-  | Some (V.Element (s, V.Number x)) -> s ^ "[" ^ string_of_int (int_of_float x) ^ "]"
-  | Some (V.Element (s, _         )) -> s ^ ".?"   in
-
-let io_builtins =
-  [ "readfrom", V.caml_func readfrom
-  ; "writeto",  V.caml_func (writeto' false)
-  ; "appendto", V.caml_func (writeto' true)
-  ; "remove",   V.pure (V.string **-> V.values)
+let io_builtins g =
+  [ "readfrom", V.caml_func (readfrom g)
+  ; "writeto",  V.caml_func (writeto' false g)
+  ; "appendto", V.caml_func (writeto' true g)
+  ; "remove",   V.efunc (V.string **-> V.values)
                 (fun s -> wrap_err (fun () -> Sys.remove s; success))
-  ; "rename",   V.pure (V.string **-> V.string **-> V.values)
+  ; "rename",   V.efunc (V.string **-> V.string **-> V.values)
                 (fun s1 s2 -> wrap_err (fun () -> Sys.rename s1 s2; success))
   ; "tmpname",  V.caml_func tmpname
-  ; "read",     V.impure (V.option V.string **-> V.values) read
-  ; "write",    V.caml_func (fun g l -> wrap_err (fun () ->
-                               List.iter (write_string g) l;
-                               flush io.currentout;
-                               []))
-  ; "date",     V.impure (V.option V.string **-> V.values) date
-  ; "exit",     V.pure (V.option V.int **-> V.runit) (fun n -> exit (getopt n 0))
-  ; "getenv",   V.pure (V.string **-> V.values)
+  ; "read",     V.efunc (V.option V.string **-> V.values) (read g)
+  ; "write",    V.caml_func (fun l -> wrap_err (fun () ->
+                             List.iter (write_string g) l;
+                             flush io.currentout;
+                             []))
+  ; "date",     V.efunc (V.option V.string **-> V.values) (date g)
+  ; "exit",     V.efunc (V.option V.int **-> V.runit) (fun n -> exit (getopt n 0))
+  ; "getenv",   V.efunc (V.string **-> V.values)
                 (fun s -> try [V.String (Sys.getenv s)] with Not_found -> [V.Nil])
-  ; "execute",  V.pure (V.string **-> V.result V.int) Sys.command
-  ; "objname",  V.impure (V.value **-> V.result V.string) objname
-(*  ; "map", V.pure (V.func (V.value **-> V.result V.value) **-> V.list V.value **-> V.result (V.list V.value))  List.map *)
+  ; "execute",  V.efunc (V.string **-> V.result V.int) Sys.command
   ] in
 @ 
 <<luaiolib.ml>>=
@@ -175,7 +164,7 @@ module Make (T : Lua.Lib.TYPEVIEW with type 'a t = 'a t)
        let init g = 
          let io = {currentin = stdin; currentout = stdout} in
          <<i/o builtins>>
-         C.register_globals io_builtins g;
+         C.register_globals (io_builtins g) g;
          Lua.Lib.StringList.empty
      end (*M*)
   end (*Make*)
@@ -184,13 +173,13 @@ module Make (T : Lua.Lib.TYPEVIEW with type 'a t = 'a t)
 module V = Luavalue
 let out (upper) fail =
       { V.embed   = (fun x -> upper.V.embed (Out x))
-      ; V.project = (fun g x -> match upper.V.project g x with
+      ; V.project = (fun x -> match upper.V.project x with
                     | Out x -> x
                     | _ -> fail x "out_channel")
       } 
 let in' (upper) fail =
       { V.embed   = (fun x -> upper.V.embed (In x))
-      ; V.project = (fun g x -> match upper.V.project g x with
+      ; V.project = (fun x -> match upper.V.project x with
                     | In x -> x
                     | _ -> fail x "out_channel")
       } 

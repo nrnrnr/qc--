@@ -45,13 +45,11 @@ module MakeLib (C: Lua.Lib.CORE) = struct
     let ( **-> ) = V.( **-> )
 
     <<dofile>>
-    
-    let builtins =
-    [ "dosearchfile" , 
-      V.impure (V.string **-> V.value **-> V.result (V.list V.value)) dosearchfile
-    ]
+
     let init g =
-      C.register_module "Util" builtins g;
+      C.register_module "Util"
+      [ "dosearchfile", V.efunc (V.string **-> V.value **-> V.values) (dosearchfile g)
+      ] g;
       Lua.Lib.StringList.empty (* OK? *)
 end
 @

@@ -9,33 +9,27 @@
 <<luamathlib.mli>>=
 module M : Lua.Lib.BARE
 <<math builtins>>=
-let unimp s =
-  V.caml_func (fun g _ ->
-    I.fallback "error" g [V.String ("math library does not implement `" ^ s ^ "'")])
-
 let rfloat = V.result V.float
 let float = V.float
-let func x = (V.func x).V.embed
-let binary = func
 let math_builtins =
-  [ "abs",   func (float **-> rfloat)            abs_float
-  ; "acos",  func (float **-> rfloat)            acos
-  ; "asin",  func (float **-> rfloat)            asin
-  ; "atan",  func (float **-> rfloat)            atan
-  ; "atan2", func (float **-> float **-> rfloat) atan2
-  ; "ceil",  func (float **-> rfloat)            ceil
-  ; "cos",   func (float **-> rfloat)            cos
-  ; "floor", func (float **-> rfloat)            floor
-  ; "log",   func (float **-> rfloat)            log
-  ; "log10", func (float **-> rfloat)            log10
-  ; "max",   func (float **-> float **-> rfloat) max
-  ; "min",   func (float **-> float **-> rfloat) min
-  ; "mod",   func (float **-> float **-> rfloat) mod_float
-  ; "sin",   func (float **-> rfloat)            sin
-  ; "sqrt",  func (float **-> rfloat)            sqrt
-  ; "tan",   func (float **-> rfloat)            tan
-  ; "random", V.caml_func (fun _ _ -> [V.Number (Random.float 1.0)])
-  ; "randomseed", func (V.int **-> V.runit)        Random.init
+  [ "abs",   V.efunc (float **-> rfloat)            abs_float
+  ; "acos",  V.efunc (float **-> rfloat)            acos
+  ; "asin",  V.efunc (float **-> rfloat)            asin
+  ; "atan",  V.efunc (float **-> rfloat)            atan
+  ; "atan2", V.efunc (float **-> float **-> rfloat) atan2
+  ; "ceil",  V.efunc (float **-> rfloat)            ceil
+  ; "cos",   V.efunc (float **-> rfloat)            cos
+  ; "floor", V.efunc (float **-> rfloat)            floor
+  ; "log",   V.efunc (float **-> rfloat)            log
+  ; "log10", V.efunc (float **-> rfloat)            log10
+  ; "max",   V.efunc (float **-> float **-> rfloat) max
+  ; "min",   V.efunc (float **-> float **-> rfloat) min
+  ; "mod",   V.efunc (float **-> float **-> rfloat) mod_float
+  ; "sin",   V.efunc (float **-> rfloat)            sin
+  ; "sqrt",  V.efunc (float **-> rfloat)            sqrt
+  ; "tan",   V.efunc (float **-> rfloat)            tan
+  ; "random", V.caml_func (fun _ -> [V.Number (Random.float 1.0)])
+  ; "randomseed", V.efunc (V.int **-> V.runit)        Random.init
   ] 
 @ 
 <<luamathlib.ml>>=

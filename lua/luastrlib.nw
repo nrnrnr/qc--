@@ -9,27 +9,27 @@
 <<luastrlib.mli>>=
 module M : Lua.Lib.BARE
 <<string builtins>>=
-let unimp s =
-  V.caml_func (fun g _ -> I.error g ("string library does not implement `" ^ s ^ "'"))
+let unimp g s =
+  V.caml_func (fun _ -> I.error g ("string library does not implement `" ^ s ^ "'"))
 
 let getopt x y = match x with None -> y | Some x -> x
 
 <<support for [[format]]>>
 
-let string_builtins =
-  [ "strfind", unimp "strfind"
-  ; "strlen", (V.func (V.string **-> V.result V.int)).V.embed String.length
+let string_builtins g =
+  [ "strfind", unimp g "strfind"
+  ; "strlen",  V.efunc (V.string **-> V.result V.int) String.length
   ; "strsub",
-    (V.func (V.string **-> V.int **-> V.option V.int **-> V.result V.string)).V.embed
+    (V.efunc (V.string **-> V.int **-> V.option V.int **-> V.result V.string))
     (fun s start last ->
       let start = start - 1 in (* caml strings are 0-indexed *)
       let last = match last with None -> String.length s
                                | Some n -> min n (String.length s) in
       let len = last - start in
       String.sub s start len)
-  ; "strlower", (V.func (V.string **-> V.result V.string)).V.embed String.lowercase
-  ; "strupper", (V.func (V.string **-> V.result V.string)).V.embed String.uppercase
-  ; "strrep",   (V.func (V.string **-> V.int **-> V.result V.string)).V.embed
+  ; "strlower", V.efunc (V.string **-> V.result V.string) String.lowercase
+  ; "strupper", V.efunc (V.string **-> V.result V.string) String.uppercase
+  ; "strrep",   V.efunc (V.string **-> V.int **-> V.result V.string)
                 (fun s n ->
                   if n < 0 then
                     raise (Invalid_argument ("number of replicas " ^ string_of_int n ^
@@ -37,10 +37,10 @@ let string_builtins =
                   else
                     let rec list l = function 0 -> l | n -> list (s::l) (n-1) in
                     String.concat "" (list [] n))
-  ; "ascii",   (V.func (V.string **-> V.option V.int **-> V.result V.int)).V.embed
+  ; "ascii",   V.efunc (V.string **-> V.option V.int **-> V.result V.int)
                (fun s i -> Char.code (String.get s (getopt i 1 - 1)))
-  ; "format",  V.caml_func format
-  ; "gsub",    unimp "gsub"
+  ; "format",  V.caml_func (format g)
+  ; "gsub",    unimp g "gsub"
   ] 
 @ 
 Escape character is [[%]].
@@ -53,7 +53,7 @@ module M (I : Lua.Lib.CORE) = struct
   module V = I.V
   let ( **-> ) = V.( **-> )
   <<string builtins>>
-  let init g = I.register_globals string_builtins g; Lua.Lib.StringList.empty
+  let init g = I.register_globals (string_builtins g) g; Lua.Lib.StringList.empty
 end
 @ 
 Code for [[format]] borrowed from standard [[Printf]] library.
@@ -88,7 +88,7 @@ let bprintf_internal g buf format =
                       "Not enough arguments to string-library function `format'" in
             match c with 
             | 's' ->
-                let s = V.string.V.project g arg in
+                let s = V.string.V.project arg in
                 if j <= i+1 then
                   Buffer.add_string buf s
                 else begin
@@ -109,16 +109,16 @@ let bprintf_internal g buf format =
                 doprn (succ j) args
         | 'c' ->
             let c =
-              try Char.chr (V.int.V.project g arg)
+              try Char.chr (V.int.V.project arg)
               with Invalid_argument _ -> V.projection arg "Character code" in  
             Buffer.add_char buf c;
             doprn (succ j) args
         | 'd' | 'i' | 'o' | 'x' | 'X' | 'u' ->
-            let n = V.int.V.project g arg in
+            let n = V.int.V.project arg in
             Buffer.add_string buf (format_int (String.sub format i (j-i+1)) n);
             doprn (succ j) args
         | 'f' | 'e' | 'E' | 'g' | 'G' ->
-            let f = V.float.V.project g arg in
+            let f = V.float.V.project arg in
             Buffer.add_string buf (format_float (String.sub format i (j-i+1)) f);
             doprn (succ j) args
         | 'p' | 'q' ->
@@ -138,4 +138,4 @@ let bprintf_internal g buf format =
 
 let format g args =
   let fmt, args = match args with h :: t -> h, t | [] -> V.Nil, [] in
-  [V.String (bprintf_internal g (Buffer.create 16) (V.string.V.project g fmt) args)]
+  [V.String (bprintf_internal g (Buffer.create 16) (V.string.V.project fmt) args)]

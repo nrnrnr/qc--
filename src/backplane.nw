@@ -614,17 +614,15 @@ let stageFn = V.func (V.value **-> proc **-> V.result V.bool)
 
 <<stage map>>
 
-let projectAction g v = match v with
-  | V.Userdata _ -> project g v
-  | V.Table _    -> single (projectStage g v)
-  | V.Function _ -> single (projectStage g v)
+let projectAction g =
+  let pstage = projectStage g in
+  fun v -> match v with
+  | V.Userdata _ -> project v
+  | V.Table _    -> single (pstage v)
+  | V.Function _ -> single (pstage v)
   | _            -> raise (V.Projection (v, "action"))
 
-let action = { V.embed   = embed 
-             ; V.project = projectAction 
-             }
 @
-
 Finally, we make the list of builtins that will be visible in Lua.
 N.B. that the ``[[stage]]'' builtin is not necessary except as a way
 of eagerly projecting a function or table into an action.
@@ -634,6 +632,7 @@ let ( **-> ) = V.( **-> )
 
 let id x = x
 let init g =
+  let action = { V.embed   = embed ; V.project = projectAction g } in
   Interp.register_module "Backplane" 
   [ "seq",       (V.func ((V.list action)     **-> V.result action)).V.embed seq
   ; "when_do",   (V.func (action  **-> action **-> V.result action)).V.embed when_do
@@ -671,7 +670,7 @@ let stage_name g v =
 let projectStage g stage' = match stage' with
   | V.Function (_, f) ->
     { name = stage_name g stage'
-    ; fn   = stageFn.V.project g stage'
+    ; fn   = stageFn.V.project stage'
     ; paramExpected  = None
     ; stateCreated   = SS.empty
     ; stateDestroyed = SS.empty
@@ -679,12 +678,12 @@ let projectStage g stage' = match stage' with
     }
   | V.Table stage ->
       let field f      = V.Table.find stage (embedString f) in
-      let string_set v = list2SSet ((V.optlist V.string).V.project g v) in
+      let string_set v = list2SSet ((V.optlist V.string).V.project v) in
       { name = (match field "name" with
                 | V.Nil -> stage_name (V.state()) stage'
-                | s     -> projectString g s)
-      ; fn = stageFn.V.project g (field "fn")
-      ; paramExpected  = (V.option V.string).V.project g (field "paramExpected")
+                | s     -> projectString s)
+      ; fn = stageFn.V.project (field "fn")
+      ; paramExpected  = (V.option V.string).V.project (field "paramExpected")
       ; stateCreated   = string_set (field "creates")
       ; stateDestroyed = string_set (field "destroys")
       ; stateUsed      = string_set (field "uses")
@@ -715,10 +714,6 @@ let embedStage stage =
                 stageLabels stageValues
     in
         V.Table newTab
-
-let stage = { V.embed = embedStage
-            ; V.project = projectStage
-            }
 @
 
 

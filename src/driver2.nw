@@ -323,28 +323,28 @@ end
 
 let init g = 
   C.register_module "Asm"
-    [ "cmm"  , V.pure (            Map.outchan **-> V.result Map.asm) Asm.asm     
-    ; "ast"  , V.pure (            Map.outchan **-> V.result Map.asm) Asm.asm (*alias*)
-    ; "dot"  , V.pure (            Map.outchan **-> V.result Map.asm) Dotasm.asm
-    ; "asdl" , V.pure (            Map.outchan **-> V.result Map.asm) Asdlasm.asm
-    ; "sparc", V.pure (V.bool **-> Map.outchan **-> V.result Map.asm) Msparcasm.asm
+    [ "cmm"  , V.efunc (            Map.outchan **-> V.result Map.asm) Asm.asm     
+    ; "ast"  , V.efunc (            Map.outchan **-> V.result Map.asm) Asm.asm (*alias*)
+    ; "dot"  , V.efunc (            Map.outchan **-> V.result Map.asm) Dotasm.asm
+    ; "asdl" , V.efunc (            Map.outchan **-> V.result Map.asm) Asdlasm.asm
+    ; "sparc", V.efunc (V.bool **-> Map.outchan **-> V.result Map.asm) Msparcasm.asm
     ] g;
   C.register_module "Driver" 
-    [ "assemble"      , V.pure (Map.asm     **-> V.runit)        (fun asm -> asm#emit)
-    ; "proc_assembler", V.pure (Map.asm     **-> V.result Map.stage) 
+    [ "assemble"      , V.efunc (Map.asm     **-> V.runit)        (fun asm -> asm#emit)
+    ; "proc_assembler", V.efunc (Map.asm     **-> V.result Map.stage) 
                           (fun asm v p -> asm#cfg_instr p.Proc.cfg p.Proc.symbol; true)
-    ; "check"         , V.pure (Map.ast     **-> Map.asm 
+    ; "check"         , V.efunc (Map.ast     **-> Map.asm 
                                         **-> V.result Map.env)   check
-    ; "emit_asdl"     , V.pure (Map.ast     **-> V.runit)            emit_asdl
-    ; "parse"         , V.pure (V.string    **-> V.result Map.ast)   parse
-    ; "print"         , V.pure (Map.doc     **-> V.int **-> V.runit) print
-    ; "pretty"        , V.pure (Map.ast     **-> V.result Map.doc)   pretty
-    ; "scan"          , V.pure (V.string    **-> V.runit)            scan
-    ; "version"       , V.pure (V.unit      **-> V.runit)            version
+    ; "emit_asdl"     , V.efunc (Map.ast     **-> V.runit)            emit_asdl
+    ; "parse"         , V.efunc (V.string    **-> V.result Map.ast)   parse
+    ; "print"         , V.efunc (Map.doc     **-> V.int **-> V.runit) print
+    ; "pretty"        , V.efunc (Map.ast     **-> V.result Map.doc)   pretty
+    ; "scan"          , V.efunc (V.string    **-> V.runit)            scan
+    ; "version"       , V.efunc (V.unit      **-> V.runit)            version
     ; "stdin"         , Map.inchan.V.embed                       stdin (* hack *)
     ; "stdout"        , Map.outchan.V.embed                      stdout(* hack *)
     ; "freeze"        , Map.stage.V.embed (fun v p -> Ast3ir.freeze p; true)
-    ; "compile"       , V.pure (Map.optimize **-> Map.ast  
+    ; "compile"       , V.efunc (Map.optimize **-> Map.ast  
                                              **-> Map.target 
                                              **-> Map.env 
                                              **-> V.result Map.asm) compile

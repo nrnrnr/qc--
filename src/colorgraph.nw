@@ -1009,10 +1009,10 @@ module Cheats = struct
             with Not_found -> []
 
     (* OK, THIS HAS TO BE CHANGED... still assuming width 32 *)
-    let makeRegs g regTable =
-        let reg space i = String.get (V.string.V.project g space) 0, i, 32 in
+    let makeRegs regTable =
+        let reg space i = String.get (V.string.V.project space) 0, i, 32 in
         luaTableMapApp (fun space rlist ->
-                        List.map (reg space) ((V.list V.int).V.project g rlist))
+                        List.map (reg space) ((V.list V.int).V.project rlist))
                     regTable
 
     (* check whether two temps interfere - whether they have overlapping reg
@@ -1171,24 +1171,24 @@ let writedot compress _ proc =
     true
 
 let graph_coloring_module =
-  [ "liveness",         V.pure stageFn liveness
-  ; "build",            V.pure stageFn build
-  ; "makeWorklist",     V.pure stageFn makeWorklist
-  ; "simplify",         V.pure stageFn simplify
-  ; "coalesce",         V.pure stageFn coalesce
-  ; "freeze",           V.pure stageFn freeze
-  ; "selectSpill",      V.pure stageFn selectSpill
-  ; "assignColors",     V.pure stageFn assignColors
-  ; "haveSpilledTemps", V.pure stageFn haveSpilledTemps
-  ; "resetProgram",     V.pure stageFn resetProgram
-  ; "updateProgram",    V.pure stageFn updateProgram
-  ; "applyColors",      V.pure stageFn applyColors
-  ; "printCG",          V.pure stageFn printCGInfo
-  ; "printCFGLive",     V.pure stageFn printCFGLive
-  ; "pCFG",             V.pure stageFn pCFG
-  ; "makeInitInfo",     V.pure (V.unit **-> V.result cgmap) makeInitInfo
-  ; "setColors",        V.pure stageFn setColors
-  ; "writedot",         V.pure (V.bool **-> V.result (V.func stageFn)) writedot
+  [ "liveness",         V.efunc stageFn liveness
+  ; "build",            V.efunc stageFn build
+  ; "makeWorklist",     V.efunc stageFn makeWorklist
+  ; "simplify",         V.efunc stageFn simplify
+  ; "coalesce",         V.efunc stageFn coalesce
+  ; "freeze",           V.efunc stageFn freeze
+  ; "selectSpill",      V.efunc stageFn selectSpill
+  ; "assignColors",     V.efunc stageFn assignColors
+  ; "haveSpilledTemps", V.efunc stageFn haveSpilledTemps
+  ; "resetProgram",     V.efunc stageFn resetProgram
+  ; "updateProgram",    V.efunc stageFn updateProgram
+  ; "applyColors",      V.efunc stageFn applyColors
+  ; "printCG",          V.efunc stageFn printCGInfo
+  ; "printCFGLive",     V.efunc stageFn printCFGLive
+  ; "pCFG",             V.efunc stageFn pCFG
+  ; "makeInitInfo",     V.efunc (V.unit **-> V.result cgmap) makeInitInfo
+  ; "setColors",        V.efunc stageFn setColors
+  ; "writedot",         V.efunc (V.bool **-> V.result (V.func stageFn)) writedot
   ]
 
 @

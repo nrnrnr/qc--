@@ -31,44 +31,43 @@ module Add (MakeParser : Luaparser.MAKER) (I : Luainterp.S) = struct
       with Not_found -> V.Nil, V.Nil
     in [k; v]
 
-  let nextvar g x = next g.V.globals x
-  let luabaselib =
-
-    [ "dofile",   V.impure (V.string **-> V.values)             dofile
-    ; "dostring", V.impure (V.string **-> V.values)             dostring
+  let luabaselib g =
+    [ "dofile",      V.efunc (V.string **-> V.values) (dofile g)
+    ; "dostring",    V.efunc (V.string **-> V.values) (dostring g)
         (* should catch Sys_error and turn into an error fallback... *)
-    ; "size",     V.pure   (V.table **-> V.result V.int)        Luahash.population
-    ; "next",     V.pure   (V.table **-> V.value **-> V.values) next
-    ; "nextvar",  V.impure (V.value **-> V.values)              nextvar
-    ; "tostring", V.pure   (V.value **-> V.result V.string)     V.to_string
-    ; "print",    V.caml_func (fun g args ->
-                               List.iter (fun x -> print_endline (V.to_string x)) args;
-                               flush stdout;
-                               [])
-    ; "tonumber", V.pure (V.float **-> V.result V.float)  (fun x -> x)
-    ; "type",     V.pure (V.value **-> V.result V.string)
-                  (function
-                    | V.Nil            -> "nil"
-                    | V.Number   _     -> "number"
-                    | V.String   _     -> "string"
-                    | V.Table    _     -> "table"
-                    | V.Function (_,_) -> "function"
-                    | V.Userdata _     -> "userdata")
-    ; "assert",  V.impure (V.value **-> V.runit)
-                 (fun g -> function V.Nil -> I.error g "assertion failed!"
-                                  | _ -> ())
-    ; "error",       V.impure (V.string **-> V.runit) I.error
-    ; "setglobal",   V.impure (V.value **-> V.value **-> V.runit)
-                       (fun g k v -> V.Table.bind g.V.globals k v)
-    ; "getglobal",   V.impure (V.value **-> V.result V.value) I.getglobal
-    ; "setfallback", V.impure (V.string **-> V.value **-> V.result V.value)
-                     I.setfallback
+    ; "size",        V.efunc (V.table **-> V.result V.int) Luahash.population
+    ; "next",        V.efunc (V.table **-> V.value **-> V.values) next
+    ; "nextvar",     V.efunc (V.value **-> V.values) (fun x -> next g.V.globals x)
+    ; "tostring",    V.efunc (V.value **-> V.result V.string)     V.to_string
+    ; "print",       V.caml_func 
+                        (fun args ->
+                          List.iter (fun x -> print_endline (V.to_string x)) args;
+                          flush stdout;
+                          [])
+    ; "tonumber",    V.efunc (V.float **-> V.result V.float) (fun x -> x)
+    ; "type",        V.efunc (V.value **-> V.result V.string)
+                     (function
+                     | V.Nil            -> "nil"
+                     | V.Number _       -> "number"
+                     | V.String _       -> "string"
+                     | V.Table _        -> "table"
+                     | V.Function (_,_) -> "function"
+                     | V.Userdata _     -> "userdata")
+    ; "assert",      V.efunc (V.value **-> V.runit)
+                     (function V.Nil -> I.error g "assertion failed!"
+                             | _ -> ())
+    ; "error",       V.efunc (V.string **-> V.runit) (I.error g)
+    ; "setglobal",   V.efunc (V.value **-> V.value **-> V.runit)
+                     (fun k v -> V.Table.bind g.V.globals k v)
+    ; "getglobal",   V.efunc (V.value **-> V.result V.value) (I.getglobal g)
+    ; "setfallback", V.efunc (V.string **-> V.value **-> V.result V.value)
+                     (I.setfallback g)
     ] 
 
   include I
   let mk () =
     let g, init = I.pre_mk () in
-    I.register_globals luabaselib g;
+    I.register_globals (luabaselib g) g;
     init (fun s -> ignore (dostring g s));
     g
 end
@@ -87,9 +86,9 @@ let do_lexbuf ~sourcename:filename g buf =
         prerr_endline ": syntax error";
         []
       end in
-  let pgm = I.compile ~srcdbg:(map, false) chunks in
+  let pgm = I.compile ~srcdbg:(map, false) chunks g in
   try
-    match pgm g with
+    match pgm () with
     | [] -> [I.Value.String "executed without errors"]
     | answers -> answers
   with
