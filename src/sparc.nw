@@ -234,7 +234,7 @@ let icontext =
   Talloc.Multiple.reg 't',
   fun ((c,_,_), _, _) -> c =<= 'r' || c =<= 't' || c =<= 'o'
 
-let fcontext = (* Talloc.Multiple.reg 'u', fun (c, _, _) -> c =<= 'f' || c =<= 'u' *)
+let fcontext =
   (fun t w ->
     if w = 32 then Talloc.Multiple.reg 'u' t 32
     else Talloc.Multiple.reg 'q' t 64), 
@@ -316,14 +316,6 @@ let li  ~dst const =
       rstore (R.reg t)   (Up.const const)  32 <:>
       astore slot        (rfetch t)        32 <:>
       rstore (R.reg dst) (A.fetch slot 32) 32
-(*
-      let offset = R.bits (Bits.S.of_int (23*4) 32) 32 in
-      let addr   = R.app (R.opr "add" [32]) [rfetch sp; offset] in
-      [ R.store (R.reg dst)    (R.fetch (mem 32 addr) 32) 32
-      ; R.store (mem 32 addr) (rfetch t) 32
-      ; R.store (R.reg t)      (Up.const const) 32
-      ]
-*)
   | (('q', _, _), _, R.C 1), RP.Bits b -> (* we are forced to go through memory *)
       Printf.eprintf "Bad idea!!!!\n";
       let t1 = talloc 't' 32 in
@@ -376,19 +368,22 @@ let unop ~dst op x =
 let binop ~dst op x y =
   let dstw = reg_width dst in
   match op with
-(* I think this is never used...
   | "f2i", ws ->
       begin match dst, x with
-      | ('r', _, _), ('f', _, _) ->
-          assert (dstw = 32);
+      | (('u', _, _), _, _), (('u', _, _), _, _) ->
+          rstore (R.reg dst) (R.app (Up.opr op) [rfetch x; rfetch y]) dstw
+      | (('u', _, _), _, _), (('q', _, _), _, _) ->
+          rstore (R.reg dst) (R.app (Up.opr op) [rfetch x; rfetch y]) dstw
+      | ((dstr, _, _), _, _), ((xr, _, _), _, _) -> impossf "'%c' := %%f2i('%c'..): f2i only available single precision or float-to-float space\n" dstr xr
+(*
+      | (('t', _, _), _, _), (('u', _, _), _, _) ->
           let ftmp = talloc 'u' dstw in
           let slot = salloc dstw in
-          [R.store (R.reg dst) (A.fetch slot) dstw;
-           R.store (A.store slot) (rfetch ftmp); 
-           R.store (R.reg ftmp) (R.app (Up.opr op) [rfetch x; rfetch y]) dstw]
-      | _ -> [R.store (R.reg dst) (R.app (Up.opr op) [rfetch x; rfetch y]) dstw]
-      end
+          rstore (R.reg ftmp) (R.app (Up.opr op) [rfetch x; rfetch y]) dstw <:>
+          astore slot (rfetch ftmp) dstw <:>
+          rstore (R.reg dst) (A.fetch slot dstw) dstw
 *)
+      end
   | "modu", ws ->
       rstore (R.reg dst) (R.app (R.opr "divu" ws) [rfetch x; rfetch y])   dstw <:>
       rstore (R.reg dst) (R.app (R.opr "mul"  ws) [rfetch y; rfetch dst]) dstw <:>
@@ -421,13 +416,6 @@ let bc x (opr, ws as op) y ~ifso ~ifnot =
   assert (ws =*= [wordsize] || ws =*= [wordsize*2]);
   PX.Test (rstore cc (R.app (R.opr "sparc_subcc" ws) [rfetch x; rfetch y]) 32,
            (R.app (R.opr ("sparc_"^opr) ws) [R.fetch cc 32], ifso, ifnot))
-
-(* Why won't the following work?  If I try it, I get a runtime error from
-   the expander when it tries to call succ on an illegal node! *)
-(*
-  [ R.guard (R.app (R.opr opr ws) [rfetch x; rfetch y])
-            (R.store pc_lhs (Up.const tgt) 32) ]
-*)
 @ 
 <<SPARC postexpander>>=
 let bnegate r = 

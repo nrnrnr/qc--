@@ -181,11 +181,6 @@ inst : Store(dst:regl, src:const, w)
 inst : Store(dst:regl, src:reg, w)
   {: sprintf "mov %s, %s" src dst :}
 
--- here we start cheating...
--- inst : Store(dst:fregl, src:reg, w)
---   {: sprintf "! cheating move\n\tst %s, [%%sp+%i]\n\tld [%%sp+%i], %s" src (23*4) (23*4) dst :}
--- inst : Store(dst:regl, src:freg, w)
---   {: sprintf "! cheating move\n\tst %s, [%%sp+%i]\n\tld [%%sp+%i], %s" src (23*4) (23*4) dst :}
 -- memory load
 inst : Store(dst:regl, src:mem, w)
   {: if w = 64 then sprintf "ldx %s, %s" src dst
@@ -302,11 +297,6 @@ inst : Store(dst:regl, Shrl(x:reg, y:reg_or_const), w)
 -- shra
 inst : Store(dst:regl, Shra(x:reg, y:reg_or_const), w)
   {: sprintf "sra %s, %s, %s" x y dst :}
-
--- popcnt: strange, but the SPARC-V9 seems to have population count.
--- This probably won't work with older SPARCs though.
-inst : Store(dst:regl, Popcnt(x:reg), w)
-  {: sprintf "popc %s, %s" x dst :}
 
 -- fdiv
 inst : Store(dst:fregl, Fdiv(x:freg, y:freg), w)
@@ -432,7 +422,7 @@ inst : Nop() {: "! Why do you think there should be a nop? " :}
 
 \paragraph{Diagnostic rules}
 <<rules>>=
-inst: any [100] {: "<" ^ any ^ ">" :}
+inst: any [1000] {: "<" ^ any ^ ">" :}
 
 any : True  () {: "True"  :}
 any : False () {: "False" :}
@@ -501,8 +491,6 @@ any : Goto(any) {: "Goto(" ^ any ^ ")" :}
 | RP.App(("shl",   [w]), [x; y]) -> conShl    (exp x) (exp y)
 | RP.App(("shrl",  [w]), [x; y]) -> conShrl   (exp x) (exp y)
 | RP.App(("shra",  [w]), [x; y]) -> conShra   (exp x) (exp y)
-
-| RP.App(("popcnt",[w]), [x   ]) -> conPopcnt (exp x)
 
 | RP.App(("lobits",[32;8]),  [x]) -> conLobyte (exp x)
 | RP.App(("lobits",[32;16]), [x]) -> conLohalf (exp x)
