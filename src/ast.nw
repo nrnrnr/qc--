@@ -1,3 +1,7 @@
+%
+% $Id$
+%
+
 
 \section{Abstract Syntax Definition}
 
@@ -27,22 +31,26 @@ align       = (int)     -- power of 2
 aligned     = (int)     -- power of 2
 op          = (string)
 
-program     = (topdecl*)
+pos         = (int,int) -- source code positions span
 
-topdecl     = Import (ty, name*)
-            | Export (name*)
-            | Const  (const*)
-            | Section (name, section*)
-            | Global (register*)
-            | Pragma                    -- just for testing
+program     = (pos,topdecl*)
 
-const       = (name, expr)
+topdecl     = Import  (pos, ty, name*)
+            | Export  (pos, name*)
+            | Const   (pos, const*)
+            | Section (pos, name, section*)
+            | Global  (pos, register*)
+            | Pragma  (pos)                   -- just for testing
 
-register    = (invariant, ty, name, reg?)
 
-section     = SSpan (expr key, expr value, section*)
-            | Datum (datum)
-            | Procedure ( conv?
+const       = (pos, name, expr)
+
+register    = (pos, invariant, ty, name, reg?)
+
+section     = SSpan (pos, expr key, expr value, section*)
+            | Datum (pos, datum)
+            | Procedure ( pos
+                        , conv?
                         , name
                         , formal*
                         , decl*
@@ -52,9 +60,9 @@ memsize     = NoSize
             | DynSize
             | FixSize (expr)
                        
-datum       = Label (name)
-            | Align (align)
-            | MemDecl (ty, memsize, init?)
+datum       = Label (pos, name)
+            | Align (pos, align)
+            | MemDecl (pos, ty, memsize, init?)
 
 @ Escape sequence in the concrete syntax are removed during the
 translation to the abstract syntax.  So [[InitStr]] and [[InitUStr]]
@@ -65,8 +73,8 @@ init        = InitExprs (expr*)
             | InitStr   (string)
             | InitUStr  (string)
 
-ty          = BitsTy  (size)
-            | FloatTy (size)
+ty          = BitsTy  (pos, size)
+            | FloatTy (pos, size)
 
 @ To encode the [[invariant]] keyword a boolean value would suffice.
 But this type is not provided by \asdl.
@@ -76,19 +84,19 @@ But this type is not provided by \asdl.
 invariant   = Invariant
             | Variant
 
-formal      = (hint?, invariant, ty, name)
-actual      = (hint?, expr)
+formal      = (pos, hint?, invariant, ty, name)
+actual      = (pos, hint?, expr)
 
-decl        = Register(invariant, ty, name)
-            | Stackdata (datum*)
+decl        = Register  (pos, invariant, ty, name)
+            | Stackdata (pos, datum*)
            
-flow        = CutsTo (name*)
-            | UnwindsTo (name*)
-            | ReturnsTo (name*)
-            | Aborts
+flow        = CutsTo    (pos, name*)
+            | UnwindsTo (pos, name*)
+            | ReturnsTo (pos, name*)
+            | Aborts    (pos)
 
-lvalue      = Var (name)
-            | Mem (ty, expr, aligned?)
+lvalue      = Var (pos, name)
+            | Mem (pos, ty, expr, aligned?)
 
 assign      = (lvalue,expr)
 altcont     = (expr, expr)
@@ -98,26 +106,26 @@ targets     = (target*)
 flows       = (flow*)
 lvalues     = (lvalue*)
 
-stmt        = IfStmt (expr, stmts, stmts)
-            | LabelStmt (name)
-            | ContStmt (name, name*)
-            | SpanStmt (expr key, expr value, stmts)
-            | AssignStmt (assign*)
-            | CallStmt (lvalue*, conv?, expr, actual*, targets, flows)
-            | PrimStmt (lvalue*, conv?, name, actual*, flows)
-            | GotoStmt (expr, targets)
-            | JumpStmt (conv?, expr, actual*, targets)
-            | CutStmt  (name, actual*, flows)
-            | ReturnStmt (conv?, altcont?, actual*)
-            | EmptyStmt
+stmt        = IfStmt     (pos, expr, stmts, stmts)
+            | LabelStmt  (pos, name)
+            | ContStmt   (pos, name, name*)
+            | SpanStmt   (pos, expr key, expr value, stmts)
+            | AssignStmt (pos, assign*)
+            | CallStmt   (pos, lvalue*, conv?, expr, actual*, targets, flows)
+            | PrimStmt   (pos, lvalue*, conv?, name, actual*, flows)
+            | GotoStmt   (pos, expr, targets)
+            | JumpStmt   (pos, conv?, expr, actual*, targets)
+            | CutStmt    (pos, name, actual*, flows)
+            | ReturnStmt (pos, conv?, altcont?, actual*)
+            | EmptyStmt  (pos)
 
-expr        = Int    (int,size?)
-            | Float  (string,size?)
-            | Char   (string,size?)
-            | Fetch  (lvalue)
-            | BinOp  (expr, op, expr)
-            | UnOp   (op, expr)
-            | PrimOp (name, actual*)
+expr        = Int    (pos, int,size?)
+            | Float  (pos, string,size?)
+            | Char   (pos, string,size?)
+            | Fetch  (pos, lvalue)
+            | BinOp  (pos, expr, op, expr)
+            | UnOp   (pos, op, expr)
+            | PrimOp (pos, name, actual*)
 
 @ Infix operators are abbreviations for primitive operations. The
 parser could perform this translation right away. But we want to
