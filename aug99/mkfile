@@ -4,6 +4,7 @@ SOURCES=asm cmmir ast
 # SOURCES=`cmsrcs *.cm | sed 's/\.nw$//'`
 SOURCESDOTDEFS=`echo $SOURCES | sed 's/ /.defs /g;s/$/.defs/'`
 SOURCESDOTTEX=`echo   $SOURCES | sed 's/ /.tex /g;s/$/.tex/'`
+SOURCESDOTASDL=`echo   $SOURCES | sed 's/ /.asdl /g;s/$/.asdl/'`
 SOURCESDOTHTML=`echo   $SOURCES solve | sed 's/ /.html /g;s/$/.html/'`
 SOURCESDOTNW=`echo   $SOURCES solve | sed 's/ /.nw /g;s/$/.nw/'`
 SOURCESREGEXP=`echo $SOURCES | sed 's/ /|/g'`
@@ -22,16 +23,18 @@ TEXDIR=TEX/
 	notangle -L -R$target $prereq | cpif $target
 
 
-all:V: html
+all:V: caml
 
 clean:V: 
 	rm -f *.html *~ *.t cm.dot cm.ps cm.eps 
 	rm -f *.aux *.dvi *.toc *.ps *.log *.blg
+	rm -f *.cmi *.cmo *.o 
 
 clobber:V: clean
-	rm -f *.g *.sml *.sig *.ord *.lex *.tab
-	rm -f *.tex *.html *.defs cm.gif
+	rm -f *.g *.sml *.sig *.ord *.lex *.tab *.mli *.ml
+	rm -f *.tex *.html *.defs cm.gif *.a
 	rm -rf CM NW WWW
+	rm -f $SOURCESDOTASDL
 
 html:V: $SOURCESDOTHTML
 
@@ -45,10 +48,6 @@ count:V: $SOURCESDOTNW
 	export PATH
 	markup $prereq | elide 'refman:*' '\*' | nocount -f
 
-deadcount:V: $SOURCESDOTNW
-	roots=`noroots $prereq | sed "/'/d;"'/^<<refman:/d;s/"/\\"/g;s/^<</-R"/;s/>>$/"/' | fgrep ' '`
-	eval notangle -filter \"elide 'refman:*'\" \"-R*\" $roots $SOURCESDOTNW | wc
-	
 
 
 $TEXDIR%.ps: %.dot
@@ -73,7 +72,7 @@ ${HTMLDIR}index.html: index.nw
 ################ defined identifiers
 
 ^($SOURCESREGEXP)'\.'defs:R: '\1'.nw 
-	nodefs -auto ocaml $prereq > $target
+	nodefs -auto asdl $prereq > $target
 
 all.defs: $SOURCESDOTDEFS 
 	sort -u $prereq | cpif $target
@@ -86,7 +85,7 @@ all.defs: $SOURCESDOTDEFS
 ^($SOURCESREGEXP)'\.'tex:R: '\1'.nw 
 	$NOWEAVE -x -n $stem1.nw >$target
 
-DOCINPUTS="doc.tex $SOURCESDOTTEX doc.nwi"
+DOCINPUTS="doc.tex $SOURCESDOTTEX"
 
 docin:V: $DOCINPUTS
 
@@ -107,7 +106,7 @@ doc_check:V: doc.tex
 
 ###################
 #
-#  
+#  Targets for interfaces
 
 caml:V: asm.cmi asm.cmo cmmIR.cmi cmmIR.cmo cMinusMinus.cmi cMinusMinus.cmo
 
@@ -116,7 +115,7 @@ CAMLOPTS="-I /home/cellar/nr/zephyr/asdlGen-19990816/src/ocaml"
 asm.mli asm.ml asmUtil.mli asmUtil.ml: asm.asdl
 	camlGen --ocaml --pickler=sexp $prereq
 
-cmmIR.mli cmmIR.ml rTL.mi rTL.ml: crtl.asdl cmmir.asdl
+cmmIR.mli cmmIR.ml rTL.mli rTL.ml: crtl.asdl cmmir.asdl
 	camlGen --ocaml --pickler=sexp $prereq
 
 cMinusMinus.mli cMinusMinus.ml cMinusMinusUtil.mli cMinusMinusUtil.ml: ast.asdl
