@@ -15,7 +15,6 @@ This module presents the compiler as a compositional collection of
 abstract values and functions. These functions and values are exported
 as primitives to a Lua interpreter, giving the user a way to customize
 the compiler.
-@
 
 In case of an error, all functions raise [[Error.ErrorExn]]. An error
 message is typically printed to [[stderr]] before the exception is
@@ -46,30 +45,15 @@ This module provides new Lua types like [[asm]] and [[ast]] for the
 interpreter, and a library that uses them. 
 
 <<driver2.mli>>=
-module Export : sig
-    module AsmT     : Lua.USERDATA
-    module AstT     : Lua.USERDATA
-    module EnvT     : Lua.USERDATA
-    module ProcT    : Lua.USERDATA with type 'a t = Proc.t
-    module TargetT  : Lua.USERDATA with type 'a t = Target2.t
-    module DocT     : Lua.USERDATA
-
-    module MakeLib  
-      (AsmV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a AsmT.t)
-      (AstV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a AstT.t 
-                                  and  type 'a combined = 'a AsmV.combined)
-      (EnvV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a EnvT.t 
-                                  and  type 'a combined = 'a AsmV.combined)
-      (ProcV   : Lua.Lib.TYPEVIEW with type 'a t        = 'a ProcT.t
-                                  and  type 'a combined = 'a AsmV.combined)
-      (TargetV : Lua.Lib.TYPEVIEW with type 'a t        = 'a TargetT.t 
-                                  and  type 'a combined = 'a AsmV.combined)
-      (DocV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a DocT.t 
-                                  and  type 'a combined = 'a AsmV.combined)
-      (InOutV  : Lua.Lib.TYPEVIEW with type 'a t        = 'a Luaiolib.T.t    
-                                  and  type 'a combined = 'a AsmV.combined)
-        : Lua.Lib.TYPEFUL with type 'a combined = 'a AsmV.combined 
-end
+val check : Srcmap.map * Ast.program -> Asm3.assembler -> Fenv.Clean.env
+val emit_asdl : 'a * Ast.program -> unit
+val parse : string -> Srcmap.map * Ast.program
+val print : Pp.doc -> int -> unit
+val pretty : 'a * Ast.toplevel list -> Pp.doc
+val scan : string -> unit
+val version : unit -> unit
+val compile : (Proc.t -> unit) ->
+                'a * Ast.program -> Target2.t -> Fenv.Clean.env -> Asm3.assembler
 @
 
 
@@ -77,24 +61,20 @@ end
 \subsection{Caml Implementation}
 % ------------------------------------------------------------------ 
 
-@
-
-<<Export>>=
+<<driver2.ml>>=
 module Personality = struct
     let target = Targets.dummy
 end
 
 module E   = Error
+module F   = Fenv.Clean
 module L   = Live.Make(Cfg4)
 module Asm = Astasm.Make(Personality)
 module IR  = Ast3ir
-module F   = Fenv.Clean
 
-<<Caml>>=
 
 let dummy   = Targets.dummy
 
-<<Export>>=
 let version () =
     ( This.name     stdout 
     ; output_string stdout " "
@@ -105,7 +85,6 @@ let version () =
         "See also http://www.cminusminus.org/\n"
     )
 
-<<Export>>=
 let scan file =
     let fd          = try open_in file
                       with Sys_error(msg) -> E.error msg    in
@@ -129,7 +108,6 @@ let scan file =
         ; finally ()
         )
 
-<<Export>>=
 let parse (file:string) = 
     let fd          = try open_in file
                       with Sys_error(msg) -> E.error msg    in
@@ -157,7 +135,6 @@ let parse (file:string) =
               ; raise e
               )
 
-<<Export>>=
 let emit_asdl (map,ast) =
         AstUtil.sexp_wr_program ast stdout
 @
@@ -172,7 +149,7 @@ let sparcasm    (solaris:bool) (c:out_channel)  = Sparcasm.make solaris c
 The user specifies in the source code some target properties. They must
 be consistent with the actual target. We check this in
 [[consistency_check]].
-<<Export>>=
+<<driver2.ml>>=
 let consistency_check env (t:Target2.t) =
     let int i = string_of_int i in
     let msg property source target = 
@@ -199,7 +176,7 @@ let consistency_check env (t:Target2.t) =
 @
 
 
-<<Export>>=
+<<driver2.ml>>=
 let check (map,ast) (asm) =
     let env      = Fenv.Dirty.empty map asm          in
     let env      = Fenv.Dirty.push env (Fenv.Dirty.emptyscope) in
@@ -211,7 +188,7 @@ let check (map,ast) (asm) =
     in
         Fenv.clean env
 
-<<Export>>=
+<<driver2.ml>>=
 let compile (opt) (map,ast) (target) (env)  =
     let () = consistency_check env target in   
     IR.translate env target opt ast 
@@ -219,135 +196,6 @@ let compile (opt) (map,ast) (target) (env)  =
 let pretty (map,ast) =
     Astpp.program ast
 
-<<Export>>=
 let print (doc) (width) =
     Pp.ppToFile stdout width doc
 @
-
-% ------------------------------------------------------------------ 
-\subsection{Export to Lua}
-% ------------------------------------------------------------------ 
-
-<<driver2.ml>>=
-module Export = struct
-    <<Export>>
-end
-
-<<Export>>=
-module AsmT = struct
-    type 'a t       = Asm3.assembler
-    let tname       = "asm"
-    let eq _        = fun x y -> x = y
-    let to_string _ = fun t -> "<asm>" 
-end
-module AstT = struct
-    type 'a t       = Srcmap.map * Ast.program
-    let tname       = "ast"
-    let eq _        = fun x y -> x = y
-    let to_string _ = fun t -> "<ast>" 
-  end
-module EnvT = struct
-    type 'a t       = Fenv.Clean.env
-    let tname       = "env"
-    let eq _        = fun x y -> x = y
-    let to_string _ = fun t -> "<env>" 
-end
-module ProcT = struct
-    type 'a t       = Proc.t
-    let tname       = "proc"
-    let eq _        = fun x y -> x = y
-    let to_string _ = fun t -> ("<proc "^t.Proc.symbol#text^">") 
-end
-module TargetT = struct
-    type 'a t       = Target2.t
-    let tname       = "target"
-    let eq _        = fun x y -> x = y
-    let to_string _ = fun t -> "<target " ^ t.Target2.name ^ ">" 
-end
-module DocT = struct
-    type 'a t       = Pp.doc
-    let tname       = "doc"
-    let eq _        = fun x y -> x = y
-    let to_string _ = fun t -> "<doc>" 
-end
-
-<<MakeLib>>
-@
-
-<<MakeLib>>=
-module MakeLib
-  (AsmV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a AsmT.t)
-  (AstV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a AstT.t 
-                              and  type 'a combined = 'a AsmV.combined)
-  (EnvV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a EnvT.t 
-                              and  type 'a combined = 'a AsmV.combined)
-  (ProcV   : Lua.Lib.TYPEVIEW with type 'a t        = 'a ProcT.t
-                              and  type 'a combined = 'a AsmV.combined)
-  (TargetV : Lua.Lib.TYPEVIEW with type 'a t        = 'a TargetT.t 
-                              and  type 'a combined = 'a AsmV.combined)
-  (DocV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a DocT.t 
-                              and  type 'a combined = 'a AsmV.combined)
-  (InOutV  : Lua.Lib.TYPEVIEW with type 'a t        = 'a Luaiolib.T.t    
-                              and  type 'a combined = 'a AsmV.combined)
-    
-    : Lua.Lib.TYPEFUL with type 'a combined = 'a AsmV.combined =
-
-struct
-  type 'a combined = 'a AsmV.combined
-  module M (C : Lua.Lib.CORE with type 'a V.userdata' = 'a combined) =
-    struct
-      module V = C.V
-      let ( **-> ) = V.( **-> )
-      <<export goodies to Lua>>
-    end (*M*)
-end (*MakeLib*)
-@ 
-Here we finally bind the exported values to names in the Lua
-interpreter. The [[compile]] function receives a lua value such that it
-can call Lua functions while it is active.
-<<export goodies to Lua>>=
-
-module Map = struct
-    let ast       = AstV.makemap    V.userdata V.projection
-    let asm       = AsmV.makemap    V.userdata V.projection
-    let env       = EnvV.makemap    V.userdata V.projection
-    let proc      = ProcV.makemap   V.userdata V.projection
-    let doc       = DocV.makemap    V.userdata V.projection
-    let target    = TargetV.makemap V.userdata V.projection
-    let optimize  = V.closure (proc **-> V.runit)
-    let channel   = InOutV.makemap  V.userdata V.projection
-    let inchan    = Luaiolib.in'    channel    V.projection
-    let outchan   = Luaiolib.out    channel    V.projection
-    let stage     = V.func (V.value **-> proc **-> V.result V.bool)
-end
-
-let init g = 
-  C.register_module "Asm"
-    [ "cmm"  , V.efunc (            Map.outchan **-> V.result Map.asm) Asm.asm     
-    ; "ast"  , V.efunc (            Map.outchan **-> V.result Map.asm) Asm.asm (*alias*)
-    ; "dot"  , V.efunc (            Map.outchan **-> V.result Map.asm) Dotasm.asm
-    ; "asdl" , V.efunc (            Map.outchan **-> V.result Map.asm) Asdlasm.asm
-    ; "sparc", V.efunc (V.bool **-> Map.outchan **-> V.result Map.asm) Msparcasm.asm
-    ] g;
-  C.register_module "Driver" 
-    [ "assemble"      , V.efunc (Map.asm     **-> V.runit)        (fun asm -> asm#emit)
-    ; "proc_assembler", V.efunc (Map.asm     **-> V.result Map.stage) 
-                          (fun asm v p -> asm#cfg_instr p.Proc.cfg p.Proc.symbol; true)
-    ; "check"         , V.efunc (Map.ast     **-> Map.asm 
-                                        **-> V.result Map.env)   check
-    ; "emit_asdl"     , V.efunc (Map.ast     **-> V.runit)            emit_asdl
-    ; "parse"         , V.efunc (V.string    **-> V.result Map.ast)   parse
-    ; "print"         , V.efunc (Map.doc     **-> V.int **-> V.runit) print
-    ; "pretty"        , V.efunc (Map.ast     **-> V.result Map.doc)   pretty
-    ; "scan"          , V.efunc (V.string    **-> V.runit)            scan
-    ; "version"       , V.efunc (V.unit      **-> V.runit)            version
-    ; "stdin"         , Map.inchan.V.embed                       stdin (* hack *)
-    ; "stdout"        , Map.outchan.V.embed                      stdout(* hack *)
-    ; "freeze"        , Map.stage.V.embed (fun v p -> Ast3ir.freeze p; true)
-    ; "compile"       , V.efunc (Map.optimize **-> Map.ast  
-                                             **-> Map.target 
-                                             **-> Map.env 
-                                             **-> V.result Map.asm) compile
-    ] g;
-  Lua.Lib.StringList.empty
-@  

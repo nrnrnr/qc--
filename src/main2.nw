@@ -21,89 +21,6 @@ It is executed only for side effect, so it exports an empty interface.
 @
 
 % ------------------------------------------------------------------ 
-\subsection{Back End}
-% ------------------------------------------------------------------ 
-
-Because the back end is in large parts functorized it must be assembled
-before it can be used. For the lack of a better place we do it here.
-
-<<main2.ml>>=
-module Reloc             = Sledlib.MkReloc
-                            (struct type symbol = Symbol.t end)
-module MSparcRtlEncoder  = Msparcenc.Mk(Reloc)
-module MSparcRtlExpander = Sparcexpander.Make (Reloc) (MSparcRtlEncoder)
-@
-
-% ------------------------------------------------------------------ 
-\subsection{Lua-Interpreter}
-% ------------------------------------------------------------------ 
-
-The compiler is controlled by an embedded Lua interpreter. Types and
-values of the compiler are made available as Lua primitives and allow
-the user to control the compiler. We build here an interpreter with our
-extensions.
-
-<<main2.ml>>=
-module E = Error
-
-module T    = Lua.Lib.Combine.T9                    (* types *)
-                (Driver2.Export.AsmT)       (* T1 *)
-                (Driver2.Export.AstT)       (* T2 *)
-                (Driver2.Export.EnvT)       (* T3 *)
-                (Driver2.Export.ProcT)      (* T4 *)
-                (Driver2.Export.TargetT)    (* T5 *)
-                (Driver2.Export.DocT)       (* T6 *)
-                (Luaiolib.T)                (* T7 *)
-                (Backplane.T)               (* T8 *)
-                (Colorgraph.GCT)            (* T9 *)
-
-module AsmT        = T.T1
-module AstT        = T.T2
-module EnvT        = T.T3
-module ProcT       = T.T4
-module TargetT     = T.T5
-module DocT        = T.T6
-module LuaioT      = T.T7
-module BackplaneT  = T.T8
-module ColorgraphT = T.T9
-
-module IO = Lua.Lib.Extend (LuaioT)
-
-module L1 = 
-  Lua.Lib.Combine.L10                   (* up to 10 libraries *)
-    (Luaiolib.Make (LuaioT))
-    (IO (Luastrlib.M))
-    (IO (Luamathlib.M))
-    (Driver2.Export.MakeLib (AsmT) (AstT) (EnvT) (ProcT) (TargetT) (DocT) (LuaioT))
-    (Backplane.Make  (BackplaneT) (ProcT))
-    (Colorgraph.Make (BackplaneT) (ColorgraphT) (ProcT))
-    (Targets.MakeLib (TargetT))
-    (Placevar.Make (BackplaneT) (ProcT))
-    (Linscan.Make (ProcT))
-    (IO (Luautil.MakeLib))
-                
-
-module XXX = MSparcRtlExpander.Lua
-
-
-module L2 = 
-  Lua.Lib.Combine.L6                    (* up to 9 more libs *)
-    (L1)
-    (Dummyexpander.Make          (ProcT))
-    (Placevar2.Make (BackplaneT) (ProcT))
-    (MSparcRtlExpander.Lua       (ProcT))
-    (Expander.Lua                (ProcT))
-    (IO (Rtleval2.Lua)) 
-
-module I = 
-  Lua.MakeInterp                            (* our interpreter *)
-    (Lua.Parser.MakeStandard)
-    (Lua.MakeCore (T) (L2))
-
-module V = I.Value
-@
-
-% ------------------------------------------------------------------ 
 \subsection{Interactive Lua-Interpreter}
 % ------------------------------------------------------------------ 
 
@@ -111,6 +28,10 @@ For extreme debugging an interactive session with the compiler's Lua
 interpreter might be helpful.
 
 <<main2.ml>>=
+module E = Error
+module I = Lualink.I
+module V = I.Value
+
 let run_interactive state infile =
     let prompt = "-- " in
     let msg = [ "This is Lua for QC--"

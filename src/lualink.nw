@@ -1,0 +1,202 @@
+% ------------------------------------------------------------------ 
+\section{Linking the Lua Interpreter}\label{sect:lua-link}
+% ------------------------------------------------------------------ 
+
+The compiler is controlled by an embedded Lua interpreter. Types and
+values of the compiler are made available as Lua primitives and allow
+the user to control the compiler. We build here an interpreter with our
+extensions.
+
+<<lualink.mli>>=
+module I : Lua.INTERP
+@
+
+<<lualink.ml>>=
+<<Linking QC-- Types>>
+
+module Reloc             = Sledlib.MkReloc
+                            (struct type symbol = Symbol.t end)
+module MSparcRtlEncoder  = Msparcenc.Mk(Reloc)
+module MSparcRtlExpander = Sparcexpander.Make (Reloc) (MSparcRtlEncoder)
+
+module T    = Lua.Lib.Combine.T9                    (* types *)
+                (AsmType)       (* T1 *)
+                (AstType)       (* T2 *)
+                (EnvType)       (* T3 *)
+                (ProcType)      (* T4 *)
+                (TargetType)    (* T5 *)
+                (DocType)       (* T6 *)
+                (Luaiolib.T)                (* T7 *)
+                (Backplane.T)               (* T8 *)
+                (Colorgraph.GCT)            (* T9 *)
+
+module AsmT        = T.T1
+module AstT        = T.T2
+module EnvT        = T.T3
+module ProcT       = T.T4
+module TargetT     = T.T5
+module DocT        = T.T6
+module LuaioT      = T.T7
+module BackplaneT  = T.T8
+module ColorgraphT = T.T9
+
+module IO = Lua.Lib.Extend (LuaioT)
+
+module L1 = 
+  Lua.Lib.Combine.L10                   (* up to 10 libraries *)
+    (Luaiolib.Make (LuaioT))
+    (IO (Luastrlib.M))
+    (IO (Luamathlib.M))
+    (MakeLib (AsmT) (AstT) (EnvT) (ProcT) (TargetT) (DocT) (LuaioT))
+    (Backplane.Make  (BackplaneT) (ProcT))
+    (Colorgraph.Make (BackplaneT) (ColorgraphT) (ProcT))
+    (Targets.MakeLib (TargetT))
+    (Placevar.Make (BackplaneT) (ProcT))
+    (Linscan.Make (ProcT))
+    (IO (Luautil.MakeLib))
+                
+
+module XXX = MSparcRtlExpander.Lua
+
+
+module L2 = 
+  Lua.Lib.Combine.L6                    (* up to 9 more libs *)
+    (L1)
+    (Dummyexpander.Make          (ProcT))
+    (Placevar2.Make (BackplaneT) (ProcT))
+    (MSparcRtlExpander.Lua       (ProcT))
+    (Expander.Lua                (ProcT))
+    (IO (Rtleval2.Lua)) 
+
+module I = 
+  Lua.MakeInterp                            (* our interpreter *)
+    (Lua.Parser.MakeStandard)
+    (Lua.MakeCore (T) (L2))
+@
+
+
+% ------------------------------------------------------------------ 
+\subsection{Export to Lua}
+% ------------------------------------------------------------------ 
+
+<<Linking QC-- Types>>=
+module Personality = struct
+    let target = Targets.dummy
+end
+
+module Asm = Astasm.Make(Personality)
+
+module AsmType = struct
+    type 'a t       = Asm3.assembler
+    let tname       = "asm"
+    let eq _        = fun x y -> x = y
+    let to_string _ = fun t -> "<asm>" 
+end
+module AstType = struct
+    type 'a t       = Srcmap.map * Ast.program
+    let tname       = "ast"
+    let eq _        = fun x y -> x = y
+    let to_string _ = fun t -> "<ast>" 
+  end
+module EnvType = struct
+    type 'a t       = Fenv.Clean.env
+    let tname       = "env"
+    let eq _        = fun x y -> x = y
+    let to_string _ = fun t -> "<env>" 
+end
+module ProcType = struct
+    type 'a t       = Proc.t
+    let tname       = "proc"
+    let eq _        = fun x y -> x = y
+    let to_string _ = fun t -> ("<proc "^t.Proc.symbol#text^">") 
+end
+module TargetType = struct
+    type 'a t       = Target2.t
+    let tname       = "target"
+    let eq _        = fun x y -> x = y
+    let to_string _ = fun t -> "<target " ^ t.Target2.name ^ ">" 
+end
+module DocType = struct
+    type 'a t       = Pp.doc
+    let tname       = "doc"
+    let eq _        = fun x y -> x = y
+    let to_string _ = fun t -> "<doc>" 
+end
+
+module MakeLib
+  (AsmV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a AsmType.t)
+  (AstV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a AstType.t 
+                              and  type 'a combined = 'a AsmV.combined)
+  (EnvV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a EnvType.t 
+                              and  type 'a combined = 'a AsmV.combined)
+  (ProcV   : Lua.Lib.TYPEVIEW with type 'a t        = 'a ProcType.t
+                              and  type 'a combined = 'a AsmV.combined)
+  (TargetV : Lua.Lib.TYPEVIEW with type 'a t        = 'a TargetType.t 
+                              and  type 'a combined = 'a AsmV.combined)
+  (DocV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a DocType.t 
+                              and  type 'a combined = 'a AsmV.combined)
+  (InOutV  : Lua.Lib.TYPEVIEW with type 'a t        = 'a Luaiolib.T.t    
+                              and  type 'a combined = 'a AsmV.combined)
+    
+    : Lua.Lib.TYPEFUL with type 'a combined = 'a AsmV.combined =
+
+struct
+  type 'a combined = 'a AsmV.combined
+  module M (C : Lua.Lib.CORE with type 'a V.userdata' = 'a combined) =
+    struct
+      module V = C.V
+      let ( **-> ) = V.( **-> )
+      <<export goodies to Lua>>
+    end (*M*)
+end (*MakeLib*)
+@ 
+
+Here we finally bind the exported values to names in the Lua
+interpreter. The [[compile]] function receives a lua value such that it
+can call Lua functions while it is active.
+
+<<export goodies to Lua>>=
+module Map = struct
+    let ast       = AstV.makemap    V.userdata V.projection
+    let asm       = AsmV.makemap    V.userdata V.projection
+    let env       = EnvV.makemap    V.userdata V.projection
+    let proc      = ProcV.makemap   V.userdata V.projection
+    let doc       = DocV.makemap    V.userdata V.projection
+    let target    = TargetV.makemap V.userdata V.projection
+    let optimize  = V.closure (proc **-> V.runit)
+    let channel   = InOutV.makemap  V.userdata V.projection
+    let inchan    = Luaiolib.in'    channel    V.projection
+    let outchan   = Luaiolib.out    channel    V.projection
+    let stage     = V.func (V.value **-> proc **-> V.result V.bool)
+end
+
+let init g = 
+  C.register_module "Asm"
+    [ "cmm"  , V.efunc (            Map.outchan **-> V.result Map.asm) Asm.asm     
+    ; "ast"  , V.efunc (            Map.outchan **-> V.result Map.asm) Asm.asm (*alias*)
+    ; "dot"  , V.efunc (            Map.outchan **-> V.result Map.asm) Dotasm.asm
+    ; "asdl" , V.efunc (            Map.outchan **-> V.result Map.asm) Asdlasm.asm
+    ; "sparc", V.efunc (V.bool **-> Map.outchan **-> V.result Map.asm) Msparcasm.asm
+    ] g;
+  C.register_module "Driver" 
+    [ "assemble"      , V.efunc (Map.asm     **-> V.runit)        (fun asm -> asm#emit)
+    ; "proc_assembler", V.efunc (Map.asm     **-> V.result Map.stage) 
+                          (fun asm v p -> asm#cfg_instr p.Proc.cfg p.Proc.symbol; true)
+    ; "check"         , V.efunc (Map.ast     **-> Map.asm 
+                                        **-> V.result Map.env)   Driver2.check
+    ; "emit_asdl"     , V.efunc (Map.ast     **-> V.runit)            Driver2.emit_asdl
+    ; "parse"         , V.efunc (V.string    **-> V.result Map.ast)   Driver2.parse
+    ; "print"         , V.efunc (Map.doc     **-> V.int **-> V.runit) Driver2.print
+    ; "pretty"        , V.efunc (Map.ast     **-> V.result Map.doc)   Driver2.pretty
+    ; "scan"          , V.efunc (V.string    **-> V.runit)            Driver2.scan
+    ; "version"       , V.efunc (V.unit      **-> V.runit)            Driver2.version
+    ; "stdin"         , Map.inchan.V.embed                       stdin (* hack *)
+    ; "stdout"        , Map.outchan.V.embed                      stdout(* hack *)
+    ; "freeze"        , Map.stage.V.embed (fun v p -> Ast3ir.freeze p; true)
+    ; "compile"       , V.efunc (Map.optimize **-> Map.ast  
+                                             **-> Map.target 
+                                             **-> Map.env 
+                                             **-> V.result Map.asm) Driver2.compile
+    ] g;
+  Lua.Lib.StringList.empty
+@  
