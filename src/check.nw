@@ -462,7 +462,8 @@ declarations are only processed when local values are bound.
 and body scope env = function
     | A.BodyAt(x, r) -> E.catch' env (error r env) (body scope env) x
     | A.DeclBody(d)  -> if scope=F.Local then decl scope env d else env 
-    | A.DataBody(dd) -> foldl (datum scope) env dd 
+    | A.DataBody(dd) -> if scope=F.Local then foldl (datum scope) env dd 
+                        else env
     | A.StmtBody(s)  -> stmt scope env s
 <<>>=       
 let proc scope env (_,name,_,bb) = 
