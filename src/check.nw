@@ -105,7 +105,10 @@ to sub-modules which are assembled here.
 @
 
 Finally, here is the function that checks an entire program.  The
-implementation gives an overview of the different steps.
+implementation gives an overview of the different steps.  Sometimes a
+violation manifests itself only by bindings of the [[Error.Error]]
+value in the fat environment.  Thus, this is scanned for such
+bindings. 
 
 <<>>=
 let checkProgram env program =
@@ -113,7 +116,7 @@ let checkProgram env program =
     let env        = ValueEnv.Bind.globals env program             in
     let env        = ValueEnv.Eval.doGlobalConst env  program in
     let env        = F.setDefaults env                             in
-        Semantics.program env program
+        E.Implode.pair (Semantics.program env program, F.errorfree env)
 @
 
 To actually scan, parse, and check a file we provide a function
@@ -121,13 +124,6 @@ To actually scan, parse, and check a file we provide a function
 create the abstract syntax and calls the different phases of checking. 
 In principle errors are propagated and [[checkProgram]] returns with
 [[Error.Error]] when a violation of a static semantic rule was found. 
-Sometimes a violation manifests itself only by bindings of the
-[[Error.Error]] value in the fat environment.  Thus, this is scanned
-for such bindings. Still, not all errors are detected: a
-re-declaration of a type or value is an error. When the second
-declaration is processed the re-declaration is detected and an error
-message is issued.  Currently the first (valid) declaration stays in
-the environment and the error stays invisible.
 
 <<>>=
 let check file =
@@ -141,7 +137,7 @@ let check file =
             ( Srcmap.sync map 0 (file,1,1)
             ; let ast        = Parse.program scanner lexbuf in
               let env        = F.create map                 in
-                E.Implode.pair (checkProgram env ast, F.errorfree env)   
+                checkProgram env ast
             )
         with
             | Parsing.Parse_error ->
@@ -527,8 +523,8 @@ which may be undefined. A declaration which refers to an undefined type
 is bound to [[Error.Error]].
 
 <<bind global values>>=
-let rec ty env = function
-    | A.TyAt(x,r)       -> E.catch (error r env) (ty env) x
+let rec ty r env = function
+    | A.TyAt(x,r)       -> E.catch (error r env) (ty r env) x
     | A.BitsTy(n)       -> E.Ok(T.bits n)
     | A.AliasTy(n)      -> F.findt' n env
 @
@@ -547,65 +543,69 @@ in the environment. This helps to decide whether a symbol is local or
 global when it is accessed from inside a procedure.
 
 <<>>=
-let import scope t env = function
+let import r scope t env = function
     | Some foreign, name -> 
-        F.bindv name scope (E.ematch (ty env t) (fun t -> F.Import,t)) env
+        F.bindv' name (r,scope) (E.ematch (ty r env t) 
+        (fun t -> F.Import,t)) env
     | None        , name -> 
-        F.bindv name scope (E.ematch (ty env t) (fun t -> F.Import,t)) env
+        F.bindv' name (r,scope) (E.ematch (ty r env t) 
+        (fun t -> F.Import,t)) env
          
 <<>>=
-let target env = function
+let target r env = function
     | A.Memsize(i) when i > 0   -> F.bindMemsize i env
     | A.Memsize(i)              -> E.error "memsize must be positive"
     | A.ByteorderBig            -> F.bindEndianness F.Big env
     | A.ByteorderLittle         -> F.bindEndianness F.Little env 
     
 <<>>=
-let imports  scope env t ii         = foldl (import scope t) env ii
-let register scope env (_,t,name,_) = 
-    F.bindv name scope (E.ematch (ty env t) (fun t -> F.Register,t)) env
+let imports r scope env t ii          = foldl (import r scope t) env ii
+let register r scope env (_,t,name,_) = 
+    F.bindv' name (r,scope) (E.ematch (ty r env t) 
+        (fun t -> F.Register,t)) env
 @
 
 The [[datum]] function binds global data-labels and local
 [[stackdata]] labels when called from [[body]].
 
 <<>>=
-let rec datum scope env = function
-    | A.DatumAt(x,r)  -> E.catch' env (error r env) (datum scope env) x
-    | A.Label(n)      -> F.bindv n scope (E.Ok(F.Label(F.Data),T.data)) env
-    | _               -> env
+let rec datum r scope env = function
+    | A.DatumAt(x,r) -> E.catch' env (error r env) (datum r scope env) x
+    | A.Label(n)     -> F.bindv' n (r,scope) (E.Ok(F.Label(F.Data),T.data)) env
+    | _              -> env
 @
 
 Continuations are local to procedures and thus they are only bound
 when in [[F.Local]] mode.
 
 <<>>=
-let rec stmt scope env = function 
+let rec stmt r scope env = function 
     | A.StmtAt(x,r)           -> 
-        E.catch' env (error r env) (stmt scope env) x
+        E.catch' env (error r env) (stmt r scope env) x
     | A.IfStmt ( e, ss1, ss2) -> 
-        foldl (stmt scope) (foldl (stmt scope) env ss1) ss2
+        foldl (stmt r scope) (foldl (stmt r scope) env ss1) ss2
     | A.LabelStmt(n)          -> 
-        F.bindv n scope (E.Ok(F.Label(F.Code),T.code)) env
+        F.bindv' n (r,scope) (E.Ok(F.Label(F.Code),T.code)) env
     | A.SpanStmt(e1,e2,ss)    -> 
-        foldl (body scope) env ss
-    | A.SwitchStmt (r,e,arms) -> 
-        foldl (arm scope)  env arms
+        foldl (body r scope) env ss
+    | A.SwitchStmt (range,e,arms) -> 
+        foldl (arm r range scope)  env arms
     | A.ContStmt(n,ee)        -> 
         if scope=F.Global then env 
-        else F.bindv n scope (E.Ok(F.Continuation,T.cont)) env
+        else F.bindv' n (r,scope) (E.Ok(F.Continuation,T.cont)) env
     | otherwise               -> 
         env
 
-and arm scope env = function
-    | A.ArmAt(x,r)            -> E.catch' env (error r env) (arm scope env) x
-    | A.Case(ranges, ss)      -> foldl (stmt scope) env ss
+and arm r range scope env = function
+    | A.ArmAt(x,r)      -> E.catch' env (error r env) (arm r range scope env) x
+    | A.Case(ranges, ss)-> foldl (stmt r scope) env ss
 <<>>=
-and decl scope env = function
-    | A.DeclAt(x,r)    -> E.catch' env (error r env) (decl scope env) x
-    | A.Import(ty,ii)  -> imports scope env ty ii
-    | A.Registers(rr)  -> foldl (register scope) env rr 
-    | A.Target(aa)     -> if scope=F.Global then foldl target env aa else env
+and decl r scope env = function
+    | A.DeclAt(x,r)    -> E.catch' env (error r env) (decl r scope env) x
+    | A.Import(ty,ii)  -> imports r scope env ty ii
+    | A.Registers(rr)  -> foldl (register r scope) env rr 
+    | A.Target(aa)     -> if scope=F.Global then foldl (target r) env aa 
+                          else env
     | _                -> env
 @
 
@@ -613,34 +613,34 @@ A \textit{body} is always local to procedure and therefore its
 declarations are only processed when local values are bound. 
 
 <<>>=
-and body scope env = function
-    | A.BodyAt(x, r) -> E.catch' env (error r env) (body scope env) x
-    | A.DeclBody(d)  -> if scope=F.Local then decl scope env d else env 
-    | A.DataBody(dd) -> if scope=F.Local then foldl (datum scope) env dd 
+and body r scope env = function
+    | A.BodyAt(x, r) -> E.catch' env (error r env) (body r scope env) x
+    | A.DeclBody(d)  -> if scope=F.Local then decl r scope env d else env 
+    | A.DataBody(dd) -> if scope=F.Local then foldl (datum r scope) env dd 
                         else env
-    | A.StmtBody(s)  -> stmt scope env s
+    | A.StmtBody(s)  -> stmt r scope env s
 <<>>=       
-let proc scope env (_,name,_,bb) = 
-    let env' = F.bindv name scope (E.Ok(F.Label(F.Proc),T.code)) env in
-        foldl (body scope) env' bb
+let proc r scope env (_,name,_,bb) = 
+    let env' = F.bindv' name (r,scope) (E.Ok(F.Label(F.Proc),T.code)) env in
+        foldl (body r scope) env' bb
 <<>>=
-let rec section env = function
-    | A.SectionAt(x,r)     -> E.catch' env (error r env) (section env) x
-    | A.Decl(d)            -> decl F.Global env d
-    | A.SSpan( e1, e2, ss) -> foldl section env ss
-    | A.Datum( d)          -> datum F.Global env d
-    | A.Procedure(p)       -> proc F.Global env p
+let rec section r env = function
+    | A.SectionAt(x,r)     -> E.catch' env (error r env) (section r env) x
+    | A.Decl(d)            -> decl r F.Global env d
+    | A.SSpan( e1, e2, ss) -> foldl (section r) env ss
+    | A.Datum( d)          -> datum r F.Global env d
+    | A.Procedure(p)       -> proc r F.Global env p
 
 <<>>=
-let rec toplevel env = function 
-    | A.ToplevelAt(x, r)  -> E.catch' env (error r env) (toplevel env) x
-    | A.Section(name, ss) -> foldl section env ss
-    | A.TopDecl(d)        -> decl F.Global env d
-    | A.TopProcedure(p)   -> proc F.Global env p 
+let rec toplevel r env = function 
+    | A.ToplevelAt(x, r)  -> E.catch' env (error r env) (toplevel r env) x
+    | A.Section(name, ss) -> foldl (section r) env ss
+    | A.TopDecl(d)        -> decl r F.Global env d
+    | A.TopProcedure(p)   -> proc r F.Global env p 
 
 <<>>=
-let globals env tt   = foldl toplevel env tt
-let locals  env bb   = foldl (body F.Local) env bb
+let globals env tt   = foldl (toplevel Srcmap.null) env tt
+let locals  env bb   = foldl (body Srcmap.null F.Local) env bb
 @ 
 
 % ------------------------------------------------------------------ 
@@ -1574,10 +1574,10 @@ Formal parameters are entered with local scope into the environment
 when a procedure is checked.
 
 <<>>=
-and formal env (hint, inv, ty, name) =
+and formal r env (hint, inv, ty, name) =
     match evalTy env ty with
-    | E.Ok(t) -> F.bindv name F.Local (E.Ok(F.Register,t)) env 
-    | E.Error -> F.bindvError name F.Local env
+    | E.Ok(t) -> F.bindv' name (r,F.Local) (E.Ok(F.Register,t)) env 
+    | E.Error -> F.bindv' name (r,F.Local) E.Error env
 @
 
 A procedure opens a new scope.  First all local type, value, and
@@ -1586,8 +1586,8 @@ formal parameters.  It should not matter whether formal parameters are
 entered before or after values and types.
     
 <<>>=
-and proc env (cc, name, ff, bb) =
-    let env = foldl formal env ff                     in 
+and proc r env (cc, name, ff, bb) =
+    let env = foldl (formal r) env ff                 in 
     let env = TypeEnv.doLocalTypes env bb             in
     let env = ValueEnv.Bind.locals env bb             in
     let env = ValueEnv.Eval.doLocalConst env bb in
@@ -1595,18 +1595,18 @@ and proc env (cc, name, ff, bb) =
 
 
 <<>>=
-and section env = function    
-    | A.SectionAt(x,r)     -> E.catch (error r env) (section env) x
+and section r env = function    
+    | A.SectionAt(x,r)     -> E.catch (error r env) (section r env) x
     | A.Decl(d)            -> E.Ok()
     | A.Datum( d)          -> datum env d
-    | A.Procedure(p)       -> proc env p
+    | A.Procedure(p)       -> proc r env p
     | A.SSpan( e1, e2, ss) -> E.Ok()
 <<>>=
-let rec toplevel env = function
-    | A.ToplevelAt(x, r)   -> E.catch (error r env) (toplevel env) x
-    | A.Section(name, ss)  -> E.Implode.map (section env) ss 
+let rec toplevel r env = function
+    | A.ToplevelAt(x, r)   -> E.catch (error r env) (toplevel r env) x
+    | A.Section(name, ss)  -> E.Implode.map (section Srcmap.null env) ss 
     | A.TopDecl(d)         -> decl env d
-    | A.TopProcedure(p)    -> proc env p 
+    | A.TopProcedure(p)    -> proc r env p 
 @
 
 The [[program]] function is the entry point to check the static
@@ -1614,6 +1614,6 @@ sementics of a program \emph{after} the environment has been enlarged
 with all global symbols.
     
 <<>>=
-and program env tt = E.Implode.map (toplevel env) tt
+and program env tt = E.Implode.map (toplevel Srcmap.null env) tt
 @
 

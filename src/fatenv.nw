@@ -111,15 +111,13 @@ specialized function [[bindvError]] and [[bindtError]] bind names to
 [[Error.Error]] in the value and type name space respectively.
 
 Any attempt to re-declare a name in a scope is detected by the
-[[bind*]] functions reported with an [[Error.ErrorExn]] exception.
+[[bind*]] functions and reported. The possibly leagal first
+declaration of a name is re-bound to [[Error]] to flag the problem in
+the environment. The [[bind*]] functions never fail.
 
 <<>>=
-val bindv           : string -> scope -> ventry  -> env -> env
-val bindt           : string -> scope -> tentry  -> env -> env
 val bindv'          : string -> attr  -> ventry  -> env -> env
 val bindt'          : string -> attr  -> tentry  -> env -> env
-val bindvError      : string -> scope            -> env -> env
-val bindtError      : string -> scope            -> env -> env
 @
 
 The [[find*]] functions lookup the meaning of a name in the value or
@@ -235,11 +233,10 @@ position that is used to decribe the place where the error is located.
 let error r env msg = E.errorRegionPrt (srcmap env,r) msg 
 @
 
-When a name is re-declared we issue an error but the first declaration
-is considered valid.  It would be better to re-bind it to error to
-make the problem visible in the environment.  But the current error
-reporting design does not allow to report an error and return a value
-at the same time.
+When a name is re-declared we issue two error messages:  the first
+describes the actual location [[reg]] where the problem is detected,
+and the second the location of the declaration that clashes.  This one
+is also re-bound to [[Error]] to flag the problem.
 
 <<>>=
 let bindv' name (reg,scope as attr) x env =
@@ -255,28 +252,21 @@ let bindv' name (reg,scope as attr) x env =
             add name (attr,x)
     with
         Not_found -> add name (attr,x)
-<<>>=        
-let bindv name scope x env = bindv' name (Srcmap.null,scope) x env
 
 <<>>=
 let bindt' name (reg,scope as attr) x env =
-    let add name x = {env with tenv = StrMap.add name (attr,x) env.tenv} in
+    let add name x = {env with tenv = StrMap.add name x env.tenv} in
     try 
-        let (reg',scope'),_ = StrMap.find name env.tenv in
+        let (reg',scope' as attr'),_ = StrMap.find name env.tenv in
         if scope' = scope then
-            E.error ("type already declared: "^name)
+            ( error reg  env ("re-declaration of type "^name)
+            ; error reg' env ("previously declared here")
+            ; add name (attr',E.Error) (* re-bind orig. to Error *)
+            )
         else
-            add name x
+            add name (attr,x) 
     with
-        Not_found -> add name x
-@
-<<>>=
-let bindt name scope x env = bindt' name (Srcmap.null,scope) x env
-
-        
-<<>>=
-let bindvError name scope env = bindv name scope E.Error env
-let bindtError name scope env = bindt name scope E.Error env
+        Not_found -> add name (attr,x)
 @
 
 The functions to lookup a value [[findv]] and a type [[findt]] raise
@@ -302,8 +292,8 @@ let findt name env =
 @
 
 The following primed functions return just the entry for a name
-without its scope. This is a special case of the functions above and
-only for convenience.
+without its attributes.  This is a special case of the functions above
+and only for convenience.
 
 <<>>=
 let findv' name env = snd (findv name env)
@@ -353,8 +343,8 @@ let findEndianness env = env.arch.endianness
 
 <<>>=
 let errorfree env =
-    let combine key (scope,x) y = E.Implode.pair (x,y)    in
-    let free map = StrMap.fold combine env.venv (E.Ok())  in
+    let combine key (attr,x) y = E.Implode.pair (x,y)    in
+    let free map = StrMap.fold combine map (E.Ok())      in
         E.Implode.pair (free env.tenv, free env.venv)
 @
 
