@@ -455,11 +455,13 @@ match loc l with
     let w          = Cell.to_width mcell ct in
     let R.C offset = Cell.to_count mcell (w - n - lsb) in
     let addr       = Dn.exp (RU.addk (RU.Width.exp' addr) (Up.exp addr) offset) in
+    let assn       = Alignment.gcd assn offset in
     RP.Mem (mspace, Cell.to_count mcell n, addr, assn)
 | <<little-endian memory location>> 
   when Cell.divides mcell n && Cell.divides mcell lsb ->
     let R.C offset = Cell.to_count mcell lsb in
     let addr       = Dn.exp (RU.addk (RU.Width.exp' addr) (Up.exp addr) offset) in
+    let assn       = Alignment.gcd assn offset in
     RP.Mem (mspace, Cell.to_count mcell n, addr, assn)
 | <<big-endian register location>> 
   when Cell.divides rcell n && Cell.divides rcell lsb ->
@@ -477,14 +479,16 @@ match loc l with
     RP.Fetch (RP.Mem (mspace, Cell.to_count mcell n, addr, assn), n)
 | [w;n],[<<big-endian memory fetch>>] when Cell.divides mcell (w - n) ->
     let R.C offset = Cell.to_count mcell (w - n) in
-    let addr    = Dn.exp (RU.addk (RU.Width.exp' addr) (Up.exp addr) offset) in
+    let addr = Dn.exp (RU.addk (RU.Width.exp' addr) (Up.exp addr) offset) in
+    let assn = Alignment.gcd assn offset in
     RP.Fetch (RP.Mem (mspace, Cell.to_count mcell n, addr, assn), n)
 | [w;n],[RP.App(("shrl", [_]),
                 [<<little-endian memory fetch>>; RP.Const(RP.Bits b)])] ->
     let shamt = Bits.U.to_int b in
     if Cell.divides mcell shamt then
       let R.C offset = Cell.to_count mcell shamt in
-      let addr    = Dn.exp (RU.addk (RU.Width.exp' addr) (Up.exp addr) offset) in
+      let addr = Dn.exp (RU.addk (RU.Width.exp' addr) (Up.exp addr) offset) in
+      let assn = Alignment.gcd assn offset in
       lobits [w-shamt; n]
         [RP.Fetch (RP.Mem (mspace, Cell.to_count mcell (w-shamt), addr, assn),w-shamt)]
     else
