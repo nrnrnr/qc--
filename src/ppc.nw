@@ -211,6 +211,9 @@ let tstore tmp exp       = R.store (tloc tmp) exp (twidth tmp)
 let mem    assn w addr = R.mem assn 'm' byte_order w addr
 let memval assn w addr = R.fetch (mem assn w addr) w
 @ 
+<<ppc postexpander>>=
+let set_xer2 opr x y = R.store xer (R.app opr [x; y]) 32
+@ 
 The load and store instructions on the ppc cannot use register 0 as a
 parameter. Right now this is avoided by not telling the register
 allocator about register 0, so we don't have to worry about that here.
@@ -284,11 +287,41 @@ appropriate bit in the CR register. With this scheme, the opposite
 condition can be derived by changing the guard operator.
 I am using a bits value of 0 because using 1 gives the wrong number.
 <<ppc postexpander>>=
-let bc x (opr, ws as op) y ~tgt =
-    assert (ws = [wordsize]);
-    [ R.guard (R.app (Up.opr op) [tval x; tval y]) 
-              (R.store pc_lhs (Up.const tgt) wordsize)  (* effect *)
-    ]
+let xer_condition = function
+  | "eq" | "ne" | "lt" | "le" | "gt" | "ge" 
+  | "ltu" | "leu" | "gtu" | "geu" -> None
+  | "add_overflows" 
+  | "div_overflows"
+  | "mul_overflows"
+  | "mulu_overflows"
+  | "sub_overflows" -> Some "ppc_xer_ov_set"
+  | opr -> Impossible.unimp ("conditional branch on " ^ opr)
+
+let with_xer z x opr y =
+  let opr' = "ppc_xer_" ^ opr in
+  [R.par [R.store (tloc z) (R.app (R.opr opr [32]) [tval x; tval y]) 32;
+          R.store xer (R.app (R.opr opr' []) [tval x; tval y]) 32;
+         ]]
+
+let bc_setup opr x y = match opr with
+| "add_overflows"  -> with_xer (talloc 't' 32) x "add" y
+| "sub_overflows"  -> with_xer (talloc 't' 32) x "sub" y
+| "mul_overflows"  -> with_xer (talloc 't' 32) x "mul" y
+| "mulu_overflows" -> with_xer (talloc 't' 32) x "mulu" y
+| "div_overflows"  -> Impossible.unimp "%div_overflows"
+| _ -> Impossible.impossible "bc_setup"
+
+
+let bc x ((opr, ws) as op) y ~tgt =
+  assert (ws = [wordsize]);
+  match xer_condition opr with
+  | None -> 
+      [R.guard (R.app (Up.opr op) [tval x; tval y]) 
+        (R.store pc_lhs (Up.const tgt) wordsize)]
+  | Some tst ->
+      R.guard (R.app (R.opr tst []) [R.fetch xer wordsize])
+        (R.store pc_lhs (Up.const tgt) wordsize) ::
+      bc_setup opr x y
 
 let negate = function
   | "ne"            -> "eq"

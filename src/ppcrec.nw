@@ -199,6 +199,7 @@ regl: Reg('r', n:int, w:int) [{: guard (n<>0) :}] {: regname n :}
 pcl:  Reg('c', 0, w:int) {: () :}
 cial: Reg('c', 1, w:int) {: () :}
 crl:  Reg('c', 2, w:int) {: () :}
+xerl: Reg('c', 4, w:int) {: () :}
 lrl:  Reg('c', 5, w:int) {: () :}
 spl:  Reg('r', 14, w:int) {: () :}
 
@@ -310,6 +311,8 @@ inst:  Guarded(cmp,Goto(lconst))
           | (i_, (l_, op),x,y) -> "cmp" ^ l_ ^ "w" ^ i_ ^ " cr0," ^ x ^ "," ^
                                   y ^ "\n\tb" ^ op ^ " " ^ lconst
        :}   
+inst : Guarded(OvSet(Fetch(xerl,32)), Goto(lconst))
+       {: "bo " ^ lconst :}
 @ 
 \paragraph{Arithmetic instructions}
 
@@ -323,6 +326,16 @@ inst:  Store(regl, Sub(x:reg,y:reg), w:int)
 inst:  Store(regl, Mul(x:reg,y:reg), w:int)
        {: "mulhw " ^ regl ^ "," ^ x    ^ "," ^ y     :}
 inst:  Store(regl, Neg(reg), w:int) {: "neg " ^ reg ^ "," ^ reg :}
+
+inst:  Par(Store(regl, Add(x:reg,y:reg), w:int), Store(xerl, XerAdd(x2:reg,y2:reg), w2:int))
+       [ {: 0 (* x = x2 & y = y2*) :} ]
+       {: "addco "  ^ regl ^ "," ^ x    ^ "," ^ y     :}
+inst:  Par(Store(regl, Sub(x:reg,y:reg), w:int), Store(xerl, XerSub(x2:reg,y2:reg), w2:int))
+       [ {: 0 (* x = x2 & y = y2 *) :} ]
+       {: "subo "  ^ regl ^ "," ^ x    ^ "," ^ y     :}
+inst:  Par(Store(regl, Mul(x:reg,y:reg), w:int), Store(xerl, XerMul(x2:reg,y2:reg), w2:int))
+       [ {: 0 (* x = x2 & y = y2 *) :} ]
+       {: "mulhwo "  ^ regl ^ "," ^ x    ^ "," ^ y     :}
 @ 
 \paragraph{Logical instructions}
 
@@ -425,6 +438,11 @@ constructor for each operator.
 | RP.App(("shl",  ws), [x; y]) -> conShl  (exp x) (exp y)
 | RP.App(("shra", ws), [x; y]) -> conShra (exp x) (exp y)
 | RP.App(("shrl", ws), [x; y]) -> conShrl (exp x) (exp y)
+| RP.App(("ppc_xer_ov_set", []), [x]) -> conOvSet (exp x)
+| RP.App(("ppc_xer_add",  []), [x;y]) -> conXerAdd (exp x)  (exp y)
+| RP.App(("ppc_xer_sub",  []), [x;y]) -> conXerSub (exp x)  (exp y)
+| RP.App(("ppc_xer_mul",  []), [x;y]) -> conXerMul (exp x)  (exp y)
+| RP.App(("ppc_xer_mulu", []), [x;y]) -> Impossible.unimp "ppc mulu"
 | RP.App(("bitExtract", [w; n]), [lsb; src]) -> conBitExtract (exp lsb) (exp src) n
 | RP.App((op, ws), [x; y]) 
     when Strutil.Set.mem op cmp -> conCmp op (exp x) (exp y)
