@@ -49,32 +49,35 @@ _bye:
 .text
 _main:
 	addi r1,r1,-80
-	mflr r4
+	mflr r2
 _Linitialize_continuations_l4:
 _Lproc_body_start_l3:
 	bl _Lpic_fun_l16
 _Lpic_l15:
 _Lpic_fun_l16:
-	mflr r2
+	mflr r4
 _Lpic_end_l17:
-	addi r5,0,1
-	addis r5,r5,0
+	addi r5,0,0
+	addi r5,r5,1
 	cmplw cr0,r3,r5
 	bgt _Ljoin_l10
 _Ljoin_l11:
-	addis r3,r2,ha16(_hello-_Lpic_l15)
-	la r3,lo16(_hello-_Lpic_l15)(r3)
+	addis r5,0,ha16(_hello-_Lpic_l15)
+	addi r5,r5,lo16(_hello-_Lpic_l15)
+	add r3,r4,r5
 	b _Ljoin_l9
 _Ljoin_l10:
-	addis r3,r2,ha16(_bye-_Lpic_l15)
-	la r3,lo16(_bye-_Lpic_l15)(r3)
+	addis r5,0,ha16(_bye-_Lpic_l15)
+	addi r5,r5,lo16(_bye-_Lpic_l15)
+	add r3,r4,r5
 	b _Ljoin_l9
 _Ljoin_l9:
-	stw r4,64(r1)
+	stw r2,64(r1)
 	bl L_printf$stub
 _Ljoin_l8:
-	lwz r4,64(r1)
-	mtlr r4
+	addi r3,0,0
+	lwz r12,64(r1)
+	mtlr r12
 	addi r1,r1,80
 	blr
 .section __DATA,pcmap_data
@@ -89,10 +92,10 @@ _Lframe_l24:
 .long 0x80000018
 .long 0xfffffff0
 .long _Lstackdata_l23
-.long 0x80000026
-.long 0x80000003
-.long 0x80000000
-.long 0x80000001
+.long 38
+.long 3
+.long 0
+.long 1
 .long 0x40000036
 .long 0x40000036
 .long 0x40000037
@@ -134,5 +137,5 @@ _Lframe_l24:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .text

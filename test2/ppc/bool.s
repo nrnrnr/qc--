@@ -25,27 +25,26 @@ _Cmm.global_area:
 .text
 _main:
 	addi r1,r1,-80
-	mflr r4
+	mflr r2
 _Linitialize_continuations_l5:
 _Lproc_body_start_l4:
 	bl _Lpic_fun_l17
 _Lpic_l16:
 _Lpic_fun_l17:
-	mflr r3
+	mflr r4
 _Lpic_end_l18:
-	addi r3,0,3
-	addis r3,r3,0
-	stw r4,64(r1)
+	addi r3,0,0
+	addi r3,r3,3
+	stw r2,64(r1)
 	bl _tryout
 _Ljoin_l12:
-	addi r3,0,4
-	addis r3,r3,0
+	addi r3,0,0
+	addi r3,r3,4
 	bl _tryout
 _Ljoin_l9:
 	addi r3,0,0
-	addis r3,r3,0
-	lwz r2,64(r1)
-	mtlr r2
+	lwz r12,64(r1)
+	mtlr r12
 	addi r1,r1,80
 	blr
 .section __DATA,pcmap_data
@@ -60,10 +59,10 @@ _Lframe_l25:
 .long 0x80000018
 .long 0xfffffff0
 .long _Lstackdata_l24
-.long 0x80000026
-.long 0x80000002
-.long 0x80000000
-.long 0x80000001
+.long 38
+.long 2
+.long 0
+.long 1
 .long 0x40000036
 .long 0x40000036
 .long 0x40000037
@@ -104,7 +103,7 @@ _Lframe_l25:
 .long 0x40000048
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .section __DATA,pcmap
 .long _Ljoin_l9
 .long _Lframe_l26
@@ -114,10 +113,10 @@ _Lframe_l26:
 .long 0x80000018
 .long 0xfffffff0
 .long _Lstackdata_l24
-.long 0x80000026
-.long 0x80000002
-.long 0x80000000
-.long 0x80000001
+.long 38
+.long 2
+.long 0
+.long 1
 .long 0x40000036
 .long 0x40000036
 .long 0x40000037
@@ -158,7 +157,7 @@ _Lframe_l26:
 .long 0x40000048
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .text
 .text
 _tryout:
@@ -171,30 +170,31 @@ _Lpic_l40:
 _Lpic_fun_l41:
 	mflr r5
 _Lpic_end_l42:
-	addi r6,0,1
-	addis r6,r6,0
-	and r7,r3,r6
 	addi r6,0,0
-	addis r6,r6,0
-	cmpw cr0,r7,r6
+	addi r6,r6,1
+	and  r6,r3,r6
+	addi r7,0,0
+	cmpw cr0,r6,r7
 	bne _Ljoin_l35
 _Ljoin_l36:
-	addis r6,r5,ha16(_z-_Lpic_l40)
-	la r6,lo16(_z-_Lpic_l40)(r6)
+	addis r6,0,ha16(_z-_Lpic_l40)
+	addi r6,r6,lo16(_z-_Lpic_l40)
+	add r5,r5,r6
 	b _Ljoin_l34
 _Ljoin_l35:
-	addis r6,r5,ha16(_nz-_Lpic_l40)
-	la r6,lo16(_nz-_Lpic_l40)(r6)
+	addis r6,0,ha16(_nz-_Lpic_l40)
+	addi r6,r6,lo16(_nz-_Lpic_l40)
+	add r5,r5,r6
 	b _Ljoin_l34
 _Ljoin_l34:
 	stw r3,64(r1)
-	mr r3,r6
+	mr r3,r5
 	lwz r4,64(r1)
 	stw r2,68(r1)
 	bl L_printf$stub
 _Ljoin_l33:
-	lwz r2,68(r1)
-	mtlr r2
+	lwz r12,68(r1)
+	mtlr r12
 	addi r1,r1,80
 	blr
 .section __DATA,pcmap_data
@@ -209,10 +209,10 @@ _Lframe_l49:
 .long 0x80000018
 .long 0xfffffff4
 .long _Lstackdata_l48
-.long 0x80000026
-.long 0x80000002
-.long 0x80000000
-.long 0x80000001
+.long 38
+.long 2
+.long 0
+.long 1
 .long 0x40000036
 .long 0x40000036
 .long 0x40000037
@@ -253,7 +253,7 @@ _Lframe_l49:
 .long 0x40000048
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .text
 .section __DATA,data
 _nz:

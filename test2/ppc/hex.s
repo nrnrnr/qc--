@@ -46,41 +46,37 @@ _notzero:
 .text
 _main:
 	addi r1,r1,-80
-	mflr r4
+	mflr r2
 _Linitialize_continuations_l4:
 _Lproc_body_start_l3:
 	bl _Lpic_fun_l16
 _Lpic_l15:
 _Lpic_fun_l16:
-	mflr r3
+	mflr r4
 _Lpic_end_l17:
-	stw r3,64(r1)
-	mr r2,r3
-	addis r3,r2,ha16(_notzero-_Lpic_l15)
-	la r3,lo16(_notzero-_Lpic_l15)(r3)
-	stw r4,68(r1)
+	addis r5,0,ha16(_notzero-_Lpic_l15)
+	addi r5,r5,lo16(_notzero-_Lpic_l15)
+	add r3,r4,r5
 	stw r2,64(r1)
+	stw r4,68(r1)
 	bl L_strlen$stub
 _Ljoin_l11:
-	li r2,ha16(_answer-_Lpic_l15)
-	la r2,lo16(_answer-_Lpic_l15)(r2)
-	lwz r4,64(r1)
-	add r5,r4,r2
+	addis r2,0,ha16(_answer-_Lpic_l15)
+	addi r2,r2,lo16(_answer-_Lpic_l15)
+	lwz r6,68(r1)
+	add r2,r6,r2
 	stw r3,72(r1)
-	mr r3,r5
-	stw r4,64(r1)
+	mr r3,r2
 	lwz r4,72(r1)
-	li r5,ha16(_notzero-_Lpic_l15)
-	la r5,lo16(_notzero-_Lpic_l15)(r5)
-	lwz r2,64(r1)
-	add r2,r2,r5
+	addis r2,0,ha16(_notzero-_Lpic_l15)
+	addi r2,r2,lo16(_notzero-_Lpic_l15)
+	add r2,r6,r2
 	lbz r5,0(r2)
 	bl L_printf$stub
 _Ljoin_l8:
 	addi r3,0,0
-	addis r3,r3,0
-	lwz r2,68(r1)
-	mtlr r2
+	lwz r12,64(r1)
+	mtlr r12
 	addi r1,r1,80
 	blr
 .section __DATA,pcmap_data
@@ -93,12 +89,12 @@ _Lstackdata_l23:
 _Lframe_l24:
 .long 0xffffffc8
 .long 0x80000018
-.long 0xfffffff4
+.long 0xfffffff0
 .long _Lstackdata_l23
-.long 0x80000026
-.long 0x80000003
-.long 0x80000000
-.long 0x80000001
+.long 38
+.long 3
+.long 0
+.long 1
 .long 0x40000036
 .long 0x40000036
 .long 0x40000037
@@ -140,7 +136,7 @@ _Lframe_l24:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .section __DATA,pcmap
 .long _Ljoin_l8
 .long _Lframe_l25
@@ -148,12 +144,12 @@ _Lframe_l24:
 _Lframe_l25:
 .long 0xffffffc8
 .long 0x80000018
-.long 0xfffffff4
+.long 0xfffffff0
 .long _Lstackdata_l23
-.long 0x80000026
-.long 0x80000003
-.long 0x80000000
-.long 0x80000001
+.long 38
+.long 3
+.long 0
+.long 1
 .long 0x40000036
 .long 0x40000036
 .long 0x40000037
@@ -195,7 +191,7 @@ _Lframe_l25:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .text
 .section __DATA,data
 _answer:

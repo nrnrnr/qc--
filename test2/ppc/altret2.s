@@ -68,39 +68,35 @@ _Lpic_fun_l21:
 	mflr r6
 _Lpic_end_l22:
 	addi r3,0,0
-	addis r3,r3,0
-	addi r6,0,-32
-	addi r7,r1,96
-	add r4,r7,r6
-	addi r5,0,10
-	addis r5,r5,0
+	addi r6,r1,96
+	addi r7,0,0
+	addi r7,r7,-32
+	add r4,r6,r7
+	addi r5,0,0
+	addi r5,r5,10
 	stw r2,80(r1)
 	bl L_read$stub
 _Ljoin_l16:
 	addi r2,0,0
-	addis r2,r2,0
 	cmpw cr0,r3,r2
 	blt _Ljoin_l12
 _Ljoin_l13:
 	addi r2,0,0
-	addis r2,r2,0
 	stw r3,84(r1)
 	mr r3,r2
 	bl L_close$stub
 _Ljoin_l10:
-	addi r2,0,4
-	addis r2,r2,0
-	lwz r3,80(r1)
-	add r3,r3,r2
-	stw r3,80(r1)
+	addi r12,0,0
+	addi r12,r12,4
+	lwz r11,80(r1)
+	add r12,r11,r12
 	lwz r3,84(r1)
-	lwz r2,80(r1)
-	mtlr r2
+	mtlr r12
 	addi r1,r1,96
 	blr
 _Ljoin_l12:
-	lwz r2,80(r1)
-	mtlr r2
+	lwz r12,80(r1)
+	mtlr r12
 	addi r1,r1,96
 	blr
 .section __DATA,pcmap_data
@@ -116,10 +112,10 @@ _Lframe_l29:
 .long 0x80000018
 .long 0xfffffff0
 .long _Lstackdata_l28
-.long 0x80000026
-.long 0x80000001
-.long 0x80000000
-.long 0x80000001
+.long 38
+.long 1
+.long 0
+.long 1
 .long 0x40000036
 .long 0x40000036
 .long 0x40000037
@@ -159,7 +155,7 @@ _Lframe_l29:
 .long 0x40000048
 .long 0x40000048
 .long 0
-.long 0x80000000
+.long 0
 .section __DATA,pcmap
 .long _Ljoin_l10
 .long _Lframe_l30
@@ -169,10 +165,10 @@ _Lframe_l30:
 .long 0x80000018
 .long 0xfffffff0
 .long _Lstackdata_l28
-.long 0x80000026
-.long 0x80000001
-.long 0x80000000
-.long 0x80000001
+.long 38
+.long 1
+.long 0
+.long 1
 .long 0x40000036
 .long 0x40000036
 .long 0x40000037
@@ -212,12 +208,12 @@ _Lframe_l30:
 .long 0x40000048
 .long 0x40000048
 .long 0xfffffff4
-.long 0x80000000
+.long 0
 .text
 .text
 _main:
 	addi r1,r1,-80
-	mflr r4
+	mflr r2
 _Linitialize_continuations_l38:
 _Lproc_body_start_l37:
 	bl _Lpic_fun_l63
@@ -225,37 +221,35 @@ _Lpic_l62:
 _Lpic_fun_l63:
 	mflr r3
 _Lpic_end_l64:
-	stw r4,64(r1)
+	stw r2,64(r1)
 	stw r3,68(r1)
 	bl _doread
 	b _C___R56
 _Ljoin_l57:
-	li r2,ha16(_success_read-_Lpic_l62)
-	la r2,lo16(_success_read-_Lpic_l62)(r2)
+	addis r2,0,ha16(_success_read-_Lpic_l62)
+	addi r2,r2,lo16(_success_read-_Lpic_l62)
 	lwz r5,68(r1)
-	add r6,r5,r2
+	add r2,r5,r2
 	stw r3,72(r1)
-	mr r3,r6
+	mr r3,r2
 	lwz r4,72(r1)
-	stw r5,68(r1)
 	bl L_printf$stub
 _Ljoin_l53:
 	bl _doread
 	b _C___R49
 _Ljoin_l50:
-	li r2,ha16(_success_read-_Lpic_l62)
-	la r2,lo16(_success_read-_Lpic_l62)(r2)
+	addis r2,0,ha16(_success_read-_Lpic_l62)
+	addi r2,r2,lo16(_success_read-_Lpic_l62)
 	lwz r5,68(r1)
-	add r5,r5,r2
+	add r2,r5,r2
 	stw r3,72(r1)
-	mr r3,r5
+	mr r3,r2
 	lwz r4,72(r1)
 	bl L_printf$stub
 _Ljoin_l46:
 	addi r3,0,0
-	addis r3,r3,0
-	lwz r2,64(r1)
-	mtlr r2
+	lwz r12,64(r1)
+	mtlr r12
 	addi r1,r1,80
 	blr
 _C___R49:
@@ -263,20 +257,19 @@ _C___R49:
 _C___R56:
 	b _Ljoin_l58
 _Ljoin_l58:
-	li r2,ha16(_fail_to_read-_Lpic_l62)
-	la r2,lo16(_fail_to_read-_Lpic_l62)(r2)
-	lwz r4,68(r1)
-	add r4,r4,r2
+	addis r2,0,ha16(_fail_to_read-_Lpic_l62)
+	addi r2,r2,lo16(_fail_to_read-_Lpic_l62)
+	lwz r5,68(r1)
+	add r2,r5,r2
 	stw r3,76(r1)
-	mr r3,r4
+	mr r3,r2
 	lwz r4,76(r1)
 	bl L_printf$stub
 _Ljoin_l42:
-	addi r2,0,1
-	addis r2,r2,0
-	mr r3,r2
-	lwz r2,64(r1)
-	mtlr r2
+	addi r3,0,0
+	addi r3,r3,1
+	lwz r12,64(r1)
+	mtlr r12
 	addi r1,r1,80
 	blr
 .section __DATA,pcmap_data
@@ -291,10 +284,10 @@ _Lframe_l71:
 .long 0x80000018
 .long 0xfffffff0
 .long _Lstackdata_l70
-.long 0x80000026
-.long 0x80000004
-.long 0x80000000
-.long 0x80000001
+.long 38
+.long 4
+.long 0
+.long 1
 .long 0x40000036
 .long 0x40000036
 .long 0x40000037
@@ -337,7 +330,7 @@ _Lframe_l71:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .section __DATA,pcmap
 .long _Ljoin_l53
 .long _Lframe_l72
@@ -347,10 +340,10 @@ _Lframe_l72:
 .long 0x80000018
 .long 0xfffffff0
 .long _Lstackdata_l70
-.long 0x80000026
-.long 0x80000004
-.long 0x80000000
-.long 0x80000001
+.long 38
+.long 4
+.long 0
+.long 1
 .long 0x40000036
 .long 0x40000036
 .long 0x40000037
@@ -393,7 +386,7 @@ _Lframe_l72:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .section __DATA,pcmap
 .long _C___R49
 .long _Lframe_l73
@@ -403,10 +396,10 @@ _Lframe_l73:
 .long 0x80000018
 .long 0xfffffff0
 .long _Lstackdata_l70
-.long 0x80000026
-.long 0x80000004
-.long 0x80000000
-.long 0x80000001
+.long 38
+.long 4
+.long 0
+.long 1
 .long 0x40000036
 .long 0x40000036
 .long 0x40000037
@@ -449,7 +442,7 @@ _Lframe_l73:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .section __DATA,pcmap
 .long _Ljoin_l46
 .long _Lframe_l74
@@ -459,10 +452,10 @@ _Lframe_l74:
 .long 0x80000018
 .long 0xfffffff0
 .long _Lstackdata_l70
-.long 0x80000026
-.long 0x80000004
-.long 0x80000000
-.long 0x80000001
+.long 38
+.long 4
+.long 0
+.long 1
 .long 0x40000036
 .long 0x40000036
 .long 0x40000037
@@ -505,7 +498,7 @@ _Lframe_l74:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .section __DATA,pcmap
 .long _Ljoin_l42
 .long _Lframe_l75
@@ -515,10 +508,10 @@ _Lframe_l75:
 .long 0x80000018
 .long 0xfffffff0
 .long _Lstackdata_l70
-.long 0x80000026
-.long 0x80000004
-.long 0x80000000
-.long 0x80000001
+.long 38
+.long 4
+.long 0
+.long 1
 .long 0x40000036
 .long 0x40000036
 .long 0x40000037
@@ -561,7 +554,7 @@ _Lframe_l75:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .text
 .section __DATA,data
 _success_read:

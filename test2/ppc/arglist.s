@@ -76,223 +76,215 @@ _Lpic_l41:
 _Lpic_fun_l42:
 	mflr r9
 _Lpic_end_l43:
-	li r10,ha16(_numbers-_Lpic_l41)
-	la r10,lo16(_numbers-_Lpic_l41)(r10)
-	add r11,r9,r10
-	lwz r10,0(r11)
+	addis r10,0,ha16(_numbers-_Lpic_l41)
+	addi r10,r10,lo16(_numbers-_Lpic_l41)
+	add r10,r9,r10
+	lwz r10,0(r10)
 	cmpw cr0,r3,r10
 	beq _Ljoin_l36
 _Ljoin_l49:
 	b _Ljoin_l37
 _Ljoin_l36:
-	li r10,ha16(_ok-_Lpic_l41)
-	la r10,lo16(_ok-_Lpic_l41)(r10)
-	add r11,r9,r10
+	addis r10,0,ha16(_ok-_Lpic_l41)
+	addi r10,r10,lo16(_ok-_Lpic_l41)
+	add r10,r9,r10
 	stw r3,64(r1)
-	mr r3,r11
+	mr r3,r10
 	stw r4,68(r1)
 	lwz r4,64(r1)
-	li r11,ha16(_numbers-_Lpic_l41)
-	la r11,lo16(_numbers-_Lpic_l41)(r11)
-	add r10,r9,r11
-	lwz r11,0(r10)
+	addis r10,0,ha16(_numbers-_Lpic_l41)
+	addi r10,r10,lo16(_numbers-_Lpic_l41)
+	add r10,r9,r10
+	lwz r10,0(r10)
 	stw r5,72(r1)
-	mr r5,r11
-	stw r2,88(r1)
-	stw r6,76(r1)
-	stw r7,80(r1)
-	stw r8,84(r1)
+	mr r5,r10
+	stw r2,76(r1)
+	stw r6,80(r1)
+	stw r7,84(r1)
+	stw r8,88(r1)
 	stw r9,92(r1)
 	bl L_printf$stub
 _Ljoin_l35:
-	lwz r2,88(r1)
+	lwz r2,76(r1)
 	lwz r4,68(r1)
 	lwz r5,72(r1)
-	lwz r6,76(r1)
-	lwz r7,80(r1)
-	lwz r8,84(r1)
+	lwz r6,80(r1)
+	lwz r7,84(r1)
+	lwz r8,88(r1)
 	lwz r9,92(r1)
 	b _Ljoin_l37
 _Ljoin_l37:
-	addi r3,0,4
-	addis r3,r3,0
-	li r10,ha16(_numbers-_Lpic_l41)
-	la r10,lo16(_numbers-_Lpic_l41)(r10)
-	add r11,r9,r10
-	add r10,r11,r3
-	lwz r3,0(r10)
-	cmpw cr0,r4,r3
+	addis r10,0,ha16(_numbers-_Lpic_l41)
+	addi r10,r10,lo16(_numbers-_Lpic_l41)
+	add r10,r9,r10
+	addi r11,0,0
+	addi r11,r11,4
+	add r10,r10,r11
+	lwz r10,0(r10)
+	cmpw cr0,r4,r10
 	beq _Ljoin_l31
 _Ljoin_l50:
 	b _Ljoin_l32
 _Ljoin_l31:
-	li r3,ha16(_ok-_Lpic_l41)
-	la r3,lo16(_ok-_Lpic_l41)(r3)
-	add r10,r9,r3
-	mr r3,r10
-	addi r10,0,4
-	addis r10,r10,0
-	li r11,ha16(_numbers-_Lpic_l41)
-	la r11,lo16(_numbers-_Lpic_l41)(r11)
-	add r12,r9,r11
-	add r11,r12,r10
-	lwz r10,0(r11)
+	addis r10,0,ha16(_ok-_Lpic_l41)
+	addi r10,r10,lo16(_ok-_Lpic_l41)
+	add r3,r9,r10
+	addis r10,0,ha16(_numbers-_Lpic_l41)
+	addi r10,r10,lo16(_numbers-_Lpic_l41)
+	add r10,r9,r10
+	addi r11,0,0
+	addi r11,r11,4
+	add r10,r10,r11
+	lwz r10,0(r10)
 	stw r5,72(r1)
 	mr r5,r10
-	stw r2,88(r1)
-	stw r6,76(r1)
-	stw r7,80(r1)
-	stw r8,84(r1)
+	stw r2,76(r1)
+	stw r6,80(r1)
+	stw r7,84(r1)
+	stw r8,88(r1)
 	stw r9,92(r1)
 	bl L_printf$stub
 _Ljoin_l30:
-	lwz r2,88(r1)
+	lwz r2,76(r1)
 	lwz r5,72(r1)
-	lwz r6,76(r1)
-	lwz r7,80(r1)
-	lwz r8,84(r1)
+	lwz r6,80(r1)
+	lwz r7,84(r1)
+	lwz r8,88(r1)
 	lwz r9,92(r1)
 	b _Ljoin_l32
 _Ljoin_l32:
-	addi r3,0,8
-	addis r3,r3,0
-	li r4,ha16(_numbers-_Lpic_l41)
-	la r4,lo16(_numbers-_Lpic_l41)(r4)
-	add r10,r9,r4
-	add r4,r10,r3
-	lwz r3,0(r4)
-	cmpw cr0,r5,r3
+	addis r10,0,ha16(_numbers-_Lpic_l41)
+	addi r10,r10,lo16(_numbers-_Lpic_l41)
+	add r10,r9,r10
+	addi r11,0,0
+	addi r11,r11,8
+	add r10,r10,r11
+	lwz r10,0(r10)
+	cmpw cr0,r5,r10
 	beq _Ljoin_l26
 _Ljoin_l51:
 	b _Ljoin_l27
 _Ljoin_l26:
-	li r3,ha16(_ok-_Lpic_l41)
-	la r3,lo16(_ok-_Lpic_l41)(r3)
-	add r4,r9,r3
-	mr r3,r4
+	addis r10,0,ha16(_ok-_Lpic_l41)
+	addi r10,r10,lo16(_ok-_Lpic_l41)
+	add r3,r9,r10
 	mr r4,r5
-	addi r5,0,8
-	addis r5,r5,0
-	li r10,ha16(_numbers-_Lpic_l41)
-	la r10,lo16(_numbers-_Lpic_l41)(r10)
-	add r11,r9,r10
-	add r10,r11,r5
+	addis r10,0,ha16(_numbers-_Lpic_l41)
+	addi r10,r10,lo16(_numbers-_Lpic_l41)
+	add r10,r9,r10
+	addi r11,0,0
+	addi r11,r11,8
+	add r10,r10,r11
 	lwz r5,0(r10)
-	stw r2,88(r1)
-	stw r6,76(r1)
-	stw r7,80(r1)
-	stw r8,84(r1)
+	stw r2,76(r1)
+	stw r6,80(r1)
+	stw r7,84(r1)
+	stw r8,88(r1)
 	stw r9,92(r1)
 	bl L_printf$stub
 _Ljoin_l25:
-	lwz r2,88(r1)
-	lwz r6,76(r1)
-	lwz r7,80(r1)
-	lwz r8,84(r1)
+	lwz r2,76(r1)
+	lwz r6,80(r1)
+	lwz r7,84(r1)
+	lwz r8,88(r1)
 	lwz r9,92(r1)
 	b _Ljoin_l27
 _Ljoin_l27:
-	addi r3,0,12
-	addis r3,r3,0
-	li r4,ha16(_numbers-_Lpic_l41)
-	la r4,lo16(_numbers-_Lpic_l41)(r4)
-	add r5,r9,r4
-	add r4,r5,r3
-	lwz r3,0(r4)
-	cmpw cr0,r6,r3
+	addis r10,0,ha16(_numbers-_Lpic_l41)
+	addi r10,r10,lo16(_numbers-_Lpic_l41)
+	add r10,r9,r10
+	addi r11,0,0
+	addi r11,r11,12
+	add r10,r10,r11
+	lwz r10,0(r10)
+	cmpw cr0,r6,r10
 	beq _Ljoin_l21
 _Ljoin_l52:
 	b _Ljoin_l22
 _Ljoin_l21:
-	li r3,ha16(_ok-_Lpic_l41)
-	la r3,lo16(_ok-_Lpic_l41)(r3)
-	add r4,r9,r3
-	mr r3,r4
+	addis r10,0,ha16(_ok-_Lpic_l41)
+	addi r10,r10,lo16(_ok-_Lpic_l41)
+	add r3,r9,r10
 	mr r4,r6
-	addi r6,0,12
-	addis r6,r6,0
-	li r5,ha16(_numbers-_Lpic_l41)
-	la r5,lo16(_numbers-_Lpic_l41)(r5)
-	add r10,r9,r5
-	add r5,r10,r6
-	lwz r6,0(r5)
-	mr r5,r6
-	stw r2,88(r1)
-	stw r7,80(r1)
-	stw r8,84(r1)
+	addis r6,0,ha16(_numbers-_Lpic_l41)
+	addi r6,r6,lo16(_numbers-_Lpic_l41)
+	add r6,r9,r6
+	addi r10,0,0
+	addi r10,r10,12
+	add r6,r6,r10
+	lwz r5,0(r6)
+	stw r2,76(r1)
+	stw r7,84(r1)
+	stw r8,88(r1)
 	stw r9,92(r1)
 	bl L_printf$stub
 _Ljoin_l20:
-	lwz r2,88(r1)
-	lwz r7,80(r1)
-	lwz r8,84(r1)
+	lwz r2,76(r1)
+	lwz r7,84(r1)
+	lwz r8,88(r1)
 	lwz r9,92(r1)
 	b _Ljoin_l22
 _Ljoin_l22:
-	addi r3,0,16
-	addis r3,r3,0
-	li r4,ha16(_numbers-_Lpic_l41)
-	la r4,lo16(_numbers-_Lpic_l41)(r4)
-	add r5,r9,r4
-	add r4,r5,r3
-	lwz r3,0(r4)
-	cmpw cr0,r7,r3
+	addis r6,0,ha16(_numbers-_Lpic_l41)
+	addi r6,r6,lo16(_numbers-_Lpic_l41)
+	add r6,r9,r6
+	addi r10,0,0
+	addi r10,r10,16
+	add r6,r6,r10
+	lwz r6,0(r6)
+	cmpw cr0,r7,r6
 	beq _Ljoin_l16
 _Ljoin_l53:
 	b _Ljoin_l17
 _Ljoin_l16:
-	li r3,ha16(_ok-_Lpic_l41)
-	la r3,lo16(_ok-_Lpic_l41)(r3)
-	add r4,r9,r3
-	mr r3,r4
+	addis r6,0,ha16(_ok-_Lpic_l41)
+	addi r6,r6,lo16(_ok-_Lpic_l41)
+	add r3,r9,r6
 	mr r4,r7
-	addi r7,0,16
-	addis r7,r7,0
-	li r5,ha16(_numbers-_Lpic_l41)
-	la r5,lo16(_numbers-_Lpic_l41)(r5)
-	add r6,r9,r5
-	add r5,r6,r7
-	lwz r6,0(r5)
-	mr r5,r6
-	stw r2,88(r1)
-	stw r8,84(r1)
+	addis r6,0,ha16(_numbers-_Lpic_l41)
+	addi r6,r6,lo16(_numbers-_Lpic_l41)
+	add r6,r9,r6
+	addi r7,0,0
+	addi r7,r7,16
+	add r6,r6,r7
+	lwz r5,0(r6)
+	stw r2,76(r1)
+	stw r8,88(r1)
 	stw r9,92(r1)
 	bl L_printf$stub
 _Ljoin_l15:
-	lwz r2,88(r1)
-	lwz r8,84(r1)
+	lwz r2,76(r1)
+	lwz r8,88(r1)
 	lwz r9,92(r1)
 	b _Ljoin_l17
 _Ljoin_l17:
-	addi r3,0,20
-	addis r3,r3,0
-	li r4,ha16(_numbers-_Lpic_l41)
-	la r4,lo16(_numbers-_Lpic_l41)(r4)
-	add r5,r9,r4
-	add r4,r5,r3
-	lwz r3,0(r4)
-	cmpw cr0,r8,r3
+	addis r6,0,ha16(_numbers-_Lpic_l41)
+	addi r6,r6,lo16(_numbers-_Lpic_l41)
+	add r6,r9,r6
+	addi r7,0,0
+	addi r7,r7,20
+	add r6,r6,r7
+	lwz r6,0(r6)
+	cmpw cr0,r8,r6
 	beq _Ljoin_l11
 _Ljoin_l54:
 	b _Ljoin_l12
 _Ljoin_l11:
-	li r3,ha16(_ok-_Lpic_l41)
-	la r3,lo16(_ok-_Lpic_l41)(r3)
-	add r4,r9,r3
-	mr r3,r4
+	addis r6,0,ha16(_ok-_Lpic_l41)
+	addi r6,r6,lo16(_ok-_Lpic_l41)
+	add r3,r9,r6
 	mr r4,r8
-	addi r8,0,20
-	addis r8,r8,0
-	li r5,ha16(_numbers-_Lpic_l41)
-	la r5,lo16(_numbers-_Lpic_l41)(r5)
-	add r6,r9,r5
-	add r5,r6,r8
-	lwz r6,0(r5)
-	mr r5,r6
-	stw r2,88(r1)
+	addis r6,0,ha16(_numbers-_Lpic_l41)
+	addi r6,r6,lo16(_numbers-_Lpic_l41)
+	add r6,r9,r6
+	addi r7,0,0
+	addi r7,r7,20
+	add r6,r6,r7
+	lwz r5,0(r6)
+	stw r2,76(r1)
 	bl L_printf$stub
 _Ljoin_l10:
-	lwz r2,88(r1)
+	lwz r2,76(r1)
 	b _Ljoin_l12
 _Ljoin_l12:
 	mtlr r2
@@ -308,12 +300,12 @@ _Lstackdata_l55:
 _Lframe_l56:
 .long 0xffffffb8
 .long 0x80000018
-.long 0xfffffff8
+.long 0xffffffec
 .long _Lstackdata_l55
-.long 0x80000026
-.long 0x80000006
-.long 0x80000000
-.long 0x80000001
+.long 38
+.long 6
+.long 0
+.long 1
 .long 0x40000036
 .long 0x40000036
 .long 0x40000037
@@ -355,10 +347,10 @@ _Lframe_l56:
 .long 0
 .long 0xffffffe4
 .long 0xffffffe8
-.long 0xffffffec
 .long 0xfffffff0
 .long 0xfffffff4
-.long 0x80000000
+.long 0xfffffff8
+.long 0
 .section __DATA,pcmap
 .long _Ljoin_l30
 .long _Lframe_l57
@@ -366,12 +358,12 @@ _Lframe_l56:
 _Lframe_l57:
 .long 0xffffffb8
 .long 0x80000018
-.long 0xfffffff8
+.long 0xffffffec
 .long _Lstackdata_l55
-.long 0x80000026
-.long 0x80000006
-.long 0x80000000
-.long 0x80000001
+.long 38
+.long 6
+.long 0
+.long 1
 .long 0x40000036
 .long 0x40000036
 .long 0x40000037
@@ -413,10 +405,10 @@ _Lframe_l57:
 .long 0
 .long 0
 .long 0xffffffe8
-.long 0xffffffec
 .long 0xfffffff0
 .long 0xfffffff4
-.long 0x80000000
+.long 0xfffffff8
+.long 0
 .section __DATA,pcmap
 .long _Ljoin_l25
 .long _Lframe_l58
@@ -424,57 +416,57 @@ _Lframe_l57:
 _Lframe_l58:
 .long 0xffffffb8
 .long 0x80000018
-.long 0xfffffff8
-.long _Lstackdata_l55
-.long 0x80000026
-.long 0x80000006
-.long 0x80000000
-.long 0x80000001
-.long 0x40000036
-.long 0x40000036
-.long 0x40000037
-.long 0x40000037
-.long 0x40000038
-.long 0x40000038
-.long 0x40000039
-.long 0x40000039
-.long 0x4000003a
-.long 0x4000003a
-.long 0x4000003b
-.long 0x4000003b
-.long 0x4000003c
-.long 0x4000003c
-.long 0x4000003d
-.long 0x4000003d
-.long 0x4000003e
-.long 0x4000003e
-.long 0x4000003f
-.long 0x4000003f
-.long 0x40000040
-.long 0x40000040
-.long 0x40000041
-.long 0x40000041
-.long 0x40000042
-.long 0x40000042
-.long 0x40000043
-.long 0x40000043
-.long 0x40000044
-.long 0x40000044
-.long 0x40000045
-.long 0x40000045
-.long 0x40000046
-.long 0x40000046
-.long 0x40000047
-.long 0x40000047
-.long 0x40000048
-.long 0x40000048
-.long 0
-.long 0
-.long 0
 .long 0xffffffec
+.long _Lstackdata_l55
+.long 38
+.long 6
+.long 0
+.long 1
+.long 0x40000036
+.long 0x40000036
+.long 0x40000037
+.long 0x40000037
+.long 0x40000038
+.long 0x40000038
+.long 0x40000039
+.long 0x40000039
+.long 0x4000003a
+.long 0x4000003a
+.long 0x4000003b
+.long 0x4000003b
+.long 0x4000003c
+.long 0x4000003c
+.long 0x4000003d
+.long 0x4000003d
+.long 0x4000003e
+.long 0x4000003e
+.long 0x4000003f
+.long 0x4000003f
+.long 0x40000040
+.long 0x40000040
+.long 0x40000041
+.long 0x40000041
+.long 0x40000042
+.long 0x40000042
+.long 0x40000043
+.long 0x40000043
+.long 0x40000044
+.long 0x40000044
+.long 0x40000045
+.long 0x40000045
+.long 0x40000046
+.long 0x40000046
+.long 0x40000047
+.long 0x40000047
+.long 0x40000048
+.long 0x40000048
+.long 0
+.long 0
+.long 0
 .long 0xfffffff0
 .long 0xfffffff4
-.long 0x80000000
+.long 0xfffffff8
+.long 0
 .section __DATA,pcmap
 .long _Ljoin_l20
 .long _Lframe_l59
@@ -482,12 +474,12 @@ _Lframe_l58:
 _Lframe_l59:
 .long 0xffffffb8
 .long 0x80000018
-.long 0xfffffff8
+.long 0xffffffec
 .long _Lstackdata_l55
-.long 0x80000026
-.long 0x80000006
-.long 0x80000000
-.long 0x80000001
+.long 38
+.long 6
+.long 0
+.long 1
 .long 0x40000036
 .long 0x40000036
 .long 0x40000037
@@ -530,9 +522,9 @@ _Lframe_l59:
 .long 0
 .long 0
 .long 0
-.long 0xfffffff0
 .long 0xfffffff4
-.long 0x80000000
+.long 0xfffffff8
+.long 0
 .section __DATA,pcmap
 .long _Ljoin_l15
 .long _Lframe_l60
@@ -540,12 +532,12 @@ _Lframe_l59:
 _Lframe_l60:
 .long 0xffffffb8
 .long 0x80000018
-.long 0xfffffff8
+.long 0xffffffec
 .long _Lstackdata_l55
-.long 0x80000026
-.long 0x80000006
-.long 0x80000000
-.long 0x80000001
+.long 38
+.long 6
+.long 0
+.long 1
 .long 0x40000036
 .long 0x40000036
 .long 0x40000037
@@ -589,8 +581,8 @@ _Lframe_l60:
 .long 0
 .long 0
 .long 0
-.long 0xfffffff4
-.long 0x80000000
+.long 0xfffffff8
+.long 0
 .section __DATA,pcmap
 .long _Ljoin_l10
 .long _Lframe_l61
@@ -598,12 +590,12 @@ _Lframe_l60:
 _Lframe_l61:
 .long 0xffffffb8
 .long 0x80000018
-.long 0xfffffff8
+.long 0xffffffec
 .long _Lstackdata_l55
-.long 0x80000026
-.long 0x80000006
-.long 0x80000000
-.long 0x80000001
+.long 38
+.long 6
+.long 0
+.long 1
 .long 0x40000036
 .long 0x40000036
 .long 0x40000037
@@ -648,7 +640,7 @@ _Lframe_l61:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .text
 .text
 _g:
@@ -661,34 +653,34 @@ _Lpic_l84:
 _Lpic_fun_l85:
 	mflr r6
 _Lpic_end_l86:
-	addi r7,0,20
-	addis r7,r7,0
-	li r8,ha16(_numbers-_Lpic_l84)
-	la r8,lo16(_numbers-_Lpic_l84)(r8)
-	add r9,r6,r8
-	add r8,r9,r7
-	lwz r7,0(r8)
+	addis r7,0,ha16(_numbers-_Lpic_l84)
+	addi r7,r7,lo16(_numbers-_Lpic_l84)
+	add r7,r6,r7
+	addi r8,0,0
+	addi r8,r8,20
+	add r7,r7,r8
+	lwz r7,0(r7)
 	cmpw cr0,r3,r7
 	beq _Ljoin_l79
 _Ljoin_l92:
 	b _Ljoin_l80
 _Ljoin_l79:
-	li r7,ha16(_ok-_Lpic_l84)
-	la r7,lo16(_ok-_Lpic_l84)(r7)
-	add r8,r6,r7
+	addis r7,0,ha16(_ok-_Lpic_l84)
+	addi r7,r7,lo16(_ok-_Lpic_l84)
+	add r7,r6,r7
 	stw r3,64(r1)
-	mr r3,r8
+	mr r3,r7
 	stw r4,68(r1)
 	lwz r4,64(r1)
-	addi r8,0,20
-	addis r8,r8,0
-	li r7,ha16(_numbers-_Lpic_l84)
-	la r7,lo16(_numbers-_Lpic_l84)(r7)
-	add r9,r6,r7
-	add r7,r9,r8
-	lwz r8,0(r7)
+	addis r7,0,ha16(_numbers-_Lpic_l84)
+	addi r7,r7,lo16(_numbers-_Lpic_l84)
+	add r7,r6,r7
+	addi r8,0,0
+	addi r8,r8,20
+	add r7,r7,r8
+	lwz r7,0(r7)
 	stw r5,72(r1)
-	mr r5,r8
+	mr r5,r7
 	stw r2,76(r1)
 	stw r6,80(r1)
 	bl L_printf$stub
@@ -699,29 +691,28 @@ _Ljoin_l78:
 	lwz r6,80(r1)
 	b _Ljoin_l80
 _Ljoin_l80:
-	addi r3,0,16
-	addis r3,r3,0
-	li r7,ha16(_numbers-_Lpic_l84)
-	la r7,lo16(_numbers-_Lpic_l84)(r7)
-	add r8,r6,r7
-	add r7,r8,r3
-	lwz r3,0(r7)
-	cmpw cr0,r4,r3
+	addis r7,0,ha16(_numbers-_Lpic_l84)
+	addi r7,r7,lo16(_numbers-_Lpic_l84)
+	add r7,r6,r7
+	addi r8,0,0
+	addi r8,r8,16
+	add r7,r7,r8
+	lwz r7,0(r7)
+	cmpw cr0,r4,r7
 	beq _Ljoin_l74
 _Ljoin_l93:
 	b _Ljoin_l75
 _Ljoin_l74:
-	li r3,ha16(_ok-_Lpic_l84)
-	la r3,lo16(_ok-_Lpic_l84)(r3)
-	add r7,r6,r3
-	mr r3,r7
-	addi r7,0,16
-	addis r7,r7,0
-	li r8,ha16(_numbers-_Lpic_l84)
-	la r8,lo16(_numbers-_Lpic_l84)(r8)
-	add r9,r6,r8
-	add r8,r9,r7
-	lwz r7,0(r8)
+	addis r7,0,ha16(_ok-_Lpic_l84)
+	addi r7,r7,lo16(_ok-_Lpic_l84)
+	add r3,r6,r7
+	addis r7,0,ha16(_numbers-_Lpic_l84)
+	addi r7,r7,lo16(_numbers-_Lpic_l84)
+	add r7,r6,r7
+	addi r8,0,0
+	addi r8,r8,16
+	add r7,r7,r8
+	lwz r7,0(r7)
 	stw r5,72(r1)
 	mr r5,r7
 	stw r2,76(r1)
@@ -733,30 +724,29 @@ _Ljoin_l73:
 	lwz r6,80(r1)
 	b _Ljoin_l75
 _Ljoin_l75:
-	addi r3,0,12
-	addis r3,r3,0
-	li r4,ha16(_numbers-_Lpic_l84)
-	la r4,lo16(_numbers-_Lpic_l84)(r4)
-	add r7,r6,r4
-	add r4,r7,r3
-	lwz r3,0(r4)
-	cmpw cr0,r5,r3
+	addis r7,0,ha16(_numbers-_Lpic_l84)
+	addi r7,r7,lo16(_numbers-_Lpic_l84)
+	add r7,r6,r7
+	addi r8,0,0
+	addi r8,r8,12
+	add r7,r7,r8
+	lwz r7,0(r7)
+	cmpw cr0,r5,r7
 	beq _Ljoin_l69
 _Ljoin_l94:
 	b _Ljoin_l70
 _Ljoin_l69:
-	li r3,ha16(_ok-_Lpic_l84)
-	la r3,lo16(_ok-_Lpic_l84)(r3)
-	add r4,r6,r3
-	mr r3,r4
+	addis r7,0,ha16(_ok-_Lpic_l84)
+	addi r7,r7,lo16(_ok-_Lpic_l84)
+	add r3,r6,r7
 	mr r4,r5
-	addi r5,0,12
-	addis r5,r5,0
-	li r7,ha16(_numbers-_Lpic_l84)
-	la r7,lo16(_numbers-_Lpic_l84)(r7)
+	addis r7,0,ha16(_numbers-_Lpic_l84)
+	addi r7,r7,lo16(_numbers-_Lpic_l84)
 	add r6,r6,r7
-	add r7,r6,r5
-	lwz r5,0(r7)
+	addi r7,0,0
+	addi r7,r7,12
+	add r6,r6,r7
+	lwz r5,0(r6)
 	stw r2,76(r1)
 	bl L_printf$stub
 _Ljoin_l68:
@@ -778,10 +768,10 @@ _Lframe_l96:
 .long 0x80000018
 .long 0xffffffec
 .long _Lstackdata_l95
-.long 0x80000026
-.long 0x80000003
-.long 0x80000000
-.long 0x80000001
+.long 38
+.long 3
+.long 0
+.long 1
 .long 0x40000036
 .long 0x40000036
 .long 0x40000037
@@ -823,7 +813,7 @@ _Lframe_l96:
 .long 0
 .long 0xffffffe4
 .long 0xffffffe8
-.long 0x80000000
+.long 0
 .section __DATA,pcmap
 .long _Ljoin_l73
 .long _Lframe_l97
@@ -833,10 +823,10 @@ _Lframe_l97:
 .long 0x80000018
 .long 0xffffffec
 .long _Lstackdata_l95
-.long 0x80000026
-.long 0x80000003
-.long 0x80000000
-.long 0x80000001
+.long 38
+.long 3
+.long 0
+.long 1
 .long 0x40000036
 .long 0x40000036
 .long 0x40000037
@@ -878,7 +868,7 @@ _Lframe_l97:
 .long 0
 .long 0
 .long 0xffffffe8
-.long 0x80000000
+.long 0
 .section __DATA,pcmap
 .long _Ljoin_l68
 .long _Lframe_l98
@@ -888,10 +878,10 @@ _Lframe_l98:
 .long 0x80000018
 .long 0xffffffec
 .long _Lstackdata_l95
-.long 0x80000026
-.long 0x80000003
-.long 0x80000000
-.long 0x80000001
+.long 38
+.long 3
+.long 0
+.long 1
 .long 0x40000036
 .long 0x40000036
 .long 0x40000037
@@ -933,97 +923,89 @@ _Lframe_l98:
 .long 0
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .text
 .text
 _main:
 	addi r1,r1,-80
-	mflr r4
+	mflr r2
 _Linitialize_continuations_l101:
 _Lproc_body_start_l100:
 	bl _Lpic_fun_l113
 _Lpic_l112:
 _Lpic_fun_l113:
-	mflr r3
+	mflr r9
 _Lpic_end_l114:
-	li r2,ha16(_numbers-_Lpic_l112)
-	la r2,lo16(_numbers-_Lpic_l112)(r2)
-	add r9,r3,r2
-	lwz r2,0(r9)
-	stw r3,64(r1)
-	mr r3,r2
-	addi r2,0,4
-	addis r2,r2,0
-	li r9,ha16(_numbers-_Lpic_l112)
-	la r9,lo16(_numbers-_Lpic_l112)(r9)
-	lwz r10,64(r1)
-	add r11,r10,r9
-	add r9,r11,r2
-	lwz r2,0(r9)
-	stw r4,68(r1)
-	mr r4,r2
-	addi r2,0,8
-	addis r2,r2,0
-	li r9,ha16(_numbers-_Lpic_l112)
-	la r9,lo16(_numbers-_Lpic_l112)(r9)
-	add r11,r10,r9
-	add r9,r11,r2
-	lwz r5,0(r9)
-	addi r9,0,12
-	addis r9,r9,0
-	li r2,ha16(_numbers-_Lpic_l112)
-	la r2,lo16(_numbers-_Lpic_l112)(r2)
-	add r11,r10,r2
-	add r2,r11,r9
-	lwz r6,0(r2)
-	addi r2,0,16
-	addis r2,r2,0
-	li r9,ha16(_numbers-_Lpic_l112)
-	la r9,lo16(_numbers-_Lpic_l112)(r9)
-	add r11,r10,r9
-	add r9,r11,r2
-	lwz r7,0(r9)
-	addi r9,0,20
-	addis r9,r9,0
-	li r2,ha16(_numbers-_Lpic_l112)
-	la r2,lo16(_numbers-_Lpic_l112)(r2)
-	add r11,r10,r2
-	add r2,r11,r9
-	lwz r8,0(r2)
-	stw r10,64(r1)
+	addis r10,0,ha16(_numbers-_Lpic_l112)
+	addi r10,r10,lo16(_numbers-_Lpic_l112)
+	add r10,r9,r10
+	lwz r3,0(r10)
+	addis r10,0,ha16(_numbers-_Lpic_l112)
+	addi r10,r10,lo16(_numbers-_Lpic_l112)
+	add r10,r9,r10
+	addi r11,0,0
+	addi r11,r11,4
+	add r10,r10,r11
+	lwz r4,0(r10)
+	addis r10,0,ha16(_numbers-_Lpic_l112)
+	addi r10,r10,lo16(_numbers-_Lpic_l112)
+	add r10,r9,r10
+	addi r11,0,0
+	addi r11,r11,8
+	add r10,r10,r11
+	lwz r5,0(r10)
+	addis r10,0,ha16(_numbers-_Lpic_l112)
+	addi r10,r10,lo16(_numbers-_Lpic_l112)
+	add r10,r9,r10
+	addi r11,0,0
+	addi r11,r11,12
+	add r10,r10,r11
+	lwz r6,0(r10)
+	addis r10,0,ha16(_numbers-_Lpic_l112)
+	addi r10,r10,lo16(_numbers-_Lpic_l112)
+	add r10,r9,r10
+	addi r11,0,0
+	addi r11,r11,16
+	add r10,r10,r11
+	lwz r7,0(r10)
+	addis r10,0,ha16(_numbers-_Lpic_l112)
+	addi r10,r10,lo16(_numbers-_Lpic_l112)
+	add r10,r9,r10
+	addi r11,0,0
+	addi r11,r11,20
+	add r10,r10,r11
+	lwz r8,0(r10)
+	stw r2,64(r1)
+	stw r9,68(r1)
 	bl _f
 _Ljoin_l108:
-	addi r2,0,20
-	addis r2,r2,0
-	li r3,ha16(_numbers-_Lpic_l112)
-	la r3,lo16(_numbers-_Lpic_l112)(r3)
-	lwz r4,64(r1)
-	add r5,r4,r3
-	add r3,r5,r2
-	lwz r3,0(r3)
-	addi r2,0,16
-	addis r2,r2,0
-	li r5,ha16(_numbers-_Lpic_l112)
-	la r5,lo16(_numbers-_Lpic_l112)(r5)
-	add r6,r4,r5
-	add r5,r6,r2
-	lwz r2,0(r5)
-	stw r4,64(r1)
-	mr r4,r2
-	addi r2,0,12
-	addis r2,r2,0
-	li r5,ha16(_numbers-_Lpic_l112)
-	la r5,lo16(_numbers-_Lpic_l112)(r5)
-	lwz r6,64(r1)
-	add r6,r6,r5
-	add r5,r6,r2
-	lwz r5,0(r5)
+	addis r2,0,ha16(_numbers-_Lpic_l112)
+	addi r2,r2,lo16(_numbers-_Lpic_l112)
+	lwz r6,68(r1)
+	add r2,r6,r2
+	addi r7,0,0
+	addi r7,r7,20
+	add r2,r2,r7
+	lwz r3,0(r2)
+	addis r2,0,ha16(_numbers-_Lpic_l112)
+	addi r2,r2,lo16(_numbers-_Lpic_l112)
+	add r2,r6,r2
+	addi r7,0,0
+	addi r7,r7,16
+	add r2,r2,r7
+	lwz r4,0(r2)
+	addis r2,0,ha16(_numbers-_Lpic_l112)
+	addi r2,r2,lo16(_numbers-_Lpic_l112)
+	add r2,r6,r2
+	addi r6,0,0
+	addi r6,r6,12
+	add r2,r2,r6
+	lwz r5,0(r2)
 	bl _g
 _Ljoin_l105:
 	addi r3,0,0
-	addis r3,r3,0
-	lwz r2,68(r1)
-	mtlr r2
+	lwz r12,64(r1)
+	mtlr r12
 	addi r1,r1,80
 	blr
 .section __DATA,pcmap_data
@@ -1036,12 +1018,12 @@ _Lstackdata_l120:
 _Lframe_l121:
 .long 0xffffffc8
 .long 0x80000018
-.long 0xfffffff4
+.long 0xfffffff0
 .long _Lstackdata_l120
-.long 0x80000026
-.long 0x80000002
-.long 0x80000000
-.long 0x80000001
+.long 38
+.long 2
+.long 0
+.long 1
 .long 0x40000036
 .long 0x40000036
 .long 0x40000037
@@ -1082,7 +1064,7 @@ _Lframe_l121:
 .long 0x40000048
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .section __DATA,pcmap
 .long _Ljoin_l105
 .long _Lframe_l122
@@ -1090,12 +1072,12 @@ _Lframe_l121:
 _Lframe_l122:
 .long 0xffffffc8
 .long 0x80000018
-.long 0xfffffff4
+.long 0xfffffff0
 .long _Lstackdata_l120
-.long 0x80000026
-.long 0x80000002
-.long 0x80000000
-.long 0x80000001
+.long 38
+.long 2
+.long 0
+.long 1
 .long 0x40000036
 .long 0x40000036
 .long 0x40000037
@@ -1136,5 +1118,5 @@ _Lframe_l122:
 .long 0x40000048
 .long 0
 .long 0
-.long 0x80000000
+.long 0
 .text
