@@ -68,18 +68,8 @@ module RelocPrint = struct
         | None  , const -> c2s const
 end
 module Decoder = Msparcdec.Mk(RelocPrint)
+
 @
-
-% ------------------------------------------------------------------ 
-\subsubsection{Classes for symbols}
-% ------------------------------------------------------------------ 
-
-<<class symbol>>=
-class symbol (n:string) : Symbol.t = object
-    method text    = n
-end
-@
-
 % ------------------------------------------------------------------ 
 \subsubsection{Name Mangling}
 % ------------------------------------------------------------------ 
@@ -109,7 +99,24 @@ let spec =
             ; Mangle.reserved   = reserved
             ; Mangle.avoid      = (fun x -> x ^ "_")
             }
+
 @
+
+% ------------------------------------------------------------------ 
+\subsubsection{Classes for symbols}
+% ------------------------------------------------------------------ 
+
+We include name mangling into [[Symbol.t]] class because all assembler
+symbols like labels will be derived from them. Since the mangler is
+stateful, we have to create it outside the individual instance of a
+symbol. For now, we pass it from the assembler to here.
+
+<<class symbol>>=
+class symbol (mangle:Mangle.t) (n:string) : Symbol.t = object
+    method text    = mangle n
+end
+@
+
 
 
 % ------------------------------------------------------------------ 
@@ -122,24 +129,26 @@ object (this)
     val mutable _section = "this can't happen"
     val         _solaris = solaris
     val         _fd      = fd
+    
+    val         _mangle  = (Mangle.mk spec)   
 
     (* declarations *)
-    method import s = new symbol s
-    method export s = new symbol s
-    method local  s = new symbol s
+    method import s = new symbol _mangle s
+    method export s = new symbol _mangle s
+    method local  s = new symbol _mangle s
 
     (* sections *)
     method section s = _section <- s
     method current   = _section
 
     (* definitions *)
-    method label (s: Symbol.t) = P.fprintf _fd "%s:\n" s#text
+    method label (s: Symbol.t) = P.fprintf _fd "%s:\n" (s#text)
     method const s b = unsupported "no assembler instruction symbol=bits"
 
     (* locations *)
     method org n    = unsupported "org unsupported by SPARC assembler"
-    method align  n = P.fprintf _fd ".align %d\n" n
-    method addloc n = P.fprintf _fd ".skip %d\n"  n
+    method align  n = if n > 1 then P.fprintf _fd ".align %d\n" n
+    method addloc n = if n > 0 then P.fprintf _fd ".skip %d\n"  n
 
     (* simple values *)
     method zeroes n = 

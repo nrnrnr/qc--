@@ -7,6 +7,9 @@
 \section{Control-Flow Graph}
 % ------------------------------------------------------------------ 
 
+\emph{See the documents in the directory [[doc/]] for design problems
+here.}
+
 The executable part of a procedure is represented as a control-flow
 graph (\cfg). The graph is polymorphic over instructions that are
 embedded into its nodes. The most important specialization is when
@@ -60,7 +63,7 @@ Add observations of problems here.
       current target into the {\cfg} consructor. The target allows only
       {\rtl}-based instructions and thus when an instruction 
 
-\item John Dias wants to traverse and mutate the {\CFG} at the same time.
+\item John Dias wants to traverse and mutate the {\cfg} at the same time.
       This is in general unsafe. How can we support it anyway?
 
 \end{itemize}
@@ -352,6 +355,13 @@ purpose is to provide a container for all nodes and to manage named
 labels.  The problem at hand is, that labels can be used before they are
 defined. In that case a label node is created, but is successor is
 unknown. It is patched in by the method that defines labels. 
+
+
+Some algorithm below needs to create new labels and hence new symbols.
+Symbols as usually issued by an assembler. Since this context is not
+available, here is a new source for symbols. This is a very bad hack
+because symbols are assembler specific and in particular, are
+responsible for name mangling. 
 
 <<OO>>=
 class symbol (s:string) : Symbol.t =

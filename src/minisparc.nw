@@ -483,7 +483,8 @@ does not recognize the {\rtl} it is applied to, it raises
 module Mk(Reloc: Sledlib.RELOC_PRINT with type symbol = Symbol.t):
 sig
     module Instruction: Sparc.S with type t = Sledlib.String.t
-    val decode : Rtl.rtl -> Instruction.t   (* Sledlib.Failure *)
+    val decode : Rtl.rtl -> Instruction.t   
+                                                    (* Sledlib.Failure *)
 end
 @
 
@@ -532,6 +533,20 @@ let decode rtl = match Rtl.Convert.rtl rtl with
          )
 @        
 
+A relocatable address inside an instruction can take either form: a
+literal value, or a sum of a symbol and a literal value. We match the
+relocatable address with [[t]] and pass it to [[traget]] to (re-)
+construct a relocatable value.
+
+<<target decoder>>=
+let target = function
+    | RP.Const (RP.Bits b) -> 
+        Reloc.of_const (Bits.U.to_native b)
+    | RP.App (("add", [32]),[RP.Const (RP.Link(s,_)); RP.Const (RP.Bits b)]) ->
+        Reloc.of_sum s (Bits.U.to_native b) 
+    | _ -> Sledlib.fail ["illformed relocatable address"]
+@
+
 The machine generated code does not define a pattern for [[sethi]]. I
 will just take clues from the encoding function and define a matching
 pattern here.
@@ -574,19 +589,6 @@ noted.
            Instruction.and_ (Bits.U.to_native rs1) (Instruction.imode 
                  (Bits.U.to_native arg139)) (Bits.U.to_native rd) 
 @
-
-A relocatable address inside an instruction can take either form: a
-literal value, or a sum of a symbol and a literal value. We match the
-relocatable address with [[t]] and pass it to [[traget]] to (re-)
-construct a relocatable value.
-
-<<target decoder>>=
-let target = function
-    | RP.Const (RP.Bits b) -> 
-        Reloc.of_const (Bits.U.to_native b)
-    | RP.App (("add", [32]),[RP.Const (RP.Link(s,_)); RP.Const (RP.Bits b)]) ->
-        Reloc.of_sum s (Bits.U.to_native b) 
-    | _ -> Sledlib.fail ["illformed relocatable address"]
 
 <<instructions>>=
 | RP.Rtl [(RP.Const (RP.Bool true), 
