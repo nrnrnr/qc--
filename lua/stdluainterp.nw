@@ -821,11 +821,12 @@ let chunk ((smap, dbg) as srcdbg) block rho = function
   | A.Statement s -> block rho [s]
   | A.Fundef (pos, f, args, varargs, body) ->
       let v = func (lambda srcdbg (Srcmap.location smap pos) args varargs body) in
-      block rho [A.Assign ([f], [A.Lit v])]
+      block rho [A.Stmt'(pos, A.Assign ([f], [A.Lit v]))]
   | A.Methdef (pos, obj, meth, args, varargs, body) ->
       let args = "self" :: args in
       let v = func (lambda srcdbg (Srcmap.location smap pos) args varargs body) in
-      block rho [A.Assign ([A.Lindex (obj, A.Lit (V.String meth))], [A.Lit v])]
+      block rho [A.Stmt'(pos, A.Assign ([A.Lindex (obj, A.Lit (V.String meth))],
+                                        [A.Lit v]))]
 @ 
 Compiling a list of chunks is a lot like compiling a function, except
 we also have to keep track of whether debugging is turned on.

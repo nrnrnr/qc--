@@ -1,5 +1,7 @@
 % -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 
+% inc: \usepackage{url,longtable}
+
 % Grades     ::=    "%%Grades:" Quality Importance Urgency
 % Quality    ::=    A|B|C|D|E
 % Importance ::=    Central|Subsystem|Peripheral
@@ -29,36 +31,89 @@ the stage. If it is possible to reach a stage without satisfying the expected
 properties of the stage, then the control flow is invalid. Validity of the
 control flow is verified in a static checking phase.
 
-\vskip 0pt plus 2\baselineskip \penalty-200 \vskip 0pt plus -2\baselineskip
+\newcommand\vfb[1]
+  {\vskip 0pt plus #1\baselineskip \penalty-200 \vskip 0pt plus -#1\baselineskip}
 
-The properties used in Quick~{\PAL} are as follows:\\
-\begin{tabularx}{\linewidth}{@{\hskip1.5em}>{\ttfamily}lX@{}}
+\vfb4
+
+\setlongtables
+The properties used in Quick~{\PAL} are as follows:
+\begin{longtable}[l]{@{\hskip1.5em}>{\ttfamily}lp{3in}@{}}
+sensible source&
+  The source code uses well-known operators and sensible variable sizes.
+  Presumably a back end advertises what these are.  
+  In the long run, we would like to make every operator ``well
+  known,'' by implementation in software if need be.
+  A~variable, on the other hand, is probably sensible only if it fits
+  in a word on the target machine.  For a first cut, 8-, 16-, and
+  32-bit variables should probably be considered sensible on a 32-bit
+  machine.  We also want 1-bit variables, although that may be
+  problematic for our first release.  
+  In the long run, our users might like us to simulate large variables
+  using, e.g., large arithmetic.
+  \par
+  This property is established by the \emph{front end}.
+  \\ 
 proper widths&
-  Every variable and operator is specialzed at widths that are
+  Every operator is specialzed at widths that are
   appropriate to the target machine.  For example, on a 32-bit machine
-  that supports no smaller arithmetic, all variables and operators
-  would be used at 32~bits.\\
+  that supports no smaller arithmetic, all operators
+  would be used at 32~bits.
+  (There may be an extension for [[sx]] and [[zx]] operators, which are
+  used to load narrow values into wide registers, and for the
+  [[lobits]] operator, which is used to store only part of a wide register.)
+  This property is established by the \emph{widener}.
+  \\ 
 no vars& 
-  No {\PAL} variable appears in any RTL.\\
-no compile-time constants&
-  No compile-time constant appears in any RTL.\\
-varmap& 
-  The [[varmap]] field in the [[Proc.t]] is initialized\\
-no temps& 
-  No temporary register appears in any RTL.\\
+  No {\PAL} variable appears in any RTL.
+
+  This property is established by the \emph{variable placer}.
+  We imagine four variable placers:
+\begin{itemize}
+\item 
+The Fortran placer (a temporary expedient)
+\item
+Each variable goes into a temporary
+\item
+Each variable goes into a stack slot, from which an optimizer might
+one day promote it
+\item
+A few frequently used variables go into hardware registers, and the
+rest go onto the stack (the \texttt{lcc} placement)
+\end{itemize}
+  A variable placer may put a variable in the least significant
+  $k$~bits of an $n$-bit temporary.
+  \\ 
 \emph{machine} invariant& 
   Each RTL, under an appropriate substitution, is
-  representable as a single instruction on the target machine.\\
+  representable as a single instruction on the target machine.
+  Or possibly a more complicated invariant involving the nefarious
+  ``assember temporary'' as documented in
+  \url{~nr/papers/stack/three.tex} and to appear in the stack paper.
+  This property is established by a target-dependent \emph{code expander}.
+  \\ 
+no temps& 
+  No temporary register appears in any RTL.
+  This property is established by the \emph{register allocator}.
+  \\ 
+\rlap{no compile-time constants}&\mbox{}\break
+  No compile-time constant appears in any RTL.
+  This property is established by the \emph{stack-frame freezer}.
+  \\ 
+varmap& 
+  The [[varmap]] field in the [[Proc.t]] is initialized.
+  This property should be established by the variable placer.
+  \\ 
 live sets&
   The live set at each control-flow node (along each control-flow
-  edge?) is accurate.\\
+  edge?) is accurate.\\ 
 simple RHS&
   At most one operator appears on the right-hand side of any RTL,
   except possibly for an RTL that is representable as a single
   instruction on the target machine.  This invariant might be further
   elaborated; see one of the generic code expanders.\\
-\end{tabularx}
-
+\end{longtable}
+@
 
 
 <<backplane.mli>>=

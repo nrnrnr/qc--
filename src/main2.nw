@@ -259,6 +259,7 @@ REGISTER-ALLOCATION PIECES SHOULD WIND UP IN colograph.lua.\footnote
 {Note to self: ``It's time to break up \texttt{stan.c}, Stan.''}
 <<qc--.lua>>= 
 $debug 1
+
 -- 
 -- $Id$
 ------------------------------------------------------------------ 
@@ -661,7 +662,62 @@ CommandLineOption.dump   =  Dump.vars
 Main.dump                =  Dump.vars
 CommandLineOption.script =  Dump.script
 @
+The following represents groping toward a more regular structure.
+<<qc--.lua>>=
+Stages = Stages or { }
+function Stages.nullf () return nil end
+Stages.null = B.mk("empty stage", Stages.nullf)
 
+Backend = Backend or { }
+
+function Stages.cmmasm () 
+  Driver.cmmasm() -- must get args correct here
+end
+
+Backend.debug =     --- debugging back end
+  { widen     = Stages.null
+  , placevars = Placevar.fortran
+  , expand    = Expander.toy
+  , liveness  = Stages.null
+  , ralloc    = CG.color
+  , freeze    = Stages.null
+  , asm       = Stages.cmmasm
+  }   
+
+Opt = Opt or { }
+
+function run_assembler(self)
+  Driver.assemble(self.asm)
+  return nil -- don't repeat in fixed point (didn't change the program)
+end
+
+function assembler_stage(asm)
+  return B.single { name = "assembler " .. Util.funname(asm)
+                  , fn = { asm = asm, apply = run_assembler }
+                  } 
+end
+                
+
+function Opt.standard(backend)
+  return B.seq
+    { backend.widen      or Stages.null
+    , backend.placevars  or Stages.null
+    , backend.expand     or Stages.null
+    , backend.liveness   or Stages.null
+    , backend.ralloc     or Stages.null
+    , backend.freeze     or Stages.null
+    , assembler_stage(backend.asm) -- needs fixing
+    } 
+end
+
+function Main.newcompile(backend, file)
+    local ast = Driver.parse(file) 
+    local asm = backend.asm(Driver.stdout) 
+    local env = Driver.check(ast,asm) -- asm is stored in env
+    local opt = Opt.standard(backend)
+    Driver.compilec(opt, ast, nil and bogus, env)
+end    
+@
 % ------------------------------------------------------------------  
 \section{Manual Page}
 % ------------------------------------------------------------------  
