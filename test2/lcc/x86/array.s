@@ -515,8 +515,8 @@ L.55:
 	movl $-48,%ecx
 	addl %ecx,%esi
 	movl %edi,(%esi)
-	movl %eax,36(%esp)
 	movl %edx,40(%esp)
+	movl %eax,36(%esp)
 	call printf
 Ljoin_l93:
 L.56:
@@ -618,8 +618,8 @@ Ljoin_l98:
 	movl %esi,%edi
 	movl 24(%esp),%esi
 	movl 28(%esp),%ecx
-	movl 36(%esp),%eax
 	movl 40(%esp),%edx
+	movl 36(%esp),%eax
 	jmp L.51
 Ljoin_l90:
 	jmp Ljoin_l97
@@ -627,8 +627,8 @@ Ljoin_l97:
 	movl %esi,%edi
 	movl 24(%esp),%esi
 	movl 28(%esp),%ecx
-	movl 36(%esp),%eax
 	movl 40(%esp),%edx
+	movl 36(%esp),%eax
 	jmp L.55
 .section .pcmap_data
 Lstackdata_l104:

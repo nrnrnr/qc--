@@ -36,15 +36,15 @@ main:
 	movl (%eax),%eax
 Linitialize_continuations_l4:
 Lproc_body_start_l3:
-	fnstcw 16(%esp)
-	movzwl 16(%esp),%ecx
+	fnstcw 32(%esp)
+	movzwl 32(%esp),%ecx
 	shll $20, %ecx
 	shrl $30, %ecx
 	movl $2,%edx
 	movl %edi,36(%esp)
 	leal 60(%esp), %edi
 	movl %edi,40(%esp)
-	movl $-40,%edi
+	movl $-32,%edi
 	movl %edi,44(%esp)
 	movl 40(%esp),%edi
 	movl %esi,48(%esp)
@@ -52,21 +52,21 @@ Lproc_body_start_l3:
 	addl %esi,%edi
 	movl %edx,(%edi)
 	leal 60(%esp), %edi
-	movl $-40,%esi
+	movl $-32,%esi
 	addl %esi,%edi
 	fildl (%edi)
 	movl $3,%edi
 	leal 60(%esp), %esi
-	movl $-40,%edx
+	movl $-32,%edx
 	addl %edx,%esi
 	movl %edi,(%esi)
 	leal 60(%esp), %edi
-	movl $-40,%esi
+	movl $-32,%esi
 	addl %esi,%edi
 	fildl (%edi)
 	fdivp
 	leal 60(%esp), %edi
-	movl $-52,%esi
+	movl $-48,%esi
 	addl %esi,%edi
 	fstps (%edi)
 	fnstcw 24(%esp)
@@ -78,11 +78,11 @@ Lproc_body_start_l3:
 	movw %di,24(%esp)
 	fldcw 24(%esp)
 	leal 60(%esp), %edi
-	movl $-52,%esi
+	movl $-48,%esi
 	addl %esi,%edi
 	flds (%edi)
 	leal 60(%esp), %edi
-	movl $-48,%esi
+	movl $-52,%esi
 	addl %esi,%edi
 	fistpl (%edi)
 	leal print_int,%edi
@@ -91,7 +91,7 @@ Lproc_body_start_l3:
 	addl %edx,%esi
 	movl %edi,(%esi)
 	leal 60(%esp), %edi
-	movl $-48,%esi
+	movl $-52,%esi
 	addl %esi,%edi
 	leal 60(%esp), %esi
 	movl $-56,%edx
@@ -102,20 +102,20 @@ Lproc_body_start_l3:
 	movl %ecx,56(%esp)
 	call printf
 Ljoin_l17:
-	fnstcw 26(%esp)
-	movzwl 26(%esp),%edi
+	fnstcw 22(%esp)
+	movzwl 22(%esp),%edi
 	andl $-3073,%edi
 	movl $2,%esi
 	shll $10, %esi
 	orl %esi,%edi
-	movw %di,26(%esp)
-	fldcw 26(%esp)
+	movw %di,22(%esp)
+	fldcw 22(%esp)
 	leal 60(%esp), %edi
-	movl $-52,%esi
+	movl $-48,%esi
 	addl %esi,%edi
 	flds (%edi)
 	leal 60(%esp), %edi
-	movl $-48,%esi
+	movl $-52,%esi
 	addl %esi,%edi
 	fistpl (%edi)
 	leal print_int,%edi
@@ -124,7 +124,7 @@ Ljoin_l17:
 	addl %eax,%esi
 	movl %edi,(%esi)
 	leal 60(%esp), %edi
-	movl $-48,%esi
+	movl $-52,%esi
 	addl %esi,%edi
 	leal 60(%esp), %esi
 	movl $-56,%eax
@@ -133,20 +133,20 @@ Ljoin_l17:
 	movl %edi,(%esi)
 	call printf
 Ljoin_l14:
-	fnstcw 28(%esp)
-	movzwl 28(%esp),%edi
+	fnstcw 20(%esp)
+	movzwl 20(%esp),%edi
 	andl $-3073,%edi
 	movl $0,%esi
 	shll $10, %esi
 	orl %esi,%edi
-	movw %di,28(%esp)
-	fldcw 28(%esp)
+	movw %di,20(%esp)
+	fldcw 20(%esp)
 	leal 60(%esp), %edi
-	movl $-52,%esi
+	movl $-48,%esi
 	addl %esi,%edi
 	flds (%edi)
 	leal 60(%esp), %edi
-	movl $-48,%esi
+	movl $-52,%esi
 	addl %esi,%edi
 	fistpl (%edi)
 	leal print_int,%edi
@@ -155,7 +155,7 @@ Ljoin_l14:
 	addl %eax,%esi
 	movl %edi,(%esi)
 	leal 60(%esp), %edi
-	movl $-48,%esi
+	movl $-52,%esi
 	addl %esi,%edi
 	leal 60(%esp), %esi
 	movl $-56,%eax
@@ -164,20 +164,20 @@ Ljoin_l14:
 	movl %edi,(%esi)
 	call printf
 Ljoin_l11:
-	fnstcw 30(%esp)
-	movzwl 30(%esp),%edi
+	fnstcw 18(%esp)
+	movzwl 18(%esp),%edi
 	andl $-3073,%edi
 	movl $3,%esi
 	shll $10, %esi
 	orl %esi,%edi
-	movw %di,30(%esp)
-	fldcw 30(%esp)
+	movw %di,18(%esp)
+	fldcw 18(%esp)
 	leal 60(%esp), %edi
-	movl $-52,%esi
+	movl $-48,%esi
 	addl %esi,%edi
 	flds (%edi)
 	leal 60(%esp), %edi
-	movl $-48,%esi
+	movl $-52,%esi
 	addl %esi,%edi
 	fistpl (%edi)
 	leal print_int,%edi
@@ -186,7 +186,7 @@ Ljoin_l11:
 	addl %eax,%esi
 	movl %edi,(%esi)
 	leal 60(%esp), %edi
-	movl $-48,%esi
+	movl $-52,%esi
 	addl %esi,%edi
 	leal 60(%esp), %esi
 	movl $-56,%eax
@@ -195,14 +195,14 @@ Ljoin_l11:
 	movl %edi,(%esi)
 	call printf
 Ljoin_l8:
-	fnstcw 32(%esp)
-	movzwl 32(%esp),%edx
+	fnstcw 16(%esp)
+	movzwl 16(%esp),%edx
 	andl $-3073,%edx
 	movl 56(%esp),%ecx
 	shll $10, %ecx
 	orl %ecx,%edx
-	movw %dx,32(%esp)
-	fldcw 32(%esp)
+	movw %dx,16(%esp)
+	fldcw 16(%esp)
 	movl $0,%eax
 	leal 60(%esp), %edx
 	movl $0,%ecx
@@ -236,8 +236,8 @@ Lframe_l25:
 .long 0
 .long 0
 .long 0xfffffffc
-.long 0xffffffcc
 .long 0xffffffd0
+.long 0xffffffcc
 .long 0
 .section .pcmap
 .long Ljoin_l14
@@ -259,8 +259,8 @@ Lframe_l26:
 .long 0
 .long 0
 .long 0xfffffffc
-.long 0xffffffcc
 .long 0xffffffd0
+.long 0xffffffcc
 .long 0
 .section .pcmap
 .long Ljoin_l11
@@ -282,8 +282,8 @@ Lframe_l27:
 .long 0
 .long 0
 .long 0xfffffffc
-.long 0xffffffcc
 .long 0xffffffd0
+.long 0xffffffcc
 .long 0
 .section .pcmap
 .long Ljoin_l8
@@ -305,7 +305,7 @@ Lframe_l28:
 .long 0
 .long 0
 .long 0xfffffffc
-.long 0xffffffcc
 .long 0xffffffd0
+.long 0xffffffcc
 .long 0
 .section .text

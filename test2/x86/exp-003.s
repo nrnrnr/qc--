@@ -735,8 +735,8 @@ _i_47:
 Ljoin_l132:
 	jmp Ljoin_l167
 Ljoin_l167:
-	movl %eax,20(%esp)
 	movl %edx,88(%esp)
+	movl %eax,20(%esp)
 	jmp _i_48
 Ljoin_l131:
 	jmp _i_51
@@ -753,8 +753,8 @@ _i_51:
 Ljoin_l130:
 	jmp Ljoin_l166
 Ljoin_l166:
-	movl %eax,20(%esp)
 	movl %edx,88(%esp)
+	movl %eax,20(%esp)
 	jmp _i_48
 Ljoin_l129:
 	jmp _i_53
@@ -1336,8 +1336,8 @@ Ljoin_l241:
 	jmp _i_64
 _i_64:
 	movl 32(%esp),%edx
-	movl 20(%esp),%eax
 	movl 28(%esp),%ecx
+	movl 20(%esp),%eax
 	jmp _i_62
 Ljoin_l246:
 	jmp _i_62
@@ -1416,8 +1416,8 @@ Ljoin_l215:
 	jmp _i_76
 _i_76:
 	movl 32(%esp),%edx
-	movl 20(%esp),%eax
 	movl 28(%esp),%ecx
+	movl 20(%esp),%eax
 	jmp _i_73
 Ljoin_l219:
 	jmp _i_75
@@ -1490,8 +1490,8 @@ _i_78:
 	call *%edi
 Ljoin_l209:
 	movl %eax,%edx
-	movl 20(%esp),%eax
 	movl 28(%esp),%ecx
+	movl 20(%esp),%eax
 	jmp _i_79
 _i_79:
 	movl $0,%edi
@@ -1635,8 +1635,8 @@ _i_88:
 Ljoin_l203:
 	jmp Ljoin_l255
 Ljoin_l255:
-	movl %eax,20(%esp)
 	movl %edx,92(%esp)
+	movl %eax,20(%esp)
 	jmp _i_89
 Ljoin_l202:
 	jmp _i_92
@@ -1659,8 +1659,8 @@ _i_92:
 Ljoin_l201:
 	jmp Ljoin_l254
 Ljoin_l254:
-	movl %eax,20(%esp)
 	movl %edx,92(%esp)
+	movl %eax,20(%esp)
 	jmp _i_89
 Ljoin_l200:
 	jmp _i_94
@@ -2554,8 +2554,8 @@ Ljoin_l348:
 	jmp _i_116
 _i_116:
 	movl 48(%esp),%edx
-	movl 32(%esp),%eax
 	movl 44(%esp),%ecx
+	movl 32(%esp),%eax
 	jmp _i_114
 Ljoin_l353:
 	jmp _i_114
@@ -2680,8 +2680,8 @@ Ljoin_l334:
 	call *%esi
 Ljoin_l331:
 	movl 48(%esp),%edx
-	movl 32(%esp),%eax
 	movl 44(%esp),%ecx
+	movl 32(%esp),%eax
 	jmp _i_128
 Ljoin_l335:
 	jmp _i_128
@@ -2716,8 +2716,8 @@ Ljoin_l315:
 	leal _i_new_he,%edi
 	movl (%edi),%edi
 	movl %edx,48(%esp)
-	movl %eax,32(%esp)
 	movl %ecx,92(%esp)
+	movl %eax,32(%esp)
 	call *%edi
 Ljoin_l313:
 	movl $8,%edi
@@ -3645,8 +3645,8 @@ Ljoin_l454:
 	jmp _i_151
 _i_151:
 	movl 44(%esp),%edx
-	movl 28(%esp),%eax
 	movl 40(%esp),%ecx
+	movl 28(%esp),%eax
 	jmp _i_149
 Ljoin_l459:
 	jmp _i_149
@@ -3708,8 +3708,8 @@ _i_163:
 Ljoin_l426:
 	movl %eax,%edi
 	movl 44(%esp),%edx
-	movl 28(%esp),%eax
 	movl 40(%esp),%ecx
+	movl 28(%esp),%eax
 	jmp _i_164
 _i_164:
 	movl $0,%esi
@@ -3833,8 +3833,8 @@ Ljoin_l418:
 	call *%esi
 Ljoin_l415:
 	movl 44(%esp),%edx
-	movl 28(%esp),%eax
 	movl 40(%esp),%ecx
+	movl 28(%esp),%eax
 	jmp _i_173
 Ljoin_l419:
 	jmp _i_173
@@ -3869,8 +3869,8 @@ Ljoin_l399:
 	leal _i_new_he,%edi
 	movl (%edi),%edi
 	movl %edx,44(%esp)
-	movl %eax,28(%esp)
 	movl %ecx,132(%esp)
+	movl %eax,28(%esp)
 	call *%edi
 Ljoin_l397:
 	movl $8,%edi
@@ -5188,8 +5188,8 @@ _i_210:
 Ljoin_l515:
 	jmp Ljoin_l556
 Ljoin_l556:
-	movl %eax,20(%esp)
 	movl %ecx,100(%esp)
+	movl %eax,20(%esp)
 	movl 4(%esp),%esi
 	jmp _i_211
 Ljoin_l514:
@@ -5209,8 +5209,8 @@ _i_214:
 Ljoin_l513:
 	jmp Ljoin_l555
 Ljoin_l555:
-	movl %eax,20(%esp)
 	movl %ecx,100(%esp)
+	movl %eax,20(%esp)
 	jmp _i_211
 Ljoin_l512:
 	jmp _i_216
@@ -5254,8 +5254,8 @@ _i_211:
 	movl $0,%edi
 	movl 100(%esp),%edx
 	movl (%edx),%ecx
-	movl 20(%esp),%eax
 	movl 48(%esp),%esi
+	movl 20(%esp),%eax
 	jmp _i_213
 Ljoin_l507:
 	jmp _i_218
@@ -5917,8 +5917,8 @@ Ljoin_l642:
 	jmp _i_231
 _i_231:
 	movl 36(%esp),%edx
-	movl 20(%esp),%eax
 	movl 32(%esp),%ecx
+	movl 20(%esp),%eax
 	jmp _i_229
 Ljoin_l634:
 	jmp _i_229
@@ -5997,8 +5997,8 @@ _i_240:
 	call *%edi
 Ljoin_l603:
 	movl %eax,%edx
-	movl 20(%esp),%eax
 	movl 32(%esp),%ecx
+	movl 20(%esp),%eax
 	jmp _i_241
 _i_241:
 	movl $0,%edi
@@ -6175,8 +6175,8 @@ _i_251:
 	movl %ecx,%edx
 	movl %edi,%ecx
 	movl 88(%esp),%edi
-	movl 20(%esp),%eax
 	movl 44(%esp),%esi
+	movl 20(%esp),%eax
 	jmp _i_253
 Ljoin_l589:
 	jmp _i_258

@@ -20,13 +20,13 @@ Lproc_body_start_l4:
 	movl $1,%ecx
 	cmpl %ecx,%eax
 	jne Ljoin_l13
-Ljoin_l17:
+Ljoin_l18:
 	jmp Ljoin_l9
 Ljoin_l13:
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	jne Ljoin_l8
-Ljoin_l18:
+Ljoin_l17:
 	jmp Ljoin_l9
 Ljoin_l9:
 	movl $0,%eax

@@ -3905,7 +3905,7 @@ section "text"
         $c0 when %ne[32](@i_@255i_newsize, @i_@263i_1) = sym@Ljoin@l815;
         Ljoin:l816:
         $c0 when %gt[32](@i_@263i_1, @i_@262i_oldsize) = sym@Ljoin@l814;
-        Ljoin:l821:
+        Ljoin:l820:
         $c0 = sym@@i_397;
         Ljoin:l814:
         $c0 = sym@@i_399;
@@ -4037,7 +4037,7 @@ section "text"
         $c0 = sym@@i_421;
         @i_421:
         $c0 when %lt[32](@i_@256i_i, @i_@262i_oldsize) = sym@Ljoin@l767;
-        Ljoin:l820:
+        Ljoin:l821:
         $c0 = sym@@i_394;
         Ljoin:l767:
         $c0 = sym@@i_418;

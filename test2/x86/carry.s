@@ -20,7 +20,7 @@ lladd:
 	addl %edx,%ecx
 	leal 60(%esp), %edx
 	movl %ecx,24(%esp)
-	movl $-60,%ecx
+	movl $-44,%ecx
 	addl %ecx,%edx
 	movl 24(%esp),%ecx
 	fildq (%ecx)
@@ -41,12 +41,12 @@ Linitialize_continuations_l6:
 Lproc_body_start_l5:
 	leal 60(%esp), %edx
 	movl %ecx,32(%esp)
-	movl $-56,%ecx
+	movl $-40,%ecx
 	addl %ecx,%edx
 	movl (%edx),%ecx
 	leal 60(%esp), %edx
 	movl %ecx,36(%esp)
-	movl $-60,%ecx
+	movl $-44,%ecx
 	addl %ecx,%edx
 	movl (%edx),%ecx
 	leal 60(%esp), %edx
@@ -80,20 +80,20 @@ Lproc_body_start_l5:
 	movl 44(%esp),%edi
 	adcl %edi,%ecx
 	leal 60(%esp), %edi
-	movl $-44,%edx
+	movl $-60,%edx
 	addl %edx,%edi
 	movl 56(%esp),%edx
 	movl %edx,(%edi)
 	leal 60(%esp), %edi
-	movl $-40,%edx
+	movl $-56,%edx
 	addl %edx,%edi
 	movl %ecx,(%edi)
 	leal 60(%esp), %ecx
-	movl $-44,%edi
+	movl $-60,%edi
 	addl %edi,%ecx
 	movl (%ecx),%eax
 	leal 60(%esp), %ecx
-	movl $-40,%edi
+	movl $-56,%edi
 	addl %edi,%ecx
 	movl (%ecx),%edx
 	leal 60(%esp), %ecx
@@ -113,7 +113,7 @@ llsub:
 	addl %edx,%ecx
 	leal 60(%esp), %edx
 	movl %ecx,24(%esp)
-	movl $-60,%ecx
+	movl $-44,%ecx
 	addl %ecx,%edx
 	movl 24(%esp),%ecx
 	fildq (%ecx)
@@ -134,12 +134,12 @@ Linitialize_continuations_l18:
 Lproc_body_start_l17:
 	leal 60(%esp), %edx
 	movl %ecx,32(%esp)
-	movl $-56,%ecx
+	movl $-40,%ecx
 	addl %ecx,%edx
 	movl (%edx),%ecx
 	leal 60(%esp), %edx
 	movl %ecx,36(%esp)
-	movl $-60,%ecx
+	movl $-44,%ecx
 	addl %ecx,%edx
 	movl (%edx),%ecx
 	leal 60(%esp), %edx
@@ -173,20 +173,20 @@ Lproc_body_start_l17:
 	movl 44(%esp),%edi
 	sbbl %edi,%ecx
 	leal 60(%esp), %edi
-	movl $-44,%edx
+	movl $-60,%edx
 	addl %edx,%edi
 	movl 56(%esp),%edx
 	movl %edx,(%edi)
 	leal 60(%esp), %edi
-	movl $-40,%edx
+	movl $-56,%edx
 	addl %edx,%edi
 	movl %ecx,(%edi)
 	leal 60(%esp), %ecx
-	movl $-44,%edi
+	movl $-60,%edi
 	addl %edi,%ecx
 	movl (%ecx),%eax
 	leal 60(%esp), %ecx
-	movl $-40,%edi
+	movl $-56,%edi
 	addl %edi,%ecx
 	movl (%ecx),%edx
 	leal 60(%esp), %ecx
@@ -205,7 +205,7 @@ llmul:
 	movl $4,%edx
 	addl %edx,%ecx
 	leal 56(%esp), %edx
-	movl $-56,%eax
+	movl $-40,%eax
 	addl %eax,%edx
 	fildq (%ecx)
 	fistpq (%edx)
@@ -222,12 +222,12 @@ llmul:
 Linitialize_continuations_l30:
 Lproc_body_start_l29:
 	leal 56(%esp), %edx
-	movl $-52,%eax
+	movl $-36,%eax
 	addl %eax,%edx
 	movl (%edx),%edx
 	leal 56(%esp), %eax
 	movl %ecx,24(%esp)
-	movl $-56,%ecx
+	movl $-40,%ecx
 	addl %ecx,%eax
 	movl (%eax),%eax
 	leal 56(%esp), %ecx
@@ -249,19 +249,19 @@ Lproc_body_start_l29:
 	mull %ecx
 	leal 56(%esp), %edi
 	movl %ecx,52(%esp)
-	movl $-40,%ecx
+	movl $-56,%ecx
 	addl %ecx,%edi
 	movl %eax,(%edi)
 	leal 56(%esp), %ecx
-	movl $-36,%edi
+	movl $-52,%edi
 	addl %edi,%ecx
 	movl %edx,(%ecx)
 	leal 56(%esp), %ecx
-	movl $-40,%edi
+	movl $-56,%edi
 	addl %edi,%ecx
 	movl (%ecx),%ecx
 	leal 56(%esp), %edi
-	movl $-36,%edx
+	movl $-52,%edx
 	addl %edx,%edi
 	movl (%edi),%edi
 	movl 44(%esp),%edx
@@ -273,19 +273,19 @@ Lproc_body_start_l29:
 	imull %eax,%edx
 	addl %edx,%edi
 	leal 56(%esp), %edx
-	movl $-40,%eax
+	movl $-56,%eax
 	addl %eax,%edx
 	movl %ecx,(%edx)
 	leal 56(%esp), %ecx
-	movl $-36,%edx
+	movl $-52,%edx
 	addl %edx,%ecx
 	movl %edi,(%ecx)
 	leal 56(%esp), %ecx
-	movl $-40,%edi
+	movl $-56,%edi
 	addl %edi,%ecx
 	movl (%ecx),%eax
 	leal 56(%esp), %ecx
-	movl $-36,%edi
+	movl $-52,%edi
 	addl %edi,%ecx
 	movl (%ecx),%edx
 	leal 56(%esp), %ecx

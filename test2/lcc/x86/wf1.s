@@ -354,8 +354,8 @@ Ljoin_l69:
 	movl %eax,%ecx
 	movl 16(%esp),%edi
 	movl 28(%esp),%esi
-	movl 4(%esp),%eax
 	movl 32(%esp),%edx
+	movl 4(%esp),%eax
 	jmp L.19
 .section .pcmap_data
 Lstackdata_l87:

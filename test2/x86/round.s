@@ -72,7 +72,7 @@ Lproc_body_start_l4:
 	movl %edi,56(%esp)
 	leal 108(%esp), %edi
 	movl %edi,60(%esp)
-	movl $-80,%edi
+	movl $-56,%edi
 	movl %edi,64(%esp)
 	movl 60(%esp),%edi
 	movl %esi,68(%esp)
@@ -80,15 +80,15 @@ Lproc_body_start_l4:
 	addl %esi,%edi
 	movl %ecx,(%edi)
 	leal 108(%esp), %edi
-	movl $-80,%esi
+	movl $-56,%esi
 	addl %esi,%edi
 	fildl (%edi)
 	leal 108(%esp), %edi
-	movl $-80,%esi
+	movl $-56,%esi
 	addl %esi,%edi
 	movl %eax,(%edi)
 	leal 108(%esp), %edi
-	movl $-80,%esi
+	movl $-56,%esi
 	addl %esi,%edi
 	fildl (%edi)
 	fdivp
@@ -103,13 +103,13 @@ Lproc_body_start_l4:
 	leal 108(%esp), %edi
 	movl $-84,%esi
 	addl %esi,%edi
-	fnstcw 36(%esp)
-	movzwl 36(%esp),%esi
+	fnstcw 50(%esp)
+	movzwl 50(%esp),%esi
 	shll $20, %esi
 	shrl $30, %esi
-	fnstcw 34(%esp)
+	fnstcw 48(%esp)
 	movl %edi,72(%esp)
-	movzwl 34(%esp),%edi
+	movzwl 48(%esp),%edi
 	andl $-3073,%edi
 	movl %edi,76(%esp)
 	movl $1,%edi
@@ -117,18 +117,18 @@ Lproc_body_start_l4:
 	movl %esi,80(%esp)
 	movl 76(%esp),%esi
 	orl %edi,%esi
-	movw %si,34(%esp)
-	fldcw 34(%esp)
+	movw %si,48(%esp)
+	fldcw 48(%esp)
 	movl 72(%esp),%edi
 	fistpl (%edi)
-	fnstcw 32(%esp)
-	movzwl 32(%esp),%edi
+	fnstcw 46(%esp)
+	movzwl 46(%esp),%edi
 	andl $-3073,%edi
 	movl 80(%esp),%esi
 	shll $10, %esi
 	orl %esi,%edi
-	movw %di,32(%esp)
-	fldcw 32(%esp)
+	movw %di,46(%esp)
+	fldcw 46(%esp)
 	leal fmt,%edi
 	leal 108(%esp), %esi
 	movl %edi,84(%esp)
@@ -173,26 +173,26 @@ Ljoin_l18:
 	leal 108(%esp), %edi
 	movl $-84,%esi
 	addl %esi,%edi
-	fnstcw 42(%esp)
-	movzwl 42(%esp),%esi
+	fnstcw 44(%esp)
+	movzwl 44(%esp),%esi
 	shll $20, %esi
 	shrl $30, %esi
-	fnstcw 40(%esp)
-	movzwl 40(%esp),%eax
+	fnstcw 42(%esp)
+	movzwl 42(%esp),%eax
 	andl $-3073,%eax
 	movl $2,%ecx
 	shll $10, %ecx
 	orl %ecx,%eax
-	movw %ax,40(%esp)
-	fldcw 40(%esp)
+	movw %ax,42(%esp)
+	fldcw 42(%esp)
 	fistpl (%edi)
-	fnstcw 38(%esp)
-	movzwl 38(%esp),%edi
+	fnstcw 40(%esp)
+	movzwl 40(%esp),%edi
 	andl $-3073,%edi
 	shll $10, %esi
 	orl %esi,%edi
-	movw %di,38(%esp)
-	fldcw 38(%esp)
+	movw %di,40(%esp)
+	fldcw 40(%esp)
 	leal fmt,%edi
 	leal 108(%esp), %esi
 	movl $-108,%eax
@@ -228,26 +228,26 @@ Ljoin_l15:
 	leal 108(%esp), %edi
 	movl $-84,%esi
 	addl %esi,%edi
-	fnstcw 48(%esp)
-	movzwl 48(%esp),%esi
+	fnstcw 38(%esp)
+	movzwl 38(%esp),%esi
 	shll $20, %esi
 	shrl $30, %esi
-	fnstcw 46(%esp)
-	movzwl 46(%esp),%eax
+	fnstcw 36(%esp)
+	movzwl 36(%esp),%eax
 	andl $-3073,%eax
 	movl $0,%ecx
 	shll $10, %ecx
 	orl %ecx,%eax
-	movw %ax,46(%esp)
-	fldcw 46(%esp)
+	movw %ax,36(%esp)
+	fldcw 36(%esp)
 	fistpl (%edi)
-	fnstcw 44(%esp)
-	movzwl 44(%esp),%edi
+	fnstcw 34(%esp)
+	movzwl 34(%esp),%edi
 	andl $-3073,%edi
 	shll $10, %esi
 	orl %esi,%edi
-	movw %di,44(%esp)
-	fldcw 44(%esp)
+	movw %di,34(%esp)
+	fldcw 34(%esp)
 	leal fmt,%edi
 	leal 108(%esp), %esi
 	movl $-108,%eax
@@ -283,26 +283,26 @@ Ljoin_l12:
 	leal 108(%esp), %edi
 	movl $-84,%esi
 	addl %esi,%edi
-	fnstcw 54(%esp)
-	movzwl 54(%esp),%esi
+	fnstcw 32(%esp)
+	movzwl 32(%esp),%esi
 	shll $20, %esi
 	shrl $30, %esi
-	fnstcw 52(%esp)
-	movzwl 52(%esp),%eax
+	fnstcw 30(%esp)
+	movzwl 30(%esp),%eax
 	andl $-3073,%eax
 	movl $3,%ecx
 	shll $10, %ecx
 	orl %ecx,%eax
-	movw %ax,52(%esp)
-	fldcw 52(%esp)
+	movw %ax,30(%esp)
+	fldcw 30(%esp)
 	fistpl (%edi)
-	fnstcw 50(%esp)
-	movzwl 50(%esp),%edi
+	fnstcw 28(%esp)
+	movzwl 28(%esp),%edi
 	andl $-3073,%edi
 	shll $10, %esi
 	orl %esi,%edi
-	movw %di,50(%esp)
-	fldcw 50(%esp)
+	movw %di,28(%esp)
+	fldcw 28(%esp)
 	leal fmt,%edi
 	leal 108(%esp), %esi
 	movl $-108,%eax

@@ -3043,14 +3043,14 @@ Ljoin_l150:
 	movl (%edx),%edx
 	movl 40(%esp),%ecx
 	cmpl %edx,%ecx
-	jle Ljoin_l169
-Ljoin_l170:
+	jle Ljoin_l172
+Ljoin_l173:
 	movl $0,%eax
-	jmp Ljoin_l168
-Ljoin_l169:
+	jmp Ljoin_l171
+Ljoin_l172:
 	movl $-1,%eax
-	jmp Ljoin_l168
-Ljoin_l168:
+	jmp Ljoin_l171
+Ljoin_l171:
 	jmp LifEnd_152
 Ljoin_l163:
 	jmp LifTrue_150
@@ -3194,14 +3194,14 @@ Ljoin_l156:
 	movl %ecx,(%edx)
 	movl $0,%edx
 	cmpl %edx,%eax
-	jle Ljoin_l172
-Ljoin_l173:
+	jle Ljoin_l169
+Ljoin_l170:
 	movl $0,%eax
-	jmp Ljoin_l171
-Ljoin_l172:
+	jmp Ljoin_l168
+Ljoin_l169:
 	movl $-1,%eax
-	jmp Ljoin_l171
-Ljoin_l171:
+	jmp Ljoin_l168
+Ljoin_l168:
 	jmp LifEnd_152
 LifEnd_152:
 	leal 76(%esp), %edx
@@ -3593,14 +3593,14 @@ Ljoin_l188:
 	movl (%edx),%edx
 	movl 40(%esp),%ecx
 	cmpl %edx,%ecx
-	jg Ljoin_l207
-Ljoin_l208:
+	jg Ljoin_l210
+Ljoin_l211:
 	movl $0,%eax
-	jmp Ljoin_l206
-Ljoin_l207:
+	jmp Ljoin_l209
+Ljoin_l210:
 	movl $-1,%eax
-	jmp Ljoin_l206
-Ljoin_l206:
+	jmp Ljoin_l209
+Ljoin_l209:
 	jmp LifEnd_167
 Ljoin_l201:
 	jmp LifTrue_165
@@ -3744,14 +3744,14 @@ Ljoin_l194:
 	movl %ecx,(%edx)
 	movl $0,%edx
 	cmpl %edx,%eax
-	jg Ljoin_l210
-Ljoin_l211:
+	jg Ljoin_l207
+Ljoin_l208:
 	movl $0,%eax
-	jmp Ljoin_l209
-Ljoin_l210:
+	jmp Ljoin_l206
+Ljoin_l207:
 	movl $-1,%eax
-	jmp Ljoin_l209
-Ljoin_l209:
+	jmp Ljoin_l206
+Ljoin_l206:
 	jmp LifEnd_167
 LifEnd_167:
 	leal 76(%esp), %edx
@@ -4587,14 +4587,14 @@ LifTrue_182:
 	addl %edx,%ecx
 	movl (%ecx),%ecx
 	cmpl %ecx,%esi
-	jl Ljoin_l281
-Ljoin_l282:
+	jl Ljoin_l278
+Ljoin_l279:
 	movl $0,%edi
-	jmp Ljoin_l280
-Ljoin_l281:
+	jmp Ljoin_l277
+Ljoin_l278:
 	movl $-1,%edi
-	jmp Ljoin_l280
-Ljoin_l280:
+	jmp Ljoin_l277
+Ljoin_l277:
 	jmp LifEnd_184
 LifEnd_184:
 	movl $0,%esi
@@ -4656,14 +4656,14 @@ LifTrue_189:
 	addl %edx,%ecx
 	movl (%ecx),%ecx
 	cmpl %ecx,%esi
-	jge Ljoin_l278
-Ljoin_l279:
+	jge Ljoin_l281
+Ljoin_l282:
 	movl $0,%edi
-	jmp Ljoin_l277
-Ljoin_l278:
+	jmp Ljoin_l280
+Ljoin_l281:
 	movl $-1,%edi
-	jmp Ljoin_l277
-Ljoin_l277:
+	jmp Ljoin_l280
+Ljoin_l280:
 	jmp LifEnd_191
 LifEnd_191:
 	movl $0,%esi

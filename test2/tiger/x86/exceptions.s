@@ -365,7 +365,7 @@ Ljoin_l84:
 	movl %edi,(%esi)
 	jmp Ltry_end_48
 Lexn_35_U39:
-	movl 44(%esp),%edi
+	movl 48(%esp),%edi
 	movl $21,%esi
 	cmpl %esi,%edi
 	je Ljoin_l80
@@ -434,7 +434,7 @@ Ljoin_l71:
 Ljoin_l68:
 	jmp Ltry_end_67
 Lexn_59_U44:
-	movl 48(%esp),%edi
+	movl 44(%esp),%edi
 	movl $22,%esi
 	cmpl %esi,%edi
 	je Ljoin_l64
@@ -545,16 +545,16 @@ Lframe_l96:
 .long 0
 .long 0
 .long 0
-.long 0xfffffff8
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
 .long 0xfffffff4
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0xfffffff8
 .long 0
 .long 0
 .long 0
@@ -594,16 +594,16 @@ Lframe_l97:
 .long 0
 .long 0
 .long 0
-.long 0xfffffff8
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
 .long 0xfffffff4
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0xfffffff8
 .long 0
 .long 0
 .long 0
@@ -643,16 +643,16 @@ Lframe_l98:
 .long 0
 .long 0
 .long 0
-.long 0xfffffff8
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
 .long 0xfffffff4
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0xfffffff8
 .long 0
 .long 0
 .long 0
@@ -692,7 +692,7 @@ Lframe_l99:
 .long 0
 .long 0
 .long 0
-.long 0xfffffff8
+.long 0xfffffff4
 .long 0
 .long 0
 .long 0
@@ -734,7 +734,7 @@ Lframe_l100:
 .long 0
 .long 0
 .long 0
-.long 0xfffffff8
+.long 0xfffffff4
 .long 0
 .long 0
 .long 0
@@ -776,7 +776,7 @@ Lframe_l101:
 .long 0
 .long 0
 .long 0
-.long 0xfffffff8
+.long 0xfffffff4
 .long 0
 .long 0
 .long 0
@@ -818,7 +818,7 @@ Lframe_l102:
 .long 0
 .long 0
 .long 0
-.long 0xfffffff8
+.long 0xfffffff4
 .long 0
 .long 0
 .long 0

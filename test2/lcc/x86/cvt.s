@@ -186,17 +186,17 @@ Lproc_body_start_l19:
 	addl %eax,%edi
 	fildl (%edi)
 	leal 304(%esp), %edi
-	movl $-304,%eax
+	movl $-64,%eax
 	addl %eax,%edi
 	fstpl (%edi)
 	leal 304(%esp), %edi
-	movl $-304,%eax
+	movl $-64,%eax
 	addl %eax,%edi
 	leal d,%eax
 	fildq (%edi)
 	fistpq (%eax)
 	leal 304(%esp), %edi
-	movl $-304,%eax
+	movl $-64,%eax
 	addl %eax,%edi
 	leal D,%eax
 	fildq (%edi)
@@ -247,17 +247,17 @@ Ljoin_l79:
 	addl %eax,%edi
 	fildl (%edi)
 	leal 304(%esp), %edi
-	movl $-296,%eax
+	movl $-72,%eax
 	addl %eax,%edi
 	fstpl (%edi)
 	leal 304(%esp), %edi
-	movl $-296,%eax
+	movl $-72,%eax
 	addl %eax,%edi
 	leal d,%eax
 	fildq (%edi)
 	fistpq (%eax)
 	leal 304(%esp), %edi
-	movl $-296,%eax
+	movl $-72,%eax
 	addl %eax,%edi
 	leal D,%eax
 	fildq (%edi)
@@ -308,17 +308,17 @@ Ljoin_l76:
 	addl %eax,%edi
 	fildl (%edi)
 	leal 304(%esp), %edi
-	movl $-288,%eax
+	movl $-80,%eax
 	addl %eax,%edi
 	fstpl (%edi)
 	leal 304(%esp), %edi
-	movl $-288,%eax
+	movl $-80,%eax
 	addl %eax,%edi
 	leal d,%eax
 	fildq (%edi)
 	fistpq (%eax)
 	leal 304(%esp), %edi
-	movl $-288,%eax
+	movl $-80,%eax
 	addl %eax,%edi
 	leal D,%eax
 	fildq (%edi)
@@ -369,17 +369,17 @@ Ljoin_l73:
 	addl %eax,%edi
 	fildl (%edi)
 	leal 304(%esp), %edi
-	movl $-280,%eax
+	movl $-88,%eax
 	addl %eax,%edi
 	fstpl (%edi)
 	leal 304(%esp), %edi
-	movl $-280,%eax
+	movl $-88,%eax
 	addl %eax,%edi
 	leal d,%eax
 	fildq (%edi)
 	fistpq (%eax)
 	leal 304(%esp), %edi
-	movl $-280,%eax
+	movl $-88,%eax
 	addl %eax,%edi
 	leal D,%eax
 	fildq (%edi)
@@ -429,17 +429,17 @@ Ljoin_l70:
 	addl %eax,%edi
 	fildl (%edi)
 	leal 304(%esp), %edi
-	movl $-272,%eax
+	movl $-96,%eax
 	addl %eax,%edi
 	fstpl (%edi)
 	leal 304(%esp), %edi
-	movl $-272,%eax
+	movl $-96,%eax
 	addl %eax,%edi
 	leal d,%eax
 	fildq (%edi)
 	fistpq (%eax)
 	leal 304(%esp), %edi
-	movl $-272,%eax
+	movl $-96,%eax
 	addl %eax,%edi
 	leal D,%eax
 	fildq (%edi)
@@ -489,17 +489,17 @@ Ljoin_l67:
 	addl %eax,%edi
 	fildl (%edi)
 	leal 304(%esp), %edi
-	movl $-264,%eax
+	movl $-104,%eax
 	addl %eax,%edi
 	fstpl (%edi)
 	leal 304(%esp), %edi
-	movl $-264,%eax
+	movl $-104,%eax
 	addl %eax,%edi
 	leal d,%eax
 	fildq (%edi)
 	fistpq (%eax)
 	leal 304(%esp), %edi
-	movl $-264,%eax
+	movl $-104,%eax
 	addl %eax,%edi
 	leal D,%eax
 	fildq (%edi)
@@ -557,23 +557,23 @@ Ljoin_l64:
 	fmulp
 	faddp
 	leal 304(%esp), %edi
-	movl $-256,%eax
+	movl $-112,%eax
 	addl %eax,%edi
 	fstpl (%edi)
 	leal 304(%esp), %edi
-	movl $-256,%eax
+	movl $-112,%eax
 	addl %eax,%edi
 	fldl (%edi)
 	leal f,%edi
 	fstps (%edi)
 	leal 304(%esp), %edi
-	movl $-256,%eax
+	movl $-112,%eax
 	addl %eax,%edi
 	leal d,%eax
 	fildq (%edi)
 	fistpq (%eax)
 	leal 304(%esp), %edi
-	movl $-256,%eax
+	movl $-112,%eax
 	addl %eax,%edi
 	leal D,%eax
 	fildq (%edi)
@@ -632,23 +632,23 @@ Ljoin_l61:
 	fmulp
 	faddp
 	leal 304(%esp), %edi
-	movl $-248,%eax
+	movl $-120,%eax
 	addl %eax,%edi
 	fstpl (%edi)
 	leal 304(%esp), %edi
-	movl $-248,%eax
+	movl $-120,%eax
 	addl %eax,%edi
 	fldl (%edi)
 	leal f,%edi
 	fstps (%edi)
 	leal 304(%esp), %edi
-	movl $-248,%eax
+	movl $-120,%eax
 	addl %eax,%edi
 	leal d,%eax
 	fildq (%edi)
 	fistpq (%eax)
 	leal 304(%esp), %edi
-	movl $-248,%eax
+	movl $-120,%eax
 	addl %eax,%edi
 	leal D,%eax
 	fildq (%edi)
@@ -660,12 +660,12 @@ Ljoin_l58:
 	movl (%ecx),%ecx
 	movl %ecx,(%edi)
 	leal 304(%esp), %ecx
-	movl $-240,%edx
+	movl $-304,%edx
 	addl %edx,%ecx
 	movl (%edi),%edi
 	movl %edi,(%ecx)
 	leal 304(%esp), %edi
-	movl $-240,%ecx
+	movl $-304,%ecx
 	addl %ecx,%edi
 	flds (%edi)
 	leal 304(%esp), %edi
@@ -689,16 +689,16 @@ Ljoin_l58:
 	movl %ecx,(%edi)
 	leal f_9,%edi
 	leal 304(%esp), %ecx
-	movl $-236,%edx
+	movl $-300,%edx
 	addl %edx,%ecx
 	movl (%edi),%edi
 	movl %edi,(%ecx)
 	leal 304(%esp), %edi
-	movl $-240,%ecx
+	movl $-304,%ecx
 	addl %ecx,%edi
 	flds (%edi)
 	leal 304(%esp), %edi
-	movl $-236,%ecx
+	movl $-300,%ecx
 	addl %ecx,%edi
 	flds (%edi)
 	fcompp
@@ -707,11 +707,11 @@ Ljoin_l58:
 	ja Ljoin_l54
 Ljoin_l55:
 	leal 304(%esp), %edi
-	movl $-236,%ecx
+	movl $-300,%ecx
 	addl %ecx,%edi
 	flds (%edi)
 	leal 304(%esp), %edi
-	movl $-240,%ecx
+	movl $-304,%ecx
 	addl %ecx,%edi
 	flds (%edi)
 	fsubp
@@ -730,7 +730,7 @@ Ljoin_l54:
 	jmp L.7
 L.7:
 	leal 304(%esp), %edi
-	movl $-240,%ecx
+	movl $-304,%ecx
 	addl %ecx,%edi
 	flds (%edi)
 	leal 304(%esp), %edi
@@ -747,22 +747,22 @@ L.8:
 	movb %al,(%edi)
 	leal f,%edi
 	leal 304(%esp), %ecx
-	movl $-232,%edx
+	movl $-296,%edx
 	addl %edx,%ecx
 	movl (%edi),%edi
 	movl %edi,(%ecx)
 	leal f_9,%edi
 	leal 304(%esp), %ecx
-	movl $-228,%edx
+	movl $-292,%edx
 	addl %edx,%ecx
 	movl (%edi),%edi
 	movl %edi,(%ecx)
 	leal 304(%esp), %edi
-	movl $-232,%ecx
+	movl $-296,%ecx
 	addl %ecx,%edi
 	flds (%edi)
 	leal 304(%esp), %edi
-	movl $-228,%ecx
+	movl $-292,%ecx
 	addl %ecx,%edi
 	flds (%edi)
 	fcompp
@@ -771,11 +771,11 @@ L.8:
 	ja Ljoin_l52
 Ljoin_l53:
 	leal 304(%esp), %edi
-	movl $-228,%ecx
+	movl $-292,%ecx
 	addl %ecx,%edi
 	flds (%edi)
 	leal 304(%esp), %edi
-	movl $-232,%ecx
+	movl $-296,%ecx
 	addl %ecx,%edi
 	flds (%edi)
 	fsubp
@@ -794,7 +794,7 @@ Ljoin_l52:
 	jmp L.11
 L.11:
 	leal 304(%esp), %edi
-	movl $-232,%ecx
+	movl $-296,%ecx
 	addl %ecx,%edi
 	flds (%edi)
 	leal 304(%esp), %edi
@@ -811,22 +811,22 @@ L.12:
 	movw %ax,(%edi)
 	leal f,%edi
 	leal 304(%esp), %ecx
-	movl $-224,%edx
+	movl $-288,%edx
 	addl %edx,%ecx
 	movl (%edi),%edi
 	movl %edi,(%ecx)
 	leal f_9,%edi
 	leal 304(%esp), %ecx
-	movl $-220,%edx
+	movl $-284,%edx
 	addl %edx,%ecx
 	movl (%edi),%edi
 	movl %edi,(%ecx)
 	leal 304(%esp), %edi
-	movl $-224,%ecx
+	movl $-288,%ecx
 	addl %ecx,%edi
 	flds (%edi)
 	leal 304(%esp), %edi
-	movl $-220,%ecx
+	movl $-284,%ecx
 	addl %ecx,%edi
 	flds (%edi)
 	fcompp
@@ -835,11 +835,11 @@ L.12:
 	ja Ljoin_l50
 Ljoin_l51:
 	leal 304(%esp), %ecx
-	movl $-220,%edx
+	movl $-284,%edx
 	addl %edx,%ecx
 	flds (%ecx)
 	leal 304(%esp), %ecx
-	movl $-224,%edx
+	movl $-288,%edx
 	addl %edx,%ecx
 	flds (%ecx)
 	fsubp
@@ -858,7 +858,7 @@ Ljoin_l50:
 	jmp L.14
 L.14:
 	leal 304(%esp), %edi
-	movl $-224,%ecx
+	movl $-288,%ecx
 	addl %ecx,%edi
 	flds (%edi)
 	leal 304(%esp), %edi
@@ -875,22 +875,22 @@ L.15:
 	movl %edi,(%ecx)
 	leal f,%edi
 	leal 304(%esp), %ecx
-	movl $-216,%edx
+	movl $-280,%edx
 	addl %edx,%ecx
 	movl (%edi),%edi
 	movl %edi,(%ecx)
 	leal f_9,%edi
 	leal 304(%esp), %ecx
-	movl $-212,%edx
+	movl $-276,%edx
 	addl %edx,%ecx
 	movl (%edi),%edi
 	movl %edi,(%ecx)
 	leal 304(%esp), %edi
-	movl $-216,%ecx
+	movl $-280,%ecx
 	addl %ecx,%edi
 	flds (%edi)
 	leal 304(%esp), %edi
-	movl $-212,%ecx
+	movl $-276,%ecx
 	addl %ecx,%edi
 	flds (%edi)
 	fcompp
@@ -899,11 +899,11 @@ L.15:
 	ja Ljoin_l48
 Ljoin_l49:
 	leal 304(%esp), %eax
-	movl $-212,%ecx
+	movl $-276,%ecx
 	addl %ecx,%eax
 	flds (%eax)
 	leal 304(%esp), %eax
-	movl $-216,%ecx
+	movl $-280,%ecx
 	addl %ecx,%eax
 	flds (%eax)
 	fsubp
@@ -922,7 +922,7 @@ Ljoin_l48:
 	jmp L.17
 L.17:
 	leal 304(%esp), %edi
-	movl $-216,%eax
+	movl $-280,%eax
 	addl %eax,%edi
 	flds (%edi)
 	leal 304(%esp), %edi
@@ -940,17 +940,17 @@ L.18:
 	leal f,%edi
 	flds (%edi)
 	leal 304(%esp), %edi
-	movl $-208,%eax
+	movl $-128,%eax
 	addl %eax,%edi
 	fstpl (%edi)
 	leal 304(%esp), %edi
-	movl $-208,%eax
+	movl $-128,%eax
 	addl %eax,%edi
 	leal d,%eax
 	fildq (%edi)
 	fistpq (%eax)
 	leal 304(%esp), %edi
-	movl $-208,%eax
+	movl $-128,%eax
 	addl %eax,%edi
 	leal D,%eax
 	fildq (%edi)
@@ -962,12 +962,12 @@ Ljoin_l47:
 	fildq (%ecx)
 	fistpq (%edi)
 	leal 304(%esp), %ecx
-	movl $-200,%edx
+	movl $-272,%edx
 	addl %edx,%ecx
 	fildq (%edi)
 	fistpq (%ecx)
 	leal 304(%esp), %edi
-	movl $-200,%ecx
+	movl $-272,%ecx
 	addl %ecx,%edi
 	fldl (%edi)
 	leal 304(%esp), %edi
@@ -991,16 +991,16 @@ Ljoin_l47:
 	movl %ecx,(%edi)
 	leal f_23,%edi
 	leal 304(%esp), %ecx
-	movl $-192,%edx
+	movl $-264,%edx
 	addl %edx,%ecx
 	fildq (%edi)
 	fistpq (%ecx)
 	leal 304(%esp), %edi
-	movl $-200,%ecx
+	movl $-272,%ecx
 	addl %ecx,%edi
 	fldl (%edi)
 	leal 304(%esp), %edi
-	movl $-192,%ecx
+	movl $-264,%ecx
 	addl %ecx,%edi
 	fldl (%edi)
 	fcompp
@@ -1009,11 +1009,11 @@ Ljoin_l47:
 	ja Ljoin_l43
 Ljoin_l44:
 	leal 304(%esp), %edi
-	movl $-192,%ecx
+	movl $-264,%ecx
 	addl %ecx,%edi
 	fldl (%edi)
 	leal 304(%esp), %edi
-	movl $-200,%ecx
+	movl $-272,%ecx
 	addl %ecx,%edi
 	fldl (%edi)
 	fsubp
@@ -1032,7 +1032,7 @@ Ljoin_l43:
 	jmp L.21
 L.21:
 	leal 304(%esp), %edi
-	movl $-200,%ecx
+	movl $-272,%ecx
 	addl %ecx,%edi
 	fldl (%edi)
 	leal 304(%esp), %edi
@@ -1049,22 +1049,22 @@ L.22:
 	movb %al,(%edi)
 	leal d,%edi
 	leal 304(%esp), %ecx
-	movl $-184,%edx
+	movl $-256,%edx
 	addl %edx,%ecx
 	fildq (%edi)
 	fistpq (%ecx)
 	leal f_23,%edi
 	leal 304(%esp), %ecx
-	movl $-176,%edx
+	movl $-248,%edx
 	addl %edx,%ecx
 	fildq (%edi)
 	fistpq (%ecx)
 	leal 304(%esp), %edi
-	movl $-184,%ecx
+	movl $-256,%ecx
 	addl %ecx,%edi
 	fldl (%edi)
 	leal 304(%esp), %edi
-	movl $-176,%ecx
+	movl $-248,%ecx
 	addl %ecx,%edi
 	fldl (%edi)
 	fcompp
@@ -1073,11 +1073,11 @@ L.22:
 	ja Ljoin_l41
 Ljoin_l42:
 	leal 304(%esp), %edi
-	movl $-176,%ecx
+	movl $-248,%ecx
 	addl %ecx,%edi
 	fldl (%edi)
 	leal 304(%esp), %edi
-	movl $-184,%ecx
+	movl $-256,%ecx
 	addl %ecx,%edi
 	fldl (%edi)
 	fsubp
@@ -1096,7 +1096,7 @@ Ljoin_l41:
 	jmp L.25
 L.25:
 	leal 304(%esp), %edi
-	movl $-184,%ecx
+	movl $-256,%ecx
 	addl %ecx,%edi
 	fldl (%edi)
 	leal 304(%esp), %edi
@@ -1113,22 +1113,22 @@ L.26:
 	movw %ax,(%edi)
 	leal d,%edi
 	leal 304(%esp), %ecx
-	movl $-168,%edx
+	movl $-240,%edx
 	addl %edx,%ecx
 	fildq (%edi)
 	fistpq (%ecx)
 	leal f_23,%edi
 	leal 304(%esp), %ecx
-	movl $-160,%edx
+	movl $-232,%edx
 	addl %edx,%ecx
 	fildq (%edi)
 	fistpq (%ecx)
 	leal 304(%esp), %edi
-	movl $-168,%ecx
+	movl $-240,%ecx
 	addl %ecx,%edi
 	fldl (%edi)
 	leal 304(%esp), %edi
-	movl $-160,%ecx
+	movl $-232,%ecx
 	addl %ecx,%edi
 	fldl (%edi)
 	fcompp
@@ -1137,11 +1137,11 @@ L.26:
 	ja Ljoin_l39
 Ljoin_l40:
 	leal 304(%esp), %ecx
-	movl $-160,%edx
+	movl $-232,%edx
 	addl %edx,%ecx
 	fldl (%ecx)
 	leal 304(%esp), %ecx
-	movl $-168,%edx
+	movl $-240,%edx
 	addl %edx,%ecx
 	fldl (%ecx)
 	fsubp
@@ -1160,7 +1160,7 @@ Ljoin_l39:
 	jmp L.28
 L.28:
 	leal 304(%esp), %edi
-	movl $-168,%ecx
+	movl $-240,%ecx
 	addl %ecx,%edi
 	fldl (%edi)
 	leal 304(%esp), %edi
@@ -1177,22 +1177,22 @@ L.29:
 	movl %edi,(%ecx)
 	leal d,%edi
 	leal 304(%esp), %ecx
-	movl $-152,%edx
+	movl $-224,%edx
 	addl %edx,%ecx
 	fildq (%edi)
 	fistpq (%ecx)
 	leal f_23,%edi
 	leal 304(%esp), %ecx
-	movl $-144,%edx
+	movl $-216,%edx
 	addl %edx,%ecx
 	fildq (%edi)
 	fistpq (%ecx)
 	leal 304(%esp), %edi
-	movl $-152,%ecx
+	movl $-224,%ecx
 	addl %ecx,%edi
 	fldl (%edi)
 	leal 304(%esp), %edi
-	movl $-144,%ecx
+	movl $-216,%ecx
 	addl %ecx,%edi
 	fldl (%edi)
 	fcompp
@@ -1201,11 +1201,11 @@ L.29:
 	ja Ljoin_l37
 Ljoin_l38:
 	leal 304(%esp), %eax
-	movl $-144,%ecx
+	movl $-216,%ecx
 	addl %ecx,%eax
 	fldl (%eax)
 	leal 304(%esp), %eax
-	movl $-152,%ecx
+	movl $-224,%ecx
 	addl %ecx,%eax
 	fldl (%eax)
 	fsubp
@@ -1224,7 +1224,7 @@ Ljoin_l37:
 	jmp L.31
 L.31:
 	leal 304(%esp), %edi
-	movl $-152,%eax
+	movl $-224,%eax
 	addl %eax,%edi
 	fldl (%edi)
 	leal 304(%esp), %edi
@@ -1264,12 +1264,12 @@ Ljoin_l36:
 	fildq (%ecx)
 	fistpq (%edi)
 	leal 304(%esp), %ecx
-	movl $-128,%edx
+	movl $-208,%edx
 	addl %edx,%ecx
 	fildq (%edi)
 	fistpq (%ecx)
 	leal 304(%esp), %edi
-	movl $-128,%ecx
+	movl $-208,%ecx
 	addl %ecx,%edi
 	fldl (%edi)
 	leal 304(%esp), %edi
@@ -1293,16 +1293,16 @@ Ljoin_l36:
 	movl %ecx,(%edi)
 	leal f_37,%edi
 	leal 304(%esp), %ecx
-	movl $-120,%edx
+	movl $-200,%edx
 	addl %edx,%ecx
 	fildq (%edi)
 	fistpq (%ecx)
 	leal 304(%esp), %edi
-	movl $-128,%ecx
+	movl $-208,%ecx
 	addl %ecx,%edi
 	fldl (%edi)
 	leal 304(%esp), %edi
-	movl $-120,%ecx
+	movl $-200,%ecx
 	addl %ecx,%edi
 	fldl (%edi)
 	fcompp
@@ -1311,11 +1311,11 @@ Ljoin_l36:
 	ja Ljoin_l32
 Ljoin_l33:
 	leal 304(%esp), %edi
-	movl $-120,%ecx
+	movl $-200,%ecx
 	addl %ecx,%edi
 	fldl (%edi)
 	leal 304(%esp), %edi
-	movl $-128,%ecx
+	movl $-208,%ecx
 	addl %ecx,%edi
 	fldl (%edi)
 	fsubp
@@ -1334,7 +1334,7 @@ Ljoin_l32:
 	jmp L.35
 L.35:
 	leal 304(%esp), %edi
-	movl $-128,%ecx
+	movl $-208,%ecx
 	addl %ecx,%edi
 	fldl (%edi)
 	leal 304(%esp), %edi
@@ -1351,22 +1351,22 @@ L.36:
 	movb %al,(%edi)
 	leal D,%edi
 	leal 304(%esp), %ecx
-	movl $-112,%edx
+	movl $-192,%edx
 	addl %edx,%ecx
 	fildq (%edi)
 	fistpq (%ecx)
 	leal f_37,%edi
 	leal 304(%esp), %ecx
-	movl $-104,%edx
+	movl $-184,%edx
 	addl %edx,%ecx
 	fildq (%edi)
 	fistpq (%ecx)
 	leal 304(%esp), %edi
-	movl $-112,%ecx
+	movl $-192,%ecx
 	addl %ecx,%edi
 	fldl (%edi)
 	leal 304(%esp), %edi
-	movl $-104,%ecx
+	movl $-184,%ecx
 	addl %ecx,%edi
 	fldl (%edi)
 	fcompp
@@ -1375,11 +1375,11 @@ L.36:
 	ja Ljoin_l30
 Ljoin_l31:
 	leal 304(%esp), %edi
-	movl $-104,%ecx
+	movl $-184,%ecx
 	addl %ecx,%edi
 	fldl (%edi)
 	leal 304(%esp), %edi
-	movl $-112,%ecx
+	movl $-192,%ecx
 	addl %ecx,%edi
 	fldl (%edi)
 	fsubp
@@ -1398,7 +1398,7 @@ Ljoin_l30:
 	jmp L.39
 L.39:
 	leal 304(%esp), %edi
-	movl $-112,%ecx
+	movl $-192,%ecx
 	addl %ecx,%edi
 	fldl (%edi)
 	leal 304(%esp), %edi
@@ -1415,22 +1415,22 @@ L.40:
 	movw %ax,(%edi)
 	leal D,%edi
 	leal 304(%esp), %ecx
-	movl $-96,%edx
+	movl $-176,%edx
 	addl %edx,%ecx
 	fildq (%edi)
 	fistpq (%ecx)
 	leal f_37,%edi
 	leal 304(%esp), %ecx
-	movl $-88,%edx
+	movl $-168,%edx
 	addl %edx,%ecx
 	fildq (%edi)
 	fistpq (%ecx)
 	leal 304(%esp), %edi
-	movl $-96,%ecx
+	movl $-176,%ecx
 	addl %ecx,%edi
 	fldl (%edi)
 	leal 304(%esp), %edi
-	movl $-88,%ecx
+	movl $-168,%ecx
 	addl %ecx,%edi
 	fldl (%edi)
 	fcompp
@@ -1439,11 +1439,11 @@ L.40:
 	ja Ljoin_l28
 Ljoin_l29:
 	leal 304(%esp), %ecx
-	movl $-88,%edx
+	movl $-168,%edx
 	addl %edx,%ecx
 	fldl (%ecx)
 	leal 304(%esp), %ecx
-	movl $-96,%edx
+	movl $-176,%edx
 	addl %edx,%ecx
 	fldl (%ecx)
 	fsubp
@@ -1462,7 +1462,7 @@ Ljoin_l28:
 	jmp L.42
 L.42:
 	leal 304(%esp), %edi
-	movl $-96,%ecx
+	movl $-176,%ecx
 	addl %ecx,%edi
 	fldl (%edi)
 	leal 304(%esp), %edi
@@ -1479,22 +1479,22 @@ L.43:
 	movl %edi,(%ecx)
 	leal D,%edi
 	leal 304(%esp), %ecx
-	movl $-80,%edx
+	movl $-160,%edx
 	addl %edx,%ecx
 	fildq (%edi)
 	fistpq (%ecx)
 	leal f_37,%edi
 	leal 304(%esp), %ecx
-	movl $-72,%edx
+	movl $-152,%edx
 	addl %edx,%ecx
 	fildq (%edi)
 	fistpq (%ecx)
 	leal 304(%esp), %edi
-	movl $-80,%ecx
+	movl $-160,%ecx
 	addl %ecx,%edi
 	fldl (%edi)
 	leal 304(%esp), %edi
-	movl $-72,%ecx
+	movl $-152,%ecx
 	addl %ecx,%edi
 	fldl (%edi)
 	fcompp
@@ -1503,11 +1503,11 @@ L.43:
 	ja Ljoin_l26
 Ljoin_l27:
 	leal 304(%esp), %eax
-	movl $-72,%ecx
+	movl $-152,%ecx
 	addl %ecx,%eax
 	fldl (%eax)
 	leal 304(%esp), %eax
-	movl $-80,%ecx
+	movl $-160,%ecx
 	addl %ecx,%eax
 	fldl (%eax)
 	fsubp
@@ -1526,7 +1526,7 @@ Ljoin_l26:
 	jmp L.45
 L.45:
 	leal 304(%esp), %edi
-	movl $-80,%eax
+	movl $-160,%eax
 	addl %eax,%edi
 	fldl (%edi)
 	leal 304(%esp), %edi
@@ -1543,18 +1543,18 @@ L.46:
 	movl %edi,(%eax)
 	leal D,%edi
 	leal 304(%esp), %eax
-	movl $-64,%ecx
+	movl $-144,%ecx
 	addl %ecx,%eax
 	fildq (%edi)
 	fistpq (%eax)
 	leal 304(%esp), %edi
-	movl $-64,%eax
+	movl $-144,%eax
 	addl %eax,%edi
 	fldl (%edi)
 	leal f,%edi
 	fstps (%edi)
 	leal 304(%esp), %edi
-	movl $-64,%eax
+	movl $-144,%eax
 	addl %eax,%edi
 	leal d,%eax
 	fildq (%edi)
@@ -1607,58 +1607,74 @@ Lframe_l87:
 .long 0
 .long 0
 .long 0
+.long 0xffffffc0
+.long 0
+.long 0
+.long 0
+.long 0xffffffb8
+.long 0
+.long 0
+.long 0
+.long 0xffffffb0
+.long 0
+.long 0
+.long 0
+.long 0xffffffa8
+.long 0
+.long 0
+.long 0
+.long 0xffffffa0
+.long 0
+.long 0
+.long 0
+.long 0xffffff98
+.long 0
+.long 0
+.long 0
+.long 0xffffff90
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0xffffff88
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
 .long 0xfffffed0
 .long 0
-.long 0
-.long 0
+.long 0xfffffed4
 .long 0xfffffed8
-.long 0
-.long 0
-.long 0
+.long 0xfffffedc
 .long 0xfffffee0
-.long 0
-.long 0
-.long 0
+.long 0xfffffee4
 .long 0xfffffee8
+.long 0xfffffeec
+.long 0xffffff80
+.long 0
+.long 0
 .long 0
 .long 0
 .long 0
 .long 0xfffffef0
 .long 0
-.long 0
-.long 0
 .long 0xfffffef8
-.long 0
-.long 0
-.long 0
 .long 0xffffff00
-.long 0
-.long 0
-.long 0
-.long 0
 .long 0xffffff08
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
 .long 0xffffff10
-.long 0
-.long 0xffffff14
 .long 0xffffff18
-.long 0xffffff1c
 .long 0xffffff20
-.long 0xffffff24
 .long 0xffffff28
-.long 0xffffff2c
+.long 0xffffff78
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
 .long 0xffffff30
 .long 0
-.long 0
-.long 0
-.long 0
-.long 0
 .long 0xffffff38
-.long 0
 .long 0xffffff40
 .long 0xffffff48
 .long 0xffffff50
@@ -1666,22 +1682,6 @@ Lframe_l87:
 .long 0xffffff60
 .long 0xffffff68
 .long 0xffffff70
-.long 0xffffff78
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0xffffff80
-.long 0
-.long 0xffffff88
-.long 0xffffff90
-.long 0xffffff98
-.long 0xffffffa0
-.long 0xffffffa8
-.long 0xffffffb0
-.long 0xffffffb8
-.long 0xffffffc0
 .long 0
 .long 0
 .long 0
@@ -1705,58 +1705,74 @@ Lframe_l88:
 .long 0
 .long 0
 .long 0
+.long 0xffffffc0
+.long 0
+.long 0
+.long 0
+.long 0xffffffb8
+.long 0
+.long 0
+.long 0
+.long 0xffffffb0
+.long 0
+.long 0
+.long 0
+.long 0xffffffa8
+.long 0
+.long 0
+.long 0
+.long 0xffffffa0
+.long 0
+.long 0
+.long 0
+.long 0xffffff98
+.long 0
+.long 0
+.long 0
+.long 0xffffff90
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0xffffff88
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
 .long 0xfffffed0
 .long 0
-.long 0
-.long 0
+.long 0xfffffed4
 .long 0xfffffed8
-.long 0
-.long 0
-.long 0
+.long 0xfffffedc
 .long 0xfffffee0
-.long 0
-.long 0
-.long 0
+.long 0xfffffee4
 .long 0xfffffee8
+.long 0xfffffeec
+.long 0xffffff80
+.long 0
+.long 0
 .long 0
 .long 0
 .long 0
 .long 0xfffffef0
 .long 0
-.long 0
-.long 0
 .long 0xfffffef8
-.long 0
-.long 0
-.long 0
 .long 0xffffff00
-.long 0
-.long 0
-.long 0
-.long 0
 .long 0xffffff08
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
 .long 0xffffff10
-.long 0
-.long 0xffffff14
 .long 0xffffff18
-.long 0xffffff1c
 .long 0xffffff20
-.long 0xffffff24
 .long 0xffffff28
-.long 0xffffff2c
+.long 0xffffff78
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
 .long 0xffffff30
 .long 0
-.long 0
-.long 0
-.long 0
-.long 0
 .long 0xffffff38
-.long 0
 .long 0xffffff40
 .long 0xffffff48
 .long 0xffffff50
@@ -1764,22 +1780,6 @@ Lframe_l88:
 .long 0xffffff60
 .long 0xffffff68
 .long 0xffffff70
-.long 0xffffff78
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0xffffff80
-.long 0
-.long 0xffffff88
-.long 0xffffff90
-.long 0xffffff98
-.long 0xffffffa0
-.long 0xffffffa8
-.long 0xffffffb0
-.long 0xffffffb8
-.long 0xffffffc0
 .long 0
 .long 0
 .long 0
@@ -1803,58 +1803,74 @@ Lframe_l89:
 .long 0
 .long 0
 .long 0
+.long 0xffffffc0
+.long 0
+.long 0
+.long 0
+.long 0xffffffb8
+.long 0
+.long 0
+.long 0
+.long 0xffffffb0
+.long 0
+.long 0
+.long 0
+.long 0xffffffa8
+.long 0
+.long 0
+.long 0
+.long 0xffffffa0
+.long 0
+.long 0
+.long 0
+.long 0xffffff98
+.long 0
+.long 0
+.long 0
+.long 0xffffff90
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0xffffff88
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
 .long 0xfffffed0
 .long 0
-.long 0
-.long 0
+.long 0xfffffed4
 .long 0xfffffed8
-.long 0
-.long 0
-.long 0
+.long 0xfffffedc
 .long 0xfffffee0
-.long 0
-.long 0
-.long 0
+.long 0xfffffee4
 .long 0xfffffee8
+.long 0xfffffeec
+.long 0xffffff80
+.long 0
+.long 0
 .long 0
 .long 0
 .long 0
 .long 0xfffffef0
 .long 0
-.long 0
-.long 0
 .long 0xfffffef8
-.long 0
-.long 0
-.long 0
 .long 0xffffff00
-.long 0
-.long 0
-.long 0
-.long 0
 .long 0xffffff08
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
 .long 0xffffff10
-.long 0
-.long 0xffffff14
 .long 0xffffff18
-.long 0xffffff1c
 .long 0xffffff20
-.long 0xffffff24
 .long 0xffffff28
-.long 0xffffff2c
+.long 0xffffff78
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
 .long 0xffffff30
 .long 0
-.long 0
-.long 0
-.long 0
-.long 0
 .long 0xffffff38
-.long 0
 .long 0xffffff40
 .long 0xffffff48
 .long 0xffffff50
@@ -1862,22 +1878,6 @@ Lframe_l89:
 .long 0xffffff60
 .long 0xffffff68
 .long 0xffffff70
-.long 0xffffff78
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0xffffff80
-.long 0
-.long 0xffffff88
-.long 0xffffff90
-.long 0xffffff98
-.long 0xffffffa0
-.long 0xffffffa8
-.long 0xffffffb0
-.long 0xffffffb8
-.long 0xffffffc0
 .long 0
 .long 0
 .long 0
@@ -1901,58 +1901,74 @@ Lframe_l90:
 .long 0
 .long 0
 .long 0
+.long 0xffffffc0
+.long 0
+.long 0
+.long 0
+.long 0xffffffb8
+.long 0
+.long 0
+.long 0
+.long 0xffffffb0
+.long 0
+.long 0
+.long 0
+.long 0xffffffa8
+.long 0
+.long 0
+.long 0
+.long 0xffffffa0
+.long 0
+.long 0
+.long 0
+.long 0xffffff98
+.long 0
+.long 0
+.long 0
+.long 0xffffff90
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0xffffff88
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
 .long 0xfffffed0
 .long 0
-.long 0
-.long 0
+.long 0xfffffed4
 .long 0xfffffed8
-.long 0
-.long 0
-.long 0
+.long 0xfffffedc
 .long 0xfffffee0
-.long 0
-.long 0
-.long 0
+.long 0xfffffee4
 .long 0xfffffee8
+.long 0xfffffeec
+.long 0xffffff80
+.long 0
+.long 0
 .long 0
 .long 0
 .long 0
 .long 0xfffffef0
 .long 0
-.long 0
-.long 0
 .long 0xfffffef8
-.long 0
-.long 0
-.long 0
 .long 0xffffff00
-.long 0
-.long 0
-.long 0
-.long 0
 .long 0xffffff08
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
 .long 0xffffff10
-.long 0
-.long 0xffffff14
 .long 0xffffff18
-.long 0xffffff1c
 .long 0xffffff20
-.long 0xffffff24
 .long 0xffffff28
-.long 0xffffff2c
+.long 0xffffff78
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
 .long 0xffffff30
 .long 0
-.long 0
-.long 0
-.long 0
-.long 0
 .long 0xffffff38
-.long 0
 .long 0xffffff40
 .long 0xffffff48
 .long 0xffffff50
@@ -1960,22 +1976,6 @@ Lframe_l90:
 .long 0xffffff60
 .long 0xffffff68
 .long 0xffffff70
-.long 0xffffff78
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0xffffff80
-.long 0
-.long 0xffffff88
-.long 0xffffff90
-.long 0xffffff98
-.long 0xffffffa0
-.long 0xffffffa8
-.long 0xffffffb0
-.long 0xffffffb8
-.long 0xffffffc0
 .long 0
 .long 0
 .long 0
@@ -1999,58 +1999,74 @@ Lframe_l91:
 .long 0
 .long 0
 .long 0
+.long 0xffffffc0
+.long 0
+.long 0
+.long 0
+.long 0xffffffb8
+.long 0
+.long 0
+.long 0
+.long 0xffffffb0
+.long 0
+.long 0
+.long 0
+.long 0xffffffa8
+.long 0
+.long 0
+.long 0
+.long 0xffffffa0
+.long 0
+.long 0
+.long 0
+.long 0xffffff98
+.long 0
+.long 0
+.long 0
+.long 0xffffff90
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0xffffff88
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
 .long 0xfffffed0
 .long 0
-.long 0
-.long 0
+.long 0xfffffed4
 .long 0xfffffed8
-.long 0
-.long 0
-.long 0
+.long 0xfffffedc
 .long 0xfffffee0
-.long 0
-.long 0
-.long 0
+.long 0xfffffee4
 .long 0xfffffee8
+.long 0xfffffeec
+.long 0xffffff80
+.long 0
+.long 0
 .long 0
 .long 0
 .long 0
 .long 0xfffffef0
 .long 0
-.long 0
-.long 0
 .long 0xfffffef8
-.long 0
-.long 0
-.long 0
 .long 0xffffff00
-.long 0
-.long 0
-.long 0
-.long 0
 .long 0xffffff08
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
 .long 0xffffff10
-.long 0
-.long 0xffffff14
 .long 0xffffff18
-.long 0xffffff1c
 .long 0xffffff20
-.long 0xffffff24
 .long 0xffffff28
-.long 0xffffff2c
+.long 0xffffff78
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
 .long 0xffffff30
 .long 0
-.long 0
-.long 0
-.long 0
-.long 0
 .long 0xffffff38
-.long 0
 .long 0xffffff40
 .long 0xffffff48
 .long 0xffffff50
@@ -2058,22 +2074,6 @@ Lframe_l91:
 .long 0xffffff60
 .long 0xffffff68
 .long 0xffffff70
-.long 0xffffff78
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0xffffff80
-.long 0
-.long 0xffffff88
-.long 0xffffff90
-.long 0xffffff98
-.long 0xffffffa0
-.long 0xffffffa8
-.long 0xffffffb0
-.long 0xffffffb8
-.long 0xffffffc0
 .long 0
 .long 0
 .long 0
@@ -2097,58 +2097,74 @@ Lframe_l92:
 .long 0
 .long 0
 .long 0
+.long 0xffffffc0
+.long 0
+.long 0
+.long 0
+.long 0xffffffb8
+.long 0
+.long 0
+.long 0
+.long 0xffffffb0
+.long 0
+.long 0
+.long 0
+.long 0xffffffa8
+.long 0
+.long 0
+.long 0
+.long 0xffffffa0
+.long 0
+.long 0
+.long 0
+.long 0xffffff98
+.long 0
+.long 0
+.long 0
+.long 0xffffff90
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0xffffff88
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
 .long 0xfffffed0
 .long 0
-.long 0
-.long 0
+.long 0xfffffed4
 .long 0xfffffed8
-.long 0
-.long 0
-.long 0
+.long 0xfffffedc
 .long 0xfffffee0
-.long 0
-.long 0
-.long 0
+.long 0xfffffee4
 .long 0xfffffee8
+.long 0xfffffeec
+.long 0xffffff80
+.long 0
+.long 0
 .long 0
 .long 0
 .long 0
 .long 0xfffffef0
 .long 0
-.long 0
-.long 0
 .long 0xfffffef8
-.long 0
-.long 0
-.long 0
 .long 0xffffff00
-.long 0
-.long 0
-.long 0
-.long 0
 .long 0xffffff08
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
 .long 0xffffff10
-.long 0
-.long 0xffffff14
 .long 0xffffff18
-.long 0xffffff1c
 .long 0xffffff20
-.long 0xffffff24
 .long 0xffffff28
-.long 0xffffff2c
+.long 0xffffff78
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
 .long 0xffffff30
 .long 0
-.long 0
-.long 0
-.long 0
-.long 0
 .long 0xffffff38
-.long 0
 .long 0xffffff40
 .long 0xffffff48
 .long 0xffffff50
@@ -2156,22 +2172,6 @@ Lframe_l92:
 .long 0xffffff60
 .long 0xffffff68
 .long 0xffffff70
-.long 0xffffff78
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0xffffff80
-.long 0
-.long 0xffffff88
-.long 0xffffff90
-.long 0xffffff98
-.long 0xffffffa0
-.long 0xffffffa8
-.long 0xffffffb0
-.long 0xffffffb8
-.long 0xffffffc0
 .long 0
 .long 0
 .long 0
@@ -2195,58 +2195,74 @@ Lframe_l93:
 .long 0
 .long 0
 .long 0
+.long 0xffffffc0
+.long 0
+.long 0
+.long 0
+.long 0xffffffb8
+.long 0
+.long 0
+.long 0
+.long 0xffffffb0
+.long 0
+.long 0
+.long 0
+.long 0xffffffa8
+.long 0
+.long 0
+.long 0
+.long 0xffffffa0
+.long 0
+.long 0
+.long 0
+.long 0xffffff98
+.long 0
+.long 0
+.long 0
+.long 0xffffff90
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0xffffff88
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
 .long 0xfffffed0
 .long 0
-.long 0
-.long 0
+.long 0xfffffed4
 .long 0xfffffed8
-.long 0
-.long 0
-.long 0
+.long 0xfffffedc
 .long 0xfffffee0
-.long 0
-.long 0
-.long 0
+.long 0xfffffee4
 .long 0xfffffee8
+.long 0xfffffeec
+.long 0xffffff80
+.long 0
+.long 0
 .long 0
 .long 0
 .long 0
 .long 0xfffffef0
 .long 0
-.long 0
-.long 0
 .long 0xfffffef8
-.long 0
-.long 0
-.long 0
 .long 0xffffff00
-.long 0
-.long 0
-.long 0
-.long 0
 .long 0xffffff08
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
 .long 0xffffff10
-.long 0
-.long 0xffffff14
 .long 0xffffff18
-.long 0xffffff1c
 .long 0xffffff20
-.long 0xffffff24
 .long 0xffffff28
-.long 0xffffff2c
+.long 0xffffff78
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
 .long 0xffffff30
 .long 0
-.long 0
-.long 0
-.long 0
-.long 0
 .long 0xffffff38
-.long 0
 .long 0xffffff40
 .long 0xffffff48
 .long 0xffffff50
@@ -2254,22 +2270,6 @@ Lframe_l93:
 .long 0xffffff60
 .long 0xffffff68
 .long 0xffffff70
-.long 0xffffff78
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0xffffff80
-.long 0
-.long 0xffffff88
-.long 0xffffff90
-.long 0xffffff98
-.long 0xffffffa0
-.long 0xffffffa8
-.long 0xffffffb0
-.long 0xffffffb8
-.long 0xffffffc0
 .long 0
 .long 0
 .long 0
@@ -2293,58 +2293,74 @@ Lframe_l94:
 .long 0
 .long 0
 .long 0
+.long 0xffffffc0
+.long 0
+.long 0
+.long 0
+.long 0xffffffb8
+.long 0
+.long 0
+.long 0
+.long 0xffffffb0
+.long 0
+.long 0
+.long 0
+.long 0xffffffa8
+.long 0
+.long 0
+.long 0
+.long 0xffffffa0
+.long 0
+.long 0
+.long 0
+.long 0xffffff98
+.long 0
+.long 0
+.long 0
+.long 0xffffff90
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0xffffff88
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
 .long 0xfffffed0
 .long 0
-.long 0
-.long 0
+.long 0xfffffed4
 .long 0xfffffed8
-.long 0
-.long 0
-.long 0
+.long 0xfffffedc
 .long 0xfffffee0
-.long 0
-.long 0
-.long 0
+.long 0xfffffee4
 .long 0xfffffee8
+.long 0xfffffeec
+.long 0xffffff80
+.long 0
+.long 0
 .long 0
 .long 0
 .long 0
 .long 0xfffffef0
 .long 0
-.long 0
-.long 0
 .long 0xfffffef8
-.long 0
-.long 0
-.long 0
 .long 0xffffff00
-.long 0
-.long 0
-.long 0
-.long 0
 .long 0xffffff08
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
 .long 0xffffff10
-.long 0
-.long 0xffffff14
 .long 0xffffff18
-.long 0xffffff1c
 .long 0xffffff20
-.long 0xffffff24
 .long 0xffffff28
-.long 0xffffff2c
+.long 0xffffff78
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
 .long 0xffffff30
 .long 0
-.long 0
-.long 0
-.long 0
-.long 0
 .long 0xffffff38
-.long 0
 .long 0xffffff40
 .long 0xffffff48
 .long 0xffffff50
@@ -2352,22 +2368,6 @@ Lframe_l94:
 .long 0xffffff60
 .long 0xffffff68
 .long 0xffffff70
-.long 0xffffff78
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0xffffff80
-.long 0
-.long 0xffffff88
-.long 0xffffff90
-.long 0xffffff98
-.long 0xffffffa0
-.long 0xffffffa8
-.long 0xffffffb0
-.long 0xffffffb8
-.long 0xffffffc0
 .long 0
 .long 0
 .long 0
@@ -2391,58 +2391,74 @@ Lframe_l95:
 .long 0
 .long 0
 .long 0
+.long 0xffffffc0
+.long 0
+.long 0
+.long 0
+.long 0xffffffb8
+.long 0
+.long 0
+.long 0
+.long 0xffffffb0
+.long 0
+.long 0
+.long 0
+.long 0xffffffa8
+.long 0
+.long 0
+.long 0
+.long 0xffffffa0
+.long 0
+.long 0
+.long 0
+.long 0xffffff98
+.long 0
+.long 0
+.long 0
+.long 0xffffff90
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0xffffff88
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
 .long 0xfffffed0
 .long 0
-.long 0
-.long 0
+.long 0xfffffed4
 .long 0xfffffed8
-.long 0
-.long 0
-.long 0
+.long 0xfffffedc
 .long 0xfffffee0
-.long 0
-.long 0
-.long 0
+.long 0xfffffee4
 .long 0xfffffee8
+.long 0xfffffeec
+.long 0xffffff80
+.long 0
+.long 0
 .long 0
 .long 0
 .long 0
 .long 0xfffffef0
 .long 0
-.long 0
-.long 0
 .long 0xfffffef8
-.long 0
-.long 0
-.long 0
 .long 0xffffff00
-.long 0
-.long 0
-.long 0
-.long 0
 .long 0xffffff08
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
 .long 0xffffff10
-.long 0
-.long 0xffffff14
 .long 0xffffff18
-.long 0xffffff1c
 .long 0xffffff20
-.long 0xffffff24
 .long 0xffffff28
-.long 0xffffff2c
+.long 0xffffff78
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
 .long 0xffffff30
 .long 0
-.long 0
-.long 0
-.long 0
-.long 0
 .long 0xffffff38
-.long 0
 .long 0xffffff40
 .long 0xffffff48
 .long 0xffffff50
@@ -2450,22 +2466,6 @@ Lframe_l95:
 .long 0xffffff60
 .long 0xffffff68
 .long 0xffffff70
-.long 0xffffff78
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0xffffff80
-.long 0
-.long 0xffffff88
-.long 0xffffff90
-.long 0xffffff98
-.long 0xffffffa0
-.long 0xffffffa8
-.long 0xffffffb0
-.long 0xffffffb8
-.long 0xffffffc0
 .long 0
 .long 0
 .long 0
@@ -2489,58 +2489,74 @@ Lframe_l96:
 .long 0
 .long 0
 .long 0
+.long 0xffffffc0
+.long 0
+.long 0
+.long 0
+.long 0xffffffb8
+.long 0
+.long 0
+.long 0
+.long 0xffffffb0
+.long 0
+.long 0
+.long 0
+.long 0xffffffa8
+.long 0
+.long 0
+.long 0
+.long 0xffffffa0
+.long 0
+.long 0
+.long 0
+.long 0xffffff98
+.long 0
+.long 0
+.long 0
+.long 0xffffff90
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0xffffff88
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
 .long 0xfffffed0
 .long 0
-.long 0
-.long 0
+.long 0xfffffed4
 .long 0xfffffed8
-.long 0
-.long 0
-.long 0
+.long 0xfffffedc
 .long 0xfffffee0
-.long 0
-.long 0
-.long 0
+.long 0xfffffee4
 .long 0xfffffee8
+.long 0xfffffeec
+.long 0xffffff80
+.long 0
+.long 0
 .long 0
 .long 0
 .long 0
 .long 0xfffffef0
 .long 0
-.long 0
-.long 0
 .long 0xfffffef8
-.long 0
-.long 0
-.long 0
 .long 0xffffff00
-.long 0
-.long 0
-.long 0
-.long 0
 .long 0xffffff08
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
 .long 0xffffff10
-.long 0
-.long 0xffffff14
 .long 0xffffff18
-.long 0xffffff1c
 .long 0xffffff20
-.long 0xffffff24
 .long 0xffffff28
-.long 0xffffff2c
+.long 0xffffff78
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
 .long 0xffffff30
 .long 0
-.long 0
-.long 0
-.long 0
-.long 0
 .long 0xffffff38
-.long 0
 .long 0xffffff40
 .long 0xffffff48
 .long 0xffffff50
@@ -2548,22 +2564,6 @@ Lframe_l96:
 .long 0xffffff60
 .long 0xffffff68
 .long 0xffffff70
-.long 0xffffff78
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0xffffff80
-.long 0
-.long 0xffffff88
-.long 0xffffff90
-.long 0xffffff98
-.long 0xffffffa0
-.long 0xffffffa8
-.long 0xffffffb0
-.long 0xffffffb8
-.long 0xffffffc0
 .long 0
 .long 0
 .long 0
@@ -2587,58 +2587,74 @@ Lframe_l97:
 .long 0
 .long 0
 .long 0
+.long 0xffffffc0
+.long 0
+.long 0
+.long 0
+.long 0xffffffb8
+.long 0
+.long 0
+.long 0
+.long 0xffffffb0
+.long 0
+.long 0
+.long 0
+.long 0xffffffa8
+.long 0
+.long 0
+.long 0
+.long 0xffffffa0
+.long 0
+.long 0
+.long 0
+.long 0xffffff98
+.long 0
+.long 0
+.long 0
+.long 0xffffff90
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0xffffff88
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
 .long 0xfffffed0
 .long 0
-.long 0
-.long 0
+.long 0xfffffed4
 .long 0xfffffed8
-.long 0
-.long 0
-.long 0
+.long 0xfffffedc
 .long 0xfffffee0
-.long 0
-.long 0
-.long 0
+.long 0xfffffee4
 .long 0xfffffee8
+.long 0xfffffeec
+.long 0xffffff80
+.long 0
+.long 0
 .long 0
 .long 0
 .long 0
 .long 0xfffffef0
 .long 0
-.long 0
-.long 0
 .long 0xfffffef8
-.long 0
-.long 0
-.long 0
 .long 0xffffff00
-.long 0
-.long 0
-.long 0
-.long 0
 .long 0xffffff08
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
 .long 0xffffff10
-.long 0
-.long 0xffffff14
 .long 0xffffff18
-.long 0xffffff1c
 .long 0xffffff20
-.long 0xffffff24
 .long 0xffffff28
-.long 0xffffff2c
+.long 0xffffff78
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
 .long 0xffffff30
 .long 0
-.long 0
-.long 0
-.long 0
-.long 0
 .long 0xffffff38
-.long 0
 .long 0xffffff40
 .long 0xffffff48
 .long 0xffffff50
@@ -2646,22 +2662,6 @@ Lframe_l97:
 .long 0xffffff60
 .long 0xffffff68
 .long 0xffffff70
-.long 0xffffff78
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0xffffff80
-.long 0
-.long 0xffffff88
-.long 0xffffff90
-.long 0xffffff98
-.long 0xffffffa0
-.long 0xffffffa8
-.long 0xffffffb0
-.long 0xffffffb8
-.long 0xffffffc0
 .long 0
 .long 0
 .long 0

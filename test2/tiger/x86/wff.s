@@ -1678,14 +1678,14 @@ Ljoin_l168:
 	movl %esi,(%ecx)
 	movl $0,%esi
 	cmpl %esi,%eax
-	jle Ljoin_l181
-Ljoin_l182:
+	jle Ljoin_l178
+Ljoin_l179:
 	movl $0,%edi
-	jmp Ljoin_l180
-Ljoin_l181:
+	jmp Ljoin_l177
+Ljoin_l178:
 	movl $-1,%edi
-	jmp Ljoin_l180
-Ljoin_l180:
+	jmp Ljoin_l177
+Ljoin_l177:
 	jmp LifEnd_114
 LifEnd_114:
 	movl $0,%esi
@@ -1749,14 +1749,14 @@ Ljoin_l149:
 	movl %edi,(%ecx)
 	movl $0,%ecx
 	cmpl %ecx,%eax
-	jle Ljoin_l178
-Ljoin_l179:
+	jle Ljoin_l181
+Ljoin_l182:
 	movl $0,%edx
-	jmp Ljoin_l177
-Ljoin_l178:
+	jmp Ljoin_l180
+Ljoin_l181:
 	movl $-1,%edx
-	jmp Ljoin_l177
-Ljoin_l177:
+	jmp Ljoin_l180
+Ljoin_l180:
 	jmp LifEnd_130
 LifEnd_130:
 	movl $0,%ecx

@@ -1302,14 +1302,14 @@ Ljoin_l150:
 	movl %esi,(%ecx)
 	movl $0,%esi
 	cmpl %esi,%eax
-	jle Ljoin_l163
-Ljoin_l164:
+	jle Ljoin_l160
+Ljoin_l161:
 	movl $0,%edi
-	jmp Ljoin_l162
-Ljoin_l163:
+	jmp Ljoin_l159
+Ljoin_l160:
 	movl $-1,%edi
-	jmp Ljoin_l162
-Ljoin_l162:
+	jmp Ljoin_l159
+Ljoin_l159:
 	jmp LifEnd_102
 LifEnd_102:
 	movl $0,%esi
@@ -1373,14 +1373,14 @@ Ljoin_l131:
 	movl %edi,(%ecx)
 	movl $0,%ecx
 	cmpl %ecx,%eax
-	jle Ljoin_l160
-Ljoin_l161:
+	jle Ljoin_l163
+Ljoin_l164:
 	movl $0,%edx
-	jmp Ljoin_l159
-Ljoin_l160:
+	jmp Ljoin_l162
+Ljoin_l163:
 	movl $-1,%edx
-	jmp Ljoin_l159
-Ljoin_l159:
+	jmp Ljoin_l162
+Ljoin_l162:
 	jmp LifEnd_118
 LifEnd_118:
 	movl $0,%ecx

@@ -167,14 +167,14 @@ Ljoin_l64:
 Ljoin_l59:
 	movl $2,%ecx
 	cmpl %eax,%ecx
-	jbe Ljoin_l72
-Ljoin_l80:
+	jbe Ljoin_l68
+Ljoin_l75:
 	jmp Ljoin_l58
-Ljoin_l72:
+Ljoin_l68:
 	movl $3,%ecx
 	cmpl %ecx,%eax
 	jbe Ljoin_l57
-Ljoin_l79:
+Ljoin_l76:
 	jmp Ljoin_l58
 Ljoin_l58:
 	jmp Ljoin_l53
@@ -187,30 +187,30 @@ Ljoin_l52:
 Ljoin_l47:
 	movl $5,%ecx
 	cmpl %eax,%ecx
-	jbe Ljoin_l71
-Ljoin_l78:
-	jmp Ljoin_l70
-Ljoin_l71:
+	jbe Ljoin_l72
+Ljoin_l77:
+	jmp Ljoin_l71
+Ljoin_l72:
 	movl $-1,%ecx
 	cmpl %ecx,%eax
 	jbe Ljoin_l45
-Ljoin_l77:
-	jmp Ljoin_l70
-Ljoin_l70:
+Ljoin_l78:
+	jmp Ljoin_l71
+Ljoin_l71:
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	je Ljoin_l45
-Ljoin_l69:
+Ljoin_l70:
 	movl $-2147483648,%ecx
 	cmpl %eax,%ecx
-	jbe Ljoin_l68
-Ljoin_l76:
+	jbe Ljoin_l69
+Ljoin_l79:
 	jmp Ljoin_l46
-Ljoin_l68:
+Ljoin_l69:
 	movl $-1,%ecx
 	cmpl %ecx,%eax
 	jbe Ljoin_l45
-Ljoin_l75:
+Ljoin_l80:
 	jmp Ljoin_l46
 Ljoin_l46:
 	jmp Ljoin_l41

@@ -433,8 +433,8 @@ L.16:
 	addl %esi,%edi
 	movl %eax,(%edi)
 	movl %edx,48(%esp)
-	movl %ecx,44(%esp)
 	movl %eax,40(%esp)
+	movl %ecx,44(%esp)
 	call partition
 Ljoin_l90:
 	leal 56(%esp), %edi
@@ -716,8 +716,8 @@ Ljoin_l118:
 	call exchange
 Ljoin_l116:
 	movl 52(%esp),%edx
-	movl 28(%esp),%edi
 	movl 48(%esp),%eax
+	movl 28(%esp),%edi
 	movl 60(%esp),%ecx
 	jmp L.30
 Ljoin_l117:

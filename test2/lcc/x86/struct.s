@@ -539,8 +539,8 @@ Linitialize_continuations_l69:
 Lproc_body_start_l68:
 	movl %ecx,(%esp)
 	movl (%edx),%ecx
-	movl %edx,4(%esp)
 	movl %ecx,8(%esp)
+	movl %edx,4(%esp)
 	movl (%esp),%edx
 	movl (%edx),%ecx
 	movl 8(%esp),%edx
@@ -562,8 +562,8 @@ Ljoin_l77:
 	movl 4(%esp),%ecx
 	addl %edx,%ecx
 	movl (%ecx),%ecx
-	movl %ecx,20(%esp)
 	movl %edx,16(%esp)
+	movl %ecx,20(%esp)
 	movl (%esp),%edx
 	movl %edx,%ecx
 	movl 16(%esp),%edx

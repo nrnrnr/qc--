@@ -29,20 +29,20 @@ main:
 	movl (%eax),%eax
 Linitialize_continuations_l4:
 Lproc_body_start_l3:
-	fnstcw 16(%esp)
-	movzwl 16(%esp),%edx
+	fnstcw 20(%esp)
+	movzwl 20(%esp),%edx
 	andl $-3073,%edx
 	movl $0,%ecx
 	shll $10, %ecx
 	orl %ecx,%edx
-	movw %dx,16(%esp)
-	fldcw 16(%esp)
+	movw %dx,20(%esp)
+	fldcw 20(%esp)
 	movl $1,%edx
 	movl $-1067450368,%ecx
 	movl %edi,24(%esp)
 	leal 44(%esp), %edi
 	movl %edi,28(%esp)
-	movl $-24,%edi
+	movl $-28,%edi
 	movl %edi,32(%esp)
 	movl 28(%esp),%edi
 	movl %esi,36(%esp)
@@ -50,7 +50,7 @@ Lproc_body_start_l3:
 	addl %esi,%edi
 	movl %ecx,(%edi)
 	leal 44(%esp), %edi
-	movl $-24,%esi
+	movl $-28,%esi
 	addl %esi,%edi
 	flds (%edi)
 	leal 44(%esp), %edi

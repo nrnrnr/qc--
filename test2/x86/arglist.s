@@ -91,7 +91,7 @@ Lproc_body_start_l5:
 	movl 12(%esp),%esi
 	cmpl %edi,%esi
 	je Ljoin_l36
-Ljoin_l43:
+Ljoin_l48:
 	jmp Ljoin_l37
 Ljoin_l36:
 	leal ok,%edi
@@ -119,13 +119,13 @@ Ljoin_l36:
 	movl (%edi),%edi
 	movl %edi,(%esi)
 	movl %edx,60(%esp)
-	movl %ecx,56(%esp)
 	movl %eax,52(%esp)
+	movl %ecx,56(%esp)
 	call printf
 Ljoin_l35:
 	movl 60(%esp),%edx
-	movl 56(%esp),%ecx
 	movl 52(%esp),%eax
+	movl 56(%esp),%ecx
 	jmp Ljoin_l37
 Ljoin_l37:
 	leal numbers,%edi
@@ -134,7 +134,7 @@ Ljoin_l37:
 	movl (%edi),%edi
 	cmpl %edi,%ecx
 	je Ljoin_l31
-Ljoin_l44:
+Ljoin_l47:
 	jmp Ljoin_l32
 Ljoin_l31:
 	leal ok,%edi
@@ -171,7 +171,7 @@ Ljoin_l32:
 	movl 16(%esp),%esi
 	cmpl %edi,%esi
 	je Ljoin_l26
-Ljoin_l45:
+Ljoin_l46:
 	jmp Ljoin_l27
 Ljoin_l26:
 	leal ok,%edi
@@ -208,7 +208,7 @@ Ljoin_l27:
 	movl 20(%esp),%esi
 	cmpl %edi,%esi
 	je Ljoin_l21
-Ljoin_l46:
+Ljoin_l45:
 	jmp Ljoin_l22
 Ljoin_l21:
 	leal ok,%edi
@@ -245,7 +245,7 @@ Ljoin_l22:
 	movl 24(%esp),%esi
 	cmpl %edi,%esi
 	je Ljoin_l16
-Ljoin_l47:
+Ljoin_l44:
 	jmp Ljoin_l17
 Ljoin_l16:
 	leal ok,%edi
@@ -281,7 +281,7 @@ Ljoin_l17:
 	movl (%edi),%edi
 	cmpl %edi,%eax
 	je Ljoin_l11
-Ljoin_l48:
+Ljoin_l43:
 	jmp Ljoin_l12
 Ljoin_l11:
 	leal ok,%edi
@@ -492,7 +492,7 @@ Lproc_body_start_l57:
 	movl 12(%esp),%esi
 	cmpl %edi,%esi
 	je Ljoin_l73
-Ljoin_l80:
+Ljoin_l82:
 	jmp Ljoin_l74
 Ljoin_l73:
 	leal ok,%edi
@@ -522,13 +522,13 @@ Ljoin_l73:
 	movl (%edi),%edi
 	movl %edi,(%esi)
 	movl %edx,56(%esp)
-	movl %ecx,52(%esp)
 	movl %eax,48(%esp)
+	movl %ecx,52(%esp)
 	call printf
 Ljoin_l72:
 	movl 56(%esp),%edx
-	movl 52(%esp),%ecx
 	movl 48(%esp),%eax
+	movl 52(%esp),%ecx
 	jmp Ljoin_l74
 Ljoin_l74:
 	leal numbers,%edi
@@ -573,7 +573,7 @@ Ljoin_l69:
 	movl (%edi),%edi
 	cmpl %edi,%eax
 	je Ljoin_l63
-Ljoin_l82:
+Ljoin_l80:
 	jmp Ljoin_l64
 Ljoin_l63:
 	leal ok,%edi

@@ -258,22 +258,22 @@ Ljoin_l33:
 	movl $0,%edi
 	movl 52(%esp),%esi
 	cmpl %edi,%esi
-	jne Ljoin_l50
+	jne Ljoin_l51
 Ljoin_l52:
 	movl 48(%esp),%eax
 	jmp Ljoin_l27
-Ljoin_l50:
+Ljoin_l51:
 	movl $-2147483648,%edi
 	movl 48(%esp),%eax
 	cmpl %edi,%eax
-	je Ljoin_l49
-Ljoin_l55:
+	je Ljoin_l50
+Ljoin_l58:
 	jmp Ljoin_l26
-Ljoin_l49:
+Ljoin_l50:
 	movl $-1,%edi
 	cmpl %edi,%esi
 	je Ljoin_l27
-Ljoin_l56:
+Ljoin_l57:
 	jmp Ljoin_l26
 Ljoin_l26:
 	movl %eax,%edx
@@ -288,14 +288,14 @@ Ljoin_l27:
 Ljoin_l25:
 	movl $-2147483648,%ecx
 	cmpl %ecx,%eax
-	je Ljoin_l51
-Ljoin_l57:
+	je Ljoin_l49
+Ljoin_l56:
 	jmp Ljoin_l24
-Ljoin_l51:
+Ljoin_l49:
 	movl $-1,%ecx
 	cmpl %ecx,%esi
 	je Ljoin_l23
-Ljoin_l58:
+Ljoin_l55:
 	jmp Ljoin_l24
 Ljoin_l24:
 	leal no,%ecx

@@ -77,8 +77,8 @@ loop:
 	movl 28(%esp),%edi
 	movl %edi,(%esi)
 	movl %edx,40(%esp)
-	movl %eax,32(%esp)
 	movl %ecx,36(%esp)
+	movl %eax,32(%esp)
 	call printf
 Ljoin_l14:
 	movl $1,%edi

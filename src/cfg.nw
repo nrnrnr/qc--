@@ -462,10 +462,8 @@ val exit       : 'i cfg -> 'i node
 We can observe all the nodes.
 We do so by providing higher-order functions.
 These functions work by enumerating  \emph{basic blocks}.
-A basic
-block is a sequence of nodes beginning in a \emph{head node} (a join
-point or the entry 
-node) and ending in a control-transfer node or the exit node.
+A basic block is a sequence of nodes beginning in a \emph{head node} (a join
+point or the entry node) and ending in a control-transfer node or the exit node.
 The basic blocks are enumerated in no particular order.
 Within a basic block, we enumerate nodes in order.
 If the client mutates the graph, we make no guarantees about what
@@ -1223,7 +1221,7 @@ We have several functions to iterate or fold over the nodes of the graph.
 [[fold_heads]] folds over the entry node and the join points.
 [[fold_nodes]] folds over all the nodes in the cfg.
 <<graph and node observers implementation>>=
-let fold_heads f zero cfg = List.fold_right f (heads cfg) zero
+let fold_heads f zero cfg = List.fold_left (fun x y -> f y x) zero (heads cfg)
 @ 
 In [[fold_nodes]], we are careful to make sure we visit every single node in the graph,
 regardless of whether it is accessible from the entry or exit nodes, via predecessors
@@ -1238,6 +1236,7 @@ function [[cons]] to affect the traversal.
 <<graph and node observers implementation>>=
 <<join node set operations>>
 let fold_nodes cons nil g =
+  let cons x y = cons y x in
   let rec vchildren children k set lst = 
     match children with
     | c::rst -> vnode c (vchildren rst k) set lst
@@ -1249,7 +1248,7 @@ let fold_nodes cons nil g =
       let preds = preds n in
       let succs = succs n in
       vchildren succs (vchildren preds k) (IS.add (num n) set) (n::lst) in
-  vnode (entry g) (fun _ lst -> List.fold_right cons lst nil)
+  vnode (entry g) (fun _ lst -> List.fold_left cons nil lst)
         IS.empty []
 let iter_nodes f = fold_nodes (fun n () -> f n) ()
 let iter_heads f = fold_heads (fun n () -> f n) ()

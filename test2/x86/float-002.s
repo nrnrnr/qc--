@@ -28,11 +28,11 @@ Lproc_body_start_l3:
 	movl $2139095040,%ecx
 	leal 56(%esp), %edx
 	movl %edi,40(%esp)
-	movl $-28,%edi
+	movl $-20,%edi
 	addl %edi,%edx
 	movl %ecx,(%edx)
 	leal 56(%esp), %edi
-	movl $-28,%ecx
+	movl $-20,%ecx
 	addl %ecx,%edi
 	flds (%edi)
 	leal 56(%esp), %edi
@@ -44,11 +44,11 @@ Lproc_body_start_l3:
 Ljoin_l149:
 	movl $2139095040,%edi
 	leal 56(%esp), %ecx
-	movl $-28,%edx
+	movl $-20,%edx
 	addl %edx,%ecx
 	movl %edi,(%ecx)
 	leal 56(%esp), %edi
-	movl $-28,%ecx
+	movl $-20,%ecx
 	addl %ecx,%edi
 	flds (%edi)
 	leal 56(%esp), %edi
@@ -60,11 +60,11 @@ Ljoin_l149:
 Ljoin_l146:
 	movl $2139095040,%edi
 	leal 56(%esp), %ecx
-	movl $-28,%edx
+	movl $-20,%edx
 	addl %edx,%ecx
 	movl %edi,(%ecx)
 	leal 56(%esp), %edi
-	movl $-28,%ecx
+	movl $-20,%ecx
 	addl %ecx,%edi
 	flds (%edi)
 	leal 56(%esp), %edi
@@ -86,11 +86,11 @@ Ljoin_l143:
 	movl %edi,(%ecx)
 	movl $2139095040,%edi
 	leal 56(%esp), %ecx
-	movl $-28,%edx
+	movl $-20,%edx
 	addl %edx,%ecx
 	movl %edi,(%ecx)
 	leal 56(%esp), %edi
-	movl $-28,%ecx
+	movl $-20,%ecx
 	addl %ecx,%edi
 	flds (%edi)
 	leal 56(%esp), %edi
@@ -115,11 +115,11 @@ Ljoin_l143:
 Ljoin_l140:
 	movl $-8388608,%edi
 	leal 56(%esp), %eax
-	movl $-28,%ecx
+	movl $-20,%ecx
 	addl %ecx,%eax
 	movl %edi,(%eax)
 	leal 56(%esp), %edi
-	movl $-28,%eax
+	movl $-20,%eax
 	addl %eax,%edi
 	flds (%edi)
 	leal 56(%esp), %edi
@@ -130,11 +130,11 @@ Ljoin_l140:
 Ljoin_l137:
 	movl $-8388608,%edi
 	leal 56(%esp), %ecx
-	movl $-28,%edx
+	movl $-20,%edx
 	addl %edx,%ecx
 	movl %edi,(%ecx)
 	leal 56(%esp), %edi
-	movl $-28,%ecx
+	movl $-20,%ecx
 	addl %ecx,%edi
 	flds (%edi)
 	leal 56(%esp), %edi
@@ -146,11 +146,11 @@ Ljoin_l137:
 Ljoin_l134:
 	movl $-8388608,%edi
 	leal 56(%esp), %ecx
-	movl $-28,%edx
+	movl $-20,%edx
 	addl %edx,%ecx
 	movl %edi,(%ecx)
 	leal 56(%esp), %edi
-	movl $-28,%ecx
+	movl $-20,%ecx
 	addl %ecx,%edi
 	flds (%edi)
 	leal 56(%esp), %edi
@@ -172,11 +172,11 @@ Ljoin_l131:
 	movl %edi,(%ecx)
 	movl $-8388608,%edi
 	leal 56(%esp), %ecx
-	movl $-28,%edx
+	movl $-20,%edx
 	addl %edx,%ecx
 	movl %edi,(%ecx)
 	leal 56(%esp), %edi
-	movl $-28,%ecx
+	movl $-20,%ecx
 	addl %ecx,%edi
 	flds (%edi)
 	leal 56(%esp), %edi
@@ -201,11 +201,11 @@ Ljoin_l131:
 Ljoin_l128:
 	movl $0,%edi
 	leal 56(%esp), %eax
-	movl $-28,%ecx
+	movl $-20,%ecx
 	addl %ecx,%eax
 	movl %edi,(%eax)
 	leal 56(%esp), %edi
-	movl $-28,%eax
+	movl $-20,%eax
 	addl %eax,%edi
 	flds (%edi)
 	leal 56(%esp), %edi
@@ -216,11 +216,11 @@ Ljoin_l128:
 Ljoin_l125:
 	movl $0,%edi
 	leal 56(%esp), %ecx
-	movl $-28,%edx
+	movl $-20,%edx
 	addl %edx,%ecx
 	movl %edi,(%ecx)
 	leal 56(%esp), %edi
-	movl $-28,%ecx
+	movl $-20,%ecx
 	addl %ecx,%edi
 	flds (%edi)
 	leal 56(%esp), %edi
@@ -232,11 +232,11 @@ Ljoin_l125:
 Ljoin_l122:
 	movl $0,%edi
 	leal 56(%esp), %ecx
-	movl $-28,%edx
+	movl $-20,%edx
 	addl %edx,%ecx
 	movl %edi,(%ecx)
 	leal 56(%esp), %edi
-	movl $-28,%ecx
+	movl $-20,%ecx
 	addl %ecx,%edi
 	flds (%edi)
 	leal 56(%esp), %edi
@@ -258,11 +258,11 @@ Ljoin_l119:
 	movl %edi,(%ecx)
 	movl $0,%edi
 	leal 56(%esp), %ecx
-	movl $-28,%edx
+	movl $-20,%edx
 	addl %edx,%ecx
 	movl %edi,(%ecx)
 	leal 56(%esp), %edi
-	movl $-28,%ecx
+	movl $-20,%ecx
 	addl %ecx,%edi
 	flds (%edi)
 	leal 56(%esp), %edi
@@ -287,11 +287,11 @@ Ljoin_l119:
 Ljoin_l116:
 	movl $-2147483648,%edi
 	leal 56(%esp), %eax
-	movl $-28,%ecx
+	movl $-20,%ecx
 	addl %ecx,%eax
 	movl %edi,(%eax)
 	leal 56(%esp), %edi
-	movl $-28,%eax
+	movl $-20,%eax
 	addl %eax,%edi
 	flds (%edi)
 	leal 56(%esp), %edi
@@ -302,11 +302,11 @@ Ljoin_l116:
 Ljoin_l113:
 	movl $-2147483648,%edi
 	leal 56(%esp), %ecx
-	movl $-28,%edx
+	movl $-20,%edx
 	addl %edx,%ecx
 	movl %edi,(%ecx)
 	leal 56(%esp), %edi
-	movl $-28,%ecx
+	movl $-20,%ecx
 	addl %ecx,%edi
 	flds (%edi)
 	leal 56(%esp), %edi
@@ -318,11 +318,11 @@ Ljoin_l113:
 Ljoin_l110:
 	movl $-2147483648,%edi
 	leal 56(%esp), %ecx
-	movl $-28,%edx
+	movl $-20,%edx
 	addl %edx,%ecx
 	movl %edi,(%ecx)
 	leal 56(%esp), %edi
-	movl $-28,%ecx
+	movl $-20,%ecx
 	addl %ecx,%edi
 	flds (%edi)
 	leal 56(%esp), %edi
@@ -344,11 +344,11 @@ Ljoin_l107:
 	movl %edi,(%ecx)
 	movl $-2147483648,%edi
 	leal 56(%esp), %ecx
-	movl $-28,%edx
+	movl $-20,%edx
 	addl %edx,%ecx
 	movl %edi,(%ecx)
 	leal 56(%esp), %edi
-	movl $-28,%ecx
+	movl $-20,%ecx
 	addl %ecx,%edi
 	flds (%edi)
 	leal 56(%esp), %edi
@@ -373,11 +373,11 @@ Ljoin_l107:
 Ljoin_l104:
 	movl $2139095073,%edi
 	leal 56(%esp), %eax
-	movl $-28,%ecx
+	movl $-20,%ecx
 	addl %ecx,%eax
 	movl %edi,(%eax)
 	leal 56(%esp), %edi
-	movl $-28,%eax
+	movl $-20,%eax
 	addl %eax,%edi
 	flds (%edi)
 	leal 56(%esp), %edi
@@ -388,11 +388,11 @@ Ljoin_l104:
 Ljoin_l101:
 	movl $2139095073,%edi
 	leal 56(%esp), %ecx
-	movl $-28,%edx
+	movl $-20,%edx
 	addl %edx,%ecx
 	movl %edi,(%ecx)
 	leal 56(%esp), %edi
-	movl $-28,%ecx
+	movl $-20,%ecx
 	addl %ecx,%edi
 	flds (%edi)
 	leal 56(%esp), %edi
@@ -404,11 +404,11 @@ Ljoin_l101:
 Ljoin_l98:
 	movl $2139095073,%edi
 	leal 56(%esp), %ecx
-	movl $-28,%edx
+	movl $-20,%edx
 	addl %edx,%ecx
 	movl %edi,(%ecx)
 	leal 56(%esp), %edi
-	movl $-28,%ecx
+	movl $-20,%ecx
 	addl %ecx,%edi
 	flds (%edi)
 	leal 56(%esp), %edi
@@ -430,11 +430,11 @@ Ljoin_l95:
 	movl %edi,(%ecx)
 	movl $2139095073,%edi
 	leal 56(%esp), %ecx
-	movl $-28,%edx
+	movl $-20,%edx
 	addl %edx,%ecx
 	movl %edi,(%ecx)
 	leal 56(%esp), %edi
-	movl $-28,%ecx
+	movl $-20,%ecx
 	addl %ecx,%edi
 	flds (%edi)
 	leal 56(%esp), %edi
@@ -459,11 +459,11 @@ Ljoin_l95:
 Ljoin_l92:
 	movl $2139095117,%edi
 	leal 56(%esp), %eax
-	movl $-28,%ecx
+	movl $-20,%ecx
 	addl %ecx,%eax
 	movl %edi,(%eax)
 	leal 56(%esp), %edi
-	movl $-28,%eax
+	movl $-20,%eax
 	addl %eax,%edi
 	flds (%edi)
 	leal 56(%esp), %edi
@@ -474,11 +474,11 @@ Ljoin_l92:
 Ljoin_l89:
 	movl $2139095117,%edi
 	leal 56(%esp), %ecx
-	movl $-28,%edx
+	movl $-20,%edx
 	addl %edx,%ecx
 	movl %edi,(%ecx)
 	leal 56(%esp), %edi
-	movl $-28,%ecx
+	movl $-20,%ecx
 	addl %ecx,%edi
 	flds (%edi)
 	leal 56(%esp), %edi
@@ -490,11 +490,11 @@ Ljoin_l89:
 Ljoin_l86:
 	movl $2139095117,%edi
 	leal 56(%esp), %ecx
-	movl $-28,%edx
+	movl $-20,%edx
 	addl %edx,%ecx
 	movl %edi,(%ecx)
 	leal 56(%esp), %edi
-	movl $-28,%ecx
+	movl $-20,%ecx
 	addl %ecx,%edi
 	flds (%edi)
 	leal 56(%esp), %edi
@@ -516,11 +516,11 @@ Ljoin_l83:
 	movl %edi,(%ecx)
 	movl $2139095117,%edi
 	leal 56(%esp), %ecx
-	movl $-28,%edx
+	movl $-20,%edx
 	addl %edx,%ecx
 	movl %edi,(%ecx)
 	leal 56(%esp), %edi
-	movl $-28,%ecx
+	movl $-20,%ecx
 	addl %ecx,%edi
 	flds (%edi)
 	leal 56(%esp), %edi
@@ -545,16 +545,16 @@ Ljoin_l83:
 Ljoin_l80:
 	movl $0,%edi
 	leal 56(%esp), %eax
-	movl $-24,%ecx
+	movl $-28,%ecx
 	addl %ecx,%eax
 	movl %edi,(%eax)
 	movl $2146435072,%edi
 	leal 56(%esp), %eax
-	movl $-20,%ecx
+	movl $-24,%ecx
 	addl %ecx,%eax
 	movl %edi,(%eax)
 	leal 56(%esp), %edi
-	movl $-24,%eax
+	movl $-28,%eax
 	addl %eax,%edi
 	fldl (%edi)
 	leal 56(%esp), %edi
@@ -565,16 +565,16 @@ Ljoin_l80:
 Ljoin_l77:
 	movl $0,%edi
 	leal 56(%esp), %ecx
-	movl $-24,%edx
+	movl $-28,%edx
 	addl %edx,%ecx
 	movl %edi,(%ecx)
 	movl $2146435072,%edi
 	leal 56(%esp), %ecx
-	movl $-20,%edx
+	movl $-24,%edx
 	addl %edx,%ecx
 	movl %edi,(%ecx)
 	leal 56(%esp), %edi
-	movl $-24,%ecx
+	movl $-28,%ecx
 	addl %ecx,%edi
 	fldl (%edi)
 	leal 56(%esp), %edi
@@ -586,16 +586,16 @@ Ljoin_l77:
 Ljoin_l74:
 	movl $0,%edi
 	leal 56(%esp), %ecx
-	movl $-24,%edx
+	movl $-28,%edx
 	addl %edx,%ecx
 	movl %edi,(%ecx)
 	movl $2146435072,%edi
 	leal 56(%esp), %ecx
-	movl $-20,%edx
+	movl $-24,%edx
 	addl %edx,%ecx
 	movl %edi,(%ecx)
 	leal 56(%esp), %edi
-	movl $-24,%ecx
+	movl $-28,%ecx
 	addl %ecx,%edi
 	fldl (%edi)
 	leal 56(%esp), %edi
@@ -617,16 +617,16 @@ Ljoin_l71:
 	movl %edi,(%ecx)
 	movl $0,%edi
 	leal 56(%esp), %ecx
-	movl $-24,%edx
+	movl $-28,%edx
 	addl %edx,%ecx
 	movl %edi,(%ecx)
 	movl $2146435072,%edi
 	leal 56(%esp), %ecx
-	movl $-20,%edx
+	movl $-24,%edx
 	addl %edx,%ecx
 	movl %edi,(%ecx)
 	leal 56(%esp), %edi
-	movl $-24,%ecx
+	movl $-28,%ecx
 	addl %ecx,%edi
 	fldl (%edi)
 	leal 56(%esp), %edi
@@ -651,16 +651,16 @@ Ljoin_l71:
 Ljoin_l68:
 	movl $0,%edi
 	leal 56(%esp), %eax
-	movl $-24,%ecx
+	movl $-28,%ecx
 	addl %ecx,%eax
 	movl %edi,(%eax)
 	movl $-1048576,%edi
 	leal 56(%esp), %eax
-	movl $-20,%ecx
+	movl $-24,%ecx
 	addl %ecx,%eax
 	movl %edi,(%eax)
 	leal 56(%esp), %edi
-	movl $-24,%eax
+	movl $-28,%eax
 	addl %eax,%edi
 	fldl (%edi)
 	leal 56(%esp), %edi
@@ -671,16 +671,16 @@ Ljoin_l68:
 Ljoin_l65:
 	movl $0,%edi
 	leal 56(%esp), %ecx
-	movl $-24,%edx
+	movl $-28,%edx
 	addl %edx,%ecx
 	movl %edi,(%ecx)
 	movl $-1048576,%edi
 	leal 56(%esp), %ecx
-	movl $-20,%edx
+	movl $-24,%edx
 	addl %edx,%ecx
 	movl %edi,(%ecx)
 	leal 56(%esp), %edi
-	movl $-24,%ecx
+	movl $-28,%ecx
 	addl %ecx,%edi
 	fldl (%edi)
 	leal 56(%esp), %edi
@@ -692,16 +692,16 @@ Ljoin_l65:
 Ljoin_l62:
 	movl $0,%edi
 	leal 56(%esp), %ecx
-	movl $-24,%edx
+	movl $-28,%edx
 	addl %edx,%ecx
 	movl %edi,(%ecx)
 	movl $-1048576,%edi
 	leal 56(%esp), %ecx
-	movl $-20,%edx
+	movl $-24,%edx
 	addl %edx,%ecx
 	movl %edi,(%ecx)
 	leal 56(%esp), %edi
-	movl $-24,%ecx
+	movl $-28,%ecx
 	addl %ecx,%edi
 	fldl (%edi)
 	leal 56(%esp), %edi
@@ -723,16 +723,16 @@ Ljoin_l59:
 	movl %edi,(%ecx)
 	movl $0,%edi
 	leal 56(%esp), %ecx
-	movl $-24,%edx
+	movl $-28,%edx
 	addl %edx,%ecx
 	movl %edi,(%ecx)
 	movl $-1048576,%edi
 	leal 56(%esp), %ecx
-	movl $-20,%edx
+	movl $-24,%edx
 	addl %edx,%ecx
 	movl %edi,(%ecx)
 	leal 56(%esp), %edi
-	movl $-24,%ecx
+	movl $-28,%ecx
 	addl %ecx,%edi
 	fldl (%edi)
 	leal 56(%esp), %edi
@@ -757,16 +757,16 @@ Ljoin_l59:
 Ljoin_l56:
 	movl $0,%edi
 	leal 56(%esp), %eax
-	movl $-24,%ecx
+	movl $-28,%ecx
 	addl %ecx,%eax
 	movl %edi,(%eax)
 	movl $0,%edi
 	leal 56(%esp), %eax
-	movl $-20,%ecx
+	movl $-24,%ecx
 	addl %ecx,%eax
 	movl %edi,(%eax)
 	leal 56(%esp), %edi
-	movl $-24,%eax
+	movl $-28,%eax
 	addl %eax,%edi
 	fldl (%edi)
 	leal 56(%esp), %edi
@@ -777,16 +777,16 @@ Ljoin_l56:
 Ljoin_l53:
 	movl $0,%edi
 	leal 56(%esp), %ecx
-	movl $-24,%edx
+	movl $-28,%edx
 	addl %edx,%ecx
 	movl %edi,(%ecx)
 	movl $0,%edi
 	leal 56(%esp), %ecx
-	movl $-20,%edx
+	movl $-24,%edx
 	addl %edx,%ecx
 	movl %edi,(%ecx)
 	leal 56(%esp), %edi
-	movl $-24,%ecx
+	movl $-28,%ecx
 	addl %ecx,%edi
 	fldl (%edi)
 	leal 56(%esp), %edi
@@ -798,16 +798,16 @@ Ljoin_l53:
 Ljoin_l50:
 	movl $0,%edi
 	leal 56(%esp), %ecx
-	movl $-24,%edx
+	movl $-28,%edx
 	addl %edx,%ecx
 	movl %edi,(%ecx)
 	movl $0,%edi
 	leal 56(%esp), %ecx
-	movl $-20,%edx
+	movl $-24,%edx
 	addl %edx,%ecx
 	movl %edi,(%ecx)
 	leal 56(%esp), %edi
-	movl $-24,%ecx
+	movl $-28,%ecx
 	addl %ecx,%edi
 	fldl (%edi)
 	leal 56(%esp), %edi
@@ -829,16 +829,16 @@ Ljoin_l47:
 	movl %edi,(%ecx)
 	movl $0,%edi
 	leal 56(%esp), %ecx
-	movl $-24,%edx
+	movl $-28,%edx
 	addl %edx,%ecx
 	movl %edi,(%ecx)
 	movl $0,%edi
 	leal 56(%esp), %ecx
-	movl $-20,%edx
+	movl $-24,%edx
 	addl %edx,%ecx
 	movl %edi,(%ecx)
 	leal 56(%esp), %edi
-	movl $-24,%ecx
+	movl $-28,%ecx
 	addl %ecx,%edi
 	fldl (%edi)
 	leal 56(%esp), %edi
@@ -863,16 +863,16 @@ Ljoin_l47:
 Ljoin_l44:
 	movl $0,%edi
 	leal 56(%esp), %eax
-	movl $-24,%ecx
+	movl $-28,%ecx
 	addl %ecx,%eax
 	movl %edi,(%eax)
 	movl $-2147483648,%edi
 	leal 56(%esp), %eax
-	movl $-20,%ecx
+	movl $-24,%ecx
 	addl %ecx,%eax
 	movl %edi,(%eax)
 	leal 56(%esp), %edi
-	movl $-24,%eax
+	movl $-28,%eax
 	addl %eax,%edi
 	fldl (%edi)
 	leal 56(%esp), %edi
@@ -883,16 +883,16 @@ Ljoin_l44:
 Ljoin_l41:
 	movl $0,%edi
 	leal 56(%esp), %ecx
-	movl $-24,%edx
+	movl $-28,%edx
 	addl %edx,%ecx
 	movl %edi,(%ecx)
 	movl $-2147483648,%edi
 	leal 56(%esp), %ecx
-	movl $-20,%edx
+	movl $-24,%edx
 	addl %edx,%ecx
 	movl %edi,(%ecx)
 	leal 56(%esp), %edi
-	movl $-24,%ecx
+	movl $-28,%ecx
 	addl %ecx,%edi
 	fldl (%edi)
 	leal 56(%esp), %edi
@@ -904,16 +904,16 @@ Ljoin_l41:
 Ljoin_l38:
 	movl $0,%edi
 	leal 56(%esp), %ecx
-	movl $-24,%edx
+	movl $-28,%edx
 	addl %edx,%ecx
 	movl %edi,(%ecx)
 	movl $-2147483648,%edi
 	leal 56(%esp), %ecx
-	movl $-20,%edx
+	movl $-24,%edx
 	addl %edx,%ecx
 	movl %edi,(%ecx)
 	leal 56(%esp), %edi
-	movl $-24,%ecx
+	movl $-28,%ecx
 	addl %ecx,%edi
 	fldl (%edi)
 	leal 56(%esp), %edi
@@ -935,16 +935,16 @@ Ljoin_l35:
 	movl %edi,(%ecx)
 	movl $0,%edi
 	leal 56(%esp), %ecx
-	movl $-24,%edx
+	movl $-28,%edx
 	addl %edx,%ecx
 	movl %edi,(%ecx)
 	movl $-2147483648,%edi
 	leal 56(%esp), %ecx
-	movl $-20,%edx
+	movl $-24,%edx
 	addl %edx,%ecx
 	movl %edi,(%ecx)
 	leal 56(%esp), %edi
-	movl $-24,%ecx
+	movl $-28,%ecx
 	addl %ecx,%edi
 	fldl (%edi)
 	leal 56(%esp), %edi
