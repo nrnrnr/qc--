@@ -799,7 +799,7 @@ let check_map (pnum,pmap) =
                    | _ -> VM.print (Printf.sprintf "outmap for node %d" pnum) pmap;
                           VM.print (Printf.sprintf "inmap for node %d" (G.num node))
                                    inmap;
-                          Impossible.impossible "inmap invariant failed\n") inmap () in
+                          impossf "inmap invariant failed\n") inmap () in
 let () = List.iter check_map pred_maps in
 @
 %-------------------------------------------------------------------
@@ -838,7 +838,7 @@ varmaps because we may have to set a spill location for the temp.
       let (state,map) = spill_reg true_fun (state, map) r in
       (state, VM.add t (Reg r) map, a, c, rst, not_lo)
     | ([],     _,      _,     _)                                    ->
-        Impossible.impossible "No register available for temp" in
+        impossf "No register available for temp %s" (printReg t) in
 @
 Note that by calling [[get_avail_reg]], I am disallowing copies in which the used
 temp lives past this node.
@@ -1038,7 +1038,7 @@ We update the successor's variable map to have each inconsistent temp in memory.
                   with Not_found ->
                     (Cfgutil.print_cfg cfg;
                      Printf.eprintf "node %d; pred %d\n" (G.num succ) (G.num pred);
-                     Impossible.impossible "shuffling: pred node with no outmap") in
+                     impossf "shuffling: pred node with no outmap") in
 		(*
     VM.print (Printf.sprintf "\npred_vm %d:" (G.num pred)) pred_vm;
     VM.print (Printf.sprintf "\nsucc_vm %d:" (G.num succ)) succ_vm;
@@ -1053,7 +1053,7 @@ We update the successor's variable map to have each inconsistent temp in memory.
                    let (state', s) = store state t r in
                    (state', s::stores)
                  | (_, _)         ->
-                   Impossible.impossible "Unallocated temp in pred's outmap")
+                   impossf "Unallocated temp in pred's outmap")
               temps (state, []) in
     let state, pred_vm, nodes' = make_nodes' state pred_vm stores in
 
@@ -1079,15 +1079,14 @@ let shuffle_between state pred succ =
       | (Mem _, Reg r::_, [])                          ->
         let state', s = store state temp r in (state', ms, ls, s::ss)
       | (_    , []      , [] )                         ->
-        Impossible.impossible
-          (Printf.sprintf "%s %s %s %d %s %d %s %s"
+        impossf "%s %s %s %d %s %d %s %s"
              "DLS register allocator error in shuffle(): Temp" (printReg temp)
              "allocated in succ" (G.num succ) "but not pred" (G.num pred)
-             "map in function" (proc.Proc.symbol#original_text))
+             "map in function" (proc.Proc.symbol#original_text)
       | (_    , _       , _  )                         ->
         VM.print "Pred VM:" pred_vm;
         VM.print "Succ VM:" succ_vm;
-        Impossible.impossible "Varmap has temp in unexpected locations" in
+        impossf "Varmap has temp in unexpected locations" in
     List.fold_left one_loc state_lists succ_locs in
 
   let state, moves, loads, stores = VM.fold find_shuffles succ_vm (state, [],[],[]) in
@@ -1110,7 +1109,7 @@ To reconcile variable maps, we need to create move, store, and load rtl's.
 <<define [[assign]], [[move]], [[store]], and [[load]]>>=
 let make_loc_empty loc vm =
   match loc with
-  | Mem _ -> Impossible.impossible "DLS: make_loc_empty called on memory location"
+  | Mem _ -> impossf "DLS: make_loc_empty called on memory location"
   | Reg r -> match VM.reg_contents vm r with
              | Some t -> VM.remove t loc vm
              | None   -> vm                 in
@@ -1142,7 +1141,7 @@ let make_nodes' state start_vm shuffles =
     | r::rs  -> let n   = G.instruction cfg r ~succ:(G.illegal cfg)              in
                 let s'  = mark_allocated (set_varOut (set_varIn s n vm) n vm)  n in
                 make_node_lst (s', vm,  n::rst) (upd_vm, rs)
-    | []  -> Impossible.impossible "empty rtl list for load, move, or store"     in
+    | []  -> impossf "empty rtl list for load, move, or store"     in
   List.fold_left make_node_lst (state, start_vm, []) shuffles                    in
 @
 %-------------------------------------------------------------------
@@ -1157,7 +1156,7 @@ let rewrite_spans (node, ss as rst) =
   (Debug.eprintf "dls" "adding dls span for node %d\n" (G.num node);
    let vm = try IM.find (G.num node) state.varInMaps
             with Not_found ->
-                   imposs "DLS: Cannot modify runtime data for unknown node" in
+                   impossf "DLS: Cannot modify runtime data for unknown node" in
    let rewrite_span l =
      let guard = function RP.Reg r -> is_tmp tgt r | _ -> false in
      let map l = match l with
@@ -1167,7 +1166,7 @@ let rewrite_spans (node, ss as rst) =
                 | Mem l :: _ -> Dn.loc (Automatonutil.aloc l (Register.width r))
                 | [] -> raise RTD.DeadValue
             with Not_found -> raise RTD.DeadValue)
-       | _          -> imposs "DLS reg allocator emitting RT data: guard failed\n" in
+       | _          -> impossf "DLS reg allocator emitting RT data: guard failed" in
      Rtlutil.Subst.loc_of_loc ~guard ~map l in
    Runtimedata.upd_spans rewrite_span ss) in
 List.iter rewrite_spans proc.Proc.spans;
@@ -1178,7 +1177,7 @@ let () = Debug.register "dls" "(downstairs) linear-scan register allocator"
 \subsection{Utilities}
 %-------------------------------------------------------------------
 <<printers>>=
-let imposs = Impossible.impossible
+let impossf fmt = Printf.kprintf Impossible.impossible fmt
 let indent = "  "
 let printTemps iter msg collection =
   Printf.eprintf "%s" msg;
@@ -1276,7 +1275,7 @@ let make_map tgt reg_map reg =
        with Not_found ->
          ( VM.print "" reg_map
          ; flush stderr
-         ; Impossible.impossible ("DLS: failed to allocate temp " ^ (printReg reg))
+         ; impossf "DLS: failed to allocate temp %s" (printReg reg)
          )
   else reg
 
