@@ -50,16 +50,19 @@ We expose two types of functions:
 \item Functions that convert data to a span.
 \item A function that emits the spans as assembly.
 \end{itemize}
+The first conversion function takes a user's key and value and produces a span.
+<<runtimedata.mli>>=
+type span = Bits.bits * Rtl.exp  (* should be abstract *)
+val user_span : Bits.bits -> Bits.bits Reloc.Simple.relocatable -> span
+@ 
 The conversion functions for frame size and overflow-block size use
 the number of variables and the virtual frame pointer in addition to
 the expression representing the size.
 These functions cannot ask for a record of type [[Oast2ir.proc]] because
 they may be used before such a record exists. 
 <<runtimedata.mli>>=
-type span = Bits.bits * Rtl.exp
 val frame_size_to_span    : vfp:Rtl.exp -> Rtl.exp -> span
 val overflow_size_to_span : vfp:Rtl.exp -> Rtl.exp -> span
-val of_link : Bits.bits * Bits.bits Reloc.Simple.relocatable -> span
 @
 Occasionally, it is useful to represent a value as being dead at a stopping point.
 For example, if a variable is not live, we represent it with the [[dead_value]].
@@ -570,4 +573,4 @@ This ought to be the identity---indeed, the conversion ought to go
 \emph{from} general expression \emph{to} span.
 But until Joao has a chance to work his magic, it's unimplemented. 
 <<runtimedata.ml>>=
-let of_link _ = Impossible.unimp "convert link-time stuff into span"
+let user_span _ _ = Impossible.unimp "convert link-time stuff into span"
