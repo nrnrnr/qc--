@@ -1,31 +1,27 @@
 
+                          Building Quick C--
 
-                Building the Quick C-- Compiler
-
-This document describes how to build the QC-- compiler from source
-code and lays out a road map of the source code.
+This document describes how to build Quick C-- from source.
 
 Prerequisites
+~~~~~~~~~~~~~
 
-The compiler is written in the functional programming language Objective
-Caml (http://caml.inria.fr). Most of the source code is written as a
-literate program using the Noweb literate programming tool.  The
-documentation is intended to be formatted with for the LaTeX type
-setting system. The build process is controlled by the make-like tool
-mk.  Mk was originally written by Andrew Hume at Bell Labs, became the
-build tool of the Plan 9 operating system, and then was released to the
-world as part of Inferno.  We provide at
-http://www.cminusminus.org/tools.html a version of mk derived from the
-Inferno distribution. The C source code is also part of the Quick C--
+The compiler is written in the functional programming language
+Objective Caml (http://caml.inria.fr). Most of the source code is
+written as a literate program using the Noweb literate programming
+tool.  The documentation is intended to be formatted with LaTeX.  
+The build process is controlled by mk, a version of Make.  Mk was
+originally written by Andrew Hume at Bell Labs, became the build tool
+of the Plan 9 operating system, and then was released to the world as
+part of Inferno.  We provide a version of mk derived from the Inferno
 distribution. If you are using old versions of mk from Unix v7 or
 similar, you will need to upgrade.
 
 To build the compiler from source code you need:
 
-        * Objective Caml 3.04 or 3.07 and higher
+        * Objective Caml 3.07 or higher
           (including ocamlyacc and ocamllex)
-          [OCaml 3.06 has a bug that causes qc-- to segfault]
-        * Noweb 2.9 or better
+        * Noweb 2.9 or higher
         * LaTeX
         * Perl's POD utilities, namely pod2man(1)
 
@@ -44,12 +40,14 @@ generator. However, we do not provide the generator which means there is
 no way to re-compile the ASDL specification. 
 
 Building Mk
+~~~~~~~~~~~
 
 Before you can build anything else, you must build mk.  You will find
 instructions in mk/README.  Once you have built mk, put it on your PATH.
 
 
 Building QC--
+~~~~~~~~~~~~~
 
 The recursive build process is controlled by mkfiles for mk(1). All
 mkfiles include files from config/ to find tools and libraries. It
@@ -73,9 +71,14 @@ To compile everything, run configure and mk:
         ./configure
 	mk timestamps # needed if direct from CVS repository
         mk 
+	mk install
 
-If ./configure fails it will tell what to try; it also writes helpful
-output into a configure.log file. The file it creates is
+If you don't have rights to install into /usr/local, you will need to use 
+
+        ./configure --prefix=...
+
+If ./configure fails it will suggest what to try; it also writes
+helpful output into a configure.log file. The file it creates is
 config/config.mk. You can create this file manually from
 config/config.mk.default.
 
@@ -84,7 +87,7 @@ through, you will see quite a few warnings of the form
 
   warning: skipping missing include file: DEPEND: No such file or directory
 
-These are normal and should not trouble you.
+These warnings are normal and should not trouble you.
 
 Mk produces (at least) the following files:
 
@@ -96,29 +99,32 @@ Mk produces (at least) the following files:
 There are more binaries and manual pages that are used during
 development but they are not important to use qc--.
         
-If the OCaml native code compiler ocamlopt is supported in your platform
-and is installed, you can also create a native code binary qc--.opt:
+If the OCaml native-code compiler ocamlopt is supported in your
+platform and is installed, we strongly recommend that you create a
+native-code binary qc--.opt:
 
         mk all.opt
+	mk install.opt
 
 To execute the test suite you can also call the test target:
 
         mk test
 
 
-Finally, you can install the software in /usr/local by typing
-`mk install' or `mk install.opt'.
-
-
 
 Problems and Bug Reports
+~~~~~~~~~~~~~~~~~~~~~~~~
 
 If you have trouble building the compiler or using it, send email to
-bugs@cminusminus.org. The bug tracksing system is at
+bugs@cminusminus.org.  You can view the status of bug reports at
 http://www.cminusminus.org/qc--bugs.
 
 
-Roadmap
+How the Compiler'S Source Code is Organized
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+You can use the compiler without any of the following information, but
+if you want to hack on the compiler, this information may help.
 
 The source code of the compiler is split into different directories. 
 The top level mkfile knows the dependencies between them and makes
@@ -172,6 +178,8 @@ In alphabetical order:
 
     rtl/        RTL type definition.
 
+    runtime/    The Quick C-- run-time system
+
     specialized/ Partially evaluated compiler sources.
 
     src/        Main sources for the c-- compiler.
@@ -186,6 +194,4 @@ In alphabetical order:
 
 Directories depend on each other in the following order:
 
-    cllib lua asdl rtl gen camlburg tools src test2
-
-
+    cllib lua asdl rtl gen camlburg tools src runtime test2
