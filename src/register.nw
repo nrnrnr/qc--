@@ -44,18 +44,40 @@ module Set: Set.S with type elt = t
 module Map: Map.S with type key = t
 @
 
-A register is a special case of a location.  We would like to have 
-functions that converts between these two. Of course, a [[Rtl.loc]] is
-more general and thus only values denoting a register can be
-converted. Applying other values is a checked run-time error.
+A register is a special case of a [[Rtl.loc]] location.  We would like
+to have functions that converts between these two.  Of course, a
+[[Rtl.loc]] is more general and thus only values denoting a register
+can be converted.  Applying other values is a checked run-time error.
 
 The space description supplied to [[to_loc]] must fit to the space of
 the first argument, otherwise it is a checked run-time error.
 
-<<not yet implemented>>=
+<<register.mli>>=
 val to_loc: t -> Rtl.spacedescr -> Rtl.loc   (* Invalid_argument *)
 val of_loc: Rtl.loc -> t                     (* Invalid_argument *)
 @
+
+
+The [[assign]] function creates an [[Rtl.rtl]] that transfers a value
+from one register to another.  The source and destination must be
+assignment compatible, otherwise it is a checked run-time error which
+raises an [[Invalid_argument]] exception.  The first argument is a
+lookup-function that provides information about the spaces the source
+and destination registers live in.
+
+<<register.mli>>=
+val assign: (Rtl.space -> Rtl.spacedescr) -> src:t -> dst:t -> Rtl.rtl
+@
+
+When the register allocator (see ~module{linscan}) must spill, it has to create
+{\rtl}s that move values from registers to memory (spill) and vice versa
+(reloads). Here are two functions to create such {\rtl}s:
+
+<<register.mli>>=
+val spill:  (Rtl.space -> Rtl.spacedescr) -> reg:t -> loc:Rtl.loc -> Rtl.rtl list
+val reload: (Rtl.space -> Rtl.spacedescr) -> reg:t -> loc:Rtl.loc -> Rtl.rtl list
+@
+
 
 % ------------------------------------------------------------------ 
 \section{Implementation}
@@ -93,5 +115,38 @@ let of_loc loc = match Rtl.Convert.loc loc with
             (sp,index,width)
     | _                         -> invalid_arg "Register.of_loc"
 @
+
+The [[assign]] function converts both registers to [[Rtl.loc]] values and
+then uses the [[Rtl]] framework to create an assignment.    
+
+<<register.ml>>=
+let assign lookup ~src:(src_sp,_,src_w as src) ~dst:(dst_sp,_,dst_w as dst) =
+    if src_w <> dst_w then
+        invalid_arg "Register.assign source and destination width don't match"
+    else
+        let src_loc = to_loc src (lookup src_sp) in
+        let dst_loc = to_loc dst (lookup dst_sp) in
+            Rtl.store dst_loc (Rtl.fetch src_loc src_w)  dst_w
+@
+
+<<register.ml>>=
+let spill lookup ~reg:(sp,index,width as reg) ~loc =
+    if Rtlutil.locwidth loc <> width then
+        invalid_arg "Register.spill size mismatch"
+    else
+        let reg_loc = to_loc reg (lookup sp) in
+        let rtl     = Rtl.store loc (Rtl.fetch reg_loc width) width in
+            [rtl]
+
+let reload lookup ~reg:(sp,index,width as reg) ~loc =
+    if Rtlutil.locwidth loc <> width then
+        invalid_arg "Register.spill size mismatch"
+    else
+        let reg_loc = to_loc reg (lookup sp) in
+        let rtl     = Rtl.store reg_loc (Rtl.fetch loc width) width in
+            [rtl]
+@
+    
+    
 
 
