@@ -34,13 +34,14 @@ module T1 = Lua.Lib.Combine.T5
                 (AstType)                   (* T1.TV4 *)
                 (Colorgraph.NewGCT)         (* T1.TV5 *)
 
-module T    = Lua.Lib.Combine.T6            (* types *)
+module T    = Lua.Lib.Combine.T7            (* types *)
                 (T1)                        (* T.TV1 *)
                 (NewBackplane.T)            (* T.TV2 *)
                 (EnvType)                   (* T.TV3 *)
                 (ProcType)                  (* T.TV4 *)
                 (NewTargetType)             (* T.TV5 *)
                 (BlockType)                 (* T.TV6 *)
+                (AutomatonType)             (* T.TV7 *)
 
 module T1' = Lua.Lib.Lift (T1) (T.TV1)
 
@@ -55,6 +56,7 @@ module EnvTV             = T.TV3
 module NewProcTV         = T.TV4
 module NewTargetTV       = T.TV5
 module BlockTV           = T.TV6
+module AutomatonTV       = T.TV7
 
 module WT = Lua.Lib.WithType (T)
 
@@ -64,7 +66,8 @@ module C =
     (WT (Luastrlib.M))
     (WT (Luamathlib.M))
     (MakeLib 
-        (AsmTV) (AstTV) (EnvTV) (NewProcTV) (NewTargetTV) (DocTV) (LuaioTV) (BlockTV))
+        (AsmTV) (AstTV) (EnvTV) (NewProcTV) (NewTargetTV) (DocTV) (LuaioTV) (BlockTV)
+        (AutomatonTV))
     (Colorgraph.NewMake (NewBackplaneTV) (NewColorgraphTV) (NewProcTV))
     (Dls.Make (NewBackplaneTV) (NewProcTV))
     (WT (Luautil.MakeLib))
@@ -147,6 +150,12 @@ module BlockType = struct
     let eq _        = fun x y -> x = y
     let to_string   = fun _ t -> "<block>"
 end
+module AutomatonType = struct
+    type 'a t       = Automaton.t
+    let tname       = "automaton"
+    let eq _        = fun x y -> false
+    let to_string   = fun _ t -> "<automaton>"
+end
 
 module MakeLib
   (AsmV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a AsmType.t)
@@ -163,6 +172,8 @@ module MakeLib
   (InOutV  : Lua.Lib.TYPEVIEW with type 'a t        = 'a Luaiolib.T.t    
                               and  type 'a combined = 'a AsmV.combined)
   (BlockV  : Lua.Lib.TYPEVIEW with type 'a t        = 'a BlockType.t    
+                              and  type 'a combined = 'a AsmV.combined)
+  (AutomatonV  : Lua.Lib.TYPEVIEW with type 'a t    = 'a AutomatonType.t    
                               and  type 'a combined = 'a AsmV.combined)
     
     : Lua.Lib.USERCODE with type 'a userdata' = 'a AsmV.combined =
@@ -215,6 +226,7 @@ module Map = struct
     let outchan   = Luaiolib.out    channel    V.projection
     let stage proc = V.func (V.value **-> proc **->> V.bool)
     let block     = BlockV.makemap  V.userdata V.projection
+    let automaton = AutomatonV.makemap V.userdata V.projection
 end
 @ 
 Here we finally bind the exported values to names in the Lua
@@ -359,6 +371,7 @@ C.register_module "Liveness"
 C.register_module "Placevar"
   [ "fortran", V.efunc (V.value **-> Map.proc **->> V.bool) Placevar.fortran'
   ; "context", V.efunc (V.value **-> Map.proc **->> V.bool) Placevar.context
+  ; "x86",     V.efunc (Map.proc **->> Map.automaton)       X86.placevars
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Simplify"

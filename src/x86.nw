@@ -31,6 +31,7 @@ end
 module Post : Postexpander.S
 module X    : Expander.S
 val target : Ast2ir.tgt
+val placevars : Ast2ir.proc -> Automaton.t
 @ 
 
 \subsection{Name and storage spaces}
@@ -588,6 +589,53 @@ let target =
   } 
 
 type tgt  = ((Rtl.exp -> Automaton.t), Call.t) Target.t
+@ 
+\subsection{Variable placement}
+The machine accepts only three widths of floating-point variables: 32,
+64, and 80~bits.
+Any 80-bit value is seen as a float (this might be wrong in the case
+of an 80-bit structure variable, so the decision should be revisited).
+A~32-bit or 64-bit value would have to be suitably hinted to be seen
+as a float.
+Because floating-point registers are organized as a stack, we can't
+use the registers effectively for variables, so floats go in memory.
+
+Any other value of width at most~32 goes into a temporary.
+Larger values go straight to memory.
+
+FOR WARNINGS, IT MIGHT BE USEFUL TO INCLUDE A VARIABLE NAME SOMEWHERE,
+SOMEHOW.
+<<x86.ml>>=
+let warning s = Printf.eprintf "backend warning: %s\n" s
+
+let from_temps proc space = (* stage to allocate a temporary location *)
+  let allocator = Talloc.Multiple.loc proc.Proc.temps space in
+  let alloc ~width:w ~alignment:a ~hint:h = A.of_loc (allocator w) in
+  A.wrap (fun methods -> {A.allocate = alloc; A.freeze = methods.A.freeze})
+
+let placevars proc = 
+  let is_float      hint w = w = 80 || (hint = "float" && (w = 32 || w = 64)) in
+  let strange_float hint w = w = 80 && hint <> "float" in
+  let strange_int   hint w = hint = "float" && not (is_float hint w) in
+  let warn methods =
+    let alloc ~width:w ~alignment:a ~hint:h =
+      if strange_float h w then
+        warning "80-bit variable not hinted float but will go as float anyway"
+      else if strange_int h w then
+        warning
+          (Printf.sprintf "%d-bit variable hinted float but will go as integer" w);
+      methods.A.allocate w a h in
+    {A.allocate = alloc; A.freeze = methods.A.freeze} in
+  Block.srelative target.T.vfp "variables placed in memory" A.at
+  (
+    A.wrap warn *>
+    A.choice
+      [ is_float,               A.widen (Aux.round_up_to ~multiple_of: 64); 
+        (fun h w -> w <= 32),   A.widen (fun _ -> 32) *> from_temps proc 't';
+        A.is_any,               A.widen (Aux.round_up_to ~multiple_of: 32);
+      ] *>
+  A.align_to (fun _ -> 4) *>
+  A.overflow ~memsize:8 ~byteorder:PX.byte_order ~growth:Memalloc.Up ~max_alignment:4)
 @ 
 \section{Tentative example Lua code}
 
