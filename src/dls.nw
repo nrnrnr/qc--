@@ -491,15 +491,18 @@ before [[alloc_node]] is applied to $n$.
 [[dls]] puts the allocator together: [[rpo_dfs]] is called with [[alloc_node]] to
 place each temp at a node.
 [[alloc_node]] calls [[choose_varMaps]] to decide where each temp belongs.
+
+Note the aggressive use of continuations [[k]] to maintain tail recursion; tread
+lightly.
 <<rpo\_dfs determines the order for visiting nodes>>=
 <<define [[print_prefs]] to print preferences>>
 <<updating preferences>>
 let rpo_dfs (state, prefs) =
   let (_, postorder) = G.postorder_dfs (fun n (i, map) -> (i+1, NM.add n i map))
                                        (0, NM.empty) cfg                              in
-  let rec visit (state, prefs) node prev_delays =
+  let rec visit (state, prefs) node prev_delays k =
     if is_visited state node then
-      (state, prefs, prev_delays)
+      k (state, prefs, prev_delays)
     else
       let state = mark_visited state node                                             in
       let prefs = update_prefs_at_node prefs node                                     in
@@ -512,27 +515,31 @@ let rpo_dfs (state, prefs) =
         let comparep p = try NM.find p postorder > node_num with Not_found -> false   in
         List.partition comparep unvis_preds                                           in
 
-      let visit_pred (state, prefs, delays) node =
+      let visit_pred node (state, prefs, delays) k =
         let prefs = update_pref_varmap state prefs
                                        (List.filter (is_allocated state) preds)       in
-        visit (state, prefs) node delays                                              in
-      let (state, prefs, delays) =
-        List.fold_left visit_pred (state, prefs, prev_delays) to_vis                  in
-      let state, prefs = 
-        if G.kind node = G.Illegal then
-          state, prefs
-        else
-          let state = alloc_node state prefs node in
-          let prefs =
-            post_update_prefs node prefs (IM.find (G.num node) state.varOutMaps) in
-          state, prefs in
-      ( state
-      , prefs
-      , (List.map (fun d -> (prefs,d)) to_delay) :: delays
-      ) in
+        visit (state, prefs) node delays k                                            in
+      let alloc_curr_node (state, prefs, delays) =
+        let state, prefs =
+				  if G.kind node = G.Illegal then state, prefs
+          else
+            let state = alloc_node state prefs node in
+            let prefs =
+              post_update_prefs node prefs (IM.find (G.num node) state.varOutMaps) in
+            state, prefs in
+        k ( state
+          , prefs
+          , (List.map (fun d -> (prefs,d)) to_delay) :: delays
+          ) in
+      let rec iter_preds preds spd =
+        match preds with
+				| []     -> alloc_curr_node spd
+				| p::rst -> visit_pred p spd (iter_preds rst) in
+			iter_preds to_vis (state, prefs, prev_delays) in
+  let id x = x in
   let rec handle_delays (state, _, ds) = match List.concat ds with
     | []  -> state
-    | ds  -> List.fold_left (fun s (p, n) -> handle_delays (visit (s, p) n []))
+    | ds  -> List.fold_left (fun s (p, n) -> handle_delays (visit (s, p) n [] id))
                             state ds in
   handle_delays (state, prefs, [[(prefs, G.exit cfg)]]) in
 @
