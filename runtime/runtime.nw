@@ -1,0 +1,343 @@
+% -*- mode: Noweb; noweb-code-mode: c-mode -*-
+% $Id$
+
+% ---------------------------------------------------------------------------
+\section{QC-- Runtime Public Interface}
+% ---------------------------------------------------------------------------
+For now, we are ignoring threads, and a number of interface functions.
+<<qc--runtime.h>>=
+#ifndef QCMM_RUNTIME_H
+#define QCMM_RUNTIME_H
+
+/* In future, these defines will come out of the compiler.
+   Please ignore this embarrassing hack -PG
+ */
+#define WORDSIZE 4
+#define NUM_REGS 12 // Hmm...
+#define ESP 8 // 4
+#define EBP 9 // 5
+
+<<data structures>>
+<<public functions>>
+#endif /* QCMM_RUNTIME_H */
+@
+The data structures used by the runtime system are considered private.
+Their representation is exposed to clients so they can allocate the
+correct amount of space for them.
+<<data structures>>=
+typedef unsigned  Cmm_Word;
+typedef void*     Cmm_Dataptr;
+typedef void    (*Cmm_Codeptr)();
+
+/* This structure should be considered private */
+typedef struct {
+  Cmm_Word*   vfp;
+  Cmm_Codeptr pc;
+  Cmm_Dataptr rtdata;
+  Cmm_Word*   regs[NUM_REGS];
+} Cmm_Activation;
+
+/* This structure should be considered private */
+typedef struct {
+  Cmm_Codeptr pc;
+  Cmm_Word*   sp;
+} Cmm_Cont;
+@ 
+Functions for walking the stack.
+<<public functions>>=
+Cmm_Activation Cmm_YoungestActivation (const Cmm_Cont *t);
+Cmm_Activation Cmm_NextActivation     (const Cmm_Activation *a);
+int            Cmm_isOldestActivation (const Cmm_Activation *a);
+int            Cmm_ChangeActivation   (Cmm_Activation *a);
+<<public functions>>=
+Cmm_Dataptr Cmm_GetDescriptor(const Cmm_Activation *a, Cmm_Word token);
+@ 
+Functions for finding local variables.
+<<public functions>>=
+unsigned Cmm_LocalVarCount    (const Cmm_Activation *a);
+void*    Cmm_FindLocalVar     (const Cmm_Activation *a, unsigned n);
+void*    Cmm_FindDeadLocalVar (const Cmm_Activation *a, unsigned n);
+void*    Cmm_FindStackData    (const Cmm_Activation *a, unsigned n);
+@ 
+These functions are currently unimplemented.
+<<unimplemented public functions>>=
+Cmm_Cont* Cmm_CreateThread(Cmm_Codeptr f, Cmm_Dataptr x, void *s,
+                           unsigned n, void **limit_cookie);
+Cmm_Cont* Cmm_RunThread   (Cmm_Cont *k);
+
+Cmm_Cont* Cmm_GetUnwindCont(const Cmm_Activation *a, Cmm_Word index);
+
+void*    Cmm_FindGlobalVar (void *gp, int n);
+unsigned Cmm_GlobalCount   (void);
+unsigned Cmm_GlobalSize    (void);
+@ 
+% ---------------------------------------------------------------------------
+\section{Walking the stack}
+% ---------------------------------------------------------------------------
+This implementation assumes that a [[C--]] thread can only be
+suspended at a continuation. Particularly, this means we do not expect
+that the runtime system will be entered in response to an interrupt or
+some other method that preempts the [[C--]] thread at an arbitrary
+point.
+
+Walking the stack always begins at a continuation. A [[C--]]
+continuation contains the program counter and stack pointer at the
+point of return to the continuation. From this an initial virtual
+frame pointer (vfp) can be derived. The process of walking the stack
+involves computing the vfp of each caller, and tracking the locations
+of all saved registers along the way.
+
+In order to compute the virtual frame pointer for an activation, the
+runtime system needs to know the frame size at each call site and
+continuation in the [[C--]] program. In addition, the runtime system
+needs to know the locations of caller and callee saved registers.
+Happily, for [[C--]] functions, all of this information is emitted by
+the [[C--]] compiler as part of the runtime data. Unhappily, none of
+this information is available for non-[[C--]] compilers, and compiler
+specific techniques must be used to skip over unknown areas of the
+stack.
+
+This file contains all of the general stack walking code including all
+of the code for handling [[C--]] functions. Compiler specific code is
+contained in separate files -- one for each compiler supported. The
+compiler specific files must export the function
+[[walk_foreign_frames]], which takes as arguments the current frame
+pointer, and a list of register values for the current frame. This
+function should return a new frame pointer, or [[NULL]] on failure.
+<<external functions>>=
+extern Cmm_Word*
+walk_foreign_frames(Cmm_Word* fp, Cmm_Word* const* regs);
+@
+The runtime system can begin walking a call stack at a [[C--]]
+continuation. The youngest activation is constructed by looking up the
+runtime data associated with the given continuation. It is important
+to note that none of the runtime functions may allocate memory.
+Because of this, the initial activation record is returned by value
+which forces the caller to allocate space for it.
+<<public function implementations>>=
+Cmm_Activation
+Cmm_YoungestActivation(const Cmm_Cont* t) {
+  Cmm_Activation a;
+  pc_map_entry* entry = lookup_entry_linear(t->pc);
+  assert(entry);
+
+  //print_stack(t->sp);
+
+  a.vfp = t->sp - decode_woffset(entry->frame_size);
+  a.pc = t->pc;
+  a.rtdata = (void*)entry;
+  update_saved_regs(&a, 0);
+  return a;
+}
+@ 
+The main function for walking the stack is [[Cmm_NextActivation]].
+Given an activation, [[a]], we start searching the stack at the frame
+pointer provided in [[a]]. We get the caller and try to lookup an
+entry for that address in the PC map. If the caller is not in the PC
+map, then we can try to skip past the unknown frame using
+[[walk_foreign_frames]]. If a new activation is found, a new
+activation record is populated and returned. Otherwise [[na.fp]] is
+set to zero to indicate failure.
+<<public function implementations>>=
+Cmm_Activation
+Cmm_NextActivation(const Cmm_Activation *a) {
+  Cmm_Word* fp;
+  Cmm_Word* caller;
+  Cmm_Activation na;
+  pc_map_entry* entry;
+  pc_map_entry* old_entry;
+
+  assert(a && a->vfp);
+  fp = a->vfp;
+  //print_stack(fp);
+
+  entry = (pc_map_entry*)a->rtdata;
+  caller = a->vfp + decode_woffset(entry->return_address);
+  entry = lookup_entry_linear((Cmm_Codeptr)*caller);
+  if (!entry) {
+    fp = walk_foreign_frames(fp, a->regs);
+    if (fp) {
+      caller = (Cmm_Word*)(fp);
+      entry = lookup_entry_linear((Cmm_Codeptr)*caller);
+    }
+  }
+
+  if (entry) {
+    old_entry = (pc_map_entry*)a->rtdata;
+    na.vfp = fp - decode_woffset(entry->frame_size)
+                + decode_woffset(old_entry->overflow_size);
+    na.pc = (Cmm_Codeptr)*caller;
+    na.rtdata = (void*)entry;
+    update_saved_regs(&na, a);
+  } else {
+    na.vfp = 0; // indicates failure
+  }
+  return na;
+}
+@ 
+The oldest activations are determined differently for general [[C--]]
+stacks than for the system stack. Finding the top of the system stack
+may differ for different environments. Currently, this function
+returns 0, and the end of the stack is detected by a failure of
+[[Cmm_NextActivation]].
+<<public function implementations>>=
+int
+Cmm_isOldestActivation(const Cmm_Activation *a) {
+  return 0;
+}
+@ 
+The [[Cmm_ChangeActivation]] is provided for convenience.
+<<public function implementations>>=
+int
+Cmm_ChangeActivation(Cmm_Activation *a) {
+  if (Cmm_isOldestActivation(a)) {
+    return 0;
+  } else {
+    *a = Cmm_NextActivation(a);
+    return (a->vfp != 0);
+  }
+}
+@ 
+% ---------------------------------------------------------------------------
+\section{Span Data}
+% ---------------------------------------------------------------------------
+
+For any activation, the client may ask for the inner-most enclosing
+span associated with a given token. The user spans are contained in the
+runtime data emitted by the compiler. Tokens must be integers greater
+than or equal to zero. A table of descriptors is stored in the pc map
+entry immediately following the locals data. Using the activation
+record, the table of descriptors is looked up, and the appropriate
+entry returned.
+
+<<public function implementations>>=
+Cmm_Dataptr
+Cmm_GetDescriptor(const Cmm_Activation *a, Cmm_Word token) {
+  pc_map_entry* entry = (pc_map_entry*)a->rtdata;
+  if (entry) {
+    Cmm_Word* descs = spans(entry);
+    assert(token < entry->num_spans);
+    return (Cmm_Dataptr)descs[token];
+  } else {
+    return 0;
+  }
+}
+@
+% ---------------------------------------------------------------------------
+\section{Accessing Local Variables}
+% ---------------------------------------------------------------------------
+Local variables for an activation can can be found either on the
+stack, or in registers. The location of parameters is computed using
+information generated by the [[C--]] compiler. Each [[C--]] call site
+has associated with it the number of locals, and an array containing
+information about each local. If a local lives on the stack, an offset
+from the frame pointer is given. If a local is in a register, then the
+register number is given. The number of registers, and their indexes
+are architecture dependent.
+
+In addition to information about locals, each call site has
+information about saved registers at the time of the call. If a
+register has been saved on the stack, then the offset from the frame
+pointer is given. Otherwise, a zero indicates that the register has
+not been saved by this activation.
+
+As new activations are created during a walk of the stack, the
+locations of saved registers are recorded within the activations. The
+locations of all saved registers for an activation can be computed
+using information in the pc map table along with the previous
+activation.
+<<private functions>>=
+void
+update_saved_regs(Cmm_Activation* new, const Cmm_Activation* prev) {
+  int i;
+  int r = decode_offset(((pc_map_entry*)(new->rtdata))->num_registers);
+  Cmm_Word* regs = registers(new->rtdata);
+
+  if (prev) {
+    for (i = 0; i < NUM_REGS; i++)
+      new->regs[i] = prev->regs[i];
+  }
+  
+  for (i = 0; i < r; i+=2) {
+    if (regs[i] == regs[i+1]) continue;
+    new->regs[decode_reg(regs[i])] = new->vfp + decode_woffset(regs[i + 1]);
+  }
+}
+@ 
+Clients of the runtime system can ask for the number of locals for a
+given activation. This information is stored in the activation
+structure.
+<<public function implementations>>=
+unsigned
+Cmm_LocalVarCount(const Cmm_Activation *a) {
+  pc_map_entry* entry = (pc_map_entry*)a->rtdata;
+  return decode_offset(entry->num_locals);
+}
+@ 
+Local variables are asked for by index. A pointer is returned to the
+local by first looking it up in the array of locals for this
+activation. If the local is in a register, a pointer into the saved
+register is returned. Otherwise, a pointer into the stack where the
+register is saved is returned.
+<<public function implementations>>=
+void*
+Cmm_FindLocalVar(const Cmm_Activation *a, unsigned n) {
+  int local, reg;
+  pc_map_entry* entry = (pc_map_entry*)a->rtdata;
+  if (n >= decode_offset(entry->num_locals)) {
+    fprintf(stderr, "local var index out of range");
+    assert(0);
+  }
+  local = (locals(entry))[n];
+  if (0 != (reg = decode_reg(local))) {
+    return a->regs[reg];
+  }
+  else if (!is_dead(local)) {
+    return a->vfp + decode_woffset(local);
+  }
+  return 0;
+}
+@ 
+In the current implementation it is not possible to find the location
+of a dead var.
+<<public function implementations>>=
+void*
+Cmm_FindDeadLocalVar(const Cmm_Activation *a, unsigned n) {
+  return Cmm_FindLocalVar(a, n);
+}
+@
+Stack data is stored in a table per procedure. Each PC map entry links
+to the correct stack data table.
+<<public function implementations>>=
+void*
+Cmm_FindStackData(const Cmm_Activation *a, unsigned n) {
+  pc_map_entry* entry = (pc_map_entry*)a->rtdata;
+  Cmm_Word* sdt = entry->stackdata_table;
+  assert(sdt);
+
+  if (n >= sdt[0]) {
+    fprintf(stderr, "stack data index out of range");
+    assert(0);
+  }
+
+  return a->vfp + sdt[n+1];
+}
+@ 
+% ---------------------------------------------------------------------------
+stitch things together.
+<<runtime.c>>=
+#include "qc--runtime.h"
+#include "pcmap.h"
+#include <assert.h>
+#include <stdio.h>
+<<external functions>>
+<<private functions>>
+<<public function implementations>>
+<<private functions>>=
+void print_stack(int* fp) {
+  int a;
+  printf("stack %X\n", (unsigned)fp);
+  for (a = 35; a > -7; --a) {
+    printf("%d: %X: %x\n", a, (unsigned)fp+a, fp[a]);
+  }
+}

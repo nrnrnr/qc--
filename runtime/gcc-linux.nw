@@ -1,0 +1,40 @@
+% -*- mode: Noweb; noweb-code-mode: c-mode -*-
+% $Id$
+
+% ---------------------------------------------------------------------------
+\section{Walking GCC-Linux Stack Frames}
+% ---------------------------------------------------------------------------
+This version of the gcc stack walker assumes that a frame pointer is
+being used (no --fomit-frame-pointer). Every function stores the frame
+pointer in [[EBP]], and this register is saved at the top of each
+stack frame on entry.
+<<gcc-linux.c>>=
+#include "qc--runtime.h"
+#include "pcmap.h"
+@ 
+We are done when we find a call site in our runtime data.
+<<gcc-linux.c>>=
+int
+cmm_caller(Cmm_Word* fp) {
+  pc_map_entry* entry;
+  entry = lookup_entry_linear((const Cmm_Codeptr)*(fp));
+  return (entry != 0);
+}
+@ 
+I know how to restore EBP, but not the other regs. I guess the
+[[qc--]] client needs to kill all regs before calling a C function?
+<<gcc-linux.c>>=
+Cmm_Word*
+walk_foreign_frames(Cmm_Word* fp, Cmm_Word* regs)
+{
+  int tries = 0;
+  fp = (Cmm_Word*)regs[EBP];
+  do {
+    fp = (Cmm_Word*)*fp;
+    if (fp == 0 || tries++ > 20)
+      return 0;
+  } while (!cmm_caller(fp + 1));
+  regs[EBP] = (unsigned)fp;
+  return fp+1;
+}
+@

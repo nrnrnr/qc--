@@ -1,0 +1,51 @@
+target byteorder little;
+
+import bits32 printf;
+import bits32 rt_stack_trace;
+import bits32 c_b;
+import bits32 show_map;
+export main;
+export f,g,h;
+
+section "data" {
+   s_lbl: bits8[] "stack_trace\000";
+   f_lbl: bits8[] "f\000";
+   g_lbl: bits8[] "g\000";
+   h_lbl: bits8[] "h\000";
+   m_lbl: bits8[] "main\000";
+
+   fmt: bits8[] "%s : %X\n\000";
+   msg: bits8[] "calling runtime system...\n\000";
+}
+
+section "text" {
+span 1 s_lbl {
+stack_trace() {
+  foreign "C" printf(msg);
+  foreign "C" rt_stack_trace(j) also cuts to j;
+  return();
+
+  continuation j():
+  return();
+}}
+
+span 1 h_lbl {
+foreign "C"
+h() { stack_trace(); foreign "C" return(); }
+}
+
+span 1 g_lbl {
+foreign "C"
+g() { foreign "C" c_b();       foreign "C"  return(); }}
+
+span 1 f_lbl { f() {
+ foreign "C" g();                       return();
+ }}
+
+span 1 m_lbl {
+foreign "C" main() {
+  /* show_map(); */
+  f();
+  foreign "C" return();
+}}
+}

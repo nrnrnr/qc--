@@ -1,0 +1,108 @@
+# ------------------------------------------------------------------ 
+# $Id$
+# ------------------------------------------------------------------ 
+
+NAME = runtime
+TOP  = ..
+<      $TOP/config/config.mk
+B=""
+
+LIBA   = ${B}$NAME.a
+DEPEND = ${B}DEPEND
+
+QCMM="../bin/qc--"
+
+# ------------------------------------------------------------------ 
+# (high level) virtual targets
+# ------------------------------------------------------------------ 
+
+NW   = pcmap.nw gcc-linux.nw runtime.nw
+HTML = ${NW:%.nw=%.html}
+INC  = ${NW:%.nw=%.inc}
+
+all:V:     $LIBA
+all.opt:V: all
+doc:V:     doc.ps
+dvi:V:     doc.dvi
+html:V:    $HTML
+depend:V:  $DEPEND
+
+test:V: all test.exe
+
+doc.dvi: doc.tex $INC
+
+update:V: all
+update.opt:V: update
+
+# ------------------------------------------------------------------ 
+# cleanup
+# ------------------------------------------------------------------ 
+
+clean.opt:V:
+	rm -f $B*.o $B*.a
+
+clean:V: clean.opt
+
+clobber:V: clean
+	rm -f DEPEND $C $H *.s
+	rm -f pcmap.ld *.exe
+	rm -f *.aux *.log *.dvi *.toc *.inc *.ps *.html
+
+# ------------------------------------------------------------------ 
+# rules and tools
+# ------------------------------------------------------------------ 
+
+<$TOP/config/noweb.mk
+<$TOP/config/latex.mk
+
+# ------------------------------------------------------------------ 
+# important file sets
+# ------------------------------------------------------------------ 
+
+C = runtime.c pcmap.c gcc-linux.c
+H = qc--runtime.h pcmap.h
+
+C = ${C:%.c=$B%.c}
+H = ${H:%.h=$B%.h}
+O = ${C:%.c=%.o}
+
+SCAN = $C trace.c
+# <$TOP/config/depend.mk
+$DEPEND:D: $SCAN mkfile $H
+	gcc -MM $SCAN > $DEPEND
+<$DEPEND
+
+dep-chk:V:
+	echo
+
+# ------------------------------------------------------------------ 
+# build the libraries
+# ------------------------------------------------------------------ 
+
+$LIBA:  $O
+	ar cr $target $prereq
+
+test.exe: $O test.o trace.o pcmap.ld
+	gcc -o $target $prereq
+
+pcmap.ld:D: pcmap.nw
+	$NOTANGLE $prereq -R$target > $target
+
+&.o: &.s
+	as -o $target $stem.s
+
+&.s: &.c
+	gcc -Wall -S $stem.c
+
+&.s:D: &.c--
+	$QCMM -globals -stop .s $prereq -o $target
+
+# ------------------------------------------------------------------ 
+# extra rules for cases not covered by noweb.mk
+# ------------------------------------------------------------------ 
+
+&.h:D: &.nw
+	$NOTANGLE -L $prereq -R$target > $target
+
+qc--runtime.h:D: runtime.nw
+	$NOTANGLE -L $prereq -R$target > $target

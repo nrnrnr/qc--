@@ -1,0 +1,185 @@
+% -*- mode: Noweb; noweb-code-mode: c-mode -*-
+% $Id$
+
+% ---------------------------------------------------------------------------
+\section{PC Map}
+% ---------------------------------------------------------------------------
+This file provides an interface to the runtime data emitted by the
+compiler. The runtime data is in a table indexed by PC. For each call
+site and continuation, there is an entry in the [[pcmap]] section
+which points to the runtime data. The actual runtime data is placed in
+the [[pcmap_data]] section. Both of these are collected up, sorted by
+PC, and placed in the a data section by the system linker. Below is an
+example linker script for x86 Linux that makes the pcmap available to
+the runtime system.
+<<pcmap.ld>>=
+SECTIONS {
+ .rodata : {
+   . =  (. + 3) & ~ 3;
+   pc_map_start = .;
+   *(.pcmap)
+   pc_map_len = .;
+   LONG(. - pc_map_start);
+   *(.pcmap_data)
+ }
+}
+@
+The [[pc_map_index]] and [[pc_map_entry]] structs below are used to
+access the PC map table, and runtime data entries emitted by the
+compiler. A more detailed description of the layout and contents of
+the emitted data can be found in the file [[src/runtimedata.nw]].
+<<pcmap.h>>=
+#ifndef PC_MAP_H
+#define PC_MAP_H
+
+typedef struct {
+  Cmm_Word    frame_size;
+  Cmm_Word    overflow_size;
+  Cmm_Codeptr return_address;
+  Cmm_Word*   stackdata_table;
+  Cmm_Word    num_registers;
+  Cmm_Word    num_locals;
+  Cmm_Word    num_spans;
+  Cmm_Word    num_continuations;
+  Cmm_Word    data[1]; // registers, locals, spans, continuations.
+} pc_map_entry;
+
+
+#define enf(entry,field) (((pc_map_entry*)entry)->field)
+
+#define registers(e)      ((Cmm_Word*)enf(e,data))
+#define locals(e)        (((Cmm_Word*)enf(e,data)) + enf(e,num_registers))
+#define spans(e)         (((Cmm_Word*)enf(e,data)) + enf(e,num_registers) \
+                                                   + enf(e,num_locals))
+#define continuations(e) (((Cmm_Word*)enf(e,data)) + enf(e,num_registers) \
+                                                   + enf(e,num_locals)    \
+                                                   + enf(e,num_continuations))
+
+typedef struct {
+  Cmm_Codeptr ra;
+  pc_map_entry* entry;
+} pc_map_index;
+
+pc_map_entry* lookup_entry(const Cmm_Codeptr caller);
+
+unsigned is_dead(int local);
+unsigned decode_reg(int local);
+unsigned decode_offset(int local);
+
+#define decode_woffset(l) (decode_offset((int)l) / WORDSIZE)
+
+ // for debugging
+pc_map_entry* lookup_entry_linear(const Cmm_Codeptr caller);
+void show_map();
+
+#endif /* PC_MAP_H */
+@ 
+The runtime system expects the symbols [[pc_map_start]] and
+[[pc_map_len]] to be emitted by the linker.
+<<pcmap.c>>=
+#include "qc--runtime.h"
+#include "pcmap.h"
+#include <stdio.h>
+#include <assert.h>
+
+extern unsigned pc_map_start;
+extern unsigned pc_map_len;
+pc_map_index* pc_map = (pc_map_index*)&pc_map_start;
+#define pc_map_size (pc_map_len / sizeof(pc_map_index))
+@ 
+If we can rely on the linker to sort the entries by PC, then the
+lookup function can do binary search.
+<<pcmap.c>>=
+pc_map_entry*
+lookup_entry(const Cmm_Codeptr caller)
+{
+  pc_map_index* ndx = pc_map;
+  unsigned i  = (pc_map_size+1) / 2;
+  unsigned sz = i / 2;
+  while(1) {
+    if (ndx[i].ra == caller) {
+      return ndx[i].entry;
+    }
+    i += (ndx[i].ra < caller ? sz : -sz);
+    if (i < 0 || i >= pc_map_size)
+      break;
+    sz = (sz+1) / 2;
+  }
+  return 0;
+}
+@ 
+The compiler encodes the type in the top two bits. Registers are given
+the encoding [[01]], dead variables are given [[00]], and offsets are
+prefixed with 1. See [[emit_data]] in [[src/runtimedata.nw]] for more
+details.
+<<pcmap.c>>=
+unsigned
+decode_reg(int local) {
+  if (local > 0 && local @<< 1 < 0)
+  {
+    int mask   = ((WORDSIZE * 8) -2) / 2;
+    int slice  = (local & ((1 @<< (WORDSIZE*8-2)) -1)) >> mask;
+    int offset =  local & ((1 @<<  mask         ) -1);
+
+    if (slice) {
+      fprintf(stderr, "register slices not supported.\n");
+      assert(0);
+    }
+    return offset;
+  }
+  return 0;
+}
+<<pcmap.c>>=
+unsigned
+decode_offset(int local) {
+  assert(local < 0);
+  local <<= 1;        // GCC BUG !!
+  return local / 2;
+}
+<<pcmap.c>>=
+unsigned
+is_dead(int local) {
+  if (local >= 0 && local @<< 1 >= 0) {
+    return 1;
+  } else {
+    return 0;
+  }
+}
+@ 
+A linear search function is useful for debugging.
+<<pcmap.c>>=
+pc_map_entry*
+lookup_entry_linear(const Cmm_Codeptr caller)
+{
+  pc_map_index* ndx = pc_map;
+  unsigned i = 0;
+  for(i = 0; i < pc_map_size; ++i) {
+    if (ndx[i].ra == caller) {
+      return ndx[i].entry;
+    }
+  }
+  return 0;
+}
+@ 
+[[show_map]] dumps out all of the runtime data. It is only useful for
+debugging the [[qc--]] runtime system.
+<<pcmap.c debug>>=
+void show_map() {
+  unsigned i;
+  pc_map_index* ndx = pc_map;
+  printf("pc_map_size %d\n", pc_map_size);
+  for (i = 0; i < pc_map_size; ++i) {
+    printf("%d: ra:%X  entry:%X -> frame_size:%X -> %X, overflow:%X\n"
+           "\tregs:%X,locals%X,spans:%X,cont:%X\n",
+           i, ndx[i].ra, ndx[i].entry,
+           ndx[i].entry->frame_size,
+           decode_offset(ndx[i].entry->frame_size),
+           ndx[i].entry->overflow_size,
+           ndx[i].entry->num_registers,
+           ndx[i].entry->num_locals,
+           ndx[i].entry->num_spans,
+           ndx[i].entry->num_continuations           
+           );
+  }
+}
+@ 
