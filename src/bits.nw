@@ -652,15 +652,17 @@ let check width uint64 =
     then raise Overflow
     else () (* ok *)*)
 
-  try (if (not(
-           if (width <= 0) || (width > 64) 
-           then
-             raise (Size ("does not fit in check with "^(string_of_int width)))
-           else (width = 64) || (U.le uint64 (U.shl width I.one))))
-  then
-    (T.nbe' (T.arrow(T.a',T.unit))
-       (Sy.VAR "raise") (Sy.VAR "Overflow"))
-  else ())
+  try 
+    if (not(
+        if (width <= 0) || (width > 64) 
+        then
+          raise (Size ("does not fit in check with "^(string_of_int width)))
+        else (width = 64) || (U.le uint64 (U.shl width I.one))))
+    then
+      (*(T.nbe' (T.arrow(T.a',T.unit))
+	 (Sy.VAR "raise") (Sy.VAR "Overflow"))*)
+      raise Overflow
+    else ()
   with Size _ -> (T.nbe' (T.arrow(T.a',T.unit)) (Sy.VAR "raise") (Sy.VAR "Size"))
 
 @
