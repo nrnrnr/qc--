@@ -1,3 +1,4 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 
 \input{macros.tex}
 
@@ -245,3 +246,91 @@ temporaries.  This makes it easier to place them into registers.
       spilled temporaries or is there a better way?
 
 \end{enumerate}
+
+
+<<linscan2.mli>>=
+<<exported module types>>
+module Make (A : Args) : S
+
+<<exported module types>>=
+module type Args = sig
+  module Cfg : sig
+    include Cfg2.S
+    type t = cfg
+    val replace : (Rtl.rtl -> Rtl.rtl) -> node -> unit
+    val mapg : (Rtl.rtl -> Rtl.rtl) -> cfg -> cfg
+  end
+  module Lifetime : Lifetime.S
+  type loc = Register.t
+  module LT : Map.S with type key = loc
+
+  val find_reg     : Lifetime.t LT.t -> loc -> loc option
+  val find_spillee : Lifetime.t LT.t -> loc -> loc * Lifetime.Interval.t
+end
+@ 
+Here's one component of an allocator.
+It is written in continuation-passing style.
+<<exported module types>>=
+module type S = sig
+  module A : Args
+  type lifetimes = A.Lifetime.t A.LT.t
+  val replace_temporary :
+        graph:A.Cfg.t -> 
+        temporary:A.loc ->
+        lifetimes:lifetimes ->
+        succeed:(A.Cfg.t -> lifetimes -> 'a) ->
+        spill:(A.loc -> A.Lifetime.Interval.t -> A.Cfg.cfg -> 'a)
+        -> 'a
+end
+
+<<linscan2.ml>>=
+<<exported module types>>
+
+module Make (A : Args) : S = struct
+
+  type lifetimes = A.Lifetime.t A.LT.t
+  module A = A
+
+open A (* never do this *)
+
+exception Retry of Cfg.t
+
+let replace n f = Cfg.replace f n
+
+let linscan g        (* graph *)
+            lifetime (* lifetime interval of each location *)
+            =
+  let alloc = <<allocator>> in
+  try Cfg.iter g alloc with Retry g -> raise (Retry g)
+
+
+<<allocator>>=
+fun node -> assert false
+@ 
+
+One step in general-purpose allocation: choose a node containing
+temporaries, and replace a temporary in that node.
+<<linscan2.ml>>=
+module L = Lifetime
+
+let lookup table x = LT.find x table
+
+let replace_reg t r = fun t' -> if t = t' then r else t'
+
+let replace_temporary graph t lifetimes allocated spill =
+  let lifetime = lookup lifetimes in
+  match find_reg lifetimes t with
+  | Some r -> (* successfully found a hardware register *)
+      let lifetimes = LT.add r (L.union (lifetime r) (lifetime r)) lifetimes in
+      let lifetimes = LT.remove t lifetimes in
+      allocated (Cfg.mapg (Rtlutil.Subst.reg (replace_reg t r)) graph) lifetimes
+  | None ->
+      let spillee, interval = find_spillee lifetimes t in (* chooses t or a h/w reg *)
+      spill spillee interval graph
+
+
+
+
+
+<<linscan2.ml>>=
+end
