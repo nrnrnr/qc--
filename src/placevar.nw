@@ -28,6 +28,7 @@ val fortran'  : 'a -> Ast2ir.proc -> bool
 Boilerplate for linking to Lua.
 <<placevar.ml>>=
 module R  = Rtl
+module RT = Runtimedata
 module RU = Rtlutil
 module A  = Automaton
 module RP = Rtl.Private
@@ -50,6 +51,7 @@ let fortran' _ ({Proc.cfg = g; Proc.temps = temps; Proc.varMap = tMap} as proc) 
     | Some rtl -> let rtl' = replace_var store_var fetch_var rtl in
                   G.update_instr (fun _ -> rtl') node  in
   let () = G.iter_nodes updateNode g in
+  <<add variable placements to spans>>
   !changed
 @
 We use the Fortran convention for placing variables: anything named
@@ -81,8 +83,9 @@ let get_placer s i w =
   match tMap.(i) with
   | Some a -> a
   | None   -> let tmp = new_tmp s w in
-              let alloc = { A.fetch = (fun   w -> R.fetch tmp w)
-                          ; A.store = (fun e w -> R.store tmp e w)
+              let alloc = { A.fetch  = (fun   w -> R.fetch tmp w)
+                          ; A.store  = (fun e w -> R.store tmp e w)
+                          ; A.simple = (fun ()  -> tmp)
                           } in
               (changed := true;
                tMap.(i) <- Some alloc;
@@ -177,6 +180,7 @@ let context autmtn _ ({ Proc.cfg = g; Proc.target = tgt; Proc.formals = formals
   <<choose a context for each variable>>
   <<replace variables with temps>>
   <<freeze [[autmtn]] and make sure its overflow block is empty>>
+  <<add variable placements to spans>>
   !changed
 @
 For each variable, we keep track of how many times it is used in each context.
@@ -370,4 +374,24 @@ let mk_automaton ~warn ~vfp mk_stage proc =
     {A.allocate = alloc; A.freeze = methods.A.freeze} in
   Block.srelative vfp "variables placed in memory" A.at
   ( A.wrap warn *> mk_stage ~temps:(from_temps proc) *> A.as_stage proc.Proc.priv )
+@
+After we have placed the variables, we record their locations in the spans.
+<<add variable placements to spans>>=
+let fold_arri f a z = 
+  let l = Array.length a in
+  let rec do_fold i z =
+    if i < l then do_fold (i+1) (f i (Array.get a i) z)
+    else z in
+  do_fold 0 z in
+let var_spans =
+  fold_arri (fun i loc rst -> match loc with None   -> rst
+                                           | Some l -> RT.var_asst_to_span proc i l
+																					             :: rst)
+            tMap [] in
+let newspans =
+  List.map (fun (l,spans as p) -> if l = proc.Proc.symbol#original_text
+                                  then p
+																	else (l, var_spans@spans))
+           proc.Proc.spans in
+proc.Proc.spans <- newspans;
 @
