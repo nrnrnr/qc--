@@ -124,7 +124,23 @@ module Exists : sig
     val rtl : (Rtl.Private.const -> bool) -> Rtl.rtl -> bool
   end
 end 
+@ 
+If a location satisfying a predicate exists, we can find it.
+<<rtlutil.mli>>=
+module Find : sig
+  module Loc : sig
+    val exp : (Rtl.Private.loc -> bool) -> Rtl.Private.exp -> Rtl.Private.loc option
+  end
+end 
 @    
+We fold over locations that appear under [[Fetch]].
+<<rtlutil.mli>>=
+module Fold : sig
+  module LocFetched : sig
+    val rtl : (Rtl.Private.loc -> 'a -> 'a) -> Rtl.Private.rtl -> 'a -> 'a
+  end
+end
+@ 
 
 % ------------------------------------------------------------------ 
 \subsection{Location search}
@@ -148,10 +164,11 @@ shuffles.
 <<rtlutil.mli>>=
 module MayAlias : sig
   (* MODULE MAY GIVE FALSE NEGATIVES FOR QUERIES INVOLVING REGISTER PAIRS *)
-  val regs : Register.t -> Register.t -> bool   
-  val locs : Rtl.loc -> Rtl.loc -> bool  (* useful to partially apply *)
-  val exp  : Rtl.loc -> Rtl.exp -> bool  (* useful to partially apply *)
-  val exp' : Rtl.Private.loc -> Rtl.Private.exp -> bool  (* useful to partially apply *)
+  val regs  : Register.t -> Register.t -> bool   
+  val locs  : Rtl.loc -> Rtl.loc -> bool  (* useful to partially apply *)
+  val locs' : Rtl.Private.loc -> Rtl.Private.loc -> bool  (* partially apply *)
+  val exp   : Rtl.loc -> Rtl.exp -> bool  (* useful to partially apply *)
+  val exp'  : Rtl.Private.loc -> Rtl.Private.exp -> bool  (* partially apply *)
 end
 @
 
@@ -163,9 +180,9 @@ Register allocation requires to re-write an {\rtl} by substituting
 registers inside. The translation of a procedure creates expressions
 that contain [[Rtl.link]] values that later must be substituted for
 compile-time constants. Substitutions for locations, registers. and
-expressions are provided by the [[Subst2]] sub-module:
+expressions are provided by the [[Subst]] sub-module:
 <<rtlutil.mli>>=
-module Subst2: sig
+module Subst: sig
     val loc:        guard:(Rtl.Private.loc -> bool)               
                     -> map:(Rtl.Private.loc -> Rtl.Private.loc) 
                     -> Rtl.rtl -> Rtl.rtl
@@ -184,6 +201,11 @@ module Subst2: sig
     val reg_def:    map:(Register.t -> Register.t) -> Rtl.rtl -> Rtl.rtl
     
     val reg_use:    map:(Register.t -> Register.t) -> Rtl.rtl -> Rtl.rtl
+
+    val rhs_exp:    guard:(Rtl.Private.loc -> bool) ->
+                    map:(Rtl.Private.loc -> Rtl.width -> Rtl.Private.exp) ->
+                    Rtl.rtl -> Rtl.rtl
+      (* argument implements Fetch *)
 end
 @
 
@@ -289,8 +311,8 @@ module ReadWriteKill = struct
     <<ReadWriteKill>>
 end
 
-module Subst2 = struct
-    <<Subst2>>
+module Subst = struct
+    <<Subst>>
 end
 
 module ToAST = struct
@@ -436,7 +458,7 @@ let sets_promote rtl = mk_sets fold_promote RS.add  RS.empty  rtl
 
 The [[DownUp]] module allows to apply functions that work on the private
 representation of {\rtl}s to their abstract public representation.
-<<Subst2>>=
+<<Subst>>=
 module DownUp = struct
     let rtl f r = Rtl.Up.rtl (f (Rtl.Dn.rtl r))
     let loc f l = Rtl.Up.loc (f (Rtl.Dn.loc l))
@@ -451,7 +473,7 @@ should be applied to definitions and/or uses. The [[loc]] sub-function is
 resposible for checking the [[act]] boolean variable before applying the
 function. The caller of [[loc]] pass this variable according to whether the
 location is used as a def or a use.
-<<Subst2>>=
+<<Subst>>=
 let loc_gen' guard map rtl ~def ~use = 
     let rec exp = function
         | RP.Fetch (l, width)      -> RP.Fetch(loc use l, width)
@@ -496,7 +518,7 @@ let exp' guard map rtl =
 For subtitutiong registers we use the substitution function for
 locations and provide it with the appropirate guard and map.
 
-<<Subst2>>=
+<<Subst>>=
 let reg_gen' map rtl loc' =
     let map = function RP.Reg r -> RP.Reg(map r) | _ -> assert false in
     let is_register = function
@@ -530,6 +552,24 @@ let reg_def            ~map rtl = DownUp.rtl (reg_def'    map) rtl
 let reg_use            ~map rtl = DownUp.rtl (reg_use'    map) rtl 
 @
 
+<<Subst>>=
+let rhs_exp ~guard ~map =
+  let rec exp = function
+    | RP.Fetch (l, width) when guard l -> map l width
+    | RP.Fetch (l, width) -> RP.Fetch (loc l, width)
+    | RP.App(opr, exprs)  -> RP.App(opr, List.map exp exprs)
+    | RP.Const _ as e     -> e
+  and loc l = match l with
+  | RP.Mem (sp,agg,w,e,ass)  -> RP.Mem(sp, agg, w, exp e, ass)
+  | RP.Slice (w,i,l)         -> RP.Slice(w,i,loc l)
+  | RP.Reg _ | RP.Var _ | RP.Global _ -> l in
+  let effect = function
+    | RP.Store (l,e,width)     -> RP.Store(loc l, exp e, width)
+    | RP.Kill  (l)             -> RP.Kill (loc l) in
+  let guarded (e,eff)  = (exp e, effect eff) in
+  let rtl (RP.Rtl rtl) = RP.Rtl (List.map guarded rtl) in
+  fun r -> Up.rtl (rtl (Dn.rtl r))
+@
 
 % ------------------------------------------------------------------ 
 \subsection{RTL Classification}
@@ -1075,5 +1115,44 @@ module Exists = struct
         | RP.App(_, es)  -> List.exists exp es
       and const c = const_ftn c in
       fun r -> rtl (R.Dn.rtl r)
+  end
+end 
+<<rtlutil.ml>>=
+module Find = struct
+  module Loc = struct
+    let exp f e =
+      let rec has es ess = match es with
+        | [] -> (match ess with [] -> None | es :: ess -> has es ess)
+        | RP.Const _ :: es -> has es ess
+        | RP.Fetch (l, w) :: es ->
+            if f l then Some l
+            else ( match l with
+                 | RP.Mem (_, _, _, e, _) -> has (e :: es) ess
+                 | _ -> has es ess)
+        | RP.App (_, es') :: es -> has es (es' :: ess) in
+      has [e] []
+  end
+end 
+@ 
+<<rtlutil.ml>>=
+module Fold = struct
+  module LocFetched = struct
+    let rtl f rtl z = 
+      let rec exp z e =
+        let rec fold z es ess = match es with
+        | [] -> (match ess with [] -> z | es :: ess -> fold z es ess)
+        | RP.Const _ :: es -> fold z es ess
+        | RP.Fetch (l, w) :: es -> let z = f l z in fold (loc z l) es ess
+        | RP.App (_, es') :: es -> fold z es (es' :: ess) in
+        fold z [e] [] 
+      and loc z = function
+        | RP.Mem (_, _, _, e, _) -> exp z e
+        | _ -> z in
+      let effect z = function
+        | RP.Kill l -> loc z l
+        | RP.Store (_, r, w) -> exp z r in
+      let guarded z (g, e) = effect (exp z g) e in
+      let RP.Rtl effs = rtl in
+      List.fold_left guarded z effs
   end
 end 

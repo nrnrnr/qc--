@@ -55,11 +55,11 @@ module SS = Strutil.Set
 module T  = Target
 
 module ToString = RU.ToReadableString
+<<utilities>>
 @ 
 <<peephole.ml>>=
 module D  = Dataflow.Make (G)
 
-<<substitution>>
 let subst_forward _ proc =
   let ok =
     if Verbose.verbosity < 4 then proc.P.target.T.is_instruction
@@ -87,18 +87,21 @@ According to Jack Davidson, we should try two substitutions, not just
 one, when peephole optimizing.
 <<propagation>>=
 let propagate node avail =
+  <<substitution>>
   let update rtl = G.update_instr (replace rtl) node; changed := true in
   let () = 
     match G.to_executable node with
     | None -> ()
     | Some rtl ->
         Verbose.eprintf 4 "=> Considering %s\n" (ToString.rtl rtl);
-        subst_one rtl avail
-          (fun rtl' (resume:unit->unit) ->
-            subst_one rtl' avail
-              (fun rtl'' resume -> if ok rtl'' then update rtl'' else resume ())
-              (fun () -> if ok rtl' then update rtl' else resume()))
-          (fun () -> ()) in
+        let try_pair l l' resume =
+          let rtl' = subst2 l l' rtl in
+          if ok rtl' then update rtl' else resume () in
+        let try_one l resume =
+          let rtl' = subst1 l rtl in
+          if ok rtl' then update rtl' else resume () in
+        let cs = candidates (Dn.rtl rtl) in
+        search_pairs cs (wrap2 try_pair) (fun () -> search cs (wrap try_one) (fun () -> ())) in
   match G.kind node with
   | G.Instruction | G.Assertion ->
       (match G.to_instr node with
@@ -106,15 +109,52 @@ let propagate node avail =
       | Some rtl -> Avail.forward rtl avail)
   | _ -> Avail.empty  (* rank pessimism *) in
 @ 
-Here's a nasty backtracking search for a substitutable location.
 <<substitution>>=
+let candidates rtl =
+  let add loc pairs = match loc with
+  | RP.Reg _ when not (List.mem_assoc loc pairs) ->
+      (match Avail.in_loc avail loc with
+      | Some e -> (loc, e) :: pairs
+      | None -> pairs)
+  | _ -> pairs in
+  RU.Fold.LocFetched.rtl add rtl [] in
+
+let rec search list succ fail = match list with
+| [] -> fail()
+| x :: xs -> succ x (fun () -> search xs succ fail) in
+
+let rec search_pairs list succ fail = match list with
+| [] -> fail ()
+| x :: xs -> search xs (fun x' resume -> succ x x' resume)
+                       (fun () -> search_pairs xs succ fail) in
+
+let subst1 (loc, e) rtl =
+  RU.Subst.rhs_exp ~guard:((=) loc) ~map:(fun _ _ -> e) rtl in
+
+let subst2 (loc,e) (loc',e') rtl =
+  RU.Subst.rhs_exp ~guard:(fun l -> l = loc || l = loc')
+                   ~map:(fun l _ -> if l = loc then e else e') rtl in
+@ 
+
+
+<<utilities>>=
 let wrap = 
   if Verbose.verbosity < 4 then (fun succ -> succ)
   else (fun succ l resume ->
-    let () = Verbose.eprintf 4 "Substituting for %s\n" (ToString.loc (Up.loc l)) in
+    Printf.eprintf "Substituting for %s\n" (ToString.loc (Up.loc (fst l)));
     succ l (fun () ->
-      (Verbose.eprintf 4 "Abandoning %s\n" (ToString.loc (Up.loc l)); resume())))
+      (Printf.eprintf "Abandoning %s\n" (ToString.loc (Up.loc (fst l))); resume())))
 
+let wrap2 = 
+  if Verbose.verbosity < 4 then (fun succ -> succ)
+  else (fun succ l l' resume ->
+    Printf.eprintf "Substituting for %s and %s\n" (ToString.loc (Up.loc (fst l))) 
+      (ToString.loc (Up.loc (fst l')));
+    succ l l' (fun () ->
+      (Printf.eprintf "Abandoning %s and %s\n" (ToString.loc (Up.loc (fst l))) (ToString.loc (Up.loc (fst l'))); resume())))
+@ 
+Here's a nasty backtracking search for a substitutable location.
+<<old substitution>>=
 let subst_one rtl avail succ fail =
   let is_some = function Some _ -> true | None -> false in
   let substitute loc =

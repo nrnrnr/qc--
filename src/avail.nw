@@ -32,8 +32,8 @@ location holds.
 To observe for redundancy elimination, we need to know what location
 holds an expression.
 <<avail.mli>>=
-val in_loc  : t -> Rtl.loc -> Rtl.exp option
-val has_exp : t -> Rtl.exp -> Rtl.loc option
+val in_loc  : t -> Rtl.Private.loc -> Rtl.Private.exp option
+val has_exp : t -> Rtl.Private.exp -> Rtl.Private.loc option
 @ 
 
 
@@ -43,6 +43,7 @@ val has_exp : t -> Rtl.exp -> Rtl.loc option
 <<avail.ml>>=
 module R   = Rtl
 module RP  = Rtl.Private
+module RU  = Rtlutil
 module Up  = Rtl.Up
 module Dn  = Rtl.Dn
 module Re  = Register
@@ -54,12 +55,48 @@ type t = (RP.loc * RP.exp) list
 let empty = []
 @ 
 <<avail.ml>>=
-let in_loc pairs l = try Some (Up.exp (List.assoc (Dn.loc l) pairs))
+let in_loc pairs l = try Some (List.assoc l pairs)
                      with Not_found -> None
 let has_exp pairs e =
-  let e = Dn.exp e in
-  try Some (Up.loc (fst (List.find (fun (_, e') -> e = e') pairs)))
+  try Some (fst (List.find (fun (_, e') -> e = e') pairs))
   with Not_found -> None
 @ 
+THIS CODE IS BROKEN FOR THE CASE WHEN A LEFT-HAND SIDE ALSO APPEARS ON
+A RIGHT-HAND SIDE.
+IN SUCH A CASE, WE NEED TO SUBSTITUTE FOR THE EXISTING VALUE OF THE
+LHS OR WE NEED TO GIVE UP.
+(A less serious problem is that we may get multiple equivalents for
+the same expression, and it is not clear which one(s) to use.)
 <<avail.ml>>=
-let forward rtl pairs = Impossible.unimp "available expressions"
+<<kills>>
+let forward rtl pairs =
+  let locs = locs_killed rtl in
+  let alocs = List.map RU.MayAlias.locs' locs in
+  let aexps = List.map RU.MayAlias.exp'  locs in
+  let invalidated (l, r) =
+    List.exists (fun aloc -> aloc l) alocs || List.exists (fun aexp -> aexp r) aexps in
+  let pairs =
+    if List.exists invalidated pairs then
+      List.filter (fun p -> not (invalidated p)) pairs
+    else
+      pairs in
+  (* massive pessimism: do registers only *)
+  let extend guarded pairs = match guarded with
+  | RP.Const (RP.Bool true), RP.Store(RP.Reg _ as l, r, _) -> (l, r) :: pairs
+  | _ -> pairs in
+  let RP.Rtl effects = Dn.rtl rtl in
+  List.fold_right extend effects pairs
+@ 
+We never remember a memory location, so we need only to identify
+registers that are killed.
+<<kills>>=
+let locs_killed rtl =
+  let add_reg r locs =
+    if List.exists (function RP.Reg r' when r = r' -> true | _ -> false) locs then
+      locs
+    else
+      RP.Reg r :: locs in
+  RU.ReadWriteKill.fold_promote ~write:add_reg ~kill:add_reg ~read:(fun _ locs -> locs)
+    rtl []
+@ 
+  

@@ -332,17 +332,17 @@ immed8 : const8  {: "$" ^ const8 :}
 @ 
 \paragraph{RTLs to recognize before code generation}
 <<rules>>=
-slotaddr : Add(vfp, lateconst) {: sprintf "%%vfp+%s" lateconst :}
+slotaddr : Add(vfp, const) {: sprintf "%%vfp+%s" const :}
 slotaddr : vfp {: "%vfp" :}
 
-lateconst: const {: const :}
-lateconst: Late(string, w) {: string :}
-lateconst: Add(l:lateconst, r:lateconst) {: sprintf "%s+%s" l r :}
+const: Late(string, w) {: string :}
+const: Add(l:const, r:const) {: sprintf "%s+%s" l r :}
 
 inst: Guarded(Cmp(string, esp, slotaddr), Store(espl, s2:slotaddr, w)) 
          {: "adjust %esp" :}
 inst: Store(dst:eaddrl, slotaddr, w) {: sprintf "%s := %s" dst slotaddr :}
-inst: Store(dst:eaddrl, lateconst, w) {: sprintf "%s := %s" dst lateconst :}
+
+-- inst: Store(dst:eaddrl, lateconst, w) {: sprintf "%s := %s" dst lateconst :}
 @ 
 
 \paragraph{Data movement}
@@ -415,10 +415,16 @@ inst : Withaflags(dst:eaddrl, "add", src:reg, w, "x86_addflags")
 inst : Withaflags(dst:regl, "add", src:eaddr, w, "x86_addflags")
   {: cat ["add"; suffix w; " "; src; ","; dst] :}
 
+inst : Withaflags(dst:regl, "add", src:immed, w, "x86_addflags")
+  {: cat ["add"; suffix w; " "; src; ","; dst] :}
+
 inst : Withaflags(dst:eaddrl, "sub", src:reg, w, "x86_subflags")
   {: cat ["sub"; suffix w; " "; src; ","; dst] :}
 
 inst : Withaflags(dst:regl, "sub", src:eaddr, w, "x86_subflags")
+  {: cat ["sub"; suffix w; " "; src; ","; dst] :}
+
+inst : Withaflags(dst:regl, "sub", src:immed, w, "x86_subflags")
   {: cat ["sub"; suffix w; " "; src; ","; dst] :}
 
 inst : Withaflagsunary("neg", dst:eaddrl, w, "x86_negflags")
@@ -653,6 +659,7 @@ any : F2i(n:w, w, any) {: sprintf "F2i(%d, %d, %s)" n w any :}
 any : I2f(n:w, w, any) {: sprintf "I2f(%d, %d, %s)" n w any :}
 any : Lobits(any, w) {: "Lobits(" ^ any ^ ", " ^ string_of_int w ^ ")" :}
 any : X86_subflags(l:any, r:any) {: "X86_subflags(" ^ l ^ ", " ^ r ^ ")" :}
+any : X86_addflags(l:any, r:any) {: "X86_addflags(" ^ l ^ ", " ^ r ^ ")" :}
 
 any : Mem(any, w) {: "Mem(" ^any ^ "," ^ string_of_int w ^ ")" :}
 any : Reg  (char, n, w) {: sprintf "Reg(%s, %d, %d)"   (Char.escaped char) n w :}
@@ -721,6 +728,7 @@ constructor for each operator.
 | RP.App(("x86_fcmp", [w]), [x; y]) -> conFcmp (exp x) (exp y)
 | RP.App(("lobits", [w;n]), [x])   -> conLobits (exp x) n
 | RP.App(("x86_subflags", [w]), [x; y]) -> conX86_subflags (exp x) (exp y)
+| RP.App(("x86_addflags", [w]), [x; y]) -> conX86_addflags (exp x) (exp y)
 | RP.App(("x86_ah2flags", []), [x]) -> conAh2flags (exp x)
 | RP.App(("x86_repmovs",   [w]), [x;y;z]) -> conRepmovs (exp x) (exp y) (exp z)
 | RP.App(("bitInsert", [w; n]), [lsb; dst; src]) ->

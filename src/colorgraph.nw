@@ -1001,7 +1001,7 @@ let applyColors cg
   let subst t = if is_tmp target t then find t else t in
   let subst_rtl node =
     begin
-      G.upd_instr node (Rtlutil.Subst2.reg ~map:subst);
+      G.upd_instr node (Rtlutil.Subst.reg ~map:subst);
       <<rewrite temporaries in spans>>
     end in
   let () = G.iter_nodes subst_rtl cfg in
@@ -1034,7 +1034,7 @@ let rewrite_spans (lbl, ss as rst) =
                        | [] -> raise Not_found
 		     *)
                   else Rtl.reg r in
-      (i, try Rtlutil.Subst2.loc_of_exp ~map e
+      (i, try Rtlutil.Subst.loc_of_exp ~map e
           with Not_found -> RTD.dead_value) in
     (lbl, List.map rewrite_span ss)
   else rst in
@@ -1140,7 +1140,7 @@ let update proc spillee (map, newtemps as accum) node =
         (cfg_ins_lst_before (target.T.reload lookup tmp mem) node)
     ; if writes then 
         (cfg_ins_lst_after  (target.T.spill  lookup tmp mem) node)
-    ; G.upd_instr node (Rtlutil.Subst2.reg ~map:subst)
+    ; G.upd_instr node (Rtlutil.Subst.reg ~map:subst)
     ; (RM.add tmp (mem, tmp::spill_regs) map, tmp::newtemps)
     )
   else accum
