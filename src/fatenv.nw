@@ -85,8 +85,8 @@ the declaration of that binding was erroneous.  For this reason the
 constructor.
 
 <<>>=
-type ventry     = scope * (denotation * ty) Error.error
-type tentry     = scope * ty                Error.error
+type ventry     = (denotation * ty) Error.error
+type tentry     = ty                Error.error
 @ 
 
 The fat environment records the [[target]] annotation from a {\PAL}
@@ -112,21 +112,22 @@ Any attempt to re-declare a name in a scope is detected by the
 [[bind*]] functions reported with an [[Error.ErrorExn]] exception.
 
 <<>>=
-val bindv           : string -> ventry  -> env -> env
-val bindt           : string -> tentry  -> env -> env
-val bindvError      : string -> scope   -> env -> env
-val bindtError      : string -> scope   -> env -> env
+val bindv           : string -> scope -> ventry  -> env -> env
+val bindt           : string -> scope -> tentry  -> env -> env
+val bindvError      : string -> scope            -> env -> env
+val bindtError      : string -> scope            -> env -> env
 @
 
 The [[find*]] functions lookup the meaning of a name in the value or
 type name space.  The result includes the scope where a name was
 bound.  In case the name is not bound an [[Error.ErrorExn]] is raised.
+The primed functions omit the scope from the result.
 
 <<>>=
-val findv           : string -> env     -> ventry
-val findt           : string -> env     -> tentry
-val findv'          : string -> env     -> (denotation * ty) Error.error
-val findt'          : string -> env     -> ty Error.error
+val findv           : string -> env -> scope * ventry
+val findt           : string -> env -> scope * tentry
+val findv'          : string -> env -> ventry
+val findt'          : string -> env -> tentry
 @
 
 The [[srcmap]] function returns the [[Srcmap.map]] value passed to
@@ -182,8 +183,8 @@ module StrMap       = Map.Make(Comparable)
 
 <<type declarations>>
 
-type tenv           = tentry StrMap.t
-type venv           = ventry StrMap.t
+type tenv           = (scope * tentry) StrMap.t
+type venv           = (scope * ventry) StrMap.t
 type arch           = { memsize:      int option
                       ; endianness:   endianness option
                       }
@@ -221,8 +222,8 @@ reporting design does not allow to report an error and return a value
 at the same time.
 
 <<>>=
-let bindv name (scope, _ as x) env =
-    let add name x = {env with venv = StrMap.add name x env.venv} in
+let bindv name scope x env =
+    let add name x = {env with venv = StrMap.add name (scope,x) env.venv} in
     try 
         let (scope',_) = StrMap.find name env.venv in
         if scope' = scope then
@@ -234,8 +235,8 @@ let bindv name (scope, _ as x) env =
 @
 
 <<>>=
-let bindt name (scope, _ as x) env =
-    let add name x = {env with tenv = StrMap.add name x env.tenv} in
+let bindt name scope x env =
+    let add name x = {env with tenv = StrMap.add name (scope,x) env.tenv} in
     try 
         let (scope',_) = StrMap.find name env.tenv in
         if scope' = scope then
@@ -246,8 +247,8 @@ let bindt name (scope, _ as x) env =
         Not_found -> add name x
 
 <<>>=
-let bindvError name scope env = bindv name (scope, E.Error) env
-let bindtError name scope env = bindt name (scope, E.Error) env
+let bindvError name scope env = bindv name scope E.Error env
+let bindtError name scope env = bindt name scope E.Error env
 @
 
 The functions to lookup a value [[findv]] and a type [[findt]] raise
@@ -266,6 +267,12 @@ let findt name env =
         StrMap.find name env.tenv
     with
         Not_found -> E.error ("unknown type: "^name)
+@
+
+The following primed functions return just the entry for a name
+without its scope. This is a special case of the functions above and
+only for convenience.
+
 <<>>=
 let findv' name env = snd (findv name env)
 let findt' name env = snd (findt name env)

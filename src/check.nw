@@ -18,7 +18,7 @@ scopes.  There are four name spaces:
 \item Types (names defined by [[typedef]]).
 \item Primitive compile-time operators ([[%add]], \dots).
 \item Primitive run-time operators; this a super set of the compile-time
-      coperators.
+      operators.
 \end{enumerate}
 
 Since operators are predefined they are visible everywhere and have no
@@ -93,9 +93,9 @@ module F = Fatenv
 \subsubsection{The 30\,000 feet overview}
 % ------------------------------------------------------------------  
 
-An outlined in the introduction, an environment must be built up befor
+An outlined in the introduction, an environment must be built up before
 the static semantics can be checked. The different phases are delegated
-tu sub-modules which are assembled here. 
+to sub-modules which are assembled here. 
 
 <<>>=
 <<auxiliaries>>
@@ -399,10 +399,10 @@ A [[typedef]] declares multiple names.  This function binds all
 
 <<>>=
 let bindt names ty scope env =
-    foldl (fun env n -> F.bindt n (scope,ty) env) env names
+    foldl (fun env n -> F.bindt n scope ty env) env names
 @
 
-While processing a declaration an error may occur. This is catched
+While processing a declaration an error may occur. This is caught
 here; the source-code position associated with a type declaration is
 used for error reporting.
 
@@ -492,7 +492,7 @@ The outline of the [[ValueEnv]] module below gives a glimpse of the
 different steps:  module [[TV]] provides informations about the
 dependencies of constant declarations.  [[Bind]] enters names for
 values (except of constants) into the environment, [[Collect]]
-collects constant declarations, and [[Eval]] evaulates constant
+collects constant declarations, and [[Eval]] evaluates constant
 declarations and enters them into the environment. 
 
 <<building the value environment>>=
@@ -527,20 +527,6 @@ which may be undefined. A declaration which refers to an undefined type
 is bound to [[Error.Error]].
 
 <<bind global values>>=
-let proct scope    = (scope, E.Ok(F.Label(F.Proc),T.code))
-let codet scope    = (scope, E.Ok(F.Label(F.Code),T.code))
-let datat scope    = (scope, E.Ok(F.Label(F.Data),T.data))
-let contt scope    = (scope, E.Ok(F.Continuation,T.cont))    
-
-<<>>=
-let regt scope = function 
-    | E.Ok(t) -> (scope, E.Ok(F.Register,t))
-    | E.Error -> (scope, E.Error)
-<<>>=
-let importt scope = function 
-    | E.Ok(t) -> (scope, E.Ok(F.Import,t))
-    | E.Error -> (scope, E.Error)
-<<>>=
 let rec ty env = function
     | A.TyAt(x,r)       -> E.catch (error r env) (ty env) x
     | A.BitsTy(n)       -> E.Ok(T.bits n)
@@ -560,11 +546,13 @@ procedure) are bound labels are bound a second time with a local scope
 in the environment. This helps to decide whether a symbol is local or
 global when it is accessed from inside a procedure.
 
-    
 <<>>=
 let import scope t env = function
-    | Some foreign, name -> F.bindv name (importt scope (ty env t)) env
-    | None        , name -> F.bindv name (importt scope (ty env t)) env
+    | Some foreign, name -> 
+        F.bindv name scope (E.ematch (ty env t) (fun t -> F.Import,t)) env
+    | None        , name -> 
+        F.bindv name scope (E.ematch (ty env t) (fun t -> F.Import,t)) env
+         
 <<>>=
 let target env = function
     | A.Memsize(i) when i > 0   -> F.bindMemsize i env
@@ -574,7 +562,8 @@ let target env = function
     
 <<>>=
 let imports  scope env t ii         = foldl (import scope t) env ii
-let register scope env (_,t,name,_) = F.bindv name (regt scope (ty env t)) env
+let register scope env (_,t,name,_) = 
+    F.bindv name scope (E.ematch (ty env t) (fun t -> F.Register,t)) env
 @
 
 The [[datum]] function binds global data-labels and local
@@ -582,9 +571,9 @@ The [[datum]] function binds global data-labels and local
 
 <<>>=
 let rec datum scope env = function
-    | A.DatumAt(x,r)        -> E.catch' env (error r env) (datum scope env) x
-    | A.Label(n)            -> F.bindv n (datat scope) env 
-    | _                     -> env
+    | A.DatumAt(x,r)  -> E.catch' env (error r env) (datum scope env) x
+    | A.Label(n)      -> F.bindv n scope (E.Ok(F.Label(F.Data),T.data)) env
+    | _               -> env
 @
 
 Continuations are local to procedures and thus they are only bound
@@ -596,13 +585,17 @@ let rec stmt scope env = function
         E.catch' env (error r env) (stmt scope env) x
     | A.IfStmt ( e, ss1, ss2) -> 
         foldl (stmt scope) (foldl (stmt scope) env ss1) ss2
-    | A.LabelStmt(n)          -> F.bindv n (codet scope) env
-    | A.SpanStmt(e1,e2,ss)    -> foldl (body scope) env ss
-    | A.SwitchStmt (r,e,arms) -> foldl (arm scope)  env arms
-    | A.ContStmt(n,ee)        -> if scope=F.Global then env 
-                                 else F.bindv n (contt scope) env
-    
-    | _                       -> env
+    | A.LabelStmt(n)          -> 
+        F.bindv n scope (E.Ok(F.Label(F.Code),T.code)) env
+    | A.SpanStmt(e1,e2,ss)    -> 
+        foldl (body scope) env ss
+    | A.SwitchStmt (r,e,arms) -> 
+        foldl (arm scope)  env arms
+    | A.ContStmt(n,ee)        -> 
+        if scope=F.Global then env 
+        else F.bindv n scope (E.Ok(F.Continuation,T.cont)) env
+    | otherwise               -> 
+        env
 
 and arm scope env = function
     | A.ArmAt(x,r)            -> E.catch' env (error r env) (arm scope env) x
@@ -628,7 +621,7 @@ and body scope env = function
     | A.StmtBody(s)  -> stmt scope env s
 <<>>=       
 let proc scope env (_,name,_,bb) = 
-    let env' = F.bindv name (proct scope) env in
+    let env' = F.bindv name scope (E.Ok(F.Label(F.Proc),T.code)) env in
         foldl (body scope) env' bb
 <<>>=
 let rec section env = function
@@ -742,10 +735,13 @@ names.  As said before we only sort constant declarations.
 <<module TV>>=
 type decl = (A.ty option * string * A.expr) * A.region
 @
+
 A [[const]] declaration defines the name it declare. That was simple.
+
 <<>>=
 let rec defines ((t,name,expr),r) = [name]
 @
+
 A constant expression can refer to other constant and link-time
 constants.  To find the right topological order it is only important
 to find other constants.  Of course, these can not be syntactically
@@ -893,33 +889,31 @@ match the given type, and is not [[bool]] the name is bound to the
 type and value in the environment.
 
 <<>>=
-let doConstDecl scope env ((ty,name,expr),r) = (* UGLY UGLY UGLY *)
-    match ty with 
-    | Some t' -> (* type given at decl *)
-        ( match evalExpr env expr, evalTy env t' with 
-        | E.Ok(t,v),E.Ok(t') when t =t' && t <> Types.bool -> 
-            F.bindv name (scope,E.Ok(F.Constant(v),t)) env
-        | E.Ok(t,v),E.Ok(t') when t =t' && t = Types.bool -> 
+let doConstDecl scope env ((ty,name,expr),r) = 
+    let seqPair p f = E.sequence f (E.Raise.pair p)                in
+    let seq     x f = E.sequence f x                               in
+    let consistent t = match ty with None -> true | Some t' -> t'=t in
+    let entry = seq (evalExpr env expr) 
+        ( function
+        | (t,v) when t <> Types.bool -> E.Ok(F.Constant(v),t)
+        | (t,v) -> 
             ( E.errorPrt "constant has type bool but must have type bits"
-            ;  F.bindvError name scope env
+            ; E.Error
             )
-        | E.Ok(t,v),E.Ok(t') when t<>t'  ->
-            ( E.errorPrt ("type declared for constant "^name^" does not match actual type")
-            ; F.bindvError name scope env
-            )
-        | _ -> F.bindvError name scope env
-        )
-    | None -> (* no type part of decl *)
-        ( match evalExpr env expr with
-        | E.Ok(t,v) when t <> Types.bool ->
-            F.bindv name (scope,E.Ok(F.Constant(v),t)) env
-        | E.Ok(t,v) when t = Types.bool ->
-            ( E.errorPrt "constant has type bool but must have type bits"
-            ; F.bindvError name scope env
-            ) 
-        | _  -> F.bindvError name scope env
-        )
-    
+        ) in
+    let entry = (* check user provided type against inferred type *)
+        ( match ty with 
+        | None    -> entry
+        | Some t' -> seqPair (entry, evalTy env t') 
+                    ( function
+                    | (v,t), t' when t = t' -> entry
+                    | _ -> ( E.errorPrt ("type declared for constant "^name^" does not match actual type")
+                           ; E.Error
+                           )
+                    )
+         ) 
+    in 
+         F.bindv name scope entry env
 
 <<>>=
 let doConstDecls scope env dd =
@@ -1016,17 +1010,14 @@ evaluations. It is easier and cleaner to implement the type checking
 functions again.
 
 <<type check expression>>=
-let rec tyFetch env = function
+let rec tyFetch : F.env -> A.lvalue -> F.ty E.error = fun env -> function
     | A.LValueAt(x,r) -> E.catch (error r env) (tyFetch env) x
-    | A.Var(hint,id)  -> ( match F.findv' id env with
-                         | E.Error                -> E.Error
-                         | E.Ok(denotation,ty)    -> E.Ok(ty)
-                         ) 
+    | A.Var(hint,id)  -> snd (E.Lower.pair (F.findv' id env))
     | A.Mem (t,e,a)   -> 
         let te    = tyExpr env e in
         let t'    = evalTy env t in
         let align = match a with
-                    | None   -> 1
+                    | None   -> 1 (* wrong! bits / memsize *)
                     | Some a when is2power a -> a
                     | Some a -> E.error "alignment not a power of 2"
         in
@@ -1037,6 +1028,7 @@ let rec tyFetch env = function
             | _      -> E.error "memory reference by non-data pointer"
             )
 <<>>=        
+ (* tyAppl: Types.tyscheme -> Types.ty list E.error -> Types.ty E.error *)
 and tyAppl opTy argTys = E.emap (Types.appl opTy) argTys
 @
 
@@ -1051,6 +1043,7 @@ and tyPrimOp env op args =
         tyAppl ot (E.Raise.list at)
 
 <<>>=
+ (* tyExpr: F.env -> A.expr -> Types.ty E.error *)
 and tyExpr env = function
     | A.ExprAt(x,r) -> E.catch (error r env) (tyExpr env) x
     | A.Int (str, Some t)            -> evalTy env t
@@ -1495,7 +1488,7 @@ and decl env = function
 <<>>=
 and formal env (hint, inv, ty, name) =
     match evalTy env ty with
-    | E.Ok(t) -> F.bindv name (F.Local,E.Ok(F.Register,t)) env 
+    | E.Ok(t) -> F.bindv name F.Local (E.Ok(F.Register,t)) env 
     | E.Error -> F.bindvError name F.Local env
     
 <<>>=
