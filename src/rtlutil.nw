@@ -160,19 +160,24 @@ compile-time constants. Substitutions for locations, registers. and
 expressions are provided by the [[Subst2]] sub-module:
 <<rtlutil.mli>>=
 module Subst2: sig
-    val loc:     guard:(Rtl.Private.loc -> bool)               
-                 -> map:(Rtl.Private.loc -> Rtl.Private.loc) 
-                 -> Rtl.rtl -> Rtl.rtl
+    val loc:        guard:(Rtl.Private.loc -> bool)               
+                    -> map:(Rtl.Private.loc -> Rtl.Private.loc) 
+                    -> Rtl.rtl -> Rtl.rtl
     
-    val exp:     guard:(Rtl.Private.exp -> bool)
-                 -> map:(Rtl.Private.exp -> Rtl.Private.exp) 
-                 -> Rtl.rtl -> Rtl.rtl
+    val exp:        guard:(Rtl.Private.exp -> bool)
+                    -> map:(Rtl.Private.exp -> Rtl.Private.exp) 
+                    -> Rtl.rtl -> Rtl.rtl
     
-    val reg:     map:(Register.t -> Register.t) -> Rtl.rtl -> Rtl.rtl
+    val exp_of_exp: guard:(Rtl.Private.exp -> bool)
+                    -> map:(Rtl.Private.exp -> Rtl.Private.exp) 
+                    -> Rtl.exp -> Rtl.exp
+    val loc_of_exp: map:(Register.t -> Rtl.loc) -> Rtl.exp -> Rtl.exp
     
-    val reg_def: map:(Register.t -> Register.t) -> Rtl.rtl -> Rtl.rtl
+    val reg:        map:(Register.t -> Register.t) -> Rtl.rtl -> Rtl.rtl
     
-    val reg_use: map:(Register.t -> Register.t) -> Rtl.rtl -> Rtl.rtl
+    val reg_def:    map:(Register.t -> Register.t) -> Rtl.rtl -> Rtl.rtl
+    
+    val reg_use:    map:(Register.t -> Register.t) -> Rtl.rtl -> Rtl.rtl
 end
 @
 
@@ -458,22 +463,24 @@ let loc'     guard map rtl = loc_gen' guard map rtl ~def:true  ~use:true
 let loc_def' guard map rtl = loc_gen' guard map rtl ~def:true  ~use:false
 let loc_use' guard map rtl = loc_gen' guard map rtl ~def:false ~use:true
 
+let subst_exp_loc guard map =
+    let rec subst_exp e = if guard e then map e else match e with
+        | RP.Fetch (l, width)      -> RP.Fetch(subst_loc l, width)
+        | RP.App(opr, exprs)       -> RP.App(opr, List.map subst_exp exprs)
+        | x                        -> x
+    and subst_loc = function
+        | RP.Mem (sp,agg,w,e,ass)  -> RP.Mem(sp, agg, w, subst_exp e, ass)
+        | RP.Slice (w,i,l)         -> RP.Slice(w,i,subst_loc l)
+        | x                        -> x                                    in
+    (subst_exp, subst_loc)
 let exp' guard map rtl =
-    let rec exp e = if guard e then map e else match e with
-        | RP.Fetch (l, width)      -> RP.Fetch(loc l, width)
-        | RP.App(opr, exprs)       -> RP.App(opr, List.map exp exprs)
-        | x                        -> x
-    and loc = function
-        | RP.Mem (sp,agg,w,e,ass)  -> RP.Mem(sp, agg, w, exp e, ass)
-        | RP.Slice (w,i,l)         -> RP.Slice(w,i,loc l)
-        | x                        -> x
-    and effect = function
+    let (exp, loc) = subst_exp_loc guard map                        in
+    let effect = function
         | RP.Store (l,e,width)     -> RP.Store(loc l, exp e, width)
-        | RP.Kill  (l)             -> RP.Kill (loc l)
-    and guarded (e,eff)            = (exp e, effect eff)
-    and subst (RP.Rtl rtl)         = RP.Rtl (List.map guarded rtl)
-    in  
-        subst rtl
+        | RP.Kill  (l)             -> RP.Kill (loc l)               in
+    let guarded (e,eff)            = (exp e, effect eff)            in
+    let subst (RP.Rtl rtl)         = RP.Rtl (List.map guarded rtl)  in
+    subst rtl
 @
 
 
@@ -492,11 +499,26 @@ let reg' map rtl     = reg_gen' map rtl loc'
 let reg_def' map rtl = reg_gen' map rtl loc_def'
 let reg_use' map rtl = reg_gen' map rtl loc_use'
 
-let exp ~guard  ~map rtl = DownUp.rtl (exp' guard  map) rtl
-let loc ~guard  ~map rtl = DownUp.rtl (loc' guard  map) rtl 
-let reg         ~map rtl = DownUp.rtl (reg'        map) rtl 
-let reg_def     ~map rtl = DownUp.rtl (reg_def'    map) rtl 
-let reg_use     ~map rtl = DownUp.rtl (reg_use'    map) rtl 
+let exp        ~guard  ~map rtl = DownUp.rtl (exp' guard  map) rtl
+let exp_of_exp ~guard  ~map exp =
+  let (subst_exp,_) = subst_exp_loc guard map in
+  DownUp.exp subst_exp exp
+let loc_of_exp         ~map exp =
+  let rec subst_exp e = match e with
+      | RP.Fetch (l, width)      -> RP.Fetch(subst_loc l, width)
+      | RP.App(opr, exprs)       -> RP.App(opr, List.map subst_exp exprs)
+      | x                        -> x
+  and subst_loc = function
+      | RP.Mem (sp,agg,w,e,ass)  -> RP.Mem(sp, agg, w, subst_exp e, ass)
+      | RP.Slice (w,i,l)         -> RP.Slice(w,i,subst_loc l)
+      | RP.Reg (s,i,w as r)      -> Dn.loc (map r)
+      | x                        -> x                                    in
+  DownUp.exp subst_exp exp
+  
+let loc        ~guard  ~map rtl = DownUp.rtl (loc' guard  map) rtl 
+let reg                ~map rtl = DownUp.rtl (reg'        map) rtl 
+let reg_def            ~map rtl = DownUp.rtl (reg_def'    map) rtl 
+let reg_use            ~map rtl = DownUp.rtl (reg_use'    map) rtl 
 @
 
 
