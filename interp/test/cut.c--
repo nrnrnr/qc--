@@ -1,0 +1,38 @@
+// cut.c--
+//
+// fails an assertion in the "linorder" method of "label" (cfg4.nw)
+
+target 
+       byteorder   big
+       memsize     8
+       wordsize    32
+       pointersize 32
+;
+
+export main;
+import bits32 cmmprint;
+
+section "text" {
+  main() {
+    subroutine(0) also cuts to cont;
+    return;
+
+    continuation cont():
+      foreign "C" cmmprint(0);
+      return;
+  }
+
+  subroutine(bits8 x) {
+    foreign "C" cmmprint(x);
+    if %geu(x, 10::bits8) {
+      cut to cont();
+    } else {
+      x = x + 1::bits8;
+      subroutine(x) also cuts to cont;
+
+      // this shouldn't execute
+      foreign "C" cmmprint(x);
+      return;
+    }
+  }
+}
