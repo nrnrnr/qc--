@@ -399,7 +399,7 @@ and body is_global env = function
 <<>>=       
 let proc is_global env (_,name,_,bb) = 
     let env' = F.bindv name proct env in
-        foldl (body is_global) env bb
+        foldl (body is_global) env' bb
 <<>>=
 let rec section env = function
     | A.SectionAt(x,r)     -> E.catch' env (E.errorRegPrt r) (section env) x
@@ -588,7 +588,7 @@ let reportCycle decls =
 let doConst is_global env dd =
     let decls          = List.map fst                            in
     let scope          = if is_global then F.Global else F.Local in
-    let rec bindAll dd =
+    let rec bindAll env dd =
         try
             let dd' = TSort.sort dd                              in
             doConstDecls scope env (decls dd')
@@ -597,10 +597,10 @@ let doConst is_global env dd =
             let scope = if is_global then F.Global else F.Local  in
             let env'  = bindError scope env offending            in
                 ( reportCycle offending
-                ; bindAll dd'
+                ; bindAll env' dd'
                 )
                                                                  in
-        bindAll dd
+        bindAll env dd
 
 let doGlobalConst env program = 
         doConst true  env (CollectConst.foldGlobalConstDecls program)
