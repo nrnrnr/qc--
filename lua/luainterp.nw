@@ -57,6 +57,7 @@ These functions enable us to convert the basic types.
   val int    : int    map
   val bool   : bool   map
   val string : string map
+  val unit   : unit   map   (* useful for result types *)
 @ 
 To convert a value of option type, we represent [[None]] as [[Nil]].
 Woe betide you if [[Nil]] is a valid value of your type!
@@ -77,12 +78,12 @@ associative.
 That's OK, as it probably shouldn't be used for curried functions.
 
 For curried functions that should take lists of arguments in Lua,
-we use [[**->]], [[func]], and [[result]].
+we use [[**->]], [[pfunc]], [[func]], and [[result]].
 The idea is this: if we have a Caml function type
 [[t -> u -> v -> w]], we can turn this into a Lua function of three
 arguments by using the embedding/projection pair produced by
 \begin{quote}
-[[func (t **-> u **-> v **-> result w)]]
+[[pfunc (t **-> u **-> v **-> result w)]]
 \end{quote}
 <<signatures>>=
   val ( -->  ) : 'a map  -> 'b map  -> ('a -> 'b) map
@@ -99,6 +100,12 @@ let apply = function Function f -> f emptystate
                    | v -> raise (Projection (v, "function"))
 let check = string.project (apply sub [string.embed "hello"; int.embed 0; int.embed 2])
 let _ = assert (check = "he")
+@ 
+If a function is impure (needs access to the Lua state) we use
+[[func]].
+<<tests>>=
+let setglobal {globals=g; fallbacks=f} n v = Table.bind g (String n) v
+let sg = ((func (string **-> value **-> result unit)).embed setglobal : value)
 @ 
 For the rest of the interface, we can make Lua values by supplying an
 appropriate [[userdata]] type.  
@@ -162,6 +169,9 @@ let int   = { embed = (fun n -> Number (pervasive_float n))
 
 let bool  = { embed = (fun b -> if b then String "t" else Nil)
             ; project = function Nil -> false | _ -> true
+            } 
+let unit =  { embed = (fun () -> Nil)
+            ; project = function Nil -> () | v -> raise (Projection (v, "unit"))
             } 
 @ 
 <<value toplevel>>=
