@@ -579,7 +579,7 @@ let addInterference node =
   let live = LI.live_out node in
   let defs = G.defs node in
   let live =
-    if isMoveInstruction node target then
+    if isMoveInstruction target node then
       let uses = G.uses node in
       (let item = ilg_add cg.moveLG WorklistMove node in
       cg.moveListMap <- RS.fold (listMapAdd item)
@@ -724,7 +724,7 @@ let coalesce cg ({Proc.target = target} as proc) =
     (match !(cg.moveLG WorklistMove) with
     | Some move ->
         let x = RM.find (source move.v) cg.regToItem in
-        let y = RM.find (dest move.v) cg.regToItem in
+        let y = RM.find (dest move.v)   cg.regToItem in
         let (u, v) = if y.list = Precolored then (y, x) else (x, y) in
         let () =
             if u = v
@@ -867,7 +867,7 @@ assign colors to these nodes.
 The choice of which node to spill here is an important policy decision.
 
 <<selectSpill>>=
-let selectSpill cg _ =
+let selectSpill cg {Proc.cfg = cfg} =
     let rec findSpill lst =
         match lst with
         | Some t when not (RS.mem t.v cg.spills) ->
@@ -875,7 +875,12 @@ let selectSpill cg _ =
             let () = freezeMoves t cg in
 			true
         | Some t -> findSpill t.next
-        | None   -> false                                    in
+        | None when !(cg.tempLG SpillWorklist) = None -> false
+		| None ->    (* only spill temps on spillworklist -> bug!!! *)
+	      ( print_cfg    cfg
+	      ; print_cgInfo cg
+		  ; Impossible.impossible "only spill temps remain on spillworklist!"
+		  ) in
     findSpill (!(cg.tempLG SpillWorklist))
 @
 
@@ -1150,10 +1155,15 @@ let dest inst =
  * First get the assignment, then verify that the source and dest are
  * in the same reg. space
  *)
-let isMoveInstruction inst t =
-	match Rtlutil.RTLType.singleAssignment (G.instr inst) with
-	| Some ((s1,_,_) as r1, (s2,_,_) as r2)
-		when is_tmp t r1 -> s1 = s2
+let isMoveInstruction t inst =
+  (* WE NEED TO DISCUSS HOW TO HANDLE THIS PROPERLY: V IS NOT A SPACE
+     IN THE TARGET, WHICH MEANS THE FUNCTIONS IN TARGET2.NW DON'T WORK *)
+  let isVFP (s,_,_) = s = 'V' in
+  match Rtlutil.RTLType.singleAssignment (G.instr inst) with
+	| Some (((s1,_,_) as r1), ((s2,_,_) as r2)) ->
+	  (not (isVFP r1 || isVFP r2)) &&
+   	  (s1 = s2 || (is_tmp t r1 && Target2.fits t s1 r2)
+               || (is_tmp t r2 && Target2.fits t s2 r1))
 	| _ -> false
 @
 
@@ -1447,6 +1457,9 @@ function ColorGraph_init (CG, B) -- carefully don't define table
       { fn = CG.build, uses = {'liveness', 'no vars'}, creates = 'no temps' }
     } 
       
+  CG.pcg  = B.ignore(CG.printCG)
+  CG.pcfg = B.ignore(CG.pCFG)
+  
   CG.orderVars = B.seq 
       { CG.makeWorklist
       , B.fix(B.unless_do(CG.simplify,
@@ -1454,11 +1467,6 @@ function ColorGraph_init (CG, B) -- carefully don't define table
                                   B.unless_do(CG.freeze,
                                       CG.selectSpill))))
       }
-  
-  CG.pcg = 
-      B.ignore(CG.printCG)
-  CG.pcfg = 
-      B.ignore(CG.pCFG)
   
   CG.color = 
     B.share
@@ -1600,14 +1608,19 @@ let printCGInfo param _ = print_cgInfo param; false
         cfgSay ["CFG\n===\n"];
         ( G.iter_nodes
             (fun node ->
-                cfgSay [ string_of_int (number node)
-                      ; ": "
-                      ; Rtlutil.ToString.rtl (G.instr node)
-                      ; "\n"
-                      ; "\t"
-                      ; G.node_info_string node
-                      ; "\n"
-                      ] )
+              cfgSay (List.flatten
+				       [ [ string_of_int (number node)
+                         ; ": "
+                         ; Rtlutil.ToReadableString.rtl (G.instr node)
+                         ; "\n"
+						 ]
+					   ; RS.fold (fun r rst -> Printf.sprintf "%s, " (printReg r)
+						                          :: rst) (LI.live_out node) []
+					   ; [ "\t"
+                         ; G.node_info_string node
+                         ; "\n"
+                         ]
+					   ]))
             cfg);
         cfgSay ["END CFG\n===\n"]
     let pCFG _ {Proc.cfg = cfg} = print_cfg cfg; false
