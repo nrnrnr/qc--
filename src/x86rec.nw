@@ -394,8 +394,11 @@ inst : Withaflags(dst:eaddrl, "mul_trunc", src:reg, w, "x86_mulflags")
 inst : Withaflags(dst:regl, "mul_trunc", src:eaddr, w, "x86_mulflags")
   {: cat ["imul"; suffix w; " "; src; ","; dst] :}
 
-inst : Withaflags(dst:regpairl, "div", src:reg, w, "x86_divflags")
+inst : Withundefflags(dst:regpairl, "quot", src:reg, w)
   {: cat ["idiv"; suffix w; " "; src; ", "; dst] :}
+
+inst : Withundefflags(dst:regpairl, "divu", src:reg, w)
+  {: cat ["div"; suffix w; " "; src; ", "; dst] :}
 
 inst : Withaflags(dst:regl, "shl", reg_cl, w, "x86_shlflags")
   {: sprintf "shl%s %%cl, %s" (suffix w) dst :}
@@ -740,8 +743,8 @@ and effect = function
 We attempt to recognize register pairs.
 <<code to follow the labeler>>=  
 and regpair = function
-  | RP.App(("or",_),[ RP.App(("shl",_), [RP.App(("sx",_), [RP.Fetch(r1,_)]);_])
-                    ; RP.App(("sx",_),                    [RP.Fetch(r2,_)])])
+  | RP.App(("or",_),[ RP.App(("shl",_), [RP.App(("zx",_), [RP.Fetch(r1,_)]);_])
+                    ; RP.App(("zx",_),                    [RP.Fetch(r2,_)])])
       -> conRegPair (loc r1) (loc r2)
   | x -> Impossible.impossible "Argument is not a register pair"
 @
@@ -777,6 +780,11 @@ and begins_x86_ s =
 Oh, the joy of the flags\ldots
 <<horrible pattern match for [[Withflags]]>>=
 | [ (RP.Const(RP.Bool true), <<pattern for [[l]] := [[l']] [[o]] [[r]] at [[w]]>>)
+  ; (RP.Const(RP.Bool true), <<pattern for flags := [[%x86_undefflags()]]>>)
+  ] when l = l' && flag_index = SS.indices.SS.cc ->
+      conWithundefflags (loc l) o (exp r) w
+<<horrible pattern match for [[Withflags]]>>=
+| [ (RP.Const(RP.Bool true), <<pattern for [[l]] := [[l']] [[o]] [[r]] at [[w]]>>)
   ; (RP.Const(RP.Bool true), <<pattern for flags := [[fo]] ([[l'']], [[r']])>>)
   ] when l = l' && l = l'' && r = r' && flag_index = SS.indices.SS.cc ->
       conWithaflags (loc l) o (exp r) w fo
@@ -788,6 +796,10 @@ Oh, the joy of the flags\ldots
   ; (RP.Const(RP.Bool true), <<pattern for flags := [[fo]] ([[l1'/l2']], [[r']])>>)
   ] when l1 = l1' && l2 = l2' && r = r' && flag_index = SS.indices.SS.cc ->
       conWithaflags (regpair rp) o (exp r) w fo
+| [ (RP.Const(RP.Bool true), <<pattern for [[d]] := rp:[[l1/l2]] [[o]] [[r]] at [[w]]>>)
+  ; (RP.Const(RP.Bool true), <<pattern for flags := [[%x86_undefflags()]]>>)
+  ] when flag_index = SS.indices.SS.cc ->
+      conWithundefflags (regpair rp) o (exp r) w
 | [ (RP.Const(RP.Bool true), <<pattern for [[l]] := [[l']] [[o]] [[r]] at [[w]]>>)
   ; (RP.Const(RP.Bool true), <<pattern for flags := [[fo]] ([[l'']] [[o']] [[r']])>>)
   ] when l = l' && l = l'' && r = r' && o = o'
@@ -817,6 +829,8 @@ RP.Store(l, RP.App(("bitInsert", [32; 8]),
                                    [RP.Const (RP.Bits eightbits'); RP.Fetch(l'',_)]);
                             r]) as flag_left]),
          w)
+<<pattern for flags := [[%x86_undefflags()]]>>=
+RP.Store(RP.Reg('c', flag_index, _), RP.App(("x86_undefflags", _), []), _)
 <<pattern for flags := [[fo]] [[flag_left']]>>=
 RP.Store(RP.Reg('c', flag_index, _), RP.App((fo, _), [flag_left']), _)
 <<pattern for [[l]] := [[l']] [[o]] [[r]] at [[w]]>>=
@@ -831,17 +845,17 @@ RP.Store(RP.Reg('c', flag_index, _),
          RP.App((fo, _), [RP.Fetch(l'',_)]), _)
 <<pattern for [[d]] := rp:[[l1/l2]] [[o]] [[r]] at [[w]]>>=
 RP.Store(d, RP.App((o, _),
-                   [ (RP.App(("or",_), [ RP.App(("shl",_),
-                                          [RP.App(("sx",_), [RP.Fetch(l1,_)]);_])
-                                      ;    RP.App(("sx",_), [RP.Fetch(l2,_)])]) as rp)
-                   ; r]), w)
+  [ (RP.App(("or",_), [ RP.App(("shl",_),
+                               [RP.App(("zx",_), [RP.Fetch(l1,_)]);_]);
+                                RP.App(("zx",_), [RP.Fetch(l2,_)])]) as rp);
+    r]), w)
 <<pattern for flags := [[fo]] ([[l1'/l2']], [[r']])>>=
 RP.Store(RP.Reg('c', flag_index, _),
          RP.App((fo, _), 
-                   [ RP.App(("or",_), [ RP.App(("shl",_),
-                                          [RP.App(("sx",_), [RP.Fetch(l1',_)]);_])
-                          ;                RP.App(("sx",_), [RP.Fetch(l2',_)])])
-                   ; r']), _)
+              [ RP.App(("or",_), [ RP.App(("shl",_),
+                                     [RP.App(("zx",_), [RP.Fetch(l1',_)]);_])
+                     ;                RP.App(("zx",_), [RP.Fetch(l2',_)])])
+              ; r']), _)
 <<pattern for flags := [[fo]] ([[l'']] [[o']] [[r']])>>=
 RP.Store(RP.Reg('c', flag_index, _),
          RP.App((fo, _), [RP.App ((o', _), [RP.Fetch(l'',_); r'])]), _)

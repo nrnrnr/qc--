@@ -53,9 +53,9 @@ section "text"
         bits32[i] = %and[32](j, bits32[k]);
         bits32[i] = %or[32](j, bits32[k]);
         bits32[i] = %xor[32](j, bits32[k]);
-        $c0 when %lt[32](j, k) = sym@join@l9;
+        $c0 when %ltu[32](j, k) = sym@join@l9;
         join:l10:
-        $c0 when %le[32](j, k) = sym@join@l7;
+        $c0 when %leu[32](j, k) = sym@join@l7;
         join:l8:
         $c0 when %leu[32](j, k) = sym@join@l6;
         join:l15:

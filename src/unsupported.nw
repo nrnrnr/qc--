@@ -17,6 +17,8 @@ val stack_width : have:int -> want:int -> 'a
 val calling_convention : string -> 'a
 val automaton_widths : int -> 'a
 val automaton_widen  : have:int -> want:int -> 'a
+val div_and_mod : unit -> 'a
+val div_overflows : unit -> 'a
 @ 
 <<unsupported.ml>>=
 exception Unsupported
@@ -127,3 +129,17 @@ let automaton_widen ~have ~want =
         s "%d-bit value to %d-bits or fit it in a %d-bit register"
           have want want)
       automaton_widen_n [ have ; want ]
+@ 
+<<unsupported.ml>>=
+let div_and_mod_n = getn (fun _ ->
+    ["On this target, signed division and modulus round toward zero.";
+     "You must use the operators %quot and %rem, not %div and %mod.";
+    ])
+
+let div_and_mod () = fail (nosupport "%div and %mod") div_and_mod_n []
+
+let div_overflows_n = getn (fun _ ->
+    ["This code generator cannot test for %div_overflows and %quot_overflows"])
+
+let div_overflows () = fail (nosupport "overflow detection for division") div_overflows_n []
+

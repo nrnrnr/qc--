@@ -27,7 +27,7 @@ section "text"
         ij = 2;
         ik = 0;
         il = 0;
-        $c0 when %ge[32](ij, 2) = sym@join@l6;
+        $c0 when %geu[32](ij, 2) = sym@join@l6;
         join:l12:
         $c0 = sym@join@l7;
         join:l6:

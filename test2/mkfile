@@ -44,6 +44,7 @@ tiger.tst:QV:
 	echo 'print("hello\n")' > /tmp/hello.tig
 	if < /tmp/hello.tig ../../frontends/tiger/tigerc 1>/dev/null 2>/dev/null; then
 	  rm -f /tmp/hello.tig
+	  echo $QC testdrv.lua tiger.tst
 	  $QC testdrv.lua tiger.tst
 	else
 	  rm -f /tmp/hello.tig
@@ -58,8 +59,8 @@ opgen: opgen.o
 ops%.c--:D: opgen
 	./opgen $stem > $target
 
-%: %.c--
-	$QC -v -globals -o $target $prereq
+ops%: ops%.c-- $QC
+	$QC -v -globals -o $target ops$stem.c--
 
 '^optest([0-9]*)$':VR: ops'\1'
 	./$prereq

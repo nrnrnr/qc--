@@ -18,7 +18,7 @@ initialize_continuations_l3:
 	movl %ebp,8(%esp)
 	movl $2,%ebp
 	cmpl %ebp,%edx
-	jge join_l5
+	jae join_l5
 join_l13:
 	jmp join_l6
 join_l5:

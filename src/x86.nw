@@ -199,7 +199,7 @@ let negflags   x   w = R.store eflags (R.app (R.opr "x86_negflags"   [w]) [x])  
 let subflags   x y w = R.store eflags (R.app (R.opr "x86_subflags"   [w]) [x; y]) 32
 let addflags   x y w = R.store eflags (R.app (R.opr "x86_addflags"   [w]) [x; y]) 32
 let mulflags   x y w = R.store eflags (R.app (R.opr "x86_mulflags"   [w]) [x; y]) 32
-let divflags   x y w = R.store eflags (R.app (R.opr "x86_divflags"   [w]) [x; y]) 32
+let undefflags       = R.store eflags (R.app (R.opr "x86_undefflags" [])  [])     32
 let logicflags exp w = R.store eflags (R.app (R.opr "x86_logicflags" [w]) [exp])  32
 let shflags sh x y w =
   let flagsop = "x86_" ^ sh ^ "flags" in
@@ -313,26 +313,30 @@ well as the expression representation of the register pair.
 I have tried to make [[regpairv]] fairly general; we won't know if this is a success
 until we try it with other versions of the x86 divide instruction.
 <<x86 postexpander>>=
-| ("div" |"divu" | "quot" | "modu" | "rem") as opname ->  (* cheat until all can get it right *)
+| ("div" | "mod") -> Unsupported.div_and_mod()
+| ("divu" | "quot" | "modu" | "rem") as opname ->
+    let unsigned = opname = "divu" || opname = "modu" in
     let regpairv w hreg lreg =
-      let rval      r = R.fetch (temploc r) w in
-      let sxreg     l = R.app (R.opr "sx" [w; w*2]) [rval l] in
-      let sbit        = talloc 't' w in
-      let high_reg    = talloc 't' w in
-      let sh op dst s = R.app (R.opr op [w]) [ dst
-                                             ; R.bits (Bits.U.of_int s w) w] in
-      let shl  = sh "shl"  in
-      let shra = sh "shra" in
-      ( [ R.store (temploc hreg) (rval sbit)                             w
-        ; R.store (temploc sbit) (shra (R.fetch (temploc sbit) w) (w-1)) w
-        ; R.store (temploc sbit) (rval lreg)                             w
-        ]
-      , (R.app (R.opr "or" [w*2]) [shl (sxreg hreg) w; sxreg lreg])) in
-
+      let rval  r = R.fetch (temploc r) w in
+      let sh op l r = R.app (R.opr op [w]) [l; R.bits (Bits.U.of_int r w) w] in
+      let zxreg l = R.app (R.opr "zx" [w; w*2]) [rval l] in
+      let pairval = R.app (R.opr "or" [w*2]) [sh "shl" (zxreg hreg) w; zxreg lreg] in
+            (* notice the ill-typed shift-left *)
+      let sethi =
+        if unsigned then
+          [ R.store (temploc hreg) (R.bits (Bits.zero w) w) w ]
+        else
+          let sbit = temploc (talloc 't' w) in
+          let sbitval = R.fetch sbit w in
+          [ R.store (temploc hreg) sbitval w
+          ; R.store sbit           (sh "shra" sbitval (w-1)) w
+          ; R.store sbit           (rval lreg) w
+          ] in
+      sethi, pairval in
     let (is, regpair) = regpairv 32 edx_reg eax_reg in
-    let div = exp_with_flags divflags eax_reg
-                             (R.app (R.opr "div" [32;32]) [regpair; tempval y])
-                             regpair (tempval y) 32 in
+    let opr = if unsigned then "divu" else "quot" in
+    let div = R.par [R.store eax (R.app (R.opr opr [32;32]) [regpair; tempval y]) 32;
+                     undefflags] in
     let answer = if opname = "rem" || opname = "modu" then edx_reg else eax_reg in
     move_rtl x answer :: div :: is @ move_rtl eax_reg x :: move
 @ 
@@ -528,8 +532,7 @@ to check for.
 let cmpfun tgt =
   let set_flags op x y = binop (talloc 't' 32) (op, [32]) x y
   and cmp x y = [subflags (tempval x) (tempval y) 32] in
-  let div_flags x y = set_flags "div" x y (* FAULT - FIX ME *)
-  in
+  let div_flags x y = Unsupported.div_overflows () in
   function
   | "eq"
   | "ne"

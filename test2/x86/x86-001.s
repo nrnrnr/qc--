@@ -106,10 +106,10 @@ initialize_continuations_l3:
 	movl %ebx,(%edx)
 	movl (%esp),%edx
 	cmpl %edx,%eax
-	jl join_l8
+	jb join_l8
 join_l9:
 	cmpl %edx,%eax
-	jle join_l6
+	jbe join_l6
 join_l7:
 	cmpl %edx,%eax
 	jbe join_l5

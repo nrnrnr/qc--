@@ -42,7 +42,7 @@ main:
 initialize_continuations_l3:
 	movl $1,%ecx
 	cmpl %ecx,%eax
-	jg join_l9
+	ja join_l9
 join_l10:
 	leal hello,%eax
 	jmp join_l8

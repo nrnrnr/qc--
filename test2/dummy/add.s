@@ -6,7 +6,7 @@ target
     charset "latin1"
     float "ieee754";
 
-import bits32 printf;
+import  bits32 printf;
 
 export bits32 Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY, main;
 
@@ -72,7 +72,7 @@ section "text"
         iargc, iargv = $r0, $r1;
         $t1 = $r30;
         initialize continuations:l4:
-        $c0 when %gt[32](iargc, 1) = sym@join@l10;
+        $c0 when %gtu[32](iargc, 1) = sym@join@l10;
         join:l11:
         iptr = sym@hello;
         $c0 = sym@join@l9;

@@ -77,7 +77,7 @@ join_l12:
 	addl %eax,%edx
 	movl 12(%esp),%eax
 	cmpl %eax,%ecx
-	jl join_l8
+	jb join_l8
 join_l9:
 	leal nl,%eax
 	movl $-28,%ebx
