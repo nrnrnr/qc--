@@ -19,7 +19,7 @@ Test.files =
 --, { source="paranoia.c--", stdin="/dev/null"  }
   , { source="sort.c--",     stdin="/dev/null"  }
   , { source="spill.c--",    stdin="/dev/null"  }
-  , { source="stdarg.c--",   stdin="/dev/null"  }
+--  , { source="stdarg.c--",   stdin="/dev/null"  } -- uses varargs
   , { source="struct.c--",   stdin="/dev/null"  }
   , { source="switch.c--",   stdin="/dev/null"  }
   , { source="wf1.c--",      stdin="juliet.txt" }
