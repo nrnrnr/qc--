@@ -7,12 +7,15 @@ LIBDIR =        ../lib
 OCAMLC_FLAGS=-I $LIBDIR -g
 OCAMLO_FLAGS=-I $LIBDIR
 
-SRC=ast.ml ast.mli builtins.ml builtins.mli floatscan.ml floatscan.mll \
-	io.ml io.mli lua.ml lua.mli main.ml parser.ml parser.mli scan.ml \
-	thashtbl.ml thashtbl.mli value.ml value.mli
+SRC=luaast.ml luaast.mli luabaselib.ml luabaselib.mli luafloat.ml luafloat.mll \
+	luaiolib.ml luaiolib.mli luainterp.ml luainterp.mli main.ml luaparser.ml luaparser.mli luascanner.ml \
+	luahash.ml luahash.mli luavalue.ml luavalue.mli lualib.mli lualib.ml \
+	luastrlib.mli luastrlib.ml luamathlib.mli luamathlib.ml newinterp.mli newinterp.ml
 
 
-OBJ=thashtbl.cmo floatscan.cmo value.cmo ast.cmo parser.cmo scan.cmo lua.cmo builtins.cmo io.cmo main.cmo
+OBJ=luahash.cmo luafloat.cmo luavalue.cmo luaast.cmo luaparser.cmo luascanner.cmo \
+	lualib.cmo luabaselib.cmo luainterp.cmo newinterp.cmo \
+	luastrlib.cmo luamathlib.cmo luaiolib.cmo main.cmo
 OPT=`echo $OBJ | sed 's/\.cmo/.cmx/g'`
 
 all:V: oclua
@@ -31,23 +34,23 @@ TEST=03 04 05 06 07 08 10 12 02
 test:V: oclua.opt
 	for i in $TEST; do ./$prereq test/$i.lua; done	
 
-parsex.mly: syntax.nw
+luaparsex.mly: luasyntax.nw
 	[ -r $target ] && chmod +w $target
-	notangle -Rparser.mly $prereq | 
+	notangle -Rluaparser.mly $prereq | 
 	sed "s/','/COMMA/g;s/'{'/LBRA/g;s/'}'/RBRA/g;s/'<'/LT/g;s/'>'/GT/g;s/':'/COLON/g;s/';'/SEMI/g;s/'^'/HAT/g;s/'\*'/STAR/g;s@'/'@SLASH@g;s/'('/LPAR/g;s/')'/RPAR/g;s/'='/GETS/g;s/'+'/PLUS/;s/'-'/MINUS/g;s/'\.'/DOT/g;s/'\['/LSQ/g;s/'\]'/RSQ/g" > $target
 	chmod -w $target
 
-scan.mll: syntax.nw
+luascanner.mll: luasyntax.nw
 	notangle -R$target $prereq > $target
 
-floatscan.mll: value.nw
+luafloat.mll: luavalue.nw
 	notangle -R$target $prereq > $target
 
-parser.ml: parsex.ml
+luaparser.ml: luaparsex.ml
 	cp $prereq $target
 
-parser.mli: parsex.mli syntax.nw
-	(sed '/^val /,$d' parsex.mli; notangle -L"$LINE" -R$target syntax.nw) > $target
+luaparser.mli: luaparsex.mli luasyntax.nw
+	(sed '/^val /,$d' luaparsex.mli; notangle -L"$LINE" -R$target luasyntax.nw) > $target
 
 depend:V: DEPEND
 

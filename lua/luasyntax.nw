@@ -1,22 +1,23 @@
 % -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 @ 
 \subsection{Parser}
-<<parser.mli>>=
+<<luaparser.mli>>=
 module type S = sig
   type chunk
   val chunks : (Lexing.lexbuf  -> token) -> Lexing.lexbuf -> chunk list
 end
-module type MAKER = functor (Ast : Ast.S) -> S with type chunk = Ast.chunk
+module type MAKER = functor (Ast : Luaast.S) -> S with type chunk = Ast.chunk
 module MakeStandard : MAKER
 @ 
-<<parser.mly>>=
+<<luaparser.mly>>=
 %{
-module type S = sig
-  type chunk
-  val chunks : (Lexing.lexbuf  -> token) -> Lexing.lexbuf -> chunk list
-end
-module type MAKER = functor (Ast : Ast.S) -> S with type chunk = Ast.chunk
-  module MakeStandard (Ast : Ast.S) = struct
+  module type S = sig
+    type chunk
+    val chunks : (Lexing.lexbuf  -> token) -> Lexing.lexbuf -> chunk list
+  end
+  module type MAKER = functor (Ast : Luaast.S) -> S with type chunk = Ast.chunk
+  
+  module MakeStandard (Ast : Luaast.S) = struct
     module A = Ast
     type chunk = Ast.chunk
 %}
@@ -133,7 +134,7 @@ glob_arm_and_body
          {codeIf($3,$7);$$=$3+3;} /* patch jumps; return label for other patch */
        ;                      
 */
-<<parser.mly>>=
+<<luaparser.mly>>=
 block    :  statlist ret { $1 @ $2 } ;
 
 ret	: /* empty */          { [] }
@@ -276,9 +277,9 @@ end
       stream. See the documentation of [[Srcmap]] for details.
 \end{itemize}
 
-<<scan.mll>>=
+<<luascanner.mll>>=
 {
-    module P = Parser     (* tokens are defined here *)
+    module P = Luaparser     (* tokens are defined here *)
     
     exception Scan of string
     

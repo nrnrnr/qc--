@@ -23,7 +23,7 @@ module type S = sig
     | Userdata of userdata
     | Table    of table
   and func  = state -> value list -> value list
-  and table = (value, value) Thashtbl.t
+  and table = (value, value) Luahash.t
   and userdata  = value userdata'
   and userstate = value userstate'
   and state = { globals : table
@@ -143,13 +143,13 @@ module type USERDATA = sig
   type 'a state
   val state : unit -> 'a state  (* may cause problems *)
 end
-<<value.mli>>=
+<<luavalue.mli>>=
 <<signatures>>
 module Make (U : USERDATA) : S with type 'a userdata'  = 'a U.t 
                                with type 'a userstate' = 'a U.state
 @
 \subsection{Implementation}
-<<value.ml>>=
+<<luavalue.ml>>=
 <<signatures>>
 module Make (U : USERDATA) : S with type 'a userdata'  = 'a U.t 
                                with type 'a userstate' = 'a U.state
@@ -171,7 +171,7 @@ type value
   | Userdata of userdata
   | Table    of table
 and func  = state -> value list -> value list
-and table = (value, value) Thashtbl.t
+and table = (value, value) Luahash.t
 and userdata  = value userdata'
 and userstate = value userstate'
 and state = { globals : table
@@ -224,15 +224,15 @@ let key_matching iter t v =
 let objname g v =
   match key_matching Hashtbl.iter g.fallbacks v with
   | Some s -> Some (Fallback s)
-  | None -> match key_matching Thashtbl.iter g.globals v with
+  | None -> match key_matching Luahash.iter g.globals v with
     | Some (String s) -> Some (Global s)
     | _ ->
         let r = ref None in
-        Thashtbl.iter (fun k v ->
+        Luahash.iter (fun k v ->
           match !r with
           | None -> (match k, v with
             | String n, Table t ->
-                (match key_matching Thashtbl.iter t v with
+                (match key_matching Luahash.iter t v with
                 | Some v -> r := Some (Element (n, v))
                 | None -> ())
             | _, _ -> ())
@@ -283,14 +283,14 @@ let string = { embed = (fun s -> String s)
              } 
 
 let is_float_literal s = 
-  Floatscan.length (Lexing.from_string s) = String.length s
+  Luafloat.length (Lexing.from_string s) = String.length s
 let pervasive_float = float
 let float = { embed = (fun x -> Number x)
             ; project = function Number x -> x
                                | String s when is_float_literal s -> float_of_string s
                                | v -> raise (Projection (v, "float"))
             } 
-<<floatscan.mll>>=
+<<luafloat.mll>>=
 let digit       = ['0'-'9']
 let sign        = ['+' '-']
 let exp         = ['e''E'] sign? digit+
@@ -418,12 +418,12 @@ Lua tables are very nearly Caml hash tables, except they never have
 multiple elements.
 <<table definition>>=
 module Table = struct
-  let create = Thashtbl.create eq
-  let find t k = try Thashtbl.find t k with Not_found -> Nil
+  let create = Luahash.create eq
+  let find t k = try Luahash.find t k with Not_found -> Nil
   let bind t k v =
     match v with
-    | Nil -> Thashtbl.remove t k
-    | _ -> Thashtbl.replace t k v
+    | Nil -> Luahash.remove t k
+    | _ -> Luahash.replace t k v
   let of_list l =
     let t = create (List.length l) in
     let _ = List.iter (fun (k, v) -> bind t (String k) v) l in

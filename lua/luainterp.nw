@@ -9,23 +9,19 @@ that is inspired by Olivier Danvy's work on type-directed partial
 evaluation. 
 This file sketches some of the supporting details, focusing on the
 embedding and projection, which is the new part.
-<<lua.mli>>=
+<<luainterp.mli>>=
 <<signatures>>
-module Bottom : TIER
-module Make (L : TIER) : INTERP
-  (* warning -- after making, must call Builtins.Make to get state function *)
-  (* this is a bogon *)
+module Make (L : Lualib.FULL) : S
+module NoLibrary : Lualib.FULL
 @ 
 \subsection{Implementation}
-<<lua.ml>>=
+<<luainterp.ml>>=
 <<signatures>>
 @ 
-\subsection{Steps toward the full language}
-@ 
 <<signatures>>=
-module type INTERP = sig
-  module Value : Value.S
-  module Ast : Ast.S with module Value = Value
+module type S = sig
+  module Value : Luavalue.S
+  module Ast : Luaast.S with module Value = Value
   type state = Value.state
   type value = Value.value
   exception Error of string
@@ -42,149 +38,10 @@ module type INTERP = sig
     (* sets fallback, returns previous one *)
 end
 @ 
-<<signatures>>=
-module type VALUE    = Value.S
-module type USERDATA = Value.USERDATA
-module type TOP = sig
-  module V : VALUE
-  val fallback : string -> V.state -> V.value list -> V.value list
-end
-
-module type INTO_LAYER = sig
-  module Top : TOP
-  type 'a t   (* is this parameter needed really? *)
-  val map : Top.V.value t Top.V.map
-  type 'a state 
-  val project_state : Top.V.state -> Top.V.value state
-end
-
-module type LAYER_WITH_TYPE = sig
-  module U : Value.USERDATA
-  module M (This : INTO_LAYER with type 'a t = 'a U.t and type 'a state = 'a U.state) :
-      sig
-        val init : This.Top.V.state -> unit
-      end
-end
-
-module type LAYER_WITHOUT_TYPE = 
-  functor (Top : TOP) -> sig
-    val init : Top.V.state -> unit
-  end
-@ 
-<<lua.mli>>=
-module Combine2 (L1 : LAYER_WITH_TYPE) (L2 : LAYER_WITH_TYPE) : LAYER_WITH_TYPE
-module AddLayer (LT : LAYER_WITH_TYPE) (LU : LAYER_WITHOUT_TYPE) : LAYER_WITH_TYPE
-module Make' (L : LAYER_WITH_TYPE) : INTERP
-<<lua.ml>>=
-module AddLayer (LT : LAYER_WITH_TYPE) (LU : LAYER_WITHOUT_TYPE) : LAYER_WITH_TYPE =
-struct
-  module U = LT.U
-  module M (This : INTO_LAYER with type 'a t = 'a U.t and type 'a state = 'a U.state) =
-    struct
-      module LT' = LT.M (This)
-      module LU' = LU   (This.Top)
-      let init g = (LT'.init g; LU'.init g)
-    end
-end
-
-
-module Combine2 (L1 : LAYER_WITH_TYPE) (L2 : LAYER_WITH_TYPE) : LAYER_WITH_TYPE = struct
-  module U = struct
-    type 'a t =
-      | L1 of 'a L1.U.t 
-      | L2 of 'a L2.U.t 
-    let tname = L1.U.tname ^ " or " ^ L2.U.tname
-    let eq veq x y = match x, y with
-    | L1 x,    L1 y    -> L1.U.eq veq x y
-    | L2 x,    L2 y    -> L2.U.eq veq x y
-    | _, _ -> false
-    let to_string vs = function
-      | L1 x -> L1.U.to_string vs x
-      | L2 x -> L2.U.to_string vs x
-    type 'a state = { l1 : 'a L1.U.state ; l2 : 'a L2.U.state }
-    let state () = { l1 = L1.U.state() ; l2 = L2.U.state () }
-  end
-  module M (This : INTO_LAYER with type 'a t = 'a U.t and type 'a state = 'a U.state) =
-    struct
-      module Top = This.Top
-      module V = Top.V
-      module This1 = struct
-        module Top = Top
-        type 'a t = 'a L1.U.t
-        let map = { V.embed = (fun x -> This.map.V.embed (U.L1 x))
-                  ; V.project = (fun v -> match This.map.V.project v with
-                                        | U.L1 x -> x
-                                        | _ -> raise (V.Projection (v, L1.U.tname)))
-                }
-        type 'a state = 'a L1.U.state
-        let project_state s = (This.project_state s).U.l1
-      end
-      module This2 = struct
-        module Top = Top
-        type 'a t = 'a L2.U.t
-        let map = { V.embed = (fun x -> This.map.V.embed (U.L2 x))
-                  ; V.project = (fun v -> match This.map.V.project v with
-                                        | U.L2 x -> x
-                                        | _ -> raise (V.Projection (v, L2.U.tname)))
-                }
-        type 'a state = 'a L2.U.state
-        let project_state s = (This.project_state s).U.l2
-      end
-      module L1' = L1.M (This1)
-      module L2' = L2.M (This2)
-      let init g = (L1'.init g; L2'.init g)
-    end
-end
-
-<<signatures>>=
-module type TOWER = sig
-  (* top of the tower *)
-  module V : Value.S
-  val fallback : string -> V.state -> V.value list -> V.value list
-
-  (* access to one tier *)
-  type 'a t   (* is this parameter really needed? *)
-  val map : V.value t V.map
-  type 'a state 
-  val project_state : V.state -> V.value state
-end
-
-module type TIER = sig
-  module U : Value.USERDATA
-  module M (T : TOWER with type 'a t = 'a U.t with type 'a state = 'a U.state) : sig
-    val init : T.V.state -> unit
-  end
-end
-
-module type MIXIN = functor (L : TIER) -> TIER
-
-<<lua.ml>>=
-module Bottom : TIER = struct
-  module U = struct
-    type 'a t = unit
-    let tname = "<nothing>"
-    type 'a state = unit
-    let state () = ()
-    let to_string _ () = "<nothing>"
-    let eq _ () () = true
-  end
-  module M (FB : TOWER) = struct let init _ = () end
-end
-
-module Make (L : TIER) : INTERP = struct
-  module Value = Value.Make(L.U)
-  module Ast = Ast.Make (Value)
-  type state = Value.state
-  type value = Value.value
-  <<interp toplevel>>
-  <<interp fallbacks>>
-  <<old-style state function>>
-  <<interp tests>>
-end
-
-module Make' (L' : LAYER_WITH_TYPE) : INTERP = struct
-  module Value = Value.Make(L'.U)
-  module Ast = Ast.Make (Value)
+<<luainterp.ml>>=
+module Make (L : Lualib.FULL) : S = struct
+  module Value = Luavalue.Make(L.U)
+  module Ast = Luaast.Make (Value)
   type state = Value.state
   type value = Value.value
   <<interp toplevel>>
@@ -194,27 +51,24 @@ module Make' (L' : LAYER_WITH_TYPE) : INTERP = struct
 end
 @ 
 <<new-style state function>>=
-module Top = struct
-  module V = Value
-  let fallback = fallback
-end
-
 module This = struct
-  module Top = Top
+  module Interp = struct
+    module V = Value
+    let fallback = fallback
+  end
   type 'a t = 'a V.userdata'
   let map = V.userdata
   type 'a state = 'a V.userstate'
   let project_state g = g.V.userstate
 end
 
-module L'' = L'.M(This)
+module L' = L.M(This)
 
 let state () =
   let g = V.state () in
   add_fallbacks g;
-  L''.init g;
+  L'.init g;
   g
-
 @
 Abbreviate!
 <<interp toplevel>>=
@@ -243,23 +97,6 @@ let fbs =
 (* make default fallbacks; provide state in V *)
 let add_fallbacks g =
   List.iter (fun (k, f) -> Hashtbl.add g.V.fallbacks k (V.caml_func f)) fbs 
-<<old-style state function>>=
-module Top = struct
-  module V = Value
-  let fallback = fallback
-  type 'a t = 'a V.userdata'
-  let map = V.userdata
-  type 'a state = 'a V.userstate'
-  let project_state g = g.V.userstate
-end
-
-module L' = L.M(Top)
-
-let state () =
-  let g = V.state () in
-  add_fallbacks g;
-  L'.init g;
-  g
 @ 
 must be able to manage stack correctly
 <<interp toplevel>>=
@@ -415,8 +252,6 @@ let lookup rho x =
   in look rho
 
 <<interp toplevel>>=
-
-
 let rec exp rho = function
   | A.Var x -> (match rho x with
                 | Global -> fun g l k -> k (getglobal g (V.String x))
@@ -688,6 +523,25 @@ let setfallback g fbname fb =
   let _ = Hashtbl.replace g.V.fallbacks fbname fb in
   fb'
 @ 
+<<luainterp.ml>>=
+module NoLibrary = struct
+  module U = struct
+    type 'a state = unit
+    type 'a t     = unit
+    let tname = "<nothing>"
+    let eq _ _ _ = true
+    let to_string _ _ = "<nothing>"
+    let state () = ()
+  end
+  module M (This : Lualib.FULL_VIEW with type 'a t = 'a U.t and type 'a state = 'a U.state) =
+    struct
+      let init _ = ()
+    end
+end
+@
+
+
+
 <<interp tests>>=  
 let nil = A.Lit V.Nil
 let three = A.Lit (V.Number 3.0)
@@ -719,16 +573,11 @@ let test _ =
       ; "result of loop", stmts loop test_state
   ] 
 @ 
-<<lua.ml>>=
-(*
-module U = struct type t = unit let to_string () = "<userdata>" let eq = (=) end
-module V = Value.Make (U)
-module A = Ast.Make (V)
-*)
-module T = Make (Bottom)
+<<luainterp.ml>>=
+module T = Make (NoLibrary)
 let t = T.test ()
-<<lua.mli>>=
-module T : INTERP
+<<luainterp.mli>>=
+module T : S
 val t : (string * T.Value.value list) list
 @
 
