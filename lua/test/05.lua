@@ -2,7 +2,7 @@ $ifnot checktable
 
 $ifnot querytab
 
-stat = function () print"`querytab' nao ativo" end
+function stat () print("`querytab' nao ativo") end
 
 $else
 
@@ -39,6 +39,8 @@ function checktable (t)
   return l
 end
 
+function writei(_,v) write(" ", v) end
+
 function mostra (t)
   write(t.size, "  ", t.ff, "\n")
   local i = 0
@@ -47,12 +49,18 @@ function mostra (t)
     if type(t[i]) ~= 'table' then
       write(tostring(t[i]))
     else
-      foreachi(t[i], function(_,v) write(" ", v) end)
+      foreachi(t[i], writei)
     end
     write("\n")
     i = i+1
   end
 end
+
+
+function formatthing(i,n)
+    print(format("%5d %10d %.2f%%", i, n, n*100/gnlist))
+  end
+
 
 function stat (t)
   t = checktable(t)
@@ -71,11 +79,19 @@ function stat (t)
   end
   print(format("size=%d  elements=%d  load=%.2f  med.len=%.2f",
           t.size, nelem, nelem/t.size, nelem/nlist))
-  foreachi(maxlist, function(i,n)
-    print(format("%5d %10d %.2f%%", i, n, n*100/%nlist))
-  end)
+  local og = gnlist
+  gnlist = nlist
+  foreachi(maxlist, formatthing)
+  gnlist = og
 end
 
 $end
 
 $end
+
+if querytab then
+  stat {'hello', "Dolly"; x = 99 }
+else
+  print("`querytab' nao ativo")
+end
+

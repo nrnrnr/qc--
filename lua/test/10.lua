@@ -13,13 +13,19 @@ function a.y (x) return x+self end
 assert(a:x(1)+10 == a.y(1))
 
 a.t = {i=-100}
-a["t"].x = function (self, a,b) return self.i+a+b end
+function a["t"].x (self, a,b) return self.i+a+b end
 
 assert(a.t:x(2,3) == -95)
 
 a = {x=0}
 function a:add (x) self.x = self.x+x; return self end
-assert(a:add(10):add(20):add(30).x == 60)
+-- assert(a:add(10):add(20):add(30).x == 60)
+local tmp
+  tmp = a:add(10)
+  tmp = tmp:add(20)
+  tmp = tmp:add(30)
+  assert(tmp.x == 60)
+
 
 print('OK')
 

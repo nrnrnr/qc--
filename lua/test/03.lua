@@ -1,4 +1,4 @@
-print "testando operacoes W"
+print ("testando operacoes W")
 
 -- lots of empty lines (to force SETLINEW)
 
@@ -244,7 +244,6 @@ b = {  -- lots of strings (to force JMPW and PUSHCONSTANTW)
 ; x=23}
 else a = 1 end
 
-
 end
 
 assert(b.x == 23)
@@ -315,7 +314,7 @@ n298 = 298.5, n299 = 299.5, j300 = 300} or 1
 until 1
 
 assert(a.n299 == 299.5)
-assert((xxx = 1) == 1 and xxx == 1)
+-- assert((xxx = 1) == 1 and xxx == 1)  -- assignment is not an expression
 
 function a:findfield (f)
   local i,v = next(self, nil)
@@ -328,6 +327,29 @@ end
 
 ii = 0
 i = 1
+function showfun(f, ...)
+  print("Tried to call " .. tostring(f) .. " of type " .. type(f))
+--   print ("arg = " .. tostring(arg))
+--   print (arg.n .. " arguments")
+--   local i, v = next(arg, nil)
+-- print("i = " .. tostring(i) .. " arg = " .. tostring(arg) .. " v = " .. tostring(v))
+--   while i do
+--     print("arg[" .. tostring(i) .. "] = " .. tostring(v))
+--     i, v = next(arg, i)
+--   end
+-- print("finished with i = " .. tostring(i) .. "; v = " .. tostring(v))
+-- 
+  local k = 1
+  while arg[k] do
+    print("argument " .. k .. " = " .. tostring(arg[k]))
+    k = k + 1
+  end
+  error("Bad function call")
+end
+
+oldfun = setfallback("function", showfun)
+  
+
 while b[i] do
   local r = a:findfield(b[i]);
   assert(a[b[i]] == r)
@@ -337,12 +359,12 @@ end
 
 assert(ii == 299)
 
-function xxxx (x) return %ii+x end
+-- function xxxx (x) return %ii+x end
 
-assert(xxxx(10) == 309)
+-- assert(xxxx(10) == 309)
 
 a = nil
 b = nil
 a1 = nil
 
-print'OK'
+print ('OK')

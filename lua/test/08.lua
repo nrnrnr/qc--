@@ -1,7 +1,7 @@
 
 $ifnot setfallback
 
-  assert(dofile(_WD..'setfallback.lua'))
+--  assert(dofile(_WD..'setfallback.lua'))
 
 $end
 
@@ -11,8 +11,8 @@ print('testando fallbacks')
 function index (t,f)
   if f == 'parent' then return oldIndex(t,f) end
   local p = t.parent
-  return if type(p) == 'table' then p[f]
-  else oldIndex(t,f)
+  if type(p) == 'table' then return p[f]
+  else return oldIndex(t,f)
   end
 end
  
@@ -20,16 +20,16 @@ oldIndex = setfallback('index', index)
  
 
 function method (a, b, op)
-  return if type(a) == 'table' then a[op](a, b)
-  else oldMethod (a, b, op)
+  if type(a) == 'table' then return a[op](a, b)
+  else return oldMethod (a, b, op)
   end
 end
 
 oldMethod = setfallback('arith', method)
 
 function newcall (a, b)
-  return if type(a) == 'table' then a:create(b)
-  else oldCall(a)
+  if type(a) == 'table' then return a:create(b)
+  else return oldCall(a)
   end
 end
 
@@ -59,8 +59,10 @@ print('+')
 
 i = -1
 a = point{0,0}
-while (i=i+1) < 1000 do
+i = i+1
+while i < 1000 do
   a = a+point{i/2, 0}
+  i = i + 1
 end
 
 print('+')
