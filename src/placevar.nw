@@ -164,7 +164,7 @@ let context autmtn _ ({Proc.cfg = g; Proc.target = target} as proc) =
   <<count uses in each context>>
   <<choose a context for each variable>>
   <<replace variables with temps>>
-  <<add the allocation automaton's overflow block to the proc.t>>
+  <<freeze [[autmtn]] and make sure its overflow block is empty>>
   (*proc.Proc.varMap <- tMap;*)
   (*TM.fold (fun _ _ _ -> true) tMap false (* ugh *)*)
 	true
@@ -294,9 +294,22 @@ let updateNode node =
     <<context replace var>>
     G.update_instr (fun _ -> replace_var store_var fetch_var rtl) node in
 let () = G.iter_nodes updateNode g in
+<<verbosely dump [[tMap]]>>
+@ 
+<<verbosely dump [[tMap]]>>=
+let () =
+  if Verbose.verbosity > 5 then
+    let loc = function
+      | None -> "<??none??>"
+      | Some l -> RU.ToReadableString.exp (l.A.fetch 99) in
+    Verbose.say 6 ["Varmap: Var i -> Loc\n"];
+    Array.iteri
+      (fun i l -> Verbose.say 6 [Printf.sprintf "  %d -> %s\n" i (loc l)]) tMap in
 @
-<<add the allocation automaton's overflow block to the proc.t>>=
-(*
-let res = freeze autmtn in
-*)
-@
+<<freeze [[autmtn]] and make sure its overflow block is empty>>=
+let aresult = A.freeze autmtn in
+let _ = if Block.size aresult.A.overflow <> 0 then
+          Impossible.impossible "nonempty overflow from placing variables" in
+
+
+
