@@ -304,4 +304,5 @@ static int safe_regexec(Reprog* p, char* s, Resub* sub, int k) {
     fprintf(stderr, "mk ran out of relist space; must rebuild regexec.c\n");
     Exit();
   }
+  return n;
 }
