@@ -308,16 +308,36 @@ Accordingly, we patch things here.
 
 function Stack.layout(dummy,proc)
     blocks = Stack.blocks(proc)
-    block  = Block.cat 
-                { blocks.incoming
+    local layout = 
+                { blocks.incoming               -- <-- high addresses
                 , blocks.stackdata
                 , blocks.continuations
-                , Block.mk(blocks.sp, 24, 16)   -- s
+                , Block.mk(blocks.sp, 24, 16)   -- size/alignment=24/16
                 , blocks.spills
                 , blocks.outgoing
-                , blocks.sp
+                , blocks.sp                     -- <-- low addresses 
                 }
+    local block = Block.cat(layout)
     Stack.freeze(proc,block)
+
+    -- some debugging output
+    -- local i, v = next(layout,nil)
+    -- write("size and alignment of stack blocks:\n")
+    -- while i do
+    --     write(format("%s: %d (align %d)\n"
+    --                 , i, Block.size(v), Block.alignment(v)))
+    --     i, v = next(layout,i)
+    -- end    
+    -- write("size and alignment of named procedure blocks:\n")
+    -- local i, v = next(blocks,nil)
+    -- while i do
+    --     write(format("%s: %d (align %d)\n"
+    --                 , i, Block.size(v), Block.alignment(v)))
+    --     i, v = next(blocks,i)
+    -- end    
+    -- write(format("frame size: %d (align %d)\n"
+    --                 , Block.size(block), Block.alignment(block)))
+
     return 1    -- Backplane protocol
 end
 

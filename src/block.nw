@@ -53,6 +53,14 @@ compile-time constants. A separate substitution step must replace the
 late compile-time constants in {\rtl} expressions that emerged from the
 block operations.
 
+\emph{Attention:} the semantis of [[cat]] might counter your intuition
+The result of [[cat x y]] is one block into which [[x]] and [[y]] are
+embedded side by side. Block [[y]] occupies a lower addresses, and [[x]]
+the higher. This might be counter intuitive if you think about [[x]] and
+[[y]] as a string $(x,y)$ where $x$ is the beginning, i.e.~low end of
+the string.  The problem becomes even more apparent when lists of blocks
+are concatenated: in $[x,y,z]$ the $x$ is a the top, not the bottom.
+
 Two blocks whose data are live at the same time can be concatenated into
 one bigger block. Inside the new block, the data from the first block
 occupies the lower addresses, and the second block the higher addresses.
@@ -183,14 +191,18 @@ We do so by virtually increasing the size of the first block to
 alignment of the resulting block is the maximum of the two incoming
 alignments.
 
+\emph{Attention:} as discussed above, there is a possability for
+confusion here which block goes into low memory and which into high
+memory. Block [[x]] sits on top of [[y]].
+
 <<block.ml>>=
 let cat x y =
-    let size' = align (size x) (alignment y) in
-        { base          = base x
-        ; size          = size' + size y
-        ; alignment     = max (alignment x) (alignment y)
-        ; constraints   = C.equate (add (base x) size') (base y)  
-                          :: (constraints x) @ (constraints y) 
+    let size' = align (size y) (alignment x) in
+        { base          = base y
+        ; size          = size' + size x
+        ; alignment     = max (alignment y) (alignment x)
+        ; constraints   = C.equate (add (base y) size') (base x)  
+                          :: (constraints y) @ (constraints x) 
         }
 @
 
