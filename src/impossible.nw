@@ -1,0 +1,56 @@
+
+% l2h substitution cfg CFG
+% l2h substitution dots ...
+% l2h substitution AST AST
+% l2h substitution ast AST
+% l2h substitution rtl RTL
+% l2h substitution ir IR
+% l2h substitution noweb NOWEB
+% l2h substitution qcc QC--
+% l2h substitution C C--
+% l2h substitution PAL C--
+% l2h substitution pal C--
+% l2h substitution asdl ASDL
+% l2h substitution ocaml OCaml
+% l2h substitution forall forall
+% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
+
+\input{macros.tex}
+
+% ------------------------------------------------------------------ 
+\section{Impossible}
+% ------------------------------------------------------------------ 
+
+Implementations are imperfect: they reach code that they should. This
+module provides two function to signal these kind of internal errors:
+
+\begin{itemize}
+\item Code that should be unreachable due to the internal logic of the
+      program should call [[impossible]] with a descriptive message.
+
+\item Missing implementations call [[unimp]] with a descriptive message.
+\end{itemize}
+
+{\ocaml} does not provide [[__LINE]__]] and [[__FILE__]] like the C
+pre-processore.  It is therefore a good idea to include the source
+file name in the messages passed to [[impossible]] and the like.  A
+raised exception by itself does not include any hint where it was
+raised.  The {\ocaml} debugger is one way of finding where an
+excpetion was raised.
+
+<<impossible.mli>>=
+val impossible: string -> 'a
+val unimp:      string -> 'a
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+<<impossible.ml>>=
+exception Impossible of string
+
+let impossible msg = raise (Impossible msg)
+let unimp msg = impossible ("not implemented: "^msg)
+@
+
