@@ -585,8 +585,14 @@ let target =
             | "C--" | "c--"    -> cmm_convention
             | "notail"         -> notail_convention
             | cc -> Impossible.impossible ("unsupported calling convention "^cc))
+  (* global or hardware registers *)
   ; T.globals  = globals
   ; T.is_rounding_mode = (fun loc -> loc = fpcond 0) (* see globals value *)
+  ; T.named_locs   = Strutil.assoc2map 
+                     ["IEEE 754 rounding mode",    fpcond 0
+                     ;"IEEE 754 rounding results", fpcond 1
+                     ]
+  
   (* bogosity *)
   ; T.data_section = "data" (* NOT REALLY A PROPERTY OF THE TARGET MACHINE... *)
   ; T.charset = "latin1" (* THIS IS NONSENSE!! NOT A PROPERTY OF THE MACHINE?? *)

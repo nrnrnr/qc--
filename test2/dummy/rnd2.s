@@ -6,15 +6,15 @@ target
     charset "latin1"
     float "ieee754";
 
-export bits32 m\208\\\245O,\028\030\246\203V\151\153o\250\006;
+export bits32 \223\030;*\183\2383\144\190E\157j\151\006\240o;
 
 section "data" { align 1; }
 
 section "data" { sym@Cmm_private_global_area: }
 
-section "data" { sym@m@208@@@245O@@028@030@246@203V@151@153o@250@006: }
+section "data" { sym@@223@030@@@183@2383@144@190E@157j@151@006@240o: }
 
-section "data" { bits8[1::bits32]; }
+section "data" { bits8[0::bits32]; }
 
 section "text"
 {
