@@ -1,28 +1,22 @@
+* The check of the static semantics does not detect when a link-time
+  expression uses an operator that is not available at link-time. The
+  probem is only detected in the [[Ast3ir]] module. One problem is, that
+  link-time expressions could be target specfic.
+
+* The compiler reserves global memory for global registers. This must be
+  only by one compilation unit and all others must import the
+  corresponding symbol. We thus need a flag (-main ?) that tells whether
+  the memory should be reserved or not.
+
 * Cfg3: transaction-based interface: which operations should be
   protected by transactions?
 
 * How are continuations created? The translation of a continuation must 
   store a continuation value on the run-time stack.
 
-* How to translate the memory block resulting from global registers back
-  to C--? (Ast3ir.translate).
-
 * Link-time expression in the Asm interface are incompatible to the 
   link-time expressions as they are calculated by Rtleval.
 
-* CFG: do we really need two methods for traversing the cfg? We have one
-  based on the linear order of nodes and another unspecified one. Having
-  just the one based on a linear order seem enough for me.
-
-* How are RTLs translated back to C--? C-- syntax has no way to express
-  different spaces as they are present in RTLs. 
-
-    $r[2]       -> bits32[2]            no indication of space 
-                                        confusing
-                -> typedef $r bits32    space becomes type
-                   $r[2]                width of '2' can be wrong
-                -> bits32[$r+2]         space becomes base address
-                                        width of '2' can be wrong    
 
 * The implementation of cutto currently lacks all details to find the
   activation for the continuation and thus the \emph{incoming} area in
@@ -49,19 +43,6 @@
   would be to raise the standard exception Invalid_argument. The
   problem of tracking its cause remains the same. 
 
-* I believe stack slots for registers (spilling, callee saved
-  registers, etc) should be managed by an automaton that itself
-  allocates memory from an Area. The private area of the stack
-  therefore is a concatenation of (at least) two Area.t: user stack
-  data and slots used by compiler and run-time system.
-
-* Automaton.freeze and Area.freeze should adjust the size of the area 
-  under construction such that is a multiple of the base alignment.
-  Otherwise it is not possible to to overlay areas on such that they
-  share their high ends.
-  
-* I would like build a dummy target but need some inspiration what a
-  good dummy would look like. Appel's book might help.
 
 * Spilling hardware registers is not save: if [[spillee]] is a
   hardware register, it is re-loaded into a new temporary that
@@ -74,18 +55,6 @@
   However, the register allocator works on the level of a procedure
   which might include calls using different calling conventions.
 
-* I'm not sure how Const should work. When are equations solved? --CL
-
-* We currently have the [[Const]] module to relate compile-time
-  constants.  However, it maintains a global set of equations despite
-  the fact that equations are procedure-local.  I'd like to discuss
-  the interface of [[Const]] first before providing an implementation
-  for Area.overlap.  --CL
-
-* think about the relationship between Rtl.link and the Const 
-
-* The implementation of Area needs the width of an Rtl.exp.
-  Implemented in Rtlutl, but was marked deprecated.
 
 * I don't know how to find the data-flow annotations/nodes for continuations.
 
