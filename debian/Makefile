@@ -34,7 +34,8 @@ install: bin/qc--.opt manual
 	gzip -9 $(MAN1DIR)/qc--interp.1
 	install -m644 lib/libqc--interp.a $(LIBDIR) 
 	install -m644 interp/libinclude/qc--interp.h $(INCDIR)
-	install -m644 interp/libinclude/qc--runtime.h $(INCDIR)/qc--interp-runtime.h
+	# the following line seems obsolete -CL
+	# install -m644 interp/libinclude/qc--runtime.h $(INCDIR)/qc--interp-runtime.h
 	# the runtime system 
 	install -m664 runtime/libqc--.a $(LIBDIR)
 	install -m664 runtime/pcmap.ld $(LIBDIR)
