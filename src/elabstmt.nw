@@ -1,0 +1,162 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+% Grades     ::=    "%%Grades:" Quality Importance Urgency
+% Quality    ::=    A|B|C|D|E
+% Importance ::=    Central|Subsystem|Peripheral
+% Urgency    ::=    Immediate|Soon|Later
+%
+% Example (at beginning of line): %%Grades: B Central Soon
+
+% ------------------------------------------------------------------ 
+\section{Elaborating Statements}
+% ------------------------------------------------------------------ 
+
+<<exposed types>>=
+type exp = Rtl.exp
+type rtl = Rtl.rtl
+type loc = Rtl.loc
+type convention = string
+type hint = string
+type name = string
+type 'a hinted = hint * 'a
+type range = int * int   (* lo <= x < hi *)
+type procname = string
+type flow = { cuts : name list; unwinds : name list; areturns : name list;
+              returns : bool; aborts : bool }
+type stmt =
+  | If     of exp * stmt list * stmt list
+  | Label  of name
+  | Switch of range option * exp * (range list * stmt list) list
+  | Cont   of name * name hinted list
+  | Span   of Bits.bits * exp * stmt list
+  | Assign of rtl
+  | Call   of loc hinted list * convention * exp * exp hinted list * procname list
+            * flow
+  | Goto   of exp * name list
+  | Jump   of convention * exp * exp hinted list * procname list
+  | Cut    of exp * exp hinted list * flow 
+  | Return of convention * int * int * exp hinted list
+@
+<<elabstmt.mli>>=
+<<exposed types>>
+val elab_stmts :
+  'a Fenv.Dirty.env' -> (Ast.name_or_mem, Ast.expr, Nast.assign) Nast.stmt list ->
+  stmt list Error.error
+@ The [[elab_*]] functions work with incomplete information,
+indicated by [[Error.Error]] values.  The policy is as follows:
+\begin{itemize}
+\item In case of a success, [[check]] returns the type of the
+      expression at hand as a [[Error.Ok]] value.
+\item If the type check must use an erroneous information from the
+      environment, it propagates this error and returns [[E.Error]].
+\item If the type check detects a new error, for example a type
+      inconsistency, it issues an error message and returns
+      [[E.Error]].
+      The exception [[Error.ErrorExn]] may be used internally, but it
+      should never be raised by a top-level function.
+\end{itemize}
+@
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+<<elabstmt.ml>>=
+<<exposed types>>
+module AT = Automaton
+module N = Nast
+module E = Error
+module F = Fenv.Dirty
+let impossf fmt = Printf.kprintf Impossible.impossible fmt
+let unimp = Impossible.unimp
+let is2power x = x > 0 && x land (x - 1) = 0
+@
+
+<<elabstmt.ml>>=
+module M = Metrics
+<<utilities>>
+@ 
+<<utilities>>=
+@ 
+Parameter [[reachable]] means the statement is reachable by ordinary
+control flow (i.e., not by continuation).
+<<elabstmt.ml>>=
+let elab_stmts env =
+  let eprint r = E.errorRegionPrt (F.srcmap env, r) in
+  let errorf r = Printf.kprintf (fun s -> eprint r s; E.Error) in
+  let exp = Elabexp.elab_exp env in
+  let rec full_stmt r reachable s =
+    <<definitions of elaboration functions>>
+    let rec stmt s = match s with
+    | N.StmtAt (s, r) -> E.catch (eprint r) (full_stmt r reachable) s
+    | N.If (c, t, f) -> 
+        E.ematch3 (exp c) (stmts r t) (stmts r f) (fun (c, cty) t f ->
+          match cty with
+          | Types.Bool -> If (c, t, f)
+          | Types.Bits n -> E.error "condition in `if' is not a Boolean")
+    | N.Switch (range, e, arms) -> switch range e arms
+    | N.Label n -> E.Ok (Label n)
+    | N.Cont (name, formals) ->
+        if reachable then
+          E.error "control can fall through to continuation"
+        else
+          E.ematch (E.Raise.list (List.map cformal formals)) (fun formals ->
+            Cont (name, formals))
+    | _ -> unimp "statements" in
+    stmt s
+  and stmts r ss =
+    let rec stmts reachable = function
+      | [] -> []
+      | N.Span (_, _, []) :: ss -> stmts reachable ss
+      | s :: ss -> full_stmt r reachable s :: stmts (not (jumps s)) ss in
+    Error.Raise.list (stmts true ss)
+  and jumps = function N.Goto _ | N.Jump _ | N.Cut _ | N.Return _  -> true
+                     | N.Call (_, _, _, _, _, fl) -> List.mem Ast.NeverReturns fl
+                     | N.StmtAt (s, _) -> jumps s
+                     | N.Span (_, _, ss) -> jumps (Aux.last ss)
+                     | _ -> false in
+(*
+  | N.Label  of name
+  | N.Cont   of name * cformal list
+  | N.Span   of 'e * 'e * ('l, 'e, 'a) stmt list
+  | N.Assign of 'a
+  | N.Call   of 'l list * convention * 'e   * 'e actual list * procname list * flow
+  | N.Prim   of 'l list * convention * name * 'e actual list * flow
+  | N.Goto   of 'e * label list
+  | N.Jump   of convention * 'e * 'e actual list * procname list
+  | N.Cut    of 'e * 'e actual list * cflow 
+  | N.Return of convention * ('e * 'e) option * 'e actual list
+
+    | A.StmtAt(x,r)     -> E.catch' (F.flagError env) (error r env) (stmt env) x
+    | A.IfStmt  x       -> ifStmt     env x
+    | A.SpanStmt x      -> spanStmt   env x
+    | A.AssignStmt x    -> assignStmt env x
+    | A.CallStmt x      -> callStmt   env x
+    | A.PrimStmt x      -> primStmt   env x
+    | A.GotoStmt x      -> gotoStmt   env x
+    | A.CutStmt x       -> cutStmt    env x
+    | A.ReturnStmt x    -> returnStmt env x
+    | A.JumpStmt x      -> jumpStmt   env x
+    | A.ContStmt x      -> contStmt   env x
+    | A.SwitchStmt x    -> switchStmt env x
+    | A.LabelStmt x     -> env        (* nothing to do *)
+    | A.EmptyStmt       -> env        (* nothing to do *)  
+    | A.CommentStmt _   -> env
+
+*)
+  stmts Srcmap.null
+<<definitions of elaboration functions>>=
+let cformal (hint, name) =
+  E.seq (snd (F.findv name env)) (fun den ->
+    match den with
+    | F.Variable _, _ when F.is_localv name env -> E.Ok (hint, name)
+    | _ -> errorf r
+             "continuation parameter '%s' is not a local register variable" name) in
+@
+The type of the switch expression must be matched by the guarding
+ranges of the arms.  An empty switch-statement is an error because no
+arm can match the value of the switch-expression at run-time.
+<<definitions of elaboration functions>>=
+let switch range e arms =
+  match arms with
+  | [] -> E.error "empty switch statement"
+  | _ :: _ -> unimp "switch statements" in
