@@ -153,8 +153,8 @@ When no target declaration was provided, the [[find*]] functions
 return [[None]].
 
 <<>>=
-val bindMemsize     : int        -> env -> env
-val bindEndianness  : endianness -> env -> env 
+val bindMemsize     : Srcmap.reg -> int        -> env -> env
+val bindEndianness  : Srcmap.reg -> endianness -> env -> env 
 val findMemsize     : env -> int option Error.error
 val findEndianness  : env -> endianness option Error.error  
 @
@@ -190,8 +190,13 @@ module StrMap       = Map.Make(Comparable)
 
 type tenv           = (attr * tentry) StrMap.t
 type venv           = (attr * ventry) StrMap.t
-type target         = { memsize:      int option E.error
+type target         = { memsize:      int        option E.error
                       ; endianness:   endianness option E.error
+                      ; word:         Types.ty   option E.error
+                      ; code:         Types.ty   option E.error
+                      ; data:         Types.ty   option E.error
+                      ; float:        string     option E.error
+                      ; charset:      string     option E.error
                       }
 <<>>=
 type env            = { tenv   :      tenv
@@ -204,6 +209,11 @@ let create map      = { tenv   = StrMap.empty
                       ; venv   = StrMap.empty
                       ; target = { memsize    = E.Ok(None)
                                  ; endianness = E.Ok(None)
+                                 ; word       = E.Ok(None)
+                                 ; code       = E.Ok(None)
+                                 ; data       = E.Ok(None)
+                                 ; float      = E.Ok(None)
+                                 ; charset    = E.Ok(None)
                                  }
                       ; srcmap = map
                       }
@@ -340,15 +350,13 @@ let update r env name old new' =
     
 
 <<>>=
-let bindMemsize n env =
-    let r        = Srcmap.null (* for the moment *)            in
+let bindMemsize r n env =
     let memsize' = update r env "memsize" env.target.memsize n in
     let target'  = { env.target with memsize = memsize' }      in
         { env with  target = target' }
 
 <<>>=
-let bindEndianness e env =
-    let r        = Srcmap.null (* for the moment *)                  in 
+let bindEndianness r e env =
     let e'       = update r env "endianness" env.target.endianness e in
     let target'  = { env.target with endianness = e' }               in
         { env with target = target' }
@@ -391,6 +399,6 @@ checks need it.
 let setDefaults env =
     match findMemsize env with
     | E.Ok(Some x) -> env
-    | E.Ok(None)   -> bindMemsize 8 env
+    | E.Ok(None)   -> bindMemsize Srcmap.null 8 env
     | E.Error      -> env
 @

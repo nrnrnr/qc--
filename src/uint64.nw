@@ -24,9 +24,22 @@ converts between [[float]] and [[int64]] by maintaining the numerical
 value. This conversion maintains the bit patters and thus relates two
 very different numerical values.
 
+
+
 <<uint64.mli>>=
-external of_float:   float -> int64                  = "uint64_int64"
-external to_float:   int64 -> float                  = "uint64_float"
+<<external functions>>
+@
+
+<<external functions>>=
+external of_float:   float -> int64                  = "uint64_f2i"
+external to_float:   int64 -> float                  = "uint64_i2f"
+@
+
+The function [[of_int]] copies an [[int]] bitwise into an [[int64]]
+value; unlike [[Int64.of_int]] no sign-extension is performed.
+
+<<>>=
+external of_int:     int   -> int64                  = "uint64_i2i"
 @
 
 The following arithmetical operations consider their arguments and
@@ -34,7 +47,7 @@ return values as unsigned integers. Otherwise they implement the
 behavior of the corresponding functions in the [[Int64]] module.
 
 <<>>=
-external compare     int64 -> int64 -> int           = "unit64_compare"
+external compare:    int64 -> int64 -> int           = "uint64_compare"
 external addu:       int64 -> int64 -> int64         = "uint64_add"
 external subu:       int64 -> int64 -> int64         = "uint64_sub"
 external mulu:       int64 -> int64 -> int64         = "uint64_mul"
@@ -50,11 +63,16 @@ The implementation is done in C like the implementation of [[Int64]].
 It simply provides some additional operations in the same style as the
 [[Int64]] implementation. 
 
-<<uint64.c>>=
+<<uint64.ml>>=
+<<external functions>>
+@
+
+<<uint64p.c>>=
 #include <caml/fail.h>
 #include <caml/mlvalues.h>
 #include <caml/alloc.h>
 #include <caml/config.h>
+@
 
 <<>>=
 value uint64_compare(value v1, value v2)
@@ -65,7 +83,7 @@ value uint64_compare(value v1, value v2)
 }
 
 <<>>=
-value uint64_int64(value f)
+value uint64_f2i(value f)
 {
     union { double d; int64 i; } buffer;
     buffer.d = Double_val(f);
@@ -73,11 +91,26 @@ value uint64_int64(value f)
 }
 
 <<>>=
-value uint64_float(value i)
+value uint64_i2f(value i)
 {
     union { double d; int64 i; } buffer;
     buffer.i = Int64_val(i);
     return copy_double(buffer.d);
+}
+@
+
+The following function is a quick hack and not portable to 64 bit
+architectures. 
+
+<<>>=
+value uint64_i2i(value i)
+{
+    union { int32 i[2]; int64 j; } buffer;
+    
+    buffer.i[0] = Int_val(i);
+    buffer.i[1] = 0;
+
+    return copy_int64(buffer.j);
 }
 
 

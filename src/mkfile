@@ -81,7 +81,8 @@ nwclean:V:
 # important file sets
 # ------------------------------------------------------------------ 
 
-MLI =           srcmap.mli  \
+MLI =           uint64.mli  \
+                srcmap.mli  \
                 error.mli   \
                 cmdline.mli \
                 ast.mli     \
@@ -93,7 +94,8 @@ MLI =           srcmap.mli  \
                 fatenv.mli  \
                 topsort.mli \
 
-ML =            srcmap.ml   \
+ML =            uint64.ml   \
+                srcmap.ml   \
                 error.ml    \
                 this.ml     \
                 ast.ml      \
@@ -189,7 +191,8 @@ html:V:         $HTML
 # ------------------------------------------------------------------  
 
 uint64.mli      \
-uint64.c:       uint64.nw
+uint64.ml       \
+uint64p.c:      uint64.nw
                 eval $OCAMLTANGLE
 
 value.ml:       value.nw
@@ -269,7 +272,7 @@ srcmap.ml:      srcmap.nw
 # C code
 # ------------------------------------------------------------------ 
 
-uint64.o:       uint64.c
+uint64p.o:      uint64p.c
                 $OCAMLC $OCAMLC_FLAGS -c $prereq
 
 # ------------------------------------------------------------------ 
@@ -289,15 +292,22 @@ ASDL =          asdlGen
 # binaries
 # ------------------------------------------------------------------ 
 
+OBJ =           uint64p.o
 CMOLIBS =       cllib.cma  asdl.cma
 CMXLIBS =       cllib.cmxa asdl.cmxa
 
-$NAME:          $CMO
-                $OCAMLC $OCAMLC_FLAGS -o $target $CMOLIBS $CMO
+$NAME:          $CMO $OBJ
+                $OCAMLC $OCAMLC_FLAGS -custom -o $target $CMOLIBS $OBJ $CMO 
                 
-$NAME.opt:      $CMX
-                $OCAMLO $OCAMLO_FLAGS -o $target $CMXLIBS $CMX
+$NAME.opt:      $CMX $OBJ
+                $OCAMLO $OCAMLO_FLAGS -o $target $CMXLIBS $OBJ $CMX
                 
+#
+# an OCaml interpreter with all our C code compiled in
+#
+
+ocamli:         $OBJ uint64.cmo
+                $OCAMLTOP -custom -o $target uint64.cmo $OBJ 
 
 # ------------------------------------------------------------------ 
 # update hierarchy
