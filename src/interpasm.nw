@@ -31,6 +31,7 @@ module Asm      = Asm
 module GU       = Cfgutil
 module RL       = Interpemitrtl
 module RP       = Rtl.Private
+module P        = Proc
 
 type tgt   = ((Rtl.exp -> Automaton.t), Call.t) Target.t
 type proc' = (Automaton.t, Rtl.rtl Cfgx.M.cfg, Call.t, tgt) Proc.t
@@ -56,10 +57,32 @@ module New = struct
        we use for storing continuation information *)
     let emit (proc:proc) fd =
         let fprintf = Printf.fprintf in
-        ( fprintf fd "CMM.procedure ('%s',%d,%d) -- stackdata = sdata+conts\n"
+
+        (* this code for emitting stackdata info. stolen from runtimedata.nw *)
+        let sort_spans = List.sort (fun (i1,_) (i2,_) -> compare i1 i2) in
+        let rec extract_offset e = match Rtl.Dn.exp (Simplify.exp e) with
+          | RP.Const (RP.Bits n) -> Bits.U.to_int n
+          | _ -> Impossible.impossible "found illegal stackdata span value" in
+
+        let stackdata_spans = 
+          List.filter (fun (site,_) -> site = proc.P.symbol#original_text)
+             proc.P.spans in
+        let stackdata_decls fd = match stackdata_spans with
+          | [(_,spans)] ->
+            ( fprintf fd "{ "
+            ; List.iter (fun (_,e) -> fprintf fd "%d,"
+                                              (extract_offset e))
+                 (sort_spans spans)
+            ; fprintf fd " }"
+            )
+          | _ -> Impossible.impossible "more than one set of SD spans found" in
+
+        ( fprintf fd "CMM.procedure ('%s',%d,%d,"
                       (proc.Proc.symbol#mangled_text)
                       proc.Proc.vars
                       (Block.size proc.Proc.stackd+Block.size proc.Proc.conts)
+        ; stackdata_decls fd
+        ; fprintf fd ")\n"
         ; Interpemit.proc proc fd
         ; fprintf fd "CMM.end_procedure()\n"
         )
