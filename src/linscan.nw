@@ -175,15 +175,16 @@ temporaries.  This makes it easier to place them into registers.
 \mc{2}{l}{\sc Allocate $(\cfg)$} \\
 1  & \k{forall} hardware register $r$ \k{do} $\lt[r] \gets\emptyset$ \\
 2  & \k{loop} spill:\\
-3  & \quad $\mathit{lifeness}(\cfg)$\\
-5  & \quad $\v{tmp},\v{reg} \gets \v{partition}(\v{domain}(\v{lifetime}))$\\
+3  & \quad $\v{lifeness}(\cfg)$\\
+   & \quad $\v{lifetime} \gets \v{lifetimes}(\cfg)$\\
+4  & \quad $\v{tmp},\v{reg} \gets \v{partition}(\v{domain}(\v{lifetime}))$\\
    & \quad \it temporaries and hardware registers\\
-4  & \quad \k{loop} assign:\\
+5  & \quad \k{loop} assign:\\
 6  & \quad\quad \k{if} $\v{tmp} = \emptyset$ \k{then} \k{return} $\cfg$ \\
 7  & \quad\quad $(t,r) \gets \v{select}(\v{tmp},\v{reg})$\\
    & \quad\quad \it such that $\neg\v{overlaps}(\v{bbox}(\lt[t]),\lt[r])$\\
 8  & \quad\quad \k{if} no $(t,r)$ found \k{then}\\
-9  & \quad\quad\quad select $r \in\v{domain}(\lt)$ \\
+9  & \quad\quad\quad select $r \in\v{tmp} \cup \v{reg}$ \\
 10 & \quad\quad\quad select interval $i \subseteq \lt[r]$\\
 11 & \quad\quad\quad $\cfg \gets \v{spill}(\cfg,r)$\\
 12 & \quad\quad\quad \k{loop} spill\\
