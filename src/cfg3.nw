@@ -821,7 +821,6 @@ and exit cfg: node =
 object(this)
     inherit vnode cfg Rtl.null
 end
-@
 
 class assign cfg rtl succ : node =
 object (this)
@@ -829,7 +828,7 @@ object (this)
 
     val mutable _succ = succ
 
-    initializer =
+    initializer 
         succ # link_pred (this :> node)
 
     method succ = [_succ]
@@ -838,7 +837,7 @@ object (this)
         _succ <- map _succ
 end
 
-class return cfg rtl (x,y) : node  
+class return cfg rtl (x,y) : node  =
 object (this)  
     inherit vnode cfg rtl
 
@@ -853,7 +852,7 @@ object (this)
     val mutable _targets = targets
 
     initializer
-        List.iter (fun n -> n#link_pred (this :> node) _targets
+        List.iter (fun n -> n#link_pred (this :> node)) _targets
 
     method succ = uniq _targets      
     
@@ -861,12 +860,39 @@ object (this)
         _targets <- List.map map _targets 
 end
 
-class jump cfg rtl conts : node =
+class jump cfg rtl targets : node =
 object (this)
-    inherit vnode
+    inherit vnode cfg rtl
 
+    val mutable _targets = targets
+    
+    initializer
+        List.iter (fun n -> n#link_pred (this :> node)) _targets
+
+    method succ = uniq _targets      
+    
+    method upd_succ map =
+        _targets <- List.map map _targets
 end
 
+class call cfg rtl conts ~succ : node =
+object (this)
+    inherit vcut cfg rtl conts
 
+    val mutable _succ = (succ: node)
+
+    initializer 
+        succ # link_pred (this :> node)
+
+    method succ =
+        uniq (List.concat [ [_succ]; _cuts; _unwinds; _returns])
+
+    method upd_succ map = 
+        ( _cuts     <- List.map map _cuts
+        ; _unwinds  <- List.map map _unwinds
+        ; _returns  <- List.map map _returns
+        ; _succ     <- map _succ
+        ) 
+end
 @
 
