@@ -1,8 +1,20 @@
 % -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% inc: \usepackage[leqno,centertags]{amsmath}
+% inc: \usepackage{latexsym}
+% inc: \usepackage{mathpartir}
+% inc: \input{../config/widenmacros}
 
 \section{Widening}
 
-A simple widener for floating-point values.
+<<widen.ml>>=
+let () =
+  Debug.register "widen"      "show results of widener";
+  Debug.register "widen-pre"  "show RTL before widening";
+  Debug.register "widen-vars" "show when a variable is widened";
+  Debug.register "gamma"      "show how Gamma is constructed"
+@ 
+
+[[float]] is a simple widener for floating-point values.
 Parameter [[rm]] contains the hardware rounding modes.
 <<widen.mli>>=
 val float : rm:Rtl.exp -> int list -> Rtl.rtl -> Rtl.rtl
@@ -12,23 +24,45 @@ val float : rm:Rtl.exp -> int list -> Rtl.rtl -> Rtl.rtl
 <<widen.mli>>=
 val store_const : int -> Rtl.rtl -> Rtl.rtl
   (* l := k   =>   l := lobits(k') *)
-
-val dpwiden : Rtl.rtl -> Rtl.rtl
-  (* do integer widening using dynamic programming *)
-
-val widenlocs : Rtl.rtl -> Rtl.rtl
-  (* This is supposed to widen locations *)
-
-exception Doesn't_need_widening
-
-val needs_widening : Rtl.rtl -> bool
-  (* Check if widths are less than the target width *)
 @ 
 
+A dynamic programming implementation of integer widening.
 <<widen.mli>>=
-val badwiden : Rtl.rtl -> Rtl.rtl
-  (* do integer widening without using dynamic programming *)
+val dpwiden : Rtl.rtl -> Rtl.rtl
+@ Before running the integer widener, [[widenlocs]] should be called
+to make each store and fetch an acceptable width.
+<<widen.mli>>=
+val widenlocs : Rtl.rtl -> Rtl.rtl
+@ 
 
+Check if widths are less than the target width.  The [[lualink.nw]]
+file uses [[Doesn't_need_widening]] to avoid updating RTLs that don't
+need integer widening.  The [[needs_widening]] function is called to
+determine if an RTL needs integer widening.
+<<widen.mli>>=
+exception Doesn't_need_widening
+val needs_widening : Rtl.rtl -> bool
+@ 
+
+[[init_gamma_counts]] and [[update_gamma_counts]] are used by
+[[lualink.nw]] to count the context in which local variables are used
+in a procedure.  The function [[create_gamma]] is called after
+updating all the counts for the procedure and before doing integer
+widening.  The counts are used to suggest fill types for widening of
+variables.  The [[gamma]] environment is also used to get the original
+width of widened locations---unlike the fill type hints, this needs to
+be accurate.
+<<widen.mli>>=
+exception Don't_update
+val init_gamma_counts : unit -> unit
+val update_gamma_counts : Rtl.rtl -> Rtl.rtl
+val create_gamma : unit -> unit
+@ 
+
+Finally, [[width_cost]] and [[app_count]] can be used to guage the
+effectiveness of the dynamic programming algorithm in keeping widened
+expressions small.
+<<widen.mli>>=
 val width_cost : Rtl.rtl -> (int * int * int)
   (* count extension and truncation operations (#sign, #zero, #lobits) *)
   (* we don't count these operations applied to locations or constants *)
@@ -36,10 +70,9 @@ val width_cost : Rtl.rtl -> (int * int * int)
 val app_count : Rtl.rtl -> int
   (* this probably shouldn't be here...it just counts the number of
      RP.App present in the rtl *)
-
-val time : ('a -> 'b) -> 'a -> 'b
 @ 
 
+\subsection{Floating-point widener}
 <<widen.ml>>=
 module R = Rtl
 module RP = Rtl.Private
@@ -52,6 +85,7 @@ let imposs = Impossible.impossible
 
 exception Abort_unknown
 exception Doesn't_need_widening
+exception Don't_update
 @ 
 We're given [[goodwidths]], and our goal is to change all
 floating-point operations in an RTL to be using one of the widths in
@@ -216,43 +250,87 @@ let rtl r =
   else
     r in
 <<widen.ml>>=
-let () =
-  Debug.register "widen"      "show results of widener";
-  Debug.register "widen-pre"  "show RTL before widening"
-@ 
-<<widen.ml>>=
 let store_const goodwidth rtl = match Down.rtl rtl with
   | RP.Rtl [(g, RP.Store(l, (RP.Const (RP.Bits b) as k), w))] when w < goodwidth ->
-      let widek = RP.App(("zx", [w; goodwidth]), [k]) in
-      let widek = Down.exp (Simplify.exp (Up.exp widek)) in
+      let widek  = RP.App(("zx", [w; goodwidth]), [k]) in
+      let widek  = Down.exp (Simplify.exp (Up.exp widek)) in
       let lobits = RP.App(("lobits", [goodwidth; w]), [widek]) in
       Up.rtl (RP.Rtl [(g, RP.Store(l, lobits, w))])
   | _ -> rtl
 @ 
 
-\subsection{DP Integer Widening}
+\subsection{Integer widening by dynamic programming}
 
-<<widen.ml>>=
-<<types>>
-<<solution utilities>>
-<<helpers>>
-<<environments>>
-<<find reachable solutions>>
-<<combine solutions>>
-<<bottom-up transform>>
-<<dynamic programming>>
-@ 
-
+Some basic types used in the integer widener:
 <<types>>=
-type fill = G | Z | S
-(* type width = int *)
+type fill = G | Z | S | H
 type index = int
 type width = int
-type solution = {e : RP.exp; cost : int; e' : RP.exp; fill : fill; n : index; w : width}
+@ Type [[fill]] represents the kind of the high bits produced by a
+widened expression: garbage, zeros, sign bits, and ``high-bits contain
+the value''.
+
+The dynamic programming algorithm works by generating all possible
+solutions based on a set of rules and the operations available on the
+target machine.  A solution is represented as a type [[solution]]
+which is a record containing the original expression [[e]], the width
+of the original expression [[m]], the cost of this solution [[cost]],
+the widened expression [[e']], the fill type of the widened expression
+[[fill]], the index of the fill type [[n]], and finally the width of
+the widened expression [[w]].
+<<types>>=
+type solution = {e : RP.exp; m : width; cost : int; e' : RP.exp; 
+                 fill : fill; n : index; w : width}
+@ There are three types of environments used by the widener: type
+[[machine_env]] describes the abilities of the target machine, type
+[[fill_env]] gives the fill type of each operator, and [[gamma]] gives
+a fill type to each local variable.
+<<types>>=
 type machine_env = (string * (width list)) list
 type fill_env    = (string * fill * index) list
+let (gamma : (string, (fill * int)) Hashtbl.t) = Hashtbl.create 50
+@ 
+<<types>>=
+type tcount = {z:int; s:int; h:int; ni:int}
+let (gamma_counts : (string, tcount) Hashtbl.t) = Hashtbl.create 50
 @ 
 
+\subsubsection{Expanding the solution frontier}
+
+The dynamic programming algorithm works bottom-up by applying two
+phases at each AST node.
+\begin{description}
+\item[Apply syntax translation rules:] In the first phase we apply
+each rule that can match the syntax of the original expression---there
+is exactly one rule for each kind of expression.  The first phase is
+implemented in the function [[ast_combine]], which simply
+pattern-matches the incoming AST and applies the appropriate rule.  A
+description of this rule comes a bit later.  Some rules are
+non-determininstic and thus can produce several possible solutions for
+a given input.  Therefore each rule returns a list of all possible
+solutions for a given input.
+
+\item[Apply width-changing and subtyping rules:] In the second phase
+we take all the solutions from the first phase and apply several rules
+that needn't match particular input syntax.  These second-phase rules
+can be applied to any input solution, although they have conditions
+that must be met to produce a non-empty list of result solutions.
+This second phase is implemented in the function [[find_reachable]] in
+the next code chunk.  These two phases are applied bottom up at each
+AST node to produce all possible solutions.
+\end{description}
+
+The function [[find_reachable]] implements the second phase applied at
+each AST node.  The rules we apply at this phase may usefully be
+reapplied to the solutions from other rules in the set.  We want to
+apply each rule to the set of solutions until no new solutions are
+returned.  The function takes two parameters: [[known]], the entire
+set of solutions, and [[frontier]], the set of solutions that have
+just been generated.  [[find_reachable]] applies each rule to the
+[[frontier]] to create a fresh frontier.  It then recurs using the
+``relevant'' solutions in the fresh frontier as the [[frontier]] and
+the union of the old frontier with the old known solutions as
+[[known]].
 <<find reachable solutions>>=
 <<relations>>
 <<solution set utilities>>
@@ -263,36 +341,15 @@ let rec find_reachable known frontier =
   let frontier  = List.find_all (fun soln -> relevant_given soln known) frontier'
   in
   if frontier <> [] then find_reachable known frontier else known
-@ 
-
-The key to finding the reachable solutions is being able to compare them.
-<<relations>>=
-let comparable a b =
-  ast a = ast b && width a = width b && fill a = fill b
-@ 
-
-Should definitly explain this more.  Perhaps bears some formalization.
-<<relations>>=
-(* determines if solution a is redundant given solution b *)
-let redundant_given1 a b =
-  if comparable a b then
-    if      index a > index b && cost a < cost b then false
-    else if index a < index b && cost a > cost b then false
-    else if index a >= index b then cost a >= cost b
-    else (* index a <  index b *)   false
-  else false
-@ 
-
-<<relations>>=
-let relevant_given soln known = not (List.exists (redundant_given1 soln) known)
-@ 
-
+@ [[find_reachable]] relies on the ability to create a set of
+solutions from a list of solutions using the function
+[[solutions_unique]].
 <<solution set utilities>>=
 let solutions_union xs ys =
   let xs' = List.find_all (fun soln -> relevant_given soln ys) xs in
   xs' @ ys
-@ 
-
+@ [[find_reachable]] also needs to construct the union of two sets of
+solutions using the function [[solutions_union]].
 <<solution set utilities>>=
 let solutions_unique =
   let rec make_unique result = function
@@ -302,25 +359,129 @@ let solutions_unique =
           make_unique (soln :: result) rest
         else make_unique result rest
   in make_unique []
+@ All three of these functions rely on being able to tell if a
+solution is \emph{relevant} given a set of known solutions.  A
+solution is relevant if there does not exist a known solution that
+makes it redundant.
+<<relations>>=
+<<redundant>>
+let relevant_given soln known = not (List.exists (redundant_given1 soln) known)
+@ The function [[redundant_given1]] determines if a solution [[a]] is
+redundant given that we already know solution [[b]].
+<<redundant>>=
+<<comparable>>
+let redundant_given1 a b =
+  if comparable a b then
+    if b.m <= index b then
+      if      index a > index b && cost a < cost b then false
+      else if index a < index b && cost a > cost b then false
+      else if index a >= index b then cost a >= cost b
+      else (* index a <  index b *)   false
+    else if a.m > index a then
+      if index a = index b then cost a >= cost b
+      else false
+    else if a.m <= index a then false
+    else imposs "comparing solutions for redundancy: missing case"
+  else false
+@ The first thing that [[redundant_given1]] checks is that the two
+solutions are actually comparable at all---for solutions to be
+comparable, they must widen the same original expression to the same
+width with the same fill type.  We also check that the original
+expression have the same width, although this should be unnecessary.
+Note that to be comparable they do not need to have the same fill
+\emph{index}.  The index is part of how we decide if a solution is
+redundant.  Conditions from the \rul{Subsume-Index} rule are baked
+into [[redundant_given1]].  Determining of a solution is redundant is
+the way we trim the search space, so it's important to throw away as
+many solutions as we can without actually ignoring a potential desired
+solution.  The dynamic programming algorithm is designed to take the
+minimum cost solution, so [[redundant_given1]] throws away solutions
+that are essentially the same as a known solutions but with higher
+cost.
+\[
+\inferrule [Subsume-Index \sidecond{n<n'\leq w}]
+{\tenv,\menv \derives e \trans{c} \e :: \xty{n}  : \bits{w}\\
+ \polymach \derives e : n
+}
+{\tenv,\menv \derives e \trans{c} \e :: \xty{n'} : \bits{w}}
+\]
+<<comparable>>=
+let comparable a b =
+  ast a = ast b && width a = width b && fill a = fill b && a.m = b.m
 @ 
 
+\subsubsection{Width-changing and subtyping rules}
+
+\def\widentheta#1{%
+\inferrule [Widen-#1 \sidecond{n\leq w\leq w'}]
+{\tenv,\menv \derives e \trans{c} \e :: \fty[#1]{n} : \bits{w} \\
+ \xx{w'}{w} \in \menv}
+{\tenv,\menv \derives e \trans{c+1} \xx{w'}{w}\e :: \fty[#1]{n}:\bits{w'}}
+}
+\newcommand\droplo[2]{%
+\inferrule [Drop-Lo-#2 \sidecond{n\leq n'\leq w}]
+{\tenv,\menv \derives e \trans{c} \e :: \fty{n'} : \bits{w}}
+{\tenv,\menv \derives \lo{n}{n'}e \trans{c} \e :: #1 : \bits{w}}}
+
+The \rul{Subsume-Index} rule is implicit in the definition of other
+rules---other rules search for solutions at a desired index and may
+accept a smaller index if the preconditions of this rule are met.
+This rule is also partly implemented in the function
+[[redundant_given1]].
+\[
+\inferrule [Subsume-Index \sidecond{n<n'\leq w}]
+{\tenv,\menv \derives e \trans{c} \e :: \xty{n}  : \bits{w}\\
+ \polymach \derives e : n
+}
+{\tenv,\menv \derives e \trans{c} \e :: \xty{n'} : \bits{w}}
+\]
+We use the function [[subsume_index]] to check if a solution [[soln]] can be
+used in place of a solution with index [[n']].
+<<applying rules>>=
+let subsume_index soln n' = (soln.n < n' && soln.m <= soln.n) || soln.n = n'
+@ 
+
+\[
+\inferrule [Subsume-Fill \sidecond{n\leq w}]
+{\tenv,\menv \derives e \trans{c} \e :: \xty{n} : \bits{w}}
+{\tenv,\menv \derives e \trans{c} \e :: \g{n}   : \bits{w}}
+\]
 <<applying rules>>=
 let subsume_fill_rule soln =
-  if fill soln = S || fill soln = Z then
+  if is_sigma soln then
     [subst_fill soln G]
   else []
 @ 
 
+\[\inferrule [Natural]
+{\tenv,\menv \derives e \trans{c} \e :: \g{w}   : \bits{w}}
+{\tenv,\menv \derives e \trans{c} \e :: \xty{w} : \bits{w}}
+\]
+The \rul{Natural} rule tells us that if the fill index is already at
+the high end of the bitvector then we can switch to any fill type
+desired (it's vacuously true).  The first part of the [[natural_rule]]
+function implements \rul{Natural} as follows:
 <<applying rules>>=
 let natural_rule soln =
   let create fill' = {soln with fill = fill'; n = soln.w} in    
   if width soln = index soln && fill soln = G then
     [create Z; create S]
+@ However, we also need to take into account the possiblility that
+\rul{Natural} is combined with the \rul{Subsume-Index} rule, which
+says that we can increase the fill index under certain
+circumstances---the next branch of the conditional gives solutions for
+the combined rule case.
+<<applying rules>>=
   else if fill soln = S || fill soln = Z then
-    [create Z; create S]
+    List.filter (fun s -> subsume_index soln (index s)) [create Z; create S]
   else []
 @ 
 
+\[\inferrule [Fill \sidecond{\uns(k_w)=n,n\leq w\leq w'}]
+{\tenv,\menv \derives e \trans{c} \e :: \g{n} : \bits{w} \\
+ \xxlo{w'}{w} \in \menv}
+{\tenv,\menv \derives e \trans{c+1} \xxlo{w'}{w}(k_w, \e) :: \xty{n}:\bits{w'}}
+\]
 <<applying rules>>=
 let fill_rule soln =
   let n = index soln in
@@ -338,10 +499,12 @@ let fill_rule soln =
     let zx_solns = if zx_exists then [create Z "zx"] else [] in
     let sx_solns = if sx_exists then [create S "sx"] else [] in
     let solns    = zx_solns @ sx_solns in
-    List.find_all (fun s -> s.n <= s.w) solns (* is this necessary *)
+    List.find_all (fun s -> s.n <= s.w) solns (* this is necessary *)
   else []
 @ 
 
+\[\widentheta{{\ensuremath{\sigma}}}
+\]
 <<applying rules>>=
 let widen_sigma soln =
   if is_sigma soln then
@@ -349,16 +512,20 @@ let widen_sigma soln =
     let w          = width soln in
     let ext_widths = find_exts_from w ext in
     let create ws =
-      let (_, w') = monomorphic ext ws in
-      { soln with
-        e' = RP.App((ext, ws), [soln.e']);
-        cost = soln.cost + 1;
-        w = w' }
+      match Rtlop.Types.mono (Rtl.opr ext ws) with
+      | ([Types.Bits _], Types.Bits w') ->
+          { soln with
+            e' = RP.App((ext, ws), [soln.e']);
+            cost = soln.cost + 1;
+            w = w' }
+      | _ -> imposs (ext^" operator should have some type bits#n->bits#w")
     in
     List.map create ext_widths
   else []
 @ 
 
+\[\widentheta{{\ensuremath{\gtname}}}
+\]
 <<applying rules>>=
 let widen_garbage soln =
   if fill soln = G then
@@ -366,74 +533,201 @@ let widen_garbage soln =
     let zx_widths = find_exts_from w "zx" in
     let sx_widths = find_exts_from w "sx" in
     let create fill' ext ws =
-      let (_, w') = monomorphic ext ws in
-      { soln with
-        e' = RP.App((ext, ws), [soln.e']);
-        cost = soln.cost + 1;
-        w = w' }
+      match Rtlop.Types.mono (Rtl.opr ext ws) with
+      | ([Types.Bits _], Types.Bits w') ->
+          { soln with
+            e' = RP.App((ext, ws), [soln.e']);
+            cost = soln.cost + 1;
+            w = w' }
+      | _ -> imposs (ext^" operator should have some type bits#n->bits#w")
     in
     List.map (create Z "zx") zx_widths @ List.map (create S "sx") sx_widths
   else []
 @ 
 
+\[\inferrule [Narrow \sidecond{n\leq w\leq w'}]
+{\tenv,\menv \derives e \trans{c} \e :: \fty{n} : \bits{w'} \\
+ \lo{w}{w'} \in \menv}
+{\tenv,\menv \derives e \trans{c+1} \lo{w}{w'} \e :: \fty{n} :
+\bits{w}}
+\]
 <<applying rules>>=
 let narrow_rule soln =
-  let w'           = width soln in
-  let trunc_widths = find_exts_from w' "lobits" in
-  let create ws =
-    let (_, w) = monomorphic "lobits" ws in
-    { soln with
-      e' = RP.App(("lobits", ws), [soln.e']);
-      cost = soln.cost + 1;
-      w = w }
-  in
-  List.find_all (fun s -> s.n <= s.w) (List.map create trunc_widths)
+  if is_tau soln then
+    let w'           = width soln in
+    let trunc_widths = find_exts_from w' "lobits" in
+    let create ws =
+      match Rtlop.Types.mono (Rtl.opr "lobits" ws) with
+      | ([Types.Bits _], Types.Bits w) ->
+          { soln with
+            e' = RP.App(("lobits", ws), [soln.e']);
+            cost = soln.cost + 1;
+            w = w }
+      | _ -> imposs "lobits operator should have some type bits#w->bits#n"
+    in
+    List.find_all (fun s -> s.n <= s.w) (List.map create trunc_widths)
+  else []
 @ 
 
 <<applying rules>>=
+let to_high_rule soln =
+  if fill soln = G &&
+    List.exists (function [w] -> w = soln.w | _ -> false) (machine_widths m "shl")
+  then
+    let w = soln.w in
+    let n = soln.n in
+    [{ soln with
+       e' = RP.App(("shl", [w]), [soln.e';
+                                  RP.Const(RP.Bits(Bits.S.of_int (w-n) w))]);
+       cost = soln.cost + 1;
+       n    = w - n;
+       fill = H }]
+  else []
+@ 
+
+<<applying rules>>=
+let from_high_s_rule soln =
+  if fill soln = H &&
+    List.exists (function [w] -> w = soln.w | _ -> false) (machine_widths m "shra")
+  then
+    let w = soln.w in
+    let n = soln.n in
+    [{ soln with
+       e'   = RP.App(("shra", [w]), [soln.e';
+                                     RP.Const(RP.Bits(Bits.S.of_int n w))]);
+       cost = soln.cost + 1;
+       n    = w - n;
+       fill = S }]
+    else []
+@ 
+
+<<applying rules>>=
+let from_high_z_rule soln =
+  if fill soln = H &&
+    List.exists (function [w] -> w = soln.w | _ -> false) (machine_widths m "shrl")
+  then 
+    let w = soln.w in
+    let n = soln.n in
+    [{ soln with
+       e'   = RP.App(("shrl", [w]), [soln.e';
+                                     RP.Const(RP.Bits(Bits.S.of_int n w))]);
+       cost = soln.cost + 1;
+       n    = w - n;
+       fill = Z }]
+  else []    
+@ 
+
+All the width-changing and subtyping rules are applied by the function
+[[apply_rule]].  Each rule returns a list of solutions when applied to
+a solution.  [[apply_rule]] concatenates all the lists of solutions
+from applying relevant rules to the argument [[soln]].  Usually the
+relevent rules are all the rules, but there are two special cases:
+boolean constants shouldn't have their width changed since they aren't
+really bitvectors, and bitvector constants can be widened at compile
+time making it unnecessary to apply most of the rules.
+<<applying rules>>=
 let apply_rules soln =
-  let all_general_rules = [subsume_fill_rule; natural_rule; fill_rule;
-                           widen_sigma; widen_garbage; narrow_rule]
+  let all_general_rules = [subsume_fill_rule; natural_rule; fill_rule
+                          ; widen_sigma; widen_garbage; narrow_rule
+                          ; from_high_s_rule; from_high_z_rule; to_high_rule]
   in
   let relevant_rules = 
     match ast soln with
     | RP.Const (RP.Bool _) -> []
     | RP.Const (RP.Bits _) -> [subsume_fill_rule; natural_rule; narrow_rule]
-(*     | Var(s,w) -> ext_var_rule :: all_general_rules *)
     | _        -> all_general_rules
   in List.concat (List.map (apply_with soln) relevant_rules)
 @ 
 
+\subsubsection{Syntax translation rules}
+
+\[
+\inferrule [Lit \sidecond{k'_w = \xx{w}{n} k_n, n\leq w}]
+{ }
+{\tenv,\menv \derives k_n \trans{0} k'_w :: \xty{n} : \bits{w}}
+\]
 <<combine solutions>>=
 let mksolutions_lit_bool e = match e with 
-| (RP.Const (RP.Bool b)) -> [{e = e; cost = 0; e' = e; fill = Z; n = 1; w = 1}]
+| (RP.Const (RP.Bool b)) -> [{e = e; m = 1; cost = 0; e' = e; fill = Z; n = 1; w = 1}]
 | _ -> imposs "mksolutions_lit_bool requires a bool const"
 
 let mksolutions_lit_bits tau e = match e with
 | (RP.Const (RP.Bits b)) ->
   let n = Bits.width b (* minbits i *) in
   let litwidths = List.filter (fun w' -> n <= w') (List.assoc "literal" m) in
-  let f w' =
-    let ext = if tau = S then Bits.Ops.sx else Bits.Ops.zx in
-    {e = e; cost = 0; e' = RP.Const(RP.Bits (ext w' b)); fill = tau; n = n; w = w'} in
-  List.map f litwidths
+  (match tau with
+  | (S | Z) ->
+      let f w' =
+        let ext = if tau = S then Bits.Ops.sx else Bits.Ops.zx in
+        {e = e; m = n; cost = 0; e' = RP.Const(RP.Bits (ext w' b)); fill = tau; n = n; w = w'} in
+      List.map f litwidths
+  | H ->
+      let f w' =
+        let ext = Bits.Ops.shl (Bits.Ops.zx w' b) (Bits.S.of_int (w' - n) w') in
+        {e = e; m = n; cost = 0; e' = RP.Const(RP.Bits ext); fill = H; n = w' - n; w = w'}
+      in
+      List.map f litwidths
+  | G -> imposs "widening failed: literals cannot have garbage type")
 | _ -> imposs "mksolutions_lit_bits requires a bitvector const"
 @ 
 
-Assume that each use of a variable is garbage type with index same as width.
+% Assume that each use of a variable is garbage type with index same
+% as width.
+
+\[\inferrule [Var \sidecond{n\leq w}]
+{\tenv(x_w)=\fty{n}}
+{\tenv,\menv \derives x_w \trans{0} x_w :: \fty{n} : \bits{w}}
+\]
+Use [[gamma]] to find the appropriate fill type for this variable.
 <<combine solutions>>=
-let mksolutions_var e w =
-  [{e = e; cost = 0; e' = e; fill = G; n = w; w = w}]
+let lookup_gamma name w =
+  try
+    let (fill, n) = Hashtbl.find gamma name in
+    if Debug.on "gamma" then Printf.eprintf "Found %s :: %s[%i]\n" name (string_of_fill fill) n;
+    (fill, n)
+  with Not_found -> (G, w)
+
+let mksolutions_var name e w =
+  let (fill, n) = lookup_gamma name w in
+  [{e = e; m = n; cost = 0; e' = e; fill = fill; n = n; w = w}]
 @ 
 
+\[\inferrule [Binop \sidecond{\n1\leq\w1,\n2\leq\w2,n\leq w}]
+{%%%\bwtype[\polymach]{e_1}{\n1} \qquad \bwtype[\polymach]{e_2}{\n2} \\
+ \oplus :: \fidx1 \times \fidx2 \rightarrow \tau \\
+ \,\bwoptype [\polymach] \oplus  {\n1 \cross \n2 \arrow n}\\
+ \bwoptype [\rlap{$\menv$}\phantom{\polymach}]
+     {\oplus} {\bits{\w1} \times \bits{\w2} \rightarrow \bits{w}} \\
+ \tx {e_1} {c_1} {\e_1} {\fty[\fidx1]{\n1}} {\bits{\w1}} \\
+ \tx {e_2} {c_2} {\e_2} {\fty[\fidx2]{\n2}} {\bits{\w2}}\\
+}
+{
+\Gamma, M \derives \oplusn(e_1,e_2) \trans{c_1 + c_2} \oplusw(\e_1,\e_2) :: \fty{n} : \bits{w}
+}
+% \tx {\oplusn(e_1,e_2)} {c_1 + c_2} {\oplusw(\e_1,\e_2)} {\fty{n}} {\bits{w}}}
+\]
 <<combine solutions>>=
 let mksolutions_op args_solns opname ws args =
+  (* here we just want to pretend that booleans are 1-bit values *)
+  let monomorphic opname ws =
+    let to_int = function
+      | Types.Bits n -> n
+      | Types.Bool   -> 1
+    in
+    let (a, b) = 
+      if List.mem_assoc opname op_fill_types then
+        Rtlop.Types.mono (Rtl.opr opname ws)
+      else raise Not_found
+    in
+    (List.map to_int a, to_int b)
+  in
   let (args_indices, result_index) = 
     try monomorphic opname ws
     with Not_found -> raise Abort_unknown
   in
-
-  let args_solns = map2_find_all (fun n s -> s.n <= n) args_indices args_solns in
+  let args_solns =
+    map2_find_all (fun n' s -> subsume_index s n') args_indices args_solns
+  in
 
   let m_widths = machine_widths m opname in
   let m_widths = List.map (fork (monomorphic opname) id) m_widths in
@@ -450,8 +744,18 @@ let mksolutions_op args_solns opname ws args =
   let solns_widths_and_taus = cross_pair_filter has_taus solns_and_widths taus in
   
   let mkopsoln ((solns, ((_,w'), ws')), (_,t)) =
+    (* THIS MIGHT BE BOGUS *)
+    (* I suspect what this is trying to do is get rid of widths that
+       are 1 because we were replacing a boolean.  However, there are operators
+       that actually do operate on one bit values.  On the other hand,
+       since they are special purpose, the width probably doesn't
+       appear as a parameter for the op.  Can we show that we never
+       want to accept a parameter width 1?
+     *)
     let ws' = List.filter (fun x -> x > 1) ws' in
+
     { e    = RP.App((opname, ws), args);
+      m    = result_index;
       cost = List.fold_left (+) 0 (List.map cost solns);
       e'   = RP.App((opname, ws'), List.map ast' solns);
       fill = t;
@@ -461,7 +765,16 @@ let mksolutions_op args_solns opname ws args =
   List.map mkopsoln solns_widths_and_taus
 @ 
 
-This implements the Drop-Ext rule.
+Drop extention rule from the paper:
+\[\inferrule [Drop-Ext \sidecond{n\leq n'\leq w}]
+{\tenv,\menv \derives e \trans{c} e' :: \xty{n} : \bits{w}}
+{\tenv,\menv \derives \xx{n'}{n}e \trans{c} e' :: \xty{n} : \bits{w}}
+\]
+More flexible revised rule that is implemented:
+\[\inferrule [Drop-Ext \sidecond{n\leq n'\leq n''\leq w}]
+{\tenv,\menv \derives e \trans{c} e' :: \xty{n} : \bits{w}}
+{\tenv,\menv \derives \xx{n''}{n}e \trans{c} e' :: \xty{n'} : \bits{w}}
+\]
 <<combine solutions>>=
 let mksolutions_ext ext ws arg_solnss =
   let arg_solns = List.hd arg_solnss in
@@ -471,34 +784,96 @@ let mksolutions_ext ext ws arg_solnss =
   let arg_solns = List.find_all (fun s -> s.fill = sigma) arg_solns in
 
   (* find all solutions with index equal to the input width of the extension *)
-  let (ns, n') = monomorphic ext ws in
-  let n = List.hd ns in
-  let arg_solns = List.find_all (fun s -> s.n <= n && s.w >= n) arg_solns in
-  (* remember to use n as the index of the result *)
+  let (n, n'') =
+    match Rtlop.Types.mono (Rtl.opr ext ws) with
+    | ([Types.Bits n], Types.Bits n'') -> (n, n'')
+    | _ -> imposs (ext^" operator should have some type bits#n->bits#w")
+  in
+  (* assert that n <= n'' *)
 
-  let create arg_soln = { arg_soln with e = RP.App((ext,ws),[arg_soln.e]); n = n } in
-  List.map create arg_solns
+  let arg_solns = List.find_all (fun s -> subsume_index s n && n <= s.w) arg_solns in
+
+  let create1 arg_soln = { arg_soln with e = RP.App((ext,ws),[arg_soln.e]); 
+                          m = n''; n = n} in
+  let create2 arg_soln = { arg_soln with e = RP.App((ext,ws),[arg_soln.e]); 
+                          m = n''; n = n''} in
+  List.map create2 arg_solns @ List.map create1 arg_solns
 @ 
 
+Implementation of the drop rules for truncation.
+
+These rules need to be revised, I think.  They are sound in the paper,
+but they could be less restrictive.  In their original versions:
+\[\droplo{{\fty{n'}}}{Copy}
+\]
+\[\droplo{{\g{n}}}{Ignore}
+\]
+
+Modified versions I've implemented:
+\[\inferrule[Drop-Lo-Copy \sidecond{n\leq n'\leq n''\leq w}]
+{\tenv,\menv \derives e \trans{c} \e :: \fty{n'} : \bits{w}}
+{\tenv,\menv \derives \lo{n}{n''}e \trans{c} \e :: \fty{n'} :\bits{w}}
+\]
+\[\inferrule[Drop-Lo-Ignore \sidecond{n\leq n'\leq n''\leq w}]
+{\tenv,\menv \derives e \trans{c} \e :: \fty{n'} : \bits{w}}
+{\tenv,\menv \derives \lo{n}{n''}e \trans{c} \e :: \g{n} :\bits{w}}
+\]
+In the new versions, the index of the input solution doesn't have to
+be exactly the same as the input width to the lobits operation.  This
+is still sound because the fill type is correct (same as input
+solution) and the value in the low $n'$ bits is required (by
+precondition) to be the same as the original expression---the fact
+that the original expression has lost some bits doesn't matter.
 <<combine solutions>>=
 let mksolutions_trunc ws arg_solnss =
-  let arg_solns = List.hd arg_solnss in
-  let e arg = RP.App(("lobits", ws), [arg]) in
-  let (ns', n) = monomorphic "lobits" ws in
-  let n' = List.hd ns' in
-  let drop_lo_copy arg_soln = { arg_soln with e = e arg_soln.e } in
-  let drop_lo_ignore arg_soln = 
-    { arg_soln with e = e arg_soln.e; fill = G; n = n}
+  let arg_solns =
+    assert (List.length arg_solnss = 1);
+    List.filter is_tau (List.hd arg_solnss)
   in
-  let arg_solns = List.find_all (fun s -> index s = n') arg_solns in
+  (* [[e]] just updates the original expression *)
+  let e arg = RP.App(("lobits", ws), [arg]) in
+  let (n'', n) =
+    match Rtlop.Types.mono (Rtl.opr "lobits" ws) with
+    | ([Types.Bits n''], Types.Bits n) -> (n'', n)
+    | _ -> imposs "lobits operator should have some type bits#w->bits#n"
+  in
+  let drop_lo_copy arg_soln = { arg_soln with e = e arg_soln.e; m = n} in
+  let drop_lo_ignore arg_soln = 
+    { arg_soln with e = e arg_soln.e; fill = G; m = n; n = n}
+  in
+  let ok_soln s =
+    let n' = s.n in
+    n' <= n'' && (n <= n' || subsume_index s n)
+  in
+  let arg_solns = List.find_all ok_soln arg_solns in
   List.map drop_lo_copy arg_solns @ List.map drop_lo_ignore arg_solns
 @ 
 
+The following rule doesn't occure because we don't really have a sxlo
+or zxlo operator.
+\[\inferrule [Extlo \sidecond{n\leq n'\leq w\leq w'}]
+{\xxlo{w'}{w} \in \menv \\
+ \tenv,\menv \derives b \trans{c_1} \b :: \z{n} : \bits{w} \\
+ \tenv,\menv \derives e \trans{c_2} \e :: \g{n} : \bits{w}
+}
+{\tenv,\menv \derives \xxlo{n'}{n}(b, e) \trans{c_1+c_2+1} \xxlo{w'}{w}(\b, \e) :: \xty{n} : \bits{w'}}
+\]
+
 <<combine solutions>>=
+let var_name = function
+  | RP.Const(RP.Link(nm,_,_)) -> nm#original_text
+  | RP.Const(RP.Late(nm,_))   -> nm
+  | RP.Fetch((RP.Var(nm,_,_) | RP.Global(nm,_,_)),_) -> nm
+  | _ -> "/*" (* impossible name *)
+
 let ast_combine solns = function
   | RP.Const(RP.Bool b) as e -> mksolutions_lit_bool e
-  | RP.Const(RP.Bits b) as e -> (mksolutions_lit_bits Z e) @ (mksolutions_lit_bits S e)
-  | (RP.Const(RP.Link(_,_,w)|RP.Late(_,w)) | RP.Fetch(_,w)) as e -> mksolutions_var e w
+  | RP.Const(RP.Bits b) as e ->
+      (mksolutions_lit_bits Z e) @
+      (mksolutions_lit_bits S e) @
+      (mksolutions_lit_bits H e)
+  | (RP.Const(RP.Link(_,_,w)|RP.Late(_,w)) | RP.Fetch(_,w)) as e ->
+      mksolutions_var (var_name e) e w
   | RP.App((("sx"|"zx" as ext),   ws), [arg]) -> mksolutions_ext ext ws solns
   | RP.App(("lobits",             ws), [arg]) -> mksolutions_trunc ws solns
   | RP.App((opname,               ws), args) -> mksolutions_op solns opname ws args
@@ -511,6 +886,8 @@ let rec bottom_up f = function
   | e                 -> f [] e
 @ 
 
+[[all_solutions]] is where the two phases of the dynamic programming
+algorithm are applied bottom-up on each AST node.
 <<dynamic programming>>=
 let all_solutions =
   let solve_node known e =
@@ -526,7 +903,14 @@ let ast   s = s.e
 let ast'  s = s.e'
 let fill  s = s.fill
 
-let is_sigma s = fill s = S || fill s = Z
+let string_of_fill = function
+  | S -> "S"
+  | Z -> "Z"
+  | G -> "G"
+  | H -> "H"
+
+let is_sigma s = match fill s with (S | Z) -> true | (G | H) -> false
+let is_tau   s = match fill s with (S | Z | G) -> true | H -> false
 @ 
 <<solution utilities>>=
 let subst_fill s tau = {s with fill = tau}
@@ -593,25 +977,7 @@ let minimum = function
   | [] -> imposs "empty list"
   | x :: rest -> List.fold_left min x rest
 @ 
-WHAT IS THE [[monomorphic]] FUNCTION SUPPOSED TO BE DOING??
-THIS FUNCTION SHOULD PROBABLY BE CALLING INTO [[Rtlop]], SINCE THAT'S
-WHERE TYPE INFORMATION ABOUT RTL OPERATORS IS SUPPOSED TO LIVE.
 <<helpers>>=
-let monomorphic opname ws =
-  match opname, ws with
-  | ("eq"|"ge"|"geu"|"gt"|"gtu"|"le"|"leu"|"lt"|"ltu"|"ne"), [n;1] -> [n;n], 1
-  | ("eq"|"ge"|"geu"|"gt"|"gtu"|"le"|"leu"|"lt"|"ltu"|"ne"), [n] -> [n;n], 1
-  | "not", _ -> [1], 1
-  | ("com"|"neg"|"popcnt"), [n] -> [n], n
-  | ("mul"|"quot"|"rem"|"mod"|"modu"|"add"|"and"|"or"|"shl"|"shra"|"shrl"|"sub"|"xor"|"div"|"divu"), [n] -> [n;n], n
-  | ("mulx"|"mulux"), [n] -> [n;n], 2*n
-  | ("sx"|"zx"|"lobits"), [n;w] -> [n], w
-  | _ ->
-      if print_debug then Printf.eprintf "!!! %s at " opname;
-      if print_debug then ignore (List.map (Printf.eprintf "%i, ") ws);
-      if print_debug then (Printf.eprintf "!!!\n"; flush stderr);
-      raise Not_found
-
 let ext_of_fill = function
   | S -> "sx"
   | Z -> "zx"
@@ -625,8 +991,10 @@ let fill_of_ext = function
 
 <<environments>>=
 let op_fill_types =
-  [ "add", [[G;G],G]
-  ; "sub", [[G;G],G]
+  [ "add", [[G;G],G;
+            [H;H],H]
+  ; "sub", [[G;G],G;
+            [H;H],H]
   ; "div", [[S;S],S]
   ; "divu", [[Z;Z],Z]
   ; "mul", [[S;S],S]
@@ -635,11 +1003,14 @@ let op_fill_types =
   ; "shl",  [[G;Z],G]
   ; "xor", [[G;G],G
            ;[S;S],S
-           ;[Z;Z],Z]
+           ;[Z;Z],Z
+           ;[H;H],H]
   ; "or", [[S;S],S;
            [Z;Z],Z;
-           [G;G],G]
-  ; "neg", [[G],G]
+           [G;G],G;
+           [H;H],H]
+  ; "neg", [[G],G;
+            [H],H]
   ; "mulux", [[Z;Z],Z]
   ; "mulx", [[S;S],S]
   ; "mod", [[S;S],S]
@@ -649,26 +1020,40 @@ let op_fill_types =
   ; "and", [[S;S],S;
             [Z;G],Z;
             [G;Z],Z;
-            [G;G],G]
+            [G;G],G;
+            [H;H],H]
   ; "rem", [[S;S],S]
   ; "quot", [[S;S],S]
   ; "eq",     [[S;S],Z;
-               [Z;Z],Z]
-  ; "ge",     [[S;S],S]
+               [Z;Z],Z;
+               [H;H],Z]
+  ; "ge",     [[S;S],S;
+               [H;H],Z]
   ; "geu",    [[S;S],Z;
-               [Z;Z],Z]
-  ; "gt",     [[S;S],Z]
+               [Z;Z],Z;
+               [H;H],Z]
+  ; "gt",     [[S;S],Z;
+               [H;H],Z]
   ; "gtu",    [[S;S],Z;
-               [Z;Z],Z]
-  ; "le",     [[S;S],Z]
+               [Z;Z],Z;
+               [H;H],Z]
+  ; "le",     [[S;S],Z;
+               [H;H],Z]
   ; "leu",    [[S;S],Z;
-               [Z;Z],Z]
-  ; "lt",     [[S;S],Z]
+               [Z;Z],Z;
+               [H;H],Z]
+  ; "lt",     [[S;S],Z;
+               [H;H],Z]
   ; "ltu",    [[S;S],Z;
-               [Z;Z],Z]
+               [Z;Z],Z;
+               [H;H],Z]
   ; "ne",     [[S;S],Z;
-               [Z;Z],Z]
+               [Z;Z],Z;
+               [H;H],Z]
   ; "not",    [[Z],Z]
+  ; "bool",   [[Z],Z]
+  ; "disjoin", [[Z;Z],Z]
+  ; "bit",    [[Z],G]
   ]
 
 let ia64 : machine_env =
@@ -713,9 +1098,12 @@ let ia64 : machine_env =
 
 let x86 : machine_env =
   [ "sx",     [8;32]
+  ; "sx",     [1;32]
   ; "sx",     [16;32]
+  ; "zx",     [1;32]
   ; "zx",     [8;32]
-  ; "zx",     [8;32]
+  ; "zx",     [16;32]
+  ; "lobits", [32;1]
   ; "lobits", [32;8]
   ; "lobits", [32;16]
   ; "sxlo",   [32;32]
@@ -752,6 +1140,9 @@ let x86 : machine_env =
   ; "ltu",    [32;1]
   ; "ne",     [32;1]
   ; "not",    [1]
+  ; "bool",   [1]
+  ; "disjoin", [1]
+  ; "bit",    [1]
   ]
 
 let m = x86
@@ -771,6 +1162,17 @@ let find_exts_to w extname =
   let ext_widths = machine_widths m extname in
   List.find_all (function [_;w2] -> w2 = w
                         | _ -> imposs "ill formed machine env") ext_widths
+@ 
+
+<<widen.ml>>=
+<<types>>
+<<solution utilities>>
+<<helpers>>
+<<environments>>
+<<find reachable solutions>>
+<<combine solutions>>
+<<bottom-up transform>>
+<<dynamic programming>>
 @ 
 
 <<widen.ml>>=
@@ -814,7 +1216,9 @@ let dpwiden r =
   let find_best_soln r tau w =
     let solns  = all_solutions r in
     let solns  = List.find_all (fun s -> width s = w && fill s = tau) solns in
-    (minimum_cost solns).e'
+    let soln   = minimum_cost solns in
+    if print_debug then Printf.eprintf "cost: %i\n" soln.cost;
+    soln.e'
   in
   let rec widen_loc = function
     | RP.Mem(sp,agg,w,e,a) -> RP.Mem(sp,agg,w,find_best_soln e Z targetwidth, a)
@@ -822,28 +1226,38 @@ let dpwiden r =
     | RP.Slice(w,i,l)      -> RP.Slice(w,i, widen_loc l)
     | l                    -> l
   in
+@ 
+\[
+\inferrule [Assign \sidecond{n\leq w}]
+{\tenv(x_w)=\fty{n}\\
+ \tenv,\menv \derives e \trans{c} \e :: \fty{n} : \bits{w}}
+{\tenv,\menv \derives x_w :=_w e \trans{c} x_w :=_w \e}
+\]
+<<widen.ml>>=
   let widen_guard (g, eff) =
     let effsoln = 
       match eff with
-      | RP.Store(l, r, w) -> RP.Store(widen_loc l, find_best_soln r Z w, w)
+      | RP.Store(l, r, w) ->
+          let (fill, _) = lookup_gamma (var_name (RP.Fetch(l,w))) w in
+          RP.Store(widen_loc l, find_best_soln r fill w, w)
       | RP.Kill l         -> RP.Kill (widen_loc l)
     in
     let gsoln = find_best_soln g Z 1 in
     (gsoln, effsoln)
   in
   let rtl = Rtlutil.ToString.rtl in
-(*  let () = if print_debug then (Printf.eprintf "Widening %s\n" (rtl r); flush stderr) in *)
+  let () = if Debug.on "pre-widen" then
+    (Printf.eprintf "Widening %s\n" (rtl r); flush stderr)
+  in
   let r' =
     try
       let RP.Rtl es = Down.rtl r in
       Up.rtl (RP.Rtl (List.map widen_guard es))
     with Abort_unknown -> r
   in
-  let () = 
-    if print_debug && (rtl r') <> (rtl r) then
-      (Printf.eprintf "Widening %s\n" (rtl r); 
-       Printf.eprintf "\\->      %s\n" (rtl r'); flush stderr)
-  in
+  if Debug.on "widen" && (rtl r') <> (rtl r) then
+    (Printf.eprintf "Widening %s\n" (rtl r); 
+     Printf.eprintf "`->      %s\n" (rtl r'); flush stderr);
   r'
 @ 
 
@@ -881,8 +1295,12 @@ let widenlocs r =
       | RP.Store(RP.Var(name, i, vw), r, sw) ->
           if vw <> sw then imposs "Shouldn't store and var widths be the same?"
           else if vw < targetwidth
-          then RP.Store(RP.Var(name, i, targetwidth),
-                        RP.App(("zx", [vw; targetwidth]), [widen_exp r]),
+          then
+            let ext =
+              try ext_of_fill (fst (lookup_gamma name vw)) with Not_found -> "zx"
+            in
+            RP.Store(RP.Var(name, i, targetwidth),
+                        RP.App((ext, [vw; targetwidth]), [widen_exp r]),
                         targetwidth)
           else RP.Store(RP.Var(name, i, vw), widen_exp r, sw)
       | RP.Store(l, r, w) -> RP.Store(widen_loc l, widen_exp r, w)
@@ -895,10 +1313,63 @@ let widenlocs r =
     Up.rtl (RP.Rtl (List.map widen_guarded es))
   in
   let () =
-    if print_debug && r' <> r then
+    if Debug.on "widen-vars" && r' <> r then
       (Printf.eprintf "rewritten to %s\n" (tostr r'); flush stderr)
   in
   r'
+@ 
+
+Needs work: this function should only count those variables that need widening.
+<<widen.ml>>=
+let update_gamma_counts r =
+  let add c i n = function
+    | G -> c
+    | Z -> {c with z=c.z+i; ni = n}
+    | S -> {c with s=c.s+i; ni = n}
+    | H -> {c with h=c.h+i; ni = n}
+  in
+  let update h x n t =
+    if Hashtbl.mem h x then Hashtbl.replace h x (add (Hashtbl.find h x) 1 n t)
+    else Hashtbl.add h x (add {z=0; s=0; h=0; ni=n} 1 n t)
+  in
+  let targetwidth = 32 in
+  let rec loc = function
+    | (RP.Var(s,_,w)|RP.Global(s,_,w)) -> 
+        if w < targetwidth then
+          (if Debug.on "gamma" then Printf.eprintf "Updating count of %s\n" s; update gamma_counts s w G)
+    | _ -> ()
+  and exp = function
+    | RP.Fetch(l, w) -> ()
+    | RP.App((opname, ws), es) -> ()
+    | _ -> ()
+  in
+  let guard (g, eff) =
+    (match eff with
+    | RP.Store(l, r, w) -> loc l; exp r
+    | RP.Kill l -> loc l);
+    exp g
+  in
+  let RP.Rtl es = Down.rtl r in
+  List.iter guard es;
+  raise Don't_update
+@ 
+
+<<widen.ml>>=
+let init_gamma_counts () = Hashtbl.clear gamma_counts
+
+let create_gamma () =
+  let argmax z s h =
+    if z > h then
+      if z > s then Z
+      else S
+    else if h > s then H
+    else S
+  in
+  Hashtbl.clear gamma;
+  Hashtbl.iter (fun s c -> Hashtbl.add gamma s (argmax c.z c.s c.h, c.ni)) gamma_counts;
+  if Debug.on "gamma" then
+    (Printf.eprintf "Printing gamma:\n";
+     Hashtbl.iter (fun s (t,n) -> Printf.eprintf "Gamma |- %s :: %s[%i]\n" s (string_of_fill t) n) gamma)
 @ 
 
 \subsection{Counting operations and testing}
@@ -970,172 +1441,3 @@ let app_count r =
   count
 @ 
 
-The old version of DP widening didn't print out the cost.
-<<old>>=
-let dpwiden r =
-  let targetwidth = 32 in
-  let find_best_soln r tau w =
-    let solns  = all_solutions r in
-    let solns  = List.find_all (fun s -> width s = w && fill s = tau) solns in
-    (minimum_cost solns).e'
-  in
-  let rec widen_loc = function
-    | RP.Mem(sp,agg,w,e,a) -> RP.Mem(sp,agg,w,find_best_soln e Z targetwidth,a)
-    | RP.Slice(w,i,l)      -> RP.Slice(w,i, widen_loc l)
-    | l                    -> l
-  in
-  let widen_guard (g, eff) =
-    let effsoln = 
-      match eff with
-      | RP.Store(l, r, w) -> RP.Store(widen_loc l, find_best_soln r S w, w)
-      | RP.Kill l         -> RP.Kill (widen_loc l)
-    in
-    let gsoln = find_best_soln g Z 1 in
-    (gsoln, effsoln)
-  in
-  let rtl = Rtlutil.ToString.rtl in
-  let () = if print_debug then (Printf.eprintf "Widening %s\n" (rtl r); flush stderr)in
-  let r' =
-    let RP.Rtl es = Down.rtl r in
-    Up.rtl (RP.Rtl (List.map widen_guard es))
-  in
-  let () = 
-    if print_debug && (rtl r') <> (rtl r) then
-      (Printf.eprintf "\\->      %s\n" (rtl r'); flush stderr)
-  in
-  r'
-@ 
-
-<<widen.ml>>=
-let time f x =
-  let start_time = Sys.time() in
-  let result = f x in
-  let finish_time = Sys.time() in
-  print_string
-    ("CPU time (user): "^(string_of_float(finish_time -. start_time)));
-  print_newline();
-  result
-@ 
-
-<<widen.ml>>=
-let badwiden r =
-  let targetwidth = 64 in
-  let extract1 f x = match x with
-  | ([t1'], t') -> f t1' t'
-  | _ -> imposs "expected singleton"
-  in
-  let extract2 f x = match x with
-  | ([t1';t2'], t') -> f t1' t2' t'
-  | _ -> imposs "expected singleton"
-  in
-  let best_fill1 tau fills =
-    try List.find (extract1 (fun t1 t -> t1 = G && t = tau)) fills
-    with Not_found ->
-      try List.find (extract1 (fun t1 t -> t = tau)) fills
-      with Not_found ->
-        List.hd fills
-  in
-  let best_fill2 tau fills =
-    try List.find (extract2 (fun t1 t2 t -> t1 = G && t2 = G && t = tau)) fills
-    with Not_found ->
-      try List.find (extract2 (fun t1 t2 t -> t1 = G && t = tau)) fills
-      with Not_found -> 
-        try List.find (extract2 (fun t1 t2 t -> t2 = G && t = tau)) fills
-        with Not_found ->
-          try List.find (extract2 (fun t1 t2 t -> t = tau)) fills
-          with Not_found -> 
-            List.hd fills
-  in
-  let maybe_do_ext e tau w w' = 
-    if w < w' then
-      let extname = try ext_of_fill tau with Not_found -> "zx" in
-      let wss     = find_exts_to w' extname in
-      let ws      = List.find ((=) [w;w']) wss in
-      RP.App((extname, ws), [e])
-    else e
-  in
-  let rec find_best_soln r tau index w' =
-    match r with
-      (* constants *)
-    | RP.Const(RP.Bool b) as e -> e
-    | RP.Const(RP.Bits b) ->
-        let ext = if tau = S then Bits.Ops.sx else Bits.Ops.zx in
-        RP.Const(RP.Bits (ext w' b))
-      
-      (* variables *)
-    | ((RP.Const(RP.Link(_,_,w)|RP.Late(_,w))) | RP.Fetch(_,w)) as e ->
-        maybe_do_ext e tau w w'
-      
-      (* width changing *)
-    | RP.App((("sx"|"zx" as ext), [n;w2]), [RP.App(("lobits", [w1;n']), [arg])]) ->
-        let w = (List.hd (List.hd (find_exts_to w' (ext^"lo")))) in
-        let argsoln = find_best_soln arg G n w in
-        if (tau = G || ext_of_fill tau = ext) && index >= n then 
-          RP.App((ext, [n;w']), [RP.App(("lobits", [w;n]), [argsoln])])
-        else 
-          maybe_do_ext argsoln tau w w'
-    | RP.App((("sx"|"zx" as ext), [n;w]), [arg]) ->
-        let argsoln = find_best_soln arg tau n targetwidth in
-        argsoln
-    | RP.App(("lobits", [w;n]), [arg]) -> 
-        let argsoln = find_best_soln arg tau n targetwidth in
-        argsoln
-
-      (* operators *)
-    | RP.App((opname, ws), [arg1; arg2]) ->
-        let fills = List.assoc opname op_fill_types in
-        let (n1, n2, n) = extract2 (fun x y z -> (x,y,z)) (monomorphic opname ws) in
-        let (t1, t2, t) = extract2 (fun x y z -> (x,y,z)) (best_fill2 tau fills) in
-        let (_,ws') =
-          List.find (fun (nm, ws') -> nm = opname && snd (monomorphic nm ws') = w') m in
-        let (w1, w2, w') = extract2 (fun x y z -> (x,y,z)) (monomorphic opname ws') in
-        let arg1soln = find_best_soln arg1 t1 n1 w1 in
-        let arg2soln = find_best_soln arg2 t2 n2 w2 in
-        let r' = RP.App((opname, ws'), [arg1soln; arg2soln]) in
-        if t = tau then r'
-        else RP.App((ext_of_fill tau, [n;w']),
-                    [RP.App(("lobits", [w';n]), [r'])])
-    | RP.App((opname, ws), [arg]) ->
-        let fills = List.assoc opname op_fill_types in
-        let (n1, n) = extract1 (fun x y -> (x,y)) (monomorphic opname ws) in
-        let (t1, t) = extract1 (fun x y -> (x,y)) (best_fill1 tau fills) in
-        let (_,ws') =
-          List.find (fun (nm, ws') -> nm = opname && snd (monomorphic nm ws') = w') m in
-        let (w1, w') = extract1 (fun x y -> (x,y)) (monomorphic opname ws') in
-        let argsoln = find_best_soln arg t1 n1 w1 in
-        let r' = RP.App((opname, ws'), [argsoln]) in
-        if t = tau then r'
-        else RP.App((ext_of_fill tau, [n;w']),
-                    [RP.App(("lobits", [w';n]), [r'])])
-    | _ -> imposs "find_best_soln couldn't match"
-  in
-  let rec widen_loc = function
-    | RP.Mem(sp,agg,w,e,a) -> RP.Mem(sp,agg,targetwidth,find_best_soln e Z w targetwidth,a)
-    | RP.Slice(w,i,l)      -> RP.Slice(w,i, widen_loc l)
-    | l                    -> l
-  in
-  let widen_guard (g, eff) =
-    let effsoln =
-      match eff with
-      | RP.Store(l, r, w) -> 
-          let r' = 
-            if w < targetwidth then
-              RP.App(("lobits", [targetwidth;w]), [find_best_soln r S w targetwidth])
-            else
-              find_best_soln r S w targetwidth
-          in
-          RP.Store(widen_loc l, r', w)
-      | RP.Kill l         -> RP.Kill (widen_loc l)
-    in
-    let gsoln = find_best_soln g Z 1 1 in
-    (gsoln, effsoln)
-  in
-  let rtl = Rtlutil.ToString.rtl in
-  let () = if print_debug then (Printf.eprintf "Widening %s\n" (rtl r); flush stderr) in
-  let r' =
-      let RP.Rtl es = Down.rtl r in
-      Up.rtl (RP.Rtl (List.map widen_guard es))
-  in
-  let () = if print_debug then (Printf.eprintf "Widened to %s\n" (rtl r'); flush stderr) in
-  r'
-@ 

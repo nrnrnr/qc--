@@ -654,11 +654,22 @@ let width_cost _ proc =
     locount := !locount + lo;
   in
   let count   = G.update_instr (fun r -> update_count r; r) in
-(*  let ()      = Widen.time (G.iter_nodes count) proc.Proc.cfg in *)
-  let ()      = Widen.time (G.iter_nodes count) proc.Proc.cfg in
   let total = !sxcount + !zxcount + !locount in
   Printf.printf "Summary: total=%i, sx=%i, zx=%i, lo=%i\n" total !sxcount !zxcount !locount;
   1
+in
+let update_gamma_counts _ proc =
+  let f x = try G.update_instr Widen.update_gamma_counts x with Widen.Don't_update -> ()
+  in
+  Widen.init_gamma_counts();
+  G.iter_nodes f proc.Proc.cfg; 1
+in
+let create_gamma _ _=
+(*
+  let done_this = ref false in
+  (fun _ _ -> (if not !done_this then (done_this := true; Widen.create_gamma())); 1)
+*)
+Widen.create_gamma(); 1
 in
 let dpwiden _ proc =
   let upd g r = if Widen.needs_widening r then g r
@@ -673,10 +684,6 @@ let dpwiden _ proc =
     with Widen.Doesn't_need_widening -> ()
   in
   G.iter_nodes (f Widen.dpwiden) proc.Proc.cfg;
-  1
-in
-let badwiden _ proc =
-  G.iter_nodes (G.update_instr Widen.badwiden) proc.Proc.cfg;
   1
 in
 let widenlocs _ proc =
@@ -695,9 +702,10 @@ C.register_module "Widen"
  ; "store_const",
        V.efunc (V.int **->> V.func (V.value **-> Map.proc **->> V.int)) const
  ; "width_cost", V.efunc (V.value **-> Map.proc **->> V.int) width_cost
+ ; "update_gamma_counts", V.efunc (V.value **-> Map.proc **->> V.int) update_gamma_counts
+ ; "create_gamma", V.efunc (V.value **-> Map.proc **->> V.int) create_gamma
  ; "dpwiden", V.efunc (V.value **-> Map.proc **->> V.int) dpwiden
  ; "widenlocs", V.efunc (V.value **-> Map.proc **->> V.int) widenlocs
- ; "badwiden", V.efunc (V.value **-> Map.proc **->> V.int) badwiden
  ; "op_count", V.efunc (V.value **-> Map.proc **->> V.int) op_count
  ] g;
 <<register modules to [[g]] in alphabetical order>>=

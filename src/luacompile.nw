@@ -601,9 +601,10 @@ function Opt.standard(backend, asm, B)
   end
   local x = B.seq
     { 
-      Opt.verb(backend.intwiden)   or Stages.null
+      Opt.verb(backend.gamma)      or Stages.null
+    , Opt.verb(backend.intwiden)   or Stages.null
     , Opt.verb(backend.placevars)  or Stages.null
-    , Opt.verb(backend.widen)      or Stages.null
+    , Opt.verb(backend.floatwiden) or Stages.null
     , Opt.verb(Optimize.simplify_exps) or Stages.null
     , Opt.verb(backend.preopt)     or Stages.null
     , Opt.verb(backend.pic)        or Stages.null
@@ -739,18 +740,19 @@ Backend = Backend and error('Backend not empty') or {}
 -- make a backend for the new backplane
 function Backend.make(b)
   return
-    { target    = b.target    or error('target not specified')
-    , widen     = b.widen     or nil
-    , placevars = b.placevars or nil
-    , expand    = b.expand    or nil
-    , liveness  = b.liveness  or nil
-    , ralloc    = b.ralloc    or nil
-    , freeze    = b.freeze    or Dummy.layout
-    , rmvfp     = b.rmvfp     or nil
-    , asm       = b.asm       or Asm.cmm
-    , emit      = b.emit      or Driver.assemble
-    , emit_data = b.emit_data or nil
-    , compile   = Compile.file
+    { target     = b.target     or error('target not specified')
+    , intwiden   = b.intwiden   or nil
+    , placevars  = b.placevars  or nil
+    , floatwiden = b.floatwiden or nil
+    , expand     = b.expand     or nil
+    , liveness   = b.liveness   or nil
+    , ralloc     = b.ralloc     or nil
+    , freeze     = b.freeze     or Dummy.layout
+    , rmvfp      = b.rmvfp      or nil
+    , asm        = b.asm        or Asm.cmm
+    , emit       = b.emit       or Driver.assemble
+    , emit_data  = b.emit_data  or nil
+    , compile    = Compile.file
     }   
 end
 
@@ -786,116 +788,24 @@ Backend.interp.compile = Compile.Old.file
 Backend.debug_interp.compile = Compile.Old.file
 
 --
--- Kevin's ia64 backend to test widening
---
-
-Backend.wia64 =
-  { target    = Targets.ia64
-  , widen     = NewBackplane.seq
-                   { Widen.op_count, Widen.dpwiden,
-                     Stages.assert('proper widths') }
-  , placevars = Placevar.context(Placevar.ia64, "ia64")
-  , preopt    = Optimize.remove_nops
-  , expand    = Expander.ia64
-  , liveness  = Liveness.liveness
-  , ralloc    = Ralloc.dls
-  , freeze    = Ia64.layout
-  , rmvfp     = NewBackplane.seq
-                   { Stages.replace_vfp,
-                     Optimize.remove_nops }
-  , asm       = Asm.ia64
-  , compile   = Compile.file
-  }
-
---
--- Kevin's x86 backend for testing widening
---
-
-Backend.widentest =
-  { target    = Targets.x86
-  , widen     = NewBackplane.seq
-                   { Widen.op_count,
-                     Widen.x86_floats, Widen.store_const(32),
-                     Widen.dpwiden,
-                     Widen.width_cost,
-                     Widen.op_count,
-                     Stages.assert('proper widths') }
-  , placevars = Placevar.context(Placevar.x86, "x86")
-  , preopt    = Optimize.remove_nops
-  , expand    = Expander.x86
-  , liveness  = Liveness.liveness
-  , ralloc    = Ralloc.color
-  , freeze    = X86.layout
-  , rmvfp     = Stages.replace_vfp
-  , asm       = Asm.x86
-  , emit      = Driver.assemble
-  , compile   = Compile.file
-  }
-
-Backend.widentest2 =
-  { target    = Targets.x86
-  , widen     = NewBackplane.seq
-                   { Widen.op_count,
-                     Widen.x86_floats, Widen.store_const(32),
-                     Widen.badwiden,
-                     Widen.width_cost,
-                     Widen.op_count,
-                     Stages.assert('proper widths') }
-  , placevars = Placevar.context(Placevar.x86, "x86")
-  , preopt    = Optimize.remove_nops
-  , expand    = Expander.x86
-  , liveness  = Liveness.liveness
-  , ralloc    = Ralloc.color
-  , freeze    = X86.layout
-  , rmvfp     = Stages.replace_vfp
-  , asm       = Asm.x86
-  , emit      = Driver.assemble
-  , compile   = Compile.file
-  }
-
--- x86w is for widening x86 code
-
-Backend.x86w =
-  { target    = Targets.x86
-  , intwiden  = NewBackplane.seq
-                   { Widen.widenlocs,
-                     Widen.dpwiden }
-  , placevars = Placevar.context(Placevar.x86, "x86")
-  , widen     = NewBackplane.seq
-                   { Widen.x86_floats,
-                     Widen.store_const(32),
-                     Stages.assert('proper widths') }
-  , preopt    = Optimize.remove_nops
---  , pic       = NewBackplane.seq { Pic.x86, Stages.assert('proper pic') }
-  , expand    = Expander.x86
-  , liveness  = Liveness.liveness
-  , ralloc    = Ralloc.dls
-  , freeze    = X86.layout
-  , rmvfp     = NewBackplane.seq
-		   { Stages.replace_vfp,
-		     Optimize.remove_nops }
-  , asm       = Asm.x86
-  , emit      = Driver.assemble
-  , emit_data = Runtime.emit_data
-  , compile   = Compile.file
-  }   
-
---
 -- x86 backends
 --
 
 Backend.x86 =
   { target    = Targets.x86
-  , intwiden  = nil
+  , intwiden  = NewBackplane.seq
+                   { Widen.update_gamma_counts,
+                     Widen.create_gamma,
+                     Widen.widenlocs,
+                     Widen.dpwiden }
   , placevars = Placevar.context(Placevar.x86, "x86")
-  , widen     = NewBackplane.seq
+  , floatwiden = NewBackplane.seq
                    { Widen.x86_floats,
                      Widen.store_const(32),
                      Stages.assert('proper widths') }
   , preopt    = Optimize.remove_nops
 --  , pic       = NewBackplane.seq { Pic.x86, Stages.assert('proper pic') }
   , expand    = Expander.x86
-  , improve   = Optimize.validate
   , liveness  = Liveness.liveness
   , ralloc    = Ralloc.dls
   , freeze    = X86.layout
@@ -930,20 +840,20 @@ Optimize.oimprove =
 --
 
 Backend.mips =     
-  { target    = Targets.mips
-  , widen     = Stages.assert('proper widths')
-  , placevars = Placevar.context(Placevar.mips, "mips")
-  , expand    = Expander.mips
-  , liveness  = Liveness.liveness
-  , ralloc    = Ralloc.dls
-  , freeze    = Mips.layout
-  , rmvfp     = NewBackplane.seq
-		   { Stages.replace_vfp,
-		     Optimize.remove_nops }
-  , asm       = Asm.mips
-  , emit      = Driver.assemble
-  , emit_data = Runtime.emit_data
-  , compile   = Compile.file
+  { target     = Targets.mips
+  , floatwiden = Stages.assert('proper widths')
+  , placevars  = Placevar.context(Placevar.mips, "mips")
+  , expand     = Expander.mips
+  , liveness   = Liveness.liveness
+  , ralloc     = Ralloc.dls
+  , freeze     = Mips.layout
+  , rmvfp      = NewBackplane.seq
+		    { Stages.replace_vfp,
+		      Optimize.remove_nops }
+  , asm        = Asm.mips
+  , emit       = Driver.assemble
+  , emit_data  = Runtime.emit_data
+  , compile    = Compile.file
   }   
 
 --
@@ -951,63 +861,63 @@ Backend.mips =
 --
 
 Backend.alpha =     
-  { target    = Targets.alpha
-  , widen     = Stages.assert('proper widths')
-  , placevars = Placevar.context(Placevar.x86, "x86") -- wrong!
-  , expand    = Expander.alpha
-  , liveness  = Liveness.liveness
-  , ralloc    = Ralloc.dls
-  , freeze    = Alpha.layout
-  , rmvfp     = NewBackplane.seq
-		   { Stages.replace_vfp,
-		     Optimize.remove_nops }
-  , asm       = Asm.alpha
-  , emit      = Driver.assemble
-  , emit_data = Runtime.emit_data
-  , compile   = Compile.file
+  { target     = Targets.alpha
+  , floatwiden = Stages.assert('proper widths')
+  , placevars  = Placevar.context(Placevar.x86, "x86") -- wrong!
+  , expand     = Expander.alpha
+  , liveness   = Liveness.liveness
+  , ralloc     = Ralloc.dls
+  , freeze     = Alpha.layout
+  , rmvfp      = NewBackplane.seq
+		    { Stages.replace_vfp,
+		      Optimize.remove_nops }
+  , asm        = Asm.alpha
+  , emit       = Driver.assemble
+  , emit_data  = Runtime.emit_data
+  , compile    = Compile.file
   }   
 
 --
 -- PPC Backend (32 bit, big endian)
 --
 Backend.ppc =
-  { target    = Targets.ppc
-  , placevars = Placevar.context(Placevar.ppc, "ppc")
-  , widen     = Stages.assert('proper widths')
-  , preopt    = Optimize.remove_nops
-  , pic       = NewBackplane.seq { Pic.ppc, Stages.assert('proper pic') }
-  , expand    = Expander.ppc
-  , liveness  = Liveness.liveness
-  , ralloc    = Ralloc.dls
-  , freeze    = PPC.layout
-  , rmvfp     = NewBackplane.seq
-		   { Stages.replace_vfp,
-		     Optimize.remove_nops }
-  , asm       = Asm.ppc
-  , emit      = Driver.assemble
-  , emit_data = Runtime.emit_data
-  , compile   = Compile.file
+  { target     = Targets.ppc
+  , placevars  = Placevar.context(Placevar.ppc, "ppc")
+  , floatwiden = Stages.assert('proper widths')
+  , preopt     = Optimize.remove_nops
+  , pic        = NewBackplane.seq { Pic.ppc, Stages.assert('proper pic') }
+  , expand     = Expander.ppc
+  , liveness   = Liveness.liveness
+  , ralloc     = Ralloc.dls
+  , freeze     = PPC.layout
+  , rmvfp      = NewBackplane.seq
+		    { Stages.replace_vfp,
+		      Optimize.remove_nops }
+  , asm        = Asm.ppc
+  , emit       = Driver.assemble
+  , emit_data  = Runtime.emit_data
+  , compile    = Compile.file
   }   
 
 --
 -- Ia64 Backend (64 bit, little-endian)
 --
 Backend.ia64 =
-  { target    = Targets.ia64
-  , placevars = Placevar.context(Placevar.ia64, "ia64")
-  , widen     = Stages.assert('proper widths')
-  , preopt    = Optimize.remove_nops
-  , expand    = Expander.ia64
-  , liveness  = Liveness.liveness
-  , ralloc    = Ralloc.dls
-  , freeze    = Ia64.layout
-  , rmvfp     = NewBackplane.seq
-		   { Stages.replace_vfp,
-		     Optimize.remove_nops }
-  , asm       = Asm.ia64
-  , emit      = Driver.assemble
-  , emit_data = Runtime.emit_data
-  , compile   = Compile.file
+  { target     = Targets.ia64
+  , placevars  = Placevar.context(Placevar.ia64, "ia64")
+  , floatwiden = Stages.assert('proper widths')
+  , preopt     = Optimize.remove_nops
+  , expand     = Expander.ia64
+  , liveness   = Liveness.liveness
+  , ralloc     = Ralloc.dls
+  , freeze     = Ia64.layout
+  , rmvfp      = NewBackplane.seq
+		    { Stages.replace_vfp,
+		      Optimize.remove_nops }
+  , asm        = Asm.ia64
+  , emit       = Driver.assemble
+  , emit_data  = Runtime.emit_data
+  , compile    = Compile.file
   }
 @
 
