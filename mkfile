@@ -53,65 +53,65 @@ all:V:          config qc--     interp doc
 all.opt:V:      config qc--.opt interp doc
 
 config:QV:       
-                if [ -f config/config.mk ]; then : ;else
-                echo "============================================"
-                echo "Run the ./configure script first!" 
-                echo "Alternatively, create config/config.mk"
-                echo "from config/config.mk.template."
-                echo "============================================"
-                exit 1
-                fi    
+	if [ -f config/config.mk ]; then : ;else
+	echo "============================================"
+	echo "Run the ./configure script first!" 
+	echo "Alternatively, create config/config.mk"
+	echo "from config/config.mk.template."
+	echo "============================================"
+	exit 1
+	fi    
 
 qc--:V:         tools lib dirs
-                for i in src 
-                do 
-                    (echo "# cd $i" && cd $i && mk $MKFLAGS depend) || exit 1
-                    (echo "# cd $i" && cd $i && mk $MKFLAGS update) || exit 1
-                done
+	for i in src 
+	do 
+	  (echo "# cd $i" && cd $i && mk $MKFLAGS depend) || exit 1
+	  (echo "# cd $i" && cd $i && mk $MKFLAGS update) || exit 1
+	done
 
 qc--.opt:V:     tools.opt lib.opt dirs
-                for i in src 
-                do 
-                    (echo "# cd $i" && cd $i && mk $MKFLAGS depend)    || exit 1
-                    (echo "# cd $i" && cd $i && mk $MKFLAGS update.opt)|| exit 1
-                done
+	for i in src 
+	do 
+	  (echo "# cd $i" && cd $i && mk $MKFLAGS depend)    || exit 1
+	  (echo "# cd $i" && cd $i && mk $MKFLAGS update.opt)|| exit 1
+	done
 
 lib:V:          dirs
-                for i in cllib lua asdl rtl gen 
-                do 
-                    (echo "# cd $i" && cd $i && mk $MKFLAGS depend) || exit 1
-                    (echo "# cd $i" && cd $i && mk $MKFLAGS update) || exit 1
-                done
+	for i in cllib lua asdl rtl gen 
+	do 
+	  (echo "# cd $i" && cd $i && mk $MKFLAGS depend) || exit 1
+	  (echo "# cd $i" && cd $i && mk $MKFLAGS update) || exit 1
+	done
 
 lib.opt:V:      dirs
-                for i in cllib lua asdl rtl gen
-                do 
-                    (echo "# cd $i" && cd $i && mk $MKFLAGS depend) || exit 1
-                    (echo "# cd $i" && cd $i && mk $MKFLAGS update.opt) || exit 1
-                done
+	for i in cllib lua asdl rtl gen
+	do 
+	  (echo "# cd $i" && cd $i && mk $MKFLAGS depend) || exit 1
+	  (echo "# cd $i" && cd $i && mk $MKFLAGS update.opt) || exit 1
+	done
 
 tools:V:        lib dirs
-                for i in tools camlburg
-                do 
-                    (echo "# cd $i" && cd $i && mk $MKFLAGS depend) || exit 1
-                    (echo "# cd $i" && cd $i && mk $MKFLAGS update) || exit 1
-                done
+	for i in tools camlburg
+	do 
+	  (echo "# cd $i" && cd $i && mk $MKFLAGS depend) || exit 1
+	  (echo "# cd $i" && cd $i && mk $MKFLAGS update) || exit 1
+	done
 
 tools.opt:V:    lib dirs
-                for i in tools camlburg
-                do 
-                    (echo "# cd $i" && cd $i && mk $MKFLAGS depend) || exit 1
-                    (echo "# cd $i" && cd $i && mk $MKFLAGS update.opt) || exit 1
-                done
+	for i in tools camlburg
+	do 
+	  (echo "# cd $i" && cd $i && mk $MKFLAGS depend) || exit 1
+	  (echo "# cd $i" && cd $i && mk $MKFLAGS update.opt) || exit 1
+	done
 
 interp:V:       dirs
-                echo "# cd interp" && cd interp && mk $MKFLAGS update
-                
+	echo "# cd interp" && cd interp && mk $MKFLAGS update
+	
 doc:V:          dirs
-                echo "# cd doc" && cd doc && mk $MKFLAGS update 
+	echo "# cd doc" && cd doc && mk $MKFLAGS update 
 
 test:V:         all
-                cd test2 && mk $MKFLAGS all
+	cd test2 && mk $MKFLAGS all
 
 # ------------------------------------------------------------------
 # line counting
@@ -137,27 +137,27 @@ INSTALL =       bin/qc--                    \
                 lib/libqc--interp.a         \
 
 install-dirs:VQ:
-                for dir in $prefix $bindir $libdir $incdir $man1dir
-                do
-                   if [ ! -d $dir ]; then
-                     echo "  mkdir -p $dir"
-                     mkdir -p $dir
-                   fi
-                done
+	for dir in $prefix $bindir $libdir $incdir $man1dir
+	do
+	  if [ ! -d $dir ]; then
+	    echo "  mkdir -p -m 755 $dir"
+	    mkdir -p $dir
+	  fi
+	done
 
 install:V:      $INSTALL install-dirs
-                cp bin/qc--                             $bindir
-                [ -x bin/qc--.opt ] && cp bin/qc--.opt  $bindir
-                cp bin/qc--interp                       $bindir
-                cp man/man1/qc--.1                      $man1dir
-                cp man/man1/qc--internals.1             $man1dir
-                cp man/man1/qc--interp.1                $man1dir
-                cp lib/libqc--interp.a                  $libdir
-                # XXX copy header files to $incdir
-                for d in camlburg tools
-                do 
-                  (echo "# cd $d" && cd $d && mk $MKFLAGS install) || exit 1
-                done
+	cp bin/qc--                             $bindir
+	[ -x bin/qc--.opt ] && cp bin/qc--.opt  $bindir
+	cp bin/qc--interp                       $bindir
+	cp man/man1/qc--.1                      $man1dir
+	cp man/man1/qc--internals.1             $man1dir
+	cp man/man1/qc--interp.1                $man1dir
+	cp lib/libqc--interp.a                  $libdir
+	# XXX copy header files to $incdir
+	for d in camlburg tools
+	do 
+	  (echo "# cd $d" && cd $d && mk $MKFLAGS install) || exit 1
+	done
 
 # ------------------------------------------------------------------ 
 # print dependency graph
@@ -165,10 +165,10 @@ install:V:      $INSTALL install-dirs
 
 dot:V:		graph.dot
 print-dot:V:	graph.ps
-	        lpr $prereq
+	lpr $prereq
 
 %.ps:D: %.dot
-	        dot -Tps $prereq > $target
+	dot -Tps $prereq > $target
 
 DEPENDFILES =   cllib/DEPEND.evaluating \
                 gen/DEPEND              \
@@ -177,71 +177,71 @@ DEPENDFILES =   cllib/DEPEND.evaluating \
 		src/DEPEND.evaluating   \
 
 graph.dot:D:	$DEPENDFILES
-	        cat $prereq | ocamldot -landscape > $target
-                
+	cat $prereq | ocamldot -landscape > $target
+	
 # ------------------------------------------------------------------ 
 # Devleoper's Documentation
 # ------------------------------------------------------------------ 
 
 html            \
 dvi:V:          dirs
-                for i in $SUBDIRS; 
-                do 
-                    (echo "# cd $i" && cd $i && mk $MKFLAGS $target) || exit 1
-                done
+	for i in $SUBDIRS; 
+	do 
+	  (echo "# cd $i" && cd $i && mk $MKFLAGS $target) || exit 1
+	done
 
 # ------------------------------------------------------------------ 
 # Cleaning
 # ------------------------------------------------------------------ 
 
 clean:V:        dirs
-                for i in $SUBDIRS 
-                do 
-                    (echo "#cd $i" && cd $i && mk $MKFLAGS $target)
-                done
-                find lib \
-                        \( -name 'CVS'                  \
-                        -o -name '.cvsignore'           \
-                        \) -prune                       \
-                        -o -type f -exec rm '{}' \;
-                rm -f *.tar.gz        
-                rm -f config/aux/tst
+	for i in $SUBDIRS 
+	do 
+	  (echo "#cd $i" && cd $i && mk $MKFLAGS $target)
+	done
+	find lib \
+	  \( -name 'CVS'                  \
+	  -o -name '.cvsignore'           \
+	  \) -prune                       \
+	  -o -type f -exec rm '{}' \;
+	rm -f *.tar.gz        
+	rm -f config/aux/tst
 
 clean.opt:V:    dirs
-                for i in $SUBDIRS 
-                do 
-                    (echo "#cd $i" && cd $i && mk $MKFLAGS $target)
-                done
-                find lib \
-                        \( -name 'CVS'                  \
-                        -o -name '.cvsignore'           \
-                        \) -prune                       \
-                        -o                              \
-                        \( -name '*.cmx'                \
-                        -o -name '*.o'                  \
-                        -o -name '*.a'                  \
-                        -o -name '*.cmxa'               \
-                        \) -exec rm '{}' \;             
-                rm -f *.tar.gz        
-                rm -f config/aux/tst
+	for i in $SUBDIRS 
+	do 
+	  (echo "#cd $i" && cd $i && mk $MKFLAGS $target)
+	done
+	find lib \
+	  \( -name 'CVS'                  \
+	  -o -name '.cvsignore'           \
+	  \) -prune                       \
+	  -o                              \
+	  \( -name '*.cmx'                \
+	  -o -name '*.o'                  \
+	  -o -name '*.a'                  \
+	  -o -name '*.cmxa'               \
+	  \) -exec rm '{}' \;             
+	rm -f *.tar.gz        
+	rm -f config/aux/tst
 
 clobber:V:      dirs clean
-                for i in $SUBDIRS; 
-                do 
-                    (echo "# cd $i" && cd $i && mk $MKFLAGS $target)
-                done
-                find bin lib man                        \
-                        \( -name 'CVS'                  \
-                        -o -name '.cvsignore'           \
-                        \) -prune -o -type f -exec rm '{}' \;
-                rm -f FILES
-                rm -f config/config.mk
+	for i in $SUBDIRS; 
+	do 
+	  (echo "# cd $i" && cd $i && mk $MKFLAGS $target)
+	done
+	find bin lib man                  \
+	  \( -name 'CVS'                  \
+	  -o -name '.cvsignore'           \
+	  \) -prune -o -type f -exec rm '{}' \;
+	rm -f FILES
+	rm -f config/config.mk
 
 # make sure appropriate empty directories exist
 dirs:V:
-                for i in bin lib man man/man1 lua/std; do
-                    [ -d $i ] || mkdir $i
-                done
+	for i in bin lib man man/man1 lua/std; do
+	  [ -d $i ] || mkdir $i
+	done
 
 # ------------------------------------------------------------------ 
 # build distribution
@@ -264,39 +264,39 @@ DIR =           $NAME$VERSION
 # find(1)'s job is it to exclude unwanted files and directories.
 
 FILES:D:          clobber
-                find .  \( -path "*/CVS/*"         \
-                        -o -path "*/.*"            \
-                        -o -path "./lib/*"         \
-                        -o -path "./man/*"         \
-                        -o -path "./bin/*"         \
-                        -o -path "./test/*"        \
-                        -o -path "./aug99/*"       \
-                        -o -path "./ccl-suite/*"   \
-                        -o -path "./mwb/*"         \
-                        -o -path "./specialized/*" \
-                        -o -path "./tdpe/*"        \
-                        -o -path "./bin/*"         \
-                        -o -path "./man/*"         \
-                        -o -path "./lib/*"         \
-                        -o -path "./lua-bench/*"   \
-                        -o -name "*.tar*"          \
-                        -o -type l                 \
-                        \) -prune                  \
-                        -o -type f -print | sort   > $target 
+	find . \
+	  \( -path "*/CVS/*"         \
+	  -o -path "*/.*"            \
+	  -o -path "./lib/*"         \
+	  -o -path "./man/*"         \
+	  -o -path "./bin/*"         \
+	  -o -path "./test/*"        \
+	  -o -path "./aug99/*"       \
+	  -o -path "./ccl-suite/*"   \
+	  -o -path "./mwb/*"         \
+	  -o -path "./specialized/*" \
+	  -o -path "./tdpe/*"        \
+	  -o -path "./bin/*"         \
+	  -o -path "./man/*"         \
+	  -o -path "./lib/*"         \
+	  -o -path "./lua-bench/*"   \
+	  -o -name "*.tar*"          \
+	  -o -type l                 \
+	  \) -prune                  \
+	  -o -type f -print | sort   > $target 
 
 timestamps:V:   
-                cd interp; mk -t -a disasm-dec.c interp-dec.c encode.[ch]
+	cd interp; mk -t -a disasm-dec.c interp-dec.c encode.[ch]
 
 tar:V:          $DIR.tar.gz
-                
+	
 $DIR.tar.gz:    FILES timestamps
-                ln -s . $DIR 
-                tar czvhf $DIR.tar.gz `sed "s+^\./+$DIR/+" FILES` 
-                rm -f $DIR
-                rm -f FILES
-                
+	ln -s . $DIR 
+	tar czvhf $DIR.tar.gz `sed "s+^\./+$DIR/+" FILES` 
+	rm -f $DIR
+	rm -f FILES
+	
 tar-test:V:     $DIR.tar.gz
-                tar zxvf $DIR.tar.gz
-                ( cd $DIR && ./configure && mk )
-                rm -rf $DIR
-
+	tar zxvf $DIR.tar.gz
+	( cd $DIR && ./configure && mk )
+	rm -rf $DIR

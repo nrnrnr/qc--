@@ -6,18 +6,18 @@ POD2MAN =       pod2man
 POD2HTML =      pod2html
 
 %.man:          %.1
-                nroff -man $prereq > $target
+	nroff -man $prereq > $target
 
 %.1:            %.pod
-                if [ -z "$NAME" ]; then NAME="Quick C-- Tools"; fi
-                $POD2MAN   --release="Version $VERSION"         \
-                           --center="$NAME"                     \
-                           --section=1 $prereq > $target
+	if [ -z "$NAME" ]; then NAME="Quick C-- Tools"; fi
+	$POD2MAN   --release="Version $VERSION"         \
+		   --center="$NAME"                     \
+		   --section=1 $prereq > $target
 %.5:            %.pod
-                if [ -z "$NAME" ]; then NAME="Quick C-- Tools"; fi
-                $POD2MAN   --release="Version $VERSION"         \
-                           --center="$NAME"                     \
-                           --section=5 $prereq > $target
+	if [ -z "$NAME" ]; then NAME="Quick C-- Tools"; fi
+	$POD2MAN   --release="Version $VERSION"         \
+		   --center="$NAME"                     \
+		   --section=5 $prereq > $target
 %-man.html:     %.pod
-                $POD2HTML  --title=$NAME $prereq > $target
+	$POD2HTML  --title=$NAME $prereq > $target
 

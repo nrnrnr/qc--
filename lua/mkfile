@@ -68,37 +68,37 @@ doc:V:		lua.ps
 
 html:V:		$NWHTML
 dvi:VQ:
-                echo "nothing to be done for $target"     
+	echo "nothing to be done for $target"     
 
 clean.opt:V:    
-                rm -f *.cmx *.o
-                rm -f *.cmxa *.a 
-		rm -f *~
+	rm -f *.cmx *.o
+	rm -f *.cmxa *.a 
+	rm -f *~
 
 clean:V:        clean.opt
-		rm -f *.cmi *.cmo 
-                rm -f *.cma
-		rm -f *~
+	rm -f *.cmi *.cmo 
+	rm -f *.cma
+	rm -f *~
 
 clobber:V:	clean
-                rm -f *.ml *.mli *.mly *.mll
-		rm -f $NWHTML
-		rm -f luaparsex.output tspecl lspecl *.icn
-		rm -f *.aux *.log *.dvi *.toc *.tex *.inc
-		rm -f oclua-* oclua-*.opt *.cma *.cmxa *.a 
-		rm -f lua.ps
-                rm -f DEPEND*
-		rm -f oclbench-*
-		rm -f luaclient
+	rm -f *.ml *.mli *.mly *.mll
+	rm -f $NWHTML
+	rm -f luaparsex.output tspecl lspecl *.icn
+	rm -f *.aux *.log *.dvi *.toc *.tex *.inc
+	rm -f oclua-* oclua-*.opt *.cma *.cmxa *.a 
+	rm -f lua.ps
+	rm -f DEPEND*
+	rm -f oclbench-*
+	rm -f luaclient
 
 standalone:V: lua-ml.tar
 
 xluaclient.tex:D:	luaclient.nw
-		noweave -delay $prereq > $target
+	noweave -delay $prereq > $target
 
 xluaclient.html:	luaclient.tex
-		hevea nw.hva $prereq
-		tidy -f /dev/null -im $target
+	hevea nw.hva $prereq
+	tidy -f /dev/null -im $target
 
 
 ALONE=luasyntax.nw lua.nw luaast.nw luabaselib.nw luahash.nw \
@@ -126,7 +126,7 @@ lua-ml.tar:D: $ALONE
 # ------------------------------------------------------------------ 
 
 lua.tex: lua.nw
-		noweave -x lua.nw > lua.tex
+	noweave -x lua.nw > lua.tex
 
 # ------------------------------------------------------------------ 
 # lua library
@@ -178,30 +178,30 @@ LIBCMI = ${LIBMLI:%.mli=%.cmi}
 
 
 lua-$INTERP.cma:	$LIBCMO $LIBCMI
-		$OCAMLC $OCAMLC_FLAGS -a -o $target $LIBCMO
+	$OCAMLC $OCAMLC_FLAGS -a -o $target $LIBCMO
 
 # this target also creates *.o files and a lua.a library
 lua-$INTERP.cmxa:	$LIBCMX	$LIBCMI 
-		$OCAMLO $OCAMLO_FLAGS -a -o $target $LIBCMX
+	$OCAMLO $OCAMLO_FLAGS -a -o $target $LIBCMX
 
 
 # copy library and interfaces to $LIBDIR. Note that lua-std.a is
 # implicitly built when lua-std.cmxa is built.
 
 $LIBDIR/lua.cma:Q: lua-std.cma $LIBMLI $LIBCMI dirs
-		cp -v lua-std.cma $target
-		for f in $LIBMLI $LIBCMI
-		do
-		    cmp -s $f $LIBDIR/$f || cp -v $f $LIBDIR
-		done
+	cp -v lua-std.cma $target
+	for f in $LIBMLI $LIBCMI
+	do
+	  cmp -s $f $LIBDIR/$f || cp -v $f $LIBDIR
+	done
 
 $LIBDIR/lua.cmxa:Q: lua-std.cmxa $LIBMLI $LIBCMI dirs
-		cp -v lua-std.cmxa $target
-		cp -v lua-std.a $LIBDIR/lua.a
-		for f in $LIBMLI $LIBCMI
-		do
-		    cmp -s $f $LIBDIR/$f || cp -v $f $LIBDIR
-		done
+	cp -v lua-std.cmxa $target
+	cp -v lua-std.a $LIBDIR/lua.a
+	for f in $LIBMLI $LIBCMI
+	do
+	  cmp -s $f $LIBDIR/$f || cp -v $f $LIBDIR
+	done
 
 $BINDIR/oclbench%:Q: oclbench%
 	cp -v $prereq $target
@@ -248,10 +248,10 @@ src:V: $SCAN
 TEST=03 04 05 06 07 08 09 10 12 02 16 19
 
 test.opt:V: 	oclua-$INTERP.opt
-		for i in $TEST; do ./$prereq test/$i.lua; done	
+	for i in $TEST; do ./$prereq test/$i.lua; done	
 
 test:V: 	oclua-$INTERP
-		for i in $TEST; do ./$prereq test/$i.lua; done	
+	for i in $TEST; do ./$prereq test/$i.lua; done	
 
 # ------------------------------------------------------------------ 
 # main interpreter. We special rules to extract sources
@@ -308,10 +308,10 @@ luaparser.mli: luaparsex.mli luasyntax.nw
 dirs:VQ:
 	for i in $LIBDIR; do
 	    if [ ! -d $i ]; then
-		echo "missing directory $i"
-		echo "invoke mk from the toplevel the first time"
-		echo "to create all directories"
-		false
+	        echo "missing directory $i"
+	        echo "invoke mk from the toplevel the first time"
+	        echo "to create all directories"
+	        false
 	    fi
 	done    
 

@@ -34,28 +34,28 @@ dvi:V:          $INC
 html:V:         $HTML
 
 test:VQ:
-                echo "nothing to be done"
+	echo "nothing to be done"
 
 depend:V:       $DEPEND
 
 # remove native code files
 clean.opt:V:    
-                rm -f *.cmx *.o
-                rm -f $LIBCMX $NAME.a
+	rm -f *.cmx *.o
+	rm -f $LIBCMX $NAME.a
 
 # remove byte code and native code
 clean:V:        clean.opt
-                rm -f *.cmi *.cmo
-                rm -f $LIBCMO 
+	rm -f *.cmi *.cmo
+	rm -f $LIBCMO 
 
 # remove remaining derived file
 clobber:V:      clean
-                rm -f *.output
-                rm -f rc_parse.ml rc_parse.mly 
-                rm -f rc_scan.ml rc_scan.mll
-                rm -f *.ml *.mli
-                rm -f *.aux *.log *.dvi *.toc *.html
-                rm -f $DEPEND
+	rm -f *.output
+	rm -f rc_parse.ml rc_parse.mly 
+	rm -f rc_scan.ml rc_scan.mll
+	rm -f *.ml *.mli
+	rm -f *.aux *.log *.dvi *.toc *.html
+	rm -f $DEPEND
 
 
 # ------------------------------------------------------------------ 
@@ -98,60 +98,59 @@ MLI =           lc.mli     \
 
 SCAN =          $ML $MLI
 
-CMO =           `echo $ML       | sed 's/\.ml/.cmo/g'`
-CMX =           `echo $ML       | sed 's/\.ml/.cmx/g'`
-OBJ =           `echo $ML       | sed 's/\.ml/.o/g'`
+CMO = ${ML:%.ml=%.cmo}
+CMX = ${ML:%.ml=%.cmx}
 
 # ------------------------------------------------------------------ 
 # build the libraries
 # ------------------------------------------------------------------ 
 
 $LIBCMO:        $CMO
-		$OCAMLC $OCAMLC_FLAGS -a -o $target $prereq
-                
+	$OCAMLC $OCAMLC_FLAGS -a -o $target $prereq
+	
 
 $LIBCMX:	$CMX
-		$OCAMLO $OCAMLO_FLAGS -a -o $target $prereq
+	$OCAMLO $OCAMLO_FLAGS -a -o $target $prereq
 
 # ------------------------------------------------------------------ 
 # update hierarchy
 # ------------------------------------------------------------------ 
 
 $LIBDIR/$LIBCMO:    $LIBCMO dirs
-		    for i in $LIBCMO *.mli *.cmi 
-                    do
-		        cmp -s $i $LIBDIR/$i || cp $i $LIBDIR 
-		    done
+	for i in $LIBCMO *.mli *.cmi 
+	do
+	  cmp -s $i $LIBDIR/$i || cp $i $LIBDIR 
+	done
 
 $LIBDIR/$LIBCMX:    $LIBCMX dirs
-		    for i in $LIBCMX $NAME.a *.mli *.cmi
-                    do
-		        cmp -s $i $LIBDIR/$i || cp $i $LIBDIR
-		    done
+	for i in $LIBCMX $NAME.a *.mli *.cmi
+	do
+	  cmp -s $i $LIBDIR/$i || cp $i $LIBDIR
+	done
 
 dirs:VQ:
-                    for i in $LIBDIR; do
-                        if [ ! -d $i ]; then
-                            echo "missing directory $i"
-                            echo "invoke mk from the toplevel the first time"
-                            echo "to create all directories"
-                            false
-                        fi
-                    done    
+	for i in $LIBDIR; do
+	    if [ ! -d $i ]; then
+	        echo "missing directory $i"
+	        echo "invoke mk from the toplevel the first time"
+	        echo "to create all directories"
+	        false
+	    fi
+	done    
 
 # ------------------------------------------------------------------ 
 # extra rules for cases not covered by noweb.mk
 # ------------------------------------------------------------------ 
 
 rc_parse.mly:   rc.nw
-	        $NOTANGLE           -R$target $prereq > $target
+	$NOTANGLE           -R$target $prereq > $target
 rc_scan.mll:    rc.nw
-	        $NOTANGLE           -R$target $prereq > $target
+	$NOTANGLE           -R$target $prereq > $target
 rc_ast.mli:     rc.nw
-	        $NOTANGLE -L"$LINE" -R$target $prereq > $target
+	$NOTANGLE -L"$LINE" -R$target $prereq > $target
 rc_ast.ml:      rc.nw
-	        $NOTANGLE -L"$LINE" -R$target $prereq > $target
-        
+	$NOTANGLE -L"$LINE" -R$target $prereq > $target
+	
 
 # ------------------------------------------------------------------ 
 # recalculate dependencies
@@ -159,7 +158,7 @@ rc_ast.ml:      rc.nw
 # ------------------------------------------------------------------ 
 
 $DEPEND: 	$SCAN
-		$OCAMLDEP $SCAN > $DEPEND
+	$OCAMLDEP $SCAN > $DEPEND
 
 # ------------------------------------------------------------------ 
 # include dependencies

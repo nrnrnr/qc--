@@ -48,12 +48,12 @@ LRTLHEAP =     /usr/local/smlnj/bin/.heap/lrtl.x86-linux
 
 all:V:          src cmo libcmo
 all.opt:V:      src cmx libcmx
-                
+	
 # update and update.opt are defined below. They rely on variables
 # that are not visible here.
 
 html dvi test:VQ:          
-                echo "nothing to be done"          
+	echo "nothing to be done"          
 
 depend:V:       $DEPEND
 
@@ -64,19 +64,19 @@ depend:V:       $DEPEND
 # Sparcreg is expensive to derive and thus is not removed by clean.
 
 clean.opt:V:
-                rm -f `find . -not -name 'sparcrec*' -name '*.cmx'` 
-                rm -f `find . -not -name 'sparcrec*' -name '*.o'` 
-                rm -f *.cmxa *.a
+	rm -f `find . -not -name 'sparcrec*' -name '*.cmx'` 
+	rm -f `find . -not -name 'sparcrec*' -name '*.o'` 
+	rm -f *.cmxa *.a
 
 clean:V:        clean.opt
-                rm -f `find . -not -name 'sparcrec*' -name '*.cm[io]'` 
-                rm -f *.cma
-                
+	rm -f `find . -not -name 'sparcrec*' -name '*.cm[io]'` 
+	rm -f *.cma
+	
 clobber:V:      clean
-                rm -f sparcrec*.cm[xio] sparcrec*.o
-                rm -f *.output
-                rm -f $DEPEND
-                rm -f *.aux *.log *.dvi *.tex *.inc *.toc
+	rm -f sparcrec*.cm[xio] sparcrec*.o
+	rm -f *.output
+	rm -f $DEPEND
+	rm -f *.aux *.log *.dvi *.tex *.inc *.toc
 
 # ------------------------------------------------------------------ 
 # rules and tools for OCaml
@@ -134,11 +134,12 @@ BAREML  =       # sparcrec.ml
 sparcrec.cmi:   sparcrec.cmo
                 # do nothing; the compiler does it
 
-CMO =           `echo $LOCAL       | sed 's/\.ml/.cmo/g'`
-CMI =           `echo $LOCALI      | sed 's/\.mli/.cmi/g'` \
-                `echo $BAREML      | sed 's/\.ml/.cmi/g'`
-CMX =           `echo $LOCAL       | sed 's/\.ml/.cmx/g'`
-OBJ =           `echo $LOCAL       | sed 's/\.ml/.o/g'`
+CMO = ${LOCAL:%.ml=%.cmo}
+CMI1 = ${LOCALI:%.mli=%.cmi} 
+CMI2 = ${BAREML:%.ml=%.cmi}
+CMI = $CMI1 $CMI2
+CMX = ${LOCAL:%.ml=%.cmx}
+OBJ = ${LOCAL:%.ml=%.o}
 
 SCAN =          $LOCAL $LOCALI
 
@@ -157,37 +158,37 @@ LIBOBJ =        gen.a
 
 libcmo          \
 $LIBCMO:        $CMO
-                $OCAMLC $OCAMLC_FLAGS -a -o $LIBCMO $prereq
-                
+	$OCAMLC $OCAMLC_FLAGS -a -o $LIBCMO $prereq
+	
 libcmx          \
 $LIBCMX:        $CMX
-                $OCAMLO $OCAMLO_FLAGS -a -o $LIBCMX $prereq
+	$OCAMLO $OCAMLO_FLAGS -a -o $LIBCMX $prereq
 
 # ------------------------------------------------------------------ 
 # update hierarchy
 # ------------------------------------------------------------------ 
 
 update:V:           $LIBCMO dirs $LOCALI $CMI
-                    for i in $LIBCMO $LOCALI $CMI
-                    do
-                        cmp -s $i $LIBDIR/$i || cp $i $LIBDIR 
-                    done
+	for i in $LIBCMO $LOCALI $CMI
+	do
+	  cmp -s $i $LIBDIR/$i || cp $i $LIBDIR 
+	done
 
 update.opt:V:       $LIBCMX dirs $LOCALI $CMI
-                    for i in $LIBCMX $LOCALI $CMI $LIBOBJ
-                    do
-                        cmp -s $i $LIBDIR/$i || cp $i $LIBDIR
-                    done
+	for i in $LIBCMX $LOCALI $CMI $LIBOBJ
+	do
+	  cmp -s $i $LIBDIR/$i || cp $i $LIBDIR
+	done
 
 dirs:VQ:
-                    for i in $LIBDIR; do
-                        if [ ! -d $i ]; then
-                            echo "missing directory $i"
-                            echo "invoke mk from the toplevel the first time"
-                            echo "to create all directories"
-                            false
-                        fi
-                    done    
+	for i in $LIBDIR; do
+	    if [ ! -d $i ]; then
+	        echo "missing directory $i"
+	        echo "invoke mk from the toplevel the first time"
+	        echo "to create all directories"
+	        false
+	    fi
+	done    
 
 
 # ------------------------------------------------------------------ 
@@ -197,7 +198,7 @@ dirs:VQ:
 
 depend:V: $DEPEND
 $DEPEND:D:        $SCAN
-                $OCAMLDEP -I $LIBDIR $SCAN > $DEPEND
+	$OCAMLDEP -I $LIBDIR $SCAN > $DEPEND
 
 # ------------------------------------------------------------------ 
 # include dependencies

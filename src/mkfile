@@ -65,13 +65,13 @@ update.opt:V:   $BINDIR/$NAME.opt
 depend:V:   $DEPEND
 
 test:VQ:     
-            echo "you can run 'mk test' only from the toplevel ($TOP)"
-            echo "developers can run 'mk dtest' or 'mk tx', but don't"
-            echo "expect it to mean anything" 
-            exit 1
+	echo "you can run 'mk test' only from the toplevel ($TOP)"
+	echo "developers can run 'mk dtest' or 'mk tx', but don't"
+	echo "expect it to mean anything" 
+	exit 1
 
 tx:VQ: update
-	    cd ../test; mk $MKFLAGS test
+	cd ../test; mk $MKFLAGS test
 
 dtest:VEQ: add hello cut
 	echo hello; ./hello
@@ -83,27 +83,27 @@ dtest:VEQ: add hello cut
 	./tqc -o $target $stem1.c--
 
 clean.opt:V:    
-            rm -f *.cmx *.o
-            rm -f *.cmxa *.a
+	rm -f *.cmx *.o
+	rm -f *.cmxa *.a
 
 clean:V:    clean.opt
-            rm -f *.cmi *.cmo
-            rm -f *.cma
-            
+	rm -f *.cmi *.cmo
+	rm -f *.cma
+	
 
 clobber:V:  clean
-            rm -f $DEPEND
-            rm -f *.sig 
-            rm -f *.ml *.mli *.mll *.mly *.output
-            rm -f *.c *.h 
-            rm -f this.in
-            rm -f *.inc *.tex *.dvi *.log *.aux *.bbl *.blb *.blg *.toc
-            rm -f *.html *.ps *.pod
-            rm -f *.pod *.1
-            rm -f *~
-            rm -f *.lua 
-            rm -f $NAME $NAME.opt 
-            rm -f `find . -type l -print`
+	rm -f $DEPEND
+	rm -f *.sig 
+	rm -f *.ml *.mli *.mll *.mly *.output
+	rm -f *.c *.h 
+	rm -f this.in
+	rm -f *.inc *.tex *.dvi *.log *.aux *.bbl *.blb *.blg *.toc
+	rm -f *.html *.ps *.pod
+	rm -f *.pod *.1
+	rm -f *~
+	rm -f *.lua 
+	rm -f $NAME $NAME.opt 
+	rm -f `find . -type l -print`
 
 # ------------------------------------------------------------------
 # important file sets
@@ -314,20 +314,20 @@ LIBSLASHCMXLIBS = ${CMXCMM:%=$LIBDIR/%}
 OBJ =           $LIBDIR/uint64p.o
 
 $NAME:          depend-check $CMO $OBJ $LIBSLASHCMOLIBS
-                $OCAMLC $OCAMLC_FLAGS -custom -o $target $CMOLIBS $OBJ $CMO 
+	$OCAMLC $OCAMLC_FLAGS -custom -o $target $CMOLIBS $OBJ $CMO 
 
 $NAME.opt:      depend-check $CMX $OBJ $LIBSLASHCMXLIBS
-                $OCAMLO $OCAMLO_FLAGS         -o $target $CMXLIBS $OBJ $CMX
+	$OCAMLO $OCAMLO_FLAGS         -o $target $CMXLIBS $OBJ $CMX
 
 # ------------------------------------------------------------------
 # copy files to their official directories
 # ------------------------------------------------------------------
 
 $BINDIR/$NAME:          $NAME
-                        cp $prereq $target
+	cp $prereq $target
 
 $BINDIR/$NAME.opt:      $NAME.opt
-                        cp $prereq $target
+	cp $prereq $target
 
 # ------------------------------------------------------------------
 # LaTeX documentation
@@ -349,7 +349,7 @@ cfg.inc:D: cfg.nw
 # individual modules is included
 
 modules.tex:VD: $INC
-    echo $INC | sed 's!\([a-z0-9./]*inc\)!\\input{\1}!g' | fmt -w 10 > $target
+	echo $INC | sed 's!\([a-z0-9./]*inc\)!\\input{\1}!g' | fmt -w 10 > $target
 
 # ------------------------------------------------------------------ 
 # special cases, primarily for multiple sources in one .nw
@@ -361,82 +361,83 @@ modules.tex:VD: $INC
 # conditional code happens to be in the general case.
 
 interval.mli:D: lifetime.nw
-                $NOTANGLE -L"$LINE" -R$target $prereq > $target
+	$NOTANGLE -L"$LINE" -R$target $prereq > $target
 interval.ml:D:  lifetime.nw
-                $NOTANGLE -L"$LINE" -R$target $prereq > $target
+	$NOTANGLE -L"$LINE" -R$target $prereq > $target
 
 postexpander.mli:D: expander.nw
-                $NOTANGLE -L"$LINE" -R$target $prereq > $target
+	$NOTANGLE -L"$LINE" -R$target $prereq > $target
 postexpander.ml:D:  expander.nw
-                $NOTANGLE -L"$LINE" -R$target $prereq > $target
+	$NOTANGLE -L"$LINE" -R$target $prereq > $target
 
 x86target.ml:D:  x86.nw
-                $NOTANGLE -L"$LINE" -R$target $prereq > $target
+	$NOTANGLE -L"$LINE" -R$target $prereq > $target
 
 
 uint64p.c:D:    uint64.nw
-                $NOTANGLE -L -R$target $prereq > $target
+	$NOTANGLE -L -R$target $prereq > $target
 
 topsorttest.ml:D: topsort.nw
-                $NOTANGLE -L"$LINE" -R$target $prereq > $target
+	$NOTANGLE -L"$LINE" -R$target $prereq > $target
 
 this.mli:D:     main.nw
-                $NOTANGLE -L"$LINE" -R$target $prereq > $target
+	$NOTANGLE -L"$LINE" -R$target $prereq > $target
 this.in:D:      main.nw
-                $NOTANGLE -L"$LINE" -R$target $prereq > $target
+	$NOTANGLE -L"$LINE" -R$target $prereq > $target
 
 qc--.lua:D:     luadriver.nw luacompile.nw colorgraph.nw 
-                $NOTANGLE -L'$file "%F"%N$line %L%N' -R$target $prereq > $target
+	$NOTANGLE -L'$file "%F"%N$line %L%N' -R$target $prereq > $target
 
 parse.mly:D:    parser.nw
-                $NOTANGLE -R$target $prereq > $target
+	$NOTANGLE -R$target $prereq > $target
 scan.mll:D:     parser.nw
-                $NOTANGLE -R$target $prereq > $target
+	$NOTANGLE -R$target $prereq > $target
 scan.mli:D:     parser.nw
-                $NOTANGLE -L"$LINE" -R$target $prereq > $target
+	$NOTANGLE -L"$LINE" -R$target $prereq > $target
 
 # ------------------------------------------------------------------ 
 # MLburg generated files
 # ------------------------------------------------------------------ 
 
 x86rec.mlb:D:   x86rec.nw
-	        $NOTANGLE -L"$LINE" -R$target $prereq > $target
+	$NOTANGLE -L"$LINE" -R$target $prereq > $target
 
 x86rec.ml:D:    x86rec.mlb $MLBURG
-	        $MLBURG x86rec.mlb  | $MLBURGFIX $target 
+	$MLBURG x86rec.mlb  | $MLBURGFIX $target 
 
 mipsrec.mlb:D:  mipsrec.nw
-                $NOTANGLE -L"$LINE" -R$target $prereq > $target
+	$NOTANGLE -L"$LINE" -R$target $prereq > $target
 
 mipsrec.ml:D:   mipsrec.mlb $MLBURG
-                $MLBURG mipsrec.mlb | $MLBURGFIX $target
+	$MLBURG mipsrec.mlb | $MLBURGFIX $target
 
 alpharec.mlb:D: alpharec.nw
-                $NOTANGLE -L"$LINE" -R$target $prereq > $target
+	$NOTANGLE -L"$LINE" -R$target $prereq > $target
 
 alpharec.ml:D:  alpharec.mlb $MLBURG
-                $MLBURG alpharec.mlb | $MLBURGFIX $target
+	$MLBURG alpharec.mlb | $MLBURGFIX $target
 
 # ------------------------------------------------------------------
 # include version and name information
 # ------------------------------------------------------------------
 # The ../doc/qc--.man dependency is across directories; best avoided.
 
-this.ml:D:      this.in qc--.lua ../doc/qc--.man
-                sed     -e "s/@this@/$NAME-$VERSION/"   \
-                        this.in                         > $target
-                echo 'let boot = "'                     >> $target
-                sed     -e 's/\\/\\\\/g'                \
-                        -e 's/"/\\"/g'                  \
-                        qc--.lua                        >> $target    
-                echo '"'                                >> $target        
-                echo 'let manual ="'                    >> $target
-                sed     -e 's/\\/\\\\/g'                \
-                        -e 's/"/\\"/g'                  \
-                        ../doc/qc--.man                 >> $target    
-                echo '"'                                >> $target        
-                echo 'let byteorder = "'$config_endian'"' >> $target
-                echo 'let arch_os   = "'$config_arch'"'   >> $target    
+this.ml:DQ:      this.in qc--.lua ../doc/qc--.man
+	echo "building $target from $prereq"
+	sed     -e "s/@this@/$NAME-$VERSION/"   \
+	        this.in                         > $target
+	echo 'let boot = "'                     >> $target
+	sed     -e 's/\\/\\\\/g'                \
+	        -e 's/"/\\"/g'                  \
+	        qc--.lua                        >> $target    
+	echo '"'                                >> $target        
+	echo 'let manual ="'                    >> $target
+	sed     -e 's/\\/\\\\/g'                \
+	        -e 's/"/\\"/g'                  \
+	        ../doc/qc--.man                 >> $target    
+	echo '"'                                >> $target        
+	echo 'let byteorder = "'$config_endian'"' >> $target
+	echo 'let arch_os   = "'$config_arch'"'   >> $target    
 
 # ------------------------------------------------------------------
 # recalculate dependencies
@@ -444,18 +445,18 @@ this.ml:D:      this.in qc--.lua ../doc/qc--.man
 # ------------------------------------------------------------------
 
 $DEPEND:D:      $SCAN mkfile
-                $OCAMLDEP -I $LIBDIR $prereq > $DEPEND
-            
+	$OCAMLDEP -I $LIBDIR $prereq > $DEPEND
+	
 
 # make sure DEPEND is up to date
 depend-check:VQ: $BINDIR/newer
-    # check for $DEPEND
-    if $BINDIR/newer $DEPEND mkfile; then true;
-    else
-      echo "$DEPEND is out of date;" 1>&2
-      echo "you must run 'mk depend' before continuing" 1>&2
-      exit 1
-    fi
+	# check for $DEPEND
+	if $BINDIR/newer $DEPEND mkfile; then true;
+	else
+	  echo "$DEPEND is out of date;" 1>&2
+          echo "you must run 'mk depend' before continuing" 1>&2
+	  exit 1
+	fi
 
 
 <$DEPEND

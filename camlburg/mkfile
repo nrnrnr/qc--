@@ -48,20 +48,20 @@ all:V:          ocamlburg      runtime     man
 all.opt:V:      ocamlburg.opt  runtime.opt man 
 
 update:V:       $RTCMO all 
-                cp $RTCMO           $LIBDIR
-                cp ocamlburg        $BINDIR
-                cp ocamlburg.1      $MANDIR/man1
-                cp ocamlburgfix     $BINDIR
-                cp ocamlburgfix.1   $MANDIR/man1
+	cp $RTCMO           $LIBDIR
+	cp ocamlburg        $BINDIR
+	cp ocamlburg.1      $MANDIR/man1
+	cp ocamlburgfix     $BINDIR
+	cp ocamlburgfix.1   $MANDIR/man1
 
 update.opt:V:   $RTCMX all.opt 
-                cp $RTCMX       $LIBDIR
-                cp ocamlburg.opt   $BINDIR
-                test -f $BINDIR/ocamlburg || cp ocamlburg.opt $BINDIR/ocamlburg
-                cp ocamlburg.1      $MANDIR/man1
-                cp ocamlburgfix     $BINDIR
-                cp ocamlburgfix.1   $MANDIR/man1
-    
+	cp $RTCMX       $LIBDIR
+	cp ocamlburg.opt   $BINDIR
+	test -f $BINDIR/ocamlburg || cp ocamlburg.opt $BINDIR/ocamlburg
+	cp ocamlburg.1      $MANDIR/man1
+	cp ocamlburgfix     $BINDIR
+	cp ocamlburgfix.1   $MANDIR/man1
+	
 dvi:V:          $DVI
 html:V:         $HTML
 ps:V:           $PS
@@ -76,33 +76,33 @@ runtime:V:      camlburg.ml $RTCMO
 runtime.opt:V:  camlburg.ml $RTCMX
 
 clean.opt:V:
-                rm -f *.cmx *.o
-                rm -f *.cmxa *.a
+	rm -f *.cmx *.o
+	rm -f *.cmxa *.a
 
 clean:V:        clean.opt
-                rm -f *.cmo *.cmi 
-                
+	rm -f *.cmo *.cmi 
+	
 clobber:V:      clean
-                rm -f ocamlburg ocamlburg.opt 
-                rm -f nofake
-                rm -f *.pod *.1
-                rm -f *.ps *.pdf
-                rm -f *.output
-                rm -f *.mll *.mly
-                rm -f *.ml *.mli 
-                rm -f *.aux *.log *.dvi *.tex *.inc *.toc *.html
-                rm -f $DEPEND 
-                rm -f pp.*
-                rm -f srcmap.*
-                rm -f pod2htm*
+	rm -f ocamlburg ocamlburg.opt 
+	rm -f nofake
+	rm -f *.pod *.1
+	rm -f *.ps *.pdf
+	rm -f *.output
+	rm -f *.mll *.mly
+	rm -f *.ml *.mli 
+	rm -f *.aux *.log *.dvi *.tex *.inc *.toc *.html
+	rm -f $DEPEND 
+	rm -f pp.*
+	rm -f srcmap.*
+	rm -f pod2htm*
 
 install:V:      ocamlburg ocamlburg.1 ocamlburgfix ocamlburgfix.1
-                [ -x ocamlburg.opt ] && \
-                install -s ocamlburg.opt  $prefix/bin/ocamlburg.opt
-                install    ocamlburg      $prefix/bin/ocamlburg
-                install    ocamlburg.1    $prefix/man/man1                
-                install    ocamlburgfix   $prefix/bin
-                install    ocamlburgfix.1 $prefix/man/man1
+	[ -x ocamlburg.opt ] && \
+	install -s ocamlburg.opt  $prefix/bin/ocamlburg.opt
+	install    ocamlburg      $prefix/bin/ocamlburg
+	install    ocamlburg.1    $prefix/man/man1                
+	install    ocamlburgfix   $prefix/bin
+	install    ocamlburgfix.1 $prefix/man/man1
 
 # ------------------------------------------------------------------ 
 # rules and tools for OCaml
@@ -156,10 +156,10 @@ CMX =           `echo $ML       | sed 's/\.ml/.cmx/g'`
 # ------------------------------------------------------------------ 
 
 ocamlburg:      $LIBDIR/cllib.cma  $CMO 
-                $OCAMLC $OCAMLC_FLAGS -o $target $prereq
-                
+	$OCAMLC $OCAMLC_FLAGS -o $target $prereq
+	
 ocamlburg.opt:  $LIBDIR/cllib.cmxa $CMX
-                $OCAMLO $OCAMLO_FLAGS -o $target $prereq
+	$OCAMLO $OCAMLO_FLAGS -o $target $prereq
 
 # ------------------------------------------------------------------ 
 # extra rules for cases not covered by noweb.mk or to resolve
@@ -167,68 +167,68 @@ ocamlburg.opt:  $LIBDIR/cllib.cmxa $CMX
 # ------------------------------------------------------------------ 
 
 lex.mll:        lex.nw
-	        $NOTANGLE -R$target $prereq > $target
+	$NOTANGLE -R$target $prereq > $target
 
 lex.ml:         lex.mll
-                $OCAMLLEX $prereq
+	$OCAMLLEX $prereq
 
 parse.mly:      parse.nw
-                $NOTANGLE -R$target $prereq > $target
+	$NOTANGLE -R$target $prereq > $target
 
 parse.ml:       parse.mly
 
 parse.mli       \
 parse.ml        \
 parse.output:   parse.mly
-                $OCAMLYACC -v parse.mly
+	$OCAMLYACC -v parse.mly
 
 ocamlburg.pod:  main.nw
-                $NOTANGLE -R$target $prereq > $target
+	$NOTANGLE -R$target $prereq > $target
 
 ocamlburgfix.1:D: ocamlburgfix
-                $POD2MAN ocamlburgfix > $target
+	$POD2MAN ocamlburgfix > $target
 
 ocamlburgfix-man.html:D: ocamlburgfix
-                $POD2HTML ocamlburgfix > $target
-                
+	$POD2HTML ocamlburgfix > $target
+	
 # ------------------------------------------------------------------ 
 # Examples
 # ------------------------------------------------------------------ 
 
 sample.mlb:     sample.nw
-                $NOTANGLE -L"$LINE" -R$target $prereq > $target
+	$NOTANGLE -L"$LINE" -R$target $prereq > $target
 
 sampleclient.ml: sample.nw
-                $NOTANGLE -L"$LINE" -R$target $prereq > $target
+	$NOTANGLE -L"$LINE" -R$target $prereq > $target
 
 sample.ml:      sample.mlb ocamlburg runtime
-                ./ocamlburg sample.mlb > $target
+	./ocamlburg sample.mlb > $target
 
 iburg.ml:       iburg.mlb ocamlburg runtime
-                ./ocamlburg iburg.mlb > $target
+	./ocamlburg iburg.mlb > $target
 
 # ------------------------------------------------------------------ 
 # export distribution to outside world
 # ------------------------------------------------------------------ 
 
 nofake.nw:      ../tools/nofake.nw
-                cp $prereq $target
+	cp $prereq $target
 
 pp.nw:          ../cllib/pp.nw
-                cp $prereq $target
+	cp $prereq $target
 
 srcmap.nw:      ../cllib/srcmap.nw
-                cp $prereq $target
+	cp $prereq $target
 
 nofake:         nofake.nw
-                $NOTANGLE -R$target $prereq > $target
-                chmod +x $target
+	$NOTANGLE -R$target $prereq > $target
+	chmod +x $target
 
 nofake.1:       nofake
-                $POD2MAN nofake > $target
+	$POD2MAN nofake > $target
 
 nofake-man.html:    nofake
-                $POD2HTML nofake > $target
+	$POD2HTML nofake > $target
 
 
 EXPORT =        README DEPEND Makefile                            \
@@ -251,7 +251,7 @@ EXPORT =        README DEPEND Makefile                            \
                 srcmap.nw srcmap.html                             \
 
 tidy:V:         $HTML nofake-man.html ocamlburg-man.html
-                tidy -f /dev/null -im $prereq || exit 0
+	tidy -f /dev/null -im $prereq || exit 0
 
 # 1.0 was officially released 05 March 2002 
 # 1.1 26 March 2002 - bug fix release for bug in camlburg.nw.
@@ -262,16 +262,16 @@ FILE =          "ocamlburg-1.3"
 tar:V:          $FILE.tar.gz 
 
 $FILE.tar.gz:   $EXPORT tidy mkfile
-                ln -s . $FILE
-                tar czvhf $FILE.tar.gz `ls -1 $EXPORT | sed "s|^|$FILE/|"`
-                rm -f $FILE
+	ln -s . $FILE
+	tar czvhf $FILE.tar.gz `ls -1 $EXPORT | sed "s|^|$FILE/|"`
+	rm -f $FILE
 
 tartest:V:      tar
-                tar zxvf $FILE.tar.gz
-                ( cd $FILE && make ) && rm -rf $FILE
+	tar zxvf $FILE.tar.gz
+	( cd $FILE && make ) && rm -rf $FILE
 
 www:V:          $FILE.tar.gz
-                cp $prereq $HOME/../cminusminus/www/download
+	cp $prereq $HOME/../cminusminus/www/download
 
 # ------------------------------------------------------------------ 
 # recalculate dependencies
@@ -279,7 +279,7 @@ www:V:          $FILE.tar.gz
 # ------------------------------------------------------------------ 
 
 $DEPEND:        $SCAN
-                $OCAMLDEP $SCAN > $DEPEND
+	$OCAMLDEP $SCAN > $DEPEND
 
 # ------------------------------------------------------------------ 
 # include dependencies

@@ -22,55 +22,55 @@ all:V:          man $PS
 man:V:          qc--.1 qc--internals.1 qc--interp.1 qc--.man
 
 update:V:       man 
-                cp qc--.1           $TOP/man/man1
-                cp qc--internals.1  $TOP/man/man1
-                cp qc--interp.1     $TOP/man/man1
+	cp qc--.1           $TOP/man/man1
+	cp qc--internals.1  $TOP/man/man1
+	cp qc--interp.1     $TOP/man/man1
 
 update.opt:V:   update
 
 clean:V:
-                rm -f *.dvi *.aux *.log *.toc *.ps               
-                rm -f cfg.tex modules.ps*
-                rm -f stack.tex stack.inc
-		rm -f refactor.tex refactor.inc
-                rm -f qc--.1 qc--internals.1 qc--interp.1
-                rm -f qc--.pdf
-                rm -f qc--.man
+	rm -f *.dvi *.aux *.log *.toc *.ps               
+	rm -f cfg.tex modules.ps*
+	rm -f stack.tex stack.inc
+	rm -f refactor.tex refactor.inc
+	rm -f qc--.1 qc--internals.1 qc--interp.1
+	rm -f qc--.pdf
+	rm -f qc--.man
 
 
 
-clean.opt:  
-                echo "nothing to do for $target"
-                
+clean.opt:VQ:  
+	echo "nothing to do for $target"
+	
 clobber:V:      clean                
 
-depend:V:       
-                echo "nothing to do for $target"
+depend:VQ:
+	echo "nothing to do for $target"
 
 # ------------------------------------------------------------------ 
 # The details
 # ------------------------------------------------------------------ 
 
 '^'(cfg|refactor)'\.'tex'$':RD:        '\1'.nw
-                $NOWEAVE -delay $prereq > $target 
+	$NOWEAVE -delay $prereq > $target 
 
 '^'(index|stack)'\.'tex'$':RD:        '\1'.nw
-                $NOWEAVE        $prereq > $target 
+	$NOWEAVE        $prereq > $target 
 
 modules.ps:     modules.txt
-                a2ps -B -9 -r -f 12 -o $target modules.txt
+	a2ps -B -9 -r -f 12 -o $target modules.txt
 
 qc--.ps:        qc--.1
-                groff -man -Tps qc--.1 > $target 
+	groff -man -Tps qc--.1 > $target 
 
 qc--internals.ps:   qc--internals.1
-                groff -man -Tps qc--internals.1 > $target 
+	groff -man -Tps qc--internals.1 > $target 
 
 qc--interp.ps:  qc--interp.1
-                groff -man -Tps qc--interp.1 > $target
+	groff -man -Tps qc--interp.1 > $target
 
 # The qc--.man file is included as a string into the qc-- binary
 # and accessible from Lua as This.manual.
 
 qc--.man:D:     qc--.1
-                nroff -man qc--.1 | ul -t dump > $target                
+	nroff -man qc--.1 | ul -t dump > $target                

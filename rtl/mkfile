@@ -34,24 +34,24 @@ dvi:V:          $INC
 html:V:         $HTML
 
 test:VQ:
-                echo "nothing to be done"
+	echo "nothing to be done"
 
 depend:V:       $DEPEND
 
 clean.opt:V:    
-                rm -f *.cmx *.o
-                rm -f *.cmxa *.a *.cma
+	rm -f *.cmx *.o
+	rm -f *.cmxa *.a *.cma
 
 clean:V:        clean.opt
-                rm -f *.cmo *.cmi
+	rm -f *.cmo *.cmi
 
 clobber:V:      clean
-                rm -f *.output
-		rm -f *.html
-                rm -f *.dvi *.aux *.toc *.log *.tex *.inc *.ps
-                rm -f *.ml *.mli
-                rm -f *.c
-                rm -f $DEPEND                
+	rm -f *.output
+	rm -f *.html
+	rm -f *.dvi *.aux *.toc *.log *.tex *.inc *.ps
+	rm -f *.ml *.mli
+	rm -f *.c
+	rm -f $DEPEND                
 
 # ------------------------------------------------------------------ 
 # rules and tools for OCaml
@@ -94,45 +94,44 @@ MLI =           base.mli        \
 
 SCAN =          $ML $MLI
 
-CMO =           `echo $ML       | sed 's/\.ml/.cmo/g'`
-CMX =           `echo $ML       | sed 's/\.ml/.cmx/g'`
-
-OBJ =           uint64p.o
+CMO = ${ML:%.ml=%.cmo}
+CMX = ${ML:%.ml=%.cmx}
+OBJ = uint64p.o
 
 # ------------------------------------------------------------------ 
 # build the libraries
 # ------------------------------------------------------------------ 
 
 $LIBCMO:        $CMO $OBJ
-		$OCAMLC $OCAMLC_FLAGS -a -o $target $CMO
-                
+	$OCAMLC $OCAMLC_FLAGS -a -o $target $CMO
+	
 
 $LIBCMX:	$CMX $OBJ
-		$OCAMLO $OCAMLO_FLAGS -a -o $target $CMX
+	$OCAMLO $OCAMLO_FLAGS -a -o $target $CMX
 
 # ------------------------------------------------------------------ 
 # update hierarchy
 # ------------------------------------------------------------------ 
 
 $LIBDIR/$LIBCMO:    $LIBCMO dirs $OBJ
-		    for i in $LIBCMO *.mli *.cmi $OBJ; do
-		        cmp -s $i $LIBDIR/$i || cp $i $LIBDIR 
-		    done
+	for i in $LIBCMO *.mli *.cmi $OBJ; do
+	  cmp -s $i $LIBDIR/$i || cp $i $LIBDIR 
+	done
 
 $LIBDIR/$LIBCMX:    $LIBCMX dirs $OBJ
-		    for i in $LIBCMX $NAME.a *.mli *.cmi $OBJ; do
-		        cmp -s $i $LIBDIR/$i || cp $i $LIBDIR
-		    done
+	for i in $LIBCMX $NAME.a *.mli *.cmi $OBJ; do
+	  cmp -s $i $LIBDIR/$i || cp $i $LIBDIR
+	done
 
 dirs:VQ:
-                    for i in $LIBDIR; do
-                        if [ ! -d $i ]; then
-                            echo "missing directory $i"
-                            echo "invoke mk from the toplevel the first time"
-                            echo "to create all directories"
-                            false
-                        fi
-                    done    
+	for i in $LIBDIR; do
+	    if [ ! -d $i ]; then
+	        echo "missing directory $i"
+	        echo "invoke mk from the toplevel the first time"
+	        echo "to create all directories"
+	        false
+	    fi
+	done    
 
 # ------------------------------------------------------------------ 
 # extra rules for cases not covered by noweb.mk
@@ -142,13 +141,13 @@ uint64.cmo      \
 uint64.cmx:     uint64p.o
 
 uint64p.o:      uint64p.c
-                $OCAMLC $OCAMLC_FLAGS -c $prereq
+	$OCAMLC $OCAMLC_FLAGS -c $prereq
 
 uint64p.c:      uint64.nw
-                $NOTANGLE -L -R$target $prereq > $target
+	$NOTANGLE -L -R$target $prereq > $target
 
 uint64.inc:     uint64.nw
-                $NOWEAVE -delay -autodefs c -index $prereq > $target
+	$NOWEAVE -delay -autodefs c -index $prereq > $target
 
 # ------------------------------------------------------------------ 
 # recalculate dependencies
@@ -156,11 +155,10 @@ uint64.inc:     uint64.nw
 # ------------------------------------------------------------------ 
 
 $DEPEND: 	$SCAN
-		$OCAMLDEP $SCAN > $DEPEND
+	$OCAMLDEP $SCAN > $DEPEND
 
 # ------------------------------------------------------------------ 
 # include dependencies
 # ------------------------------------------------------------------ 
 
 <$DEPEND
-
