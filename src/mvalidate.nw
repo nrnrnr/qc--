@@ -23,32 +23,33 @@ exception RTLInvalid of string
 <<mvalidate.ml>>=
 let () = Debug.register "mvalidate" "debug machine-environment validator"
 let rtl t r =
-  let m  = t.Target.machine_env.Target.ops in
+  let impossf fmt = Printf.kprintf Impossible.impossible fmt in
+  let imposs = Impossible.impossible in
   let remove_bits = function
     | Types.Bits n -> n
     | Types.Bool   -> 1
   in
-  let m = List.map (fun (s, bs) -> (s, List.map remove_bits bs)) m in
+  let m  = t.Target.machine_env.Target.ops in
+  let m  = List.map (fun (s, bs) -> (s, List.map remove_bits bs)) m in
   let w  = t.Target.wordsize in
   let ns = t.Target.machine_env.Target.literal in
   Debug.eprintf "mvalidate" "ns is %d length\n" (List.length ns);
   let spaces = Vfp.mk_space w :: t.Target.spaces in
-  let name = t.Target.name in
+  let name   = t.Target.name in
   let machine_widths opname =
     let all = List.find_all (fun (opname',_) -> opname = opname') m in
     List.map (fun (opname, ws) -> ws) all
   in
   let xy_or_z tostr xyz =
     match List.rev xyz with
-    | []    -> Impossible.impossible ("No integer literal sizes available for target '"^name^"'")
+    | []    -> impossf "No literal sizes specified for target '%s'" name
     | [z]   -> tostr z
     | z::yx ->
-        let xy = List.rev (List.map tostr yx) in
+        let xy  = List.rev (List.map tostr yx) in
         let xy' = String.concat ", " xy in
-        xy'^" or "^tostr z
+          xy'^" or "^tostr z
   in
   let sprintf = Printf.sprintf in
-  let imposs = Impossible.impossible in
   let reject fmt = Printf.kprintf (fun s -> raise (RTLInvalid s)) fmt in
   let reg s n p1 p2 =
     let space =
@@ -76,19 +77,26 @@ let rtl t r =
   and exp = function
     | RP.Fetch(l, n) -> loc l
     | RP.App((opname, ws), es) ->
+        let str_of_opty (opname, ws) =
+          let (argw, resw) = Rtlop.Types.mono (Rtl.opr opname ws) in
+          let argw = List.map remove_bits argw in
+          let resw = remove_bits resw in
+          String.concat "->" (List.map string_of_int (argw @ [resw]))
+        in
         (* like the widener, we give up on operations not in M *)
         let wss' = machine_widths opname in
-        let op_possible =
-            wss' = [] || List.exists (fun ws' -> List.for_all2 (fun w w' -> w <= w') ws ws') wss'
-        in
-        if op_possible then List.for_all exp es
+        let trivial_possible = wss' = [] in
+        let op_possible = List.exists (List.for_all2 (fun w w' -> w <= w') ws) wss' in
+        if Debug.on "mvalidate" then
+          (Printf.eprintf "Validating %%%s::%s..." opname (str_of_opty (opname, ws));
+           if trivial_possible then
+             Debug.eprintf "mvalidate" "trivially possible\n"
+           else if op_possible then
+             Debug.eprintf "mvalidate" "matches at %s\n" (xy_or_z str_of_opty (List.map (fun x -> (opname, x)) wss'))
+           else Debug.eprintf "mvalidate" "impossible\n");
+        if trivial_possible || op_possible then
+           List.for_all exp es
         else
-          let str_of_opty (opname, ws) =
-            let (argw, resw) = Rtlop.Types.mono (Rtl.opr opname ws) in
-            let argw = List.map remove_bits argw in
-            let resw = remove_bits resw in
-            String.concat "->" (List.map string_of_int (argw @ [resw]))
-          in
           reject "No acceptable widths for %%%s on target '%s'; asked for %s, target accepts %s" opname name 
             (str_of_opty (opname, ws)) (xy_or_z str_of_opty (List.map (fun x -> (opname, x)) wss'))
     | RP.Const c -> const c

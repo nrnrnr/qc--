@@ -286,7 +286,11 @@ type solution = {e : RP.exp; m : width; cost : int; e' : RP.exp;
 [[fill_env]] gives the fill type of each operator, and [[gamma]] gives
 a fill type to each local variable.
 <<types>>=
-type machine_env = (string * (width list)) list
+type machine_env = { ops      : (string * (width list)) list
+                   ; literals : width list
+                   ; pointer  : width
+                   ; word     : width
+                   }
 type fill_env    = (string * fill * index) list
 let (gamma : (string, (fill * int)) Hashtbl.t) = Hashtbl.create 50
 @ 
@@ -918,15 +922,15 @@ let var_name = function
   | RP.Fetch((RP.Var(nm,_,_) | RP.Global(nm,_,_)),_) -> nm
   | _ -> "/*" (* impossible name *)
 
-let ast_combine litwidths m solns = function
+let ast_combine m solns = function
   | RP.Const(RP.Bool b) as e -> mksolutions_lit_bool e
   | RP.Const(RP.Bits b) as e ->
-      (mksolutions_lit_bits litwidths Z e) @
-      (mksolutions_lit_bits litwidths S e) @
-      (mksolutions_lit_bits litwidths H e)
+      (mksolutions_lit_bits m.literals Z e) @
+      (mksolutions_lit_bits m.literals S e) @
+      (mksolutions_lit_bits m.literals H e)
   | (RP.Fetch(RP.Mem(s,agg,w,addr,a),_)) as e ->
-      let best = List.concat solns in
-      let best = List.find_all (fun s -> fill s = Z (* req mach ptr size *)) best in
+      let all = List.concat solns in
+      let best = List.find_all (fun s -> fill s = Z && s.w = m.pointer) all in
       if best = [] then
           imposs ("Couldn't widen "^(Rtlutil.ToString.exp (Up.exp e)))
       else
@@ -939,7 +943,7 @@ let ast_combine litwidths m solns = function
       mksolutions_var (var_name e) e w
   | RP.App((("sx"|"zx" as ext),   ws), [arg]) -> mksolutions_ext ext ws solns
   | RP.App(("lobits",             ws), [arg]) -> mksolutions_trunc ws solns
-  | RP.App((opname,               ws), args) -> mksolutions_op m solns opname ws args
+  | RP.App((opname,               ws), args)  -> mksolutions_op m solns opname ws args
   | _  -> imposs "Widen.ast_combine couldn't handle the rtl"
 @ 
 
@@ -953,9 +957,9 @@ let rec bottom_up f = function
 [[all_solutions]] is where the two phases of the dynamic programming
 algorithm are applied bottom-up on each AST node.
 <<dynamic programming>>=
-let all_solutions litwidths m =
+let all_solutions m =
   let solve_node known e =
-    (find_reachable m []) (solutions_unique (ast_combine litwidths m known e)) in
+    (find_reachable m []) (solutions_unique (ast_combine m known e)) in
   bottom_up solve_node
 @ 
 
@@ -1120,10 +1124,10 @@ let op_fill_types =
   ; "bit",    [[Z],G]
   ]
 
-let machine_has menv opname ws = List.mem (opname,ws) menv
+let machine_has m opname ws = List.mem (opname,ws) m.ops
 
-let machine_widths menv opname =
-  let all = List.find_all (fun (opname',_) -> opname = opname') menv in
+let machine_widths m opname =
+  let all = List.find_all (fun (opname',_) -> opname = opname') m.ops in
     List.map (fun (opname,ws) -> ws) all
 
 let find_exts_from m w extname =
@@ -1186,15 +1190,17 @@ just to match what some C-- frontends seem to want to do...not that it matters.
 <<widen.ml>>=
 let dpwiden t r =
   let targetwidth = t.Target.wordsize in
-  let m = t.Target.machine_env.Target.ops in
+  let ptrwidth = t.Target.pointersize in
+  let ops = t.Target.machine_env.Target.ops in
   let remove_bits = function
     | Types.Bits n -> n
     | Types.Bool   -> 1
   in
-  let m = List.map (fun (s, bs) -> (s, List.map remove_bits bs)) m in
+  let ops = List.map (fun (s, bs) -> (s, List.map remove_bits bs)) ops in
   let litwidths = t.Target.machine_env.Target.literal in
+  let m = {ops=ops; literals=litwidths; pointer=ptrwidth; word=targetwidth} in
   let find_best_soln r tau w =
-    let solns  = all_solutions litwidths m r in
+    let solns  = all_solutions m r in
     let solns  = List.find_all (fun s -> width s = w && fill s = tau) solns in
     if solns = [] then
       imposs ("Couldn't widen "^Rtlutil.ToString.exp (Up.exp r))
@@ -1204,7 +1210,7 @@ let dpwiden t r =
       soln.e'
   in
   let rec widen_loc = function
-    | RP.Mem(sp,agg,w,e,a) -> RP.Mem(sp,agg,w,find_best_soln e Z targetwidth, a)
+    | RP.Mem(sp,agg,w,e,a) -> RP.Mem(sp,agg,w,find_best_soln e Z ptrwidth, a)
 (* the following might be wrong...shouldn't we update w? *)
     | RP.Slice(w,i,l)      -> RP.Slice(w,i, widen_loc l)
     | l                    -> l
