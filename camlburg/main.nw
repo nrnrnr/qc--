@@ -139,7 +139,7 @@ flag is present, B<mlburg> emits the normalized rule set to stdout.
 
 B<Mlburg> accepts a Burg specification that conforms to the following
 EBNF grammar. Terminals are enclosed double quotes, all other symbols
-are nonterminals.
+are nonterminals. 
 
     spec    :   { decl } "%%" { rule }
 
@@ -156,6 +156,15 @@ are nonterminals.
             |   ident "(" pattern { "," pattern } ")"
             |   ident "(" ")"
             |   ident [ ":" ident ]
+
+In addition to the grammar above, a rule pattern must not be a literal
+number, literal string, or a terminal variable. Those can only appear as
+constructor arguments! 
+
+    alpha       = ['a'-'z' 'A'-'Z']
+    digit       = ['0'-'9']
+    ident       = alpha(digit|alpha|'_')*
+    number      = digit+
 
 A I<string> is enclosed in double quotes, a I<number> is a non-negative
 integer, I<camlcode> is arbitrary code that may include properly nested
@@ -265,17 +274,18 @@ constructor. For the example above, these are:
     val conSUB   : t -> t -> t   
 
 To find the cheapest cover for a subject tree, the client walks over the
-subject tree and calls the appropriate function for the actual node.  At
-a leave with an integer constant, it calls B<conCONST>. There are two
-rules for the B<CONST> constructor, depending on the integer constant
-the generated code will select the cheaper one and return a value of
-type B<t>. This value represents the user-provided code of the selected
-rule and the associated cost.  If the client comes to a node with an
-B<ADD> constructor, it calls B<conADD> and passes values as arguments
-that were returned by the above functions when the child notes were
-visited. Finally, the client comes to the root node and receives a final
-B<t> value for it. This value represents the cheapest cover for the
-subject tree. 
+subject tree and calls the appropriate function for the actual node: For
+every pattern constructor I<C> the generated code contains a function
+B<con>I<C>.  At a leave with an integer constant, it calls B<conCONST>.
+There are two rules for the B<CONST> constructor, depending on the
+integer constant the generated code will select the cheaper one and
+return a value of type B<t>. This value represents the user-provided
+code of the selected rule and the associated cost.  If the client comes
+to a node with an B<ADD> constructor, it calls B<conADD> and passes
+values as arguments that were returned by the above functions when the
+child notes were visited. Finally, the client comes to the root node and
+receives a final B<t> value for it. This value represents the cheapest
+cover for the subject tree. 
 
 Typically, the root node of a subject tree is covered only by a single
 nonterminal, for example the B<number> nonterminal. When the B<action>
@@ -307,6 +317,9 @@ L<ocaml>.
 Fraser and Hanson: "Engineering a Simple, Efficient Code Generator
 Generator", ACM Letters on Programming Languages and Systems 1, 3 (Sep
 1992), 213-226.
+
+http://www.cminusminus.org/. B<Mlburg> is part of the Quick C--
+compiler.
 
 =head1 AUTHORS
 
