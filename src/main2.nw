@@ -126,20 +126,7 @@ qc-- - the quick c-- compiler
 
 =head1 SYNOPSIS
 
-B<qc-- -version>
-
-B<qc-- -help>
-
-B<qc-- -lex> I<file.c-->
-
-B<qc-- -asdl> I<file.c-->
-
-B<qc-- -pp> [ B<-w> I<width> ] I<file.c-->
-
-B<qc-- -check> I<file.c-->
-
-B<qc-- -c> B<-target> I<target> I<file.c-->
-B<qc-- -target> I<target> B<-c> I<file.c-->
+B<qc--> I<"lua command">
 
 =head1 DESCRIPTION
 
@@ -150,48 +137,77 @@ currently accepted by B<qc--> is described in section L<"GRAMMAR">.
 
 =head1 OPTIONS
 
+Unlike most compilers B<qc--> is not controlled by command line switches
+but by a built-in Lua 2.5 interpreter. Different phases of the compiler are
+available as Lua primitives such that the user can write a Lua script to
+control B<qc-->. The few existing command line switches therefore
+control the Lua interpreter, rather than the compiler directly.
+
 =over
 
-=item B<-version>
+=item I<"lua command">
 
-Report the version of B<qc--> to stdout. The version is essentialy the
-date the compiler was built.
+B<qc--> takes one argument that is passed to the Lua interpreter for
+evaluation.
 
-=item B<-help>
+=back
 
-Print a short usage message to stdout.
+=head1 LUA TYPES
 
-=item B<-asdl> I<file>
+In addition to the six Lua core-types the Lua interpreter in the
+B<qc--> compiler offers the following types that represent internal
+compiler data structures:
 
-Parse I<file> and print the abstract syntax in ASDL format to stdout. 
-The ASDL format is a cross-platform cross-compiler format to exchange
-an abstract syntax.  The B<-asdl> option thus exports the abstract
-syntax of a C-- program to a file which possibly can be read by
-another compiler that supports ASDL as its input format.
+=over
 
-=item B<-pp> [ B<-w> I<width> ]I<file>
+=item I<asm> Assembly code.
 
-Parse I<file> and write a pretty printed concrete syntax to stdout. 
-The default width for output is 72 characters; it can be changed with the
-B<-w> flag. 
+=item I<ast> C-- abstract syntax.
 
-=item B<-lex> I<file>
+=item I<env> Symbol table.
 
-Scan (lex) I<file> and write a representation of the tokens in I<file> 
-to stdout.
+=item I<cfg> Control-flow graph.
 
-=item B<-check> I<file>
+=item I<doc> Printable output.
 
-Check the static semantics of I<file>. Error messages are written to
-stdout. In case of errors in the static semantics of I<file> the
-compiler exits with an exit code different from 0.
+=item I<target> Target architecture.
 
-=item B<-c> B<-target> I<target> I<file>
+=back
 
-Check the static semantics of I<file>, compile it into internal data
-structures and back to C--. The I<target> is ignored, the C-- output is
-written to stdout. This is a development option; do not expect the
-output to be legal C--.
+=head1 LUA FUNCTIONS
+
+The B<qc--> compiler is controlled by functions that consume and produce
+the above types:
+
+=over
+
+=item B<Driver.version>(I<string>). Prints version information and
+copyright to stdout.
+
+=item B<Driver.dummy>. A I<target> value for our only current target.
+
+=item B<Driver.scan>(I<string>). Takes a file name, scans it and prints
+all tokens to stdout. This is only useful to debug the scanner.
+
+=item B<Driver.parse>(I<string>). Takes a file name and parses the file
+as a B<C--> program. Returns its abstract syntax as an I<ast> value.
+
+=item B<Driver.emit_asdl>(I<ast>). Emits an abstract syntax I<ast> to
+stdout in ASDL format.  The ASDL format is a cross-platform
+cross-compiler format to exchange an abstract syntax.  
+
+=item B<Driver.check>(I<ast>). Takes an abstract syntax I<ast> and checks
+its static semantics. Returns a symbol table I<env> upon success.
+
+=item B<Driver.compile>(I<ast>, I<target>, I<env>). Compiles an <ast>
+for a I<target>, using symbol table I<env>. Returns an assembly program
+I<asm>.
+
+=item B<Driver.assemble>(I<asm>). Assembles an I<asm> value to a
+printable I<doc> format.
+
+=item B<Driver.print>(I<doc>, I<number>). Formats I<doc> for a line width
+of I<number> characters and prints it to stdout.
 
 =back
 
@@ -204,13 +220,22 @@ exit code 1.  Any internal compiler error leads to exit code 2.
 =head1 SEE ALSO
 
 http://www.cminusminus.org/, 
+http://www.lua.org/,
 http://www.cs.princeton.edu/zephyr/ASDL/
 
-=head1 AUTHOR
+=head1 AUTHORS
 
 Christian Lindig <lindig@eecs.harvard.edu>, 
-Norman Ramsey <nr@eecs.harvard.edu>
+Norman Ramsey <nr@eecs.harvard.edu>,
+Daniel Damian <damian@eecs.harvard.edu>,
+John Dias <dias@eecs.harvard.edu>,
+Jonathan D. Eddy <eddy@fas.harvard.edu>
 @
+          
+      
+% ------------------------------------------------------------------  
+\section{Grammar Manual Page}
+% ------------------------------------------------------------------  
 
 <<qc--grammar.pod>>=
 =head1 NAME
@@ -236,10 +261,13 @@ implementation reports an otherwise unexplainable parse error.
 http://www.cminusminus.org/, 
 http://www.cs.princeton.edu/zephyr/ASDL/
 
-=head1 AUTHOR
+=head1 AUTHORS
 
 Christian Lindig <lindig@eecs.harvard.edu>, 
-Norman Ramsey <nr@eecs.harvard.edu>
+Norman Ramsey <nr@eecs.harvard.edu>,
+Daniel Damian <damian@eecs.harvard.edu>,
+John Dias <dias@eecs.harvard.edu>,
+Jonathan D. Eddy <eddy@fas.harvard.edu>
 @
           
       
@@ -251,7 +279,7 @@ To include some version information into the main binary we provide
 the [[This]] module.  Its source code [[this.ml]] is created during
 the build process from [[this.in]].  Currently only the version
 information stays here but it is a useful place for other informations
-that change frequently.  Note, that this code should \emph{note} be
+that change frequently.  Note, that this code should \emph{not} be
 used to control the behavior of the program.  We therefore write all
 these informations to a stream to emphasize this.
 
