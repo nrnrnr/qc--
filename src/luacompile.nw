@@ -589,7 +589,11 @@ end
 function Opt.standard(backend, asm, B)
   if not B then error("Opt.standard called without backplane argument") end
   Stages.null = B.stage {name="empty stage", fn=Stages.nullf}
-  local assemble = Driver.proc_assembler(asm) 
+  local assemble  = Driver.proc_assembler(asm) 
+	local emit_data = nil
+  if backend.emit_data then
+    emit_data = Opt.verb(B.stage { name = "emit_data", fn = backend.emit_data(asm)})
+  end
   local x = B.seq
     { Opt.verb(backend.placevars)  or Stages.null
     , Opt.verb(Optimize.simplify_exps) or Stages.null
@@ -602,6 +606,7 @@ function Opt.standard(backend, asm, B)
     , Opt.verb(backend.freeze)     or Stages.null
     , Opt.verb(backend.rmvfp)      or Stages.null
     , Opt.verb(B.stage { name="assemble procedure", fn = assemble })
+    , emit_data or Stages.null
     }
   return x
 end
@@ -681,6 +686,7 @@ function Backend.make(b)
     , rmvfp     = b.rmvfp     or nil
     , asm       = b.asm       or Asm.cmm
     , emit      = b.emit      or Driver.assemble
+    , emit_data = b.emit_data or nil
     , compile   = Compile.file
     }   
 end
@@ -722,11 +728,12 @@ Backend.x86 =
   , preopt    = Optimize.remove_nops
   , expand    = Expander.x86
   , liveness  = Liveness.liveness
-  , ralloc    = Ralloc.color
+  , ralloc    = Ralloc.dls
   , freeze    = X86.layout
   , rmvfp     = Stages.replace_vfp
   , asm       = Asm.x86
   , emit      = Driver.assemble
+  , emit_data = Runtime.emit_data
   , compile   = Compile.file
   }   
 
@@ -741,11 +748,12 @@ Backend.mips =
   , placevars = Placevar.context(Placevar.mips, "mips")
   , expand    = Expander.mips
   , liveness  = Liveness.liveness
-  , ralloc    = Ralloc.color
+  , ralloc    = Ralloc.dls
   , freeze    = Mips.layout
   , rmvfp     = Stages.replace_vfp
   , asm       = Asm.mips
   , emit      = Driver.assemble
+  , emit_data = Runtime.emit_data
   , compile   = Compile.file
   }   
 
@@ -759,11 +767,12 @@ Backend.alpha =
   , placevars = Placevar.context(Placevar.x86, "x86") -- wrong!
   , expand    = Expander.alpha
   , liveness  = Liveness.liveness
-  , ralloc    = Ralloc.color
+  , ralloc    = Ralloc.dls
   , freeze    = Alpha.layout
   , rmvfp     = Stages.replace_vfp
   , asm       = Asm.alpha
   , emit      = Driver.assemble
+  , emit_data = Runtime.emit_data
   , compile   = Compile.file
   }   
 
@@ -779,11 +788,12 @@ Backend.ppc =
 	           { Pic.ppc_pic, Stages.assert('proper pic') }
   , expand    = Expander.ppc
   , liveness  = Liveness.liveness
-  , ralloc    = Ralloc.color
+  , ralloc    = Ralloc.dls
   , freeze    = Dummy.layout
   , rmvfp     = Stages.replace_vfp
   , asm       = Asm.ppc
   , emit      = Driver.assemble
+  , emit_data = Runtime.emit_data
   , compile   = Compile.file
   }   
 
@@ -797,11 +807,12 @@ Backend.ia64 =
   , preopt    = Optimize.remove_nops
   , expand    = Expander.ia64
   , liveness  = Liveness.liveness
-  , ralloc    = Ralloc.color
+  , ralloc    = Ralloc.dls
   , freeze    = Ia64.layout
   , rmvfp     = Stages.replace_vfp
   , asm       = Asm.ia64
   , emit      = Driver.assemble
+  , emit_data = Runtime.emit_data
   , compile   = Compile.file
   }
 @
