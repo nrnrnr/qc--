@@ -715,7 +715,7 @@ So, we have a separate defmap and outmap, where the defmap keeps any dead defini
 <<[[choose_varMaps]] finds varIn and varOut maps for a node>>=
   let inmap,outmap = VM.sync_maps inmap outmap in
   let defmap = outmap in
-  (*VM.print "nearly outmap" outmap;*)
+  (*VM.print "defmap" outmap;*)
   let outmap = expire_dead_defs outmap in
   (*VM.print "final  inmap" inmap;*)
   (*VM.print "final outmap" outmap;*)
@@ -846,7 +846,7 @@ other).
     match get_copy_regs node with
     | Some regs ->
       let (to_alloc, other) = order regs in
-      if Register.eq to_alloc t then
+      if Register.eq to_alloc t && not (Vfp.is_vfp (RP.Reg other)) then
           try let r = if is_tmp tgt other then choose_reg map other else other in
               get_avail_reg state t r alloc_prefs
           with Not_found -> alloc_prefs state t

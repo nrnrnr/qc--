@@ -672,7 +672,8 @@ untag:
 .section .text
 .section .text
 raise:
-	movl (%esp),%ecx
+	movl %esp,%ecx
+	movl (%ecx),%ecx
 .Linitialize_continuations_l100:
 .Lproc_body_start_l99:
 	movl %eax,%edx

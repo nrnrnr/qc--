@@ -354,7 +354,8 @@ g:
 .section .text
 .section .text
 h:
-	movl (%esp),%ecx
+	movl %esp,%ecx
+	movl (%ecx),%ecx
 .Linitialize_continuations_l72:
 .Lproc_body_start_l71:
 	movl $99,%ecx
