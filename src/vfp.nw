@@ -1,0 +1,131 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% vi users, do your worst on this line!
+
+\section{Virtual frame pointer}
+
+This file contains some notes about a virtual frame pointer.
+One day it may contain a substitution algorithm.
+
+The problem we're trying to solve is how to deal with a stack pointer
+that moves around.
+\begin{itemize}
+\item
+In the presence of tail calls, a stack pointer may have at least three
+values: the value on entry, the value on exit, and the value between
+prolog and epilog.
+\item
+Depending on calling convention, the stack pointer may be moved by a
+callee.
+\item
+On some targets, it may be pleasant to use push or pop instructions to
+save or restore nonvolatile registers.
+\end{itemize}
+If the stack pointer moves, it is difficult to use it to address the
+activation record.  This note suggests a solution by means of a
+\emph{virtual frame pointer}.
+
+A virtual frame pointer is an immutable run-time value used to address
+locations on the stack.
+For simplicity, we say that the value of the virtual frame pointer is
+the value the stack pointer had at procedure entry.
+
+To use a virtual frame pointer effectively, we require certain
+conventions:
+\begin{itemize}
+\item
+All addressing expressions referring to data on the stack are written
+in the form $\mathtt{Fetch}(\vfp)+k$, where $k$~is a (possibly late) compile-time
+constant.\footnote
+{From here on, we omit the \texttt{Fetch}.}
+The stack pointer is never used in an addressing expression.
+\item
+The \vfp\ is immutable, so it never appears in an lvalue context.
+\item
+We normally set $\sp$ by an assignment of the form
+\mbox{$\sp \gets \vfp + k$}, but we might also adjust the stack pointer by an
+assignment of the form 
+\mbox{$\sp \gets \sp + k$}.
+\item 
+All addressing expressions returned by the block abstraction are of
+the form $\vfp+k$.
+\end{itemize}
+
+At procedure entry, the calling convention dictates where the stack
+pointer is relative to the overflow incoming parameters (and possibly
+return address).
+This is probably at the extreme young end of the stack (high or low
+depending on the direction of stack growth).
+In any case, the calling convention should provide not only the block
+and the locations of parameters but the location of the stack pointer.
+This location is, of course, where the virtual frame pointer points.
+
+To enter the procedure, we need to allocate its activation record and
+to move all the parameters, the return 
+address, and the callee-saves registers into their ``private''
+locations, where they reside for the duration of the procedure.
+\begin{enumerate}
+\item
+Find the extreme young end of the stack frame and call that
+location~$y$.
+Invent a fresh, late compile-time constant $n$~to stand for the frame
+size, and write the equation $y=\vfp-n$.
+\item
+Emit the instruction $\sp \gets \vfp-n$.
+\item
+Emit a big shuffle as a single RTL.
+This shuffle does all the moves noted above.
+It's the code expander's job to eliminate redundant moves and do the
+remaining moves in the right order.
+It's the job of 
+the code that chooses stack slots for variables and callee-saves
+registers to maximize the number of redundant moves.
+\end{enumerate}
+This prolog is very simple, but it may be hard to discover push
+instructions.
+On a machine that favors push instructions (such as the $x$86), 
+we might want a somewhat different prolog.
+
+The epilog works similarly, by issuing a big shuffle for the
+nonvolatile registers and the return value.
+
+After the stack is frozen, we can compute at each node~$n$ the equation
+\mbox{$\vfp = \sp+k_n$}, where  $k_n$~may be different at each node.
+We know that $\vfp$~is immutable, and that on entry $\vfp=\sp$.
+We can therefore start at the entry node and propagate information
+forward.
+\begin{itemize}
+\item
+If we encounter a node that doesn't touch \sp, nothing happens.
+\item
+If we know $\vfp=\sp+k$ and we
+ encounter a node with \mbox{$\sp \gets \sp+k'$}, 
+then after that node \mbox{$\vfp=\sp+(k-k')$}.
+\item
+If we know $\vfp=\sp+k$ and we
+ encounter a node with \mbox{$\sp \gets \vfp+k'$}, 
+then after that node $\vfp=\sp-k'$.
+\item
+If we encounter any other sort of node, the compiler is broken, and we
+halt with an assertion failure.
+\end{itemize}
+We also need to check the equations for consistency at each join point
+in the control-flow graph.
+
+After we have $\vfp=\sp+k_n$ at each node, we can substitute
+appropriately for $\vfp$ and simplify.
+One hopes this step creates no additional work in the code expander.
+(In real life, we can probably combine the substitution and the
+computation. The code will appear in this file.) 
+
+
+
+
+Other notes:
+\begin{itemize} 
+\item 
+It is OK to add a possibly redundant assignment to \sp\ on an edge
+flowing out of a call site.
+If the call does change the stack pointer, it will be reset as needed.
+If the call does not change the stack pointer, the redundant
+assignment can be optimized away.
+\end{itemize}
