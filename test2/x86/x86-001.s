@@ -105,11 +105,10 @@ cmpl %eax,%eax
 jle p_l9
 jmp p_l10
 L:
-movl $99,%edx
+movl $99,%ecx
 movl $32,%eax
-movl %esp,%ecx
-addl %eax,%ecx
-movl %edx,(%ecx)
+addl %eax,%esp
+movl %ecx,(%esp)
 ret
 jmp p_l9
 p_l10:

@@ -19,9 +19,8 @@ movl %ebx,(%ecx)
 addl %ecx,%eax
 addl %edx,%eax
 movl $32,%ecx
-movl %esp,%edx
-addl %ecx,%edx
-movl %eax,(%edx)
+addl %ecx,%esp
+movl %eax,(%esp)
 ret
 nop
 nop
