@@ -46,6 +46,15 @@ Here are some basic types and operations:
 type uid
 type label = uid * string
 
+type regs  = Register.Set.t  (* sets of regs for dataflow *)
+type xregs = Register.SetX.t (* sets of regs for dataflow *)
+type contedge = { kills:regs; defs:regs; node:label }
+
+module Rep : sig
+  <<exposed types for [[Rep]] module>>
+  <<declarations of [[Rep]]'s public functions>>
+end
+
 type graph
 type zgraph
 
@@ -103,11 +112,6 @@ After insertion, the entry node remains the focus.
 %%  an unfocused graph.
 %%  In either case,  the new node becomes the new focus.
 <<zipcfg.mli>>=
-type regs  = Register.Set.t  (* sets of regs for dataflow *)
-type xregs = Register.SetX.t (* sets of regs for dataflow *)
-type contedge = { kills:regs; defs:regs; node:label }
-
-
 val uid : unit -> uid
 type machine = { goto    : label -> Rtl.rtl;
                  cbranch : Rtl.exp * label -> Rtl.rtl;
@@ -146,6 +150,81 @@ Mutation---ugh!
 <<zipcfg.mli>>=
 val set_spans : zgraph -> Spans.t -> unit  (* set spans at focus *)
 @ 
+\subsubsection{Exposure}
+
+A basic block is a [[first]] node, followed by zero or more [[middle]]
+nodes, followed by a [[last]] node.
+<<exposed types for [[Rep]] module>>=
+type 'a edgelist = 'a list (* could be array *)
+<<node types>>
+type first
+  = Entry
+  | Label of label * user * Spans.t option ref  (* user labels can't be deleted *)
+and user = User of bool  (* is label a user label? *)
+
+type middle
+  = Instruction  of Rtl.rtl
+  | Stack_adjust of Rtl.rtl
+  | Assertion    of Rtl.rtl
+
+type last
+  = Exit    of exit_num  
+  | Branch  of Rtl.rtl * label
+  | Cbranch of Rtl.rtl * label * label    (* true, false *)
+  | Mbranch of Rtl.rtl * label edgelist (* possible successors *)
+  | Call    of call  
+  | Cut     of Rtl.rtl * contedge edgelist * regs  (* out edges, registers used *)
+  | Return  of exit_num * Rtl.rtl * regs
+  | Jump    of Rtl.rtl * regs * string list
+                   (* inst, registers used, targets *)
+  | Forbidden of Rtl.rtl (* cause a run-time error *)
+and exit_num = int
+@ In a complete graph for a procedure, the [[Exit]] node should not
+appear, but it is useful in a subgraph (e.g., replacement for a node).
+Also, perhaps a [[Jump]] should get an exit number?  Not really clear.
+@
+To sequence these things,
+a~[[head]] is a [[first]] followed by zero or more [[middle]]s.
+A~[[tail]] is  zero or more [[middle]]s followed by a [[last]].
+<<exposed types for [[Rep]] module>>=
+type head = First of first | Head of head * middle
+type tail = Last  of last  | Tail of middle * tail
+@
+And now the zipper.
+In the future, we may well simplify these to just two cases.
+<<exposed types for [[Rep]] module>>=
+type zblock
+  = Start  of first * tail           (* focus on first *)
+  | Middle of head * middle * tail   (* focus on middle *)
+  | End    of head * last            (* focus on last *)
+@ An alternative would be to make [[type zblock = head * tail]], with
+focus on the first element of the tail.  Not sure if that is flexible
+enough, however---it is often useful to focus on a [[first]] node.
+
+Another alternative would be to inline the definitions of [[first]] and
+[[last]] into [[head]] and [[tail]], doing away with a level of
+indirection.
+But this would probably make it harder for clients to reason about
+nodes in isolation.
+@
+A block need not be in zipper form:
+<<exposed types for [[Rep]] module>>=
+type block = first * tail
+@ 
+We expose some utility functions:
+<<declarations of [[Rep]]'s public functions>>=
+val zip   : zblock -> block
+val unzip : block  -> zblock
+val goto_start : zblock -> first * tail
+val goto_end   : zblock -> head  * last
+val first      : zblock -> first
+val last       : zblock -> last
+@ 
+Access to the representation:
+<<zipcfg.mli>>=
+val to_blocks : graph -> Rep.block Unique.Map.t
+val of_blocks : Rep.block Unique.Map.t -> graph
+@ 
 \subsection{Implementation}
 <<zipcfg.ml>>=
 module R = Rtl
@@ -168,69 +247,22 @@ type machine = { goto    : label -> Rtl.rtl;
 
 let uid = U.uid
 let entry_uid = U.distinguished_uid
-
+@ 
+\paragraph{Nodes and basic blocks}
+It is OK to open [[Rep]] because the definition is sitting right
+here---this [[open]] does not create the stereotypical problem of a
+mysterious [[open]] from a separately compiled module.
+<<zipcfg.ml>>=
 type regs  = Register.Set.t  (* sets of regs for dataflow *)
 type xregs = Register.SetX.t (* sets of regs for dataflow *)
 type contedge = { kills:regs; defs:regs; node:label }
+
+module Rep = struct
+  <<exposed types for [[Rep]] module>>
+  <<definitions of [[Rep]]'s public functions>>
+end
+open Rep
 @ 
-\paragraph{Nodes and basic blocks}
-<<zipcfg.ml>>=
-type user = User of bool  (* is label a user label? *)
-type first
-  = Entry
-  | Label of label * user * Spans.t option ref  (* user labels can't be deleted *)
-
-type middle
-  = Instruction  of Rtl.rtl
-  | Stack_adjust of Rtl.rtl
-  | Assertion    of Rtl.rtl
-@ 
-Unclear whether a jump should get an exit number or what it should
-mean (think about inlining).
-
-In a complete graph for a procedure, the [[Exit]] node should not
-appear, but it is useful in a subgraph (e.g., replacement for a node).
-<<zipcfg.ml>>=
-type 'a edgelist = 'a list (* could be array *)
-<<node types>>
-type exit_num = int
-
-type last
-  = Exit    of exit_num  
-  | Branch  of Rtl.rtl * label
-  | Cbranch of Rtl.rtl * label * label    (* true, false *)
-  | Mbranch of Rtl.rtl * label edgelist (* possible successors *)
-  | Call    of call  
-  | Cut     of Rtl.rtl * contedge edgelist * regs  (* out edges, registers used *)
-  | Return  of exit_num * Rtl.rtl * regs
-  | Jump    of exit_num * Rtl.rtl * regs * string list
-                   (* exit num, inst, registers used, targets *)
-  | Forbidden of Rtl.rtl (* cause a run-time error *)
-@ 
-Now the zipper:
-A [[head]] is a [[first]] followed by zero or more [[middle]]s.
-A [[tail]] is  zero or more [[middle]]s followed by a [[last]].
-<<zipcfg.ml>>=
-type head = First of first | Head of head * middle
-type tail = Last  of last  | Tail of middle * tail
-
-type zblock
-  = Start  of first * tail           (* focus on first *)
-  | Middle of head * middle * tail   (* focus on middle *)
-  | End    of head * last            (* focus on last *)
-@ An alternative would be to make [[type zblock = head * tail]], with
-focus on the first element of the tail.  Not sure if that is flexible
-enough, however.
-
-Another alternative is to inline the definitions of [[first]] and
-[[last]] into [[head]] and [[tail]], doing away with a level of
-indirection.
-But this would probably make it harder for clients to reason about
-nodes in isolation.
-@
-Without zipper:
-<<zipcfg.ml>>=
-type block = first * tail
 <<node types>>=
 type call = {         cal_i          : Rtl.rtl
             ;         cal_contedges  : contedge edgelist
@@ -242,11 +274,10 @@ type call = {         cal_i          : Rtl.rtl
             ;         cal_reads      : string list option
             ;         cal_writes     : string list option
             }
-@ 
 @
 \paragraph{Block manipulations}
 Convert block between forms.
-<<zipcfg.ml>>=
+<<definitions of [[Rep]]'s public functions>>=
 let goto_start =
   let rec revapp head tail = match head with
   | First f -> f, tail
@@ -267,7 +298,7 @@ let goto_end =
 
 let zip = goto_start
 let unzip (n, ns) = Start (n, ns)
-
+<<definitions of [[Rep]]'s public functions>>=
 let last =
   let rec last = function (Last l) -> l | Tail (_, t) -> last t in
   function
@@ -275,10 +306,12 @@ let last =
     | Middle (h, m, t) -> last t
     | End (h, l) -> l
 
-let goto_start : zblock -> first * tail = goto_start
-let goto_end   : zblock -> head  * last = goto_end
-let zip   : zblock -> block  = zip
-let unzip : block  -> zblock = unzip
+let first =
+  let rec first = function (First f) -> f | Head (h, _) -> first h in
+  function
+    | Start (f, t) -> f
+    | Middle (h, m, t) -> first h
+    | End (h, l) -> first h
 @ 
 \paragraph{Graph}
 For the graph, we want to be able to look up a block efficiently by
@@ -297,7 +330,7 @@ module type BLOCKS = sig
   val fold   : (block -> 'a -> 'a) -> t -> 'a -> 'a
 end
 
-module Blocks : BLOCKS = struct
+module Blocks : BLOCKS with type t = block UM.t = struct
   type t = block UM.t
   let id = function (Entry,_) -> entry_uid | (Label ((u, _), _, _),_) -> u
   let empty = UM.empty
@@ -312,6 +345,8 @@ end
 <<zipcfg.ml>>=  
 type graph  = Blocks.t
 type zgraph = zblock * Blocks.t
+let of_blocks g = g
+let to_blocks g = g
 @ 
 <<zipcfg.ml>>=
 let empty = Blocks.insert (Entry, Last (Exit 0)) Blocks.empty
@@ -350,7 +385,7 @@ let consl last g = match g with
 | _ -> impossf "focus not on entry node"
 
 let branch machine target = consl (Branch (machine.goto target, target))
-let jump rtl ~uses ~targets  = consl (Jump (0, rtl, uses, targets))
+let jump rtl ~uses ~targets  = consl (Jump (rtl, uses, targets))
 let cbranch machine =
   let f = machine.cbranch in
   fun exp ~ifso ~ifnot ->
