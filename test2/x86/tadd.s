@@ -152,8 +152,8 @@ Ljoin_l22:
 	addl %edx,%edi
 	movl (%ecx),%edx
 	movl %edx,(%edi)
-	movl 48(%esp),%ebp
 	movl 28(%esp),%ebx
+	movl 48(%esp),%ebp
 	movl 52(%esp),%esi
 	movl 56(%esp),%edi
 	leal 72(%esp), %esp
@@ -172,8 +172,8 @@ Ljoin_l18:
 	addl %edx,%ebx
 	movl (%ecx),%edx
 	movl %edx,(%ebx)
-	movl 48(%esp),%ebp
 	movl 28(%esp),%ebx
+	movl 48(%esp),%ebp
 	movl 52(%esp),%esi
 	movl 56(%esp),%edi
 	leal 72(%esp), %esp

@@ -74,8 +74,8 @@ Ljoin_l11:
 	addl %edx,%ebp
 	movl (%ecx),%edx
 	movl %edx,(%ebp)
-	movl 8(%esp),%ebp
 	movl 4(%esp),%ebx
+	movl 8(%esp),%ebp
 	leal 16(%esp), %esp
 	ret
 Ljoin_l12:
@@ -280,8 +280,8 @@ Ljoin_l32:
 	addl %ecx,%ebp
 	movl (%ebx),%ecx
 	movl %ecx,(%ebp)
-	movl 12(%esp),%ebp
 	movl 8(%esp),%ebx
+	movl 12(%esp),%ebp
 	leal 44(%esp), %esp
 	ret
 Ljoin_l31:
@@ -421,8 +421,8 @@ Ljoin_l64:
 	addl %edx,%ebp
 	movl (%ecx),%edx
 	movl %edx,(%ebp)
-	movl 12(%esp),%ebp
 	movl 8(%esp),%ebx
+	movl 12(%esp),%ebp
 	leal 24(%esp), %esp
 	ret
 Ljoin_l65:

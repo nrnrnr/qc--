@@ -84,8 +84,8 @@ Ljoin_l10:
 	addl %ecx,%ebx
 	movl 16(%esp),%ecx
 	movl %ecx,(%ebx)
-	movl 24(%esp),%ebp
 	movl 20(%esp),%ebx
+	movl 24(%esp),%ebp
 	leal 48(%esp), %esp
 	ret
 Ljoin_l24:
@@ -997,174 +997,42 @@ Ljoin_l56:
 	movl (%ecx),%edx
 	movl %edx,(%eax)
 	leal -4(%esp), %esp
-	movl $1,%eax
-	movl $4,%edx
-	movl $-12,%ecx
-	leal 88(%esp), %ebp
-	addl %ecx,%ebp
-	addl %edx,%ebp
-	movl (%ebp),%edx
+	movl $-12,%eax
+	leal 88(%esp), %edx
 	addl %eax,%edx
-	movl $-88,%eax
-	leal 88(%esp), %ebp
-	addl %eax,%ebp
-	movl %edx,(%ebp)
-	movl $-12,%edx
-	leal 88(%esp), %ebp
-	addl %edx,%ebp
-	movl (%ebp),%edx
-	movl %edx,%eax
+	movl (%edx),%eax
+	movl $1,%edx
+	movl $4,%ecx
+	movl $-12,%ebp
+	leal 88(%esp), %edi
+	addl %ebp,%edi
+	addl %ecx,%edi
+	movl (%edi),%ecx
+	addl %edx,%ecx
+	movl $-88,%edx
+	leal 88(%esp), %edi
+	addl %edx,%edi
+	movl %ecx,(%edi)
 	call tryy_62
 Ljoin_l53:
 	leal Cmm.global_area,%eax
 	movl (%eax),%ecx
 	movl $8,%eax
 	movl $-12,%edx
-	leal 84(%esp), %ebp
-	addl %edx,%ebp
-	movl (%ebp),%edx
+	leal 84(%esp), %edi
+	addl %edx,%edi
+	movl (%edi),%edx
 	addl %eax,%edx
 	movl (%edx),%eax
 	movl $8,%edx
-	movl $-12,%ebp
-	leal 84(%esp), %edi
-	addl %ebp,%edi
-	addl %edx,%edi
-	movl $-80,%edx
-	leal 84(%esp), %ebp
-	addl %edx,%ebp
-	movl (%edi),%edx
-	movl %edx,(%ebp)
-	movl $29,%edx
-	movl $-76,%ebp
-	leal 84(%esp), %edi
-	addl %ebp,%edi
-	movl %edx,(%edi)
-	movl $-84,%edx
-	leal 84(%esp), %edi
-	addl %edx,%edi
-	movl %eax,(%edi)
-	movl %ecx,56(%esp)
-	call tig_bounds_check
-Ljoin_l50:
-	leal Cmm.global_area,%eax
-	movl 56(%esp),%ecx
-	movl %ecx,(%eax)
-	movl $0,%eax
-	movl $4,%ecx
-	movl $1,%edx
-	movl $8,%edi
-	movl $-12,%ebp
-	leal 84(%esp), %ebx
-	addl %ebp,%ebx
-	addl %edi,%ebx
-	movl (%ebx),%edi
-	addl %edx,%edi
-	imull %ecx,%edi
-	movl $8,%ecx
-	movl $-12,%edx
-	leal 84(%esp), %ebx
-	addl %edx,%ebx
-	movl (%ebx),%edx
-	addl %ecx,%edx
-	movl (%edx),%ecx
-	addl %edi,%ecx
-	movl %eax,(%ecx)
-	leal Cmm.global_area,%eax
-	movl (%eax),%ecx
-	movl $16,%eax
 	movl $-12,%edi
-	leal 84(%esp), %edx
-	addl %edi,%edx
-	movl (%edx),%edi
-	addl %eax,%edi
-	movl (%edi),%eax
-	movl $4,%edi
-	movl $-12,%edx
-	leal 84(%esp), %ebx
-	addl %edx,%ebx
-	addl %edi,%ebx
-	movl (%ebx),%edi
-	movl $8,%ebx
-	movl $-12,%edx
 	leal 84(%esp), %ebp
-	addl %edx,%ebp
-	addl %ebx,%ebp
-	movl (%ebp),%ebx
-	addl %edi,%ebx
-	movl $-80,%edi
-	leal 84(%esp), %ebp
-	addl %edi,%ebp
-	movl %ebx,(%ebp)
-	movl $29,%ebx
-	movl $-76,%ebp
-	leal 84(%esp), %edi
-	addl %ebp,%edi
-	movl %ebx,(%edi)
-	movl $-84,%ebx
-	leal 84(%esp), %edi
-	addl %ebx,%edi
-	movl %eax,(%edi)
-	movl %ecx,60(%esp)
-	call tig_bounds_check
-Ljoin_l47:
-	leal Cmm.global_area,%eax
-	movl 60(%esp),%ecx
-	movl %ecx,(%eax)
-	movl $0,%eax
-	movl $4,%ecx
-	movl $1,%edx
-	movl $4,%edi
-	movl $-12,%ebx
-	leal 84(%esp), %ebp
-	addl %ebx,%ebp
-	addl %edi,%ebp
-	movl (%ebp),%edi
-	movl $8,%ebp
-	movl $-12,%ebx
-	leal 84(%esp), %esi
-	addl %ebx,%esi
-	addl %ebp,%esi
-	movl (%esi),%ebp
 	addl %edi,%ebp
 	addl %edx,%ebp
-	imull %ecx,%ebp
-	movl $16,%ecx
-	movl $-12,%edx
+	movl $-80,%edx
 	leal 84(%esp), %edi
 	addl %edx,%edi
-	movl (%edi),%edx
-	addl %ecx,%edx
-	movl (%edx),%ecx
-	addl %ebp,%ecx
-	movl %eax,(%ecx)
-	leal Cmm.global_area,%eax
-	movl (%eax),%ecx
-	movl $20,%eax
-	movl $-12,%ebp
-	leal 84(%esp), %edx
-	addl %ebp,%edx
-	movl (%edx),%ebp
-	addl %eax,%ebp
-	movl (%ebp),%eax
-	movl $4,%ebp
-	movl $-12,%edx
-	leal 84(%esp), %edi
-	addl %edx,%edi
-	addl %ebp,%edi
-	movl (%edi),%ebp
-	movl $7,%edi
-	movl $8,%edx
-	movl $-12,%esi
-	leal 84(%esp), %ebx
-	addl %esi,%ebx
-	addl %edx,%ebx
-	movl (%ebx),%edx
-	addl %edi,%edx
-	subl %ebp,%edx
-	movl $-80,%ebp
-	leal 84(%esp), %edi
-	addl %ebp,%edi
+	movl (%ebp),%edx
 	movl %edx,(%edi)
 	movl $29,%edx
 	movl $-76,%edi
@@ -1175,6 +1043,137 @@ Ljoin_l47:
 	leal 84(%esp), %ebp
 	addl %edx,%ebp
 	movl %eax,(%ebp)
+	movl %ecx,56(%esp)
+	call tig_bounds_check
+Ljoin_l50:
+	leal Cmm.global_area,%eax
+	movl 56(%esp),%ecx
+	movl %ecx,(%eax)
+	movl $0,%eax
+	movl $4,%ecx
+	movl $1,%edx
+	movl $8,%ebp
+	movl $-12,%edi
+	leal 84(%esp), %ebx
+	addl %edi,%ebx
+	addl %ebp,%ebx
+	movl (%ebx),%ebp
+	addl %edx,%ebp
+	imull %ecx,%ebp
+	movl $8,%ecx
+	movl $-12,%edx
+	leal 84(%esp), %ebx
+	addl %edx,%ebx
+	movl (%ebx),%edx
+	addl %ecx,%edx
+	movl (%edx),%ecx
+	addl %ebp,%ecx
+	movl %eax,(%ecx)
+	leal Cmm.global_area,%eax
+	movl (%eax),%ecx
+	movl $16,%eax
+	movl $-12,%ebp
+	leal 84(%esp), %edx
+	addl %ebp,%edx
+	movl (%edx),%ebp
+	addl %eax,%ebp
+	movl (%ebp),%eax
+	movl $4,%ebp
+	movl $-12,%edx
+	leal 84(%esp), %ebx
+	addl %edx,%ebx
+	addl %ebp,%ebx
+	movl (%ebx),%ebp
+	movl $8,%ebx
+	movl $-12,%edx
+	leal 84(%esp), %edi
+	addl %edx,%edi
+	addl %ebx,%edi
+	movl (%edi),%ebx
+	addl %ebp,%ebx
+	movl $-80,%ebp
+	leal 84(%esp), %edi
+	addl %ebp,%edi
+	movl %ebx,(%edi)
+	movl $29,%ebx
+	movl $-76,%edi
+	leal 84(%esp), %ebp
+	addl %edi,%ebp
+	movl %ebx,(%ebp)
+	movl $-84,%ebx
+	leal 84(%esp), %ebp
+	addl %ebx,%ebp
+	movl %eax,(%ebp)
+	movl %ecx,60(%esp)
+	call tig_bounds_check
+Ljoin_l47:
+	leal Cmm.global_area,%eax
+	movl 60(%esp),%ecx
+	movl %ecx,(%eax)
+	movl $0,%eax
+	movl $4,%ecx
+	movl $1,%edx
+	movl $4,%ebp
+	movl $-12,%ebx
+	leal 84(%esp), %edi
+	addl %ebx,%edi
+	addl %ebp,%edi
+	movl (%edi),%ebp
+	movl $8,%edi
+	movl $-12,%ebx
+	leal 84(%esp), %esi
+	addl %ebx,%esi
+	addl %edi,%esi
+	movl (%esi),%edi
+	addl %ebp,%edi
+	addl %edx,%edi
+	imull %ecx,%edi
+	movl $16,%ecx
+	movl $-12,%edx
+	leal 84(%esp), %ebp
+	addl %edx,%ebp
+	movl (%ebp),%edx
+	addl %ecx,%edx
+	movl (%edx),%ecx
+	addl %edi,%ecx
+	movl %eax,(%ecx)
+	leal Cmm.global_area,%eax
+	movl (%eax),%ecx
+	movl $20,%eax
+	movl $-12,%edi
+	leal 84(%esp), %edx
+	addl %edi,%edx
+	movl (%edx),%edi
+	addl %eax,%edi
+	movl (%edi),%eax
+	movl $4,%edi
+	movl $-12,%edx
+	leal 84(%esp), %ebp
+	addl %edx,%ebp
+	addl %edi,%ebp
+	movl (%ebp),%edi
+	movl $7,%ebp
+	movl $8,%edx
+	movl $-12,%esi
+	leal 84(%esp), %ebx
+	addl %esi,%ebx
+	addl %edx,%ebx
+	movl (%ebx),%edx
+	addl %ebp,%edx
+	subl %edi,%edx
+	movl $-80,%edi
+	leal 84(%esp), %ebp
+	addl %edi,%ebp
+	movl %edx,(%ebp)
+	movl $29,%edx
+	movl $-76,%ebp
+	leal 84(%esp), %edi
+	addl %ebp,%edi
+	movl %edx,(%edi)
+	movl $-84,%edx
+	leal 84(%esp), %edi
+	addl %edx,%edi
+	movl %eax,(%edi)
 	movl %ecx,64(%esp)
 	call tig_bounds_check
 Ljoin_l44:
@@ -2429,8 +2428,8 @@ Ljoin_l118:
 	addl %ecx,%edx
 	movl 4(%esp),%ecx
 	movl %ecx,(%edx)
-	movl 12(%esp),%ebp
 	movl 8(%esp),%ebx
+	movl 12(%esp),%ebp
 	movl 16(%esp),%esi
 	movl 20(%esp),%edi
 	leal 64(%esp), %esp

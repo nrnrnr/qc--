@@ -894,8 +894,8 @@ Ljoin_l139:
 	addl %edx,%ebp
 	movl (%ecx),%edx
 	movl %edx,(%ebp)
-	movl 24(%esp),%ebp
 	movl 20(%esp),%ebx
+	movl 24(%esp),%ebp
 	leal 36(%esp), %esp
 	ret
 .section .pcmap_data

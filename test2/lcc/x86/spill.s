@@ -416,8 +416,8 @@ L.32:
 	addl %edx,%ebx
 	movl (%ebp),%edx
 	movl %edx,(%ebx)
-	movl 32(%esp),%ebp
 	movl 24(%esp),%ebx
+	movl 32(%esp),%ebp
 	leal 36(%esp), %esp
 	ret
 .section .text
@@ -494,8 +494,8 @@ Lproc_body_start_l100:
 	addl %ebx,%ebp
 	movl (%esi),%ebx
 	movl %ebx,(%ebp)
-	movl 4(%esp),%ebp
 	movl (%esp),%ebx
+	movl 4(%esp),%ebp
 	movl 8(%esp),%esi
 	movl 16(%esp),%edi
 	leal 36(%esp), %esp

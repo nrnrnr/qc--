@@ -240,6 +240,7 @@ Ljoin_l73:
 	jmp loop
 loop:
 	leal -8(%esp), %esp
+	movl %eax,44(%esp)
 	movl $-52,%ebx
 	leal 100(%esp), %esi
 	addl %ebx,%esi
@@ -247,7 +248,6 @@ loop:
 	leal 100(%esp), %ebp
 	addl %ebx,%ebp
 	movl %esi,(%ebp)
-	movl %eax,44(%esp)
 	movl $50,%ebp
 	movl $-96,%esi
 	leal 100(%esp), %ebx

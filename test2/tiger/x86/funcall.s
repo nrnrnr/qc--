@@ -286,8 +286,8 @@ LifEnd_36:
 	addl %ecx,%edx
 	movl 12(%esp),%ecx
 	movl %ecx,(%edx)
-	movl 20(%esp),%ebp
 	movl 16(%esp),%ebx
+	movl 20(%esp),%ebp
 	leal 44(%esp), %esp
 	ret
 .section .pcmap_data
@@ -363,26 +363,26 @@ Lproc_body_start_l38:
 	movl 4(%esp),%eax
 	movl %eax,(%edx)
 	leal -8(%esp), %esp
-	movl $4,%eax
-	movl $-8,%edx
-	leal 32(%esp), %ecx
-	addl %edx,%ecx
-	addl %eax,%ecx
-	movl $-32,%eax
-	leal 32(%esp), %edx
-	addl %eax,%edx
-	movl (%ecx),%eax
-	movl %eax,(%edx)
 	movl $-8,%eax
 	leal 32(%esp), %edx
 	addl %eax,%edx
 	movl (%edx),%eax
-	leal Lgbl_38,%edx
-	movl $-28,%ecx
+	movl $4,%edx
+	movl $-8,%ecx
 	movl %ebx,20(%esp)
 	leal 32(%esp), %ebx
 	addl %ecx,%ebx
-	movl %edx,(%ebx)
+	addl %edx,%ebx
+	movl $-32,%edx
+	leal 32(%esp), %ecx
+	addl %edx,%ecx
+	movl (%ebx),%edx
+	movl %edx,(%ecx)
+	leal Lgbl_38,%ecx
+	movl $-28,%edx
+	leal 32(%esp), %ebx
+	addl %edx,%ebx
+	movl %ecx,(%ebx)
 	call fa_26
 Ljoin_l43:
 	movl $4,%ecx

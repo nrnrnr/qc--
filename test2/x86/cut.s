@@ -65,14 +65,14 @@ Lproc_body_start_l12:
 Ljoin_l24:
 	leal nocut,%edi
 	movl $-36,%esi
-	leal 36(%esp), %ebx
-	addl %esi,%ebx
-	movl %edi,(%ebx)
-	movl $-32,%ebx
+	leal 36(%esp), %ebp
+	addl %esi,%ebp
+	movl %edi,(%ebp)
+	movl $-32,%ebp
 	leal 36(%esp), %edi
-	addl %ebx,%edi
-	movl 24(%esp),%ebx
-	movl %ebx,(%edi)
+	addl %ebp,%edi
+	movl 24(%esp),%ebp
+	movl %ebp,(%edi)
 	call printf
 Ljoin_l21:
 	leal 36(%esp), %eax
@@ -81,8 +81,8 @@ Ljoin_l21:
 	addl %ecx,%edx
 	movl (%eax),%ecx
 	movl %ecx,(%edx)
-	movl 12(%esp),%ebp
 	movl 8(%esp),%ebx
+	movl 12(%esp),%ebp
 	movl 16(%esp),%esi
 	movl 20(%esp),%edi
 	leal 36(%esp), %esp
@@ -107,8 +107,8 @@ Ljoin_l17:
 	addl %ecx,%edx
 	movl (%eax),%ecx
 	movl %ecx,(%edx)
-	movl 12(%esp),%ebp
 	movl 8(%esp),%ebx
+	movl 12(%esp),%ebp
 	movl 16(%esp),%esi
 	movl 20(%esp),%edi
 	leal 36(%esp), %esp

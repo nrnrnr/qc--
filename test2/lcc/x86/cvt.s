@@ -1571,8 +1571,8 @@ Ljoin_l25:
 	addl %edx,%ebp
 	movl (%ecx),%edx
 	movl %edx,(%ebp)
-	movl 256(%esp),%ebp
 	movl 252(%esp),%ebx
+	movl 256(%esp),%ebp
 	leal 260(%esp), %esp
 	ret
 .section .pcmap_data

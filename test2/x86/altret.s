@@ -431,8 +431,8 @@ Ljoin_l41:
 	addl %ebx,%ebp
 	movl (%ecx),%ebx
 	movl %ebx,(%ebp)
-	movl 12(%esp),%ebp
 	movl 8(%esp),%ebx
+	movl 12(%esp),%ebp
 	leal 24(%esp), %esp
 	ret
 Ljoin_l43:
@@ -661,13 +661,13 @@ Ljoin_l102:
 	leal msg0,%edi
 	movl %esi,40(%esp)
 	movl $-56,%esi
-	movl %ebx,32(%esp)
-	leal 56(%esp), %ebx
-	addl %esi,%ebx
-	movl %edi,(%ebx)
-	movl $-52,%ebx
+	movl %ebp,36(%esp)
+	leal 56(%esp), %ebp
+	addl %esi,%ebp
+	movl %edi,(%ebp)
+	movl $-52,%ebp
 	leal 56(%esp), %edi
-	addl %ebx,%edi
+	addl %ebp,%edi
 	movl %eax,(%edi)
 	movl $-48,%eax
 	leal 56(%esp), %edi
@@ -684,7 +684,7 @@ Ljoin_l92:
 	addl %eax,%ecx
 	movl 28(%esp),%eax
 	movl %eax,(%ecx)
-	movl 32(%esp),%ebx
+	movl 36(%esp),%ebp
 	movl 40(%esp),%esi
 	movl 44(%esp),%edi
 	leal 56(%esp), %esp
@@ -700,13 +700,13 @@ Ljoin_l109:
 	leal msg1,%edi
 	movl %esi,40(%esp)
 	movl $-56,%esi
-	movl %ebx,32(%esp)
-	leal 56(%esp), %ebx
-	addl %esi,%ebx
-	movl %edi,(%ebx)
-	movl $-52,%ebx
+	movl %ebp,36(%esp)
+	leal 56(%esp), %ebp
+	addl %esi,%ebp
+	movl %edi,(%ebp)
+	movl $-52,%ebp
 	leal 56(%esp), %edi
-	addl %ebx,%edi
+	addl %ebp,%edi
 	movl %eax,(%edi)
 	movl $-48,%eax
 	leal 56(%esp), %edi
@@ -723,7 +723,7 @@ Ljoin_l88:
 	addl %eax,%ecx
 	movl 28(%esp),%eax
 	movl %eax,(%ecx)
-	movl 32(%esp),%ebx
+	movl 36(%esp),%ebp
 	movl 40(%esp),%esi
 	movl 44(%esp),%edi
 	leal 56(%esp), %esp
@@ -791,8 +791,8 @@ Ljoin_l84:
 	addl %eax,%ecx
 	movl 28(%esp),%eax
 	movl %eax,(%ecx)
-	movl 36(%esp),%ebp
 	movl 32(%esp),%ebx
+	movl 36(%esp),%ebp
 	movl 40(%esp),%esi
 	movl 44(%esp),%edi
 	leal 56(%esp), %esp
@@ -872,9 +872,9 @@ Lframe_l118:
 .long 0x80000000
 .long 0x80000001
 .long 0x40000007
-.long 0xffffffe8
+.long 0x40000007
 .long 0x40000009
-.long 0x40000009
+.long 0xffffffec
 .long 0x4000000a
 .long 0xfffffff0
 .long 0x4000000b
@@ -901,9 +901,9 @@ Lframe_l119:
 .long 0x80000000
 .long 0x80000001
 .long 0x40000007
-.long 0xffffffe8
+.long 0x40000007
 .long 0x40000009
-.long 0x40000009
+.long 0xffffffec
 .long 0x4000000a
 .long 0xfffffff0
 .long 0x4000000b

@@ -237,8 +237,8 @@ L.8:
 	addl %ebx,%ecx
 	movl (%eax),%ebx
 	movl %ebx,(%ecx)
-	movl 12(%esp),%ebp
 	movl 4(%esp),%ebx
+	movl 12(%esp),%ebp
 	leal 32(%esp), %esp
 	ret
 .section .text
@@ -418,8 +418,8 @@ L.43:
 	addl %ecx,%edx
 	movl (%eax),%ecx
 	movl %ecx,(%edx)
-	movl 24(%esp),%ebp
 	movl 20(%esp),%ebx
+	movl 24(%esp),%ebp
 	leal 60(%esp), %esp
 	ret
 .section .pcmap_data
@@ -588,8 +588,8 @@ Ljoin_l96:
 	addl %edx,%ebp
 	movl (%ecx),%edx
 	movl %edx,(%ebp)
-	movl 16(%esp),%ebp
 	movl 12(%esp),%ebx
+	movl 16(%esp),%ebp
 	leal 24(%esp), %esp
 	ret
 .section .pcmap_data
@@ -958,8 +958,8 @@ Ljoin_l112:
 	addl %edx,%ebx
 	movl (%ecx),%edx
 	movl %edx,(%ebx)
-	movl 24(%esp),%ebp
 	movl 20(%esp),%ebx
+	movl 24(%esp),%ebp
 	leal 188(%esp), %esp
 	ret
 Ljoin_l116:

@@ -100,8 +100,8 @@ Lproc_body_start_l20:
 	addl %ebp,%ebx
 	movl (%ecx),%ebp
 	movl %ebp,(%ebx)
-	movl 4(%esp),%ebp
 	movl (%esp),%ebx
+	movl 4(%esp),%ebp
 	leal 16(%esp), %esp
 	ret
 .section .text
@@ -178,8 +178,8 @@ Lproc_body_start_l33:
 	addl %ebp,%ecx
 	movl (%ebx),%ebp
 	movl %ebp,(%ecx)
-	movl 4(%esp),%ebp
 	movl (%esp),%ebx
+	movl 4(%esp),%ebp
 	leal 16(%esp), %esp
 	ret
 .section .text

@@ -561,20 +561,20 @@ Ljoin_l51:
 	leal Cmm.global_area,%eax
 	movl %esi,(%eax)
 	leal -4(%esp), %esp
-	movl $4,%eax
-	movl $-8,%esi
-	leal 56(%esp), %ecx
-	addl %esi,%ecx
-	addl %eax,%ecx
-	movl $-56,%eax
-	leal 56(%esp), %esi
-	addl %eax,%esi
-	movl (%ecx),%eax
-	movl %eax,(%esi)
 	movl $-8,%eax
 	leal 56(%esp), %esi
 	addl %eax,%esi
 	movl (%esi),%eax
+	movl $4,%esi
+	movl $-8,%ecx
+	leal 56(%esp), %edx
+	addl %ecx,%edx
+	addl %esi,%edx
+	movl $-56,%esi
+	leal 56(%esp), %ecx
+	addl %esi,%ecx
+	movl (%edx),%esi
+	movl %esi,(%ecx)
 	call mark_multiples_37
 Ljoin_l48:
 	jmp LifEnd_65
@@ -584,8 +584,8 @@ LifEnd_65:
 	addl %ecx,%edx
 	movl 20(%esp),%ecx
 	movl %ecx,(%edx)
-	movl 28(%esp),%ebp
 	movl 24(%esp),%ebx
+	movl 28(%esp),%ebp
 	movl 32(%esp),%esi
 	leal 56(%esp), %esp
 	ret
@@ -946,8 +946,8 @@ Lloop_end_67:
 	addl %ecx,%ebx
 	movl 4(%esp),%ecx
 	movl %ecx,(%ebx)
-	movl 12(%esp),%ebp
 	movl 8(%esp),%ebx
+	movl 12(%esp),%ebp
 	movl 16(%esp),%esi
 	leal 36(%esp), %esp
 	ret
@@ -955,6 +955,9 @@ Ljoin_l80:
 	jmp Lloop_body_69
 Lloop_body_69:
 	leal -4(%esp), %esp
+	movl $-16,%ebx
+	leal 40(%esp), %eax
+	addl %ebx,%eax
 	movl $12,%ebx
 	movl $-16,%ebp
 	leal 40(%esp), %esi
@@ -965,9 +968,6 @@ Lloop_body_69:
 	addl %ebx,%ebp
 	movl (%esi),%ebx
 	movl %ebx,(%ebp)
-	movl $-16,%ebx
-	leal 40(%esp), %eax
-	addl %ebx,%eax
 	call step_38
 Ljoin_l79:
 	movl $1,%eax

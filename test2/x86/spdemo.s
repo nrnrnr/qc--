@@ -68,8 +68,8 @@ Ljoin_l10:
 	addl %edx,%ebp
 	movl (%ecx),%edx
 	movl %edx,(%ebp)
-	movl 24(%esp),%ebp
 	movl 20(%esp),%ebx
+	movl 24(%esp),%ebp
 	leal 28(%esp), %esp
 	ret
 .section .pcmap_data

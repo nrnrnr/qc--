@@ -308,8 +308,8 @@ Ljoin_l11:
 	addl %edx,%ebx
 	movl (%ecx),%edx
 	movl %edx,(%ebx)
-	movl 48(%esp),%ebp
 	movl 28(%esp),%ebx
+	movl 48(%esp),%ebp
 	leal 68(%esp), %esp
 	ret
 .section .pcmap_data

@@ -38,8 +38,8 @@ Ljoin_l7:
 	addl %ebx,%ecx
 	movl (%esp),%ebx
 	movl %ebx,(%ecx)
-	movl 8(%esp),%ebp
 	movl 4(%esp),%ebx
+	movl 8(%esp),%ebp
 	leal 12(%esp), %esp
 	ret
 .section .text

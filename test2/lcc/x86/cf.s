@@ -247,8 +247,8 @@ Ljoin_l8:
 	addl %edx,%esi
 	movl (%ecx),%edx
 	movl %edx,(%esi)
-	movl 40(%esp),%ebp
 	movl 36(%esp),%ebx
+	movl 40(%esp),%ebp
 	movl 44(%esp),%esi
 	leal 60(%esp), %esp
 	ret
