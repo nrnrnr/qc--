@@ -64,6 +64,8 @@ val fpustatus : Rtl.loc (* the FPU status word *)
 %type eaddrl {: string :}
 %type eax {: unit :}
 %type ecx {: unit :}
+%type edx {: unit :}
+%type edx_eax {: unit :}
 %type edi {: unit :}
 %type eight {: unit :}
 %type eip {: unit :}
@@ -343,7 +345,7 @@ const: Add(l:const, r:const) {: sprintf "%s+%s" l r :}
 
 inst: Guarded(Cmp(string, esp, slotaddr), Store(espl, s2:slotaddr, w)) 
          {: "adjust %esp" :}
-inst: Store(dst:eaddrl, slotaddr, w) {: sprintf "%s := %s" dst slotaddr :}
+inst: Store(dst:regl, slotaddr, w) {: sprintf "%s := %s" dst slotaddr :}
 
 -- inst: Store(dst:eaddrl, lateconst, w) {: sprintf "%s := %s" dst lateconst :}
 
@@ -436,11 +438,13 @@ inst : Withaflags(dst:eaddrl, "mul", src:reg, w, "x86_mulflags")
 inst : Withaflags(dst:regl, "mul", src:eaddri, w, "x86_mulflags")
   {: cat ["imul"; suffix w; " "; src; ","; dst] :}
 
-inst : Withundefflags(dst:regpairl, "quot", src:reg, w)
-  {: cat ["idiv"; suffix w; " "; src; ", "; dst] :}
+edx_eax : RegPair(edx, eax) {: () :}
 
-inst : Withundefflags(dst:regpairl, "divu", src:reg, w)
-  {: cat ["div"; suffix w; " "; src; ", "; dst] :}
+inst : Withundefflags(dst:edx_eax, "quot", src:eaddr, w)
+  {: sprintf "idiv%s %s, %%eax" (suffix w) src :}
+
+inst : Withundefflags(dst:edx_eax, "divu", src:eaddr, w)
+  {: sprintf "div%s %s, %%eax" (suffix w) src :}
 
 inst : Withaflags(dst:regl, "shl", reg_cl, w, "x86_shlflags")
   {: sprintf "shl%s %%cl, %s" (suffix w) dst :}
@@ -598,6 +602,7 @@ inst : Par(Store(fpccl, Fcmp(fpstacktop, fpstack1), w), fppop2)
 <<rules>>=
 eax : Reg('r', n, w) [{: guard (n = 0 && w = 32):}]  {: () :}
 ecx : Reg('r', n, w) [{: guard (n = 1 && w = 32):}]  {: () :}
+edx : Reg('r', n, w) [{: guard (n = 2 && w = 32):}]  {: () :}
 esi : Reg('r', n, w) [{: guard (n = 6 && w = 32):}]  {: () :}
 edi : Reg('r', n, w) [{: guard (n = 7 && w = 32):}]  {: () :}
 ax  : Slice(w, lsb:n, eax) [{: guard (w = 16 && lsb = 0):}]  {: "%ax" :}
@@ -661,6 +666,9 @@ any : Lobits(any, w) {: "Lobits(" ^ any ^ ", " ^ string_of_int w ^ ")" :}
 any : X86_subflags(l:any, r:any) {: "X86_subflags(" ^ l ^ ", " ^ r ^ ")" :}
 any : X86_addflags(l:any, r:any) {: "X86_addflags(" ^ l ^ ", " ^ r ^ ")" :}
 any : X86ccop(string, cc:any) {: "X86ccop(" ^ string ^ ", " ^ cc ^ ")" :}
+any : X86op(string) {: "X86op(" ^ string ^ ")" :}
+
+any : NonLlrOp(string) {: "NonLlrOp(" ^ string ^ ")" :}
 
 any : Mem(any, w) {: "Mem(" ^any ^ "," ^ string_of_int w ^ ")" :}
 any : Reg  (char, n, w) {: sprintf "Reg(%s, %d, %d)"   (Char.escaped char) n w :}
@@ -740,6 +748,9 @@ constructor for each operator.
 | RP.App(("bitExtract", [w; n]), [lsb; src]) -> conBitExtract (exp lsb) (exp src) n
 | RP.App((("gt"|"lt"|"ge"|"le"|"eq"|"ne"), [w]) as op, [l; r]) ->
     conCmp op (exp l) (exp r)
+| RP.App((("shra"|"shrl"|"shl"|"quot"|"rem"|"div"|"mod"|"divu"|"modu") as op, [w]),
+         [x; y]) -> conNonLlrOp op
+| RP.App((("neg") as op, [w]), [x]) -> conNonLlrOp op
 | RP.App((("add"|"sub"|"mul"|"sx"|"zx"|"lobits"|"x86_subflags"|"bitInsert"|
            "bitExtract"|"fabs"|"fneg"|"fdiv"|"fmul"|"fsub"|"fadd"|"f2f"|"f2i"|
            "i2f"|"and"|"or"|"xor"|"com") as op, ws), xs)->
@@ -762,6 +773,8 @@ let rec exp = function
   | RP.Const(k)               -> const (k)
   | RP.Fetch(l,w)             -> conFetch (loc l) w
   <<special cases for particular operators>>
+  | RP.App((o,_),_) when String.length o > 4 && String.sub o 0 4 = "x86_" ->
+      conX86op(o)
   | RP.App((o,_),_)           -> error ("unknown operator " ^ o)
 <<code to follow the labeler>>=  
 and loc l = match l with
@@ -794,9 +807,9 @@ and effect = function
 We attempt to recognize register pairs.
 <<code to follow the labeler>>=  
 and regpair = function
-  | RP.App(("or",_),[ RP.App(("shl",_), [RP.App(("zx",_), [RP.Fetch(r1,_)]);_])
-                    ; RP.App(("zx",_),                    [RP.Fetch(r2,_)])])
-      -> conRegPair (loc r1) (loc r2)
+  | RP.App(("or",_),[ RP.App(("shl",_), [RP.App(("zx",_), [RP.Fetch(msw,_)]);_])
+                    ; RP.App(("zx",_),                    [RP.Fetch(lsw,_)])])
+      -> conRegPair (loc msw) (loc lsw)
   | x -> Impossible.impossible "Argument is not a register pair"
 @
 The truly ghastly stuff is the stuff that recognizes multiple
