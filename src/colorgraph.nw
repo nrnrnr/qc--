@@ -7,13 +7,13 @@
 
 
 <<colorgraph.mli>>=
-module T : Lua.Lib.USERTYPE
+module GCT : Lua.Lib.USERTYPE
 module Make (T1 : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.t')
-            (T2 : Lua.Lib.TYPEVIEW with type 'a t = 'a T.t and type 'a
+            (T2 : Lua.Lib.TYPEVIEW with type 'a t = 'a GCT.t and type 'a
 combined = 'a T1.combined)
             (T3 : Lua.Lib.TYPEVIEW with type 'a t = Proc.t and type 'a combined =
 'a T1.combined)
-	: Lua.Lib.TYPEFUL with type 'a combined = 'a T1.combined
+    : Lua.Lib.TYPEFUL with type 'a combined = 'a T1.combined
 @
 
 
@@ -58,52 +58,97 @@ Every move instruction is in one and only one of these lists:
 
 module G = Cfg3
 
+module T = Target2
 module Cheats = struct
-	let fold_fwd g = Cfg3.scan_fwd g (Cfg3.number (Cfg3.first g))
+    let fold_fwd g = Cfg3.scan_fwd g (Cfg3.number (Cfg3.first g))
                                      (Cfg3.number (Cfg3.last g) + 1)
-	let register_count _ = 15
-	let makeReg i = 'r', i, 32
-	let possibleColors _ = List.map makeReg [1;2;3;4;5;6;7;8;9;10;11;12;13;14;15]
-		
-	let spill cfg spillees = assert false
+    let register_count _ = 15
+    let makeReg i = 'Z', i, 32
+    let possibleColors _ = List.map makeReg [1;2;3;4;5;6;7;8;9;10;11;12;13;14;15]
+        
+
+    let reads_writes rtl loc =
+        let reads  sp index width (r,w) = (r || loc = (sp,index,width), w) in
+        let writes sp index width (r,w) = (r, w || loc = (sp,index,width)) in
+        Rtlutil.ReadWrite.fold reads writes rtl (false,false)
+
+    let gm_insert_lst_before lst node =
+        let _ = List.fold_right G.gm_insert_assign_before lst node
+		in ()
+    let gm_insert_lst_after lst node =
+        let _ = List.fold_left G.gm_insert_assign_after node lst
+		in ()
+    let update target (spillee, mem) node =
+        let reads, writes = reads_writes (G.rtl node) spillee in
+            if reads || writes then
+                    ( let tmp   = target.T.mk_tmp spillee in
+                      let subst = fun x -> if x = spillee then tmp else x in 
+                      ( if reads  then 
+                            (gm_insert_lst_before 
+                                (target.T.reload target.T.space tmp mem) node)
+                      ; if writes then 
+                            (gm_insert_lst_after  
+                                (target.T.spill  target.T.space tmp mem) node)
+                      ; G.set_rtl node (Rtlutil.Subst.reg subst)
+                      )
+                    ; Some tmp
+                    )
+             else None
+
+    let spill {Proc.cfg = cfg; Proc.priv = a; Proc.target = target} spillees =
+        let spill_slot ((_,w,_):Register.t) =
+            Automaton.to_loc (Automaton.ty a w None) in
+        let smPairs = List.map (fun s -> (s, spill_slot s)) spillees in 
+        (* newTemps is an accumulating param *)
+        let updateNode smPairs node newTemps =
+            (List.fold_left
+                (fun tmps sm -> match update target sm node with
+                                | None -> tmps
+                                | Some tmp -> tmp::tmps)
+                newTemps smPairs)
+        in
+            fold_fwd cfg (updateNode smPairs) []
 (*
-		fold_fwd cfg spill spillees
+(* reserve a spill slot using automaton *)
+
+
+      let mem = spill_slot automaton spillee
 *)
 (*
     let (newTemps, newGraph) = Cheats.spill cfg cg.spilledNodes in (* set of all new temps added *)
 *)
 
-	(* Not really cheats anymore.... *)
+    (* Not really cheats anymore.... *)
 
-	let source node =
-		match Rtlutil.RTLType.singleAssignment (G.rtl node) with
-		| Some (s, _) -> s
-		| _ -> assert false
-	let dest node =
-		match Rtlutil.RTLType.singleAssignment (G.rtl node) with
-		| Some (_, d) -> d
-		| _ -> assert false
+    let source node =
+        match Rtlutil.RTLType.singleAssignment (G.rtl node) with
+        | Some (s, _) -> s
+        | _ -> assert false
+    let dest node =
+        match Rtlutil.RTLType.singleAssignment (G.rtl node) with
+        | Some (_, d) -> d
+        | _ -> assert false
 
-	(*
+    (*
      * singleAssignment returns a (Register.t * Register.t) option
      * First get the assignment, then verify that the source and dest are
      * in the same reg. space
      *)
-	let isMoveInstruction node =
-		match Rtlutil.RTLType.singleAssignment (G.rtl node) with
-		| Some ((s1,_,_), (s2,_,_)) -> s1 = s2
-		| None -> false
+    let isMoveInstruction node =
+        match Rtlutil.RTLType.singleAssignment (G.rtl node) with
+        | Some ((s1,_,_), (s2,_,_)) -> s1 = s2
+        | None -> false
 end
 
 
 module CompareRegPair = struct
-	type t = Register.t * Register.t
-	let compare = compare
+    type t = Register.t * Register.t
+    let compare = compare
 end
 module RegPairSet = Set.Make(CompareRegPair)
 module CompareMoves = struct
-	type t = G.node
-	let compare = compare
+    type t = G.node
+    let compare = compare
 end
 module MS = Set.Make(CompareMoves)
 module P  = Cfgprop
@@ -217,7 +262,7 @@ This algorithm annotates each node in the (\cfg) with a live-in set.
 
 <<livenessAnalysis>>=
 (* dummy implementation *)
-let liveness _ cfg = LI.liveness cfg; true
+let liveness _ {Proc.cfg = cfg} = LI.liveness cfg; true
 
 (*
 let livenessStage = { Backplane.name = "liveness"
@@ -270,7 +315,7 @@ let addEdge u v cg =
 let resetDegree cg temp =
     cg.degreeMap <- RM.add temp (cg.k - (Cheats.register_count temp)) cg.degreeMap
 
-let build cgInfo cfg =
+let build cgInfo {Proc.cfg = cfg} =
 (*
     match cgInfo with
         | U.Other (P.CGInfo cg) ->
@@ -629,12 +674,21 @@ match T2'.map.V.project param with
         in
             true
 
+exception UncoloredTemp of color
+let applyColors param {Proc.cfg = cfg} =
+    match T2'.map.V.project param with (CGInfo cg) ->
+    let subst temp = try RM.find temp cg.colorMap
+                     with Not_found -> raise (UncoloredTemp temp)
+    in
+        (Cheats.fold_fwd cfg
+            (fun node () -> G.set_rtl node (Rtlutil.Subst.reg subst)) ()
+        ; true)
 
-let rewriteProgram param cfg =
-match T2'.map.V.project param with
-    | CGInfo cg ->
+
+let rewriteProgram param proc =
+    match T2'.map.V.project param with (CGInfo cg) ->
     (* handle addition of temps (those in spilledNodes) *)
-    let (newTemps, newGraph) = Cheats.spill cfg cg.spilledNodes in (* set of all new temps added *)
+    let newTemps = Cheats.spill proc cg.spilledNodes in (* set of all new temps added *)
     let _ = cg.adjSet <- RegPairSet.empty in
     let _ = cg.adjListMap <- RM.empty in
     let _ = cg.degreeMap <- RM.empty in
@@ -696,40 +750,40 @@ let rewriteProgramStage = { Backplane.name = "rewriteProgram"
     <<graph coloring types>>
 
     type 'a t' = CGInfo of colorGraph
-module T : Lua.Lib.USERTYPE with type 'a t = 'a t' = struct
-	type 'a t = 'a t'
-	let tname = "Graph Coloring"
-	let eq _ x y = match x, y with
-	| CGInfo x, CGInfo y -> x = y
-	let to_string vs = function
-	| CGInfo g -> "<cgInfo>"
+module GCT : Lua.Lib.USERTYPE with type 'a t = 'a t' = struct
+    type 'a t = 'a t'
+    let tname = "Graph Coloring"
+    let eq _ x y = match x, y with
+    | CGInfo x, CGInfo y -> x = y
+    let to_string vs = function
+    | CGInfo g -> "<cgInfo>"
 end
 module Make (T1 : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.t')
-            (T2 : Lua.Lib.TYPEVIEW with type 'a t = 'a T.t and type 'a
+            (T2 : Lua.Lib.TYPEVIEW with type 'a t = 'a GCT.t and type 'a
 combined = 'a T1.combined)
             (T3 : Lua.Lib.TYPEVIEW with type 'a t = Proc.t and type 'a combined =
 'a T1.combined)
-	: Lua.Lib.TYPEFUL with type 'a combined = 'a T1.combined =
+    : Lua.Lib.TYPEFUL with type 'a combined = 'a T1.combined =
   struct
-	type 'a combined = 'a T1.combined
-	module M (Interp : Lua.Lib.CORE with type 'a V.userdata' = 'a T1.combined) = struct
+    type 'a combined = 'a T1.combined
+    module M (Interp : Lua.Lib.CORE with type 'a V.userdata' = 'a T1.combined) = struct
         module V = Interp.V
-		module T1' = struct
-			let map = T1.makemap V.userdata V.projection
-		end
-		module T2' = struct
-			let map = T2.makemap V.userdata V.projection
-		end
-		module T3' = struct
-			let map = T3.makemap V.userdata V.projection
-		end
+        module T1' = struct
+            let map = T1.makemap V.userdata V.projection
+        end
+        module T2' = struct
+            let map = T2.makemap V.userdata V.projection
+        end
+        module T3' = struct
+            let map = T3.makemap V.userdata V.projection
+        end
 
         <<graph coloring builtins>>
 
         let init g =
           Interp.register_globals graph_coloring_globals    g;
           Interp.register_module "CG" graph_coloring_module g
-	end
+    end
   end
 @
 
@@ -749,28 +803,9 @@ let {V.embed = embed; V.project = project} = T2.makemap V.userdata V.projection
 
 
 
-(*
-let dnode1 = G.makeNode "1" ["g"] ["j"] false
-let dnode2 = G.makeNode "2" ["h"] ["k"] false
-let dnode3 = G.makeNode "3" ["f"] ["g";"h"] false
-let dnode4 = G.makeNode "4" ["e"] ["j"] false
-let dnode5 = G.makeNode "5" ["m"] ["j"] false
-let dnode6 = G.makeNode "6" ["b"] ["f"] false
-let dnode7 = G.makeNode "7" ["c"] ["e"] false
-let dnode8 = G.makeNode "8" ["d"] ["c"] true
-let dnode9 = G.makeNode "9" ["k"] ["m"] false
-let dnode10 = G.makeNode "10" ["j"] ["b"] true
-let dnodeLiveOut = G.makeNode "liveOut" [] ["d"; "k"; "j"] false
-let dgraph = [dnode1; dnode2; dnode3; dnode4; dnode5; dnode6; dnode7;
-              dnode8; dnode9; dnode10; dnodeLiveOut]
-*)
-
+let proc = T3'.map
 let ( **-> ) = V.( **-> )
-let cfg = T3'.map
-let cfg = { V.embed = (fun _ -> assert false)
-          ; V.project = (fun x -> (T3'.map.V.project x).Proc.cfg)
-          }
-let stageFn = (V.pfunc (V.value **-> cfg **-> V.result V.bool)).V.embed
+let stageFn = (V.pfunc (V.value **-> proc **-> V.result V.bool)).V.embed
 
 let graph_coloring_module =
         [ "liveness",         stageFn liveness
@@ -783,6 +818,7 @@ let graph_coloring_module =
         ; "assignColors",     stageFn assignColors
         ; "haveSpilledNodes", stageFn haveSpilledNodes
         ; "rewriteProgram",   stageFn rewriteProgram
+        ; "applyColors",      stageFn applyColors
         ]
 
 let graph_coloring_globals =
