@@ -96,6 +96,17 @@ val overlap : placement -> t list -> t
      multiple of its alignment.  N.B. may raise Const.Cannot_solve. *)
 @
 
+Areas of concurrent lifetimes can be concatenated using [[concat]],
+resulting in a new area.  The addresses assigned to the argument areas
+will increase from the head to the tail of the list.  It is a checked
+run-time error to supply an empty list as an argument. 
+
+<<area.mli>>=
+val concat : t list -> t        
+    (* req: argument <> [];
+       calls Const.make_equal, may raise Const.Cannot_solve *)
+@
+
 % ------------------------------------------------------------------ 
 \section{Implementation}
 % ------------------------------------------------------------------ 
@@ -103,8 +114,8 @@ val overlap : placement -> t list -> t
 The implementation maintains basically a [[base]] address and a
 positive [[offset]] from the base to model a block of allocated
 memory.  The base address is a link-time expression whose alignment
-requirement is the maximum of all allignment requests received for the
-offset.  Alignements are checked to be a power of two.
+requirement is the maximum of all alignment requests received for the
+offset.  Alignments are checked to be a power of two.
 
 <<area.ml>>=
 module RP = Rtl.Private
@@ -197,5 +208,23 @@ let overlap placement areas =  match (placement,areas) with
     | _           , []      -> assert false
     | EqualLowEnds, (a::aa) -> List.fold_left maxarea a aa 
     | _                     -> Impossible.unimp "Area.overlap"
+@
+
+The implementation of [[concat]] creates a functional [[builder]]
+value [[b]] and then allocates space in it according to the size and
+alignment of the areas.  The calls to [[make_equal]] are still missing
+because of the design questions raised above.
+
+<<area.ml>>=
+let concat = function
+    | []             -> assert false
+    | t::_ as areas  -> 
+        let b       = mk t.address in   (* get base address *)
+        let cat b t =  
+            let b = align b t.align in  (*XXX call make_equal here *)
+            let b = alloc b t.size  in
+                b
+        in
+            freeze (List.fold_left cat b areas)
 @
 
