@@ -93,12 +93,9 @@ accessible from the entry node.
 Then we remove the unreachable spans.
 <<optimize.ml>>=
 let trim_unreachable_code _ ({Proc.cfg = cfg} as proc) =
-  let module IS = Set.Make (struct type t = int let compare = compare end) in
+  let module IS = Set.Make (struct type t = int let compare x y = x - y end) in
   let nodes_from_entry =
-    let add_labels n lset = 
-      if G.is_join n then List.fold_right SS.add (G.labels n) lset else lset in
-    G.postorder_dfs (fun n nset -> IS.add (G.num n) nset)
-                    IS.empty cfg in
+    G.postorder_dfs (fun n nset -> IS.add (G.num n) nset) IS.empty cfg in
   let nodes_from_exit  = G.reverse_podfs (fun n rst -> n :: rst) [] cfg in
   let to_delete = List.filter (fun n -> not (IS.mem (G.num n) nodes_from_entry))
                               nodes_from_exit in
