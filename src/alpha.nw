@@ -493,7 +493,11 @@ let globals base =
 % ------------------------------------------------------------------ 
 
 <<alpha.ml>>=
-let c_convention = Alphacall.c return (F.cutto (Rtl.reg sp)) 
+let c_convention   = Alphacall.c    return (F.cutto (Rtl.reg sp)) 
+let cmm0           = Alphacall.cmm0 return (F.cutto (Rtl.reg sp)) 
+let cmm1           = Alphacall.cmm1 return (F.cutto (Rtl.reg sp)) 
+let cmm2           = Alphacall.cmm2 return (F.cutto (Rtl.reg sp)) 
+let cmm3           = Alphacall.cmm3 return (F.cutto (Rtl.reg sp)) 
 
 let target =
     { T.name                = "alpha"
@@ -520,7 +524,13 @@ let target =
     ; T.call                = F.call
     ; T.branch              = F.branch
     
-    ; T.cc                  = (fun _ -> c_convention)
+    ; T.cc                  = ( function
+                              | "cmm0" -> cmm0
+                              | "cmm1" -> cmm1
+                              | "cmm2" -> cmm2
+                              | "cmm3" -> cmm3
+                              | _      -> c_convention
+                              )
     ; T.globals             = globals
     ; T.is_rounding_mode    = (fun loc -> false)
     ; T.named_locs          = Strutil.Map.empty

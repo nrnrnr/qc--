@@ -2,12 +2,20 @@
 
  $Id$
 
+o Argument lists for testing calling conventions should cause at least
+  two overflowing parameters such that a wrong order in the overflow
+  block gets detected. The current algorithm that traverses an automaton
+  will miss this if all overflow parameters have the same alignment.
+
 o On the Alpha, the SP ($30) is set back in the epilog before the return
   address is fetched from the stack. It must be the other way round.
 
         addq $30, 16, $30       /* deallocate frame */
         ldq $0, -16($30)        /* fetch return address */
         mov $0, $26; ret ($26)  /* return */
+
+  This problem went away after I modified the calling convention to put
+  the return address in the right register. 
 
 o Some gross hacks in the Alpha backend: prolog code emitted in 
   alphaasm.nw. Unsatisfying representation and recognition of call and

@@ -208,12 +208,12 @@ let call_actuals  =
   C.outgoing ~growth ~sp
     ~mkauto:(fun () -> Block.srelative vfp "out call parms" A.at specs.call)
     ~autosp:(fun r -> Block.base r.A.overflow)
-    ~postsp:(fun sp -> sp) in  (* was ~postsp:(fun _ -> std_sp_location) *)
+    ~postsp:(fun _ sp -> sp) in  (* was ~postsp:(fun _ -> std_sp_location) *)
 let prolog  =
   C.incoming ~growth ~sp
     ~mkauto:(fun () -> A.at (addk vfp 4) specs.call)
     ~autosp:(fun _ -> vfp)
-    ~postsp:(fun _ -> std_sp_location) in
+    ~postsp:(fun _ _ -> std_sp_location) in
    (* alternate: ~mkauto:Block.relative vfp "in call parms" specs.call *)
    (*   ~autosp:(fun r -> addk (Block.base r.A.overflow) (-4)) *)
 @ 
@@ -222,12 +222,12 @@ let call_results  =
   C.incoming ~growth ~sp
     ~mkauto:(fun () -> Block.srelative vfp "in ovfl results" A.at specs.results)
     ~autosp:(fun r -> Block.base r.A.overflow)
-    ~postsp:(fun _ -> std_sp_location) in  (* irrelevant? *)
+    ~postsp:(fun _ _ -> std_sp_location) in  (* irrelevant? *)
 let epilog  =
   C.outgoing ~growth ~sp
     ~mkauto:(fun () -> Block.srelative vfp "out ovfl results" A.at specs.results)
     ~autosp:(fun r -> Block.base r.A.overflow)
-    ~postsp:(fun r -> addk r (-4)) in
+    ~postsp:(fun _ r -> addk r (-4)) in
 @ 
 We need an assertion here!
 <<functions to transform automata>>=
@@ -235,12 +235,12 @@ let also_cuts_to =
   C.incoming ~growth ~sp
     ~mkauto:(fun () -> Block.srelative vfp "in cont parms" A.at specs.cutto)
     ~autosp:(fun r -> std_sp_location)
-    ~postsp:(fun _ -> std_sp_location) in
+    ~postsp:(fun _ _ -> std_sp_location) in
 
 let cut_actuals base  =
   C.outgoing ~growth ~sp ~mkauto:(fun () -> A.at base specs.cutto)
      ~autosp:(fun r -> spval)  (* should this be std_sp_location? *)
-     ~postsp:(fun _ -> spval) in
+     ~postsp:(fun _ _ -> spval) in
 @ 
 \paragraph{Putting together the whole convention}
 <<x86call.ml>>=

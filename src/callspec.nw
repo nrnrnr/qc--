@@ -188,8 +188,8 @@ pamarameter block and the caller allocates the result block, is the
 caller allowed to overlap the result with the parameter block or not?
 Currently the compiler does exactly this and thus we deallocate only up
 to the young end of the result block. But in principle the result block
-could be allocated outside the prameter block and thus we could
-deallocate the paramter block completely.
+could be allocated outside the parameter block and thus we could
+deallocate the paramter block completely. 
 
 <<callspec.ml>>=
 let epilog t =
@@ -224,8 +224,8 @@ let call_actuals t =
 @
 
 After a call the stack pointer points at the young end of the result
-overlow block. We have to move it back to the standard location. This
-might or might not be the same. If it is not, this will deallocate a any
+overflow block. We have to move it back to the standard location. This
+might or might not be the same. If it is not, this will deallocate any
 callee-allocated result block.
 
 <<callspec.ml>>=
@@ -268,17 +268,17 @@ just keep the current location. The policy cannot express to put the
 return address into a conventional location on exit, as required by the
 Alpha for example.
 
+\textbf{Alert:} The register allocator shows a bug when we put the
+return address into a temporary on exit. 
 
 <<callspec.ml>>=
 let ra_on_exit t saved_ra block temp = match style t with
     | ReturnAddress.KeepInPlace  -> saved_ra 
     | ReturnAddress.SaveToTemp s -> Talloc.Multiple.loc temp s t.wordsize 
 
-let where_to_save_ra t ra temp = match style t with
-    | ReturnAddress.KeepInPlace  -> 
-        Impossible.impossible "ReturnAddress.KeepInPlace contradicts saving RA"
+let where_to_save_ra t = fun ra_on_entry temp -> match style t with
+    | ReturnAddress.KeepInPlace  -> ra t
     | ReturnAddress.SaveToTemp s -> Talloc.Multiple.loc temp s t.wordsize 
-
 
 let to_call ~cutto ~return t =
     { C.name          = t.name

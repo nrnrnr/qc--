@@ -243,11 +243,11 @@ NOT CLEAR.
 val outgoing :
      growth:Memalloc.growth -> sp:Rtl.loc -> mkauto:valpass ->
      autosp:(Automaton.result -> Rtl.exp) ->
-     postsp:(Rtl.exp -> Rtl.exp) -> outgoing
+     postsp:(Automaton.result -> Rtl.exp -> Rtl.exp) -> outgoing
 val incoming : 
      growth:Memalloc.growth -> sp:Rtl.loc -> mkauto:valpass ->
      autosp:(Automaton.result -> Rtl.exp) ->
-     postsp:(Rtl.exp -> Rtl.exp) -> incoming
+     postsp:(Automaton.result -> Rtl.exp -> Rtl.exp) -> incoming
 <<exported type definitions>>=
 type valpass = unit -> Automaton.t
 @ 
@@ -282,7 +282,7 @@ let outgoing ~growth ~sp ~mkauto ~autosp ~postsp types actuals =
     let shuffle = R.par (List.rev (List.fold_left2 crank [] types actuals)) in
     let a = A.freeze a in
     let autosp = autosp a in
-    let postsp = postsp autosp in
+    let postsp = postsp a autosp in
     let setsp  = RU.store sp postsp in
     let no r s = s in
     { overflow = a.A.overflow
@@ -301,7 +301,7 @@ let incoming ~growth ~sp ~mkauto ~autosp ~postsp types formals =
     let shuffle = R.par (List.rev (List.fold_left2 crank [] types formals)) in
     let a = A.freeze a in
     let autosp = autosp a in
-    let postsp = postsp autosp in
+    let postsp = postsp a autosp in
     let setsp  = RU.store sp postsp in
     let no r s = s in
     { overflow = a.A.overflow
