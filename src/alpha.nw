@@ -296,7 +296,7 @@ all cases stored in [[x]].
 
 
 [[com]] complements a temporay bitwise. As above, we could like to
-assigne the result to a new temporary, but cannot allocate one. We thus
+assign the result to a new temporary, but cannot allocate one. We thus
 mutate the argument.
 
 <<Alpha postexpander>>=
@@ -379,15 +379,16 @@ let bnegate r =
 
 \paragraph{Calls}\label{alpha:call} 
 
-Calls and returns must follow a protocal to allow a procedure to
-maintain its global pointer: on entry, the \$27 contains the procedure's
-address, on exit \$26 contains the return address. Both registers are
-used to load the global pointer on entry and after a return:
+Calls and returns must follow a protocol to allow a procedure to
+maintain its global pointer: on entry, register \$27 contains the
+procedure's address, on exit \$26 contains the return address. Both
+registers are used to load the global pointer on entry and after a
+return:
 
 <<example for calling convention>>=
     ...
     lda $27, foo
-    jsr ($27)           /* ra in $26, foo in $27 */
+    jsr $26,($27)       /* ra in $26, foo in $27 */
     ldgp $gp,0($26)     /* establish gp; $pc = $26 */
 
 
@@ -398,7 +399,7 @@ foo:
 @    
 
 The call and return instructions in general do not use the conventional
-registers. Here we expand them such that tey do. We also add the
+registers. Here we expand them such that they do. We also add the
 [[ldgp]] instruction after a [[jsr]]. The [[ldgp]] instruction at the
 beginning of a procedure is added by the assembler module
 \module{alphaasm}.
