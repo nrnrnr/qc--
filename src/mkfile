@@ -21,6 +21,9 @@
 #
 # clean             - remove everything but real sources
 #
+#
+# foo.html          - make foo.html from foo.nw
+# foo.dvi           - make foo.dvi  from foo.nw
 
 NAME =      qc--
 VERSION =   `date +%Y%m%d`
@@ -82,12 +85,18 @@ nwclean:V:
 # important file sets
 # ------------------------------------------------------------------ 
 
+# The order of files defines the link order.  So if you have troubles
+# with undefined symbols during linking re-order this list
+# accordingly.  No module must use any of its successors.
+
 ML =            uint64.ml   \
                 aux.ml      \
                 srcmap.ml   \
                 error.ml    \
                 bits.ml     \
                 this.ml     \
+                asm.ml      \
+                asmUtil.ml  \
                 ast.ml      \
                 astUtil.ml  \
                 parse.ml    \
@@ -146,17 +155,39 @@ HTML =          `echo *.nw       | sed 's/\.nw/.html/g;'`
 
 # ------------------------------------------------------------------ 
 
-%.tex:          %.nw
-                $NOWEAVE -filter ../config/autodefs.ocaml -index $prereq > $target
+# generate a self-contained LaTeX document from a LaTeX file that
+# is supposed to be read by \input from a master LaTeX file. This rule
+# allows to specify extra packages like tabularx to be included. 
+# The here-document ended by EOF relies on a single TAB character and
+# the beginning of a line - so don't substitute it for spaces.
+
+%.tex:	%.inc
+	cp $stem.inc $stem.tex
+	ed -s $stem.tex <<EOF 
+	1
+	i
+	\documentclass{article}
+	\usepackage{noweb}
+	\usepackage{tabularx}
+	\pagestyle{noweb}
+	\noweboptions{}
+	\begin{document}
+	\nwfilename{$stem.nw}
+	\nwbegindocs{}
+	.
+	\$
+	a
+	\end{document}
+	.
+	w
+	q
+	EOF 
 
 %.inc:          %.nw
                 $NOWEAVE -delay -filter ../config/autodefs.ocaml -index $prereq > $target
 
 uint64.inc:     uint64.nw
                 $NOWEAVE -delay -autodefs c -index $prereq > $target
-
-%.html:         %.nw
-                $NOWEAVE -delay -filter ../config/autodefs.ocaml -index -html -filter l2h $prereq > $target
 
 %.dvi:          %.tex macros.tex
                 $LATEX "\\scrollmode \\input $stem.tex"
@@ -178,6 +209,7 @@ $NAME.dvi:      ../cllib/lc.inc  \
                 ../cllib/rc.inc  \
                 ../cllib/rx.inc  \
                 ../test/test.inc \
+                asm.inc          \
                 ast.inc          \
                 agraph.inc       \
                 aux.inc          \
@@ -205,6 +237,9 @@ html:V:         $HTML
 # ------------------------------------------------------------------  
 # sources generated from noweb sources
 # ------------------------------------------------------------------  
+
+asm.asdl:       asm.nw
+                eval $MISCTANGLE
 
 aux.ml          \
 aux.mli:        aux.nw
@@ -352,9 +387,7 @@ $NAME:          $CMO $OBJ
 $NAME.opt:      $CMX $OBJ
                 $OCAMLO $OCAMLO_FLAGS -o $target $CMXLIBS $OBJ $CMX
                 
-#
 # an OCaml interpreter with all our C code compiled in
-#
 
 ocamli:         $OBJ uint64.cmo
                 $OCAMLTOP -custom -o $target uint64.cmo $OBJ 
