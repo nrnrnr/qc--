@@ -32,7 +32,7 @@ environment holds informations about:
 \item Values, like constants, labels for goto and data, procedures.
 \item Types, as they are declared by the [[typedef]] directive.
 \item Target architecture, as declared by the [[target]] directive.
-\item An Index counter for registers.
+\item An index counter for registers.
 \item A flag that indicates a serious error.
 \end{itemize}
 
@@ -67,7 +67,7 @@ module type Env = sig
 end
 @
 
-By defininig [[info]] and [[partial]] appropriately, the interface for
+By defining [[info]] and [[partial]] appropriately, the interface for
 the [[Dirty]] and the [[Clean]] modules can be derived.  The types
 [[info]] and [[partial]] describe possibly ``bad'' or unknown values
 in the the signature.
@@ -82,12 +82,12 @@ in the the signature.
 
 \item The [[bad]] function creates a erroneous value of the [['a
       info]] type.  Using this function in a clean environment causes
-      an assertion violation.
+      is a checked compile-time error.
 \end{itemize}      
 
 The two sub-modules [[Dirty]] and [[Clean]] just differ in the meaning
-of [[info]] and [[partial]].  A clean environment that all values are
-present and that are good.
+of [[info]] and [[partial]].  A clean environment ensures that all
+values are present and that they are good.
 
 <<fenv.mli>>=
 module StrSet: Set.S with type elt = string
@@ -107,10 +107,10 @@ module Clean : Env
 val clean: Dirty.env -> Clean.env
 @
 
-The only wae to obtain a clean environment is by cleaning a dirty
+The only way to obtain a clean environment is by cleaning a dirty
 environment.  However, the dirty environment must not be really dirty: 
 all informations must be provided, and they must be ``good''.  Trying
-to clean a dirty environment with bad values will result in an
+to clean a dirty environment with bad values will result in a checked
 run-time error.
 
 % ------------------------------------------------------------------ 
@@ -118,12 +118,12 @@ run-time error.
 % ------------------------------------------------------------------ 
 
 The main purpose of the fat environment is to bind values to names. 
-In {\PAL} same names have the same meaning everyhwhere in a program,
+In {\PAL} same names have the same meaning everywhere in a program,
 and others may differ inside and outside of a procedure.  Example of
 the former are [[target]] declarations, and bindings for types and
 values for the latter; these bindings are called \emph{scoped}.  This
 interface provides a fat environment [[env]], that holds all bindings,
-regardless whether they are scoped or unscoped. 
+regardless whether they are scoped or un-scoped. 
 
 Bindings for types and values have two scopes: the global scope of the
 entire compilation unit, and the scope inside of a procedure. So in
@@ -134,18 +134,18 @@ scoping rules:
 \begin{itemize}
 \item Labels defined inside procedures have global scope: they are
       visible in the entire compilation unit.
-\item Values imported inside a procedure have global scoper, too.
+\item Values imported inside a procedure have global scope, too.
 \end{itemize}
 
 After a procedure is left, only the global bindings are in effect. 
 Since a procedure is entered many times in a multi-pass compiler it
-pays off, to save the bindings for a procedure instead of re-computing
-them every time the procedure is entered.  To facilitate this, an
-[[env]] value is internally devided into halfs:  the first is a stack
-of [[scope]]s for values and types, and the second holds all other
-\emph{global} informations.  The bottom scope in the scope stack
-contains all global name and type bindings.  And when a procedure is
-active, all its name and type bindindings are in the top-scope.  A
+pays off to save the bindings for a procedure instead of re-computing
+them every time the procedure is entered.  To facilitate this an
+[[env]] value is internally divided into two parts:  the first is a
+stack of [[scope]]s for values and types, and the second holds all
+other \emph{global} informations.  The bottom scope in the scope stack
+contains all global name and type bindings.  When a procedure is
+active all its name and type bindings are in the top-scope.  A
 procedure's bindings can be saved by saving the [[top]] scope and
 re-used, by [[pop]]'ing it later.
 
@@ -206,10 +206,10 @@ capture the structure of values in {\PAL}.
       be annotated with a hint. Hints are used to determine calling
       conventions (see module \module{callconv}). Each register has an
       index that identifies it for the run-time API.
-\item Labels come in different flavors: labels in [[goto]] or inside
-      data declarations are vanilla-plain. Procedures in a clean
-      environment include their saved  local [[scope]] and
-      informations about local stack data on the run-time stack. 
+\item Labels come in different flavors:  labels in [[goto]] or inside
+      data declarations are plain vanilla.  Procedures are labels in a
+      clean environment that include their saved local [[scope]] and
+      informations about local stack data.  
 \end{itemize}
 
 Some care must be taken when dealing with [[goto]] labels and imported
@@ -227,7 +227,7 @@ type proc =
     ; slabel:     string partial    (* link-time const for stack data offset*)
     }
 
-and  reghint        = RReg  of string   (* hardare reg *)
+and  reghint        = RReg  of string   (* hardware reg *)
                     | RHint of string   (* calling convention hint *)
                     | RNone             (* none of above *)
 
@@ -275,7 +275,6 @@ environment are searched from top to bottom and the first binding
 found is returned.  The exception [[Error.ErrorExn]] is raised, if no
 binding can be found (applies also when the scope stack is empty). 
  
-
 Since it is illegal to re-bind names and values in the same scope, any
 attempt to do so is reported as an error to stdout.  Additionally the
 existing binding is re-bound to be bad in case the environment was a
@@ -303,7 +302,7 @@ val findt           : string -> env -> tentry   (* Error.ErrorExn *)
 \emph{Think of algebraic rules that describe the interaction of bind
 and find}.
 
-Sometimes is is necessary to know, whether a value is bound in a local
+Sometimes is is necessary to know whether a value is bound in a local
 scope.  The following predicate is true, if and only if a given name
 is bound in the top scope, \emph{and} the top scope is not the bottom
 scope at the same time.  It is an assertion failure to supply an
@@ -350,7 +349,6 @@ functions receive a source code position.
     Should the error reporting be factored out by reporting
     inconsistencies with an exception?
 \end{quote}
-
 
 <<types>>=
 and  endianness     = Big | Little
@@ -407,6 +405,11 @@ inside of stack data declarations.  Since procedures do not nest in
 decided to maintain the [[offset]] counter inside the fat environment
 because the [[offset]] must be maintained over many functions and
 becomes a non-local property.
+
+\begin{quote}\it
+    This does not look right to me. Why can't the stackdata counter
+    not associated with the a scope? --CL
+\end{quote}
 
 <<signature Env>>=
 val resetOffset     : string -> env -> env
@@ -514,8 +517,8 @@ module StrSet       = Set.Make(Comparable)
 @
 
 The [[Arg]] modules captures the diverse aspects of [[Clean]] and
-[[Dirty]]. Different [[Arg]] implementations are passed to functor [[Env]]
-to create [[Clean]] and [[Dirty]].
+[[Dirty]].  Different [[Arg]] implementations are passed to functor
+[[Env]] to create [[Clean]] and [[Dirty]].
 
 <<fenv.ml>>=
 module type Arg = sig
@@ -531,7 +534,7 @@ end
 @
 
 \begin{itemize}
-    \item First of all, are information more vaguely represented in
+    \item First of all, informations are more vaguely represented in
     [[Dirty]] than in [[Clean]]: a [[partial]] information might be
     absent in [[Dirty]], but not in [[Clean]]. And an information
     [[info]] can be marked as [[bad]] in [[Dirty]], but not in
@@ -612,7 +615,7 @@ environment.
 \subsection{The Heart of the Implementation: [[Env]]}
 % ------------------------------------------------------------------ 
 
-The fat and the clean version of an environement share the same basic
+The fat and the clean version of an environment share the same basic
 implementation [[Env]] which is functorized over [[Arg]]. [[Arg]]
 provides us what we need to know about good and bad values:
 
@@ -756,7 +759,7 @@ let foldv f {venv=v} z = StrMap.fold f v z
     
 New Bindings are recorded in the top scope; it is an assertion
 failures, if the scope stack is empty.  It is illegal to re-bind
-names:  if the name to be bound is found in the top scope, an errror
+names:  if the name to be bound is found in the top scope, an error
 is issued, the error flag is set, and the existing binding is re-bound
 to a bad value.  Register values that use a hardware register are
 additionally recorded in the [[regdecls]] component.
@@ -1062,10 +1065,6 @@ return it.
 <<module Env>>=
 let regdecls env = List.rev env.regdecls
 @
-
-
-        
-        
 
 % ------------------------------------------------------------------ 
 \subsection{Cleaning a fat environment}
