@@ -175,11 +175,27 @@ module StringSet = Set.Make(struct type t = string let compare = compare end)
 
 let float_ops = 
     List.fold_right 
-    StringSet.add 
-    ["fcmp"; "fadd"; "fsub"; "fdiv"; "fmul"; "fabs"; "fneg"; "fsqrt"]
-    StringSet.empty
+        StringSet.add 
+        ["fcmp"; "fadd"; "fsub"; "fdiv"; "fmul"; "fabs"; "fneg"; "fsqrt"]
+        StringSet.empty
+@
+
+To simplify guarded effects we have to know which operators return
+boolean values. All operators that take \emph{and} return boolean values
+have been re-written into control-flow structures and do not show up
+here. The operators listed here all take non-boolean arguments.
+
+<<utilities>>=
+let bool_ops = (* boolean valued primitive with non-boolean args *)
+    List.fold_right
+        StringSet.add
+        ["bool"; "eq"; "ge"; "geu"; "gt"; "gtu"; "le"; "leu"; "lt"; "ltu";
+         "ne"]
+         StringSet.empty
 
 let is_float_op (op,_) = StringSet.mem op float_ops
+let is_bool_op  (op,_) = StringSet.mem op bool_ops
+let is_int_op   opr    = not (is_float_op opr || is_bool_op opr) 
 @
 
 To create a fetch from a location we have to know the size of the
@@ -237,12 +253,13 @@ constants! Do we have to treat the different constants seperately?
 
 <<rules>>=
 const:      Const(k)
-            {: U.exp (RP.Const(k)) :}
+            {: return (U.exp (RP.Const(k))) :}
 
 -- r := k   
 ireg:       const [1]
-            {:  itmp (W.exp const)                   >>= fun t  ->
-                exec (R.store t const (W.exp const)) >>= fun () ->
+            {:  const                                >>= fun k ->
+                itmp (W.exp k)                       >>= fun t  ->
+                exec (R.store t k (W.exp k))         >>= fun () ->
                 return t
             :}
 
@@ -335,18 +352,33 @@ mem:        Cell('m', agg, width, addr, ass)
             :}
             
 ireg:       Cell('r', agg, width, const, ass)
-            {: return (R.cell (U.assertion ass) 'r' agg width const) :}
+            {: 
+                const >>= fun k ->
+                return (R.cell (U.assertion ass) 'r' agg width k) 
+            :}
 ireg:       Cell('t', agg, width, const, ass)
-            {: return (R.cell (U.assertion ass) 't' agg width const) :}
+            {: 
+                const >>= fun k ->
+                return (R.cell (U.assertion ass) 't' agg width k) 
+            :}
 
 
 freg:       Cell('f', agg, width, const, ass)
-            {: return (R.cell (U.assertion ass) 'f' agg width const) :}
+            {: 
+                const >>= fun k ->
+                return (R.cell (U.assertion ass) 'f' agg width k) 
+            :}
 freg:       Cell('u', agg, width, const, ass)
-            {: return (R.cell (U.assertion ass) 'u' agg width const) :}
+            {: 
+                const >>= fun k ->
+                return (R.cell (U.assertion ass) 'u' agg width k) 
+            :}
 
 creg:       Cell('c', agg, width, const, ass)
-            {: return (R.cell (U.assertion ass) 'c' agg width const) :}
+            {: 
+                const >>= fun k ->
+                return (R.cell (U.assertion ass) 'c' agg width k) 
+            :}
 
 error:      Cell(x:char, agg, width, addr, ass)
             {:
@@ -360,10 +392,13 @@ an integer operator is also considered a floating-point operator but is
 associated with extreme costs and thus will be never selected.
 
 <<rules>>=
-fop:        Op(opr) [{: if is_float_op opr then 0 else C.inf_cost :}] 
+fop:        Op(opr) [{: if is_float_op opr  then 0 else C.inf_cost :}] 
             {: U.opr opr :}
 
-iop:        Op(opr) [{: if not (is_float_op opr) then 0 else C.inf_cost :}]
+iop:        Op(opr) [{: if is_int_op opr    then 0 else C.inf_cost :}]
+            {: U.opr opr :}
+
+bop:        Op(opr) [{: if is_bool_op opr   then 0 else C.inf_cost :}]
             {: U.opr opr :}
 @
 
@@ -440,13 +475,30 @@ stmt:       Store(creg, ireg, width)
 
 @
 
+Currently the frontend generates guarded expression only for
+if-statements. The expression is already simplified such that it is
+either [[true]], [[false]], or an application with a boolean result that
+takes \emph{non-boolean} arguments. 
+
 I don't know how to handle guarded statements. The guard expression is a
 boolean expression. For the moment I treat the guard as a literal and do
 not expand it.
 
 <<rules>>=
-gstmt:      GStmt(g:x,stmt)
-            {: stmt >>= fun s -> return (R.guard (U.exp g) s) :}
+guard:      True()  {: return (R.bool true)  :}
+guard:      False() {: return (R.bool false) :}
+guard:      App(bop, iregs)
+            {:  
+                iregs >>= fun rs ->
+                return (R.app bop (List.map fetch rs))
+            :}    
+
+gstmt:      GStmt(guard,stmt)
+            {: 
+                guard >>= fun g ->
+                stmt  >>= fun s -> 
+                return (R.guard g s) 
+            :}
 
 gstmts:     Nil() {:  return [] :}
 gstmts:     Cons(gstmt,gstmts)
@@ -488,33 +540,36 @@ MLBURG} manual. This code follows here.
 
 <<tail>>=
 let rec map f = function
-    | []                -> conNil ()
-    | x::xs             -> conCons (f x) (map f xs)
+    | []                        -> conNil ()
+    | x::xs                     -> conCons (f x) (map f xs)
+@    
+  
+Make sure that the above function [[map]] is \emph{not} in the same
+[[letrec]] as the functions below. In that case it becomes monomorphic
+and the code below will not type check! This mistake has taken me some
+time to spot.
 
-let rec const = function
-    | RP.Bool(b)        -> () (* not used at the moment *)
-    | RP.Bits(b)        -> ()
-    | RP.Link(s,w)      -> ()
-    | RP.Late(s,w)      -> ()
-    
-and exp = function
-    | RP.Const(k)       -> conConst k
-    | RP.Fetch(l,w)     -> conFetch (loc l) w
-    | RP.App(opr,exps)  -> conApp (conOp opr) (map exp exps)
+<<tail>>=  
+let rec exp = function
+    | RP.Const(RP.Bool(true))   -> conTrue()
+    | RP.Const(RP.Bool(false))  -> conFalse()
+    | RP.Const(k)               -> conConst(k)
+    | RP.Fetch(l,w)             -> conFetch (loc l) w
+    | RP.App(opr,exps)          -> conApp (conOp opr) (map exp exps)
 
 and loc = function
     | RP.Cell(char, aff, w, e, ass) -> conCell char aff w (exp e) ass 
-    | RP.Var(s, i, w)   -> conVar ()
-    | RP.Slice(w,i,loc) -> conSlice ()
+    | RP.Var(s, i, w)           -> conVar ()
+    | RP.Slice(w,i,loc)         -> conSlice ()
     
 and stmt = function
-    | RP.Store(l,e,w)   -> conStore (loc l) (exp e) w
-    | RP.Kill(loc)      -> conKill ()
+    | RP.Store(l,e,w)           -> conStore (loc l) (exp e) w
+    | RP.Kill(loc)              -> conKill ()
 
-and guarded ((e,eff): RP.guarded)     =  conGStmt e (stmt eff)
+and guarded (e,eff)             =  conGStmt (exp e) (stmt eff)
 
 and rtl = function
-    | RP.Rtl(gs)        -> conRtl (map guarded gs)
+    | RP.Rtl(gs)                -> conRtl (map guarded gs)
 @
 
 The [[rtl]] function returns (the best) plan to rewrite a given {\rtl}.
