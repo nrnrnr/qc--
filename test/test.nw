@@ -1,0 +1,72 @@
+% l2h substitution C C--
+% l2h substitution asdl ASDL
+% l2h substitution ocaml OCaml
+
+% ------------------------------------------------------------------  
+\section{Testing}
+% ------------------------------------------------------------------  
+
+% ------------------------------------------------------------------  
+\subsection{Fixpoint Test}
+% ------------------------------------------------------------------ 
+
+The [[qc--]] compiler can re-create the concrete syntax of a file that
+is has parsed. This is an opportunity for a fixpoint test: 
+
+\begin{enumerate}
+\item \label{one} Parse a file and write out its concrete syntax.
+\item \label{two} Parse again the output of step \ref{one} and write
+      out its concrete syntax. The output of step \ref{one} and this
+      one should not differ.
+\end{enumerate}
+
+Every legal \C~input can thus be used to easily test the parsing and
+pretty printing modules of the compiler.  Doing it for the actual
+implementation, however, requires a third parsing and printing step
+before the fixpoint is reached:  when [[qc--]] parses a pragma it
+pretty prints a comment for it.  Since comments are skipped while
+scanning the next round this comment will no produce in any output. 
+When this output again is parsed and printed it should be equal to the
+one just parsed. 
+
+A simple shell script implements the fixpoint test. 
+
+<<fixpoint>>=
+#! /bin/sh
+
+# interrupt handler
+
+trap "rm -f $tmp/$this.$$.* ; exit 1" 1 2 3 15
+
+
+this="`basename $0`"
+tmp="${TMP:-/tmp}"
+qc="../bin/qc--"
+
+# check command line
+
+if [ $# -ne 1 ]; then
+    echo "usage: $this file.c--"    
+fi
+
+file="$1"
+
+# three rounds
+
+$qc -pp $file           > $tmp/$this.$$.1
+$qc -pp $tmp/$this.$$.1 > $tmp/$this.$$.2
+$qc -pp $tmp/$this.$$.2 > $tmp/$this.$$.3
+
+diff -c $tmp/$this.$$.2 $tmp/$this.$$.3
+rc="$?"
+
+# clean up and return
+
+rm -f $tmp/$this.$$.*
+exit $rc
+
+@
+ 
+
+
+

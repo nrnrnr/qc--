@@ -1,0 +1,64 @@
+#
+#
+
+# ------------------------------------------------------------------ 
+# paths
+# ------------------------------------------------------------------ 
+
+LIBDIR =    ../lib
+BINDIR =    ../bin
+MANDIR =    ../man
+
+# ------------------------------------------------------------------  
+# high level targets
+# ------------------------------------------------------------------  
+
+all:V:          fp
+
+fp:V:           fixpoint
+                for f in *.c--; do ./fixpoint $f; done
+
+# ------------------------------------------------------------------ 
+# Noweb stuff - once this is stable the generic part should go to
+# ../config/noweb.mk
+# ------------------------------------------------------------------ 
+
+NOWEAVE =       noweave
+NOTANGLE =      notangle
+CPIF =          cpif
+LATEX =         latex
+RERUN =         Rerun (LaTeX|to get cross-references right)
+
+LINE =          '# %L "%F"%N'
+OCAMLTANGLE =   'for f in $target; do $NOTANGLE -L"$LINE" -R$f $prereq | $CPIF $f; done'
+MISCTANGLE  =   'for f in $target; do $NOTANGLE -R$f $prereq | $CPIF $f; done'
+
+HTML =          `echo *.nw       | sed 's/\.nw/.html/g;'`
+
+%.inc:          %.nw
+                $NOWEAVE -delay $prereq > $target
+
+%.html:         %.nw
+                $NOWEAVE -delay -html -filter l2h $prereq > $target
+
+%.dvi:          %.tex
+                $LATEX "\\scrollmode \\input $stem.tex"
+                ltxcount=3
+                while egrep -s "$RERUN" $stem.log && [ $ltxcount -gt 0 ]
+                do
+                    $LATEX "\\scrollmode \\input $stem.tex"
+                    ltxcount=`expr $ltxcount - 1`
+                done
+
+%.ps:           %.dvi
+                dvips -Ppdf -o $target $prereq
+
+
+# ------------------------------------------------------------------  
+# sources generated from noweb sources
+# ------------------------------------------------------------------  
+
+fixpoint:       test.nw
+                eval $MISCTANGLE
+
+html:V:         $HTML
