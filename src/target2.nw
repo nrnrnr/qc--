@@ -179,13 +179,35 @@ knows how they are related.  Therefore only the target can provide a
 function that creates new temporaries.
 
 <<components of t>>=
-mk_tmp:         Register.t -> Register.t        (* Invalid_argument *)
+mk_tmp:         Register.t -> Register.t;       (* Invalid_argument *)
 @
 
 The function [[mk_tmp r]] creates a new temporary for register [[r]].
 A target typically supports temporaries only for certain registers
-widths. If [[r]] is not supported this is a check run-time error and
+widths. If [[r]] is not supported this is a checked run-time error and
 [[Invalid_argument]] will be raised.
+
+The [[assign]] function creates an [[Rtl.rtl]] that transfers a value
+from one register to another.  The source and destination must be
+assignment compatible, otherwise it is a checked run-time error which
+raises an [[Invalid_argument]] exception.  The first argument is a
+lookup-function that provides information about the spaces the source
+and destination registers live in.
+
+<<components of t>>=
+assign: (Rtl.space -> Rtl.spacedescr) -> src:Register.t -> dst:Register.t -> Rtl.rtl;
+@
+
+When the register allocator (see ~module{linscan}) must spill, it has
+to create {\rtl}s that move values from registers to memory (spill)
+and vice versa (reloads).  Here are two functions to create such
+{\rtl}s:
+
+<<components of t>>=
+spill:  (Rtl.space -> Rtl.spacedescr) -> Register.t -> Rtl.loc ->Rtl.rtl list;
+reload: (Rtl.space -> Rtl.spacedescr) -> Register.t -> Rtl.loc ->Rtl.rtl list;
+@
+
 
 % ------------------------------------------------------------------ 
 \subsection{Implementation}
@@ -264,6 +286,35 @@ let new_tmp (sp,index,width) =
     | 16 -> ('u',!tmp_counter,width)
     | 32 -> ('t',!tmp_counter,width)
     | _  -> invalid_arg "unsupported register width in target2.nw"
+@
+
+The [[assign]] function converts both registers to [[Rtl.loc]] values and
+then uses the [[Rtl]] framework to create an assignment.    
+
+<<module D>>=
+let assign lookup ~src:(src_sp,_,src_w as src) ~dst:(dst_sp,_,dst_w as dst) =
+    if src_w <> dst_w then
+        invalid_arg "Target2.assign source and destination width don't match"
+    else
+        let src_loc = Register.to_loc lookup src  in
+        let dst_loc = Register.to_loc lookup dst  in
+            Rtl.store dst_loc (Rtl.fetch src_loc src_w)  dst_w
+
+let spill lookup ~reg:(sp,index,width as reg) ~loc =
+    if Rtlutil.locwidth loc <> width then
+        invalid_arg "Target2.spill size mismatch"
+    else
+        let reg_loc = Register.to_loc lookup reg in
+        let rtl     = Rtl.store loc (Rtl.fetch reg_loc width) width in
+            [rtl]
+
+let reload lookup ~reg:(sp,index,width as reg) ~loc =
+    if Rtlutil.locwidth loc <> width then
+        invalid_arg "Register.spill size mismatch"
+    else
+        let reg_loc = Register.to_loc lookup reg  in
+        let rtl     = Rtl.store reg_loc (Rtl.fetch loc width) width in
+            [rtl]
     
 let t = 
     { byteorder       = Dummy.byteorder         
@@ -285,6 +336,9 @@ let t =
     ; allocatable     = [] (* need something more sensible *)
     ; space           = CharUtil.lookup spaces 
     ; mk_tmp          = new_tmp 
+    ; assign          = assign
+    ; spill           = spill
+    ; reload          = reload
     }
 @
         
