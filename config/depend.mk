@@ -6,7 +6,7 @@
 # ------------------------------------------------------------------ 
 
 consistency-check:VQ:
-	[ -d $B ] || mkdir -p $B
+	[ -z "$B" ] || [ -d $B ] || mkdir -p $B
 	DOTS=`echo $B | sed "s/[^.]//g"`
 	if [ ! -z "$DOTS" ]; then
 	  echo
@@ -34,7 +34,7 @@ consistency-check:VQ:
 	fi
 
 dep-chk:VQ: consistency-check
-	if [ $DEPEND -nt mkfile ]; then true
+	if $config_test $DEPEND -nt mkfile; then true
 	else
 	  echo
 	  echo "You must run mk depend first"

@@ -40,7 +40,7 @@ nuke:
 	    rm -f *~ include/*~
 	    for i in lib/regexp lib/bio lib/9 src; do (cd $$i; make nuke); done
 
-FILE    :=  mk-$(VERSION)
+FILE    =  mk-$(VERSION)
 
 # export creates $(FILE).tar.gz with all sources. The tactic used below is
 # to include everything, excpet derived files which are indentified by

@@ -54,7 +54,7 @@ all.opt:V:      config qc--.opt $config_build_interp doc
 
 config:QV:
 	if [ -f config/config.mk ]; then
-	if test configure -nt config/config.mk
+	if $config_test configure -nt config/config.mk
 	then
 	  echo "============================================"
 	  echo "config.mk is out of date."
@@ -276,6 +276,7 @@ FILES:D:          clobber
 timestamps:V:   
 	(cd interp; mk -t -a disasm-dec.c interp-dec.c encode.[ch])
 	touch */*.1
+	touch doc/release.ps
 
 tar:V:          $DIR.tar.gz
 
