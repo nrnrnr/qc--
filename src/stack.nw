@@ -28,7 +28,6 @@ module Target = Target2
 module RP     = Rtl.Private
 module AT     = Automaton2
 @
-
 [[blocks]] builds a list table of (named) blocks taken from the actual
 procedure.  This table will be passed to the Lua function that actually
 assembles the blocks into one that becomes the stack frame. 
@@ -36,14 +35,13 @@ assembles the blocks into one that becomes the stack frame.
 Some blocks blocks are special: the block named [[sp]] is empty, but is
 still useful because its address is the stack pointer. It can be
 therefore used by the frame-assembling Lua function to define where the
-stack pointer points into the frame. We probably have to add another
-such block for the frame pointer [[fp]].
-
+stack pointer points into the frame. We probably have to remove the
+[[sp]] and replace it with a block for the virtual frame pointer [[vfp]].
 <<stack.ml>>=
 let blocks (p:Proc.t) =
     let cc       = p.Proc.cc                        in
     let ptr      = p.Proc.target.Target.pointersize in
-        [ "sp"              , Block.mk(Rtl.fetch cc.Target.sp ptr) 0 4 
+        [ "sp"              , Block.at (Rtl.fetch cc.Target.sp ptr) 0 4 
         ; "incoming"        , p.Proc.incoming
         ; "stackdata"       , p.Proc.stackd            
         ; "continuations"   , p.Proc.conts

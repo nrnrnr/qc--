@@ -1064,12 +1064,11 @@ let proc spans env target optimizer (cconv,name,args,bdy) =
     let cfg         = G.mk target (Rtl.par []) in (* empty control-flow graph *)
     (* symbolic late compile-time constants to be used for stack areas *)
     let sp_offset k = addk sp k in
-    let stack       = sp_offset (Rtl.late "stackdata" pointer) in
     let inb         = sp_offset (Rtl.late "inbase"    pointer) in
     let outb        = sp_offset (Rtl.late "outbase"   pointer) in
     let privb       = sp_offset (Rtl.late "private"   pointer) in
     (* calculate amount of user stack data - updates env! *)
-    let stackd      = Memalloc.mk stack in
+    let stackd      = Memalloc.relative sp "stackdata" in
     let ( env, stackd, conts, esc_conts) = StackData.proc env target stackd cc bdy in
     (* priv provides spill slots etc *)    
     let priv        = AT.mk cc.Target.stack_slots privb in
@@ -1079,7 +1078,7 @@ let proc spans env target optimizer (cconv,name,args,bdy) =
     let exit        = G.gm_label cfg exit_label exit_symbol (G.exit cfg) in
     (* dummy area in outgoing area because the the body of the procedure
        might not create any. This would confuse Area.overlap below *)
-    let dummy       = Block.mk outb 0 1 in   
+    let dummy       = Block.at outb 0 1 in   
     let state = (* this is needed for translation of the body *)
         { proc      = name       (* name of this procedure *)
         ; env       = env        (* fat environment *)

@@ -380,10 +380,10 @@ to be composable with an
 automaton created by [[Automaton2.Memory.mk]].  
 \end{quote}
 <<DummyTarget>>=
-class new_simple' (byte_order) (base:Rtl.exp): Automaton2.automaton =
+class new_simple' (byte_order) (anchor:Rtl.exp) dbg: Automaton2.automaton =
 object (this)
-    val _mem = AM.mk { AM.byteorder = byte_order; AM.wordsize = 32;
-                       AM.pointersize = 32; AM.memsize = 8 } true true base
+    val _mem = AM.relative { AM.byteorder = byte_order; AM.wordsize = 32;
+                             AM.pointersize = 32; AM.memsize = 8 } true true anchor dbg
     method freeze () = _mem#freeze ()
     method allocate width hint = match hint with
     | None ->   _mem#allocate width hint
@@ -395,7 +395,7 @@ end
 
 class simple' (byte_order) (base:Rtl.exp): Automaton2.automaton =
 object (this)
-    val mutable _block  = Block.mk base (*size*) 0 (*align*) 8  (* block *)
+    val mutable _block  = Block.at base (*size*) 0 (*align*) 8  (* block *)
     val mutable _frozen = false
     
     method freeze () =
@@ -411,17 +411,13 @@ object (this)
     | "IEEE 754 comparison results"     -> new loc (fpcond 1)
     | r     -> Impossible.impossible ("unknown hardware register "^r) 
     
-    method private slotaddress = (* base + v *)
-        Rtlutil.add pointersize base (Rtl.late (Idgen.slot "slots") pointersize)
-    
     method allocate width hint = 
         let ()      = assert (_frozen = false) in          
         match hint with 
         | Some x -> this#hardware x
         | None ->
             let ()      = assert (width mod memsize = 0) in
-            let slot    = Block.mk this#slotaddress 
-                                   (width / memsize) pointersize in
+            let slot    = Block.relative base "slots" (width / memsize) pointersize in
             ( _block <- Block.cathl slot _block 
             ; this#memloc (Block.base slot) width
             )
@@ -623,19 +619,9 @@ The automaton that works with our new Automaton and Block modules. This
 will replace the automaton above.
 
 <<SparcTarget>>=
-class new_simple' (byte_order) (base:Rtl.exp): Automaton2.automaton =
-object (this)
-    val _mem = AM.mk { AM.byteorder = byte_order; AM.wordsize = 32;
-                       AM.pointersize = 32; AM.memsize = 8 } true true base
-    method freeze () = _mem#freeze ()
-    method allocate width hint = match hint with
-    | None   -> _mem#allocate width hint
-    | Some r -> Impossible.impossible ("unknown hardware register "^r) 
-end
-
 class simple' (byte_order) (base:Rtl.exp): Automaton2.automaton =
 object (this)
-    val mutable _block  = Block.mk base (*size*) 0 (*align*) 8  (* block *)
+    val mutable _block  = Block.at base (*size*) 0 (*align*) 8  (* block *)
     val mutable _frozen = false
     
     method freeze () =
@@ -648,17 +634,13 @@ object (this)
     method private hardware hint = match hint with 
     | r     -> Impossible.impossible ("unknown hardware register "^r) 
     
-    method private slotaddress = (* base + v *)
-        Rtlutil.add pointersize base (Rtl.late (Idgen.slot "slots") pointersize)
-    
     method allocate width hint = 
         let ()      = assert (_frozen = false)           
         and ()      = assert (width mod memsize = 0) in
         match hint with 
         | Some x -> this#hardware x
         | None ->
-            let slot    = Block.mk this#slotaddress 
-                                   (width / memsize) pointersize in
+            let slot = Block.relative base "slots" (width / memsize) pointersize in
             ( _block <- Block.cathl slot _block 
             ; this#memloc (Block.base slot) width
             )

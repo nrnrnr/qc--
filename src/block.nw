@@ -31,7 +31,11 @@ construct a block and can be observed as well.
 type t
 
 (* constructors *)
-val mk: base:Rtl.exp -> size:int -> alignment:int -> t
+val at:       base:Rtl.exp -> size:int -> alignment:int -> t
+  (* block is fixed at base *)
+val relative: anchor:Rtl.exp -> dbg:string -> size:int -> alignment:int -> t
+  (* block's base is at an unknown offset from anchor; offset is a late 
+     compile-time constant whose name includes dbg *)
 
 (* observers *)
 val base:           t -> Rtl.exp
@@ -124,7 +128,7 @@ module Lua: sig
     val adjust:     t -> t
     val cat:        Rtl.width -> t list -> t
     val overlap:    (string -> placement) -> Rtl.width -> string -> t list -> t
-    val mk:         t -> int (*size*) -> int -> string option -> t
+    val at:         t -> int (*size*) -> int -> string option -> t
 end
 @
 
@@ -148,12 +152,16 @@ let size t          = t.size
 let alignment t     = t.alignment
 let constraints t   = t.constraints
 
-let mk ~base ~size ~alignment =
+let at ~base ~size ~alignment =
     { base          = base
     ; size          = size
     ; alignment     = alignment
     ; constraints   = []
     }
+
+let relative ~anchor ~dbg ~size ~alignment =
+  let w = RU.Width.exp anchor in
+  at ~base:(RU.add w anchor (Rtl.late (Idgen.offset dbg) w)) ~size ~alignment
 
 type placement = High | Low
 @
@@ -227,8 +235,7 @@ Not essential, but convenient functions.
 let offset base name ptrwidth =
   RU.add ptrwidth base (Rtl.late (Idgen.offset name) ptrwidth)
 
-let empty w =
-  mk ~base:(offset (Vfp.mk w) (Idgen.offset "empty block") w) ~size:0 ~alignment:1
+let empty w = relative ~anchor:(Vfp.mk w) ~dbg:"empty block" ~size:0 ~alignment:1
 
 let cathl_list w = function
   | [] -> empty w
@@ -277,12 +284,12 @@ provide a name for the constant that is fed into [[Idgen]] to make it
 unique.
 
 <<Block primitives for Lua>>=
-let mk block size alignment name =
-    let name  = Aux.Option.get "Block.mk" name in (* name for late *)
+let at block size alignment name =
+    let name  = Aux.Option.get "Block.at" name in (* name for late *)
     let width = Rtlutil.Width.exp (base block) in (* width of addr *)  
     let late  = Rtl.late name width in
     let addr  = offset (base block) name width in
-        mk addr size alignment
+        at addr size alignment
 @
 
 

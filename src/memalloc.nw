@@ -1,3 +1,4 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 
 % Grades     ::=    "%%Grades:" Quality Importance Urgency
 % Quality    ::=    A|B|C|D|E
@@ -14,15 +15,15 @@ This module provides an applicative abstraction [[t]] to allocate a
 memory block incrementally by a sequence of [[allocate]] and [[align]]
 directives.  The abstraction is similar to a pointer that is advanced
 and aligned to reserve memory. At any point the value of the  pointer
-can be uesed as an address. After allocation is complete, the automaton
+can be used as an address. After allocation is complete, the automaton
 is [[frozen]] and the allocated block is returned. A [[t]] value should
 not be used after it was frozen (allthough it is technically possible
 and safe).
-
 <<memalloc.mli>>=
-type t          (* mutable state *)
+type t          (* immutable *)
 
-val mk:         base:Rtl.exp -> t       (* provide base address *)
+val at:         base:Rtl.exp -> t       (* provide base address *)
+val relative:   anchor:Rtl.exp -> dbg:string -> t (* unknown addr relative to anchor *)
 val allocate:   t -> size:int -> t      (* increase block *)
 val align:      t -> int -> t           (* align cursor *)
 val current:    t -> Rtl.exp            (* obtain cursor *)
@@ -41,12 +42,16 @@ type t =
     ; alignment:            int         (* alignment of block *)
     }
 
-let mk ~base = 
+let at ~base = 
     { base      = base
     ; width     = Rtlutil.Width.exp base
     ; size      = 0
     ; alignment = 1
     }
+
+let relative ~anchor ~dbg = 
+  let w = Rtlutil.Width.exp anchor in
+  at (Rtlutil.add w anchor (Rtl.late (Idgen.offset dbg) w))
 
 let allocate t ~size = 
     assert (size >= 0);    
@@ -62,8 +67,5 @@ let align    t n = (* align both size and base alignment *)
     }
 let current t = Rtlutil.addk t.width t.base t.size
 
-let freeze t = Block.mk t.base t.size t.alignment
+let freeze t = Block.at t.base t.size t.alignment
 @
-
-    
-    

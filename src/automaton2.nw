@@ -78,6 +78,24 @@ type spec = Rtl.exp -> automaton    (* specification should be abstract *)
 type loc  = location                (* location      should be abstract *)
 type t    = automaton               (* automaton     should be abstract *)
 @
+Here's an alternative:
+<<types>>=
+module type S = sig
+  type t
+  type loc
+  type parts = { allocate : int -> string option -> loc
+               ; freeze   : unit -> result
+               } 
+  val mk : parts -> t
+  type pre_t = next:t -> parts
+  type with_overflow = next:t -> overflow:t -> parts
+  val alloc  : t -> int -> string option -> loc
+  val freeze : t -> result
+  type width = int
+  val fetch  : loc -> width -> Rtl.exp
+  val store  : loc -> Rtl.exp -> width -> Rtl.rtl
+end
+@          
 
 <<automaton2.mli>>=
 <<types>>
@@ -150,6 +168,8 @@ The alignment of the resulting block is the maxmimum alignment of any slot.
 
 Upon freezing, the stack pointer points at the young (most recently
 allocated) end of the block.
+The block will be addressed at an unknown offset relative to the
+[[anchor]] expression. 
 <<automaton2.mli>>=
 module Memory: sig
     type target = 
@@ -159,7 +179,8 @@ module Memory: sig
         ; memsize:          int                 (* in bits *)
         }
 
-    val mk: target -> up:bool -> aligned:bool -> Rtl.exp (*base*) -> automaton
+    val relative:
+        target -> up:bool -> aligned:bool -> anchor:Rtl.exp -> dbg:string -> automaton
 end
 @
 
@@ -178,6 +199,8 @@ respectively. The class types define their shape but we are free to
 provide entirely different implementations.
 
 <<automaton2.ml>>=
+module RU = Rtlutil
+module B  = Block
 <<types>>
 @
 
@@ -216,7 +239,7 @@ module Memory = struct
     <<class loc>>
     <<class [[Memory.t]]>>
     
-    let mk target ~up ~aligned base = new t target up aligned base
+    let relative target ~up ~aligned ~anchor ~dbg = new t target up aligned anchor dbg
 end    
 @
 
@@ -242,44 +265,42 @@ with [[_block]]. Depending on [[T.up]] the [[_block]] grows on its high
 or low end.
 
 <<class [[Memory.t]]>>=
-class t (target:target) up aligned (base:Rtl.exp): automaton =
+class t (target:target) up aligned (anchor:Rtl.exp) dbg : automaton =
 object (this)
-    val mutable _block  = Block.mk base 0 1  (* initial block *)
+    val mutable _block  = B.relative anchor dbg 0 1  (* initial block *)
     val mutable _frozen = false
     val mutable _maxalign = 1
-    val         _add      = Rtlutil.add target.pointersize
+    val         _add      = RU.add  target.pointersize
+    val         _addk     = RU.addk target.pointersize
     
     method freeze () =
-        ( _block  <- Block.adjust (Block.cathl _block (Block.mk base 0 _maxalign))
+        ( _block  <- 
+             (let alignblock = B.at (B.base _block) 0 _maxalign in
+              B.adjust (B.cathl _block alignblock))
         ; _frozen <- true 
         ; { overflow = _block
           ; sp_value =
-              if up then Rtlutil.addk (Rtlutil.Width.exp base) base (Block.size _block)
-              else base
+              if up then _addk (B.base _block) (B.size _block)
+              else B.base _block
           }
         )
-
-    method private memloc addr w = 
-        new loc (Rtl.cell Rtl.none 'm' target.byteorder w addr)
-    
-    method private slotaddress = (* base + v *)
-        _add base (Rtl.late (Idgen.slot "slots") target.pointersize)
     
     method allocate width hint = 
-        let ()      = assert (_frozen = false)           
-        and ()      = assert (width mod target.memsize = 0) 
-        and bytes   = width / target.memsize in
+        let ()        = assert (_frozen = false)           
+        and ()        = assert (width mod target.memsize = 0) 
+        and bytes     = width / target.memsize in
         let setmax () = if _maxalign < bytes then _maxalign <- bytes in
-	let align = if aligned then (setmax(); bytes) else 1 in
+	let align     = if aligned then (setmax(); bytes) else 1 in
+        let assn      = if aligned then Rtl.aligned bytes else Rtl.none in
         match hint with 
-        | Some x -> assert false (* hints not supported *)
+        | Some x -> Impossible.impossible "hint reached a memory automaton"
         | None ->
-            let slot = Block.mk this#slotaddress bytes align in
+            let slot = B.relative anchor "slots" bytes align in
                 ( if up then
-                    _block <- Block.cathl slot _block 
+                    _block <- B.cathl slot _block 
                   else
-                    _block <- Block.cathl _block slot 
-                ; this#memloc (Block.base slot) width
+                    _block <- B.cathl _block slot 
+                ; new loc (Rtl.mem assn 'm' target.byteorder width (B.base slot))
                 )                
 end
 @

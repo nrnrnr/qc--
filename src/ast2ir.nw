@@ -658,8 +658,9 @@ and cutStmt (e, args, conts) =
   (* PERHAPS IT SHOULD BE POSSIBLE TO SET THE CALLING CONVENTION FOR CUT TO
      AND FOR CONTINUATION? *)
   let cc    = ccs default_cc in
-  let out   = actuals cc.C.cut_to_actuals args in
-  let cuti  = Contn.cutto target cc.C.cutto.Target2.embed ~contn:(expr e) in
+  let k     = expr e in
+  let out   = actuals (cc.C.cut_to_actuals k) args in
+  let cuti  = Contn.cutto target cc.C.cutto.Target2.embed ~contn:k in
   let ()    = add_constraints (Block.constraints out.C.overflow) in
   let conts = continuations cc conts in
   G.instruction g out.C.shuffle **>
@@ -762,19 +763,13 @@ let proc containing_spans (cconv,procname,args,procbody) =
                } in
     let g = G.mk info Idgen.label in (* empty control-flow graph *)
 
-    let sp          = Rtl.fetch (proc_cc.C.sp) pointersize in (* stack pointer *)
-
-    (* symbolic late compile-time constants to be used for stack areas *)
-    (* THERE ARE LOTS OF THESE.  WHERE ARE THEY USED? *)
-    let sp_offset = add sp in
-    let stack     = sp_offset (Rtl.late "stackdata" pointersize) in
-    let inb       = sp_offset (Rtl.late "inbase"    pointersize) in
-    let outb      = sp_offset (Rtl.late "outbase"   pointersize) in
+    let sp = Rtl.fetch (proc_cc.C.sp) pointersize in (* stack pointer *)
 
     (* calculate amount of user stack data - rebinds env! *)
     <<definition of [[stackdata]]>> in
     let env, stackd, contenv =
-      stackdata target (F.push env scope) (Memalloc.mk stack) procbody in
+      stackdata target (F.push env scope) (Memalloc.relative sp "stackdata") procbody
+    in
 
     (* define all the mutable state here *)
     let youngblocks = ref [] in
@@ -789,7 +784,7 @@ let proc containing_spans (cconv,procname,args,procbody) =
       try Strutil.Map.find l contenv with _ -> impossible "lost cont" in
     let cont_rvalue cname coffset w =
       (continuation cname).K.escapes <- true;
-      sp_offset (Rtl.late coffset w) in
+      add sp (Rtl.late coffset w) in
 
     let expr, exprtype, lvalue = exprfuns env contenv cont_rvalue in
 
@@ -850,8 +845,8 @@ let proc containing_spans (cconv,procname,args,procbody) =
         ; Proc.incoming = incoming   (* incoming   block *)   
         ; Proc.outgoing = outgoing   (* outgoing   block *)   
         ; Proc.stackd   = stackd     (* stack data block *)
-        ; Proc.priv     = AM.mk (amtarget target) ~up:true ~aligned:true
-                                       (sp_offset (Rtl.late "private" pointersize))
+        ; Proc.priv     = AM.relative (amtarget target) ~up:true ~aligned:true
+                                      ~anchor:sp ~dbg:"private"
         ; Proc.eqns     = List.concat (!constraints)
         ; Proc.conts    = contblocks
         ; Proc.vars     = vars       (* number of variables *)
