@@ -4,21 +4,18 @@
 
 \input{macros.tex}
 
-\title{A datatype of syntax of residual terms}
+\section{Core syntax of residual terms}
 
-The type of residual expressions is parametric, so that we can represent
-more types later.
-<<syntax.mli>>=
-  <<syntax datatype>>
-val pprint : ('a -> unit) -> 'a bExp -> unit
-@ [[filterNones]] is a hack which merges the braches returning [[None]]
-in a case statement. Should be really useful to get shorter residual code.
-<<syntax.mli>>=
-val filterNones : 'a bExp -> (string * id list * 'a bExp) list -> 'a bExp
-  
-@ The residual syntax relfects the basic types and type constructors in
-Ocaml.
-<<syntax datatype>>=
+We define the core abstract syntax of the residual language. The core
+syntax defines representations for most of the OCaml base types and
+constructs (lambda abstraction, application, let-bindings, case
+expressions, pairs, etc). However, the abstract syntax of residual
+expressions is parametric. We will have the posibility to add
+represntations for more base types (or constructs).
+
+We have some limited fancy features as pattern-matching and generic case
+statements with optional wildcards.
+<<core syntax>>=
 type id = string
 type pat = ID of id | TUPLE of pat list
 type 'a bExp =
@@ -50,12 +47,24 @@ type 'a bExp =
   | CASEoption of 'a bExp * (id * 'a bExp) * 'a bExp
   | CASEGEN of 'a bExp * (string * id list * 'a bExp) list * 'a bExp option
   | XTRA of 'a
+@
+\section{Interface}
+We provide a pretty-printing function.
+<<syntax.mli>>=
+  <<core syntax>>
+val pprint : ('a -> unit) -> 'a bExp -> unit
+@
 
-@ \section{Implementatipon} The pretty-printing function takes an
+[[filterNones]] is a hack which merges the braches returning [[None]]
+in a case statement. Should be really useful to get shorter residual code.
+<<syntax.mli>>=
+val filterNones : 'a bExp -> (string * id list * 'a bExp) list -> 'a bExp
+
+@ \section{Implementation} The pretty-printing function takes an
 argument a function pretty-printing of additional types.
 
 <<syntax.ml>>=
-<<syntax datatype>>
+<<core syntax>>
 open Pprint
 
 let pprint pxtra t =
@@ -85,13 +94,13 @@ let pprint pxtra t =
     match pat with
       ID x -> ps x
     | TUPLE pats -> 
-	let _ =
-	  MyList.mapM
-	    pp_pat
+        let _ =
+          MyList.mapM
+            pp_pat
             (fun () -> ps "(")
             (fun () -> ps ",")
             (fun () -> ps ")") pats
-	in ()
+        in ()
 
   and pp_top t =
     match t with 
@@ -112,11 +121,11 @@ let pprint pxtra t =
             (fun () -> print_close "]") exs in ()
     | CONS (e1,e2)       ->
         print_open 1 "(";
-	pp_top e1;
-	ps "::";
-	pbk();
-	pp_top e2;
-	print_close ")"
+        pp_top e1;
+        ps "::";
+        pbk();
+        pp_top e2;
+        print_close ")"
     | NIL -> ps "[]";
     | APP(APP(VAR "+",t1),t2) -> (pp_fun t1; psp();ps "+";psp();pp_arg t2)
     | APP(APP(VAR "=",t1),t2) -> (pp_fun t1; psp();ps "=";psp();pp_arg t2)
@@ -135,15 +144,15 @@ let pprint pxtra t =
         )
     | LAM(pat, t)      -> 
         (print_open 2 "fun ";
-	 pp_pat pat;
-	 ps " ->"; psp(); pp_top t; 
+         pp_pat pat;
+         ps " ->"; psp(); pp_top t; 
          Format.close_box())
     | PAIR(t1, t2)   -> 
         (print_open 1 "("; pp_top t1; ps ","; psp(); pp_top t2;
          print_close ")") 
     | TRIPLE(t1, t2, t3)   -> 
         (print_open 1 "("; pp_top t1; ps ","; psp(); pp_top t2;
-	 ps ","; psp(); pp_top t3;
+         ps ","; psp(); pp_top t3;
          print_close ")") 
     | FST e     -> (ps "Tools.fst"; psp(); pp_arg e)
     | SND e     -> (ps "Tools.snd"; psp(); pp_arg e)

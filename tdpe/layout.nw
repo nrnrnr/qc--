@@ -1,0 +1,173 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>(<a href="#$1.dvi">.dvi</a>)
+% l2h macro exfile 1 <a href="#$1"><tt>#1</tt></a>
+% l2h macro image 1 <img alt="Dependency graph" src="#1.gif" ALIGN=right></img>
+
+\title{Proposed layout of machine-constructors instances}
+
+I outline my proposal for structuring the toolkit-generated code in
+order to use TDPE in a code-duplication friendly manner. See also a
+hands-on example in \module{sparc-structures}.
+
+Suppose our instruction set is composed out of the types
+[[t1]],[[t2]],...,[[tn]]. Not necessarily, but the sequence might
+include the main type [[t]] as well. I actually encourage that. Also,
+note that for the moment I am ignoring the [[relocatable]] qualifiers.
+
+For a better specialization, the main idea is to generate two instances
+of the types [[ti]]. The [[ti]] type instance is the usual type. The
+[[ti']] instance is the dynamic type (eventually, [[Tdpe.dynamic]]).
+
+I'll show the changes that I needed to do in the generated code. But
+first, I'll show how we can structure the abstract representation of
+machine instructions in order to reduce the amount of code duplication
+resulting when applying TDPE.
+
+\subsection{The abstract representation}
+
+Some cases of specialization suggest that we should consider all
+arguments of machine instructions as dynamic, even if they are complex
+types. Therefore, we might generate abstract representation of machine
+instructions as follows:
+
+<<abstract_representation>>=
+module Machine =
+  struct
+    type d = Tdpe.dynamic
+
+    (* for all ti, including instruction *)
+    type ti = ...
+      | Some_Constructor(d,d,d)
+      | ......
+    (* endfor *)
+  end
+@
+
+\subsection{The instance signature}
+As mentioned before, a machine-code instance will provide two
+representations of values values of type [[ti]]. One representation (tye
+type [[ti]]) is the original intended representation (be it abstract
+rep., RTL, bits, etc). The second representation (type [[ti']] is a
+syntactic representation.  We also provide reify/reflect functions for
+converting [[ti]] into [[ti']] and viceversa. A signature might look
+like:
+
+<<instance_signature>>=
+module type S = sig
+  
+  (* for all i *)
+  type ti
+  type ti' 
+  (* endfor *)
+
+  (* for all i *)
+  val reify_ti : ti -> ti'
+  val reflect_ti : ti' -> ti
+  (* endfor *)
+
+  type nativeint = Base.nativeint  (* in fact, Tdpe.dynamic as well *)
+      
+  val some_constructor : nativeint * nativeint * ti' -> t
+
+end
+@ \textbf{Important:} The constructors use the dynamic type [[ti']].
+Notice also that we are redefining the [[nativeint]] type.
+
+\subsection{Abstract representation creating instance}
+
+An instance for creating machine instructions in abstract representation
+would look like the following: ([[Machine]] is the module defining the
+abstract representation)
+
+<<abstract_representation_creation_instance>>=
+module MkRep : S with type t = Machine.instruction =
+  struct
+    (* for all i *)
+    type ti  = Machine.ti
+    type ti' = Tdpe.dynamic
+    (* endfor *)
+
+    let reify_ti = MachineNbe.reify_ti
+    let reflect_ti = MachineNbe.reflect_ti
+    (* endfor *)
+
+    type nativeint = Base.nativeint
+
+    let some_constructor nint_val nint_val ti'_val =
+      Some_Constructor (nint_val, nint_val, ti'_val)
+  end
+@ \textbf{Note} that the constructor is used at [[ti']] type, but no
+conversion is needed.
+
+\subsection{RTL-creation instance}
+
+When creating RTLs, we are using the full power of having two instances
+of the types [[ti]]. 
+
+Notice that, at this point, the order in which code is generated
+matters.
+
+<<rtl_creation_instance>>=
+module Encode : S with type t = Rtl.rtl =
+    struct
+      exception NoWay
+
+      (* for all i, in reverse dependence order *)
+
+      type ti = Rtl.exp
+      type ti' = Tdpe.dynamic
+
+      let encode_ti x = 
+        match x with
+          ....
+        | Some_Other_Constructor(v1,v2) = some_other_constructor v1 v2
+          
+      let reify_ti = raise NoWay
+      let reflect_ti ti'_val = encode_ti(MachineNbe.reflect_ti ti'_val)
+
+      let some_constructor nint_val nint_val ti'_val =
+        Rtl.fetch (.....
+                     (reflect_ti ti'_val) ...)
+
+      (* endfor *)
+    end
+@ There are several things to say here: the [[reflect]] function maps an
+expression representing a value of type [[ti]] directly into its
+associated [[Rtl.exp]]ression. The mapping is done by first reflecting
+the expression into a [[ti]] value and then by using the corresponding
+rtl-creation constructor to build the [[Rtl.exp]].
+
+Also, I will eventually like to make the [[encode_t]] function public
+out of the signature [[S]]. If [[t]] (instruction) is included in the
+list [[ti]], then that would be just the [[reflect_t]] function, which
+is already made public.
+
+\subsection{The RTL recognizer}
+
+The RTL recognizer constructs instructions. The constructors expect
+dynamic types. Therefore, it needs to convert types [[ti]] into [[ti']]
+using the reify functions. An example is given below.
+
+<<rtl recognizer>>=
+module Make (Instruction : MachineInstance.S) = struct 
+    
+    module RP = Rtl.Private
+    module B = Bits
+    module BO = Bitops
+
+    let (&&) x y = Base.lgand x y
+
+    let defaultOfInstruction rtl = 
+      (match rtl with
+      | RP.Rtl [... bits1 .. bits2 .. bits3] 
+        ->
+          Instruction.constructor
+            (Bits.to_nativeint bits1)
+            (Bits.to_nativeint bits2)
+            (Instruction.reify_ti
+               (Instruction.some_ti_constructor
+                  (Bits.to_nativeint bits3)))
+      | .....
+@ Note that we are using an [[Instruction.reify_ti]] after each
+constructor of type [[ti]].
+@ 

@@ -5,16 +5,23 @@
 \input{macros.tex}
 \section{Introduction}
 
-In this module, we run the residualizing instance of the
-RTL-optimization functions.
+In this module, we define an interface to program specialization and we
+provide several specialization instances. The specialization instances
+are the available RTL-optimization functions.
 
+For the purpose of generality, a ``specializable'' term is defined with
+a [[TEST_INSTANCE]] module.
 <<spec.mli>>=
 module type TEST_INSTANCE =
     <<specialization instance signature>>
+@ The actual specialization call is obtained as an associated [[TEST]]
+module, with the help of a functor.
+<<spec.mli>>=
 module type TEST =
     <<specialization signature>>
 module MkTest(B : TEST_INSTANCE) : TEST
-@ All the tests that we know of:
+@ All the tests that we provide at this point: identity function,
+forward substitutions, locations read and written by an instruction.
 <<spec.mli>>=
 module IdTest            : TEST
 module IdTranslationTest : TEST
@@ -26,9 +33,9 @@ module FrwdMergeTest  : TEST
 module ReadWriteTest  : TEST
 module ReadWriteTest' : TEST
 
-@ Tests follow a standard interface. A ``specializable'' term is defined
-in a [[TEST_INSTANCE]] module, by defining its type, its associated NBE
-combinator, and the name of residual value.
+@ A [[TEST_INSTANCE]] module, defines a specializable term by specifying
+the term, its type, its associated Tdpe combinator, and the name of
+residual value.
 <<specialization instance signature>>=
   sig
     type tau
@@ -36,7 +43,8 @@ combinator, and the name of residual value.
     val termName : string
     val combinator : tau Tdpe.rr
   end
-@ Available specialization directives/outputs:
+@ Available specialization directives/outputs. We might provide
+functions for writing specialized code into files, etc.
 <<specialization signature>>=
   sig
     val normalize : unit -> Tdpe.dynamic
@@ -92,7 +100,7 @@ module MkTest(Ts : TEST_INSTANCE) =
 
 @ \subsection{Test instances}
 
-The [[Id]] test may be used to visualize the reflection over the
+The [[Id]] instance may be used to visualize the reflection over the
 [[instruction]] type.
 <<test instances>>=
 module Id : TEST_INSTANCE =
@@ -102,10 +110,10 @@ module Id : TEST_INSTANCE =
     let termName = "identity"
     let combinator = T.arrow(Mn.instruction,Mn.instruction)
   end
-@ The [[IdTranslation]] test produces the residualizing version of the
-composition of the RTL-encoder and RTL-recognizer. Ideally, it should
-yield a similar result as with the test above (modulo the [[option]]
-answer type).
+@ The [[IdTranslation]] instance produces the residualizing version of
+the composition of the RTL-encoder and RTL-recognizer. Ideally, it
+should yield a similar result as with the test above (modulo the
+[[option]] answer type).
 <<test instances>>=
 module IdTranslation : TEST_INSTANCE =
   struct
@@ -135,8 +143,9 @@ module MkFS(B : FS_INSTANCE) : TEST_INSTANCE =
     let term = B.term
     let termName = B.termName
   end
+@
 
-@ The [[FSI]] instance is associated with the first implementation of
+The [[FSI]] instance is associated with the first implementation of
 forward substitution on RTLs.
 <<test instances>>=
 module FSI : FS_INSTANCE =
@@ -185,7 +194,7 @@ module MkRW_cd(B : RW_INSTANCE) : TEST_INSTANCE =
                                  T.arrowStub("z",T.a',T.a'))))
     let combinator =
       T.arrowStub
-	("read",treg,
+        ("read",treg,
          T.arrowStub("write",treg,
                      T.arrowStub("instruction",Mn.instruction,
                                  T.arrowStub("zero",T.a',T.a'))))

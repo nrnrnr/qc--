@@ -220,7 +220,7 @@ RERUN =         Rerun (LaTeX|to get cross-references right)
 
 LINE =          '# %L "%F"%N'
 
-HTML =          `echo *.nw                             | sed 's/\.nw/.html/g'`
+HTML =          `echo *.nw */*.nw                      | sed 's/\.nw/.html/g'`
 INC  =          `echo *.nw  ../cllib/*.nw ../test/*.nw | sed 's/\.nw/.inc/g'`
 
 ################################################################
@@ -333,8 +333,11 @@ lowercopy.ml: cfg.nw
 ################################################################
 CFLAGS=-I$OCAMLSOURCES/byterun -O
 
-%.o:            %.c
-                $CC $CFLAGS -c $stem.c -o $target
+#%.o:            %.c
+#                $CC $CFLAGS -c $stem.c -o $target
+
+tdpeLib/callcc.o:       tdpeLib/callcc.c
+                $CC $CFLAGS -c $prereq -o $target
 
 uint64p.o:      uint64p.c
                 $OCAMLC $OCAMLC_FLAGS -c $prereq
@@ -485,6 +488,8 @@ clean:V:
 	        rm -f $INTDIR/*.html $INTDIR/*.1 $INTDIR/*.ps $INTDIR/*.pod
 	        rm -f $INTDIR/*~
 		rm -f $QCmmSRC/*.cmi $QCmmSRC/*.cmo
+		rm -f $QCmmML $QCmmMLI
+		rm -f $QCmmPML $QCmmPMLI
 		rm -f $INSTML $INSTMLI $INTDIR/*.c
 
 clobber:V:	clean
