@@ -29,19 +29,16 @@ typedef unsigned  Cmm_Word;
 typedef void*     Cmm_Dataptr;
 typedef void    (*Cmm_Codeptr)();
 
-/* This structure should be considered private */
-typedef struct {
+/* This structure should be considered private---
+   it is an unchecked run-time error to read or write any field */
+typedef struct cmm_activation {
   Cmm_Word*   vfp;
   Cmm_Codeptr pc;
   Cmm_Dataptr rtdata;
   Cmm_Word*   regs[NUM_REGS];
 } Cmm_Activation;
 
-/* This structure should be considered private */
-typedef struct {
-  Cmm_Codeptr pc;
-  Cmm_Word*   sp;
-} Cmm_Cont;
+typedef struct cmm_cont Cmm_Cont;  /* continuation; private representation */
 @ 
 Functions for walking the stack.
 <<public functions>>=
@@ -339,6 +336,7 @@ stitch things together.
 #include <assert.h>
 #include <stdio.h>
 <<external functions>>
+<<private representations>>
 <<private functions>>
 <<public function implementations>>
 <<private functions>>=
@@ -349,3 +347,10 @@ void print_stack(int* fp) {
     fprintf(stderr, "%d: %X: %x\n", a, (unsigned)fp+a, fp[a]);
   }
 }
+@ 
+The representation of continuations is private.
+<<private representations>>=
+struct cmm_cont {
+  Cmm_Codeptr pc;
+  Cmm_Word*   sp;
+};
