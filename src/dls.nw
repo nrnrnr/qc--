@@ -369,7 +369,8 @@ let dls _ (cfg, ({Proc.cc = cc; Proc.target = tgt} as proc)) =
   let cfg = rpo_dfs cfg in
   let cfg = cleanup cfg in
   <<add spans for variable locations>>;
-  if Debug.on "dls" then <<print [[cfg]] plus live-in and live-out sets>>;
+  if Debug.on "dls" then (<<print [[cfg]] plus live-in and live-out sets>>;
+                          <<print varmaps>>);
   (cfg, proc), true
 (* Diagnostic:
 let dls a proc = time (proc.Proc.symbol#original_text) (dls a) proc
@@ -399,19 +400,25 @@ let alloc_block prefs (blockmap, predmap) bid pred_ids =
     | []    -> impossf "DLS: Block has no live_out sets" in
   <<define functions [[entry_inmap]] and [[label_inmap]] to help find the inmap>>
 
+  let add_middle head rtls_lst =
+    let add head rtls =
+      List.fold_left (fun h r -> GR.Head (h, GR.Instruction r)) head rtls in
+    List.fold_left add head rtls_lst in
+
   (* first: *)
   let varOutf = match first with
-    | GR.Entry   -> entry_inmap ()
+    | GR.Entry   -> let vm = entry_inmap () in (setVarIn bid vm; vm)
     | GR.Label _ ->
         match live_outs with
         | lo::_ ->
             let inmap = label_inmap pred_ids in
             let live_out = R.promote_rxset lo in
             let live_out_w_spans = R.promote_rxset (G.add_live_spansf first lo) in
-            let (varIn, defMap, varOut) =
+            let (varIn, defMap, varOut, spills, reloads) =
               choose_varMaps prefs None inmap ~defs:RS.empty ~uses:RS.empty
                              ~live_in ~live_out ~live_out_w_spans in
             let () = setVarIn bid varIn in
+Printf.eprintf "setting varin on %s\n" (blockname block);
             varOut
         | [] -> impossf "DLS: no more live_out sets" in
 
@@ -425,24 +432,29 @@ let alloc_block prefs (blockmap, predmap) bid pred_ids =
     let live_out = R.promote_rxset lo in
     match tail with
     | GR.Tail (m, t) ->
+VM.print "middle" inmap;
         let live_out_w_spans = live_out in
         let rtl = GR.mid_instr m in
-        let (varIn, varDefs, varOut) =
+        let defs = defsm m in
+        let uses = usesm m in
+        let (varIn, varDefs, varOut, spills, reloads) =
           choose_varMaps prefs (Some rtl) inmap 
-                         ~defs:(defsm m) ~uses:(usesm m)
-                         ~live_in ~live_out ~live_out_w_spans in
+                         ~defs ~uses ~live_in ~live_out ~live_out_w_spans in
         let m' = G.new_rtlm (rewrite_rtl tgt ~varIn ~varDefs rtl) m in
+        let head = add_middle (add_middle head spills) reloads in
         alloc_tail varOut live_outs (GR.Head (head, m')) t
     | GR.Last l ->
         let live_out_w_spans = R.promote_rxset (G.add_live_spansl l lo) in
         let rtl = GR.last_instr l in
-        let (varIn, varDefs, varOut) =
+        let defs = defsl l in
+        let uses = usesl l in
+        let (varIn, varDefs, varOut, spills, reloads) =
           choose_varMaps prefs (Some rtl) inmap 
-                         ~defs:(defsl l) ~uses:(usesl l)
-                         ~live_in ~live_out ~live_out_w_spans in
+                         ~defs ~uses ~live_in ~live_out ~live_out_w_spans in
         let l' = G.new_rtll (rewrite_rtl tgt ~varIn ~varDefs rtl) l in
         let () = setVarOut bid varOut in
         let () = match l' with GR.Call _ -> setCallIn bid varIn | _ -> () in
+        let head = add_middle (add_middle head spills) reloads in
         l', GR.zip (GR.End (head, l')) in
   let last, block = alloc_tail varOutf live_outs (GR.First first) tail in
   let blockmap = UM.add bid block blockmap in
@@ -551,26 +563,28 @@ This optimization would insert a move instruction instead of a store.
   (* We need to spill a hardware register if it is defined *)
   let spill r z =
     if is_tmp tgt r then z else spill_reg (fun t -> RS.mem t live_out_w_spans) z r in
-  let inmap = RS.fold spill defs inmap in
-  let inmap = alloc_temps alloc_uses prefs.regs uses inmap in
+  let inmap, spills = RS.fold spill defs (inmap, []) in
+  let inmap, spills, reloads =
+    alloc_temps alloc_uses prefs.regs uses (inmap, spills, []) in
 @
 Now, we expire any temps that die at this node and move on to the defs at the node.
 <<[[choose_varMaps]] finds varIn and varOut maps for a node>>=
   let midmap = expire_last_uses inmap in
-  let outmap = alloc_temps (alloc_defs inmap) prefs.regs defs midmap in
+  let outmap, spills, reloads =
+    alloc_temps (alloc_defs inmap) prefs.regs defs (midmap, spills, reloads) in
 @
 Here's an interesting case. If we have a def that is never used again, then we must
 assign it a register, but we don't want it in the outmap.
 So, we have a separate defmap and outmap, where the defmap keeps any dead definitions.
 <<[[choose_varMaps]] finds varIn and varOut maps for a node>>=
-  let inmap,outmap = VM.sync_maps inmap outmap in
+  let inmap, outmap = VM.sync_maps inmap outmap in (* NECESSARY? *)
   let defmap = outmap in
   (*VM.print "nearly outmap" outmap;*)
   let outmap = expire_dead_defs outmap in
   (*VM.print "final  inmap" inmap;*)
   (*VM.print "final outmap" outmap;*)
   (*Printf.eprintf "final choose_varMaps called on %s\n" (G.print_node node);*)
-  inmap, defmap, outmap in
+  inmap, defmap, outmap, spills, reloads in
 @
 In [[expire_last_uses]], the guard supports instructions such as $x := x + y$; where
 both x's must be placed in the same register.
@@ -622,30 +636,34 @@ varmaps because we may have to set a spill location for the temp.
       let () = spillMap := RM.add temp l (!spillMap) in
       l in
 
+  <<define [[assign]], [[move]], [[store]], and [[load]]>>
+
   let spill temp map =
     let spill_loc = get_spill_loc temp in
     VM.spill temp spill_loc map in
-  let spill_reg guard map reg =
+  let spill_reg guard (map, spills as z) reg =
     match VM.reg_contents map reg with
-    | Some t when guard t -> spill t map
-    | _                   -> map in
+    | Some t when guard t -> (spill t map, store' t reg :: spills)
+    | _                   -> z in
 @
 %-------------------------------------------------------------------
 \subsection{Choosing a Register for a Single Temp}
 %-------------------------------------------------------------------
 <<define allocation functions>>=
-  let default_alloc (map, regs_used) t =
+  let default_alloc (map, spills, reloads, regs_used) t =
     let live_past_use = RS.mem t live_out_w_spans in
     let reg = alloc_reg map regs_used live_past_use t in
     let regs_used = RS.add reg regs_used in
-    let map = match VM.reg_contents map reg with
-      | Some _ -> let map = spill_reg true_fun map reg in
-                  VM.add_reg t reg map
-      | None   -> VM.add_reg t reg map in
+    let map, spills = match VM.reg_contents map reg with
+      | Some _ -> let map, spills = spill_reg true_fun (map, spills) reg in
+                  (VM.add_reg t reg map, spills)
+      | None   -> (VM.add_reg t reg map, spills) in
+    let reloads = if is_use then load' t reg :: reloads else reloads in
+    if is_use then (Printf.eprintf "load %s -> %s\n" (printReg t) (printReg reg));
     if live_past_use && (RS.mem reg live_out || RS.mem reg defs) then
       let spill_loc = get_spill_loc t in
-      (VM.add_mem t spill_loc map, regs_used)
-    else (map, regs_used) in
+      (VM.add_mem t spill_loc map, store' t reg :: spills, reloads, regs_used)
+    else (map, spills, reloads, regs_used) in
 @
 Note that by calling [[get_avail_reg]], I am disallowing copies in which the used
 temp lives past this node.
@@ -656,9 +674,11 @@ temps in the register to separate spill slots (b/c spill slots are allocated by 
 name, not value, and one of the temps may be redefined and spilled, overwriting the
 other).
 <<define allocation functions>>=
-  let get_avail_reg ((map, regs_used) as s) t reg fail =
+  let get_avail_reg ((map, spills, reloads, regs_used) as s) t reg fail =
     if free_reg map regs_used (RS.mem t live_out_w_spans) reg then
-      (VM.add_reg t reg map, RS.add reg regs_used)
+      let reloads =
+        if is_use then (Printf.eprintf "load\n"; (load' t reg :: reloads)) else reloads in
+      (VM.add_reg t reg map, spills, reloads, RS.add reg regs_used)
     else fail s t in
 
   (* include preferences *)
@@ -678,16 +698,17 @@ other).
     | None  -> alloc_prefs state t in
 @
 <<[[choose_register]]>>=
-  let allocate free_reg order prefmap alloc_reg state to_alloc =
+  let allocate is_use free_reg order prefmap alloc_reg state to_alloc =
     <<define allocation functions>>
     alloc_copy order prefmap state to_alloc in
   let free_in  = VM.free_reg_inregs  defs live_in live_out in
   let alloc_uses regs =
-    allocate free_in  (fun (d,s) -> (s,d)) prefs.varMap
+    allocate true free_in  (fun (d,s) -> (s,d)) prefs.varMap
              (VM.alloc_inreg regs defs live_in live_out) in
   let free_out = VM.free_reg_outregs defs live_out in
   let alloc_defs uses_map regs =
-    allocate free_out (fun (d,s) -> (d,s)) uses_map (VM.alloc_outreg regs defs live_out) in
+    allocate false free_out (fun (d,s) -> (d,s)) uses_map
+             (VM.alloc_outreg regs defs live_out) in
 @
 If any temps are in an unavailable register, then we need to spill the temp from that
 register.
@@ -695,7 +716,7 @@ There is an opportunity for optimization here: even if the temp is not used in t
 instruction, we could try to allocate it to a register if there are any free registers.
 This optimization would insert a move instruction instead of a store.
 <<[[choose_register]]>>=
-  let alloc_temps alloc regs to_alloc map =
+  let alloc_temps alloc regs to_alloc (map, spills, reloads) =
     (* I'm valuing the cost of allocation over the cost of verbose code here.... *)
     let fold_alloced f z r vm =
       try  match (VM.var_locs' vm r).VM.reg with None -> z | Some r -> f r z
@@ -708,7 +729,9 @@ This optimization would insert a move instruction instead of a store.
         let regs = get_regs_for_space tgt regs s in
         alloc regs rst r
       else rst in
-    fst (RS.fold one_alloc to_alloc (map, regs_used)) in
+    let (map, spills, reloads, _) =
+      RS.fold one_alloc to_alloc (map, spills, reloads, regs_used) in
+    (map, spills, reloads) in
 @
 %-------------------------------------------------------------------
 \subsection{Shuffling Establishes Consistency}
@@ -722,7 +745,6 @@ This optimization would insert a move instruction instead of a store.
 \end{alltt}
 
 <<definition of shuffle>>=
-<<define [[assign]], [[move]], [[store]], and [[load]]>>
 let rec shuffle_moves = function
   | ((t, dst, src) :: rest) as effs ->
       <<definition of [[try_first_effect]]>>
@@ -945,10 +967,16 @@ let move temp ((_,_,ms),_,c as dst) src =
   let w = Cell.to_width ms c in
   ((fun vm -> VM.add_reg temp dst (make_reg_empty dst vm)),
    [Rtl.store (Rtl.reg dst) (Rtl.fetch (Rtl.reg src) w) w]) in
+let store' temp src = 
+  let loc = get_spill_loc temp in
+  (tgt.Target.spill  space src loc) in
 let store temp src =
   let loc = get_spill_loc temp in
   ((fun vm -> VM.add_mem temp loc vm),
    tgt.Target.spill  space src loc) in
+let load' temp dst =
+  let loc = get_spill_loc temp in
+  tgt.Target.reload space dst loc in
 let load temp dst =
   let loc = get_spill_loc temp in
   ((fun vm -> VM.add_reg temp dst (make_reg_empty dst vm)),
@@ -1116,6 +1144,13 @@ begin
                    (blockname b) (set (Live.live_out_last last)) in
   G.iter_blocks print_block cfg
 end
+<<print varmaps>>=
+  let print_vms b =
+    let id = GR.id b in
+Printf.eprintf "block %s\n" (blockname b);
+    (VM.print (Printf.sprintf "InMap for %s" (blockname b)) (getVarIn id);
+     VM.print (Printf.sprintf "OutMap for %s" (blockname b)) (getVarOut id)) in
+  G.iter_blocks print_vms cfg
 @ 
 
 %-------------------------------------------------------------------
