@@ -121,13 +121,9 @@ let elab_stmts r env =
     | N.Prim (lhs, conv, p, args, flow)       -> prim lhs conv p args flow
     | N.Return (conv, altcont, args)          -> return conv altcont args in
     stmt s
-  and stmts r reachable ss = stmts' false r reachable ss
-  and stmts' procbody r reachable ss =
+  and stmts r reachable ss = 
     let rec stmts reachable = function
-      | [] -> if procbody && reachable then
-                [errorf r "control falls off end of procedure"]
-              else
-                []
+      | [] -> []
       | N.Span (_, _, []) :: ss -> stmts reachable ss
       | s :: ss ->
           let s' = full_stmt r reachable s in  (* enforce order *)
@@ -136,13 +132,20 @@ let elab_stmts r env =
   and jumps = function N.Goto _ | N.Jump _ | N.Cut _ | N.Return _  -> true
                      | N.Call (_, _, _, _, _, fl) -> List.mem Ast.NeverReturns fl
                      | N.StmtAt (s, _) -> jumps s
-                     | N.Span (_, _, ss) -> jumps (Aux.last ss)
+                     | N.Span (_, _, ss) -> jumpsss ss
                      | N.If (_, t, f) -> jumpsss t && jumpsss f
                      | N.Switch (_, _, arms) -> List.for_all jumpsarm arms
                      | _ -> false
-  and jumpsss = function [] -> false | ss -> jumps (Aux.last ss)
+  and jumpsss = function
+    | [] -> false
+    | [s] -> jumps s
+    | s :: N.Span (_, _, []) :: ss -> jumpsss (s :: ss)
+    | _ :: ss -> jumpsss ss
   and jumpsarm (_, ss) = jumpsss ss in
-  stmts' true r true
+  fun ss ->
+    let falls = not (jumpsss ss) in
+    let ss = stmts r true ss in
+    if falls then errorf r "control falls off end of procedure" else ss
 @ 
 Here are a couple of basic utilities.
 We sometimes do extra checking if an expression is just a name.
