@@ -979,11 +979,12 @@ aligned.
 <<utilities>>=
 let aligned_mem ~align ~base target = 
   let memsize = target.T.memsize in
-  let t = AT.overflow memsize target.T.byteorder base Memalloc.Up align in
+  let (AT.I t) = AT.overflow memsize target.T.byteorder Memalloc.Up align in
+  let t = t ~start:base in
   let alloc ~width ~alignment ~hint =
     let alignment = width / memsize in
     t.AT.allocate width alignment hint
-  in AT.mk { AT.freeze = t.AT.freeze; AT.allocate = alloc }
+  in AT.of_methods { AT.freeze = t.AT.freeze; AT.allocate = alloc }
 @
         
 

@@ -292,9 +292,8 @@ The interpreter hands out registers for globals and arguments, assuming
 that we have an endless supply for each. We have just one automaton
 [[seq]] that does this. It is parameterized over a function [[reg]]
 that supplies the register.
-
 <<interp.ml>>=
-let seq (reg: int -> Register.t) ~(base:Rtl.exp) =
+let seq (reg: int -> Register.t) next =
     let index = ref (-1)                  in
     let regs  = ref ([]: Register.t list) in
     let allocate ~width ~alignment ~hint =
@@ -302,19 +301,16 @@ let seq (reg: int -> Register.t) ~(base:Rtl.exp) =
         ; regs  := (reg !index) :: !regs
         ; loc_of (Rtl.reg (reg !index))
         ) in
-    let freeze rs locs   = 
-        { AN.overflow    = Block.at ~base ~size:0 ~alignment:1
-        ; AN.regs_used   = RS.union rs (RS.of_list !regs)
-        ; AN.mems_used   = locs
-        ; AN.align_state = 1
-        } 
-    in
-        { AN.allocate = allocate
-        ; AN.freeze   = freeze
-        }
+    let freeze rs mems =
+        next.AN.freeze (RS.union (RS.of_list (!regs)) rs) mems in
+    { AN.allocate = allocate
+    ; AN.freeze   = freeze
+    }
+let seq reg =
+  (AN.wrap (seq reg)) (AN.no_overflow 1 "exhausted infinite register supply!")
 
 let params      = seq arg_reg               (* for parameters  *)
-let globls base = AN.mk (seq glb_reg base)  (* for global regs *)
+let globls base = AN.at base (seq glb_reg)  (* for global regs *)
 @
 
 % ------------------------------------------------------------------ 
@@ -342,36 +338,36 @@ I have to admit, that I don't know what I am doing here.
 <<transformations>>=
 let call_actuals  =
   C.outgoing ~growth ~sp
-    ~mkauto:(fun () -> Block.relative vfp "out call parms" params) 
+    ~mkauto:(fun () -> Block.srelative vfp "out call parms" AN.at params) 
     ~autosp:(fun r  -> Block.base r.AN.overflow)
     ~postsp:(fun sp -> sp) in  
 
 let prolog  =
   C.incoming ~growth ~sp
-    ~mkauto:(fun () -> params vfp)
+    ~mkauto:(fun () -> AN.at vfp params)
     ~autosp:(fun _ -> vfp)
     ~postsp:(fun _ -> std_sp_location) in
 
 let call_results  =
   C.incoming ~growth ~sp
-    ~mkauto:(fun () -> Block.relative vfp "in ovfl results" params)
+    ~mkauto:(fun () -> Block.srelative vfp "in ovfl results" AN.at params)
     ~autosp:(fun r -> Block.base r.AN.overflow)
     ~postsp:(fun _ -> std_sp_location) in
 
 let epilog  =
   C.outgoing ~growth ~sp
-    ~mkauto:(fun () -> Block.relative vfp "out ovfl results" params)
+    ~mkauto:(fun () -> Block.srelative vfp "out ovfl results" AN.at params)
     ~autosp:(fun r -> Block.base r.AN.overflow)
     ~postsp:(fun _ -> vfp) in
 
 let also_cuts_to =
   C.incoming ~growth ~sp
-    ~mkauto:(fun () -> Block.relative vfp "in cont parms" params)
+    ~mkauto:(fun () -> Block.srelative vfp "in cont parms" AN.at params)
     ~autosp:(fun r -> std_sp_location)
     ~postsp:(fun _ -> std_sp_location) in
 
 let cut_actuals base  =
-   C.outgoing ~growth ~sp ~mkauto:(fun () -> params base)
+   C.outgoing ~growth ~sp ~mkauto:(fun () -> AN.at base params)
      ~autosp:(fun r -> spval)
      ~postsp:(fun _ -> spval) in
 

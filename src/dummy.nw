@@ -1,3 +1,4 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 % vim: ts=8 sw=4 et:
 
 % ------------------------------------------------------------------ 
@@ -204,11 +205,11 @@ let globals base =
     let ( **> ) f x = f x in
     let width w     = if w <= 8 then 8 else if w <= 16 then 16 else
                       Aux.round_up_to 32 w in
-        AN.mk **> AN.widen width 
+        AN.at ~start:base
+              **> AN.widen width 
               **> AN.align_to (function 8 -> 1 | 16 -> 2 | _ -> 4)
               **> AN.overflow ~memsize:A.memsize
                               ~byteorder:A.byte_order
-                              ~start:base
                               ~growth:Memalloc.Down
                               ~max_alignment:4  
 @
@@ -379,7 +380,7 @@ remaining parameters in memory. We use 16 floating point and 16 integer
 registers. 
 
 <<calling convention>>=
-let simple ~base =
+let simple =
     AN.hint_choice
         [ ((=) "float"),     AN.widen (Aux.round_up_to ~multiple_of:32) 
                           *> AN.widths  [32]    ~errormsg:(badwidth "simple")
@@ -390,7 +391,6 @@ let simple ~base =
         ] **> 
     AN.overflow ~memsize:A.memsize
                 ~byteorder:A.byte_order
-                ~start:base
                 ~growth:Memalloc.Down
                 ~max_alignment:sp_align
 @
@@ -434,36 +434,36 @@ I have to admit, that I don't know what I am doing here.
 <<transformations>>=
 let call_actuals  =
   C.outgoing ~growth ~sp
-    ~mkauto:(fun () -> Block.relative vfp "out call parms" specs.call)
+    ~mkauto:(fun () -> Block.srelative vfp "out call parms" AN.at specs.call)
     ~autosp:(fun r  -> Block.base r.AN.overflow)
     ~postsp:(fun sp -> sp) in  
 
 let prolog  =
   C.incoming ~growth ~sp
-    ~mkauto:(fun () -> specs.call vfp)
+    ~mkauto:(fun () -> AN.at vfp specs.call)
     ~autosp:(fun _ -> vfp)
     ~postsp:(fun _ -> std_sp_location) in
 
 let call_results  =
   C.incoming ~growth ~sp
-    ~mkauto:(fun () -> Block.relative vfp "in ovfl results" specs.results)
+    ~mkauto:(fun () -> Block.srelative vfp "in ovfl results" AN.at specs.results)
     ~autosp:(fun r -> Block.base r.AN.overflow)
     ~postsp:(fun _ -> std_sp_location) (* irrelevant? *) in
 
 let epilog  =
   C.outgoing ~growth ~sp
-    ~mkauto:(fun () -> Block.relative vfp "out ovfl results" specs.results)
+    ~mkauto:(fun () -> Block.srelative vfp "out ovfl results" AN.at specs.results)
     ~autosp:(fun r -> Block.base r.AN.overflow)
     ~postsp:(fun _ -> vfp)  (* irrelevant *) in
 
 let also_cuts_to =
   C.incoming ~growth ~sp
-    ~mkauto:(fun () -> Block.relative vfp "in cont parms" specs.cutto)
+    ~mkauto:(fun () -> Block.srelative vfp "in cont parms" AN.at specs.cutto)
     ~autosp:(fun r -> std_sp_location)
     ~postsp:(fun _ -> std_sp_location) in
 
 let cut_actuals base  =
-   C.outgoing ~growth ~sp ~mkauto:(fun () -> specs.cutto base)
+   C.outgoing ~growth ~sp ~mkauto:(fun () -> AN.at base specs.cutto)
      ~autosp:(fun r -> spval)
      ~postsp:(fun _ -> spval) in
 

@@ -608,9 +608,8 @@ let ( **> ) f x = f x
 let globals base = 
   let width w = if w <= 8 then 8 else if w <= 16 then 16 else Aux.round_up_to 32 w in
   let align = function 8 -> 1 | 16 -> 2 | _ -> 4 in
-  A.mk **> A.widen width **> A.align_to align **>
-  A.overflow ~memsize:8 ~byteorder:PX.byte_order ~start:base
-             ~growth:Memalloc.Up ~max_alignment:4
+  A.at ~start:base **> A.widen width **> A.align_to align **>
+  A.overflow ~memsize:8 ~byteorder:PX.byte_order ~growth:Memalloc.Up ~max_alignment:4
 
 let new_target =
   { T.name = "x86"
@@ -653,3 +652,60 @@ let new_target =
 
 type tgt  = ((Rtl.exp -> Automaton.t), Call.t) Target2.t'
 let new_target = (new_target:tgt)
+@ 
+\section{Tentative example Lua code}
+
+An automaton needs a ``base'' argument.
+This argument must somehow be handled behind the scenes.
+<<example Lua>>=
+X86.Regs = { r = Register.space('r', 8, 32), f = Register.space('f', 8, 80),
+             c = Register.space('c', 4, 32) }
+Register.addnames(X86.Regs, X86.Regs.r, 
+  { 'eax', 'ecx', 'edx', 'ebx', 'esp', 'ebp', 'esi', 'edi' })
+
+X86.CC = Call.make(X86.target)
+
+function X86.CC.results(rs) 
+  local CC = X86.CC
+  return 
+    { CC.choice ( 'float',  { CC.widen(CC.multiple_of(80))
+                            , CC.widths(80, "x86 FP too wide")
+                            , CC.useregs(X86.Regs.f[0], "internal error")
+                            }
+                , nil,      { CC.widen(CC.multiple_of(32))
+                            , CC.widths(32, "x86 return too wide")
+                            , CC.useregs(rs, "internal error")
+                            }
+                ),
+    , CC.no_overflow(4, "multiple return values for x86 return")
+    }
+end
+
+function X86.setccs() 
+  local vfp = Vfp.mk(32)
+  local R = X86.Regs
+  local eax, ecx, edx, ebx, esi, edi, ebp =
+    R.eax, R.ecx, R.edx, R.ebx, R.esi, R.edi, R.ebp
+
+  local allregs = {eax, ecx, edx, ebx, esi, edi, ebp}
+  local volregs = {eax, ecx, edx}
+  local nvregs  = {ebx, esi, edi, ebp}
+
+  local CC = X86.CC
+  local c_results   = CC.results(eax)
+  local cmm_results = CC.results(volregs)
+  local c_args    = { CC.widen(CC.multiple_of(32)), CC.overflow("up", 4)}
+  local cut_args  =
+    { CC.widen(CC.multiple_of(32))
+    , CC.widths(32, "at most 32 bits in cut-to argument")
+    , CC.useregs(allregs)
+    , CC.overflow("up", 4)
+    }
+  local cmm_args = 
+    { CC.widen(CC.multiple_of(32))
+    , CC.useregs(allregs)
+    , CC.overflow("up", 4)
+    }
+end  
+
+

@@ -113,7 +113,7 @@ strictly more permissive than~C, as it permits returning one integer
 Any floating-point result is automatically widened to 80~bits, and
 an integer result is widened to 32~bits.
 <<x86call.ml>>=
-let results iregs base = 
+let results iregs = 
   A.hint_choice
      [ ((=) "float"),   A.widen  (Aux.round_up_to ~multiple_of:80) *>
                         A.widths [80] ~errormsg:(badwidth "x86 floating return") *>
@@ -122,8 +122,7 @@ let results iregs base =
                         A.widths [32] ~errormsg:(badwidth "x86 return convention") *>
                         A.useregs iregs ~errormsg:imp
      ]
-let c_results ~base =
-  results [eax] base **> A.no_overflow base 4 "multiple return values for x86 C"
+let c_results = results [eax] **> A.no_overflow 4 "multiple return values for x86 C"
 @
 When passing procedure parameters, we put
 earlier arguments in lower addresses, so even though the
@@ -132,20 +131,19 @@ An argument's size is increased, if necessary, to make it a multiple
 of words.  The ABI specifies padding, but we'll use [[widen]] because
 the machine is little-endian.
 <<x86call.ml>>=
-let c_arguments ~base = 
+let c_arguments = 
   A.widen  (Aux.round_up_to ~multiple_of:32) **>
-  A.overflow ~memsize:8 ~byteorder:bo ~start:base
-             ~growth:Memalloc.Up ~max_alignment:sp_align
+  A.overflow ~memsize:8 ~byteorder:bo ~growth:Memalloc.Up ~max_alignment:sp_align
+let _ = (c_arguments : A.implementation)
 @ 
 When passing cut-to parameters, we use all the registers---there's no
 reason not to.
 <<x86call.ml>>=
-let cut_args ~base = 
+let cut_args = 
   A.widen  (Aux.round_up_to ~multiple_of:32) **>
   A.widths [32] ~errormsg:(badwidth "x86 cut-to convention") **>
   A.useregs allregs ~errormsg:imp **>
-  A.overflow ~memsize:8 ~byteorder:bo ~start:base
-             ~growth:Memalloc.Up ~max_alignment:sp_align
+  A.overflow ~memsize:8 ~byteorder:bo ~growth:Memalloc.Up ~max_alignment:sp_align
 @ 
 It's worth studying these automata to see what's likely to remain
 unchanged across conventions:
@@ -154,16 +152,14 @@ candidates for defaulting.
 @
 \paragraph{Automata for passing values---{\PAL}~convention}
 <<x86call.ml>>=
-let cmm_results ~base =
-  results (RS.elements volregs) base **>
-  A.overflow ~memsize:8 ~byteorder:bo ~start:base
-             ~growth:Memalloc.Down ~max_alignment:sp_align
+let cmm_results =
+  results (RS.elements volregs) **>
+  A.overflow ~memsize:8 ~byteorder:bo ~growth:Memalloc.Down ~max_alignment:sp_align
 
-let cmm_arguments ~base = 
+let cmm_arguments = 
   A.widen  (Aux.round_up_to ~multiple_of:32) **>
   A.useregs (RS.elements volregs) ~errormsg:imp **>
-  A.overflow ~memsize:8 ~byteorder:bo ~start:base
-             ~growth:Memalloc.Up ~max_alignment:sp_align
+  A.overflow ~memsize:8 ~byteorder:bo ~growth:Memalloc.Up ~max_alignment:sp_align
 @
 \paragraph{Managing the stack pointer and return address}
 On entry, the stack pointer points to the return address.
@@ -190,12 +186,12 @@ N.B. the call instruction moves the stack pointer.
 <<functions to transform automata>>=
 let call_actuals  =
   C.outgoing ~growth ~sp
-    ~mkauto:(fun () -> Block.relative vfp "out call parms" specs.call)
+    ~mkauto:(fun () -> Block.srelative vfp "out call parms" A.at specs.call)
     ~autosp:(fun r -> Block.base r.A.overflow)
     ~postsp:(fun sp -> sp) in  (* was ~postsp:(fun _ -> std_sp_location) *)
 let prolog  =
   C.incoming ~growth ~sp
-    ~mkauto:(fun () -> specs.call (addk vfp 4))
+    ~mkauto:(fun () -> A.at (addk vfp 4) specs.call)
     ~autosp:(fun _ -> vfp)
     ~postsp:(fun _ -> std_sp_location) in
    (* alternate: ~mkauto:Block.relative vfp "in call parms" specs.call *)
@@ -204,12 +200,12 @@ let prolog  =
 <<functions to transform automata>>=
 let call_results  =
   C.incoming ~growth ~sp
-    ~mkauto:(fun () -> Block.relative vfp "in ovfl results" specs.results)
+    ~mkauto:(fun () -> Block.srelative vfp "in ovfl results" A.at specs.results)
     ~autosp:(fun r -> Block.base r.A.overflow)
     ~postsp:(fun _ -> std_sp_location) in  (* irrelevant? *)
 let epilog  =
   C.outgoing ~growth ~sp
-    ~mkauto:(fun () -> Block.relative vfp "out ovfl results" specs.results)
+    ~mkauto:(fun () -> Block.srelative vfp "out ovfl results" A.at specs.results)
     ~autosp:(fun r -> Block.base r.A.overflow)
     ~postsp:(fun _ -> vfp)  (* irrelevant *) in
 @ 
@@ -217,22 +213,14 @@ We need an assertion here!
 <<functions to transform automata>>=
 let also_cuts_to =
   C.incoming ~growth ~sp
-    ~mkauto:(fun () -> Block.relative vfp "in cont parms" specs.cutto)
+    ~mkauto:(fun () -> Block.srelative vfp "in cont parms" A.at specs.cutto)
     ~autosp:(fun r -> std_sp_location)
     ~postsp:(fun _ -> std_sp_location) in
 
 let cut_actuals base  =
- let out =
-   C.outgoing ~growth ~sp ~mkauto:(fun () -> specs.cutto base)
+  C.outgoing ~growth ~sp ~mkauto:(fun () -> A.at base specs.cutto)
      ~autosp:(fun r -> spval)
      ~postsp:(fun _ -> spval) in
-(*
- let out types actuals = 
-   let answer = out types actuals in
-   let c = Const2.equate base (Block.base answer.C.overflow) in
-   {answer with C.overflow = Block.with_constraint answer.C.overflow c} in
-*)
- out in
 @ 
 \paragraph{Putting together the whole convention}
 <<x86call.ml>>=
