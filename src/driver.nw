@@ -203,7 +203,9 @@ let dummy =
 \subsubsection{A {\PAL} to {\PAL} compiler}
 % ------------------------------------------------------------------ 
 
-        
+The following [[Mangle.symbol]] value is used to construct a
+[[Mangle.mangler]] function that respects the syntax of {\PAL}.
+
 <<>>=       
 let cmangle =
     let reserved =
@@ -232,24 +234,29 @@ let cmangle =
         ; Mangle.reserved   = reserved
         ; Mangle.avoid      = (fun x -> x ^ "$")
         }
+@
+
+An assembler if functorized over a personality that determines target
+characteristics and provides a name mangler. 
+
+<<>>=
+module Graph0   = Agraph2ast.Graph
+module Graph1   = Lowercopy.Make(Graph0)
 
 module Personality = struct
-    module G = Agraph2ast.Graph
-    
     let target          = dummy
-    type instr          = G.graph
+    type instr          = Graph0.graph
     
     let map             = Mangle.StrMap.empty
     let mangle          = Mangle.make cmangle map
     let ext i           = 
-        let name  = mangle (G.name  i) in
-        let stmts = G.stmts i mangle   in
+        let name  = mangle (Graph0.name  i) in
+        let stmts = Graph0.stmts i mangle   in
             (None, name, [], List.map (fun s -> Ast.StmtBody s) stmts) 
 end
 
-module Asm = Asm2ast.Make(Personality)
-
-module Ast2IR = Ast2ir.Make (Agraph2ast.Graph) (Asm)
+module Asm      = Asm2ast.Make(Personality)
+module Ast2IR   = Ast2ir.Make (Graph0) (Asm)
 @
 
     
