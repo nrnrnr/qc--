@@ -13,6 +13,8 @@ OCAMLDEP =	ocamldep
 OCAMLYACC =	ocamlyacc
 OCAMLLEX =	ocamllex
 
+NOFAKE =	perl -- nofake
+
 OCAMLC_FLAGS=
 OCAMLO_FLAGS=
 
@@ -51,10 +53,10 @@ install:	ocamlerror ocamlerror.1
 		$(OCAMLYACC) -v $<
 
 %.ml:		%.nw
-		./nofake -L'# %L "%F"%N' -R$@ $< > $@
+		$(NOFAKE) -L'# %L "%F"%N' -R$@ $< > $@
 
 %.mli:		%.nw
-		./nofake -L'# %L "%F"%N' -R$@ $< > $@
+		$(NOFAKE) -L'# %L "%F"%N' -R$@ $< > $@
 		
 
 # ------------------------------------------------------------------ 
@@ -62,7 +64,7 @@ install:	ocamlerror ocamlerror.1
 # ------------------------------------------------------------------ 
 
 ocamlscan.mll:	ocamlerror.nw
-		./nofake -R$@ $< > $@
+		$(NOFAKE) -R$@ $< > $@
 
 # ------------------------------------------------------------------
 # files
