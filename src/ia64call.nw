@@ -13,22 +13,25 @@ val cconv :
 \section{Implementation of IA64 calling conventions}
 
 <<ia64call.ml>>=
-module R = Rtl
+module R  = Rtl
+module RS = Register.Set
 @ 
 <<IA64 calling convention automata in Lua>>=
 A                 = Automaton
-IA64              = IA64              or {}
-IA64.cc           = IA64.cc           or {}
-IA64.cc["C"     ] = IA64.cc["C"     ] or {}
+Ia64              = Ia64              or {}
+Ia64.cc           = Ia64.cc           or {}
+Ia64.cc["C"     ] = Ia64.cc["C"     ] or {}
 @ 
 
 \paragraph{IA64 registers and their conventional uses}
 <<ia64call.ml>>=
+let b i = ('a', i, 64)
 let r i = ('r', i, 64)
-let volregs = RS.of_list (List.map r ([2; 3; 8; 9; 10; 11] @ 
-									  (Aux.from 14 ~upto:31)))
-let nvregs  = RS.of_list (List.map r [0; 1; 4; 5; 6; 7; 12; 13])
-let allregs = RS.elements (RS.union volregs nvregs)
+let vol_regs = RS.of_list (List.map r ([2; 3; 8; 9; 10; 11] @ 
+		 							   (Aux.from 14 ~upto:31)))
+let nv_regs  = RS.of_list (List.map r [0; 1; 4; 5; 6; 7; 12; 13])
+let branch_regs = RS.of_list (List.map b (Aux.from 1 ~upto:7))
+let all_regs = RS.union (RS.union vol_regs nv_regs) branch_regs
 
 let saved_nvr temps = 
   let t = Talloc.Multiple.loc temps 't' in
@@ -36,18 +39,19 @@ let saved_nvr temps =
 @ 
 
 <<IA64 calling convention automata in Lua>>=
-IA64.growth    = "down"
-IA64.byteorder = "little"
-IA64.sp_align  = 16
-IA64.wordsize  = 64
+Ia64.growth    = "down"
+Ia64.byteorder = "little"
+Ia64.sp_align  = 16
+Ia64.wordsize  = 64
 
 function reg(sp, i, w) return({ space = sp, index = i, width = w }) end
-function r(i) return (reg("r", i, IA64.wordsize)) end
-function f(i) return (reg("f", i, IA64.wordsize)) end
+function r(i) return (reg("r", i, Ia64.wordsize)) end
+function f(i) return (reg("f", i, Ia64.wordsize)) end
 @ 
 
 \paragraph{Conventions governing the stack}
 <<ia64call.ml>>=
+let ra       = R.reg (b 0)
 let sp       = R.reg (r 12)
 let spval    = R.fetch sp 64
 let sp_align = 16
@@ -62,7 +66,7 @@ function fpreturn(h, w)
   return (h == "float" and w <= 82)
 end
 
-IA64.cc["C"].results =
+Ia64.cc["C"].results =
   A.choice { fpreturn, { A.widths { 32, 64, 82 }
                        , A.useregs { f(8) }
                        }
@@ -73,8 +77,10 @@ IA64.cc["C"].results =
            } 
 @ 
 
-<<IA64 calling convention automata in Lua>>=
-IA64.cc["C"].call = 
+For the moment [[Automaton.is_counter]] does not exist.  Here's what we would
+use as a spec:
+<<would-be IA64 calling convention automata in Lua>>=
+Ia64.cc["C"].call = 
   { A.widen(64, "multiple")
   , A.bitcounter("bits")
   , A.choice { "float", { A.bitcounter("floatbits")
@@ -86,21 +92,93 @@ IA64.cc["C"].call =
                         } 
              , A.is_any, A.regs_by_bits("bits", r(32) .. r(39))
              } 
-  , A.overflow { memsize = 8, byteorder = IA64.byteorder, growth = "up"
-               , max_alignment = IA64.sp_align
+  , A.overflow { memsize = 8, byteorder = Ia64.byteorder, growth = "up"
+               , max_alignment = Ia64.sp_align
                } 
   }	
 @ 
+And here's what we now {\em do} use.
+<<IA64 calling convention automata in Lua>>=
+Ia64.cc["C"].call = 
+  { A.widen(64, "multiple")
+  , A.bitcounter("bits")
+  , A.choice { "float" , A.regs_by_bits("bits", f(8)  .. f(15))
+             , A.is_any, A.regs_by_bits("bits", r(32) .. r(39))
+             } 
+  , A.overflow { memsize = 8, byteorder = Ia64.byteorder, growth = "up"
+               , max_alignment = Ia64.sp_align
+               } 
+  }
+@ 
+And now for some postprocessing magic to set aside the first 16-bytes at sp
+for ``scratch space'':
+<<ia64call.ml>>=
+module A = Automaton
+let prefix16bytes result =
+    let b = Block.relative (Vfp.mk 64) "16-byte block" Block.at 
+              ~size:16 ~alignment:16
+    in
+        { result with 
+          A.overflow = Block.cathl result.A.overflow b
+        }
+
+let postprocess cconv =
+    { cconv with A.call = A.postprocess cconv.A.call prefix16bytes }
+
+@ 
 
 <<IA64 calling convention automata in Lua>>=
-IA64.cc["C"].cutto =
+Ia64.cc["C"].cutto =
   { A.widen(64)
   , A.useregs(r(32) .. r(39))
-  , A.overflow { memsize = 8, byteorder = IA64.byteorder, growth = "up"
-               , max_alignment = IA64.sp_align
+  , A.overflow { memsize = 8, byteorder = Ia64.byteorder, growth = "up"
+               , max_alignment = Ia64.sp_align
                }
   }
 @ 
 
+Finally we register the calling conventions.
+<<IA64 calling convention automata in Lua>>=
+A.register_cc(Backend.ia64.target, "C", Ia64.cc["C"])
+@ 
+
 \subsection{Implementation using [[Callspec]]}
 
+<<callspec specification>>=
+  { CS.name         = "C"
+  ; CS.stack_growth = Memalloc.Down
+  ; CS.overflow     = CS.overflow C.Caller C.Caller
+  ; CS.sp           = r 12
+  ; CS.sp_align     = sp_align
+  ; CS.all_regs     = all_regs
+  ; CS.nv_regs      = nv_regs
+  ; CS.save_nvr     = saved_nvr
+  ; CS.ra           = (ra, CS.ReturnAddress.SaveToTemp 't')
+  }	
+@ 
+
+<<ia64call.ml>>=
+module C  = Call
+module CS = Callspec
+
+let rtn return_to k n ~ra =
+    if k = 0 && n = 0 then return_to ra
+    else Impossible.impossible "alternate return using C calling convention" 
+
+let c ~return_to cut auto =
+  let spec = <<callspec specification>> in
+  let t = CS.to_call cut (rtn return_to) (postprocess auto) spec
+  in { t with C.ra_on_exit = (fun _ _ t -> ra) }
+
+(*
+  in t *)(*  { t with C.ra_on_exit = (fun _ _ _ -> R.reg (b 0)) } *)
+@ 
+
+Here's our CC lookup function.
+<<ia64call.ml>>=
+let cconv ~return_to cut ccname stage =
+  let f =
+    match ccname with
+	| "C" | _ -> c
+  in f ~return_to cut stage
+@ 

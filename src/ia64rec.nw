@@ -35,6 +35,11 @@ let cat = String.concat ""
 let infinity = Camlburg.inf_cost
 let guard b = if b then 0 else infinity
 
+let native' w b = 
+  assert (Bits.width b = w);
+  Nativeint.to_string (Bits.U.to_native b)
+let native = native' 64
+
 exception Error of string
 let error msg = raise (Error msg)
 @ 
@@ -49,6 +54,7 @@ n w bits symbol
 
 \paragraph{Constants}
 <<rules>>=
+lconst : Link(symbol, w) {: symbol#mangled_text :}
 const  : Bits(b:bits)  [{: guard (Bits.width b = 64) :}]  {: native b :}
 @ 
 
@@ -56,6 +62,7 @@ const  : Bits(b:bits)  [{: guard (Bits.width b = 64) :}]  {: native b :}
 <<rules>>=
 reg   : Fetch(regl, w) {: regl :}
 regl  : Reg('r', n, w) {: "r" ^ string_of_int n :}
+regl  : Reg('a', n, w) {: "b" ^ string_of_int n :}
 
 eregl : regl  {: regl :}
 eregl : bregl {: bregl :}
@@ -65,13 +72,28 @@ meml  : Mem(reg, w)    {: "[" ^ reg ^ "]" :} -- indirect
 
 reg_or_const : reg   {: reg :}
 reg_or_const : const {: const :}
+
+target : lconst {: lconst ^ "#" :}
+@ 
+
+\paragraph{Special Locations}
+<<rules>>=
+pcl   : Reg('c', n, w) [{: guard (n = 0 && w = 64):}] {: () :}
+pc    : Fetch(pcl,w)   [{: guard (w = 64) :}] {: () :}
+
+ral   : Reg('a', n, w) [{: guard (n = 0 && w = 64):}] {: () :}
+ra    : Fetch(ral,w)   [{: guard (w = 64) :}] {: () :}
 @ 
 
 \paragraph{Data movement}
 <<rules>>=
+-- load immediate
+inst : Store(dst:regl, src:lconst, w)
+  {: cat ["addl"; " "; dst; " = @ltoff(."; src; "), gp"] :}
+
 -- register move
 inst : Store(dst:eregl, src:reg, w)
-  {: cat ["mov"; " " ; dst ; " = " ; src] :}
+  {: cat ["mov"; " " ; dst; " = " ; src] :}
 
 -- memory load
 inst : Store(dst:regl, src:mem, w)
@@ -85,40 +107,69 @@ inst : Store(dst:meml, src:reg, w)
 <<rules>>=
 inst : Store(dst:regl, Add(x:reg_or_const, y:reg), w)
   {: cat ["add"; " "; dst; " = "; x; ", "; y] :}
+
+inst : Store(dst:regl, Add(x:reg, y:reg_or_const), w)
+  {: cat ["add"; " "; dst; " = "; y; ", "; x] :}
 @ 
 
 \paragraph{Control Flow}
 <<rules>>=
+-- call
+next: Add(pc,const) {: () :}
+inst: Par(Goto(target), Store(ral,next,w)) {: "br.call.sptk.many b0 = " ^ target :}
+
 -- return
--- inst : Goto
+inst: Par(Goto(a:reg), Goto(b:reg)) {: "br.ret.sptk.many b0" :}
+-- THE ABOVE IS COMMENTED OUT UNTIL WE FIGURE OUT HOW TO PROPERLY RECOGNIZE A
+--   RETURN.
+
+-- branches
+inst: Goto(target) {: "br.sptk.many " ^ target :}
+
+-- indirect branches
+inst: Goto(reg)    {: "br.sptk.many " ^ reg :}
+@ 
+
+\paragraph{Other Instructions}
+<<rules>>=
+inst : Nop() {: "" :}
 @ 
 
 \subsection{Interfacing {\rtl}s with the Expander}
 
 <<special cases for particular operators>>=
+
+(* RRO temp
 | RP.App(("and", [w]), [x; y]) -> conAnd (exp x) (exp y)
 | RP.App(("or",  [w]), [x; y]) -> conOr (exp x) (exp y)
 | RP.App(("xor", [w]), [x; y]) -> conXor (exp x) (exp y)
 | RP.App(("com", [w]), [x])    -> conCom (exp x)
-| RP.App(("add", [w]), [x; y]) -> conAdd (exp x) (exp y)
 | RP.App(("sub", [w]), [x; y]) -> conSub (exp x) (exp y)
+*)
+
+| RP.App(("add", [w]), [x; y]) -> conAdd (exp x) (exp y)
+
 (*| RP.App(("neg", [w]), [x])    -> conNeg (exp x)*)
+
+(* RRO temp
 | RP.App(("mul_trunc", [w]), [x; y]) -> conMul_trunc (exp x) (exp y)
 | RP.App(("sx",  [n;w]), [x])   -> conSx  (exp x)
 | RP.App(("zx",  [n;w]), [x])   -> conZx  (exp x)
-| RP.App(("f2f", [n;w]), [x; rm])   -> conF2f n w (exp x) (* need to assert rm *)
-| RP.App(("f2i", [n;w]), [x; rm])   -> conF2i n w (exp x) (* need to assert rm *)
-| RP.App(("i2f", [n;w]), [x; rm])   -> conI2f n w (exp x) (* need to assert rm *)
-| RP.App(("fadd", [w]), [x; y; rm]) -> conFadd (exp x) (exp y) (* need to assert rm *)
-| RP.App(("fsub", [w]), [x; y; rm]) -> conFsub (exp x) (exp y) (* need to assert rm *)
-| RP.App(("fmul", [w]), [x; y; rm]) -> conFmul (exp x) (exp y) (* need to assert rm *)
-| RP.App(("fdiv", [w]), [x; y; rm]) -> conFdiv (exp x) (exp y) (* need to assert rm *)
+| RP.App(("f2f", [n;w]), [x; rm])   -> conF2f n w (exp x) 
+| RP.App(("f2i", [n;w]), [x; rm])   -> conF2i n w (exp x) 
+| RP.App(("i2f", [n;w]), [x; rm])   -> conI2f n w (exp x) 
+| RP.App(("fadd", [w]), [x; y; rm]) -> conFadd (exp x) (exp y) 
+| RP.App(("fsub", [w]), [x; y; rm]) -> conFsub (exp x) (exp y) 
+| RP.App(("fmul", [w]), [x; y; rm]) -> conFmul (exp x) (exp y) 
+| RP.App(("fdiv", [w]), [x; y; rm]) -> conFdiv (exp x) (exp y) 
 | RP.App(("fneg", [w]), [x]) -> conFneg (exp x)
 | RP.App(("fabs", [w]), [x]) -> conFabs (exp x)
 | RP.App(("lobits", [w;n]), [x])   -> conLobits (exp x) n
 | RP.App(("bitInsert", [w; n]), [lsb; dst; src]) ->
     conBitInsert (exp lsb) (exp dst) (exp src)
 | RP.App(("bitExtract", [w; n]), [lsb; src]) -> conBitExtract (exp lsb) (exp src) n
+*)
+
 | RP.App((("add"|"sub"|"mul_trunc"|"sx"|"zx"|"lobits"|"bitInsert"|
            "bitExtract"|"fabs"|"fneg"|"fdiv"|"fmul"|"fsub"|"fadd"|"f2f"|"f2i"|
            "i2f"|"and"|"or"|"xor"|"com") as op, ws), xs)->
@@ -130,10 +181,14 @@ inst : Store(dst:regl, Add(x:reg_or_const, y:reg), w)
 And now we convert between RTLs and Burg constructors.
 <<code to follow the labeler>>=  
 let const = function
+
+(* RRO temp
   | RP.Bool(true)             -> conTrue  ()
   | RP.Bool(false)            -> conFalse ()
-  | RP.Link(s,w)              -> conLink s w
   | RP.Late(s,w)              -> conLate s w
+*)
+
+  | RP.Link(s,w)              -> conLink s w
   | RP.Bits(b)                -> conBits(b)
 <<code to follow the labeler>>=  
 let rec exp = function
@@ -143,13 +198,18 @@ let rec exp = function
   | RP.App((o,_),_)           -> error ("unknown operator " ^ o)
 <<code to follow the labeler>>=  
 and loc l = match l with
-  | RP.Mem('m', aff, w, e, ass) -> conMem (exp e) w
+(* RRO temp
   | RP.Mem('f', aff, w, e, ass) -> conFpreg (exp e)
+*)
+
+  | RP.Mem('m', aff, w, e, ass) -> conMem (exp e) w
   | RP.Reg(sp, i, w)          -> conReg sp i w 
   | RP.Mem(_, _, _, _, _)     -> error "non-mem, non-reg cell"
   | RP.Var(s, i, w)           -> error "var found"
-  | RP.Slice(w,i,l)           -> (*error "cannot handle slice"*)
-      conSlice w i (loc l)
+
+(* RRO temp
+  | RP.Slice(w,i,l)           -> conSlice w i (loc l)
+*)
 @ 
 We recognize some special forms of single effects:
 <<code to follow the labeler>>=  
@@ -158,14 +218,20 @@ and effect = function
     when (i = SS.indices.SS.pc)       -> conGoto (exp r)
   | RP.Store(RP.Reg('c',i, _), r, w)  -> error ("set $c["^string_of_int i^"]")
   | RP.Store(l,e,w)                   -> conStore (loc l) (exp e) w
+
+(* RRO temp
   | RP.Kill(l)                        -> conKill (loc l)
+*)
 @
 We attempt to recognize register pairs.
 <<code to follow the labeler>>=  
 and regpair = function
+
+(* RRO temp
   | RP.App(("or",_),[ RP.App(("shl",_), [RP.App(("sx",_), [RP.Fetch(r1,_)]);_])
                     ; RP.App(("sx",_),                    [RP.Fetch(r2,_)])])
       -> conRegPair (loc r1) (loc r2)
+*)
   | x -> Impossible.impossible "Argument is not a register pair"
 @
 <<code to follow the labeler>>=
@@ -176,7 +242,10 @@ and geffects = function
     | (g, s) :: t -> conPar (guarded g s) (geffects t)
 and guarded g eff = match g with
 | RP.Const(RP.Bool b) -> if b then effect eff else conNop()
+
+(* RRO temp
 | _ -> conGuarded (exp g) (effect eff)
+*)
 @ 
 
 \subsection{The exported recognizer}

@@ -6,22 +6,28 @@
 val arch : string
 module Spaces : sig
   val m : Space.t
+  val a : Space.t
   val r : Space.t
   val t : Space.t
   val f : Space.t
   val u : Space.t
   val c : Space.t   (* PC at 0 *)
+  val v : Space.t
 end
 
 module Post : Postexpander.S
 module X    : Expander.S
 val target : Ast2ir.tgt
+
+val placevars : Ast2ir.proc -> Automaton.t
 @ 
 
 
 \subsection{Name and Storage Spaces}
 <<ia64.ml>>=
 module SS = Space.Standard64
+module R  = Rtl
+
 let arch = "ia64"
 @ 
 
@@ -31,11 +37,12 @@ module Spaces = struct
   let bo = Rtl.LittleEndian
   let id = Rtl.Identity
   let m = Space.Standard64.m bo [8; 16; 32; 64]
+  let a = Space.Standard64.a 8   id [64]  (* these are branch registers *)
   let r = Space.Standard64.r 128 id [64]
   let t = Space.Standard64.t     id [64]
   let f = S.checked { S.space = 'f'; S.doc = "floating-point registers"
                     ; S.cellwidth = 82
-                    ; S.indexwith = 7 ; S.indexlimit = Some 127
+                    ; S.indexwidth = 7 ; S.indexlimit = Some 127
                     ; S.aggregation = id; S.widths = [82]
                     ; S.classification = S.Reg
                     }
@@ -50,16 +57,20 @@ module Spaces = struct
                     ; S.aggregation = id; S.widths = [82]
                     ; S.classification = S.Temp all_floats
                     }
+  let v = Space.Standard64.v   id [64]
   let c = Space.Standard64.c 1 id [64]
 end
 
-let creg n = R.reg ('c', n, 64)
-let pc = creg 0  (* instruction pointer / program counter *)
+let locations = SS.locations Spaces.c
+let pc = locations.SS.pc  (* instruction pointer / program counter *)
+let cc = locations.SS.cc
+let sp = R.reg ('r', 12, 64)
+let ra = R.reg ('a',  0, 64)
+let raloc = R.fetch ra 64
 @ 
 
 \subsection{Postexpander}
 <<ia64.ml>>=
-module R = Rtl
 module RP   = Rtl.Private
 module Up   = Rtl.Up
 module Down = Rtl.Dn
@@ -75,7 +86,7 @@ let wordsize   = 64
 The postexpander may need to allocate temporaries.
 <<ia64 postexpander>>=
 let talloc = ref None
-let remember_allocatore ta = talloc := Some ta
+let remember_allocator ta = talloc := Some ta
 @ 
 \paragraph{Utility Functions}
 <<ia64 postexpander>>=
@@ -94,6 +105,10 @@ type context = (Talloc.Multiple.t -> int -> Register.t) * (Register.t -> bool)
 let icontext = Talloc.Multiple.reg 't', fun (c, _, _) -> c = 'r' || c = 't'
 let fcontext = Talloc.Multiple.reg 'u', fun (c, _, _) -> c = 'f' || c = 'u'
 let acontext = icontext
+
+(* this is just bogus *)
+let rcontext = (fun x y -> Impossible.unimp "Unsupported soft rounding mode")
+               ,fun r -> r = ('d', 0, 2)
 @ 
 \paragraph{Addressing modes}
 The only addressing mode is the obvious one (and we have no stack).
@@ -110,13 +125,22 @@ everything is~64.
 <<ia64 postexpander>>=
 let load ~dst:((_, _, w) as dst) ~addr assn =
   assert (w = 64);
-  [R.store (temploc dst) (R.fetch (R.mem assn 'm' byte_order 64 addr) 64) 64]
+  match Down.exp addr with
+  |	RP.App(op, [RP.Fetch(RP.Reg(s,i,w), _); opnd]) ->
+         [R.store (temploc dst)
+            (R.fetch (R.mem assn 'm' byte_order 64 (tempval (s,i,w))) 64) 64
+         ;R.store (temploc (s,i,w)) addr 64]
+  |	_ -> [R.store (temploc dst) 
+			(R.fetch (R.mem assn 'm' byte_order 64 addr) 64) 64]
+
 let store ~addr ~src:((_, _, w) as src) assn =
   assert (w = 64);
   [R.store (R.mem assn 'm' byte_order 64 addr) (tempval src) 64]
 @ 
 We also provide sixn-extending loads and stores:
-<<x86 postexpander>>=
+NOTE THAT WE PROBABLY NEED TO FIX THIS UP TOO WITH RESPECT TO LOADS AND
+STORES FROM OFFSETS.
+<<ia64 postexpander>>=
 let extend opname n e = R.app (R.opr opname   [n; 64]) [e]
 let lobits        n e = R.app (R.opr "lobits" [64; n]) [e]
 let sxload ~dst:((_, _, w) as dst) ~addr n assn =
@@ -142,9 +166,12 @@ let move ~dst ~src   = if dst = src then [] else [move_rtl dst src]
 let li  ~dst const = [R.store (temploc dst) (Up.const const) (tempwidth dst)]
 let lix ~dst e     = [R.store (temploc dst) e                (tempwidth dst)]
 @ 
+
 \subsubsection{Operator Contexts}
 <<ia64 postexpander>>=
 module SM = Strutil.Map
+let bcontext = (fun x y -> Impossible.impossible "allocate from bcontext")
+               ,fun _ -> false
 let operators = Context.standard icontext fcontext rcontext acontext bcontext
 let resmap    = List.fold_left (fun m (n, a, r)-> SM.add n r m) SM.empty operators
 let argmap    = List.fold_left (fun m (n, a, r)-> SM.add n a m) SM.empty operators
@@ -169,7 +196,18 @@ We hope there's only one PC on the Itanium.
 let pc_lhs = pc
 let pc_rhs = pc
 
-let br ~tgt = [R.store pc_lhs (tempval  tgt) 64]
+(* note that instructions need to be specified in reverse order! *)
+let br ~tgt = 
+  let alloc = match !talloc with
+    | Some ta -> ta 
+    | None -> Impossible.impossible "can't find allocator for branch" in
+  let tempr = Talloc.Multiple.loc alloc 'v' 64 in
+  [ R.store pc_lhs (R.fetch tempr 64) 64
+  ; R.store tempr (tempval tgt) 64 ]
+(* RRO temp
+[R.store pc_lhs (tempval  tgt) 64]
+*)
+
 let b  ~tgt = [R.store pc_lhs (Up.const tgt) 64]
 
 let effects = List.map Up.effect
@@ -180,24 +218,94 @@ let cut_to effs = [R.par (effects effs)]
 
 let bc x (opr, ws) y ~tgt =
   assert (ws = [64]);
-  R.guard (R.app (R.opr opr ws) (List.map tempval [x;y]))
-          (R.store pc_lhs (Up.const tgt) 64)
+  [R.guard (R.app (R.opr opr ws) (List.map tempval [x;y]))
+          (R.store pc_lhs (Up.const tgt) 64)]
 
 let bnegate r = match Down.rtl r with
-| RP.Rtl [g, RP.Store(pc, tgt, 64) as eff] when pc = Down.loc pc_lhs ->
+| RP.Rtl [g, (RP.Store(pc, tgt, 64) as eff)] when pc = Down.loc pc_lhs ->
      Up.rtl (RP.Rtl [RP.App(("not", [64]), [g]), eff])
 | _ -> Impossible.impossible "ill-formed IA64 conditional branch"
 @
 
+\subsubsection{Other}
+
+<<ia64 postexpander>>=
+let don't_touch_me es = false
+@ 
+
 \subsection{Building the Target}
+Standard control flow.
 <<ia64.ml>>=
 module T = Target
+module F = Mflow.MakeStandard (
+  struct
+     let pc_lhs = Post.pc_lhs
+     let pc_rhs = Post.pc_rhs
+     let ra_reg    = ra
+     let ra_offset = 8
+  end)
+@ 
 
-(*
+We find somewhere to store globals.
+<<ia64.ml>>=
+module A = Automaton
+let ( *> ) = A.( *> )
+let globals base = 
+  let width w = if   w <= 8 then 8 else if w <= 16 then 16 else if w <= 32 then 32
+                else Aux.round_up_to 64 w in
+  let align = function 8 -> 1 | 16 -> 2 | _ -> 4 in
+  A.at ~start:base (A.widen width *> A.align_to align *>
+  A.overflow ~memsize:8 ~byteorder:Post.byte_order ~growth:Memalloc.Up ~max_alignment:16)
+@ 
+
+Spilling and reloading.
+<<ia64.ml>>=
+module X = Expander.IntFloatAddr (Post)
+(* expansion here once caused infinite loop *)
+let spill_expand p r = [r]
+let spill  p t l =
+  spill_expand p (Automaton.store l (Post.tempval t) (Post.tempwidth t))
+let reload p t l =
+  spill_expand p (R.store (Post.temploc t) (Automaton.fetch l (Post.tempwidth t)) (Post.tempwidth t))
+
+let return_to this_ra =
+  R.par [R.store pc raloc Post.wordsize ; R.store pc raloc Post.wordsize]
+@ 
+
+<<ia64.ml>>=
 let target =
   { T.name = "ia64"
+
+  ; T.byteorder   = Post.byte_order
+  ; T.wordsize    = Post.wordsize
+  ; T.pointersize = Post.wordsize
+  ; T.vfp         = SS.vfp
+  ; T.alignment   = 4
+  ; T.memsize     = 8
+  ; T.spaces      = [ Spaces.m; Spaces.a; Spaces.r; Spaces.t; Spaces.f
+                    ; Spaces.u; Spaces.v; Spaces.c ]
+  ; T.distinct_addr_sp = false
+  ; T.float       = "ieee754"
+
+  ; T.spill       = spill
+  ; T.reload      = reload
+
+  ; T.bnegate     = F.bnegate cc
+  ; T.goto        = F.goto
+  ; T.jump        = F.jump
+  ; T.call        = F.call
+  ; T.branch      = F.branch
+
+  ; T.cc_specs    = A.init_cc
+  ; T.cc_spec_to_auto = Ia64call.cconv ~return_to (F.cutto sp)
+  ; T.globals     = globals
+
+  (* there is bogosity below *)
+  ; T.rounding_mode = R.slice 0 ~lsb:0 pc
+  ; T.named_locs    = Strutil.assoc2map []
+  ; T.data_section  = "data"
+  ; T.charset       = "latin1"
   }
-*)
 @ 
 
 \subsection{Variable Placement}
