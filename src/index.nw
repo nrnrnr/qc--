@@ -20,6 +20,63 @@
 % l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
 
 % ------------------------------------------------------------------ 
+\section{Overview information related to more than one module}
+% ------------------------------------------------------------------ 
+
+% ------------------------------------------------------------------ 
+\subsection{Locations}
+% ------------------------------------------------------------------ 
+
+There are three representations of locations in the compiler.
+From most to least general, they are:
+\begin{itemize}
+\item
+An [[Automaton.loc]] is the most abstract and general of the
+locations.
+It provides only the ability to fetch from and store to a location.
+The utility of such an uninformative abstraction is that it enables us
+to represent a ``location'' that splits a value between a register and
+memory, for example.
+We believe that certain calling conventions require such splitting,
+and that the best way to deal with it is to pretend the relevant
+parameter is stored in a single ``location.''
+\item
+An [[Rtl.loc]] is a real machine location, i.e., a space, an offset,
+and a width.
+It might represent a word in memory, a
+register, a register pair, etc.
+A value of type [[Rtl.loc]]  can represent any real location that
+comes up in a {\PAL} program, even one whose true identity depends on
+the state of the machine (i.e., location [[bits32[x+12]]]).
+The type [[Rtl.loc]] is the ``standard'' location and is readily
+amenable to analysis and code generation.
+\item
+A [[Register.t]] is a special-case location intended to represent
+machine registers.
+Its actual definition is that it represents a location for which the
+offset is known at compile time.
+Such locations include hardware registers, special registers, and
+temporaries.
+The advantage of having this special representation is that it greatly
+simplifies substitution and alias analysis.\footnote
+{I'm not sure whether or where we exploit this in the compiler.}
+\end{itemize}
+We can map between these representations with standard
+embedding/projection functions, which are defined in
+the [[Automaton]] and [[Register]] interfaces.
+The projection functions raise the (unknown?!) exception on failure.
+
+We want to avoid using [[Automaton.loc]] except as absolutely necessary.
+So for example, if we use an automaton to allocate spill locations in
+a stack frame, we may use an [[Automaton.t]] to allocate the
+locations, but we will immediately convert to an [[Rtl.loc]] because
+we know we will never use a ``split'' location for spilling.
+
+
+
+
+
+% ------------------------------------------------------------------ 
 \section{Roadmap to the source code}
 % ------------------------------------------------------------------ 
 
