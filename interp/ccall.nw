@@ -25,6 +25,7 @@ calling mechanism.
 
 #define C_FUNC_CALLER   "caller"
 #define C_FUNC_POINTER  "f"
+#define C_FUNC_NAME     "name"
 
 <<type definitions>>
 <<global variable declarations>>
@@ -164,6 +165,10 @@ void register_c_func(const char *name, void *f, const char *sig) {
   lua_pushusertag(L, f, lua_c_func_tag);
   lua_settable(L, -3);
 
+  lua_pushstring(L, C_FUNC_NAME);
+  lua_pushstring(L, name);
+  lua_settable(L, -3);
+
   /* associate C function's table with id in c_func_table */
   lua_rawseti(L, -2, id);
 
@@ -246,6 +251,36 @@ about.
 <<function definitions>>=
 void init_c_sigs(void) {
   <<register C function signatures>>
+
+  /* export c_sig_table to Lua */
+  {
+    lua_error_handle(lua_dostring(lua_interpreter,
+           "CMM               = CMM               or {}   \n"
+           "CMM.tables        = CMM.tables        or {}   \n"),
+       "<internal code>");
+    lua_getglobal (lua_interpreter, "CMM");
+    lua_pushstring(lua_interpreter, "tables");
+    lua_gettable  (lua_interpreter, -2);
+    lua_pushstring(lua_interpreter, "c_sigs"    );
+    lua_pushtable (lua_interpreter,  c_sig_table);
+    lua_settable  (lua_interpreter, -3);
+    lua_pop       (lua_interpreter,  2);
+  }
+
+  /* export c_func_table to Lua */
+  {
+    lua_error_handle(lua_dostring(lua_interpreter,
+           "CMM               = CMM               or {}   \n"
+           "CMM.tables        = CMM.tables        or {}   \n"),
+       "<internal code>");
+    lua_getglobal (lua_interpreter, "CMM");
+    lua_pushstring(lua_interpreter, "tables");
+    lua_gettable  (lua_interpreter, -2);
+    lua_pushstring(lua_interpreter, "c_funcs"    );
+    lua_pushtable (lua_interpreter,  c_func_table);
+    lua_settable  (lua_interpreter, -3);
+    lua_pop       (lua_interpreter,  2);
+  }
 }
 @ 
 <<register C function signatures>>=

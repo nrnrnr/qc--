@@ -358,6 +358,9 @@ The table below lists and explains the arguments supported.\\
 [[-v]] & turns verbosity ON
 \\\hline
 
+[[-e]] & causes interpreter to load source code without interpreting it
+\\\hline
+
 [[-]]  & reads in a source file from [[stdin]] and runs its [[main]] procedure
 \\\hline
 
@@ -390,6 +393,7 @@ extern int   opterr;
     int   i;
     int   c            = -1;
     int   files_loaded =  0;
+    int   load_only    =  0;
 
     /* process options */
     opterr = 0;
@@ -401,7 +405,7 @@ extern int   opterr;
       <<load next source file specified on command line>>
     }
 
-    if (files_loaded) {
+    if (files_loaded && !load_only) {
       <<attempt to run procedure [[main]]>>
     }
   }
@@ -432,7 +436,7 @@ Processing command line options is not very interesting if done with the
 help of [[getopt]].
 
 <<process next command line option>>=
-      c = getopt(argc, argv, "hvo:P:");
+      c = getopt(argc, argv, "hve");
 
       switch (c) {
         case 'h':
@@ -441,6 +445,10 @@ help of [[getopt]].
 
         case 'v':
           verbosity = 1;
+          break;
+
+        case 'e':
+          load_only = 1;
           break;
 
         case '?':
@@ -465,10 +473,11 @@ of the arguments this client takes on the command line.
           printf("Enters interactive mode unless command line arguments are "
                  "given.\n\n");
 
-          printf("  -h                Display this help screen\n");
-          printf("  -v                Turns verbosity ON\n");
-          printf("  -                 Read source file from stdin\n");
-          printf("  <filename>*       Read in source files named\n");
+          printf("  -h               Display this help screen\n");
+          printf("  -v               Turns verbosity ON\n");
+          printf("  -                Read source file from stdin\n");
+          printf("  -e               Load but do not interpret source code\n");
+          printf("  <filename>*      Read in source files named\n");
 @ 
 
 % ----------------------------------------------------------------------------

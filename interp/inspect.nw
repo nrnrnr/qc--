@@ -1,0 +1,271 @@
+% -*- mode: Noweb; noweb-code-mode: lua-mode -*- %
+
+\ifx\nointro\undefined
+This document contains the interface and implementation of a Lua-based inspection facility for the Quick~{\PAL} Interpreter.
+\fi
+
+% ----------------------------------------------------------------------------
+\interface{[[inspect]] : Inspecting the Interpreter from Lua}
+% ----------------------------------------------------------------------------
+
+To allow Lua code to inspect various parts of the interpreter, we write
+and export a number of functions to Lua.
+
+For the most part these functions will be placed in the global Lua table
+[[CMM.inspect]], although there are exceptions.
+
+In this document, we present C-style prototypes for exported Lua functions.
+these prototypes need not appear in the code, though; they are merely present
+for ease of understanding.
+
+% ----------------------------------------------------------------------------
+\subsection{Inspecting Registered Operators}
+% ----------------------------------------------------------------------------
+
+We export one operator-related function to the [[CMM.inspect]] table.
+[[CMM.inspect.dump_operators]] prints a readable (alphabetically-sorted) list
+of all operators registered with the interpreter, as well as a list of all
+types at which these operators are instantiated.
+
+<<Lua prototypes>>=
+void  CMM.inspect.dump_operators(void);
+@ 
+
+We also export a few functions to the Lua table [[CMM.inspect.operators]].
+
+[[CMM.inspect.operators.names]] prints an alphabetically-sorted list of
+all operators registered with the interpreter, and returns this list as
+a numerically-indexed table (with string values).
+[[CMM.inspect.operators.instantiations]] takes an operator name as its argument
+(e.g., [[add]], [[zx]]), and prints all the types at which this operator is
+instantiated in the interpreter.
+
+<<Lua prototypes>>=
+table CMM.inspect.operators;
+table CMM.inspect.operators.names(void);
+void  CMM.inspect.operators.instantiations(string opname);
+@ 
+
+% ----------------------------------------------------------------------------
+\subsection{Inspecting the C Calling Mechanism}
+% ----------------------------------------------------------------------------
+
+We export one C call-related function to the [[CMM.inspect]] table.
+[[CMM.inspect.dump_ccall]] prints a list of all C function signatures
+registered with the interpreter, as well as an alphabeticaly sorted list of
+all C functions registered with the interpreter.
+
+<<Lua prototypes>>=
+void  CMM.inspect.dump_ccall(void);
+@ 
+
+We export a few functions to the Lua table [[CMM.inspect.ccall]].
+
+[[CMM.inspect.ccall.sigs]] prints a list of all C function signatures
+registered with the interpreter; that is, only C functions of these types
+may be registered with the interpreter to be potentially called by interpreted
+{\PAL} code.
+[[CMM.inspect.ccall.funcs]] prints an alphabetically sorted list of all C
+functions registered with the interpreter.
+
+<<Lua prototypes>>=
+table CMM.inspect.ccall;
+void  CMM.inspect.ccall.sigs (void);
+void  CMM.inspect.ccall.funcs(void);
+@ 
+
+% ----------------------------------------------------------------------------
+\implementation{Inspecting the Interpreter from Lua}
+% ----------------------------------------------------------------------------
+
+<<inspect.lua>>=
+-- [inspect.lua]
+-- 
+-- This code will only work when run through the Lua 4.0 interpreter, as
+-- extended by the Quick C-- Interpreter.
+
+CMM                   = CMM                   or {}
+CMM.inspect           = CMM.inspect           or {}
+
+<<inspecting registered operators>>
+<<inspecting the C calling mechanism>>
+@
+
+% ----------------------------------------------------------------------------
+\subsection{Inspecting Registered Operators}
+% ----------------------------------------------------------------------------
+
+We first create table [[CMM.inspect.operators]] and store functions there.
+
+<<inspecting registered operators>>=
+CMM.inspect.operators = CMM.inspect.operators or {}
+@ 
+
+Next, we define [[CMM.inspect.operators.names]] to retrieve the names of
+all registered operators, sorted in alphabetical order.
+This function prints the names as well as returning a numerically-indexed
+table of them.
+
+<<inspecting registered operators>>=
+CMM.inspect.operators.names = function ()
+  local T = CMM.tables.operators
+
+  local sorted_opnames = {}
+  local print_opnames  = 
+     function (nametable)
+        local i = 1
+        while i <= getn(nametable) do
+          write(format('%s ', nametable[i]))
+          i = i + 1
+        end        
+     end                   
+
+  local i = 0
+
+  for opname, instants in T do
+    i = i + 1
+    sorted_opnames[i] = opname
+  end
+  
+  sort(sorted_opnames)
+
+  print("The following operators are registered in the interpreter:\n")
+  print_opnames(sorted_opnames)
+  print("")
+
+  print("------------------------------------------------------------------" ..
+        "-----------")
+
+  return sorted_opnames
+end
+@ 
+
+[[CMM.inspect.operators.instantiations]] prints a well-formatted list of all
+types at which the given operator (given by name in string form) is
+instantiated.
+
+<<inspecting registered operators>>=
+CMM.inspect.operators.instantiations = function (opname)
+  local T_ref = CMM.tables.operators[opname]
+
+  if T_ref then
+    local T = getfromref(T_ref)
+
+    print("[" .. opname .. "]")
+
+    for sig, func in T do
+      local fancysig = sig
+
+      -- make even nullary functions look pretty
+      if strsub(fancysig, 1, 1) == ":" then
+          fancysig = gsub(fancysig, ":", "")
+      end
+
+      fancysig = gsub(fancysig, ",", " * " )
+      fancysig = gsub(fancysig, ":", " -> ")
+
+      print("  " .. fancysig)
+    end
+  else
+    print("The given operator [" .. opname .. "] is not registered in the " ..
+          "interpreter")
+  end
+
+  print("------------------------------------------------------------------" ..
+        "-----------")
+end
+@ 
+
+Finally, we export one operator-related function in the [[CMM.inspect]] table:
+[[CMM.inspect.dump_operators]].
+This nullary function dumps a list of all operators and all operator 
+instantiations currently registered with the interpreter.
+
+<<inspecting registered operators>>=
+CMM.inspect.dump_operators = function ()
+  local print_instants =
+     function (i, opname)
+        CMM.inspect.operators.instantiations(opname)
+     end
+
+  foreachi(CMM.inspect.operators.names(), print_instants)
+end
+@ 
+
+% ----------------------------------------------------------------------------
+\subsection{Inspecting the C Calling Mechanism}
+% ----------------------------------------------------------------------------
+
+We first create table [[CMM.inspect.ccall]] and store functions there.
+
+<<inspecting the C calling mechanism>>=
+CMM.inspect.ccall = CMM.inspect.ccall or {}
+@ 
+
+Next, we define [[CMM.inspect.ccall.sigs]].
+
+<<inspecting the C calling mechanism>>=
+CMM.inspect.ccall.sigs = function ()
+  local T = CMM.tables.c_sigs
+
+  print("[Registered C function signatures]")
+
+  if T then
+    for sig, func in T do
+      local fancysig = sig
+
+      fancysig = gsub(fancysig, "pointer", "(void *)");
+      fancysig = gsub(fancysig, ","      , ", "      );
+      fancysig = gsub(fancysig, ":"      , " -> "    );
+
+      print("  " .. fancysig .. "\n")
+    end
+  else
+    print("  <none found>")
+  end
+
+  print("------------------------------------------------------------------" ..
+        "-----------")
+end
+@ 
+
+And now, we define [[CMM.inspect.ccall.funcs]].
+
+<<inspecting the C calling mechanism>>=
+CMM.inspect.ccall.funcs = function ()
+  local T        = CMM.tables.c_funcs
+  local T_sorted = {}
+
+  print("[Registered C functions]")
+
+  if T then
+    local printfunc = function(i, n) print("  " .. n) end
+    local i = 1
+
+    for index, f_table in T do
+      if f_table and f_table["name"] then
+        T_sorted[i] = f_table["name"]
+        i = i + 1
+      end
+    end
+
+    sort(T_sorted)
+    foreachi(T_sorted, printfunc)
+  else
+    print("  <none found>")
+  end
+
+  print("------------------------------------------------------------------" ..
+        "-----------")  
+end
+@ 
+
+Finally, we export one function to the main [[CMM.inspect]] table.
+It simply calls the above two Lua functions.
+
+<<inspecting the C calling mechanism>>=
+CMM.inspect.dump_ccall = function ()
+  CMM.inspect.ccall.sigs()
+  CMM.inspect.ccall.funcs()
+end
+@ 

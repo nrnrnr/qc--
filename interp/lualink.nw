@@ -63,6 +63,15 @@ identically.
 int lua_table_foreach(lua_State *L, table t, const char *str);
 @ 
 
+[[lua_getfromref]] allows Lua code to access Lua tables that are not stored as
+globals, but rather referenced only by C [[table]] records.
+This function takes a Lua reference (an [[int]]) and returns a table on the
+Lua stack.
+
+<<function prototypes>>=
+int lua_getfromref(lua_State *L);
+@ 
+
 \paragraph{Debugging}
 
 For extra debugging information, we use the Lua debugging library in
@@ -99,6 +108,7 @@ void lua_assert_istable   (lua_State *L, int i, const char *err_msg);
 
 #include "interp.h" 
 #include "encoding.h"
+#include "operator.h" /* for use of operator_table */
 
 int lua_assembly_unit_tag;
 int lua_RBlock_tag;
@@ -161,12 +171,18 @@ lua_State *init_lua_interp(void) {
 
   /* FIX : for now, send lua_open 0; it will default to a stacksize of 1024 */
   lua_interpreter = lua_interp = lua_open(0);
+
   lua_baselibopen(lua_interp);
+  lua_iolibopen(lua_interp);
+  lua_strlibopen(lua_interp);
+  lua_mathlibopen(lua_interp);
+
   lua_setlinehook(lua_interp, lua_linehook);
 
   <<extend Lua initial basis>>
   <<create Lua userdata tags>>
   <<register C functions with lua>>
+  <<bind global tables to global Lua symbols>>
 
   return lua_interp;
 }
@@ -214,11 +230,24 @@ functions (see [[encoding]] module), and two remaining calls register
   lua_newtable(lua_interp);
   lua_setglobal(lua_interp, "CMM");
   ITERATE_CMM_FUNCS(LUA_FUNC_REGISTER)
-  lua_register(lua_interp, "relocate_block", 
-               (lua_CFunction) lua_relocate_block);
-  lua_register(lua_interp, "copy_block_contents",
-               (lua_CFunction) lua_copy_block_contents);
+  lua_register(lua_interp,"relocate_block",(lua_CFunction) lua_relocate_block);
+  lua_register(lua_interp,"copy_block_contents",
+                                      (lua_CFunction) lua_copy_block_contents);
+  lua_register(lua_interp,"getfromref"    ,(lua_CFunction) lua_getfromref    );
 @ 
+
+To allow the user to inspect certain internal tables used in the interpreter,
+we bind some such tables to global Lua symbols.
+
+<<bind global tables to global Lua symbols>>=
+  /* store tables under CMM.tables */
+  lua_getglobal(lua_interp, "CMM");
+  lua_pushstring(lua_interp, "tables");
+  lua_newtable(lua_interp);
+  lua_settable(lua_interp, -3);
+
+  lua_pop(lua_interp, 1);
+@
 
 % ----------------------------------------------------------------------------
 \subsection{Utility Functions and Macros}
@@ -249,6 +278,25 @@ int  lua_table_foreach(lua_State *L, table t, const char *str) {
   return 0;
 }
 @ 
+
+[[lua_getfromref]] simply wraps C function (from the Lua API) [[lua_getref]].
+
+<<function definitions>>=
+int lua_getfromref(lua_State *L) {
+  int i;
+
+  lua_assert_isnumber(L, -1, "getfromref expects an integer argument");
+  i = (int) lua_tonumber(L, -1);
+
+  lua_pop(L, 1);
+
+  if (lua_getref(L, i))
+    return 1;
+  else
+    return 0;
+}
+@ 
+
 
 \paragraph{Debugging}
 
