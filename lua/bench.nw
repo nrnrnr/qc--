@@ -1,0 +1,28 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+\section{Main program for Lua benchmarking}
+
+<<bench.ml>>=
+module T = Lua.Lib.Combine.T1 (Luaiolib.T)
+module X = Lua.Lib.Extend (T.T1)
+module L = Lua.Lib.Combine.L3 (Luaiolib.Make (T.T1)) 
+                              (X(Luastrlib.M)) (X(Luamathlib.M))
+module I = Lua.MakeInterp (Lua.Parser.MakeStandard) (Lua.MakeCore (T) (L))
+
+  module V = I.Value
+  let state = I.state()
+  let run infile = ignore (I.dofile state infile)
+  let rec args = function
+    | file :: argv ->
+        let embed = (V.list V.string).V.embed in
+        V.Table.bind state.V.globals (V.String "arg") (embed argv);
+        (try ignore (I.dofile state file)
+        with I.Error msg -> prerr_string ("Lua error: " ^ msg ^ "\n"))
+    | [] -> prerr_string "Usage: oclbench <filename> <arguments>\n"; exit 1
+  
+  let _ = args (List.tl (Array.to_list (Sys.argv)))
+
+(*
+let _ = prerr_string ("Average bucket-list has " ^ string_of_float (Log.avg_length()) ^
+                      "elements\n")
+*)

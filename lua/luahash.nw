@@ -37,7 +37,7 @@ val create : ('a -> 'a -> bool) -> int -> ('a,'b) t
            initial guess. *)
 
 val population : ('a, 'b) t -> int
-        (* number of elements in a table (as distinct from its size) *)
+        (* number of key-value pairs in a table (as distinct from its size) *)
 
 val clear : ('a, 'b) t -> unit
         (* Empty a hash table. *)
@@ -137,6 +137,28 @@ and ('a, 'b) bucketlist =
     Empty
   | Cons of 'a * 'b * ('a, 'b) bucketlist
 
+let bucket_length l =
+  let rec len k = function
+    | Empty -> k
+    | Cons(_, _, l) -> len (k+1) l
+  in len 0 l
+
+let dump_buckets h k i l =
+  let nsize = Array.length h.data in
+  let int = string_of_int in
+  let hmod k = int (hash k mod nsize) in
+  let rec dump = function
+    | Empty -> ()
+    | Cons (k', i', l) ->
+        List.iter prerr_string ["New bucket hash = "; int (hash k'); " [mod=";
+                                hmod k'; "]"; 
+                                if h.eq k k' then " (identical " else " (different ";
+                                "keys)\n"];
+        dump l
+  in List.iter prerr_string ["First bucket hash = "; string_of_int (hash k);
+                             " [mod="; hmod k; "]\n"];
+     dump l
+
 let create eq initial_size =
   let s = if initial_size < 1 then 1 else initial_size in
   let s = if s > Sys.max_array_length then Sys.max_array_length else s in
@@ -147,6 +169,36 @@ let clear h =
   for i = 0 to Array.length h.data - 1 do
     h.data.(i) <- Empty
   done
+
+let dump_table_stats h =
+  let flt x = Printf.sprintf "%4.2f" x in
+  let int = string_of_int in
+  let sum = ref 0 in
+  let sumsq = ref 0 in
+  let n   = ref 0 in
+  let zs  = ref 0 in
+  let ratio n m = float n /. float m in
+  let inc r n = r := !r + n in
+  let stats l =
+    let k = bucket_length l in
+    if k = 0 then inc zs 1
+    else (inc sum k; inc sumsq (k*k); inc n 1) in
+  for i = 0 to Array.length h.data - 1 do
+    stats h.data.(i)
+  done;
+  let mean = ratio (!sum) (!n) in
+  let variance = 
+    if !n > 1 then                         (* concrete math p 378 *)
+      (float (!sumsq) -. float (!sum) *. mean) /. (float (!n - 1))
+    else
+      0.0 in
+  let variance = if variance < 0.0 then 0.0 else variance in
+  let stddev = sqrt variance in
+  let stderr = stddev /. sqrt (float (!n)) in
+  List.iter prerr_string ["Table has "; int (!zs); " empy buckets; ";
+                          "avg nonzero length is "; flt (ratio (!sum) (!n));
+                          " +/- "; flt stderr; " \n"]
+
 
 let resize hashfun tbl =
   let odata = tbl.data in
@@ -166,6 +218,7 @@ let resize hashfun tbl =
     tbl.data <- ndata;
   end;
   tbl.max_len <- 2 * tbl.max_len
+(*  if tbl.max_len >= 48 then dump_table_stats tbl *)
 
 let rec bucket_too_long n bucket =
   if n < 0 then true else
@@ -275,12 +328,27 @@ let replace h key info =
         else Cons(k, i, replace_bucket next) in
   let i = (hash key) mod (Array.length h.data) in
   let l = h.data.(i) in
+(*
+  Log.bucket_length (bucket_length l);
+  if bucket_length l > 5 then
+    begin
+      (match l with Cons (k, i, l) -> dump_buckets h k i l | _ -> ());
+      prerr_string
+          (if bucket_too_long h.max_len l then "bucket too long (> "
+           else "bucket length OK (<= ");
+      prerr_int h.max_len;
+      prerr_string ")\n\n"
+    end;
+*)
   try
     h.data.(i) <- replace_bucket l
   with Not_found ->
     begin
-      h.data.(i) <- Cons(key, info, l);
-      h.population <- h.population + 1
+      let bucket = Cons(key, info, l) in
+      h.data.(i) <- bucket;
+      h.population <- h.population + 1;
+      (*if bucket_too_long h.max_len bucket then resize hash h*)
+      if h.population > Array.length h.data then resize hash h
     end
 
 let mem h key =

@@ -29,8 +29,8 @@ OCAMLO_FLAGS =	-I $LIBDIR
 # high level (virtual) targets
 # ------------------------------------------------------------------ 
 
-all:V: 		lua.cma oclua
-all.opt:V:      lua.cmx oclua.opt
+all:V: 		lua.cma oclua     oclbench
+all.opt:V:      lua.cmx oclua.opt oclbench.opt
 
 update:V:	$LIBDIR/lua.cma 
 update.opt:V:   $LIBDIR/lua.cmxa
@@ -66,7 +66,8 @@ lua.tex: lua.nw
 # The order of files determines the link order. No file must use any
 # of its successors
 
-LIBML = 	luahash.ml	\
+LIBML = 	log.ml		\
+		luahash.ml	\
 		luafloat.ml	\
 		luavalue.ml	\
 		luaast.ml	\
@@ -74,6 +75,7 @@ LIBML = 	luahash.ml	\
 		luascanner.ml	\
 		luabaselib.ml	\
 		lualib.ml		\
+		oldinterp.ml	\
 		luainterp.ml	\
 		luarun.ml	\
 		lua.ml          \
@@ -89,9 +91,11 @@ LIBOBJ =	`echo $LIBML | sed 's/\.ml/.o/g'`
 # we wan't easily deduce LIBMLI from LIBML because there might be
 # interfaces with no implementation and vice versa.
 
-LIBMLI = 	lua.mli		\
+LIBMLI = 	log.mli		\
+		lua.mli		\
 		luaast.mli	\
 		luabaselib.mli	\
+		oldinterp.mli	\
 		luainterp.mli	\
 		luaiolib.mli	\
 		lualib.mli	\
@@ -143,13 +147,20 @@ oclua: 		lua.cma $CMO
 oclua.opt: 	lua.cmxa $CMX
 		$OCAMLO $OCAMLO_FLAGS -o $target unix.cmxa cllib.cmxa $prereq 
 
+oclbench:	lua.cma bench.cmo
+		$OCAMLC $OCAMLC_FLAGS -o $target unix.cma cllib.cma $prereq 
+
+oclbench.opt: 	lua.cmxa bench.cmx
+		$OCAMLO $OCAMLO_FLAGS -o $target unix.cmxa cllib.cmxa $prereq 
+
+
 # ------------------------------------------------------------------ 
 # Source files
 # The following files are scanned for dependencies. We have to list them
 # here to make sure they get extracted from Noweb files and generated if
 # neccessary.
 
-SCAN = 		$LIBML $LIBMLI main.ml
+SCAN = 		$LIBML $LIBMLI main.ml bench.ml
 
 src:V: $SCAN
 

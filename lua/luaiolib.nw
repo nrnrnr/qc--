@@ -39,16 +39,21 @@ let outfile = { V.embed = (fun f -> embed (Out f))
 
 let wrap_err f = try f () with Sys_error s -> [V.Nil; V.String s] in
 
-let readfrom g = function
+let readfrom g =
+  let finish_new file =
+    io.currentin <- file;
+    [infile.V.embed file] in
+  function
   | [V.String s] ->
       (match String.get s 0 with
        | '|' ->
-           wrap_err (fun () ->
-             [infile.V.embed
-                   (Unix.open_process_in (String.sub s 1 (String.length s - 1)))])
-       | _   -> wrap_err (fun () -> [infile.V.embed (open_in s)]))
+           wrap_err (fun () -> finish_new
+                       (Unix.open_process_in (String.sub s 1 (String.length s - 1))))
+       | _   -> wrap_err (fun () -> finish_new (open_in s)))
   | [] ->
-      ( close_in io.currentin; io.currentin <- stdin; [])
+      let c = io.currentin in
+      io.currentin <- stdin;
+      wrap_err (fun () -> close_in c; [])
   | [v] -> (io.currentin <- infile.V.project v; [])
   | _ -> C.fallback "error" g [V.String "bad args to readfrom"] in
               
@@ -80,7 +85,7 @@ let unimp s =
     C.fallback "error" g [V.String ("string library does not implement `" ^ s ^ "'")]) in
 
 let read g = function
-  | None -> [V.String (input_line io.currentin)]
+  | None -> [try V.String (input_line io.currentin) with End_of_file -> V.Nil]
   | Some _ -> C.fallback "error" g
               [V.String ("string library does not implement read patterns")]  in
 
