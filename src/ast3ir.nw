@@ -565,32 +565,39 @@ and jumpStmt state (cconv,e,args,labels) =
         else
             let node,area,defs = IO.copyout state.cfg args cc.Target.proc 
                                        state.inbase jmp in
-            { state with
-                node     = node
-            ;   outgoing = area :: state.incoming
-            }  
+            let result = 
+                { state with node     = node
+                ;            outgoing = area :: state.incoming
+                } in 
+            let () = G.gm_insert_dataflow_between
+		  ~defs:Register.Set.empty ~uses:defs ~kills:Register.Set.empty
+		  ~src:jmp ~dst:(G.exit(state.cfg)) in
+                result
 @
 
-\begin{figure}
-\begin{quote}\small
-\begin{verbatim}
 
-            /   |
-            |   o  r0 = x  
- copy-out:  |   |                      
- defs r0,r1 |   o  r1 = y 
-            \   |
-             ------
-            | call | x = f(x,y) call: kills y, ... 
-           ///-----
-          ///   |
-         ///    o               data-flow: uses r0, r1; defs x 
- continuations  |
-                o  x = r0       copy-in:   uses r0
-                |
-                        
-\end{verbatim}
-\end{quote}
+%% \begin{quote}\small
+%% \begin{verbatim}
+%% 
+%%             /   |
+%%             |   o  r0 = x  
+%%  copy-out:  |   |                      
+%%  defs r0,r1 |   o  r1 = y 
+%%             \   |
+%%              ------
+%%             | call | x = f(x,y) call: kills y, ... 
+%%            ///-----
+%%           ///   |
+%%          ///    o               data-flow: uses r0, r1; defs x 
+%%  continuations  |
+%%                 o  x = r0       copy-in:   uses r0
+%%                 |
+%%                         
+%% \end{verbatim}
+%% \end{quote}
+
+\begin{figure}
+\centerline{\includegraphics[width=\hsize]{../figures/callstmt}}
 \caption{\label{fig:ast3ir:call} Principle translation of a call
 statement. A data-flow node expresses inter-procedural data-flow.}
 \end{figure}
@@ -652,7 +659,13 @@ and returnStmt state (cconv, kont, args) =
     let ret     = G.gm_return state.cfg rtl (x, y)   in
     let copy, area, defs =
                   IO.copyout state.cfg args cc.Target.ret state.inbase ret in
-        { state with node = ret; incoming = area :: state.incoming}
+    let result  = {state with node = ret; incoming = area :: state.incoming}in
+		  (* fix data-flow *)
+    let ()      = G.gm_insert_dataflow_between
+		  ~defs:Register.Set.empty ~uses:defs ~kills:Register.Set.empty
+		  ~src:ret ~dst:(G.exit(state.cfg)) in
+	result
+	
 @
 
 A continuation receives its parameters in the \emph{incoming} area of
@@ -660,16 +673,18 @@ its activation.
 
 <<Make statements>>=
 and contStmt state (label,args)  = 
-    let cc        = state.target.Target.cc default_cc              in
-    let args      = List.map (formal state.env) args in
-    let atm       = Automaton.mk cc.Target.cont state.inbase       in
+    let cc      = state.target.Target.cc default_cc              in
+    let args    = List.map (formal state.env) args in
+    let atm     = Automaton.mk cc.Target.cont state.inbase       in
     let copy,area,uses = IO.copyin state.cfg args 
-                    cc.Target.cont state.inbase state.node in
-    let _         = G.set_label state.cfg label copy               in
-        { state with
-            node     = copy
-        ;   incoming = area :: state.incoming
-        }
+                  cc.Target.cont state.inbase state.node in
+    let ()      = G.set_label state.cfg label copy               in
+    let result  = { state with
+                    node     = copy
+                  ; incoming = area :: state.incoming
+                  } in
+
+        result
 @
 
 \begin{quote}\it
@@ -693,10 +708,13 @@ and cutStmt state (e, args, conts) =
     let inbase    = Rtl.link "inbase for cont" 
                     state.target.Target.pointersize (*XXX*) in
     let copy,area,defs = IO.copyout state.cfg args cc.Target.cont inbase cut  in
-        { state with
-            node     = cut
-        ;   incoming = area :: state.outgoing
-        }
+    let result    =    { state with node     = cut
+                       ;            incoming = area :: state.outgoing
+                       } in
+    let ()      = G.gm_insert_dataflow_between
+		  ~defs:Register.Set.empty ~uses:defs ~kills:Register.Set.empty
+		  ~src:cut ~dst:(G.exit(state.cfg)) in
+        result
 
 and primStmt      state x  = Impossible.unimp "primitive"
 and spanStmt      state x  = Impossible.unimp "span"

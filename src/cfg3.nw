@@ -145,7 +145,6 @@ val exit:       cfg -> node
 val fold_fwd:   cfg -> (node -> 'a -> 'a) -> 'a -> 'a (* must not use gm_xxx *)
 val fold_bwd:   cfg -> (node -> 'a -> 'a) -> 'a -> 'a (* must not use gm_xxx *)
 
-(* switch to open intervall semantics? first:int -> limit:int *)
 (* cfg traversal in linear order, requires (enumerated cfg)  *)
 val first:      cfg -> node (* wrt numbering *)
 val last:       cfg -> node (* wrt numbering *)
@@ -162,11 +161,6 @@ val gm_jump:    cfg -> Rtl.rtl -> node list -> node
 val gm_cutto:   cfg -> Rtl.rtl -> conts     -> node
 val gm_call:    cfg -> Rtl.rtl -> conts -> succ:node -> node
 val gm_branch:  cfg -> Rtl.rtl -> ifso:node -> ifnot:node -> node
-(*  used only internally - no reason to export
- *  val gm_dummy:   cfg -> node
- *)
-(* dataflow-design is bogus *)
-val gm_dataflow: cfg -> defs:locs -> uses:locs -> kills:locs -> succ:node -> node
 
 (* cfg mutators, ensures: not (enumerated cfg) *)
 val gm_redirect_all:            src:node -> olddst:node -> newdst:node -> unit
@@ -521,15 +515,73 @@ module type S = sig
     <<types and ops>>
 end
 
+type locs       = Register.Set.t  (* defs/uses/kills *)
+type property   = unit
+
 module X = struct
     <<module X>>
 end
 
-type cfg  = X.cfg       (* class type cfg  *)
-type t    = cfg         (* alias           *)
-type node = X.node      (* class type node *)
-<<type conts>>          (* continuation bundle *)
+type cfg        = X.cfg           (* class type cfg  *)
+type t          = cfg             (* alias           *)
+type node       = X.node          (* class type node *)
+<<type conts>>                    (* continuation bundle *)
 @
+
+The implementation of most functions refer to methods of the involved
+objects and therefore quite short.
+
+<<cfg3.ml>>=
+let mk () = new X.graph
+
+<<cfg3.ml>>=
+let set_label cfg (label:string) (node:node) =
+    cfg#set_label label node
+
+let lookup cfg (label:string) =
+    cfg#lookup label
+
+<<cfg3.ml>>=
+let entry cfg =
+    cfg#entry
+
+let exit cfg =
+    cfg#exit
+
+let fold_fwd cfg f zero = assert false
+let fold_bwd cfg f zero = assert false
+
+let first cfg = assert false
+let last  cfg = assert false
+
+let scan_fwd cfg ~first:int ~limit:int f zero = assert false
+let scan_bwd cfg ~first:int ~limit:int f zero = assert false
+let next (node:node) = assert false
+let prev (node:node) = assert false
+
+<<cfg3.ml>>=
+let gm_assign = new X.assign
+let gm_return = new X.return
+let gm_goto   = new X.goto
+let gm_jump   = new X.jump
+let gm_cutto  = new X.cutto
+let gm_call   = new X.call
+let gm_branch = new X.branch
+@
+
+
+<<cfg3.ml>>=
+let cfg         (node:node) = node#cfg
+let rtl         (node:node) = node#rtl
+let succ        (node:node) = node#succ
+let pred        (node:node) = node#pred
+let property    (node:node) = assert false
+let number      (node:node) = node#number
+let defs        (node:node) = node#defs
+let uses        (node:node) = node#uses
+let kills       (node:node) = node#kills
+@
+
 
 % ------------------------------------------------------------------ 
 \subsection{Object-Oriented Implementation}
@@ -545,12 +597,6 @@ A [[node]] has a fixed number of outgoing edges to successors that are
 initialized when the node is created. Edges can be updated using
 [[upd_succ]] but the number of edges is fixed.
 
-The implementation of labels requires a third class type [[proxy]]
-which is a sub-class type of [[node]]. A [[proxy]] node holds a label
-for a node that is not yet defined. Its distinct feature is, that an
-edge to a successor can be added later after the proxy was created.
-This allows to point the proxy to the node that really should hold the
-label, once this node is defined.
 
 <<module X>>=
 class type cfg = object
@@ -604,12 +650,16 @@ and node = object
 
     method link_pred:   node -> unit    (* add    in-edge from to pred node *)
     method unlink_pred: node -> unit    (* remove in-edge from to pred node *) 
-    method upd_pred:    (node -> node) -> unit (* redirect preds of this *)
     method upd_succ:    (node -> node) -> unit (* redirect succs of this *)
+    method set_rtl:     Rtl.rtl -> unit (* set rtl to new value *)
+
+    method defs:        locs            (* defined by this *)
+    method uses:        locs            (* used by this    *)
+    method kills:       locs            (* killed by this  *)
 end
 @
 
-\begin{itemize]
+\begin{itemize}
 \item [[cfg]] is the {\cfg} this node belongs to.
 \item [[rtl]] is the {\rtl} belonging to this node.
 \item [[id]] is the identification of this node. It is unique within
@@ -623,12 +673,17 @@ end
 \item [[unlink_pred]] informs this node that a given node is no longer
       a predecessor of this node. It is a checked run-time error if
       the node at hand is not a predecessor of this node.
-\item [[upd_pred]] updates links to predecessors from [[this]] using 
-      a map-function.
 \item [[upp_succ]] updates links to successors using a map-function.
       Note that a map-function can collapse different links to a
       single node but can't reverse the effect.
 \end{itemize}      
+
+The implementation of labels requires a third class type [[proxy]]
+which is a sub-class type of [[node]]. A [[proxy]] node holds a label
+for a node that is not yet defined. Its distinct feature is, that an
+edge to a successor can be added later after the proxy was created.
+This allows to point the proxy to the node that really should hold the
+label, once this node is defined.
 
 <<module X>>=
 class type proxy = object
@@ -665,6 +720,25 @@ successors and predecessors below.
     
 <<module X>>=
 let uniq nodes = nodup compare (List.sort compare nodes)   
+@
+
+Edges in a {\cfg} can not be simply added or removed but only
+redirected. This ensures that no edge gets lost. Redirection of edges is
+specified by a client supplied function that maps the end of an edge to
+a new node: [[node -> node]]. Whenever an edge is remapped it must be
+unlinked from the old destination and linked with the new destination.
+We create a such a function from the client supplied [[map]]:
+
+<<module X>>=
+let upd (this:node) (map:node->node) = fun n -> 
+    let n' = map n in
+        if n' <> n then         (* edge gets redirected *)
+            ( n  #unlink_pred this
+            ; n' #link_pred   this
+            ; n'
+            )
+        else
+            n
 @
 
 % ------------------------------------------------------------------ 
@@ -734,6 +808,9 @@ object (this)
         )
 end
 
+(* ------------------------------------------------------------------ *) 
+
+<<module X>>=
 and virtual vnode cfg rtl =
 object(this)
     val mutable _pred = NodeSet.empty
@@ -761,14 +838,25 @@ object(this)
     method unlink_pred node =
         assert (NodeSet.mem node _pred);
         _pred <- NodeSet.remove node _pred
-    
-    method upd_pred map =
-        let nodes = this#pred in
-        let nodes = List.map map nodes in
-        let nodes = List.fold_right NodeSet.add nodes NodeSet.empty in
-            _pred <- nodes    
+
+    method set_rtl (rtl:Rtl.rtl) =
+        _rtl <- rtl
+
+    method defs = 
+        let read,write = Rtlutil.read_write_sets _rtl in
+            write
+
+    method uses = 
+        let read,write = Rtlutil.read_write_sets _rtl in
+            read
+
+    method kills =
+        Register.Set.empty
 end 
 
+(* ------------------------------------------------------------------ *) 
+
+<<module X>>=
 and virtual vcut cfg rtl (conts: conts) =
 object (this)
     inherit vnode cfg rtl
@@ -786,6 +874,9 @@ object (this)
     method virtual upd_succ : (node -> node) -> unit
 end 
 
+(* ------------------------------------------------------------------ *) 
+
+<<module X>>=
 and dummy cfg: proxy =
 object(this)
     inherit vnode cfg Rtl.null
@@ -801,27 +892,41 @@ object(this)
             | Some n -> [n]
     
     method upd_succ map =
+        let map = upd (this :> node) map in
         match _succ with
             | None   -> ()
             | Some n -> _succ <- Some (map n)
 end
 
+(* ------------------------------------------------------------------ *) 
+
+<<module X>>=
 and entry cfg exit: node =
 object(this)
     inherit vnode cfg Rtl.null
 
     val mutable _succ = (exit:node)
+
+    initializer 
+        _succ # link_pred (this :> node)
     
     method succ = [_succ]
     method upd_succ map = 
+        let map = upd (this :> node) map in
         _succ <- map _succ
 end
 
+(* ------------------------------------------------------------------ *) 
+
+<<module X>>=
 and exit cfg: node =
 object(this)
     inherit vnode cfg Rtl.null
 end
 
+(* ------------------------------------------------------------------ *) 
+
+<<module X>>=
 class assign cfg rtl succ : node =
 object (this)
     inherit vnode cfg rtl
@@ -834,17 +939,35 @@ object (this)
     method succ = [_succ]
 
     method upd_succ map = 
+        let map = upd (this :> node) map in
         _succ <- map _succ
 end
 
+(* ------------------------------------------------------------------ *) 
+
+<<module X>>=
 class return cfg rtl (x,y) : node  =
 object (this)  
     inherit vnode cfg rtl
 
-    val _x = (x:int)
-    val _y = (y:int)
+    val         _x    = (x:int)
+    val         _y    = (y:int)
+    val mutable _exit = cfg#exit
+
+    initializer 
+        _exit # link_pred (this :> node)
+    
+    method succ = [_exit]
+    
+    method upd_succ map =
+        let map = upd (this :> node) map in
+        _exit <- map _exit
+
 end
 
+(* ------------------------------------------------------------------ *) 
+
+<<module X>>=
 class goto cfg rtl targets : node =
 object (this)
     inherit vnode cfg rtl
@@ -857,24 +980,35 @@ object (this)
     method succ = uniq _targets      
     
     method upd_succ map =
+        let map = upd (this :> node) map in
         _targets <- List.map map _targets 
 end
 
+(* ------------------------------------------------------------------ *) 
+
+<<module X>>=
 class jump cfg rtl targets : node =
 object (this)
     inherit vnode cfg rtl
 
     val mutable _targets = targets
+    val mutable _exit    = cfg#exit     (* artifical edge to exit *)
     
     initializer
-        List.iter (fun n -> n#link_pred (this :> node)) _targets
+        List.iter (fun n -> n#link_pred (this :> node)) (_exit::_targets)
 
-    method succ = uniq _targets      
+    method succ = uniq (_exit::_targets)      
     
     method upd_succ map =
-        _targets <- List.map map _targets
+        let map = upd (this :> node) map in
+        ( _targets <- List.map map _targets
+        ; _exit    <- map _exit
+        )
 end
 
+(* ------------------------------------------------------------------ *) 
+
+<<module X>>=
 class call cfg rtl conts ~succ : node =
 object (this)
     inherit vcut cfg rtl conts
@@ -888,11 +1022,63 @@ object (this)
         uniq (List.concat [ [_succ]; _cuts; _unwinds; _returns])
 
     method upd_succ map = 
+        let map = upd (this :> node) map in
         ( _cuts     <- List.map map _cuts
         ; _unwinds  <- List.map map _unwinds
         ; _returns  <- List.map map _returns
         ; _succ     <- map _succ
         ) 
 end
+
+(* ------------------------------------------------------------------ *) 
+
+<<module X>>=
+class cutto cfg rtl conts : node =
+object (this)
+    inherit vcut cfg rtl conts
+
+    val mutable _exit = cfg#exit        (* artifical edge to exit *)
+
+    initializer
+        _exit # link_pred (this :> node)
+
+    method succ =
+        uniq (List.concat [ [_exit]; _cuts; _unwinds; _returns])
+
+    method upd_succ map = 
+        let map = upd (this :> node) map in
+        ( _cuts     <- List.map map _cuts
+        ; _unwinds  <- List.map map _unwinds
+        ; _returns  <- List.map map _returns
+        ; _exit     <- map _exit
+        ) 
+end
+
+(* ------------------------------------------------------------------ *) 
+
+<<module X>>=
+class branch cfg rtl (ifso:node) (ifnot:node) : node =
+object (this)
+    inherit vnode cfg rtl 
+
+    val mutable _ifso  = ifso
+    val mutable _ifnot = ifnot
+
+    initializer
+        ( _ifso  # link_pred (this :> node)
+        ; _ifnot # link_pred (this :> node)
+        )
+
+    method succ =
+        uniq [_ifso;_ifnot]
+
+    method upd_succ map =
+        let map = upd (this :> node) map in
+        ( _ifso  <- map _ifso
+        ; _ifnot <- map _ifnot
+        )
+end
+
 @
 
+% vim:tw=72:ts=4:et:
