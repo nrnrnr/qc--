@@ -1024,18 +1024,10 @@ let rewrite_node node =
   match spans with
   | Some ss ->
      (Verbose.eprintf verb "adding colorgraph span for node %d\n" (G.num node);
-      let get_spilled_loc tmp =
-        let (mem, spilltemps) =
-          try  RM.find tmp cg.spillMap
- 	        with Not_found -> raise RTD.DeadValue in
-        let rec try_temps tmps = match tmps with
-          | t::ts -> (try RP.Reg (RM.find t cg.colorMap) with Not_found -> try_temps ts)
-          | []    -> Dn.loc (Automatonutil.aloc mem (Register.width tmp)) in
-        try_temps spilltemps in
       let map l = match l with
         | RP.Reg tmp -> (try  RP.Reg (RM.find tmp cg.colorMap)
-                         with Not_found -> get_spilled_loc tmp)
-        | _          -> imposs "GC reg allocator emitting RT data: guard failed\n" in
+                         with Not_found -> imposs "uncolored temp in span")
+        | _          -> imposs "GC reg allocator emitting RT data: guard failed" in
       let rewrite_span l =
         let guard = function RP.Reg r -> is_tmp target r | _ -> false in
         Rtlutil.Subst.loc_of_loc ~guard ~map l in
@@ -1146,13 +1138,30 @@ In addition to adding store and fetch instructions to replace the spilled
 temps in the \cfg, [[rewrite]] returns the new spill temps that are
 generated.
 <<insert spills>>=
-let rewrite proc spillees =
+let rewrite ({Proc.target = target} as proc) spillees =
   let spillMap =
     ilg_fold (fun s map -> RM.add s.v (P.spill_slot_for proc s.v, []) map)
              spillees RM.empty in
-  (* newTemps is an accumulating param *)
+
+  let updateSpans node =
+    let spans = match G.kind node with G.Call | G.Join -> G.spans node
+                                     | _               -> None in
+    match spans with
+    | Some ss ->
+        let map l = match l with
+          | RP.Reg tmp ->
+              Rtl.Dn.loc (AU.aloc (fst (RM.find tmp spillMap)) (Register.width tmp))
+          | _ -> imposs "guard failed" in
+        let rewrite_span l =
+          let guard = function RP.Reg r -> is_tmp target r && RM.mem r spillMap
+                             | _ -> false in
+          Rtlutil.Subst.loc_of_loc ~guard ~map l in
+        Runtimedata.upd_spans rewrite_span ss
+    | None -> () in
   let updateNode node accum =
-    ilg_fold (fun tmp accum -> update proc tmp.v accum node) spillees accum in
+    ( updateSpans node
+    ; ilg_fold (fun tmp accum -> update proc tmp.v accum node) spillees accum
+    ) in
   G.fold_nodes updateNode (spillMap, []) proc.Proc.cfg
 @
 
@@ -1242,6 +1251,7 @@ let listMapAdd value key listMap =
 \subsection{Lua registration}
 
 <<colorgraph.ml>>=
+module AU  = Automatonutil
 module RTD = Runtimedata
 module R   = Register
 module RP  = Rtl.Private
@@ -1273,6 +1283,7 @@ module type GRAPH = sig
   val defs : node -> Register.Set.t  (* includes kills!!! *)
   val uses : node -> Register.Set.t
   val upd_instr : node -> (Rtl.rtl -> Rtl.rtl) -> unit
+  val add_live_spans : node -> Register.SetX.t -> Register.SetX.t
   val is_call : node -> bool
   val set_succ: node -> succ:node -> unit
   val gm_insert_assign_after:     node -> Rtl.rtl -> node (* after assign! *)
@@ -1341,6 +1352,7 @@ module G : GRAPH with type node = Rtl.rtl Cfgx.M.node
     | Some i -> let uses, defs, kills = irwk i in uses in
     R.promote_rxset (G.add_inedge_uses node (R.rset_to_rxset uses))
     
+  let add_live_spans = G.add_live_spans
   let upd_instr n f = G.update_instr f n
   let is_call n = G.kind n =*= G.Call
 
