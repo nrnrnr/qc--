@@ -81,6 +81,7 @@ the same expression, and it is not clear which one(s) to use.)
 <<substitution>>
 let forward rtl pairs =
   let locs = locs_killed rtl in
+Debug.eprintf "availx" "avail: killed %s\n" (String.concat ", " (List.map (fun l -> S.loc (Up.loc l)) locs));
   let alocs = List.map RU.MayAlias.locs' locs in
   let aexps = List.map RU.MayAlias.exp'  locs in
   let add_new_pair l r new_pairs =
@@ -121,12 +122,8 @@ We never remember a memory location, so we need only to identify
 registers that are killed.
 <<kills>>=
 let locs_killed rtl =
-  let add_reg r locs =
-    if List.exists (function RP.Reg r' when r = r' -> true | _ -> false) locs then
-      locs
-    else
-      RP.Reg r :: locs in
-  RU.ReadWriteKill.fold_promote ~write:add_reg ~kill:add_reg ~read:(fun _ locs -> locs)
+  let add l locs = if List.mem l locs then locs else l :: locs in
+  RU.FullReadWriteKill.fold ~write:add ~kill:add ~read:(fun _ locs -> locs)
     rtl []
 @ 
 <<substitution>>=

@@ -105,6 +105,14 @@ module ReadWriteKill: sig
     val sets_promote: Rtl.rtl -> Register.Set.t * Register.Set.t * Register.Set.t
 end
 @ 
+Sometimes we need to know about all locations, not just registers.
+<<rtlutil.mli>>=
+module FullReadWriteKill: sig
+    type 'a observer = Rtl.Private.loc -> 'a -> 'a
+    val fold: read: 'a observer -> write: 'a observer -> kill: 'a observer ->
+                    Rtl.rtl -> 'a -> 'a
+end
+@ 
 % ------------------------------------------------------------------ 
 \subsection{Search}
 % ------------------------------------------------------------------ 
@@ -315,6 +323,10 @@ module ReadWriteKill = struct
     <<ReadWriteKill>>
 end
 
+module FullReadWriteKill = struct
+    <<FullReadWriteKill>>
+end
+
 module Subst = struct
     <<Subst>>
 end
@@ -389,22 +401,22 @@ let exp e = exp' (Rtl.Dn.exp e)
 % ------------------------------------------------------------------ 
 
 <<define common ReadWriteKill Higher Order Fns>>=
-let fold handle_reg handle_slice ~read ~write ~kill r z = 
+let fold handle_reg handle_slice handle_mem ~read ~write ~kill r z = 
   let rec rtl (z:'a) (RP.Rtl gs)  = List.fold_left guarded z gs
       and guarded z (g, eff) = exp (effect z eff) g
       and effect z eff = match eff with
-        | RP.Store (lhs, rhs, _)        -> loc write (exp z rhs) lhs
-        | RP.Kill lhs                   -> loc kill z lhs
+        | RP.Store (lhs, rhs, _)             -> loc write (exp z rhs) lhs
+        | RP.Kill lhs                        -> loc kill z lhs
       and loc which z l = match l with
-        | RP.Mem (space, _, w, addr, _) -> exp z addr
-        | RP.Reg r                      -> handle_reg       which z r
-        | RP.Slice (w, i, l)            -> handle_slice loc which z (w, i, l)
-        | RP.Var _                      -> z
-        | RP.Global _                   -> z
+        | RP.Mem (space, _, w, addr, _) as m -> exp (handle_mem which z m) addr
+        | RP.Reg r                           -> handle_reg       which z r
+        | RP.Slice (w, i, l)                 -> handle_slice loc which z (w, i, l)
+        | RP.Var _                           -> z
+        | RP.Global _                        -> z
       and exp z e = match e with
-        | RP.Const _                    -> z
-        | RP.Fetch (l, w)               -> loc read z l
-        | RP.App (_, es)                -> List.fold_left exp z es
+        | RP.Const _                         -> z
+        | RP.Fetch (l, w)                    -> loc read z l
+        | RP.App (_, es)                     -> List.fold_left exp z es
   in
      rtl z (Rtl.Dn.rtl r)
 
@@ -413,11 +425,14 @@ let fold_regx ~read ~write ~kill r z =
        (fun loc which z (w, i, l) -> match l with
                         | RP.Reg r -> which (Re.Slice (w, i, r)) z
                         | _        -> loc which z l)
+       (fun _ z _ -> z)
     ~read ~write ~kill r z
 
 let fold_regt ~read ~write ~kill r z =
   fold (fun which z r -> which r z)
-       (fun loc which z (w, i, l) -> loc which z l) ~read ~write ~kill r z
+       (fun loc which z (w, i, l) -> loc which z l)
+       (fun _ z _ -> z)
+       ~read ~write ~kill r z
 @
 
 <<ReadWrite>>=
@@ -454,6 +469,24 @@ let mk_sets fold add empty rtl =
 
 let sets         rtl = mk_sets fold         RSX.add RSX.empty rtl
 let sets_promote rtl = mk_sets fold_promote RS.add  RS.empty  rtl
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{All locations read, written, and killed by an RTL}
+% ------------------------------------------------------------------ 
+
+I'M NOT SURE WHAT'S GOING ON WITH SLICES HERE...
+
+<<FullReadWriteKill>>=
+type 'a observer = RP.loc -> 'a -> 'a
+let fold ~read ~write ~kill r z =
+  fold (fun which z r -> which (RP.Reg r) z)
+       (fun loc which z (w, i, l) ->  (* ??? *)
+         match l with
+         | RP.Reg r -> which (RP.Slice (w, i, l)) z
+         | _        -> loc which z l)
+       (fun which z m -> which m z)
+    ~read ~write ~kill r z
 @
 
 % ------------------------------------------------------------------ 
@@ -1157,7 +1190,7 @@ module Fold = struct
         | _ -> z in
       let effect z = function
         | RP.Kill l -> loc z l
-        | RP.Store (_, r, w) -> exp z r in
+        | RP.Store (l, r, w) -> exp (loc z l) r in
       let guarded z (g, e) = effect (exp z g) e in
       let RP.Rtl effs = rtl in
       List.fold_left guarded z effs
