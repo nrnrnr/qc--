@@ -77,6 +77,7 @@ end
 type block = string * Rtl.rtl list
 val blocks: graph -> block list
 val stmts : graph -> Mangle.mangler -> Ast.stmt list
+val name  : graph -> string
 @
 
 % ------------------------------------------------------------------ 
@@ -99,13 +100,13 @@ end
 @
 
 A basic [[block]] is a list of {\rtl}s that starts with a label.  A
-[[graph]] is a list of basic blocks in \emph{reverse order}.  Each
-[[node]] contains a reference to the graph it belongs to.
+[[graph]] is a list of basic blocks.  Each [[node]] contains a
+reference to the graph it belongs to.
 
 <<types>>=
 type block =   string * Rtl.rtl list    (* label and RTLs *)
 type graph =   { name:              string
-               ; mutable bbs':      block list
+               ; mutable bbs:      block list
                }
 
 type node  =   { graph:             graph 
@@ -180,7 +181,7 @@ function does this by side-effect.
 <<module Make>>=
 type ginit = string
 let graph name = { name  = name
-                 ; bbs'  = [] 
+                 ; bbs  = [] 
                  }
 
 let terminal g = { graph = g 
@@ -191,7 +192,7 @@ let graph_of {graph=g} = g
 
 let bblock node name = 
     let g = graph_of node in
-     g.bbs' <- (name,node.rtls) :: g.bbs'
+     g.bbs <- (name,node.rtls) :: g.bbs
 @
 
 Some nodes neither start or end a basic block, nor do they contribute
@@ -251,8 +252,8 @@ let entry n p =
 <<>>=
 let branch e t f p =
     let g = graph_of t in
-        ( bblock t (Idgen.id' g.name)
-        ; bblock f (Idgen.id' g.name)
+        ( bblock f (Idgen.id' g.name)
+        ; bblock t (Idgen.id' g.name)
         ; terminal g
         )
        
@@ -267,15 +268,23 @@ let label n node p =
 \subsubsection{Extras}
 % ------------------------------------------------------------------ 
 
+A block's name is returned by [[name]]:
+
+<<agraph2ast.ml>>=
+let name {name=n} = n 
+@
+
 The list of basic blocks is returned by [[blocks]]:
 
 <<agraph2ast.ml>>=
-let blocks {bbs' = bb} = List.rev bb
+let blocks {bbs = bb} = bb
 @
 
 The [[stmts]] function translates the basic blocks of a graph into a
 list of statements. Each block starts with a label which is passed
-through the mangler.
+through the mangler. The label of the first block is droped, because
+it belongs to the [[entry]] node which we expect to belong to a
+procedure.
 
 <<>>=
 let stmts graph mangle = 
@@ -283,7 +292,7 @@ let stmts graph mangle =
     let block (n,rtls) = 
         A.LabelStmt(mangle n) :: List.map (Rtl2ast.translate mangle) rtls
     in
-        List.flatten (List.map block bb)
+        List.tl (List.flatten (List.map block bb))
 @
 
 
