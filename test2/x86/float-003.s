@@ -39,22 +39,14 @@ Lproc_body_start_l3:
 	fstpl (%edi)
 	movl $18,%edi
 	leal 36(%esp), %ecx
-	movl $-12,%edx
+	movl $-20,%edx
 	addl %edx,%ecx
 	movl %edi,(%ecx)
 	movl $2146435072,%edi
 	leal 36(%esp), %ecx
-	movl $-8,%edx
+	movl $-16,%edx
 	addl %edx,%ecx
 	movl %edi,(%ecx)
-	leal 36(%esp), %edi
-	movl $-12,%ecx
-	addl %ecx,%edi
-	fldl (%edi)
-	leal 36(%esp), %edi
-	movl $-20,%ecx
-	addl %ecx,%edi
-	fstpl (%edi)
 Ljoin_l10:
 	leal fmt,%edi
 	leal 36(%esp), %ecx

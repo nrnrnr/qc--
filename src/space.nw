@@ -31,10 +31,11 @@ provides a type to describe an {\rtl} space.
 The function [[checked]] asserts that its argument satisfies a few
 simple invariants, then returns that argument.
 <<space.mli>>=
-<<type location set>>
-<<type classification>>
-<<type t>>
-val checked  : t -> t
+<<definitions of exported types, including [[t]]>>
+val checked : t -> t
+<<definition of signature [[Standard]]>>
+module Standard32 : Standard
+module Standard64 : Standard
 @
 The module [[Standard]] provides support for common spaces with
 standard names.  Memory uses 8-bit cells, and other units use 32-bit
@@ -45,7 +46,7 @@ As of October 2004, temporary registers cannot be aggregated; the byte
 order specified for 
 a temporary space is the byte order of the underlying hardware space,
 and exactly one width is supported.
-<<module type Standard>>=
+<<definition of signature [[Standard]]>>=
 module type Standard = sig
   type generator  = Rtl.aggregation -> Rtl.width list -> t
   type tgenerator = Rtl.aggregation -> Rtl.width      -> t
@@ -73,15 +74,14 @@ module type Standard = sig
   val indices : int locations (* standard indices in c space *)
   val vfp : Rtl.exp  (* the virtual frame pointer, $V[0] *)
 end
-
-<<space.mli>>=
-<<module type Standard>>
-module Standard32: Standard
-module Standard64: Standard
 @ 
+To define spaces, we must first define [[classification]] and
+[[location_set]].
 A [[Rtl.space]] denotes a memory space, the details of a particular
 space are covered by a space descriptor [[t]].
-<<type t>>=
+<<definitions of exported types, including [[t]]>>=
+<<definition of type [[location_set]]>>
+<<definition of type [[classification]]>>
 type t  =
     { space:            Rtl.space       (* space being described *)
     ; doc:              string          (* informal doc string *)       
@@ -106,7 +106,7 @@ type t  =
 @
 A space falls into one of the following classifications: memory-like,
 register-like, fixed, or temporary. 
-<<type classification>>=
+<<definition of type [[classification]]>>=
 type classification = 
     | Mem               
     | Reg               
@@ -159,7 +159,7 @@ expressions used to index cells in that space.
    The register allocator ultimately replaces each temporary location
    with a real hardware location.
 \end{itemize}
-<<type location set>>=
+<<definition of type [[location_set]]>>=
 type location_set =
     { stands_for : Register.t -> bool  (* what registers we stand for *)
     ; set_doc    : string     (* informal description *)    
@@ -175,10 +175,8 @@ val stands_for : char -> Register.aggregation -> Register.width -> (Register.t -
 % ------------------------------------------------------------------ 
 
 <<space.ml>>=
-<<type location set>>
-<<type classification>>
-<<type t>>
-<<module type Standard>>
+<<definitions of exported types, including [[t]]>>
+<<definition of signature [[Standard]]>>
 @
 
 <<space.ml>>=

@@ -31,6 +31,7 @@ argument lists. An argument list corresponds to a path in an automaton.
 Together, all argument lists cover every pair of an incoming and
 outgoing edge at a node.
 
+Function [[summary]] prints the number of nodes, edges, and paths.
 <<automatongraph.mli>>=
 val print: mk:(unit -> Automaton.t) 
                      -> (int * string) list (* width * hint *)
@@ -39,8 +40,10 @@ val print: mk:(unit -> Automaton.t)
 val paths: mk:(unit -> Automaton.t) 
                      -> (int * string) list (* width * hint *)
                      -> unit
+val summary : what:string -> mk:(unit -> Automaton.t) 
+                     -> (int * string) list (* width * hint *)
+                     -> unit
 @
-
 I now realize that the [[graph]] type defined in the implementation is
 basically an isomorphism of the automaton defined in \module{automaton}.
 Given the graph, the underlying automaton can be simulated.  After this
@@ -410,7 +413,6 @@ paths, the result was correct.
 
 The main function extracts the parameter lists, flattens and reverses
 them.
-
 <<automatongraph.ml>>=
 let interesting_paths graph = 
     let (paths,_) = explore graph ES.empty [] [] graph.start in
@@ -422,3 +424,16 @@ let paths ~mk dirs =
     let g       = graph init           in
     let g       = dfs mk dirs g [] init in
         ToDot.paths (interesting_paths g)
+
+let mapsize m = T.fold (fun _ _ n -> n + 1) m 0
+
+let summary ~what ~mk dirs =
+    let dump g  = print_endline (ToString.graph g) in
+    let init    = {regs=Register.Set.empty; align=0}   in
+    let g       = graph init           in
+    let g       = dfs mk dirs g [] init in
+    Printf.printf "Automaton graph for %s has %d nodes, %d edges, %d paths\n" what
+      (NS.cardinal g.nodes) (mapsize g.edges) (List.length (interesting_paths g))
+
+
+
