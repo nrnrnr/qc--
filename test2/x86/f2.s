@@ -11,63 +11,63 @@ main:
 	leal 24(%esp), %eax
 	movl $4,%edx
 	addl %edx,%eax
-	movl (%eax),%edx
-	leal 24(%esp), %edx
-	movl $8,%eax
-	addl %eax,%edx
-	movl (%edx),%eax
+	movl (%eax),%eax
+	leal 24(%esp), %eax
+	movl $8,%edx
+	addl %edx,%eax
+	movl (%eax),%eax
 	leal 24(%esp), %eax
 	movl $12,%edx
 	addl %edx,%eax
-	movl (%eax),%edx
+	movl (%eax),%eax
 Linitialize_continuations_l4:
 Lproc_body_start_l3:
-	movl $1,%edx
-	movl $-1067450368,%eax
+	movl $1,%eax
+	movl $-1067450368,%edx
 	leal 24(%esp), %ecx
-	movl %ebx,20(%esp)
-	movl $-8,%ebx
-	addl %ebx,%ecx
-	movl %eax,(%ecx)
-	leal 24(%esp), %eax
-	movl $-8,%ecx
-	addl %ecx,%eax
-	flds (%eax)
-	leal 24(%esp), %eax
-	movl $-12,%ecx
-	addl %ecx,%eax
-	fistpl (%eax)
-	leal fmt,%eax
-	leal 24(%esp), %ecx
-	movl $-24,%ebx
-	addl %ebx,%ecx
-	movl %eax,(%ecx)
-	movl $24,%ecx
-	shll %cl, %edx
-	movl $24,%ecx
-	shrl %cl, %edx
-	leal 24(%esp), %ecx
-	movl $-20,%eax
-	addl %eax,%ecx
+	movl %edi,20(%esp)
+	movl $-8,%edi
+	addl %edi,%ecx
 	movl %edx,(%ecx)
-	leal 24(%esp), %ecx
+	leal 24(%esp), %edi
+	movl $-8,%edx
+	addl %edx,%edi
+	flds (%edi)
+	leal 24(%esp), %edi
 	movl $-12,%edx
-	addl %edx,%ecx
+	addl %edx,%edi
+	fistpl (%edi)
+	leal fmt,%edi
 	leal 24(%esp), %edx
-	movl $-16,%eax
-	addl %eax,%edx
-	movl (%ecx),%eax
-	movl %eax,(%edx)
+	movl $-24,%ecx
+	addl %ecx,%edx
+	movl %edi,(%edx)
+	movl $24,%ecx
+	shll %cl, %eax
+	movl $24,%ecx
+	shrl %cl, %eax
+	leal 24(%esp), %edi
+	movl $-20,%ecx
+	addl %ecx,%edi
+	movl %eax,(%edi)
+	leal 24(%esp), %edi
+	movl $-12,%eax
+	addl %eax,%edi
+	leal 24(%esp), %eax
+	movl $-16,%ecx
+	addl %ecx,%eax
+	movl (%edi),%edi
+	movl %edi,(%eax)
 	call printf
 Ljoin_l8:
 	movl $0,%eax
-	leal 24(%esp), %ecx
 	leal 24(%esp), %edx
-	movl $0,%ebx
-	addl %ebx,%edx
-	movl (%ecx),%ebx
-	movl %ebx,(%edx)
-	movl 20(%esp),%ebx
+	leal 24(%esp), %ecx
+	movl $0,%edi
+	addl %edi,%ecx
+	movl (%edx),%edx
+	movl %edx,(%ecx)
+	movl 20(%esp),%edi
 	leal 24(%esp), %esp
 	ret
 .section .pcmap_data
@@ -87,13 +87,13 @@ Lframe_l16:
 .long 0x80000000
 .long 0x80000001
 .long 0x40000007
+.long 0x40000007
+.long 0x40000009
+.long 0x40000009
+.long 0x4000000a
+.long 0x4000000a
+.long 0x4000000b
 .long 0xfffffffc
-.long 0x40000009
-.long 0x40000009
-.long 0x4000000a
-.long 0x4000000a
-.long 0x4000000b
-.long 0x4000000b
 .long 0
 .long 0
 .long 0

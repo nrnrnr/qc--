@@ -15,11 +15,11 @@ main:
 	leal 16(%esp), %eax
 	movl $4,%ecx
 	addl %ecx,%eax
-	movl (%eax),%ecx
-	leal 16(%esp), %ecx
-	movl $8,%eax
-	addl %eax,%ecx
-	movl (%ecx),%eax
+	movl (%eax),%eax
+	leal 16(%esp), %eax
+	movl $8,%ecx
+	addl %ecx,%eax
+	movl (%eax),%eax
 Linitialize_continuations_l4:
 Lproc_body_start_l3:
 	leal notzero,%eax
@@ -31,30 +31,30 @@ Lproc_body_start_l3:
 Ljoin_l11:
 	leal answer,%ecx
 	leal 16(%esp), %edx
-	movl %ebx,12(%esp)
-	movl $-16,%ebx
-	addl %ebx,%edx
+	movl %edi,12(%esp)
+	movl $-16,%edi
+	addl %edi,%edx
 	movl %ecx,(%edx)
-	leal 16(%esp), %ecx
-	movl $-12,%edx
-	addl %edx,%ecx
-	movl %eax,(%ecx)
-	leal notzero,%eax
-	movzbl (%eax),%ecx
+	leal 16(%esp), %edi
+	movl $-12,%ecx
+	addl %ecx,%edi
+	movl %eax,(%edi)
+	leal notzero,%edi
+	movzbl (%edi),%edi
 	leal 16(%esp), %eax
-	movl $-8,%edx
-	addl %edx,%eax
-	movl %ecx,(%eax)
+	movl $-8,%ecx
+	addl %ecx,%eax
+	movl %edi,(%eax)
 	call printf
 Ljoin_l8:
 	movl $0,%eax
-	leal 16(%esp), %ecx
 	leal 16(%esp), %edx
-	movl $0,%ebx
-	addl %ebx,%edx
-	movl (%ecx),%ebx
-	movl %ebx,(%edx)
-	movl 12(%esp),%ebx
+	leal 16(%esp), %ecx
+	movl $0,%edi
+	addl %edi,%ecx
+	movl (%edx),%edx
+	movl %edx,(%ecx)
+	movl 12(%esp),%edi
 	leal 16(%esp), %esp
 	ret
 .section .pcmap_data
@@ -99,13 +99,13 @@ Lframe_l20:
 .long 0x80000000
 .long 0x80000001
 .long 0x40000007
+.long 0x40000007
+.long 0x40000009
+.long 0x40000009
+.long 0x4000000a
+.long 0x4000000a
+.long 0x4000000b
 .long 0xfffffffc
-.long 0x40000009
-.long 0x40000009
-.long 0x4000000a
-.long 0x4000000a
-.long 0x4000000b
-.long 0x4000000b
 .long 0
 .long 0
 .long 0

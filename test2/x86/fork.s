@@ -16,33 +16,33 @@ run_thread:
 	leal 28(%esp), %eax
 	movl $4,%ecx
 	addl %ecx,%eax
-	movl (%eax),%ecx
+	movl (%eax),%eax
 Linitialize_continuations_l11:
-	leal cutback_C8,%eax
+	leal cutback_C8,%ecx
 	leal 28(%esp), %edx
-	movl %ecx,(%esp)
-	movl $-8,%ecx
-	addl %ecx,%edx
-	movl %eax,(%edx)
+	movl %eax,(%esp)
+	movl $-8,%eax
+	addl %eax,%edx
+	movl %ecx,(%edx)
 	leal 28(%esp), %eax
-	movl $-28,%edx
-	addl %edx,%eax
-	leal 28(%esp), %edx
-	movl $-4,%ecx
-	addl %ecx,%edx
-	movl %eax,(%edx)
+	movl $-28,%ecx
+	addl %ecx,%eax
+	leal 28(%esp), %ecx
+	movl $-4,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
 Lproc_body_start_l10:
 	leal 28(%esp), %eax
-	movl $-8,%edx
-	addl %edx,%eax
-	leal comeback,%edx
-	movl %eax,(%edx)
+	movl $-8,%ecx
+	addl %ecx,%eax
+	leal comeback,%ecx
+	movl %eax,(%ecx)
 	movl $4,%eax
-	movl (%esp),%edx
-	movl %edx,%ecx
-	addl %eax,%ecx
-	movl (%ecx),%eax
-	movl (%edx),%ecx
+	movl (%esp),%ecx
+	movl %ecx,%edx
+	addl %eax,%edx
+	movl (%edx),%eax
+	movl (%ecx),%ecx
 	movl %edi,16(%esp)
 	movl %esi,12(%esp)
 	movl %ebp,8(%esp)
@@ -52,10 +52,10 @@ cutback_C8:
 	movl %edx,%eax
 	leal 28(%esp), %edx
 	leal 28(%esp), %ecx
-	movl $0,%ebx
-	addl %ebx,%ecx
-	movl (%edx),%ebx
-	movl %ebx,(%ecx)
+	movl $0,%edi
+	addl %edi,%ecx
+	movl (%edx),%edx
+	movl %edx,(%ecx)
 	movl 4(%esp),%ebx
 	movl 8(%esp),%ebp
 	movl 12(%esp),%esi
@@ -94,31 +94,31 @@ Lframe_l20:
 cmm_threadfun:
 	leal -12(%esp), %esp
 	leal 12(%esp), %ecx
-	movl (%ecx),%edx
+	movl (%ecx),%ecx
 Linitialize_continuations_l23:
 Lproc_body_start_l22:
 	leal 12(%esp), %edi
 	movl $-12,%esi
 	addl %esi,%edi
 	movl %eax,(%edi)
-	movl $10,%eax
-	leal 12(%esp), %edi
-	movl $-8,%esi
-	addl %esi,%edi
-	movl %eax,(%edi)
-	movl %edx,8(%esp)
+	movl $10,%edi
+	leal 12(%esp), %esi
+	movl $-8,%ebp
+	addl %ebp,%esi
+	movl %edi,(%esi)
+	movl %ecx,8(%esp)
 	call fib
 Ljoin_l26:
 	movl %eax,%edx
-	leal comeback,%eax
-	movl (%eax),%ecx
-	movl $4,%eax
-	addl %eax,%ecx
-	movl (%ecx),%eax
-	leal comeback,%ecx
-	movl (%ecx),%edi
-	movl (%edi),%ecx
-	movl %eax, %esp; jmp *%ecx
+	leal comeback,%edi
+	movl (%edi),%edi
+	movl $4,%esi
+	addl %esi,%edi
+	movl (%edi),%edi
+	leal comeback,%esi
+	movl (%esi),%esi
+	movl (%esi),%esi
+	movl %edi, %esp; jmp *%esi
 .section .pcmap_data
 Lstackdata_l33:
 .long 0

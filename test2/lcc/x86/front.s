@@ -50,14 +50,14 @@ Lproc_body_start_l26:
 	call exit
 Ljoin_l32:
 	movl $0,%eax
-	leal 8(%esp), %ecx
 	leal 8(%esp), %edx
-	movl %ebx,4(%esp)
-	movl $0,%ebx
-	addl %ebx,%edx
-	movl (%ecx),%ebx
-	movl %ebx,(%edx)
-	movl 4(%esp),%ebx
+	leal 8(%esp), %ecx
+	movl %edx,4(%esp)
+	movl $0,%edx
+	addl %edx,%ecx
+	movl 4(%esp),%edx
+	movl (%edx),%edx
+	movl %edx,(%ecx)
 	leal 8(%esp), %esp
 	ret
 .section .pcmap_data
@@ -91,19 +91,19 @@ nested:
 	leal 4(%esp), %edx
 	movl $4,%ecx
 	addl %ecx,%edx
-	movl (%edx),%ecx
-	leal 4(%esp), %edx
+	movl (%edx),%edx
+	leal 4(%esp), %ecx
 	movl $8,%eax
-	addl %eax,%edx
-	movl (%edx),%eax
+	addl %eax,%ecx
+	movl (%ecx),%ecx
 Linitialize_continuations_l43:
 Lproc_body_start_l42:
-	movl $4,%edx
-	cmpl %edx,%ecx
+	movl $4,%eax
+	cmpl %eax,%edx
 	jge Ljoin_l57
 Ljoin_l58:
-	movl $114,%edx
-	cmpl %edx,%eax
+	movl $114,%eax
+	cmpl %eax,%ecx
 	je Ljoin_l56
 Ljoin_l68:
 	jmp L.6
@@ -112,16 +112,16 @@ Ljoin_l56:
 Ljoin_l57:
 	jmp L.6
 L.6:
-	movl $1,%edx
-	cmpl %edx,%ecx
+	movl $1,%eax
+	cmpl %eax,%edx
 	jne Ljoin_l54
 Ljoin_l55:
-	movl $104,%edx
-	cmpl %edx,%eax
+	movl $104,%eax
+	cmpl %eax,%ecx
 	je Ljoin_l52
 Ljoin_l53:
-	movl $105,%edx
-	cmpl %edx,%eax
+	movl $105,%eax
+	cmpl %eax,%ecx
 	je Ljoin_l51
 Ljoin_l67:
 	jmp L.8
@@ -132,16 +132,16 @@ Ljoin_l52:
 Ljoin_l54:
 	jmp L.8
 L.8:
-	movl $2,%edx
-	cmpl %edx,%ecx
+	movl $2,%eax
+	cmpl %eax,%edx
 	jne Ljoin_l49
 Ljoin_l50:
-	movl $111,%ecx
-	cmpl %ecx,%eax
+	movl $111,%edx
+	cmpl %edx,%ecx
 	je Ljoin_l47
 Ljoin_l48:
-	movl $121,%ecx
-	cmpl %ecx,%eax
+	movl $121,%edx
+	cmpl %edx,%ecx
 	jne Ljoin_l46
 Ljoin_l66:
 	jmp L.9
@@ -155,14 +155,14 @@ Ljoin_l49:
 	jmp L.3
 L.3:
 	movl $0,%eax
-	leal 4(%esp), %ecx
 	leal 4(%esp), %edx
-	movl %ebx,(%esp)
-	movl $0,%ebx
-	addl %ebx,%edx
-	movl (%ecx),%ebx
-	movl %ebx,(%edx)
-	movl (%esp),%ebx
+	leal 4(%esp), %ecx
+	movl %edx,(%esp)
+	movl $0,%edx
+	addl %edx,%ecx
+	movl (%esp),%edx
+	movl (%edx),%edx
+	movl %edx,(%ecx)
 	leal 4(%esp), %esp
 	ret
 .section .text
@@ -170,16 +170,16 @@ s:
 	movl %esp,%edx
 	movl $4,%ecx
 	addl %ecx,%edx
-	movl (%edx),%ecx
+	movl (%edx),%edx
 Linitialize_continuations_l72:
 Lproc_body_start_l71:
 L.12:
-	movl %esp,%ecx
 	movl %esp,%edx
+	movl %esp,%ecx
 	movl $0,%eax
-	addl %eax,%edx
-	movl (%ecx),%eax
-	movl %eax,(%edx)
+	addl %eax,%ecx
+	movl (%edx),%edx
+	movl %edx,(%ecx)
 	ret
 .section .text
 .section .data
@@ -199,8 +199,8 @@ Lproc_body_start_l83:
 	movl %esp,%ecx
 	movl $0,%eax
 	addl %eax,%ecx
-	movl (%edx),%eax
-	movl %eax,(%ecx)
+	movl (%edx),%edx
+	movl %edx,(%ecx)
 	ret
 .section .text
 f:
@@ -210,8 +210,8 @@ Lproc_body_start_l95:
 	movl %esp,%ecx
 	movl $0,%eax
 	addl %eax,%ecx
-	movl (%edx),%eax
-	movl %eax,(%ecx)
+	movl (%edx),%edx
+	movl %edx,(%ecx)
 	ret
 .section .text
 f1:
@@ -221,76 +221,76 @@ Lproc_body_start_l107:
 	movl %esp,%ecx
 	movl $0,%eax
 	addl %eax,%ecx
-	movl (%edx),%eax
-	movl %eax,(%ecx)
+	movl (%edx),%edx
+	movl %edx,(%ecx)
 	ret
 .section .text
 f2:
 	movl %esp,%edx
 	movl $4,%ecx
 	addl %ecx,%edx
-	movl (%edx),%ecx
-	movl %esp,%ecx
-	movl $8,%edx
-	addl %edx,%ecx
-	movl (%ecx),%edx
+	movl (%edx),%edx
+	movl %esp,%edx
+	movl $8,%ecx
+	addl %ecx,%edx
+	movl (%edx),%edx
 Linitialize_continuations_l120:
 Lproc_body_start_l119:
 	movl %esp,%edx
 	movl %esp,%ecx
 	movl $0,%eax
 	addl %eax,%ecx
-	movl (%edx),%eax
-	movl %eax,(%ecx)
+	movl (%edx),%edx
+	movl %edx,(%ecx)
 	ret
 .section .text
 g:
 	movl %esp,%edx
 	movl $4,%ecx
 	addl %ecx,%edx
-	movl (%edx),%ecx
+	movl (%edx),%edx
 Linitialize_continuations_l132:
 Lproc_body_start_l131:
-	movl %esp,%ecx
 	movl %esp,%edx
+	movl %esp,%ecx
 	movl $0,%eax
-	addl %eax,%edx
-	movl (%ecx),%eax
-	movl %eax,(%edx)
+	addl %eax,%ecx
+	movl (%edx),%edx
+	movl %edx,(%ecx)
 	ret
 .section .text
 h:
 	movl %esp,%edx
 	movl $4,%ecx
 	addl %ecx,%edx
-	movl (%edx),%ecx
+	movl (%edx),%edx
 Linitialize_continuations_l144:
 Lproc_body_start_l143:
-	movl %esp,%ecx
 	movl %esp,%edx
+	movl %esp,%ecx
 	movl $0,%eax
-	addl %eax,%edx
-	movl (%ecx),%eax
-	movl %eax,(%edx)
+	addl %eax,%ecx
+	movl (%edx),%edx
+	movl %edx,(%ecx)
 	ret
 .section .text
 h1:
 	movl %esp,%edx
 	movl $4,%ecx
 	addl %ecx,%edx
-	movl (%edx),%ecx
-	movl %esp,%ecx
-	movl $8,%edx
-	addl %edx,%ecx
-	movl (%ecx),%edx
+	movl (%edx),%edx
+	movl %esp,%edx
+	movl $8,%ecx
+	addl %ecx,%edx
+	movl (%edx),%edx
 Linitialize_continuations_l156:
 Lproc_body_start_l155:
 	movl %esp,%edx
 	movl %esp,%ecx
 	movl $0,%eax
 	addl %eax,%ecx
-	movl (%edx),%eax
-	movl %eax,(%ecx)
+	movl (%edx),%edx
+	movl %edx,(%ecx)
 	ret
 .section .text
 h2:
@@ -300,8 +300,8 @@ Lproc_body_start_l167:
 	movl %esp,%ecx
 	movl $0,%eax
 	addl %eax,%ecx
-	movl (%edx),%eax
-	movl %eax,(%ecx)
+	movl (%edx),%edx
+	movl %edx,(%ecx)
 	ret
 .section .text
 .section .data
@@ -316,8 +316,8 @@ Lproc_body_start_l179:
 	movl %esp,%ecx
 	movl $0,%eax
 	addl %eax,%ecx
-	movl (%edx),%eax
-	movl %eax,(%ecx)
+	movl (%edx),%edx
+	movl %edx,(%ecx)
 	ret
 .section .text
 .section .data
@@ -332,8 +332,8 @@ Lproc_body_start_l191:
 	movl %esp,%ecx
 	movl $0,%eax
 	addl %eax,%ecx
-	movl (%edx),%eax
-	movl %eax,(%ecx)
+	movl (%edx),%edx
+	movl %edx,(%ecx)
 	ret
 .section .text
 i_goo:
@@ -343,8 +343,8 @@ Lproc_body_start_l203:
 	movl %esp,%ecx
 	movl $0,%eax
 	addl %eax,%ecx
-	movl (%edx),%eax
-	movl %eax,(%ecx)
+	movl (%edx),%edx
+	movl %edx,(%ecx)
 	ret
 .section .text
 sss:
@@ -354,8 +354,8 @@ Lproc_body_start_l215:
 	movl %esp,%ecx
 	movl $0,%eax
 	addl %eax,%ecx
-	movl (%edx),%eax
-	movl %eax,(%ecx)
+	movl (%edx),%edx
+	movl %edx,(%ecx)
 	ret
 .section .text
 .section .bss
@@ -367,15 +367,15 @@ rrr:
 	movl %esp,%edx
 	movl $4,%ecx
 	addl %ecx,%edx
-	movl (%edx),%ecx
+	movl (%edx),%edx
 Linitialize_continuations_l228:
 Lproc_body_start_l227:
-	movl %esp,%ecx
 	movl %esp,%edx
+	movl %esp,%ecx
 	movl $0,%eax
-	addl %eax,%edx
-	movl (%ecx),%eax
-	movl %eax,(%edx)
+	addl %eax,%ecx
+	movl (%edx),%edx
+	movl %edx,(%ecx)
 	ret
 .section .text
 setstatic:
@@ -385,8 +385,8 @@ Lproc_body_start_l239:
 	movl %esp,%ecx
 	movl $0,%eax
 	addl %eax,%ecx
-	movl (%edx),%eax
-	movl %eax,(%ecx)
+	movl (%edx),%edx
+	movl %edx,(%ecx)
 	ret
 .section .text
 gx1:
@@ -401,12 +401,12 @@ gx1:
 	fistpq (%ecx)
 Linitialize_continuations_l252:
 Lproc_body_start_l251:
-	leal 16(%esp), %ecx
 	leal 16(%esp), %edx
+	leal 16(%esp), %ecx
 	movl $0,%eax
-	addl %eax,%edx
-	movl (%ecx),%eax
-	movl %eax,(%edx)
+	addl %eax,%ecx
+	movl (%edx),%edx
+	movl %edx,(%ecx)
 	leal 16(%esp), %esp
 	ret
 .section .text
@@ -420,18 +420,18 @@ ff1:
 	addl %eax,%ecx
 	fildq (%edx)
 	fistpq (%ecx)
-	leal 8(%esp), %ecx
-	movl $12,%edx
-	addl %edx,%ecx
-	movl (%ecx),%edx
+	leal 8(%esp), %edx
+	movl $12,%ecx
+	addl %ecx,%edx
+	movl (%edx),%edx
 Linitialize_continuations_l264:
 Lproc_body_start_l263:
 	leal 8(%esp), %edx
 	leal 8(%esp), %ecx
 	movl $0,%eax
 	addl %eax,%ecx
-	movl (%edx),%eax
-	movl %eax,(%ecx)
+	movl (%edx),%edx
+	movl %edx,(%ecx)
 	leal 8(%esp), %esp
 	ret
 .section .text
@@ -439,53 +439,53 @@ gg1:
 	movl %esp,%edx
 	movl $4,%ecx
 	addl %ecx,%edx
-	movl (%edx),%ecx
-	movl %esp,%ecx
-	movl $8,%edx
-	addl %edx,%ecx
-	movl (%ecx),%edx
+	movl (%edx),%edx
+	movl %esp,%edx
+	movl $8,%ecx
+	addl %ecx,%edx
+	movl (%edx),%edx
 Linitialize_continuations_l276:
 Lproc_body_start_l275:
 	movl %esp,%edx
 	movl %esp,%ecx
 	movl $0,%eax
 	addl %eax,%ecx
-	movl (%edx),%eax
-	movl %eax,(%ecx)
+	movl (%edx),%edx
+	movl %edx,(%ecx)
 	ret
 .section .text
 hh1:
 	movl %esp,%edx
 	movl $4,%ecx
 	addl %ecx,%edx
-	movl (%edx),%ecx
+	movl (%edx),%edx
 Linitialize_continuations_l288:
 Lproc_body_start_l287:
-	movl %esp,%ecx
 	movl %esp,%edx
+	movl %esp,%ecx
 	movl $0,%eax
-	addl %eax,%edx
-	movl (%ecx),%eax
-	movl %eax,(%edx)
+	addl %eax,%ecx
+	movl (%edx),%edx
+	movl %edx,(%ecx)
 	ret
 .section .text
 cmp:
 	movl %esp,%edx
 	movl $4,%ecx
 	addl %ecx,%edx
-	movl (%edx),%ecx
-	movl %esp,%ecx
-	movl $8,%edx
-	addl %edx,%ecx
-	movl (%ecx),%edx
+	movl (%edx),%edx
+	movl %esp,%edx
+	movl $8,%ecx
+	addl %ecx,%edx
+	movl (%edx),%edx
 Linitialize_continuations_l300:
 Lproc_body_start_l299:
 	movl %esp,%edx
 	movl %esp,%ecx
 	movl $0,%eax
 	addl %eax,%ecx
-	movl (%edx),%eax
-	movl %eax,(%ecx)
+	movl (%edx),%edx
+	movl %edx,(%ecx)
 	ret
 .section .text
 sort:
@@ -495,8 +495,8 @@ Lproc_body_start_l311:
 	movl %esp,%ecx
 	movl $0,%eax
 	addl %eax,%ecx
-	movl (%edx),%eax
-	movl %eax,(%ecx)
+	movl (%edx),%edx
+	movl %edx,(%ecx)
 	ret
 .section .text
 onearg:
@@ -506,8 +506,8 @@ Lproc_body_start_l323:
 	movl %esp,%ecx
 	movl $0,%eax
 	addl %eax,%ecx
-	movl (%edx),%eax
-	movl %eax,(%ecx)
+	movl (%edx),%edx
+	movl %edx,(%ecx)
 	ret
 .section .text
 .section .bss

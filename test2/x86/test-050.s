@@ -11,59 +11,58 @@ main:
 	leal 16(%esp), %eax
 	movl $4,%ecx
 	addl %ecx,%eax
-	movl (%eax),%ecx
-	leal 16(%esp), %eax
+	movl (%eax),%eax
+	leal 16(%esp), %ecx
 	movl $8,%edx
-	addl %edx,%eax
-	movl (%eax),%edx
+	addl %edx,%ecx
+	movl (%ecx),%ecx
 Linitialize_continuations_l4:
 Lproc_body_start_l3:
-	leal fmt,%edx
-	leal 16(%esp), %eax
-	movl %ecx,8(%esp)
-	movl $-16,%ecx
-	addl %ecx,%eax
-	movl %edx,(%eax)
-	leal 16(%esp), %eax
-	movl $-12,%edx
-	addl %edx,%eax
-	movl 8(%esp),%edx
-	movl %edx,(%eax)
+	leal fmt,%ecx
+	leal 16(%esp), %edx
+	movl %edi,8(%esp)
+	movl $-16,%edi
+	addl %edi,%edx
+	movl %ecx,(%edx)
+	leal 16(%esp), %edi
+	movl $-12,%ecx
+	addl %ecx,%edi
+	movl %eax,(%edi)
+	movl %eax,12(%esp)
 	call printf
 Ljoin_l14:
-	leal fmt,%eax
-	leal 16(%esp), %ecx
-	movl $-16,%edx
-	addl %edx,%ecx
-	movl %eax,(%ecx)
+	leal fmt,%edi
 	leal 16(%esp), %eax
-	movl $-12,%ecx
+	movl $-16,%ecx
 	addl %ecx,%eax
-	movl 8(%esp),%ecx
-	movl %ecx,(%eax)
+	movl %edi,(%eax)
+	leal 16(%esp), %edi
+	movl $-12,%eax
+	addl %eax,%edi
+	movl 12(%esp),%eax
+	movl %eax,(%edi)
 	call printf
 Ljoin_l11:
-	leal fmt,%eax
-	leal 16(%esp), %ecx
-	movl $-16,%edx
-	addl %edx,%ecx
-	movl %eax,(%ecx)
+	leal fmt,%edi
 	leal 16(%esp), %eax
-	movl $-12,%ecx
+	movl $-16,%ecx
 	addl %ecx,%eax
-	movl 8(%esp),%ecx
-	movl %ecx,(%eax)
+	movl %edi,(%eax)
+	leal 16(%esp), %edi
+	movl $-12,%eax
+	addl %eax,%edi
+	movl 12(%esp),%eax
+	movl %eax,(%edi)
 	call printf
 Ljoin_l8:
 	movl $0,%eax
-	leal 16(%esp), %ecx
 	leal 16(%esp), %edx
-	movl %ebx,12(%esp)
-	movl $0,%ebx
-	addl %ebx,%edx
-	movl (%ecx),%ebx
-	movl %ebx,(%edx)
-	movl 12(%esp),%ebx
+	leal 16(%esp), %ecx
+	movl $0,%edi
+	addl %edi,%ecx
+	movl (%edx),%edx
+	movl %edx,(%ecx)
+	movl 8(%esp),%edi
 	leal 16(%esp), %esp
 	ret
 .section .pcmap_data
@@ -89,8 +88,8 @@ Lframe_l22:
 .long 0x4000000a
 .long 0x4000000a
 .long 0x4000000b
-.long 0x4000000b
 .long 0xfffffff8
+.long 0xfffffffc
 .long 0
 .long 0x80000000
 .section .pcmap
@@ -113,8 +112,8 @@ Lframe_l23:
 .long 0x4000000a
 .long 0x4000000a
 .long 0x4000000b
-.long 0x4000000b
 .long 0xfffffff8
+.long 0xfffffffc
 .long 0
 .long 0x80000000
 .section .pcmap
@@ -137,7 +136,7 @@ Lframe_l24:
 .long 0x4000000a
 .long 0x4000000a
 .long 0x4000000b
-.long 0x4000000b
+.long 0xfffffff8
 .long 0
 .long 0
 .long 0x80000000

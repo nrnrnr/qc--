@@ -11,11 +11,11 @@ main:
 	leal 4(%esp), %ecx
 	movl $4,%edx
 	addl %edx,%ecx
-	movl (%ecx),%edx
-	leal 4(%esp), %edx
-	movl $8,%ecx
-	addl %ecx,%edx
-	movl (%edx),%ecx
+	movl (%ecx),%ecx
+	leal 4(%esp), %ecx
+	movl $8,%edx
+	addl %edx,%ecx
+	movl (%ecx),%ecx
 Linitialize_continuations_l5:
 Lproc_body_start_l4:
 	movl $3,%eax
@@ -25,14 +25,14 @@ Ljoin_l12:
 	call tryout
 Ljoin_l9:
 	movl $0,%eax
-	leal 4(%esp), %ecx
 	leal 4(%esp), %edx
-	movl %ebx,(%esp)
-	movl $0,%ebx
-	addl %ebx,%edx
-	movl (%ecx),%ebx
-	movl %ebx,(%edx)
-	movl (%esp),%ebx
+	leal 4(%esp), %ecx
+	movl %edx,(%esp)
+	movl $0,%edx
+	addl %edx,%ecx
+	movl (%esp),%edx
+	movl (%edx),%edx
+	movl %edx,(%ecx)
 	leal 4(%esp), %esp
 	ret
 .section .pcmap_data
@@ -89,43 +89,45 @@ Lframe_l20:
 .section .text
 .section .text
 tryout:
-	leal -16(%esp), %esp
-	leal 16(%esp), %ecx
-	movl (%ecx),%edx
+	leal -20(%esp), %esp
+	leal 20(%esp), %ecx
+	movl (%ecx),%ecx
 Linitialize_continuations_l23:
 Lproc_body_start_l22:
-	movl $1,%ecx
-	movl %edx,8(%esp)
-	movl %eax,%edx
-	andl %ecx,%edx
-	movl $0,%ecx
-	cmpl %ecx,%edx
+	movl $1,%edx
+	movl %edi,8(%esp)
+	movl %eax,%edi
+	andl %edx,%edi
+	movl $0,%edx
+	cmpl %edx,%edi
 	jne Ljoin_l29
 Ljoin_l30:
-	leal z,%ecx
+	leal z,%edi
 	jmp Ljoin_l28
 Ljoin_l29:
-	leal nz,%ecx
+	leal nz,%edi
 	jmp Ljoin_l28
 Ljoin_l28:
-	leal 16(%esp), %edx
-	movl %eax,12(%esp)
-	movl $-16,%eax
-	addl %eax,%edx
-	movl %ecx,(%edx)
-	leal 16(%esp), %ecx
-	movl $-12,%edx
-	addl %edx,%ecx
-	movl 12(%esp),%eax
-	movl %eax,(%ecx)
+	leal 20(%esp), %edx
+	movl %edi,12(%esp)
+	movl $-20,%edi
+	addl %edi,%edx
+	movl 12(%esp),%edi
+	movl %edi,(%edx)
+	leal 20(%esp), %edi
+	movl $-16,%edx
+	addl %edx,%edi
+	movl %eax,(%edi)
+	movl %ecx,16(%esp)
 	call printf
 Ljoin_l27:
-	leal 16(%esp), %eax
+	leal 20(%esp), %edx
 	movl $0,%ecx
-	addl %ecx,%eax
-	movl 8(%esp),%ecx
-	movl %ecx,(%eax)
-	leal 16(%esp), %esp
+	addl %ecx,%edx
+	movl 16(%esp),%ecx
+	movl %ecx,(%edx)
+	movl 8(%esp),%edi
+	leal 20(%esp), %esp
 	ret
 .section .pcmap_data
 Lstackdata_l36:
@@ -135,9 +137,9 @@ Lstackdata_l36:
 .long Lframe_l37
 .section .pcmap_data
 Lframe_l37:
-.long 0xfffffff0
+.long 0xffffffec
 .long 0x80000004
-.long 0xfffffff8
+.long 0xfffffffc
 .long Lstackdata_l36
 .long 0x80000008
 .long 0x80000002
@@ -150,7 +152,7 @@ Lframe_l37:
 .long 0x4000000a
 .long 0x4000000a
 .long 0x4000000b
-.long 0x4000000b
+.long 0xfffffff4
 .long 0
 .long 0
 .long 0x80000000

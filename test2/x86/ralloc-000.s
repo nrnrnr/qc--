@@ -9,38 +9,38 @@ Cmm.global_area:
 p:
 	leal -12(%esp), %esp
 	leal 12(%esp), %edx
-	movl (%edx),%ecx
+	movl (%edx),%edx
 Linitialize_continuations_l5:
 Lproc_body_start_l4:
 	movl $1,%eax
+	movl $2,%ecx
+	movl %edx,(%esp)
+	movl $0,%edx
+	movl %edx,4(%esp)
+	movl $0,%edx
+	movl %edx,8(%esp)
 	movl $2,%edx
-	movl %ecx,(%esp)
-	movl $0,%ecx
-	movl %ebx,4(%esp)
-	movl $0,%ebx
-	movl %ebp,8(%esp)
-	movl $2,%ebp
-	cmpl %ebp,%edx
+	cmpl %edx,%ecx
 	jae Ljoin_l7
 Ljoin_l15:
 	jmp Ljoin_l8
 Ljoin_l7:
-	movl $3,%ebp
-	movl $4,%ecx
-	movl %ecx,%ebx
-	movl %ebp,%ecx
+	movl $3,%edx
+	movl %edx,4(%esp)
+	movl $4,%edx
+	movl %edx,8(%esp)
 	jmp Ljoin_l8
 Ljoin_l8:
-	addl %edx,%eax
 	addl %ecx,%eax
-	addl %ebx,%eax
-	leal 12(%esp), %ebx
+	movl 4(%esp),%edx
+	addl %edx,%eax
+	movl 8(%esp),%edx
+	addl %edx,%eax
+	leal 12(%esp), %edx
 	movl $0,%ecx
-	addl %ecx,%ebx
+	addl %ecx,%edx
 	movl (%esp),%ecx
-	movl %ecx,(%ebx)
-	movl 4(%esp),%ebx
-	movl 8(%esp),%ebp
+	movl %ecx,(%edx)
 	leal 12(%esp), %esp
 	ret
 .section .text
@@ -50,35 +50,35 @@ main:
 	leal 12(%esp), %eax
 	movl $4,%ecx
 	addl %ecx,%eax
-	movl (%eax),%ecx
-	leal 12(%esp), %ecx
-	movl $8,%eax
-	addl %eax,%ecx
-	movl (%ecx),%eax
+	movl (%eax),%eax
+	leal 12(%esp), %eax
+	movl $8,%ecx
+	addl %ecx,%eax
+	movl (%eax),%eax
 Linitialize_continuations_l19:
 Lproc_body_start_l18:
 	call p
 Ljoin_l26:
 	leal fmt,%ecx
 	leal 12(%esp), %edx
-	movl %ebx,8(%esp)
-	movl $-12,%ebx
-	addl %ebx,%edx
+	movl %edi,8(%esp)
+	movl $-12,%edi
+	addl %edi,%edx
 	movl %ecx,(%edx)
-	leal 12(%esp), %ecx
-	movl $-8,%edx
-	addl %edx,%ecx
-	movl %eax,(%ecx)
+	leal 12(%esp), %edi
+	movl $-8,%ecx
+	addl %ecx,%edi
+	movl %eax,(%edi)
 	call printf
 Ljoin_l23:
 	movl $0,%eax
-	leal 12(%esp), %ecx
 	leal 12(%esp), %edx
-	movl $0,%ebx
-	addl %ebx,%edx
-	movl (%ecx),%ebx
-	movl %ebx,(%edx)
-	movl 8(%esp),%ebx
+	leal 12(%esp), %ecx
+	movl $0,%edi
+	addl %edi,%ecx
+	movl (%edx),%edx
+	movl %edx,(%ecx)
+	movl 8(%esp),%edi
 	leal 12(%esp), %esp
 	ret
 .section .pcmap_data
@@ -123,13 +123,13 @@ Lframe_l34:
 .long 0x80000000
 .long 0x80000001
 .long 0x40000007
+.long 0x40000007
+.long 0x40000009
+.long 0x40000009
+.long 0x4000000a
+.long 0x4000000a
+.long 0x4000000b
 .long 0xfffffffc
-.long 0x40000009
-.long 0x40000009
-.long 0x4000000a
-.long 0x4000000a
-.long 0x4000000b
-.long 0x4000000b
 .long 0
 .long 0
 .long 0

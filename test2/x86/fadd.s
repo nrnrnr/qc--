@@ -66,14 +66,14 @@ Lproc_body_start_l3:
 	call printf
 Ljoin_l8:
 	movl $0,%eax
-	leal 32(%esp), %ecx
 	leal 32(%esp), %edx
-	movl %ebx,28(%esp)
-	movl $0,%ebx
-	addl %ebx,%edx
-	movl (%ecx),%ebx
-	movl %ebx,(%edx)
-	movl 28(%esp),%ebx
+	leal 32(%esp), %ecx
+	movl %edx,28(%esp)
+	movl $0,%edx
+	addl %edx,%ecx
+	movl 28(%esp),%edx
+	movl (%edx),%edx
+	movl %edx,(%ecx)
 	leal 32(%esp), %esp
 	ret
 .section .pcmap_data

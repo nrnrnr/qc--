@@ -27,6 +27,7 @@ Test.files = { "add.c--"
              , "hello.c--"
 	     , "hex.c--"
 	     , { source='ladd.c--', other='src/ops64.c' }
+	           , "live_rtd.c--"
              , "not.c--"
              , "ovrflow.c--"
              , "ralloc-000.c--"

@@ -35,38 +35,38 @@ main:
 	leal 8(%esp), %eax
 	movl $4,%ecx
 	addl %ecx,%eax
-	movl (%eax),%ecx
-	leal 8(%esp), %eax
+	movl (%eax),%eax
+	leal 8(%esp), %ecx
 	movl $8,%edx
-	addl %edx,%eax
-	movl (%eax),%edx
+	addl %edx,%ecx
+	movl (%ecx),%ecx
 Linitialize_continuations_l4:
 Lproc_body_start_l3:
-	movl $1,%edx
-	cmpl %edx,%ecx
+	movl $1,%ecx
+	cmpl %ecx,%eax
 	ja Ljoin_l10
 Ljoin_l11:
-	leal hello,%ecx
+	leal hello,%eax
 	jmp Ljoin_l9
 Ljoin_l10:
-	leal bye,%ecx
+	leal bye,%eax
 	jmp Ljoin_l9
 Ljoin_l9:
-	leal 8(%esp), %edx
-	movl $-8,%eax
-	addl %eax,%edx
-	movl %ecx,(%edx)
+	leal 8(%esp), %ecx
+	movl $-8,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
 	call printf
 Ljoin_l8:
 	movl $0,%eax
-	leal 8(%esp), %ecx
 	leal 8(%esp), %edx
-	movl %ebx,4(%esp)
-	movl $0,%ebx
-	addl %ebx,%edx
-	movl (%ecx),%ebx
-	movl %ebx,(%edx)
-	movl 4(%esp),%ebx
+	leal 8(%esp), %ecx
+	movl %edx,4(%esp)
+	movl $0,%edx
+	addl %edx,%ecx
+	movl 4(%esp),%edx
+	movl (%edx),%edx
+	movl %edx,(%ecx)
 	leal 8(%esp), %esp
 	ret
 .section .pcmap_data

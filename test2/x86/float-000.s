@@ -42,11 +42,11 @@ main:
 	leal 16(%esp), %eax
 	movl $4,%ecx
 	addl %ecx,%eax
-	movl (%eax),%ecx
-	leal 16(%esp), %ecx
-	movl $8,%eax
-	addl %eax,%ecx
-	movl (%ecx),%eax
+	movl (%eax),%eax
+	leal 16(%esp), %eax
+	movl $8,%ecx
+	addl %ecx,%eax
+	movl (%eax),%eax
 Linitialize_continuations_l4:
 Lproc_body_start_l3:
 	leal fmt,%eax
@@ -63,14 +63,14 @@ Lproc_body_start_l3:
 	call printf
 Ljoin_l8:
 	movl $0,%eax
-	leal 16(%esp), %ecx
 	leal 16(%esp), %edx
-	movl %ebx,12(%esp)
-	movl $0,%ebx
-	addl %ebx,%edx
-	movl (%ecx),%ebx
-	movl %ebx,(%edx)
-	movl 12(%esp),%ebx
+	leal 16(%esp), %ecx
+	movl %edx,12(%esp)
+	movl $0,%edx
+	addl %edx,%ecx
+	movl 12(%esp),%edx
+	movl (%edx),%edx
+	movl %edx,(%ecx)
 	leal 16(%esp), %esp
 	ret
 .section .pcmap_data

@@ -28,52 +28,50 @@ Lgbl_20:
 .byte 0
 .section .text
 tiger_main:
-	leal -28(%esp), %esp
-	leal 28(%esp), %ecx
-	movl (%ecx),%edx
+	leal -24(%esp), %esp
+	leal 24(%esp), %ecx
+	movl (%ecx),%ecx
 Linitialize_continuations_l4:
 Lproc_body_start_l3:
-	leal 28(%esp), %ecx
-	movl %eax,4(%esp)
-	movl $-8,%eax
-	addl %eax,%ecx
-	movl 4(%esp),%eax
-	movl %eax,(%ecx)
-	leal Lgbl_20,%eax
-	leal 28(%esp), %ecx
-	movl %edx,8(%esp)
-	movl $-8,%edx
-	addl %edx,%ecx
-	movl $4,%edx
-	addl %edx,%ecx
-	movl %eax,(%ecx)
-	leal Cmm.global_area,%eax
-	movl (%eax),%ecx
-	leal 28(%esp), %eax
+	leal 24(%esp), %edx
+	movl %edi,4(%esp)
+	movl $-8,%edi
+	addl %edi,%edx
+	movl %eax,(%edx)
+	leal Lgbl_20,%edi
+	leal 24(%esp), %eax
 	movl $-8,%edx
 	addl %edx,%eax
 	movl $4,%edx
 	addl %edx,%eax
-	leal 28(%esp), %edx
-	movl %ebx,12(%esp)
-	movl $-28,%ebx
-	addl %ebx,%edx
-	movl (%eax),%ebx
-	movl %ebx,(%edx)
-	movl %ecx,16(%esp)
+	movl %edi,(%eax)
+	leal Cmm.global_area,%edi
+	movl (%edi),%edi
+	leal 24(%esp), %eax
+	movl $-8,%edx
+	addl %edx,%eax
+	movl $4,%edx
+	addl %edx,%eax
+	leal 24(%esp), %edx
+	movl %edi,8(%esp)
+	movl $-24,%edi
+	addl %edi,%edx
+	movl (%eax),%edi
+	movl %edi,(%edx)
+	movl %ecx,12(%esp)
 	call tig_print
 Ljoin_l8:
-	leal Cmm.global_area,%eax
-	movl 16(%esp),%ecx
-	movl %ecx,(%eax)
+	leal Cmm.global_area,%edx
+	movl 8(%esp),%ecx
+	movl %ecx,(%edx)
 	movl $0,%eax
-	leal 28(%esp), %ecx
-	movl $0,%edx
-	addl %edx,%ecx
-	movl 8(%esp),%edx
-	movl %edx,(%ecx)
-	movl 12(%esp),%ebx
-	leal 28(%esp), %esp
+	leal 24(%esp), %edx
+	movl $0,%ecx
+	addl %ecx,%edx
+	movl 12(%esp),%ecx
+	movl %ecx,(%edx)
+	movl 4(%esp),%edi
+	leal 24(%esp), %esp
 	ret
 .section .pcmap_data
 Lstackdata_l14:
@@ -84,26 +82,26 @@ Lstackdata_l14:
 .long Lframe_l15
 .section .pcmap_data
 Lframe_l15:
-.long 0xffffffe4
+.long 0xffffffe8
 .long 0x80000004
-.long 0xffffffec
+.long 0xfffffff4
 .long Lstackdata_l14
 .long 0x80000008
 .long 0x80000004
 .long 0x80000002
 .long 0x80000001
 .long 0x40000007
+.long 0x40000007
+.long 0x40000009
+.long 0x40000009
+.long 0x4000000a
+.long 0x4000000a
+.long 0x4000000b
+.long 0xffffffec
+.long 0
+.long 0
+.long 0
 .long 0xfffffff0
-.long 0x40000009
-.long 0x40000009
-.long 0x4000000a
-.long 0x4000000a
-.long 0x4000000b
-.long 0x4000000b
-.long 0
-.long 0
-.long 0
-.long 0xfffffff4
 .long 0x80000000
 .long 0
 .long tiger_main_gc_data

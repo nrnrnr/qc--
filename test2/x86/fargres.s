@@ -11,22 +11,22 @@ main:
 	leal 20(%esp), %eax
 	movl $4,%ecx
 	addl %ecx,%eax
-	movl (%eax),%ecx
-	leal 20(%esp), %ecx
-	movl $8,%eax
-	addl %eax,%ecx
-	movl (%ecx),%eax
+	movl (%eax),%eax
+	leal 20(%esp), %eax
+	movl $8,%ecx
+	addl %ecx,%eax
+	movl (%eax),%eax
 	leal 20(%esp), %eax
 	movl $12,%ecx
 	addl %ecx,%eax
-	movl (%eax),%ecx
+	movl (%eax),%eax
 Linitialize_continuations_l4:
 Lproc_body_start_l3:
-	movl $1084227584,%ecx
-	leal 20(%esp), %eax
+	movl $1084227584,%eax
+	leal 20(%esp), %ecx
 	movl $-20,%edx
-	addl %edx,%eax
-	movl %ecx,(%eax)
+	addl %edx,%ecx
+	movl %eax,(%ecx)
 	call doubleme
 Ljoin_l11:
 	leal 20(%esp), %eax
@@ -49,14 +49,14 @@ Ljoin_l11:
 	call printf
 Ljoin_l8:
 	movl $0,%eax
-	leal 20(%esp), %ecx
 	leal 20(%esp), %edx
-	movl %ebx,16(%esp)
-	movl $0,%ebx
-	addl %ebx,%edx
-	movl (%ecx),%ebx
-	movl %ebx,(%edx)
-	movl 16(%esp),%ebx
+	leal 20(%esp), %ecx
+	movl %edx,16(%esp)
+	movl $0,%edx
+	addl %edx,%ecx
+	movl 16(%esp),%edx
+	movl (%edx),%edx
+	movl %edx,(%ecx)
 	leal 20(%esp), %esp
 	ret
 .section .pcmap_data
