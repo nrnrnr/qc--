@@ -120,20 +120,6 @@ assistance.
 let rec expr' e =
     match e with
     | R.Const c           -> const c
-
-(* this was an attempt to figure out something about stackdata *)
-(* ***************************************************************************
-    | R.Fetch(R.Mem (_,_,_,R.App(_,(R.Fetch(R.Reg('c',1,_),_))::ee),_), _) -> 
-        let examine appexp =
-          match appexp with
-          | (R.Const (R.Bool _)) -> ""
-          | (R.Const (R.Bits _)) -> ""        
-          | (R.Const c)          -> const c
-          | (_)                  -> ""
-        in
-            (String.concat "\n" (List.map examine ee))
-  ************************************************************************* *)
-
     | R.Fetch(loc, _)     -> 
         let (prefix, func_f, func_suffix, args) = location' loc in
         prefix ^ luafunc (func_f "fetch" func_suffix) args
@@ -161,28 +147,35 @@ and location' = function
         , string_of_int width ^ "," ^ byteorder agg ^ "," ^ alignment ass
         )
 
-    | R.Reg   ('A', i, width)        -> 
+    | R.Reg   ('A', i, width)        ->  (* argument-passing register space *)
         ( ""
         , argspace
         , "_arg"
         , string_of_int i
         )
 
-    | R.Reg   ('G', i, width)        ->
+    | R.Reg   ('G', i, width)        ->  (* global register space           *)
         ( ""
         , globalspace
         , "_global"
         , string_of_int i
         )
 
-    | R.Reg   ('d', 0, 2)            ->
+	| R.Reg   ('V', 0, _)            ->  (* VFP space                       *)
+        ( ""
+        , valstack
+        , "_sp"
+        , ""
+        )
+
+    | R.Reg   ('d', 0, 2)            ->  (* floating-pt rounding mode space *)
         ( ""
         , valstack
         , "_rounding"
         , ""
         )
 
-    | R.Reg   (sp, i, width)         -> 
+    | R.Reg   (sp, i, width)         ->
         ( ""
         , commentout
         , "_register"

@@ -23,23 +23,46 @@ module C = Cfgx.M
 module P = Proc
 module E = Interpemitrtl
 module T = Target
+module R = Rtl.Private
 @
 
 \paragraph{Helper functions}.
 
 <<interpemit.ml>>=
-let fprintf = Printf.fprintf
+let fprintf          = Printf.fprintf
+let quoted s         = "\"" ^ s ^ "\""
 
-let open_span fd = function
-    | token, (Some s, offset) -> 
-        fprintf fd "CMM.begin_span(%d,'%s') -- offset: %d\n"
-            (Bits.S.to_int token)
-            (s#mangled_text)
-            (Bits.S.to_int offset)
-    | token, (None  , offset) ->
-        Impossible.impossible "cannot handle link-time constant in call"
+let open_span fd (token, exp) = 
+   let dnexp  = Rtl.Dn.exp exp in
+   let imposs = (fun () -> Impossible.impossible "open_span:invalid span val.")
+   in
+   let const  = function
+       | R.Link(sym , _) -> (Some sym#mangled_text, 0              )
+       | R.Late(name, _) -> (Some name            , 0              )
+       | R.Bits b        -> (None                 , Bits.S.to_int b)
+       | _               -> Impossible.impossible "open_span:invalid span val."
+   in
+   let rec viewexp = function
+       | R.Const c -> const c
+       | R.Fetch _ -> imposs()
+       | R.App   (("add",_), [exp' ; exp'']) ->
+           let v'  = viewexp exp'  in
+           let v'' = viewexp exp'' in
+             (match (v', v'') with
+              | ((Some s, i'), (None  , i'')) -> (Some s, i' + i'')
+              | ((None  , i'), (Some s, i'')) -> (Some s, i' + i'')
+              | _                             -> imposs()
+             )
+       | _         -> imposs()
+   in
+   let spanval, offset = viewexp dnexp
+   in
+      fprintf fd "CMM.begin_span(%d,'%s',%d)\n"
+      	      (Bits.S.to_int token)
+              (match spanval with | Some s -> s | _ -> imposs())
+              offset
 
-let close_span fd (token,_) =
+let close_span fd (token, _) =
     fprintf fd "CMM.end_span(%d)\n" (Bits.S.to_int token)
 
 let instr n =
@@ -57,27 +80,56 @@ let node fd n = match C.kind n with
     | C.Join | C.Exit -> 
         List.iter (fprintf fd "CMM.define_label('%s')\n") (C.labels n)
     | C.Call ->
-        let spans   = [] (* XXX fix, can't be observed at the moment *) 
-        and cuts    = []
-        and unwinds = []
-        and returns = []
-        and aborts  = false
+        let rec sublist lst i length = 
+           let helper lst i length = match lst with
+               | []        -> []
+               | (elt::es) -> if   i > 0 then sublist es (i-1) length
+                              else if    length <= 0 then []
+                                   else  elt::(sublist es i (length-1))
+           in  List.rev (helper lst i length)
+        in
+
+        let nreturns = C.altrets    n
+        and nunwinds = C.unwinds_to n
+        and ncuts    = C.cuts_to    n
+        in
+
+        let spans   = C.spans n     in
+        let succs   = C.succs n     in
+
+        let returns = sublist succs 0                nreturns
+        and cuts    = sublist succs nreturns         ncuts
+        and unwinds = sublist succs (nreturns+ncuts) nunwinds
+        and aborts  = List.length succs > nreturns + 1 + nunwinds + ncuts
         and e       = match C.to_executable n with
                       | None   -> Impossible.impossible "call w/o instruction"
                       | Some i -> Interp.target'.T.call.T.project i
         in
-            ( List.iter (open_span fd) (List.rev spans) 
-            ; E.exp fd e  
-            ; fprintf fd "CMM.call({%s}, {%s}, {%s}, %s) -- %s \n"
-                (String.concat "," cuts)   
-                (String.concat "," unwinds) 
-                (String.concat "," returns) 
-                (if aborts then "1" else "0")
-                "cuts, unwinds, returns, aborts"
-            ; List.iter (close_span fd) spans
-            ) 
+
+        let string_of_annotation lst = 
+           let get_label n = 
+              if   not (C.is_join n)
+              then Impossible.impossible "interpemit: invalid annotation"
+              else C.label n
+            (* FIX ^^^^^^^^^ this might be okay, but not sure *)
+           in String.concat "," (List.map (fun n -> quoted (get_label n)) lst)
+        in
+           ( List.iter (open_span fd) (List.rev spans) 
+           ; E.exp fd e  
+           ; fprintf fd "CMM.call({%s}, {%s}, {%s}, %s) -- %s\n"
+               (string_of_annotation cuts   )
+               (string_of_annotation unwinds)
+               (string_of_annotation returns)
+               (if aborts then "1" else "0" )
+               "cuts, unwinds, returns, aborts"
+           ; List.iter (close_span fd) spans
+           ) 
+
+    (* FIX cut to is not being translated well *)
     | C.CutTo ->
         ( E.rtl fd (instr n)
+        ; fprintf fd "-- succ node of cut: %s\n"
+            (String.concat "," (List.flatten (List.map C.labels (C.succs n))))
         ; fprintf fd "CMM.cut()\n"
         )
     | C.Cbranch ->

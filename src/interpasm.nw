@@ -52,12 +52,14 @@ end
 module New = struct
     type proc = proc'
 
+    (* we ask for more stackdata space than we strictly need; leftover space
+       we use for storing continuation information *)
     let emit (proc:proc) fd =
         let fprintf = Printf.fprintf in
-        ( fprintf fd "CMM.procedure ('%s',%d,%d) -- stack data size correct\n" 
+        ( fprintf fd "CMM.procedure ('%s',%d,%d) -- stackdata = sdata+conts\n"
                       (proc.Proc.symbol#mangled_text)
                       proc.Proc.vars
-                      (Block.size proc.Proc.stackd)
+                      (Block.size proc.Proc.stackd+Block.size proc.Proc.conts)
         ; Interpemit.proc proc fd
         ; fprintf fd "CMM.end_procedure()\n"
         )
