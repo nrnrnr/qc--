@@ -1,0 +1,56 @@
+
+target byteorder little;
+
+import bits32 printf;
+export main;
+
+
+section "data" {
+    numbers:    bits32[] {1,2,3,4,5,6,7,8,9,10};
+    ok:         bits8[]  "ok (expected %d, received %d)\n";
+}
+
+f(bits32 i0, bits32 i1, bits32 i2, bits32 i3, bits32 i4, bits32 i5)
+{
+    if (i0 == bits32[numbers+4*0]) 
+        { foreign "C" printf(ok,i0,bits32[numbers+4*0]);}
+    if (i1 == bits32[numbers+4*1]) 
+        { foreign "C" printf(ok,i1,bits32[numbers+4*1]);}
+    if (i2 == bits32[numbers+4*2]) 
+        { foreign "C" printf(ok,i2,bits32[numbers+4*2]);}
+    if (i3 == bits32[numbers+4*3]) 
+        { foreign "C" printf(ok,i3,bits32[numbers+4*3]);}
+    if (i4 == bits32[numbers+4*4]) 
+        { foreign "C" printf(ok,i4,bits32[numbers+4*4]);}
+    if (i5 == bits32[numbers+4*5]) 
+        { foreign "C" printf(ok,i5,bits32[numbers+4*5]);}
+    return();
+}
+
+g(bits32 i5, bits32 i4, bits32 i3)
+{
+    if (i5 == bits32[numbers+4*5]) 
+        { foreign "C" printf(ok,i5,bits32[numbers+4*5]);}
+    if (i4 == bits32[numbers+4*4]) 
+        { foreign "C" printf(ok,i4,bits32[numbers+4*4]);}
+    if (i3 == bits32[numbers+4*3]) 
+        { foreign "C" printf(ok,i3,bits32[numbers+4*3]);}
+    return();
+}
+foreign "C" main("unsinged" bits32 iarg, "address" bits32 iargv)
+{
+    f(
+        bits32[numbers+4*0], 
+        bits32[numbers+4*1], 
+        bits32[numbers+4*2], 
+        bits32[numbers+4*3], 
+        bits32[numbers+4*4], 
+        bits32[numbers+4*5]);
+    g(
+        bits32[numbers+4*5], 
+        bits32[numbers+4*4], 
+        bits32[numbers+4*3]);
+
+    
+    foreign "C" return(0);
+}

@@ -12,6 +12,7 @@ Test.files = { "add.c--"
              , "bits-bug.c--"
              , "blockcpy.c--"
              , "cut.c--"
+             , "arglist.c--"
              , norun("eqasolve-000.c--")
              , norun("exp-000.c--")
              , norun("exp-001.c--")
