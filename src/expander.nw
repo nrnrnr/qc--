@@ -10,28 +10,13 @@
 
 %%Grades: A Subsystem Later
 
-\section{Things yet to be covered in this document}
-\begin{enumerate}
-\item
-Kill effects
-\item
-When to use [[don't_touch_me]]
-\item
-The problem of instructions with multiple effects:
-The generic expander can't expand while maintaining multiple effects
-\item
-Contexts really aren't general enough---need to say something about
-widths, and hardware registers would be nice
-\item
-Not covered to sufficient detail: mutual recursion between generic
-expander and postexpander 
-(e.g., tying of recursive knot places restrictions on use)
-\end{enumerate}
-
-
 \section{A generic, parameterized code expander}
 
 \label{expander.sec}
+
+\emph{(See disclaimers in Section~\ref{expander.uncovered} on
+  page~\pageref{expander.uncovered}.)}
+
 
 A back end is obligated to expand code in such a way that each node in
 the flow graph bears an RTL that can be represented as a single
@@ -45,6 +30,7 @@ In other words, this module expands a flow-graph node into a subgraph of
 simpler nodes.
 The target-dependent code is relegated to a \emph{postexpander}.
 
+
 To explain what is happening, I use the following
 conventions:\\
 \begin{tabular}{@{\quad}cl}
@@ -53,18 +39,38 @@ $m$& any memory-like space\\
 $k$& any compile-time constant\\
 $L$& any label or link-time constant\\
 $\oplus$& any RTL value operator\\
+$r$& a hardware register\\
+$\mathit{rm}$& a floating-point rounding mode\\
+$w$& any wierd value, like a carry bit, in all or part of a register\\
 $?$& any RTL comparison operator\\
 \end{tabular}
 
 For a register machine, we reduce RTLs to the following forms:
 {\def\gets{\mathrel{:=}}%
+\def\rm{{\mathit{rm}}}%
 $$\begin{array}{r@{}c@{}l@{\mskip10mu}ll}
 m[t_l] & {}\gets{} & t     &\mbox{\texttt{store}}\\
 t      & \gets & m[t_l]&\mbox{\texttt{load}} \\
 t_1    & \gets & t_2   &\mbox{\texttt{move}} \\
+t      & \gets & r   &\mbox{\texttt{hwget}} \\
+r      & \gets & t   &\mbox{\texttt{hwset}} \\
 t      & \gets & k     &\mbox{\texttt{li} (load immediate constant)}\\
-t      & \gets & \oplus(t_1, \ldots, t_n) & 
-  \mbox{ALU operations (\texttt{binop}, \texttt{rtlop}, etc)}\\
+t      & \gets & t_1 \oplus t_2 &  
+           \mbox{a binary ALU operation (\texttt{binop})}\\
+t      & \gets & \mathit{op}(t_1) &  
+           \mbox{a unary ALU operation (\texttt{unop})}\\
+t      & \gets & t_1 \oplus_\rm t_2 &  
+           \mbox{a binary floating-point operation (\texttt{binrm})}\\
+t      & \gets & \mathit{op}(t_1, \rm) &  
+           \mbox{a unary floating-point operation or conversion (\texttt{unrm})}\\
+t      & \gets & \oplus(t_1, t_2, w) & 
+           \mbox{a weird value operation, like add with carry (\texttt{wrdop})}\\
+w      & \gets & \oplus(t_1, t_2, w) & 
+           \mbox{a weird value/result operation, like carry (\texttt{wrdrop})}\\
+t_{\mathit{hi}}, t_{\mathit{lo}}      & \gets & t_1 \otimes t_2 & 
+            \mbox{an extended multiply operation (\texttt{dblop})}\\
+%%t      & \gets & \oplus(t_1, \ldots, t_n) & 
+%%  \mbox{ordinary ALU operations (\texttt{binop}, \texttt{unop}, etc)}\\
 m[t_l] & \gets & \mathtt{lobits}_n(t)     &\mbox{\texttt{lostore} (store byte/halfword)}\\
 t      & \gets & \mathtt{sx}(m[t_l])       &\mbox{\texttt{sxload} (load signed b/h)} \\
 t      & \gets & \mathtt{zx}(m[t_l])       &\mbox{\texttt{zxload} (load unsigned b/h)} \\
@@ -74,7 +80,7 @@ t \mathbin? t \rightarrow \mathit{PC}& \gets & L &\mbox{\texttt{bc} (branch cond
 \mathit{PC}& \gets & \rlap{t}\phantom{L/t} \mid t_l \gets t_r&\mbox{\texttt{cut\_to}}\\
 \mathit{PC}& \gets & L/t \mid \cdots \mathit{PC} \cdots&\mbox{\texttt{call}/\texttt{callr}}\\
 \end{array}
-$$}
+$$}%
 The treatment of [[call]] and [[cut to]] needs some explanation.
 Both instructions change the program counter while also assigning to a
 register.
@@ -88,7 +94,7 @@ touched.
 It's up to the [[t.Target.call]] to know what it's doing, although the
 postexpander can validate the RTL if it wants.
 In any case, we maintain the call as an atomic RTL. 
-
+@
 In the case of \mbox{[[cut to]]}, the program counter isn't mentioned
 in an rvalue context, but some register (probably the stack
 pointer) is modified along with the branch.
@@ -115,14 +121,23 @@ A \emph{standard value operator} takes some bit vectors of reasonable
 width and returns a result of that width.
 \item
 A \emph{weird value operator} takes some bit vectors of reasonable
-width and returns a result of some other width.
-The obvious weird operators are multiply (which doubles with width of
-its operands) and multiprecision operators such as carry and borrow.
-A~full classification awaits careful study of the list of operators.
+width, but also may take an argument or return a result that is
+unusually narrow.
+
+An important special case of weird value operator is a floating-point
+operator, which takes ordinary floating-point operand(s) plus a
+rounding mode.
+%
+The other weird value operators are extended multiplies (which double
+with width of 
+their operands) and multiprecision operators such as carry, borrow, add
+with carry, and add with borrow.
 \item
 A \emph{size-changing operator} widens or narrows a bit vector.
-I~believe there are only three such operators: [[sx]], [[zx]], and
+The integer size-changing operators are [[sx]], [[zx]], and
 [[lobits]].
+The floating-point size-changing operators are [[i2f]], [[f2i]], and
+[[f2f]].
 \item
 A \emph{comparison operator} takes one or more bit vectors and returns
 a Boolean.
@@ -132,12 +147,11 @@ unnecessary [[bool]] operator.
 \item
 A \emph{Boolean operator} takes one or more Booleans and returns a
 Boolean.
-The only Boolean operators are [[conj]], [[disj]], and [[not]], and
-I'm inclined to think they should be compiled to control flow.
+The Boolean operators are [[conjoin]], [[disjoin]], and [[not]].
+The generic expander compiles them to control flow.
 \item
-The elusive [[bit]] operator is the only operator to take a Boolean
-and return a bit vector.
-It is compiled to control flow below.
+The [[bit]] and [[bool]] operators convert between values and Booleans.
+They are also compiled away in the generic expander.
 N.B.~Machines such as MIPS support [[bit]] by instructions such as SLT
 (set less than), so it probably should not be compiled away by the
 front end (sadly).
@@ -149,23 +163,6 @@ As such, it
 register machine and a stack machine, which speaks to how operators
 are implemented on particular hardware.
 @
-\begin{quote}\em
-Aside:
-I'm contemplating how we might create a hand-written expander that can
-easily be specialized to establish ``most of'' the machine invariant
-for many different targets, without relying so heavily on peephole
-optimization \emph{post facto}.
-For example, it's legitimate to think of $\mathtt{\$m}[\cdot]$ as an
-``address context.''
-Any machine should be able to deal with $t$~in an address context, but
-many machines will also be able to deal with $t_1+t_2$ and $t+k$ (though
-on some machines $k$~may not be too large).
-Some machines can even deal with $t_1+4\times t_2$!
-One possibility, then, would be to make an ``address context''
-function dynamic through Lua.
-Care would have to be taken to avoid paying for an expensive identity
-function (embedding/projection) at every application of such a function.
-\end{quote}
 @
 \subsection{Support for expansion---the postexpander module}
 
@@ -179,17 +176,14 @@ It defines some types and utility functions that can be used by
 postexpanders. 
 \end{itemize}
 
-The overall structure of the postexpander is as follows:
+Because it defines the postexpander interface, serves postexpanders,
+and serves the generic expander, the [[Postexpander]] signature is
+fairly rich.
 <<postexpander.mli>>=
 <<abstract types for postexpanders>>
 <<types for postexpanders>>
 <<exported utility functions for postexpanders>>
 <<exported utility functions for use by the generic expander>>
-<<signature of a postexpander>>
-<<postexpander.ml>>=
-module R  = Rtl
-type uid = int
-<<types for postexpanders>>
 <<signature of a postexpander>>
 @ 
 To make the interfaces more readable, we use these type abbreviations:
@@ -201,6 +195,21 @@ type width     = Rtl.width
 type assertion = Rtl.assertion
 type operator  = Rtl.Private.opr
 @
+We also have type definitions for weird (narrow) values.
+If it is not a constant, a~weird value must be stored in an
+ordinary temporary. 
+The narrow value is in the low bits, and we record a fill type,
+which is a demand that the postexpander must satisfy.
+A~weird argument may also be a literal.
+<<types for postexpanders>>=
+type wtemp = fill * temp
+and  fill  = HighS | HighZ | HighAny  
+and  warg  = WBits of Bits.bits
+           | WTemp of Register.x  (* high bits, if any, could contain anything *)
+@ The [[warg_val]] utility function can help a postexpander create
+RTLs that use a weird argument.
+<<exported utility functions for postexpanders>>=
+val warg_val : warg -> exp
 @
 \paragraph{Fragments of flow graphs}
 
@@ -232,8 +241,8 @@ A conditional branch is expanded into a [[cbranch]].
 This subgraph is somewhat more complicated because it has \emph{two}
 exits, which are designated by the Boolean values [[true]] and
 [[false]].
-The subgraph represents decision logic \emph{only}; the sole job of
-the subgraph is to decide on one of the two exits.\footnote
+The subgraph represents decision logic \emph{only}; its sole job
+ is to decide on one of the two exits.\footnote
 {Later in compilation, the peephole optimizer may combine computation
 with decision.}
 
@@ -246,7 +255,7 @@ Unlike the other subgraphs, the [[cbranch]] can represent a DAG, not
 just a tree---hence the [[Shared]] node.
 \end{itemize}
 <<abstract types for postexpanders>>=
-type uid
+type uid  (* identifies a shared node *)
 <<types for postexpanders>>=
 type block   = Rtl   of rtl
              | Seq   of block * block
@@ -258,14 +267,16 @@ and  cbranch = Exit   of bool
              | Test   of block * cbinst
              | Shared of uid * cbranch  (* don't duplicate this node *)
 and  cbinst  = exp * cbranch * cbranch
-@ Note that since the only purpose of a conditional branch is to reach
+@ Since the only purpose of a conditional branch is to reach
 one of the two exits, there is never any straight-line code that
 intervenes between a conditional branch and the exit.
-Also note that a conditional branch can be simplified to
+And it's possible that a conditional branch is simplified to
 unconditional; that's what a bare [[Exit]]  means.
 @
-We now explain what each of the above constructors and types means,
-and under what conditions it is deemed to satisfy the machine invariant.
+Each of the constructors and types  above has a particular meaning,
+which we explain here.
+We also explain  under what conditions each construct is deemed to
+satisfy the machine invariant. 
 \begin{itemize}
 \item [[Rtl]] wraps a \emph{non-branching} RTL.
 It satisfies the machine invariant if the RTL  can be represented by a single
@@ -278,7 +289,7 @@ optimistic assumption that a late compile-time constant is ``small.''
 If the assumption is violated, it must be possible for the recognizer
 to emit a sequence of instructions that together implement the RTL.
 Either this sequence can be generated without using an additional
-register, or else the recognizer will have to reserve to itself a
+register, or else the recognizer will have to reserve a
 register for this purpose.
 \end{itemize}
 @
@@ -376,16 +387,6 @@ instruction on the target machine.
 \item
 The resulting RTL can be changed with [[bnegate]] and still be
 representable as a single instruction on the target machine.
-@
-\item
-The [[Exit]] continuation represents control flow to one of the two
-exits of the subgraph.
-An [[Exit]] always satisfies the machine invariant.
-@
-\item
-The [[Continue]] continuation represents additional control flow which
-eventually leads to an exit.
-It satisfies the machine invariant if its [[cbranch]] does.
 \end{itemize} 
 \end{itemize}
 @
@@ -442,8 +443,8 @@ a certain state.
 This is easy to do with a pattern of ``save; set; block; restore.''
 But in the case where we want to execute with the hardware register in
 its current state, it is better just to emit ``block.'' 
-The reason is that when code sets a part of a control register, that
-can be pretty baroque, and at least as of October 2004, our optimizer
+The reason is that when code sets a part of a control register, the
+RTLs can get pretty baroque, and at least as of October 2004, our optimizer
 is unlikely to discover that the instructions are unnecessary.
 
 When [[hard = soft]], function [[with_hw hard soft temp block]] has the
@@ -486,7 +487,7 @@ val lookup : uid -> 'a nodeset -> 'a   (* raises Not_found *)
 val insert : uid -> 'a -> 'a nodeset -> 'a nodeset
 @
 
-\paragraph {The target-dependent postexpander}
+\subsection  {The target-dependent postexpander interface}
 \label{expander.sec:Postexpander.S}
 
 Here is a signature for a postexpander for an integer/float/address
@@ -511,9 +512,11 @@ an address.  At present, the only way to create an address is by using
 a temporary, which is expected to hold the address.
 A~typical implementation will let [[Address.t]] be [[Rtl.exp]] and
 will define a [[reg]] function that simply fetches the address.
-(WORTH PUTTING IN A [[Standard.Address]]?)
+(WORTH PUTTING IN A [[Standard.Address]] FOR THE TYPICAL IMPLEMENTATION?)
 @ 
 \subsubsection{Postexpander operations for register machines}
+
+\paragraph{Data movement}
 We provide basic load and store.
 The [[assertion]] gives the alignment of the [[Address.t]], which
 tells the postexpander 
@@ -548,17 +551,9 @@ also moves from space to space (e.g., move a value from an integer register into
 floating-point register).
 <<generic expansion operations for register machines>>=
 val move : dst:temp -> src:temp -> block
-@ We also must handle a move into a hardware register that is narrower
-than a single temporary.
-Such a move can occur only as a result of a back end advertising a
-narrow hardware register by name, but it is necessary to provide
-access to the floating-point rounding mode.
-<<generic expansion operations for register machines>>=
-val hwset : dst:Register.x -> src:warg       -> block
-val hwget : dst:wtemp      -> src:Register.x -> block
 @ 
-Finally, we have to handle moves between temporaries of different
-sizes.
+On some machines, we will have to move data between registers of
+different widths.
 For example, it might be necessary to move a value from a 64-bit
 floating-point register into two 32-bit integer registers (or vice
 versa).
@@ -571,6 +566,15 @@ We pass the pieces of the large value, \emph{least significant piece
 <<generic expansion operations for register machines>>=
 val extract   : dst:temp -> lsb:int -> src:temp -> block
 val aggregate : dst:temp -> src:temp list       -> block (* little-endian *)
+@ 
+Finally, we must handle a move into a hardware register that is
+narrower than a single temporary.
+Such a move can occur only as a result of a back end advertising a
+narrow hardware register by name, but it is necessary to provide
+access to the floating-point rounding mode.
+<<generic expansion operations for register machines>>=
+val hwset : dst:Register.x -> src:warg       -> block
+val hwget : dst:wtemp      -> src:Register.x -> block
 @ 
 Load immediate can take any constant except a Boolean.
 <<generic expansion operations for register machines>>=
@@ -614,9 +618,16 @@ The [[lix]] may make optimistic assumptions about the size of
 constants, as noted above on page~\pageref{sec:optimism}.
 <<generic expansion operations for register machines>>=
 val lix : dst:temp -> Rtl.exp           -> block
+@
+Every machine should be able to do a block copy.
+<<generic expansion operations for register machines>>=
+val block_copy :
+  dst:Address.t -> assertion -> src:Address.t -> assertion -> width -> block
 @ 
-Some operators are handled in the generic expander or the simplifier,
-most operators reach the postexpander.
+\paragraph{Computation} 
+
+Some operators are handled in the generic expander or the simplifier.
+Others operators reach the postexpander.
 Not all such operators have the same shape, so we provide an interface
 function for each shape.
 @
@@ -655,20 +666,6 @@ result is supported by [[wrdrop]].
 These operators include only [[carry]] and [[borrow]].
 <<generic expansion operations for register machines>>=
 val wrdrop : dst:wtemp -> operator -> temp -> temp -> warg -> block
-@
-If it is not a constant, a~weird (narrow) value must be stored in an
-ordinary temporary. 
-The narrow value is in the low bits, and we record a fill type,
-which may be either guaranteed (in argument position) or demanded (in
-result position).
-A~weird argument may also be a literal.
-<<types for postexpanders>>=
-type wtemp = fill * temp
-and  fill  = HighS | HighZ | HighAny  
-and  warg  = WBits of Bits.bits
-           | WTemp of Register.x  (* high bits, if any, could contain anything *)
-<<exported utility functions for postexpanders>>=
-val warg_val : warg -> exp
 @ 
 Usage note:
 \begin{quote}
@@ -685,6 +682,8 @@ to use algebraic equivalents.
 Our library of equivalents lives in the [[Rewrite]] module.
 \end{quote}
 @
+\paragraph{Machine contexts}
+
 The generic expander guarantees that
 the arguments to functions above satisfy the precondition that the
 temporaries are in the spaces the postexpander expects.
@@ -730,11 +729,6 @@ We have to know when a right-hand side is too big to try to cram into
 a single temporary.
 <<generic expansion operations for register machines>>=
 val itempwidth : int  (* maximum width for one integer temporary *)
-@
-Every machine should be able to do a block copy.
-<<generic expansion operations for register machines>>=
-val block_copy :
-  dst:Address.t -> assertion -> src:Address.t -> assertion -> width -> block
 @ 
 \paragraph{Control flow}
 To recognize control flow, the expander must be able to identify the
@@ -957,12 +951,25 @@ the recognizer \emph{after} register allocation and simplification.
 The postexpander must collude with the register allocator such that
 after an acceptable substitution of hardware registers for
 temporaries, the recognizer will accept the resulting RTL.
-IT SHOULD BE DOCUMENTED SOMEWHERE HOW TO COMMUNICATE TO THE REGISTER
-ALLOCATOR WHAT CONSTITUTES AN ACCEPTABLE SUBSTITUTION.  WHERE IS THAT?
+How does the register allocator know what substitutions are
+acceptable?
+By a combination of two elements: 
+\begin{itemize}
+\item
+Given a calling convention [[cc]], the register allocator may use only
+registers that appear in the union of the sets
+[[cc.Call.volregs]] and [[cc.Call.pre_nvregs]].
+Only these registers may be substituted for temporaries.
+\item
+Each temporary space~$S$ includes a [[Space.stands_for]] predicate, which says
+whether a particular hardware register may acceptably be substituted
+for a temporary drawn from space~$S$.
+Help applying this predicate can be had from function [[Target.fits]].
+\end{itemize}
 \item
 The simplifier evaluates many expressions at compile time.
 For example, the expression $\mathtt{sx}_{16-32}(\mathtt{0xffff})$
-will be simplified to  $\mathtt{0xffffffff}$.
+is simplified to  $\mathtt{0xffffffff}$.
 Even if the postexpander emits the former, the recognizer must be
 prepared to accept the latter.
 In fact, if what the machine instruction does is sign-extend a 16-bit
@@ -982,7 +989,7 @@ peephole optimizer is \emph{guarded} by a call to the recognizer.
 @
 \clearpage
 
-\subsection{Implementation outline}
+\subsection{Implementation of the postexpander module}
 
 \subsubsection {Postexpander support}
 
@@ -1008,6 +1015,12 @@ has been called more recently than
 [[remember_allocators]].
 \end{itemize}
 @
+<<postexpander.ml>>=
+module R  = Rtl
+type uid = int
+<<types for postexpanders>>
+<<signature of a postexpander>>
+@ 
 <<postexpander.ml>>=
 module Alloc = struct
   let badslot : width -> Automaton.loc =
@@ -1160,14 +1173,25 @@ module Nostack (Address : sig type t val reg : temp -> t end) = struct
   let is_stack_top_proxy _ = false
 end
 @
-\subsubsection{More stuff}
-The [[Proc.t]] gives the expander a supply of temporaries.
+
+\clearpage
+% ----------------------------------------------------------------
+\subsection{A generic expander}
+% ----------------------------------------------------------------
+
+\subsubsection{Interface}
+
+The generic expander is functorized over a postexpander.
+Here is the interface.
+The expander needs a supply of temporaries, which is part of the
+[[Ast2ir.proc]]. 
 <<expander.mli>>=
 module type S = sig
   val cfg: 'a -> Ast2ir.proc -> bool
 end 
 module IntFloatAddr (Post : Postexpander.S) : S
 @ 
+\subsubsection{Abbreviations and utilities}
 Here are some abbreviations and utilities.
 <<expander.ml>>=
 module type S = sig
@@ -1191,7 +1215,6 @@ module Dn = Rtl.Dn
 let upassn = Rtl.Up.assertion
 let impossf fmt = Printf.kprintf Impossible.impossible fmt
 @ 
-\subsection{Utilities and debugging code}
 <<expander.ml>>=
 let fetch l = RP.Fetch (Dn.loc l, RU.Width.loc l)
 let width e = RU.Width.exp (Up.exp e)
@@ -1302,9 +1325,8 @@ It was useful in debugging the expander.
 <<expander.ml>>=
 let _ = Sys.set_signal Sys.sigterm (Sys.Signal_handle (fun _ -> exit 0))
 @ 
-% ----------------------------------------------------------------
-\subsection{A generic expander}
-% ----------------------------------------------------------------
+
+\subsubsection {The generic-expander functor}
 
 This expander is intended for machines with integer, floating, and
 address register spaces.
@@ -1319,17 +1341,7 @@ module IntFloatAddr (Post : Postexpander.S) = struct
   <<generic flow-graph expander>>
 end
 @ 
-Within the expander, we need to be able to turn a temporary into a
-location. 
-For this we need the postexpander.
-It's questionable whether the byte order of a register should be fixed
-to that of memory, but so be it.
-When we refactor the compiler to support register locations directly,
-this function should go away.
-<<generic expander>>=
-let temploc (space, n, w) = R.reg (space, n, w)
-@ 
-\subsection{Contexts in which to evaluate expressions}
+\subsubsection{Contexts in which to evaluate expressions}
 
 The world is complicated by the existence of two kinds of machines:
 stack machines and register machines.
@@ -1442,7 +1454,7 @@ let looks_like_stack_rhs = function
   | RP.Fetch (l, _) -> Post.is_stack_top_proxy l
   | _ -> false in
 @ 
-\subsection{Expanding an expression into a temporary}
+\subsubsection{Expanding an expression into a temporary}
 The core of the expander is a function [[to_temp]], which takes an
 expression and returns a pair containing a list of instructions and a
 temporary such that executing those instructions develops the
@@ -1676,7 +1688,7 @@ and is_compile_time_constant = function
   | _ -> false
 @ 
 
-\subsection{Expanding using stack instructions}
+\subsubsection{Expanding using stack instructions}
 <<other generic expander functions>>=
 and to_stack' room e =
   if room < 1 then
@@ -1779,7 +1791,7 @@ and restore_stack number_to_keep number_to_restore =
     let a, is  = address room addr in
     is <:> is' <:> Post.push_cvt_rm op r n a (upassn assn)
 @ 
-\subsection{Expanding RTLs}
+\subsubsection{Expanding RTLs}
 
 This part of the generic expander is currently simpler than it really
 needs to be.
@@ -2197,7 +2209,7 @@ let try_first_effect effects succ fail =
           maybe ((l, r, w) :: bad) rest in
   maybe [] effects in
 @ 
-\subsection{Flow-graph fragments}
+\subsubsection{Flow-graph fragments}
 <<other generic expander functions>>=
 and block b = match b with
 | PX.Rtl r        -> rtl r
@@ -2208,7 +2220,7 @@ and block b = match b with
 and branch' (b, r) = let b', r = rtl_to_branch r in (block b <:> b', r)
 @ 
 
-\subsection{Debugging the expander}
+\subsubsection{Debugging the expander}
 These wrapper functions show what the expander [[rtl]] and register
 targeter [[to_temp]] are doing.
 <<other generic expander functions>>=
@@ -2246,7 +2258,7 @@ and to_stack room e =
   let _ = D.pr_block is in
   is
 @ 
-\subsection{Stack-slot allocation}
+\subsubsection{Stack-slot allocation}
 To move from a temporary to the stack, we may need to allocate a stack slot.
 <<stack-slot allocation>>=
 let exchange_slot =
@@ -2258,7 +2270,7 @@ let exchange_slot =
       slots := (w, slot) :: !slots;
       slot in
 @   
-\subsection{Old code no longer relevant}
+\subsubsection{Old code no longer relevant}
 This is old stuff left over, which I might want to resurrect some day
 when I try to expand general guards.
 <<ZZZ definitions of [[to_temp]], [[rtl]] and all the other generic expander functions>>=
@@ -2266,15 +2278,15 @@ let rec old_general_guard g left right w =
   (* this case is bogus *)
   let r, is  = to_temp Post.stack_depth (guess_context right) right in
   let l, is' = old_loc left in
-  is <:> is' <:> PX.Rtl (R.guard (Up.exp g) (R.store l (R.fetch (temploc r) w) w))
+  is <:> is' <:> PX.Rtl (R.guard (Up.exp g) (R.store l (R.fetch (R.reg r) w) w))
 and old_loc l =
   match l with
   | RP.Mem (('m',_,_) as mspace, w, addr, assn) ->
       let addr, is = to_temp Post.stack_depth (acontext) addr in
-      Up.loc (RP.Mem (mspace, w, fetch (temploc addr), assn)), is
+      Up.loc (RP.Mem (mspace, w, fetch (R.reg addr), assn)), is
   | _ -> Up.loc l, PX.Nop in
 @
-\subsection{The flow-graph expander}
+\subsubsection{The flow-graph expander}
 
 To expand the flow graph, we expand each node.
 Expanding a node means converting its RTL to a block, a conditional
@@ -2394,7 +2406,7 @@ and cbranch2cfg c ~t ~f =
 
 @ 
 
-\subsection{Compilation of Boolean expressions into control flow.}
+\subsubsection{Compilation of Boolean expressions into control flow.}
 
 THIS CODE SHOULD BE MOVED TO THE GENERIC CODE EXPANDER.
 
@@ -2501,3 +2513,36 @@ and guard state succ fail e =
 <<special cases that match floating-point comparisons>>=
 (* the evil empire *)
 @
+\section{Things yet to be covered in this document}
+\label{expander.uncovered}
+\begin{enumerate}
+\item
+Kill effects
+\item
+The problem of instructions with multiple effects:
+The generic expander can't expand while maintaining multiple effects
+\item
+Contexts really aren't general enough---need to say something about
+widths, and hardware registers would be nice
+\item
+Not covered to sufficient detail: mutual recursion between generic
+expander and postexpander 
+(e.g., tying of recursive knot places restrictions on use)
+\end{enumerate}
+
+
+Aside:
+I'm contemplating how we might create a hand-written expander that can
+easily be specialized to establish ``most of'' the machine invariant
+for many different targets, without relying so heavily on peephole
+optimization \emph{post facto}.
+For example, it's legitimate to think of $\mathtt{\$m}[\cdot]$ as an
+``address context.''
+Any machine should be able to deal with $t$~in an address context, but
+many machines will also be able to deal with $t_1+t_2$ and $t+k$ (though
+on some machines $k$~may not be too large).
+Some machines can even deal with $t_1+4\times t_2$!
+One possibility, then, would be to make an ``address context''
+function dynamic through Lua.
+Care would have to be taken to avoid paying for an expensive identity
+function (embedding/projection) at every application of such a function.
