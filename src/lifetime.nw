@@ -22,53 +22,6 @@ provides intervals over ordered points to model a region where a
 particular variable is live, and defines the lifetime of a variable to
 be a \emph{disjoint} set of intervals.
 
-The implementation is a functor [[Make]] that takes the a [[Point]]
-module as parameter and returns a module of type [[S]], detailed
-below.
-
-<<interval.mli>>=
-<<module type POINT>>
-<<module type S of Interval>>
-module Make (Point: POINT): (S with module Point = Point)
-@ 
-<<module type S of Interval>>=
-module type S = sig
-    module Point : POINT 
-    type t
-    (* primitives *)
-    val empty: t
-    val mk: Point.t -> Point.t -> t  (* note conditions above *) 
-    (* constructors *)
-    val union : t -> t -> t
-    (* observers *)
-    val isempty  : t -> bool
-    val overlaps : t -> t -> bool
-    val precedes : t -> t -> bool
-
-    module Set : Set.S with type elt = t
-      (* Elements with different left-hand sides are ordered by that left-hand side.
-         Note the ordering here is *not* the same as the partial order defined
-         by [[precedes]]. *)
-end
-
-
-<<lifetime.mli>>=
-<<module type S of Lifetime>>
-module Make (Interval : Interval.S): (S with module Interval = Interval)
-@
-
-Points must be ordered and in addition provide a single point
-[[zero]].  This is used to define an empty interval.  This module type
-too is in a named code chunk such that it can be referred to in the
-implementation. 
-
-<<module type POINT>>=
-module type POINT = sig
-    type t
-    val compare: t -> t -> int
-    val zero: t
-end
-@
 
 % ------------------------------------------------------------------ 
 \subsection{Intervals}
@@ -87,12 +40,26 @@ of the following cases:
 \end{enumerate}
 @
 
+If one interval precedes another, it clearly starts and ends before
+the other.  However, if two intervals overlap, this does not mean that
+they have the same starting and end point.  The [[min]] and [[max]]
+function provide another way of comparing two intervals:  [[min]]
+returns the one whose starting point is smaller than the other,
+[[max]] returns the interval whose ending point is greater than the
+other.  Please note, that [[min i j = max i j]] is possible.
+
+\begin{quote}\it
+    Do we need better names for [[min]] and [[max]]? --CL
+\end{quote}
+
 \begin{quote}\it
     Is a half-open interval the right design? If the highest number of
     a node in a {\cfg} is $n$, an interval covering it must include
     $n+1$. When the point type is abstract, there is no easy way to
     obtain such a point. Closed intervals would only rely on points
     actually used in a {\acfg}. --CL
+
+    NR things this is the RightThing. --CL
 \end{quote}
 
 The following algebraic laws explain the interaction between the
@@ -109,7 +76,55 @@ precedes (mk \_ y) (mk x \_) = y $\leq$ x
 overlaps x y  = overlaps x y
 overlaps (mk x y) (mk v w) = $\neg$ (precedes (mk x y) (mk v w) 
                              $\vee$ precedes (mk v w) (mk x y))
+
+min empty i                = i
+min i empty                = i
+max empty i                = i
+max i empty                = i
+min (mk x1 y1) (mk x2 y2)  = if x1 < x2 then (mk x1 y1) else (mk x2 y2)
+max (mk x1 y1) (mk x2 y2)  = if y1 > y2 then (mk x1 y1) else (mk x2 y2)
 \end{quote}
+
+The implementation is a functor [[Make]] that takes the a [[Point]]
+module as parameter and returns a module of type [[S]], detailed
+below.
+
+<<module type S of Interval>>=
+module type S = sig
+    module Point : POINT 
+    type t
+    (* primitives *)
+    val empty: t
+    val mk: Point.t -> Point.t -> t  (* note conditions above *) 
+    (* constructors *)
+    val union : t -> t -> t
+    (* observers *)
+    val isempty  : t -> bool
+    val overlaps : t -> t -> bool
+    val precedes : t -> t -> bool
+    val min      : t -> t -> t
+    val max      : t -> t -> t
+    module Set : Set.S with type elt = t
+      (* Elements with different left-hand sides are ordered by that
+         left-hand side.  Note the ordering here is *not* the same as
+         the partial order defined by [[precedes]].  *)
+end
+@
+
+
+
+Points must be ordered and in addition provide a single point
+[[zero]].  This is used to define an empty interval.  This module type
+too is in a named code chunk such that it can be referred to in the
+implementation. 
+
+<<module type POINT>>=
+module type POINT = sig
+    type t
+    val compare: t -> t -> int
+    val zero: t
+end
+@
 
 % ------------------------------------------------------------------ 
 \subsection{Lifetimes}
@@ -169,6 +184,19 @@ bbox (mk i)       = i
 bbox (empty)      = Interval.empty
 \end{quote}
 
+% ------------------------------------------------------------------ 
+\subsection{Putting Interfaces together}
+% ------------------------------------------------------------------ 
+
+<<interval.mli>>=
+<<module type POINT>>
+<<module type S of Interval>>
+module Make (Point: POINT): (S with module Point = Point)
+
+<<lifetime.mli>>=
+<<module type S of Lifetime>>
+module Make (Interval : Interval.S): (S with module Interval = Interval)
+@
 
 % ------------------------------------------------------------------ 
 \subsection{Implementation of Intervals}
@@ -252,6 +280,17 @@ let union i1 i2 = match i1, i2 with
     | i1     , i2  when isempty i1  -> i2
     | i1     , i2  when isempty i2  -> i1
     | (x1,y1), (x2,y2)              -> Order.min x1 x2, Order.max y1 y2
+@
+
+<<module Interval struct>>=
+let min i j = match i, j with
+    | i           , j when isempty i -> j
+    | i           , j when isempty j -> i
+    | (x1,y1 as i), (x2,y2 as j)     -> if Order.lt x1 x2 then i else j
+let max i j = match i, j with
+    | i           , j when isempty i -> j
+    | i           , j when isempty j -> i
+    | (x1,y1 as i), (x2,y2 as j)     -> if Order.gt y1 y2 then i else j
 @
 
 To order intervals, they are compared by their first component first

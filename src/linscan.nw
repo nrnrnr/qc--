@@ -305,6 +305,8 @@ to implement everything that is provoded by [[Arg]] and get rid of it.
 module type Args = sig
     val fits : Rtl.space -> Register.t -> bool
         (* fits s r = true, iff r can hold any value from space s *) 
+    val is_tmp : Rtl.space -> bool
+        (* true, iff space belongs to the temporary space *)
 end
 @
 
@@ -329,8 +331,6 @@ end
 @
 
 <<Make>>=
-exception Retry of Cfg3.t
-
 (* general purpose functions 
  * - iter walks over cfg, update RTLs in nodes using f
  *)
@@ -364,8 +364,7 @@ temporaries to the current node and its successors.
 let linscan cfg lifetimes =
     let iter cfg f = Cfg3.fold cfg (fun node () -> f node) () in
     let alloc      = <<allocator>>                            in
-        try  iter cfg alloc 
-        with Retry cfg -> raise (Retry cfg)
+        iter cfg alloc 
 @
 
 The allocator takes a node and replaces all temporaries by hardware
@@ -377,7 +376,7 @@ fun node ->
     let spill     = fun cfg loc intv  -> assert false in (* continuation *)
         ( match find_tmp node with
         | None     -> ()
-        | Some tmp -> replace_tmp cfg tmp lifetimes allocated spill
+        | Some tmp -> replace_tmp cfg tmp lifetimes node allocated spill
         )
 @
 
@@ -404,13 +403,15 @@ such register can be found.
 \end{quote}
 
 Our implementation is simple and returns the first temporary it
-finds. 
+finds. The [[read_write_lists]] functions returns all registers read
+or written by an {\rtl} and thus we have to look for temporaries
+explicitly.
 
 <<Make>>=
 let find_tmp node = 
     let uses space index width = function
-        | None -> Some (space, index, width)
-        | x    -> x 
+        | None when is_tmp space -> Some (space, index, width)
+        | x                      -> x 
     in
         Rtlutil.read_write_lists uses uses (Cfg3.rtl node) None    
 @       
@@ -445,23 +446,56 @@ let find_reg = first_fit        (* first_fit is a possible find_reg impl *)
 
 When no register can be found to hold regsiter [[t]], we have to spill
 a register which can be either a hardware register, or a temporary. 
-The [[find_spillee]] function receives the [[lifetimes]] map and the
-register [[t]] that we could not find a register for.  The function
-returns a register to spill and a region, where to spill it.
+The [[find_spillee]] function receives the [[lifetimes]] map, the
+register [[t]] that we could not find a register for, and the [[node]]
+under consideration in the linear scan.  The function returns a
+register to spill and a region, where to spill it.
+
+For finding a spillee, we use the policy described by
+\cite{poletto:99:toplas}:  consider the temporary that could not be
+placed and all hardware registers currently in use and spill the one
+that is used farest\footnote{with respect to the node numbering} in
+the program.  This means, we look at the bounding boxes of these
+registers and spill the one that ends last.
+
+Registers currently in use, or \emph{active}, are those whose
+lifetime's bounding box overlaps with the current node.  This is a
+superset of all nodes used by the current node.  The function
+[[longest]] computes a list of all registers active at the current
+node plus the temporay [[tmp]], and returns the register whose
+lifetime bounding box ends last. 
 
 <<Make>>=
-(* val find_spillee : lifetimes -> loc -> loc * Lifetime.Interval.t 
- *)
+let active node tmp lifetimes =
+    let nodei = I.mk (Cfg3.number node) (Cfg3.number node + 1) in
+    let find loc lt (maxloc,maxi as m) = 
+        let loci = L.bbox lt in 
+            if (I.overlaps loci nodei) && (I.max maxi loci = loci) 
+            then (loc,loci) else m                             in            
+    let init = tmp, L.bbox (RM.find tmp lifetimes)             in
+    let (loc,_) = RM.fold find lifetimes init                  in
+        loc
+@        
 
-let find_spillee lifetimes tmp = assert false
+<<find_spillee type>>= 
+lifetimes -> loc -> Cfg3.node -> loc * I.t 
+<<Make>>=
+let find_spillee: <<find_spillee type>> = fun lifetimes tmp node ->
+    let cfg      = Cfg3.cfg node                    in
+    let last     = Cfg3.number (Cfg3.last cfg)      in
+    let register = active node tmp lifetimes        in
+    let interval = I.mk (Cfg3.number node) (last+1) in
+        register, interval
 @
 
 The [[replace_temporary]] function tries to replace temporary [[t]] in
 [[graph]] with a hardware register. On success, it calls continuation
-[[allocated]], on failure [[spill]].
+[[allocated]], on failure [[spill]]. The parameter [[node]] indicates
+what node is currently under consideration in the linear scan
+allocator. 
 
 <<Make>>=
-let replace_tmp (graph:Cfg3.t) (t:Register.t) lifetimes allocated spill =
+let replace_tmp (graph:Cfg3.t) (t:Register.t) lifetimes node allocated spill =
   let lifetime = lookup lifetimes in
   match find_reg lifetimes t with
   | Some r -> (* successfully found a hardware register *)
@@ -470,7 +504,7 @@ let replace_tmp (graph:Cfg3.t) (t:Register.t) lifetimes allocated spill =
       let ()        = iter graph (Rtlutil.Subst.reg (replace t r)) in
           allocated graph lifetimes
   | None ->
-      let spillee, interval = find_spillee lifetimes t in (* chooses t or a h/w reg *)
+      let spillee, interval = find_spillee lifetimes t node in 
           spill graph spillee interval
 @
 
