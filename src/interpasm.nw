@@ -46,6 +46,7 @@ module Asm      = Asm3
 module G        = Cfg4
 module GU       = Cfgutil
 module RL       = Rtltolua
+module RP       = Rtl.Private
 
 <<PERSONALITY>>
 <<S>>
@@ -208,13 +209,15 @@ object (this)
 
     (* instructions *)
     method cfg_instr (proc:Proc.t) =
-        let cfg    = proc.Proc.cfg    in
-        let symbol = proc.Proc.symbol in
-        let vars   = proc.Proc.vars   in (* number of locals *) 
+        let cfg     = proc.Proc.cfg               in
+        let symbol  = proc.Proc.symbol            in
+        let vars    = proc.Proc.vars              in (* number of locals *)
+        let stackd  = Block.size proc.Proc.stackd in (* stackdata size   *)
         let fprintf = Printf.fprintf in
-        ( fprintf fd "CMM.procedure ('%s',%d,0) -- stack data size wrong\n" 
+        ( fprintf fd "CMM.procedure ('%s',%d,%d) -- stack data size correct\n" 
                       symbol#text
                       vars
+                      stackd
         ; G.interp cfg _fd
         ; fprintf fd "CMM.end_procedure()\n"
         )
@@ -264,6 +267,11 @@ object (this)
                                         (List.map quoted
 											(Strutil.Set.elements _exported))))
     
+    (* this is wrong!!! *)
+    method private globals =
+          luafunc "globals" "36"
+
+
     (* -- Advertise pointer sizes and such for this assembler -- *)
 
     method private personality =
@@ -276,7 +284,8 @@ object (this)
         ^ luafunc "ptrsize"   (string_of_int P.target.T.pointersize)
     
     method emit = 
-        let toplevel = this#imports ^ this#exports ^ this#personality in
+        let toplevel = this#imports ^ this#exports ^ this#personality
+                     ^ this#globals                                   in
         ( _fprintf (luafunc "end_section" "")
         ; _fprintf toplevel
         )
