@@ -266,6 +266,7 @@ C.register_module "Asm"
   ; "dot" , V.efunc (Map.outchan **->> Map.asm) (Dotasm.asm ~compress:true ~live:false)
   ; "big_dot" , V.efunc (Map.outchan **->> Map.asm) 
                             (Dotasm.asm ~compress:false ~live:true)
+  ; "ppc",   V.efunc (Map.outchan **->> Map.asm) (Ppcasm.make Cfgutil.emit)
   ; "x86" ,  V.efunc (Map.outchan **->> Map.asm) (X86asm.make Cfgutil.emit)
   ; "mips",  V.efunc (Map.outchan **->> Map.asm) (Mipsasm.make Cfgutil.emit)
   ; "alpha", V.efunc (Map.outchan **->> Map.asm) (Alphaasm.make Cfgutil.emit)
@@ -469,7 +470,8 @@ C.register_module "Debug"
 @
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Expander"
-  [ "x86f" , backplane_stage X86.X.cfg
+  [ "ppc"  , backplane_stage Ppc.X.cfg
+  ; "x86f" , backplane_stage X86.X.cfg
   ; "mips" , backplane_stage Mips.X.cfg
   ; "alpha", backplane_stage Alpha.X.cfg
   ; "ppc",   backplane_stage Ppc.X.cfg
@@ -491,6 +493,7 @@ C.register_module "Placevar"
   [ "fortran", backplane_stage Placevar.fortran'
   ; "contextfn", V.efunc ((Map.proc --> Map.automaton) **->>  (* currying *)
                         V.func (V.value **-> Map.proc **->> V.bool)) Placevar.context
+  ; "ppc",     V.efunc (Map.proc **->> Map.automaton)       Ppc.placevars
   ; "x86",     V.efunc (Map.proc **->> Map.automaton)       X86.placevars
   ; "mips",    V.efunc (Map.proc **->> Map.automaton)       Mips.placevars
   ; "ppc",     V.efunc (Map.proc **->> Map.automaton)       Ppc.placevars
@@ -527,6 +530,7 @@ C.register_module "Stages"
 C.register_module "Targets"
   [ "dummy32l", Map.new_target.V.embed Dummy.dummy32l'
   ; "dummy32b", Map.new_target.V.embed Dummy.dummy32b'
+  ; "ppc",      Map.new_target.V.embed Ppc.target
   ; "x86",      Map.new_target.V.embed X86.target
   ; "mips",     Map.new_target.V.embed Mips.target
   ; "alpha",    Map.new_target.V.embed Alpha.target
