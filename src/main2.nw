@@ -54,9 +54,10 @@ module L1   = Lua.Lib.Combine.L10                   (* up to 10 libraries *)
                 (Linscan.Make (T.T4))
                 (IO (Luautil.MakeLib))
                 
-module L2   = Lua.Lib.Combine.L2                    (* add up to 9 more libs *)
+module L2   = Lua.Lib.Combine.L3                    (* add up to 9 more libs *)
                 (L1)
                 (Dummyexpander.Make (T.T4))
+                (Sparcexpander.Make (T.T4))
                 
 module I    = Lua.MakeInterp                            (* our interpreter *)
                 (Lua.Parser.MakeStandard)
@@ -272,6 +273,7 @@ CodeExpandStages =
     { placeVars = mkS("placeVars", PV.placeVars)
     , generic   = mkS("expander" , PV.expander)
     , dummy     = mkS("expander" , Dummyexpand.expand)
+    , sparc     = mkS("expander" , Sparcexpand.expand)
     }
 
 
@@ -283,6 +285,12 @@ codeExpand =
 codeDummyExapnd = -- experimental expander for CL
     seq({ single(CodeExpandStages.placeVars)
         , single(CodeExpandStages.dummy)
+        })
+
+
+codeSparcExapnd = -- experimental expander for CL
+    seq({ single(CodeExpandStages.placeVars)
+        , single(CodeExpandStages.sparc)
         })
     
 placeVars = single(CodeExpandStages.placeVars)
@@ -360,6 +368,15 @@ function dummy (proc)
     local action = seq
         { single(CodeExpandStages.placeVars)
         , single(CodeExpandStages.dummy)
+        } 
+    run(action, proc, {})    
+end    
+        
+-- run the Burg generated dummy expander -- experimental for CL
+function sparc (proc)
+    local action = seq
+        { single(CodeExpandStages.placeVars)
+        , single(CodeExpandStages.sparc)
         } 
     run(action, proc, {})    
 end    

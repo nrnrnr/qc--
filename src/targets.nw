@@ -1,4 +1,5 @@
 % -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% vim: ts=8 et sw=4:
 
 % ------------------------------------------------------------------ 
 \section{Targets supported by the compiler}
@@ -6,23 +7,71 @@
 
 This module is a central location holding all targets the compiler
 supports.
+
 <<targets.mli>>=
-val dummy : Target2.t
-module MakeLib  
-      (TargetV : Lua.Lib.TYPEVIEW with type 'a t = Target2.t)
-        : Lua.Lib.TYPEFUL with type 'a combined = 'a TargetV.combined 
+val dummy : Target2.t 
+
+module MakeLib  (TargetV : Lua.Lib.TYPEVIEW with type 'a t = Target2.t)
+    : Lua.Lib.TYPEFUL with type 'a combined = 'a TargetV.combined 
 @ 
 
 % ------------------------------------------------------------------ 
-\subsection{Utilities and abbreviations}
+\subsection{Implementation}
 % ------------------------------------------------------------------ 
 
 <<targets.ml>>=
-module R = Rtl
+module R  = Rtl
 module RP = Rtl.Private
-module S = Space
-module T = Target2
+module S  = Space
+module T  = Target2
 
+type 'a map = 'a T.map =
+    { embed:    ('a -> Rtl.rtl)
+    ; project:  (Rtl.rtl -> 'a)
+    } 
+
+<<target-independent utilities>>
+@
+
+We have one sub-module per target to keep the name space clean.
+
+
+<<targets.ml>>=
+module DummyTarget = struct 
+    <<DummyTarget>>
+end
+let dummy = DummyTarget.target
+
+module SparcTarget = struct
+    <<SparcTarget>>
+end   
+@
+
+All targets are exported as Lua values. 
+
+<<targets.ml>>=
+module MakeLib  (TargetV : Lua.Lib.TYPEVIEW with type 'a t = Target2.t)
+    : Lua.Lib.TYPEFUL with type 'a combined = 'a TargetV.combined  = 
+struct
+    type 'a combined = 'a TargetV.combined
+    module M (C : Lua.Lib.CORE with type 'a V.userdata' = 'a combined) =
+    struct
+        let target = TargetV.makemap C.V.userdata C.V.projection
+        let targets =
+            [ "dummy",  target.C.V.embed dummy 
+            ; "sparc",  target.C.V.embed SparcTarget.target
+            ]
+        let init = C.register_module "Targets" targets
+    end (*M*)
+end 
+
+@ 
+
+% ------------------------------------------------------------------ 
+\subsection{Target-independent Utilities}
+% ------------------------------------------------------------------ 
+
+<<target-independent utilities>>=
 module StrMap  = Map.Make(struct type t=string let compare=compare end)
 module CharMap = Map.Make(struct type t=char   let compare=compare end)
 
@@ -38,81 +87,48 @@ end
 
 module StrUtil  = MapUtil(StrMap)
 module CharUtil = MapUtil(CharMap) 
+@
 
-type 'a map = 'a T.map =
-    { embed:    ('a -> Rtl.rtl)
-    ; project:  (Rtl.rtl -> 'a)
-    } 
+The [[assign]] function converts both registers to [[Rtl.loc]] values and
+then uses the [[Rtl]] framework to create an assignment. Returned
+{\rtl}s must respect the machine invariant. This is currently not the
+case!   
 
+<<target-independent utilities>>=
+module Spill = struct
+    let assign lookup ~src:(src_sp,_,src_w as src) 
+                      ~dst:(dst_sp,_,dst_w as dst) =
+        if src_w <> dst_w then
+            invalid_arg 
+                "Target2.assign source and destination width don't match"
+        else
+            let src_loc = Register.to_loc lookup src  in
+            let dst_loc = Register.to_loc lookup dst  in
+                Rtl.store dst_loc (Rtl.fetch src_loc src_w)  dst_w
+
+    let spill lookup (sp,index,width as reg) loc =
+        if Rtlutil.Width.loc loc <> width then
+            invalid_arg "Target2.spill size mismatch"
+        else
+            let reg_loc = Register.to_loc lookup reg in
+            let rtl     = Rtl.store loc (Rtl.fetch reg_loc width) width in
+                [rtl]
+
+    let reload lookup (sp,index,width as reg) loc =
+        if Rtlutil.Width.loc loc <> width then
+            invalid_arg "Register.spill size mismatch"
+        else
+            let reg_loc = Register.to_loc lookup reg  in
+            let rtl     = Rtl.store reg_loc (Rtl.fetch loc width) width in
+                [rtl]
+end
 @ 
-
 
 % ------------------------------------------------------------------ 
 \subsection{Dummy Target}
 % ------------------------------------------------------------------ 
 
-\begin{center}
-    \begin{tabular}{ll}
-    \hline
-    \multicolumn{2}{c}{Memory Space \emph{R}}\\
-    \hline
-    Cellwidth    & 32                    \\
-    Byteorder    & indentity             \\
-    Addresswidth & 5                     \\
-    \hline
-    Index        & Purpose               \\
-    \hline
-    31            & SP                    \\
-    \dots        & general purpose       \\
-    \end{tabular}
-\end{center}    
-
-
-<<targets.ml>>=
-let const n width = Rtl.bits (Bits.of_int n width) width
-let reg n         = Rtl.cell Rtl.none 'r' Rtl.Identity 32 (const n 5)
-let pc            = Rtl.cell Rtl.none 'c' Rtl.Identity 32 (const 0 1)
-let mem addr      = Rtl.cell Rtl.none 'm' Rtl.BigEndian 32 addr
-let assign loc e  = Rtl.store loc e (Rtlutil.Width.exp e)       
-    
-(* this is total nonsense - it's just for toying around *)
-
-let goto_embed e     = assign pc e
-let goto_project rtl = match R.Convert.rtl rtl with
-    | RP.Rtl([(_,RP.Store(loc,exp,width))]) -> R.Revert.exp exp
-    | _                                     -> assert false
-
-
-let goto =
-    { embed   = goto_embed
-    ; project = goto_project
-    }
-
-let branch_embed (e,addr) = R.guard e (assign pc addr)
-let branch_project rtl  = match R.Convert.rtl rtl with
-    | RP.Rtl([(e,RP.Store(loc,addr,width))]) -> ( R.Revert.exp e
-                                                , R.Revert.exp addr
-                                                )
-    | _                                      -> assert false
-
-let branch =
-    { embed   = branch_embed
-    ; project = branch_project
-    }
-
-
-let cc =
-    { T.sp              = reg 31
-    ; T.return          = assign pc (R.fetch (mem (R.fetch (reg 31) 32)) 32)
-    ; T.proc            = Automaton.dummy
-    ; T.cont            = Automaton.dummy
-    ; T.ret             = Automaton.dummy
-    ; T.allocatable     = List.concat 
-                            [ List.map (fun n -> ('r',n,32)) [3;4;5]
-                            ; List.map (fun n -> ('f',n,32)) [1;2;3]
-                            ]
-    }
-
+<<DummyTarget>>=
 let spaces = 
     [     { S.space = 'r'
           ; S.cellwidth   = 32
@@ -135,9 +151,9 @@ let spaces =
           } 
 
     ;     { S.space = 'm'
-          ; S.cellwidth   = Dummy.wordsize
-          ; S.aggregation = Dummy.byteorder 
-          ; S.indexwidth  = Dummy.pointersize
+          ; S.cellwidth   = 8
+          ; S.aggregation = Rtl.BigEndian
+          ; S.indexwidth  = 32
           ; S.indexlimit  = None
           ; S.aggsize     = [1;2;4]
           ; S.classification = S.Mem
@@ -183,49 +199,63 @@ let spaces =
           ; S.doc         = "control and status registers"
           } 
 
-    ]      
+    ]     
+    
+let const n width = Rtl.bits (Bits.of_int n width) width
+let reg n         = Rtl.cell Rtl.none 'r' Rtl.Identity 32 (const n 5)
+let pc            = Rtl.cell Rtl.none 'c' Rtl.Identity 32 (const 0 1)
+let mem addr      = Rtl.cell Rtl.none 'm' Rtl.LittleEndian 32 addr
+let assign loc e  = Rtl.store loc e (Rtlutil.Width.exp e)       
+    
+(* this is total nonsense - it's just for toying around *)
+
+let goto_embed e     = assign pc e
+let goto_project rtl = match R.Convert.rtl rtl with
+    | RP.Rtl([(_,RP.Store(loc,exp,width))]) -> R.Revert.exp exp
+    | _                                     -> assert false
+
+
+let goto =
+    { embed   = goto_embed
+    ; project = goto_project
+    }
+
+let branch_embed (e,addr) = R.guard e (assign pc addr)
+let branch_project rtl  = match R.Convert.rtl rtl with
+    | RP.Rtl([(e,RP.Store(loc,addr,width))]) -> ( R.Revert.exp e
+                                                , R.Revert.exp addr
+                                                )
+    | _                                      -> assert false
+
+let branch =
+    { embed   = branch_embed
+    ; project = branch_project
+    }
+
+let cc =
+    { T.sp              = reg 31
+    ; T.return          = assign pc (R.fetch (mem (R.fetch (reg 31) 32)) 32)
+    ; T.proc            = Automaton.dummy
+    ; T.cont            = Automaton.dummy
+    ; T.ret             = Automaton.dummy
+    ; T.allocatable     = List.concat 
+                            [ List.map (fun n -> ('r',n,32)) [3;4;5]
+                            ; List.map (fun n -> ('f',n,32)) [1;2;3]
+                            ]
+    }
+ 
 @
 
-The [[assign]] function converts both registers to [[Rtl.loc]] values and
-then uses the [[Rtl]] framework to create an assignment. Returned
-{\rtl}s must respect the machine invariant. This is currently not the
-case!   
 
-% XXX
-
-<<targets.ml>>=
-let assign lookup ~src:(src_sp,_,src_w as src) ~dst:(dst_sp,_,dst_w as dst) =
-    if src_w <> dst_w then
-        invalid_arg "Target2.assign source and destination width don't match"
-    else
-        let src_loc = Register.to_loc lookup src  in
-        let dst_loc = Register.to_loc lookup dst  in
-            Rtl.store dst_loc (Rtl.fetch src_loc src_w)  dst_w
-
-let spill lookup (sp,index,width as reg) loc =
-    if Rtlutil.Width.loc loc <> width then
-        invalid_arg "Target2.spill size mismatch"
-    else
-        let reg_loc = Register.to_loc lookup reg in
-        let rtl     = Rtl.store loc (Rtl.fetch reg_loc width) width in
-            [rtl]
-
-let reload lookup (sp,index,width as reg) loc =
-    if Rtlutil.Width.loc loc <> width then
-        invalid_arg "Register.spill size mismatch"
-    else
-        let reg_loc = Register.to_loc lookup reg  in
-        let rtl     = Rtl.store reg_loc (Rtl.fetch loc width) width in
-            [rtl]
-    
-let dummy = 
+<<DummyTarget>>=
+let target = 
     { T.name            = "dummy"
-    ; T.byteorder       = Dummy.byteorder         
-    ; T.wordsize        = Dummy.wordsize
-    ; T.pointersize     = Dummy.pointersize
-    ; T.memsize         = Dummy.memsize
-    ; T.float           = Dummy.float
-    ; T.charset         = Dummy.charset
+    ; T.byteorder       = Rtl.LittleEndian
+    ; T.wordsize        = 32
+    ; T.pointersize     = 32
+    ; T.memsize         = 8
+    ; T.float           = "ieee754"
+    ; T.charset         = "latin1"
     ; T.globals         = Automaton.dummy
     ; T.register        = StrUtil.lookup StrMap.empty (* no registers *)
     ; T.goto            = goto
@@ -235,28 +265,165 @@ let dummy =
     ; T.branch          = branch
     ; T.cc              = StrUtil.lookup (StrUtil.list2map [("C--",cc)])
     ; T.spaces          = spaces 
-    ; T.assign          = assign
-    ; T.spill           = spill
-    ; T.reload          = reload
+    ; T.assign          = Spill.assign
+    ; T.spill           = Spill.spill
+    ; T.reload          = Spill.reload
     ; T.data_section    = "data"
     ; T.stack_slots     = Automaton.dummy
     }
-
 @ 
-Here's the Lua support for targets.
-<<targets.ml>>=
-module MakeLib  
-      (TargetV : Lua.Lib.TYPEVIEW with type 'a t = Target2.t)
-        : Lua.Lib.TYPEFUL with type 'a combined = 'a TargetV.combined  =
-  struct
-    type 'a combined = 'a TargetV.combined
-    module M (C : Lua.Lib.CORE with type 'a V.userdata' = 'a combined) =
-      struct
-        let target = TargetV.makemap C.V.userdata C.V.projection
-        let targets =
-          [ "dummy",  target.C.V.embed dummy 
-          ]
-        let init = C.register_module "Targets" targets
-      end (*M*)
-  end (*MakeLib*)
+
+% ------------------------------------------------------------------ 
+\subsection{Sparc Target}
+% ------------------------------------------------------------------ 
+
+
+
+<<SparcTarget>>=
+let spaces = 
+    [     { S.space = 'r'
+          ; S.cellwidth   = 32
+          ; S.aggregation = Rtl.Identity
+          ; S.indexwidth  = 5
+          ; S.indexlimit  = None
+          ; S.aggsize     = [1]
+          ; S.classification = S.Reg
+          ; S.doc         = "general-purpose registers"
+          } 
+
+    ;     { S.space = 'f'
+          ; S.cellwidth   = 32
+          ; S.aggregation = Rtl.Identity
+          ; S.indexwidth  = 5
+          ; S.indexlimit  = None
+          ; S.aggsize     = [1]
+          ; S.classification = S.Reg
+          ; S.doc         = "floating-point registers"
+          } 
+
+    ;     { S.space = 'm'
+          ; S.cellwidth   = 8
+          ; S.aggregation = Rtl.LittleEndian
+          ; S.indexwidth  = 32
+          ; S.indexlimit  = None
+          ; S.aggsize     = [1;2;4]
+          ; S.classification = S.Mem
+          ; S.doc         = "main memory"
+          
+          }
+          
+    ;     { S.space = 't'
+          ; S.cellwidth   = 32
+          ; S.aggregation = Rtl.Identity
+          ; S.indexwidth  = 16
+          ; S.indexlimit  = None
+          ; S.aggsize     = [1]
+          ; S.classification =
+               S.Temp { S.stands_for = 'r'
+                      ; S.index_ok   = (fun _ -> true)
+                      ; S.set_doc    = "any register"
+                      } 
+          ; S.doc         = "general-purpose temporaries"
+          }
+
+    ;     { S.space = 'u'
+          ; S.cellwidth   = 32
+          ; S.aggregation = Rtl.Identity
+          ; S.indexwidth  = 16
+          ; S.indexlimit  = None
+          ; S.aggsize     = [1; 2]
+          ; S.classification =
+               S.Temp { S.stands_for = 'f'
+                      ; S.index_ok   = (fun _ -> true)
+                      ; S.set_doc    = "any register"
+                      } 
+          ; S.doc         = "floating-point temporaries"
+          }
+
+    ;     { S.space = 'c'
+          ; S.cellwidth   = 32
+          ; S.aggregation = Rtl.Identity
+          ; S.indexwidth  = 5
+          ; S.indexlimit  = Some 6
+          ; S.aggsize     = [1]
+          ; S.classification = S.Fixed
+          ; S.doc         = "control and status registers"
+          } 
+
+    ]      
+@
+
+The following definitions are repeated in the code expander for the
+Sparc. I therefore suggest to factor them out into a separate module.
+
+<<SparcTarget>>=
+let const n width = Rtl.bits (Bits.of_int n width) width
+let reg n         = Rtl.cell Rtl.none 'r' Rtl.Identity 32 (const n 5)
+let fp  n         = Rtl.cell Rtl.none 'f' Rtl.Identity 32 (const n 5)
+let pc            = Rtl.cell Rtl.none 'c' Rtl.Identity 32 (const 4 5)
+let mem addr      = Rtl.cell Rtl.none 'm' Rtl.LittleEndian 32 addr
+let assign loc e  = Rtl.store loc e (Rtlutil.Width.exp e)       
+    
+(* this is total nonsense - it's just for toying around *)
+
+let goto_embed e     = assign pc e
+let goto_project rtl = match R.Convert.rtl rtl with
+    | RP.Rtl([(_,RP.Store(loc,exp,width))]) -> R.Revert.exp exp
+    | _                                     -> assert false
+
+
+let goto =
+    { embed   = goto_embed
+    ; project = goto_project
+    }
+
+let branch_embed (e,addr) = R.guard e (assign pc addr)
+let branch_project rtl  = match R.Convert.rtl rtl with
+    | RP.Rtl([(e,RP.Store(loc,addr,width))]) -> ( R.Revert.exp e
+                                                , R.Revert.exp addr
+                                                )
+    | _                                      -> assert false
+
+let branch =
+    { embed   = branch_embed
+    ; project = branch_project
+    }
+
+
+let cc =
+    { T.sp              = reg 31
+    ; T.return          = assign pc (R.fetch (mem (R.fetch (reg 31) 32)) 32)
+    ; T.proc            = Automaton.dummy
+    ; T.cont            = Automaton.dummy
+    ; T.ret             = Automaton.dummy
+    ; T.allocatable     = List.concat 
+                            [ List.map (fun n -> ('r',n,32)) [3;4;5]
+                            ; List.map (fun n -> ('f',n,32)) [1;2;3]
+                            ]
+    }
+
+let target = 
+    { T.name            = "sparc"
+    ; T.byteorder       = Rtl.LittleEndian
+    ; T.wordsize        = 32
+    ; T.pointersize     = 32
+    ; T.memsize         = 8
+    ; T.float           = "ieee754"
+    ; T.charset         = "latin1"
+    ; T.globals         = Automaton.dummy
+    ; T.register        = StrUtil.lookup StrMap.empty (* no registers *)
+    ; T.goto            = goto
+    ; T.jump            = goto
+    ; T.cutto           = goto
+    ; T.call            = goto
+    ; T.branch          = branch
+    ; T.cc              = StrUtil.lookup (StrUtil.list2map [("C--",cc)])
+    ; T.spaces          = spaces 
+    ; T.assign          = Spill.assign
+    ; T.spill           = Spill.spill
+    ; T.reload          = Spill.reload
+    ; T.data_section    = "data"
+    ; T.stack_slots     = Automaton.dummy
+    }
+@ 
 

@@ -1,0 +1,580 @@
+
+% ------------------------------------------------------------------ 
+\section{Sparc Code Expander}
+% ------------------------------------------------------------------ 
+
+This module provides an [[expand]] function that re-writes an {\rtl}
+into a sequence of {\rtl}s such that each is representable as a machine
+instruction on the {\sparc}. Hence, the code expander establishes the
+\emph{machine invariant} for the {\sparc}.
+
+The code expander is implemented as a {\burg} rule set. All auxiliary
+functions are into the [[head]] and [[tail]] section of the {\burg}
+specification.
+
+<<sparcexpander.mlb>>=
+%head {: <<head>> :}
+<<terminal types>>
+%tail {: <<tail>> :}
+%%
+<<rules>>
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Utilities}
+% ------------------------------------------------------------------ 
+
+<<head>>=
+module R  = Rtl
+module RP = Rtl.Private
+module RU = Rtlutil
+module S  = Space
+module T  = Target2
+module C  = Camlburg
+module D  = Rtl.Convert      (* Convert Down to private repr. *)
+module U  = Rtl.Revert       (* Convert Up    to abstract repr. *)
+module W  = Rtlutil.Width 
+module G  = Cfg3             (* for expanding all RTLs in a CFG *)
+module GU = Cfgutil
+@
+
+We raise an error exception in case things go wrong. There is no need to
+chatch the exception because all errors are fatal.
+
+<<head>>=
+exception Error of string
+let error msg = raise (Error msg)
+@
+
+Many transformations return both a list of {\rtl}s and a location where
+a certain value can be found. To avoid the constant pattern matching of
+the returned values, we use a monadic programming style. A state monad
+[[m]] holds the list of resulting {\rtl}s and a source for temporaries.
+The functions [[return]] and [[>>=]] are the two standard monadic
+functions \emph{unit} and \emph{bind}.
+
+<<head>>=
+type state = R.rtl list * Talloc.Multiple.t
+type 'a m  = state -> ('a * state)
+
+let return a  = fun s -> (a, s)
+let (>>=) (m: 'a m) (f: 'a -> 'b m) = fun s -> let (a,s) = m s in f a s 
+@
+
+We save an {\rtl} to the state with [[exec]]. {\rtl}s are saved in
+\emph{reverse exceution order}.
+
+<<head>>=
+let exec  rtl  = fun (rtls,tmp) -> ((), (rtl :: rtls,tmp)) 
+@
+
+New tempoaries come as integer and floating point varieties. You have to
+supply the desired with of the new temporary.
+
+<<head>>=
+let itmp w = fun (rtls,tmp as state) -> (Talloc.Multiple.loc tmp 't' w, state)
+let ftmp w = fun (rtls,tmp as state) -> (Talloc.Multiple.loc tmp 'u' w, state)
+@
+
+The expander develops expressions into locations and returns them. In an
+right-hand-side context a location must be wrapped with a fetch
+instruction to form an excpetion. The [[fetch]] function is handy,
+because it takes care of the width of a location.
+
+<<head>>=
+let fetch   t = R.fetch t (W.loc t)
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Sparc Instructions}
+% ------------------------------------------------------------------ 
+
+<<head>>=
+let const n width   = R.bits (Bits.of_int n width) width
+let rd n            = R.cell R.none 'r' R.Identity 32 (const n 5)
+let fd n            = R.cell R.none 'f' R.Identity 32 (const n 5)
+let cd n            = R.cell R.none 'c' R.Identity 32 (const n 5)
+
+let mem addr        = R.cell R.none 'm' R.LittleEndian 32 addr
+let pc              = cd 4
+let npc             = cd 5  
+let zero            = R.fetch (rd 0) 32
+
+let add x y         = R.app (R.opr "add" [32]) [x;y]
+let (<--) loc e     = R.store loc e (W.exp e)
+let sx32 w n        = R.app (R.opr "sx" [w;32]) [n]
+let zx32 w n        = R.app (R.opr "zx" [w;32]) [n]
+let or' r1 rc r2    = r2 <-- R.app (R.opr "or" [32]) [r1; rc] 
+@
+
+Index and displacement are the two addressing modes for load and store
+instructions. 
+
+<<head>>=
+let index r1 r2     = add (fetch r1) (fetch r2)         (* $r[r1] + $r[r2] *)
+let disp r1 imm     = add (fetch r1) (sx32 13 imm)      (* $r[r1] + simm13 *) 
+
+(* addr = index r1 r2 | disp r1 imm *)
+
+let ld addr r       = r         <--  fetch (mem addr)
+let st r addr       = mem addr  <--  r
+let ldf addr f      = f         <--  fetch (mem addr) 
+let stf f addr      = mem addr  <--  f
+let jmpl addr r     = R.par [npc <-- addr; r <-- fetch pc]
+let jmp  addr       = jmpl addr (rd 0)
+
+let mov  rc r       = r <-- rc              (* or' zero rc r *)
+let movr r1 r2      = r2 <-- fetch r1       (* or' zero (fetch r1) r2 *)
+let ret             = jmpl (disp (rd 7) (const 8 13)) (rd 0)
+let fmovs f1 f2     = f2 <-- fetch f1     
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Cost Functions}
+% ------------------------------------------------------------------ 
+
+Check that a bits [[b]] value fits into [[n]] bits.
+
+<<head>>=
+let is_imm n b =
+    let rec power2 = function
+        | 0 -> 1
+        | n -> 2 * power2 (n-1)
+    in    
+        try 
+            let i = Bits.to_int b 
+            and c = power2 n in
+            (- c) <= i || i <= (c-1)
+        with
+            Bits.Overflow -> false
+
+
+module StringSet = Set.Make(struct type t = string let compare = compare end)
+
+let float_ops = 
+    List.fold_right 
+        StringSet.add 
+        ["fcmp"; "fadd"; "fsub"; "fdiv"; "fmul"; "fabs"; "fneg"; "fsqrt"]
+        StringSet.empty
+@
+
+To simplify guarded effects we have to know which operators return
+boolean values. All operators that take \emph{and} return boolean values
+have been re-written into control-flow structures and do not show up
+here. The operators listed here all take non-boolean arguments.
+
+<<head>>=
+let bool_ops = (* boolean valued primitive with non-boolean args *)
+    List.fold_right
+        StringSet.add
+        ["bool"; "eq"; "ge"; "geu"; "gt"; "gtu"; "le"; "leu"; "lt"; "ltu";
+         "ne"]
+         StringSet.empty
+
+let is_float_op (op,_) = StringSet.mem op float_ops
+let is_bool_op  (op,_) = StringSet.mem op bool_ops
+let is_int_op   opr    = not (is_float_op opr || is_bool_op opr) 
+
+let is_add_op = function
+    | ("add",_)     -> true
+    | _             -> false
+
+let cost = function
+    | true  ->  0
+    | false ->  C.inf_cost 
+@
+
+
+
+% ------------------------------------------------------------------ 
+\subsection{Code Expansion Rules}
+% ------------------------------------------------------------------ 
+
+The following table summarizes the nonterminals from the rule set. 
+
+\begin{tabular}{ll}
+    Nonterminal & Meaning \\ 
+    \hline
+    [[ireg]]    & integer computation that yields result in a register\\
+    [[freg]]    & same as [[ireg]] for floating-point computations\\
+    [[const]]   & constant
+    [[const13]] & constant that fits into 13 bits\\
+    [[guard]]   & boolean guard for effect\\
+\end{tabular}
+
+In a {\burg} pattern variables hold either polymorphic nonterminal
+values, or monomorphic terminal ({\ocaml}) values. Terminal types must
+be declared:
+
+<<terminal types>>=
+%term k width opr exps agg ass index bool bits link late x symbol
+@
+
+\begin{quote}\it
+    \begin{itemize}
+    
+    \item It is not clear what width constants in {\rtl}s that represent
+    instructions should have. The recognizer assumes that constants are
+    kept in 32 bits. --CL
+
+    \item The recognizer does not know the [[sethi]] instruction and
+    thus we cannot load large constants into registers.
+
+    \end{itemize}
+\end{quote}
+
+
+<<rules>>=
+const:      Bits(b:bits)        {: R.bits b (Bits.width b)  :}
+const:      Link(symbol,width)  {: R.link symbol width      :}
+@
+
+If a constant fits into 13 bits we create a 13-bit wide value to pass
+it. 
+
+<<rules>>=
+const13:    Bits(b:bits) [{: cost (is_imm 13 b):}] 
+            {: return (R.bits (Bits.cast 13 b) 13) :}
+
+reg:        const13 [1]
+            {: 
+                const13 >>= fun k ->
+                itmp 32 >>= fun t ->
+                exec (or' zero (sx32 13 k) t) >>= fun () ->     (* set *)
+                return t
+            :}    
+reg:        const [1] {: error "cannot load large constants" :}
+@
+
+Memory cells addresses are of either form: $\$r[r_1] + \$r[r_2]$, or
+$\$r[r_1] + c$. The [[addr]] nonterminal captures these addresses. Chain
+rules cover conversions.
+
+<<rules>>=
+disp:       Add(reg, const13)
+            {:
+                reg     >>= fun r ->
+                const13 >>= fun k ->
+                return (disp r k)       (* exp m *)
+            :}    
+                
+index:      Add(r1:reg, r2:reg)
+            {: 
+                r1 >>= fun r1 ->
+                r2 >>= fun r2 ->
+                return (index r1 r2)    (* exp m *)
+            :}
+
+addr:       reg     {: reg >>= fun r -> return (index (rd 0) r) :}
+addr:       const13 {: const13 >>= fun k -> return (disp (rd 0) k) :}
+addr:       disp    {: disp  :}
+addr:       index   {: index :}
+addr:       const   {: error "cannot handle large constants" :}    
+
+
+mem:        Cell('m', agg, width, addr, ass)
+            {:
+                addr >>= fun a ->
+                return (R.cell (U.assertion ass) 'm' agg width a)
+            :}    
+            
+stmt:       Store(mem, reg, width) [1]       
+            {:
+                mem  >>= fun m ->
+                reg  >>= fun r ->
+                return (m <-- fetch r)  (* st r addr *)
+            :}    
+
+stmt:       Store(mem, freg, width) [1]       
+            {:
+                mem  >>= fun m ->
+                freg >>= fun f ->
+                return (m <-- fetch f)  (* stf f addr *)
+            :}    
+
+reg:        Fetch(mem, width) [1]
+            {:
+                mem         >>= fun m ->
+                itmp width  >>= fun t ->
+                exec (t <-- fetch m) >>= fun () -> (* ld addr t *)
+                return t
+            :}    
+
+freg:       Fetch(mem, width) [1]
+            {:
+                mem         >>= fun m ->
+                ftmp width  >>= fun f ->
+                exec (f <-- fetch m) >>= fun () -> (* ldf addr f *)
+                return f
+            :}    
+
+@
+
+We categorize operands into floating-point, boolean, and integer
+operands. We need this to decided when to use floating-point registers.
+
+<<rules>>=
+fop:        Op(opr) [{: cost (is_float_op opr) :}]
+            {: U.opr opr :}
+
+iop:        Op(opr) [{: cost (is_int_op opr) :}]
+            {: U.opr opr :}
+
+bop:        Op(opr) [{: cost (is_bool_op opr) :}]
+            {: U.opr opr :}
+@
+
+Registers are categorized into interger, floating point, and control
+registers. Note, that temporaries are treated like hardware registers.
+
+<<rules>>=
+reg:        Cell(s:char, agg, width, k:const, ass) 
+            [{: cost (s = 'r' || s = 't') :}]
+            {:
+                return (R.cell (U.assertion ass) s agg width k)
+            :}    
+            
+freg:       Cell(s:char, agg, width, k:const, ass)
+            [{: cost (s = 'f' || s = 'u') :}]
+            {:
+                return (R.cell (U.assertion ass) s agg width k)
+            :}    
+            
+            
+creg:       Cell('c', agg, width, k:const, ass)
+            {:
+                return (R.cell (U.assertion ass) 'c' agg width k)
+            :}    
+
+@
+
+Moves between registers. There seems to be no way to move data from
+integer to floating-point registers and vice versa. 
+
+<<rules>>=
+stmt:       Store(r1:reg, r2:reg, width) [1]
+            {: 
+                r1 >>= fun r1 ->
+                r2 >>= fun r2 ->
+                return (movr r2 r1)
+            :}
+            
+stmt:       Store(f1:freg, f2:freg, width) [1]
+            {:
+                
+                f1 >>= fun f1 ->
+                f2 >>= fun f2 ->
+                return (fmovs f2 f1)
+            :}
+@
+
+Small constants can be loaded directly.
+
+<<rules>>=
+stmt:       Store(reg, const13, width) [1]
+            {:  
+                reg     >>= fun r ->
+                const13 >>= fun k ->
+                return (r <--  sx32 13 k)(* mov rc r *)
+            :}    
+@            
+
+Lists of registers. Nothing to see here.
+
+<<rules>>=
+regs:       Nil() {: return [] :}
+regs:       Cons(reg, regs) 
+            {: reg >>= fun r -> regs >>= fun rs -> return (r::rs) :}
+
+fregs:      Nil() {: return [] :}
+fregs:      Cons(freg, fregs) 
+            {: freg >>= fun r -> fregs >>= fun rs -> return (r::rs) :}
+@            
+
+Expressions are devleoped into register locations which are then passed
+around.
+
+<<rules>>=
+reg:        App(iop, regs) [1]
+            {:
+                regs >>= fun rs ->
+                let fetches = List.map fetch rs in
+                let exp     = R.app iop fetches in
+                let width   = W.exp exp         in
+                itmp width >>= fun t ->
+                exec (t <-- exp) >>= fun () ->
+                return t
+            :}
+
+freg:       App(fop, fregs) [1]
+            {:
+                fregs >>= fun fs ->
+                let fetches = List.map fetch fs in
+                let exp     = R.app fop fetches in
+                let width   = W.exp exp         in
+                ftmp width >>= fun f ->
+                exec (f <-- exp) >>= fun () ->
+                return f
+            :}
+
+<<rules>>=
+guard:      True()  {: return (R.bool true) :}
+guard:      False() {: return (R.bool false) :}
+
+
+gstmt:      GStmt(guard,stmt)
+            {: 
+                guard >>= fun g ->
+                stmt  >>= fun s ->      
+                return (R.guard g s)    (* rtl m *)
+            :}
+
+
+gstmts:     Nil() {:  return [] :}
+gstmts:     Cons(gstmt,gstmts)
+            {: gstmt  >>= fun s  -> gstmts >>= fun ss -> return (s::ss) :}
+
+rtl:        Rtl(gstmts) [1]
+            {:
+                gstmts            >>= fun rtls ->
+                exec (R.par rtls) >>= fun ()  ->
+                return ()
+            :}
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Interfacing {\rtl}s with the Expander}
+% ------------------------------------------------------------------ 
+
+<<tail>>=
+let rec map f = function
+    | []                        -> conNil ()
+    | x::xs                     -> conCons (f x) (map f xs)
+@    
+  
+Make sure that the above function [[map]] is \emph{not} in the same
+[[letrec]] as the functions below. In that case it becomes monomorphic
+and the code below will not type check! This mistake has taken me some
+time to spot.
+
+Because it is much easier in {\ocaml}, we decompose applications of the
+[[add]] primitive here.
+
+<<tail>>=  
+let const = function
+    | RP.Bool(true)             -> conTrue  ()
+    | RP.Bool(false)            -> conFalse ()
+    | RP.Link(s,w)              -> conLink s w
+    | RP.Late(s,w)              -> error "late compile time constant"
+    | RP.Bits(b)                -> conBits(b)
+
+let rec exp = function
+    | RP.Const(k)               -> const (k)
+    | RP.Fetch(l,w)             -> conFetch (loc l) w
+    | RP.App(("add",_),[x;y])   -> conAdd (exp x) (exp y)
+    | RP.App(opr,exps)          -> conApp (conOp opr) (map exp exps)
+
+and loc = function
+    | RP.Cell(char, aff, w, e, ass) -> conCell char aff w (exp e) ass 
+    | RP.Var(s, i, w)           -> error "var found"
+    | RP.Slice(w,i,loc)         -> error "cannot handle slice"
+    
+and stmt = function
+    | RP.Store(l,e,w)           -> conStore (loc l) (exp e) w
+    | RP.Kill(loc)              -> error "cannot handle kill"
+
+and guarded (e,eff)             =  conGStmt (exp e) (stmt eff)
+
+<<tail>>=  
+and rtl = function
+    | RP.Rtl(gs)                -> conRtl (map guarded gs)
+@
+
+The [[rtl]] function returns (the best) plan to rewrite a given {\rtl}.
+When this plan is executed, it returns a monadic value that includes the
+desired expanded {\rtl}s.
+
+<<tail>>=
+let expand tmps (r: R.rtl) = 
+    let plan = rtl (D.rtl r) in
+    try
+        match plan.rtl.Camlburg.action () ([],tmps) with
+            | (), (rtls,_) -> rtls
+    with 
+        Camlburg.Uncovered -> 
+            ( List.iter prerr_endline
+                [ "cannot expand this RTL:"
+                ; RU.ToString.rtl r
+                ]
+            ; assert false
+            )
+@                        
+
+% ------------------------------------------------------------------ 
+\subsection{Expanding an entire {\cfg}}
+% ------------------------------------------------------------------ 
+
+{\rtl}s do not live in isolation but belong to a procedure's {\cfg}.
+Since procedures are the basic units of compilation we want to expand
+all the {\rtl}s of a procedure. This requires to re-write the {\cfg}.
+
+Re-writing the {\cfg} mutates its structure and therefore we have to
+obtain first all the nodes whose {\rtl}s we want to expand. We cannot
+use the iterator provided by the {\cfg} module because it does not work
+under mutation.
+
+[[Cfg]] expands all {\rtl}s of a procedure and returns [[true]], if the 
+structure of the procedure's {\cfg} had to be modified.
+
+<<tail>>=
+let cfg proc =
+    let nodes       = GU.fold_bwd proc.Proc.cfg (fun n ns -> n::ns) []
+    and tmps        = proc.Proc.temps   (* source for temporaries *)
+    and insert n i  = G.gm_insert_assign_before i n
+    and modified    = ref false in
+    let expnd node =
+        match expand tmps (G.rtl node) with
+        | last :: preds ->
+            ( ignore (List.fold_left insert node preds)
+            ; G.set_rtl node (fun _ -> last)
+            ; modified := (preds <> [])
+            )
+        | [] -> assert false 
+    in    
+        ( List.iter expnd nodes
+        ; !modified
+        )
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Exporting the Expander to Lua}
+% ------------------------------------------------------------------ 
+
+Code expansion is part of {\qcc}'s backend that is controlled by a Lua
+interpreter. To make the expander accessible for Lua code, it is
+exported as a Lua primitive [[Sparcexpand.expand]].
+
+<<tail>>=
+module Make (ProcT: Lua.Lib.TYPEVIEW with type 'a t = Proc.t): 
+    Lua.Lib.TYPEFUL with type 'a combined = 'a ProcT.combined =
+struct
+    type 'a combined = 'a ProcT.combined
+    module M (C : Lua.Lib.CORE with type 'a V.userdata' = 'a combined) =
+    struct
+        <<export expander>>
+        let init = C.register_module "Sparcexpand" builtins
+    end (*M*)    
+end (*Make*)            
+
+<<export expander>>=
+module V  = C.V
+
+let ( **-> ) = V.( **-> )
+let proc     = ProcT.makemap V.userdata V.projection
+let pf t     = (V.pfunc t).V.embed    (* pure Lua function *)
+
+let builtins =
+    [ "expand" , pf (V.value **-> proc **-> V.result V.bool) (fun _ -> cfg)
+    ]
+@
+
