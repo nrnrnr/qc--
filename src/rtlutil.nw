@@ -1057,13 +1057,12 @@ module Exists = struct
       let rec rtl (RP.Rtl gs) = List.exists guarded gs
       and guarded (e, eff) = exp e || effect eff
       and effect eff = match eff with
-        | RP.Store(RP.Reg('c',_,_), _, _) -> false
         | RP.Store(l, e, _) -> loc l || exp e
-        | _ -> false
+        | RP.Kill l -> loc l
       and loc l = match l with
         | RP.Mem(_,_,_,e,_) -> exp e
         | RP.Slice(_,_,l')  -> loc l'
-        | _ -> false
+        | RP.Reg _ | RP.Var _ | RP.Global _ -> false
       and exp e = match e with
         | RP.Const c     -> const c
         | RP.Fetch(l, _) -> loc l
