@@ -265,7 +265,6 @@ end
 
 \begin{itemize}
 \item The scanner compiles, but is untested otherwise.
-\item Pragma lines, starting with a [[$]] are skipped.
 \item The entry point of the scanner is [[token]]:
       $$[[val token : Lexing.lexbuf -> Srcmap.map -> Parser.token]]$$
 
@@ -429,7 +428,13 @@ rule token = parse      (* raise Error in case of error *)
   | '"'         { fun map ->  shortstring lexbuf map "\"" (Buffer.create 80) }
   | "[["        { fun map ->  longstring  lexbuf 1 map (Buffer.create 160) }
 
-  | _           { fun map ->  error "illegal character" } 
+  | _           { fun map ->  error     
+                                ( Printf.sprintf 
+                                  "illegal character `%s' at character %d" 
+                                  (Char.escaped (Lexing.lexeme_char lexbuf 0))
+                                  (Lexing.lexeme_start lexbuf)
+                                )  
+                } 
 
 and skip = parse        (* skip to end of line *)
     eof         { fun map ->  P.EOF        }
@@ -446,8 +451,13 @@ and file_pragma = parse
                         ; token lexbuf map
                         )
                 }
-  | _           { fun map -> error "illegal character in $file pragma" }
-
+  | _           { fun map ->  error     
+                                ( Printf.sprintf 
+                                  "illegal character `%s' at character %d" 
+                                  (Char.escaped (Lexing.lexeme_char lexbuf 0))
+                                  (Lexing.lexeme_start lexbuf)
+                                )  
+                }
 and line_pragma = parse
     eof         { fun map -> error "illegal $file pragma" }
   | digit+      { fun map -> 
@@ -459,8 +469,13 @@ and line_pragma = parse
                         ; token lexbuf map
                         )
                 }        
-  | _           { fun map -> error "illegal character in $line pragma" }
-        
+  | _           { fun map ->  error     
+                                ( Printf.sprintf 
+                                  "illegal character `%s' at character %d" 
+                                  (Char.escaped (Lexing.lexeme_char lexbuf 0))
+                                  (Lexing.lexeme_start lexbuf)
+                                )  
+                }
 
 
 
