@@ -15,6 +15,8 @@ VERSION =       `date +%Y%m%d`
 
 prefix =        $config_prefix
 bindir =        $prefix/bin
+libdir =        $prefix/lib/qc--
+incdir =        $prefix/include/qc--
 man1dir =       $prefix/man/man1
 
 # ------------------------------------------------------------------ 
@@ -132,14 +134,26 @@ INSTALL =       bin/qc--                    \
                 man/man1/qc--.1             \
                 man/man1/qc--internals.1    \
                 man/man1/qc--interp.1       \
+                lib/libqc--interp.a         \
 
-install:V:      $INSTALL $bindir $man1dir   
+install-dirs:VQ:
+                for dir in $prefix $bindir $libdir $incdir $man1dir
+                do
+                   if [ ! -d $dir ]; then
+                     echo "  mkdir -p -m 755 $dir"
+                     mkdir -p -m 755 $dir
+                   fi
+                done
+
+install:V:      $INSTALL install-dirs
                 cp bin/qc--                             $bindir
                 [ -x bin/qc--.opt ] && cp bin/qc--.opt  $bindir
                 cp bin/qc--interp                       $bindir
-                cp bin/man1/qc--.1                      $man1dir
-                cp bin/man1/qc--internals.1             $man1dir
-                cp bin/man1/qc--interp.1                $man1dir
+                cp man/man1/qc--.1                      $man1dir
+                cp man/man1/qc--internals.1             $man1dir
+                cp man/man1/qc--interp.1                $man1dir
+                cp lib/libqc--interp.a                  $libdir
+                # XXX copy header files to $incdir
 
 # ------------------------------------------------------------------ 
 # print dependency graph
