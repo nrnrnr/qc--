@@ -245,6 +245,10 @@ val succs : last -> uid list
 val mid_instr  : middle -> Rtl.rtl
 val last_instr : last -> Rtl.rtl  (* may be nop for, e.g., [[Exit]] *)
 @ 
+<<zipcfg.mli>>=
+val iter_spans : (Spans.t -> unit) -> graph -> unit
+val fold_spans : (Spans.t -> 'a -> 'a) -> graph -> 'a -> 'a
+@ 
 \paragraph{Observing data flow}
 As noted above a node can contribute defs, uses, and kills to each
 outedge, and a non-join node may contribute uses to each inedge.
@@ -356,12 +360,11 @@ let goto_end =
 let zip = goto_start
 let unzip (n, ns) = Start (n, ns)
 <<definitions of [[Rep]]'s public functions>>=
-let last =
-  let rec last = function (Last l) -> l | Tail (_, t) -> last t in
-  function
-    | Start (f, t) -> last t
-    | Middle (h, m, t) -> last t
-    | End (h, l) -> l
+let rec lastt = function (Last l) -> l | Tail (_, t) -> lastt t 
+let last = function
+  | Start (f, t) -> lastt t
+  | Middle (h, m, t) -> lastt t
+  | End (h, l) -> l
 
 let first =
   let rec first = function (First f) -> f | Head (h, _) -> first h in
@@ -385,6 +388,7 @@ module type BLOCKS = sig
   val union  : t -> t -> t
 
   val fold   : (block -> 'a -> 'a) -> t -> 'a -> 'a
+  val iter   : (block -> unit) -> t -> unit
 end
 
 module Blocks : BLOCKS with type t = block UM.t = struct
@@ -396,6 +400,7 @@ module Blocks : BLOCKS with type t = block UM.t = struct
   let focus blocks u = UM.split u blocks
   let union = UM.union
   let fold f blocks z = UM.fold (fun _ b z -> f b z) blocks z
+  let iter = UM.iter
 end
 @ 
 <<zipcfg.ml>>=  
@@ -561,6 +566,28 @@ let call machine exp ~altrets ~unwinds_to ~cuts_to ~aborts
 let set_spans (bz, blocks) spans = match bz with
 | Start (Label (l, u, r), _) -> r := Some spans
 | _ -> impossf "setting spans on non-label"
+@ 
+<<zipcfg.ml>>=
+let iter_spans f g =
+  let span s = match s with Some s -> f s | None -> () in
+  let first = function Label (_, _, s) -> span (!s) | _ -> () in
+  let block (f, t) =
+    first f;
+    match lastt t with
+    | Call c -> span c.cal_spans
+    | _ -> () in
+  Blocks.iter block g
+@ 
+<<zipcfg.ml>>=
+let fold_spans f g z =
+  let span s z = match s with Some s -> f s z | None -> z in
+  let first f z = match f with Label (_, _, s) -> span (!s) z | _ -> z in
+  let block (f, t) z =
+    let z = first f z in
+    match lastt t with
+    | Call c -> span c.cal_spans z
+    | _ -> z in
+  Blocks.fold block g z
 @ 
 <<zipcfg.ml>>=
 let followed_by g n g' = unimpf "graph stitching"

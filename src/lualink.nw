@@ -97,8 +97,8 @@ module Personality = struct
     let charset     = "latin1"
     let float       = "ieee754"
 
-    let cfg2ast proc =
-      Zipcfgutil.cfg2ast Rtlutil.ToAST.rtl proc.Proc.cfg proc.Proc.symbol#mangled_text
+    let cfg2ast (g, proc) =
+      Zipcfgutil.cfg2ast Rtlutil.ToAST.rtl g proc.Proc.symbol#mangled_text
 end
 @
 The assemblers for the {\AST} and the interpreter are polymorphic. We
@@ -130,7 +130,7 @@ struct
     type 'a t       = Ast2ir.proc
     let tname       = "proc"
     let eq _        = fun x y -> x =*= y
-    let to_string _ = fun t -> ("<proc "^t.Proc.symbol#mangled_text^">") 
+    let to_string _ = fun (_, t) -> ("<proc "^t.Proc.symbol#mangled_text^">") 
 end
 module TargetType = struct
     type 'a t       = Ast2ir.tgt
@@ -315,13 +315,20 @@ interpreter. The [[compile]] function receives a lua value such that it
 can call Lua functions while it is active.
 <<export goodies to Lua>>=
 let init g = 
-  let backplane_stage = V.efunc (V.value **-> Map.proc **->> V.bool) in
+  let proc = Map.proc in
+  let stage_results =
+    let em (p, b) = [proc.V.embed p; V.bool.V.embed b] in
+    let pr = function [p; b] -> (proc.V.project p, V.bool.V.project b)
+      | l -> V.projection ((V.list V.value).V.embed l) "proc * bool" in
+    V.results em pr in
+  let backplane_stage = V.efunc (V.value **-> proc **-> stage_results) in
   <<register modules to [[g]] in alphabetical order>>
   V.at_init g [ <<lua initialization>> ]
 
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Asm"
   [ "cmm" , V.efunc (Map.outchan **->> Map.asm) AstAsm.asm     
+(*
   ; "dot" , V.efunc (Map.outchan **->> Map.asm) (Dotasm.asm ~compress:true ~live:false)
   ; "big_dot" , V.efunc (Map.outchan **->> Map.asm) 
                             (Dotasm.asm ~compress:false ~live:true)
@@ -335,6 +342,7 @@ C.register_module "Asm"
             (Interpasm.asm' ~byteorder:Rtl.LittleEndian ~memsize:8 ~ptrsize:32)
   ; "interp32b" , V.efunc (Map.outchan **->> Map.asm) 
             (Interpasm.asm' ~byteorder:Rtl.BigEndian ~memsize:8 ~ptrsize:32)
+*)
   ] g;
 @ 
 \paragraph{Calling-convention automata}
@@ -516,7 +524,7 @@ C.register_module "Cfg"
         ])
     ] g;
 @
-<<register modules to [[g]] in alphabetical order>>=
+<<old register modules to [[g]] in alphabetical order>>=
 C.register_module "Dataflow" 
    [ "emit_dot",   V.efunc (V.unit **->> V.unit)  Dataflow.Test.emit_dot
    ] g;                        
@@ -584,10 +592,10 @@ C.register_module "Debug"
   ; "run_cc_return", V.efunc (Map.target **-> V.string **->
                                listpair V.int V.string **->> V.list (V.list V.string))
                       (run_cc_wrap Call.run_cc_on_sig_and_return)
-  ; "printcfg", backplane_stage (fun _ proc -> Cfgutil.print_cfg proc.Proc.cfg; true)
+  ; "printcfg", backplane_stage (fun _ p -> Zipcfgutil.print_cfg (fst p); (p, false))
   ] g;
 @
-<<register modules to [[g]] in alphabetical order>>=
+<<old register modules to [[g]] in alphabetical order>>=
 C.register_module "Expander"
   [ "x86f" , backplane_stage X86.X.cfg
   ; "ppc"  , backplane_stage Ppc.X.cfg
@@ -596,12 +604,12 @@ C.register_module "Expander"
   ; "alpha", backplane_stage Alpha.X.cfg
   ; "sparc", backplane_stage Sparc.X.cfg
   ] g;
-<<register modules to [[g]] in alphabetical order>>=
+<<old register modules to [[g]] in alphabetical order>>=
 C.register_module "Liveness"
   [ "livenessfn", backplane_stage 
        (fun _ p -> Cfgx.Live.set_live p.Proc.cfg; true)
   ] g;
-<<register modules to [[g]] in alphabetical order>>=
+<<old register modules to [[g]] in alphabetical order>>=
 C.register_module "Optimize"
   [ "simplify_exps"         , backplane_stage Optimize.simplify_exps
   ; "collapse_branch_chains", backplane_stage Optimize.collapse_branch_chains
@@ -611,7 +619,7 @@ C.register_module "Optimize"
   ; "peephole"              , backplane_stage Peephole.subst_forward
   ; "deadfn"                , backplane_stage Dead.elim_assignments
   ] g;
-<<register modules to [[g]] in alphabetical order>>=
+<<old register modules to [[g]] in alphabetical order>>=
 C.register_module "Placevar"
   [ "contextfn", V.efunc ((Map.proc --> Map.automaton) **->>  (* currying *)
                         V.func (V.value **-> Map.proc **->> V.bool)) Placevar.context
@@ -636,7 +644,7 @@ C.register_module "Rtlop"
       ];
     "opnames", (V.list V.string).V.embed (List.sort Pervasives.compare Rtlop.opnames);
   ] g;
-<<register modules to [[g]] in alphabetical order>>=
+<<old register modules to [[g]] in alphabetical order>>=
 C.register_module "Runtime"
   [ "emit_data", V.efunc (Map.asm **->> (Map.stage Map.proc))
        (fun asm _ proc -> Runtimedata.emit_as_asm proc.Proc.target asm
@@ -647,7 +655,7 @@ C.register_module "Runtime"
 C.register_module "Simplify"
   [ "compile_time_ops", (V.list V.string).V.embed Simplify.compile_time_ops
   ] g;
-<<register modules to [[g]] in alphabetical order>>=
+<<old register modules to [[g]] in alphabetical order>>=
 C.register_module "Stack"
   [ "freeze",  V.efunc (Map.proc **-> Map.block **->> V.unit)   Stack.freeze
   ; "blocks",  V.efunc (Map.proc **->> (V.record V.value))
@@ -658,7 +666,7 @@ C.register_module "Stack"
   ] g;                    
 @ 
 PERHAPS THIS CODE SHOULD REPLACE THE SOMEWHAT HEAVYWEIGHT [[Asm.dot]]???
-<<register modules to [[g]] in alphabetical order>>=
+<<old register modules to [[g]] in alphabetical order>>=
 C.register_module "Stages"
   [ "writedot", backplane_stage
       (fun _ proc -> 
@@ -687,7 +695,7 @@ C.register_module "Target"
     "metrics",      V.efunc (Map.target **->> V.record V.value) metrics;
     "name",         V.efunc (Map.target **->> V.string) (fun t -> t.Target.name);
   ] g;
-<<register modules to [[g]] in alphabetical order>>=
+<<old register modules to [[g]] in alphabetical order>>=
 C.register_module "Targets"
   [ "dummy32l", Map.target.V.embed Dummy.dummy32l'
   ; "dummy32b", Map.target.V.embed Dummy.dummy32b'
@@ -699,16 +707,16 @@ C.register_module "Targets"
   ; "sparc",    Map.target.V.embed Sparc.target
   ; "interp",   Map.target.V.embed Interp.target'
   ] g;
-<<register modules to [[g]] in alphabetical order>>=
+<<old register modules to [[g]] in alphabetical order>>=
 C.register_module "Typecheck" 
  [ "proc",       V.efunc (V.value **-> Map.proc **->> V.int)
                          (fun _ proc -> Typecheck.proc proc; 1)
  ] g;
-<<register modules to [[g]] in alphabetical order>>=
+<<old register modules to [[g]] in alphabetical order>>=
 C.register_module "Unsupported" 
  [ "explain", V.efunc (V.int **-> V.int *****->> V.unit) Unsupported.explain
  ] g;
-<<register modules to [[g]] in alphabetical order>>=
+<<old register modules to [[g]] in alphabetical order>>=
 let floats ws _ proc =
   let rml = proc.Proc.target.Target.rounding_mode in
   let rm  = Rtlutil.fetch rml in
@@ -795,7 +803,7 @@ C.register_module "Widen"
  ; "widenlocs", V.efunc (V.value **-> Map.proc **->> V.int) widenlocs
  ; "op_count", V.efunc (V.value **-> Map.proc **->> V.int) op_count
  ] g;
-<<register modules to [[g]] in alphabetical order>>=
+<<old register modules to [[g]] in alphabetical order>>=
 let pic load_wkr use_return proc =
   let import _ = Error.error "imports not supported in PIC code" in
   Pic.transform ~import ~load_wkr ~use_return proc;

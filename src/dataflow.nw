@@ -1,61 +1,54 @@
 % -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 
-\section{Support for forward dataflow problems}
+\section{Support for backward dataflow problems}
 
-This documentation is written long after the event, so one may be
-suspicious of errors. 
 
-We want to solve both forward and backward problems, so we talk about
-a ``split,'' which will be a join point in one direction and a merge
-point in the other.
-A~value of type [[('i, 'a)]] problem is a dataflow problem over nodes
-with instructions represented by~[['i]] and the dataflow information
-represented by~[['a]].
-All problems incrementally build up information at each split node until we
-reach a fixed point.
-This means each split node holds suitable mutable state of type~[['a]].
-
-Each dataflow problem has these parts:
+A dataflow pass is based on a single dataflow fact of type~[['a]], but
+to describe a fully general pass requires not one but three type
+parameters:
 \begin{itemize}
 \item
-[[init_info]]: Initial (bottom) value of dataflow information.
+Type parameter [['a]] is the pass's dataflow fact.
+Values of type~[['a]] should form a lattice.
 \item
-[[propagate]]: Push the dataflow information through a non-split node.
+Type parameter [['i]] is an input, from which it should be possible to
+derived the dataflow fact.
+For example, [['i]] might be equal to~[['a]], or it might be a tuple
+of which one element is~[['a]].
 \item
-[[split_info]]: Extract the dataflow information from a split node.
-\item 
-[[merge_split_info]]:
-Using the dataflow equations, merge a new dataflow value with the
-value already stored at the split node (e.g., by taking the least
-upper bound).
-Return a Boolean indicating whether this operation changed the
-(mutable) value at the split node.
+Type parameter [['o]] is an output.
+For a pure analysis, [['o]] is equal to~[['a]].
+For a pure transformation, [['o]] is [[graph option]].
+For a combined analysis and transformation, [['o]] 
+is [['a answer]].
 \end{itemize}
-
-Given a problem, [[fwd_iteration]] runs one forward iteration and
-returns a Boolean indicating whether anything changed.
-It can be repeated until it reaches a fixed point.
+The dataflow engine computes a least solution to a set of dataflow
+equations defined by a pass.
 @
-\section{Implementation}
-
 <<dataflow.mli>>=
 <<exported types>>
 <<exported types>>=
 type uid = Zipcfg.uid
-type 'a answer = 'a
-  (* might one day be Dataflow of 'a | Rewrite of Zipcfg.graph *)
+type 'a answer = Dataflow of 'a | Rewrite of Zipcfg.graph
 
-type ('input, 'output) analysis =
+type ('i, 'a, 'o) pass' =
  { name      : string;
-   add_info  : 'output -> 'output -> 'output;
-   changed   : old:'output -> new':'output -> bool;  (* is new one bigger? *)
-   init_info : 'output;
-   last_in   : (uid -> 'input) -> Zipcfg.Rep.last -> 'output answer;
-   middle_in : 'input -> Zipcfg.Rep.middle -> 'output answer;
-   first_in  : 'input -> Zipcfg.Rep.first -> 'output answer;
+   add_info  : 'a -> 'a -> 'a;  (* lattice join (least upper bound) *)
+   changed   : old:'a -> new':'a -> bool;  (* is new one bigger? *)
+   init_info : 'a;  (* lattice bottom element *)
+   last_in   : (uid -> 'i) -> Zipcfg.Rep.last -> 'o;
+   middle_in : 'i -> Zipcfg.Rep.middle -> 'o;
+   first_in  : 'i -> Zipcfg.Rep.first -> 'o;
  } 
+
+type 'a analysis = ('a, 'a, 'a) pass'
+type 'a transformation = ('a, unit, Zipcfg.graph option) pass'
+type 'a pass = ('a, 'a, 'a answer) pass'
 <<dataflow.mli>>=
-val backward : ('a, 'a) analysis -> Zipcfg.graph -> (uid -> 'a)
+val backward : 'a analysis -> Zipcfg.graph -> (uid -> 'a)
+@
+\section{Implementation}
+
 <<dataflow.ml>>=
 module G  = Zipcfg
 module GR = Zipcfg.Rep
@@ -99,23 +92,9 @@ let backward anal graph =
   iterate 1
 @ 
 <<dataflow.ml>>=
-type 'a answer' = Dataflow of 'a | Rewrite of Zipcfg.graph
-
-
-type ('input, 'output) analysis' =
- { name'      : string;
-   add_info'  : 'output -> 'output -> 'output;
-   changed'   : old:'output -> new':'output -> bool;  (* is new one bigger? *)
-   init_info' : 'output;
-   last_in'   : (uid -> 'input) -> Zipcfg.Rep.last -> 'output answer';
-   middle_in' : 'input -> Zipcfg.Rep.middle -> 'output answer';
-   first_in'  : 'input -> Zipcfg.Rep.first -> 'output answer';
- } 
-@ 
-<<dataflow.ml>>=
 let rec backward' anal graph =
   let blocks = List.rev (G.postorder_dfs graph) in
-  let map = UA.make (List.map GR.id blocks) anal.init_info' in
+  let map = UA.make (List.map GR.id blocks) anal.init_info in
   let find = UA.get map in
   <<definition of [[answer]]>>
   let changed = ref false in
@@ -128,7 +107,7 @@ let rec backward' anal graph =
     let in' = prev h out in
     let u = GR.id b in
     let old_in = find u in
-    if anal.changed' ~old:old_in ~new':in' then
+    if anal.changed ~old:old_in ~new':in' then
       begin
         UA.set map u in';
         changed := true
@@ -138,9 +117,9 @@ let rec backward' anal graph =
     let () = List.iter block blocks in
     if !changed then
       if n < 1000 then iterate (n + 1)
-      else impossf "%s didn't converge in %n iterations" anal.name' n
+      else impossf "%s didn't converge in %n iterations" anal.name n
     else
-      ( Debug.eprintf anal.name' "%s converted in %d iterations\n" anal.name' n ;
+      ( Debug.eprintf anal.name "%s converted in %d iterations\n" anal.name n ;
         find ) in
   iterate 1
 <<definition of [[answer]]>>=
@@ -149,19 +128,19 @@ let solve_graph_with_map anal map g = unimpf "UW framework" in
 let solve_graph anal g out =
   let last' map l = match l with
   | GR.Exit 0 -> Dataflow out
-  | _ -> anal.last_in' map l in
-  let anal' = { anal with last_in' = last' } in
+  | _ -> anal.last_in map l in
+  let anal' = { anal with last_in = last' } in
   backward' anal' g GR.entry_uid in
   
-let answerf out f = match anal.first_in' out f with
+let answerf out f = match anal.first_in out f with
 | Dataflow a -> a
 | Rewrite g -> solve_graph anal g out in
 
-let answerm out m k = match anal.middle_in' out m with
+let answerm out m k = match anal.middle_in out m with
 | Dataflow a -> k a
 | Rewrite g -> solve_graph anal g out in
 
-let answerl l = match anal.last_in' find l with
+let answerl l = match anal.last_in find l with
 | Dataflow a -> a
 | Rewrite g -> solve_graph_with_map anal map g in
 @

@@ -76,7 +76,7 @@ type spans = Spans.t
 exception DeadValue
 val upd_spans     : (Rtl.loc -> Rtl.loc) -> spans -> unit   (* may raise DeadValue *)
 val upd_all_spans :
-  (Rtl.loc -> Rtl.loc) -> Rtl.rtl Cfgx.M.cfg -> unit   (* may raise DeadValue *)
+    (Rtl.loc -> Rtl.loc) -> Zipcfg.graph -> unit   (* may raise DeadValue *)
 @ 
 The run-time system needs to know how the registers are mapped to constants.
 <<runtimedata.mli>>=
@@ -88,8 +88,7 @@ the data as assembly by calling [[emit_as_asm]].
 The function should be partially applied to an assembler, then added
 to the optimization pipeline.
 <<runtimedata.mli>>=
-val emit_as_asm : tgt -> 'a Asm.assembler -> procsym:Symbol.t ->
-                  Rtl.rtl Cfgx.M.cfg -> bool
+val emit_as_asm : tgt -> 'a Asm.assembler -> procsym:Symbol.t -> Zipcfg.graph -> bool
 @
 It appears that the interpreter needs to know about user-defined spans and
 stackdata.
@@ -145,12 +144,7 @@ let upd_spans upd spans =
   spans.S.sds      <- List.map upd spans.S.sds;
   Array.iteri (fun i l -> spans.S.vars.(i) <- maybe_upd l) spans.S.vars
 
-let upd_all_spans upd cfg =
-  let upd_node n = match G.kind n with
-    | G.Call | G.Join -> (match G.spans n with Some ss -> upd_spans upd ss
-                                             | None    -> ())
-    | _ -> () in
-  G.iter_nodes upd_node cfg
+let upd_all_spans upd g = Zipcfg.iter_spans (upd_spans upd) g
 @
 
 % ------------------------------------------------------------------ 
@@ -164,11 +158,8 @@ Then, for each stopping point, we emit the associated spans by calling
 [[emit_site_spans]].
 <<runtimedata.ml>>=
 let emit_as_asm target asm ~procsym cfg =
-  let node_spans =
-    let add n rst = match G.kind n with
-      | G.Call | G.Join -> (match G.spans n with Some ss -> (n, ss) :: rst | _ -> rst)
-      | _ -> rst in
-    G.fold_nodes add [] cfg in
+  let node_spans = Zipcfg.fold_spans (fun s ss -> s :: ss) cfg [] in
+  let node_spans = Impossible.unimp "spans" in
   let wordsize   = target.T.wordsize in
   let to_bits  i = Bits.S.of_int i wordsize  in 
   let zero       = Bits.zero wordsize in
@@ -181,6 +172,7 @@ let emit_as_asm target asm ~procsym cfg =
   List.iter emit_site_spans (order node_spans);
   asm#section prev_section;
   true
+let emit_as_asm target asm ~procsym g = Impossible.unimp "emit runtimedata"
 @
 By emitting the spans in the same order that the labels are emitted,
 we can use binary search to find a span (since the labels will be
