@@ -1,0 +1,232 @@
+
+\input{macros.tex}
+
+% l2h substitution dots ...
+% l2h substitution ast AST
+% l2h substitution rtl RTL
+% l2h substitution ir IR
+% l2h substitution noweb NOWEB
+% l2h substitution qcc QC--
+% l2h substitution C C--
+% l2h substitution PAL C--
+% l2h substitution pal C--
+% l2h substitution asdl ASDL
+% l2h substitution ocaml OCaml
+% l2h substitution forall forall
+% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
+
+% ------------------------------------------------------------------ 
+\section{Abstract Assembler Interface}
+% ------------------------------------------------------------------ 
+
+One way for the code generator to emit code is using an external
+assembler.  In order to support as many target platforms as possible
+the idiosyncrasies of individual assemblers and platforms are best
+hidden behind a common interface.  This module defines such an
+interface by exposing commonalities among assemblers and leaving the
+representation of instructions abstract. We expect a specific assembly
+interface to conform to the module type [[S]] provided here.
+
+<<asm2.mli>>=
+module type S = sig
+    <<module type s>>
+end
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Program Representation}
+% ------------------------------------------------------------------ 
+
+An assembly program is represented by an abstract type [[asm]].  It is
+built by a sequence of [[actions]], which are appended to an initially
+empty assembly program.  The general assumption is, that a assembly
+program is constructed in its natural order, from top to bottom.
+
+<<module type s>>=
+type asm        
+type action
+
+val append: asm -> action -> asm
+@
+
+Since both the representation of an entire program and its building
+blocks are left abstract, an imperative or functional way of composing
+a program is imaginable. In an imperative setting [[asm]] is
+essentially an open file, and an [[action]] a function that writes to
+it. Then, [[append]] is simply an application:
+
+<<imperative>>=
+type asm            = { info: info; file: out_channel }
+type action         = asm -> asm
+
+let append asm f    = f asm
+@
+
+In a functional setting, a program would be represented by algebraic data
+structures, which are composed by append:
+
+<<functional>>=
+type asm            = { info: info; actions: action list }
+type action         = Import of ..
+                    | Export of ..
+                    | ...
+
+let append asm a    = { asm with actions = a :: asm.actions }
+@
+
+A program is created by an [[init]] function that receives a string
+list as arguments for initialization.
+
+<<module type s>>=
+val init:           string list -> asm
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Location}
+% ------------------------------------------------------------------ 
+
+An assembler maintains named \emph{sections} and for each section a
+\emph{location counter}.  The [[section]] action announces the start
+of a new section.  Once this action is [[append]]ed to the [[asm]]
+value it can be queried for the [[current]] section.
+
+<<module type s>>=
+type section = string 
+
+val section : section -> action
+val current : asm -> section
+@
+
+The location counter of the current section can be manipulated: 
+[[org]] sets it to a value, [[align n]] aligns the location pointer to
+the next largest multiple of [[n]], in case the current value of the
+location pointer is not a multiple of [[n]].  [[addloc n]] increments
+the value of the location pointer by [[n]].
+
+<<>>=
+val org     : int -> action
+val align   : int -> action
+val addloc  : int -> action
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Symbols and Adresses}
+% ------------------------------------------------------------------ 
+
+A [[symbol]] is an assembly-level name that binds a value.  This can
+be an address, but also an integer value.  Typically [[goto]] labels
+and procedure names are represented as symbols that bind addresses. 
+The scope of a symbol is the entire assembly program, even before its
+definition. Symbols are divided into four disjoint classes:
+
+\begin{enumerate}
+\item [[local]]:  the value of the symbol is defined exactly once
+      inside the compilation unit (program) at hand and not visible
+      outside of it.
+
+\item [[import]]: the value of the symbol is defined in another
+      compilation unit but made visible in the compilation unit at
+      hand by an import declaration. No symbol exported from the
+      module at hand can be imported.
+
+\item [[export]]: the symbol is defined like a [[local]] symbol but
+      additionally exported such that other compilation units can
+      import it. No imported symbol can be exported.
+
+\item [[common]]: several compilation units can define the same symbol
+      as common. During the link process the different definitions are
+      unified. This feature is currently not used.
+\end{enumerate}      
+
+The following four actions declare named symbols.  However, except for
+imported symbols, no value is yet bound to them. 
+
+<<module type s>>=
+type symbol
+type name    = string
+type size    = int
+type align   = int
+
+val import  : name -> action
+val export  : name -> action
+val local   : name -> action
+val common  : name -> size -> align -> section -> action
+@
+
+After the declarations are [[append]]ed to the current [[asm]] program
+they can be looked up by their name.  An abstract [[symbol]] is
+required in order to define its value.  [[define_label]] binds the
+current value of the location counter to a symbol; [[define_const]]
+binds a constant to a symbol.  No values must be bound to imported
+symbols and exactly one value must be bound to every other declared
+symbol.
+
+<<>>=
+val lookup          : name -> asm -> symbol
+val define_label    : symbol -> action
+val define_const    : symbol -> Bits.bits -> action
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Relocatable Addresses}
+% ------------------------------------------------------------------ 
+
+A relocatable address [[reladdr]] $r$ is defined relative to an existing
+address which is taken from a [[symbol]] $s$: $r= s+o$ where $o$ is
+the [[offset]] from the symbol $s$. An offset can be specified
+directly, or taken from the difference of two symbols.
+
+<<>>=
+type reladdr
+type offset
+
+val offset          : int -> offset               (* create offset directly *)
+val diff            : symbol -> symbol -> offset  (* difference *)
+val reladdr         : symbol -> offset -> reladdr
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Emitting Values and Instructions}
+% ------------------------------------------------------------------ 
+
+The point of an assembly interface is to emit instructions.  Of
+course, in order to be general the representation of an
+[[instruction]] is hidden and left to an implementation.  The [[inst]]
+action emits an instruction.
+
+<<>>=
+type instruction
+val instr           : instruction -> action
+@
+
+Instructions are one half of an assembly program, data is the other. 
+The following functions emit data:  [[zeroes n]] emits [[n]] zero
+values of the target [[memsize]], [[addr]] emits a relative address,
+and [[value]] emits a value.  The assembler takes care of the
+[[byteorder]]. 
+
+<<>>=
+val zeroes          : int -> action
+val value           : Bits.bits -> action
+val addr            : reladdr -> action
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Byteorder and Comments}
+% ------------------------------------------------------------------ 
+
+A target specific assembler takes the target's byteorder into account.
+The [[byteorder]] value tells it.
+
+<<>>=
+val byteorder       : Fenv.Clean.endianness
+@
+
+To emit a comment, use the [[comment]] action. A comment should
+contain only printable characters and especially no newline character.
+
+<<>>=
+val comment         : string -> action 
+@
+
+
