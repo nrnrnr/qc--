@@ -2,8 +2,17 @@ TOP=..
 <../config/ocaml.mk
 <../config/noweb.mk
 
-all:V: lua.cmi lua.cmo
+all:V: lua.cmi lua.cmo parse.cmo parse.cmi
 src:V: lua.ml lua.mli
+
+parsex.mly: lua.nw
+	notangle -Rparse.mly $prereq > $target
+
+parse.ml: parsex.ml
+	cp $prereq $target
+
+parse.mli: parsex.mli lua.nw
+	(sed '/^val /,$d' parsex.mli; notangle -R$target lua.nw) > $target
 
 depend:V: DEPEND
 
@@ -12,5 +21,6 @@ clean:V:
 
 DEPEND: src `echo *.ml *.mli`
 	$OCAMLDEP *.ml *.mli > $target
+
 
 <DEPEND

@@ -25,9 +25,9 @@ module type VALUE = sig
     = Nil
     | Number   of float
     | String   of string
-    | Function of (state -> value list -> value)
+    | Function of (state -> value list -> value list)
     | Userdata of userdata
-    | Table    of table  (* should use a hash table *)
+    | Table    of table
   and table = (value, value) Hashtbl.t
   and state = { globals : table; fallbacks : (string, value) Hashtbl.t }
 @ 
@@ -57,7 +57,6 @@ These functions enable us to convert the basic types.
   val int    : int    map
   val bool   : bool   map
   val string : string map
-  val unit   : unit   map   (* useful for result types *)
 @ 
 To convert a value of option type, we represent [[None]] as [[Nil]].
 Woe betide you if [[Nil]] is a valid value of your type!
@@ -89,6 +88,7 @@ arguments by using the embedding/projection pair produced by
   val ( -->  ) : 'a map  -> 'b map  -> ('a -> 'b) map
   val ( **-> ) : 'a map  -> 'b mapf -> ('a -> 'b) mapf
   val result   : 'a map  -> 'a mapf
+  val runit    : unit mapf                         (* for functions w/o results *)
   val pfunc    : 'a mapf -> 'a map                 (* pure functions *)
   val func     : 'a mapf -> (state -> 'a) map      (* impure functions *)
 end
@@ -96,7 +96,7 @@ end
 it to some arguments.
 <<tests>>=
 let sub = (pfunc (string **-> int **-> int **-> result string)).embed String.sub
-let apply = function Function f -> f emptystate
+let apply = function Function f -> fun args -> trim1 (f emptystate args)
                    | v -> raise (Projection (v, "function"))
 let check = string.project (apply sub [string.embed "hello"; int.embed 0; int.embed 2])
 let _ = assert (check = "he")
@@ -105,7 +105,7 @@ If a function is impure (needs access to the Lua state) we use
 [[func]].
 <<tests>>=
 let setglobal {globals=g; fallbacks=f} n v = Table.bind g (String n) v
-let sg = ((func (string **-> value **-> result unit)).embed setglobal : value)
+let sg = ((func (string **-> value **-> runit)).embed setglobal : value)
 @ 
 For the rest of the interface, we can make Lua values by supplying an
 appropriate [[userdata]] type.  
@@ -114,11 +114,13 @@ module type USERDATA = sig type t end
 <<lua.mli>>=
 <<signatures>>
 module MkValue (U : USERDATA) : VALUE with type userdata = U.t
+module MkAst (V : VALUE) : AST with module Value = V
+module MkInterp (XYZ : AST) : INTERP (* with module Ast = XYZ *)
 @ 
 \subsection{Implementation}
 <<lua.ml>>=
 <<signatures>>
-module MkValue (U : USERDATA) = struct
+module MkValue (U : USERDATA) : VALUE with type userdata = U.t = struct
   <<value toplevel>>
   <<tests>>
 end
@@ -130,7 +132,7 @@ type value
   = Nil
   | Number   of float
   | String   of string
-  | Function  of (state -> value list -> value)
+  | Function  of (state -> value list -> value list)
   | Userdata of userdata
   | Table    of table
   and table = (value, value) Hashtbl.t
@@ -141,21 +143,26 @@ Now, for embedding and projection.  More repeats.
 exception Projection of value * string
 type ('a,'b) ep = { embed : 'a -> 'b; project : 'b -> 'a }
 type 'a map  = ('a, value) ep
-type 'a mapf = ('a, value list -> value) ep
+type 'a mapf = ('a, value list -> value list) ep
 @ 
 Here are the embedding/projection pairs for the simple types.
 There are subtle mismatches between Caml types and Lua types, so I do
 my best to patch them.
-These functions should probably do more generous conversions, e.g.,
-between strings and numbers.
+Numbers are automatically converted to strings on request, but I
+haven't yet implemented the opposite conversion.
 <<value toplevel>>=
 let string = { embed = (fun s -> String s)
-             ; project = function String s -> s | v -> raise (Projection (v, "string"))
+             ; project = function String s -> s 
+                                | Number x -> string_of_float x
+                                | v -> raise (Projection (v, "string"))
              } 
 
+let is_float_literal s = false  (* needs fixing *)
 let pervasive_float = float
 let float = { embed = (fun x -> Number x)
-            ; project = function Number x -> x | v -> raise (Projection (v, "float"))
+            ; project = function Number x -> x
+                               | String s when is_float_literal s -> float_of_string s
+                               | v -> raise (Projection (v, "float"))
             } 
 
 let to_int x = 
@@ -194,8 +201,9 @@ let emptystate = { globals = Hashtbl.create 0; fallbacks = Hashtbl.create 0 }
 
 let (-->) arg result =
   { embed =   (fun f -> 
-               Function (fun _ args -> result.embed (f (arg.project (trim1 args)))))
-  ; project = function Function f -> fun x -> result.project (f emptystate [arg.embed x])
+               Function (fun _ args -> [result.embed (f (arg.project (trim1 args)))]))
+  ; project = function Function f -> 
+                          fun x -> result.project (trim1 (f emptystate [arg.embed x]))
                      | v -> raise (Projection (v, "function"))
   } 
 @ 
@@ -217,9 +225,14 @@ let ( **-> ) (firstarg : 'a map) (lastargs : 'b mapf) : ( ('a -> 'b) mapf ) =
   { embed = apply; project = unapp }
 
 let result (r : 'a map) : ('a mapf) = 
-  { embed   = (fun f -> fun args -> r.embed f)
-  ; project = (fun f -> r.project (f []))
+  { embed   = (fun f -> fun args -> [r.embed f])
+  ; project = (fun f -> r.project (trim1 (f [])))
   } 
+
+let runit = { embed = (fun () -> assert false)  (* results never embedded *)
+            ; project = (fun f -> match f [] with [] -> ()
+                                    | h::t -> raise (Projection (h, "unit result")))
+            } 
 
 let pfunc (arrow : 'a mapf) : ('a map) =
   { embed   = (fun (f : 'a) -> Function (fun s -> arrow.embed f))
@@ -251,43 +264,654 @@ Values alone aren't enough: we need declarations, statements,
 expressions, and an interpreter.
 What follows is some highly speculative infrastructure.
 <<signatures>>=
-module type Language = sig
+module type AST = sig
   module Value : VALUE
   type value = Value.value
-  type state = { globals : Value.table; fallbacks : Value.table }
-  type stmt
-  type exp
-
-  val run  : stmt -> state -> state
-  val eval : exp  -> state -> value
-
-  module Lvalue : sig
-    type t
-    val var   : string -> t
-    val index : table:exp -> value:exp -> t
-  end
-
-  module Statement : sig
-    val assign : Lvalue.t list -> exp list -> stmt
-    val block : stmt list -> stmt    
-    val while' : exp -> stmt list -> stmt
-    val repeat_until : stmt list -> exp -> stmt
-    val if' : (exp * stmt) list -> stmt option -> stmt
-    (* local declaration *)
-    val return : exp list -> stmt
-  end   
-
-  module Exp : sig
-    val lit   : value -> exp
-    val index : table:exp -> key:exp -> exp
-    type op = And | Or | Lt | Le | Gt | Ge | Eq | Ne | Concat
-            | Plus | Minus | Times | Div | Not | Uminus | Hat
-    val binop : exp -> op -> exp -> exp
-    val unop  :        op -> exp -> exp
-    val table : exp list * (string * exp) list -> exp
-    val call  : exp * exp list -> exp
-    val methcall : exp * string * exp list -> exp
-  end
+  <<abstract syntax>>
 end
+<<lua.ml>>=
+module MkAst (V : VALUE) : AST with module Value = V = struct
+  module Value = V
+  type value = Value.value
+  <<abstract syntax>>
+end
+@ 
+<<abstract syntax>>=
+type name = string
+type stmt =
+  | Assign      of lval list * exp list
+  | WhileDo     of exp * block
+  | RepeatUntil of block * exp
+  | If          of exp * block * (exp * block) list * block option
+  | Return      of exp list
+  | Callstmt    of call
+  | Local       of name list * exp list
+and block = stmt list
+and lval =
+  | Lvar   of name
+  | Lindex of exp * exp
+and exp =
+  | Var   of name
+  | Lit   of value
+  | Binop of exp * op * exp
+  | Unop  of op * exp
+  | Index of exp * exp
+  | Table of exp list * (name * exp) list
+  | Call  of call
+and call =
+  | Funcall  of exp * exp list
+  | Methcall of exp * name * exp list
+and op = And | Or | Lt | Le | Gt | Ge | Eq | Ne | Concat
+       | Plus | Minus | Times | Div | Not | Pow
 
-  
+type chunk =
+  | Statement of stmt
+  | Fundef    of lval * name list * block
+  | Methdef   of exp * name * name list * block
+@ 
+<<signatures>>=
+module type INTERP = sig
+  module Value : VALUE
+  module Ast : AST with module Value = Value
+  val compile : Ast.chunk list -> Value.state -> Value.value list
+  val test : unit -> (string * Value.value list) list
+end
+<<lua.ml>>=
+module MkInterp (Ast : AST) : INTERP = struct
+  module Ast = Ast
+  module Value = Ast.Value
+  <<interp toplevel>>
+  <<interp tests>>
+end
+@ 
+Abbreviate!
+<<interp toplevel>>=
+module A = Ast
+module V = Ast.Value
+@
+
+Fallbacks can't use the ordinary [[cpscall]] because this could lead
+to an infinite loop. 
+
+\emph{Contemplating two revisions: (1)~pass state before args, as in
+the function value; (2)~get rid of continuations for calls, since they
+don't seem to be doing anything useful.}
+<<interp toplevel>>=
+exception Error 
+let default_error_fallback args g k = raise Error (* get better later *)
+
+let rec fallback fbname args g k =
+  let call f args g k = match f with
+  | V.Function f -> k (f g args)
+  | v when fbname <> "function" -> fallback "function" (v :: args) g k
+  | v -> default_error_fallback [V.String "`function' fallback not a function"] g k  in
+  call (Hashtbl.find g.V.fallbacks fbname) args g k
+@ 
+Everybody else can use a call that falls back to the fallback.
+If the types don't match, we have to do something.
+This problem has no counterpart in the C~version, in which it's up to
+each individual C~routine to worry about type mismatches.
+<<interp toplevel>>=
+let cpscall f args g k = match f with
+  | V.Function f -> (try k (f g args) with V.Projection _ -> assert false)
+  | v -> fallback "function" (v :: args) g k
+@      
+To use a fallback or function call in a situation where we expect
+exactly one result, we adjust the results.
+We do this by maniupulating continuations.
+<<interp toplevel>>=
+let adjust1 (f : (V.value list -> 'answer) -> 'answer) : (V.value -> 'answer) -> 'answer =
+  fun k -> f (function [] -> k V.Nil | h :: t -> k h)
+@ 
+Operators, like everything else, use CPS
+<<interp toplevel>>=
+let arith opname op =
+  let opname = V.String opname in
+  let f x y g = try
+    let x = V.float.V.project x in
+    let y = V.float.V.project y in
+    fun k -> k (V.float.V.embed (op x y))
+  with V.Projection (_, _) -> adjust1 (fallback "arith" [x; y; opname] g)
+  in f
+<<interp toplevel>>=
+let negate x g k = try
+  let x = V.float.V.project x in
+  k (V.float.V.embed (~-. x))
+  with V.Projection (_, _) -> adjust1 (fallback "arith" [x; V.Nil; V.String "umn"] g) k
+<<interp toplevel>>=
+let order opname nop sop =
+  let opname = V.String opname in
+  let f x y g =
+    match x, y with
+    | V.Number x, V.Number y -> fun k -> k (V.bool.V.embed (nop x y))
+    | _ -> try let x = V.string.V.project x in
+               let y = V.string.V.project y in
+               fun k -> k (V.bool.V.embed (sop x y))
+           with V.Projection (_, _) -> adjust1 (fallback "order" [x; y; opname] g)
+  in f
+<<interp toplevel>>=
+let concat x y g k =
+  try let x = V.string.V.project x in
+      let y = V.string.V.project y in
+      k (V.string.V.embed (x ^ y))
+  with V.Projection (_, _) -> adjust1 (fallback "concat" [x; y] g) k
+<<interp toplevel>>=
+let eq x y = match x, y with
+| V.Nil,        V.Nil        -> true
+| V.Number x,   V.Number y   -> x = y
+| V.String x,   V.String y   -> x = y
+| V.Function x, V.Function y -> x == y
+| V.Userdata x, V.Userdata y -> x == y
+| V.Table x,    V.Table y    -> x == y
+| _,            _            -> false
+<<interp toplevel>>=
+let binop = function
+  | A.Plus   -> arith "add" (+.)
+  | A.Minus  -> arith "sub" (-.)
+  | A.Times  -> arith "mul" ( *. )
+  | A.Div    -> arith "div" ( /. )
+  | A.Pow    -> assert false
+  | A.Lt     -> order "lt" (<)  (<)
+  | A.Le     -> order "le" (<=) (<=)
+  | A.Gt     -> order "gt" (>)  (>)
+  | A.Ge     -> order "ge" (>=) (>=)
+  | A.Eq     -> fun x y g k -> k (V.bool.V.embed (eq x y))
+  | A.Ne     -> fun x y g k -> k (V.bool.V.embed (not (eq x y)))
+  | A.And    -> assert false (* short circuit *)
+  | A.Or     -> assert false (* short circuit *)
+  | A.Concat -> concat
+  | A.Not    -> assert false (* unary *)
+
+let unop = function
+  | A.Minus  -> negate
+  | A.Not    -> fun v g k -> k (match v with V.Nil -> V.Number 1.0 | _ -> V.Nil)
+  | _        -> assert false
+<<interp toplevel>>=
+let index g t key = match t with
+| V.Table t -> V.Table.find t key
+| _ -> assert false (* need a fallback here *)
+
+let settable g t key v = match t with
+| V.Table t -> V.Table.bind t key v
+| _ -> assert false (* need a fallback here *)
+
+<<interp toplevel>>=
+type var = Global | Local of int
+let lookup rho x =
+  let rec look = function
+    | [] -> Global
+    | h :: t when h = x -> Local (List.length t)
+    | h :: t -> look t
+  in look rho
+
+<<interp toplevel>>=
+
+
+let rec exp rho = function
+  | A.Var x -> (match rho x with
+                | Global -> fun g l k -> k (V.Table.find g.V.globals (V.String x))
+                | Local n -> fun g l k -> k (Array.get l n))
+  | A.Lit v -> fun g l k -> k v
+  | A.Index (tab, key) ->
+      let tab = exp rho tab in
+      let key = exp rho key in
+      fun g l k -> tab g l (fun t -> key g l (fun v -> k (index g t v))) 
+@ 
+We could perhaps speed this up by walking the contents in advance.
+<<interp toplevel>>=
+  | A.Table (lists, bindings) ->
+      let rec listbind n bs = function
+        | [] -> bs
+        | h::t -> listbind (n +. 1.0) ((V.Number n, exp rho h) :: bs) t  in
+      let rec bind bs = function
+        | [] -> bs
+        | (n, h) :: t -> bind ((V.String n, exp rho h) :: bs) t  in
+      let contents = listbind 1.0 (bind [] bindings) lists in
+      let size     = List.length contents in
+      fun g l k ->
+        let t = V.Table.create size in
+        let rec walk = function
+          | [] -> k (V.Table t)
+          | (n, e) :: rest -> e g l (fun v -> V.Table.bind t n v; walk rest) in
+        walk contents
+<<interp toplevel>>=
+  | A.Binop (e1, op, e2) ->
+      let e1 = exp rho e1 in
+      let e2 = exp rho e2 in
+      ( match op with
+      | A.And -> fun g l k -> e1 g l (function V.Nil -> k V.Nil | _ -> e2 g l k)
+      | A.Or  -> fun g l k -> e1 g l (function V.Nil -> e2 g l k | v -> k v)
+      | _ -> let op = binop op in
+             fun g l k -> e1 g l (fun v1 -> e2 g l (fun v2 -> op v1 v2 g k)))
+  | A.Unop (op, e) ->
+      let e = exp rho e in
+      let op = unop op in
+      fun g l k -> e g l (fun v -> op v g k)
+<<interp toplevel>>=
+  | A.Call c ->
+      let c = call c rho in
+      fun g l -> adjust1 (c g l)
+@ 
+<<interp toplevel>>=
+and explist rho =
+  let rec walk = function 
+    | [] -> fun g l k -> k []
+    | h :: t ->
+        let h = exp rho h in
+        let t = walk t in
+        fun g l k -> h g l (fun v -> t g l (fun vs -> k (v :: vs)))
+  in walk 
+and call c rho = match c with
+| A.Funcall (f, args) ->
+    let f    = exp rho f in
+    let args = explist rho args in
+    fun g l k -> f g l (fun fv -> args g l (fun argv -> cpscall fv argv g k))
+| A.Methcall (obj, meth, args) ->
+    let self = exp rho obj in
+    let args = explist rho args in
+    let meth = V.String meth in
+    fun g l k -> self g l (fun v -> let m = index g v meth in
+                 args g l (fun argv -> cpscall m (v::argv) g k))
+@ 
+Static environment for a statement includes list of local variables.
+Dynamic continuations include return continuation and standard
+continuation.
+We make a separate function to compute max number of locals.
+<<interp toplevel>>=
+let notnil = function
+  | V.Nil -> false
+  | _ -> true
+
+let (_ : (string -> var) -> A.exp -> V.state -> V.value array -> (V.value -> 'answer) -> 'answer) = exp
+
+type answer = unit * string * bool
+let (pexp : (string -> var) -> A.exp -> V.state -> V.value array -> (V.value -> answer) -> answer) = exp
+
+
+let rec stmt rho = function
+  | A.WhileDo (cond, body) ->
+      let cond = exp (lookup rho) cond in
+      let body = block rho body in
+      fun theta ret ->
+        let rec loop g l =
+          cond g l (fun v -> if notnil v then body loop ret g l else theta g l)  in
+        loop
+  | A.RepeatUntil (body, cond) ->
+      let cond = exp (lookup rho) cond in
+      let body = block rho body in
+      fun theta ret ->
+        let rec loop g l =
+          body (fun g l -> cond g l (fun v -> 
+                if notnil v then loop g l else theta g l)) ret g l
+        in loop
+  | A.If (c, t, alts, f) ->
+      let alts = (c, t) :: alts in
+      let f = block rho (match f with None -> [] | Some ss -> ss) in
+      let add (cond, body) f =
+        let cond = exp (lookup rho) cond in
+        let body = block rho body in
+        fun theta ret g l -> cond g l (fun v -> if notnil v then body theta ret g l
+                                                else f theta ret g l)  in
+      List.fold_right add alts f
+  | A.Return es ->
+      let es = explist (lookup rho) es in
+      fun theta ret g l -> es g l ret
+  | A.Local (vs, es) ->
+      stmt (List.rev_append vs rho) (A.Assign (List.map (fun x -> A.Lvar x) vs, es))
+  | A.Assign (vs, [A.Call c]) ->
+      assign (lvars (lookup rho) vs) (call c (lookup rho))
+  | A.Assign (vs, es) ->
+      assign (lvars (lookup rho) vs) (explist (lookup rho) es)
+  | A.Callstmt c -> fun theta ret g l -> call c (lookup rho) g l (fun _ -> theta g l)
+and block rho = function
+  | [] -> fun theta ret -> theta
+  | s :: ss -> fun theta ret -> stmt rho s (block rho ss theta ret) ret
+and lvar rho : A.lval -> V.state -> V.value array -> V.value -> unit = function
+  | A.Lvar x -> (match rho x with
+                 | Global  -> fun g l v -> V.Table.bind g.V.globals (V.String x) v
+                 | Local n -> fun g l v -> Array.set l n v)
+  | A.Lindex (t, key) ->
+      let t = exp rho t in
+      let key = exp rho key in
+      fun g l -> t g l (fun t -> key g l (fun key -> (fun v -> settable g t key v)))
+and lvars rho = function
+  | [] -> fun g l vs -> ()
+  | h :: t ->
+      let h = (lvar rho h : V.state -> V.value array -> V.value -> unit) in
+      let t = lvars rho t in
+      fun g l ->
+        let h = h g l in
+        let t = t g l in
+        fun vs ->
+          let hv, tv = match vs with h::t -> h, t | [] -> V.Nil, [] in (h hv; t tv)
+and assign left right =
+  fun theta ret g l ->
+    let left = left g l in
+    (right g l left; theta g l)
+@ 
+Function [[numlocals]] takes a sequence of statements and returns the
+maximum number of local variables declared on any path through that sequence.
+<<interp toplevel>>=
+let rec numlocals = function
+  | [] -> 0
+  | h :: t -> numlocals t + match h with
+    | A.Local (vs, es)        -> List.length vs
+    | A.WhileDo     (_, body) -> numlocals body
+    | A.RepeatUntil (body, _) -> numlocals body
+    | A.If (c, t, alts, f)    ->
+        let add k (_, body) = max k (numlocals body) in
+        List.fold_left add (match f with None -> 0 | Some b -> numlocals b)
+                           ((c, t) :: alts)
+    | A.Assign _   -> 0
+    | A.Return _   -> 0
+    | A.Callstmt _ -> 0
+@ 
+Chunks are executed by compiling functions.
+<<interp toplevel>>=
+let lambda args body =
+  let n = List.length args + numlocals body in
+  let rho = List.rev args in
+  let body = block rho body in
+  fun state argv ->
+    let locals = Array.make n V.Nil in
+    let rec walk n = function
+      | [] -> ()
+      | h :: t -> (Array.set locals n h; walk (n+1) t)  in
+    ( walk 0 argv
+    ; body (fun g l -> []) (fun results -> results) state locals
+    )
+
+let (_ : string list -> A.block -> V.state -> V.value list -> V.value list) = lambda
+@ 
+<<interp toplevel>>=
+let chunk = function
+  | A.Statement s -> stmt [] s
+  | A.Fundef (f, args, body) ->
+      let v = V.Function (lambda args body) in
+      stmt [] (A.Assign ([f], [A.Lit v]))
+  | A.Methdef (obj, meth, args, body) ->
+      let v = V.Function (lambda args body) in
+      stmt [] (A.Assign ([A.Lindex (obj, A.Lit (V.String meth))], [A.Lit v]))
+
+let no_locals = Array.make 0 V.Nil
+let rec chunks = function
+  | [] -> fun g -> []
+  | h :: t ->
+      let h = chunk h in
+      let t = chunks t in
+      fun g -> h (fun g l -> t g) (fun results -> results) g no_locals
+let compile = chunks
+@ 
+<<interp tests>>=  
+let nil = A.Lit V.Nil
+let three = A.Lit (V.Number 3.0)
+
+let ret = A.Return ([nil; three])
+
+let state = { V.globals = V.Table.create 10; V.fallbacks = Hashtbl.create 10 }
+
+let stmts l = chunks (List.map (fun s -> A.Statement s) l)
+
+let num n = A.Lit (V.Number (float n))
+let rtest = stmts [ret]
+let sum = stmts [A.Return ([A.Binop (three, A.Plus, three)])]
+let exp = stmts [A.Return ([A.Binop (three, A.Times, A.Binop (num 2, A.Minus, three))])]
+let x = A.Var "x"
+let gets x e = A.Assign ([A.Lvar x], [e])
+let binary op e1 e2 = A.Binop (e1, op, e2)
+let lt = binary A.Lt
+let times = binary A.Times
+let loop = [ gets "x" (num 10)
+               ; A.WhileDo (lt x (num 100), [gets "x" (times (num 2) x)])
+               ; A.Return [x]]
+
+let test _ =
+  [ "return nil and three", rtest state
+      ; "sum of three and three", sum state
+      ; "expression minus three", exp state
+      ; "result of loop", stmts loop state
+  ] 
+@ 
+<<lua.ml>>=
+module U = struct type t = unit end
+module V = MkValue (U)
+module A = MkAst (V)
+module T = MkInterp (A)
+let t = T.test ()
+<<lua.mli>>=
+module T : INTERP
+val t : (string * T.Value.value list) list
+@ 
+\subsection{Parser}
+<<parse.mli>>=
+module MkParser (Ast : Lua.AST) : sig
+  val chunks :
+    (Lexing.lexbuf  -> token) -> Lexing.lexbuf -> Ast.chunk list
+end
+@ 
+<<parse.mly>>=
+%{
+  module MkParser (Ast : Lua.AST) = struct
+    module A = Ast
+%}
+
+%start chunks
+%type <Ast.chunk list> chunks
+
+%type <Ast.lval> var
+
+%token WRONGTOKEN
+%token NIL
+%token IF THEN ELSE ELSEIF WHILE DO REPEAT UNTIL CASE GLOBMATCH OF END
+%token RETURN
+%token LOCAL
+%token FUNCTION
+%token DOTS
+%token ARROW
+%token <float> NUMBER
+%token <string>  STRING
+%token <string>  NAME 
+
+%left AND OR
+%left EQ NE '>' '<' LE GE
+%left CONC
+%left '+' '-'
+%left '*' '/'
+%left UNARY NOT
+%right '^'
+
+
+%% /* beginning of rules section */
+
+chunks	: chunklist ret { List.rev $1 }
+
+chunklist : /* empty */        { [] }
+	  | chunklist stat sc  { A.Statement $2 :: $1 }
+	  | chunklist function_ { $2 :: $1 }
+	  ;
+
+function_     : FUNCTION funcname body  { $2 $3 };
+
+funcname  : var             { fun (args, body) -> A.Fundef ($1, args, body) }
+	  | varexp ':' NAME { fun (args, body) -> A.Methdef ($1, $3, args, body) }
+          ;
+
+body :  '(' parlist ')' block END { ($2, $4 ) } ;
+
+statlist : /* empty */         { [] }
+	 | statlist stat sc    { $1 @ [$2] }
+	 ;
+
+sc	 : /* empty */ { () } | ';' { () } ;
+
+stat   : IF expr1 THEN block elsepart END { let (a, e) = $5 in A.If ($2, $4, a, e) }
+  /*
+       | CASE expr1 OF case_body END
+       | GLOBMATCH expr1 OF glob_body END
+  */
+       | WHILE  expr1 DO block END  { A.WhileDo ($2, $4) }
+       | REPEAT block UNTIL expr1   { A.RepeatUntil ($2, $4) }
+       | varlist1 '=' exprlist1     { A.Assign ($1, $3) }
+       | functioncall               { A.Callstmt $1 }
+       | LOCAL localdeclist decinit { A.Local ($2, $3) }
+
+elsepart : /* empty */    { ([], None) }
+	 | ELSE block     { ([], Some $2) }
+         | ELSEIF expr1 THEN block elsepart { let (a, e) = $5 in (($2, $4)::a, e) }
+<<junk>>=
+ /* keeps a copy of expr1 (from CASE expr1 of) on stack until arm is chosen */
+ /* we have to insert DUP *before* tagged_arm_and_body to avoid parser confusion */
+case_body : '|' {code_byte(DUP);} tagged_arm_and_body
+          | ELSE ARROW {code_byte(POP);} block 
+          | /* empty */ {code_byte(POP); /* should code for fallback here */ }
+          ;
+
+tagged_arm_and_body
+       : expr1 PrepIfEqJump ',' /* if it equals tag, will jump to backpatched label */
+         {code_byte(DUP);} tagged_arm_and_body
+   	 {codeIfEqJmp($2,$5); $$=$5;}  /* backpatch and return the label */
+       | expr1 {code_byte(EQOP);} PrepJump ARROW /* if equal, jump to block */
+         {code_byte(POP);} /* we found an arm; pop expr1 (from CASE expr1 OF) */
+         block PrepJump    /* execute block, then jump to end of case stmt */
+         case_body 
+         {codeIf($3,$7);$$=$3+3;} /* patch jumps; return label for other patch */
+       ;                      
+
+ /* keeps a copy of expr1 (from CASE expr1 of) on stack until arm is chosen */
+ /* we have to insert DUP *before* tagged_arm_and_body to avoid parser confusion */
+glob_body : '|' {code_byte(DUP);} glob_arm_and_body
+          | ELSE ARROW {code_byte(POP);} block 
+          | /* empty */ {code_byte(POP); /* should code for fallback here */ }
+          ;
+
+glob_arm_and_body
+       : expr1 PrepIfGlobJump ',' /* if matches tag, will jump to backpatched label */
+         {code_byte(DUP);} glob_arm_and_body
+   	 {codeIfEqJmp($2,$5); $$=$5;}  /* backpatch and return the label */
+       | expr1 {code_byte(GLOBMATCHOP);} PrepJump ARROW /* if match, jump to block */
+         {code_byte(POP);} /* we found an arm; pop expr1 (from CASE expr1 OF) */
+         block PrepJump    /* execute block, then jump to end of case stmt */
+         glob_body 
+         {codeIf($3,$7);$$=$3+3;} /* patch jumps; return label for other patch */
+       ;                      
+*/
+<<parse.mly>>=
+block    :  statlist ret { $1 @ $2 } ;
+
+ret	: /* empty */          { [] }
+        | RETURN exprlist sc   { [A.Return $2] }
+	;
+
+expr1	 : expr { $1 } ;
+				
+expr :  '(' expr ')'  { $2 }
+     |  expr1 EQ  expr1	{ A.Binop ($1, A.Eq, $3) }
+     |	expr1 '<' expr1	{ A.Binop ($1, A.Lt, $3) }
+     |	expr1 '>' expr1	{ A.Binop ($1, A.Gt, $3) }
+     |	expr1 NE  expr1	{ A.Binop ($1, A.Ne, $3) }
+     |	expr1 LE  expr1	{ A.Binop ($1, A.Le, $3) }
+     |	expr1 GE  expr1	{ A.Binop ($1, A.Ge, $3) }
+     |	expr1 '+' expr1 { A.Binop ($1, A.Plus,  $3) }
+     |	expr1 '-' expr1 { A.Binop ($1, A.Minus, $3) }
+     |	expr1 '*' expr1 { A.Binop ($1, A.Times, $3) }
+     |	expr1 '/' expr1 { A.Binop ($1, A.Div,   $3) }
+     |	expr1 '^' expr1 { A.Binop ($1, A.Pow,   $3) }
+     |	expr1 CONC expr1 { A.Binop ($1, A.Concat, $3) }
+     |	'-' expr1 %prec UNARY	{ A.Unop (A.Minus, $2) }
+     | table                    { $1 }
+     |  varexp          { $1 }
+     |  NUMBER          { A.Lit (A.Value.Number $1) }
+     |  STRING          { A.Lit (A.Value.String $1) }
+     |	NIL		{ A.Lit (A.Value.Nil)       }
+     |  functioncall    { A.Call $1 }
+     |	NOT expr1	{ A.Unop (A.Not, $2) }
+     |	expr1 AND expr1 { A.Binop ($1, A.And, $3) }
+     |	expr1 OR  expr1 { A.Binop ($1, A.Or,  $3) }
+     ;
+
+table : '{' fieldlist '}' { let (l, b) = $2 in A.Table (l, b) } ;
+
+functioncall : funcvalue funcParams { $1 $2 } ;
+
+funcvalue    : varexp { fun args -> A.Funcall ($1, args) }
+	     | varexp ':' NAME  { fun args -> A.Methcall ($1, $3, args) }
+	     ;
+
+funcParams :	'(' exprlist ')' { $2 } 
+  	|	table  { [$1] }
+	;
+
+exprlist  :	/* empty */		{ [] }
+	  |	exprlist1		{ $1 }
+	  ;
+		
+exprlist1 :  expr	{ [$1] }
+	  |  exprlist1 ',' expr { $1 @ [$3] }
+	  ;
+
+parlist  :	/* empty */ { [] }
+	  |	parlist1    { $1 }
+	  ;
+		
+parlist1 :	par		  { [$1] }
+	  |	parlist1 ',' par  { $1 @ [$3] }
+	  ;
+
+par : NAME	{ $1 }
+    | DOTS	{ assert false (* not documented *) }
+    ;
+		
+fieldlist  : lfieldlist semicolonpart { ($1, $2) }
+	   | ffieldlist1 lastcomma    { ([], $1) }
+	   ;
+
+semicolonpart : /* empty */    { [] }
+	      | ';' ffieldlist { $2 }
+	      ;
+
+lastcomma  : /* empty */   { () }
+	   | ','           { () }
+	   ;
+
+ffieldlist  : /* empty */ { [] }
+            | ffieldlist1 lastcomma { $1 }
+            ;   
+
+ffieldlist1 : ffield			{ [$1] }
+	   | ffieldlist1 ',' ffield	{ $1 @ [$3] }
+ffield      : NAME '=' expr1  { ($1, $3) } ;
+
+lfieldlist  : /* empty */ { [] }
+	    | lfieldlist1 lastcomma { $1 }
+	    ;
+
+lfieldlist1 : expr1  {[$1]}
+	    | lfieldlist1 ',' expr1 { $1 @ [$3] }
+            ;
+
+varlist1  :	var  {[$1]}
+	  |	varlist1 ',' var	{ $1 @ [$3] }
+	  ;
+		
+var	  :	singlevar { A.Lvar $1 }
+	  |	varexp '[' expr1 ']'  { A.Lindex ($1, $3) }
+	  |	varexp '.' NAME       { A.Lindex ($1, A.Lit (A.Value.String $3)) }
+	  ;
+		
+singlevar :	NAME   { $1 }
+	  ;
+
+varexp	: var { match $1 with A.Lvar x -> A.Var x | A.Lindex (t, k) -> A.Index (t, k) }
+	;
+	  
+localdeclist  : NAME { [$1] }
+     	  | localdeclist ',' NAME { $1 @ [$3] }
+	  ;
+		
+decinit	  : /* empty */  { [] }
+	  | '=' exprlist1 { $2 }
+	  ;
+	  
+%%
+
+end
