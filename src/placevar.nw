@@ -8,10 +8,23 @@
 %%Grades: D Peripheral Later
 
 \section{Placing variables into suitable temporary locations}
+The [[mk_automaton]] function generates an automaton for placing variables,
+given a warning function and a function that returns temporaries.
+The [[context]] variable placer gives an automaton stage the opportunity to put
+a variable into a temporary; if the opportunity is not used (i.e. the stage
+passes the buck to its successor), the variable goes into the private block on
+the stack.
 <<placevar.mli>>=
-val fortran'  : 'a -> Ast2ir.proc -> bool
+val mk_automaton : warn:(width:int -> alignment:int -> hint:string -> unit) ->
+                   vfp:Rtl.exp ->
+                   (temps:(Rtl.space -> Automaton.stage) -> Automaton.stage) ->
+                   (Ast2ir.proc -> Automaton.t)
 val context   : (Ast2ir.proc -> Automaton.t) -> 'e -> Ast2ir.proc -> bool
 @ 
+The [[fortran]] variable placer is deprecated.
+<<placevar.mli>>=
+val fortran'  : 'a -> Ast2ir.proc -> bool
+@
 Boilerplate for linking to Lua.
 <<placevar.ml>>=
 module R  = Rtl
@@ -279,8 +292,8 @@ We do not issue a warning if the elected hint is the default, with zero votes.
 let formal_arr = Array.make proc.Proc.vars None in
 let () = List.iter (fun (i,v) -> formal_arr.(i) <- Some v) formals in
 let choose_hint i elected_hint = 
-  let space_name = function | "signed" | "unsigned" | "" -> "int"
-                            | n                          -> n     in
+  let space_name = function "signed" | "unsigned" | "" -> "int"
+                          | n                          -> n     in
   match formal_arr.(i) with
   | Some (Some ("address" as h), _, _, n) when elected_hint = "int" ->
     if tgt.Target.distinct_addr_sp then
@@ -340,3 +353,21 @@ let () =
 let aresult = A.freeze autmtn in
 let _ = if Block.size aresult.A.overflow <> 0 then
           Impossible.impossible "nonempty overflow from placing variables" in
+@
+<<placevar.ml>>=
+let ( *> ) = A.( *> )
+
+let from_temps proc space = (* stage to allocate a temporary location *)
+  let allocator = Talloc.Multiple.loc proc.Proc.temps space in
+  let alloc ~width:w ~alignment:a ~hint:h = A.of_loc (allocator w) in
+  A.wrap (fun methods -> {A.allocate = alloc; A.freeze = methods.A.freeze})
+
+let mk_automaton ~warn ~vfp mk_stage proc =
+  let warn methods =
+    let alloc ~width:w ~alignment:a ~hint:h =
+      warn ~width:w ~alignment:a ~hint:h;
+      methods.A.allocate w a h in
+    {A.allocate = alloc; A.freeze = methods.A.freeze} in
+  Block.srelative vfp "variables placed in memory" A.at
+  ( A.wrap warn *> mk_stage ~temps:(from_temps proc) *> A.as_stage proc.Proc.priv )
+@

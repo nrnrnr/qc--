@@ -894,41 +894,23 @@ FOR WARNINGS, IT MIGHT BE USEFUL TO INCLUDE A VARIABLE NAME SOMEWHERE,
 SOMEHOW.
 <<x86.ml>>=
 let warning s = Printf.eprintf "backend warning: %s\n" s
-
-let from_temps proc space = (* stage to allocate a temporary location *)
-  let allocator = Talloc.Multiple.loc proc.Proc.temps space in
-  let alloc ~width:w ~alignment:a ~hint:h = A.of_loc (allocator w) in
-  A.wrap (fun methods -> {A.allocate = alloc; A.freeze = methods.A.freeze})
-
-let placevars proc = 
+let placevars = 
   let is_float      hint w = w = 80 || (hint = "float" && (w = 32 || w = 64)) in
   let strange_float hint w = w = 80 && hint <> "float" in
   let strange_int   hint w = hint = "float" && not (is_float hint w) in
-  let warn methods =
-    let alloc ~width:w ~alignment:a ~hint:h =
+  let warn ~width:w ~alignment:a ~hint:h =
       if strange_float h w then
         warning "80-bit variable not hinted float but will go as float anyway"
       else if strange_int h w then
         warning
-          (Printf.sprintf "%d-bit variable hinted float but will go as integer" w);
-      methods.A.allocate w a h in
-    {A.allocate = alloc; A.freeze = methods.A.freeze} in
-  let verbose methods =
-    let alloc ~width:w ~alignment:a ~hint:h =
-      Verbose.say 3
-        [ Printf.sprintf "Allocating width %d alignment %d hint '%s'\n" w a h];
-      methods.A.allocate w a h in
-    {A.allocate = alloc; A.freeze = methods.A.freeze} in
-  Block.srelative target.T.vfp "variables placed in memory" A.at
-  (
-    A.wrap warn *>
+          (Printf.sprintf "%d-bit variable hinted float but will go as integer" w) in
+  let mk_stage ~temps =
     A.choice
       [ is_float,               A.widen (Aux.round_up_to ~multiple_of: 64); 
-        (fun h w -> w <= 32),   A.widen (fun _ -> 32) *> from_temps proc 't';
+        (fun h w -> w <= 32),   A.widen (fun _ -> 32) *> temps 't';
         A.is_any,               A.widen (Aux.round_up_to ~multiple_of: 8);
-      ] *>
-    A.as_stage proc.Proc.priv
-  )
+      ] in
+  Placevar.mk_automaton ~warn ~vfp:target.T.vfp mk_stage
 @ 
 \section{Tentative example Lua code}
 

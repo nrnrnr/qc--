@@ -347,9 +347,7 @@ let negate = function
   | _               -> impossible 
                         "bad comparison in expanded MIPS conditional branch"
 @ 
-
 A conditional branch is presented by a guarded assignment to the PC.
-
 <<MIPS postexpander>>=
 let bc x (opr, ws as op) y ~tgt =
     assert (ws = [wordsize]);
@@ -357,17 +355,12 @@ let bc x (opr, ws as op) y ~tgt =
               (R.store pc_lhs (Up.const tgt) wordsize)  (* effect *)
     ]
 @
-
 [[bnegate]] inverts the condition in a conditional branch.
-
 <<MIPS postexpander>>=
 let bnegate r = match Dn.rtl r with
-    | RP.Rtl [ RP.App( (op,[32])
-                     , [RP.Fetch(RP.Reg(x),32);RP.Fetch (RP.Reg(y),32)]
-                     ) 
-             , RP.Store (pc, tgt, 32)
-             ] when pc = Dn.loc pc_lhs ->
-        R.guard (R.app (R.opr (negate op) [32]) [tval x; tval y]) 
+    | RP.Rtl [ RP.App( (op,[32]), [x; y]), RP.Store (pc, tgt, 32)]
+      when pc = Dn.loc pc_lhs ->
+        R.guard (R.app (R.opr (negate op) [32]) [x; y]) 
                 (R.store pc_lhs (Up.exp tgt) wordsize)
     | _ -> impossible "ill-formed MIPS conditional branch"
 @
@@ -375,8 +368,6 @@ let bnegate r = match Dn.rtl r with
 \paragraph{Calls} Direct and indirect calls. In an indirect call the
 target is held in a register. I don't understand the [[others]]
 parameter. 
-
-
 <<MIPS postexpander>>=
 let effects = List.map Up.effect
 let call  ~tgt ~others = 
