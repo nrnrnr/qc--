@@ -790,9 +790,11 @@ let conservative neighbors cg =
 
 <<coalesce move>>=
 let rec getAlias node cg =
-    if node.list = Coalesced
-    then getAlias (RM.find (RM.find node.v cg.aliasMap) cg.regToItem) cg
-    else node.v
+    try
+        if node.list = Coalesced
+        then getAlias (RM.find (RM.find node.v cg.aliasMap) cg.regToItem) cg
+        else node.v
+    with Not_found -> Impossible.impossible "Not_found in Colorgraph.getAlias"
 @
 
 [[combine]] coalesces the temp [[v]] with the temp [[u]]. [[v]]'s neighbors
