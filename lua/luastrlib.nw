@@ -10,7 +10,7 @@
 module M : Lua.Lib.BARECODE
 <<string builtins>>=
 <<support for [[format]]>>
-type 'a parser = int -> (int -> (unit -> 'a) -> 'a) -> (unit -> 'a) -> 'a
+type 'a parse = int -> (int -> (unit -> 'a) -> 'a) -> (unit -> 'a) -> 'a
 
 let strindex = { V.embed   = (fun n -> V.int.V.embed (n+1))
                ; V.project = (fun v -> V.int.V.project v - 1)
@@ -208,10 +208,10 @@ let find pat s =
   let rec anywhere r i succ fail =
     r i (succ i) (fun () -> if i = length then fail ()
                             else anywhere r (i+1) succ fail) in
-  let nonempty (r:'a parser) i succ fail =
+  let nonempty (r:'a parse) i succ fail =
     r i (fun i' resume -> if i = i' then resume () else succ i' resume) fail in
   let empty i succ fail = succ i fail in
-  let rec star (r : 'a parser) = ((fun i -> ((nonempty r >> star r) || empty) i) : 'a parser) in
+  let rec star (r : 'a parse) = ((fun i -> ((nonempty r >> star r) || empty) i) : 'a parse) in
   let char p i succ fail =
     if (try p s.[i] with _ -> false) then succ (i+1) fail else fail () in
   let comp pat =
