@@ -78,12 +78,19 @@ end
 % ------------------------------------------------------------------ 
 \section{Implementation of registers}
 % ------------------------------------------------------------------ 
+
+Profiling showed that register are compared frequently; a monomorphic
+[[compare]] function improved compile time by over 10\%. (CL)
+
 <<register.ml>>=
 <<exported types>>
-
 module Compare = struct
     type t = reg 
-    let compare = compare
+    let compare ((xs,xi,xw):t) ((ys,yi,yw):t) =
+        let x = compare xs ys in
+        if x <> 0 then x
+        else let i = compare xi yi in if i <> 0 then i 
+        else compare xw yw
 end
 module CompareX = struct
     type t = x
