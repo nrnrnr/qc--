@@ -102,9 +102,10 @@ A standard recursive tree walk.
 The interesting case is [[RP.Var]] in [[walkLoc]].
 <<walk RTL>>=
 let rec walkLoc loc tMap = match loc with
-	| RP.Cell (sp, ag, w, e, ass) ->
+	| RP.Mem (sp, ag, w, e, ass) ->
 		let e', tMap' = walkExp e tMap in
-		RP.Cell (sp, ag, w, e', ass), tMap'
+		RP.Mem (sp, ag, w, e', ass), tMap'
+        | RP.Reg (sp, i, w) as r -> r, tMap
 	| RP.Var (s, i, w) ->
 		(try TM.find i tMap, tMap
 		 with Not_found ->

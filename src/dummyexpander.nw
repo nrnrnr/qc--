@@ -429,21 +429,33 @@ can only be addresses by registers in this model.
 let cell sp agg width addr ass=
     addr >>= fun a -> return (R.cell (U.assertion ass) sp agg width a)
 
+let reg sp i width = return (R.reg (sp, i, width))
+    
+
 <<rules>>=
 addr:       ireg  {: ireg >>= fun r -> return (fetch r) :}
 
 <<rules>>=
-mem:        Cell('m', agg, width, addr, ass)  {: cell 'm' agg width addr ass :}
-icell:      Cell('r', agg, width, const, ass) {: cell 'r' agg width const ass :}
-icell:      Cell('t', agg, width, const, ass) {: cell 't' agg width const ass :}
-icell:      Cell('g', agg, width, const, ass) {: cell 'g' agg width const ass :}
-icell:      Cell('v', agg, width, const, ass) {: cell 'v' agg width const ass :}
-fcell:      Cell('f', agg, width, const, ass) {: cell 'f' agg width const ass :}
-fcell:      Cell('u', agg, width, const, ass) {: cell 'u' agg width const ass :}
-dcell:      Cell('d', agg, width, const, ass) {: cell 'd' agg width const ass :}
-ccell:      Cell('c', agg, width, const, ass) {: cell 'c' agg width const ass :}
+mem:        Mem('m', agg, width, addr, ass)  {: cell 'm' agg width addr ass :}
+@
 
-error:      Cell(x:char, agg, width, addr, ass) [10]
+The name [[icell]] is poorly chosen. We originally had no syntax for
+registers in {\rtl}s, only for cells. 
+
+<<rules>>=
+icell:      Reg('r', index, width) {: reg 'r' index width :} 
+icell:      Reg('t', index, width) {: reg 't' index width :} 
+icell:      Reg('g', index, width) {: reg 'g' index width :} 
+icell:      Reg('v', index, width) {: reg 'v' index width :} 
+fcell:      Reg('f', index, width) {: reg 'f' index width :} 
+fcell:      Reg('u', index, width) {: reg 'u' index width :} 
+dcell:      Reg('d', index, width) {: reg 'd' index width :} 
+ccell:      Reg('c', index, width) {: reg 'c' index width :} 
+
+error:      Reg(x:char, index, width)
+            {: error (Printf.sprintf "register in space '%c'" x) :}
+
+error:      Mem(x:char, agg, width, addr, ass) [10]
             {: error (Printf.sprintf "cell in space '%c'" x) :}    
 @
 
@@ -602,7 +614,8 @@ let rec exp = function
     | _                         -> error "application with too many args"
 
 and loc = function
-    | RP.Cell(char, aff, w, e, ass) -> conCell char aff w (exp e) ass 
+    | RP.Mem(char, aff, w, e, ass) -> conMem char aff w (exp e) ass 
+    | RP.Reg(sp, i, w)          -> conReg sp i w
     | RP.Var(s, i, w)           -> conVar ()
     | RP.Slice(w,i,loc)         -> conSlice ()
     

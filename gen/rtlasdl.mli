@@ -27,7 +27,8 @@
       | Late of (StdPrims.std_string * width)
   
   and loc =
-        Cell of (space * aggregration * width * exp * assertion)
+        Mem of (space * aggregration * width * exp * assertion)
+      | Reg of (space * StdPrims.std_int * width)
       | Var of (StdPrims.std_string * StdPrims.std_int * width)
       | Slice of (width * StdPrims.std_int * loc)
   

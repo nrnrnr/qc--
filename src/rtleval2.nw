@@ -1,12 +1,14 @@
 % -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% vim: ts=8 sw=4 et: Come for the Emacs, stay for the Vi
 
-% ------------------------------------------------------------------ 
 % Grades     ::=    "%%Grades:" Quality Importance Urgency
 % Quality    ::=    A|B|C|D|E
 % Importance ::=    Central|Subsystem|Peripheral
 % Urgency    ::=    Immediate|Soon|Later
 %
 % Example (at beginning of line): %%Grades: B Central Soon
+
+% ------------------------------------------------------------------ 
 \section{RTL Constant Folding}
 % ------------------------------------------------------------------ 
 
@@ -166,9 +168,10 @@ let rec exp = function
     | RP.App ((o,w),args)           -> app o w (List.map exp args) 
         
 and loc = function    
-    | RP.Cell(sp, agg, w, e, ass)   -> RP.Cell(sp, agg, w, exp e, ass)
-    | RP.Var(s,i,w) as v            -> v
+    | RP.Mem(sp, agg, w, e, ass)    -> RP.Mem(sp, agg, w, exp e, ass)
     | RP.Slice(w,i,l)               -> RP.Slice(w, i, loc l)
+    | RP.Reg(sp, i, w) as v         -> v
+    | RP.Var(s,i,w) as v            -> v
 
 let effect = function
     | RP.Store(l,e,w)               -> RP.Store(loc l, exp e, w)

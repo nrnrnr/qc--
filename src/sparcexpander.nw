@@ -7,6 +7,7 @@
 % Urgency    ::=    Immediate|Soon|Later
 %
 % Example (at beginning of line): %%Grades: B Central Soon
+
 % ------------------------------------------------------------------ 
 \section{Sparc Code Expander}
 % ------------------------------------------------------------------ 
@@ -47,8 +48,8 @@ specification.
 <<modules>>=
 module B  = Bits
 module C  = Camlburg
-module D  = Rtl.Convert      (* Convert Down  to private repr. *)
-module G  = Cfg4             (* for expanding all RTLs in a CFG *)
+module D  = Rtl.Dn              (* Convert Down  to private repr. *)
+module G  = Cfg4                (* for expanding all RTLs in a CFG *)
 module GU = Cfgutil
 module R  = Rtl
 module RP = Rtl.Private
@@ -56,7 +57,7 @@ module RU = Rtlutil
 module N  = Nativeint
 module S  = Space
 module T  = Target2
-module U  = Rtl.Revert       (* Convert Up    to abstract repr. *)
+module U  = Rtl.Up              (* Convert Up    to abstract repr. *)
 module W  = Rtlutil.Width 
 @
 
@@ -282,7 +283,7 @@ addr:       reg         {: reg >>= fun r -> return (I.indirecta r) :}
 addr:       const13     {: return (I.absolutea const13) :}
 
 
-mem:        Cell('m', agg, width, addr, ass) {: addr :}
+mem:        Mem('m', agg, width, addr, ass) {: addr :}
             
 stmt:       Store(mem, reg, width) [1]       
             {: mem >>= fun m -> reg >>= fun r -> exec (I.st r m) :}    
@@ -319,13 +320,13 @@ Registers are categorized into interger, floating point, and control
 registers. Note, that temporaries are treated like hardware registers.
 
 <<rules>>=
-rcell:      Cell(s:char, agg, width, k:const, ass) 
+rcell:      Reg(s:char, i:int, width)
             [{: guard 0 (s = 'r' || s = 't') :}]
-            {: return (I.reg s (N.to_int k)) :}    
+            {: return (I.reg s i) :}    
             
-fcell:      Cell(s:char, agg, width, k:const, ass)
+fcell:      Reg(s:char, i:int, width)
             [{: guard 0 (s = 'f' || s = 'u') :}]
-            {: return (I.reg s (N.to_int k)) :}
+            {: return (I.reg s i) :}
 @
 
 Moves between registers.
@@ -469,7 +470,8 @@ let rec exp = function
     | RP.App(_,_)               -> error "too many arguments in application"
 
 and loc = function
-    | RP.Cell(char, aff, w, e, ass) -> conCell char aff w (exp e) ass 
+    | RP.Mem(char, aff, w, e, ass) -> conMem char aff w (exp e) ass 
+    | RP.Reg(char, i, w)        -> conReg char i w
     | RP.Var(s, i, w)           -> error "var found"
     | RP.Slice(w,i,loc)         -> error "cannot handle slice"
     
@@ -488,7 +490,7 @@ letters in a cell.
 and rtl = function
     | RP.Rtl([])                            -> conNop ()
     | RP.Rtl([(RP.Const(RP.Bool(true)),s)]) -> conSimple (stmt s)
-    | RP.Rtl([(g,RP.Store(RP.Cell(sp,_,_,_,_),e,_))]) as rtl ->
+    | RP.Rtl([(g,RP.Store(RP.Mem(sp,_,_,_,_),e,_))]) as rtl ->
         ( match sp with
         | 'B' -> conBranch (exp g) (exp e) 
         | 'G' -> conGoto   (exp e)

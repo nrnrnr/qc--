@@ -6,27 +6,10 @@
 % Urgency    ::=    Immediate|Soon|Later
 %
 % Example (at beginning of line): %%Grades: B Central Soon
-\input{../config/macros.tex}
 
-% l2h substitution cfg CFG
-% l2h substitution dots ...
-% l2h substitution ast AST
-% l2h substitution AST AST
-% l2h substitution rtl RTL
-% l2h substitution ir IR
-% l2h substitution noweb NOWEB
-% l2h substitution qcc QC--
-% l2h substitution C C--
-% l2h substitution PAL C--
-% l2h substitution pal C--
-% l2h substitution asdl ASDL
-% l2h substitution ocaml OCaml
-% l2h substitution forall forall
-% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
-
-% ################################################################## 
+% ------------------------------------------------------------------ 
 \section{Register}
-% ################################################################## 
+% ------------------------------------------------------------------ 
 
 A [[Register.t]] describes a target-specific register-like location.
 Such a location includes hardware-registers or temporaries, but not
@@ -41,15 +24,22 @@ scheme of multiple cells is associated with the [[space]], but not
 included in a [[t]] value.  They can, however, obtained from the
 [[Target.t]] description of the target the register belongs to.
 
+We cannot refer to types in module \module{rtl} because this would
+create a cyclic dependency,
+
 <<type t>>=
-type t = Rtl.space * Base.std_int * Rtl.width
+type t = char * int * int       (* Rtl.space, index, Rtl.width *)
 @
 
 <<register.mli>>=
 <<type t>>
 module Set: Set.S with type elt = t
 module Map: Map.S with type key = t
+@
 
+Registers are exported to Lua as a new \emph{userdata} type.
+
+<<register.mli>>=
 module RT (C : Lua.Lib.CORE) : sig
 	val map : t C.V.map
 end
@@ -65,7 +55,10 @@ include the aggregation and width of the index expression. Therefore
 [[to_loc]] receives as its first argument a map, that provides a
 complete description for a given space.
 
-<<register.mli>>=
+THE FOLLOWING TWO FUNCTIONS WILL BE REMOVED ONCE WE HAVE COMPLETED THE
+TRANSITION TO RTL.MEM/RTL.REG.
+
+<<deprecated register.mli>>=
 val to_loc: (Rtl.space -> Space.t) -> t -> Rtl.loc   
 val of_loc: Rtl.loc -> t                     (* Invalid_argument *)
 @
@@ -84,10 +77,6 @@ val print_set: Set.t -> string
 % ------------------------------------------------------------------ 
 
 <<register.ml>>=
-module R    = Rtl
-module S    = Space
-module RP   = Rtl.Private
-
 <<type t>>
 
 module Compare = struct
@@ -96,6 +85,9 @@ module Compare = struct
 end
 module Set = Set.Make(Compare)
 module Map = Map.Make(Compare)
+
+<<deprecated>>=
+module S    = Space
 
 let to_loc lookup (sp,index,width) =
     let spec  = lookup sp                                     in
@@ -125,17 +117,25 @@ struct
 	let embedString = V.string.V.embed
 
 	let embedRegister (s,i,w) =
-		let labels = [ embedString "space"; embedString "index"; embedString "width" ] in
-		let values = [ embedString (Char.escaped s); V.int.V.embed i; V.int.V.embed w] in
+		let labels = [ embedString "space"
+                             ; embedString "index"
+                             ; embedString "width" 
+                             ] in
+		let values = [ embedString (Char.escaped s)
+                             ; V.int.V.embed i
+                             ; V.int.V.embed w
+                             ] in
 		let newTab = (V.Table.create (List.length labels)) in
-		let () = List.iter2 (fun key data -> V.Table.bind newTab ~key ~data)
+		let () = List.iter2 
+                            (fun key data -> V.Table.bind newTab ~key ~data)
 							labels values in
 		V.Table newTab
 
 	let projectRegister reg = match reg with
 		| V.Table reg ->
 		    let field f = V.Table.find reg (embedString f) in
-			let s = String.get (V.string.V.project (field "space")) 0 in
+			let s = String.get 
+                                    (V.string.V.project (field "space")) 0 in
 			let i = V.int.V.project (field "index") in
 			let w = V.int.V.project (field "width") in
 			(s,i,w)
@@ -145,20 +145,6 @@ struct
 		      ; C.V.project = projectRegister
 	          }
 end
-@
-
-\iffalse
-Spill slots are maintained by an [[Automaton.t]] that hands out
-[[Automaton.loc]] positions. We exploit the fact that we know that the
-automaton at hand alwas issues locations that can be converted to
-[[Rtl.loc]] locations.
-\fi
-
-<<register.ml causes cyclic dependencies with>>=
-let spill_slot automaton (sp,index,width) =
-    let loc:Automaton.loc = Automaton.ty automaton width None in
-    let loc:Rtl.loc       = Automaton.to_loc loc              in 
-        loc
 @
 
 % ------------------------------------------------------------------ 

@@ -139,12 +139,16 @@
         (SexpPkl.rd_lp s_);
         let tmp_ = let t = (SexpPkl.get_sym s_) in
           (match (t) with 
-              "rtlasdl_Cell" -> let space1 = (sexp_rd_space s_) in
+              "rtlasdl_Mem" -> let space1 = (sexp_rd_space s_) in
               let aggregration1 = (sexp_rd_aggregration s_) in
               let width1 = (sexp_rd_width s_) in
               let exp1 = (sexp_rd_exp s_) in
               let assertion1 = (sexp_rd_assertion s_) in
-              Rtlasdl.Cell(space1, aggregration1, width1, exp1, assertion1)
+              Rtlasdl.Mem(space1, aggregration1, width1, exp1, assertion1)
+            | "rtlasdl_Reg" -> let space1 = (sexp_rd_space s_) in
+              let int1 = (StdPrimsUtil.sexp_rd_std_int s_) in
+              let width1 = (sexp_rd_width s_) in
+              Rtlasdl.Reg(space1, int1, width1)
             | "rtlasdl_Var" -> let string1 = (StdPrimsUtil.sexp_rd_std_string s_) in
               let int1 = (StdPrimsUtil.sexp_rd_std_int s_) in
               let width1 = (sexp_rd_width s_) in
@@ -375,18 +379,26 @@
   
   and sexp_wr_loc x_ s_ = 
       (match (x_) with 
-          (Rtlasdl.Cell(space1,
+          (Rtlasdl.Mem(space1,
             aggregration1,
             width1,
             exp1,
             assertion1)) -> begin
             (SexpPkl.wr_lp s_);
-            (SexpPkl.wr_sym "rtlasdl_Cell" s_);
+            (SexpPkl.wr_sym "rtlasdl_Mem" s_);
             (sexp_wr_space space1 s_);
             (sexp_wr_aggregration aggregration1 s_);
             (sexp_wr_width width1 s_);
             (sexp_wr_exp exp1 s_);
             (sexp_wr_assertion assertion1 s_);
+            (SexpPkl.wr_rp s_)
+          end
+        | (Rtlasdl.Reg(space1, int1, width1)) -> begin
+            (SexpPkl.wr_lp s_);
+            (SexpPkl.wr_sym "rtlasdl_Reg" s_);
+            (sexp_wr_space space1 s_);
+            (StdPrimsUtil.sexp_wr_std_int int1 s_);
+            (sexp_wr_width width1 s_);
             (SexpPkl.wr_rp s_)
           end
         | (Rtlasdl.Var(string1, int1, width1)) -> begin

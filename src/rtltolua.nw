@@ -105,7 +105,7 @@ let rec expr' f e =
 
 <<ToLua>>=
 and location' = function
-    | R.Cell (sp, agg, width, e, ass) ->
+    | R.Mem (sp, agg, width, e, ass) ->
 		(match sp with
         | 'A' -> ("",
                   argstack,
@@ -120,8 +120,14 @@ and location' = function
                   commentout,
 				  "_register",
 				  "'" ^ String.make 1 r ^ "'," ^ expr' nopush e))
-    | R.Var   (name, index, width)     -> ("", valstack, "_local", 
-										   string_of_int index)
+    
+    | R.Reg   (sp, i, width)           -> assert false (* ask RO to fix it *)
+    | R.Var   (name, index, width)     -> (""
+                                          , valstack
+                                          , "_local"
+                                          , string_of_int index
+                                          )
+                                          
     | R.Slice (w, i, loc)              -> 
         let (p, ff, s, a) = location' loc in ("-- slice\n" ^ p, ff, s, a)
 

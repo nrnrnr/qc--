@@ -7,10 +7,9 @@
 % Urgency    ::=    Immediate|Soon|Later
 %
 % Example (at beginning of line): %%Grades: B Central Soon
-% ------------------------------------------------------------------ 
-\section{Intel $x$86 Recognizer}
-\label{x86rec.sec}
 
+% ------------------------------------------------------------------ 
+\section{Intel $x$86 Recognizer} \label{x86rec.sec}
 % ------------------------------------------------------------------ 
 
 %%Grades: B Subsystem Later
@@ -397,10 +396,9 @@ let rec exp = function
   | RP.App((o,_),_)           -> error ("unknown operator " ^ o)
 <<code to follow the labeler>>=  
 and loc = function
-  | RP.Cell('m', aff, w, e, ass) -> conMem (exp e) w
-  | RP.Cell(sp, aff, w, RP.Const(RP.Bits b), ass)
-                              -> conReg sp (Bits.U.to_int b) w
-  | RP.Cell(_, _, _, _, _)    -> error "non-mem, non-reg cell"
+  | RP.Mem('m', aff, w, e, ass) -> conMem (exp e) w
+  | RP.Reg(sp, i, w)          -> conReg sp i w 
+  | RP.Mem(_, _, _, _, _)     -> error "non-mem, non-reg cell"
   | RP.Var(s, i, w)           -> error "var found"
   | RP.Slice(w,i,loc)         -> error "cannot handle slice"
 @ 
@@ -408,20 +406,15 @@ Things start to get a bit baroque here, as we recognize different
 special forms a single effect can take.
 <<code to follow the labeler>>=  
 and effect = function
-  | RP.Store(l, RP.App((o, _), [RP.Fetch(l',_); r]), w) when l = l' ->
-      conLlr (loc l) o (exp r) w
-  | RP.Store(RP.Cell('c', _, _, RP.Const(RP.Bits b), ass), r, w)
-    when (Bits.U.to_int b = SS.indices.SS.pc) ->
-      conGoto (exp r)
-  | RP.Store(RP.Cell('c', _, _, RP.Const(RP.Bits b), ass), r, w)
-    when (Bits.U.to_int b = SS.indices.SS.cc) ->
-      conSetflags (exp r)
-  | RP.Store(RP.Cell('c', _, _, RP.Const(RP.Bits b), ass), r, w) ->
-      error ("set $c["^string_of_int (Bits.U.to_int b)^"]")
-  | RP.Store(RP.Cell('c', _, _, index, ass), r, w) ->
-      error ("set $c["^RU.ToReadableString.exp (Up.exp index)^"]")
-  | RP.Store(l,e,w)           -> conStore (loc l) (exp e) w
-  | RP.Kill(l)                -> conKill (loc l)
+  | RP.Store(l, RP.App((o, _), [RP.Fetch(l',_); r]), w) 
+    when l = l'                       -> conLlr (loc l) o (exp r) w
+  | RP.Store(RP.Reg('c',i, w),r,_) 
+    when (i = SS.indices.SS.pc)       -> conGoto (exp r)
+  | RP.Store(RP.Reg('c', i, w),r,_)
+    when (i = SS.indices.SS.cc)       -> conSetflags (exp r)
+  | RP.Store(RP.Reg('c', i, _), r, w) -> error ("set $c["^string_of_int i^"]")
+  | RP.Store(l,e,w)                   -> conStore (loc l) (exp e) w
+  | RP.Kill(l)                        -> conKill (loc l)
 @
 The truly ghastly stuff is the stuff that recognizes multiple
 effects that set flags.
@@ -439,11 +432,11 @@ the recognizer (which currently falls on the floor).
 <<code to follow the labeler>>=  
 and guarded g eff = match g with
 | RP.Const(RP.Bool b) -> if b then effect eff else conNop()
-| RP.App((compare, [32]), [RP.Fetch(RP.Cell('c', _, _, RP.Const(RP.Bits n), _), _)])
-    when Bits.U.to_int n = SS.indices.SS.cc && begins_x86_ compare ->
+| RP.App((compare, [32]), [RP.Fetch(RP.Reg('c', n, _), _)])
+    when n = SS.indices.SS.cc && begins_x86_ compare ->
       (match eff with
-      | RP.Store(RP.Cell('c', _, _, RP.Const(RP.Bits b), _), r, w)
-        when (Bits.U.to_int b = SS.indices.SS.pc) ->
+      | RP.Store(RP.Reg('c', i, _), r, w)
+        when (i = SS.indices.SS.pc) ->
           conJcc (String.sub compare 4 (String.length compare - 4)) (exp r)
       | _ -> error "guard on x86 non-branch")
 | _ -> conGuarded (exp g) (effect eff)
@@ -454,20 +447,20 @@ Oh, the joy of the flags\ldots
 <<horrible pattern match for [[Withflags]]>>=
 | [ (RP.Const(RP.Bool true), <<pattern for [[l]] := [[l']] [[o]] [[r]] at [[w]]>>)
   ; (RP.Const(RP.Bool true), <<pattern for flags := [[fo]] ([[l'']], [[r']])>>)
-  ] when l = l' && l = l'' && r = r' && Bits.U.to_int flag_index = SS.indices.SS.cc ->
+  ] when l = l' && l = l'' && r = r' && flag_index = SS.indices.SS.cc ->
       conWithaflags (loc l) o (exp r) w fo
 | [ (RP.Const(RP.Bool true), <<pattern for [[l]] := [[l']] [[o]] [[r]] at [[w]]>>)
   ; (RP.Const(RP.Bool true), <<pattern for flags := [[fo]] ([[l'']] [[o']] [[r']])>>)
   ] when l = l' && l = l'' && r = r' && o = o'
-    && Bits.U.to_int flag_index = SS.indices.SS.cc ->
+    && flag_index = SS.indices.SS.cc ->
       conWithlflags (loc l) o (exp r) w fo
 <<pattern for [[l]] := [[l']] [[o]] [[r]] at [[w]]>>=
 RP.Store(l, RP.App((o, _), [RP.Fetch(l',_); r]), w) 
 <<pattern for flags := [[fo]] ([[l'']], [[r']])>>=
-RP.Store(RP.Cell('c', _, _, RP.Const(RP.Bits flag_index), ass), 
+RP.Store(RP.Reg('c', flag_index, _),
          RP.App((fo, _), [RP.Fetch(l'',_); r']), _)
 <<pattern for flags := [[fo]] ([[l'']] [[o']] [[r']])>>=
-RP.Store(RP.Cell('c', _, _, RP.Const(RP.Bits flag_index), ass), 
+RP.Store(RP.Reg('c', flag_index, _),
          RP.App((fo, _), [RP.App ((o', _), [RP.Fetch(l'',_); r'])]), _)
 @
 \subsection{The exported recognizers}

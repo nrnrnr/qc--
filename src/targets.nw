@@ -141,8 +141,8 @@ module Spill = struct
             invalid_arg 
                 "Target2.assign source and destination width don't match"
         else
-            let src_loc = Register.to_loc lookup src  in
-            let dst_loc = Register.to_loc lookup dst  in
+            let src_loc = Rtl.reg src  in
+            let dst_loc = Rtl.reg dst  in
                 Rtl.store dst_loc (Rtl.fetch src_loc src_w)  dst_w
 
     let spill lookup (sp,index,w as reg) loc =
@@ -150,7 +150,7 @@ module Spill = struct
         if w <> w' then invalid_arg 
             (Printf.sprintf "Target2.spill size mismatch: %d <- %c(%d)" w' sp w)
         else
-            let reg_loc = Register.to_loc lookup reg in
+            let reg_loc = Rtl.reg reg in
             let rtl     = Rtl.store loc (Rtl.fetch reg_loc w) w in
                 [rtl]
 
@@ -158,7 +158,7 @@ module Spill = struct
         if Rtlutil.Width.loc loc <> width then
             invalid_arg "Register.spill size mismatch"
         else
-            let reg_loc = Register.to_loc lookup reg  in
+            let reg_loc = Rtl.reg reg  in
             let rtl     = Rtl.store reg_loc (Rtl.fetch loc width) width in
                 [rtl]
 end
