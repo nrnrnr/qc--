@@ -95,7 +95,8 @@ behaviors, the following name scheme is used:
 \end{itemize}
 
 <<types and ops>>=
-type cfg
+type cfg        
+type t = cfg    (* Cfg.t looks JustBetter *)
 type node
 <<type conts>>
 <<type formal>>
@@ -112,13 +113,17 @@ val lookup:     cfg -> string -> node                 (* Not_found *)
 val entry:      cfg -> node (* = first ?? *)
 val exit:       cfg -> node (* = last ??  *)
 val enumerated: cfg -> bool                  (* true, iff nodes are numbered *)
+val first:      cfg -> node (* wrt numbering *)
+val last:       cfg -> node (* wrt numbering *)
+
+(* cfg traversal *)
 val fold:       cfg -> (node -> 'a -> 'a) -> 'a -> 'a (* must not use gm_xxx *)
 val scan_fwd:   cfg -> (node -> 'a -> 'a) -> 'a -> 'a (* must not use gm_xxx *)
 val scan_bwd:   cfg -> (node -> 'a -> 'a) -> 'a -> 'a (* must not use gm_xxx *)
-val forward:    cfg -> node -> node option
-val backward:   cfg -> node -> node option
-val first:      cfg -> node (* wrt numbering *)
-val last:       cfg -> node (* wrt numbering *)
+val forward:    cfg -> node -> node option (* obsolete? *)
+val backward:   cfg -> node -> node option (* obsolete? *)
+val scani_fwd:  cfg -> first:int -> last:int -> (node -> 'a -> 'a) -> 'a -> 'a 
+val scani_bwd:  cfg -> first:int -> last:int -> (node -> 'a -> 'a) -> 'a -> 'a
 
 (* add node to cfg, post: not (enumerated cfg) *)
 val gm_assign:  cfg -> Rtl.rtl -> succ:node -> node
@@ -137,9 +142,9 @@ val gm_copyo:   cfg -> actual list -> Automaton2.t -> succ:node -> node * Automa
 (* cfg mutators, post: not (enumerated cfg) *)
 val gm_delete:                  node -> unit
 val gm_redirect_all:            node -> from:node -> dest:node -> unit
-val gm_insert_assign_before:    node -> Rtl.rtl -> unit (* assign node only *)
+val gm_insert_assign_before:    node -> Rtl.rtl -> unit (* any node *)
 val gm_insert_assign_after:     node -> Rtl.rtl -> unit (* assign node only *)
-val gm_enumerate:               cfg -> unit (* post: enumerated cfg *)            
+val gm_enumerate:               cfg -> unit (* post: enumerated cfg *)
 
 (* node observation *)
 val cfg:        node -> cfg
@@ -151,7 +156,7 @@ val number:     node -> int             (* pre: enumerated cfg *)
 
 (* node mutators *)
 val set_live:   node -> Register.Set.t -> unit (* set live set *)
-val set_rtl:    node -> Rtl.rtl -> unit
+val set_rtl:    node -> (Rtl.rtl -> Rtl.rtl) -> unit
 @
 
 % ------------------------------------------------------------------ 
@@ -190,6 +195,17 @@ val set_rtl:    node -> Rtl.rtl -> unit
     
 \item[scan\_bwd]
     Like [[scan_fwd]] except that nodes are visited in the reverse order.
+
+\item[scani\_fwd]
+    Scans the nodes in the [[first]] \dots [[last]] interval in enumeration
+    order and passes nodes to the supplied function. Each of the following
+    is a checked run-time error:  absent numbering, [[first]] greater
+    than [[last]]. It is an unchecked run-time error when the supplied
+    function uses any graph mutator.
+
+\item[scani\_bwd]]
+    Like [[scani_fwd]], except that the interval in reverse order,
+    from [[last]] to [[first]].
 
 \item[forward]
     The next node in numbered order or [[None]] if the [[node]]
