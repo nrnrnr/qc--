@@ -62,9 +62,9 @@ cases because they decide which test to use.
 % ------------------------------------------------------------------ 
 
 The [[qc--]] compiler can re-create the concrete syntax of a file that
-is has parsed:  [[qc-- -pp file.c--]] writes a pretty printed form of
-[[file.c--]] to standard output.  This is an opportunity for a
-fixpoint test: 
+is has parsed:  [[qc-- -p file.c--]] writes a pretty-printed form of
+[[file.c--]] to standard output.  This is an opportunity for a fixpoint
+test: 
 
 \begin{enumerate}
 \item \label{one} Parse a file and write out its concrete syntax.
@@ -106,9 +106,9 @@ file="$1"
 
 # three rounds
 
-$qc -pp $file           > $tmp/$this.$$.1
-$qc -pp $tmp/$this.$$.1 > $tmp/$this.$$.2
-$qc -pp $tmp/$this.$$.2 > $tmp/$this.$$.3
+$qc -p $file           > $tmp/$this.$$.1
+$qc -p $tmp/$this.$$.1 > $tmp/$this.$$.2
+$qc -p $tmp/$this.$$.2 > $tmp/$this.$$.3
 
 diff -c $tmp/$this.$$.2 $tmp/$this.$$.3 || echo "@>>> $file "
 rc="$?"
@@ -249,20 +249,20 @@ done
 
 #
 # run cmd
-#
+# shell quoting hell is upon us.
 
 if [ "$verbose" = "on" ]; then
     echo "testing command: '$cmd'"
 fi
 
-if [ "$recording" = "off" ]; then
-    $cmd < "$stdin" 2> "$tmp.stderr" > "$tmp.stdout"
+if [ "$recording" = "off" ]; then 
+    eval "$cmd < \"$stdin\" 2> \"$tmp.stderr\" > \"$tmp.stdout\""
     returnc="$?"
 else
     # recording mode - do not compare but create files 
     # as specified on the cmd line
 
-    $cmd < "$stdin" 2> "$stderr" > "$stdout"
+    eval "$cmd < \"$stdin\" 2> \"$stderr\" > \"$stdout\""
     for f in $files; do
         mv $f `basename $f`
     done
