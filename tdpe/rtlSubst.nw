@@ -6,9 +6,25 @@
 
 \section{A forward substitution function on RTLs}
 
+This module implements a forward-substitution procedure on RTLs. We are given
+two RTLs [[rtl1]] and [[rtl2]], which we assume to be succesive
+instructions in an instruction stream. If [[sigma]] is the initial
+state of the machine, the effects take place as:
+\begin{verbatim}
+             rtl1                rtl2
+  sigma   ---------> sigma'    --------> sigma''
+\end{verbatim}
+The procedure returns [[rtl2]] in which references to locations [[l]] in
+assigned as [[l <- e]] by [[rtl1]] are replaced with the assigned
+expression [[e]]. 
+
+The procedure makes sure that the result of evaluation of [[l]] in
+[[sigma]] is identical with the result of evaluation of [[l]] in
+[[sigma']]. The same is done for the substituted expression [[e]].
+
 <<rtlSubst.mli>>=
 
-val forwSubstitutionX : Rtl.rtl -> Rtl.rtl -> Rtl.rtl
+val frwdSubst : Rtl.rtl -> Rtl.rtl -> Rtl.rtl option
 
 @ \section{Implementation}
 
@@ -17,21 +33,14 @@ val forwSubstitutionX : Rtl.rtl -> Rtl.rtl -> Rtl.rtl
 module R = Rtl.Private
 module RPb = Rtl
 module RR = Rtl.Revert
-(*let (=) x y = Base.eq x y*)
+
 let (<) x y = Base.lessthan x y
 let (+) x y = Base.add x y
 
 exception DiffNonsense
 exception IDontKnowYet
-
-let width l =
-  match l with
-    R.Cell(space,agg,width,exp,assrt) -> width
-  | R.Var(_,_,width) -> width
-  | R.Slice _ -> raise IDontKnowYet
-
     
-let forwSubstitutionX rtl1 rtl2 =
+let frwdSubst rtl1 rtl2 =
   let (R.Rtl rtl1) = Rtl.Convert.rtl rtl1 in
   let (R.Rtl rtl2) = Rtl.Convert.rtl rtl2 in
 
@@ -42,8 +51,8 @@ let forwSubstitutionX rtl1 rtl2 =
   let constEq c1 c2 =
     match (c1,c2) with
       (R.Bool b1,R.Bool b2) ->
-	if b1 then b2
-	else not(b2)
+        if b1 then b2
+        else not(b2)
     | (R.Bits b1,R.Bits b2) -> (Bitops.eq' b1 b2)
     | (R.Link (s1,w1),R.Link (s2,w2)) -> (s1=s2) && (w1=w2)
     | _ -> false in
@@ -54,75 +63,42 @@ let forwSubstitutionX rtl1 rtl2 =
     | (R.Bits(b1,w1),R.Bits(b2,w2)) -> raise IDontKnowYet
     | (R.Link (s1,w1),R.Link (s2,w2)) -> false (* something I do not know of yet *)
     | _ -> false in
-
+@ Here some approximations are made. I return [[false]] whenever I am
+not sure [[true]] holds.
+<<rtlSubst.ml>>=
   let rec sameValue expBefore expAfter =
     match expBefore with
       R.Const c1 ->
         (match expAfter with
           R.Const c2 -> constEq c1 c2
-        | R.Fetch(locAfter,widthAfter) ->
-            false (* I do not want to know what was it assigned before,
-                     another substitution should have taken care of that *)
-        | R.App(op,oplist) ->
-            false (* I should have normalized all constant expressions
-                     before getting here.
-                     But, otherwise, I can think of inserting a dynamic test
-                     that calls the operand, but where will we end up?
+        | R.Fetch(locAfter,widthAfter) -> false 
+        | R.App(op,oplist) -> false)
 
-                     Let's do it later
-
-                     Here maybe is a place where once can make use of those theories..
-
-                     Again, we may make use of the fact that some location
-                     in the subexpressions has been assigned before to a constant,
-                     but again, another substitution should have taken care of that.
-                  *)
-        )
     | R.Fetch(locBefore,widthBefore) ->
         (match expAfter with
-          R.Const c2 ->
-            false (* I have no way to tell, do I?
-                     I mean, I can never know that a location in sigma evaluates
-                     to a constant *)
+          R.Const c2 -> false 
         | R.Fetch(locAfter,widthAfter) ->
-            if widthBefore=widthAfter &&
-              unTouched locAfter widthAfter &&
-              sameLoc locBefore locAfter then
-              true (* To know for sure that the two locations
-                      yield the same value,they must have the same width. Then,
-                      we can only tell for sure that they are the same in two possibilities:
-                         - they are the same location which is not 
-                           affected by the first assignment.
-                      
-                         - they are different locations, and the second one
-                           is assigned in the first rtl to the first one. In this case,
-                           we hope that a later substitution might lead this case
-                           into the first case.
-                   *)
-            else false
-        | R.App(op,oplist) ->
-            false (* We should normalize all constant expressions
-                     at some point, but not here *)
-        )
-    | R.App(op,oplist) -> false
-           (* Again, perhaps we should normalize all constant before getting here *)
+            (widthBefore=widthAfter &&
+             unTouched locAfter widthAfter &&
+             sameLoc locBefore locAfter) 
+        | R.App(op,oplist) -> false )
 
+    | R.App(op,oplist) -> false
+@ The [[expNotWithinDiff]] function tries to establish wether the
+defined vicinities of two expressions do not overlap. It conservatively
+returns [[true]].
+<<rtlSubst.ml>>=
   and expNotWithinDiff expBefore widthBefore expAfter widthAfter =
     (match expBefore with
       R.Const cBefore ->
         (match expAfter with
           R.Const cAfter ->
             constBiggerDiff cBefore widthBefore cAfter widthAfter
-        | R.Fetch(loc,width) ->
-            false  (* here I take a conservative approach,
-                      Me might be able to do something here,
-                      like disinguish the locations that have been assigned,
-                      but then we are really getting paranoid... *)
-        | R.App(op,exs) ->
-            false (* reduce me and I'll tell you *))
-    | R.Fetch(loc,width) ->
-        false (* I have no way to tell whay sigma holds *)
-    | R.App(op,exs) -> false (* reduce me and I'll tell you *))
+        | R.Fetch(loc,width) -> false  
+        | R.App(op,exs) -> false )
+
+    | R.Fetch(loc,width) -> false 
+    | R.App(op,exs) -> false)
               
   
   and sameLoc locBefore locAfter =
@@ -147,7 +123,7 @@ let forwSubstitutionX rtl1 rtl2 =
     List.for_all (fun (e,eff) ->
       match eff with
         R.Store(l,e,w) -> noOverlap l w locAfter widthAfter
-      | R.Kill l -> noOverlap l (width l) locAfter widthAfter) rtl1 in
+      | R.Kill l -> noOverlap l (Rtlutil.locwidth' l) locAfter widthAfter) rtl1 in
   
   let rec locReplaceExp loc exp_source width_source exp_dest =
     match exp_dest with
@@ -175,16 +151,7 @@ let forwSubstitutionX rtl1 rtl2 =
       R.Store(l,e,w) -> locReplaceRtl l e w rtl
     | R.Kill l -> rtl
 
-  in RR.rtl (R.Rtl (List.fold_right substEffect rtl1 rtl2))
+  in Some (RR.rtl (R.Rtl (List.fold_right substEffect rtl1 rtl2)))
 
 
-@ This function tries to extract the set of constraints
-
-<<rtlSubst.ml>>=
-
-(*type constr =
-    Eq of Base.std_int * Base.std_int
-  | Le of Base.std_int * Base.std_int
-  | And of constr list
-  | Not of constr
-  | SameL of R.loc * R.loc*)
+@ 

@@ -5,8 +5,9 @@
 \input{macros.tex}
 \section{Introduction}
 
-In this module, we specialize the RTL-optimization functions. (Usually, I
-uncomment only the element of interest)
+In this module, we run the residualizing instance of the
+RTL-optimization functions. (Usually, I uncomment only the element of
+interest)
 
 \section{Interface}
 <<spec.mli>>=
@@ -16,124 +17,191 @@ uncomment only the element of interest)
 <<spec.ml>>=
 
 module T = Tdpe
-module S = Machine
-module Sn = MachineNbe
-
+module M = Machine
+module Mn = MachineNbe
+module Ms = MachineSyntax
+module S = Syntax
 module G = Generic
-    
+
+<<specialization instances>>
+
 let _ =
-  let instropt = T.option(Sn.instruction) in
-  (*let r = T.nbe (T.arrow(T.arrow(T.a',T.arrow(T.a',T.a')),
-                       T.arrow(T.a',T.arrow(Sn.instruction,T.a')))) foldLocUsedInst in*)
-  (*let r1 = T.nbe (T.arrow(Sn.instruction,T.arrow(Sn.instruction,instropt))) frwSubstInst in
-  let r2 = T.nbe (T.arrow(Sn.instruction,T.arrow(Sn.instruction,instropt))) frwSubstInstMrg in
-  let r3 = T.nbe (T.arrow(Sn.instruction,T.arrow(Sn.instruction,instropt))) frwSubstInstMrgX in
-  let r4 = T.nbe (T.arrow(Sn.instruction,Sn.instruction)) RtlFuns.identity in
-  let r5 = T.nbe (T.arrow(Sn.instruction,instropt)) identInstr in*)
-  (*print_string "++++++++++++++++++++++++++++++++++++++\n";
-  print_string "The specialization of foldLocsUsed is:\n";
-  print_newline();
-  Syntax.pprint r;*)
-  (*print_newline();
-  print_string "++++++++++++++++++++++++++++++++++++++\n";
-  print_string "The specialization of frwSubstInst is:\n";
-  print_newline();
-  Syntax.pprint r1;
-  print_newline();*)
-  (*print_newline();
-  print_string "++++++++++++++++++++++++++++++++++++++\n";
-  print_string "The specialization of frwSubstInstMrg is:\n";
-  print_newline();
-  Syntax.pprint r2;
-  print_string "++++++++++++++++++++++++++++++++++++++\n";
-  print_string "The specialization of frwSubstInstMrgX is:\n";
-  print_newline();
-  Syntax.pprint r3;
-  print_string "++++++++++++++++++++++++++++++++++++++\n";
-  print_string "The specialization of physical identity is:\n";
-  print_newline();
-  Syntax.pprint r4;
-  print_string "++++++++++++++++++++++++++++++++++++++\n";
-  print_string "The specialization of identity by translation is:\n";
-  print_newline();
-  Syntax.pprint r5*)
+  RwTest'.pprintModule()
 
-  (*print_newline();
-  let r6 = T.nbe (T.arrow(Sn.instruction,T.arrow(Sn.instruction,instropt))) G.frwSubstInstX in
-  print_string "++++++++++++++++++++++++++++++++++++++\n";
-  print_string "The specialization of frwSubstInstX is:\n";
-  print_newline();
-  MachineSyntax.pprint r6;
-  Format.print_flush();*)
+@ In this module we define several ``specializable'' programs. Each
+program is defined by a [[TEST_INSTANCE]] module, which defines its
+type, associated NBE combinator, and the name of residual value.
+<<specialization instances>>=
+module type TEST_INSTANCE =
+  sig
+    type tau
+    val term : tau
+    val termName : string
+    val combinator : tau T.rr
+  end
+@ This is the actual specialization code. We provide functions for
+pretty-printing on output, as a compilable Caml module, etc.
+<<specialization instances>>=
+module MkTest(Ts : TEST_INSTANCE) =
+  struct
+    let normalize () = T.nbe Ts.combinator Ts.term
+    let pprint () = Ms.pprint (normalize())
 
-  (*print_newline();
-  let tinst = Sn.instruction in
-  let r7 = T.nbe (T.arrow(tinst,T.arrow(tinst,T.option(tinst)))) G.frwSubstInstX2 in
-  print_newline();
-  print_string "++++++++++++++++++++++++++++++++++++++\n";
-  print_string "The specialization of frwSubstInstX2 is:\n";
-  print_newline();
-  MachineSyntax.pprint r7;
-  Format.print_flush();
-  print_newline();*)
+    let pprintModule () =
+      print_string "open Sparcrep\n";
+      print_string "let v = \n";
+      pprint ();
+      print_newline()
 
-  (*print_newline();
-  let tinst = T.a' in
-  let r8 = T.nbe (T.arrow(tinst,T.arrow(tinst,T.option(tinst)))) G.frwSubstInstX2E in
-  print_newline();
-  print_string "++++++++++++++++++++++++++++++++++++++\n";
-  print_string "The specialization of frwSubstInstX2E is:\n";
-  print_newline();
-  MachineSyntax.pprint r8;
-  Format.print_flush();
-  print_newline();*)
+    let output () =
+      print_string "++++++++++++++++++++++++++++++++++++++\n";
+      print_string "The specialization of ";
+      print_string Ts.termName;
+      print_string "is:\n";
+      print_newline();
+      pprint ();
+      print_newline()
+  end
 
-  (*print_newline();
-  let tinst = Sn.instruction in
-  let treg = T.arrowN(T.char,T.arrowN(T.a',T.arrowN(T.int,T.arrowStub("z",T.a',T.a')))) in
-  (*let r9 = T.nbe (T.arrowStub("read",treg,
-			      T.arrowStub("write",treg,
-					  T.arrowStub("instruction",tinst,
-						      T.arrowStub("zero",T.a',T.a')))))
-      G.read_write_setsInstr in*)
-  let r9 = T.nbe (T.arrowStub("read",treg,
-			      T.arrowStub("write",treg,
-					  T.arrowStub("instruction",T.a',
-						      T.arrowStub("zero",T.a',T.a')))))
+@ The [[Id]] test may be used to visualize the reflection over the
+[[instruction]] type.
+
+<<specialization instances>>=
+module Id : TEST_INSTANCE =
+  struct
+    type tau = M.instruction -> M.instruction
+    let term = RtlFuns.identity
+    let termName = "identity"
+    let combinator = T.arrow(Mn.instruction,Mn.instruction)
+  end
+@ The [[Translation]] test produces the residualizing version of the
+composition of the RTL-encoder and RTL-recognizer. Ideally, it should
+yield a similar result as with the test above (modulo the [[option]]
+answer type).
+<<specialization instances>>=
+module Translation : TEST_INSTANCE =
+  struct
+    type tau = M.instruction -> M.instruction option
+    let term = G.identInstr
+    let termName = "identInstr"
+    let combinator = T.arrow(Mn.instruction,T.option(Mn.instruction))
+  end
+
+@ The several instances of forward-substitution functions have the same
+type (and combinator). Therefore, we abstract over them.
+<<specialization instances>>=
+module type FS_INSTANCE =
+  sig
+    val term : G.subst_type
+    val termName : string
+  end
+
+module MkFS(B : FS_INSTANCE) : TEST_INSTANCE =
+  struct
+    open B
+     type tau = G.subst_type
+    let combinator =
+      T.arrow(Mn.instruction,
+              T.arrow(Mn.instruction,T.option(Mn.instruction)))
+    let term = B.term
+    let termName = B.termName
+  end
+
+@ The [[FSI]] instance is associated with the first implementation of
+forward substitution on RTLs.
+<<specialization instances>>=
+module FSI : FS_INSTANCE =
+  struct
+    let term = G.frwdSubstInst
+    let termName = "frwdSubstInst"
+  end
+@ Respectively, [[FSI']] is associated with the second implementation of
+the forward substitution on RTLs.
+<<specialization instances>>=
+module FSI' : FS_INSTANCE =
+  struct
+    let term = G.frwdSubstInst'
+    let termName = "frwSubstInstX"
+  end
+@ And [[FMI]] is associated with the RTL-merge procedure.
+<<specialization instances>>=
+module FMI : FS_INSTANCE =
+  struct
+    let term = G.frwdInstMerge
+    let termName = "frwdInstMerge"
+  end
+
+module FS = MkFS(FSI)
+module FS' = MkFS(FSI')
+module FM = MkFS(FMI)
+
+@ The two [[read_write_set]] functions are also treated generically.
+<<specialization instances>>=
+module type RW_INSTANCE =
+    sig
+      val term : T.tExp G.read_write_type
+      val termName : string
+    end
+
+@ The [[_cd]] indicates that this module is the ``by-the-book'' use of
+TDPE, but leads to code duplication.
+<<specialization instances>>=
+module MkRW_cd(B : RW_INSTANCE) : TEST_INSTANCE =
+  struct
+    type tau =  T.tExp G.read_write_type
+    let treg = T.arrowN(T.char,
+                        T.arrowN(T.a',
+                                 T.arrowN(T.int,
+                                          T.arrowStub("z",T.a',T.a'))))
+    let combinator = T.arrowStub("read",treg,
+                                 T.arrowStub("write",treg,
+                                             T.arrowStub("instruction",Mn.instruction,
+                                                         T.arrowStub("zero",T.a',T.a'))))
+    let term = B.term
+    let termName = B.termName
+  end
+@ This module exploits some knowledge about the functions and does not
+produce code duplication.
+<<specialization instances>>=
+module MkRW(B : RW_INSTANCE) : TEST_INSTANCE =
+  struct
+    type tau =
+	T.tExp Rtlutil.regfun ->
+	  T.tExp Rtlutil.regfun ->
+            T.tExp ->
+              T.tExp -> T.tExp 
+
+    let treg = T.arrowN(T.char,
+                        T.arrowN(T.a',
+                                 T.arrowN(T.int,
+                                          T.arrowStub("z",T.a',T.a'))))
+    let combinator = T.arrowStub("read",treg,
+                                 T.arrowStub("write",treg,
+                                             T.arrowStub("instruction",T.a',
+                                                         T.arrowStub("zero",T.a',T.a'))))
+    let term =
       (fun read -> fun write -> fun instr -> fun zero -> 
-	G.read_write_setsInstr read write (Tdpe.nbe' tinst instr) zero)
-  in
-  print_newline();
-  print_string "open Sparcrep\n";
-  print_string "let v = \n";
-  print_newline();
-  MachineSyntax.pprint r9;
-  Format.print_flush();
-  print_newline();*)
+        B.term read write (Tdpe.nbe' Mn.instruction instr) zero)
+    let termName = B.termName
+  end
 
-  print_newline();
-  let tinst = Sn.instruction in
-  let treg = T.arrowN(T.char,T.arrowN(T.a',T.arrowN(T.int,T.arrowStub("z",T.a',T.a')))) in
-  (*let r9 = T.nbe (T.arrowStub("read",treg,
-			      T.arrowStub("write",treg,
-					  T.arrowStub("instruction",tinst,
-						      T.arrowStub("zero",T.a',T.a')))))
-      G.read_write_setsInstr in*)
-  let triple = Tdpe.triple(Tdpe.char,Tdpe.a',Tdpe.int) in
-  let tlocset = Tdpe.pair(triple,triple) in 
-  let tp = Tdpe.pair(T.a',T.a') in 
-  let r9 = T.nbe (T.arrowStub("read",treg,
-			      T.arrowStub("write",treg,
-					  (T.arrowStub("instruction",T.a',
-						       T.arrowStub("info",T.a',
-								   T.a'))))))
-      (fun read -> fun write -> fun instr -> fun zero -> 
-	G.read_write_locsInstr read write (Tdpe.nbe' tinst instr) zero)
-  in
-  print_newline();
-  print_string "open Sparcrep\n";
-  print_string "let v = \n";
-  print_newline();
-  MachineSyntax.pprint r9;
-  Format.print_flush();
-  print_newline();
+module RWI : RW_INSTANCE =
+  struct
+    let term = G.read_write_setsInstr
+    let termName = "read_write_setsInstr"
+  end
+module RWI' : RW_INSTANCE =
+  struct
+    let term = G.read_write_locsInstr
+    let termName = "read_write_locsInstr'"
+  end
+
+module RW = MkRW(RWI)
+module RW' = MkRW(RWI')
+
+@ These are the actual modules.
+<<specialization instances>>=
+module RwTest = MkTest(RW)
+module RwTest' = MkTest(RW')
+@ 
+

@@ -14,7 +14,7 @@ removed.
 
 <<rtlMerge.mli>>=
 
-val forwMerge : Rtl.rtl -> Rtl.rtl -> (Rtl.loc -> bool) -> Rtl.rtl option
+val frwdMerge : Rtl.rtl -> Rtl.rtl -> (Rtl.loc -> bool) -> Rtl.rtl option
 
 @ \section{Implementation}
 
@@ -32,30 +32,10 @@ module S = Base
 exception DiffNonsense
 exception IDontKnowYet
 
-(*module LS = Set.MakeSet(
-  struct
-    type t = R.location
-    let eq x y = false
-  end)*)
-
-
-    
-@ [[width]] returns the width of a location
-<<rtlMerge.ml>>=
-let width l =
-  match l with
-    R.Cell(space,agg,width,exp,assrt) -> width
-  | R.Var(_,_,width) -> width
-  | _ -> raise IDontKnowYet
-
-@ [[forwSubstitutionX rtl1 rtl2]] sibstitutes assignments in [[rtl1]]
-into [[rtl2]]. Returns [[Some rtl2']] if some substitution is performed,
-[[None]] otherwise. As a general rule, [[Before]] is attached to
-expressions/locations evaluated in [[sigma]], [[After]] to those
-evaluated in [[sigma']].
+@ 
 <<rtlMerge.ml>>=
 
-let forwMerge rtlP1 rtlP2 isDead =
+let frwdMerge rtlP1 rtlP2 isDead =
   let (R.Rtl rtl1) = Rtl.Convert.rtl rtlP1 in
   let (R.Rtl rtl2) = Rtl.Convert.rtl rtlP2 in
 
@@ -151,20 +131,20 @@ in [[rtl']]
 
   let ok = if List.exists
       (fun (locBefore,w1) -> 
-	let locBefore = Rtl.Convert.loc locBefore in
-	List.exists
+        let locBefore = Rtl.Convert.loc locBefore in
+        List.exists
           (fun (locAfter,w2) ->
-	    let locAfter = Rtl.Convert.loc locAfter in
-	    mayOverlap (locBefore,w1) (locAfter,w2)) locUsedRtl1) locAssgLiveRtl2
+            let locAfter = Rtl.Convert.loc locAfter in
+            mayOverlap (locBefore,w1) (locAfter,w2)) locUsedRtl1) locAssgLiveRtl2
   then false
   else
     List.exists
       (fun (locBefore,w1) ->
-	let locBefore = Rtl.Convert.loc locBefore in
-	List.exists
+        let locBefore = Rtl.Convert.loc locBefore in
+        List.exists
           (fun (locAfter,w2) ->
-	    let locAfter = Rtl.Convert.loc locAfter in
-	    mayOverlap (locBefore,w1) (locAfter,w2)) locAssgRtl1) locUsedLiveRtl2
+            let locAfter = Rtl.Convert.loc locAfter in
+            mayOverlap (locBefore,w1) (locAfter,w2)) locAssgRtl1) locUsedLiveRtl2
 
   in
   if ok then Some (Rtl.Revert.rtl (R.Rtl (rtl1@liveRtl2)))

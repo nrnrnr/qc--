@@ -6,52 +6,54 @@
 
 \title{Set-based read and write functions}
 
-<<readwrite.mli ((evaluating))>>=
-type index
-type 'a set
-<<commmon types>>
-<<common values>>
+This module defines a function [[read_write_sets]] collecting the
+locations read and written by a function. The function
+[[read_write_sets]] is based on the [[read_write_lists]] from the
+\module{../src/rtlutil} module. The function makes use of a trivial
+list-based implementation of sets.
 
-<<readwrite.mli ((residualizing))>>=
+<<readWrite.mli ((evaluating))>>=
+type 'a set
+<<common types>>
+<<common values declarations>>
+
+<<readWrite.mli ((residualizing))>>=
 type set = MachineSyntax.exp
 <<common types>>
-<<common values>>
+<<common value declarations>>
 
 <<common types>>=
 type index = Base.std_int
 type loc = Rtl.space * index * Rtl.width
 type locInfo = loc * loc
 
-<<common values>>=
+<<common value declarations>>=
 val read_write_sets : 'a Rtlutil.regfun -> 'a Rtlutil.regfun -> Rtl.rtl -> 'a -> 'a
     
-@ \section{Implementation}
+@ \section{Evaluating Implementation}
 
-<<readwrite.ml ((evaluating))>>=
-
+<<readWrite.ml ((evaluating))>>=
 type set = 'a list
 <<common types>>
-
 let empty = []
 <<common code>>
 
-<<readwrite.ml ((residualizing))>>=
-
+@ \section{Residualizing Implementation}
+<<readWrite.ml ((residualizing))>>=
 type set = MachineSyntax.exp
 <<common types>>
+let empty = []
 
 module Sy = Syntax
-
-let empty = []
 <<common code>>
 
-@ The common code
+@ \subsection{The common code}
 
-I have to mention that here, in the residualizing interpretation, the
-equality on indexes is structural equality on  expressions: it may be a
-conservative approximation, but deffinitelly not
-meaning-preserving... Introducing the usual equality would mean
-something else...
+I have to mention that, in the residualizing interpretation, the
+equality on indexes is structural equality on expressions: it this
+limited context, is meaning-preserving, but it is a conservative
+approximation of the ``best code''... Introducing the usual equality
+would lead to dynamic tests in static contexts.
 
 <<common code>>=
 let insert space index width list =
@@ -59,9 +61,9 @@ let insert space index width list =
     match ls with
       [] -> [(space,index,width)]
     | (space',index',width')::ls' ->
-	if space = space' && index=index' && width=width'
-	then ls
-	else (space',index',width')::(walk ls')
+        if space = space' && index=index' && width=width'
+        then ls
+        else (space',index',width')::(walk ls')
   in walk list
 
 let insert_left space index width (set1,set2) =
@@ -75,3 +77,5 @@ let read_write_sets read write rtl z =
   let read ls (s,i,w) = read s i w ls in
   let write ls (s,i,w) = write s i w ls in
   List.fold_left read (List.fold_left write z writelist) readlist
+
+@ 

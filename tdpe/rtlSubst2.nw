@@ -6,9 +6,17 @@
 
 \section{A forward substitution function on RTLs}
 
+This module priovides an alternative implementation of the forward
+substitution function. [[frwdSubst' rtl1 rtl2]] sibstitutes
+assignments in [[rtl1]] into [[rtl2]]. Returns [[Some rtl2']] if some
+substitution is performed, [[None]] otherwise. As a general rule,
+[[Before]] is attached to expressions/locations evaluated in [[sigma]],
+[[After]] to those evaluated in [[sigma']]. See also the comments in
+\module{rtlSubst}.
+
 <<rtlSubst2.mli>>=
 
-val forwSubstitutionX : Rtl.rtl -> Rtl.rtl -> Rtl.rtl option
+val frwdSubst' : Rtl.rtl -> Rtl.rtl -> Rtl.rtl option
 
 @ \section{Implementation}
 
@@ -19,21 +27,13 @@ module R = Rtl.Private
 let (<) x y = Base.lessthan x y
 let (+) x y = Base.add x y
 let cond = Base.cond
-(*let not = Base.not*)
 
 module S = Base
 
 exception DiffNonsense
 exception IDontKnowYet
 
-@ [[forwSubstitutionX rtl1 rtl2]] sibstitutes assignments in [[rtl1]]
-into [[rtl2]]. Returns [[Some rtl2']] if some substitution is performed,
-[[None]] otherwise. As a general rule, [[Before]] is attached to
-expressions/locations evaluated in [[sigma]], [[After]] to those
-evaluated in [[sigma']].
-<<rtlSubst2.ml>>=
-
-let forwSubstitutionX  rtl1 rtl2 =
+let frwdSubst'  rtl1 rtl2 =
   let (R.Rtl rtl1) = Rtl.Convert.rtl rtl1 in
   let (R.Rtl rtl2) = Rtl.Convert.rtl rtl2 in
 
@@ -56,7 +56,6 @@ can not be established.
   let constWithinDiff c1 w1 c2 w2 =
     match (c1,c2) with
       (R.Bool b1,R.Bool b2) -> raise DiffNonsense
-(*    | (R.Int b1,R.Int b2) -> (b1<b2+w2) && (b2<b1+w1) *)
     | (R.Bits b1,R.Bits b2) -> true
     | (R.Link (s1,w1),R.Link (s2,w2)) -> true (* something I do not know of yet *)
     | _ -> raise IDontKnowYet in
