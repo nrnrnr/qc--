@@ -733,8 +733,9 @@ let expire_last_uses vm =
   let expire_one t vm =
     if is_tmp tgt t then
       let lp = VM.var_locs' vm t in
-      let vm = if RS.mem t defs then app (VM.remove_mem t) lp.mem vm else vm in
-      if RS.mem t live_out then vm else app (VM.remove_reg t) lp.reg vm
+      if RS.mem t defs then app (VM.remove_mem t) lp.mem vm
+      else if RS.mem t live_out then vm
+      else app (VM.remove_reg t) lp.reg vm
     else vm in
   RS.fold expire_one uses vm in
 let expire_dead_defs vm =
