@@ -262,8 +262,8 @@ module Typedefs = struct
     <<collect type decls>>
     <<process type decls>>
 
-    let global env program      = doTypes env (globalDecls program)
-    let local  env (_,_,_,body) = doTypes env (localDecls body)
+    let global env program        = doTypes env (globalDecls program)
+    let local  env (_,_,_,body,_) = doTypes env (localDecls body)
 end
 @
 
@@ -282,7 +282,7 @@ module Consts = struct
 
     let global env program = 
         Eval.doConst env (Collect.globalDecls program)
-    let local  env (_,_,_,bb) = 
+    let local  env (_,_,_,bb,_) = 
         Eval.doConst env (Collect.localDecls bb)
 end
 @
@@ -341,7 +341,7 @@ checks need it.
         let env = foldl (toplevel Srcmap.null) env program in
             env
 
-    let local env (_,_,ff,bb as proc) =
+    let local env (_,_,ff,bb,_ as proc) =
         let env = Typedefs.local                     env proc in
         let env = Consts.local                       env proc in
         let env = foldl formal                       env ff   in
@@ -552,13 +552,13 @@ let rec section r env = function
     | A.Decl(d)                 -> decl r env d 
     | A.SSpan( e1, e2, ss)      -> foldl (section r) env ss
     | A.Datum( d)               -> env
-    | A.Procedure(_,_,_,bb)     -> foldl (body r) env bb
+    | A.Procedure(_,_,_,bb,r)   -> foldl (body r) env bb
 <<module Targets>>=
 let rec toplevel r env = function
-    | A.ToplevelAt(x,r)         -> toplevel r env x
-    | A.Section(_, ss)          -> foldl (section r) env ss
-    | A.TopDecl (d)             -> decl r env d
-    | A.TopProcedure (_,_,_,bb) -> foldl (body r) env bb 
+    | A.ToplevelAt(x,r)          -> toplevel r env x
+    | A.Section(_, ss)           -> foldl (section r) env ss
+    | A.TopDecl (d)              -> decl r env d
+    | A.TopProcedure (_,_,_,bb,r)-> foldl (body r) env bb 
 @
 
 
@@ -1320,7 +1320,7 @@ let formal env (r, (hint, inv, ty, name)) =
 @
 
 <<module Env>>=
-let proc r env (_,name,ff,bb as p) =
+let proc env (_,name,ff,bb,r) =
     let sym     = F.symbol env name in
     let ventry  = E.ematch (pointerTy env) 
                            (fun p -> F.Label(F.Proc(sym,None,0)),p) in
@@ -1339,14 +1339,14 @@ let rec section r env = function
     | A.Decl(d)            -> gdecl r env d
     | A.SSpan( e1, e2, ss) -> foldl (section r) env ss
     | A.Datum( d)          -> datum r Global env d
-    | A.Procedure(p)       -> proc r env p
+    | A.Procedure(p)       -> proc env p
 
 <<module Env>>=
 let rec toplevel r env = function 
     | A.ToplevelAt(x, r)  -> E.catch' env (error r env) (toplevel r env) x
     | A.Section(name, ss) -> foldl (section r) env ss
     | A.TopDecl(d)        -> gdecl r env d
-    | A.TopProcedure(p)   -> proc r env p 
+    | A.TopProcedure(p)   -> proc env p 
 
 @
 
@@ -2072,7 +2072,7 @@ environment such that it can be re-used later.  This function updates
 the existing entry for the procedure in the fat environment. 
 
 <<check>>=
-and proc r env (_,name,_,bb as p) =
+and proc env (_,name,_,bb,r as p) =
     let env   = F.push env F.emptyscope  (* open new scope *)   in 
     let env   = Env.local env p                                 in
     let env   = foldl body env bb (* traverse body *)           in
@@ -2101,7 +2101,7 @@ and section r env = function
                               (section r env) x
     | A.Decl(d)            -> decl env d
     | A.Datum( d)          -> datum env d
-    | A.Procedure(p)       -> proc r env p 
+    | A.Procedure(p)       -> proc env p 
     | A.SSpan x            -> topSpan r env x 
             
     
@@ -2111,7 +2111,7 @@ let rec toplevel r env = function
                                       (toplevel r env) x
     | A.Section(name, ss) -> foldl (section r)  env ss
     | A.TopDecl(d)        -> decl env d
-    | A.TopProcedure(p)   -> proc r env p
+    | A.TopProcedure(p)   -> proc env p
 
 <<check>>=
 let global env program = foldl (toplevel Srcmap.null) env program

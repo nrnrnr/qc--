@@ -68,6 +68,7 @@ Initialized data, as well as data in the form of [[SSpan]] and
 [[Procedure]], are found only at top level.
 <<exposed types>>=
 type proc = {
+    region        : Ast.region;
     cc            : convention;
     name          : name;
     formals       : (hint * Ast.variance * ty * name) marked list;
@@ -282,12 +283,12 @@ let rec section r imps exports lbls ks consts types regs archs data s k = match 
         k imps exports lbls ks pconsts ptypes pregs archs data)
 | A.Datum d ->
     k imps exports lbls ks consts types regs archs (add_datum r d data)
-| A.Procedure(cc,p,fs,bs) ->
+| A.Procedure(cc,p,fs,bs,r) ->
     bodies r imps exports [] [] [] [] [] archs [] bs
     (fun ss imps exports plbls pks pconsts ptypes pregs archs pdata ->
       let cdecls = { constants = pconsts; types = ptypes } in
       let p = { cc = convention cc; name = p; formals = List.map formal fs; code = ss;
-                continuations = pks; labels = plbls;
+                continuations = pks; labels = plbls; region = r;
                 locals = rflatten pregs; pdecls = cdecls; stackdata = pdata; } in
       k imps exports (plbls::lbls) ks consts types regs archs ((r,Procedure p)::data))
 and sections r = kmap_none section r
@@ -319,6 +320,6 @@ let program ts =
       let _ = checknull "data" sdata in
       let _ = checknull "continuations" ks in
       { target = rflatten archs; imports = imps; exports = exports;
-        code_labels = lbls; globals = rflatten regs; sections = sdata;
+        code_labels = lbls; globals = rflatten regs; sections = List.map fst ss;
         udecls = { types = types; constants = consts };
       })

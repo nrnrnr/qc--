@@ -27,6 +27,8 @@ section "text"
         $r31 = ($r31+-24);
         $t1 = $r30;
         initialize continuations:l4:
+        $r31 = ($r31+24);
+        $c0 = $t1;
     }
 }
 

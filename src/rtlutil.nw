@@ -324,6 +324,7 @@ let loc l = match (Rtl.Dn.loc l) with
     | RP.Mem(_,_,w,_,_)     -> w
     | RP.Reg(_,_,w)         -> w
     | RP.Var(_,_,w)         -> w
+    | RP.Global(_,_,w)      -> w
     | RP.Slice(w, _, _)     -> w
 @
 
@@ -366,6 +367,7 @@ let fold handle_reg handle_slice ~read ~write ~kill r z =
         | RP.Reg r                      -> handle_reg       which z r
         | RP.Slice (w, i, l)            -> handle_slice loc which z (w, i, l)
         | RP.Var _                      -> z
+        | RP.Global _                   -> z
       and exp z e = match e with
         | RP.Const _                    -> z
         | RP.Fetch (l, w)               -> loc read z l
@@ -651,7 +653,8 @@ and location' = function
             let s       = string_of_int i in
             A.Mem(A.TypeSynonym space,A.Int(s,None), None, [])
         | Low -> A.Name(None, Printf.sprintf "$%c%d" sp i))
-    | R.Var (name,_,width)       -> A.Name(None,name)
+    | R.Var    (name,_,width)   -> A.Name(None,name)
+    | R.Global (name,_,width)    -> A.Name(None,name)
     | R.Slice (w,i,loc)          -> location' loc (*XXX*)
     
 
@@ -733,7 +736,8 @@ and location' = function
                     else "$" ^ Char.escaped sp in
         space ^ "[" ^ expr' e ^ "]"
     | R.Reg (sp,i,w) -> Printf.sprintf "$%s[%d]" (Char.escaped sp) i
-    | R.Var (name,_,width)       -> name
+    | R.Var    (name,_,width)       -> name
+    | R.Global (name,_,width)       -> name
     | R.Slice (w,i,loc)          ->
         location' loc ^ "@[" ^ string_of_int i ^ ".." ^ string_of_int (i+w-1) ^ "]"
     
@@ -845,6 +849,8 @@ and loc = function
         apply "Reg" [char sp; int i; int w]
     | RP.Var(name, index, w) ->
         apply "Var" [str name; int index; int w]
+    | RP.Global(name, index, w) ->
+        apply "Global" [str name; int index; int w]
     | RP.Slice(w, i, l) ->
         apply "Slice" [int w; int i; loc l]
         
@@ -885,6 +891,10 @@ module MayAlias = struct
 
   let with_vari vi = function
     | RP.Var (_, vi', _) -> vi = vi'
+    | _ -> false
+
+  let with_globali vi = function
+    | RP.Global (_, vi', _) -> vi = vi'
     | _ -> false
 
   let memsize = 8 (* big risk *)
@@ -935,7 +945,8 @@ sym n sym' n'];
 
   let rec locs' l = match l with
     | RP.Reg r               -> unslice (with_reg  r)
-    | RP.Var (_, i, _)       -> unslice (with_vari i)
+    | RP.Var    (_, i, _)    -> unslice (with_vari i)
+    | RP.Global (_, i, _)    -> unslice (with_globali i)
     | RP.Mem (s, a, w, e, _) -> unslice (with_mem s w e)
     | RP.Slice (_, _, l)     -> locs' l
   and locs l =
@@ -1028,6 +1039,7 @@ module ExistsOpr = struct
       | RP.Reg r                  -> false
       | RP.Slice (_, _, l)        -> loc l
       | RP.Var _                  -> false
+      | RP.Global _               -> false
     and exp = function
       | RP.Const _                -> false
       | RP.Fetch (l, w)           -> loc l

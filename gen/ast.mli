@@ -138,7 +138,7 @@
       | StmtBody of (stmt)
       | DataBody of (datum list)
   
-  and proc = (conv option * name * formal list * body list)
+  and proc = (conv option * name * formal list * body list * region)
   and section =
         SectionAt of (section * region)
       | Decl of (decl)

@@ -656,7 +656,8 @@
           let name1 = (sexp_rd_name s_) in
           let formal_list1 = (SexpPkl.rd_list sexp_rd_formal s_) in
           let body_list1 = (SexpPkl.rd_list sexp_rd_body s_) in
-          (conv_opt1, name1, formal_list1, body_list1) in
+          let region1 = (sexp_rd_region s_) in
+          (conv_opt1, name1, formal_list1, body_list1, region1) in
         begin
           (SexpPkl.rd_rp s_);
           tmp_
@@ -1591,13 +1592,15 @@
           ((conv_opt1,
             name1,
             formal_list1,
-            body_list1) : Ast.proc) -> begin
+            body_list1,
+            region1) : Ast.proc) -> begin
             (SexpPkl.wr_lp s_);
             (SexpPkl.wr_sym "ast_proc" s_);
             (SexpPkl.wr_option sexp_wr_conv conv_opt1 s_);
             (sexp_wr_name name1 s_);
             (SexpPkl.wr_list sexp_wr_formal formal_list1 s_);
             (SexpPkl.wr_list sexp_wr_body body_list1 s_);
+            (sexp_wr_region region1 s_);
             (SexpPkl.wr_rp s_)
           end)
       (* end match *)

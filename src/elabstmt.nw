@@ -14,7 +14,7 @@
 <<exposed types>>=
 type exp = Rtl.exp
 type rtl = Rtl.rtl
-type loc = Automaton.loc * Rtl.width
+type loc = Rtl.loc * Rtl.width
 type convention = string
 type hint = string
 type actual = hint * exp * Rtl.width
@@ -46,7 +46,8 @@ type stmt =
 @
 <<elabstmt.mli>>=
 <<exposed types>>
-val elab_stmts : 'a Fenv.Dirty.env' -> Nast.stmt list -> stmt list Error.error
+val elab_stmts :
+  Ast.region -> 'a Fenv.Dirty.env' -> Nast.stmt list -> stmt list Error.error
 @ The [[elab_*]] functions work with incomplete information,
 indicated by [[Error.Error]] values.  The policy is as follows:
 \begin{itemize}
@@ -68,7 +69,6 @@ indicated by [[Error.Error]] values.  The policy is as follows:
 <<elabstmt.ml>>=
 <<exposed types>>
 module A  = Ast
-module AT = Automaton
 module E  = Error
 module F  = Fenv.Dirty
 module N  = Nast
@@ -86,7 +86,7 @@ restrictions: if a statement is reachable by ordinary control flow, it
  had better not be a continuation.
 Similarly, it had better not be the end of the procedure body.
 <<elabstmt.ml>>=
-let elab_stmts env =
+let elab_stmts r env =
   let eprint r = E.errorRegionPrt (F.srcmap env, r) in
   let errorf r = Printf.kprintf (fun s -> eprint r s; E.Error) in
   let exp = Elabexp.elab_exp env in
@@ -129,14 +129,20 @@ let elab_stmts env =
               else
                 []
       | N.Span (_, _, []) :: ss -> stmts reachable ss
-      | s :: ss -> full_stmt r reachable s :: stmts (not (jumps s)) ss in
+      | s :: ss ->
+          let s' = full_stmt r reachable s in  (* enforce order *)
+          s' :: stmts (not (jumps s)) ss in
     Error.Raise.list (stmts reachable ss)
   and jumps = function N.Goto _ | N.Jump _ | N.Cut _ | N.Return _  -> true
                      | N.Call (_, _, _, _, _, fl) -> List.mem Ast.NeverReturns fl
                      | N.StmtAt (s, _) -> jumps s
                      | N.Span (_, _, ss) -> jumps (Aux.last ss)
-                     | _ -> false in
-  stmts' true Srcmap.null true
+                     | N.If (_, t, f) -> jumpsss t && jumpsss f
+                     | N.Switch (_, _, arms) -> List.for_all jumpsarm arms
+                     | _ -> false
+  and jumpsss = function [] -> false | ss -> jumps (Aux.last ss)
+  and jumpsarm (_, ss) = jumpsss ss in
+  stmts' true r true
 @ 
 Here are a couple of basic utilities.
 We sometimes do extra checking if an expression is just a name.
@@ -252,7 +258,7 @@ let effect lhs (guard,rhs) =
       errorf r "location of type bits%d cannot hold value of type %s" w
         (Types.to_string ty)
     else
-      let rtl = loc.AT.store e w in
+      let rtl = Rtl.store loc e w in
       match guard with
       | None   -> E.Ok rtl
       | Some g -> E.seq g (fun (g, ty) ->
@@ -458,7 +464,7 @@ let prim lhs conv op args flows =
           if t <> Types.Bits w then
             <<raise error exn on primop type mismatch>>
           else
-            Assign (AT.store result (Rtl.app opr argexps) w)
+            Assign (Rtl.store result (Rtl.app opr argexps) w)
       | _ -> E.error "primitive operator produces exactly one result") in
 <<raise error exn on primop type mismatch>>=
 Printf.kprintf E.error

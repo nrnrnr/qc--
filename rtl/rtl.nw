@@ -122,6 +122,7 @@ val aligned  : int -> assertion
 val mem      : assertion -> space -> aggregation -> width -> exp -> loc
 val reg      : Register.t -> loc
 val var      : string -> index:int -> width -> loc
+val global   : string -> index:int -> width -> loc
 val slice    : width -> lsb:int -> loc -> loc
 @
 An effect alters one or more [[loc]]s.  A [[store]] puts the value of
@@ -253,10 +254,10 @@ and  loc       = Mem        of space
                             *  assertion
                 | Reg       of Register.t (* space * int * width *)         
           
-                | Var       of string    (* name from C-- source   *)
+                | Var      of string    (* name from C-- source   *)
                             *  int       (* index for run-time API *)
                             *  width
-
+                | Global    of string * int * width (* global C-- variable *)
                 | Slice     of width     (* number of bits in loc *)
                             *  int       (* index of least-significant bit of slice *)
                             *  loc  (* location from which slice is drawn *)
@@ -405,7 +406,8 @@ let opr name widths         = (name,widths)
 
 (* location *)
 let mem assertion sp agg width expr = Mem(sp,agg,width,expr,assertion)
-let var name ~index width           = Var(name,index,width)
+let var    name ~index width        = Var (name,index,width)
+let global name ~index width        = Global (name,index,width)
 let reg r                           = Reg r
 
 (* effect *)
@@ -421,6 +423,7 @@ let locwidth = function
   | Mem(_,_,w,_,_)     -> w
   | Reg(_,_,w)         -> w
   | Var(_,_,w)         -> w
+  | Global(_,_,w)      -> w
   | Slice(w, _, _)     -> w 
 
 let rec fetch_cvt loc n = 

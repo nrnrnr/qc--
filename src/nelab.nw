@@ -530,6 +530,7 @@ let program srcmap asm ast =
     let memsize   = metrics.Metrics.memsize in
     <<definitions of name-binding functions>>
     <<definitions of elaboration functions>>
+    (* phase one: create environment and bind all names *)
     let env = F.empty srcmap metrics asm in
     let env = F.push env (F.emptyscope) in  (* weird, but so it is *)
     let env = TypeSortBind. bind_sortable_definitions env ast.N.udecls.N.types in
@@ -539,9 +540,10 @@ let program srcmap asm ast =
     let env, globals = registers_from Global 0 ast.N.globals env in
     let env = foldl (foldl bind_code_label) env ast.N.code_labels in
     let env = foldl bind_section_names env ast.N.sections in
+    (* phase two: in environment, elaborate and check the world (only flags env) *)
+    let env = foldl check_export env ast.N.exports in
     let ss  = E.Raise.list (List.map (section env) ast.N.sections) in
     let env = flag ss env in
-    let env = foldl check_export env ast.N.exports in
     E.ematch2 globals ss (fun globals ss ->
       (env, { globals = globals; sections = ss })))
 @
@@ -565,7 +567,7 @@ let proc env spans p =
   let env = foldl bind_code_label env p.N.labels in  (* odd -- explained above *)
   let env, conts = bind_and_return_continuations env p.N.continuations in
   let stackmem, stacklabels, env = stackdata env p.N.stackdata in
-  let code = Elabstmt.elab_stmts env p.N.code in
+  let code = Elabstmt.elab_stmts p.N.region env p.N.code in
   E.ematch3 code locals (E.Raise.list spans) (fun code locals spans ->
     Procedure
       { env = env; cc = p.N.cc; name = p.N.name; formals = formals;
@@ -618,25 +620,54 @@ let bind_code_label env (r, n) =
   F.bindv n (r, E.Ok (F.Label(F.Code (F.symbol env n)), pointerty)) env in
 @ 
 \subsubsection{Register variables and formal parameters}
+<<to migrate to variable placer>>=
+let global_base_sym = F.symbol env "Cmm.global_area" in
+let global_sigbuf   = Buffer.create 128 in
+let global_loc env = 
+  let global_automaton = target.T.globals (Rtl.link global_base_sym pointersize) in
+  fun hint ty name ->
+    let hinted h =
+      let w = tywidth ty in
+      Printf.bprintf global_sigbuf "[%s %d]" name w
+      AT.allocate t w h in
+    let hardware r = 
+      try
+        Printf.bprintf global_sigbuf "[%s %s]" name r;
+        E.Ok (AT.of_loc (Strutil.Map.find t target.T.named_locs))
+      with Not_found ->
+        errorf "unknown hardware register %S" r in
+    function F.Rnone -> hinted "" | F.RHint h -> hinted h | F.RReg r -> hardware r in
+
+        with Error.ErrorExn msg -> impossible msg
+    in
+        ( List.iter (assign env) names 
+        ; AT.freeze t, Digest.string (Buffer.contents decls)    
+        )
+
 <<definitions of name-binding functions>>=
 let registers_from scope n rs env =
   let rec regs_from prev' n rs env = match rs with
   | [] ->
       let regs = E.ematch (E.Raise.list (List.rev prev')) (fun rs ->
-        List.map (function F.Variable r -> r | _ -> impossf "non-register") rs) in
+        List.map (function F.Variable r, _ -> r | _ -> impossf "non-register") rs) in
       env, regs
   | (rgn, (v, hint, t, name, hwreg)) :: rs ->
-      let reg h = { F.index = n; F.rhint = h; F.loc = None; F.variance = v } in
-      let den h = E.Ok (F.Variable (reg h)) in
-      let den = match hint, hwreg with
-      | Some _, Some _ -> errorf rgn "can't have hint and hardware register"
-      | None,   Some r ->
-          if scope = Local then errorf rgn "local register can't be mapped to hardware"
-          else den (F.RReg r)
-      | Some _, None   -> errorf rgn "hints permissible only on formal parameters" 
-      | None,   None   -> den F.RNone in
-      let env = F.bindv name (rgn, E.Raise.pair (den, Elabexp.elab_ty env t)) env in
-      regs_from (den::prev') (n+1) rs env in
+      let entry = E.seq (Elabexp.elab_ty env t) (fun ty ->
+        let w     = match ty with T.Bits w -> w | T.Bool -> impossf "decl bool" in
+        let loc   = (match scope with Global -> R.global | Local -> R.var) name n w in
+        let reg h = { F.index = n; F.rhint = h; F.loc = loc; F.variance = v } in
+        let den h = E.Ok (F.Variable (reg h)) in
+        let den = match hint, hwreg with
+        | Some _, Some _ -> errorf rgn "can't have hint and hardware register"
+        | Some _, None   -> errorf rgn "hints permissible only on formal parameters" 
+        | None,   None   -> den F.RNone
+        | None,   Some r ->
+            if scope = Local then
+              errorf rgn "local register can't be mapped to hardware"
+            else
+              den (F.RReg r) in
+        E.Raise.left (den, ty)) in
+      regs_from (entry::prev') (n+1) rs (F.bindv name (rgn, entry) env) in
   regs_from [] n rs env in
 <<definitions of name-binding functions>>=
 let formals_from n rs env =
@@ -644,13 +675,13 @@ let formals_from n rs env =
   | [] -> env, n, List.rev prev'
   | (r, (hint, inv, ty, name)) :: rs ->
       match Elabexp.elab_ty env ty with
-      | E.Ok t ->
+      | E.Ok (Types.Bits w as t) ->
           let i = { F.index = n; F.variance = inv;
-                    F.loc = None; F.rhint = F.RHint hint; } in
+                    F.loc = Rtl.var name n w; F.rhint = F.RHint hint; } in
           let env = F.bindv name (r, E.Ok (F.Variable i, t)) env in
           formals ((n, hint, inv, t, name)::prev') (n+1) rs env
-      | E.Error ->
-          formals prev' n rs (F.bindv name (r, E.Error) env) in
+      | E.Ok Types.Bool -> impossf "declared type is boolean"
+      | E.Error -> formals prev' n rs (F.bindv name (r, E.Error) env) in
   formals [] n rs env in
 @ 
 <<definitions of name-binding functions>>=
@@ -661,7 +692,7 @@ let bind_section_names env (secname, ds) =
 let section env (secname, ds) =
   <<definitions of procedure-processing functions>>
   <<definitions of elaboration functions for data>>
-  E.Raise.right (secname, E.Raise.list (data [] [] ds)) in
+  E.Raise.right (secname, E.Raise.list (data [] ds [])) in
 @ 
 \subsection{Translation of \texttt{stackdata} declarations, accumulating labels}
 
@@ -755,7 +786,8 @@ let check_export env (r, ty, pairs) =
       else
         match den with
         | F.Label (F.Proc _ | F.Code _ | F.Data _) -> env
-        | _ -> errorf "%s can't be exported" name) in
+        | d -> errorf "%s '%s' can't be exported" (F.denotation's_category d) name) in
+  let check_pair env = E.catch' env (eprint r) (check_pair env) in
   let env = match ty with
   | Some t ->
       E.seq' env (Elabexp.elab_ty env t) (fun ty ->
@@ -787,18 +819,21 @@ let rec datum env (r, d) =
       F.bindv p.N.name (r, E.Ok (den, pointerty)) env
   | N.SSpan (_, _, ds) -> foldl datum env ds in
 @ 
+I want to be careful to elaborate in source-code order so as to have
+the error messages ordered by source location.
+THIS PROPERTY NEEDS TO BE CHECKED AND ENFORCED THROUGHOUT!!
 <<definitions of elaboration functions for data>>=
 let metrics = F.metrics env in
-let rec data spans tail ds = match ds with
-| [] -> tail
+let rec data spans ds rest = match ds with
+| [] -> (match rest with [] -> [] | (spans, ds) :: rest -> data spans ds rest)
 | (r, d) :: ds ->
-    let tail = data spans tail ds in
     match d with
-    | N.Datalabel l -> E.Ok (Datalabel l) :: tail
-    | N.Align n     -> E.Ok (Align n)     :: tail     (* checked earlier *)
-    | N.Procedure p -> proc env spans p   :: tail
-    | N.ReserveMem(ty,size,init) -> reserve_mem r ty size init :: tail
-    | N.SSpan (k, v, ds) ->
+    | N.Datalabel l -> let d = E.Ok (Datalabel l) in d :: data spans ds rest
+    | N.Align n     -> let d = E.Ok (Align n)     in d :: data spans ds rest
+    | N.Procedure p -> let d = proc env spans p   in d :: data spans ds rest
+    | N.ReserveMem(ty,size,init) ->
+        let d = reserve_mem r ty size init in d :: data spans ds rest
+    | N.SSpan (k, v, ds') ->
         let span = E.seq2 (Elabexp.elab_con env k) (Elabexp.elab_link env v)
           (fun (k, kw) (v, vw) ->
             if kw <> metrics.Metrics.wordsize then
@@ -807,7 +842,7 @@ let rec data spans tail ds = match ds with
               errorf r "span value must be a bit vector of native pointer size"
             else
               E.Ok (k, v)) in
-        data (span::spans) tail ds
+        data (span::spans) ds' ((spans, ds) :: rest)
 @ It's unfortunate that spans are elaborated both here and in
 \module{elabstmt}, but to reuse the error messages would be more
 trouble than it is worth.
@@ -835,27 +870,6 @@ and reserve_mem r ty size idata =
             if      rcount > lcount then errorf r "too many initial values"
             else if rcount < rcount then errorf r "too few initial values"
             else E.Ok (InitializedData inits)))
-@ 
-A memory declaration has a type, a type, and optionally a number of
-expressions to initialize the memory.  The number of expressions must
-match the size specification, and the type of the expressions must
-match the declared type.
-
-<<check>>=
-let memdecl env ty size init_exprs =
-    let t = evalTy env ty    in
-    let n = memsize env size in
-    match init_exprs with
-    | None   -> E.seq' (F.flagError env) (E.Raise.pair   (t,n)) (fun _ -> env)
-    | Some i -> E.seq' (F.flagError env) (E.Raise.triple (t,n,init env t i))
-        ( function 
-        | t, Some n, m when m > n -> E.error "too many initial values"
-        | t, Some n, m when m < n -> E.error "foo few initial values"
-        | t, Some n, _            -> env
-        | t, None  , _            -> env
-        )
-@
-
 @
 The [[init_size]] function returns the number of objects to reserve
 memory for. Any given number must be nonnegative.
@@ -886,7 +900,8 @@ and init r ty i =
         if List.for_all (fun (e, t) -> t = ty) tes then
           E.Ok tes
         else
-          errorf r "typeof an initial value does not match declared type")
+          errorf r "type of an initial value does not match declared type %s"
+            (Types.to_string ty))
   | A.InitStr s ->
       let to_texpr c = R.bits (Bits.U.of_int (Char.code c) 8) 8, ty in
       if ty = T.Bits 8 then

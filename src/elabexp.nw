@@ -11,6 +11,10 @@
 \section{Elaborating Expressions}
 % ------------------------------------------------------------------ 
 
+PERHAPS [[elab_ty]] SHOULD RETURN A WIDTH, SINCE AN EXPLICITLY
+ELABORATED TYPE IS NEVER THE BOOLEAN TYPE? CHECK USAGE IN
+\module{nelab} TO BE SURE.
+
 The {\qcc} compiler type checks expressions and converts them to RTL
 expressions. 
 None of these functions ever raises an exception.
@@ -23,13 +27,13 @@ ONE PROBLEM REMAINS: WE COULD ACCEPT A HINT ON A PRIMITIVE CALL.
 <<elabexp.mli>>=
 type nm_or_mem = Ast.name_or_mem
 type link = Bits.bits Reloc.Simple.relocatable
-val elab_ty : 'a Fenv.Dirty.env' -> Ast.ty   -> Types.ty                    Error.error
-val elab_loc: 'a Fenv.Dirty.env' -> nm_or_mem-> (Automaton.loc * Rtl.width) Error.error
-val elab_exp: 'a Fenv.Dirty.env' -> Ast.expr -> (Rtl.exp       * Types.ty)  Error.error
-val elab_con: 'a Fenv.Dirty.env' -> Ast.expr -> (Bits.bits     * Rtl.width) Error.error
-val elab_link:'a Fenv.Dirty.env' -> Ast.expr -> (link          * Rtl.width) Error.error
+val elab_ty : 'a Fenv.Dirty.env' -> Ast.ty   -> Types.ty                Error.error
+val elab_loc: 'a Fenv.Dirty.env' -> nm_or_mem-> (Rtl.loc   * Rtl.width) Error.error
+val elab_exp: 'a Fenv.Dirty.env' -> Ast.expr -> (Rtl.exp   * Types.ty)  Error.error
+val elab_con: 'a Fenv.Dirty.env' -> Ast.expr -> (Bits.bits * Rtl.width) Error.error
+val elab_link:'a Fenv.Dirty.env' -> Ast.expr -> (link      * Rtl.width) Error.error
 val elab_hinted_name: 
-  'a Fenv.Dirty.env' -> nm_or_mem -> (string * (Automaton.loc * Rtl.width)) Error.error
+  'a Fenv.Dirty.env' -> nm_or_mem -> (string * (Rtl.loc * Rtl.width)) Error.error
 
 @ The [[elab_*]] functions work with incomplete information,
 indicated by [[Error.Error]] values.  The policy is as follows:
@@ -51,7 +55,6 @@ indicated by [[Error.Error]] values.  The policy is as follows:
 
 <<elabexp.ml>>=
 module A = Ast
-module AT = Automaton
 module E = Error
 module F = Fenv.Dirty
 type nm_or_mem = Ast.name_or_mem
@@ -144,28 +147,16 @@ let astwidth msg env = emap (tywidth msg) << elab_ty env
 Only the name of a {\PAL} register variable is meaningful in an lvalue
 context.
 The environment is explicit.
-\nwaddbox{lvalue_name_in_inv : F.env -> name -> AT.loc * Rtl.width}
+\nwaddbox{lvalue_name_in_inv : F.env -> name -> Rtl.loc * Rtl.width}
 \deeperbox{16pt}
 <<definition of [[lvalue_name]]>>=
 let lvalue_name x = 
   E.ematch (snd (F.findv x env))
-  (fun (denot,t) ->
+  (fun (den,t) ->
     let w = tywidth "assigned to" t  in
-    match denot with
-    | F.Variable({F.loc=Some l}) -> l, w
-    | F.Variable({F.index=i;F.loc=None}) ->
-        if F.is_localv x env then
-          AT.of_loc (Rtl.var x i w), w
-        else 
-          impossf "global variable %s without location" x
-    | _ -> 
-        let what = match denot with
-        | F.Constant _ -> "constant"
-        | F.Label    _ -> "label"
-        | F.Import   _ -> "imported symbol"
-        | F.Continuation _ -> "continuation"
-        | F.Variable _ -> "register" in
-        errorf "may not assign to %s %s" what x) in
+    match den with
+    | F.Variable {F.loc=l} -> l, w
+    | _ -> errorf "may not assign to %s %s" (F.denotation's_category den) x) in
 @ 
 Any name can be meaningful in an rvalue context.
 The environment is implicit.
@@ -176,27 +167,22 @@ let rvalue_name x =
   (fun (denot, t) ->
     let w = tywidth "named variable" t in
     let rval = match denot with
-    | F.Constant(bits)            -> E.Ok (Rtl.bits bits w)
-    | F.Label(F.Proc s)           -> E.Ok (Rtl.link s w)
-    | F.Label(F.Code s)           -> E.Ok (Rtl.link s w)
-    | F.Label(F.Data s)           -> E.Ok (Rtl.link s w)
-    | F.Import(_,s)               -> E.Ok (Rtl.link s w)
-    | F.Continuation c            -> (c.F.escapes <- true; E.Ok (Block.base c.F.base))
+    | F.Constant bits       -> E.Ok (Rtl.bits bits w)
+    | F.Label(F.Proc s)     -> E.Ok (Rtl.link s w)
+    | F.Label(F.Code s)     -> E.Ok (Rtl.link s w)
+    | F.Label(F.Data s)     -> E.Ok (Rtl.link s w)
+    | F.Import(_,s)         -> E.Ok (Rtl.link s w)
+    | F.Continuation c      -> (c.F.escapes <- true; E.Ok (Block.base c.F.base))
     | F.Label(F.Stack addr) -> E.Ok addr  (* a fetch would be wrong *)
-    | F.Variable _                -> emap atfetch (lvalue_name x) in
+    | F.Variable _          -> emap (fun (l,w) -> Rtl.fetch l w) (lvalue_name x) in
     E.Raise.left (rval, t)) in
-@ 
-Help for fetching and storing automata locations.
-<<utilities>>=
-let atfetch (loc, w)     = loc.AT.fetch w
-let atstore (loc, w) exp = loc.AT.store exp w
 @ 
 \subsubsection{General lvalues}
 
 WE MUST CHECK TO SEE IF A HINT IS PERMITTED!
 
 Again, the environment is implicit.
-\nwaddbox{lvalue : Ast.lvalue -> AT.loc * Rtl.width}
+\nwaddbox{lvalue : Ast.lvalue -> Rtl.loc * Rtl.width}
 \deeperbox{14pt}
 <<mutually recursive nest of [[typed_expr]] and [[lvalue]]>>=
 let rec hinted_name lhs = match lhs with
@@ -216,14 +202,14 @@ let rec lvalue lhs = match lhs with
           else if w mod metrics.M.memsize <> 0 then
             E.error "reference's type is not a multiple of target memsize"
           else
-            AT.of_loc (Rtl.mem assn 'm' metrics.M.byteorder w addre), w)
+            Rtl.mem assn 'm' metrics.M.byteorder w addre, w)
 and expr e = emap fst (typed_expr e) 
 and rvalue_name_or_mem nm = match nm with
   | A.NameOrMemAt(v, r) -> catch r rvalue_name_or_mem v
   | A.Name(Some _, x)   -> E.error "hint permissible only on parameter or result"
   | A.Name(None,   x)   -> rvalue_name x
   | A.Mem(_, _, _, _)   ->
-      E.ematch (lvalue nm) (fun (loc, w) -> loc.AT.fetch w, Types.Bits w)
+      E.ematch (lvalue nm) (fun (loc, w) -> Rtl.fetch loc w, Types.Bits w)
 @
 <<utilities>>=
 let assertion = function

@@ -29,6 +29,8 @@ val fortran'  : 'a -> Ast2ir.proc -> bool
 @
 Boilerplate for linking to Lua.
 <<placevar.ml>>=
+let fetch_global _ = Impossible.unimp "placing global variables"
+let store_global _ = Impossible.unimp "placing global variables"
 module R  = Rtl
 module RT = Runtimedata
 module RU = Rtlutil
@@ -123,21 +125,24 @@ let rec walkLoc loc =
   | RP.Mem   (sp, ag, w, e, ass) -> RP.Mem (sp, ag, w, walkExp e, ass)
   | RP.Reg   (sp, i, w) as r     -> r
   | RP.Var   (s, i, w)           -> Impossible.unimp "slice of variable"
+  | RP.Global(s, i, w)           -> Impossible.unimp "slice of global variable"
   | RP.Slice (w, i, l)           -> RP.Slice (w, i, walkLoc l)
 
 and walkExp exp = match exp with
-  | RP.Const _                   -> exp
-  | RP.Fetch (RP.Var (s,i,w), _) -> R.Dn.exp (fetch_var (s,i,w))
-  | RP.Fetch (l, w)              -> RP.Fetch (walkLoc l, w)
-  | RP.App   (op, exps)          -> RP.App(op, List.map walkExp exps)
+  | RP.Const _                      -> exp
+  | RP.Fetch (RP.Var    (s,i,w), _) -> R.Dn.exp (fetch_var    (s,i,w))
+  | RP.Fetch (RP.Global (s,i,w), _) -> R.Dn.exp (fetch_global (s,i,w))
+  | RP.Fetch (l, w)                 -> RP.Fetch (walkLoc l, w)
+  | RP.App   (op, exps)             -> RP.App(op, List.map walkExp exps)
 and upExp e = R.Up.exp (walkExp e)
 and upLoc l = R.Up.loc (walkLoc l)
   
 and walkEffect effect = match effect with
-  | RP.Store (RP.Var (s,i,w), e, _) -> store_var (walkExp e) (s,i,w)
+  | RP.Store (RP.Var    (s,i,w), e, _) -> store_var    (walkExp e) (s,i,w)
+  | RP.Store (RP.Global (s,i,w), e, _) -> store_global (walkExp e) (s,i,w)
   | RP.Store (l, e, w)        -> R.store (upLoc l) (upExp e) w
-  | RP.Kill  (RP.Var _)       -> Impossible.unimp "Killing variables is unimplemented"
-  | RP.Kill  l                -> R.kill (upLoc l) in
+  | RP.Kill  (RP.Var _ | RP.Global _) -> Impossible.unimp "killing variables"
+  | RP.Kill  l -> R.kill (upLoc l) in
 
 let walkGuard (exp, effect) = R.guard (upExp exp) (walkEffect effect) in
 
@@ -246,6 +251,7 @@ let rec count_loc loc ctxt = match loc with
   | RP.Mem   (_, _, _, e, _) -> count_exp e (Some inc_addr)
   | RP.Slice (_, _, l)       -> count_loc l ctxt
   | RP.Reg    _              -> ()
+  | RP.Global _              -> ()  (* cannot be placed based on context *)
   | RP.Var   (_, i, _)       ->
     (match ctxt with
      | None   -> ()
