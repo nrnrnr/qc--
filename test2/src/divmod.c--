@@ -1,0 +1,27 @@
+divmod(bits32 n, bits32 m) {
+  bits32 x, y;
+
+  x = n `divu` m;
+  y = n `modu` m;
+  return (x, y);
+}
+
+
+target byteorder little;
+
+foreign "C" main(bits32 argc, "address" bits32 argv) {
+  bits32 x, y;
+  bits32 n, m;
+  n, m = 987, 33;
+  x, y = divmod(n, m);
+
+  foreign "C" printf("address" answer, n, m, x, n, m, y, x * m + y);
+  foreign "C" return(0);
+}
+
+section "data" {
+  answer: bits8[]
+   "%d div %d == %d (wants 29);  %d mod %d == %d (wants 30);  d * q + r == %d\n\0";
+}
+
+import printf; export main;

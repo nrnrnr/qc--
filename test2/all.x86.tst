@@ -15,6 +15,7 @@ Test.files = { "add.c--"
              , "cut.c--"
              , "arglist.c--"
              , "conj.c--"
+	     , "divmod.c--"
              , norun("eqasolve-000.c--")
              , "exp-000.c--"
              , norun("exp-001.c--")
