@@ -1,0 +1,510 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+\section{Coverage Checking for Burg Rules}
+
+Twelf has the ability to perform inductive proofs to determine whether
+the rules for a relation cover all expressions.  This code transforms
+Burg specifications to Twelf specifications that determine whether the
+Burg rules cover all patterns of expressions.
+
+For example, this Burg file
+\begin{webcode}
+%term int string
+%%
+
+number : ADD(x:number,  y:number)                [2] \{: x + y :\}
+number : ADD(x:number,  CONST(0))                [1] \{: x     :\}
+number : ADD(x:number,  ADD(CONST(0), z:number)) [1] \{: x + z :\}
+number : SUB(n:number, m:number)                     \{: n - m :\}
+number : CONST(x: int)                           [1] \{: x :\}
+number : CONST(0)                                [0] \{: 0 :\}
+
+str    : STR(x: string)                          [1] \{: x :\}
+str    : CONS(x: string, y:string)               [2] \{: x ^ y :\}
+
+str    : number                [1]    \{: string_of_int number :\}
+number : str                   [1]    \{: int_of_string str    :\}
+\end{webcode} may be checked with this Twelf code
+\begin{webcode}
+exp : type.
+
+int : type.
+1 : int.
+0 : int.
+
+string : type.
+str_lit_1 : string.
+
+cons : string -> string -> exp.
+str : string -> exp.
+div : exp -> exp -> exp.
+mul : exp -> exp -> exp.
+sub : exp -> exp -> exp.
+const : int -> exp.
+add : exp -> exp -> exp.
+
+match_str : exp -> type.
+match_number : exp -> type.
+
+%mode match_str +E.
+%mode match_number +E.
+%worlds () (match_str E) (match_number E).
+
+rule_1 : match_number (add E1 E2)
+  <- match_number E1
+  <- match_number E2.
+
+rule_2 : match_number (add E1 (add E2 E3))
+  <- match_number E1
+  <- match_number E2
+  <- match_number E3.
+
+rule_3 : match_number (add E1 (const 0))
+  <- match_number E1.
+
+rule_4 : match_number (add (const 0) (const 0)).
+
+rule_5 : match_number (sub E1 E2)
+  <- match_number E1
+  <- match_number E2.
+
+rule_6 : match_number (mul E1 E2)
+  <- match_number E1
+  <- match_number E2.
+
+rule_7 : match_number (div E1 E2)
+  <- match_number E1
+  <- match_number E2.
+
+rule_8 : match_number (const E1).
+
+rule_9 : match_number (const 0).
+
+rule_10 : match_str (str E1).
+
+rule_11 : match_str (cons E1 E2).
+
+% chain rules
+
+rule_12 : match_str (add E1 E2)
+  <- match_number E1
+  <- match_number E2.
+
+rule_13 : match_str (add E1 (add E2 E3))
+  <- match_number E1
+  <- match_number E2
+  <- match_number E3.
+
+rule_14 : match_str (add E1 (const 0))
+  <- match_number E1.
+
+rule_15 : match_str (add (const 0) (const 0)).
+
+rule_16 : match_str (sub E1 E2)
+  <- match_number E1
+  <- match_number E2.
+
+rule_17 : match_str (mul E1 E2)
+  <- match_number E1
+  <- match_number E2.
+
+rule_18 : match_str (div E1 E2)
+  <- match_number E1
+  <- match_number E2.
+
+rule_19 : match_str (const E1).
+
+rule_20 : match_str (const 0).
+
+rule_21 : match_number (str E1).
+
+rule_22 : match_number (cons E1 E2).
+
+%covers (match_str +E) (match_number +E).
+\end{webcode}
+
+<<modules>>=
+module S = Spec
+open Printf
+@ 
+
+Variables are named ``E'' followed by a number.  Each variable name
+returned from a function constructed by [[mk_var_gensym]] is unique
+for that function---the number increases by one at each call.
+<<variable naming>>=
+let mk_var_gensym ()=
+  let count = ref 0 in
+  fun () -> incr(count); "E"^(string_of_int !count)
+@ 
+
+[[gen_pattern]] takes a pattern from a Burg rule and returns a tuple
+with the following information about the pattern.  The first element
+of the tuple is a string representation of the Twelf expression
+corresponding to the Burg pattern.  The second element of the tuple
+contains type information for all variables---it is a list of pairs of
+strings where the first of the pair is the name of a variable and the
+second is the name of its type.  [[gen_pattern]] uses
+[[mk_var_gensym]] to create a [[gensym]] function for variables.
+Therefore, for each pattern, all variables have unique names.  We also
+use [[id_of_string]] to name string literals---this returns a unique
+integer identifier for each string.
+<<twelf code generation functions>>=
+let gen_pattern pattern =
+  let gensym = mk_var_gensym() in
+  let rec gen = function
+    | S.Literal (S.Int    i)    -> (string_of_int i, [])
+    | S.Literal (S.String s)    ->
+        let str_id = string_of_int (id_of_string s) in
+        ("str_lit_"^str_id, [])
+    | S.Literal (S.Char   c)    -> 
+        ("char_lit_"^(string_of_int (int_of_char c)), [])
+    | S.Var (name, S.Term t)    -> (gensym(), [])
+    | S.Var (name, S.NonTerm t) ->
+        let v = gensym() in
+        (v, [v,t])
+    | S.Con (name, args)        ->
+        let (arg_strs, env) = List.split (List.map gen args) in
+        let twelf_con_name  = String.lowercase name
+        and args_string     = String.concat " " arg_strs
+        and env'            = List.flatten env in
+        ("("^twelf_con_name^" "^args_string^")", env')
+  in gen pattern
+@ 
+
+Twelf rules are named ``rule\_'' followed by a number.  Each rule name
+returned from a function constructed by [[mk_rule_gensym]] is unique
+for that function---the number increases by one at each call.
+<<rule naming>>=
+let mk_rule_gensym () =
+  let count = ref 0 in
+  fun () -> incr(count); "rule_"^(string_of_int !count)
+@ 
+
+<<twelf rule type>>=
+type twelf_rule = {
+    rule_name : string;
+    goal_type : string;
+    goal_expr : string;
+    type_env  : (string * string) list
+  }
+@ 
+
+<<twelf code generation functions>>=
+let gen_rule =
+  let gensym = mk_rule_gensym() in
+  let gen r =
+    let (goal, to_prove) = gen_pattern r.S.pattern in
+    { rule_name = gensym();
+      goal_type = r.S.nonterm;
+      goal_expr = goal;
+      type_env  = to_prove }
+  in gen
+@ 
+
+<<twelf code generation functions>>=
+let print_rule r =
+  let goal_match = r.rule_name^" : match_"^r.goal_type in
+  if r.type_env <> [] then
+    let precond_str (name, ty) = "<- match_"^ty^" "^name in
+    let precond_strs = List.map precond_str r.type_env in
+    (printf "%s %s\n  " goal_match r.goal_expr;
+     printf "%s.\n\n" (String.concat "\n  " precond_strs))
+  else
+    printf "%s %s.\n\n" goal_match r.goal_expr
+@ 
+
+What we need to know to generate Twelf:
+
+data:
+
+goal types.
+literal types used.
+literals used.
+constructor types.
+chain rule (type <- type).
+non-chain rule (type <- pattern, var*type list).
+
+operations:
+
+literal type * literals in code -> next unused literal.
+
+unused_int_literal    : int list    -> int
+unused_string_literal : string list -> string
+unused_char_literal   : char list   -> char
+
+<<auxiliary functions>>=
+let compose f g x = f (g x)
+@ 
+
+<<auxiliary functions>>=
+let maximum = List.fold_left max min_int
+@ 
+
+<<auxiliary functions>>=
+let unused_int_literal ints = 
+  if ints = [] then 0 else (maximum ints) + 1
+@ 
+
+<<auxiliary functions>>=
+let (id_of_string,
+     string_of_id,
+     unused_string_id,
+     used_string_ids) =
+  let count  = ref 0 in
+  let strmap : (string * int) list ref = ref [] in
+  let i_of_s s =
+    try List.assoc s !strmap
+    with Not_found ->
+      incr(count);
+      strmap := (s, !count) :: !strmap;
+      !count
+  in
+  let s_of_i i =
+    if List.length !strmap >= i then
+      fst (List.nth !strmap (i - 1))
+    else raise Not_found
+  in
+  (i_of_s,
+   s_of_i,
+   (fun () -> incr(count); !count),
+   (fun () -> List.map snd !strmap))
+@ 
+
+Need to fix the way this works.  Maybe just populate an array size 256
+and then scan for empty spots.
+<<auxiliary functions>>=
+let unused_char_literal chars =
+  if chars = [] then char_of_int 0
+  else
+    char_of_int ((maximum (List.map int_of_char chars) + 1) mod 255)
+@ 
+
+burg rules -> constructor types.
+
+constructor_types : S.rules -> (string * string list) list
+
+<<twelf code generation functions>>=
+let return_type = function
+  | S.Literal (S.Int    i)    -> "int"
+  | S.Literal (S.String s)    -> "string"
+  | S.Literal (S.Char   c)    -> "char"
+  | S.Var (name, S.Term t)    -> t
+  | S.Var (name, S.NonTerm t) -> "exp"
+  | S.Con (name, args)        -> "exp"
+@ 
+
+<<twelf code generation functions>>=
+let constructor_types rules =
+  let rec accum_types tys = function
+    | S.Con (name, args) as ctor ->
+        let ctor_name = String.lowercase name in
+        let ty   = (ctor_name,
+                    List.map return_type args @ ["exp"]) in
+        let tys' =
+          if List.mem_assoc ctor_name tys then
+            (assert(List.assoc ctor_name tys = snd ty);
+             tys)
+          else ty :: tys in
+        List.fold_left accum_types tys' args
+    | _ -> tys
+  in
+  let extract_pattern rule = rule.S.pattern in
+  List.fold_left accum_types [] (List.map extract_pattern rules)
+@ 
+
+<<twelf code generation functions>>=
+let print_constructor_type (ctor_name, ctor_arg_types) =
+  let args_str = String.concat " -> " ctor_arg_types in
+  printf "%s : %s.\n" ctor_name args_str
+@ 
+
+burg rules -> goal types.
+
+goal_types : S.rules -> string list
+
+<<twelf code generation functions>>=
+let goal_types =
+  let add_goal t tys = if List.mem t tys then tys else t :: tys in
+  let rec add_goals tys = function
+    | S.Literal (S.Int    i)    -> tys
+    | S.Literal (S.String s)    -> tys
+    | S.Literal (S.Char   c)    -> tys
+    | S.Var (name, S.Term t)    -> tys
+    | S.Var (name, S.NonTerm t) -> add_goal t tys
+    | S.Con (name, args)        -> List.fold_left add_goals tys args
+  in
+  let add_rule_goals tys r =
+    add_goals (add_goal r.S.nonterm tys) r.S.pattern
+  in
+  List.fold_left add_rule_goals []
+@ 
+
+<<twelf code generation functions>>=
+let atomic_types =
+  let add_ty t tys = if List.mem t tys then tys else t :: tys in
+  let rec add_tys tys = function
+    | S.Literal (S.Int    i)    -> add_ty "int"    tys
+    | S.Literal (S.String s)    -> add_ty "string" tys
+    | S.Literal (S.Char   c)    -> add_ty "char"   tys
+    | S.Var (name, S.Term t)    -> add_ty t        tys
+    | S.Con (name, args)        -> List.fold_left add_tys tys args
+    | _                         -> tys
+  in
+  List.fold_left (fun tys r -> add_tys tys r.S.pattern) []
+@ 
+
+burg rules * literal type -> literals used.
+
+int_literals    : S.rules -> int list
+string_literals : S.rules -> string list
+char_literals   : S.rules -> char list
+
+<<twelf code generation functions>>=
+let int_literals =
+  let add_int i xs = if List.mem i xs then xs else i :: xs in
+  let rec add_ints xs = function
+    | S.Literal (S.Int i)    -> add_int i xs
+    | S.Con     (name, args) -> List.fold_left add_ints xs args
+    | _                      -> xs
+  in
+  List.fold_left (fun xs r -> add_ints xs r.S.pattern) []
+@ 
+
+<<twelf code generation functions>>=
+let char_literals =
+  let add_char c xs = if List.mem c xs then xs else c :: xs in
+  let rec add_chars xs = function
+    | S.Literal (S.Char c)   -> add_char c xs
+    | S.Con     (name, args) -> List.fold_left add_chars xs args
+    | _                      -> xs
+  in
+  List.fold_left (fun xs r -> add_chars xs r.S.pattern) []
+@ 
+
+burg rule -> is it a chain rule?
+
+is_chain_rule : S.rule -> bool
+
+<<twelf code generation functions>>=
+let is_chain_rule rule =
+  match rule.S.pattern with
+  | S.Var (name, S.NonTerm t) -> true
+  | _                         -> false
+@ 
+
+create twelf rules to represent a chain rule
+chain rule * twelf rule list -> twelf rule list
+
+gen_chain_rule : S.rule * twelf_rule list -> twelf_rule list
+
+First we scan [[rules]] looking for rules with the goal type we seek
+to alter---in other words, the type of the variable in the pattern of
+[[rule]].  We then create a new list of rules where the goal type is
+changed to the goal type of [[rule]].  Then we just run [[gen_rule]]
+on the list to get the Twelf rules.
+<<twelf code generation functions>>=
+let gen_chain_rule rules rule =
+  let chain_var_type =
+    match rule.S.pattern with
+    | S.Var (name, S.NonTerm t) -> t
+    | _                         -> raise (Invalid_argument "not a chain rule")
+  in
+  let to_change = List.find_all (fun r -> r.S.nonterm = chain_var_type) rules in
+  List.map (fun r -> {r with S.nonterm = rule.S.nonterm}) to_change
+@ 
+
+non-chain burg rule -> twelf rule
+
+gen_rule : S.rule -> twelf_rule
+
+<<twelf code generation functions>>=
+let rules_equal r1 r2 =
+  r1.S.nonterm = r2.S.nonterm && r1.S.pattern = r2.S.pattern
+@ 
+
+<<twelf code generation functions>>=
+let rec find_chain_rules_fixpoint rules accum_rules chain_rules =
+  let crs =
+    List.flatten (List.map (gen_chain_rule (rules @ accum_rules)) chain_rules) in
+  let rules_not_eq r1 r2 = not (rules_equal r1 r2) in
+  let crs' = List.find_all
+      (fun x -> (List.for_all (rules_not_eq x) accum_rules)
+             && (List.for_all (rules_not_eq x) rules)) crs in
+  if crs' <> [] then
+    find_chain_rules_fixpoint rules (accum_rules @ crs') chain_rules
+  else accum_rules
+@ 
+
+TO DO: 1. add option to specify the type to coverage check.  2. add
+option so that we don't populate term types with extra literals
+3. figure out how to make string literals look right/useful
+
+<<twelf code generation functions>>=
+let gen_elf spec =
+  let chain_rules     = List.find_all is_chain_rule spec.S.rules in
+  let non_chain_rules = List.find_all (compose not is_chain_rule) spec.S.rules in
+  let twelf_rules     = List.map gen_rule non_chain_rules in
+  let ctor_types  = constructor_types spec.S.rules in
+  let goal_types  = goal_types spec.S.rules in
+  let atomic_types = atomic_types spec.S.rules in
+  let chain_fixpoint = 
+    List.map gen_rule (find_chain_rules_fixpoint non_chain_rules [] chain_rules) in
+
+  printf "exp : type.\n\n";
+
+  S.StringSet.iter 
+    (fun t -> 
+      if not (List.mem t ["string"; "int"; "char"]) then
+        printf "%s : type.\n%s_lit : %s.\n\n" t t t)
+    spec.S.terms;
+
+  (if List.mem "int" atomic_types then
+    let int_lits = int_literals spec.S.rules in
+    let int_lits' = (unused_int_literal int_lits) :: int_lits in
+    printf "int : type.\n";
+    List.iter (fun i -> printf "%i : int.\n" i) int_lits';
+    printf "\n");
+
+  (if List.mem "string" atomic_types then
+    let str_ids = used_string_ids() in
+    let str_ids' = unused_string_id() :: str_ids in
+    printf "string : type.\n";
+    List.iter (fun i -> printf "str_lit_%i : string.\n" i) str_ids';
+    printf "\n");
+
+  (if List.mem "char" atomic_types then
+    let char_lits = char_literals spec.S.rules in
+    let char_lits' = (unused_char_literal char_lits) :: char_lits in
+    printf "char : type.\n";
+    List.iter (fun c -> printf "char_lit_%i : char.\n" (int_of_char c)) char_lits';
+    printf "\n");
+
+  List.iter print_constructor_type ctor_types;
+  printf "\n";
+
+  List.iter (fun t -> printf "match_%s : exp -> type.\n" t) goal_types;
+  printf "\n";
+
+  List.iter (fun t -> printf "%%mode match_%s +E.\n" t) goal_types;
+  printf "%%worlds ()";
+  List.iter (fun t -> printf " (match_%s E)" t) goal_types;
+  printf ".\n\n";
+
+  List.iter print_rule twelf_rules;
+
+  printf "%% chain rules\n\n";
+  List.iter print_rule chain_fixpoint;
+
+  printf "%%covers";
+  List.iter (fun t -> printf " (match_%s +E)" t) goal_types;
+  printf ".\n"
+@ 
+
+<<noguardscheck.ml>>=
+<<modules>>
+<<auxiliary functions>>
+<<variable naming>>
+<<rule naming>>
+<<twelf rule type>>
+<<twelf code generation functions>>
+@ 
