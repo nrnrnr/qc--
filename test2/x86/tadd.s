@@ -141,10 +141,10 @@ main:
 	addl %edx,%ecx
 	movl 72(%esp),%edx
 	movl %edx,(%ecx)
-	movl %ebx,76(%esp)
-	movl %ebp,80(%esp)
-	movl %esi,84(%esp)
-	movl %edi,88(%esp)
+	movl %edi,76(%esp)
+	movl %esi,80(%esp)
+	movl %ebp,84(%esp)
+	movl %ebx,88(%esp)
 	call tagged_add
 .Lcall_successor_l28:
 	movl %eax,88(%esp)
@@ -174,10 +174,10 @@ main:
 	addl %edx,%ecx
 	movl 52(%esp),%edx
 	movl %edx,(%ecx)
-	movl 84(%esp),%edi
-	movl 80(%esp),%esi
-	movl 76(%esp),%ebp
-	movl 72(%esp),%ebx
+	movl 84(%esp),%ebx
+	movl 80(%esp),%ebp
+	movl 76(%esp),%esi
+	movl 72(%esp),%edi
 	leal 100(%esp), %esp
 	ret
 .Lcut_entry_l11:
@@ -194,10 +194,10 @@ main:
 	addl %edx,%ecx
 	movl 52(%esp),%edx
 	movl %edx,(%ecx)
-	movl 84(%esp),%edi
-	movl 80(%esp),%esi
-	movl 76(%esp),%ebp
-	movl 72(%esp),%ebx
+	movl 84(%esp),%ebx
+	movl 80(%esp),%ebp
+	movl 76(%esp),%esi
+	movl 72(%esp),%edi
 	leal 100(%esp), %esp
 	ret
 .section .pcmap_data
@@ -331,13 +331,13 @@ main:
 .long 9
 .long 0
 .long 1
-.long 11
-.long 0xfffffff0
-.long 10
-.long 0xffffffec
-.long 9
-.long 0xffffffe8
 .long 7
+.long 0xfffffff0
+.long 9
+.long 0xffffffec
+.long 10
+.long 0xffffffe8
+.long 11
 .long 0xffffffe4
 .long 0
 .long 0
@@ -362,13 +362,13 @@ main:
 .long 9
 .long 0
 .long 1
-.long 11
-.long 0xfffffff0
-.long 10
-.long 0xffffffec
-.long 9
-.long 0xffffffe8
 .long 7
+.long 0xfffffff0
+.long 9
+.long 0xffffffec
+.long 10
+.long 0xffffffe8
+.long 11
 .long 0xffffffe4
 .long 0
 .long 0
@@ -393,13 +393,13 @@ main:
 .long 9
 .long 0
 .long 1
-.long 11
-.long 0xfffffff0
-.long 10
-.long 0xffffffec
-.long 9
-.long 0xffffffe8
 .long 7
+.long 0xfffffff0
+.long 9
+.long 0xffffffec
+.long 10
+.long 0xffffffe8
+.long 11
 .long 0xffffffe4
 .long 0
 .long 0
@@ -424,13 +424,13 @@ main:
 .long 9
 .long 0
 .long 1
-.long 11
-.long 0xfffffff0
-.long 10
-.long 0xffffffec
-.long 9
-.long 0xffffffe8
 .long 7
+.long 0xfffffff0
+.long 9
+.long 0xffffffec
+.long 10
+.long 0xffffffe8
+.long 11
 .long 0xffffffe4
 .long 0
 .long 0
@@ -455,13 +455,13 @@ main:
 .long 9
 .long 0
 .long 1
-.long 11
-.long 0xfffffff0
-.long 10
-.long 0xffffffec
-.long 9
-.long 0xffffffe8
 .long 7
+.long 0xfffffff0
+.long 9
+.long 0xffffffec
+.long 10
+.long 0xffffffe8
+.long 11
 .long 0xffffffe4
 .long 0
 .long 0

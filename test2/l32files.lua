@@ -7,56 +7,58 @@ Test.files = { "add.c--"
              , "bits-bug.c--"
              , "bool.c--"
              , "blockcpy.c--"
-	     , { source = 'carry.c--', other = 'src/ctest.c' }
+             , { source = 'carry.c--', other = 'src/ctest.c' }
              , "cut.c--"
              , "conj.c--"
        , 'deadcut.c--'
-	     , "divmod.c--"
-	     , "emptyifbody.c--"
-	     , "if-false.c--"
-	     , "if-false2.c--"
+             , "divmod.c--"
+             , "emptyifbody.c--"
+             , "if-false.c--"
+             , "if-false2.c--"
              ---  , "inf.c--"  -- infinite loop, used to test limit mechanism
              , "exp-000.c--"
              , "exp-001.c--"
              , "fadd.c--"
-	     , { source="fargres.c--", other='src/double.c' }
+             , "failedcase.c--"
+             , { source="fargres.c--", other='src/double.c' }
              , "float-000.c--"
              , "float-001.c--"
              , "float-001-hero.c--"
              , "float-001-coward.c--"
              , 'float-002.c--'
              , { source='float-003.c--' }  -- .outdir will be modified for sparc
-	     , 'f2.c--'
+             , 'f2.c--'
              , { source = { 'global.c--', 'incn.c--' } }
              , "hello.c--"
-	     , "hex.c--"
+             , "hex.c--"
              , "jtab.c--"    -- computed goto with jump table
-	     , { source='ladd.c--', other='src/ops64.c' }
+             , { source='ladd.c--', other='src/ops64.c' }
              , { source = 'lit8.c--', other='src/lit8main.c' }
              , "live_rtd.c--"
+             , "multasgn.c--"
              , "not.c--"
              , "ovrflow.c--"
              , "ralloc-000.c--"
              , 'ratail.c--'
-	     , { source='r64.c--', other='src/r64main.c' }
+             , { source='r64.c--', other='src/r64main.c' }
              , "rnd2.c--"
              , "round.c--"
              , "round2.c--"
-	     , 'sparcerr.c--'
-	     , { source="spdemo.c--", argv="4" }
+             , 'sparcerr.c--'
+             , { source="spdemo.c--", argv="4" }
              , "sub.c--"
-	     , "switch.c--"
-	     , { name='tadd', source='tadd.c--' }
-	     , { name='tadd22', source='tadd.c--', argv='2 2' }
-	     , { name='tadd100-', source='tadd.c--', argv='100 -1' }
-	     , { name='tadd11', source='tadd.c--', argv='-1 -1' }
-	     , { name='taddov', source='tadd.c--', argv='536870912 536870912', rc=1 }
-	     , "tail.c--"
+             , "switch.c--"
+             , { name='tadd', source='tadd.c--' }
+             , { name='tadd22', source='tadd.c--', argv='2 2' }
+             , { name='tadd100-', source='tadd.c--', argv='100 -1' }
+             , { name='tadd11', source='tadd.c--', argv='-1 -1' }
+             , { name='taddov', source='tadd.c--', argv='536870912 536870912', rc=1 }
+             , "tail.c--"
              , "tail_from_c.c--"
              , { source = {'tail2.c--', 'call3.c--'} }
              , { source = {'tailnot.c--', 'call3.c--'} }
-	     , 'test-039.c--'
-	     , 'test-050.c--'
+             , 'test-039.c--'
+             , 'test-050.c--'
              , 'tf.c--'
              , 'wtizzy.c--'
              , "x86-000.c--"

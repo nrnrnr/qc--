@@ -17,25 +17,25 @@ unwind_test:
 	movl (%ecx),%ecx
 .Linitialize_continuations_l12:
 .Lproc_body_start_l11:
-	movl %eax,(%esp)
-	movl %ecx,4(%esp)
+	movl %ecx,(%esp)
+	movl %eax,4(%esp)
 	call g
 .Lcall_successor_l17:
 	movl $0,%eax
 	leal 8(%esp), %ecx
 	movl $0,%edx
 	addl %edx,%ecx
-	movl 4(%esp),%edx
+	movl (%esp),%edx
 	movl %edx,(%ecx)
 	leal 8(%esp), %esp
 	ret
 .Lunwind_entry_l10:
 .Lstart_of_continuation_code_l8:
-	movl (%esp),%eax
+	movl 4(%esp),%eax
 	leal 8(%esp), %ecx
 	movl $0,%edx
 	addl %edx,%ecx
-	movl 4(%esp),%edx
+	movl (%esp),%edx
 	movl %edx,(%ecx)
 	leal 8(%esp), %esp
 	ret
@@ -49,13 +49,13 @@ unwind_test:
 .Lframe_l24:
 .long 0x80000004
 .long 0xfffffff8
-.long 0xfffffffc
+.long 0xfffffff8
 .long .Lstackdata_l23
 .long 0
 .long 1
 .long 0
 .long 7
-.long 0xfffffff8
+.long 0xfffffffc
 .long 1
 .long 2
 .long 1
@@ -91,10 +91,10 @@ g:
 	movl $-32,%edx
 	addl %edx,%ecx
 	movl %eax,(%ecx)
-	movl %ebx,8(%esp)
-	movl %ebp,12(%esp)
-	movl %esi,16(%esp)
-	movl %edi,20(%esp)
+	movl %edi,8(%esp)
+	movl %esi,12(%esp)
+	movl %ebp,16(%esp)
+	movl %ebx,20(%esp)
 	call do_unwind
 .Lcall_successor_l36:
 	int $3
@@ -106,10 +106,10 @@ g:
 	addl %edx,%ecx
 	movl 4(%esp),%edx
 	movl %edx,(%ecx)
-	movl 20(%esp),%edi
-	movl 16(%esp),%esi
-	movl 12(%esp),%ebp
-	movl 8(%esp),%ebx
+	movl 20(%esp),%ebx
+	movl 16(%esp),%ebp
+	movl 12(%esp),%esi
+	movl 8(%esp),%edi
 	leal 32(%esp), %esp
 	ret
 .section .pcmap_data
@@ -128,13 +128,13 @@ g:
 .long 0
 .long 0
 .long 1
-.long 11
-.long 0xfffffff4
-.long 10
-.long 0xfffffff0
-.long 9
-.long 0xffffffec
 .long 7
+.long 0xfffffff4
+.long 9
+.long 0xfffffff0
+.long 10
+.long 0xffffffec
+.long 11
 .long 0xffffffe8
 .long 0
 .section .pcmap
@@ -150,13 +150,13 @@ g:
 .long 0
 .long 0
 .long 1
-.long 11
-.long 0xfffffff4
-.long 10
-.long 0xfffffff0
-.long 9
-.long 0xffffffec
 .long 7
+.long 0xfffffff4
+.long 9
+.long 0xfffffff0
+.long 10
+.long 0xffffffec
+.long 11
 .long 0xffffffe8
 .long 0
 .section .text

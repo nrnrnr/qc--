@@ -118,13 +118,13 @@ f2:
 	movl (%ecx),%ecx
 .Linitialize_continuations_l39:
 .Lproc_body_start_l38:
-	movl %eax,(%esp)
-	movl %ecx,4(%esp)
+	movl %ecx,(%esp)
+	movl %eax,4(%esp)
 	call f
 .Lcall_successor_l48:
 .Lbranch_target_l52:
 	movl $0,%ecx
-	movl (%esp),%edx
+	movl 4(%esp),%edx
 	cmpl %ecx,%edx
 	je L.7
 .Lbranch_target_l45:
@@ -143,7 +143,7 @@ L.8:
 	leal 12(%esp), %ecx
 	movl $0,%edx
 	addl %edx,%ecx
-	movl 4(%esp),%edx
+	movl (%esp),%edx
 	movl %edx,(%ecx)
 	leal 12(%esp), %esp
 	ret
@@ -157,13 +157,13 @@ L.8:
 .Lframe_l58:
 .long 0x80000004
 .long 0xfffffff4
-.long 0xfffffff8
+.long 0xfffffff4
 .long .Lstackdata_l57
 .long 0
 .long 4
 .long 0
 .long 1
-.long 0xfffffff4
+.long 0xfffffff8
 .long 0
 .long 0
 .long 0
@@ -175,7 +175,7 @@ L.8:
 .Lframe_l59:
 .long 0x80000004
 .long 0xfffffff4
-.long 0xfffffff8
+.long 0xfffffff4
 .long .Lstackdata_l57
 .long 0
 .long 4

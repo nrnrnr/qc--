@@ -372,7 +372,7 @@ tiger_main:
 .Lstart_of_continuation_code_l35:
 .Lbranch_target_l84:
 	movl $21,%eax
-	movl 20(%esp),%ecx
+	movl 40(%esp),%ecx
 	cmpl %eax,%ecx
 	je Lhandle_52
 Lskip_53:
@@ -443,7 +443,7 @@ Ltry_end_48:
 .Lstart_of_continuation_code_l41:
 .Lbranch_target_l83:
 	movl $22,%eax
-	movl 40(%esp),%ecx
+	movl 20(%esp),%ecx
 	cmpl %eax,%ecx
 	je Lhandle_70
 Lskip_71:
@@ -544,16 +544,16 @@ Ltry_end_67:
 .long 0
 .long 0
 .long 0
-.long 0xffffffd0
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
 .long 0xffffffbc
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0xffffffd0
 .long 0
 .long 0
 .long 0
@@ -589,16 +589,16 @@ Ltry_end_67:
 .long 0
 .long 0
 .long 0
-.long 0xffffffd0
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
 .long 0xffffffbc
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0xffffffd0
 .long 0
 .long 0
 .long 0
@@ -634,16 +634,16 @@ Ltry_end_67:
 .long 0
 .long 0
 .long 0
-.long 0xffffffd0
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
-.long 0
 .long 0xffffffbc
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0xffffffd0
 .long 0
 .long 0
 .long 0
@@ -679,7 +679,7 @@ Ltry_end_67:
 .long 0
 .long 0
 .long 0
-.long 0xffffffd0
+.long 0xffffffbc
 .long 0
 .long 0
 .long 0
@@ -717,7 +717,7 @@ Ltry_end_67:
 .long 0
 .long 0
 .long 0
-.long 0xffffffd0
+.long 0xffffffbc
 .long 0
 .long 0
 .long 0
@@ -755,7 +755,7 @@ Ltry_end_67:
 .long 0
 .long 0
 .long 0
-.long 0xffffffd0
+.long 0xffffffbc
 .long 0
 .long 0
 .long 0
@@ -793,7 +793,7 @@ Ltry_end_67:
 .long 0
 .long 0
 .long 0
-.long 0xffffffd0
+.long 0xffffffbc
 .long 0
 .long 0
 .long 0

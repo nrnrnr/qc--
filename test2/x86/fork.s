@@ -55,10 +55,10 @@ run_thread:
 	addl %eax,%edx
 	movl (%edx),%eax
 	movl (%ecx),%ecx
-	movl %ebx,16(%esp)
-	movl %ebp,20(%esp)
-	movl %esi,24(%esp)
-	movl %edi,28(%esp)
+	movl %edi,16(%esp)
+	movl %esi,20(%esp)
+	movl %ebp,24(%esp)
+	movl %ebx,28(%esp)
 	movl %eax, %esp; jmp *%ecx
 .Lcut_entry_l8:
 .Lstart_of_continuation_code_l7:
@@ -68,10 +68,10 @@ run_thread:
 	addl %edx,%ecx
 	movl 12(%esp),%edx
 	movl %edx,(%ecx)
-	movl 28(%esp),%edi
-	movl 24(%esp),%esi
-	movl 20(%esp),%ebp
-	movl 16(%esp),%ebx
+	movl 28(%esp),%ebx
+	movl 24(%esp),%ebp
+	movl 20(%esp),%esi
+	movl 16(%esp),%edi
 	leal 40(%esp), %esp
 	ret
 .section .pcmap_data
@@ -90,13 +90,13 @@ run_thread:
 .long 2
 .long 0
 .long 1
-.long 11
-.long 0xfffffff4
-.long 10
-.long 0xfffffff0
-.long 9
-.long 0xffffffec
 .long 7
+.long 0xfffffff4
+.long 9
+.long 0xfffffff0
+.long 10
+.long 0xffffffec
+.long 11
 .long 0xffffffe8
 .long 0
 .long 0
@@ -147,13 +147,13 @@ cmm_threadfun:
 .long 2
 .long 0
 .long 1
-.long 11
-.long 0
-.long 10
+.long 7
 .long 0
 .long 9
 .long 0
-.long 7
+.long 10
+.long 0
+.long 11
 .long 0
 .long 0
 .long 0

@@ -75,13 +75,13 @@ addpoint:
 	addl %ecx,%eax
 	movl (%eax),%eax
 	movl %eax,40(%esp)
-	movl (%esp),%ecx
-	movl 36(%esp),%eax
-	movl %eax,(%ecx)
-	movl $4,%eax
-	addl %eax,%ecx
-	movl 40(%esp),%eax
-	movl %eax,(%ecx)
+	movl 36(%esp),%ecx
+	movl (%esp),%eax
+	movl %ecx,(%eax)
+	movl $4,%ecx
+	addl %ecx,%eax
+	movl 40(%esp),%ecx
+	movl %ecx,(%eax)
 L.1:
 	leal 44(%esp), %eax
 	movl $0,%ecx
@@ -91,16 +91,16 @@ L.1:
 	ret
 .section .text
 canonrect:
-	leal -100(%esp), %esp
-	leal 100(%esp), %eax
+	leal -96(%esp), %esp
+	leal 96(%esp), %eax
 	movl $4,%ecx
 	addl %ecx,%eax
 	movl (%eax),%eax
-	leal 100(%esp), %ecx
+	leal 96(%esp), %ecx
 	movl $8,%edx
 	addl %edx,%ecx
 	movl (%ecx),%ecx
-	leal 100(%esp), %edx
+	leal 96(%esp), %edx
 	movl (%edx),%edx
 .Linitialize_continuations_l20:
 .Lproc_body_start_l19:
@@ -133,7 +133,7 @@ L.11:
 	addl %ecx,%eax
 	movl (%eax),%eax
 L.12:
-	leal 100(%esp), %ecx
+	leal 96(%esp), %ecx
 	movl %eax,20(%esp)
 	movl $-16,%eax
 	addl %eax,%ecx
@@ -173,7 +173,7 @@ L.15:
 	addl %ecx,%eax
 	movl (%eax),%eax
 L.16:
-	leal 100(%esp), %ecx
+	leal 96(%esp), %ecx
 	movl %eax,40(%esp)
 	movl $-16,%eax
 	addl %eax,%ecx
@@ -209,7 +209,7 @@ L.19:
 	addl %ecx,%eax
 	movl (%eax),%eax
 L.20:
-	leal 100(%esp), %ecx
+	leal 96(%esp), %ecx
 	movl %eax,56(%esp)
 	movl $-16,%eax
 	addl %eax,%ecx
@@ -245,7 +245,7 @@ L.24:
 	addl %eax,%ecx
 	movl (%ecx),%eax
 L.25:
-	leal 100(%esp), %ecx
+	leal 96(%esp), %ecx
 	movl %eax,68(%esp)
 	movl $-16,%eax
 	addl %eax,%ecx
@@ -253,11 +253,11 @@ L.25:
 	addl %eax,%ecx
 	movl 68(%esp),%eax
 	movl %eax,(%ecx)
-	leal 100(%esp), %eax
+	leal 96(%esp), %eax
 	movl $-16,%ecx
 	addl %ecx,%eax
 	movl (%eax),%eax
-	leal 100(%esp), %ecx
+	leal 96(%esp), %ecx
 	movl %eax,72(%esp)
 	movl $-16,%eax
 	addl %eax,%ecx
@@ -265,23 +265,20 @@ L.25:
 	addl %eax,%ecx
 	movl (%ecx),%eax
 	movl %eax,76(%esp)
-	movl (%esp),%ecx
-	movl 72(%esp),%eax
-	movl %eax,(%ecx)
-	movl $4,%eax
-	movl %eax,80(%esp)
-	movl %ecx,%eax
-	movl 80(%esp),%ecx
+	movl 72(%esp),%ecx
+	movl (%esp),%eax
+	movl %ecx,(%eax)
+	movl $4,%ecx
 	addl %ecx,%eax
 	movl 76(%esp),%ecx
 	movl %ecx,(%eax)
-	leal 100(%esp), %eax
+	leal 96(%esp), %eax
 	movl $-16,%ecx
 	addl %ecx,%eax
 	movl $8,%ecx
 	addl %ecx,%eax
 	movl (%eax),%eax
-	leal 100(%esp), %ecx
+	leal 96(%esp), %ecx
 	movl %eax,72(%esp)
 	movl $-16,%eax
 	addl %eax,%ecx
@@ -300,11 +297,11 @@ L.25:
 	movl 76(%esp),%eax
 	movl %eax,(%ecx)
 L.8:
-	leal 100(%esp), %eax
+	leal 96(%esp), %eax
 	movl $0,%ecx
 	addl %ecx,%eax
 	movl %edx,(%eax)
-	leal 100(%esp), %esp
+	leal 96(%esp), %esp
 	ret
 .section .text
 makepoint:
@@ -356,13 +353,13 @@ makepoint:
 	addl %eax,%ecx
 	movl (%ecx),%eax
 	movl %eax,24(%esp)
-	movl (%esp),%ecx
-	movl 20(%esp),%eax
-	movl %eax,(%ecx)
-	movl $4,%eax
-	addl %eax,%ecx
-	movl 24(%esp),%eax
-	movl %eax,(%ecx)
+	movl 20(%esp),%ecx
+	movl (%esp),%eax
+	movl %ecx,(%eax)
+	movl $4,%ecx
+	addl %ecx,%eax
+	movl 24(%esp),%ecx
+	movl %ecx,(%eax)
 L.37:
 	leal 36(%esp), %eax
 	movl $0,%ecx

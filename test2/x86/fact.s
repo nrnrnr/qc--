@@ -57,10 +57,10 @@ run_thread:
 	addl %eax,%edx
 	movl (%edx),%eax
 	movl (%ecx),%ecx
-	movl %ebx,16(%esp)
-	movl %ebp,20(%esp)
-	movl %esi,24(%esp)
-	movl %edi,28(%esp)
+	movl %edi,16(%esp)
+	movl %esi,20(%esp)
+	movl %ebp,24(%esp)
+	movl %ebx,28(%esp)
 	movl %eax, %esp; jmp *%ecx
 .Lcut_entry_l11:
 .Lstart_of_continuation_code_l10:
@@ -70,10 +70,10 @@ run_thread:
 	addl %edx,%ecx
 	movl 12(%esp),%edx
 	movl %edx,(%ecx)
-	movl 28(%esp),%edi
-	movl 24(%esp),%esi
-	movl 20(%esp),%ebp
-	movl 16(%esp),%ebx
+	movl 28(%esp),%ebx
+	movl 24(%esp),%ebp
+	movl 20(%esp),%esi
+	movl 16(%esp),%edi
 	leal 40(%esp), %esp
 	ret
 .section .pcmap_data
@@ -92,13 +92,13 @@ run_thread:
 .long 2
 .long 0
 .long 1
-.long 11
-.long 0xfffffff4
-.long 10
-.long 0xfffffff0
-.long 9
-.long 0xffffffec
 .long 7
+.long 0xfffffff4
+.long 9
+.long 0xfffffff0
+.long 10
+.long 0xffffffec
+.long 11
 .long 0xffffffe8
 .long 0
 .long 0
@@ -148,13 +148,13 @@ cmm_threadfun:
 .long 4
 .long 2
 .long 1
-.long 11
-.long 0
-.long 10
+.long 7
 .long 0
 .long 9
 .long 0
-.long 7
+.long 10
+.long 0
+.long 11
 .long 0
 .long 0
 .long 0
@@ -279,10 +279,10 @@ cmm_stacktrace:
 	movl $-32,%edx
 	addl %edx,%ecx
 	movl %eax,(%ecx)
-	movl %ebx,8(%esp)
-	movl %ebp,12(%esp)
-	movl %esi,16(%esp)
-	movl %edi,20(%esp)
+	movl %edi,8(%esp)
+	movl %esi,12(%esp)
+	movl %ebp,16(%esp)
+	movl %ebx,20(%esp)
 	call stacktrace
 .Lcall_successor_l72:
 	leal 32(%esp), %eax
@@ -290,10 +290,10 @@ cmm_stacktrace:
 	addl %ecx,%eax
 	movl 4(%esp),%ecx
 	movl %ecx,(%eax)
-	movl 20(%esp),%edi
-	movl 16(%esp),%esi
-	movl 12(%esp),%ebp
-	movl 8(%esp),%ebx
+	movl 20(%esp),%ebx
+	movl 16(%esp),%ebp
+	movl 12(%esp),%esi
+	movl 8(%esp),%edi
 	leal 32(%esp), %esp
 	ret
 .Lcut_entry_l64:
@@ -303,10 +303,10 @@ cmm_stacktrace:
 	addl %ecx,%eax
 	movl 4(%esp),%ecx
 	movl %ecx,(%eax)
-	movl 20(%esp),%edi
-	movl 16(%esp),%esi
-	movl 12(%esp),%ebp
-	movl 8(%esp),%ebx
+	movl 20(%esp),%ebx
+	movl 16(%esp),%ebp
+	movl 12(%esp),%esi
+	movl 8(%esp),%edi
 	leal 32(%esp), %esp
 	ret
 .section .pcmap_data
@@ -325,13 +325,13 @@ cmm_stacktrace:
 .long 0
 .long 2
 .long 1
-.long 11
-.long 0xfffffff4
-.long 10
-.long 0xfffffff0
-.long 9
-.long 0xffffffec
 .long 7
+.long 0xfffffff4
+.long 9
+.long 0xfffffff0
+.long 10
+.long 0xffffffec
+.long 11
 .long 0xffffffe8
 .long 0
 .long 0
@@ -349,13 +349,13 @@ cmm_stacktrace:
 .long 0
 .long 2
 .long 1
-.long 11
-.long 0xfffffff4
-.long 10
-.long 0xfffffff0
-.long 9
-.long 0xffffffec
 .long 7
+.long 0xfffffff4
+.long 9
+.long 0xfffffff0
+.long 10
+.long 0xffffffec
+.long 11
 .long 0xffffffe8
 .long 0
 .long 0

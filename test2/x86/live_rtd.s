@@ -42,13 +42,13 @@ main:
 .long 0
 .long 0
 .long 1
-.long 11
-.long 0
-.long 10
+.long 7
 .long 0
 .long 9
 .long 0
-.long 7
+.long 10
+.long 0
+.long 11
 .long 0
 .long 0
 .section .text

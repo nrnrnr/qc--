@@ -2168,7 +2168,8 @@ let make_cut_to effs =
 Shuffle would be cooler if we carefully arranged to make things
 push-like, but never mind.
 As it is, we look for an effect that can go first (because its
-left-hand side doesn't alias with any other right-hand-side), and if
+left-hand side doesn't alias with any other right-hand-side or with an
+addressing expression on the left-hand side), and if
 we don't find one, we introduce a new temporary.
 <<support for shuffle>>=
 let make_shuffle effs =
@@ -2195,7 +2196,11 @@ let try_first_effect effects succ fail =
   let rec maybe bad = function
     | [] -> fail()
     | (l, r, w) :: rest ->
-        let alias (_, r, _) = RU.MayAlias.exp' l r in
+        let alias (l', r', _) =
+          RU.MayAlias.exp' l r' ||
+          match l' with
+          | RP.Mem (_, _, e, _) -> RU.MayAlias.exp' l e
+          | _ -> false in
         if not (List.exists alias bad || List.exists alias rest) then
           succ (l, r, w) (List.rev_append bad rest)
         else
