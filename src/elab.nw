@@ -934,7 +934,7 @@ Both result and type are returned.
 and evalPrimOp env op args =
     E.ematch (E.Raise.list (List.map (evalExpr env) args))
     (fun args ->
-        let f , t   = Value.Ops.lookup op Value.ops in
+        let f , t   = Value.lookup op Value.ops in
         let at, av  = List.split args in
         let rt      = Types.appl t at in
             rt, f av
@@ -1331,7 +1331,7 @@ All primitive runtime operators will go into their own module
 <<type check expression>>=
 and tyPrimOp env op args =
     let at = List.map (tyExpr env) args                  in
-    let ot = snd (Value.Ops.lookup op Value.ops) in
+    let ot = snd (Value.lookup op Value.ops) in
         tyAppl ot (E.Raise.list at)
 
 <<type check expression>>=
@@ -1760,7 +1760,7 @@ change.
 and primStmt env (left,cc,op,args,fs) =
     let left   = E.Raise.list (List.map (lvalue PrimCall env) left) in
     let env    = foldl (checkFlow false) env fs                     in
-    let opTy   = snd (Value.Ops.lookup op Value.ops)                in
+    let opTy   = snd (Value.lookup op Value.ops)                in
     let args   = List.map snd args                                  in
     let at     = List.map (tyExpr env) args                         in
     let rTy    = tyAppl opTy (E.Raise.list at)                      in

@@ -117,13 +117,22 @@ val proc   : size t list -> size t -> tyscheme   (* build proc type      *)
 % ------------------------------------------------------------------ 
 
 Substitutions describe the variables of a type scheme.  The
-implementation uses an environment to model substitutions.
+implementation uses a map to model substitutions.
 
 <<types.ml>>=
 module E = Error
-
 <<types>>
-module S = Env.Make(struct type t=key let compare=compare end)
+@
+
+In addition to the functions provided by [[Map]] we define some helper
+functions. 
+
+<<types.ml>>=
+module S = Map.Make(struct type t=key let compare=compare end)
+
+let lookup key env = 
+    try S.find key env with Not_found -> Error.error ("unknown operator")
+let dump env = let f key data res = (key,data)::res in S.fold f env []
 @
 
 What is called a unification is technically a matching of a constant
@@ -146,9 +155,9 @@ raised.
 let match' sigma = function 
     | Bool           , Bool                          -> sigma
     | Bits(Const(x)) , Bits(y) when x = y            -> sigma
-    | Bits(Var(x))   , Bits(y) when (S.domain x sigma) ->
-        if (S.lookup x sigma) = y then sigma else (raise MatchExn)
-    | Bits(Var(x))   , Bits(y)                       -> S.enter x y sigma
+    | Bits(Var(x))   , Bits(y) when (S.mem x sigma) ->
+        if (lookup x sigma) = y then sigma else (raise MatchExn)
+    | Bits(Var(x))   , Bits(y)                       -> S.add x y sigma
     | _              , _ -> raise MatchExn
 @
 
@@ -161,7 +170,7 @@ type schemes are used for matching and substitution.
 let subst sigma = function
     | Bool              -> Bool
     | Bits(Const(x))    -> Bits(x)
-    | Bits(Var(x))      -> try Bits(S.lookup x sigma)
+    | Bits(Var(x))      -> try Bits(lookup x sigma)
                            with Not_found -> assert false
 @
 
@@ -194,7 +203,7 @@ let widthlist (args',r) args =
                  | MatchExn -> E.error "type error in application"
                  )                                           in
     let sorted = List.sort (fun (key1,val1) (key2,val2) -> compare key1 key2) 
-                 (S.dump sigma)                              in
+                 (dump sigma)                                in
         List.map snd sorted
 @
 
