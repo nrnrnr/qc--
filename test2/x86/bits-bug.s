@@ -28,99 +28,99 @@ failed:
 .byte 0
 .text
 main:
-leal -4(%esp), %esp
-movl $4,%ecx
-leal 4(%esp), %eax
-addl %ecx,%eax
-movl (%eax),%eax
-movl $8,%ecx
-leal 4(%esp), %eax
-addl %ecx,%eax
-movl (%eax),%eax
-nop
-leal 4(%esp), %eax
-movl (%eax),%ecx
-leal 4(%esp), %eax
-movl %ecx,(%eax)
+	leal -4(%esp), %esp
+	movl $4,%ecx
+	leal 4(%esp), %eax
+	addl %ecx,%eax
+	movl (%eax),%eax
+	movl $8,%ecx
+	leal 4(%esp), %eax
+	addl %ecx,%eax
+	movl (%eax),%eax
+	nop
+	leal 4(%esp), %eax
+	movl (%eax),%ecx
+	leal 4(%esp), %eax
+	movl %ecx,(%eax)
 initialize_continuations_l3:
-nop
-movl $-1420500317,%eax
-movl $-4,%ecx
-leal 4(%esp), %edx
-addl %ecx,%edx
-movl %eax,(%edx)
-nop
-call callee
-nop
-nop
-nop
-nop
-nop
-leal 4(%esp), %eax
-movl (%eax),%eax
-movl $0,%ecx
-leal 4(%esp), %edx
-addl %ecx,%edx
-movl %eax,(%edx)
-leal 4(%esp), %esp
-ret
+	nop
+	movl $-1420500317,%eax
+	movl $-4,%ecx
+	leal 4(%esp), %edx
+	addl %ecx,%edx
+	movl %eax,(%edx)
+	nop
+	call callee
+	nop
+	nop
+	nop
+	nop
+	nop
+	leal 4(%esp), %eax
+	movl (%eax),%eax
+	movl $0,%ecx
+	leal 4(%esp), %edx
+	addl %ecx,%edx
+	movl %eax,(%edx)
+	leal 4(%esp), %esp
+	ret
 .text
 callee:
-leal -4(%esp), %esp
-movl $4,%ecx
-leal 4(%esp), %eax
-addl %ecx,%eax
-movl (%eax),%eax
-nop
-leal 4(%esp), %ecx
-movl (%ecx),%edx
-leal 4(%esp), %ecx
-movl %edx,(%ecx)
+	leal -4(%esp), %esp
+	movl $4,%ecx
+	leal 4(%esp), %eax
+	addl %ecx,%eax
+	movl (%eax),%eax
+	nop
+	leal 4(%esp), %ecx
+	movl (%ecx),%edx
+	leal 4(%esp), %ecx
+	movl %edx,(%ecx)
 initialize_continuations_l12:
-movl $-1420500317,%ecx
-cmpl %ecx,%eax
-jne join_l19
+	movl $-1420500317,%ecx
+	cmpl %ecx,%eax
+	jne join_l19
 join_l20:
-nop
-leal success,%eax
-movl $-4,%ecx
-leal 4(%esp), %edx
-addl %ecx,%edx
-movl %eax,(%edx)
-nop
-call printf
-nop
-nop
-nop
-nop
-nop
-leal 4(%esp), %eax
-movl (%eax),%eax
-movl $0,%ecx
-leal 4(%esp), %edx
-addl %ecx,%edx
-movl %eax,(%edx)
-leal 4(%esp), %esp
-ret
+	nop
+	leal success,%eax
+	movl $-4,%ecx
+	leal 4(%esp), %edx
+	addl %ecx,%edx
+	movl %eax,(%edx)
+	nop
+	call printf
+	nop
+	nop
+	nop
+	nop
+	nop
+	leal 4(%esp), %eax
+	movl (%eax),%eax
+	movl $0,%ecx
+	leal 4(%esp), %edx
+	addl %ecx,%edx
+	movl %eax,(%edx)
+	leal 4(%esp), %esp
+	ret
 join_l19:
-nop
-leal failed,%eax
-movl $-4,%ecx
-leal 4(%esp), %edx
-addl %ecx,%edx
-movl %eax,(%edx)
-nop
-call printf
-nop
-nop
-nop
-nop
-nop
-leal 4(%esp), %eax
-movl (%eax),%eax
-movl $0,%ecx
-leal 4(%esp), %edx
-addl %ecx,%edx
-movl %eax,(%edx)
-leal 4(%esp), %esp
-ret
+	nop
+	leal failed,%eax
+	movl $-4,%ecx
+	leal 4(%esp), %edx
+	addl %ecx,%edx
+	movl %eax,(%edx)
+	nop
+	call printf
+	nop
+	nop
+	nop
+	nop
+	nop
+	leal 4(%esp), %eax
+	movl (%eax),%eax
+	movl $0,%ecx
+	leal 4(%esp), %edx
+	addl %ecx,%edx
+	movl %eax,(%edx)
+	leal 4(%esp), %esp
+	ret

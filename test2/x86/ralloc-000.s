@@ -5,60 +5,60 @@ Cmm_private_global_area:
 _212_029_140_217_143_000_178_004_233_128_t_152_236_248B_:
 .text
 p:
-leal -44(%esp), %esp
-nop
-nop
-leal 44(%esp), %eax
-movl (%eax),%eax
-movl %eax,40(%esp)
+	leal -44(%esp), %esp
+	nop
+	nop
+	leal 44(%esp), %eax
+	movl (%eax),%eax
+	movl %eax,40(%esp)
 initialize_continuations_l3:
-movl $1,%eax
-movl %eax,36(%esp)
-movl $2,%eax
-movl %eax,28(%esp)
-movl $0,%eax
-movl %eax,8(%esp)
-movl 8(%esp),%eax
-movl %eax,(%esp)
-movl $0,%eax
-movl %eax,12(%esp)
-movl 12(%esp),%eax
-movl %eax,4(%esp)
-movl $2,%eax
-movl %eax,16(%esp)
-movl 16(%esp),%eax
-movl 28(%esp),%ecx
-cmpl %eax,%ecx
-jge join_l5
+	movl $1,%eax
+	movl %eax,36(%esp)
+	movl $2,%eax
+	movl %eax,28(%esp)
+	movl $0,%eax
+	movl %eax,8(%esp)
+	movl 8(%esp),%eax
+	movl %eax,(%esp)
+	movl $0,%eax
+	movl %eax,12(%esp)
+	movl 12(%esp),%eax
+	movl %eax,4(%esp)
+	movl $2,%eax
+	movl %eax,16(%esp)
+	movl 16(%esp),%eax
+	movl 28(%esp),%ecx
+	cmpl %eax,%ecx
+	jge join_l5
 join_l11:
-jmp join_l6
+	jmp join_l6
 join_l5:
-movl $3,%eax
-movl %eax,20(%esp)
-movl 20(%esp),%eax
-movl %eax,(%esp)
-movl $4,%eax
-movl %eax,24(%esp)
-movl 24(%esp),%eax
-movl %eax,4(%esp)
-jmp join_l6
+	movl $3,%eax
+	movl %eax,20(%esp)
+	movl 20(%esp),%eax
+	movl %eax,(%esp)
+	movl $4,%eax
+	movl %eax,24(%esp)
+	movl 24(%esp),%eax
+	movl %eax,4(%esp)
+	jmp join_l6
 join_l6:
-movl 36(%esp),%eax
-movl 28(%esp),%ecx
-addl %ecx,%eax
-movl (%esp),%ecx
-addl %ecx,%eax
-movl 4(%esp),%ecx
-addl %ecx,%eax
-nop
-movl $0,%ecx
-leal 44(%esp), %edx
-movl %edx,32(%esp)
-movl 32(%esp),%edx
-addl %ecx,%edx
-movl %edx,32(%esp)
-movl 32(%esp),%ecx
-movl 40(%esp),%edx
-movl %edx,(%ecx)
-leal 44(%esp), %esp
-ret
+	movl 36(%esp),%eax
+	movl 28(%esp),%ecx
+	addl %ecx,%eax
+	movl (%esp),%ecx
+	addl %ecx,%eax
+	movl 4(%esp),%ecx
+	addl %ecx,%eax
+	nop
+	movl $0,%ecx
+	leal 44(%esp), %edx
+	movl %edx,32(%esp)
+	movl 32(%esp),%edx
+	addl %ecx,%edx
+	movl %edx,32(%esp)
+	movl 32(%esp),%ecx
+	movl 40(%esp),%edx
+	movl %edx,(%ecx)
+	leal 44(%esp), %esp
+	ret

@@ -24,39 +24,39 @@ my_data:
 .byte 0
 .text
 main:
-leal -4(%esp), %esp
-movl $4,%ecx
-leal 4(%esp), %eax
-addl %ecx,%eax
-movl (%eax),%eax
-movl $8,%ecx
-leal 4(%esp), %eax
-addl %ecx,%eax
-movl (%eax),%eax
-nop
-leal 4(%esp), %eax
-movl (%eax),%ecx
-leal 4(%esp), %eax
-movl %ecx,(%eax)
+	leal -4(%esp), %esp
+	movl $4,%ecx
+	leal 4(%esp), %eax
+	addl %ecx,%eax
+	movl (%eax),%eax
+	movl $8,%ecx
+	leal 4(%esp), %eax
+	addl %ecx,%eax
+	movl (%eax),%eax
+	nop
+	leal 4(%esp), %eax
+	movl (%eax),%ecx
+	leal 4(%esp), %eax
+	movl %ecx,(%eax)
 initialize_continuations_l3:
-nop
-leal my_data,%eax
-movl $-4,%ecx
-leal 4(%esp), %edx
-addl %ecx,%edx
-movl %eax,(%edx)
-nop
-call printf
-nop
-nop
-nop
-nop
-nop
-leal 4(%esp), %eax
-movl (%eax),%eax
-movl $0,%ecx
-leal 4(%esp), %edx
-addl %ecx,%edx
-movl %eax,(%edx)
-leal 4(%esp), %esp
-ret
+	nop
+	leal my_data,%eax
+	movl $-4,%ecx
+	leal 4(%esp), %edx
+	addl %ecx,%edx
+	movl %eax,(%edx)
+	nop
+	call printf
+	nop
+	nop
+	nop
+	nop
+	nop
+	leal 4(%esp), %eax
+	movl (%eax),%eax
+	movl $0,%ecx
+	leal 4(%esp), %edx
+	addl %ecx,%edx
+	movl %eax,(%edx)
+	leal 4(%esp), %esp
+	ret

@@ -30,48 +30,48 @@ bye:
 .byte 0
 .text
 main:
-leal -4(%esp), %esp
-movl $4,%ecx
-leal 4(%esp), %eax
-addl %ecx,%eax
-movl (%eax),%eax
-movl $8,%ecx
-leal 4(%esp), %edx
-addl %ecx,%edx
-movl (%edx),%ecx
-nop
-leal 4(%esp), %ecx
-movl (%ecx),%edx
-leal 4(%esp), %ecx
-movl %edx,(%ecx)
+	leal -4(%esp), %esp
+	movl $4,%ecx
+	leal 4(%esp), %eax
+	addl %ecx,%eax
+	movl (%eax),%eax
+	movl $8,%ecx
+	leal 4(%esp), %edx
+	addl %ecx,%edx
+	movl (%edx),%ecx
+	nop
+	leal 4(%esp), %ecx
+	movl (%ecx),%edx
+	leal 4(%esp), %ecx
+	movl %edx,(%ecx)
 initialize_continuations_l3:
-movl $1,%ecx
-cmpl %ecx,%eax
-jg join_l8
+	movl $1,%ecx
+	cmpl %ecx,%eax
+	jg join_l8
 join_l9:
-leal hello,%ecx
-jmp join_l7
+	leal hello,%ecx
+	jmp join_l7
 join_l8:
-leal bye,%ecx
-jmp join_l7
+	leal bye,%ecx
+	jmp join_l7
 join_l7:
-nop
-movl $-4,%eax
-leal 4(%esp), %edx
-addl %eax,%edx
-movl %ecx,(%edx)
-nop
-call printf
-nop
-nop
-nop
-nop
-nop
-leal 4(%esp), %eax
-movl (%eax),%eax
-movl $0,%ecx
-leal 4(%esp), %edx
-addl %ecx,%edx
-movl %eax,(%edx)
-leal 4(%esp), %esp
-ret
+	nop
+	movl $-4,%eax
+	leal 4(%esp), %edx
+	addl %eax,%edx
+	movl %ecx,(%edx)
+	nop
+	call printf
+	nop
+	nop
+	nop
+	nop
+	nop
+	leal 4(%esp), %eax
+	movl (%eax),%eax
+	movl $0,%ecx
+	leal 4(%esp), %edx
+	addl %ecx,%edx
+	movl %eax,(%edx)
+	leal 4(%esp), %esp
+	ret
