@@ -227,7 +227,7 @@ let rvalue_name x =
   | F.Label(F.Data s)           -> Rtl.link s w
   | F.Import(_,s)               -> Rtl.link s w
   | F.Continuation(st,_)        -> cont_rvalue x st w
-  | F.Label(F.Stack(None))      -> impossible "Ast2ir.Make.variable"
+  | F.Label(F.Stack(None))      -> impossible ("no location for "^x)
   | F.Label(F.Stack(Some addr)) -> addr  (* a fetch would be wrong *)
   | F.Register _                -> atfetch (lvalue_name x) in
   rval, t
@@ -447,8 +447,8 @@ automata, and building the rep and the continuation.
 <<definitions of stack-data procedures>>=
 let contStmt1 state n args = 
   let cc = ccs default_cc in
-  let cut_in    = cformals' state.env cc.C.cut_parms.C.in' args in
-  let return_in = cformals' state.env cc.C.results.C.in'   args in
+  let cut_in    = cformals' env cc.C.cut_parms.C.in' args in
+  let return_in = cformals' env cc.C.results.C.in'   args in
   let rep  = Contn.with_overflow target cut_in.C.overflow in
   let k    = K.mk n args rep g ~cut_in ~return_in in
   { state with contenv = Strutil.Map.add n k state.contenv } in
@@ -831,12 +831,13 @@ The [[stackdata]] function includes the first pass of translation of
 continuations. 
 <<definition of [[proc]], which translates one procedure>>=
   <<definition of [[stackdata]]>> in
-  let env, stackd, contenv =
+  let env, (stackd, contenv) =
     let scope = match F.findv procname env with
     | _,(F.Label(F.Proc (sym,scope,i)),_) -> scope
     | _ -> impossible "no environment for procedure" in
     let sdmem = Memalloc.relative vfp "stackdata" Memalloc.Up in
-    stackdata target (F.push env scope) sdmem procbody in
+    let env   = F.push env scope in
+    env ,stackdata target (F.push env scope) sdmem procbody in
 @ 
 We provide a lookup of continuation by name.
 If a continuation is used as an rvalue, we get the address of its
@@ -995,17 +996,16 @@ let aligned_mem ~align ~base target =
 \subsection{Translation of \texttt{stackdata} declarations, accumulating labels}
 % ------------------------------------------------------------------ 
 
-Stack data declarations may appear everywhere in a procedure body. 
-We process them in one pass, producing an extended environment that
-binds labels to locations in stack-allocated memory.
-This memory is represented by a [[Memalloc.t]] value.
-We also accumulate continuation information.
-Thus, we have a state consisting of three values: environment, stack
+Stack data declarations may appear everywhere in a procedure body.  We
+process them in one pass, updating the environment by side-effect to
+bind labels to locations in stack-allocated memory.  This memory is
+represented by a [[Memalloc.t]] value.  We also accumulate continuation
+information.  Thus, we have a state consisting of two values: stack
 memory, and continuation environment.
+
 <<types for gathering stack and continuation info>>=
 type 'i stackdata_state = 
-    { env:    proc F.env'
-    ; mem:    Memalloc.t
+    { mem:      Memalloc.t
     ; contenv:  'i K.t Strutil.Map.t
     }
 @ 
@@ -1014,12 +1014,11 @@ The traversal is straightforward and needs little documentation.
 let stackdata (target:tgt) env sd bb =
   <<definitions of stack-data procedures>> in
   let state = 
-    { env    = env
-    ; mem    = sd
+    { mem      = sd
     ; contenv  = Strutil.Map.empty
     } in
   let state = bodies state bb in 
-  state.env, Memalloc.freeze state.mem, state.contenv
+  Memalloc.freeze state.mem, state.contenv
 @ 
 <<definitions of stack-data procedures>>=
 let rec stackdatum state = function
@@ -1029,7 +1028,9 @@ let rec stackdatum state = function
             let x = F.findv l env in
             ( match x with
             | (r,(F.Label(F.Stack(None)),t)) ->
-                { state with env = F.rebindv l (r,(F.Label(F.Stack(Some loc)),t)) env }
+                ( F.rebindv' l (r,(F.Label(F.Stack(Some loc)),t)) env 
+                ; state
+                )
             | _ -> impossible "duplicate stack labels"
             )
     | A.Align n -> { state with mem = Memalloc.align state.mem n} 
@@ -1161,15 +1162,16 @@ let globals (base:Rtl.exp) names =
                 let sign  = Printf.sprintf "[%d <%s>]" w h  in
                 let ()    = Buffer.add_string decls sign    in
                 let loc   = AT.allocate t w h in
-                let entry = ( rgn
-                            , (F.Register({reg with F.loc = Some loc}),ty)
-                            ) in F.rebindv n entry env
+                let entry = (rgn, (F.Register({reg with F.loc = Some loc}),ty)) 
+                in 
+                    F.rebindv' n entry env
             | _ -> impossible ("global register " ^ n ^ " not in environment")
             )
         with Error.ErrorExn msg -> impossible msg
     in
-    let env = List.fold_left assign env names in
-        env, AT.freeze t, Digest.string (Buffer.contents decls)    
+        ( List.iter (assign env) names 
+        ; AT.freeze t, Digest.string (Buffer.contents decls)    
+        )
 @
 We have to deal somehow with the global-register area, i.e., make it consistent.
 The fingerprint [[digest]] for global register declarations is a
@@ -1182,8 +1184,7 @@ let import_global_register area () =
 and export_global_register_area () =
   let base_sym = F.symbol env "Cmm_private_global_area" in
   let base     = Rtl.link base_sym pointersize in 
-  let env
-     ,area    
+  let area    
      ,digest   = globals base (F.globals env) in
   let area     = area.AT.overflow in
   let digest   = String.escaped digest in

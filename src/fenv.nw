@@ -344,12 +344,17 @@ special function [[rebindv]] is introduced for this purpose.
 binding for the name at hand.  So if you want to update a global
 binding make sure, that this scope is at the top because otherwise it
 may be shadowed by a binding in a local scope and this one would be
-replaced.  If no binding for the given name is found, the environment
-is returned unaltered.
+replaced.  It is a checked run-time error if no binding to update is
+found.
+
+We had trouble with losing environments with rebound entries in module
+[[Ast2ir]]. As an experiment, I have made [[rebindv']] an imperative
+version of [[rebindv]] that updates an environment by mutation. 
  
 <<signature Env>>=
 val bindv           : string -> ventry  -> 'p env' -> 'p env'
 val rebindv         : string -> ventry  -> 'p env' -> 'p env'
+val rebindv'        : string -> ventry  -> 'p env' -> unit  (* mutates *)
 val bindt           : string -> tentry  -> 'p env' -> 'p env'
 val findv           : string -> 'p env' -> ventry   (* Error.ErrorExn *)
 val findt           : string -> 'p env' -> tentry   (* Error.ErrorExn *)
@@ -804,23 +809,20 @@ denotation of values and types. Of course, these types must be defined
 in the implementation as well.
 
 <<module Env>>=
-type 'proc env'    =  { scopes     :    scope list (* top = hd scopes *)
-                      ; srcmap     :    Srcmap.map
-                      ; asm        :    'proc Asm.assembler
-                      ; error      :    bool
-                      ; target     :    target
-                      ; extern     :    extern
-                      ; globals    :    string  list  (* global   registers *)
-                      ; stackdata  :    stackdata
+type 'proc env'    =  { scopes          :    scope list (* top = hd scopes *)
+                      ; srcmap          :    Srcmap.map
+                      ; asm             :    'proc Asm.assembler
+                      ; error           :    bool
+                      ; target          :    target
+                      ; extern          :    extern
+                      ; globals         :    string  list(* global registers *)
+                      ; stackdata       :    stackdata
                       }
 
 and stackdata =       { soffset    :    int    (* current offset *)
                       ; smaxalign  :    int    (* max stackdata align constr*)
                       ; sname      :    string (* label for offset *)
                       }
-(*
- * and env = Proc.t env'
- *)
 <<types>>
 @
                        
@@ -853,7 +855,7 @@ and extern          = { imported:     Strutil.Set.t
 A [[scope]] is record of two maps for values and types respectively:
 
 <<module Env>>=
-and scope           = { venv:   ventry Strutil.Map.t
+and scope           = { mutable venv:   ventry Strutil.Map.t
                       ; tenv:   tentry Strutil.Map.t
                       ; rindex: int   (* getIndex, nextIndex *)
                       }
@@ -1048,18 +1050,26 @@ let findt name env =
         loop env.scopes
 @
 
-The [[rebindv]] function replaces the most local binding for a name. If
-the name is not bound in the environment, it is returned unaltered. 
+The [[rebindv]] function replaces the most local binding for a name. 
 
 <<module Env>>=
 let rebindv name x env =
     let rec loop = function
-        | []    -> []
+        | []    -> Impossible.impossible ("can't rebind "^name)
         | s::ss -> if Strutil.Map.mem name s.venv 
                    then { s with venv = Strutil.Map.add name x s.venv } :: ss
-                   else loop ss
+                   else s :: loop ss
     in
         { env with scopes = loop env.scopes }
+
+let rebindv' name x env =
+    let rec loop = function
+        | []    -> Impossible.impossible ("can't rebind "^name)
+        | s::ss -> if Strutil.Map.mem name s.venv 
+                   then s.venv <- Strutil.Map.add name x s.venv 
+                   else loop ss
+    in
+        loop env.scopes 
 @
 
 An assertion fails, if the scope stack is empty.
