@@ -343,8 +343,8 @@ module type S = sig
 end
 @
 
-The implemenatition must provided all the module types declared in the
-interfacse. Thanks to literate programming we can refer to the code
+The implementation must provided all the module types declared in the
+interface. Thanks to literate programming we can refer to the code
 chunk that was used in the interface. 
 
 <<linscan2.ml>>=
@@ -356,12 +356,46 @@ module A = A
 open A (* never do this *)
 
 let replace n f = Cfg.replace f n           (* apply f to node n *)
+@
+Linear scan register allocation works by traversing the nodes of a
+procedure in a linear way.  The [[alloc]] function is passed the
+actual node and is responsible for placing it's temporaries.  Every
+time a temporary is successfully placed into a register, it disappears
+from the entire control-flow graph.  Assuming that the [[alloc]]
+function allocates \emph{all} temporaries of a node, a temporary found
+by [[alloc]] can only be live in the rest of the graph, but not before
+the current node.  It is thus sensible to restrict the substitution of
+temporaries to the current node and its successors.
 
+\begin{enumerate}
+\item No node preceding the current node reads or writes temporaries.
+\item The current node (before allocation) writes temporaries, but
+      does not read them.  
+       
+      \emph{Is this true?  In the presence of loops registers can be live
+      that are not defined by code preceding them in the linear order. 
+      The current node could read such a note which could be a
+      temporary.}
+      
+\item Nodes past the current node read and write temporaries.
+\end{enumerate}
+
+\begin{quote}\it
+    The [[Cfg.iter]] function is not suitable for register
+    allocation, because (currently} {\rtl}s can't be updated by
+    side-effect. The [[iter]] function is intended for updating
+    live-sets during liveness analysis.
+\end{quote}
+
+<<>>=
 exception Retry of Cfg.t
 let linscan cfg lifetimes =
   let alloc = <<allocator>> in
   try Cfg.iter cfg alloc with Retry cfg -> raise (Retry cfg)
+@
 
+The allocator takes a node and replaces all temporaries by hardware
+registers. 
 
 <<allocator>>=
 fun node -> assert false
