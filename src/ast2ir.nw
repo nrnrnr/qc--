@@ -666,8 +666,8 @@ and jumpStmt (cconv,e,args,targets (*unused*)) =
     <<insist that [[cc]] matches [[proc_cc]] and supports jumps>>
     let out     = actuals cc.C.call_parms.C.out args in
     let ra_out  = cc.C.ra_on_exit saved_ra out.C.overflow temps in
-    let jump_sp = cc.C.sp_on_jump out.C.overflow temps in
     let jumpi   = target.T.jump.T.embed (expr e) in
+    let jump_sp = cc.C.sp_on_jump out.C.overflow temps in
     let ()  = if cc.C.overflow_alloc.C.parameter_deallocator = C.Caller
               then impossible "cc does not support tail call but used anyways"
               else add oldblocks_callee out.C.overflow in
@@ -694,10 +694,10 @@ and callStmt (lhs,cconv, e, args, targets (*unused*), conts) succ =
   let conts = continuations cc conts false        in
   let ()  = if cc.C.overflow_alloc.C.parameter_deallocator = C.Caller
             then add youngblocks_caller out.C.overflow
-            else add youngblocks_callee out.C.overflow in
+            else add youngblocks_callee out.C.overflow in (* outgoing overflow parms *)
   let ()  = if cc.C.overflow_alloc.C.result_allocator = C.Caller
             then add youngblocks_caller in'.C.overflow
-            else add youngblocks_callee in'.C.overflow in
+            else add youngblocks_callee in'.C.overflow in (* incoming overflow results *)
   G.stack_adjust g out.C.pre_sp                **>
   G.instruction  g out.C.shuffle               **>
   G.stack_adjust g out.C.post_sp               **>
@@ -734,6 +734,7 @@ and returnStmt (cconv, kont, args) =
     let ()  = if cc.C.overflow_alloc.C.result_allocator = C.Caller
               then add oldblocks_caller out.C.overflow
               else add oldblocks_callee out.C.overflow in
+                        (* outgoing jump overflow = incoming *)
     G.stack_adjust g out.C.pre_sp            **>
     G.instruction  g out.C.shuffle           **>
     G.instruction  g restore_nvrs            **>
@@ -817,6 +818,8 @@ reader).
 \paragraph{Managing mutable state: blocks and constraints}
 The important state here is [[youngblocks]], [[oldblocks]], and
 [[constraints]]. 
+TRY TO REFACTOR THIS CODE SO THAT [[add]] CAN TAKE CALLER/CALLEE AS
+PARAMETER. 
 <<definition of [[proc]], which translates one procedure>>=
   let youngblocks_callee = ref [] in
   let youngblocks_caller = ref [] in
