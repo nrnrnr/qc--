@@ -197,14 +197,24 @@ let scan map lexbuf =
 recognizes all keywords and simple tokens. For complex tokens like
 strings or comments it branches into special contexts.
 
-<<scan.mll>>=
+\ifbugs
+Originally the [[#]] character for the CPP line pragma was recognized only
+after a newline. This broke the scanner when the very first line of a
+file contained a line pragme. This fix is the recognize the [[#]]
+character everywhere.
 
+<<bug: works-002.c-->>=
+# 2 "xxx.nw"
+/* first line breaks qc-- */
+@ \fi
+
+<<scan.mll>>=
 rule token = parse
     eof         { fun map -> EOF          }
   | ws+         { fun map -> token lexbuf map }
   | tab         { fun map -> tab lexbuf map; token lexbuf map }
   | nl          { fun map -> nl lexbuf map ; token lexbuf map }
-  | nl '#'      { fun map -> line lexbuf map 0; token lexbuf map }
+  | '#'         { fun map -> line lexbuf map 0; token lexbuf map }
 
   | ";"         { fun map -> SEMI         }
   | ":"         { fun map -> COLON        }
@@ -299,8 +309,17 @@ and character = parse
 % ------------------------------------------------------------------  
 \subsection{Comments}
 % ------------------------------------------------------------------  
-<<scan.mll>>=
 
+\ifbugs
+The following test case found a bug in the lexer; "*"+ was recognized
+too greedily. The fix was to recognize only one "*" at a time so the two
+character sequence "*/" matches.
+
+<<bug: works-001.c-->>=
+/* this is a c-- comment ******/
+@ \fi
+
+<<scan.mll>>=
 and comment = parse
     eof                         { fun map level ->
                                   error lexbuf map "unterminated comment" 
@@ -311,13 +330,17 @@ and comment = parse
   | nl                          { fun map level ->
                                   nl lexbuf map; comment lexbuf map level 
                                 }
+  | nl '#'                      { fun map level -> 
+                                  line lexbuf map 0; comment lexbuf map level
+                                }
+  
   | tab                         { fun map level -> 
                                   tab lexbuf map; comment lexbuf map level
                                 }
   | "/*"                        { fun map level -> 
                                   comment lexbuf map (level+1)
                                 }
-  | "*"+                        { fun map level ->
+  | "*"                         { fun map level ->
                                   comment lexbuf map level
                                 }
   | "*/"                        { fun map level ->
@@ -333,8 +356,8 @@ and comment = parse
 % ------------------------------------------------------------------  
 \subsection{Strings}
 % ------------------------------------------------------------------  
-<<scan.mll>>=
 
+<<scan.mll>>=
 and string = parse
     eof                         { fun map buf -> 
                                   error lexbuf map "unterminated string" 
@@ -519,7 +542,9 @@ map after the file name is found.  When the context becomes active the
 initial [[#]] has already been consumed. The context is left after the
 quoted file name is recognized. 
 
-This implementation does not check the right 
+This implementation does not check the syntax but just recognizes
+different tokens. It returns when it finds a string and relies on the
+fact that the line number must come first.
 
 <<>>=
 and line = parse 
@@ -546,7 +571,6 @@ and line = parse
                           "illegal character in line directive"
                         }
 @
-following syntax of the line directive:
 
 
 
