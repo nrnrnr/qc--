@@ -26,21 +26,19 @@ module GR = Zipcfg.Rep
 
 <<Linking QC-- Types>>
 
-module Reloc        = Sledlib.MkReloc (struct type symbol = Symbol.t end)
+module Reloc     = Sledlib.MkReloc (struct type symbol = Symbol.t end)
 module Backplane = Backplane.M
 
-module T1 = Lua.Lib.Combine.T4
+module T1 = Lua.Lib.Combine.T5
                 (DocType)                   (* T1.TV1 *)
                 (Luaiolib.T)                (* T1.TV2 *)
                 (AsmType)                   (* T1.TV3 *)
                 (AstType)                   (* T1.TV4 *)
-(*
-                (Colorgraph.GCT)         (* T1.TV5 *)
-*)
+                (Colorgraph.GCT)            (* T1.TV5 *)
 
 module T    = Lua.Lib.Combine.T9            (* types *)
                 (T1)                        (* T.TV1 *)
-                (Backplane.T)            (* T.TV2 *)
+                (Backplane.T)               (* T.TV2 *)
                 (EnvType)                   (* T.TV3 *)
                 (ProcType)                  (* T.TV4 *)
                 (TargetType)                (* T.TV5 *)
@@ -55,13 +53,11 @@ module DocTV             = T1'.TV1
 module LuaioTV           = T1'.TV2
 module AsmTV             = T1'.TV3
 module AstTV             = T1'.TV4
-(*
-module ColorgraphTV   = T1'.TV5
-*)
+module ColorgraphTV      = T1'.TV5
 
-module BackplaneTV    = T.TV2
+module BackplaneTV       = T.TV2
 module EnvTV             = T.TV3
-module ProcTV         = T.TV4
+module ProcTV            = T.TV4
 module TargetTV          = T.TV5
 module BlockTV           = T.TV6
 module AutomatonTV       = T.TV7
@@ -71,17 +67,15 @@ module CounterenvTV      = T.TV9
 module WT = Lua.Lib.WithType (T)
 
 module C = 
-  Lua.Lib.Combine.C6                   (* up to 10 libraries *)
+  Lua.Lib.Combine.C7                   (* up to 10 libraries *)
     (Luaiolib.Make (LuaioTV))
     (WT (Luastrlib.M))
     (WT (Luamathlib.M))
     (MakeLib 
         (AsmTV) (AstTV) (EnvTV) (ProcTV) (TargetTV) (DocTV) (LuaioTV)
         (BlockTV) (AutomatonTV) (CCStageTV) (CounterenvTV))
-(*
     (Colorgraph.Make (BackplaneTV) (ColorgraphTV) (ProcTV))
-    (Dls.Make (BackplaneTV) (ProcTV))
-*)
+    (*(Dls.Make (BackplaneTV) (ProcTV))*)
     (WT (Luautil.MakeLib))
     (Backplane.MakeLua  (BackplaneTV) (ProcTV))
 

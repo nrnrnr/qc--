@@ -651,23 +651,6 @@ let addInterference block =
     let uses = usesl l in
     add_and_upd live defs uses in
   vis_head head (vis_last last) in
-(*
-    let live = LI.live_out node in
-
-    let defs = G.defs node in
-    let live =
-      if isMoveInstruction target node then
-        let uses = G.uses node in
-        (let item = ilg_add cg.moveLG WorklistMove node in
-         cg.moveListMap <- RS.fold (listMapAdd item) (defs ++ uses) cg.moveListMap;
-         live -- uses)
-      else
-        live in
-    let live = live ++ defs in
-    let addAllEdges def =
-      RS.iter (fun liveNode -> addEdge target cg liveNode def) live in
-    RS.iter addAllEdges defs in
-*)
 @
 
 %-------------------------------------------------------------------
@@ -1066,11 +1049,6 @@ let applyColors cg (cfg, ({Proc.target = target; Proc.var_map = vMap} as proc)) 
   ( update_spans rewrite_span_loc cfg
   ; ((cfg, proc), true)
   )
-(*
-  (G.iter_nodes (fun n -> G.update_instr (Rtlutil.Subst.reg ~map:subst) n) cfg;
-   <<rewrite temporaries in spans>>
-   (cfg, proc), true)
-*)
 @
 It's useful to have a generic function to replace temporaries in the spans.
 We parameterize this function over an update function that takes a set
@@ -1091,25 +1069,6 @@ let update_spans upd cfg =
     ; vis_head head live_inl
     ) in
   G.iter_blocks block cfg
-@
-<<rewrite temporaries in spans>>=
-(*
-let rewrite_node node =
-  let spans = match G.kind node with G.Call | G.Join -> G.spans node
-                                   | _               -> None in
-  match spans with
-  | Some ss ->
-     (Verbose.eprintf verb "adding colorgraph span for node %d\n" (G.num node);
-      let map l = match l with
-        | RP.Reg tmp -> RP.Reg (find tmp)
-        | _          -> imposs "GC reg allocator emitting RT data: guard failed" in
-      let rewrite_span l =
-        let guard = function RP.Reg r -> is_tmp target r | _ -> false in
-        Rtlutil.Subst.loc_of_loc ~guard ~map l in
-      Runtimedata.upd_spans rewrite_span ss)
-  | None -> () in
-G.iter_nodes rewrite_node cfg;
-*)
 @
 
 %-------------------------------------------------------------------
@@ -1181,19 +1140,6 @@ let updateProgram cg (cfg, proc) =
       | GR.Last l                     -> GR.zip (GR.End (head, l)) in
     filt (GR.First first) tail in
   ((G.of_blocks (UM.map filter_copies (G.to_blocks cfg)), proc), true)
-(*
-  ilg_iter (fun n -> Cfgutil.delete cfg n.v) (!(cg.moveLG CoalescedMove));
-  true
-*)
-@
-A pair of convenience functions for adding lists of \cfg nodes:
-<<insert spills>>=
-(*
-let cfg_ins_lst_before cfg lst node =
-  ignore (List.fold_right (G.gm_insert_assign_before cfg) lst node)
-let cfg_ins_lst_after cfg lst node =
-  ignore (List.fold_left  (G.gm_insert_assign_after cfg) node lst)
-*)
 @
 The [[reads_writes]] function checks whether a location [[loc]] is
 read or written by an {\rtl}.  It returns a pair $(r,w)$ of [[bool]]
@@ -1236,23 +1182,6 @@ it must be updated such that it uses a new temporary [[tmp]] instead.
 Before and after the node, [[tmp]] must be read from or written to the
 memory location [[mem]], where the value of the spillee is held.
 <<define update functions for each type of node in the cfg>>=
-(*
-let updateLast spillee (last, loads, spillMap, newtemps as accum) =
-  let spillee = spillee.v in
-  let reads, writes = reads_writes (GR.last_instr last) spillee in
-  if reads then 
-    let (mem, spill_regs) = RM.find spillee spillMap in
-    let tmp   = Talloc.Multiple.reg_like proc.Proc.temps spillee in
-    let subst = fun x -> if Register.eq x spillee then tmp else x in 
-    let map = Rtlutil.Subst.reg ~map:subst in
-    let last  = G.map_rtll map map last in
-    let loads =  target.T.reload lookup tmp mem :: loads in
-    let spillMap = RM.add tmp (mem, tmp::spill_regs) spillMap in
-    let spillTemps = tmp::newtemps in
-    (last, loads, spillMap, newtemps)
-  else accum in
-*)
-
 let updateInstr map_rtl instr spillee
                 (node, loads, spillMap, spills, newTemps as accum) =
   let spillee = spillee.v in
@@ -1278,29 +1207,6 @@ let updateLast spillee (last, loads, spillMap, spills, newTemps) =
 let updateMiddle spillee (middle, loads, spillMap, spills, newTemps) =
   updateInstr (fun map -> G.map_rtlm map middle) (GR.mid_instr middle) spillee
               (middle, loads, spillMap, spills, newTemps) in
-
-(*
-let update proc spillee (blocks', map, newtemps as accum) block =
-  let target = proc.Proc.target in
-
-  let reads, writes = reads_writes (G.instr node) spillee in
-
-  let lookup = Target.space target in
-  let (mem, spill_regs) = RM.find spillee map in
-  if reads || writes then
-    let tmp   = Talloc.Multiple.reg_like proc.Proc.temps spillee in
-    let subst = fun x -> if Register.eq x spillee then tmp else x in 
-
-    ( if reads then 
-        (cfg_ins_lst_before cfg (target.T.reload lookup tmp mem) node)
-    ; if writes then 
-        (cfg_ins_lst_after  cfg (target.T.spill  lookup tmp mem) node)
-    ; G.upd_instr node (Rtlutil.Subst.reg ~map:subst)
-    ; (RM.add tmp (mem, tmp::spill_regs) map, tmp::newtemps)
-    )
-
-  else accum in
-*)
 @
 In addition to adding store and fetch instructions to replace the spilled
 temps in the \cfg, [[rewrite]] returns the new spill temps that are
@@ -1323,52 +1229,11 @@ let rewrite cfg ({Proc.target = target} as proc) spillees =
       | _ -> imposs "guard failed" in
     Rtlutil.Subst.loc_of_loc ~guard ~map l in
   let () = update_spans rewrite_span_loc cfg in
-(*
-  let updateSpans ss =
-    let map l = match l with
-      | RP.Reg tmp ->
-          Rtl.Dn.loc (AU.aloc (fst (RM.find tmp spillMap)) (Register.width tmp))
-      | _ -> imposs "guard failed" in
-    let rewrite_span l =
-      let guard = function RP.Reg r -> is_tmp target r && RM.mem r spillMap
-                         | _ -> false in
-      Rtlutil.Subst.loc_of_loc ~guard ~map l in
-    Runtimedata.upd_spans rewrite_span ss in
-*)
-
   let blocks = G.to_blocks cfg in
-
-(*
-  let () = G.iter_spans updateSpans cfg in
-*)
-
   Debug.eprintf "color" "  color::rewrite() -- done with updateSpans\n"; flush stderr;
   let (blocks, spillMap, newTemps) =
     UM.fold (updateBlock proc spillees) blocks (UM.empty, spillMap, []) in
   (G.of_blocks blocks, spillMap, newTemps)
-
-(*
-  let updateSpans node =
-    let spans = match G.kind node with G.Call | G.Join -> G.spans node
-                                     | _               -> None in
-    match spans with
-    | Some ss ->
-        let map l = match l with
-          | RP.Reg tmp ->
-              Rtl.Dn.loc (AU.aloc (fst (RM.find tmp spillMap)) (Register.width tmp))
-          | _ -> imposs "guard failed" in
-        let rewrite_span l =
-          let guard = function RP.Reg r -> is_tmp target r && RM.mem r spillMap
-                             | _ -> false in
-          Rtlutil.Subst.loc_of_loc ~guard ~map l in
-        Runtimedata.upd_spans rewrite_span ss
-    | None -> () in
-  let updateNode node accum =
-    ( updateSpans node
-    ; ilg_fold (fun tmp accum -> update proc tmp.v accum node) spillees accum
-    ) in
-  G.fold_nodes updateNode (spillMap, []) proc.Proc.cfg
-*)
 @
 
 %-------------------------------------------------------------------
@@ -1388,15 +1253,6 @@ where both are in the same register space.
 <<node observers>>=
 let source = fst
 let dest   = snd
-(*
-  match Rtlutil.RTLType.singleAssignment (G.instr inst) with
-  | Some (s, _) -> s
-  | _           -> Impossible.impossible "bug in singleAssignment()"
-let dest inst =
-  match Rtlutil.RTLType.singleAssignment (G.instr inst) with
-  | Some (_, d) -> d
-  | _           -> Impossible.impossible "bug in singleAssignment()"
-*)
 
 (*
  * singleAssignment returns a (Register.t * Register.t) option
@@ -1469,52 +1325,6 @@ let imposs = Impossible.impossible
 
 let () = Debug.register "colorgraph" "generalized graph coloring allocator"
 <<imperative lists>>
-(*
-module type GRAPH = sig
-  type cfg
-  type node
-  type kind = Cfgx.M.kind
-    = Join | Instruction | StackAdjust | Branch | Cbranch | Mbranch
-    | Jump  | Call | Return | CutTo
-    | Entry | Exit | Assertion | Illegal | Impossible
-  val node_labeled : cfg -> string -> node
-  val instr    : node -> Rtl.rtl
-  val num      : node -> int
-  val illegal  : cfg -> node
-  val kind  : node -> kind
-  val spans : node -> Spans.t option
-  val print_node : node -> string
-  val node_info_string : node -> string
-  val defs : node -> Register.Set.t  (* includes kills!!! *)
-  val uses : node -> Register.Set.t
-  val upd_instr : node -> (Rtl.rtl -> Rtl.rtl) -> unit
-  val add_live_spans : node -> Register.SetX.t -> Register.SetX.t
-  val is_call : node -> bool
-  val set_succ: cfg -> node -> succ:node -> unit
-  val gm_insert_assign_after:     cfg -> node -> Rtl.rtl -> node (* after assign! *)
-  val gm_insert_assign_before:    cfg -> Rtl.rtl -> node -> node (* any node   *)
-
-  val preds : node -> node list
-  val pred  : node -> node
-  val succs : node -> node list
-  val succ  : node -> node
-
-  val update_instr  : (Rtl.rtl -> Rtl.rtl) -> node -> unit
-  val delete     : cfg -> node -> unit
-  val fold_nodes : (node->'a -> 'a) -> 'a -> cfg -> 'a
-  val iter_nodes : (node->unit) -> cfg -> unit
-  val eq : node -> node -> bool
-
-end
-*)
-<<colorgraph.ml>>=
-(*
-module type LIVENESS = sig
-  type node
-  val live_out : node -> Register.Set.t
-end
-*)
-
 <<colorgraph.ml>>=
 module G  = Zipcfg
 module GR = Zipcfg.Rep
@@ -1540,166 +1350,38 @@ let usesl last =
   let uses, _, _ = irwk (GR.last_instr last) in
   R.promote_rxset (G.add_inedge_uses last (R.rset_to_rxset uses))
 
-(*
-module G : GRAPH with type node = Rtl.rtl Cfgx.M.node
-                 with type cfg  = Rtl.rtl Cfgx.M.cfg = struct
-  module G = Cfgx.M
-  type node = Rtl.rtl G.node
-  type cfg  = Rtl.rtl G.cfg
-  type kind = Cfgx.M.kind
-    = Join | Instruction | StackAdjust | Branch | Cbranch | Mbranch
-    | Jump  | Call | Return | CutTo
-    | Entry | Exit | Assertion | Illegal | Impossible
-  let print_node = G.print_node
-  let node_info_string n = "???"
-
-  let nop = Rtl.par []
-  let node_labeled = G.node_labeled 
-  let instr n = Aux.Option.get nop (G.to_instr n)
-  let illegal = G.illegal
-  let kind = G.kind
-  let spans = G.spans
-  let preds = G.preds
-  let pred  = G.pred
-  let succs = G.succs
-  let succ  = G.succ
-  let num n = G.num n
-  let update_instr = G.update_instr
-  let iter_nodes = G.iter_nodes
-  let fold_nodes = G.fold_nodes
-  let eq = G.eq
-
-  let irwk = Rtlutil.ReadWriteKill.sets_promote
-
-  let defs node =
-    let defs = match G.to_instr node with
-    | None   -> RS.empty
-    | Some i -> let uses, defs, kills = irwk i in defs ++ kills in
-    R.promote_rxset
-      (G.union_over_outedges node (fun n -> R.rset_to_rxset defs)
-          (fun {G.node = n'; G.defs = d; G.kills = k} ->
-             (R.rset_to_rxset (defs ++ d ++ k))))
-
-  let usesm middle =
-    let uses, _, _ = irwk (GR.mid_instr middle) in
-    R.promote_rxset (R.rset_to_rxset uses)
-  let usesl last =
-    let uses, _, _ = irwk (GR.last_instr last) in
-    R.promote_rxset (G.add_inedge_uses last (R.rset_to_rxset uses))
-
-  let uses node =
-    let uses = match G.to_instr node with
-    | None   -> RS.empty
-    | Some i -> let uses, defs, kills = irwk i in uses in
-    R.promote_rxset (G.add_inedge_uses node (R.rset_to_rxset uses))
-    
-  let add_live_spans = G.add_live_spans
-  let upd_instr n f = G.update_instr f n
-  let is_call n = G.kind n =*= G.Call
-
-  let insert_assign splice cfg node rtl =
-    let g = G.of_node node in
-    let n' = G.instruction g rtl (G.illegal g) in
-    splice cfg ~entry:n' ~exit:n' node;
-    n'
-
-  let set_succ = G.set_succ
-  let gm_insert_assign_after = insert_assign G.splice_after
-  let gm_insert_assign_before cfg r n = insert_assign G.splice_before cfg n r
-  let delete = G.delete
-end
-*)
-<<colorgraph.ml>>=
-(*
-module L : LIVENESS with type node = G.node = struct
-  module G = Cfgx.M
-  type node = Rtl.rtl G.node
-  let live_out n = R.promote_rxset (Cfgx.Live.live_out n)
-end
-*)
-<<colorgraph.ml>>=
-(*
-module type PROC = sig
-  type automaton
-  type cfg
-  type cc
-  type automatonspec
-  type tgt = (automatonspec, cc) Target.t
-  type t = (automaton, cfg, cc, tgt) Proc.t
-  val allocatable : cc -> Register.t list
-  val spill_slot_for : t -> Register.t -> Automaton.loc
-  (* let spill_slot_for (_, _, w) proc = Automaton2.allocate proc.Proc.priv w None *)
-
-end
-*)
-
 <<colorgraph.ml>>=
 let spill_slot_for proc ((_,_,ms), _, c)  =
   Automaton.allocate proc.Proc.priv (Cell.to_width ms c) "" 1
-(*
-module PreMake (G : GRAPH with type node = Rtl.rtl Cfgx.M.node
-                          with type cfg  = Rtl.rtl Cfgx.M.cfg)
-               (LI : LIVENESS with type node = G.node) 
-               (P : PROC with type cfg = G.cfg) 
-               (N : sig val name : string end) = struct
-*)
+<<graph coloring types>>
+module GCT : Lua.Lib.USERTYPE with type 'a t = 'a colorGraph = struct
+    type 'a t = 'a colorGraph
+    let tname = "Graph Coloring"
+    let eq _ x y = x =*= y  (* may be dangerous *)
+    let to_string vs _ = "<cgInfo>"
+end
+module Make (BackplaneT : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.M.action)
+            (GCT : Lua.Lib.TYPEVIEW with type 'a t = 'a GCT.t
+                                  and type 'a combined = 'a BackplaneT.combined)
+            (ProcT : Lua.Lib.TYPEVIEW with type 'a t = Ast2ir.proc
+                                      and  type 'a combined = 'a BackplaneT.combined)
+       : Lua.Lib.USERCODE with type 'a userdata' = 'a BackplaneT.combined =
+  struct
+    type 'a userdata' = 'a BackplaneT.combined
+    module M (Interp : Lua.Lib.CORE
+                with type 'a V.userdata' = 'a BackplaneT.combined) = struct
+        module V = Interp.V
+        let cgmap = GCT.makemap V.userdata V.projection
 
-  <<graph coloring types>>
-  module GCT : Lua.Lib.USERTYPE with type 'a t = 'a colorGraph = struct
-      type 'a t = 'a colorGraph
-      let tname = "Graph Coloring"
-      let eq _ x y = x =*= y  (* may be dangerous *)
-      let to_string vs _ = "<cgInfo>"
-  end
-  module Make (BackplaneT : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.M.action)
-              (GCT : Lua.Lib.TYPEVIEW with type 'a t = 'a GCT.t
-                                    and type 'a combined = 'a BackplaneT.combined)
-              (ProcT : Lua.Lib.TYPEVIEW with type 'a t = Ast2ir.proc
-                                        and  type 'a combined = 'a BackplaneT.combined)
-         : Lua.Lib.USERCODE with type 'a userdata' = 'a BackplaneT.combined =
-    struct
-      type 'a userdata' = 'a BackplaneT.combined
-      module M (Interp : Lua.Lib.CORE
-                  with type 'a V.userdata' = 'a BackplaneT.combined) = struct
-          module V = Interp.V
-          let cgmap = GCT.makemap V.userdata V.projection
-  
-                  module RT = Register.RT (Interp)
-                  let register = RT.map
-  
-          <<graph coloring builtins>>
-  
-          let init = Interp.register_module "ColorGraph" graph_coloring_module
-            (* FIX -- register init code here? *)
-      end
+                module RT = Register.RT (Interp)
+                let register = RT.map
+
+        <<graph coloring builtins>>
+
+        let init = Interp.register_module "ColorGraph" graph_coloring_module
+          (* FIX -- register init code here? *)
     end
-(*
-end
-*)
-<<colorgraph.ml>>=
-(*
-module Proc = struct
-  module C = Call
-  type automaton = Automaton.t
-  type automatonspec = Rtl.exp->Automaton.t
-  type cfg = Rtl.rtl Cfgx.M.cfg
-  type cc = Call.t
-  type tgt = (automatonspec, cc) Target.t
-  type t = (automaton, cfg, cc, tgt) Proc.t
-  let allocatable cc = RS.elements (cc.C.pre_nvregs ++ cc.C.volregs)
-  let spill_slot_for proc ((_,_,ms), _, c)  =
-    Automaton.allocate proc.Proc.priv (Cell.to_width ms c) "" 1
-end
-
-module All = PreMake (G) (L) (Proc) (struct let name = "ColorGraph" end)
-*)
-@ 
-<<colorgraph.ml>>=
-(*
-module GCT  = All.GCT
-module Make = All.Make
-*)
-@
+  end
 <<graph coloring builtins>>=
     let verb   = 18
     let cfgSay = Verbose.say verb
