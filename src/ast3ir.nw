@@ -1,0 +1,293 @@
+
+\input{macros.tex}
+
+% l2h substitution cfg CFG
+% l2h substitution dots ...
+% l2h substitution AST AST
+% l2h substitution ast AST
+% l2h substitution rtl RTL
+% l2h substitution ir IR
+% l2h substitution noweb NOWEB
+% l2h substitution qcc QC--
+% l2h substitution C C--
+% l2h substitution PAL C--
+% l2h substitution pal C--
+% l2h substitution asdl ASDL
+% l2h substitution ocaml OCaml
+% l2h substitution forall forall
+% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
+
+% ------------------------------------------------------------------ 
+\section{Translation to Intermediate Representation}
+% ------------------------------------------------------------------ 
+
+<<ast3ir.ml>>=
+module Target   = Target2
+module A        = Ast
+module T        = Types
+module E        = Error
+module F        = Fenv.Clean
+module StrMap   = Map.Make(struct type t=string let compare=compare end)
+
+<<auxilliaries>>
+<<ExprTypes>>
+
+module Make
+    (G:     Cfg3.S)
+    (Asm:   Asm2.S with type instruction = G.t
+                   with type init        = unit) = 
+struct
+    <<Make auxilliaries>>
+    <<Make expressions>>
+    <<Make continuation bundles>>
+    <<Make assignment>>    
+    <<Make>>
+end
+@
+
+<<Make>>=
+(*Make*)
+@
+
+% ------------------------------------------------------------------
+\subsection{Auxilliaries}
+% ------------------------------------------------------------------ 
+
+<<auxilliaries>>=
+let default_cc          = "C--"
+let default_space       = ('m':Rtl.space)
+let default_section     = "text"
+
+(* the @ is required by NOWEB and not part of the operator! *)
+let (@<<) f g = fun x -> f (g x) (* function composition *)
+
+(* val width : 'a T.t -> 'a *)
+let width = function
+    | T.Bits n -> n
+    | _        -> Impossible.impossible "ast3ir.width"
+
+(* val astty : F.env -> A.ty -> Types.ty *)
+let rec astty env = function
+    | A.TyAt(x,r)  -> astty env x
+    | A.BitsTy(n)  -> Types.bits n
+    | A.AliasTy(x) -> snd (F.findt x env)
+
+(* val astwidth : F.env -> A.ty -> int *)
+let astwidth env = width @<< (astty env) 
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Expression Types}
+% ------------------------------------------------------------------ 
+
+<<ExprTypes body>>=
+
+let rec astFetch env target = function
+    | A.LValueAt(x,r)   -> astFetch env target x
+    | A.Var(hint,id)    -> (match F.findv id env with (attr,(_,t)) -> t)
+    | A.Mem(ty,e,align) -> 
+        let et = expr env target e      in
+        let t  = astty env ty           in
+        let a  = Aux.Option.get 1 align in
+            t
+@
+
+The types for primitive operators are looked up in the [[Value]]
+model.  This is a hack; we need a model for run-time primitive
+operators. 
+
+<<ExprTypes body>>=
+and primOp env target op args =
+    let argtys = List.map (expr env target) args     in
+    let opty   = snd (Value.Ops.lookup op Value.ops) in (*XXX*)
+        Types.appl opty argtys 
+            
+and expr env target exp =
+    let word          = T.bits target.Target.wordsize in
+    let optty default = function
+        | None    -> default
+        | Some t  -> astty env t       
+    in match exp with
+        | A.ExprAt(x,r)     -> expr env target x
+        | A.Int   (_,ty)    -> optty word ty
+        | A.Float (_,ty)    -> optty word ty
+        | A.Char  (_,ty)    -> optty word ty
+        | A.Fetch (v)       -> astFetch env target v
+        | A.BinOp (l,op,r)  -> primOp env target op [l;r]
+        | A.UnOp  (op,e)    -> primOp env target op [e]
+        | A.PrimOp(op,args) -> primOp env target op (List.map snd args)
+
+
+<<ExprTypes>>=
+module ExprTypes = struct
+    <<ExprTypes body>>
+end
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Make}
+% ------------------------------------------------------------------ 
+
+<<Make auxilliaries>>=
+let (++)           = Asm.append
+let idwidth id env = match F.findv id env with (attr,(_,t)) -> width t
+@
+
+
+% ------------------------------------------------------------------ 
+\subsection{Expression Translation}
+% ------------------------------------------------------------------ 
+
+Expressions denotes values, represented by compile-time, link-time, or
+run-time values.  The translation of a variable depends on its
+denotation. 
+
+\begin{quote}\it
+    \begin{enumerate}
+        \item Translation of primitive operators needs fix.
+        \item Translation of variables denoting stack labels missing.
+    \end{enumerate} --CL
+\end{quote}
+
+Lookup for operations is a hack; we need a module for primitive
+operators.
+
+<<Make expressions>>=
+let rec fetch env target globals = function
+    | A.LValueAt(x,_) -> fetch env target globals x
+    | A.Var(hint,x)   -> variable env target globals hint x
+    | A.Mem(t,e,a)    -> 
+        let width = astwidth env t in
+        let cell  = 
+            Rtl.cell
+                (match a with None -> Rtl.none | Some n -> Rtl.aligned n)
+                default_space  (* m *) 
+                target.Target.byteorder
+                width
+                (expr env target globals e)
+        in
+            Rtl.fetch cell width     
+
+(* XXX stack data labels don't work *)
+            
+and variable env target globals hint x =
+    let (_,(denot,t)) = F.findv x env in
+    ( match denot with
+    | F.Constant(bits)  -> Rtl.bits bits (width t)
+    | F.Label(F.Proc _) -> Rtl.link x (width t)
+    | F.Label(F.Code)   -> Rtl.link x (width t)
+    | F.Label(F.Data)   -> Rtl.link x (width t)
+    | F.Import(None)    -> Rtl.link x (width t)
+    | F.Import(Some n)  -> Rtl.link n (width t)
+    | F.Continuation    -> Impossible.impossible "Ast3ir.Make.variable cont"
+    | F.Label(F.Stack(o,l)) -> Impossible.unimp "Ast3ir.Make.variable stack"
+    | F.Register({F.index=i;F.rhint=F.RReg(hw)}) ->
+        (* global h/w register *)
+        Rtl.fetch (target.Target.register hw) (width t) 
+    | F.Register({F.index=i;F.rhint=_}) ->
+        (* global or local register in memory, ignoring hint *)
+        if F.is_localv x env then
+            let w = width t in
+            Rtl.fetch (Rtl.var x i w) w
+        else (* global register in memory *)
+            ( try
+                Automaton2.fetch (StrMap.find x globals) (width t)
+              with Not_found -> assert false
+            )
+    )
+    
+and prim env target globals op args =
+    let argtys  = List.map (ExprTypes.expr env target) args in
+    let opty    = snd (Value.Ops.lookup op Value.ops)      in (*XXX*)
+    let widths  = Types.widthlist opty argtys               in
+        Rtl.app (Rtl.opr op widths) (List.map (expr env target globals) args)
+
+and expr env target globals exp = 
+    let word = target.Target.wordsize in
+    let const default_width = function
+        | Some ty -> astwidth env ty
+        | None    -> default_width
+    in match exp with
+        | A.ExprAt(x,_)     -> expr env target globals x
+        | A.Int(bits,t)     -> Rtl.bits bits (const word t)
+        | A.Float(bits,t)   -> Rtl.bits bits (const word t)
+        | A.Char(bits,t)    -> Rtl.bits bits (const word t)
+        | A.Fetch(v)        -> assert false
+        | A.BinOp (l,op,r)  -> prim env target globals op [l;r]
+        | A.UnOp  (op,e)    -> prim env target globals op [e]
+        | A.PrimOp(op,args) -> prim env target globals op (List.map snd args)
+@
+
+
+% ------------------------------------------------------------------ 
+\subsection{Continuation Bundles}
+% ------------------------------------------------------------------ 
+
+<<Make continuation bundles>>=
+let continuations ast cfg =
+    let lookup = List.map (G.lookup cfg)  in
+    let rec loop conts = function
+        | (A.FlowAt(f,_)):: ff -> 
+            loop conts (f::ff)
+        | (A.CutsTo n)   :: ff -> 
+            loop {conts with G.cuts    = lookup n @ conts.G.cuts   } ff
+        | (A.UnwindsTo n):: ff -> 
+            loop {conts with G.unwinds = lookup n @ conts.G.unwinds} ff
+        | (A.ReturnsTo n):: ff -> 
+            loop {conts with G.returns = lookup n @ conts.G.returns} ff
+        | (A.Aborts)     :: ff -> 
+            loop {conts with G.aborts   = true                     } ff 
+        | []                   -> conts in
+    let empty =
+        { G.cuts = []; G.unwinds = []; G.returns = []; G.aborts = false
+        } 
+    in
+        loop empty ast
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Assignment}
+% ------------------------------------------------------------------ 
+
+<<Make assignment>>=
+let rec assign env target globals lhs exp = match lhs with
+    | A.LValueAt(lhs,_) -> assign env target globals lhs exp
+    | A.Var(hint,x) ->
+        let (_,(denot,t)) = F.findv x env in
+        let w = width t                   in
+            ( match denot with
+            | F.Register({F.index=i;F.rhint=F.RReg(hw)}) ->
+                (* global h/w register *)
+                Rtl.store (target.Target.register hw) exp w
+            | F.Register({F.index=i;F.rhint=_}) ->
+                (* global or local register in memory, ignoring hint *)
+                if F.is_localv x env then
+                    Rtl.store (Rtl.var x i w) exp w
+                else (* global register in memory *)
+                    ( try
+                        Automaton2.store (StrMap.find x globals) exp w
+                      with Not_found -> assert false
+                    )
+            | _ -> assert false (* impossible *)
+            )
+    | A.Mem(t,addr,align) ->
+        let w     = astwidth env t in
+        let cell  = 
+            Rtl.cell
+                (match align with None -> Rtl.none | Some n -> Rtl.aligned n)
+                default_space  (* m *) 
+                target.Target.byteorder
+                w
+                (expr env target globals addr)                        
+        in
+            Rtl.store cell exp w
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Procedure Translation}
+% ------------------------------------------------------------------ 
+
+% ------------------------------------------------------------------ 
+\subsection{Program Translation}
+% ------------------------------------------------------------------ 
+
