@@ -132,15 +132,15 @@ function Test.compile_file(file)
 
   Util.redirect_stdout(so)
   Util.redirect_stderr(se)
-  local status = Util.catch(Test.translate, file)
+  local compiles_ok = Util.catch(Test.translate, file)
   Util.redirect_stdout()
   Util.redirect_stderr()
 
-  if not status then
+  if not compiles_ok then
     Test.log("Compilation errors detected")
   end
 
-  return s_file, so, se
+  return s_file, so, se, compiles_ok
 end
 @ 
 This function runs both front ends, directing messages to different
@@ -302,7 +302,7 @@ then all outputs are generated.
 <<testdrv.lua>>=
 function Test.run_test_case(inputs)
   local file = inputs.source
-  local s_file, so, se = Test.compile_file(file)
+  local s_file, so, se, compiles_ok = Test.compile_file(file)
   if not s_file then return end
 
   inputs["diffs"] = ""
@@ -312,16 +312,20 @@ function Test.run_test_case(inputs)
                + Test.check_update_file(inputs, se)
 
   if inputs.runnable and (Test.update or status > 0) then
-    local exe_file = Test.build_exe(inputs, s_file)
-    if exe_file then
-      local pso, pse = Test.run_exe(exe_file, inputs["stdin"])
-      status = Test.check_update_file(inputs, pso)
-             + Test.check_update_file(inputs, pse)
-      remove(pso)
-      remove(pse)
-      remove(exe_file)
+    if compiles_ok then
+      local exe_file = Test.build_exe(inputs, s_file)
+      if exe_file then
+        local pso, pse = Test.run_exe(exe_file, inputs["stdin"])
+        status = Test.check_update_file(inputs, pso)
+               + Test.check_update_file(inputs, pse)
+        remove(pso)
+        remove(pse)
+        remove(exe_file)
+      else
+        status = 1  -- failed to build exe is an error
+      end
     else
-      status = 1  -- failed to build exe is an error
+      status = 1 -- runnable program does not compile?  error
     end
   end
   remove(s_file)
@@ -363,7 +367,7 @@ function Test.process_file(files)
   end
 
   if type(files) ~= "table" or not files.source then
-    error("invalid file entry")
+    error("invalid file entry---not a table or missing .source field")
   end
 
   local bn = files.name or Caml.Filename.basename(files.source)

@@ -324,8 +324,8 @@ and the other to the data associated with the stopping point:
 \end{verbatim}
 <<emit proc to run-time data map>>=
   asm#section "pcmap";
-  asm#addr (Reloc.Simple.of_sum (asm#local stop_l) zero);
-  asm#addr (Reloc.Simple.of_sum frame_label        zero);
+  asm#addr (Reloc.Simple.of_sum Rtl.codesym (asm#local stop_l) zero);
+  asm#addr (Reloc.Simple.of_sum Rtl.datasym frame_label        zero);
 @
 The second area keeps track of the size of the frame, the size of the incoming overflow
 block that the procedure must deallocate, the location of the return address,
@@ -433,7 +433,7 @@ let reg_ix proc r =
   try RM.find r (snd proc.P.target.T.reg_ix_map)
   with Not_found -> imposs "Register not found in map" in
 let emit_dead_var      ()    = asm#value zero in
-let emit_link_const    sym   = asm#addr (Reloc.Simple.of_sum sym zero) in
+let emit_link_const mk sym   = asm#addr (Reloc.Simple.of_sum mk sym zero) in
 let emit_offset bits =
   let value    = Bits.S.to_int bits in
   let offset_w = wordsize - 1 in
@@ -454,10 +454,11 @@ Then, we check the type of value (as encoded in the [[Rtl.exp]] type) and emit t
 value in the proper format.
 <<define functions for emitting data>>=
 let emit_val_loc e =
+  let mklink kind s w = Up.exp (RP.Const (RP.Link(s, kind, w))) in
   <<define helpers to emit different values>>
   match Dn.exp (simplify_exp e) with
   | RP.Const (RP.Bool false)               -> emit_dead_var ()
-  | RP.Const (RP.Link (sym,_,_))           -> emit_link_const sym
+  | RP.Const (RP.Link (sym,kind,_))        -> emit_link_const (mklink kind) sym
   | RP.Const (RP.Bits bs)                  -> emit_offset   bs
   | RP.Fetch (RP.Reg r, _)                 -> emit_reg  (reg_ix proc r) 0
   | RP.Fetch (RP.Slice (_,i, RP.Reg r), _) -> emit_reg  (reg_ix proc r) i
@@ -571,6 +572,11 @@ let conts_to_spans ~wordsize =
 \subsubsection{Link-time constants into spans}
 This ought to be the identity---indeed, the conversion ought to go
 \emph{from} general expression \emph{to} span.
-But until Joao has a chance to work his magic, it's unimplemented. 
+But until Jo\~ao has a chance to work his magic, it's a dreadful hack.
 <<runtimedata.ml>>=
-let user_span _ _ = Impossible.unimp "convert link-time stuff into span"
+let user_span k v =
+  let s, b = Reloc.Simple.expnormalize v in
+  let w    = Bits.width b in
+  match s with
+  | None           -> k, Rtl.bits b w
+  | Some (sym, mk) -> k, Rtlutil.add w (mk sym w) (Rtl.bits b w)

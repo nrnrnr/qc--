@@ -1,3 +1,4 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 
 % ------------------------------------------------------------------ 
 % Grades     ::=    "%%Grades:" Quality Importance Urgency
@@ -37,6 +38,10 @@ as a sum of a symbol and many constants. Since the representation is
 polymorphic over the type of the constant, [[add_const]] receives as
 first argument a function that adds constants.
 
+It might be necessary to turn a relocatable address back into an
+expression, which might conceivably undergo a PIC transformation.
+For that reason, to make a relocatable address from a symbol, it is
+necessary to supply a suitable function.
 <<module type RELOCATABLE>>=
 module type RELOCATABLE = sig
     type symbol                 
@@ -44,11 +49,13 @@ module type RELOCATABLE = sig
 
     (* constructors *)
     val of_const:   'a           -> 'a relocatable
-    val of_sum:     symbol -> 'a -> 'a relocatable
+    val of_sum:     (symbol -> Rtl.width -> Rtl.exp) -> symbol -> 'a -> 'a relocatable
     val add_const:  ('a -> 'a -> 'a) -> 'a relocatable -> 'a -> 'a relocatable
 
     (* observer *)
     val normalize:  'a relocatable -> symbol option * 'a
+    val expnormalize:  
+       'a relocatable -> (symbol * (symbol -> Rtl.width -> Rtl.exp)) option * 'a
 end
 @
 
@@ -68,12 +75,15 @@ module Simple:                      RELOCATABLE with type symbol = Symbol.t
 <<module type RELOCATABLE>>
 
 module MkSimple(S: sig type t end) = struct
-    type symbol         = S.t
-    type 'a relocatable = symbol option * 'a
-    let of_const c      = (None, c)
-    let of_sum s c      = (Some s, c)
-    let add_const (+)   = fun (s, c) c' -> (s, c + c')
-    let normalize r     = r
+    type symbol          = S.t
+    type 'a relocatable  = (symbol * (symbol -> Rtl.width -> Rtl.exp)) option * 'a
+    let of_const c       = (None, c)
+    let of_sum mk s c    = (Some (s, mk), c)
+    let add_const (+)    = fun (s, c) c' -> (s, c + c')
+    let expnormalize r   = r
+    let normalize (s, c) = match s with
+    | None -> None, c
+    | Some (s, _) -> Some s, c
 end
 
 module Simple = MkSimple(Symbol)

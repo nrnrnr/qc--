@@ -239,6 +239,7 @@ module K = struct
     ;         cut_in      : (Block.t -> Rtl.rtl) C.answer    (* move vals at cut (uses rep) *)
     ;         return_in   : (Block.t -> Rtl.rtl) C.answer    (* move vals at also returns *)
     ;         rep         : Contn.t     (* representation as C-- value (incl block) *)
+    ;         base        : Block.t     (* base address; to be composed with rep *)
     ;         convention  : string
     ; mutable succ        : 'i G.node   (* filled in by 2nd pass time *)
     ; mutable spans       : Runtimedata.span list (* spans at the continuation *)
@@ -250,7 +251,7 @@ end
 
 Our state of knowledge when we first encounter a continuation.
 <<definition of [[K.mk]], which initializes continuation information>>=
-let mk name den rep g ~cut_in ~return_in  =
+let mk name den rep base g ~cut_in ~return_in  =
   { escapes     = den.FE.escapes
   ; cut_to      = den.FE.cut_to
   ; returned_to = den.FE.returned_to
@@ -259,6 +260,7 @@ let mk name den rep g ~cut_in ~return_in  =
   ; cut_pc      = Idgen.ContEntry.cut    name
   ; return_pc   = Idgen.ContEntry.return name
   ; rep         = rep
+  ; base        = base
   ; convention  = den.FE.convention
   ; cut_in      = cut_in
   ; return_in   = return_in
@@ -275,7 +277,7 @@ let extend_cont name den =
   let cut_in    = cformals cc.C.cut_parms.C.in' args in
   let return_in = cformals cc.C.results.C.in'   args in
   let rep       = Contn.with_overflow target cut_in.C.overflow in
-  K.mk name den rep g ~cut_in ~return_in in
+  K.mk name den rep den.FE.base g ~cut_in ~return_in in
 @
 \subsubsection{Second pass: continuations and flow annotations}
 The second pass fills in the mutable fields.
@@ -835,12 +837,15 @@ WE OUGHT TO BE ABLE TO DO WITHOUT ONE OF THESE LABEL NODES.
 We initialize continuations, finish compiling them, and accumulate
 their blocks into [[contblocks]].
 CAN'T WE HAVE JUST ONE INSERTION POINT?
+AND WOULDN'T IT BE NICER JUST TO CONCATENATE BLOCKS DIRECTLY RATHER
+THAN MAKE A LIST AND THEN CONCATENATE?
 <<definition of [[proc]], which translates one procedure>>=
   let () = insert_init_cont_nodes contenv (G.node_labeled g contlbl) in
   let contblocks =
     let addblock name k blocks =
       finish_compiling_continuation k;
-      if k.K.escapes then Contn.rep k.K.rep :: blocks else blocks in
+      if k.K.escapes then Block.cathl (Contn.rep k.K.rep) k.K.base :: blocks
+      else blocks in
     Block.cathl_list pointersize (Strutil.Map.fold addblock contenv []) in
 @ 
 \paragraph{Building and optimizing the [[Proc.t]]}
@@ -996,7 +1001,7 @@ let emit_global_register_area ~export =
         asm#section (target.T.data_section);
         asm#label localref;
         asm#comment "reference to global-register signature";
-        asm#addr (Reloc.Simple.of_sum digest (Bits.zero pointersize))
+        asm#addr (Reloc.Simple.of_sum Rtl.impsym digest (Bits.zero pointersize))
       end in
   gmap
 @

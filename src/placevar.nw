@@ -7,6 +7,7 @@
 %
 %%Grades: D Peripheral Later
 
+@
 \section{Placing variables into suitable temporary locations}
 The [[mk_automaton]] function generates an automaton for placing variables,
 given a warning function and a function that returns temporaries.
@@ -29,12 +30,11 @@ val fortran'  : 'a -> Oast2ir.proc -> bool
 @
 Boilerplate for linking to Lua.
 <<placevar.ml>>=
-let fetch_global _ = Impossible.unimp "placing global variables"
-let store_global _ = Impossible.unimp "placing global variables"
+module A  = Automaton
+module P  = Proc
 module R  = Rtl
 module RT = Runtimedata
 module RU = Rtlutil
-module A  = Automaton
 module RP = Rtl.Private
 
 <<replace var>>
@@ -49,11 +49,13 @@ let fortran' _ ({Proc.cfg = g; Proc.temps = temps; Proc.var_map = tMap} as proc)
   let module G = Cfgx.M in
   let changed = ref false in
   <<fortran replace var>>
+  <<fetch and store globals>>
   let updateNode node =
     match G.to_instr node with
     | None     -> ()
-    | Some rtl -> let rtl' = replace_var store_var fetch_var rtl in
-                  G.update_instr (fun _ -> rtl') node  in
+    | Some rtl ->
+        let rtl' = replace_var store_var fetch_var store_global fetch_global rtl in
+        G.update_instr (fun _ -> rtl') node  in
   let () = G.iter_nodes updateNode g in
   <<add variable placements to spans>>
   !changed
@@ -95,6 +97,9 @@ let get_placer s i w =
                alloc) in
 let store_var exp (s, i, w) = (get_placer s i w).A.store (R.Up.exp exp) w in
 let fetch_var     (s, i, w) = (get_placer s i w).A.fetch                w in
+<<fetch and store globals>>=
+let store_global exp (s, i, w) = proc.P.global_map.(i).A.store (R.Up.exp exp) w in
+let fetch_global     (s, i, w) = proc.P.global_map.(i).A.fetch                w in
 @ 
 Old diagnostics?
 <<walk RTL>>=
@@ -112,7 +117,7 @@ let print_var (s, i, w) =
 We use a higer-order function to allow different variable placers to replace a variable
 and take advantage of the rtl-walk.
 <<replace var>>=
-let replace_var store_var fetch_var r =
+let replace_var store_var fetch_var store_global fetch_global r =
   <<walk RTL>>
   walkRtl r
 @
@@ -346,7 +351,9 @@ let updateNode node =
   | None     -> ()
   | Some rtl ->
     <<context replace var>>
-    G.update_instr (fun _ -> replace_var store_var fetch_var rtl) node in
+    <<fetch and store globals>>
+    G.update_instr
+      (fun _ -> replace_var store_var fetch_var store_global fetch_global rtl) node in
 let () = G.iter_nodes updateNode g in
 <<verbosely dump [[tMap]]>>
 @ 

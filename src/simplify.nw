@@ -123,15 +123,17 @@ let bool e = match Safe.exp (D.exp e) with
              | RP.Const(RP.Bool(b)) -> b
              | _                    -> Error.error "not a constant condition"
 
+let mklink kind s w = U.exp (RP.Const (RP.Link(s, kind, w)))
+
 let link e = match Safe.exp (D.exp e) with
 | RP.Const(RP.Bits b)   -> Reloc.Simple.of_const b
-| RP.Const(RP.Link(l,_,w)) -> Reloc.Simple.of_sum l (Bits.zero w)
+| RP.Const(RP.Link(l,kind,w)) -> Reloc.Simple.of_sum (mklink kind) l (Bits.zero w)
 | RP.Const(RP.Diff(c1,c2)) ->
     Impossible.unimp "difference of link-time constants"
-| RP.App(("add",_),[RP.Const(RP.Link(l,_,w)); RP.Const(RP.Bits(b))]) ->
-    Reloc.Simple.of_sum l b
-| RP.App(("sub",_),[RP.Const(RP.Link(l,_,w)); RP.Const(RP.Bits(b))]) ->
-    Reloc.Simple.of_sum l (Bits.Ops.neg b)
+| RP.App(("add",_),[RP.Const(RP.Link(l,kind,w)); RP.Const(RP.Bits(b))]) ->
+    Reloc.Simple.of_sum (mklink kind) l b
+| RP.App(("sub",_),[RP.Const(RP.Link(l,kind,w)); RP.Const(RP.Bits(b))]) ->
+    Reloc.Simple.of_sum (mklink kind) l (Bits.Ops.neg b)
 | RP.App(("sub",_),[RP.Const(RP.Link(l,_,w)); RP.Const(RP.Link(l',_,w'))]) ->
     Impossible.unimp "difference of link-time constants"
 | _ ->
