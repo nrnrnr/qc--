@@ -1,34 +1,12 @@
 % -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 % vim: ts=8 sw=4 et:
-
-% Grades     ::=    "%%Grades:" Quality Importance Urgency
-% Quality    ::=    A|B|C|D|E
-% Importance ::=    Central|Subsystem|Peripheral
-% Urgency    ::=    Immediate|Soon|Later
-%
-% Example (at beginning of line): %%Grades: B Central Soon
-
-\newcommand{\syryu}[1]{}
-\newcommand{\delete}[1]{}
-
 % ------------------------------------------------------------------ 
 \section{PPC Recognizer} \label{ppcrec.sec}
 % ------------------------------------------------------------------ 
 
-%%Grades: B Subsystem Later
-
-This module provides functions that recognize a PPC RTL.
-As an experiment, the recognizer is implemented using BURG rules.
-If the instruction is recognized, it is coverable with small cost.
-(Perhaps one day, the cost could be bytes of code.)
-If it is not recognized, there is a catchall rule that recognizes
-anything with cost~100 (I~hope).
-
-WARNING: THIS RECOGNIZER DOES NOT (YET) RECOGNIZE KILLS.
-
-The level of indirection is an artifact from the old days.
-We keep it because in the future, the recognizer might want to take a
-module parameter.
+This module provides functions that recognize a PPC RTL. The level of
+indirection is an artifact from the old days. We keep it because in
+the future, the recognizer might want to take a module parameter.
 N.B.~A~recognizer takes two forms: one to say if we have an
 instruction, and one to convert to an assembly-language string.
 <<ppcrec.mli>>=
@@ -36,7 +14,6 @@ module M : sig
   val is_instruction : Rtl.rtl -> bool
   val to_asm         : Rtl.rtl -> string list -> string
 end
-@ 
 <<ppcrec.mlb>>=
 %head {: <<modules>> 
          module M = struct
@@ -52,36 +29,20 @@ end
 @
 A few abbreviations.
 <<modules>>=
-module RP = Rtl.Private
-module RU = Rtlutil
-module SS = Space.Standard32
-module Down  = Rtl.Dn      (* Convert Down  to private repr. *)
-module Up    = Rtl.Up       (* Convert Up    to abstract repr. *)
-@
-If something goes wrong during recognition, we raise this exception.
-It's different from merely ``unrecognized;'' it means something
-happened that shouldn't have.
-<<code to precede the labeler>>=
+module RP   = Rtl.Private
+module RU   = Rtlutil
+module SS   = Space.Standard32
+module Down = Rtl.Dn      (* Convert Down  to private repr. *)
+module Up   = Rtl.Up      (* Convert Up    to abstract repr. *)
+
 exception Error of string
 let error msg = raise (Error msg)
-@
-We should be using [[sprintf]] more.
-<<code to precede the labeler>>=
 let sprintf = Printf.sprintf
 @ 
-
-
 % ------------------------------------------------------------------ 
 \subsection{Utilities}
 % ------------------------------------------------------------------ 
-
-We've had some mystery problems; in particular, we've seen the integer
-$-4$ get converted to 32~bits with its sign bit clear.
 <<code to precede the labeler>>=
-let native' w b =
-  assert (Bits.width b = w);
-  Nativeint.to_string (Bits.U.to_native b)
-let native = native' 32
 let cat = String.concat ""
 @   
 The [[guard]] function turns a predicate into a cost.
@@ -89,57 +50,9 @@ The [[guard]] function turns a predicate into a cost.
 let infinity = Camlburg.inf_cost
 let guard b = if b then 0 else infinity
 @ 
-The PPC uses a suffix to denote width.
-<<code to precede the labeler>>=
-let suffix w = match w with
-| 8  -> "b"
-| 16 -> "h"
-| 32 -> "w"
-| _ -> Impossible.impossible "width in PPC not 8/16/32"
-@ 
-Register names.
-<<code to precede the labeler>>=
-let regname n = "r" ^ string_of_int n
-@ 
 Utilities for instructions.
 <<code to precede the labeler>>=
 let imports = ref ([] : string list)
-
-let fst (x, _) = x
-let snd (_, x) = x
-
-let int_load str (suff, z_a, (x_, mem)) r =
-  match (String.get z_a 0, String.get suff 0) with
-  | ('z',  _) | ('a','h') -> sprintf str suff z_a x_ r mem
-  | _ -> Impossible.impossible "wrong integer load instruction"
- 
-let get_reg mem_str =
-  match String.get mem_str (String.length mem_str - 1) with
-  | ')' -> let start = (String.index mem_str '(') + 1
-           in  (String.sub mem_str start (String.length mem_str - (start+1)),
-                None)
-  | _   -> let middle = String.index mem_str ','
-           in  (String.sub mem_str 0 middle,
-                Some(String.sub mem_str (middle+1)
-                                        (String.length mem_str - (middle+1))))
-
-let int_loadu str (suff, z_a, (x_, mem)) r r1 r2 =
-  if r=$=r1
-  then Impossible.impossible "invalid integer load with update instruction"
-  else match (String.get z_a 0, String.get suff 0) with
-  | ('z',  _) | ('a','h') -> 
-    (match get_reg mem with
-    | (r1',None    ) -> if r1=$=r1' then sprintf str suff z_a x_ r mem else "nop"
-    | (r1',Some r2') -> if r1=$=r1' && r2=$=r2'
-                                  then sprintf str suff z_a x_ r mem else "nop")
-  | _ -> Impossible.impossible "wrong integer load with update instruction"
-
-let int_store  str suff (x_, mem) r = sprintf str suff x_ r mem
-let int_storeu str suff (x_, mem) r r1 r2 =
-  match get_reg mem with
-  | (r1',None    ) -> if r1=$=r1' then sprintf str suff x_ r mem else "nop"
-  | (r1',Some r2') -> if r1=$=r1' && r2=$=r2' 
-                                then sprintf str suff x_ r mem else "nop"
 
 let ind_addr name =
   if List.exists ((=$=) name) (!imports) then "L" ^ name ^ "$stub" else name
@@ -150,27 +63,6 @@ let ppc_op = function
   | "gtu" -> ("l", "gt")
   | "geu" -> ("l", "ge")
   | op    -> ("" , op  )
-
-let d2h = function
-  | 0 -> "0"
-  | d ->
-    let rec d2h' d' =
-      let cv = function
-        | 10 -> "a"
-        | 11 -> "b"
-        | 12 -> "c"
-        | 13 -> "d"
-        | 14 -> "e"
-        | 15 -> "f"
-        | i  -> string_of_int i in
-      if d' > 0 then d2h' (d' / 16) ^ cv (d' mod 16) else "" in
-    d2h' d
-
-let li reg imm =
-  let i = int_of_string imm in
-  let adj = match String.get imm 0 with | '-' -> 32768 | _   -> 0 in
-  "lis " ^ reg ^ "," ^ "0x" ^ d2h (i / 65536 + adj) ^ "\n\t" ^
-  "ori " ^ reg ^ "," ^ reg ^ "," ^ (string_of_int (i mod 65536))
 @
 % ------------------------------------------------------------------ 
 \subsection{Recognizer Rules}
@@ -186,14 +78,16 @@ Terminal [[bits]] is a constant of types [[Bits.bits]]; terminal
 [[symbol]] is a string.
 
 <<rules>>=
-const:  Bits(bits) [{: guard (Bits.width bits = 32) :}] {: native bits :}
+const32:  Bits(bits) [{: guard (Bits.width bits = 32) :}] {: Bits.to_string bits :}
+const16:  Bits(bits) [{: guard (Bits.width bits = 16) :}] {: Bits.to_string bits :}
+
 lconst: Link(symbol, w:int)        {: symbol#mangled_text :}
 pic:    Diff(c1:lconst, c2:lconst) {: c1 ^ "-" ^ c2 :}
 pic:    Fetch(Mem(Diff(c1:lconst, c2:lconst)), w2:int) {: c1 ^ "-" ^ c2 :}
 @ 
 \paragraph{Registers}
 <<rules>>=
-regl: Reg('r', n:int) [{: guard (n<>0) :}] {: regname n :}
+regl: Reg('r', n:int) [{: guard (n<>0) :}] {: "r" ^ string_of_int n :}
 
 pcl:  Reg('c', 0) {: () :}
 cial: Reg('c', 1) {: () :}
@@ -201,7 +95,6 @@ crl:  Reg('c', 2) {: () :}
 xerl: Reg('c', 4) {: () :}
 lrl:  Reg('c', 5) {: () :}
 spl:  Reg('r', 14) {: () :}
-
 
 reg:                  Fetch(regl, w:int)         {: regl :}
 reg:  BitExtract(any, Fetch(regl, w:int), n:int) {: regl :}
@@ -214,60 +107,26 @@ sp:   Fetch(spl,  32) {: () :}
 @
 \paragraph{Addresses}
 <<rules>>=
-meml: Mem(addr)              {: addr :}
-mem:  Sx(Fetch(meml, w:int)) {: (suffix w, "a", meml) :}
-mem:  Zx(Fetch(meml, w:int)) {: (suffix w, "z", meml) :}
-mem:     Fetch(meml, w:int)  {: (suffix w, "z", meml) :}
-mem:  lconst                 {: ("h",      "a", ("", lconst)) :}
+addr: const16                 {: const16 ^ "(r0)"          :}
+addr: reg                     {:           "(" ^ reg ^ ")" :}
+addr: Add(reg, const16)       {: const16 ^ "(" ^ reg ^ ")" :}
 
-addr: imm                     {: ("",  imm) :}
-addr: reg                     {: ("",  "0(" ^ reg ^ ")") :}
-addr: Add(reg, imm)           {: ("",  imm  ^ "(" ^ reg ^ ")") :}
-addr: Add(reg1:reg, reg2:reg) {: ("x", reg1 ^ "," ^ reg2) :}
-
-i_r: imm {: imm :}
-i_r: reg {: reg :}
-@
-\paragraph{Constant Expressions}
-<<rules>>=
-imm:   const   {: const :}
+index_addr: Add(reg1:reg, reg2:reg) {: reg1 ^","^ reg2 :}
 @
 \paragraph{Data Movement}
-Load register from memory. A load of a value smaller than 32 bits
-implies a zero or sign extension.
 <<rules>>=
-inst:  Store(regl, mem, 32) {: int_load "l%s%s%s %s,%s" mem regl :}
-inst:  Par(Store(regl1:regl, mem, 32), Llr(regl2:regl, "add", i_r, 32))
-       {: int_loadu "l%s%su%s %s,%s" mem regl1 regl2 i_r :}
-@
-Load immediate.
-<<rules>>=
-inst:  Store(regl, imm, 32) {: li regl imm :}
-@ 
-Store register to memory. No extension here; the 8, 16, or 32 bits are
-simply written to memory.
-<<rules>>=
-inst:  Store(meml, reg, w:int)
-       {: int_store  "st%s%s %s,%s"  (suffix w) meml reg :}
-inst:  Par(Store(meml, reg, w:int), Llr(regl, "add", i_r, 32))
-       {: int_storeu "st%su%s %s,%s" (suffix w) meml reg regl i_r :}
-@ 
-There is a special instruction for shift left by 16 and load immediate
-that is often used when loading 32-bit constants.
-<<rules>>=
-inst:  Store(regl, Shl(const,b:const), w:int) --[{: guard (b=16) :}]
-       {: "lis " ^ regl ^ "," ^ const :}
-@ 
-Special purpose registers have special instructions.
-<<rules>>=
-inst:  Store(regl, lr, w:int) {: "mflr " ^ regl :}
-inst:  Store(lrl, reg, w:int) {: "mtlr " ^ reg  :}
-@ 
-Moves between between registers.
-<<rules>>=
-inst:  Store(regl, cr, w:int) {: "mfcr " ^ regl :}
-inst:  Store(regl, lr, w:int) {: "mflr " ^ regl :}
-inst:  Store(lrl, reg, w:int) {: "mtlr " ^ reg  :}
+inst:  Store(regl, reg, w:int) {: "mr " ^ regl ^ "," ^ reg :}
+inst:  Store(regl,  lr, w:int) {: "mflr " ^ regl :}
+inst:  Store(lrl,  reg, w:int) {: "mtlr " ^ reg  :}
+inst:  Store(regl,  cr, w:int) {: "mfcr " ^ regl :}
+
+inst: Store(regl, const16, 32) {: "li " ^ regl ^","^ const16 :}
+
+inst: Store (regl, Fetch(Mem(addr      ), 32), 32) {: "lwz "  ^ regl ^","^ addr  :}
+inst: Store (regl, Fetch(Mem(index_addr), 32), 32) {: "lwzx " ^ regl ^","^ index_addr :}
+
+inst: Store (Fetch(Mem(addr      ), 32), regl, 32) {: "stw "  ^ regl ^","^ addr  :}
+inst: Store (Fetch(Mem(index_addr), 32), regl, 32) {: "stwx " ^ regl ^","^ index_addr :}
 @ 
 Position-independent code. The integer register r2 is used for
 position-independent code.
@@ -281,10 +140,9 @@ inst:  Store(regl, pic, 32)
 @
 \paragraph{Control Flow}
 <<rules>>=
-inst:  Goto(lconst)        {: "b " ^ ind_addr lconst :}
-inst:  Goto(lr) {: "blr"                  :}
+inst:  Goto(lconst) {: "b " ^ ind_addr lconst :}
+inst:  Goto(lr)     {: "blr"                  :}
 @
-@ 
 The [[cut to]] is supposed to look atomic, but it is a sequence of two
 instructions. 
 <<rules>>=
@@ -294,7 +152,7 @@ The [[next]] pattern covers the expression $PC + 4$ which denotes the
 instruction following the branch instruction.
 
 <<rules>>=
-next:  Add(cia,const) {: () :}
+next:  Add(cia,const32) {: () :}
 inst:  Par(Goto(lconst), Store(lrl,next,32)) {: "bl " ^ ind_addr lconst :}
 @
 
@@ -305,12 +163,12 @@ terminals are in scope for the semantic action.
 
 <<rules>>=
 cmp:   Cmp(op:string, x:reg, y:reg) {: ("",  ppc_op op,x,y) :}
-cmp:   Cmp(op:string, x:reg, y:imm) {: ("i", ppc_op op,x,y) :}
+cmp:   Cmp(op:string, x:reg, y:const16) {: ("i", ppc_op op,x,y) :}
 inst:  Guarded(cmp,Goto(lconst)) 
        {: match cmp with
           | (i_, (l_, op),x,y) -> "cmp" ^ l_ ^ "w" ^ i_ ^ " cr0," ^ x ^ "," ^
                                   y ^ "\n\tb" ^ op ^ " " ^ lconst
-       :}   
+       :}
 inst : Guarded(OvSet(Fetch(xerl,32)), Goto(lconst))
        {: "bo " ^ lconst :}
 @ 
@@ -319,49 +177,32 @@ inst : Guarded(OvSet(Fetch(xerl,32)), Goto(lconst))
 <<rules>>=
 inst:  Store(regl, Add(x:reg,y:reg), w:int)
        {: "add "  ^ regl ^ "," ^ x    ^ "," ^ y     :}
-inst:  Store(regl, Add(x:reg,y:const), w:int)
+inst:  Store(regl, Add(x:reg,y:const16), w:int)
        {: "addi " ^ regl ^ "," ^ x    ^ "," ^ y     :}
 inst:  Store(regl, Sub(x:reg,y:reg), w:int)
        {: "sub " ^ regl ^ "," ^ x    ^ "," ^ y     :}
 inst:  Store(regl, Mul(x:reg,y:reg), w:int)
-       {: "mulhw " ^ regl ^ "," ^ x    ^ "," ^ y     :}
+       {: "mullw " ^ regl ^ "," ^ x    ^ "," ^ y     :}
 inst:  Store(regl, Neg(reg), w:int) {: "neg " ^ reg ^ "," ^ reg :}
 
-inst:  Par(Store(regl, Add(x:reg,y:reg), w:int), Store(xerl, XerAdd(x2:reg,y2:reg), w2:int))
-       [ {: 0 (* x = x2 & y = y2*) :} ]
-       {: "addco "  ^ regl ^ "," ^ x    ^ "," ^ y     :}
-inst:  Par(Store(regl, Sub(x:reg,y:reg), w:int), Store(xerl, XerSub(x2:reg,y2:reg), w2:int))
-       [ {: 0 (* x = x2 & y = y2 *) :} ]
-       {: "subo "  ^ regl ^ "," ^ x    ^ "," ^ y     :}
-inst:  Par(Store(regl, Mul(x:reg,y:reg), w:int), Store(xerl, XerMul(x2:reg,y2:reg), w2:int))
-       [ {: 0 (* x = x2 & y = y2 *) :} ]
-       {: "mulhwo "  ^ regl ^ "," ^ x    ^ "," ^ y     :}
 @ 
 \paragraph{Logical instructions}
 
 <<rules>>=
 inst:  Store(regl, And(x:reg,y:reg), w:int)
        {: "and "   ^ regl ^ "," ^ x    ^ "," ^ y     :}
-inst:  Store(regl, And(x:reg,y:const), w:int)
+inst:  Store(regl, And(x:reg,y:const16), w:int)
        {: "andi. " ^ regl ^ "," ^ x    ^ "," ^ y     :}
 inst:  Store(regl, Or(x:reg,y:reg), w:int)
        {: "or "  ^ regl ^ "," ^ x    ^ "," ^ y     :}
-inst:  Store(regl, Or(x:reg,y:const), w:int)
+inst:  Store(regl, Or(x:reg,y:const16), w:int)
        {: "ori " ^ regl ^ "," ^ x    ^ "," ^ y     :}
 inst:  Store(regl, Xor(x:reg,y:reg), w:int)
        {: "xor "  ^ regl ^ "," ^ x    ^ "," ^ y     :}
-inst:  Store(regl, Xor(x:reg,y:const), w:int)
+inst:  Store(regl, Xor(x:reg,y:const16), w:int)
        {: "xori " ^ regl ^ "," ^ x    ^ "," ^ y     :}
 inst: Store(regl, Shl(x:reg, y:reg), w:int)
        {: "slw " ^ regl ^ "," ^  x    ^ "," ^ y     :}
-@
-\paragraph{Recommended Simplified Mnemonics}
-Appendix F.9 of the architecture manual describes some of the most
-commonly-used operations (such as no-op, load immediate, load address, move
-register, and complement register).
-<<rules>>=
-inst:  Store(regl, Mr(reg), w:int) {: "mr " ^ regl ^ "," ^ reg :}
-inst:  Store(regl, reg, w:int)     {: "mr " ^ regl ^ "," ^ reg :}
 @
 \paragraph{Other instructions}
 <<rules>>=
@@ -393,9 +234,6 @@ any : Xor(x:any, y:any) {: "Xor(" ^ x ^ ", " ^ y ^ ")" :}
 any : Shl(x:any, y:any) {: "Shl(" ^ x ^ ", " ^ y ^ ")" :}
 any : Shra(x:any, y:any) {: "Shra(" ^ x ^ ", " ^ y ^ ")" :}
 any : Shrl(x:any, y:any) {: "Shrl(" ^ x ^ ", " ^ y ^ ")" :}
-any : Mr(any) {: "Mr(" ^ any ^ ")" :}
-any : Sx(any) {: "Sx(" ^ any ^ ")" :}
-any : Zx(any) {: "Zx(" ^ any ^ ")" :}
 any : Lobits(any, w) {: "Lobits(" ^ any ^ ", " ^ string_of_int w ^ ")" :}
 any : BitExtract(lsb:any, y:any, n:int) {: sprintf "BitExtract(%s, %s, %d)" lsb y n :}
 
@@ -422,32 +260,6 @@ any : Goto(any) {: "Goto(" ^ any ^ ")" :}
 
 The code in this section walks an RTL and calls suitable \burg\
 constructors. 
-The most interesting code is probably the code that maps the
-general representation of application into one that uses a unique
-constructor for each operator.
-<<special cases for particular operators>>=
-| RP.App(("add",  ws), [x; y]) -> conAdd  (exp x) (exp y)
-| RP.App(("sub",  ws), [x; y]) -> conSub  (exp x) (exp y)
-| RP.App(("mul",  ws), [x; y]) -> conMul (exp x) (exp y)
-| RP.App(("neg",  ws), [x])    -> conNeg  (exp x)
-| RP.App(("and",  ws), [x; y]) -> conAnd  (exp x) (exp y)
-| RP.App(("or",   ws), [RP.Fetch(l,_) as x; RP.Fetch(l',_) as y]) ->
-  if RU.Eq.loc l l' then conMr (exp x) else conOr  (exp x) (exp y)
-| RP.App(("or",   ws), [x; y]) -> conOr   (exp x) (exp y)
-| RP.App(("xor",  ws), [x; y]) -> conXor  (exp x) (exp y)
-| RP.App(("shl",  ws), [x; y]) -> conShl  (exp x) (exp y)
-| RP.App(("shra", ws), [x; y]) -> conShra (exp x) (exp y)
-| RP.App(("shrl", ws), [x; y]) -> conShrl (exp x) (exp y)
-| RP.App(("ppc_xer_ov_set", []), [x]) -> conOvSet (exp x)
-| RP.App(("ppc_xer_add",  []), [x;y]) -> conXerAdd (exp x)  (exp y)
-| RP.App(("ppc_xer_sub",  []), [x;y]) -> conXerSub (exp x)  (exp y)
-| RP.App(("ppc_xer_mul",  []), [x;y]) -> conXerMul (exp x)  (exp y)
-| RP.App(("ppc_xer_mulu", []), [x;y]) -> Impossible.unimp "ppc mulu"
-| RP.App(("bitExtract", [w; n]), [lsb; src]) -> conBitExtract (exp lsb) (exp src) n
-| RP.App((op, ws), [x; y]) 
-    when Strutil.Set.mem op cmp -> conCmp op (exp x) (exp y)
-@ 
-Here is the rest of the mapping.  
 <<code to follow the labeler>>=  
 let rec const = function
   | RP.Bool(true)             -> conTrue  ()
@@ -456,21 +268,29 @@ let rec const = function
   | RP.Diff(c1,c2)            -> conDiff (const c1) (const c2)
   | RP.Late(s,w)              -> conLate s w
   | RP.Bits(b)                -> conBits(b)
+@
 <<code to follow the labeler>>=  
-let cmp = 
-    Strutil.from_list ["eq";"ge";"geu";"gt";"gtu";"le";"leu";"lt";"ltu";"ne"] 
+let cmp = ["eq";"ge";"geu";"gt";"gtu";"le";"leu";"lt";"ltu";"ne"] 
 
 let rec exp = function
   | RP.Const(k)               -> const (k)
   | RP.Fetch(l,w)             -> conFetch (loc l) w
-  <<special cases for particular operators>>
+  | RP.App(("add",  ws), [x; y]) -> conAdd  (exp x) (exp y)
+  | RP.App(("sub",  ws), [x; y]) -> conSub  (exp x) (exp y)
+  | RP.App(("mul",  ws), [x; y]) -> conMul (exp x) (exp y)
+  | RP.App(("neg",  ws), [x])    -> conNeg  (exp x)
+  | RP.App(("and",  ws), [x; y]) -> conAnd  (exp x) (exp y)
+  | RP.App(("or",   ws), [x; y]) -> conOr   (exp x) (exp y)
+  | RP.App(("xor",  ws), [x; y]) -> conXor  (exp x) (exp y)
+  | RP.App(("shl",  ws), [x; y]) -> conShl  (exp x) (exp y)
+  | RP.App(("shra", ws), [x; y]) -> conShra (exp x) (exp y)
+  | RP.App(("shrl", ws), [x; y]) -> conShrl (exp x) (exp y)
+  | RP.App(("ppc_xer_ov_set", []), [x]) -> conOvSet (exp x)
+  | RP.App(("bitExtract", [w; n]), [lsb; src]) -> conBitExtract (exp lsb) (exp src) n
+  | RP.App((op, ws), [x; y]) 
+    when List.mem op cmp -> conCmp op (exp x) (exp y)
   | RP.App((o,_),_)           -> error (sprintf "unknown operator %s" o)
 @ 
-\syryu{
-If [[loc]] is a memory location, then its space is either [['m']] or [['f']].
-For the x86, when [[loc]] is [[fpcc]] (the FPU condition codes) or
-[[fpustatus]] (the FPU status word) is the special case. How about the PPC?
-Finally, [[loc]] cannot be [[RP.Var]].}
 <<code to follow the labeler>>=  
 and loc l = match l with
   | RP.Mem(('m',_,_), Rtl.C c, e, ass) -> conMem (exp e)
@@ -478,61 +298,22 @@ and loc l = match l with
   | RP.Mem(_, _, _, _)     -> error "non-mem, non-reg cell"
   | RP.Var _ | RP.Global _ -> error "var found"
   | RP.Slice(w,i,l)        -> conSlice w i (loc l)
-@ 
-Things start to get a bit baroque here, as we recognize different
-special forms a single effect can take.
-\syryu{
-If an effect is the form $L \mathrel{:=} L \oplus R$, it should be as
-follows:\\
-[[        RP.Store(l, RP.App((_, _), [RP.Fetch(l',_); _]), w)]]\\
-where [[l]] equals to [[l']].
-If an effect is the form $L \mathrel{:=} \oplus L$, it should be as
-follows:\\
-[[        RP.Store(l, RP.App((_, [w']), [RP.Fetch(l',_)]), w)]]\\
-where [[l]] equals to [[l']] and [[w]] equals to [[w']].
-Finally, if the location of a store effect is a control and special register,
-then the location should be either [[SS.indices.SS.pc]] or
-[[SS.indices.SS.cc]] which represents the [[Goto]] or [[Setflags]] effect,
-respectively.
-}
-<<code to follow the labeler>>=  
+
 and effect = function
   | RP.Store(RP.Reg(('c',_,_), i, w),r,_) 
     when i = SS.indices.SS.pc         -> conGoto (exp r)
   | RP.Store(l,e,w)                   -> conStore (loc l) (exp e) w
   | RP.Kill(l)                        -> conKill (loc l)
-@
-The truly ghastly stuff is the stuff that recognizes multiple
-effects that set flags.
-<<code to follow the labeler>>=  
-and rtl (RP.Rtl es) = geffects es
+
+and guarded g eff = match g with
+| RP.Const(RP.Bool b) -> if b then effect eff else conNop()
+| _ -> conGuarded (exp g) (effect eff)
+
 and geffects = function
     | [] -> conNop ()
     | [g, s] -> guarded g s
     | (g, s) :: t -> conPar (guarded g s) (geffects t)
-and is8 b =
-  Bits.width b > 3 & Bits.Ops.eq b (Bits.U.of_int 8 (Bits.width b))
-@ 
-Dealing with a guard is straightforward.
-Either it's trivial, it's a conditional branch, or we pass it off to
-the recognizer (which currently falls on the floor).
-\syryu{
-If a guard [[(guard, effect)]] is a conditional branch, 
-then [[guard]] is as follows:\\
-[[        RP.App((compare, [32]), [RP.Fetch(RP.Reg('c', n, _), _)])]]\\
-where the name of [[compare]] begins with [[ppc_]],
-[[n]] equals to [[SS.indices.SS.cc]],
-and [[effect]] is as follows:\\
-[[        RP.Store(RP.Reg('c', i, _), r, _)]]\\
-where [[i]] equals to [[SS.indices.SS.pc]].}
-<<code to follow the labeler>>=  
-and guarded g eff = match g with
-| RP.Const(RP.Bool b) -> if b then effect eff else conNop()
-| _ -> conGuarded (exp g) (effect eff)
-@
-\syryu{
-For the x86, [[SS.indices.SS.cc]] is [[eflags]]. How about the PPC?
-}
+and rtl (RP.Rtl es) = geffects es
 @
 
 \subsection{The exported recognizers}
@@ -558,8 +339,8 @@ let to_asm r i =
 let is_instruction r =
   try
     let plan = rtl (Down.rtl r) in
-    plan.inst.Camlburg.cost < 100  (* should be true, but shade this... *)
-  with 
+    plan.inst.Camlburg.cost < 100
+  with
   | Camlburg.Uncovered -> false
   | Error msg -> (errmsg r msg; false)
 @                        
