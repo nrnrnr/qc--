@@ -514,7 +514,8 @@ let check width uint64 =
 <<bits.ml ((residualizing))>>=
 let setSize (b,w as bits) width =
     if not (fits bits width)
-    then raise Overflow
+    then
+      raise Overflow
     else (b,width)
 
 @
@@ -571,10 +572,10 @@ let of_stringc str width =
             ( check width c;
               mkBitsINT64 width c
             ) 
-
+@ Here I need to avoid a bug
 <<bits.ml ((residualizing))>>=
 let of_int i width =
-    let uint64 = U.of_int i in
+    let uint64 = (*U.of_int i*) Int64.of_int i in
         ( check width uint64 ;
           mkBitsINT width i
          )
