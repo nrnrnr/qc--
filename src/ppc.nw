@@ -141,19 +141,22 @@ let byte_order = R.BigEndian
 let wordsize = 32
 let pc_lhs = nia
 let pc_rhs = cia
-
 module Address = struct
   type t = Rtl.exp
   let reg (space, n, w) = R.fetch (R.reg (space, n, w)) w
 end
-
+@ 
+This temporary allocator is copied directly from the x86 backend.
+<<ppc postexpander>>=
 let talloc = ref None
 let get_talloc () = match !talloc with
   | Some s -> s
   | None   -> Impossible.impossible "Temp allocator not registered with postexpander"
 let remember_allocator ta = talloc := Some ta
 let talloc space = Talloc.Multiple.reg space (get_talloc ())
-
+@ 
+Contexts.
+<<ppc postexpander>>=
 type context = (Talloc.Multiple.t -> int -> Register.t) * (Register.t -> bool)
 let icontext = Talloc.Multiple.reg 't', fun (c, _, _) -> c = 'r' || c = 't'
 let fcontext = icontext
@@ -173,72 +176,114 @@ let arg_contexts   (n, _) = try SM.find n argmap
 let result_context (n, _) = try SM.find n resmap
                             with Not_found -> Impossible.impossible
                                     ("cannot find result context for "^n)
-
+@ 
+A few utility functions for building common RTL's.
+<<ppc postexpander>>=
 let ui s = Printf.eprintf "*** unimp %s" s; []
 
-let tloc               t = Rtl.reg t
+let tloc t               = Rtl.reg t
 let tval  ((_,_,w) as t) = R.fetch (tloc t) w
 let twidth (_,_,w)       = w
-let tstore       tmp exp = R.store (tloc tmp) exp (twidth tmp)
+let tstore tmp exp       = R.store (tloc tmp) exp (twidth tmp)
 
 let mem    assn w addr = R.mem assn 'm' byte_order w addr
 let memval assn w addr = R.fetch (mem assn w addr) w
-
+@ 
+The load and store instructions on the ppc cannot use register 0 as a
+parameter. Right now this is avoided by not telling the register
+allocator about register 0, so we don't have to worry about that here.
+<<ppc postexpander>>=
 let load ~dst ~addr assn =
   let w = twidth dst in
   assert (w = wordsize);
-  [R.par [ R.store (tloc dst) (memval assn w addr) w
-         ; tstore dst addr
-         ] ]
+  [R.store (tloc dst) (memval assn w addr) w]
 
 let store ~addr ~src assn =
   let w = twidth src in
   assert (w = wordsize);
-  [R.par [ R.store (mem assn w addr) (tval src) w
-         ; tstore src addr
-         ] ]
-
+  [R.store (mem assn w addr) (tval src) w]
+@ 
+The [[xload]] and [[xstore]] functions apply an operator to an
+expression before loading or storing them in the final location. The
+remaining postexpander load and store operations are defined in terms
+of these two functions.
+<<ppc postexpander>>=
 let xload op ~dst ~addr w assn =
-  let ext = R.app (R.opr op [w; twidth dst]) [memval assn w addr]
-  in [tstore dst ext]
+  let ext = R.app (R.opr op [w; twidth dst]) [memval assn w addr] in
+  [tstore dst ext]
 
-let sxload = xload "sx"
-let zxload = xload "zx"
+let xstore op ~addr ~src w assn =
+  let ext = R.app (R.opr op [twidth src; w]) [tval src] in
+  [R.store (mem assn w addr) ext w]
 
-let lostore ~addr ~src w assn =
-  let ext = R.app (R.opr "lobits" [twidth src; w]) [tval src]
-  in [R.store (mem assn w addr) ext w]
-
-let move ~dst ~src = [tstore dst (tval src)]
-
-let li ~dst const = [tstore dst (Up.const const)]
-let lix ~dst exp  = [tstore dst exp]
-
+let sxload  = xload "sx"
+let zxload  = xload "zx"
+let lostore = xstore "lobits"
+@ 
+Values are copied into registers with [[tstore]].
+<<ppc postexpander>>=
+let move ~dst ~src  = [tstore dst (tval src)]
+let li   ~dst const = [tstore dst (Up.const const)]
+let lix  ~dst exp   = [tstore dst exp]
+@ 
+Operators...
+<<ppc postexpander>>=
 let rtlop ~dst op tmpl = [tstore dst (R.app (Up.opr op) (List.map tval tmpl))]
 
 let binop ~dst op tmp1 tmp2 = rtlop dst op [tmp1;tmp2]
 let unop  ~dst op tmp       = rtlop dst op [tmp]
-
+@ 
+Block Copy...
+<<ppc postexpander>>=
 let block_copy ~dst assn1 ~src assn2 width = ui "block_copy"
-
+@ 
+Branch and call rtls.
+<<ppc postexpander>>=
 let br ~tgt = [R.store pc_lhs (tval tgt) wordsize]
 let b ~tgt  = [R.store pc_lhs (Up.const tgt) wordsize]
-let bc tmp1 op tmp2 ~tgt =
-  [ R.guard (R.app (Up.opr op) [R.bool true]) (List.hd (b tgt))
-  ; R.store (R.reg tmp1)
-      (R.app (Up.opr op) [ (R.fetch (R.reg tmp1) wordsize)
-                         ; (R.fetch (R.reg tmp2) wordsize)
-                         ] )
-      wordsize
-  ]
+@ 
+Conditional branches are encoded as a comparison against the
+appropriate bit in the CR register. With this scheme, the opposite
+condition can be derived by changing the guard operator.
+I am using a bits value of 0 because using 1 gives the wrong number.
+<<ppc postexpander>>=
+let bc tmp1 ((opr,ws) as op) tmp2 ~tgt =
+  assert(ws = [32]);
+  let tmp = talloc 't' 32
+  and one = R.bits (Bits.U.of_int 0 1) 1
+  and crf = match opr with
+  | "eq"  -> EQ
+  | "ne"  -> EQ
+  | "lt"  -> EQ
+  | "le"  -> EQ
+  | "gt"  -> EQ
+  | "ge"  -> EQ
+  | "ltu" -> EQ
+  | "leu" -> EQ
+  | "gtu" -> EQ
+  | "geu" -> EQ
+  | _ -> Impossible.impossible "non-comparison in ppc conditional branch"
+  in
+  let crb = R.fetch (R.slice 1 (cr_flag_to_bit crf) cr) 1 in
+  R.guard (R.app (R.opr "ne" [1;1]) [one;crb]) (List.hd (b tgt))
+  :: binop tmp op tmp1 tmp2
 
-
-let bnegate rtl = rtl
+let bnegate rtl =
+  (* Printf.eprintf "\n\n%s\n\n" (Rtlutil.ToReadableString.rtl rtl); *)
+  match Down.rtl rtl with
+  | RP.Rtl[RP.App(("ne", ws), exps), effs] ->
+      Up.rtl(RP.Rtl[RP.App(("eq", ws), exps), effs])
+  | _ -> Impossible.impossible "ill-formed ppc conditional branch"
+@ 
+Call instructions are the same as branches with some additional effects.
+<<ppc postexpander>>=
 let call  ~tgt ~others = [R.par (List.hd (b  tgt) :: List.map Up.effect others)]
 let callr ~tgt ~others = [R.par (List.hd (br tgt) :: List.map Up.effect others)]
 
 let cut_to effects = [R.par (List.map Up.effect effects)]
-
+@ 
+For debugging purposes, all effects that can be preserved are printed.
+<<ppc postexpander>>=
 let don't_touch_me effects =
   let exp = (fun e -> Rtlutil.ToReadableString.exp (Up.exp e))
   and loc = (fun l -> Rtlutil.ToReadableString.loc (Up.loc l)) in
@@ -250,7 +295,9 @@ let don't_touch_me effects =
   in
   Printf.eprintf("dont touch me effects\n");
   List.iter pr effects; false
-
+@ 
+Stack operations...
+<<ppc postexpander>>=
 let opclass op = PX.Register
 
 let stack_depth = 8
@@ -295,7 +342,9 @@ let cvregs = regset 'c' 32 [5(*lr*); 6(*ctr*); 4(*xer*); 2(*cr*)]
 let volregs  = RS.union vregs cvregs
 let nvolregs = nvregs
 @ 
-A function to build a [[Call.t]].
+A function to build a [[Call.t]]. This function is still cheating a
+bit by using the dummy module. I have changed that fields that both
+need to be different, and that I understand.
 <<calling conventions>>=
 let cconv name spec =
   let ws    = Post.wordsize
@@ -328,7 +377,14 @@ PPC.overflow = A.overflow { memsize       = 8
                           , growth        = "down"
                           , max_alignment = 4
                           }
-
+@ 
+For the C convention, the overflow block should contain space
+corresponding to all of the parameters allocated into registers. I
+want something like regs_by_bits for the overflow block. The Mips
+backend uses a postprocess stage to handle something similar (see
+mipscall.nw). In absence of a nicer solution, something like this will
+have to be employed here.
+<<PPC calling convention automata in Lua>>=
 PPC.cc["C"].call =
   { A.widen(32, "multiple")
   , A.widths { 32, 64 }
@@ -347,17 +403,20 @@ PPC.cc["C"].results =
     }
 
 PPC.cc["C"].cutto = { A.widen(32), PPC.overflow }
-
+@
+The [[C--]] convention is the same as the [[C]] convention except that
+we provide an overflow block for results.
+<<PPC calling convention automata in Lua>>=
 PPC.cc["C--"].call    = PPC.cc["C"].call
 PPC.cc["C--"].results = { PPC.cc["C"].results, PPC.overflow }
 PPC.cc["C--"].cutto   = PPC.cc["C"].cutto
-
-PPC.cc["notail"] = PPC.cc["C--"]
-
-A.register_cc(Backend.ppc.target,"C"     ,PPC.cc["C"     ])
-A.register_cc(Backend.ppc.target,"C'"    ,PPC.cc["C"     ])
-A.register_cc(Backend.ppc.target,"C--"   ,PPC.cc["C--"   ])
-A.register_cc(Backend.ppc.target,"notail",PPC.cc["notail"])
+@ 
+Finally, register all of the conventions for the PPC.
+<<PPC calling convention automata in Lua>>=
+A.register_cc(Backend.ppc.target,"C"     ,PPC.cc["C"  ])
+A.register_cc(Backend.ppc.target,"C'"    ,PPC.cc["C"  ])
+A.register_cc(Backend.ppc.target,"C--"   ,PPC.cc["C--"])
+A.register_cc(Backend.ppc.target,"notail",PPC.cc["C--"])
 @ 
 % ---------------------------------------------------------------------------
 \section{Target Specification}
