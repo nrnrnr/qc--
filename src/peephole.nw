@@ -85,7 +85,7 @@ let subst_forward _ proc =
   <<propagation>>
   let fwd = D.fwd_iteration { D.split_info = split; D.merge_split_info = merge
                             ; D.init_info = init; D.propagate = propagate } in
-  ignore (fwd proc.P.cfg); 
+  (try ignore (fwd proc.P.cfg) with G.Tx.Exhausted -> ()); 
   !changed
 @ 
 According to Jack Davidson, we should try two substitutions, not just
@@ -93,7 +93,11 @@ one, when peephole optimizing.
 <<propagation>>=
 let propagate node avail =
   <<substitution>>
-  let update rtl = G.update_instr (replace rtl) node; changed := true in
+  let update rtl =
+    G.Tx.start_exn proc.P.cfg;
+    G.update_instr (replace rtl) node;
+    changed := true;
+    G.Tx.finish proc.P.cfg in
   let () = 
     match G.to_executable node with
     | Some rtl ->

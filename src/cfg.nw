@@ -508,12 +508,38 @@ We can change the graph by any of the following operations:
 <<graph and node mutators>>=
 @ 
 \paragraph{Transactions}
-In case we ever want to debug, mutations should be logged as
-transactions.
-This way we can replay them later...
+
+To debug an optimizer, we perform each code improvement as a
+\emph{transaction}.
+A~transaction is started by [[start_cond]] or [[start_exn]] and is
+ended by [[finish]].
+The claim is that the observable behavior of a program should be
+unchanged by a transaction.
+
+As implemented at present, the transaction mechanism does nothing
+other than provide each client (an optimization pass) a way to abort
+itself when 
+the \emph{transaction limit} is reached.
+Function [[start_cond]] tells the client to abort by returning
+[[false]];
+function [[start_exn]] tells the client to abort by raising
+[[Exhausted]].
+The idea is that a test driver can do a binary search on the limit so
+that we can identify exactly the transaction that causes a program to
+fail. 
+
+N.B.~All flow graphs in a program share a single transaction counter
+and limit. 
 <<graph and node mutators>>=
-val start_transaction : 'i cfg -> string -> unit
-val end_transaction   : 'i cfg -> unit
+module Tx : sig
+  exception Exhausted
+  val start_cond : 'i cfg -> bool   (* returns true iff transaction OK *)
+  val start_exn  : 'i cfg -> unit   (* raises Exhausted iff transaction not OK *)
+  val finish     : 'i cfg -> unit   (* marks end of transaction *)
+
+  val set_limit  : int -> unit      (* set the transaction limit *)
+  val used       : unit -> int      (* say how many transactions were used *)
+end
 @ 
 \paragraph{Altering successors}
 We alter edges either by setting successors or by splicing in graphs.
@@ -1487,8 +1513,26 @@ let set_fsucc node ~succ = match node with
 Transactions are not usable as yet; some useful function has not been added to
 the interface yet.
 <<graph and node mutators implementation>>=
-let start_transaction cfg name = ()
-let end_transaction cfg = ()
+module Tx = struct
+  exception Exhausted
+  type t = { mutable limit : int; mutable remaining : int; }
+  let ts = { limit = max_int; remaining = max_int; }
+
+  let start_cond _ =
+    if ts.remaining > 0 then
+      ( ts.remaining <- ts.remaining - 1; true )
+    else
+      false
+  
+  let start_exn g = if start_cond g then () else raise Exhausted
+
+  let finish _ = ()
+
+  let set_limit n = ts.limit <- n; ts.remaining <- n
+  let used _ = ts.limit - ts.remaining
+
+  let _ = Reinit.at (fun () -> ts.remaining <- ts.limit)      
+end
 @
 It may be useful to invert a conditional branch so that the false arm can
 be the layout successor of the cbr.
