@@ -221,46 +221,6 @@ let rec actual env (target: Target.info) globals (hint, e) =
 
 [[expr]] translates an {\small AST} expression into an [[Rtl.expr]].  
 
-An assignment is an effect that is captured by an {\rtl}.  The lvalue
-of an assignment becomes a {\rtl} [[location]].  We currently ignore
-alignments and hints. The only names on the left hand side of an
-assignment are registers; all syntactically possible names (like
-labels, continuations) must have been rejected by the static semantics
-check. 
-
-<<>>=
-and lvalue env (target: Target.info) globals = function
-    | A.LValueAt(x,_)          -> lvalue env target globals x
-    | A.Var(hint,x)            -> 
-        let ((_,s),(denot,t)) = F.findv x env in 
-            ( match denot with
-            | F.Register(r)    -> 
-                let width = bits t in 
-                  ( match r.F.rhint with
-                  | F.RReg r ->
-                        ( try Target.StrMap.find r target.Target.regmap with 
-                        | Not_found -> assert false
-                        )
-                  | _        ->
-                      Rtl.Var
-                          ( x
-                          , r.F.index
-                          , width
-                          )
-                  )
-            
-            | _                -> assert false (* impossible *)
-            )
-    | A.Mem(t,e,a)             -> let width = ty env t in
-                                  Rtl.Cell
-                                      ( default_memory
-                                      , target.Target.byteorder
-                                      , width
-                                      , expr env target globals e
-                                      , default_assertion
-                                      )
-@
-
 A variable as part of an expression denotes a value; it is translated
 into a [[Rtl.expr]].  Depending on the denotation of the variable it
 becomes a constant of either link-time or compile-time, or something
@@ -357,6 +317,55 @@ let flows ast =
         loop empty ast 
 @
 
+An assignment is an effect that is captured by an {\rtl}.  The lvalue
+of an assignment must be either a memory location, or a register.  For
+global registers, [[globals]] provides the desired effect when
+supplying the expression representing the value to be stored.  A Local
+register is represented by an [[Rtl.Var]] locations which a value can
+be stored in.
+
+The last two arguments to the [[assign]] function, [[lhs]] and [[e]],
+denote the lvalue of the the assignment, and the expression [[e]]
+computing the value to be stores.  The expression is already an
+{\rtl}.
+
+<<>>=
+let rec assign env target globals lhs (e: Rtl.expr) = match lhs with
+    | A.LValueAt(x,_)  -> assign env target globals x e
+    | A.Var(hint,x)    ->
+        let ((_,s),(denot,t)) = F.findv x env in
+            ( match denot with
+            | F.Register(r) ->
+                let width = bits t in
+                    ( match s with
+                    | F.Global -> 
+                        let (write,read) = ( try StrMap.find x globals with
+                                           | Not_found -> assert false
+                                           ) 
+                        in write e
+                    | F.Local ->
+                        let loc = Rtl.Var
+                            ( x
+                            , r.F.index
+                            , width
+                            )
+                        in Rtl.Store(loc, e, width)
+                    )
+            | _ -> assert false (* impossible *)
+            )
+    | A.Mem(t,addr,a)    -> 
+        let width = ty env t in
+        let loc   = Rtl.Cell
+              ( default_memory
+              , target.Target.byteorder
+              , width
+              , expr env target globals addr
+              , default_assertion
+              )
+        in
+            Rtl.Store(loc,e,width)       
+@
+
 
 % ------------------------------------------------------------------ 
 \subsubsection{Procedure Body} 
@@ -385,12 +394,11 @@ let rec body env target globals props graph after bb =
 
 <<cases for translating statements>>=
 | A.AssignStmt(lhs,rhs) ->
-    let effects = 
-        List.map2 (fun lhs rhs -> 
-                   R.assign (lvalue env target globals lhs) 
-                            (expr env target globals rhs)) lhs rhs
+    let effects = List.map2 (fun lhs rhs ->
+        R.truth,assign env target globals lhs (expr env target globals rhs)) 
+        lhs rhs
     in 
-        decorate (GM.assign (R.par effects) after) 
+        decorate (GM.assign (Rtl.Rtl effects) after) 
 
 <<cases for translating statements>>=
 | A.IfStmt ( e, ss1, ss2) ->
@@ -787,12 +795,12 @@ collect some from the actual usage patterns and then put them in their
 own module. 
 
 <<module R>>=
-  let truth      = Rtl.Const(Rtl.Bool(true))
-  let width_of r = 77 (* all exprs 77 bits wide - bogus *)
-  let assign l r = Rtl.Rtl [(truth, Rtl.Store(l, r, width_of r))]
-  let skip       = Rtl.Rtl []
-  let par l      = List.fold_right 
-                   (fun (Rtl.Rtl l1) (Rtl.Rtl l2) -> Rtl.Rtl (l1 @ l2)) l skip
+let truth      = Rtl.Const(Rtl.Bool(true))
+let width_of r = 77 (* all exprs 77 bits wide - bogus *)
+let assign l r = Rtl.Rtl [(truth, Rtl.Store(l, r, width_of r))]
+let skip       = Rtl.Rtl []
+let par l      = List.fold_right 
+               (fun (Rtl.Rtl l1) (Rtl.Rtl l2) -> Rtl.Rtl (l1 @ l2)) l skip
 @
  
 % ------------------------------------------------------------------ 
