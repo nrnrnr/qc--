@@ -210,6 +210,7 @@ static int is_sorted(void) {
       <<conditionally spray information about the [[pc_map]] array>>
       return 0;
     }
+  <<conditionally announce that [[pc_map]] is sorted>>
   return 1;
 }
 @ 
@@ -251,8 +252,9 @@ pc_map_entry* Cmm_lookup_entry(const Cmm_Codeptr caller)
 @ 
 And this is for debugging!
 <<conditionally spray information about the [[pc_map]] array>>=
+#define SHOW_UNSORTED 1
 { char *debug = getenv("QCDEBUG");
-  if (debug && strstr(debug, "pcmap")) {
+  if (SHOW_UNSORTED || (debug && strstr(debug, "pcmap"))) {
     fprintf(stderr, "C-- Surprise! PCMAP array is unsorted!\n");
     for (p = Cmm_pc_map; p < Cmm_pc_map_limit; p++) {
       fprintf(stderr, "  ra = %8p", (void*)p->ra);
@@ -261,6 +263,11 @@ And this is for debugging!
       fprintf(stderr, "\n");
     }
   }
+}
+<<conditionally announce that [[pc_map]] is sorted>>=
+{ char *debug = getenv("QCDEBUG");
+  if (debug && strstr(debug, "pcmap"))
+    fprintf(stderr, "C-- info: PCMAP array is sorted, as expected\n");
 }
 @ 
 \subsubsection{Locations}

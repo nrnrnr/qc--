@@ -17,6 +17,7 @@ don't provide access to global variables.
 <<data structures>>
 <<exposed private data structures>>
 <<public functions>>
+<<exposed private functions>>
 #endif /* QCMM_RUNTIME_H */
 @
 The definitions of the basic {\PAL}  types are public.
@@ -589,6 +590,12 @@ int Cmm_is_thread_start_frame(struct cmm_pc_map_entry *rtdata, Cmm_Codeptr pc) {
          (unsigned) Cmm_start_thread_helper <= (unsigned) pc &&
          (unsigned) pc <= (unsigned) Cmm_thread_helper_fence;
 }
+@ Because the run-time system is split across multiple C~files, this
+function needs to be exposed---but it is private to the {\PAL}
+run-time system, and it is an unchecked run-time error for client code
+to call this function.
+<<exposed private functions>>=
+int Cmm_is_thread_start_frame(struct cmm_pc_map_entry *rtdata, Cmm_Codeptr pc);
 <<implementations of public functions>>=
 Cmm_Cont* Cmm_CreateThread(Cmm_Codeptr f, Cmm_Dataptr x, void *s, unsigned n) {
   char *stack = s;
