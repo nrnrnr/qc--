@@ -45,9 +45,11 @@ OCAMLDEFS =     $TOP/config/autodefs.ocaml
 # The here-document ended by EOF relies on a single TAB character at
 # the beginning of a line - so don't substitute spaces for it .
 
+NOWEBBREAKCODE=no
+
 %.tex:Q: %.inc
 	cp $stem.inc $stem.tex
-	ed -s $stem.tex <<EOF 
+	> /dev/null ed -s $stem.tex <<EOF 
 	1
 	i
 	\documentclass{article}
@@ -56,7 +58,7 @@ OCAMLDEFS =     $TOP/config/autodefs.ocaml
 	\usepackage{hyperref}
 	\usepackage[dvips]{graphicx}
 	\pagestyle{noweb}
-	\noweboptions{breakcode}
+	`if [ $NOWEBBREAKCODE = yes ]; then echo '\noweboptions{breakcode}'; fi`
 	\begin{document}
 	\nwfilename{$stem.nw}
 	\tableofcontents
