@@ -1,0 +1,278 @@
+
+% ------------------------------------------------------------------ 
+\section{RTL Constant Folding}
+% ------------------------------------------------------------------ 
+
+An {\rtl} expression can denote a compile-time, link-time, or run-time
+value. The goal is to evaluate any {\rtl} expression as early as
+possible to minimize computation at run-time. This module provides
+routines to evaluate {\rtl} expressions and to simplify {\rtl}s by
+evaluating expressions inside of them. The promise is, that the returned
+{\rtl}s and expressions are simpler as the ones provided.
+
+<<rtleval2.mli>>=
+val rtl:    Rtl.rtl -> Rtl.rtl
+val exp:    Rtl.exp -> Rtl.exp
+val bits:   Rtl.exp -> Bits.bits    (* Error.ErrorExn, convenient function *)
+val bool:   Rtl.exp -> bool         (* Error.ErrorExn, convenient function *)
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+The implementation relies on the following idea: we evaluate an
+expression (or {\rtl}) bottom up as far as possible. The final result
+will tell us whether it needs further ecaluation at link-time or
+run-time.
+
+<<rtleval2.ml>>=
+module RS = Reloc.Simple
+module R  = Rtl
+module RP = Rtl.Private
+module D  = Rtl.Convert (* Down *)
+module U  = Rtl.Revert  (* Up   *)
+
+type reloc     = Bits.bits RS.relocatable
+let impossible = Impossible.impossible
+
+module Private = struct
+    <<RTL operator implementations>>
+    <<traverse RTL>>
+end    
+@
+
+The exported function work on the public representation of {\rtl}s
+
+<<rtleval2.ml>>=
+let rtl r  = U.rtl (Private.rtl (D.rtl r))
+let exp e  = U.exp (Private.exp (D.exp e))
+let bits e = match Private.exp (D.exp e) with
+             | RP.Const(RP.Bits(b)) -> b
+             | _                    -> Error.error "not a constant value"
+             
+let bool e = match Private.exp (D.exp e) with
+             | RP.Const(RP.Bool(b)) -> b
+             | _                    -> Error.error "not a constant condition"
+             
+            
+@
+            
+@
+
+% ------------------------------------------------------------------ 
+\subsection{RTL Traversal}
+% ------------------------------------------------------------------ 
+
+<<traverse RTL>>=   
+let app o w args = match o with
+    |  "add"        -> add w args 
+    |  "and"        -> and' w args 
+    |  "bit"        -> bit w args
+    |  "bool"       -> bool w args
+    |  "borrow"     -> borrow w args
+    |  "carry"      -> carry w args
+    |  "com"        -> com w args
+    |  "conjoin"    -> conjoin w args
+    |  "disjoin"    -> disjoin w args
+    |  "div"        -> div w args
+    |  "divu"       -> divu w args
+    |  "eq"         -> eq w args
+    |  "f2f"        -> f2f w args
+    |  "f2i"        -> f2i w args
+    |  "fadd"       -> fadd w args
+    |  "fcmp"       -> fcmp w args
+    |  "fdiv"       -> fdiv w args
+    |  "float_eq"   -> float_eq w args
+    |  "float_gt"   -> float_gt w args
+    |  "float_lt"   -> float_lt w args
+    |  "fmul"       -> fmul w args
+    |  "fneg"       -> fneg w args
+    |  "fsub"       -> fsub w args
+    |  "ge"         -> ge w args
+    |  "geu"        -> geu w args
+    |  "gt"         -> gt w args
+    |  "gtu"        -> gtu w args
+    |  "i2f"        -> i2f w args
+    |  "le"         -> le w args
+    |  "leu"        -> leu w args
+    |  "lobits"     -> lobits w args
+    |  "lt"         -> lt w args
+    |  "ltu"        -> ltu w args
+    |  "mod"        -> mod' w args
+    |  "modu"       -> modu w args
+    |  "mul"        -> mul w args
+    |  "mulu"       -> mulu w args
+    |  "neg"        -> neg w args
+    |  "ne"         -> ne w args
+    |  "not"        -> not' w args
+    |  "or"         -> or' w args
+    |  "parity"     -> parity w args
+    |  "quot"       -> quot w args
+    |  "rem"        -> rem w args
+    |  "rotl"       -> rotl w args
+    |  "rotr"       -> rotr w args
+    |  "shl"        -> shl w args
+    |  "shra"       -> shra w args
+    |  "shrl"       -> shrl w args
+    |  "sub"        -> sub w args
+    |  "sx"         -> sx w args
+    |  "unordered"  -> unordered w args
+    |  "xor"        -> xor w args
+    |  "zx"         -> zx w args
+    |  "bitExtract" -> bitExtract w args
+    |  o            -> Impossible.impossible ("unknown RTL operator: "^o)
+    
+
+let rec exp = function
+    | RP.Const _ as c               -> c
+    | RP.Fetch (l, w)               -> RP.Fetch (loc l, w)
+    | RP.App ((o,w),args)           -> app o w args 
+        
+and loc = function    
+    | RP.Cell(sp, agg, w, e, ass)   -> RP.Cell(sp, agg, w, exp e, ass)
+    | RP.Var(s,i,w) as v            -> v
+    | RP.Slice(w,i,l)               -> RP.Slice(w, i, loc l)
+
+let effect = function
+    | RP.Store(l,e,w)               -> RP.Store(loc l, exp e, w)
+    | RP.Kill(l)                    -> RP.Kill(loc l)
+
+
+let guarded (e, eff)                = (exp e, effect eff)
+let rtl (RP.Rtl(es))                = RP.Rtl(List.map guarded es)
+@
+% ------------------------------------------------------------------ 
+\subsection{RTL Operator Implementations}
+% ------------------------------------------------------------------ 
+
+All operator implementations have an easy way out: they just construct a
+run-time expression from their arguments and return it. 
+
+<<RTL operator implementations>>=
+let default op w args = RP.App((op,w),args)
+
+let int64 = function
+    | RP.Const(RP.Bits(x)) -> Bits.S.to_int64 x
+    | _                    -> assert false
+
+let int = function
+    | RP.Const(RP.Bits(x)) -> Bits.S.to_int x
+    | _                    -> assert false
+
+let to_bits i w = RP.Const(RP.Bits(Bits.S.of_int64 i w))
+let to_bool b   = RP.Const(RP.Bool(b)) 
+
+let is_bits = function
+    | RP.Const(RP.Bits(_)) -> true
+    | _                    -> false
+
+let add w args = match (w,args) with
+    | [w],[x;y] when is_bits x && is_bits y 
+                -> to_bits (Int64.add (int64 x) (int64 y)) w
+    | _         -> default "add" w args
+    
+
+
+let and' w args = default "and" w args
+let bit w args  = default "bit" w args
+let bool w args = default "bool" w args
+let borrow w args = default "borrow" w args
+let carry w args = default "carry" w args
+let com w args  = default "com" w args
+let conjoin w args = default "conjoin" w args
+let disjoin w args = default "disjoin" w args
+
+let div w args  = match (w,args) with
+    | [w],[x;y] when is_bits x && is_bits y 
+                -> to_bits (Int64.div (int64 x) (int64 y)) w
+    | _         -> default "div" w args
+    
+let divu w args = default "divu" w args
+
+let eq w args   = match (w,args) with
+    | [w],[x;y] when is_bits x && is_bits y 
+                -> to_bool ((int64 x) = (int64 y)) 
+    | _         -> default "eq" w args
+    
+let f2f w args  = default "f2f" w args
+
+let f2i w args  = default "f2i" w args
+let fadd w args = default "fadd" w args
+let fcmp w args = default "fcmp" w args
+let fdiv w args = default "fdiv" w args
+let float_eq w args = default "float_eq" w args
+let float_gt w args = default "float_gt" w args
+let float_lt w args = default "float_lt" w args
+let fmul w args = default "fmul" w args
+let fneg w args = default "fneg" w args
+let fsub w args = default "fsub" w args
+let ge w args   = default "ge" w args
+let geu w args  = default "geu" w args
+let gt w args   = default "gt" w args
+let gt w args   = default "gt" w args
+let gtu w args  = default "gtu" w args
+let i2f w args  = default "i2f" w args
+let le w args   = default "le" w args
+let leu w args  = default "leu" w args
+let lobits w args = default "lobits" w args
+let lt w args   = default "lt" w args
+let lt w args   = default "lt" w args
+let ltu w args  = default "ltu" w args
+let mod' w args = default "mod" w args
+let modu w args = default "modu" w args
+
+let mul w args  = match (w,args) with
+    | [w],[x;y] when is_bits x && is_bits y 
+                -> to_bits (Int64.add (int64 x) (int64 y)) w
+    | _         -> default "mul" w args
+
+let mulu w args = default "mulu" w args
+
+let neg w args  = match (w,args) with
+    | [w], [x]  when is_bits x 
+                -> to_bits (Int64.neg (int64 x)) w
+    | _         -> default "neg" w args
+
+let ne w args = match (w,args) with
+    | [w], [x;y]  when is_bits x && is_bits y 
+                -> to_bool ((int64 x) <> (int64 y))
+    | _         -> default "ne" w args
+    
+let not' w args = default "not" w args
+let or' w args  = default "or" w args
+let parity w args = default "parity" w args
+let quot w args = default "quot" w args
+let rem w args  = default "rem" w args
+let rotl w args = default "rotl" w args
+let rotr w args = default "rotr" w args
+let shl w args  = match (w,args) with
+    | [w], [x;y] when is_bits x && is_bits y 
+                -> to_bits (Int64.shift_left (int64 x) (int y)) w 
+    | _         -> default "shl" w args
+
+let shra w args  = match (w,args) with
+    | [w], [x;y] when is_bits x && is_bits y 
+                 -> to_bits (Int64.shift_right (int64 x) (int y)) w 
+    | _          -> default "shra" w args
+
+let shrl w args  = match (w,args) with
+    | [w], [x;y] when is_bits x && is_bits y 
+                 -> to_bits (Int64.shift_right_logical (int64 x) (int y)) w 
+    | _          -> default "shrl" w args
+
+let sub w args  = match (w,args) with
+    | [w],[x;y] when is_bits x && is_bits y  
+                -> to_bits (Int64.sub (int64 x) (int64 y)) w
+    | _         -> default "sub" w args
+    
+let sx w args   = match (w,args) with
+    | [i;j],[x] when is_bits x
+                -> to_bits (int64 x) j
+    | _         -> default "sx" w args
+
+let unordered w args = default "unordered" w args
+let xor w args  = default "xor" w args
+let zx w args   = default "zx" w args
+let bitExtract w args = default "bitExtract" w args
+@    

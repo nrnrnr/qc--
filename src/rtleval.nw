@@ -106,11 +106,10 @@ module CompileTime = struct
     
     let embed b = R.bits b (Bits.width b)
     
-    let apply (op,_ as opr) args =
-        let f    = try Rtlop.Impl.lookup (Rtl.Revert.opr opr)
-                   with Not_found -> E.error ("unknown operator "^op)
+    let apply (op,w) args =
+        let e = Rtleval2.exp (Rtl.app (Rtl.opr op w) (List.map embed args))
         in    
-            project (D.exp (f (List.map embed args)))
+            project (D.exp e)
 end
 @
 

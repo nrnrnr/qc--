@@ -40,6 +40,20 @@ end
 @
 
 % ------------------------------------------------------------------ 
+\subsection{Evaluation Time Classification}
+% ------------------------------------------------------------------ 
+
+The form of an {\rtl} expression tells whether it is a compile-time
+constant, link-time constant, or run-time expression.
+
+<<rtlutil.mli>>=
+module Time: sig
+    val compile:    Rtl.exp -> bool (* true, iff compile-time const *)
+    val link:       Rtl.exp -> bool (* true, off compile-time or link-time *)
+end
+@
+
+% ------------------------------------------------------------------ 
 \subsection{Read-Write Sets}
 % ------------------------------------------------------------------ 
 
@@ -165,6 +179,8 @@ end
 
 <<rtlutil.ml>>=
 module RP = Rtl.Private
+module U  = Rtl.Revert
+module D  = Rtl.Convert
 
 module Width = struct
     <<Width>>
@@ -185,6 +201,10 @@ end
 module ToString = struct
     <<ToString>>
 end
+
+module Time = struct
+    <<Time>>
+end    
 @
 
 Register allocation may benefit from knowing whether an {\rtl} represents a
@@ -491,7 +511,26 @@ let rtl' (R.Rtl gg) =
 let rtl = rtl' @<< Rtl.Convert.rtl
 @
 
+% ------------------------------------------------------------------ 
+\subsection{Evaluation Time Classification}
+% ------------------------------------------------------------------ 
 
+<<Time>>=
+let compile e = match D.exp e with
+    | RP.Const(RP.Bits _) -> true
+    | RP.Const(RP.Bool _) -> true
+    | RP.Const(RP.Late _) -> true
+    | _                   -> false
+
+let link e = match D.exp e with     
+    | RP.Const(RP.Bits _) -> true
+    | RP.Const(RP.Bool _) -> true
+    | RP.Const(RP.Late _) -> true
+    | RP.Const(RP.Link _) -> true       
+    | RP.App(("add",_), [RP.Const(RP.Link _); RP.Const(RP.Bits _)])
+        -> true
+    | _                   -> false
+@
 
 % ------------------------------------------------------------------ 
 \subsection{Conversion to String}
@@ -567,5 +606,4 @@ let rtl r =
     let pp = rtl' (R.Convert.rtl r) in
         Pp.ppToString 66 (* line width *) pp
 @
-
 

@@ -4,40 +4,18 @@
 \section{Translation of {\PAL} operators to RTL operators}
 % ------------------------------------------------------------------ 
 
-This module provides translation of {\PAL} operators to {\rtl}
-operators, types, and implementations for {\rtl} operators.  The
-semantics of an {\rtl} operator is independent of its implementation.
-Therefore run-time and compile-time implementations of an operator share
-the same type. 
+This module provides the translation of a {\PAL} operator to an {\rtl}
+operator.  {\PAL} and {\rtl} operators are closely related: a {\PAL}
+operator is in general an instance of a polymorphic {\rtl} operator.
 
-{\rtl} operators are closely related to {\PAL} primitive operators. The
-[[Translate]] module provides [[operator]] to typecheck the application
-of a {\PAL} primitive operator and to translate the operator to an
-{\rtl} operator. It returns the type of the result, and the {\rtl}
-operator. The client has tp supply the name of the {\PAL} operator and
-the types of the arguments. In case of an error (unknown operator, type
-check fails), [[Error.ErrorExn]] is raised.
+The [[operator]] function returns the type of the operator's result, and
+an {\rtl} operator that implements the {\PAL} operator.
 
 <<rtlop.mli>>=
 module Translate : sig
-    val operator:  op:string -> Types.ty list -> Types.ty * Rtl.opr  
-    (* ErrorExn *)
+    val operator: op:string -> Types.ty list -> Types.ty * Rtl.opr (*ErrorExn*)
 end
 @
-
-% ------------------------------------------------------------------ 
-\subsection{Compile-Time implementations of RTL operators}
-% ------------------------------------------------------------------ 
-
-Module [[Impl]] provides compile-time implementations of {\rtl}
-operators. 
-
-<<rtlop.mli>>=
-module Impl : sig
-    val lookup: Rtl.opr -> Rtl.exp list -> Rtl.exp       (* Not_found *)
-end
-@
-
 
 % ------------------------------------------------------------------ 
 \subsection{Types of RTL operators}
@@ -46,9 +24,6 @@ end
 Note: the [[Types]] module is not intended for the casual user. There
 should be no reason why you need to know about the types of a {\rtl}
 operator. 
-
-% [[Poly]] returns the polymorphic type of an {\rtl} operator. It is a
-% checked run-time error to look up an unknown operator. 
 
 [[Mono]] takes an [[Rtl.opr]] operator and reconstructs its monomorphic
 type (using the width list inside the operator). If the operator is
@@ -59,8 +34,6 @@ module Types: sig
     val mono: Rtl.opr -> Types.monotype      (* Not_found *)
 end
 @
-
-
 
 % ------------------------------------------------------------------ 
 \subsection{Implementation}
@@ -73,10 +46,6 @@ module Types = struct
     <<Types>>
 end
 
-module Impl  = struct
-    <<CT>>
-end    
-
 module Translate = struct
     <<Translate>>
 end
@@ -87,18 +56,18 @@ end
 \subsection{RTL-Op Types}
 % ------------------------------------------------------------------ 
 
-\emph{Some documentation explaning what is going on here would be most welcome.}
-
 The [[ops]] table associates {\rtl} operators with their types. A
 function type is constructed by [[T.proc]] that takes the list of
 arguments and the result type. Most functions are polymorphic; a
 [[T.bitsv]]~$n$ introduces a (bound) polymorphic [[bits]] type variable
 $n$. For example, the type for [[add]] demands that all arguments and
-the result have the same width. 
+the result have the same width. If the type variable of the result is
+not identical to one of the arguments, the operator is polymorphic in
+its return size. 
 
 <<Types>>=
 module T = Types
-
+(**) (* == result size is polymorphic *)
 let ops = Strutil.assoc2map
     [  "add"        , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1)
     ;  "and"        , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1)
@@ -112,8 +81,8 @@ let ops = Strutil.assoc2map
     ;  "div"        , T.proc [T.bitsv 1; T.bitsv 2] (T.bitsv 2)
     ;  "divu"       , T.proc [T.bitsv 1; T.bitsv 2] (T.bitsv 2)
     ;  "eq"         , T.proc [T.bitsv 1; T.bitsv 1] T.bool
-    ;  "f2f"        , T.proc [T.bitsv 1; T.bitsc 2; T.bitsv 2] (T.bitsv 2)
-    ;  "f2i"        , T.proc [T.bitsv 1; T.bitsc 2; T.bitsv 2] (T.bitsv 2)
+(**);  "f2f"        , T.proc [T.bitsv 1; T.bitsc 2] (T.bitsv 2)
+(**);  "f2i"        , T.proc [T.bitsv 1; T.bitsc 2] (T.bitsv 2)
     ;  "fadd"       , T.proc [T.bitsv 1; T.bitsv 1; T.bitsc 2] (T.bitsv 1)
     ;  "fcmp"       , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsc 2)
     ;  "fdiv"       , T.proc [T.bitsv 1; T.bitsv 1; T.bitsc 2] (T.bitsv 1)
@@ -128,17 +97,17 @@ let ops = Strutil.assoc2map
     ;  "gt"         , T.proc [T.bitsv 1; T.bitsv 1] T.bool
     ;  "gt"         , T.proc [T.bitsv 1; T.bitsv 1] T.bool
     ;  "gtu"        , T.proc [T.bitsv 1; T.bitsv 1] T.bool
-    ;  "i2f"        , T.proc [T.bitsv 1; T.bitsc 2; T.bitsv 2] (T.bitsv 2)
+(**);  "i2f"        , T.proc [T.bitsv 1; T.bitsc 2] (T.bitsv 2)
     ;  "le"         , T.proc [T.bitsv 1; T.bitsv 1] T.bool
     ;  "leu"        , T.proc [T.bitsv 1; T.bitsv 1] T.bool
-    ;  "lobits"     , T.proc [T.bitsv 1; T.bitsv 2] (T.bitsv 2)
+(**);  "lobits"     , T.proc [T.bitsv 1] (T.bitsv 2)
     ;  "lt"         , T.proc [T.bitsv 1; T.bitsv 1] T.bool
     ;  "lt"         , T.proc [T.bitsv 1; T.bitsv 1] T.bool
     ;  "ltu"        , T.proc [T.bitsv 1; T.bitsv 1] T.bool
     ;  "mod"        , T.proc [T.bitsv 1; T.bitsv 2] (T.bitsv 2)
     ;  "modu"       , T.proc [T.bitsv 1; T.bitsv 2] (T.bitsv 2)
-    ;  "mul"        , T.proc [T.bitsv 1; T.bitsv 2] (T.bitsv 2)
-    ;  "mulu"       , T.proc [T.bitsv 1; T.bitsv 2] (T.bitsv 2)
+(**);  "mul"        , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1) (*XXX*)
+(**);  "mulu"       , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1) (*XXX*)
     ;  "neg"        , T.proc [T.bitsv 1] (T.bitsv 1)
     ;  "ne"         , T.proc [T.bitsv 1; T.bitsv 1] T.bool
     ;  "not"        , T.proc [T.bool] T.bool
@@ -153,10 +122,10 @@ let ops = Strutil.assoc2map
     ;  "shrl"       , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1)
     ;  "sub"        , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1)
     ;  "sub"        , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1)
-    ;  "sx"         , T.proc [T.bitsv 1; T.bitsv 2] (T.bitsv 2)
+(**);  "sx"         , T.proc [T.bitsv 1] (T.bitsv 2)
     ;  "unordered"  , T.proc [] (T.bitsc 2)
     ;  "xor"        , T.proc [T.bitsv 1; T.bitsv 1] (T.bitsv 1)
-    ;  "zx"         , T.proc [T.bitsv 1; T.bitsv 2] (T.bitsv 2)
+(**);  "zx"         , T.proc [T.bitsv 1] (T.bitsv 2)
     (* the operators below are not legal C-- operators but they
        show up in generated RTLs. In order to typecheck these, we
        have to include them. We need a better solution. XXX *)
@@ -179,85 +148,19 @@ let mono op =
 
 
 % ------------------------------------------------------------------ 
-\subsection{RTL-Op Compile-Time Implementation}
+\subsection{Translation from {\PAL} operators to {\rtl} operators}
 % ------------------------------------------------------------------ 
-
-This is totally bogus.
-
-<<CT>>=
-module B  = Bits
-module R  = Rtl
-module RP = Rtl.Private
-module D  = Rtl.Convert (* Down *)
-module U  = Rtl.Revert  (* Up *)
-
-let zero args = match List.map D.exp args with 
-    | [RP.Const(RP.Bits(x))
-      ;RP.Const(RP.Bits(y))] -> let w = B.width x in
-                                R.bits (B.zero w) w
-    | _                      -> assert false
-
-let ii2i op args = match List.map D.exp args with
-    | [RP.Const(RP.Bits(x))
-      ;RP.Const(RP.Bits(y))] ->
-        let wx = Bits.width x      in
-        let wy = Bits.width y      in
-        let x  = Bits.S.to_int64 x in
-        let y  = Bits.S.to_int64 y in
-        let _  = assert (wx = wy)  in 
-           R.bits (Bits.S.of_int64 (op x y) wx) wx
-    | _ -> assert false
-
-let ii2b op args = match List.map D.exp args with
-    | [RP.Const(RP.Bits(x))
-      ;RP.Const(RP.Bits(y))] -> 
-        let wx = Bits.width x      in
-        let wy = Bits.width y      in
-        let x  = Bits.S.to_int64 x in
-        let y  = Bits.S.to_int64 y in
-        let _  = assert (wx = wy)  in 
-            R.bool (op x y)
-    | _  -> assert false
-
-
-let neg args = match List.map D.exp args with 
-    | [RP.Const(RP.Bits(x))] ->
-        let w = B.width x in
-        R.bits (B.zero w) w
-    | _             -> assert false
-
-let ops = Strutil.assoc2map
-    [  "add"    , (ii2i Int64.add)
-    ;  "sub"    , (ii2i Int64.sub)
-    ;  "div"    , (ii2i Int64.div)
-    ;  "mul"    , (ii2i Int64.mul)
-    ;  "neg"    , (neg   )
-    ;  "shl"    , (zero  )
-    ;  "shra"   , (zero  )
-    ;  "shrl"   , (zero  )
-    ;  "eq"     , (ii2b (=))
-    ;  "zx"     , (zero  )
-    ]
-
-let lookup opr = 
-    let (op,_) = Rtl.Convert.opr opr in
-    try Strutil.Map.find op ops with Not_found -> assert false
-@
-
-% ------------------------------------------------------------------ 
-\subsection{Translation from {\PAL} primitive operators}
-% ------------------------------------------------------------------ 
-
 
 {\PAL} primitive operators and {\rtl} primitive operators are closely
-connected. To typecheck the application of a {\PAL} operator we use the
+connected. To typecheck the application of a {\PAL} operator, we use the
 type of the corresponding {\RTL} operator.  For example, the {\PAL}
 operator [[add]] is translated to the {\rtl} operator [[add]], that has
-the exact same signature. The exceptions are {\PAL} operators like
-[[zx32]] that encodes the size of their return value in the name. {\rtl}
-operators are more polymorphic than {\PAL} operators and thus there
-are no separate operators [[zx1]], \dots, [[zx32]], \dots, but a single
-polymorphic operator [[zx]]:
+the exact same signature. 
+
+The exceptions are {\PAL} operators like [[zx32]] that encodes the size
+of their return value in the name. {\rtl} operators are more polymorphic
+than {\PAL} operators and thus there are no separate operators [[zx1]],
+\dots, [[zx32]], \dots, but a single polymorphic operator [[zx]]:
 
 $$[[zx]]: \forall~\alpha,\beta.[[bits]]\alpha \to [[bits]]\beta$$
 
@@ -292,17 +195,25 @@ we find the current operator in the [[alias]] map we replace it with the
 official name. If we don't find it, we assume it is an official name
 already.
 
+If an operator name has a numerical component, it denotes the size of
+the result. Such a size always becomes the last element in the width
+list of an operator. 
+
 <<Translate>>=
 let operator ~op argtys =
     try 
-        let op, argtys = match T.split (unalias op) with
-            | op, None   -> op, argtys
-            | op, Some n -> op, argtys @ [T.bits n]        in
-        let return    = T.appl (Types.poly op) argtys      in
-        let widthlist = T.widthlist (Types.poly op) argtys in
-        return, Rtl.opr op widthlist 
+        let op, retsize = T.split (unalias op)             in
+        ( match retsize with
+        | None ->   let return      = T.appl (Types.poly op) argtys    in
+                    let widthlist   = T.widthlist (Types.poly op) argtys in
+                    return, Rtl.opr op widthlist 
+        | Some n -> let return    = T.bits n in
+                    let widthlist = (T.widthlist (Types.poly op) argtys)@[n] in
+                    return, Rtl.opr op widthlist
+        )            
     with
     | Not_found  -> Error.error ("unknown operator "^op)
     | T.MatchExn -> Error.error "type error in application"
+
 @        
 

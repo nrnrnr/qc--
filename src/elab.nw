@@ -974,9 +974,13 @@ and evalPrimOp env op args =
     E.ematch (E.Raise.list (List.map (evalExpr env) args))
     (fun args ->
         let t,v    = List.split args                 in
-        let rt,opr = Rtlop.Translate.operator op t      in
-        let  f     = Rtlop.Impl.lookup opr           in
-            rt, f v)
+        let rt,opr = Rtlop.Translate.operator op t   in
+        let e      = Rtleval2.exp (Rtl.app opr v)    in
+            ( match D.exp e with
+            | RP.Const(RP.Bits _) -> rt, e
+            | _     -> E.error ("not a compile-time operator: "^op)
+            )
+    )
 
 <<module Eval>>=
 and evalExprs env ee = E.Raise.list (List.map (evalExpr env) ee)
