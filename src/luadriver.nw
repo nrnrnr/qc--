@@ -478,6 +478,8 @@ Options.output   = nil      -- -o
 Options.help     = nil      -- -help
 Options.version  = nil      -- -versions
 Options.interact = nil      -- -i
+Options.interp   = nil      -- -interp
+Options.exec     = nil      -- -e
 -- debug options below
 Options.pretty   = nil      -- -pp
 
@@ -504,6 +506,7 @@ Ld.options  = ""            -- options
 Interp = Interp and error('Interp not empty') or {}
 Interp.path     = "qc--interp"
 Interp.options  = ""
+Interp.hashbang = "/usr/bin/env qc--interp" -- goes into executables
 @
 
 All logic for the command line is encapsulated in the [[CMD]] module.
@@ -540,52 +543,23 @@ directly.
 
 <<Lua Boot Script>>=
 CMD.manpage = [[
-       qc-- processes options from left to right, and then all
-       file name arguments from left to right.
+qc-- processes options from left to right, and then all file name
+arguments from left to right.
 
-       -c  Compile to object code, do not link. Each C-- source
-           ("file.c--") and assembly file ("file.s") is compiled
-           and assembled to an object file ("file.o"), but not
-           linked. This option is incompatible with option -S.
+-c          Compile to object code, do not link. 
+-S          Compile to assembly code, do not assemble or link.
+-o output   Name the output file output.  If -o is not used,
+            the output file defaults to "a.out".
+-Ldir       Add dir to the library search path. 
+-lname      Add library name to the list of libraries to be searched. 
+-interp     Generate code for qc--interp(1).
+-v          Print commands as they are executed. 
+-version    Print version to stdout and stop with exit code 0.
+-help       Summarize options to stdout and stop with exit code 0.
+var=value   Assign the variable var in qc--'s Lua interpreter the 
+            new value. 
 
-       -S  Compile to assembly code, do not assemble or link.
-           Each C-- source ("file.c--") file is compiled to a
-           corresponding "file.s" assembly file. No assembling or
-           linking. This option is incompatible with option -c
-
-       -o output
-           Name the output file output.  If -c or -S is specified
-           and there is exactly  one  source  file,  this option
-           names  the object or assembly file, respectively.
-           Otherwise, this  option  names  the  final executable
-           file generated  by  the  loader. If -o is not used,
-           the output file defaults to "a.out".
-
-       -Ldir
-           Add dir to the library search path. This option can be
-           repeated and is passed to the linker.
-
-       -lname
-           Add library name to the list of libraries to be
-           searched. This option can be repeated is passed to the
-           linker.
-
-       -v  Print commands as they are executed. Commands include
-           calls to all external programs, like the assembler or
-           linker.
-
-       -version
-           Print version to stdout and stop with exit code 0.
-           This option is incompatible with any other option.
-
-       -help
-           Summarize options to stdout and stop with exit code 0.
-           This option is incompatible with any other option.
-
-       var=value
-           Assign the variable var in qc--'s Lua interpreter the
-           new value value. Refer to qc--internals(1) for
-           details.
+See also: qc--(1), qc--internals(1), http://www.cminusminus.org/.            
 ]]
 
 
@@ -641,12 +615,16 @@ function CMD.cmdline (args)
         elseif v == "-version"      then O.version      = not nil
         elseif v == "-help"         then O.help         = not nil
         elseif v == "-pp"           then O.pretty       = not nil
-        elseif Util.contains(v, "=")then dostring (v) 
+        elseif v == "-interp"       then 
+            O.interp = not nil
+            backend  = Backend.interp
+        elseif Util.contains(v, "=") then dostring (v) 
         elseif v == "-o" then 
             i,v    = i+1, args[i+1]
             if not v then error("argument for option -o missing") end
             O.output = v 
         elseif v == "-e" then 
+            O.exe  = not nil
             i, v   = i+1, args[i+1]
             if not v then error("argument for option -e missing") end
             dostring(v)
@@ -668,14 +646,18 @@ see what the user has requested and starts doing it. In a loop it passes
 all file arguments to [[CMD.dispatch]] which decides what to do based on
 the file's suffix and the options.
 
+It turned out that compiling for bytecode and native code cannot be
+uinfied gracefully. We therefore have distinct dispatch functions for
+each case.
+
 <<Lua Boot Script>>=
 function CMD.run ()
     local O = Options
     
-    if      O.help      then CMD.usage ()  ; return 0
-    elseif  O.version   then CMD.version() ; return 0
-    elseif  O.interact  then CMD.interact(); return 0
-    elseif  O.argc == 0 then CMD.usage ()  ; return 0
+    if      O.help                     then CMD.usage ()  ; return 0
+    elseif  O.version                  then CMD.version() ; return 0
+    elseif  O.interact                 then CMD.interact(); return 0
+    elseif  O.argc == 0 and not O.exec then CMD.usage ()  ; return 0
     
     elseif  O.to_obj  and O.to_asm then 
         CMD.error("Options -c and -S exclude each other")
@@ -696,7 +678,11 @@ function CMD.run ()
         objs.n = 0      -- save in OCaml implementation?
 
         while i <= O.argc do
-            obj = CMD.dispatch(Options.argv[i],O.output)
+            if O.interp or backend == Backend.interp then
+                obj = CMD.interp_dispatch(Options.argv[i],O.output)
+            else
+                obj = CMD.compile_dispatch(Options.argv[i],O.output)
+            end    
             -- skip nil entries resulted from *.lua
             if obj then objs.n=objs.n+1; objs[objs.n] = obj end
             i = i+1
@@ -723,7 +709,7 @@ resulting file. Otherwise the [[cmm2asm]] is free to pick a name. This
 applies to the other functions $x$[[2]]$y$ analogously.
 
 <<Lua Boot Script>>=
-function CMD.dispatch(file,out)
+function CMD.compile_dispatch(file,out)
     if Util.checksuffix (file, ".c--") or Util.checksuffix(file, ".cmm") then 
         if      Options.to_asm -- -S option
         then    return CMD.cmm2asm(file, out) 
@@ -740,6 +726,22 @@ function CMD.dispatch(file,out)
         return dofile(file)
     else -- catches -L* -l* *.o *.a *.so
         return file    
+    end
+    return nil
+end
+
+function CMD.interp_dispatch(file,out)
+    if Util.checksuffix (file, ".c--") or Util.checksuffix(file, ".cmm") then 
+        if      Options.pretty
+        then    return CMD.cmm2pp(file, out)
+        else    return CMD.cmm2qs(file, out)
+        end
+    elseif Util.checksuffix(file, ".qs") then
+        return  file
+    elseif Util.checksuffix(file, ".lua") then 
+        return  dofile(file)
+    else -- catches -L* -l* *.o *.a *.so
+        CMD.error("don't know what to do with file "..file)
     end
     return nil
 end
@@ -762,6 +764,13 @@ function CMD.cmm2pp(file,out)
     return pp
 end
 
+function CMD.cmm2qs(file,out)
+    local base = Util.chopsuffix(file)
+    local qs   = out or base .. ".qs"
+    Compile.file(backend, file, qs) 
+    return qs
+end
+
 function CMD.cmm2obj(file,out)
     local base = Util.chopsuffix(file)
     local asm  = base .. ".s"
@@ -779,21 +788,12 @@ end
 
 function CMD.asm2obj(file,out)
     local obj = out or Util.chopsuffix(file) .. ".o"
-    local cmd
-    
-    if backend == Backend.interp then
-        cmd = format ("cp %s %s"
-                     , file
-                     , obj
-                     )
-    else -- regular case
-        cmd = format ("%s %s -o %s %s"
-                     , As.path
-                     , As.options
-                     , obj
-                     , file
-                     )
-    end 
+    local cmd = format ("%s %s -o %s %s"
+                       , As.path
+                       , As.options
+                       , obj
+                       , file
+                       )
     CMD.exec(cmd)
     return obj
     
@@ -815,7 +815,11 @@ end
 @
 
 The linker takes a list of object files in a table [[objs]] and an
-optional output file.
+optional output file. Note, that we are in quoting hell: the [[-P]]
+option typically will be multiple words and therefore we have to quote
+it. The shell-based approach to executing commands is dangerous and we
+should have an [[exec]] function that takes a list of arguments rather
+than a string.
 
 <<Lua Boot Script>>=
 function CMD.link(objs,out)
@@ -828,9 +832,10 @@ function CMD.link(objs,out)
                      , exe
                      )
     else
-        cmd = format ("%s -o %s"
+        cmd = format ("%s -o %s -P '%s'"
                      , Interp.path      -- Interp.options ignored
                      , exe
+                     , Interp.hashbang  -- what goes after #! in script
                      )
     end    
     local i = 1
