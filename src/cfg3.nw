@@ -268,13 +268,22 @@ passed to the functions and returned in an advanced state.  The
 [[copyi]] function implements receiving parameters, the [[copyo]]
 function passing actual parameters. 
 
-<<type formal>>=
-type formal =   { name:      string 
-                ; width:     Rtl.width       (* bits *)
-                ; hint:      string option   (* C-- hint *)
-                ; index:     int             (* run-time API index*)
-                } 
+Formal parameters are implicitly declared local registers when used
+for procedures.  A continuation's formal parameter must be an already
+declared local \emph{or global} register.  Since local registers are
+basically represented as names, but global registers as abstract
+locations of type [[Automaton2.loc]], the [[formal]] type must
+accommodate both.
 
+<<type formal>>=
+type repr       = Local  of  string * int     (* name, index     *)
+                | Global of  Automaton2.loc   (* abstr. location *)     
+                
+type formal =   { width:    Rtl.width
+                ; hint:     string option
+                ; repr:     repr              (* representation *)
+                }
+                 
 <<type actual>>=
 type actual     = Rtl.exp 
                 * Rtl.width 

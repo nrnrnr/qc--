@@ -308,27 +308,29 @@ let actual env target globals (hint, e) =
     let w   = width (ExprTypes.expr env target e) in
     let exp = expr env target globals e           in
         (exp, w, hint) 
+@
 
-(* don't know how to deal with hints on registers that are used
-   as formal parameters for continuations which also might be hinted *)
-        
-let kformal env (khint, n) = 
+\begin{quote}\it
+    As NR pointed out, hints on global registers have no semantics in 
+    {\qcc}. They thus must be ignored when computing parameter
+    passing. --CL
+\end{quote} 
+
+<<Make formals and actuals>>=
+let formal env globals (khint, n) = 
     ( match snd (F.findv n env) with 
-    | (F.Register {F.index=i; F.rhint=h},ty) when F.is_localv n env  -> 
-        { G.name  = n
+    | (F.Register {F.index=i},ty) when F.is_localv n env  -> 
+        { G.repr  = G.Local (n,i)
         ; G.width = width ty
-        ; G.hint  = ( match h, khint with
-                    | F.RReg _ , _  -> assert false (* impossible *)
-                    | F.RHint s, _  -> Some s
-                    | F.RNone  , _  -> None
-                    )
-        ; G.index = i
+        ; G.hint  = khint  
         } 
-    | (F.Register {F.index=i; F.rhint=h},ty) -> assert false 
-        (* don't how to to translate global registers *)
+    | (F.Register {F.index=i; F.rhint=h},ty) -> 
+        { G.repr  = G.Global (globals n)
+        ; G.width = width ty
+        ; G.hint  = khint  
+        } 
     | _ -> assert false
     )
-let formal env n = kformal env (None,n)
 @
     
 
@@ -463,15 +465,18 @@ and jumpStmt state (cconv,e,args,labels) =
                 node     = node
             ;   outgoing = Automaton2.freeze atm :: state.outgoing
             }  
+@
 
-(* 
- * Both automatons use the same base - correct?
- *)
+The copy-out code must honor the hints attached to the actual
+parameters, the copy-in code the hints on the l-lvalues.  The
+[[formal]] function translate these into a format suitable for the
+automaton that guides the parameter passing.
 
+<<Make statements>>=
 and callStmt state (lhs,cconv, e, args, targets, conts) = 
     let rec lvalue = function
         | A.LValueAt(x,_) -> lvalue x
-        | A.Var(hint,x)   -> formal state.env x
+        | A.Var x         -> formal state.env state.globals x 
         | A.Mem _         -> assert false                        in
     let exp     = expr state.env state.target state.globals e    in
     let cc      = state.target.Target.cc (Aux.Option.get default_cc cconv) in
@@ -494,16 +499,12 @@ and callStmt state (lhs,cconv, e, args, targets, conts) =
         ;   incoming = Automaton2.freeze atmi :: state.incoming
         }  
 
-(*
- * what's the default for x/y if no pair given given in source?
- *)         
-        
 and returnStmt state (cconv, kont, args) =
     let const e   = Bits.to_int (compile_const state.env state.target e)     in
     let cc        = state.target.Target.cc (Aux.Option.get default_cc cconv) in
     let atm       = Automaton2.mk cc.Target.ret state.inbase                 in
     let (x,y)     = match kont with
-                    | None       -> (0,0) (*XXX*)
+                    | None       -> (0,0) (* default *)
                     | Some (x,y) -> (const x, const y) in
     let rtl       = cc.Target.return                                         in
     let args      = List.map
@@ -524,11 +525,11 @@ and returnStmt state (cconv, kont, args) =
  *)
 
 and contStmt state (label,args)  =
-    let cc        = state.target.Target.cc default_cc         in
-    let args      = List.map (kformal state.env) args (*XXX*) in
-    let atm       = Automaton2.mk cc.Target.cont state.inbase in
-    let copyi,atm = G.gm_copyi state.cfg args atm state.node  in
-    let _         = G.set_label state.cfg label copyi         in
+    let cc        = state.target.Target.cc default_cc               in
+    let args      = List.map (formal state.env state.globals) args in
+    let atm       = Automaton2.mk cc.Target.cont state.inbase       in
+    let copyi,atm = G.gm_copyi state.cfg args atm state.node        in
+    let _         = G.set_label state.cfg label copyi               in
         { state with
             node     = copyi
         ;   incoming = Automaton2.freeze atm :: state.incoming
@@ -714,7 +715,7 @@ let program env target globals asm tt =
         foldl (toplevel env target globals) asm tt
 
 let translate env target prog =
-    let base     = Rtl.link "global base" target.Target.pointersize in (*XXX*)
+    let base     = Rtl.link "global_base" target.Target.pointersize in (*XXX*)
     let map,area = globals target base (F.regdecls env) in
     let lookup   = lookup_global map in
     let asm      = Asm.init () in
