@@ -80,6 +80,9 @@ val to_string: bits -> string
 \subsection{Arithmetic}
 % ------------------------------------------------------------------ 
 
+We prefer to use {\PAL} names, not OCaml names, so logical or is 
+[[or]] and not [[logor]].
+Except that because [[or]] is a reserved word, it's [[or']].
 <<bits.mli ((evaluating))>>=
 module Ops : sig
   val add       : bits -> bits -> bits
@@ -87,12 +90,13 @@ module Ops : sig
   val shra      : bits -> bits -> bits
   val shrl      : bits -> bits -> bits
   val shl       : bits -> bits -> bits
-  val logor     : bits -> bits -> bits
+  val or'       : bits -> bits -> bits
   val mul_trunc : bits -> bits -> bits
   val neg       : bits -> bits
 
   val sx        : int  -> bits -> bits
   val zx        : int  -> bits -> bits
+  val lobits    : int  -> bits -> bits
   
   val eq        : bits -> bits -> bool
   val ne        : bits -> bits -> bool
@@ -407,6 +411,10 @@ let zx k (b,w) =
     let n = zx64 b w in
         (n, k)
 
+let lobits k (b, w) =
+  assert (k <= w);
+  (sx64 b k, k)
+
 let shra (b,w) (b',w') =
     assert (w = w');
     let n  = zx64 b w in
@@ -420,7 +428,7 @@ let shl (b,w) (b',w') =
     assert (w = w');
     (zx64 (Int64.shift_left b (Int64.to_int b')) w, w)
 
-let logor (b,w) (b',w') =
+let or' (b,w) (b',w') =
     assert (w = w');
     (zx64 (Int64.logor b b') w, w)
 @
