@@ -171,8 +171,7 @@ rule    : ID COLON toppat cost code { fun terms ->
 
 A pattern receives the set of declared terminal types [[ts]]. This set
 is used to decide about the type of an explicitly typed variable. A
-variable $x$ without an explicit type defaults to $x:x$ where $x$ is
-treated as a non-terminal type. 
+variable $x$ without an explicit type defaults to $x:x$.
 
 We have two productions for patterns: [[pat]], and [[toppat]]. Toplevel
 patterns [[toppat]] must not contain literals or terminal variables.
@@ -184,7 +183,10 @@ restrictions.
 pat     : INT                       { fun ts -> S.Literal(S.Int($1)) }
         | STRING                    { fun ts -> S.Literal(S.String($1))}
         | ID LPAREN pats RPAREN     { fun ts -> S.Con($1, rev ($3 ts))}
-        | ID                        { fun ts -> S.Var($1, S.NonTerm $1)}
+        | ID                        { fun ts -> 
+                                      let t = if S.StringSet.mem $1 ts
+                                              then S.Term $1 else S.NonTerm $1  
+                                      in S.Var($1, t)}
         | ID COLON ID               { fun ts -> 
                                       let t = if S.StringSet.mem $3 ts
                                               then S.Term $3 else S.NonTerm $3  
