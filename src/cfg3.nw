@@ -1,0 +1,527 @@
+
+\input{macros.tex}
+
+
+% l2h substitution cfg CFG
+% l2h substitution dots ...
+% l2h substitution AST AST
+% l2h substitution ast AST
+% l2h substitution rtl RTL
+% l2h substitution ir IR
+% l2h substitution noweb NOWEB
+% l2h substitution qcc QC--
+% l2h substitution C C--
+% l2h substitution PAL C--
+% l2h substitution pal C--
+% l2h substitution asdl ASDL
+% l2h substitution ocaml OCaml
+% l2h substitution forall forall
+% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
+
+% ------------------------------------------------------------------ 
+\section{Control-Flow Graph}
+% ------------------------------------------------------------------ 
+
+For code generation, the compiler translates the dynamic part of a
+{\PAL} procedure into a control flow-graph (\cfg).  Each node is
+contains a target-specific register-transfer list {\rtl} that later is
+translated to machine instructions.  The lifetime of a control-flow
+graph has two distinct phases:
+
+\begin{enumerate}
+\item Creation.
+\item Analysis and semantics preserving modification.
+\end{enumerate}
+
+Once a procedure is translated into an initial {\cfg} it is analyzed
+and according to the results rewritten gradually in a semantics
+preserving way.  Analysis includes liveness analysis, modifications
+include establishing a the machine invariant that every {\rtL} is
+representable by a machine instruction and modifications resulting
+from register allocation and spilling.
+
+The creation interface for the {\cfg} can take a different level of
+abstraction than the analysis and modification interface:  some
+details are only relevant at the analysis level.  For example, a call
+is represented by a number of assignments for parameter passing and a
+call node.  However, during creation we can maintain the illution that
+all these aspects are captured by one node.  The analysis phase, on
+the other hand, has to look at all the nodes seperately. 
+Consequently, the control flow-graph interface is layered:  a
+high-level interface for creating {\cfg}s, and a low-level interface
+for analysis and modification.
+
+% ------------------------------------------------------------------ 
+\subsection{Auxilliary Types}
+% ------------------------------------------------------------------ 
+
+A control flow graph is cyclic in general.  In order to express cycles
+while building the graph nodes can be labeled and referred to by name. 
+In particular it is possible to use these names before its defining
+label exists.  The following types are used both by the high-level
+interface. 
+
+{\PAL} continuations can be used to model exception handling.  Nodes
+that can transfer control to a continuation are annotated with a
+[[cuts]] value that lists the different possible nodes/continuations.
+
+<<auxilliary types>>=
+type cuts =     { cuts    : string list
+                ; unwinds : string list
+                ; returns : string list
+                ; aborts  : bool
+                }
+@
+                
+A formal parameter is a variable, an actual parameter an expression. 
+Both can have optional hints, and have a [[width]], i.e.~a type. 
+
+<<auxilliary types>>=
+type formal =   { name:      string 
+                ; width:     Rtl.width       (* bits *)
+                ; hint:      string option   (* C-- hint *)
+                ; api:       int             (* run-time API index*)
+                } 
+
+type actual     = Rtl.exp 
+                * Rtl.width 
+                * string option               (* hint *)
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Low-Level Interface -- Types}
+% ------------------------------------------------------------------ 
+
+On the lowest level, a {\cfg} is a stateful object, containing
+stateful nodes that respond to messages.  Different kind of nodes
+\emph{behave} differently, but they all share a common interface.
+Interfaces are expressed as class types for clarity.
+
+<<class types>>=
+class type cfg = object 
+    (* observations *)
+    method nodes:       node list         (* all nodes of self *)
+    method entry:       node              (* entry node        *)
+    method exit:        node              (* exit node         *)
+    
+    (* construction *)
+    method add:         node -> unit      (* add node to self           *)
+    method set_entry:   node -> unit      (* declare node to entry node *)
+    method set_exit:    node -> unit      (* declare node to exit node  *)
+    method new_id:      int               (* return fresh id            *)
+    method lookup:      string -> proxy
+end
+@
+
+A complete {\cfg} contains [[nodes]]; two of them are special: the
+[[entry]] and the [[exit]] node. 
+
+\begin{itemize}
+\item During construction-time, [[add]] adds a new node to a {\cfg}. 
+\item The [[set]] methods establish the entry and exit node of a
+      graph.  It is a checked run-time error if a [[node]] argument of
+      a [[set]] method was not added to the graph before.
+\item A [[cfg]] instance maintains a counter for integer identifiers that
+      are used by nodes to create unique identifiers. Every [[id]] message
+      returns a locally unique integer.
+\item A [[cfg]] instance maintains a map from strings to [[proxy]]
+      nodes. The implementation guarantees that the same string
+      returns the same object. This means, that the first message with
+      a new string creates a [[proxy]] object that can later be
+      referred to using the string.
+\end{itemize}
+
+<<class types>>=
+and node = object 
+    (* observations *)
+    method cfg:         cfg               (* the cfg self belongs to       *)
+    method rtl:         Rtl.rtl           (* rtl of self                   *)
+    method succ:        node list         (* successor nodes               *)
+    method pred:        node list         (* predecessor node              *)
+    method id:          int               (* id of self                    *)
+    method show:        unit              (* string representation of self *)
+    
+    (* construction *)
+    method linked:      node -> unit      (* self became a successor of node*)
+    method upd_pred:    (node -> node) -> unit
+    method upd_succ:    (node -> node) -> unit
+end
+@
+
+A [[node]] belongs to exactly one graph [[cfg]]; within that graph is
+has a uniqoue [[id]].  Nodes are linked with each other:  [[succ]]
+returns a node's successors, [[pred]] its predecessors.  For
+debugging, [[show]] writes a node's [[id]] and those of its successors
+and predescessors to stdout.
+
+The [[linked n]] method informs a node that [[n]] has become its
+predecessor.  Each node maintains a list of its predecessors and
+successors.  These lists can be updated using the [[upd]] methods
+which provide a function that maps a node to a possibly different one.
+
+\begin{quote}\it
+    What happens in the case of [[#upd_succ (fun f _ -> x)]] where all
+    successors are changed to the same node? Is this legal?
+\end{quote}
+ 
+<<class types>>=
+and proxy = object
+    inherit node
+    method set_node:    node -> unit
+end        
+@
+
+A [[proxy]] node is a node that acts as a placeholder for another
+node.  This another node can be supplied after a [[proxy]] instance
+was created, using [[set_node]].  It is a checked run-time error to
+send any message except [[cfg]], [[linked]], or [[pred]] before a node
+was supplied using [[set_node]].  Using [[set_node]] again, is a
+checked run-time error. 
+
+<<rtl dummy sig>>=
+module Rtl : sig 
+    type rtl 
+    type exp 
+    type width
+    val null: rtl
+end
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Low-Level Interface -- Node and Graph Creation}
+% ------------------------------------------------------------------ 
+
+Nodes come in different flavors, representing different aspects of a
+control-flow graph.  However, they all repsond to a the common
+[[node]] interface.  Nodes are created by class functions, taking
+additional arguments specific to the node flavor at hand.  All class
+functions take their [[cfg]] and an [[rtl]] as argument.  In the
+following, the term \emph{nodes} are often used instead of the more
+precise term \emph{node class functions}.
+
+<<classes>>=
+class graph   : cfg
+class assign  : cfg -> Rtl.rtl -> succ:node -> node
+class return  : cfg -> Rtl.rtl -> int * int -> node
+class goto    : cfg -> Rtl.rtl -> node list -> node
+class jump    : cfg -> Rtl.rtl -> node list -> node
+class cutto   : cfg -> Rtl.rtl -> cuts -> node
+class call    : cfg -> Rtl.rtl -> cuts -> succ:node -> node
+class branch  : cfg -> Rtl.rtl -> ifso:node -> ifnot:node -> node 
+(*
+class between : cfg -> Rtl.rtl -> node list -> node -> node
+*)
+@
+
+\begin{itemize}
+\item To create a [[cfg]], instanciate [[graph]] and pass it to all
+      class functions that create nodes for it.
+      
+\item A graph is built bottom-up: nodes, take their successors as arguments
+      upon creation.  Some sucessors are only known by their names,
+      hidden behind labels. It's a node's implementation
+      responsibility to resolve these names in order to find the real
+      nodes. 
+
+\item A labeled node is created by putting it inside a [[proxy]] that
+      was created by a [[lookup]] message with the label as a
+      parameter. 
+\end{itemize}
+
+% ------------------------------------------------------------------ 
+\subsection{Putting the Interface together}
+% ------------------------------------------------------------------ 
+
+<<cfg3.mli>>=
+<<rtl dummy sig>>
+<<auxilliary types>>
+<<class types>>
+<<classes>>
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+
+<<cfg3.ml>>=
+<<rtl dummy struct>>
+<<auxilliary types>>
+<<class types>>
+@
+
+<<rtl dummy struct>>=
+module Rtl = struct
+    type rtl   = unit
+    type exp   = unit
+    type width = unit
+    let null   = ()
+end
+@
+
+<<cfg3.ml>>=
+module NodeSet = Set.Make(struct type t=node   let compare=compare end)
+module NodeMap = Map.Make(struct type t=string let compare=compare end)
+
+
+class graph: cfg =
+object (self)
+    val mutable _labels  =  NodeMap.empty
+    val mutable _nodes   =  NodeSet.empty
+    val mutable _exit    = (None: node option)
+    val mutable _entry   = (None: node option)
+    val mutable _id      = 0
+
+    method add node =
+        _nodes <- NodeSet.add node _nodes
+        
+    method nodes = 
+        NodeSet.elements _nodes
+
+    method lookup l =
+        try  NodeMap.find l _labels
+        with Not_found -> 
+            let p = new label (self: #cfg :> cfg) Rtl.null
+            in
+                ( _labels <- NodeMap.add l p _labels
+                ; p
+                )
+
+    method set_exit node  =
+        ( assert (NodeSet.mem node _nodes)
+        ; _exit <- Some node
+        )
+
+    method set_entry node =
+        ( assert (NodeSet.mem node _nodes)
+        ; _entry <- Some node
+        )
+
+    method exit = 
+        match _exit with
+        | None   -> assert false
+        | Some n -> n
+
+    method entry =
+        match _entry with
+        | None   -> assert false
+        | Some n -> n
+
+    method new_id =
+        ( _id <- _id + 1
+        ; _id
+        )
+end
+
+and virtual vnode cfg rtl = 
+object (self)
+    val mutable _pred   = NodeSet.empty
+    val mutable _rtl    = (rtl : Rtl.rtl) 
+    val _cfg            = (cfg : cfg)
+    val _id             = cfg#new_id
+    
+    initializer 
+        _cfg # add (self : #node :> node)
+
+    method cfg =
+        _cfg
+    
+    method rtl =
+        _rtl
+
+    method virtual succ: node list
+
+    method pred  = 
+        NodeSet.elements _pred
+    
+    method succ = 
+        ([]: node list)
+    
+    method linked node =
+        _pred <- NodeSet.add node _pred
+
+    method id =
+        _id
+
+    method upd_pred map =
+        let nodes = self#pred in
+        let nodes = List.map map nodes in
+        let nodes = List.fold_right NodeSet.add nodes NodeSet.empty in
+            _pred <- nodes
+
+    method virtual upd_succ: (node -> node) -> unit 
+        
+    method show =
+        ( Printf.printf "node %d\n" _id
+        ; Printf.printf "   predecessors:"
+        ; List.iter (fun n -> Printf.printf " %d" n#id) (self#pred)
+        ; Printf.printf "\n"
+        ; Printf.printf "   successors:"
+        ; List.iter (fun n -> Printf.printf " %d" n#id) (self#succ)
+        ; Printf.printf "\n"
+        )
+end        
+and label cfg rtl : proxy =
+object (self)
+    inherit vnode cfg rtl
+
+    val mutable _node = (None: node option)
+
+    method private node =
+        match _node with
+        | None   -> assert false
+        | Some n -> n
+
+    (* cfg, id, linked, pred, upd_pred are handled by the proxy,
+       the rest by _node *)
+
+    method id         = self#node#id
+    method show       = self#node#show
+    method succ       = self#node#succ
+    method upd_succ f = self#node#upd_succ f 
+        
+    method set_node n = 
+        ( assert (_node = None)
+        ; _node <- Some n
+        )
+end
+
+class virtual vcut cfg rtl (cuts: cuts) =
+    let lookup n = ((cfg#lookup n) :> node) in
+object(self)
+    inherit vnode cfg rtl
+    
+    val mutable _cuts    = List.map lookup cuts.cuts
+    val mutable _unwinds = List.map lookup cuts.unwinds
+    val mutable _returns = List.map lookup cuts.returns
+    val _aborts          = cuts.aborts
+    
+    initializer 
+        let succ = List.concat [_cuts;_unwinds;_returns] in 
+            List.iter (fun n -> n#linked (self: #node :> node)) succ
+        
+    method virtual succ : node list    
+end
+
+(* ------------------------------------------------------------------ *)
+class assign cfg rtl ~succ : node =
+object (self)
+    inherit vnode cfg rtl
+    val mutable _next = succ
+    
+    initializer
+        succ # linked (self: #node :> node)
+    
+    method upd_succ f = _next <- f succ
+    method succ       = [_next]
+end 
+
+class between cfg rtl before after: node =
+object (self)
+    inherit vnode cfg rtl
+    val mutable _next = (after: node)
+
+    initializer
+        ( List.iter (fun n -> self#linked n) before
+        ; List.iter (fun n -> n#upd_succ 
+            (fun n -> if n = after  then (self:#node:>node) else n))
+            before
+        ; after#upd_pred  
+            (fun n -> if List.mem n before then (self:#node:>node) else n)
+        )
+        
+    method succ       = [_next]
+    method upd_succ f = _next <- f _next 
+end
+    
+
+class return cfg rtl (x,y) : node =
+object (self)
+    inherit vnode cfg rtl
+    val _x      = (x: int)
+    val _y      = (y: int)
+
+    method succ       = []
+    method upd_succ f = ()
+end
+ 
+class goto cfg rtl targets : node =
+object (self)
+    inherit vnode cfg rtl
+    val mutable _targets = targets
+    
+    initializer
+        List.iter (fun n -> n#linked (self: #node :> node)) _targets
+    
+    method succ       = _targets
+    method upd_succ f = _targets <- List.map f _targets  
+end
+
+class jump cfg rtl targets : node =
+object (self)
+    inherit vnode cfg rtl
+    val mutable _targets = targets
+    
+    initializer
+        List.iter (fun n -> n#linked (self: #node :> node)) _targets
+       
+    
+    method succ       = _targets
+    method upd_succ f = _targets <- List.map f _targets  
+end
+
+class cutto cfg rtl cuts: node =
+object (self)
+    inherit vcut cfg rtl cuts
+    
+    method upd_succ f =
+        ( _cuts    <- List.map f _cuts
+        ; _unwinds <- List.map f _unwinds
+        ; _returns <- List.map f _returns
+        )
+
+    method succ =
+        List.concat [_cuts;_unwinds;_returns]
+end
+
+class call cfg rtl cuts ~succ : node =
+object (self)
+    inherit vcut cfg rtl cuts
+
+    val mutable _next = (succ: node)
+
+    initializer
+        succ # linked (self: #node :> node)
+    
+    method upd_succ f =
+        ( _cuts    <- List.map f _cuts
+        ; _unwinds <- List.map f _unwinds
+        ; _returns <- List.map f _returns
+        ; _next    <- f _next
+        )
+
+    method succ =
+        List.concat [ [_next];_cuts;_unwinds;_returns]
+end
+  
+class branch cfg rtl ~ifso ~ifnot : node =
+object (self)
+    inherit vnode cfg rtl
+
+    val mutable _ifso  = (ifso:  node)
+    val mutable _ifnot = (ifnot: node)
+
+    initializer 
+        ( ifso # linked (self: #node :> node)
+        ; ifso # linked (self: #node :> node)
+        )
+
+    method upd_succ f =
+        ( _ifso  <- f _ifso
+        ; _ifnot <- f _ifnot
+        )
+
+    method succ = 
+        [_ifso;_ifnot]
+end
+
