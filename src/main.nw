@@ -285,4 +285,37 @@ http://www.eecs.harvard.edu/~lindig/
           
           
       
+% ------------------------------------------------------------------  
+\section{This}
+% ------------------------------------------------------------------  
+
+To include some version information into the main binary we provide
+the [[This]] module.  Its source code [[this.ml]] is created during
+the build process from [[this.in]].  Currently only the version
+information stays here but it is a useful place for other informations
+that change frequently.
+
+<<this.in>>=
+(* do not edit - this file is created from this.in through make(1) *)
+
+let system	    = "@this@"
+let architecture    = "@arch@"
+
+@ The functions [[name]] and [[version]] decompose the [[system]]
+string to get the name and version of the system. 
+
+<<this.in>>=
+let name = 
+  try
+    let minus = String.index system '-' in
+      String.sub system 0 minus
+  with Not_found -> "not configured"
+
+let version = 
+  try
+    let minus = String.rindex system '-' in
+      String.sub system (minus + 1) (String.length system - minus - 1)
+  with Not_found -> "not configured"
+@
+
 
