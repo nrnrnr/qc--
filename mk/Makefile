@@ -30,6 +30,7 @@ clean:
 nuke:
 	    rm -f *~ include/*~
 	    for i in lib/regexp lib/bio lib/9 src; do (cd $$i; make nuke); done
+	    rm -f *.tat.gz
 
 FILE    :=  "mk-$(VERSION)"
 
