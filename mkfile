@@ -17,7 +17,7 @@ VERSION =       `date +%Y%m%d`
 # SUBDIRS are made from left to right - order matters
 # ------------------------------------------------------------------ 
 
-SUBDIRS =       cllib asdl lua rtl gen camlburg tools doc src interp 
+SUBDIRS =       cllib asdl rtl gen lua camlburg tools doc src interp 
 
 # A note on profiling.  Profiling is controlled in subdirectories by a
 # PROFILE variable in each mkfile.  Profiling is turned on by default,
@@ -78,13 +78,13 @@ qc--.opt:VQ:     tools.opt lib.opt dirs
 	done
 
 lib:VQ:          dirs
-	for i in cllib asdl lua rtl gen; do 
+	for i in cllib asdl rtl gen lua; do 
 	  (echo "# cd $i" && cd $i && mk $MKFLAGS depend && mk $MKFLAGS update) ||
 	  exit 1
 	done
 
 lib.opt:QV:      dirs
-	for i in cllib asdl lua rtl gen
+	for i in cllib asdl rtl gen lua
 	do 
 	  (echo "# cd $i" && cd $i && mk $MKFLAGS depend && mk $MKFLAGS update.opt) ||
 	  exit 1
