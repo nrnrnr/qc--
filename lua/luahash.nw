@@ -1,7 +1,8 @@
 % -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 
 This is the standard OCaml hash table, except I've added [[first]] and
-[[next]] functions to support Lua's table-enumeration primitive.
+[[next]] functions to support Lua's table-enumeration primitive, plus
+I've added a [[population]] function.
 
 <<luahash.mli>>=
 (***********************************************************************)
@@ -34,6 +35,9 @@ val create : ('a -> 'a -> bool) -> int -> ('a,'b) t
            order of the expected number of elements that will be in
            the table.  The table grows as needed, so [n] is just an
            initial guess. *)
+
+val population : ('a, 'b) t -> int
+        (* number of elements in a table (as distinct from its size) *)
 
 val clear : ('a, 'b) t -> unit
         (* Empty a hash table. *)
@@ -125,6 +129,7 @@ let hash x = hash_param 10 100 x
 
 type ('a, 'b) t =
   { eq : 'a -> 'a -> bool;
+    mutable population : int;
     mutable max_len: int;                     (* max length of a bucket *)
     mutable data: ('a, 'b) bucketlist array } (* the buckets *)
 
@@ -135,9 +140,10 @@ and ('a, 'b) bucketlist =
 let create eq initial_size =
   let s = if initial_size < 1 then 1 else initial_size in
   let s = if s > Sys.max_array_length then Sys.max_array_length else s in
-  { eq = eq; max_len = 3; data = Array.make s Empty }
+  { eq = eq; max_len = 3; data = Array.make s Empty; population = 0 }
 
 let clear h =
+  h.population <- 0;
   for i = 0 to Array.length h.data - 1 do
     h.data.(i) <- Empty
   done
@@ -172,7 +178,13 @@ let remove h key =
       Empty ->
         Empty
     | Cons(k, i, next) ->
-        if h.eq k key then next else Cons(k, i, remove_bucket next) in
+        if h.eq k key then
+          begin
+            h.population <- h.population - 1;
+            next
+          end
+        else
+          Cons(k, i, remove_bucket next) in
   let i = (hash key) mod (Array.length h.data) in
   h.data.(i) <- remove_bucket h.data.(i)
 
@@ -266,7 +278,10 @@ let replace h key info =
   try
     h.data.(i) <- replace_bucket l
   with Not_found ->
-    h.data.(i) <- Cons(key, info, l)
+    begin
+      h.data.(i) <- Cons(key, info, l);
+      h.population <- h.population + 1
+    end
 
 let mem h key =
   let rec mem_in_bucket = function
@@ -286,3 +301,6 @@ let iter f h =
   for i = 0 to Array.length d - 1 do
     do_bucket d.(i)
   done
+
+let population h =
+  h.population

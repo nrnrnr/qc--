@@ -90,9 +90,13 @@ We won't see it.
 <<signatures>>=
   val option : 'a map -> 'a option map
 @ 
-To convert a list of values, we produce a table with a binding of the
+To embed a list of values, we produce a table with a binding of the
 length to the name [[n]] and bindings of the values to the numbers $1..n$.
-We won't see it.
+To project a Lua table down to a list, we first look to see if the table 
+binds the name~[[n]]. 
+If so, we take that to be the number of elements; otherwise we use the table's 
+population.  (In the latter case, lists cannot contain [[nil]].)
+This way, users are free to include [[n]] or not as they choose.
 <<signatures>>=
   val list : 'a map -> 'a list map
 @ 
@@ -337,7 +341,7 @@ let list (ty : 'a map) =
   let untable (t:table) =
     let n = match Table.find t (String "n") with
     | Number x -> to_int x
-    | v -> raise (Projection (v, "length of list")) in
+    | v -> Luahash.population t  in
     let rec elems i =
       if i > n then []
       else ty.project (Table.find t (Number (pervasive_float i))) :: elems (i + 1) in

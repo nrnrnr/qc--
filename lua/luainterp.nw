@@ -12,7 +12,7 @@ embedding and projection, which is the new part.
 <<luainterp.mli>>=
 <<signatures>>
 module Make3  (T : Lib3.COMBINED_TYPE)
-                  (L : Lib3.Lib.TYPEFUL with type 'a T.t = 'a T.t) :
+                  (L : Lib3.TYPEFUL with type 'a combined = 'a T.t) :
     S with type 'a Value.userdata'  = 'a T.t
 @ 
 \subsection{Implementation}
@@ -53,7 +53,7 @@ end
 @ 
 <<luainterp.ml>>=
 module Make3  (T : Lib3.COMBINED_TYPE)
-                  (L : Lib3.Lib.TYPEFUL with type 'a T.t = 'a T.t) :
+                  (L : Lib3.TYPEFUL with type 'a combined = 'a T.t) :
     S with type 'a Value.userdata'  = 'a T.t = struct
   module U = struct
     type 'a t = 'a T.t
@@ -187,6 +187,8 @@ let cpscall f args g k = match f with
          | V.Projection (v, what) -> <<projection error fallback>>
          | Invalid_argument msg -> <<argument error fallback>>)
   | v -> k (fallback "function" g (v :: args))
+
+let apply f g args = cpscall f args g (fun x -> x)
 
 <<projection error fallback>>=
 fallback "error" g [V.String ("cannot convert value " ^ V.to_string v ^ " to " ^ what)]

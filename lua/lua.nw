@@ -62,6 +62,7 @@ If a projection fails, it raises [[Projection]] giving the value it
 tried to project and a string indicating what it tried to project to.
 <<lua.mli>>=
   exception Projection of value * string
+  val projection : value -> string -> 'a
   type ('a,'b) ep = ('a, 'b) Luavalue.ep = { embed : 'a -> 'b; project : 'b -> 'a }
   type 'a map  = ('a, value) ep
   type 'a mapf  (* used to build function maps that curry/uncurry *)
@@ -80,9 +81,13 @@ We won't see it.
 <<lua.mli>>=
   val option : 'a map -> 'a option map
 @ 
-To convert a list of values, we produce a table with a binding of the
+To embed a list of values, we produce a table with a binding of the
 length to the name [[n]] and bindings of the values to the numbers $1..n$.
-We won't see it.
+To project a Lua table down to a list, we first look to see if the table 
+binds the name~[[n]]. 
+If so, we take that to be the number of elements; otherwise we use the table's 
+population.  (In the latter case, lists cannot contain [[nil]].)
+This way, users are free to include [[n]] or not as they choose.
 <<lua.mli>>=
   val list : 'a map -> 'a list map
 @ 
@@ -292,10 +297,9 @@ module type INTERP_CORE = sig
     (* sets fallback, returns previous one *)
 end
 
-(*module MakeCore (Lib : Lib.FULL) : INTERP_CORE*)
 module MakeCore
     (T : Lib3.COMBINED_TYPE)
-    (L : Lib3.Lib.TYPEFUL with type 'a T.t = 'a T.t)
+    (L : Lib3.TYPEFUL with type 'a combined = 'a T.t)
     : INTERP_CORE with type 'a Value.userdata' = 'a T.t
 @ 
 
