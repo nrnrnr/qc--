@@ -70,13 +70,14 @@ let cmd_asdl      = literal "-asdl" **> any --> fun s -> Cmdline.Asdl(s)
 let cmd_check     = literal "-check" **>any --> fun s -> Cmdline.Check(s) 
 let cmd_default   = any                     --> fun s -> Cmdline.Check(s)
 
-let cmd_compile   = ( literal "-c" **> 
-                      literal "-target" **> any *** any 
+let cmd_target    =  (literal "-target" **> any)
+                 ||| succeed "dummy"
+                 
+let cmd_compile   = ( literal "-c" **> cmd_target *** any
                       --> fun (t,f) -> Cmdline.Compile(t,f)
                     )
                    ||| 
-                    ( literal "-target" **> any ***
-                      literal "-c" **> any
+                    ( cmd_target *** literal "-c" **> any
                       --> fun (t,f) -> Cmdline.Compile(t,f)
                     )
 

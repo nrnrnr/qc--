@@ -730,6 +730,8 @@ let imports env asm =
     (F.imported env) asm
 @
 
+
+
 The global registers of a {\PAL} program are assigned to registers and
 memory locations.  The assignment is performed by an automaton
 provided by the [[target]] value.  The sequence of all global register
@@ -773,17 +775,24 @@ let globals target decls =
     let dfa = target.Target.globals in
     let map = StrMap.empty in
         loop map dfa decls
+@
+
+The assembler maintains a current section. To guarantee that
+everything goes into a meaningful section, the first action is to
+start the [[text]] section.
+
 
 
 <<>>=
 let program env target globals asm tt = 
+    let asm = asm ++ Asm.section "text"           in
     let asm = exports env asm                     in
     let asm = imports env asm                     in
         foldl (toplevel env target globals) asm tt
 @
 
-An assembly program is initialized with a list of strings.  These are
-probably target dependent and should be provided by [[target]].
+The initializing argument to [[Asm.init]] is probably target dependent
+and should be provided by [[target]]. 
 
 <<>>=
 type program = Automaton.location StrMap.t * Asm.asm
