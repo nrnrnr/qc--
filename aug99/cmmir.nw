@@ -1,19 +1,48 @@
 \section{Intermediate-code nodes}
 
-<<cmmir.asdl>>=
-module CmmIR (imports RTL) {
-  -- defines the intermediate form of C-- (just the IR nodes)
-  -- needs to be supplemented by an assembly-language interface and a wrapper
-  --   to be a full layer
+The design of the intermediate form is governed by the following
+desiderata:
+\begin{itemize}
+\item
+It should be relatively easy to assign it a formal semantics, viz, the
+semantics in ``Exceptions need not be exceptional.''
+\item
+It should be straightforward to translate to it from abstract syntax.
+\item
+It should be straightforward to generate simple machine code, using
+primarily local strategies.
+\item
+It should be straightforward to generate tables that will support the
+{\PAL} run-time system.
+\end{itemize}
 
+The [[IRNode]] module defines only the nodes used to represent
+procedures.
+These, together with other data types, may be stitched together to
+represent and entire {\PAL} module.
+We assume that the global context representing the module provides
+\begin{itemize}
+\item 
+The {\PAL} [[global]] declarations in the context of which the
+module is compiled.
+\item
+A list of all the IR~nodes used to represent procedures in the
+module. 
+This list is used to map from a ``node id'' to a node.
+\item
+A mapping from label and procedure names to IR~nodes.
+\end{itemize}
+<<cmmir.asdl>>=
+module IRNode (imports RTL) {
   <<ASDL definitions for nodes of abstract \PAL>>
 }
 @ 
-Because ASDL handles trees, not graphs, we represent the graph as a
+Because ASDL handles trees, not graphs, we represent a graph as a
 list of nodes, and we refer to nodes using integer node ids.
+Node ids are intended to be unique per module.
 <<ASDL definitions for nodes of abstract \PAL>>=
-graph = (node*) -- node ids are indexes into this list
-nodeid = (int)
+graph  = (node*) -- node ids are indexes into this list
+nodeid = Node (int)
 @
 Flow-graph nodes are taken from Table 2 of 
 the paper ``Exceptions Need Not Be Exceptional.''
@@ -22,7 +51,7 @@ node = Entry (continuation*, nodeid next)
      | Exit
      | Copyin  (formal*, copy_context, string convention, nodeid next)
      | Copyout (actual*, copy_context, string convention, nodeid next)
-     | Calleesaves (string* variables, nodeid next)
+     | Calleesaves (variable*, nodeid next)
      | Assign (RTL.rtl, nodeid next)
      | Branch (RTL.exp, nodeid true, nodeid false) -- exp is condition
      | Goto (RTL.exp, nodeid* targets)             -- exp is address of target
@@ -30,14 +59,19 @@ node = Entry (continuation*, nodeid next)
      | Jump (RTL.exp, nodeid last)
      | Invoke (RTL.exp, nodeid last)
      | Yield (RTL.exp, contbund)
-attributes (keyvalue* properties) -- used for spans
-keyvalue = (string, RTL.exp)
+attributes (keyvalue* enclosing_spans) -- used for spans
+keyvalue = (int token, RTL.exp value)  -- value is link-time constant
+@ On entry to a code generator,
+the RTL expressions should use no space other than the [[m]]~space (memory); 
+other spaces, including hardware registers, are reserved for the
+private use of the code generator.
 @
-A continuation is a named node.
+The list of continuations in the entry node is used to set up the
+continuation values.
+We need to know a continuation's name, and the node to which it refers.
 <<ASDL definitions for nodes of abstract \PAL>>=
 continuation = (string, nodeid)
 @
-
 The copy nodes ([[Copyin]] for formals and [[Copyout]] for actuals) 
 are used in three different contexts.  The contexts must be
 identified, because each context is likely to have a different
@@ -48,9 +82,8 @@ copy_context = ProcedureParameters    -- used in call, jump, prologue
              | ContinuationParameters -- used in invoke, continuation
 @ A formal or actual carries a type and an optional hint.
 <<ASDL definitions for nodes of abstract \PAL>>=
-formal = (RTL.location, RTL.ty, hint?) 
-actual = (RTL.exp,      RTL.ty, hint?)
-   -- note RTL.location could be variable, temporary, or h/w register
+formal = (variable, RTL.ty, hint?) 
+actual = (RTL.exp,  RTL.ty, hint?)
 @ Note that the type is an RTL type; in particular, the distinction
 between [[bits]]$k$ and [[float]]$k$ has been folded into the hints,
 according to the following table:
@@ -72,17 +105,31 @@ Type&Hint&Type&Hint\\
 \end{quote}
 <<ASDL definitions for nodes of abstract \PAL>>=
 hint = (string)
+@ 
+Variables stand for locations.  On entry, they must have been created
+with the [[RTL.VAR]] constructor.
+<<ASDL definitions for nodes of abstract \PAL>>=
+variable = (RTL.location) -- must be VAR constructor on entry
 @
 The continuation bundle attached to a call shows the possible
 continuations: normal, cuts, unwinds, and returns.
 <<ASDL definitions for nodes of abstract \PAL>>=
 contbund = 
   (nodeid normal, nodeid* cuts, nodeid* unwinds, nodeid* returns, nodeid? aborts)
-@ 
-For an entire procedure, we want its name, its name-mangling
-convention, its formal parameters, its local variables, and its flow graph.
+@ Variables survive calls, but memory locations need not.
+Since these are the only locations used by the elaborator, that's all
+we need say about the semantics, but we will add that we expect the
+code generator will establish, for each new storage space, whether the
+locations in that space may be mutated by calls.
+@
+To compile a procedure, we need its name and the convention for
+mangling the name.
+For convenience in supporting the run-time procedure [[FindVar]], we
+also require the names and types of its formal parameters and local variables,
+in declaration order.
 (We don't need the calling convention as it's embodied in the copy
 nodes in the flow graph.)
 <<ASDL definitions for nodes of abstract \PAL>>=
-proc = (string name, string mangling, formal* args, formal* locals, graph)
+proc = (string name, string? mangling, var_info* formals, var_info* locals)
+var_info = (string name, RTL.ty)
 @
