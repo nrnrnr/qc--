@@ -6,6 +6,9 @@ This document contains the interface and implementation of the mechanism that al
 \section{Interface}
 % ----------------------------------------------------------------------------
 
+This is the interface for the C calling mechanism, which is complicated by
+its inability to completely subvert the C type system.
+
 <<ccall.h>>=
 #ifndef _CCALL_H
 #define _CCALL_H
@@ -26,6 +29,8 @@ This document contains the interface and implementation of the mechanism that al
 % ----------------------------------------------------------------------------
 \subsection{Type Definitions}
 % ----------------------------------------------------------------------------
+
+We implement ``C callers'' to aid in the C calling mechanism.
 
 <<type definitions>>=
 typedef sptr (*c_caller)(sptr, void *);
@@ -240,11 +245,16 @@ Note also that the C caller takes care of pushing and popping the correct number
 In order to deal with functions that return no value (are of return type [[void]]), we hack through with macros [[RETURNS_VAL]] and [[RETURNS_VOID]]; they essentially allow conditional text replacement in the C preprocessor.
 The idea is that a macro is handed off either [[RETURNS_VAL]] or [[RETURNS_VOID]].
 The macro may then pass 2 arguments to whichever of these two macros it receives; this macro call will be replaced by the first of the 2 arguments if [[RETURNS_VAL]] was the macro passed in, and it will be replaced by the second of the 2 arguments if [[RETURNS_VOID]] was the macro passed in.
+
 <<macro definitions>>=
 #define RETURNS_VAL(X, Y)  X
 #define RETURNS_VOID(X, Y) Y
 @ 
+
 [[ITERATE_UNARY_C_CALLERS]], [[ITERATE_BINARY_C_CALLERS]], and company are the iterator macros mentioned above; each takes a macro name as its only argument and calls this macro with the C function signatures its family supports.
+
+This is where additional supported C signatures should be added, if desired.
+
 <<macro definitions>>=
 #define ITERATE_NULLARY_C_CALLERS(F) \
 F(void, RETURNS_VOID) \
@@ -274,10 +284,10 @@ typedef void *pointer;
 #define ITERATE_FOURARY_C_CALLERS(F) \
 F(pointer, pointer, unsigned, pointer, pointer, RETURNS_VAL)
 @ 
-All C callers take two arguments, an argument-passing stack and a [[void *]] function pointer, and return a new pointer to the argument-passing stack.
-<<macro definitions>>=
-/* ARGS OK */
 
+All C callers take two arguments, an argument-passing stack and a [[void *]] function pointer, and return a new pointer to the argument-passing stack.
+
+<<macro definitions>>=
 #define NULLARY_C_CALLER_PROTOTYPE(RETTY, RETURNS) \
 sptr c_caller_void_##RETTY (sptr arguments, void *f);
 
@@ -290,7 +300,9 @@ sptr c_caller_##A##_##B##_##RETTY (sptr arguments, void *f);
 #define FOURARY_C_CALLER_PROTOTYPE(A, B, C, D, RETTY, RETURNS) \
 sptr c_caller_##A##_##B##_##C##_##D##_##RETTY (sptr arguments, void *f);
 @ 
+
 Registration of C callers involves a simple call to [[register_c_sig]]; this associates a C function signature with a C caller implementation.
+
 <<macro definitions>>=
 #define NULLARY_C_CALLER_REGISTRATION(RETTY, RETURNS) \
 register_c_sig("void:" #RETTY, c_caller_void_##RETTY);
@@ -306,10 +318,10 @@ register_c_sig(#A "," #B ":" #RETTY, \
 register_c_sig(#A "," #B "," #C "," #D ":" #RETTY, \
                c_caller_##A##_##B##_##C##_##D##_##RETTY);
 @ 
-The actual implementation of the C callers are simple functions that pop the correct number of arguments from the argument-passing stack, call the indicated C function with these arguments, push the C call's return values atop the argument-passing stack, and return a new pointer to the argument-passing stack.
-<<macro definitions>>=
-/* ARGS */
 
+The actual implementations of the C callers are simple functions that pop the correct number of arguments from the argument-passing stack, call the indicated C function with these arguments, push the C call's return values atop the argument-passing stack, and return a new pointer to the argument-passing stack.
+
+<<macro definitions>>=
 #define NULLARY_C_CALLER(RETTY, RETURNS) \
 sptr c_caller_void_##RETTY (sptr arguments, void *f) { \
   { \
@@ -363,6 +375,11 @@ ITERATE_FOURARY_C_CALLERS(FOURARY_C_CALLER)
 @ 
 
 Our ``[[printf]]'' caller is a hack to allow a varargs printing function.
+It breaks apart the format string and makes a number of successive calls
+to the real [[printf]], as necessary.
+
+To register this [[printf]], a client would call [[register_c_func]]
+with a user-picked name and the signature [["printf"]].
 
 <<function definitions>>=
 sptr c_caller_printf (sptr arguments, void *f) {

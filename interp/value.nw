@@ -24,7 +24,13 @@ This document contains the interface and implementation of {\PAL} primitive oper
 \subsection{Datatypes}
 % ----------------------------------------------------------------------------
 
-We define the union type [[value]] to hold {\PAL} values.  The idea is that a {\PAL} value of type $b$ may be fetched from a C [[value v]] by accessing [[v.]]$b$.  Value stacks are represented in C as pointer-style [[value]] arrays, and generic data stacks are represented by pointer-style byte arrays.
+We define the union type [[value]] to hold {\PAL} values.  
+The idea is that a {\PAL} value of type $b$ may be fetched from a C [[value v]] by accessing [[v.]]$b$.  
+Value stacks are represented in C as pointer-style [[value]] arrays, and generic data stacks are represented by pointer-style byte arrays.
+
+For now, we have commented out a few members of the union, because those types
+are as of now unsupported.
+
 <<type definitions>>=
 typedef union {
   bool    bool;
@@ -32,15 +38,15 @@ typedef union {
   bits8   bits8;
   bits16  bits16;
   bits32  bits32;
-/*  bits64  bits64; */
+  /*  bits64  bits64;  */  /* UNSUPPORTED for now */
   float32 float32;
-/*  float64 float64; */
-/*  float96 float96; */
+  /*  float64 float64; */  /* UNSUPPORTED for now */
+  /*  float96 float96; */  /* UNSUPPORTED for now */
   void    *ptr;
 } value;
 
-typedef value *stack;    /* value stack */
-typedef value *sptr;     /* stack pointer */
+typedef value  *stack;     /* value stack */
+typedef value  *sptr;      /* stack pointer */
 
 typedef u_int8 *datastack;
 typedef u_int8 *dataptr;
@@ -62,7 +68,8 @@ we provide [[to_CMM_value]].
 value to_CMM_value(unsigned v, unsigned width);
 @ 
 
-To perform some quick internal assertions about the [[value]] type, we provide helper [[check_value_types]].
+To perform some quick internal assertions about the [[value]] type, we provide
+helper [[check_value_types]].
 
 <<function prototypes>>=
 void check_value_types(void);
@@ -85,7 +92,7 @@ void check_value_types(void);
 \subsection{Utility Functions and Macros}
 % ----------------------------------------------------------------------------
 
-We define a number of macros/functions to ease the notational burden of value maniuplation.
+We define a few macros/functions to ease the notational burden of value maniuplation.
 On the simplest level, we need to be able to interpret the bits of a C lvalue as if the value were a different type.
 C type casting does not do the trick, as it actually changes the bit-level value being examined; instead, we define the macro [[VIEW]].
 
@@ -93,7 +100,9 @@ C type casting does not do the trick, as it actually changes the bit-level value
 #define VIEW(LVALUE, T)       (*((T *) (&(LVALUE))))
 @
 
-[[to_CMM_value]] embeds a C value in a [[value]].
+[[to_CMM_value]] embeds a C value in a [[value]] without subverting the C
+type system.
+For now, though, it only works for integer values.
 
 <<function definitions>>=
 value to_CMM_value(unsigned v, unsigned width) {
@@ -122,6 +131,9 @@ value to_CMM_value(unsigned v, unsigned width) {
 We perform checks to make sure that our standardized basic data types are of the expected bit widths.
 For now, we also assert that a pointer is 32-bits.
 Some of our code is dependent on this, so we want to cause an error early on if this interpreter is being executed on a machine with a different pointer-size.
+
+The commented-out code is for types not currently supported within the 
+[[value]] type.
 
 <<function definitions>>=
 void check_value_types (void) {

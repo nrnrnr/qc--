@@ -37,7 +37,8 @@ To represent an assembly unit in the interpreter, we create the type [[assembly_
 Note that we keep all [[assembly_unit]]s in an implicit chain (using the
 field [[next]]).  We have no way of finding the beginning of the chain, but
 the linking allows us to load in multiple assembly units at once and then
-properly relocate the [[RBlock]]s associated with each one just loaded.
+properly relocate the [[RBlock]]s associated with each one just loaded (in
+the correct order).
 
 <<type definitions>>=
 typedef struct au {
@@ -76,7 +77,7 @@ static assembly_unit *assembly_unit_new(void);
 @ 
 
 <<function prototypes>>=
-void           assembly_unit_free_all(void);
+void assembly_unit_free_all(void);
 @ 
 
 Note that [[assembly_unit_new]] returns a pointer to an \emph{uninitialized} 
@@ -105,7 +106,7 @@ extern table          assembly_units_table;
 @ 
 
 <<global variable definitions>>=
-assembly_unit    *unit                 = NULL;
+assembly_unit    *unit = NULL;
 table             assembly_units_table;
 
 extern procedure *curr_proc;
@@ -172,6 +173,7 @@ void assembly_unit_free_all(void) {
 
 To create and initialize an [[assembly_unit]] struct, we must make sure to create empty table references and default target-architecture values.
 We use the constants [[#define]]d in [[machine.h]] to initialize the architecture information.
+
 <<function definitions>>=
 assembly_unit *enter_new_assembly_unit(lua_State *L) {
   static unsigned next_au_id = 1;

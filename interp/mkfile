@@ -2,53 +2,53 @@
 # Quick C-- Interpreter
 #
 
-NAME     = qc--interp
-VERSION  = `date +%Y%m%d`
+NAME      = qc--interp
+VERSION   = `date +%Y%m%d`
 
 # ------------------------------------------------------------------
 # paths
 # ------------------------------------------------------------------
 
-TOP      = ..
-LIBDIR   = /home/lair/olinsky/lib
-BINDIR   = ../bin
+TOP       = ..
+LIBDIR    = /usr/lib
+BINDIR    = ../bin
 
-LUALIBS  = $LIBDIR/liblua.a $LIBDIR/liblualib.a
-TOOLS    = /home/lair/olinsky/bin/tools
+LUAINCDIR = /usr/include/lua40
+TOOLS     = /home/lair/olinsky/bin/tools
 
 # ------------------------------------------------------------------
 # main targets
 # ------------------------------------------------------------------
 
-INTERP   = evaluating
-DEPEND   = $CC -MM $INCLUDES
+INTERP    = evaluating
+DEPEND    = $CC -MM $INCLUDES
 
-all:V:     $NAME
-all.opt:V: all
+all:V:      $NAME
+all.opt:V:  all
 
 update:V:     $BINDIR/$NAME
 update.opt:V: update
 
-depend:V:  $DEPEND
+depend:V:   $DEPEND
 
 test:VQ:
-           cd test/
-           mk $MKFLAGS test
-           cd ..
+            cd test/
+            mk $MKFLAGS test
+            cd ..
 
 clean:V:
-           rm -f *.o clients/*.o
+            rm -f *.o clients/*.o
 
 clean.opt:V: clean
 
-clobber:V: clean
-	       rm -f *.blg *.log *.dvi *.inc *.toc *.aux 
-           rm -f clients/*.blg clients/*.inc
-	       rm -f $NWTEXFILES interfaces.nw clients/gc.tex prof.out core *~
-           rm -f $NAME clients/gc_client
-           rm -f *.m *.i decode.fetch bytecode.sled clients/*.i
-           rm -f $COREHDRS $INTERPSRCS
-           rm -f $CLIENTHDRS $CLIENTSRCS
+clobber:V:  clean
+	        rm -f *.blg *.log *.dvi *.inc *.toc *.aux 
+            rm -f clients/*.blg clients/*.inc
+	        rm -f $NWTEXFILES interfaces.nw clients/gc.tex prof.out core *~
+            rm -f $NAME clients/gc_client
+            rm -f *.m *.i decode.fetch bytecode.sled clients/*.i
+            rm -f $COREHDRS $INTERPSRCS
+            rm -f $CLIENTHDRS $CLIENTSRCS
 
 # ------------------------------------------------------------------
 # important file sets
@@ -121,8 +121,8 @@ code:V:      $SRCS $HDRS
 
 <../config/c.mk
 
-LIBS         = -L$LIBDIR -lm
-INCLUDES     = -Iinclude -Iinclude/cii -I.
+LIBS         = -lm -llua40 $LIBDIR/liblualib40.so.4
+INCLUDES     = -Iinclude -Iinclude/cii -I. -I$LUAINCDIR
 
 CFLAGS       = -g -ansi -pedantic -Wall $INCLUDES
 
@@ -146,10 +146,10 @@ gc:V:     clients/gc_client
 interp:V: $NAME
 
 $NAME:    $COREOBJS client.o
-    $CC $CFLAGS $LIBS -o $target $COREOBJS client.o $LUALIBS
+    $CC $CFLAGS $LIBS -o $target $COREOBJS client.o
 
 clients/gc_client: $COREOBJS clients/gc.o
-    $CC $CFLAGS $LIBS -o $target $COREOBJS clients/gc.o $LUALIBS
+    $CC $CFLAGS $LIBS -o $target $COREOBJS clients/gc.o
 
 ###
 ###

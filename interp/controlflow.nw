@@ -27,11 +27,15 @@ This document contains the interface and implementation of the C  representation
 \subsection{Procedures and Continuations}
 % ----------------------------------------------------------------------------
 
-The operational semantics for procedure-calling and continuation-calling instructions require more information about procedures and continuations than simple program counters.  
+The operational semantics for procedure-calling and continuation-calling instructions require more information about procedures and continuations than simply program counters.  
 We create types [[procedure]] and [[continuation]] to encapsulate the necessary information for representing procedures and continuations.  
 Note that we use [[RAddr]]s to represent addresses in program memory, for these structures are used during the interpretation of the input Lua script before sections of program memory are permanently located at addresses.  
-An [[RAddr]] is a relocatable address and is defined by the NJ Machine-Code Toolkit, as will be explained later.
+An [[RAddr]] is a relocatable address and is defined by the NJ Machine-Code Toolkit.
 We must also make sure to store a copy of the uid of the continuation's activation; if a continuation were dead when we tried to cut to it, we would have to look at the continuation's [[u]] and not [[dest_act->u]], which may well have been overwritten by a live activation. 
+
+[[continuation]]s are chained together (through their [[next]] field) so all
+of a given procedure's continuations can be easily associated with it (see
+the [[cont_list]] field of the [[procedure]] type).
 
 <<type definitions>>=
 typedef struct continuation {
@@ -87,6 +91,7 @@ structures.
 @
 
 To keep track of the current procedure, we use a global pointer.
+Note that this should be updated both at load-time \emph{and} at runtime.
 
 <<global variable declarations>>=
 extern procedure *curr_proc;

@@ -1,4 +1,5 @@
 \section{Introduction}
+
 This document contains the interface and implementation of the {\PAL} run-time system, as explained in CVS revision 1.59 of the {\PAL} Reference Manual.
 Please see the manual for detailed information about the functions contained herein.
 
@@ -30,15 +31,6 @@ typedef Cmm_Cont;
 Cmm_Cont       *Cmm_CreateThread(Cmm_Codeptr f, Cmm_Dataptr x, void *s,
                                  unsigned n, void **limit_cookie);
 Cmm_Cont       *Cmm_RunThread   (Cmm_Cont *k);
-@ 
-
-We also export thread creation to {\PAL} itself in the form of [[CreateThread]], which for now may run with a [[c_call]] from {\PAL}.
-[[CreateThread]] takes four arguments: the address of a procedure, data to send to the procedure, a pointer to available space to be used as activation stack space, and the size of this space.
-It returns two values: the created thread, and a cookie pointing to the limit of the activation stack created for the thread.
-[[CreateThread]] takes 
-
-<<faux {\PAL} prototypes>>=
-bits32 CreateThread(bits32 f, bits32 x, bits32 s, bits32 n, bits32 cookie_ptr);
 @ 
 
 % ----------------------------------------------------------------------------
@@ -79,8 +71,8 @@ unsigned        Cmm_GlobalSize   (void);
 % ----------------------------------------------------------------------------
 
 The runtime system exports two functions that allow the interpreter to be started up and shut down.
-[[Cmm_open]] must only be called once, and must be called before any other interpreter-related functions are called.
-[[Cmm_close]] should be called once, but not until after the interpreter has finished its work.
+[[Cmm_open]] must only be called once (unless [[Cmm_close]] was called since it was last called), and must be called before any other interpreter-related functions are called.
+[[Cmm_close]] should be called once, but not until after the interpreter has finished its work, and only after [[Cmm_open]] has been called.
 
 <<function prototypes>>=
 int  Cmm_open(int valstack_size, int argspace_size);
@@ -108,7 +100,8 @@ The header file for the {\PAL} runtime system is contained within [[runtime.h]].
 #endif /* _RUNTIME_H */
 @ 
 
-We import a few values from [[interp.m]]; namely, the number of globals in the loaded {\PAL} code, the array in which the {\PAL} global values are actually stored, and the Lua tag we use to store [[span]] values in our Lua span tables.
+We import a few values from other noweb documents; namely, the number of globals in the loaded {\PAL} code, the array in which the {\PAL} global values are actually stored, and the Lua tags we use to store [[span]] values and [[CMM_label]]s in Lua tables.
+
 <<faux declarations for external definitions>>=
 extern int    num_globals;
 extern value *globals;
@@ -169,8 +162,15 @@ typedef thread       Cmm_Cont;
 \subsection{Creating and Running a Thread}
 % ----------------------------------------------------------------------------
 
-The work of creating a thread is farmed out to [[init_thread]], as defined in [[interp.nw]]; and the work of running a thread is taken care of by similarly defined [[run_interp]].
+The work of creating a thread is farmed out to [[init_thread]], as defined in [[thread.nw]]; and the work of running a thread is taken care of by similarly defined [[run_interp]].
 \emph{FIX: for the moment, it is unclear what exactly [[Cmm_RunThread]] should return, if anything at all.}
+
+We also use some partially-static boot-up code to be able to run initial
+{\PAL} procedure [[f]] with argument [[x]].
+Unfortunately, for the moment, this means that if one were to inspect a
+new thread that has yet to be run, he would be surprised to find the thread
+suspended at this strange boot-up procedure and not at the procedure he
+wrote.
 
 <<thread functions>>=
 Cmm_Cont *Cmm_CreateThread(Cmm_Codeptr f, Cmm_Dataptr x, void *s, unsigned n,
@@ -261,27 +261,13 @@ Cmm_Cont *Cmm_RunThread (Cmm_Cont *k) {
 }
 @ 
 
-\paragraph{Exporting to {\PAL}}
-
-We write [[Cmm_CreateThread_helper]] simply to wrap up a call to [[Cmm_CreateThread]].
-For now this involves only some simple type casting (pointer arguments are passed as [[void *]]s).
-
-<<thread functions>>=
-void *Cmm_CreateThread_helper(void *f, void *x, void *s, unsigned n,
-                                 void *limit_cookie)
-{
-  return (void *) Cmm_CreateThread((Cmm_Codeptr) f, (Cmm_Dataptr) x, 
-                                   (void *) s, (unsigned) n,
-                                   (void **) limit_cookie);
-}
-@ 
-
 % ----------------------------------------------------------------------------
 \subsection{Walking the Stack}
 % ----------------------------------------------------------------------------
 
 Walking the stack is very easy, given our representation of activation stacks.
-To find the youngest activation, determine if an activation is the oldest in its thread, and to find the activation of a given activation's caller we do some pointer arithmetic; this arithmetic, of course, relies on the stacks' direction of growth.
+To find the youngest activation, to determine if an activation is the oldest in its thread, and to find the activation of a given activation's caller, we simply perform pointer arithmetic.
+This arithmetic, of course, relies on the stacks' direction of growth and general layout (see [[thread.nw]]).
 
 <<stack-walking functions>>=
 Cmm_Activation *Cmm_YoungestActivation(const Cmm_Cont *t) {
@@ -317,11 +303,7 @@ int Cmm_ChangeActivation(Cmm_Activation **a) {
 }
 @ 
 
-DOCUMENT
-\emph{These functions are unimplemented and fail assertions for now.}
-
 <<stack-walking functions>>=
-
 void *Cmm_FindLocalVar(const Cmm_Activation *a, unsigned n) {
   return (void *) (a->locals + n);
 }
@@ -329,7 +311,12 @@ void *Cmm_FindLocalVar(const Cmm_Activation *a, unsigned n) {
 unsigned Cmm_LocalVarCount(const Cmm_Activation *a) {
   return (unsigned) (a->locals_end - a->locals);
 }
+@ 
 
+DOCUMENT
+\emph{These functions are unimplemented and fail assertions for now.}
+
+<<stack-walking functions>>=
 void *Cmm_FindDeadLocalVar(const Cmm_Activation *a, unsigned n) {
   /* will this do the trick? */
   return (void *) (a->locals + n);
@@ -343,12 +330,15 @@ void *Cmm_FindStackData(const Cmm_Activation *a, unsigned n) {
 @ 
 
 [[Cmm_GetDescriptor]] must look up the given [[token]] in the Lua span table of the given activation's thread; moreover, it must look for the innermost (table entry with greatest index) value associated with the token.
+Fortunately, [[span.nw]] exports [[span_find_value]] to take care of the job.
 
 <<stack-walking functions>>=
 Cmm_Dataptr Cmm_GetDescriptor(const Cmm_Activation *a, Cmm_Word token) {
   return (Cmm_Dataptr) span_find_value((unsigned) a->pc, (unsigned) token);
 }
 @ 
+
+\emph{This function is unimplemented and fails an assertion.}
 
 <<stack-walking functions>>=
 Cmm_Cont *Cmm_GetUnwindCont(const Cmm_Activation *a, Cmm_Word index) {
@@ -446,7 +436,7 @@ void Cmm_RestoreGlobals_helper(unsigned gpu) {
 % ----------------------------------------------------------------------------
 
 So we can better control how the runtime system fits in with the interpreter, we wrap the interpreter's [[cmm_interp_open]] and [[cmm_interp_close]] functions.
-For one thing, this allows us to register select C functions in the runtime system with the interpreter (to be called from {\PAL}), while keeping the interpreter's implementation otherwise ignorant of the runtime system.
+For one thing, this allows us to register select C functions in the runtime system with the interpreter (to be called from {\PAL}), while keeping the interpreter's implementation otherwise ignorant of the {\PAL} runtime system.
 
 <<controlling the interpreter>>=
 int Cmm_open(int valstack_size, int argspace_size) {
@@ -457,8 +447,6 @@ int Cmm_open(int valstack_size, int argspace_size) {
                   "unsigned:void");
   register_c_func("RestoreGlobals", (void *) Cmm_RestoreGlobals_helper, 
                   "unsigned:void");
-  /* register_c_func("CreateThread",   (void *) Cmm_CreateThread_helper,
-                  "pointer,pointer,unsigned,pointer:pointer"); */
 
   if (rc != 0) { return rc; }
   
@@ -468,9 +456,8 @@ int Cmm_open(int valstack_size, int argspace_size) {
 }  
 @ 
 
-To load in the standard basis, we must first make sure to find it.  We search
-a few common directories and if we don't find it, simply try the current
-directory.  If all fails, we signal an error.
+We use a standard basis mainly to allow some old test code to work fine without
+being updated.
 
 <<load in the standard basis and store error code in [[rc]]>>=
   {
@@ -497,7 +484,7 @@ If an error is encountered in one of the runtime system's functions, a call
 is made to private internal helper [[runtime_sys_err]].
 
 <<internal function prototypes>>=
-void runtime_sys_err(char *fmt, ...);
+static void runtime_sys_err(char *fmt, ...);
 @ 
 
 This function is given an error message's format string and a variable number
@@ -506,7 +493,7 @@ of arguments.
 Callers of this function should expect it \emph{not} to return.
 
 <<internal helpers>>=
-void runtime_sys_err(char *fmt, ...) {
+static void runtime_sys_err(char *fmt, ...) {
   va_list args;
 
   if (fmt != NULL) {

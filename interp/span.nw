@@ -1,6 +1,6 @@
 % -*- mode: Noweb; noweb-code-mode: c-mode -*- %
 
-This document contains the interface and implementation of spans.
+This document contains the interface and implementation of {\PAL} spans.
 
 % ----------------------------------------------------------------------------
 \section{Interface}
@@ -25,8 +25,9 @@ This document contains the interface and implementation of spans.
 \subsection{Data Structures}
 % ----------------------------------------------------------------------------
 
-We construct PC range tables from spans; at runtime, these tables may be
-queried to find the span value associated with a particular PC and token.
+We construct PC (program counter) range tables from {\PAL} spans; at runtime, 
+these tables may be queried to find the span value associated with a 
+particular PC and token.
 
 <<type definitions>>=
 typedef struct span_t {
@@ -68,7 +69,7 @@ unsigned span_find_value(unsigned real_pc, unsigned tok);
 
 To abstract away from the details of memory management, this interface
 provides a function to create a new [[span]] and a function that frees
-all existing [[span]]s in memory.
+\emph{all} existing [[span]]s in memory.
 
 <<function prototypes>>=
 span *span_new(void);
@@ -92,7 +93,7 @@ extern table  span_table;
 table span_table;
 @ 
 
-To help debug the span implementation, we have a verbosity level--just for
+To help debug the span implementation, we have a verbosity level just for
 spans.
 
 <<global variable declarations>>=
@@ -171,6 +172,11 @@ appropriate Lua-style C functions ([[lua_CMM_begin_span]] or
 #define LUA_CURR_SPAN_WITHIN "curr_span"
 @ 
 
+The implementation idea is this: there is a global span table.  In this table,
+we associate each unique span token we come across with its own table.
+We use this table as a numerically-indexed array (queue), and inject a 
+[[span]] pointer into it when [[span_table_begin]] is called.
+
 <<function definitions>>=
 void span_table_begin(table t, unsigned tok, const char *lbl) {
   lua_State   *L;
@@ -204,10 +210,6 @@ void span_table_begin(table t, unsigned tok, const char *lbl) {
       label_define(rl, 0);
       sp->pc_begin = addr_new(rl, 0);
     }
-
-/*
-    sp->pc_begin = addr_new(block_label(crb()), block_lc(crb()));
-*/
     sp->pc_end   = NULL;
 
     sp->enclosing_span = curr_span_within_get(tok);
@@ -243,14 +245,7 @@ void span_table_end  (table t, unsigned tok) {
     curr_span_within->pc_end = addr_new(rl, 0);
   }
 
-/*
-  curr_span_within->pc_end = addr_new(block_label(crb()), block_lc(crb()));
-*/
-
   /* update curr_span_within */
-  /* FIX this needs to allow curr_span_within to be a table mapping
-     token->span
-  */
   curr_span_within_set(tok, curr_span_within->enclosing_span);
 
   assert(lua_gettop(span_table.L) == 0);
@@ -260,6 +255,8 @@ void span_table_end  (table t, unsigned tok) {
 Helper functions [[curr_span_within_get]] and [[curr_span_within_set]]
 assist with keeping track of the smallest span we are currently enclosed
 within (given a specific token).
+They allow us to easily figure out which span we're closing when
+[[span_table_end]] is called.
 
 <<internal function prototypes>>=
 static span *curr_span_within_get(unsigned tok);
@@ -341,8 +338,8 @@ unsigned span_find_value(unsigned real_pc, unsigned tok) {
 }
 @ 
 
-We do an extended binary search to find the smallest span associated with the
-current program counter ([[real_pc]]).
+We perform an extended binary search to find the smallest span associated with
+the current program counter ([[real_pc]]).
 
 <<find smallest span associated with [[real_pc]]>>=
   /* do binary search; only leave 'for' loop if we don't find span */
@@ -378,6 +375,9 @@ current program counter ([[real_pc]]).
     }
   }
 @ 
+
+We must make sure that we have the smallest span associated with the given
+PC, not just one that happens to enclose the given PC.
 
 <<retrieve information from [[last_matching_span]] and return>>=
   if (last_matching_span != NULL) {

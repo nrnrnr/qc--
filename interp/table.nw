@@ -6,6 +6,11 @@ This document contains the interface and implementation of tables; these ``table
 \section{Interface}
 % ----------------------------------------------------------------------------
 
+We choose to use tables (dynamic, associative arrays) in our representation of various pieces of data.
+This interface allows easy manipulation of tables with Lua; additionally, the
+macros in this interface ensure that a [[table]] used in C will not be
+accidentally garbage-collected by Lua.
+
 <<table.h>>=
 #ifndef _TABLE_H
 #define _TABLE_H
@@ -26,15 +31,16 @@ This document contains the interface and implementation of tables; these ``table
 \subsection{Data Structures}
 % ----------------------------------------------------------------------------
 
-We choose to use tables (dynamic, associative arrays) in our representation of various pieces of data.
 The [[table]] data structure allows us to encapsulate all information we need to know about a given table.
+
 <<type definitions>>=
 typedef struct {
   lua_State  *L;      /* the Lua interpreter in which this reference works */
   int         data;   /* this is a Lua reference to a Lua table */
 } table;
 @ 
-These tables are actually stored using embedded Lua tables that may be manipulated using the following convenience macros.
+
+These tables are actually stored using embedded Lua tables that may be manipulated using the convenience macros defined in [[table.nw]].
 References to Lua tables are handed across the C/Lua interface as [[int]]s, 
 hence the strange [[int]] member of this record type.
 
@@ -44,8 +50,8 @@ hence the strange [[int]] member of this record type.
 
 [[fresh_table]] creates a new [[table]] structure with properly initialized data members.
 [[free_table_data]] frees the data stored in a [[table]] structure, but does \emph{not} free the argument [[table]] structure itself.
-[[lua_pushtable]] pushes a copy of the given table atop the Lua stack.
-[[lua_table_foreach]] evaluates Lua function named in string [[str]] for each element in table [[t]]; it returns a Lua error code.
+[[lua_pushtable]] pushes the given table atop the Lua stack.
+[[lua_table_foreach]] evaluates the Lua function named in string [[str]] for each element in table [[t]]; it returns a Lua error code (see [[lua_error_handle]] in [[interp.nw]] for information on handling Lua error codes).
 
 <<function prototypes>>=
 table fresh_table(void);
@@ -56,8 +62,6 @@ void  free_table_data  (lua_State *L, table t);
 void  lua_pushtable    (lua_State *L, table t);
 int   lua_table_foreach(lua_State *L, table t, const char *str);
 @ 
-
-Note that a couple of the most important tables are stored globally.
 
 % ----------------------------------------------------------------------------
 \section{Implementation}
@@ -74,7 +78,8 @@ Note that a couple of the most important tables are stored globally.
 \subsection{Utility Functions}
 % ----------------------------------------------------------------------------
 
-[[fresh_table]] simply creates a fresh [[table]] structure, initializes its Lua table reference to [[LUA_NOREF]] and its [[lua_State *]] to [[NULL]].
+[[fresh_table]] simply creates a fresh [[table]] structure, initializing its
+Lua table reference to [[LUA_NOREF]] and its [[lua_State *]] to [[NULL]].
 
 <<function definitions>>=
 table fresh_table(void) {
@@ -91,10 +96,9 @@ table fresh_table(void) {
 \subsection{Utility Macros}
 % ----------------------------------------------------------------------------
 
-We write a few macros to make it easier to deal with tables stored in Lua.
 [[lua_pushtable]] looks for the table referred to by a given [[table]] structure; if it does not exist, the table is created as a global variable in the given Lua interpreter.
 Either way, the table is left atop the Lua stack.
-Note that a [[table]] structure must be passed in, not a [[table *]] pointer to one.
+Note that a [[table]] structure must be passed in, not a pointer ([[table *]]) to one.
 
 <<macro definitions>>=
 #define lua_pushtable(LS, TAB) \
@@ -107,7 +111,7 @@ if ((TAB).data == LUA_NOREF || (TAB).data == LUA_REFNIL) { \
 assert(lua_getref((LS), (TAB).data));
 @
 
-[[free_table_data]] simply releases the lock on and effectively throws away the Lua table storing a given [[table]] structure's data.
+[[free_table_data]] simply releases the lock on the given table's Lua representation, effectively throwing away the Lua table.
 Here also, a [[table]] structure itself must be passed in, and not a [[table *]].
 
 <<macro definitions>>=

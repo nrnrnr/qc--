@@ -1,4 +1,5 @@
 % -*- mode: Noweb; noweb-code-mode: c-mode -*- %
+
 This document contains a description of the responsibilities of a client of the Quick~{\PAL} Interpreter.
 Additionally, a sample client implementation may be found at the bottom of this document.
 
@@ -86,7 +87,7 @@ void Cmm_close (void);
 \subsection{Functions Exported by the Runtime System}
 % ----------------------------------------------------------------------------
 
-DOCUMENT \emph{For now, look at {\PAL} manual.}
+\emph{For now, look at the {\PAL} manual.}
 
 % ----------------------------------------------------------------------------
 \section{A Sample Client Implementation}
@@ -140,19 +141,21 @@ The following table describes the commands that the interpreter currently unders
 \begin{tabularx}{\linewidth}{|l|X|}\hline
 [[verbosity]] & turns on extra debugging output
 \\\hline
+[[stacksize]] $[new_size]$ & gets and optionally sets the current {\PAL} stack size
+\\\hline
 [[help]] & prints a list of available commands
 \\\hline
 [[quit]] & quits the interpreter
 \\\hline\hline
-[[load]] $\{filename\}^{*}$ & loads (assembles into memory) all filenames listed
+[[load]] $\{filename\}^{*}$ & loads (assembles into memory) all filenames listed, in the order listed
 \\\hline
 [[disasm]] $\{label\}^{*}$ & disassembles (to stdout) the program bytecode chunks located at each of the labels listed
 \\\hline
-[[run]] $\{label\}^{*}$ & sequentially runs (interprets) the program bytecode chunks located at each of the labels listed
+[[run]] $label [arg]$ & runs (interprets) the program bytecode chunk (should be a procedure) located at the given label, optionally passing $arg$ to the code as a parameter
 \\\hline
 \end{tabularx}
 Also note that the client takes command line arguments.
-Look in the source code or type [[./interp --help]] at the command line for information.
+Look in the source code or type [[qc--interp --h]] at the command line for information.
 
 % ----------------------------------------------------------------------------
 \subsection{Type Definitions}
@@ -201,6 +204,10 @@ Cmm_TCB *TCB_new(void) {
 @ 
 
 [[TCB_free]] frees the space [[TCB_new]] allocated for activation stack space.
+Note that it \emph{is} the responsibility of the client to allocate and free
+the stack space for a thread.  The interpreter takes care of all other
+memory management issues with threads.
+
 <<utility functions>>=
 void TCB_free(Cmm_TCB *tcb) {
   free(tcb->stack_space);
@@ -216,7 +223,7 @@ void TCB_free(Cmm_TCB *tcb) {
 
 In this client, we register a couple of C functions with the interpreter: 
 a simple printing function (that takes a 16 bit [[int]], prints it, and 
-returns it) and a 32-bit version of this function.
+returns it) and it 32-bit sibling.
 
 <<function prototypes>>=
 u_int16 cmmprint16(u_int16 i);
@@ -243,7 +250,10 @@ We start with our user-defined C functions.
   register_c_func("cmmprint32", (void *) cmmprint32, "u_int32:u_int32");
 @ 
 
-We then proceed onward to functions in the C standard library.
+We then proceed onward to a subset of functions in the C standard library.
+Note that [[printf]]'s implementation is somewhat of a hack to get around
+the interprer's lack of support for varargs functions.
+See [[ccall.nw]] for the details.
 
 <<register needed C functions with the interpreter>>=
   register_c_func("putchar", (void *) putchar, "int:int" );
@@ -311,17 +321,20 @@ The table below lists and explains the arguments supported.\\
 \begin{tabularx}{\linewidth}{|l|X|}\hline
 \textbf{Argument}   & \textbf{Description}\\\hline\hline
 
-[[--help]] & lists and explains arguments supported
-\\\hline
-
-[[-]]  & reads in a source file from [[stdin]] and runs its [[main]] procedure
+[[-h]] & lists and explains arguments supported
 \\\hline
 
 [[-o ]] $<filename>$ & links files listed on the command line, placing results
 in $<filename>$
 \\\hline
 
+[[-P]] $<interp_path>$ & specifies path to the interpreter
+\\\hline
+
 [[-v]] & turns verbosity ON
+\\\hline
+
+[[-]]  & reads in a source file from [[stdin]] and runs its [[main]] procedure
 \\\hline
 
 $<filename>$ & reads in source file [[<filename>]]
@@ -367,11 +380,12 @@ extern int   opterr;
           printf("Enters interactive mode unless command line arguments are "
                  "given.\n\n");
 
-          printf("  -h            Display this help screen\n");
-          printf("  -             Read source file from stdin\n");
-          printf("  -o <filename> Link specified files into <filename>\n");
-          printf("  -v            Turns verbosity ON\n");
-          printf("  <filename>*   Read in source files named\n");
+          printf("  -h                Display this help screen\n");
+          printf("  -o <filename>     Link specified files into <filename>\n");
+          printf("  -P <interp_path>  Specifies path to the interpreter\n");
+          printf("  -v                Turns verbosity ON\n");
+          printf("  -                 Read source file from stdin\n");
+          printf("  <filename>*       Read in source files named\n");
 
           exit(0);
 

@@ -6,6 +6,9 @@ This document contains the interface and implementation of labels used in the in
 \section{Interface}
 % ----------------------------------------------------------------------------
 
+We define our own sort of labels to allow more information than a simple
+memory location to be passed around at runtime.
+
 <<label.h>>=
 #ifndef _LABEL_H
 #define _LABEL_H
@@ -29,6 +32,7 @@ This document contains the interface and implementation of labels used in the in
 % ----------------------------------------------------------------------------
 
 For the purpose of storing all labels in one namespace (both explicitly defined labels and the labels demarcating {\PAL} procedures and continuations), we create a new type.
+
 <<type definitions>>=
 typedef struct {
   enum {
@@ -77,9 +81,11 @@ Note that [[CMM_label_new]] returns a pointer to an \emph{uninitialized}
 % ----------------------------------------------------------------------------
 
 \paragraph{Manipulating [[CMM_label]]s}
+
 We provide a convenience macro for determining if a given [[CMM_label]] has yet been defined; that is, it returns 0 if and only if the [[CMM_label]]'s associated [[RAddr]] has not been tied down to a location within an [[RBlock]].
 Additionally, we provide a macro [[CMM_label_raddr]] that, given a [[CMM_label]], returns the [[RAddr]] to which it is tied.
 Note that [[CMM_label_raddr]] returns a valid lvalue.
+
 <<faux prototypes>>=
 int         CMM_label_defined(CMM_label *lbl);
 RAddr       CMM_label_raddr(CMM_label *lbl);
@@ -87,13 +93,16 @@ bytecodeptr CMM_label_location(CMM_label *lbl);
 @
 
 \paragraph{Finding a Label}
+
 [[get_label]] takes a [[lua_State]] and a string [[name]], expects this string to also be atop the Lua stack within the specified [[lua_State]], pops the string off the Lua stack, and returns the [[CMM_label]] structure associated with the label named [[name]].
 If this label was not previously defined, [[get_label]] creates a fresh [[CMM_label]] and links it with the string [[name]] for future queries.
+
 <<function prototypes>>=
 CMM_label *get_label(lua_State *L, const char *name);
 @
 
 Once {\PAL} code has been loaded into memory, clients may use our exported function [[cmm_find_export]] to find the location associated with an exported {\PAL} label.
+
 <<function prototypes>>=
 CMM_label *cmm_find_export(const char *arg);
 @ 
@@ -169,9 +178,11 @@ Macro [[CMM_label_defined]] simplifies testing whether or not a given [[CMM_labe
   block_defined((LBL)->lbl.raddr->label->block))       || \
  ((LBL)->ty == CMM_CFUNCTION))
 @
+
 Macro [[CMM_label_raddr]] returns the [[RAddr]] to which a [[CMM_label]] is tied, and [[CMM_label_location]] returns the location to which a [[CMM_label]] is tied.
 Note that the value returned by this macro is a valid lvalue.
 It is an unchecked runtime error (will likely lead to segfault) to get the [[CMM_label_raddr]] or [[CMM_label_location]] of a [[CMM_CFUNCTION]]-typed [[CMM_label]].
+
 <<macro definitions>>=
 #define CMM_label_raddr(LBL) \
 (  (LBL)->ty == CMM_PROCEDURE    ? (LBL)->lbl.proc->raddr  \
@@ -191,6 +202,7 @@ It is an unchecked runtime error (will likely lead to segfault) to get the [[CMM
 [[get_label]] expects to see a string atop the Lua stack and leaves the Lua stack with one less item than it started with.
 We look to see if there is a value associated with [[name]] in the Lua label table.
 If there is a value attached with [[name]] in the table, we return it.
+
 <<function definitions>>=
 CMM_label *get_label(lua_State *L, const char *name) {
   RLabel     label;

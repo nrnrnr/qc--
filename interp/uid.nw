@@ -6,6 +6,9 @@ This document contains the interface and implementation of unique identifiers (u
 \section{Interface}
 % ----------------------------------------------------------------------------
 
+A unique identifier is used to uniquely identify an activation frame; in
+{\PAL}, we need both a frame id and a thread id to identify an activation.
+
 <<uid.h>>=
 #ifndef _UID_H
 #define _UID_H
@@ -20,7 +23,10 @@ This document contains the interface and implementation of unique identifiers (u
 \subsection{Data Structures}
 % ----------------------------------------------------------------------------
 
-We represent $uid$'s as indicated above: with a thread id and a frame id.  For ease of thread identification, we choose to actually make the thread id a pointer to the structure representing the current thread.  The pointer is of type [[void *]] because of mutually recursive definition dependencies among types [[uid]] and [[thread]].
+We represent $uid$'s as indicated above: with a thread id and a frame id.  
+For ease of thread identification, we choose to actually make the thread id a pointer to the structure representing the current thread.
+The pointer is of type [[void *]] because of mutually recursive definition dependencies among types [[uid]] and [[thread]].
+
 <<type definitions>>=
 typedef struct {
   void         *thread;
@@ -32,7 +38,11 @@ typedef struct {
 \subsection{Utility Functions}
 % ----------------------------------------------------------------------------
 
-Some helper functions assist in managing unique identifiers.  [[new_uid]] returns a new unique identifier for an activation in the given thread.  [[dies_uid]] registers the given [[uid]] as dead, and [[islive_uid]] returns 0 if and only if the given [[uid]] is dead.
+Some helper functions assist in managing unique identifiers.  
+Given a pointer to a thread, [[new_uid]] returns a new unique identifier for an activation in the thread.
+[[dies_uid]] and [[dies_uid_range]] register a given [[uid]] or range of consecutive [[uid]]s (from the same thread) as dead.
+[[islive_uid]] returns 0 if and only if the given [[uid]] is dead.
+
 <<function prototypes>>=
 uid    new_uid(void *t);
 void   dies_uid(uid u);
@@ -58,7 +68,8 @@ int    islive_uid(uid u);
 \subsection{Utility Functions}
 % ----------------------------------------------------------------------------
 
-Given a thread, we construct a new [[uid]] by finding the next frame id to be issued in the thread and cast the thread pointer to a [[void *]].
+Given a pointer to a thread, we construct a new [[uid]] by finding the next frame id to be issued in the thread and cast the thread pointer to a [[void *]].
+
 <<function definitions>>=
 uid new_uid(void *t) {
   thread *th = (thread *) t;
@@ -70,7 +81,10 @@ uid new_uid(void *t) {
   return u;
 }
 @ 
+
 When the death of a [[uid]] is signalled, we must add its [[frame_id]] to the [[dead_list]] of the [[thread]].
+Because [[interval_list_add]] expects as its last two arguments the bounds of integer range, we simply specify the range $[$[[u.frame]]$,$ [[u.frame]]$]$.
+
 <<function definitions>>=
 void dies_uid(uid u) {
   thread *t = find_thread(u);
@@ -79,7 +93,9 @@ void dies_uid(uid u) {
   t->dead_list = interval_list_add(t->dead_list, u.frame, u.frame);
 }
 @ 
+
 To kill off an entire range of [[uid]]s, we use [[dies_uid_range]].
+
 <<function definitions>>=
 void   dies_uid_range(uid newest, uid oldest) {
   thread *t = find_thread(newest);
@@ -91,7 +107,9 @@ void   dies_uid_range(uid newest, uid oldest) {
   t->dead_list = interval_list_add(t->dead_list, oldest.frame, newest.frame);  
 }
 @ 
+
 To determine if a [[uid]] is still live, we must simply check if its frame id is listed in the [[dead_list]] of the [[thread]] pointed to by its thread id.
+
 <<function definitions>>=
 int islive_uid(uid u) {
   thread *t = find_thread(u);

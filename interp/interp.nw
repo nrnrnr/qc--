@@ -404,16 +404,20 @@ We will limit our discussion of these libraries to the extent to which we need t
 Before an input file to the Quick~{\PAL} Interpreter may be interpreted, it is first translated into bytecode and stored in memory.  
 Thus, the in-memory format of the instructions is simply a byte array. 
 For purposes of internal addressing, we make use of the NJ Machine-Code Toolkit's relocatable address type ([[RAddr]]).
+
 <<external definitions>>=
 typedef struct relocatable_address *RAddr;
 @ 
+
 We will see later how these addresses are manipulated and how the bytecode is structured in memory with respect to {\PAL} sections.
 
 % ----------------------------------------------------------------------------
 \subsection{Bytecode Generation}
 % ----------------------------------------------------------------------------
 
-To assist in generating bytecode, we use the NJ Machine-Code toolkit.  As a client of this library, we are responsible for writing a general allocation function and a closure allocation function (allocates [[RClosure]]s).  Additionally, when using certain toolkit functions we are required to supply an error printing function that takes a format string and a variable number of arguments and returns nothing.
+To assist in generating bytecode, we use the NJ Machine-Code toolkit.  
+As a client of this library, we are responsible for writing a general allocation function and a closure allocation function (allocates [[RClosure]]s).  
+Additionally, when using certain toolkit functions we are required to supply an error printing function that takes a format string and a variable number of arguments and returns nothing.
 
 <<function prototypes>>=
 void *mc_alloc(int size, Mc_alloc_pool pool);
@@ -452,7 +456,8 @@ int    lua_copy_block_contents(lua_State *L);
 % ----------------------------------------------------------------------------
 
 To load an entire assembly unit into memory (i.e., generate bytecode for it and store the bytecode in memory), we create the main bytecode generation function [[load_assembly_unit]].
-This function takes a string with the name of the source file to be loaded as an assembly unit or the string to be loaded itself, and whether a filename or source string is being passed in; it returns an error code indicates success/failure.
+This function takes a string with the name of the source file to be loaded as an assembly unit or the string to be loaded itself, and an indication of whether a filename or source string is being passed in; it returns an error code indicates success/failure.
+
 <<function prototypes>>=
 int load_assembly_unit(char *s, assembly_unit_type source_type);
 @ 
@@ -463,6 +468,7 @@ int load_assembly_unit(char *s, assembly_unit_type source_type);
 
 The main interpreting of this application is done in the [[run_interp]] function.  
 Given a suspended {\PAL} thread at which to start program interpretation, [[run_interp]] executes program code stored as in-memory bytecode.
+
 <<function prototypes>>=
 void run_interp(thread *t);
 @ 
@@ -924,7 +930,7 @@ To help catch memory allocation errors, we provide macro [[mem_assert]].
 
 <<macro definitions>>=
 #define mem_assert(EXP) ((EXP) ? (void)0 \
-                               : cmm_err("memory error " \
+                               : cmm_err("(out of) memory error " \
                                          "<"__FILE__":%d>", __LINE__))
 @ 
 
@@ -938,7 +944,9 @@ To allow failed assertions to generate better error messages, we provide [[cmm_a
 \subsection{Bytecode Generation}
 % ----------------------------------------------------------------------------
 
-The main plan with bytecode generation is this: a Lua source file written using the functions listed at the top of this document is run using an embedded Lua interpreter that is extended with C functions implementing the {\PAL} Lua functions.  These C functions are more or less wrappers for C encoding functions that are automatically generated when the SLED definition of the interprer's instruction set ([[bytecode.sled]]) is run through the NJ Machine-Code Toolkit.  These generated functions emit bytecode into relocatable memory blocks ([[RBlock]]s), which we use to represent {\PAL} sections.
+The main plan with bytecode generation is this: a Lua source file written using the functions listed in [[manual.nw]] is run using an embedded Lua interpreter that is extended with C functions implementing the {\PAL} Lua functions.  
+These C functions (in [[encoding.nw]]) are more or less wrappers for C encoding functions that are automatically generated when the SLED definition of the interprer's instruction set ([[bytecode.sled]]) is run through the NJ Machine-Code Toolkit. 
+These generated functions (in [[encode.c]]) emit bytecode into relocatable memory blocks ([[RBlock]]s), which we use to represent {\PAL} sections.
 
 % ----------------------------------------------------------------------------
 \subsubsection{Lua Interaction Helpers}
@@ -1052,7 +1060,10 @@ void mc_free_all(void) {
 \paragraph{Bytecode Relocation}
 % ----------------------------------------------------------------------------
 
-When we are ready to assign permanent addresses to our relocatable blocks, we do so within Lua.  [[lua_relocate_block]] is the C function exported to Lua that implements this relocation.  It pops an [[RBlock]] off the Lua stack, uses [[malloc]] to find enough contiguous space in memory to store the [[RBlock]], and calls Toolkit API function [[set_address]] to permanently relocate it.  The 0 return value tells Lua no values are being returned from [[lua_relocate_block]].
+When we are ready to assign permanent addresses to our relocatable blocks, we do so within Lua.  
+[[lua_relocate_block]] is the C function exported to Lua that implements this relocation.  
+It pops an [[RBlock]] off the Lua stack, uses [[mc_alloc]] to find enough contiguous space in memory to store the [[RBlock]], and calls Toolkit API function [[set_address]] to permanently relocate it.  
+The 0 return value tells Lua no values are being returned from [[lua_relocate_block]].
 
 <<bytecode generation>>=
 int lua_relocate_block(lua_State *L) {
@@ -1073,11 +1084,8 @@ int lua_relocate_block(lua_State *L) {
   halt();
   set_block(oldbl);
 
-  /* THIS COULD BE DANGEROUS */
+  /* THIS NEEDS A SLIGHTLY REVISED VERSION OF mclib.c */
   loc = (void *) mc_alloc(block_size(bl), relocated_pool);
-
-  /* loc = (void *) malloc(block_size(bl)); */
-  /* mem_assert(loc); */
 
   set_address(bl, (unsigned) loc);
 
@@ -1212,7 +1220,8 @@ This Lua function is actually a C function registered with Lua: [[lua_relocate_b
 
 Note that we loop through all assembly units starting at [[au]].
 This is done because we may have read in multiple assembly units (see
-function [[lua_CMM_new_assembly_unit]] in [[encoding.nw]]).
+function [[lua_CMM_new_assembly_unit]] in [[encoding.nw]]) and we need to
+properly relocate them in the correct order.
 
 <<perform bytecode relocation>>=
   for (temp = au; temp != NULL; temp = temp->next) {
@@ -1294,7 +1303,7 @@ Finally, we get to the main part of the interpreter.  We start by initializing t
   /* we have to allocate memory for globals here */
   <<allocate memory for globals>>
 
-  /* FIX reset global variables */
+  /* reset global variables */
   curr_proc = NULL;
   values    = values_base - 1;
 @ 
@@ -1330,7 +1339,8 @@ We [[malloc]] space for them.
 \subsubsection{The Main Interpreting Loop}
 % ----------------------------------------------------------------------------
 
-For the main interpreting loop, we use the ``matching'' feature of the New Jersey Machine-Code Toolkit.  This code is pre-processed by the Toolkit and ends up in normal C format.
+For the main interpreting loop, we use the ``matching'' decoding feature of the New Jersey Machine-Code Toolkit.  
+This code is pre-processed by the Toolkit and ends up in normal C format.
 
 <<bytecode interpreting>>=
 void run_interp(thread *t) {
@@ -1360,9 +1370,9 @@ void run_interp(thread *t) {
 
 The bulk of the matching statement bodies follow from the operational semantics of the interpreter's instructions.
 For ease of understanding, the relevant operational rules are reproduced above each instruction's matching statement.
+
 The one thing we must make sure to do in the body of our matching statement is to advance the program counter ([[pc]]) to the proper address in memory.
 The local C variable [[next]] is set to the address of the immediately next instruction, as stored in memory; control-flow instructions must do something more interesting than merely setting [[pc = next]], though.
-@ 
 
 Literal value pushes, local/global stores and fetches are all straightforward.
 We push and pop values using our stack manipulation macros and functions (see [[value.nw]] and [[stack.nw]]), and use the [[locals]] and [[globals]] arrays for local and global operations.
@@ -1424,7 +1434,6 @@ For now, we only support the natural byte-order of the machine on which the inte
 \useops{Guarded-Store-False}
 <<matching statement>>=
     | FETCH(sz,bo,al)   => {
-                           /* FIX actually do something with sz,bo,al */
                            assert(bo == DEF_BYTE_ORDER);
                            assert(al == DEF_ALIGN);
                            assert(sz >  0);
@@ -1452,7 +1461,7 @@ For now, we only support the natural byte-order of the machine on which the inte
                            }
 @ 
 
-\emph{This should ultimately be fixed to work!  Note that we are fetching more than asked to; this is bad!}
+\emph{This should ultimately be fixed to work!  Note that we may be fetching more than asked to; this is bad!}
 
 <<fetch value from given address>>=
   {
@@ -1471,7 +1480,7 @@ For now, we only support the natural byte-order of the machine on which the inte
   }
 @ 
 
-\emph{STORAGE DOES NOT WORK!!!}
+\emph{STORAGE DOES NOT WORK WHEN UNALIGNED!!!}
 
 <<store given value at given address>>=
   {
@@ -1797,7 +1806,7 @@ Once more, we pop a [[procedure]] struct pointer off the value stack for informa
 @ 
 
 Because the old activation dies, we can simply reuse the memory chunk it used on its thread's stack for [[locals]] and [[stackdata]].
-We do need to make sure, though, that there is enough room on this stacks for the new activation in the case that the new activation needs more local stack memory than the dying one.
+We do need to make sure, though, that there is enough room on this stack for the new activation in the case that the new activation needs more local stack memory than the dying one.
 
 <<reuse dead local memory for new activation>>=
                            stackdata     = (datastack) (locals_end = locals + 
@@ -1824,10 +1833,13 @@ We implement both return rules with one matching case.
                              interval_list_free(t->dead_list);
                              t->stack_free = t->stack_base;
 
-                             /* THIS COULD BE DANGEROUS */
+                             /* we free t -- THIS COULD BE DANGEROUS? */
                              free(t);
 
-                             printf("[returned from specified procedure].\n");
+						     /*
+                              printf("[returned from specified procedure].\n");
+                             */
+
                              done = 1;
                              break;
                            }
@@ -2030,7 +2042,14 @@ And its brother, [[END_PROC]].
 
                            cmm_err("procedure missing return/jump statement");
                            }
+@ 
 
+[[BREAKPT]] is a debugging-related bytecode instruction that should do
+nothing at runtime.
+Its presence simply allows us to easily pause our interpreter in a C debugger
+when it is about to interpret a certain bytecode instruction.
+
+<<matching statement>>=
     | BREAKPT()         => {
 	                       pc = next;
 	                       }
@@ -2183,7 +2202,6 @@ sptr    values                = NULL;
 stack   values_base           = NULL;
 sptr    values_limit          = NULL;
 
-/* ARGS OK */
 sptr    arguments             = NULL;
 sptr    arguments_limit       = NULL;
 
@@ -2263,21 +2281,11 @@ lua_close(lua_interp);
 
 I could probably remove \texttt{locals\_end} and \texttt{stackdata\_end} as local variables in function \texttt{run\_interp}; but they \emph{must} remain stored away in an \texttt{activation} record at all non-tail calls.
 
-Do nullary operations have to have a type appended to their names?  (e.g., [[round_down_bits32]])
-
 How should floating-pt computation with rounding best be done?
 
 FIX FIX have to change [[ROTL]] and [[ROTR]] so they deal with the case when $d > x$.
 
-Should macro-generated functions look like [[op_xor_bits16]] or like [[op_xor_bits16_bits16]] or like [[op_xor_bits16_bits16_bits16]] or something else...
-
 [[label_new]] does NOT copy its string argument; do NOT free anything you pass off to [[label_new]]!
-
-No way to push boolean right now, except for simply pushing 0 or 1 and making sure the bits work out.
-
-Need to add citations!!!
-
-Look through standard C header files / libraries for info on bit-standardized types: William Kahan web page, book down in the lab.
 
 Use CII: maybe sequences to store closure pointers, check out Hanson's [[malloc]] interface (that allows debugging), maybe rings for the dead set, look at dvars and [[array_t]].
 
@@ -2291,12 +2299,7 @@ We have to release all lua references when done?
 
 Consider making use of the [[lua_State *]] in the [[table]] structure.
 
-How should we handle [[return]]s from the first procedure interpreted; that is, if our interpreter starts code execution by running a procedure named [[main]], how should it handle a [[return]] from procedure main?
-
 Use ``higher-order'' macros to declare, define and register operator implementations (instead of the current [[#undef]] business).
-
-When we push values, how do we store them?  As what kind of [[bits]]$k$ value?
-I think [[lua_CMM_push_literal]] needs some help in this respect.
 
 Document that tables sent to Lua function [[CMM_call]] (as call-site annotations) are used internally by the encoder/interpreter and that changing them would be dangerous.
 
@@ -2304,27 +2307,14 @@ Do we have to handle [[never returns]] annotations?
 
 Do we need to make sure that continuations are not defined outside of procedures (by testing if [[curr_proc]] is [[NULL]])?
 
-Convert C loop to Lua.
-
-Remember that spans can only be placed in a section; consider asserting this.
-
 Quote from manual: \emph{All separately compiled modules must have} identical \emph{top-level variable declarations}.
 
 \section{To Do Immediately}
 Consider changing operator representation/implementation so that OP bytecode does not need to carry around a 32-bit value (right now it carries around an (operator *)).
 
-Figure out how to get initialized data to work when given as a string or some other value.
-
 Use dynamic arrays!  Stop with this assertion failure business.
 
 Figure out what's up with [[curr_proc]] during interpreting time.
-
-For what kind of calls do we have to bundle up the current activation in a half-activation?
-Only for cuts or for C calls as well?
-
-Where do we free threads?
-
-We should apply closures before each interpreting run, not after each loading run!!!  What about imports??
 
 % end file
 \nwfilename{interp.nw}

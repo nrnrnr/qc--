@@ -24,7 +24,7 @@ This document contains the interface and implementation of {\PAL} primitive oper
 \subsection{Global Data Structures}
 % ----------------------------------------------------------------------------
 
-The operators are stored in a global Lua table.
+The currently-available operators are stored in a global Lua table.
 
 <<global variable declarations>>=
 extern table operator_table;
@@ -480,6 +480,7 @@ sptr op_##NAME##_##BX##_##B (sptr values) {  \
 }
 @ 
 [[NULLARYOP]] and [[IBINARYOP]] are similar, but perform the result computation imperatively (allowing for arbitrary code execution of [[STMS]]).
+Note that [[IBINARYOP]] takes an extra argument ([[RES]]) -- the name of the variable into which the operator's result will be placed.
 <<macro definitions>>=
 #define NULLARYOP(NAME, STMS, X, T, B) \
 \
@@ -517,6 +518,7 @@ UNARYOP(NAME, EXP, X, T, T, B, B)
 #define T_IBINARYOP(NAME, STMS, X, Y, RES, T, B)  \
 IBINARYOP(NAME, STMS, X, Y, RES, T, T, T, B, B, B)
 @ 
+
 Finally, we write a few extra macros for operators whose return value computations require type-specific information.
 By writing these as macros, we make it much easier to instantiate these operators at different types.
 <<macro definitions>>=
