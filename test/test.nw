@@ -256,13 +256,13 @@ if [ "$verbose" = "on" ]; then
 fi
 
 if [ "$recording" = "off" ]; then 
-    eval "$cmd < \"$stdin\" 2> \"$tmp.stderr\" > \"$tmp.stdout\""
+    eval "$cmd < '$stdin' 2> '$tmp.stderr' > '$tmp.stdout'"
     returnc="$?"
 else
     # recording mode - do not compare but create files 
     # as specified on the cmd line
 
-    eval "$cmd < \"$stdin\" 2> \"$stderr\" > \"$stdout\""
+    eval "$cmd < '$stdin' 2> '$stderr' > '$stdout'"
     for f in $files; do
         mv $f `basename $f`
     done
@@ -284,11 +284,13 @@ fi
 
 if ! cmp "$stdout" "$tmp.stdout" ; then
     echo "failed: '$cmd' stdout does not match expectation"
+    diff "$stdout" "$tmp.stdout"
     rc=1
 fi
 
 if ! cmp "$stderr" "$tmp.stderr" ; then
     echo "failed: '$cmd' stderr does not match expectation"
+    diff "$stderr" "$tmp.stderr"
     rc=1
 fi
 

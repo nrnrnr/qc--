@@ -1,3 +1,11 @@
+#
+# Adding a new test:
+# (1) create a test file: foo.c--
+# (2) the head of the test file must include a test commands:
+#     /// ./regr "../bin/qc-- -c $SELF" $REGRFLAGS -out $BASE.1
+# (3) call 'mk foo.record'  to record expected results in foo.1
+# (4) check that the results are indeed the expected ones
+# (5) add foo.c-- foo.1 (foo.2) to CVS
 
 # ------------------------------------------------------------------ 
 # paths
@@ -17,18 +25,28 @@ MANDIR =    ../man
 test:VQ:        ../bin/qc-- fp regr
                 for f in *.c--; do mk "`basename $f .c--`.test"; done
 
+record:VQ:      ../bin/qc-- fp regr
+                for f in *.c--; do mk "`basename $f .c--`.record"; done
 
 # ------------------------------------------------------------------ 
 # useful targets to create test results
 # ------------------------------------------------------------------ 
 
-%.2:            %.c--
-                ../bin/qc-- -check $prereq 2> $target || true
-
 %.test:V:       %.c--         
 		SELF=$stem.c--
 		BASE=$stem
 		export SELF BASE
+                sed -n 's!^///!!p' $SELF | sh -x || true
+
+# The update rule updates the expected output of a test.  Use
+# only after you have verified that the factual output is indeed the
+# expected output!
+
+%.record:V:     %.c--         
+		SELF=$stem.c--
+		BASE=$stem
+                REGRFLAGS="-r"
+		export SELF BASE REGRFLAGS
                 sed -n 's!^///!!p' $SELF | sh -x || true
 
 # ------------------------------------------------------------------  
