@@ -5,27 +5,46 @@
 
 \input{../macros.tex}
 
+This module provides a layer between the OCaml [[Pervasives]] types and
+types used in dynamic contexts in the QC-- compiler. In the evaluating
+instance, the layer is completely transparent (Types are made
+public). In the residualizing instance, base types are replaced with the
+dynamic type.
+
+I use the [[std_]] prefix to make a better distinction, and also to
+avoid a recursive definition (or too many indirections).
+
 \section{Evaluating instance}
 <<base.mli ((evaluating))>>=
 type std_int = int
+type std_string = string
+type std_nativeint = nativeint
 @ \subsection{Implementation}
 <<base.ml ((evaluating))>>=
 type std_int = int
+type std_string = string
+type std_nativeint = nativeint
 
 @ 
-\section{Residualising  instance of the standard primitives}
+\section{Residualising instance}
 
 <<base.mli ((residualizing))>>=
+<<types>>
+@ We cover most of the types in the OCaml [[Pervasives]]. 
+<<types>>=
+type std_int = Tdpe.dynamic
+type std_word = Tdpe.dynamic
+type std_bits = Tdpe.dynamic
+type std_string = Tdpe.dynamic
+type std_bool = Tdpe.dynamic
+type std_char = Tdpe.dynamic
+type std_unit = Tdpe.dynamic
+type std_nativeint = Tdpe.dynamic
 
-  <<types>>
-
-(*val evalOp : std_string * std_int list -> std_int*)
-
-(*type mylocation = Syntax.exp*)
-
-(* combinators ?*)
-
-val nativeint : nativeint Tdpe.rr
+@ I should change this at some point into std_nativeint, after I fix the
+code generator...
+<<base.mli ((residualizing))>>=
+val nativeint : std_nativeint Tdpe.rr
 
 val qint : int -> std_int
 val qword : int -> std_word
@@ -58,18 +77,6 @@ val print_std_char : std_int -> unit
 val print_std_word : std_word -> unit
 
 val to_bool : std_bool -> bool
-    
-@ these are the types that we are going to see
-<<types>>=
-type std_int = MachineSyntax.exp
-type std_word = MachineSyntax.exp
-type std_bits = MachineSyntax.exp
-type std_string = MachineSyntax.exp
-type std_bool = MachineSyntax.exp
-type std_char = MachineSyntax.exp
-type std_unit = MachineSyntax.exp
-
-type nativeint = MachineSyntax.exp
 
 @ \section{Implementation}
 
@@ -80,14 +87,6 @@ module Sy = Syntax
 module T = Tdpe
   
 <<types>>
-(*let evalOp(op,ls) = raise Error*)
-
-(*type mylocation = Syntax.exp
-
-let _MEMORY = raise Error
-let _TEMPORARY x = raise Error
-let _VARIABLE x = raise Error
-let _REGISTER x = raise Error*)
 
 let nativeint = T.a'
   
@@ -192,3 +191,6 @@ let lgand e1 e2 =
   match (e1,e2) with
     (Sy.BOOL i1,Sy.BOOL i2) -> Sy.BOOL(i1 && i2)
   | (_,_) -> T.nbe' (T.arrowN(T.a',T.arrowN(T.a',T.a'))) (Sy.VAR "&&") e1 e2
+
+@ 
+        
