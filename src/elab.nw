@@ -145,7 +145,7 @@ module Env : sig
 end
 @
 
-The static semantics of a [[program]] is checked by [[Check.check]].
+The static semantics of a [[program]] is checked by [[Check.check]]. 
 Any errors found are reported to stderr and the marked in the returned
 environment.
 
@@ -154,14 +154,6 @@ module Check : sig
     val global: Fenv.Dirty.env -> Ast.program   -> Fenv.Dirty.env
 end
 @
-
-To check a file containing a {\PAL} program call [[check]]. The return
-value is [[Error.Error]] in case a semantic error was found. 
-
-<<>>=
-val global: Fenv.Dirty.env -> Ast.program -> Fenv.Dirty.env
-val check : string -> unit Error.error
-@   
     
 % ------------------------------------------------------------------ 
 \subsection{Implementation -- The 30\,000 feet overview}
@@ -324,63 +316,6 @@ module Check = struct
 end
 @
 
-\paragraph{Interface to Clients} Finally, here is the function that
-checks an entire program.  The implementation gives an overview of the
-different steps.  Sometimes a violation manifests itself only by
-bindings of the [[Error.Error]] value in the fat environment.  Thus,
-this is scanned for such bindings. 
-
-<<>>=
-let global env program =
-    let env        = Env.global env program                 in
-    let env        = Check.global  env program              in
-        env
-    
-<<>>=
-let checkProgram env program =
-    let env        = global env program                     in
-        if F.errorFlag env
-        then E.Error
-        else E.Ok()
-@
-
-To actually scan, parse, and check a file we provide a function
-[[check]] to be called with a file name.  It calls the parser to
-create the abstract syntax and calls the different phases of checking. 
-In principle errors are propagated and [[checkProgram]] returns with
-[[Error.Error]] when a violation of a static semantic rule was found. 
-
-<<>>=
-let check file =
-    let fd          = try open_in file
-                      with Sys_error(msg) -> E.error msg    in
-    let finally ()  = close_in fd                           in
-    let lexbuf      = Lexing.from_channel fd                in
-    let map         = Srcmap.empty                          in
-    let scanner     = Scan.scan map                         in
-        try
-            ( Srcmap.sync map 0 (file,1,1)
-            ; let ast        = Parse.program scanner lexbuf in
-              let env        = F.empty map                  in
-                checkProgram env ast
-            )
-        with
-            | Parsing.Parse_error ->
-              ( finally()
-              ; E.errorPointPrt (map, Lexing.lexeme_start lexbuf) "parse error"
-              ; E.Error
-              )
-            | E.ErrorExn msg ->
-              ( finally()
-              ; E.errorPointPrt (map, Lexing.lexeme_start lexbuf) msg
-              ; E.Error
-              )
-            | e ->
-              ( finally()
-              ; raise e
-              )
-@
-
 % ------------------------------------------------------------------ 
 \subsection{Auxiliaries}
 % ------------------------------------------------------------------ 
@@ -509,7 +444,7 @@ let rec body r env = function
 and stmt r env = function
     | A.StmtAt(x,r)     -> stmt r env x
     | A.SpanStmt(_,_,bb)-> foldl (body r) env bb
-    | A.IfStmt _        -> env
+    | A.IfStmt  _       -> env
     | A.SwitchStmt _    -> env
     | A.LabelStmt _     -> env
     | A.ContStmt _      -> env
@@ -541,17 +476,17 @@ types.
     
 <<>>=
 let rec section r env = function
-    | A.SectionAt(x,r)         -> section r env x 
-    | A.Decl(d)                -> decl r env d 
-    | A.SSpan( e1, e2, ss)     -> foldl (section r) env ss
-    | A.Datum( d)              -> env
-    | A.Procedure(_,_,_,bb)    -> foldl (body r) env bb
+    | A.SectionAt(x,r)          -> section r env x 
+    | A.Decl(d)                 -> decl r env d 
+    | A.SSpan( e1, e2, ss)      -> foldl (section r) env ss
+    | A.Datum( d)               -> env
+    | A.Procedure(_,_,_,bb)     -> foldl (body r) env bb
 <<>>=    
 let rec toplevel r env = function
-    | A.ToplevelAt(x,r)   -> toplevel r env x
-    | A.Section(_, ss)    -> foldl (section r) env ss
-    | A.TopDecl (d)       -> decl r env d
-    | A.TopProcedure _    -> env (* no global typedefs here *)
+    | A.ToplevelAt(x,r)         -> toplevel r env x
+    | A.Section(_, ss)          -> foldl (section r) env ss
+    | A.TopDecl (d)             -> decl r env d
+    | A.TopProcedure (_,_,_,bb) -> foldl (body r) env bb 
 @
 
 

@@ -1,0 +1,175 @@
+
+\input{macros.tex}
+
+% l2h substitution ast AST
+% l2h substitution rtl RTL
+% l2h substitution noweb NOWEB
+% l2h substitution qcc QC--
+% l2h substitution C C--
+% l2h substitution PAL C--
+% l2h substitution pal C--
+% l2h substitution asdl ASDL
+% l2h substitution ocaml OCaml
+% l2h substitution forall forall
+% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
+
+% ------------------------------------------------------------------ 
+\section{Driver}
+% ------------------------------------------------------------------ 
+
+An action specified on the {\qcc} command line is usually too complex
+to be carried out by the \module{main} module that parses the command
+line.  Modules like \module{ast} or \module{elab} implement the
+functionality to do what the user asks for; however, in order to keep
+these modules as clean as possible they should be not concerned with
+opening a file and parsing it just to get the abstract syntax of a
+file.  This module mediates between the \module{main} module and the
+task specific modules.
+
+% ------------------------------------------------------------------ 
+\subsection{Interface}
+% ------------------------------------------------------------------ 
+
+The [[dispatch]] function takes an abstract command line and performs
+the requested action.  It returns an [[int]] return code to be used by
+the \module{main} module for the [[exit]] function.  A returned value
+of [[0]] indicates success, [[1]] an error in a source file, and [[2]]
+an internal compiler error.
+
+The [[Cmdline.cmd]] values [[Help]] and [[Version]] are covered by the
+\module{main} module and must be not passed to [[dispatch]].
+
+<<driver.mli>>=
+val dispatch : Cmdline.cmd -> int
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+<<driver.ml>>=
+module E = Error
+@
+
+The abstract syntax tree ({\ast}) of a {\PAL} source is the most
+frequently required data structure. Function [[ast_of]] returns it for a
+name [[file]] together with a [[Srcmap.map]] for that file.  It raises
+[[Error.ErrorExn]] in case of problems. 
+
+
+<<>>=
+let ast_of file = 
+    let fd          = try open_in file
+                      with Sys_error(msg) -> E.error msg    in
+    let finally ()  = close_in fd                           in
+    let lexbuf      = Lexing.from_channel fd                in
+    let map         = Srcmap.empty                          in
+    let scanner     = Scan.scan map                         in
+        try
+            ( Srcmap.sync map 0 (file,1,1)
+            ; Parse.program scanner lexbuf, map 
+            )
+        with
+            | Parsing.Parse_error ->
+              ( finally()
+              ; E.errorPointPrt (map, Lexing.lexeme_start lexbuf) "parse error"
+              ; E.error "parse error - compilation aborted"
+              )
+            | E.ErrorExn msg ->
+              ( finally()
+              ; E.errorPointPrt (map, Lexing.lexeme_start lexbuf) msg
+              ; E.error "parse error"
+              )
+            | e ->
+              ( finally()
+              ; raise e
+              )
+@
+
+% ------------------------------------------------------------------ 
+\paragraph{[[-lex]] command line option}
+% ------------------------------------------------------------------ 
+
+The [[lex]] function is a bit special because unlike most other
+functions it works at the lexical level.  We thus can't use the
+[[ast_of]] function from above.  The funtion reads a file token by
+token and prints it together with its position to [[stdout]].
+
+<<>>=
+let lex file =
+    let fd          = try open_in file
+                      with Sys_error(msg) -> E.error msg    in
+    let finally ()  = close_in fd                           in
+    let lexbuf      = Lexing.from_channel fd                in
+    let map         = Srcmap.empty                          in
+    let scanner     = Scan.scan map                         in
+    let location lb = Srcmap.location map (Lexing.lexeme_start lb) in
+    let rec loop lb =
+        match scanner lb with
+            | Parse.EOF -> ()
+            | tok       ->
+                let (file,line,col) = location lb           in
+                let tok             = Scan.tok2str tok      in
+                    ( Printf.printf "%-16s %3d %2d %s\n" file line col tok
+                    ; loop lb
+                    )
+    in
+        ( Srcmap.sync map 0 (file,1,1)
+        ; loop lexbuf
+        ; finally ()
+        )
+@
+
+\paragraph{[[-asdl]]} The [[asdl]] command exports the abstract syntax
+of a a file in {\asdl} format to [[stdout]].
+
+<<>>=
+let asdl file =
+    let ast,map = ast_of file in
+        AstUtil.sexp_wr_program ast stdout
+        
+@
+
+\paragraph{[[-pp]]} The [[pp]] command parses a file and pretty-prints
+it for a line [[width]] to [[stdout]].
+
+<<>>=
+let pp file width =
+    let ast,map = ast_of file in
+        Astpp.ppToFile stdout width ast
+@
+
+\paragraph{[[-check]]} The [[check]] command parses a file and checks
+its static semantics. 
+
+<<>>=
+let check file = 
+    let ast, map = ast_of file               in
+    let env      = Fenv.Dirty.empty map      in
+    let env      = Elab.Env.global   env ast in
+    let env      = Elab.Check.global env ast in
+        match Fenv.Dirty.errorFlag env with
+            | true  -> 1
+            | false -> 0
+@
+
+The (exported) dispatch function just invokes the appropriate function
+that implements a command. The cases [[Help]] and [[Version]] are
+expexted to be handled by the \module{main} module. 
+            
+<<>>=
+let dispatch cmd = 
+    try 
+        ( match cmd with 
+        | Cmdline.Help          -> assert false
+        | Cmdline.Version	-> assert false
+        | Cmdline.Lex(file)     -> lex  file      ; 0
+        | Cmdline.Asdl(file)    -> asdl file      ; 0
+        | Cmdline.PP(file,width)-> pp file width  ; 0
+        | Cmdline.Check(file)   -> check file
+        | Cmdline.IR(file)      -> E.error "not yet implemented"
+        )
+    with
+        | E.ErrorExn(msg)       -> E.errorPrt msg; 1
+@
+

@@ -132,45 +132,12 @@ let usage this =
     Printf.printf "%s command line syntax\n" this ;
     List.iter print_endline msg
 @
-        
-For testing the parser we let the [[asdl]] function write the
-abstract syntax to stdout.
 
-<<>>=
-let asdl file =
-    let fd          = try open_in file 
-                      with Sys_error(msg) -> E.error msg     in
-    let finally ()  = close_in fd                            in
-    let lexbuf      = Lexing.from_channel fd                 in
-    let map         = Srcmap.empty                           in
-    let scanner     = Scan.scan map                          in
-    let _           = Srcmap.sync map 0 (file,1,1)           in
-    let asdl ()     = let ast = Parse.program scanner lexbuf in
-                         (E.Ok (AstUtil.sexp_wr_program ast stdout))
-        in try asdl () with
-            | Parsing.Parse_error ->
-              ( finally()
-              ; E.errorPointPrt (map, Lexing.lexeme_start lexbuf) "parse error"
-              ; E.Error
-              )
-            | E.ErrorExn msg ->
-              ( finally()
-              ; E.errorPointPrt (map, Lexing.lexeme_start lexbuf) msg
-              ; E.Error
-              )
-            | e ->
-              ( finally()
-              ; raise e
-              )
-@
- 
 The [[main]] function gets the command line arguments and tries to
 parse them using the [[cmdline]] parser.  It returns the abstract
 syntax as defined in Module [[Cmdline]] which is used to decide which
-function to call.  In case of no error all functions return here and
-the program end with exit code zero.  However, in case of an error the
-[[Error]] exception is raised and caught here.  This leads to a non
-zero exit code. 
+function to call.  The details are handled by the [[Driver.dispatch]]
+function which returns an integer to be used as an exit code.
 
 <<main.ml>>=
 let main () =
@@ -183,18 +150,7 @@ let main () =
                          usage this;
                          exit 1
     in
-    let dispatch    = function
-        | Cmdline.Help          -> usage this ; E.Ok ()
-        | Cmdline.Version	-> version () ; E.Ok ()
-        | Cmdline.Lex(file)     -> Scan.lex file 
-        | Cmdline.Asdl(file)    -> asdl file 
-        | Cmdline.PP(file,width)-> Astpp.pp file width
-        | Cmdline.Check(file)   -> Elab.check file
-        | Cmdline.IR(file)      -> Ast2ir.ast2ir file
-    in
-        match E.catch E.errorPrt dispatch cmd with
-            | E.Error -> exit 1
-            | E.Ok _  -> exit 0
+        exit (Driver.dispatch cmd)
 @                
 
 In \ocaml~no [[main]] function like in C exists but simply all values

@@ -15,12 +15,9 @@ semantics have been found correct it is translated into abstract
 \subsection{Interface}
 % ------------------------------------------------------------------ 
 
-This module is called from the [[Main.main]] function with the name of
-the source file; function [[ast2ir]] takes care of everything and
-reports success or failure with an [[Error.error]] value.
+Currently empty.
 
 <<ast2ir.mli>>=
-val ast2ir: string -> unit Error.error
 @
 
 % ------------------------------------------------------------------ 
@@ -609,38 +606,4 @@ let check map program =
         if   Fenv.Dirty.errorFlag env
         then E.error "compilation aborted due to errors in static semantics"
         else Fenv.clean env
-@
-
-The function [[ast2ir]] scans, parses, and checks a file before the
-translation in this module can start.
-
-<<ast2ir.ml>>=
-let ast2ir file =
-    let fd          = try open_in file
-                      with Sys_error(msg) -> E.error msg    in
-    let finally ()  = close_in fd                           in
-    let lexbuf      = Lexing.from_channel fd                in
-    let map         = Srcmap.empty                          in
-    let scanner     = Scan.scan map                         in
-        try
-            ( Srcmap.sync map 0 (file,1,1)
-            ; let ast        = Parse.program scanner lexbuf in
-              let env        = check map ast                in
-                  E.Ok()
-            )
-        with
-            | Parsing.Parse_error ->
-              ( finally()
-              ; E.errorPointPrt (map, Lexing.lexeme_start lexbuf) "parse error"
-              ; E.Error
-              )
-            | E.ErrorExn msg ->
-              ( finally()
-              ; E.errorPointPrt (map, Lexing.lexeme_start lexbuf) msg
-              ; E.Error
-              )
-            | e ->
-              ( finally()
-              ; raise e
-              )
 @

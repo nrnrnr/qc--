@@ -732,37 +732,7 @@ together with their positions.
     | P.FLT(f)            -> "FLT(" ^  Bits.to_string None   f ^ ")"
     | P.CHAR(c)           -> "CHAR(" ^ Bits.to_string None   c ^ ")"
     | P.BITSn(i)          -> "BITSn(" ^ string_of_int i        ^ ")"
-@
 
-The following function [[lex]] takes a file name, scans the
-corresponding file and writes all tokens to standard output. It
-implements the [[-lex]] command line flag and is called by the
-[[Main]] module. In case of success, the function returns
-[[Error.Ok()]] and [[Error.Error]] otherwise.
-
-<<>>=
-let lex file =
-    let fd          = try open_in file
-                      with Sys_error(msg) -> E.error msg    in
-    let finally ()  = close_in fd                           in
-    let lexbuf      = Lexing.from_channel fd                in
-    let map         = Srcmap.empty                          in
-    let scanner     = scan map                              in
-    let rec loop lb =
-        match scanner lb with
-            | Parse.EOF -> ()
-            | tok       ->
-                let (file,line,col) = location lb map       in
-                let tok             = tok2str tok           in
-                    ( Printf.printf "%-16s %3d %2d %s\n" file line col tok
-                    ; loop lb
-                    )
-    in
-        ( Srcmap.sync map 0 (file,1,1)
-        ; loop lexbuf
-        ; finally ()
-        ; Error.Ok()
-        )
 } (* end of epilog *)
 @
 
