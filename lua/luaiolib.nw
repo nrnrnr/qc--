@@ -60,10 +60,10 @@ let readfrom =
     else
       setinput (open_in s) in
   let from_other _ = C.error "bad args to readfrom" in
-  [ V.alt (V.string **->> infile)   from_string
-  ; V.alt (V.unit   **->> infile)   (fun () -> (close_in io.currentin; setinput stdin))
-  ; V.alt (infile   **->> infile)   setinput
-  ; V.alt (V.value  **->  V.results) from_other
+  [ V.alt (V.string **->> infile) from_string
+  ; V.alt (V.unit   **->> infile) (fun () -> (close_in io.currentin; setinput stdin))
+  ; V.alt (infile   **->> infile) setinput
+  ; V.alt (V.value  **->> infile) from_other
   ]  in
 
 let open_out_append s =
@@ -89,7 +89,7 @@ let writeto' append =
   ]  in
     
 let read = function
-  | None -> [try V.String (input_line io.currentin) with End_of_file -> V.Nil]
+  | None -> (try Some (input_line io.currentin) with End_of_file -> None)
   | Some _ -> C.error ("I/O library does not implement read patterns")  in
 
 let getopt x d = match x with Some v -> v | None -> d  in
@@ -102,7 +102,7 @@ let date = function
       let mm = t.Unix.tm_mon + 1 in
       let yyyy = t.Unix.tm_year + 1900 in
       let dd = t.Unix.tm_mday in
-      [V.String (s mm ^ "/" ^ s dd ^ "/" ^ s yyyy)]  in
+      s mm ^ "/" ^ s dd ^ "/" ^ s yyyy in
 
 let tmpname () = Filename.temp_file "lua" "" in
 
@@ -119,14 +119,14 @@ let io_builtins =
   ; "remove",    errfunc (V.string **->> V.string) (succeed Sys.remove)
   ; "rename",    errfunc (V.string **-> V.string **->> V.string) (succeed2 Sys.rename)
   ; "tmpname",   V.efunc (V.unit **->> V.string) tmpname
-  ; "read",      V.efunc (V.option V.string **-> V.results) read
+  ; "read",      V.efunc (V.option V.string **->> V.option V.string) read
   ; "write",     errchoose 
                  [ V.alt (V.string *****->> V.int)   (* eta-expand to delay eval *)
                                                (fun l -> write_strings io.currentout l)
                  ; V.alt (outfile **-> V.string *****->> V.int) write_strings
                  ]                          
-  ; "date",      V.efunc (V.option V.string **-> V.results) date 
-  ; "exit",      V.efunc (V.option V.int **-> V.runit) (fun n -> exit (getopt n 0))
+  ; "date",      V.efunc (V.option V.string **->> V.string) date 
+  ; "exit",      V.efunc (V.option V.int **->> V.unit) (fun n -> exit (getopt n 0))
   ; "getenv",    V.efunc (V.string **->> V.option V.string)
                  (fun s -> try Some (Sys.getenv s) with Not_found -> None)
   ; "execute",   V.efunc (V.string **->> V.int) Sys.command

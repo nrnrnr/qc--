@@ -81,18 +81,19 @@ module MakeLib : Lua.Lib.BARECODE
 module MakeLib (C: Lua.Lib.CORE) = struct
     module V = C.V
     let ( **-> ) = V.( **-> )
+    let ( **->> ) x y = x **-> V.result y
 
     <<utility functions>>
 
     let init g =
       C.register_module "Util"
-      [ "dosearchfile",    V.efunc (V.string **-> V.option V.table **-> V.results)
+      [ "dosearchfile",    V.efunc (V.string **-> V.option V.table **-> V.resultvs)
                            (dosearchfile g)
       ; "catch",           V.caml_func catch_lua
-      ; "redirect_stdout", V.efunc (V.option V.string **-> V.runit) redirect_stdout
-      ; "redirect_stderr", V.efunc (V.option V.string **-> V.runit) redirect_stderr
-      ; "files_nonwhite_equivalent",   V.efunc (V.string **-> V.string **-> V.result V.bool) files_nonwhite_equivalent
-      ; "call",            V.efunc (V.value **-> V.list V.value **-> V.results)
+      ; "redirect_stdout", V.efunc (V.option V.string **->> V.unit) redirect_stdout
+      ; "redirect_stderr", V.efunc (V.option V.string **->> V.unit) redirect_stderr
+      ; "files_nonwhite_equivalent",   V.efunc (V.string **-> V.string **->> V.bool) files_nonwhite_equivalent
+      ; "call",            V.efunc (V.value **-> V.list V.value **-> V.resultvs)
                            (function V.Function (_, f) -> f
                                    | v -> V.projection v "function")
       ] g;

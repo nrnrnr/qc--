@@ -165,9 +165,10 @@ arguments by using the embedding/projection pair produced by
   val ( -->  ) : 'a map  -> 'b map  -> ('a -> 'b) map
   val ( **-> ) : 'a map  -> 'b mapf -> ('a -> 'b) mapf
   val result   : 'a map  -> 'a mapf
+  val resultvs : value list mapf                   (* functions returning value lists*)
   val dots_arrow:'a map  -> 'b map  -> ('a list -> 'b) mapf     (* varargs functions *)
-  val runit    : unit mapf                         (* for functions w/o results *)
-  val results  : value list mapf                   (* functions returning value lists*)
+  val results  : ('a -> value list) -> (value list -> 'a) -> 'a mapf  
+                                    (* 'a represents multiple results (general case) *)
   val func     : 'a mapf -> 'a map                 (* function *)
   val closure  : 'a mapf -> 'a map                 (* function or table+apply method *)
   val efunc    : 'a mapf -> 'a -> value            (* efunc f = (closure f).embed *)
@@ -486,6 +487,8 @@ let take1 = function  (* take one value from a list of arguments *)
   | [] -> Nil
   | h::t -> h
 
+let take2 = function [] -> Nil, Nil | v :: vs -> v, take1 vs
+
 let const f s = f
 let (-->) arg result =
   { embed =   (fun f -> 
@@ -498,7 +501,7 @@ let (-->) arg result =
 @ 
 What we have above would be enough, except that Caml likes functions
 to be curried and Lua likes them uncurried.
-We provide [[**->]], [[result]], and [[func]] for embedding and
+We provide [[**->]], [[results]], and [[func]] for embedding and
 projecting curried functions.
 The functions are a bit subtle, but if you follow the types, you
 shouldn't be too baffled. 
@@ -517,22 +520,23 @@ let ( **-> ) (firstarg : 'a map) (lastargs : 'b mapf) : ( ('a -> 'b) mapf ) =
     firstarg.is h && lastargs.is t in
   { embed = apply; project = unapp; is = is }
 
-
-let result (r : 'a map) : ('a mapf) = 
-  { embed   = (fun (v:'a) -> fun args -> [r.embed v])
-  ; project = (fun f_lua -> r.project (take1 (f_lua [])))
+let results (caml_to_values : 'a -> value list) (caml_of_values : value list -> 'a) = 
+  { embed   = (fun (caml:'a) -> fun lua_args -> caml_to_values caml)
+  ; project = (fun f_lua -> (caml_of_values (f_lua []) : 'a))
   ; is = (function [] -> true | _ :: _ -> false)
   } 
 
-let runit = { embed = (fun () args -> [])
-            ; project = (fun f -> match f [] with [] -> ()
-                                  | h::t -> raise (Projection (h, "unit result")))
-            ; is = (function [] -> true | _ :: _ -> false)
-            } 
+let (<<) f g = fun x -> f (g x)
 
-let results : value list mapf =
-  { embed = (fun l args -> l); project = (fun f -> assert false); is = runit.is
-  } 
+let result r = results (fun v -> [r.embed v]) (r.project << take1)
+let resultvs = results (fun l -> l) (fun l -> l)
+
+(* other possibilities not exposed in interface *)
+let result2 r1 r2 = results (fun (v1, v2) -> [r1.embed v1; r2.embed v2])
+                            ((fun (l1, l2) -> r1.project l1, r2.project l2) << take2)
+let runit =
+  results (fun () -> []) 
+          (function [] -> () | h :: _ -> raise (Projection (h, "unit result")))
 <<value toplevel>>=
 let dots_arrow (varargs : 'a map) (result : 'b map) : ( ('a list -> 'b) mapf ) =
   let apply (f : 'a list -> 'b) = 
