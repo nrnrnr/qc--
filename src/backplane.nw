@@ -54,6 +54,9 @@ A stage represents an individual step of the compiler. This step is
 performed by a function, which may expect a single input parameter. Each stage
 also expects a particular set of states to be valid when this stage begins;
 states may be created or destroyed during the execution of the function.
+The state fields are represented by sets instead of lists to facilitate set
+operations such as union and intersection, which will be useful during
+the semantic checking phase.
 
 <<stage type>>=
 type 'a stage = { name : string
@@ -81,83 +84,91 @@ type 'a action = Seq       of 'a action list
 
 To clarify the meanings of the action types, we provide the operational
 semantics for the execution of an action. Each action is $a$ is executed from
-the starting configuration $\langle a, x, \rho \rangle$ and ends in the
-configuration $\langle v, \rho'\rangle$. $a$ represents an action which is
-executed in the environment $\rho$, with a local variable $x$. The action
-results in the Boolean value $v$, and the environment after execution is
-represented by $\rho'$. We use $T$ and $F$ to represent the Boolean
-constants true and false. 
+the starting configuration $\langle a, x, \sigma \rangle$ and ends in the
+configuration $\langle v, \sigma'\rangle$. When a [[Share]] action is used,
+the shared variable is the $x$ that is passed to all actions within the
+scope of the [[Share]] action. If [[Share]] actions are nested, the innermost
+[[Share]] action will outscope all others. $\sigma$ represents the current
+state of the world, including the \cfg \ and other stored information that
+may be modified imperatively. The action results in the Boolean value $v$,
+and the state after execution is represented by $\sigma'$. We use $T$ and $F$
+to represent the Boolean constants true and false. 
 
 
-\noindent $Seq(a_1, a_2, ..., a_n)$ performs a list of actions in sequence:
+\noindent $[[Seq]](a_1, a_2, ..., a_n)$ performs a list of actions in sequence:
 \[
-\frac{\langle a_1 , x , \rho_0\rangle \Downarrow \langle v_1 , \rho_1 \rangle
+\frac{\langle a_1 , x , \sigma_0\rangle \Downarrow \langle v_1 , \sigma_1 \rangle
       \ \ \ \ 
-      \langle a_2 , x , \rho_1\rangle \Downarrow \langle v_2 , \rho_2 \rangle
+      \langle a_2 , x , \sigma_1\rangle \Downarrow \langle v_2 , \sigma_2 \rangle
       \ \ \ \ \dots \ \ \ \
-      \langle a_n , x , \rho_{n - 1}\rangle \Downarrow \langle v_n , \rho_n
+      \langle a_n , x , \sigma_{n - 1}\rangle \Downarrow \langle v_n ,
+      \sigma_n
 \rangle}
-     {\langle Seq(a_1 ; a_2; \dots; a_n) , x , \rho_0\rangle \Downarrow \langle v_1 \vee v_2 \vee \dots \vee v_n , \rho_n\rangle}
+     {\langle [[Seq]](a_1 ; a_2; \dots; a_n) , x , \sigma_0\rangle
+         \Downarrow \langle v_1 \vee v_2 \vee \dots \vee v_n , \sigma_n\rangle}
 \]
 
-\noindent The action $When\_Do(cond, body)$ evaluates the $body$ action only
+\noindent The action $[[When_Do]](cond, body)$ evaluates the $body$ action only
 if the $cond$ action returns a true result:
 \[
-\frac{\langle cond , x , \rho \rangle \Downarrow \langle F , \rho' \rangle}
-     {\langle When\_Do(cond, body) , x , \rho \rangle \Downarrow \langle F ,
-\rho' \rangle}
+\frac{\langle cond , x , \sigma \rangle \Downarrow \langle F , \sigma' \rangle}
+     {\langle [[When_Do]](cond, body) , x , \sigma \rangle \Downarrow \langle F ,
+\sigma' \rangle}
 \]
 \[
-\frac{\langle cond , x , \rho \rangle \Downarrow \langle T , \rho' \rangle
-      \ \ \ \ \langle body , x , \rho' \rangle \Downarrow \langle v_2 , \rho'' \rangle}
-     {\langle When\_Do(cond, body) , x , \rho \rangle \Downarrow \langle v_2 , \rho'' \rangle}
+\frac{\langle cond , x , \sigma \rangle \Downarrow \langle T , \sigma' \rangle
+      \ \ \ \ \langle body , x , \sigma' \rangle \Downarrow \langle v_2 ,
+      \sigma'' \rangle}
+     {\langle [[When_Do]](cond, body) , x , \sigma \rangle \Downarrow
+         \langle v_2 , \sigma'' \rangle}
 \]
 
-\noindent Conversely, $Unless\_Do(cond, body)$ evaluates the $body$ action only
+\noindent Conversely, $[[Unless_Do]](cond, body)$ evaluates the $body$ action only
 if the $cond$ action returns a false result:
 \[
-\frac{\langle cond , x , \rho \rangle \Downarrow \langle T , \rho' \rangle}
-     {\langle Unless\_Do(cond, body) , x , \rho \rangle \Downarrow \langle
-T , \rho' \rangle}
+\frac{\langle cond , x , \sigma \rangle \Downarrow \langle T , \sigma' \rangle}
+     {\langle [[Unless_Do]](cond, body) , x , \sigma \rangle \Downarrow \langle
+T , \sigma' \rangle}
 \]
 \[
-\frac{\langle cond , x , \rho \rangle \Downarrow \langle F , \rho' \rangle
-      \ \ \ \ \langle body , x , \rho' \rangle \Downarrow \langle v_2 ,
-\rho'' \rangle}
-     {\langle Unless\_Do(cond, body) , x , \rho \rangle \Downarrow \langle
-r_2 , \rho'' \rangle}
+\frac{\langle cond , x , \sigma \rangle \Downarrow \langle F , \sigma' \rangle
+      \ \ \ \ \langle body , x , \sigma' \rangle \Downarrow \langle v_2 ,
+\sigma'' \rangle}
+     {\langle [[Unless_Do]](cond, body) , x , \sigma \rangle \Downarrow \langle
+r_2 , \sigma'' \rangle}
 \]
 
-\noindent $Fix(a)$ evaluates an action until it returns a false result:
+\noindent $[[Fix]](a)$ evaluates an action until it returns a false result:
 \[
-\frac{\langle a , x , \rho \rangle \Downarrow \langle F , \rho' \rangle}
-     {\langle Fix(a) , x , \rho \rangle \Downarrow \langle F , \rho' \rangle}
+\frac{\langle a , x , \sigma \rangle \Downarrow \langle F , \sigma' \rangle}
+     {\langle [[Fix]](a) , x , \sigma \rangle \Downarrow \langle F , \sigma' \rangle}
 \]
 \[
-\frac{\langle a , x , \rho \rangle \Downarrow \langle T , \rho' \rangle
-      \ \ \ \ \langle Fix(a) , x , \rho' \rangle \Downarrow \langle v ,
-\rho'' \rangle}
-     {\langle Fix(a) , x \rangle \Downarrow \langle v , \rho'' \rangle}
+\frac{\langle a , x , \sigma \rangle \Downarrow \langle T , \sigma' \rangle
+      \ \ \ \ \langle [[Fix]](a) , x , \sigma' \rangle \Downarrow \langle v ,
+\sigma'' \rangle}
+     {\langle [[Fix]](a) , x \rangle \Downarrow \langle v , \sigma'' \rangle}
 \]
 
-\noindent $Ignore(a)$ evaluates an action and returns false, regardless of the
+\noindent $[[Ignore]](a)$ evaluates an action and returns false, regardless of the
 action's result:
 \[
-\frac{\langle a , x , \rho \rangle \Downarrow \langle v , \rho' \rangle}
-     {\langle Ignore(a) , x , \rho \rangle \Downarrow \langle F , \rho' \rangle}
+\frac{\langle a , x , \sigma \rangle \Downarrow \langle v , \sigma' \rangle}
+     {\langle [[Ignore]](a) , x , \sigma \rangle \Downarrow \langle F , \sigma' \rangle}
 \]
 
-\noindent $Share(a, x')$ supplies a new input parameter $x'$ for the action $a$:
+\noindent $[[Share]](a, x')$ supplies a new input parameter $x'$ for the action $a$:
 \[
-\frac{\langle a , x' , \rho \rangle \Downarrow \langle v , \rho' \rangle}
-     {\langle Share(a, x'), x , \rho \rangle \Downarrow \langle v , \rho' \rangle}
+\frac{\langle a , x' , \sigma \rangle \Downarrow \langle v , \sigma' \rangle}
+     {\langle [[Share]](a, x'), x , \sigma \rangle \Downarrow \langle v ,
+         \sigma' \rangle}
 \]
 
-\noindent $Single(f)$ evaluates the function $f$ ($f$ executes a a single
+\noindent $[[Single]](f)$ evaluates the function $f$ ($f$ executes a a single
 compiler stage):
 \[
-\frac{\langle f(x) , x , \rho \rangle \Downarrow \langle v , \rho' \rangle}
-     {\langle Single(f) , x , \rho \rangle \Downarrow \langle v, \rho' \rangle}
+\frac{\langle f(x) , x , \sigma \rangle \Downarrow \langle v , \sigma' \rangle}
+     {\langle [[Single]](f) , x , \sigma \rangle \Downarrow \langle v, \sigma' \rangle}
 \]
 
 
@@ -171,25 +182,18 @@ let rec runProgram arg proc = function
                 truth || result in
         List.fold_left seqHelp false actionList
     | When_Do (whenExp, doExp) ->
-        let result = runProgram arg proc whenExp in
-            if result then runProgram arg proc doExp else result
+           runProgram arg proc whenExp
+        && runProgram arg proc doExp
     | Unless_Do (unlessExp, doExp) ->
-        let result = runProgram arg proc unlessExp in
-            if result then result else runProgram arg proc doExp
+           runProgram arg proc unlessExp
+        || runProgram arg proc doExp
     | Fix action ->
-        let result = runProgram arg proc action in
-            if result then runProgram arg proc (Fix action) else result
+           runProgram arg proc action
+        && runProgram arg proc (Fix action)
     | Ignore action ->
         let _ = runProgram arg proc action in false
     | Single {fn = func} -> func arg proc
     | Share (param, _, action) -> runProgram param proc action
-@
-
-
-
-<<error types>>=
-type 'a aerror = Arg  of string option * string option * 'a action
-               | Live of string * 'a action
 @
 
 
@@ -198,9 +202,10 @@ type 'a aerror = Arg  of string option * string option * 'a action
 % ------------------------------------------------------------------
 
 A semantic analysis phase is performed to ensure that the control flow is
-legal, based on the state information associated with each stage. An illegal
-control flow is one that may destroy a state property before it can reach a
-stage where the property is needed.
+legal, based on the state information associated with each stage. A legal
+control flow ensures that actions will always receive the variables they
+expect (from an enclosing [[Share]] action) and the properties used by an
+action ([[uses]]) will always reach the action.
 
 In order to perform the semantic analysis, we walk the [[action]]'s in a
 depth-first, reverse post-order traversal. At each [[action]], we make any
@@ -214,8 +219,38 @@ the errors that have already been found and the set of properties that must
 be live after the action is completed (we know this information because we
 are performing a reverse post-order traversal).
 
+The use of a closure to compute the live set and errors is not strictly
+necessary, but it provides a clean implementation. Each closure is
+independent of context, depending only on the subtree which it represents;
+the context (necessary for processing the live set and errors) is provided
+through the arguments to this closure.
+
+We define three types of errors that can cause an illegal control flow:
+\begin{itemize}
+\item A [[Sharing]] error occurs if an action expects an input parameter that
+      is not provided by the [[Share]] action that is currently in scope. 
+\item A [[NoProp]] error occurs if an action expects a state property, but
+      this property is never established. This error occurs when we attempt
+	  to use a control flow that expects input parameters we never provide -
+	  this is not the result of a conflict between actions in the control
+	  flow.
+\item A [[DestProp]] error occurs if an action $a$ expects a state property, but
+      another action has destroyed the property before it can reach $a$.
+\end{itemize}
+
+<<error types>>=
+type prop = string
+type destroysAction = string
+type usesAction = string
+type formal = string option
+type actual = string option
+type error = DestProp of prop * destroysAction * usesAction
+           | NoProp of prop * usesAction
+           | Sharing of formal * actual * usesAction
+@
+
 The following rules determine the set of information determined from each type
-of [[action]].
+of [[action]]:
 
 \noindent{Single $a$:}
 
@@ -284,82 +319,91 @@ of [[action]].
 
     $uses = accum\_uses_{a_1}$
 
-The rules for Ignore and Share are the same as Single; the rules for Unless\_Do
-are the same as When\_Do.
+[[Ignore]] and [[Share]] simply make a recursive call on their sub-actions;
+the rules for [[Unless_Do]] are the same as [[When_Do]].
 
 [[walk]] implements these rules, and [[stateCheck]] initializes and calls
 this traversal.
 
 <<state checking>>=
-module ErrorMod = struct
-    type t = error
-    let compare = compare
-end
-module ES = Set.Make(ErrorMod)
+let ( ++ ) = SP.union
+let ( -- ) = SP.diff
+let ( ** ) live destroys =
+    let inter = SP.inter live destroys in
+    let live = SP.filter (fun (x,_) -> SP.exists (fun (y,_) -> x = y) inter)
+                         live in
+    let makeError (l1, l2) rst =
+        let dest = SP.filter (fun (d1,_) -> l1 = d1) destroys in
+        let _ = assert (SP.cardinal dest = 1) in
+        let (_, d2) = SP.choose dest in
+            (* prop, destroys, uses *)
+            DestProp (l1, d2, l2) :: rst
+    in
+        SP.fold makeError live []
+        
 
-let ( /@@ ) = ES.union
+(* should find errors of destruction here *)
 
-let ( ++ ) = SS.union
-let ( -- ) = SS.diff
-let ( ** ) = SS.inter
+let checkArg formal actual fnName = match formal, actual with
+    | None, _ -> []
+    | f, a when f != a -> [Sharing (f, a, fnName)]
+    | _ -> []
 
-let checkArg formal actual action = match formal, actual with
-    | None, _ -> ES.empty
-    | f, a when f != a -> ES.singleton (Arg (f, a, action))
-    | _ -> ES.empty
+let spSet_from_sSet name sSet =
+    SS.fold (fun elt set -> SP.add (name, elt) set) sSet SP.empty
 
 
 (* walk : action -> string option -> create * destroy * use *
-                                     (live * errors -> live * errors) *)
+                                     (live' * errors' -> live * errors)
+    where create, destroy, use, live, and live' are of type string * string *)
 let rec walk arg a =
-    let ( /++ ) errSet sSet =
-        SS.fold (fun s eSet -> ES.add (Live (s, a)) eSet) sSet errSet in
     match a with
     | Seq aList ->
-        let seqWalk a (seqcreates, seqdestroys, sequses, seqanalyze) =
-            let (creates, destroys, uses, analyze) = walk arg a in
+        let seqWalk a (seqcreates, seqdestroys, sequses, seqMkLive) =
+            let (creates, destroys, uses, mkLive) = walk arg a in
             (seqcreates ++ (creates -- seqdestroys),
              seqdestroys ++ (destroys -- seqcreates),
              uses ++ (sequses -- creates),
              fun (live', errors') ->
-                let (seqlive, seqerrors) = seqanalyze (live', errors') in
-                    analyze (seqlive, seqerrors))
+                let (seqlive, seqerrors) = seqMkLive (live', errors') in
+                    mkLive (seqlive, seqerrors))
         in
             List.fold_right seqWalk aList
-                            (SS.empty, SS.empty, SS.empty, fun a -> a)
+                            (SP.empty, SP.empty, SP.empty, fun a -> a)
     | When_Do (cond, body) ->
-        let ccreates, cdestroys, cuses, canalyze = walk arg cond in
-        let bcreates, bdestroys, buses, banalyze = walk arg body in
+        let ccreates, cdestroys, cuses, cMkLive = walk arg cond in
+        let bcreates, bdestroys, buses, bMkLive = walk arg body in
             (ccreates -- bdestroys,
              cdestroys ++ bdestroys,
              cuses ++ (buses -- ccreates),
              fun (live', errors') ->
-                let (blive, berrors) = banalyze (live', errors') in
-                    canalyze (live' ++ blive, berrors))
+                let (blive, berrors) = bMkLive (live', errors') in
+                    cMkLive (live' ++ blive, berrors))
     | Unless_Do (cond, body) -> walk arg (When_Do (cond, body))
     | Fix a ->
-        let creates, destroys, uses, analyze = walk arg a in
+        let creates, destroys, uses, mkLive = walk arg a in
             (creates, destroys, uses,
              fun (live', errors') ->
-                let live = (live' -- creates) ++ uses in
-                    (live,
-                     errors' /++ (live' ** destroys)
-                             /++ (live ** destroys)
-                             /++ (creates ** destroys)))
+                let (flive, ferrors) = mkLive (live', errors') in
+                    (flive,
+                     ferrors @ (flive ** destroys)))
+                             
     | Ignore a -> walk arg a
-    | Single luaStage -> (match luaStage with
-        {name = fnName; stateUsed = uses; stateCreated = creates;
-                   stateDestroyed = destroys; paramExpected = formal} ->
-        (creates, destroys, uses,
-         fun (live', errors') ->
-            ((live' -- creates) ++ uses,
-             errors' /++ (live' ** destroys) /++ (creates ** destroys)
-                     /@@ (checkArg formal arg a))))
-    | Share (_, localArg, a) -> walk (Some localArg) a
+    | Single {name = fnName; stateUsed = uses; stateCreated = creates;
+	          stateDestroyed = destroys; paramExpected = formal} ->
+		(match List.map (spSet_from_sSet fnName) [creates; destroys; uses] with
+		 | [creates; destroys; uses] ->
+			(creates, destroys, uses,
+			 fun (live', errors') ->
+				((live' -- creates) ++ uses,
+				 errors' @ (live' ** destroys) @ (creates ** destroys)
+						 @ (checkArg formal arg fnName)))
+		 | _ -> assert false)
+	| Share (_, localArg, a) -> walk (Some localArg) a
 
 let stateCheck a =
     let (_, _, _, check) = walk None a in
-        check (SS.empty, ES.empty)
+        check (SP.empty, [])
 @
 
 
@@ -379,13 +423,13 @@ let run main proc input =
 *)
     let (liveIn, errors) = stateCheck main
     in
-        if ES.is_empty errors
-        then
+        match errors with
+        | [] ->
 (*
             (backSay ["No Errors. Running runProgram()\n"]
 *)
              runProgram V.Nil proc main
-        else
+        | _ ->
             (backSay ["Errors in control flow.\n"]; false)
 
 @
@@ -409,6 +453,11 @@ module StringMod = struct
     let compare = compare
 end
 module SS = Set.Make(StringMod)
+module StringPairMod = struct
+    type t = string * string
+    let compare = fun (a,_) (b,_) -> compare a b
+end
+module SP = Set.Make(StringPairMod)
 
 let list2SSet lst = List.fold_right SS.add lst SS.empty
 
@@ -454,8 +503,7 @@ module Make (T1 : Lua.Lib.TYPEVIEW with type 'a t = 'a t')
 combined) =
       struct
         module V = Interp.V
-		type error = V.value aerror
-		<<state checking>>
+        <<state checking>>
         <<backplane builtins>>
 
         type state = Interp.V.state
@@ -656,22 +704,60 @@ let rec printAction indent =
             text ^ printAction newIndent action ^ ")"
 
 
+
 let printError err =
-	let printOpt opt = match opt with
-		| None -> "Nil"
-		| Some a -> noIndent ^ a in
+    let printOpt opt = match opt with
+        | None -> "Nil"
+        | Some a -> noIndent ^ a in
     let identity x y = x ^ y in
     let error text = "Error: " ^ text
-	in
-		match err with
-		| Arg (formal, actual, action) ->
-			error ("Cannot convert actual argument " ^ (printOpt actual) ^
+    in
+        match err with
+        | DestProp (prop, dest, uses) ->
+            error (String.concat " "
+                       [ "Property"
+                       ; prop
+                       ; "needed by"
+                       ; uses
+                       ; "is destroyed by"
+                       ; dest
+                       ; ".\n"
+                       ])
+        | NoProp (prop, uses) ->
+            error (String.concat " "
+                       [ "Property"
+                       ; prop
+                       ; "needed by"
+                       ; uses
+                       ; "is never provided"
+                       ; ".\n"
+                       ])
+        | Sharing (formal, actual, fnName) ->
+            let valOf = function
+                | None -> "None"
+                | Some v -> v in
+            let formal = valOf formal in
+            let actual = valOf actual in
+            error (String.concat " "
+                       [ "Variable type mismatch:"
+                       ; fnName
+                       ; "expects"
+                       ; actual
+                       ; "but was passed type"
+                       ; actual
+                       ; ".\n"
+                       ])
+
+                       (*
+        | Arg (formal, actual, action) ->
+            error ("Cannot convert actual argument " ^ (printOpt actual) ^
                    " to formal argument " ^ (printOpt formal) ^ " in action\n" ^
-				   (printAction noIndent action))
-		| Live (prop, action) -> 
-			error ("State property " ^ prop ^
-				   " that is used in a future stage is destroyed by action\n" ^
-				   (printAction noIndent action))
+                   (printAction noIndent action))
+        | Live (prop, action) -> 
+            error ("State property " ^ prop ^
+                   " that is used in a future stage is destroyed by action\n" ^
+                   (printAction noIndent action))
+            *)
 
 
 @
