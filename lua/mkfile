@@ -7,6 +7,11 @@ LIBDIR =        ../lib
 OCAMLC_FLAGS=-I $LIBDIR -g
 OCAMLO_FLAGS=-I $LIBDIR
 
+SRC=ast.ml ast.mli builtins.ml builtins.mli floatscan.ml floatscan.mll \
+	io.ml io.mli lua.ml lua.mli main.ml parser.ml parser.mli scan.ml \
+	thashtbl.ml thashtbl.mli value.ml value.mli
+
+
 OBJ=thashtbl.cmo floatscan.cmo value.cmo ast.cmo parser.cmo scan.cmo lua.cmo builtins.cmo io.cmo main.cmo
 OPT=`echo $OBJ | sed 's/\.cmo/.cmx/g'`
 
@@ -18,8 +23,8 @@ oclua: $OBJ
 oclua.opt: $OPT
 	ocamlopt $OCAMLO_FLAGS -o $target unix.cmxa cllib.cmxa $prereq 
 
-bin:V: lua.cmi lua.cmo parser.cmo parser.cmi scan.cmi scan.cmo main.cmo builtins.cmi builtins.cmo 
-src:V: lua.ml lua.mli
+bin:V: $OBJ 
+src:V: $SRC
 
 TEST=03 04 05 06 07 08 10 12 02
 # 09 needs I/O library -- dofile needs to return nil on error
@@ -49,7 +54,7 @@ depend:V: DEPEND
 clean:V:
 	rm -f *.cmi *.cmo *.ml *.mli *.mly
 
-DEPEND: src `echo *.ml *.mli`
+DEPEND: $SRC
 	$OCAMLDEP *.ml *.mli > $target
 
 
