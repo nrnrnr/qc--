@@ -44,6 +44,7 @@ Replace the node at the focus, plugging in a new graph in its place.
 Here are some basic types and operations:
 <<zipcfg.mli>>=
 type uid
+type label = uid * string
 
 type graph
 type zgraph
@@ -92,21 +93,26 @@ After insertion, the entry node remains the focus.
 <<zipcfg.mli>>=
 type regs  = Register.Set.t  (* sets of regs for dataflow *)
 type xregs = Register.SetX.t (* sets of regs for dataflow *)
-type contedge = { kills:regs; defs:regs; node:uid }
+type contedge = { kills:regs; defs:regs; node:label }
 
 
 val uid : unit -> uid
-type machine = ((Rtl.exp -> Automaton.t), Call.t) Target.t
+type machine = { goto    : label -> Rtl.rtl;
+                 cbranch : Rtl.exp * label -> Rtl.rtl;
+                 bnegate : Rtl.rtl -> Rtl.rtl;
+                 call    : Rtl.exp -> Rtl.rtl;
+                 forbidden : Rtl.rtl;
+               }
 
-val label        : machine -> uid -> string -> zgraph -> zgraph  (* spans? *)
+val label        : machine -> label -> zgraph -> zgraph  (* spans? *)
 val instruction  : Rtl.rtl -> zgraph -> zgraph
 val stack_adjust : Rtl.rtl -> zgraph -> zgraph
 val assertion    : Rtl.rtl -> zgraph -> zgraph
-val branch       : machine -> target:uid -> zgraph -> zgraph
+val branch       : machine -> target:label -> zgraph -> zgraph
 val jump         : Rtl.rtl -> uses:regs -> targets:string list -> zgraph -> zgraph
-val cbranch      : machine -> Rtl.exp -> ifso:uid -> ifnot:uid -> zgraph -> zgraph
-val mbranch      : Rtl.rtl -> targets:uid list -> zgraph -> zgraph
-val call         : Rtl.rtl -> altrets:contedge list -> 
+val cbranch      : machine -> Rtl.exp -> ifso:label -> ifnot:label -> zgraph -> zgraph
+val mbranch      : Rtl.rtl -> targets:label list -> zgraph -> zgraph
+val call         : machine -> Rtl.exp -> altrets:contedge list -> 
                      unwinds_to:contedge list -> cuts_to:contedge list ->
                      aborts:bool -> uses:regs -> defs:regs -> kills:regs ->
                      reads:string list option -> writes:string list option ->
@@ -114,12 +120,15 @@ val call         : Rtl.rtl -> altrets:contedge list ->
 val cut_to       : Rtl.rtl -> cuts_to:contedge list -> aborts:bool ->
                      uses:regs -> zgraph -> zgraph
 val return       : Rtl.rtl -> exit:int -> uses:regs -> zgraph -> zgraph
+val forbidden    : machine -> zgraph -> zgraph
+  (* control should not reach; causes checked RTE *)
 @ 
-Sometimes we need to create a branch target in the middle of a graph.
+Sometimes we need to make the current focus (which must be the entry)
+a branch target to be used later.
 Calling [[make_target gz]] returns a new graph and a unique identifier
-that flows into the focus.
+to which the entry flows in.
 <<zipcfg.mli>>=
-val make_target : zgraph -> uid * zgraph
+val make_target : machine -> zgraph -> label * zgraph
 @ 
 <<zipcfg.ml>>=
 module R = Rtl
@@ -127,8 +136,16 @@ module T = Target
 
 let impossf fmt = Printf.kprintf Impossible.impossible fmt
 let unimpf  fmt = Printf.kprintf Impossible.unimp      fmt
+let ( **> ) f x = f x
 
 type uid = int
+type label = uid * string
+type machine = { goto    : label -> Rtl.rtl;
+                 cbranch : Rtl.exp * label -> Rtl.rtl;
+                 bnegate : Rtl.rtl -> Rtl.rtl;
+                 call    : Rtl.exp -> Rtl.rtl;
+                 forbidden : Rtl.rtl;
+               }
 
 let uid =
   let n = Reinit.ref 1 in
@@ -140,22 +157,19 @@ let address uid = R.codesym (Printf.kprintf Symbol.unmangled ".Lz%d" uid) 99
 
 type regs  = Register.Set.t  (* sets of regs for dataflow *)
 type xregs = Register.SetX.t (* sets of regs for dataflow *)
-type contedge = { kills:regs; defs:regs; node:uid }
+type contedge = { kills:regs; defs:regs; node:label }
 @ 
 \paragraph{Nodes and basic blocks}
 <<zipcfg.ml>>=
-type label = string
-
+type user = User of bool  (* is label a user label? *)
 type first
   = Entry
-  | Label of uid * string option
-        (* no continuation? *)
+  | Label of label * user  (* user labels can't be deleted *)
 
 type middle
   = Instruction  of Rtl.rtl
   | Stack_adjust of Rtl.rtl
   | Assertion    of Rtl.rtl
-      
 @ 
 Unclear whether a jump should get an exit number or what it should
 mean (think about inlining).
@@ -165,19 +179,19 @@ appear, but it is useful in a subgraph (e.g., replacement for a node).
 <<zipcfg.ml>>=
 type 'a edgelist = 'a list (* could be array *)
 <<node types>>
-
 type exit_num = int
 
 type last
   = Exit    of exit_num  
-  | Branch  of Rtl.rtl * uid
-  | Cbranch of Rtl.rtl * uid * uid    (* true, false *)
-  | Mbranch of Rtl.rtl * uid edgelist (* possible successors *)
+  | Branch  of Rtl.rtl * label
+  | Cbranch of Rtl.rtl * label * label    (* true, false *)
+  | Mbranch of Rtl.rtl * label edgelist (* possible successors *)
   | Call    of call  
   | Cut     of Rtl.rtl * contedge edgelist * regs  (* out edges, registers used *)
   | Return  of exit_num * Rtl.rtl * regs
   | Jump    of exit_num * Rtl.rtl * regs * string list
                    (* exit num, inst, registers used, targets *)
+  | Forbidden of Rtl.rtl (* cause a run-time error *)
 @ 
 Now the zipper:
 A [[head]] is a [[first]] followed by zero or more [[middle]]s.
@@ -257,18 +271,26 @@ module type BLOCKS = sig
   val find   : t -> uid -> block 
   val focus  : t -> uid -> block * t
   val union  : t -> t -> t
-  val exit   : int -> t -> block * t
 
   val fold   : (block -> 'a -> 'a) -> t -> 'a -> 'a
+  val focusopt : (block -> 'a option) -> t -> 'a * t
 end
 
 module Blocks : BLOCKS = struct
   type t = block list
-  let id = function (Entry,_) -> entry_uid | (Label (u, _),_) -> u
+  let id = function (Entry,_) -> entry_uid | (Label ((u, _), _),_) -> u
   let empty = []
   let insert b bs = b :: bs
   let find blocks u = List.find (fun b -> id b = u) blocks
-  let focus blocks u =
+  let focusopt p blocks =
+    let rec f prev' next = match next with
+    | [] -> raise Not_found
+    | b :: bs ->
+        match p b with
+        | Some x -> x, List.rev_append prev' bs
+        | None -> f (b::prev') bs in
+    f [] blocks
+  let focus blocks u = 
     let rec f prev' next = match next with
     | [] -> raise Not_found
     | b :: bs ->
@@ -276,7 +298,6 @@ module Blocks : BLOCKS = struct
         else f (b::prev') bs in
     f [] blocks
   let union = (@)
-  let exit n blocks = unimpf "Blocks.find_exit"
   let fold = List.fold_right
 end
 @ 
@@ -284,15 +305,19 @@ end
 type graph  = Blocks.t
 type zgraph = zblock * Blocks.t
 @ 
-<<zipcfg>>=
-@ 
 <<zipcfg.ml>>=
 let empty = Blocks.insert (Entry, Last (Exit 0)) Blocks.empty
 
-let focus blocks uid =
+let focus uid blocks =
   let (b, bs) = Blocks.focus blocks uid in
   unzip b, bs
-let entry blocks = focus blocks entry_uid
+let entry blocks = focus entry_uid blocks
+let exit n =
+  let is_exit b = match goto_end (unzip b) with
+  | head, (Exit n' as l) when n' = n -> Some (End (head, l))
+  | _ -> None in
+  Blocks.focusopt is_exit 
+  
 
 let unfocus (bz, bs) = Blocks.insert (zip bz) bs
 <<zipcfg.ml>>=
@@ -305,45 +330,49 @@ let assertion    rtl g = consm (Assertion    rtl) g
 let stack_adjust rtl g = consm (Stack_adjust rtl) g
 
 let unreachable = function
-  | Last (Branch _) -> ()
+  | Last (Branch _ | Forbidden _) -> ()
   | _ -> Printf.eprintf "warning: unreachable code?\n"
 
-let consl last g = match entry g with
+let consl last g = match g with
 | (Start (Entry, tail), blocks) ->
     unreachable tail;
     (Start (Entry, Last last), blocks)
 | _ -> impossf "focus not on entry node"
 
-let goto tgt =
-  let f = tgt.T.goto.T.embed in
-  fun uid -> f (address uid)
-
-let branch tgt = let g = goto tgt in fun ~target -> consl (Branch (g target, target))
+let branch machine =
+  let goto = machine.goto in fun ~target -> consl (Branch (goto target, target))
 let jump rtl ~uses ~targets  = consl (Jump (0, rtl, uses, targets))
-let cbranch rtl ~ifso ~ifnot = consl (Cbranch (rtl, ifso, ifnot))
+let cbranch machine =
+  let f = machine.cbranch in
+  fun exp ~ifso ~ifnot ->
+    let rtl = f (exp, ifso) in
+    consl (Cbranch (rtl, ifso, ifnot))
 let mbranch rtl ~targets     = consl (Mbranch (rtl, targets))
 let return  rtl ~exit ~uses  = consl (Return (exit, rtl, uses))
 let cut_to  rtl ~cuts_to ~aborts ~uses = consl (Cut (rtl, cuts_to, uses))
+let forbidden machine = consl (Forbidden machine.forbidden)
 @ 
 <<zipcfg.ml>>=
-let label tgt =
-  let goto = goto tgt in
-  fun uid name g -> match g with
+let label' user tgt =
+  let goto = tgt.goto in
+  fun lbl g -> match g with
   | (Start (Entry, tail), blocks) -> 
-      Start (Entry, Last (Branch (goto uid, uid))),
-      Blocks.insert (Label (uid, Some name), tail) blocks
+      Start (Entry, Last (Branch (goto lbl, lbl))),
+      Blocks.insert (Label (lbl, user), tail) blocks
   | _ -> impossf "focus not on entry node"
+let label        = label' (User true)
+let privatelabel = label' (User false)
 @ 
 <<zipcfg.ml>>=
-let exit_to_head block =
-  match goto_end (unzip block) with
-  | h, Exit _ -> h
-  | _ -> impossf "unexpected non-exit"
-
 let entry_to_tail block =
   match goto_start block with
   | Entry, t -> t
   | _ -> impossf "unexpected non-entry"
+
+let exit_to_head block =
+  match goto_end block with
+  | h, Exit _ -> h
+  | _ -> impossf "unexpected non-exit"
 <<zipcfg.ml>>=
 let check_single_exit g =
   let check block found = match goto_end (unzip block) with
@@ -370,7 +399,7 @@ let splice_before (focus, blocks) g =
             after_head head, Blocks.union blocks gblocks
         | Last last ->
             let blocks = Blocks.insert (zip (End (head, last))) blocks in
-            let gexit, gblocks = Blocks.exit 0 gblocks in
+            let gexit, gblocks = exit 0 gblocks in
             after_head (exit_to_head gexit), Blocks.union blocks gblocks in
         extend head gnodes
     | _ -> impossf "ill-formed entry node" in
@@ -402,36 +431,31 @@ let splice_after (focus, blocks) g =
   | Middle (head, mid, tail) -> splice tail (fun tail -> Middle (head, mid, tail))
   | End (tail, last) -> impossf "splicing after a last node"
 <<zipcfg.ml>>=
-let make_target ((b, bs) as gz) = match b with
-| Start (Label (u, _), tail) -> u, Blocks.insert (zip b) bs
-| Start (Entry, tail) -> unimpf "make entry a target"
-| _ ->
-    (* splice in Entry -> goto u; Label u -> Exit *)
-    let machine = unimpf "machine" in
-    let u = uid () in
-    let l = Idgen.label "branch target" in
-    let g = unfocus (branch machine u (unfocus (label machine u l (entry empty)))) in
-    let g = unfocus (splice_before gz g) in
-    u, g
+let make_target machine ((b, bs) as gz) = match b with
+| Start (Label (u, _), tail) -> u, gz
+| Start (Entry, Last (Branch (_, u))) -> u, gz
+| Start (Entry, _) ->
+    let lbl = (uid (), Idgen.label "branch target") in
+    let gz = branch machine ~target:lbl **> privatelabel machine lbl **> gz in
+    lbl, gz
+| _ -> impossf "focus not on entry"
 @ 
 <<zipcfg.ml>>=
-let call rtl ~altrets ~unwinds_to ~cuts_to ~aborts
-               ~uses ~defs ~kills ~reads ~writes ~spans =
-  let new_cedge u = { kills = kills; defs = defs; node = u } in
-  let u = uid () in
-  let succ = [new_cedge u] in
-  let abort       = if aborts then (unimpf "aborts"; [new_cedge 99]) else [] in
-  let edgelist    = List.flatten [succ; altrets; unwinds_to; cuts_to; abort] in
+let call machine exp ~altrets ~unwinds_to ~cuts_to ~aborts
+               ~uses ~defs ~kills ~reads ~writes ~spans succ =
+  let new_cedge lbl = { kills = kills; defs = defs; node = lbl } in
+  let lbl = (uid (), Idgen.label "call successor") in
+  let edgelist = new_cedge lbl :: List.flatten [altrets; unwinds_to; cuts_to] in
   let call = 
-    { cal_i = rtl; cal_contedges = edgelist; cal_spans = spans;
+    { cal_i = machine.call exp; cal_contedges = edgelist; cal_spans = spans;
       cal_uses = uses; cal_altrets = List.length altrets;
       cal_unwinds_to = List.length unwinds_to; cal_cuts_to = List.length cuts_to;
       cal_reads = reads; cal_writes = writes; } in
-  function
-  | (Start (Entry, tail), blocks) -> 
-      Start (Entry, Last (Call call)),
-      Blocks.insert (Label (u, None), tail) blocks
-  | _ -> impossf "focus not on entry node"
+  let succ = privatelabel machine lbl succ in
+  match succ with
+  | (Start (Entry, Last (Branch (_, lbl'))), blocks) when lbl' =*= lbl -> 
+      Start (Entry, Last (Call call)), blocks
+  | _ -> impossf "internal error in call constructor"
 @ 
 <<zipcfg.ml>>=
 let followed_by g n g' = unimpf "graph stitching"
