@@ -137,6 +137,9 @@ sub mysys {
     my $rc;
     my $signo;
     
+    if ($verbose) {
+        print "# executing: @_\n";
+    }    
     $rc    = system(@_);
     $signo = $rc & 127; 
     $signo && die "killed by signal $signo\n";
@@ -165,7 +168,10 @@ sub same {
     my ($old,$new) = @_;
     my $rc;
     
-    if (!-f $old || !-f $new) { return 1;} # not equal 
+    if (!-f $old || !-f $new) { 
+        $reason = "file $old or $new is missing";
+        return 1;
+    } 
 
     if ($verbose) {
         $rc = mysys ("diff -c $old $new");
@@ -199,11 +205,9 @@ sub expect {
         return 0;   # failed
     }
     $rc = mysys ("$cmd < $stdin 2> $t2 > $t1");
-    $rc >>= 8;
     
     # if something goes wrong, we expect the outputs not to match, so we
     # don't check $rc.
-
     
     if (not (same($stdout,$t1))) {
         $reason = "stdout did not match $stdout";

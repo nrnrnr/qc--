@@ -28,13 +28,6 @@ temporaries) into named spaces. The cells forming a space share
 properties but the {\rtl} framework does not announce them. This module
 provides a type to describe an {\rtl} space. 
 
-%%  \begin{quote}\it
-%%      I feel that the type to describe a space should go into the
-%%      \module{rtl} module. Values for different spaces could be still
-%%      defined somewhere else. NR suggested to have this separate module.
-%%      --CL
-%%  \end{quote}
-
 The function [[checked]] asserts that its argument satisfies a few
 simple invariants, then returns that argument.
 <<space.mli>>=
@@ -61,7 +54,15 @@ module Standard32 : sig
   val p :  count:int -> generator          (* predicate registers *)
   val w :               generator          (* predicate temps *)
   val c :  count:int -> generator          (* control and special registers *)
-  type 'a locations = { pc : 'a; npc : 'a; cc : 'a }
+  
+  type 'a locations = 
+    { pc:       'a
+    ; npc:      'a
+    ; cc:       'a
+    ; fp_mode:  'a  (* FP rounding mode   *)
+    ; fp_fcmp:  'a  (* FP %fcmp results   *)
+    }
+
   val locations : c:t -> Rtl.loc locations
         (* apply to c space to get standard locations *)
   val indices : int locations (* standard indices in c space *)
@@ -322,14 +323,32 @@ module Standard32 = struct
     ; classification = Fixed
     } 
 
-  type 'a locations = { pc : 'a; npc : 'a; cc : 'a }
-  let locations ~c = match c with
-    { space = space; cellwidth = cw; aggregation = bo; indexwidth = iw } ->
-    if space <> 'c' then
-      Impossible.impossible ("Standard locations from space " ^ Char.escaped space);
-    let reg n = Rtl.reg (space, n, cw) in
-    { pc = reg 0; npc = reg 1; cc = reg 2 }
-  let indices = { pc = 0; npc = 1; cc = 2 }
+  type 'a locations = 
+    { pc:       'a
+    ; npc:      'a
+    ; cc:       'a
+    ; fp_mode:  'a  (* FP rounding mode   *)
+    ; fp_fcmp:  'a  (* FP condition codes *)
+    }
+  
+  let locations ~c = match c with    
+    |   { space       = 'c'
+        ; cellwidth   = cw
+        ; aggregation = bo
+        ; indexwidth  = iw 
+        } ->
+            let reg n = Rtl.reg ('c', n, cw) in
+            { pc      = reg 0
+            ; npc     = reg 1
+            ; cc      = reg 2 
+            ; fp_mode = Rtl.slice 2 0 (reg 4)   
+            ; fp_fcmp = Rtl.slice 2 0 (reg 5) 
+            }
+    |   { space = s } -> Impossible.impossible 
+            ( "Standard locations from space " ^ Char.escaped s)
+                                 
+  
+  let indices = { pc = 0; npc = 1; cc = 2; fp_mode = 4 ; fp_fcmp = 5 }
   let vfp = Rtl.fetch (Rtl.reg ('V', 0, 32)) 32
 end
 @
