@@ -115,6 +115,7 @@ $target         = undef;                # option: -target=t
 $file           = undef;                # foo.c-- without suffix .c-- 
 $cflag          = 0;                    # option: -c
 $sflag          = 0;                    # option: -S
+$reason         = "success";            # why test failed
 @
 
 The test script is broken into sub routines. A sub routine never exists
@@ -161,7 +162,7 @@ sub same {
         $rc = system ("cmp -s $old $new");
     }    
     my $equal = ($rc eq 0 ? 1 : 0);
-    
+    $reason = $equal ? $reason : "$old and $new different";
     return $equal;
 }
 @
@@ -179,9 +180,11 @@ sub expect {
     my $t1 = "$tmp.4";
     my $t2 = "$tmp.5";
     my $rc;
+    my $r;
    
     unless (-f $stdout && -f $stderr) { 
         $verbose && print "$stdin or $stdout missing\n";
+        $reason = "file $stdin or $stdout missing\n";
         return 0;   # failed
     }
     $rc = system ("$cmd < $stdin 2> $t2 > $t1");
@@ -190,7 +193,16 @@ sub expect {
     # if something goes wrong, we expect the outputs not to match, so we
     # don't check $rc.
 
-    return (same($stdout,$t1) && same($stderr,$t2));
+    
+    if (not (same($stdout,$t1))) {
+        $reason = "stdout did not match $stdout";
+        return 0;
+    }
+    if (not (same($stderr,$t2))) {
+        $reason = "stderr did not match $stderr";
+        return 0;
+    }    
+    return 1;
 }    
 @
 
@@ -256,7 +268,7 @@ Short sub routines to deal with final messages and cleanup.
 
 <<testqc>>=
 sub failed {
-    print "\n# $0 -verbose @ARGV #test failed\n";
+    print "\n $0 -verbose @ARGV #failed: $reason\n";
     cleantmp();
 }
 
