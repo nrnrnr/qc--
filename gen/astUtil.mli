@@ -14,9 +14,11 @@
   val sexp_rd_hint : SexpPkl.instream -> Ast.hint
   val sexp_rd_reg : SexpPkl.instream -> Ast.reg
   val sexp_rd_target : SexpPkl.instream -> Ast.target
+  val sexp_rd_alias_set : SexpPkl.instream -> Ast.alias_set
   val sexp_rd_size : SexpPkl.instream -> Ast.size
   val sexp_rd_align : SexpPkl.instream -> Ast.align
   val sexp_rd_aligned : SexpPkl.instream -> Ast.aligned
+  val sexp_rd_in_alias : SexpPkl.instream -> Ast.in_alias
   val sexp_rd_op : SexpPkl.instream -> Ast.op
   val sexp_rd_region : SexpPkl.instream -> Ast.region
   val sexp_rd_ty : SexpPkl.instream -> Ast.ty
@@ -25,10 +27,11 @@
   val sexp_rd_expr : SexpPkl.instream -> Ast.expr
   val sexp_rd_import : SexpPkl.instream -> Ast.import
   val sexp_rd_export : SexpPkl.instream -> Ast.export
-  val sexp_rd_invariant : SexpPkl.instream -> Ast.invariant
+  val sexp_rd_variance : SexpPkl.instream -> Ast.variance
   val sexp_rd_register : SexpPkl.instream -> Ast.register
   val sexp_rd_arch : SexpPkl.instream -> Ast.arch
   val sexp_rd_decl : SexpPkl.instream -> Ast.decl
+  val sexp_rd_bare_formal : SexpPkl.instream -> Ast.bare_formal
   val sexp_rd_formal : SexpPkl.instream -> Ast.formal
   val sexp_rd_memsize : SexpPkl.instream -> Ast.memsize
   val sexp_rd_init : SexpPkl.instream -> Ast.init
@@ -67,6 +70,7 @@
   val sexp_rd_datum_list : SexpPkl.instream -> Ast.datum list
   val sexp_rd_section_list : SexpPkl.instream -> Ast.section list
   val sexp_rd_toplevel_list : SexpPkl.instream -> Ast.toplevel list
+  val sexp_rd_in_alias_list : SexpPkl.instream -> Ast.in_alias list
   val sexp_rd_aligned_option : SexpPkl.instream -> Ast.aligned option
   val sexp_rd_target_list : SexpPkl.instream -> Ast.target list
   val sexp_rd_reg_option : SexpPkl.instream -> Ast.reg option
@@ -78,9 +82,11 @@
   val sexp_wr_hint : Ast.hint -> SexpPkl.outstream -> unit
   val sexp_wr_reg : Ast.reg -> SexpPkl.outstream -> unit
   val sexp_wr_target : Ast.target -> SexpPkl.outstream -> unit
+  val sexp_wr_alias_set : Ast.alias_set -> SexpPkl.outstream -> unit
   val sexp_wr_size : Ast.size -> SexpPkl.outstream -> unit
   val sexp_wr_align : Ast.align -> SexpPkl.outstream -> unit
   val sexp_wr_aligned : Ast.aligned -> SexpPkl.outstream -> unit
+  val sexp_wr_in_alias : Ast.in_alias -> SexpPkl.outstream -> unit
   val sexp_wr_op : Ast.op -> SexpPkl.outstream -> unit
   val sexp_wr_region : Ast.region -> SexpPkl.outstream -> unit
   val sexp_wr_ty : Ast.ty -> SexpPkl.outstream -> unit
@@ -89,10 +95,11 @@
   val sexp_wr_expr : Ast.expr -> SexpPkl.outstream -> unit
   val sexp_wr_import : Ast.import -> SexpPkl.outstream -> unit
   val sexp_wr_export : Ast.export -> SexpPkl.outstream -> unit
-  val sexp_wr_invariant : Ast.invariant -> SexpPkl.outstream -> unit
+  val sexp_wr_variance : Ast.variance -> SexpPkl.outstream -> unit
   val sexp_wr_register : Ast.register -> SexpPkl.outstream -> unit
   val sexp_wr_arch : Ast.arch -> SexpPkl.outstream -> unit
   val sexp_wr_decl : Ast.decl -> SexpPkl.outstream -> unit
+  val sexp_wr_bare_formal : Ast.bare_formal -> SexpPkl.outstream -> unit
   val sexp_wr_formal : Ast.formal -> SexpPkl.outstream -> unit
   val sexp_wr_memsize : Ast.memsize -> SexpPkl.outstream -> unit
   val sexp_wr_init : Ast.init -> SexpPkl.outstream -> unit
@@ -137,6 +144,9 @@
   val sexp_wr_datum_list : Ast.datum list -> SexpPkl.outstream -> unit
   val sexp_wr_section_list : Ast.section list -> SexpPkl.outstream -> unit
   val sexp_wr_toplevel_list : Ast.toplevel list ->
+      SexpPkl.outstream ->
+      unit
+  val sexp_wr_in_alias_list : Ast.in_alias list ->
       SexpPkl.outstream ->
       unit
   val sexp_wr_aligned_option : Ast.aligned option ->

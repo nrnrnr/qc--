@@ -69,6 +69,18 @@
         end
       end
   
+  and sexp_rd_alias_set s_ = 
+      begin
+        (SexpPkl.rd_lp s_);
+        (SexpPkl.rd_sym "ast_alias_set" s_);
+        let tmp_ = let string1 = (StdPrimsUtil.sexp_rd_std_string s_) in
+          (string1) in
+        begin
+          (SexpPkl.rd_rp s_);
+          tmp_
+        end
+      end
+  
   and sexp_rd_size s_ = 
       begin
         (SexpPkl.rd_lp s_);
@@ -99,6 +111,18 @@
         (SexpPkl.rd_sym "ast_aligned" s_);
         let tmp_ = let int1 = (StdPrimsUtil.sexp_rd_std_int s_) in
           (int1) in
+        begin
+          (SexpPkl.rd_rp s_);
+          tmp_
+        end
+      end
+  
+  and sexp_rd_in_alias s_ = 
+      begin
+        (SexpPkl.rd_lp s_);
+        (SexpPkl.rd_sym "ast_in_alias" s_);
+        let tmp_ = let string1 = (StdPrimsUtil.sexp_rd_std_string s_) in
+          (string1) in
         begin
           (SexpPkl.rd_rp s_);
           tmp_
@@ -164,7 +188,8 @@
             | "ast_Mem" -> let ty1 = (sexp_rd_ty s_) in
               let expr1 = (sexp_rd_expr s_) in
               let aligned_opt1 = (SexpPkl.rd_option sexp_rd_aligned s_) in
-              Ast.Mem(ty1, expr1, aligned_opt1, raise (Failure "no asdlGen"))
+              let in_alias_list1 = (SexpPkl.rd_list sexp_rd_in_alias s_) in
+              Ast.Mem(ty1, expr1, aligned_opt1, in_alias_list1)
             | _ -> (SexpPkl.die ()))
           (* end match *) in
         begin
@@ -251,7 +276,7 @@
         end
       end
   
-  and sexp_rd_invariant s_ = 
+  and sexp_rd_variance s_ = 
       begin
         (SexpPkl.rd_lp s_);
         let tmp_ = let t = (SexpPkl.get_sym s_) in
@@ -271,12 +296,12 @@
       begin
         (SexpPkl.rd_lp s_);
         (SexpPkl.rd_sym "ast_register" s_);
-        let tmp_ = let invariant1 = (sexp_rd_invariant s_) in
+        let tmp_ = let variance1 = (sexp_rd_variance s_) in
           let hint_opt1 = (SexpPkl.rd_option sexp_rd_hint s_) in
           let ty1 = (sexp_rd_ty s_) in
           let name1 = (sexp_rd_name s_) in
           let reg_opt1 = (SexpPkl.rd_option sexp_rd_reg s_) in
-          (invariant1, hint_opt1, ty1, name1, reg_opt1) in
+          (variance1, hint_opt1, ty1, name1, reg_opt1) in
         begin
           (SexpPkl.rd_rp s_);
           tmp_
@@ -316,9 +341,9 @@
               "ast_DeclAt" -> let decl1 = (sexp_rd_decl s_) in
               let region1 = (sexp_rd_region s_) in
               Ast.DeclAt(decl1, region1)
-            | "ast_Import" -> let ty1 = (SexpPkl.rd_option sexp_rd_ty s_) in
+            | "ast_Import" -> let ty_opt1 = (SexpPkl.rd_option sexp_rd_ty s_) in
               let import_list1 = (SexpPkl.rd_list sexp_rd_import s_) in
-              Ast.Import(ty1, import_list1)
+              Ast.Import(ty_opt1, import_list1)
             | "ast_Export" -> let ty_opt1 = (SexpPkl.rd_option sexp_rd_ty s_) in
               let export_list1 = (SexpPkl.rd_list sexp_rd_export s_) in
               Ast.Export(ty_opt1, export_list1)
@@ -342,15 +367,28 @@
         end
       end
   
+  and sexp_rd_bare_formal s_ = 
+      begin
+        (SexpPkl.rd_lp s_);
+        (SexpPkl.rd_sym "ast_bare_formal" s_);
+        let tmp_ = let hint_opt1 = (SexpPkl.rd_option sexp_rd_hint s_) in
+          let variance1 = (sexp_rd_variance s_) in
+          let ty1 = (sexp_rd_ty s_) in
+          let name1 = (sexp_rd_name s_) in
+          (hint_opt1, variance1, ty1, name1) in
+        begin
+          (SexpPkl.rd_rp s_);
+          tmp_
+        end
+      end
+  
   and sexp_rd_formal s_ = 
       begin
         (SexpPkl.rd_lp s_);
         (SexpPkl.rd_sym "ast_formal" s_);
-        let tmp_ = let hint_opt1 = (SexpPkl.rd_option sexp_rd_hint s_) in
-          let invariant1 = (sexp_rd_invariant s_) in
-          let ty1 = (sexp_rd_ty s_) in
-          let name1 = (sexp_rd_name s_) in
-          (hint_opt1, invariant1, ty1, name1) in
+        let tmp_ = let region1 = (sexp_rd_region s_) in
+          let bare_formal1 = (sexp_rd_bare_formal s_) in
+          (region1, bare_formal1) in
         begin
           (SexpPkl.rd_rp s_);
           tmp_
@@ -753,6 +791,9 @@
   and sexp_rd_toplevel_list s_ = 
       (SexpPkl.rd_list sexp_rd_toplevel s_)
   
+  and sexp_rd_in_alias_list s_ = 
+      (SexpPkl.rd_list sexp_rd_in_alias s_)
+  
   and sexp_rd_aligned_option s_ = 
       (SexpPkl.rd_option sexp_rd_aligned s_)
   
@@ -821,6 +862,16 @@
           end)
       (* end match *)
   
+  and sexp_wr_alias_set x_ s_ = 
+      (match (x_) with 
+          ((string1) : Ast.alias_set) -> begin
+            (SexpPkl.wr_lp s_);
+            (SexpPkl.wr_sym "ast_alias_set" s_);
+            (StdPrimsUtil.sexp_wr_std_string string1 s_);
+            (SexpPkl.wr_rp s_)
+          end)
+      (* end match *)
+  
   and sexp_wr_size x_ s_ = 
       (match (x_) with 
           ((int1) : Ast.size) -> begin
@@ -847,6 +898,16 @@
             (SexpPkl.wr_lp s_);
             (SexpPkl.wr_sym "ast_aligned" s_);
             (StdPrimsUtil.sexp_wr_std_int int1 s_);
+            (SexpPkl.wr_rp s_)
+          end)
+      (* end match *)
+  
+  and sexp_wr_in_alias x_ s_ = 
+      (match (x_) with 
+          ((string1) : Ast.in_alias) -> begin
+            (SexpPkl.wr_lp s_);
+            (SexpPkl.wr_sym "ast_in_alias" s_);
+            (StdPrimsUtil.sexp_wr_std_string string1 s_);
             (SexpPkl.wr_rp s_)
           end)
       (* end match *)
@@ -911,13 +972,13 @@
             (sexp_wr_name name1 s_);
             (SexpPkl.wr_rp s_)
           end
-        | (Ast.Mem(ty1, expr1, aligned_opt1, alias_sets)) -> begin
+        | (Ast.Mem(ty1, expr1, aligned_opt1, in_alias_list1)) -> begin
             (SexpPkl.wr_lp s_);
             (SexpPkl.wr_sym "ast_Mem" s_);
             (sexp_wr_ty ty1 s_);
             (sexp_wr_expr expr1 s_);
             (SexpPkl.wr_option sexp_wr_aligned aligned_opt1 s_);
-            raise (Failure "no asdlGen");
+            (SexpPkl.wr_list sexp_wr_in_alias in_alias_list1 s_);
             (SexpPkl.wr_rp s_)
           end)
       (* end match *)
@@ -1015,7 +1076,7 @@
           end)
       (* end match *)
   
-  and sexp_wr_invariant x_ s_ = 
+  and sexp_wr_variance x_ s_ = 
       (match (x_) with 
           Ast.Invariant -> begin
             (SexpPkl.wr_lp s_);
@@ -1036,14 +1097,14 @@
   
   and sexp_wr_register x_ s_ = 
       (match (x_) with 
-          ((invariant1,
+          ((variance1,
             hint_opt1,
             ty1,
             name1,
             reg_opt1) : Ast.register) -> begin
             (SexpPkl.wr_lp s_);
             (SexpPkl.wr_sym "ast_register" s_);
-            (sexp_wr_invariant invariant1 s_);
+            (sexp_wr_variance variance1 s_);
             (SexpPkl.wr_option sexp_wr_hint hint_opt1 s_);
             (sexp_wr_ty ty1 s_);
             (sexp_wr_name name1 s_);
@@ -1105,10 +1166,10 @@
             (sexp_wr_region region1 s_);
             (SexpPkl.wr_rp s_)
           end
-        | (Ast.Import(ty1, import_list1)) -> begin
+        | (Ast.Import(ty_opt1, import_list1)) -> begin
             (SexpPkl.wr_lp s_);
             (SexpPkl.wr_sym "ast_Import" s_);
-            (SexpPkl.wr_option sexp_wr_ty ty1 s_);
+            (SexpPkl.wr_option sexp_wr_ty ty_opt1 s_);
             (SexpPkl.wr_list sexp_wr_import import_list1 s_);
             (SexpPkl.wr_rp s_)
           end
@@ -1153,15 +1214,26 @@
           end)
       (* end match *)
   
-  and sexp_wr_formal x_ s_ = 
+  and sexp_wr_bare_formal x_ s_ = 
       (match (x_) with 
-          ((hint_opt1, invariant1, ty1, name1) : Ast.formal) -> begin
+          ((hint_opt1, variance1, ty1, name1) : Ast.bare_formal) -> begin
             (SexpPkl.wr_lp s_);
-            (SexpPkl.wr_sym "ast_formal" s_);
+            (SexpPkl.wr_sym "ast_bare_formal" s_);
             (SexpPkl.wr_option sexp_wr_hint hint_opt1 s_);
-            (sexp_wr_invariant invariant1 s_);
+            (sexp_wr_variance variance1 s_);
             (sexp_wr_ty ty1 s_);
             (sexp_wr_name name1 s_);
+            (SexpPkl.wr_rp s_)
+          end)
+      (* end match *)
+  
+  and sexp_wr_formal x_ s_ = 
+      (match (x_) with 
+          ((region1, bare_formal1) : Ast.formal) -> begin
+            (SexpPkl.wr_lp s_);
+            (SexpPkl.wr_sym "ast_formal" s_);
+            (sexp_wr_region region1 s_);
+            (sexp_wr_bare_formal bare_formal1 s_);
             (SexpPkl.wr_rp s_)
           end)
       (* end match *)
@@ -1666,6 +1738,9 @@
   
   and sexp_wr_toplevel_list x_ s_ = 
       (SexpPkl.wr_list sexp_wr_toplevel x_ s_)
+  
+  and sexp_wr_in_alias_list x_ s_ = 
+      (SexpPkl.wr_list sexp_wr_in_alias x_ s_)
   
   and sexp_wr_aligned_option x_ s_ = 
       (SexpPkl.wr_option sexp_wr_aligned x_ s_)

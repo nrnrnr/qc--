@@ -98,10 +98,11 @@ Initialized data, as well as data in the form of [[SSpan]] and
 type ('l, 'e, 'a) proc = {
     cc            : convention;
     name          : name;
-    formals       : (hint * Ast.invariant * ty * name) list;
+    formals       : (hint * Ast.variance * ty * name) marked list;
     locals        : register marked list;
     pdecls        : 'e compile_time_defns;
     continuations : name marked list;
+    labels        : name marked list;  (* code labels *)
     stackdata     : (void, void, void) datum marked list;
     code          : ('l, 'e, 'a) stmt list;
   }
@@ -133,7 +134,7 @@ type t = {
     imports  : (Ast.region * Ast.ty option * Ast.import list) list;
     exports  : (Ast.region * Ast.export list) list;
     globals  : register marked list;
-    code_labels : name marked list;
+    code_labels : name marked list list;
     udecls   : Ast.expr compile_time_defns;
     sections : section list
   }
@@ -161,7 +162,8 @@ let rflatten xs =
 
 
 let cformal (hint, name) = (Aux.Option.get "" hint, name)
-let formal (hint, variance, ty, name) = (Aux.Option.get "" hint, variance, ty, name)
+let formal (r, (hint, variance, ty, name)) =
+  (r, (Aux.Option.get "" hint, variance, ty, name))
 let actual (hint, name) = (Aux.Option.get "" hint, name)
 let convention = Aux.Option.get "C--"
 @ 
@@ -320,13 +322,13 @@ let rec section r imps exports lbls ks consts types regs archs data s k = match 
 | A.Datum d ->
     k imps exports lbls ks consts types regs archs (add_datum r d data)
 | A.Procedure(cc,p,fs,bs) ->
-    bodies r imps exports lbls [] [] [] [] archs [] bs
-    (fun ss imps exports lbls pks pconsts ptypes pregs archs pdata ->
+    bodies r imps exports [] [] [] [] [] archs [] bs
+    (fun ss imps exports plbls pks pconsts ptypes pregs archs pdata ->
       let cdecls = { constants = pconsts; types = ptypes } in
       let p = { cc = convention cc; name = p; formals = List.map formal fs; code = ss;
-                continuations = pks;
+                continuations = pks; labels = plbls;
                 locals = rflatten pregs; pdecls = cdecls; stackdata = pdata; } in
-      k imps exports lbls ks consts types regs archs ((r,Procedure p) :: data))
+      k imps exports (plbls::lbls) ks consts types regs archs ((r,Procedure p)::data))
 and sections r = kmap_none section r
 @ 
 At top level, we accumulate sections, where a section is a named list of data.

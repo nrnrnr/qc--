@@ -344,7 +344,7 @@ checks need it.
     let local env (_,_,ff,bb as proc) =
         let env = Typedefs.local                     env proc in
         let env = Consts.local                       env proc in
-        let env = foldl (formal Srcmap.null)         env ff   in
+        let env = foldl formal                       env ff   in
         let env = foldl (body Srcmap.null Local)     env bb   in
             env
 end (* module Env *)
@@ -1304,7 +1304,7 @@ scope.  When collecting the global values only the procedure's name is
 bound in the environment and the [[goto]] labels in its body.
 
 <<module Env>>=
-let formal r env (hint, inv, ty, name) =
+let formal env (r, (hint, inv, ty, name)) =
     match evalTy env ty with
     | E.Ok(t) -> let i = { F.index = F.getIndex env (* run-time API *)
                          ; F.rhint = ( match hint with

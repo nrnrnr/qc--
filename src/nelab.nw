@@ -15,6 +15,7 @@ type rtl  = Rtl.rtl
 type name = string
 type size = int
 type hint = string
+type index = int
 type convention = string
 type procname   = string
 type label      = string
@@ -74,18 +75,11 @@ type stmt =
 @ 
 Procedures and sections in nice normal form.
 <<exposed types>>=
-type oproc = {
-    formals : register list;
-    vars : register list;
-    stackdata : datum list;
-    code : stmt list;
-  }
-
 type proc =
   { env : unit Fenv.Dirty.env';
     cc  : name;
     name : name;
-    formals : unit list;
+    formals : (index * hint * Ast.variance * Types.ty * name) list;
     locals  : unit list;
     continuations : unit list;
     stackmem      : Block.t;
@@ -322,6 +316,7 @@ let error r env msg = E.errorRegionPrt (F.srcmap env,r) msg
 Types in the abstract syntax may be names and must be evaluated before
 they can be used.  The evaluation can fail in case the name is
 undefined and therefore an [[E.error]] type is used.
+DUPLICATE CODE HERE AND MODULE [[Type]].
 <<auxiliaries>>=
 let rec evalTy env = function
     | A.TyAt (x,r)    -> E.catch (error r env) (evalTy env) x
@@ -645,16 +640,26 @@ let elab lvalue typed_expr srcmap asm ast =
     let env = check_exports env ast.N.exports in
     env)
 @
+In a procedure, labels have global scope, but they are bound a
+second time in the local environment. This has the following advantages:
+\begin{itemize}
+\item The second binding clashes with any other local binding that
+      might shadows the global binding.
+
+\item A [[goto]] must have a local target. Now is is possible to test
+      for this. 
+\end{itemize}
 <<definitions of procedure-processing functions>>=
 let proc env p =
+  let env = F.push env F.emptyscope in
   let env = TypeSortBind. bind_sortable_definitions env p.N.pdecls.N.types in
   let env = ConstSortBind.bind_sortable_definitions env p.N.pdecls.N.constants in
-  let env, n = formals_from p.N.formals env in
+  let env, n, formals = formals_from 0 p.N.formals env in
   let env = registers_from Local n p.N.locals env in
   let env = foldl bind_code_label env p.N.labels in  (* odd -- explain *)
   let env = foldl bind_continuation env p.N.continuations in
   let stackmem, stacklabels, env = stackdata env p.N.stackdata in
-  { env = env; cc = p.N.cc; name = p.N.name; formals = unimp "formals";
+  { env = env; cc = p.N.cc; name = p.N.name; formals = formals;
     locals = unimp "locals"; continuations = unimp "continuations";
     stackmem = stackmem; stacklabels = stacklabels; code = unimp "code"; } in
 @ 
@@ -714,7 +719,19 @@ let rec registers_from scope n rs env =
   | [] -> env
   | r :: rs -> register env r (registers_from scope (n+1) rs) in
 <<definitions of name-binding functions>>=
-let formals_from _ = unimp "formals" in
+let formals_from n rs env =
+  let rec formals prev' n rs env = match rs with
+  | [] -> env, n, List.rev prev'
+  | (r, (hint, inv, ty, name)) :: rs ->
+      match Type.evalTy env ty with
+      | E.Ok t ->
+          let i = { F.index = n; F.variance = inv;
+                    F.loc = None; F.rhint = F.RHint hint; } in
+          let env = F.bindv name (r, E.Ok (F.Variable i, t)) env in
+          formals ((n, hint, inv, t, name)::prev') (n+1) rs env
+      | E.Error ->
+          formals prev' n rs (F.bindv name (r, E.Error) env) in
+  formals [] n rs env in
 @ 
 <<definitions of name-binding functions>>=
 let bind_section_names env (secname, ds) = 
@@ -820,59 +837,13 @@ let datum env (r, d) =
 @ 
 ================================================================
 
-
-
-Continuations are local to procedures and thus they are only bound
-when in [[Local]] mode; labels have global scope, but are bound a
-second time in the local environment. This has the following advantages:
-\begin{itemize}
-\item The second binding clashes with any other local binding that
-      might shadows the global binding.
-
-\item A [[goto]] must have a local target. Now is is possible to test
-      for this. 
-\end{itemize}
 <<module Env>>=
-let rec stmt r scope env = function 
-    | A.StmtAt(x,r)               ->
-        E.catch' env (error r env) (stmt r scope env) x
-    | A.IfStmt ( e, ss1, ss2)     ->
-        foldl (body r scope) (foldl (body r scope) env ss1) ss2
-    | A.LabelStmt(n) -> MISSING
-    | A.SpanStmt(e1,e2,ss)        ->
-        foldl (body r scope) env ss
-    | A.SwitchStmt (range,e,arms) ->
-        foldl (arm r range scope)  env arms
-    | A.ContStmt(n,ee) when scope = Local ->
-        let sym    = F.symbol env n in
-        let ventry = (E.ematch (pointerTy env) 
-                     (fun p -> F.Continuation (Idgen.cont n,sym),p)) in
-            F.bindv n (r,ventry) env
-    | otherwise                   ->
-        env
-
-and arm r range scope env = function
-    | A.ArmAt(x,r)      -> E.catch' env (error r env) (arm r range scope env) x
-    | A.Case(ranges, ss)-> foldl (body r scope) env ss
 @
 A procedure opens a local scope:  the procedure's parameters and all
 local [[typedef]], [[const]], [[continuation]] belong to the local
 scope.  When collecting the global values only the procedure's name is
 bound in the environment and the [[goto]] labels in its body.
 <<module Env>>=
-let formal r env (hint, inv, ty, name) =
-    match evalTy env ty with
-    | E.Ok(t) -> let i = { F.index = F.getIndex env (* run-time API *)
-                         ; F.rhint = ( match hint with
-                                     | Some h -> F.RHint h
-                                     | None   -> F.RNone
-                                     ) 
-                         ; F.loc   = None
-                         }
-                     in
-                         F.bindv name (r,(E.Ok(F.Variable(i),t))) 
-                         (F.nextIndex env) 
-    | E.Error -> F.bindv name (r, E.Error) env
 @
 <<module Env>>=
 let proc r env (_,name,ff,bb as p) =

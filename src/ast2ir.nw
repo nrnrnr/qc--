@@ -356,8 +356,9 @@ time these functions are defined.
 \nextchunklabel{ast2ir.actuals'}%
 <<environment-independent support for formals, actuals, and results>>=
 let actuals'  ew  = convert_parms (fun (h, e)       -> h, e) ew                       
-and formals'  env = convert_parms (fun (h, _, _, x) -> h, x) (lvalue_name_in_env env) 
 and cformals' env = convert_parms (fun (h, x)       -> h, x) (lvalue_name_in_env env) 
+and formals'  env =
+               convert_parms (fun (_, (h, _, _, x)) -> h, x) (lvalue_name_in_env env) 
 and results'  env = 
   let rec hn = function
     | A.NameOrMemAt (lv, _) -> hn lv
@@ -1050,9 +1051,9 @@ Then function [[optimize]], which is passed in, runs the rest of the
 compiler. 
 The main thing here is dealing with all the blocks.
 <<definition of [[proc]], which translates one procedure>>=
-  let formals = List.map (fun ((_,_,_,n) as arg) ->
+  let formals = List.map (fun (_, ((_,_,_,n) as arg)) ->
                             match F.findv n env with
-                            | (_, (F.Variable {F.index = index},_)) -> (index, arg)
+                            | (_, (F.Variable v,_)) -> (v.F.index, arg)
                             | _ -> Impossible.impossible "formal is not a var???")
                 args in
   let i =    
@@ -1331,7 +1332,7 @@ let rec section props asm = function
     | A.SectionAt(x,_)     -> section props asm x
     | A.Decl  d            -> ()
     | A.Datum d            -> datum asm d
-    | A.Procedure  p       -> proc  props p
+    | A.Procedure  p       -> proc props p
     | A.SSpan (e1, e2, ss) -> 
         let key   = compile_const e1 in
         let value = expr          e2 in  (* must be link-time constant *)

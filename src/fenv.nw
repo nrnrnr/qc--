@@ -278,7 +278,7 @@ variables.
 and  variable =     { index:        int
                     ; rhint:        reghint
                     ; loc:          Automaton.loc option
-                    ; variance:     Ast.invariant
+                    ; variance:     Ast.variance
                     }
 @
 The [[int]] value in the procedure denotation is the number of local
@@ -295,7 +295,7 @@ and  denotation     = Constant      of Bits.bits
                     | Import        of string * Symbol.t
                           (* external name, assembly symbol *)
                     | Variable      of variable
-                    | Continuation  of string * Symbol.t   (* MEANING??? *)
+                    | Continuation  (* meaning stored in another environment for now *)
                           (* String is internal name for link-time
                              constant to be added to sp (vfp?) to get
                              continuation value?
@@ -1162,7 +1162,7 @@ let rec clean_venv map  =
                 | Dirty.Label(Dirty.Stack x)  -> Clean.Label(Clean.Stack x)
                 | Dirty.Import(s,n)           -> Clean.Import(s,n)
                 | Dirty.Variable(n)           -> Clean.Variable(clean_reg n)
-                | Dirty.Continuation(n,s)     -> Clean.Continuation(n,s)
+                | Dirty.Continuation          -> Clean.Continuation
             in
                  Strutil.Map.add key (pos,(denot',ty)) map
         |  _  -> assert false

@@ -45,6 +45,7 @@ alias_set   = (string)  -- names for aliasing assertions
 size        = (int)     
 align       = (int)     -- power of 2
 aligned     = (int)     -- power of 2
+in_alias    = (string)
 op          = (string)
 @
 
@@ -103,7 +104,7 @@ export      = (name, string?)
 @
        
 <<ast declaration>>=
-register    = (invariant, hint?, ty, name, reg?)
+register    = (variance, hint?, ty, name, reg?)
 proc        = (conv?, name, formal*, body*)
 
 body        = BodyAt        (body, region)
@@ -135,15 +136,13 @@ ty          = TyAt          (ty, region)
             | BitsTy        (size)
             | TypeSynonym   (name)
 @
-
-To encode the [[invariant]] keyword a boolean value would suffice.
-But this type is not provided by \asdl.
 <<ast declaration>>=
-invariant   = Invariant
+variance   = Invariant
             | Invisible
             | Variant
 
-formal      = (hint?, invariant, ty, name)
+formal      = (region, bare_formal)
+bare_formal = (hint?, variance, ty, name)
 actual      = (hint?, expr)
 cformal     = (hint?, name)
 

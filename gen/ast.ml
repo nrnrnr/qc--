@@ -17,6 +17,7 @@
   and size = (StdPrims.std_int)
   and align = (StdPrims.std_int)
   and aligned = (StdPrims.std_int)
+  and in_alias = (StdPrims.std_string)
   and op = (StdPrims.std_string)
   and region = (StdPrims.std_int * StdPrims.std_int)
   and ty =
@@ -27,7 +28,7 @@
   and name_or_mem =
         NameOrMemAt of (name_or_mem * region)
       | Name of (hint option * name)
-      | Mem of (ty * expr * aligned option * alias_set list)
+      | Mem of (ty * expr * aligned option * in_alias list)
   
   and actual = (hint option * expr)
   and expr =
@@ -42,11 +43,12 @@
   
   and import = (StdPrims.std_string option * name)
   and export = (name * StdPrims.std_string option)
-  and invariant =
-        Invariant | Invisible
+  and variance =
+        Invariant
+      | Invisible
       | Variant
   
-  and register = (invariant * hint option * ty * name * reg option)
+  and register = (variance * hint option * ty * name * reg option)
   and arch =
         Memsize of (StdPrims.std_int)
       | ByteorderBig
@@ -66,7 +68,8 @@
       | Pragma
       | Target of (arch list)
   
-  and formal = (hint option * invariant * ty * name)
+  and bare_formal = (hint option * variance * ty * name)
+  and formal = (region * bare_formal)
   and memsize =
         NoSize
       | DynSize
