@@ -217,10 +217,10 @@ passed.
 <<driver.ml>>=
 
 module Personality = struct
-    let target = Target2.dummy
-    type instr = Cfg3.t
-    let ext _  = (None, "foo", [], [])
-    let mangle = Mangle.mk cmangle Mangle.StrMap.empty
+    let target                  = Target2.dummy
+    type instr                  = Cfg3.t * string
+    let mangle                  = Mangle.mk cmangle Mangle.StrMap.empty
+    let ext (cfg,name)          = Cfg3.ast cfg name mangle 
 end    
 
     
@@ -243,6 +243,10 @@ let compile target file =
             ; 0
             )
 @
+
+% ------------------------------------------------------------------ 
+\subsection{Dispatch over command line options}
+% ------------------------------------------------------------------ 
 
 The command line flags [[-version]] and [[-help]] trigger short
 messages going to stdout.  The [[usage]] function is also called from
@@ -273,10 +277,6 @@ let usage this =
     Printf.printf "%s command line syntax\n" this ;
     List.iter print_endline msg
 @
-
-% ------------------------------------------------------------------ 
-\subsection{Dispatch over command line options}
-% ------------------------------------------------------------------ 
 
 The (exported) dispatch function just invokes the appropriate function
 that implements a command. The cases [[Help]] and [[Version]] are

@@ -197,6 +197,9 @@ val set_property:   node -> property -> unit
 (* continuation bundle constructor *)
 val conts: cuts:node list -> unwinds:node list -> 
            returns:node list -> aborts: bool -> conts 
+
+(* observation *)
+val ast:    cfg -> name:string -> (mangle:string -> string) -> Ast.proc
 @
 
 % ------------------------------------------------------------------ 
@@ -679,6 +682,15 @@ let set_rtl     (node:node) (map:Rtl.rtl -> Rtl.rtl) =
     node#set_rtl (map node#rtl)
 
 let set_property (node:node) (p:property) = node#set_property p
+
+
+<<cfg3.ml>>=
+let ast (cfg:cfg) (name:string) (mangle:string -> string) = 
+    ( None
+    , mangle name
+    , []
+    , cfg#ast mangle
+    )
 @
     
 
@@ -711,6 +723,7 @@ class type cfg = object
     method enumeration: node array      (* req: enumerated *)
     method get_id:      unit -> int     (* unique *)
     method test:        unit            (* test integrity of this *)
+    method ast:         (string->string) -> Ast.body list (* req: enumerated *)
 end
 @
 
@@ -749,6 +762,18 @@ end
 
 \item [[get_id]] returns a unique number (in this {\cfg}) at every
       invocation.  Used by nodes for their unique ID.
+
+\item [[test]] checks the internal consistency of [[this]] and fails 
+      with a run-time error if problems exist.
+
+\item [[ast]] returns a {\PAL} representation of [[this]]. More
+      precisely, it returns the abstract syntax of a procedure's body
+      that represents [[this]] {\cfg}. Invoking [[ast]] requires that
+      nodes are enumerated, otherwise it is a checked run-time error.
+      The [[ast]] method receives a \emph{mangler} function that is used
+      to transform labels and symbolic constants withing [[this]] to
+      {\PAL} syntax. See module \module{mangle} for details.
+
 \end{itemize}
 
 
@@ -1067,6 +1092,17 @@ object (this)
         ; NodeSet.iter (fun n -> n#test) _nodes
         )
 
+    (* create AST of this *)
+    method ast (mangle:string -> string) =
+        let this = (this :> cfg) in
+        if not this#enumerated then this#enumerate else ();
+        let enum          = 
+            match _enumeration with 
+            | Some x -> x 
+            | _      -> assert false                  in
+        let f node result = node#ast mangle :: result in
+            List.concat (Array.fold_right f enum [])
+            
 end
 @
 

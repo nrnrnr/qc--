@@ -32,7 +32,7 @@ procedure.
 <<ast3ir.mli>>=
 module Make 
         (G: Cfg3.S) 
-        (A: Asm2.S with type instruction = G.t
+        (A: Asm2.S with type instruction = G.t * string
                    and  type init        = unit)  : sig
     
     val translate: Fenv.Clean.env -> Target2.t -> Ast.program -> A.asm
@@ -53,7 +53,7 @@ module F        = Fenv.Clean
 <<auxilliaries>>
 <<ExprTypes>>
 module Make (G: Cfg3.S) 
-            (Asm: Asm2.S with type instruction = G.t
+            (Asm: Asm2.S with type instruction = (G.t * string)
                          and  type init        = unit) =
 struct
     module IO = Copyinout.Make(G)
@@ -778,7 +778,7 @@ let proc env target (*props*) asm (cconv,name,args,bdy) =
      * These will be attached to the instruction but the interface 
      * for Asm has to change first.
      *)
-        asm ++ Asm.instr cfg    (*XXX*)
+        asm ++ Asm.instr (cfg,name)    (*XXX*)
 @
         
    
@@ -856,6 +856,9 @@ let rec datum env target asm = function
 % ------------------------------------------------------------------ 
 \subsection{Stack Data Declarations}
 % ------------------------------------------------------------------ 
+
+Stack data declarations may appear everywhere in a procedure body. We
+process them in a single descent into the body.
 
 <<Make stack data declarations>>=
 module StackData = struct 
