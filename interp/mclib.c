@@ -279,7 +279,8 @@ RBlock block_new(size) unsigned size; {
     RBlock rb, tmprb; 
     
     rb = (RBlock) mc_alloc(sizeof(*rb), RBlock_pool);
-    
+
+	rb->size = 0;    
 #line 93 "mclib.nw"
 rb->curbuf = &rb->firstbuf;
 #line 199 "mclib.nw"
