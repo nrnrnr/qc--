@@ -1297,12 +1297,34 @@ let rec is2power = function
 \subsubsection{Expression types}
 % ------------------------------------------------------------------ 
 
-Expressions are type checked.  In [[Const.Eval]] constant definitions
-were already type checked and there is some code for this.  But the
-evaluation of constants interlaces type checking and evaluations.  It
-is easier and cleaner to implement the type checking functions again.
-
 <<type check expression>>=
+let tyExpr env exp =
+    let word      = E.seq (F.findWordsize env) 
+                    ( function 
+                    | Some x -> E.Ok(Types.bits x)
+                    | None   -> E.Error
+                    ) in
+    let pointer   = E.seq (F.findPointersize env)
+                    ( function 
+                    | Some x -> E.Ok(Types.bits x) 
+                    | None   -> E.Error 
+                    ) in
+    let tlookup   = fun x -> snd (F.findt x env)                  in
+    let vlookup   = fun x -> E.ematch (snd (F.findv x env)) (snd) in 
+    let olookup   = fun x -> E.Ok(snd (Value.lookup x Value.ops)) in 
+                    
+    let e = { Expcheck.wordsize    = word
+            ; Expcheck.pointersize = pointer
+            ; Expcheck.tlookup     = tlookup
+            ; Expcheck.vlookup     = vlookup
+            ; Expcheck.olookup     = olookup
+            } 
+    in Expcheck.check e exp 
+
+let tyAppl opTy argTys = E.ematch argTys (Types.appl opTy) 
+@
+
+<<type check expression (old)>>=
 let rec tyFetch : F.env -> A.lvalue -> T.ty E.error = fun env -> function
     | A.LValueAt(x,r) -> E.catch (error r env) (tyFetch env) x
     | A.Var(hint,id)  -> snd (E.Lower.pair (snd (F.findv id env)))
@@ -1319,7 +1341,7 @@ let rec tyFetch : F.env -> A.lvalue -> T.ty E.error = fun env -> function
             | te, t', w when te = w -> t'
             | otherwise -> E.error "memory reference by non-data pointer"
             )
-<<type check expression>>=
+<<type check expression (old)>>=
  (* tyAppl: Types.tyscheme -> Types.ty list E.error -> Types.ty E.error *)
 and tyAppl opTy argTys = E.ematch argTys (Types.appl opTy) 
 @
@@ -1328,13 +1350,13 @@ For now we are using the types of the primitive constant operators.
 All primitive runtime operators will go into their own module
 [[Primitives]].  So we have to fix the [[lookup]] later.
 
-<<type check expression>>=
+<<type check expression (old)>>=
 and tyPrimOp env op args =
     let at = List.map (tyExpr env) args                  in
     let ot = snd (Value.lookup op Value.ops) in
         tyAppl ot (E.Raise.list at)
 
-<<type check expression>>=
+<<type check expression (old)>>=
  (* tyExpr: F.env -> A.exp -> Types.ty E.error *)
 and tyExpr env = function
     | A.ExprAt(x,r) -> E.catch (error r env) (tyExpr env) x

@@ -32,10 +32,11 @@ record [[env]] for the [[check]] function.
 
 <<types>>=
 type env = 
-    { tlookup:  string -> Types.ty Error.error
-    ; vlookup:  string -> Types.ty Error.error
-    ; wordsize:           Types.ty Error.error
-    ; pointersize:        Types.ty Error.error
+    { tlookup:  string -> Types.ty       Error.error    (* type aliases *)
+    ; vlookup:  string -> Types.ty       Error.error    (* types of values *)
+    ; olookup:  string -> Types.tyscheme Error.error    (* type of operators *) 
+    ; wordsize:           Types.ty       Error.error
+    ; pointersize:        Types.ty       Error.error
     }   
 @
 
@@ -100,8 +101,7 @@ operators.
 <<expcheck.ml>>=
 and primOp env op args =
     let argtys = (E.Raise.list @<< List.map (expr env)) args in
-    let opty   = try E.Ok(snd (Value.lookup op Value.ops))   (*XXX*)
-                 with Not_found -> E.error ("unknown operator: "^op) in
+    let opty   = env.olookup op in
         E.ematchPair (opty,argtys) (fun (op,args) -> Types.appl op args)
             
 and expr env exp =
