@@ -85,7 +85,7 @@ end
 
 function Inspect.value(key, val)
    if not val then val = key; key = nil end
-   write(format ("%-40s%s\n",key or "", Inspect.type(val)))
+   write(format ("%-40s%s\n",tostring(key or ""), Inspect.type(val)))
    if type(val) == "table" then Inspect.table (key or '?', val) end
 end
 
@@ -262,6 +262,7 @@ function Stack.layout(dummy,proc)
     return 1
 end    
 @ 
+
 The new layout supports the virtual frame pointer.
 <<Lua Boot Script>>=
 Debug = Debug or {}
@@ -281,7 +282,37 @@ function Debug.showblocks(blocks, keys)
   end
 end
 @ 
-This code should probably move to the x86 module.
+
+
+
+\paragraph{Stack Layout for the Dummy Target} \module{dummy.nw} module
+that defines the dummy target.
+
+<<Lua Boot Script>>=
+Dummy = {} or Dummy
+
+function Dummy.layout(dummy, proc)
+    local blocks = Stack.new_blocks(proc)
+    local layout =
+        { Block.overlap(32,"low",  blocks.oldblocks)  
+        , blocks.stackdata
+        , blocks.vfp
+        , blocks.continuations
+        , Block.relative(blocks.sp, "six words", 24, 16)
+        , blocks.spills
+        , Block.overlap(32,"high", blocks.youngblocks)
+        , blocks.sp
+        }
+    local block = Block.cat(32, layout)
+    Stack.new_freeze(proc, block)
+    return 1
+end
+@
+    
+
+\paragraph{Stack Layout for the $x$86} This code should probably move to
+the x86 module.
+
 <<Lua Boot Script>>=
 X86 = X86 or {}
 X86.layout = { creates='no late consts' }
@@ -404,15 +435,17 @@ function whichB(B)
   end
 end
 
--- function verbose(s, a, b, c, d, e, f, g, h)
---    return
--- end
+function verbose(s, a, b, c, d, e, f, g, h)
+      print(s,a,b,c,d,e,f,g,h)
+end
 
 function Opt.standard(backend, asm, B)
---verbose('running Opt.standard with third argument ', whichB(B), '\n')
+
+-- verbose('running Opt.standard with third argument ', whichB(B), '\n')
   B = B or Backplane
---verbose('running Opt.standard with ', whichB(B), '\n')
+-- verbose('running Opt.standard with ', whichB(B), '\n')
   Stages.null = B.stage {name="empty stage for " .. whichB(B), fn=Stages.nullf}
+  local assemble = Driver.proc_assembler(asm) 
   local x = B.seq
     { backend.widen      or Stages.null
     , backend.placevars  or Stages.null
@@ -421,9 +454,9 @@ function Opt.standard(backend, asm, B)
     , backend.ralloc     or Stages.null
     , backend.freeze     or Stages.null
     , backend.rmvfp      or Stages.null
-    , B.stage { name="assemble procedure", fn = Driver.proc_assembler(asm) }
-    } 
---verbose('built a standard optimizer with ', whichB(B), '\n')
+    , B.stage { name="assemble procedure", fn = assemble }
+    }
+-- verbose('built a standard optimizer with ', whichB(B), '\n')
   return x
 end
 @
@@ -448,7 +481,6 @@ function Backend.make(b)
     , liveness  = b.liveness  or Stages.null
     , ralloc    = b.ralloc    or Stages.null
     , freeze    = b.freeze    or Stack.layout
-    , rmvfp     = b.rmvfp     or nil -- Stages.replace_vfp  
     , asm       = b.asm       or Asm.cmm
     , emit      = b.emit      or Driver.assemble
     }   
@@ -457,12 +489,12 @@ end
 function Backend.new_make(b)
   return
     { target    = b.target    or error('target not specified')
-    , widen     = b.widen     or Stages.new_null
-    , placevars = b.placevars or Stages.new_null
-    , expand    = b.expand    or Stages.new_null
-    , liveness  = b.liveness  or Stages.new_null
-    , ralloc    = b.ralloc    or Stages.new_null
-    , freeze    = b.freeze    or Stack.layout
+    , widen     = b.widen     or nil
+    , placevars = b.placevars or nil
+    , expand    = b.expand    or nil
+    , liveness  = b.liveness  or nil
+    , ralloc    = b.ralloc    or nil
+    , freeze    = b.freeze    or Dummy.layout
     , rmvfp     = b.rmvfp     or Stages.replace_vfp  
     , asm       = b.asm       or Asm.new_cmm
     , emit      = b.emit      or Driver.assemble
@@ -473,15 +505,15 @@ Backend.dummy32l        = Backend.make { target = Targets.dummy32l}
 Backend.dummy32b        = Backend.make { target = Targets.dummy32b}
 Backend.dummy           = Backend.dummy32b      -- alias
 
-Backend.new_dummy32l    = Backend.make { target = Targets.new_dummy32l }
-Backend.new_dummy32b    = Backend.make { target = Targets.new_dummy32b }
+Backend.new_dummy32l    = Backend.new_make { target = Targets.new_dummy32l }
+Backend.new_dummy32b    = Backend.new_make { target = Targets.new_dummy32b }
 Backend.new_dummy       = Backend.new_dummy32b  -- alias
 
 Backend.interp          = Backend.make { target = Targets.interp
                                        , asm    = Asm.interp
                                        }
 Backend.new_interp      = Backend.make { target = Targets.new_interp
-                                       , asm    = Asm.interp
+                                       , asm    = nil
                                        }
 
 Backend.x86 =     
@@ -534,11 +566,11 @@ Compile = Compile and error('Compile not empty') or {}
 
 function Compile.run_optimizer(self,proc)
     local B = self.B or Backplane
---verbose('running Compile.run_optimizer with ', whichB(B), '\n')
+    -- verbose('running Compile.run_optimizer with ', whichB(B), '\n')
 
     if B == NewBackplane then -- demo for a bug in the backplane
-       B.run(B.seq {Stages.assert('fish'),
-                    B.stage {fn=Stages.nullf, uses='fish'}}, proc)
+        B.run(B.seq {Stages.assert('fish'),
+                   B.stage {fn=Stages.nullf, uses='fish'}}, proc)
     end
 
     B.run(self.action, proc)
@@ -559,9 +591,10 @@ end
 
 function Compile.new_file(backend, file, out)
     local fd  = (not out or out == "-") and Driver.stdout or open_out(out)
-    local ast = Driver.parse(file) 
+    local ast = Driver.parse(file)
+    
 --verbose('about to call asm\n')
-    local asm = backend.asm(fd)
+    local asm = backend.asm(fd) 
 --verbose('about to call Driver.new_check\n')
     local env = Driver.new_check(ast,asm) -- asm is stored in env
 --verbose('about to call Opt.standard\n')
