@@ -352,7 +352,7 @@ let bnegate r = match Dn.rtl r with
              ] when pc = Dn.loc pc_lhs ->
         R.guard (R.app (R.opr (negate op) [32]) [tval x; tval y]) 
                 (R.store pc_lhs (Up.exp tgt) wordsize)
-    | _ -> Impossible.impossible "ill-formed MIPS conditional branch"
+    | _ -> impossible "ill-formed MIPS conditional branch"
 @
 
 \paragraph{Calls} Direct and indirect calls. In an indirect call the
@@ -435,6 +435,9 @@ let globals base =
 let c_convention = Mipscall.c (fun ra -> (R.store pc ra wordsize)) 
                               (F.cutto (Rtl.reg sp))
 
+let c'_convention = Mipscall.c' (fun ra -> (R.store pc ra wordsize)) 
+                              (F.cutto (Rtl.reg sp))
+
 let target =
     { T.name                = "mips"
     ; T.byteorder           = byteorder
@@ -460,7 +463,13 @@ let target =
     ; T.call                = F.call
     ; T.branch              = F.branch
     
-    ; T.cc                  = (fun _ -> c_convention)
+    ; T.cc                  = (fun 
+                                "c"  | "C"  -> c_convention
+                                "c'" | "C'" -> c'_convention
+                                x -> impossible (Printf.sprintf 
+                                    "unknown calling convention %s" x)
+                              )
+                    
     ; T.globals             = globals
     ; T.is_rounding_mode    = (fun loc -> false)
     ; T.named_locs          = Strutil.assoc2map

@@ -308,11 +308,6 @@ let paths_c_cutto = dump Automatongraph.paths cut_args
 
 <<x86call.ml>>=
 module CS = Callspec
-
-let overflow x y = { CS.parameter_deallocator = x
-                   ; CS.result_allocator      = y
-                   }
-              
 let template = (* conservative spec *)
         { CS.name           = "callspec"    (* override this! *)
         ; CS.wordsize       = 32
@@ -320,7 +315,7 @@ let template = (* conservative spec *)
         ; CS.results        = (fun () -> assert false)   
         ; CS.cutto          = (fun () -> assert false)
         ; CS.stack_growth   = Memalloc.Down
-        ; CS.overflow       = overflow CS.Caller CS.Caller
+        ; CS.overflow       = CS.overflow CS.Caller CS.Caller
         ; CS.sp             = esp
         ; CS.sp_align       = 4
         ; CS.all_regs       = RS.union volregs nvregs
