@@ -152,6 +152,7 @@ OCAMLTANGLE =   'for f in $target; do $NOTANGLE -L"$LINE" -R$f $prereq | $CPIF $
 MISCTANGLE  =   'for f in $target; do $NOTANGLE -R$f $prereq | $CPIF $f; done'
 
 HTML =          `echo *.nw       | sed 's/\.nw/.html/g;'`
+INC  =          `echo *.nw       | sed 's/\.nw/.inc/g;'`
 
 # ------------------------------------------------------------------ 
 
@@ -193,8 +194,10 @@ uint64.inc:     uint64.nw
                 $NOWEAVE -delay -filter ../config/autodefs.ocaml \
                     -index -html -filter l2h $prereq > $target
 
-
-%.dvi:          %.tex macros.tex
+%.bbl:          %.bib
+                bibtex $stem
+                    
+%.dvi:          %.tex %.bbl macros.tex
                 $LATEX "\\scrollmode \\input $stem.tex"
                 ltxcount=3
                 while egrep -s "$RERUN" $stem.log && [ $ltxcount -gt 0 ]
@@ -208,32 +211,7 @@ uint64.inc:     uint64.nw
 
 # ------------------------------------------------------------------ 
 
-$NAME.dvi:      ../cllib/lc.inc  \
-                ../cllib/pc.inc  \
-                ../cllib/pp.inc  \
-                ../cllib/rc.inc  \
-                ../cllib/rx.inc  \
-                ../test/test.inc \
-                asm.inc          \
-                ast.inc          \
-                agraph.inc       \
-                aux.inc          \
-                ast2ir.inc       \
-                bits.inc         \
-                elab.inc         \
-                env.inc          \
-                error.inc        \
-                fatenv.inc       \
-                fenv.inc         \
-                ir.inc           \
-                index.inc        \
-                main.inc         \
-                parser.inc       \
-                srcmap.inc       \
-                topsort.inc      \
-                types.inc        \
-                uint64.inc       \
-                value.inc        \
+$NAME.dvi:      $INC
 
 dvi:V:          $NAME.dvi
 ps:V:           $NAME.ps
