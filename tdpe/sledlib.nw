@@ -103,27 +103,32 @@ when an instruction can't be encoded.
 [[cons]] and [[nil']] exist to support the creation of lists of
 strings, but in practice they should be rewritten to use the standard
 ML notation for lists.
-<<sledlib.ml>>=
-
-module Sy = Syntax
-
-<<exported exceptions and module types>>
-(*let fail l = raise (Failure l)*)
-let fail l =
-  Tdpe.nbe' (Tdpe.arrow(Tdpe.a',Tdpe.unit))
-    (Sy.VAR "Sledlib.fail") (Sy.LIST (List.map (fun s -> Sy.STR s) l));
-  raise (Failure l)
-
-(*let fail_unless condition l = if condition then () else fail l*)
-
-let fail_unless condition l =
-  Tdpe.nbe' (Tdpe.arrowN(Tdpe.a',Tdpe.arrow(Tdpe.a',Tdpe.unit)))
-    (Sy.VAR "Sledlib.fail_unless") condition (Sy.LIST (List.map (fun s -> Sy.STR s) l))
-
+@ the trivial reloc
+<<trivial reloc>>=
 module TrivialReloc = struct
   type 'a relocatable = 'a
   let early x = x
   let late label offset = fail ["Trivial relocatable addresses don't support labels"]
 end
+@ 
+<<sledlib.ml ((evaluating))>>=
+<<exported exceptions and module types>>
+let fail l = raise (Failure l)
+let fail_unless condition l = if condition then () else fail l
+<<trivial reloc>>
+@
+<<sledlib.ml ((residualizing))>>=
+module Sy = Syntax
+<<exported exceptions and module types>>
+let fail l =
+  Tdpe.nbe' (Tdpe.arrow(Tdpe.a',Tdpe.unit))
+    (Sy.VAR "Sledlib.fail") (Sy.LIST (List.map (fun s -> Sy.STR s) l));
+  raise (Failure l)
+
+
+let fail_unless condition l =
+  Tdpe.nbe' (Tdpe.arrowN(Tdpe.a',Tdpe.arrow(Tdpe.a',Tdpe.unit)))
+    (Sy.VAR "Sledlib.fail_unless") condition (Sy.LIST (List.map (fun s -> Sy.STR s) l))
+<<trivial reloc>>
 @ 
 

@@ -1,6 +1,6 @@
 module type S =
   sig
-    type nativeint = Tdpe.dynamic
+    type nativeint = Base.std_nativeint
     type reg_or_imm
       = Imode of nativeint (*[~4096..4095]*)
       | Rmode of nativeint (*[0..31]*)

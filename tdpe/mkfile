@@ -68,6 +68,7 @@ TOP = ..
 ################################################################
 
 QCmmSRC = ../src
+QCmmLIB = ../lib
 
 ################################################################
 # paths
@@ -81,7 +82,7 @@ MANDIR  =    ../man
 # The includes
 ################################################################
 
-OCAMLINCLUDES = -I $QCmmSRC
+OCAMLINCLUDES = -I $QCmmSRC -I $QCmmLIB
 
 ################################################################
 # (high level) virtual targets
@@ -135,18 +136,20 @@ MACHINEML =     ${MACHINE}Constructors.ml \
 		${MACHINE}TreesBuild.ml \
 
 LIBML    =      sledlib.ml \
-		nativeint.ml \
+		rlib/nativeint.ml \
 
 ENCRECML = 	${MACHINE}RtlMk.ml \
 		${MACHINE}RtlRec.ml \
 
-QCmmML  =	$QCmmSRC/srcmap.ml \
-		$QCmmSRC/error.ml \
+#$QCmmLIB/srcmap.ml \
+
+QCmmML  =	$QCmmSRC/error.ml \
 		$QCmmSRC/uint64.ml \
 		$QCmmSRC/base.ml \
 		$QCmmSRC/bits.ml \
 		$QCmmSRC/bitops.ml \
 		$QCmmSRC/rtl.ml \
+		$QCmmSRC/rtleval.ml \
 		$QCmmSRC/register.ml \
 		$QCmmSRC/rtlutil.ml \
 
@@ -345,7 +348,7 @@ uint64p.o:      uint64p.c
 
 
 OBJ =           callcc.o uint64p.o
-CMOLIBS =       
+CMOLIBS =       cllib.cma  asdl.cma
 #CMOLIBS =       cllib.cma  asdl.cma
 #CMXLIBS =       cllib.cmxa asdl.cmxa
 
@@ -438,6 +441,7 @@ clean:V:
 	rm -f $QCmmSRC/*.html $QCmmSRC/*.ps $QCmmSRC/*~
 	rm -f $CODEML $CODEMLI $TDPELIBML $TDPELIBMLI
 	rm -f $NATIVEML $NATIVEMLI $MACHINESTX $MACHINESTXI
+	rm -f $LIBML $LIBMLI
 	rm -f $INTDIR/*.cmo $INTDIR/*.cmi
 	cd $QCmmSRC; mk clean
 

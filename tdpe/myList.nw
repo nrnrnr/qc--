@@ -15,6 +15,9 @@ of the sequence appends [[e()]].
 [[mapM' f b i e]] is the same as above, only that it does call the
 margin functions for a unique element too.
 
+[[mapM'' f b i e]] is the same as above, only that it calls the margin
+functions for an empty list as well.
+
 <<myList.mli>>=
 val mapM :
     ('a -> 'b) ->
@@ -88,7 +91,10 @@ let mapM' f b m e ls =
 
 let mapM'' f b m e ls =
   match ls with
-    [] ->  [b();e()]
+    [] ->
+      let v1 = b() in
+      let v2 = e() in
+      [v1;v2]
   | ls ->
       let rec walk =
         (function

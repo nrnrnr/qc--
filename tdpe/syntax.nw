@@ -47,9 +47,7 @@ type 'a bExp =
   | CASEoption of 'a bExp * (id * 'a bExp) * 'a bExp
   | CASEGEN of 'a bExp * (string * id list * 'a bExp) list * 'a bExp option
   | XTRA of 'a
-@ A quick hack, to be fixed.
-<<core syntax>>=
-  | CASE of 'a bExp * (string * id list * 'a bExp) list
+  | CASE of 'a bExp * (string * pat * 'a bExp) list
 @
 \section{Interface}
 We provide a pretty-printing function.
@@ -98,7 +96,7 @@ let pprint pxtra t =
       ID x -> ps x
     | TUPLE pats -> 
         let _ =
-          MyList.mapM
+          MyList.mapM''
             pp_pat
             (fun () -> ps "(")
             (fun () -> ps ",")
@@ -170,7 +168,7 @@ let pprint pxtra t =
          ps " in"; psp();
          pp_top e; 
          Format.close_box())
-    | X_Some e -> ps "(Some ";pp_top e;ps ")"
+    | X_Some e -> ps "Some (";pp_top e;ps ")"
     | X_None -> ps "None"
     | CASEoption  (e,(x1,s1),s2) ->
         print_open 2 "(match ";pp_top e; ps " with";psp();
@@ -196,13 +194,15 @@ let pprint pxtra t =
     | CASE  (e,ls) ->
         print_open 2 "(match ";pp_top e; ps " with";psp();
         List.iter
-          (fun (tag,ids,e) ->
+          (fun (tag,pat,e) ->
             (print_open 2 " | ";
              ps tag;
-             let _ = MyList.mapM' ps
+             psp();
+             pp_pat pat;
+             (*let _ = MyList.mapM' ps
                  (fun () -> ps "(")
                  (fun () -> ps ",")
-                 (fun () -> ps ")") ids in 
+                 (fun () -> ps ")") ids in *)
              ps " ->"; psp();pp_top e; psp (); print_close "";nl()))
           ls;
         print_close ")"

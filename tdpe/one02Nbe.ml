@@ -41,13 +41,13 @@ fun x1 ->
      | Nop () -> Sy.XTRA (S.T__t (S.Nop ())))
 let reflect_t =
 fun x1 ->
-  let r2 = Tools.gensym "x" in
-  let r3 = Tools.gensym "x" in
-  let r4 = Tools.gensym "x" in
-  let r5 = Tools.gensym "x" in
-  let r6 = Tools.gensym "x" in
-  let r7 = Tools.gensym "x" in
-  let r8 = Tools.gensym "x" in
+  let r2 = Tools.gensym "aaa" in
+  let r3 = Tools.gensym "bbb" in
+  let r4 = Tools.gensym "ccc" in
+  let r5 = Tools.gensym "ddd" in
+  let r6 = Tools.gensym "eee" in
+  let r7 = Tools.gensym "fff" in
+  let r8 = Tools.gensym "ggg" in
   let vv9 =
   Ctrl.shift
     (fun x10 ->
