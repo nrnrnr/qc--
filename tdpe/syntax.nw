@@ -193,6 +193,19 @@ let pprint pxtra t =
           Some e -> print_open 2 "| _ ->"; psp();pp_top e;print_close ""
         | None -> ());
         print_close ")"
+    | CASE  (e,ls) ->
+        print_open 2 "(match ";pp_top e; ps " with";psp();
+        List.iter
+          (fun (tag,ids,e) ->
+            (print_open 2 " | ";
+             ps tag;
+             let _ = MyList.mapM' ps
+                 (fun () -> ps "(")
+                 (fun () -> ps ",")
+                 (fun () -> ps ")") ids in 
+             ps " ->"; psp();pp_top e; psp (); print_close "";nl()))
+          ls;
+        print_close ")"
     | SEQ(e1,e2) -> pp_top e1;ps ";";pbk();pp_top e2
     | XTRA x -> pxtra x
 

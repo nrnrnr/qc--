@@ -1,17 +1,20 @@
-type  exp = (allTypes) Syntax.bExp
-and amode_S =
-    Short
-  | Hword
-  | Word
-  | Dword
-and instruction_S = 
-    Add of exp * exp * exp
-  | Ld of exp * exp
-  | St of exp * exp
-  | Nop
-and allTypes =
-    T__amode of  amode_S
-  | T__instruction of instruction_S
+
+type exp = (allTypes) Syntax.bExp
+and allTypes =   T__amode of t__amode
+               | T__t of t__t
+               
+and t__amode =
+  Short of unit
+| Hword of unit
+| Word of unit
+| Dword of unit
+
+and t__t =
+  Add of (exp * exp * exp)
+| Ld of (exp * exp)
+| St of (exp * exp)
+| Nop of unit
+
 
 
 val pprint : exp ->

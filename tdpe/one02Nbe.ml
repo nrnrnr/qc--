@@ -1,110 +1,74 @@
-open One02Syntax
-open Syntax
+open One02Trees.M
 
-module M = One02Trees.M
-module T = Tdpe
-module C = T.Ctrl
-
-let amode_C = 
-fun ()  -> (T.RR
-  ((fun t  ->
-      (match t with
-        | M.Short()  -> (XTRA (T__amode Short))
-        | M.Hword()  -> (XTRA (T__amode Hword))
-        | M.Word()  -> (XTRA (T__amode Word))
-        | M.Dword()  -> (XTRA (T__amode Dword)))),
-   (fun e  -> C.shift
-      (fun k  -> filterNones e
-         [("Short", [], C.reset (fun ()  -> k (M.Short())));
-          ("Hword", [], C.reset (fun ()  -> k (M.Hword())));
-          ("Word", [], C.reset (fun ()  -> k (M.Word())));
-          ("Dword", [], C.reset (fun ()  -> k (M.Dword())))]))))
-let t_C = 
-fun ((T.RR (reify1, reflect1)), (T.RR (reify2, reflect2)), (T.RR (reify3,
-  reflect3)), (T.RR (reify4, reflect4)), (T.RR (reify5, reflect5)),
-  (T.RR (reify6, reflect6)), (T.RR (reify7, reflect7)))  -> (T.RR
-  ((fun t  ->
-      (match t with
-        | M.Add (x1, x2, x3) -> (XTRA (T__instruction (Add
-          (reify1 x1, reify2 x2, reify3 x3))))
-        | M.Ld (x4, x5) -> (XTRA (T__instruction (Ld
-          (reify4 x4, reify5 x5))))
-        | M.St (x6, x7) -> (XTRA (T__instruction (St
-          (reify6 x6, reify7 x7))))
-        | M.Nop () -> (XTRA (T__instruction Nop)))),
-   (fun e  ->
-      let id1 = Tools.gensym "id" in
-      let id2 = Tools.gensym "id" in
-      let id3 = Tools.gensym "id" in
-      let id4 = Tools.gensym "id" in
-      let id5 = Tools.gensym "id" in
-      let id6 = Tools.gensym "id" in
-      let id7 = Tools.gensym "id" in C.shift
-      (fun k  -> filterNones e
-         [("Add", [id1;id2;id3], C.reset
-           (fun ()  -> k (M.Add
-              (reflect1 (VAR id1), reflect2 (VAR id2), reflect3 (VAR
-               id3)))));
-          ("Ld", [id4;id5], C.reset
-           (fun ()  -> k (M.Ld (reflect4 (VAR id4), reflect5 (VAR id5)))));
-          ("St", [id6;id7], C.reset
-           (fun ()  -> k (M.St (reflect6 (VAR id6), reflect7 (VAR id7)))));
-          ("Nop", [], C.reset (fun ()  -> k (M.Nop())))]))))
-let amode =  amode_C ()
-let t =  t_C (T.a', T.a', amode, T.a', T.a', T.a',T.a')
-
-let amode_C_None = 
-fun  () -> (T.RR
-  ((fun t  ->
-      (match t with
-        | M.Short()  -> (XTRA (T__amode Short))
-        | M.Hword()  -> (XTRA (T__amode Hword))
-        | M.Word()  -> (XTRA (T__amode Word))
-        | M.Dword()  -> (XTRA (T__amode Dword)))),
-   (fun e  -> C.shift
-      (fun k  -> filterNones e
-         [("Short", [], C.reset (fun ()  -> k (M.Short())));
-          ("Hword", [], C.reset (fun ()  -> k (M.Hword())));
-          ("Word", [], C.reset (fun ()  -> k (M.Word())));
-          ("Dword", [], C.reset (fun ()  -> k (M.Dword())))]))))
-let t_C_None = 
-fun ((T.RR (reify1, reflect1)), (T.RR (reify2, reflect2)), (T.RR (reify3,
-  reflect3)), (T.RR (reify4, reflect4)), (T.RR (reify5, reflect5)),
-  (T.RR (reify6, reflect6)), (T.RR (reify7, reflect7)))  -> (T.RR
-  ((fun t  ->
-      (match t with
-        | M.Add (x1, x2, x3) -> (XTRA (T__instruction (Add
-          (reify1 x1, reify2 x2, reify3 x3))))
-        | M.Ld (x4, x5) -> (XTRA (T__instruction (Ld
-          (reify4 x4, reify5 x5))))
-        | M.St (x6, x7) -> (XTRA (T__instruction (St
-          (reify6 x6, reify7 x7))))
-        | M.Nop()  -> (XTRA (T__instruction Nop)))),
-   (fun e  ->
-      let id1 = Tools.gensym "id" in
-      let id2 = Tools.gensym "id" in
-      let id3 = Tools.gensym "id" in
-      let id4 = Tools.gensym "id" in
-      let id5 = Tools.gensym "id" in
-      let id6 = Tools.gensym "id" in
-      let id7 = Tools.gensym "id" in C.shift
-      (fun k  -> filterNones e
-         [("Add", [id1;id2;id3], C.reset
-           (fun ()  -> k (M.Add
-              (reflect1 (VAR id1), reflect2 (VAR id2), reflect3 (VAR
-               id3)))));
-          ("Ld", [id4;id5], C.reset
-           (fun ()  -> k (M.Ld (reflect4 (VAR id4), reflect5 (VAR id5)))));
-          ("St", [id6;id7], C.reset
-           (fun ()  -> k (M.St (reflect6 (VAR id6), reflect7 (VAR id7)))));
-          ("Nop", [], C.reset (fun ()  -> k (M.Nop())))]))))
-let amode_None =  amode_C_None ()
-let t_None =  t_C_None
-(T.a', T.a', amode_None, T.a', T.a', T.a',T.a')
+module S = One02Syntax
+module Sy = Syntax
+module Ctrl = Tdpe.Ctrl
 
 
-let reify_amode e = Tdpe.nbe amode_None e
-let reify_t e = Tdpe.nbe t_None e
 
-let reflect_amode e = Tdpe.nbe' amode_None e
-let reflect_t e = Tdpe.nbe' t_None e
+
+let reify_amode =
+fun x1 ->
+  (match x1 with 
+     | Short () -> Sy.XTRA (S.T__amode (S.Short ()))
+     | Hword () -> Sy.XTRA (S.T__amode (S.Hword ()))
+     | Word () -> Sy.XTRA (S.T__amode (S.Word ()))
+     | Dword () -> Sy.XTRA (S.T__amode (S.Dword ())))
+let reflect_amode =
+fun x1 ->
+  let vv2 =
+  Ctrl.shift
+    (fun x3 ->
+       let r4 = Ctrl.reset (fun x5 -> let rr6 = x3 (Short ()) in rr6)
+       in
+       let r7 = Ctrl.reset (fun x8 -> let rr9 = x3 (Hword ()) in rr9)
+       in
+       let r10 =
+       Ctrl.reset (fun x11 -> let rr12 = x3 (Word ()) in rr12) in
+       let r13 =
+       Ctrl.reset (fun x14 -> let rr15 = x3 (Dword ()) in rr15) in
+       Sy.CASE
+       (x1,
+        [("Short", [], r4);("Hword", [], r7);("Word", [], r10);
+         ("Dword", [], r13)])) in vv2
+let reify_t =
+fun x1 ->
+  (match x1 with 
+     | Add (x2,x3,x4) ->
+    Sy.XTRA (S.T__t (S.Add (x2, x3, reify_amode x4)))
+     | Ld (x5,x6) -> Sy.XTRA (S.T__t (S.Ld (x5, x6)))
+     | St (x7,x8) -> Sy.XTRA (S.T__t (S.St (x7, x8)))
+     | Nop () -> Sy.XTRA (S.T__t (S.Nop ())))
+let reflect_t =
+fun x1 ->
+  let r2 = Tools.gensym "x" in
+  let r3 = Tools.gensym "x" in
+  let r4 = Tools.gensym "x" in
+  let r5 = Tools.gensym "x" in
+  let r6 = Tools.gensym "x" in
+  let r7 = Tools.gensym "x" in
+  let r8 = Tools.gensym "x" in
+  let vv9 =
+  Ctrl.shift
+    (fun x10 ->
+       let r11 =
+       Ctrl.reset
+         (fun x12 ->
+            let rr13 =
+            x10 (Add (Sy.VAR r2, Sy.VAR r3, reflect_amode (Sy.VAR r4)))
+            in rr13) in
+       let r14 =
+       Ctrl.reset
+         (fun x15 -> let rr16 = x10 (Ld (Sy.VAR r5, Sy.VAR r6)) in rr16)
+       in
+       let r17 =
+       Ctrl.reset
+         (fun x18 -> let rr19 = x10 (St (Sy.VAR r7, Sy.VAR r8)) in rr19)
+       in
+       let r20 =
+       Ctrl.reset (fun x21 -> let rr22 = x10 (Nop ()) in rr22) in
+       Sy.CASE
+       (x1,
+        [("Add", [r2;r3;r4], r11);("Ld", [r5;r6], r14);
+         ("St", [r7;r8], r17);("Nop", [], r20)])) in vv9
+

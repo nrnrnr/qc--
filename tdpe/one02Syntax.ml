@@ -1,47 +1,55 @@
-open Pprint
 
-type  exp = (allTypes) Syntax.bExp
-and amode_S =
-    Short
-  | Hword
-  | Word
-  | Dword
-and instruction_S = 
-    Add of exp * exp * exp
-  | Ld of exp * exp
-  | St of exp * exp
-  | Nop
-and allTypes =
-    T__amode of  amode_S
-  | T__instruction of instruction_S
+module P = Pprint
+module S = Syntax
 
 
-let pallTypes printtExp = 
-fun x1  ->
-  (match x1 with
-    T__amode x2 ->
-      (match x2 with
-      | Short  -> (print_open 1 "(";ps "Short";ps " ";print_open 1
-                     "(";print_close ")";print_close ")";())
-      | Hword  -> (print_open 1 "(";ps "Hword";ps " ";print_open 1
-                     "(";print_close ")";print_close ")";())
-      | Word  -> (print_open 1 "(";ps "Word";ps " ";print_open 1 "(";
-                  print_close ")";print_close ")";())
-      | Dword  -> (print_open 1 "(";ps "Dword";ps " ";print_open 1
-                     "(";print_close ")";print_close ")";()))
-  | T__instruction x3 ->
-      (match x3 with
-      | Add (x4, x5, x6) -> (print_open 1 "(";ps "Add";ps " ";
-                             print_open 1 "(";printtExp x4;ps ",";pbk ();printtExp x5;ps
-                               ",";pbk ();printtExp x6;print_close ")";print_close ")";())
-      | Ld (x7, x8) -> (print_open 1 "(";ps "Ld";ps " ";print_open 1
-                          "(";printtExp x7;ps ",";pbk ();printtExp x8;print_close ")";
-                        print_close ")";())
-      | St (x9, x10) -> (print_open 1 "(";ps "St";ps " ";print_open 1
-                           "(";printtExp x9;ps ",";pbk ();printtExp x10;print_close ")";
-                         print_close ")";())
-      | Nop  -> (print_open 1 "(";ps "Nop";ps " ";print_open 1 "(";
-                 print_close ")";print_close ")";())))
-let pprint = 
-let rec pc = fun x  -> Syntax.pprint (pallTypes pc) x in pc
+type exp = (allTypes) Syntax.bExp
+and allTypes =   T__amode of t__amode
+               | T__t of t__t
+               
+and t__amode =
+  Short of unit
+| Hword of unit
+| Word of unit
+| Dword of unit
+
+and t__t =
+  Add of (exp * exp * exp)
+| Ld of (exp * exp)
+| St of (exp * exp)
+| Nop of unit
+
+
+
+let ppAll =
+fun ppExp ->
+  fun x ->
+    (match x with 
+       | T__amode x ->
+      (match x with 
+         | Short () ->
+        P.ps "Short";P.psp ();P.open_ 1;P.ps "(";P.ps ")";P.close ();()
+         | Hword () ->
+        P.ps "Hword";P.psp ();P.open_ 1;P.ps "(";P.ps ")";P.close ();()
+         | Word () ->
+        P.ps "Word";P.psp ();P.open_ 1;P.ps "(";P.ps ")";P.close ();()
+         | Dword () ->
+        P.ps "Dword";P.psp ();P.open_ 1;P.ps "(";P.ps ")";P.close ();())
+       | T__t x ->
+      (match x with 
+         | Add (x1,x2,x3) ->
+        P.ps "Add";P.psp ();P.open_ 1;P.ps "(";P.ps "x1";P.ps ",";P.psp
+          ();P.ps "x2";P.ps ",";P.psp ();P.ps "x3";P.ps ")";P.close
+          ();()
+         | Ld (x4,x5) ->
+        P.ps "Ld";P.psp ();P.open_ 1;P.ps "(";P.ps "x4";P.ps ",";P.psp
+          ();P.ps "x5";P.ps ")";P.close ();()
+         | St (x6,x7) ->
+        P.ps "St";P.psp ();P.open_ 1;P.ps "(";P.ps "x6";P.ps ",";P.psp
+          ();P.ps "x7";P.ps ")";P.close ();()
+         | Nop () ->
+        P.ps "Nop";P.psp ();P.open_ 1;P.ps "(";P.ps ")";P.close ();()))
+
+let  rec pprint =
+fun x -> S.pprint (ppAll pprint) x
 

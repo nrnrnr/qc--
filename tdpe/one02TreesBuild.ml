@@ -6,17 +6,9 @@ type t = One02Trees.M.t
     type nativeint = Base.std_nativeint
           
     type amode = One02Trees.M.amode
-    type amode' = Tdpe.dynamic
 
     type t = One02Trees.M.t
-    type t' = Tdpe.dynamic
           
-    let t_reflect = One02Nbe.reflect_t
-    let t_reify = One02Nbe.reify_t
-
-    let amode_reflect = One02Nbe.reflect_amode
-    let amode_reify = One02Nbe.reify_amode
-
     let short () = 
       One02Trees.M.Short()
 
