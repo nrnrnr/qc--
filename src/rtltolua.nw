@@ -18,7 +18,7 @@ Lua-style counterpart.
 
 <<rtltolua.mli>>=
 val rtl: out_channel -> Rtl.rtl -> unit
-val exp: Rtl.exp -> string
+val exp: out_channel -> Rtl.exp -> unit
 @ 
 
 % ------------------------------------------------------------------ 
@@ -47,6 +47,20 @@ let luafunc       f args = "CMM." ^ f ^ parenthesized args ^ "\n"
 let push   kind c = luafunc ("push_" ^ kind) (quoted c)
 let nopush kind c = c
 
+let argstack op s =
+  match op with
+  |	"fetch" -> "pop" ^ s
+  |	"store" -> "push" ^ s
+  |	_       -> assert false
+
+let valstack   op s = op ^ s
+let commentout _  _ = "comment"
+
+let tybits b = 
+  match b with
+  |	Types.Bool    -> "bool"
+  |	Types.Bits(i) -> "bits" ^ string_of_int i
+
 let const f c =
 	match c with
     | R.Bool(true)    -> f "literal" "1"
@@ -60,12 +74,11 @@ let const f c =
 <<ToLua>>=
 (* but what about the operator's return type? *)
 let opr op w = 
-  luafunc "apply_operator" 
-          ((quoted op) ^ "," ^ (quoted (String.concat "," 
-						   (List.map (fun b -> "bits" ^ string_of_int b) w))))
-
-
-(* string_of_int w))) *)
+  let opty, result = Rtlop.Types.mono (Rtl.opr op w) in
+  luafunc "apply_operator"  ((quoted op) ^ "," ^
+							 (quoted 
+								((String.concat "," (List.map tybits opty)) ^ 
+								 ":" ^ (tybits result))))
 
 let byteorder = function
   |	Rtl.BigEndian    -> quoted "BIG"
@@ -80,8 +93,8 @@ let rec expr' f e =
 	match e with
     | R.Const c           -> const f c
     | R.Fetch(loc, _)     -> 
-		let (prefix, func_suffix, args) = location' loc in
-		prefix ^ luafunc ("fetch" ^ func_suffix) args
+		let (prefix, func_f, func_suffix, args) = location' loc in
+		prefix ^ luafunc (func_f "fetch" func_suffix) args
     | R.App((op, ww), ee) -> (String.concat "\n" (List.map (expr' push) ee)) ^ 
 		                     opr op ww
 @ 
@@ -90,23 +103,31 @@ let rec expr' f e =
 and location' = function
     | R.Cell (sp, agg, width, e, ass) ->
 		(match sp with
+        | 'A' -> (expr' push e,
+                  argstack,
+                  "_arg",
+                  "")
         | 'm' -> (expr' push e,
+                  valstack,
 				  "",
 				  string_of_int width ^ "," ^ byteorder agg ^ "," ^ 
 				     alignment ass)
-        | r   -> ("", 
+        | r   -> ("",
+                  commentout,
 				  "_register",
 				  "'" ^ String.make 1 r ^ "'," ^ expr' nopush e))
-    | R.Var   (name, index, width)     -> ("", "_local", string_of_int index)
+    | R.Var   (name, index, width)     -> ("", valstack, "_local", 
+										   string_of_int index)
     | R.Slice (w, i, loc)              -> 
-        let (p, s, a) = location' loc in ("-- slice\n" ^ p, s, a)
+        let (p, ff, s, a) = location' loc in ("-- slice\n" ^ p, ff, s, a)
 
 (* the last case of Cell is not being properly handled *)
 (* NOTE: R.Slice is not yet being properly handled     *)
 
-let (<<) f g = fun x -> f (g x)
-let expr     = (expr' nopush) << Rtl.Convert.exp
-let location = location' << Rtl.Convert.loc
+let (<<) f g   = fun x -> f (g x)
+
+let expr fd rtl = output_string fd ((expr' push) (Rtl.Convert.exp rtl))
+let location  = location' << Rtl.Convert.loc
 @ 
 
 <<ToLua>>=
@@ -114,9 +135,9 @@ let effect eff func_prefix =
     match eff with
     | R.Kill loc            -> ""
     | R.Store (loc, exp, w) -> 
-		let (prefix, func_suffix, args) = location' loc in
+		let (prefix, func_f, func_suffix, args) = location' loc in
 		prefix ^ expr' push exp ^ 
-		(luafunc (func_prefix ^ "store" ^ func_suffix) args)
+		(luafunc (func_prefix ^ func_f "store" func_suffix) args)
 
 let guard = function
   | R.Const (R.Bool true) -> ""

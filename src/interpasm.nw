@@ -59,17 +59,18 @@ end
 % ------------------------------------------------------------------ 
 
 <<Make>>=
-let quoted  s      = "\"" ^ s ^ "\""
-let braced  s      = "{"  ^ s ^ "}"
+let quoted        s = "\"" ^ s ^ "\""
+let parenthesized s = "("  ^ s ^ ")"
+let braced        s = "{"  ^ s ^ "}"
 
-let luafunc f args = "CMM." ^ f ^ quoted args ^ "\n"
+let luafunc f args  = "CMM." ^ f ^ parenthesized args ^ "\n"
 
 (* sz : int , d : string list *)
 let initdata sz d  = luafunc "data" (string_of_int sz ^ "," ^
                                      (braced (String.concat "," 
                                                  (List.map quoted d))))
  
-let hexbits v      = Printf.sprintf "0x%Lx" (Bits.U.to_int64 v)
+let hexbits v      = Printf.sprintf "%Lx" (Bits.U.to_int64 v)
 
 exception Unsupported of string
 let unsupported msg = raise (Unsupported msg)
@@ -149,8 +150,6 @@ class asm (fd:out_channel): Asm.assembler =
 object (this)
     val         _fd       = fd
 
-    val mutable _luacode  = ([] : string list) (* rev'ed *)
-
     val mutable _section  = "this can't happen"
     val mutable _exported = Strutil.Set.empty
     val mutable _imported = Strutil.Set.empty
@@ -159,8 +158,7 @@ object (this)
     val         _fprintf  = output_string fd
 
     method private append s =
-        _luacode <- s :: _luacode
-
+        _fprintf s
 
     (* -- declare symbols -- *)
     method import s =
@@ -181,7 +179,7 @@ object (this)
     (* -- sections -- *)
     method section s =
         ( this#append (luafunc "end_section" "")
-        ; this#append (luafunc "section"     s )
+        ; this#append (luafunc "section"     (quoted s))
         ; _section <- s
         )
 
@@ -190,7 +188,7 @@ object (this)
             
     (* define symbols *)        
     method label (s: Symbol.t) = 
-        this#append (luafunc "define_label" s#text)
+        this#append (luafunc "define_label" (quoted s#text))
     
     (* FIX can we ignore constants here? *)
     method const (s: Symbol.t) (b:Bits.bits) = 
@@ -244,34 +242,33 @@ object (this)
         | []    -> ""
         | names -> luafunc "imports" 
 			               (braced (String.concat "," 
-										     (Strutil.Set.elements _imported)))
+                                        (List.map quoted
+										    (Strutil.Set.elements _imported))))
 
     method private exports =
         match Strutil.Set.elements _exported with
         | []    -> ""
         | names -> luafunc "exports" 
 			               (braced (String.concat "," 
-											 (Strutil.Set.elements _exported)))
+                                        (List.map quoted
+											(Strutil.Set.elements _exported))))
     
     (* -- Advertise pointer sizes and such for this assembler -- *)
 
     method private personality =
           luafunc "memsize"   (string_of_int P.target.T.memsize)
         ^ luafunc "byteorder" ( match P.target.T.byteorder with
-		                        | Rtl.BigEndian    -> "BIG"
-							    | Rtl.LittleEndian -> "LITTLE"
+		                        | Rtl.BigEndian    -> quoted "BIG"
+							    | Rtl.LittleEndian -> quoted "LITTLE"
 							    | _                -> assert false
                               )
         ^ luafunc "ptrsize"   (string_of_int P.target.T.pointersize)
     
-    (* emit takes the declarations in _luacode and completes them to a
-       Lua/C-- program. Imports and exports are announced according to the
-       names registered in _imported, _exported *)
-
     method emit = 
         let toplevel = this#imports ^ this#exports ^ this#personality in
-        let sections = String.concat "," (List.rev _luacode)          in
-        _fprintf (toplevel ^ sections)
+        ( _fprintf (luafunc "end_section" "")
+        ; _fprintf toplevel
+        )
 
 end    
 @
