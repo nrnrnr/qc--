@@ -47,8 +47,10 @@ clean:V:        nwclean
 
 nwclean:V:
                 rm -f *.inc
-                rm -f main.ml cmdline.ml cmdline.mli ast.asdl
-                
+                rm -f main.ml cmdline.ml cmdline.mli this.in qc--.pod 
+                rm -f ast.asdl astpp.mli astpp.ml
+                rm -f scan.mll parse.mly
+
 # ------------------------------------------------------------------ 
 # important file sets
 # ------------------------------------------------------------------ 
@@ -93,7 +95,8 @@ TIDY =          tidy
 RERUN =         Rerun (LaTeX|to get cross-references right)
 
 LINE =          '# %L "%F"%N'
-EXTRACT =       'for f in $target; do $NOTANGLE -L"$LINE" -R$f $prereq | $CPIF $f; done'
+OCAMLTANGLE =   'for f in $target; do $NOTANGLE -L"$LINE" -R$f $prereq | $CPIF $f; done'
+MISCTANGLE  =   'for f in $target; do $NOTANGLE -R$f $prereq | $CPIF $f; done'
 
 %.inc:          %.nw
                 $NOWEAVE -delay -index -autodefs ocaml $prereq > $target
@@ -121,18 +124,21 @@ EXTRACT =       'for f in $target; do $NOTANGLE -L"$LINE" -R$f $prereq | $CPIF $
 this.in         \
 main.ml         \
 cmdline.mli:    main.nw
-                eval $EXTRACT
+                eval $OCAMLTANGLE
 
 astpp.mli       \
 astpp.ml:       ast.nw
-                eval $EXTRACT
+                eval $OCAMLTANGLE
 
 ast.asdl:       ast.nw
-                for f in $target; do $NOTANGLE -R$f $prereq | $CPIF $f; done
+                eval $MISCTANGLE
 
+parse.mly       \
+scan.mll:       parser.nw
+                eval $MISCTANGLE
 
 $NAME.pod:      main.nw
-                for f in $target; do $NOTANGLE -R$f $prereq | $CPIF $f; done
+                eval $MISCTANGLE
 
 ast.inc:        ast.nw         
                 $NOWEAVE -delay $prereq > $target
