@@ -1,0 +1,54 @@
+.TH NOCOND 1 "local 8/1/94"
+.SH NAME
+nocond \- provide noweb with conditional tangling
+.SH SYNOPSIS
+.B nocond
+version
+.br
+\fBawk -f nocond.awk\fP version
+.SH DESCRIPTION
+.I nocond
+is a filter designed to work with
+.I notangle(1)
+to provide it with a simple
+conditional capability.  Chunk definitions may be
+marked as conditional by including a version name
+wrapped in double parentheses as part of the chunk name.
+.PP
+.I nocond
+concatenates its command line arguments
+(with a single space between each argument) to form
+a version name, and removes matching conditional marks
+from chunk definition names so
+.I notangle(1)
+will include the chunks as part of the appropriate
+definition.
+.PP
+.I nocond
+also provides a file of TeX macros, \fInocondmac.tex\fP, which
+will nicely typeset conditional chunk names.
+.SH EXAMPLE
+Suppose that a Pascal web (\fIpgm.nw\fP) uses the chunk
+.IP
+\fB<<\fPOpen the output file\fB>>\fP
+.PP
+The author can provide multiple definitions of this chunk:
+.IP
+\fB<<\fPOpen the output file ((UCSD Pascal))\fB>>=\fP
+.nf
+REWRITE(outfile, 'XYZ.DAT');
+\fB<<\fPOpen the output file ((Turbo Pascal))\fB>>=\fP
+ASSIGN(outfile, 'XYZ.DAT');
+REWRITE(outfile);
+.fi
+.PP
+To tangle the UCSD Pascal version, the command line
+.IP
+notangle -filter "nocond UCSD Pascal" pgm.nw > pgm.pas
+.PP
+will suffice.  The Turbo Pascal version can be tangled
+similarly.
+.SH SEE ALSO
+.I notangle(1)
+.SH AUTHOR
+Lee Wittenberg.  Internet address: \fBleew@pilot.njin.net\fP
