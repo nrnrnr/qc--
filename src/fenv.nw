@@ -222,9 +222,6 @@ locally visible values must ignore them.
 <<types>>=
 type proc = 
     { scope:      scope partial
-    ; sdata:      int partial       (* amount of stackdata  *)
-    ; salign:     int partial       (* max align constraint *)
-    ; slabel:     string partial    (* link-time const for stack data offset*)
     }
 
 and  reghint        = RReg  of string   (* hardware reg *)
@@ -237,9 +234,7 @@ and  register       = { index:      int           (* for run-time API *)
 and  kind           = Proc          of proc
                     | Code
                     | Data
-                    | Stack         of ( int     (* offset within s/d *)
-                                       * string  (* r/t const for s/d *)
-                                       ) partial 
+                    | Stack         of Alloc.Mem.t partial
 
 and  denotation     = Constant      of Bits.bits
                     | Label         of kind
@@ -391,56 +386,6 @@ The above functions obey to the following rules:
 getIndex empty = 0
 getIndex (nextIndex env) = (getIndex env) + 1
 \end{verbatim}
-\end{quote}
-
-% ------------------------------------------------------------------ 
-\subsection{Stackdata Offset}
-% ------------------------------------------------------------------ 
-
-Inside of a procedure uninitialized data can be declared on the stack. 
-For each procedure an [[offset]] is maintained that counts the amount
-of memory declared on the stack and whose value is bound to label
-inside of stack data declarations.  Since procedures do not nest in
-{\PAL}, a single counter in the [[env]] is sufficient.  We have
-decided to maintain the [[offset]] counter inside the fat environment
-because the [[offset]] must be maintained over many functions and
-becomes a non-local property.
-
-\begin{quote}\it
-    This does not look right to me. Why can't the stackdata counter
-    not be associated with the a scope? --CL
-\end{quote}
-
-<<signature Env>>=
-val resetOffset     : string -> env -> env
-val incrOffset      : int -> env -> env
-val alignOffset     : int -> env -> env
-val maxOffsetAlign  : env -> int
-val offset          : env -> int
-val offsetName      : env -> string
-@
-
-
-Each procedure sets the offset to zero by calling [[resetOffset]] by
-passing a unique name as the first argument.  The name is later bound
-to the offset from the beginning of the procedure's run-time stack. 
-The (current) name can be obtained from [[offsetName]].
-
-A data declaration increments the offset by its size using
-[[incrOffset]].  The [[alignOffset n]] function advances the
-[[offset]] to the next multiple of [[n]] unless [[offset]] is already
-a multiple of [[n]].  The maximal alignment constraint is also
-remembered and returned by [[maxOffsetAlign]].  For labels and the
-total amount of [[stackdata]] [[offset]] reports the current value of
-the offset counter.
-
-Beware:  the values of [[offset]] and [[offsetName]] are only
-meaningful in the context of a procedure and not a global program
-property.
-
-\begin{quote}
-    This also does not look right in the presence of [[Automaton2]]. All
-    stack data should be represented as an automaton. --CL
 \end{quote}
 
 % ------------------------------------------------------------------ 
@@ -1020,47 +965,6 @@ let getIndex   env   = env.rindex
 @
 
 % ------------------------------------------------------------------ 
-\subsection{Stackdata Offset}
-% ------------------------------------------------------------------ 
-
-The implementation of the [[offset]] functions for stack data are
-straight forward:
-
-<<module Env>>=
-let resetOffset n env     = let sd = { smaxalign = 1
-                                     ; soffset   = 0
-                                     ; sname     = n
-                                     }
-                            in  { env with stackdata = sd }
-let incrOffset n env      = { env with 
-                              stackdata = { env.stackdata with 
-                                            soffset = env.stackdata.soffset + n 
-                                          }
-                            }
-let offset env            = env.stackdata.soffset
-let maxOffsetAlign env    = env.stackdata.smaxalign
-let offsetName env        = env.stackdata.sname
-@
-
-The [[alignOffset]] function aligns the [[soffset]] counter and also
-remembers the maximal alignment constraint.
-
-<<module Env>>=
-let alignOffset n env = 
-    let m = max n env.stackdata.smaxalign in
-    let o = if   env.stackdata.soffset mod n = 0 
-            then env.stackdata.soffset 
-            else let q = env.stackdata.soffset / n in (q+1) * n
-    in
-        { env with stackdata = 
-            { env.stackdata with
-                soffset   = o
-            ;   smaxalign = m
-            }
-        }
-@
-
-% ------------------------------------------------------------------ 
 \subsubsection{Hardware Registers}
 % ------------------------------------------------------------------ 
 
@@ -1155,14 +1059,8 @@ and clean_scope { Dirty.venv = v; Dirty.tenv = t } =
 <<clean function>>=
 and clean_proc x = match x with
     |   { Dirty.scope     = Some s
-        ; Dirty.sdata     = Some n 
-        ; Dirty.salign    = Some m 
-        ; Dirty.slabel    = Some l
         } ->
         { Clean.scope     = clean_scope s
-        ; Clean.sdata     = n
-        ; Clean.salign    = m
-        ; Clean.slabel    = l
         }
     |   _ -> assert false 
 

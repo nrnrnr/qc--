@@ -1238,9 +1238,6 @@ let formal r env (hint, inv, ty, name) =
 <<module Env>>=
 let proc r env (_,name,ff,bb as p) =
     let x    = { F.scope  = None
-               ; F.sdata  = None
-               ; F.salign = None 
-               ; F.slabel = None
                } in
     let t    = E.ematch (pointerTy env) (fun p -> F.Label(F.Proc(x)),p) in
     let env  = foldl (body r Global) env bb     in 
@@ -1491,33 +1488,22 @@ let memdecl env ty size init_exprs =
 
 A [[stackdatum]] declaration must respect some constraints:  (1) no
 expressions to initialize memory, (2) no [[[]]] used as a size, (3) an
-alignment must be a power of two.  Additionally, it updates the
-[[offset]] pointer maintained by the fat environment.  An memory
-declaration advances the pointer by the size of the declared memory,
-an [[align]] declaration aligns the [[offset]], and a label is bound
-to the current offset.
+alignment must be a power of two. 
 
 <<check>>=
 let rec stackdatum env = function
     | A.DatumAt(x,r)            -> E.catch' (F.flagError env) (error r env) 
                                       (stackdatum env) x
-    | A.Label(n) -> 
-        let offset = F.offset env                  in
-        let label  = F.offsetName env              in
-        let denot  = F.Label(F.Stack(Some (offset,label))) in
-        let rgn,x  = F.findv n env                 in
-            E.seq' (F.flagError env) x 
-                (fun (_,ty) -> F.rebindv n (rgn,E.Ok(denot,ty)) env)
-    
+    | A.Label(n) -> env
     | A.Align(a) when not (is2power a) ->
         E.error ("illegal alignment: " ^ string_of_int a)
-    | A.Align(a)                -> F.alignOffset a env
+    | A.Align(a)                -> env 
     | A.MemDecl(t,A.DynSize,_)  -> E.error ("illegal size for stack data")
     | A.MemDecl(t,n,None)       -> 
         let env = memdecl env t n None in
             E.seq' env (memsize env n)
             ( function 
-            | Some n -> F.incrOffset n env
+            | Some n -> env
             | None   -> assert false        (* impossible *)
             )
     | A.MemDecl(t,n,_   )       -> 
@@ -2014,16 +2000,11 @@ across procedures.
 
 The local environment for the procedure is bound in the fat
 environment such that it can be re-used later.  This function updates
-the existing entry for the procedure in the fat environment.  After
-the [[body]] of a procedure is traversed the [[offset]] equals the
-amount of stack data that was allocated there.  This number goes also
-into the denotation of the procedure.
+the existing entry for the procedure in the fat environment. 
 
 <<check>>=
 and proc r env (_,name,_,bb as p) =
     let env   = F.push env F.emptyscope  (* open new scope *)   in 
-    let label = Idgen.id' (name^" stackdata")                   in
-    let env   = F.resetOffset label env   (* stackdata offset *)in
     let env   = Env.local env p                                 in
     let env   = foldl body env bb (* traverse body *)           in
     let scope = F.top env                                       in
@@ -2035,9 +2016,6 @@ and proc r env (_,name,_,bb as p) =
                | (F.Label(F.Proc(p)),t) -> (* update denotation *)
                     let p' = { p with 
                                F.scope     = Some scope
-                             ; F.sdata     = Some (F.offset env)
-                             ; F.salign    = Some (F.maxOffsetAlign env)
-                             ; F.slabel    = Some label
                              }
                     in F.Label(F.Proc(p')),t
                | _ -> assert false
