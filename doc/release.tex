@@ -100,6 +100,42 @@ The implementation of the \texttt{switch} statement is especially
 na\"\i ve.
 
 
+\section{Notes for release 20040501}
+
+We've added limited support for 64-bit variables on 32-bit platforms.
+It is now possible to initialize such variables with literals and to
+pass them two and from C~functions.  Here, for example, is a {\PAL}
+procedure that tests 64-bit add:
+\begin{verbatim} 
+  target byteorder little;
+  
+  import ladd, printf;
+  export main;
+  
+  foreign "C" main(bits32 argc, "address" bits32 argv) {
+    bits64 n, m;
+    n = 0x80000000::bits64;
+    m = 0x80000000::bits64;
+    bits64 sum;
+    sum = foreign "C" ladd(n, m);
+    foreign "C" printf(format, n, m, sum);
+    foreign "C" return(0);
+  }
+
+  section "data" {
+    format: bits8[] "sum of %016llx\nand    %016llx\nis     %016llx\n\0";
+  }
+\end{verbatim}
+Here the imported function \texttt{ladd} is defined in~C as follows:
+\begin{verbatim} 
+  long long ladd(long long x, long long y) {
+    return x + y;
+  }
+\end{verbatim}
+The 64-bit variables are not actually stored in 32-bit register pairs,
+but that optimization will probably come in a future release.
+
+
 \section{Notes for release 20040427}
 
 Quick~{\PAL} has a new front end.

@@ -1,0 +1,26 @@
+target byteorder little;
+
+import ladd, printf;
+export main;
+
+foreign "C" main(bits32 argc, "address" bits32 argv) {
+  bits64 n, m;
+  n = 0x80000000::bits64;
+  m = 0x80000000::bits64;
+  bits64 sum;
+  sum = foreign "C" ladd(n, m);
+  foreign "C" printf(format, n, m, sum);
+  foreign "C" return(0);
+}
+
+section "data" {
+  format: bits8[] "sum of %016llx\nand    %016llx\nis     %016llx\n\0";
+}
+
+/* N.B. ladd is a C function defined as follows:
+
+  long long ladd(long long x, long long y) {
+    return x + y;
+  }
+
+*/

@@ -1152,6 +1152,7 @@ and assign_room room left right w =
         match left with
         | RP.Mem ('m', agg, w, addr, assn) ->  (* some kind of store *)
             assert (agg = Post.byte_order || agg = Rtl.Identity);
+            <<definition of [[split_assignment]]>>
             let a, is' = address room addr in
             (match right with
             | <<\emph{pattern [[->]] action} for low-bit store>>
@@ -1214,22 +1215,33 @@ ALIGNMENT IS CONCERNED.
                           RP.App (("zx", [nn;ww']), [lsw])])
 ) when w > Post.itempwidth && agg <> Rtl.Identity && ww = ww' && ww = ww'' &&
   ww = ww''' && dd = ww - nn && BO.eq nnb (Bits.U.of_int nn ww) ->
-    let memsize = proc.Proc.target.T.memsize in
-    assert (w mod memsize = 0 && nn mod memsize = 0);
-    let addr = Up.exp addr in
-    let assn = Up.assertion assn in
-    let lsw, msw = Up.exp lsw, Up.exp msw in
-    let offset nn = RU.addk proc.Proc.target.T.pointersize addr (nn / memsize) in
-    (match agg with
-    | Rtl.LittleEndian ->
-        rtl (R.par [R.store (R.mem assn 'm' agg nn addr) lsw nn;
-                    R.store (R.mem assn 'm' agg dd (offset nn)) msw dd])
-    | Rtl.BigEndian ->
-        rtl (R.par [R.store (R.mem assn 'm' agg dd addr) msw dd;
-                    R.store (R.mem assn 'm' agg nn (offset dd)) msw nn])
-    | Rtl.Identity ->
-        Impossible.impossible "bad aggregation in split assignment"
-    )
+    split_assignment ~lsw ~lw:nn ~msw ~mw:dd
+| RP.Const (RP.Bits b) when w > Post.itempwidth ->
+  let lw = Post.itempwidth in
+  let mw = w - lw in
+  let lsw = RP.Const (RP.Bits (BO.lobits lw b)) in
+  let msw = RP.Const (RP.Bits (BO.lobits mw (BO.shrl b (Bits.U.of_int lw w)))) in
+  split_assignment ~lsw ~lw ~msw ~mw
+@ 
+We split an assignment into a least significant word [[lsw]] of
+width~[[lw]] and a most significant word [[msw]] of width~[[mw]].
+<<definition of [[split_assignment]]>>=
+let split_assignment ~lsw ~lw ~msw ~mw =
+  let memsize = proc.Proc.target.T.memsize in
+  assert (w mod memsize = 0 && lw mod memsize = 0 && w = lw + mw);
+  let addr = Up.exp addr in
+  let assn = Up.assertion assn in
+  let lsw, msw = Up.exp lsw, Up.exp msw in
+  let offset nn = RU.addk proc.Proc.target.T.pointersize addr (nn / memsize) in
+  match agg with
+  | Rtl.LittleEndian ->
+      rtl (R.par [R.store (R.mem assn 'm' agg lw addr) lsw lw;
+                  R.store (R.mem assn 'm' agg mw (offset lw)) msw mw])
+  | Rtl.BigEndian ->
+      rtl (R.par [R.store (R.mem assn 'm' agg mw addr) msw mw;
+                  R.store (R.mem assn 'm' agg lw (offset mw)) lsw lw])
+  | Rtl.Identity ->
+      Impossible.impossible "bad aggregation in split assignment" in
 @ 
 <<other generic expander functions>>=
 and fetch_slot slot w = Down.exp (A.fetch slot w)

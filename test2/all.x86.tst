@@ -24,6 +24,7 @@ Test.files = { "add.c--"
              , norun("float-001.c--")
              , "hello.c--"
 	     , norun("hex.c--")
+	     , { source='ladd.c--', other='src/ops64.c' }
              , norun("non-local-cut.c--")
              , norun("not.c--")
              , "ovrflow.c--"
