@@ -180,11 +180,7 @@ let location b =
     let sum    = RP.App (("add",[b.width]), [b.base;offset])         in
         Rtl.Revert.exp sum
 
-let adjust b =
-    if b.offset mod b.basealign > 0 then    
-        { b with offset = b.basealign * ((b.offset / b.basealign) + 1) }
-    else
-        b
+let adjust b = align b (b.basealign)
 
 let freeze b = 
     let b = adjust b in
@@ -218,8 +214,8 @@ are adjusted accordingly:
 <<area.ml>>=
 let concat (areas:t list) (const:Const.t) = 
     let cat (b,const) t =  
-        let const = Const.make_equal (location b) t.address const in
         let b     = align b t.align in  
+        let const = Const.make_equal (location b) t.address const in
         let b     = alloc b t.size  in
                 (b,const)
     in match areas with            
