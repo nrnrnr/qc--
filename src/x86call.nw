@@ -2,17 +2,15 @@
 
 \section{X86 calling conventions}
 
+My goal here is to avoid knowing anything about instructions.
+The parameters represent the machine instructions to implement
+[[return]] and [[cut to]].
 <<x86call.mli>>=
 val c : return_to:(Rtl.exp -> Rtl.rtl) -> Mflow.cut_args Target2.map -> Call.t
   (* C calling convention *)
 @ 
-Information from the SYSV ABI, Third Edition, ISBN 0-13-104670-5.
-Values are aligned on 1-, 2-, or 4-byte boundaries.
-Doubles and long doubles are 4-byte aligned; others have the alignment
-of their size.
-
-Structures, arrays, and unions take the alignment of their most
-aligned component.
+\section{Implementation of X86 calling conventions}
+We use these abbreviations:
 <<x86call.ml>>=
 module A  = Automaton
 module C  = Call
@@ -22,39 +20,96 @@ module RS = Register.Set
 module RU = Rtlutil
 module T  = Target2
 @ 
-\paragraph{X86 stuff}
+\paragraph{General information}
+Information on the C~calling convention is from the SYSV ABI, Third
+Edition, ISBN 0-13-104670-5. 
+
+Values are aligned on 1-, 2-, or 4-byte boundaries.
+Doubles and long doubles are 4-byte aligned; others have the alignment
+of their size.
+
+Structures, arrays, and unions take the alignment of their most
+aligned component.
+
+From Figure 3-14,
+the return register is  [[eax]], and the volatile registers are
+[[ebx]], [[esi]], and [[edi]].
+@ 
+\paragraph{X86 registers and their conventional uses}
+Calling conventions refer to registers frequently, so it is
+appropriate to be able to refer to them by name.
+Lua code would do something similar.
 <<x86call.ml>>=
-
-let xreg k = ('r', k, 32)
-
-let eax = xreg 0
-let ecx = xreg 1
-let edx = xreg 2
-let ebx = xreg 3
-let esp = xreg 4
-let ebp = xreg 5
-let esi = xreg 6
-let edi = xreg 7
-
+let eax = ('r', 0, 32)
+let ecx = ('r', 1, 32)
+let edx = ('r', 2, 32)
+let ebx = ('r', 3, 32)
+let esp = ('r', 4, 32)
+let ebp = ('r', 5, 32)
+let esi = ('r', 6, 32)
+let edi = ('r', 7, 32)
 let vfp = Vfp.mk 32
 @ 
-From Figure 3-14,
-the return register is [[eax]], and the volatile registers are
-[[ebx]], [[esi]], and [[edi]].
-
+Here are the volatile and nonvolatile registers.
+N.B. In position-independent code, [[ebx]] is reserved to point to the
+global offset table.
+Flags are also volatile, except that the direction flag must be set to
+``forward'' (that is, zero) on entry and exit.
+<<x86call.ml>>=
+let volregs = RS.of_list [eax; ecx; edx]
+let nvregs  = RS.of_list [ebx; esi; edi; ebp]
+let allregs = RS.elements (RS.union volregs nvregs)
+@  N.B. We omit all floating-point registers.
+These are all volatile and available for allocation, although
+[[%st(0)]] can used to return a floating-point result.
+The ABI says that all these registers ``must be empty'' at entry and
+exit (except that [[%st(0)]] need not be empty if it holds a result).
+Understanding ``empty'' requires understanding $x$86 floating-point.
+@ 
+For now, we save a nonvolatile register anywhere.
+Later, we may want mechanisms for saving them in conventional locations.
+<<x86call.ml>>=
+let saved_nvr temps =
+  let t = Talloc.Multiple.loc temps 't' in
+  fun (_, _, w) -> t w
+@
+\paragraph{Conventions governing the stack}
+Page 3-10.  The stack is word-aligned.
+The stack pointer points at the last item on the stack, \emph{not} at
+an empty slot.
+<<x86call.ml>>=
+let sp       = R.reg esp
+let spval    = R.fetch sp 32
+let sp_align = 4
+let growth   = Memalloc.Down
+let bo       = R.LittleEndian
+@
+\paragraph{Generic automaton support}
+The two infix operators both represent the basic composition operator,
+which must instantiated at two types:
+stage followed by stage is stage,
+and 
+stage followed by implementation is implementation.
 <<x86call.ml>>=
 let ( **> ) f x = f x
 let ( *> ) f1 f2 x = f1 (f2 x)
+@ 
+We provide error parameters to automata.
+<<x86call.ml>>=
 let badwidth what w = Impossible.impossible
     ("Unsupported (rounded) width " ^ string_of_int w ^ " in x86 " ^ what)
-
 let imp _ = Impossible.impossible "grave miscalculation in automaton"
 @ 
-Strictly more permissive than~C, as it permits returning one integer
+\paragraph{Automata for passing values}
+
+For results,
+we cheat a bit: this convention is
+strictly more permissive than~C, as it permits returning one integer
 \emph{and} one floating result.
+Any floating-point result is automatically widened to 80~bits, and
+an integer result is widened to 32~bits.
 <<x86call.ml>>=
 let results base = 
-  A.mk **>
   A.hint_choice
      [ ((==) "float"),  A.widen  (Aux.round_up_to ~multiple_of:80) *>
                         A.widths [80] ~errormsg:(badwidth "x86 floating return") *>
@@ -64,63 +119,52 @@ let results base =
                         A.useregs [eax] ~errormsg:imp
      ] **>
   A.no_overflow base 4 "multiple return values for x86 C"
-@ 
-Here are the volatile and nonvolatile registers.
-N.B. In position-independent code, [[ebx]] is reserved to point to the
-global offset table.
-Flags are also volatile, except that the direction flag must be set to
-``forward'' (that is, zero) on entry and exit.
-<<x86call.ml>>=
-let set l = List.fold_right RS.add l RS.empty
-let volregs = set [eax; ecx; edx]
-let nvregs  = set [ebx; esi; edi; ebp]
-let allregs = [eax; ecx; edx; ebx; esi; edi; ebp]
-@  N.B. We omit all floating-point registers.
-These are all volatile and available for allocation, although
-[[%st(0)]] can used to return a floating-point result.
-The ABI says that all these registers ``must be empty'' at entry and
-exit (except that [[%st(0)]] need not be empty if it holds a result).
-Understanding ``empty'' requires understanding $x$86 floating-point.
 @
-Page 3-10.  The stack is word-aligned.
-The stack pointer points at the last item on the stack, \emph{not} at
-an empty slot.
-<<x86call.ml>>=
-let sp = R.reg esp
-let pc = R.reg
-let growth = Memalloc.Down
-let sp_align = 4
-let bo = R.LittleEndian
-@ 
-Earlier arguments are stored in lower addresses, so even though the
+When passing procedure parameters, we put
+earlier arguments in lower addresses, so even though the
 stack grows down, the overflow block grows up.
-An argument's size in increased, if necessary, to make it a multiple
+An argument's size is increased, if necessary, to make it a multiple
 of words.  The ABI specifies padding, but we'll use [[widen]] because
 the machine is little-endian.
 <<x86call.ml>>=
 let arguments base = 
-  A.mk **>
   A.widen  (Aux.round_up_to ~multiple_of:32) **>
   A.overflow ~memsize:8 ~byteorder:bo ~start:base
              ~growth:Memalloc.Up ~max_alignment:sp_align
+@ 
+When passing cut-to parameters, we use all the registers---there's no
+reason not to.
+<<x86call.ml>>=
+let cut_args base = 
+  A.widen  (Aux.round_up_to ~multiple_of:32) **>
+  A.widths [32] ~errormsg:(badwidth "x86 cut-to convention") **>
+  A.useregs allregs ~errormsg:imp **>
+  A.overflow ~memsize:8 ~byteorder:bo ~start:base
+             ~growth:Memalloc.Up ~max_alignment:sp_align
+@ 
+It's worth studying these automata to see what's likely to remain
+unchanged across conventions:
+memsize, byte order, stack alignment, and growth direction are good
+candidates for defaulting.
 @
+\paragraph{Managing the stack pointer and return address}
 On entry, the stack pointer points to the return address.
 This needs some aliasing info?
 <<x86call.ml>>=
 let ra = R.mem R.none 'm' bo 32 vfp
 @ 
-For now, let's save a nonvolatile register anywhere.
-<<x86call.ml>>=
-let saved_nvr temps =
-  let t = Talloc.Multiple.loc temps 't' in
-  fun (_, _, w) -> t w
-@ 
-N.B. the call instruction moves the stack pointer.
+The ``normal'' location for the stack pointer is at the bottom of the
+frame. 
+This line of code should be the \emph{only} place in the compiler
+where the constant [["minus frame size"]] is mentioned.
+Clients should use the base of the appropriate block in the calling convention.
 <<x86call.ml>>=
 let addk = RU.addk 32
 let add  = RU.add  32
-let std_sp_location = add vfp (R.late "frame size" 32)
-let spval = R.fetch sp 32
+let std_sp_location = add vfp (R.late "minus frame size" 32)
+@ 
+N.B. the call instruction moves the stack pointer.
+<<x86call.ml>>=
 let call_actuals  =
   C.outgoing ~what:"call" ~growth ~sp ~spec:arguments
     ~autosp:(fun r -> Block.base r.A.overflow)
@@ -144,38 +188,30 @@ let epilog  =
     ~postsp:(fun _ -> vfp)  (* irrelevant *)
     ~relative_to:vfp
 @ 
+If we use [[Call.outgoing]] by itself, we have a problem, because
+[[Call.outgoing]] assumes that the overflow block is relative, when in
+fact it needs to be exact for a [[cut to]].
+We have a horrid patch here.
 <<x86call.ml>>=
-let cutto pc sp =
-  { T.embed = (fun (newpc, newsp) ->
-                 let assign loc e = Rtl.store loc e 32 in
-                 Rtl.par [assign pc newpc; assign sp newsp])
-  ; T.project = (fun r -> match R.Dn.rtl r with
-                          | RP.Rtl [ (_, RP.Store(_, npc, _))
-                                   ; (_, RP.Store(_, nsp, _))] ->
-                              (R.Up.exp nsp, R.Up.exp npc)
-                          | _ -> Impossible.impossible "projected non-cutto")
-  }
-
-let cut_args base = 
-  A.mk **>
-  A.widen  (Aux.round_up_to ~multiple_of:32) **>
-  A.widths [32] ~errormsg:(badwidth "x86 cut-to convention") **>
-  A.useregs allregs ~errormsg:imp **>
-  A.overflow ~memsize:8 ~byteorder:bo ~start:base
-             ~growth:Memalloc.Up ~max_alignment:sp_align
-
-let cut_actuals base  =
-  C.outgoing ~what:"cut to" ~growth ~sp ~spec:arguments
-    ~autosp:(fun r -> spval)
-    ~postsp:(fun _ -> spval)
-    ~relative_to:base  (* BAD -- WILL LEAD TO UNSOLVED CONSTRAINT!! *)
-
 let also_cuts_to =
   C.incoming ~what:"continuation" ~growth ~sp ~spec:arguments
     ~autosp:(fun r -> std_sp_location)
     ~postsp:(fun _ -> std_sp_location)
     ~relative_to:vfp
+
+let cut_actuals base  =
+ let out =
+   C.outgoing ~what:"cut to" ~growth ~sp ~spec:arguments
+     ~autosp:(fun r -> spval)
+     ~postsp:(fun _ -> spval)
+     ~relative_to:base in
+ let out types actuals = 
+   let answer = out types actuals in
+   let c = Const2.equate base (Block.base answer.C.overflow) in
+   {answer with C.overflow = Block.with_constraint answer.C.overflow c} in
+ out
 @ 
+\paragraph{Putting together the whole convention}
 <<x86call.ml>>=
 let c ~return_to cut =
   let return k n ~ra =

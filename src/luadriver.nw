@@ -187,37 +187,55 @@ end
 The backplane provides primitives to construct stages which implement
 back end phases in the compiler. For notational brevity, we introduce an
 alias here. See \module{backplane.nw} for details.
-
 <<Lua Boot Script>>=
 B      = Backplane 
 Stages = Stages or {}
 
 function Stages.nullf () return nil end
 Stages.null = B.stage { name="empty stage", fn = Stages.nullf }
+
+function Stages.assert(prop)
+  return NewBackplane.stage { name='assert ' .. prop, creates={prop},
+                              fn = Stages.nullf}
+end
 @
 
 % ------------------------------------------------------------------ 
 \subsection{Stage Patching}
 % ------------------------------------------------------------------ 
 
-Some primtive functions that are registered need to be stages rather
-than functions. we simply patch the binding in the Lua interpreter here.
-
+Some primitive functions that are registered need to be stages rather
+than functions. We patch the binding in the Lua interpreter here.
 <<Lua Boot Script>>=
-
 function Stages.make_stage(t, short, long, B)
   B = B or Backplane
   if type(t[short]) == 'function' then
-    t[short] = B.stage { name=long, fn = t[short] }
+    if type(long) == 'table' then
+      local stage = { fn = t[short] }
+      <<add every key-value pair in [[long]] to [[stage]]>>
+      t[short] = B.stage(stage)
+    else
+      t[short] = B.stage { name=long, fn = t[short] }
+    end
   end
 end
 
+Stages.make_stage(Stages, 'replace_vfp', {name='replace VFP', uses='no late consts' },
+                  NewBackplane)
+
 Stages.make_stage(Placevar,  'fortran', "fortran variable placer")
-Stages.make_stage(Placevar,  'new_fortran', "new fortran variable placer", NewBackplane)
+Stages.make_stage(Placevar,  'new_fortran',
+                  {name="new fortran variable placer",creates='no vars'}, NewBackplane)
 Stages.make_stage(Typecheck, 'proc',    'type check RTLs')
 -- non longer compiled in:
 -- Stages.make_stage(Expander,  'dummy',   'dummy expander')
 -- Stages.make_stage(Expander,  'sparc',   'sparc expander')
+<<add every key-value pair in [[long]] to [[stage]]>>=
+local k, v = next(long, nil)
+while k do
+  stage[k] = v
+  k, v = next(long, k)
+end
 @
 
 
@@ -292,8 +310,9 @@ function Stack.new_layout(dummy,proc) --- really for a C convention only
 end    
 
 X86 = X86 or {}
+X86.layout = { creates='no late consts' }
 
-function X86.layout(dummy,proc) --- really for a C convention only
+function X86.layout.fn(dummy,proc) --- really for a C convention only
     local blocks = Stack.new_blocks(proc)
     blocks.ra = Block.relative(blocks.vfp, "return address", 4, 4)
     local layout = 
@@ -314,6 +333,7 @@ function X86.layout(dummy,proc) --- really for a C convention only
     Stack.new_freeze(proc,block)
     return 1
 end    
+
 @
 
 
@@ -421,7 +441,8 @@ Backend.interp = Backend.make {target=Targets.interp, asm=Asm.interp}
 
 Backend.x86 =     
   { target    = Targets.x86
-  , widen     = Stages.null
+  , widen     = { fn = Stages.nullf, name='assert proper widths',
+                  creates='proper widths'}
   , placevars = Placevar.fortran
   , expand    = Expander.x86
   , liveness  = Liveness.liveness
@@ -433,7 +454,7 @@ Backend.x86 =
 
 Backend.new_x86 =     
   { target    = Targets.new_x86
-  , widen     = nil -- Stages.null
+  , widen     = Stages.assert('proper widths')
   , placevars = Placevar.new_fortran
   , expand    = Expander.new_x86
   , liveness  = Liveness.new_liveness
@@ -466,6 +487,12 @@ Compile = Compile and error('Compile not empty') or {}
 function Compile.run_optimizer(self,proc)
     local B = self.B or Backplane
 --verbose('running Compile.run_optimizer with ', whichB(B), '\n')
+
+    if B == NewBackplane then -- demo for a bug in the backplane
+       B.run(B.seq {Stages.assert('fish'),
+                    B.stage {fn=Stages.nullf, uses='fish'}}, proc)
+    end
+
     B.run(self.action, proc)
 end    
 

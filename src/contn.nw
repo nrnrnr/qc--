@@ -32,8 +32,10 @@ Each is responsible for different types of information:
 A continuation is a block of memory with two locations: one for a stack
 pointer, and another for a code pointer.
 [[with_overflow]] creates a stack block for a continuation; the
-[[overflow]] input is a block for overflow parameters and [[base]] is the
-base address of the block.
+[[overflow]] input is a block for overflow parameters, and the base
+address of the whole continuation will be relative to the base of
+[[overflow]].
+The observer function
 [[rep]] can be used to get the stack block for the continuation.
 
 A continuation value is a pointer to the block. The block resides in
@@ -47,7 +49,7 @@ type t
 
 val init_code:     t -> k_sp:Rtl.exp -> k_pc:Rtl.exp -> Rtl.rtl
 val rep : t -> Block.t               (* entire cont in memory *)
-val with_overflow: ('a, 'b) Target2.t' -> base:Rtl.exp -> overflow:Block.t -> t
+val with_overflow: ('a, 'b) Target2.t' -> overflow:Block.t -> t
 @
 
 The [[cutto]] function takes a pointer to the continuation ([[contn]])
@@ -94,11 +96,14 @@ let pc_sp base t =
   let sp = mem (offset base ptrcells t.T.pointersize) in
   pc, sp
 
-let with_overflow t ~base ~overflow =
+let with_overflow t ~overflow =
   let size = t.T.pointersize / t.T.memsize in
-  let pc, sp = pc_sp base t in
-  { block = Block.cathl overflow (Block.at ~base ~size:(2 * size)
-                                           ~alignment:t.T.alignment)
+  let my_pc_sp =
+    Block.relative (Block.base overflow) "continuation block"
+      Block.at ~size:(2 * size) ~alignment:t.T.alignment in
+  let my_rep = Block.cathl overflow my_pc_sp in
+  let pc, sp = pc_sp (Block.base my_rep) t in
+  { block = my_rep
   ; sp    = sp
   ; pc    = pc
   ; overflow = Block.base overflow

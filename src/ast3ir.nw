@@ -934,12 +934,13 @@ and contStmt spans state (label,args)  =
             let variable  = Rtl.late contID ptr in
             let offset    = Rtlutil.add ptr sp variable in
             let newBase   = Rtl.late (Idgen.block ("contParams"^label)) ptr in
+            let newBase   = Rtlutil.add ptr offset newBase in
             let rtls,area = IO.copyin args cc.Target.cont newBase in
             let copy,_ =
                 add_to_cfg state.cfg (fun n rst ->
                                           Register.Set.union rst (G.uses n))
                            rtls (state.node, Register.Set.empty) in
-            let cont      = Contn.with_overflow state.target offset area in
+            let cont      = Contn.with_overflow state.target area in
             let state     = { state with conts =
                                  Strutil.Map.add label cont state.conts} in
             copy,state

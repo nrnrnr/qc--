@@ -364,7 +364,6 @@ We define three types of errors that can cause an illegal control flow:
 \item A [[DestProp]] error occurs if an action $a$ expects a state property, but
       another action has destroyed the property before it can reach $a$.
 \end{itemize}
-
 <<error types>>=
 type prop = string
 type destroysAction = string
@@ -372,7 +371,7 @@ type usesAction = string
 type formal = string option
 type actual = string option
 type error = DestProp of prop * destroysAction * usesAction
-           | NoProp of prop * usesAction
+           | NoProp   of prop * usesAction
            | Sharing of formal * actual * usesAction
 @
 
@@ -451,14 +450,12 @@ the rules for [[Unless_Do]] are the same as [[When_Do]].
 
 [[walk]] implements these rules, and [[stateCheck]] initializes and calls
 this traversal.
-
 <<state checking>>=
 let ( ++ ) = SP.union
 let ( -- ) = SP.diff
 let ( ** ) live destroys =
     let inter = SP.inter live destroys in
-    let live = SP.filter (fun (x,_) -> SP.exists (fun (y,_) -> x = y) inter)
-                         live in
+    let live = SP.filter (fun (x,_) -> SP.exists (fun (y,_) -> x = y) inter) live in
     let makeError (l1, l2) rst =
         let dest = SP.filter (fun (d1,_) -> l1 = d1) destroys in
         let _ = assert (SP.cardinal dest = 1) in
@@ -467,10 +464,8 @@ let ( ** ) live destroys =
             DestProp (l1, d2, l2) :: rst
     in
         SP.fold makeError live []
-        
-
+<<state checking>>=
 (* should find errors of destruction here *)
-
 let checkArg formal actual fnName = match formal, actual with
     | None, _ -> []
     | f, a when f != a -> [Sharing (f, a, fnName)]
@@ -478,11 +473,12 @@ let checkArg formal actual fnName = match formal, actual with
 
 let spSet_from_sSet name sSet =
     SS.fold (fun elt set -> SP.add (name, elt) set) sSet SP.empty
-
-
+@ 
+<<state checking>>=
 (* walk : action -> string option -> create * destroy * use *
                                      (live' * errors' -> live * errors)
     where create, destroy, use, live, and live' are of type string * string *)
+let (<<) f g = fun x -> f (g x)
 let rec walk arg a =
     match a with
     | Seq aList ->
@@ -491,12 +487,8 @@ let rec walk arg a =
             (seqcreates ++ (creates -- seqdestroys),
              seqdestroys ++ (destroys -- seqcreates),
              uses ++ (sequses -- creates),
-             fun (live', errors') ->
-                let (seqlive, seqerrors) = seqMkLive (live', errors') in
-                    mkLive (seqlive, seqerrors))
-        in
-            List.fold_right seqWalk aList
-                            (SP.empty, SP.empty, SP.empty, fun a -> a)
+             mkLive << seqMkLive) in
+        List.fold_right seqWalk aList (SP.empty, SP.empty, SP.empty, fun a -> a)
     | When_Do (cond, body) ->
         let ccreates, cdestroys, cuses, cMkLive = walk arg cond in
         let bcreates, bdestroys, buses, bMkLive = walk arg body in
@@ -518,19 +510,21 @@ let rec walk arg a =
     | Ignore a -> walk arg a
     | Single {name = fnName; stateUsed = uses; stateCreated = creates;
 	          stateDestroyed = destroys; paramExpected = formal} ->
-		(match List.map (spSet_from_sSet fnName) [creates; destroys; uses] with
-		 | [creates; destroys; uses] ->
-			(creates, destroys, uses,
-			 fun (live', errors') ->
-				((live' -- creates) ++ uses,
-				 errors' @ (live' ** destroys) @ (creates ** destroys)
-						 @ (checkArg formal arg fnName)))
-		 | _ -> assert false)
-	| Share (_, localArg, a) -> walk (Some localArg) a
+	 (match List.map (spSet_from_sSet fnName) [creates; destroys; uses] with
+	 | [creates; destroys; uses] ->
+	     (creates, destroys, uses,
+	          fun (live', errors') ->
+		    ((live' -- creates) ++ uses,
+		     errors' @ (live' ** destroys) @ (creates ** destroys)
+		             @ (checkArg formal arg fnName)))
+	 | _ -> assert false)
+    | Share (_, localArg, a) -> walk (Some localArg) a
 
-let stateCheck a =
+let stateErrors a =
     let (_, _, _, check) = walk None a in
-        check (SP.empty, [])
+    let live, errors = check (SP.empty, []) in
+    let errors = List.map (fun (x,y) -> NoProp (x, y)) (SP.elements live) @ errors in
+    errors
 @
 
 
@@ -540,27 +534,20 @@ let stateCheck a =
 
 To run a program of [[action]]'s, we first perform a semantic check, and barring
 errors, we run the program.
-
 <<run>>=
 exception MismatchedParameters of string
 
 let run main proc =
-(*
-    let _ = backSay ["Running stateCheck()\n"] in
-*)
-    let (liveIn, errors) = stateCheck main
-    in
-        match errors with
-        | [] ->
-(*
-            (backSay ["No Errors. Running runProgram()\n"]
-*)
-             runProgram V.Nil proc main
-        | _ ->
-            (backSay ["Errors in control flow.\n"]; false)
-
+  match stateErrors main with
+  | []   -> runProgram V.Nil proc main
+  | errs -> let msg = String.concat "\n" (List.map error_string errs) in
+            let pgm = printAction "  " main in
+            (*
+            Impossible.impossible ("incorrect backplane configuration:\n" ^ msg
+                                   ^ "\n  ... program is:\n    " ^ pgm)
+            *)
+            runProgram V.Nil proc main (* seeing false errors *)
 @
-
 The backplane introduces three new types. A [[StageFn]] is the function that
 actually executes the compiler step represented by a stage. [[Stage]]'s include
 the state property information that is associated with a [[StateFn]].
@@ -828,69 +815,34 @@ let rec printAction indent =
         let text = "Ignore(" in
         let newIndent = indent ^ (makeIndent (String.length text)) in
             text ^ printAction newIndent action ^ ")"
-    | Single {name = name} -> name
+    | Single a ->
+        let props tag s =
+          if SS.is_empty s then
+            ""
+          else
+            Printf.sprintf " %s={%s}" tag (String.concat ", " (SS.elements s)) in
+        Printf.sprintf "%s:%s%s%s" a.name (props "uses" a.stateUsed)
+          (props "creates" a.stateCreated) (props "destroys" a.stateDestroyed)
     | Share (param, paramType, action) ->
         let text = "Share(" ^ paramType ^ ", " in
         let newIndent = indent ^ (makeIndent (String.length text)) in
             text ^ printAction newIndent action ^ ")"
 
 
-
-let printError err =
-    let printOpt opt = match opt with
-        | None -> "Nil"
-        | Some a -> noIndent ^ a in
-    let identity x y = x ^ y in
-    let error text = "Error: " ^ text
-    in
-        match err with
-        | DestProp (prop, dest, uses) ->
-            error (String.concat " "
-                       [ "Property"
-                       ; prop
-                       ; "needed by"
-                       ; uses
-                       ; "is destroyed by"
-                       ; dest
-                       ; ".\n"
-                       ])
-        | NoProp (prop, uses) ->
-            error (String.concat " "
-                       [ "Property"
-                       ; prop
-                       ; "needed by"
-                       ; uses
-                       ; "is never provided"
-                       ; ".\n"
-                       ])
-        | Sharing (formal, actual, fnName) ->
-            let valOf = function
-                | None -> "None"
-                | Some v -> v in
-            let formal = valOf formal in
-            let actual = valOf actual in
-            error (String.concat " "
-                       [ "Variable type mismatch:"
-                       ; fnName
-                       ; "expects"
-                       ; actual
-                       ; "but was passed type"
-                       ; actual
-                       ; ".\n"
-                       ])
-
-                       (*
-        | Arg (formal, actual, action) ->
-            error ("Cannot convert actual argument " ^ (printOpt actual) ^
-                   " to formal argument " ^ (printOpt formal) ^ " in action\n" ^
-                   (printAction noIndent action))
-        | Live (prop, action) -> 
-            error ("State property " ^ prop ^
-                   " that is used in a future stage is destroyed by action\n" ^
-                   (printAction noIndent action))
-            *)
-
-
+(* WE OLD SML PROGRAMMERS NEED TO REMEMBER [[Printf.sprintf]] *)
+let error_string err =
+    let spr = Printf.sprintf in
+    match err with
+    | DestProp (prop, dest, uses) ->
+        spr "  property `%s' needed by `%s' is destroyed by `%s'" prop uses dest
+    | NoProp (uses, prop) ->
+        spr "  stage `%s' needs property `%s', which is never established" uses prop
+    | Sharing (formal, actual, fnName) ->
+        let valOf = Aux.Option.get "None" in
+        let formal = valOf formal in
+        let actual = valOf actual in
+        spr "  type mismatch: `%s' expects arg of type `%s' but was passed type `%s'"
+        fnName formal actual
 @
 <<backplane.ml>>=
 module M = Make(struct

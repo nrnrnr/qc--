@@ -134,24 +134,30 @@ let bnegate bool_flags r = match Down.rtl r with
       Up.rtl (RP.Rtl [cmpneg w ~cop ~fetch:[RP.Fetch (flags, w)],
                                RP.Store (pc, tgt, w)])
   | _ -> Impossible.impossible "ill-formed conditional branch"
-
+<<standard machine-level control flow>>=
 let goto = { Ep.embed   = (fun e -> R.store P.pc_lhs e w)
            ; Ep.project = (fun r -> match downrtl r with
                                    | RP.Rtl [(_, RP.Store(_, e, _))] -> upexp e
                                    | _ -> Impossible.impossible "projected non-goto")
            } 
 let jump = goto
+@ 
+By convention, the [[cut to]] \emph{always} puts the PC on the
+\emph{left}.
+This convention will be necessary at least until we have recognizers
+that cope with associative-commutative operators.
+<<standard machine-level control flow>>=
 let cutto ~sp =
   { Ep.embed   = (fun {new_sp=new_sp; new_pc=new_pc} -> 
                    let assign loc e = Rtl.store loc e w in
-                   Rtl.par [assign sp new_sp; assign P.pc_lhs new_pc])
+                   Rtl.par [assign P.pc_lhs new_pc; assign sp new_sp])
   ; Ep.project = (fun r -> match downrtl r with
-                          | RP.Rtl [ (_, RP.Store(_,  nsp, _))
-                                   ; (_, RP.Store(_ , npc, _))] ->
-                               { new_sp=upexp nsp; new_pc= upexp npc }
-                          | _ -> Impossible.impossible "projected non-cutto")
+                           | RP.Rtl [ (_, RP.Store(_,  npc, _))
+                                    ; (_, RP.Store(_ , nsp, _))] ->
+                                { new_sp=upexp nsp; new_pc= upexp npc }
+                           | _ -> Impossible.impossible "projected non-cutto")
   }
-
+<<standard machine-level control flow>>=
 let ra_val = 
   let pc = R.fetch P.pc_rhs w in
   RU.addk w pc P.ra_offset
@@ -162,7 +168,7 @@ let call = { Ep.embed   = (fun e -> R.par [R.store P.pc_lhs e w;
                                    | RP.Rtl [(_, RP.Store(_, e, _)); _] -> upexp e
                                    | _ -> Impossible.impossible "projected non-call")
            } 
-
+<<standard machine-level control flow>>=
 let return = 
     { Ep.embed   = (fun () -> R.store P.pc_lhs (R.fetch P.ra_reg w) w)
     ; Ep.project = (fun r  -> match downrtl r with
@@ -170,7 +176,7 @@ let return =
                   | _ -> Impossible.impossible "projected non-return"
                   )
     }              
-
+<<standard machine-level control flow>>=
 let branch =
   { Ep.embed   = (fun (cond, tgt) -> R.guard cond (goto.Ep.embed tgt))
   ; Ep.project = (fun r -> match downrtl r with

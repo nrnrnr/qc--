@@ -819,8 +819,9 @@ let proc containing_spans (cconv,procname,args,procbody) =
     let continuation l =
       try Strutil.Map.find l contenv with _ -> impossible "lost cont" in
     let cont_rvalue cname coffset w =
-      (continuation cname).K.escapes <- true;
-      add vfp (Rtl.late coffset w) in
+      let k = continuation cname in
+      k.K.escapes <- true;
+      Block.base (Contn.rep k.K.rep) in
 
     let expr, exprtype, lvalue = exprfuns env contenv cont_rvalue in
 
@@ -1030,8 +1031,7 @@ and stmt state = function
         let cc = ccs default_cc in
         let cut_in    = cformals' state.env cc.C.also_cuts_to    args in
         let return_in = cformals' state.env cc.C.also_returns_to args in
-        let base = exp_of_label (n^"base for bogosity") in
-        let rep  = Contn.with_overflow target base cut_in.C.overflow in
+        let rep  = Contn.with_overflow target cut_in.C.overflow in
         let k    = K.mk n args rep g ~cut_in ~return_in in
         { state with conts = Strutil.Map.add n k state.conts }
     | _                    -> state

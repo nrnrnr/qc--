@@ -226,23 +226,26 @@ denote variables. It helped to track down some bugs, though.
 
 <<Make>>=
 let dump t =
-    let product (i,term) =
-        if i = 1 then
-	    Printf.printf "%s"        (E.print term) 
-	else
- 	    Printf.printf "%d * %s" i (E.print term) in
-    let eqn s =
-        ( Printf.printf "0 = "; List.iter product s; Printf.printf "\n")in
-    let assoc (v,sum) =
-        ( Printf.printf "%s :-> " v; List.iter product sum; Printf.printf "\n") 
-    in
-        ( Printf.printf "Eqn.t: unsolved equations\n"
-        ; List.iter eqn t.set    
-        ; Printf.printf "------ solved variables:\n"
-        ; List.iter assoc t.env
-        ; Printf.printf "------ Eqn.t ends\n"
-        ; flush stdout
-        )
+  let spr = Printf.sprintf in
+  let product (i,term) =
+    if i = 1 then
+      E.print term
+    else
+      spr "%d * %s" i (E.print term) in
+  let sum = function
+    | [] -> "0"
+    | s  -> String.concat " + " (List.map product s) in
+  let eqn s =
+    let pos = List.filter (fun (i, t) -> i >= 0)  s in
+    let neg = List.filter (fun (i, t) -> i <  0)  s in
+    let neg = List.map    (fun (i, t) -> (-i, t)) neg in
+    spr "  %s = %s" (sum pos) (sum neg) in
+  let assoc (v,s) = spr "  %s :-> %s" v (sum s) in
+  let multiple f s = String.concat "\n" (List.map f s) in
+  Printf.printf
+    "Eqn.t: unsolved equations\n%s\n------ solved variables:\n%s\n------ Eqn.t ends\n"
+    (multiple eqn t.set) (multiple assoc t.env);
+  flush stdout
 @
 
 Normalizing an equation means to divide it by the greatest common

@@ -186,13 +186,15 @@ outgoing stuff.  The [[relative_to]] parameter is pure hell and not obvious
 to the amateur.  The [[postsp]] parameter is a bit tricky too.
 <<call.mli>>=
 val outgoing : what:string ->
-     growth:Memalloc.growth -> sp:Rtl.loc -> spec:(Rtl.exp -> Automaton.t) ->
+     growth:Memalloc.growth -> sp:Rtl.loc -> spec:valpass ->
      autosp:(Automaton.result -> Rtl.exp) ->
      postsp:(Rtl.exp -> Rtl.exp) -> relative_to:Rtl.exp -> outgoing
 val incoming : what:string ->
-     growth:Memalloc.growth -> sp:Rtl.loc -> spec:(Rtl.exp -> Automaton.t) ->
+     growth:Memalloc.growth -> sp:Rtl.loc -> spec:valpass ->
      autosp:(Automaton.result -> Rtl.exp) ->
      postsp:(Rtl.exp -> Rtl.exp) -> relative_to:Rtl.exp -> incoming
+<<exported type definitions>>=
+type valpass = Rtl.exp -> Automaton.implementation
 @ 
 \subsection{Implementation}
 
@@ -216,7 +218,8 @@ let too_small growth sp target =
   | Memalloc.Up   -> RU.fetch sp <* target
 
 let outgoing ~what ~growth ~sp ~spec ~autosp ~postsp ~relative_to types actuals =
-    let a = Block.relative relative_to (what ^ " out ovfl") (fun ~base -> spec base) in
+    let a = Block.relative relative_to (what ^ " out ovfl")
+            (fun ~base -> A.mk (spec base)) in
     let crank effects' (h, w) actual =
       let l = A.allocate a w h in
       A.store l actual w :: effects' in
@@ -235,7 +238,8 @@ let outgoing ~what ~growth ~sp ~spec ~autosp ~postsp ~relative_to types actuals 
     }
 
 let incoming ~what ~growth ~sp ~spec ~autosp ~postsp ~relative_to types formals =
-    let a = Block.relative relative_to (what ^ " in ovfl") (fun ~base -> spec base) in
+    let a = Block.relative relative_to (what ^ " in ovfl")
+            (fun ~base -> A.mk (spec base)) in
     let crank effects' (h, w) formal =
       let l = A.allocate a w h in
       A.store formal (A.fetch l w) w :: effects' in
