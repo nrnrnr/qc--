@@ -245,6 +245,8 @@ any : Xor(x:any, y:any) {: "Xor(" ^ x ^ ", " ^ y ^ ")" :}
 any : Shl(x:any, y:any) {: "Shl(" ^ x ^ ", " ^ y ^ ")" :}
 any : Shra(x:any, y:any) {: "Shra(" ^ x ^ ", " ^ y ^ ")" :}
 any : Shrl(x:any, y:any) {: "Shrl(" ^ x ^ ", " ^ y ^ ")" :}
+any : Rem(x:any, y:any)  {: "Rem(" ^ x ^ ", " ^ y ^ ")" :}
+
 any : Lobits(any, w) {: "Lobits(" ^ any ^ ", " ^ string_of_int w ^ ")" :}
 any : BitExtract(lsb:any, y:any, n:int) {: sprintf "BitExtract(%s, %s, %d)" lsb y n :}
 
@@ -296,9 +298,10 @@ let rec exp = function
   | RP.App(("shl",  ws), [x; y]) -> conShl  (exp x) (exp y)
   | RP.App(("shra", ws), [x; y]) -> conShra (exp x) (exp y)
   | RP.App(("shrl", ws), [x; y]) -> conShrl (exp x) (exp y)
+  | RP.App(("rem",  ws), [x; y]) -> conRem  (exp x) (exp y)
   | RP.App(("ppc_xer_ov_set", []), [x]) -> conOvSet (exp x)
   | RP.App(("bitExtract", [w; n]), [lsb; src]) -> conBitExtract (exp lsb) (exp src) n
-  | RP.App((op, ws), [x; y]) 
+  | RP.App((op, ws), [x; y])
     when List.mem op cmp -> conCmp op (exp x) (exp y)
   | RP.App((o,_),_)           -> error (sprintf "unknown operator %s" o)
 @ 
