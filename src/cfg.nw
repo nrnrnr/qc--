@@ -614,11 +614,15 @@ We can make a variety of individual nodes.
 These functions all mutate the graph, but we classify them as constructors anyway.
 <<graph and node constructors>>=
 val node_labeled : 'i cfg -> label -> 'i node
-@ This function returns a join point bearing the given label.
+@ The [[node_labeled]] function returns a join point bearing the given label.
 If no such join point exists, one is created.
-This function is the only way to create a join point explicitly
-(though one may be created implicitly if two successors are set to the
-same point).
+We may also want a join point immediately before some node. 
+The [[join_leading_to]] function returns its argument if it is a join point, returns
+the predecessor if it is a join point, or inserts and returns a join point immediately
+before the argument.
+N.B. The golden invariant ensures the second case will not go wrong.
+<<graph and node constructors>>=
+val join_leading_to : succ:'i node -> 'i node
 @
 In most cases, when we create a node we supply its successors.
 The simple instruction is, well, simple.
@@ -1325,15 +1329,13 @@ The join point is then returned.
 This function can be useful for maintaining the golden invariant.
 <<set node successors>>=
 let rec join_leading_to ~succ =
-  (*let () = Printf.fprintf stderr "in join_leading_to\n" in
-  let () = flush stderr in*)
   if is_join succ then succ
   else let p = pred succ in (* p must not be a fork b/c succ is not a join *)
        if is_join p then p
        else let cfg  = get_cfg succ in
             let join = node_labeled cfg (cfg.mk_label "join") in
             let () = if not (is_ill p) then set_succ p ~succ:join in
-            let () = set_succ join ~succ:succ in  (* maybe use set_succ here? *)
+            let () = set_succ join ~succ:succ in
             join
 @
 [[set_succ']] takes four steps to set the successor of [[node]] to [[succ]]
@@ -1492,39 +1494,45 @@ The exit node must have only a single possible successor (i.e. multiway branches
 conditional branches may not be the exit node).
 <<graph and node mutators implementation>>=
 let splice_on_every_edge_between ~entry ~exit ~pred ~succ =
+  Printf.eprintf "Splicing between pred %d and succ %d\n" (num pred) (num succ);
   let () = if not (List.exists (eq pred) (preds succ))
-           then ((*Printf.fprintf stderr "pred:%d succ:%d\n" (num pred) (num
-                   succ);*) assert false)
+           then (Printf.eprintf "Splicing between pred:%d succ:%d\n" (num pred) (num
+                   succ); assert false)
            else () in
   let () =
     if not (List.exists (eq succ) (succs pred))
     then imposs "splice_on_every_edge_between: succ is not a successor of pred" in
   let update_succ () = set_succ exit ~succ in
   let update_pred () =
-    let upd_succ n            = if eq n succ then entry else n in
-    let upd_array_gen upd arr = Array.iteri (fun i n -> Array.set arr i (upd n)) arr in
-    let upd_array             = upd_array_gen upd_succ in
-    let upd_contedge_array    =
-      upd_array_gen (fun ce -> {ce with node = upd_succ ce.node}) in
+    let upd_succ      n       entry = if eq n succ then entry else n    in
+    let upd_array_gen upd arr entry =
+      Array.iteri (fun i n -> Array.set arr i (upd n entry)) arr        in
+    let upd_array             entry = upd_array_gen upd_succ entry      in
+    let upd_contedge_array    entry =
+      upd_array_gen (fun ce e -> {ce with node = upd_succ ce.node e}) entry in
     match pred with
     | Cbr c ->
+      let entry = join_leading_to entry in
       if eq succ c.cbr_true  then set_tsucc pred entry; 
       if eq succ c.cbr_false then set_fsucc pred entry
     | Imp i ->
-      ( i.imp_succ      <- upd_succ i.imp_succ
-      ; i.imp_exit_succ <- upd_succ i.imp_exit_succ
+      ( i.imp_succ      <- upd_succ i.imp_succ      entry
+      ; i.imp_exit_succ <- upd_succ i.imp_exit_succ entry
       )
     | Mbr m ->
-      ( upd_array m.mbr_succs 
-      ; m.mbr_lsucc <- upd_succ m.mbr_lsucc
+      let entry = join_leading_to entry in
+      ( upd_array m.mbr_succs entry
+      ; m.mbr_lsucc <- upd_succ m.mbr_lsucc entry
       )
     | Cal c ->
-      ( upd_contedge_array c.cal_contedges 
-      ; c.cal_lsucc <- upd_succ c.cal_lsucc
+      let entry = join_leading_to entry in
+      ( upd_contedge_array c.cal_contedges  entry
+      ; c.cal_lsucc <- upd_succ c.cal_lsucc entry
       )
     | Cut c ->
-      ( upd_contedge_array c.cut_contedges 
-      ; c.cut_lsucc <- upd_succ c.cut_lsucc
+      let entry = join_leading_to entry in
+      ( upd_contedge_array c.cut_contedges  entry
+      ; c.cut_lsucc <- upd_succ c.cut_lsucc entry
       )
     | _     -> set_succ pred ~succ:entry in
   (update_pred (); update_succ ())
