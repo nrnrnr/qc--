@@ -698,26 +698,30 @@ other).
   (* include copy propagation *)
   let alloc_copy order map state t =
     match get_copy_regs instr with
-    | Some regs ->
-      let (to_alloc, other) = order regs in
-      if Register.eq to_alloc t then
-          try let r = if is_tmp tgt other then choose_reg map other else other in
+    | Some regpair ->
+      let (to_alloc, other) = order regpair in
+      if R.eq to_alloc t then
+          try let r = if is_tmp tgt other then
+                        choose_reg map other
+                      else if List.exists (R.eq other) regs then
+                             other
+                      else raise Not_found in
               get_avail_reg state t r alloc_prefs
           with Not_found -> alloc_prefs state t
       else alloc_prefs state t
     | None  -> alloc_prefs state t in
 @
 <<[[choose_register]]>>=
-  let allocate is_use free_reg order prefmap alloc_reg state to_alloc =
+  let allocate regs is_use free_reg order prefmap alloc_reg state to_alloc =
     <<define allocation functions>>
     alloc_copy order prefmap state to_alloc in
   let free_in  = VM.free_reg_inregs  defs live_in live_out in
   let alloc_uses regs =
-    allocate true free_in  (fun (d,s) -> (s,d)) prefs.varMap
+    allocate regs true free_in  (fun (d,s) -> (s,d)) prefs.varMap
              (VM.alloc_inreg regs defs live_in live_out) in
   let free_out = VM.free_reg_outregs defs live_out in
   let alloc_defs uses_map regs =
-    allocate false free_out (fun (d,s) -> (d,s)) uses_map
+    allocate regs false free_out (fun (d,s) -> (d,s)) uses_map
              (VM.alloc_outreg regs defs live_out) in
 @
 If any temps are in an unavailable register, then we need to spill the temp from that
@@ -1077,10 +1081,7 @@ let partition_regs tgt temps = RS.partition (is_tmp tgt) temps
 (* I HOPE TO ELIMINATE THIS CASE WITH SOME BETTER PREFERENCING *)
 let get_copy_regs rtl =
   match rtl with
-  | Some i ->
-    (match Rtlutil.RTLType.singleAssignment i with
-     | (Some (r1, r2) as copy) -> copy
-     | _                       -> None)
+  | Some i -> Rtlutil.RTLType.singleAssignment i
   | None   -> None
 let ( ++ ) = RS.union 
 let ( -- ) = RS.diff 
