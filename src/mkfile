@@ -225,9 +225,8 @@ MLI =           area.mli        \
                 topsort.mli     \
                 types.mli       \
 
-CMO =           `echo $ML       | sed 's/\.ml/.cmo/g'`
-CMX =           `echo $ML       | sed 's/\.ml/.cmx/g'`
-
+CMO = ${ML:%.ml=%.cmo}
+CMX = ${ML:%.ml=%.cmx}
 
 
 # The following list of files are scanned for dependencies. They are
@@ -259,12 +258,12 @@ CMOSYS  =       unix.cma str.cma
 CMOCMM  =	cllib.cma asdl.cma lua.cma rtllib.cma gen.cma
 CMOLIBS =       $CMOSYS $CMOCMM
 
-CMXSYS  =       `echo $CMOSYS | sed 's/.cma/.cmxa/g'`
-CMXCMM  =       `echo $CMOCMM | sed 's/.cma/.cmxa/g'` 
+CMXSYS  = ${CMOSYS:%.cma=%.cmxa}
+CMXCMM  = ${CMOCMM:%.cma=%.cmxa}
 CMXLIBS =       $CMXSYS $CMXCMM
 
-LIBSLASHCMOLIBS = `for f in $CMOCMM; do echo "$LIBDIR/$f"; done`
-LIBSLASHCMXLIBS = `for f in $CMXCMM; do echo "$LIBDIR/$f"; done`
+LIBSLASHCMOLIBS = ${CMOCMM:%=$LIBDIR/%}
+LIBSLASHCMXLIBS = ${CMXCMM:%=$LIBDIR/%}
 
 OBJ =           $LIBDIR/uint64p.o
 
@@ -460,3 +459,9 @@ newer: newer.c
 <$DEPEND
 
 
+showcmo:QV: 
+	echo CMO=$CMO
+	echo
+	echo CMX=$CMX
+	echo
+	echo LIBSLASHCMOLIBS=$LIBSLASHCMOLIBS
