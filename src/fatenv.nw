@@ -482,8 +482,15 @@ checks need it.
 
 <<>>=
 let setDefaults env =
-    match findMemsize env with
-    | E.Ok(Some x) -> env
-    | E.Ok(None)   -> bindMemsize Srcmap.null 8 env
-    | E.Error      -> env
+    let env = match findMemsize env with
+        | E.Ok(Some x) -> env
+        | E.Ok(None)   -> bindMemsize Srcmap.null 8 env
+        | E.Error      -> env   in
+    let env = match findEndianness env with
+        | E.Ok(Some x) -> env
+        | E.Ok(None)   -> E.error "target endianness specification missing"
+        | E.Error      -> E.error "target endianness specification inconsistent"
+    in
+        env
+        
 @
