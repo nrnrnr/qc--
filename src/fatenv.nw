@@ -41,10 +41,11 @@ type scope      = Global | Local
 @
 
 Labels come in different kinds:  they denote procedures, goto-labels,
-data-labels, and stack-labels.
+data-labels, and stack-labels. A procedure carries its local
+environment after it has been computed.
 
 <<>>=
-type kind       = Proc
+type kind       = Proc  of env option
                 | Code
                 | Data
                 | Stack
@@ -118,9 +119,16 @@ Any attempt to re-declare a name in a scope is detected by the
 declaration of a name is re-bound to [[Error]] to flag the problem in
 the environment. The [[bind*]] functions never fail.
 
+The function [[rebindv name x env]] re-binds [[name]] to [[x]].  Since
+this is only intended to update the informations for an exsisting
+[[name]], [[name]] must be bound in [[env]] as a value.  The scope and
+source code location of the existing binding is re-used for the new
+binding.
+
 <<>>=
-val bindv'          : string -> attr  -> ventry  -> env -> env
-val bindt'          : string -> attr  -> tentry  -> env -> env
+val bindv           : string -> attr  -> ventry  -> env -> env
+val bindt           : string -> attr  -> tentry  -> env -> env
+val rebindv         : string ->          ventry  -> env -> env
 @
 
 The [[find*]] functions lookup the meaning of a name in the value or
@@ -186,11 +194,32 @@ module E = Error
 module Comparable   = struct type t=string let compare=compare end
 module StrMap       = Map.Make(Comparable)
 
-<<type declarations>>
+<<>>=
+type scope      = Global | Local
+type attr       = Srcmap.reg * scope
+type endianness = Big | Little
+type ty         = Types.ty
+type value      = Const.value
 
-type tenv           = (attr * tentry) StrMap.t
-type venv           = (attr * ventry) StrMap.t
-type target         = { memsize:      int        option E.error
+<<>>=
+type kind       = Proc  of env option
+                | Code
+                | Data
+                | Stack
+<<>>=
+and  denotation = Constant of value
+                | Label    of kind
+                | Import
+                | Register
+                | Continuation
+<<>>=
+and  ventry     = (denotation * ty) Error.error
+and  tentry     = ty                Error.error
+
+<<>>=
+and  tenv           = (attr * tentry) StrMap.t
+and  venv           = (attr * ventry) StrMap.t
+and  target         = { memsize:      int        option E.error
                       ; endianness:   endianness option E.error
                       ; word:         Types.ty   option E.error
                       ; code:         Types.ty   option E.error
@@ -199,11 +228,12 @@ type target         = { memsize:      int        option E.error
                       ; charset:      string     option E.error
                       }
 <<>>=
-type env            = { tenv   :      tenv
+and  env            = { tenv   :      tenv
                       ; venv   :      venv
                       ; target :      target
                       ; srcmap :      Srcmap.map
                       }    
+
 
 let create map      = { tenv   = StrMap.empty
                       ; venv   = StrMap.empty
@@ -252,7 +282,7 @@ and the second the location of the declaration that clashes.  This one
 is also re-bound to [[Error]] to flag the problem.
 
 <<>>=
-let bindv' name (reg,scope as attr) x env =
+let bindv name (reg,scope as attr) x env =
     let add name x = {env with venv = StrMap.add name x env.venv} in
     try 
         let (reg',scope' as attr'),_ = StrMap.find name env.venv in
@@ -267,7 +297,7 @@ let bindv' name (reg,scope as attr) x env =
         Not_found -> add name (attr,x)
 
 <<>>=
-let bindt' name (reg,scope as attr) x env =
+let bindt name (reg,scope as attr) x env =
     let add name x = {env with tenv = StrMap.add name x env.tenv} in
     try 
         let (reg',scope' as attr'),_ = StrMap.find name env.tenv in
@@ -280,6 +310,21 @@ let bindt' name (reg,scope as attr) x env =
             add name (attr,x) 
     with
         Not_found -> add name (attr,x)
+@
+
+The following function [[rebindv name x env]] re-binds [[name]] to
+[[x]]. Since this is only intended to update the informations for an
+exsisting [[name]], [[name]] must be bound in [[env]] as a value. The
+scope and source code location of the existing binding is re-used for
+the new binding.
+
+<<>>=
+let rebindv name x env =
+    try 
+        let attr,_ = StrMap.find name env.venv in
+            { env with venv = StrMap.add name (attr,x) env.venv }
+    with
+        Not_found -> assert false
 @
 
 The functions to lookup a value [[findv]] and a type [[findt]] raise

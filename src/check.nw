@@ -70,8 +70,33 @@ named file.  When the check succeeds [[Error.Ok()]] is returned, and
 [[Error.Error]] otherwise.
 
 <<check.mli>>=
-val check : string -> unit Error.error
+val check        : string -> unit Error.error
+@
+
+To check the semantics of a program call [[checkProgram]]; the
+function returns [[Error.Ok(env)]] only if the semantics are error
+free. The returned value [[env]] is a fat environment where all
+procedures carry their own local environment.
+
+<<>>=
+val checkProgram : Fatenv.env -> Ast.toplevel list -> Fatenv.env Error.error
 @ 
+
+We provide some type checking resources so we don't have to
+re-implement it.
+
+<<>>=
+module Semantics :
+  sig
+    <<semantics signature>>
+  end
+@
+
+<<semantics signature>>=
+val tyAppl   : Types.tyscheme -> Types.ty list Error.error -> Types.ty Error.error
+val tyPrimOp : Fatenv.env -> Const.Symbol.key -> Ast.expr list -> Types.ty Error.error
+val tyExpr   : Fatenv.env -> Ast.expr -> Types.ty Error.error
+@
 
 % ------------------------------------------------------------------ 
 \subsection{Implementation}
@@ -116,7 +141,10 @@ let checkProgram env program =
     let env        = ValueEnv.Bind.globals env program             in
     let env        = ValueEnv.Eval.doGlobalConst env  program in
     let env        = F.setDefaults env                             in
-        E.Implode.pair (Semantics.program env program, F.errorfree env)
+        E.matchPair (Semantics.program env program, F.errorfree env)
+        ( function
+        | env, () -> env
+        ) 
 @
 
 To actually scan, parse, and check a file we provide a function
@@ -137,7 +165,7 @@ let check file =
             ( Srcmap.sync map 0 (file,1,1)
             ; let ast        = Parse.program scanner lexbuf in
               let env        = F.create map                 in
-                checkProgram env ast
+                E.Implode.singleton (checkProgram env ast)
             )
         with
             | Parsing.Parse_error ->
@@ -387,7 +415,7 @@ in the (fat) environment.
 <<process type decls>>=
 let bindError scope env decls = 
     let bind env ((_,names),r) = 
-        foldl (fun env n -> F.bindt' n (r,scope) E.Error env) env names 
+        foldl (fun env n -> F.bindt n (r,scope) E.Error env) env names 
     in 
         foldl bind env decls
 @
@@ -397,7 +425,7 @@ A [[typedef]] declares multiple names.  This function binds all
 
 <<>>=
 let bindt names attr ty env =
-    foldl (fun env n -> F.bindt' n attr ty env) env names
+    foldl (fun env n -> F.bindt n attr ty env) env names
 @
 
 While processing a declaration an error may occur. This is caught
@@ -545,10 +573,10 @@ global when it is accessed from inside a procedure.
 <<>>=
 let import r scope t env = function
     | Some foreign, name -> 
-        F.bindv' name (r,scope) (E.ematch (ty r env t) 
+        F.bindv name (r,scope) (E.ematch (ty r env t) 
         (fun t -> F.Import,t)) env
     | None        , name -> 
-        F.bindv' name (r,scope) (E.ematch (ty r env t) 
+        F.bindv name (r,scope) (E.ematch (ty r env t) 
         (fun t -> F.Import,t)) env
          
 <<>>=
@@ -561,7 +589,7 @@ let target r env = function
 <<>>=
 let imports r scope env t ii          = foldl (import r scope t) env ii
 let register r scope env (_,t,name,_) = 
-    F.bindv' name (r,scope) (E.ematch (ty r env t) 
+    F.bindv name (r,scope) (E.ematch (ty r env t) 
         (fun t -> F.Register,t)) env
 @
 
@@ -571,7 +599,7 @@ The [[datum]] function binds global data-labels and local
 <<>>=
 let rec datum r scope env = function
     | A.DatumAt(x,r) -> E.catch' env (error r env) (datum r scope env) x
-    | A.Label(n)     -> F.bindv' n (r,scope) (E.Ok(F.Label(F.Data),T.data)) env
+    | A.Label(n)     -> F.bindv n (r,scope) (E.Ok(F.Label(F.Data),T.data)) env
     | _              -> env
 @
 
@@ -585,14 +613,14 @@ let rec stmt r scope env = function
     | A.IfStmt ( e, ss1, ss2) -> 
         foldl (stmt r scope) (foldl (stmt r scope) env ss1) ss2
     | A.LabelStmt(n)          -> 
-        F.bindv' n (r,scope) (E.Ok(F.Label(F.Code),T.code)) env
+        F.bindv n (r,scope) (E.Ok(F.Label(F.Code),T.code)) env
     | A.SpanStmt(e1,e2,ss)    -> 
         foldl (body r scope) env ss
     | A.SwitchStmt (range,e,arms) -> 
         foldl (arm r range scope)  env arms
     | A.ContStmt(n,ee)        -> 
         if scope=F.Global then env 
-        else F.bindv' n (r,scope) (E.Ok(F.Continuation,T.cont)) env
+        else F.bindv n (r,scope) (E.Ok(F.Continuation,T.cont)) env
     | otherwise               -> 
         env
 
@@ -621,7 +649,8 @@ and body r scope env = function
     | A.StmtBody(s)  -> stmt r scope env s
 <<>>=       
 let proc r scope env (_,name,_,bb) = 
-    let env' = F.bindv' name (r,scope) (E.Ok(F.Label(F.Proc),T.code)) env in
+    let t    = E.Ok(F.Label(F.Proc(None)),T.code) in
+    let env' = F.bindv name (r,scope) t env      in
         foldl (body r scope) env' bb
 <<>>=
 let rec section r env = function
@@ -896,7 +925,7 @@ let doConstDecl scope env ((ty,name,expr),r) =
                     )
          ) 
     in 
-         F.bindv' name (r,scope) entry env
+         F.bindv name (r,scope) entry env
 
 <<>>=
 let doConstDecls scope env dd =
@@ -908,7 +937,7 @@ in the (fat) environment.
 
 <<>>=
 let bindError scope env decls = 
-    let bind env ((_,name,_),r) = F.bindv' name (r,scope) E.Error env
+    let bind env ((_,name,_),r) = F.bindv name (r,scope) E.Error env
     in
         foldl bind env decls
 @
@@ -1162,10 +1191,10 @@ the native code pointer type.
 let checkCallTarget env x =
     E.ematch (E.Raise.right (F.findv x env))
     ( function
-    | _       ,(F.Label(F.Proc),_) ->  ()
+    | _       ,(F.Label(F.Proc(_)),_) ->  ()
     | _       ,(F.Import       ,t) 
-      when t = Types.code          ->  ()
-    | otherwise                    ->  E.error (x^" is not call target")
+      when t = Types.code             ->  ()
+    | otherwise                       ->  E.error (x^" is not call target")
     )
 
 <<>>=
@@ -1535,7 +1564,7 @@ and export' env = function
     | None, name   -> 
         E.ematch (F.findv' name env)
         ( function
-        | F.Label(F.Proc),    _ -> ()
+        | F.Label(F.Proc(_)), _ -> ()
         | F.Label(F.Code),    _ -> ()
         | F.Label(F.Data),    _ -> ()
         | _                   -> E.error (name^" can't be exported")
@@ -1543,13 +1572,13 @@ and export' env = function
     | Some t, name -> 
         E.matchPair (F.findv' name env, evalTy env t)
         ( function
-        | (F.Label(F.Proc),t), t' when t = t' -> ()
-        | (F.Label(F.Code),t), t' when t = t' -> ()
-        | (F.Label(F.Data),t), t' when t = t' -> ()
-        | (F.Label(F.Proc),_), _ 
-        | (F.Label(F.Data),_), _ 
-        | (F.Label(F.Code),_), _  -> E.error (name^" has not declared type")
-        | _                       -> E.error (name^" can't be exported")
+        | (F.Label(F.Proc _ ),t), t' when t = t' -> ()
+        | (F.Label(F.Code   ),t), t' when t = t' -> ()
+        | (F.Label(F.Data   ),t), t' when t = t' -> ()
+        | (F.Label(F.Proc _ ),_), _ 
+        | (F.Label(F.Data   ),_), _ 
+        | (F.Label(F.Code   ),_), _  -> E.error (name^" has not declared type")
+        | _                          -> E.error (name^" can't be exported")
            
         )
 
@@ -1576,8 +1605,8 @@ when a procedure is checked.
 <<>>=
 and formal r env (hint, inv, ty, name) =
     match evalTy env ty with
-    | E.Ok(t) -> F.bindv' name (r,F.Local) (E.Ok(F.Register,t)) env 
-    | E.Error -> F.bindv' name (r,F.Local) E.Error env
+    | E.Ok(t) -> F.bindv name (r,F.Local) (E.Ok(F.Register,t)) env 
+    | E.Error -> F.bindv name (r,F.Local) E.Error env
 @
 
 A procedure opens a new scope.  First all local type, value, and
@@ -1585,35 +1614,80 @@ constant declarations must be entered into the environment, as well as
 formal parameters.  It should not matter whether formal parameters are
 entered before or after values and types.
     
+The [[proc]] function returns a pair of a [[F.env]] and [[E.error]]. 
+The environment contains an updated binding for the procedure that
+includes its local environment.  Returning the environment as [[F.env
+E.error]] is not an option because after the first error an
+environment would be longer available.
+
 <<>>=
 and proc r env (cc, name, ff, bb) =
-    let env = foldl (formal r) env ff                 in 
-    let env = TypeEnv.doLocalTypes env bb             in
-    let env = ValueEnv.Bind.locals env bb             in
-    let env = ValueEnv.Eval.doLocalConst env bb in
-        E.Implode.map (body env) bb            
+    let env' = foldl (formal r) env ff                  in 
+    let env' = TypeEnv.doLocalTypes env' bb             in
+    let env' = ValueEnv.Bind.locals env' bb             in
+    let env' = ValueEnv.Eval.doLocalConst env' bb in
+    let t    = E.Ok(F.Label(F.Proc(Some env')),T.code)  in
+        F.rebindv name t env, E.Implode.map (body env') bb            
 
 
 <<>>=
 and section r env = function    
-    | A.SectionAt(x,r)     -> E.catch (error r env) (section r env) x
-    | A.Decl(d)            -> E.Ok()
-    | A.Datum( d)          -> datum env d
+    | A.SectionAt(x,r)     -> E.catch' (env,E.Error)  
+                                       (error r env) (section r env) x
+    | A.Decl(d)            -> env, E.Ok()
+    | A.Datum( d)          -> env, datum env d
     | A.Procedure(p)       -> proc r env p
-    | A.SSpan( e1, e2, ss) -> E.Ok()
+    | A.SSpan( e1, e2, ss) -> env, E.Ok()
+@
+
+Since [[proc]] returns a [[F.env, E.error]] pair [[sections]] must
+pass the environment into all [[section]] invocations.  The
+[[foldPair]] combinator does this:  [[foldPair f env (e,xx)]] calls
+[[f env x]] where [[x]] is from the list [[xx]] and extracts from the
+returned result [[env', e']] the environment [[env']] to pass it to
+the next invocation of [[f]].  The returned [[E.error]] values [[e]]
+from all invocations of [[f]] are combined to a single [[E.error]]
+value reflecting the overall success.  Finally the [[env]] returned by
+the last invocation of [[f]] and the overall success [[E.error]] value
+are returned as a pair.
+    
+<<>>=
+(* (F.env -> 'b -> F.env * 'c E.error) -> F.env -> (unit E.error * 'b list)  
+    -> F.env * unit E.error *)
+      
+let foldPair f env x =
+    let rec loop env = function
+        | acc, []      -> env, acc
+        | acc, x::xx   -> let env', res = f env x in
+                          loop env' (E.Implode.pair (acc,res),xx)
+    in
+        loop env x
+        
+<<>>=
+let sections r env ss = foldPair (section r) env (E.Ok(),ss)
+
 <<>>=
 let rec toplevel r env = function
-    | A.ToplevelAt(x, r)   -> E.catch (error r env) (toplevel r env) x
-    | A.Section(name, ss)  -> E.Implode.map (section Srcmap.null env) ss 
-    | A.TopDecl(d)         -> decl env d
+    | A.ToplevelAt(x, r)   -> E.catch' (env, E.Error) 
+                                       (error r env) (toplevel r env) x
+    | A.Section(name, ss)  -> sections Srcmap.null env  ss 
+    | A.TopDecl(d)         -> env, decl env d
     | A.TopProcedure(p)    -> proc r env p 
+
+<<>>=
+let toplevels r env tt = foldPair (toplevel r) env (E.Ok(),tt)
 @
 
 The [[program]] function is the entry point to check the static
-sementics of a program \emph{after} the environment has been enlarged
-with all global symbols.
+semantics of a program \emph{after} the environment has been enlarged
+with all global symbols.  On success an [[E.Ok(env_]] value is
+returned.  In the returned [[env]] all procedure bindings contain the
+environment for the respective procedure.
     
 <<>>=
-and program env tt = E.Implode.map (toplevel Srcmap.null env) tt
+let program env tt = 
+    match toplevels Srcmap.null env tt with
+    | env, E.Error   -> E.Error
+    | env, E.Ok _    -> E.Ok(env)
 @
 
