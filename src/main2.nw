@@ -227,7 +227,7 @@ CGStages = { liveness = mkS("liveness", CG.liveness)
            , freeze = mkS("freeze", CG.freeze)
            , selectSpill = mkS("selectSpill", CG.selectSpill)
            , assignColors = mkS("assignColors", CG.assignColors)
-           , haveSpilledNodes = mkS("haveSpilledNodes", CG.haveSpilledNodes)
+           , haveSpilledTemps = mkS("haveSpilledTemps", CG.haveSpilledTemps)
            , resetProgram = mkS("resetProgram", CG.resetProgram)
            , updateProgram = mkS("updateProgram", CG.updateProgram)
            , applyColors = mkS("applyColors", CG.applyColors)
@@ -272,7 +272,7 @@ function graphColoring (colors)
                                           single(CGStages.selectSpill)))))
 ,pcg
                       , single(CGStages.assignColors)} )
-                   , when_do(single(CGStages.haveSpilledNodes),
+                   , when_do(single(CGStages.haveSpilledTemps),
 seq {
 pcg,
                              single(CGStages.resetProgram)
@@ -289,7 +289,7 @@ function fullRun (colors)
     return seq({codeExpand, graphColoring(colors)}) end
 prCFG = seq({codeExpand, live})
 
-colors = {1,2,3}
+colors = {r={31,11,12,13}, f={11,12,13}}
 
 Optimizer = Optimizer or {}
   -- `run' should be delayed
