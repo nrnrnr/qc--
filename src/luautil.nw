@@ -76,6 +76,24 @@ let split path =
         loop 0 
 @
 
+Try to find the installation directory for the current executable by
+searching the path. This is used to setup the default search location
+for lua files.
+<<dofile>>=
+let locate_exe =
+  let filename = Sys.argv.(0) in
+  let rec find_in path =
+    match path with
+      dir :: rest ->
+        if Sys.file_exists (Filename.concat dir filename)
+        then dir else find_in rest
+    | [] -> "/usr/local/bin" (* XXX fix XXX *)
+  in
+  let dirname = Filename.dirname filename in
+  if dirname <> "" then dirname
+  else find_in (split (Sys.getenv "PATH"))
+@ 
+
 The conversion of values between Lua and \ocaml~is a bit ugly. Maybe
 some expert can clean this up. Another problem was to call [[dofile]]
 and [[dostring]]. Is there a better way then [[apply]]?
@@ -87,9 +105,9 @@ let lookup   g f     = try Luahash.find g.V.globals (V.String f)
 let dofile   g file  = C.apply (lookup g "dofile")   g  file
 let dostring g str   = C.apply (lookup g "dostring") g  str
 
-let defaultdir       = "/usr/local/lib/qc--"    (*XXX fix XXX*)
+let defaultdir       = Filename.concat locate_exe "../lib/qc--"
 let luapath          = "QCMMLUAPATH"
-let defaultpath      = ":.:*"                   (*XXX fix XXX*)
+let defaultpath      = ".::*"                  (*XXX fix XXX*)
 
 type script =
     | String of V.value list  (* string is script             *)
@@ -125,7 +143,7 @@ let dosearchfile g file value =
             )  
         | dir :: rem -> 
             let d    = if dir = "" then defaultdir else dir in
-            let p    = Filename.concat dir file in
+            let p    = Filename.concat d file in
                 if Sys.file_exists p then
                     File [(V.String p)]
                 else search rem
