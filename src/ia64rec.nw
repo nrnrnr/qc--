@@ -185,7 +185,11 @@ inst : Nop() {: "// " :}
 @
 And now we convert between RTLs and Burg constructors.
 <<code to follow the labeler>>=  
+let unimp = Impossible.unimp
 let const = function
+
+  | RP.Late(s,w)              -> unimp "ia64: late constants"
+  | RP.Bool(b)                -> unimp "ia64: bool"
 
 (* RRO temp
   | RP.Bool(true)             -> conTrue  ()
@@ -213,6 +217,8 @@ and loc l = match l with
   | RP.Mem(_, _, _, _, _)     -> error "non-mem, non-reg cell"
   | RP.Var(s, i, w)           -> error "var found"
 
+  | RP.Slice(w,i,l)           -> unimp "ia64: slice locations"
+
 (* RRO temp
   | RP.Slice(w,i,l)           -> conSlice w i (loc l)
 *)
@@ -224,6 +230,8 @@ and effect = function
     when (i = SS.indices.SS.pc)       -> conGoto (exp r)
   | RP.Store(RP.Reg('c',i, _), r, w)  -> error ("set $c["^string_of_int i^"]")
   | RP.Store(l,e,w)                   -> conStore (loc l) (exp e) w
+
+  | RP.Kill(l)                        -> unimp "ia64: kill effect"
 
 (* RRO temp
   | RP.Kill(l)                        -> conKill (loc l)
@@ -247,7 +255,9 @@ and geffects = function
     | [g, s] -> guarded g s
     | (g, s) :: t -> conPar (guarded g s) (geffects t)
 and guarded g eff = match g with
-| RP.Const(RP.Bool b) -> if b then effect eff else conNop()
+  | RP.Const(RP.Bool b) -> if b then effect eff else conNop()
+
+  | _ -> unimp "ia64: unimplemented guarded RTL"
 
 (* RRO temp
 | _ -> conGuarded (exp g) (effect eff)
