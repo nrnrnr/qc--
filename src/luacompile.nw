@@ -136,13 +136,15 @@ end
 @ 
 
 
+% ------------------------------------------------------------------ 
+\paragraph{Stack Layout for the Dummy Target} 
+% ------------------------------------------------------------------ 
 
-\paragraph{Stack Layout for the Dummy Target} \module{dummy.nw} module
+\module{dummy.nw} module
 that defines the dummy target.
 
 <<Lua compiler configuration>>=
 Dummy = {} or Dummy
-
 function Dummy.layout(dummy, proc)
     local blocks = Stack.blocks(proc)
     local layout =
@@ -162,8 +164,11 @@ end
 @
     
 
-\paragraph{Stack Layout for the $x$86} This code should probably move to
-the x86 module.
+% ------------------------------------------------------------------ 
+\paragraph{Stack Layout for the $x$86} 
+% ------------------------------------------------------------------ 
+
+This code should probably move to the x86 module.
 
 <<Lua compiler configuration>>=
 X86 = X86 or {}
@@ -240,6 +245,30 @@ function X86.layout["C--"](dummy,proc)
     return 1
 end    
 @
+
+% ------------------------------------------------------------------ 
+\paragraph{Stack Layout for the Interpreter}
+% ------------------------------------------------------------------ 
+
+<<Lua compiler configuration>>=
+Interp = Interp or {}
+function Interp.layout(dummy, proc)
+    local blocks = Stack.blocks(proc)
+    local layout =
+        { Block.overlap(32,"low",  blocks.oldblocks)  
+        , blocks.stackdata
+        , blocks.vfp
+        , blocks.continuations
+        , blocks.spills
+        , Block.overlap(32,"high", blocks.youngblocks)
+        , blocks.sp
+        }
+    local block = Block.cat(32, layout)
+    Stack.freeze(proc, block)
+    return 1
+end
+@
+ 
 
 % ------------------------------------------------------------------ 
 \subsection{Graph-Coloring Register Allocator}
@@ -368,27 +397,40 @@ function Backend.make(b)
     , liveness  = b.liveness  or nil
     , ralloc    = b.ralloc    or nil
     , freeze    = b.freeze    or Dummy.layout
-    , rmvfp     = b.rmvfp     or Stages.replace_vfp  
+    , rmvfp     = b.rmvfp     or nil
     , asm       = b.asm       or Asm.cmm
     , emit      = b.emit      or Driver.assemble
     , compile   = Compile.file
     }   
 end
 
+--
 -- Dummy backends
+--
 
-Backend.dummy32l        = Backend.make  { target = Targets.dummy32l }
-Backend.dummy32b        = Backend.make  { target = Targets.dummy32b }
+Backend.dummy32l        = Backend.make  { target = Targets.dummy32l 
+                                        , rmvfp  = Stages.replace_vfp  
+                                        }
+Backend.dummy32b        = Backend.make  { target = Targets.dummy32b 
+                                        , rmvfp  = Stages.replace_vfp  
+                                        }
 Backend.dummy           = Backend.dummy32l  -- alias
 
+--
 -- Interpreter backends, for new and old backplane
+--
+
 Backend.interp          = Backend.make  { target = Targets.interp
-                                        , asm    = Asm.interp32l }
+                                        , asm    = Asm.interp32l 
+                                        , freeze = Interp.layout
+                                        }
 Backend.debug_interp    = Backend.make  { target = Targets.interp
-                                        , asm    = Asm.cmm}
-
-
+                                        , asm    = Asm.cmm
+                                        , freeze = Interp.layout
+                                        }
+--
 -- x86 backends
+--
 
 Backend.x86 =     
   { target    = Targets.x86

@@ -111,8 +111,9 @@ let global   x            = R.reg (glb_reg x)          (* globals   *)
 let fp_mode               = Rtl.reg('d',0,2)           (* FP rounding mode *) 
 let spval                 = Rtl.fetch sp wordsize
 let vfp                   = Vfp.mk wordsize          
+let std_sp_location       = vfp
 let std_sp_location       = RU.add pointersize 
-                            vfp (R.late "minus frame size" pointersize)
+                             vfp (R.late "minus frame size" pointersize)
 @
                 
 % ------------------------------------------------------------------ 
@@ -314,9 +315,9 @@ let cc' = (* new style *)
     ; C.saved_nvr       = (fun _ _ -> Impossible.impossible "saved regs")
     ; C.cutto           = Flow.cutto
     ; C.return          = (fun k n ~ra -> Flow.return)
-    ; C.ra_on_entry      = (fun _ -> R.fetch ra wordsize)
-    ; C.where_to_save_ra = (fun _ t -> Talloc.Multiple.loc t 't' wordsize)
-    ; C.ra_on_exit       = (fun t b -> t)
+    ; C.ra_on_entry      = (fun _   -> R.fetch ra wordsize)
+    ; C.where_to_save_ra = (fun _ t -> ra)
+    ; C.ra_on_exit       = (fun t b -> ra)
     }
 @
 

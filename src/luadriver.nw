@@ -21,6 +21,7 @@ $debug 1
 -- $Id$
 --
 
+<<Debuging Tools>>
 <<Lua compiler configuration>>
 <<Lua command line driver>>
 
@@ -56,7 +57,7 @@ the interpreter to stdout.
 
 [[Inspect.type]] returns the type of a table entry. It tries to be smart
 about userdata.
-<<Lua command line driver>>=
+<<Debuging Tools>>=
 Inspect = Inspect and error('Inspect not empty') or {}
 
 function Inspect.type (val)  -- identify the value
@@ -75,7 +76,7 @@ end
 [[Inspect.globals]] and [[Inspect.table]] dump the table of all global
 variables and a regular table, respectively. Both functions recurse if
 they find a table, which they pass to [[Inspect.table]].
-<<Lua command line driver>>=
+<<Debuging Tools>>=
 function Inspect.globals ()
     local key,val = nextvar(nil)
     while key do
@@ -107,17 +108,17 @@ function Inspect.valname(tabname, key)
     end
 end
 @
-This script is stored as a string in [[Inspect["Lua command line driver"]]]. For
+This script is stored as a string in [[Inspect["qc--.lua"]]]. For
 convenience we provide an [[Inspect.script]] function that dumps it to
 stdout.
-<<Lua command line driver>>=
-function Inspect.script () write(Boot["Lua command line driver"]) end    
+<<Debuging Tools>>=
+function Inspect.script () write(Boot["qc--.lua"]) end    
 @
 
 The [[Inspect.find]] searches trough all tables for a key [[x]] and
 returns the path to first [[x]] it finds as a string, or [[nil]].
 
-<<Lua command line driver>>=
+<<Debuging Tools>>=
 function Inspect.find(x)
     local i, v, ii, vv
     -- search global tables for x
@@ -195,7 +196,7 @@ Ld = Ld and error ('Ld not empty') or {}
 Ld.path     = "cc"          -- binary
 Ld.options  = ""            -- options
 
-Interp = Interp and error('Interp not empty') or {}
+Interp = Interp or {}
 Interp.hashbang = "#! /usr/bin/env qc-interp"
 @
 
@@ -441,7 +442,8 @@ function CMD.interp_dispatch(file,out)
        Caml.Filename.checksuffix(file, ".cmm") then 
         if      Options.pretty
         then    return CMD.cmm2pp(file, out)
-        else    return CMD.cmm2qs(file, out)
+        else    return CMD.cmm2qs(file, (Options.to_obj or Options.to_asm) 
+                                        and out)
         end
     elseif Caml.Filename.checksuffix(file, ".qs") then
         return  file
