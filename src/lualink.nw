@@ -368,10 +368,11 @@ let regty = RL.map in
 let counterty = V.string in
 let counterpred = (V.int <@ (=)) <|> (V.func (V.int **->> V.bool)) in
 let reserve = V.default "normal" V.string in
+let align_fun = (V.int <@ (fun n w -> n)) <|> (V.func (V.int **->> V.int)) in
 
 C.register_module "Automaton"
   [ (* first the stage constructors ... *)
-    "align_to"    , V.efunc ((V.func (V.int **->> V.int)) **->> stage) A.align_to
+    "align_to"    , V.efunc (align_fun                    **->> stage) A.align_to
   ; "argcounter"  , V.efunc (counterty                    **->> stage) A.argcounter
   ; "bitcounter"  , V.efunc (counterty                    **->> stage) A.bitcounter
   ; "choice"      , V.efunc (listpair choice_pred stage   **->> stage) A.choice
@@ -401,6 +402,10 @@ C.register_module "Automaton"
   ; "is_any"      , choicep.V.embed A.is_any
   ; "counter_is"  , V.efunc (counterty **-> counterpred **->> choicep) A.counter_is
                             
+  ; "debug"       ,
+       V.efunc (counterty **->
+                V.func (V.int **-> V.string **-> V.int **-> V.int **->> V.unit) **->>
+                stage) A.debug
     (* registration, although it shouldn't necessarily be in here *)
   ; "register_cc" , V.efunc (Map.new_target **-> V.string **-> V.table **->> V.unit)
                     register_cc
@@ -503,7 +508,7 @@ C.register_module "Debug"
                                listpair V.string V.int **->> V.unit)
                       (Call.run_cc_on_sig_and_print (fun s -> s.Automaton.call))
   ; "run_cc_return", V.efunc (Map.new_target **-> V.string **->
-                               listpair V.string V.int **->> V.list V.string)
+                               listpair V.string V.int **->> V.list (V.list V.string))
                       (Call.run_cc_on_sig_and_return (fun s -> s.Automaton.call))
   ] g;
 @

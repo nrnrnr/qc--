@@ -327,7 +327,10 @@ list of stages into one stage (using the [[*>]] operator).
 <<exported values>>=
 val unit : stage
 @
-
+\paragraph{Debugging}
+<<exported values>>=
+val debug : counter -> (int -> string -> int -> int -> unit) -> stage
+@ 
 \paragraph{Lua Registration of Calling Conventions}
 Ideally it would be nice for these types to sit in some other module
 (maybe \module{call.nw}?) but there are some dependency issues that force
@@ -407,12 +410,10 @@ let of_loc     loc            = { fetch  = R.fetch loc
 There's substantial bookkeeping in passing the start address around.
 We prefer to program in terms of [[methods]] rather than
 implementation.
-
-FIX: THESE TYPES BELOW ARE NOT CORRECT ANYMORE!!!
 \nwaddbox{wrap         : (methods                   -> methods) -> stage}
-\nwaddbox{swrap        : (methods -> ~start:Rtl.exp -> ~memsize:int -> ~ctrs:counterenv -> methods) -> stage}
-\nwaddbox{wrap_choice  : (('a*(methods->methods)) list -> methods -> methods) -> ('a * stage) list -> stage}
-\nwaddbox{wrap_counter : ((methods -> methods) -> counter -> stage}
+\nwaddbox{swrap        : (methods -> start:Rtl.exp -> memsize:int -> byteorder:Rtl.aggregation -> ctrs:counterenv -> methods) -> stage}
+\nwaddbox{wrap_choice  : (('a*(methods->methods)) list -> methods -> ctrs:counterenv -> methods) -> ('a * stage) list -> stage}
+\nwaddbox{wrap_counter : (int -> Rtl.aggregation -> int ref -> methods -> methods) -> counter -> stage}
 \deeperbox{40pt}
 <<automaton.ml>>=
 let wrap  f = S (fun (I next) -> I (fun ~start ~memsize ~byteorder ~ctrs ->
@@ -699,6 +700,16 @@ let as_stage inner = swrap (as_stage inner)
 \paragraph{The unit stage}
 <<automaton.ml>>=
 let unit = wrap (fun next -> next)
+@ 
+\paragraph{Debugging}
+<<automaton.ml>>=
+let debug f _ _ ctr next =
+  let allocate ~width ~alignment ~hint =
+    f width hint alignment (!ctr);
+    next.allocate ~width ~alignment ~hint in
+  { allocate = allocate; freeze = next.freeze }
+
+let debug counter f = wrap_counter (debug f) counter
 @ 
 
 \paragraph{Postprocessing a result}

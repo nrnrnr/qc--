@@ -712,6 +712,75 @@ function Inspect.valname(tabname, key)
         return tabname .. "[" .. key .. "]"
     end
 end
+@ 
+<<Debugging Tools>>=
+function Inspect.image(x)
+  local i, n, v, pfx, s, ty, tag
+  if type(x) == 'string' then return format("%q", x)
+  elseif type(x) == 'number' then
+     if x == floor(x) then return format("%.0f", x)
+     else                  return format("%f", x)
+     end
+  elseif type(x) == 'function' or type(x) == "cfunction" then
+       return tostring(x)
+  elseif type(x) == 'table' then
+        if Util.is_list(x) then s = "{"; pfx = " "
+                           i = 1
+                           while x[i] do
+                             s = s .. pfx .. Inspect.image(x[i])
+                             pfx = ", "
+                             i = i + 1
+                           end
+                           return s .. " }"
+        else               s = "{\n"; pfx = "  "
+                           i = nil
+                           n = 0
+                           repeat
+                             i, v = next(x, i)
+                             if (i ~= nil) then
+                               s = s .. pfx 
+                               if type(i) == "string" and strfind(i, "^[a-zA-Z][a-zA-Z_0-9]*$") then
+                                 s = s .. i
+                               else
+                                 s = s .. "[" .. Inspect.image(i) .. "]"
+                               end
+                               s = s .. " = " .. Inspect.image(v)
+                             end
+                             pfx = ",\n  "
+                           until (i == nil)
+                           return s .. "\n}"
+        end
+  elseif type(x) == 'nil' then return 'nil'
+  else return tostring(x)
+  end
+end
+function Inspect.show(x, a, b, c, d, e)
+  local i, n, v, pfx
+  write(Inspect.image(x))
+  if a then Inspect.show(a, b, c, d, e) end
+end
+function Util.is_list(list)
+  if type(list) ~= "table" then return nil end
+  local i = 1
+  while list[i] do i = i + 1 end
+  i = i - 1
+  return i == Util.list_length(list)
+end
+function Util.list_length(list)
+  local i, n, v
+  i = nil
+  n = 0
+  if type(list) ~= "table" then
+    errormsg("Length of non-list (", type(list), ") ", Inspect.image(list))
+  end
+  repeat
+    i, v = next(list, i)
+    if i ~= nil then
+      n = n + 1
+    end
+  until i == nil
+  if list.n == n - 1 then return n - 1 else return n end
+end
 @
 This script is stored as a string in [[Inspect["qc--.lua"]]]. For
 convenience we provide an [[Inspect.script]] function that dumps it to

@@ -309,13 +309,20 @@ val paths_return : tgt -> string -> (int * string) list -> unit
 val paths_cutto  : tgt -> string -> (int * string) list -> unit
 
 val path_2_in_overflow : tgt -> string -> unit
-
-val run_cc_on_sig_and_print :
-    (Automaton.cc_spec -> Automaton.stage) -> 
-    tgt -> string -> (string * int) list -> unit
+@ 
+Diagnostic procedures.
+Both look up a convention in a target by name.
+Both then take a signature.
+The first returns a list of locations used to pass values;
+a value may occupy more than one location.
+The second prints this information in suitable diagnostic form.
+<<call.mli>>=
 val run_cc_on_sig_and_return :
-    (Automaton.cc_spec -> Automaton.stage) -> 
-    tgt -> string -> (string * int) list -> string list
+    (Automaton.cc_spec -> Automaton.stage) -> tgt -> string ->
+    (string * int) list -> string list list
+val run_cc_on_sig_and_print :
+    (Automaton.cc_spec -> Automaton.stage) -> tgt -> string ->
+    (string * int) list -> unit
 @ 
 
 \subsection{Implementation}
@@ -323,9 +330,12 @@ val run_cc_on_sig_and_return :
 A consummation most devoutly to be wished.
 <<call.ml>>=
 module A  = Automaton
+module Dn = Rtl.Dn
 module R  = Rtl
+module RP = Rtl.Private
 module RS = Register.Set
 module RU = Rtlutil
+module Up = Rtl.Up
 <<exported type definitions>>
 @ 
 <<call.ml>>=
@@ -386,10 +396,7 @@ Some utilities.  DOCO HERE.
 type tgt = ((Rtl.exp -> Automaton.t), t) Target.t
 
 let add_cc specs name ~call ~results ~cutto = 
-  let base = if   List.mem_assoc name specs
-             then List.remove_assoc name specs
-             else specs
-  in
+  let base = List.remove_assoc name specs in
     (name, { A.call    = call
            ; A.results = results
            ; A.cutto   = cutto
@@ -450,23 +457,29 @@ let path_2_in_overflow target ccname =
     (findpath_2_in_overflow (fun s -> s.A.call) target ccname);
   Printf.printf "\n"
 
-let run_cc_on_sig_and_return autofun target ccname tys =
-  let loc2str loc = 
-    try Rtlutil.ToReadableString.loc (A.simple loc)
-    with _ -> "<split allocation>" in
+let locs aloc w =
+  let RP.Rtl gs = Dn.rtl (A.store aloc (Rtl.bits (Bits.zero w) w) w) in
+  let getloc = function RP.Store (l, _, _) -> l | RP.Kill l -> l in
+  let rec add_32locs l locs = match l with
+  | RP.Reg (s, n, w) when w <= 0 -> locs
+  | RP.Reg (s, n, w) -> Up.loc l :: add_32locs (RP.Reg (s, n+1, w-32)) locs
+  | l -> Up.loc l :: locs in
+  List.fold_right (fun (_,  e) locs -> add_32locs (getloc e) locs) gs []
 
+let run_cc_on_sig_and_return autofun target ccname tys =
+  let loc2strs l (h, w) = List.map Rtlutil.ToReadableString.loc (locs l w) in
   let wordsize  = target.Target.wordsize  in
   let memsize   = target.Target.memsize   in
   let byteorder = target.Target.byteorder in
-  let automaton = autofun (get_ccspec target ccname) in
-  let an        = A.at ~start:(Rtl.bits (Bits.zero wordsize) wordsize) 
-                    ~memsize ~byteorder automaton in
+  let auto      = autofun (get_ccspec target ccname) in
+  let an        = A.at ~start:(Rtl.late "ovflw" wordsize) ~memsize ~byteorder auto in
   let allocs    = List.map (fun (h,w) -> A.allocate an ~width:w ~hint:h) tys in
-  List.map loc2str allocs
+  List.map2 loc2strs allocs tys
 
 let run_cc_on_sig_and_print autofun target ccname tys =
   let locs = run_cc_on_sig_and_return autofun target ccname tys in
-  List.iter2 (fun (h,w) loc -> Printf.printf "%s/%d => %s\n" h w loc) tys locs
+  let print (h, w) ls = Printf.printf "%s/%d => { %s }\n" h w (String.concat "," ls) in
+  List.iter2 print tys locs
 @ 
 
 \subsection{Potential new constructors for \texttt{Call.t}}
