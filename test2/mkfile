@@ -52,9 +52,28 @@ testdrv.inc:D: testdrv.nw
 opgen.lua:D:  opgen.nw
 	$NOTANGLE -L'$file "%F"%N$line %L%N' -R$target $prereq > $target
 
+copgen.lua:D:  copgen.nw ../interp/operator.nw
+	($NOTANGLE -L'$file "%F"%N$line %L%N' -R$target copgen.nw
+	 ($NOTANGLE -R'macro definitions for converting C to Lua' copgen.nw
+	  $NOTANGLE -R'macro synonyms' ../interp/operator.nw
+	  $NOTANGLE -R'operator definitions' ../interp/operator.nw
+	 ) | cpp | sed '/^#/d'
+	) > $target
 
-tg.c--:D: opgen.lua $QC
+
+ctest:V: optest
+
+copgen.c:D: opgen.lua copgen.lua 
+	 ../bin/qc-- opgen.lua copgen.lua > copgen.c
+
+optest: optest.o copgen.o cmmopgen.o
+	cc -o $target $prereq -lm
+
+cmmopgen.c--:D: opgen.lua $QC
 	$QC opgen.lua -e 'Testgen.emit()' > $target
+
+cmmopgen.o: cmmopgen.c-- $QC
+	$QC -c -globals $prereq
 
 ################################################################
 

@@ -81,6 +81,7 @@ int lua_CMM_end_section(lua_State *L);
 #include <assert.h>
 #include <mclib.h>
 #include <string.h>
+#include <strings.h>
 #include <stdlib.h>
 
 #include "assemblyunit.h"
@@ -354,16 +355,15 @@ int lua_CMM_end_section(lua_State *L) {
   return lua_CMM_section(L);
 }
 @
-
-[[lua_CMM_procedure]] expects three arguments atop the Lua stack: a {\PAL} 
-procedure's name, the number of local variables in the procedure, and the size
-of local stack-data in the procedure (in [[memsize]] units).
+[[lua_CMM_procedure]] expects four arguments atop the Lua stack: a {\PAL} 
+procedure's name, the number of local variables in the procedure, the size
+of local stack-data in the procedure (in [[memsize]] units), and
+a table of offsets for stackdata labels.
 This function effectively pops these values off the stack, creates a new C
 [[procedure]] structure encapsulating necessary information about the {\PAL}
 procedure, associates a [[CMM_label]] with this procedure by way of a call to
 [[label]] module helper function [[get_label]], and returns 0 to tell Lua
 no value is being returned.
-
 <<bytecode generation>>=
 int lua_CMM_procedure(lua_State *L) {
   const char *name;

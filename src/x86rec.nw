@@ -614,6 +614,21 @@ inst : Par(Store(fpstacknextl, I2f(s:w, d:w, mem), w2:w), fppush)
   {: sprintf "fild%s %s" (fisuffix s) mem :}
 inst : Par(Store(dst:meml, F2i(s:w, d:w, fpstacktop), w2:w), fppop)
   {: sprintf "fistp%s %s" (fisuffix d) dst :}
+@ 
+Some editions of the Pentium manual have a dangerously misleading bug
+regarding FDIV and FDIVR.
+For FDIV, 
+the informal English says that ``The division instructions divide the
+stack top by the other operand and return the quotient to the
+destination.''
+The informal English is correct; i.e., it is consistent with results
+obtained from generating real code.
+But the manual also says, in a box at the top,
+\begin{quote}
+Replace $ST(1)$ with $ST(1) \div ST$\qquad \textbf{Wrong!}
+\end{quote}
+and this box is wrong (arguments are in the opposite order).
+A~similar problem obtains for FDIVR.
 <<rules>>=
 inst : Par(Store(fpstack1l, Fadd(fpstacktop, fpstack1), w), fppop)
   {: "faddp" :}
@@ -621,6 +636,8 @@ inst : Par(Store(fpstack1l, Fsub(fpstacktop, fpstack1), w), fppop)
   {: "fsubp" :}
 inst : Par(Store(fpstack1l, Fdiv(fpstacktop, fpstack1), w), fppop)
   {: "fdivp" :}
+inst : Par(Store(fpstack1l, Fdiv(fpstack1, fpstacktop), w), fppop)
+  {: "fdivrp" :}
 inst : Par(Store(fpstack1l, Fmul(fpstacktop, fpstack1), w), fppop)
   {: "fmulp" :}
 <<rules>>=

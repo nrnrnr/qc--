@@ -413,7 +413,9 @@ let wrdrop  ~dst:(fill, dt) op x y z =
   rtl (R.store eax (RO.shrl 32 (RU.fetch eax) (R.bits (Bits.U.of_int 8 32) 32)) 32) <:>
   rtl (R.store (temploc dt) (R.fetch eax 32) 32) <:>
   match fill with
-  | PX.HighAny | PX.HighZ -> PX.Nop
+  | PX.HighAny -> PX.Nop
+  | PX.HighZ -> 
+      PX.Expand.block (rtl (R.store (temploc dt) (Rewrite.zxlo 1 32 (tempval dt)) 32))
   | PX.HighS ->
       PX.Expand.block (rtl (R.store (temploc dt) (Rewrite.sxlo 1 32 (tempval dt)) 32))
 @ 
@@ -575,13 +577,17 @@ let cmpfun =
   | o -> impossf "non-comparison %%%s in x86 conditional branch" o
 @ 
 \subsection{Stack operations}
+
+Regarding floating-point division, don't be fooled by wrongness in
+the Pentium manual.
+Full explanation is found in the recognizer.
 <<x86 postexpander>>=
 let opclass (op, _) =
   match op with
   | "i2f" | "f2f" | "f2f_implicit_round" | "f2i" | "fabs" | "fneg" | "fsqrt" ->
       PX.Stack(PX.LeftFirst, 1)
   | "fadd" | "fcmp" | "fdiv" | "fmul" | "fmulx" | "fsub"    
-  | "feq" | "fge" | "fgt" | "fne"     
+  | "feq" | "fge" | "fgt" | "fne"      
   | "fordered" | "funordered" -> PX.Stack(PX.RightFirst, 2)
   | "fle" | "flt"  -> PX.Stack(PX.LeftFirst, 2)  (* computed by swapping *)
   | _ ->
@@ -647,8 +653,10 @@ let pushk_cvt _ _ _ = Impossible.unimp "load floating-point constant"
 <<x86 postexpander>>=
 let stack_op op = match opclass op with
 | PX.Register -> impossf "passed register operator to stack_op"
-| PX.Stack(_, depth) -> (* by lucky accident, depth is arity *)
+| PX.Stack(first, depth) -> (* by lucky accident, depth is arity *)
     let positions = Aux.from 0 (depth-1) in
+    let positions = match first with PX.RightFirst -> positions
+                                   | PX.LeftFirst  -> List.rev positions in
     let argvals = List.map (fun n -> ffetch (stregplus n)) positions in
     let argvals = match op with
     | ("fadd"|"fsub"|"fdiv"|"fmul"|"f2f"|"f2i"|"i2f"), _ ->

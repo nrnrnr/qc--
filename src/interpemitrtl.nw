@@ -128,7 +128,6 @@ let rec expr' e =
                              opr op ww
 
 @ 
-
 Helper [[location']] converts an RTL location into a 4-tuple of the form:
 $(prefix, func, funcSuffix, args)$.
 The plan is for this location tuple to ultimately be converted in the Lua
@@ -136,7 +135,6 @@ function call $concat(prefix, func(X), funcSuffix)$[[(]]$args$[[)]] for some
 $X$ (likely either [[fetch]] or [[store]]).
 This allows us to retain similar structure whether we are making a fetch or
 a store.
-
 <<ToLua>>=
 (* location' : Rtl.Private.loc -> string * (string -> string -> string) *
                                   string * string                            *)
@@ -191,7 +189,11 @@ and location' = function
         )
 
     | R.Global (name, index, width)   -> 
-        Impossible.unimp "passing global variable to interpreter"
+        ( ""
+        , globalspace
+        , "_global"
+        , string_of_int index
+        )
 
     (* NOTE: should R.Slice just fail an assertion? *)                 
     | R.Slice (w, i, loc)              -> 

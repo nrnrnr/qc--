@@ -12,14 +12,23 @@ This document ([[features.nw]]) contains header files that allow the
 conditional use of C language extensions:
 
 \begin{itemize}
+\item
+ Header file [[c-features.h : c99]] makes use of ISO C99 language
+ features not found in earlier versions of the C language standard. 
 
-\item Header file [[c-features.h : c99]] makes use of ISO C99 language features not found in earlier versions of the C language standard.
+\item
+ Header file [[float-features.h : iec60559]] makes use of IEC 60559
+ floating-point arithmetic features. 
 
-\item Header file [[float-features.h : iec60559]] makes use of IEC 60559 floating-point arithmetic features.
+\item
+ Header file [[c-features.h : no-c99]] is a dummy header file that
+ warns the user and performs a no-op anytime a C99-only feature is
+ used. 
 
-\item Header file [[c-features.h : no-c99]] is a dummy header file that warns the user and performs a no-op anytime a C99-only feature is used.
-
-\item Header file [[float-features.h : no-iec60559]] is a dummy header file that warns the user and performs a no-op anytime an IEC 60559-only feature is used.
+\item
+ Header file [[float-features.h : no-iec60559]] is a dummy header file
+ that warns the user and performs a no-op anytime an IEC 60559-only
+ feature is used. 
 
 \end{itemize}
 
@@ -50,20 +59,16 @@ C code should include [[c-features.h]] or [[float-features.h]] as needed.
 
 #endif /* _C_FEATURES_H */
 @
-
 We write a dummy function in the implementation of [[c-features.c.c99]] so
 the C compiler does not complain when it finds an otherwise empty [[.c]] file.
-
 <<c-features.c.c99>>=
 #include "c-features.h"
 
 void _dummy_function(void) {}
 @ 
-
 If the user is not using a C99-compliant compiler, we need to go ahead and
 declare and define [[strcasecmp]]; otherwise, it should be provided by the C 
 standard library.
-
 <<c-features.h.no-c99>>=
 #ifndef _C_FEATURES_H
 #define _C_FEATURES_H
@@ -108,6 +113,10 @@ int strcasecmp(const char *s1, const char *s2) {
   free(u2);
 
   return rc;
+}
+<<c-features.c.no-c99>>=
+float sqrt32(float x) {
+  return (float) sqrt((double) x);
 }
 @ 
 

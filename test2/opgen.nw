@@ -22,7 +22,8 @@ From the capability record of a back end, generate an externally callable
 implementation of each claimed operator.
 Then generate a table in which each record has the following form:
 \begin{quote}
-\textit{opname}, \textit{{\PAL}-function}, \textit{C-function}, \emph{stride}
+\textit{opname}, \textit{{\PAL}-function}, \textit{C-function},
+   \textit{print-function}, \emph{stride}
 \end{quote}
 where \emph{stride} is the number of bytes of memory used as input.
 
@@ -33,6 +34,7 @@ Each function is to have the same signature, i.e.,
 The function takes pointers to three arguments, some of which may be
 ignored, and it writes its result through the [[result]] pointer.
 The value returned is the number of bytes written.
+(Except a print function returns zero.)
 \item
 Have a test driver walk the table and compare {\PAL} with~C on random
 inputs. 
@@ -168,11 +170,12 @@ function Testgen.emit(t)
     defined[op.name] = 1
     local opname = Testgen.canonical_name(op)
     local namel = Testgen.emitstring(opname)
-    w('    %s, cmmtest_%s, ctest_%s, %d,\n',
-      namel, opname, opname, Testgen.stride(t, op))
-    Testgen.emitdata('  import ctest_%s;\n', opname)
+    w('    %s, cmmtest_%s, ctest_%s, cprint_%s, %d,\n',
+      namel, opname, opname, opname, Testgen.stride(t, op))
+    Testgen.emitdata('  import ctest_%s, cprint_%s;\n', opname, opname)
     i = i + 1
   end
+  w('  0, 0, 0, 0\n')
   w('  };\n\n')
   Testgen.drain_pending('data')
   w('}\n')
