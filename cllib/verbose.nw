@@ -12,9 +12,26 @@ Uses environment level [[VERBOSITY]] to make noise.
 <<verbose.mli>>=
 val say : int -> string list -> unit
   (* if VERBOSITY >= k, then say k l writes every string in l to stderr *)
+val eprintf : int -> ('a, out_channel, unit) format -> 'a
+  (* if VERBOSITY >= k, then say k l writes every string in l to stderr *)
 val verbosity : int  (* current verbosity *)
 @ 
 <<verbose.ml>>=
 let verbosity = try int_of_string (Sys.getenv "VERBOSITY") with _ -> 0
 let err l = List.iter prerr_string l; flush stderr
 let say k = if verbosity >= k then err else ignore
+
+let noprintf chan fmt =
+  let fmt = (Obj.magic fmt : string) in
+  let len = String.length fmt in
+  let rec doprn i =
+    if i >= len then Obj.magic () else
+    match String.unsafe_get fmt i with
+    | '%' -> Printf.scan_format fmt i cont_s cont_a cont_t
+    |  c  -> output_char chan c; doprn (succ i)
+  and cont_s s i = doprn i
+  and cont_a printer arg i = doprn i
+  and cont_t printer i = doprn i
+  in doprn 0
+
+let eprintf k = if verbosity >= k then Printf.eprintf else noprintf stdout
