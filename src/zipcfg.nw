@@ -20,7 +20,10 @@ parents) to be represented by an explicit, reified value (as opposed
 to being captured in an implicit continuation).
 We investigate this idea for a control-flow graph.
 
-Every graph has a single entry and one or more exits.
+Every graph has a single entry and zero or more exits.
+(For example, the graph for a procedure has no exits, the graph
+for an expanded instruction has one exit, and the graph for an
+expanded conditional branch has two exits.)
 Exits are numbered from~$0$.
 A~[[graph]] is a set of basic blocks, one of which is distinguished as the
 entry block.
@@ -75,18 +78,17 @@ Stitch two graphs together:
 val followed_by : graph -> int -> graph -> graph
   (* followed_by g n g' = connect Exit n of g to entry of g' *)
 @ 
-Sometimes we need to create a branch target in the middle of a graph.
-Calling [[make_target gz]] returns a new graph and a unique identifier
-that flows into the focus.
-<<zipcfg.mli>>=
-val make_target : zgraph -> uid * graph
-@ 
 Building a graph.
-When we add a node that can flow through to its successor, we insert
-the node before the focus.
-But when we add a node that cannot flow to its successor, we add it to
-an unfocused graph.
-In either case,  the new node becomes the new focus.
+The entry plays a dual role here; every constructor effectively
+requires the focus be on the entry node and inserts a new node
+following the entry node.
+After insertion, the entry node remains the focus.
+
+%%  When we add a node that can flow through to its successor, we insert
+%%  the node before the focus.
+%%  But when we add a node that cannot flow to its successor, we add it to
+%%  an unfocused graph.
+%%  In either case,  the new node becomes the new focus.
 <<zipcfg.mli>>=
 type regs  = Register.Set.t  (* sets of regs for dataflow *)
 type xregs = Register.SetX.t (* sets of regs for dataflow *)
@@ -100,18 +102,24 @@ val label        : machine -> uid -> string -> zgraph -> zgraph  (* spans? *)
 val instruction  : Rtl.rtl -> zgraph -> zgraph
 val stack_adjust : Rtl.rtl -> zgraph -> zgraph
 val assertion    : Rtl.rtl -> zgraph -> zgraph
-val branch       : machine -> target:uid -> graph -> zgraph
-val jump         : Rtl.rtl -> uses:regs -> targets:string list -> graph -> zgraph
-val cbranch      : machine -> Rtl.exp -> ifso:uid -> ifnot:uid -> graph -> zgraph
-val mbranch      : Rtl.rtl -> targets:uid list -> graph -> zgraph
+val branch       : machine -> target:uid -> zgraph -> zgraph
+val jump         : Rtl.rtl -> uses:regs -> targets:string list -> zgraph -> zgraph
+val cbranch      : machine -> Rtl.exp -> ifso:uid -> ifnot:uid -> zgraph -> zgraph
+val mbranch      : Rtl.rtl -> targets:uid list -> zgraph -> zgraph
 val call         : Rtl.rtl -> altrets:contedge list -> 
                      unwinds_to:contedge list -> cuts_to:contedge list ->
                      aborts:bool -> uses:regs -> defs:regs -> kills:regs ->
                      reads:string list option -> writes:string list option ->
                      spans:Spans.t option -> zgraph -> zgraph
 val cut_to       : Rtl.rtl -> cuts_to:contedge list -> aborts:bool ->
-                     uses:regs -> graph -> zgraph
-val return       : Rtl.rtl -> exit:int -> uses:regs -> graph -> zgraph
+                     uses:regs -> zgraph -> zgraph
+val return       : Rtl.rtl -> exit:int -> uses:regs -> zgraph -> zgraph
+@ 
+Sometimes we need to create a branch target in the middle of a graph.
+Calling [[make_target gz]] returns a new graph and a unique identifier
+that flows into the focus.
+<<zipcfg.mli>>=
+val make_target : zgraph -> uid * zgraph
 @ 
 <<zipcfg.ml>>=
 module R = Rtl
@@ -207,6 +215,36 @@ type call = {         cal_i          : Rtl.rtl
             ;         cal_writes     : string list option
             }
 @ 
+@
+\paragraph{Block manipulations}
+Convert block between forms.
+<<zipcfg.ml>>=
+let goto_start =
+  let rec revapp head tail = match head with
+  | First f -> f, tail
+  | Head (h, m) -> revapp h (Tail (m, tail)) in
+  function
+  | Start  (f, t)    -> f, t
+  | Middle (h, m, t) -> revapp h (Tail (m, t))
+  | End    (h, l)    -> revapp h (Last l)
+
+let goto_end =
+  let rec revapp head tail = match tail with
+  | Last l -> head, l
+  | Tail (m, t) -> revapp (Head (head, m)) t in
+  function
+  | Start  (f, t)    -> revapp (First f) t
+  | Middle (h, m, t) -> revapp (Head (h, m)) t
+  | End    (h, l)    -> h, l
+
+let zip = goto_start
+let unzip (n, ns) = Start (n, ns)
+
+let goto_start : zblock -> first * tail = goto_start
+let goto_end   : zblock -> head  *last  = goto_end
+let zip   : zblock -> block  = zip
+let unzip : block  -> zblock = unzip
+@ 
 \paragraph{Graph}
 For the graph, we want to be able to look up a block efficiently by
 its unique id.  
@@ -220,6 +258,8 @@ module type BLOCKS = sig
   val focus  : t -> uid -> block * t
   val union  : t -> t -> t
   val exit   : int -> t -> block * t
+
+  val fold   : (block -> 'a -> 'a) -> t -> 'a -> 'a
 end
 
 module Blocks : BLOCKS = struct
@@ -236,36 +276,13 @@ module Blocks : BLOCKS = struct
         else f (b::prev') bs in
     f [] blocks
   let union = (@)
-  let exit blocks = unimpf "Blocks.find_exit"
+  let exit n blocks = unimpf "Blocks.find_exit"
+  let fold = List.fold_right
 end
 @ 
 <<zipcfg.ml>>=  
 type graph  = Blocks.t
 type zgraph = zblock * Blocks.t
-@
-Convert block between forms.
-<<zipcfg.ml>>=
-let zip = 
-  let rec revapp head tail = match head with
-  | First f -> f, tail
-  | Head (h, m) -> revapp h (Tail (m, tail)) in
-  function
-  | Start  (f, t)    -> f, t
-  | Middle (h, m, t) -> revapp h (Tail (m, t))
-  | End    (h, l)    -> revapp h (Last l)
-
-let unzip (n, ns) = Start (n, ns)
-
-let rec goto_start block = match block with
-| Middle (Head (h, m'), m, t) -> goto_start (Middle (h, m', Tail (m', t)))
-| _ -> unimpf "goto_start"
-
-let rec goto_end block = match block with
-| Start  (f, Tail (m, t))     -> goto_end (Middle (First f, m, t))
-| Start  (f, Last l)          -> First f, l
-| Middle (h, m, Tail (m', t)) -> goto_end (Middle (Head (h, m), m', t))
-| Middle (h, m, Last l)       -> Head (h, m), l
-| End (h, l)                  -> h, l
 @ 
 <<zipcfg>>=
 @ 
@@ -322,11 +339,26 @@ let exit_to_head block =
   match goto_end (unzip block) with
   | h, Exit _ -> h
   | _ -> impossf "unexpected non-exit"
+
+let entry_to_tail block =
+  match goto_start block with
+  | Entry, t -> t
+  | _ -> impossf "unexpected non-entry"
+<<zipcfg.ml>>=
+let check_single_exit g =
+  let check block found = match goto_end (unzip block) with
+  | _, Exit 0 when not found -> true
+  | _, Exit _ -> impossf "multiple exits found where single exit expected"
+  | _ -> found in
+  if not (Blocks.fold check g false) then
+    impossf "graph does not have an exit"
+@ 
 <<zipcfg.ml>>=
 let splice_before (focus, blocks) g =
   (* first extend the head with the entry of g, then 
      if we have not reached the exit of g,
      make the exit of g the new head *)
+  check_single_exit g;
   let splice head after_head =
     let gentry, gblocks = entry g in
     match gentry with
@@ -336,7 +368,8 @@ let splice_before (focus, blocks) g =
         | Last (Exit n) ->
             assert (n = 0);
             after_head head, Blocks.union blocks gblocks
-        | Last _ ->
+        | Last last ->
+            let blocks = Blocks.insert (zip (End (head, last))) blocks in
             let gexit, gblocks = Blocks.exit 0 gblocks in
             after_head (exit_to_head gexit), Blocks.union blocks gblocks in
         extend head gnodes
@@ -345,8 +378,30 @@ let splice_before (focus, blocks) g =
   | Start _ -> impossf "splicing before a first node"
   | Middle (head, mid, tail) -> splice head (fun head -> Middle (head, mid, tail))
   | End (head, last) -> splice head (fun head -> End (head, last))
-
-
+<<zipcfg.ml>>=
+let splice_after (focus, blocks) g =
+  check_single_exit g;
+  (* first extend the tail with the exit of g, then 
+     if we have not reached the entry of g,
+     make the entry of g the new tail *)
+  let splice tail before_tail =
+    let gexit, gblocks = exit 0 g in
+    match goto_end gexit with
+    | gnodes, Exit 0 ->
+        let rec extend tail gnodes = match gnodes with
+        | Head (gnodes, mid) -> extend (Tail (mid, tail)) gnodes
+        | First Entry -> before_tail tail, Blocks.union blocks gblocks
+        | First first ->
+            let blocks = Blocks.insert (zip (Start (first, tail))) blocks in
+            let gentry, gblocks = entry gblocks in
+            before_tail (entry_to_tail gentry), Blocks.union blocks gblocks in
+        extend tail gnodes
+    | _ -> impossf "ill-formed exit node" in
+  match focus with
+  | Start (first, tail) -> splice tail (fun tail -> Start (first, tail))
+  | Middle (head, mid, tail) -> splice tail (fun tail -> Middle (head, mid, tail))
+  | End (tail, last) -> impossf "splicing after a last node"
+<<zipcfg.ml>>=
 let make_target ((b, bs) as gz) = match b with
 | Start (Label (u, _), tail) -> u, Blocks.insert (zip b) bs
 | Start (Entry, tail) -> unimpf "make entry a target"

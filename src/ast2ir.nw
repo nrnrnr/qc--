@@ -84,7 +84,7 @@ type aligned = int
 type label   = G.uid * string 
 let genlabel s =
   let s = Idgen.label s in
-  (G.uid s, s)
+  (G.uid (), s)
 @ 
 Utility functions and so on.
 <<ast2ir.ml>>=
@@ -313,7 +313,7 @@ let rec contStmt2 label succ =
   k.K.spans <- props;
   k.K.succ  <- Some (uid, label);
   unimpf "illegal flow"; (*G.illegal g*) (* should be not reached *) 
-  G.entry g
+  g
 @ 
 As continuations appear in flow annotations, we set the [[cut_to]],
 [[unwound_to]], and [[returned_to]] fields as needed.
@@ -493,8 +493,9 @@ and stmt  props s  succ =
   match s with
   | S.If (e, so, not) ->
       let endif, g = G.make_target succ in
-      let so,    g = G.make_target (stmts props so  (G.focus endif g)) in
-      let not,   g = G.make_target (stmts props not (G.focus endif g)) in
+      let not,   g = G.make_target (stmts props not g) in
+      let        g = G.branch target endif g in
+      let so,    g = G.make_target (stmts props so  g) in
       G.cbranch target e ~ifso:so ~ifnot:not g
   | S.Label n              -> G.label target (uid_of n) n succ 
   | S.Switch (rg, e, arms) -> switchStmt rg e arms props succ
@@ -506,13 +507,13 @@ and stmt  props s  succ =
   | S.Goto (e, labels) ->
       (match Dn.exp e with
       | RP.Const (RP.Link (sym, _, w)) ->
-             G.branch target ~target:(uid_of sym#original_text) (G.unfocus succ)
+             G.branch target ~target:(uid_of sym#original_text) succ
       | _ -> let instr   = target.T.goto.T.embed e in
              let targets = List.map uid_of labels in
-             G.mbranch instr targets (G.unfocus succ))
-  | S.Jump (cc, e, args, targets) -> jump cc e args targets (G.unfocus succ)
-  | S.Cut (cc, k, args, conts)    -> cut cc k args conts (G.unfocus succ)
-  | S.Return (cc, i, n, args)     -> return cc i n args (G.unfocus succ)
+             G.mbranch instr targets succ)
+  | S.Jump (cc, e, args, targets) -> jump cc e args targets succ
+  | S.Cut (cc, k, args, conts)    -> cut cc k args conts succ
+  | S.Return (cc, i, n, args)     -> return cc i n args succ
 @
 \paragraph{[[switch]] statements}
 
@@ -538,7 +539,7 @@ and switchStmt range e arms props stmt_succ =
     let arm, g = G.make_target (stmts props body (G.branch target endswitch g)) in
     G.make_target (G.cbranch target condition ~ifso:arm ~ifnot:next_test g) in
   let (first_test, g) = List.fold_right do_arm arms (endswitch, g) in
-  G.focus first_test g
+  g
 @
 \subsubsection{Statements that go between procedures}
 
@@ -695,7 +696,7 @@ let proc global_map proc =
 We'll remember labels, too.
 <<definition of [[proc]], which translates one procedure>>=
   let uidmap =
-    let add map l = SM.add l (G.uid l) map in
+    let add map l = SM.add l (G.uid ()) map in
     List.fold_left add SM.empty (Elabstmt.codelabels proc.N.code) in
   let uid_of s = 
     try SM.find s uidmap with Not_found -> impossf "unknown code label" in
