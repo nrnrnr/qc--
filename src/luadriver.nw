@@ -301,6 +301,8 @@ function CMD.parse (args)
         O.stop_at(v)
     elseif strfind(v, '^-') and not strfind(v, '^-[lL]') then
         CMD.error("unknown option: ".. v, 1)
+    elseif strfind(v, '%.lua$') then -- evaluate right away
+        local _ = Util.dosearchfile(v) or CMD.exit(2)
     else -- it is a file or is -L or -l and must be treated as a file
         O.argc         = O.argc + 1
         O.argv[O.argc] = v 
@@ -525,7 +527,7 @@ A Lua file is interpreted for side effect.
 If an error occurs, we exit.
 <<Lua command-line driver>>=
 function CMD.compilertab[".lua"](file) 
-  local _ = Util.dosearchfile(file, nil) or CMD.exit(2) -- fails on error
+  CMD.error("Internal error --- .lua file made it to second pass")
 end
 @ 
 {\PAL} source is translated to assembly code.

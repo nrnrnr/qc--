@@ -53,6 +53,9 @@ module RU  = Rtlutil
 module Up  = Rtl.Up
 module Dn  = Rtl.Dn
 module Re  = Register
+module S   = RU.ToReadableString
+let () = Debug.register "avail" "available expressions"
+let debug = Debug.on "avail"
 @ 
 The implementation is designed to try to maximize sharing and minimize
 allocation, not for fast lookup.
@@ -97,7 +100,15 @@ let forward rtl pairs =
   | RP.Const (RP.Bool true), RP.Store(RP.Reg _ as l, r, _) -> add_new_pair l r pairs
   | _ -> pairs in
   let RP.Rtl effects = Dn.rtl rtl in
-  List.fold_right extend effects pairs
+  let pairs = List.fold_right extend effects pairs in
+  if debug then
+    begin
+      Printf.eprintf "avail: forwarding past %s yields\n" (S.rtl rtl);
+      List.iter
+        (fun (l, r) -> Printf.eprintf "avail:   %s == %s\n"
+                                      (S.loc (Up.loc l)) (S.exp (Up.exp r))) pairs;
+    end;
+  pairs
 @ 
 <<if all interfering locations can be substituted, keep [[l, r]]; otherwise not>>=
 let badlocs = List.filter (fun l -> RU.MayAlias.exp' l r) locs in
