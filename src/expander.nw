@@ -36,8 +36,8 @@ $?$& any RTL comparison operator\\
 
 We reduce RTLs to the following forms:
 {\def\gets{\mathrel{:=}}%
-$$\begin{array}{rcl@{\mskip10mu}ll}
-m[t_l] & \gets & t     &\mbox{\texttt{store}}\\
+$$\begin{array}{r@{}c@{}l@{\mskip10mu}ll}
+m[t_l] & {}\gets{} & t     &\mbox{\texttt{store}}\\
 t      & \gets & m[t_l]&\mbox{\texttt{load}} \\
 t_1    & \gets & t_2   &\mbox{\texttt{move}} \\
 t      & \gets & k     &\mbox{\texttt{li} (load immediate constant)}\\
@@ -49,9 +49,33 @@ t      & \gets & \mathtt{zx}(m[t_l])       &\mbox{\texttt{zxload} (load unsigned
 \mathit{PC}& \gets & L &\mbox{\texttt{b} (branch)}\\
 \mathit{PC}& \gets & t &\mbox{\texttt{br} (branch register)}\\
 t \mathbin? t \rightarrow \mathit{PC}& \gets & L &\mbox{\texttt{bc} (branch conditional)}\\
+\mathit{PC}& \gets & \rlap{t}\phantom{L/t} \mid t_l \gets t_r&\mbox{\texttt{cut\_to}}\\
+\mathit{PC}& \gets & L/t \mid \cdots \mathit{PC} \cdots&\mbox{\texttt{call}/\texttt{callr}}\\
 \end{array}
 $$}
-(TREATMENT OF CALL AND CUT TO STILL NEEDS EXPLANATION)
+The treatment of [[call]] and [[cut to]] needs some explanation.
+Both instructions change the program counter while also assigning to a
+register.
+In the case of [[call]], the program counter appears on the right-hand
+side of some additional effect.
+The generic expander assumes that this RTL originated in a call to
+[[t.Target.call]], and that its only obligation is to expand the
+expression denoting the callee.
+The other effects are assumed not to need expansion, and they aren't
+touched.
+It's up to the [[t.Target.call]] to know what it's doing, although the
+postexpander can validate the RTL if it wants.
+In any case, we maintain the call as an atomic RTL. 
+
+In the case of \mbox{[[cut to]]}, the program counter isn't mentioned
+in an rvalue context, but some register (probably the stack
+pointer) is modified along with the branch.
+Here we don't need to know the details; all the expander needs to do is
+preserve the atomicity of the assignment, but it can (and does) expand
+out the right-hand sides.
+In the case of cut to, the atomicity is not real; 
+the illusion of atomicity is the result of
+a conspiracy among the [[Target.t]], the expander, and the recognizer.
 @
 Driving the design is the following classification of operators:
 \begin{itemize}
