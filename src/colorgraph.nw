@@ -327,6 +327,7 @@ Additional information is also stored:
 \begin{itemize}
 \item [[regToItem]] - map from temps to list-group items
 \item [[spills]]    - short-living temps introduced for spilling (spill temps)
+\item [[spillMap]]  - map from the original temps to spill temps
 
 \item [[luaColorOverride]] - value set in Lua to override the standard register list
 \item [[allColors]] - list of all registers
@@ -343,6 +344,7 @@ type 'a colorGraph = { mutable adjSet : EdgeSet.t
                      ; mutable aliasMap : Register.t RM.t
                      ; mutable colorMap : color RM.t
                      ; mutable spills : RS.t
+                     ; mutable spillMap : (Automaton.loc * RS.t) RM.t
 
                      ; mutable regToItem : (tempList,Register.t) impListItem RM.t
                      ; mutable tempLG : (tempList, Register.t) impListGroup
@@ -402,6 +404,7 @@ let cgInfo =
        ; colorMap = RM.empty
        ; tempLG = tempFn
        ; spills = RS.empty
+       ; spillMap = RM.empty
        ; moveLG = moveFn
 
        ; luaColorOverride = V.Nil
@@ -450,6 +453,7 @@ let clearCGInfo cg {Proc.cc = colors} =
     let () = cg.colorMap <- RM.empty in
     let () = cg.tempLG <- tempFn in
     let () = cg.spills <- RS.empty in
+    let () = cg.spillMap <- RM.empty in
     let () = cg.moveLG <- moveFn in
 
     let () = cg.allColors <- P.allocatable colors in
