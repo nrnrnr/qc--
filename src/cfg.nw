@@ -1020,6 +1020,7 @@ The proper successor (a join point) is then returned.
 
 <<set successors>>=
 <<add pred>>
+<<remove pred>> 
 let rec verify_join ~succ =
   if is_join succ then succ
   else let p = pred succ in
@@ -1031,10 +1032,10 @@ let rec verify_join ~succ =
             join
 
 and set_succ_n node n ~succ =
-  <<remove pred>> in
   let () = remove_pred (succ_n node n) ~pred:node in
-  <<setup successor>> in
   let inval () = raise (Invalid_argument "set_succ_n: illegal index") in
+  let setup_succ = (setup_succ : 'i node -> succ:'i node -> 'i node) in 
+    (* work around ocaml bug *)
   let mult a n succ =
     if n >= 0 && n < Array.length a then Array.set a n (setup_succ node succ)
     else inval () in
@@ -1071,11 +1072,12 @@ and set_succ_n node n ~succ =
   | Exi _, _ -> undef "set_succ" "exit"
   | Ill _, _ -> undef "set_succ" "illegal"
   | Boot , _ -> undef "set_succ" "boot"
+and <<setup successor>>
 
 let join_leading_to = verify_join
-let rec set_succ' single mult cbr node ~succ =
+let rec set_succ' single mult cbr n node ~succ =
   if not (is_join succ) && not (is_ill (pred succ)) then
-    set_succ' single mult cbr node ~succ:(join_leading_to succ)
+    set_succ' single mult cbr n node ~succ:(join_leading_to succ)
   else
     begin
       (<<modify the $n$th successor of [[node]] because [[node]] is no longer a predecessor>>);
@@ -1115,20 +1117,25 @@ match node with
 | Ill _ -> undef "set_succ" "illegal"
 | Boot  -> undef "set_succ" "boot"
 @ 
+
+@ 
+NR is not happy with this next bit, because he would rather [[n]] be hidden
 <<modify the $n$th successor of [[node]] because [[node]] is no longer a predecessor>>=
-assert false
+remove_pred (succ_n node n) ~pred:node
 <<modify [[succ]] because [[node]] has become a predecessor>>=
-assert false
+ignore (setup_succ node ~succ)
 <<set_successors>>=
 let new_set_succ_n n =
   set_succ' (if n = 0 then (fun s -> s) else (fun s -> invalid "successor index"))
             (fun a f -> let s = a.(n) in a.(n) <- f s; s)
             (if n = 0 then (fun () -> true) else if n = 1 then (fun () -> false)
              else fun () -> invalid "successor index")
+            n
 let new_set_succ =
   set_succ' (fun s -> s)
             (fun a f -> undef "set_succ" "multiple node not o/w specified")
             (fun () ->  undef "set_succ" "cbr")
+            0
 
 <<set successors>>=
 let set_succ node ~succ = match node with
@@ -1217,7 +1224,7 @@ let remove_pred node ~pred =
 <<setup successor>>=
 (* what if the node is a join?
    how are we making a label here? *)
-let setup_succ node ~succ =
+setup_succ node ~succ =
   match succ with
   | Exi _ | Joi _ -> (add_pred succ ~pred:node ; succ)
   | Ent _ -> imposs "entry nodes have no predecessors"
