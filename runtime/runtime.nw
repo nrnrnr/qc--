@@ -117,6 +117,11 @@ runtime data associated with the given continuation. It is important
 to note that none of the runtime functions may allocate memory.
 Because of this, the initial activation record is returned by value
 which forces the caller to allocate space for it.
+
+SOMETHING MUST BE DONE TO ENSURE CORRECTNESS FOR A CONTINUATION THAT
+REPRESENTS A NEWLY CREATED STACK.  
+THE CHOICES WOULD BE TO TREAT THAT PC SPECIALLY HERE OR TO SYNTHESIZE
+RUNTIMEDATA STRUCTURES FOR IT.
 <<public function implementations>>=
 Cmm_Activation
 Cmm_YoungestActivation(const Cmm_Cont* t) {
@@ -479,6 +484,7 @@ foreign "C" Cmm_CutTo(bits32 k) {
 }
 @ 
 \subsection{Threads}
+
 <<external functions>>=
 extern void Cmm_start_thread_helper();
 <<runtime.c>>=
@@ -497,6 +503,20 @@ Cmm_Cont* Cmm_CreateThread(Cmm_Codeptr f, Cmm_Dataptr x, void *s, unsigned n) {
   }
 }
 @ 
+Here is the layout of a thread with a down-going stack:
+\begin{center}
+\unitlength=15pt
+\def\~{\hspace*{15pt}}
+\begin{picture}(22,8)(-14,-5)
+  \put(-5,1.5){\framebox(13,1.5)[l]{\~[[k->pc = Cmm_start_thread_helper]]}}
+  \put(-5,0){\framebox(13,1.5)[l]{\~[[k->sp = vfp]]}}
+  \put(-5,-1.5){\framebox(13,1.5)[l]{\~[[x]]}}
+  \put(-5,-3.0){\framebox(13,1.5)[l]{\~[[f]]}}
+  \put(-5,-2.7){\makebox(0,0)[r]{[[vfp]]\raisebox{0.5ex}{\vector(1,0){1}}}}
+  \put(-5,0.3){\makebox(0,0)[r]{result of [[Cmm_CreateThread]]\raisebox{0.5ex}{\vector(1,0){1}}}}
+  \put(-5,-4.5){\makebox(13,2.0)[l]{\vrule\hfill$\vdots$\hfill\vrule}}
+\end{picture}
+\end{center}
 I set up the stack pointer to point to the first empty word.
 <<set up stack for growth downward>>=
 young = stack;
