@@ -138,13 +138,13 @@ provide entirely different implementations.
 
 <<automaton.ml>>=
 class type location = object
-    method fetch:   width:int -> Rtl.exp
-    method store:   Rtl.exp -> width:int -> Rtl.rtl
+    method fetch:   (*width*) int -> Rtl.exp
+    method store:   Rtl.exp -> (*width*) int -> Rtl.rtl
     method to_loc:  Rtl.loc
 end
 
 class type automaton = object
-    method ty:      width:int -> hint:(string option) -> location
+    method ty:      (*width*) int -> (*hint*) (string option) -> location
     method freeze:  unit -> Area.t
 end
 
@@ -162,8 +162,8 @@ let mk spec ~address  = spec address
 let ty t ~width ~hint = t#ty width hint
 let freeze t          = t#freeze ()
 
-let fetch loc ~width      = loc#fetch ~width
-let store loc expr ~width = loc#store expr ~width
+let fetch loc ~width      = loc#fetch width
+let store loc expr ~width = loc#store expr width
 let to_loc loc            = loc#to_loc
 @
 
@@ -208,9 +208,9 @@ class dummyloc (loc:Rtl.loc): location =
 object
     val _loc   = loc
     
-    method store expr ~width = Rtl.store _loc expr width 
-    method fetch ~width      = Rtl.fetch _loc width
-    method to_loc            = _loc
+    method store expr width = Rtl.store _loc expr width 
+    method fetch width      = Rtl.fetch _loc width
+    method to_loc           = _loc
 end
 
 let memloc addr = 
@@ -227,7 +227,7 @@ object (self)
         let _ = _frozen <- true in
             Area.freeze _area 
     
-    method ty ~width ~hint = 
+    method ty  width  hint = 
         let _     = assert (_frozen = false)           in
         (* assertions above *)
         let n     = width / memsize                    in (* how many cells*)

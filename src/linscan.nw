@@ -313,7 +313,8 @@ let lifetimes proc =
                       (set, state)                                 in
     let first       = G.number (G.first cfg)                       in
     let last        = G.number (G.last cfg)                        in
-    let (set,(op,lt)) = G.scan_fwd cfg first last scan (RS.empty, initial) in
+    let (set,(op,lt)) = G.scan_fwd cfg ~first ~limit:last 
+                                scan (RS.empty, initial) in
                       (* close all open intervals after the last node *)
     let     (_ ,lt) = close_regs (last+1) (domain op) (op,lt)      in
     let _           = () (* dump lt *)   in
@@ -410,7 +411,8 @@ let replace_tmp proc node tmp lifetimes next_tmp spill =
                                lifetimes                            in
       let lookup    = Target2.space proc.Proc.target                in
       let lifetimes = RM.remove tmp lifetimes                       in
-      let ()        = iter cfg (Rtlutil.Subst2.reg lookup (replace tmp r)) in
+      let ()        = iter cfg 
+                        (Rtlutil.Subst2.reg ~lookup ~map:(replace tmp r)) in
           next_tmp lifetimes
   | None -> (* out of register - must spill *)
       let allocatable = proc.Proc.cc.T.allocatable              in 
@@ -454,7 +456,7 @@ let find_tmp proc node =
             Some (space, index, width)
         | x -> x 
     in
-        Rtlutil.ReadWrite.fold uses uses (G.rtl node) None    
+        Rtlutil.ReadWrite.fold ~read:uses ~write:uses (G.rtl node) None    
 @       
 
 \begin{quote}\it
@@ -647,9 +649,9 @@ and spill proc spillee mem interval =
     (* let _     = Cfg3.dump proc.Proc.cfg "before spilling" in *)
     let first = I.left  interval in
     let last  = I.right interval in 
-    let nodes = G.scan_fwd proc.Proc.cfg first last
+    let nodes = G.scan_fwd proc.Proc.cfg ~first ~limit:last
                     (fun n set -> NodeSet.add n set) NodeSet.empty in
-        ( G.scan_fwd proc.Proc.cfg first last 
+        ( G.scan_fwd proc.Proc.cfg ~first ~limit:last 
             (fun n () -> update proc interval nodes spillee mem n) ()
           (* ; Cfg3.dump proc.Proc.cfg "after spilling" *)
         ; linscan proc (* start over *)
@@ -664,9 +666,9 @@ otherwise.
 
 <<update>>=
 and reads_writes rtl loc =
-    let reads  sp index width (r,w) = (r || loc = (sp,index,width), w) in
-    let writes sp index width (r,w) = (r, w || loc = (sp,index,width)) in
-        Rtlutil.ReadWrite.fold reads writes rtl (false,false)
+    let read  sp index width (r,w) = (r || loc = (sp,index,width), w) in
+    let write sp index width (r,w) = (r, w || loc = (sp,index,width)) in
+        Rtlutil.ReadWrite.fold ~read ~write rtl (false,false)
 @
 
 The [[extern]] function returns all nodes from a list of nodes that do

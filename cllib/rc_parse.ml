@@ -130,6 +130,22 @@ let yycheck = "\001\000\
 \255\255\255\255\255\255\255\255\255\255\255\255\255\255\255\255\
 \255\255\255\255\002\001\002\001\002\001"
 
+let yynames_const = "\
+  COMMA\000\
+  EQUAL\000\
+  TRUE\000\
+  FALSE\000\
+  EOF\000\
+  "
+
+let yynames_block = "\
+  STR\000\
+  ID\000\
+  BOOL\000\
+  FLOAT\000\
+  INT\000\
+  "
+
 let yyact = [|
   (fun _ -> failwith "parser")
 ; (fun parser_env ->
@@ -218,6 +234,8 @@ let yytables =
     tablesize=yytablesize;
     table=yytable;
     check=yycheck;
-    error_function=parse_error }
+    error_function=parse_error;
+    names_const=yynames_const;
+    names_block=yynames_block }
 let rcfile (lexfun : Lexing.lexbuf -> token) (lexbuf : Lexing.lexbuf) =
    (yyparse yytables 1 lexfun lexbuf : Rc_ast.rcdict)

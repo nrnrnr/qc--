@@ -59,7 +59,7 @@ treating a control-flow graph as an instruction.
 <<ast3ir.mli>>=
 val translate: Fenv.Clean.env 
             -> Target2.t 
-            -> (optimizer: Proc.t -> unit)
+            -> optimizer: (Proc.t -> unit)
             -> Ast.program 
             -> Asm3.assembler
 @
@@ -816,7 +816,7 @@ let freeze (p:Proc.t) =
             | Not_found -> e
             )  
         | x -> x in
-    let ()       = Cfgutil.subst p.Proc.cfg (Rtlutil.Subst2.exp guard subst)
+    let ()       = Cfgutil.subst p.Proc.cfg (Rtlutil.Subst2.exp ~guard ~map:subst)
     in
         ()
 
@@ -1144,7 +1144,7 @@ should be exported but currently it is not.
 \end{quote}
 
 <<Make translate program>>=
-let translate env target optimizer prog =
+let translate env target ~optimizer prog =
     let base_sym   = F.symbol env "global base" in
     let base     = Rtl.link base_sym target.Target.pointersize in 
     let env

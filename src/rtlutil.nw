@@ -62,7 +62,7 @@ write positions as sets.
 
 <<rtlutil.mli>>=
 module ReadWrite: sig
-    type 'a observer = Rtl.space -> index:Base.std_int -> Rtl.width -> 'a -> 'a
+    type 'a observer = Rtl.space -> Base.std_int -> Rtl.width -> 'a -> 'a
     val fold: read: 'a observer -> write: 'a observer -> Rtl.rtl -> 'a -> 'a
     val sets: Rtl.rtl -> (Register.Set.t * Register.Set.t)
 end
@@ -91,16 +91,16 @@ is hopefully easier to use.
 
 <<rtlutil.mli>>=
 module Subst2: sig
-    val loc:    (guard:Rtl.Private.loc -> bool)               
-                -> (map:Rtl.Private.loc -> Rtl.Private.loc) 
+    val loc:    guard:(Rtl.Private.loc -> bool)               
+                -> map:(Rtl.Private.loc -> Rtl.Private.loc) 
                 -> Rtl.rtl -> Rtl.rtl
     
-    val exp:    (guard:Rtl.Private.exp -> bool)
-                -> (map:Rtl.Private.exp -> Rtl.Private.exp) 
+    val exp:    guard:(Rtl.Private.exp -> bool)
+                -> map:(Rtl.Private.exp -> Rtl.Private.exp) 
                 -> Rtl.rtl -> Rtl.rtl
     
-    val reg:    (lookup:Rtl.space -> Space.t) 
-                -> (map:Register.t -> Register.t)
+    val reg:    lookup:(Rtl.space -> Space.t) 
+                -> map:(Register.t -> Register.t)
                 -> Rtl.rtl -> Rtl.rtl
 end
 @
@@ -250,9 +250,9 @@ let exp e = match Rtl.Convert.exp e with
 % ------------------------------------------------------------------ 
 
 <<ReadWrite>>=
-type 'a observer = Rtl.space -> index:Base.std_int -> Rtl.width -> 'a -> 'a
+type 'a observer = Rtl.space -> (*index*) Base.std_int -> Rtl.width -> 'a -> 'a
 
-let fold (read:'a observer) (write:'a observer) = 
+let fold ~(read:'a observer) ~(write:'a observer) = 
   let rec rtl (z:'a) (RP.Rtl gs)  = List.fold_left guarded z gs
       and guarded z (g, eff) = exp (effect z eff) g
       and effect z eff = match eff with
@@ -282,7 +282,7 @@ let sets (rtl:Rtl.rtl) =
     let add_right  space index width (left,right) = 
         (left, Register.Set.add (reg space index width) right) in
     let empty = (Register.Set.empty, Register.Set.empty) in
-        fold add_left add_right rtl empty
+        fold ~read:add_left ~write:add_right rtl empty
 @
 
 % ------------------------------------------------------------------ 
@@ -495,9 +495,9 @@ let reg' lookup map rtl =
     let map' = fun loc -> reg2loc lookup (map (loc2reg loc)) in
         loc' is_register map' rtl
 
-let exp guard  map rtl = DownUp.rtl (exp' guard  map) rtl
-let loc guard  map rtl = DownUp.rtl (loc' guard  map) rtl 
-let reg lookup map rtl = DownUp.rtl (reg' lookup map) rtl 
+let exp ~guard  ~map rtl = DownUp.rtl (exp' guard  map) rtl
+let loc ~guard  ~map rtl = DownUp.rtl (loc' guard  map) rtl 
+let reg ~lookup ~map rtl = DownUp.rtl (reg' lookup map) rtl 
 @
 
 

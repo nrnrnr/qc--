@@ -608,7 +608,7 @@ let wrap f x = let l = f x in (prerr_string "function returned ";
                                prerr_endline " values";
                                l)
 
-let compile srcdbg cs = 
+let compile ~srcdbg cs = 
   let block, count = block_compiler srcdbg in
   let block = (block : string list -> A.block -> 'a cont -> (V.value list -> 'a) -> 'a cont) in
   let ret = fun results -> results in
@@ -637,7 +637,7 @@ let ret = A.Return ([nil; three])
 let test_state = V.state ()
 
 let bogusmap = Srcmap.mk ()
-let stmts l = compile (bogusmap, false) (List.map (fun s -> A.Statement s) l)
+let stmts l = compile ~srcdbg:(bogusmap, false) (List.map (fun s -> A.Statement s) l)
 
 let num n = A.Lit (V.Number (float n))
 let rtest = stmts [ret]

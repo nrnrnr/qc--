@@ -216,7 +216,7 @@ type solution =
     ; dependent:    (string * Rtl.exp) list
     }
 
-let empty width =
+let empty ~width =
     { eqns      = Eqns.empty
     ; width     = width
     }
@@ -242,7 +242,7 @@ let rec exp t = function
     | x                -> Eqns.const x
     
 
-let make_equal' e1 (x:int) e2 (y:int) t =
+let make_equal' e1 ~(x:int) e2 ~(y:int) t =
     let e1    = Rtl.Convert.exp e1 in
     let e2    = Rtl.Convert.exp e2 in
     let left  = Eqns.add (exp t e1) (Eqns.int x) in
@@ -292,7 +292,7 @@ let const k     = [(1, Const k)]
 let add x y     = x @ y
 let sub x y     = x @ List.map (fun (i,y) -> (-i,y)) y
 
-let rtl (width:int) (e:exp) = 
+let rtl ~(width:int) (e:exp) = 
     let add    = Rtl.opr "add"  [width] in
     let mult   = Rtl.opr "mult" [width] in 
     let bits i = Rtl.bits (Bits.of_int i width) width    in 

@@ -65,7 +65,7 @@ module Add (MakeParser : Luaparser.MAKER) (I : Luainterp.S) = struct
 end
 <<toplevel>>=
 let lex map buf = Luascanner.token buf map
-let do_lexbuf filename g buf =
+let do_lexbuf ~sourcename:filename g buf =
   let map = Srcmap.mk () in
   let _ = Srcmap.sync map 0 (filename, 1, 1) in
   let chunks =
@@ -78,7 +78,7 @@ let do_lexbuf filename g buf =
         prerr_endline ": syntax error";
         []
       end in
-  let pgm = I.compile (map, false) chunks in
+  let pgm = I.compile ~srcdbg:(map, false) chunks in
   try
     match pgm g with
     | [] -> [I.Value.String "executed without errors"]
@@ -88,7 +88,7 @@ let do_lexbuf filename g buf =
   | I.Value.Projection (v, w) -> (prerr_endline ("error projecting to " ^ w); [])
 let dostring g s = 
   I.with_stack (V.info ("dostring('" ^ s ^ "')") 0) g
-    (do_lexbuf "<string>" g) (Lexing.from_string s)
+    (do_lexbuf ~sourcename:"<string>" g) (Lexing.from_string s)
 
 let dofile g infile =
   try
@@ -96,7 +96,7 @@ let dofile g infile =
     let close () = if infile <> "-" then close_in f else () in
     try 
       let answer = I.with_stack (V.info ("dofile('" ^ infile ^ "')") 0) g
-                     (do_lexbuf infile g) (Lexing.from_channel f)
+                     (do_lexbuf ~sourcename:infile g) (Lexing.from_channel f)
       in  (close(); answer)
     with e -> (close (); raise e)
   with Sys_error msg ->

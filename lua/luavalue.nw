@@ -55,7 +55,7 @@ module type S = sig
 Lua tables are not quite like Caml tables, but they are close.
 <<signatures>>=
   module Table : sig
-    val create : sizehint:int -> table
+    val create : int -> table
     val find   : table -> key:value -> value
     val bind   : table -> key:value -> data:value -> unit
     val of_list : (string * value) list -> table
@@ -209,9 +209,9 @@ To make this work, every function gets a unique id.  No exceptions.
 <<value toplevel>>=
 let info =
   let n = ref 0 in
-  fun file line -> (n := !n + 1; (!n, file, line))
-let lua_func file line f = Function (info file line, f)
-let caml_func = lua_func "(OCaml)" (-1)
+  fun ~file ~linedefined:line -> (n := !n + 1; (!n, file, line))
+let lua_func ~file ~linedefined:line f = Function (info file line, f)
+let caml_func = lua_func ~file:"(OCaml)" ~linedefined:(-1)
 @ 
 <<value toplevel>>=
 let rec to_string = function
@@ -425,8 +425,8 @@ multiple elements.
 <<table definition>>=
 module Table = struct
   let create = Luahash.create eq
-  let find t k = try Luahash.find t k with Not_found -> Nil
-  let bind t k v =
+  let find t ~key:k = try Luahash.find t k with Not_found -> Nil
+  let bind t ~key:k ~data:v =
     match v with
     | Nil -> Luahash.remove t k
     | _ -> Luahash.replace t k v

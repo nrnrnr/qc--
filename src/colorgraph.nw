@@ -838,7 +838,7 @@ let applyColors cg {Proc.cfg = cfg; Proc.target = target} =
                       ; ": "
                       ; Rtlutil.ToString.rtl (Cfg3.rtl node)
                       ; "\n"];
-               G.set_rtl node (Rtlutil.Subst2.reg lookup subst)) ()
+               G.set_rtl node (Rtlutil.Subst2.reg ~lookup ~map:subst)) ()
         ; true)
 let applyColors cg = applyColors (project cg)
 @
@@ -933,9 +933,9 @@ values.  The first component $r$ is true iff [[loc]] is read by
 
 <<insert spills>>=
     let reads_writes rtl loc =
-        let reads  sp index width (r,w) = (r || loc = (sp,index,width), w) in
-        let writes sp index width (r,w) = (r, w || loc = (sp,index,width)) in
-        Rtlutil.ReadWrite.fold reads writes rtl (false,false)
+        let read  sp index width (r,w) = (r || loc = (sp,index,width), w) in
+        let write sp index width (r,w) = (r, w || loc = (sp,index,width)) in
+        Rtlutil.ReadWrite.fold ~read ~write rtl (false,false)
 @
 
 The heart of the spiller is [[update]] that is applied to every
@@ -959,7 +959,7 @@ memory location [[mem]], where the value of the spillee is held.
                       ; if writes then 
                             (cfg_ins_lst_after  
                                 (target.T.spill  (T.space target) tmp mem) node)
-                      ; G.set_rtl node (Rtlutil.Subst2.reg lookup subst)
+                      ; G.set_rtl node (Rtlutil.Subst2.reg ~lookup ~map:subst)
                       )
                     ; Some tmp
                     )

@@ -615,7 +615,7 @@ let conts ~cuts ~unwinds ~returns ~aborts =
 let mk () = new X.graph
 
 <<implementation>>=
-let gm_label cfg (label:string) (sym:Reladdr.symbol) (succ:node) =
+let gm_label cfg (label:string) (sym:Reladdr.symbol) ~(succ:node) =
     cfg#label label sym succ
 
 let lookup cfg (label:string) =
@@ -710,13 +710,13 @@ Each node is an object and the function that creates it is simply its
 constructor.
 
 <<implementation>>=
-let gm_assign = new X.assign
+let gm_assign cfg rtl ~succ = new X.assign cfg rtl succ
 let gm_return = new X.return
 let gm_goto   = new X.goto
 let gm_jump   = new X.jump
 let gm_cutto  = new X.cutto
 let gm_call   = new X.call
-let gm_branch = new X.branch
+let gm_branch cfg rtl ~ifso ~ifnot = new X.branch cfg rtl ifso ifnot
 @
 
 <<implementation>>=
@@ -729,7 +729,7 @@ let gm_insert_assign_before (rtl:Rtl.rtl) (node:node) =
 let gm_insert_assign_after (node:node) (rtl:Rtl.rtl) =
     node#insert_assign_after rtl
 
-let gm_insert_assign_between (rtl:Rtl.rtl) (src:node) (dst:node) =
+let gm_insert_assign_between (rtl:Rtl.rtl) ~(src:node) ~(dst:node) =
     dst#insert_assign_on_edges_from rtl src
 
 let gm_insert_dataflow_between ~defs ~uses ~kills ~src ~dst =
@@ -759,7 +759,7 @@ let gm_delete_assign (node:node) =
 let print_node (node:node) =
     (node#comment ^ "\n")
 
-let dump cfg msg =
+let dump cfg ~msg =
     let nodes = cfg#nodes in
         ( prerr_endline msg
         ; List.iter (fun n -> prerr_endline (n#comment)) nodes
@@ -795,7 +795,7 @@ The [[ast]] method returns an [[Ast.proc]] value. All names in the
 resulting {\AST} must be d using [[]]. 
 
 <<implementation>>=
-let ast (cfg:cfg) (name:string) (target:Target2.t) = 
+let ast (cfg:cfg) ~(name:string) ~(target:Target2.t) = 
     cfg#test;   (* check integrity *)    
     ( None
     , name
@@ -1338,7 +1338,7 @@ object(this)
     method insert_assign_after (rtl:Rtl.rtl) = 
         invalid_arg "Cfg3: add_assign_after method for non-assignment node"
 
-    method insert_assign_on_edges_from (rtl:Rtl.rtl) (before:node) =
+    method insert_assign_on_edges_from (rtl:Rtl.rtl) ~(before:node) =
         let _           = () (* Printf.eprintf "this:%s before:%s\n" 
                             ((this :> node)#comment)
                             (before#comment); flush stderr *)in 

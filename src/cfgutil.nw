@@ -71,13 +71,13 @@ let limit cfg = G.number (G.last  cfg) + 1 (* highest number + 1 *)
 
 let fold_fwd cfg f unit =
   G.gm_enumerate cfg;
-  G.scan_fwd cfg (first cfg) (limit cfg) f unit
+  G.scan_fwd cfg ~first:(first cfg) ~limit:(limit cfg) f unit
 
 let fold_bwd cfg f unit =
   G.gm_enumerate cfg;
-  G.scan_bwd cfg (first cfg) (limit cfg) f unit
+  G.scan_bwd cfg ~first:(first cfg) ~limit:(limit cfg) f unit
 
-let subst cfg (f: Rtl.rtl -> Rtl.rtl) = 
+let subst cfg (f:Rtl.rtl -> Rtl.rtl) = 
     fold_fwd cfg (fun node () -> G.set_rtl node f) () 
 @ 
 
@@ -95,7 +95,7 @@ let emit cfg rtl_emit sym_emit unit =
 let number_and_rtl node =
   string_of_int (G.number node) ^ ": " ^ Rtlutil.ToString.rtl (G.rtl node)
 
-let cfg2dot compress name cfg =
+let cfg2dot ~compress ~name cfg =
   let nodename node = Printf.sprintf "N\"%d\"" (G.number node) in
   let dotnode  node = nodename node ^ " [label=\"" ^ number_and_rtl node ^ "\"]" in
   let edge_fwd from to' = nodename from ^ " -> " ^ nodename to'  ^ "\n" in

@@ -28,11 +28,11 @@ module Caml: sig    (* in case of error Error.ErrorExn is raised! *)
     val cmmasm:     out_channel -> asm      (* C-- emitting assembler *)
     val dotasm:     out_channel -> asm      (* DOT emitting assembler *)
     val asdlasm:    out_channel -> asm      (* ASDL emitting assembler *)
-    val sparcasm:   solaris:bool -> out_channel -> asm  (* SPARC *)
+    val sparcasm:   (* solaris *) bool -> out_channel -> asm  (* SPARC *)
     
     val version:    unit -> unit            (* print version to stdout   *)
-    val scan:       file:string -> unit     (* for debugging the scanner *)
-    val parse:      file:string -> ast      (* parse file                *)
+    val scan:       string -> unit     (* for debugging the scanner *)
+    val parse:      string -> ast      (* parse file                *)
     val pretty:     ast -> doc              (* pretty print *)
 
     val emit_asdl:  ast -> unit             (* emit AST in ASDL format *)
@@ -42,7 +42,7 @@ module Caml: sig    (* in case of error Error.ErrorExn is raised! *)
                     (* calls optimize *)
                 
     val assemble:   asm -> unit
-    val print:      doc -> width:int -> unit (* print doc to stdout *)
+    val print:      doc -> int -> unit (* print doc to stdout *)
 end
 @
 
@@ -208,9 +208,9 @@ Assemblers are objects. We therefore need function to create them, Here
 are our current assemblers.
 
 <<Caml>>=
-let cmmasm      (c:out_channel)                = Asm.asm      c 
-let dotasm      (c:out_channel)                = Dotasm.asm   c
-let asdlasm     (c:out_channel)                = Asdlasm.asm  c
+let cmmasm      (c:out_channel)                 = Asm.asm      c 
+let dotasm      (c:out_channel)                 = Dotasm.asm   c
+let asdlasm     (c:out_channel)                 = Asdlasm.asm  c
 let sparcasm    (solaris:bool) (c:out_channel) = Sparcasm.make solaris c
 @
 
