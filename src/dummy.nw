@@ -8,7 +8,8 @@
       target in module \module{targets.nw}. Before it can be deployed
       the code expander in \module{dummyexpander.nw} must be adapted to
       recognize the {\rtl}s control-flow transfer (jump, branch, and so
-      on).}
+      on). During the transition from Targets.dummy to this dummy, I
+      make it available as a another target [[dummy2]].}
 
 This target describes a purely fuctional target. We use it for
 debugging. 
@@ -70,7 +71,7 @@ module Spaces = struct
                 ; Space.indexwidth     = 5
                 ; Space.indexlimit     = None
                 ; Space.aggregation    = Rtl.Identity
-                ; Space.widths         = [32]
+                ; Space.widths         = [8]
                 ; Space.classification = Space.Reg
                 }
     let v   = Space.checked
@@ -80,7 +81,7 @@ module Spaces = struct
                 ; Space.indexwidth     = 16
                 ; Space.indexlimit     = None
                 ; Space.aggregation    = Rtl.Identity
-                ; Space.widths         = [2]
+                ; Space.widths         = [8]
                 ; Space.classification = Space.Temp
                     { Space.stands_for = 'g'
                     ; Space.index_ok   = (fun _ -> true)
@@ -120,12 +121,16 @@ module Flow = Mflow.MakeStandard
 
 
 let cutto =                 
-    { T.embed   = (fun (newpc, newsp) ->
+    { T.embed   = (fun { Mflow.new_pc=newpc
+                       ; Mflow.new_sp=newsp
+                       } ->
                        Rtl.par [assign (reg 31) newsp; assign pc newpc])
     ; T.project = (fun r -> match Dn.rtl r with
                     | RP.Rtl [ (_, RP.Store(_, nsp, _)) 
                              ; (_, RP.Store(_, npc, _))] -> 
-                                (Up.exp nsp, Up.exp npc)
+                                { Mflow.new_sp =Up.exp nsp
+                                ; Mflow.new_pc= Up.exp npc
+                                }  
                     | _ -> Impossible.impossible "projected non-cutto")
     }
 @
@@ -194,7 +199,8 @@ object (this)
         | None ->
             let ()      = assert (width mod memsize = 0) in
             let slot    = Block.relative base "slots" 
-                            (width / memsize) pointersize in
+                          Block.at ~size:(width/memsize) ~alignment:pointersize
+            in            
             ( _block <- Block.cathl slot _block 
             ; this#memloc (Block.base slot) width
             )

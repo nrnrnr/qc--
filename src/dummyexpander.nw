@@ -314,6 +314,8 @@ generator for a temporary for the result. Passing [[itmp]] means, that
 the result will be stored in an integer temporary.
 
 <<utilities>>=
+let bits2 n = R.bits (Bits.U.of_int n 2) 2
+
 let app0 tmp s x =
     let opr   = R.opr s x in
     let exp   = R.app opr [] in
@@ -358,6 +360,12 @@ dreg:   App0("float_eq", x)               {: app0 dtmp "float_eq" x :}
 dreg:   App0("float_gt", x)               {: app0 dtmp "float_gt" x :}
 dreg:   App0("float_lt", x)               {: app0 dtmp "float_lt" x :}
 dreg:   App0("unordered", x)              {: app0 dtmp "unordered" x :}
+
+const:  App0("round_down", x)             {: return (bits2 3) :}  
+const:  App0("round_nearest", x)          {: return (bits2 1) :}
+const:  App0("round_up", x)               {: return (bits2 2) :}
+const:  App0("round_zero", x)             {: return (bits2 0) :}
+
 
 ireg:   App1("com",  x, r1:ireg)          {: app1 itmp "com"  x r1 :}
 ireg:   App1("lobits",x,r1:ireg)          {: app1 itmp "lobits" x r1 :}
@@ -507,6 +515,7 @@ stmt:       Store(icell, ireg, width)       {: store icell ireg  width :}
 stmt:       Store(fcell, freg, width)       {: store fcell freg  width :}
 stmt:       Store(ccell, ireg, width) [1]   {: store ccell ireg  width :}
 stmt:       Store(dcell, dreg, width)       {: store dcell dreg  width :}
+stmt:       Store(dcell, const, width)      {: store' dcell const width :}
 stmt:       Store(ccell, const,width)       {: store' ccell const width :}
 @
 
