@@ -64,7 +64,8 @@ interval_list *interval_list_new(void) {
 interval_list *interval_list_add(interval_list *list, unsigned int lower, 
                                  unsigned int upper)
 {
-  interval_list *temp, *last, *free_temp;
+  interval_list *temp,      *last;
+  interval_list *free_temp, *free_last;
   interval_list *beg = NULL;
   interval_list *new;
 
@@ -87,11 +88,12 @@ interval_list *interval_list_add(interval_list *list, unsigned int lower,
         beg->upper = max(upper, last->upper);
         beg->next  = temp;
 
-        for (free_temp = beg->next, last = beg; 
+        for (free_temp = beg->next, free_last = beg; 
              free_temp != NULL && free_temp != temp;
-             last = free_temp, free_temp = free_temp->next)
-          free(last);
-        free(last);
+             free_last = free_temp, free_temp = free_temp->next)
+          free(free_last);
+        if (free_last != beg)
+          free(free_last);
 
         return list;
       }
@@ -121,11 +123,12 @@ interval_list *interval_list_add(interval_list *list, unsigned int lower,
     beg->lower = min(lower, beg->lower);
     beg->upper = max(last->upper, upper);
 
-    for (free_temp = beg->next, last = beg; 
+    for (free_temp = beg->next, free_last = beg; 
          free_temp != NULL && free_temp != temp;
-         last = free_temp, free_temp = free_temp->next)
-      free(last);
-    free(last); 
+         free_last = free_temp, free_temp = free_temp->next)
+      free(free_last);
+    if (free_last != beg)
+      free(free_last); 
 
     return list;
   }
