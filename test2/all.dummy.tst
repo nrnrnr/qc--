@@ -2,6 +2,7 @@ backend = Backend.dummy
 
 -- compare results with files in dummy
 Test.asmdir = Test.asmdir or "dummy"
+Ld.rtend = ""  --- don't need the run-time system
 
 -- source files live in src directory
 Test.source  = "src"

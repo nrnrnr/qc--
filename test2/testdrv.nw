@@ -274,6 +274,24 @@ function Test.compile_file(file, i, txlimit)
   return s_file, so, se, compiles_ok
 end
 @ 
+\paragraph{Sign the run-time system}
+It's not compilation, but it's analogous to compilation:
+take the run-time system and compute an MD5 signature.
+<<testdrv.lua>>=
+function Test.sign_runtimes(inputs)
+  local files = Ld.rtend .. " " .. (inputs.other or "")
+  local sig = Test.temp_name(".5")
+  if strfind(files, "%S") then
+    Test.log("computing signature of files %s", files)
+    local cmd = format("md5sum %s > %s", files, sig)
+    Test.log(cmd)
+    execute(cmd)
+  else
+    execute('touch ' .. sig)
+  end
+  return sig
+end
+@ 
 \paragraph{Build an executable}
 Call [[cc]] to build a final executable file. Calling the [[qc--]]
 compiler may not work correctly if the additional files specified by
@@ -365,7 +383,9 @@ function Test.check_update_file(inputs, file, i)
   elseif ext == ".s1" then exp = inputs.asmout[i]
   elseif ext == ".s2" then exp = inputs.asmerr[i]
   elseif ext == ".1"  then exp = inputs.stdout
-  elseif ext == ".2"  then exp = inputs.stderr end
+  elseif ext == ".2"  then exp = inputs.stderr
+  elseif ext == ".5"  then exp = inputs.md5sig
+  end
 
   local nonempty = Util.file_exists(exp)
   local comparee = nonempty and exp or "/dev/null" 
@@ -446,6 +466,8 @@ function Test.run_test_case(inputs)
   local all_compiles_ok = 'true'  -- all compilers went OK
   inputs.diffs = ""               -- extensions that are different
   <<compile each file in [[sources]]; set [[s_files]], [[status]], [[all_compiles_ok]]>>
+  local runtime_sig = Test.sign_runtimes(inputs)
+  status = status + Test.check_update_file(inputs, runtime_sig)
 
   if inputs.runnable and (Test.update or Test.force or inputs.force or status > 0) then
     if all_compiles_ok then
@@ -759,6 +781,7 @@ function Test.complete_test_table(files)
   if type(files.asmout) == 'string' then files.asmout = { files.asmout } end
   if type(files.asmerr) == 'string' then files.asmerr = { files.asmerr } end
 
+  Test.compute_filename(files, "md5sig", Test.asmdir, name, ".5")
 
   Test.compute_filenames(files, "asm",    Test.asmdir,  files.source, ".s")
   Test.compute_filenames(files, "asmout", files.outdir, files.source, ".s1")
