@@ -289,6 +289,8 @@ type machine_env = { ops      : (string * (width list)) list
                    ; literals : width list
                    ; pointer  : width
                    ; word     : width
+                   ; itemps   : width list
+                   ; is_hardware_register : RP.loc -> bool
                    }
 type fill_env    = (string * fill * index) list
 let (gamma : (string, (fill * int)) Hashtbl.t) = Hashtbl.create 50
@@ -569,6 +571,52 @@ let widen_garbage m soln =
   | _ -> []
 @ 
 
+\[
+\inferrule [Widen-hw-$\sigma$ \sidecond{n\leq n'\leq w, x_{n'} \text{ is hardware reg}}]
+{w \in itempwidth \\
+ \tenv,\menv \derives e \trans{c}              x_{n'} :: \fty[\sigma]{n} :\bits{n'}}
+{\tenv,\menv \derives e \trans{c+1} \xx{w}{n'}\x_{n'} :: \fty[\sigma]{n} :\bits{w}}
+\]
+\[
+\inferrule [Widen-hw-$\gtname$ \sidecond{n\leq n'\leq w, x_{n'} \text{ is hardware reg}}]
+{w \in itempwidth \\
+ \tenv,\menv \derives e \trans{c}              x_{n'} :: \fty[\gtname]{n} :\bits{n'}}
+{\tenv,\menv \derives e \trans{c+1} \xx{w}{n'}\x_{n'} :: \fty[\gtname]{n} :\bits{w}}
+\]
+<<applying rules>>=
+let widen_hw m soln =
+  if Debug.on "widen" then
+    Printf.eprintf "widen_hw: %s -> %s :: %s[%i] : %i\n"
+       (Rtlutil.ToString.exp (Up.exp soln.e)) (Rtlutil.ToString.exp (Up.exp soln.e'))
+       (string_of_fill soln.fill) (index soln) (width soln);
+  match soln.e' with
+  | RP.Fetch(l,_) when m.is_hardware_register l ->
+      let n  = index soln in
+      let n' = width soln in
+      let ws = List.filter (fun w -> n' <= w) m.itemps in
+      let create ext f w = {soln with e'   = RP.App((ext, [n';w]),[soln.e']);
+                                      fill = f;
+                                      w    = w;
+                                      cost = soln.cost + 1}
+      in
+      let solns' =
+        match fill soln with
+        | G -> List.map (create "zx" G) ws
+        | Z -> List.map (create "zx" Z) ws
+        | S -> List.map (create "sx" S) ws
+        | H -> []
+      in
+      if Debug.on "widen" then
+        List.iter (fun s -> Printf.eprintf 
+                            "widen_hw success: %s -> %s :: %s[%i] : %i\n"
+                            (RU.ToString.exp (Up.exp s.e))
+                            (RU.ToString.exp (Up.exp s.e'))
+                            (string_of_fill s.fill)
+                            (index s) (width s)) solns';
+      solns'
+  | _ -> []
+@ 
+
 \[\inferrule [Narrow \sidecond{n\leq w\leq w'}]
 {\tenv,\menv \derives e \trans{c} \e :: \fty{n} : \bits{w'} \\
  \lo{w}{w'} \in \menv}
@@ -591,14 +639,13 @@ let narrow_rule m soln =
     in
     List.filter (fun s -> s.n <= s.w) (List.map create trunc_widths)
   else []
-@ 
+@
 
 \[
 \inferrule[To-High\sidecond{\uns(k_w)=w-n,n\leq w}]
 {\tenv,\menv \derives e \trans{c} \e :: \g{n}\\
  \oname{shl}:\bits{w}\times\bits{w}\rightarrow\bits{w}}
-{\tenv,\menv \derives e \trans{c+1}\oname{shl}_w(\e, k_w) :: \h{w-n} :
-\bits{w}}
+{\tenv,\menv \derives e \trans{c+1}\oname{shl}_w(\e, k_w) :: \h{w-n} :\bits{w}}
 \]
 <<applying rules>>=
 let to_high_rule m soln =
@@ -671,7 +718,7 @@ time making it unnecessary to apply most of the rules.
 <<applying rules>>=
 let apply_rules m soln =
   let all_general_rules = [subsume_fill_rule; natural_rule; fill_rule
-                          ; widen_sigma; widen_garbage; narrow_rule
+                          ; widen_sigma; widen_garbage; widen_hw; narrow_rule
                           ; from_high_s_rule; from_high_z_rule; to_high_rule]
   in
 (* ouch, this just got uglier *)
@@ -955,7 +1002,8 @@ algorithm are applied bottom-up on each AST node.
 <<dynamic programming>>=
 let all_solutions m =
   let solve_node known e =
-    (find_reachable m []) (solutions_unique (ast_combine m known e)) in
+    find_reachable m [] (solutions_unique (ast_combine m known e)) 
+  in
   bottom_up solve_node
 @ 
 <<solution utilities>>=
@@ -1211,12 +1259,14 @@ let dpwiden proc r =
   let ptrwidth    = t.Target.pointersize in
   let ops         = List.map Dn.opr t.Target.capabilities.Target.operators in
   let litwidths   = t.Target.capabilities.Target.literals in
-  let m = {ops=ops; literals=litwidths; pointer=ptrwidth; word=targetwidth} in
+  let m = {ops=ops; literals=litwidths; pointer=ptrwidth; word=targetwidth;
+           itemps=t.Target.capabilities.Target.itemps;
+           is_hardware_register=is_hardware_register proc} in
   let find_best_soln r tau w =
     let solns  = all_solutions m r in
     let solns  = List.filter (fun s -> width s = w && fill s =*= tau) solns in
     let () = if null solns then
-               impossf "dpwiden couldn't widen %s" (Rtlutil.ToString.exp (Up.exp r)) in
+      impossf "dpwiden couldn't widen %s" (Rtlutil.ToString.exp (Up.exp r)) in
     let soln   = minimum_cost solns in
     if print_debug then Printf.eprintf "cost: %i\n" soln.cost;
     soln.e' in
@@ -1226,18 +1276,35 @@ let dpwiden proc r =
     | l                -> l in
 @ 
 \[
+\inferrule [Assign \sidecond{n\leq w\leq w', x_w \text{ is a hardware reg}}]
+{\tenv(x_w)=\fty{n} \\
+ \tenv,\menv \derives e \trans{c} \e :: \fty{n} : \bits{w'}}
+{\tenv,\menv \derives x_w :=_w \lo{w}{w'}e \trans{c} x_w :=_w \lo{w}{w'}\e}
+\]
+\[
 \inferrule [Assign \sidecond{n\leq w}]
 {\tenv(x_w)=\fty{n}\\
  \tenv,\menv \derives e \trans{c} \e :: \fty{n} : \bits{w}}
 {\tenv,\menv \derives x_w :=_w e \trans{c} x_w :=_w \e}
 \]
+Note that [[widen_guard]] doesn't seem to be checking the index of the result!
 <<widen.ml>>=
   let widen_guard (g, eff) =
     try
       let effsoln = 
         match eff with
+        | RP.Store(l, RP.App(("lobits", [w';_]), [e]), w) 
+          when is_hardware_register proc l && w <= w' ->
+            let (fill, _) = lookup_gamma (var_name (RP.Fetch(l,w))) w in
+            if Debug.on "widen" then
+              Printf.eprintf " looking for %s -> ... :: %s[_] : %i\n"
+                 (RU.ToString.exp (Up.exp e)) (string_of_fill fill) w';
+            RP.Store(l, RP.App(("lobits", [w';w]), [find_best_soln e fill w']), w)
         | RP.Store(l, r, w) ->
             let (fill, _) = lookup_gamma (var_name (RP.Fetch(l,w))) w in
+            if Debug.on "widen" then
+              Printf.eprintf " looking for %s -> ... :: %s[_] : %i\n"
+                 (RU.ToString.exp (Up.exp r)) (string_of_fill fill) w;
             RP.Store(widen_loc l, find_best_soln r fill w, w)
         | RP.Kill l         -> RP.Kill (widen_loc l)
       in
