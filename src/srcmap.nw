@@ -77,13 +77,13 @@ following it.
 
 <<srcmap.mli>>= 
 type pos            = int
-type reg            = pos * pos
+type rgn            = pos * pos
 @
 The [[null]] region is sometimes used a special value when no real
 region information is available and.
 
 <<>>=
-val null            : reg
+val null            : rgn
 @
 
 Programmers think in terms of locations, describing a line and
@@ -137,7 +137,7 @@ that keeps track of their origins.
 
 <<>>= 
 type point          = map * pos
-type region         = map * reg
+type region         = map * rgn
 @
 The [[Str]] module provides string representations for points and regions.
 
@@ -160,7 +160,7 @@ performance.
 
 <<srcmap.ml>>=
 type pos            = int
-type reg            = pos * pos
+type rgn            = pos * pos
 type location       = string    (* file   *)
                     * int       (* line   *)
                     * int       (* column *)
@@ -202,7 +202,7 @@ type map =          { mutable points:       syncpoint array
                     ; files :               (string, string) Hashtbl.t
                     }
 type point          = map * pos
-type region         = map * reg
+type region         = map * rgn
 @
 
 The [[top]] component maintains the index of the first free position
@@ -354,8 +354,8 @@ module Str = struct
         let (file,line,column) = location map pos in
             Printf.sprintf "file %s, line %d, character %d" file line column
     
-    let region (map,reg) =
-        match reg with 
+    let region (map,rgn) =
+        match rgn with 
         | (0,0)        -> Printf.sprintf "<unknown location>"
         | (left,right) -> 
         let (file1,l1,col1) = location map left   in

@@ -101,6 +101,10 @@ let un_const e = 333 (* bogus *)
 The implementation [[Make]] is a functor that receives an abstract
 view ([[Agraph]] -- \module{agraph}) of the flow graph as an argument.
 
+
+The [[ty]] function returns the number of bits denoted by a type in
+the {\small AST}.
+
 <<module Make>>=
 let rec ty env = function
     | A.TyAt(x,_)       -> ty env x
@@ -109,21 +113,33 @@ let rec ty env = function
                            | attr, T.Bits n -> n
                            | _              -> assert false
                            )
+@
 
+The [[tyOf]] function returns the number of bits denoted by a name
+[[n]] which is looked up in the fat environment.
+
+<<>>=                           
 let tyOf n env = match F.findv n env with attr, (denot,ty) -> bits ty
+@
+
                              
+The following function translates an [[Ast.actual]] parameter into a
+[[Fgraph.actual]].
+
 <<>>=
-let actuals env ir xs = true
-let actual env (hint, e) = (dummy_expression, 99, hint)
+let rec actual env (hint, e) = 
+    let width = bits (Expr.tyExpr env e) in
+    let e     = expr env e               in
+        (e, width, hint)
+    
 @
  
-An assignment is an effect what captured by an {\rtl}.  The lvalue of
-an assignment becomes a {\rtl} [[location]].  We currently ignore
+An assignment is an effect that is captured by an {\rtl}.  The lvalue
+of an assignment becomes a {\rtl} [[location]].  We currently ignore
 alignments and hints.
 
-
 <<>>=
-let rec lvalue env = function
+and lvalue env = function
     | A.LValueAt(x,_)   -> lvalue env x
     | A.Var(hint,x)     -> let (attr,(_,t)) = F.findv x env in Rtl.Var(x,bits t)
     | A.Mem(t,e,a)      -> let width = ty env t      in
@@ -134,13 +150,15 @@ let rec lvalue env = function
                              , expr env e
                              , default_assertion
                              )
+@
+[[expr]] translates an {\small AST} expression into an [[Rtl.expr]].  
+
 <<>>=
 and primOp env op args =
     let o = Expr.op env op args 
     in
         Rtl.App(o, List.map (expr env) args)
 
-<<>>=
 and expr env = function 
     | A.ExprAt(x,_)         -> expr env x
     | A.Int( i, None)       -> Rtl.Const(Rtl.Bits(i,bits T.word))
@@ -182,29 +200,17 @@ let rec datum env ir = function
 let formal (h, v, t, n) = true
 
 <<>>=
-let formals  env ir xs               = true
 let register env ir (v , t, n, reg)  = true
-let altcont  env ir (e1,e2)          = true   
-let targets env ir                   = true 
-    
-<<>>=
-let rec flow env ir = function
-    | A.FlowAt(x,_)     -> flow env ir x
-    | A.CutsTo(ns)      -> true
-    | A.UnwindsTo(ns)   -> true
-    | A.ReturnsTo(ns)   -> true
-    | A.Aborts          -> true
-
-<<>>=
-let conv env ir        = true
-let export env ir t ns = true
 
 <<>>=
 let range env ir = function
     | A.Point(e)        -> true
     | A.Range(e1,e2)    -> true
-
 @ 
+
+Flow annotations are translated to continuation bundles of type
+[[Fgraph.cont]].  The [[flows]] function takes a list of flow
+annotations and adds them to a provided [[Fgraph.cont]] value.
 
 <<>>=
 let rec flows cont = function 
@@ -228,13 +234,17 @@ representation of the entire flow graph, with a pointer to the node
 that follows this statement. 
 
 <<>>=
-let body env props graph s =
-    let rec stmt s after = match s with
-        | A.StmtAt(x,_) -> stmt x after
+let rec body env props graph after b =
+    let rec stmt s after = match s with  
+        | A.StmtAt(x,_)     -> stmt x after
         <<cases for translating statements>>
-        | _ -> assert false (* remove me in due time *)
     in 
-        stmt s (G.bind G.Props.empty (GM.exit graph))
+        match b with
+        | A.BodyAt(x, _)    -> body env props graph after x
+        | A.DeclBody(d)     -> after (* ignore decls *)
+        | A.StmtBody(s)     -> stmt s after
+        | A.DataBody(dd)    -> after (* ignore data for the moment *)
+        
 @ 
 
 <<cases for translating statements>>=
@@ -262,29 +272,39 @@ let body env props graph s =
 | A.LabelStmt(n)                       -> props (GM.label n after)
 @
 
-A call [[x,y = f()]] is translated into a [[Call]]-node, followed by a
-[[CopyIn]] node for the locations [[x]] and [[y]].  Since we build the
-graph backwards the [[CopyIn]] node comes first.  The lvalue of a call
-is guaranteed to be a variable.  It must be translated into a
-[[Rtl.formal]] value which is done by the local [[lvalue]] function. 
 
+A call [[x,y = f(v,w)]] is translated into the following sequence of
+nodes in the flow graph:
+
+\begin{enumerate}
+\item A [[CopyOut]] node for the parameters [[v]] and [[w]],
+\item a [[Call]] node for [[f]],
+\item a [[CopyIn]] node for the variables [[x]] and [[y]],
+\item the passed in [[after]] node.
+\end{enumerate}
+
+Since the flow graph is build up backwards the [[CopyIn]] node comes first.
 
 <<cases for translating statements>>=
 | A.CallStmt(lhs, cc, e, args, ts, fs) ->
     let rec lvalue = function
         | A.LValueAt(x,_) -> lvalue x
         | A.Var(hint,n)   -> (n,tyOf n env ,hint)
-        | A.Mem _         -> assert false
-    in     
-    let cc   = Aux.Option.get default_convention cc in
-    let copy = if lhs <> [] 
-               then props (GM.copy_in (List.map lvalue lhs) 
-                                      Fgraph.ProcResults cc after)  
-               else after                           in
-    let cont = GM.empty_cont copy                   in
-    let call = GM.call (expr env e) cont            in
-        props call
-@
+        | A.Mem _         -> assert false in     
+    let cc    = Aux.Option.get default_convention cc in
+    let copyi = if lhs <> []
+                then props (GM.copy_in (List.map lvalue lhs)
+                                       Fgraph.ProcResults cc after)
+                else after                           in
+    let cont  = flows (GM.empty_cont copyi) fs       in
+    let call  = props (GM.call (expr env e) cont)    in
+    let copyo = if args <> []
+                then props (GM.copy_out (List.map (actual env) args)
+                                        Fgraph.ProcParameters cc call)
+                else call                            
+    in
+        copyo
+@        
 
 A continuation is represented by a labeled node.  This node is a
 [[CopyIn]] node in case the continuation receives parameters. 
@@ -299,17 +319,43 @@ A continuation is represented by a labeled node.  This node is a
                 else after                           
     in
         props (GM.label n copy)
-    
-<<more cases for translating statements>>=
-| A.SpanStmt(e1,e2,ss)                 -> true
-| A.PrimStmt(lhs, cc, n, args, fs)     -> true
-| A.GotoStmt(e,ts)                     -> true
-| A.CutStmt(e, args, fs)               -> true
-| A.JumpStmt(cc,e,args,ts)             -> true
-| A.EmptyStmt                          -> true
-| A.SwitchStmt (r,e,arms)              -> true
+
+<<cases for translating statements>>=
+| A.EmptyStmt -> after
+@
+
+A tail call is a [[jump]] statement. The parameters, if any, are
+handled by a [[CopyOut]] node in the flow graph representation.  The
+actual sequence is the [[CopyOut]] node, followed by the [[Jump]]
+node. The [[after]] node is not used in since a jump always ends a
+sequence of statements.
+
+<<cases for translating statements>>=
+| A.JumpStmt(cc,e,args,ts) ->
+    let cc    = Aux.Option.get default_convention cc  in
+    let args  = List.map (actual env) args            in
+    let jump  = props (GM.jump graph (expr env e) ts) in
+        if   args <> []
+        then props (GM.copy_out args Fgraph.ProcParameters cc jump)
+        else jump
+@
+
+The translation of a [[goto]] statement is straight forward; the
+[[after]] node is unused.
+
+<<cases for translating statements>>=
+| A.GotoStmt(e,ts) -> props (GM.goto graph (expr env e) ts)
+@
+
+The following statements are just skipped for the moment.    
+
+<<cases for translating statements>>=
+| A.PrimStmt(lhs, cc, n, args, fs)     -> after
+| A.SpanStmt(e1,e2,ss)                 -> after
+| A.CutStmt(e, args, fs)               -> after
+| A.SwitchStmt (r,e,arms)              -> after
         
-<<>>=
+<<unused>>=
 let rec body' env ir = function
     | A.BodyAt(x, _)    -> body env ir x
     | A.DeclBody(d)     -> true

@@ -37,10 +37,8 @@ available where the exception is raised but where it is caught.
 Because of this we do not attach any informations about the origin of
 an error to an exception. 
 <<error.mli>>=
-type pretty         = string                    (* for the moment *)
-
-exception ErrorExn  of pretty
-val error :         pretty -> 'a
+exception ErrorExn  of string
+val error :         string -> 'a (* ErrorExn *)
 @
 
 In the original paper \textit{Eliminating Spurious Error Messages
@@ -158,9 +156,9 @@ Catching the exception is done with [[catch]] in the special case, and
 value that is returned when an exception is caught whereas [[catch]]
 always uses [[Error]] for this.
 <<>>=
-val catch   :       (pretty -> unit) 
+val catch   :       (string -> unit) 
                     -> ('a -> 'b error) -> 'a -> 'b error
-val catch'  : 'b -> (pretty -> unit) 
+val catch'  : 'b -> (string -> unit) 
                     -> ('a -> 'b      ) -> 'a -> 'b 
 @
 
@@ -175,8 +173,8 @@ cases specialized functions for error reporting will be used to include
 some source code locations.
 
 <<>>=
-val warningPrt : pretty -> unit
-val errorPrt   : pretty -> unit
+val warningPrt : string -> unit
+val errorPrt   : string -> unit
 @
 
 The following error reporting functions take a location as their first
@@ -189,7 +187,7 @@ exceptions are caught and not where they are raised.
 val errorPointPrt  : Srcmap.point -> string -> unit
 val errorRegionPrt : Srcmap.region -> string -> unit
 val errorPosPrt    : Srcmap.pos -> string -> unit
-val errorRegPrt    : Srcmap.reg -> string -> unit
+val errorRegPrt    : Srcmap.rgn -> string -> unit
 @
 
 % ------------------------------------------------------------------  
@@ -200,9 +198,7 @@ val errorRegPrt    : Srcmap.reg -> string -> unit
 type 'a error       = Error                     (* bad result  *)
                     | Ok        of 'a           (* good result *)
 
-type pretty         = string                    (* for the moment *)
-
-exception ErrorExn  of    pretty
+exception ErrorExn  of string
 @
 
 % ------------------------------------------------------------------ 
