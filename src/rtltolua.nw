@@ -1,4 +1,5 @@
 % -*- mode: Noweb; noweb-code-mode: caml-mode -*- %
+% vim: ts=8 sw=4 et:
 
 % ------------------------------------------------------------------ 
 \section{RTL to Lua}
@@ -174,12 +175,17 @@ let rec rtl' fd (R.Rtl gg) = match gg with
                  ,_))]    
         when Bits.U.to_int i0 = 0 && Bits.U.to_int i3 = 3 ->
         assert false (* return *)    
-    
-    | [(_,R.Store(R.Cell('A',_,_,_,_), e, ));_] -> assert false
-    
     *)
+    
+    | [(_,R.Store(R.Cell('A',_,_,_,_), e,_));_] ->
+        ( output_string fd ((expr' push) e)
+        ; Printf.fprintf fd "CMM.push_arg()\n"
+        )
 
-
+    | [(_,R.Store(R.Var(_,i,_),R.Fetch (R.Cell('A',_,_,_,_),_),_))] ->
+        ( Printf.fprintf fd "CMM.pop_arg()\n"
+        ; Printf.fprintf fd "CMM.store_local(%d) -- CL\n" i
+        )
     
     | _      -> List.iter (print_guarded fd) gg   (* standard RTL *)
 

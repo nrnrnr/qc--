@@ -696,7 +696,7 @@ object (this)
                                 succ)
             )
 
-    method interp fd = () (* do nothing *) 
+    method virtual interp: out_channel -> unit
 
 end (* of vnode class *)
 @
@@ -1011,12 +1011,13 @@ object (this)
     method interp fd =
         let e       = Interp.target.Target2.call.Target2.project _instr in
         ( Rtltolua.rtl fd _instr
-        ; fprintf fd "CMM.cmm_call({%s}, {%s}, {%s}, %s)\n"
+        ; fprintf fd "CMM.cmm_call({%s}, {%s}, {%s}, %s) -- %s \n"
             (String.concat "," []) (* FIX *)
             (String.concat "," []) (* FIX *)
             (String.concat "," []) (* FIX *)
             (if _aborts then "1" else "0")
-        )    
+            "annotations missing"
+        )   
 end
 @
 
@@ -1090,6 +1091,9 @@ object (this)
         ( Some _ifnot
         , [_ifso]
         )
+    
+    method interp fd =
+        fprintf fd "-- don't know how to translate branch node\n"
 
 end
 @
@@ -1127,6 +1131,8 @@ object (this)
     method kills  = _kills
    
     method linorder = ( Some _succ , [])
+    method interp fd =
+        fprintf fd "-- don't know how to translate data flow node\n"
 end
 @
 
