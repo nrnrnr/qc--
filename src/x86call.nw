@@ -512,7 +512,8 @@ X86 = X86 or {}
 X86.layout = { creates='no late consts' }
 
 function X86.layout.fn(dummy,proc) --- dispatch on cc name
-  return X86.layout[Stack.ccname(proc)](dummy, proc)
+  proc, changed = X86.layout[Stack.ccname(proc)](dummy, proc)
+  return proc, changed
 end
 <<stack-frame layout functions>>=
 function X86.layout["C"](dummy,proc) --- really for a C convention only
@@ -559,8 +560,7 @@ function X86.layout["C"](dummy,proc) --- really for a C convention only
     end
     if Debug.framesize then Debug.showframesize(block,proc) end
         
-    proc = Stack.freeze(proc,block)
-print("returning from layout\n")
+    Stack.freeze(proc,block)
     return proc, 1
 end    
 

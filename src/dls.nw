@@ -306,7 +306,7 @@ let rpo_dfs cfg =
     let add_preds m b =
       let ladd k v m = UM.add k (v :: try UM.find k m with Not_found -> []) m in
       GR.fold_succs (fun uid m -> ladd uid (GR.id b) m) (GR.last (GR.unzip b)) m in
-    List.fold_left add_preds UM.empty blocks in
+    List.fold_left add_preds (UM.add GR.entry_uid [] UM.empty) blocks in
   let (_, po_map, rpo_bid_lst) =
     List.fold_left (fun (i, m, l) b -> let bid = GR.id b in
                                        (i + 1, UM.add bid i m, bid :: l))
@@ -334,9 +334,9 @@ let rpo_dfs cfg =
       (* we pass the same prefs to all preds *)
       let visit_preds visited pred_ids blockmaps prefs =
         let rec loop pred_ids visited blockmaps = match pred_ids with
-          | []     -> alloc_curr_block visited blockmaps
+          | []       -> alloc_curr_block visited blockmaps
           | pid::rst ->
-              if UM.find pid po_map > node_num && not (US.mem pid visited) then
+              if UM.find pid po_map < node_num && not (US.mem pid visited) then
                 visit_pred visited pid blockmaps prefs (loop rst)
               else loop rst visited blockmaps in
         loop pred_ids visited blockmaps in
@@ -387,6 +387,7 @@ To allocate registers at a single block, we follow a simple process:
 <<[[alloc_block]] allocates registers at a single block>>=
 let alloc_block prefs (blockmap, predmap) bid pred_ids =
   let (first, tail as block) = UM.find bid blockmap in
+  let () = Debug.eprintf "dls" "allocating block %s\n" (blockname block) in
   let (head, last) = GR.goto_end (GR.unzip block) in
   (*Printf.eprintf "dls adding varmap for block %d\n" id;*)
   <<get [[live_outs]]>>
@@ -448,11 +449,11 @@ let alloc_block prefs (blockmap, predmap) bid pred_ids =
 
   let maps =
     List.fold_left (fun maps p ->
-                    try ignore (getVarOut p); maps with Not_found -> shuffle maps p bid)
+                    try ignore (getVarOut p); shuffle maps p bid with Not_found -> maps)
                    (blockmap, predmap) pred_ids in
   let (blockmap, predmap) =
     List.fold_left (fun maps s ->
-                     try ignore (getVarIn s); maps with Not_found -> shuffle maps bid s)
+                     try ignore (getVarIn s); shuffle maps bid s with Not_found -> maps)
                    maps (GR.succs last) in
   (blockmap, predmap) in
 
@@ -755,7 +756,8 @@ If not (as in multiway-branch, call, and cut-to instructions), we need to insert
 and stores before and after the nodes.
 <<definition of shuffle>>=
 let shuffle (blockmap, predmap) pred_id succ_id =
-  (*Printf.eprintf "Shuffling pred %d and succ %d\n" (G.num pred) (G.num succ);*)
+  Debug.eprintf "dls" "Shuffling pred %s and succ %s\n"
+        (blockname (UM.find pred_id blockmap)) (blockname (UM.find succ_id blockmap));
   let pred_vm = getVarOut pred_id in
   let succ_vm = getVarIn  succ_id in
 	(*
