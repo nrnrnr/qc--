@@ -1,0 +1,17 @@
+%start stmt
+%type <string> disp rc stmt
+%type <int> reg
+%term IDENT CON
+
+%%
+stmt : ASGNI (disp, reg) [1]     {: pair disp reg >>= fun d, r ->
+                                    exec [d, " := ", regstring r] :}
+stmt : reg                       {: mmap ignore reg :}
+reg  : ADDI (reg, rc)    [1]     {: getreg >>= fun r ->
+                                    pair reg rc >>= fun reg, rc ->
+	                            exec [regstring r, ":= ", regstring reg, " + ", rc]
+                                    >>= fun () -> unit r :}
+reg  : 	CVCI(INDIRC(disp)) [1]   {: getreg >>= fun r ->
+                                    disp >>= fun disp ->
+                                    exec [regstring r, " := sx (", disp, ")"] >>=
+                                    fun () -> unit r :}
