@@ -46,36 +46,44 @@ Because ASDL handles trees, not graphs, we represent a graph as a
 list of nodes, and we refer to nodes using integer node ids.
 Node ids are intended to be unique per module.
 <<ASDL definitions for nodes of abstract \PAL>>=
-graph  = (node*) -- node ids are indexes into this list
-nodeid = Node (int)
+graph  = (node*) 		-- A list of all and only the Label nodes
+label = (string?, int)		-- The Ints are unique per compilation unit
+				-- Ditto the names if present
 @
 Flow-graph nodes are taken from Table 2 of 
 the paper ``Exceptions Need Not Be Exceptional.''
 <<ASDL definitions for nodes of abstract \PAL>>=
-node = Entry (continuation*, nodeid next)
+node = Entry (continuation*, node next)
      | Exit
-     | Copyin  (formal*, copy_context, string convention, nodeid next)
-     | Copyout (actual*, copy_context, string convention, nodeid next)
-     | Calleesaves (variable*, nodeid next)
-     | Assign (RTL.rtl, nodeid next)
-     | Branch (RTL.exp, nodeid true, nodeid false) -- exp is condition
-     | Goto (RTL.exp, nodeid* targets)             -- exp is address of target
+     | Label (label, node)
+     | Copyin  (formal*, copy_context, string convention, node next)
+     | Copyout (actual*, copy_context, string convention, node next)
+     | Calleesaves (variable*, node next)
+     | Assign (RTL.rtl, node next)
+     | Branch (RTL.exp, label true, label false)	-- exp is condition
+     | Goto (RTL.exp, label* targets)           	-- exp is address of target
      | Call (RTL.exp, contbund)
-     | Jump (RTL.exp, nodeid last)
-     | Invoke (RTL.exp, nodeid last)
+     | Jump (RTL.exp)
+     | Invoke (RTL.exp)
      | Yield (RTL.exp, contbund)
-attributes (keyvalue* enclosing_spans) -- used for spans
-keyvalue = (int token, RTL.exp value)  -- value is link-time constant
+attributes (keyvalue* enclosing_spans)	-- used for spans
+keyvalue = UserSpan(int token, RTL.exp value)	-- value is link-time constant
+						-- token is non-negative
+	 | LiveVars(variable*)
 @ On entry to a code generator,
 the RTL expressions should use no space other than the [[m]]~space (memory); 
 other spaces, including hardware registers, are reserved for the
 private use of the code generator.
 @
+We in [[keyvalue]] pairs, we 
+use negative [[token]]s for spans that are private between the \PAL{} code
+generator and its runtime system.  Notably, liveness information.
+@
 The list of continuations in the entry node is used to set up the
 continuation values.
 We need to know a continuation's name, and the node to which it refers.
 <<ASDL definitions for nodes of abstract \PAL>>=
-continuation = (string, nodeid)
+continuation = (string, label)
 @
 The copy nodes ([[Copyin]] for formals and [[Copyout]] for actuals) 
 are used in three different contexts.  The contexts must be
@@ -133,7 +141,7 @@ The continuation bundle attached to a call shows the possible
 continuations: normal, cuts, unwinds, and returns.
 <<ASDL definitions for nodes of abstract \PAL>>=
 contbund = 
-  (nodeid normal, nodeid* cuts, nodeid* unwinds, nodeid* returns, nodeid? aborts)
+  (node normal, label* cuts, label* unwinds, label* returns, label? aborts)
 @ Variables survive calls, but memory locations need not.
 Since these are the only locations used by the elaborator, that's all
 we need say about the semantics, but we will add that we expect the
@@ -148,24 +156,22 @@ in declaration order.
 (We don't need the calling convention as it's embodied in the copy
 nodes in the flow graph.)
 <<ASDL definitions for nodes of abstract \PAL>>=
-proc = (string name, string? mangling, var_info* formals, var_info* locals)
+proc = (string name, string? mangling, node body, var_info* formals, var_info* locals)
 var_info = (string name, RTL.ty)
-@
+@ The [[body]] of [[proc]] always starts with a [[Label]] node, then an [[Entry]] node.
+The [[name]] field of the [[proc]] must be the same as the [[string]] field (which must be present) 
+of the [[Label]] node.
 
-
-\subsection{A program in intermediate form}
+@ \subsection{A program in intermediate form}
 
 Although the AST and IR-node representations are independent, the full
 IR representation draws from both.
 <<ir.asdl>>=
 module IR (imports IRNode imports AST) {
-  prog = ( IRNode.graph
-         , AST.global_info* globals
-         , AST.const_name procedures
-         , label_pair* labels_and_procedures
+  prog = ( AST.global_info* globals
          , seg* segments
-         )
-  label_pair = (AST.const_name, IRNode.nodeid)
+         , IRNode.graph
+         ) 
   seg = (AST.segment_name, item*)
   item = Datum (AST.datum)
        | Proc  (IRNode.proc procedure)
