@@ -16,17 +16,14 @@ divmod:
 	movl (%ecx),%ecx
 Linitialize_continuations_l5:
 Lproc_body_start_l4:
-	movl %edx,(%esp)
-	movl %eax,%edx
-	movl %eax,4(%esp)
-	movl %edx,%eax
+	movl %eax,(%esp)
+	movl %edx,4(%esp)
 	movl $0,%edx
 	movl %ecx,8(%esp)
-	movl (%esp),%ecx
+	movl 4(%esp),%ecx
 	divl %ecx, %eax
-	movl 4(%esp),%edx
 	movl %eax,12(%esp)
-	movl %edx,%eax
+	movl (%esp),%eax
 	movl $0,%edx
 	divl %ecx, %eax
 	movl 12(%esp),%eax

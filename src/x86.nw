@@ -337,17 +337,16 @@ let llr op x y = match at32 op with
 | "mul" -> with_flags mulflags x (Up.opr op) x y 32
 <<more cases for [[llr]]>>
 @
-Division is rather painful.
-We place the dividend in the EDX:EAX register pair, and we represent
-the destination as a register pair.
-[[regpairv]] does most of the work, creating the RTLs  to form the register pair, as
-well as the expression representation of the register pair.
-I have tried to make [[regpairv]] fairly general; we won't know if this is a success
-until we try it with other versions of the x86 divide instruction.
-<<more cases for [[llr]]>>=
+Division is slightly painful.
+The dividend must go the EDX:EAX register pair, the value of which is
+written as [[regpair]].
+To set EDX appropriately we use [[sethi]].
+The instruction itself is [[div]], and it may be wrapped or rewritten
+in various ways.
+<<cases in [[binop]] to handle integer division>>=
 | "mod" ->
     let modexp = Rewrite.(mod) 32 (tempval x) (tempval y) in
-    PX.Expand.block (rtl (R.store (temploc x) modexp 32))
+    PX.Expand.block (rtl (R.store (temploc dst) modexp 32))
 | ("div" | "divu" | "quot" | "modu" | "rem") as opname ->
     let unsigned = opname =$= "divu" || opname =$= "modu" in
     let w = 32 in
@@ -364,12 +363,12 @@ until we try it with other versions of the x86 divide instruction.
                          R.store edx (R.app (R.opr r [w]) [regpair; tempval y]) w;
                          undefflags] in
     let finish = match opname with
-    | "rem" | "modu" -> move_rtl x Rg.edx
-    | "div" ->
-        let d = Rewrite.div' w ~dst:(R.reg x) (tempval x) (tempval y)
-                  ~quot:(tempval Rg.eax) ~rem:(tempval Rg.edx) in
-        PX.Expand.block d
-    | _ -> move_rtl x Rg.eax in
+    | "quot" | "divu" -> move_rtl dst Rg.eax
+    | "rem"  | "modu" -> move_rtl dst Rg.edx
+    | "div" -> let d = Rewrite.div' w ~dst:(R.reg dst) (tempval x) (tempval y)
+                         ~quot:(tempval Rg.eax) ~rem:(tempval Rg.edx) in
+               PX.Expand.block d
+    | _ -> impossf "division operator %%%s?" opname in
     move_rtl Rg.eax x <:> sethi Rg.edx Rg.eax <:> rtl div <:> finish
 @ 
 Shifts and rotates use register~CL.
@@ -387,8 +386,7 @@ doesn't know the effect on the flags is dead).
 <<more cases for [[llr]]>>=
 | ("and"|"or"|"xor") -> with_lflags x (Up.opr op) (tempval x) (tempval y) 32 
 @ 
-A~good person would check the list of operators to see if they are
-exhaustive, and thereby issue an error message here.
+The list above should exhaust the x86 binary operators.
 <<more cases for [[llr]]>>=
 | op  -> impossf "non-binary operator %%%s in x86 binop" op
 @ 
@@ -396,6 +394,7 @@ NOTE THERE IS NO REAL REASON THAT DIVISION SHOULD BE HANDLED AS LLR
 SINCE WE USE SPECIAL REGISTERS ANYWAY!  
 <<x86 postexpander>>=
 let binop ~dst op x y = match at32 op with
+<<cases in [[binop]] to handle integer division>>
 | _ -> move dst x <:> llr op dst y
 @ 
 \paragraph{Unary operators}
@@ -513,7 +512,7 @@ let rmask_set   = R.bits (Bits.U.of_int 0xc00 32)  32
 let and32 = R.opr "and" [32]
 let or32  = R.opr "or"  [32]
 let ten = RO.unsigned 32 10 
-
+<<x86 postexpander>>=
 let hwset ~dst ~src =
   if Register.eqx dst rounding_mode_reg then
     let slot      = PX.Alloc.slot 16 in
@@ -529,24 +528,20 @@ let hwset ~dst ~src =
     rtl (R.store Rg.fpuctl (slot.A.fetch 16) 16)                   (* fldcw *)
   else
     impossf "setting unexposed hardware register"
-
+<<x86 postexpander>>=
 let hwget ~dst:(fill,dt) ~src =
   if Register.eqx src rounding_mode_reg then
     let slot      = PX.Alloc.slot 16 in
     rtl (slot.A.store (R.fetch Rg.fpuctl 16) 16) <:>                   (* fnstcw *)
     rtl (R.store (temploc dt) (RO.zx 16 32 (slot.A.fetch 16)) 32) <:>  (* movzwl *)
     match fill with
-    | PX.HighAny ->
-        shift dt RO.shrl 10
-    | PX.HighZ ->
-        shift dt RO.shl 20 <:> shift dt RO.shrl 30
-    | PX.HighS ->
-        shift dt RO.shl 20 <:> shift dt RO.shra 30
+    | PX.HighAny -> shift dt RO.shrl 10
+    | PX.HighZ   -> shift dt RO.shl 20 <:> shift dt RO.shrl 30
+    | PX.HighS   -> shift dt RO.shl 20 <:> shift dt RO.shra 30
   else
     impossf "getting unexposed hardware register"
 @ 
 \subsubsection{Control flow}
-
 There's just one PC on the Pentium.
 <<x86 postexpander>>=
 let pc_lhs = pc
@@ -558,13 +553,14 @@ instructions, but I~think we can stick with the simple ones for now.
 let br ~tgt = PX.Nop, R.store pc_lhs (tempval tgt) 32
 let b  ~tgt = PX.Nop, R.store pc_lhs (Up.const tgt) 32
 @ 
-The call instructions came from us, so we can rely on the single extra effects pushing the program counter.
+The call instructions came from us, so we can rely on the single extra
+effects pushing the program counter. 
 <<x86 postexpander>>=
 let effects = List.map Up.effect
 let call  ~tgt ~others =
   PX.Nop, R.par (R.store pc_lhs (Up.const tgt) 32 :: effects others)
 let callr ~tgt ~others =
-  PX.Nop, R.par (R.store pc_lhs (tempval tgt) 32 :: effects others)
+  PX.Nop, R.par (R.store pc_lhs (tempval tgt)  32 :: effects others)
 @ 
 The [[cut to]] is our own little conspiracy.
 <<x86 postexpander>>=
@@ -720,7 +716,7 @@ let opclass (op, _) =
       PX.Register
 
 let converts_stack_to_temp (op, _) = op =$= "f2i" || op =$= "f2f"
-
+@ 
 <<x86 postexpander>>=
 let stspace = ('F', Rtl.Identity, Cell.of_size 3)
 let fspace  = ('f', Rtl.Identity, Cell.of_size 80)
@@ -740,7 +736,6 @@ let st_pop_with f = (* rtl got by popping (f e), where e is top of floating-pt s
 let st_push e = (* effect of pushing e *)
   let next_st = stsub 1 in
   R.par [ R.store (freg_at next_st) e 80; R.store st next_st 3 ]
-
 
 let stack_depth = 8
 let stack_width = 80
@@ -883,6 +878,7 @@ implementation assumes that the direction flag is set properly. The
 emitted code could be improved by using [[movsw]] or [[movsd]] if the
 number of bytes to copy is a multiple of 2 or 4 respectively. However,
 I am not sure where this optimization should take place. -PG
+HOW DO WE KNOW THE SIDE EFFECT ON THE FLOATING-POINT STACK IS SAFE?
 <<x86 postexpander>>=
 let i2f_64_80 = ("i2f", [64; 80])
 let f2i_80_64 = ("f2i", [80; 64])

@@ -192,9 +192,7 @@ Ljoin_l49:
 	jmp L.8
 L.8:
 	movl $10,%ecx
-	movl %eax,%edx
 	movl %eax,4(%esp)
-	movl %edx,%eax
 	movl %eax,%edx
 	sarl $31, %edx
 	idivl %ecx, %eax
@@ -203,10 +201,8 @@ L.8:
 	je Ljoin_l44
 Ljoin_l45:
 	movl $10,%eax
-	movl 4(%esp),%ecx
-	movl %ecx,%edx
 	movl %eax,8(%esp)
-	movl %edx,%eax
+	movl 4(%esp),%eax
 	movl %eax,%edx
 	sarl $31, %edx
 	movl 8(%esp),%ecx
@@ -222,9 +218,8 @@ Ljoin_l44:
 	jmp L.10
 L.10:
 	movl $10,%eax
-	movl 4(%esp),%ecx
 	movl %eax,12(%esp)
-	movl %ecx,%eax
+	movl 4(%esp),%eax
 	movl %eax,%edx
 	sarl $31, %edx
 	movl 12(%esp),%ecx
