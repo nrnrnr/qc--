@@ -1,4 +1,8 @@
 
+% l2h substitution C C--
+% l2h substitution asdl ASDL
+% l2h substitution ocaml OCaml
+
 % ------------------------------------------------------------------  
 \section{Error Handling}
 % ------------------------------------------------------------------ 
@@ -25,14 +29,30 @@ type 'a error       = Error                     (* bad result  *)
                     | Ok        of 'a           (* good result *)
 
 @ At some point in a program the processing is finally aborted by
-rasing the [[ErrorExn]] exception.
+raising an exception. We expect to find most errors while checking the
+static semantics of a \C~program. In that situation we have a source map
+to find the location of the error. However, there are other situations where
+we can not attribute an error to a specific location. We thus have
+different exceptions.
+
+The [[ErrorExn]] deals with errors that we can attribute to a specific
+location and that we have a source map for.  The [[FatalExn]] is for
+situation without context information --- for example during command
+line processing. 
+
+The [[ParseExn]] should be defined inside the parser.  But the
+generated interface file for the parser does hide it to the outside so
+that it must be defined somewhere else.  Parse errors are special
+because a position the error can be attributed to is available, but no
+location map.  Function named after the exceptions help to raise them.
 
 <<error.mli>>=
 
 type pretty         = string                    (* for the moment *)
 
 exception ErrorExn of    Srcmap.point * pretty list
-exception ParseError of  int * string
+exception ParseExn of    Srcmap.pos * string
+exception FatalExn of    string
 
 @ Combinators to deal with functions that do not naturally expect 
 values of type [[error]].
@@ -78,7 +98,10 @@ module Lower :
                                             * 'd error
   end
 
-val error   : Srcmap.point -> pretty list -> 'a
+val errorExn : Srcmap.point -> pretty list -> 'a
+val parseExn : Srcmap.pos   -> string      -> 'a
+val fatalExn : string -> 'a
+
 val warning : Srcmap.point -> string list -> unit
 
   
@@ -95,8 +118,9 @@ type 'a error       = Error                     (* bad result  *)
 
 type pretty         = string                    (* for the moment *)
 
-exception ErrorExn  of    Srcmap.point * pretty list
-exception ParseError of  int * string
+exception ErrorExn of    Srcmap.point * pretty list
+exception ParseExn of    Srcmap.pos * string
+exception FatalExn of    string
 
 let combine = function  
     | Ok x      -> x
@@ -180,7 +204,9 @@ issue warnings.
 
 <<error.ml>>=
 
-let error point msg = raise (ErrorExn(point,msg))
+let errorExn point msg = raise (ErrorExn(point,msg))
+let parseExn pos   msg = raise (ParseExn(pos,msg))
+let fatalExn msg       = raise (FatalExn(msg)) 
 
 let warning point msg =
     ( prerr_string (Srcmap.Str.point point)

@@ -115,7 +115,8 @@ let usage this =
 (* lex *)
 
 let lex file =
-    let fd          = open_in file                                      in
+    let fd          = try open_in file 
+                      with Sys_error(msg) -> fatalExn msg               in
     let finally ()  = close_in fd                                       in
     let lexbuf      = Lexing.from_channel fd                            in
     let map         = Srcmap.empty                                      in
@@ -141,7 +142,8 @@ to stdout.
 <<main.ml>>= 
 
 let parse file =
-    let fd          = open_in file                                      in
+    let fd          = try open_in file 
+                      with Sys_error(msg) -> fatalExn msg               in
     let finally ()  = close_in fd                                       in
     let lexbuf      = Lexing.from_channel fd                            in
     let map         = Srcmap.empty                                      in
@@ -154,11 +156,11 @@ let parse file =
         with
             | Parsing.Parse_error -> 
               ( finally()
-              ; error (map, Parsing.symbol_start()) ["parse error"]
+              ; errorExn (map, Parsing.symbol_start()) ["parse error"]
               )
-            | ParseError(pos,msg) ->
+            | ParseExn(pos,msg) ->
               ( finally()
-              ; error (map,pos) [msg]
+              ; errorExn (map,pos) [msg]
               )   
             | e ->  
               ( finally()
@@ -166,7 +168,8 @@ let parse file =
               )
 
 let pp file width =
-    let fd          = open_in file                                      in
+    let fd          = try open_in file 
+                      with Sys_error(msg) -> fatalExn msg               in
     let finally ()  = close_in fd                                       in
     let lexbuf      = Lexing.from_channel fd                            in
     let map         = Srcmap.empty                                      in
@@ -181,11 +184,11 @@ let pp file width =
         with
             | Parsing.Parse_error -> 
               ( finally()
-              ; error (map, Parsing.symbol_start()) ["parse error"]
+              ; errorExn (map, Parsing.symbol_start()) ["parse error"]
               )
-            | ParseError(pos,msg) ->
+            | ParseExn(pos,msg) ->
               ( finally()
-              ; error (map,pos) [msg]
+              ; errorExn (map,pos) [msg]
               )   
             | e ->  
               ( finally()
@@ -228,7 +231,7 @@ let main () =
                 ; prerr_newline ()
                 ; exit 1
                 )       
-            | Sys_error(msg) ->
+            | FatalExn(msg) ->
                 ( prerr_endline ("Fatal error: " ^ msg )
                 ; exit 1
                 )

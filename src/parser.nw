@@ -55,9 +55,9 @@ to [[Srcmap.location]]:
     let location lexbuf map =
         Srcmap.location map (Lexing.lexeme_start lexbuf)
      
-    let lexerror lexbuf map msg = 
+    let error lexbuf map msg = 
         let point = (map, Lexing.lexeme_start lexbuf) in
-            Error.error point [msg]
+            Error.errorExn point [msg]
 
 @ We define some helpers; [[get]] returns the matched string and is
 quite intuitive when called as [[get lexbuf]].
@@ -251,6 +251,12 @@ rule token = parse
                   let s = substr 5 0 (get lexbuf) in
                   FLOATn (int_of_string s)
                 }
+
+@ An identifier is an [[ID]] unless it is a reserved word.  When it is
+the reserved word [[pragma]] the [[PRAGMA]] token is returned by
+[[keyword]] and we switch to the special [[pragma1]] context. 
+
+<<scan.mll>>=
   | id          { fun map ->  
                   let s  = get lexbuf in 
                   let k  = try keyword s with Not_found -> ID s in
@@ -259,13 +265,12 @@ rule token = parse
   | float       { fun map -> FLT (get lexbuf) }
   | nat         { fun map -> INT (int_of_string (get lexbuf))     }
 
-
   
   | "/*"        { fun map -> comment lexbuf map 0 }
   | "\""        { fun map -> string  lexbuf map (Buffer.create 80) }
   | "'"         { fun map -> character lexbuf map } 
  
-  | _           { fun map -> lexerror lexbuf map "illegal character" }
+  | _           { fun map -> error lexbuf map "illegal character" }
 
 @
 % ------------------------------------------------------------------  
@@ -285,10 +290,10 @@ and character = parse
                                   CHAR  (String.make 1 c)
                                 }
   | '\\' _                      { fun map -> 
-                                  lexerror lexbuf map "illegal character escape" 
+                                  error lexbuf map "illegal character escape" 
                                 }
   | _                           { fun map ->
-                                  lexerror lexbuf map "illegal character constant" 
+                                  error lexbuf map "illegal character constant" 
                                 }
 
 @
@@ -299,7 +304,7 @@ and character = parse
 
 and comment = parse
     eof                         { fun map level ->
-                                  lexerror lexbuf map "unterminated comment" 
+                                  error lexbuf map "unterminated comment" 
                                 }
   | [^ '*' '\n' '\t' '/']+      { fun map level ->
                                   comment lexbuf map level
@@ -333,7 +338,7 @@ and comment = parse
 
 and string = parse
     eof                         { fun map buf -> 
-                                  lexerror lexbuf map "unterminated string" 
+                                  error lexbuf map "unterminated string" 
                                 }
   | "\""                        { fun map buf -> STR (Buffer.contents buf) }
   | [^ '\000'-'\031'
@@ -360,10 +365,10 @@ and string = parse
                                   )
                                 }
   | '\\' _                      { fun map buf ->
-                                  lexerror lexbuf map "illegal character escape"
+                                  error lexbuf map "illegal character escape"
                                 }
   | _                           { fun map buf ->
-                                  lexerror lexbuf map "illegal character in string"
+                                  error lexbuf map "illegal character in string"
                                 }
 
 @
@@ -412,20 +417,20 @@ and pragma1 = parse
                           with Not_found -> pragma2 lexbuf map 
                         }
   | _                   { fun map -> 
-                          lexerror lexbuf map "id for pragma expected" 
+                          error lexbuf map "id for pragma expected" 
                         }
 
 
 and pragma2 = parse
     eof                 { fun map -> 
-                          lexerror lexbuf map "pragma body expected" 
+                          error lexbuf map "pragma body expected" 
                         }
   | ws+                 { fun map -> pragma2 lexbuf map }
   | tab                 { fun map -> tab lexbuf map; pragma2 lexbuf map }
   | nl                  { fun map -> nl  lexbuf map; pragma2 lexbuf map }
   | '{'                 { fun map -> pragma3 lexbuf map 0 }
   | _                   { fun map -> 
-                          lexerror lexbuf map "pragma body expected" 
+                          error lexbuf map "pragma body expected" 
                         }
 
 @ It is an error when the opening bracket is not found. Once it is
@@ -447,7 +452,7 @@ for the details but must consider only the following cases:
 
 and pragma3 = parse
     eof                         { fun map level ->
-                                  lexerror lexbuf map "unterminated pragma" 
+                                  error lexbuf map "unterminated pragma" 
                                 }
   | [^ '{' '}'  '\n' '\t' 
        '/' '\'' '"']+           { fun map level ->
@@ -597,7 +602,7 @@ module [[Ast]].
 open Ast
 open List
 
-let error pos msg = raise (Error.ParseError(pos,msg))
+let error pos msg = Error.parseExn pos msg
 
 let localReg region = function
     | (var,ty,id,None) -> DeclAt(Register(var,ty,id),region)
