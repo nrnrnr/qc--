@@ -610,6 +610,13 @@ function Opt.standard(backend, asm, B)
   return x
 end
 
+Liveness.liveness =
+  NewBackplane.stage { name='liveness', creates='liveness', fn = Liveness.livenessfn }
+
+Optimize.dead = 
+  NewBackplane.stage { name='dead', creates={'no dead assignments'},
+                       uses='liveness', fn = Optimize.deadfn }
+
 @
 % ------------------------------------------------------------------ 
 \subsection{Compiler}
@@ -874,7 +881,20 @@ Backend.x86 =
   }   
 
 Optimize.improve =
-  NewBackplane.seq { Optimize.remove_nops, Optimize.validate, Optimize.peephole, Optimize.validate }
+  NewBackplane.seq { 
+    Optimize.remove_nops, 
+    Optimize.validate, 
+    Optimize.peephole, 
+    NewBackplane.fix (
+      NewBackplane.seq { NewBackplane.ignore (Liveness.liveness), Optimize.dead }),
+    Optimize.validate }
+
+Optimize.oimprove =
+  NewBackplane.seq { 
+    Optimize.remove_nops, 
+    Optimize.validate, 
+    Optimize.peephole, 
+    Optimize.validate }
 
 
 --

@@ -1,0 +1,80 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+% Grades     ::=    "%%Grades:" Quality Importance Urgency
+% Quality    ::=    A|B|C|D|E
+% Importance ::=    Central|Subsystem|Peripheral
+% Urgency    ::=    Immediate|Soon|Later
+%
+% Example (at beginning of line): %%Grades: B Central Soon
+
+%%Grades: A Peripheral Later
+
+
+\section{Dead-assignment elimination}
+
+<<dead.mli>>=
+val elim_assignments : 'a -> Ast2ir.proc -> bool
+@
+<<dead.ml>>=
+module G  = Cfgx.M
+module L  = Cfgx.Live
+module P  = Proc
+module R  = Register
+module RS = Register.Set
+module RP = Rtl.Private
+module S  = Rtlutil.ToReadableString
+@ 
+<<dead.ml>>=
+let () = Debug.register "dead" "dead-assignment elimination"
+let debug fmt = Debug.eprintf "dead" fmt
+
+let get_live_in  n = R.promote_rxset (Cfgx.Live.live_in  n)
+let get_live_out n = R.promote_rxset (Cfgx.Live.live_out n)
+
+<<utilities>>
+
+let add n deads =
+  if G.kind n = G.Instruction then
+    match G.to_executable n with
+    | None -> Impossible.impossible "non-executable instruction"
+    | Some rtl ->
+Debug.eprintf "dead" "dead: considering %s\n" (S.rtl rtl);
+        all_regs_assigned rtl
+          (fun regs ->
+             let live = get_live_out n in
+             if List.for_all (fun r -> not (RS.mem r live)) regs then
+(Debug.eprintf "dead" "dead: found a dead assignment\n";
+               n :: deads
+)
+             else
+(Debug.eprintf "dead" "dead: something is live out\n";
+               deads)
+)
+          (fun () -> deads)
+  else
+    deads
+
+let elim_assignments _ proc =
+  let deads = G.fold_nodes add [] proc.P.cfg in
+  let changed = ref false in
+  let kill node =
+    G.Tx.start_exn "dead";
+    Cfgutil.delete proc.P.cfg node;
+    changed := true in
+  (try List.iter kill deads with G.Tx.Exhausted -> ());
+  !changed
+@ 
+CPS to find if an RTL assigns only registers
+<<utilities>>=
+let all_regs_assigned rtl succ fail =
+  let fail () = Debug.eprintf "dead" "assigned to non-register\n"; fail () in
+  let RP.Rtl effs = Rtl.Dn.rtl rtl in
+  let rec effects regs = function
+    | [] -> succ regs
+    | (_, RP.Store(RP.Reg r, _, _)) :: es -> effects (r::regs) es
+    | (_, RP.Store((RP.Mem _ | RP.Var _ | RP.Global _), _, _)) :: es -> fail ()
+    | (_, RP.Kill _) :: es -> effects regs es
+    | (g, RP.Store(RP.Slice(_, _, l), r, w)) :: es ->
+        effects regs ((g, RP.Store(l, r, w)) :: es) in
+  effects [] effs
+
