@@ -47,8 +47,6 @@ end
       :}
 
 %term <<names of types of terminals>>
-
-<<ppcrec.mlb>>=
 %%
 <<rules>>
 @
@@ -129,7 +127,9 @@ let get_reg mem_str =
                                         (String.length mem_str - (middle+1))))
 
 let int_loadu str (suff, z_a, (x_, mem)) r r1 r2 =
-  match (String.get z_a 0, String.get suff 0) with
+  if r=r1
+  then Impossible.impossible "invalid integer load with update instruction"
+  else match (String.get z_a 0, String.get suff 0) with
   | ('z',  _) | ('a','h') -> 
     (match get_reg mem with
     | (r1',None    ) -> if r1=r1' then sprintf str suff z_a x_ r mem else "nop"
@@ -162,17 +162,20 @@ const:  Bits(bits) [{: guard (Bits.width bits = 32) :}] {: native bits :}
 lconst: Link(symbol, w:int)      {: symbol#mangled_text :}
 @ 
 \paragraph{Registers}
-<<rules>>=
 regl: Reg('r', n:int, w:int) [{: guard (n<>0) :}] {: regname n :}
+<<rules>>=
+regl: Reg('r', n:int, w:int) {: regname n :}
 
+cial: Reg('c', 1, w:int) {: () :}
 pcl:  Reg('c', 0, w:int) {: () :}
-lrl:  Reg('c', 2, w:int) {: () :} -- need to check with the postexpander
+lrl:  Reg('c', 5, w:int) {: () :}
 
 reg:                  Fetch(regl, w:int)         {: regl :}
 reg:  BitExtract(any, Fetch(regl, w:int), n:int) {: regl :}
 
-pc:   Fetch(pcl, 32) {: () :}
-lr:   Fetch(lrl, 32) {: () :}
+cia:  Fetch(cial, 32) {: () :}
+pc:   Fetch(pcl,  32) {: () :}
+lr:   Fetch(lrl,  32) {: () :}
 @
 
 \paragraph{Addresses}
@@ -181,6 +184,7 @@ meml: Mem(addr, w:int)       {: addr :}
 mem:  Sx(Fetch(meml, w:int)) {: (suffix w, "a", meml) :}
 mem:  Zx(Fetch(meml, w:int)) {: (suffix w, "z", meml) :}
 mem:     Fetch(meml, w:int)  {: (suffix w, "z", meml) :}
+mem:  lconst                 {: ("h",      "a", ("", lconst)) :}
 
 addr: i_r                     {: ("",  i_r) :}
 addr: Add(reg, imm)           {: ("",  imm ^ "(" ^ reg ^ ")") :}
@@ -222,10 +226,17 @@ inst:  Goto(lconst) {: "b " ^ lconst :}
 
 The [[next]] pattern covers the expression $PC + 4$ which denotes the
 instruction following the branch instruction.
+
 <<rules>>=
-next:  Add(pc, const) {: () :}
-inst:  Par(Store(lrl,next,32), Goto(addr)) {: "bl " ^ (fst addr) :}
+next:  Add(cia,const) {: () :}
+inst:  Par(Goto(lconst), Store(lrl,next,32)) {: "bl " ^ lconst :}
 @ 
+\paragraph{Arithmetic instructions}
+
+<<rules>>=
+inst:  Llr(regl, "add", const, w:int) [{:guard (w=32):}]
+       {: "addi " ^ regl ^ "," ^ regl ^"," ^ const :} 
+@
 \paragraph{Other instructions}
 <<rules>>=
 inst : Nop() {: "nop" :}
