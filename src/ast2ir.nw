@@ -367,31 +367,20 @@ Compile entry points for continuations as needed ([[finish_compiling_continuatio
 For each continuation we have reserved memory on the stack that must be
 initialized when the procedure is entered. The following function
 inserts code to do the initialization.
-We decide what program counter to give the continuation depending on what entry
-points already exist.
-If no entry points exist, we make a new join node and use its label as the program
-counter.
 
 We also attach spans to each continuation that escapes.
 <<definition of [[insert_init_cont_nodes]]>>=
 let insert_init_cont_nodes contmap init_node =
   let one_node cname k succ = 
     if k.K.escapes then
-      let (lbl,new_join) = if k.K.cut_to then (k.K.cut_pc, false)
-                           else if k.K.unwound_to then (k.K.unwind_pc, false)
-                           else (Idgen.ContEntry.cut "unused", true) in
-      let pc    = exp_of_code_label lbl in
+      let pc    = exp_of_code_label k.K.cut_pc in
       let sp    = proc_cc.C.stable_sp_loc      in
       let spans = RT.to_spans ~sp:(to_mloc sp) ~prev_sp:prev_sp_loc ~ra:saved_ra
                               ~users:k.K.spans ~csregs:nvr_temps ~conts:[]
                               ~sds:sd_locs ~vars:(var_array ()) in
-      let () = add_spans (G.non_local_join_labeled g lbl, spans) in
+      let () = add_spans (G.non_local_join_labeled g k.K.cut_pc, spans) in
       let pc_sp = { Mflow.new_pc = pc; Mflow.new_sp = sp } in
-      let node  = G.instruction g (Contn.init_code k.K.rep pc_sp) succ in
-      if new_join then
-        let j = G.non_local_join_labeled g lbl in
-        (G.set_succ j ~succ:node; j)
-      else node
+      G.instruction g (Contn.init_code k.K.rep pc_sp) succ
     else
       succ in
   let next = G.succ init_node in
@@ -403,17 +392,17 @@ is used leads to sensible code.
 A continuation that escapes but is never cut to presents a dilemma: 
 it has to have a value (because it escapes), but the front end has
 promised never to use that value in a [[cut to]].
-Previously, we treated the continuation just as if it could be cut to.
-But since the only observable change from the client's perspective is
-the program counter on entry to the continuation (and since they have
-promised never to use that program counter), we instead avoid generating
-an extra entry point, and if the continuation has no entry points, we
-make a new join node and use its label as the program counter.
+As per discussion including Simon and Norman in the restaurant of Washington DC's 
+Melrose Hotel, an continuation that is not [[cut to]] should not be used -- and
+therefore, it should not even escape.
+This error should really be detected elsewhere.
 <<functions that translate statements, including [[stmts]]>>=
 let rec finish_compiling_continuation k =
   begin
     if k.K.cut_to then
-      generate_cut_to_entry k;
+      generate_cut_to_entry k
+    else if k.K.escapes then
+      impossible "Continuation escapes but is not annotated with also cuts to";
     generate_return_to_entries k;
     if k.K.unwound_to then
       generate_unwind_to_entry k;
