@@ -9,59 +9,58 @@ control-flow graph and emitting code for each node.
 <<interpemit.mli>>=
 val proc: Ast2ir.proc -> (string -> unit) -> unit
 @
-
 % ------------------------------------------------------------------ 
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
 
 The implementation is against the ``new'' control-flow graph module
 \module{cfg.nw}.
-
 <<interpemit.ml>>=
 module C   = Cfgx.M
 module P   = Proc
 module E   = Interpemitrtl
 module T   = Target
-module R   = Rtl.Private
+module RP  = Rtl.Private
+module RU  = Rtlutil
 module RTD = Runtimedata
-@
 
-\paragraph{Helper functions}.
-
-<<interpemit.ml>>=
+let impossf fmt = Printf.kprintf Impossible.impossible fmt
 let sprintf          = Printf.sprintf
 let quoted s         = "\"" ^ s ^ "\""
+@
+\paragraph{Helper functions}.
 
+THIS FUNCTION APPEARS TO MAKE NO SENSE WHATEVER.
+IT SCRUTINIZES [[dnexp]], WHICH IS KNOWN TO BE [[RP.Bits]].
+AN ORIGINAL VERSION ALWAYS FAILED.
+LET'S TRY IT WITH [[sym]].
+<<interpemit.ml>>=
 let open_span printer (token, reloc) = 
-   let (_,bits) = Reloc.Simple.normalize reloc in
-   let dnexp  = Rtl.Dn.exp (Rtl.bits bits Interp.target'.T.pointersize) in
-   let imposs = (fun () -> Impossible.impossible "open_span:invalid span val.")
-   in
-   let const  = function
-       | R.Link(sym,_,_) -> (Some sym#mangled_text, 0              )
-       | R.Late(name, _) -> (Some name            , 0              )
-       | R.Bits b        -> (None                 , Bits.S.to_int b)
-       | R.Diff _        -> Impossible.impossible "PIC not supported"
-       | _               -> Impossible.impossible "open_span:invalid span val."
-   in
-   let rec viewexp = function
-       | R.Const c -> const c
-       | R.Fetch _ -> imposs()
-       | R.App   (("add",_), [exp' ; exp'']) ->
+   let (sym,bits)  = Reloc.Simple.normalize reloc in
+   let symname     = Aux.Option.map (fun s -> s#mangled_text) sym in
+   let dnexp       = Rtl.Dn.exp (Rtl.bits bits Interp.target'.T.pointersize) in
+   let to_string e = RU.ToString.exp (Rtl.Up.exp e) in
+   let const = function
+       | RP.Link(sym,_,_) -> (Some sym#mangled_text, 0              )
+       | RP.Late(name, _) -> (Some name            , 0              )
+       | RP.Bits b        -> (symname              , Bits.S.to_int b)
+       | RP.Diff _        -> Impossible.impossible "PIC not supported"
+       | RP.Bool _        -> impossf "Boolean constant in span" in
+   let rec viewexp e = match e with
+       | RP.Const c -> const c
+       | RP.App   (("add",_), [exp' ; exp'']) ->
            let v'  = viewexp exp'  in
            let v'' = viewexp exp'' in
              (match (v', v'') with
               | ((Some s, i'), (None  , i'')) -> (Some s, i' + i'')
               | ((None  , i'), (Some s, i'')) -> (Some s, i' + i'')
-              | _                             -> imposs()
+              | _ -> impossf "bad addition %s in span" (to_string e)
              )
-       | _         -> imposs()
-   in
-   let spanval, offset = viewexp dnexp
-   in
-      printer (sprintf "CMM.begin_span(%d,'%s',%d)\n"
+       | _ -> impossf "unexpected %s in span" (to_string e) in
+   let spanval, offset = viewexp dnexp in
+   printer (sprintf "CMM.begin_span(%d,'%s',%d)\n"
                 (Bits.S.to_int token)
-                (match spanval with | Some s -> s | _ -> imposs())
+                (match spanval with | Some s -> s | _ -> impossf "missing name in span")
                 offset)
 
 let close_span printer (token, _) =
@@ -72,11 +71,8 @@ let instr n =
     | None      -> Impossible.impossible "expected instruction in this node"
     | Some i    -> i
 @
-
 The [[node]] function does all the work. Depending on the type of node,
 code is emitted. 
-
-
 <<interpemit.ml>>=
 let node proc printer n = match C.kind n with
     | C.Join | C.Exit -> 

@@ -35,8 +35,9 @@ test-lua:V: testdrv.lua
 clean:V:            
 	rm -f *.dvi *.log *.aux *.inc *.tex *.toc *.o
 	rm -f opgen.lua copgen.lua copgen32.c optest-$config_arch
-	rm -f cmmopgen-*.c-- optest.c
+	rm -f cmmopgen-*.c-- optest.c cmmfloat.h interp.h cmmfloat-*.c
 
+clean.opt:V: clean
 clobber:V: clean
 	rm -f testdrv.lua example.tst ocamlprof.dump
 
@@ -74,15 +75,26 @@ copgen.lua:DQ:  copgen.nw ../interp/operator.nw
 	) > $target
 
 
-copgen32.c:DQ: opgen.lua copgen.lua 
-	($NOTANGLE -R'type definitions for rounding mode' ../interp/operator.nw
-	 ../bin/qc-- opgen.lua copgen.lua
-	) > $target
+cmmfloat.h:D: ../interp/cmmfloat.nw
+	notangle -R$target $prereq | cpif $target
+
+copgen32.c:DQ: opgen.lua copgen.lua
+	../bin/qc-- opgen.lua copgen.lua > $target
+
+copgen32.o: cmmfloat.h interp.h
+
+interp.h:
+	cat /dev/null > $target
+
+cmmfloat-$config_float_impl.c:D: ../interp/cmmfloat.nw
+	notangle -R$target -L $prereq > $target
 
 x86-linux.optest: optest-x86-linux
 	./$prereq -v -nan -nan 500000
 
-optest-${config_arch}:Q: optest.o copgen${config_wordsize}.o cmmopgen-${config_arch}.o
+optest-${config_arch}:Q: optest.o \
+                         copgen${config_wordsize}.o cmmopgen-${config_arch}.o \
+                         cmmfloat-$config_float_impl.o
 	cc -o $target $prereq -lm
 
 cmmopgen-${config_arch}.c--:DQ: opgen.lua $QC

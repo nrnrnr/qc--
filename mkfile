@@ -182,7 +182,7 @@ dvi:V:          dirs
 # ------------------------------------------------------------------ 
 
 clean:V:        dirs
-	for i in $SUBDIRS 
+	for i in $SUBDIRS test2
 	do 
 	  (echo "#cd $i" && cd $i && mk $MKFLAGS $target)
 	done
@@ -195,7 +195,7 @@ clean:V:        dirs
 	rm -f config/aux/tst
 
 clean.opt:V:    dirs
-	for i in $SUBDIRS 
+	for i in $SUBDIRS test2
 	do 
 	  (echo "#cd $i" && cd $i && mk $MKFLAGS $target)
 	done
@@ -213,7 +213,7 @@ clean.opt:V:    dirs
 	rm -f config/aux/tst
 
 clobber:V:      dirs clean
-	for i in $SUBDIRS; 
+	for i in $SUBDIRS test2
 	do 
 	  (echo "# cd $i" && cd $i && mk $MKFLAGS $target)
 	done

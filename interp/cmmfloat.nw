@@ -1,0 +1,203 @@
+% -*- mode: Noweb; noweb-code-mode: c-mode -*- %
+
+\ifx\nointro\undefined
+This document contains some non-portable floating-point functions.
+\fi
+
+% ----------------------------------------------------------------------------
+\interface{[[cmmfloat]] : Floating-point portability layer}
+% ----------------------------------------------------------------------------
+
+This document describes floating-point functions that have different
+implementations on different platforms.
+\begin{itemize}
+\item
+Manipulate roundind modes with [[cmm_getround]] and [[cmm_setround]].
+The values in the [[cmm_round]] type can't be changed without also
+changing the values used in 
+the simplifier in the compiler's front end.
+\item
+Test and convert floating-point values with the remaining functions.
+These functions are taken from the C99 standard, which is not
+available on all platforms.
+\end{itemize}
+<<cmmfloat.h>>=
+#ifndef _CMMFLOAT_H
+#define _CMMFLOAT_H
+
+typedef enum {
+  CMM_ROUND_NEAREST = 0,
+  CMM_ROUND_DOWN    = 1,
+  CMM_ROUND_UP      = 2,
+  CMM_ROUND_ZERO    = 3
+} cmm_round;
+ 
+void      cmm_setround(cmm_round);
+cmm_round cmm_getround(void);
+
+int cmm_isnan (double);
+int cmm_isnanf(float);
+
+double cmm_nearbyint(double x);
+float  cmm_nearbyintf(float x);
+
+float cmm_fabsf(float x);
+float cmm_sqrtf(float x);
+
+#endif /* _CMMFLOAT_H */
+@
+% ----------------------------------------------------------------------------
+\implementation{Floating-point functions for different platforms}
+% ----------------------------------------------------------------------------
+
+\subsection{Linux with Gnu libc}
+
+Mostly straight calls to what appear to be C99 standard functions.
+Why [[<features.h>]] is required is beyond me.
+<<cmmfloat-iec60559.c>>=
+#pragma STDC FENV_ACCESS ON
+#include <features.h>
+#define __USE_ISOC99 1
+#include <fenv.h>
+#include <math.h>
+#include "cmmfloat.h"
+
+extern void cmm_err     (const char *fmt);
+extern void cmm_err_wint(const char *fmt, const int   i);
+
+static unsigned cmm_round_to_fe(unsigned round) {
+  switch(round) {
+    case CMM_ROUND_NEAREST : return FE_TONEAREST;
+    case CMM_ROUND_DOWN    : return FE_DOWNWARD;
+    case CMM_ROUND_UP      : return FE_UPWARD;
+    case CMM_ROUND_ZERO    : return FE_TOWARDZERO;
+    default : cmm_err_wint("cannot convert C-- mode %d to FE", round); return ~0;
+  }
+}
+  
+static unsigned cmm_round_of_fe(unsigned round) {
+  switch(round) {
+    case FE_TONEAREST  : return CMM_ROUND_NEAREST;
+    case FE_DOWNWARD   : return CMM_ROUND_DOWN;
+    case FE_UPWARD     : return CMM_ROUND_UP;
+    case FE_TOWARDZERO : return CMM_ROUND_ZERO;
+    default : cmm_err_wint("cannot convert FE mode %d to C--", round); return ~0;
+  }
+}
+
+void cmm_setround(unsigned rm) {
+  if (fesetround(cmm_round_to_fe(rm)) != 0) 
+    cmm_err("could not set floating-pt rounding mode");
+}
+
+unsigned cmm_getround(void) {
+  return cmm_round_of_fe(fegetround());
+}
+
+int    cmm_isnan     (double x) { return isnan(x);      }
+int    cmm_isnanf    (float  x) { return isnan(x);      }
+double cmm_nearbyint (double x) { return nearbyint (x); }
+float  cmm_nearbyintf(float  x) { return nearbyintf(x); }
+float  cmm_sqrtf     (float  x) { return sqrtf(x);      }
+float  cmm_fabsf     (float  x) { return fabsf(x);      }
+@ 
+\subsection{Solaris}
+Solaris code.
+Rounding mode and NaN testing are available.
+Other functions are approximated.
+<<cmmfloat-solaris.c>>=
+#include "cmmfloat.h"
+#include "interp.h"
+#include <ieeefp.h>
+#include <math.h>
+
+extern void cmm_err     (const char *fmt);
+extern void cmm_err_wint(const char *fmt, const int   i);
+
+static unsigned cmm_round_to_fp(unsigned round) {
+  switch(round) {
+    case CMM_ROUND_NEAREST : return FP_RN;
+    case CMM_ROUND_DOWN    : return FP_RM;
+    case CMM_ROUND_UP      : return FP_RP;
+    case CMM_ROUND_ZERO    : return FP_RZ;
+    default : cmm_err_wint("cannot convert C-- mode %d to FP", round); return ~0;
+  }
+}
+  
+static unsigned cmm_round_of_fp(unsigned round) {
+  switch(round) {
+    case FP_RN : return CMM_ROUND_NEAREST;
+    case FP_RM : return CMM_ROUND_DOWN;
+    case FP_RP : return CMM_ROUND_UP;
+    case FP_RZ : return CMM_ROUND_ZERO;
+    default : cmm_err_wint("cannot convert FP mode %d to C--", round); return ~0;
+  }
+}
+
+void cmm_setround(unsigned rm) {
+  if (fpsetround(cmm_round_to_fp(rm)) != 0) 
+    cmm_assert(0, "could not set floating-pt rounding mode");
+}
+
+unsigned cmm_getround(void) {
+  return cmm_round_of_fp(fpgetround());
+}
+
+int cmm_isnan(double x) { return isnand(x); }
+int cmm_isnanf(float x) { return isnanf(x); }
+<<approximate versions of [[nearby*]], [[sqrtf]], and [[fabsf]]>>
+@ 
+The code below is not correct, because it always rounds toward zero.
+<<approximate versions of [[nearby*]], [[sqrtf]], and [[fabsf]]>>=
+double cmm_nearbyint (double x) { return (double) (long int) (x); }
+float  cmm_nearbyintf(float  x) { return (float)  (long int) (x); }
+@ 
+More approximations.
+<<approximate versions of [[nearby*]], [[sqrtf]], and [[fabsf]]>>=
+float cmm_sqrtf(float x) { return (float) sqrt((double) x); }
+float cmm_fabsf(float x) { return (float) fabs((double) x); }
+@ 
+% ----------------------------------------------------------------------------
+\subsection{Implementation of last resort}
+% ----------------------------------------------------------------------------
+
+<<cmmfloat-none.c>>=
+#include "cmmfloat.h"
+#include "interp.h"
+#include <math.h>
+#include <stdio.h>
+#include <assert.h>
+
+extern void cmm_err     (const char *fmt);
+extern void cmm_err_wint(const char *fmt, const int   i);
+
+void cmm_setround(unsigned rm) {
+  static int warned = 0;
+  if (!warned) {
+    warned = 1;
+    fprintf(stderr, "Cannot set floating-point rounding mode\n");
+  }
+}
+
+unsigned cmm_getround(void) {
+  static int warned = 0;
+  if (!warned) {
+    warned = 1;
+    fprintf(stderr, "Cannot get floating-point rounding mode\n");
+  }
+  return CMM_ROUND_NEAREST;
+}
+
+int cmm_isnan(double x) {
+  unsigned long long n;
+  assert(sizeof(x) == sizeof(n));
+  n = *(unsigned long long*)(&x);
+  return ((n >> 52 & 0x7ffLL) == 0x7ffLL) && (n << 12 != 0LL);
+}
+int cmm_isnanf(float x) {
+  unsigned long n;
+  assert(sizeof(x) == sizeof(n));
+  n = *(unsigned long long*)(&x);
+  return ((n >> 23 & 0xffL) == 0xffL) && (n << 9 != 0L);
+}
+<<approximate versions of [[nearby*]], [[sqrtf]], and [[fabsf]]>>

@@ -142,9 +142,12 @@ void init_operators(void);
 
 #include <stdlib.h>
 
-#include "c-features.h"
-#include "float-features.h"    /* for rounding mode handling */
+#include "util.h"
+#include "cmmfloat.h"    /* for rounding mode handling */
+#define __USE_ISOC99 1
 #include <math.h>
+#define notnan(X)  (!cmm_isnan(X))
+#define notnanf(X) (!cmm_isnanf(X))
 
 #include "stack.h"
 #include "table.h"
@@ -220,21 +223,6 @@ typedef enum {
   UNORDERED = 03U
 } float_comparison;
 @ 
-These values can't be changed without also changing the values used in
-the simplifier in the compiler's front end.
-<<type definitions>>=
-<<type definitions for rounding mode>>
-<<type definitions for rounding mode>>=
-typedef enum {
-  CMM_ROUND_NEAREST = 0,
-  CMM_ROUND_DOWN    = 1,
-  CMM_ROUND_UP      = 2,
-  CMM_ROUND_ZERO    = 3
-} cmm_round;
-<<function prototypes>>=
-unsigned cmm_round_to_fe(unsigned);
-unsigned cmm_round_of_fe(unsigned);
-@ 
 % ----------------------------------------------------------------------------
 \subsection{Memory Allocation}
 % ----------------------------------------------------------------------------
@@ -297,12 +285,6 @@ NULLARYOP(float_lt , { v1 = FLOAT_LT ; }, v1, u_int8, bits2)
 NULLARYOP(float_eq , { v1 = FLOAT_EQ ; }, v1, u_int8, bits2)
 NULLARYOP(float_gt , { v1 = FLOAT_GT ; }, v1, u_int8, bits2)
 NULLARYOP(unordered, { v1 = UNORDERED; }, v1, u_int8, bits2)
-IBINARYOP(fcmp, { if isunordered(v1, v2)    ans = UNORDERED;
-                  else if isgreater(v1, v2) ans = FLOAT_GT;
-                  else if isless(v1, v2)    ans = FLOAT_LT;
-                  else ans = FLOAT_EQ;
-                }, v1, v2, ans, float32, float32, bits2,
-                                bits2  , bits2  , bits2)
 BINARYOP (feq, v1 == v2, v1,v2, float32, float32, bool, bits32, bits32, bool)
 BINARYOP (feq, v1 == v2, v1,v2, float64, float64, bool, bits64, bits64, bool)
 BINARYOP (fge, v1 >= v2, v1,v2, float32, float32, bool, bits32, bits32, bool)
@@ -315,13 +297,13 @@ BINARYOP (flt, v1 <  v2, v1,v2, float32, float32, bool, bits32, bits32, bool)
 BINARYOP (flt, v1 <  v2, v1,v2, float64, float64, bool, bits64, bits64, bool)
 BINARYOP (fne, v1 != v2, v1,v2, float32, float32, bool, bits32, bits32, bool)
 BINARYOP (fne, v1 != v2, v1,v2, float64, float64, bool, bits64, bits64, bool)
-BINARYOP (fordered,   !isunordered(v1,v2), v1,v2, float32, float32, bool,
+BINARYOP (fordered,   notnanf(v1) && notnanf(v2), v1,v2, float32, float32, bool,
                                                   bits32, bits32, bool) 
-BINARYOP (fordered,   !isunordered(v1,v2), v1,v2, float64, float64, bool,
+BINARYOP (fordered,   notnan(v1) && notnan(v2), v1,v2, float64, float64, bool,
                                                   bits64, bits64, bool) 
-BINARYOP (funordered, isunordered(v1, v2), v1,v2, float32, float32, bool,
+BINARYOP (funordered, cmm_isnanf(v1) || cmm_isnanf(v2), v1,v2, float32, float32, bool,
                                                   bits32, bits32, bool)
-BINARYOP (funordered, isunordered(v1, v2), v1,v2, float64, float64, bool,
+BINARYOP (funordered, cmm_isnan(v1) || cmm_isnan(v2), v1,v2, float64, float64, bool,
                                                   bits64, bits64, bool)
 UNARYOP  (NaN, (float32) LOOPHOLE(u_int32, float32, (v1 & 0x7fffff) | 0x7f800000), v1, u_int32, float32, bits23, bits32)
 OP64(UNARYOP  (NaN, (float64) LOOPHOLE(u_int64, float64, (v1 & 0xfffffffffffffLL) | 0x7ff0000000000000LL), v1, u_int64, float64, bits52, bits64))
@@ -331,8 +313,8 @@ NULLARYOP   (round_nearest, { v1 = CMM_ROUND_NEAREST; },  v1, u_int8, bits2)
 NULLARYOP   (round_zero,    { v1 = CMM_ROUND_ZERO;    },  v1, u_int8, bits2)
 RMUNARYOP   (f2f  , (float64) v1  , v1, float32, float64, bits32, bits64)
 RMUNARYOP   (f2f  , (float32) v1  , v1, float64, float32, bits64, bits32)
-RMUNARYOP   (f2i  , nearbyintf(v1), v1, float32, s_int32, bits32, bits32)
-RMUNARYOP   (f2i  , nearbyint (v1), v1, float64, s_int32, bits64, bits32)
+RMUNARYOP   (f2i  , cmm_nearbyintf(v1), v1, float32, s_int32, bits32, bits32)
+RMUNARYOP   (f2i  , cmm_nearbyint (v1), v1, float64, s_int32, bits64, bits32)
 RMUNARYOP   (i2f  , (float32) v1  , v1, s_int32, float32, bits32, bits32)
 RMUNARYOP   (i2f  , (float64) v1  , v1, s_int32, float64, bits32, bits64)
 T_RMBINARYOP(fadd , v1 + v2       , v1, v2, float32, bits32)
@@ -345,7 +327,7 @@ T_RMBINARYOP(fmul , v1 * v2       , v1, v2, float32, bits32)
 T_RMBINARYOP(fmul , v1 * v2       , v1, v2, float64, bits64)
 BINARYOP    (fmulx, (float64) v1 * (float64) v2, v1, v2, 
                     float32, float32, float64, bits32, bits32, bits64)
-#define FABS(v) (sizeof(v) == sizeof(float)  ? fabsf(v) : \
+#define FABS(v) (sizeof(v) == sizeof(float)  ? cmm_fabsf(v) : \
                  sizeof(v) == sizeof(double) ? fabs(v)  : \
                  (assert(0),0.0))
 T_UNARYOP   (fabs , FABS(v1), v1, float32, bits32)
@@ -353,7 +335,7 @@ T_UNARYOP   (fabs , FABS(v1), v1, float64, bits64)
 #undef FABS
 T_UNARYOP   (fneg , -(v1),                        v1, float32, bits32)
 T_UNARYOP   (fneg , -(v1),                        v1, float64, bits64)
-T_RMUNARYOP (fsqrt, (assert(sizeof(float )==(32/8)), sqrtf(v1)) , v1, float32, bits32)
+T_RMUNARYOP (fsqrt, (assert(sizeof(float )==(32/8)), cmm_sqrtf(v1)) , v1, float32, bits32)
 T_RMUNARYOP (fsqrt, (assert(sizeof(double)==(64/8)), sqrt (v1)) , v1, float64, bits64)
 NULLARYOP   (minf , { v1 = (float32) (-1.0/0.0); }, v1, float32, bits32)
 NULLARYOP   (mzero, { v1 = (float32)       -0.0; }, v1, float32, bits32)
@@ -374,7 +356,7 @@ integer operation specified in the {\PAL} documentation.
 <<integer operator definitions>>=
 /* INTEGER operators begin here. */
 T_BINARYOP(add,     v1 + v2             , v1, v2,s_int16,bits16)
-OVERFLOW  (add,     +, signed           , v1, v2,s_int32,bits32)
+OVERFLOWOP(add,     +, signed           , v1, v2,s_int32,bits32)
 T_BINARYOP(add,     v1 + v2             , v1, v2,s_int32,bits32)
 WEIRDOP   (addc,    v1 + v2 + (c&0x01)  , v1, v2, c,u_int32,u_int32,bits32,bits32)
 T_BINARYOP(and,     v1 & v2             , v1, v2,u_int16,bits16)
@@ -433,8 +415,8 @@ T_BINARYOP (modu, v1 % v2, v1,v2, u_int32,bits32)
 T_BINARYOP(mul  ,v1 * v2, v1,v2, s_int8 , bits8 )
 T_BINARYOP(mul  ,v1 * v2, v1,v2, s_int16, bits16)
 T_BINARYOP(mul  ,v1 * v2, v1,v2, s_int32, bits32)
-OVERFLOW  (mul,*,signed, v1, v2, s_int32, bits32)
-OVERFLOW  (mulu,*,unsigned, v1, v2, u_int32, bits32)
+OVERFLOWOP(mul,*,signed, v1, v2, s_int32, bits32)
+OVERFLOWOP(mulu,*,unsigned, v1, v2, u_int32, bits32)
 BINARYOP  (mulx ,v1 * v2, v1,v2, s_int8 , s_int8 ,s_int16,bits8 ,bits8 ,bits16)
 BINARYOP  (mulx ,v1 * v2, v1,v2, s_int16, s_int16,s_int32,bits16,bits16,bits32)
 OP64(BINARYOP  (mulx ,(s_int64) v1 * (s_int64) v2, v1,v2, s_int32, s_int32,s_int64,bits32,bits32,bits64))
@@ -485,7 +467,7 @@ T_BINARYOP(shrl,    v1 >> v2          , v1, v2, u_int32, bits32)
 T_BINARYOP(sub ,    v1 - v2           , v1, v2, s_int16, bits16)
 T_BINARYOP(sub ,    v1 - v2           , v1, v2, s_int32, bits32)
 WEIRDOP   (subb,    v1 - v2 - (b&0x01), v1, v2, b,s_int32,s_int32,bits32,bits32)
-OVERFLOW  (sub,     -, signed        , v1, v2, s_int32, bits32)
+OVERFLOWOP(sub,     -, signed        , v1, v2, s_int32, bits32)
 UNARYOP   (sx  ,    (s_int16) v1      , v1, s_int8 , s_int16, bits8 , bits16)
 UNARYOP   (sx  ,    ((s_int32) v1 @<< 31) @>> 31, \
                                         v1, u_int1 , s_int32, bits1 , bits32)
@@ -787,7 +769,7 @@ T_BINARYOP(rotr, (x >>  d) + (((~(((T) ~0) << d)) & x) << (sizeof(T)*8 - d)),\
 @ 
 There's a certain pattern to some of the overflow operators.
 <<macro synonyms>>=
-#define OVERFLOW(NAME, OP, SIGNED, X, Y, T, B)   \
+#define OVERFLOWOP(NAME, OP, SIGNED, X, Y, T, B)   \
   BINARYOP  (NAME##_overflows,  \
              LL64 ((SIGNED long long) (X OP Y) != \
                       (SIGNED long long) X OP (SIGNED long long) Y), \
@@ -813,22 +795,3 @@ static int hand_mod(int x, int y) {
 static int hand_mod(int x, int y);
 @ 
 <<function definitions>>=
-unsigned cmm_round_to_fe(unsigned round) {
-  switch(round) {
-    case CMM_ROUND_NEAREST : return FE_TONEAREST;
-    case CMM_ROUND_DOWN    : return FE_DOWNWARD;
-    case CMM_ROUND_UP      : return FE_UPWARD;
-    case CMM_ROUND_ZERO    : return FE_TOWARDZERO;
-    default : cmm_err_wint("cannot convert C-- mode %d to FE", round); return ~0;
-  }
-}
-  
-unsigned cmm_round_of_fe(unsigned round) {
-  switch(round) {
-    case FE_TONEAREST  : return CMM_ROUND_NEAREST;
-    case FE_DOWNWARD   : return CMM_ROUND_DOWN;
-    case FE_UPWARD     : return CMM_ROUND_UP;
-    case FE_TOWARDZERO : return CMM_ROUND_ZERO;
-    default : cmm_err_wint("cannot convert FE mode %d to C--", round); return ~0;
-  }
-}

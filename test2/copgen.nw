@@ -46,12 +46,21 @@ w([[
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
+
+#include "cmmfloat.h"
+#define notnan(X) (!cmm_isnan(X))
+#define notnanf(X) (!cmm_isnanf(X))
+
 #define AT(ADDR, TY) (*(TY *)(ADDR))
 
 static double loophole[2];
 
 #define LOOPHOLE(TYFROM, TYTO, VAL) (AT(loophole, TYFROM) = (VAL), AT(loophole, TYTO))
 #define LL64(E) (sizeof(long long) == 64 / 8 ? (E) : (assert(0), 0))
+
+void cmm_err     (const char *fmt)        { fprintf(stderr, fmt);    }
+void cmm_err_wint(const char *fmt, int n) { fprintf(stderr, fmt, n); }
+
 
 typedef double float%d;
 typedef float  float%d;
@@ -326,7 +335,7 @@ end
 
 Copgen.fmts = { u_int32 = '%08lx', u_int16 = '%04x', u_int8 = '%02x', u_int1 = '%d',
                 s_int32 = '%8ld',  s_int16 = '%4d',  s_int8 = '%2d',  s_int1 = '%d',
-                float32 = '%f', float64 = '%lf',
+                float32 = '%g', float64 = '%lg',
                 u_int64 = '%016llx',
                 s_int64 = '%16lld',
                 bool = '%d',

@@ -57,6 +57,7 @@ $x{sizeof_ptr}  = ""   ;         # 4
 $x{sizeof_char} = ""   ;         # 1
 $x{stdc_version}= ""   ;         # 199409 - from     __STDC_VERSION__
 $x{stdc_iec559} = ""   ;         # defined/undefined __STDC_IEC_559__
+$x{float_impl}  = ""   ;   # iec60559/solaris/none
 $x{arch}        = ""   ;         # x86-linux  
 $x{wordsize}    = ""   ;         # 32
 $x{ocaml_version} = "" ;         # OCaml Version
@@ -262,9 +263,13 @@ $x{pod2html}        = $x{pod2html}     || search("pod2html",@path);
 $x{lua_h}           = $x{lua_h}        || search("lua.h", @include);
 $x{lualib_h}        = $x{lualib_h}     || search("lualib.h", @include);
 $x{liblua}          = $x{liblua}       || search("liblua.so", @libs) 
-                                       || search("liblua40.so", @libs);
+                                       || search("liblua40.so", @libs)
+                                       || search("liblua.a", @libs) 
+                                       || search("liblua40.a", @libs);
 $x{liblualib}       = $x{liblualib}    || search("liblualib.so", @libs) 
-                                       || search("liblualib40.so", @libs);
+                                       || search("liblualib40.so", @libs)
+                                       || search("liblualib.a", @libs) 
+                                       || search("liblualib40.a", @libs);
 
 ($liblua,$path,$suffix) = fileparse($x{liblua},('.so', '.a'));
 $liblua =~ s/^lib/-l/;
@@ -295,11 +300,17 @@ chdir("config/aux") || die "cannot cd to config/aux: $!";
 
 $result = $x{cc} && runtest($x{cc}, "$x{lua_inc} $config_c_flags config.c");
 $result && eval($result);
+$x{wordsize} = 8 * $x{sizeof_ptr};
 $x{arch}=`./arch-os`;
 $x{arch} && chop($x{arch});
 
-$x{wordsize} = 32 if ($x{arch} =~ /^(sparc|x86|mips|powerpc)-/);
-$x{wordsize} = 64 if ($x{arch} =~ /^(alpha|ia64)-/);
+if ($x{stdc_iec550}) {
+    $x{float_impl} = "iec60559";
+} else {
+    $x{float_impl} = "none";
+    $x{float_impl} = "solaris"  if ($x{arch} eq "sparc-solaris");
+    $x{float_impl} = "iec60559" if ($x{arch} eq "x86-linux");
+}
 
 chdir ("../..") || die "cannot cd back to top level: $!";
 
@@ -439,6 +450,7 @@ EOF
 my @export = ( "arch"
              , "wordsize"
              , "endian"
+             , "float_impl",
              , "has_latex",
              , "cc"
              , "stdc_version"

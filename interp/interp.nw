@@ -24,7 +24,7 @@ interpreter.
 #include "label.h"
 #include "table.h"
 #include "thread.h"
-#include "c-features.h"
+#include "util.h"
 
 <<constant definitions>>
 <<macro definitions>>
@@ -1273,16 +1273,14 @@ Operator implementation functions return a new [[valstack]] so we set
 rounding mode atop the value stack.
 ``Storing'' a rounding mode involves popping a 2-bit value off the value stack
 and setting it to be the current hardware floating-point rounding mode.
-See the [[features]] module for information about C language support for
+See the [[cmmfloat]] module for information about C language support for
 manipulating the hardware rounding mode.
 <<matching statement>>=
-    | FETCH_ROUND()     => PUSH(to_CMM_value(cmm_round_of_fe(fegetround()),2), values);
+    | FETCH_ROUND()     => PUSH(to_CMM_value(cmm_getround(),2), values);
                            pc = next;
     | STORE_ROUND()     => {
                            value v  = POP(values);
-                           int   rm = cmm_round_to_fe(v.bits2); 
-                           cmm_assert(fesetround(rm) == 0, "could not "
-                                      "set floating-pt rounding mode");
+                           cmm_setround(v.bits2);
                            pc       = next;
                            }
 @ 
@@ -2006,12 +2004,13 @@ Putting it all together, we have [[interp.m]], the C file with NJ Machine-Code T
 
 #include <assert.h>
 #include <stdlib.h>
+#include <string.h>
 #include <stdarg.h>
 #include <math.h>
 #include <setjmp.h>
 #include <signal.h>
 
-#include "float-features.h"
+#include "cmmfloat.h"
 #include "lualink.h"
 #include "encode.h"
 #include "ccall.h"
