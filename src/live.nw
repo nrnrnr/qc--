@@ -97,11 +97,12 @@ end
 module Make (A : Arg) = struct 
   module G = A.G
   let irwk = Rtlutil.ReadWriteKill.sets
-  <<struct Make>>
+  <<liveness functions>>
+  <<code using [[Dataflow]]>>
 end
 @ 
 Here's how we get to the cached information for a node.
-<<struct Make>>=
+<<liveness functions>>=
 let info node =
   if      G.is_join node then A.jx (G.jx node)
   else if G.is_fork node then A.fx (G.fx node)
@@ -112,7 +113,7 @@ We use these
 set operations.
 The [[--*]] operation expresses our expectation that a killed register should
 never be live. 
-<<struct Make>>=
+<<liveness functions>>=
 let ( ++  ) = RS.union
 let ( --  ) = RS.diff 
 let ( --* ) live killed =
@@ -135,7 +136,7 @@ $$\mathit{live}_{\mathit{in}} =
       \setminus \mathit{defined} \setminus \mathit{killed}
     ) \cup \mathit{used}.
 $$
-<<struct Make>>=
+<<liveness functions>>=
 let rec live_out node = (info node).cached_live_out
 and new_live_out node =
   G.union_over_outedges
@@ -157,7 +158,7 @@ To fill the caches with correct liveness information, we empty all
 cached live sets and iterate until we reach a fixed point.
 The iteration order is unspecified, and it would probably
 be much more efficient to use a well-chosen order. 
-<<struct Make>>=
+<<liveness functions>>=
 let set_live g =
   G.iter_nodes (fun n -> (info n).cached_live_out <- RS.empty) g;
   let changed     = ref false                           in
@@ -168,6 +169,7 @@ let set_live g =
     ; if !changed then
         if n < 1000 then loop (n+1) 
         else Impossible.impossible "liveness didn't converge in 1000 iterations"
+    ; Verbose.say 2 ["set_live converged in "; string_of_int n; " iterations\n"]
     ) in
   loop 0
 @
@@ -185,4 +187,50 @@ let update_cache node =
     ; info.cached_live_out <- l
     ) 
 @ 
+Liveness is a backward dataflow problem.
+The ``info'' is the live-out set.
+At a fork, we take the union.
+I'M ALMOST CERTAIN THIS CODE WON'T WORK, FOR A VARIETY OF REASONS, NOT
+LEAST OF WHICH IS THAT THE BACKWARD CODE IN DATAFLOW INCORRECTLY
+ASSUMES THAT A FORK POINT DOES NOT CONTAIN AN INSTRUCTION.
+<<code using [[Dataflow]]>>=
+let split_info node = (info node).cached_live_out
+let merge node live =
+  let info = info node in
+  if RS.subset live info.cached_live_out then
+    false
+  else
+    ( info.cached_live_out <- info.cached_live_out ++ live
+    ; true
+    ) 
+let init_info = RS.empty
+let (with_predecessor's_outedge : Rtl.rtl G.node -> RS.t ->
+        (RS.t -> defs:RS.t -> kills:RS.t -> RS.t) -> RS.t) = assert false
+let propagate node live =
+  (info node).cached_live_out <- live;
+  let live = match G.to_instr node with
+  | None -> live
+  | Some i ->
+      let uses, defs, kills = irwk i in
+      live -- defs --* kills ++ uses in
+  let live = G.add_inedge_uses node live in
+  if G.is_join node then
+    live
+  else
+    with_predecessor's_outedge (G.pred node) live
+      (fun live ~defs ~kills -> live -- defs --* kills)
 
+module D = Dataflow.Make(G)
+let set_live' =
+  let once = D.bwd_iteration { D.split_info = split_info; D.merge_split_info = merge
+                              ; D.init_info = init_info; D.propagate = propagate } in
+  fun g ->
+    let rec go n =
+      if n < 1000 then
+        if once g then
+          go (n+1)
+        else
+          Verbose.say 2 ["set_live' converged in "; string_of_int n; " iterations\n"]
+      else
+        Impossible.impossible "liveness didn't converge in 1000 iterations";
+    in go 0

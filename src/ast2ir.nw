@@ -360,7 +360,7 @@ type 'i conts = { cuts    : 'i G.contedge list
 We use the remembered labels to associate the correct entry point with
 each continuation, depending on how the continuation is used.
 <<Make continuation bundles>>=
-let continuations cc ast =
+let continuations cc ast default_aborts =
   let volregs = cc.C.volregs in                 (* volatile registers *)
   let allregs = RS.union volregs cc.C.nvregs in (* all registers *)
   let entry n = G.node_labeled g n in
@@ -384,7 +384,9 @@ let continuations cc ast =
     | A.UnwindsTo ns -> { cs with unwinds = contmap as_unwinds ns @ cs.unwinds }
     | A.ReturnsTo ns -> { cs with returns = contmap as_returns ns @ cs.returns }
     | A.Aborts       -> { cs with aborts  = true                               } in
-  let empty = { cuts = []; unwinds = []; returns = [] ; aborts = false } in
+  (*| A.NeverAborts  -> { cs with aborts  = false                              } in*)
+  (*| A.NeverReturns -> ??? *)
+  let empty = { cuts = []; unwinds = []; returns = [] ; aborts = default_aborts } in
   List.fold_right add ast empty
 @
 
@@ -596,7 +598,7 @@ and callStmt (lhs,cconv, e, args, targets (*unused*), conts) succ =
   let out   = actuals cc.C.call_actuals args  in
   let in'   = results cc.C.call_results lhs   in
   let calli = target.T.call.T.embed (expr e)  in
-  let conts = continuations cc conts          in
+  let conts = continuations cc conts false    in
   let () = add_youngblock out.C.overflow      in  (* outgoing overflow parms *)
   let () = add_youngblock in'.C.overflow      in  (* incoming overflow results *)
   G.instruction g out.C.pre_sp                **>
@@ -662,7 +664,7 @@ and cutStmt (e, args, conts) =
   let out   = actuals (cc.C.cut_to_actuals k) args in
   let cuti  = Contn.cutto target cc.C.cutto.Target2.embed ~contn:k in
   let ()    = add_constraints (Block.constraints out.C.overflow) in
-  let conts = continuations cc conts in
+  let conts = continuations cc conts true in
   G.instruction g out.C.shuffle **>
   G.cut_to      g cuti ~cuts_to:conts.cuts ~aborts: conts.aborts ~uses:out.C.regs
 @
