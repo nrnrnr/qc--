@@ -11,7 +11,7 @@ module T : Lua.Lib.USERTYPE
 module Make (T1 : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.t')
             (T2 : Lua.Lib.TYPEVIEW with type 'a t = 'a T.t and type 'a
 combined = 'a T1.combined)
-            (T3 : Lua.Lib.TYPEVIEW with type 'a t = Cfg3.cfg and type 'a combined =
+            (T3 : Lua.Lib.TYPEVIEW with type 'a t = Proc.t and type 'a combined =
 'a T1.combined)
 	: Lua.Lib.TYPEFUL with type 'a combined = 'a T1.combined
 @
@@ -59,13 +59,19 @@ Every move instruction is in one and only one of these lists:
 module G = Cfg3
 
 module Cheats = struct
-	let spill _ = assert false
 	let fold_fwd g = Cfg3.scan_fwd g (Cfg3.number (Cfg3.first g))
                                      (Cfg3.number (Cfg3.last g) + 1)
 	let register_count _ = 15
 	let makeReg i = 'r', i, 32
 	let possibleColors _ = List.map makeReg [1;2;3;4;5;6;7;8;9;10;11;12;13;14;15]
 		
+	let spill cfg spillees = assert false
+(*
+		fold_fwd cfg spill spillees
+*)
+(*
+    let (newTemps, newGraph) = Cheats.spill cfg cg.spilledNodes in (* set of all new temps added *)
+*)
 
 	(* Not really cheats anymore.... *)
 
@@ -189,6 +195,7 @@ let initInfo = { adjSet = RegPairSet.empty
 let haveSpilledNodes param _ = match T2'.map.V.project param with
     | CGInfo cg -> not (empty cg.spilledNodes)
 
+(*
 let haveSpilledNodesStage = { Backplane.name = "haveSpilledNodes"
                             ; Backplane.fn = haveSpilledNodes
                             ; Backplane.paramExpected = Some "cgInfo"
@@ -196,17 +203,7 @@ let haveSpilledNodesStage = { Backplane.name = "haveSpilledNodes"
                             ; Backplane.stateDestroyed = Backplane.list2SSet []
                             ; Backplane.stateUsed = Backplane.list2SSet ["cfg"]
                             }
-
-let rename _ cfg = assert false (*G.rename cfg; true*)
-
-let renameStage = { Backplane.name = "rename"
-                  ; Backplane.fn = rename
-                  ; Backplane.paramExpected = None
-                  ; Backplane.stateCreated = Backplane.list2SSet []
-                  ; Backplane.stateDestroyed = Backplane.list2SSet []
-                  ; Backplane.stateUsed = Backplane.list2SSet ["cfg"]
-                  }
-
+*)
 @
 
 
@@ -221,6 +218,7 @@ This algorithm annotates each node in the (\cfg) with a live-in set.
 (* dummy implementation *)
 let liveness _ cfg = LI.liveness cfg; true
 
+(*
 let livenessStage = { Backplane.name = "liveness"
                     ; Backplane.fn = liveness
                     ; Backplane.paramExpected = None
@@ -228,6 +226,7 @@ let livenessStage = { Backplane.name = "liveness"
                     ; Backplane.stateDestroyed = Backplane.list2SSet []
                     ; Backplane.stateUsed = Backplane.list2SSet ["cfg"]
                     }
+*)
 @
 
 %-------------------------------------------------------------------
@@ -303,6 +302,7 @@ match T2'.map.V.project cgInfo with
                 true
         
 
+(*
 let buildStage = {Backplane.name = "build"
                  ; Backplane.fn = build
                  ; Backplane.paramExpected = Some "cgInfo"
@@ -310,6 +310,7 @@ let buildStage = {Backplane.name = "build"
                  ; Backplane.stateDestroyed = Backplane.list2SSet []
                  ; Backplane.stateUsed = Backplane.list2SSet ["cfg"; "live_in sets"]
                  }
+*)
 @
 
 %-------------------------------------------------------------------
@@ -349,6 +350,7 @@ match T2'.map.V.project param with
             true
              
 
+(*
 let makeWorklistStage = { Backplane.name = "makeWorklist"
                         ; Backplane.fn = makeWorklist
                         ; Backplane.paramExpected = Some "cgInfo"
@@ -356,6 +358,7 @@ let makeWorklistStage = { Backplane.name = "makeWorklist"
                         ; Backplane.stateDestroyed = Backplane.list2SSet []
                         ; Backplane.stateUsed = Backplane.list2SSet ["interferenceGraph"]
                        }
+*)
 @
 
 %-------------------------------------------------------------------
@@ -402,6 +405,7 @@ match T2'.map.V.project param with
 
 
 
+(*
 let simplifyStage = { Backplane.name = "simplify"
                     ; Backplane.fn = simplify
                     ; Backplane.paramExpected = Some "cgInfo"
@@ -409,6 +413,7 @@ let simplifyStage = { Backplane.name = "simplify"
                     ; Backplane.stateDestroyed = Backplane.list2SSet []
                     ; Backplane.stateUsed = Backplane.list2SSet []
                     }
+*)
 @
 
 
@@ -506,6 +511,7 @@ match T2'.map.V.project param with
                  true)
         | _ -> false)
 
+(*
 let coalesceStage = { Backplane.name = "coalesce"
                     ; Backplane.fn = coalesce
                     ; Backplane.paramExpected = Some "cgInfo"
@@ -521,6 +527,7 @@ let recklessCoalesceStage = { Backplane.name = "recklessCoalesce"
                             ; Backplane.stateDestroyed = Backplane.list2SSet []
                             ; Backplane.stateUsed = Backplane.list2SSet []
                             }
+*)
 @
 
 %-------------------------------------------------------------------
@@ -555,6 +562,7 @@ match T2'.map.V.project param with
         | _ -> false)
     
 
+(*
 let freezeStage = { Backplane.name = "freeze"
                   ; Backplane.fn = freeze
                   ; Backplane.paramExpected = Some "cgInfo"
@@ -562,6 +570,7 @@ let freezeStage = { Backplane.name = "freeze"
                   ; Backplane.stateDestroyed = Backplane.list2SSet []
                   ; Backplane.stateUsed = Backplane.list2SSet []
                   }
+*)
 @
 
 
@@ -647,6 +656,7 @@ match T2'.map.V.project param with
     let _ = cg.activeMoves <- [] in
         true
 
+(*
 let selectSpillStage = { Backplane.name = "selectSpill"
                        ; Backplane.fn = selectSpill
                        ; Backplane.paramExpected = Some "cgInfo"
@@ -670,6 +680,7 @@ let rewriteProgramStage = { Backplane.name = "rewriteProgram"
                           ; Backplane.stateDestroyed = Backplane.list2SSet []
                           ; Backplane.stateUsed = Backplane.list2SSet []
                           }
+*)
 @
 
 
@@ -695,7 +706,7 @@ end
 module Make (T1 : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.t')
             (T2 : Lua.Lib.TYPEVIEW with type 'a t = 'a T.t and type 'a
 combined = 'a T1.combined)
-            (T3 : Lua.Lib.TYPEVIEW with type 'a t = Cfg3.cfg and type 'a combined =
+            (T3 : Lua.Lib.TYPEVIEW with type 'a t = Proc.t and type 'a combined =
 'a T1.combined)
 	: Lua.Lib.TYPEFUL with type 'a combined = 'a T1.combined =
   struct
@@ -755,7 +766,11 @@ let dgraph = [dnode1; dnode2; dnode3; dnode4; dnode5; dnode6; dnode7;
 let cgTable = V.Table.create 10
 let ( **-> ) = V.( **-> )
 let cfg = T3'.map
+let cfg = { V.embed = (fun _ -> assert false)
+          ; V.project = (fun x -> (T3'.map.V.project x).Proc.cfg)
+          }
 let stageFn = V.pfunc (V.value **-> cfg **-> V.result V.bool)
+
 let _ = List.iter (fun (k, v) -> V.Table.bind cgTable k v)
         [ V.string.V.embed "liveness", stageFn.V.embed liveness
         ; V.string.V.embed "build", stageFn.V.embed build
