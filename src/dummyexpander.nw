@@ -239,6 +239,9 @@ of type [[width]] and thus represents a terminal value.
 code expander keeps the latter two and replaces an expression by a location
 that hold the expression's value. 
 
+The following table summarizes the nonterminals in the rules and their
+purpose. 
+
 \begin{tabular}{ll}
     Nonterminal & Meaning \\ 
     \hline
@@ -252,6 +255,10 @@ that hold the expression's value.
     [[stmt]]        & side effect (like assignment)\\
 \end{tabular}
 
+The costs associated with burg rules usually reflect the number of
+generated {\rtl}s. In addtion, we want to penalize the conversion
+between integer and floating point registers. A missing cost annotation
+defaults to zero.
 
 A constant is loaded into a register. This does not work for boolean
 constants! Do we have to treat the different constants seperately?
@@ -261,14 +268,14 @@ const:      Const(const)
             {: U.exp (RP.Const(const)) :}
 
 -- r := k   
-ireg:       const
+ireg:       const [1]
             {:  itmp (W.exp const)                   >>= fun t  ->
                 exec (R.store t const (W.exp const)) >>= fun () ->
                 return t
             :}
 
 -- r := $m[addr]            
-ireg:       Fetch(mem,width) 
+ireg:       Fetch(mem,width) [1]
             {:  mem           >>= fun m ->
                 itmp width    >>= fun t -> 
                 exec (R.store t (R.fetch m width) width) >>= fun () ->
@@ -283,7 +290,7 @@ a right-hand-side context.
 ireg:       Fetch(ireg,width) {: ireg :}
 
 -- r := op(r,..,r)
-ireg:       App(iop, iregs) 
+ireg:       App(iop, iregs) [1]
             {:  
                 iregs                                     >>= fun rs ->
                 let fetches = List.map fetch rs           in 
@@ -300,7 +307,7 @@ registers that hold the values.
 
 <<rules>>=
 -- f := $m[addr]
-freg:       Fetch(mem,width) 
+freg:       Fetch(mem,width) [1]
             {:  mem           >>= fun m ->
                 ftmp width    >>= fun u -> 
                 exec (R.store u (R.fetch m width) width) >>= fun () ->
@@ -312,7 +319,7 @@ freg:       Fetch(mem,width)
 freg:       Fetch(freg,width) {: freg :}    
 
 -- f := op(f, .., f)
-freg:       App(fop, fregs)
+freg:       App(fop, fregs) [1]
             {:  
                 fregs                                     >>= fun us ->
                 let fetches = List.map fetch us           in 
@@ -339,10 +346,10 @@ fregs:      Cons(freg, fregs)
             {: freg  >>= fun u -> fregs >>= fun us -> return (u::us) :}
 @
 
-We expect memory locations and hardware registers in the code to expand.
-These locations are classified into memory and integer/floating-point
-registers.  Memory is addressed by registers ([[addr]] is a synonym for
-[[ireg]], we might add [[const]] later).
+We expect memory locations, tempraries, and hardware registers in the
+code to expand.  These locations are classified into memory and
+integer/floating-point registers.  Memory is addressed by registers
+([[addr]] is a synonym for [[ireg]], we might add [[const]] later).
 
 <<rules>>=
 addr:       ireg  {: ireg >>= fun r -> return (fetch r) :}
@@ -358,10 +365,22 @@ ireg:       Cell("r", agg, width, addr, ass)
                 addr >>= fun a ->
                 return (R.cell (U.assertion ass) 'r' agg width a)
             :}
+ireg:       Cell("t", agg, width, addr, ass)
+            {: 
+                addr >>= fun a ->
+                return (R.cell (U.assertion ass) 't' agg width a)
+            :}
+
+
 freg:       Cell("f", agg, width, addr, ass)
             {:
                 addr >>= fun a ->
                 return (R.cell (U.assertion ass) 'f' agg width a)
+            :}
+freg:       Cell("u", agg, width, addr, ass)
+            {:
+                addr >>= fun a ->
+                return (R.cell (U.assertion ass) 'u' agg width a)
             :}
 
 error:      Cell(x:string, agg, width, addr, ass)
@@ -379,6 +398,16 @@ fop:        Op(opr) [{: if is_float_op opr then 0 else C.inf_cost :}]
 iop:        Op(opr) [{: if not (is_float_op opr) then 0 else C.inf_cost :}]
             {: U.opr opr :}
 @
+
+To make sure we can cover every {\rtl} we allow an integer register to
+be used as a floating-point register, and vice versa. However, we don't
+like these conversion and penalize them with a high cost.
+
+<<rules>>=
+ireg:       freg [2]    {: freg :}  -- do something more?
+freg:       ireg [2]    {: ireg :}
+@
+
 
 {\rtl} effects are covered by the [[stmt]] nonterminal. We allow
 only very simple assignments between registers of the same class and
@@ -425,7 +454,7 @@ not expand it.
 gstmt:      GStmt(g:x,stmt)
             {: stmt >>= fun s -> return (R.guard (U.exp g) s) :}
 
-gstmts:     Nil {:  return [] :}
+gstmts:     Nil() {:  return [] :}
 gstmts:     Cons(gstmt,gstmts)
             {: gstmt  >>= fun s  -> gstmts >>= fun ss -> return (s::ss) :}
 @
@@ -433,7 +462,7 @@ gstmts:     Cons(gstmt,gstmts)
 An {\rtl} is a list of guarded statements. 
 
 <<rules>>=
-rtl:        Rtl(gstmts)
+rtl:        Rtl(gstmts) [1]
             {:
                 gstmts            >>= fun rtls ->
                 exec (R.par rtls) >>= fun ()  ->
@@ -485,7 +514,9 @@ and loc = function
                 | 'r' -> "r"
                 | 'f' -> "f"
                 | 'm' -> "m"
-                | _   -> error "unknown space"
+                | 'u' -> "u"
+                | 't' -> "t"
+                | _   -> error (Printf.sprintf "unknown space `%c'" sp)
                 )
         in
             conCell s aff w (exp e) ass
@@ -509,8 +540,17 @@ desired expanded {\rtl}s.
 <<tail>>=
 let expand (r: R.rtl) = 
     let plan = rtl (D.rtl r) in
-    match plan.rtl.Camlburg.action () [] with
-        | (), rtls -> rtls
+    try
+        match plan.rtl.Camlburg.action () [] with
+            | (), rtls -> rtls
+    with 
+        Camlburg.Uncovered -> 
+            ( List.iter prerr_endline
+                [ "cannot expand this RTL:"
+                ; RU.ToString.rtl r
+                ]
+            ; assert false
+            )
 @                        
 
 % ------------------------------------------------------------------ 
@@ -576,7 +616,7 @@ let proc     = ProcT.makemap V.userdata V.projection
 let pf t     = (V.pfunc t).V.embed    (* pure Lua function *)
 
 let builtins =
-    [ "cfg" , pf (V.value **-> proc **-> V.result V.bool) (fun _ -> cfg)
+    [ "expand" , pf (V.value **-> proc **-> V.result V.bool) (fun _ -> cfg)
     ]
 @
 
