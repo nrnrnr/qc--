@@ -843,7 +843,7 @@ let rec ifStmt env e ss1 ss2 =
     | otherwise                 -> E.error "if-condition must be of type bool"
 
 <<>>=
-and spanStmt env e1 e2 ss =
+and spanStmt env e1 e2 bb =
     let f = function
         | E.Error                           -> E.Error
         | E.Ok (ty,value) when ty = T.word  -> E.Ok() 
@@ -851,9 +851,9 @@ and spanStmt env e1 e2 ss =
             E.error "span key and value must be of the natural word type"
     in
         E.Implode.triple ( f (constExpr env e1)
-                       , f (constExpr env e2)
-                       , stmts env ss
-                       )
+                         , f (constExpr env e2)
+                         , E.Implode.map (body env) bb
+                         )
 <<>>=
 and gotoStmt env e ts = 
     let t = targets env ts in
@@ -921,7 +921,7 @@ and returnStmt env cc alt args =
                           )
 
 <<>>=
-and assignStmt env lvalues exprs =
+and assignStmt env (lvalues,exprs) =
     let pairs = try List.combine lvalues exprs
                 with Invalid_argument _ -> 
                 E.error "length of lhs/rhs in assignment differs"
@@ -934,8 +934,101 @@ and assignStmt env lvalues exprs =
         | otherwise   -> E.error "type mismatch in assignment"
     in
         E.Implode.map pair pairs
+
 <<>>=
-and stmts env ss = E.Ok()
+and callStmt env (l,cc,e,args,ts,fs) =
+    let lt      = E.Implode.map (lvalue env) l   in
+    let ts'     = targets env ts                 in
+    let fs'     = flows env fs                   in
+    let args'   = List.map snd args              in
+    let argsTy  = E.Implode.map (tyExpr env) args' in
+        match tyExpr env e with
+        | E.Error                 -> E.Error
+        | E.Ok(t) when t = T.code -> E.Implode.quad (lt,ts',fs',argsTy)
+        | otherwise               -> E.error "call-expression is not a pointer"
+             
+<<>>=
+and primStmt env (l,cc,op,args,fs) =
+    let l      = E.Implode.map (lvalue env) l                in
+    let fs     = flows env fs                                in
+    let opTy   = snd (Const.Symbol.lookup op Const.constOps) in
+    let args'  = List.map snd args                           in
+    let argsTy = List.map (tyExpr env) args'                 in
+    let rTy    = tyAppl opTy (E.Raise.list argsTy)           in
+        E.Implode.triple (l,fs,rTy)
+
+<<>>=
+and range env = function
+    | A.Point(e)     -> E.emap fst (constExpr env e)
+    | A.Range(e1,e2) -> 
+        ( match constExpr env e1, constExpr env e2 with
+        | E.Error         , _                      ->  E.Error
+        | _               , E.Error                ->  E.Error
+        | E.Ok(t1,v1)     , E.Ok(t2,v2) when t1=t2 ->  E.Ok(t1)
+        | otherwise -> E.error "Different types of lower and upper range bound"
+        )
+<<>>=        
+and arm t env = function
+    | A.ArmAt(x,r)   -> E.catch (error r env) (arm t env) x
+    | A.Case(rr, ss) ->
+        let ss' = stmts env ss in 
+        let rr' =
+            ( match E.Raise.list (List.map (range env) rr) with
+            | E.Ok([])     -> t
+            | E.Ok(t::tt)  -> if    List.for_all ((=) t) tt then E.Ok(t)
+                              else E.error "type inconstencies in ranges"
+            | E.Error      -> E.Error
+            )
+        in
+            ( match ss', rr' with
+            | E.Ok(), E.Ok(_) -> rr'
+            | _               -> E.Error
+            )
+<<>>=                
+and switchStmt env (r, expr, arms) =
+    let et = tyExpr env expr in
+    let at = ( match E.Raise.list (List.map (arm et env) arms) with
+             | E.Ok([])    -> et 
+             | E.Ok(t::tt) -> if   List.for_all ((=) t) tt then E.Ok(t)
+                              else E.error "type inconsistencies acress arms" 
+             | E.Error     -> E.Error
+             ) in
+    let rt = ( match r with
+             | None   -> et 
+             | Some r -> range env r
+             ) in
+        match E.Implode.triple (et, at, rt) with
+        | E.Ok() when et <> at -> 
+            E.error "type inconsistency between expression and arms"
+        | E.Ok() when at <> rt -> 
+            E.error "type inconsistency between expression and range"
+        | E.Ok()               -> E.Ok()
+        | E.Error              -> E.Error
+
+<<>>=
+and body env = function
+    | A.BodyAt(x, r) -> E.catch (error r env) (body env) x
+    | A.DeclBody(d)  -> E.Ok() (* XXX *)
+    | A.DataBody(dd) -> E.Implode.map (datum env) dd 
+    | A.StmtBody(s)  -> stmt env s       
+<<>>=
+and stmt env = function
+    | A.StmtAt(x,r)                 -> E.catch (error r env) (stmt env) x
+    | A.IfStmt ( e, ss1, ss2)       -> ifStmt env e ss1 ss2
+    | A.SpanStmt(e1,e2,ss)          -> spanStmt env e1 e2 ss
+    | A.AssignStmt(xs)              -> assignStmt env xs
+    | A.CallStmt call               -> callStmt env call
+    | A.PrimStmt call               -> primStmt env call
+    | A.GotoStmt(e,ts)              -> gotoStmt env e ts
+    | A.CutStmt(n, args, fs)        -> cutStmt env n args fs
+    | A.ReturnStmt(cc, alt, args)   -> returnStmt env cc alt args
+    | A.JumpStmt(cc,e,args,ts)      -> jumpStmt env cc e args ts
+    | A.ContStmt(n,ns)              -> contStmt env n ns
+    | A.LabelStmt(n)                -> E.Ok ()
+    | A.EmptyStmt                   -> E.Ok ()
+    | A.SwitchStmt switch           -> switchStmt env switch         
+<<>>=
+and stmts env ss = E.Implode.map (stmt env) ss
         
 @
 % ------------------------------------------------------------------ 
