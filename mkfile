@@ -13,9 +13,7 @@ VERSION =       `date +%Y%m%d`
 # SUBDIRS are made from left to right - order matters
 # ------------------------------------------------------------------ 
 
-SRC     =       src
-LIBSRC  =       cllib lua asdl rtl gen camlburg tools
-SUBDIRS =       $LIBSRC $SRC doc
+SUBDIRS =       cllib lua asdl rtl gen camlburg tools src interp doc
 
 # A note on profiling.  Profiling is controlled in subdirectories by a
 # PROFILE variable in each mkfile.  Profiling is turned on by default,
@@ -28,9 +26,10 @@ SUBDIRS =       $LIBSRC $SRC doc
 # ------------------------------------------------------------------ 
 # high level targets
 # ------------------------------------------------------------------ 
-# all:          build the compiler
+# all:          build the compiler, interpreter, documentation
+# qc--:         build compiler
+# interp:       build interpreter
 # lib:          build just the lib/ directory, but not the compiler
-#
 # clean:        remove non-source files (recursive) but leave all
 #               binaries in bin/
 # clobber:      remove all non-source file
@@ -38,12 +37,50 @@ SUBDIRS =       $LIBSRC $SRC doc
 # test:         run test suite
 
 
-all:V:          lib dirs
-                for i in $SRC doc; 
+all:V:          qc--     interp doc
+all.opt:V:      qc--.opt interp doc
+
+
+qc--:V:         lib dirs
+                for i in src 
                 do 
                     (echo "# cd $i" && cd $i && mk $MKFLAGS depend) || exit 1
                     (echo "# cd $i" && cd $i && mk $MKFLAGS update) || exit 1
                 done
+
+qc--.opt:V:     lib.opt dirs
+                for i in src doc
+                do 
+                    (echo "# cd $i" && cd $i && mk $MKFLAGS depend)    || exit 1
+                    (echo "# cd $i" && cd $i && mk $MKFLAGS update.opt)|| exit 1
+                done
+
+lib:V:          dirs
+                for i in cllib lua asdl rtl gen camlburg tools
+                do 
+                    (echo "# cd $i" && cd $i && mk $MKFLAGS depend) || exit 1
+                    (echo "# cd $i" && cd $i && mk $MKFLAGS update) || exit 1
+                done
+
+lib.opt:V:      dirs
+                for i in cllib lua asdl rtl gen camlburg tools
+                do 
+                    (echo "# cd $i" && cd $i && mk $MKFLAGS depend) || exit 1
+                    (echo "# cd $i" && cd $i && mk $MKFLAGS update.opt) || exit 1
+                done
+
+interp:V:       dirs
+                echo "# cd interp" && cd interp && mk $MKFLAGS update
+                
+doc:V:          dirs
+                echo "# cd doc" && cd doc && mk $MKFLAGS update 
+
+test:V:         all
+                cd test2 && mk $MKFLAGS all
+
+# ------------------------------------------------------------------ 
+# print dependency graph
+# ------------------------------------------------------------------ 
 
 dot:V:		graph.dot
 print-dot:V:	graph.ps
@@ -60,30 +97,10 @@ DEPENDFILES =   cllib/DEPEND.evaluating \
 
 graph.dot:D:	$DEPENDFILES
 	        cat $prereq | ocamldot -landscape > $target
-
-all.opt:V:      lib.opt dirs
-                for i in $SRC; 
-                do 
-                    (echo "# cd $i" && cd $i && mk $MKFLAGS depend)    || exit 1
-                    (echo "# cd $i" && cd $i && mk $MKFLAGS update.opt)|| exit 1
-                done
-
-lib:V:          dirs
-                for i in $LIBSRC; 
-                do 
-                    (echo "# cd $i" && cd $i && mk $MKFLAGS depend) || exit 1
-                    (echo "# cd $i" && cd $i && mk $MKFLAGS update) || exit 1
-                done
-
-lib.opt:V:      dirs
-                for i in $LIBSRC; 
-                do 
-                    (echo "# cd $i" && cd $i && mk $MKFLAGS depend) || exit 1
-                    (echo "# cd $i" && cd $i && mk $MKFLAGS update.opt) || exit 1
-                done
-
-precompile:     
-                echo "this target has become obsolete"                
+                
+# ------------------------------------------------------------------ 
+# Devleoper's Documentation
+# ------------------------------------------------------------------ 
 
 html            \
 dvi:V:          dirs
@@ -92,11 +109,15 @@ dvi:V:          dirs
                     (echo "# cd $i" && cd $i && mk $MKFLAGS $target) || exit 1
                 done
 
-test:V:         all
-                cd test2 && mk $MKFLAGS all
+# ------------------------------------------------------------------ 
+# Cleaning
+# ------------------------------------------------------------------ 
 
 clean:V:        dirs
-                for i in $SUBDIRS; do (cd $i && mk $MKFLAGS $target); done
+                for i in $SUBDIRS 
+                do 
+                    (echo "#cd $i" && cd $i && mk $MKFLAGS $target)
+                done
                 find lib \
                         \( -name 'CVS'                  \
                         -o -name '.cvsignore'           \
@@ -104,7 +125,10 @@ clean:V:        dirs
                         -o -type f -exec rm '{}' \;
 
 clean.opt:V:    dirs
-                for i in $SUBDIRS; do (cd $i && mk $MKFLAGS $target); done
+                for i in $SUBDIRS 
+                do 
+                    (echo "#cd $i" && cd $i && mk $MKFLAGS $target)
+                done
                 find lib \
                         \( -name 'CVS'                  \
                         -o -name '.cvsignore'           \
