@@ -1,0 +1,317 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+\section{Lua values, parameterized by user data}
+
+As in Lua, we keep the value space simple and small.
+Unlike Lua, we have only one kind of function.
+The type of [[userdata]] is not specified here; it is intended to be a
+functor parameter.
+
+This interface is a key for clients because it not only specifies what
+a Lua value is, but also provides higher-order embedding/projection
+pairs so that Caml values can be mapped to Lua values and back again.
+<<signatures>>=
+module type S = sig
+  type userdata
+  type value
+    = Nil
+    | Number   of float
+    | String   of string
+    | Function of (state -> value list -> value list)
+    | Userdata of userdata
+    | Table    of table
+  and table = (value, value) Hashtbl.t
+  and state = { globals : table
+              ; fallbacks : (string, value) Hashtbl.t
+              ; mutable callstack : string list
+              }
+  val to_string : value -> string
+@ 
+Lua tables are not quite like Caml tables, but they are close.
+<<signatures>>=
+  module Table : sig
+    val create : sizehint:int -> table
+    val find   : table -> key:value -> value
+    val bind   : table -> key:value -> data:value -> unit
+    val of_list : (string * value) list -> table
+  end
+@ 
+Now, for embedding and projection.
+This is a key, as it completely replaces the stupid stack-based
+interface found in~C.
+Instead, we use higher-order functions to whip up functionality as needed.
+If a projection fails, it raises [[Projection]] giving the value it
+tried to project and a string indicating what it tried to project to.
+<<signatures>>=
+  exception Projection of value * string
+  type ('a,'b) ep = { embed : 'a -> 'b; project : 'b -> 'a }
+  type 'a map  = ('a, value) ep
+  type 'a mapf  (* used to build function maps that curry/uncurry *)
+@ 
+These functions enable us to convert the basic types.
+<<signatures>>=
+  val float  : float  map
+  val int    : int    map
+  val bool   : bool   map
+  val string : string map
+@ 
+To convert a value of option type, we represent [[None]] as [[Nil]].
+Woe betide you if [[Nil]] is a valid value of your type!
+We won't see it.
+<<signatures>>=
+  val option : 'a map -> 'a option map
+@ 
+To convert a list of values, we produce a table with a binding of the
+length to the name [[n]] and bindings of the values to the numbers $1..n$.
+We won't see it.
+<<signatures>>=
+  val list : 'a map -> 'a list map
+@ 
+If for some reason a Caml function operates on Lua values, we need an
+identity pair.
+<<signatures>>=
+  val value  : value map
+@
+Here is the support for converting functions.
+First, if one wants a Lua function to be curried (as the Caml
+functions are), one can simply use [[-->]].
+There's a small gotcha, in that we can't make [[-->]] right
+associative.
+That's OK, as it probably shouldn't be used for curried functions.
+
+For curried functions that should take lists of arguments in Lua,
+we use [[**->]], [[pfunc]], [[func]], and [[result]].
+The idea is this: if we have a Caml function type
+[[t -> u -> v -> w]], we can turn this into a Lua function of three
+arguments by using the embedding/projection pair produced by
+\begin{quote}
+[[pfunc (t **-> u **-> v **-> result w)]]
+\end{quote}
+<<signatures>>=
+  val ( -->  ) : 'a map  -> 'b map  -> ('a -> 'b) map
+  val ( **-> ) : 'a map  -> 'b mapf -> ('a -> 'b) mapf
+  val result   : 'a map  -> 'a mapf
+  val runit    : unit mapf                         (* for functions w/o results *)
+  val values   : value list mapf                   (* functions returning value lists*)
+  val pfunc    : 'a mapf -> 'a map                 (* pure functions *)
+  val func     : 'a mapf -> (state -> 'a) map      (* impure functions *)
+end
+@ Here's an example: we embed the [[String.sub]] function, then apply
+it to some arguments.
+<<tests>>=
+let sub = (pfunc (string **-> int **-> int **-> result string)).embed String.sub
+let apply = function Function f -> fun args -> trim1 (f emptystate args)
+                   | v -> raise (Projection (v, "function"))
+let check = string.project (apply sub [string.embed "hello"; int.embed 0; int.embed 2])
+let _ = assert (check = "he")
+@ 
+If a function is impure (needs access to the Lua state) we use
+[[func]].
+<<tests>>=
+let setglobal {globals=g; fallbacks=f} n v = Table.bind g (String n) v
+let sg = ((func (string **-> value **-> runit)).embed setglobal : value)
+@ 
+For the rest of the interface, we can make Lua values by supplying an
+appropriate [[userdata]] type.  
+<<signatures>>=
+module type USERDATA = sig type t val to_string : t -> string end
+<<value.mli>>=
+<<signatures>>
+module Make (U : USERDATA) : S with type userdata = U.t
+@
+\subsection{Implementation}
+<<value.ml>>=
+<<signatures>>
+module Make (U : USERDATA) : S with type userdata = U.t = struct
+  <<value toplevel>>
+  <<tests>>
+end
+@ 
+I have to repeat the datatype definition.
+<<value toplevel>>=
+type userdata = U.t
+type value
+  = Nil
+  | Number   of float
+  | String   of string
+  | Function  of (state -> value list -> value list)
+  | Userdata of userdata
+  | Table    of table
+  and table = (value, value) Hashtbl.t
+  and state = { globals : table
+              ; fallbacks : (string, value) Hashtbl.t
+              ; mutable callstack : string list
+              }
+<<table definition>>
+@ 
+Now, for embedding and projection.  More repeats.
+<<value toplevel>>=
+exception Projection of value * string
+type ('a,'b) ep = { embed : 'a -> 'b; project : 'b -> 'a }
+type 'a map  = ('a, value) ep
+type 'a mapf = ('a, value list -> value list) ep
+@ 
+<<value toplevel>>=
+let to_string = function
+  | Nil -> "nil"
+  | Number x -> string_of_float x
+  | String s -> s
+  | Function f -> "function"
+  | Userdata u -> U.to_string u
+  | Table t  -> "table"
+@
+Here are the embedding/projection pairs for the simple types.
+There are subtle mismatches between Caml types and Lua types, so I do
+my best to patch them.
+Numbers are automatically converted to strings on request, but I
+haven't yet implemented the opposite conversion.
+<<value toplevel>>=
+let string = { embed = (fun s -> String s)
+             ; project = function String s -> s 
+                                | Number x -> string_of_float x
+                                | v -> raise (Projection (v, "string"))
+             } 
+
+let is_float_literal s = 
+  Floatscan.length (Lexing.from_string s) = String.length s
+let pervasive_float = float
+let float = { embed = (fun x -> Number x)
+            ; project = function Number x -> x
+                               | String s when is_float_literal s -> float_of_string s
+                               | v -> raise (Projection (v, "float"))
+            } 
+<<floatscan.mll>>=
+let digit       = ['0'-'9']
+let sign        = ['+' '-']
+let exp         = ['e''E'] sign? digit+
+let number      = digit+ exp?
+                | digit+ '.' digit+ exp?
+rule length = parse number { Lexing.lexeme_end lexbuf } | _ { -1 }
+@ 
+<<value toplevel>>=
+let to_int x = 
+  let n = truncate x in
+  if pervasive_float n = x then n else raise (Projection (Number x, "int"))
+
+let int   = { embed = (fun n -> Number (pervasive_float n))
+            ; project = function Number x -> to_int x 
+                               | v -> raise (Projection (v, "int"))
+            } 
+
+let bool  = { embed = (fun b -> if b then String "t" else Nil)
+            ; project = function Nil -> false | _ -> true
+            } 
+let unit =  { embed = (fun () -> Nil)
+            ; project = function Nil -> () | v -> raise (Projection (v, "unit"))
+            } 
+@ 
+<<value toplevel>>=
+let option t = { embed = (function None -> Nil | Some x -> t.embed x)
+               ; project = (function Nil -> None | v -> Some (t.project v))
+               }
+@ 
+<<value toplevel>>=
+let list (ty : 'a map) = 
+  let table l =
+    let n = List.length l in
+    let t = Table.create n in
+    let rec set_elems next = function
+      | [] -> Table.bind t (String "n") (Number (pervasive_float n))
+      | e :: es -> ( Table.bind t (Number next) (ty.embed e)
+                   ; set_elems (next +. 1.0) es)
+    in  (set_elems 1.0 l; Table t)
+  in
+  let untable (t:table) =
+    let n = match Table.find t (String "n") with
+    | Number x -> to_int x
+    | v -> raise (Projection (v, "length of list")) in
+    let rec elems i =
+      if i > n then []
+      else ty.project (Table.find t (Number (pervasive_float i))) :: elems (i + 1) in
+    elems 1
+  in { embed = table; project = (function Table t -> untable t
+                                        | v -> raise (Projection (v, "list"))) }
+@
+<<value toplevel>>=
+let value = { embed = (fun x -> x); project = (fun x -> x) }
+@ 
+Here is a simple function from one argument to one result.
+We implement the usual Lua game of ``adjusting'' the argument list.
+<<value toplevel>>=
+let trim1 = function  (* trim list of arguments to a single argument *)
+  | [] -> Nil
+  | h::t -> h
+
+let const f s = f
+let emptystate = 
+ { globals = Hashtbl.create 0; fallbacks = Hashtbl.create 0; callstack = [] }
+
+let (-->) arg result =
+  { embed =   (fun f -> 
+               Function (fun _ args -> [result.embed (f (arg.project (trim1 args)))]))
+  ; project = function Function f -> 
+                          fun x -> result.project (trim1 (f emptystate [arg.embed x]))
+                     | v -> raise (Projection (v, "function"))
+  } 
+@ 
+What we have above would be enough, except that Caml likes functions
+to be curried and Lua likes them uncurried.
+We provide [[**->]], [[result]], and [[func]] for embedding and
+projecting curried functions.
+The functions are a bit subtle, but if you follow the types, you
+shouldn't be too baffled. 
+<<value toplevel>>=
+let ( **-> ) (firstarg : 'a map) (lastargs : 'b mapf) : ( ('a -> 'b) mapf ) =
+  let apply (f : 'a -> 'b) args = 
+    let h, t = match args with [] -> Nil, [] | h :: t -> h, t in
+    let f = f (firstarg.project h) in
+    lastargs.embed f t
+  in
+  let unapp f' =
+    fun (x : 'a) -> lastargs.project (function t -> f' (firstarg.embed x :: t)) in
+  { embed = apply; project = unapp }
+
+let result (r : 'a map) : ('a mapf) = 
+  { embed   = (fun f -> fun args -> [r.embed f])
+  ; project = (fun f -> r.project (trim1 (f [])))
+  } 
+
+let runit = { embed = (fun () args -> [])
+(*            ; project = (fun f -> match f [] with [] -> ()
+                                    | h::t -> raise (Projection (h, "unit result")))
+*)
+; project = (fun f -> assert false) (* results only *)
+            } 
+
+let values : value list mapf =
+  { embed = (fun l args -> l); project = (fun f -> assert false)
+  } 
+
+let pfunc (arrow : 'a mapf) : ('a map) =
+  { embed   = (fun (f : 'a) -> Function (fun s -> arrow.embed f))
+  ; project = (function Function f -> (arrow.project (f emptystate) : 'a)
+                      | v -> raise (Projection (v, "function")))
+  } 
+
+let func (arrow : 'a mapf) : ((state -> 'a) map) =
+  { embed   = (fun (f : state -> 'a) -> Function (fun s -> arrow.embed (f s)))
+  ; project = (function Function f -> (fun s -> arrow.project (f s) : state -> 'a)
+                      | v -> raise (Projection (v, "function")))
+  } 
+@ 
+Lua tables are very nearly Caml hash tables, except they never have
+multiple elements.
+<<table definition>>=
+module Table = struct
+  let create = Hashtbl.create
+  let find t k = try Hashtbl.find t k with Not_found -> Nil
+  let bind t k v =
+    Hashtbl.remove t k;
+    match v with Nil -> ()
+    | _ -> Hashtbl.add t k v
+  let of_list l =
+    let t = Hashtbl.create (List.length l) in
+    let _ = List.iter (fun (k, v) -> bind t (String k) v) l in
+    t
+end
+@ 
