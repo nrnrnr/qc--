@@ -83,8 +83,10 @@ type 'a compunit = {
 @ 
 <<nelab.mli>>=
 <<exposed types>>
-val program : Srcmap.map -> 'a Asm.assembler -> Nast.t ->
+val program : validator -> Srcmap.map -> 'a Asm.assembler -> Nast.t ->
   ('a Fenv.Dirty.env' * 'a compunit) Error.error
+<<exposed types>>=
+type validator = Rtl.rtl -> string option
 @ 
 % ------------------------------------------------------------------ 
 \section{Checking Static Semantics}
@@ -417,7 +419,7 @@ imports and exports have two effects
 
 <<nelab.ml>>=
 type scope = Local | Global
-let program srcmap asm ast =
+let program validate srcmap asm ast =
   E.seq (Metrics.of_ast srcmap ast.N.target) (fun metrics ->
     let flag = function E.Error -> F.flagError | E.Ok _ -> (fun env -> env) in
     let eprint r s = E.errorRegionPrt (srcmap, r) s in
@@ -465,7 +467,7 @@ let proc env spans p =
   let env = foldl bind_code_label env p.N.labels in  (* odd -- explained above *)
   let env, conts = bind_and_return_continuations env p.N.continuations in
   let stackmem, stacklabels, env = stackdata env p.N.stackdata in
-  let code = Elabstmt.elab_stmts p.N.region env p.N.code in
+  let code = Elabstmt.elab_stmts validate srcmap p.N.region env p.N.code in
   let _, den  = F.findv p.N.name env in
   E.ematch4 code locals (E.Raise.list spans) den (fun code locals spans den ->
     let sym = match den with

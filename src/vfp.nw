@@ -131,8 +131,9 @@ If the call does not change the stack pointer, the redundant
 assignment can be optimized away.
 \end{itemize}
 <<vfp.mli>>=
-val mk     : Rtl.width       -> Rtl.exp
-val is_vfp : Rtl.Private.loc -> bool
+val mk_space : Rtl.width       -> Space.t
+val mk       : Rtl.width       -> Rtl.exp
+val is_vfp   : Rtl.Private.loc -> bool
 type x
 val mkx : unit -> x
 module type ARG = sig
@@ -284,3 +285,14 @@ and find_k'_added_to_sp (RP.Rtl ges) =
     | _ :: ges -> find found k' ges in
   find false 0 ges
 @ 
+<<vfp.ml>>=
+let mk_space w = 
+    { Space.space = 'V'
+    ; Space.doc = "holds the virtual frame pointer"
+    ; Space.cellwidth = w
+    ; Space.indexwidth = w
+    ; Space.indexlimit = None
+    ; Space.aggregation = Rtl.Identity
+    ; Space.widths = [w]
+    ; Space.classification = Space.Fixed
+    }

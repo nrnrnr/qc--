@@ -50,7 +50,8 @@ type stmt =
 <<elabstmt.mli>>=
 <<exposed types>>
 val elab_stmts :
-  Ast.region -> 'a Fenv.Dirty.env' -> Nast.stmt list -> stmt list Error.error
+  (Rtl.rtl -> string option) -> Srcmap.map -> Ast.region -> 'a Fenv.Dirty.env' -> 
+  Nast.stmt list -> stmt list Error.error
 val elab_cformals : 
   Ast.region -> 'a Fenv.Dirty.env' -> Nast.cformal list ->
     Fenv.variable hinted list Error.error
@@ -93,7 +94,7 @@ restrictions: if a statement is reachable by ordinary control flow, it
  had better not be a continuation.
 Similarly, it had better not be the end of the procedure body.
 <<elabstmt.ml>>=
-let elab_functions r env =
+let elab_functions validate srcmap r env =
   let eprint r = E.errorRegionPrt (F.srcmap env, r) in
   let errorf r = Printf.kprintf (fun s -> eprint r s; E.Error) in
   let exp = Elabexp.elab_exp env in
@@ -159,8 +160,10 @@ let elab_functions r env =
     let ss = stmts r true ss in
     if falls then errorf r "control falls off end of procedure" else ss
   in stmts, cformals
-let elab_stmts    r env = fst (elab_functions r env)
-let elab_cformals r env = snd (elab_functions r env)
+let nullmap = Srcmap.mk ()
+let nullv   = fun _ -> None
+let elab_stmts    v m r env = fst (elab_functions v m           r env)
+let elab_cformals     r env = snd (elab_functions nullv nullmap r env)
 @ 
 Here are a couple of basic utilities.
 We sometimes do extra checking if an expression is just a name.
@@ -178,6 +181,14 @@ let ispointer =
 let insist_pointer what t =
   if ispointer t then ()
   else E.error (what ^ " must be a bit vector of the native pointer type") in
+@ 
+We need to be able to validate an RTL at a source location.
+<<elaboration utilities>>=
+let vrtl r rtl =
+  match validate rtl with
+  | None -> rtl
+  | Some msg ->
+      ( Printf.eprintf "%s: Warning: %s\n" (Srcmap.Str.region r) msg; rtl ) in
 @ 
 A formal parameter to a continuation must be a local register variable.
 <<elaboration of continuation formals>>=
@@ -271,7 +282,8 @@ The right hand side may contain optional guarding expressions of type
 [[bool]].
 <<definitions of elaboration functions>>=
 let assign lhs rhs =
-  try E.ematch (E.Raise.list (List.map2 effect lhs rhs)) (fun es -> Assign(Rtl.par es))
+  try E.ematch (E.Raise.list (List.map2 effect lhs rhs)) (fun es ->
+    Assign (vrtl (srcmap, r) (Rtl.par es)))
   with Invalid_argument _ -> <<complain about length mismatch in assignment>> in
 <<elaboration utilities>>=
 let effect lhs (guard,rhs) =

@@ -480,15 +480,16 @@ C.register_module "Dataflow"
    ] g;                        
 @ 
 <<register modules to [[g]] in alphabetical order>>=
-let new_ok (map,ast) asm =
-  match Nelab.program map asm (Nast.program ast) with
+let new_ok target (map,ast) asm =
+  match Nelab.program (Mvalidate.rtl target) map asm (Nast.program ast) with
   | Error.Error -> false
   | Error.Ok (env, _) -> not (Fenv.Dirty.errorFlag env) in
 C.register_module "Driver" 
   [ "assemble"  , V.efunc (Map.vasm **->> V.unit)   (fun asm -> asm#emit)
   ; "proc_assembler", V.efunc (Map.vasm **->> (Map.stage V.value)) 
                     (fun asm v p -> asm#cfg_instr p ; true)
-  ; "new_ok"    , V.efunc (Map.ast **-> Map.asm **->> V.bool)  new_ok
+  ; "new_ok"    , V.efunc (Map.new_target **-> Map.ast **-> Map.asm **->> V.bool)  
+                          new_ok
   ; "emit_asdl" , V.efunc (Map.ast **->> V.unit)               Driver.emit_asdl
   ; "parse"     , V.efunc (V.string**->> Map.ast)              Driver.parse
   ; "print"     , V.efunc (Map.doc **-> V.int **-> Map.outchan **->> V.unit)
@@ -499,7 +500,7 @@ C.register_module "Driver"
   ; "stdin"     , Map.inchan.V.embed              stdin (* hack *)
   ; "stdout"    , Map.outchan.V.embed             stdout(* hack *)
   ; "compile"  , V.efunc (Map.new_target **-> Map.optimize Map.proc **-> V.bool **->
-                           Map.ast **-> Map.asm **->> V.unit) 
+                           Map.ast **-> Map.asm **-> V.bool **->> V.unit) 
                           Driver.compile
   ; "reinit"    , V.efunc (V.unit  **->> V.unit)  Reinit.reset
   ] g;

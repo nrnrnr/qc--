@@ -2,29 +2,28 @@
 
 \section{RTL Validation}
 
-[[mvalidate]] checks that all operators are at widths no larger than
+[[Mvalidate.rtl]] checks that all operators are at widths no larger than
 those supported by the target.  If we detect that an RTL cannot be
-compiled then the value returned from [[validate]] is [[Some s]] where
+compiled then the value returned from [[rtl]] is [[Some s]] where
 [[s]] is a string explaining why the RTL is invalid.  Otherwise the
 result is [[None]].
 <<mvalidate.mli>>=
-val mvalidate : ('a, 'b) Target.t -> Rtl.rtl -> string option
+val rtl : ('a, 'b) Target.t -> Rtl.rtl -> string option
 @ 
-
 <<mvalidate.ml>>=
 module RP   = Rtl.Private
 module Down = Rtl.Dn
 module Up   = Rtl.Up
 @ 
-
 The exception [[RTLInvalid]] is used internally in this module to
 signal that a RTL cannot be compiled---users never see this.
 <<mvalidate.ml>>=
 exception RTLInvalid of string
 @ 
-
 <<mvalidate.ml>>=
-let mvalidate t r =
+let () = Debug.register "mvalidate" "debug machine-environment validator"
+let rtl t r =
+  Debug.eprintf "mvalidate" "Lafayette, we are here\n";
   let m  = t.Target.machine_env.Target.ops in
   let remove_bits = function
     | Types.Bits n -> n
@@ -33,7 +32,7 @@ let mvalidate t r =
   let m = List.map (fun (s, bs) -> (s, List.map remove_bits bs)) m in
   let w  = t.Target.wordsize in
   let ns = t.Target.machine_env.Target.literal in
-  let spaces = t.Target.spaces in
+  let spaces = Vfp.mk_space w :: t.Target.spaces in
   let name = t.Target.name in
   let machine_widths opname =
     let all = List.find_all (fun (opname',_) -> opname = opname') m in
@@ -50,24 +49,23 @@ let mvalidate t r =
   in
   let sprintf = Printf.sprintf in
   let imposs = Impossible.impossible in
-  let reject s = raise (RTLInvalid s) in
+  let reject fmt = Printf.kprintf (fun s -> raise (RTLInvalid s)) fmt in
   let reg s n p1 p2 =
     let space =
       try List.find (fun x -> x.Space.space = s) spaces
-      with Not_found -> reject (p1 s name)
+      with Not_found -> reject "%s" (p1 s name)
     in
     List.mem n space.Space.widths
-    || reject (p2 s (xy_or_z string_of_int space.Space.widths))
+    || reject "%s" (p2 s (xy_or_z string_of_int space.Space.widths))
   in
   let rec loc = function
     | RP.Mem(_,_,n,e,_) -> exp e (* not clear what else to do *)
     | RP.Reg(s,_,n) as e ->
         reg s n (sprintf "Space '%c' not found in target '%s'")
                 (sprintf "Space '%c' only supports width %s")
-    | RP.Var(x,_,n) -> n <= w
+    | RP.Var(x,_,n) -> n <= w || n mod t.Target.memsize == 0 
       || reject 
-          ("Var "^x^" of "^string_of_int n^" bits should be no more than "
-           ^string_of_int w^" bits")
+          "variable %s of type bits%d should either be at most %d bits wide or else have a width a multiple of %d bits" x n w t.Target.memsize
     | RP.Global(_,_,n) ->
         reg 'r' n (fun c s -> imposs "Space 'r' must be available")
                   (fun c -> sprintf "Globals only available at width %s")
@@ -84,8 +82,7 @@ let mvalidate t r =
           with Not_found -> true
         in
         if op_possible then List.for_all exp es
-        else reject (sprintf "No acceptable widths for %%%s on target '%s'"
-                       opname name)
+        else reject "No acceptable widths for %%%s on target '%s'" opname name
     | RP.Const c -> const c
   and const = function
     | RP.Link(_,_,n) -> List.exists (fun w -> n <= w) ns
