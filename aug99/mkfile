@@ -5,7 +5,7 @@ ASDLGEN=camlGen
 NOWEAVE=`echo ${NOWEAVE-noweave}`
 
 ASDLSRC=asm cmmir ast rtl
-OCAMLSRC=sourcemap util atomize ralloc
+OCAMLSRC=sourcemap util atomize ralloc error
 
 
 ASDLSRCDOTDEFS=`echo $ASDLSRC | sed 's/ /.defs /g;s/$/.defs/'`
@@ -113,8 +113,11 @@ all.defs: $ASDLSRCDOTDEFS
 ^($ASDLSRCREGEXP)'\.'tex:R: '\1'.nw
 	$NOWEAVE -autodefs asdl -index -n $stem1.nw >$target
 
+^($OCAMLSRCREGEXP)'\.'tex:R: '\1'.nw
+	$NOWEAVE -x -n $stem1.nw >$target
 
-DOCINPUTS="doc.tex $ASDLSRCDOTTEX"
+
+DOCINPUTS="doc.tex $ASDLSRCDOTTEX $OCAMLSRCDOTTEX"
 
 docin:V: $DOCINPUTS
 
@@ -123,8 +126,8 @@ doc.dvi: $DOCINPUTS
 doc.tex: doc.nw
 	$NOWEAVE -delay doc.nw >$target
 
-doc_check:V: doc.tex
-	for i in $ASDLSRCDOTTEX; do 
+doc-check:V: doc.tex
+	for i in $ASDLSRCDOTTEX $OCAMLSRCDOTTEX; do 
 	  j=`basename $i .tex`
 	  fgrep -s "\include{$j}" doc.tex || echo "$i not in doc" 1>&2
         done
@@ -175,7 +178,7 @@ aST.mli aST.ml aSTUtil.mli aSTUtil.ml: ast.asdl
 	notangle -R$target -L' --#line %-1L "%F"%N'  $prereq > $target
 
 irnode.asdl: cmmir.nw
-	notangle -R$target -L' --#line %-1L "%F"%N'  $prereq > $target
+	notangle -filter 'nocond codegen' -R$target -L' --#line %-1L "%F"%N'  $prereq > $target
 ir.asdl: cmmir.nw
 	notangle -R$target -L' --#line %-1L "%F"%N'  $prereq > $target
 
