@@ -659,7 +659,7 @@ let width_cost _ proc =
   1
 in
 let update_gamma_counts _ proc =
-  let f x = try G.update_instr Widen.update_gamma_counts x with Widen.Don't_update -> ()
+  let f x = try G.update_instr (Widen.update_gamma_counts proc.Proc.target) x with Widen.Don't_update -> ()
   in
   Widen.init_gamma_counts();
   G.iter_nodes f proc.Proc.cfg; 1
@@ -672,29 +672,30 @@ let create_gamma _ _=
 Widen.create_gamma(); 1
 in
 let dpwiden _ proc =
-  let upd g r = if Widen.needs_widening r then g r
+  let upd g r = if Widen.needs_widening proc.Proc.target r then g r
               else raise Widen.Doesn't_need_widening in
   (* better alternative *)
   let widen node = match G.to_executable node with
-  | Some r when Widen.needs_widening r -> G.update_instr Widen.dpwiden node
+  | Some r when Widen.needs_widening proc.Proc.target r ->
+      G.update_instr (Widen.dpwiden proc.Proc.target) node
   | _ -> () in
   let f g x =
     try 
       G.update_instr (upd g) x
     with Widen.Doesn't_need_widening -> ()
   in
-  G.iter_nodes (f Widen.dpwiden) proc.Proc.cfg;
+  G.iter_nodes (f (Widen.dpwiden proc.Proc.target)) proc.Proc.cfg;
   1
 in
 let widenlocs _ proc =
-  let upd g r = if Widen.needs_widening r then g r
+  let upd g r = if Widen.needs_widening proc.Proc.target r then g r
               else raise Widen.Doesn't_need_widening in
   let f g x =
     try
       G.update_instr (upd g) x
     with Widen.Doesn't_need_widening -> ()
   in
-  G.iter_nodes (f Widen.widenlocs) proc.Proc.cfg;
+  G.iter_nodes (f (Widen.widenlocs proc.Proc.target)) proc.Proc.cfg;
   1
 in
 C.register_module "Widen" 
