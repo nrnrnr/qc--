@@ -52,15 +52,20 @@ procedure.
 
 
 <<ASM>>=
-Asm2.S with type instruction = G.t * string
-       and  type init        = string -> string
+Asm2.S with type instruction = G.t                      (* CFG *)
+                             * string                   (* proc name *)
+                             * (string -> string)       (* mangler *)
+       and  type init        = unit
 @
+
 
 <<ast3ir.mli>>=
 module Make 
         (G: Cfg3.S) 
         (A: <<ASM>>) : sig
-    val translate: Fenv.Clean.env -> Target2.t -> Ast.program -> A.asm
+    val translate: Fenv.Clean.env -> Target2.t 
+                                  -> Ast.program 
+                                  -> A.asm
 end
 @
 
@@ -763,7 +768,7 @@ and switchStmt    state x  = Impossible.unimp "switch"
 \end{quote}
 
 <<Make procedure>>=
-let proc env target (*props*) asm (cconv,name,args,bdy) = 
+let proc env target (mangle:string->string)  asm (cconv,name,args,bdy) = 
     let p           = match F.findv name env with
                       | _,(F.Label(F.Proc p),_) -> p
                       | _                        -> assert false in
@@ -800,86 +805,9 @@ let proc env target (*props*) asm (cconv,name,args,bdy) =
      * These will be attached to the instruction but the interface 
      * for Asm has to change first.
      *)
-        asm ++ Asm.instr (cfg,name)    (*XXX*)
+        asm ++ Asm.instr (cfg,name,mangle)    (*XXX*)
 @
         
-   
-% ------------------------------------------------------------------ 
-\subsection{Global Memory declarations}
-% ------------------------------------------------------------------ 
-
-\begin{note}\it
-    The [[Asm]] interface for emitting link-time expressions is
-    incompatible with the [[Rtl]]s that represent link-time expressions.
-    --CL
-\end{note}
-
-<<Make memory declarations>>=
-let initialized_data target asm expr = 
-    Impossible.unimp "initialized data in global memory declaration"
-
-let rec init env target asm = function
-    | A.InitAt(x,_)   -> init env target asm x
-    | A.InitExprs(es) -> foldl (initialized_data target) asm es
-    | A.InitUStr(_)      (*XXX*)
-    | A.InitStr(_)    -> (*XXX*)
-        Impossible.unimp "initialized data in global memory declaration"
-@
-
-In order to reserve memory for data we have to know how many objects
-an sequence of initializing expressions defined. This number is
-returned by [[init_size]].
-
-<<Make memory declarations>>=
-let rec init_size = function
-    | None   -> 1
-    | Some i -> let rec loop = function 
-                    | A.InitAt(x,_)   -> loop x
-                    | A.InitExprs(es) -> List.length es
-                    | A.InitStr(s)    -> assert false
-                    | A.InitUStr(s)   -> assert false
-                in 
-                    loop i 
-@
-
-Data can be declared initialized or un-initialized. The amount of
-memory used by a declaration is the size of the base-type times the
-number of values of this type. 
-
-<<Make memory declarations>>=
-let memdecl (env:F.env) target asm t size ini = 
-    let sizeof  = astwidth env t / target.Target.memsize          in
-    let const e = Bits.to_int (compile_const env target e)     in
-    let n      = ( match size with
-                 | A.DynSize    -> init_size ini
-                 | A.NoSize     -> 1
-                 | A.FixSize(e) -> const e
-                 ) in
-        ( match ini with
-        | None    -> asm ++ Asm.zeroes (n * sizeof)
-        | Some ii -> init env target asm ii
-        )
-@
-
-Data can be declared globally inside a section or a section-level
-[[span]] and locally, inside a procedure as [[stackdata]].  The former
-is directly translated into assembly action that reserve memory inside
-a section, the latter becomes just an amount of memory that is
-allocated inside a procedure's activation record.  Since the amount of
-stack allocated data and the offsets associated with labels inside of
-it are already entered into the fat environment (by
-[[Elab.Check.stackdatum]]), stack data declaration can be ignored. 
-Global data declarations, on the other hand, must be translated to
-assembly actions.
- 
-<<Make memory declarations>>=
-let rec datum env target asm = function
-    | A.DatumAt(x,_)        -> datum env target asm x
-    | A.Label(n)            -> asm ++ Asm.define_local (Asm.mksym n)
-    | A.Align(a)            -> asm ++ Asm.align a 
-    | A.MemDecl(t,m,init)   -> memdecl env target asm t m init
-@
-
 % ------------------------------------------------------------------ 
 \subsection{Stack Data Declarations}
 % ------------------------------------------------------------------ 
@@ -955,7 +883,84 @@ module StackData = struct
 
 end (* of module StackData *)
 @
-    
+      
+% ------------------------------------------------------------------ 
+\subsection{Global Memory declarations}
+% ------------------------------------------------------------------ 
+
+\begin{note}\it
+    The [[Asm]] interface for emitting link-time expressions is
+    incompatible with the [[Rtl]]s that represent link-time expressions.
+    --CL
+\end{note}
+
+<<Make memory declarations>>=
+let initialized_data target asm expr = 
+    Impossible.unimp "initialized data in global memory declaration"
+
+let rec init env target asm = function
+    | A.InitAt(x,_)   -> init env target asm x
+    | A.InitExprs(es) -> foldl (initialized_data target) asm es
+    | A.InitUStr(_)      (*XXX*)
+    | A.InitStr(_)    -> (*XXX*)
+        Impossible.unimp "initialized data in global memory declaration"
+@
+
+In order to reserve memory for data we have to know how many objects
+an sequence of initializing expressions defined. This number is
+returned by [[init_size]].
+
+<<Make memory declarations>>=
+let rec init_size = function
+    | None   -> 1
+    | Some i -> let rec loop = function 
+                    | A.InitAt(x,_)   -> loop x
+                    | A.InitExprs(es) -> List.length es
+                    | A.InitStr(s)    -> assert false
+                    | A.InitUStr(s)   -> assert false
+                in 
+                    loop i 
+@
+
+Data can be declared initialized or un-initialized. The amount of
+memory used by a declaration is the size of the base-type times the
+number of values of this type. 
+
+<<Make memory declarations>>=
+let memdecl (env:F.env) target asm t size ini = 
+    let sizeof  = astwidth env t / target.Target.memsize          in
+    let const e = Bits.to_int (compile_const env target e)     in
+    let n      = ( match size with
+                 | A.DynSize    -> init_size ini
+                 | A.NoSize     -> 1
+                 | A.FixSize(e) -> const e
+                 ) in
+        ( match ini with
+        | None    -> asm ++ Asm.zeroes (n * sizeof)
+        | Some ii -> init env target asm ii
+        )
+@
+
+Data can be declared globally inside a section or a section-level
+[[span]] and locally, inside a procedure as [[stackdata]].  The former
+is directly translated into assembly action that reserve memory inside
+a section, the latter becomes just an amount of memory that is
+allocated inside a procedure's activation record.  Since the amount of
+stack allocated data and the offsets associated with labels inside of
+it are already entered into the fat environment (by
+[[Elab.Check.stackdatum]]), stack data declaration can be ignored. 
+Global data declarations, on the other hand, must be translated to
+assembly actions.
+ 
+<<Make memory declarations>>=
+let rec datum env target mangle asm = function
+    | A.DatumAt(x,_)        -> datum env target mangle asm x
+    | A.Label(n)            -> asm ++ Asm.define_local (Asm.mksym (mangle n))
+    | A.Align(a)            -> asm ++ Asm.align a 
+    | A.MemDecl(t,m,init)   -> memdecl env target asm t m init
+@
+
+ 
 % ------------------------------------------------------------------ 
 \subsection{Toplevel}
 % ------------------------------------------------------------------ 
@@ -973,19 +978,19 @@ accordingly.  The next time we come across a procedure, the properties
 including the span will be used.
 
 <<Make toplevel>>=
-let rec sspan env target asm (e1,e2,ss) =    
+let rec sspan env target mangle asm (e1,e2,ss) =    
     let key   = compile_const env target e1 in
     let value = link_const    env target e2 in
     (* construct props value, pass it to section. not implemented *)
-        foldl (section env target) asm ss 
+        foldl (section env target mangle) asm ss 
 
 <<Make toplevel>>=
-and section env target (asm: Asm.asm) = function
-    | A.SectionAt(x,_)     -> section env target asm x
+and section env target mangle (asm: Asm.asm) = function
+    | A.SectionAt(x,_)     -> section env target mangle asm x
     | A.Decl(d)            -> asm
-    | A.Datum( d)          -> datum   env target asm d
-    | A.Procedure(p)       -> proc    env target asm p
-    | A.SSpan ss           -> sspan   env target asm ss
+    | A.Datum( d)          -> datum   env target mangle asm d
+    | A.Procedure(p)       -> proc    env target mangle asm p
+    | A.SSpan ss           -> sspan   env target mangle asm ss
 @            
 
 What to do with top-level procedures? They should go into some section
@@ -993,14 +998,14 @@ because otherwise they will end up in whatever section is currently
 active which just seems wrong.
 
 <<Make toplevel>>=
-let rec toplevel env target asm = function
-    | A.ToplevelAt(x, _)  -> toplevel env target asm x
+let rec toplevel env target mangle asm = function
+    | A.ToplevelAt(x, _)  -> toplevel env target mangle asm x
     | A.Section(name, ss) -> 
-        let asm = asm ++ Asm.section name in  
-            foldl (section env target (*props*)) asm ss
+        let asm = asm ++ Asm.section (mangle name)in  
+            foldl (section env target mangle (*props*)) asm ss
     | A.TopDecl(d)        -> asm (* nothing to do here *)
     | A.TopProcedure(p)   -> let asm = asm ++ Asm.section default_section  
-                             in proc env target (*props*) asm p
+                             in proc env target mangle (*props*) asm p
 @
 
 
@@ -1026,51 +1031,20 @@ let imports env asm =
 The assembler maintains a current section. To guarantee that
 everything goes into a meaningful section, the first action is to
 start the [[text]] section.
-
-<<Make translate program>>=
-let cmm =
-    let reserved =
-        [ "aborts"; "align"; "aligned"; "also"; "as"; "big"; "byteorder";
-        "case"; "const"; "continuation"; "cut"; "cuts"; "else"; "equal";
-        "export"; "foreign"; "goto"; "if"; "import"; "invariant"; "jump";
-        "little"; "memsize"; "pragma"; "register"; "return"; "returns";
-        "section"; "semi"; "span"; "stackdata"; "switch"; "target"; "targets";
-        "to"; "typedef"; "unicode"; "unwinds"; "float"; "charset";
-        "pointersize"; "wordsize"]
-    in
-    let id = function
-        | 'a'..'z'
-        | '0'..'9'
-        | 'A'..'Z'
-        | '.' 
-        | '_' 
-        | '$' 
-        | '@'      -> true
-        | _        -> false in
-    let replace = function
-        | x when id x -> x
-        | _           -> '@' in    
-        { Mangle.preprocess = (fun x -> x)
-        ; Mangle.replace    = replace
-        ; Mangle.reserved   = reserved
-        ; Mangle.avoid      = (fun x -> x ^ "$")
-        }
-@
-    
                       
 <<Make translate program>>=
-let program env target asm tt = 
+let program env target mangle asm tt = 
     let asm = asm ++ Asm.section "text"           in
     let asm = exports env asm                     in
     let asm = imports env asm                     in
-        foldl (toplevel env target) asm tt
+        foldl (toplevel env target mangle) asm tt
 
 let translate env target prog =
     let base     = Rtl.link "global_base" target.Target.pointersize in (*XXX*)
     let env,area = globals env target base (F.globals env) in
                    (*XXX where does area go?*)
     let map      = F.nam2sym env in
-    let mangler  = Mangle.mk cmm map in
-    let asm      = Asm.init mangler in
-        program env target asm prog  (* asm *)
+    let mangle   = Mangle.mk Asm.mangle map in (* make global? *)
+    let asm      = Asm.init () in
+        program env target mangle asm prog  (* asm *)
 @    

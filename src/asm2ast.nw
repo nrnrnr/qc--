@@ -52,14 +52,10 @@ knows about these rules and passes only legal names. This means in
 practice that names passed into this interface are not touched here and
 should be mangled previously (see module \module{mangle}).
 
-The assembler is initialized with a value of type [[init]]. In the case
-of this assembler [[init]] is a mangler function that is passed to the
-function [[ext]] that translates an instruction. Knowing the rules for
-names from the mangler and together with the actual target, [[ext]] is in
-the position to create code that respects the current constrains.
+The assembler is initialized with a value of type [[init]]. 
 
 <<init type>>=
-(string -> string)
+unit    (* can be anything - will be passed to ext *)
 @
 
 <<module type personality>>=
@@ -112,6 +108,55 @@ by the interface, but not by this implementation.
 <<module make>>=
 exception Unsupported of string
 let unsupported msg = raise (Unsupported msg)
+@
+
+This assembler creates {\PAL} output and therefore must respect the
+{\PAL} syntax for names. The [[mangle]] value allows a client to build a
+name mangler that respect the {\PAL} rules for names. 
+
+<<module make>>=
+let mangle =
+    let reserved =
+        [ "aborts"; "align"; "aligned"; "also"; "as"; "big"; "byteorder";
+        "case"; "const"; "continuation"; "cut"; "cuts"; "else"; "equal";
+        "export"; "foreign"; "goto"; "if"; "import"; "invariant"; "jump";
+        "little"; "memsize"; "pragma"; "register"; "return"; "returns";
+        "section"; "semi"; "span"; "stackdata"; "switch"; "target"; "targets";
+        "to"; "typedef"; "unicode"; "unwinds"; "float"; "charset";
+        "pointersize"; "wordsize"]
+    in
+    let id = function
+        | 'a'..'z'
+        | '0'..'9'
+        | 'A'..'Z'
+        | '.' 
+        | '_' 
+        | '$' 
+        | '@'      -> true
+        | _        -> false in
+    let replace = function
+        | x when id x -> x
+        | _           -> '@' 
+    in    
+        { Mangle.preprocess = (fun x -> x)
+        ; Mangle.replace    = replace
+        ; Mangle.reserved   = reserved
+        ; Mangle.avoid      = (fun x -> x ^ "$")
+        }
+@
+    
+The assembler maintains a current section. To guarantee that
+everything goes into a meaningful section, the first action is to
+start the [[text]] section.
+                      
+<<Make translate program>>=
+let program env target asm tt = 
+    let asm = asm ++ Asm.section "text"           in
+    let asm = exports env asm                     in
+    let asm = imports env asm                     in
+        foldl (toplevel env target) asm tt
+
+
 @
 
 An assembler is not independent from the personality of the underlying
