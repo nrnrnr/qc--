@@ -1,12 +1,14 @@
 NOWEAVE=`echo ${NOWEAVE-noweave}`
 
+# should split into ASDLSOURCES and CAMLSOURCES
+
 SOURCES=asm cmmir ast
 # SOURCES=`cmsrcs *.cm | sed 's/\.nw$//'`
 SOURCESDOTDEFS=`echo $SOURCES | sed 's/ /.defs /g;s/$/.defs/'`
 SOURCESDOTTEX=`echo   $SOURCES | sed 's/ /.tex /g;s/$/.tex/'`
 SOURCESDOTASDL=`echo   $SOURCES | sed 's/ /.asdl /g;s/$/.asdl/'`
-SOURCESDOTHTML=`echo   $SOURCES solve | sed 's/ /.html /g;s/$/.html/'`
-SOURCESDOTNW=`echo   $SOURCES solve | sed 's/ /.nw /g;s/$/.nw/'`
+SOURCESDOTHTML=`echo   $SOURCES | sed 's/ /.html /g;s/$/.html/'`
+SOURCESDOTNW=`echo   $SOURCES | sed 's/ /.nw /g;s/$/.nw/'`
 SOURCESREGEXP=`echo $SOURCES | sed 's/ /|/g'`
 
 NWLIB1=/usr/public/pkg/noweb/lib
@@ -18,6 +20,8 @@ NWLIB4=/usr/local/noweb/lib
 
 HTMLDIR=WWW/
 TEXDIR=TEX/
+
+SOURCESDOTHTML=`echo $SOURCES | sed "s@^@$HTMLDIR@;s@ @.html $HTMLDIR@g;s/\$/.html/"`
 
 %.g: %.nw
 	notangle -L -R$target $prereq | cpif $target
@@ -61,15 +65,16 @@ $HTMLDIR%.gif: %.dot
 	dot -Tgif | giftool -rgb white > $target
 
 $HTMLDIR%.html: %.nw
+	sh -c "mkdir $HTMLDIR 2>/dev/null; exit 0"
 	echo '\section*{Contents}
 	\tableofcontents' |
-	$NOWEAVE -filter 'elide refman:*' -filter l2h -autodefs sml -html -index - $prereq | htmltoc > $target
+	$NOWEAVE -filter 'elide refman:*' -filter l2h -autodefs asdl -html -index - $prereq | htmltoc > $target
 
 ${HTMLDIR}index.html: index.nw
 	$NOWEAVE -filter l2h -html $prereq | htmltoc | htmlgif > $target
 
 
-################ defined identifiers
+################ defined identifiers (not used here)
 
 ^($SOURCESREGEXP)'\.'defs:R: '\1'.nw 
 	nodefs -auto asdl $prereq > $target
@@ -79,11 +84,9 @@ all.defs: $SOURCESDOTDEFS
 
 ################ literate source 
 
-^old($SOURCESREGEXP)'\.'tex:R: '\1'.nw all.defs
-	$NOWEAVE -filter 'elide refman:*' -autodefs sml -indexfrom all.defs -n $stem1.nw >$target
+^($SOURCESREGEXP)'\.'tex:R: '\1'.nw
+	$NOWEAVE -autodefs asdl -index -n $stem1.nw >$target
 
-^($SOURCESREGEXP)'\.'tex:R: '\1'.nw 
-	$NOWEAVE -x -n $stem1.nw >$target
 
 DOCINPUTS="doc.tex $SOURCESDOTTEX"
 
