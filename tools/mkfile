@@ -45,7 +45,6 @@ html:V:         $HTML
 
 man:V:          ocamlerror.1 nofake.1
 
-
 test:V:         nofake nofake.nw
                 ./nofake -Rnofake nofake.nw | diff - nofake 
 
@@ -57,6 +56,8 @@ clean:V:
                 rm -rf *.ml *.mll *.mli DEPEND 
                 rm -rf *.aux *.log *.dvi *.tex *.inc *.toc
                 rm -rf *.html
+                rm -rf pod2htm*
+                rm -rf *.tar.gz
                 
 clobber:V:      clean
                 rm -rf ocamlerror ocamlerror.opt
@@ -116,10 +117,6 @@ nofake:         nofake.nw
                 notangle -R$target $prereq > $target
                 chmod +x $target
 
-nofake.1:       nofake
-                pod2man nofake > nofake.1
-
-
 # ------------------------------------------------------------------ 
 # extra rules for cases not covered by noweb.mk
 # ------------------------------------------------------------------ 
@@ -130,22 +127,34 @@ ocamlscan.mll:  ocamlerror.nw
 ocamlerror.pod: ocamlerror.nw
                 $NOTANGLE -R$target $prereq > $target
 
+nofake.1:       nofake                
+                $POD2MAN nofake > $target
+
+nofake-man.html:    nofake
+                $POD2HTML nofake > $target
+
 # ------------------------------------------------------------------ 
-# rules to export source code into a world without noweb
+# rules to build a distribution for the outside world
+# we have to include files that we otherwise obtain from lib/.
 # ------------------------------------------------------------------ 
 
-untangle:V:     ocamlerror.pod ocamlerror.1
-                nountangle -ml -Rocamlerror.ml ocamlerror.nw > ocamlerror.ml
-                nountangle -ml -Rocamlscan.mll ocamlerror.nw > ocamlscan.mll
-                nountangle -ml -Rsrcmap.ml  ../cllib/srcmap.nw > srcmap.ml
-                nountangle -ml -Rsrcmap.mli ../cllib/srcmap.nw > srcmap.mli
+srcmap.nw:      ../cllib/srcmap.nw
+                cp $prereq $target
 
-EXPORT =        build.sh srcmap.mli srcmap.ml ocamlscan.mll ocamlerror.ml\
-                ocamlerror.pod ocamlerror.1
+EXPORT =        README Makefile\
+                nofake nofake.nw nofake.html nofake.1 nofake-man.html\
+                ocamlerror.nw ocamlerror.html ocamlerror.1 ocamlerror-man.html\
+                srcmap.nw srcmap.html
 
-tar:V:          untangle
-                tar zcvf ocamlerror.tar.gz $EXPORT
-                                
+tidy:V:         $HTML nofake.html ocamlerror.html
+                tidy -f /dev/null -im $prereq || exit 0
+
+export:V:       $EXPORT tidy
+                FILE="ocamlerror-1.0"
+                ln -s . $FILE
+                tar czvhf $FILE.tar.gz `ls -1 $EXPORT | sed "s|^|$FILE/|"`
+                rm -f $FILE
+                
 
 # ------------------------------------------------------------------ 
 # recalculate dependencies

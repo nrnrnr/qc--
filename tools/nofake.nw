@@ -4,6 +4,7 @@
 \def\noweb{{\small NOWEB}}
 \def\notangle{\texttt{notangle}}
 
+
 % ------------------------------------------------------------------ 
 \section{NoFake}
 % ------------------------------------------------------------------ 
@@ -22,8 +23,8 @@ common cases correctly. Therefore it is no substitute during program
 development.
 
 {\nofake} is derived from NegWeb 1.0.1 that was released by its author
-Darrell Johnson \url|<darrell@boswa.com>|.  into the public domain at
-\url|http://boswa.com/misc/negweb/|.
+Darrell Johnson \path|<darrell@boswa.com>| into the public domain at
+\path|http://boswa.com/misc/negweb/|.
 
 Note that quoting hell is upon you: this source is itself a literate
 program in {\noweb} syntax. It has to use the delimiters [[@<<]] and
@@ -164,12 +165,12 @@ are met:
 
 =over 4    
 
-=item 
+=item *
 
 Redistributions of source code must retain the above copyright
 notice, this list of conditions and the following disclaimer.
-    
-=item
+
+=item *
 
 Redistributions in binary form must reproduce the above copyright
 notice, this list of conditions and the following disclaimer in the
@@ -208,11 +209,17 @@ Norman Ramsey, Literate programming simplified, IEEE Software
 
 <<nofake>>=
 #!/usr/bin/perl -w
-# Generated from nofake.nw. Do not edit! Edit nofake.nw instead.
+#
+# $Id$
+#
+# Generated from nofake.nw. Do not edit! Edit nofake.nw instead and
+# run nofake on it: 
+#   ./nofake -Rnofake > nofake.pl && cp nofake.pl nofake
 
 sub version {
     print @<<EOF;
-    NoFake 1.0 (c) 2002 Christian Lindig <lindig\@eecs.harvard.edu>
+    $Id$
+    (c) 2002 Christian Lindig <lindig\@eecs.harvard.edu>
     
     NoFake is derived from the public domain NegWeb 1.0.1 
     http://boswa.com/misc/negweb by Darrell Johnson <darrell\@boswa.com>.
@@ -221,8 +228,8 @@ EOF
 
 <<defaults>>
 
-<<line_directive>>
-<<read_file>>
+<<line directive>>
+<<read file>>
 <<extract>>
 
 <<process command line and extract chunk>>
@@ -262,7 +269,7 @@ The [[line_directive]] returns the string used as a line directive. The
 formatting is taken from [[lineformat]] that is controlled by the [[-L]]
 command line option.
 
-<<line_directive>>=
+<<line directive>>=
 sub line_directive {
     my ($fname,$line)=@_;
     my $ret=$lineformat;
@@ -278,7 +285,7 @@ chunk-definitions. Each chunk is put under its name into the global
 [[chunks]] hash table. The [[sync]] flag controls whether line
 directives are emitted.
 
-<<read_file>>=
+<<read file>>=
 sub read_file { 
     my ($fname,$sync)=@_;
     local *INFILE;
@@ -304,7 +311,7 @@ sub read_file {
             }
         } elsif($chunk ne '') { 
             #inside <<foo>= ... @ chunk
-            if($line=~/^@\s*$/){ 
+            if($line=~/^@/){ 
                 # reached end of chunk
                 $chunk='';
             }else{
