@@ -61,15 +61,46 @@ Lua interpreter.
 
 <<main2.ml>>=
 module E = Error
+module V = I.Value
+@
 
+We add members  to an existing or new Lua table [[tabname]] with
+[[bind_table]]. The table is created, if it does not already exist.
+
+<<main2.ml>>=
+let bind_table g tabname members =
+  let t = I.getglobal g (V.String tabname) in
+  let t = match t with
+  | V.Nil       -> V.Table.create (List.length members)
+  | V.Table t   -> t
+  | _           -> I.error g ("Global value " ^ tabname ^ " is not a table") in
+  let _ = V.Table.bind g.V.globals (V.String tabname) (V.Table t) in
+      List.iter (fun (k, v) -> V.Table.bind t (V.String k) v) members
+@ 
+
+
+We export some command line arguments to the Lua value [[Sys.argv]]. The
+[[Sys]] table is created, if it does not exist.
+
+<<main2.ml>>=
+let export_argv g strings =
+    let list = V.list V.string in
+    bind_table g "Sys" ["argv", list.V.embed strings]
+
+
+<<main2.ml>>=
 let main () =
     let argv        = Array.to_list Sys.argv in
     let this        = Filename.basename (List.hd argv) in
     let args        = List.tl argv in
-    let usage       = "usage: " ^ this ^ " 'lua commands'" in
+    let usage       = "usage: " ^ this ^ " -e 'lua commands' [arg arg ..]" in
+    let state       = I.state () in (* fresh Lua state *)       
         try 
             ( match args with 
-            | [code] -> I.dostring (I.state ()) code  
+            | ("-e"::code::argv) -> 
+                ( export_argv state argv
+                ; I.dostring  state code
+                )
             | _      -> E.error usage
             )
         with
@@ -88,7 +119,7 @@ in a module are evaluated.  However, we simulate this by evaluating
 let _ = main ()
 @
 
-During devlopment bugs are easier to find with the debugger if we
+During development bugs are easier to find with the debugger if we
 don't catch exceptions on the top-level. Shipping code, however,
 should use instead the following:
 
@@ -100,6 +131,17 @@ let _ = try main () with e ->
         ; exit 2
         )
 @
+
+% ------------------------------------------------------------------ 
+\section{Lua Startup Script}
+% ------------------------------------------------------------------ 
+
+When the compiler starts, it looks for the Lua script  [[qc--.lua]] in
+the actual directory.
+
+<<qc--.lua>>=
+@
+
  
 % ------------------------------------------------------------------  
 \section{Manual Page}
