@@ -141,8 +141,6 @@ procedure Main()\\
 \subsection{Data Structures}
 %-------------------------------------------------------------------
 
-let () = Debug.register "colorgraph" "generalized graph coloring allocator"
-
 <<graph coloring types>>=
 module T = Target
 @
@@ -482,11 +480,11 @@ let clearCGInfo cg {Proc.cc = colors} =
       let rec firstn n lst =
         if n <= 0 then []
         else (match lst with 
-        | [] -> []
-        | a::rst -> a :: firstn (n - 1) rst) in
+            | [] -> []
+            | a::rst -> a :: firstn (n - 1) rst) in
       cg.allColors <- firstn (V.int.V.project cg.luaColorOverride) cg.allColors
-     | _ -> cg.allColors <- (V.list register).V.project cg.luaColorOverride) in
-    
+    | _ -> cg.allColors <- (V.list register).V.project cg.luaColorOverride) in
+
     let () = cg.k <- List.length cg.allColors in
     false
 @
@@ -512,9 +510,9 @@ let possibleColors target cg ((s,_,_) as tmp) =
         else RS.singleton tmp
  
 let regs_in_space target cg temp =
-  if is_tmp target temp
-  then RS.cardinal (possibleColors target cg temp)
-  else cg.k
+    if is_tmp target temp
+    then RS.cardinal (possibleColors target cg temp)
+    else cg.k
 @
 
 
@@ -580,23 +578,21 @@ We also build a map ([[regToItem]]) from a register to a listgroup item.
 
 <<build>>=
 let build cg {Proc.cfg = cfg; Proc.target = target} =
-  (*Debug.eprintf "colorgraph" "Colorgraph\n"; *)
-  let () = if Aux.Option.is_some (!(cg.tempLG Initial)) then
-    Impossible.impossible "Temps on initial list prematurely" in
-  let regs =
-    G.fold_nodes (fun node allregs -> G.defs node ++ G.uses node ++ allregs)
+    let () = if Aux.Option.is_some (!(cg.tempLG Initial)) then
+               Impossible.impossible "Temps on initial list prematurely" in
+    let regs =
+      G.fold_nodes (fun node allregs -> G.defs node ++ G.uses node ++ allregs)
       RS.empty cfg in
-  Debug.eprintf "colorgraph" "Regs: %s" (Register.Set.to_string regs);
-  let regMap =
-    RS.fold (fun r map -> resetDegree target cg r
-        ; if is_tmp target r
-        then RM.add r (ilg_add cg.tempLG Initial r) map
-        else RM.add r (ilg_add cg.tempLG Precolored r) map)
-      regs cg.regToItem in
-  let () = cg.regToItem <- regMap in
-  <<addInterference>>
-  G.iter_nodes addInterference cfg;
-  true
+    let regMap =
+        RS.fold (fun r map -> resetDegree target cg r
+                            ; if is_tmp target r
+                              then RM.add r (ilg_add cg.tempLG Initial r) map
+                              else RM.add r (ilg_add cg.tempLG Precolored r) map)
+                regs cg.regToItem in
+    let () = cg.regToItem <- regMap in
+    <<addInterference>>
+    G.iter_nodes addInterference cfg;
+    true
 @
 We add an edge between the temps defined in an instruction and those that
 are live after this instruction [[node]]. Note that the defined temps must
@@ -642,7 +638,7 @@ into worklists:
 <<temp observers>>
 
 let makeWorklist cg _ = 
-      let addToLists = function
+    let addToLists = function
         | temp when RM.find temp.v cg.degreeMap >= cg.k ->
             ilg_switch cg.tempLG SpillWorklist temp
         | temp when moveRelated temp cg ->
@@ -928,7 +924,6 @@ exception GraphColoring
 
 let assignColors cg {Proc.target = target; Proc.cfg = cfg} =
     <<colorTemp>>
-  Debug.eprintf "colorgraph" "Colorgraph"; flush stdout;
     let colorSelectStack () =
         let () = ilg_iter colorTemp (!(cg.tempLG SelectStack)) in
     if Aux.Option.is_some (!(cg.tempLG SelectStack))
@@ -976,9 +971,9 @@ let colorTemp temp =
   then begin
     if (RS.mem temp.v cg.spills)
     then begin
-      print_cfg    cfg
-	; print_cgInfo cg
-	; Impossible.impossible ("Spilling a spill temp: " ^ printReg temp.v)
+        print_cfg    cfg
+      ; print_cgInfo cg
+      ; Impossible.impossible ("Spilling a spill temp: " ^ printReg temp.v)
     end 
     else ilg_switch cg.tempLG Spilled temp
   end else begin
@@ -1000,7 +995,7 @@ module CallVarMap =
   Map.Make (struct type t = G.node let compare = Pervasives.compare end)
 
 let applyColors cg
-    ({Proc.cfg = cfg; Proc.target = target; Proc.var_map = vMap} as proc) =
+                ({Proc.cfg = cfg; Proc.target = target; Proc.var_map = vMap} as proc) =
   (*let () = print_cgInfo cg in*)
   let find (((s,_,_), i, _) as t) =
     try RM.find t cg.colorMap
