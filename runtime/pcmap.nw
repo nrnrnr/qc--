@@ -41,7 +41,7 @@ typedef struct {
   Cmm_Word    num_locals;
   Cmm_Word    num_spans;
   Cmm_Word    num_continuations;
-  Cmm_Word    data[1]; // registers, locals, spans, continuations.
+  Cmm_Word    data[1]; // registers, locals, continuations, spans.
 } pc_map_entry;
 
 
@@ -49,9 +49,9 @@ typedef struct {
 
 #define registers(e)      ((Cmm_Word*)enf(e,data))
 #define locals(e)        (((Cmm_Word*)enf(e,data)) + enf(e,num_registers))
-#define spans(e)         (((Cmm_Word*)enf(e,data)) + enf(e,num_registers) \
-                                                   + enf(e,num_locals))
 #define continuations(e) (((Cmm_Word*)enf(e,data)) + enf(e,num_registers) \
+                                                   + enf(e,num_locals))
+#define spans(e)         (((Cmm_Word*)enf(e,data)) + enf(e,num_registers) \
                                                    + enf(e,num_locals)    \
                                                    + enf(e,num_continuations))
 
@@ -64,7 +64,7 @@ pc_map_entry* lookup_entry(const Cmm_Codeptr caller);
 
 unsigned is_dead(int local);
 unsigned decode_reg(int local);
-unsigned decode_offset(int local);
+signed   decode_offset(int local);
 
 #define decode_woffset(l) (decode_offset((int)l) / WORDSIZE)
 
@@ -130,7 +130,7 @@ decode_reg(int local) {
   return 0;
 }
 <<pcmap.c>>=
-unsigned
+signed
 decode_offset(int local) {
   assert(local < 0);
   local <<= 1;        // GCC BUG !!
