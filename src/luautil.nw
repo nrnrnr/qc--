@@ -18,7 +18,7 @@ This module adds Lua functions into the Lua table [[Util]].
 
 The [[dosearchfile]] function obtains a search path from the environment
 variable [[QCMMLUAPATH]] and searches if for a named file. If the file
-name is absolut, it is immediately passed to [[dofile]]. Otherwise it is
+name is absolute, it is immediately passed to [[dofile]]. Otherwise it is
 searched in the directories from the search path from left to right.
 
 Directory entries in the search path are separated by colons.  Two
@@ -26,8 +26,9 @@ directory names in the search path are special: [[*]] and the empty
 path.  The star [[*]] stands for the [[table]] passed to
 [[dosearchfile]] and the empty path for a system specific directory. If
 the table is searched the file name is used as a key.  A matching entry
-is passed to [[dostring]] and thus exceuted as a Lua program. If no file
-can be found the error fallback is called.  
+is passed to [[dostring]] and thus executed as a Lua program. If no file
+can be found the error fallback is called and is expected to return a
+string with Lua code.  
 
 \end{itemize}
 
@@ -83,43 +84,57 @@ and [[dostring]]. Is there a better way then [[apply]]?
 let error g msg      = C.fallback "error" g [V.String msg]
 let lookup   g f     = try Luahash.find g.V.globals (V.String f)
                        with Not_found -> V.Nil
-let dofile   g file  = C.apply (lookup g "dofile")   g  [file]
-let dostring g str   = C.apply (lookup g "dostring") g  [str]
+let dofile   g file  = C.apply (lookup g "dofile")   g  file
+let dostring g str   = C.apply (lookup g "dostring") g  str
 
 let defaultdir       = "/usr/local/lib/qc--"    (*XXX fix XXX*)
 let luapath          = "QCMMLUAPATH"
 let defaultpath      = ":.:*"                   (*XXX fix XXX*)
+
+type script =
+    | String of V.value list  (* string is script             *)
+    | File   of V.value list  (* string is filename of script *)
 @
 
-The code for [[*]] has a problem with exceptions: a [[Not_found]]
-escaping from the [[dostring]] function will be misread as coming from
-the [[find]] and cause a new attempt to find [[file]].
+The code below is ugly. The problem is that [[dofile]] and [[dostring]]
+both take string arguments, but one is a file name, the other a program.
+If we cannot find the named \emph{file} we take the name as key into a
+table and eventually return the entry, which is a script, rather a the
+file name of a script. This also makes error recovery problematic.
+Currently the value returned by [[error]] is taken to be a Lua program,
+rather a file name, but this decision is arbitrary.
 
 <<dofile>>=
 let dosearchfile g file value =
     let path = try Sys.getenv luapath with Not_found -> defaultpath in
     let rec search = function
-        | [] -> 
-            error g ("dosearchfile: can't find `"^file^"' in path `"^path^"'")
+        | [] -> String (error g ( "dosearchfile: can't find `"
+                                ^ file
+                                ^ "' in path `"
+                                ^ path
+                                ^ "'"
+                                ))
         | "*" :: rem -> 
             ( match value with
               | V.Nil      -> search rem
-              | V.Table(t) -> 
-                 (try let script = Luahash.find t (V.String file) in
-                     dostring g script
-                 with Not_found -> search rem)
-              | _  -> 
-                error g "dosearchfile: expected nil or table as second argument"
+              | V.Table(t) -> (try  String [(Luahash.find t (V.String file))] 
+                               with Not_found -> search rem)
+              | _  -> String (error g 
+                    "dosearchfile: expected nil or table as second
+                    argument")
             )  
         | dir :: rem -> 
             let d    = if dir = "" then defaultdir else dir in
             let p    = Filename.concat dir file in
                 if Sys.file_exists p then
-                    dofile g (V.String p)
+                    File [(V.String p)]
                 else search rem
     in
         if Filename.is_relative file then
-            search (split path)
+            match search (split path) with
+            | File f   -> dofile g f
+            | String s -> dostring g s
         else
-            dofile g (V.String file)
+            dofile g [(V.String file)]
 @    
+
