@@ -88,16 +88,21 @@ type ty =       int * string                    (* width, hint     *)
 type path =     ty list                         (* leads to a node *)
 @
 
-A [[node]] is the observable state of an automaton. It comprises the
-ordered list of allocated registers and the alignment of the next slot
-in the overflow memory block. To keep node equality simple, we represent
-allocated registers as an ordered (or normalized) list, rather than as a
-set.
+A [[node]] is the observable state of an automaton. It comprises the set
+of allocated registers and the alignment of the next slot in the
+overflow memory block. The register set inside a node forces us to
+define a [[compare_nodes]] function since sets have no normal form.
 
 <<automatongraph.ml>>=
-type node    =  { regs:     Register.t list     (* ordered *)
+type node    =  { regs:     Register.Set.t
                 ; align:    int
                 }
+
+let compare_nodes (x:node) (y:node) =
+    ( match compare x.align y.align with
+    | 0 -> Register.Set.compare x.regs y.regs
+    | x -> x
+    )
 @
 
 An [[edge]] is a node where an edge originates and a label that
@@ -106,6 +111,12 @@ defined in the [[graph]], but is not part of the [[edge]] type.
 
 <<automatongraph.ml>>=
 type edge =     node * ty
+
+let compare_edges (x:edge) (y:edge) =
+    ( match compare (snd x) (snd y) with
+    | 0 -> compare_nodes (fst x) (fst y)
+    | x -> x
+    )
 @
 
 A [[graph]] value records for every [[edge]] its endpoint in [[edges]],
@@ -116,9 +127,9 @@ context of a [[graph]] which provides the map. In addition, the
 corresponding to the start state of the automaton.
 
 <<automatongraph.ml>>=
-module NS = Set.Make (struct type t=node let compare=compare end)
-module ES = Set.Make (struct type t=edge let compare=compare end)
-module T  = Map.Make (struct type t=edge let compare=compare end)
+module NS = Set.Make (struct type t=node let compare=compare_nodes end)
+module ES = Set.Make (struct type t=edge let compare=compare_edges end)
+module T  = Map.Make (struct type t=edge let compare=compare_edges end)
 
 type graph =    { nodes:    NS.t            (* all the nodes *)
                 ; start:    node            (* start node    *)
@@ -156,8 +167,9 @@ module ToString = struct
     let register (sp,i,_) = sprintf "$%c%i" sp i
     let ty (width,hint)   = sprintf "%d/%s" width hint
     let align n           = sprintf "%i:" n
-    let node s            = String.concat "" 
-                                ((align s.align)::List.map register s.regs)
+    let node s            = let regs = Register.Set.elements s.regs in
+                            String.concat "" 
+                                ((align s.align):: List.map register regs)
     let edge src label dst= sprintf "%s --%s--> %s"
                                 (node  src)
                                 (ty    label)
@@ -183,10 +195,11 @@ module ToDot = struct
         
     let register (sp,i,w) = sprintf "$%c%i%s" sp i (size w)
     let ty (width,hint)   = sprintf "%d/%s" width hint
-    let node s            = sprintf "\"%i:%s\"" 
+    let node s            = let regs = Register.Set.elements s.regs in
+                            sprintf "\"%i:%s\"" 
                                         s.align 
                                         (String.concat "" 
-                                            (List.map register s.regs))
+                                            (List.map register regs))
     let edge src label dst= printf "%s -> %s [label=\"%s\"]\n"
                                 (node  src)
                                 (node  dst)
@@ -231,7 +244,7 @@ let goto mk path =
     let t    = mk ()                        in
     let ()   = List.iter (fun (w,h) -> ignore (A.allocate t w h)) path in
     let res  = A.freeze t in
-        { regs  = Register.Set.elements res.A.regs_used     (* ordered! *)
+        { regs  = res.A.regs_used     
         ; align = res.A.align_state
         }
 @
@@ -272,9 +285,8 @@ We like to check that the location for [[ty]] wasn't used before:
 
 \begin{itemize}
 
-\item If [[ty]] is passed in a register, [[node'.regs]] must include it.
-Since [[node.regs]] is an ordered list with duplicates (created from a
-set) it is enough to check its length.
+\item If [[ty]] is passed in a register, [[node'.regs]] must include it;
+more specifically, [[node.regs]] must be a subset of [[node'.regs]].
 
 \item If [[ty]] is passed in memory, the alignment of [[node']] should
 differ from [[node]]. However, this is not 100\% sure. There may exist
@@ -292,7 +304,7 @@ let rec follow (mk:unit->Automaton.t) (dirs: ty list) graph path node ty =
     if mem edge graph then
         graph
     else
-        (* assert (node != node'); check we allocated a new resource *)
+        (* assert (Register.Set.subset node.regs node'.regs) *)
         dfs mk dirs (add edge node' graph) path node'
        
 
@@ -310,9 +322,9 @@ empty.
 <<automatongraph.ml>>=
 let print ~mk dirs =
     let dump g  = print_endline (ToString.graph g) in
-    let init    = {regs=[]; align=0}   in
-    let g       = graph init           in
-    let g       = dfs mk dirs g [] {regs=[]; align=0} in
+    let init    = {regs=Register.Set.empty; align=0}   in
+    let g       = graph init            in
+    let g       = dfs mk dirs g [] init in
         ( ToDot.graph g
         )
 @
@@ -416,7 +428,7 @@ let interesting_paths graph =
 
 let paths ~mk dirs =
     let dump g  = print_endline (ToString.graph g) in
-    let init    = {regs=[]; align=0}   in
+    let init    = {regs=Register.Set.empty; align=0}   in
     let g       = graph init           in
-    let g       = dfs mk dirs g [] {regs=[]; align=0} in
+    let g       = dfs mk dirs g [] init in
         ToDot.paths (interesting_paths g)
