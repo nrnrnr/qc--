@@ -89,6 +89,41 @@ The first width is the width of the expression; the second is the
 width of the slice (as in [[lobits]]).
 <<rewrite.mli>>=
 val slice : width -> width -> lsb:int -> exp -> exp
+@ 
+Here are two ways to split a value for RISC load-immediate
+implementations.
+<<rewrite.mli>>=
+type 'a pair = { hi : 'a; lo : 'a }
+val splits : width -> lsb:int -> exp -> exp pair
+val splitu : width -> lsb:int -> exp -> exp pair
+@ It's a checked run-time error unless $0 < \mathtt{lsb} <
+\mathtt{w}$.
+The 
+postconditions are as follows:
+\begin{quote}
+\let\t\mathtt
+\def\lo#1#2{\t{lobits}_{#1 \rightarrow #2}}
+\def\sx#1#2{\t{sx}_{#1 \rightarrow #2}}
+\def\zx#1#2{\t{zx}_{#1 \rightarrow #2}}
+[[splits w n e = {hi, lo}]] where
+\begin{eqnarray*}
+\t e &=& \t{hi} + \t{lo}\\
+\lo w n \t{hi} &=& 0\\
+\sx n w (\lo w n \t{lo}) &=& \t{lo}\\
+\end{eqnarray*}
+
+[[splitu w n e = {hi, lo}]] where
+\begin{eqnarray*}
+\t e &=& \t{hi} + \t{lo} = \t{hi} \mathbin{|} \t{lo}\\
+\lo w n \t{hi} &=& 0\\
+\zx n w (\lo w n \t{lo}) &=& \t{lo}\\
+\end{eqnarray*}
+\end{quote}
+The idea is that given a constant expression, one can implement load
+immediate by
+$t \gets \mathtt{hi}; t \gets t + \mathtt{\sigma x}\;\mathtt{lo}$ 
+where $\sigma$~stands for [[s]]~or~[[z]].
+The recognizer should use the [[Bits.[SU].fits]] predicates.
 @
 \subsection{Implementation}
 <<rewrite.ml>>=
@@ -172,6 +207,31 @@ let slice w n ~lsb e =
     O.lobits w n e
   else
     O.lobits w n (O.shrl w e (O.unsigned w lsb))
+@ 
+Unsigned splitting is simple; we just grab the bits.
+<<rewrite.ml>>=
+type 'a pair = { hi : 'a; lo : 'a }
+
+let splitu w ~lsb:n e =
+  assert (0 < n && n < w);
+  let lo = O.zx n w (O.lobits w n e) in
+  let n  = O.unsigned w n in
+  let hi = O.shl w (O.shrl w e n) n in
+  { hi = hi; lo = lo }
+@ 
+Signed splitting is a bit tricky.
+If the sign bit of the low part (bit $\mathtt{lsb}-1$) is set,
+eventually $1$~will be subtracted from the high part, so we have to
+add it ([[adjust]]) here.  The arithmetic achieves this effect without
+any conditionals. 
+<<rewrite.ml>>=
+let splits w ~lsb:n e =
+  assert (0 < n && n < w);
+  let lo     = O.sx n w (O.lobits w n e) in
+  let adjust = O.zx 1 w (slice w 1 ~lsb:(n-1) e) in
+  let n      = O.unsigned w n in
+  let hi     = O.shl w (O.add w (O.shrl w e n) adjust) n in
+  { hi = hi; lo = lo }
 @
 
 \section{Things not to be looked at}

@@ -158,16 +158,20 @@ in two's complement representation. The observer converts it to a
 (signed) {\ocaml} number. For the conversion to succeed, the number must
 be within the range of the target type ($[[min_int]] \le v \le
 [[max_int]]$), otherwise the conversion raises [[Overflow]]. 
-
+%
 $$v = \sum_{i=0}^{w-2} 2^i \times b_i - 2^{w-1} \times b_{w-1}$$
-
+%
 This guarantees $-2^{w-1} \le v < 2^{w-1}$.
-
 <<interface S>>=
 val to_int:     t -> int                        (* Overflow *)
 val to_native:  t -> nativeint                  (* Overflow *)
 val to_int64:   t -> int64                      (* Overflow *)
 @
+We can also observe whether a value fits in~[[n]] signed bits.
+N.B. this is an observation of the value, not just the width.
+<<interface S>>=
+val fits : width -> t -> bool    (* fits w b == (b = sxlo w b) *)
+@ 
 
 % ------------------------------------------------------------------ 
 \subsection{Unsigned Constructors}
@@ -201,12 +205,11 @@ val of_string:  string      -> width -> t            (* Overflow, Syntax *)
 
 An unsigned observer takes a bit vector $b$ of length $w$ and interprets
 it as an unsigned number $v$:
-
+%
 $$v = \sum_{i=0}^{w-1} 2^i \times b_i$$
-
+%
 The conversion returns a signed number $v'$ that is related to $v$ as
 follows:
-
 $$v' = \cases{v                   
                 & \quad if $0 \le v \le [[max_int]]$\cr
               v + 2 \times [[min_int]]     
@@ -215,17 +218,20 @@ $$v' = \cases{v
               \mathit{overflow}
                 & \quad otherwise}
 $$
-
 This means that $-2^{k-1} \le v' < 2^{k-1}$ and $v = v' \bmod 2^k$,
 where $[[min_int]] = -2^{k-1}$ and $[[max_int]] = 2^{k-1}-1$.
 Intuitively, the sign bit in the target type is treated as if it were a
 regular bit. The consequence is, that a value larger than [[max_int]]
 becomes negative. 
-
 <<interface U>>=
 val to_int:     t -> int                        (* Overflow *)
 val to_native:  t -> nativeint                  (* Overflow *)
 val to_int64:   t -> int64                      (* Overflow *)
+@ 
+We can also observe whether a value fits in~[[n]] unsigned bits.
+N.B. this is an observation of the value, not just the width.
+<<interface S>>=
+val fits : width -> t -> bool    (* fits w b == (b = zxlo w b) *)
 @
 
 % ------------------------------------------------------------------ 
@@ -512,6 +518,8 @@ let fits_signed i w =
     w = 64 or
     let i' = I.shift_right i (w-1) in i' =*= I.zero || i' =*= I.minus_one
 
+let fits w' (i, w) = w <= w' || fits_signed i w'
+
 let of_int i w =
     check w;
     let i' = I.of_int i in
@@ -571,6 +579,8 @@ $64-w$ most significant bits are zero.
 let fits_unsigned i w =
     assert (w = 64 || i >= I.zero);
     w = 64 or (I.shift_right_logical i w) =*= I.zero
+
+let fits w' (i, w) = w <= w' || fits_unsigned i w'
 
 let of_int i w =
     check w;
