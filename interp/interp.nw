@@ -1781,16 +1781,13 @@ void run_interp(procedure *start, int num_globals, void *stack_space,
 The bulk of the matching statement bodies follow from the operational semantics of the interpreter's instructions.
 For ease of understanding, the relevant operational rules are reproduced above each instruction's matching statement.
 @ 
-Literal value pushes, operator application, local/global stores and fetches are all straightforward.
+Literal value pushes, local/global stores and fetches are all straightforward.
+We push and pop values using our stack manipulation macros, and use the [[locals]] and [[globals]] arrays for local and global operations.
 \useops{Literal}
 <<matching statement>>=
     | PUSH(v)           => OVERFLOW_CHECK(values, 1);
                            PUSH(v, values);
-@ 
-\useops{ApplyOp}
-<<matching statement>>=
-    | apply_operator(n) => values = (*operators[n].f)(values);
-@ 
+@  
 \useops{Store-Local}
 \useops{Fetch-Local}
 <<matching statement>>=
@@ -1809,7 +1806,7 @@ Literal value pushes, operator application, local/global stores and fetches are 
     | fetch_global(n)   => OVERFLOW_CHECK(values, 1);
                            PUSH(globals[n], values);
 @ 
-Guarded stores require a little more work; we must see if the expected boolean is true or false.
+Guarded stores require a little more work; we must see if the expected boolean is true or false with a simple [[if]] statement.
 We use [[bool_true]] and [[bool_false]] here to test.
 \useops{Guarded-Store-Local-True}
 \useops{Guarded-Store-Local-False}
@@ -1832,7 +1829,13 @@ We use [[bool_true]] and [[bool_false]] here to test.
                                values -= 2;
                            }
 @ 
-Pushing and popping to the argument stack is easy.
+The argument to the operator application instruction should be an index into the [[operators]] array of operators registered with the interpreter.
+We simply look at record [[n]] of this array, find the function pointer stored in the [[operator]] structure there, and call the operator function with the [[values]] stack pointer.
+\useops{ApplyOp}
+<<matching statement>>=
+    | apply_operator(n) => values = (*operators[n].f)(values);
+@
+Pushing and popping to the argument stack is not difficult.
 \useops{Push-Arg}
 \useops{Pop-Arg}
 <<matching statement>>=
@@ -1845,6 +1848,7 @@ Pushing and popping to the argument stack is easy.
                            PUSH(POP(arguments), values);
 @ 
 For goto and branches, we simply conditionally (or unconditionally in the case of goto) assign a new value to [[pc]].
+Although these instructions were encoded using [[RAddr]]s for arguments, the Toolkit is able to translate these addresses to actual pointers by the time we reach this matching statement.
 \useops{Goto}
 <<matching statement>>=
     | GOTO              => UNDERFLOW_CHECK(values, 1);
@@ -1875,7 +1879,8 @@ For goto and branches, we simply conditionally (or unconditionally in the case o
                                pc = (bytecodeptr) b;
                            }
 @ 
-COMMENT HERE
+To implement a {\PAL} procedure call, we must store information about the present activation in the current thread's activation stack and perform some pointer bookkeeping.
+We pop a pointer to a C [[procedure]] structure off the value stack, and dereference it to find needed information about the callee (so we can properly allocate new memory from the [[locals]] and [[stackdata]] stacks.
 \useops{CMMCall}
 <<matching statement>>=
     | CMM_CALL(kc,ku,kr) =>procedure  *proc;
@@ -1886,6 +1891,12 @@ COMMENT HERE
                            proc = VIEW(POP(values), procedure *);
                            assert(proc != NULL);
 
+                           <<save current activation info in a stack record>>
+
+                           <<allocate and update memory for new activation>>
+@
+To save the caller's activation record, we simply use the next free [[activation]] location in the [[callstack]] array and copy over the necessary pointers and information.
+<<save current activation info in a stack record>>=
                            /* save necessary info in activation record */
                            saved = t->callstack_free++;
                            assert(t->callstack_free <= t->callstack_limit);
@@ -1903,8 +1914,11 @@ COMMENT HERE
                               NOTE that ``also aborts'' defaults to 1 (true) */
 
                            saved->u             = u;
-
-                           /* allocate memory, update state of the machine */
+@
+We allocate memory from stacks [[locals]] and [[stackdata]], create a fresh unique identifier using helper [[new_uid]], and set [[pc]] to the permanent address of the [[RAddr]] stored in [[proc]].
+When the matching statement is executed once more during the next cycle of the [[for]] loop, {\PAL} code interpreting will seamlessly continue at the next procedure.
+<<allocate and update memory for new activation>>=
+                          /* allocate memory, update state of the machine */
                            assert(location_known(proc->raddr));
                            pc            = (bytecodeptr) location(proc->raddr);
 
@@ -1919,8 +1933,10 @@ COMMENT HERE
                            assert(t->stackdata_free <= t->stackdata_limit);
 
                            u             = new_uid(t);
-@ 
-COMMENT HERE
+@
+Tail calls are easier to implement than regular procedure calls because we need not save the activation record of the calling activation.
+In fact, we must effectively kill off the calling activation (we call [[dies_uid]] to signal the death of the activation).
+Once more, we pop a [[procedure]] struct pointer off the value stack for information about the callee.
 \useops{CMMTailCall}
 <<matching statement>>=
     | CMM_TAIL_CALL     => procedure *proc;
@@ -1933,6 +1949,15 @@ COMMENT HERE
 	                       assert(location_known(proc->raddr));
                            pc   = (bytecodeptr) location(proc->raddr);
 
+                           <<reuse dead local memory for new activation>>
+
+                           /* deal with uid : */
+                           dies_uid(u);
+                           u = new_uid(t);
+@ 
+Because the old activation dies, we can simply reuse the memory chunk it used on the [[locals]] and [[stackdata]] stacks.
+We do need to make sure, though, that there is enough room on these stacks for the new activation in the case that the new activation needs more local stack memory than the dying one.
+<<reuse dead local memory for new activation>>=
                            /* for now, make sure there's enough room on locals
                               and stackdata stacks
                             */
@@ -1946,12 +1971,8 @@ COMMENT HERE
                                                          proc->num_locals;
                            t->stackdata_free = stackdata_end = stackdata + 
                                                          proc->stackdata_size;
-
-                           /* deal with uid : */
-                           dies_uid(u);
-                           u = new_uid(t);
 @ 
-COMMENT HERE
+We implement both return rules with one statement block.
 \useops{ReturnDefault}
 \useops{ReturnAlt}
 <<matching statement>>=
@@ -1962,10 +1983,18 @@ COMMENT HERE
                            
                            /* FIX for now, assert we don't walk off stack */
                            assert(t->callstack_free > t->callstack_base);
-
                            caller = t->callstack_free--;
                            
-                           /* FIX for now we don't assert that m = |returns| */
+                           <<restore activation record stored at [[caller]]>>
+
+                           <<reclaim unneeded dead local space>>
+
+                           dies_uid(u);
+                           u = caller->u;
+@ 
+We simply copy pointers to restore information from the activation record stored at [[caller]].
+<<restore activation record stored at [[caller]]>>=
+                           /* FIX we should here assert that m = |returns| */
                            
                            pc     = caller->kappa.also_returns_to[i];
 
@@ -1973,15 +2002,18 @@ COMMENT HERE
                            locals_end    = caller->locals_end;
                            stackdata     = caller->stackdata;
                            stackdata_end = caller->stackdata_end;
-                           
+@
+We adjust the current thread's pointers to reclaim space freed with the death of the callee.
+<<reclaim unneeded dead local space>>=
                            /* reclaim freed space */
                            t->locals_free    = locals_end;
                            t->stackdata_free = stackdata_end;
-
-                           dies_uid(u);
-                           u = caller->u;
-@ 
-COMMENT HERE
+@
+Next comes the cut instruction, one of the most difficult to implement.
+We begin by popping off a [[continuation]] pointer from the value stack and making sure it represents a valid cut continuation.
+We then save the current activation if the destination continuation is in a different thread and jump to the new thread.
+We kill off all aborted activations (ones that are ``above'' [[cont->dest_act]] in the activation chain of the destination thread).
+We restore state information from the destination activation and recover memory once used by the aborted activations.
 \useops{Cut}
 <<matching statement>>=
     | CUT               => continuation *cont;
@@ -1990,17 +2022,46 @@ COMMENT HERE
                            ASSERT_EMPTY(values);
                            UNDERFLOW_CHECK(values, 1);
                            cont = VIEW(POP(values), continuation *);
+
+                           <<make sure [[cont]] is a valid cut continuation>>
+
+                           if (cont->dest_act->u.thread != u.thread) {
+						       <<save current info in a partial stack record>>
+ 
+                               /* jump over to destination thread */
+                               t = find_thread(u);
+                           } else if (cont->dest_act->u.frame == u.frame) {
+                               /* if we're here, then we're cutting to a
+                                  continuation in the current activation */
+                               /* FIX : for now, just treat like GOTO */
+                               pc = cont->pc;
+                               continue;
+                           }
+
+                           <<kill off activations above [[dest_act]] in [[t]]>>
+ 
+                           <<restore info from [[cont->dest_act]]>>
+
+                           /* recover freed memory */
+                           t->callstack_free = cont->dest_act;
+                           t->locals_free    = cont->dest_act->locals_end;
+                           t->stackdata_free = cont->dest_act->stackdata_end;
+@ 
+We make sure that [[cont]] is a valid cut continuation by checking to see if the [[uid]] uniquely identifying [[cont->dest_act]] is still live.
+Note that this is actually the main purpose of having [[uid]]s around in the interpreter.
+We also must ensure that [[cont->dest_act]] was listed as a valid ``also cuts to'' continuation in the caller of the activation we were in at the beginning of the matching statement.
+<<make sure [[cont]] is a valid cut continuation>>=
                            assert(cont != NULL);
                            assert(cont->dest_act != NULL);
-
                            assert(islive_uid(cont->dest_act->u));
 
                            /* FIX : look in kappa annotations in activation 
                               pointed to by called_by to make sure that
                               cont->pc is in kappa.also_cuts_to
                             */
-
-                           if (cont->dest_act->u.thread != u.thread) {
+@
+If we are cutting to a continuation across different threads, we must make sure to save the cutting activation's information in a partial record (partial because there are no call-site annotations).
+<<save current info in a partial stack record>>=
                                /* save needed info in activation record */
                                saved = t->callstack_free++;
                                assert(t->callstack_free <= t->callstack_limit);
@@ -2012,16 +2073,10 @@ COMMENT HERE
                                saved->stackdata_end = stackdata_end;
                                /* FIX : store call-site annotations here ?? */
                                saved->u             = u;
- 
-                               /* jump over to destination thread */
-                               t = find_thread(u);
-                           } else if (cont->dest_act->u.frame == u.frame) {
-                               /* if we're here, then we're cutting to a
-                                  continuation in the current activation */
-                               /* FIX : for now, just treat like GOTO */
-                               pc = cont->pc;
-                               continue;
-                           }
+@
+We next kill off all applications ``above'' [[dest_act]] in the activation chain of the destination thread.\footnote{When we say ``above'', we refer to the transitive closure of the following relation: a callee's activation is directly ``above'' its caller's activation if they are in the same thread.}
+\emph{For now, we individually kill off each aborted activation one at a time. This could be made more efficient if we handle frame id intervals instead.}
+<<kill off activations above [[dest_act]] in [[t]]>>=
                            for (a = t->callstack_free - 1; a > cont->dest_act;
                                 a--)
                            {
@@ -2031,7 +2086,9 @@ COMMENT HERE
                                /* assert((a - 1)->annotations.also_aborts); */
                                dies_uid(a->u);
                            }
- 
+@
+Finally, restoring information from the destination activation is as simple as copying pointers and the old [[uid]].
+<<restore info from [[cont->dest_act]]>>=
                            /* a should now equal cont->dest_act */
                            /* update state of machine */
                            pc            = cont->pc;
@@ -2040,14 +2097,7 @@ COMMENT HERE
                            stackdata     = cont->dest_act->stackdata;
                            stackdata_end = cont->dest_act->stackdata_end;
                            u             = cont->dest_act->u;
- 
-                           /* recover freed memory */
-                           t->callstack_free = cont->dest_act;
-                           t->locals_free    = cont->dest_act->locals_end;
-                           t->stackdata_free = cont->dest_act->stackdata_end;
-@ 
-COMMENT HERE
-
+@
 \subsection{Application Driver}
 Next, we proceed onto our [[main]] function, in which we will read assembly code from an external Lua source file and emit instruction bytecode into memory.  Our previously defined [[run_interp]] function should be able to properly interpret this bytecode, given a program counter and sufficient memory resources.
 
@@ -2269,6 +2319,8 @@ Document the two 0's sent to [[error]] within [[error_wrapper]].
 Consider also asserting the [[u_int]] types in [[check_value_types]].
 
 I'm [[strcpy]]ing into no-man's space!  Expect segfaults!
+
+Do we properly handle default returns?
 
 % end file
 \nwfilename{interp.nw}
