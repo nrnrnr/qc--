@@ -210,6 +210,22 @@ record. The label is part of the continuation's denotation.
     currently active calling convention. -- CL (Wed May 15 16:58:46 EDT 2002)
 \end{quote}
 
+For example, we expect the following C--:
+\begin{alltt}
+p () {
+    continuation k():
+}
+\end{alltt}
+to be translated into the following:
+\begin{alltt}
+sym@p()
+{
+    $m[sp + sym@k + 4] = sym@k;
+    $m[sp + sym@k]     = sp;
+    sym@k:
+}
+\end{alltt}
+
 <<Make expressions>>=
 and variable env target hint x =
     let (_,(denot,t)) = F.findv x env in
@@ -1071,11 +1087,12 @@ let proc env target optimizer (cconv,name,args,bdy) =
 
     let incoming = Block.overlap_list Block.Low  state.incoming in
     let outgoing = Block.overlap_list Block.High state.outgoing in
-    (*
-     * let conts    = Strutil.Map.fold (fun _ c b -> Block.cat c.Contn.block b) 
-     *                (List.tl state.conts) (List.hd state.conts) 
-     *)
-    let conts = Block.mk (Rtl.late "bogus" pointer) 0 1 in (*XXX*) 
+    
+    let conts    =
+        match Strutil.Map.fold (fun _ c rst -> c :: rst) state.conts [] with
+        | [] -> Block.mk (Rtl.late "bogus" pointer) 0 1 (*XXX*)
+        | conts -> List.fold_left (fun b c -> Block.cat c.Contn.block b) 
+                        (List.hd conts).Contn.block (List.tl conts) in 
     (* order cfg *)
     let ()    = G.gm_enumerate cfg in
     let i =    
