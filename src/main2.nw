@@ -86,7 +86,12 @@ We export some command line arguments to the Lua value [[Sys.argv]]. The
 let export_argv g strings =
     let list = V.list V.string in
     bind_table g "Sys" ["argv", list.V.embed strings]
+@
 
+At start-up, we load the file [[qc--.lua]] into the interpreter. It
+defines commonly used functions. Later we will compile the corresponding
+string into the compiler such that it is always available. During
+development it is easier to have an external file.
 
 <<main2.ml>>=
 let main () =
@@ -96,13 +101,17 @@ let main () =
     let usage       = "usage: " ^ this ^ " -e 'lua commands' [arg arg ..]" in
     let state       = I.state () in (* fresh Lua state *)       
         try 
-            ( match args with 
-            | ("-e"::code::argv) -> 
-                ( export_argv state argv
-                ; I.dostring  state code
+            let rec loop = function
+                | ("-e"::code::args) -> 
+                    ( ignore (I.dostring  state code)
+                    ; loop args
+                    )
+                | ["-e"] -> E.error usage
+                | args -> export_argv state args
+            in
+                ( ignore(I.dofile state "qc--.lua")     (* startup *)
+                ; loop args                             (* cmdline *)
                 )
-            | _      -> E.error usage
-            )
         with
             E.ErrorExn(msg) -> 
                 ( E.errorPrt msg
@@ -170,7 +179,7 @@ qc-- - the quick c-- compiler
 
 =head1 SYNOPSIS
 
-B<qc--> I<"lua command">
+B<qc--> [B<-e> I<command>] [B<-e> I<command>] [I<arg> I<arg> ...] 
 
 =head1 DESCRIPTION
 
@@ -187,12 +196,21 @@ available as Lua primitives such that the user can write a Lua script to
 control B<qc-->. The few existing command line switches therefore
 control the Lua interpreter, rather than the compiler directly.
 
+Upon start-up B<qc--> reads the file B<qc--.lua> in the current
+directory and then starts processing the command line:
+
 =over
 
-=item I<"lua command">
+=item B<-e> I<command>
 
-B<qc--> takes one argument that is passed to the Lua interpreter for
-evaluation.
+The I<command> is passed to the Lua interpreter and evaluated. This
+option can be used multiple times.
+
+=item I<arg> ...
+
+After all B<-e> options have been processed remaining arguments are
+passed literally to the Lua interpreter. They are available as
+B<Sys.argv> in the Lua interpreter. 
 
 =back
 
