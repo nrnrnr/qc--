@@ -105,7 +105,7 @@ let bits e =
   let rec cvt = function
     | RP.Const (RP.Bits b) -> b
     | RP.Const (RP.Bool _) -> Error.error "a constant expression may not be a Boolean"
-    | RP.Const (RP.Link (s, _)) ->
+    | RP.Const (RP.Link (s, _, _)) ->
         Error.errorf "constant %s not resolvable until link time" s#original_text
     | RP.Const (RP.Diff (_, _)) ->
         Error.errorf "difference of two constants not resolvable until link time"
@@ -125,14 +125,14 @@ let bool e = match Safe.exp (D.exp e) with
 
 let link e = match Safe.exp (D.exp e) with
 | RP.Const(RP.Bits b)   -> Reloc.Simple.of_const b
-| RP.Const(RP.Link(l,w)) -> Reloc.Simple.of_sum l (Bits.zero w)
+| RP.Const(RP.Link(l,_,w)) -> Reloc.Simple.of_sum l (Bits.zero w)
 | RP.Const(RP.Diff(c1,c2)) ->
     Impossible.unimp "difference of link-time constants"
-| RP.App(("add",_),[RP.Const(RP.Link(l,w)); RP.Const(RP.Bits(b))]) ->
+| RP.App(("add",_),[RP.Const(RP.Link(l,_,w)); RP.Const(RP.Bits(b))]) ->
     Reloc.Simple.of_sum l b
-| RP.App(("sub",_),[RP.Const(RP.Link(l,w)); RP.Const(RP.Bits(b))]) ->
+| RP.App(("sub",_),[RP.Const(RP.Link(l,_,w)); RP.Const(RP.Bits(b))]) ->
     Reloc.Simple.of_sum l (Bits.Ops.neg b)
-| RP.App(("sub",_),[RP.Const(RP.Link(l,w)); RP.Const(RP.Link(l',w'))]) ->
+| RP.App(("sub",_),[RP.Const(RP.Link(l,_,w)); RP.Const(RP.Link(l',_,w'))]) ->
     Impossible.unimp "difference of link-time constants"
 | _ ->
     Error.error ("Bad link-time constant " ^ Rtlutil.ToReadableString.exp e)

@@ -20,10 +20,15 @@
       | Identity
   
   and opr = (StdPrims.std_string * width list)
+  and kind =
+        Code
+      | Data
+      | Imported
+  
   and const =
         Bool of (bool)
       | Bits of (bits)
-      | Link of (StdPrims.std_string * width)
+      | Link of (StdPrims.std_string * kind * width)
       | Diff of (const * const)
       | Late of (StdPrims.std_string * width)
   

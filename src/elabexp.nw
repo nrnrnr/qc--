@@ -181,10 +181,10 @@ let rvalue_name x =
     let w = tywidth "named variable" t in
     let rval = match denot with
     | F.Constant bits       -> E.Ok (Rtl.bits bits w)
-    | F.Label(F.Proc s)     -> E.Ok (Rtl.link s w)
-    | F.Label(F.Code s)     -> E.Ok (Rtl.link s w)
-    | F.Label(F.Data s)     -> E.Ok (Rtl.link s w)
-    | F.Import(_,s)         -> E.Ok (Rtl.link s w)
+    | F.Label(F.Proc s)     -> E.Ok (Rtl.codesym s w)
+    | F.Label(F.Code s)     -> E.Ok (Rtl.codesym s w)
+    | F.Label(F.Data s)     -> E.Ok (Rtl.datasym s w)
+    | F.Import(_,s)         -> E.Ok (Rtl.impsym  s w)
     | F.Continuation c      -> (c.F.escapes <- true; E.Ok (Block.base c.F.base))
     | F.Label(F.Stack addr) -> E.Ok addr  (* a fetch would be wrong *)
     | F.Variable _          -> emap (fun (l,w) -> Rtl.fetch l w) (lvalue_name x) in

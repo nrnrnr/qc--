@@ -839,9 +839,8 @@ conditional branch, and pass everything over to [[expand_cbranch]].
     let t       = alloc context w in
     let pc_lhs_up = Rtl.Up.loc pc_lhs in
 
-    let tlabel = Idgen.label "if_true" in
-    let tsym   = Rtl.link (proc.Proc.mk_symbol tlabel)
-                          (RU.Width.loc pc_lhs_up) in
+    let tlabel  = Idgen.label "if_true" in
+    let tsym    = Rtl.codesym (proc.Proc.mk_symbol tlabel) (RU.Width.loc pc_lhs_up) in
     let tjoin   = G.node_labeled cfg tlabel in
     let (ti,tf) = to_segment (Post.li t (RP.Bits (Bits.S.of_int 1 w))) in
     let ()      = G.set_succ tjoin ~succ:ti in
@@ -1095,8 +1094,8 @@ and expand_cbranch_rtl g left right w ktrue kfalse =
             else
               (* PLAUSIBLE BUT COMPLETELY UNTESTED. *)
               let tlabel = Idgen.label "fstack_true" in
-              let tsym   = Down.exp (Rtl.link (proc.Proc.mk_symbol tlabel)
-                                              (RU.Width.loc (Up.loc pc_lhs))) in
+              let tsym   = Down.exp (Rtl.codesym (proc.Proc.mk_symbol tlabel)
+                                                 (RU.Width.loc (Up.loc pc_lhs))) in
               let tjoin   = G.node_labeled cfg tlabel in
               let (rti, rtf) = restore_stack 0 room in (* true  case *)
               let ()         = G.set_succ tjoin ~succ:rti in
@@ -1466,7 +1465,7 @@ and guard state succ fail e =
         let ls    = F.symbol env ll     in
         let succ  = G.gm_label state.cfg ll ls succ in
         let y     = guard' succ fail y    in
-        let lexp  = Rtl.link ls state.target.T.pointersize in
+        let lexp  = Rtl.codesym ls state.target.T.pointersize in
         let lrtl  = state.target.T.goto.T.embed lexp in
         let succ  = G.gm_goto state.cfg lrtl [G.lookup state.cfg ll] in
                 guard' succ y x              
@@ -1479,12 +1478,12 @@ and guard state succ fail e =
         let fs    = F.symbol env fl     in
         let fail  = G.gm_label state.cfg fl fs fail in
         
-        let oexp  = Rtl.link fs state.target.T.pointersize in
+        let oexp  = Rtl.codesym fs state.target.T.pointersize in
         let ortl  = state.target.T.goto.T.embed oexp in
         let fail  = G.gm_goto state.cfg ortl [G.lookup state.cfg fl] in
         
         let e     = R.Revert.exp e in
-        let link  = Rtl.link ss state.target.T.pointersize in
+        let link  = Rtl.codesym ss state.target.T.pointersize in
         let rtl   = state.target.T.branch.T.embed (e,link)  in
             G.gm_branch state.cfg rtl succ fail 
     in

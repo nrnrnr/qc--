@@ -111,6 +111,22 @@
         end
       end
   
+  and sexp_rd_kind s_ = 
+      begin
+        (SexpPkl.rd_lp s_);
+        let tmp_ = let t = (SexpPkl.get_sym s_) in
+          (match (t) with 
+              "rtlasdl_Code" -> Rtlasdl.Code
+            | "rtlasdl_Data" -> Rtlasdl.Data
+            | "rtlasdl_Imported" -> Rtlasdl.Imported
+            | _ -> (SexpPkl.die ()))
+          (* end match *) in
+        begin
+          (SexpPkl.rd_rp s_);
+          tmp_
+        end
+      end
+  
   and sexp_rd_const s_ = 
       begin
         (SexpPkl.rd_lp s_);
@@ -121,8 +137,9 @@
             | "rtlasdl_Bits" -> let bits1 = (sexp_rd_bits s_) in
               Rtlasdl.Bits(bits1)
             | "rtlasdl_Link" -> let string1 = (StdPrimsUtil.sexp_rd_std_string s_) in
+              let kind1 = (sexp_rd_kind s_) in
               let width1 = (sexp_rd_width s_) in
-              Rtlasdl.Link(string1, width1)
+              Rtlasdl.Link(string1, kind1, width1)
             | "rtlasdl_Diff" -> let const1 = (sexp_rd_const s_) in
               let const2 = (sexp_rd_const s_) in
               Rtlasdl.Diff(const1, const2)
@@ -354,6 +371,25 @@
           end)
       (* end match *)
   
+  and sexp_wr_kind x_ s_ = 
+      (match (x_) with 
+          Rtlasdl.Code -> begin
+            (SexpPkl.wr_lp s_);
+            (SexpPkl.wr_sym "rtlasdl_Code" s_);
+            (SexpPkl.wr_rp s_)
+          end
+        | Rtlasdl.Data -> begin
+            (SexpPkl.wr_lp s_);
+            (SexpPkl.wr_sym "rtlasdl_Data" s_);
+            (SexpPkl.wr_rp s_)
+          end
+        | Rtlasdl.Imported -> begin
+            (SexpPkl.wr_lp s_);
+            (SexpPkl.wr_sym "rtlasdl_Imported" s_);
+            (SexpPkl.wr_rp s_)
+          end)
+      (* end match *)
+  
   and sexp_wr_const x_ s_ = 
       (match (x_) with 
           (Rtlasdl.Bool(bool1)) -> begin
@@ -368,10 +404,11 @@
             (sexp_wr_bits bits1 s_);
             (SexpPkl.wr_rp s_)
           end
-        | (Rtlasdl.Link(string1, width1)) -> begin
+        | (Rtlasdl.Link(string1, kind1, width1)) -> begin
             (SexpPkl.wr_lp s_);
             (SexpPkl.wr_sym "rtlasdl_Link" s_);
             (StdPrimsUtil.sexp_wr_std_string string1 s_);
+            (sexp_wr_kind kind1 s_);
             (sexp_wr_width width1 s_);
             (SexpPkl.wr_rp s_)
           end

@@ -17,6 +17,7 @@
   val sexp_rd_bits : SexpPkl.instream -> Rtlasdl.bits
   val sexp_rd_aggregration : SexpPkl.instream -> Rtlasdl.aggregration
   val sexp_rd_opr : SexpPkl.instream -> Rtlasdl.opr
+  val sexp_rd_kind : SexpPkl.instream -> Rtlasdl.kind
   val sexp_rd_const : SexpPkl.instream -> Rtlasdl.const
   val sexp_rd_loc : SexpPkl.instream -> Rtlasdl.loc
   val sexp_rd_exp : SexpPkl.instream -> Rtlasdl.exp
@@ -38,6 +39,7 @@
       SexpPkl.outstream ->
       unit
   val sexp_wr_opr : Rtlasdl.opr -> SexpPkl.outstream -> unit
+  val sexp_wr_kind : Rtlasdl.kind -> SexpPkl.outstream -> unit
   val sexp_wr_const : Rtlasdl.const -> SexpPkl.outstream -> unit
   val sexp_wr_loc : Rtlasdl.loc -> SexpPkl.outstream -> unit
   val sexp_wr_exp : Rtlasdl.exp -> SexpPkl.outstream -> unit

@@ -50,14 +50,13 @@ we need to skip them. Their names includes a colon ``[[:]]'' character
 to avoid name chashes with existing names.
 <<position-independent code>>=
 let exists_pic = scan (fun c -> match c with
-  | RP.Link (l, _) -> not(String.contains l#original_text ':')
+  | RP.Link (l, RP.Data, _) -> true  (* oversimplification *)
   | _ -> false) in
 <<position-independent code>>=
 let wkl s w =
-  RP.Link (Symbol.unmangled (Printf.sprintf "L%s" name#original_text), w) in
+  RP.Link (Symbol.unmangled (Printf.sprintf "L%s" name#original_text), RP.Code, w) in
 let const c = match c with
-  | RP.Link (s, w) ->
-    if String.contains s#original_text ':' then c else RP.Diff(c, wkl s w)
+  | RP.Link (s, RP.Data, w) -> RP.Diff(c, wkl s w)
   | _ -> c in
 let rec loc l = match l with
   | RP.Mem  (s, a, w, e, a') -> RP.Mem  (s, a, w, exp e, a')

@@ -49,9 +49,11 @@ let rec const = function
                                             (Bits.U.to_int64 b)
                                        , Bits.width b
                                        )
-    | RP.Link(sym,width)     -> X.Link (sym#mangled_text, width)
+    | RP.Link(sym,k,width)   -> X.Link (sym#mangled_text, kind k,width)
     | RP.Diff(c1,c2)         -> X.Diff (const c1, const c2)
     | RP.Late(name,width)    -> X.Late (name, width)  
+
+and kind = function RP.Data -> X.Data | RP.Code -> X.Code | RP.Imported -> X.Imported
 
 let rec loc = function
     | RP.Mem(s,agg,w,e,a)    -> X.Mem ( Char.code s

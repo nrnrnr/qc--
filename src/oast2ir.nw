@@ -227,10 +227,10 @@ let rvalue_name x =
   let w = tywidth t in
   let rval = match denot with
   | F.Constant(bits)            -> Rtl.bits bits w
-  | F.Label(F.Proc (s,_,_))     -> Rtl.link s w
-  | F.Label(F.Code s)           -> Rtl.link s w
-  | F.Label(F.Data s)           -> Rtl.link s w
-  | F.Import(_,s)               -> Rtl.link s w
+  | F.Label(F.Proc (s,_,_))     -> Rtl.codesym s w
+  | F.Label(F.Code s)           -> Rtl.codesym s w
+  | F.Label(F.Data s)           -> Rtl.datasym s w
+  | F.Import(_,s)               -> Rtl.impsym  s w
   | F.Continuation(_,_)         -> cont_rvalue x
   | F.Label(F.Stack(None))      -> impossible ("no location for "^x)
   | F.Label(F.Stack(Some addr)) -> addr  (* a fetch would be wrong *)
@@ -530,7 +530,7 @@ We also attach spans to each continuation that escapes.
 let insert_init_cont_nodes contmap init_node =
   let one_node cname k succ = 
     if k.K.escapes then
-      let pc              = exp_of_label k.K.cut_pc    in
+      let pc              = exp_of_code_label k.K.cut_pc    in
       let sp              = proc_cc.C.stable_sp_loc    in
       let frame_size_span = RT.frame_size_to_span vfp proc_cc.C.stable_sp_loc in
       let cont_size_span  = RT.conts_to_spans target.T.wordsize in
@@ -647,7 +647,7 @@ and stmt props s succ =
       let l = G.node_labeled g n in (G.set_succ l succ; l)
   | A.GotoStmt (e, labels) ->
       (match Dn.exp (expr e) with
-      | RP.Const (RP.Link (sym, w)) ->
+      | RP.Const (RP.Link (sym, _, w)) ->
              G.branch g ~target:(G.node_labeled g (sym#original_text))
       | e -> let instr   = target.T.goto.T.embed (Up.exp e) in
              let targets = List.map (G.node_labeled g) labels in
@@ -819,26 +819,26 @@ let proc containing_spans (cconv,procname,args,procbody,_) =
 @ 
 \paragraph{Setting up the control-flow graph}
 First step is to set up  the control-flow graph.
-We use [[exp_of_label]] below, but once symbols are expunged, it
+We use [[exp_of_code_label]] below, but once symbols are expunged, it
 should be simple enough to drop it (reducing the cognitive load on the
 reader). 
 <<definition of [[proc]], which translates one procedure>>=
-  let exp_of_label l = R.link ((F.asm env)#local l) pointersize in
+  let exp_of_code_label l = R.codesym ((F.asm env)#local l) pointersize in
   let g =
     let exp_to_label e = match Dn.exp e with
-    | RP.Const(RP.Link (l, _))
-    | RP.Const(RP.Diff (RP.Link (l, _), _)) -> l#original_text
+    | RP.Const(RP.Link (l, _, _))
+    | RP.Const(RP.Diff (RP.Link (l, _, _), _)) -> l#original_text
     | _ -> impossible "bad label projection" in
-    let guarded_exp_of_label (g,l) =
-      (g, (R.link ((F.asm env)#local l) pointersize)) in
+    let guarded_exp_of_code_label (g,l) =
+      (g, (R.codesym ((F.asm env)#local l) pointersize)) in
     let guarded_exp_to_label (e1,e2) = match (e1, Dn.exp e2) with
-    | (g, RP.Const(RP.Link (l, _)))
-    | (g, RP.Const(RP.Diff (RP.Link (l, _), _))) -> (g, l#original_text)
+    | (g, RP.Const(RP.Link (l, _, _)))
+    | (g, RP.Const(RP.Diff (RP.Link (l, _, _), _))) -> (g, l#original_text)
     | _                           -> impossible "bad label projection" in
-    let info = { G.goto = { T.embed = target.T.goto.T.embed << exp_of_label
+    let info = { G.goto = { T.embed = target.T.goto.T.embed << exp_of_code_label
                           ; T.project = exp_to_label << target.T.goto.T.project }
                ; G.branch = { T.embed = target.T.branch.T.embed
-                                 << guarded_exp_of_label
+                                 << guarded_exp_of_code_label
                             ; T.project = guarded_exp_to_label
                                  << target.T.branch.T.project }
                ; G.bnegate = target.T.bnegate
@@ -1280,7 +1280,7 @@ are too long for the linker.
 <<supporting functions for fooling with the global-register area>>=
 let emit_global_register_area ~export =
   let base_sym     = F.symbol env "Cmm.global_area" in
-  let base         = Rtl.link base_sym pointersize in 
+  let base         = Rtl.datasym base_sym pointersize in 
   let area, digest = globals base (F.globals env) in
   let area         = area.AT.overflow in
   let digest       = "Cmm.globalsig." ^ Idcode.encode digest in

@@ -493,7 +493,7 @@ let mksolutions_trunc ws arg_solnss =
 let ast_combine solns = function
   | RP.Const(RP.Bool b) as e -> mksolutions_lit_bool e
   | RP.Const(RP.Bits b) as e -> (mksolutions_lit_bits S e) @ (mksolutions_lit_bits Z e)
-  | (RP.Const(RP.Link(_,w)|RP.Late(_,w)) | RP.Fetch(_,w)) as e -> mksolutions_var e w
+  | (RP.Const(RP.Link(_,_,w)|RP.Late(_,w)) | RP.Fetch(_,w)) as e -> mksolutions_var e w
   | RP.App((("sx"|"zx" as ext),   ws), [arg]) -> mksolutions_ext ext ws solns
   | RP.App(("lobits",             ws), [arg]) -> mksolutions_trunc ws solns
   | RP.App((opname,               ws), args) -> mksolutions_op solns opname ws args
@@ -862,7 +862,7 @@ let badwiden r =
         RP.Const(RP.Bits (ext w' b))
       
       (* variables *)
-    | ((RP.Const(RP.Link(_,w)|RP.Late(_,w))) | RP.Fetch(_,w)) as e ->
+    | ((RP.Const(RP.Link(_,_,w)|RP.Late(_,w))) | RP.Fetch(_,w)) as e ->
         maybe_do_ext e tau w w'
       
       (* width changing *)

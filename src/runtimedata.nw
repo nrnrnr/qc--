@@ -273,7 +273,7 @@ let sd_label = asm#local (Idgen.label "stackdata") in
 let partition_site_spans spans =
   let sd_spans, site_spans =
     List.partition (fun (site,_) -> site = proc.P.symbol#original_text) spans in
-  let sd_span = (to_bits sd_table_ix, Rtl.link sd_label proc.P.target.T.pointersize) in
+  let sd_span = to_bits sd_table_ix, Rtl.datasym sd_label proc.P.target.T.pointersize in
   let site_spans = List.map (fun (l,ss) -> (l, sd_span::ss)) site_spans in
   sd_spans, site_spans in
 @
@@ -453,7 +453,7 @@ let emit_val_loc e =
   <<define helpers to emit different values>>
   match Dn.exp (simplify_exp e) with
   | RP.Const (RP.Bool false)               -> emit_dead_var ()
-  | RP.Const (RP.Link (sym,_))             -> emit_link_const sym
+  | RP.Const (RP.Link (sym,_,_))           -> emit_link_const sym
   | RP.Const (RP.Bits bs)                  -> emit_offset   bs
   | RP.Fetch (RP.Reg r, _)                 -> emit_reg  (reg_ix proc r) 0
   | RP.Fetch (RP.Slice (_,i, RP.Reg r), _) -> emit_reg  (reg_ix proc r) i

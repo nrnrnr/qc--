@@ -340,11 +340,11 @@ application on the outermost level.
 
 <<Width>>=
 let rec const = function
-    | RP.Bool _     -> Impossible.impossible "asked width of Boolean"
-    | RP.Bits b     -> Bits.width b
-    | RP.Link (_,w) -> w
-    | RP.Diff (c,_) -> const c
-    | RP.Late (_,w) -> w
+    | RP.Bool _       -> Impossible.impossible "asked width of Boolean"
+    | RP.Bits b       -> Bits.width b
+    | RP.Link (_,_,w) -> w
+    | RP.Diff (c,_)   -> const c
+    | RP.Late (_,w)   -> w
 
 let exp' = function
     | RP.Const(c)   -> const c
@@ -608,9 +608,9 @@ let rec const = function
                                 else None
                               )
                      
-    | R.Link(sym,w)  -> A.Fetch(A.Name(None, (sym#mangled_text)))
-    | R.Diff(c1,c2)  -> A.PrimOp("-", [(None,const c1); (None,const c2)])
-    | R.Late(name,w) -> A.Fetch(A.Name(None, name)) (*XXX ok? *)
+    | R.Link(sym,_,w) -> A.Fetch(A.Name(None, sym#mangled_text))
+    | R.Diff(c1,c2)   -> A.PrimOp("-", [(None,const c1); (None,const c2)])
+    | R.Late(name,w)  -> A.Fetch(A.Name(None, name)) (*XXX ok? *)
 @
 
 
@@ -708,13 +708,12 @@ module T = Types
 
 <<ToReadableString>>=
 let rec const = function
-    | R.Bool(true)   ->  "true"
-    | R.Bool(false)  ->  "false"
-    | R.Bits b       ->  Int64.to_string (Bits.S.to_int64 b)
-                     
-    | R.Link(sym,w)  -> sym#mangled_text
-    | R.Diff(c1,c2)  -> (const c1) ^ "-" ^ (const c2)
-    | R.Late(name,w) -> "<" ^ name ^ ">"
+    | R.Bool(true)    ->  "true"
+    | R.Bool(false)   ->  "false"
+    | R.Bits b        ->  Int64.to_string (Bits.S.to_int64 b)
+    | R.Link(sym,_,w) -> sym#mangled_text
+    | R.Diff(c1,c2)   -> (const c1) ^ "-" ^ (const c2)
+    | R.Late(name,w)  -> "<" ^ name ^ ">"
 @
 
 <<ToReadableString>>=
@@ -838,10 +837,10 @@ let rec const = function
     | RP.Bits(b)        -> apply "Bits"  [ str (Int64.to_string (Bits.U.to_int64 b))
                                          ; int (Bits.width b)
                                          ]
-    | RP.Link(r,w)      -> apply "Link"  [str r#mangled_text; int w]
+    | RP.Link(r,k,w)    -> apply "Link"  [str r#mangled_text; P.text (kind k); int w]
     | RP.Diff(c1,c2)    -> apply "Diff"  [const c1; const c2]
     | RP.Late(s,w)      -> apply "Late"  [str s; int w]
-
+and kind = function RP.Code -> "Code" | RP.Data -> "Data" | RP.Imported -> "Imported"
 
 let rec exp = function
     | RP.Const(k)       -> apply "Const" [const k]
@@ -922,7 +921,7 @@ module MayAlias = struct
     | _ -> None
 
   let rec is_initialized_data = function
-    | RP.Const (RP.Link(_, _)) -> true
+    | RP.Const (RP.Link(_, _, _)) -> true
     | RP.Const (RP.Diff(_, _)) -> true
     | RP.App ((("add"|"sub"), [_]), [RP.Const _ as l; RP.Const _ as r]) ->
         is_initialized_data l || is_initialized_data r

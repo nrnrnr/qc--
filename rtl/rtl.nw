@@ -82,7 +82,11 @@ should be the \emph{only} way to create {\rtl}s when translating from
 the abstract syntax tree.
 
 A constant expression can be a boolean value, a number of bits, or a
-link-time value, which has a name. A [[fetch]] creates an expression
+link-time value, which has a name.
+To support position-independent code, the compiler must distinguish
+three kinds of link-time value: a locally defined code label, a
+locally defined data label, and an imported symbol.
+A [[fetch]] creates an expression
 that represents the value stored in a [[loc]]. Operators [[op]] can be
 applied to values and return a value.
 <<types and functions exported at top level>>=
@@ -94,7 +98,9 @@ type assertion    (* a claim about the run-time value of an address *)
 
 val bool      : bool -> exp                    
 val bits      : Bits.bits -> width -> exp      
-val link      : Symbol.t -> width -> exp    
+val codesym   : Symbol.t -> width -> exp    (* locally defined code label (incl proc) *)
+val datasym   : Symbol.t -> width -> exp    (* locally defined data label *)
+val impsym    : Symbol.t -> width -> exp    (* imported symbol *)
 val late      : string -> width -> exp         (* late compile time constant *)
 val fetch     : loc -> width -> exp
 val app       : opr -> exp list -> exp
@@ -229,9 +235,10 @@ grabbed by an automatically generated recognizer.
 <<representation exposed in the private interface>>=
 type const      = Bool      of bool
                 | Bits      of Bits.bits            (* literal constant *)
-                | Link      of Symbol.t * width  (* link time constant *)
+                | Link      of Symbol.t * symkind * width  (* link-time constant *)
 		| Diff      of const  * const   (* difference of two constants *)
                 | Late      of string * width   (* late compile time constant *)
+and symkind = Code | Data | Imported (* three kinds of symbol, needed for PIC *)
 
 type exp        = Const     of const               
                 | Fetch     of loc * width 
@@ -397,7 +404,9 @@ argument is normally static.
 let bits b width            = ( assert (Bits.width b = width)
                               ; Const (Bits b)
                               )
-let link name width         = Const (Link(name,width))
+let codesym name width      = Const (Link(name,Code,width))
+let datasym name width      = Const (Link(name,Data,width))
+let impsym  name width      = Const (Link(name,Imported,width))
 let diff const1 const2      = Const (Diff(const1,const2))
 let late name width         = Const (Late(name,width))
 let fetch loc w             = Fetch(loc, w)
