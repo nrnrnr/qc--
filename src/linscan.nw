@@ -159,23 +159,21 @@ is processed, all still open intervals must be closed.
 
 <<compute lifetimes>>=
 let lifetimes cfg lt =
-    let initial    = (RM.empty, lt)      in
-    let domain map = RM.fold (fun key _ list -> key::list) map [] in
+    let initial    = (RM.empty, lt)                                           in
+    let domain map = RM.fold (fun key _ list -> key::list) map []             in
     let scan node (oldset, state) =
-        let point   = Cfg3.number node             in
-        let set     = Cfg3.live node               in 
-        let opening = RS.diff set oldset in
-        let closing = RS.diff oldset set in
-        let state   = open_regs  point (RS.elements opening) state in
-        let state   = close_regs point (RS.elements closing) state in
-                      (set, state)
-    in (* close all open intervals after the last node *)
-    let first       = Cfg3.number (Cfg3.first cfg)      in
-    let last        = Cfg3.number (Cfg3.last cfg)       in
+        let point   = Cfg3.number node                                        in
+        let set     = Cfg3.live node                                          in
+        let opening = RS.diff set oldset                                      in
+        let closing = RS.diff oldset set                                      in
+        let state   = open_regs  point (RS.elements opening) state            in
+        let state   = close_regs point (RS.elements closing) state            in
+                      (set, state)                                            in
+    let first       = Cfg3.number (Cfg3.first cfg)                            in
+    let last        = Cfg3.number (Cfg3.last cfg)                             in
     let (set,(op,lt)) = Cfg3.scan_fwd cfg first last scan (RS.empty, initial) in
-    let last          = Cfg3.number (Cfg3.last cfg)             in
-    let      (_ ,lt)  = close_regs (last+1)    (* half open interval! *) 
-                                   (domain op) (op,lt) in 
+                      (* close all open intervals after the last node *)
+    let     (_ ,lt) = close_regs (last+1) (domain op) (op,lt)                 in
         lt
 @
 
@@ -362,9 +360,10 @@ temporaries to the current node and its successors.
 \item Nodes past the current node read and write temporaries.
 \end{enumerate}
 
-<<Make>>=
+<<linscan>>=
 let linscan cfg lifetimes =
-    let alloc      = <<allocator>> in
+    let iter cfg f = Cfg3.fold cfg (fun node () -> f node) () in
+    let alloc      = <<allocator>>                            in
         try  iter cfg alloc 
         with Retry cfg -> raise (Retry cfg)
 @
@@ -373,7 +372,13 @@ The allocator takes a node and replaces all temporaries by hardware
 registers. 
 
 <<allocator>>=
-fun node -> assert false
+fun node -> 
+    let allocated = fun cfg lifetimes -> ()           in (* continuation *)
+    let spill     = fun cfg loc intv  -> assert false in (* continuation *)
+        ( match find_tmp node with
+        | None     -> ()
+        | Some tmp -> replace_tmp cfg tmp lifetimes allocated spill
+        )
 @
 
 % ------------------------------------------------------------------ 
@@ -383,7 +388,7 @@ fun node -> assert false
 
 <<Make>>=
 let lookup table x       = RM.find x table       (* lookup lifetime *)
-let replace_temp tmp reg = fun t -> if t = tmp then reg else t
+let replace tmp reg      = fun t -> if t = tmp then reg else t
 @
 
 The [[find_tmp]] function returns a temporary used in [[node]] that
@@ -456,15 +461,21 @@ The [[replace_temporary]] function tries to replace temporary [[t]] in
 [[allocated]], on failure [[spill]].
 
 <<Make>>=
-let replace_temporary graph t lifetimes allocated spill =
+let replace_tmp (graph:Cfg3.t) (t:Register.t) lifetimes allocated spill =
   let lifetime = lookup lifetimes in
   match find_reg lifetimes t with
   | Some r -> (* successfully found a hardware register *)
       let lifetimes = RM.add r (L.union (lifetime r) (lifetime r)) lifetimes in
-      let lifetimes = RM.remove t lifetimes                             in
-      let ()        = iter graph (Rtlutil.Subst.reg (replace_temp t r)) in
+      let lifetimes = RM.remove t lifetimes                        in
+      let ()        = iter graph (Rtlutil.Subst.reg (replace t r)) in
           allocated graph lifetimes
   | None ->
       let spillee, interval = find_spillee lifetimes t in (* chooses t or a h/w reg *)
-          spill spillee interval graph
+          spill graph spillee interval
+@
+
+
+<<Make>>=
+(* linscan comes last because it depends on helper functions above *)
+<<linscan>>
 @
