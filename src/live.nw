@@ -7,6 +7,8 @@
 %
 % Example (at beginning of line): %%Grades: B Central Soon
 
+%%Grades: A Peripheral Later
+
 % l2h substitution cfg CFG
 % l2h substitution dots ...
 % l2h substitution AST AST
@@ -29,16 +31,17 @@
 
 Liveness analysis determines what locations are live on entry to and
 exit from every node in a flow graph.
-Precisely speaking, a location~$x$ is live on an edge~$e$ iff that
-edge flows to a use of~$x$ without crossing a definition or kill of
-$x$. 
-Liveness information should be attached to each
-edge, but since our edges are simple pointers, 
-we instead provide  for live-in and live-out information at each node;
-the liveness of an edge is the live-in set of that edge's head.
+Liveness is actually an edge property: a location~$x$ is live on an
+edge~$e$ iff that 
+edge flows to a use of~$x$ without crossing a definition or kill
+of~$x$.  
+Since our edges are simple pointers, 
+we put liveness information at the nodes node, in the form of
+\emph{live-in} and \emph{live-out sets}.
+The liveness of an edge is the live-in set of that edge's head.
 The live-out set is the union of the live sets on all the edges
 flowing out of a node.
-
+@
 
 % ------------------------------------------------------------------ 
 \subsection{Interface}
@@ -47,7 +50,7 @@ flowing out of a node.
 Function [[set_live]] computes liveness information and caches the
 results in node extensions.
 The functions [[live_in]] and [[live_out]] use the cached information.
-One day we hope to get extremely clever about minimizing the amount of
+One day we hope to get clever about minimizing the amount of
 cached information while still making [[live_in]] and [[live_out]]
 cost constant time, but that day is not yet.
 <<live.mli>>=
@@ -73,13 +76,17 @@ end
 \section{Implementation of liveness}
 % ------------------------------------------------------------------ 
 
+Following a suggestion of John Dias, we cache live-out information at
+each node. 
 <<live.ml>>=
 module RS = Register.Set
 module R  = Rtl
 
 type live_info = { mutable cached_live_out : RS.t }
 let mk () = { cached_live_out = RS.empty }
-
+@ 
+Here are the structures promised in the interface.
+<<live.ml>>=
 module type Arg = sig
   module G : Cfg.S
   val jx : G.X.jx -> live_info 
@@ -92,27 +99,19 @@ module Make (A : Arg) = struct
   let irwk = Rtlutil.ReadWriteKill.sets
   <<struct Make>>
 end
-@
+@ 
+Here's how we get to the cached information for a node.
+<<struct Make>>=
+let info node =
+  if      G.is_join node then A.jx (G.jx node)
+  else if G.is_fork node then A.fx (G.fx node)
+  else                        A.nx (G.nx node)
 
-The [[live]] function computes the set of registers live \emph{after}
-[[node]].  It does so by looking at the liveout sets of its successors
-and the registers defined, killed, and used by the successors [[node]]. 
-The idea is, that variables live before successor nodes must be must be
-live after this node as well.  The details depend on the kind of [[node]]. 
-
-\begin{itemize}
-\item A variables live after the node are also live before it,
-\item minus the variables that are defined by the rtl,
-\item minus the variables that are killed by the rtl,
-\item plus the variables that are used by the rtl.
-\end{itemize}
-$$\mathit{live} = 
-    ( \mathit{after} 
-      \setminus \mathit{defined} \setminus \mathit{killed}
-    ) \cup \mathit{used}
-$$
 @
-Set operations.
+We use these
+set operations.
+The [[--*]] operation expresses our expectation that a killed register should
+never be live. 
 <<struct Make>>=
 let ( ++  ) = RS.union
 let ( --  ) = RS.diff 
@@ -122,20 +121,27 @@ let ( --* ) live killed =
   else
     live 
 @ 
+The [[live_out]] function uses the cache.
+The [[new_live_out]] function computes the live-out set afresh; it is
+used to fill the cache.
+It works by taking the union over outedges of the live-in sets of its
+successors, also accounting for any defs or kills that may be on the
+outedges. 
+Finally, the [[live_in]] function starts with the cached live-out set and
+accounts for any registers used, defined, and killed by the
+instruction in the node.
+$$\mathit{live}_{\mathit{in}} = 
+    (\mathit{live}_{\mathit{out}}
+      \setminus \mathit{defined} \setminus \mathit{killed}
+    ) \cup \mathit{used}.
+$$
 <<struct Make>>=
-let info node =
-  if      G.is_join node then A.jx (G.jx node)
-  else if G.is_fork node then A.fx (G.fx node)
-  else                        A.nx (G.nx node)
-
-@ 
-<<struct Make>>=
-let rec new_live_out node =
+let rec live_out node = (info node).cached_live_out
+and new_live_out node =
   G.union_over_outedges
     node
     (fun n' -> live_in n')
     (fun {G.node = n'; G.defs = d; G.kills = k} -> live_in n' -- d --* k)
-and live_out node = (info node).cached_live_out
 and live_in  node =
   let live = live_out node in  
   let live = match G.to_instr node with
@@ -144,11 +150,12 @@ and live_in  node =
       let uses, defs, kills = irwk i in
       live -- defs --* kills ++ uses in
   G.add_inedge_uses node live
+@ N.B. we could operate more efficiently if, instead of using [[irwk]]
+to build sets, we simply folded over the proper functions directly.
 @
-@
-To compute liveness, we empty all cached live sets and iterate until
-we reach a fixed point.
-The iteration order is completely unspecified, and it would probably
+To fill the caches with correct liveness information, we empty all
+cached live sets and iterate until we reach a fixed point.
+The iteration order is unspecified, and it would probably
 be much more efficient to use a well-chosen order. 
 <<struct Make>>=
 let set_live g =
@@ -160,7 +167,7 @@ let set_live g =
     ; G.iter_nodes update_cache g
     ; if !changed then
         if n < 1000 then loop (n+1) 
-        else Impossible.impossible "more than 1000 iterations for liveness to converge"
+        else Impossible.impossible "liveness didn't converge in 1000 iterations"
     ) in
   loop 0
 @
