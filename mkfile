@@ -1,13 +1,19 @@
 # ------------------------------------------------------------------ 
 # $Id$
 # ------------------------------------------------------------------ 
-#
-# Building qc-- as a native code binary is for the moment not supported
-# because we fail to compile the machine-generated SPARC recognzier in
-# gen/.
 
 NAME =          qc--
 VERSION =       `date +%Y%m%d`
+
+#
+# For configuration, see the files config/*.mk, in particular check that
+# config/lua.mk has the right seting to find the Lua 4.0 header and
+# library files.
+#
+
+prefix =        /usr/local
+bindir =        $prefix/bin
+man1dir =       $prefix/man/man1
 
 # ------------------------------------------------------------------ 
 # SUBDIRS are made from left to right - order matters
@@ -84,6 +90,27 @@ doc:V:          dirs
 
 test:V:         all
                 cd test2 && mk $MKFLAGS all
+
+# ------------------------------------------------------------------
+# installation
+#
+# This is rudimentary install target. Refine as you see fit.
+# Should 'all' be a prerequiste? Or 'all' and 'all.opt'?
+# ------------------------------------------------------------------ 
+
+INSTALL =       bin/qc--                    \
+                bin/qc--interp              \
+                man/man1/qc--.1             \
+                man/man1/qc--internals.1    \
+                man/man1/qc--interp.1       \
+
+install:V:      $INSTALL $bindir $man1dir   
+                cp bin/qc--                             $bindir
+                [ -x bin/qc--.opt ] && cp bin/qc--.opt  $bindir
+                cp bin/qc--interp                       $bindir
+                cp bin/man1/qc--.1                      $man1dir
+                cp bin/man1/qc--internals.1             $man1dir
+                cp bin/man1/qc--interp.1                $man1dir
 
 # ------------------------------------------------------------------ 
 # print dependency graph
@@ -171,16 +198,22 @@ dirs:V:
 # It is a good idea to call tar on a freshly checked out CVS repository
 # to avoid junk being included into the tar file.
 #
-# tar       - build a *.tar.gz file
-# tar-test  - unpack *.tar.gz file and call mk
+# tar           - build a *.tar.gz file
+# tar-test      - unpack *.tar.gz file and call mk
+# timestamps    - make sure that machine generated sources are younger
+#                 than their specs to not trigger call to tools
+#                 that are unavailable. Usually necessary after
+#                 checkout from CVS.
+# 
 # ------------------------------------------------------------------ 
 
+# name of directory a distribution unpacks into.
 DIR =           $NAME$VERSION
 
-# find(1)'s job is it to exlcude unwanted files and directories.
+# find(1)'s job is it to exclude unwanted files and directories.
 
 FILES:          clobber
-                find .  \( -path "*/CVS/*"        \
+                find .  \( -path "*/CVS/*"         \
                         -o -path "*/.*"            \
                         -o -path "./lib/*"         \
                         -o -path "./man/*"         \
@@ -195,19 +228,22 @@ FILES:          clobber
                         -o -path "./man/*"         \
                         -o -path "./lib/*"         \
                         -o -name "*.tar*"          \
+                        -o -type l                 \
                         \) -prune                  \
-                        -o -type f -print | sort | sed "s+^\./+$DIR/+" \
-                        > $target 
+                        -o -type f -print | sort   > $target 
 
 timestamps:V:   
                 touch interp/*-dec.c interp/encode.[ch]
 
-tar:V:          FILES timestamps
-                ln -s . $DIR 
-                tar czvhf $DIR.tar.gz `cat FILES` 
-                rm -f $DIR
+tar:V:          $DIR.tar.gz
                 
-tartest:V:      $DIR.tar.gz
+$DIR.tar.gz:    FILES timestamps
+                ln -s . $DIR 
+                tar czvhf $DIR.tar.gz `sed "s+^\./+$DIR/+" FILES` 
+                rm -f $DIR
+                rm -f FILES
+                
+tar-test:V:     $DIR.tar.gz
                 tar zxvf $DIR.tar.gz
                 ( cd $DIR && mk )
                 rm -rf $DIR
