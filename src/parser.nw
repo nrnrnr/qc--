@@ -318,6 +318,9 @@ and character_end = parse
 \subsection{Escape Sequences}
 % ------------------------------------------------------------------ 
 
+The documentation for \texttt{ocamllex} doesn't say whether ties
+are broken in favor of
+the longest match, but apparently they are.
 <<scan.mll>>=
 and escape = parse
     |  escape                   { decode_escape (getchar lexbuf 0) }
@@ -348,8 +351,8 @@ let rec decode_escape = function
     |  _   -> Impossible.impossible "unknown escape sequence"
 
 let decode_hex c = match c with 
-    | 'a' .. 'f' -> Char.code c - Char.code 'a' 
-    | 'A' .. 'F' -> Char.code c - Char.code 'A' 
+    | 'a' .. 'f' -> Char.code c - Char.code 'a' + 10
+    | 'A' .. 'F' -> Char.code c - Char.code 'A' + 10
     | '0' .. '9' -> Char.code c - Char.code '0'
     | _          -> Impossible.impossible 
                         ("not a hexadecimal character: "^Char.escaped c)
@@ -706,7 +709,7 @@ together with their positions.
     
     
     | P.ID(s)             -> "ID(" ^        s ^ ")"
-    | P.STR(s)            -> "STR(" ^       s ^ ")"
+    | P.STR(s)            -> "STR(" ^       String.escaped s ^ ")"
     | P.INFIXOP(s)        -> "INFIXOP(" ^   s ^ ")"
     | P.PRIMOP(s)         -> "PRIMOP(" ^    s ^ ")"
     | P.INT(s)            -> "INT(" ^       s ^ ")"
