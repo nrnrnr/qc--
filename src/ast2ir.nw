@@ -631,13 +631,15 @@ and stmt props s succ =
       G.instruction g (Rtl.par (List.map2 effect lhs rhs)) succ
   | A.IfStmt (e, so, not)  ->
       G.cbranch g (expr e) ~ifso:(bodies props so succ) ~ifnot:(bodies props not succ)
-  | A.LabelStmt n          -> G.node_labeled g n
+  | A.LabelStmt n          ->
+      let l = G.node_labeled g n in (G.set_succ l succ; l)
   | A.GotoStmt (e, labels) ->
-     (match Dn.exp (expr e) with
-     | RP.Const (RP.Link (sym, w)) -> G.branch g ~target:(G.node_labeled g (sym#mangled_text))
-     | e -> let instr   = target.T.goto.T.embed (Up.exp e) in
-            let targets = List.map (G.node_labeled g) labels in
-            G.mbranch g instr targets)
+      (match Dn.exp (expr e) with
+      | RP.Const (RP.Link (sym, w)) ->
+             G.branch g ~target:(G.node_labeled g (sym#mangled_text))
+      | e -> let instr   = target.T.goto.T.embed (Up.exp e) in
+             let targets = List.map (G.node_labeled g) labels in
+             G.mbranch g instr targets)
   | A.ContStmt    x -> contStmt2  x succ
   | A.CallStmt    x -> callStmt   x succ
   | A.JumpStmt    x -> jumpStmt   x
