@@ -122,17 +122,17 @@ end
 type t = automaton
 
 class bottomup (base: Rtl.expr) (target: Target.t) =
-    let wrd = target#wordsize                                           in
-    let ptr = target#pointersize                                        in
-    let agg = target#byteorder                                          in
-    let mem = target#memsize                                            in
+    let wrd = target#wordsize                                         in
+    let ptr = target#pointersize                                      in
+    let agg = target#byteorder                                        in
+    let mem = target#memsize                                          in
 
-    let addptr    x y = Rtl.app ("add",[ptr]) [x;y]                       in
-    let constptr  k   = Rtl.const (Rtl.bits (Bits.of_int k ptr) ptr)      in
-    let offset    k w = Rtl.cloc 'm' agg w (addptr base (constptr k))     in
-    let eff2rtl   eff = Rtl.rtl [(Rtl.const Rtl.truth,eff)]               in
-    let write     k w = fun e -> eff2rtl (Rtl.store (offset k w) e w)     in
-    let read      k w = Rtl.fetch (offset k w) w                          in
+    let add           = Rtl.op "add" [ptr]                            in
+    let addptr    x y = Rtl.app add [x;y]                             in
+    let constptr  k   = Rtl.bits (Bits.of_int k ptr) ptr              in
+    let offset    k w = Rtl.cell 'm' agg w (addptr base (constptr k)) in
+    let write     k w = fun e -> Rtl.store (offset k w) e w           in
+    let read      k w = Rtl.fetch (offset k w) w                      in
       
      
     object (self)
@@ -167,10 +167,6 @@ class bottomup (base: Rtl.expr) (target: Target.t) =
             
     end
     
-    
-
-class topdown (base: Rtl.expr) (target: Target.t) = object end
-
 let mk spec base =
     match spec with
     | BottomUp(target) -> new bottomup base target 
