@@ -13,7 +13,7 @@ This document contains the interface and implementation of {\PAL} primitive oper
 #define _OPERATOR_H
 
 #include "table.h"
-#include "value.h"
+#include "stack.h"
 
 <<type definitions>>
 <<global variable declarations>>
@@ -172,10 +172,10 @@ void init_operators(void);
 
 \paragraph{Operator Records}
 
-We represent a {\PAL} operator with a [[typedef]]'d [[struct]]: the [[operator]] data type.  However, we actually implement the operators themselves with C functions that take one argument (a value stack pointer) and return a new value stack pointer.
+We represent a {\PAL} operator with a [[typedef]]'d [[struct]]: the [[operator]] data type.  However, we actually implement the operators themselves with C functions that take one argument (a value stack) and return a new value stack.
 
 <<type definitions>>=
-typedef sptr (*operator_fun)(sptr values);
+typedef valstack (*operator_fun)(valstack values);
 
 typedef struct {
   const char   *opname;  /* operator name */
@@ -313,49 +313,49 @@ As with the floating-point operations, we write one macro call per integer opera
 
 <<integer operator definitions>>=
 /* INTEGER operators begin here. */
-T_BINARYOP(add,     v1 + v2           , v1, v2, s_int16, bits16)
-T_BINARYOP(add,     v1 + v2           , v1, v2, s_int32, bits32)
-T_BINARYOP(and,     v1 & v2           , v1, v2, u_int16, bits16)
-T_BINARYOP(and,     v1 & v2           , v1, v2, u_int32, bits32)
-T_UNARYOP (bit,     v1                , v1,     bool   , bits1 )
+T_BINARYOP(add,     v1 + v2             , v1, v2 ,s_int16,bits16)
+T_BINARYOP(add,     v1 + v2             , v1, v2 ,s_int32,bits32)
+T_BINARYOP(and,     v1 & v2             , v1, v2 ,u_int16,bits16)
+T_BINARYOP(and,     v1 & v2             , v1, v2 ,u_int32,bits32)
+T_UNARYOP (bit,     v1                  , v1     ,bool   ,bits1 )
 /* bitExtract  */
 /* bitInsert   */
 /* bitTransfer */
-T_UNARYOP (lobits,  v1                , v1,     u_int32, bits32)
-UNARYOP   (lobits,  v1 & 0xff         , v1,     u_int32, u_int8, bits32, bits8)
-T_UNARYOP (bool,    v1                , v1,     bool   , bits1 )
+T_UNARYOP (lobits,  v1                  , v1     ,u_int32,bits32)
+UNARYOP   (lobits,  v1 & 0xff           , v1     ,u_int32,u_int8,bits32,bits8 )
+T_UNARYOP (bool,    v1                  , v1     ,bool   ,bits1 )
 /* borrow      */
 /* carry       */
-T_UNARYOP (com,     ~v1               , v1,     u_int16, bits16)
-T_UNARYOP (com,     ~v1               , v1,     u_int32, bits32)
-T_BINARYOP(conjoin, (v1 != 0 ? v2 : 0), v1, v2, bool   , bits1 )
-T_BINARYOP(disjoin, (v1 != 0 ? 1 : v2), v1, v2, bool   , bits1 )
+T_UNARYOP (com,     ~v1                 , v1     ,u_int16,bits16)
+T_UNARYOP (com,     ~v1                 , v1     ,u_int32,bits32)
+T_BINARYOP(conjoin, (v1 != 0 ? v2 : 0)  , v1, v2 ,bool   ,bits1 )
+T_BINARYOP(disjoin, (v1 != 0 ? 1 : v2)  , v1, v2 ,bool   ,bits1 )
 IBINARYOP (div, { div_t temp = div(v1, v2);
                   ans = (temp.quot < 0 ? temp.quot - (temp.rem > 0)
                                        : temp.quot + (temp.rem > 0));
                 },    v1,v2,ans, u_int32, u_int32,u_int32,bits32,bits32,bits32)
 BINARYOP  (divu,v1 / v2,  v1,v2, u_int16, u_int16,u_int16,bits16,bits16,bits16)
 BINARYOP  (divu,v1 / v2,  v1,v2, u_int32, u_int32,u_int32,bits32,bits32,bits32)
-BINARYOP  (eq,  v1 == v2, v1,v2, u_int8 , u_int8 ,bool,  bits2 , bits2 , bool )
-BINARYOP  (eq,  v1 == v2, v1,v2, u_int16, u_int16,bool , bits16, bits16, bool )
-BINARYOP  (eq,  v1 == v2, v1,v2, u_int32, u_int32,bool , bits32, bits32, bool )
-BINARYOP  (ge,  v1 >= v2, v1,v2, s_int16, s_int16,bool , bits16, bits16, bool )
-BINARYOP  (ge,  v1 >= v2, v1,v2, s_int32, s_int32,bool , bits32, bits32, bool )
-BINARYOP  (geu, v1 >= v2, v1,v2, u_int16, u_int16,bool , bits16, bits16, bool )
-BINARYOP  (geu, v1 >= v2, v1,v2, u_int32, u_int32,bool , bits32, bits32, bool )
-BINARYOP  (gt,  v1 >  v2, v1,v2, s_int16, s_int16,bool , bits16, bits16, bool )
-BINARYOP  (gt,  v1 >  v2, v1,v2, s_int32, s_int32,bool , bits32, bits32, bool )
-BINARYOP  (gtu, v1 >  v2, v1,v2, u_int16, u_int16,bool , bits16, bits16, bool )
-BINARYOP  (gtu, v1 >  v2, v1,v2, u_int32, u_int32,bool , bits32, bits32, bool )
-BINARYOP  (le,  v1 <= v2, v1,v2, s_int16, s_int16,bool , bits16, bits16, bool )
-BINARYOP  (le,  v1 <= v2, v1,v2, s_int32, s_int32,bool , bits32, bits32, bool )
-BINARYOP  (leu, v1 <= v2, v1,v2, u_int16, u_int16,bool , bits16, bits16, bool )
-BINARYOP  (leu, v1 <= v2, v1,v2, u_int32, u_int32,bool , bits32, bits32, bool )
-BINARYOP  (lt,  v1 <  v2, v1,v2, s_int16, s_int16,bool , bits16, bits16, bool )
-BINARYOP  (lt,  v1 <  v2, v1,v2, s_int32, s_int32,bool , bits32, bits32, bool )
-BINARYOP  (ltu, v1 <  v2, v1,v2, u_int16, u_int16,bool , bits16, bits16, bool )
-BINARYOP  (ltu, v1 <  v2, v1,v2, u_int32, u_int32,bool , bits32, bits32, bool )
-IBINARYOP (mod, { div_t temp = div(v1, v2);
+BINARYOP  (eq,  v1 == v2, v1,v2, u_int8 , u_int8 ,bool   ,bits2 ,bits2 ,bool  )
+BINARYOP  (eq,  v1 == v2, v1,v2, u_int16, u_int16,bool   ,bits16,bits16,bool  )
+BINARYOP  (eq,  v1 == v2, v1,v2, u_int32, u_int32,bool   ,bits32,bits32,bool  )
+BINARYOP  (ge,  v1 >= v2, v1,v2, s_int16, s_int16,bool   ,bits16,bits16,bool  )
+BINARYOP  (ge,  v1 >= v2, v1,v2, s_int32, s_int32,bool   ,bits32,bits32,bool  )
+BINARYOP  (geu, v1 >= v2, v1,v2, u_int16, u_int16,bool   ,bits16,bits16,bool  )
+BINARYOP  (geu, v1 >= v2, v1,v2, u_int32, u_int32,bool   ,bits32,bits32,bool  )
+BINARYOP  (gt,  v1 >  v2, v1,v2, s_int16, s_int16,bool   ,bits16,bits16,bool  )
+BINARYOP  (gt,  v1 >  v2, v1,v2, s_int32, s_int32,bool   ,bits32,bits32,bool  )
+BINARYOP  (gtu, v1 >  v2, v1,v2, u_int16, u_int16,bool   ,bits16,bits16,bool  )
+BINARYOP  (gtu, v1 >  v2, v1,v2, u_int32, u_int32,bool   ,bits32,bits32,bool  )
+BINARYOP  (le,  v1 <= v2, v1,v2, s_int16, s_int16,bool   ,bits16,bits16,bool  )
+BINARYOP  (le,  v1 <= v2, v1,v2, s_int32, s_int32,bool   ,bits32,bits32,bool  )
+BINARYOP  (leu, v1 <= v2, v1,v2, u_int16, u_int16,bool   ,bits16,bits16,bool  )
+BINARYOP  (leu, v1 <= v2, v1,v2, u_int32, u_int32,bool   ,bits32,bits32,bool  )
+BINARYOP  (lt,  v1 <  v2, v1,v2, s_int16, s_int16,bool   ,bits16,bits16,bool  )
+BINARYOP  (lt,  v1 <  v2, v1,v2, s_int32, s_int32,bool   ,bits32,bits32,bool  )
+BINARYOP  (ltu, v1 <  v2, v1,v2, u_int16, u_int16,bool   ,bits16,bits16,bool  )
+BINARYOP  (ltu, v1 <  v2, v1,v2, u_int32, u_int32,bool   ,bits32,bits32,bool  )
+IBINARYOP (mod, { div_t temp = div(v1, v2); 
                   ans = (temp.quot < 0 ? temp.rem + v2
                                        : temp.rem);
                 },    v1,v2,ans, u_int32, u_int32,u_int32,bits32,bits32,bits32)
@@ -367,14 +367,14 @@ T_BINARYOP(mul_trunc, v1 * v2, v1, v2, u_int16, bits16)
 T_BINARYOP(mul_trunc, v1 * v2, v1, v2, u_int32, bits32)
 BINARYOP  (mulu, v1 * v2, v1,v2, u_int16, u_int16,u_int32,bits16,bits16,bits32)
 BINARYOP  (mulu, v1 * v2, v1,v2, u_int8 , u_int8 ,u_int16,bits8 ,bits8 ,bits16)
-BINARYOP  (ne,   v1 !=v2, v1,v2, u_int8 , u_int8 ,bool,   bits2 ,bits2 ,bool )
-BINARYOP  (ne,   v1 !=v2, v1,v2, u_int16, u_int16,bool,   bits16,bits16,bool )
-BINARYOP  (ne,   v1 !=v2, v1,v2, u_int32, u_int32,bool,   bits32,bits32,bool )
-T_UNARYOP (neg,     -v1               , v1    , s_int16, bits16)
-T_UNARYOP (neg,     -v1               , v1    , s_int32, bits32)
-T_UNARYOP (not,     !v1               , v1    , bool   , bits1 )
-T_BINARYOP(or ,     v1 | v2           , v1, v2, u_int16, bits16)
-T_BINARYOP(or ,     v1 | v2           , v1, v2, u_int32, bits32)
+BINARYOP  (ne,   v1 !=v2, v1,v2, u_int8 , u_int8 ,bool   ,bits2 ,bits2 ,bool  )
+BINARYOP  (ne,   v1 !=v2, v1,v2, u_int16, u_int16,bool   ,bits16,bits16,bool  )
+BINARYOP  (ne,   v1 !=v2, v1,v2, u_int32, u_int32,bool   ,bits32,bits32,bool  )
+T_UNARYOP (neg,     -v1                 , v1     ,s_int16,bits16)
+T_UNARYOP (neg,     -v1                 , v1     ,s_int32,bits32)
+T_UNARYOP (not,     !v1                 , v1     ,bool   ,bits1 )
+T_BINARYOP(or ,     v1 | v2             , v1, v2 ,u_int16,bits16)
+T_BINARYOP(or ,     v1 | v2             , v1, v2 ,u_int32,bits32)
 POPCNT    (u_int16, bits16)
 POPCNT    (u_int32, bits32)
 
@@ -549,19 +549,20 @@ operators.
 <<macro definitions>>=
 #define BINARYOP(NAME, EXP, X, Y, TX, TY, T, BX, BY, B) \
 \
-sptr op_##NAME##_##BX##_##BY##_##B (sptr values) { \
+valstack op_##NAME##_##BX##_##BY##_##B (valstack values) { \
   TY Y;                                      \
   TX X;                                      \
   UNDERFLOW_CHECK(values, 2);                \
   Y = VIEW(STACK_ELT(values,  0).TY, TY);    \
   X = VIEW(STACK_ELT(values, -1).TX, TX);    \
   VIEW(STACK_ELT(values, -1).T, T) = (EXP);  \
-  return values-1;                           \
+  values.s_free--;                           \
+  return values;                             \
 }
 
 #define RMBINARYOP(NAME, EXP, X, Y, TX, TY, T, BX, BY, B) \
 \
-sptr op_##NAME##_##BX##_##BY##_bits2_##B (sptr values) { \
+valstack op_##NAME##_##BX##_##BY##_bits2_##B (valstack values) { \
   TY Y;                                      \
   TX X;                                      \
   u_int8 _rmode;                             \
@@ -570,12 +571,13 @@ sptr op_##NAME##_##BX##_##BY##_bits2_##B (sptr values) { \
   Y = VIEW(STACK_ELT(values, -1).TY, TY);    \
   X = VIEW(STACK_ELT(values, -2).TX, TX);    \
   VIEW(STACK_ELT(values, -2).T, T) = (EXP);  \
-  return values-2;                           \
+  values.s_free -= 2;                        \
+  return values;                             \
 }
 
 #define UNARYOP(NAME, EXP, X, TX, T, BX, B)  \
 \
-sptr op_##NAME##_##BX##_##B (sptr values) {  \
+valstack op_##NAME##_##BX##_##B (valstack values) { \
   TX X;                                      \
   UNDERFLOW_CHECK(values, 1);                \
   X = VIEW(STACK_ELT(values, 0).TX, TX);     \
@@ -585,14 +587,15 @@ sptr op_##NAME##_##BX##_##B (sptr values) {  \
 
 #define RMUNARYOP(NAME, EXP, X, TX, T, BX, B) \
 \
-sptr op_##NAME##_##BX##_bits2_##B (sptr values) {  \
+valstack op_##NAME##_##BX##_bits2_##B (valstack values) {  \
   TX X;                                      \
   u_int8 _rmode;                             \
   UNDERFLOW_CHECK(values, 2);                \
   _rmode = VIEW(STACK_ELT(values, 0).bits2, u_int8); \
-  X = VIEW(STACK_ELT(values, -1).TX, TX);     \
-  VIEW(STACK_ELT(values, -1).T, T) = (EXP);   \
-  return values-1;                           \
+  X = VIEW(STACK_ELT(values, -1).TX, TX);    \
+  VIEW(STACK_ELT(values, -1).T, T) = (EXP);  \
+  values.s_free--;                           \
+  return values;                             \
 }
 @ 
 
@@ -604,18 +607,19 @@ variable into which the operator's result will be placed.
 <<macro definitions>>=
 #define NULLARYOP(NAME, STMS, X, T, B) \
 \
-sptr op_##NAME##_##B (sptr values) {       \
+valstack op_##NAME##_##B (valstack values) { \
   T X;                                     \
   OVERFLOW_CHECK(values, 1);               \
   STMS                                     \
   VIEW(STACK_ELT(values, 1).T, T) = X;     \
-  return values + 1;                       \
+  values.s_free++;                         \
+  return values;                           \
 }
 
 /* IBINARYOP is an imperative form of BINARYOP; destroys value at values */
 #define IBINARYOP(NAME, STMS, X, Y, RES, TX, TY, T, BX, BY, B)  \
 \
-sptr op_##NAME##_##BX##_##BY##_##B (sptr values) { \
+valstack op_##NAME##_##BX##_##BY##_##B (valstack values) { \
   TX X;                                      \
   TY Y;                                      \
   T  RES;                                    \
@@ -623,7 +627,8 @@ sptr op_##NAME##_##BX##_##BY##_##B (sptr values) { \
   Y = VIEW(STACK_ELT(values,  0).TY, TY);    \
   X = VIEW(STACK_ELT(values, -1).TX, TX);    \
   STMS;                                      \
-  VIEW(STACK_ELT(values, 0).T, T) = RES;     \
+  VIEW(STACK_ELT(values, -1).T, T) = RES;    \
+  values.s_free--;                           \
   return values;                             \
 }
 @ 
@@ -661,7 +666,7 @@ operators at different types.
    T is a C type, B is a C-- type
  */
 #define POPCNT(T, B) \
-sptr op_popcnt##_##B (sptr values) {       \
+valstack op_popcnt##_##B (valstack values) { \
   T v, count;                              \
   UNDERFLOW_CHECK(values, 1);              \
   v = VIEW(STACK_ELT(values, 0).T, T);     \

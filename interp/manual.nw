@@ -108,7 +108,7 @@ standard Lua functions as well as the following {\PAL} related functions:\\
 
 \manentry{comment}{\ldots}
 {Takes an arbitrary number of arguments and does nothing.}
-{anything\_here}
+{"comment\_here", 10, nil}
 
 \manentry{new\_assembly\_unit}{}
 {Denotes the beginning of a separate assembly unit that should be loaded into
@@ -142,17 +142,19 @@ a separate namespace.}
 {Defines the continuation [[name]].}
 {"cont1"}
 
-\manentry{begin\_span}{$number$ [[token]]$, string$ [[value]]}
-{Begins the definition of the [[token]] span.  Note that [[token]] must be a positive integer.}
+\end{tabularx}
+
+\begin{tabularx}{\linewidth}{|lY|Y|}\hline
+
+\manentry{begin\_span}
+{$number$ [[token]]$, string$ [[value]]$, number$ [[offset]]}
+{Begins the definition of the [[token]] span.  Note that [[token]] must be a positive integer and [[value]] must be a {\PAL} label (where [[offset]] is an offset from this label).}
 {1, "label1"}
 
 \manentry{end\_span}{$number$ [[token]]}
 {Marks the end of the [[token]] span.}
 {1}
 
-\end{tabularx}
-
-\begin{tabularx}{\linewidth}{|lY|Y|}\hline
 \manentry{imports}{$stringTable$ [[imports]]}
 {Imports the externally defined labels stored as strings in numerically-indexed table [[imports]].}
 {\{ "malloc", "printf" \}}
@@ -187,16 +189,18 @@ a separate namespace.}
 {Skips (increases emitting location counter) by [[n]] [[memsize]] units.}
 {4}
 
+\end{tabularx}
+
+\begin{tabularx}{\linewidth}{|lY|Y|}\hline
+
 \manentry{data}{$number$ [[size]]$, table$ [[init]]}
 {Reserves space for data of bit-width [[size]]; if [[init]] is a non-nil table, then its numerically-indexed elements (which are each of size [[size]]) are stored in memory at the current location.}
 {32, \{ "0x3a4", "0x0" \}}
 
-\manentry{emit\_addr}{$string$ [[s]]$, number$ [[offset]]}
+\manentry{emit\_raddr}{$string$ [[s]]$, number$ [[offset]]}
 {Emits the address of symbol [[s]], offset by [[offset]] [[memsize]] units.}
 {"label1"}
-\end{tabularx}
 
-\begin{tabularx}{\linewidth}{|lY|Y|}\hline
 \manentry{push\_literal}{$string$ [[value]]$, number$ [[width]]}
 {Pushes literal [[value]] of width [[width]] onto the value stack.}
 {"0x10", 16}
@@ -223,6 +227,10 @@ a separate namespace.}
 {Pops a value and an address off the value stack, and then stores that value at that address in memory space, using [[byte_order]] byte-order and [[align]] alignment.  If [[align]] $= 0$, the machine's default alignment is used.}
 {8, "NATIVE", 0}
 
+\end{tabularx}
+
+\begin{tabularx}{\linewidth}{|lY|Y|}\hline
+
 \manentry{store\_local}{$number$ [[index]]}
 {Pops a value off the value stack and stores it in local variable [[index]].}
 {1}
@@ -230,10 +238,6 @@ a separate namespace.}
 \manentry{store\_global}{$number$ [[index]]}
 {Pops a value off the value stack and stores it in global variable [[index]].}
 {2}
-
-\end{tabularx}
-
-\begin{tabularx}{\linewidth}{|lY|Y|}\hline
 
 \manentry{gstore}
 {$number$ [[size]]$, number$ [[byte_order]]$, number$ [[align]]}
@@ -258,13 +262,13 @@ a separate namespace.}
 
 % --
 
-\manentry{apply\_operator}{$string$ [[stem_name]]$, string$ [[bit-widths]]}
-{Applies operator [[stem_name]] to some nonnegative number of values atop the value stack (popping any such values off), and pushes the result onto the stack; [[bit-widths]] is a string-based type signature for the operator (e.g., [["bits32,bits16:bits8"]]).}
-{"divu", "bits32,bits32:bits32"}
-
 \end{tabularx}
 
 \begin{tabularx}{\linewidth}{|lY|Y|}\hline
+
+\manentry{apply\_operator}{$string$ [[stem_name]]$, string$ [[bit-widths]]}
+{Applies operator [[stem_name]] to some nonnegative number of values atop the value stack (popping any such values off), and pushes the result onto the stack; [[bit-widths]] is a string-based type signature for the operator (e.g., [["bits32,bits16:bits8"]]).}
+{"divu", "bits32,bits32:bits32"}
 
 \manentry{fetch\_rounding}{}
 {Pushes onto the value stack the 2-bit value representing the current hardware floating-point rounding mode.}
@@ -287,13 +291,13 @@ floating-point rounding mode to this value.}
 {Pops a boolean off the value stack; if the boolean is false, the program counter is set to the address of label [[destLabel]].  Otherwise, control flow falls through.}
 {"label1"}
 
-\manentry{branchtf}{$string$ [[labelT]]$, $ [[labelF]]}
-{Pops a boolean off the value stack; the program counter is set to the address of label [[labelT]] if the boolean is true, and to the address of label [[labelF]] if the boolean is false.}
-{"label1", "label2"}
-
 \end{tabularx}
 
 \begin{tabularx}{\linewidth}{|lY|Y|}\hline
+
+\manentry{branchtf}{$string$ [[labelT]]$, $ [[labelF]]}
+{Pops a boolean off the value stack; the program counter is set to the address of label [[labelT]] if the boolean is true, and to the address of label [[labelF]] if the boolean is false.}
+{"label1", "label2"}
 
 \manentry{call}
 {$stringTable$ $\kappa_{[[cuts]]}, stringTable$ $\kappa_{[[unwinds]]}, stringTable$ $\kappa_{[[returns]]}, number$ [[aborts]]}
@@ -311,4 +315,5 @@ Annotations are ignored if procedure is a foreign C procedure; C procedures must
 \manentry{cut}{}
 {Pops an address off the value stack and cuts to the continuation located at the address.}
 {}
+
 \end{tabularx}

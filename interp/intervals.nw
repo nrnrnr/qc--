@@ -146,14 +146,14 @@ interval_list *interval_list_add(interval_list *list, unsigned long lower,
      * list at the current spot */
     if (upper < temp->lower - 1) {
 
-	  /* If the lower end of the new interval did not overlap with a previous
-	   * interval in the existing list, insert it, solo, into the list */
-	  if (beg == NULL) {
+      /* If the lower end of the new interval did not overlap with a previous
+       * interval in the existing list, insert it, solo, into the list */
+      if (beg == NULL) {
         <<insert new interval between [[last]] and [[temp]] and return list>>
 
       /* Otherwise, it did overlap with a previous interval in the existing
        * list (beg != NULL) */
-	  } else {
+      } else {
         /* expand the overlapping intervals to have the largest upper edge */
         beg->upper = max(upper, last->upper);
 
@@ -161,22 +161,22 @@ interval_list *interval_list_add(interval_list *list, unsigned long lower,
 
         /* fix pointers */
         beg->next  = temp;
-		
+        
         return list;
-	  }
+      }
     }
 
     /* If the new interval is completely enveloped by an old interval, we do
      * not pay attention to it; just return the old list */
     if (lower >= temp->lower && upper <= temp->upper)
-	  return list;
+      return list;
 
     /* If the new interval overlaps with the current one, keep track of the
      * overlap for the next iteration of the main for loop */
     if ((lower <= temp->lower - 1 || lower <= temp->upper + 1) && beg == NULL)
-	{
-	  beg      = temp;
-	  beg->lower = min (lower, temp->lower);
+    {
+      beg      = temp;
+      beg->lower = min (lower, temp->lower);
     }
   }
 
@@ -191,10 +191,10 @@ interval_list *interval_list_add(interval_list *list, unsigned long lower,
   } else {
     <<free enveloped intervals from [[beg->next]] through [[last]]>>
 
-	beg->next  = NULL;
-	beg->upper = max(last->upper, upper);
+    beg->next  = NULL;
+    beg->upper = max(last->upper, upper);
 
-	return list;
+    return list;
   }
 }
 @
@@ -210,10 +210,10 @@ And now all of the missing bookkeeping:
         new->upper = upper;
 
         if (last == NULL)
-		  return new;
+          return new;
         else {
-		  last->next = new;
-		  return list;
+          last->next = new;
+          return list;
         }
 @
 
@@ -221,23 +221,23 @@ And now all of the missing bookkeeping:
         /* Free all the enveloped intervals between the start of the overlap 
          * and the current (temp) node */
         for (free_temp = beg->next, free_last = NULL; 
-			 free_temp != NULL && free_temp != temp;
-			 free_last = free_temp, free_temp = free_temp->next)
-		  free(free_last);
+             free_temp != NULL && free_temp != temp;
+             free_last = free_temp, free_temp = free_temp->next)
+          free(free_last);
 @
 
 <<append new interval to existing list after element [[last]]>>=
-	new = (interval_list *) malloc(sizeof(interval_list));
-	assert(new != NULL);
-	new->next = NULL;
-	new->lower = lower;
-	new->upper = upper;
-	if (last == NULL)
-	  return new;
-	else {
+    new = (interval_list *) malloc(sizeof(interval_list));
+    assert(new != NULL);
+    new->next = NULL;
+    new->lower = lower;
+    new->upper = upper;
+    if (last == NULL)
+      return new;
+    else {
       last->next = new;
       return list;
-	}
+    }
 @
 
 Removing a single integer from an interval list is easier than adding a range,
@@ -257,8 +257,8 @@ interval_list *interval_list_remove(interval_list *list, unsigned long i) {
       <<case : if [[i]] is exactly the upper bound of [[temp]]>>
       <<case : if [[i]] is otherwise contained within [[temp]]>>
 
-	  /* otherwise, we re-loop */
-	}
+      /* otherwise, we re-loop */
+    }
 
     /* if we fall down here, [[i]] wasn't in the list to begin with and we
      * simply return the original list unaltered */
@@ -267,45 +267,45 @@ interval_list *interval_list_remove(interval_list *list, unsigned long i) {
 @ 
 
 <<case : if [[i]] is both the lower and upper bound of [[temp]]>>=
-	  if (i == temp->lower && i == temp->upper) {
+      if (i == temp->lower && i == temp->upper) {
         if (last == NULL)
           return temp->next;
         last->next = temp->next;
         return list;
-	  }
+      }
 @
 
 <<case : if [[i]] is exactly the lower bound of [[temp]]>>=
-	  if (i == temp->lower) {
+      if (i == temp->lower) {
         temp->lower++;
         return list;
-	  }
+      }
 @
 
-<<case : if [[i]] is exactly the upper bound of [[temp]]>>=	  
-	  if (i == temp->upper) {
+<<case : if [[i]] is exactly the upper bound of [[temp]]>>=   
+      if (i == temp->upper) {
         temp->upper--;
         return list;
-	  }
+      }
 @
 
 <<case : if [[i]] is otherwise contained within [[temp]]>>=
-	  if (i > temp->lower && i < temp->upper) {
-		
+      if (i > temp->lower && i < temp->upper) {
+        
         new = (interval_list *) malloc(sizeof(interval_list));
         assert(new != NULL);
         new->next   = temp->next;
         new->lower  = i + 1;
         new->upper  = temp->upper;
-		
+        
         temp->next  = new;
         temp->upper = i - 1;
-		
+        
         if (last == NULL)
           return temp;
-		
+        
         return list;
-	  }
+      }
 @
 
 There is nothing suprising with the deallocation function.

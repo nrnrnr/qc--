@@ -123,6 +123,13 @@ If this label was not previously defined, [[get_label]] creates a fresh
 CMM_label *get_label(lua_State *L, const char *name);
 @
 
+To capture a reference to an offset from a given [[CMM_label]], we provide
+[[get_label_offset]].
+
+<<function prototypes>>=
+CMM_label *get_label_offset(CMM_label *lbl, int offset);
+@ 
+
 Once {\PAL} code has been loaded into memory, clients may use our exported
 function [[cmm_find_export]] to find the location associated with an exported
 {\PAL} label.
@@ -176,6 +183,7 @@ CMM_label *CMM_label_new(void) {
   lbl = (CMM_label *) Arena_alloc(CMM_label_arena, sizeof(CMM_label), 
                                   __FILE__, __LINE__);
   mem_assert(lbl);
+
   return lbl;
 }
 
@@ -238,8 +246,6 @@ If there is a value attached with [[name]] in the table, we return it.
 
 <<function definitions>>=
 CMM_label *get_label(lua_State *L, const char *name) {
-  RLabel     label;
-  RAddr      addr;
   CMM_label *lbl;
 
   /* expects a string atop the stack ! */
@@ -256,6 +262,9 @@ CMM_label *get_label(lua_State *L, const char *name) {
   {
     lua_pop(L, 3); /* pop userdata, key string, table */
   } else {
+    RLabel     label;
+    RAddr      addr;
+
     <<create new [[CMM_label]] and store in label table>>
     lua_pop(L, 1); /* pop table */
   }
@@ -269,11 +278,10 @@ We call [[lua_pushtable]] to help us find the label table.
 @
 If [[name]] has no non-nil value attached to it in the table, we create a new [[RAddr]], store it in the table under the key [[name]], and return it.
 <<create new [[CMM_label]] and store in label table>>=
-    label = label_new(name);
-    addr  = addr_new(label, 0);
+    label          = label_new(name);
+    addr           = addr_new(label, 0);
 
-    lbl   = CMM_label_new();
-
+    lbl            = CMM_label_new();
     lbl->ty        = CMM_LABEL;
     lbl->lbl.raddr = addr;
 
@@ -281,6 +289,25 @@ If [[name]] has no non-nil value attached to it in the table, we create a new [[
     lua_pushusertag(L, (void *) lbl, lua_CMM_label_tag);
     lua_settable(L, -3); /* pops off pointer, key string */
 @
+
+Helper [[get_label_offset]] simply constructs a new [[RAddr]] with the given
+offset from the [[RAddr]] stored in the given [[CMM_label]].
+
+<<function definitions>>=
+CMM_label *get_label_offset(CMM_label *lbl, int offset) {
+  RAddr      old = CMM_label_raddr(lbl);
+  CMM_label *new;
+
+  cmm_assert(old != NULL && old->label != NULL,
+             "cannot get_label_offset from undeclared label");
+
+  new            = CMM_label_new();
+  new->ty        = CMM_LABEL;
+  new->lbl.raddr = addr_new(old->label, 0);
+
+  return new;
+}
+@ 
 
 \paragraph{Exported Functions}
 

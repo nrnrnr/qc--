@@ -56,7 +56,7 @@ We provide functions that should be used at assembly file load-time to
 construct span tables for later use.
 
 <<function prototypes>>=
-void span_table_begin(table t, unsigned tok, const char *lbl);
+void span_table_begin(table t, unsigned tok, const char *lbl, int lbl_offset);
 void span_table_end  (table t, unsigned tok);
 @ 
 
@@ -186,7 +186,7 @@ We use this table as a numerically-indexed array (queue), and inject a
 [[span]] pointer into it when [[span_table_begin]] is called.
 
 <<function definitions>>=
-void span_table_begin(table t, unsigned tok, const char *lbl) {
+void span_table_begin(table t, unsigned tok, const char *lbl, int lbl_offset) {
   lua_State   *L;
   span        *sp;
 
@@ -234,7 +234,7 @@ When we create a new [[span]] record, we leave its [[pc_end]] member set to
     sp->enclosing_span = curr_span_within_get(tok);
 
     lua_pushstring(L, lbl);
-    sp->value    = get_label(L, lbl);
+    sp->value    = get_label_offset(get_label(L, lbl), lbl_offset);
 
     /* update curr span info */
     curr_span_within_set(tok, sp);

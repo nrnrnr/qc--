@@ -16,7 +16,7 @@ CMM.section("data")
 CMM.end_section()
 
 CMM.section("text")
- CMM.begin_span(1, "GC_main")
+ CMM.begin_span(1, "GC_main", 0)
 
    CMM.procedure("main", 5, 5)
       CMM.define_label("label1")
