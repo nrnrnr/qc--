@@ -44,7 +44,7 @@ void rt_check(Cmm_Cont* t) {
     void* rootp;
     char* desc = (char*)Cmm_GetDescriptor(&a, 1);
     int var_count = Cmm_LocalVarCount(&a);
-    int* sd = Cmm_FindStackData(&a, 0);
+    int* sd = Cmm_FindStackLabel(&a, 0);
     printf("Descriptor: %d \"%s\"\n", var_count, desc);
     for (i = 0; i < var_count; i++) {
       rootp = (void *) Cmm_FindLocalVar(&a, i);
