@@ -74,3 +74,10 @@ Test.files = { "add.c--"
              , "x86-000.c--"
              , "x86-001.c--"
              }
+
+local i = 1
+while Test.files[i] do
+  a = {source=Test.files[i], runnable="false"}
+  Test.files[i] = a
+  i = i + 1
+end

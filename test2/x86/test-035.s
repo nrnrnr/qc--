@@ -1,1 +1,0 @@
-.globl foo

@@ -153,13 +153,14 @@ function Test.status_line(i, len)
   local right = format("[ %0.2f %% ]", 100 * (i-1) / len)
   local len   = 80 - strlen(left)
   local fmt   = format('%%s%%%ds\r', len)
+  if Test.verbose then
+     fmt =  format('%%s%%%ds\n', len)
+  end
   write(format(fmt, left, right))
 end
 
 function Test.clear_status_line()
-  if Test.verbose then
-    print("") -- for pager programs
-  else
+  if not Test.verbose then
     write(format("%-80s\r", ""))
   end
 end
@@ -408,7 +409,7 @@ function Test.check_update_file(inputs, file)
   return 0
 end
 @ 
-For a given test case, we first compile the course file down to
+For a given test case, we first compile the sourse file down to
 assembly language by calling the [[qc--]] compiler. If the assembly
 output matches the expected output, then the test is passed. Otherwise
 if the [[trust_exe]] flag is set, we build and run the executable and
@@ -427,17 +428,14 @@ function Test.run_test_case(inputs)
   local status = Test.check_update_file(inputs, s_file)
                + Test.check_update_file(inputs, so)
                + Test.check_update_file(inputs, se)
-  if Test.update or (status > 0 and
-                    (Test.trust_exe or Test.verbose))
-  then
+
+  local should_run = status > 0 and (inputs.runnable or Test.verbose)
+  if Test.update or should_run then
     local exe_file = Test.build_exe(inputs, s_file)
     if exe_file then
       local pso, pse = Test.run_exe(exe_file, inputs["stdin"])
-      local s = Test.check_update_file(inputs, pso)
-              + Test.check_update_file(inputs, pse)
-      if s == 0  and Test.trust_exe then
-        status = 0
-      end
+      status = Test.check_update_file(inputs, pso)
+             + Test.check_update_file(inputs, pse)
       remove(pso)
       remove(pse)
       remove(exe_file)
@@ -504,6 +502,9 @@ function Test.process_file(files)
   Test.compute_filename(files, "asm",    Test.results, name .. ".s")
   Test.compute_filename(files, "asmout", Test.results, name .. ".s1")
   Test.compute_filename(files, "asmerr", Test.results, name .. ".s2")
+
+  files.runnable = files.runnable or "true"
+  if files.runnable ~= "true" then files.runnable = nil end
 
   Test.run_test_case(files)
 end
