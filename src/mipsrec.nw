@@ -43,6 +43,7 @@ module RP = Rtl.Private
 module RU = Rtlutil
 module Up = Rtl.Up
 module Dn = Rtl.Dn
+module SS = Space.Standard32
 @
 
 We report a fatal error with [[error]]. We do not expect to recover from
@@ -114,10 +115,19 @@ symbol:     Link(x, w:int)      {: x#mangled_text :}
 \paragraph{Registers}
 
 <<rules>>=
-regl:       Reg('r', n, w:int)  {: reg  n :}
-regl:       Reg('f', n, w:int)  {: freg n :}
+regl:       Reg('r', n:int, w:int)  {: reg  n :}
+regl:       Reg('f', n:int, w:int)  {: freg n :}
+
+pcl:        Reg('c',  0, w:int) {: () :}
+spl:        Reg('r', 29, w:int) {: () :}
+ral:        Reg('r', 31, w:int) {: () :}
 
 reg:        Fetch(regl,w:int)   {: regl   :}
+pc:         Fetch(pcl,32)       {: () :}
+sp:         Fetch(spl,32)       {: () :}
+ra:         Fetch(ral,32)       {: () :}
+
+
 @
 
 \paragraph{Addresses}
@@ -149,8 +159,16 @@ implies a zero or sign extension.
 zero 
 
 <<rules>>=
+
+inst:       Store(regl,symbol,32)
+            {: cat ["l"; suffix 32; " "; regl; ","; symbol] :}
+
 inst:       Store(regl,mem,32)
             {: cat ["l"; suffix 32; " "; regl; ","; mem] :}
+
+inst:       Store(regl,imm,32)
+            {: cat ["l"; suffix 32; " "; regl; ","; imm] :}
+
 
 inst:       Store(regl, Sx(Fetch(mem,x:int)), w:int)
             {: cat ["l"; suffix w; sx; " "; regl; ","; mem] :}
@@ -172,6 +190,19 @@ Moves between registers.
 <<rules>>=
 inst:       Store(regl, reg, 32)
             {: cat ["move"; " "; regl; ","; reg] :}
+@
+
+\paragraph{Control Flow}
+
+<<rules>>=
+inst:       Goto(symbol)
+            {: cat ["b"; " "; symbol] :}
+
+inst:       Goto(addr)
+            {: cat ["j"; " "; addr] :}
+
+inst:       Par(Goto(addr),Store(ral,pc,32))
+            {: cat ["jal"; " "; addr] :} 
 @
 
 \paragraph{Other Instructions}
@@ -204,7 +235,7 @@ any : Zx(any)           {: cat [ "Zx(";any;")" ] :}
 any : Lobits(any)       {: cat [ "Lobits(";any;")" ] :}
 
 any : Mem(any, w:int)   {: cat [ "Mem(";any;",";width w;")" ] :}
-any : Reg(char, n, w:int) 
+any : Reg(char, n:int, w:int) 
                         {: cat [ "Reg('";Char.escaped char;"',"
                                ;width n;","; width w;")" ] :}
 
@@ -277,6 +308,8 @@ let rtl (RP.Rtl es) = geffects es
 % ------------------------------------------------------------------ 
 
 <<special cases for [[Store]]>>=
+| RP.Store(RP.Reg('c',i,w),r,_)
+  when i = SS.indices.SS.pc   -> conGoto (exp r)
 @
 
 <<special cases for [[App]]>>=

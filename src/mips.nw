@@ -271,30 +271,24 @@ let b  ~tgt = [R.store pc_lhs (Up.const tgt) wordsize]  (* branch     *)
 
 \paragraph{Conditional Branches}
 
-We don't want to talk about the exact flags a comprison operator
-touches. The invented [[cmp_flags]] operator returns the flags as a
-comparison operation would set them.
+The {\mips} assembler implements conditional branches directly, that is,
+without setting a condition code that a later branch uses.
+
+The [[negate]] function implements the nagation for of a binary
+operator.
 
 <<MIPS postexpander>>=
-let cmp_flags = R.opr "mips_cmpflags" [wordsize]
-let cmp x y   = R.store cc (R.app cmp_flags [tval x; tval y]) wordsize
-@
-
-All {\rtl} comparison opeartors are translated into target specific
-comparison operators. I am not sure this is neccessary. 
-
-<<MIPS postexpander>>=
-let cmp_opr = function
-  | "eq"            -> "mips_eq"
-  | "ne"            -> "mips_ne"
-  | "lt"            -> "mips_lt"
-  | "le"            -> "mips_le"
-  | "gt"            -> "mips_gt"
-  | "ge"            -> "mips_ge"
-  | "ltu"           -> "mips_ltu"
-  | "leu"           -> "mips_leu"
-  | "gtu"           -> "mips_gtu"
-  | "geu"           -> "mips_geu"
+let negate = function
+  | "ne"            -> "eq"
+  | "eq"            -> "ne"
+  | "ge"            -> "lt"
+  | "gt"            -> "le"
+  | "le"            -> "gt"
+  | "lt"            -> "ge"
+  | "geu"           -> "ltu"
+  | "gtu"           -> "leu"
+  | "leu"           -> "gtu"
+  | "ltu"           -> "geu"
   | "feq"           -> unimp "floating-point comparison"
   | "fne"           -> unimp "floating-point comparison"
   | "flt"           -> unimp "floating-point comparison"
@@ -303,36 +297,17 @@ let cmp_opr = function
   | "fge"           -> unimp "floating-point comparison"
   | "fordered"      -> unimp "floating-point comparison"
   | "funordered"    -> unimp "floating-point comparison"
-  | _               -> impossible "non-comparison in MIPS conditional branch"
-@ 
-
-The second important function negates a {\mips} operator.
-
-<<MIPS postexpander>>=
-let negate = function
-  | "mips_ne"       -> "mips_eq"
-  | "mips_eq"       -> "mips_ne"
-  | "mips_ge"       -> "mips_lt"
-  | "mips_gt"       -> "mips_le"
-  | "mips_le"       -> "mips_gt"
-  | "mips_lt"       -> "mips_ge"
-  | "mips_geu"      -> "mips_ltu"
-  | "mips_gtu"      -> "mips_leu"
-  | "mips_leu"      -> "mips_gtu"
-  | "mips_ltu"      -> "mips_geu"
   | _               -> impossible 
                         "bad comparison in expanded MIPS conditional branch"
 @ 
 
-A conditional branch is presented by a guarded assignment to the PC and
-an operation that sets the flags, using a target-specific operator.
+A conditional branch is presented by a guarded assignment to the PC.
 
 <<MIPS postexpander>>=
-let bc x (opr, ws) y ~tgt =
+let bc x (opr, ws as op) y ~tgt =
     assert (ws = [wordsize]);
-    [ R.guard (R.app (R.opr (cmp_opr opr) [32]) [R.fetch cc wordsize]) 
+    [ R.guard (R.app (Up.opr op) [tval x; tval y]) 
               (R.store pc_lhs (Up.const tgt) wordsize)  (* effect *)
-    ; cmp x y
     ]
 @
 
@@ -340,17 +315,19 @@ let bc x (opr, ws) y ~tgt =
 
 <<MIPS postexpander>>=
 let bnegate r = match Dn.rtl r with
-    | RP.Rtl [ RP.App((cop, [32]), [RP.Fetch (flags, 32)])  (* guard  *)
-             , RP.Store (pc, tgt, 32)]                      (* effect *)
-        when pc = Dn.loc pc_lhs && flags = Dn.loc cc ->
-        R.guard (R.app (R.opr (negate cop) [32]) [R.fetch cc wordsize]) 
+    | RP.Rtl [ RP.App( (op,[32])
+                     , [RP.Fetch(RP.Reg(x),32);RP.Fetch (RP.Reg(y),32)]
+                     ) 
+             , RP.Store (pc, tgt, 32)
+             ] when pc = Dn.loc pc_lhs ->
+        R.guard (R.app (R.opr (negate op) [32]) [tval x; tval y]) 
                 (R.store pc_lhs (Up.exp tgt) wordsize)
     | _ -> Impossible.impossible "ill-formed MIPS conditional branch"
 @
 
 \paragraph{Calls} Direct and indirect calls. In an indirect call the
 target is held in a register. I don't understand the [[others]]
-parameter and the documentation does not explain it.
+parameter. 
 
 
 <<MIPS postexpander>>=
