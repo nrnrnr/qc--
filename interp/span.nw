@@ -1,0 +1,370 @@
+% -*- mode: Noweb; noweb-code-mode: c-mode -*- %
+
+This document contains the interface and implementation of spans.
+
+% ----------------------------------------------------------------------------
+\section{Interface}
+% ----------------------------------------------------------------------------
+
+<<span.h>>=
+#ifndef _SPAN_H
+#define _SPAN_H
+
+#include <mclib.h>
+#include "table.h"
+#include "label.h"
+
+<<type definitions>>
+<<global variable declarations>>
+<<function prototypes>>
+
+#endif /* _SPAN_H */
+@ 
+
+% ----------------------------------------------------------------------------
+\subsection{Data Structures}
+% ----------------------------------------------------------------------------
+
+We construct PC range tables from spans; at runtime, these tables may be
+queried to find the span value associated with a particular PC and token.
+
+<<type definitions>>=
+typedef struct span_t {
+  RAddr      pc_begin;
+  RAddr      pc_end;
+
+  CMM_label *value;
+  
+  struct span_t *enclosing_span;
+} span;
+@ 
+
+% ----------------------------------------------------------------------------
+\subsection{Load-Time Span Table Creation}
+% ----------------------------------------------------------------------------
+
+We provide functions that should be used at assembly file load-time to
+construct span tables for later use.
+
+<<function prototypes>>=
+void span_table_begin(table t, unsigned tok, const char *lbl);
+void span_table_end  (table t, unsigned tok);
+@ 
+
+% ----------------------------------------------------------------------------
+\subsection{Runtime Span Lookup}
+% ----------------------------------------------------------------------------
+
+We provide a function that may be used at runtime to find the value associated
+with a particular PC and token.
+
+<<function prototypes>>=
+unsigned span_find_value(unsigned real_pc, unsigned token);
+@ 
+
+% ----------------------------------------------------------------------------
+\subsection{Managing Memory for [[span]]s}
+% ----------------------------------------------------------------------------
+
+To abstract away from the details of memory management, this interface
+provides a function to create a new [[span]] and a function that frees
+all existing [[span]]s in memory.
+
+<<function prototypes>>=
+span *span_new(void);
+void  span_free_all(void);
+@ 
+
+Note that [[span_new]] returns a pointer to an \emph{uninitialized} 
+[[span]].
+
+% ----------------------------------------------------------------------------
+\subsection{Global Variables}
+% ----------------------------------------------------------------------------
+
+We use a (Lua) [[table]] to store our PC range tables.
+
+<<global variable declarations>>=
+extern table  span_table;
+@ 
+
+<<global variable definitions>>=
+table span_table;
+@ 
+
+% ----------------------------------------------------------------------------
+\section{Implementation}
+% ----------------------------------------------------------------------------
+
+<<span.c>>=
+#include "span.h"
+
+#include <cii/arena.h>
+#include <lua.h>
+#include "interp.h"
+#include "lualink.h"
+
+<<constant definitions>>
+<<global variable definitions>>
+<<internal static variable definitions>>
+
+<<internal function prototypes>>
+<<function definitions>>
+@
+
+% ----------------------------------------------------------------------------
+\subsection{Memory Allocation}
+% ----------------------------------------------------------------------------
+
+We make use of Hanson's ``arenas'' (see \emph{C Interfaces and Implementations})
+to assist in allocating and de-allocating memory for [[span]]s.
+
+<<internal static variable definitions>>=
+static Arena_T span_arena = NULL;
+@ 
+
+<<function definitions>>=
+span *span_new(void) {
+  span *sp;
+
+  if (span_arena == NULL) {
+    span_arena = Arena_new();
+    mem_assert(span_arena);
+  }
+
+  sp = (span *) Arena_alloc(span_arena, sizeof(span), __FILE__, __LINE__);
+  mem_assert(sp);
+  return sp;
+}
+
+void span_free_all(void) {
+  if (span_arena != NULL) {
+    Arena_free(span_arena);
+    Arena_dispose(&span_arena);
+    span_arena = NULL;
+  }
+}
+@ 
+
+% ----------------------------------------------------------------------------
+\subsection{Load-Time Span Table Creation}
+% ----------------------------------------------------------------------------
+
+These functions should be called at bytecode generation time by one of the
+appropriate Lua-style C functions ([[lua_CMM_begin_span]] or 
+[[lua_CMM_end_span]]).
+
+<<constant definitions>>=
+#define LUA_CURR_SPAN_WITHIN "curr_span"
+@ 
+
+<<function definitions>>=
+void span_table_begin(table t, unsigned tok, const char *lbl) {
+  lua_State   *L;
+  span        *sp;
+
+  assert(unit != NULL);
+  L = span_table.L;
+  assert(L    != NULL);
+
+  lua_pushtable(L, span_table);
+  lua_pushusertag(L, (void *) tok, lua_span_token_tag);
+  lua_gettable(L, -2);
+
+  /* if no table for this token, create new table */
+  if (!lua_istable(L, -1)) {
+    lua_pop(L, 1); /* pop bogus value */
+    lua_pushusertag(L, (void *) tok, lua_span_token_tag);
+    lua_pushvalue(L, -1);
+    lua_newtable(L);
+    lua_settable(L, -4);
+    lua_gettable(L, -2);
+  }
+
+  /* create new span object */
+  {
+    sp = span_new();
+
+    /* we create a new RAddr to refer to the curr lc in the curr block */
+    sp->pc_begin = addr_new(block_label(crb()), block_lc(crb()));
+    sp->pc_end   = NULL;
+
+    sp->enclosing_span = curr_span_within_get(tok);
+
+    lua_pushstring(L, lbl);
+    sp->value    = get_label(L, lbl);
+
+    /* update curr span info */
+    curr_span_within_set(tok, sp);
+  }
+
+  /* store span object away */
+  lua_pushusertag(L, (void *) sp, lua_span_tag);
+  lua_rawseti(L, -2, lua_getn(L, -2) + 1);
+
+  lua_pop(L, 2); /* pop this token's table as well as the overall span table */
+
+  assert(lua_gettop(L) == 0);
+}
+
+void span_table_end  (table t, unsigned tok) {
+  span *curr_span_within = curr_span_within_get(tok);
+  cmm_assert(curr_span_within != NULL, 
+             "cannot end span; we are not within one");
+
+  /* create new RAddr */
+  
+  curr_span_within->pc_end = addr_new(block_label(crb()), block_lc(crb()));
+
+  /* update curr_span_within */
+  /* FIX this needs to allow curr_span_within to be a table mapping
+     token->span
+  */
+  curr_span_within_set(tok, curr_span_within->enclosing_span);
+
+  assert(lua_gettop(span_table.L) == 0);
+}
+@ 
+
+Helper functions [[curr_span_within_get]] and [[curr_span_within_set]]
+assist with keeping track of the smallest span we are currently enclosed
+within (given a specific token).
+
+<<internal function prototypes>>=
+static span *curr_span_within_get(unsigned tok);
+static void  curr_span_within_set(unsigned tok, span *sp);
+@ 
+
+<<function definitions>>=
+static span *curr_span_within_get(unsigned tok) {
+  lua_State *L = span_table.L;
+  span      *sp;
+
+  lua_pushtable(L, span_table);
+  lua_pushusertag(L, (void *) tok, lua_span_token_tag);
+  lua_gettable(L, -2);
+
+  if (!lua_istable(L, -1)) {
+    lua_pop(L, 2); /* pop bogus value, table */
+    return NULL;
+  }
+
+  lua_pushstring(L, LUA_CURR_SPAN_WITHIN);
+  lua_gettable(L, -2);
+
+  if (!lua_isuserdata(L, -1) || 
+      lua_tag(L, -1) != lua_span_tag ||
+      (sp = (span *) lua_touserdata(L, -1)) == NULL)
+  {
+    lua_pop(L, 3); /* pop bogus userdata, pop 2 tables */
+    return NULL;
+  }
+
+  lua_pop(L, 3); /* pop span, 2 tables */
+  return sp;
+}
+
+static void curr_span_within_set(unsigned tok, span *sp) {
+  lua_State *L = span_table.L;
+
+  lua_pushtable(L, span_table);
+  lua_pushusertag(L, (void *) tok, lua_span_token_tag);
+  lua_gettable(L, -2);
+
+  lua_assert_istable(L, -1, "internal error -- cannot set curr_span_within!");
+
+  lua_pushstring(L, LUA_CURR_SPAN_WITHIN);
+  lua_pushusertag(L, (void *) sp, lua_span_tag);
+  lua_settable(L, -3);
+
+  lua_pop(L, 2); /* pop this token's table, general span table */
+}
+@ 
+
+% ----------------------------------------------------------------------------
+\subsection{Runtime Span Lookup}
+% ----------------------------------------------------------------------------
+
+<<function definitions>>=
+unsigned span_find_value(unsigned real_pc, unsigned token) {
+  lua_State *L = span_table.L;
+  span      *sp, *last_matching_span = NULL;
+  unsigned   low, middle, high;
+
+  lua_pushtable(L, span_table);
+  lua_pushusertag(L, (void *) token, lua_span_token_tag);
+  lua_gettable(L, -2);
+  if (!lua_istable(L, -1)) {
+    lua_pop(L, 2); /* pop bogus value, table */
+    return 0;
+  }
+
+  low    = 1;
+  high   = lua_getn(L, -1);
+
+  /* do binary search; only leave 'for' loop if we don't find span */
+  
+  for (middle = low + ((high - low) / 2); high - low >= 0; 
+       middle = low + ((high - low) / 2)) 
+  {
+    <<find smallest span associated with [[real_pc]]>>
+  }
+  lua_pop(L, 2); /* pop 2 tables */
+
+  /* if can't find, return 0 */
+  return 0;
+}
+@ 
+
+We do an extended binary search to find the smallest span associated with the
+current program counter ([[real_pc]]).
+
+<<find smallest span associated with [[real_pc]]>>=
+    lua_rawgeti(L, -1, middle);
+    if (!lua_isuserdata(L, -1) || 
+        lua_tag(L, -1) != lua_span_tag ||
+        (sp = (span *) lua_touserdata(L, -1)) == NULL)
+    {
+      lua_pop(L, 3); /* pop bogus value, 2 tables */
+      cmm_err("internal error -- invalid span value");
+    }
+    lua_pop(L, 1); /* pop span */
+
+    cmm_assert(location_known(sp->pc_begin), "internal span error");
+    cmm_assert(location_known(sp->pc_end),   "internal span error");
+    cmm_assert(location(sp->pc_begin) <= location(sp->pc_end),
+               "internal span error");
+
+    if (real_pc < location(sp->pc_begin)) {
+      high = middle - 1;
+      continue;
+    } else if (real_pc > location(sp->pc_end)) {
+      low  = middle + 1;
+      continue;
+    }
+
+    /* otherwise, real_pc must be in the closed interval [pc_begin, pc_end] */
+    assert(last_matching_span == NULL);
+    last_matching_span = sp;
+    for ( ; middle <= high; middle++) {
+      lua_rawgeti(L, -1, middle);
+
+      if (!lua_isuserdata(L, -1) || 
+        lua_tag(L, -1) != lua_span_tag ||
+        (sp = (span *) lua_touserdata(L, -1)) == NULL)
+      {
+        lua_pop(L, 3); /* pop bogus value, 2 tables */
+        cmm_err("internal error -- invalid span value");
+      }
+      lua_pop(L, 1); /* pop span */
+
+      if (real_pc < location(sp->pc_begin)) {
+        lua_pop(L, 2); /* pop 2 tables */
+        cmm_assert(location_known(CMM_label_raddr(last_matching_span->value)),
+                   "span value references undefined label");
+        return (unsigned) CMM_label_location(last_matching_span->value);
+      } else {
+        last_matching_span = sp;
+      }
+    }
+@ 
