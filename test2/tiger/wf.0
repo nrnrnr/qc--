@@ -1,0 +1,87 @@
+/* wf - print word frequencies; uses structures */
+/* based on the program of the same name from the lcc test suite */
+
+let
+  type node = {
+    count : int,       /* frequency count */
+    left  : node,       /* left subtree */
+    right : node,       /* right subtree */
+    word  : string		/* word itself */
+  }
+  var root := nil
+
+function err(s : string) = (
+	print("? "); print(s); print("\n");
+	exit(1)
+)
+
+/* add_word - add word to tree: install or increment count */
+function add_word(word : string) =
+  let function insert(p : node) : node =
+        if p = nil then node { count = 1, left = nil, right = nil, word = word }
+        else if word = p.word then (p.count := p.count + 1; p)
+        else if word < p.word then (p.left := insert(p.left); p)
+        else                       (p.right := insert(p.right); p)
+  in    root := insert(root)
+  end
+
+/* not until we have division 
+function print_int(n : int) = 
+  if n = 0 then print("0")
+  else  if n < 0 then (print("-"); print_int(-n))
+  else
+    let function digit(n : int) = print(chr(ord("0") + n))
+	function mod10(n : int) : int = n - 10 * (n / 10)
+        function digits(n : int) =
+          (if n < 10 then digit(n) else (digits(n / 10); digit(mod10(n))))
+    in  digits(n)
+    end
+*/
+
+/* tprint - print tree */
+function tprint(tree : node) =
+  if tree <> nil then (
+     tprint(tree.left);
+     printi(tree.count); print("\t"); print(tree.word); print("\n");
+     tprint(tree.right)
+  ) 
+
+/* isletter - return folded version of c if it is a letter, 0 otherwise */
+function isletter(c : string) : int =
+   if c >= "A" and c <= "Z" then
+	ord(c) + ord("a") - ord("A")
+   else if c >= "a" and c <= "z" then
+        ord(c)
+   else
+	0
+
+/* getword - get next input word into buf, return empty string on EOF */
+
+function getword() : string = 
+  let var s := ""
+      var c := ""
+  in
+      c := getchar();
+      while c <> "" and isletter(c) = 0 do 
+        c := getchar();
+      while c <> "" and isletter(c) do (
+	s := concat(s, chr(isletter(c)));
+        c := getchar()
+      );
+      s
+  end
+
+
+function main() = 
+   let var word := ""
+   in
+       word := getword();
+       while size(word) > 0 do (
+          add_word(word);
+          word := getword()
+       );
+       tprint(root)
+   end
+
+in main()
+end
