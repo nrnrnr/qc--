@@ -158,6 +158,8 @@ module type S = sig
   type assertion = Rtl.assertion
   type operator  = Rtl.Private.opr
 
+  (* The postexpander may need to allocate temporaries *)
+  val register_talloc : Talloc.Multiple.t -> unit 
   <<generic expansion operations>>
 end
 @ 
@@ -465,6 +467,7 @@ context that's not known at compile-compile time.
 \nextchunklabel{expander.contextmap}%
 <<generic expander>>=
 let expand proc =
+  let () = Post.register_talloc proc.Proc.temps in (* postexpander may allocate temps *)
   let contextmap (space, checker) =
     (Talloc.Multiple.reg proc.Proc.temps space, checker) in
   let icontext = contextmap Post.icontext in
