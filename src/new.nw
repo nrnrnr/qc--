@@ -97,9 +97,7 @@ type size  = int
 % ------------------------------------------------------------------ 
 
 <<new.ml>>=
-type align      = int
-type width      = int
-type size       = int
+<<type abbreviations>>
 
 type spec       = BottomUp of Target.t
 
@@ -120,7 +118,13 @@ class type automaton = object
 end   
     
 type t = automaton
+@
 
+The [[bottumup]] class returns locations of the form $\mathit{base}+k$
+where $k \ge 0$ is increased accoring to the size and alignment
+requirements of requests.
+
+<<>>=
 class bottomup (base: Rtl.expr) (target: Target.t) =
     let wrd = target#wordsize                                         in
     let ptr = target#pointersize                                      in
@@ -133,22 +137,25 @@ class bottomup (base: Rtl.expr) (target: Target.t) =
     let offset    k w = Rtl.cell 'm' agg w (addptr base (constptr k)) in
     let write     k w = fun e -> Rtl.store (offset k w) e w           in
     let read      k w = Rtl.fetch (offset k w) w                      in
-      
+    let align x k     = if x mod k = 0 
+                        then x 
+                        else (x / k + 1) * k                          in  
      
     object (self)
         val mutable frozen    = false
-        val mutable align     = 1
+        val mutable maxalign  = 1
         val mutable k         = 0
 
-        method block width align =
-            let _    = assert (not frozen)                                 in
-            let _    = assert (width mod mem = 0)                          in
-            let _    = if k mod align <> 0 then k <- ((k/align)+1) * align in
-            let size = width / mem                                         in
+        method block width a =
+            let _    = assert (not frozen)        in
+            let _    = assert (width mod mem = 0) in
+            let _    = k <- (align k a)           in
+            let _    = maxalign < - max maxalign a in
+            let size = width / mem                in
             let loc  = { store = write k width
                        ; fetch = read k width
-                       }                                                   in
-            let _    = k <- k + size                                  in
+                       }                          in
+            let _    = k <- k + size              in
                 loc
 
         method ty t (hint: string option) = 
@@ -162,7 +169,7 @@ class bottomup (base: Rtl.expr) (target: Target.t) =
             let _ = frozen <- true in
             { address = base
             ; size    = k
-            ; align   = align
+            ; align   = maxalign
             }
             
     end
