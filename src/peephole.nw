@@ -1,0 +1,142 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% vim: ts=2 sw=2 et: 
+% Grades     ::=    "%%Grades:" Quality Importance Urgency
+% Quality    ::=    A|B|C|D|E
+% Importance ::=    Central|Subsystem|Peripheral
+% Urgency    ::=    Immediate|Soon|Later
+%
+% Example (at beginning of line): %%Grades: B Central Soon
+% 
+
+% inc: \usepackage{nchicago}
+
+
+\section{Peephole Optimization}
+
+
+The idea behind peephole optimization is simple.
+Suppose you have the following program:
+\begin{verbatim}
+  t1 := 12
+  t2 := sp + t1
+\end{verbatim}
+After the first assignment, you know as an ``available expression''
+that [[t1 == 12]].
+You can therefore do a forward substitution of [[12]]~for~[[t1]],
+yielding
+\begin{verbatim}
+  t1 := 0
+  t2 := sp + 12
+\end{verbatim}
+With luck, the assignment to~[[t1]] becomes dead, and a later
+dead-assignment elimination will eliminate it.
+Congratulations!  You have a peephole optimizer.
+
+This module implements a forward dataflow pass that does the forward
+substitution.
+It's very pessimistic about available expressions, assuming that they
+are empty at the start of each basic block.
+For cleaning up the output of the generic expander, this is just fine.
+<<peephole.mli>>=
+val subst_forward : 'a -> Oast2ir.proc -> bool
+@ 
+
+\subsection{Implementation}
+
+This is a forward dataflow problem.
+<<peephole.ml>>=
+module G  = Cfgx.M
+module P  = Proc
+module RP = Rtl.Private
+module RU = Rtlutil
+module Dn = Rtl.Dn
+module Up = Rtl.Up
+module SS = Strutil.Set
+module T  = Target
+
+module ToString = RU.ToReadableString
+@ 
+<<peephole.ml>>=
+module D  = Dataflow.Make (G)
+
+<<substitution>>
+let subst_forward _ proc =
+  let ok =
+    if Verbose.verbosity < 4 then proc.P.target.T.is_instruction
+    else (fun i -> if proc.P.target.T.is_instruction i then true
+                   else (Printf.eprintf "### rejected substitution %s\n"
+                           (ToString.rtl i); false)) in
+  let changed = ref false in
+  let init = Avail.empty in
+  let split _ = Avail.empty in
+  let merge _ _ = false in
+  let replace =
+    if Verbose.verbosity < 4 then (fun rtl _ -> rtl)
+    else
+      (fun rtl old ->
+        Printf.eprintf "Replacing old rtl %s\n     with new rtl %s\n"
+          (ToString.rtl old) (ToString.rtl rtl);
+        rtl) in
+  <<propagation>>
+  let fwd = D.fwd_iteration { D.split_info = split; D.merge_split_info = merge
+                            ; D.init_info = init; D.propagate = propagate } in
+  ignore (fwd proc.P.cfg); 
+  !changed
+@ 
+According to Jack Davidson, we should try two substitutions, not just
+one, when peephole optimizing.
+<<propagation>>=
+let propagate node avail =
+  let update rtl = G.update_instr (replace rtl) node; changed := true in
+  let () = 
+    match G.to_executable node with
+    | None -> ()
+    | Some rtl ->
+        Verbose.eprintf 4 "=> Considering %s\n" (ToString.rtl rtl);
+        subst_one rtl avail
+          (fun rtl' (resume:unit->unit) ->
+            subst_one rtl' avail
+              (fun rtl'' resume -> if ok rtl'' then update rtl'' else resume ())
+              (fun () -> if ok rtl' then update rtl' else resume()))
+          (fun () -> ()) in
+  match G.kind node with
+  | G.Instruction | G.Assertion ->
+      (match G.to_instr node with
+      | None -> Impossible.impossible "instruction/assertion with no RTL"
+      | Some rtl -> Avail.forward rtl avail)
+  | _ -> Avail.empty  (* rank pessimism *) in
+@ 
+Here's a nasty backtracking search for a substitutable location.
+<<substitution>>=
+let wrap = 
+  if Verbose.verbosity < 4 then (fun succ -> succ)
+  else (fun succ l resume ->
+    let () = Verbose.eprintf 4 "Substituting for %s\n" (ToString.loc (Up.loc l)) in
+    succ l (fun () ->
+      (Verbose.eprintf 4 "Abandoning %s\n" (ToString.loc (Up.loc l)); resume())))
+
+let subst_one rtl avail succ fail =
+  let is_some = function Some _ -> true | None -> false in
+  let substitute loc =
+    match Avail.in_loc avail loc with
+    | Some e -> RU.Subst.rhs_exp ~guard:((=) loc) ~map:(fun _ _ -> e) rtl
+    | None -> Impossible.impossible "available location is not available?!" in
+  let substitutable exp =
+    RU.Find.Loc.exp (fun l -> is_some (Avail.in_loc avail l)) exp in
+  let rec find_loc succ fail = function
+    | [] -> fail ()
+    | (guard, RP.Kill loc) :: es ->
+        let resume () = find_loc succ fail es in
+        let succ = wrap succ in
+        ( match substitutable guard with Some l -> succ l resume | None -> resume ())
+    | (guard, RP.Store (loc, rhs, w)) :: es ->
+        let succ = wrap succ in
+        let r1 () =
+          let resume () = find_loc succ fail es in
+          match substitutable rhs with Some l -> succ l resume | None -> resume() in
+        match substitutable guard with Some l -> succ l r1 | None -> r1 () in
+  let RP.Rtl effs = Dn.rtl rtl in
+  find_loc (fun loc resume -> succ (substitute loc) resume) fail effs
+
+type void = Void of void
+let _ = (subst_one : Rtl.rtl -> Avail.t -> (Rtl.rtl -> (unit->void) -> void) -> (unit->void) -> void)
