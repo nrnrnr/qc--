@@ -136,7 +136,10 @@ B<mlburg> I<spec.mlb>
 B<mlburg> generates Objective Caml source code from a Burg specification
 I<spec.mlb> and emits it to stdout. The generated code implements a
 dynamic programming algorithm to cover a tree structure with minimal
-cost. 
+cost. B<mlburg> is inspired by David Hanson's iburg(1) for C:   Fraser
+and Hanson: "Engineering a Simple, Efficient Code Generator Generator",
+ACM Letters on Programming Languages and Systems 1, 3 (Sep 1992),
+213-226.
 
 =head1 OPTIONS
 
@@ -156,6 +159,7 @@ This is an option for debugging B<mlburg>. B<Mlburg> normalizes rules
 during the translation process. In a normalized rule no constructor
 pattern has another constructor pattern as argument. When the B<-norm>
 flag is present, B<mlburg> emits the normalized rule set to stdout.
+
 =back
 
 =head1 BURG SPECIFICATION
@@ -275,6 +279,8 @@ cost is either static, or dynamic. In the dynamic case the user provides
 a cost expression that is evaluated at run-time. The values of terminal
 variables in the pattern are available for the cost expression.
 
+=head1 THE GENERATED CODE
+
 The purpose of the generated code is to select the rules from a set that
 match a (subject) tree at the smallest cost, according to the cost
 annotations.  The generated code contains a function for every
@@ -312,6 +318,9 @@ constructor. For the example above, these are:
     val conADD   : t -> t -> t   
     val conMUL   : t -> t -> t   
     val conSUB   : t -> t -> t   
+
+
+=head1 THE CLIENT
 
 To find the cheapest cover for a subject tree, the client walks over the
 subject tree and calls the appropriate function for the actual node: For
@@ -353,9 +362,49 @@ value. This allows to obtain a string value as well:
 The generated code relies on the small module C<Camlburg> that comes as
 C<camlburg.mli> and C<camlburg.ml> with B<mlburg>. 
 
+=head1 COPYING
+
+Copyright (c) 2001, 2002 Christian Lindig <lindig@eecs.harvard.edu>, 
+Norman Ramsey <nr@eecs.harvard.edu>. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+
+=over
+
+=item 1.
+
+Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+
+=item 2.
+
+Redistributions in binary form must reproduce the above
+copyright notice, this list of conditions and the following
+disclaimer in the documentation and/or other materials provided
+with the distribution.
+
+=back
+
+
+THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESS OR IMPLIED
+WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR AND COPYRIGHT HOLDER BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,
+OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR
+TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
+THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+SUCH DAMAGE.
+@
+
 =head1 SEE ALSO
 
-L<ocaml>. 
+ocaml(1)
 
 Fraser and Hanson: "Engineering a Simple, Efficient Code Generator
 Generator", ACM Letters on Programming Languages and Systems 1, 3 (Sep

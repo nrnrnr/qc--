@@ -54,7 +54,7 @@ dvi:V:          $DVI
 html:V:         $HTML
 ps:V:           $PS
 
-man:V:          mlburg.1
+man:V:          mlburg.1 
 
 test:VQ:        sample.cmo iburg.cmo
 
@@ -70,13 +70,16 @@ clean:V:
                 rm -f parse.ml* lex.ml*
                 rm -f *.ml *.mll *.mli $DEPEND *.mly
                 rm -f *.aux *.log *.dvi *.tex *.inc *.toc *.html
+                rm -f *.ps *.pdf
                 rm -f *.pod
                 
 clobber:V:      clean
                 rm -f mlburg mlburg.opt mlburg.1
-
-# 
-# 
+                rm -f nofake*
+                rm -f pp.*
+                rm -f srcmap.*
+                rm -f pod2htm*
+                rm -f *.tar*
 #
 
 install:V:      mlburg.opt mlburg.1
@@ -94,14 +97,6 @@ install:V:      mlburg.opt mlburg.1
 
 OCAMLC_FLAGS =  -g -I $LIBDIR
 OCAMLO_FLAGS =     -I $LIBDIR
-
-# ------------------------------------------------------------------ 
-# new rule for Burg specifications
-# causes ambiguities with noweb rules :-(
-# ------------------------------------------------------------------ 
-
-# %.ml:           %.mlb ./mlburg
-#                ./mlburg $stem.mlb > $target
 
 # ------------------------------------------------------------------ 
 # important file sets
@@ -183,6 +178,56 @@ sample.ml:      sample.mlb mlburg runtime
 
 iburg.ml:       iburg.mlb mlburg runtime
                 ./mlburg iburg.mlb > $target
+
+# ------------------------------------------------------------------ 
+# export distribution to outside world
+# ------------------------------------------------------------------ 
+
+nofake.nw:      ../tools/nofake.nw
+                cp $prereq $target
+
+pp.nw:          ../cllib/pp.nw
+                cp $prereq $target
+
+srcmap.nw:      ../cllib/srcmap.nw
+                cp $prereq $target
+
+nofake:         nofake.nw
+                notangle -R$target $prereq > $target
+                chmod +x $target
+
+nofake.1:       nofake
+                $POD2MAN nofake > $target
+
+nofake-man.html:    nofake
+                $POD2HTML nofake > $target
+
+
+EXPORT =        README DEPEND Makefile                      \
+                iburg.mlb                                   \
+                mlburg.1 mlburg-man.html                    \
+                nofake nofake.1 nofake-man.html nofake.html \
+                burg.nw burg.html                           \
+                camlburg.nw camlburg.html                   \
+                code.nw code.html                           \
+                lex.nw lex.html                             \
+                main.nw main.html                           \
+                norm.nw norm.html                           \
+                parse.nw parse.html                         \
+                parseerror.nw parseerror.html               \
+                pp.nw pp.html                               \
+                sample.nw sample.html                       \
+                spec.nw spec.html                           \
+                srcmap.nw srcmap.html                       \
+
+tidy:V:         $HTML nofake-man.html mlburg-man.html
+                tidy -f /dev/null -im $prereq || exit 0
+
+export:V:       $EXPORT tidy
+                FILE="ocamlburg-1.0"
+                ln -s . $FILE
+                tar czvhf $FILE.tar.gz `ls -1 $EXPORT | sed "s|^|$FILE/|"`
+                rm -f $FILE
 
 
 # ------------------------------------------------------------------ 
