@@ -331,12 +331,21 @@ end
 module MakeInterp (MakeParser : Parser.MAKER) (I : INTERP_CORE)
     : INTERP with module Value = I.Value
 @ 
+Once we've made an interpreter, if we like, we can run it using the
+command-line arguments.
+If there are no arguments, it runs interactively from standard input.
+<<lua.mli>>=
+module Run (I : INTERP) : sig end  (* runs interpreter on Sys.argv *)
+@ 
 Here is an example of how to build an interpreter that uses the three
 standard libraries:
 \begin{verbatim}
-  module I = Lua.MakeInterp (Lua.Parser.MakeStandard)
-               (Lua.MakeCore (Lua.Lib.AddBare (Lua.Lib.AddBare
-                 (Luaiolib.M) (Luastrlib.M)) (Luamathlib.M)))
+  module T = Lua.Lib.Combine.T1 (Luaiolib.T)
+  module X (L : Lua.Lib.BARE) = Lua.Lib.Extend (L) (T.T1)
+  module L = Lua.Lib.Combine.L3 (Luaiolib.Make (T.T1)) 
+                                (X(Luastrlib.M)) (X(Luamathlib.M))
+  module I = Lua.MakeInterp (Lua.Parser.MakeStandard) (Lua.MakeCore (T) (L))
+  module Go = Lua.Run(I)
 \end{verbatim}
 @
 
@@ -358,6 +367,7 @@ module type INTERP = sig
   val dostring  : state -> string -> value list
   val dofile    : state -> string -> value list
 end
+module Run (I : INTERP) = Luarun.Make (I)
 module MakeCore = Luainterp.Make3
 module MakeInterp = Luabaselib.Add
 (*

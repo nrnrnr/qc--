@@ -5,9 +5,25 @@
 Runs the given interpreter at startup, using [[Sys.argv]] to decide
 what to do.
 <<luarun.mli>>=
-module Make (I : Lua.INTERP) : sig end
+module type INTERP = sig
+  module Value : Luavalue.S
+  type value = Value.value
+  type state = Value.state
+  val state : unit -> state
+  val dostring  : state -> string -> value list
+  val dofile    : state -> string -> value list
+end
+module Make (I : INTERP) : sig end
 <<luarun.ml>>=
-module Make (I : Lua.INTERP) = struct
+module type INTERP = sig
+  module Value : Luavalue.S
+  type value = Value.value
+  type state = Value.state
+  val state : unit -> state
+  val dostring  : state -> string -> value list
+  val dofile    : state -> string -> value list
+end
+module Make (I : INTERP) = struct
   module V = I.Value
   let state = I.state()
   let dumpstate = ref false
