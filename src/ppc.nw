@@ -582,7 +582,7 @@ let from_temps proc space = (* stage to allocate a temporary location *)
   A.wrap (fun methods -> {A.allocate = alloc; A.freeze = methods.A.freeze})
 
 let placevars proc = 
-  let is_float hint w _ = w <= 32 && hint = "float" in
+  let is_float w hint _ = w <= 32 && hint = "float" in
   let warn methods =
     let alloc ~width:w ~alignment:a ~hint:h =
       if w > 32 then
@@ -596,7 +596,7 @@ let placevars proc =
     A.wrap warn *>
     A.choice
       [ is_float,               A.widen (Aux.round_up_to ~multiple_of: 32); 
-        (fun h w _ -> w <= 32), A.widen (fun _ -> 32) *> from_temps proc 't';
+        (fun w h _ -> w <= 32), A.widen (fun _ -> 32) *> from_temps proc 't';
         A.is_any,               A.widen (Aux.round_up_to ~multiple_of: 8);
       ] *>
     A.as_stage proc.Proc.priv

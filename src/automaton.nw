@@ -264,7 +264,7 @@ The idea is that for an allocation, we use the first stage for which
 the predicate is satisfied.
 It is a checked run-time error if no predicate is satisfied.
 <<exposed types>>=
-type choice_predicate = string -> int -> counterenv -> bool
+type choice_predicate = int -> string -> counterenv -> bool
 <<exported values>>=
 val choice : (choice_predicate * stage) list -> stage
 @ To help create predicates we provide several convenience functions.
@@ -533,7 +533,7 @@ let choice choices next ~ctrs =
                            ; freeze   = alternative.freeze } in
       let choice = stage follows_choice in
       let alloc ~width ~alignment ~hint =
-        let alloc = if p hint width ctrs then choice.allocate 
+        let alloc = if p width hint ctrs then choice.allocate 
                                          else alternative.allocate in
         alloc width alignment hint in
       { allocate = alloc; freeze = choice.freeze } in
@@ -550,7 +550,7 @@ let first_choice choices next ~ctrs =
   let freeze regs mems = (!myself).freeze regs mems in
   let first_allocate ~width ~alignment ~hint =
     let choice =
-      try snd (List.find (fun (p, _) -> p hint width ctrs) choices)
+      try snd (List.find (fun (p, _) -> p width hint ctrs) choices)
       with Not_found -> imposs "missing choice" in
     myself := choice;
     allocate width alignment hint in
@@ -562,9 +562,9 @@ let first_choice choices next ~ctrs =
 let first_choice = wrap_choice first_choice
 
 let counter_is c f _ _ env = match env c with Some i -> f (!i) | None -> false
-let is_hint    h'  h w _   = h = h'
-let is_width   w'  h w _   = w = w'
-let is_any         h w _   = true
+let is_hint    h'  w h _   = h = h'
+let is_width   w'  w h _   = w = w'
+let is_any         w h _   = true
 @ 
 \paragraph{Register assignment}
 <<automaton.ml>>=
