@@ -1,0 +1,21 @@
+target byteorder little;
+
+import printf;
+export main;
+
+foreign "C" main(bits32 argc, "address" bits32 argv) {
+  tryout(3); tryout(4);
+  foreign "C" return(0);
+}
+
+tryout(bits32 n) {
+  bits32 fmt;
+  if %bool(%lobits1(n)) { fmt = nz; } else { fmt = z; }
+  foreign "C" printf(fmt, n);
+  return;
+}
+
+section "data" {
+  nz :  bits8[] "%d low bit is nonzero\n\0";
+   z :  bits8[] "%d low bit is zero\n\0";
+}
