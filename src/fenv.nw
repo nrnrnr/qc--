@@ -1,3 +1,6 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% vim: ts=8 et sts=4 sw=4
+
 
 % l2h substitution dots ...
 % l2h substitution AST AST
@@ -21,7 +24,7 @@
 The meaning, or denotation, of names in a {\PAL} program are recorded
 in an environment.  Because only one environment is used for all
 different kinds of names, it is called fat.  The fat environment not
-only serves the classic symbol table purpose but also represents some
+only serves the classic symbol table purpose, but also represents some
 global state of the compiler.  It is used to pass around informations
 between the different phases of the compiler.  In particular the fat
 environment holds informations about:
@@ -109,7 +112,32 @@ to clean a dirty environment with bad values will result in a checked
 run-time error.
 
 % ------------------------------------------------------------------ 
-\subsection{General Interface \texttt{Env}}
+\subsection{Getting Started: creating an Environment}
+% ------------------------------------------------------------------ 
+
+The [[empty]] function creates an (almost) empty environment and it the
+only way to create an environment. For every program the compiler
+translates it creates one environment. Upon creation the environment is
+passed to important data structures: a [[Srcmap.map]] value, and an
+assembler [[Asm3.assembler]]. A [[Srcmap.map]] value associates a
+byte-offset in the input with a more readable triple of file name, line,
+and column. An assembler requires symbols to be registered before they
+can be used.  Both the source map and the assembler can be observed from
+an environment.
+
+<<signature Env>>=
+type env 
+type scope
+<<types>>
+
+val empty:      Srcmap.map -> Asm3.assembler -> env   (* empty scope stack *)
+val srcmap:     env -> Srcmap.map
+val asm:        env -> Asm3.assembler
+@
+
+
+% ------------------------------------------------------------------ 
+\subsection{Scopes and the Fat Environment}
 % ------------------------------------------------------------------ 
 
 The main purpose of the fat environment is to bind values to names. 
@@ -121,7 +149,7 @@ interface provides a fat environment [[env]], that holds all bindings,
 regardless whether they are scoped or un-scoped. 
 
 Bindings for types and values have two scopes: the global scope of the
-entire compilation unit, and the scope inside of a procedure. So in
+entire compilation unit, and the scope inside a procedure. So in
 principle, the scope changes, when a procedure is entered. However,
 {\PAL} has some anomalies with respect to these well known static
 scoping rules: 
@@ -145,14 +173,6 @@ procedure's bindings can be saved by saving the [[top]] scope and
 re-used, by [[pop]]'ing it later.
 
 <<signature Env>>=
-type env 
-type scope
-<<types>>
-
-<<signature Env>>=
-val empty:      Srcmap.map -> env       (* empty scope stack *)
-val srcmap:     env -> Srcmap.map
-
 val emptyscope: scope   
 val top:        env -> scope            (* top empty = assert false *)
 val pop:        env -> env              (* pop empty = assert false *)
@@ -203,16 +223,15 @@ capture the structure of values in {\PAL}.
       index that identifies it for the run-time API.
 \item Labels come in different flavors:  labels in [[goto]] or inside
       data declarations are plain vanilla.  Procedures are labels in a
-      clean environment that include their saved local [[scope]] and
-      informations about local stack data.  
+      clean environment that include their saved local [[scope]]. 
 \end{itemize}
 
-Some care must be taken when dealing with [[goto]] labels and imported
-values because of {\PAL} idiosyncrasies.  Both have global scope, even
-when they are defined inside a procedure.  Consequently, they are added
-to the environment (at the outermost/bottom scope) during the first
-pass, that enters all globally bound values.  A later pass that enters
-only locally visible values must ignore them. 
+Be careful when dealing with [[goto]] labels and imported values because
+of {\PAL}'s idiosyncrasies.  Both have global scope, even when they are
+defined inside a procedure.  Consequently, they are added to the
+environment (at the outermost/bottom scope) during the first pass, that
+enters all globally bound values.  A later pass that enters only locally
+visible values must ignore them. 
 
 The denotation of a continuation $x$ includes a label $x'$. It is used
 during translation the translation of an expressions that refer to $x$:
@@ -229,13 +248,13 @@ represented by an [[Rtl.link]] value that uses the string part of the
 [[denotation]]. A continuation therefore has two [[Rtl.link]] values
 associated with it: one for its entry point, the other for the pointer
 its run-time representation as a pointer to a pair.  
- 
+
+Some values finally become assembler symbols. When such a value enters
+the fat environment we reserve an assembler symbol for it. The symbol
+becomes part of the value's denotation.
+
 
 <<types>>=
-type proc = 
-    { scope:      scope partial
-    }
-
 and  reghint        = RReg  of string   (* hardware reg *)
                     | RHint of string   (* calling convention hint *)
                     | RNone             (* none of above *)
@@ -245,16 +264,16 @@ and  register =     { index:        int
                     ; loc:          Automaton.loc option
                     }
                       
-and  kind           = Proc          of proc
-                    | Code
-                    | Data          
+and  kind           = Proc          of Asm3.symbol * scope partial 
+                    | Code          of Asm3.symbol    
+                    | Data          of Asm3.symbol
                     | Stack         of Rtl.exp option
 
 and  denotation     = Constant      of Bits.bits
                     | Label         of kind
-                    | Import        of string option
+                    | Import        of string option * Asm3.symbol
                     | Register      of register
-                    | Continuation  of string    
+                    | Continuation  of string * Asm3.symbol   
 @
 
 The complete entry [[ventry]] for a value includes not only its
@@ -403,34 +422,31 @@ getIndex (nextIndex env) = (getIndex env) + 1
 \end{quote}
 
 % ------------------------------------------------------------------ 
-\subsection{Imports and Exports}
+\subsection{Imports, Exports, and Assembler Symbols}
 % ------------------------------------------------------------------ 
 
-The translation process assigns certain {\PAL} \emph{names}
-to assembly-level \emph{symbols}.  The relation between a name and its
-assembly symbol is not straight forward, as explained in module
-\module{mangle}.  In order to build a map from {\PAL} names to symbols
-all imports and exports of a {\PAL} program must be registered.  This
-is done with [[import]] and [[export]].  To provide meaningful error
-messages, both function receive the region of the statement at hand in
-the source code. 
-
-\emph{Describe interaction with bindv}
+The translation process assigns certain {\PAL} \emph{names} to
+assembly-level \emph{symbols}.  The relation between a name and its
+assembly symbol is not straight forward, as explained in
+section \ref{sect:fenv:mangle}.  In order to build a map from {\PAL} names to
+symbols all imports and exports of a {\PAL} program must be registered.
+This is done with [[import]] and [[export]].  To provide meaningful
+error messages, both function receive the region of the statement at
+hand in the source code. 
 
 <<signature Env>>=
 val import: Srcmap.rgn -> string -> string -> env -> env (* import g as f *)
 val export: Srcmap.rgn -> string -> string -> env -> env (* export f as g *)
 @
 
-The assembly level symbols imported and exported from a compilation
-unit can be obtained, as well as a map from {\PAL} names to these
-symbols.  The union of the imported and exported sets equals the range
-of the map.
+The [[symbol env n]] function returns the assembly level symbol for a
+{\PAL} name [[n]]. If [[n]] is not associated with an imported or
+exported symbol, we register a new local symbol in the assembler and
+return it. Since every {\PAL} name should have exactly one associated
+symbol it is an unchecked error to call [[symbol]] twice with the same name.
 
 <<signature Env>>=
-val imported: env -> Strutil.Set.t
-val exported: env -> Strutil.Set.t
-val nam2sym:  env -> string Strutil.Map.t    (* need this? *)
+val symbol:   env -> string -> Asm3.symbol
 @
 
 % ------------------------------------------------------------------ 
@@ -445,6 +461,182 @@ determine the assignment of register to hardware register or memory,
 <<signature Env>>=
 val globals : env -> string list
 @
+
+% ------------------------------------------------------------------ 
+\subsection{The Details of {\PAL} names and Assembler Symbols}
+\label{sect:fenv:mangle} 
+% ------------------------------------------------------------------ 
+
+A translation of {\PAL} to assembly code must create assembly level
+\emph{symbols} for {\PAL} \emph{names} that represent addresses:
+
+\begin{itemize}
+\item Procedures
+\item Goto-Labels
+\item Data-Labels
+\item Continuations
+\end{itemize} 
+
+Since names for all objects above have global scope, they are unique
+for every compilation unit and thus can, in principle, be used for
+their assembly-level symbols, which also have a compilation-unit
+scope.  A name from outside a compilation unit can be used after it
+was imported; likewise can a compilation unit export a name to make it
+accessible for others.  Import and export declarations in {\PAL} allow
+to re-name an imported or exported object:
+
+\begin{quote}
+    [[import]] $a$ as $c$\\
+    [[export]] $c$ as $a$
+\end{quote}
+
+The {\PAL} name $c$ corresponds to the assembly level symbol $a$.  In
+the presence of re-naming, a {\PAL} name $x$ need not to not
+correspond to the same symbol $x$ on the assembly level.  Even worse,
+imports and exports using the [[as]] feature have non-local effects:
+
+\begin{quote}
+\begin{verbatim}
+import print as p;
+print () { ... }
+\end{verbatim}
+\end{quote}
+
+The assembly symbol [[print]] is already used, although [[p]] is used
+on the {\PAL} side to refer to it.  Consequently, a {\PAL} procedure
+[[print]] can still be defined, but the name [[print]] can no longer
+be used as its assembly symbol.  The {\qcc} compiler must manage names
+in order to avoid name clashes caused by re-naming.  The main idea is
+to find and record a corresponding assembly symbol for every {\PAL}
+name.  To make debugging easier, corresponding names on the {\PAL} and
+the assembly side should resemble each other as much as possible.
+
+% ------------------------------------------------------------------ 
+\subsubsection{The Rules}
+% ------------------------------------------------------------------ 
+
+Before we go into the details how name conflicts are found and
+resolved we like to state the rules that {\PAL} names and assembly
+symbols must adhere to.  The following rules apply both for {\PAL}
+names and assembler symbols inside a compilation units.
+
+\begin{itemize}
+\item A name (symbol) is either imported, or defined, but not both. 
+      Every name (symbol) is exactly defined once.  An exported name
+      (symbol) must be defined.
+
+\item It is illegal to export a name (symbol) that is imported or to
+      import a name that is also exported.
+\end{itemize}
+
+According to the rules it is legal to import the same symbol under
+different names in {\PAL}:
+
+\begin{quote}
+\begin{verbatim}
+import f as g;
+import f as h;
+\end{verbatim}
+\end{quote}
+
+A naive translation of the following code could lead to assembly code
+that violates the second rule. 
+
+\begin{quote}
+\begin{verbatim}
+import f as g;
+export print as f;
+print () { ... }
+\end{verbatim}
+\end{quote}
+
+On the assembly level [[f]] is both imported and exported, because the
+corresponding symbol for [[print]] is [[f]]. The {\qcc} compiler must
+detect this problem only by looking at the {\PAL} code and reject this
+program. 
+
+% ------------------------------------------------------------------ 
+\subsubsection{Design}
+% ------------------------------------------------------------------ 
+
+This section sketches how assembly symbols are computed for {\PAL}
+names and how an implementation fits into the current compiler
+architecture.  For the rest of this section we assume that [[import]]
+$a$ is a shortcut for [[import]] $a$ [[as]] $a$, and [[export]] $c$ a
+shortcut for [[export]] $c$ [[as]] $c$.
+
+An early pass over the abstract syntax is added to the code that
+checks the static semantics.  This pass records all [[include]] and
+[[export]] declarations of a compilation unit.  More precisely, two
+sets and one map are built:
+
+\begin{itemize}
+\item Set $I$ of assembly symbols imported by a {\PAL}
+      compilation unit:  [[import g]] adds [[g]] to $I$, 
+      The symbol [[g]] must not be element of set $E$ (see
+      below). 
+    
+\item Set $E$ of assembly symbols exported by a {\PAL}
+      compilation unit: [[export f as g]] adds [[g]] to $E$,
+      where [[g]] must be not in $I$.
+    
+\item A map $m$ from {\PAL} names to their corresponding assembly
+      level symbols:
+      
+      \begin{center}
+      \begin{tabular}{ll}
+      {\PAL} & added to map $m$ \\ \hline
+      [[import f]]      & [[f]] $\mapsto$ [[f]] \\
+      [[import g as f]] & [[f]] $\mapsto$ [[g]] \\
+      [[export f]]      & [[f]] $\mapsto$ [[f]] \\
+      [[export f as g]] & [[f]] $\mapsto$ [[g]] 
+      \end{tabular}
+      \end{center}
+
+\item The following equations relates $I$, $E$, and $m$:
+      $\mathit{range}(m) = I \cup E$. 
+\end{itemize}      
+
+The sets $I$ and $E$ together contain the symbols which are determined
+by the outside of a module and thus can not be used (in general) for
+assembly symbols stemming from {\PAL} names.  Recording them in two
+sets is necessary to detect symbols on the assembly side that are
+imported and exported at the same time.  The map must be used during
+translation of names.
+
+To translate a {\PAL} program to assembly language, not only the
+symbols for imported or exported objects must be known but for all
+{\PAL} objects that have a corresponding symbol.  The following
+algorithm extends the map $m$ such that it maps all relevant {\PAL}
+names to their symbols.
+
+The algorithm uses a set $M$ that contains all assembly symbols used
+by a program.  Initially it contains the union of $I$ and $E$:  $M
+\gets I \cup M$.  Next, the algorithm visits all \emph{definitions} of
+objects that have a corresponding symbol and matches them against the
+left hand side of the following table. After visiting all definitions,
+$m$ contains a mapping from {\PAL} names to assembly symbols.
+
+\begin{center}
+\def\dom{\mathit{dom}}
+\begin{tabularx}{\hsize}{lX}
+    Definition of $c$               & Action \\
+    \hline
+    [[import]] $c$                  & none \\
+    [[import]] $x$ [[as]] $c$       & none \\
+    label $c$, $c \in\dom(m)$       & none ($c$ is exported) \\
+    label $c$, $c \in M$            & invent a new name $a \not\in M$, 
+                                      $M \gets M \cup \{a\}$, 
+                                      $m \gets m + (c \mapsto a)$\\
+    label $c$                       & $m \gets m + (c \mapsto c)$\\
+\end{tabularx}
+\end{center}
+
+Imports can be skipped because they are already considered in the
+initial map $m$.  The same is true for labels that are exported.  In
+most cases the name defined by a label can also be used as a symbol. 
+Only when the name symbol is already in use a new symbol must be
+invented and marked as used in $M$.
 
 
 % ------------------------------------------------------------------ 
@@ -461,6 +653,7 @@ following section.
 <<fenv.ml>>=
 module E            = Error     (* handy abbreviations *)
 module T            = Types
+module Asm          = Asm3    
 @
 
 The [[Arg]] modules captures the diverse aspects of [[Clean]] and
@@ -577,12 +770,12 @@ denotation of values and types. Of course, these types must be defined
 in the implementation as well.
 
 <<module Env>>=
-<<types>>
-and env            =  { scopes     :    scope list (* top = hd scopes *)
+type env           =  { scopes     :    scope list (* top = hd scopes *)
                       ; srcmap     :    Srcmap.map
+                      ; asm        :    Asm.assembler
                       ; error      :    bool
                       ; target     :    target
-                      ; asm        :    asm
+                      ; extern     :    extern
                       ; rindex     :    int   (* register index *)
                       ; globals    :    string  list  (* global   registers *)
                       ; stackdata  :    stackdata
@@ -592,6 +785,7 @@ and stackdata =       { soffset    :    int    (* current offset *)
                       ; smaxalign  :    int    (* max stackdata align constr*)
                       ; sname      :    string (* label for offset *)
                       }
+<<types>>
 @
                        
 
@@ -609,14 +803,15 @@ and  target         = { memsize:      int        partial info
 @
 
 Imports and exports are recorded (see module \module{mangle}) to build
-a map from {\PAL} names to assembly symbols.  The [[asm]] type holds
+a map from {\PAL} names to assembly symbols.  The [[extern]] type holds
 two sets of assembly symbols:  [[imported]] and [[exported]], and a
 map from {\PAL} names to symbols.
 
 <<module Env>>=
-and asm             = { imported:     Strutil.Set.t
+(* XXX this will change with the new assembler interface *)
+and extern          = { imported:     Strutil.Set.t
                       ; exported:     Strutil.Set.t
-                      ; nam2sym:      string Strutil.Map.t
+                      ; nam2sym:      Asm3.symbol Strutil.Map.t
                       }
 @
 
@@ -654,9 +849,10 @@ should never be used because a clean environment is obtained by
 cleaning a dirty one. 
 
 <<module Env>>=
-let empty  map =  
+let empty  map asm =  
     { scopes    = []
     ; srcmap    = map
+    ; asm       = asm
     ; error     = false
     ; rindex    = 0
     ; globals   = []
@@ -671,7 +867,7 @@ let empty  map =
                   ; float      = Arg.default "ieee754"
                   ; charset    = Arg.default "latin1"
                   }
-    ; asm       = { imported   = Strutil.Set.empty
+    ; extern    = { imported   = Strutil.Set.empty
                   ; exported   = Strutil.Set.empty
                   ; nam2sym    = Strutil.Map.empty
                   }
@@ -683,6 +879,7 @@ The implementation of the [[scope]] stack provides no surprises.
 <<module Env>>=
 let emptyscope          = { venv  = Strutil.Map.empty; tenv = Strutil.Map.empty }
 let srcmap {srcmap=m}   = m
+let asm    {asm=a}      = a 
 
 let top env = match env.scopes with
     | []    -> assert false
@@ -909,48 +1106,72 @@ let findCharset     env = env.target.charset
 @   
 
 % ------------------------------------------------------------------ 
-\subsection{Imports and Exports}
+\subsection{Imports, Exports, Symbols}
 % ------------------------------------------------------------------ 
 
-The fat environment maintains the set of imported and exported
-assembly symbols and a map, that associates an imported or exported
-{\PAL} name with it symbol. No assembly symbol may be imported and
-exported at the same time. If such a case is detected, an error
-message is issued. Details about the connection between {\PAL} names
-and assembly symbols can be found in \module{mangle}.
+The fat environment maintains the set of imported and exported assembly
+\emph{symbols} and a map, that associates {\PAL} names with its symbol.
+No assembly symbol may be imported and exported at the same time. If
+such a case is detected, an error message is issued. Details about the
+connection between {\PAL} names and assembly symbols can be found in
+\module{mangle}.
 
 <<module Env>>=
 let import r sym name env =
-    if Strutil.Set.mem sym env.asm.exported 
-    then ( error r env.srcmap ("import of an exported name: "^name)
-         ; flagError env
-         )
-    else let asm = { exported = env.asm.exported
-                   ; imported = Strutil.Set.add sym env.asm.imported
-                   ; nam2sym  = Strutil.Map.add name sym env.asm.nam2sym
-                   }
+    if Strutil.Set.mem sym env.extern.exported 
+    then 
+        ( error r env.srcmap ("import of an exported name: "^name)
+        ; flagError env
+        )
+    else 
+        let sym'   = env.asm#import sym in
+        let extern = { exported = env.extern.exported
+                     ; imported = Strutil.Set.add sym  env.extern.imported
+                     ; nam2sym  = Strutil.Map.add name sym' env.extern.nam2sym
+                     }
          in
-            { env with asm = asm }
+            { env with extern = extern }
 
 let export r name sym env =
-    if Strutil.Set.mem sym env.asm.imported 
-    then ( error r env.srcmap ("export of an imported name: "^name)
-         ; flagError env
-         )
-    else let asm = { imported = env.asm.imported
-                   ; exported = Strutil.Set.add sym env.asm.exported
-                   ; nam2sym  = Strutil.Map.add name sym env.asm.nam2sym
-                   }
+    if Strutil.Set.mem sym env.extern.imported 
+    then 
+        ( error r env.srcmap ("export of an imported name: "^name)
+        ; flagError env
+        )
+    else 
+        let sym'   = env.asm#export sym in
+        let extern = { imported = env.extern.imported
+                      ; exported = Strutil.Set.add sym env.extern.exported
+                      ; nam2sym  = Strutil.Map.add name sym' env.extern.nam2sym
+                      }
          in
-            { env with asm = asm }
+            { env with extern = extern }
 @
+
+If a name [[n]] is imported or exported, we find its corresponding
+assembler symbol in the [[nam2sym]] map. If we can't find it there we
+would like to register a new symbol for [[n]]. However, [[n]] might be
+have been used already for an exported or imported symbol: [[export c as
+n]] uses registers a symbol for [[n]] such that any other entity [[n]]
+cannot register [[n]] for a symbol. We detect this by checking the sets
+of names that were registered for im- and exported symbols. In the case
+of such a collision we derive a new name from [[n]] that we use to
+generate a symbol for [[n]].
 
 <<module Env>>=
-let imported env = env.asm.imported
-let exported env = env.asm.exported
-let nam2sym  env = env.asm.nam2sym
+let symbol env n =
+    try Strutil.Map.find n env.extern.nam2sym
+    with Not_found ->
+        let rec avoid_collision n =
+            if Strutil.Set.mem n env.extern.exported ||
+               Strutil.Set.mem n env.extern.imported
+            then
+                avoid_collision (n ^ "@")
+            else
+                n
+        in
+            env.asm#local (avoid_collision n)
 @
-
 
 % ------------------------------------------------------------------ 
 \subsection{Register Index}
@@ -1000,14 +1221,15 @@ let rec clean_venv map  =
     let copy key data map = match data with
         |  pos,E.Ok(denot,ty) ->
             let denot' = match denot with
-                | Dirty.Constant(v)               -> Clean.Constant(v)
-                | Dirty.Label(Dirty.Proc(p))      -> Clean.Label(Clean.Proc(clean_proc p))
-                | Dirty.Label(Dirty.Code)         -> Clean.Label(Clean.Code)
-                | Dirty.Label(Dirty.Data  )       -> Clean.Label(Clean.Data  )
-                | Dirty.Label(Dirty.Stack x)      -> Clean.Label(Clean.Stack x)
-                | Dirty.Import(n)                 -> Clean.Import(n)
-                | Dirty.Register(n)               -> Clean.Register(clean_reg n)
-                | Dirty.Continuation(n)           -> Clean.Continuation(n)
+                | Dirty.Constant(v)           -> Clean.Constant(v)
+                | Dirty.Label(Dirty.Proc(s, p))-> 
+                    Clean.Label(Clean.Proc(s, clean_proc p))
+                | Dirty.Label(Dirty.Code s)   -> Clean.Label(Clean.Code s)
+                | Dirty.Label(Dirty.Data s)   -> Clean.Label(Clean.Data s)
+                | Dirty.Label(Dirty.Stack x)  -> Clean.Label(Clean.Stack x)
+                | Dirty.Import(s,n)           -> Clean.Import(s,n)
+                | Dirty.Register(n)           -> Clean.Register(clean_reg n)
+                | Dirty.Continuation(n,s)     -> Clean.Continuation(n,s)
             in
                  Strutil.Map.add key (pos,(denot',ty)) map
         |  _  -> assert false
@@ -1042,10 +1264,10 @@ and clean_target = function
     |   _ -> assert false 
 
 <<clean function>>=
-and clean_asm asm =
-    { Clean.imported = asm.Dirty.imported
-    ; Clean.exported = asm.Dirty.exported
-    ; Clean.nam2sym  = asm.Dirty.nam2sym
+and clean_extern extern =
+    { Clean.imported = extern.Dirty.imported
+    ; Clean.exported = extern.Dirty.exported
+    ; Clean.nam2sym  = extern.Dirty.nam2sym
     }
 
 <<clean function>>=
@@ -1055,12 +1277,9 @@ and clean_scope { Dirty.venv = v; Dirty.tenv = t } =
     }
     
 <<clean function>>=
-and clean_proc x = match x with
-    |   { Dirty.scope     = Some s
-        } ->
-        { Clean.scope     = clean_scope s
-        }
-    |   _ -> assert false 
+and clean_proc = function 
+      | Some s -> clean_scope s
+      | _      -> assert false
 
 and clean_stackdata sd =
     { Clean.sname     = sd.Dirty.sname
@@ -1072,12 +1291,13 @@ and clean_stackdata sd =
 and clean env =
     { Clean.scopes    = List.map clean_scope env.Dirty.scopes
     ; Clean.srcmap    = env.Dirty.srcmap 
+    ; Clean.asm       = env.Dirty.asm
     ; Clean.error     = env.Dirty.error
     ; Clean.target    = clean_target env.Dirty.target
     ; Clean.rindex    = env.Dirty.rindex
     ; Clean.stackdata = clean_stackdata env.Dirty.stackdata
     ; Clean.globals   = env.Dirty.globals
-    ; Clean.asm       = clean_asm env.Dirty.asm
+    ; Clean.extern    = clean_extern env.Dirty.extern
     }
 @
 

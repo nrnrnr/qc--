@@ -46,7 +46,7 @@ end
 \subsection{Symbolic RTL compile-time constants}
 % ------------------------------------------------------------------ 
 
-A symbolic compile-time constant $v$ is represented by an [[Rtl.link]]
+A symbolic compile-time constant $v$ is represented by an [[Rtl.late]]
 value and is created when it is needed. It then becomes part of other
 {\rtl}s.  Knowledge about $v$'s value comes from equations in which $v$
 takes part, like $v = \sum_i e_i$, where $e$ are other expressions.
@@ -65,7 +65,7 @@ type solution =
 
 val empty: width:int -> t
 
-val register:   Rtl.exp -> t -> t               (* req: Rtl.exp = Rtl.link *)
+val register:   Rtl.exp -> t -> t               (* req: Rtl.exp = Rtl.late *)
 val sym:        string -> t -> (t * Rtl.exp)    (* create symb. constant *)
 val make_equal: Rtl.exp -> Rtl.exp -> t -> t 
 val make_equal': Rtl.exp -> x:int -> Rtl.exp -> y:int-> t -> t
@@ -73,13 +73,13 @@ val make_equal': Rtl.exp -> x:int -> Rtl.exp -> y:int-> t -> t
 val solve: t -> solution                        (* Can'tSolve *)
 @
 
-Symbolic compile-time constants, created by [[Rtl.link]],  must be
+Symbolic compile-time constants, created by [[Rtl.late]],  must be
 [[registered]] in the equation system [[t]] that is used to find their
 values. The reason is, that {\rtl} expressions might contain other
-[[Rtl.link]] values that do not represent compile-time constants.
+[[Rtl.late]] values that do not represent compile-time constants.
 Alternatively, [[sym]] creates an [[Rtl.link]] value and registers it in
 one step.  It is a checked run-time error to pass anything but an
-[[Rtl.link]] value to [[register]].
+[[Rtl.late]] value to [[register]].
 
 Equations $e_1 = e_2$ are added to an equation system by ([[make_equal]]
 $e_1$ $e_2$). One of the two equations must include at least one
@@ -237,12 +237,14 @@ let empty width =
     }
 
 let register exp t = match Rtl.Convert.exp exp with
-    | RP.Const(RP.Link (x,_)) -> { t with symbols = Strutil.Set.add x t.symbols }
-    | _                       -> invalid_arg "Const.HighLevel.register"
+    | RP.Const(RP.Late (x,_)) -> 
+        { t with symbols = Strutil.Set.add x t.symbols }
+    | _                       -> 
+        invalid_arg "Const.HighLevel.register"
 
 
 let sym x t =
-    { t with symbols = Strutil.Set.add x t.symbols }, Rtl.link x t.width 
+    { t with symbols = Strutil.Set.add x t.symbols }, Rtl.late x t.width 
 @
 
 To convert an [[Rtl.exp]] value into an [[Eqns.exp]] value the
@@ -253,7 +255,7 @@ and [[sub]] sums, and everything else opaque constants.
 <<HighLevel>>=
 let const t = function
     | RP.Bits(b)                                -> Eqns.int (Bits.to_int b)
-    | RP.Link(x,_) when Strutil.Set.mem x t.symbols -> Eqns.sym x
+    | RP.Late(x,_) when Strutil.Set.mem x t.symbols -> Eqns.sym x
     | x                                         -> Eqns.const (RP.Const x )
         
                         
@@ -319,10 +321,10 @@ let rtl (width:int) (e:exp) =
     let add    = Rtl.opr "add"  [width] in
     let mult   = Rtl.opr "mult" [width] in 
     let bits i = Rtl.bits (Bits.of_int i width) width    in 
-    let link x = Rtl.link x width in
+    let late x = Rtl.late x width in
     let summand = function
-        | (1,Sym x)   -> link x 
-        | (i,Sym x)   -> Rtl.app mult [bits i; link x] 
+        | (1,Sym x)   -> late x 
+        | (i,Sym x)   -> Rtl.app mult [bits i; late x] 
         | (i,Unit)    -> bits i 
         | (1,Const k) -> C.rtl k
         | (i,Const k) -> Rtl.app mult [bits i;C.rtl k] in

@@ -1,4 +1,5 @@
 % -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% :vim sw=4 tw=8 et sts=4
 
 \input{../config/macros.tex}
 
@@ -70,9 +71,13 @@ let bits n             = A.BitsTy n
 
 let const mangle = function
     | R.Bool(_)      -> assert false    (* impossible *)
-    | R.Bits(b,w)    -> A.Int((b,w), if !the_verbosity = High then Some (bits w)
-                                     else None)
-    | R.Link(name,w) -> A.Fetch(A.Var(None, mangle name))
+    | R.Bits(b,w)    ->  A.Int((b,w)
+                              ,if !the_verbosity = High 
+                               then Some (bits w) 
+                               else None)
+                     
+    | R.Link(sym,w)  -> A.Fetch(A.Var(None, mangle (sym#text)))
+    | R.Late(name,w) -> A.Fetch(A.Var(None, mangle name)) (*XXX ok? *)
 @
 
 <<rtl2ast.ml>>=

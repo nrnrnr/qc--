@@ -1,8 +1,5 @@
 % -*- mode: Noweb; noweb-code-mode: caml-mode -*-
-% vim: ts=4 et
-
-% TODO: name mangling to ensures symbols are transoformed to C-- syntax
-% and to avoid name clashes with reserved words.
+% vim: ts=8 et sw=4 sts=4
 
 % ------------------------------------------------------------------ 
 \section{{\PAL} Assembler}
@@ -22,7 +19,8 @@ end
 
 <<astasm.mli>>=
 <<PERSONALITY>>
-module Make(P: PERSONALITY): Asm3.ASM
+module Make(P: PERSONALITY): Asm3.ASM with type i    = Proc.t
+                                      with type init = unit 
 @
 
 % ------------------------------------------------------------------ 
@@ -38,7 +36,9 @@ module A        = Ast
 module Asm      = Asm3
 
 <<PERSONALITY>>
-module Make (P: PERSONALITY):Asm.ASM  = struct
+module Make (P: PERSONALITY):Asm.ASM with type i    = Proc.t 
+                                     with type init = unit = 
+struct
     <<Make>>
 end
 @
@@ -63,6 +63,47 @@ let unsupported msg = raise (Unsupported msg)
 @
 
 % ------------------------------------------------------------------ 
+\subsubsection{Name Mangling}
+% ------------------------------------------------------------------ 
+
+Since we emit {\PAL} code we have to make sure that symbols respect the
+{\PAL} naming conventions. The \module{mangle} module provides name
+mangling support. To highlight the destinction between names and symbols
+we prefix every symbol with [[sym]].
+
+<<Make>>=
+let spec =
+    let reserved =
+        [ "aborts"; "align"; "aligned"; "also"; "as"; "big"; "byteorder";
+        "case"; "const"; "continuation"; "cut"; "cuts"; "else"; "equal";
+        "export"; "foreign"; "goto"; "if"; "import"; "invariant"; "jump";
+        "little"; "memsize"; "pragma"; "register"; "return"; "returns";
+        "section"; "semi"; "span"; "stackdata"; "switch"; "target"; "targets";
+        "to"; "typedef"; "unicode"; "unwinds"; "float"; "charset";
+        "pointersize"; "wordsize"]
+    in
+    let id = function
+        | 'a'..'z'
+        | '0'..'9'
+        | 'A'..'Z'
+        | '.' 
+        | '_' 
+        | '$' 
+        | '@'      -> true
+        | _        -> false in
+    let replace = function
+        | x when id x -> x
+        | _           -> '@' 
+        in    
+            { Mangle.preprocess = (fun x -> "sym:"^x)  
+            ; Mangle.replace    = replace
+            ; Mangle.reserved   = reserved
+            ; Mangle.avoid      = (fun x -> x ^ "$")
+            }
+@
+
+
+% ------------------------------------------------------------------ 
 \subsubsection{Classes for symbols, instructions, and addresses}
 % ------------------------------------------------------------------ 
 
@@ -80,7 +121,7 @@ end
 <<Make>>=
 (* instructions *)
 class instr (p:Proc.t): Asm.instruction = object
-    method ast = Cfg3.ast p.Proc.cfg p.Proc.name p.Proc.mangle P.target
+    method ast = Cfg3.ast p.Proc.cfg p.Proc.symbol#text p.Proc.mangle P.target
 end    
 @
 
@@ -127,6 +168,7 @@ file or similar. We don't use it at the momement.
 
 <<Make>>=
 type init = unit
+type i    = Proc.t
 
 class asm () : Asm.assembler = 
 object (this)
@@ -135,6 +177,7 @@ object (this)
     val mutable _imported = Strutil.Set.empty
     val mutable _toplevel = ([]: (string * A.section list) list) (* rev'ed *)
     val mutable _actions  = ([]: A.section list) (* reversed *)                
+    val         _mangle   = Mangle.mk spec
 
 
     method private append (a:A.section) =
@@ -143,27 +186,28 @@ object (this)
     (* declare symbols *)
     method import s =
         ( _imported <- Strutil.Set.add s _imported
-        ; new symbol s
+        ; new symbol (_mangle s)
         )
         
     method export s =
         ( _exported <- Strutil.Set.add s _exported
-        ; new symbol s
+        ; new symbol (_mangle s)
         )
         
     method local  s = 
-        new symbol s
+        new symbol (_mangle s)
 
     (* sections *)
 
     (* section closes the current section and adds it to toplevel. It is
        dropped in case it is empty. *)
     method section s = 
-        if _actions <> [] then
-            _toplevel <- (_section, List.rev _actions) :: _toplevel
-        else
-            ()
-    
+        ( if _actions <> [] then  
+            _toplevel <- (_section, List.rev _actions) :: _toplevel 
+        )    
+        ; _section <- s
+        ; _actions <- []
+
     method current = 
         _section
             

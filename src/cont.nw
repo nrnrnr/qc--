@@ -29,7 +29,7 @@ type t                                  (* a continuation *)
 
 val allocate:   Automaton.t             (* stack space *)
                 -> sp:Rtl.loc           (* location of stack pointer *)
-                -> label:string         (* label of continuation *)
+                -> label:Asm3.symbol    (* label of continuation *)
                 -> reference:string     (* reference to cont *)
                 -> t
                 
@@ -81,8 +81,8 @@ generate assignments at the entry of a procedure.
 type t =
     { cont_sp:          Rtl.loc         (* location of sp in pair *)
     ; cont_pc:          Rtl.loc         (* location of pc in pair *)
-    ; label:            string          (* name of continuation *)
-    ; reference:        string          (* Rtl.link reference to cont *)
+    ; label:            Asm3.symbol     (* name of continuation *)
+    ; reference:        string          (* Rtl.late reference to cont *)
     ; sp:               Rtl.loc         (* sp register *)
     }
 @
@@ -94,19 +94,16 @@ type t =
 \item [[cont_pc]]: the location of the $l$ part, 
       which is the link-time constant of the continuation's code.
       
-\item [[label]]: the name of the continuation.      
+\item [[label]]: the code-symbol of the continuation.      
 
 \item [[reference]]: the references in the body of the enclosing procedure
-      to [[label]] are represented as [[Rtl.link t.reference]]. We cannot use
-      [[label]] here because we must use [[label]] in the code generated
-      by [[init]] and in that code we don't want [[label]] to be
-      substituted by a pointer into the stack.
+      to [[label]] are represented as [[Rtl.late t.reference]].
 
 \item [[sp]]: the location of the stack pointer (register).
 \end{itemize}
 
 <<cont.ml>>=
-let allocate (a:Automaton.t) (sp:Rtl.loc) (label:string) (reference:string) =
+let allocate (a:Automaton.t)(sp:Rtl.loc)(label:Asm3.symbol)(reference:string) =
     let width = Rtlutil.Width.loc sp in         (* pointer width *)
         { label     = label
         ; reference = reference
@@ -115,7 +112,7 @@ let allocate (a:Automaton.t) (sp:Rtl.loc) (label:string) (reference:string) =
         ; cont_pc   = Automaton.to_loc (Automaton.ty a width None)
         }
 
-let reference t = Rtl.link t.reference (Rtlutil.Width.loc t.sp)
+let reference t = Rtl.late t.reference (Rtlutil.Width.loc t.sp)
 @
 
 In the body of a procedure we want to replace every symbolic

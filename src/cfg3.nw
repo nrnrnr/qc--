@@ -148,7 +148,7 @@ type property = Cfgprop.t       (* data inside nodes *)
 val mk:         unit -> cfg
 
 (* label mutator/observation *)
-val set_label:  cfg -> string -> node -> node
+val set_label:  cfg -> string -> Asm3.symbol -> node -> node
 val lookup:     cfg -> string -> node           (* always succeeds! *)
 
 (* cfg observation *)
@@ -241,20 +241,26 @@ an exit node.  Numbering of nodes is absent and no labels are defined.
 \subsubsection{Labels}
 % ------------------------------------------------------------------ 
 
-\begin{itemize}
-\item [[set_label:  cfg -> string -> node -> node]]: 
-Assigns a label to a node.  It is a checked run-time error if the node
-does not belong to the {\cfg}.  The labeled node is returned. Note: the
-returned node may or may not be the same as the one supplied as an
-argument. The reason is, that [[lookup]] creates an internal labeled
-node if the one that is asked for does not yet exist. In that case
-[[set_label]] makes the provided node a successor of the internal node
-and returns the internal node in order to get the control-flow right.
+Labels come in two flavors: Assembler symbols and strings. String
+symbols are used to navigate within the {\cfg} but they never leak out
+of it. When a node is transleted to assembler code it is labeled with
+its assembler symbol.
 
-\item [[lookup:  cfg -> string -> node]]: 
-Looks up a node by a label.  If a node was assigned that label before
-it is returned.  Otherwise a [[dummy]] node is created, labeled, and
-returned.
+\begin{itemize}
+\item [[set_label:  cfg -> string -> Asm3.symbol -> node -> node]]:
+represented in an assmbly program the symbol is used to represent its
+address.  It is a checked run-time error if the node does not belong to
+the {\cfg}.  The labeled node is returned. Note: the returned node may
+or may not be the same as the one supplied as an argument. The reason
+is, that [[lookup]] creates an internal labeled node if the one that is
+asked for does not yet exist. In that case [[set_label]] makes the
+provided node a successor of the internal node and returns the internal
+node in order to get the control-flow right.
+
+\item [[lookup:  cfg -> string -> node]]: Looks up a node by a label.
+If a node was assigned that label before it is returned.  Otherwise a
+[[dummy]] node is created under that label and returned.  
+
 \end{itemize}
 
 % ------------------------------------------------------------------ 
@@ -595,8 +601,8 @@ let conts ~cuts ~unwinds ~returns ~aborts =
 let mk () = new X.graph
 
 <<implementation>>=
-let set_label cfg (label:string) (node:node) =
-    cfg#set_label label node
+let set_label cfg (label:string) (sym:Asm3.symbol) (node:node) =
+    cfg#set_label label sym node
 
 let lookup cfg (label:string) =
     cfg#lookup label
@@ -796,7 +802,8 @@ class type cfg = object
     method entry:       node            (* entry node of this *)
     method exit:        node            (* exit node of this *)
     method lookup:      string -> node  (* find labeled node *)
-    method set_label:   string -> node -> node  (* assign label to node *)
+    method set_label:   string -> Asm3.symbol -> node -> node  
+                                        (* assign label to node *)
     
     method add:         node -> unit    (* add node to this; 
                                            est: enumerated = false *)
@@ -877,7 +884,7 @@ and node = object
     method pred:        node list       (* cf predecessors of this *)
     method property:    property        (* property of this *)
 
-    method add_label:   string -> unit  (* add alabel to this node *)
+    method add_label:   Asm3.symbol -> unit  (* add label to this node *)
     method link_pred:   node -> unit    (* add    in-edge from to pred node *)
     method unlink_pred: node -> unit    (* remove in-edge from to pred node *) 
     method unlink:      unit            (* unlink this from all other nodes *)
@@ -1171,13 +1178,13 @@ object (this)
         with Not_found ->
             try (Hashtbl.find _dummies label :> node)
             with Not_found ->
-            let (d:proxy) = new dummy (this :> cfg) label in
+            let (d:proxy) = new dummy (this :> cfg) in
                 ( Hashtbl.add _dummies label d 
                 ; this#add (d :> node)
                 ; (d :> node)
                 )
                 
-    method set_label label node =
+    method set_label label symbol node =
         assert (NodeSet.mem node _nodes);       (* node#cfg = (this:>cfg) *)
         try 
             let d = Hashtbl.find _dummies label in
@@ -1186,7 +1193,7 @@ object (this)
                 )
         with Not_found ->
             ( Hashtbl.add _labels label node
-            ; node#add_label label  
+            ; node#add_label symbol  
             ; node
             )
 
@@ -1257,7 +1264,7 @@ object(this)
     val mutable _id     = (cfg#get_id ())
     val mutable _num    = -1 
     val mutable _prop   = (Property.empty ())       (* default properties *)
-    val mutable _labels = ([]: string list)
+    val mutable _symbols = ([]: Asm3.symbol list)
     
     initializer
         _cfg#add (this :> node)
@@ -1272,8 +1279,9 @@ object(this)
         assert (_cfg#enumerated); 
         _num
     
-    method add_label (x:string) = 
-        _labels <- x::_labels
+    method add_label  (s:Asm3.symbol) = 
+        _symbols <- s::_symbols
+       
         
     method upd_succ map =               (* make virtual? *)
         ()
@@ -1356,8 +1364,8 @@ object(this)
 
     method ast (mangle:string->string) (target:Target2.t) = 
         let this    = (this :> node) in
-        let label l = stmt (A.LabelStmt (mangle l)) in
-        let labels  = List.map label _labels in
+        let label l = stmt (A.LabelStmt (mangle l#text)) in
+        let labels  = List.map label _symbols in
         (**) let comment = stmt (A.CommentStmt (this#comment)) in 
         (*
        Verbose.say 5 [ this#comment; "\n"];
@@ -1382,10 +1390,10 @@ object(this)
                 (List.fold_left (fun r n -> r && (List.mem this n#pred)) 
                                 true 
                                 succ)
-            ; assert ((List.length pred <= 1) || (_labels <> [])) 
+            ; assert ((List.length pred <= 1) || (_symbols <> [])) 
             
             (** this code was used to debug some problem 
-            ; if not ((List.length pred <= 1) || (_labels <> [])) then
+            ; if not ((List.length pred <= 1) || (_symbols <> [])) then
                 ( Printf.printf "node %d\n" _id
                 ; List.iter (fun n -> Printf.printf "pred %d (%s)" 
                                 n#id n#comment) pred
@@ -1422,14 +1430,11 @@ end
 (* ------------------------------------------------------------------ *) 
 
 <<module X>>=
-and dummy cfg label: proxy =
+and dummy cfg: proxy =
 object(this)
     inherit vnode cfg Rtl.null as super
 
     val mutable _succ   = (None: node option) 
-
-    initializer
-        (this :> node) # add_label label
 
     method set_succ node =
         ( _succ <- Some node
@@ -1550,7 +1555,7 @@ link to its successor, but is not linked from any other node.
         let pred = NodeSet.min_elt _pred                in
         let ()   = assert (pred = NodeSet.max_elt _pred) in
             ( pred#upd_succ (fun n -> if n = this then _succ else n)
-            ; List.iter _succ#add_label _labels
+            ; List.iter _succ#add_label _symbols
             ; _succ#unlink_pred this
             ; _succ#link_pred pred
             )

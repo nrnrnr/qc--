@@ -77,7 +77,8 @@ all names must be resolved in a multi-step approach:
 \item The source code contains [[target]] directives which describe
       properties of the target architecture like the size of pointers.
       Since this information is required in for type-checking is is
-      collected first and entered into the fat environment.
+      collected first and entered into the fat environment. In addition,
+      all imported and exported names are collected in this run.
 
 \item All type declarations of the current scope are collected. They
       are topologically sorted with respect to the use of each other
@@ -95,6 +96,16 @@ all names must be resolved in a multi-step approach:
       the current scope. This includes checking the types
       and all the other constraints defined by the static semantics.
 \end{enumerate}
+
+% ------------------------------------------------------------------ 
+\subsection{Assembler Symbols}
+% ------------------------------------------------------------------ 
+
+Many names in a {\PAL} program correspond to assembler \emph{symbols}
+after translation. For each name that corresponds later to a symbol the
+denotation of that name includes its assembler symbol. Hence, this
+module reserves assembler symbols for these names and enters them into
+the fat environment.
 
 
 % ------------------------------------------------------------------ 
@@ -459,6 +470,7 @@ let pointerTy env = E.seq (F.findPointersize env)
                   | None   -> assert false
                   )                
 @
+
 
 % ------------------------------------------------------------------ 
 \subsection{Processing \texttt{target}, \texttt{im}-, and 
@@ -1124,8 +1136,11 @@ the development of the compiler to make the mapping between {\PAL}
 names and assembly level names easier.
 
 <<module Env>>=
-let import r t env (foreign,name) = 
-    bindv name r (E.ematch (ty r env t) (fun t -> F.Import foreign,t)) env
+let import r t env (foreign,name) =
+    let sym    = F.symbol env name in
+    let ventry = E.ematch (ty r env t) (fun t -> F.Import(foreign,sym),t) in
+        F.bindv name (r,ventry)  env
+    
 let imports r env t ii          = foldl (import r t) env ii
 
 <<module Env>>=
@@ -1155,10 +1170,11 @@ a [[stackdatum]]. We thus have two functions: [[datum]] and [[stackdatum]].
 <<module Env>>=
 let rec datum r scope env = function
     | A.DatumAt(x,r) -> E.catch' env (error r env) (datum r scope env) x
-    | A.Label(n)     -> bindv n r
-                                (E.ematch (pointerTy env) 
-                                    (fun p ->  F.Label(F.Data),p)) 
-                                env
+    | A.Label(n)     ->
+        let sym    = F.symbol env n in
+        let ventry = (E.ematch (pointerTy env) 
+                     (fun p -> F.Label(F.Data sym),p)) in
+            F.bindv n (r,ventry) env
     | _              -> env
 @
 
@@ -1195,14 +1211,19 @@ let rec stmt r scope env = function
     | A.IfStmt ( e, ss1, ss2)     ->
         foldl (body r scope) (foldl (body r scope) env ss1) ss2
     | A.LabelStmt(n) ->
-        bindv n (r) (E.ematch (pointerTy env) (fun p -> F.Label(F.Code),p)) env
+        let sym    = F.symbol env n in
+        let ventry = (E.ematch (pointerTy env) 
+                     (fun p -> F.Label(F.Code sym),p)) in
+            F.bindv n (r,ventry) env
     | A.SpanStmt(e1,e2,ss)        ->
         foldl (body r scope) env ss
     | A.SwitchStmt (range,e,arms) ->
         foldl (arm r range scope)  env arms
     | A.ContStmt(n,ee) when scope = Global ->
-        bindv n r (E.ematch (pointerTy env) 
-            (fun p -> F.Continuation (Idgen.cont n),p)) env
+        let sym    = F.symbol env n in
+        let ventry = (E.ematch (pointerTy env) 
+                     (fun p -> F.Continuation (Idgen.cont n,sym),p)) in
+            F.bindv n (r,ventry) env
     | otherwise                   ->
         env
 
@@ -1276,11 +1297,11 @@ let formal r env (hint, inv, ty, name) =
 
 <<module Env>>=
 let proc r env (_,name,ff,bb as p) =
-    let x    = { F.scope  = None
-               } in
-    let t    = E.ematch (pointerTy env) (fun p -> F.Label(F.Proc(x)),p) in
-    let env  = foldl (body r Global) env bb     in 
-    let env  = F.bindv name (r,t) env    in
+    let sym     = F.symbol env name in
+    let ventry  = E.ematch (pointerTy env) 
+                           (fun p -> F.Label(F.Proc(sym,None)),p) in
+    let env     = foldl (body r Global) env bb     in 
+    let env     = F.bindv name (r,ventry) env    in
         env
 @
 
@@ -1538,21 +1559,21 @@ let export' env = function
     | None, name   -> 
         E.seq' (F.flagError env) (snd (F.findv name env))
         ( function
-        | F.Label(F.Proc(_)), _ -> env
-        | F.Label(F.Code),    _ -> env
-        | F.Label(F.Data  ),  _ -> env
-        | _                     -> E.error (name^" can't be exported")
+        | F.Label(F.Proc _), _ -> env
+        | F.Label(F.Code _), _ -> env
+        | F.Label(F.Data _), _ -> env
+        | _                    -> E.error (name^" can't be exported")
         )
     | Some t, name -> 
         let t = evalTy env t in
         E.seq' (F.flagError env) (E.Raise.pair (snd (F.findv name env), t))
         ( function
         | (F.Label(F.Proc _ ),t), t' when t = t' -> env
-        | (F.Label(F.Code   ),t), t' when t = t' -> env
-        | (F.Label(F.Data   ),t), t' when t = t' -> env
+        | (F.Label(F.Code _ ),t), t' when t = t' -> env
+        | (F.Label(F.Data _ ),t), t' when t = t' -> env
         | (F.Label(F.Proc _ ),_), _ 
-        | (F.Label(F.Data   ),_), _ 
-        | (F.Label(F.Code   ),_), _  -> E.error (name^" has not declared type")
+        | (F.Label(F.Data _ ),_), _ 
+        | (F.Label(F.Code _ ),_), _  -> E.error (name^" has not declared type")
         | _                          -> E.error (name^" can't be exported")
         )
 
@@ -1564,8 +1585,8 @@ A target for a [[goto]] statement must be a local code pointer.
 <<check>>=
 let checkGotoTarget env x = E.seq' env (snd (F.findv x env))
     ( function 
-    | (F.Label(F.Code),_) when F.is_localv x env -> env
-    | (F.Label(F.Code),_)    -> E.error (x^" not a local label")
+    | (F.Label(F.Code _),_) when F.is_localv x env -> env
+    | (F.Label(F.Code _),_)  -> E.error (x^" not a local label")
     | (F.Label(_)     ,_)    -> E.error (x^" is not a goto label")
     | otherwise              -> E.error (x^" is not a label")
     )
@@ -2014,11 +2035,8 @@ and proc r env (_,name,_,bb as p) =
                 with Not_found -> assert false                  in
     let entry = E.ematch x
                ( function
-               | (F.Label(F.Proc(p)),t) -> (* update denotation *)
-                    let p' = { p with 
-                               F.scope     = Some scope
-                             }
-                    in F.Label(F.Proc(p')),t
+               | (F.Label(F.Proc(sym,None)),t) -> (* update denotation *)
+                    F.Label(F.Proc(sym,Some scope)),t
                | _ -> assert false
                )                                            
     in

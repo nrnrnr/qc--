@@ -14,7 +14,7 @@ the compiler.
 
 <<driver2.mli>>=
 module Caml: sig    (* in case of error Error.ErrorExn is raised! *)
-    type asm        (* assembly code                      *)
+    type asm        (* assembler                          *)
     type ast        (* abstract syntax                    *)
     type env        (* environment/symbol table           *)
     type doc        (* printable document                 *)
@@ -24,18 +24,19 @@ module Caml: sig    (* in case of error Error.ErrorExn is raised! *)
     type optimize  = proc -> unit
 
     val dummy:      target                  (* our only target right now *)
+    val cmmasm:     unit -> asm             (* an assembler *)
     
     val version:    unit -> unit            (* print version to stdout   *)
     val scan:       file:string -> unit     (* for debugging the scanner *)
     val parse:      file:string -> ast      (* parse file                *)
 
     val emit_asdl:  ast -> unit             (* emit AST in ASDL format *)
-    val check:      ast -> env              (* check semantics of AST  *)
+    val check:      ast -> asm -> env       (* check semantics of AST  *)
 
     val compile:    optimize -> ast -> target -> env -> asm
                     (* calls optimize *)
                 
-    val assemble:   asm -> doc
+    val assemble:   asm -> unit
     val print:      doc -> width:int -> unit (* print doc to stdout *)
 end
 @
@@ -58,8 +59,7 @@ raised.
 \item [[compile]]: compiles an {\AST} to assembly code. The function
       calls the Lua function [[optimize]] for every function and passed
       the functions control-flow graph [[cfg]] and its [[stack]] to it.
-\item [[assemble]]: truns a assembly program into the printable [[doc]]
-      format.
+\item [[assemble]]: emits an assembler program.
 \item [[print]]: prints a [[doc]] value to [[stdout]], formatting the
       output for a line width of [[width]] characters.       
 \end{itemize}
@@ -107,19 +107,16 @@ end
 
 <<Caml>>=
 module Personality = struct
-    type instr = Proc.t
     let target = Targets.dummy
-    let ext (p:Proc.t) target () = 
-            Cfg3.ast p.Proc.cfg p.Proc.name p.Proc.mangle target
 end
 
 module E   = Error
 module L   = Live.Make(Cfg3)
-module Asm = Asm2ast.Make(Personality)
+module Asm = Astasm.Make(Personality)
 module IR  = Ast3ir.Make(Asm)
 
 <<Caml>>=
-type asm        = Asm.asm 
+type asm        = Asm3.assembler
 type ast        = Srcmap.map * Ast.program
 type env        = Fenv.Clean.env
 type doc        = Pp.doc
@@ -198,9 +195,12 @@ let parse (file:string) =
 let emit_asdl (map,ast:ast) =
         AstUtil.sexp_wr_program ast stdout
 
+let cmmasm () = new Asm.asm ()
+
+
 <<Caml>>=
-let check (map,ast:ast) =
-    let env      = Fenv.Dirty.empty map              in
+let check (map,ast:ast) (asm:asm) =
+    let env      = Fenv.Dirty.empty map asm          in
     let env      = Fenv.Dirty.push env (Fenv.Dirty.emptyscope) in
     let env      = Elab.Env.global   env ast         in
     let env      = Elab.Check.global env ast         in
@@ -216,8 +216,7 @@ let compile (opt:optimize) (map,ast:ast) (target:target) (env:env)  =
         IR.translate env target opt ast 
 
 <<Caml>>=
-let assemble (asm:asm) = 
-    Astpp.program (Asm.ast asm)
+let assemble (asm:asm) = asm#emit
 
 <<Caml>>=
 let print (doc:doc) (width:int) =
@@ -256,7 +255,7 @@ module ProcT = struct
     type 'a t       = Caml.proc
     let tname       = "proc"
     let eq _        = fun x y -> x = y
-    let to_string _ = fun t -> ("<proc "^t.Proc.name^">") 
+    let to_string _ = fun t -> ("<proc "^t.Proc.symbol#text^">") 
 end
 module TargetT = struct
     type 'a t       = Caml.target
@@ -324,13 +323,16 @@ module Map = struct
 end
 
 let builtins =
-  [ "assemble"  , pf (Map.asm  **-> V.result Map.doc)   Caml.assemble
-  ; "check"     , pf (Map.ast  **-> V.result Map.env)   Caml.check
+  [ "assemble"  , pf (Map.asm  **-> V.runit)            Caml.assemble
+  ; "check"     , pf (Map.ast  **-> Map.asm 
+                               **-> V.result Map.env)   Caml.check
   ; "emit_asdl" , pf (Map.ast  **-> V.runit)            Caml.emit_asdl
   ; "parse"     , pf (V.string **-> V.result Map.ast)   Caml.parse
   ; "print"     , pf (Map.doc  **-> V.int **-> V.runit) Caml.print
   ; "scan"      , pf (V.string **-> V.runit)            Caml.scan
   ; "version"   , pf (V.string **-> V.runit)  (fun _ -> Caml.version ())
+  ; "cmmasm"    , pf (V.string **-> V.result Map.asm) 
+                  (fun _ -> Caml.cmmasm ())
   ; "compile"   , func (Map.optimize  **-> Map.ast  
                                       **-> Map.target 
                                       **-> Map.env 

@@ -91,8 +91,8 @@ from the abstract syntax tree.
 
 A constant expression can be a boolean value, a number of bits, or a
 link-time value, which has a name. A [[fetch]] creates an expression
-that represents the value stored in a [[loc]]. Operators [[op]]
-can be applied to values and return a value.
+that represents the value stored in a [[loc]]. Operators [[op]] can be
+applied to values and return a value.
 
 <<types and functions exported at top level>>=
 type exp          (* denotes a compile-time or run-time value *)
@@ -101,9 +101,10 @@ type rtl          (* effect of a computation *)
 type opr          (* a pure function on values *)
 type assertion    (* a claim about the run-time value of an address *)
 
-val bool      : bool -> exp                    (* const *)
-val bits      : Bits.bits -> width -> exp      (* const *)
-val link      : string -> width -> exp         (* const *)
+val bool      : bool -> exp                    
+val bits      : Bits.bits -> width -> exp      
+val link      : Asm3.symbol -> width -> exp    
+val late      : string -> width -> exp         (* late compile time constant *)
 val fetch     : loc -> width -> exp
 val app       : opr -> exp list -> exp
 
@@ -131,15 +132,6 @@ val cell     : assertion -> space -> aggregation -> width -> exp -> loc
 val var      : string -> index:int -> width -> loc
 val slice    : width -> lsb:int -> loc -> loc
 @
-
-A [[cell]] [[c]] of some [[space]], described by a [[spacedesc]] value
-[[s]], is well-typed, if all of the following conditions are met:
-
-\begin{enumerate}
-\item The cell's aggregation equals [[s.byteorder]]
-\item The cell's width equals [[s.cellwidth]]
-\item The cell's address expression width equals [[s.addrwidth]]
-\end{enumerate}
 
 An effect alters one or more [[loc]]s.  A [[store]] puts the value of
 [[exp]] into a location; a [[kill]] invalidates a location's content.
@@ -245,8 +237,9 @@ grabbed by an automatically generated recognizer.
 
 <<representation exposed in the private interface>>=
 type const      = Bool      of bool
-                | Bits      of Bits.bits
-                | Link      of string * width         (* link time constant *)
+                | Bits      of Bits.bits            (* literal constant *)
+                | Link      of Asm3.symbol * width  (* link time constant *)
+                | Late      of string * width   (* late compile time constant *)
 
 type exp        = Const     of const               
                 | Fetch     of loc * width 
@@ -414,6 +407,7 @@ argument is normally static.
 <<definitions of types and functions exported at top level>>=
 let bits (bvector, w) width = (assert (w >= width); Const (Bits(bvector,width)))
 let link name width         = Const (Link(name,width))
+let late name width         = Const (Late(name,width))
 let fetch loc width         = Fetch(loc,width)
 let app op exprs            = App(op,exprs)
 let opr name widths         = (name,widths)

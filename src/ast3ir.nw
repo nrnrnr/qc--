@@ -1,4 +1,5 @@
 % -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% vim: ts=8 sw=4 et sts=4
 
 \input{../config/macros.tex}
 
@@ -55,37 +56,15 @@ puts a whole procedure body into a single instruction by basically
 treating a control-flow graph as an instruction. 
 
 
-<<ASM>>=
-Asm2.S with type instruction = Proc.t
-       and  type init        = unit
-@
-
-
 <<ast3ir.mli>>=
-module Make (A: <<ASM>>) : sig
+module Make(A: Asm3.ASM with type i = Proc.t): sig
     val translate: Fenv.Clean.env 
                 -> Target2.t 
                 -> (optimizer: Proc.t -> unit)
                 -> Ast.program 
-                -> A.asm
+                -> Asm3.assembler
 end
 @
-
-% ------------------------------------------------------------------ 
-\subsection{Name Mangling}
-% ------------------------------------------------------------------ 
-
-The assembler we emit code for has certain rules for its names. It
-andvertises these rules in its [[A.mangle]] symbol. Names that are
-passed to the assembler are therefore first mangled with a function that
-was build with the help of [[A.mangle]]. The names that are created
-inside control-flow graphs are \emph{not} mangled upon creation. But
-each instruction includes the mangler function such that at any later
-time when instructions are passed to the assember the right mangler can
-be used to mangle the names. To summaraize: names passed to the
-assembler are mangled, names part of instructions are not mangled, but
-the instruction includes a mangler to do so later as needed.
-
 
 % ------------------------------------------------------------------ 
 \subsection{Implementation}
@@ -101,7 +80,7 @@ module F        = Fenv.Clean
 <<auxilliaries>>
 <<ExprTypes>>
 
-module Make (Asm: <<ASM>>) = 
+module Make(Asm: Asm3.ASM with type i = Proc.t) = 
 struct
     module G  = Cfg3 
     module IO = Copyinout.Make(G)
@@ -224,13 +203,12 @@ record. The label is part of the continuation's denotation.
 and variable env target hint x =
     let (_,(denot,t)) = F.findv x env in
     ( match denot with
-    | F.Constant(bits)  -> Rtl.bits bits (width t)
-    | F.Label(F.Proc _) -> Rtl.link x (width t)
-    | F.Label(F.Code)   -> Rtl.link x (width t)
-    | F.Label(F.Data  ) -> Rtl.link x (width t)
-    | F.Import(None)    -> Rtl.link x (width t)
-    | F.Import(Some n)  -> Rtl.link n (width t)
-    | F.Continuation label  -> Rtl.link label (width t)
+    | F.Constant(bits)          -> Rtl.bits bits (width t)
+    | F.Label(F.Proc (s,_))     -> Rtl.link s (width t)
+    | F.Label(F.Code s)         -> Rtl.link s (width t)
+    | F.Label(F.Data s)         -> Rtl.link s (width t)
+    | F.Import(_,s)             -> Rtl.link s (width t)
+    | F.Continuation(_,s)       -> Rtl.link s (width t)
     | F.Label(F.Stack(None))  -> Impossible.impossible "Ast3ir.Make.variable"
     | F.Label(F.Stack(Some loc)) ->
         let w    = width t                                   in 
@@ -290,10 +268,8 @@ We translate constants to {\rtl} expressions which we then evaluate.
 module Eval = Rtleval.Make(Asm.RelAddr)
 
 let compile_const env target exp     = Eval.compile (expr env target exp)
-let link_const    env target asm exp = 
-    Eval.link (expr env target exp) (fun s -> Asm.Local s) (*XXX*)     
-let eval_const    env target asm exp = 
-    Eval.eval (expr env target exp) (fun s -> Asm.Local s) (*XXX*)
+let link_const    env target asm exp = Eval.link (expr env target exp)  (*XXX*)
+let eval_const    env target asm exp = Eval.eval (expr env target exp)  (*XXX*)
 @
 
 % ------------------------------------------------------------------ 
@@ -302,7 +278,6 @@ let eval_const    env target asm exp =
 
 
 <<Make auxilliaries>>=
-let (++)           = Asm.append
 let idwidth id env = match F.findv id env with (attr,(_,t)) -> width t
 @
 
@@ -553,7 +528,11 @@ and body b state = match b with
     
 
 and labelStmt state x =
-    { state with node = G.set_label state.cfg x state.node }
+    let s = match F.findv x state.env with
+        | _, (F.Label(F.Code(s)),_) -> s
+        | _ -> assert false
+    in    
+        { state with node = G.set_label state.cfg x s state.node }
 @
 
 An if-statement is translated into a seqence of nodes such that the
@@ -576,18 +555,20 @@ taken otherwise and ends with a [[goto]] around the other branch.
 and ifStmt state (e,ifso,ifnot) =
     let l_ifso = Idgen.label state.proc in (* label for ifso/left *)
     let l_join = Idgen.label state.proc in (* label for join *)
+    let s_ifso = F.symbol state.env l_ifso in   (* register symbol *)
+    let s_join = F.symbol state.env l_join in   (* register symbol *)
     let state  = { state with (* label join *)
-                   node = G.set_label state.cfg l_join state.node } in  
+                   node = G.set_label state.cfg l_join s_join state.node } in  
     let ifso   = foldr body ifso state  in
     let state  = { state with (* label ifso *)
-                   node = G.set_label state.cfg l_ifso ifso.node  } in 
+                   node = G.set_label state.cfg l_ifso s_join ifso.node  } in 
     
-    let l2exp  = Rtl.link l_join state.target.Target.pointersize in
+    let l2exp  = Rtl.link s_join state.target.Target.pointersize in
     let l2rtl  = state.target.Target.goto.Target.embed l2exp in
     let l2goto = G.gm_goto state.cfg l2rtl [G.lookup state.cfg l_join] in
     let ifnot  = foldr body ifnot {ifso with node = l2goto} in
     let exp    = expr state.env state.target e in
-    let link   = Rtl.link l_ifso state.target.Target.pointersize in
+    let link   = Rtl.link s_ifso state.target.Target.pointersize in
     let rtl    = state.target.Target.branch.Target.embed (exp,link)  in
         { ifnot with node = 
           G.gm_branch state.cfg rtl ifso.node ifnot.node
@@ -748,7 +729,10 @@ and contStmt state (label,args)  =
     let atm     = Automaton.mk cc.Target.cont state.inbase       in
     let copy,area,uses = IO.copyin state.cfg args 
                   cc.Target.cont state.inbase state.node in
-    let copy    = G.set_label state.cfg label copy               in
+    let symbol  = match F.findv label state.env with
+                  | _,(F.Continuation(_,s),_) -> s
+                  | _ -> assert false                            in
+    let copy    = G.set_label state.cfg label symbol copy        in
     let result  = { state with
                     node     = copy
                   ; incoming = area :: state.incoming
@@ -801,10 +785,10 @@ and switchStmt    state x  = Impossible.unimp "switch"
 
 <<Make procedure>>=
 let create_cont (a:Automaton.t) (sp:Rtl.loc) (env:F.env) (label:string) =
-    let reference = match F.findv label env with
-        | (_, (F.Continuation(r),_)) -> r
-        | x                          -> assert false in
-    Cont.allocate a sp label reference
+    let reference, sym = match F.findv label env with
+        | (_, (F.Continuation(r,s),_)) -> r,s
+        | _                            -> assert false in
+    Cont.allocate a sp sym reference
         
 let init_cont (cfg:G.cfg) (c:Cont.t) =
   ignore (List.fold_left G.gm_insert_assign_after (G.entry cfg) (Cont.init c))
@@ -830,13 +814,13 @@ let freeze (p:Proc.t) =
     (* The guard protects the subst function. If the guard is true
      * the subst function is applied to an expression *)
     let guard    = function
-        | RP.Const(RP.Link(_)) -> true
+        | RP.Const(RP.Late(_)) -> true
         | _                    -> false in
     
     (* This is the guareded substitution - we replace certain RP.Link 
      * values *)
     let rec subst (e:RP.exp) = match e with              
-        | RP.Const(RP.Link(x,_)) -> 
+        | RP.Const(RP.Late(x,_)) -> 
             ( try Rtl.Convert.exp (Strutil.Map.find x map) with 
             | Not_found -> e
             )  
@@ -847,10 +831,10 @@ let freeze (p:Proc.t) =
 
 
 let proc env target mangle optimizer asm (cconv,name,args,bdy) = 
-    let p           = match F.findv name env with
-                      | _,(F.Label(F.Proc p),_) -> p
-                      | _                        -> assert false in
-    let env         = F.push env p.F.scope in  (* activate local scope *)
+    let symbol,scope = match F.findv name env with
+                      | _,(F.Label(F.Proc (sym,scope)),_) -> sym,scope
+                      | _                          -> assert false in
+    let env         = F.push env scope  in  (* activate local scope *)
     let pointer     = target.Target.pointersize in
     let cc          = target.Target.cc (Aux.Option.get default_cc cconv) in
     let sp          = Rtl.fetch (cc.Target.sp) pointer in (* stack pointer *)
@@ -868,7 +852,9 @@ let proc env target mangle optimizer asm (cconv,name,args,bdy) =
     (* priv provides spill slots etc *)    
     let priv        = Automaton.mk target.Target.stack_slots privb in
     (* build CFG for body *)                    
-    let exit        = G.set_label cfg (Idgen.exit name) (G.exit cfg) in
+    let exit_label  = Idgen.exit name in
+    let exit_symbol = F.symbol env exit_label in
+    let exit        = G.set_label cfg exit_label exit_symbol (G.exit cfg) in
     (* dummy area in outgoing area because the the body of the procedure
        might not create any. This would confuse Area.overlap below *)
     let dummy       = Area.freeze (Area.mk outb) in   
@@ -907,7 +893,7 @@ let proc env target mangle optimizer asm (cconv,name,args,bdy) =
     (* order cfg *)
     let ()    = G.gm_enumerate cfg in
     let i =    
-        { Proc.name     = name
+        { Proc.symbol   = symbol
         ; Proc.cc       = cc
         ; Proc.target   = target
         ; Proc.temps    = Talloc.Multiple.for_spaces target.Target.spaces
@@ -921,7 +907,7 @@ let proc env target mangle optimizer asm (cconv,name,args,bdy) =
         } in
     let () = optimizer i in
     let () = freeze i    in
-        asm ++ Asm.instr i
+        asm#instr (new Asm.instr i)  (* *)
 @
         
 % ------------------------------------------------------------------ 
@@ -1024,12 +1010,12 @@ end (* of module StackData *)
 <<Make memory declarations>>=
 let initialized_data env target asm expr = 
         match eval_const env target asm expr with
-        | Eval.LinkTime e    -> asm ++ Asm.addr e
-        | Eval.CompileTime b -> asm ++ Asm.value b
+        | Eval.LinkTime e    -> asm#addr e
+        | Eval.CompileTime b -> asm#value b
 
 let rec init env target asm = function
     | A.InitAt(x,_)   -> init env target asm x
-    | A.InitExprs(es) -> foldl (initialized_data env target) asm es
+    | A.InitExprs(es) -> List.iter (initialized_data env target asm) es
     | A.InitUStr(_)      (*XXX*)
     | A.InitStr(_)    -> (*XXX*)
         Impossible.unimp "strings as initialized data not implemented"
@@ -1065,7 +1051,7 @@ let memdecl (env:F.env) target asm t size ini =
                  | A.FixSize(e) -> const e
                  ) in
         ( match ini with
-        | None    -> asm ++ Asm.zeroes (n * sizeof)
+        | None    -> asm#zeroes (n * sizeof)
         | Some ii -> init env target asm ii
         )
 @
@@ -1084,8 +1070,11 @@ assembly actions.
 <<Make memory declarations>>=
 let rec datum env target mangle asm = function
     | A.DatumAt(x,_)        -> datum env target mangle asm x
-    | A.Label(n)            -> asm ++ Asm.define_label (Asm.Local (mangle n))
-    | A.Align(a)            -> asm ++ Asm.align a 
+    | A.Label(n)            -> let s = match F.findv n env with
+                               | _,(F.Label(F.Data(s)),_) -> s 
+                               | _ -> assert false in 
+                               asm#label s
+    | A.Align(a)            -> asm#align a 
     | A.MemDecl(t,m,init)   -> memdecl env target asm t m init
 @
 
@@ -1111,12 +1100,12 @@ let rec sspan env target mangle optimizer asm (e1,e2,ss) =
     let key   = compile_const env target      e1 in
     let value = link_const    env target  asm e2 in
     (* construct props value, pass it to section. not implemented *)
-        foldl (section env target mangle optimizer) asm ss 
+        List.iter (section env target mangle optimizer asm) ss 
 
 <<Make toplevel>>=
-and section env target mangle optimizer (asm: Asm.asm) = function
+and section env target mangle optimizer asm = function
     | A.SectionAt(x,_)     -> section env target mangle optimizer asm x
-    | A.Decl(d)            -> asm
+    | A.Decl(d)            -> ()
     | A.Datum( d)          -> datum   env target mangle asm d
     | A.Procedure(p)       -> proc    env target mangle optimizer asm p
     | A.SSpan ss           -> sspan   env target mangle optimizer asm ss
@@ -1130,11 +1119,11 @@ active which just seems wrong.
 let rec toplevel env target mangle optimizer asm = function
     | A.ToplevelAt(x, _)  -> toplevel env target mangle optimizer asm x
     | A.Section(name, ss) -> 
-        let asm = asm ++ Asm.section (mangle name)in  
-            foldl (section env target mangle (*props*) optimizer) asm ss
-    | A.TopDecl(d)        -> asm (* nothing to do here *)
-    | A.TopProcedure(p)   -> let asm = asm ++ Asm.section default_section  
-                             in proc env target mangle optimizer asm p
+        let () = asm#section (mangle name)in  
+            List.iter (section env target mangle (*props*) optimizer asm) ss
+    | A.TopDecl(d)        -> ()
+    | A.TopProcedure(p)   -> let () = asm#section default_section  in 
+                              proc env target mangle optimizer asm p
 @
 
 
@@ -1142,31 +1131,14 @@ let rec toplevel env target mangle optimizer asm = function
 \subsubsection{Program}
 % ------------------------------------------------------------------ 
 
-Imports and exports of assembly symbols are announced once at the top
-of the assembly program.  The sets of imported and exported symbols
-are registered in the fat environment.  For details, see modules
-\module{mangle}, and \module{elab}. 
-
-<<Make translate program>>=
-let exports env asm = 
-    Strutil.Set.fold (fun s asm -> snd (Asm.export s asm)) 
-    (F.exported env) asm
-
-let imports env asm =
-    Strutil.Set.fold (fun s asm -> snd (Asm.import s asm)) 
-    (F.imported env) asm
-@
-
 The assembler maintains a current section. To guarantee that
 everything goes into a meaningful section, the first action is to
 start the [[text]] section.
                       
 <<Make translate program>>=
 let program env target mangle asm optimizer tt = 
-    let asm = asm ++ Asm.section "text"           in
-    let asm = exports env asm                     in
-    let asm = imports env asm                     in
-        foldl (toplevel env target mangle optimizer) asm tt
+    let () = asm#section "text"           in
+        List.iter (toplevel env target mangle optimizer asm) tt
 @
 
 The finger print [[disgest]] for global register declarations is a 16
@@ -1183,20 +1155,22 @@ should be exported but currently it is not.
 
 <<Make translate program>>=
 let translate env target optimizer prog =
-    let mangle   = Asm.mangle (F.nam2sym env) in 
-    let base_sym = mangle "global base" in
-    let base     = Rtl.link base_sym target.Target.pointersize in (*XXX*)
+    let mangle     = fun s -> s           in  (*XXX get rid of this! *)
+    let base_sym   = F.symbol env "global base" in
+    let base     = Rtl.link base_sym target.Target.pointersize in 
     let env
        ,area
        ,digest   = globals env target base (F.globals env) in
-    let digest   = mangle (String.escaped digest) in
-    let asm      = Asm.init () in
-    let asm      = asm ++ Asm.section (target.Target.data_section)
-                       ++ Asm.comment "memory for global registers"
-                       ++ Asm.align area.Area.align
-                       ++ Asm.addloc area.Area.size
-                       ++ Asm.define_label (Asm.Local base_sym) (*XXX ok? *)
-                       ++ Asm.define_label (Asm.Local digest) (*XXX*)
+    let digest   = String.escaped digest in
+    let asm      = F.asm env in
+    let ()       = ( () (* asm#export digest *)
+                   ; asm#section (target.Target.data_section)
+                   ; asm#comment "memory for global registers"
+                   ; asm#align area.Area.align
+                   ; asm#addloc area.Area.size
+                   )
     in   
-        program env target mangle asm optimizer prog  (* asm *)
+        ( program env target mangle asm optimizer prog 
+        ; asm
+        )
 @    

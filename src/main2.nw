@@ -343,10 +343,10 @@ function Main.compile ()
     if f == nil then error("Main.check: no file in Sys.argv[1]") end
 
     local ast = Driver.parse(f)
-    local env = Driver.check(ast)
+    local asm = Driver.cmmasm("dummy argument")
+    local env = Driver.check(ast,asm)
     local asm = Driver.compile(Default.runopt, ast, Default.target, env)
-    local doc = Driver.assemble(asm)
-    Driver.print(doc,Default.linewidth)
+    Driver.assemble(asm)
 end    
 Main.c = Main.compile -- abbreviation
 @
@@ -360,7 +360,8 @@ function Main.dot ()
     Default.optimizer = seq {Default.optimizer(),
                              single {name="writedot", fn=CG.writedot(compressdot)}}
     local ast = Driver.parse(f)
-    local env = Driver.check(ast)
+    local asm = Driver.cmmasm("dummy argument")
+    local env = Driver.check(ast,asm)
     Driver.compile(Default.runopt, ast, Default.target, env) -- result ignored
 end    
 @ 
