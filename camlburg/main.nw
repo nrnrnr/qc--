@@ -165,9 +165,11 @@ flag is present, B<ocamlburg> emits the normalized rule set to stdout.
 
 =head1 BURG SPECIFICATION
 
+=head2 SYNATX
+
 B<ocamlburg> accepts a Burg specification that conforms to the following
-EBNF grammar. Terminals are enclosed double quotes, all other symbols
-are nonterminals. 
+EBNF grammar. Terminals in the grammar below are enclosed double quotes,
+all other symbols are nonterminals. 
 
     spec    :   { decl } "%%" { rule }
 
@@ -189,7 +191,8 @@ are nonterminals.
 
 In addition to the grammar above, a rule pattern must not be a literal
 number, literal string, or a terminal variable. Those can only appear as
-constructor arguments like in C<Int(23)>. 
+constructor arguments like in C<Int(23)>. Identifiers and numbers in a
+B<ocamlburg> specification match the following regular expressions.
 
     alpha       = ['a'-'z' 'A'-'Z']
     digit       = ['0'-'9']
@@ -209,9 +212,9 @@ C<Nil()> a constructor. It is easy to forget the parentheses for the
 constructor. 
 
 Certain identifier are keywords and cannot be used as variables or
-nonterminals: C<start>, C<term>, C<type>, C<head>, C<tail>. Three terminal
-types are predefined: C<int>, C<string>, and C<char>. They correspond to
-number, string, and character literals.
+nonterminals: C<start>, C<term>, C<type>, C<head>, C<tail>. Three
+terminal types are predefined: C<int>, C<string>, and C<char>. They
+correspond to number, string, and character literals.
 
 Here is an example for a specification:
 
@@ -241,13 +244,18 @@ Here is an example for a specification:
     str    : number                [1]    {: string_of_int number :}
     number : str                   [1]    {: int_of_string str    :}
 
+
+=head2 DECLARATIONS
+
 Code associated with a C<%head> declaration is copied verbatim to the
 output I<before> the code generated for rules, code from a C<%tail>
 declaration goes I<after> code for rules. This code is used to declare
 type and values used by user code in the rules. A C<%term> declaration
-lists Objective Caml types used for variables in rules. In the example
-above, C<x:number> is a nonterminal variable, and C<x:string> is a
-terminal variable, because C<string> was declared as a terminal type.
+lists Objective Caml types used for terminal variables in rules. In the
+example above, C<x:number> is a nonterminal variable, and C<x:string> is
+a terminal variable, because C<string> was declared as a terminal type.
+
+=head2 RULES
 
 A rule defines a nonterminal (type) that is to the left of the colon,
 has a pattern, an optional non-negative cost, and a user-provided action. 
@@ -256,6 +264,8 @@ value, a terminal or nonterminal variable, or have a constructor with
 more patterns as arguments. When a rule is selected and executed at
 run-time, it computes a value of the nonterminal of its left hand side.
 
+    -- rule with cost and action
+    number : ADD(x:number,  y:number)     [2]    {: x + y :}
 
     -- chain rules
     str    : number                [1]    {: string_of_int number :}
@@ -266,19 +276,27 @@ I<x>B<:>I<x>. This often allows to omit types from variables if the
 types of variables in a pattern are distinct.  The two so-called chain
 rules at the end of the specification are an example: the C<number>
 variable in the first rule stands for C<number:number> and thus matches
-a C<number> nonterminal value. Chain rules are rules that have only a
-non-terminal variable as pattern. They provide conversions between
-nonterminal values: a C<number> nonterminal value can be converted into
-a C<str> nonterminal value at cost one by the first rule. The two rules
-are recursive but the associated costs of one prevent that they are
-applied indefinitely.
+a C<number> nonterminal value. 
 
-Rules have an associated non-negative cost.  The cost of a rule is
-the sum of cost of its arguments and its own cost, which defaults to
-zero.  The cost of arguments are computed at run-time. The rule's own
-cost is either static, or dynamic. In the dynamic case the user provides
-a cost expression that is evaluated at run-time. The values of terminal
-variables in the pattern are available for the cost expression.
+The terminal and nonterminal variables of a rule are in scope of the
+actions. In the example above the action refers to C<x> and C<y>, which
+are defined in the pattern.
+
+Chain rules are rules that have only a non-terminal variable as pattern.
+They provide conversions between nonterminal values: a C<number>
+nonterminal value can be converted into a C<str> nonterminal value at
+cost one by the first rule. The two rules are recursive but the
+associated costs of one prevent that they are applied indefinitely.
+
+=head2 COSTS
+
+Rules have an associated non-negative cost.  The cost of a rule is the
+sum of cost of its arguments and its own cost. If a rule has no explicit
+cost, it defaults to zero.  The cost of arguments are computed at
+run-time. The rule's own cost is either static, or dynamic. In the
+dynamic case the user provides a cost expression that is evaluated at
+run-time. The values of terminal variables in the pattern are available
+for the cost expression.
 
 =head1 THE GENERATED CODE
 
