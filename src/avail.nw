@@ -1,0 +1,65 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+% Grades     ::=    "%%Grades:" Quality Importance Urgency
+% Quality    ::=    A|B|C|D|E
+% Importance ::=    Central|Subsystem|Peripheral
+% Urgency    ::=    Immediate|Soon|Later
+%
+% Example (at beginning of line): %%Grades: B Central Soon
+@
+\section{Available expressions}
+
+The purpose of this module is to help compute a set of ``available
+expressions.''
+This set is really a set of equalities that represent facts we know
+about the state of the machine at a program point.
+Each such equality identifies the contents of some location with the
+value of some expression.
+The equalities can drive both redundancy elimination and forward
+substitution (peephole optimization).
+
+Here are the constructors.
+If~[[a]] is the set of expressions available immediately before an
+RTL~[[r]], then [[forward a r]] is the set of expressions available
+immediately after~[[r]].
+<<avail.mli>>=
+type t   (* a set of available expressions *)
+val empty : t  (* the empty set *)
+val forward : Rtl.rtl -> t -> t
+@ 
+To observe for forward substitution, we need to know what expression a
+location holds.
+To observe for redundancy elimination, we need to know what location
+holds an expression.
+<<avail.mli>>=
+val in_loc  : t -> Rtl.loc -> Rtl.exp option
+val has_exp : t -> Rtl.exp -> Rtl.loc option
+@ 
+
+
+\subsection{Implementation}
+
+
+<<avail.ml>>=
+module R   = Rtl
+module RP  = Rtl.Private
+module Up  = Rtl.Up
+module Dn  = Rtl.Dn
+module Re  = Register
+@ 
+The implementation is designed to try to maximize sharing and minimize
+allocation, not for fast lookup.
+<<avail.ml>>=
+type t = (RP.loc * RP.exp) list
+let empty = []
+@ 
+<<avail.ml>>=
+let in_loc pairs l = try Some (Up.exp (List.assoc (Dn.loc l) pairs))
+                     with Not_found -> None
+let has_exp pairs e =
+  let e = Dn.exp e in
+  try Some (Up.loc (fst (List.find (fun (_, e') -> e = e') pairs)))
+  with Not_found -> None
+@ 
+<<avail.ml>>=
+let forward rtl pairs = Impossible.unimp "available expressions"
