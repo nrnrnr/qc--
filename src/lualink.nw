@@ -29,16 +29,17 @@ module Reloc             = Sledlib.MkReloc
 module MSparcRtlEncoder  = Msparcenc.Mk(Reloc)
 module MSparcRtlExpander = Sparcexpander.Make (Reloc) (MSparcRtlEncoder)
 
-module T    = Lua.Lib.Combine.T9                    (* types *)
-                (AsmType)       (* T1 *)
-                (AstType)       (* T2 *)
-                (EnvType)       (* T3 *)
-                (ProcType)      (* T4 *)
-                (TargetType)    (* T5 *)
-                (DocType)       (* T6 *)
+module T    = Lua.Lib.Combine.T10           (* types *)
+                (AsmType)                   (* T1 *)
+                (AstType)                   (* T2 *)
+                (EnvType)                   (* T3 *)
+                (ProcType)                  (* T4 *)
+                (TargetType)                (* T5 *)
+                (DocType)                   (* T6 *)
                 (Luaiolib.T)                (* T7 *)
                 (Backplane.T)               (* T8 *)
                 (Colorgraph.GCT)            (* T9 *)
+                (Block.T)                   (* T9 *)
 
 module AsmT        = T.T1
 module AstT        = T.T2
@@ -49,6 +50,7 @@ module DocT        = T.T6
 module LuaioT      = T.T7
 module BackplaneT  = T.T8
 module ColorgraphT = T.T9
+module BlockT      = T.T10
 
 module IO = Lua.Lib.Extend (LuaioT)
 
@@ -70,12 +72,13 @@ module XXX = MSparcRtlExpander.Lua
 
 
 module L2 = 
-  Lua.Lib.Combine.L5                    (* up to 9 more libs *)
+  Lua.Lib.Combine.L6                    (* up to 9 more libs *)
     (L1)
     (Dummyexpander.Make          (ProcT))
     (Placevar2.Make (BackplaneT) (ProcT))
     (MSparcRtlExpander.Lua       (ProcT))
     (IO (Rtleval2.Lua)) 
+    (Block.MakeLib(BlockT))
 
 module I = 
   Lua.MakeInterp                            (* our interpreter *)

@@ -103,6 +103,15 @@ Block.cat(block list): block
 Block.overlap("high"|"low", block list): block
 @
 
+We export a module and a functor that are linked into the Lua
+interpreter in module \module{lualink}.
+
+<<block.mli>>=
+module T: Lua.Lib.USERTYPE
+module MakeLib  (V : Lua.Lib.TYPEVIEW with type 'a t = 'a T.t)
+    : Lua.Lib.TYPEFUL with type 'a combined = 'a V.combined 
+@
+
 % ------------------------------------------------------------------ 
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
@@ -216,4 +225,66 @@ let overlap_list p ts = List.fold_left (overlap p) (List.hd ts) (List.tl ts)
 \subsection{Export to Lua}
 % ------------------------------------------------------------------ 
 
+A block is represented as a [[userdata]] type in Lua. We could use the
+[[Rtlutil.ToString]] module to provide a better [[to_string]] function.
 
+<<block.ml>>=
+module T = struct
+    type block      = t         (* just to access outer type t *)
+    type 'a t       = block
+    let tname       = "block"
+    let eq _        = fun x y -> x = y
+    let to_string   = fun _ t -> "<block>"
+end
+@
+
+The [[MakeLib]] functor is exported such that the Lua interpreter can be
+linked together. The details how this exactly works are beyond me. 
+
+<<block.ml>>=
+module MakeLib (BlockV: Lua.Lib.TYPEVIEW with type 'a t = 'a T.t) =
+struct
+    type 'a combined = 'a BlockV.combined
+    module M (C: Lua.Lib.CORE with type 'a V.userdata' = 'a combined) =
+    struct
+        module V = C.V
+        let ( **-> ) = V.( **-> )
+        <<export functions to Lua>>
+    end (*M*)
+end (*MakeLib*)
+@
+
+An interpreter should never fails with internal errors. Therefore we
+have to wrap the [[cat]] and [[overlap]] function to check for possible
+problems be fore we call them.
+
+<<export functions to Lua>>=
+let cat' g = function
+    | [] -> C.error g "Block.cat: empty argument list"
+    | bs -> cat_list bs
+
+let overlap' g placement blocks = match (placement, blocks) with
+    | _     , [] -> C.error g "Block.overlap: empty block list"
+    | "high", bs -> overlap_list High bs
+    | "low" , bs -> overlap_list Low  bs
+    | _          -> C.error g "Block.overlap: 'high' or 'low' expected"
+@    
+
+The [[init]] function is called during the initialization phase of the
+interpreter. It creates a new table [[Block]] and registers all
+functions in there. 
+
+<<export functions to Lua>>=
+let init g =
+    let block = BlockV.makemap V.userdata V.projection in
+    C.register_module "Block"
+        [ "size"       , V.efunc (block        **-> V.result V.int) size
+        ; "alignment"  , V.efunc (block        **-> V.result V.int) alignment
+        ; "adjust"     , V.efunc (block        **-> V.result block) adjust
+        ; "cat"        , V.efunc (V.list block **-> V.result block) (cat' g)
+        ; "overlap"    , V.efunc (V.string **-> V.list block 
+                                           **-> V.result block) (overlap' g)
+        ] g;
+    Lua.Lib.StringList.empty    
+        
+@
