@@ -164,7 +164,6 @@ an unchecked run-time error.
 The {\rtl}s do not have to represent machine instructions. It suffices
 to create {\rtl}s that the code expander can recognize as jumps, calls,
 and so on. 
-
 <<type map>>=
 type 'a map =   { embed:    ('a -> Rtl.rtl)
                 ; project:  (Rtl.rtl -> 'a)
@@ -174,7 +173,7 @@ goto:           Rtl.exp map ;
 jump:           Rtl.exp map ;
 cutto:          Rtl.exp map ;
 call:           Rtl.exp map ;
-branch:         (Rtl.exp * Rtl.exp) map;
+branch:         (Rtl.exp * Rtl.exp) map; (* EXPLAIN ARGUMENTS TO THIS FUNCTION *)
 @
 
 % ------------------------------------------------------------------ 
@@ -205,9 +204,12 @@ raises an [[Invalid_argument]] exception.  The first argument is a
 lookup-function that provides information about the spaces the source
 and destination registers live in. \emph{{\rtl} respects machine
 invariant? --CL}
+If the result is to respect the machine invariant, it must be a list
+of RTLs.  I've temporarily expunged it as it seems to be unused. ---NR
+
 
 <<components of t>>=
-assign: (Rtl.space -> Space.t) -> src:Register.t -> dst:Register.t -> Rtl.rtl;
+(*assign: (Rtl.space -> Space.t) -> src:Register.t -> dst:Register.t -> Rtl.rtl;*)
 @
 
 When the register allocator (see ~module{linscan}) must spill, it has to
@@ -249,8 +251,9 @@ defined here.
 
 \emph{Should we use an object instead of a record to define this? --CL}
 
+THIS FUNCTION SEEMS UNDERSPECIFIED; WHAT IS THE ARGUMENT?
 <<components of t>>=
-contn:      (Rtl.exp -> Contn.t);       (* continutaion representation *)
+contn:      Rtl.exp -> Contn.t;       (* continuation representation *)
 @
     
 % ------------------------------------------------------------------ 

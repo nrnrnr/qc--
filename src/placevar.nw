@@ -66,11 +66,14 @@ anything useful.
 <<walk RTL>>=
 (* NOTE: using space 't' is hopeful, but ultimately bogus. *)
 let new_tmp name w =
+  let first = try Char.lowercase (name.[0])
+              with Invalid_argument _ -> Impossible.impossible "empty name" in
     match name, w with
-    |   n, 32 when (compare name "i" >= 0) && (compare name "n" <= 0)
+    |   n, _  when String.length n = 0 -> Impossible.impossible "empty name"
+    |   n, 32 when 'i' <= first && first <= 'n'
                -> Talloc.Multiple.loc temps 't' w
     |   n, 32  -> Talloc.Multiple.loc temps 'u' w 
-    |   n, 64 when (compare name "i" >= 0) && (compare name "n" <= 0)
+    |   n, 64 when 'i' <= first && first <= 'n'
                -> Talloc.Multiple.loc temps 't' 32
     |   n, 64  -> Talloc.Multiple.loc temps 'u' 32
     |   n, 16  -> Talloc.Multiple.loc temps 't' 32

@@ -205,25 +205,45 @@ $debug 1
 
 Dump = Dump or {}
 
+function Dump.id (val)  -- identify the value
+    if type(val) == "userdata" then
+        local s = tostring(val)
+        if strlen(s) < 20 then
+            return "userdata " .. s
+        else
+            return "userdata"
+        end
+    else
+        return type(val)
+    end
+end
+
 function Dump.vars ()
-    local s
     local key,val = nextvar(nil)
     while key do
-        s = format ("%-40s%s\n",key, type(val))
+        local s = format ("%-40s%s\n",key, Dump.id(val))
         write (s)
-        if type(val) == "table" then Dump.table (key .. ".", val) end
+        if type(val) == "table" then Dump.table (key, val) end
         key,val = nextvar(key)
     end
 end    
 
-function Dump.table (name,table)    -- helper for Dump.vars 
+function Dump.valname(tabname, key)
+  if type(key) == "string" then
+     return tabname .. "." .. key
+  else
+     return tabname .. "[" .. key .. "]"
+  end
+end
+
+function Dump.table (tabname,table)    -- helper for Dump.vars 
     local key,val = next(table,nil)
-    local s
     while key do
-        s = format("%-40s%s\n", name .. key, type(val))
+        local valname = Dump.valname(tabname, key)
+        local s = format("%-40s%s\n", valname, Dump.id(val))
         write(s)
         if type(val) == "table" then 
-            Dump.table (name .. key .. ".", val) 
+          Dump.table (valname, val)
         end
         key,val = next(table,key)
     end
@@ -461,6 +481,18 @@ Backend.old =     --- compatible with old back end
   , widen     = Stages.null
   , placevars = Placevar.fortran
   , expand    = Expander.dummy
+  , liveness  = Stages.null
+  , ralloc    = Ralloc.color
+  , freeze    = Driver.freeze
+  , asm       = Asm.cmm
+  , emit      = Driver.assemble
+  }   
+
+Backend.x86 =     --- compatible with old back end
+  { target    = Targets.x86
+  , widen     = Stages.null
+  , placevars = Placevar.fortran
+  , expand    = Expander.x86
   , liveness  = Stages.null
   , ralloc    = Ralloc.color
   , freeze    = Driver.freeze

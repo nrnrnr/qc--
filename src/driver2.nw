@@ -154,12 +154,12 @@ let consistency_check env (t:Target2.t) =
     let int i = string_of_int i in
     let msg property source target = 
         let m = Printf.sprintf 
-                "mismatch of %s between source (%s) and target (%s)"
-                property source target 
+                "source code specifies %s %s, but target %s specifies %s %s"
+                property source t.Target2.name property target 
         in Error.error (m)
     in match F.findEndianness env, t.Target2.byteorder with
-    | F.Big,    Rtl.LittleEndian -> msg "byteorder" "little" "big"
-    | F.Little, Rtl.BigEndian    -> msg "byteorder" "big"    "little"
+    | F.Big,    Rtl.LittleEndian -> msg "byteorder" "big"    "little"
+    | F.Little, Rtl.BigEndian    -> msg "byteorder" "little" "big"
     | _ -> if F.findWordsize env <> t.Target2.wordsize then
         msg "wordsize" (int (F.findWordsize env)) (int t.Target2.wordsize)
     else if F.findMemsize env <> t.Target2.memsize then
@@ -168,7 +168,7 @@ let consistency_check env (t:Target2.t) =
         msg "pointer size" (int (F.findPointersize env)) 
             (int t.Target2.pointersize)
     else if F.findFloat env <> t.Target2.float then
-        msg "floating point standard" (F.findFloat env) t.Target2.float
+        msg "floating-point standard" (F.findFloat env) t.Target2.float
     else if F.findCharset env <> t.Target2.charset then
         msg "charset" (F.findCharset env) t.Target2.charset
     else

@@ -1,3 +1,4 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 
 % vim: ts=8 sw=4 et
 % Grades     ::=    "%%Grades:" Quality Importance Urgency
@@ -178,6 +179,10 @@ module ToString: sig
     val rtl: Rtl.rtl -> string
     val exp: Rtl.exp -> string
 end
+module ToReadableString: sig
+    val rtl: Rtl.rtl -> string
+    val exp: Rtl.exp -> string
+end
 @
 
 % ------------------------------------------------------------------ 
@@ -207,6 +212,10 @@ end
 
 module ToString = struct
     <<ToString>>
+end
+
+module ToReadableString = struct
+    <<ToReadableString>>
 end
 
 module Time = struct
@@ -521,6 +530,78 @@ let rtl' (R.Rtl gg) =
     let lhs, rhs = List.split pairs             in
         A.AssignStmt(lhs,rhs)
 let rtl = rtl' @<< Rtl.Convert.rtl
+@
+% ------------------------------------------------------------------ 
+\subsection{Conversion to Readable String}
+% ------------------------------------------------------------------ 
+
+<<ToReadableString>>=
+module R = Rtl.Private
+module A = Ast
+module T = Types
+@
+
+<<ToReadableString>>=
+let const = function
+    | R.Bool(true)   ->  "true"
+    | R.Bool(false)  ->  "false"
+    | R.Bits b       ->  string_of_int (Bits.U.to_int b)
+                     
+    | R.Link(sym,w)  -> sym#text
+    | R.Late(name,w) -> "<" ^ name ^ ">"
+@
+
+<<ToReadableString>>=
+let opr op w = "%%" ^ op
+
+let join = String.concat
+
+let rec expr' = function
+    | R.Const c         -> const c
+    | R.Fetch(loc,_)    -> location' loc
+    | R.App((op,ww),ee) -> match ee with
+                           | [l; r] when op = "add" || op = "sub" ->
+                                  let op = if op = "add" then " + " else " - " in
+                                  brexpr' l ^ op ^ brexpr' r
+                           | _ -> opr op ww ^ "(" ^ join ", " (List.map expr' ee) ^ ")"
+and brexpr' e = match e with (* bracketed expression *)
+    | R.App ((op,ww), _) when op = "add" || op = "sub" -> "(" ^ expr' e ^ ")"
+    | _ -> expr' e
+@
+
+<<ToReadableString>>=
+and location' = function 
+    | R.Cell (sp,agg,width,e,ass) ->
+        let space = if sp = 'm' then "bits" ^ string_of_int width
+                    else "$" ^ Char.escaped sp in
+        space ^ "[" ^ expr' e ^ "]"
+    | R.Var (name,_,width)       -> name
+    | R.Slice (w,i,loc)          ->
+        location' loc ^ "@[" ^ string_of_int i ^ ".." ^ string_of_int (i+w-1) ^ "]"
+    
+let (@<<) f g  = fun x -> f (g x)
+let expr       = expr'     @<< Rtl.Convert.exp
+let location   = location' @<< Rtl.Convert.loc
+@
+
+A [[kill]] is translated into an assignment of [[%undef()]].
+<<ToReadableString>>=
+let rec effect = function
+    | R.Kill   loc       -> "kill " ^ location' loc
+    | R.Store  (loc,e,w) -> location' loc ^ " := " ^ expr' e
+
+let guard = function
+  | R.Const (R.Bool true) -> ""
+  | g -> expr' g ^ " --> " 
+
+let guarded (g, eff) = guard g ^ effect eff
+
+let rtl' (R.Rtl gg) = 
+  match gg with
+  | [] -> "skip"
+  | _ :: _ -> join " | " (List.map guarded gg)
+let rtl = rtl' @<< Rtl.Convert.rtl
+let exp = expr
 @
 
 % ------------------------------------------------------------------ 

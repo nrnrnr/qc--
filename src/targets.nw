@@ -17,6 +17,9 @@ supports.
 <<targets.mli>>=
 val dummy : Target2.t 
 val sparc : Target2.t
+val dummy_automaton : Rtl.aggregation -> Automaton2.spec
+val contn : Rtl.aggregation -> Rtl.exp -> Contn.t 
+  (* semantics baffling; see complaint at Target2.contn *)
 @
 
 The targets are exported to Lua. When the following module is initalized
@@ -70,6 +73,7 @@ module DummyTarget = struct
     <<DummyTarget>>
 end
 let dummy = DummyTarget.target
+let contn = DummyTarget.contn
 
 module SparcTarget = struct
     <<SparcTarget>>
@@ -341,8 +345,13 @@ The [[simple]] automaton is a toy that we use for all purposes. All
 location it hands out are in memory, except when a hardware register is
 explicitly requested.
 
+PLEASE EXPLAIN THE USE OF MUTABLE STATE HERE.  IF THE RESULT OF 
+[[new simple']] IS AN [[Automaton2.spec]], WHY CAN'T EVERYTHING HERE
+SHARE A SINGLE MUTABLE OBJECT?  AND IF THE OBJECT CAN'T SAFELY BE
+SHARED BY ALL TARGETS, THEN HOW CAN IT SAFELY BE SHARED BY MULTIPLE
+PROCEDURES IN A COMPILATION UNIT?
 <<DummyTarget>>=
-class simple' (base:Rtl.exp): Automaton2.automaton =
+class simple' (byte_order) (base:Rtl.exp): Automaton2.automaton =
 object (this)
     val mutable _block  = Block.mk base (*size*) 0 (*align*) 8  (* block *)
     val mutable _frozen = false
@@ -351,7 +360,7 @@ object (this)
         let _ = _frozen <- true in _block  (* return block *)
     
     method private memloc addr w = 
-        new loc (Rtl.cell Rtl.none 'm' Rtl.BigEndian w addr)
+        new loc (Rtl.cell Rtl.none 'm' byte_order w addr)
     
     method private hardware hint = match hint with 
     | "IEEE 754 rounding modes"         -> new loc (fpcond 0)
@@ -375,6 +384,8 @@ object (this)
             ; this#memloc (Block.base slot) width
             )
 end
+<<targets.ml>>=
+let dummy_automaton order = new DummyTarget.simple' order
 @
 
 The [[cc]] value describes a calling convention. It is just a toy and
@@ -384,9 +395,9 @@ probably is not good for anything.
 let cc =
     { T.sp              = reg 31
     ; T.return          = assign pc (R.fetch (mem (R.fetch (reg 31) 32)) 32)
-    ; T.proc            = new simple'
-    ; T.cont            = new simple'
-    ; T.ret             = new simple'
+    ; T.proc            = new simple' Rtl.BigEndian
+    ; T.cont            = new simple' Rtl.BigEndian
+    ; T.ret             = new simple' Rtl.BigEndian
     ; T.allocatable     = List.concat 
                             [ List.map (fun n -> ('r',n,32)) [1;2;3]
                             ; List.map (fun n -> ('f',n,32)) [1;2;3]
@@ -400,10 +411,10 @@ The [[contn]] value describes the memory layout of continuations. More
 precisely, the pair of two pointers that are stored on the stack.
 
 <<DummyTarget>>=
-let contn (base:Rtl.exp) =
+let contn (byte_order) (base:Rtl.exp) =
     let add       = Rtl.opr "add" [32] in
     let offset n  = Rtl.app add [base; Rtl.bits (Bits.S.of_int n 32) 32] in
-    let cell addr = Rtl.cell Rtl.none 'm' Rtl.BigEndian 32  addr in
+    let cell addr = Rtl.cell Rtl.none 'm' byte_order 32  addr in
         { C.block = Block.mk ~base ~size:4 ~alignment:4
         ; C.sp    = cell (offset 0)
         ; C.pc    = cell (offset 4)
@@ -421,7 +432,7 @@ let target =
     ; T.memsize         = 8
     ; T.float           = "ieee754"
     ; T.charset         = "latin1"
-    ; T.globals         = new simple'
+    ; T.globals         = new simple' Rtl.BigEndian
     ; T.goto            = goto
     ; T.jump            = goto
     ; T.cutto           = goto
@@ -429,12 +440,12 @@ let target =
     ; T.branch          = branch
     ; T.cc              = StrUtil.lookup (StrUtil.list2map [("C--",cc)])
     ; T.spaces          = spaces 
-    ; T.assign          = Spill.assign
+(*    ; T.assign          = Spill.assign *)
     ; T.spill           = Spill.spill
     ; T.reload          = Spill.reload
     ; T.data_section    = "data"
-    ; T.stack_slots     = new simple'
-    ; T.contn           = contn
+    ; T.stack_slots     = new simple' Rtl.BigEndian
+    ; T.contn           = contn Rtl.BigEndian
     }
 @ 
 
@@ -549,7 +560,7 @@ The automaton that works with our new Automaton and Block modules. This
 will replace the automaton above.
 
 <<SparcTarget>>=
-class simple' (base:Rtl.exp): Automaton2.automaton =
+class simple' (byte_order) (base:Rtl.exp): Automaton2.automaton =
 object (this)
     val mutable _block  = Block.mk base (*size*) 0 (*align*) 8  (* block *)
     val mutable _frozen = false
@@ -558,7 +569,7 @@ object (this)
         let _ = _frozen <- true in _block  (* return block *)
     
     method private memloc addr w = 
-        new loc (Rtl.cell Rtl.none 'm' Rtl.BigEndian w addr)
+        new loc (Rtl.cell Rtl.none 'm' byte_order w addr)
     
     method private hardware hint = match hint with 
     | r     -> Impossible.impossible ("unknown hardware register "^r) 
@@ -639,19 +650,19 @@ let cc =
     { T.sp              = sp
     ; T.return          = special 'R' false' 
                             (R.bits (Bits.U.of_int 12345 32) 32)
-    ; T.proc            = new simple'
-    ; T.cont            = new simple'
-    ; T.ret             = new simple'
+    ; T.proc            = new simple' Rtl.BigEndian
+    ; T.cont            = new simple' Rtl.BigEndian
+    ; T.ret             = new simple' Rtl.BigEndian
     ; T.allocatable     = List.concat 
                             [ List.map (fun n -> ('r',n,32)) [3;4;5]
                             ; List.map (fun n -> ('f',n,32)) [1;2;3]
                             ]
     }
 
-let contn (base:Rtl.exp) =
+let contn byte_order (base:Rtl.exp) =
     let add       = Rtl.opr "add" [32] in
     let offset n  = Rtl.app add [base; Rtl.bits (Bits.S.of_int n 32) 32] in
-    let cell addr = Rtl.cell Rtl.none 'm' Rtl.BigEndian 32  addr in
+    let cell addr = Rtl.cell Rtl.none 'm' byte_order 32  addr in
         { C.block = Block.mk ~base ~size:4 ~alignment:4
         ; C.sp    = cell (offset 0)
         ; C.pc    = cell (offset 4)
@@ -665,7 +676,7 @@ let target =
     ; T.memsize         = 8
     ; T.float           = "ieee754"
     ; T.charset         = "latin1"
-    ; T.globals         = new simple'
+    ; T.globals         = new simple' Rtl.BigEndian
     ; T.goto            = goto
     ; T.jump            = jump
     ; T.cutto           = cutto
@@ -673,12 +684,12 @@ let target =
     ; T.branch          = branch
     ; T.cc              = StrUtil.lookup (StrUtil.list2map [("C--",cc)])
     ; T.spaces          = spaces 
-    ; T.assign          = Spill.assign
+(*    ; T.assign          = Spill.assign *)
     ; T.spill           = Spill.spill
     ; T.reload          = Spill.reload
     ; T.data_section    = "data"
-    ; T.stack_slots     = new simple'
-    ; T.contn           = contn
+    ; T.stack_slots     = new simple' Rtl.BigEndian
+    ; T.contn           = contn Rtl.BigEndian
     }
 @ 
 

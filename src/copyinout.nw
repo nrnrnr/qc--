@@ -89,22 +89,19 @@ type formal =   { width:    Rtl.width
                 ; hint:     string option
                 ; repr:     repr              (* representation *)
                 }
-                
+@ 
 <<Make sig>>=
 <<type formal>>
 val copyin: G.cfg -> formal list -> Automaton2.spec 
                 -> addr:Rtl.exp -> succ:G.node 
                 -> G.node * Block.t * Register.Set.t (* uses *)
-@             
-
-The [[copyin]] function creates a linear sequence of assign-nodes for
+@ The [[copyin]] function creates a linear sequence of assign-nodes for
 the {\cfg} and returns a triple: the top-node of the sequence, the
 area used for incoming overflow parameters and (calling-convention)
 locations used by the sequence.  The [[Block.t]] value is used to
 reserve memory in the incoming area, the usages for data-flow
 annotations in the control-flow graph.  The function receives the
 following parameters:
-
 \begin{itemize}
 \item The {\cfg} the node-sequence becomes part of.
 \item The list of formal parameters of the (receiving) procedure at hand.
@@ -155,32 +152,31 @@ type actual     = Rtl.exp               (* value to pass      *)
                 * Rtl.width             (* its width          *)
                 * string option         (* calling conv. hint *)
 @
-
+The documentation of this function is primarily above, with the
+documentation for [[copyin]].
 <<Make sig>>=
 <<type actual>>
 val copyout: G.cfg -> actual list -> Automaton2.spec 
                  -> addr:Rtl.exp -> succ:G.node 
                  -> G.node * Block.t * Register.Set.t (* defs *)
-@
-
-The head node of the sequence is returned together with the area for
+@ The head node of the sequence is returned together with the area for
 overflowing parameter and the locations defined by the sequence. 
-
+The parameters are
 \begin{itemize}
-\item The {\cfg}.
-\item The list of actual parameters, i.e.~expressions.
-\item The automaton for the calling convention.
-\item The base address for the overflow area.
-\item The node succeeding the sequence.
+\item The {\cfg}
+\item The list of actual parameters, i.e.~expressions
+\item The automaton for the calling convention
+\item The base address for the overflow area
+\item The node succeeding the sequence
 \end{itemize}
-
+@
 Like the virtual copy-in is used to receive parameters returned by a
 callee, copy-out not only passes values to procedures (or
 continuations) but also returns values.  Note that in the case of
 continuations and tail-calls \emph{outgoing} overflow parameters are
 passed in the \emph{incoming} area of an activations.  Refer to
 section \module{stack} for an overview.
-
+@
 The nodes of a {\cfg} are subject to liveness analysis to find the
 lifespan of variables (c.f.~\module{life}).  The liveness analysis
 usually determines from the {\rtl}s inside {\cfg} node which variables

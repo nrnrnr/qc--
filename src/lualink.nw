@@ -1,3 +1,5 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
 % vim: ts=8 sw=4 et:
 % Grades     ::=    "%%Grades:" Quality Importance Urgency
 % Quality    ::=    A|B|C|D|E
@@ -5,7 +7,6 @@
 % Urgency    ::=    Immediate|Soon|Later
 %
 % Example (at beginning of line): %%Grades: B Central Soon
-
 
 % ------------------------------------------------------------------ 
 \section{Linking the Lua Interpreter}\label{sect:lua-link}
@@ -69,12 +70,11 @@ module XXX = MSparcRtlExpander.Lua
 
 
 module L2 = 
-  Lua.Lib.Combine.L6                    (* up to 9 more libs *)
+  Lua.Lib.Combine.L5                    (* up to 9 more libs *)
     (L1)
     (Dummyexpander.Make          (ProcT))
     (Placevar2.Make (BackplaneT) (ProcT))
     (MSparcRtlExpander.Lua       (ProcT))
-    (Expander.Lua                (ProcT))
     (IO (Rtleval2.Lua)) 
 
 module I = 
@@ -210,5 +210,22 @@ let init g =
                                           **-> Map.env 
                                           **-> V.result Map.asm) Driver2.compile
     ] g;
-  Lua.Lib.StringList.empty
+  C.register_module "Expander"
+    [ "toyf" , V.efunc (V.value **-> Map.proc **-> V.result V.bool) Expander.cfg
+    ; "x86f" , V.efunc (V.value **-> Map.proc **-> V.result V.bool) X86.X.cfg
+    ] g;
+  C.register_module "Targets"
+    [ "dummy",  Map.target.V.embed Targets.dummy 
+    ; "sparc",  Map.target.V.embed Targets.sparc
+    ; "x86",    Map.target.V.embed X86.target
+    ] g;
+  Lua.Lib.StringList.of_list [ <<lua initialization>> ]
 @  
+<<lua initialization>>=
+"Expander.toy = { fn = Expander.toyf, uses = { 'proper widths', 'no vars' }, \
+                  name = 'Expander.toy', creates = { 'simple RHS' }, \
+                  doc = 'A toy code expander' }";
+"Expander.x86 = { fn = Expander.x86f, uses = { 'proper widths', 'no vars' }, \
+                  name = 'Expander.x86', creates = { 'x86 invariant' }, \
+                  doc = 'A prototype code expander for the x86' }";
+""

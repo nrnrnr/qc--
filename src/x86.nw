@@ -26,7 +26,9 @@ module Spaces : sig
   val u : Space.t
   val c : Space.t   (* PC at 0 and condition codes at 1 *)
 end
-module Expander : Postexpander.S
+module Post : Postexpander.S
+module X    : Expander.S
+val target : Target2.t
 @ 
 
 \paragraph{Name}
@@ -70,7 +72,7 @@ end
 <<x86.ml>>=
 module R = Rtl
 module RP = Rtl.Private
-module Expander = struct
+module Post = struct
   <<x86 expander>>
 end
 @ 
@@ -113,7 +115,8 @@ let aflags result = R.store eflags (R.app (R.opr "IA32.aflags" []) [result]) 32
 
 let temploc (space, n, w) = Rtl.cell Rtl.none space byte_order w (rindex n)
 let tempval ((space, n, w) as t) = R.fetch (temploc t) w
-let mem addr = R.cell R.none
+let tempwidth (space, n, w) = w
+let mem addr = R.cell R.none 'm' byte_order 32 addr
 @ 
 It's not clear whether the MOV instruction sets the flags or not.
 For the moment, I assume not.
@@ -149,7 +152,8 @@ It has to be looked up!
 <<x86 expander>>=
 let width (_, _, w) = w
 let move_rtl dst src = as_mov (R.store (temploc dst) (tempval src) (width src))
-let move ~dst ~src = [move_rtl dst src]
+let move ~dst ~src = 
+  if dst = src then [] else [move_rtl dst src]
 @ 
 Load immediate should also be a simple move.
 <<x86 expander>>=
@@ -241,16 +245,16 @@ Operator hell (or heaven).
 We start with binary operators in $L \mathrel{:=} L \oplus R$ form.
 <<x86 expander>>=
 let with_flags setflags dst exp =
-  R.par [setflags exp; R.store (temploc dst) exp (width dst)]
+  R.par [R.store (temploc dst) exp (width dst); setflags exp]
 
 let llr op x y move = match op with
-| "add", [32] -> [with_flags aflags x (R.app (upop op) [tempval x; tempval y])]
+| "add", [32] -> with_flags aflags x (R.app (upop op) [tempval x; tempval y]) :: move
 | "add", [n]  -> Impossible.unimp (string_of_int n ^ "-bit add")
 | "add", _    -> Impossible.impossible "ill-formed add"
 | _           ->
-    [R.store (temploc x) (R.app (upop op) [tempval x; tempval y]) (width x)]
+    R.store (temploc x) (R.app (upop op) [tempval x; tempval y]) (width x) :: move
 
-let binop ~dst op x y = llr op dst x (move_rtl dst x)
+let binop ~dst op x y = llr op dst y (move dst x)
 @ 
 Other operators are surely wrong.
 <<x86 expander>>=
@@ -259,3 +263,163 @@ let unop ~dst op x =
 
 let rtlop ~dst op args =
   [R.store (temploc dst) (R.app (upop op) (List.map tempval args)) (width dst)]
+@ 
+\subsection{Control flow}
+<<x86 expander>>=
+let pc_lhs = pc
+let pc_rhs = pc
+@ 
+There are some hairy semantics attached to some Pentium jumps, but
+I~think we can stick with the simple ones for now.
+<<x86 expander>>=
+let br ~tgt = [R.store pc_lhs (tempval tgt) 32]
+let b  ~tgt = [R.store pc_lhs (upconst tgt) 32]
+@
+To implement the comparisons, we define new operators that are private
+to the $x$86 architecture. 
+\begin{itemize}
+\item [[x86_cmp]] returns what goes into the flags after a [[cmp]]
+instruction.
+\item
+Operators [[x86_a]], [[x86_ae]], and so on, accept one argument, the
+flags, and return a Boolean value that tells whether [[JA]], [[JAE]],
+and so one, would jump.
+\end{itemize}
+
+
+<<x86 expander>>=
+<<important functions on $x$86 operators>>
+let eflags =
+  R.cell R.none 'c' Spaces.bo 32 (R.bits (Bits.U.of_int 1 32) 32)
+let cmp x y =
+  R.store eflags (R.app (R.opr "cmp" [32]) [tempval x; tempval y]) 32
+let bc x (opr, ws) y ~tgt =
+  assert (ws = [32]);
+  [ R.guard (R.app (R.opr (cmpopr opr) [32]) [R.fetch eflags 32]) 
+            (R.store pc_lhs (upconst tgt) 32)
+  ; cmp x y
+  ]
+
+let uprtl   = R.Revert.rtl
+let downrtl = R.Convert.rtl
+let uploc   = R.Revert.loc
+let downloc = R.Convert.loc
+
+let bnegate r = match downrtl r with
+| RP.Rtl [RP.App((cop, [32]), [RP.Fetch (flags, 32)]), RP.Store (pc, tgt, 32)]
+  when pc = downloc pc_lhs && flags = downloc eflags ->
+    uprtl (RP.Rtl [RP.App((cmpneg cop, [32]), [RP.Fetch (flags, 32)]),
+                   RP.Store (pc, tgt, 32)])
+| _ -> Impossible.impossible "ill-formed x86 conditional branch"
+@ 
+The first important functions converts a {\PAL} operator into the
+corresponding Intel operator.
+<<important functions on $x$86 operators>>=
+let cmpopr = function
+  | "eq"  -> "x86_e"
+  | "ne"  -> "x86_ne"
+  | "lt"  -> "x86_l"
+  | "le"  -> "x86_le"
+  | "gt"  -> "x86_g"
+  | "ge"  -> "x86_ge"
+  | "ltu" -> "x86_b"
+  | "leu" -> "x86_be"
+  | "gtu" -> "x86_a"
+  | "geu" -> "x86_ae"
+  | "feq"  -> Impossible.unimp "floating-point comparison"
+  | "fne"  -> Impossible.unimp "floating-point comparison"
+  | "flt"  -> Impossible.unimp "floating-point comparison"
+  | "fle"  -> Impossible.unimp "floating-point comparison"
+  | "fgt"  -> Impossible.unimp "floating-point comparison"
+  | "fge"  -> Impossible.unimp "floating-point comparison"
+  | "fordered"   -> Impossible.unimp "floating-point comparison"
+  | "funordered" -> Impossible.unimp "floating-point comparison"
+  | _ -> Impossible.impossible "non-comparison in x86 conditional branch"
+@ 
+The second important function negates an Intel operator.
+<<important functions on $x$86 operators>>=
+let cmpneg = function
+  | "x86_ne" -> "x86_e"
+  | "x86_e"  -> "x86_ne"
+  | "x86_ge" -> "x86_l"
+  | "x86_g"  -> "x86_le"
+  | "x86_le" -> "x86_g"
+  | "x86_l"  -> "x86_ge"
+  | "x86_ae" -> "x86_b"
+  | "x86_a" -> "x86_be"
+  | "x86_be" -> "x86_a"
+  | "x86_b" -> "x86_ae"
+  | _ -> Impossible.impossible "bad comparison in expanded x86 conditional branch"
+@ 
+Some generic utilities.
+<<x86.ml>>=
+module PX = Post
+let esp = PX.temploc ('r', 4, 32)
+let espval = PX.tempval ('r', 4, 32)
+let add x y = R.app (R.opr "add" [32]) [x; y]
+let sub x y = R.app (R.opr "sub" [32]) [x; y]
+let const n = R.bits (Bits.S.of_int n 32) 32
+let mem = PX.mem
+let fetch l = R.fetch l 32
+let store l r = R.store l r 32
+let pc = PX.pc
+
+let pop_with f = (* rtl got by popping (f e), where e is top of stack *)
+  let top = fetch (PX.mem espval) in
+  R.par [ f top; store esp (add espval (const 4)) ]
+
+let push e = (* effect of pushing e *)
+  let next_sp = sub espval (const 4) in
+  R.par [ store (mem next_sp) e; store esp next_sp ]
+
+module T = Target2
+module F = Mflow.Make (
+  struct
+     let pc_lhs = PX.pc_lhs
+     let pc_rhs = PX.pc_rhs
+     let ra_reg    = PX.temploc ('?', 99, 32) (* not used *)
+     let ra_offset = 33                      (* not used *)
+  end)
+     
+<<x86.ml>>=
+module X = Expander.IntFloatAddr (PX)
+(* expansion here causes infinite loop *)
+let spill_expand = X.expand
+let spill_expand r = [r]
+let spill  _ t l =
+  spill_expand (R.store l (PX.tempval t) (PX.tempwidth t))
+let reload _ t l =
+  spill_expand (R.store (PX.temploc t) (R.fetch l (PX.tempwidth t)) (PX.tempwidth t))
+
+let target =
+  { T.name = "x86"
+  ; T.cc = (fun _ -> 
+           { T.sp = esp
+           ; T.return = pop_with (fun ra -> store pc ra)
+           ; T.proc = Targets.dummy_automaton PX.byte_order
+           ; T.cont = Targets.dummy_automaton PX.byte_order
+           ; T.ret  = Targets.dummy_automaton PX.byte_order
+           ; T.allocatable = List.map (fun n -> ('r', n, 32)) [0; 1; 2; 3]
+           }) 
+  ; T.byteorder = PX.byte_order
+  ; T.wordsize = PX.wordsize
+  ; T.pointersize = PX.wordsize
+  ; T.memsize = 8
+  ; T.float = "ieee754"
+  ; T.charset = "latin1" (* THIS IS NONSENSE!! NOT A PROPERTY OF THE MACHINE?? *)
+  ; T.globals = Targets.dummy_automaton PX.byte_order
+  ; T.spaces = [Spaces.m; Spaces.r; Spaces.t; Spaces.f; Spaces.u; Spaces.c]
+  ; T.data_section = "data"
+  ; T.goto = F.goto
+  ; T.jump = F.jump
+  ; T.cutto = F.cutto (* BOGUS *)
+  ; T.call = { T.embed = (fun e -> R.par [F.goto.T.embed e; push (fetch pc)])
+             ; T.project = F.call.T.project (* should be OK *)
+             } 
+  ; T.branch = F.branch
+  ; T.spill  = spill
+  ; T.reload = reload
+  ; T.stack_slots = Targets.dummy_automaton PX.byte_order
+  ; T.contn = Targets.contn PX.byte_order (* dubious *)
+  } 
+                          
