@@ -226,7 +226,8 @@ val goto_end   : zblock -> head  * last
 Access to the representation:
 <<zipcfg.mli>>=
 val to_blocks : graph -> Rep.block Unique.Map.t
-val of_blocks : Rep.block Unique.Map.t -> graph
+val of_blocks : Rep.block Unique.Map.t -> graph  (* cheap *)
+val of_block_list : Rep.block list -> graph  (* expensive *)
 @ 
 Traversal: [[postorder_dfs]] returns a list of blocks reachable from
 the entry node.
@@ -581,7 +582,7 @@ let add_blocks blocks (focus, newblocks) =
 let succs = function
   | Exit    _ -> []
   | Branch  (_, l) -> [fst l]
-  | Cbranch (_, t, f) -> [fst t; fst f]
+  | Cbranch (_, t, f) -> [fst f; fst t]  (* order meets layout constraint *)
   | Mbranch (_, edges) -> List.map fst edges
   | Call    c -> List.map (fun e -> fst e.node) c.cal_contedges
   | Cut     (_, edges, _) -> List.map (fun e -> fst e.node) edges
@@ -666,3 +667,7 @@ let last_instr l = match l with
 | Return  (_, r, _) -> r
 | Jump    (r, _, _) -> r
 | Forbidden r -> r
+@ 
+<<zipcfg.ml>>=
+let of_block_list blocks =
+  List.fold_left (fun m b -> Blocks.insert b m) Blocks.empty blocks 

@@ -178,7 +178,7 @@ module Up   = Rtl.Up
 module Make (Arg : ARG) = struct
   module G = Arg.G
   let jx node = (Arg.jx (G.jx node))
-  module D  = Dataflow.Make (G)
+(*  module D  = Dataflow.Make (G) *)
   let replace_with ~sp =
     let w = RU.Width.loc sp in
     let vfp = mk w in
@@ -216,8 +216,11 @@ module Make (Arg : ARG) = struct
             | G.CutTo -> Down.exp (R.late "this can't happen (vfp)" w), unknown
             | _       -> note_sp_changes (Down.rtl rtl) vfp k in
           vfp, k in
+(*
     let fwd = D.fwd_iteration { D.split_info = info; D.merge_split_info = merge
                               ; D.init_info = init; D.propagate = propagate } in
+*)
+    let fwd = Impossible.unimp "rmvfp" in
     fun g -> ignore (fwd g)
 end
 <<definition of [[simp]], which is verbose>>=

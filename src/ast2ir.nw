@@ -42,7 +42,7 @@ The functor parameters and the parameter of type [[string->Call.t]]
 will all go away once the new flow graph ([[Cfg]]) takes over the compiler.
 <<ast2ir.mli>>=
 type tgt  = ((Rtl.exp -> Automaton.t), Call.t) Target.t
-type proc = (Automaton.t, Zipcfg.graph, Call.t, tgt) Proc.t
+type proc = Zipcfg.graph * (Automaton.t, unit, Call.t, tgt) Proc.t
 val translate :  tgt
                 -> proc Fenv.Clean.env'
                 -> optimizer: (proc -> unit)
@@ -105,7 +105,6 @@ some of the usual suspects.
 <<utilities>>=
 let (<<) f g  = fun x -> f (g x) (* function composition *)
 let impossf x = Printf.kprintf Impossible.impossible x
-let unimpf  x = Printf.kprintf Impossible.unimp x
 @ 
 The [[**>]] function is an infix, right-associative function that
 makes it easy to create sequences of flow-graph nodes.
@@ -119,7 +118,7 @@ are internal.
 The types in module [[K]] are used to translate continuations.
 <<ast2ir.ml>>=
 type tgt = ((Rtl.exp -> Automaton.t), C.t) Target.t
-type proc = (Automaton.t, G.graph, C.t, tgt) Proc.t
+type proc = Zipcfg.graph * (Automaton.t, unit, Call.t, tgt) Proc.t
 <<module [[K]], for continution info>>
 <<types for nonvolatile registers>>
 @ 
@@ -942,13 +941,14 @@ The main thing here is dealing with all the blocks.
     List.map (fun (i, h, v, w, n, a) -> i, (Some h, v, Ast.BitsTy w, n, Some a))
     proc.N.formals in
   let i =    
+    g,
     { Proc.symbol      = proc.N.sym
     ; Proc.cc          = proc_cc
     ; Proc.target      = target
     ; Proc.formals     = formals
     ; Proc.temps       = temps
     ; Proc.mk_symbol   = Fenv.Clean.symbol env
-    ; Proc.cfg         = g
+    ; Proc.cfg         = ()
     ; Proc.oldblocks   = (* parms must be first, so call List.rev *)
         { C.callee = List.rev (oldblocks.callee); 
           C.caller = List.rev (oldblocks.caller); }
@@ -971,8 +971,7 @@ The main thing here is dealing with all the blocks.
 Before running the optimizer, we trim away any unreachable code,
 as well as spans associated with unreachable code.
 <<definition of [[proc]], which translates one procedure>>=
-  let fixup = (fun _ -> unimpf "transformations on new graph") in
-  let _ = fixup Optimize.trim_unreachable_code () i in
+  let i, _ = Optimize.trim_unreachable_code () i in
   optimizer i (* runs optimizer, freezes, and assembles proc *)
 @ 
 We define an automaton to allocate suitably aligned locations. 

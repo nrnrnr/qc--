@@ -57,7 +57,6 @@ WHAT DO [[cfg2ast]] AND [[emit]] DO? PLEASE EXPLAIN THE PARAMETERS. --CL
 <<cfgutil.ml>>=
 module A = Ast 
 module G = Cfgx.M 
-module L = Cfgx.Live 
 
 let emit cfg call_emit rtl_emit sym_emit =
   let labels n = if G.kind n =*= G.Join then G.labels n else [] in
@@ -83,7 +82,7 @@ let extend_with preds nodes =
   add_predecessors nodes (List.flatten (List.map preds nodes))
 
 let cfg2dot ~compress ~live ~name g =
-  let () = if live then L.set_live g in
+  let () = if live then assert false in
   let original_nodes = G.fold_layout (fun x y -> x :: y) [] g in
   let nodes = extend_with G.preds original_nodes in
   let nodes = extend_with G.succs nodes in
@@ -107,7 +106,7 @@ let cfg2dot ~compress ~live ~name g =
   let edge_fwd from to' =
     let edge = nodename from ^ " -> " ^ nodename to' in
     if live then
-      edge ^ "[label=\"" ^ Register.SetX.to_string (L.live_in to') ^ "\"]\n"
+      edge ^ "[label=\"" ^ Register.SetX.to_string (assert false) ^ "\"]\n"
     else
       edge ^ "\n" in
   let edge_bwd from to' = nodename to'  ^ " -> " ^ nodename from ^

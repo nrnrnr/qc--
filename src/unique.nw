@@ -33,7 +33,8 @@ module type MAP = sig
   val splitp: (uid -> 'a -> bool) -> 'a t -> 'a * 'a t
     (* split based on predicate *)
   val union : 'a t -> 'a t -> 'a t
-  val fold   : (uid -> 'a -> 'b -> 'b) -> 'a t -> 'b -> 'b
+  val fold  : (uid -> 'a -> 'b -> 'b) -> 'a t -> 'b -> 'b
+  val size  : 'a t -> int
 end
 <<exposed types>>=
 module type SET = sig
@@ -81,6 +82,7 @@ module Map : MAP = struct
       else
         add u v m in
     fold add m m'
+  let size m = fold (fun _ _ n -> n + 1) m 0
 end
 
 module Array : ARRAY = struct

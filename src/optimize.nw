@@ -31,7 +31,7 @@ following predecessors from the exit node.
 The nodes that are unreachable by following successor edges from the entry node
 are removed by [[trim_unreachable_code]].
 <<optimize.mli>>=
-val trim_unreachable_code : 'a -> Ast2ir.proc -> bool
+val trim_unreachable_code : 'a -> Ast2ir.proc -> Ast2ir.proc * bool
 @
 It's also easy to collapse simple branch chains.
 We eliminate a branch to a join point if the branch is the only predecessor of the join
@@ -59,6 +59,7 @@ val validate : 'a -> Ast2ir.proc -> bool
 We provide each of the optimization in turn.
 <<optimize.ml>>=
 module G  = Cfgx.M
+module Z  = Zipcfg
 module P  = Proc
 module RP = Rtl.Private
 module RU = Rtlutil
@@ -76,6 +77,7 @@ let simplify_exps _ {Proc.cfg = cfg} =
     | None   -> rst
     | Some i -> G.update_instr Simplify.rtl n; true in
   G.fold_nodes simplify_node false cfg
+let simplify_exps _ = Impossible.unimp "new simplifier"
 @
 A forward dfs followed by a backwards dfs will find nodes reachable from the entry
 (following successors) and nodes reachable from the exit (following predecessors).
@@ -115,6 +117,11 @@ let trim_unreachable_code _ ({Proc.cfg = cfg} as proc) =
        delete_nodes (hanging_nodes succs @ rst)) in
   delete_nodes (hanging_nodes to_delete);
   not_null to_delete
+
+let trim_unreachable_code _ (g, proc) =
+  let g' = Z.postorder_dfs g in
+  let changed = List.length g' < Unique.Map.size (Z.to_blocks g) in
+  (Z.of_block_list g', proc), changed
 @
 We find each join point with one predecessor, and if the predecessor is a branch to the
 join point, we eliminate the branch and the join point.
@@ -139,6 +146,7 @@ let collapse_branch_chains _ {Proc.cfg = cfg} =
     then (G.delete cfg j; G.delete cfg n) in
   List.iter collapse to_collapse;
   not_null to_collapse
+let collapse_branch_chains _ = Impossible.unimp "new optimizer"
 @
 <<optimize.ml>>=
 let remove_nops _ {Proc.cfg = cfg} =
@@ -160,6 +168,7 @@ let remove_nops _ {Proc.cfg = cfg} =
   let remove n = Cfgutil.delete cfg n; changed := true in
   G.iter_nodes (fun n -> if is_nop (G.to_executable n) then remove n) cfg;
   !changed
+let remove_nops _ = Impossible.unimp "new optimizer"
 @ 
 <<optimize.ml>>=
 let badrtl r =
@@ -172,3 +181,5 @@ let validate _ proc =
   | None -> () in
   G.iter_nodes ok proc.P.cfg;
   false
+
+let validate _ = Impossible.unimp "new optimizer"
