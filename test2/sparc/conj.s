@@ -6,25 +6,36 @@
 Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY:
 Cmm.global_area:
 .section ".text"
-ge:
+foo:
 	save %sp, -96, %sp
 	mov %i0, %g2
-	mov %i1, %g3
 	mov %i7, %g1
 Linitialize_continuations_l6:
 Lproc_body_start_l5:
+	set 1, %g3
 	subcc %g2, %g3, %g0
-	bl Ljoin_l10
+	bne Ljoin_l14
 	nop
-Ljoin_l9:
-	set 1, %g2
-	mov %g2, %i0
-	mov %g1, %i7
-	! Evil recognizer deleted add %sp, 96, %sp
-	ret
-	restore
+Ljoin_l20:
+	ba Ljoin_l10
+	nop
+Ljoin_l14:
+	set 0, %g3
+	subcc %g2, %g3, %g0
+	bne Ljoin_l9
+	nop
+Ljoin_l21:
+	ba Ljoin_l10
+	nop
 Ljoin_l10:
 	set 0, %g2
+	ba Ljoin_l8
+	nop
+Ljoin_l9:
+	set 999, %g2
+	ba Ljoin_l8
+	nop
+Ljoin_l8:
 	mov %g2, %i0
 	mov %g1, %i7
 	! Evil recognizer deleted add %sp, 96, %sp
@@ -38,35 +49,29 @@ main:
 	mov %i1, %g1
 	st %i7, [%sp+100]
 	st %i7, [%sp+96]
-Linitialize_continuations_l23:
-Lproc_body_start_l22:
-	set 987, %g1
+Linitialize_continuations_l26:
+Lproc_body_start_l25:
+	set 0, %g1
 	mov %g1, %o0
-	set 33, %g1
-	mov %g1, %o1
-	call ge, 0
+	call foo, 0
+	nop
+Ljoin_l39:
+	mov %o0, %g1
+	st %g1, [%sp+104]
+	set 1, %g1
+	mov %g1, %o0
+	call foo, 0
 	nop
 Ljoin_l36:
 	mov %o0, %g1
-	st %g1, [%sp+104]
-	set 33, %g1
+	st %g1, [%sp+108]
+	set 2, %g1
 	mov %g1, %o0
-	set 987, %g1
-	mov %g1, %o1
-	call ge, 0
+	call foo, 0
 	nop
 Ljoin_l33:
 	mov %o0, %g1
-	st %g1, [%sp+108]
-	set 987, %g1
-	mov %g1, %o0
-	set 987, %g1
-	mov %g1, %o1
-	call ge, 0
-	nop
-Ljoin_l30:
-	mov %o0, %g1
-	set answer, %g2
+	set fmt, %g2
 	mov %g2, %o0
 	ld [%sp+104], %g2
 	mov %g2, %o1
@@ -75,7 +80,7 @@ Ljoin_l30:
 	mov %g1, %o3
 	call printf, 0
 	nop
-Ljoin_l27:
+Ljoin_l30:
 	set 0, %g1
 	mov %g1, %i0
 	ld [%sp+100], %i7
@@ -84,16 +89,16 @@ Ljoin_l27:
 	ret
 	restore
 .section ".pcmap_data"
-Lstackdata_l44:
+Lstackdata_l47:
 .byte 0
 .byte 0
 .byte 0
 .byte 0
 .section ".pcmap"
-.word Ljoin_l36
-.word Lframe_l45
+.word Ljoin_l39
+.word Lframe_l48
 .section ".pcmap_data"
-Lframe_l45:
+Lframe_l48:
 .byte -1
 .byte -1
 .byte -1
@@ -106,7 +111,73 @@ Lframe_l45:
 .byte -1
 .byte -1
 .byte -12
-.word Lstackdata_l44
+.word Lstackdata_l47
+.byte 0
+.byte 0
+.byte 0
+.byte 2
+.byte 0
+.byte 0
+.byte 0
+.byte 5
+.byte 0
+.byte 0
+.byte 0
+.byte 0
+.byte 0
+.byte 0
+.byte 0
+.byte 1
+.byte 64
+.byte 0
+.byte 0
+.byte 49
+.byte -1
+.byte -1
+.byte -1
+.byte -16
+.byte 64
+.byte 0
+.byte 0
+.byte 19
+.byte 64
+.byte 0
+.byte 0
+.byte 19
+.byte -1
+.byte -1
+.byte -1
+.byte -8
+.byte -1
+.byte -1
+.byte -1
+.byte -4
+.byte 64
+.byte 0
+.byte 0
+.byte 19
+.byte 0
+.byte 0
+.byte 0
+.byte 0
+.section ".pcmap"
+.word Ljoin_l36
+.word Lframe_l49
+.section ".pcmap_data"
+Lframe_l49:
+.byte -1
+.byte -1
+.byte -1
+.byte -20
+.byte -128
+.byte 0
+.byte 0
+.byte 92
+.byte -1
+.byte -1
+.byte -1
+.byte -12
+.word Lstackdata_l47
 .byte 0
 .byte 0
 .byte 0
@@ -157,9 +228,9 @@ Lframe_l45:
 .byte 0
 .section ".pcmap"
 .word Ljoin_l33
-.word Lframe_l46
+.word Lframe_l50
 .section ".pcmap_data"
-Lframe_l46:
+Lframe_l50:
 .byte -1
 .byte -1
 .byte -1
@@ -172,7 +243,7 @@ Lframe_l46:
 .byte -1
 .byte -1
 .byte -12
-.word Lstackdata_l44
+.word Lstackdata_l47
 .byte 0
 .byte 0
 .byte 0
@@ -223,9 +294,9 @@ Lframe_l46:
 .byte 0
 .section ".pcmap"
 .word Ljoin_l30
-.word Lframe_l47
+.word Lframe_l51
 .section ".pcmap_data"
-Lframe_l47:
+Lframe_l51:
 .byte -1
 .byte -1
 .byte -1
@@ -238,73 +309,7 @@ Lframe_l47:
 .byte -1
 .byte -1
 .byte -12
-.word Lstackdata_l44
-.byte 0
-.byte 0
-.byte 0
-.byte 2
-.byte 0
-.byte 0
-.byte 0
-.byte 5
-.byte 0
-.byte 0
-.byte 0
-.byte 0
-.byte 0
-.byte 0
-.byte 0
-.byte 1
-.byte 64
-.byte 0
-.byte 0
-.byte 49
-.byte -1
-.byte -1
-.byte -1
-.byte -16
-.byte 64
-.byte 0
-.byte 0
-.byte 19
-.byte 64
-.byte 0
-.byte 0
-.byte 19
-.byte -1
-.byte -1
-.byte -1
-.byte -8
-.byte -1
-.byte -1
-.byte -1
-.byte -4
-.byte 64
-.byte 0
-.byte 0
-.byte 19
-.byte 0
-.byte 0
-.byte 0
-.byte 0
-.section ".pcmap"
-.word Ljoin_l27
-.word Lframe_l48
-.section ".pcmap_data"
-Lframe_l48:
-.byte -1
-.byte -1
-.byte -1
-.byte -20
-.byte -128
-.byte 0
-.byte 0
-.byte 92
-.byte -1
-.byte -1
-.byte -1
-.byte -12
-.word Lstackdata_l44
+.word Lstackdata_l47
 .byte 0
 .byte 0
 .byte 0
@@ -355,55 +360,40 @@ Lframe_l48:
 .byte 0
 .section ".text"
 .section ".data"
-answer:
-.byte 57
-.byte 56
-.byte 55
+fmt:
+.byte 102
+.byte 111
+.byte 111
+.byte 40
+.byte 48
+.byte 41
 .byte 32
-.byte 62
-.byte 61
-.byte 32
-.byte 51
-.byte 51
-.byte 32
-.byte 61
 .byte 61
 .byte 32
 .byte 37
 .byte 100
 .byte 59
 .byte 32
+.byte 102
+.byte 111
+.byte 111
+.byte 40
+.byte 49
+.byte 41
 .byte 32
-.byte 51
-.byte 51
-.byte 32
-.byte 62
-.byte 61
-.byte 32
-.byte 57
-.byte 56
-.byte 55
-.byte 32
-.byte 61
 .byte 61
 .byte 32
 .byte 37
 .byte 100
 .byte 59
 .byte 32
+.byte 102
+.byte 111
+.byte 111
+.byte 40
+.byte 50
+.byte 41
 .byte 32
-.byte 57
-.byte 56
-.byte 55
-.byte 32
-.byte 62
-.byte 61
-.byte 32
-.byte 57
-.byte 56
-.byte 55
-.byte 32
-.byte 61
 .byte 61
 .byte 32
 .byte 37

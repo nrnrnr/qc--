@@ -2,12 +2,14 @@
 .global Cmm.global_area
 .global Cmm.globalsig.bcPDWKVXdYZZBPSFTVVJOBXQNc
 .section ".data"
-/* memory for global registers */
+! memory for global registers
 Cmm.globalsig.bcPDWKVXdYZZBPSFTVVJOBXQNc:
 Cmm.global_area:
 .section ".text"
 f:
-	save %sp, -112, %sp
+	save %sp, -128, %sp
+	st %i7, [%sp+116]
+	st %i7, [%sp+112]
 Linitialize_continuations_l7:
 Lproc_body_start_l6:
 	set 388380743, %g1
@@ -31,103 +33,190 @@ Lproc_body_start_l6:
 	call c_fun, 0
 	nop
 Ljoin_l11:
-	! Evil recognizer deleted add %sp, 112, %sp
+	ld [%sp+116], %i7
+	ld [%sp+112], %i7
+	! Evil recognizer deleted add %sp, 128, %sp
 	ret
 	restore
 .section ".pcmap_data"
 Lstackdata_l19:
-.word 0
+.byte 0
+.byte 0
+.byte 0
+.byte 0
 .section ".pcmap"
 .word Ljoin_l11
 .word Lframe_l20
 .section ".pcmap_data"
 Lframe_l20:
-.word 0xffffffec
-.word 0x8000005c
-.word 0x40000031
+.byte -1
+.byte -1
+.byte -1
+.byte -36
+.byte -128
+.byte 0
+.byte 0
+.byte 92
+.byte -1
+.byte -1
+.byte -1
+.byte -12
 .word Lstackdata_l19
-.word 0x80000000
-.word 0x80000000
-.word 0x80000000
-.word 0x80000001
-.word 0x80000000
+.byte 0
+.byte 0
+.byte 0
+.byte 2
+.byte 0
+.byte 0
+.byte 0
+.byte 0
+.byte 0
+.byte 0
+.byte 0
+.byte 0
+.byte 0
+.byte 0
+.byte 0
+.byte 1
+.byte 64
+.byte 0
+.byte 0
+.byte 49
+.byte -1
+.byte -1
+.byte -1
+.byte -16
+.byte 0
+.byte 0
+.byte 0
+.byte 0
 .section ".text"
 .section ".text"
 c_fun:
-	save %sp, -112, %sp
-	add %sp, 112, %g1
-	set -16, %g2
-	add %g1, %g2, %g3
-	st %i0, [%g3]
-	add %sp, 112, %g3
-	set -12, %g1
-	add %g3, %g1, %g2
-	st %i1, [%g2]
-	add %sp, 112, %g2
-	set -8, %g1
-	add %g2, %g1, %g3
-	st %i2, [%g3]
-	add %sp, 112, %g3
-	set -4, %g1
-	add %g3, %g1, %g2
-	st %i3, [%g2]
+	save %sp, -128, %sp
+	add %sp, 128, %g1
+	set -32, %g2
+	add %g1, %g2, %g1
+	st %i0, [%g1]
+	add %sp, 128, %g1
+	set -28, %g2
+	add %g1, %g2, %g1
+	st %i1, [%g1]
+	add %sp, 128, %g1
+	set -24, %g2
+	add %g1, %g2, %g1
+	st %i2, [%g1]
+	add %sp, 128, %g1
+	set -20, %g2
+	add %g1, %g2, %g1
+	st %i3, [%g1]
+	st %i7, [%sp+116]
+	st %i7, [%sp+112]
 Linitialize_continuations_l24:
 Lproc_body_start_l23:
-	set fmt, %g2
-	mov %g2, %o0
-	add %sp, 112, %g2
-	set -12, %g1
-	add %g2, %g1, %g3
-	ld [%g3], %g1
+	set fmt, %g1
+	mov %g1, %o0
+	add %sp, 128, %g1
+	set -28, %g2
+	add %g1, %g2, %g1
+	ld [%g1], %g1
 	mov %g1, %o2
-	add %sp, 112, %g1
-	set -16, %g3
-	add %g1, %g3, %g2
-	ld [%g2], %g1
+	add %sp, 128, %g1
+	set -32, %g2
+	add %g1, %g2, %g1
+	ld [%g1], %g1
 	mov %g1, %o1
-	add %sp, 112, %g1
-	set -4, %g2
-	add %g1, %g2, %g3
-	ld [%g3], %g1
+	add %sp, 128, %g1
+	set -20, %g2
+	add %g1, %g2, %g1
+	ld [%g1], %g1
 	mov %g1, %o4
-	add %sp, 112, %g1
-	set -8, %g3
-	add %g1, %g3, %g2
-	ld [%g2], %g1
+	add %sp, 128, %g1
+	set -24, %g2
+	add %g1, %g2, %g1
+	ld [%g1], %g1
 	mov %g1, %o3
 	call printf, 0
 	nop
 Ljoin_l28:
 	mov %o0, %g1
-	! Evil recognizer deleted add %sp, 112, %sp
+	ld [%sp+116], %i7
+	ld [%sp+112], %i7
+	! Evil recognizer deleted add %sp, 128, %sp
 	ret
 	restore
 .section ".pcmap_data"
 Lstackdata_l36:
-.word 0
+.byte 0
+.byte 0
+.byte 0
+.byte 0
 .section ".pcmap"
 .word Ljoin_l28
 .word Lframe_l37
 .section ".pcmap_data"
 Lframe_l37:
-.word 0xffffffec
-.word 0x8000005c
-.word 0x40000031
+.byte -1
+.byte -1
+.byte -1
+.byte -36
+.byte -128
+.byte 0
+.byte 0
+.byte 92
+.byte -1
+.byte -1
+.byte -1
+.byte -12
 .word Lstackdata_l36
-.word 0x80000000
-.word 0x80000003
-.word 0x80000000
-.word 0x80000001
-.word 0xfffffff0
-.word 0xfffffff8
-.word 0
-.word 0x80000000
+.byte 0
+.byte 0
+.byte 0
+.byte 2
+.byte 0
+.byte 0
+.byte 0
+.byte 3
+.byte 0
+.byte 0
+.byte 0
+.byte 0
+.byte 0
+.byte 0
+.byte 0
+.byte 1
+.byte 64
+.byte 0
+.byte 0
+.byte 49
+.byte -1
+.byte -1
+.byte -1
+.byte -16
+.byte -1
+.byte -1
+.byte -1
+.byte -32
+.byte -1
+.byte -1
+.byte -1
+.byte -24
+.byte 64
+.byte 0
+.byte 0
+.byte 19
+.byte 0
+.byte 0
+.byte 0
+.byte 0
 .section ".text"
 .section ".text"
 main:
-	save %sp, -96, %sp
+	save %sp, -112, %sp
 	mov %i0, %g1
 	mov %i1, %g1
+	st %i7, [%sp+100]
+	st %i7, [%sp+96]
 Linitialize_continuations_l41:
 Lproc_body_start_l40:
 	call f, 0
@@ -135,28 +224,71 @@ Lproc_body_start_l40:
 Ljoin_l45:
 	set 0, %g1
 	mov %g1, %i0
-	! Evil recognizer deleted add %sp, 96, %sp
+	ld [%sp+100], %i7
+	ld [%sp+96], %i7
+	! Evil recognizer deleted add %sp, 112, %sp
 	ret
 	restore
 .section ".pcmap_data"
 Lstackdata_l53:
-.word 0
+.byte 0
+.byte 0
+.byte 0
+.byte 0
 .section ".pcmap"
 .word Ljoin_l45
 .word Lframe_l54
 .section ".pcmap_data"
 Lframe_l54:
-.word 0xfffffffc
-.word 0x8000005c
-.word 0x40000031
+.byte -1
+.byte -1
+.byte -1
+.byte -20
+.byte -128
+.byte 0
+.byte 0
+.byte 92
+.byte -1
+.byte -1
+.byte -1
+.byte -12
 .word Lstackdata_l53
-.word 0x80000000
-.word 0x80000002
-.word 0x80000000
-.word 0x80000001
-.word 0
-.word 0
-.word 0x80000000
+.byte 0
+.byte 0
+.byte 0
+.byte 2
+.byte 0
+.byte 0
+.byte 0
+.byte 2
+.byte 0
+.byte 0
+.byte 0
+.byte 0
+.byte 0
+.byte 0
+.byte 0
+.byte 1
+.byte 64
+.byte 0
+.byte 0
+.byte 49
+.byte -1
+.byte -1
+.byte -1
+.byte -16
+.byte 64
+.byte 0
+.byte 0
+.byte 19
+.byte 64
+.byte 0
+.byte 0
+.byte 19
+.byte 0
+.byte 0
+.byte 0
+.byte 0
 .section ".text"
 .section ".data"
 fmt:

@@ -2,7 +2,7 @@
 .global Cmm.global_area
 .global Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY
 .section ".data"
-/* memory for global registers */
+! memory for global registers
 Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY:
 Cmm.global_area:
 .section ".data"
@@ -29,9 +29,11 @@ failed:
 .byte 0
 .section ".text"
 main:
-	save %sp, -96, %sp
+	save %sp, -112, %sp
 	mov %i0, %g1
 	mov %i1, %g1
+	st %i7, [%sp+100]
+	st %i7, [%sp+96]
 Linitialize_continuations_l6:
 Lproc_body_start_l5:
 	set -1420500317, %g1
@@ -41,7 +43,9 @@ Lproc_body_start_l5:
 Ljoin_l10:
 	set 0, %g1
 	mov %g1, %i0
-	! Evil recognizer deleted add %sp, 96, %sp
+	ld [%sp+100], %i7
+	ld [%sp+96], %i7
+	! Evil recognizer deleted add %sp, 112, %sp
 	ret
 	restore
 .section ".pcmap_data"
@@ -52,22 +56,26 @@ Lstackdata_l18:
 .word Lframe_l19
 .section ".pcmap_data"
 Lframe_l19:
-.word 0xfffffffc
+.word 0xffffffec
 .word 0x8000005c
-.word 0x40000031
+.word 0xfffffff4
 .word Lstackdata_l18
-.word 0x80000000
-.word 0x80000002
-.word 0x80000000
-.word 0x80000001
+.word 2
+.word 2
 .word 0
+.word 1
+.word 0x40000031
+.word 0xfffffff0
+.word 0x40000013
+.word 0x40000013
 .word 0
-.word 0x80000000
 .section ".text"
 .section ".text"
 callee:
-	save %sp, -96, %sp
+	save %sp, -112, %sp
 	mov %i0, %g1
+	st %i7, [%sp+100]
+	st %i7, [%sp+96]
 Linitialize_continuations_l23:
 Lproc_body_start_l22:
 	set -1420500317, %g2
@@ -80,7 +88,9 @@ Ljoin_l33:
 	call printf, 0
 	nop
 Ljoin_l27:
-	! Evil recognizer deleted add %sp, 96, %sp
+	ld [%sp+100], %i7
+	ld [%sp+96], %i7
+	! Evil recognizer deleted add %sp, 112, %sp
 	ret
 	restore
 Ljoin_l32:
@@ -89,7 +99,9 @@ Ljoin_l32:
 	call printf, 0
 	nop
 Ljoin_l31:
-	! Evil recognizer deleted add %sp, 96, %sp
+	ld [%sp+100], %i7
+	ld [%sp+96], %i7
+	! Evil recognizer deleted add %sp, 112, %sp
 	ret
 	restore
 .section ".pcmap_data"
@@ -100,29 +112,33 @@ Lstackdata_l41:
 .word Lframe_l42
 .section ".pcmap_data"
 Lframe_l42:
-.word 0xfffffffc
+.word 0xffffffec
 .word 0x8000005c
-.word 0x40000031
+.word 0xfffffff4
 .word Lstackdata_l41
-.word 0x80000000
-.word 0x80000001
-.word 0x80000000
-.word 0x80000001
+.word 2
+.word 1
 .word 0
-.word 0x80000000
+.word 1
+.word 0x40000031
+.word 0xfffffff0
+.word 0x40000013
+.word 0
 .section ".pcmap"
 .word Ljoin_l31
 .word Lframe_l43
 .section ".pcmap_data"
 Lframe_l43:
-.word 0xfffffffc
+.word 0xffffffec
 .word 0x8000005c
-.word 0x40000031
+.word 0xfffffff4
 .word Lstackdata_l41
-.word 0x80000000
-.word 0x80000001
-.word 0x80000000
-.word 0x80000001
+.word 2
+.word 1
 .word 0
-.word 0x80000000
+.word 1
+.word 0x40000031
+.word 0xfffffff0
+.word 0x40000013
+.word 0
 .section ".text"
