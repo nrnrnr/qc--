@@ -141,7 +141,7 @@ let checkProgram env program =
     let env        = ValueEnv.Bind.globals env program             in
     let env        = ValueEnv.Eval.doGlobalConst env  program in
     let env        = F.setDefaults env                             in
-        E.matchPair (Semantics.program env program, F.errorfree env)
+        E.ematchPair (Semantics.program env program, F.errorfree env)
         ( function
         | env, () -> env
         ) 
@@ -889,7 +889,7 @@ let rec evalPrimOp' op env args =
         rt, f av
 <<>>=
 and evalPrimOp env op args =
-    E.emap (evalPrimOp' op env) (evalExprs env args)
+    E.ematch (evalExprs env args) (evalPrimOp' op env) 
 
 <<>>=
 and evalExprs env ee = E.Raise.list (List.map (evalExpr env) ee)
@@ -924,10 +924,9 @@ type and value in the environment.
 
 <<>>=
 let doConstDecl scope env ((ty,name,expr),r) = 
-    let seqPair p f = E.sequence f (E.Raise.pair p)                in
-    let seq     x f = E.sequence f x                               in
+    let seqPair p = E.sequence (E.Raise.pair p)                in
     let consistent t = match ty with None -> true | Some t' -> t'=t in
-    let entry = seq (evalExpr env expr) 
+    let entry = E.sequence (evalExpr env expr) 
         ( function
         | (t,v) when t <> Types.bool -> E.Ok(F.Constant(v),t)
         | (t,v) -> 
@@ -1056,14 +1055,14 @@ let rec tyFetch : F.env -> A.lvalue -> F.ty E.error = fun env -> function
                     | Some a when is2power a -> a
                     | Some a -> E.error "alignment not a power of 2"
         in
-            E.matchPair (te, te) 
+            E.ematchPair (te, te) 
             ( function
             | te, t' when te = Types.data -> t'
             | otherwise -> E.error "memory reference by non-data pointer"
             )
 <<>>=        
  (* tyAppl: Types.tyscheme -> Types.ty list E.error -> Types.ty E.error *)
-and tyAppl opTy argTys = E.emap (Types.appl opTy) argTys
+and tyAppl opTy argTys = E.ematch argTys (Types.appl opTy) 
 @
 
 For now we are using the types of the primitive constant operators. 
@@ -1113,7 +1112,7 @@ Here is a function to check for a type and report an error in case of
 a mismatch.
 
 <<>>=
-let isTy t msg = E.emap (fun t' -> if t=t' then () else E.error msg) 
+let isTy t msg x = E.ematch x (fun t' -> if t=t' then () else E.error msg) 
 @
 
 Initial values for memory must be either compile-time constants or
@@ -1150,7 +1149,7 @@ match the declared type.
 <<>>=
 let memdecl env ty size = function 
     | None     -> E.Implode.pair (memsize env size, evalTy env ty)
-    | Some (i) -> E.combine (E.matchPair (init env i, evalTy env ty)
+    | Some (i) -> E.combine (E.ematchPair (init env i, evalTy env ty)
         ( function 
         | tys, ty' ->
             let n           = List.length tys in
@@ -1302,7 +1301,7 @@ let lvalue context env lv =
         | _, _              -> E.error ("not a register: "^name)
         )
     | A.Mem(t, e, a) when context <> Assign  -> E.error ("not a register") 
-    | A.Mem(t, e, a) -> E.matchQuad 
+    | A.Mem(t, e, a) -> E.ematchQuad 
         (tyExpr env e, evalTy env t, align a, F.findMemsize env) 
         ( function  
         | te, t, (), Some m when not (multiMemsize m t) -> E.error msg
@@ -1318,8 +1317,7 @@ An [[if]] expression must have type [[bool]].
 
 <<>>=
 let rec ifStmt env e ss1 ss2 =
-    let seq f x = E.sequence x f in
-    seq (tyExpr env e) 
+    E.sequence (tyExpr env e) 
     ( function 
     | ty when ty = T.bool -> E.Implode.pair (stmts env ss1, stmts env ss2)
     | otherwise           -> E.error "if-condition must be of type bool"
@@ -1425,7 +1423,7 @@ and returnStmt env cc alt args =
         | None         -> tys
         | Some (e1,e2) -> let e1' = constExpr env e1 in
                           let e2' = constExpr env e2 in
-                          ( E.combine (E.matchPair (e1',e2') 
+                          ( E.combine (E.ematchPair (e1',e2') 
                             ( function 
                             | x when f x -> tys
                             | otherwise  -> E.error "illegal <x/y> combination"
@@ -1445,7 +1443,7 @@ and assignStmt env (lvalues,exprs) =
                 E.error "length of lhs/rhs in assignment differs"
     in
     let pair (lhs,expr) =  
-        E.matchPair (lvalue Assign env lhs, tyExpr env expr) 
+        E.ematchPair (lvalue Assign env lhs, tyExpr env expr) 
         ( function 
         | t, te when t = te -> ()
         | otherwise         -> E.error "type mismatch in assignment"
@@ -1467,10 +1465,9 @@ and callStmt env (l,cc,e,args,ts,fs) =
     let fs'     = flows false env fs                in
     let args'   = List.map snd args                 in
     let argsTy  = E.Implode.map (tyExpr env) args'  in
-    let seq f x = E.sequence x f                    in    
         if ts = [] && not (isLabel env e) then
             E.error "a target annotation for this call is missing"
-        else seq (tyExpr env e) 
+        else E.sequence (tyExpr env e) 
         ( function 
         | t when t = T.code -> E.Implode.quad (lt,ts',fs',argsTy)
         | otherwise         -> E.error "call-expression is not a pointer"
@@ -1505,7 +1502,7 @@ and range t env = function
         )
 
     | A.Range(e1,e2) -> 
-        E.matchPair (constExpr env e1, constExpr env e2) 
+        E.ematchPair (constExpr env e1, constExpr env e2) 
         ( function 
         | (t1,v1), (t2,v2) when t1=t && t2=t -> ()
         | otherwise -> E.error "Range type does not match expression type"
@@ -1537,7 +1534,7 @@ and switchStmt env (r, expr, arms) =
                                    , range t env r
                                    ) 
         | None   -> E.Implode.map (arm t env) arms in
-    let r = E.sequence f (tyExpr env expr) in
+    let r = E.sequence (tyExpr env expr) f in
         if arms = [] then
             E.error "empty switch statement"
         else r    
@@ -1592,7 +1589,7 @@ and export' env = function
         | _                   -> E.error (name^" can't be exported")
         )
     | Some t, name -> 
-        E.matchPair (F.findv' name env, evalTy env t)
+        E.ematchPair (F.findv' name env, evalTy env t)
         ( function
         | (F.Label(F.Proc _ ),t), t' when t = t' -> ()
         | (F.Label(F.Code   ),t), t' when t = t' -> ()
@@ -1640,7 +1637,7 @@ The [[proc]] function returns a pair of a [[F.env]] and [[E.error]].
 The environment contains an updated binding for the procedure that
 includes its local environment.  Returning the environment as [[F.env
 E.error]] is not an option because after the first error an
-environment would be longer available.
+environment would be no longer available.
 
 <<>>=
 and proc r env (cc, name, ff, bb) =

@@ -31,6 +31,10 @@ type env
 <<function signatures>>
 @
 
+% ------------------------------------------------------------------ 
+\subsubsection{Types and Values}
+% ------------------------------------------------------------------ 
+
 {\PAL} knows two scopes and two kinds of names that are scoped: 
 values and types declared at the top-level and section-level have
 global scope, values and types declared inside procedures have local
@@ -119,16 +123,9 @@ Any attempt to re-declare a name in a scope is detected by the
 declaration of a name is re-bound to [[Error]] to flag the problem in
 the environment. The [[bind*]] functions never fail.
 
-The function [[rebindv name x env]] re-binds [[name]] to [[x]].  Since
-this is only intended to update the informations for an exsisting
-[[name]], [[name]] must be bound in [[env]] as a value.  The scope and
-source code location of the existing binding is re-used for the new
-binding.
-
 <<>>=
 val bindv           : string -> attr  -> ventry  -> env -> env
 val bindt           : string -> attr  -> tentry  -> env -> env
-val rebindv         : string ->          ventry  -> env -> env
 @
 
 The [[find*]] functions lookup the meaning of a name in the value or
@@ -142,6 +139,15 @@ val findt           : string -> env -> scope * tentry
 val findv'          : string -> env -> ventry
 val findt'          : string -> env -> tentry
 @
+
+<<>>=
+(* will go away *)
+val rebindv  : string ->          ventry  -> env -> env
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Other informations}
+% ------------------------------------------------------------------ 
 
 The [[srcmap]] function returns the [[Srcmap.map]] value passed to
 [[create]].
@@ -166,6 +172,21 @@ val bindEndianness  : Srcmap.reg -> endianness -> env -> env
 val findMemsize     : env -> int option Error.error
 val findEndianness  : env -> endianness option Error.error  
 @
+
+Not all errors detected by the check of the static semantics manifest
+them self in an error-binding for a type or value.  However, we want
+to detect any error after we have checked the static semantics by
+scanning the environment.  So we provide a function to flag an error
+in the environment; once this flag is set, it can't be un-set.  Setting
+it a second time does not produce a new environment.
+
+<<>>=
+val flagError: env -> env
+@
+ 
+
+When the check of the static semantic detects an error that does not
+lead to an [[Error.Error]] binding for a name in the environment
 
 The function [[errorfree]] checks whether a fat environment [[env]]
 binds any [[Error.Error]] value.  In case it does, it return
@@ -232,6 +253,7 @@ and  env            = { tenv   :      tenv
                       ; venv   :      venv
                       ; target :      target
                       ; srcmap :      Srcmap.map
+                      ; error  :      bool
                       }    
 
 
@@ -246,16 +268,19 @@ let create map      = { tenv   = StrMap.empty
                                  ; charset    = E.Ok(None)
                                  }
                       ; srcmap = map
+                      ; error  = false
                       }
 @
 
 % ------------------------------------------------------------------ 
-\subsubsection{Sourcemap}
+\subsubsection{Sourcemap and error flag}
 % ------------------------------------------------------------------ 
 
 <<>>=
-let srcmap env = env.srcmap
+let srcmap env    = env.srcmap
+let flagError env = { env with error = true }
 @
+
 
 % ------------------------------------------------------------------ 
 \subsubsection{Bindings for types and values}
@@ -382,8 +407,7 @@ case [[Error]] is returned.
 
 <<>>=
 let update r env name old new' =
-    let seq f x = E.sequence x f in
-        seq old
+        E.sequence old
         ( function
         | Some x as old when x = new' -> E.Ok(old) (* consistent   *)
         | Some x               -> 

@@ -39,18 +39,37 @@ type pretty         = string                    (* for the moment *)
 exception ErrorExn  of pretty
 val error :         pretty -> 'a
 @
+
+In the original paper \textit{Eliminating Spurious Error Messages
+Using Exceptions, Polymorphism and Higher-Order Functions}
+\cite{ramsey:99:compj} higher order functions usually expect functions
+as the first argument:  [[('a -> 'b) -> 'a error -> 'b error]] and
+arguments to them at higher positions.  Moving the function argument
+to the last position [['a error -> ('a -> 'b)]] provides more
+syntactical freedom because the function can be easier written inline,
+covering multiple lines of source code.  For this reason function
+arguments will come last.
+
 Combinators to deal with functions that do not naturally expect 
 values of type [[error]].
+
 <<error.mli>>=
 val combine     : 'a error error -> 'a error
-val emap        : ('a -> 'b) -> 'a error -> 'b error
-val sequence    : ('a -> 'b error) -> 'a error -> 'b error
+val ematch      : 'a error -> ('a -> 'b) -> 'b error
+val ematchPair  : 'a error * 'b error -> ('a * 'b -> 'c) -> 'c error
+val ematchTriple: 'a error * 'b error * 'c error -> 
+                   ('a * 'b * 'c -> 'd) -> 'd error
+val ematchQuad  : 'a error * 'b error * 'c error * 'd error -> 
+                   ('a * 'b * 'c * 'd -> 'e) -> 'e error
+val sequence    : 'a error -> ('a -> 'b error) -> 'b error
 @
+
 Raising combinators raise the constructors of an [[error]] value
 inside a complex value to the top-level.  A complex value is bad when
 one of its components is bad and good otherwise.  The raising
 combinators deal with the most important data types:  options, lists,
 and tuples.
+
 <<error.mli>>=
 module Raise :
   sig
@@ -69,19 +88,6 @@ a pair when raising the constructor.
                   -> ('a * 'b * 'c * 'd) error
   end
 @
-The following functions offer some more convenient syntax for common
-idioms.  
-
-<<error.mli>>=
-val ematch      : 'a error -> ('a -> 'b) -> 'b error       
-                  (* ematch v f = emap f e *)
-val matchPair   : 'a error * 'b error -> ('a * 'b -> 'c) -> 'c error
-                  (* matchPair p f = emap f (Raise.pair p) *)
-val matchTriple : 'a error * 'b error * 'c error -> 
-                   ('a * 'b * 'c -> 'd) -> 'd error
-val matchQuad   : 'a error * 'b error * 'c error * 'd error -> 
-                   ('a * 'b * 'c * 'd -> 'e) -> 'e error
-@ 
 
 Lowering functions take a complex [[error]] value and push the
 constructor from the top-level to the values inside the [[error]]
@@ -156,10 +162,10 @@ argument.  Typically the location is supplied to the function like in
 exceptions are caught and not where they are raised.
 
 <<>>=
-val errorPointPrt : Srcmap.point -> string -> unit
+val errorPointPrt  : Srcmap.point -> string -> unit
 val errorRegionPrt : Srcmap.region -> string -> unit
-val errorPosPrt : Srcmap.pos -> string -> unit
-val errorRegPrt : Srcmap.reg -> string -> unit
+val errorPosPrt    : Srcmap.pos -> string -> unit
+val errorRegPrt    : Srcmap.reg -> string -> unit
 @
 
 % ------------------------------------------------------------------  
@@ -173,22 +179,11 @@ type 'a error       = Error                     (* bad result  *)
 type pretty         = string                    (* for the moment *)
 
 exception ErrorExn  of    pretty
-
-<<>>=
-let combine = function  
-    | Ok x      -> x
-    | Error     -> Error
-
-<<>>=
-let emap f = function
-    | Ok x      -> Ok (f x)
-    | Error     -> Error
-
-<<>>=
-let sequence f = function
-    | Ok x      -> f x
-    | Error     -> Error
 @
+
+% ------------------------------------------------------------------ 
+\subsubsection{Raising functions}
+% ------------------------------------------------------------------ 
 
 Raising combinators raise the constructors of an [[error]] value inside
 a complex value to the top-level. A complex value is bad when one
@@ -239,14 +234,10 @@ let quad = function
     | (Ok a,Ok b,Ok c,Ok d) -> Ok (a,b,c,d)
     | _                     -> Error
 @
-Here come the convenience functions.
 
-<<error.ml>>=
-let ematch       x1 f = emap f x1
-let matchPair    x2 f = emap f (Raise.pair x2)
-let matchTriple  x3 f = emap f (Raise.triple x3)
-let matchQuad    x4 f = emap f (Raise.quad x4)
-@ 
+% ------------------------------------------------------------------ 
+\subsubsection{Lowering functions}
+% ------------------------------------------------------------------ 
 
 Lowering functions take a complex [[error]] value and push the
 constructor from the top-level to the values inside the [[error]]
@@ -271,6 +262,10 @@ let quad = function
     | Ok (a,b,c,d)          -> Ok a , Ok b , Ok c , Ok d
     | Error                 -> Error, Error, Error, Error
 @ 
+
+% ------------------------------------------------------------------ 
+\subsubsection{Reduction functions}
+% ------------------------------------------------------------------ 
 
 Sometimes it is sufficient to distinguish between good and bad
 values. Any complex value that has a bad value in it is itself bad.
@@ -322,6 +317,39 @@ let map f l =
         loop ok l 
 @
 
+% ------------------------------------------------------------------ 
+\subsubsection{Error functions}
+% ------------------------------------------------------------------ 
+
+The following combinators bridge the gap between code that uses error
+propagation using the [[error]] type and code that doesn't.
+
+<<error.ml>>=
+let combine = function  
+    | Ok x      -> x
+    | Error     -> Error
+
+<<>>=
+let ematch x f = match x with
+    | Ok x      -> Ok (f x)
+    | Error     -> Error
+
+<<>>=
+let ematchPair    x2 = ematch (Raise.pair x2)
+let ematchTriple  x3 = ematch (Raise.triple x3)
+let ematchQuad    x4 = ematch (Raise.quad x4)
+
+
+<<>>=
+let sequence x f = match x with 
+    | Ok x      -> f x
+    | Error     -> Error
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Error reporting}
+% ------------------------------------------------------------------ 
+
 We provide functions to raise the error ([[ErrorExn]]) exception and
 issue warnings.
 
@@ -334,6 +362,12 @@ let catch' default printer f arg =
 <<>>=    
 let catch printer f arg = catch' Error printer f arg
 let error msg           = raise (ErrorExn msg)
+@
+
+The following functions print error and warning messages. They differ
+in the argument describing a source code position the error is
+attributed to.
+
 <<>>=
 let warningPrt msg = 
     ( prerr_string "Warning: "
