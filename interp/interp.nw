@@ -269,8 +269,8 @@ patterns
     EMIT_RADDR    PUSH_SYMBOL    OP
     FETCH_ROUND   STORE_ROUND    FETCH_SP
     PLACECODE     BREAKPT
-    HALT
-  ] is op = {0 to 36}
+    HALT          FORBIDDEN
+  ] is op = {0 to 37}
 @ 
 
 To add an instruction to the bytecode, one must simply add an instruction name to the [[op]] table above and increase the upper bound of [[op]]'s value range.
@@ -287,11 +287,11 @@ patterns
   memory  is FETCH | STORE  | GSTORE
   nullary is HALT  |  GOTO  | CMM_TAIL_CALL   | CUT           | END_PROC
            | FETCH_ROUND    | STORE_ROUND     | FETCH_SP
-           | BREAKPT
+           | BREAKPT        | FORBIDDEN
 @ 
-
-The [[relocatable]] and [[placeholder]] keywords allow us to specify that some arguments to instructions will be relocatable addresses ([[RAddr]]s).
-
+The [[relocatable]] and [[placeholder]] keywords allow us to specify
+that some arguments to instructions will be relocatable addresses
+([[RAddr]]s). 
 <<bytecode.sled>>=
 relocatable addr
 relocatable addr2
@@ -299,9 +299,7 @@ relocatable addr2
 placeholder for bcode is PLACECODE
 placeholder for long  is bits32 = 0
 @ 
-
 Now, we create constructors for our instructions (or for groups of instructions as we defined them in the above pattern definition); these are used in our C code when we need to use the toolkit to parse the bytecode into something human-readable.
-
 <<bytecode.sled>>=
 constructors
   any8           bits8                is any8;       bits8

@@ -91,6 +91,7 @@ end
 %type immed {: string :}
 %type immed8 {: string :}
 %type inst {: string :}
+%type inthandler {: string :}
 %type lconst {: string :}
 %type lateconst {: string :}
 %type mem {: string :}
@@ -588,6 +589,13 @@ inst : Par(Goto(eaddr),Par(Store(stacknext, Fetch(eip, x:w), y:w), push))
 inst : Par(Goto(lconst),Par(Store(stacknext, Fetch(eip, x:w), y:w), push))
         {: "call " ^ lconst :}
 @ 
+An interrupt is forbidden.
+<<rules>>=
+inst : Par(Goto(inthandler),Par(Store(stacknext, Fetch(eip, x:w), y:w), push))
+        {: "int " ^ inthandler :}
+
+inthandler : X86IdtPc(const) {: const :}
+@ 
 \paragraph{Floating point}
 <<rules>>=
 one3  : Bits(b:bits)
@@ -842,6 +850,7 @@ constructor for each operator.
 | RP.App((("quot"|"rem"|"div"|"mod"|"divu"|"modu"|"mulx"|"mulux") as op, [w]), [x; y])->
     conNonLlrOp op
 | RP.App((("neg") as op, [w]), [x]) -> conNonLlrOp op
+| RP.App(("x86_idt_pc", []), [x]) -> conX86IdtPc (exp x)
 | RP.App((("add"|"sub"|"mul"|"sx"|"zx"|"lobits"|"x86_subflags"|"bitInsert"|
            "bitExtract"|"fabs"|"fneg"|"fdiv"|"fmul"|"fsub"|"fadd"|"f2f"|"f2i"|
            "i2f"|"and"|"or"|"xor"|"com") as op, ws), xs)->

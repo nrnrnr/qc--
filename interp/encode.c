@@ -546,6 +546,14 @@ void breakpt(void) {
 }
 /**************
 
+forbidden  is (FORBIDDEN) op == 37
+
+***********/
+void forbidden(void) {
+  emitm(37, 1);
+}
+/**************
+
 store_local bits16 is 
   (store_local8) op ==  8; bits8 = bits16 
   | (store_local16) op == 12; bits16 = bits16
