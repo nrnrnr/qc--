@@ -243,10 +243,14 @@ See the paper for this.
 val bitcounter    : int ref -> stage
 val offsetregs : int ref -> Register.t list -> stage
 @ 
-And also see the pape for this:
+And also see the paper for this:
 <<exported values>>=
 val argcounter : int ref -> stage
 val argnoregs  : int ref -> Register.t list -> stage
+@ 
+And this is documented nowhere, not even in the paper.
+<<exported values>>=
+val postprocess : implementation -> (result -> result) -> implementation
 @
 \paragraph{Combination of multiple stages}
 It can be useful to hand out different registers from different piles.
@@ -890,3 +894,12 @@ let to_old l = new loc' l
 val unit : stage
 <<automaton.ml>>=
 let unit = wrap (fun next -> next)
+@ 
+<<automaton.ml>>=
+let postprocess (I i) f =
+  I (fun ~start ->
+      let m = i start in
+      { allocate = m.allocate
+      ; freeze = (fun rs ms -> f (m.freeze rs ms))
+      } )
+
