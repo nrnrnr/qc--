@@ -70,6 +70,11 @@ module ReadWrite: sig
     val fold: read: 'a observer -> write: 'a observer -> Rtl.rtl -> 'a -> 'a
     val sets: Rtl.rtl -> (Register.Set.t * Register.Set.t)
 end
+@ 
+<<rtlutil.mli>>=
+module ReadWriteKill: sig
+    val sets: Rtl.rtl -> Register.Set.t * Register.Set.t * Register.Set.t
+end
 @    
 
 % ------------------------------------------------------------------ 
@@ -184,6 +189,10 @@ module ReadWrite = struct
     <<ReadWrite>>
 end
 
+module ReadWriteKill = struct
+    <<ReadWriteKill>>
+end
+
 module Subst2 = struct
     <<Subst2>>
 end
@@ -280,6 +289,37 @@ let sets (rtl:Rtl.rtl) =
         (left, Register.Set.add (reg space index width) right) in
     let empty = (Register.Set.empty, Register.Set.empty) in
         fold ~read:add_left ~write:add_right rtl empty
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Registers read, written, and killed by an RTL}
+% ------------------------------------------------------------------ 
+
+<<ReadWriteKill>>=
+let fold ~read ~write ~kill r z = 
+  let rec rtl z (RP.Rtl gs) = List.fold_left guarded z gs
+      and guarded z (g, eff) = exp (effect z eff) g
+      and effect z eff = match eff with
+        | RP.Store (lhs, rhs, _)         -> loc write (exp z rhs) lhs
+        | RP.Kill lhs                    -> loc kill  z lhs
+      and loc which z l = match l with
+        | RP.Mem (space, _, w, addr, _)  -> exp z addr
+        | RP.Reg r                       -> which r z
+        | RP.Slice (_, _, l)             -> loc which z l
+        | RP.Var _                       -> z
+      and exp z e = match e with
+        | RP.Const _                     -> z
+        | RP.Fetch (l, w)                -> loc read z l
+        | RP.App (_, es)                 -> List.fold_left exp z es
+  in
+     rtl z (Rtl.Dn.rtl r)
+
+let sets (rtl:Rtl.rtl) = 
+  let module RS = Register.Set in
+  let read  reg (r, w, k) = (RS.add reg r, w, k) in
+  let write reg (r, w, k) = (r, RS.add reg w, k) in
+  let kill  reg (r, w, k) = (r, w, RS.add reg k) in
+  fold ~read ~write ~kill rtl (RS.empty, RS.empty, RS.empty)
 @
 
 % ------------------------------------------------------------------ 
