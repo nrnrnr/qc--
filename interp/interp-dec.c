@@ -1019,7 +1019,7 @@ void run_interp(thread *t) {
                                                                                                            name = lua_tostring(L, -1);
                                                                                                          }
                                                                                    
-                                                                                                         lua_pop(L, 2);  /* pop table & retrieved value */
+                                                                                                         lua_pop(L, 3);  /* pop tables & retrieved value */
               
                                                                                                          lua_pushtable(L, c_func_table);
                                                                                                          lua_rawgeti(L, -1, i);
@@ -1033,7 +1033,7 @@ void run_interp(thread *t) {
                                                                                                              (call_helper = (c_caller) 
                                                                                                                              lua_touserdata(L, -1)) == NULL)
                                                                                                          {
-                                                                                                           lua_pop(L, 1); /* pop bogus val */
+                                                                                                           lua_pop(L, 3); /* pop bogus val, tables */
                                                                                                            cmm_err("internal error with c call");
                                                                                                          }
                                                                                                          lua_pop(L, 1);   /* pop call_helper pointer */
@@ -1555,6 +1555,8 @@ void run_interp(thread *t) {
       if (err_occurred || done) break;
     }
   }
+
+  printf("---- after run_interp: %d -------\n", lua_gettop(assembly_units_table.L));
 
   errorjmp_set = 0;
 }
