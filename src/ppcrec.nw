@@ -95,8 +95,6 @@ pic:    Fetch(Mem(Diff(c1:lconst, c2:lconst)), w2:int) {: c1 ^ "-" ^ c2 :}
 @ 
 \paragraph{Registers}
 <<rules>>=
-regl: Reg('r', n:int) [{: guard (n<>0) :}] {: "r" ^ string_of_int n :}
-
 pcl:  Reg('c', 0) {: () :}
 cial: Reg('c', 1) {: () :}
 crl:  Reg('c', 2) {: () :}
@@ -104,14 +102,14 @@ xerl: Reg('c', 4) {: () :}
 lrl:  Reg('c', 5) {: () :}
 spl:  Reg('r', 14) {: () :}
 
-reg:                  Fetch(regl, w:int)         {: regl :}
-reg:  BitExtract(any, Fetch(regl, w:int), n:int) {: regl :}
-
 pc:   Fetch(pcl,  32) {: () :}
 cia:  Fetch(cial, 32) {: () :}
 cr:   Fetch(crl,  32) {: () :}
 lr:   Fetch(lrl,  32) {: () :}
 sp:   Fetch(spl,  32) {: () :}
+
+regl: Reg('r', n:int) [{: guard (n<>0) :}] {: "r" ^ string_of_int n :}
+reg:  Fetch(regl, 32) {: regl :}
 @
 \paragraph{Addresses}
 <<rules>>=
@@ -119,35 +117,48 @@ addr: const16                 {: const16 ^ "(r0)"          :}
 addr: reg                     {:          "0(" ^ reg ^ ")" :}
 addr: Add(reg, const16)       {: const16 ^ "(" ^ reg ^ ")" :}
 
-index_addr: Add(reg1:reg, reg2:reg) {: reg1 ^","^ reg2 :}
+ndx_addr: Add(reg1:reg, reg2:reg) {: reg1 ^","^ reg2 :}
 @
 \paragraph{Data Movement}
 <<rules>>=
-inst:  Store(regl, reg, w:int) {: "mr " ^ regl ^ "," ^ reg :}
-inst:  Store(regl,  lr, w:int) {: "mflr " ^ regl :}
-inst:  Store(lrl,  reg, w:int) {: "mtlr " ^ reg  :}
-inst:  Store(regl,  cr, w:int) {: "mfcr " ^ regl :}
+inst: Store(regl, reg, w:int) {: "mr " ^ regl ^ "," ^ reg :}
+inst: Store(regl,  lr, w:int) {: "mflr " ^ regl :}
+inst: Store(lrl,  reg, w:int) {: "mtlr " ^ reg  :}
+inst: Store(regl,  cr, w:int) {: "mfcr " ^ regl :}
 
-inst: Store(regl, const16, 32) {: "addi " ^ regl ^",0,"^ const16 :}
-
+inst: Store(regl,                const16, 32) {: "addi " ^ regl ^",0,"^ const16 :}
 inst: Store(Slice(16, 0, regl),  const16, 16) {: "addi "  ^ regl ^",0,"^ const16 :}
 inst: Store(Slice(16, 16, regl), const16, 16) {: "addis " ^ regl ^","^ regl ^","^ const16 :}
 
-inst: Store (regl, Fetch(Mem(addr      ),32), 32) {: "lwz "  ^ regl ^","^ addr  :}
-inst: Store (regl, Fetch(Mem(index_addr),32), 32) {: "lwzx " ^ regl ^","^ index_addr :}
+inst: Store (regl, Fetch(Mem(addr    ),32), 32)     {: "lwz "   ^ regl ^","^ addr  :}
+inst: Store (regl, Fetch(Mem(ndx_addr),32), 32)     {: "lwzx "  ^ regl ^","^ ndx_addr :}
+inst: Store (regl, Zx(Fetch(Mem(addr),8)), 32)      {: "lbz "   ^ regl ^","^ addr  :}
+inst: Store (regl, Zx(Fetch(Mem(ndx_addr),8)), 32)  {: "lbzx "  ^ regl ^","^ ndx_addr  :}
+inst: Store (regl, Zx(Fetch(Mem(addr),16)), 32)     {: "lhz "   ^ regl ^","^ addr  :}
+inst: Store (regl, Zx(Fetch(Mem(ndx_addr),16)), 32) {: "lhzx "  ^ regl ^","^ ndx_addr  :}
+inst: Store (regl, Sx(Fetch(Mem(addr),8)), 32)      {: "lbz "   ^ regl ^","^ addr ^ "\n\t" ^
+                                                       "extsb " ^ regl ^","^ regl :}
+inst: Store (regl, Sx(Fetch(Mem(ndx_addr),8)), 32)  {: "lbzx "  ^ regl ^","^ ndx_addr ^ "\n\t" ^
+                                                       "extsb " ^ regl ^","^ regl :}
+inst: Store (regl, Sx(Fetch(Mem(addr),16)), 32)     {: "lha "   ^ regl ^","^ addr  :}
+inst: Store (regl, Sx(Fetch(Mem(ndx_addr),16)), 32) {: "lhax "  ^ regl ^","^ ndx_addr  :}
 
-inst: Store (Mem(addr      ), Fetch(regl,32), 32) {: "stw "  ^ regl ^","^ addr  :}
-inst: Store (Mem(index_addr), Fetch(regl,32), 32) {: "stwx " ^ regl ^","^ index_addr :}
+inst: Store (Mem(addr    ), reg, 32)           {: "stw "  ^ reg ^","^ addr  :}   
+inst: Store (Mem(ndx_addr), reg, 32)           {: "stwx " ^ reg ^","^ ndx_addr :}
+inst: Store (Mem(addr    ), Lobits(reg, 8), 8) {: "stb "  ^ reg ^","^ addr  :}
+inst: Store (Mem(ndx_addr), Lobits(reg, 8), 8) {: "stbx " ^ reg ^","^ ndx_addr  :}
+inst: Store (Mem(addr    ), Lobits(reg,16),16) {: "sth "  ^ reg ^","^ addr  :}
+inst: Store (Mem(ndx_addr), Lobits(reg,16),16) {: "sthx " ^ reg ^","^ ndx_addr  :}
 @ 
-Position-independent code. The integer register r2 is used for
-position-independent code.
+\paragraph{Position-independent Code}
 <<rules>>=
 inst:  Store(regl, Add(reg,pic), 32)
-       {: "addis " ^ regl ^ ","^ reg ^",ha16(" ^ pic ^ ")\n\tla " ^ regl ^
-          ",lo16(" ^ pic ^ ")(" ^ regl ^ ")" :}
+       {: "addis " ^ regl ^ ","^ reg ^",ha16(" ^ pic ^ ")\n\t" ^
+          "la "    ^ regl ^ ",lo16(" ^ pic ^ ")(" ^ regl ^ ")" :}
+
 inst:  Store(regl, pic, 32)
-       {: "li " ^ regl ^ ",ha16(" ^ pic ^ ")\n\tla " ^ regl ^
-          ",lo16(" ^ pic ^ ")(" ^ regl ^ ")" :}
+       {: "li " ^ regl ^ ",ha16(" ^ pic ^ ")\n\t" ^
+          "la " ^ regl ^ ",lo16(" ^ pic ^ ")(" ^ regl ^ ")" :}
 @
 \paragraph{Control Flow}
 <<rules>>=
@@ -161,9 +172,9 @@ inst : Par(Goto(lr),Store(regl,reg,w:int)) {: sprintf "mr %s, %s; blr" regl reg 
 @
 The [[next]] pattern covers the expression $PC + 4$ which denotes the
 instruction following the branch instruction.
-
 <<rules>>=
 next:  Add(cia,const32) {: () :}
+inst:  Par(Goto(lr    ), Store(lrl,next,32)) {: "blrl" :}
 inst:  Par(Goto(lconst), Store(lrl,next,32)) {: "bl " ^ ind_addr lconst :}
 @
 
@@ -183,45 +194,16 @@ inst:  Guarded(cmp,Goto(lconst))
 inst : Guarded(OvSet(Fetch(xerl,32)), Goto(lconst))
        {: "bo " ^ lconst :}
 @ 
-\paragraph{Arithmetic instructions}
-
+\paragraph{Instructions}
 <<rules>>=
-inst:  Store(dst:regl, Zx(Fetch(Mem(Fetch(src:regl,32)),8)), 32)
-       {: "lbz " ^ dst ^ ",0(" ^ src ^ ")" :}
 
-inst:  Store(regl, Add(x:reg,y:reg), w:int)
-       {: "add "  ^ regl ^ "," ^ x    ^ "," ^ y     :}
-inst:  Store(regl, Add(x:reg,y:const16), w:int)
-       {: "addi " ^ regl ^ "," ^ x    ^ "," ^ y     :}
-inst:  Store(regl, Sub(x:reg,y:reg), w:int)
-       {: "sub " ^ regl ^ "," ^ x    ^ "," ^ y     :}
-inst:  Store(regl, Mul(x:reg,y:reg), w:int)
-       {: "mullw " ^ regl ^ "," ^ x    ^ "," ^ y     :}
-inst:  Store(regl, Neg(reg), w:int) {: "neg " ^ reg ^ "," ^ reg :}
+inst: Store(regl,  Add(x:reg, y:reg), 32)       {: sprintf "add  %s,%s,%s" regl x y :}
+inst: Store(regl,  Add(x:reg, y:const16), 32)   {: sprintf "addi %s,%s,%s" regl x y :}
 
-@ 
-\paragraph{Logical instructions}
-
-<<rules>>=
-inst:  Store(regl, And(x:reg,y:reg), w:int)
-       {: "and "   ^ regl ^ "," ^ x    ^ "," ^ y     :}
-inst:  Store(regl, And(x:reg,y:const16), w:int)
-       {: "andi. " ^ regl ^ "," ^ x    ^ "," ^ y     :}
-inst:  Store(regl, Or(x:reg,y:reg), w:int)
-       {: "or "  ^ regl ^ "," ^ x    ^ "," ^ y     :}
-inst:  Store(regl, Or(x:reg,y:const16), w:int)
-       {: "ori " ^ regl ^ "," ^ x    ^ "," ^ y     :}
-inst:  Store(regl, Xor(x:reg,y:reg), w:int)
-       {: "xor "  ^ regl ^ "," ^ x    ^ "," ^ y     :}
-inst:  Store(regl, Xor(x:reg,y:const16), w:int)
-       {: "xori " ^ regl ^ "," ^ x    ^ "," ^ y     :}
-inst: Store(regl, Shl(x:reg, y:reg), w:int)
-       {: "slw " ^ regl ^ "," ^  x    ^ "," ^ y     :}
+inst: Store(regl, Unop (opr:string, x:reg),           32) {: sprintf "%s  %s,%s"    opr regl x :}
+inst: Store(regl, Binop(opr:string, x:reg,y:reg),     32) {: sprintf "%s  %s,%s,%s" opr regl x y :}
+inst: Store(regl, Binop(opr:string, x:reg,y:const16), 32) {: sprintf "%si %s,%s,%s" opr regl x y :}
 @
-\paragraph{Other instructions}
-<<rules>>=
-inst : Nop() {: "nop" :}
-@ 
 \paragraph{Support for debugging}
 If an RTL should fail to match, one can uncomment the following rule
 and get a printout of exactly how that RTL is represented using {\burg}
@@ -233,26 +215,20 @@ any : True  () {: "True"  :}
 any : False () {: "False" :}
 any : Link(symbol, w:int) {: "Link(" ^ symbol#mangled_text ^ "," ^ string_of_int w ^ ")" :}
 any : Diff(c1:any, c2:any) {: "Diff(" ^ c1 ^ ", " ^ c2 ^ ")" :}
-any : Late(string, w) {: "Late(" ^ string ^ "," ^ string_of_int w ^")" :}
 any : Bits(bits)     {: sprintf "Bits(%s)" (Bits.to_string bits) :}
 
 any : Fetch (any, w:int) {: "Fetch(" ^ any ^ "," ^ string_of_int w ^ ")" :}
 
-any : Zx(any) {: "Zx(" ^ any ^ ")"  :}
-
+any : Sx(any)           {: "Sx(" ^ any ^ ")"  :}
+any : Zx(any)           {: "Zx(" ^ any ^ ")"  :}
 any : Add(x:any, y:any) {: "Add(" ^ x ^ ", " ^ y ^ ")" :}
-any : Sub(x:any, y:any) {: "Sub(" ^ x ^ ", " ^ y ^ ")" :}
-any : Mul(x:any, y:any) {: "Mul(" ^ x ^ ", " ^ y ^ ")" :}
-any : Neg(any) {: "Neg(" ^ any ^ ")" :}
-any : And(x:any, y:any) {: "And(" ^ x ^ ", " ^ y ^ ")" :}
-any : Or(x:any, y:any) {: "Or(" ^ x ^ ", " ^ y ^ ")" :}
-any : Xor(x:any, y:any) {: "Xor(" ^ x ^ ", " ^ y ^ ")" :}
-any : Shl(x:any, y:any) {: "Shl(" ^ x ^ ", " ^ y ^ ")" :}
-any : Shra(x:any, y:any) {: "Shra(" ^ x ^ ", " ^ y ^ ")" :}
-any : Shrl(x:any, y:any) {: "Shrl(" ^ x ^ ", " ^ y ^ ")" :}
-any : Rem(x:any, y:any)  {: "Rem(" ^ x ^ ", " ^ y ^ ")" :}
 
-any : Lobits(any, w) {: "Lobits(" ^ any ^ ", " ^ string_of_int w ^ ")" :}
+any : Unop (op:string, x:any)         {: op ^ " of " ^ x  :}
+any : Binop(op:string, x:any, y:any)  {: op ^ " of " ^ x ^ "," ^ y  :}
+
+any : Nop () {: "nop" :}
+
+any : Lobits(any, w:int) {: "Lobits(" ^ any ^ ", " ^ string_of_int w ^ ")" :}
 any : BitExtract(lsb:any, y:any, n:int) {: sprintf "BitExtract(%s, %s, %d)" lsb y n :}
 
 any : Slice(w:int, n:int, y:any) {: sprintf "Slice(%d, %d, %s)" w n y :}
@@ -284,54 +260,73 @@ let rec const = function
   | RP.Bool(false)            -> conFalse ()
   | RP.Link(s,_,w)            -> conLink s w
   | RP.Diff(c1,c2)            -> conDiff (const c1) (const c2)
-  | RP.Late(s,w)              -> conLate s w
+  | RP.Late(s,w)              -> Impossible.impossible "Late constant in recognizer"
   | RP.Bits(b)                -> conBits(b)
 @
-<<code to follow the labeler>>=  
-let cmp = ["eq";"ge";"geu";"gt";"gtu";"le";"leu";"lt";"ltu";"ne"] 
+<<code to follow the labeler>>=
+let is_cmp (opr,ws) =
+  let cmp = ["eq";"ge";"geu";"gt";"gtu";"le";"leu";"lt";"ltu";"ne"] in
+  if not (List.mem opr cmp) then false
+  else match ws with
+    [32]  -> true
+  | _     -> error "comparison not at 32 bits in PPC recognizer"
+
+let rtl2ppc = function
+    "and"  -> "and"
+  | "divu" -> "divwu"
+  | "mul"  -> "mullw"
+  | "neg"  -> "neg"
+  | "or"   -> "or"
+  | "shl"  -> "slw"
+  | "shrl" -> "srw"
+  | "sub"  -> "sub"
+  | "xor"  -> "xor"
+  | opr    -> error (sprintf "Unsupported RTL operator \"%s\"" opr)
 
 let rec exp = function
-  | RP.Const(k)               -> const (k)
-  | RP.Fetch(l,w)             -> conFetch (loc l) w
-  | RP.App(("zx",   ws), [x])    -> conZx (exp x)
-  | RP.App(("add",  ws), [x; y]) -> conAdd  (exp x) (exp y)
-  | RP.App(("sub",  ws), [x; y]) -> conSub  (exp x) (exp y)
-  | RP.App(("mul",  ws), [x; y]) -> conMul (exp x) (exp y)
-  | RP.App(("neg",  ws), [x])    -> conNeg  (exp x)
-  | RP.App(("and",  ws), [x; y]) -> conAnd  (exp x) (exp y)
-  | RP.App(("or",   ws), [x; y]) -> conOr   (exp x) (exp y)
-  | RP.App(("xor",  ws), [x; y]) -> conXor  (exp x) (exp y)
-  | RP.App(("shl",  ws), [x; y]) -> conShl  (exp x) (exp y)
-  | RP.App(("shra", ws), [x; y]) -> conShra (exp x) (exp y)
-  | RP.App(("shrl", ws), [x; y]) -> conShrl (exp x) (exp y)
-  | RP.App(("rem",  ws), [x; y]) -> conRem  (exp x) (exp y)
-  | RP.App(("ppc_xer_ov_set", []), [x]) -> conOvSet (exp x)
-  | RP.App(("bitExtract", [w; n]), [lsb; src]) -> conBitExtract (exp lsb) (exp src) n
-  | RP.App((op, ws), [x; y])
-    when List.mem op cmp -> conCmp op (exp x) (exp y)
-  | RP.App((o,_),_)           -> error (sprintf "unknown operator %s" o)
+  | RP.Const(k)                  -> const (k)
+  | RP.Fetch(l,w)                -> conFetch (loc l) w
+  | RP.App(("sx", [8 ;32]), [x]) -> conSx (exp x)
+  | RP.App(("sx", [16;32]), [x]) -> conSx (exp x)
+  | RP.App(("zx", [8 ;32]), [x]) -> conZx (exp x)
+  | RP.App(("zx", [16;32]), [x]) -> conZx (exp x)
+  | RP.App(("add",[16]), [x; y]) -> conAdd  (exp x) (exp y)
+  | RP.App(("add",[32]), [x; y]) -> conAdd  (exp x) (exp y)
+
+
+  | RP.App(("ppc_xer_ov_set", []), [x])        -> conOvSet (exp x)
+  | RP.App(("bitExtract", [_; n]), [lsb; src]) -> conBitExtract (exp lsb) (exp src) n
+
+  | RP.App(("lobits", [32;w]), [x]) -> conLobits (exp x) w
+
+  | RP.App((opr, ws), [x])          -> conUnop (rtl2ppc opr) (exp x)
+  | RP.App((opr, ws), [x;y])        -> if is_cmp(opr,ws) then conCmp opr (exp x) (exp y)
+                                       else conBinop (rtl2ppc opr) (exp x) (exp y)
+
+  | RP.App((o,_),_) -> error (sprintf "unknown operator %s" o)
 @ 
 <<code to follow the labeler>>=  
 and loc l = match l with
   | RP.Mem(('m',_,_), Rtl.C c, e, ass) -> conMem (exp e)
   | RP.Reg((sp, _,_), i, w)            -> conReg sp i 
-  | RP.Mem(_, _, _, _)     -> error "non-mem, non-reg cell"
-  | RP.Var _ | RP.Global _ -> error "var found"
-  | RP.Slice(w,i,l)        -> conSlice w i (loc l)
+  | RP.Mem(_, _, _, _)                 -> error "non-mem, non-reg cell"
+  | RP.Var _ | RP.Global _             -> error "var found"
+  | RP.Slice(w,i,l)                    -> conSlice w i (loc l)
 
 and effect = function
-  | RP.Store(RP.Reg(('c',_,_), i, w),r,_) 
-    when i = SS.indices.SS.pc         -> conGoto (exp r)
-  | RP.Store(l,e,w)                   -> conStore (loc l) (exp e) w
-  | RP.Kill(l)                        -> conKill (loc l)
+  | RP.Store(RP.Reg(('c',_,_),i,_),r,_)
+    when i = SS.indices.SS.pc          -> conGoto (exp r)
+  | RP.Store(l,e,w)                    -> conStore (loc l) (exp e) w
+  | RP.Kill(l)                         -> conKill (loc l)
 
-and guarded g eff = match g with
-| RP.Const(RP.Bool b) -> if b then effect eff else conNop()
-| _ -> conGuarded (exp g) (effect eff)
+and guarded g eff =
+  match g with
+  | RP.Const(RP.Bool b) -> if b then effect eff else conNop()
+  | _                   -> conGuarded (exp g) (effect eff)
 
 and geffects = function
-    | [] -> conNop ()
-    | [g, s] -> guarded g s
+    | []          -> conNop()
+    | [g, s]      -> guarded g s
     | (g, s) :: t -> conPar (guarded g s) (geffects t)
 and rtl (RP.Rtl es) = geffects es
 @

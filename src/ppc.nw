@@ -35,8 +35,6 @@ module A  = Automaton
 
 let rtl r = PX.Rtl r
 let (<:>) = PX.(<:>)
-
-let ui = Impossible.unimp
 <<spaces>>
 module Post = struct
   <<ppc postexpander>>
@@ -111,8 +109,8 @@ let ctr    = creg 6  (* counter register                 *)
 (* what follows is true but doesn't work *)
 let rmode = R.slice 2 ~lsb:30 fpscr
 
-(* what follows works *)
-let dspace   = ('d', Rtl.Identity, Cell.of_size 2)  (* rounding modes *)
+(* what follows is a lie but works *)
+let dspace   = ('d', Rtl.Identity, Cell.of_size 2)
 let rmode    = Rtl.reg (dspace, 0, R.C 1)
 let rresults = Rtl.reg (dspace, 1, R.C 1)
 @ 
@@ -196,6 +194,13 @@ let itempwidth = 32
 
 module SM = Strutil.Map
 let operators = Context.standard icontext fcontext rcontext acontext bcontext
+let operators = List.filter (fun (n,_,_) -> compares n "i2f" <> 0) operators
+let operators = ("i2f", [icontext;rcontext], fcontext) :: operators
+
+(* Hmm, yeah, this is "wrong". *)
+let operators = List.filter (fun (n,_,_) -> compares n "f2f" <> 0) operators
+let operators = ("f2f", [icontext;rcontext], fcontext) :: operators
+
 let resmap    = List.fold_left (fun m (n, a, r)-> SM.add n r m) SM.empty operators
 let argmap    = List.fold_left (fun m (n, a, r)-> SM.add n a m) SM.empty operators
 let arg_contexts   (n, _) = try SM.find n argmap 
@@ -271,11 +276,130 @@ let li ~dst const =
                  rtl (R.store dsthi (R.bits h 16) 16)
   | _         -> tstore dst (Up.const const)
 @ 
-Operators...
+Machine Environment for PPC backend.
 <<ppc postexpander>>=
-let rtlop ~dst op tmpl = tstore dst (R.app (Up.opr op) (List.map tval tmpl))
-let binop ~dst op tmp1 tmp2 = rtlop dst op [tmp1;tmp2]
-let unop  ~dst op tmp       = rtlop dst op [tmp]
+let machine_env = 
+  [ "NaN"                ,[52;64] (* float, [n] -> m              *)
+  ; "add"                ,[32]    (* int,   [n; n] -> n           *)
+  ; "addc"               ,[32]    (* int,   [n; n; 1] -> n        *)
+  ; "add_overflows"      ,[32]    (* bool,  [n; n] -> bool        *)
+  ; "and"                ,[32]    (* int,   [n; n] -> n           *)
+  ; "bit"                ,[32]    (* int,   [bool] -> 1           *)
+  ; "bool"               ,[32]    (* bool,  [1] -> bool           *)
+  ; "borrow"             ,[32]    (* int,   [n; n; 1] -> 1        *)
+  ; "carry"              ,[32]    (* int,   [n; n; 1] -> 1        *)
+  ; "com"                ,[32]    (* int,   [n] -> n              *)
+  ; "conjoin"            ,[  ]    (* bool,  [bool; bool] -> bool  *)
+  ; "disjoin"            ,[  ]    (* bool,  [bool; bool] -> bool  *)
+  ; "div"                ,[32]    (* int,   [n; n] -> n           *)
+  ; "div_overflows"      ,[32]    (* bool,  [n; n] -> bool        *)
+  ; "divu"               ,[32]    (* int,   [n; n] -> n           *)
+  ; "eq"                 ,[32]    (* bool,  [n; n] -> bool        *)
+  ; "f2f"                ,[32;64] (* float, [n; 2] -> m           *)
+(*
+  ; "f2f"                ,[64;32]
+  ; "f2f_implicit_round" ,[64;32] (* float, [n] -> m              *)
+*)
+  ; "f2i"                ,[64;32] (* int,   [n; 2] -> m           *)
+  ; "fabs"               ,[64]    (* float, [n] -> n              *)
+  ; "fadd"               ,[64]    (* float, [n; n; 2] -> n        *)
+  ; "fcmp"               ,[64]    (* code2, [n; n] -> 2           *)
+  ; "fdiv"               ,[64]    (* float, [n; n; 2] -> n        *)
+  ; "feq"                ,[64]    (* bool,  [n; n] -> bool        *)
+  ; "fge"                ,[64]    (* bool,  [n; n] -> bool        *)
+  ; "fgt"                ,[64]    (* bool,  [n; n] -> bool        *)
+  ; "fle"                ,[64]    (* bool,  [n; n] -> bool        *)
+  ; "float_eq"           ,[  ]    (* code2, [] -> 2               *)
+  ; "float_gt"           ,[  ]    (* code2, [] -> 2               *)
+  ; "float_lt"           ,[  ]    (* code2, [] -> 2               *)
+  ; "flt"                ,[64]    (* bool,  [n; n] -> bool        *)
+  ; "fmul"               ,[64]    (* float, [n; n; 2] -> n        *)
+  ; "fmulx"              ,[64]    (* float, [n; n] -> 2n          *)
+  ; "fne"                ,[64]    (* bool,  [n; n] -> bool        *)
+  ; "fneg"               ,[64]    (* float, [n] -> n              *)
+  ; "fordered"           ,[64]    (* bool,  [n; n] -> bool        *)
+  ; "fsqrt"              ,[64]    (* float, [n; 2] -> n           *)
+  ; "fsub"               ,[64]    (* float, [n; n; 2] -> n        *)
+  ; "funordered"         ,[64]    (* bool,  [n; n] -> bool        *)
+  ; "ge"                 ,[32]    (* bool,  [n; n] -> bool        *)
+  ; "geu"                ,[32]    (* bool,  [n; n] -> bool        *)
+  ; "gt"                 ,[32]    (* bool,  [n; n] -> bool        *)
+  ; "gtu"                ,[32]    (* bool,  [n; n] -> bool        *)
+  ; "i2f"                ,[32;64] (* float, [n; 2] -> m           *)
+  ; "le"                 ,[32]    (* bool,  [n; n] -> bool        *)
+  ; "leu"                ,[32]    (* bool,  [n; n] -> bool        *)
+  ; "lobits"             ,[32; 8] (* int,   [n] -> m              *)
+  ; "lobits"             ,[32;16]
+  ; "lt"                 ,[32]    (* bool,  [n; n] -> bool        *)
+  ; "ltu"                ,[32]    (* bool,  [n; n] -> bool        *)
+  ; "minf"               ,[64]    (* float, [] -> n               *)
+  ; "mod"                ,[32]    (* int,   [n; n] -> n           *)
+  ; "modu"               ,[32]    (* int,   [n; n] -> n           *)
+  ; "mul"                ,[32]    (* int,   [n; n] -> n           *)
+(*
+  ; "mulux"              ,[00]    (* int,   [n; n] -> 2n          *)
+  ; "mulx"               ,[00]    (* int,   [n; n] -> 2n          *)
+*)
+  ; "mul_overflows"      ,[32]    (* bool,  [n; n] -> bool        *)
+  ; "mulu_overflows"     ,[32]    (* bool,  [n; n] -> bool        *)
+  ; "mzero"              ,[64]    (* float, [] -> n               *)
+  ; "ne"                 ,[32]    (* bool,  [n; n] -> bool        *)
+  ; "neg"                ,[32]    (* int,   [n] -> n              *)
+  ; "not"                ,[32]    (* bool,  [bool] -> bool        *)
+  ; "or"                 ,[32]    (* int,   [n; n] -> n           *)
+  ; "pinf"               ,[64]    (* float, [] -> n               *)
+  ; "popcnt"             ,[32]    (* int,   [n] -> 1              *)
+  ; "pzero"              ,[64]    (* float, [] -> n               *)
+  ; "quot"               ,[32]    (* int,   [n; n] -> n           *)
+  ; "quot_overflows"     ,[32]    (* bool,  [n; n] -> bool        *)
+  ; "rem"                ,[32]    (* int,   [n; n] -> n           *)
+  ; "rotl"               ,[32]    (* int,   [n; n] -> n           *)
+  ; "rotr"               ,[32]    (* int,   [n; n] -> n           *)
+  ; "round_down"         ,[  ]    (* code2, [] -> 2               *)
+  ; "round_nearest"      ,[  ]    (* code2, [] -> 2               *)
+  ; "round_up"           ,[  ]    (* code2, [] -> 2               *)
+  ; "round_zero"         ,[  ]    (* code2, [] -> 2               *)
+  ; "shl"                ,[32]    (* int,   [n; n] -> n           *)
+  ; "shra"               ,[32]    (* int,   [n; n] -> n           *)
+  ; "shrl"               ,[32]    (* int,   [n; n] -> n           *)
+  ; "sub"                ,[32]    (* int,   [n; n] -> n           *)
+  ; "subb"               ,[32]    (* int,   [n; n; 1] -> n        *)
+  ; "sub_overflows"      ,[32]    (* bool,  [n; n] -> bool        *)
+  ; "sx"                 ,[8; 32] (* int,   [n] -> m              *)
+  ; "sx"                 ,[16;32] (* int,   [n] -> m              *)
+  ; "unordered"          ,[  ]    (* code2, [] -> 2               *)
+  ; "xor"                ,[32]    (* int,   [n; n] -> n           *)
+  ; "zx"                 ,[8; 32] (* int,   [n] -> m              *)
+  ; "zx"                 ,[16;32] (* int,   [n] -> m              *)
+(*
+  ; "bitExtract"         ,[00]    (* int,   [n; n] -> m           *)
+  ; "bitInsert"          ,[00]    (* int,   [n; n; m] -> n        *)
+  ; "bitTransfer"        ,[00]    (* int,   [n; n; n; n; n] -> n  *)
+*)
+  ]
+@
+Implementation of RTL operators.
+<<ppc postexpander>>=
+let unimp_opr (op,ws) =
+  let ws' = List.fold_left (fun s i -> string_of_int i ^ " ") "" ws in
+  Impossible.unimp ("unimplemented operator " ^ op ^ ":" ^ ws')
+
+let to_binop f = function
+    [x;y] -> f 32 (tval x) (tval y)
+  | _     -> Impossible.impossible "wrong number of args given to binop"
+
+let rtlop ~dst op args =
+  match op with
+    "mod",  [32] -> PX.Expand.block (tstore dst (to_binop Rewrite.(mod) args))
+  | "modu", [32] -> PX.Expand.block (tstore dst (to_binop Rewrite.modu  args))
+  | "rem",  [32] -> PX.Expand.block (tstore dst (to_binop Rewrite.rem   args))
+  | opr, ws ->
+      if List.mem op machine_env
+      then tstore dst (R.app (Up.opr op) (List.map tval args))
+      else unimp_opr op
+
+let unop  ~dst op x   = rtlop dst op [x]
+let binop ~dst op x y = rtlop dst op [x;y]
 let dblop ~dsthi ~dstlo op x y = Unsupported.mulx_and_mulux()
 @ 
 Block Copy\ldots
@@ -717,7 +841,10 @@ let target =
   ; T.cc_spec_to_auto  = cconv
 
   ; T.is_instruction = Ppcrec.M.is_instruction
-  ; T.machine_env    = {T.ops=[]; T.literal=[]}
+  ; T.machine_env    = { T.ops     = List.map
+                                       (fun (op,ws) -> (op,List.map (fun w -> Types.Bits w) ws))
+                                       Post.machine_env;
+                         T.literal = [32;64]}
   (* global or hardware registers *)
   ; T.globals  = globals
   ; T.rounding_mode = rmode

@@ -49,13 +49,15 @@ val div1_3 : width -> dst:loc -> exp -> exp -> block
 <<rewrite.mli>>=
 val div_overflows : width -> exp -> exp -> exp
   (* uses: conjoin, eq *)
-@ 
-<<rewrite.mli>>=
+
 val (mod) : width -> exp -> exp -> exp
   (* uses : div, mul, sub *)
 
 val modu : width -> exp -> exp -> exp
   (* uses : divu, mul, sub *)
+
+val rem  : width -> exp -> exp -> exp
+  (* uses : quot, mul, sub *)
 @
 \subsection{Implementation}
 <<rewrite.ml>>=
@@ -79,6 +81,7 @@ let div_overflows w x y =
 
 let (mod) w x y = O.sub w x (O.mul w y (O.div  w x y))
 let modu  w x y = O.sub w x (O.mul w y (O.divu w x y))
+let rem   w x y = O.sub w x (O.mul w y (O.quot w x y))
 @ 
 \section{Things not to be looked at}
 
