@@ -34,7 +34,7 @@ POD2HTML =      pod2html
 %.cmo:          %.ml
                 $OCAMLC $OCAMLC_FLAGS -c $stem.ml
 
-%.cmx:          %.ml
+%.o %.cmx:      %.ml
                 $OCAMLO $OCAMLO_FLAGS -c $stem.ml
 
 %.ml:           %.mll
