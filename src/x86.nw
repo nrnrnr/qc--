@@ -27,8 +27,6 @@ module Spaces : sig
   val u : Space.t
   val c : Space.t   (* PC at 0 and condition codes at 2 *)
 end
-val fpcc : Rtl.loc (* the FPU condition codes *)
-val fpustatus : Rtl.loc (* the FPU status word *)
 module Post : Postexpander.S
 module X    : Expander.S
 val target : Oast2ir.tgt
@@ -97,10 +95,12 @@ let {SS.pc = pc; SS.cc = eflags} = SS.locations Spaces.c
 
 let fpuc n = Rtl.reg ('e', n, 16)
 let fpuctl    = fpuc 0
-let fpustatus = fpuc 1
 let fputag    = fpuc 2
 
-let fpcc = R.slice 3 ~lsb:8 fpustatus (* ignores bit 14 == C3 [probably OK] *)
+let fpcc = X86rec.fpcc (* R.slice 3 ~lsb:8 fpustatus *)
+    (* ignores bit 14 == C3 [probably OK] *)
+  
+let fpustatus = X86rec.fpustatus  (* fpuc 1 *)
 
 let rounding_modesl = R.slice 2 ~lsb:10 fpuctl
 
@@ -881,6 +881,8 @@ let target =
                            ~return_to:(fun ra -> 
                                          pop_with (fun ra -> store pc ra))
                            (F.cutto PX.esp)
+
+  ; T.is_instruction = X86rec.M.is_instruction
 
   (* global or hardware registers *)
   ; T.globals  = globals

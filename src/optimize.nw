@@ -45,6 +45,11 @@ This includes not only [[Rtl.null]] but also assignments of the form
 $x \mathbin{:=} x$.
 <<optimize.mli>>=
 val remove_nops : 'a -> Oast2ir.proc -> bool
+@ 
+Function [[validate]] does not actually do anything; it just checks
+the machine invariant.
+<<optimize.mli>>=
+val validate : 'a -> Ast2ir.proc -> bool
 @
 
 % ------------------------------------------------------------------ 
@@ -53,9 +58,11 @@ val remove_nops : 'a -> Oast2ir.proc -> bool
 
 We provide each of the optimization in turn.
 <<optimize.ml>>=
-module G = Cfgx.M
+module G  = Cfgx.M
+module P  = Proc
 module RP = Rtl.Private
-module Down = Rtl.Dn
+module RU = Rtlutil
+module Dn = Rtl.Dn
 module Up = Rtl.Up
 module SS = Strutil.Set
 @
@@ -145,8 +152,17 @@ let remove_nops _ {Proc.cfg = cfg} =
       | (_, RP.Store (l, RP.Fetch(l', w'), w)) -> assert (w=w'); l = l'
       | _ -> false in
     match rtl with
-    | Some r -> let RP.Rtl effs = Down.rtl r in List.for_all unneeded effs
+    | Some r -> let RP.Rtl effs = Dn.rtl r in List.for_all unneeded effs
     | None -> false in
   let remove n = Cfgutil.delete cfg n; changed := true in
   G.iter_nodes (fun n -> if is_nop (G.to_executable n) then remove n) cfg;
   !changed
+@ 
+<<optimize.ml>>=
+let badrtl r = Printf.eprintf "non-target RTL: %s\n" (RU.ToReadableString.rtl r)
+let validate _ proc =
+  let ok n = match G.to_executable n with
+  | Some r -> if proc.P.target.Target.is_instruction r then () else badrtl r
+  | None -> () in
+  G.iter_nodes ok proc.P.cfg;
+  false

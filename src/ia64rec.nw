@@ -7,6 +7,7 @@ It is implemented using BURG rules.
 
 <<ia64rec.mli>>=
 val to_asm : Rtl.rtl -> string
+val is_instruction : Rtl.rtl -> bool
 @ 
 
 A few abbreviations.
@@ -356,4 +357,12 @@ let to_asm r =
   with 
   | Camlburg.Uncovered -> cat [" not an instruction: " ; RU.ToReadableString.rtl r]
   | Error msg -> (errmsg r msg; " error in recognizer: " ^ msg)
+
+let is_instruction r =
+  try
+    let plan = rtl (Down.rtl r) in
+    plan.inst.Camlburg.cost < 100  (* should be true, but shade this... *)
+  with 
+  | Camlburg.Uncovered -> false
+  | Error msg -> (errmsg r msg; false)
 @ 

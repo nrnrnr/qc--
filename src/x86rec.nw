@@ -34,15 +34,21 @@ module M : sig
   val is_instruction : Rtl.rtl -> bool
   val to_asm         : Rtl.rtl -> string
 end
+val fpcc      : Rtl.loc (* the FPU condition codes *)
+val fpustatus : Rtl.loc (* the FPU status word *)
 @ 
 <<x86rec.mlb>>=
-%head {: <<modules>> 
-         module M = struct
-           <<code to precede the labeler>>
-      :}
-%tail {:   <<code to follow the labeler>>
-         end (* of M *) 
-      :}
+%head {: 
+  <<modules>> 
+  let fpustatus = Rtl.reg ('e', 1, 16)
+  let fpcc = Rtl.slice 3 ~lsb:8 fpustatus (* ignores bit 14 == C3 [probably OK] *)
+  module M = struct
+    <<code to precede the labeler>>
+:}
+%tail {:
+    <<code to follow the labeler>>
+  end (* of M *) 
+:}
 
 %term <<names of types of terminals>>
 
@@ -62,6 +68,7 @@ end
 %type eip {: unit :}
 %type esi {: unit :}
 %type esp {: unit :}
+%type espl {: unit :}
 %type fiadd {: int * string :}
 %type i2f_mem {: int * string :}
 %type four {: unit :}
@@ -82,6 +89,7 @@ end
 %type immed8 {: string :}
 %type inst {: string :}
 %type lconst {: string :}
+%type lateconst {: string :}
 %type mem {: string :}
 %type meml {: string :}
 %type minusfour {: unit :}
@@ -100,6 +108,8 @@ end
 %type stacktop {: unit :}
 %type target {: string :}
 %type two3 {: unit :}
+%type vfp {: unit :}
+%type vfpl {: unit :}
 %type zero {: unit :}
 
 
@@ -183,8 +193,8 @@ let hregname r = sprintf "%%%ch" r.[2]  (* pass %eax, get back %ah *)
 @ 
 \subsection{Other machine info}
 <<code to precede the labeler>>=
-let fpcc = Down.loc X86.fpcc
-let fpustatus = Down.loc X86.fpustatus
+let fpcc = Down.loc fpcc
+let fpustatus = Down.loc fpustatus
 @     
 
 
@@ -283,6 +293,12 @@ meml : Mem(lconst, w) {: lconst :}
 disp : Add(reg, const) {:  const ^ "(" ^ reg ^ ")" :}
 disp : Add(const, reg) {:  const ^ "(" ^ reg ^ ")" :}
 @ 
+<<rules>>=
+regl : Reg('t', n, w) {: sprintf "temporary register %d" n :}
+vfpl : Reg('V', n, w) [{: guard (n=0 && w=32) :}] {: () :}
+esp  : Fetch(espl, w)  {: espl   :}
+vfp  : Fetch(vfpl, w)  {: vfpl   :}
+@ 
 An effective address is either a register or a memory location.
 <<rules>>=
 eaddrl : regl {: regl :}
@@ -314,6 +330,21 @@ immed8 : const8  {: "$" ^ const8 :}
 -- immed : Add(lconst, const) {:  lconst ^ "+" ^ const :}
 -- immed : Add(const, lconst) {:  lconst ^ "+" ^ const :}
 @ 
+\paragraph{RTLs to recognize before code generation}
+<<rules>>=
+slotaddr : Add(vfp, lateconst) {: sprintf "%%vfp+%s" lateconst :}
+slotaddr : vfp {: "%vfp" :}
+
+lateconst: const {: const :}
+lateconst: Late(string, w) {: string :}
+lateconst: Add(l:lateconst, r:lateconst) {: sprintf "%s+%s" l r :}
+
+inst: Guarded(Cmp(string, esp, slotaddr), Store(espl, s2:slotaddr, w)) 
+         {: "adjust %esp" :}
+inst: Store(dst:eaddrl, slotaddr, w) {: sprintf "%s := %s" dst slotaddr :}
+inst: Store(dst:eaddrl, lateconst, w) {: sprintf "%s := %s" dst lateconst :}
+@ 
+
 \paragraph{Data movement}
 Move, load, and store instructions.
 Because the machine can do eaddr/reg
@@ -465,24 +496,24 @@ Call, [[cut to]],  and return require manipulating the stack pointer
 [[esp]] and 
 program counter [[eip]].
 <<rules>>=
-esp : Reg('r', n, w) [{: guard (n = 4 && w = 32):}]                {: () :}
-eip : Reg('c', n, w) [{: guard (n = SS.indices.SS.pc && w = 32):}] {: () :}
+espl : Reg('r', n, w) [{: guard (n = 4 && w = 32):}]                {: () :}
+eip  : Reg('c', n, w) [{: guard (n = SS.indices.SS.pc && w = 32):}] {: () :}
 @ 
 The [[cut to]] is supposed to look atomic, but it is a sequence of two
 instructions. 
 <<rules>>=
-inst : Par(Goto(target),Store(esp,frame:eaddr,w))
+inst : Par(Goto(target),Store(espl,frame:eaddr,w))
   {: cat ["movl "; frame; ", %esp; jmp "; target] :}
 @ 
 There are two ways to recognize a pop, depending on whether the ML
 code sees it as an $L \mathrel{:=} L \oplus R$ instruction.
 <<rules>>=
-pop  : Store(esp, Add(Fetch(esp, w), four), sw:w) {: () :}
-pop  :  Llr(esp, "add", four, w) {: () :}
-push : Llr(esp, "sub", four, w) {: () :}
-push : Llr(esp, "add", minusfour, w) {: () :}
-stacktop  : Mem(Fetch(esp, w), mw:w)            [{:guard (mw = 32):}] {: () :}
-stacknext : Mem(Sub(Fetch(esp, w), four), mw:w) [{:guard (mw = 32):}] {: () :}
+pop  : Store(espl, Add(esp, four), sw:w) {: () :}
+pop  :  Llr(espl, "add", four, w) {: () :}
+push : Llr(espl, "sub", four, w) {: () :}
+push : Llr(espl, "add", minusfour, w) {: () :}
+stacktop  : Mem(esp, mw:w)            [{:guard (mw = 32):}] {: () :}
+stacknext : Mem(Sub(esp, four), mw:w) [{:guard (mw = 32):}] {: () :}
 inst : Par(Goto(Fetch(stacktop, w)),pop) 
         {: "ret" :}
 inst : Par(Goto(eaddr),Par(Store(stacknext, Fetch(eip, x:w), y:w), push))
@@ -695,6 +726,8 @@ constructor for each operator.
 | RP.App(("bitInsert", [w; n]), [lsb; dst; src]) ->
     conBitInsert (exp lsb) (exp dst) (exp src)
 | RP.App(("bitExtract", [w; n]), [lsb; src]) -> conBitExtract (exp lsb) (exp src) n
+| RP.App((("gt"|"lt"|"ge"|"le"|"eq"|"ne"), [w]) as op, [l; r]) ->
+    conCmp op (exp l) (exp r)
 | RP.App((("add"|"sub"|"mul"|"sx"|"zx"|"lobits"|"x86_subflags"|"bitInsert"|
            "bitExtract"|"fabs"|"fneg"|"fdiv"|"fmul"|"fsub"|"fadd"|"f2f"|"f2i"|
            "i2f"|"and"|"or"|"xor"|"com") as op, ws), xs)->
