@@ -12,7 +12,7 @@ val add : int -> bits_exp -> bits_exp -> bits_exp
 val orelse  : bool_exp -> bool_exp -> bool_exp
 val andalso : bool_exp -> bool_exp -> bool_exp
 val not : bool_exp -> bool_exp
-@ 
+@
 <<implementation>>=
 type bits_exp = RTL.exp
 type bool_exp = RTL.exp
@@ -32,7 +32,7 @@ let eq n e e' =
       | _, _ -> simeq n e e')
   | _, _ -> if e = e' then R.CONST(R.BOOL true) else simeq n e e'
 
-@ 
+@
 I attempt a somewhat ``smart'' version of [[andalso]].
 <<implementation>>=
 let andalso p q = 
@@ -43,7 +43,7 @@ let andalso p q =
          | RTL.CONST (RTL.BOOL true)  -> p
          | RTL.CONST (RTL.BOOL false) -> q
          | _ -> RTL.APP (("andalso", []), [p; q])
-@ 
+@
 Ditto [[orelse]].
 <<implementation>>=
 let orelse p q = 
@@ -54,14 +54,14 @@ let orelse p q =
          | RTL.CONST (RTL.BOOL true)  -> q
          | RTL.CONST (RTL.BOOL false) -> p
          | _ -> RTL.APP(("orelse", []), [p; q])
-@ 
+@
 <<implementation>>=
 let not p = 
   match p with
   | RTL.CONST (RTL.BOOL p)  -> RTL.CONST (RTL.BOOL (not p))
   | RTL.APP (("not", []), [p]) -> p
   | p -> RTL.APP (("not", []), [p])
-@ 
+@
 <<implementation>>=
 let add n x y =
   match x, y with 

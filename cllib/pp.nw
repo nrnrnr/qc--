@@ -46,21 +46,21 @@ type doc
 @ The empty document is pretty printed to the empty string. Typically
 [[empty]] is used in one branch of an [[if]] statement.
 
-<<>>=    
+<<pp.mli>>=
 val empty : doc
 
 @ The infix operator [[x ^^ y]] concatenates two documents [[x]] and
 [[y]] into a larger one.  It does not introduce any space or other
 separation between the two original documents. 
 
-<<>>=    
+<<pp.mli>>=
 val (^^) : doc -> doc -> doc
 
 @ The [[text]] function turns a string into a document. The pretty printed
 representation of the resulting document is exactly the string [[text]]
 was applied to. 
 
-<<>>=    
+<<pp.mli>>=
 val text : string -> doc
 
 @ The important points in a document are so-called [[break]]s.  A
@@ -71,14 +71,14 @@ space that might come out as a newline.  To give the pretty printer
 enough flexibility documents must be joined with [[break]]s:  [[x ^^
 break ^^ y]]. 
    
-<<>>=    
+<<pp.mli>>=
 val break : doc
 
 @ The space character used by [[break]] my be not always appropriate. 
 The function [[breakWith s]] behaves like [[break]] except that it
 uses a user supplied string [[s]] instead of the space.
 
-<<>>=    
+<<pp.mli>>=
 val breakWith : string -> doc
 
 @ ------------------------------------------------------------------  
@@ -93,7 +93,7 @@ to newlines inside document [[d]] are followed by [[n]] spaces.  The
 [[nest]] operator nests properly such that it takes the spaces
 introduced by [[nest]]s on the outer level also into account.
 
-<<>>=
+<<pp.mli>>=
 val nest : int -> doc -> doc
 
 @ The pretty printer considers the representation of [[break]]s not
@@ -107,7 +107,7 @@ a [[hgrp]] are never turned into newlines but always come out as
 spaces.  This group has a very limited usefulness because it easily
 overruns any given line length. 
 
-<<>>=   
+<<pp.mli>>=
 val hgrp : doc -> doc
     
 @ The [[vgrp]] operator creates a \textit{vertical} group.  All
@@ -118,7 +118,7 @@ grouping and thus different nesting levels can be active in the same
 group.  Because of the fixed pretty printing strategy [[hgrp]]s are
 used mostly at the top level of documents only.
 
-<<>>=
+<<pp.mli>>=
 val vgrp : doc -> doc
 
 @ The \textit{automatic} group [[agrp]] is the most versatile.  Breaks
@@ -139,7 +139,7 @@ groups on the outer levels typically do not fit into one line their
 room for the smaller inner groups.  Chances are good that these
 will fit into a line and thus their [[break]]s come out as spaces.
 
-<<>>=
+<<pp.mli>>=
 val agrp : doc -> doc
 
 @ The break policy inside an [[agrp]] is fixed for all breaks of the
@@ -148,7 +148,7 @@ considered individually:  when the document up to the next [[break]]
 fits into the current line the [[break]] comes out as space. 
 Otherwise it comes out as newline followed by spaces. 
 
-<<>>=
+<<pp.mli>>=
 val fgrp : doc -> doc
 
 @ ------------------------------------------------------------------  
@@ -171,7 +171,7 @@ a virtual [[agrp]]. To escape from this default behavior you can
 easily wrap your document on the outer level with another group such
 that the [[agrp]] will have no effect.
 
-<<>>=
+<<pp.mli>>=
 val ppToString : int -> doc -> string
 val ppToFile : out_channel -> int -> doc -> unit
 @
@@ -191,7 +191,7 @@ creates a [[sep]] separated list.  Individual items are printed using
 [[f]].  For the common case where commas are used for separating we
 also provide an extra definition.
 
-<<>>=
+<<pp.mli>>=
 val list      : doc -> ('a -> doc) -> 'a list -> doc 
 val commalist :        ('a -> doc) -> 'a list -> doc
 
@@ -199,14 +199,14 @@ val commalist :        ('a -> doc) -> 'a list -> doc
 convenient to define an operator for this: [[x ^/ y]] joins [[x]] and
 [[y]] with a [[break]].
 
-<<>>=
+<<pp.mli>>=
 val (^/)      : doc -> doc -> doc
 
 @ A [[block]] contains objects [[xs]] formatted by [[f]] and enclosed
 by curly braces.  Its body will be indented in case it does not fit on
 a single line. 
 
-<<>>=
+<<pp.mli>>=
 val block     : ('a -> doc) -> 'a list -> doc
 @
 
@@ -276,7 +276,7 @@ A [[sdoc]] value is either an empty document ([[SNil]]), or a literal
 text followed by some [[sdoc]] ([[SText]]), or a newline, followed by
 a number of spaces and another [[sdoc]] value. 
 
-<<>>=
+<<pp.ml>>=
 type sdoc =
     | SNil
     | SText             of string * sdoc
@@ -285,7 +285,7 @@ type sdoc =
 @ Printing a [[sdoc]] value to a string or file is straight forward. 
 The [[oc]] parameter for [[sdocToFile]] is an open file channel.
 
-<<>>=
+<<pp.ml>>=
 let rec sdocToString = function
     | SNil              -> ""
     | SText(s,d)        -> s ^ sdocToString d
@@ -315,7 +315,7 @@ groups or modes remain:
                  newline and as space otherwise. 
 \end{itemize}
 
-<<>>=
+<<pp.ml>>=
 type mode =
     | Flat
     | Break
@@ -343,7 +343,7 @@ contents of an [[agrp]] [[format]] uses [[fit]] to check, whether the
 whole group fits into the rest of the line.  In case it does, the mode
 will be [[Flat]] which means its [[break]]s will be spaces. 
 
-<<>>=
+<<pp.ml>>=
 <<fits>>
 
 let rec format w k = function
@@ -404,7 +404,7 @@ let ppToFile oc w doc =
 \subsubsection{Useful functions}
 % ------------------------------------------------------------------ 
 
-<<>>=
+<<pp.ml>>=
 let rec list sep f xs =
     let rec loop acc = function
         | []    -> acc
@@ -441,7 +441,7 @@ let strlen  = String.length
 operating systems use different or more characters.  So we better
 abstract from this.
 
-<<>>=
+<<auxiliaries>>=
 let nl      = "\n"
 
 @

@@ -15,14 +15,14 @@ scanning of long strings (> 1000 chars) should be avoided.
 \subsection{Interface}
 % ------------------------------------------------------------------ 
 
-<<lc.mli>>=   
+<<lc.mli>>=
 exception Error of string
 @
 
 [[Error]] reports the failure of a lexer with a message which is not
 too descriptive but may help finding unexpected failures. 
 
-<<>>=
+<<lc.mli>>=
 type 'a lexer
 @
 A lexer scans a string to check that it matches a syntactic structure. 
@@ -32,83 +32,83 @@ list.  The type of a single result is [['a]].  Typically will a
 scanner store substrings from the scanned string and thus [['a]] is
 [[string]]. 
 
-<<>>=
+<<lc.mli>>=
 val succeed : 'a lexer
-@ 
+@
 [[succeed]] is a lexer that always succeeds.  
 
-<<>>=
+<<lc.mli>>=
 val fail : string -> 'a
-@ 
+@
 [[fail]] always fails with a descriptve error message. 
 
-<<>>=
+<<lc.mli>>=
 val any : 'a lexer
 @
 [[any]] consumes just one character when availabe and fails when the
 end of string is reached. 
 
-<<>>=
+<<lc.mli>>=
 val eof : 'a lexer
-@ 
+@
 [[eof]] succeeds when the end of input (i.e.  string) is reached.  It
 does not consume any character. 
 
-<<>>=
+<<lc.mli>>=
 val satisfy : (char -> bool) -> 'a lexer
-@ 
+@
 [[satisfy f]] consumes the next characters successfully when it
 satisfies predicate [[f]]. 
 
-<<>>=
+<<lc.mli>>=
 val chr : char -> 'a lexer
-@ 
+@
 [[chr c]] consumes the next character when it equals [[c]]; fails
 otherwise. 
 
-<<>>=
+<<lc.mli>>=
 val str : string -> 'a lexer
 @
 [[str s]] succeeds when the input starts with string [[s]] - in this
 case it consumes as many characters as [[s]] is long. 
 
-<<>>=
+<<lc.mli>>=
 val ( *** ) : 'a lexer -> 'a lexer -> 'a lexer
 val seq     : 'a lexer -> 'a lexer -> 'a lexer
-@ 
+@
 [[x *** y]] is a lexer that first uses lexer [[x]] and then scans the
 remaining input using lexer [[y]].  It fails when any of [[x]] and
 [[y]] fail.
    
 
-<<>>=
+<<lc.mli>>=
 val ( ||| ) : 'a lexer -> 'a lexer -> 'a lexer
 val alt     : 'a lexer -> 'a lexer -> 'a lexer
 @
 [[x ||| y]] scans the input using lexer [[x]]; if [[x]] fails it scans
 the input again using [[y]].  The lexer fails when [[y]] fails. 
 
-<<>>=
+<<lc.mli>>=
 val many : 'a lexer -> 'a lexer
-@ 
+@
 [[many l]] scans the input using lexer [[l]] as many (including zero)
 times as possible; always succeeds.  Beware:  [[many]] is greedy; i.e.
 [[many any *** chr 'x']] will always fail because the [['x']] in the
 input will be consumed by [[many any]]. 
 
-<<>>=
+<<lc.mli>>=
 val some : 'a lexer -> 'a lexer
-@ 
+@
 [[some l]] scans the input using lexer one or more times.  [[some]] is
 greedy -- see also [[many]]. 
 
-<<>>=
+<<lc.mli>>=
 val opt : 'a lexer -> 'a lexer
-@ 
+@
 [[opt l]] scans the input using lexer [[l]] when possible; when [[l]]
 fails the lexer does not consume input and succeeds. 
 
-<<>>=
+<<lc.mli>>=
 val save : (string -> int -> int -> 'a) -> 'a lexer -> 'a lexer
 @
 [[save f l]] is a lexer [[l]] which uses a function [[f]] to store
@@ -143,23 +143,23 @@ parentheses above.  When the matched regions do not nest a
 [[List.rev]] applied to the result list will reorder the result list
 into the more intuitive order of opening parentheses.  
 
-<<>>=
+<<lc.mli>>=
 val saveStr : string lexer -> string lexer
 @
 [[saveStr l]] uses lexer [[l]] to scan the input.  The substring [[l]]
 matches is stored in the result list which can be obtained with
 [[scan]].  See [[save]] for the order of the result list.  
 
-<<>>=
+<<lc.mli>>=
 val scan: string -> 'a lexer -> (int * 'a list)
 @
 [[scan str l]] scans string [[str]] using lexer [[l]]. The result is a
 pair: the number of characters successfully consumed and the list of
 stored results. [[scan]] raises [[Error]] when scanning fails. 
 
-<<>>=
+<<lc.mli>>=
 val scanFrom : int -> string -> 'a lexer -> (int * 'a list)
-@ 
+@
 [[scanFrom x str l]] scans string [[str]] using lexer [[l]] starting at
 character [[x]] of [[str]] (first character is 0) and returns the
 number of characters successfully scanned and the list of results. 
@@ -184,39 +184,39 @@ string, and the list of saved regions. It returns: the number of
 characters successfully consumed and a new region list. All lexers
 except [save] pass the region list just trough 
 
-<<>>=
+<<lc.ml>>=
 type 'a lexer           = string -> int -> 'a list -> (int * 'a list)
 
 (* naming convention: str=actual input, x=current position in str,
    r=region list (all regions saved by the [save] lexer) *)
 
 let succeed str x r     = (0,r)
-<<>>=
+<<lc.ml>>=
 
 let fail msg            = error msg
 
-<<>>=
+<<lc.ml>>=
 let any                 = fun str x r -> 
                           if x < strlen str 
                           then (1,r)
                           else fail "unexpected eof"
 
-<<>>=
+<<lc.ml>>=
 let eof                 = fun str x r ->         
                           if x = strlen str
                           then (0,r)
                           else fail "eof expected"
 
-<<>>=
+<<lc.ml>>=
 let satisfy f           = fun str x r ->
                           if x < strlen str && f (get str x)
                           then (1,r)
                           else fail "predicate failed"
 
-<<>>=
+<<lc.ml>>=
 let chr c               = satisfy ((=) c)
  
-<<>>=
+<<lc.ml>>=
 let str s               = fun st x r ->    
                           let l = strlen s in
                           let rec loop i =
@@ -228,7 +228,7 @@ let str s               = fun st x r ->
                               in 
                                   loop 0
 
-<<>>=
+<<lc.ml>>=
 let seq  l1 l2          = fun str x r ->
                           let (i1,r1) = l1 str  x     r    in
                           let (i2,r2) = l2 str (x+i1) r1   in
@@ -236,7 +236,7 @@ let seq  l1 l2          = fun str x r ->
 let ( *** ) = seq
 
                               
-<<>>=
+<<lc.ml>>=
 let alt l1 l2           = fun str x r ->
                           try l1 str x r with
                               Error _ -> try l2 str x r with
@@ -249,22 +249,22 @@ let alt l1 l2           = fun str x r ->
                              *)
 let (|||) = alt
 
-<<>>=
+<<lc.ml>>=
 let rec many l          = fun str x r ->
                           (l *** many l ||| succeed) str x r 
 
-<<>>=
+<<lc.ml>>=
 let some l              = l *** many l
 
-<<>>=
+<<lc.ml>>=
 let opt l               = l ||| succeed
 
-<<>>=
+<<lc.ml>>=
 let save f l            = fun str x r ->
                           let (i,r') = l str x r   in
                               (i,f str x i :: r')
 
-<<>>=
+<<lc.ml>>=
 let saveStr l           = save String.sub l
                               
 (* auxilary functions *)

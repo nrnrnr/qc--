@@ -58,14 +58,14 @@ val catchDelayed :
 type 'a error = Error | Ok of 'a
 type pretty = string list
 exception ErrorExn of Sourcemap.location * pretty
-@ 
+@
 The raising combinators move [[error]] to be a top-level type
 constructor.
 <<implementation>>=
 module Raise = struct
   <<raising>>
 end
-@ 
+@
 We manipulate these things in stylized ways.
 [[list]] takes [['a error list]] into [['a list error]].
 If any value is bad, the list is bad, and we do no further computing
@@ -77,12 +77,12 @@ let list l =
         | (Ok h::t, stripped) -> u(t, h::stripped)
         | (Error::_, _) -> Error
   in  u(l, [])
-@ 
+@
 [[pair]] does the same for pairs.
 <<raising>>=
 let pair = function (Ok x, Ok y) -> Ok (x, y)
                   | _ -> Error
-@ 
+@
 We can do left or right values only.
 <<raising>>=
 let left  = function (Ok x, y) -> Ok (x, y)
@@ -95,7 +95,7 @@ let option = function
   | (None) -> Ok None
   | (Some (Ok x)) -> Ok (Some x)
   | (Some Error) -> Error
-@ 
+@
 [[triple]] and [[quad]] do the same for triples and quadruples.
 <<raising>>=
 let triple = function
@@ -105,7 +105,7 @@ let quad = function
   | (Ok x, Ok y, Ok z, Ok w) -> Ok (x, y, z, w)
   |  _ -> Error
 let xxx = 3
-@ 
+@
 And lowering is the dual operation.
 <<implementation>>=
 module Lower = struct
@@ -116,19 +116,19 @@ module Lower = struct
   let quad   = function (Error) -> (Error, Error, Error, Error)
                       | (Ok (x, y, z, w)) -> (Ok x, Ok y, Ok z, Ok w)
 end
-@ 
+@
 We use [[map]] to propagate errors, by analogy with [[List.map]].
 [[f]] either  returns a good value or raises [[Error]].
 <<implementation>>=
 let map f = function Ok x -> Ok (f x) | Error -> Error
-@ 
+@
 In case we wind up with [['a error error]], we can combine the two
 [[error]] constructors. 
 [[combine o map]] is useful.
 <<implementation>>=
 let combine = function Error -> Error | (Ok x) -> x
 let sequence f x = combine (map f x)
-@ 
+@
 Now we can do something a little more tricky.  Suppose we have a
 function on a clean environment, and we want to pass it an environment
 that can return [['a error]].  Here's what we do:
@@ -147,7 +147,7 @@ let errorEnvOption
                        | Some Error -> raise Lookup
                        | None -> None
       in  try Ok (f env' x) with Lookup -> Error
-@ 
+@
 [[catch']] catches the [[Error]] exception and turns it into a
 default value, usually [[Error]].
 <<implementation>>=
@@ -159,13 +159,13 @@ let catchDelayed default consumer f x =
   try f x
   with ErrorExn (loc, pp) -> (consumer (msg "Error" loc pp); default ())
 let catch x  = catch' Error x (* obey value restriction *)
-@ 
+@
 <<implementation>>=
 let error  loc msg = raise (ErrorExn (loc, msg))
 let errorp loc msg = raise (ErrorExn (loc, msg))
 let warning  loc mm = ppErr (msg "Warning" loc mm)
 let warningp = warning
-@ 
+@
 <<implementation>>=
 let errormsg loc msg =
   ( prerr_string (Sourcemap.Location.string loc)

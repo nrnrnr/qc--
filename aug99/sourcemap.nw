@@ -128,7 +128,7 @@ support resynchronization, one that supports resynchronization only at
 column 1, and one that supports arbitrary resynchronization.
 
 This implementation supports arbitary resynchronization.
-@ 
+@
 A character position is an integer.  A region is delimited by the
 position of the start character and one beyond the end.
 It might help to think of Icon-style positions, which fall between
@@ -178,7 +178,7 @@ module Map = struct
   let compare = fun {uid=u1} {uid=u2} -> compare u1 u2
   <<map exports>>
 end
-@ 
+@
 <<map exports>>=
 (* local definitions *)
   let n = ref 0
@@ -189,7 +189,7 @@ end
     {resynchPos=[(pos, f, c)]; linePos=[(pos, l)]; uid=uid()}
   let null : map =
     {resynchPos=[(0, "not a real source map", 0)]; linePos=[(0, 0)]; uid= -. 99}
-@ 
+@
 Since important lists are never empty, I define this function:
 <<utilities>>=
 let hd x = try List.hd x with Failure "hd" -> assert false
@@ -209,7 +209,7 @@ module Announce = struct
         )
   <<map announce exports>>
 end
-@ 
+@
 Since [[pos]] is the position of the newline, the next line doesn't
 start until the succeeding position.
 <<map announce exports>>=
@@ -218,7 +218,7 @@ let newline map pos =
   in  map.linePos <- (pos+1, line+1) :: map.linePos
 <<map exports>>=
 let last_change map = fst (hd map.linePos)
-@ 
+@
 A generally useful thing to do is to remove from the lists the initial
 sequences of tuples
 whose positions satisfy some predicate:
@@ -231,14 +231,14 @@ let remove p map =
         | ((pos, _, _)::rest) as l -> if p pos then strip' rest else l
         | [] -> []
   in  (strip' map.resynchPos, strip map.linePos)
-@ 
+@
 We find file and line number by linear search.
 The first position less than [[p]] is what we want.
 The initial column depends on whether we resynchronized.
 <<utilities>>=
 let column (pos, file, col) (pos', line) p =
   if pos = pos' then p - pos + col else p - pos' + 1
-@ 
+@
 <<implementation>>=
 type point = map * charpos
 module Point = struct
@@ -301,7 +301,7 @@ let forgetOldPositions map
   in let (p', line)      as l = hd (map.linePos)
   in map.linePos <- [l];
      map.resynchPos <- [if p = p' then r else (p', file, 1)]
-@ 
+@
 <<location exports>>=
 let newline_count (map, (lo, hi)) =
         let (hifiles, hilines) = remove (function pos -> pos >= hi && pos > lo) map
@@ -342,4 +342,4 @@ module Sourceloc = struct
   <<sourceloc exports>>
 end
 <<sourceloc exports>>=
-@ 
+@

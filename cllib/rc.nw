@@ -58,13 +58,13 @@ exception       Error of string         (* reports parse/scan errors *)
 [[find id dict]] returns the value bound to [[id]] or raises [[Not_found]]
 in case there is no binding.
 
-<<>>=
+<<rc.mli>>=
 val find        : id -> rcdict -> rc 
 @
 
 [[read file]] reads onfiguration from [[file]].
 
-<<>>=
+<<rc.mli>>=
 val read        : string -> rcdict
 @
 
@@ -84,7 +84,7 @@ let error msg   = raise (Error msg)
 [[find id rcdict]] looks up a value for [[id]]; raises [[Not_found]] in
 case [[id]] is undefined.
 
-<<>>=
+<<rc.ml>>=
 let find   = Rc_ast.find
 let asList = Rc_ast.asList
 @
@@ -92,7 +92,7 @@ let asList = Rc_ast.asList
 [[read file]] reads rcfile [[file]], parses it, and returns it contents 
 as value of type [[rcfile]].
 
-<<>>=
+<<rc.ml>>=
 let read file = 
     let file_ic         = try open_in file with 
                           Sys_error msg -> error msg            in
@@ -130,7 +130,7 @@ type rc         =
 [[rcdict]] is a dictionary that maps [[id]]s to [[rc]] values. It captures 
 a configuration read from a file using the [[read]] function. 
 
-<<>>=
+<<rc_ast.mli>>=
 type rcdict
 @
 
@@ -144,19 +144,19 @@ clients of [[Rc]].
 
 [[empty]] - an empty [[rcdict]]
 
-<<>>=
+<<rc_ast.mli>>=
 val empty       : rcdict 
 @
 
 [[add id rc dict]] adds binding [[id]] $\to$ [[rc]] to [[dict]].
 
-<<>>=
+<<rc_ast.mli>>=
 val add         : id -> rc -> rcdict -> rcdict 
 @
 
 [[asList dict]] returns all bindings of [[dict]] in a list; for debugging.
 
-<<>>=
+<<rc_ast.mli>>=
 val asList      : rcdict -> (id * rc) list
 @
 
@@ -237,7 +237,7 @@ values          : value  COMMA value            { [$3  ; $1]    }
         Buffer.clear strBuffer
 }
 
-<<>>=
+<<rc_scan.mll>>=
 let digit       = ['0'-'9']
 let letter      = ['a'-'z' 'A'-'Z' '_']
 let ident       = letter (letter|digit)*
@@ -248,7 +248,7 @@ let nl          = '\n'
 let tab         = '\t'
 
 
-<<>>=
+<<rc_scan.mll>>=
 rule scan = parse
     | eof               { EOF }
     | ws                { scan lexbuf }
@@ -283,7 +283,7 @@ rule scan = parse
     |  _                { let c = get lexbuf in
                             error ("illegal character `" ^ c ^ "'")
                         }    
-<<>>=
+<<rc_scan.mll>>=
 and string = parse
     | eof               { error "unterminated string" }
     | '"'               { (* return *) }

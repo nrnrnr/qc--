@@ -110,7 +110,7 @@ $qc -pp $file           > $tmp/$this.$$.1
 $qc -pp $tmp/$this.$$.1 > $tmp/$this.$$.2
 $qc -pp $tmp/$this.$$.2 > $tmp/$this.$$.3
 
-diff -c $tmp/$this.$$.2 $tmp/$this.$$.3 || echo ">>> $file "
+diff -c $tmp/$this.$$.2 $tmp/$this.$$.3 || echo "@>>> $file "
 rc="$?"
 
 # clean up and return
@@ -188,7 +188,7 @@ trap "rm -f $tmp.* ; exit 1" 1 2 3 15
 ## parse command line arguments and show usage
 
 if [ $# -lt 1 ]; then
-    cat <<EOF
+    cat @<<EOF
     
      $this cmd [-r] [-in ifile] [-out ofile] [-err efile] [-x n]  [-f file] .. 
     
@@ -203,7 +203,7 @@ if [ $# -lt 1 ]; then
     
      -f   /some/file    
                   cmd is expected to create /some/file. /some/file should 
-		  NOT be placed into the \$CWD. /some/file is compared against
+                  NOT be placed into the \$CWD. /some/file is compared against
                   \$CWD/file. /some/file is deleted after comparison
     
      -r           recording mode: no comparisons are done. Instead all
@@ -223,25 +223,25 @@ cmd="$1"
 shift
 while : ; do
     case "$1" in
-	"")
-	    break;;
-	-in)
-	    stdin="$2"; shift;;
-	-out)
-	    stdout="$2"; shift;;
-	-err)
-	    stderr="$2"; shift;;
-	-x)
-	    exitc="$2"; shift;;
-	-v)
+        "")
+            break;;
+        -in)
+            stdin="$2"; shift;;
+        -out)
+            stdout="$2"; shift;;
+        -err)
+            stderr="$2"; shift;;
+        -x)
+            exitc="$2"; shift;;
+        -v)
             verbode="on";;
-	-r)
-	    recording="on";;
-	-f)
-	    files="$files $2"; shift;;
-	*)
-	    echo "unknown option: $1" 2>&1;
-	    exit 2;;
+        -r)
+            recording="on";;
+        -f)
+            files="$files $2"; shift;;
+        *)
+            echo "unknown option: $1" 2>&1;
+            exit 2;;
     esac
     shift
 done
@@ -264,7 +264,7 @@ else
 
     $cmd < "$stdin" 2> "$stderr" > "$stdout"
     for f in $files; do
-	mv $f `basename $f`
+        mv $f `basename $f`
     done
     exit 0
 fi
@@ -295,13 +295,13 @@ fi
 for f in $files; do
     expect=`basename $f`
     if ! cmp $f $expect; then 
-	echo "failed: $f does not match expectation $expect"
-	diff -c $f $expect
-	rm -f $f
-	rc=1
-	break
+        echo "failed: $f does not match expectation $expect"
+        diff -c $f $expect
+        rm -f $f
+        rc=1
+        break
     else
-	rm -f $f
+        rm -f $f
     fi
 done
 

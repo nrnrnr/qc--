@@ -44,7 +44,7 @@ successor node; the function prepends the list to its argument.
 This representation avoids lots of copying
 <<implementation>>=
 type 'a preceded = 'a * (IRNode.node -> IRNode.node)
-let (<<) f g x = f (g x)     (* function composition *)
+let (@<<) f g x = f (g x)     (* function composition *)
 @ Looks to me like a monad.
 We define a whole set of combinators for this.
 <<implementation>>=
@@ -59,29 +59,29 @@ module New = struct
   let cell space (addr, pre) = (RTL.CELL (space, addr), pre)
   let const k = (RTL.CONST k, fun x -> x)
   let var v ty = (RTL.VAR (v, ty), fun x -> x)
-  let store (loc, pre1) (src, pre2) ty = (RTL.STORE(loc, src, ty), pre2 << pre1)
-  let guard (g, pre1) (e, pre2) = (RTL.GUARDED (g, e), pre2 << pre1)
+  let store (loc, pre1) (src, pre2) ty = (RTL.STORE(loc, src, ty), pre2 @<< pre1)
+  let guard (g, pre1) (e, pre2) = (RTL.GUARDED (g, e), pre2 @<< pre1)
   let rtl gs = let (gs, pre) = Lift.list gs in (RTL.RTL gs, pre)
 end
-@ 
+@
 Dunno if we need these\ldots
 <<monad operations>>=
 let map f (x, l) = (f x, l)
 let unit x = (x, fun x -> x)
-let join ((x, l), l') = (x, l' << l)
+let join ((x, l), l') = (x, l' @<< l)
 module Lift = struct
   let list l =
-    let cons (h, pre1) (t, pre2) = (h :: t, pre2 << pre1)
+    let cons (h, pre1) (t, pre2) = (h :: t, pre2 @<< pre1)
     in  List.fold_right cons l ([], fun x -> x)
 end
-@ 
+@
 <<implementation>>=
 module Temp = struct
   type temp = RTL.location * RTL.width
   let rvalue (t, ty) = RTL.FETCH(t, ty)
   let store (t, ty) e = RTL.STORE (t, e, ty)
 end
-@ 
+@
 [[exp]] develops an [[RTL.exp]] into a temporary.
 <<implementation>>=
 <<type utilities>>
@@ -101,7 +101,7 @@ let prepend_rtls alloc attributes =
                  fun succ -> pred (IRNode.Assign (attributes, r, succ))
 let atomize (alloc : allocator) attributes successor rtl =
   prepend_rtls alloc attributes rtl successor
-@ 
+@
 <<function to atomize expression>>=
    let truth = RTL.CONST (RTL.BOOL true)
 in let alloc ty = (alloc ty, ty)
@@ -114,25 +114,25 @@ in function
    | RTL.FETCH (l, ty) ->
        let t = alloc ty in
        let (l, p) = loc l 
-       in  (Temp.rvalue t, put (always (Temp.store t (RTL.FETCH(l, ty)))) << p)
+       in  (Temp.rvalue t, put (always (Temp.store t (RTL.FETCH(l, ty)))) @<< p)
    | RTL.APP (rator, args) ->
        let t = alloc (result_ty rator)  in
        let (rhs, pre) = New.app rator (List.map exp args)
-       in  (Temp.rvalue t, put (always (Temp.store t rhs)) << pre)
-@ 
+       in  (Temp.rvalue t, put (always (Temp.store t rhs)) @<< pre)
+@
 <<function to atomize guard>>=
 function
 | RTL.CONST k as e -> (e, fun x -> x)
 | RTL.FETCH _ -> assert false
 | RTL.APP (rator, args) -> New.app rator (List.map exp args)
-@ 
+@
 
 <<type utilities>>=
 let const_width = function
     | RTL.INT        (_, t) -> t
     | RTL.LINK_CONST (_, t) -> t
     | RTL.BOOL _ -> assert false
-@ 
+@
 <<type utilities>>=
 let result_ty rator = 32 (* bogus *)
 

@@ -41,14 +41,14 @@ A mapping from label and procedure names to IR~nodes.
 module IRNode (imports RTL) {
   <<ASDL definitions for nodes of abstract \PAL>>
 }
-@ 
+@
 Because ASDL handles trees, not graphs, we represent a graph as a
 list of nodes, and we refer to nodes using integer node ids.
 Node ids are intended to be unique per module.
 <<ASDL definitions for nodes of abstract \PAL>>=
-graph  = (node*) 		-- A list of all and only the Label nodes
-label = (string?, int)		-- The Ints are unique per compilation unit
-				-- Ditto the names if present
+graph  = (node*)                -- A list of all and only the Label nodes
+label = (string?, int)          -- The Ints are unique per compilation unit
+                                -- Ditto the names if present
 @
 Flow-graph nodes are inspired by Table 2 of 
 the paper ``Exceptions Need Not Be Exceptional,'' but there are
@@ -61,16 +61,16 @@ node = Entry (continuation*, node next)
      | CopyOut (actual*, copy_context, string convention, node next)
      | CalleeSaves (variable*, node next)
      | Assign (RTL.rtl, node next)
-     | Branch (RTL.exp, node true, node false)	-- exp is condition
-     | Goto (RTL.exp, label* targets)          	-- exp is address of target
+     | Branch (RTL.exp, node true, node false)  -- exp is condition
+     | Goto (RTL.exp, label* targets)           -- exp is address of target
      | Call  (RTL.exp, contbund)
      | Yield (RTL.exp, contbund)
      | Jump  (RTL.exp)
      | CutTo (RTL.exp)
-attributes (atts enclosing_spans)	-- used for spans
+attributes (atts enclosing_spans)       -- used for spans
 atts = (att*)
-att  = UserSpan(int token, RTL.exp value)	-- value is link-time constant
-						-- token is non-negative
+att  = UserSpan(int token, RTL.exp value)       -- value is link-time constant
+                                                -- token is non-negative
      | Other(private)        
 private = Private    -- private attributes not exchanged between passes
 @ On entry to a code generator,
@@ -121,7 +121,7 @@ Type&Hint&Type&Hint\\
 \end{quote}
 <<ASDL definitions for nodes of abstract \PAL>>=
 hint = (string)
-@ 
+@
 Variables stand for locations.  On entry, they must have been created
 with the [[RTL.VAR]] constructor.
 We expect that the code generator will eliminate them at the first
@@ -179,7 +179,7 @@ module IR (imports IRNode imports AST) {
   item = Datum (AST.datum)
        | Proc  (IRNode.proc procedure)
 }
-@ 
+@
 \section{Private data for the {\PAL} code generator}
 
 Clients shouldn't look here, and should not include this code in their

@@ -12,7 +12,7 @@ module AST {
   <<definitions>>
 
 }
-@ 
+@
 %-------------------------------------------------------
 \subsection{Names}
 %-------------------------------------------------------
@@ -26,7 +26,7 @@ segment_name = (string)
 
 var_names    = (var_name*)
 
-@ 
+@
 A [[var_name]] is the name of a \emph{variable}; that is, a 
 procedure argument, local variable, or global register.  You can't take
 the address of a variable; you can assign to it.  Variables cannot be
@@ -45,7 +45,7 @@ exported.  The value of a constant may not be fixed until link time.
 %-------------------------------------------------------
 <<definitions>>=
 alignment = (int bytes)       -- Align on an n-byte boundary
-big_int = (int)	-- eventually to be replaced by arbitrary-precision ints
+big_int = (int) -- eventually to be replaced by arbitrary-precision ints
 hint = (string)  -- hints are just strings, e.g., "<address>"
 @
 % -------------------------------------------------------
@@ -72,7 +72,7 @@ decl = Import( const_name, mangling_info )
 global_info = (var_name name, type, string? register)
 
 seg_contents 
-	= Datum( datum )
+        = Datum( datum )
 
         | Procedure( calling_convention? conv
                    , const_name name
@@ -82,7 +82,7 @@ seg_contents
 
         | SpanDecl (compile_static_expr token, link_static_expr value, seg_contents*)
 
-@ 
+@
 The order of [[seg_contents]] in a [[Segment]] is significant: things are laid out strictly
 sequentially.  You can even put some static data just before a procedure.
 
@@ -126,7 +126,7 @@ Along with types, the hints label transitions in a Bailey-Davidson
 automaton \cite{bailey:formal}.
 <<definitions>>=
 formal = Formal( hint?, type, var_name )
-@ 
+@
 
 %-------------------------------------------------------
 \subsection{Statements}
@@ -139,7 +139,7 @@ no nested scopes---the scope of a declaration is the entire procedure.
 and placed at the top.)
 <<definitions>>=
 stmt = VarDecl( var_name, type )
-     | StackDecl( datum )  	       -- No initialisation allowed
+     | StackDecl( datum )              -- No initialisation allowed
      <<other constructors for [[stmt]]>>
 @ Note that an alignment in a stack declaration might well entail a
 run-time cost, depending on the alignment of the stack pointer called
@@ -152,7 +152,7 @@ for under the calling convention.
 assignment = Assign ( lvalue, expr )
 lvalue     = Var( var_name name )
            | Mem( expr address, alignment, type )
-@ 
+@
 Control flow includes if-then-else and goto-with-label.
 We've decided not to include goto with parameters; if necessary, that
 construct can be treated as syntactic sugar.
@@ -180,11 +180,11 @@ form $\mathit{lo} \le x < \mathit{hi}$.}
 <<definitions>>=
 switch_alt = Alt( range* ranges, stmt* rhs )
 range      = (compile_static_expr lo, compile_static_expr? hi)
-@ 
+@
 Calls, jumps, and invocation may all have hints about the calling
 convention.
 <<other constructors for [[stmt]]>>=
-| Call	( var_name* results
+| Call  ( var_name* results
         , calling_convention? conv
         , expr address
         , actual* actuals
@@ -192,11 +192,11 @@ convention.
         )
 | Jump  ( calling_convention? conv
         , expr address
-      	, actual* actuals
+        , actual* actuals
         )
 | Invoke( calling_convention? conv
         , expr continuation
-      	, actual* actuals
+        , actual* actuals
         )
 <<definitions>>=
 actual = (hint?, expr value)
@@ -209,11 +209,11 @@ identify the calling convention, as that is implicit in the definition
 of the procedure.
 <<other constructors for [[stmt]]>>=
 | Return( actual* results, calling_convention? conv )
-@ 
+@
 Spans can cover statements as well as declarations
 <<other constructors for [[stmt]]>>=
 | SpanStmt (compile_static_expr token, link_static_expr value, stmt*)
-@ 
+@
 
 %-------------------------------------------------------
 \subsection{Expressions}
@@ -244,7 +244,7 @@ A [[boolean_expr]] must have type [[bool]].
 compile_static_expr = (expr)
 link_static_expr    = (expr)
 boolean_expr        = (expr)
-@ 
+@
 
 
 %-------------------------------------------------------
@@ -255,7 +255,7 @@ Widths are in bits.
 <<definitions>>=
 type = BitsType(  int width )
      | FloatType( int width )
-@ 
+@
 
 
 %-------------------------------------------------------
@@ -263,7 +263,7 @@ type = BitsType(  int width )
 %-------------------------------------------------------
 <<definitions>>=
 primop = (string)
-@ 
+@
 %-------------------------------------------------------
 \subsection{Name mangling and calling conventions}
 %-------------------------------------------------------
@@ -274,6 +274,6 @@ We aren't sure what to do yet.
 mangling_info = NoManglingInfo
 
 calling_convention  = (string)
-@ 
+@
 
 

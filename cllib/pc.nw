@@ -46,20 +46,20 @@ msg]] parser consumes no input and fails with message [[msg]].  The
 [[succeed x]] parser also does not consume any input and returns the
 semantic value [[x]].
 
-<<>>=
+<<pc.mli>>=
 val fail:       string -> 'a
 val succeed:    'v -> ('t,'v) par 
 
 @ The [[any]] parser consumes the next token and returns it as
 semantic value. It fails when there is no next token. 
 
-<<>>=
+<<pc.mli>>=
 val any: ('t,'t) par
 
 @ The [[eof]] parser succeeds when the list of tokens is empty and
 returns [[true]] as semantic value. 
 
-<<>>=
+<<pc.mli>>=
 val eof: ('t,bool) par
 
 @ The [[satisfy f]] parser uses a user supplied predicate [[f]] to
@@ -67,7 +67,7 @@ check the next token in the input.  It succeeds when [[f]] is
 fulfilled and returns the token as semantic value.  The parser fails
 when either the input is empty or [[f]] is not fulfilled.
 
-<<>>=
+<<pc.mli>>=
 val satisfy: ('t -> bool) -> ('t,'t) par
 
 @ The [[literal x]] parser expects [[x]] as the next token and fails
@@ -75,7 +75,7 @@ in case the input is empty or not [[x]]. When it succeeds it returns
 [[x]] as semantic value. The [[literal]] parser can be easily
 implemented with [[satisfy]] and is a handy shortcut.
 
-<<>>=
+<<pc.mli>>=
 val literal: 't -> ('t,'t) par
 
 @ ------------------------------------------------------------------  
@@ -116,7 +116,7 @@ and [[y]] succeed and returns a pair of semantic values. Since [[***]]
 is right associative [[x *** y *** z]] would return a [[(x,(y,z))]]
 pair as a semantic value.
 
-<<>>=
+<<pc.mli>>=
 val ( *** ): ('t,'v1) par -> ('t,'v2) par -> ('t,('v1*'v2)) par 
 
 @ When using a parser like [[literal "-" *** literal any]] the
@@ -126,7 +126,7 @@ right semantic value only:  [[literal "-" **> any]] returns the right
 semantic value.  The [[**<]] combinators creates a parser that returns
 only the left semantic value. 
 
-<<>>=
+<<pc.mli>>=
 val ( **< ): ('t,'v1) par -> ('t,'v2) par -> ('t,'v1) par 
 val ( **> ): ('t,'v1) par -> ('t,'v2) par -> ('t,'v2) par 
 
@@ -135,7 +135,7 @@ val ( **> ): ('t,'v1) par -> ('t,'v2) par -> ('t,'v2) par
 and [[y]] fail. On success the semantic value of the first successful
 parser is returned.
 
-<<>>=
+<<pc.mli>>=
 val ( ||| ): ('t,'v)  par -> ('t,'v)  par -> ('t,'v)  par 
 
 @ To manipulate semantic values returned by a parser use the [[p -->
@@ -145,7 +145,7 @@ f] combinator.  It takes a parser [[p]] on the left and a function
 The [[-->]] combinator models semantic actions in a traditional Yacc
 parser. 
 
-<<>>=
+<<pc.mli>>=
 val ( --> ): ('t,'v1) par -> ('v1 -> 'v2) -> ('t,'v2) par
 
 @ When the semantic value for a parser is fixed one could use [[ p -->
@@ -153,7 +153,7 @@ val ( --> ): ('t,'v1) par -> ('v1 -> 'v2) -> ('t,'v2) par
 return x]]. So [[return]] is not a parser or parser combinator but a
 function intended to be used on the rigth hand side of [[-->]].
 
-<<>>=
+<<pc.mli>>=
 val return: 'v1 -> 'v2 -> 'v1
 
 @ The precedences of the infix operators are chosen that typical
@@ -213,7 +213,7 @@ type ('t,'v) par = 't list -> 'v * ('t list)
 \subsubsection{Primitive Parsers}
 % ------------------------------------------------------------------  
 
-<<>>=
+<<pc.ml>>=
 let succeed v ts = (v,ts)
 let fail msg     = error msg
 
@@ -270,7 +270,7 @@ from the \ocaml~scanner source code
      %left  INFIXOP0 EQUAL LESS GREATER      /* = < > | ^ $  */
 @
 
-<<pc.ml>>=    
+<<pc.ml>>=
 
 let ( ||| ) p1 p2 = fun ts ->
     try p1 ts with 

@@ -15,7 +15,7 @@ tell the difference just by looking at a space.
 type reg_like = RTL.location     (* cell with known offset *)
 type tmp      = reg_like         (* a temporary *)
 type reg      = reg_like         (* a hardware register *)
-@ 
+@
 Note the register allocator works with both registers and temporaries.
 Our assumption is that registers are divided into two classes:
 \begin{itemize}
@@ -47,7 +47,7 @@ available for allocation at the beginning of the block.
 the variable pool is unused, why not use it?)
 
 
-@ 
+@
 <<implementation>>=
 module Allocator = functor (Imports : sig <<imports>> end) -> struct
   open Imports
@@ -55,14 +55,14 @@ module Allocator = functor (Imports : sig <<imports>> end) -> struct
   <<utility functions>>
   <<allocator>>
 end
-@ 
+@
 We assume that a set of register-like things can be implemented more
 efficiently than a set of general locations.
 <<abbreviations>>=
 module Regset = Reglike.Set
 type tmp_set = Regset.t
 type reg_set = Regset.t
-@ 
+@
 Now, there are some functions that parameterize the allocator.
 We need to know what set of hardware registers is used to hold which
 temporaries: [[hwregs_for]].
@@ -90,7 +90,7 @@ We need to be able to map temporaries to hardware registers.
 <<abbreviations>>=
 module Regmap = Reglike.Map
 type regmap = reg Regmap.t
-@ 
+@
 We can also substitute for temporaries.
 In general, we need \emph{two} maps: one for definitions, the other
 for uses:
@@ -99,12 +99,12 @@ module RtlFunctions : sig
   val subst_defs_uses : reg Reglike.Map.t -> reg Reglike.Map.t -> RTL.rtl -> RTL.rtl
   val subst_exp : reg Reglike.Map.t -> RTL.exp -> RTL.exp
 end
-@ 
+@
 <<imports>>=
 module IRNodeFunctions : sig
   val subst_defs_uses : reg Reglike.Map.t -> reg Reglike.Map.t -> IRNode.node -> IRNode.node
 end
-@ 
+@
 Finally, we need some way of getting the set of registers for which
 this node is the last use.  
 <<imports>>=
@@ -127,14 +127,14 @@ let tmps_used    rtl    = regfilter is_tmp  (regs_used              rtl) in
 let tmps_defined rtl    = regfilter is_tmp  (regs_defined           rtl) in
 let regs_used_last node = regfilter not_tmp (Imports.regs_used_last node) in
 let tmps_used_last node = regfilter is_tmp  (Imports.regs_used_last node) in
-@ 
+@
 More utilities:
 <<utility functions>>=
 let dom : regmap -> Regset.t = 
   fun map -> Regmap.fold (fun key _ dom -> Regset.add key dom) map Regset.empty
 let range : regmap -> Regset.t = 
   fun map -> Regmap.fold (fun _ v rg -> Regset.add v rg) map Regset.empty
-@ 
+@
 Here, [[avail]] is the set of hardware registers that are available
 for allocation. 
 It is simply the set of registers that are dead on entry to the block
@@ -157,7 +157,7 @@ let alloc avail tmpmap node =
     )
   in  alloc avail tmpmap node
 in alloc
-@ 
+@
 If a temporary~$t$ is mapped to a register~$r$, and we encounter a
 node that (a) defines or kills~$r$ and (b) is not the last use of~$t$,
 then $t$ has to be spilled, and uses of~$t$ \emph{after} the current
@@ -208,7 +208,7 @@ match node with
         <<cases where [[Node]] is not [[Assign]]>>
 <<imports>>=
 val add_last_use_info : IRNode.node -> IRNode.node
-@ 
+@
 A hardware register must be spilled if the instruction defines it,
 a temporary currently maps to it, and it is not dead here.
 (Or is it the temporary that maps to it that should not be dead here?
@@ -243,7 +243,7 @@ temporary map.
 | N.Jump (atts, target)  -> N.Jump (atts, new_exp target) 
 | N.CutTo (atts, target) -> N.CutTo (atts, new_exp target)
 | N.Yield (atts, target, conts) -> N.Yield (atts, new_exp target, conts)
-@ 
+@
 To get a register, we ask [[hwreg_for]] what candidates there are,
 then attempt to choose from those available.  If the choice fails (by
 raising [[Not_found]], we'll have to spill.
@@ -261,10 +261,10 @@ are killed later in the block.
 @
 <<utility functions>>=
 let setmap f l = Regset.fold (fun x s -> Regset.add (f x) s) l Regset.empty
-@ 
+@
 <<utility functions>>=
 let mapsubst m x = try Regmap.find x m with Not_found -> x
-@ 
+@
 <<utility functions>>=
 type split = {t: Regset.t; f: Regset.t}
 let split p s = 
@@ -272,7 +272,7 @@ let split p s =
                  if p x then {t=Regset.add x t; f=f}
                  else {t=t; f=Regset.add x f})
   s {t=Regset.empty; f=Regset.empty}
-@ 
+@
 A register that is killed is never used.
 Grab it.
 <<utility functions>>=
@@ -291,7 +291,7 @@ let farthest_used =
             | [x] -> far remain x
             | _   -> Regset.choose cands
   in  far
-@ 
+@
 <<utility functions>>=
 module E = RtlFuns.Exp
 let insert_reloads reload spillee =
@@ -330,7 +330,7 @@ let insert_reloads reload spillee =
       if E.ever_true (E.may_use spillee target) then N.Assign(atts, reload, node)
       else node
   in insert
-@ 
+@
 Finding registers used and defined.
 The node functions could usefully be cached, but we'd have to ensure
 that substitution destroyed the cache.
@@ -342,11 +342,11 @@ let add_reg_like l regs =
 
 let regs_used       rtl = RtlFuns.Rtl.fold_locs_used    add_reg_like rtl Regset.empty
 let regs_defined    rtl = RtlFuns.Rtl.fold_locs_defined add_reg_like rtl Regset.empty
-let node_regs_used    n = IRFuns.fold_locs_used    	add_reg_like   n Regset.empty
-let node_regs_defined n = IRFuns.fold_locs_defined 	add_reg_like   n Regset.empty
-@ 
+let node_regs_used    n = IRFuns.fold_locs_used         add_reg_like   n Regset.empty
+let node_regs_defined n = IRFuns.fold_locs_defined      add_reg_like   n Regset.empty
+@
 Extending a map
 <<utility functions>>=
 let extend oldmap newmap = Regmap.fold Regmap.add newmap oldmap
 let drop_dom badkeys map = Regset.fold Regmap.remove badkeys map
-@ 
+@
