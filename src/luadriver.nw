@@ -289,6 +289,7 @@ function CMD.parse (args)
         i,v    = i+1, args[i+1] or CMD.error("argument for option -o missing") 
         O.output = v
     elseif v == "-e" then 
+        CMD.dashe = 1
         i, v   = i+1, args[i+1] or CMD.error("argument for option -e missing")
         local _ = dostring(v) or exit(2)
     elseif v == "-keep" then 
@@ -400,7 +401,7 @@ When a file is translated, it may return additional files to be
 translated, and so on until completion.
 <<Lua command-line driver>>=
 function CMD.translate_files(files, txtab)
-  if Options.argc == 0 then CMD.whatfuns["-help"](); exit(1) end
+  if Options.argc == 0 and not CMD.dashe then CMD.whatfuns["-help"](); exit(1) end
   if txtab then CMD.txtab = CMD.txtab or txtab end --- set translator's table
   if files then
     if type(files) == 'string' then
@@ -450,10 +451,14 @@ But they use different tables and different linking commands.
 function CMD.whatfuns["-compile"]()
   backend = backend or Backend.x86
   CMD.translate_files(Options.argv, CMD.compilertab)
-  if Options.stop_count == 0 then
+  if Options.stop_count == 0 and Ld.objects ~= "" then
     CMD.exec(Ld.cmd(Options.output or 'a.out'))
   elseif Options.verbose > 0 then
-    write('Stopping at ', Options.the_stop(), '\n')
+    if Options.stop_count == 0 then
+      write('Stopping at ', Options.the_stop(), '\n')
+    else
+      write('Nothing to link\n')
+    end
   end    
 end
 
