@@ -1092,12 +1092,17 @@ void run_interp(thread *t) {
   errorjmp_set = 1;
   if (setjmp(errorjmp)) {
     errorjmp_set = 0;
-    fprintf(stderr, "error: experienced unrecoverable runtime error\n");
+    fprintf(stderr, "error: experienced unrecoverable runtime error at "
+                    "PC 0x%x\n", pc);
     if (name)
 	  fprintf(stderr, "| Stack trace:\n");
       fprintf(stderr, "| 0: %s()\n", name);
     if (caller)
 	  activation_trace(caller);
+
+    if (name)
+      fprintf(stderr, "Try disassembling '%s' to find relevant instructions\n",
+                      name);
   } else {
     for (;;) {
       match [next] pc to
@@ -1388,7 +1393,8 @@ label arithmetic); all other [[CMM_label]]s are pushed atop the stack as
                              v.ptr = (void *) lbl;
                              break;
                            default:
-                             cmm_err("internal label error");
+                             cmm_err_wint("internal label error "
+                                          "(corrupt label 0x%x)", s);
                            }
 
                            PUSH(v, values);
@@ -1409,7 +1415,12 @@ We implement both {\PAL} and foreign C procedure calls with one matching case.
                            if (lbl->ty == CMM_CFUNCTION) {
                              <<perform C call>>
                            } else if (lbl->ty != CMM_PROCEDURE) {
-                             cmm_err("target label not a procedure");
+                             if (lbl->ty == CMM_LABEL)
+                              cmm_err_wstr("target label '%s' not a procedure",
+                                           lbl->lbl.raddr->label->name);
+
+                             cmm_err_wint("target label (0x%x) not a procedure"
+                                          " and appears corrupted",(int)v.ptr);
                            } else {
                              <<perform {\PAL} call>>
                            }
