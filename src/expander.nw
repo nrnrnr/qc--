@@ -579,7 +579,16 @@ not supported.
 val binop : dst:temp -> operator -> temp -> temp -> block
 val unop  : dst:temp -> operator -> temp         -> block
 val rtlop : dst:temp -> operator -> temp list    -> block
-@ Usage notes:
+@ 
+We support the width-doubling weird value operators with the
+[[dblop]] function.
+(Currently these are only the extended integer multiplies.
+Perhaps one day we will understand the role of the extended
+floating-point multiplies as well.)
+<<generic expansion operations for register machines>>=
+val dblop : dsthi:temp -> dstlo:temp -> operator -> temp -> temp -> block
+@ 
+Usage notes:
 \begin{quote}
 \slshape
 The interface contains multiple functions to make life easy for those
@@ -593,17 +602,8 @@ let binop ~dst op x y = rtlop ~dst op [x; y]
 It is almost certainly true that not every operator is implemented on
 every machine.
 The ability to expand blocks recursively is intended to make it easy
-to use algebraic equivalents, although at present
-we lack a library of such equivalents.
-For example, for a machine without an unsigned modulus instruction,
-one might consider roughly (many conversions omitted):
-\begin{verbatim}
-let binop ~dst op x y = match op with
-| "modu", ws -> 
-   let e = R.app sub [x; R.app mul [y; R.app divu [x; y]]] in
-   Postexpander.Expand.block (R.store dst e)
-...
-\end{verbatim}
+to use algebraic equivalents.
+Our library of equivalents lives in the [[Rewrite]] module.
 \end{quote}
 @
 The generic expander guarantees that
@@ -1794,6 +1794,7 @@ and assign_room room left right w =
             (match right with
             | <<\emph{pattern [[->]] action} for low-bit store>>
             | <<\emph{pattern [[->]] action} for splittable assignment>>
+            | <<\emph{pattern [[->]] action} for doubling weird value operator>>
             | _ ->
                 if looks_like_stack_rhs right then
                   (match right with
@@ -1863,6 +1864,21 @@ ALIGNMENT IS CONCERNED.
   let lsw = RP.Const (RP.Bits (BO.lobits lw b)) in
   let msw = RP.Const (RP.Bits (BO.lobits mw (BO.shrl b (Bits.U.of_int lw w)))) in
   split_assignment ~lsw ~lw ~msw ~mw
+<<\emph{pattern [[->]] action} for doubling weird value operator>>=
+RP.App ((("mulx"|"mulux"), [nw]) as opr, [x; y]) when w = 2 * nw ->
+  let xcon, ycon = match Post.arg_contexts opr with
+  | [x; y] -> contextmap x, contextmap y
+  | _ -> impossf "arity of extended multiply (arg contexts)" in
+  let rcon = contextmap (Post.result_context opr) in
+  let tx, i1 = to_temp room xcon x in
+  let ty, i2 = to_temp room ycon y in
+  let thi, tlo = alloc rcon nw, alloc rcon nw in
+  let i3 = Post.dblop ~dsthi:thi ~dstlo:tlo opr tx ty in
+  let v tmp = RP.Fetch (RP.Reg tmp, nw) in
+  i1 <:> i2 <:> i3 <:> split_assignment ~lsw:(v tlo) ~lw:nw ~msw:(v thi) ~mw:nw
+| RP.App ((("mulx"|"mulux"), _), _) as e ->
+    impossf "unsupported extended multiply %s at width %d"
+      (RU.ToUnreadableString.exp (Up.exp e)) w
 @ 
 We split an assignment into a least significant word [[lsw]] of
 width~[[lw]] and a most significant word [[msw]] of width~[[mw]].

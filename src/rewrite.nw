@@ -11,6 +11,8 @@
 
 This module has rewrite rules that help postexpanders implement
 unsupported operators in terms of supported operators.
+Arguments may be copied, so for maximum efficiency, it may be best if
+they are temporaries---but we don't require this.
 <<exported type abbreviations>>=
 type width = Rtl.width
 type exp   = Rtl.exp
@@ -18,7 +20,23 @@ type loc   = Rtl.loc
 type block = Postexpander.block
 <<rewrite.mli>>=
 <<exported type abbreviations>>
-
+@ 
+There are too many options for rewriting division.
+We assume the common case is that arguments have the same sign (i.e.,
+both positive).
+\begin{itemize}
+\item 
+If the machine's divide instruction provides both \texttt{quot} and
+\texttt{rem} for free, it is probably best to use [[div']].
+It uses at most two conditional branches and will use one in the common case.
+\item 
+If the divide instruction gives only \texttt{quot}, it's probably
+better to use one of the other instructions.
+The first uses two conditional branches always.
+The second uses only one in the common case, but may use up to three
+in uncommon cases.
+\end{itemize}
+<<rewrite.mli>>=
 val div' : width -> dst:loc -> exp -> exp -> quot:exp -> rem:exp -> block
   (* uses: comparisons, add, sub *)
 
@@ -27,13 +45,17 @@ val div2 : width -> dst:loc -> exp -> exp -> block
 
 val div1_3 : width -> dst:loc -> exp -> exp -> block
   (* 1--3 conditional branches *)
-
+@ 
+<<rewrite.mli>>=
 val div_overflows : width -> exp -> exp -> exp
   (* uses: conjoin, eq *)
-
+@ 
+<<rewrite.mli>>=
 val (mod) : width -> exp -> exp -> exp
   (* uses : div, mul, sub *)
 
+val modu : width -> exp -> exp -> exp
+  (* uses : divu, mul, sub *)
 @
 \subsection{Implementation}
 <<rewrite.ml>>=
@@ -55,7 +77,8 @@ let div_overflows w x y =
   let minint = R.bits (BO.shl (B.U.of_int 1 w) (B.U.of_int (w-1) w)) w in
   O.conjoin (O.eq w x minint) (O.eq w y (signed (-1) w))
 
-let (mod) w x y = O.sub w x (O.mul w y (O.div w x y))
+let (mod) w x y = O.sub w x (O.mul w y (O.div  w x y))
+let modu  w x y = O.sub w x (O.mul w y (O.divu w x y))
 @ 
 \section{Things not to be looked at}
 
