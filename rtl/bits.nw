@@ -139,6 +139,7 @@ $$v = \sum_{i=0}^{w-2} 2^i \times b_i - 2^{w-1} \times b_{w-1}$$
 <<interface S>>=
 val of_int:     int         -> width -> t   (* raises Overflow *)
 val of_native:  nativeint   -> width -> t   (* raises Overflow *)
+val of_int32:   int32       -> width -> t   (* raises Overflow *)
 val of_int64:   int64       -> width -> t   (* raises Overflow *)
 val of_string:  string      -> width -> t   (* raises Overflow *)
 @ For the format of the strings accepted by [[of_string]], see the section
@@ -190,6 +191,7 @@ $$v' = \sum_{i=0}^{w-1} 2^i \times b_i$$
 val of_int:     int         -> width -> t       
 val of_native:  nativeint   -> width -> t       
 val of_int64:   int64       -> width -> t       
+val of_int32:   int32       -> width -> t       
 val of_string:  string      -> width -> t   (* raises Overflow *)
 @
 
@@ -511,6 +513,11 @@ let of_int i w =
     check w;
     let i' = I.of_int i in
     if fits_signed i' w then (i',w) else raise Overflow 
+
+let of_int32 i w =
+    check w;
+    let i' = I.of_int32 i in
+    if fits_signed i' w then (i',w) else raise Overflow 
     
 let of_native i w =
     check w;
@@ -575,6 +582,16 @@ let of_int i w =
     let i' = I.of_int i in 
     let i' = if i' < I.zero 
              then I.sub i' (I.shift_left (I.of_int min_int) 1)  
+             else i' 
+    in
+        if fits_unsigned i' w then (sx64 i' w, w) else raise Overflow
+
+let of_int32 i w =
+    check w;
+    assert (i >= Int32.zero);
+    let i' = I.of_int32 i in 
+    let i' = if i' < I.zero 
+             then I.sub i' (I.shift_left (I.of_int32 Int32.min_int) 1)  
              else i' 
     in
         if fits_unsigned i' w then (sx64 i' w, w) else raise Overflow
