@@ -153,7 +153,8 @@ trouble.
 The {\rtl}s passed to node creation functions are in general
 target-specific.  For example:  the target of a [[goto]] can be
 described by an target-independent [[Rtl.exp]] value.  The [[rtl]]
-implementing the [[goto]] is target specific. 
+implementing the [[goto]] is target specific.  The [[rtl]] taken by
+the [[return]] function is provided by the actual target description.
 
 <<abstract types and values>>=
 val exit:                             Props.t -> node
@@ -163,11 +164,11 @@ val assign: Rtl.rtl                -> Props.t -> node (*succ*)
 val branch: Rtl.rtl  -> label      -> Props.t -> node (*succ*)
 val label:  label                  -> Props.t -> node (*succ*)
 
-val copyi:  formal list -> New.t -> Props.t -> node list * New.area (*succ*)
+val copyi:  formal list -> Automaton2.t -> Props.t -> node list * Automaton2.area (*succ*)
 
-val return: int*int    -> Rtl.rtl -> actual list -> New.t -> Props.t -> node list * New.area
-val jump:   label list -> Rtl.rtl -> actual list -> New.t -> Props.t -> node list * New.area
-val cutto:  cuts       -> Rtl.rtl -> actual list -> New.t -> Props.t -> node list * New.area
+val return: int*int    -> Rtl.rtl -> actual list -> Automaton2.t -> Props.t -> node list * Automaton2.area
+val jump:   label list -> Rtl.rtl -> actual list -> Automaton2.t -> Props.t -> node list * Automaton2.area
+val cutto:  cuts       -> Rtl.rtl -> actual list -> Automaton2.t -> Props.t -> node list * Automaton2.area
 @
 
 The [[copyi]] function actually does not create a single node each,
@@ -275,7 +276,7 @@ signature [[S]] as it is defined in the internet. The interesting
 stuff that implements this signature comes next.
 
 <<cfg2.ml>>=
-module A = New (* = Automaton *)
+module A = Automaton2
 module type S = sig
     <<signature S>> 
 end
@@ -420,8 +421,8 @@ let rw rtls =
 The [[return]] function generates a list of assign nodes for actual
 parameters plus a return node with liveness annotation:  all locations
 defined by the assign nodes are considered to be used by the
-[[return]] node in order to keep them live. The same applies for the
-other nodes that exit a precedure: [[jump]] and [[cutto]].
+[[return]] node in order to keep them live.  The same applies for the
+other nodes that exit a precedure:  [[jump]] and [[cutto]].
         
 <<implementation of S>>=
 let return xy rtl actuals cc props = 
