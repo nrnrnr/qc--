@@ -216,8 +216,9 @@ such that they become [[Automaton.loc]] locations. [[loc_of]] takes an
 
 <<interp.ml>>=
 let loc_of (l:Rtl.loc): AN.loc  =
-    { AN.fetch = (Rtl.fetch l)
-    ; AN.store = (Rtl.store l)
+    { AN.fetch  = (Rtl.fetch l)
+    ; AN.store  = (Rtl.store l)
+    ; AN.simple = (fun () -> l)
     }
 @
 
@@ -338,6 +339,7 @@ compiler.
 
 <<interp.ml>>=
 let target' = (* new style *)
+      let spaces = [ Spaces.m ; Spaces.c ;  Spaces.a ; Spaces.g ] in
       { T.name     = arch
 
       ; T.cc_specs = [ "C", ccspecs ; "C--", ccspecs ]
@@ -356,8 +358,8 @@ let target' = (* new style *)
       ; T.named_locs        = Strutil.assoc2map 
                                 ["IEEE 754 rounding mode", fp_mode
                                 ]
-
-      ; T.spaces            = [ Spaces.m ; Spaces.c ;  Spaces.a ; Spaces.g ]
+      ; T.spaces            = spaces
+      ; T.reg_ix_map        = T.mk_reg_ix_map spaces
       ; T.distinct_addr_sp  = false
       ; T.data_section      = "data"
       ; T.bnegate           = Flow.bnegate
