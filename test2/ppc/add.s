@@ -57,9 +57,8 @@ _Lpic_l15:
 _Lpic_fun_l16:
 	mflr r2
 _Lpic_end_l17:
-	lis r5,0x0
-	ori r5,r5,0
-	ori r5,r5,1
+	addi r5,0,1
+	addis r5,r5,0
 	cmplw cr0,r3,r5
 	bgt _Ljoin_l10
 _Ljoin_l11:

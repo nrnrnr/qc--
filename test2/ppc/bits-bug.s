@@ -55,9 +55,8 @@ _Lpic_l13:
 _Lpic_fun_l14:
 	mflr r3
 _Lpic_end_l15:
-	lis r3,0xab54
-	ori r3,r3,0
-	ori r3,r3,58019
+	addi r3,0,-7517
+	addis r3,r3,21675
 	stw r4,64(r1)
 	bl _callee
 _Ljoin_l9:
@@ -134,9 +133,8 @@ _Lpic_l39:
 _Lpic_fun_l40:
 	mflr r4
 _Lpic_end_l41:
-	lis r5,0xab54
-	ori r5,r5,0
-	ori r5,r5,58019
+	addi r5,0,-7517
+	addis r5,r5,21675
 	cmpw cr0,r3,r5
 	bne _Ljoin_l34
 _Ljoin_l35:

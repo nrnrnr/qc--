@@ -33,20 +33,17 @@ _Lpic_l16:
 _Lpic_fun_l17:
 	mflr r3
 _Lpic_end_l18:
-	lis r3,0x0
-	ori r3,r3,0
-	ori r3,r3,3
+	addi r3,0,3
+	addis r3,r3,0
 	stw r4,64(r1)
 	bl _tryout
 _Ljoin_l12:
-	lis r3,0x0
-	ori r3,r3,0
-	ori r3,r3,4
+	addi r3,0,4
+	addis r3,r3,0
 	bl _tryout
 _Ljoin_l9:
-	lis r3,0x0
-	ori r3,r3,0
-	ori r3,r3,0
+	addi r3,0,0
+	addis r3,r3,0
 	lwz r2,64(r1)
 	mtlr r2
 	addi r1,r1,80
@@ -174,13 +171,11 @@ _Lpic_l40:
 _Lpic_fun_l41:
 	mflr r5
 _Lpic_end_l42:
-	lis r6,0x0
-	ori r6,r6,0
-	ori r6,r6,1
+	addi r6,0,1
+	addis r6,r6,0
 	and r7,r3,r6
-	lis r6,0x0
-	ori r6,r6,0
-	ori r6,r6,0
+	addi r6,0,0
+	addis r6,r6,0
 	cmpw cr0,r7,r6
 	bne _Ljoin_l35
 _Ljoin_l36:
