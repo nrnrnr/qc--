@@ -1,0 +1,309 @@
+#
+# $Id$
+#
+# This is a manual page in perlpod(1) format for qc--(1). It is intended
+# to replace the current manual page in src/. Its main purpos is to
+# define amd discuss the command line syntax and semantics independent
+# of the current implementation. 
+#
+# For learn about Perl's POD format, refer to perlpod(1) and pod2man(1).
+# The syntax of this file can be checked with podchecker(1).
+#
+
+=head1 NAME
+
+qc-- - The Quick C-- Compiler
+
+=head1 SYNOPSIS
+
+B<qc--> [I<option> | I<file>] ... 
+
+=head1 DESCRIPTION
+
+B<qc--> is a compiler for the C-- language. It takes I<options> and
+I<file> names as arguments and compiles, assembles, and links the files
+on the command line into an executable C<a.out>. Options have the form
+C<->I<name> or C<->I<name>C<=>I<value>, all other arguments B<qc-->
+regards as files.  The treatment of a file depends on the ending of its
+name:
+
+=over 12
+
+=item C<.c-->
+
+C-- source file; compile, assemble, link.  A file C<file.c--> is taken
+as a C-- source file. Unless I<options> specify otherwise, a C-- source
+file is compiled to assembly code, assembled to an object file that is
+linked with the object files derived from the other command line
+arguments.
+
+=item C<.o>
+
+Object code file; link.  A file C<file.o> is considered an object file.
+B<qc--> does not touch this file but passes it the linker such that is
+linked with the other files from the command line.
+
+=item C<.a> or C<.so>
+
+Archive file; link.  A file C<file.a> or C<file.so> is considered an
+archive file that is passed untouched to the linker.
+
+=item C<.s>
+
+Assembler source; assemble, link. A file C<file.s> is taken as an
+assembly source file. It is assembled to an object file that is linked
+with the other files from the command line.
+
+
+=item C<.lua>
+
+Lua source file; interpret. A file C<file.lua> is taken as a Lua source
+code file for the Lua interpreter built into the B<qc--> compiler. Such
+a file is executed by the interpreter. Note below the order in which
+options and file arguments are processed.
+
+=back
+
+If invoked with no file argument, B<qc--> summarizes its options on the
+standard error and exists with exit code C<1>.
+
+B<qc--> removes intermediate files, like assembly files, unless options
+specify otherwise. Linking is always the last stage, unless the B<-c> or
+B<-S> flag suppresses it.
+
+=head1 OPTIONS
+
+B<qc--> processes options from left to right, and then all file name
+arguments from left to right. 
+
+=over 4
+
+=item B<-c>
+
+Compile to object code, do not link. Each C-- source (C<file.c-->) and
+assembly file (C<file.s>) is compiled and assembled to an object file
+(C<file.o>), but not linked. 
+
+=item B<-S>
+
+Compile to assembly code, do not assemble or link. Each C-- source
+(C<file.c-->) file is compiled to a corresponding C<file.s> assembly
+file. Not assembling or linking.
+
+=item B<-o> I<output>
+
+Name the output file I<output>.  If B<-c> or B<-S> is specified and
+there is exactly  one  source  file,  this option  names  the object or
+assembly file, respectively.  Otherwise, this  option  names  the  final
+executable file generated  by  the  loader. If B<-o> is not used, the
+output file defaults to C<a.out>.
+
+=item B<-L>I<dir>
+
+Add I<dir> to the library search path. This option is passed to the
+linker.
+
+=item B<-l>I<name>
+
+Add library I<name> to the list of libraries to be searched. This option
+is passed to the linker.
+
+=item B<-v>
+
+Print commands as they are executed. Commands include calls to the
+assembler, the linker, and the shell to remove files.
+
+=item -I<var>B<=>I<value>
+
+Assign the variable I<var> in B<qc-->'s Lua interpreter the new value
+I<value>. This general mechanism is in particular used for the following
+important variables.
+
+=item B<-target=>I<architecture/os>
+
+B<qc--> is a cross compiler; this option causes it to generate code for
+I<architecture> running the operating system I<os>. The following
+targets are supported:
+
+=over 20
+
+=item C<dummy>
+
+Symbolic target for debugging the compiler
+
+=item C<x86/linux>
+
+Intel I<x>86, GNU/Linux
+
+=item C<sparc/solaris>    
+
+Sun SPARC, Solaris 
+
+=back
+
+For user convenience, when a B<-target=>I<target> option requests
+nonnative  code  generation, assembly and linking are  automatically
+suppressed,  as  if  an explicit  B<-S> option had been given.  
+
+=item B<-as.path=>I<path>
+
+Use the alternate assembler I<path>, instead the default one. 
+
+=item B<-as.options=>I<options>
+
+Pass I<options> to the assembler when calling it. When this option is
+repeated, the options are accumulated into one list.
+
+=item B<-ld.path=>I<path>
+
+Like B<-as.path>, but for the linker.
+
+=item B<-ld.options=>I<options>
+
+Like B<-as.options>, but for the linker.
+
+=item B<-tempdir=>I<dir>
+
+Store temporary files in directory F<dir>. See also below for
+environment variables that affect the choice of this directory. This
+option has precedence over environment variables.
+
+=item B<-e> I<statement>
+
+The Lua I<statement> is passed to the Lua interpreter and executed. This
+allows to alter default settings in the interpreter or to inspect the
+interpreter.
+
+=item B<-i>
+
+Start an interactive session with the Lua interpreter that reads from
+stdin. The session allows to inspect the Lua interpreter; most useful
+for debugging Lua code. See also qc--internals(1).
+
+=item B<-version>
+
+Print version to stdout and stop with exit code C<0>.
+
+=item B<-help>
+
+Summarize options to stdout and stop with exit code C<0>.
+
+=back
+
+
+=head1 LUA INTERPRETER
+
+B<qc--> is controlled by a built-in Lua interpreter. At startup it
+executes the file B<qc--.lua> which is searched along a search path
+taken from the environment variable C<QCMMLUAPATH> (see below). The
+compiler can be customized by modifying this code. For the details of
+the Lua interpreter, see qc--internals(1).
+
+=head1 ENVIRONMENT
+
+=over 4
+
+=item QCMMLUAPATH
+
+The Lua interpreter built into B<qc--> controls the compiler. At
+startup it tries to find the file C<qc--.lua> using a search path taken
+from the environment variable C<QCMMLUAPATH>.  If the environment
+variable is undefined, the default is "C<:.:*>". A search path contains
+a list of colon separated directories. Two directory names are special:
+the empty directory refers to an implementation-dependent system-wide
+directory, like C</usr/local/lib/qc-->. The star C<*> refers to a
+``directory'' that is actually compiled into the B<qc--> executable.
+With the default search path, B<qc--> therefore looks first in the
+system-wide directory for C<qc--.lua>, then in the current directory,
+and then takes the built-in C<qc--.lua>. 
+
+=item TMP, TEMP, TMPDIR
+
+The environment variables C<TMP>, C<TEMP>, and C<TMPDIR> are checked in
+this order. The first one found to define an non-empty string defines
+the path to the directory where temporary files are stored. Otherwise a
+platform specific default directory is used. This directory is
+overridden by the B<-tempdir> option.
+
+=back
+
+=head1 EXIT CODE
+
+Upon successful executions, B<qc--> exists with exit code C<0>. If
+B<qc--> finds an error in a source file or while processing command line
+options, it exists with C<1>. Internal errors in the compiler lead to an
+exit code of C<2>.
+
+
+=head1 FILES
+
+=over 12
+
+=item I<file>C<.c--> 
+
+C-- source file.
+
+=item I<file>C<.o>
+
+Object file.
+
+=item I<file>C<.s>
+
+Assembly source file.
+
+=item I<file>C<.a>
+
+Archive file (static library).
+
+=item I<file>C<.so>
+
+Archive file (dynamic library)
+
+=item I<file>C<.lua>
+
+Lua source code.
+
+=item C<qc--.lua>
+
+Startup file for Lua interpreter.
+
+=item C<a.out>
+
+Default file name for output file.
+
+=item C</tmp>
+
+Default directory for temporary files.
+
+=back
+
+=head1 SEE ALSO
+
+http://www.cminusminus.org/
+http://www.lua.org/,
+http://www.cs.princeton.edu/zephyr/ASDL/,
+http://www.research.att.com/sw/tools/graphviz/.
+
+lua(1), ld(1), as(1), qc--internals(1)
+
+=head1 BUGS
+
+Report bugs to bugs@cminusminus.org. Include a I<small> example that
+allows us to reproduce the bug. The bug tracking system can be found at
+http://www.cminusminus.org/qc--bugs/.
+
+=head1 AUTHORS
+
+Christian Lindig <lindig@eecs.harvard.edu>, 
+Norman Ramsey <nr@eecs.harvard.edu>,
+Daniel Damian <damian@eecs.harvard.edu>,
+John Dias <dias@eecs.harvard.edu>,
+Jonathan D. Eddy <eddy@fas.harvard.edu>,
+Reuben Olinsky <olinsky@eecs.harvard.edu>
+Kevin Redwine <redwine@eecs.harvard.edu>.
+
+=head1 VERSION
+
+$Id$
+
+
