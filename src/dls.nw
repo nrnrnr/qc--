@@ -1127,8 +1127,8 @@ let rewrite_spans (lbl, ss as rst) =
     let rewrite_span (i, e) =
       let map r = if is_tmp tgt r then
                     match VM.var_locs vm r with
-                    | (Reg r)::_ -> Rtl.reg r
-                    | (Mem l)::_ -> A.simple l
+                    | Reg r :: _ -> Rtl.reg r
+                    | Mem l :: _ -> let (_, _, w) = r in Automatonutil.aloc l w
                     | [] -> raise Not_found
                   else Rtl.reg r in
       (i, try Rtlutil.Subst2.loc_of_exp ~map e

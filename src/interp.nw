@@ -211,18 +211,6 @@ let fetch_space spc i w = R.fetch (spc i) w
 \subsection{Automata for Calling Conventions and Globals}
 % ------------------------------------------------------------------ 
 
-Our automata hand out \rtl-based locations. We simply need to wrap them
-such that they become [[Automaton.loc]] locations. [[loc_of]] takes an
-{\rtl} location and returns an [[Automaton.loc]] location.
-
-<<interp.ml>>=
-let loc_of (l:Rtl.loc): AN.loc  =
-    { AN.fetch  = (Rtl.fetch l)
-    ; AN.store  = (Rtl.store l)
-    ; AN.simple = (fun () -> l)
-    }
-@
-
 The interpreter hands out registers for globals and arguments, assuming
 that we have an endless supply for each. We have just one automaton
 [[seq]] that does this. It is parameterized over a function [[reg]]
@@ -234,18 +222,15 @@ let seq (reg: int -> Register.t) next =
     let allocate ~width ~alignment ~hint =
         ( index := !index + 1
         ; regs  := (reg !index) :: !regs
-        ; loc_of (Rtl.reg (reg !index))
+        ; AN.of_loc (Rtl.reg (reg !index))
         ) in
     let freeze rs mems =
         next.AN.freeze (RS.union (RS.of_list (!regs)) rs) mems in
-    { AN.allocate = allocate
-    ; AN.freeze   = freeze
-    }
+    { AN.allocate = allocate; AN.freeze   = freeze }
 let seq reg = AN.wrap (seq reg)
 
 let params      = seq arg_reg                       
-let globls base = AN.at ~start:base ~memsize ~byteorder:byte_order
-                    (seq glb_reg)
+let globls base = AN.at ~start:base ~memsize ~byteorder:byte_order (seq glb_reg)
 
 let ccspecs     = { AN.call = params; AN.results = params; AN.cutto = params }
 @

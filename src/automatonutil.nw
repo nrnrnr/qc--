@@ -1,0 +1,39 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+% vim: ts=8 sw=4 et:
+% Grades     ::=    "%%Grades:" Quality Importance Urgency
+% Quality    ::=    A|B|C|D|E
+% Importance ::=    Central|Subsystem|Peripheral
+% Urgency    ::=    Immediate|Soon|Later
+%
+%%Grades: B Peripheral Later
+
+
+\section{Automaton utilities}
+
+This code is in a separate module so we can avoid charging
+[[Automaton]] for it in papers.
+
+An [[Automaton.loc]] can be converted to the list of locations that
+would be written, provided we know its width.  
+Function [[aloc]] expects that list to have exactly length~1,
+otherwise it halts with a compiler error.
+<<automatonutil.mli>>=
+val alocs : Automaton.loc -> Rtl.width -> Rtl.loc list
+val aloc  : Automaton.loc -> Rtl.width -> Rtl.loc 
+@ 
+\subsection{Implementation}
+<<automatonutil.ml>>=
+module R   = Rtl
+module RP  = Rtl.Private
+module Up  = Rtl.Up
+module Dn  = Rtl.Dn
+
+<<automatonutil.ml>>=
+let alocs aloc w =
+  let RP.Rtl gs = Dn.rtl (Automaton.store aloc (Rtl.late "dummy" w) w) in
+  let getloc = function _, RP.Store (l, _, _) -> Up.loc l | _, RP.Kill l -> Up.loc l in
+  List.map getloc gs
+let aloc a w = match alocs a w with
+| [l] -> l
+| _ -> Impossible.impossible "automaton split value across multiple locations"

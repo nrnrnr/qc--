@@ -1012,28 +1012,27 @@ them in the spans.
 <<rewrite temporaries in spans>>=
 let rewrite_spans (lbl, ss as rst) =
   let node = G.node_labeled cfg lbl in
-  Verbose.eprintf verb "adding colorgraph span for node labeled %s, node %d\n" lbl (G.num node);
+  Verbose.eprintf verb "adding colorgraph span for node labeled %s, node %d\n"
+    lbl (G.num node);
   if lbl <> proc.Proc.symbol#original_text then
     let get_spilled_loc tmp =
       let (mem, spilltemps) =
-          (try  RM.find tmp cg.spillMap
- 				   with Not_found ->
-  			     imposs "Temp was not allocated by graph coloring allocator?") in
+        try  RM.find tmp cg.spillMap
+ 	with Not_found -> imposs "Temp not allocated by graph coloring allocator?" in
       let rec try_temps tmps = match tmps with
-			  | t::rst -> 
-          (try Rtl.reg (RM.find t cg.colorMap) with Not_found -> try_temps rst)
-				| []     -> Automaton.simple mem in
-			try_temps spilltemps in
+        | t::ts -> (try Rtl.reg (RM.find t cg.colorMap) with Not_found -> try_temps ts)
+        | []    -> let (_, _, w) = tmp in Automatonutil.aloc mem w in
+      try_temps spilltemps in
     let temp_loc tmp =
       try  Rtl.reg (RM.find tmp cg.colorMap)
-			with Not_found -> get_spilled_loc tmp in
+      with Not_found -> get_spilled_loc tmp in
     let rewrite_span (i, e) =
       let map r = if is_tmp target r then temp_loc r
                     (*match temp_loc r with
-										| (Reg r)::_ -> Rtl.reg r
-										| (Mem l)::_ -> A.simple l
-                    | [] -> raise Not_found
-										*)
+		       | Reg r::_ -> Rtl.reg r
+		       | Mem l::_ -> Automatonutil.aloc l (width r)
+                       | [] -> raise Not_found
+		     *)
                   else Rtl.reg r in
       (i, try Rtlutil.Subst2.loc_of_exp ~map e
           with Not_found -> RTD.dead_value) in

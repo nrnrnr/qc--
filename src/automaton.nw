@@ -103,21 +103,17 @@ val freeze   : t -> result
 @
 In some conventions, a value must be split between two registers or
 between registers and memory.
-Accordingly, we need a special type of location.
-For those cases where we know that a value is not split, we can observe
-the location directly, using [[simple]]; it is a checked runtime error
-to observe a split location.
+Accordingly, we need a special type of location: an object with fetch
+and store methods.
 <<exposed types>>=
 type width = int
 type hint  = string
 type loc = { fetch  : width -> Rtl.exp
            ; store  : Rtl.exp -> width -> Rtl.rtl
-           ; simple : unit -> Rtl.loc
            }
 <<exported values>>=
 val fetch  : loc ->            width -> Rtl.exp
 val store  : loc -> Rtl.exp -> width -> Rtl.rtl
-val simple : loc                     -> Rtl.loc
 @ 
 Most locations are easy.
 <<exported values>>=
@@ -367,7 +363,6 @@ believe it is correct. However, I did not review the handling of
 
 module R   = Rtl
 module RS  = Register.Set
-module RU  = Rtlutil
 module B   = Block
 module M   = Memalloc
 let imposs = Impossible.impossible
@@ -399,10 +394,8 @@ let freeze     t              = t.freeze Register.Set.empty []
 
 let fetch      loc            = loc.fetch
 let store      loc            = loc.store
-let simple     loc            = loc.simple ()
 let of_loc     loc            = { fetch  = R.fetch loc
                                 ; store  = R.store loc
-                                ; simple = fun () -> loc
                                 }
 @ 
 \subsection{Wrapping etc.}
@@ -502,7 +495,6 @@ let narrower =
      let narrow = R.opr nopname [w; n] in 
        { fetch  = (fun n   -> R.app narrow [loc.fetch w])
        ; store  = (fun e n -> loc.store (R.app widen [e]) w)
-       ; simple = loc.simple
        } in
   function
   | "signed" -> narrow "lobits" "sx"
@@ -664,7 +656,6 @@ let combine msb msw lsb lsw =
   ; store  = (fun exp ww -> assert (ww = msw + lsw);
                     R.par [ store lsb (lobits ww lsw exp              ) lsw
                           ; store msb (lobits ww msw (shrl ww exp lsw)) msw ])
-  ; simple = (fun () -> imposs "cannot observe a split Automaton.location")
   }
 
 let combine_loc = function
