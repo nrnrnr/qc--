@@ -28,6 +28,7 @@ module R  = Rtl
 module RP = Rtl.Private
 module Up = Rtl.Up
 module Dn = Rtl.Dn
+module RO = Rewrite.Ops
 module RU = Rtlutil
 module PX = Postexpander
 module T  = Target
@@ -254,11 +255,17 @@ let sxload  = xload "sx"
 let zxload  = xload "zx"
 let lostore = xstore "lobits"
 @ 
-Immediate values and registers are copied into registers with
+Registers are copied into registers with
 [[tstore]].
 <<ppc postexpander>>=
 let move ~dst ~src = tstore dst (tval src)
-let lix  ~dst  exp = tstore dst exp
+@ 
+Immediate values rewquire a two-instruction sequence in general.
+<<ppc postexpander>>=
+let lix ~dst exp =
+  let {Rewrite.hi = hi; Rewrite.lo = lo} = Rewrite.splits 32 16 exp in
+  tstore dst hi <:>
+  tstore dst (RO.add 32 (tval dst) lo)
 @ 
 <<ppc postexpander>>=
 let extract ~dst ~lsb ~src = Impossible.unimp "extract"
@@ -270,6 +277,7 @@ let hwget ~dst ~src = Impossible.unimp "getting hardware register"
 @ 
 Load immediate is a bit tricky because the PPC only allows 16-bit
 constants to be loaded directly.
+A~BETTER ALTERNATIVE HERE WOULD BE [[lix dst (R.bits const 32)]], POSSIBLY SIMPLIFIED. 
 <<ppc postexpander>>=
 let li ~dst const =
   let con w i = R.bits (B.S.of_int i w) w in
