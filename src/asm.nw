@@ -53,9 +53,10 @@ module Asm {
   program = (string* initialization_args, action*)
   action = <<constructors for actions>>
   <<assembly interface types>>
-  opaque = (string)
 }
+<<view for making opaque types truly opaque>>
 @
+
 
 {\asdl} has no abstraction, so we use [[string]] to represent an
 opaque type. 
@@ -433,9 +434,9 @@ generated automatically from a {\small SLED} description of the
 instruction set. 
 
 <<constructors for actions>>=
-| EmitInstruction (instruction)
+| EmitInstruction (concrete_instruction)
 <<assembly interface types>>=
-instruction = (opaque)
+concrete_instruction = (string)
 @ 
 
 % ------------------------------------------------------------------ 
@@ -510,6 +511,27 @@ deprecated.
 <<constructors for actions>>=
 | Asmtext (string)
 @
+
+<<view for making opaque types truly opaque>>=
+view OCaml {
+  module Asm <= interface_prologue
+%%
+    type instruction
+%%
+  module Asm <= implementation_prologue
+%%
+  let wrap_instruction i = assert false
+  let unwrap_instruction i = assert false
+%%
+  Asm.concrete_instruction <= {
+    natural_type:   instruction
+    wrapper:        wrap_instruction
+    unwrapper:      unwrap_instruction
+  }
+}
+@
+
+
 
 \ifhtml
 \subsection{Index of identifiers}
