@@ -161,6 +161,74 @@ type rtl       = Rtl.rtl
 type width     = Rtl.width
 type assertion = Rtl.assertion
 type operator  = Rtl.Private.opr
+@ 
+Most postexpander functions return a \emph{block}, which is a
+single-entry, single-exit region of the control-flow graph.
+Such a region can include conditional and looping control flow.
+But expansion of a condition cannot itself be conditional; it must be
+straight-line code.
+
+We use a dirty trick to make the same constructors do for both.
+If control flow is permitted, type parameter~[['a]] is [[exp]];
+otherwise it is [[void]].
+<<types for postexpanders>>=
+type 'a t = Rtl   of rtl
+          | Seq   of 'a t * 'a t
+          | Cond  of 'a * 'a t * 'a t
+          | While of 'a * 'a t
+type void  = Void of void
+type block = Rtl.exp t
+type rtls  = void t
+@ Meanings and invariants:
+\begin{itemize}
+\item [[Rtl]] is an RTL that can be represented by a single
+instruction, with the following exceptions:
+\begin{itemize}
+\item
+If the target machine has delayed control-transfer instructions
+(branch/call/etc), we may use an RTL to represent an atomic
+two-instruction package consisting of the control transfer and the
+instruction in the delay slot.
+We do this because at present, we have no other way to constrain
+layout.
+\item
+For implementing [[cut to]], we use a single RTL representing two
+instructions: one that adjusts the stack pointer and one that
+branches.
+We need to package these atomically because once the stack pointer has
+been adjusted, the internal assumptions of the compiler are no longer
+valid.
+For example, it is not safe to spill a register after the stack
+pointer has been adjusted.
+We therefore treat the two instructions as an atomic unit by packaging
+them as one RTL.
+\item
+An RTL may be representible as a single instruction only under the
+optimistic assumption that a late compile-time constant is ``small.''
+If the assumption is violated, it must be possible for the recognizer
+to emit a sequence of instructions that together implement the RTL.
+Either this sequence can be generated without using an additional
+register, or else the recognizer will have to reserve to itself a
+register for this purpose.
+\end{itemize}
+\item
+A [[Seq]] node represents a sequence of instructions and executes
+first the left half, then the right.
+\item
+A [[Cond]] node holds a condition, represented as an expression, such
+that if the condition holds, 
+it executes the first block; otherwise, it executes the second.
+The condition must be expandable using the [[expand_cond]] function
+in the postexpander interface below.
+The condition need not satisfy any other invariants.
+\item
+The [[While]] node corresponds to a C-style [[while]] statement:
+as long as the condition is satisfied, it executes the body.
+As in [[Cond]],
+the condition must be expandle using the [[expand_cond]] function
+in the postexpander interface below.
+The condition need not satisfy any other invariants.
+\end{itemize}
 <<signature of a postexpander>>=
 module type S = sig
   val byte_order : Rtl.aggregation (* used on all access to memory *)

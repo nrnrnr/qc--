@@ -18,6 +18,10 @@ sprint(char *buf, char *fmt, ...)
 
 	va_start(arg, fmt);
 	written = vsprintf(buf, fmt, arg);
+        if (written >= SIZE) {
+          buf[SIZE-1] = 0;
+          fprintf(stderr, "overwrote buf with %d chars:\n%s\n", written, buf);
+        }
         assert(written < SIZE);
 	va_end(arg);
 	return written;

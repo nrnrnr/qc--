@@ -164,6 +164,8 @@ sub usage {
     
     ./configure [options]
 
+    --build=.               build in directory .
+
     --prefix=/usr/local     install into the /usr/local hierarchy which
                             is also the default
     -h, --help              this summary
@@ -210,8 +212,11 @@ sub success { bye 0; }
 # We start from here with reading the command line
 # ------------------------------------------------------------------ 
 
+my $build_dir = ".";
+
 foreach (@ARGV) {
     if       (/^--?prefix=(.*)$/)             { $x{prefix}=$1     }
+    elsif    (/^--?build=(.*)$/)              { $build_dir=$1     }  
     elsif    (/^--?h(elp?)$/)                 { usage(); exit 0   }  
     else     { usage(); exit 1 }
 }
@@ -421,6 +426,7 @@ my @export = ( "arch"
 
 my @export_upper_base = ( "ocamlc", "ocamlo" );
              
+
 open(OUT,"> $config_mk") || die "cannot open $config_mk";
 print OUT <<EOF;
 #
@@ -490,7 +496,7 @@ install_doc                 = \$config_prefix/doc/qc--
 install_man1                = \$config_prefix/man/man1
 
 # Build directory
-BT="."
+BT="$build_dir"
 
 # do not edit
 HERE = `basename \$PWD`
