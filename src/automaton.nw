@@ -583,7 +583,7 @@ let wrap_counter f label =
            | None   ->
               let n = ref 0 in
               (n, fun s -> if s = label then Some n else ctrs s)) in
-           f ~memsize ctr (next ~start ~memsize ~byteorder ~ctrs)))
+           f memsize byteorder ctr (next ~start ~memsize ~byteorder ~ctrs)))
 
 let counter of_width =
   let f ctr nalloc ~width ~alignment ~hint =
@@ -602,7 +602,7 @@ type regstate = { mutable used  : Register.Set.t }
 
 <<definition of [[combine_loc]]>>
 
-let reg_placer of_width allow_agg n regs reserve next =
+let reg_placer of_width agg n regs reserve next =
   let state = { used = RS.empty } in
   let getreg = function
   |	[]      -> raise (Failure "get register")
@@ -612,47 +612,49 @@ let reg_placer of_width allow_agg n regs reserve next =
   |	(_, _, w) :: rest -> drop (i - of_width w) rest
   |	[]                -> [] in
 
-  let alloc ~width ~alignment ~hint =
+  let rec alloc ~width ~alignment ~hint =
     try
       let (_, _, w) as r = getreg (drop !n regs) in
       if      w = width then
          let allocated = of_loc (R.reg r) in
          ( if reserve then ignore (next.allocate width alignment hint)
          ; allocated )
-      else if w < width then 
-                                        (* FIX THIS BELOW! *)
-             if allow_agg then combine_loc Rtl.LittleEndian 
-                                   (of_loc (R.reg r), w)
-                                   (next.allocate width alignment hint)
-             else Unsupported.automaton_widen ~have:width ~want:w
+      else if w < width then match agg with
+             | Some endianness ->
+                let w'  = width - w in
+                let _   = n := !n + w in
+                let ell = combine_loc endianness
+                             (of_loc (R.reg r)) w
+                             (alloc ~width:w' ~alignment ~hint) w'
+                in ( n := !n - w ; ell )
+             | None -> Unsupported.automaton_widen ~have:width ~want:w
       else unimp "auto-widening for register requests"
     with Failure _ -> next.allocate width alignment hint in
   let freeze regs mems = next.freeze (RS.union state.used regs) mems in
   { freeze = freeze; allocate = alloc }
 
 let bitcounter   = counter (fun w -> w)
-let regs_by_bits = reg_placer (fun w -> w) true
+let regs_by_bits = reg_placer (fun w -> w)
 
-let useregs regs = wrap (fun next -> let c = ref 0 in
-                           (bitcounter c) ((regs_by_bits c regs false) next))
+let useregs regs = 
+   swrap (fun next ~start ~memsize ~byteorder ~ctrs -> let c = ref 0 in
+            (bitcounter c) ((regs_by_bits (Some byteorder) c regs false) next))
 
-let bitcounter   = wrap_counter (fun ~memsize -> bitcounter)
+let bitcounter   = wrap_counter (fun _ _ -> bitcounter)
 let regs_by_bits label rs reserve =
-    wrap_counter (fun ~memsize ctr -> regs_by_bits ctr rs reserve) label
+    wrap_counter (fun _ bo ctr -> regs_by_bits (Some bo) ctr rs reserve) label
 
-let argcounter   = wrap_counter (fun ~memsize -> counter (fun w -> 1))
-let regs_by_args = reg_placer (fun w -> 1) false
+let argcounter   = wrap_counter (fun _ _ -> counter (fun w -> 1))
+let regs_by_args = reg_placer (fun w -> 1) None
 let regs_by_args label rs reserve = 
-    wrap_counter (fun ~memsize ctr -> regs_by_args ctr rs reserve) label
+    wrap_counter (fun _ _ ctr -> regs_by_args ctr rs reserve) label
 
 let pad = 
-  let padcounter ~memsize ctr next =
+  let padcounter memsize _ ctr next =
     let f nalloc ~width ~alignment ~hint =
       let al = alignment * memsize in
-      ( if !ctr mod al != 0 
-        then ctr := Aux.round_up_to ~multiple_of:al !ctr 
-      ; nalloc ~width ~alignment ~hint
-      )
+      ( if !ctr mod al != 0 then ctr := Aux.round_up_to ~multiple_of:al !ctr 
+      ; nalloc ~width ~alignment ~hint )
     in { next with allocate = f next.allocate }
   in wrap_counter padcounter
 @ 
@@ -661,43 +663,20 @@ And now we need to actually define the helper [[combine_loc]] that can
 combine multiple hardware resources into one abstract `location'.
 <<definition of [[combine_loc]]>>=
 <<shift and mask functions>>
-let combine_loc bo (l1,w1) l2 = 
-  let aux lsloc msloc =
-    { fetch  = (fun ww -> 
-                  let w2 = ww - w1 in
-                  let (lsb,lsw) = lsloc (l1,w1) (l2,w2) in
-                  let (msb,msw) = msloc (l1,w1) (l2,w2) in
-                  orb ww (zx lsw ww (fetch lsb lsw))
-                         (shl ww (zx msw ww (fetch msb msw)) lsw))
-    ; store  = (fun exp ww -> 
-                  let w2 = ww - w1 in
-                  let (lsb,lsw) = lsloc (l1,w1) (l2,w2) in
-                  let (msb,msw) = msloc (l1,w1) (l2,w2) in
-                  R.par [ store lsb (lobits ww lsw exp              ) lsw
-                        ; store msb (lobits ww msw (shrl ww exp lsw)) msw ])
-    ; simple = (fun () -> imposs "cannot observe a split Automaton.location")
-    } in
-
-  match bo with
-  | Rtl.Identity     -> imposs "split without byte-ordering"
-  | Rtl.LittleEndian -> aux (fun x1 _  -> x1) (fun _  x2 -> x2)
-  | Rtl.BigEndian    -> aux (fun _  x2 -> x2) (fun x1 _  -> x1)
-@ 
-<<definition of [[combine_loc]]>>=
-let combine' msb msw lsb lsw =
+let combine msb msw lsb lsw =
   { fetch  = (fun ww -> assert (ww = msw + lsw);
-                        orb ww (zx lsw ww (fetch lsb lsw))
-                               (shl ww (zx msw ww (fetch msb msw)) lsw))
+                    orb ww (zx lsw ww (fetch lsb lsw))
+                           (shl ww (zx msw ww (fetch msb msw)) lsw))
   ; store  = (fun exp ww -> assert (ww = msw + lsw);
-                            R.par [ store lsb (lobits ww lsw exp              ) lsw
-                                  ; store msb (lobits ww msw (shrl ww exp lsw)) msw ])
+                    R.par [ store lsb (lobits ww lsw exp              ) lsw
+                          ; store msb (lobits ww msw (shrl ww exp lsw)) msw ])
   ; simple = (fun () -> imposs "cannot observe a split Automaton.location")
   }
 
-let combine_loc' = function
+let combine_loc = function
   | Rtl.Identity     -> imposs "split without byte-ordering"
-  | Rtl.LittleEndian -> (fun b1 w1 b2 w2 -> combine' b2 w2 b1 w1)
-  | Rtl.BigEndian    -> combine'
+  | Rtl.LittleEndian -> (fun b1 w1 b2 w2 -> combine b2 w2 b1 w1)
+  | Rtl.BigEndian    -> combine
 @ 
 
 <<shift and mask functions>>=
