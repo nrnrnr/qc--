@@ -1,0 +1,298 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% vim: ts=2 sw=2 et: 
+% Grades     ::=    "%%Grades:" Quality Importance Urgency
+% Quality    ::=    A|B|C|D|E
+% Importance ::=    Central|Subsystem|Peripheral
+% Urgency    ::=    Immediate|Soon|Later
+%
+% Example (at beginning of line): %%Grades: B Central Soon
+% 
+% $Id$
+
+% ------------------------------------------------------------------ 
+\section{Applicative Control-Flow Graph, Based on Huet's Zipper}
+% ------------------------------------------------------------------ 
+
+
+\citet{huet:zipper} describes a generalization of a tree that enables
+a program to focus on a single node while enabling the context (e.g.,
+parents) to be represented by an explicit, reified value (as opposed
+to being captured in an implicit continuation).
+We investigate this idea for a control-flow graph.
+
+Every graph has a single entry and one or more exits.
+Exits are numbered from~$0$.
+A~[[graph]] is a set of basic blocks, one of which is distinguished as the
+entry block.
+Every other block is tagged by a
+unique id, which may correspond to a string label.\footnote
+{Maintaining a mapping between strings and unique ids is not the
+  responsibility of this module.}
+A~[[zgraph]] is a graph with the \emph{focus} on one particular node.
+This will support at least the following kinds of operations:
+\begin{itemize}
+\item
+When the focus is on the entry node, add a new node to the graph just
+before the entry node.
+This operation is the primary means of building graphs.
+\item
+Replace the node at the focus, plugging in a new graph in its place.
+\end{itemize}
+Here are some basic types and operations:
+<<zipcfg.mli>>=
+type uid
+
+type graph
+type zgraph
+
+val empty   : graph
+val entry   : graph -> zgraph           (* focus on entry node *)
+val focus   : graph -> uid -> zgraph    (* focus on node with uid *)
+val unfocus : zgraph -> graph           (* lose focus *)
+@ 
+Some graph replacement and stitching:
+<<zipcfg.mli>>=
+val replace_focus : zgraph -> graph -> zgraph
+  (* new focus on successor of replacement graph's entry *)
+
+val followed_by : graph -> int -> graph -> graph
+  (* followed_by g n g' = connect Exit n of g to entry of g' *)
+@ 
+Building a graph.
+In each of these cases, the focus of the [[zgraph]] must be on the
+entry node; otherwise it is a checked run-time error.
+<<zipcfg.mli>>=
+type regs  = Register.Set.t  (* sets of regs for dataflow *)
+type xregs = Register.SetX.t (* sets of regs for dataflow *)
+type contedge = { kills:regs; defs:regs; node:uid }
+
+
+val uid : unit -> uid
+val address : uid -> Rtl.exp
+
+val label        : ('a, 'b) Target.t -> uid -> string -> zgraph -> zgraph  (* spans? *)
+val instruction  : Rtl.rtl -> zgraph -> zgraph
+val stack_adjust : Rtl.rtl -> zgraph -> zgraph
+val assertion    : Rtl.rtl -> zgraph -> zgraph
+val branch       : ('a, 'b) Target.t -> target:uid -> zgraph -> zgraph
+val jump         : Rtl.rtl -> uses:regs -> targets:string list -> zgraph -> zgraph
+val cbranch      : Rtl.rtl -> ifso:uid -> ifnot:uid -> zgraph -> zgraph
+val mbranch      : Rtl.rtl -> targets:uid list -> zgraph -> zgraph
+val call         : Rtl.rtl -> altrets:contedge list -> 
+                     unwinds_to:contedge list -> cuts_to:contedge list ->
+                     aborts:bool -> uses:regs -> defs:regs -> kills:regs ->
+                     reads:string list option -> writes:string list option ->
+                     spans:Spans.t option -> zgraph -> zgraph
+val cut_to       : Rtl.rtl -> cuts_to:contedge list -> aborts:bool ->
+                     uses:regs -> zgraph -> zgraph
+val return       : Rtl.rtl -> exit:int -> uses:regs -> zgraph -> zgraph
+@ 
+<<zipcfg.ml>>=
+module R = Rtl
+module T = Target
+
+let impossf fmt = Printf.kprintf Impossible.impossible fmt
+let unimpf  fmt = Printf.kprintf Impossible.unimp      fmt
+
+type uid = int
+
+let uid =
+  let n = Reinit.ref 1 in
+  fun () -> let u = !n in (n := u + 1; u)
+let entry_uid = 0
+
+let address uid = R.codesym (Printf.kprintf Symbol.unmangled ".Lz%d" uid) 99
+   (* disastrous lies --- maybe need to Idgen a label for each uid, then query the graph? but then what about cycles? *) 
+
+type regs  = Register.Set.t  (* sets of regs for dataflow *)
+type xregs = Register.SetX.t (* sets of regs for dataflow *)
+type contedge = { kills:regs; defs:regs; node:uid }
+@ 
+\paragraph{Nodes and basic blocks}
+<<zipcfg.ml>>=
+type label = string
+
+type first
+  = Entry
+  | Label of uid * string option
+        (* no continuation? *)
+
+type middle
+  = Instruction  of Rtl.rtl
+  | Stack_adjust of Rtl.rtl
+  | Assertion    of Rtl.rtl
+      
+@ 
+Unclear whether a jump should get an exit number or what it should
+mean (think about inlining).
+
+In a complete graph for a procedure, the [[Exit]] node should not
+appear, but it is useful in a subgraph (e.g., replacement for a node).
+<<zipcfg.ml>>=
+type 'a edgelist = 'a list (* could be array *)
+<<node types>>
+
+type exit_num = int
+
+type last
+  = Exit    of exit_num  
+  | Branch  of Rtl.rtl * uid
+  | Cbranch of Rtl.rtl * uid * uid    (* true, false *)
+  | Mbranch of Rtl.rtl * uid edgelist (* possible successors *)
+  | Call    of call  
+  | Cut     of Rtl.rtl * contedge edgelist * regs  (* out edges, registers used *)
+  | Return  of exit_num * Rtl.rtl * regs
+  | Jump    of exit_num * Rtl.rtl * regs * string list
+                   (* exit num, inst, registers used, targets *)
+@ 
+Now the zipper:
+<<zipcfg.ml>>=
+type head = First of first | Head of head * middle
+type tail = Last  of last  | Tail of middle * tail
+
+type zblock
+  = Start  of first * tail           (* focus on first *)
+  | Middle of head * middle * tail   (* focus on middle *)
+  | End    of head * last            (* focus on last *)
+@ An alternative would be to make [[type zblock = head * tail]], with
+focus on the first element of the tail.  Not sure if that is flexible
+enough, however.
+
+Another alternative is to inline the definitions of [[first]] and
+[[last]] into [[head]] and [[tail]], doing away with a level of
+indirection.
+But this would probably make it harder for clients to reason about
+nodes in isolation.
+@
+Without zipper:
+<<zipcfg.ml>>=
+type block = first * tail
+<<node types>>=
+type call = {         cal_i          : Rtl.rtl
+            ;         cal_contedges  : contedge edgelist
+            ;         cal_spans      : Spans.t option
+            ; mutable cal_uses       : regs
+            ;         cal_altrets    : int
+            ;         cal_unwinds_to : int
+            ;         cal_cuts_to    : int
+            ;         cal_reads      : string list option
+            ;         cal_writes     : string list option
+            }
+@ 
+\paragraph{Graph}
+For the graph, we want to be able to look up a block efficiently by
+its unique id.  
+For the time being, we use a list:
+<<zipcfg.ml>>=
+module type BLOCKS = sig
+  type t
+  val empty  : t
+  val insert : block -> t -> t
+  val find   : t -> uid -> block 
+  val focus  : t -> uid -> block * t
+end
+
+module Blocks : BLOCKS = struct
+  type t = block list
+  let id = function (Entry,_) -> entry_uid | (Label (u, _),_) -> u
+  let empty = []
+  let insert b bs = b :: bs
+  let find blocks u = List.find (fun b -> id b = u) blocks
+  let focus blocks u =
+    let rec f prev' next = match next with
+    | [] -> raise Not_found
+    | b :: bs ->
+        if id b = u then b, List.rev_append prev' bs
+        else f (b::prev') bs in
+    f [] blocks
+end
+@ 
+<<zipcfg.ml>>=  
+type graph  = Blocks.t
+type zgraph = zblock * Blocks.t
+@
+Convert block between forms.
+<<zipcfg.ml>>=
+let zip = 
+  let rec revapp head tail = match head with
+  | First f -> f, tail
+  | Head (h, m) -> revapp h (Tail (m, tail)) in
+  function
+  | Start  (f, t)    -> f, t
+  | Middle (h, m, t) -> revapp h (Tail (m, t))
+  | End    (h, l)    -> revapp h (Last l)
+
+let unzip (n, ns) = Start (n, ns)
+@ 
+<<zipcfg>>=
+@ 
+<<zipcfg.ml>>=
+let empty = Blocks.insert (Entry, Last (Exit 0)) Blocks.empty
+
+let focus blocks uid =
+  let (b, bs) = Blocks.focus blocks uid in
+  unzip b, bs
+let entry blocks = focus blocks entry_uid
+
+let unfocus (bz, bs) = Blocks.insert (zip bz) bs
+<<zipcfg.ml>>=
+let consm middle g = match g with
+| (Start (Entry, tail), blocks) -> (Start (Entry, Tail (middle, tail)), blocks)
+| _ -> impossf "focus not on entry node"
+
+let instruction  rtl g = consm (Instruction  rtl) g
+let assertion    rtl g = consm (Assertion    rtl) g
+let stack_adjust rtl g = consm (Stack_adjust rtl) g
+
+let unreachable = function
+  | Last (Branch _) -> ()
+  | _ -> Printf.eprintf "warning: unreachable code?\n"
+
+let consl last g = match g with
+| (Start (Entry, tail), blocks) ->
+    unreachable tail;
+    (Start (Entry, Last last), blocks)
+| _ -> impossf "focus not on entry node"
+
+let goto tgt =
+  let f = tgt.T.goto.T.embed in
+  fun uid -> f (address uid)
+
+let branch tgt = let g = goto tgt in fun ~target -> consl (Branch (g target, target))
+let jump rtl ~uses ~targets  = consl (Jump (0, rtl, uses, targets))
+let cbranch rtl ~ifso ~ifnot = consl (Cbranch (rtl, ifso, ifnot))
+let mbranch rtl ~targets     = consl (Mbranch (rtl, targets))
+let return  rtl ~exit ~uses  = consl (Return (exit, rtl, uses))
+let cut_to  rtl ~cuts_to ~aborts ~uses = consl (Cut (rtl, cuts_to, uses))
+@ 
+<<zipcfg.ml>>=
+let label tgt =
+  let goto = goto tgt in
+  fun uid name g -> match g with
+  | (Start (Entry, tail), blocks) -> 
+      Start (Entry, Last (Branch (goto uid, uid))),
+      Blocks.insert (Label (uid, Some name), tail) blocks
+  | _ -> impossf "focus not on entry node"
+@ 
+<<zipcfg.ml>>=
+let call rtl ~altrets ~unwinds_to ~cuts_to ~aborts
+               ~uses ~defs ~kills ~reads ~writes ~spans =
+  let new_cedge u = { kills = kills; defs = defs; node = u } in
+  let u = uid () in
+  let succ = [new_cedge u] in
+  let abort       = if aborts then (unimpf "aborts"; [new_cedge 99]) else [] in
+  let edgelist    = List.flatten [succ; altrets; unwinds_to; cuts_to; abort] in
+  let call = 
+    { cal_i = rtl; cal_contedges = edgelist; cal_spans = spans;
+      cal_uses = uses; cal_altrets = List.length altrets;
+      cal_unwinds_to = List.length unwinds_to; cal_cuts_to = List.length cuts_to;
+      cal_reads = reads; cal_writes = writes; } in
+  function
+  | (Start (Entry, tail), blocks) -> 
+      Start (Entry, Last (Call call)),
+      Blocks.insert (Label (u, None), tail) blocks
+  | _ -> impossf "focus not on entry node"
+@ 
+<<zipcfg.ml>>=
+let followed_by g n g' = unimpf "graph stitching"
+let replace_focus gz g = unimpf "node replacement"
