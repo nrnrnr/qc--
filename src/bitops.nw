@@ -161,6 +161,9 @@ val ge : t -> t -> bool
 val eq' : t -> t -> bool
 val ne' : t -> t -> bool
 
+(* we need addition *)
+val add : t -> t -> t
+    
 (* extensions *)
 val sx : t -> width -> t  (* sign extend to the given width *)
 val zx : t -> width -> t
@@ -279,6 +282,18 @@ let ge = bits_bits_bool "Bitops.ge"
 let eq' = bits_bits_bool "Bitops.eq"
 let ne' = bits_bits_bool "Bitops.ne"
 
+
+let bits_bits_bits s ((tag,bits),w) ((tag1,bits1),w1) =
+  let bv = commit ((tag,bits),w) in
+  let bv1 = commit ((tag1,bits1),w1) in
+  let (b2,w2) =
+    T.nbe' (T.arrowN(bitsC,T.arrowN(bitsC,bitsCP)))
+      (Sy.VAR s) bv bv1 in
+  ((Bits.BV,b2),w)
+
+
+let add = bits_bits_bits "Bitops.add"
+    
     
 let bits_int_bits s ((tag,bits),w) y =
   let bv = commit ((tag,bits),w) in
