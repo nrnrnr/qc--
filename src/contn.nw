@@ -85,9 +85,8 @@ let init_code t ~k_sp ~k_pc =
 let rep t = t.block
 
 let with_overflow t ~base ~overflow =
-    let add       = Rtl.opr "add" [t.T.pointersize] in
-    let offset n  =
-        Rtl.app add [base; Rtl.bits (Bits.S.of_int n t.T.pointersize) t.T.pointersize] in
+    let addk      = Rtlutil.addk t.T.pointersize in
+    let offset n  = addk base n in
     let cell addr = Rtl.cell Rtl.none 'm' t.T.byteorder t.T.pointersize  addr in
     let size = t.T.pointersize / t.T.memsize in
         { block = Block.cathl overflow (Block.mk ~base ~size:(2 * size)
@@ -98,11 +97,7 @@ let with_overflow t ~base ~overflow =
         }
 
 let cutto t to_rtl ~contn =
-    to_rtl (contn, (Rtl.app (Rtl.opr "add" [t.T.pointersize])
-                [ contn
-                ; Rtl.bits (Bits.S.of_int (t.T.pointersize/t.T.memsize)
-                                          t.T.pointersize) t.T.pointersize
-                ]))
+    to_rtl (contn, Rtlutil.addk t.T.pointersize contn (t.T.pointersize/t.T.memsize))
 
 let get_contn (newpc, newsp) = newpc
 @

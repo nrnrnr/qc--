@@ -173,8 +173,8 @@ let move ~dst ~src   = if dst = src then [] else [move_rtl dst src]
 @ 
 Load immediate is also a simple move.
 <<x86 postexpander>>=
-let upconst c = Up.exp (RP.Const c)
-let li ~dst const = [R.store (temploc dst) (upconst const) (tempwidth dst)]
+let li  ~dst const = [R.store (temploc dst) (Up.const const) (tempwidth dst)]
+let lix ~dst e     = [R.store (temploc dst) e                (tempwidth dst)]
 @ 
 \subsubsection{Operator contexts}
 Here are tentative contexts for all the operators.
@@ -338,7 +338,7 @@ let divu_trunc icontext dst x y =
         ]  in
     let eax = ('r', 0, 32) in
     let edx = ('r', 2, 32) in
-    let upint n = upconst (RP.Bits(Bits.U.of_int n 32)) in
+    let upint n = Up.const (RP.Bits(Bits.U.of_int n 32)) in
     [ move_rtl eax tmpa; move_rtl edx tmpd    (* restore *)
     ; move_rtl dst eax; divmod                (* divide *)
     ; move_rtl eax x; R.store (temploc eax) (upint 0) 32
@@ -364,12 +364,12 @@ There are some hairy semantics attached to some Pentium jump
 instructions, but I~think we can stick with the simple ones for now. 
 <<x86 postexpander>>=
 let br ~tgt = [R.store pc_lhs (tempval tgt) 32]
-let b  ~tgt = [R.store pc_lhs (upconst tgt) 32]
+let b  ~tgt = [R.store pc_lhs (Up.const tgt) 32]
 @ 
 The call instructions came from us, so we can rely on the single extra effects pushing the program counter.
 <<x86 postexpander>>=
 let effects = List.map Up.effect
-let call  ~tgt ~others = [R.par (R.store pc_lhs (upconst tgt) 32 :: effects others)]
+let call  ~tgt ~others = [R.par (R.store pc_lhs (Up.const tgt) 32 :: effects others)]
 let callr ~tgt ~others = [R.par (R.store pc_lhs (tempval tgt) 32 :: effects others)]
 @ 
 The [[cut to]] is our own little conspiracy.
@@ -410,7 +410,7 @@ let cmp x y =
 let bc x (opr, ws) y ~tgt =
   assert (ws = [32]);
   [ R.guard (R.app (R.opr (cmpopr opr) [32]) [R.fetch eflags 32]) 
-            (R.store pc_lhs (upconst tgt) 32)
+            (R.store pc_lhs (Up.const tgt) 32)
   ; cmp x y
   ]
 
@@ -467,7 +467,7 @@ We begin with more utility functions
 module PX = Post
 let pc        = PX.pc
 let espval    = PX.tempval ('r', 4, 32)
-let add x y   = R.app (R.opr "add" [32]) [x; y]
+let add       = Rtlutil.add 32
 let sub x y   = R.app (R.opr "sub" [32]) [x; y]
 let const n   = R.bits (Bits.S.of_int n 32) 32
 let mem       = PX.mem
@@ -511,9 +511,9 @@ Parts of the target record are reasonable.
 Parts are lies.
 Parts are baffling---why is character set characterized by the target?
 <<x86.ml>>=
-let downrtl = R.Convert.rtl
-let uploc   = R.Revert.loc
-let upexp   = R.Revert.exp
+let downrtl = Down.rtl
+let uploc   = Up.loc
+let upexp   = Up.exp
 let target =
   { T.name = "x86"
 

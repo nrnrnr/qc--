@@ -80,17 +80,17 @@ instructions is shared with the recognizer.}
 module Flow = struct
     <<module Flow>>
 end
-
+@ 
+THESE REGISTER ASSIGNMENTS MISUSE THE STANDARD [['c']] SPACE.
+ANOTHER SPACE SHOULD BE CHOSEN.
 <<module Flow>>=
 let ewidth                = RU.Width.exp 
 let lwidth                = RU.Width.loc 
-let rindex n              = Rtl.bits (Bits.U.of_int n wordsize) wordsize
-let regloc (space, n, w)  = Rtl.cell Rtl.none space byte_order w (rindex n)
 
-let pc:Rtl.loc            = regloc ('c',0, wordsize)  (* pc pointer     *)
-let sp:Rtl.loc            = regloc ('c',1, wordsize)  (* stack pointer  *)
-let ap:Rtl.loc            = regloc ('c',2, wordsize)  (* arg pointer    *)
-let ra:Rtl.loc            = regloc ('c',3, wordsize)  (* return address *)
+let pc:Rtl.loc            = Rtl.reg ('c',0, wordsize)  (* pc pointer     *)
+let sp:Rtl.loc            = Rtl.reg ('c',1, wordsize)  (* stack pointer  *)
+let ap:Rtl.loc            = Rtl.reg ('c',2, wordsize)  (* arg pointer    *)
+let ra:Rtl.loc            = Rtl.reg ('c',3, wordsize)  (* return address *)
 @
 
 We are now defining instructions that model instructions in the
@@ -100,13 +100,13 @@ these instructions more easily.
 <<module Flow>>=
 let fetch loc   = R.fetch loc wordsize        
 let store loc e = R.store loc e wordsize        
-let add         = R.opr "add" [wordsize]
+let add         = RU.add  wordsize
+let addk        = RU.addk wordsize
 let sub         = R.opr "sub" [wordsize]
-let add1 loc    = R.app add [ fetch loc 
-                            ; R.bits (Bits.S.of_int 1 wordsize) wordsize]
+let add1 loc    = addk (fetch loc) 1
 let sub1 loc    = R.app sub [ fetch loc
                             ; R.bits (Bits.S.of_int 1 wordsize) wordsize]
-let inc loc     = R.store loc (add1 loc)  wordsize
+let inc loc     = R.store loc (add1 loc) wordsize
 let dec loc     = R.store loc (sub1 loc) wordsize
 let error       = Impossible.impossible
 @
@@ -171,18 +171,8 @@ description is quite inaccurate \emph{and need to be improved.}
 \end{itemize}
 
 <<module Flow>>=
-let fetch r     = R.fetch r wordsize
-let add         = R.opr "add" [wordsize]
-let sub         = R.opr "sub" [wordsize]
-let plus1 r     = R.app add [fetch r 
-                            ; R.bits (Bits.S.of_int 1 wordsize) wordsize]
-let minus1 r    = R.app sub [fetch r
-                            ; R.bits (Bits.S.of_int 1 wordsize) wordsize]
-let inc r       = R.store r (plus1 r)  wordsize
-let dec r       = R.store r (minus1 r) wordsize
-
-let argument x  = R.cell R.none 'A' R.Identity 1 x     
-let global   x  = R.cell R.none 'G' R.Identity 1 x 
+let argument x  = R.reg ('A', x, 1)
+let global   x  = R.reg ('G', x, 1)
 
 (* the following RTLs are not type correct *)
 (* x is an expression *)
@@ -191,10 +181,8 @@ let store_arg i e = R.par [R.store (argument (fetch ap)) e (ewidth e); inc ap]
 let fetch_arg i w = R.fetch (argument (fetch ap)) w
 *)
 
-let exp_of_index i = R.bits (Bits.S.of_int i wordsize) wordsize
-
-let store_arg i e  = R.store (argument (exp_of_index i)) e (ewidth e)
-let fetch_arg i w  = R.fetch (argument (exp_of_index i)) w
+let store_arg i e  = R.store (argument i) e (ewidth e)
+let fetch_arg i w  = R.fetch (argument i) w
 @
 
 % ------------------------------------------------------------------ 

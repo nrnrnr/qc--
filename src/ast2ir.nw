@@ -116,6 +116,8 @@ module Make (G : Cfg.S) (C : Call.S with type node = Rtl.rtl G.node) = struct
 
   let translate target env ccs ~optimizer =
     let pointersize = target.T.pointersize in
+    let add = RU.add pointersize in
+    let to_cc cconv = ccs (Aux.Option.get default_cc cconv) in
     <<definition of [[lvalue_name_in_env]]>> in
     <<environment-independent support for formals, actuals, and results>> in
     let exprfuns env contenv cont_rvalue =
@@ -228,7 +230,7 @@ let rec lvalue lhs = match lhs with
   | A.Mem(t,addr,align) ->
       let w    = astwidth env t in
       let assn = match align with None -> Rtl.none | Some n -> Rtl.aligned n in
-      AT.of_loc (Rtl.cell assn default_space target.T.byteorder w (expr addr)), w
+      AT.of_loc (Rtl.mem assn default_space target.T.byteorder w (expr addr)), w
 @ 
 
 % ------------------------------------------------------------------ 
@@ -553,7 +555,7 @@ N.B.~We don't use the [[targets]] list, which is there for future
 interprocedural optimization and call-graph analysis.
 <<supporting functions for translating statements>>=
 let rec jumpStmt (cconv,e,args,targets (*unused*)) = 
-    let cc     = ccs (Aux.Option.get default_cc cconv) in
+    let cc    = to_cc cconv in
     let out   = actuals cc.C.call_actuals args in
     let jumpi = target.T.jump.T.embed (expr e) in
     let ()    = add_oldblock out.C.overflow    in  (* jump overflow = old *)
@@ -590,16 +592,16 @@ let noregs = Register.Set.empty
 
 <<supporting functions for translating statements>>=
 and callStmt (lhs,cconv, e, args, targets (*unused*), conts) succ = 
-  let cc    = ccs (Aux.Option.get default_cc cconv) in
-  let out   = actuals cc.C.call_actuals args        in
-  let in'   = results cc.C.call_results lhs         in
-  let calli = target.T.call.T.embed (expr e)               in
-  let conts = continuations cc conts                       in
-  let () = add_youngblock out.C.overflow in  (* outgoing overflow parms *)
-  let () = add_youngblock in'.C.overflow in  (* incoming overflow results *)
-  G.instruction g out.C.pre_sp            **>
-  G.instruction g out.C.shuffle           **>
-  G.instruction g out.C.post_sp           **>
+  let cc    = to_cc cconv                     in
+  let out   = actuals cc.C.call_actuals args  in
+  let in'   = results cc.C.call_results lhs   in
+  let calli = target.T.call.T.embed (expr e)  in
+  let conts = continuations cc conts          in
+  let () = add_youngblock out.C.overflow      in  (* outgoing overflow parms *)
+  let () = add_youngblock in'.C.overflow      in  (* incoming overflow results *)
+  G.instruction g out.C.pre_sp                **>
+  G.instruction g out.C.shuffle               **>
+  G.instruction g out.C.post_sp               **>
   G.call        g calli ~uses:out.C.regs ~defs:in'.C.regs ~kills:cc.C.volregs
                         ~altrets:conts.returns ~unwinds_to:conts.unwinds
                         ~cuts_to:conts.cuts ~aborts:conts.aborts ~spans:props  **>
@@ -618,7 +620,7 @@ and refer to the big picture in \module{stack}.
 <<supporting functions for translating statements>>=
 and returnStmt (cconv, kont, args) = 
 (* SHOULD RETURN BEAR A CALLING CONVENTION, OR DOES IT GET THE CONVENTION OF THE BODY? *)
-    let cc = ccs (Aux.Option.get default_cc cconv)    in
+    let cc = to_cc cconv                       in
     let out = actuals cc.C.return_actuals args in
     let reti =
       match kont with
@@ -736,7 +738,7 @@ let insert_init_cont_nodes contmap init_node =
 @ 
 <<definition of [[proc]], which translates one procedure>>=
 let proc containing_spans (cconv,procname,args,procbody) = 
-    let proc_cc = ccs (Aux.Option.get default_cc cconv) in
+    let proc_cc = to_cc cconv in
     let symbol, scope, vars =
       match F.findv procname env with
       | _,(F.Label(F.Proc (sym,scope,i)),_) -> sym, scope, i
@@ -764,10 +766,10 @@ let proc containing_spans (cconv,procname,args,procbody) =
 
     (* symbolic late compile-time constants to be used for stack areas *)
     (* THERE ARE LOTS OF THESE.  WHERE ARE THEY USED? *)
-    let sp_offset k = Rtl.app (Rtl.opr "add" [pointersize]) [sp;k] in
-    let stack       = sp_offset (Rtl.late "stackdata" pointersize) in
-    let inb         = sp_offset (Rtl.late "inbase"    pointersize) in
-    let outb        = sp_offset (Rtl.late "outbase"   pointersize) in
+    let sp_offset = add sp in
+    let stack     = sp_offset (Rtl.late "stackdata" pointersize) in
+    let inb       = sp_offset (Rtl.late "inbase"    pointersize) in
+    let outb      = sp_offset (Rtl.late "outbase"   pointersize) in
 
     (* calculate amount of user stack data - rebinds env! *)
     <<definition of [[stackdata]]>> in

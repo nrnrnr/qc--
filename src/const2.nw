@@ -180,7 +180,7 @@ unparse a sum into an expression.
 
 <<const2.ml>>=
 let rtl ~(width:int) (e:sum) = 
-    let add    = Rtl.opr "add"  [width] in
+    let add    = Rtlutil.add width in
     let mult   = Rtl.opr "mult" [width] in 
     let bits i = Rtl.bits (Bits.U.of_int i width) width    in 
     let late x = Rtl.late x width in
@@ -192,8 +192,8 @@ let rtl ~(width:int) (e:sum) =
         | (i,Const k) -> Rtl.app mult [bits i;k] in
     let rec loop e = function
         | []    -> e
-        | [s]   -> Rtl.app add [e;summand s]
-        | s::ss -> loop (Rtl.app add [e;summand s]) ss
+        | [s]   -> add e (summand s)
+        | s::ss -> loop (add e (summand s)) ss
     in
         match e with
         | []    -> Rtl.bits (Bits.zero width) width

@@ -139,11 +139,9 @@ We often know that the address of a block has the form $b+k$, where $b$
 is a known address and $k$ some unkown offset. The function [[offset]]
 provides returns an {\rtl} address of this form, where $k$ is
 represented as a fresh late compile time constant.
-
 <<auxilliaries>>=
 let offset base ptrwidth =
-    let k = Rtl.late (Idgen.offset "Ast3ir.offset") ptrwidth in
-        Rtl.app (Rtl.opr "add" [ptrwidth]) [base;k] 
+  Rtlutil.add ptrwidth base (Rtl.late (Idgen.offset "Ast3ir.offset") ptrwidth)
 @
 
 
@@ -242,11 +240,10 @@ and variable env target hint x =
     | F.Label(F.Data s)         -> Rtl.link s (width t)
     | F.Import(_,s)             -> Rtl.link s (width t)
     | F.Continuation(st,s)       ->
-        let cc     = target.Target.cc default_cc                  in
+        let cc     = target.Target.cc default_cc          in
         let offset = Rtl.late st (width t)                in
         let sp     = cc.Target2.sp                        in
-        Rtl.app (Rtl.opr "add" [target.Target.pointersize])
-                [Rtl.fetch sp (Rtlutil.Width.loc sp);offset]
+        Rtlutil.add target.Target.pointersize (Rtlutil.fetch sp) offset
     | F.Label(F.Stack(None))  -> Impossible.impossible "Ast3ir.Make.variable"
     | F.Label(F.Stack(Some loc)) ->
         let w    = width t                                   in 
@@ -935,8 +932,7 @@ and contStmt spans state (label,args)  =
         if Strutil.Set.mem label state.esc_conts
         then begin
             let variable  = Rtl.late contID ptr in
-            let add       = Rtl.opr "add" [ptr] in
-            let offset    = Rtl.app add [sp; variable] in
+            let offset    = Rtlutil.add ptr sp variable in
             let newBase   = Rtl.late (Idgen.block ("contParams"^label)) ptr in
             let rtls,area = IO.copyin args cc.Target.cont newBase in
             let copy,_ =
@@ -978,8 +974,8 @@ and cutStmt spans state (e, args, conts) =
     let cut       = G.gm_cutto state.cfg rtl conts                     in
 
     let size      = ptr / state.target.Target.memsize                  in
-    let oflow     = Rtl.app (Rtl.opr "add" [ptr])
-                    [contn; Rtl.bits (Bits.S.of_int (2 * size) ptr) ptr] in
+    let oflow     = Rtlutil.addk ptr contn (2 * size)                  in
+                      (* CONTN REP IS EXPOSED HERE *)
     let rtls,area = IO.copyout args cc.Target.cont oflow in
 
     (* solve the equations *)
@@ -1062,11 +1058,12 @@ let proc spans env target optimizer (cconv,name,args,bdy) =
                       | _                          -> assert false in
     let env         = F.push env scope  in  (* activate local scope *)
     let pointer     = target.Target.pointersize in
+    let addk        = Rtlutil.add pointer in
     let cc          = target.Target.cc (Aux.Option.get default_cc cconv) in
     let sp          = Rtl.fetch (cc.Target.sp) pointer in (* stack pointer *)
     let cfg         = G.mk target (Rtl.par []) in (* empty control-flow graph *)
     (* symbolic late compile-time constants to be used for stack areas *)
-    let sp_offset k = Rtl.app (Rtl.opr "add" [pointer]) [sp;k] in
+    let sp_offset k = addk sp k in
     let stack       = sp_offset (Rtl.late "stackdata" pointer) in
     let inb         = sp_offset (Rtl.late "inbase"    pointer) in
     let outb        = sp_offset (Rtl.late "outbase"   pointer) in

@@ -225,6 +225,7 @@ object (this)
     val mutable _block  = Block.mk base 0 1  (* initial block *)
     val mutable _frozen = false
     val mutable _maxalign = 1
+    val         _add      = Rtlutil.add target.pointersize
     
     method freeze () =
         ( _block  <- Block.adjust (Block.cathl _block (Block.mk base 0 _maxalign))
@@ -236,8 +237,7 @@ object (this)
         new loc (Rtl.cell Rtl.none 'm' target.byteorder w addr)
     
     method private slotaddress = (* base + v *)
-        let add = Rtl.opr "add" [target.pointersize] in
-        Rtl.app add [base; Rtl.late (Idgen.slot "slots") target.pointersize]
+        _add base (Rtl.late (Idgen.slot "slots") target.pointersize)
     
     method allocate width hint = 
         let ()      = assert (_frozen = false)           

@@ -14,6 +14,23 @@
 
 This module provides functions to observe and transform {\rtl}s. 
 
+\subsection{Common operations on RTLs}
+These functions reassociate constants.
+It can be mildly useful to partially apply them to a width.
+N.B. [[addk x 0 === x]] always.
+<<rtlutil.mli>>=
+val add  : Rtl.width -> Rtl.exp -> Rtl.exp -> Rtl.exp
+val addk : Rtl.width -> Rtl.exp -> int     -> Rtl.exp
+@ 
+These functions use the width of the location.
+Although we gain some convenience,
+we lose some redundancy; use these functions only where the width is
+not readily available.
+<<rtlutil.mli>>=
+val fetch : Rtl.loc -> Rtl.exp
+val store : Rtl.loc -> Rtl.exp -> Rtl.rtl
+@ 
+
 % ------------------------------------------------------------------ 
 \subsection{Width}
 % ------------------------------------------------------------------ 
@@ -209,13 +226,17 @@ end
 % ------------------------------------------------------------------ 
 
 <<rtlutil.ml>>=
+module R  = Rtl
 module RP = Rtl.Private
-module U  = Rtl.Revert
-module D  = Rtl.Convert
+module Up = Rtl.Up
+module Dn = Rtl.Dn
 
 module Width = struct
     <<Width>>
 end
+
+let fetch l   = R.fetch l   (Width.loc l)
+let store l e = R.store l e (Width.loc l)
 
 module ReadWrite = struct
     <<ReadWrite>>
@@ -653,13 +674,13 @@ let exp = expr
 % ------------------------------------------------------------------ 
 
 <<Time>>=
-let compile e = match D.exp e with
+let compile e = match Dn.exp e with
     | RP.Const(RP.Bits _) -> true
     | RP.Const(RP.Bool _) -> true
     | RP.Const(RP.Late _) -> true
     | _                   -> false
 
-let link e = match D.exp e with     
+let link e = match Dn.exp e with     
     | RP.Const(RP.Bits _) -> true
     | RP.Const(RP.Bool _) -> true
     | RP.Const(RP.Late _) -> true
@@ -809,3 +830,37 @@ end
 module HasLoc = struct
   let exp = MayAlias.has_loc
 end
+@ 
+\section{Reassociating arithemtic}
+<<rtlutil.ml>>=
+let add' w =
+  let addop = R.opr "add" [w] in
+  fun x y -> R.app addop [x; y]
+
+let rec is_sum_of_constants = function
+  | RP.Const (RP.Bits _ | RP.Late (_, _)) -> true
+  | RP.App   ((("add"), [w]), es)   -> List.for_all is_sum_of_constants es
+  | _ -> false
+
+let addc w =
+  let add' = add' w in
+  let addconst x y = match x, y with
+    | RP.Bits b, RP.Bits b' -> R.bits (Bits.add b b') w
+    | c, c' -> add' (Up.const c) (Up.const c') in
+  fun x y ->
+    match Down.exp x with
+    | RP.App (("add", [w']), [x1; RP.Const c]) -> add' (Up.exp x1) (addconst c y)
+    | RP.App (("add", [w']), [x1; x2]) when is_sum_of_constants x2 ->
+        add' (Up.exp x1) (add' (Up.exp x2) (Up.const y))
+    | _ -> add' x (Up.const y) 
+
+let addk w =
+  let add = addc w in
+  fun x k -> if k = 0 then x else add x (RP.Bits (Bits.S.of_int k w))
+
+let add w =
+  let add = add' w in
+  fun x y -> match (Down.exp y) with
+  | RP.Const c -> addc w x c
+  | _ -> add x y
+@ 

@@ -11,7 +11,7 @@
 % Please add grades for this module below. The line must start with % "%%".
 % 
 
-%Grades: C Subsystem Later
+%%Grades: C Subsystem Later
 
 % ------------------------------------------------------------------ 
 \section{Memory Blocks}
@@ -133,7 +133,8 @@ end
 % ------------------------------------------------------------------ 
 
 <<block.ml>>=
-module C = Const2
+module C  = Const2
+module RU = Rtlutil
 
 type t =
     { base:         Rtl.exp
@@ -156,26 +157,17 @@ let mk ~base ~size ~alignment =
 
 type placement = High | Low
 @
-
 [[Align x n]] returns the smallest multiple of $n$ that is not smaller
 than $x$. Think of $x$ becoming $n$-aligned. 
-
 <<block.ml>>=
 let align x n = if x mod n = 0 then x else n * (x/n+1)
 @
-
 [[Add]] adds an integer to an {\rtl} expression and returns an {\rtl}
 expression.
-
 <<block.ml>>=
-let add exp i = 
-    let width = Rtlutil.Width.exp exp in
-    let opr   = Rtl.opr "add" [width] in
-        Rtl.app opr [exp; Rtl.bits (Bits.S.of_int i width) width]
+let add exp i = RU.addk (RU.Width.exp exp) exp i
 @
-
 The size of an adjusted block is a multiple of its alignment.
-
 <<block.ml>>=
 let adjust t = { t with size = align (size t) (alignment t) }
 @
@@ -233,8 +225,7 @@ Not essential, but convenient functions.
 
 <<block.ml>>=
 let offset base name ptrwidth =
-    let k = Rtl.late (Idgen.offset name) ptrwidth in
-        Rtl.app (Rtl.opr "add" [ptrwidth]) [base;k] 
+  RU.add ptrwidth base (Rtl.late (Idgen.offset name) ptrwidth)
 
 let empty w =
   mk ~base:(offset (Vfp.mk w) (Idgen.offset "empty block") w) ~size:0 ~alignment:1

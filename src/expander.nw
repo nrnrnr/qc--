@@ -185,7 +185,12 @@ val move : dst:temp -> src:temp -> rtl list
 @ 
 Load immediate can take any constant except a Boolean.
 <<generic expansion operations>>=
-val li : dst:temp -> Rtl.Private.const -> rtl list
+val li  : dst:temp -> Rtl.Private.const -> rtl list
+@ 
+An extended load-immediate can take sums and differences of
+compile-time constants (including late compile-time constants). 
+<<generic expansion operations>>=
+val lix : dst:temp -> Rtl.exp           -> rtl list
 @ 
 We provide simple shortcuts for binary and unary operators.
 I don't know if the shortcuts are worthwhile.
@@ -358,9 +363,7 @@ to that of memory, but so be it.
 When we refactor the compiler to support register locations directly,
 this function should go away.
 <<generic expander>>=
-let temploc (space, n, w) =
-  Rtl.cell Rtl.none space Post.byte_order w
-           (Rtl.bits (Bits.U.of_int n Post.wordsize) Post.wordsize)
+let temploc (space, n, w) = R.reg (space, n, w)
 @ 
 \subsection{Creating temporaries in allocation contexts}
 Much of the expander involves computing subexpressions into
@@ -458,13 +461,27 @@ Here we define the primed and use the unprimed; the two are connected
 with debugging code below.
 
 Most cases identify what postexpander function should be used and
-create suitable temporaries.
+create suitable temporaries.%
+\footnote{We have a small problem with register targeting; the problem
+effects the size of the expanded code and therefore the compile-time
+efficiency.
+We wish to avoid generating superfluous move
+instructions.
+There are two possible contexts: if a right-hand side is already a temporary, we avoid
+allocating a second temporary.
+But if a left-hand side is already a temporary, we fail to ``target''
+the right-hand side into that temporary.
+It is not obvious to NR how to write an expander that achieves both.}
 <<definitions of [[to_temp]], [[rtl]] and all the other generic expander functions>>=
 let rec to_temp' context e = match e with
   | RP.Const k ->
       let w = width e in
       let t = alloc context w in
       t, to_hughes (Post.li t k)
+  | RP.App (_, _) when is_compile_time_constant e ->
+      let w = width e in
+      let t = alloc context w in
+      t, to_hughes (Post.lix t (Up.exp e))
   | RP.Fetch (RP.Mem ('m', agg, w, addr, assn), w') ->
       let t = alloc context w in
       let a, is = address addr in
@@ -532,6 +549,13 @@ and address exp =
   let t, is = to_temp acontext exp
   in  Post.Address.reg t, is
 @
+A compile-time constant is a sum or difference of compile-time constants.
+<<other generic expander functions>>=
+and is_compile_time_constant = function
+  | RP.Const (RP.Bits _ | RP.Late (_, _)) -> true
+  | RP.App   ((("add"|"sub"), [w]), es)   -> List.for_all is_compile_time_constant es
+  | _ -> false
+@ 
 
 \subsection{Expanding RTLs}
 
@@ -700,7 +724,9 @@ let make_shuffle effs =
   let strip_store = function
     | RP.Store (l, r, w) -> (l, r, w)
     | RP.Kill _ -> Impossible.impossible "kill in shuffle" in
-  let rec shuffle = function
+  let rec shuffle =
+    let assign = noisy_assign in
+    function
     | [(l, r, w)] -> assign l r w
     | [] -> empty
     | ((l, (r:RP.exp), w) :: rest) as effs ->
@@ -732,6 +758,11 @@ targeter [[to_temp]] are doing.
 and rtl r =
   let is = rtl' r in
   let _ = D.strings ["Expanded "; D.rtl r; " into\n"]; D.pr_is is in
+  is
+and noisy_assign l r w =
+  let is = assign l r w in
+  let r = R.store (Up.loc l) (Up.exp r) w in
+  let _ = D.strings ["Shuffling "; D.rtl r; " into\n"]; D.pr_is is in
   is
 and to_temp context e =
   let _ = D.strings ["Targeting "; D.exp e; "...\n"] in

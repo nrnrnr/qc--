@@ -206,12 +206,12 @@ let is_bits = function
     | RP.Const(RP.Bits(_)) -> true
     | _                    -> false
 
-let addbits k k' = to_bits (Int64.add (int64 k) (int64 k'))
 let rec add w args = match (w,args) with
-    | [w],[RP.App(("add", [w']), [x; k]); k'] when w = w' && is_bits k && is_bits k'
-                -> add [w] [x; addbits k k' w]
-    | [w],[x;y] when is_bits x && is_bits y 
-                -> addbits x y w
+    | [w],[RP.App(("add", [w']), [x; RP.Const (RP.Bits k)]); RP.Const (RP.Bits k')] 
+                -> assert (w=w');
+                   add [w] [x; RP.Const (RP.Bits (Bits.add k k'))]
+    | [w],[RP.Const (RP.Bits x); RP.Const (RP.Bits y)]
+                -> RP.Const (RP.Bits (Bits.add x y))
     | _         -> default "add" w args
     
 

@@ -104,10 +104,9 @@ let cutto = { T.embed   = (fun (sp,newsp,newpc) ->
                                     | _ -> Impossible.impossible "projected non-cutto")
             }
 
-let ra_val =
+let ra_val = 
   let pc = R.fetch P.pc_rhs w in
-  if P.ra_offset = 0 then pc
-  else R.app (R.opr "add" [w]) [pc; R.bits (Bits.S.of_int P.ra_offset w) w]
+  RU.addk w pc P.ra_offset
 
 let call = { T.embed   = (fun e -> R.par [R.store P.pc_lhs e w;
                                           R.store P.ra_reg ra_val w])
