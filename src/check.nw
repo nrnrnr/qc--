@@ -224,6 +224,18 @@ sorted, and finally processed. The sort function is provided by the
 being sorted.  In this case module [[TT]] provides the necessary
 informations about type declarations. 
 
+As in the rest of the [[Check]] module, functions are named after the
+non-terminals in the grammar. So a function [[body]] deals with the
+body of procedure, for example.
+
+The overall purpose of this module is to provide functions that take
+the abstract syntax of a program or procedure and enter all type
+declarations found there into the fat environment.  This is done by
+[[foldGlobalTypeDecls]] and [[foldLocalTypeDecls]] respectively.  As
+explained earlier declaration can refer to each other.  Because of
+these dependencies among each other, they must be first collected,
+than sorted, and finally processed in the right order.
+
 <<building the type environment>>=
 module TypeEnv = struct
     module TT = struct
@@ -235,10 +247,10 @@ module TypeEnv = struct
     <<process type decls>>
 
     let foldGlobalTypeDecls program =
-        foldl (toplevel None) [] program
+        foldl (toplevel Srcmap.null) [] program
 
     let foldLocalTypeDecls b =
-        foldl (body None) [] b
+        foldl (body Srcmap.null) [] b
 end
 @
 
@@ -246,45 +258,89 @@ end
 \subsubsection{Collecting Type declarations}
 % ------------------------------------------------------------------ 
 
-The functions collecting type declarations walk over the abstract
-syntax and return them in a list.  The top-level and its sections
-declare global types, the body of procedures local types. 
+The following functions collect type declarations by walking over the
+abstract syntax and returning them in a list.  The declarations are
+not returned literally but their constructors are stripped of and
+only the abstract information is returned.
+
+The top-level and its sections declare global types, the body of
+procedures local types. 
         
+A procedure body contains statements, stack data declarations and type
+declarations. A [[span]] statement has its own body which again can
+contain type declarations - so we have to scan the statements part of
+a body.
+
+While descending into the abstract syntax we remember source-code
+positions.  The last source-code position we came across is paired
+with the declaration as its source-code location.  To simplify things
+we use the [[Srcmap.null]] source-code position at when we start to
+avoid dealing with optional source-code positions.
+
 <<collect type decls>>=
 let rec body r dd = function
-    | A.BodyAt(x,r)     -> body (Some r) dd x
+    | A.BodyAt(x,r)     -> body r dd x
     | A.DeclBody(d)     -> decl r dd d
-    | _                 -> dd
-<<>>=
-and decl r dd = function
-    | A.DeclAt(x,r)     -> decl (Some r) dd x
-    | A.Typedef(_) as d -> (d,r)::dd
-    | _                 -> dd
+    | A.StmtBody(s)     -> stmt r dd s
+    | A.DataBody _      -> dd
 <<>>=
 and stmt r dd = function
-    | A.StmtAt(x,r)     -> stmt (Some r) dd x
+    | A.StmtAt(x,r)     -> stmt r dd x
     | A.SpanStmt(_,_,bb)-> foldl (body r) dd bb
-    | _                 -> dd
+    | A.IfStmt _     -> dd
+    | A.SwitchStmt _ -> dd
+    | A.LabelStmt _  -> dd
+    | A.ContStmt _   -> dd
+    | A.AssignStmt _ -> dd
+    | A.CallStmt _   -> dd
+    | A.PrimStmt _   -> dd
+    | A.GotoStmt _   -> dd
+    | A.JumpStmt _   -> dd
+    | A.CutStmt _    -> dd
+    | A.ReturnStmt _ -> dd
+    | A.EmptyStmt    -> dd
+<<>>=
+and decl r dd = function
+    | A.DeclAt(x,r)     -> decl r dd x
+    | A.Typedef(d)      -> (d,r)::dd
+    | A.Import    _       -> dd
+    | A.Export    _       -> dd
+    | A.Const     _       -> dd
+    | A.Registers _       -> dd
+    | A.Target    _       -> dd
+    | A.Pragma            -> dd
+@
 
+Global type declarations are either on the top-level, or at the
+section-level.  A [[span]] at the section-level contains more
+declarations which must be checked.  Since procedures declare local
+types they must not be checked when we are collecting the global
+types.
+    
 <<>>=
 let rec section r dd = function
-    | A.SectionAt(x,r)         -> section (Some r) dd x 
+    | A.SectionAt(x,r)         -> section r dd x 
     | A.Decl(d)                -> decl r dd d 
     | A.SSpan( e1, e2, ss)     -> foldl (section r) dd ss
     | A.Datum( d)              -> dd
     | A.Procedure(p)           -> dd 
 <<>>=    
 let rec toplevel r dd = function
-    | A.ToplevelAt(x,r)   -> toplevel (Some r) dd x
+    | A.ToplevelAt(x,r)   -> toplevel r dd x
     | A.Section(_, ss)    -> foldl (section r) dd ss
     | A.TopDecl (d)       -> decl r dd d
-    | _                   -> dd
+    | A.TopProcedure _    -> dd (* no global typedefs here *)
+@
+
+The following two functions collect type declarations at the global
+(program) and the local (procedure) level and return them in a list.
+    
 <<>>=
 let foldGlobalTypeDecls program =
-    foldl (toplevel None) [] program
+    foldl (toplevel Srcmap.null) [] program
 <<>>=
 let foldLocalTypeDecls b =
-    foldl (body None) [] b
+    foldl (body Srcmap.null) [] b
 @
 
 % ------------------------------------------------------------------ 
@@ -302,19 +358,20 @@ declarations:  it can ask for the names a declaration [[defines]], and
 the declared names it [[uses]].  For error reporting declarations are
 enriched with optional source code positions.
 
-<<module TT>>=
-type decl = A.decl * A.region option
 
-let rec defines = function
-    | A.DeclAt(d,r)      , _   -> defines (d,Some r)
-    | A.Typedef(t,names) , _   -> names
-    | _                  , _   -> []
+<<module TT>>=
+type decl = (A.ty * string list) * A.region
+@
+
+Things are easy: a [[typedef]] defines the names it defines; it depends
+on another type if its type is itself just a name. 
+
 <<>>=
-let rec uses = function     
-    | A.DeclAt(d,r)                 , _   -> uses (d,Some r)
-    | A.Typedef(A.BitsTy(_),names)  , _   -> []
-    | A.Typedef(A.AliasTy(x),names) , _   -> [x]
-    | _                             , _   -> []
+let defines ((t,names),_) = names
+let uses    ((t,names),_) = match t with
+    | A.BitsTy(_)   -> []
+    | A.AliasTy(x)  -> [x]
+    | A.TyAt _      -> assert false
 @
 
 % ------------------------------------------------------------------ 
@@ -335,16 +392,25 @@ in the (fat) environment.
 let bindError scope env decls = 
     let names = List.concat (List.map TT.defines decls) in 
         foldl (fun env name -> F.bindtError name scope env) env names
+@
+
+A [[typedef]] declares multiple names.  This function binds all
+[[names]] to the same [[ty]] in [[scope]]. 
 
 <<>>=
 let bindt names ty scope env =
     foldl (fun env n -> F.bindt n (scope,ty) env) env names
+@
+
+While processing a declaration an error may occur. This is catched
+here; the source-code position associated with a type declaration is
+used for error reporting.
 
 <<>>=
-let rec doTypeDecl env = function
-    | A.DeclAt(x,r)      -> E.catch' env (error r env) (doTypeDecl env) x
-    | A.Typedef(t,names) -> bindt names (evalTy env t) F.Global env
-    | _                  -> env
+let rec doTypeDecl env (d,r) = 
+    let bind (t,names) = bindt names (evalTy env t) F.Global env 
+    in
+        E.catch' env (error r env) bind d
 
 <<>>=
 let doTypeDecls env decls = foldl doTypeDecl env decls
@@ -356,32 +422,37 @@ collection.
 
 <<>>=
 let reportCycle env decls = 
-    let report = function
-        | A.Typedef(t,n::nn), Some r -> 
-            error r env ("typedef for "^n^" is cyclic")
-        | A.Typedef(t,n::nn), None   -> 
-            E.errorPrt      ("typedef for "^n^" is cyclic")
-        | _                     -> assert false
+    let report = function 
+        | ((t,n::nn),r) ->  error r env ("typedef for "^n^" is cyclic")
+        | _             ->  assert false (* list of names empty *)
     in
         List.iter report decls      
+@
+
+When a cycle is found it is removed from the list of declarations and
+the process of sorting and processing is started over.  We don't care
+that this takes time because we have an illegal {\PAL} program.
 
 <<>>=
 let doTypes is_global env dd =
-    let decls          = List.map fst                 in
     let rec bindAll dd =
         try
-            let dd'   = TSort.sort dd                 in
-            doTypeDecls env (decls dd')
+            let dd    = TSort.sort dd                 in
+            doTypeDecls env dd
         with TSort.Cycle(offending) ->
-            let dd'   = exclude dd offending          in
+            let dd    = exclude dd offending          in
             let scope = if is_global then F.Global
                         else F.Local                  in
-            let env'  = bindError scope env offending in
-                ( reportCycle env' offending
-                ; bindAll dd'
+            let env   = bindError scope env offending in
+                ( reportCycle env offending
+                ; bindAll dd
                 )
                                                       in
         bindAll dd
+@
+After all, here are the two functions to process global and local type
+declarations:
+
 <<>>=
 let doGlobalTypes env program = doTypes true  env (foldGlobalTypeDecls program)
 let doLocalTypes  env body    = doTypes false env (foldLocalTypeDecls body)
