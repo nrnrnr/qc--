@@ -37,16 +37,24 @@ edge flows to a use of~$x$ without crossing a definition or kill
 of~$x$.  
 Since our edges are simple pointers, 
 we put liveness information at the nodes, in the form of
-\emph{live-in} and \emph{live-out sets}.
+\emph{live-in sets}.
 The liveness of an edge is the live-in set of that edge's head.
-The live-out set is the union of the live sets on all the edges
-flowing out of a node.
 @
 
 % ------------------------------------------------------------------ 
 \subsection{Interface}
 % ------------------------------------------------------------------ 
 
+Here's the new stuff; what's below is old stuff.
+<<live.mli>>=
+type uid = Zipcfg.uid
+type liveset = Register.SetX.t
+
+val live_in_block  : Zipcfg.graph -> (uid -> liveset)   (* live in to each block *)
+val live_in_last   : (uid -> liveset) -> Zipcfg.Rep.last -> liveset
+val live_in_middle : Zipcfg.Rep.middle -> liveset -> liveset
+      (* map live out to live in *)
+@
 Function [[set_live]] computes liveness information and caches the
 results in node extensions.
 The functions [[live_in]] and [[live_out]] use the cached information.
@@ -289,3 +297,13 @@ let set_live' =
       else
         Impossible.impossible "liveness didn't converge in 1000 iterations";
     in go 0
+@ 
+<<live.ml>>=
+let unimpf  fmt = Printf.kprintf Impossible.unimp      fmt
+
+type uid = Zipcfg.uid
+type liveset = Register.SetX.t
+
+let live_in_block graph = unimpf "liveness"
+let live_in_last blocks last = unimpf "liveness"
+let live_in_middle middle live_out = unimpf "liveness"
