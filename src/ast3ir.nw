@@ -80,6 +80,10 @@ let astwidth env = width @<< (astty env)
 
 let foldl = List.fold_left
 let foldr = List.fold_right
+
+(* evaluation of constant expressions - bogus *)
+
+let eval_const e = 123 (*XXX*)
 @
 
 % ------------------------------------------------------------------ 
@@ -292,8 +296,25 @@ let actual env target globals (hint, e) =
     let w   = width (ExprTypes.expr env target e) in
     let exp = expr env target globals e           in
         (exp, w, hint) 
-@
 
+let formal env n =
+    ( match snd (F.findv n env) with 
+    | (F.Register {F.index=i; F.rhint=h},ty) when F.is_localv n env  -> 
+        { G.name  = n
+        ; G.width = width ty
+        ; G.hint  = ( match h with
+                    | F.RReg _  -> assert false (* impossible *)
+                    | F.RHint s -> Some s
+                    | F.RNone   -> None
+                    )
+        ; G.index = i
+        } 
+    | (F.Register {F.index=i; F.rhint=h},ty) -> assert false 
+        (* don't how to to translate global registers *)
+    | _ -> assert false
+    )
+@
+    
 
 % ------------------------------------------------------------------ 
 \subsection{Global Registers}
@@ -344,6 +365,7 @@ type state =
     ; cfg:      G.t
     ; node:     G.node
     ; outbase:  Rtl.exp
+    ; inbase:   Rtl.exp
     ; outgoing: Automaton2.area list
     ; incoming: Automaton2.area list
     }
@@ -405,16 +427,16 @@ and gotoStmt state (e,labels) =
         {state with node = G.gm_goto state.cfg rtl nodes}
 
 and jumpStmt state (cconv,e,args,labels) =
-    let exp     = expr state.env state.target state.globals e in
+    let exp     = expr state.env state.target state.globals e    in
     let cc      = state.target.Target.cc (Aux.Option.get default_cc cconv) in
     let atm     = Automaton2.mk cc.Target.proc state.outbase     in
-    let rtl     = state.target.Target.mkJump exp  in
+    let rtl     = state.target.Target.mkJump exp                 in
     let args    = List.map 
                         (actual state.env state.target state.globals) args in
     let nodes   = List.map (G.lookup state.cfg) labels           in
     let rtl     = state.target.Target.mkJump exp                 in
     let jmp     = G.gm_jump state.cfg rtl nodes                  in
-        if args = [] then
+        if args = [] then (* no copyout nodes *)
             { state with node = jmp }
         else
             let node, atm =  G.gm_copyo state.cfg args atm jmp in
@@ -423,10 +445,75 @@ and jumpStmt state (cconv,e,args,labels) =
             ;   outgoing = Automaton2.freeze atm :: state.outgoing
             }  
 
+(* 
+ * Both automatons use the same base - correct?
+ *)
 
-and returnStmt    state x = assert false
-and contStmt      state x  = assert false 
-and callStmt      state x  = assert false 
+and callStmt state (lhs,cconv, e, args, targets, conts) = 
+    let rec lvalue = function
+        | A.LValueAt(x,_) -> lvalue x
+        | A.Var(hint,x)   -> formal state.env x
+        | A.Mem _         -> assert false                        in
+    let exp     = expr state.env state.target state.globals e    in
+    let cc      = state.target.Target.cc (Aux.Option.get default_cc cconv) in
+    let atmo    = Automaton2.mk cc.Target.proc state.outbase   in
+    let atmi    = Automaton2.mk cc.Target.ret  state.outbase   in
+    let rtl     = state.target.Target.mkCall exp                 in
+    let args    = List.map 
+                  (actual state.env state.target state.globals) args in
+    let nodes   = List.map (G.lookup state.cfg) targets          in
+    let conts   = continuations conts state.cfg                  in
+    let rtl     = state.target.Target.mkCall exp                 in
+    (* linking nodes from back to front: copyin<-call<-copyout *) 
+    let copyi,atmi = G.gm_copyi state.cfg 
+                        (List.map lvalue lhs) atmi state.node    in
+    let call       = G.gm_call state.cfg rtl conts copyi in
+    let copyo,atmo = G.gm_copyo state.cfg args atmo call in
+        { state with
+            node     = copyo
+        ;   outgoing = Automaton2.freeze atmo :: state.outgoing
+        ;   incoming = Automaton2.freeze atmi :: state.incoming
+        }  
+
+(*
+ * what's the default for x/y if no pair given given in source?
+ *)         
+        
+and returnStmt state (cconv, kont, args) =
+    let cc        = state.target.Target.cc (Aux.Option.get default_cc cconv) in
+    let atm       = Automaton2.mk cc.Target.ret state.inbase                 in
+    let const n   = A.Int (Bits.of_int n Bits.maxwidth, None) in (*XXX*)
+    let (x,y)     = Aux.Option.get (const 0, const 0) kont    in (*XXX*)
+    let rtl       = cc.Target.return                                         in
+    let args      = List.map
+                    (actual state.env state.target state.globals) args       in
+    let ret       = G.gm_return state.cfg rtl (eval_const x, eval_const y)   in
+    let copyo,atm = G.gm_copyo state.cfg args atm ret                        in
+        { state with
+            node     = ret
+        ;   outgoing = Automaton2.freeze atm :: state.outgoing
+        }
+
+(*
+ * args = [(hint option,name)]
+ * 
+ * We have two sources for hints: register declartion AND formal
+ * parameters for continuations. Which one should be used/ignored?
+ * If there is a problem it must be also corrected in the Eval module.
+ *)
+
+and contStmt state (label,args)  =
+    let cc        = state.target.Target.cc default_cc               in
+    let args      = List.map (fun (_,n) -> formal state.env n) args in
+    let atm       = Automaton2.mk cc.Target.cont state.inbase       in
+    let copyi,atm = G.gm_copyi state.cfg args atm state.node        in
+    let _         = G.set_label state.cfg label copyi               in
+        { state with
+            node     = copyi
+        ;   incoming = Automaton2.freeze atm :: state.incoming
+        }
+
+
 and primStmt      state x  = assert false 
 and cutStmt       state x  = assert false 
 
