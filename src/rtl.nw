@@ -119,12 +119,13 @@ val store     : location -> expr -> width -> rtl
 val kill      : location -> rtl
 @
 
-A register transfer list {\rtl} is a list of guarded effects. The
-guard [[expr]] must be a boolean expression. Several {\rtl}s can be
-combined into one using parallel composition.
+A register transfer list {\rtl} is a list of guarded effects; each
+guard must be a boolean expression.  The function [[guard]] takes a
+boolean expression [[expr]] and an [[rtl]] and conjuncts every guard
+in that rtl with the new expression.
 
 <<>>=
-val guarded   : expr -> rtl -> rtl
+val guard     : expr -> rtl -> rtl
 val par       : rtl list -> rtl
 @
 
@@ -315,10 +316,28 @@ let width = function
     
 let assign l r = Rtl [(Const(Bool true), Store(l, r, width r))]
 let par rtls   = Rtl (List.concat (List.map (fun (Rtl x) -> x) rtls))
-let slice width lsb loc = assert false
+let slice width lsb loc = assert false (* don't know how *)
 @
 
+The [[guard]] function combines every guard in the {\rtl} with the
+given expression using a logical \emph{and}.  I don't know which
+primitve to use to encode the general case.  I guess we haven't
+decided yet how to represent boolean value at run-time.
 
+<<>>=
+let guard expr (Rtl geffects) =
+    let true'  = Const(Bool true)  in
+    let false' = Const(Bool false) in
+    let conjunct (guard,effect as id) = match expr, guard with
+        | Const(Bool true) , Const(Bool true)  -> id
+        | Const(Bool _    ), Const(Bool false) -> id
+        | Const(Bool false), Const(Bool _)     -> (false',effect)
+        | x                , y                 -> assert false (* how ?? *)
+    in
+        Rtl (List.map conjunct geffects)  
+@
+
+        
 % ------------------------------------------------------------------ 
 \subsubsection{The Public View}
 % ------------------------------------------------------------------ 
@@ -358,9 +377,11 @@ let store loc expr width    = rtl (Private.Store(loc,expr,width))
 let kill  loc               = rtl (Private.Kill(loc))
 
 (* rtl *)
-let guarded expr rtl        = assert false
 let par                     = Private.par
 let slice                   = Private.slice
+let guard                   = Private.guard
+
+
 
 (* utilities *)
 let width  = Private.width
