@@ -153,8 +153,7 @@ entry       = (label,node)
 <<view ocaml>>=
 module fgraph <= interface_epilogue
 %%
-module M : Map.S with type key = label
-type graph = node M.t     
+type graph = (label,node) Hashtbl.t
 val  intern_graph : xgraph -> graph
 val  extern_graph : graph  -> xgraph
 %%
@@ -208,11 +207,12 @@ actual      = (rtl.expr, rtl.width, hint?)
 @
 
 <<>>=
+boolean     = (int)  -- view
 cont        = ( node    normal
               , label*  cuts
               , label*  unwinds
               , label*  returns
-              , label?  aborts
+              , boolean aborts
               )
 @
 
@@ -249,6 +249,12 @@ rtl.boolean <= {
     wrapper:        to_bool
     unwrapper:      of_bool 
 }    
+
+fgraph.boolean <= {
+    natural_type:   bool
+    wrapper:        to_bool
+    unwrapper:      of_bool 
+}    
 @
 
 <<>>=
@@ -269,25 +275,31 @@ let of_bool       = function true -> 1 | false -> 0
 The flow graph is internally represented as a mapping from labels to
 nodes.  This representation is never used directly when a flow graph
 is built but only through an interface like [[Agraph]] (module
-\module{agraph)) that provides an abstract view.  The chosen
-representation at this level purely functional but may change in the
-future.  The view implementation maps the internal representation to
-the external representation which uses lists of [[(label,node)]]
-pairs, and vice versa.
+\module{agraph)) that provides an abstract view.  We have chosen to
+use an imperative approach, i.e.~the graph is manipulated with side
+effects. 
+
+The {\ocaml} standard module [[Hashtbl]] provides what we need except
+that there is no [[fold]] function to easily read out an entire map.
+Until we have a more complete implementation we cheat a little bit and
+do not provide an export for the view. This does not matter for the
+moment since we can't use it anyway: a bug in the {\asdl} compiler
+creates buggy code for the marshalling functions such that we do not
+use it.
 
 <<>>=
 module fgraph <= implementation_epilogue
 %%
-module M   = Map.Make (struct type t=label let compare=compare end)
-type graph = node M.t
+type graph = (label, node) Hashtbl.t
 
 let intern_graph entries =
-    let enter map (label,node) = M.add label node map in
-    List.fold_left enter M.empty entries
+    let map = Hashtbl.create 1000 in (* inital size - grows as needed *)
+    let enter (label,node) = Hashtbl.add map label node in
+        ( List.iter enter entries
+        ; map
+        )
 
-let extern_graph map =
-    let get label node l = (label,node) :: l in
-    M.fold get map []
+let extern_graph map = [] (* this is a lie *)
 %%
 @
 

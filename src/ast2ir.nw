@@ -31,70 +31,105 @@ This module need a whole bunch of other modules.
 
 <<ast2ir.ml>>=
 module A  = Ast
+module T  = Types
 module E  = Error
-module F  = Fenv
-@
+module F  = Fenv.Clean
 
-Some auxiliary bindings.
-<<>>=
-let standard_convention = "C--"  (* gospel truth *)
-@
 
-Module [[R]] contains auxiliary functions for {\rtl}s.  We like to
-collect some from the actual usage patterns and then put them in their
-own module. 
-
-<<>>=
 module R = struct
-  let truth = Rtl.Const(Rtl.Bool(true))
-  let width_of r = 77 (* all exprs 77 bits wide - bogus *)
-  let assign l r = Rtl.Rtl [(truth, Rtl.Store(l, r, width_of r))]
-  let skip = Rtl.Rtl []
-  let par l = List.fold_right 
-               (function Rtl.Rtl l1 -> function Rtl.Rtl l2 -> Rtl.Rtl (l1 @ l2)) l skip
+    <<module R>>
 end
-@
- 
-[[un_const]] should take a compile-time constant expression and
-produce a small itneger.  [[un_const]] is surely the wrong name.
 
-<<ast2ir.ml>>=
-let un_const e = 333 (* bogus *)
-@ 
+module Expr = struct
+    <<module Expr>>
+end
 
-The implementation [[Make]] is a functor that receives an abstract
-view of the flow graph as an argument.
+<<auxiliaries>>
 
-<<ast2ir.ml>>=
 module Make (G : Agraph.S) = struct
     module GM = G.Make
     <<module Make>> 
 end
+
+<<toplevel>>
 @ 
 
-<<module Make>>=
-let rec ty env ir = function
-    | A.TyAt(x,_)       -> ty env ir x
-    | A.BitsTy(n)       -> true
-    | A.AliasTy(name)   -> true
+% ------------------------------------------------------------------ 
+\subsubsection{Auxiliaries}
+% ------------------------------------------------------------------ 
+
+Some auxiliary bindings.
+
+<<auxiliaries>>=
+let default_convention  = "C--"  (* gospel truth *)
+let default_assertion   = -1     (* unused *)
+let default_memory      = 'm'    (* Rtl.space *)
+@
 
 <<>>=
-let dummy_lvalue = Rtl.Var("dummy_variable", 32)
-let rec lvalue env = function
-    | A.LValueAt(x,_)   -> lvalue env x
-    | A.Var(None,x)     -> dummy_lvalue
-    | A.Var(Some h,x)   -> dummy_lvalue
-    | A.Mem(t,e,a)      -> dummy_lvalue
-     
+let dummy_expression    = Rtl.Const(Rtl.Bits(Bits.zero 32))
 
+<<>>=
+let bits = function
+    | T.Bits n -> n
+    | _        -> assert false
+@
+
+<<>>=
+let byteorder env = match F.findEndianness env with
+    | F.Big     -> Rtl.BigEndian
+    | F.Little  -> Rtl.LittleEndian
+@
+
+[[un_const]] should take a compile-time constant expression and
+produce a small itneger.  [[un_const]] is surely the wrong name.
+
+<<>>=
+let un_const e = 333 (* bogus *)
+@ 
+
+% ------------------------------------------------------------------ 
+\subsubsection{Module \texttt{Make}}
+% ------------------------------------------------------------------ 
+
+The implementation [[Make]] is a functor that receives an abstract
+view ([[Agraph]] -- \module{agraph}) of the flow graph as an argument.
+
+<<module Make>>=
+let rec ty env = function
+    | A.TyAt(x,_)       -> ty env x
+    | A.BitsTy(n)       -> n
+    | A.AliasTy(name)   -> ( match F.findt name env with
+                           | attr, T.Bits n -> n
+                           | _              -> assert false
+                           )
+                             
 <<>>=
 let actuals env ir xs = true
+let actual env (hint, e) = (dummy_expression, 99, hint)
+@
+ 
+An assignment is an effect what captured by an {\rtl}.  The lvalue of
+an assignment becomes a {\rtl} location.  We currently ignore
+alignments and hints.
 
 <<>>=
-let dummy_expression = Rtl.Const(Rtl.Bits(Bits.zero 32)) 
-let width env expr = 77 (* every expression is 77 bits wide *)
-let const n = A.Int (Bits.of_int n Bits.maxwidth, None) (* ugly *)
-let rec expr env = function
+let rec lvalue env = function
+    | A.LValueAt(x,_)   -> lvalue env x
+    | A.Var(hint,x)     -> let (attr,(_,t)) = F.findv x env in Rtl.Var(x,bits t)
+    | A.Mem(t,e,a)      -> let width = ty env t      in
+                             Rtl.Cell
+                             ( default_memory
+                             , byteorder env 
+                             , width
+                             , expr env e
+                             , default_assertion
+                             )
+
+<<>>=
+and expr env e = 
+    let width env expr = 77                                  in
+    match e with
     | A.ExprAt(x,_)             -> expr env x
     | A.Int( i, None)           -> dummy_expression
     | A.Int( i, Some t)         -> dummy_expression
@@ -107,8 +142,6 @@ let rec expr env = function
     | A.UnOp(op,e)              -> dummy_expression
     | A.PrimOp(n,xs)            -> dummy_expression
 
-<<>>=
-let actual env (hint, e) = (expr env e, width env e, hint)
 
 <<>>=
 let memsize env ir = function
@@ -159,19 +192,28 @@ let range env ir = function
     | A.Range(e1,e2)    -> true
 
 @ 
-[[env]] is the clean environment, which doesn't change.  [[s]] is the
-statement being translated.  We return a new flow-graph node. 
-[[after]] is a representation of the entire flow graph, with a pointer
-to the node that follows this statement. 
+
+% ------------------------------------------------------------------ 
+\paragraph{Statements} 
+% ------------------------------------------------------------------ 
+
+A statement is part of a [[body]]; the [[body]] function receives
+arguments that we need for all statements:  [[env]] is the clean
+environment, which doesn't change.  [[s]] is the statement being
+translated.  We return a new flow-graph node.  [[after]] is a
+representation of the entire flow graph, with a pointer to the node
+that follows this statement. 
 
 <<>>=
-let body env props graph =
-  let rec stmt s after = match s with
-    | A.StmtAt(x,_) -> stmt x after
-    <<cases for translating statements>>
-    | _ -> assert false (* remove me in due time *)
-  in fun s -> stmt s (G.bind G.Props.empty (GM.exit graph))
+let body env props graph s =
+    let rec stmt s after = match s with
+        | A.StmtAt(x,_) -> stmt x after
+        <<cases for translating statements>>
+        | _ -> assert false (* remove me in due time *)
+    in 
+        stmt s (G.bind G.Props.empty (GM.exit graph))
 @ 
+
 <<cases for translating statements>>=
 | A.AssignStmt(lhs,rhs) ->
     let effects = 
@@ -191,10 +233,12 @@ We have omitted the hints!!!
 
 <<cases for translating statements>>=
 | A.ReturnStmt(cc, alt, args) ->
+    let const n = A.Int (Bits.of_int n Bits.maxwidth, None)   in
     let (cont, count) = Aux.Option.get (const 0, const 0) alt in
-    let cc = Aux.Option.get standard_convention cc in
-    props (GM.copy_out (List.map (actual env) args) Fgraph.ProcResults cc (
-    props (GM.return graph (un_const cont) (un_const count))))
+    let cc = Aux.Option.get default_convention cc             in
+        props (GM.copy_out (List.map (actual env) args) Fgraph.ProcResults cc (
+        props (GM.return graph (un_const cont) (un_const count))))
+
 <<more cases for translating statements>>=
 | A.LabelStmt(n)                       -> true
 | A.ContStmt(n,ns)                     -> true
@@ -208,7 +252,7 @@ We have omitted the hints!!!
 | A.SwitchStmt (r,e,arms)              -> true
         
 <<>>=
-let rec body env ir = function
+let rec body' env ir = function
     | A.BodyAt(x, _)    -> body env ir x
     | A.DeclBody(d)     -> true
     | A.StmtBody(s)     -> true
@@ -252,18 +296,53 @@ let rec toplevel env ir = function
 let program env ir ds = true
 @
 
+% ------------------------------------------------------------------ 
+\subsubsection{{\rtl} Auxiliaries}
+% ------------------------------------------------------------------ 
+
+Module [[R]] contains auxiliary functions for {\rtl}s.  We like to
+collect some from the actual usage patterns and then put them in their
+own module. 
+
+<<module R>>=
+  let truth      = Rtl.Const(Rtl.Bool(true))
+  let width_of r = 77 (* all exprs 77 bits wide - bogus *)
+  let assign l r = Rtl.Rtl [(truth, Rtl.Store(l, r, width_of r))]
+  let skip       = Rtl.Rtl []
+  let par l      = List.fold_right 
+                   (fun (Rtl.Rtl l1) (Rtl.Rtl l2) -> Rtl.Rtl (l1 @ l2)) l skip
+@
+ 
+% ------------------------------------------------------------------ 
+\subsubsection{Expression Evaluation}
+% ------------------------------------------------------------------ 
+
+The translation of {\PAL} expressions to {\rtl} expressions requires
+the types of {\PAL} expression and sometimes their values as well. 
+There is code for both in the \module{elab} module.  Unfortunately
+they are implemented against the [[Fenv.Dirty]] environment. 
+Factoring this out is no small job. For the moment we provide some new
+code here.
+
+<<module Expr>>=
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Exported top-level functions}
+% ------------------------------------------------------------------ 
+
 We now leave the implementation of [[Make]] and return to the
 top-level of our module.  It contains functions called from module
 \module{main} in response to command line arguments to the compiler.
 
-<<ast2ir.ml>>=
+<<toplevel>>=
 let check map program =
-    let env        = F.Dirty.empty map                      in
+    let env        = Fenv.Dirty.empty map                   in
     let env        = Elab.Env.global env program            in
     let env        = Elab.Check.global env program          in
-        if   F.Dirty.errorFlag env
+        if   Fenv.Dirty.errorFlag env
         then E.error "compilation aborted due to errors in static semantics"
-        else F.clean env
+        else Fenv.clean env
 @
 
 The function [[ast2ir]] scans, parses, and checks a file before the
