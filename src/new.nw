@@ -16,6 +16,10 @@
 % l2h substitution forall forall
 % l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
 
+% ------------------------------------------------------------------ 
+\section{Automata for Resource Allocation}
+% ------------------------------------------------------------------ 
+
 An automaton encapsulates the ability to assign locations.
 Every automaton has a private collection of locations (e.g.,
 registers) that it may use at will, plus an ``overflow area.''
@@ -50,8 +54,8 @@ val mk : spec -> Rtl.expr -> t
      automaton in its initial state *)
 
   (* get a location and change the automaton's internal state *)
-val ty    : t -> Type.ty * string option -> loc    
-val block : t -> size    * align         -> loc    
+val ty    : t -> Types.ty * string option -> loc    
+val block : t -> width    * align         -> loc    
 
 
 type area = { address : Rtl.expr    (* address of memory block *)
@@ -87,3 +91,100 @@ type align = int
 type width = int
 type size  = int
 @ 
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+<<new.ml>>=
+type align      = int
+type width      = int
+type size       = int
+
+type spec       = BottomUp of Target.t
+
+type area =     { address:      Rtl.expr
+                ; align:        align
+                ; size:         size
+                }
+
+type loc =      { store:    (Rtl.expr -> Rtl.rtl)
+                ; fetch:    Rtl.expr
+                }
+                
+class type automaton = object
+    val mutable frozen: bool
+    method ty:          Types.ty -> string option -> loc
+    method block:       size     -> align         -> loc
+    method freeze:      area
+end   
+    
+type t = automaton
+
+class bottomup (base: Rtl.expr) (target: Target.t) =
+    let wrd = target#wordsize                                           in
+    let ptr = target#pointersize                                        in
+    let agg = target#byteorder                                          in
+    let mem = target#memsize                                            in
+
+    let addptr    x y = Rtl.app ("add",[ptr]) [x;y]                       in
+    let constptr  k   = Rtl.const (Rtl.bits (Bits.of_int k ptr) ptr)      in
+    let offset    k w = Rtl.cloc 'm' agg w (addptr base (constptr k))     in
+    let eff2rtl   eff = Rtl.rtl [(Rtl.const Rtl.truth,eff)]               in
+    let write     k w = fun e -> eff2rtl (Rtl.store (offset k w) e w)     in
+    let read      k w = Rtl.fetch (offset k w) w                          in
+      
+     
+    object (self)
+        val mutable frozen    = false
+        val mutable align     = 1
+        val mutable k         = 0
+
+        method block width align =
+            let _    = assert (not frozen)                                 in
+            let _    = assert (width mod mem = 0)                          in
+            let _    = if k mod align <> 0 then k <- ((k/align)+1) * align in
+            let size = width / mem                                         in
+            let loc  = { store = write k width
+                       ; fetch = read k width
+                       }                                                   in
+            let _    = k <- k + size                                  in
+                loc
+
+        method ty t (hint: string option) = 
+            let width = match t with
+                | Types.Bits(n) -> n
+                | _ -> assert false
+            in
+                self#block width 1 
+
+        method freeze =
+            let _ = frozen <- true in
+            { address = base
+            ; size    = k
+            ; align   = align
+            }
+            
+    end
+    
+    
+
+class topdown (base: Rtl.expr) (target: Target.t) = object end
+
+let mk spec base =
+    match spec with
+    | BottomUp(target) -> new bottomup base target 
+
+let ty     t (size,hint)   = t#ty    size hint
+let block  t (width,align) = t#block width align
+let freeze t               = t#freeze
+
+let fetch loc width      = loc.fetch 
+let store loc expr width = loc.store expr 
+
+type placement = EqualHighEnds | EqualLowEnds
+
+let overlap placement areas = assert false
+            
+
+@

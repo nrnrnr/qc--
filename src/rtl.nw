@@ -52,6 +52,98 @@ end
 @
 
 % ------------------------------------------------------------------ 
+\subsubsection{Public View}
+% ------------------------------------------------------------------ 
+
+The public view provides constructor functions for {\rtl}s.  Using
+them should be the \emph{only} way to create {\rtl}s when translating
+from the abstract syntax tree.
+
+Constants [[const]] are part of expressions.  A constant can be a
+boolean value, a number of bits, or a link-time value, which has a
+name.
+
+<<PUBLIC>>=
+type const
+type expr
+type location
+type effect
+type rtl
+
+val truth     : const
+val falsehood : const
+val bits      : Bits.bits -> width -> const
+val linkconst : string -> width -> const
+@
+
+An expression [[expr]] is either a constant, an expression fetched from a
+location, or an application of value to an operand [[op]].
+
+<<PUBLIC>>=
+val const     : const -> expr
+val fetch     : location -> width -> expr
+val app       : op -> expr list -> expr
+@
+
+A [[location]] is either a \emph{cell} that belongs to some [[space]],
+where it has an address [[expr]], or it represents a named {\PAL}
+variable.
+
+<<PUBLIC>>=
+val cloc      : space -> aggregation -> width -> expr -> location
+val vloc      : string -> int -> width -> location
+@
+
+An [[effect]] alters a [[location]]:  a [[store]] puts the value of
+[[expr]] into a location, a [[kill]] invalidates a location's content.
+
+<<PUBLIC>>=
+val store     : location -> expr -> width -> effect
+val kill      : location -> effect
+@
+
+A register transfer list {\rtl} is a list of guarded effects. The
+guard [[expr]] must be a boolean expression. 
+
+<<>>=
+val guarded   : expr -> effect -> expr * effect
+val rtl       : (expr * effect) list -> rtl
+@
+
+Code that builds or manipulates {\rtl}s tends to use the same
+functionality over and over again. We try to define some useful values
+here.
+
+The [[width]] of an expression is only defined for value-expressions,
+but not for conditions.  Applying [[width]] to a condition will result
+in an assertion failure.
+
+<<>>=
+val width:      expr -> int     (* width of expression *)
+val assign:     location -> expr -> rtl
+@
+
+The purpose of the private interface is to exploit the implementation
+details by pattern matching, for example. Values created by the public
+interface per se are not compatible with the private types. Conversion
+functions provide access to these values. Each function is named after
+the type it converts.
+
+It is not possible to make the conversion functions part of
+[[Private]] without putting the public interface at the same time into
+a sub-module like [[Public]]:  there is no way to refer to a type
+outside of [[Private]] from inside [[Private]] that is also declared
+inside [[Private]]. 
+
+<<PUBLIC>>=
+val conv_const:      const    -> Private.const
+val conv_expr:       expr     -> Private.expr
+val conv_location:   location -> Private.location
+val conv_effect:     effect   -> Private.effect
+val conv_rtl:        rtl      -> Private.rtl
+@
+
+% ------------------------------------------------------------------ 
 \subsubsection{The Private View}
 % ------------------------------------------------------------------ 
 
@@ -163,98 +255,6 @@ type rtl        = Rtl of guarded list
 <<PRIVATE values>>=
 val width:      expr -> int     (* width of expression *)
 val assign:     location -> expr -> rtl
-@
-
-% ------------------------------------------------------------------ 
-\subsubsection{Public View}
-% ------------------------------------------------------------------ 
-
-The public view provides constructor functions for {\rtl}s.  Using
-them should be the \emph{only} way to create {\rtl}s when translating
-from the abstract syntax tree.
-
-Constants [[const]] are part of expressions.  A constant can be a
-boolean value, a number of bits, or a link-time value, which has a
-name.
-
-<<PUBLIC>>=
-type const
-type expr
-type location
-type effect
-type rtl
-
-val truth     : const
-val falsehood : const
-val bits      : Bits.bits -> width -> const
-val linkconst : string -> width -> const
-@
-
-An expression [[expr]] is either a constant, an expression fetched from a
-location, or an application of value to an operand [[op]].
-
-<<PUBLIC>>=
-val const     : const -> expr
-val fetch     : location -> width -> expr
-val app       : op -> expr list -> expr
-@
-
-A [[location]] is either a \emph{cell} that belongs to some [[space]],
-where it has an address [[expr]], or it represents a named {\PAL}
-variable.
-
-<<PUBLIC>>=
-val cloc      : space -> aggregation -> width -> expr -> location
-val vloc      : string -> int -> width -> location
-@
-
-An [[effect]] alters a [[location]]:  a [[store]] puts the value of
-[[expr]] into a location, a [[kill]] invalidates a location's content.
-
-<<PUBLIC>>=
-val store     : location -> expr -> width -> effect
-val kill      : location -> effect
-@
-
-A register transfer list {\rtl} is a list of guarded effects. The
-guard [[expr]] must be a boolean expression. 
-
-<<>>=
-val guarded   : expr -> effect -> expr * effect
-val rtl       : (expr * effect) list -> rtl
-@
-
-Code that builds or manipulates {\rtl}s tends to use the same
-functionality over and over again. We try to define some useful values
-here.
-
-The [[width]] of an expression is only defined for value-expressions,
-but not for conditions.  Applying [[width]] to a condition will result
-in an assertion failure.
-
-<<>>=
-val width:      expr -> int     (* width of expression *)
-val assign:     location -> expr -> rtl
-@
-
-The purpose of the private interface is to exploit the implementation
-details by pattern matching, for example. Values created by the public
-interface per se are not compatible with the private types. Conversion
-functions provide access to these values. Each function is named after
-the type it converts.
-
-It is not possible to make the conversion functions part of
-[[Private]] without putting the public interface at the same time into
-a sub-module like [[Public]]:  there is no way to refer to a type
-outside of [[Private]] from inside [[Private]] that is also declared
-inside [[Private]]. 
-
-<<PUBLIC>>=
-val conv_const:      const    -> Private.const
-val conv_expr:       expr     -> Private.expr
-val conv_location:   location -> Private.location
-val conv_effect:     effect   -> Private.effect
-val conv_rtl:        rtl      -> Private.rtl
 @
 
 % ------------------------------------------------------------------ 
