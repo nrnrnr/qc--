@@ -26,6 +26,7 @@ section "data"
         $t1 = $r30;
         ;
         initialize continuations:l4:
+        $c0 = sym@loop;
         loop:
         i = (i-1);
         $c0 when %ge[32](i, 0) = sym@join@l6;
@@ -37,9 +38,7 @@ section "data"
         $r31 = ($r31+24);
         $c0 = $t1;
         join:l6:
-        $c0 = sym@sym@loop;
-        sym@loop:
-        // dangling pointer in flow graph
+        $c0 = sym@loop;
     }
 }
 

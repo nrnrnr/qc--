@@ -61,6 +61,14 @@ section "text"
         $c0 when %le[32](j, k) = sym@join@l7;
         join:l8:
         $c0 when %leu[32](j, k) = sym@join@l6;
+        join:l15:
+        $c0 = sym@L;
+        join:l6:
+        $c0 = sym@L;
+        join:l7:
+        $c0 = sym@L;
+        join:l9:
+        $c0 = sym@L;
         L:
         ;
         $r0 = 99;
@@ -68,14 +76,6 @@ section "text"
         ;
         $r31 = ($r31+24);
         $c0 = $t1;
-        join:l6:
-        $c0 = sym@sym@L;
-        join:l7:
-        $c0 = sym@sym@L;
-        join:l9:
-        $c0 = sym@sym@L;
-        sym@L:
-        // dangling pointer in flow graph
     }
 }
 
