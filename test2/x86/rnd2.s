@@ -90,7 +90,7 @@ Lframe_l30:
 .long 0x80000008
 .long 0x80000003
 .long 0x80000000
-.long 0x80000000
+.long 0x80000001
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -102,6 +102,7 @@ Lframe_l30:
 .long 0
 .long 0
 .long 0xfffffff8
+.long 0x80000000
 .section .pcmap
 .long Ljoin_l20
 .long Lframe_l31
@@ -114,7 +115,7 @@ Lframe_l31:
 .long 0x80000008
 .long 0x80000003
 .long 0x80000000
-.long 0x80000000
+.long 0x80000001
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -126,6 +127,7 @@ Lframe_l31:
 .long 0
 .long 0
 .long 0xfffffff8
+.long 0x80000000
 .section .text
 .section .data
 answer:

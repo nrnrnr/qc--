@@ -92,11 +92,11 @@ Then we remove the unreachable spans.
 <<optimize.ml>>=
 let trim_unreachable_code _ ({Proc.cfg = cfg} as proc) =
   let module IS = Set.Make (struct type t = int let compare = compare end) in
-  let (nodes_from_entry, labels_from_entry) =
+  let nodes_from_entry =
     let add_labels n lset = 
       if G.is_join n then List.fold_right SS.add (G.labels n) lset else lset in
-    G.postorder_dfs (fun n (nset, lset) -> (IS.add (G.num n) nset, add_labels n lset))
-                    (IS.empty, SS.empty) cfg in
+    G.postorder_dfs (fun n nset -> IS.add (G.num n) nset)
+                    IS.empty cfg in
   let nodes_from_exit  = G.reverse_podfs (fun n rst -> n :: rst) [] cfg in
   let to_delete = List.filter (fun n -> not (IS.mem (G.num n) nodes_from_entry))
                               nodes_from_exit in
@@ -111,11 +111,9 @@ let trim_unreachable_code _ ({Proc.cfg = cfg} as proc) =
       let succs  = G.succs n in
       (G.delete cfg n;
        delete_nodes (hanging_nodes succs @ rst)) in
-  let proc_name = proc.Proc.symbol#original_text in
   delete_nodes (hanging_nodes to_delete);
-  proc.Proc.spans <-
-      List.filter (fun (l,_) -> l = proc_name || SS.mem l labels_from_entry)
-                  proc.Proc.spans;
+  proc.Proc.spans <- List.filter (fun (n,_) -> IS.mem (G.num n) nodes_from_entry)
+                                 proc.Proc.spans;
   to_delete <> []
 @
 We find each join point with one predecessor, and if the predecessor is a branch to the

@@ -187,7 +187,7 @@ Lframe_l33:
 .long 0x80000008
 .long 0x80000009
 .long 0x80000000
-.long 0x80000000
+.long 0x80000001
 .long 0x40000007
 .long 0xffffffb4
 .long 0x40000009
@@ -205,6 +205,7 @@ Lframe_l33:
 .long 0
 .long 0
 .long 0
+.long 0x80000000
 .section .pcmap
 .long Ljoin_l11
 .long Lframe_l34
@@ -217,7 +218,7 @@ Lframe_l34:
 .long 0x80000008
 .long 0x80000009
 .long 0x80000000
-.long 0x80000000
+.long 0x80000001
 .long 0x40000007
 .long 0xffffffb4
 .long 0x40000009
@@ -235,6 +236,7 @@ Lframe_l34:
 .long 0
 .long 0
 .long 0
+.long 0x80000000
 .section .text
 f:
 	leal -32(%esp), %esp
@@ -403,7 +405,7 @@ Lframe_l69:
 .long 0x80000008
 .long 0x80000003
 .long 0x80000000
-.long 0x80000000
+.long 0x80000001
 .long 0x40000007
 .long 0xffffffe8
 .long 0x40000009
@@ -415,6 +417,7 @@ Lframe_l69:
 .long 0xfffffff8
 .long 0xfffffff4
 .long 0
+.long 0x80000000
 .section .pcmap
 .long Ljoin_l51
 .long Lframe_l70
@@ -427,7 +430,7 @@ Lframe_l70:
 .long 0x80000008
 .long 0x80000003
 .long 0x80000000
-.long 0x80000000
+.long 0x80000001
 .long 0x40000007
 .long 0xffffffe8
 .long 0x40000009
@@ -439,6 +442,7 @@ Lframe_l70:
 .long 0
 .long 0
 .long 0
+.long 0x80000000
 .section .pcmap
 .long Ljoin_l48
 .long Lframe_l71
@@ -451,7 +455,7 @@ Lframe_l71:
 .long 0x80000008
 .long 0x80000003
 .long 0x80000000
-.long 0x80000000
+.long 0x80000001
 .long 0x40000007
 .long 0xffffffe8
 .long 0x40000009
@@ -463,6 +467,7 @@ Lframe_l71:
 .long 0x40000007
 .long 0xfffffff4
 .long 0
+.long 0x80000000
 .section .pcmap
 .long Ljoin_l42
 .long Lframe_l72
@@ -475,7 +480,7 @@ Lframe_l72:
 .long 0x80000008
 .long 0x80000003
 .long 0x80000000
-.long 0x80000000
+.long 0x80000001
 .long 0x40000007
 .long 0xffffffe8
 .long 0x40000009
@@ -487,6 +492,7 @@ Lframe_l72:
 .long 0
 .long 0
 .long 0
+.long 0x80000000
 .section .text
 g:
 	leal -36(%esp), %esp
@@ -670,7 +676,7 @@ Lframe_l107:
 .long 0x80000008
 .long 0x80000005
 .long 0x80000000
-.long 0x80000000
+.long 0x80000001
 .long 0x40000007
 .long 0xffffffec
 .long 0x40000009
@@ -684,6 +690,7 @@ Lframe_l107:
 .long 0xfffffff8
 .long 0xfffffff0
 .long 0
+.long 0x80000000
 .section .pcmap
 .long Ljoin_l89
 .long Lframe_l108
@@ -696,7 +703,7 @@ Lframe_l108:
 .long 0x80000008
 .long 0x80000005
 .long 0x80000000
-.long 0x80000000
+.long 0x80000001
 .long 0x40000007
 .long 0xffffffec
 .long 0x40000009
@@ -710,6 +717,7 @@ Lframe_l108:
 .long 0
 .long 0
 .long 0
+.long 0x80000000
 .section .pcmap
 .long Ljoin_l86
 .long Lframe_l109
@@ -722,7 +730,7 @@ Lframe_l109:
 .long 0x80000008
 .long 0x80000005
 .long 0x80000000
-.long 0x80000000
+.long 0x80000001
 .long 0x40000007
 .long 0xffffffec
 .long 0x40000009
@@ -736,6 +744,7 @@ Lframe_l109:
 .long 0xfffffff8
 .long 0xfffffff0
 .long 0
+.long 0x80000000
 .section .pcmap
 .long Ljoin_l80
 .long Lframe_l110
@@ -748,7 +757,7 @@ Lframe_l110:
 .long 0x80000008
 .long 0x80000005
 .long 0x80000000
-.long 0x80000000
+.long 0x80000001
 .long 0x40000007
 .long 0xffffffec
 .long 0x40000009
@@ -762,6 +771,7 @@ Lframe_l110:
 .long 0
 .long 0
 .long 0
+.long 0x80000000
 .section .text
 .section .bss
 .align 4

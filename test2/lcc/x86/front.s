@@ -75,15 +75,16 @@ Lframe_l40:
 .long 0x80000008
 .long 0x80000000
 .long 0x80000000
+.long 0x80000001
+.long 0x40000007
+.long 0x40000007
+.long 0x40000009
+.long 0x40000009
+.long 0x4000000a
+.long 0x4000000a
+.long 0x4000000b
+.long 0x4000000b
 .long 0x80000000
-.long 0x40000007
-.long 0x40000007
-.long 0x40000009
-.long 0x40000009
-.long 0x4000000a
-.long 0x4000000a
-.long 0x4000000b
-.long 0x4000000b
 .section .text
 nested:
 	leal -4(%esp), %esp

@@ -232,11 +232,14 @@ module K = struct
   type convention = string
   type 'i t =
     {         unwind_pc   : label       (* labels may or may not be used *)
+    ;         unwind_sp   : Rtl.loc
     ;         cut_pc      : label
     ; mutable return_pcs  : (convention * label list) list
     ;         escapes     : bool        (* properties of how it is used *)
     ;         cut_to      : bool
     ;         unwound_to  : bool
+    ;         formals     : (string * FE.variable) list
+                            (* args (hint, variable index) to the continuation *)
     ;         cut_in      : (Block.t -> Rtl.rtl) C.answer    (* move vals at cut (uses rep) *)
     ;         return_in   : (Block.t -> Rtl.rtl) C.answer    (* move vals at also returns *)
     ;         rep         : Contn.t     (* representation as C-- value (incl block) *)
@@ -253,17 +256,19 @@ end
 
 Our state of knowledge when we first encounter a continuation.
 <<definition of [[K.mk]], which initializes continuation information>>=
-let mk to_cc name den rep base g ~cut_in ~return_in  =
+let mk to_cc name den rep base g ~formals ~cut_in ~return_in ~unwind_sp =
   let ccname cc = (to_cc cc).C.name in
   { escapes     = den.FE.escapes
   ; cut_to      = den.FE.cut_to
   ; unwound_to  = den.FE.unwound_to
   ; unwind_pc   = Idgen.ContEntry.unwind name
+  ; unwind_sp   = unwind_sp
   ; cut_pc      = Idgen.ContEntry.cut    name
   ; return_pcs  = <<set the return pcs>>
   ; rep         = rep
   ; base        = base
   ; convention  = den.FE.convention
+  ; formals     = formals
   ; cut_in      = cut_in
   ; return_in   = return_in
   ; succ        = G.illegal g
@@ -295,7 +300,8 @@ let extend_cont name den =
   let cut_in    = cformals cc.C.cut_parms.C.in' args in
   let return_in = cformals cc.C.results.C.in'   args in
   let rep       = Contn.with_overflow target cut_in.C.overflow in
-  K.mk to_cc name den rep den.FE.base g ~cut_in ~return_in in
+  K.mk to_cc name den rep den.FE.base g ~formals:args ~cut_in ~return_in
+       ~unwind_sp:(to_mloc proc_cc.C.stable_sp_loc) in
 @
 \subsubsection{Second pass: continuations and flow annotations}
 The second pass fills in the mutable fields.
@@ -320,18 +326,20 @@ looks up a continuation by name.
 let continuations cc ast =
   let volregs = cc.C.volregs in                 (* volatile registers *)
   let allregs = RS.union volregs cc.C.pre_nvregs in (* all registers *)
-  let entry n = G.node_labeled g n in
   let (--)    = RS.diff in
   let as_cut_to k =
-    let defs = k.K.cut_in.C.regs in
-    { G.defs = defs;     G.kills = allregs -- defs; G.node = entry k.K.cut_pc    } in
+    let defs  = k.K.cut_in.C.regs in
+    { G.defs  = defs; G.kills = allregs -- defs;
+      G.node  = G.non_local_join_labeled g k.K.cut_pc } in
   let as_unwinds k =
-    { G.defs = RS.empty; G.kills = volregs;         G.node = entry k.K.unwind_pc } in
+    { G.defs  = RS.empty; G.kills = volregs;
+      G.node  = G.non_local_join_labeled g k.K.unwind_pc } in
     (* defs are variables and so can't be a register set.  NEED ANOTHER MECHANISM *)
   let as_returns k =
     let pc = K.get_return_pc cc k in
-    let defs = k.K.return_in.C.regs in
-    { G.defs = defs;     G.kills = volregs -- defs; G.node=entry pc   } in
+    let defs  = k.K.return_in.C.regs in
+    { G.defs  = defs; G.kills = volregs -- defs;
+      G.node  = G.node_labeled g pc   } in
   let contmap f = List.map (f << continuation) in
   { S.cuts     = contmap as_cut_to  ast.S.cuts;
     S.unwinds  = contmap as_unwinds ast.S.unwinds;
@@ -359,20 +367,31 @@ Compile entry points for continuations as needed ([[finish_compiling_continuatio
 For each continuation we have reserved memory on the stack that must be
 initialized when the procedure is entered. The following function
 inserts code to do the initialization.
+We decide what program counter to give the continuation depending on what entry
+points already exist.
+If no entry points exist, we make a new join node and use its label as the program
+counter.
 
 We also attach spans to each continuation that escapes.
 <<definition of [[insert_init_cont_nodes]]>>=
 let insert_init_cont_nodes contmap init_node =
   let one_node cname k succ = 
     if k.K.escapes then
-      let pc    = exp_of_code_label k.K.cut_pc in
+      let (lbl,new_join) = if k.K.cut_to then (k.K.cut_pc, false)
+                           else if k.K.unwound_to then (k.K.unwind_pc, false)
+                           else (Idgen.ContEntry.cut "unused", true) in
+      let pc    = exp_of_code_label lbl in
       let sp    = proc_cc.C.stable_sp_loc      in
       let spans = RT.to_spans ~sp:(to_mloc sp) ~prev_sp:prev_sp_loc ~ra:saved_ra
                               ~users:k.K.spans ~csregs:nvr_temps ~conts:[]
                               ~sds:sd_locs ~vars:(var_array ()) in
-      let () = add_spans (k.K.cut_pc, spans) in
+      let () = add_spans (G.non_local_join_labeled g lbl, spans) in
       let pc_sp = { Mflow.new_pc = pc; Mflow.new_sp = sp } in
-      G.instruction g (Contn.init_code k.K.rep pc_sp) succ
+      let node  = G.instruction g (Contn.init_code k.K.rep pc_sp) succ in
+      if new_join then
+        let j = G.non_local_join_labeled g lbl in
+        (G.set_succ j ~succ:node; j)
+      else node
     else
       succ in
   let next = G.succ init_node in
@@ -384,14 +403,16 @@ is used leads to sensible code.
 A continuation that escapes but is never cut to presents a dilemma: 
 it has to have a value (because it escapes), but the front end has
 promised never to use that value in a [[cut to]].
-For the moment, we treat the continuation just as if it could be cut
-to, but we might go back later and find a way to change our minds.
+Previously, we treated the continuation just as if it could be cut to.
+But since the only observable change from the client's perspective is
+the program counter on entry to the continuation (and since they have
+promised never to use that program counter), we instead avoid generating
+an extra entry point, and if the continuation has no entry points, we
+make a new join node and use its label as the program counter.
 <<functions that translate statements, including [[stmts]]>>=
 let rec finish_compiling_continuation k =
   begin
     if k.K.cut_to then
-      generate_cut_to_entry k
-    else if k.K.escapes then
       generate_cut_to_entry k;
     generate_return_to_entries k;
     if k.K.unwound_to then
@@ -404,7 +425,7 @@ stack pointer.
 <<functions that translate statements, including [[stmts]]>>=
 and generate_cut_to_entry k =
   let in' = k.K.cut_in in
-  G.set_succ (G.node_labeled g k.K.cut_pc) (
+  G.set_succ (G.non_local_join_labeled g k.K.cut_pc) (
   G.assertion    g (in'.C.insp (Contn.rep k.K.rep))     **>
   G.stack_adjust g in'.C.pre_sp   **>
   G.instruction  g in'.C.shuffle  **>
@@ -426,11 +447,21 @@ and generate_return_to_entries k =
     k.K.succ) in
   List.iter (fun (ccname, labels) -> List.iter (gen ccname) labels) k.K.return_pcs
 @ 
+When we unwind, the argument variables are set by the run-time system's unwinding code.
+To ensure that each argument has been placed somewhere (and is live into the
+continuation), we assert an assignment to a bogus location, using each of the
+variables.
+The assignment to the bogus location is probably somewhat bogus.
 <<functions that translate statements, including [[stmts]]>>=
 and generate_unwind_to_entry k = 
-  G.set_succ (G.node_labeled g k.K.unwind_pc)
+  let use_var (h,v) succ =
+    let w = RU.Width.loc v.FE.loc in
+    G.assertion g (RU.store (R.mem R.none 'z' R.Identity w
+                                   (R.bits (Bits.S.of_int 0 w) w))
+                            (R.fetch (R.var "" v.FE.index w) w)) succ in
+  G.set_succ (G.non_local_join_labeled g k.K.unwind_pc)
   (G.assertion g (proc_cc.C.sp_on_unwind proc_cc.C.stable_sp_loc) **>
-  k.K.succ)
+   (List.fold_right use_var k.K.formals k.K.succ))
 @
 
 % ------------------------------------------------------------------ 
@@ -545,6 +576,13 @@ and call lhs cconv e args targets(*unused*) conts alias succ =
   let out   = actuals cc.C.call_parms.C.out args in
   let in'   = results cc.C.results.C.in' lhs     in
   let calli = target.T.call.T.embed e            in
+  let unwind_conts =
+    let f_to_cont (h,v) = (h,v.FE.index) in
+    let unwind_k kname =
+      let k = continuation kname in
+      let args = List.map f_to_cont k.K.formals in
+      (k.K.unwind_pc, k.K.unwind_sp, args) in
+    List.map unwind_k conts.S.unwinds in
   let conts = continuations cc conts             in
   let () = add youngblocks cc.C.overflow_alloc.C.parameter_deallocator out.C.overflow in
                                         (* outgoing overflow parms *)
@@ -555,17 +593,16 @@ and call lhs cconv e args targets(*unused*) conts alias succ =
     if cc.C.overflow_alloc.C.parameter_deallocator = C.Caller then to_mloc base
     else to_mloc (Rtlutil.addk (W.exp base) base (Block.size out.C.overflow)) in
   let spans = RT.to_spans ~sp:sp_loc ~prev_sp:prev_sp_loc ~ra:saved_ra
-                          ~users:props ~csregs:nvr_temps ~conts:[]
+                          ~users:props ~csregs:nvr_temps ~conts:unwind_conts
                           ~sds:sd_locs ~vars:(var_array ()) in
   G.stack_adjust g out.C.pre_sp                                        **>
   G.instruction  g out.C.shuffle                                       **>
   G.stack_adjust g out.C.post_sp                                       **>
+  (fun ~succ -> add_spans (succ, spans); succ) (* add spans to call node *) **>
   G.call g calli ~uses:out.C.regs ~defs:in'.C.regs ~kills:cc.C.volregs
                  ~altrets:conts.S.areturns ~unwinds_to:conts.S.unwinds
                  ~cuts_to:conts.S.cuts ~aborts:conts.S.aborts
                  ~reads:alias.S.reads ~writes:alias.S.writes           **>
-  (fun ~succ -> let n = G.join_leading_to succ in
-                (add_spans (G.label n, spans); n))                             **>
   G.assertion    g (in'.C.insp in'.C.overflow)                         **>
   G.stack_adjust g in'.C.pre_sp                (* DOUBTS ABOUT THIS *) **>
   G.instruction  g in'.C.shuffle                                       **>
@@ -796,6 +833,7 @@ We also generate an array of variable locations.
 The current method is totally bogus: I'm only using the variable numbers.
 <<definition of [[proc]], which translates one procedure>>=
   let nvars = List.length proc.N.formals + List.length proc.N.locals in
+  (* I DON'T KNOW HOW TO GET A VAR'S NAME!!!! SEE ELSEWHERE ALSO *)
   let var_array () = Array.init nvars (fun i -> Some (R.var "" ~index:i 0)) in
 @ 
 Perhaps we can save some memory allocation if we only convert the stackdata expressions

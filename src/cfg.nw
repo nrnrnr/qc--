@@ -375,10 +375,14 @@ We can also ask particular predicates that relate to the kind.
 A join node includes the exit node.
 A \emph{head} node is the head of an extended basic block; it is
 either the entry node or a join node that is not the exit node.
+A non-local join node is one that can be reached only by [[cut to]] or stack
+unwinding; if the [[is_non_local_join]] predicate is true, then the [[is_join]]
+predicate must also be true.
 <<graph and node observers>>=
-val is_join       : 'i node -> bool
-val is_fork       : 'i node -> bool
-val is_head       : 'i node -> bool
+val is_join           : 'i node -> bool
+val is_non_local_join : 'i node -> bool
+val is_fork           : 'i node -> bool
+val is_head           : 'i node -> bool
 @ 
 We can ask for a label, or for all the labels, on a join node.
 <<graph and node observers>>=
@@ -635,14 +639,16 @@ in the extension fields.
 %%% ==> don't remove blank line following decl
 <<graph and node constructors>>=
 val copy : 'j instruction_info -> ('i -> 'j) -> 'i cfg -> 'j cfg
-
 @
 We can make a variety of individual nodes.
 These functions all mutate the graph, but we classify them as constructors anyway.
 <<graph and node constructors>>=
-val node_labeled : 'i cfg -> label -> 'i node
-@ The [[node_labeled]] function returns a join point bearing the given label.
-If no such join point exists, one is created.
+val node_labeled           : 'i cfg -> label -> 'i node
+val non_local_join_labeled : 'i cfg -> label -> 'i node
+@ The [[node_labeled]] and [[non_local_join]] functions return join points
+bearing the given label.  If no such join point exists, one is created.
+The difference between these constructors is that code can flow into a regular join,
+whereas a non-local join may only be reached via a [[cut to]] or stack unwind.
 We may also want a join point immediately before some node. 
 The [[join_leading_to]] function returns its argument if it is a join point, returns
 the predecessor if it is a join point, or inserts and returns a join point immediately
@@ -692,13 +698,13 @@ val illegal      : 'i cfg -> 'i node  (* a node that must never be reached *)
 module Make (X:X) : S with module X = X = struct
   module R   = Register
   module RS  = R.Set
+  type regs  = Register.Set.t  (* sets of regs for dataflow *)
+  type xregs = Register.SetX.t (* sets of regs for dataflow *)
   module IS  = Set.Make (struct type t = int let compare = compare end)
   module RSX = R.SetX
   module SM  = Strutil.Map
   module X   = X
 
-  type regs  = Register.Set.t  (* sets of regs for dataflow *)
-  type xregs = Register.SetX.t (* sets of regs for dataflow *)
   type label = string
   type label_supply = string -> label
   type 'i instruction_info = { goto    : (label, 'i) Ep.map
@@ -791,6 +797,7 @@ type ('i, 'n, 'c) exi = {         exi_num    : int
                         ;         exi_jx     : X.jx
                         }
 type ('i, 'n, 'c) joi = {         joi_num    : int
+                        ;         joi_local  : bool
                         ; mutable joi_labels : label list
                         ; mutable joi_cfg    : 'c
                         ; mutable joi_preds  : 'n list
@@ -921,6 +928,9 @@ let num = num_util
 let is_join node = match node with
   | Joi _ | Exi _ -> true
   | _             -> false
+let is_non_local_join node = match node with
+  | Joi j -> not j.joi_local
+  | _     -> false
 let is_head node = match node with
   | Joi _ | Ent _ -> true
   | _             -> false
@@ -1335,8 +1345,9 @@ throughout the cfg implementation.
 [[node_labeled]] is fundamental to setting the successors, since join points
 must frequently be inserted.
 <<set node successors>>=
-let mk_join cfg labels ~preds ~lpred ~succ =
+let mk_join cfg labels ~preds ~lpred ~succ ~local =
   let join = Joi { joi_num    = new_num ()
+                 ; joi_local  = local
                  ; joi_labels = labels
                  ; joi_cfg    = cfg
                  ; joi_preds  = preds
@@ -1344,12 +1355,22 @@ let mk_join cfg labels ~preds ~lpred ~succ =
                  ; joi_lpred  = lpred
                  ; joi_jx     = X.jx ()
                  } in
-  let () = List.iter (fun l -> cfg.label_map <- SM.add l join cfg.label_map) labels in
+  List.iter (fun l -> cfg.label_map <- SM.add l join cfg.label_map) labels;
   join
 
 let node_labeled cfg label =
   try SM.find label cfg.label_map
   with Not_found -> mk_join cfg [label] ~preds:[] ~lpred:cfg.ill ~succ:cfg.ill
+                                ~local:true
+let non_local_join_labeled cfg label =
+  try let n = SM.find label cfg.label_map in
+      match n with
+      | Joi j when j.joi_local ->
+          imposs "CFG: non_local_join_labeled called on local join"
+      | Joi _ -> n
+      | _     -> imposs "CFG: non-join found in label_map"
+  with Not_found -> mk_join cfg [label] ~preds:[] ~lpred:cfg.ill ~succ:cfg.ill
+                                ~local:false
 @
 [[join_leading_to]] returns [[succ]] or its predecessor if one is a join point;
 otherwise, it inserts a join point between [[succ]] and its predecessor.
@@ -1698,6 +1719,8 @@ Whenever a join point is used, we look up its label in this map. If not found,
 we copy the join point from the old cfg.
 <<graph construction and copying>>=
 let copy info transform cfg =
+  assert false (* FOLLOWING NEVER TESTED; DON'T BELIEVE THE HYPE *)
+(*
   let new_cfg = { entry     = Boot
                 ; exit      = Boot
                 ; ill       = Boot
@@ -1758,6 +1781,7 @@ let copy info transform cfg =
            | Ent _ -> ()
            | _     -> imposs "postorder_dfs didn't end with entry node" in
   new_cfg
+*)
 @
 The contedges add a little excitement, but nothing shocking.
 They are added with defs/kills to each node.

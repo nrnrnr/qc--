@@ -12,6 +12,7 @@ stack frame on entry.
 #include "qc--runtime.h"
 #include "pcmap.h"
 #include <assert.h>
+#include <stdio.h>
 @ 
 We are done when we find a call site in our runtime data.
 <<gcc-linux.c>>=
@@ -23,14 +24,15 @@ cmm_caller(Cmm_Word* fp) {
   return (entry != 0);
 }
 @ 
-I know how to restore EBP, but not the other regs. I guess the
-[[qc--]] client needs to kill all regs before calling a C function?
 <<gcc-linux.c>>=
 int
 reasonable(void *fp) {
   return ((unsigned)fp >= 0xB0000000);
 }
-
+@
+I know how to restore EBP, but not the other regs.
+The [[qc--]] client needs to kill all regs before calling a C function.
+<<gcc-linux.c>>=
 Cmm_Word*
 walk_foreign_frames(Cmm_Word* fp, Cmm_Word* regs)
 {

@@ -59,7 +59,6 @@ void rt_check(Cmm_Cont* t) {
         printf("\tsd %d: %X = %d\n", i, (unsigned)sd + i, sd[i]);
       }
     }
-    Cmm_MakeUnwindCont(&a, 0);
 
   } while (Cmm_ChangeActivation(&a));
 }

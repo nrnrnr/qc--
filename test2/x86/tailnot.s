@@ -102,7 +102,7 @@ Lframe_l22:
 .long 0x80000008
 .long 0x80000004
 .long 0x80000000
-.long 0x80000000
+.long 0x80000001
 .long 0x40000007
 .long 0xfffffff4
 .long 0x40000009
@@ -115,6 +115,7 @@ Lframe_l22:
 .long 0
 .long 0
 .long 0
+.long 0x80000000
 .section .pcmap
 .long Ljoin_l12
 .long Lframe_l23
@@ -127,7 +128,7 @@ Lframe_l23:
 .long 0x80000008
 .long 0x80000004
 .long 0x80000000
-.long 0x80000000
+.long 0x80000001
 .long 0x40000007
 .long 0xfffffff4
 .long 0x40000009
@@ -140,6 +141,7 @@ Lframe_l23:
 .long 0
 .long 0xfffffff8
 .long 0
+.long 0x80000000
 .section .pcmap
 .long Ljoin_l9
 .long Lframe_l24
@@ -152,7 +154,7 @@ Lframe_l24:
 .long 0x80000008
 .long 0x80000004
 .long 0x80000000
-.long 0x80000000
+.long 0x80000001
 .long 0x40000007
 .long 0xfffffff4
 .long 0x40000009
@@ -165,6 +167,7 @@ Lframe_l24:
 .long 0
 .long 0
 .long 0
+.long 0x80000000
 .section .text
 .section .text
 down:
@@ -260,7 +263,7 @@ Lstackdata_l42:
 .long 1
 .long 0xfffffffc
 .section .pcmap
-.long Ljoin_l35
+.long Ljoin_l31
 .long Lframe_l43
 .section .pcmap_data
 Lframe_l43:
@@ -271,32 +274,7 @@ Lframe_l43:
 .long 0x80000008
 .long 0x80000004
 .long 0x80000000
-.long 0x80000000
-.long 0x40000007
-.long 0x40000007
-.long 0x40000009
-.long 0x40000009
-.long 0x4000000a
-.long 0xfffffff8
-.long 0x4000000b
-.long 0xfffffff4
-.long 0
-.long 0
-.long 0
-.long 0
-.section .pcmap
-.long Ljoin_l31
-.long Lframe_l44
-.section .pcmap_data
-Lframe_l44:
-.long 0xffffffdc
-.long 0x8000000c
-.long 0xfffffff0
-.long Lstackdata_l42
-.long 0x80000008
-.long 0x80000004
-.long 0x80000000
-.long 0x80000000
+.long 0x80000001
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -309,6 +287,33 @@ Lframe_l44:
 .long 0
 .long 0
 .long 0
+.long 0x80000000
+.section .pcmap
+.long Ljoin_l35
+.long Lframe_l44
+.section .pcmap_data
+Lframe_l44:
+.long 0xffffffdc
+.long 0x8000000c
+.long 0xfffffff0
+.long Lstackdata_l42
+.long 0x80000008
+.long 0x80000004
+.long 0x80000000
+.long 0x80000001
+.long 0x40000007
+.long 0x40000007
+.long 0x40000009
+.long 0x40000009
+.long 0x4000000a
+.long 0xfffffff8
+.long 0x4000000b
+.long 0xfffffff4
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0x80000000
 .section .text
 .section .data
 pcmp:

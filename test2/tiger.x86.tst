@@ -13,6 +13,7 @@ end
 -- source files live in src directory
 Test.files = { Test.tigertest("arrays.c--", "/dev/null"),
                Test.tigertest("colmajor.c--"),
+               Test.tigertest("exceptions.c--", "/dev/null"),
                Test.tigertest("forloop.c--", "/dev/null"),
                Test.tigertest("funcall.c--", "/dev/null"),
                Test.tigertest("hello.c--", "/dev/null"),

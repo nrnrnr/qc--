@@ -54,20 +54,22 @@ The first conversion function takes a user's key and value and produces a span.
 <<runtimedata.mli>>=
 type spans
 exception DeadValue
+type label = string
+type link  = Bits.bits Reloc.Simple.relocatable
 val to_spans : sp:Rtl.loc -> prev_sp:Rtl.loc -> ra:Rtl.loc ->
-               users:((Bits.bits  * Bits.bits Reloc.Simple.relocatable) list) ->
+               users:((Bits.bits * link) list) ->
                csregs:((Register.t * Rtl.loc option) list) ->
-               conts:(Rtl.loc list)                        ->
+               conts:((label * Rtl.loc * (string * int) list) list) ->
                sds:(Rtl.loc list)                          ->
                vars:(Rtl.loc option array)                 ->
                spans
 val upd_spans : (Rtl.loc -> Rtl.loc) -> spans -> unit
                 (* may raise DeadValue *)
 @ 
-We can convert the return address, callee-save registers, and variable assignments
-(from variable placement) to spans.
+The run-time system needs to know how the register are mapped to constants.
 <<runtimedata.mli>>=
 type tgt  = ((Rtl.exp -> Automaton.t), Call.t) Target.t
+val print_reg_map : tgt -> unit
 @
 After we have placed all the data in spans, we emit
 the data as assembly by calling [[emit_as_asm]].
@@ -75,7 +77,7 @@ The function should be partially applied to an assembler, then added
 to the optimization pipeline.
 <<runtimedata.mli>>=
 val emit_as_asm : tgt -> 'a Asm.assembler -> procsym:Symbol.t ->
-                  (string * spans) list-> bool
+                  (Rtl.rtl Cfgx.M.node * spans) list-> bool
 @
 It appears that the interpreter needs to know about user-defined spans and
 stackdata.
@@ -93,13 +95,15 @@ type tgt   = ((Rtl.exp -> Automaton.t), Call.t) Target.t
 let imposs = Impossible.impossible
 let unimp  = Impossible.unimp
 
+type label = string
+type link  = Bits.bits Reloc.Simple.relocatable
 type spans = { mutable sp            : Rtl.loc
              ; mutable prev_sp       : Rtl.loc
              ; mutable ra            : Rtl.loc
-             ; mutable users         :
-                    (Bits.bits * Bits.bits Reloc.Simple.relocatable) list
+             ; mutable users         : (Bits.bits * link) list
              ; mutable csregs        : (Register.t * Rtl.loc option) list
-             ; mutable conts         : Rtl.loc list
+             ; mutable conts         : (label * Rtl.loc * (string * int) list) list
+                                    (* (ra, sp, (hint, var number) list) *)
              ; mutable sds           : Rtl.loc list
              ; mutable vars          : Rtl.loc option array
              }
@@ -109,19 +113,21 @@ let to_spans ~sp ~prev_sp ~ra ~users ~csregs ~conts ~sds ~vars =
     conts = conts; sds = sds;         vars = vars }
 
 (* Don't touch the user-defined spans -- not necessary *)
-let upd_spans subst spans =
+let upd_spans upd spans =
   let maybe_upd l = match l with
-    | Some l -> (try Some (subst l) with DeadValue -> None)
+    | Some l -> (try Some (upd l) with DeadValue -> None)
     | None   -> None in
-  spans.sp      <- subst spans.sp;
-  spans.prev_sp <- subst spans.prev_sp;
-  spans.ra      <- subst spans.ra;
+  spans.sp      <- upd spans.sp;
+  spans.prev_sp <- upd spans.prev_sp;
+  spans.ra      <- upd spans.ra;
   spans.csregs  <- List.map (fun (r,l) -> (r, maybe_upd l)) spans.csregs;
-  spans.conts   <- List.map subst spans.conts;
-  spans.sds     <- List.map subst spans.sds;
+  spans.conts   <- List.map (fun (pc,sp,vars) -> (pc, upd sp, vars)) spans.conts;
+  spans.sds     <- List.map upd spans.sds;
   Array.iteri (fun i l -> spans.vars.(i) <- maybe_upd l) spans.vars
 
 module B  = Bits
+module G  = Cfgx.M
+module CT = Ctypes
 module RM = Register.Map
 module RS = Register.Set
 module R  = Rtl
@@ -131,74 +137,9 @@ module W  = Rtlutil.Width
 module Dn = Rtl.Dn
 module Up = Rtl.Up
 module T  = Target
+
+module IM = Map.Make (struct type t = int let compare = compare end)
 @
-
-% ------------------------------------------------------------------ 
-\subsection{Converting data to spans and emitting spans as assembly}
-% ------------------------------------------------------------------ 
-This module hides three secrets:
-\begin{itemize}
-\item When a type of data is encoded as a span, what index is used?
-\item When a type of data is encoded as a span, what expression is used?
-\item How is assembly emitted for spans of each type of data?
-\end{itemize}
-We answer the first question in the next section.
-The answers to the second and third questions are intertwined, so the
-following section answers both together.
-
-% ------------------------------------------------------------------ 
-\subsubsection{Mapping data to span indices}
-% ------------------------------------------------------------------ 
-Spans defined in the source code may only be indexed by whole numbers.
-Consequently, the compiler can use the negative indices to store private data.
-Given the maximum span index ([[max_span]]), the number of local variables ([[nvars]]),
-the number of unwind continuations ([[num_conts]]),
-and the number of callee-save registers ([[nregs]]), we layout the span
-indices as follows:
-\begin{verbatim}
-                                     +-----------------------+
-                           max_span: |                       |
-                                     | source spans          |
-                                  0: |                       |
-                                     +-----------------------+
-                                 -1: | frame size            +
-                                     +-----------------------+
-                                 -2: | overflow size         +
-                                     +-----------------------+
-                                 -3: | return address        +
-                                     +-----------------------+
-                                 -4: | stackdata table       +
-                                     +-----------------------+
-                                 -5: | num registers         +
-                                     +-----------------------+
-                                 -6: | num locals            +
-                                     +-----------------------+
-                                 -7: | num spans             +
-                                     +-----------------------+
-                                 -8: | num continuations     +
-                                     +-----------------------+
-                                 -9: |                       |
-                                     | callee-save registers |
-                     -(2*nregs + 8): |                       |
-                                     +-----------------------+
-                     -(2*nregs + 9): |                       |
-                                     | local variables       |
-             -(nvars + 2*nregs + 8): |                       |
-                                     +-----------------------+
-             -(nvars + 2*nregs + 9): |                       |
-                                     | continuations         |
-    -(nconts + nvars + 2*nregs + 8): |                       |
-                                     +-----------------------+
-\end{verbatim}
-
-For each callee-save register, we use two slots: one for the register and the next
-for the location in which it has been stored.
-
-The careful reader will notice that we have not included stackdata in this mapping.
-We handle stackdata separately because the stackdata values are visible throughout
-the procedure.
-We associate the stackdata with the procedure's label; the stackdata items are
-0-indexed, in the order they appear in the procedure.
 
 % ------------------------------------------------------------------ 
 \subsubsection{Mapping data to expressions and emitting emitting spans as assembly}
@@ -210,18 +151,33 @@ The stackdata spans ([[sd_spans]]) are emitted in a separate table.
 Then, for each stopping point, we emit the associated spans by calling
 [[emit_site_spans]].
 <<runtimedata.ml>>=
-let emit_as_asm target asm ~procsym label_spans =
+let emit_as_asm target asm ~procsym node_spans =
   let wordsize   = target.T.wordsize in
   let to_bits  i = Bits.S.of_int i wordsize  in 
   let zero       = Bits.zero wordsize in
   let one        = to_bits 1 in
+  <<define [[order]] to establish the order of the spans>>
   <<define functions for emitting data>>
   <<define [[emit_sd_spans]] and [[emit_site_spans]]>>
   let prev_section = asm#current in
   emit_sd_spans ();
-  List.iter emit_site_spans label_spans;
+  List.iter emit_site_spans (order node_spans);
   asm#section prev_section;
   true
+@
+Be emitting the spans in the same order that the labels are emitted,
+we can use binary search to find a span (since the labels will be
+ordered properly).
+<<define [[order]] to establish the order of the spans>>=
+let order node_spans =
+  match node_spans with
+  | []       -> node_spans
+  | (n,_)::_ ->
+    let g = G.of_node n in
+    let (_, map) =
+      G.fold_layout (fun n (i,m) -> (i+1, IM.add (G.num n) i m)) (0,IM.empty) g in
+    let num n = IM.find (G.num n) map in
+    List.sort (fun (n1,_) (n2,_) -> compare (num n1) (num n2)) node_spans in
 @
 \paragraph{Emitting Stackdata Spans}
 Stackdata spans have been attached to all the span collections.
@@ -234,7 +190,7 @@ The first word gives the number of stackdata labels.
 The next $n$ words give the stackdata labels in order.
 <<define [[emit_sd_spans]] and [[emit_site_spans]]>>=
 let emit_sd_spans () =
-  match label_spans with
+  match node_spans with
   | (_, spans)::_ ->
       asm#section "pcmap_data";
       asm#label   sd_label;
@@ -243,7 +199,7 @@ let emit_sd_spans () =
  | [] -> () in
 @
 \paragraph{Emitting Stopping-Point Spans}
-For each stopping point labelled [[stop_l]], we must emit the information stored in
+For each stopping point, we must emit the information stored in
 the [[spans]].
 The information is organized in two distinct areas.
 The first area is a map from stopping points in the procedure to run-time
@@ -253,8 +209,15 @@ This map is placed in the [[pcmap]] section of the assembly code.
 
 The second area is the collection of run-time data for each stopping point.
 This data is placed in the [[pcmap_data]] section of the assembly code.
+
+If a stopping point is a call node, its successor is the label we are suspended at;
+otherwise, we expect the argument node to have a label.
 <<define [[emit_sd_spans]] and [[emit_site_spans]]>>=
-let emit_site_spans (stop_l, spans) =
+let emit_site_spans (node, spans) =
+  let stop_l = match G.kind node with
+    | G.Call -> G.label (G.succ_n node (G.altrets node))
+    | G.Join -> G.label node
+    | _ -> imposs "Runtimedata expected call or join node" in
   let frame_label = asm#local (Idgen.label "frame") in
   <<emit proc to run-time data map>>
   <<emit frame data>>   in
@@ -297,13 +260,20 @@ frame_data_lbl:
 +--------------------+
 | num spans          |
 +--------------------+
-| num continuations  |
+| cont block size    |
 +--------------------+
 | registers          |
 +--------------------+
 | locals             |
-+--------------------+
-| continuations      |
++--------------------+  <--- cont offsets are from here
+| num continuations  |
+| cont 1 offset      |
+|     ...            |
+| cont n offset      |
+| --------------     |
+| cont 1 block       |
+|     ...            |
+| cont n block       |
 +--------------------+
 | spans              |
 +--------------------+
@@ -329,10 +299,10 @@ let max_span_ix = List.fold_left (fun best (i,_) -> max i best) (-1) users in
 And now, we fill in the rest of the data.
 <<emit frame data>>=
 emit_int (max_span_ix + 1);
-emit_int (List.length spans.conts);
+emit_int (size_cont_block spans.conts);
 List.iter emit_csreg spans.csregs;
 Array.iter emit_maybe_loc   spans.vars;
-List.iter emit_loc   spans.conts;
+emit_conts spans.conts;
 @
 The source spans are laid out by index.
 Because the indices may be sparse, we fill in any gaps with zeroes.
@@ -381,7 +351,7 @@ First, we define a slew of helpers to emit the different types of values.
 <<define functions for emitting data>>=
 <<define [[simplify_exp]] to simplify rtl expressions>>
 let reg_ix r =
-  try RM.find r (snd target.T.reg_ix_map)
+  try  RM.find r (snd target.T.reg_ix_map)
   with Not_found -> imposs "Register not found in map" in
 let emit_dead_loc      ()    = asm#value zero in
 let emit_link_const mk sym   = asm#addr (Reloc.Simple.of_sum mk sym zero) in
@@ -421,15 +391,45 @@ let emit_maybe_loc l = match l with
 
 let emit_csreg (reg, l) = (emit_loc (R.reg reg); emit_maybe_loc l) in
 let emit_user_span reloc = match reloc with
-  | Some reloc ->
-      let s, b = Reloc.Simple.expnormalize reloc in
-      let w    = Bits.width b in
-      let addr = match s with
-                 | None           -> Rtl.bits b w
-                 | Some (sym, mk) -> Rtlutil.add w (mk sym w) (Rtl.bits b w) in
-      emit_loc (R.mem (R.aligned target.T.alignment) 'm'
-                      target.T.byteorder target.T.pointersize addr)
-  | None   -> emit_dead_loc () in
+  | None   -> emit_dead_loc ()
+  | Some reloc -> asm#addr reloc in
+@
+To check that the continuation index is within bounds, we first emit the number
+of unwind continuations.
+For each continuation, we have:
+\begin{enumerate}
+\item A 1-word offset to locate the block.
+\item 2 words for each variable argument to the continuation.
+\item A 1-word ``end of variable'' marker.
+\item A 1-word stack-pointer offset.
+\item A 1-word return address.
+\end{enumerate}
+<<define functions for emitting data>>=
+let size_cont_block conts =
+  let n = List.length conts in
+  let nvars = List.fold_left (fun rst (_,_,vars) -> List.length vars + rst) 0 conts in
+  1 + 2 * nvars + 4 * n in
+@
+We emit the following data in the continuation block:
+\begin{enumerate}
+\item The number of continuations.
+\item The offsets of the continuations.
+\item The blocks for the continuations.
+\end{enumerate}
+The sizes of these blocks are as described above.
+<<define functions for emitting data>>=
+let emit_conts conts =
+  let n = List.length conts in
+  emit_int n;
+  ignore (List.fold_left (fun offset (_,_,vs) -> emit_int offset;
+                                                 offset + 2 * List.length vs + 3)
+                         (n+1) conts);
+  let emit_cont_block (pc, sp, vars) =
+    List.iter (fun (h,i) -> emit_int i; emit_int (Ctypes.enum_int h)) vars;
+    asm#value zero;
+    asm#addr (Reloc.Simple.of_sum Rtl.datasym (asm#local pc) zero);
+    emit_loc sp in
+  List.iter emit_cont_block conts in
 @
 We provide a function to simplify an expression first by flattening slices such that
 they consist of a single offset from a location (if applicable), then by calling
@@ -474,4 +474,11 @@ stackdata.
 <<runtimedata.ml>>=
 let user_spans spans = spans.users
 let stackdata  spans = spans.sds
+@
+The run-time system needs to know how the register are mapped to constants.
+<<runtimedata.ml>>=
+let print_reg_map tgt =
+  let (n, map) = tgt.T.reg_ix_map in
+  Printf.printf "Target has %d registers:\n" n;
+  RM.iter (fun (s,i,_) n -> Printf.printf "  %c[%d] -> %d\n" s i n) map
 @

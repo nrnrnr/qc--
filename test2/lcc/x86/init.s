@@ -191,7 +191,7 @@ L.10:
 Lstackdata_l32:
 .long 0
 .section .pcmap
-.long Ljoin_l25
+.long Ljoin_l15
 .long Lframe_l33
 .section .pcmap_data
 Lframe_l33:
@@ -202,21 +202,22 @@ Lframe_l33:
 .long 0x80000008
 .long 0x80000004
 .long 0x80000000
-.long 0x80000000
+.long 0x80000001
 .long 0x40000007
 .long 0xffffffec
 .long 0x40000009
-.long 0xfffffff0
+.long 0x40000009
 .long 0x4000000a
 .long 0x4000000a
 .long 0x4000000b
 .long 0x4000000b
-.long 0x40000007
-.long 0xfffffff8
 .long 0
 .long 0
+.long 0
+.long 0
+.long 0x80000000
 .section .pcmap
-.long Ljoin_l20
+.long Ljoin_l12
 .long Lframe_l34
 .section .pcmap_data
 Lframe_l34:
@@ -227,7 +228,33 @@ Lframe_l34:
 .long 0x80000008
 .long 0x80000004
 .long 0x80000000
+.long 0x80000001
+.long 0x40000007
+.long 0xffffffec
+.long 0x40000009
+.long 0x40000009
+.long 0x4000000a
+.long 0x4000000a
+.long 0x4000000b
+.long 0x4000000b
+.long 0
+.long 0
+.long 0
+.long 0
 .long 0x80000000
+.section .pcmap
+.long Ljoin_l20
+.long Lframe_l35
+.section .pcmap_data
+Lframe_l35:
+.long 0xffffffe4
+.long 0x80000004
+.long 0x80000000
+.long Lstackdata_l32
+.long 0x80000008
+.long 0x80000004
+.long 0x80000000
+.long 0x80000001
 .long 0x40000007
 .long 0xffffffec
 .long 0x40000009
@@ -240,33 +267,9 @@ Lframe_l34:
 .long 0xfffffff8
 .long 0
 .long 0
+.long 0x80000000
 .section .pcmap
-.long Ljoin_l15
-.long Lframe_l35
-.section .pcmap_data
-Lframe_l35:
-.long 0xffffffe4
-.long 0x80000004
-.long 0x80000000
-.long Lstackdata_l32
-.long 0x80000008
-.long 0x80000004
-.long 0x80000000
-.long 0x80000000
-.long 0x40000007
-.long 0xffffffec
-.long 0x40000009
-.long 0x40000009
-.long 0x4000000a
-.long 0x4000000a
-.long 0x4000000b
-.long 0x4000000b
-.long 0
-.long 0
-.long 0
-.long 0
-.section .pcmap
-.long Ljoin_l12
+.long Ljoin_l25
 .long Lframe_l36
 .section .pcmap_data
 Lframe_l36:
@@ -277,19 +280,20 @@ Lframe_l36:
 .long 0x80000008
 .long 0x80000004
 .long 0x80000000
-.long 0x80000000
+.long 0x80000001
 .long 0x40000007
 .long 0xffffffec
 .long 0x40000009
-.long 0x40000009
+.long 0xfffffff0
 .long 0x4000000a
 .long 0x4000000a
 .long 0x4000000b
 .long 0x4000000b
+.long 0x40000007
+.long 0xfffffff8
 .long 0
 .long 0
-.long 0
-.long 0
+.long 0x80000000
 .section .text
 .section .data
 .align 4
@@ -362,7 +366,7 @@ Lframe_l54:
 .long 0x80000008
 .long 0x80000001
 .long 0x80000000
-.long 0x80000000
+.long 0x80000001
 .long 0x40000007
 .long 0xfffffff8
 .long 0x40000009
@@ -372,6 +376,7 @@ Lframe_l54:
 .long 0x4000000b
 .long 0x4000000b
 .long 0xfffffffc
+.long 0x80000000
 .section .text
 g:
 	leal -20(%esp), %esp
@@ -468,7 +473,7 @@ L.37:
 Lstackdata_l79:
 .long 0
 .section .pcmap
-.long Ljoin_l72
+.long Ljoin_l62
 .long Lframe_l80
 .section .pcmap_data
 Lframe_l80:
@@ -479,17 +484,18 @@ Lframe_l80:
 .long 0x80000008
 .long 0x80000002
 .long 0x80000000
-.long 0x80000000
+.long 0x80000001
 .long 0x40000007
-.long 0xfffffff4
+.long 0x40000007
 .long 0x40000009
 .long 0x40000009
 .long 0x4000000a
 .long 0x4000000a
 .long 0x4000000b
 .long 0x4000000b
-.long 0xfffffff8
-.long 0xfffffffc
+.long 0
+.long 0
+.long 0x80000000
 .section .pcmap
 .long Ljoin_l67
 .long Lframe_l81
@@ -502,7 +508,7 @@ Lframe_l81:
 .long 0x80000008
 .long 0x80000002
 .long 0x80000000
-.long 0x80000000
+.long 0x80000001
 .long 0x40000007
 .long 0xfffffff4
 .long 0x40000009
@@ -513,8 +519,9 @@ Lframe_l81:
 .long 0x4000000b
 .long 0xfffffff8
 .long 0
+.long 0x80000000
 .section .pcmap
-.long Ljoin_l62
+.long Ljoin_l72
 .long Lframe_l82
 .section .pcmap_data
 Lframe_l82:
@@ -525,17 +532,18 @@ Lframe_l82:
 .long 0x80000008
 .long 0x80000002
 .long 0x80000000
+.long 0x80000001
+.long 0x40000007
+.long 0xfffffff4
+.long 0x40000009
+.long 0x40000009
+.long 0x4000000a
+.long 0x4000000a
+.long 0x4000000b
+.long 0x4000000b
+.long 0xfffffff8
+.long 0xfffffffc
 .long 0x80000000
-.long 0x40000007
-.long 0x40000007
-.long 0x40000009
-.long 0x40000009
-.long 0x4000000a
-.long 0x4000000a
-.long 0x4000000b
-.long 0x4000000b
-.long 0
-.long 0
 .section .text
 h:
 	leal -40(%esp), %esp
@@ -637,7 +645,7 @@ Lframe_l100:
 .long 0x80000008
 .long 0x80000002
 .long 0x80000000
-.long 0x80000000
+.long 0x80000001
 .long 0x40000007
 .long 0xffffffec
 .long 0x40000009
@@ -648,6 +656,7 @@ Lframe_l100:
 .long 0xfffffff8
 .long 0xfffffffc
 .long 0
+.long 0x80000000
 .section .text
 .section .data
 i_47:

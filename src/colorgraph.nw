@@ -999,21 +999,15 @@ let applyColors cg
     with
       Not_found -> Impossible.impossible (Printf.sprintf "Uncolored temp %c%d" s i) in
   let subst t = if is_tmp target t then find t else t in
-  let subst_rtl node =
-    begin
-      G.upd_instr node (Rtlutil.Subst.reg ~map:subst);
-      <<rewrite temporaries in spans>>
-    end in
-  let () = G.iter_nodes subst_rtl cfg in
-  true
+  (G.iter_nodes (fun n -> G.update_instr (Rtlutil.Subst.reg ~map:subst) n) cfg;
+   <<rewrite temporaries in spans>>
+   true)
 @
 Now that we know where the temporaries have been placed, we can replace
 them in the spans.
 <<rewrite temporaries in spans>>=
-let rewrite_spans (lbl, ss as rst) =
-  let node = G.node_labeled cfg lbl in
-  (Verbose.eprintf verb "adding colorgraph span for node labeled %s, node %d\n"
-     lbl (G.num node);
+let rewrite_spans (node, ss as rst) =
+  (Verbose.eprintf verb "adding colorgraph span for node %d\n" (G.num node);
    let get_spilled_loc tmp =
      let (mem, spilltemps) =
        try  RM.find tmp cg.spillMap
@@ -1264,6 +1258,7 @@ module type GRAPH = sig
   val succs : node -> node list
   val succ  : node -> node
 
+  val update_instr  : (Rtl.rtl -> Rtl.rtl) -> node -> unit
   val delete     : cfg -> node -> unit
   val fold_nodes : (node->'a -> 'a) -> 'a -> cfg -> 'a
   val iter_nodes : (node->unit) -> cfg -> unit
@@ -1294,6 +1289,7 @@ module NewG : GRAPH with type node = Rtl.rtl Cfgx.M.node
   let succs = G.succs
   let succ  = G.succ
   let num n = G.num n
+  let update_instr = G.update_instr
   let iter_nodes = G.iter_nodes
   let fold_nodes = G.fold_nodes
   let eq = G.eq

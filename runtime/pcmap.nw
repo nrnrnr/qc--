@@ -40,7 +40,7 @@ typedef struct {
   Cmm_Word    num_registers;
   Cmm_Word    num_locals;
   Cmm_Word    num_spans;
-  Cmm_Word    num_continuations;
+  Cmm_Word    cont_block_size;
   Cmm_Word    data[1]; // registers, locals, continuations, spans.
 } pc_map_entry;
 
@@ -53,7 +53,7 @@ typedef struct {
                                                    + enf(e,num_locals))
 #define spans(e)         (((Cmm_Word*)enf(e,data)) + enf(e,num_registers) \
                                                    + enf(e,num_locals)    \
-                                                   + enf(e,num_continuations))
+                                                   + enf(e,cont_block_size))
 
 typedef struct {
   Cmm_Codeptr ra;
@@ -72,6 +72,12 @@ signed   decode_offset(int local);
 pc_map_entry* lookup_entry_linear(const Cmm_Codeptr caller);
 void show_map();
 
+enum ctypes { CHAR = 0, DOUBLE = 1, FLOAT = 2, INT = 3, LONGDOUBLE = 4, LONGINT = 5
+            , LONGLONGINT = 6, SHORT = 7, SIGNEDCHAR = 8, UNSIGNEDCHAR = 9
+            , UNSIGNEDLONG = 10, UNSIGNEDSHORT = 11, UNSIGNEDINT = 12
+            , UNSIGNEDLONGLONG = 13, ADDRESS = 14 
+            };
+
 #endif /* PC_MAP_H */
 @ 
 The runtime system expects the symbols [[pc_map_start]] and
@@ -87,25 +93,38 @@ extern unsigned pc_map_len;
 pc_map_index* pc_map = (pc_map_index*)&pc_map_start;
 #define pc_map_size (pc_map_len / sizeof(pc_map_index))
 @ 
-If we can rely on the linker to sort the entries by PC, then the
+If we can rely on the linker (or the compiler) to sort the entries by PC, then the
 lookup function can do binary search.
+This version is stolen from K&R.
+Surely, there are more efficient implementations, but this one is obviously correct.
 <<pcmap.c>>=
 pc_map_entry*
 lookup_entry(const Cmm_Codeptr caller)
 {
   pc_map_index* ndx = pc_map;
-  unsigned i  = (pc_map_size+1) / 2;
-  unsigned sz = i / 2;
-  while(1) {
-    if (ndx[i].ra == caller) {
-      return ndx[i].entry;
+  int high, low, mid;
+
+/* print out the table
+int i;
+fprintf(stderr, "looking for %X\n", caller);
+for(i = 0; i < pc_map_size; i++) {
+  fprintf(stderr, "%X\n", ndx[i].ra);
+}
+*/
+
+  low  = 0;
+  high = pc_map_size - 1;
+  while(low <= high) {
+    mid = (low+high) / 2;
+    if(caller < ndx[mid].ra) {
+      high = mid - 1;
+    } else if (caller > ndx[mid].ra) {
+      low = mid + 1;
+    } else {
+      return ndx[mid].entry;
     }
-    i += (ndx[i].ra < caller ? sz : -sz);
-    if (i < 0 || i >= pc_map_size)
-      break;
-    sz = (sz+1) / 2;
   }
-  return 0;
+  return 0; /* no match */
 }
 @ 
 The compiler encodes the type in the top two bits. Registers are given
@@ -170,7 +189,7 @@ void show_map() {
   printf("pc_map_size %d\n", pc_map_size);
   for (i = 0; i < pc_map_size; ++i) {
     printf("%d: ra:%X  entry:%X -> frame_size:%X -> %X, overflow:%X\n"
-           "\tregs:%X,locals%X,spans:%X,cont:%X\n",
+           "\tregs:%X,locals%X,spans:%X,size of cont block:%X\n",
            i, ndx[i].ra, ndx[i].entry,
            ndx[i].entry->frame_size,
            decode_offset(ndx[i].entry->frame_size),
@@ -178,7 +197,7 @@ void show_map() {
            ndx[i].entry->num_registers,
            ndx[i].entry->num_locals,
            ndx[i].entry->num_spans,
-           ndx[i].entry->num_continuations           
+           ndx[i].entry->cont_block_size           
            );
   }
 }

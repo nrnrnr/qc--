@@ -550,13 +550,13 @@ let rpo_dfs (state, prefs) =
 <<dls algorithm>>=
 let dls () ({Proc.cfg = cfg; Proc.cc = cc; Proc.target = tgt} as proc) =
   ignore (Optimize.trim_unreachable_code () proc);
-  (*
+(*
   Cfgutil.print_cfg cfg;
   G.iter_nodes
     (fun n -> printTempSet (Printf.sprintf "%d live_out\n" (G.num n)) (get_live_out n);
               printTempSet (Printf.sprintf "%d live_in\n"  (G.num n)) (get_live_in n))
     cfg;
-  *)
+*)
   let alloc_regset = cc.Call.volregs ++ cc.Call.pre_nvregs      in
   <<define spill functions>>
   <<define [[buffer_if_succ_is_join]] to insert a nop after instr leading to join>>
@@ -606,7 +606,7 @@ let alloc_node state prefs node =
   let free_unused_maps state n =
     let not_all_allocated lst = List.exists (fun p -> not (is_allocated state p)) lst in
     let k = G.kind n in
-    if G.is_join n || G.is_fork n || k = G.Assertion || k = G.Branch ||
+    if G.is_call n || G.is_join n || G.is_fork n || k = G.Assertion || k = G.Branch ||
        not_all_allocated  (G.preds n) ||
        not_all_allocated  (G.succs n)
     then
@@ -1146,10 +1146,8 @@ the runtime system.
 For each span, we replace temporaries with the registers they have been
 assigned to.
 <<add spans for variable locations>>=
-let rewrite_spans (lbl, ss as rst) =
-  let node = G.node_labeled cfg lbl in
-  (Debug.eprintf "dls" "adding dls span for node labeled %s, node %d\n"
-                       lbl (G.num node);
+let rewrite_spans (node, ss as rst) =
+  (Debug.eprintf "dls" "adding dls span for node %d\n" (G.num node);
    let vm = try IM.find (G.num node) state.varInMaps
             with Not_found ->
                    imposs "DLS: Cannot modify runtime data for unknown node" in

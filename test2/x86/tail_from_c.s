@@ -202,7 +202,7 @@ Lframe_l33:
 .long 0x80000008
 .long 0x8000000b
 .long 0x80000000
-.long 0x80000000
+.long 0x80000001
 .long 0x40000007
 .long 0xffffffe0
 .long 0x40000009
@@ -222,6 +222,7 @@ Lframe_l33:
 .long 0x4000000a
 .long 0x4000000b
 .long 0
+.long 0x80000000
 .section .text
 .section .text
 tail_from_c:
@@ -333,7 +334,7 @@ Lframe_l52:
 .long 0x80000008
 .long 0x8000000a
 .long 0x80000000
-.long 0x80000000
+.long 0x80000001
 .long 0x40000007
 .long 0x40000007
 .long 0x40000009
@@ -352,6 +353,7 @@ Lframe_l52:
 .long 0
 .long 0
 .long 0
+.long 0x80000000
 .section .pcmap
 .long Ljoin_l43
 .long Lframe_l53
@@ -364,7 +366,7 @@ Lframe_l53:
 .long 0x80000008
 .long 0x8000000a
 .long 0x80000000
-.long 0x80000000
+.long 0x80000001
 .long 0x40000007
 .long 0xfffffff0
 .long 0x40000009
@@ -383,6 +385,7 @@ Lframe_l53:
 .long 0
 .long 0
 .long 0xfffffffc
+.long 0x80000000
 .section .pcmap
 .long Ljoin_l40
 .long Lframe_l54
@@ -395,7 +398,7 @@ Lframe_l54:
 .long 0x80000008
 .long 0x8000000a
 .long 0x80000000
-.long 0x80000000
+.long 0x80000001
 .long 0x40000007
 .long 0xfffffff0
 .long 0x40000009
@@ -414,6 +417,7 @@ Lframe_l54:
 .long 0
 .long 0
 .long 0
+.long 0x80000000
 .section .text
 .section .text
 main:

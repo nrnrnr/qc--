@@ -268,18 +268,11 @@ let fetch_var     (s, i, w) = (get_placer i w).A.fetch                w in
 @
 We fold over the nodes, replacing variables with each variable with a temp for the
 proper context.
-We include the functions that replace variables as nested functions in [[updateNode]] so
-they will have access to the entire rtl.
 <<replace variables with temps>>=
-let updateNode node =
-  match G.to_instr node with
-  | None     -> ()
-  | Some rtl ->
-    <<context replace var>>
-    <<fetch and store globals>>
-    G.update_instr
-      (fun _ -> replace_var store_var fetch_var store_global fetch_global rtl) node in
-let () = G.iter_nodes updateNode g in
+<<context replace var>>
+<<fetch and store globals>>
+let update rtl = replace_var store_var fetch_var store_global fetch_global rtl in
+G.iter_nodes (fun n -> G.update_instr update n) g;
 <<verbosely dump [[tMap]]>>
 @ 
 <<verbosely dump [[tMap]]>>=
@@ -320,12 +313,6 @@ let mk_automaton ~warn ~vfp ~memsize ~byteorder mk_stage proc =
 @
 After we have placed the variables, we record their locations in the spans.
 <<add variable placements to spans>>=
-let fold_arri f a z = 
-  let l = Array.length a in
-  let rec do_fold i z =
-    if i < l then do_fold (i+1) (f i (Array.get a i) z)
-    else z in
-  do_fold 0 z in
 let upd_var e = match R.Dn.loc e with
   | RP.Var (_,i,_) -> (match tMap.(i) with
                        | None   -> raise RT.DeadValue

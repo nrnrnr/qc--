@@ -104,7 +104,7 @@ Lframe_l25:
 .long 0x80000008
 .long 0x80000003
 .long 0x80000000
-.long 0x80000000
+.long 0x80000001
 .long 0x40000007
 .long 0xfffffff4
 .long 0x40000009
@@ -116,6 +116,7 @@ Lframe_l25:
 .long 0
 .long 0
 .long 0
+.long 0x80000000
 .section .text
 queens:
 	leal -44(%esp), %esp
@@ -305,7 +306,7 @@ Lframe_l55:
 .long 0x80000008
 .long 0x8000000e
 .long 0x80000000
-.long 0x80000000
+.long 0x80000001
 .long 0x40000007
 .long 0xffffffdc
 .long 0x40000009
@@ -328,6 +329,7 @@ Lframe_l55:
 .long 0
 .long 0
 .long 0
+.long 0x80000000
 .section .pcmap
 .long Ljoin_l35
 .long Lframe_l56
@@ -340,7 +342,7 @@ Lframe_l56:
 .long 0x80000008
 .long 0x8000000e
 .long 0x80000000
-.long 0x80000000
+.long 0x80000001
 .long 0x40000007
 .long 0xffffffdc
 .long 0x40000009
@@ -363,6 +365,7 @@ Lframe_l56:
 .long 0
 .long 0
 .long 0
+.long 0x80000000
 .section .text
 print:
 	leal -24(%esp), %esp
@@ -444,7 +447,7 @@ Lframe_l78:
 .long 0x80000008
 .long 0x80000001
 .long 0x80000000
-.long 0x80000000
+.long 0x80000001
 .long 0x40000007
 .long 0xfffffff0
 .long 0x40000009
@@ -454,6 +457,7 @@ Lframe_l78:
 .long 0x4000000b
 .long 0x4000000b
 .long 0xfffffffc
+.long 0x80000000
 .section .pcmap
 .long Ljoin_l64
 .long Lframe_l79
@@ -466,7 +470,7 @@ Lframe_l79:
 .long 0x80000008
 .long 0x80000001
 .long 0x80000000
-.long 0x80000000
+.long 0x80000001
 .long 0x40000007
 .long 0xfffffff0
 .long 0x40000009
@@ -476,6 +480,7 @@ Lframe_l79:
 .long 0x4000000b
 .long 0x4000000b
 .long 0
+.long 0x80000000
 .section .text
 .section .bss
 .align 4

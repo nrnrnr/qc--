@@ -13,9 +13,10 @@ For now, we are ignoring threads, and a number of interface functions.
    Please ignore this embarrassing hack -PG
  */
 #define WORDSIZE 4
-#define NUM_REGS 12 // Hmm...
-#define ESP 8 // 4
-#define EBP 9 // 5
+#define NUM_REGS 12
+#define ESP 8 // r[4]
+#define EBP 9 // r[5]
+#define PC  0 // c[0]
 
 <<data structures>>
 <<public functions>>
@@ -29,16 +30,22 @@ typedef unsigned  Cmm_Word;
 typedef void*     Cmm_Dataptr;
 typedef void    (*Cmm_Codeptr)();
 
-/* This structure should be considered private---
+
+/* The cmm_cont and cmm_activation structures should be considered private---
    it is an unchecked run-time error to read or write any field */
+typedef struct cmm_cont {
+  Cmm_Codeptr pc;
+  Cmm_Word*   sp;
+} Cmm_Cont;
+
 typedef struct cmm_activation {
   Cmm_Word*   vfp;
   Cmm_Codeptr pc;
+  Cmm_Word*   unwind_sp;
   Cmm_Dataptr rtdata;
+  Cmm_Cont    unwind_cont;
   Cmm_Word*   regs[NUM_REGS];
 } Cmm_Activation;
-
-typedef struct cmm_cont Cmm_Cont;  /* continuation; private representation */
 @ 
 Functions for walking the stack.
 <<public functions>>=
@@ -46,12 +53,13 @@ Cmm_Activation Cmm_YoungestActivation (const Cmm_Cont *t);
 int            Cmm_isOldestActivation (const Cmm_Activation *a);
 Cmm_Activation Cmm_NextActivation     (const Cmm_Activation *a);
 int            Cmm_ChangeActivation   (Cmm_Activation *a);
-Cmm_Cont*      Cmm_MakeUnwindCont     (const Cmm_Activation *a, Cmm_Word index, ...);
+Cmm_Cont*      Cmm_MakeUnwindCont     (Cmm_Activation *a, Cmm_Word index, ...);
 <<public functions>>=
 Cmm_Dataptr Cmm_GetDescriptor(const Cmm_Activation *a, Cmm_Word token);
 @ 
 Functions for finding local variables.
 <<public functions>>=
+void     Cmm_LocalVarWritten  (const Cmm_Activation *a, unsigned n);
 unsigned Cmm_LocalVarCount    (const Cmm_Activation *a);
 void*    Cmm_FindLocalVar     (const Cmm_Activation *a, unsigned n);
 void*    Cmm_FindDeadLocalVar (const Cmm_Activation *a, unsigned n);
@@ -111,6 +119,7 @@ which forces the caller to allocate space for it.
 <<public function implementations>>=
 Cmm_Activation
 Cmm_YoungestActivation(const Cmm_Cont* t) {
+  int i;
   Cmm_Activation a;
   pc_map_entry* entry = lookup_entry_linear(t->pc);
   assert(entry);
@@ -120,7 +129,9 @@ Cmm_YoungestActivation(const Cmm_Cont* t) {
   a.vfp = (Cmm_Word*)((int)t->sp - decode_offset(entry->frame_size));
   a.pc = t->pc;
   a.rtdata = (void*)entry;
-  update_saved_regs(&a, 0);
+  for(i = 0; i < NUM_REGS; i++) {
+    a.regs[i] = NULL;
+  }
   return a;
 }
 @ 
@@ -140,9 +151,12 @@ Cmm_NextActivation(const Cmm_Activation *a) {
   Cmm_Activation na;
   pc_map_entry* entry;
   pc_map_entry* old_entry;
+  int foreign = 0;
+  int i;
 
   assert(a && a->vfp);
   fp = a->vfp;
+  update_saved_regs(&na, a);
   //print_stack(fp);
 
   entry = (pc_map_entry*)a->rtdata;
@@ -150,7 +164,8 @@ Cmm_NextActivation(const Cmm_Activation *a) {
   entry = lookup_entry_linear((Cmm_Codeptr)*caller);
           
   if (!entry) {
-    fp = walk_foreign_frames(fp, a->regs);
+    foreign = 1;
+    fp = walk_foreign_frames(fp, na.regs);
     if (fp) {
       caller = (Cmm_Word*)(fp);
       entry = lookup_entry_linear((Cmm_Codeptr)*caller);
@@ -164,7 +179,13 @@ Cmm_NextActivation(const Cmm_Activation *a) {
 
     na.pc = (Cmm_Codeptr)*caller;
     na.rtdata = (void*)entry;
-    update_saved_regs(&na, a);
+    /* The registers were already updated above, but after a foreign walk,
+       we no longer believe them. */
+    if(foreign) {
+      for(i = 0; i < NUM_REGS; i++) {
+        na.regs[i] = NULL;
+      }
+    }
   } else {
     na.vfp = 0; // indicates failure
   }
@@ -194,19 +215,114 @@ Cmm_ChangeActivation(Cmm_Activation *a) {
   }
 }
 @ 
+We import the assembly code that restores the registers and cuts to the unwind entry
+point.
 <<public function implementations>>=
-Cmm_Cont* Cmm_MakeUnwindCont(const Cmm_Activation *a, Cmm_Word index, ...) {
+extern void (*__cmm_unwindcont)();
+Cmm_Cont* Cmm_MakeUnwindCont(Cmm_Activation *a, Cmm_Word index, ...) {
+  int i;
   int num_conts;
+  Cmm_Word *conts;
+  Cmm_Word *var;
+  Cmm_Word *unwind_pc;
+  Cmm_Word *unwind_sp;
+  int offset;
+  int varnum;
+  int vartype;
+  va_list ap;
 
   pc_map_entry* entry = (pc_map_entry*)a->rtdata;
   assert(entry);
-  num_conts = decode_offset(entry->num_continuations);
+  conts = continuations(entry);
+  num_conts = decode_offset(*conts);
+
   if(index >= num_conts) {
     fprintf(stderr, "Cmm_MakeUnwindCont called with out-of-bounds index %d\n", index);
     assert(0);
   }
 
-  return NULL;
+  offset = decode_offset(*(conts + 1 + index));
+  var = conts + offset;
+  va_start(ap, index);
+  while(*var) {
+    varnum  = decode_offset(*var);
+    vartype = decode_offset(*(var+1));
+
+    switch(vartype) {
+      case CHAR:
+        *(char *)               Cmm_FindLocalVar(a, varnum) = va_arg(ap, char);
+        break;
+      case DOUBLE:
+        *(double *)             Cmm_FindLocalVar(a, varnum) = va_arg(ap, double);
+        break;
+      case FLOAT:
+        *(float *)              Cmm_FindLocalVar(a, varnum) = va_arg(ap, float);
+        break;
+      case INT:
+        *(int *)                Cmm_FindLocalVar(a, varnum) = va_arg(ap, int);
+        break;
+      case LONGDOUBLE:
+        *(long double *)        Cmm_FindLocalVar(a, varnum) = va_arg(ap, long double);
+        break;
+      case LONGINT:
+        *(long int *)           Cmm_FindLocalVar(a, varnum) = va_arg(ap, long int);
+        break;
+      case LONGLONGINT:
+        *(long long int *)      Cmm_FindLocalVar(a, varnum) = va_arg(ap, long long int);
+        break;
+      case SHORT:
+        *(short *)              Cmm_FindLocalVar(a, varnum) = va_arg(ap, short);
+        break;
+      case SIGNEDCHAR:
+        *(signed char *)        Cmm_FindLocalVar(a, varnum) = va_arg(ap, signed char);
+        break;
+      case UNSIGNEDCHAR:
+        *(unsigned char *)      Cmm_FindLocalVar(a, varnum) = va_arg(ap, unsigned char);
+        break;
+      case UNSIGNEDLONG:
+        *(unsigned long *)      Cmm_FindLocalVar(a, varnum) = va_arg(ap, unsigned long);
+        break;
+      case UNSIGNEDSHORT:
+        *(unsigned short *)     Cmm_FindLocalVar(a, varnum) =
+                                   va_arg(ap, unsigned short);
+        break;
+      case UNSIGNEDINT:
+        *(unsigned int *)       Cmm_FindLocalVar(a, varnum) = va_arg(ap, unsigned int);
+        break;
+      case UNSIGNEDLONGLONG:
+        *(unsigned long long *) Cmm_FindLocalVar(a, varnum) =
+                                   va_arg(ap, unsigned long long);
+        break;
+      case ADDRESS:
+        *(void **) Cmm_FindLocalVar(a, varnum) = va_arg(ap, void *);
+        break;
+    }
+    Cmm_LocalVarWritten(a, varnum);
+    var = var + 2;
+  }
+  va_end(ap);
+
+  unwind_pc = var + 1;
+  unwind_sp = var + 2;
+
+  /* We initialize unknown registers to a bogus (but clearly live) address:
+     that of the activation. Otherwise, they would dereference 0. */
+  for(i = 0; i < NUM_REGS; i++) {
+    if(a->regs[i] == NULL) {
+      a->regs[i] = (Cmm_Word *)a;
+    }
+  }
+
+  /* Users are not allowed to reuse space in the activation, so we can set the PC
+     and ESP to the continuation's entry point and stack pointer. */
+  a->regs[PC]  = unwind_pc;
+  a->unwind_sp = (Cmm_Word *) ((int) a->vfp + decode_offset(*unwind_sp));
+  a->regs[ESP] = (Cmm_Word *)&a->unwind_sp;
+
+  a->unwind_cont.pc = (Cmm_Codeptr) &__cmm_unwindcont;
+  a->unwind_cont.sp = (Cmm_Word *) a->regs;
+
+  return(&a->unwind_cont);
 }
 @
 % ---------------------------------------------------------------------------
@@ -228,12 +344,11 @@ Cmm_GetDescriptor(const Cmm_Activation *a, Cmm_Word token) {
   assert(entry);
 
   num_spans = decode_offset(entry->num_spans);
-  descs = spans(entry);
-  if (token > num_spans) {
-    return 0;
-  } else {
+  if(token < num_spans) {
+    descs = spans(entry);
     return (Cmm_Dataptr)descs[token];
   }
+  return 0;
 }
 @
 % ---------------------------------------------------------------------------
@@ -263,20 +378,26 @@ activation.
 void
 update_saved_regs(Cmm_Activation* new, const Cmm_Activation* prev) {
   int i;
-  int r = decode_offset(((pc_map_entry*)(new->rtdata))->num_registers);
-  Cmm_Word* regs = registers(new->rtdata);
+  int r = decode_offset(((pc_map_entry*)(prev->rtdata))->num_registers);
+  Cmm_Word* regs = registers(prev->rtdata);
 
-  if (prev) {
-    for (i = 0; i < NUM_REGS; i++)
+  for (i = 0; i < NUM_REGS; i++) {
       new->regs[i] = prev->regs[i];
   }
   
   for (i = 0; i < r; i+=2) {
     if (regs[i] == regs[i+1]) continue;
-    new->regs[decode_reg(regs[i])] = (Cmm_Word*)((int)new->vfp + decode_offset(regs[i + 1]));
+    new->regs[decode_reg(regs[i])] =
+      (Cmm_Word*)((int)prev->vfp + decode_offset(regs[i + 1]));
   }
 }
 @ 
+Clients of the runtime system must report when a local variable is written.
+<<public function implementations>>=
+void Cmm_LocalVarWritten(const Cmm_Activation *a, unsigned n) {
+  return;
+}
+@
 Clients of the runtime system can ask for the number of locals for a
 given activation. This information is stored in the activation
 structure.
@@ -307,6 +428,14 @@ Cmm_FindLocalVar(const Cmm_Activation *a, unsigned n) {
   if (0 != (reg = decode_reg(local))) {
     assert(a);
     assert(a->regs);
+    if(a->regs[reg] == NULL) {
+      fprintf(stderr, "Run-Time System Error: Tried to find a local variable in a "
+                      "register that could not be recovered. Most likely cause: "
+                      "calling a C function in your run-time without using a calling "
+                      "convention that kills all the callee-save registers "
+                      "(e.g. \"paranoid C\").\n");
+      assert(0);
+    }
     return a->regs[reg];
   }
   else if (!is_dead(local)) {
@@ -347,8 +476,8 @@ stitch things together.
 #include "pcmap.h"
 #include <assert.h>
 #include <stdio.h>
+#include <stdarg.h>
 <<external functions>>
-<<private representations>>
 <<private functions>>
 <<public function implementations>>
 <<private functions>>=
@@ -359,13 +488,6 @@ void print_stack(int* fp) {
     fprintf(stderr, "%d: %X: %x\n", a, (unsigned)fp+a, fp[a]);
   }
 }
-@ 
-The representation of continuations is private.
-<<private representations>>=
-struct cmm_cont {
-  Cmm_Codeptr pc;
-  Cmm_Word*   sp;
-};
 @ 
 \section{{\PAL} runtime}
 

@@ -327,7 +327,7 @@ Lframe_l31:
 .long 0x80000008
 .long 0x80000008
 .long 0x80000000
-.long 0x80000000
+.long 0x80000001
 .long 0x40000007
 .long 0xffffffd8
 .long 0x40000009
@@ -344,6 +344,7 @@ Lframe_l31:
 .long 0
 .long 0
 .long 0
+.long 0x80000000
 .section .pcmap
 .long Ljoin_l20
 .long Lframe_l32
@@ -356,7 +357,7 @@ Lframe_l32:
 .long 0x80000008
 .long 0x80000008
 .long 0x80000000
-.long 0x80000000
+.long 0x80000001
 .long 0x40000007
 .long 0xffffffd8
 .long 0x40000009
@@ -373,6 +374,7 @@ Lframe_l32:
 .long 0
 .long 0
 .long 0
+.long 0x80000000
 .section .pcmap
 .long Ljoin_l17
 .long Lframe_l33
@@ -385,7 +387,7 @@ Lframe_l33:
 .long 0x80000008
 .long 0x80000008
 .long 0x80000000
-.long 0x80000000
+.long 0x80000001
 .long 0x40000007
 .long 0xffffffd8
 .long 0x40000009
@@ -402,6 +404,7 @@ Lframe_l33:
 .long 0
 .long 0
 .long 0
+.long 0x80000000
 .section .pcmap
 .long Ljoin_l14
 .long Lframe_l34
@@ -414,7 +417,7 @@ Lframe_l34:
 .long 0x80000008
 .long 0x80000008
 .long 0x80000000
-.long 0x80000000
+.long 0x80000001
 .long 0x40000007
 .long 0xffffffd8
 .long 0x40000009
@@ -431,6 +434,7 @@ Lframe_l34:
 .long 0
 .long 0
 .long 0
+.long 0x80000000
 .section .pcmap
 .long Ljoin_l11
 .long Lframe_l35
@@ -443,7 +447,7 @@ Lframe_l35:
 .long 0x80000008
 .long 0x80000008
 .long 0x80000000
-.long 0x80000000
+.long 0x80000001
 .long 0x40000007
 .long 0xffffffd8
 .long 0x40000009
@@ -460,6 +464,7 @@ Lframe_l35:
 .long 0
 .long 0
 .long 0
+.long 0x80000000
 .section .text
 f1:
 	leal -24(%esp), %esp
@@ -562,7 +567,7 @@ Lframe_l56:
 .long 0x80000008
 .long 0x80000007
 .long 0x80000000
-.long 0x80000000
+.long 0x80000001
 .long 0x40000007
 .long 0xfffffff4
 .long 0x40000009
@@ -578,6 +583,7 @@ Lframe_l56:
 .long 0
 .long 0
 .long 0
+.long 0x80000000
 .section .pcmap
 .long Ljoin_l43
 .long Lframe_l57
@@ -590,7 +596,7 @@ Lframe_l57:
 .long 0x80000008
 .long 0x80000007
 .long 0x80000000
-.long 0x80000000
+.long 0x80000001
 .long 0x40000007
 .long 0xfffffff4
 .long 0x40000009
@@ -606,6 +612,7 @@ Lframe_l57:
 .long 0
 .long 0
 .long 0
+.long 0x80000000
 .section .text
 f2:
 	leal -12(%esp), %esp
@@ -678,7 +685,7 @@ Lframe_l75:
 .long 0x80000008
 .long 0x80000005
 .long 0x80000000
-.long 0x80000000
+.long 0x80000001
 .long 0x40000007
 .long 0xfffffff8
 .long 0x40000009
@@ -692,6 +699,7 @@ Lframe_l75:
 .long 0
 .long 0
 .long 0
+.long 0x80000000
 .section .text
 .section .data
 i_33:
