@@ -26,13 +26,13 @@ all:V:          update html
 update          \
 html            \
 dvi:V:          dirs
-                for i in $SUBDIRS; do (cd $i && mk $target); done
+                for i in $SUBDIRS; do (cd $i && mk $MKFLAGS $target); done
 
 depend:V:       
-                for i in src; do (cd $i && mk $target); done
+                for i in src; do (cd $i && mk $MKFLAGS $target); done
 
 clean:V:
-                for i in $SUBDIRS; do (cd $i && mk $target); done
+                for i in $SUBDIRS; do (cd $i && mk $MKFLAGS $target); done
                 find bin lib man -name 'CVS' -prune -o -type f -exec rm '{}' \;
 
 test:V:         update
