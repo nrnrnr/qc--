@@ -341,7 +341,7 @@ let call left conv p args targets flows alias =
   let left  = E.Raise.list (List.map (Elabexp.elab_hinted_name env) left) in
   let args  = E.Raise.list (List.map (actual r) args) in
   let tgts  = E.Raise.list (List.map (call_target r) targets) in
-  let flow  = call_flow r flows in
+  let flow  = call_flow r conv flows in
   let alias = elab_alias r alias in
   reject_uncallable p;
   E.ematch6 left args (exp p) tgts flow alias (fun left args (p,pt) tgts flow alias ->
@@ -363,7 +363,7 @@ Only Christian knows\ldots
 <<definitions of elaboration functions>>=
 let cut conv k args flows =
   let args = E.Raise.list (List.map (actual r) args) in
-  let flow = cut_flow r flows in
+  let flow = cut_flow r conv flows in
   E.ematch3 args (exp k) flow (fun args (k,kt) flow ->
     insist_pointer "target of 'cut to'" kt;
     Cut (conv, k, args, flow)) in
@@ -434,10 +434,12 @@ But at some point we might want to elaborate flow of names into flow
 of denotations.  This might require extending the denotations.
 We'll know when we revise [[Oast2ir]].
 <<elaboration utilities>>=
-let flow r default_aborts default_returns =
+let flow r conv default_aborts default_returns =
   let as_cut_to  k = k.FE.cut_to <- true in
   let as_unwinds k = k.FE.unwound_to <- true in
-  let as_returns k = k.FE.returned_to <- true in
+  let as_returns k =
+    if not (List.mem conv k.FE.returned_to) then
+      k.FE.returned_to <- conv :: k.FE.returned_to in
   let rec ks r as_what prev' ns =
     let continuation n = E.seq (snd (F.findv n env)) (function
       | FE.Continuation k, _ -> as_what k; E.Ok n
@@ -463,10 +465,10 @@ let flow r default_aborts default_returns =
 @ 
 The rules for flow are slightly different for calls and cuts.
 <<elaboration utilities>>=
-let call_flow r fs = flow r false true fs in
+let call_flow r cc fs = flow r cc false true fs in
 let null = function [] -> true | _ :: _ -> false in
-let cut_flow r fs =
-  E.seq (flow r true false fs) (fun f ->
+let cut_flow r cc fs =
+  E.seq (flow r cc true false fs) (fun f ->
     if not (null f.unwinds) then
       errorf r "'also unwinds to' is meaningless on a 'cut to'"
     else if not (null f.areturns) then
@@ -511,9 +513,11 @@ Printf.kprintf E.error
   "left-hand side has type bits%d, but primitive operator produces results of type %s"
   w (Types.to_string t)
 @ 
+There should be no choice of calling convention for the application of
+a primitive operator, so we just build in the [["C--"]] convention.
 <<elaboration utilities>>=
 let prim_flow r fs =
-  E.seq (flow r false true fs) (fun f ->
+  E.seq (flow r "C--" false true fs) (fun f ->
     if not (null f.unwinds) then
       errorf r "'also unwinds to' is meaningless on a primitive operator"
     else if not (null f.cuts) then

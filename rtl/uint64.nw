@@ -35,11 +35,18 @@ Primitive functions, called \textit{external}, are implemented in C,
 <<external functions>>
 <<internal functions>>
 @
-Conversion to and from [[float]] values be re-interpretation of the
-bit-patterns.
+The [[Cast]] module provides two different packagings of the identity
+function.
+Function [[Cast.float64]] takes a 64-bit floating-point value and
+returns the same bits as a 64-bit integer.
+Function [[Cast.float32]] takes a 64-bit floating-point value,
+converts it to a 32-bit floating-point value, and returns those bits
+in the least significant 32~bits of a 64-bit integer.
 <<external functions>>=
-external of_float:   float -> int64                  = "uint64_f2i"
-external to_float:   int64 -> float                  = "uint64_i2f"
+module Cast : sig
+  external float64 :   float -> int64 = "uint64_float64"
+  external float32 :   float -> int64 = "uint64_float32"
+end
 @
 The function [[of_int]] copies an [[int]] bitwise into an [[int64]]
 value; unlike [[Int64.of_int]] no sign-extension is performed.
@@ -142,12 +149,22 @@ value uint64_compare(value v1, value v2)
 @
 Bitwise conversion of a [[float]] to a [[int64]].
 <<uint64p.c>>=
-value uint64_f2i(value f)
+value uint64_float64(value f)
 {
     union { double d; int64 i; } buffer;
     buffer.d = Double_val(f);
     return copy_int64(buffer.i);
 }
+
+value uint64_float32(value f)
+{
+    union { float f; unsigned n; } buffer;
+    int64 i;
+    buffer.f = (float) Double_val(f);
+    i = (int64) n;
+    return copy_int64(i);
+}
+
 @
 Bitwise conversion of a [[int64]] value to to [[float]].
 <<uint64p.c>>=

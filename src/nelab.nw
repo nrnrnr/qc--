@@ -494,7 +494,7 @@ let bind_and_return_continuations env conts =
             let addrblock =
               Block.relative vfp ("continuation " ^ name)
               Block.at ~size:0 ~alignment:1 in
-            let k = { FE.cut_to = false; FE.unwound_to = false; FE.returned_to = false;
+            let k = { FE.cut_to = false; FE.unwound_to = false; FE.returned_to = [];
                       FE.base = addrblock; FE.escapes = false; FE.convention = cc;
                       FE.formals = formals; } in
             let env = F.bindv name (r, E.Ok (FE.Continuation k, pointerty)) env in
@@ -572,7 +572,10 @@ let registers_from scope n rs env =
         let den h = E.Ok (FE.Variable (reg h)) in
         let den = match hint, hwreg with
         | Some _, Some _ -> errorf rgn "can't have hint and hardware register"
-        | Some _, None   -> errorf rgn "hints permissible only on formal parameters" 
+        | Some h, None ->
+            (match scope with Global -> den (FE.RHint h)
+            | Local -> errorf rgn
+                  "hints permissible only on formal parameters or global variables") 
         | None,   None   -> den FE.RNone
         | None,   Some r ->
             if scope = Local then

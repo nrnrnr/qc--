@@ -228,13 +228,14 @@ cut to or it escapes.
 <<module [[K]], for continution info>>=
 module K = struct
   type label = string
+  type convention = string
   type 'i t =
     {         unwind_pc   : label       (* labels may or may not be used *)
     ;         cut_pc      : label
-    ;         return_pc   : label
+    ;         return_pcs  : (convention * label) list
     ;         escapes     : bool        (* properties of how it is used *)
     ;         cut_to      : bool
-    ;         returned_to : bool
+(*  ;         returned_to : convention list *)
     ;         unwound_to  : bool
     ;         cut_in      : (Block.t -> Rtl.rtl) C.answer    (* move vals at cut (uses rep) *)
     ;         return_in   : (Block.t -> Rtl.rtl) C.answer    (* move vals at also returns *)
@@ -252,13 +253,15 @@ end
 Our state of knowledge when we first encounter a continuation.
 <<definition of [[K.mk]], which initializes continuation information>>=
 let mk name den rep base g ~cut_in ~return_in  =
+  (match den.FE.returned_to with [] -> ignore (Idgen.ContEntry.return name) | _ :: _ -> ());
   { escapes     = den.FE.escapes
   ; cut_to      = den.FE.cut_to
-  ; returned_to = den.FE.returned_to
+(*  ; returned_to = den.FE.returned_to *)
   ; unwound_to  = den.FE.unwound_to
   ; unwind_pc   = Idgen.ContEntry.unwind name
   ; cut_pc      = Idgen.ContEntry.cut    name
-  ; return_pc   = Idgen.ContEntry.return name
+  ; return_pcs  =
+      List.map (fun cc -> (cc, Idgen.ContEntry.return name)) den.FE.returned_to
   ; rep         = rep
   ; base        = base
   ; convention  = den.FE.convention
@@ -311,8 +314,10 @@ let continuations cc ast =
     { G.defs = RS.empty; G.kills = volregs;         G.node = entry k.K.unwind_pc } in
     (* defs are variables and so can't be a register set.  NEED ANOTHER MECHANISM *)
   let as_returns k =
+    let pc = try List.assoc cc.C.name k.K.return_pcs
+             with Not_found -> Impossible.impossible "alt-return call convention" in
     let defs = k.K.return_in.C.regs in
-    { G.defs = defs;     G.kills = volregs -- defs; G.node=entry k.K.return_pc   } in
+    { G.defs = defs;     G.kills = volregs -- defs; G.node=entry pc   } in
   let contmap f = List.map (f << continuation) in
   { S.cuts     = contmap as_cut_to  ast.S.cuts;
     S.unwinds  = contmap as_unwinds ast.S.unwinds;
@@ -375,8 +380,7 @@ let rec finish_compiling_continuation k =
       generate_cut_to_entry k
     else if k.K.escapes then
       generate_cut_to_entry k;
-    if k.K.returned_to then
-      generate_return_to_entry k;
+    generate_return_to_entries k;
     if k.K.unwound_to then
       generate_unwind_to_entry k;
   end
@@ -395,20 +399,19 @@ and generate_cut_to_entry k =
   k.K.succ)
 @ 
 If we return to a continuation, we must remember the overflow block.
-THERE'S A POTENTIAL PROBLEM WITH CALLING CONVENTION HERE---WE MIGHT
-NEED A DIFFERENT ENTRY POINT DEPENDING ON THE CALLING CONVENTION OF
-THE CALL SITE.  BLOG!
 <<functions that translate statements, including [[stmts]]>>=
-and generate_return_to_entry k = 
-  let cc  = to_cc k.K.convention in
-  let in' = k.K.return_in in
-  let ()  = add youngblocks cc.C.overflow_alloc.C.result_allocator in'.C.overflow in
-  G.set_succ (G.node_labeled g k.K.return_pc) (
-  G.assertion    g (in'.C.insp (Contn.rep k.K.rep))    **>
-  G.stack_adjust g in'.C.pre_sp    **>
-  G.instruction  g in'.C.shuffle   **>
-  G.stack_adjust g in'.C.post_sp   **>
-  k.K.succ)
+and generate_return_to_entries k = 
+  let gen (ccname, label) =
+    let cc  = to_cc ccname in
+    let in' = k.K.return_in in
+    let ()  = add youngblocks cc.C.overflow_alloc.C.result_allocator in'.C.overflow in
+    G.set_succ (G.node_labeled g label) (
+    G.assertion    g (in'.C.insp (Contn.rep k.K.rep))    **>
+    G.stack_adjust g in'.C.pre_sp    **>
+    G.instruction  g in'.C.shuffle   **>
+    G.stack_adjust g in'.C.post_sp   **>
+    k.K.succ) in
+  List.iter gen k.K.return_pcs
 @ 
 BUG ALERT! THIS CODE IS MISSING A NECESSARY ASSERTION ON THE VALUE
 OF THE STACK POINTER.
