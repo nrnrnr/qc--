@@ -149,10 +149,10 @@ sub mysys {
 
 <<testqc>>=
 sub syntax {
-    my $file = shift @_;    # src/file.c
-    my $t1   = "$tmp.1";    # names of temporary files
-    my $t2   = "$tmp.2";
-    my $t3   = "$tmp.3";
+    my $file = shift @_;        # src/file.c
+    my $t1   = "$tmp.1.c--";    # names of temporary files
+    my $t2   = "$tmp.2.c--";
+    my $t3   = "$tmp.3.c--";
     
     mysys("$qc -pp $file -o $t1 2> /dev/null > /dev/null"); 
     mysys("$qc -pp $t1   -o $t2 2> /dev/null > /dev/null"); 
@@ -169,17 +169,12 @@ sub same {
     my ($old,$new) = @_;
     my $rc;
     
-    if (!-f $old || !-f $new) { 
-        $reason = "file $old or $new is missing";
-        return 1;
-    } 
-
-    if ($verbose) {
-        $rc = mysys ("diff -c $old $new | $ocamlerror");
-    } else {
-        $rc = mysys ("cmp -s $old $new");
-    }    
+    $rc = mysys ("cmp -s $old $new");
     my $equal = ($rc eq 0 ? 1 : 0);
+    
+    if (!$equal && $verbose) {
+        mysys ("diff -c $old $new | $ocamlerror");
+    } 
     $reason = $equal ? $reason : "$old and $new different";
     return $equal;
 }
@@ -200,21 +195,19 @@ sub expect {
     my $rc;
     my $r;
    
-    unless (-f $stdout && -f $stderr) { 
-        $verbose && print "$stdin or $stdout missing\n";
-        $reason = "file $stdin or $stdout missing\n";
-        return 0;   # failed
-    }
+    # print "expect: @_\n";
     $rc = mysys ("$cmd < $stdin 2> $t2 > $t1");
     
     # if something goes wrong, we expect the outputs not to match, so we
     # don't check $rc.
     
-    if (not (same($stdout,$t1))) {
+    $r = same($stdout,$t1);
+    if (!$r) {
         $reason = "stdout did not match $stdout";
         return 0;
     }
-    if (not (same($stderr,$t2))) {
+    $r = same($stderr,$t2);
+    if (!$r) {
         $reason = "stderr did not match $stderr";
         return 0;
     }    
@@ -263,14 +256,16 @@ sub run {
     expect ($cmd, "/dev/null", $files1, $files2) || return 0; #failed
 
     # check for equality of $ts file, done if equal
-    same($files, $ts) && return 1; # success
+    same($files, $ts) && return 1;
+    
+    # we only run the code, if the target is not dummy and 
+    # the assmebly code file is not empty. Otherwise we
+    # encountered an unexpected assembler output and fail.
 
-    # Currently qc-- does not assemble and link so we simply fail
-    # here.
-    return 0; # failed
+    if ($target =~ /dummy/ || -z $ts) { return 0 } 
     
     # assemble and link $ts file to $tx. no compiler output expected
-    $cmd = "$qc backend=$target -o $tx";
+    $cmd = "$qc backend=Backend.$target -o $tx $ts";
     expect ($cmd, "/dev/null", "/dev/null", "/dev/null") || return 0; #failed
 
     # run $tx file, compare for expected output
