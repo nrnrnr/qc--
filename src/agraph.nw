@@ -1,9 +1,6 @@
 % -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 
-% agraph == abstract graph
-
 \input{macros.tex}
-
 
 % l2h substitution noweb NOWEB
 % l2h substitution qcc QC--
@@ -13,82 +10,91 @@
 % l2h substitution asdl ASDL
 % l2h substitution ocaml OCaml
 % l2h substitution forall forall
-
 % l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
 
 % ------------------------------------------------------------------ 
 \section{An abstract view of a flow graph}
 % ------------------------------------------------------------------ 
 
-The details of a flow graph as defined in module \module{ir} are
-hidden during its construction.  This module provides an abstract
-graph interface that is mainly used by the \module{ast2ir} module.
+A procedure is represented by a flow-graph that is built through an
+abstract interface defined by this module.  The idea is to have
+different implementations of a flow graph during development for
+testing and code generation.  For example, a flow graph could be
+implemented as a {\PAL} {\ast} (which ce be pretty-printed), or as a
+graph for the graph layout-language {\small DOT} for visualization. 
+For the compile process a flow-graph implementation will use the
+low-level details defined in the \module{ir} module.
 
 % ------------------------------------------------------------------ 
-\subsection{Interface}
+\subsection{Interface Overview}
 % ------------------------------------------------------------------ 
 
 The interface is captured in a signature [[S]] which is used to
 describe the result of a functor that implements it.
 
 <<agraph.mli>>=
-module type S = sig
-    <<signature S>>
-end
+<<signature S>>
+@
 
 <<signature S>>=
-type graph
-@ 
+module type S = sig
+    type graph
+    type node           (* node with properties               *)
+    type unode          (* node w/o  properties               *)
+    type label = string (* a label in the C-- source language *)
+    
+    <<module Props>>
+    val bind : Props.properties -> unode -> node
+    
+    <<module Make>>
+end
+@
+
+A flow-graph [[graph]] consists of [[node]]s with properties defined
+by sub-module [[Props]].  Properties are bound to nodes by [[bind]].
+The [[Make]] module captures all functions to create graphs and nodes. 
+
+Nodes with and without properties have different types [[node]] and
+[[unode]].  They might have exactly the same representation, but by
+using [[node]] as arguments and returning [[unode]] as results, we
+ensure that in any well-typed program, some properties are bound to
+each node. 
+
+% ------------------------------------------------------------------ 
+\subsection{Properties}
+% ------------------------------------------------------------------ 
 
 Nodes have to have properties---notably, span bindings.  We don't want
 to have to pass properties to every node-creation function.  So
 instead, we add a new type:  [[unode]], for ``unmarked node.'' We then
 use [[bind]] to add properties.
 
-<<>>=
+<<module Props>>=
 module Props : sig 
-    <<signature Props>>
-end
-@ 
+    type properties
 
-<<>>=
-type node  (* node with properties *)
-type unode (* node w/o  properties *)
-val bind : Props.properties -> unode -> node
-@ 
-
-Types [[unode]] and [[node]] might have exactly the same
-representation, but by using [[node]] as arguments and returning
-[[unode]] as results, we ensure that in any well-typed program, some
-properties are bound to each node.  At the moment, the only
-interesting properties are span bindings.
-
-<<>>=
-type label = string (* a label in the C-- source language *)
+    val empty : properties
+    val add_span : Bits.bits -> Rtl.const -> properties -> properties
+end    
 @
 
 % ------------------------------------------------------------------ 
-\subsubsection{Properties}
+\subsection{Conctruction functions}
 % ------------------------------------------------------------------ 
 
-<<signature Props>>=
-type properties
+A flow-graph uses {\rtl}s to represent expressions and assignments. 
+It takes these from the low-level representation of the {\ir} in
+module \module{ir}. 
 
-val empty : properties
-val add_span : Bits.bits -> Rtl.const -> properties -> properties
-@
-
-% ------------------------------------------------------------------ 
-\subsubsection{Conctruction functions}
-% ------------------------------------------------------------------ 
-
-<<signature S>>=
+<<module Make>>=
 module Make : sig
   <<constructor functions>>
 end
 @ 
 
-We make new graphs with [[Make.graph]].
+We make new graphs, representing a single procedure, with
+[[Make.graph]].
+
 <<constructor functions>>=
 val graph : unit -> graph (* build a new flow graph *)
 @ 
@@ -98,10 +104,10 @@ an explicit argument to the function that builds the node, or if the
 constructor function takes another node, the graph is implicit, since
 if two nodes are related they belong to the same graph.
 
-We start translating back to front, with the exit node.  As we build
-the flow graph, we always have edges that provide the control flow out
-of the node and through the graph, all the way to an unconditional
-[[goto]] or to the exit node.
+We start translating back to front, with the [[exit]] node.  As we
+build the flow graph, we always have edges that provide the control
+flow out of the node and through the graph, all the way to an
+unconditional [[goto]] or to the exit node.
 
 <<constructor functions>>=
 val exit : graph -> unode (* the unique exit node of this graph *)
@@ -138,7 +144,6 @@ type count        = int
 val return : graph -> continuation -> count -> unode
 @ 
 
-
 An abstract continuation bundle contains a node for the normal
 continuation and the names for all other. The type declaration is put
 into a {\noweb} chunk so it can be re-used in the implementation.
@@ -171,24 +176,26 @@ val label : label -> node -> unode
 @
 
 % ------------------------------------------------------------------ 
-\subsection{Implementation}
+\subsection{Empty Implementation}
 % ------------------------------------------------------------------ 
 
-The abstract graph provides a view on the the flow graph defined in
-module{ir}.  While the graph representation there is applicative we
-take updatable view on a graph here.
+We feel that the abstract flow-graph interface is too unstable to
+provide an implementation. So this is not The Real Thing.
 
 <<agraph.ml>>=
-module G = Hashtbl
-module F = Fgraph
-module type S = sig
-    <<signature S>>
-end
+<<signature S>>
 @
+
+% ------------------------------------------------------------------ 
+\subsection{Unused Implementation}
+% ------------------------------------------------------------------ 
+
+Here is an unused implementation that once worked.  Don't take it too
+seriously.
 
 A [[graph]] is an updatable data structure. 
 
-<<>>=
+<<unused>>=
 type graph = Fgraph.graph (* = Hashtbl.t *)
 @
 
@@ -199,7 +206,7 @@ some useful properties.
 
 <<>>=
 module Props = struct
-    <<module Props>>
+    <<module Props implementation>>
 end
 
 type node  = { graph: graph
@@ -218,7 +225,7 @@ sub-module [[Make]]:
 
 <<>>=
 module Make = struct
-    <<module Make>>
+    <<module Make implementation>>
 end
 @
 
@@ -229,7 +236,7 @@ values, and [[Fgraph.Number]] for the other. The function
 [[new_label]] returns a fresh label on every invocation. Thanks to the
 imperative features of {\ocaml}, an implementation is trivial.
 
-<<module Make>>=
+<<module Make implementation>>=
 let label_counter = ref 0
 let new_label ()  = (incr label_counter; F.Number !label_counter)
 @
@@ -409,7 +416,7 @@ and may be absent.
       and its value, which is a link-time constant.
 \end{itemize}
 
-<<module Props>>=
+<<module Props implementation>>=
 type properties = { span: (Bits.bits * Rtl.const) option }
 @
               
