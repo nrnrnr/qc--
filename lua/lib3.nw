@@ -5,8 +5,8 @@
 In general, a library can add new types, global mutable state, and new
 functions to an interpreter.
 Interpreters are typically built by combining multiple libraries, and
-the combination determines the [[userdata]] and [[userstate]] types
-ultimately used in the interpreter's value and state.
+the combination determines the [[userdata]] types
+ultimately used in the interpreter's values.
 
 We encourage the use of parameterized modules so that libraries can be
 combined easily.  There is some run-time cost for the generality, but
@@ -45,11 +45,6 @@ module type USERTYPE = sig
   val tname : string  (* name of this type, for projection errors *)
   val eq : ('a -> 'a -> bool) -> 'a t -> 'a t -> bool
   val to_string : ('a -> string) -> 'a t -> string
-end
-
-module type USERSTATE = sig
-  type 'a t
-  val state : unit -> 'a t
 end
 
 module type CORE = sig (* need to extend to full interpreter core *)
@@ -94,60 +89,21 @@ module type COMBINED_TYPE = sig
   module T9  : VIEW
   module T10 : VIEW
 end
-
-module type STATEVIEW = sig
-  type 'a t
-  module U : USERSTATE
-  val postmap : ('b -> 'a t) -> 'b -> 'a U.t
-end
-
-module type COMBINED_STATE = sig
-  include USERSTATE
-  module type VIEW = STATEVIEW with type 'a t = 'a t
-  module S1  : VIEW
-  module S2  : VIEW
-  module S3  : VIEW
-  module S4  : VIEW
-  module S5  : VIEW
-  module S6  : VIEW
-  module S7  : VIEW
-  module S8  : VIEW
-  module S9  : VIEW
-  module S10 : VIEW
-end
-
-module type CORE' = sig
-  include CORE
-  module T : COMBINED_TYPE
-  module S : COMBINED_STATE
-end
 @ 
 <<lib3.mli>>=
 module Lib : sig
-  module type FULL = sig
-    module T : COMBINED_TYPE
-    module S : COMBINED_STATE
-    module M : functor (C : CORE' with module T = T and module S = S) -> sig
-      val init : C.V.state -> unit
-    end
-  end
   module type TYPEFUL = sig
-    module T : COMBINED_TYPE
-    module M : functor (C : CORE' with module T = T) -> sig
+    module T : TYPEVIEW (* any of the types on which lib depends,
+                           which must all share 'a t *)
+    module M : functor (C : CORE with type 'a V.userdata' = 'a T.t) -> sig
       val init : C.V.state -> unit
     end
   end
-  module type BARE = sig
-    module M : functor (C : CORE') -> sig
+  module type BARE = 
+    functor (C : CORE) -> sig
       val init : C.V.state -> unit
     end
-  end
-  module Extend : sig
-    module S (L : TYPEFUL) (S : COMBINED_STATE) : FULL
-      with module T = L.T and module S = S
-    module TS (L : BARE) (T : COMBINED_TYPE) (S : COMBINED_STATE) : FULL
-      with module T = T and module S = S
-  end
+  module Extend (L : BARE) (T : TYPEVIEW) : TYPEFUL with module T = T
 end
 
 
@@ -159,29 +115,24 @@ module Combine : sig
                    and  module T4.U = T4 and module T5.U = T5 and module T6.U = T6
                    and  module T7.U = T7 and module T8.U = T8 and module T9.U = T9
                    and  module T10.U = T10 
-  module S10 (S1 : USERSTATE) (S2 : USERSTATE) (S3 : USERSTATE) (S4 : USERSTATE)
-             (S5 : USERSTATE) (S6 : USERSTATE) (S7 : USERSTATE) (S8 : USERSTATE) 
-             (S9 : USERSTATE) (S10 : USERSTATE)
-   : COMBINED_STATE with module S1.U = S1 and module S2.U = S2 and module S3.U = S3
-                   and  module S4.U = S4 and module S5.U = S5 and module S6.U = S6
-                   and  module S7.U = S7 and module S8.U = S8 and module S9.U = S9
-                   and  module S10.U = S10 
-  module L10 (L1 : Lib.FULL)
-    (L2 : Lib.FULL with module T = L1.T and module S = L1.S)
-    (L3 : Lib.FULL with module T = L1.T and module S = L1.S)
-    (L4 : Lib.FULL with module T = L1.T and module S = L1.S)
-    (L5 : Lib.FULL with module T = L1.T and module S = L1.S)
-    (L6 : Lib.FULL with module T = L1.T and module S = L1.S)
-    (L7 : Lib.FULL with module T = L1.T and module S = L1.S)
-    (L8 : Lib.FULL with module T = L1.T and module S = L1.S)
-    (L9 : Lib.FULL with module T = L1.T and module S = L1.S)
-    (L10 : Lib.FULL with module T = L1.T and module S = L1.S) :
-    Lib.FULL with module T = L1.T and module S = L1.S
+  <<similar specifications for [[T1]] to [[T9]]>>
+  module L10 (L1 : Lib.TYPEFUL)
+    (L2 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L3 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L4 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L5 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L6 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L7 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L8 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L9 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L10 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t) :
+    Lib.TYPEFUL with type 'a T.t = 'a L1.T.t
+  <<similar specifications for [[L1]] to [[L9]]>>
 end
 module Unused : sig
   module Type  : USERTYPE
-  module State : USERSTATE
-  module Lib   : Lib.BARE
+  module Bare   : Lib.BARE
+  module Typeful (T : TYPEVIEW) : Lib.TYPEFUL with module T = T
 end
 (*module Convert (L : LIB) : Lua.Lib.FULL*)
 
@@ -210,17 +161,18 @@ module Unused = struct
     let to_string _ _ = "<this can't happen -- value of unused type>"
   end (* Type *)
 
-  module State : USERSTATE = struct
-    type 'a t = unit
-    let state _ = ()
-  end
+  module Bare =
+      functor (C : CORE) -> struct
+        let init g = ()
+      end (*Unused.Bare*)
 
-  module Lib =
+  module Typeful (T : TYPEVIEW) =
     struct
-      module M (C : CORE') = struct
+      module T = T
+      module M (C : CORE with type 'a V.userdata' = 'a T.t) = struct
         let init g = ()
       end (*M*)
-    end (*Unused.Lib*)
+    end (*Unused.Typeful*)
 end
 
 module Combine = struct
@@ -228,50 +180,27 @@ module Combine = struct
 end
 @
 <<[[Lib]] contents>>=
-module type FULL = sig
-  module T : COMBINED_TYPE
-  module S : COMBINED_STATE
-  module M : functor (C : CORE' with module T = T and module S = S) -> sig
-    val init : C.V.state -> unit
+  module type TYPEFUL = sig
+    module T : TYPEVIEW (* any of the types on which lib depends,
+                           which must all share 'a t *)
+    module M : functor (C : CORE with type 'a V.userdata' = 'a T.t) -> sig
+      val init : C.V.state -> unit
+    end
   end
-end
-module type TYPEFUL = sig
-  module T : COMBINED_TYPE
-  module M : functor (C : CORE' with module T = T) -> sig
-    val init : C.V.state -> unit
-  end
-end
-module type BARE = sig
-  module M : functor (C : CORE') -> sig
-    val init : C.V.state -> unit
-  end
-end
+  module type BARE = 
+    functor (C : CORE) -> sig
+      val init : C.V.state -> unit
+    end
 @
 <<[[Lib]] contents>>=
-module Extend= struct
-  module S (L : TYPEFUL) (S : COMBINED_STATE) : FULL
-  with module T = L.T and module S = S   =
-    struct
-      module T = L.T
-      module S = S
-      module M (C : CORE' with module T = T and module S = S) = struct
-        module M' = L.M (C)
-        let init g = M'.init g
-      end (*M*)
-    end (*S*)
-
-  module TS (L : BARE) (T : COMBINED_TYPE) (S : COMBINED_STATE) : FULL
-  with module T = T and module S = S   =
+module Extend (L : BARE) (T : TYPEVIEW) : TYPEFUL with module T = T   =
     struct
       module T = T
-      module S = S
-      module M (C : CORE' with module T = T and module S = S) = struct
-        module M' = L.M (C)
+      module M (C : CORE with type 'a V.userdata' = 'a T.t) = struct
+        module M' = L (C)
         let init g = M'.init g
       end (*M*)
-    end (*TS*)
-
-end (* Extend *)
+    end (*Extend*)
 @ 
 <<[[Combine]] contents>>=
   module T10 (T1 : USERTYPE) (T2 : USERTYPE) (T3 : USERTYPE) (T4 : USERTYPE)
@@ -344,73 +273,26 @@ end (* Extend *)
   end
   <<nested [[T2]]..[[T10]] in [[Combine.T10]]>>
   end (* Combine.T10 *)
+  <<definitions of [[Combine.T1]] through [[Combine.T9]]>>
 @ 
-<<[[Combine]] contents>>=
-  module S10 (S1 : USERSTATE) (S2 : USERSTATE) (S3 : USERSTATE) (S4 : USERSTATE)
-             (S5 : USERSTATE) (S6 : USERSTATE) (S7 : USERSTATE) (S8 : USERSTATE) 
-             (S9 : USERSTATE) (S10 : USERSTATE)
-   : COMBINED_STATE with module S1.U = S1 and module S2.U = S2 and module S3.U = S3
-                   and  module S4.U = S4 and module S5.U = S5 and module S6.U = S6
-                   and  module S7.U = S7 and module S8.U = S8 and module S9.U = S9
-                   and  module S10.U = S10     =
-
-  struct
-    type 'a t = 'a S1.t * 'a S2.t * 'a S3.t * 'a S4.t * 'a S5.t *
-                'a S6.t * 'a S7.t * 'a S8.t * 'a S9.t * 'a S10.t
-    type 'a alias_for_t = 'a t
-    let state v = (S1.state v, S2.state v, S3.state v, S4.state v, S5.state v, 
-                   S6.state v, S7.state v, S8.state v, S9.state v, S10.state v)
-    module type VIEW = STATEVIEW with type 'a t = 'a t
-    module V = Luavalue
-    module S1 = struct
-      type 'a t = 'a alias_for_t
-      module U = S1
-      let postmap upper x =
-        let (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10) = upper x in x1
-    end (*S1*)
-    <<nested [[S2]]..[[S10]] in [[Combine.S10]]>>
-  end (* Combine.S10 *)
-@ 
-<<old [[Combine]] contents>>=
-  module TS (T : COMBINED_TYPE) (S : COMBINED_STATE) : CORE'
-    with type 'a V.userdata'  = 'a T.t
-    and  type 'a V.userstate' = 'a S.t
-    and  module T = T and module S = S  =
-      struct
-        module U = struct
-          type 'a t = 'a T.t
-          let tname = T.tname
-          let eq = T.eq
-          let to_string = T.to_string
-          type 'a state = 'a S.t
-          let state = S.state
-        end
-        module V = Luavalue.Make(U)
-        let fallback _ = assert false 
-        module T = T
-        module S = S
-      end (* Combine.TS *)
 @ 
 <<lib3.ml>>=
-
-
 @ 
 <<[[Combine]] contents>>=
-  module L10 (L1 : Lib.FULL)
-    (L2 : Lib.FULL with module T = L1.T and module S = L1.S)
-    (L3 : Lib.FULL with module T = L1.T and module S = L1.S)
-    (L4 : Lib.FULL with module T = L1.T and module S = L1.S)
-    (L5 : Lib.FULL with module T = L1.T and module S = L1.S)
-    (L6 : Lib.FULL with module T = L1.T and module S = L1.S)
-    (L7 : Lib.FULL with module T = L1.T and module S = L1.S)
-    (L8 : Lib.FULL with module T = L1.T and module S = L1.S)
-    (L9 : Lib.FULL with module T = L1.T and module S = L1.S)
-    (L10 : Lib.FULL with module T = L1.T and module S = L1.S) :
-    Lib.FULL with module T = L1.T and module S = L1.S   = 
+  module L10 (L1 : Lib.TYPEFUL)
+    (L2 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L3 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L4 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L5 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L6 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L7 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L8 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L9 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L10 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t) :
+    Lib.TYPEFUL with type 'a T.t = 'a L1.T.t   = 
   struct
     module T = L1.T
-    module S = L1.S
-    module M  (C : CORE' with module T = T and module S = S) = struct
+    module M  (C : CORE with type 'a V.userdata' = 'a T.t) = struct
       module M1 = L1.M(C)
       module M2 = L2.M(C)
       module M3 = L3.M(C)
@@ -426,266 +308,6 @@ end (* Extend *)
     end (*Combine.L10.M*)
   end (* Combine.L10*)
 @
-
-
-<<combining modules>>=
-  module T_T (L1 : Client.T) (L2 : Client.T) : Client.T = struct
-    type 'a ty = 
-      | L1 of 'a L1.T.t 
-      | L2 of 'a L2.T.t 
-    module T = struct
-      type 'a t = 'a ty
-      let tname = L1.T.tname ^ " or " ^ L2.T.tname
-      let eq veq x y = match x, y with
-      | L1 x,    L1 y    -> L1.T.eq veq x y
-      | L2 x,    L2 y    -> L2.T.eq veq x y
-      | _, _ -> false
-      let to_string vs = function
-        | L1 x -> L1.T.to_string vs x
-        | L2 x -> L2.T.to_string vs x
-   end
-   module Make (Interp : INTERP) 
-               (T' : TYPEVIEW  with module U = T and module I = Interp)
-               : INIT with type state = Interp.V.state =
-   struct
-      module V = Interp.V
-      module T1 = struct
-        module U = L1.T
-        module I = Interp
-        type 'a t = 'a L1.T.t
-        let map = { V.embed = (fun x -> T'.map.V.embed (L1 x))
-                  ; V.project = (fun v -> match T'.map.V.project v with
-                                        | L1 x -> x
-                                        | _ -> raise (V.Projection (v, L1.T.tname)))
-                  }
-      end
-      module T2 = struct
-        module U = L2.T
-        module I = Interp
-        type 'a t = 'a L2.T.t
-        let map = { V.embed = (fun x -> T'.map.V.embed (L2 x))
-                  ; V.project = (fun v -> match T'.map.V.project v with
-                                        | L2 x -> x
-                                        | _ -> raise (V.Projection (v, L2.T.tname)))
-                  }
-      end
-      module L1' = L1.Make (Interp) (T1)
-      module L2' = L2.Make (Interp) (T2)
-      type state = Interp.V.state
-      let init g = (L1'.init g; L2'.init g)
-  end
-end
-
-
-
-
-<<combining modules>>=
-module TS_B (L1 : Client.TS) (L2 : Client.BARE) 
-  : Client.TS with module T = L1.T and module S = L1.S =
-struct
-  module T = L1.T
-  module S = L1.S
-  module Make  (Interp : INTERP) 
-               (T' : TYPEVIEW  with module U = T and module I = Interp)
-               (S' : STATEVIEW with module U = S and module I = Interp)
-               : INIT with type state = Interp.V.state =
-    struct
-      module L1' = L1.Make (Interp) (T') (S')
-      module L2' = L2  (Interp)
-      type state = Interp.V.state
-      let init g = (L1'.init g; L2'.init g)
-    end
-end
-<<combining modules>>=
-module T_S (L1 : Client.T) (L2 : Client.S) 
-  : Client.TS with module T = L1.T and module S = L2.S =
-struct
-  module T = L1.T
-  module S = L2.S
-  module Make  (Interp : INTERP) 
-               (T' : TYPEVIEW  with module U = T and module I = Interp)
-               (S' : STATEVIEW with module U = S and module I = Interp)
-               : INIT with type state = Interp.V.state =
-    struct
-      module L1' = L1.Make (Interp) (T') 
-      module L2' = L2.Make (Interp) (S')
-      type state = Interp.V.state
-      let init g = (L1'.init g; L2'.init g)
-    end
-end
-@ 
-<<combining modules>>=
-  module Sharing_T (Shared : Client.T) = struct
-    module TT_TT (L1 : Client.TT with module T1 = Shared.T)
-                 (L2 : Client.TT with module T1 = Shared.T)
-                 : Client.TT with module T1 = Shared.T = 
-      struct
-        type 'a ty =
-          | L1 of 'a L1.T2.t 
-          | L2 of 'a L2.T2.t 
-        module T1 = Shared.T
-        module T2 = struct
-          type 'a t = 'a ty
-          let tname = L1.T2.tname ^ " or " ^ L2.T2.tname
-          let eq veq x y = match x, y with
-          | L1 x,    L1 y    -> L1.T2.eq veq x y
-          | L2 x,    L2 y    -> L2.T2.eq veq x y
-          | _, _ -> false
-          let to_string vs = function
-            | L1 x -> L1.T2.to_string vs x
-            | L2 x -> L2.T2.to_string vs x
-        end
-        module Make (Interp : INTERP) 
-                    (T1' : TYPEVIEW with module U = T1 and module I = Interp)
-                    (T2' : TYPEVIEW with module U = T2 and module I = Interp)
-               : INIT with type state = Interp.V.state =
-        struct
-          module V = Interp.V
-          module L1V = struct
-            module I = Interp
-            module U = L1.T2
-            let map = { V.embed = (fun x -> T2'.map.V.embed (L1 x))
-                      ; V.project = (fun v -> match T2'.map.V.project v with
-                                        | L1 x -> x
-                                        | _ -> raise (V.Projection (v, L1.T2.tname)))
-                      }
-          end
-          module L2V = struct
-            module I = Interp
-            module U = L2.T2
-            let map = { V.embed = (fun x -> T2'.map.V.embed (L2 x))
-                      ; V.project = (fun v -> match T2'.map.V.project v with
-                                        | L2 x -> x
-                                        | _ -> raise (V.Projection (v, L2.T2.tname)))
-                      }
-          end
-          module L1' = L1.Make (Interp) (T1') (L1V)
-          module L2' = L2.Make (Interp) (T1') (L2V)
-          type state = Interp.V.state
-          let init g = (L1'.init g; L2'.init g)
-        end (* Make *)
-      end (* TT_TT *)
-
-
-    module Hide (L : Client.TT with module T1 = Shared.T) : Client.T = 
-      struct
-        type 'a ty =
-          | L1 of 'a L.T1.t 
-          | L2 of 'a L.T2.t 
-        module T = struct
-          type 'a t = 'a ty
-          let tname = L.T1.tname ^ " or " ^ L.T2.tname
-          let eq veq x y = match x, y with
-          | L1 x,    L1 y    -> L.T1.eq veq x y
-          | L2 x,    L2 y    -> L.T2.eq veq x y
-          | _, _ -> false
-          let to_string vs = function
-            | L1 x -> L.T1.to_string vs x
-            | L2 x -> L.T2.to_string vs x
-       end
-       module Make (Interp : INTERP)
-                   (T' : TYPEVIEW with module U = T and module I = Interp) =
-         struct
-           module V = Interp.V
-           module T1 = struct
-             module U = L.T1
-             module I = Interp
-             type 'a t = 'a L.T1.t
-             let map = { V.embed = (fun x -> T'.map.V.embed (L1 x))
-                       ; V.project = (fun v -> match T'.map.V.project v with
-                                             | L1 x -> x
-                                             | _ -> raise (V.Projection (v, L.T1.tname)))
-                       }
-           end
-           module T2 = struct
-             module U = L.T2
-             module I = Interp
-             type 'a t = 'a L.T2.t
-             let map = { V.embed = (fun x -> T'.map.V.embed (L2 x))
-                       ; V.project = (fun v -> match T'.map.V.project v with
-                                             | L2 x -> x
-                                             | _ -> raise (V.Projection (v, L.T2.tname)))
-                       }
-           end
-           module L' = L.Make (Interp) (T1) (T2)
-           module S' = Shared.Make (Interp) (T1)
-           type state = Interp.V.state
-           let init g = S'.init g; L'.init g
-        end (* Make *)
-      end (* Hide *)
-  end (* Sharing_T *)
-@
-         
-
-
-<<combining modules>>=
-  module TS_TS (L1 : Client.TS) (L2 : Client.TS) : Client.TS = struct
-    type 'a ty = 
-      | L1 of 'a L1.T.t 
-      | L2 of 'a L2.T.t 
-    type 'a state = { l1 : 'a L1.S.t ; l2 : 'a L2.S.t }
-    module T = struct
-      type 'a t = 'a ty
-      let tname = L1.T.tname ^ " or " ^ L2.T.tname
-      let eq veq x y = match x, y with
-      | L1 x,    L1 y    -> L1.T.eq veq x y
-      | L2 x,    L2 y    -> L2.T.eq veq x y
-      | _, _ -> false
-      let to_string vs = function
-        | L1 x -> L1.T.to_string vs x
-        | L2 x -> L2.T.to_string vs x
-   end
-   module S = struct
-     type 'a t = 'a state
-     let state x = { l1 = L1.S.state x ; l2 = L2.S.state x }
-   end
-   module Make (Interp : INTERP) 
-               (T' : TYPEVIEW  with module U = T and module I = Interp)
-               (S' : STATEVIEW with module U = S and module I = Interp)
-               : INIT with type state = Interp.V.state =
-   struct
-      module V = Interp.V
-      module T1 = struct
-        module U = L1.T
-        module I = Interp
-        type 'a t = 'a L1.T.t
-        let map = { V.embed = (fun x -> T'.map.V.embed (L1 x))
-                  ; V.project = (fun v -> match T'.map.V.project v with
-                                        |L1 x -> x
-                                        | _ -> raise (V.Projection (v, L1.T.tname)))
-                  }
-      end
-      module S1 = struct
-        module U = L1.S
-        module I = Interp
-        type 'a t = 'a L1.S.t
-        let map s = (S'.map s).l1
-      end
-      module T2 = struct
-        module U = L2.T
-        module I = Interp
-        type 'a t = 'a L2.T.t
-        let map = { V.embed = (fun x -> T'.map.V.embed (L2 x))
-                  ; V.project = (fun v -> match T'.map.V.project v with
-                                        | L2 x -> x
-                                        | _ -> raise (V.Projection (v, L2.T.tname)))
-                  }
-      end
-      module S2 = struct
-        module U = L2.S
-        module I = Interp
-        type 'a t = 'a L2.S.t
-        let map s = (S'.map s).l2
-      end
-      module L1' = L1.Make (Interp) (T1) (S1)
-      module L2' = L2.Make (Interp) (T2) (S2)
-      type state = Interp.V.state
-      let init g = (L1'.init g; L2'.init g)
-  end
-end
-@
-
-
 <<old lib3.ml>>=
 module ConvertType (T : USERTYPE) : Lua.USERDATA with type 'a t = 'a T.t = struct
     type 'a t = 'a T.t
@@ -828,71 +450,172 @@ end
                     | _ -> fail x U.tname)
       } 
   end
-
-
 @ 
-<<nested [[S2]]..[[S10]] in [[Combine.S10]]>>=
-    module S2 = struct
-      type 'a t = 'a alias_for_t
-      module U = S2
-      let postmap upper x =
-        let (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10) = upper x in x2
-    end (*S2*)
-
-    module S3 = struct
-      type 'a t = 'a alias_for_t
-      module U = S3
-      let postmap upper x =
-        let (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10) = upper x in x3
-    end (*S3*)
-
-    module S4 = struct
-      type 'a t = 'a alias_for_t
-      module U = S4
-      let postmap upper x =
-        let (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10) = upper x in x4
-    end (*S4*)
-
-    module S5 = struct
-      type 'a t = 'a alias_for_t
-      module U = S5
-      let postmap upper x =
-        let (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10) = upper x in x5
-    end (*S5*)
-
-    module S6 = struct
-      type 'a t = 'a alias_for_t
-      module U = S6
-      let postmap upper x =
-        let (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10) = upper x in x6
-    end (*S6*)
-
-    module S7 = struct
-      type 'a t = 'a alias_for_t
-      module U = S7
-      let postmap upper x =
-        let (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10) = upper x in x7
-    end (*S7*)
-
-    module S8 = struct
-      type 'a t = 'a alias_for_t
-      module U = S8
-      let postmap upper x =
-        let (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10) = upper x in x8
-    end (*S8*)
-
-    module S9 = struct
-      type 'a t = 'a alias_for_t
-      module U = S9
-      let postmap upper x =
-        let (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10) = upper x in x9
-    end (*S9*)
-
-    module S10 = struct
-      type 'a t = 'a alias_for_t
-      module U = S10
-      let postmap upper x =
-        let (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10) = upper x in x10
-    end (*S10*)
-
-
+<<similar specifications for [[L1]] to [[L9]]>>=
+  module L1 (L1 : Lib.TYPEFUL)
+  : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t
+  module L2 (L1 : Lib.TYPEFUL)
+    (L2 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+  : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t
+  module L3 (L1 : Lib.TYPEFUL)
+    (L2 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L3 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+  : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t
+  module L4 (L1 : Lib.TYPEFUL)
+    (L2 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L3 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L4 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+  : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t
+  module L5 (L1 : Lib.TYPEFUL)
+    (L2 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L3 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L4 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L5 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+  : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t
+  module L6 (L1 : Lib.TYPEFUL)
+    (L2 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L3 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L4 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L5 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L6 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+  : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t
+  module L7 (L1 : Lib.TYPEFUL)
+    (L2 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L3 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L4 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L5 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L6 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L7 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+  : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t
+  module L8 (L1 : Lib.TYPEFUL)
+    (L2 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L3 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L4 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L5 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L6 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L7 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L8 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+  : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t
+  module L9 (L1 : Lib.TYPEFUL)
+    (L2 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L3 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L4 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L5 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L6 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L7 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L8 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L9 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+  : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t
+@
+<<[[Combine]] contents>>=
+  module L1 (L1 : Lib.TYPEFUL)
+  : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t   = 
+    L10 (L1) (Unused.Typeful(L1.T)) (Unused.Typeful(L1.T)) (Unused.Typeful(L1.T)) (Unused.Typeful(L1.T)) (Unused.Typeful(L1.T)) (Unused.Typeful(L1.T)) (Unused.Typeful(L1.T)) (Unused.Typeful(L1.T)) (Unused.Typeful(L1.T))
+  module L2 (L1 : Lib.TYPEFUL)
+    (L2 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+  : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t   = 
+    L10 (L1) (L2) (Unused.Typeful(L1.T)) (Unused.Typeful(L1.T)) (Unused.Typeful(L1.T)) (Unused.Typeful(L1.T)) (Unused.Typeful(L1.T)) (Unused.Typeful(L1.T)) (Unused.Typeful(L1.T)) (Unused.Typeful(L1.T))
+  module L3 (L1 : Lib.TYPEFUL)
+    (L2 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L3 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+  : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t   = 
+    L10 (L1) (L2) (L3) (Unused.Typeful(L1.T)) (Unused.Typeful(L1.T)) (Unused.Typeful(L1.T)) (Unused.Typeful(L1.T)) (Unused.Typeful(L1.T)) (Unused.Typeful(L1.T)) (Unused.Typeful(L1.T))
+  module L4 (L1 : Lib.TYPEFUL)
+    (L2 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L3 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L4 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+  : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t   = 
+    L10 (L1) (L2) (L3) (L4) (Unused.Typeful(L1.T)) (Unused.Typeful(L1.T)) (Unused.Typeful(L1.T)) (Unused.Typeful(L1.T)) (Unused.Typeful(L1.T)) (Unused.Typeful(L1.T))
+  module L5 (L1 : Lib.TYPEFUL)
+    (L2 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L3 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L4 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L5 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+  : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t   = 
+    L10 (L1) (L2) (L3) (L4) (L5) (Unused.Typeful(L1.T)) (Unused.Typeful(L1.T)) (Unused.Typeful(L1.T)) (Unused.Typeful(L1.T)) (Unused.Typeful(L1.T))
+  module L6 (L1 : Lib.TYPEFUL)
+    (L2 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L3 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L4 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L5 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L6 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+  : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t   = 
+    L10 (L1) (L2) (L3) (L4) (L5) (L6) (Unused.Typeful(L1.T)) (Unused.Typeful(L1.T)) (Unused.Typeful(L1.T)) (Unused.Typeful(L1.T))
+  module L7 (L1 : Lib.TYPEFUL)
+    (L2 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L3 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L4 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L5 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L6 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L7 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+  : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t   = 
+    L10 (L1) (L2) (L3) (L4) (L5) (L6) (L7) (Unused.Typeful(L1.T)) (Unused.Typeful(L1.T)) (Unused.Typeful(L1.T))
+  module L8 (L1 : Lib.TYPEFUL)
+    (L2 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L3 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L4 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L5 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L6 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L7 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L8 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+  : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t   = 
+    L10 (L1) (L2) (L3) (L4) (L5) (L6) (L7) (L8) (Unused.Typeful(L1.T)) (Unused.Typeful(L1.T))
+  module L9 (L1 : Lib.TYPEFUL)
+    (L2 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L3 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L4 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L5 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L6 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L7 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L8 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+    (L9 : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t)
+  : Lib.TYPEFUL with type 'a T.t = 'a L1.T.t   = 
+    L10 (L1) (L2) (L3) (L4) (L5) (L6) (L7) (L8) (L9) (Unused.Typeful(L1.T))
+<<similar specifications for [[T1]] to [[T9]]>>=
+module T1 (T1 : USERTYPE)  : COMBINED_TYPE
+ with module T1.U = T1
+module T2 (T1 : USERTYPE) (T2 : USERTYPE)  : COMBINED_TYPE
+ with module T1.U = T1 with module T2.U = T2
+module T3 (T1 : USERTYPE) (T2 : USERTYPE) (T3 : USERTYPE)  : COMBINED_TYPE
+ with module T1.U = T1 with module T2.U = T2 with module T3.U = T3
+module T4 (T1 : USERTYPE) (T2 : USERTYPE) (T3 : USERTYPE) (T4 : USERTYPE)  : COMBINED_TYPE
+ with module T1.U = T1 with module T2.U = T2 with module T3.U = T3 with module T4.U = T4
+module T5 (T1 : USERTYPE) (T2 : USERTYPE) (T3 : USERTYPE) (T4 : USERTYPE) (T5 : USERTYPE)  : COMBINED_TYPE
+ with module T1.U = T1 with module T2.U = T2 with module T3.U = T3 with module T4.U = T4 with module T5.U = T5
+module T6 (T1 : USERTYPE) (T2 : USERTYPE) (T3 : USERTYPE) (T4 : USERTYPE) (T5 : USERTYPE) (T6 : USERTYPE)  : COMBINED_TYPE
+ with module T1.U = T1 with module T2.U = T2 with module T3.U = T3 with module T4.U = T4 with module T5.U = T5 with module T6.U = T6
+module T7 (T1 : USERTYPE) (T2 : USERTYPE) (T3 : USERTYPE) (T4 : USERTYPE) (T5 : USERTYPE) (T6 : USERTYPE) (T7 : USERTYPE)  : COMBINED_TYPE
+ with module T1.U = T1 with module T2.U = T2 with module T3.U = T3 with module T4.U = T4 with module T5.U = T5 with module T6.U = T6 with module T7.U = T7
+module T8 (T1 : USERTYPE) (T2 : USERTYPE) (T3 : USERTYPE) (T4 : USERTYPE) (T5 : USERTYPE) (T6 : USERTYPE) (T7 : USERTYPE) (T8 : USERTYPE)  : COMBINED_TYPE
+ with module T1.U = T1 with module T2.U = T2 with module T3.U = T3 with module T4.U = T4 with module T5.U = T5 with module T6.U = T6 with module T7.U = T7 with module T8.U = T8
+module T9 (T1 : USERTYPE) (T2 : USERTYPE) (T3 : USERTYPE) (T4 : USERTYPE) (T5 : USERTYPE) (T6 : USERTYPE) (T7 : USERTYPE) (T8 : USERTYPE) (T9 : USERTYPE)  : COMBINED_TYPE
+ with module T1.U = T1 with module T2.U = T2 with module T3.U = T3 with module T4.U = T4 with module T5.U = T5 with module T6.U = T6 with module T7.U = T7 with module T8.U = T8 with module T9.U = T9
+@
+<<definitions of [[Combine.T1]] through [[Combine.T9]]>>=
+module T1 (T1 : USERTYPE)  : COMBINED_TYPE
+ with module T1.U = T1   = 
+    T10 (T1) (Unused.Type) (Unused.Type) (Unused.Type) (Unused.Type) (Unused.Type) (Unused.Type) (Unused.Type) (Unused.Type) (Unused.Type)
+module T2 (T1 : USERTYPE) (T2 : USERTYPE)  : COMBINED_TYPE
+ with module T1.U = T1 with module T2.U = T2   = 
+    T10 (T1) (T2) (Unused.Type) (Unused.Type) (Unused.Type) (Unused.Type) (Unused.Type) (Unused.Type) (Unused.Type) (Unused.Type)
+module T3 (T1 : USERTYPE) (T2 : USERTYPE) (T3 : USERTYPE)  : COMBINED_TYPE
+ with module T1.U = T1 with module T2.U = T2 with module T3.U = T3   = 
+    T10 (T1) (T2) (T3) (Unused.Type) (Unused.Type) (Unused.Type) (Unused.Type) (Unused.Type) (Unused.Type) (Unused.Type)
+module T4 (T1 : USERTYPE) (T2 : USERTYPE) (T3 : USERTYPE) (T4 : USERTYPE)  : COMBINED_TYPE
+ with module T1.U = T1 with module T2.U = T2 with module T3.U = T3 with module T4.U = T4   = 
+    T10 (T1) (T2) (T3) (T4) (Unused.Type) (Unused.Type) (Unused.Type) (Unused.Type) (Unused.Type) (Unused.Type)
+module T5 (T1 : USERTYPE) (T2 : USERTYPE) (T3 : USERTYPE) (T4 : USERTYPE) (T5 : USERTYPE)  : COMBINED_TYPE
+ with module T1.U = T1 with module T2.U = T2 with module T3.U = T3 with module T4.U = T4 with module T5.U = T5   = 
+    T10 (T1) (T2) (T3) (T4) (T5) (Unused.Type) (Unused.Type) (Unused.Type) (Unused.Type) (Unused.Type)
+module T6 (T1 : USERTYPE) (T2 : USERTYPE) (T3 : USERTYPE) (T4 : USERTYPE) (T5 : USERTYPE) (T6 : USERTYPE)  : COMBINED_TYPE
+ with module T1.U = T1 with module T2.U = T2 with module T3.U = T3 with module T4.U = T4 with module T5.U = T5 with module T6.U = T6   = 
+    T10 (T1) (T2) (T3) (T4) (T5) (T6) (Unused.Type) (Unused.Type) (Unused.Type) (Unused.Type)
+module T7 (T1 : USERTYPE) (T2 : USERTYPE) (T3 : USERTYPE) (T4 : USERTYPE) (T5 : USERTYPE) (T6 : USERTYPE) (T7 : USERTYPE)  : COMBINED_TYPE
+ with module T1.U = T1 with module T2.U = T2 with module T3.U = T3 with module T4.U = T4 with module T5.U = T5 with module T6.U = T6 with module T7.U = T7   = 
+    T10 (T1) (T2) (T3) (T4) (T5) (T6) (T7) (Unused.Type) (Unused.Type) (Unused.Type)
+module T8 (T1 : USERTYPE) (T2 : USERTYPE) (T3 : USERTYPE) (T4 : USERTYPE) (T5 : USERTYPE) (T6 : USERTYPE) (T7 : USERTYPE) (T8 : USERTYPE)  : COMBINED_TYPE
+ with module T1.U = T1 with module T2.U = T2 with module T3.U = T3 with module T4.U = T4 with module T5.U = T5 with module T6.U = T6 with module T7.U = T7 with module T8.U = T8   = 
+    T10 (T1) (T2) (T3) (T4) (T5) (T6) (T7) (T8) (Unused.Type) (Unused.Type)
+module T9 (T1 : USERTYPE) (T2 : USERTYPE) (T3 : USERTYPE) (T4 : USERTYPE) (T5 : USERTYPE) (T6 : USERTYPE) (T7 : USERTYPE) (T8 : USERTYPE) (T9 : USERTYPE)  : COMBINED_TYPE
+ with module T1.U = T1 with module T2.U = T2 with module T3.U = T3 with module T4.U = T4 with module T5.U = T5 with module T6.U = T6 with module T7.U = T7 with module T8.U = T8 with module T9.U = T9   = 
+    T10 (T1) (T2) (T3) (T4) (T5) (T6) (T7) (T8) (T9) (Unused.Type)

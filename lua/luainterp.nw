@@ -11,8 +11,9 @@ This file sketches some of the supporting details, focusing on the
 embedding and projection, which is the new part.
 <<luainterp.mli>>=
 <<signatures>>
-module Make (L : Lualib.FULL) : S
-module NoLibrary : Lualib.FULL
+module Make3  (T : Lib3.COMBINED_TYPE)
+                  (L : Lib3.Lib.TYPEFUL with type 'a T.t = 'a T.t) :
+    S with type 'a Value.userdata'  = 'a T.t
 @ 
 \subsection{Implementation}
 <<luainterp.ml>>=
@@ -38,7 +39,7 @@ module type S = sig
     (* sets fallback, returns previous one *)
 end
 @ 
-<<luainterp.ml>>=
+<<old luainterp.ml>>=
 module Make (L : Lualib.FULL) : S = struct
   module Value = Luavalue.Make(L.U)
   module Ast = Luaast.Make (Value)
@@ -50,6 +51,38 @@ module Make (L : Lualib.FULL) : S = struct
   <<interp tests>>
 end
 @ 
+<<luainterp.ml>>=
+module Make3  (T : Lib3.COMBINED_TYPE)
+                  (L : Lib3.Lib.TYPEFUL with type 'a T.t = 'a T.t) :
+    S with type 'a Value.userdata'  = 'a T.t = struct
+  module U = struct
+    type 'a t = 'a T.t
+    let tname = T.tname
+    let eq = T.eq
+    let to_string = T.to_string
+  end
+  module Value = Luavalue.Make(U)
+  module Ast = Luaast.Make (Value)
+  module I = struct
+    type state = Value.state
+    type value = Value.value
+    <<interp toplevel>>
+    <<interp fallbacks>>
+    <<interp tests>>
+  end
+  module Core = struct
+    include I
+  end
+  module L' = L.M(Core)
+  include I
+  let state () =
+    let g = V.state() in
+    add_fallbacks g;
+    L'.init g;
+    g
+
+end (* Make3 *)
+@ 
 <<new-style state function>>=
 module This = struct
   module Interp = struct
@@ -58,8 +91,6 @@ module This = struct
   end
   type 'a t = 'a V.userdata'
   let map = V.userdata
-  type 'a state = 'a V.userstate'
-  let project_state g = g.V.userstate
 end
 
 module L' = L.M(This)
@@ -533,7 +564,7 @@ let setfallback g fbname fb =
   let _ = Hashtbl.replace g.V.fallbacks fbname fb in
   fb'
 @ 
-<<luainterp.ml>>=
+<<old luainterp.ml>>=
 module NoLibrary = struct
   module U = struct
     type 'a state = unit
@@ -583,10 +614,10 @@ let test _ =
       ; "result of loop", stmts loop test_state
   ] 
 @ 
-<<luainterp.ml>>=
+<<old luainterp.ml>>=
 module T = Make (NoLibrary)
 let t = T.test ()
-<<luainterp.mli>>=
+<<old luainterp.mli>>=
 module T : S
 val t : (string * T.Value.value list) list
 @

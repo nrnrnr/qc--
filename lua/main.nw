@@ -3,9 +3,10 @@
 \section{Main loop for testing a standalone interpreter}
 
 <<main.ml>>=
-module I = Lua.MakeInterp (Lua.Parser.MakeStandard)
-             (Lua.MakeCore (Lua.Lib.AddBare (Lua.Lib.AddBare
-               (Luaiolib.M) (Luastrlib.M)) (Luamathlib.M)))
+module T = Lib3.Combine.T1 (Luaiolib.T)
+module X (L : Lib3.Lib.BARE) = Lib3.Lib.Extend (L) (T.T1)
+module L = Lib3.Combine.L3 (Luaiolib.Make (T.T1)) (X(Luastrlib.M)) (X(Luamathlib.M))
+module I = Lua.MakeInterp (Lua.Parser.MakeStandard) (Lua.MakeCore (T) (L))
 module V = I.Value
 let state = I.state()
 let dumpstate = ref false

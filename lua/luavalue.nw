@@ -22,7 +22,6 @@ type ('a, 'b) synonym_for_ep = ('a, 'b) ep = { embed : 'a -> 'b; project : 'b ->
 <<signatures>>=
 module type S = sig
   type 'a userdata'
-  type 'a userstate'
   type info
   type value
     = Nil
@@ -34,12 +33,10 @@ module type S = sig
   and func  = state -> value list -> value list
   and table = (value, value) Luahash.t
   and userdata  = value userdata'
-  and userstate = value userstate'
   and state = { globals : table
               ; fallbacks : (string, value) Hashtbl.t
               ; mutable callstack : activation list
               ; mutable currentloc : Srcmap.location option (* supersedes top of stack *)
-              ; userstate : userstate
               }
   and activation = info * Srcmap.location option
 
@@ -151,19 +148,15 @@ module type USERDATA = sig
   val tname : string  (* name of this type, for projection errors *)
   val eq : ('a -> 'a -> bool) -> 'a t -> 'a t -> bool
   val to_string : ('a -> string) -> 'a t -> string
-  type 'a state
-  val state : unit -> 'a state  (* may cause problems *)
 end
 <<luavalue.mli>>=
 <<signatures>>
 module Make (U : USERDATA) : S with type 'a userdata'  = 'a U.t 
-                               with type 'a userstate' = 'a U.state
 @
 \subsection{Implementation}
 <<luavalue.ml>>=
 <<signatures>>
 module Make (U : USERDATA) : S with type 'a userdata'  = 'a U.t 
-                               with type 'a userstate' = 'a U.state
 = struct
   <<value toplevel>>
   <<tests>>
@@ -172,7 +165,6 @@ end
 I have to repeat the datatype definition.
 <<value toplevel>>=
 type 'a userdata'  = 'a U.t
-type 'a userstate' = 'a U.state
 type info = int * string * int (* unique id, filename, linedefined *)
 type value
   = Nil
@@ -184,12 +176,10 @@ type value
 and func  = state -> value list -> value list
 and table = (value, value) Luahash.t
 and userdata  = value userdata'
-and userstate = value userstate'
 and state = { globals : table
             ; fallbacks : (string, value) Hashtbl.t
             ; mutable callstack : activation list
             ; mutable currentloc : Srcmap.location option (* supersedes top of stack *)
-            ; userstate : userstate
             }
 and activation = info * Srcmap.location option
 @ 
@@ -369,7 +359,7 @@ let trim1 = function  (* trim list of arguments to a single argument *)
 let const f s = f
 let state () = 
  { globals = Table.create 50; fallbacks = Hashtbl.create 10; callstack = [];
-   userstate = U.state (); currentloc = None }
+   currentloc = None }
 let emptystate = state()
 
 let (-->) arg result =

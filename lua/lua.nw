@@ -6,8 +6,8 @@
 
 As in Lua, we keep the value space simple and small.
 Unlike Lua, we have only one kind of function.
-The types [[userdata']] and [[userstate']] are not specified here; 
-they are intended to be supplied by user-defined libraries.
+The type [[userdata']] is not specified here; 
+it is intended to be supplied by a combination of user-defined libraries.
 
 The [[VALUE]] interface is a key for clients because it not only specifies what
 a Lua value is, but also provides higher-order embedding/projection
@@ -15,7 +15,6 @@ pairs so that Caml values can be mapped to Lua values and back again.
 <<lua.mli>>=
 module type VALUE = sig
   type 'a userdata'
-  type 'a userstate'
   type info
   type value
     = Nil
@@ -27,12 +26,10 @@ module type VALUE = sig
   and func  = state -> value list -> value list
   and table = (value, value) Luahash.t
   and userdata  = value userdata'
-  and userstate = value userstate'
   and state = { globals : table
               ; fallbacks : (string, value) Hashtbl.t
               ; mutable callstack : activation list
               ; mutable currentloc : Srcmap.location option (* supersedes top of stack *)
-              ; userstate : userstate
               }
   and activation = info * Srcmap.location option
 
@@ -145,8 +142,6 @@ module type USERDATA = sig
   val tname : string  (* name of this type, for projection errors *)
   val eq : ('a -> 'a -> bool) -> 'a t -> 'a t -> bool
   val to_string : ('a -> string) -> 'a t -> string
-  type 'a state
-  val state : unit -> 'a state  (* may cause problems *)
 end
 @ 
 \subsection{Parsers}
@@ -176,7 +171,7 @@ be taken care of for you by [[dofile]] and [[dostring]] in the basic library.
 \subsection{Libraries}
 
 The module [[Lua.Lib]] provides library support.
-<<lua.mli>>=
+<<old lua.mli>>=
 module Lib : sig
   <<library support>>
 end
@@ -297,13 +292,17 @@ module type INTERP_CORE = sig
     (* sets fallback, returns previous one *)
 end
 
-module MakeCore (Lib : Lib.FULL) : INTERP_CORE
+(*module MakeCore (Lib : Lib.FULL) : INTERP_CORE*)
+module MakeCore
+    (T : Lib3.COMBINED_TYPE)
+    (L : Lib3.Lib.TYPEFUL with type 'a T.t = 'a T.t)
+    : INTERP_CORE with type 'a Value.userdata' = 'a T.t
 @ 
 
 Because building an interpreter requires a library, and because not
 every client will want to create a special library, we provide an
 empty library.
-<<lua.mli>>=
+<<old lua.mli>>=
 module EmptyLibrary : Lib.FULL
 @ 
 We also provide three standard libraries:
@@ -341,13 +340,15 @@ standard libraries:
 module type VALUE = Luavalue.S
 module type USERDATA = Luavalue.USERDATA
 
-module Lib = Lualib
+(*module Lib = Lualib*)
 module Parser = Luaparser
 module type AST = Luaast.S
 
 module type INTERP_CORE = Luainterp.S
-module MakeCore = Luainterp.Make
+module MakeCore = Luainterp.Make3
 module MakeInterp = Luabaselib.Add
+(*
 module EmptyLibrary = Luainterp.NoLibrary
+*)
 
 let scanner map buf = Luascanner.token buf map

@@ -4,11 +4,14 @@
 
 <<luaiolib.mli>>=
 type 'a t = In of in_channel | Out of out_channel
-type 'a state = { mutable currentin  : in_channel
-                ; mutable currentout : out_channel
-                } 
+(*
 module M : Lualib.FULL
   with type 'a U.t = 'a t and type 'a U.state = 'a state
+*)
+
+module T : Lib3.USERTYPE  with type 'a t = 'a t
+module Make (T : Lib3.TYPEVIEW with type 'a U.t = 'a t)
+    : Lib3.Lib.TYPEFUL with type 'a T.U.t = 'a t and type 'a T.t = 'a T.t
 @ 
 <<luaiolib.ml>>=
 type 'a t = In of in_channel | Out of out_channel
@@ -17,6 +20,7 @@ type 'a state = { mutable currentin  : in_channel
                 } 
 type 'a alias_for_t = 'a t
 type 'a alias_for_state = 'a state
+<<old io lib>>=
 module M = struct
   module U = struct
     type 'a t     = 'a alias_for_t
@@ -149,3 +153,78 @@ let io_builtins =
                 (fun s -> try [V.String (Sys.getenv s)] with Not_found -> [V.Nil])
   ; "execute",  pf (V.string **-> V.result V.int) Sys.command
   ] 
+@ 
+<<luaiolib.ml>>=
+module T = struct
+  type 'a t     = 'a alias_for_t
+  let tname = "I/O channel"
+  let eq _ x y = match x, y with
+  | In x,    In y    -> x = y
+  | Out x,   Out y   -> x = y
+  | _, _ -> false
+  let to_string vs = function
+    | In _ -> "<input>"
+    | Out _ -> "<output>"
+end
+
+module S = struct
+  type 'a t = 'a alias_for_state
+  let state () = { currentin = stdin; currentout = stdout }
+end
+
+module Init
+    (T : Lib3.TYPEVIEW  with module U = T)
+    (C : Lib3.CORE with type 'a V.userdata'  = 'a T.t) =
+  struct
+    <<contents of [[Init]]>>
+  end
+
+<<contents of [[Init]]>>=
+    module V = C.V
+    let ( **-> ) = V.( **-> )
+    let fail v s = raise (V.Projection (v, s))  (* put in Value.S *)
+    let file = T.postmap V.userdata fail    
+    let infile = { V.embed = (fun f -> file.V.embed (In f))
+                 ; V.project = (fun v -> match file.V.project v with
+                                     | In f -> f
+                                     | _ -> raise (V.Projection (v, "input file")))}
+    let outfile = { V.embed = (fun f -> file.V.embed (Out f))
+                 ; V.project = (fun v -> match file.V.project v with
+                                     | Out f -> f
+                                     | _ -> raise (V.Projection (v, "output file")))}
+let wrap_err f = try f () with Sys_error s -> [V.Nil; V.String s]
+
+    let init g = 
+      let io = { currentin = stdin; currentout = stdout } in
+let readfrom g = function
+  | [V.String s] ->
+      (match String.get s 0 with
+       | '|' ->
+           wrap_err (fun () ->
+             [infile.V.embed
+                   (Unix.open_process_in (String.sub s 1 (String.length s - 1)))])
+       | _   -> wrap_err (fun () -> [infile.V.embed (open_in s)]))
+  | [] ->
+      ( close_in io.currentin; io.currentin <- stdin; [])
+  | [v] -> (io.currentin <- infile.V.project v; [])
+  | _ -> C.fallback "error" g [V.String "bad args to readfrom"]
+in
+
+let io_builtins =
+  [ "readfrom", V.caml_func readfrom
+  ]  
+in              
+
+      List.iter (fun (k, v) -> V.Table.bind g.V.globals (V.String k) v) io_builtins
+
+<<luaiolib.ml>>=
+
+module Make (T : Lib3.TYPEVIEW with type 'a U.t = 'a t)
+    : Lib3.Lib.TYPEFUL with type 'a T.U.t = 'a t and type 'a T.t = 'a T.t =
+  struct
+    module T = T
+    module M (C : Lib3.CORE with type 'a V.userdata' = 'a T.t) =
+     struct
+       <<contents of [[Init]]>>
+     end
+  end
