@@ -75,26 +75,49 @@ corresponds to the {\PAL} [[bits]]$k$ types.
 type space      = char  (* conventional, but typically 'm'=memory, 'r'=register, .. *)
 type width      = int   (* width in bits                *)
 
-type aggregation= BigEndian
-                | LittleEndian
-                | Identity
+type aggregation = 
+    | BigEndian
+    | LittleEndian
+    | Identity
+
+type classification = 
+    | Mem               
+    | Reg               
+    | Fixed
 @
 
 A [[Rtl.space]] denotes a memory space, the details of a particular
-space are covered by a space descriptor [[spacedescr]]:  Every cell in
-a given space is [[cellwidth]] bits wide.  When cells are aggregated
-in the space, the [[byteorder]] scheme is used.  Cells are addressed
-by integer expressions, each is [[addrwidth]] wide.  In the case of
-memory [[addrwidth]] is size of a pointer, in the case of registers
-[[addrwidth]] is typically just wide enough to address all registers,
-for example 5 bits for 32 registers. 
+space are covered by a space descriptor [[spacedescr]]:  
 
 <<COMMON>>=               
-type spacedescr = { cellwidth: int              (* bits *)
-                  ; addrwidth: int              (* bits *)
-                  ; byteorder: aggregation      
-                  }
+type spacedescr =
+    { doc:              string          (* informal doc string *)       
+    ; cellwidth:        int             (* bits *)
+    ; indexwidth:       int             (* bits *)
+    ; indexlimit:       int option      (* None = 2^indexwidth *)
+    ; aggregation:      aggregation      
+    ; aggsize:          int list        (* supported aggregates *)
+    ; classification:   classification  
+    }
 @
+
+\begin{itemize}
+\item [[doc]]:          Informal documentation string.
+\item [[cellwidth]]:    Width of cell in this space. A register space 
+                        could be 32 bits wide, a memory space 8 bits.
+\item [[indexwidth]]:   Width of an address in this space. A memory
+                        space could have 32 bit wide addresses, a
+                        register space 5 bit wide addresses.
+\item [[indexlimit]]:   Upper bound for an address in this space: $0,
+                        \dots, [[indexlimit]]$. 
+\item [[aggregation]]:  Supported aggregation.
+\item [[aggsize]]:      List of supported aggregat-sizes. For example, 
+                        is a 8 bit wide memory space supports 8, 16, and
+                        32 bit words, [[aggsize]] would be [1, 2, 4].
+\item [[class]]:        Classification of a space as memory-like,
+                        register-like, or fixed.
+
+\end{itemize}
 
 Of course, cells that belong to a space must meet its constraints. 
 See below for when a cell is well typed with respect to its space
