@@ -47,6 +47,9 @@ let enter key v env =
     else
         Symbol.enter key v env        
 
+let replace key v env =
+    Symbol.enter key v env
+
 let lookup = Symbol.lookup
 
 
@@ -157,7 +160,6 @@ let fst3 (x,_,_)    = x
 let snd3 (_,x,_)    = x
 let trd3 (_,_,x)    = x
 
-
 let add  = function
     | [IntConst(x);IntConst(y)] -> IntConst(x+y)
     | _                         -> assert false
@@ -172,8 +174,11 @@ let eq    = function
 
 let primOps = Symbol.enterList
     [  "add"    , (add  , proc [bitsv 1; bitsv 1] (bitsv 1))
+    ;  "+"      , (add  , proc [bitsv 1; bitsv 1] (bitsv 1))
     ;  "mult"   , (mult , proc [bitsv 1; bitsv 1] (bitsv 1))
+    ;  "*"      , (mult , proc [bitsv 1; bitsv 1] (bitsv 1))
     ;  "eq"     , (eq   , proc [bitsv 1; bitsv 1] bool)
+    ;  "=="     , (eq   , proc [bitsv 1; bitsv 1] bool)
     ] Symbol.empty
     
 let dummy env   = bool, BoolConst(true), env 
@@ -210,7 +215,7 @@ and evalExprs set env es =
         loop set env [] es
 
 and evalExpr set env = function 
-    | ExprAt(e,_)         -> evalExpr set env e 
+    | ExprAt(e,r)         -> evalExpr set env e
     | Int(i, None)        -> word     , IntConst(atoi i), env 
     | Int(i, Some size)   -> bits size, IntConst(atoi i), env
     | Float(f, None)      -> word     , FloatConst(atof f), env
@@ -220,18 +225,18 @@ and evalExpr set env = function
     | Fetch(v)            -> evalFetch set env v
     | BinOp(l,op,r)       -> evalPrimOp set env op [l;r]
     | PrimOp(op,es)       -> evalPrimOp set env op (List.map snd es)
-    | UnOp(op,e)          -> dummy env
+    | UnOp(op,e)          -> evalPrimOp set env op [e]
          
 
 and evalConst set env id = 
-    if IDSet.mem id set then error "circular const definition" else
-    match lookup id env with
+    if IDSet.mem id set then 
+        error "circular definition" 
+    else match lookup id env with
     | (_,(Constant(ExprConst(e)) as c)) -> 
-        let (t,x,env') = evalExpr (IDSet.add id set) env e
-        in (t,x, enter id (t,Constant(x)) env')
+        let (t,x,env') = evalExpr (IDSet.add id set) env e in 
+            (t,x, replace id (t,Constant(x)) env')
     | (t, Constant(x))                  -> (t,x,env)
-    | x                                 -> 
-        error "access of non-constant id in const declaration"
+    | x -> error (Printf.sprintf "reference to non-constant %s" id) 
 
 let eval env =
     let rec accConst id entry l = 
