@@ -88,7 +88,36 @@ clobber:V:	clean
 		rm -f oclua-* oclua-*.opt *.cma *.cmxa *.a 
 		rm -f lua.ps
                 rm -f DEPEND*
+		rm -f oclbench-*
+		rm -f luaclient
 
+standalone:V: lua-ml.tar
+
+xluaclient.tex:D:	luaclient.nw
+		noweave -delay $prereq > $target
+
+xluaclient.html:	luaclient.tex
+		hevea nw.hva $prereq
+		tidy -f /dev/null -im $target
+
+
+ALONE=luasyntax.nw lua.nw luaast.nw luabaselib.nw luahash.nw luaiolib.nw lualib.nw \
+        luamathlib.nw luarun.nw luastrlib.nw luavalue.nw\
+        log.nw ../cllib/srcmap.nw\
+        main.nw bench.nw\
+        luaclient.nw luaclient.html\
+        stdluainterp.nw\
+        Makefile.alone README.ALONE\
+        ../bin/nofake nw.hva
+
+
+lua-ml.tar:D: $ALONE
+	rm -rf /tmp/lua-ml
+	mkdir /tmp/lua-ml
+	mkdir /tmp/lua-ml/std
+	copy -v $prereq /tmp/lua-ml
+	chmod +x /tmp/lua-ml/nofake
+	(cd /tmp; tar cvf - lua-ml) > $target
 
 # ------------------------------------------------------------------ 
 # api documentation
