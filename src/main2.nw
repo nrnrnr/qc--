@@ -63,7 +63,9 @@ interpreter might be helpful.
 
 <<main2.ml>>=
 let run_interactive state infile =
+    let prompt = "-- " in
     let rec loop n pfx =
+        let ()   = print_string prompt; flush stdout in
         let line = input_line infile in
         if String.length line > 0 && 
             String.get line (String.length line - 1) = '\\' then
@@ -74,7 +76,12 @@ let run_interactive state infile =
             flush stdout; flush stderr;
             loop (n+1) ""
         end
-    in  try loop 1 "" with End_of_file -> ()
+    in  try 
+            ( print_string (prompt ^ "This is Lua for QC--\n")    
+            ; flush stdout
+            ; loop 1 ""
+            )
+        with End_of_file -> ()
 @
 
 % ------------------------------------------------------------------ 
