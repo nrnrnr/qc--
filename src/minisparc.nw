@@ -80,6 +80,7 @@ val srl : reg -> reg_or_imm -> reg -> t
 val st : reg -> address -> t
 val stf : reg -> address -> t
 val xor : reg -> reg_or_imm -> reg -> t
+val jmpl : address -> reg -> t
 @
 
 The functions below allow to load late compile-time constants into a
@@ -430,6 +431,12 @@ let stf fd address =
 let xor rs1 reg_or_imm rd = 
     Rtl.store rd (Rtl.app (Rtl.opr "xor" [32]) 
       [Rtl.fetch rs1 32; reg_or_imm]) 32
+
+let jmpl address rd = Rtl.par [Rtl.store (Rtl.cell Rtl.none 'i'
+  Rtl.Identity 32 (Rtl.bits (Bits.U.of_int 5 3) 3)) address 32; Rtl.store
+  rd (Rtl.fetch (Rtl.cell Rtl.none 'i' Rtl.Identity 32 (Rtl.bits
+  (Bits.U.of_int 4 3) 3)) 32) 32]
+
 @
 
 Below is the code for late compile-time constants. The generated {\rtl}s
@@ -1061,6 +1068,20 @@ when Base.to_bool (Bitops.fits_signed arg73 13) ->
 when Base.to_bool (Bitops.fits_signed arg291 13) -> 
    Instruction.xor (Bits.U.to_native rs1) (Instruction.imode 
          (Bits.U.to_native arg291)) (Bits.U.to_native rd) 
+
+| RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('i', Rtl.Identity, 
+    32, RP.Const (RP.Bits arg5830), _), 
+    RP.App (("add", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
+        RP.Const (RP.Bits rs1), _), 32); RP.Const (RP.Bits arg5831)]), 
+    32)); 
+  (RP.Const (RP.Bool true), RP.Store (RP.Cell ('r', Rtl.Identity, 32, 
+      RP.Const (RP.Bits rd), _), RP.Fetch (RP.Cell ('i', Rtl.Identity, 
+        32, RP.Const (RP.Bits arg5829), _), 32), 32))] 
+when Base.to_bool (Bitops.fits_signed arg5831 13 && Bitops.eq arg5830 
+    (Bits.U.of_int 5 3) && Bitops.eq arg5829 (Bits.U.of_int 4 3)) -> 
+   Instruction.jmpl (Instruction.generala (Bits.U.to_native rs1) 
+         (Instruction.imode (Bits.U.to_native arg5831))) 
+     (Bits.U.to_native rd) 
 @
 
 

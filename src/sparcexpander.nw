@@ -173,6 +173,13 @@ let set_late (late: I.late) (reg: I.reg) =
     exec (I.or_ reg (I.lmode late) reg)
 @
 
+We model the synthetic [[ret]] instruction here, although we could
+inline it as well.
+
+<<head>>=
+let ret = I.jmpl (I.dispa (I.reg 'r' 31) (N.of_int 8)) r0
+@
+
 % ------------------------------------------------------------------ 
 \subsection{Code Expansion Rules}
 % ------------------------------------------------------------------ 
@@ -476,6 +483,11 @@ rtl:        Goto(reloc) [1]
                 exec (I.ba reloc)
             :}
 
+rtl:        Return()
+            {:
+                exec (ret) (* jmpl %r31+8, %g0 *)
+            :}
+
 rtl:        Simple(stmt) [1] {: stmt >>= fun s -> return ()   :}    
 rtl:        Nop() [1]        {: exec I.nop  :}
 @
@@ -517,6 +529,8 @@ and stmt = function
 We classify an {\rtl} here and pass it to the appropriate rule in the
 rule set. The encoding of special instructions is shared between the
 code expander and a target description. See module \module{targets}.
+The ``special'' instructions are identified by a false guard and capital
+letters in a cell.
 
 <<tail>>=  
 and rtl = function
@@ -526,6 +540,7 @@ and rtl = function
         ( match sp with
         | 'B' -> conBranch (exp g) (exp e) 
         | 'G' -> conGoto   (exp e)
+        | 'R' -> conReturn ()
         | _   -> error_rtl (U.rtl rtl)
         )
     | RP.Rtl(_) as rtl -> error "cannot expand this RTL"
