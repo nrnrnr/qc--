@@ -118,7 +118,7 @@ let default op w args = RP.App((op,w),args)
 <<traverse RTL>>=   
 let app o w args = match o with
     |  "NaN" 		-> default o w args
-    |  "add" 		-> default o w args
+    |  "add" 		-> add w args
     |  "and" 		-> default o w args
     |  "bit" 		-> default o w args
     |  "bool" 		-> default o w args
@@ -170,7 +170,7 @@ let app o w args = match o with
     |  "mulu" 		-> default o w args
     |  "mzero" 		-> default o w args
     |  "ne" 		-> ne  w args
-    |  "neg" 		-> default o w args
+    |  "neg" 		-> neg w args
     |  "not" 		-> default o w args
     |  "or" 		-> default o w args
     |  "pinf" 		-> default o w args
@@ -232,18 +232,18 @@ let reg_offset = function
     | RP.Fetch(RP.Reg r, w) -> Some (r, zero w)
     | _                     -> None
 @
-
 <<unsafe RTL simplification>>=
 let rec app o w args = match Safe.app o w args with
     | RP.App (("eq"|"ltu"|"gtu"|"lt"|"gt" as op, w), [left;right]) as x ->
         ( match reg_offset left, reg_offset right with
         | Some(r1,k1), Some(r2,k2) when r1 = r2 -> 
             let r      = app op w [k1;k2] in
-            let dbg () = Printf.eprintf "Rtleval2.Unsafe.app: %s `%s` %s = %s\n"
+            let dbg () = Verbose.say 5 [
+                         Printf.sprintf "Rtleval2.Unsafe.app: %s `%s` %s = %s\n"
                         (Rtlutil.ToReadableString.exp (Rtl.Up.exp k1))
                         op
                         (Rtlutil.ToReadableString.exp (Rtl.Up.exp k2))
-                        (Rtlutil.ToReadableString.exp (Rtl.Up.exp r))
+                        (Rtlutil.ToReadableString.exp (Rtl.Up.exp r))]
             in r
                
         | _  -> x
@@ -264,7 +264,13 @@ and loc = function
 let effect = Safe.effect
 
 let guarded (e, eff)                = (exp e, effect eff)
-let rtl' (RP.Rtl(es))               = RP.Rtl(List.map guarded es)
+let rtl' (RP.Rtl(es))               =
+  let add_guarded e es = match guarded e with
+    | RP.Const(RP.Bool false), _ -> es
+    | e                          -> e :: es in
+  RP.Rtl(List.fold_right add_guarded es [])
+
+(*let rtl' (RP.Rtl es) = RP.Rtl (List.map guarded es)*)
 
 let rtl r  = try U.rtl (rtl' (D.rtl r)) 
              with Error msg -> Impossible.impossible msg
@@ -309,16 +315,16 @@ let round_up      w args = RP.Const(RP.Bits(Bits.U.of_int 2 2))
 let round_nearest w args = RP.Const(RP.Bits(Bits.U.of_int 1 2))
 let round_zero    w args = RP.Const(RP.Bits(Bits.U.of_int 0 2))
 
-
-let rec add w = function
-    | [ RP.App(("add", w'), [x ; RP.Const (RP.Bits k)])
-      ; RP.Const (RP.Bits k') ] ->  
-                assert (w=w');
-                add w [x; RP.Const (RP.Bits (Bits.Ops.add k k'))]
+let rec add ws args = 
+    let w = match ws with [w] -> w | _ -> Impossible.impossible "ill-typed add" in
+    match args with
+    | [ RP.App(("add", ws'), [x; RP.Const (RP.Bits k)]); RP.Const (RP.Bits k') ] ->  
+                assert (ws=ws');
+                add ws [x; RP.Const (RP.Bits (Bits.Ops.add k k'))]
     | [RP.Const (RP.Bits x); RP.Const (RP.Bits y)] ->  
                 RP.Const (RP.Bits (Bits.Ops.add x y))
-    | args  ->  default "add" w args
-    
+    | [x; RP.Const (RP.Bits y)] when Bits.Ops.eq (Bits.U.of_int 0 w) y -> x
+    | args  ->  default "add" ws args
 
 let shra w = function
     | [RP.Const(RP.Bits(x)); RP.Const(RP.Bits(y))] 
@@ -340,6 +346,12 @@ let ne w = function
                 -> to_bool (Bits.Ops.ne x y)
     | args      -> default "ne" w args
     
+let neg ws = function
+    | [RP.Const(RP.Bits(x))] 
+                -> const (Bits.Ops.neg x)
+    | args      -> default "sub" ws args
+    
+
 let shl w args  = match (w,args) with
     | [w], [x;y] when is_bits x && is_bits y 
                 -> to_bits (Int64.shift_left (int64 x) (int y)) w 

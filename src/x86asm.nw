@@ -118,7 +118,10 @@ method import s = this#new_symbol s
 @
 Exporting requires announcing as global.
 <<assembly methods>>=
-method export s = Printf.fprintf _fd ".globl %s\n" s; this#new_symbol s
+method export s =
+  let sym = this#new_symbol s in
+  Printf.fprintf _fd ".globl %s\n" sym#mangled_text;
+  sym
 @ 
 Locals also require no announcement.
 <<assembly methods>>=
@@ -204,10 +207,8 @@ let decbits b = Int64.format "%d"   (Bits.S.to_int64 b)
 <<assembly methods>>=            
 method addr a =
   match Reloc.Simple.normalize a with
-  | None, bits   -> 
-      fprintf _fd ".word %s\n" (hexbits bits)
-  | Some s, bits -> 
-      fprintf _fd ".word %s + %s\n" s#mangled_text (hexbits bits) 
+  | None, bits   -> this#value bits
+  | Some s, bits -> fprintf _fd ".word %s + %s\n" s#mangled_text (hexbits bits) 
 @ 
 <<assembly methods>>=
 method emit = ()
@@ -234,10 +235,7 @@ method cfg_instr proc  =
        entry point. This is what symbol is for. Simply use this#label?  *)
     let cfg    = proc.Proc.cfg
     and symbol = proc.Proc.symbol in
-    let label l =
-      this#label
-        (try SM.find l _syms
-         with Not_found -> Impossible.impossible ("unannounced symbol " ^ l)) in
+    let label l = this#label (try SM.find l _syms with Not_found -> this#local l) in
     this#label symbol;
     (emitter cfg (this#instruction) label : unit)
 

@@ -178,7 +178,8 @@ pointer.
 <<rules>>=
 lconst : Link(symbol, w) {: symbol#mangled_text :}
 const  : Bits(b:bits)    {: native b :}
-four   : Bits(b:bits) [{: guard (Bits.U.to_int b = 4) :}] {: native b :}
+four   : Bits(b:bits) [{: guard (Bits.Ops.eq (Bits.U.of_int 4 32) b) :}] {: native b :}
+minusfour : Bits(b:bits) [{: guard (Bits.Ops.eq (Bits.S.of_int (-4) 32) b) :}] {: native b :}
 @ 
 \paragraph{Locations and effective addresses}
 Here are the basic locations.
@@ -204,7 +205,7 @@ We can also use a link-time constant as an effective address.
 reg   : Fetch(regl,   w) {: regl   :}
 mem   : Fetch(meml,   w) {: meml   :}
 eaddr : Fetch(eaddrl, w) {: eaddrl :}
-eaddr : lconst {: lconst :} -- absolute addressing mode
+-- eaddr : lconst {: lconst :} -- absolute addressing mode
 -- indexed modes to come
 @ 
 I'm not at all sure about the rules for immediate constants, but here
@@ -212,10 +213,10 @@ goes a guess.  One problem is that I think the assembly-language
 syntax for an immediate address depends on the context in which it
 appears. 
 <<rules>>=
-immed : lconst {: lconst :}
+-- immed : lconst {: lconst :}
 immed : const  {: "$" ^ const :}
-immed : Add(lconst, const) {:  lconst ^ "+" ^ const :}
-immed : Add(const, lconst) {:  lconst ^ "+" ^ const :}
+-- immed : Add(lconst, const) {:  lconst ^ "+" ^ const :}
+-- immed : Add(const, lconst) {:  lconst ^ "+" ^ const :}
 @ 
 \paragraph{Data movement}
 Move, load, and store instructions.
@@ -224,6 +225,9 @@ and reg/eaddr but not eaddr/eaddr, there are two varieties of each.
 <<rules>>=
 inst : Store(dst:eaddrl, src:immed, w) 
   {: cat ["mov"; suffix w; " "; src; ","; dst] :}
+
+inst : Store(dst:eaddrl, src:lconst, w) 
+  {: cat ["lea"; suffix w; " "; src; ","; dst] :}
 
 -- straight load/store/move
 inst : Store(dst:eaddrl, src:reg, w) 
@@ -257,6 +261,13 @@ inst : Store(dst:regl, Lobits(src:mem), nw:w)
 These are the well-behaved instructions, which don't require hairy
 special registers.
 <<rules>>=
+inst : Store(dst:regl, disp, w) [{:guard (w = 32):}]
+  {: cat ["leal "; disp; ", "; dst] :}
+
+inst : Llr(dst:regl, "add", const, w) [{:guard (w=32):}]
+  {: cat ["leal "; const; "("; dst; ")"; ", "; dst] :}
+
+
 inst : Withaflags(dst:eaddrl, "add", src:reg, w, "x86_addflags")
   {: cat ["add"; suffix w; " "; src; ","; dst] :}
 
@@ -309,12 +320,15 @@ code sees it as an $L \mathrel{:=} L \oplus R$ instruction.
 pop  : Store(esp, Add(Fetch(esp, w), four), sw:w) {: () :}
 pop  :  Llr(esp, "add", four, w) {: () :}
 push : Llr(esp, "sub", four, w) {: () :}
+push : Llr(esp, "add", minusfour, w) {: () :}
 stacktop  : Mem(Fetch(esp, w), mw:w)            [{:guard (mw = 32):}] {: () :}
 stacknext : Mem(Sub(Fetch(esp, w), four), mw:w) [{:guard (mw = 32):}] {: () :}
 inst : Par(Goto(Fetch(stacktop, w)),pop) 
         {: "ret" :}
 inst : Par(Goto(eaddr),Par(Store(stacknext, Fetch(eip, x:w), y:w), push))
         {: "call " ^ eaddr :}
+inst : Par(Goto(lconst),Par(Store(stacknext, Fetch(eip, x:w), y:w), push))
+        {: "call " ^ lconst :}
 @ 
 \paragraph{Other instructions}
 <<rules>>=
@@ -325,7 +339,7 @@ If an RTL should fail to match, one can uncomment the following rule
 and get a printout of exactly how that RTL is represented using {\burg}
 constructors. 
 <<rules>>=
--- inst: any [100] {: "<" ^ any ^ ">" :}
+inst: any [100] {: "<" ^ any ^ ">" :}
 
 any : True  () {: "True"  :}
 any : False () {: "False" :}

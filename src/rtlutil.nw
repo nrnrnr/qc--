@@ -510,11 +510,14 @@ let verbosity v =
 
 <<ToAST>>=
 let bits n             = A.BitsTy n
+let bitstring b =
+  try string_of_int (Bits.S.to_int b)
+  with Bits.Overflow -> Bits.to_string b
 
 let const = function
     | R.Bool(true)   ->  A.PrimOp ("true", [])
     | R.Bool(false)  ->  A.PrimOp ("false", [])
-    | R.Bits b       ->  A.Int( string_of_int (Bits.U.to_int b)
+    | R.Bits b       ->  A.Int( bitstring b
                               , if !the_verbosity = High 
                                 then Some (bits (Bits.width b)) 
                                 else None

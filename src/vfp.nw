@@ -196,17 +196,27 @@ module Make (Arg : ARG) = struct
       match G.to_instr node with
       | None -> (vfp, k)
       | Some i ->
-          let rtl = Down.rtl i in
-          if RU.HasLoc.rtl is_vfp rtl then
-            (let simp = if G.kind node = G.StackAdjust then Rtleval2.Unsafe.rtl
-                       else Rtleval2.rtl in
-             G.update_instr (fun rtl -> simp (replace_vfp vfp rtl)) node);
-          let vfp, k = note_sp_changes rtl vfp k in
+          <<definition of [[simp]], which is verbose>> in
+          let down = Down.rtl i in
+          let rtl =
+            if RU.HasLoc.rtl is_vfp down then
+              let simp = if G.kind node = G.StackAdjust then simp else Rtleval2.rtl in
+              simp (replace_vfp vfp i)
+            else
+              i in
+          G.update_instr (fun _ -> rtl) node;
+          let vfp, k = note_sp_changes (Down.rtl rtl) vfp k in
           vfp, k in
     let fwd = D.fwd_iteration { D.split_info = info; D.merge_split_info = merge
                               ; D.init_info = init; D.propagate = propagate } in
     fun g -> ignore (fwd g)
 end
+<<definition of [[simp]], which is verbose>>=
+let simp rtl =
+  let str = Rtlutil.ToReadableString.rtl in
+  let rtl' = Rtleval2.Unsafe.rtl rtl in
+  Verbose.say 3 ["Simplified stack adjustment from "; str rtl; " to "; str rtl'; "\n"];
+  rtl' 
 @ 
 <<supporting functions>>=
 let replace_vfp value =
@@ -252,7 +262,8 @@ and find_k'_added_to_sp (RP.Rtl ges) =
             when sp' = sp -> find true 0 ges
           | _ -> Impossible.impossible "sp assigned other than sp + k")
     | (g, RP.Store (sp', e, w)) :: ges when sp = sp' ->
-        Impossible.impossible "assigned sp with nontrivial guard"
+        Impossible.impossible ("assigned sp with nontrivial guard " ^
+                               Rtlutil.ToReadableString.exp (Rtl.Up.exp g))
     | (g, RP.Kill sp') :: ges when sp = sp' -> 
         Impossible.impossible "killed sp"
     | _ :: ges -> find found k' ges in
