@@ -7,20 +7,25 @@
 #
 # To generate code and run the test, do the following:
 #
-#   mk all
-#   mk asm
-#   mk x86-test,    if on x86
-#   mk mips-test,   if on MIPS
-#   mk alpha-test,  if on Alpha
+#   mk
+#   mk x86-test     if on x86
+#   mk mips-test    if on MIPS
+#   mk alpha-test   if on Alpha
+#
+# If you need to run the tests on another machine, tarballs are created
+# for your convenience (<architecture>-test.tar.gz).  Simply expand them
+# and run the appropriate script (<architecture>.sh).
 #
 
-TOP =               ..
-QCC =               $TOP/bin/qc--
-GEN =               ./call.pl
-CC  =               cc
+TOP      = ..
+QCC      = $TOP/bin/qc--.opt
+#QCCFLAGS = backend.ralloc=Ralloc.dls -v
+QCCFLAGS = -v
+GEN      = ./call.pl
+CC       = cc
 
 #
-# The cmm-internal script generated an unkown number of files. Therfore
+# The cmm-internal script generated an unknown number of files. Therefore
 # I cannot list them here. I don't know how to organize compiling and
 # testing them. 
 #
@@ -28,40 +33,39 @@ CC  =               cc
 # The following line can reach an internal mk(1) limit when the list of 
 # C-- files is long. 
 #
-# ASM =               `ls -1 *.c-- | sed s'/\.c--/.s/'`
-# asm:V:            $ASM
+# ASM = `ls -1 *.c-- | sed s'/\.c--/.s/'`
+# asm:V: $ASM
 #
-# Therefore I reverted to the more explicit asm rule below.
+# Therefore I reverted to more explicit asm rules.
 
-all:V:              alpha-call x86-call mips-call
-asm:V:
-                    for f in *.c--; do
-                        mk `basename $f .c--`.s
-                    done    
+all:VQ:
+  mk call ; mk asm ; mk tarballs
+
+call:V: alpha-call x86-call mips-call
+asm :V: alpha-asm  x86-asm  mips-asm
 
 # A rule to pretty print a C-- source file
 
-%.pp:               %.c--
-                    $QCC -pp $prereq
+%.pp: %.c--
+    $QCC -pp $prereq
 
 #
 # A .sigs file contains lines of signatures for tests. Signatures are
 # emitted by the QC-- compiler. You can enlarge the number of signatures
-# by specifying more withs and hints to try. This only makes sense if
+# by specifying more widths and hints to try. This only makes sense if
 # they are actually implemented.
 #
 # Use Debug.Mips.proc_all_paths() to get all signatures relevant for the
 # MIPS. This creates 64-bit floats, but no 64-bit integers, which are
 # unknown on the MIPS.
 
-
-alpha-call.sigs:    $QCC 
+alpha-call.sigs: $QCC 
 	$QCC -e 'Debug.Alpha.proc_paths({64},{"int","float"}) exit(0)' > $target
 
-x86-call.sigs:      $QCC
+x86-call.sigs:   $QCC
 	$QCC -e 'Debug.X86.c_proc_paths({32},{"int"}) exit(0)' > $target
 
-mips-call.sigs:     $QCC
+mips-call.sigs:  $QCC
 	$QCC -e 'Debug.Mips.proc_paths({32},{"float","int"}) exit(0)' > $target
 
 #
@@ -70,120 +74,138 @@ mips-call.sigs:     $QCC
 # files.
 #
 
-alpha-call:V:       alpha-call.sigs
-                    #$GEN  -name=$target                   -width=64 < $prereq 
-                    $GEN  -name=$target-x -c              -width=64 < $prereq
-                    #$GEN  -name=$target-cmm0 -conv="cmm0" -width=64 < $prereq 
-                    #$GEN  -name=$target-cmm1 -conv="cmm1" -width=64 < $prereq 
-                    #$GEN  -name=$target-cmm2 -conv="cmm2" -width=64 < $prereq 
-                    #$GEN  -name=$target-cmm3 -conv="cmm3" -width=64 < $prereq 
+alpha-call:V: alpha-call.sigs
+               $GEN -name=$target                         -width=64 < $prereq
+              #$GEN -name=$target-cmm0    -conv="cmm0"    -width=64 < $prereq
+              #$GEN -name=$target-cmm1    -conv="cmm1"    -width=64 < $prereq 
+              #$GEN -name=$target-cmm2    -conv="cmm2"    -width=64 < $prereq
+              #$GEN -name=$target-cmm3    -conv="cmm3"    -width=64 < $prereq 
+               $GEN -name=$target-x -c                    -width=64 < $prereq
 
-x86-call:V:         x86-call.sigs             
-                    $GEN -name=$target-cmm  -width=32 -conv="notail" < $prereq
-                    $GEN -name=$target      -width=32 < $prereq
-                    $GEN -name=$target-x -c -width=32 < $prereq
-                    $GEN -name=$target-cspec -conv="c'" -c -width=32 < $prereq
-                    
+x86-call:V:   x86-call.sigs             
+               $GEN -name=$target                         -width=32 < $prereq
+               $GEN -name=$target-cmm     -conv="notail"  -width=32 < $prereq
+               $GEN -name=$target-x -c                    -width=32 < $prereq
+               $GEN -name=$target-x-cspec -conv="c'" -c   -width=32 < $prereq
 
-mips-call:V:        mips-call.sigs
-                    # $GEN -name=$target-x -c -width=32 < $prereq
-                    $GEN -name=$target-x-cspec -c -conv="c'" -width=32 < $prereq
+mips-call:V:  mips-call.sigs
+               $GEN -name=$target                       -width=32 < $prereq
+               $GEN -name=$target-x -c                  -width=32 < $prereq
+              #$GEN -name=$target-x-cspec -c -conv="c'" -width=32 < $prereq
 
 #
 # Compile *.c-- files to *.s code. Compilation depends on the desired
 # target.
 # 
 
-x86%.s:             x86%.c--
-                    $QCC -globals backend=Backend.x86 -stop .s $prereq
+X86_CMM    = x86*.c--
+ALPHA_NUMS = 0 1 2 3 4 5 6 7
+ALPHA_CMM  = ${ALPHA_NUMS:%=alpha*[%]??.c--}
+MIPS_CMM   = mips*.c--
 
-alpha%.s:           alpha%.c--                    
-                    $QCC -globals backend=Backend.alpha -stop .s $prereq
+x86-asm:V: $QCC
+	for f in "`echo "$X86_CMM" | tr ' ' '\n'`" ; do
+		$QCC -e 'Options.globals=2' backend=Backend.x86 $QCCFLAGS \
+	    	 -stop .s `echo $f`
+	done
 
-mips%.s:            mips%.c--
-                    $QCC -globals backend=Backend.mips -stop .s $prereq
+alpha-asm:V: $QCC
+	for f in "`echo "$ALPHA_CMM" | tr ' ' '\n'`" ; do
+		$QCC -e 'Options.globals=2' backend=Backend.alpha $QCCFLAGS \
+             -stop .s `echo $f`
+	done
 
-alpha%.dbg:        alpha%.c--
-                    $QCC -globals backend=Backend.alpha  \
-                         backend.asm=Asm.cmm -stop .s -o $target $prereq
+mips-asm:V: $QCC
+	for f in "`echo "$MIPS_CMM" | tr ' ' '\n'`" ; do
+		$QCC -e 'Options.globals=2' backend=Backend.mips $QCCFLAGS \
+        	 -stop .s `echo $f`
+	done
+
+alpha%.dbg: alpha%.c--
+  $QCC -e 'Options.globals=2' backend=Backend.alpha  \
+       backend.asm=Asm.cmm -stop .s -o $target $prereq
 
 #
 # Run tests. This will only work on the right platform.
 #
 
-x86-test:V:         asm
-                    set -x
-                    for f in x86-call-main-*.s x86-call-cmm-main-*.s; do
-                        cc $f && ./a.out
-                    done
-                    for f in x86-call-x-main-*.s; do
-                        g=`echo $f | sed -e 's/main/callee/' -e 's/\.s/.c/'`
-                        cc $f $g && ./a.out
-                    done    
-                    for f in x86-call-cspec-main-*.s; do
-                        g=`echo $f | sed -e 's/main/callee/' -e 's/\.s/.c/'`
-                        cc $f $g && ./a.out
-                    done    
+tarballs:V: alpha-test.tar.gz mips-test.tar.gz x86-test.tar.gz
 
-#
-# For machines without mk(1) I write actions to sh(1) script which I
-# execute manually.
-#
+%-tarball:V: %-test.tar.gz
 
-alpha-test:V:       asm alpha.sh
-                    sh alpha.sh
-alpha.sh:
-                    echo '
-                    set -x
-                    for f in alpha-call-cmm*-main-*.s; do
-                        cc $f 2> /dev/null
-                        ./a.out
-                    done    
-                    for f in alpha-call-main-*.s; do
-                        cc $f 2> /dev/null
-                        ./a.out
-                    done    
-                    
-                    for f in alpha-call-x-main-*.s; do
-                        g=`echo $f | sed -e 's/main/callee/' -e 's/\.s/.c/'`
-                        cc $f $g 2> /dev/null
-                        ./a.out
-                    done   
-                    ' > $target
+%-test.tar.gz: %.sh
+  cd ..
+  tar cf - testcc/$prereq testcc/$stem*.c testcc/$stem*.s | \
+    gzip -c > testcc/$target
+  cd testcc
 
-mips-test:          asm mips.sh
-                    sh mips.sh
+%-test:Q: %.sh
+  sh $prereq
 
-mips.sh:
-                    echo '
-                    set -x
-                    for f in mips-call-main-*.s; do
-                        cc $f 
-                        ./a.out
-                    done    
-                    for f in mips-call-x-main-*.s; do
-                        g=`echo $f | sed -e 's/main/callee/' -e 's/.s$/.c/'`
-                        cc $f $g 
-                        ./a.out
-                    done   
-                    for f in mips-call-x-cspec-main-*.s; do
-                        g=`echo $f | sed -e 's/main/callee/' -e 's/.s$/.c/'`
-                        cc $f $g 
-                        ./a.out
-                    done   
-                    
-                    ' > $target
+x86.sh:Q:
+  echo '
+  # set -x
+  rm -f x86.log
+  for f in x86-call-main-*.s x86-call-cmm-main-*.s; do
+    (cc $f && ./a.out) | tee -a x86.log | grep -v success
+  done
+  for f in x86-call-x-main-*.s; do
+    g=`echo $f | sed -e "s/main/callee/" -e "s/\.s/.c/"`
+    (cc $f $g && ./a.out) | tee -a x86.log | grep -v success
+  done    
+  for f in x86-call-x-cspec-main-*.s; do
+    g=`echo $f | sed -e "s/main/callee/" -e "s/\.s/.c/"`
+    (cc $f $g && ./a.out) | tee -a x86.log | grep -v success
+  done
+  echo Completed testing x86 architecture.  Log file x86.log created.
+  ' > $target  
+  chmod +x $target
+
+alpha.sh:Q:
+  echo '
+  # set -x
+  rm -f alpha.log
+  # for f in alpha-call-cmm*-main-*.s; do
+  #   (cc $f && ./a.out) | tee -a alpha.log | grep -v success
+  # done    
+  for f in alpha-call-main-*.s; do
+    (cc $f && ./a.out) | tee -a alpha.log | grep -v success
+  done
+  for f in alpha-call-x-main-*.s; do
+    g=`echo $f | sed -e 's/main/callee/' -e 's/\.s/.c/'`
+    (cc $f $g && ./a.out) | tee -a alpha.log | grep -v success
+  done   
+  echo Completed testing Alpha architecture.  Log file alpha.log created.
+  ' > $target
+  chmod +x $target
+
+mips.sh:Q:
+  echo '
+  # set -x
+  rm -f mips.log
+  for f in mips-call-main-*.s; do
+    (cc -mno-abicalls -fno-pic -Wa,--no-warn $f && ./a.out) | \
+      tee -a mips.log | grep -v success
+    # (as -fno-pic $f && ./a.out) | grep -v success
+  done    
+  for f in mips-call-x-main-*.s; do
+    g=`echo $f | sed -e 's/main/callee/' -e 's/.s$/.c/'`
+    (cc -Wa,--no-warn $f $g && ./a.out) | \
+      tee -a mips.log | grep -v success
+  done   
+  # for f in mips-call-x-cspec-main-*.s; do
+  #   g=`echo $f | sed -e 's/main/callee/' -e 's/.s$/.c/'`
+  #   (cc -Wa,--no-warn $f $g && ./a.out)| \
+  #     tee -a mips.log | grep -v success
+  # done   
+  echo Completed testing MIPS architecture.  Log file mips.log created.
+  ' > $target
+  chmod +x $target
 
 clean:V:
-                    rm -f *.c--
-                    rm -f *.o
-                    rm -f *.c
-                    rm -f *.s
-                    rm -f *.sigs
-                    rm -f a.out
-                    rm -f alpha.sh
-                    rm -f *.dbg
-                    rm -f *.pp
+   rm -f *.c-- *.c *.o *.s a.out *.sigs
+   rm -f alpha.sh mips.sh x86.sh
+   rm -f *.dbg *.pp *-test.tar.gz
+   rm -f *.log
 
-clobber:V:          clean
-                    
+clobber:V: clean

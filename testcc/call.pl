@@ -164,7 +164,8 @@ sub compare {
         print OUT <<EOF;
         if $v != $value 
         {
-            foreign "C" printf("address" failed); 
+            foreign "C" printf("address" failed, "address" filename,
+                               "address" sig); 
             foreign "$conv" return();
         } 
 EOF
@@ -185,11 +186,15 @@ sub c_compare {
         
         if ($hint eq "float") {
             print CEE <<EOF;
-            if (*($unsig*)(&$v) != $val) {printf("failed ($val)\\n"); return;}
+            if (*($unsig*)(&$v) != $val) {
+              printf("failed ($val) - %s sig [%s]\\n", TESTFILE, SIG); return;
+            }
 EOF
         } else {
             print CEE <<EOF;
-            if ($v != $val) {printf("failed ($val)\\n"); return;}
+            if ($v != $val) {
+              printf("failed ($val) - %s sig [%s]\\n", TESTFILE, SIG); return;
+            }
 EOF
         }
     }
@@ -206,7 +211,7 @@ sub callee {
 EOF
     compare(@_);
     print OUT <<"EOF";
-        foreign "C" printf("address" success);
+        foreign "C" printf("address" success, "address" filename);
         foreign "$conv" return ();
     }
 EOF
@@ -219,7 +224,7 @@ sub c_callee {
 EOF
     c_compare(@_);
     print CEE <<"EOF";
-        printf("success\\n");
+        printf("success - %s\\n", TESTFILE);
         return;
     }
 EOF
@@ -289,6 +294,7 @@ while (defined($sig=<STDIN>)) {
 
     # emit C-- code, and additioanlly C code, if $emitc is true.
 
+    chop($sig);
     if ($emitc eq 0) {
         # just C-- code
         open (OUT, ">$cmm") || die "cannot open $cmm: $!";
@@ -299,9 +305,13 @@ while (defined($sig=<STDIN>)) {
 
         section "data" {
             align 8;
-            success: bits8[] "success\\n\\0";
+            success : bits8[] "success - %s\\n\\0";
             align 8;
-            failed:  bits8[] "failed\\n\\0";
+            failed  : bits8[] "failed - %s sig [%s]\\n\\0";
+			align 8;
+		    filename: bits8[] "$cmm\\0";
+			align 8;
+		    sig     : bits8[] "$sig\\0";
         }
 EOF
         main(@args);
@@ -321,6 +331,8 @@ EOF
 
         print CEE<<EOF;
         #include <stdio.h>
+        #define TESTFILE "$cee"
+        #define SIG      "$sig"
 EOF
         
         main(@args);
