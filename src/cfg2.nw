@@ -86,7 +86,7 @@ Both can have optional hints, and have a [[width]], i.e.~a type.
 type formal =   { name:      string 
                 ; width:     Rtl.width       (* bits *)
                 ; hint:      string option   (* C-- hint *)
-                ; index:     int             (* run-time API *)
+                ; api:       int             (* run-time API index*)
                 } 
 
 type actual     = Rtl.exp 
@@ -346,10 +346,8 @@ let call   rtl cuts   props = node props (Call(rtl,cuts))
 let assign rtl        props = node props (Assign(rtl))  
 let label  l          props = node props (Label(l))    
 let branch rtl label  props = node props (Branch(rtl,label)) 
-
-<<implementation of S>>=
-let copyi actuals cc props = Impossible.unimp "Cfg.copyi"
 @
+
 
 
 A [[jump]], [[cutto]], or [[return]] statement exits a function. 
@@ -372,12 +370,32 @@ The [[store_actual]] function asks to calling convention automaton
 it there.  This store is represented by the [[rtl]] that is returned. 
 The automaton [[cc]] is mutated!
 
+To get the 
 <<implementation of S>>=
-let store_actual (cc: A.t) (expr,width,hint)  =   (* updates cc *)
+let store_actual (cc: A.t) (expr,width,hint) = (* updates cc *)
     let loc = A.ty cc width hint  in
-        A.store loc expr width
+        (A.store loc expr width: Rtl.rtl)
+
+let fetch_formal (cc: A.t) formal = (* updates cc *)
+    let loc = A.ty cc formal.width formal.hint in
+    let exp = A.fetch loc formal.width         in (* value of formal *)
+    let var = Rtl.var formal.name formal.api formal.width in
+        Rtl.store var exp formal.width
 @
 
+The [[copyi]] function creates a list of assignement nodes that
+together implement the calling convention.  Each node copies one
+parameter from the location determined by the calling convention to a
+local {\PAL} variable. 
+
+<<implementation of S>>=
+let copyi formals cc props =
+    let rtls  = List.map (fetch_formal cc) formals          in
+    let area  = A.freeze cc                                 in
+    let nodes = List.map (fun rtl -> assign rtl props) rtls in     
+        nodes, area
+@
+_
 The next four functions help to a compute the set of registers read
 and written by a list of {\rtl}s.  Function [[rw]] returns two sets
 $(\mathit{read},\mathit{write})$ of registers read and written by a

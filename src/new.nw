@@ -67,8 +67,8 @@ To allocate a new resource slot, call [[ty]] or [[block]]. Both return
 a location [[[loc]] and change the automaton's internal state.
 
 <<new.mli>>=
-val ty    : t -> Types.ty * string option -> loc    
-val block : t -> width    * align         -> loc    
+val ty    : t -> width -> string option -> loc    
+val block : t -> width -> align         -> loc    
 @
 
 Location's as returned by an automaton can't be used directly because
@@ -127,8 +127,8 @@ type loc =      { store:    (Rtl.exp -> Rtl.rtl)
                 
 class type automaton = object
     val mutable frozen: bool
-    method ty:          Types.ty -> string option -> loc
-    method block:       size     -> align         -> loc
+    method ty:          width -> string option -> loc
+    method block:       width -> align         -> loc
     method freeze:      area
 end   
     
@@ -173,12 +173,8 @@ class bottomup (base: Rtl.exp) (target: Target.t) =
             let _    = k <- k + size              in
                 loc
 
-        method ty t (hint: string option) = 
-            let width = match t with
-                | Types.Bits(n) -> n
-                | _ -> assert false
-            in
-                self#block width 1 
+        method ty width (hint: string option) = 
+            self#block width 1 
 
         method freeze =
             let _ = frozen <- true in
@@ -193,8 +189,8 @@ let mk spec base =
     match spec with
     | BottomUp(target) -> new bottomup base target 
 
-let ty     t (size,hint)   = t#ty    size hint
-let block  t (width,align) = t#block width align
+let ty     t size  hint    = t#ty    size hint
+let block  t width align   = t#block width align
 let freeze t               = t#freeze
 
 let fetch loc width      = loc.fetch 
