@@ -39,9 +39,8 @@ as possible, automata for calling conventions are at least in
 principle constructed at run-time (of the compiler) and not
 hard-wired.  Once an automaton is defined, it is used by the code
 generator to find the locations parameters are passed to or from
-procedures and continuations.  The difference between these two
-aspects of the interface are expressed by using sub-modules for them
-in the interface.
+procedures and continuations.  Building and running an automaton is
+delegated to submodules.
 
 <<automaton.mli>>=
 <<basic types>>
@@ -55,8 +54,8 @@ module Build : sig <<signature build>> end
 
 Pure {\PAL} data types like [[bits32]] are usually not descriptive
 enough to find the location a parameter of that value is passed in. 
-Calling conventions usually not only only rely on the size of a
-parameter, but to some degree on its purpose, too.  A type from the
+Calling conventions usually not rely on the size of a
+parameter, but also to some degree on its purpose.  A type from the
 perspective of calling conventions is thus a tuple of a {\PAL} type
 and a hint. 
 
@@ -64,21 +63,21 @@ and a hint.
 type ty = Types.ty * string option
 @
 
-An automaton is used at a caller's side to find the locations 
-values to be passed are stored in, and at the callee's side to find
-the location incoming parameters are read from. The same situation
-arises at a [[return]] and when [[cut]]'ing to a continuation. A
-[[location]] thus includes two values: a function that returns a
-location for a value to be stored, and an expression that yields the
-value of a parameter.
+An automaton is used at a caller's side to find the locations values
+to be passed are stored in, and at the callee's side to find the
+location incoming parameters are read from.  The same situation arises
+at a [[return]] and when [[cut]]'ing to a continuation.  A
+[[location]] thus includes two values:  a function that returns an
+effect of storing a value to a location, and an expression that
+fetches a value from that location.
 
 <<>>=
 type location = (Rtl.expr -> Rtl.effect)          (* write value *)
               * Rtl.expr                          (* read  parameter *)
 @
 
-Of course, there is the automaton itself.  An automaton maintains
-an internal actual state that changes when the automaton is run.  
+Of course, there is the automaton itself.  An automaton maintains an
+internal state that changes when the automaton is run. 
 
 <<>>=
 type t
@@ -98,11 +97,6 @@ question includes the desired [[location]] and the automaton in its
 new (internal) state.  When the automaton lacks a transition from its
 current state for the requested type, the [[Error.ErrorExn]] exception
 is raised.
-
-A [[ty]] value passed to [[next]] may include a hint for a hardware
-register. Such a hardware register must have been announced to the
-automaton when it was [[reset]]. The location in respond to the [[ty]]
-value will be the hardware register that was previously announced.
 
 <<signature run>>=
 val next: t -> ty -> location * t (* Error.ErrorExn *)
@@ -125,85 +119,69 @@ val overflow: t -> overflow
 @
 
 % ------------------------------------------------------------------ 
-\subsubsection{Building an Automaton -- preliminary}
+\subsubsection{Building an Automaton}
 % ------------------------------------------------------------------ 
 
-Creating an automaton for an existing calling conventions is not a
-straight forward task.  This interface is rather low-level and does
-not go beyond the automaton perspective.  An additional high-level
-approach may be adequate that provides a domain specific notation that
-ultimately can be converted into an automaton using this interface.
-
-A state captures which locations have been used for parameter passing
-and where the next parameter goes, depending on its type.  A state is
-simply a number. 
+An interface to build an automaton systematically is postponed.
 
 <<signature build>>=
-type state = int
-@
-
-Since conceptually an infinite number of parameters can be placed in
-memory, a pure finite state automaton can not keep track of the
-consumed locations.  We thus assume that an automaton contains
-some form of counter that keeps track of parameters in memory in order
-to use still a finite number of states.  The [[info]] type represents
-this counter, and the [[info]] function returns this information for
-an automaton:
-
-<<>>=
-type info       (* bogus. how t create info values? *)
-val info: t -> info
-@
-
-
-To build an automaton, start with [[make]].  This function receives
-the initial state of the automaton.
-
-<<>>=
-val make    : state -> t   
-@
-
-A \emph{transition} from one state to another describes which
-locations to use for the type [[ty]] that guards this transition.  So
-a transition between two states is labeled with two informations:  a
-type [[ty]] and a location.  Locations in memory (opposed to those in
-registers) depend on previous parameters placed into memory.  This
-makes the location dependent on the counter [[info]] maintained by an
-automaton.  A transition is thus added to an automaton by specifying
-two states, a type, and an [[info]] dependent [[location]].
-       
-<<>>=
-val add: t -> state -> ty -> (info -> location) -> state -> t
+(* empty *)
 @
 
 % ------------------------------------------------------------------ 
-\subsection{Implementation}
+\subsection{Dummy Implementation}
 % ------------------------------------------------------------------ 
 
 <<automaton.ml>>=
-type ty       = Types.ty * string option
-type location = (Rtl.expr -> Rtl.effect)
-              * Rtl.expr
+type ty       =     Types.ty * string option
+type location =     (Rtl.expr -> Rtl.effect)
+                    * Rtl.expr
 
-type t        = unit
+type t        =     { offset:       int
+                    }
 
 module Run = struct
-    let next () t = assert false
-    
-    type overflow = { size:  int
+    module T = Types
+    <<module run>>
+end
+
+module Build = struct (* empty *) end
+
+<<module run>>=
+type overflow =     { size:  int
                     ; align: int
                     }
 
-    let overflow () = assert false
-end
+let memsize     = 8  (* assumption for now, must be obtained from Fenv *)
+let pointer     = 32 (* ditto for pointer size *)
+let word        = 32
+let agg         = Rtl.BigEndian
 
-module Build = struct
-    type state = int
-    type info  = unit
 
-    let info () = assert false
-    let make n  = assert false
-    let add () s1 t f s2 = assert false
-end
+(* inventing names on the rtl level, like "sp" is problematic; may clash
+   with C-- variables *) 
+<<>>=
+let sp          = Rtl.Const(Rtl.Link("sp",pointer))       
+let offset k    = Rtl.Const(Rtl.Bits(Bits.of_int k word,word)) 
+let add         = ("add",[word])                          
+let sum x y     = Rtl.App (add,[x;y])                       
+let stack k w   = Rtl.Cell('m',agg,w,sum sp (offset k),-1)    
+let read  k w   = Rtl.Fetch(stack k w, w)                 
+let write k w   = fun e -> Rtl.Store(stack k w, e, w)    
+
+<<>>=
+let next dfa (ty,hint) =
+    let width = match ty with
+        | T.Bits(n) when n mod memsize = 0 -> n 
+        | _                                -> assert false in
+    let words = width / memsize in
+    let loc   = (write dfa.offset words, read dfa.offset words) in
+    let dfa'  = { dfa with offset = dfa.offset + words } in
+        (loc, dfa')
+
+<<>>=
+let overflow dfa = { size  = dfa.offset
+                   ; align = 1
+                   }
 @
-    
+
