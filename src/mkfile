@@ -38,6 +38,7 @@ VERSION =   `date +%Y%m%d`
 # paths
 ################################################################
 
+TOP    =    ..
 LIBDIR =    ../lib
 BINDIR =    ../bin
 MANDIR =    ../man
@@ -60,6 +61,20 @@ all:V:          $NAME
 # OCAMLC =        ocamlcp -p f    
 OCAMLC_FLAGS =  -I $LIBDIR -g
 OCAMLO_FLAGS =  -I $LIBDIR 
+
+################################################################
+# rules and tools for Noweb
+################################################################
+
+# INTERP = evaluating | residualizing
+# change the variable below to extract the right variant 
+# from *.nw files
+
+INTERP =    evaluating
+<../config/noweb.mk
+
+# file where we record dependencies
+DEPEND=DEPEND.$INTERP
 
 ################################################################
 # important file sets
@@ -133,77 +148,11 @@ CMX =           `echo $ML       | sed 's/\.ml/.cmx/g'`
 OBJ =           `echo $ML       | sed 's/\.ml/.o/g'`
 
 ################################################################
-# Noweb stuff - once this is stable the generic part should go to
-# ../config/noweb.mk
-################################################################
-
-NOWEAVE =       noweave
-NOTANGLE =      notangle
-CPIF =          cpif
-LATEX =         latex
-RERUN =         Rerun (LaTeX|to get cross-references right)
-
-LINE =          '# %L "%F"%N'
+#
+# Files we generate documentation from
 
 HTML =          `echo *.nw                             | sed 's/\.nw/.html/g'`
 INC  =          `echo *.nw  ../cllib/*.nw ../test/*.nw | sed 's/\.nw/.inc/g'`
-
-################################################################
-
-# generate a self-contained LaTeX document from a LaTeX file that
-# is supposed to be read by \input from a master LaTeX file. This rule
-# allows to specify extra packages like tabularx to be included. 
-# The here-document ended by EOF relies on a single TAB character at
-# the beginning of a line - so don't substitute spaces for it .
-
-%.tex:	%.inc
-	cp $stem.inc $stem.tex
-	ed -s $stem.tex <<EOF 
-	1
-	i
-	\documentclass{article}
-	\usepackage{noweb}
-	\usepackage{tabularx}
-	\usepackage{hyperref}
-	\pagestyle{noweb}
-	\noweboptions{}
-	\begin{document}
-	\nwfilename{$stem.nw}
-	\tableofcontents
-	\nwbegindocs{}
-	.
-	\$
-	a
-	\end{document}
-	.
-	w
-	q
-	EOF 
-
-%.inc:          %.nw
-                $NOWEAVE -delay -filter ../config/autodefs.ocaml -index $prereq > $target
-
-uint64.inc:     uint64.nw
-                $NOWEAVE -delay -autodefs c -index $prereq > $target
-
-%.html:         %.nw
-                $NOWEAVE -delay -filter ../config/autodefs.ocaml \
-                    -index -html -filter l2h $prereq > $target
-
-%.bbl:          %.bib %.aux
-                bibtex $stem 
-                    
-%.dvi:          %.tex macros.tex
-                $LATEX "\\scrollmode \\input $stem.tex"
-                ltxcount=3
-                while egrep -s "$RERUN" $stem.log && [ $ltxcount -gt 0 ]
-                do
-                    $LATEX "\\scrollmode \\input $stem.tex"
-                    ltxcount=`expr $ltxcount - 1`
-                done
-
-%.ps:           %.dvi
-                dvips -Ppdf -o $target $prereq
 
 ################################################################
 
@@ -213,37 +162,15 @@ dvi:V:          $NAME.dvi
 ps:V:           $NAME.ps
 html:V:         $HTML
 
-################################################################ 
-# sources generated from noweb sources
-################################################################ 
-
-################ general cases
-
-# The following rule covers the common case. Noweb file containing
-# more source files, or files named different than the noweb source must
-# be covered by additional rules. 
-
-'^'(.*)'\.mli?$':R:		'\1'.nw
-	$NOTANGLE -L"$LINE" -R$target $prereq > $target
-# caml compiler is so fast that I see no need for cpif above
-
-%.c: 	%.nw
-	$NOTANGLE -L -R$target $prereq > $target
-
-%.view: %.nw
-	$NOTANGLE -R$target $prereq > $target
-
-%.asdl: %.nw
-	$NOTANGLE -R$target $prereq | $CPIF $target
-
 
 ################ special cases, primarily for multiple sources in one .nw
 #
 # these rules clutter up the mkfile, but they make the output from mk,
 # and especially from mk- n, more readable, so they are worth it.
+#
+# we don't use the nocond filter here because currently all our
+# conditional code happens to be in the general case.
 
-
-# could reduce duplication by using fancier regexp above, but it's not worth it
 lowercopy.mli: cfg.nw
 	$NOTANGLE -L"$LINE" -R$target $prereq > $target
 lowercopy.ml: cfg.nw
@@ -281,6 +208,15 @@ scan.mll:       parser.nw
 scan.mli:       parser.nw
 	$NOTANGLE -L"$LINE" -R$target $prereq > $target
 
+#
+# LaTeX documentation for non OCaml code
+#
+
+uint64.inc:     uint64.nw
+                $NOWEAVE -delay -autodefs c -index $prereq > $target
+
+ast.inc:        ast.nw         
+                $NOWEAVE -delay $prereq > $target
 
 #
 # include the yacc grammar in the manual for reference
@@ -295,14 +231,6 @@ ${NAME}grammar.pod:      main.nw parse.output
 	.r !grep "^  *[0-9]" parse.output
 	wq' | ed ${NAME}grammar.pod
                  
-#
-# autodefs.asdl - not part of noweb 2.9
-#
-
-ast.inc:        ast.nw         
-                $NOWEAVE -delay $prereq > $target
-
-
 ################################################################
 # C code
 ################################################################
@@ -402,14 +330,14 @@ this.ml:        this.in mkfile
 
 
 depend:V:	src
-		$OCAMLDEP *.mli *.ml > DEPEND
+		$OCAMLDEP *.mli *.ml > $DEPEND
 
 # make sure DEPEND is up to date
 depend-check:VQ: newer
-	# check for DEPEND
-	if ./newer DEPEND mkfile; then true;
+	# check for $DEPEND
+	if ./newer $DEPEND mkfile; then true;
 	else
-	  echo "DEPEND is out of date; you must run 'mk depend' before continuing" 1>&2
+	  echo "$DEPEND is out of date; you must run 'mk depend' before continuing" 1>&2
 	  exit 1
 	fi
 	
@@ -452,4 +380,4 @@ clobber:V:	clean
 # include dependencies
 ################################################################
 
-<DEPEND
+<$DEPEND
