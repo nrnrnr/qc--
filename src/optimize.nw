@@ -26,7 +26,13 @@ It is possible to build a flow graph such that a node cannot be reached
 by following successors from the entry node, but it can be reached by
 following predecessors from the exit node.
 <<optimize.mli>>=
-val trim_unreachable_code: 'i Cfgx.M.cfg -> unit
+val trim_unreachable_code : 'i Cfgx.M.cfg -> unit
+@
+It's also easy to collapse simple branch chains.
+We eliminate a branch to a join point if the branch is the only predecessor of the join
+point.
+<<optimize.mli>>=
+val collapse_branch_chains: 'i Cfgx.M.cfg -> unit
 @
 
 % ------------------------------------------------------------------ 
@@ -62,10 +68,32 @@ let trim_unreachable_code cfg =
   let rec delete_nodes = function
     | []       -> ()
     | n :: rst -> 
-      (Printf.eprintf "deleting node %d\n" (G.num n);
       let succs = G.succs n in
-      G.delete cfg n;
-      Printf.eprintf "succs: %d\n" (List.length succs);
-      delete_nodes (hanging_nodes succs @ rst)) in
+      (G.delete cfg n;
+       delete_nodes (hanging_nodes succs @ rst)) in
   delete_nodes (hanging_nodes to_delete)
+@
+We find each join point with one predecessor, and if the predecessor is a branch to the
+join point, we eliminate the branch and the join point.
+<<optimize.ml>>=
+let collapse_branch_chains cfg =
+  let brp node = G.kind node = G.Branch &&
+                 let p = G.pred node in
+                 G.kind p = G.Join in
+  let to_collapse =
+    G.fold_nodes (fun n rst -> if brp n then n :: rst else rst) []  cfg in
+  let collapse n =
+    let j = G.pred n in
+    let s = G.succ n in
+    List.iter (fun p -> match G.kind p with
+                        | G.Cbranch ->
+                          if G.eq (G.tsucc p) j then G.set_tsucc p s;
+                          if G.eq (G.fsucc p) j then G.set_fsucc p s
+                        | G.Mbranch -> ()
+                        | G.Branch  -> G.set_succ p s
+                        | _ -> ())
+              (G.preds j);
+    if List.for_all (fun n -> G.kind n = G.Illegal) (G.preds j)
+    then (G.delete cfg j; G.delete cfg n) in
+  List.iter collapse to_collapse
 @
