@@ -19,5 +19,6 @@ POD2HTML =      pod2html
 		   --center="$NAME"                     \
 		   --section=5 $prereq > $target
 %-man.html:     %.pod
+	if [ -z "$NAME" ]; then NAME="Quick C-- Tools"; fi
 	$POD2HTML  --title=$NAME $prereq > $target
 
