@@ -44,49 +44,85 @@ typically at the following points in a source code:
       indicates a non-linearity in the source code. 
 \end{itemize}
 
-
 A synchronization establishes a connection between a source code
-position and a (filename, line, column) location.  The
-point of synchronization is called a synchronization point. In
+position and a (filename, line, column) location.  The point of
+synchronization is called a synchronization point or sync point.  In
 principle, synchronization points can be placed in any order into a
-stream of characters. The following restriction usually does not harm
+stream of characters.  The following restriction usually does not harm
 and helps to to build efficient source maps:  source code positions
 increase in the order synchronization points are established.  This
 means, that never a position to the left of an existing
 synchronization point is synchronized.
 
-Building and using a source map involves only few operations:
+Building and using a source map involves the following key operations:
 
 \begin{itemize}
 \item Create an initially empty source map.
 \item Enter synchronization points into the map.
-\item As a special case, enter a sync point for a new line.
 \item Return the location of a given position.
-\item For debugging, we also provide a [[dump]] function that 
-      prints out the contents of a source map.
 \end{itemize}
 
-To make any position meaningful, position 0 should be a synchronization
-point. 
+To make any position meaningful, position 0 should be a
+synchronization point. So whenever a source map is created a sync
+point for position 0 should be placed into it.
 
 % ------------------------------------------------------------------  
 \subsection{Interface}
 % ------------------------------------------------------------------  
 
+Position are non negative characters counts in the input stream.  They
+are represented by [[pos]].  A continous region in the input
+stream consists of the first charcter in the span and the first one
+following it.
+
 <<srcmap.mli>>= 
 
-type position       = int
+type pos            = int
+type reg            = pos * pos
+
+@ Programmers think in terms of locations, describing a line and column
+in a file; they have type [[loc]].
+
+<<srcmap.mli>>=
+ 
 type location       = string    (* file   *)
                     * int       (* line   *)
                     * int       (* column *)
 
-type srcmap
+@ A source map is a mutable data structure with an undisclosed
+reperesentation.  A source map should never be empty but should
+contain a synchronization point for [[pos]] 0.
 
-val empty :         srcmap
-val sync :          srcmap -> position -> location -> unit
-val nl :            srcmap -> position -> unit
-val location :      srcmap -> position -> location
-val dump:           srcmap -> unit
+<<srcmap.mli>>=
+type map
+
+val empty :         map
+
+@ A synchronization is announced with [[sync]].  It synchronizes a
+position [[pos]] with a [[location]].  A common case is the
+synchronizaton for a new line trough [[nl]].  A new line stays in the
+same file as the previous sync point is on the next next.  The [[pos]]
+passed to [[nl]] is the first character of the new line.
+
+<<srcmap.mli>>=
+val sync :          map -> pos -> location -> unit
+val nl :            map -> pos -> unit
+
+@ The corresponding location for a position can be obtained with
+[[location]].  For debugging a source map can be dumped to stdout
+using [[dump]]. 
+
+<<srcmap.mli>>=
+val location :      map -> pos -> location
+val dump:           map -> unit
+
+@ To make positions meaningful they can be bundeled with a source map
+that keeps track of their origins. 
+
+<<srcmap.mli>>= 
+type position       = map * pos
+type region         = map * reg
+
 @
 
 % ------------------------------------------------------------------  
@@ -99,17 +135,18 @@ should thus pay attention to memory requirements and run time
 performance. 
 
 <<srcmap.ml>>=
-type position       = int
+type pos            = int
+type reg            = pos * pos
 type location       = string    (* file   *)
                     * int       (* line   *)
                     * int       (* column *)
 
-@ A [[syncpoint]] associates a [[position]] with a [[location]]. To
+@ A [[syncpoint]] associates a [[pos]] with a [[location]]. To
 lower memory requirements a bit this could be also defined as a
 quadruple. 
 
 <<srcmap.ml>>=
-type syncpoint      = position * location
+type syncpoint      = pos * location
 
 @ We have chosen to use an array to implement a source map. Binary
 search can be used to implement the lookup representation and is
@@ -131,10 +168,12 @@ the one from the location it is a different one that is shared among
 all sync points using this name.
 
 <<srcmap.ml>>=
-type srcmap =       { mutable points:       syncpoint array 
+type map =          { mutable points:       syncpoint array 
                     ; mutable top:          int
                     ; files :               (string, string) Hashtbl.t
                     }
+type position       = map * pos
+type region         = map * reg
 
 @ The [[top]] component maintains the index of the first free position
 in the [[points]] array.
@@ -177,7 +216,7 @@ positions.
 
 <<srcmap.ml>>=         
 
-let sync srcmap position (file,line,col) =
+let sync srcmap pos (file,line,col) =
     let _     = alloc srcmap in
     let file' = try  Hashtbl.find srcmap.files file
                 with Not_found -> ( Hashtbl.add srcmap.files file file
@@ -186,8 +225,8 @@ let sync srcmap position (file,line,col) =
     in
     let location' = (file', line, col) in
     let top   = srcmap.top   in
-        ( assert ((position = 0) || (fst srcmap.points.(top-1) < position))
-        ; srcmap.points.(top) <- (position,location')
+        ( assert ((pos = 0) || (fst srcmap.points.(top-1) < pos))
+        ; srcmap.points.(top) <- (pos,location')
         ; srcmap.top <- srcmap.top + 1
         )
         
@@ -200,12 +239,12 @@ last sync point.
 
 <<srcmap.ml>>=
 
-let nl srcmap position = 
+let nl srcmap pos = 
     let (_,(file, line, _)) = srcmap.points.(srcmap.top-1) in
-        sync srcmap position (file, line+1, 1)
+        sync srcmap pos (file, line+1, 1)
         
-@ Function [[cmp]] compares a [[position]] with a [[(position,location)]]
-pair; the [[position]] is the one we like to find in the array.
+@ Function [[cmp]] compares a [[pos]] with a [[(pos,location)]]
+pair; the [[pos]] is the one we like to find in the array.
 
 <<srcmap.ml>>=
 let cmp x (y,_) = compare x y
@@ -244,9 +283,9 @@ point: we simply have to add the missing columns to go there.
 
 <<srcmap.ml>>=
 
-let location map position =
-    let pos,(file,line,col) = search position map.points map.top cmp in
-    (file,line,position - pos + col)
+let location map pos =
+    let pos',(file,line,col) = search pos map.points map.top cmp in
+    (file,line,pos - pos' + col)
 
 @ To aid debugging we provide a function [[dump]] to write the
 contents of a [[srcmap]] to stdout.
