@@ -144,31 +144,7 @@ procedure's activation record.
 
 
 <<linscan.mli>>=
-<<exported module types>>
-module Make (A: Args): sig
-    val linscan: Cfg3.t -> Target2.t -> Automaton.t -> unit
-end
-@
-
-
-% ------------------------------------------------------------------ 
-\subsubsection{Things we want to get rid of}
-% ------------------------------------------------------------------ 
-
-The [[Arg]] module summarizes the functionality that we need from the
-environment.  Since it is just a type, we can put here whatever we
-want without having to provide an implementation.  Ultimately, we like
-to implement everything that is provided by [[Arg]] and get rid of it.
-
-<<exported module types>>=
-module type Args = sig
-    (* 
-     * for spilling
-     *)
-    val mkMem:      Register.t -> Rtl.loc
-        (* create a new spill slot for a register. Incomplete - will 
-           use Automaton.t that maintains stack slots *)
-end
+val linscan: Cfg3.t -> Target2.t -> Automaton.t -> unit
 @
 
 % ------------------------------------------------------------------ 
@@ -192,41 +168,37 @@ Nodes in a {\cfg} are numbered with integers, called \emph{points}
 here.  Points mark the opening and closing of liveness intervals. 
 
 <<linscan.ml>>=
-<<exported module types>>
+module G = Cfg3
 
-module Make (A: Args)  = struct
-    module G = Cfg3
-
-    module P = struct
-        type t = int
-        let compare = compare
-        let zero = 0 
-    end
-    
-    module I        = Interval.Make(P)
-    module LT       = Lifetime.Make(I)
-    module LI       = Live.Make(G)
-    module RM       = Register.Map
-    module RS       = Register.Set
-    module T        = Target2
- 
-    type lifetimes  = LT.t RM.t  (* lt *)  (* map from register to its lifetimes *)
-    type loc        = Register.t    
- 
-    <<compute lifetimes>>
-    
-    let lookup table x = RM.find x table       (* lookup lifetime *)
-
-    <<find tmp>>
-    <<find reg>>
-    <<find spillee>>
-    
-    <<replace>> 
-    <<alloc>> 
-    <<linscan>>   
-    <<update>>        
-    <<spill>>
+module P = struct
+    type t = int
+    let compare = compare
+    let zero = 0 
 end
+
+module I        = Interval.Make(P)
+module LT       = Lifetime.Make(I)
+module LI       = Live.Make(G)
+module RM       = Register.Map
+module RS       = Register.Set
+module T        = Target2
+
+type lifetimes  = LT.t RM.t  (* lt *)  (* map from register to its lifetimes *)
+type loc        = Register.t    
+
+<<compute lifetimes>>
+
+let lookup table x = RM.find x table       (* lookup lifetime *)
+
+<<find tmp>>
+<<find reg>>
+<<find spillee>>
+
+<<replace>> 
+<<alloc>> 
+<<linscan>>   
+<<update>>        
+<<spill>>
 @
 
 
@@ -397,6 +369,10 @@ livetime, and all occurrences of [[tmp]] substituted by [[r]] in the
 <<replace>>=
 let replace tmp reg      = fun t -> if t = tmp then reg else t
 
+(* reserve a spill slot using automaton *)
+let spill_slot (a:Automaton.t) ((_,w,_):Register.t) =
+    Automaton.to_loc (Automaton.ty a w None)
+
 let replace_tmp target automaton node tmp lifetimes next_tmp spill =
   let iter cfg f = Cfgutil.fold_fwd cfg (fun node () -> G.set_rtl node f) () in
   let lifetime   = lookup lifetimes                                    in
@@ -410,7 +386,7 @@ let replace_tmp target automaton node tmp lifetimes next_tmp spill =
           next_tmp lifetimes
   | None -> (* out of register - must spill *)
       let spillee, interval = find_spillee lifetimes tmp node          in
-      let mem               = A.mkMem spillee                          in
+      let mem               = spill_slot automaton spillee             in
           spill target cfg automaton spillee mem interval
 @
 
