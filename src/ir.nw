@@ -136,7 +136,8 @@ A [[graph]] is an association list of labeled nodes. The actual
 representation inside the compiler is defined by a view below.
 
 <<module fgraph>>=
-graph       = (entry*)          -- overridden by view
+graph       = (graph_view)          
+graph_view  = (entry*)          -- overridden by view
 entry       = (label,node)
 @
 
@@ -226,6 +227,14 @@ epilogue or prologue which is not sufficient to define a view for
 function [[to_map]] and [[of_map]] which implement a view manually.
 
 <<>>=
+fgraph.graph_view <= {
+    natural_type:   Ir.graph
+    wrapper:        Ir.to_map
+    unwrapper:      Ir.of_map
+}
+@
+
+<<unused>>=
 module fgraph <= interface_epilogue
 %%
 module M : Map.S with type key = label
@@ -272,3 +281,29 @@ view OCaml {
 }
 @
 
+% ------------------------------------------------------------------ 
+\subsection{Internal flow graph representation}
+% ------------------------------------------------------------------ 
+
+<<ir.mli>>=
+module M : Map.S with type key = Fgraph.label
+
+type graph = Fgraph.node M.t
+val to_map:  Fgraph.graph -> graph
+val of_map:  graph   -> Fgraph.graph
+@
+
+<<ir.ml>>=
+module F    = Fgraph
+module M    = Map.Make (struct type t=F.label let compare=compare end)
+
+type graph  = F.node M.t
+
+let to_map entries =
+    let enter map (label,node) = M.add label node map in
+    List.fold_left enter M.empty entries
+
+let of_map map =
+    let get label node l = (label,node) :: l in
+    M.fold get map []
+@ 
