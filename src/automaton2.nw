@@ -108,16 +108,19 @@ following two functions:
 val fetch : loc -> width:int -> Rtl.exp
 val store : loc -> Rtl.exp -> width:int -> Rtl.rtl
 @
+
 Because locations are abstract they can handle difficult cases where a
 value is stored in part in a hardware register and in part in memory.
 Most times, however, a location is a sensible RTL location, in which
-case we make it abstract using [[of_loc]].\footnote
-{The former [[to_loc]] was not needed and has been expunged.}
+case we make it abstract using [[of_loc]].
+
 <<automaton2.mli>>=
 val of_loc : Rtl.loc -> loc
 @
+
 When an automaton [[t]] is frozen, it responds with the memory
 [[Block.t]] that it used for locations it handed out.
+
 <<automaton2.mli>>=
 val freeze  : t -> Block.t
 val freeze' : t -> result
@@ -128,7 +131,7 @@ val freeze' : t -> result
 % ------------------------------------------------------------------ 
 
 Here's an alternative:
-<<types>>=
+<<alternative types>>=
   type parts = { allocate : int -> string option -> loc
                ; freeze   : unit -> result
                } 
@@ -170,7 +173,7 @@ module Sample: sig
     
     val relative: target -> up:bool -> aligned:bool 
                          -> anchor:Rtl.exp -> dbg:string -> automaton
-
+    
     val stack:  target -> Rtl.exp -> automaton
     val global: target -> Rtl.exp -> automaton
 end
@@ -219,10 +222,24 @@ let freeze t              = (t#freeze ()).overflow
 
 let fetch loc ~width      = loc#fetch width
 let store loc expr ~width = loc#store expr width
-let of_loc loc            = Impossible.unimp "Automaton.of_rtl_loc"
 @
 
+Each automaton defines an abstract location which is intended for
+complex location like a register and a memory cell pair. Since all slots
+are in memory, this is essentially a wrapper for [[Rtl.loc]].
 
+<<automaton2.ml>>=
+class simple_loc (loc:Rtl.loc): location =
+object
+    val _loc   = loc
+    
+    method store expr width = Rtl.store _loc expr width 
+    method fetch width      = Rtl.fetch _loc width
+end
+
+
+let of_loc l              = new simple_loc l
+@
 
 % ------------------------------------------------------------------ 
 \subsection{Implementation of Sample Automata}
@@ -238,7 +255,6 @@ module Sample = struct
         ; registers:        (string * Rtl.loc) list
         }
     
-    <<class loc>>
     <<class memory>>
     <<class stack>>
     <<class global>>
@@ -251,20 +267,10 @@ module Sample = struct
 end    
 @
 
+I DON'T KNOW THE DIFFERENCES BETWEEN THE MEMORY AND THE STACK CLASSES.
+THEY SHOULD BE UNIFIED. HOWEVER, WE ARE GETTING RID OF AUTOMATON2 SOON,
+SO I WILL KEEP THEM. -CL
 
-Each automaton defines an abstract location which is intended for
-complex location like a register and a memory cell pair. Since all slots
-are in memory, this is essentially a wrapper for [[Rtl.loc]].
-
-<<class loc>>=
-class loc (loc:Rtl.loc): location =
-object
-    val _loc   = loc
-    
-    method store expr width = Rtl.store _loc expr width 
-    method fetch width      = Rtl.fetch _loc width
-end
-@
 
 The automaton [[memory]] maintains a block [[_block]] of memory
 allocated so far. For every new slot it allocates a small block and
@@ -307,7 +313,7 @@ object (this)
                     _block <- B.cathl slot _block 
                   else
                     _block <- B.cathl _block slot 
-                ; new loc (Rtl.mem assn 'm' target.byteorder width (B.base slot))
+                ; new simple_loc (Rtl.mem assn 'm' target.byteorder width (B.base slot))
                 )                
 end
 
@@ -324,7 +330,7 @@ object (this)
             } 
     
     method private memloc addr w = 
-        new loc (Rtl.cell Rtl.none 'm' target.byteorder w addr)
+        new simple_loc (Rtl.cell Rtl.none 'm' target.byteorder w addr)
     
     method private hardware hint = match hint with 
     | r     -> Impossible.impossible ("unknown hardware register "^r) 
@@ -356,10 +362,10 @@ object (this)
             } 
     
     method private memloc addr w = 
-        new loc (Rtl.cell Rtl.none 'm' target.byteorder w addr)
+        new simple_loc (Rtl.cell Rtl.none 'm' target.byteorder w addr)
     
     method private hardware hint = 
-        try new loc (List.assoc hint target.registers) with 
+        try new simple_loc (List.assoc hint target.registers) with 
         Not_found -> Impossible.impossible ("unknown hardware register "^hint) 
     
     method allocate width hint = 
@@ -376,5 +382,3 @@ object (this)
 end
 @
 
-
-class gloal
