@@ -42,6 +42,9 @@ Here are some abbreviations and utilities.
 module R  = Rtl
 module RP = Rtl.Private
 module RU = Rtlutil
+module S  = Space
+module T  = Target2
+
 let up   = Rtl.Revert.exp
 let down = Rtl.Convert.exp
 let uploc= Rtl.Revert.loc
@@ -174,4 +177,17 @@ Contexts.  This is jury-rigged, since in real life the expander knows
 all about the machine and doesn't need a context.
 <<expander.ml>>=
 let context t =
- assert false (*  let spaces *)
+  let rec space_of = function
+    | RP.Cell (s, _, _, _, _) -> s
+    | RP.Var (_, _, _) -> assert false
+    | RP.Slice (_, _, l) -> space_of l in
+  let mem_like =
+    List.fold_right
+      (fun s rest ->
+         if s.S.classification = S.Mem then
+           fun c -> c = s.S.space || rest c
+         else
+           rest)
+      t.T.spaces (fun _ -> false) in
+  let get_temp char k = assert false in
+  (fun loc -> mem_like (space_of loc)), get_temp
