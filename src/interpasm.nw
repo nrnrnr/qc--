@@ -26,10 +26,7 @@ captured by a functor argument of signature [[PROC]]. I could not get it
 to work with polymorphism allone.
 
 <<interpasm.ml>>=
-module T        = Target
 module Asm      = Asm
-module GU       = Cfgutil
-module RL       = Interpemitrtl
 module RP       = Rtl.Private
 module P        = Proc
 
@@ -38,7 +35,7 @@ type proc' = (Automaton.t, Rtl.rtl Cfgx.M.cfg, Call.t, tgt) Proc.t
 
 module type PROC = sig
     type proc
-    val emit: proc -> out_channel -> unit
+    val emit: proc -> (string -> unit) -> unit
 end
 
 module Make (P: PROC) = struct
@@ -55,9 +52,7 @@ module New = struct
 
     (* we ask for more stackdata space than we strictly need; leftover space
        we use for storing continuation information *)
-    let emit (proc:proc) fd =
-        let fprintf = Printf.fprintf in
-
+    let emit (proc:proc) printer =
         (* this code for emitting stackdata info. stolen from runtimedata.nw *)
         let sort_spans = List.sort (fun (i1,_) (i2,_) -> compare i1 i2) in
         let rec extract_offset e = match Rtl.Dn.exp (Simplify.exp e) with
@@ -67,24 +62,24 @@ module New = struct
         let stackdata_spans = 
           List.filter (fun (site,_) -> site = proc.P.symbol#original_text)
              proc.P.spans in
-        let stackdata_decls fd = match stackdata_spans with
+        let stackdata_decls printer = match stackdata_spans with
           | [(_,spans)] ->
-            ( fprintf fd "{ "
-            ; List.iter (fun (_,e) -> fprintf fd "%d,"
-                                              (extract_offset e))
+            ( printer "{ "
+            ; List.iter (fun (_,e) ->
+                          printer (Printf.sprintf "%d," (extract_offset e)))
                  (sort_spans spans)
-            ; fprintf fd " }"
+            ; printer " }"
             )
           | _ -> Impossible.impossible "more than one set of SD spans found" in
 
-        ( fprintf fd "CMM.procedure ('%s',%d,%d,"
+        ( printer (Printf.sprintf "CMM.procedure ('%s',%d,%d,"
                       (proc.Proc.symbol#mangled_text)
                       proc.Proc.vars
-                      (Block.size proc.Proc.stackd+Block.size proc.Proc.conts)
-        ; stackdata_decls fd
-        ; fprintf fd ")\n"
-        ; Interpemit.proc proc fd
-        ; fprintf fd "CMM.end_procedure()\n"
+                      (Block.size proc.Proc.stackd+Block.size proc.Proc.conts))
+        ; stackdata_decls printer
+        ; printer ")\n"
+        ; Interpemit.proc proc printer
+        ; printer "CMM.end_procedure()\n"
         )
 end
 
@@ -176,16 +171,15 @@ class asm  ~(byteorder:Rtl.aggregation)
            ~(ptrsize:int)
            (fd:out_channel): [proc] Asm.assembler =
 object (this)
-    val         _fd       = fd
-    val mutable _section  = "this can't happen"
-    val mutable _exported = Strutil.Set.empty
-    val mutable _imported = Strutil.Set.empty
+    val mutable _section   = "this can't happen"
+    val mutable _exported  = Strutil.Set.empty
+    val mutable _imported  = Strutil.Set.empty
+    val mutable _body      = [] (* reversed *)
 
-    val         _mangle   = Mangle.mk spec
-    val         _fprintf  = output_string fd
+    val         _mangle    = Mangle.mk spec
+    val         _fd        = fd
 
-    method private append s =
-        _fprintf s
+    method private append s = _body <- s :: _body
 
     (* -- declare symbols -- *)
     method import s =
@@ -210,16 +204,14 @@ object (this)
         ; _section <- s
         )
 
-    method current = 
-        _section
+    method current = _section
             
     (* define symbols *)        
     method label (s: Symbol.t) = 
         this#append (luafunc "define_label" (quoted s#mangled_text))
     
     (* FIX can we ignore constants here? *)
-    method const (s: Symbol.t) (b:Bits.bits) = 
-        ()
+    method const (s: Symbol.t) (b:Bits.bits) = ()
 
     method globals n = this#append (luafunc "globals" (string_of_int n))
 
@@ -237,7 +229,7 @@ object (this)
       Impossible.unimp "longjmp size not set for Interp -- needed for alternate returns"
 
     (* instructions *)
-    method cfg_instr (proc: proc) = P.emit proc _fd
+    method cfg_instr (proc: proc) = P.emit proc (this#append)
 
     (* -- emit data -- *)
 
@@ -249,8 +241,7 @@ object (this)
         if n > 0 then
             this#append (initdata (memsize) 
                                   (List.map string_of_int (z n)))
-        else
-            ()
+        else ()
     
     method value (v:Bits.bits) = 
         let sz = Bits.width v in
@@ -266,7 +257,7 @@ object (this)
                                  ((quoted s#mangled_text) ^ "," ^ 
                                   (quoted (hexbits bits))))
 
-    (* should we consider throwing the comments in as Lua comments? *)
+    (* we throw comments in as Lua comments... *)
     method comment s = this#append ("-- " ^ s ^ "\n")
 
     method private imports =
@@ -298,8 +289,9 @@ object (this)
     
     method emit = 
         let toplevel = this#imports ^ this#exports ^ this#personality in
-        ( _fprintf (luafunc "end_section" "")
-        ; _fprintf toplevel
+        ( output_string _fd toplevel
+        ; output_string _fd (String.concat "" (List.rev _body))
+        ; output_string _fd (luafunc "end_section" "")
         )
 
 end    

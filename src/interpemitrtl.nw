@@ -18,8 +18,8 @@ This module provides a translation from an RTL to a string representing its
 Lua-style counterpart.
 
 <<interpemitrtl.mli>>=
-val rtl: out_channel -> Rtl.rtl -> unit
-val exp: out_channel -> Rtl.exp -> unit
+val rtl: (string -> unit) -> Rtl.rtl -> unit
+val exp: (string -> unit) -> Rtl.exp -> unit
 @ 
 
 % ------------------------------------------------------------------ 
@@ -203,8 +203,8 @@ private RTLs (and additionally take care of outputting strings in the case
 of [[expr]]).
 
 <<ToLua>>=
-let expr fd rtl = output_string fd (expr' (Rtl.Dn.exp rtl))
-let location  = location' << Rtl.Dn.loc
+let expr printer rtl = printer (expr' (Rtl.Dn.exp rtl))
+let location         = location' << Rtl.Dn.loc
 @ 
 
 [[guard]] takes a guarded expression and yields a string form of the expression
@@ -227,7 +227,7 @@ stores in reverse-order (because we are using a first-in first-out stack).
 We take care to deal with guarded stores correctly.
 
 <<ToLua>>=
-let rtl' fd gg =
+let rtl' printer gg =
    let get_store = function
                  | (_ , R.Kill _)              -> 
                      Impossible.impossible "rtltolua : Rtl.Kill"
@@ -238,13 +238,13 @@ let rtl' fd gg =
                      (fun ((gd_prefix, gd_f_prefix), 
                            (prefix, func_f, func_suffix, args), exp, w
                           ) -> 
-                       ( output_string fd (gd_prefix ^ prefix ^ expr' exp)
+                       ( printer (gd_prefix ^ prefix ^ expr' exp)
                        ; luafunc (gd_f_prefix ^ func_f "store" func_suffix)
                                  args
                        )
                      )
                      gg_locs                                               in
-    List.iter (output_string fd) gg_stores
+    List.iter printer gg_stores
 @
 
 As above, we export [[rtl']] as [[rtl]]; and we export [[expr]] as [[exp]].
@@ -253,7 +253,7 @@ counter, etc.) and ignores them; all else is sent to [[rtl']].
 
 <<ToLua>>=
 (* exported functions *)
-let rtl fd r = 
+let rtl printer r = 
    let clean = fun glist g -> match (glist, g) with
      | (glist, (gd, R.Store (R.Reg('c', _, _), exp, w))) -> glist
      | (glist, (gd, R.Store (R.Reg('t', _, _), exp, w))) -> glist
@@ -261,7 +261,7 @@ let rtl fd r =
 
    in let (R.Rtl guardeds) = Rtl.Dn.rtl r
    in let guardeds         = List.fold_left clean [] guardeds
-   in    rtl' fd guardeds
+   in rtl' printer guardeds
 
 let exp    = expr
 @ 

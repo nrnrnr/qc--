@@ -8,7 +8,7 @@ control-flow graph and emitting code for each node.
 
 <<interpemit.mli>>=
 
-val proc: Oast2ir.proc -> out_channel -> unit
+val proc: Oast2ir.proc -> (string -> unit) -> unit
 @
 
 % ------------------------------------------------------------------ 
@@ -29,10 +29,10 @@ module R = Rtl.Private
 \paragraph{Helper functions}.
 
 <<interpemit.ml>>=
-let fprintf          = Printf.fprintf
+let sprintf          = Printf.sprintf
 let quoted s         = "\"" ^ s ^ "\""
 
-let open_span fd (token, exp) = 
+let open_span printer (token, exp) = 
    let dnexp  = Rtl.Dn.exp exp in
    let imposs = (fun () -> Impossible.impossible "open_span:invalid span val.")
    in
@@ -58,13 +58,13 @@ let open_span fd (token, exp) =
    in
    let spanval, offset = viewexp dnexp
    in
-      fprintf fd "CMM.begin_span(%d,'%s',%d)\n"
-              (Bits.S.to_int token)
-              (match spanval with | Some s -> s | _ -> imposs())
-              offset
+      printer (sprintf "CMM.begin_span(%d,'%s',%d)\n"
+                (Bits.S.to_int token)
+                (match spanval with | Some s -> s | _ -> imposs())
+                offset)
 
-let close_span fd (token, _) =
-    fprintf fd "CMM.end_span(%d)\n" (Bits.S.to_int token)
+let close_span printer (token, _) =
+    printer (sprintf "CMM.end_span(%d)\n" (Bits.S.to_int token))
 
 let instr n =
     match C.to_executable n with
@@ -77,9 +77,10 @@ code is emitted.
 
 
 <<interpemit.ml>>=
-let node proc fd n = match C.kind n with
+let node proc printer n = match C.kind n with
     | C.Join | C.Exit -> 
-        List.iter (fprintf fd "CMM.define_label('%s')\n") (C.labels n)
+        List.iter (fun l -> printer (sprintf "CMM.define_label('%s')\n" l))
+          (C.labels n)
     | C.Call ->
         let rec sublist lst i length = 
            let helper lst i length = match lst with
@@ -120,20 +121,21 @@ let node proc fd n = match C.kind n with
             (* FIX ^^^^^^^^^ this might be okay, but not sure *)
            in String.concat "," (List.map (fun n -> quoted (get_label n)) lst)
         in
-           ( List.iter (open_span fd) (List.rev spans) 
-           ; E.exp fd e  
-           ; fprintf fd "CMM.call({%s}, {%s}, {%s}, %s) -- %s\n"
-               (string_of_annotation cuts   )
-               (string_of_annotation unwinds)
-               (string_of_annotation returns)
-               (if aborts then "1" else "0" )
-               "cuts, unwinds, returns, aborts"
-           ; List.iter (close_span fd) spans
+           ( List.iter (open_span printer) (List.rev spans) 
+           ; E.exp printer e  
+           ; printer
+              (sprintf "CMM.call({%s}, {%s}, {%s}, %s) -- %s\n"
+                (string_of_annotation cuts   )
+                (string_of_annotation unwinds)
+                (string_of_annotation returns)
+                (if aborts then "1" else "0" )
+                "cuts, unwinds, returns, aborts")
+           ; List.iter (close_span printer) spans
            ) 
 
     (* FIX cut to is not being translated well *)
     | C.CutTo ->
-        ( E.rtl fd (instr n)
+        ( E.rtl printer (instr n)
         ; ( let e  = match C.to_executable n with
               | None   -> Impossible.impossible "cut w/o instruction"
               | Some i -> Interp.target'.T.call.T.project i in
@@ -141,36 +143,37 @@ let node proc fd n = match C.kind n with
               | Rtl.Private.Fetch (Rtl.Private.Mem (_,_,_,exp,_), _) ->
                  Rtl.Up.exp exp
               | _ -> e) in
-            E.exp fd e)
-        ; fprintf fd "CMM.cut()\n"
+            E.exp printer e)
+        ; printer "CMM.cut()\n"
         )
     | C.Cbranch ->
         let t = C.tsucc n in
         let l = C.label t in
         let i = instr n   in
         let (g,_) = Interp.target'.T.branch.T.project i in
-            ( E.exp fd g
-            ; fprintf fd "CMM.cbrancht('%s')\n" l
+            ( E.exp printer g
+            ; printer (sprintf "CMM.cbrancht('%s')\n" l)
             )
     | C.Branch when C.is_br n ->
         let i = instr n in
         let e = Interp.target'.T.goto.T.project i in
-            ( E.exp fd e
-            ; fprintf fd "CMM.goto()\n"
+            ( E.exp printer e
+            ; printer "CMM.goto()\n"
             )
     | C.Return ->
-        fprintf fd "CMM.cmm_return(%d,%d)\n" 0 0    (* FIX *)
+        (* THIS IS WRONG; WE DO _NOT_ ALWAYS TAKE THE 0th RETURN *)
+        printer (sprintf "CMM.cmm_return(%d,%d)\n" 0 0)
 
     | C.Jump ->
         let i = instr n in
         let e = Interp.target'.T.jump.T.project i in
-            ( E.exp fd e
-            ; fprintf fd "CMM.cmm_tail_call()\n"
+            ( E.exp printer e
+            ; printer "CMM.cmm_tail_call()\n"
             )
 
     | _ ->  ( match C.to_executable n with
             | None   -> ()
-            | Some i -> E.rtl fd i
+            | Some i -> E.rtl printer i
             )
 @            
 
@@ -179,7 +182,7 @@ We specialize the fold function provided by the {\cfg} to an iterator
 and apply it to all nodes.
 
 <<interpemit.ml>>=
-let proc p fd =
-    let iter f cfg = C.fold_layout (fun node () -> f p fd node) () cfg in
+let proc p printer =
+    let iter f cfg = C.fold_layout (fun node () -> f p printer node) () cfg in
         iter node p.P.cfg
 @    
