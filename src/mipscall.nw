@@ -18,6 +18,12 @@ both until we are convinced the latter is correct.
 <<mipscall.mli>>=
 val c : return_to: (Rtl.exp -> Rtl.rtl) -> Mflow.cut_args Target.map -> Call.t
 val c': return_to: (Rtl.exp -> Rtl.rtl) -> Mflow.cut_args Target.map -> Call.t
+
+val cconv :
+  return_to:(Rtl.exp -> Rtl.rtl) ->
+  Mflow.cut_args Target.map ->
+  string -> Automaton.cc_spec ->
+  Call.t
 @
 
 The book \emph{mips Risc Architecture} by Gerry Kane, published by
@@ -120,6 +126,30 @@ let saved_nvr temps =
         | ('f',_,w) -> u w
         | (s  ,i,_) -> impossible (sprintf "cannot save $%c%d" s i)
 @
+And in Lua:
+<<MIPS calling convention automata in Lua>>=
+A            = Automaton
+Mips         = Mips         or {}
+Mips.cc      = Mips.cc      or {}
+Mips.cc["C"] = Mips.cc["C"] or {}
+
+function round_mult_32 (k) return Util.round_up_mult(32, k)    end
+function is_float64(h, w)  return (h == "float") and (w == 64) end
+
+Mips.growth    = "down"
+Mips.byteorder = "little"
+Mips.sp_align  = 16
+Mips.wordsize  = 32
+
+function reg(sp,i) return({ space = sp, index = i, width = Mips.wordsize }) end
+function f(i) return (reg("f", i)) end
+function d(i) return (reg("d", i)) end
+function r(i) return (reg("r", i)) end
+function l(i) return (reg("l", i)) end
+
+Mips.vol_fp  = (f(0) .. f(18))
+Mips.vol_int = (r(2) .. r(15)) .. { r(24), r(25), r(31) }
+@ 
 
 \paragraph{Conventions}
 
@@ -167,6 +197,16 @@ let results =
             A.useregs [r 2; r 3] ~errormsg:fatal
         ]
 @
+And in Lua:
+<<MIPS calling convention automata in Lua>>=
+Mips.cc["C"].results =
+  { A.widen  (round_mult_32)
+  , A.widths { 32, 64 }
+  , A.choice { "float" , A.useregs(f(0) .. f(3))
+             , A.is_any, A.useregs(r(2) .. r(3))
+             }
+  }
+@ 
 
 \paragraph{C~procedure parameters}
 
@@ -185,7 +225,7 @@ let spaces =
 type belief = Manual | Lcc
 let who_do_you_believe = Lcc
 
-let arguments' () =
+let arguments () =
     let bits = ref 0 in
     let arg  = ref 0 in
     A.widen (Aux.round_up_to ~multiple_of: 32) *>
@@ -217,7 +257,39 @@ let arguments' () =
     ] *>
     A.overflow ~memsize:8 ~byteorder ~growth:Memalloc.Up 
                ~max_alignment:sp_align
+@ 
+And in Lua:
+<<MIPS calling convention automata in Lua>>=
+-- see the comments above in mipscall.nw for cc["C"].call
+-- note that there's some postprocessing magic going on in mipscall.nw too
+Mips.cc["C"].call =
+  { A.widen (round_mult_32)
+  , A.widths { 32, 64 }
+  , A.bitcounter("bits")
+  , A.argcounter("arg")
+  , A.first_choice { 
+      "float" , { A.choice {
+                    "float" , A.choice {
+                                64      , A.regs_by_args("arg", {d(12),d(14)}),
+                                A.is_any, A.regs_by_args("arg", {f(12),f(14)})
+                              },
+                    A.is_any, A.unit
+                  },
+                  A.regs_by_bits("bits", r(4) .. r(7))
+                },
 
+      A.is_any, A.choice {
+                  is_float64, A.regs_by_args("arg" , { d(12), l(6) }),
+                  A.is_any  , A.regs_by_bits("bits", r(4) .. r(7))
+                }
+    }
+  , A.overflow { memsize = 8, byteorder = Mips.byteorder, growth = "up"
+               , max_alignment = Mips.sp_align
+               }
+  }
+@
+And now for postprocessing of both ML and Lua style automata specifications.
+<<mipscall.ml>>=
 let prefix16bytes result =
     let b = Block.relative vfp "16-byte block" Block.at ~size:16 ~alignment:4 
     in    
@@ -225,8 +297,8 @@ let prefix16bytes result =
           A.overflow = Block.cathl result.A.overflow b
         }
 
-let arguments () =
-    A.postprocess (arguments'()) prefix16bytes  
+let postprocess cconv =
+    { cconv with A.call = A.postprocess cconv.A.call prefix16bytes }
 @
 
 \paragraph{C~cut-to parameters}
@@ -245,6 +317,17 @@ let cut_args =
         ] *>
     A.overflow ~memsize:8 ~byteorder ~growth ~max_alignment:sp_align
 @
+And in Lua:
+<<MIPS calling convention automata in Lua>>=
+Mips.cc["C"].cutto =
+  { A.widen (round_mult_32)
+  , A.choice { "float" , A.useregs(Mips.vol_fp)
+             , A.is_any, A.useregs(Mips.vol_int)
+             }
+  , A.overflow { memsize = 8, byteorder = Mips.byteorder, growth = Mips.growth
+               , max_alignment = Mips.sp_align }
+  }
+@
 
 % ------------------------------------------------------------------ 
 \subsection{Putting it together} 
@@ -257,61 +340,67 @@ an overflow block is always at the extreme end of a frame, which is not
 the case here.
 
 <<transformations>>=
-let prolog  =
+let prolog stage =
   let autosp = (fun _  -> vfp) in
   C.incoming ~growth ~sp
-    ~mkauto:(fun () -> Block.srelative vfp "in call parms" A.at (arguments ()))
+    ~mkauto:(fun () -> Block.srelative vfp "in call parms" A.at stage.A.call)
     ~autosp
     ~postsp:(fun _ _ -> std_sp_location)
     ~insp:(fun a _ _ -> autosp a) in
 
-let epilog  =
+let epilog stage =
   C.outgoing ~growth ~sp
-    ~mkauto:(fun () -> Block.srelative vfp "out ovfl results" A.at results)
+    ~mkauto:(fun () -> Block.srelative vfp "out ovfl results" A.at stage.A.results)
     ~autosp:(fun r  -> std_sp_location)
     ~postsp:(fun _ _ -> vfp) in
 
-let call_actuals  =
+let call_actuals stage =
   C.outgoing ~growth ~sp
-    ~mkauto:(fun () -> Block.srelative vfp "out call parms" A.at (arguments ()))
+    ~mkauto:(fun () -> Block.srelative vfp "out call parms" A.at stage.A.call)
     ~autosp:(fun r    -> std_sp_location)
     ~postsp:(fun a sp -> std_sp_location) in
 
-let call_results  =
+let call_results stage =
   let autosp = (fun r   -> std_sp_location) in
   C.incoming ~growth ~sp
-    ~mkauto:(fun ()  -> Block.srelative vfp "in ovfl results" A.at results)
+    ~mkauto:(fun ()  -> Block.srelative vfp "in ovfl results" A.at stage.A.results)
     ~autosp
     ~postsp:(fun _ _ -> std_sp_location)
     ~insp:(fun a _ _ -> autosp a) in
 
-let also_cuts_to =
+let also_cuts_to stage =
   let autosp = (fun r -> std_sp_location) in
   C.incoming ~growth ~sp
-    ~mkauto:(fun () -> Block.srelative vfp "in cont parms" A.at cut_args)
+    ~mkauto:(fun () -> Block.srelative vfp "in cont parms" A.at stage.A.cutto)
     ~autosp
     ~postsp:(fun _ _ -> std_sp_location)
     ~insp:(fun a _ _ -> autosp a) in
 
-let cut_actuals base  =
-   C.outgoing ~growth ~sp ~mkauto:(fun () -> A.at base cut_args)
+let cut_actuals stage base =
+   C.outgoing ~growth ~sp ~mkauto:(fun () -> A.at base stage.A.cutto)
      ~autosp:(fun r -> spval)
      ~postsp:(fun _ _ -> spval) in
 
-
 <<mipscall.ml>>=
-let c ~return_to cut = 
+let new_c ~return_to cut stage = 
+    let stage = postprocess stage in
     <<transformations>>
     let return k n ~ra =
         if k = 0 & n = 0 then return_to ra
         else impossible "alternate return using C calling convention" in
     { C.name            = "C"
-		; C.overflow_alloc  = { C.parameter_deallocator = C.Caller
+	; C.overflow_alloc  = { C.parameter_deallocator = C.Caller
                           ; C.result_allocator      = C.Caller
-													}
-    ; C.call_parms      = { C.in' = prolog;       C.out = call_actuals}
-    ; C.cut_parms       = { C.in' = also_cuts_to; C.out = cut_actuals}
-    ; C.results         = { C.in' = call_results; C.out = epilog}
+						  }
+    ; C.call_parms      = { C.in' = prolog stage
+                          ; C.out = call_actuals stage
+                          }
+    ; C.cut_parms       = { C.in' = also_cuts_to stage
+                          ; C.out = cut_actuals stage
+                          }
+    ; C.results         = { C.in' = call_results stage
+                          ; C.out = epilog stage
+                          }
 
     ; C.stack_growth    = growth
     ; C.stable_sp_loc   = std_sp_location
@@ -327,7 +416,22 @@ let c ~return_to cut =
     ; C.ra_on_exit       = (fun _ _ t -> ra)
     ; C.sp_on_jump       = (fun _ _ -> Rtl.null)
     }
+
+let c ~return_to cut =
+  new_c ~return_to cut
+    { A.call = arguments() ; A.results = results ; A.cutto = cut_args }
+
+let cconv ~return_to cut ccname stage = 
+  let f =
+    match ccname with
+    | _ -> new_c
+  in f ~return_to cut stage
 @
+And in Lua:
+<<MIPS calling convention automata in Lua>>=
+-- register the new calling convention!
+Backend.mips.target = A.register_cc(Backend.mips.target, "C", Mips.cc["C"])
+@ 
 
 \paragraph{Support for Debugging} 
 

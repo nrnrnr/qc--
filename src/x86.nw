@@ -790,6 +790,13 @@ let target =
             | "C'"  | "c'"     -> c'_convention (* uses Callspec *) 
             | "notail"         -> notail_convention
             | cc -> Impossible.impossible ("unsupported calling convention "^cc))
+
+  ; T.cc_specs         = A.init_cc
+  ; T.cc_spec_to_auto  = X86call.cconv 
+                           ~return_to:(fun ra -> 
+                                         pop_with (fun ra -> store pc ra))
+                           (F.cutto PX.esp)
+
   (* global or hardware registers *)
   ; T.globals  = globals
   ; T.rounding_mode = rounding_modesl

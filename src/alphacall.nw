@@ -17,6 +17,12 @@ val cmm0: return_to: (Rtl.exp -> Rtl.rtl) -> Mflow.cut_args Target.map -> Call.t
 val cmm1: return_to: (Rtl.exp -> Rtl.rtl) -> Mflow.cut_args Target.map -> Call.t
 val cmm2: return_to: (Rtl.exp -> Rtl.rtl) -> Mflow.cut_args Target.map -> Call.t
 val cmm3: return_to: (Rtl.exp -> Rtl.rtl) -> Mflow.cut_args Target.map -> Call.t
+
+val cconv :
+  return_to:(Rtl.exp -> Rtl.rtl) -> 
+  Mflow.cut_args Target.map -> 
+  string -> Automaton.cc_spec ->
+  Call.t
 @
 
 The implementation is based on \textit{True64 {\small UNIX} Assembly
@@ -131,6 +137,29 @@ let fatal _ =
     impossible "fatal error in Alpha automaton"
 @
 
+And in Lua:
+
+<<Alpha calling convention automata in Lua>>=
+A             = Automaton
+Alpha         = Alpha         or {}
+Alpha.cc      = Alpha.cc      or {}
+Alpha.cc["C"] = Alpha.cc["C"] or {}
+
+function round_mult_64 (k) return Util.round_up_mult(64, k) end
+
+Alpha.growth    = "down"
+Alpha.byteorder = "little"
+Alpha.sp_align  = 16
+Alpha.wordsize  = 64
+
+function reg(sp,i) return({space = sp, index = i, width = Alpha.wordsize}) end
+function f(i) return(reg("f", i)) end
+function r(i) return(reg("r", i)) end
+
+Alpha.vol_fp  = (f(0) .. f(1)) .. (f(10) .. f(30))  -- includes f0-f1, f10-f30
+Alpha.vol_int = (r(0) .. r(8)) .. (r(16) .. r(26))  -- includes r0-f8, r16-f26
+@ 
+
 \paragraph{C~return results}
 
 A C~function returns an integer (up to 64 bits wide) in [[$0]], a
@@ -152,6 +181,16 @@ let results =
             A.useregs [r 0] ~errormsg:fatal
         ]
 @
+And in Lua:
+<<Alpha calling convention automata in Lua>>=
+Alpha.cc["C"].results =
+  { A.widen(round_mult_64)
+  , A.widths { 64 }
+  , A.choice { "float" , A.useregs { f(0), f(1) }
+             , A.is_any, A.useregs { r(0) }
+             }
+  }
+@ 
 As an alternative we provide [[cmm_results]] that returns every result
 in memory. This is for experiments with custom calling conventions.
 <<alphacall.ml>>=
@@ -192,18 +231,34 @@ independent of the stack growth.
         
 <<alphacall.ml>>=        
 let arguments () = 
-    let ctr = ref 0 in
-    (A.bitcounter ctr *>
+    let ctr = "bitc" in
+    (A.bitcounter' ctr *>
     A.choice
         [ A.is_hint "float",
           A.widths [64] ~errormsg:(badwidth "Alpha FP call") *> 
-          A.offsetregs ctr [f 16; f 17; f 18; f 19; f 20; f 21]
+          A.offsetregs' ctr [f 16; f 17; f 18; f 19; f 20; f 21]
         ; A.is_any,
           A.widen (Aux.round_up_to ~multiple_of:64) *>
-          A.offsetregs ctr [r 16; r 17; r 18; r 19; r 20; r 21]
+          A.offsetregs' ctr [r 16; r 17; r 18; r 19; r 20; r 21]
         ]) *>  
   A.overflow ~memsize:8 ~byteorder ~growth:Memalloc.Up ~max_alignment:sp_align
 @          
+
+And in Lua:
+<<Alpha calling convention automata in Lua>>=
+Alpha.cc["C"].call =
+  { A.bitcounter("bits")
+  , A.choice { "float",  { A.widths { 64 }
+                         , A.regs_by_bits("bits", f(16) .. f(21))
+                         }
+             , A.is_any, { A.widen(round_mult_64)
+                         , A.regs_by_bits("bits", r(16) .. r(21))
+                         }
+             }
+  , A.overflow { memsize = 8, byteorder = Alpha.byteorder, growth = "up"
+               , max_alignment = Alpha.sp_align }
+  }
+@
 
 \paragraph{C~cut-to parameters}
 
@@ -220,6 +275,17 @@ let cut_args =
             A.useregs vol_int ~errormsg:fatal 
         ] *>
     A.overflow ~memsize:8 ~byteorder ~growth ~max_alignment:sp_align
+@
+And in Lua:
+<<Alpha calling convention automata in Lua>>=
+Alpha.cc["C"].cutto =
+ { A.widen(round_mult_64)
+ , A.choice { "float",  A.useregs(Alpha.vol_fp)
+            , A.is_any, A.useregs(Alpha.vol_int)
+            }
+ , A.overflow { memsize = 8, byteorder = Alpha.byteorder, growth = Alpha.growth
+              , max_alignment = Alpha.sp_align }
+ }
 @
 
 % ------------------------------------------------------------------ 
@@ -239,45 +305,45 @@ the prolog of a procedure and set back before the procedure returns. I
 hope the code below reflects this.
 
 <<transformations>>=
-let prolog  =
+let prolog stage =
   let autosp = (fun _ -> vfp) in
   C.incoming ~growth ~sp
-    ~mkauto:(fun () -> Block.srelative vfp "in call parms" A.at (arguments ()))
+    ~mkauto:(fun () -> Block.srelative vfp "in call parms" A.at stage.A.call)
     ~autosp
     ~postsp:(fun _ _ -> std_sp_location)
 	  ~insp:(fun a _ _ -> autosp a) in
 
-let epilog  =
+let epilog stage =
   C.outgoing ~growth ~sp
-    ~mkauto:(fun () -> Block.srelative vfp "out ovfl results" A.at results)
+    ~mkauto:(fun () -> Block.srelative vfp "out ovfl results" A.at stage.A.results)
     ~autosp:(fun r -> std_sp_location)
     ~postsp:(fun _ _ -> vfp) in
 
-let call_actuals  =
+let call_actuals stage =
   C.outgoing ~growth ~sp
-    ~mkauto:(fun () -> Block.srelative vfp "out call parms" A.at (arguments ()))
+    ~mkauto:(fun () -> Block.srelative vfp "out call parms" A.at stage.A.call)
     ~autosp:(fun r  -> std_sp_location)
     ~postsp:(fun _ sp -> sp) in  
 
-let call_results  =
+let call_results stage =
   let autosp = (fun r -> std_sp_location) in
   C.incoming ~growth ~sp
-    ~mkauto:(fun () -> Block.srelative vfp "in ovfl results" A.at results)
+    ~mkauto:(fun () -> Block.srelative vfp "in ovfl results" A.at stage.A.results)
     ~autosp
     ~postsp:(fun _ _ -> std_sp_location)
     ~insp:(fun a _ _ -> autosp a) in
 
 
-let also_cuts_to =
+let also_cuts_to stage =
   let autosp = (fun r -> std_sp_location) in
   C.incoming ~growth ~sp
-    ~mkauto:(fun () -> Block.srelative vfp "in cont parms" A.at cut_args)
+    ~mkauto:(fun () -> Block.srelative vfp "in cont parms" A.at stage.A.cutto)
     ~autosp
     ~postsp:(fun _ _ -> std_sp_location)
 	  ~insp:(fun a _ _ -> autosp a) in
 
-let cut_actuals base  =
-   C.outgoing ~growth ~sp ~mkauto:(fun () -> A.at base cut_args)
+let cut_actuals stage base  =
+   C.outgoing ~growth ~sp ~mkauto:(fun () -> A.at base stage.A.cutto)
      ~autosp:(fun r -> spval)
      ~postsp:(fun _ _ -> spval) in
 
@@ -286,31 +352,58 @@ let rtn return_to k n ~ra =
     if k = 0 & n = 0 then return_to ra
     else impossible "alternate return using C calling convention" 
 
-let c ~return_to cut = 
+let new_c ~return_to cut stage = 
     <<transformations>>
     { C.name            = "C"
-	  ; C.overflow_alloc  = { C.parameter_deallocator = C.Caller
-												  ; C.result_allocator      = C.Caller
-												  }
-    ; C.call_parms      = { C.in' = prolog;       C.out = call_actuals}
-    ; C.cut_parms       = { C.in' = also_cuts_to; C.out = cut_actuals}
-    ; C.results         = { C.in' = call_results; C.out = epilog}
+	; C.overflow_alloc  = { C.parameter_deallocator = C.Caller
+                          ; C.result_allocator      = C.Caller
+                          }
+    ; C.call_parms      = { C.in' = prolog stage      
+                          ; C.out = call_actuals stage
+                          }
+    ; C.cut_parms       = { C.in' = also_cuts_to stage
+                          ; C.out = cut_actuals stage
+                          }
+    ; C.results         = { C.in' = call_results stage
+                          ; C.out = epilog stage
+                          }
 
-    ; C.stack_growth    = growth
-    ; C.stable_sp_loc   = std_sp_location
-    ; C.replace_vfp     = Cfgx.Vfp.replace_with ~sp
-    ; C.sp_align        = sp_align
-    ; C.pre_nvregs      = RS.union (RS.of_list nvl_int) (RS.of_list nvl_fp)
-    ; C.volregs         = RS.union (RS.of_list vol_int) (RS.of_list vol_fp)
-    ; C.saved_nvr       = saved_nvr
-    ; C.cutto           = cut
-    ; C.return          = rtn return_to
+    ; C.stack_growth     = growth
+    ; C.stable_sp_loc    = std_sp_location
+    ; C.replace_vfp      = Cfgx.Vfp.replace_with ~sp
+    ; C.sp_align         = sp_align
+    ; C.pre_nvregs       = RS.union (RS.of_list nvl_int) (RS.of_list nvl_fp)
+    ; C.volregs          = RS.union (RS.of_list vol_int) (RS.of_list vol_fp)
+    ; C.saved_nvr        = saved_nvr
+    ; C.cutto            = cut
+    ; C.return           = rtn return_to
     ; C.ra_on_entry      = (fun _     -> R.fetch ra wordsize)
     ; C.where_to_save_ra = (fun _ t   -> Talloc.Multiple.loc t 't' wordsize)
     ; C.ra_on_exit       = (fun _ _ t -> ra)
     ; C.sp_on_jump       = (fun _ _ -> Rtl.null)
     }
+
+let c ~return_to cut =
+  new_c ~return_to cut
+    { A.call = arguments() ; A.results = results ; A.cutto = cut_args }
+
+let cconv ~return_to cut ccname stage = 
+  let f =
+    match ccname with
+(*
+    | "cmm0" -> cmm0
+	| "cmm1" -> cmm1
+	| "cmm2" -> cmm2
+*)
+	| _      -> new_c
+  in f ~return_to cut stage
 @
+
+And in Lua we simply:
+<<Alpha calling convention automata in Lua>>=
+-- register the new calling convention!
+Backend.alpha.target = A.register_cc(Backend.alpha.target, "C", Alpha.cc["C"])
+@ 
 
 \paragraph{Support for Debugging} 
 

@@ -14,6 +14,7 @@ val explain : int -> int list -> unit
 
 val widen_float : int -> 'a
 val stack_width : have:int -> want:int -> 'a
+val calling_convention : string -> 'a
 @ 
 <<unsupported.ml>>=
 exception Unsupported
@@ -45,6 +46,10 @@ let explain n ns =
 
 <<unsupported.ml>>=
 let exs ss = (fun _ -> ss)
+let ex0 f = function
+  |	[] -> f()
+  |	_  ->
+      ["For this explanation code, Unsupported.explain expects exactly one argument"]
 let ex1 f = function
   | [n] -> f n
   | _ ->
@@ -78,3 +83,12 @@ let stack_width_n = getn (ex2 (fun h w ->
 let stack_width ~have ~want =
   fail (nosupport (s "%d-bit value on the machine stack" have))
        stack_width_n [have; want]
+<<unsupported.ml>>=
+let calling_convention_n = getn (ex0 (fun _ ->
+  [ "Your code tried to make a procedure call, return, or cut to using an"
+  ; "unsupported calling convention.  Please verify the correct spelling of the"
+  ; "calling convention or supply a definition of this calling convention."
+  ]))
+let calling_convention name =
+  fail (nosupport (s "the '%s' calling convention" name))
+       calling_convention_n []

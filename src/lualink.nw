@@ -36,7 +36,7 @@ module T1 = Lua.Lib.Combine.T5
                 (AstType)                   (* T1.TV4 *)
                 (Colorgraph.NewGCT)         (* T1.TV5 *)
 
-module T    = Lua.Lib.Combine.T9            (* types *)
+module T    = Lua.Lib.Combine.T8            (* types *)
                 (T1)                        (* T.TV1 *)
                 (NewBackplane.T)            (* T.TV2 *)
                 (EnvType)                   (* T.TV3 *)
@@ -45,7 +45,6 @@ module T    = Lua.Lib.Combine.T9            (* types *)
                 (BlockType)                 (* T.TV6 *)
                 (AutomatonType)             (* T.TV7 *)
                 (CCStageType)               (* T.TV8 *)
-                (CounterType)               (* T.TV9 *)
 
 module T1' = Lua.Lib.Lift (T1) (T.TV1)
 
@@ -62,7 +61,6 @@ module NewTargetTV       = T.TV5
 module BlockTV           = T.TV6
 module AutomatonTV       = T.TV7
 module CCStageTV         = T.TV8
-module CounterTV         = T.TV9
 
 module WT = Lua.Lib.WithType (T)
 
@@ -73,7 +71,7 @@ module C =
     (WT (Luamathlib.M))
     (MakeLib 
         (AsmTV) (AstTV) (EnvTV) (NewProcTV) (NewTargetTV) (DocTV) (LuaioTV)
-        (BlockTV) (AutomatonTV) (CCStageTV) (CounterTV))
+        (BlockTV) (AutomatonTV) (CCStageTV))
     (Colorgraph.NewMake (NewBackplaneTV) (NewColorgraphTV) (NewProcTV))
     (Dls.Make (NewBackplaneTV) (NewProcTV))
     (WT (Luautil.MakeLib))
@@ -168,12 +166,6 @@ module CCStageType = struct
     let eq _        = fun x y -> false
     let to_string   = fun _ t -> "<cconv. stage>"
 end
-module CounterType = struct
-    type 'a t       = int ref
-    let tname       = "counter"
-    let eq _        = fun x y -> false
-    let to_string   = fun _ t -> "<mutable counter>"
-end
 
 module MakeLib
   (AsmV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a AsmType.t)
@@ -194,8 +186,6 @@ module MakeLib
   (AutomatonV  : Lua.Lib.TYPEVIEW with type 'a t    = 'a AutomatonType.t    
                               and  type 'a combined = 'a AsmV.combined)
   (CCStageV : Lua.Lib.TYPEVIEW with type 'a t       = 'a CCStageType.t
-                              and  type 'a combined = 'a AsmV.combined)
-  (CounterV : Lua.Lib.TYPEVIEW with type 'a t       = 'a CounterType.t
                               and  type 'a combined = 'a AsmV.combined)
     
     : Lua.Lib.USERCODE with type 'a userdata' = 'a AsmV.combined =
@@ -253,7 +243,6 @@ module Map = struct
     let automaton     = AutomatonV.makemap V.userdata V.projection
 
     let ccstage       = CCStageV.makemap   V.userdata V.projection
-    let counter       = CounterV.makemap   V.userdata V.projection
 end
 @ 
 We also need to import Lua projection/embedding pairs defined in other modules.
@@ -286,7 +275,6 @@ C.register_module "Asm"
 @ 
 For information on how we represent registers in Lua, see \module{register.nw}.
 <<register modules to [[g]] in alphabetical order>>=
-let regty = RL.map in
 let overflow memsize bo growth max_alignment =
   let byteorder =
     match String.lowercase bo with
@@ -310,14 +298,29 @@ let choice_funs f choices =
             let ff = V.func (V.string **-> V.int **->> V.bool) in
                 ff.V.project pred
         | _            -> raise (V.Projection (pred, "choice predicate")) in
-      let stages = (V.list Map.ccstage).V.project s
+      let stage = match s with
+        | V.Userdata _ -> Map.ccstage.V.project s
+        | _            -> List.fold_right Automaton.( *> ) 
+                             ((V.list Map.ccstage).V.project s) Automaton.unit
       in
-        (camlpred, List.fold_right Automaton.( *> ) stages Automaton.unit) ::
-        (choice rest)
+        (camlpred, stage) :: (choice rest)
   |	[] -> []
   |	_  -> raise (V.Projection (V.Nil, "choice predicate/stage list"))
   in
   f (choice choices) in
+
+let register_cc t name tbl = 
+  let getfield f =
+     let value = V.Table.find tbl (V.String f) in
+     match value with
+     | V.Table stages ->
+         let stages = (V.list Map.ccstage).V.project value in
+         List.fold_right Automaton.( *> ) stages Automaton.unit
+	 | V.Userdata _   -> Map.ccstage.V.project value
+	 | _              ->
+         raise (V.Projection (value, "automaton stage/stage list")) in
+  Call.register_cc t name ~call:(getfield "call")
+     ~results:(getfield "results") ~cutto:(getfield "cutto") in
 
 let widths_errmsg i = 
   Printf.sprintf "width %d not supported in this calling convention" i in
@@ -325,14 +328,21 @@ let useregs_errmsg i rs =
   Printf.sprintf
     "cannot satisfy allocation request of width %d with useregs stage" i in
 
+let regty = RL.map in
+let counterty = V.string in
+
 C.register_module "Automaton"
   [ (* first the stage constructors ... *)
     "align_to"    , V.efunc ((V.func (V.int **->> V.int)) **->> Map.ccstage)
                     Automaton.align_to
-  ; "argcounter"  , V.efunc (Map.counter        **->> Map.ccstage)
-                    Automaton.argcounter
-  ; "bitcounter"  , V.efunc (Map.counter        **->> Map.ccstage)
-                    Automaton.bitcounter
+  ; "argcounter"  , V.efunc (counterty **->> Map.ccstage)
+                    Automaton.argcounter'
+  ; "bitcounter"  , V.efunc (counterty **->> Map.ccstage)
+                    Automaton.bitcounter'
+  ; "choice"      , V.efunc (V.list V.value **->> Map.ccstage)
+                    (choice_funs Automaton.choice)
+  ; "first_choice", V.efunc (V.list V.value **->> Map.ccstage)
+                    (choice_funs Automaton.first_choice)
   ; "overflow"    , V.efunc (V.table **->> Map.ccstage)
                     (fun ovfl ->
                         let field f = V.Table.find ovfl (V.String f) in
@@ -341,28 +351,26 @@ C.register_module "Automaton"
                           (V.string.V.project (field "byteorder"))
                           (V.string.V.project (field "growth"))
                           (V.int.V.project    (field "max_alignment")))
-  ; "regs_by_args", V.efunc (Map.counter **-> V.list regty **->>
-                             Map.ccstage)
-                    Automaton.argnoregs
-  ; "regs_by_bits", V.efunc (Map.counter **-> V.list regty **->>
-                             Map.ccstage)
-                    Automaton.offsetregs
+  ; "regs_by_args", V.efunc (counterty **-> V.list regty **->> Map.ccstage)
+                    Automaton.argnoregs'
+  ; "regs_by_bits", V.efunc (counterty **-> V.list regty **->> Map.ccstage)
+                    Automaton.offsetregs'
+  ; "unit"        , Map.ccstage.V.embed Automaton.unit
   ; "useregs"     , V.efunc (V.list regty **->> Map.ccstage)
                     (fun rs -> Automaton.useregs rs ~errormsg:useregs_errmsg)
   ; "widen"       , V.efunc ((V.func (V.int **->> V.int)) **->> Map.ccstage)
                     Automaton.widen
   ; "widths"      , V.efunc (V.list V.int **->> Map.ccstage)
                     (fun ws -> Automaton.widths ws ~errormsg:widths_errmsg)
-  ; "choice"      , V.efunc (V.list V.value **->> Map.ccstage)
-                    (choice_funs Automaton.choice)
-  ; "first_choice", V.efunc (V.list V.value **->> Map.ccstage)
-                    (choice_funs Automaton.first_choice)
 
     (* the prewritten utils ... *)
   ; "is_any"      , V.efunc (V.string **-> V.int **->> V.bool)
                     Automaton.is_any
-  ; "new_counter" , V.efunc (V.int **->> Map.counter)
-                    Automaton.new_counter
+
+    (* registration, although it shouldn't necessarily be in here *)
+  ; "register_cc" , V.efunc (Map.new_target **-> V.string **-> 
+                             V.table **->> Map.new_target)
+                    register_cc
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Block" 
@@ -439,36 +447,47 @@ C.register_module "Driver"
   ; "reinit"    , V.efunc (V.unit  **-> V.runit)  Driver.reinit
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
-let dump =   V.efunc ((V.list V.int)    **-> (* widths *)
+let old_dump =   V.efunc ((V.list V.int)    **-> (* widths *)
                       (V.list V.string) **-> (* hints  *)
-                       V.result V.unit)  
+                       V.result V.unit) in
+let dump = V.efunc (Map.new_target **-> V.string **-> (V.list V.int) **->
+                    (V.list V.string) **->> V.unit) in
 
-in C.register_module "Debug"
-    ["Mips" , V.Table (V.Table.of_list 
-        [ "proc",           dump Mipscall.dump_proc
-        ; "proc_all",       V.efunc (V.unit **-> V.runit) 
-                            (fun () -> Mipscall.dump_proc'
-                            [32,"int";32,"float";64,"float"])
-        ; "proc_all_paths", V.efunc (V.unit **-> V.runit) 
-                            (fun () -> Mipscall.paths_proc'
-                            [32,"int";32,"float";64,"float"])
-        ; "cutto",          dump Mipscall.dump_cutto
-        ; "proc_paths",     dump Mipscall.paths_proc
-        ; "cutto_paths",    dump Mipscall.paths_cutto
-        ])
-     ;"Alpha" , V.Table (V.Table.of_list 
-        [ "proc",           dump Alphacall.dump_proc
-        ; "cutto",          dump Alphacall.dump_cutto
-        ; "proc_paths",     dump Alphacall.paths_proc
-        ; "cutto_paths",    dump Alphacall.paths_cutto
-        ])
-    ;"X86" , V.Table (V.Table.of_list 
-        [ "c_proc",         dump X86call.dump_c_proc
-        ; "c_cutto",        dump X86call.dump_c_cutto
-        ; "c_proc_paths",   dump X86call.paths_c_proc
-        ; "c_cutto_paths",  dump X86call.paths_c_cutto
-        ])
-    ] g;
+C.register_module "Debug"
+  [ "proc"  , dump Call.dump_proc
+  ; "return", dump Call.dump_return
+  ; "cutto" , dump Call.dump_cutto
+
+  ; "paths_proc"  , dump Call.paths_proc
+  ; "paths_return", dump Call.paths_return
+  ; "paths_cutto" , dump Call.paths_cutto
+
+  ;"Mips" , V.Table (V.Table.of_list 
+      (* need to keep Debug.Mips.proc_all and Debug.Mips.proc_all_paths *)
+      [ "proc_all",       V.efunc (V.unit **-> V.runit) 
+                          (fun () -> Mipscall.dump_proc'
+                          [32,"int";32,"float";64,"float"])
+      ; "proc_all_paths", V.efunc (V.unit **-> V.runit) 
+                          (fun () -> Mipscall.paths_proc'
+                          [32,"int";32,"float";64,"float"])
+      ; "proc",           old_dump Mipscall.dump_proc
+      ; "cutto",          old_dump Mipscall.dump_cutto
+      ; "proc_paths",     old_dump Mipscall.paths_proc
+      ; "cutto_paths",    old_dump Mipscall.paths_cutto
+      ])
+   ;"Alpha" , V.Table (V.Table.of_list 
+      [ "proc",           old_dump Alphacall.dump_proc
+      ; "cutto",          old_dump Alphacall.dump_cutto
+      ; "proc_paths",     old_dump Alphacall.paths_proc
+      ; "cutto_paths",    old_dump Alphacall.paths_cutto
+      ])
+  ;"X86" , V.Table (V.Table.of_list 
+      [ "c_proc",         old_dump X86call.dump_c_proc
+      ; "c_cutto",        old_dump X86call.dump_c_cutto
+      ; "c_proc_paths",   old_dump X86call.paths_c_proc
+      ; "c_cutto_paths",  old_dump X86call.paths_c_cutto
+      ])
+  ] g;
 @
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Expander"

@@ -243,6 +243,8 @@ let seq reg = AN.wrap (seq reg)
 
 let params      = seq arg_reg               (* for parameters  *)
 let globls base = AN.at base (seq glb_reg)  (* for global regs *)
+
+let ccspecs     = { AN.call = params; AN.results = params; AN.cutto = params }
 @
 
 % ------------------------------------------------------------------ 
@@ -336,8 +338,13 @@ compiler.
 
 <<interp.ml>>=
 let target' = (* new style *)
-      { T.name = arch
-      ; T.cc =           (fun _ -> cc') 
+      { T.name     = arch
+
+      ; T.cc       = (fun _ -> cc') 
+
+      ; T.cc_specs = [ "C", ccspecs ; "C--", ccspecs ]
+      ; T.cc_spec_to_auto   = (fun _ _ -> cc')
+
       ; T.byteorder         = byte_order
       ; T.wordsize          = wordsize
       ; T.pointersize       = wordsize

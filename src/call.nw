@@ -283,6 +283,32 @@ val incoming :
 <<exported type definitions>>=
 type valpass = unit -> Automaton.t
 @ 
+
+\subsection{Registration of Calling Conventions from Lua}
+We also now have some code to allow the registration of new calling conventions
+from Lua.
+<<call.mli>>=
+type tgt = ((Rtl.exp -> Automaton.t), t) Target.t
+
+val register_cc : 
+    tgt -> string -> call:Automaton.stage ->
+    results:Automaton.stage ->
+    cutto:Automaton.stage -> tgt
+
+(* val get_cc : ('a, 'cc) Target.t -> string -> 'cc *)
+val get_cc : ('a, 'cc) Target.t -> string -> 'cc
+@
+
+We provide a general mechanism for analyzing calling convention automata.
+<<call.mli>>=
+val dump_proc    : tgt -> string -> int list -> string list -> unit
+val dump_return  : tgt -> string -> int list -> string list -> unit
+val dump_cutto   : tgt -> string -> int list -> string list -> unit
+val paths_proc   : tgt -> string -> int list -> string list -> unit
+val paths_return : tgt -> string -> int list -> string list -> unit
+val paths_cutto  : tgt -> string -> int list -> string list -> unit
+@ 
+
 \subsection{Implementation}
 
 A consummation most devoutly to be wished.
@@ -344,6 +370,47 @@ let incoming ~growth ~sp ~mkauto ~autosp ~postsp ~insp types formals =
     ; post_sp  = R.guard (ne sp postsp)               setsp
     ; pre_sp   = R.guard (too_small growth sp postsp) setsp
     }
+@
+
+Some utilities.  DOCO HERE.
+<<call.ml>>=
+type tgt = ((Rtl.exp -> Automaton.t), t) Target.t
+
+let add_cc specs name ~call ~results ~cutto = 
+  let base = if   List.mem_assoc name specs
+             then List.remove_assoc name specs
+             else specs
+  in
+    (name, { A.call    = call
+           ; A.results = results
+           ; A.cutto   = cutto
+           }
+    ) :: base
+
+let register_cc t name ~call ~results ~cutto =
+   let newspecs = add_cc t.Target.cc_specs name ~call ~results ~cutto
+   in
+     { t with Target.cc_specs = newspecs }
+
+let get_ccspec tgt name =
+  try  List.assoc name tgt.Target.cc_specs
+  with Not_found -> Unsupported.calling_convention name
+
+let get_cc tgt name =
+  tgt.Target.cc_spec_to_auto name (get_ccspec tgt name)
+
+let dump what autofun target ccname widths hints =
+  let wordsize  = target.Target.wordsize in
+  let automaton = autofun (get_ccspec target ccname) in
+   what ~mk:(fun () -> A.at (Rtl.bits (Bits.zero wordsize) wordsize) automaton)
+        ~widths ~hints
+
+let dump_proc    = dump Automatongraph.print (fun s -> s.A.call)
+let dump_return  = dump Automatongraph.print (fun s -> s.A.results)
+let dump_cutto   = dump Automatongraph.print (fun s -> s.A.cutto)
+let paths_proc   = dump Automatongraph.paths (fun s -> s.A.call)
+let paths_return = dump Automatongraph.paths (fun s -> s.A.results)
+let paths_cutto  = dump Automatongraph.paths (fun s -> s.A.cutto)
 @ 
 
 \subsection{Potential new constructors for \texttt{Call.t}}
@@ -401,4 +468,3 @@ module type SPEC = sig
 
   val to_call : t -> call_t
 end
-

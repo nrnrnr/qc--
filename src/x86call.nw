@@ -12,6 +12,12 @@ val cmm : return_to:(Rtl.exp -> Rtl.rtl) -> Mflow.cut_args Target.map -> Call.t
   (* C-- calling convention *)
 val notail: return_to:(Rtl.exp -> Rtl.rtl) -> Mflow.cut_args Target.map -> Call.t
   (* C-- calling convention without tail calls *)
+
+val cconv :
+  return_to:(Rtl.exp -> Rtl.rtl) ->
+  Mflow.cut_args Target.map ->
+  string -> Automaton.cc_spec ->
+  Call.t
 @ 
 Here are implementation of the same conventions that use internally the
 [[Callspec]] module. We keep them both for comparison.
@@ -45,6 +51,15 @@ module RP = Rtl.Private
 module RS = Register.Set
 module RU = Rtlutil
 module T  = Target
+@
+And in Lua we need to:
+<<x86 calling convention automata in Lua>>=
+A                = Automaton
+X86              = X86              or {}
+X86.cc           = X86.cc           or {}
+X86.cc["C"     ] = X86.cc["C"     ] or {}
+X86.cc["C--"   ] = X86.cc["C--"   ] or {}
+X86.cc["notail"] = X86.cc["notail"] or {}
 @ 
 \paragraph{General information}
 Information on the C~calling convention is from the SYSV ABI, Third
@@ -99,6 +114,25 @@ let saved_nvr temps =
   let t = Talloc.Multiple.loc temps 't' in
   fun (_, _, w) -> t w
 @
+
+And in Lua:
+<<x86 calling convention automata in Lua>>=
+X86.growth    = "down"
+X86.byteorder = "little"
+X86.sp_align  = 4
+X86.wordsize  = 32
+
+function reg(sp, i, w) return({ space = sp, index = i, width = w }) end
+function r(i) return (reg("r", i, X86.wordsize)) end
+
+X86.eax = r(0)  X86.ecx = r(1)  X86.edx = r(2)
+X86.ebx = r(3)  X86.esp = r(4)  X86.ebp = r(5)
+X86.esi = r(6)  X86.edi = r(7)
+
+X86.stack_top_proxy_reg = reg("\000", 0, 80)
+X86.all_regs = {X86.eax, X86.ecx, X86.edx, X86.ebx, X86.esi, X86.edi, X86.ebp}
+@ 
+
 \paragraph{Conventions governing the stack}
 Page 3-10.  The stack is word-aligned.
 The stack pointer points at the last item on the stack, \emph{not} at
@@ -125,6 +159,13 @@ let badwidth what w = Impossible.impossible
     ("Unsupported (rounded) width " ^ string_of_int w ^ " in x86 " ^ what)
 let imp _ = Impossible.impossible "grave miscalculation in automaton"
 @ 
+
+And in Lua we need a few helper functions:
+<<x86 calling convention automata in Lua>>=
+function round_mult_32 (k) return Util.round_up_mult(32, k) end
+function round_mult_80 (k) return Util.round_up_mult(80, k) end
+@ 
+
 \paragraph{Automata for passing values---C~convention}
 
 For results,
@@ -146,6 +187,19 @@ let results iregs =
      ]
 let c_results = results [eax]
 @
+And in Lua:
+<<x86 calling convention automata in Lua>>=
+X86.cc["C"].results =
+  A.choice { "float" , { A.widen(round_mult_80)
+                       , A.widths { 80 }
+                       , A.useregs { X86.stack_top_proxy_reg }
+                       }
+           , A.is_any, { A.widen(round_mult_32)
+                       , A.widths { 32 }
+                       , A.useregs { X86.eax }
+                       }
+           }
+@
 When passing procedure parameters, we put
 earlier arguments in lower addresses, so even though the
 stack grows down, the overflow block grows up.
@@ -158,6 +212,15 @@ let c_arguments =
   A.overflow ~memsize:8 ~byteorder:bo ~growth:Memalloc.Up ~max_alignment:sp_align
 let _ = (c_arguments : A.stage)
 @ 
+And in Lua:
+<<x86 calling convention automata in Lua>>=
+X86.cc["C"].call =
+  { A.widen(round_mult_32)
+  , A.overflow { memsize = 8, byteorder = X86.byteorder, growth = "up"
+               , max_alignment = X86.sp_align
+               }
+  }
+@ 
 When passing cut-to parameters, we use all the registers---there's no
 reason not to.
 <<x86call.ml>>=
@@ -166,6 +229,17 @@ let cut_args =
   A.widths [32] ~errormsg:(badwidth "x86 cut-to convention") *>
   A.useregs allregs ~errormsg:imp *>
   A.overflow ~memsize:8 ~byteorder:bo ~growth:Memalloc.Up ~max_alignment:sp_align
+@ 
+And in Lua
+<<x86 calling convention automata in Lua>>=
+X86.cc["C"].cutto =
+  { A.widen(round_mult_32)
+  , A.widths { 32 }
+  , A.useregs(X86.all_regs)
+  , A.overflow { memsize = 8, byteorder = X86.byteorder, growth = "up"
+               , max_alignment = X86.sp_align
+               }
+  }
 @ 
 It's worth studying these automata to see what's likely to remain
 unchanged across conventions:
@@ -190,6 +264,31 @@ let cmm_arguments =
   A.useregs [eax] ~errormsg:imp *>
   A.overflow ~memsize:8 ~byteorder:bo ~growth:Memalloc.Up ~max_alignment:sp_align
 @
+And in Lua:
+<<x86 calling convention automata in Lua>>=
+-- for now it appears that the C-- results automaton looks like the C one
+-- with an overflow stage tagged on the end
+X86.cc["C--"].results = 
+  { X86.cc["C"].results
+  , A.overflow { memsize = 8, byteorder = X86.byteorder, growth = "down"
+               , max_alignment = X86.sp_align
+               } 
+  }	
+
+X86.cc["C--"].call =
+  { A.widen(round_mult_32)
+  , A.useregs { X86.eax }
+  , A.overflow { memsize = 8, byteorder = X86.byteorder, growth = "up"
+               , max_alignment = X86.sp_align
+               }
+  }
+
+-- all the calling conventions share the same cutto automaton specs.
+X86.cc["C--"].cutto = X86.cc["C"].cutto
+
+-- the notail automata is identical to the C-- one
+X86.cc["notail"] = X86.cc["C--"]
+@ 
 \paragraph{Managing the stack pointer and return address}
 On entry, the stack pointer points to the return address.
 This needs some aliasing info?
@@ -217,37 +316,37 @@ N.B. the call instruction moves the stack pointer.
 <<functions to transform automata>>=
 let call_actuals  =
   C.outgoing ~growth ~sp
-    ~mkauto:(fun () -> Block.srelative vfp "out call parms" A.at specs.call)
+    ~mkauto:(fun () -> Block.srelative vfp "out call parms" A.at specs.A.call)
     ~autosp:(fun r -> Block.base r.A.overflow)
     ~postsp:(fun _ sp -> sp) in  (* was ~postsp:(fun _ -> std_sp_location) *)
 let prolog  =
   let autosp = (fun _ -> vfp) in
   C.incoming ~growth ~sp
-    ~mkauto:(fun () -> A.at (addk vfp 4) specs.call)
+    ~mkauto:(fun () -> A.at (addk vfp 4) specs.A.call)
     ~autosp
     ~postsp:(fun _ _ -> std_sp_location)
 	  ~insp:(fun a _ _ -> autosp a) in
-   (* alternate: ~mkauto:Block.relative vfp "in call parms" specs.call *)
+   (* alternate: ~mkauto:Block.relative vfp "in call parms" specs.A.call *)
    (*   ~autosp:(fun r -> addk (Block.base r.A.overflow) (-4)) *)
 @ 
 <<functions to transform automata>>=
 let c_call_results  =
   let autosp = (fun r -> Block.base r.A.overflow) in
   C.incoming ~growth ~sp
-    ~mkauto:(fun () -> Block.srelative vfp "in ovfl results" A.at specs.results)
+    ~mkauto:(fun () -> Block.srelative vfp "in ovfl results" A.at specs.A.results)
     ~autosp
     ~postsp:(fun _ _ -> std_sp_location)     (* irrelevant? *)
     ~insp:(fun a _ _ -> autosp a) in
 let cmm_call_results  =
   C.incoming ~growth ~sp
-    ~mkauto:(fun () -> Block.srelative vfp "in ovfl results" A.at specs.results)
+    ~mkauto:(fun () -> Block.srelative vfp "in ovfl results" A.at specs.A.results)
     ~autosp:(fun r -> Block.base r.A.overflow)
     ~postsp:(fun _ _ -> std_sp_location)     (* irrelevant? *)
     ~insp:(fun _ _ out_parm_block ->
 				     addk (Block.base out_parm_block) (Block.size out_parm_block)) in
 let epilog  =
   C.outgoing ~growth ~sp
-    ~mkauto:(fun () -> Block.srelative vfp "out ovfl results" A.at specs.results)
+    ~mkauto:(fun () -> Block.srelative vfp "out ovfl results" A.at specs.A.results)
     ~autosp:(fun r -> Block.base r.A.overflow)
     ~postsp:(fun _ r -> addk r (-4)) in
 @ 
@@ -256,28 +355,28 @@ We need an assertion here!
 let also_cuts_to =
   let autosp = (fun r -> std_sp_location) in
   C.incoming ~growth ~sp
-    ~mkauto:(fun () -> Block.srelative vfp "in cont parms" A.at specs.cutto)
+    ~mkauto:(fun () -> Block.srelative vfp "in cont parms" A.at specs.A.cutto)
     ~autosp
     ~postsp:(fun _ _ -> std_sp_location)
 	  ~insp:(fun a _ _ -> autosp a) in
 
 let cut_actuals base  =
-  C.outgoing ~growth ~sp ~mkauto:(fun () -> A.at base specs.cutto)
+  C.outgoing ~growth ~sp ~mkauto:(fun () -> A.at base specs.A.cutto)
      ~autosp:(fun r -> spval)  (* should this be std_sp_location? *)
      ~postsp:(fun _ _ -> spval) in
 @ 
 \paragraph{Putting together the whole convention}
 <<x86call.ml>>=
-type ('a, 'b, 'c) specs = { call : 'a; results : 'b; cutto : 'c }
-let conv name jump specs ~return_to cut =
+let conv ~jump name specs ~return_to cut =
   <<functions to transform automata>>
   let return k n ~ra =
     if k = 0 & n = 0 then return_to ra
     else Impossible.impossible "alternate return using C calling convention" in
   { C.name       = name
-	; C.overflow_alloc  = { C.parameter_deallocator = if jump then C.Callee else C.Caller
-												; C.result_allocator      = C.Caller
-												}
+  ; C.overflow_alloc  = 
+      { C.parameter_deallocator = if jump then C.Callee else C.Caller
+	  ; C.result_allocator      = C.Caller
+	  }
   ; C.call_parms = { C.in' = prolog;       C.out = call_actuals}
   ; C.cut_parms  = { C.in' = also_cuts_to; C.out = cut_actuals}
   ; C.results    = { C.in' = if jump then cmm_call_results else c_call_results
@@ -302,11 +401,38 @@ let conv name jump specs ~return_to cut =
   ; C.return           = return
   } 
 
-let c   = conv "C"   false { call = c_arguments;   results=c_results;   cutto=cut_args}
-let cmm = conv "C--" true  { call = cmm_arguments; results=cmm_results; cutto=cut_args}
-let notail= conv "notail" false
-              { call = cmm_arguments; results=cmm_results; cutto=cut_args}
+let cconv ~return_to cut ccname stage =
+  let f =
+    match ccname with
+    | "C--"    -> conv ~jump:true
+    | "notail" -> conv ~jump:false
+    | _        -> conv ~jump:false
+  in f ccname stage ~return_to cut
+
+let c      = conv "C" ~jump:false
+               { A.call = c_arguments
+               ; A.results = c_results
+               ; A.cutto = cut_args
+               } 
+let cmm    = conv "C--" ~jump:true
+               { A.call = cmm_arguments
+               ; A.results = cmm_results
+               ; A.cutto = cut_args
+               } 
+let notail = conv "notail" ~jump:false
+               { A.call = cmm_arguments
+               ; A.results = cmm_results
+               ; A.cutto = cut_args
+               }
 @
+
+And in Lua:
+<<x86 calling convention automata in Lua>>=
+-- register the new calling conventions!
+Backend.x86.target=A.register_cc(Backend.x86.target,"C"     ,X86.cc["C"     ])
+Backend.x86.target=A.register_cc(Backend.x86.target,"C--"   ,X86.cc["C--"   ])
+Backend.x86.target=A.register_cc(Backend.x86.target,"notail",X86.cc["notail"])
+@ 
 
 % ------------------------------------------------------------------ 
 \subsection{Debugging Support}
