@@ -2,161 +2,636 @@
 
 \section{Modules for building Lua libraries}
 
-In general, a library can add new types, global mutable state, and new
-functions to an interpreter.
-Interpreters are typically built by combining multiple libraries, and
-the combination determines the [[userdata]] and [[userstate]] types
-ultimately used in the interpreter's value and state.
+To build a Lua interpreter, one must specify the type of userdata, and
+one must specify what libraries are to be included.
+Complexities arise when the library code depends on the type of
+userdata.
+For example, the I/O library must be able to project userdata to
+values of type [[in_channel]] and [[out_channel]], representing open
+files.
 
-We encourage the use of parameterized modules so that libraries can be
-combined easily.  There is some run-time cost for the generality, but
-it can be minimized as discussed below.
-
-Building the interpreter takes place in three phases:
+The approved technique occurs in three stages:
 \begin{enumerate}
 \item
-Different libraries are combined to determine the ultimate
-[[userdata]] and [[state]] types.
-The combination is then used to build an interpreter, which matches
-signature [[INTERP]].
-This step happens at compile time.
+Combine all the types using [[Lualib.Combine.T]]$n$, where $n$~is the
+number of different types of userdata supported.
 \item
-The full interpreter is passed back to each library, so that each
-library can build a function suitable for initializing interpreters of
-built with those types.
-This step also happens at compile time.
+Use the [[COMBINED_TYPE]] module returned to inform all the libraries
+how to get 
+``views'' of the types they depend on.
+This may mean passing one or more views to each library.
 \item
-A fresh state is created and all the initialization functions are
-called, building a new, fully initialized interpreter.
-This step happens at run time, as often as desired---multiple
-interpreters coexist peacefully.
+Combine all the libraries into a single library using
+[[Lualib.Combine.T]]$m$, where $m$~is the number of libraries.
 \end{enumerate}
+The combined types and libraries can then be used to build an interpreter.
+
+While this scheme is a bit more elaborate than a scheme in which types
+and libraries are bundled together, it makes it possible for each
+library to depend on any set of types---essential for complex interpreters.
 @
-Here is everything that a library is deemed to need to know about an
-interpreter.
-This signature could be extended if necessary.
-The information is divided in two pieces: there is one [[INTERP]]
-piece,  which looks the same to all libraries.
-But each library sees its own [[VIEW]] piece, which provides functions
-that map to and from the type and state provided by that library.
+The types that are combined all match [[USERTYPE]].
 <<signatures>>=
-module type INTERP = sig
+module type USERTYPE = sig
+  type 'a t                             (* type parameter will be Lua value *)
+  val tname : string  (* name of this type, for projection errors *)
+  val eq : ('a -> 'a -> bool) -> 'a t -> 'a t -> bool
+  val to_string : ('a -> string) -> 'a t -> string
+end
+@ 
+A ``combined type'' is composed of up to 10 individual types.
+We provide a ``view'' of each type, which is essentially the ability
+to convert between values of the combined type and values of the
+individual type.
+We could provide this ability as a pair of type
+[[('a t, 'a combined) Luavalue.ep]], but it is more convenient for the
+clients to provide it as a function.
+Given a view [[T : TYPEVIEW]] and a suitable module
+[[V : Luavalue.S]], clients will have code 
+such as
+\begin{verbatim}
+   let map = T.makemap V.userdata V.projection
+\end{verbatim}
+<<signatures>>=
+module type TYPEVIEW = sig
+  type 'a combined
+  type 'a t  (* the individual type of which this is a view *)
+  val makemap : ('a combined, 'b) Luavalue.ep -> ('b -> string -> 'a t)
+                -> ('a t, 'b) Luavalue.ep
+end
+@ 
+When up to ten types are combined into a single type, 
+the result provides views of all ten:
+<<signatures>>=
+module type COMBINED_TYPE = sig
+  include USERTYPE
+  module type VIEW = TYPEVIEW with type 'a combined = 'a t
+  module T1  : VIEW
+  module T2  : VIEW
+  module T3  : VIEW
+  module T4  : VIEW
+  module T5  : VIEW
+  module T6  : VIEW
+  module T7  : VIEW
+  module T8  : VIEW
+  module T9  : VIEW
+  module T10 : VIEW
+end
+@ 
+A library module needs zero or more views, plus an \emph{interpreter
+core}, which enables libraries to use some of the capabilities of the
+interpreter. 
+<<signatures>>=
+module type CORE = sig
   module V : Luavalue.S
+  val error : V.state -> string -> unit  (* error fallback *)
+  val getglobal : V.state -> V.value -> V.value
   val fallback : string -> V.state -> V.value list -> V.value list
-end
-
-module type FULL_VIEW = sig
-  module Interp : INTERP
-  type 'a t   (* is this parameter needed really? *)
-  val map : Interp.V.value t Interp.V.map
-  type 'a state 
-  val project_state : Interp.V.state -> Interp.V.value state
+  val setfallback : V.state -> string -> V.value -> V.value
+    (* sets fallback, returns previous one *)
+  val apply : V.value -> V.state -> V.value list -> V.value list
 end
 @ 
-In principle, there could be four kinds of libraries:
-a [[BARE]] library uses only existing types and state;
-a [[FULL]] library adds both a new type and new state;
-a \emph{stateful} library could add only a new state; and
-a \emph{typeful} library could add only a new type.
-This interface currently supports only two of the four alternatives,
-but the others could be added easily enough.
-Each alternative requires its own view signature.
+All a library does is add values to the initial state of an
+interpreter.
+These values are the functions, etc, provided by the library.
+If the library needs to attach private data to the state of the
+interpreter, it can either use closures to capture this state (see the
+I/O library for an example) or it can keep the state in the
+interpreter's global variables.
+If per-interpreter state must be shared among two or more libraries,
+global variables are the only option.
+@
+A \emph{bare} library does not use any user types---only the basic
+ones built into every Lua interpreter.  That means it works with any
+core at all.
 <<signatures>>=
-module type FULL = sig
-  module U : Luavalue.USERDATA
-  module M (This : FULL_VIEW with type 'a t = 'a U.t and type 'a state = 'a U.state) :
-      sig
-        val init : This.Interp.V.state -> unit
-      end
-end
-
 module type BARE = 
-  functor (Interp : INTERP) -> sig
-    val init : Interp.V.state -> unit
+  functor (C : CORE) -> sig
+    val init : C.V.state -> unit
   end
+@
+A \emph{typeful} library won't work with just any core---it works only
+with particular cores.  In practice, it will work for cores in which
+the userdata type is the [[combined]] type of the view on which the
+typeful library depends.
+<<signatures>>=
+module type TYPEFUL = sig
+  type 'a combined  (* the combined type of all the view on which lib depends *)
+  module M : functor (C : CORE with type 'a V.userdata' = 'a combined) -> sig
+    val init : C.V.state -> unit
+  end
+end
 @ 
-An interpreter requires at least one [[FULL]] library, so these two
-module combinators suffice to mix any number of any kind of libraries.
-Initialization takes place left to right, but ordinarily
-initialization of different libraries should be independent, so this
-shouldn't be an onerous restriction.
+For simplicity, we combine only typeful libraries.
+This means we occasionally need to extend a bare library to make it typeful.
+We put the type first, not the library, because the partial
+application is useful
 <<lualib.mli>>=
 <<signatures>>
+module Extend (T : TYPEVIEW) (L : BARE) : TYPEFUL with type 'a combined = 'a T.combined
+@ 
+Herewith the module [[Combine]], which contains members for combining
+up to 10 types and up to 10 libraries.
+<<lualib.mli>>=
 module Combine : sig
-  module FF (L1 : FULL) (L2 : FULL) : FULL
+  module T10 (T1 : USERTYPE) (T2 : USERTYPE) (T3 : USERTYPE) (T4 : USERTYPE)
+             (T5 : USERTYPE) (T6 : USERTYPE) (T7 : USERTYPE) (T8 : USERTYPE)
+             (T9 : USERTYPE) (T10 : USERTYPE)
+   : COMBINED_TYPE with type 'a T1.t = 'a T1.t and type 'a T2.t = 'a T2.t
+                    and type 'a T3.t = 'a T3.t and type 'a T4.t = 'a T4.t
+                    and type 'a T5.t = 'a T5.t and type 'a T6.t = 'a T6.t
+                    and type 'a T7.t = 'a T7.t and type 'a T8.t = 'a T8.t
+                    and type 'a T9.t = 'a T9.t and type 'a T10.t = 'a T10.t
+  <<similar specifications for [[T1]] to [[T9]]>>
+  module L10 (L1 : TYPEFUL)
+    (L2 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L3 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L4 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L5 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L6 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L7 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L8 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L9 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L10 : TYPEFUL with type 'a combined = 'a L1.combined) :
+    TYPEFUL with type 'a combined = 'a L1.combined
+  <<similar specifications for [[L1]] to [[L9]]>>
 end
-module AddBare  (LT : FULL) (LU : BARE) : FULL
-@ As is typical, it's less efficient to string together a bunch of
-pairs than it is to build larger tuples.
-Perhaps one day soon we will provide more alternatives---perhaps by
-generating them automatically.
-That's why we've left room for more sub-modules of [[Combine]].
 @
 \section{Implementation}
 
-If you understand the interfaces, there's nothing of interest here.
-It's all bookkeeping.
+If you understand the interfaces, there's only minor interest here.
+We actually define combining modules for only the case $n=10$, then
+define some [[Unused]] types and libraries to use as placeholders for
+smaller values of~$n$.  The rest is bookkeeping.
 <<lualib.ml>>=
 <<signatures>>
-module AddBare (LT : FULL) (LU : BARE) : FULL =
-struct
-  module U = LT.U
-  module M (This : FULL_VIEW with type 'a t = 'a U.t and type 'a state = 'a U.state) =
-    struct
-      module LT' = LT.M (This)
-      module LU' = LU   (This.Interp)
-      let init g = (LT'.init g; LU'.init g)
-    end
-end
+@ 
+<<lualib.ml>>=
+module Unused = struct
+  module Type : USERTYPE = struct
+    type 'a t = unit
+    let tname = "unused type"
+    let eq _ x y = true
+    let to_string _ _ = "<this can't happen -- value of unused type>"
+  end (* Type *)
 
+  module Bare =
+      functor (C : CORE) -> struct
+        let init g = ()
+      end (*Unused.Bare*)
+
+  module Typeful (L : TYPEFUL) =
+    struct
+      type 'a combined = 'a L.combined
+      module M (C : CORE with type 'a V.userdata' = 'a combined) = struct
+        let init g = ()
+      end (*M*)
+    end (*Unused.Typeful*)
+end
 
 module Combine = struct
-  module FF (L1 : FULL) (L2 : FULL) : FULL = struct
-    module U = struct
-      type 'a t =
-        | L1 of 'a L1.U.t 
-        | L2 of 'a L2.U.t 
-      let tname = L1.U.tname ^ " or " ^ L2.U.tname
-      let eq veq x y = match x, y with
-      | L1 x,    L1 y    -> L1.U.eq veq x y
-      | L2 x,    L2 y    -> L2.U.eq veq x y
-      | _, _ -> false
-      let to_string vs = function
-        | L1 x -> L1.U.to_string vs x
-        | L2 x -> L2.U.to_string vs x
-      type 'a state = { l1 : 'a L1.U.state ; l2 : 'a L2.U.state }
-      let state () = { l1 = L1.U.state() ; l2 = L2.U.state () }
-    end
-    module M (This : FULL_VIEW with type 'a t = 'a U.t and type 'a state = 'a U.state) =
-      struct
-        module Interp = This.Interp
-        module V = Interp.V
-        module This1 = struct
-          module Interp = Interp
-          type 'a t = 'a L1.U.t
-          let map = { V.embed = (fun x -> This.map.V.embed (U.L1 x))
-                    ; V.project = (fun v -> match This.map.V.project v with
-                                          | U.L1 x -> x
-                                          | _ -> raise (V.Projection (v, L1.U.tname)))
-                  }
-          type 'a state = 'a L1.U.state
-          let project_state s = (This.project_state s).U.l1
-        end
-        module This2 = struct
-          module Interp = Interp
-          type 'a t = 'a L2.U.t
-          let map = { V.embed = (fun x -> This.map.V.embed (U.L2 x))
-                    ; V.project = (fun v -> match This.map.V.project v with
-                                          | U.L2 x -> x
-                                          | _ -> raise (V.Projection (v, L2.U.tname)))
-                  }
-          type 'a state = 'a L2.U.state
-          let project_state s = (This.project_state s).U.l2
-        end
-        module L1' = L1.M (This1)
-        module L2' = L2.M (This2)
-        let init g = (L1'.init g; L2'.init g)
-      end
+  <<[[Combine]] contents>>
+end
+@
+<<lualib.ml>>=
+module Extend (T : TYPEVIEW) (L : BARE) : TYPEFUL with type 'a combined = 'a T.combined
+=
+    struct
+      type 'a combined = 'a T.combined
+      module M (C : CORE with type 'a V.userdata' = 'a combined) = struct
+        module M' = L (C)
+        let init g = M'.init g
+      end (*M*)
+    end (*Extend*)
+@ 
+<<[[Combine]] contents>>=
+  module T10 (T1 : USERTYPE) (T2 : USERTYPE) (T3 : USERTYPE) (T4 : USERTYPE)
+             (T5 : USERTYPE) (T6 : USERTYPE) (T7 : USERTYPE) (T8 : USERTYPE) 
+             (T9 : USERTYPE) (T10 : USERTYPE)
+   : COMBINED_TYPE with type 'a T1.t = 'a T1.t and type 'a T2.t = 'a T2.t
+                    and type 'a T3.t = 'a T3.t and type 'a T4.t = 'a T4.t
+                    and type 'a T5.t = 'a T5.t and type 'a T6.t = 'a T6.t
+                    and type 'a T7.t = 'a T7.t and type 'a T8.t = 'a T8.t
+                    and type 'a T9.t = 'a T9.t and type 'a T10.t = 'a T10.t =
+  struct
+    type 'a t =
+      | T1 of 'a T1.t
+      | T2 of 'a T2.t
+      | T3 of 'a T3.t
+      | T4 of 'a T4.t
+      | T5 of 'a T5.t
+      | T6 of 'a T6.t
+      | T7 of 'a T7.t
+      | T8 of 'a T8.t
+      | T9 of 'a T9.t
+      | T10 of 'a T10.t
+    type 'a alias_for_t = 'a t
+    let allnames = [T1.tname; T2.tname; T3.tname; T4.tname; T5.tname;
+                    T6.tname; T7.tname; T8.tname; T9.tname; T10.tname]
+    let tname =
+      let add t ts =
+        if t = Unused.Type.tname then ts
+        else match ts with
+        | Some names -> Some (names ^ " or " ^ t)
+        | None -> Some t
+      in List.fold_right add allnames None
+    let tname = match tname with Some n -> n | None -> Unused.Type.tname
+
+    let eq eqvs x y = match x, y with
+    | T1 x, T1 y -> T1.eq eqvs x y
+    | T2 x, T2 y -> T2.eq eqvs x y
+    | T3 x, T3 y -> T3.eq eqvs x y
+    | T4 x, T4 y -> T4.eq eqvs x y
+    | T5 x, T5 y -> T5.eq eqvs x y
+    | T6 x, T6 y -> T6.eq eqvs x y
+    | T7 x, T7 y -> T7.eq eqvs x y
+    | T8 x, T8 y -> T8.eq eqvs x y
+    | T9 x, T9 y -> T9.eq eqvs x y
+    | T10 x, T10 y -> T10.eq eqvs x y
+    | _, _ -> false
+
+    let to_string vs x = match x with
+    | T1 x -> T1.to_string vs x
+    | T2 x -> T2.to_string vs x
+    | T3 x -> T3.to_string vs x
+    | T4 x -> T4.to_string vs x
+    | T5 x -> T5.to_string vs x
+    | T6 x -> T6.to_string vs x
+    | T7 x -> T7.to_string vs x
+    | T8 x -> T8.to_string vs x
+    | T9 x -> T9.to_string vs x
+    | T10 x -> T10.to_string vs x
+        
+  module type VIEW = TYPEVIEW with type 'a combined = 'a t
+  module V = Luavalue
+  module T1 = struct
+    type 'a combined = 'a alias_for_t
+    type 'a t = 'a T1.t
+    let makemap (upper : ('a combined, 'b) V.ep) fail =
+      { V.embed   = (fun x -> upper.V.embed (T1 x))
+      ; V.project = (fun x -> match upper.V.project x with
+                    | T1 x -> x
+                    | _ -> fail x T1.tname)
+      } 
   end
+  <<nested [[T2]]..[[T10]] in [[Combine.T10]]>>
+  end (* Combine.T10 *)
+  <<definitions of [[Combine.T1]] through [[Combine.T9]]>>
+@ 
+@ 
+<<lualib.ml>>=
+@ 
+<<[[Combine]] contents>>=
+  module L10 (L1 : TYPEFUL)
+    (L2 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L3 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L4 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L5 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L6 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L7 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L8 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L9 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L10 : TYPEFUL with type 'a combined = 'a L1.combined) :
+    TYPEFUL with type 'a combined = 'a L1.combined   = 
+  struct
+    type 'a combined = 'a L1.combined
+    module M  (C : CORE with type 'a V.userdata' = 'a combined) = struct
+      module M1 = L1.M(C)
+      module M2 = L2.M(C)
+      module M3 = L3.M(C)
+      module M4 = L4.M(C)
+      module M5 = L5.M(C)
+      module M6 = L6.M(C)
+      module M7 = L7.M(C)
+      module M8 = L8.M(C)
+      module M9 = L9.M(C)
+      module M10 = L10.M(C)
+      let init g = M1.init g; M2.init g; M3.init g; M4.init g; M5.init g;
+                   M6.init g; M7.init g; M8.init g; M9.init g; M10.init g
+    end (*Combine.L10.M*)
+  end (* Combine.L10*)
+@
+@
+
+<<nested [[T2]]..[[T10]] in [[Combine.T10]]>>=
+  module T2 = struct
+    type 'a combined = 'a alias_for_t
+    type 'a t = 'a T2.t
+    let makemap upper fail =
+      { V.embed   = (fun x -> upper.V.embed (T2 x))
+      ; V.project = (fun x -> match upper.V.project x with
+                    | T2 x -> x
+                    | _ -> fail x T2.tname)
+      } 
+  end
+
+  module T3 = struct
+    type 'a combined = 'a alias_for_t
+    type 'a t = 'a T3.t
+    let makemap upper fail =
+      { V.embed   = (fun x -> upper.V.embed (T3 x))
+      ; V.project = (fun x -> match upper.V.project x with
+                    | T3 x -> x
+                    | _ -> fail x T3.tname)
+      } 
+  end
+
+  module T4 = struct
+    type 'a combined = 'a alias_for_t
+    type 'a t = 'a T4.t
+    let makemap upper fail =
+      { V.embed   = (fun x -> upper.V.embed (T4 x))
+      ; V.project = (fun x -> match upper.V.project x with
+                    | T4 x -> x
+                    | _ -> fail x T4.tname)
+      } 
+  end
+
+  module T5 = struct
+    type 'a combined = 'a alias_for_t
+    type 'a t = 'a T5.t
+    let makemap upper fail =
+      { V.embed   = (fun x -> upper.V.embed (T5 x))
+      ; V.project = (fun x -> match upper.V.project x with
+                    | T5 x -> x
+                    | _ -> fail x T5.tname)
+      } 
+  end
+
+  module T6 = struct
+    type 'a combined = 'a alias_for_t
+    type 'a t = 'a T6.t
+    let makemap upper fail =
+      { V.embed   = (fun x -> upper.V.embed (T6 x))
+      ; V.project = (fun x -> match upper.V.project x with
+                    | T6 x -> x
+                    | _ -> fail x T6.tname)
+      } 
+  end
+
+  module T7 = struct
+    type 'a combined = 'a alias_for_t
+    type 'a t = 'a T7.t
+    let makemap upper fail =
+      { V.embed   = (fun x -> upper.V.embed (T7 x))
+      ; V.project = (fun x -> match upper.V.project x with
+                    | T7 x -> x
+                    | _ -> fail x T7.tname)
+      } 
+  end
+
+  module T8 = struct
+    type 'a combined = 'a alias_for_t
+    type 'a t = 'a T8.t
+    let makemap upper fail =
+      { V.embed   = (fun x -> upper.V.embed (T8 x))
+      ; V.project = (fun x -> match upper.V.project x with
+                    | T8 x -> x
+                    | _ -> fail x T8.tname)
+      } 
+  end
+
+  module T9 = struct
+    type 'a combined = 'a alias_for_t
+    type 'a t = 'a T9.t
+    let makemap upper fail =
+      { V.embed   = (fun x -> upper.V.embed (T9 x))
+      ; V.project = (fun x -> match upper.V.project x with
+                    | T9 x -> x
+                    | _ -> fail x T9.tname)
+      } 
+  end
+
+  module T10 = struct
+    type 'a combined = 'a alias_for_t
+    type 'a t = 'a T10.t
+    let makemap upper fail =
+      { V.embed   = (fun x -> upper.V.embed (T10 x))
+      ; V.project = (fun x -> match upper.V.project x with
+                    | T10 x -> x
+                    | _ -> fail x T10.tname)
+      } 
+  end
+@ 
+This Icon code was used to generate L1 through L9
+<<lspecl.icn>>=
+procedure main()
+  write("<<similar specifications for [[L1]] to [[L9]]>>=")
+  every spec (1 to 9)
+  write("@")
+  write("<<[[Combine]] contents>>=")
+  every def (1 to 9)
+end
+ 
+procedure spec(k, succ)
+  write("  module L", k, " (L1 : TYPEFUL)")
+  every write ("    (L", 2 to k, " : TYPEFUL with type 'a combined = 'a L1.combined)")
+  write("  : TYPEFUL with type 'a combined = 'a L1.combined", \succ | "")
 end
 
+procedure def(k) 
+  spec(k, "   = ")
+  writes("    L10")
+  every writes(" (L", 1 to k, ")")
+  every k+1 to 10 do writes(" (Unused.Typeful(L1))")
+  write()
+end
+@ 
+This Icon code generated [[T1]] through [[T9]].
+<<tspecl.icn>>=
+procedure main()
+  write("@<<similar specifications for [[T1]] to [[T9]]@>>=")
+  every spec (1 to 9)
+  write("@")
+  write("@<<definitions of [[Combine.T1]] through [[Combine.T9]]@>>=")
+  every def (1 to 9)
+end
+ 
+procedure spec(k, succ)
+  writes("module T", k)
+  every writes(" (T", 1 to k, " : USERTYPE)")
+  write("  : COMBINED_TYPE")
+  every i := 1 to k do
+      writes(" with type 'a T", i, ".t = 'a T", i, ".t")
+  write(\succ | "")
+end
+
+procedure def(k) 
+  spec(k, "   = ")
+  writes("    T10")
+  every writes(" (T", 1 to k, ")")
+  every k+1 to 10 do writes(" (Unused.Type)")
+  write()
+end
+@ 
+
+<<similar specifications for [[L1]] to [[L9]]>>=
+  module L1 (L1 : TYPEFUL)
+  : TYPEFUL with type 'a combined = 'a L1.combined
+  module L2 (L1 : TYPEFUL)
+    (L2 : TYPEFUL with type 'a combined = 'a L1.combined)
+  : TYPEFUL with type 'a combined = 'a L1.combined
+  module L3 (L1 : TYPEFUL)
+    (L2 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L3 : TYPEFUL with type 'a combined = 'a L1.combined)
+  : TYPEFUL with type 'a combined = 'a L1.combined
+  module L4 (L1 : TYPEFUL)
+    (L2 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L3 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L4 : TYPEFUL with type 'a combined = 'a L1.combined)
+  : TYPEFUL with type 'a combined = 'a L1.combined
+  module L5 (L1 : TYPEFUL)
+    (L2 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L3 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L4 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L5 : TYPEFUL with type 'a combined = 'a L1.combined)
+  : TYPEFUL with type 'a combined = 'a L1.combined
+  module L6 (L1 : TYPEFUL)
+    (L2 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L3 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L4 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L5 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L6 : TYPEFUL with type 'a combined = 'a L1.combined)
+  : TYPEFUL with type 'a combined = 'a L1.combined
+  module L7 (L1 : TYPEFUL)
+    (L2 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L3 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L4 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L5 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L6 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L7 : TYPEFUL with type 'a combined = 'a L1.combined)
+  : TYPEFUL with type 'a combined = 'a L1.combined
+  module L8 (L1 : TYPEFUL)
+    (L2 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L3 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L4 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L5 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L6 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L7 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L8 : TYPEFUL with type 'a combined = 'a L1.combined)
+  : TYPEFUL with type 'a combined = 'a L1.combined
+  module L9 (L1 : TYPEFUL)
+    (L2 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L3 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L4 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L5 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L6 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L7 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L8 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L9 : TYPEFUL with type 'a combined = 'a L1.combined)
+  : TYPEFUL with type 'a combined = 'a L1.combined
+@
+<<[[Combine]] contents>>=
+  module L1 (L1 : TYPEFUL)
+  : TYPEFUL with type 'a combined = 'a L1.combined   = 
+    L10 (L1) (Unused.Typeful(L1)) (Unused.Typeful(L1)) (Unused.Typeful(L1)) (Unused.Typeful(L1)) (Unused.Typeful(L1)) (Unused.Typeful(L1)) (Unused.Typeful(L1)) (Unused.Typeful(L1)) (Unused.Typeful(L1))
+  module L2 (L1 : TYPEFUL)
+    (L2 : TYPEFUL with type 'a combined = 'a L1.combined)
+  : TYPEFUL with type 'a combined = 'a L1.combined   = 
+    L10 (L1) (L2) (Unused.Typeful(L1)) (Unused.Typeful(L1)) (Unused.Typeful(L1)) (Unused.Typeful(L1)) (Unused.Typeful(L1)) (Unused.Typeful(L1)) (Unused.Typeful(L1)) (Unused.Typeful(L1))
+  module L3 (L1 : TYPEFUL)
+    (L2 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L3 : TYPEFUL with type 'a combined = 'a L1.combined)
+  : TYPEFUL with type 'a combined = 'a L1.combined   = 
+    L10 (L1) (L2) (L3) (Unused.Typeful(L1)) (Unused.Typeful(L1)) (Unused.Typeful(L1)) (Unused.Typeful(L1)) (Unused.Typeful(L1)) (Unused.Typeful(L1)) (Unused.Typeful(L1))
+  module L4 (L1 : TYPEFUL)
+    (L2 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L3 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L4 : TYPEFUL with type 'a combined = 'a L1.combined)
+  : TYPEFUL with type 'a combined = 'a L1.combined   = 
+    L10 (L1) (L2) (L3) (L4) (Unused.Typeful(L1)) (Unused.Typeful(L1)) (Unused.Typeful(L1)) (Unused.Typeful(L1)) (Unused.Typeful(L1)) (Unused.Typeful(L1))
+  module L5 (L1 : TYPEFUL)
+    (L2 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L3 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L4 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L5 : TYPEFUL with type 'a combined = 'a L1.combined)
+  : TYPEFUL with type 'a combined = 'a L1.combined   = 
+    L10 (L1) (L2) (L3) (L4) (L5) (Unused.Typeful(L1)) (Unused.Typeful(L1)) (Unused.Typeful(L1)) (Unused.Typeful(L1)) (Unused.Typeful(L1))
+  module L6 (L1 : TYPEFUL)
+    (L2 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L3 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L4 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L5 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L6 : TYPEFUL with type 'a combined = 'a L1.combined)
+  : TYPEFUL with type 'a combined = 'a L1.combined   = 
+    L10 (L1) (L2) (L3) (L4) (L5) (L6) (Unused.Typeful(L1)) (Unused.Typeful(L1)) (Unused.Typeful(L1)) (Unused.Typeful(L1))
+  module L7 (L1 : TYPEFUL)
+    (L2 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L3 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L4 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L5 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L6 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L7 : TYPEFUL with type 'a combined = 'a L1.combined)
+  : TYPEFUL with type 'a combined = 'a L1.combined   = 
+    L10 (L1) (L2) (L3) (L4) (L5) (L6) (L7) (Unused.Typeful(L1)) (Unused.Typeful(L1)) (Unused.Typeful(L1))
+  module L8 (L1 : TYPEFUL)
+    (L2 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L3 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L4 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L5 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L6 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L7 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L8 : TYPEFUL with type 'a combined = 'a L1.combined)
+  : TYPEFUL with type 'a combined = 'a L1.combined   = 
+    L10 (L1) (L2) (L3) (L4) (L5) (L6) (L7) (L8) (Unused.Typeful(L1)) (Unused.Typeful(L1))
+  module L9 (L1 : TYPEFUL)
+    (L2 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L3 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L4 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L5 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L6 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L7 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L8 : TYPEFUL with type 'a combined = 'a L1.combined)
+    (L9 : TYPEFUL with type 'a combined = 'a L1.combined)
+  : TYPEFUL with type 'a combined = 'a L1.combined   = 
+    L10 (L1) (L2) (L3) (L4) (L5) (L6) (L7) (L8) (L9) (Unused.Typeful(L1))
+<<similar specifications for [[T1]] to [[T9]]>>=
+module T1 (T1 : USERTYPE)  : COMBINED_TYPE
+ with type 'a T1.t = 'a T1.t
+module T2 (T1 : USERTYPE) (T2 : USERTYPE)  : COMBINED_TYPE
+ with type 'a T1.t = 'a T1.t with type 'a T2.t = 'a T2.t
+module T3 (T1 : USERTYPE) (T2 : USERTYPE) (T3 : USERTYPE)  : COMBINED_TYPE
+ with type 'a T1.t = 'a T1.t with type 'a T2.t = 'a T2.t with type 'a T3.t = 'a T3.t
+module T4 (T1 : USERTYPE) (T2 : USERTYPE) (T3 : USERTYPE) (T4 : USERTYPE)  : COMBINED_TYPE
+ with type 'a T1.t = 'a T1.t with type 'a T2.t = 'a T2.t with type 'a T3.t = 'a T3.t with type 'a T4.t = 'a T4.t
+module T5 (T1 : USERTYPE) (T2 : USERTYPE) (T3 : USERTYPE) (T4 : USERTYPE) (T5 : USERTYPE)  : COMBINED_TYPE
+ with type 'a T1.t = 'a T1.t with type 'a T2.t = 'a T2.t with type 'a T3.t = 'a T3.t with type 'a T4.t = 'a T4.t with type 'a T5.t = 'a T5.t
+module T6 (T1 : USERTYPE) (T2 : USERTYPE) (T3 : USERTYPE) (T4 : USERTYPE) (T5 : USERTYPE) (T6 : USERTYPE)  : COMBINED_TYPE
+ with type 'a T1.t = 'a T1.t with type 'a T2.t = 'a T2.t with type 'a T3.t = 'a T3.t with type 'a T4.t = 'a T4.t with type 'a T5.t = 'a T5.t with type 'a T6.t = 'a T6.t
+module T7 (T1 : USERTYPE) (T2 : USERTYPE) (T3 : USERTYPE) (T4 : USERTYPE) (T5 : USERTYPE) (T6 : USERTYPE) (T7 : USERTYPE)  : COMBINED_TYPE
+ with type 'a T1.t = 'a T1.t with type 'a T2.t = 'a T2.t with type 'a T3.t = 'a T3.t with type 'a T4.t = 'a T4.t with type 'a T5.t = 'a T5.t with type 'a T6.t = 'a T6.t with type 'a T7.t = 'a T7.t
+module T8 (T1 : USERTYPE) (T2 : USERTYPE) (T3 : USERTYPE) (T4 : USERTYPE) (T5 : USERTYPE) (T6 : USERTYPE) (T7 : USERTYPE) (T8 : USERTYPE)  : COMBINED_TYPE
+ with type 'a T1.t = 'a T1.t with type 'a T2.t = 'a T2.t with type 'a T3.t = 'a T3.t with type 'a T4.t = 'a T4.t with type 'a T5.t = 'a T5.t with type 'a T6.t = 'a T6.t with type 'a T7.t = 'a T7.t with type 'a T8.t = 'a T8.t
+module T9 (T1 : USERTYPE) (T2 : USERTYPE) (T3 : USERTYPE) (T4 : USERTYPE) (T5 : USERTYPE) (T6 : USERTYPE) (T7 : USERTYPE) (T8 : USERTYPE) (T9 : USERTYPE)  : COMBINED_TYPE
+ with type 'a T1.t = 'a T1.t with type 'a T2.t = 'a T2.t with type 'a T3.t = 'a T3.t with type 'a T4.t = 'a T4.t with type 'a T5.t = 'a T5.t with type 'a T6.t = 'a T6.t with type 'a T7.t = 'a T7.t with type 'a T8.t = 'a T8.t with type 'a T9.t = 'a T9.t
+@
+<<definitions of [[Combine.T1]] through [[Combine.T9]]>>=
+module T1 (T1 : USERTYPE)  : COMBINED_TYPE
+ with type 'a T1.t = 'a T1.t   = 
+    T10 (T1) (Unused.Type) (Unused.Type) (Unused.Type) (Unused.Type) (Unused.Type) (Unused.Type) (Unused.Type) (Unused.Type) (Unused.Type)
+module T2 (T1 : USERTYPE) (T2 : USERTYPE)  : COMBINED_TYPE
+ with type 'a T1.t = 'a T1.t with type 'a T2.t = 'a T2.t   = 
+    T10 (T1) (T2) (Unused.Type) (Unused.Type) (Unused.Type) (Unused.Type) (Unused.Type) (Unused.Type) (Unused.Type) (Unused.Type)
+module T3 (T1 : USERTYPE) (T2 : USERTYPE) (T3 : USERTYPE)  : COMBINED_TYPE
+ with type 'a T1.t = 'a T1.t with type 'a T2.t = 'a T2.t with type 'a T3.t = 'a T3.t   = 
+    T10 (T1) (T2) (T3) (Unused.Type) (Unused.Type) (Unused.Type) (Unused.Type) (Unused.Type) (Unused.Type) (Unused.Type)
+module T4 (T1 : USERTYPE) (T2 : USERTYPE) (T3 : USERTYPE) (T4 : USERTYPE)  : COMBINED_TYPE
+ with type 'a T1.t = 'a T1.t with type 'a T2.t = 'a T2.t with type 'a T3.t = 'a T3.t with type 'a T4.t = 'a T4.t   = 
+    T10 (T1) (T2) (T3) (T4) (Unused.Type) (Unused.Type) (Unused.Type) (Unused.Type) (Unused.Type) (Unused.Type)
+module T5 (T1 : USERTYPE) (T2 : USERTYPE) (T3 : USERTYPE) (T4 : USERTYPE) (T5 : USERTYPE)  : COMBINED_TYPE
+ with type 'a T1.t = 'a T1.t with type 'a T2.t = 'a T2.t with type 'a T3.t = 'a T3.t with type 'a T4.t = 'a T4.t with type 'a T5.t = 'a T5.t   = 
+    T10 (T1) (T2) (T3) (T4) (T5) (Unused.Type) (Unused.Type) (Unused.Type) (Unused.Type) (Unused.Type)
+module T6 (T1 : USERTYPE) (T2 : USERTYPE) (T3 : USERTYPE) (T4 : USERTYPE) (T5 : USERTYPE) (T6 : USERTYPE)  : COMBINED_TYPE
+ with type 'a T1.t = 'a T1.t with type 'a T2.t = 'a T2.t with type 'a T3.t = 'a T3.t with type 'a T4.t = 'a T4.t with type 'a T5.t = 'a T5.t with type 'a T6.t = 'a T6.t   = 
+    T10 (T1) (T2) (T3) (T4) (T5) (T6) (Unused.Type) (Unused.Type) (Unused.Type) (Unused.Type)
+module T7 (T1 : USERTYPE) (T2 : USERTYPE) (T3 : USERTYPE) (T4 : USERTYPE) (T5 : USERTYPE) (T6 : USERTYPE) (T7 : USERTYPE)  : COMBINED_TYPE
+ with type 'a T1.t = 'a T1.t with type 'a T2.t = 'a T2.t with type 'a T3.t = 'a T3.t with type 'a T4.t = 'a T4.t with type 'a T5.t = 'a T5.t with type 'a T6.t = 'a T6.t with type 'a T7.t = 'a T7.t   = 
+    T10 (T1) (T2) (T3) (T4) (T5) (T6) (T7) (Unused.Type) (Unused.Type) (Unused.Type)
+module T8 (T1 : USERTYPE) (T2 : USERTYPE) (T3 : USERTYPE) (T4 : USERTYPE) (T5 : USERTYPE) (T6 : USERTYPE) (T7 : USERTYPE) (T8 : USERTYPE)  : COMBINED_TYPE
+ with type 'a T1.t = 'a T1.t with type 'a T2.t = 'a T2.t with type 'a T3.t = 'a T3.t with type 'a T4.t = 'a T4.t with type 'a T5.t = 'a T5.t with type 'a T6.t = 'a T6.t with type 'a T7.t = 'a T7.t with type 'a T8.t = 'a T8.t   = 
+    T10 (T1) (T2) (T3) (T4) (T5) (T6) (T7) (T8) (Unused.Type) (Unused.Type)
+module T9 (T1 : USERTYPE) (T2 : USERTYPE) (T3 : USERTYPE) (T4 : USERTYPE) (T5 : USERTYPE) (T6 : USERTYPE) (T7 : USERTYPE) (T8 : USERTYPE) (T9 : USERTYPE)  : COMBINED_TYPE
+ with type 'a T1.t = 'a T1.t with type 'a T2.t = 'a T2.t with type 'a T3.t = 'a T3.t with type 'a T4.t = 'a T4.t with type 'a T5.t = 'a T5.t with type 'a T6.t = 'a T6.t with type 'a T7.t = 'a T7.t with type 'a T8.t = 'a T8.t with type 'a T9.t = 'a T9.t   = 
+    T10 (T1) (T2) (T3) (T4) (T5) (T6) (T7) (T8) (T9) (Unused.Type)
+@ 

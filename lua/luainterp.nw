@@ -11,8 +11,8 @@ This file sketches some of the supporting details, focusing on the
 embedding and projection, which is the new part.
 <<luainterp.mli>>=
 <<signatures>>
-module Make3  (T : Lib3.COMBINED_TYPE)
-                  (L : Lib3.TYPEFUL with type 'a combined = 'a T.t) :
+module Make3  (T : Lualib.COMBINED_TYPE)
+                  (L : Lualib.TYPEFUL with type 'a combined = 'a T.t) :
     S with type 'a Value.userdata'  = 'a T.t
 @ 
 \subsection{Implementation}
@@ -39,21 +39,9 @@ module type S = sig
     (* sets fallback, returns previous one *)
 end
 @ 
-<<old luainterp.ml>>=
-module Make (L : Lualib.FULL) : S = struct
-  module Value = Luavalue.Make(L.U)
-  module Ast = Luaast.Make (Value)
-  type state = Value.state
-  type value = Value.value
-  <<interp toplevel>>
-  <<interp fallbacks>>
-  <<new-style state function>>
-  <<interp tests>>
-end
-@ 
 <<luainterp.ml>>=
-module Make3  (T : Lib3.COMBINED_TYPE)
-                  (L : Lib3.TYPEFUL with type 'a combined = 'a T.t) :
+module Make3  (T : Lualib.COMBINED_TYPE)
+                  (L : Lualib.TYPEFUL with type 'a combined = 'a T.t) :
     S with type 'a Value.userdata'  = 'a T.t = struct
   module U = struct
     type 'a t = 'a T.t
@@ -566,22 +554,6 @@ let setfallback g fbname fb =
   let _ = Hashtbl.replace g.V.fallbacks fbname fb in
   fb'
 @ 
-<<old luainterp.ml>>=
-module NoLibrary = struct
-  module U = struct
-    type 'a state = unit
-    type 'a t     = unit
-    let tname = "<nothing>"
-    let eq _ _ _ = true
-    let to_string _ _ = "<nothing>"
-    let state () = ()
-  end
-  module M (This : Lualib.FULL_VIEW with type 'a t = 'a U.t and type 'a state = 'a U.state) =
-    struct
-      let init _ = ()
-    end
-end
-@
 
 
 
