@@ -244,6 +244,11 @@ val last       : zblock -> last
 val goto_start : zblock -> first * tail
 val goto_end   : zblock -> head  * last
 @ 
+A couple of ways to combine parts:
+<<declarations of [[Rep]]'s public functions>>=
+val ht_to_first : head -> tail -> first * tail
+val ht_to_last  : head -> tail -> head  * last
+@ 
 Access to the representation:
 <<zipcfg.mli>>=
 val to_blocks : graph -> Rep.block Unique.Map.t
@@ -251,6 +256,17 @@ val of_blocks : Rep.block Unique.Map.t -> graph  (* cheap *)
 val of_block_list : Rep.block list -> graph  (* expensive *)
 val openz : zgraph -> Rep.zblock * Rep.block Unique.Map.t
 @ 
+We want to be able to scrutinize a single-entry, single-exit graph for
+splicing purposes. 
+There are two useful cases: the graph is a single block or it isn't.
+We use continuation-passing style
+<<zipcfg.mli>>=
+val prepare_for_splicing :
+  graph -> 
+  (Rep.tail -> 'answer) -> 
+  (entry:Rep.tail -> exit:Rep.head -> others:Rep.block Unique.Map.t -> 'answer) ->
+  'answer
+@
 Traversal: [[postorder_dfs]] returns a list of blocks reachable from
 the entry node.
 The postorder depth-first-search order means the list is in roughly
@@ -415,22 +431,22 @@ Convert block between forms.
 These functions are tail-recursive, so we can go as deep as we like
 without fear of stack overflow.  
 <<definitions of [[Rep]]'s public functions>>=
-let goto_start =
-  let rec revapp head tail = match head with
+let rec ht_to_first head tail = match head with
   | First f -> f, tail
-  | Head (h, m) -> revapp h (Tail (m, tail)) in
-  function
-  | Start  (f, t)    -> f, t
-  | Middle (h, m, t) -> revapp h (Tail (m, t))
-  | End    (h, l)    -> revapp h (Last l)
+  | Head (h, m) -> ht_to_first h (Tail (m, tail)) 
 
-let goto_end =
-  let rec revapp head tail = match tail with
-  | Last l -> head, l
-  | Tail (m, t) -> revapp (Head (head, m)) t in
-  function
-  | Start  (f, t)    -> revapp (First f) t
-  | Middle (h, m, t) -> revapp (Head (h, m)) t
+let goto_start = function
+  | Start  (f, t)    -> f, t
+  | Middle (h, m, t) -> ht_to_first h (Tail (m, t))
+  | End    (h, l)    -> ht_to_first h (Last l)
+
+let rec ht_to_last head tail = match tail with
+| Last l -> head, l
+| Tail (m, t) -> ht_to_last (Head (head, m)) t 
+
+let goto_end = function
+  | Start  (f, t)    -> ht_to_last (First f) t
+  | Middle (h, m, t) -> ht_to_last (Head (h, m)) t
   | End    (h, l)    -> h, l
 
 let zip = goto_start
@@ -897,6 +913,20 @@ let last_instr l = match l with
 let of_block_list blocks =
   List.fold_left (fun m b -> Blocks.insert b m) Blocks.empty blocks 
 @ 
+\paragraph{Splicing support}
+<<zipcfg.ml>>=
+let prepare_for_splicing graph single multi =
+  let gentry, gblocks = Blocks.focus graph entry_uid in
+  if UM.is_empty gblocks then
+    ((match last (unzip gentry) with Exit -> () | _ -> impossf "bad single block");
+     single (snd gentry)
+    )
+  else
+    let gexit, gblocks = exit gblocks in
+    let gh, gl = goto_end gexit in
+    (match gl with Exit -> () | _ -> impossf "exit is not exit?!");
+    multi ~entry:(snd gentry) ~exit:gh ~others:gblocks
+@ 
 \paragraph{Graph expansion}
 
 This probably duplicates some other splicing stuff.
@@ -907,32 +937,19 @@ let must_be_empty g =
     impossf "entry connects to exit, but there are more blocks"
 
 let splice_in_forward head graph tail expanded =
-  let rec revapp head tail = match tail with
-  | Last l -> head, l
-  | Tail (m, t) -> revapp (Head (head, m)) t in
-  let gentry, gblocks = entry graph in
-  let gf, gt = goto_start gentry in
-  (match gf with Entry -> () | _ -> impossf "entry is not entry?!");
-  let h, l = revapp head gt in
-  match l with
-  | Exit ->
-      must_be_empty gblocks;
-      h, tail, expanded
-  | _ ->
-      unreachable tail;
-      let gexit, gblocks = exit gblocks in
-      let gh, gl = goto_end gexit in
-      (match gl with Exit -> () | _ -> impossf "exit is not exit?!");
-      gh, tail, (Blocks.union gblocks (Blocks.insert (zip (End (h, l))) expanded))
+  let single after_entry =
+    let new_head, last = ht_to_last head after_entry in
+    (match last with Exit -> () | _ -> impossf "exit expected");
+    new_head, tail, expanded in
+  let multi ~entry ~exit ~others =
+    exit, tail, Blocks.insert (ht_to_first head entry) (Blocks.union others expanded) in
+  prepare_for_splicing graph single multi
 
 let finish_splice_forward head graph expanded = 
-  let rec revapp head tail = match head with
-  | First f -> f, tail
-  | Head (h, m) -> revapp h (Tail (m, tail)) in
   let gentry, gblocks = entry graph in
   let gf, gt = goto_start gentry in
   (match gf with Entry -> () | _ -> impossf "entry is not entry?!");
-  Blocks.union gblocks (Blocks.insert (revapp head gt) expanded)
+  Blocks.insert (ht_to_first head gt) (Blocks.union gblocks expanded)
 
 let expand expand_middle expand_last graph =
   let expand_block block expanded =
@@ -956,3 +973,4 @@ let single_middle m =
 let single_last l =
   let block = (Entry, Last l) in
   Blocks.insert block Blocks.empty
+@ 
