@@ -1,9 +1,10 @@
 \documentclass{article}
 \usepackage[hypertex]{hyperref}
-\usepackage{noweb} 
+\usepackage{noweb,tabularx} 
 \def\PAL{\mbox{C{\texttt{-{}-}}}}
 % l2h substitution PAL C--
-\title{Release notes for the Quick~{\PAL} compiler}
+\title{Release notes for the Quick~{\PAL} compiler\\
+Release 20040601}
 \author{The Quick~{\PAL} Team}
 
 \begin{document}
@@ -14,19 +15,161 @@
 
 \clearpage
 
+\section{Introduction}
 
-\section{Delivery on promises made in specification}
-
-\emph{Yeah, right.}
+This document contains information you need to use the Quick~{\PAL}
+compiler.
+It is divided into several sections, which do different things.
 \begin{itemize}
 \item
-Floating-point literals are availabe in types [[bits32]] and
-[[bits64]].
+We provide the target-specific information that is
+required by the {\PAL} specification.
 \item
-Integer literals may be any width up to [[bits64]].
+We explain how to integrate your front end into the
+Quick~{\PAL} driver. 
+(If you prefer just to use Quick~{\PAL} to translate {\PAL} files into
+assembly language, that's done by \texttt{qc--.opt~-S} as explained on
+the man page.)
+\item
+Quick~{\PAL} is a research prototype;
+we list some unpleasant ways that it may surprise you.
+\item
+We explain how to identify the mysterious error messages that
+Quick~{\PAL} issues when something goes badly wrong, and when and how
+to send in a bug report.
+\item 
+We discuss experimental support for multithreading.
+\item
+We provide other notes for the latest release of the compiler, as well
+as old notes for previous releases.
+The old notes are useful only if you are upgrading from an earlier release.
+Each release of Quick~{\PAL} is numbered with the day of release in
+YYYYMMDD format.
 \end{itemize}
+This document is not complete by itself;
+you also need to read the man page for \texttt{qc--}.
 
-\section{Using the Quick~{\PAL} driver}
+
+\section{Portability}
+
+\label{sec:portability}
+
+As of release 20040601, Quick~{\PAL} supports only one back end, for
+Intel x86 running Linux.
+This back end has the following properties:
+\begin{description}
+\item[Supported data types:] 
+Quick~{\PAL} supports these types:
+\begin{itemize}
+\item 
+Type [[bits32]] is supported for register variables and for all
+computation. 
+\item
+Types [[bits16]] and [[bits8]] are supported for memory references,
+and they work with operators [[%sx]], [[%zx]], and [[%lobits]].
+In particular, 
+here's what you can do with a narrow variable or memory location:
+\begin{itemize}
+\item
+Assign it a compile-time constant expression
+\item
+Assign it the contents of another variable or memory location of the
+same width
+\item
+Assign it \texttt{\char`\%lobits} of an expression of type [[bits32]].
+\end{itemize}
+\item
+Type [[bits64]] can be stored in memory and registers, passed as
+parameters, and returned as results.
+This includes passing to and from gcc-compiled C~functions, e.g., as 
+[[long long int]].
+But operators [[%sx]], [[%zx]], and [[%lobits]] are not supported for
+64-bit values, 
+and actual operations on 64-bit values have to be done by
+calling out to a C~routine.
+\item
+Larger bit vectors whose widths are a multiple of~8 can be supported
+for memory references, variables, 
+and parameters, but the only computation available is assignment,
+which translates to block copy.
+\item
+The types [[bits2]] is supported for a reference to the floating-point
+rounding mode. 
+\end{itemize}
+\item[Target metrics:]
+The native word and pointer types are [[bits32]].
+The addressing unit is the 8-bit byte,
+and the byte order is little-endian:
+\begin{verbatim}
+target byteorder little
+       memsize 8
+       wordsize 32 pointersize 32;
+\end{verbatim}
+All but byte order can be defaulted.
+\item[Primitive operators:]
+Release 20040601 supports essentially the same primitives as are in~C.
+Overflow-checking primitives such as [[%add_overflows]] are also
+implemented. 
+Signed division supports [[%quot]] and [[%rem]], not [[%div]] and
+[[%mod]]. 
+Integer primitives are supported at 32~bits.
+Floating-point primitives are nominally supported at 32, 64, and
+80~bits, but in fact all floating-point operations are widened to
+80~bits, which is the natural width of the x86 floating-point unit.
+Results from ``narrow floating-point arithmetic'' therefore may be other than
+expected. 
+
+None of the primitives are implemented in alternate-return form;
+therefore, it is not possible to use the hardware to recover from such
+errors as division by zero.
+\item[Back-end capabilities:]
+Integer literals are supported in any width up to 64~bits.
+Floating-point literals are availabe in types [[bits32]] and
+[[bits64]] only.
+
+Each primitive that takes a rounding mode as an argument can take only
+the hardware rounding mode as an argument.
+Otherwise
+there should be no difficulty generating code for expressions
+involving the supported primitives at width~32, plus sign-extended
+and zero-extended narrow \emph{values} (e.g., references to memory).
+Assignments of any number of bytes are also supported.
+\item[Foreign interface:]  
+Quick~{\PAL} supports two foreign calling conventions:
+[[foreign "C"]] and [[foreign "paranoid C"]].
+Because the C~calling convention does not specify where callee-saves
+registers are saved, it is necessary to use 
+ [[foreign "paranoid C"]] 
+when calling a C~function that might be on the stack when the run-time
+system is active.
+
+It is relatively easy to add new conventions to Quick~{\PAL} at need;
+if you want a custom calling convention,  ask.
+\item[Hints in calling conventions:]
+Quick~{\PAL} supports these three hints:\\
+\begin{tabularx}{\linewidth}{@{\quad}lX@{}}
+[["float"]]& A floating-point number\\
+[["address"]]& A memory address or pointer\\
+[[""]]& Any non-float, non-pointer data, including signed and unsigned
+integers, bit vectors, records passed by value, and so on\\
+\end{tabularx}\\
+ The x86 platform has no address registers, so the x86 back end should
+ treat [["address"]] the same as [[""]].
+\item[Hints in register declarations:]
+Quick~{\PAL} supports the same three hints in global register
+declarations. 
+\item[Names of hardware registers:]
+The only hardware register currently supported (as of 20040601) is a
+2-bit register named
+[["IEEE 754 rounding mode"]], which may be used as follows, for
+example: 
+\begin{verbatim}
+  bits2 rm = "IEEE 754 rounding mode";
+\end{verbatim}
+\end{description}
+
+
+\section{Integrating your front end into the Quick~{\PAL} driver}
 
 Quick~{\PAL} is scripted using version~2.5 of the programming language
 Lua (see \url{lua.org}).
@@ -104,19 +247,26 @@ CMD.prettytab[".tig"] = CMD.compilertab[".tig"]
 
 \section{Unpleasant surprises}
 
+Quick~{\PAL} is not yet as complete as we would like.
+Many of the limitations of the code generator are mentioned in 
+Section~\ref{sec:portability} (Portability), but we highlight some
+here. 
+
 \subsection{Floating-point computation}
 
 \begin{itemize}
 \item
 For the semantics of floating-point literals, we trust the Objective
 Caml compiler implicitly.
-This means we don't know exactly what guaranteeds are provided.
+This means we don't know exactly what guarantees are provided.
+If you must get exactly the floating-point literal you want, it is
+best to emit a hexadecimal literal that produces the right bit-pattern.
 \item
 The only rounding modes that are supported are the hardware rounding
 modes of the target machine.
 These need to be declared as a special global register variable, e.g.,
 \begin{verbatim}
-bits2 System.rounding_mode "IEEE 754 rounding mode";
+  bits2 System.rounding_mode "IEEE 754 rounding mode";
 \end{verbatim}
 The name ``\texttt{System.rounding\_mode}'' is not special; it's the
 string literal that makes this name refer to the hardware.
@@ -156,7 +306,7 @@ carry, borrow, extended multiplies, and anything else that might be
 needed for large arithmetic.
 \item
 There's no automatic way to find out what operations are supported.
-(But soon, the machine environment!)
+(An automatic way should be available by mid-June.)
 \end{itemize}
 
 \subsection{Features missing from the language}
@@ -165,17 +315,11 @@ There's no automatic way to find out what operations are supported.
 \item
 The \texttt{also unwinds to} annotation does not work and may cause
 things to fail.
-\item
-The \texttt{also returns to} annotation does not work and may cause
-things to fail.
 \end{itemize}
 
 
 \subsection{Features missing from the run-time interface}
 \begin{itemize}
-\item
-Anything to do with threads is probably not there, or if there, is a
-little wacky.
 \item
 Unwinding the stack is not yet supported.
 \end{itemize}
@@ -185,6 +329,13 @@ Unwinding the stack is not yet supported.
 The compiler generates very bad code.
 The implementation of the \texttt{switch} statement is especially
 na\"\i ve.
+Code can be improved somewhat by using our peephole optimizer,
+but the peephole optimizer cannot compile all programs.
+You can try it out by running
+\begin{verbatim}
+  qc--.opt Backend.x86.improve=Optimize.improve ...
+\end{verbatim}
+
 
 
 \section{Mysterious errors messages, bugs, and bug reports}
@@ -192,7 +343,11 @@ na\"\i ve.
 Any compile-time error message that begins with the phrase 
 ``\texttt{This can't happen}'' indicates an internal error in the
 Quick~{\PAL} compiler.
-In case of such a message, please send a bug report.
+In case of such a message, please send a bug report to
+\texttt{bugs@cminusminus.org}.
+
+To view the status of a bug you have sent, you can visit
+\url{http://www.cminusminus.org/qc--bugs}.
 
 
 Any compile-time error message that begins with the phrase 
@@ -205,12 +360,12 @@ A link-time error that looks something like
 \begin{verbatim} 
   undefined reference to `Cmm.global_area'
 \end{verbatim}
-means either that you have not used the \texttt{-globals} flag on any
+means that you have not used the \texttt{-globals} flag on any
 of your compilations.
 If you get
 a~link-time error which indicates that \texttt{Cmm.global\_area} is
 multiply defined, it 
-that you have not the \texttt{-globals} flag on more than one compilation.
+that you have used the \texttt{-globals} flag on more than one compilation.
 
 A link-time error that looks something like
 \begin{verbatim} 
@@ -222,11 +377,11 @@ above), or else you have different global-variable
 declarations in different compilation units.
 
 
-Send bug reports to \texttt{bugs@cminusminus.org}.
-To view the status of a bug you have sent, you can visit
-\url{http://www.cminusminus.org/qc--bugs}.
 
 \section{Experimental features}
+
+Thread support is not yet working, but it should be in place by the
+end of June.
 
 \subsection{Thread support}
 
@@ -299,10 +454,38 @@ thread, links to other threads, and so on.
 All of this information is outside the purview of
 {\PAL}, however.
 
+\section{Notes for release 20040601}
 
-\section{Notes for particular releases}
+Don't overlook the \texttt{-globals} option (described in the man
+page), which is used to guarantee consistency of {\PAL}
+global-variable declarations across separately compiled units.
 
-In reverse chronological order.
+Quick~{\PAL} has a very simple peephole optimizer.
+It can reduce the size of a program by~30\% or so, but it does not
+work on all programs.
+You can try it out by running
+\begin{verbatim}
+  qc--.opt Backend.x86.improve=Optimize.improve ...
+\end{verbatim}
+% If you find a program that breaks the optimizer, please send it to us.
+
+Quick~{\PAL} has a graph-coloring register allocator, but because it
+is slow, it is turned off by default.  To turn it on, run
+\begin{verbatim}
+  qc--.opt Backend.x86.ralloc=Ralloc.color ...
+\end{verbatim}
+
+There are a few inconsistencies between the run-time interface in the
+specification and the one implemented in the Quick~{\PAL}
+interpreter. 
+
+
+\section{Old notes for older releases}
+
+These notes are
+in reverse chronological order.
+You need to read them only if you are upgrading from an older release
+and want to know what has changed.
 
 \subsection{Notes for release 20040522}
 
