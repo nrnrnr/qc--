@@ -194,7 +194,7 @@ let next dfa (ty,hint) =
         | T.Bits(n) when n mod memsize = 0 -> n 
         | _                                -> assert false in
     let words = width / memsize in
-    let loc   = (dfa.write dfa.offset words, dfa.read dfa.offset words) in
+    let loc   = (dfa.write dfa.offset width, dfa.read dfa.offset width) in
     let dfa   = { dfa with offset = dfa.offset + words } in
         (loc, dfa)
 @
@@ -243,8 +243,8 @@ let read  loc k w   = Rtl.Fetch(stack loc k w, w)
 let write loc k w   = fun e -> Rtl.Store(stack loc k w, e, w)    
 @
 
-The following automaton places parameters relative to some register
-[[reg0]]. 
+The following automaton places parameters relative to some link time
+constant ``sp ''.
 
 <<>>=
 let cc = 
