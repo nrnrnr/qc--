@@ -4,10 +4,23 @@
 \section{Utility functions on RTLs}
 % ----------------------------------------------------------------
 
+Code that builds or manipulates {\rtl}s tends to use the same
+functionality over and over again. We try to define some useful values
+here.
+
+The [[width]] of an expression is only defined for value-expressions,
+but not for conditions.  Applying [[width]] to a condition will result
+in an assertion failure.  
+
 <<rtlutil.mli>>=
 val locwidth  : Rtl.location -> Rtl.width
 val locwidth' : Rtl.Private.location -> Rtl.width
   (* always succeeds *)
+@ 
+<<obsolete and deprecated?>>=
+val width:      Rtl.expr -> int                 (* width of expression *)
+  (* often faults with assertion failure *)
+val assign:     Rtl.location -> Rtl.expr -> Rtl.rtl
 @ 
 <<rtlutil.ml>>=
 module RP = Rtl.Private
@@ -16,3 +29,12 @@ let locwidth' = function
     | RP.Var(_,_,w)      -> w
     | RP.Slice(w, _, _)  -> w
 let locwidth l = locwidth' (Rtl.Convert.location l)
+
+let width e = match Rtl.Convert.expr e with
+    | RP.Const(RP.Bool _)     -> assert false
+    | RP.Const(RP.Bits (_,w)) -> w
+    | RP.Const(RP.Link (_,w)) -> w
+    | RP.Fetch(_,w)           -> w
+    | RP.App _                -> assert false (* not implemented *)
+    
+let assign l r = Rtl.store l r (width r)

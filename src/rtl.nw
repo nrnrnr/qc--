@@ -52,7 +52,6 @@ end
 module Convert: sig 
     <<CONV>>
 end
-<<interface to utility functions (ephemeral)>>
 @
 
 % ------------------------------------------------------------------ 
@@ -153,17 +152,7 @@ val guard     : expr -> rtl -> rtl
 val par       : rtl list -> rtl
 @
 
-Code that builds or manipulates {\rtl}s tends to use the same
-functionality over and over again. We try to define some useful values
-here.
-
-The [[width]] of an expression is only defined for value-expressions,
-but not for conditions.  Applying [[width]] to a condition will result
-in an assertion failure.
-
 <<>>=
-val width:      expr -> int                 (* width of expression *)
-val assign:     location -> expr -> rtl
 @
 
 The purpose of the private interface is to exploit the implementation
@@ -287,11 +276,6 @@ true become effective simultaneously.
 type rtl        = Rtl of guarded list
 @
 
-
-<<interface to utility functions (ephemeral)>>=
-val width:      expr -> int     (* width of expression *)
-@
-
 % ------------------------------------------------------------------ 
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
@@ -351,14 +335,6 @@ Below are simple, nonetheless frequently used functions values on
 {\rtl}s.
 
 <<>>=
-let width = function
-    | Const(Bool _)     -> assert false
-    | Const(Bits (_,w)) -> w
-    | Const(Link (_,w)) -> w
-    | Fetch(_,w)        -> w
-    | App _             -> assert false (* not implemented *)
-    
-let assign l r = Rtl [(Const(Bool true), Store(l, r, width r))]
 let par rtls   = Rtl (List.concat (List.map (fun (Rtl x) -> x) rtls))
 let slice width lsb loc = Slice (width, lsb, loc) 
 @
