@@ -58,7 +58,6 @@ val findv           : string -> env     -> ventry
 val findt           : string -> env     -> tentry
 val findv'          : string -> env     -> (denotation * ty) Error.error
 val findt'          : string -> env     -> ty Error.error
-
 val srcmap          : env -> Srcmap.map
 @
 
@@ -67,6 +66,15 @@ val bindMemsize     : int        -> env -> env
 val bindEndianness  : endianness -> env -> env 
 val findMemsize     : env -> int option
 val findEndianness  : env -> endianness option   
+@
+
+The function [[errorfree]] checks whether a fat environment [[env]]
+binds any [[Error.Error]] value.  In case it does, it return
+[[Error.Error]] and [[Error.Ok()]] if the fat environment is
+error-free.
+
+<<>>=
+val errorfree       : env -> unit Error.error
 @
 
 % ------------------------------------------------------------------ 
@@ -102,12 +110,22 @@ let create map      = { tenv = StrMap.empty
                       }
 @
 
+% ------------------------------------------------------------------ 
+\subsubsection{Bindings for types and values}
+% ------------------------------------------------------------------ 
+
 In a {\PAL} program a declared name is visible in its entire scope,
 even before the place of its declaration.  The re-declaration of
 values and type is therefore not allowed.  The implementations of
 [[bindv]] and [[bindt]] maintains this by comparing the scope on an
 new name and a possibly existing name in the environment.  No name can
 be added into the same scope where the same name is already declared.
+
+When a name is re-declared we issue an error but the first declaration
+is considered valid.  It would be better to re-bind it to error to
+make the problem visible in the environment.  But the current error
+reporting design does not allow to report an error and return a value
+at the same time.
 
 <<>>=
 let bindv name (scope, _ as x) env =
@@ -137,11 +155,8 @@ let bindt name (scope, _ as x) env =
 <<>>=
 let bindvError name scope env = bindv name (scope, E.Error) env
 let bindtError name scope env = bindt name (scope, E.Error) env
-
-<<>>=
-let srcmap env = env.srcmap
-
 @
+
 The functions to lookup a value [[findv]] and a type [[findt]] raise
 an [[E.Error]] exception in case the name can not be found.
 
@@ -162,6 +177,18 @@ let findt name env =
 let findv' name env = snd (findv name env)
 let findt' name env = snd (findt name env)
 @
+
+% ------------------------------------------------------------------ 
+\subsubsection{Sourcemap}
+% ------------------------------------------------------------------ 
+
+<<>>=
+let srcmap env = env.srcmap
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{Target architecture description}
+% ------------------------------------------------------------------ 
 
 The [[target]] directive in {\PAL} describes the target architecture
 an program is intended for. The information can be distributed over
@@ -196,3 +223,13 @@ let findMemsize    env = env.arch.memsize
 let findEndianness env = env.arch.endianness
 @   
     
+% ------------------------------------------------------------------ 
+\subsubsection{Test for \texttt{Error}-bindings}
+% ------------------------------------------------------------------ 
+
+<<>>=
+let errorfree env =
+    let combine key (scope,x) y = E.Implode.pair (x,y)    in
+    let free map = StrMap.fold combine env.venv (E.Ok())  in
+        E.Implode.pair (free env.tenv, free env.venv)
+@

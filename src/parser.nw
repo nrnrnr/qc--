@@ -193,6 +193,7 @@ let float       = frac exp?
                 | nat exp
 
 let size        = ':' nat
+let cxxcomment  = "//" [^ '\n']+
                 
 let id          = (alpha | misc) (alpha | misc | digit)*
 let ws          = [' ' '\012' '\r']  (* SP FF CR *)
@@ -247,6 +248,7 @@ rule token = parse
 
   | ";"         { fun map -> P.SEMI         }
   | ":"         { fun map -> P.COLON        }
+  | "::"        { fun map -> P.CCOLON       }
   | ","         { fun map -> P.COMMA        }
   | ".."        { fun map -> P.DOTDOT       }
   
@@ -309,7 +311,9 @@ the reserved word [[pragma]] the [[PRAGMA]] token is returned by
   | float size  { fun map -> P.FLT (splitAtColon (get lexbuf))}
   | nat   size  { fun map -> P.INT (splitAtColon (get lexbuf))}
   
-  | "/*"        { fun map -> comment lexbuf map 0 }
+  | "/*"        { fun map -> comment1 lexbuf map }
+  | cxxcomment  { fun map -> token lexbuf map (* skip comment *) }
+  
   | "\""        { fun map -> string  lexbuf map (Buffer.create 80) }
   | "'"         { fun map -> character lexbuf map } 
  
@@ -375,6 +379,14 @@ and character = parse
 \subsection{Comments}
 % ------------------------------------------------------------------  
 
+Comments in C-- originally could nest but for compatibility with the C
+preprocessor this feature was droped.  Since it is impossible to
+include the character sequence [[*/]] in a C comment C$++$ style
+comments are additionally accepted:  a comment starts with [//] and
+goes up to the end of the line.  The latter comments are not
+implemented with a separate scanner context but inlined.
+ 
+
 \ifbugs
 The following test case found a bug in the lexer; "*"+ was recognized
 too greedily. The fix was to recognize only one "*" at a time so the two
@@ -385,36 +397,31 @@ character sequence "*/" matches.
 @ \fi
 
 <<scan.mll>>=
-and comment = parse
-    eof                         { fun map level ->
+and comment1 = parse
+    eof                         { fun map ->
                                   error lexbuf map "unterminated comment" 
                                 }
-  | [^ '*' '\n' '\t' '/']+      { fun map level ->
-                                  comment lexbuf map level
+  | [^ '*' '\n' '\t' '/']+      { fun map ->
+                                  comment1 lexbuf map
                                 }
-  | nl                          { fun map level ->
-                                  nl lexbuf map; comment lexbuf map level 
+  | nl                          { fun map ->
+                                  nl lexbuf map; comment1 lexbuf map 
                                 }
-  | nl '#'                      { fun map level -> 
-                                  line lexbuf map 0; comment lexbuf map level
+  | nl '#'                      { fun map -> 
+                                  line lexbuf map 0; comment1 lexbuf map
                                 }
   
-  | tab                         { fun map level -> 
-                                  tab lexbuf map; comment lexbuf map level
+  | tab                         { fun map -> 
+                                  tab lexbuf map; comment1 lexbuf map
                                 }
-  | "/*"                        { fun map level -> 
-                                  comment lexbuf map (level+1)
+  | "*"                         { fun map ->
+                                  comment1 lexbuf map
                                 }
-  | "*"                         { fun map level ->
-                                  comment lexbuf map level
+  | "*/"                        { fun map ->
+                                  token lexbuf map 
                                 }
-  | "*/"                        { fun map level ->
-                                  if   level = 0 
-                                  then token lexbuf map
-                                  else comment lexbuf map (level-1)
-                                }
-  | _                           { fun map level ->
-                                  comment lexbuf map level 
+  | _                           { fun map ->
+                                  comment1 lexbuf map 
                                 }
 @
 
@@ -569,8 +576,9 @@ and pragma3 = parse
                                   then token lexbuf map
                                   else pragma3 lexbuf map (level-1)
                                 }
+  | cxxcomment                  { fun map -> pragma3 lexbuf map (* ignore *) } 
   | "/*"                        { fun map level -> 
-                                  ignore (comment lexbuf map 0)
+                                  ignore (comment1 lexbuf map) 
                                 ; pragma3 lexbuf map level
                                 }
   | "\""                        { fun map level -> 
@@ -677,6 +685,7 @@ together with their positions.
     | P.ALSO              -> "ALSO"
     | P.AS                -> "AS"
     | P.COLON             -> "COLON"
+    | P.CCOLON            -> "CCOLON"
     | P.COMMA             -> "COMMA"
     | P.CONST             -> "CONST"
     | P.CONTINUATION      -> "CONTINUATION"
@@ -843,7 +852,7 @@ let mkTypedefs ty names =
 @            
 
 <<parse.mly>>=
-%token ABORTS ALIGN ALIGNED ALSO AS AMPERSAND BIG BYTEORDER CASE COLON
+%token ABORTS ALIGN ALIGNED ALSO AS AMPERSAND BIG BYTEORDER CASE COLON CCOLON
 %token COMMA CONST CONTINUATION CUT CUTS DEFAULT DOTDOT ELSE EOF EQUAL
 %token EXPORT FOREIGN GOTO IF IMPORT INFIXOP INVARIANT JUMP LBRACE
 %token LBRACKET LITTLE LPAREN MEMSIZE PPERCENT RBRACE RBRACKET REGISTER
@@ -956,7 +965,7 @@ datum       :   ID COLON                       { A.Label $1 }
 <<>>=
 initAt      :   init                           { A.InitAt($1,p()) }
 init        :   LBRACE   exprs RBRACE          { A.InitExprs($2)  }
-            |   string                         { A.InitStr($1)    }
+            |   STR                            { A.InitStr($1)    }
             |   string16                       { A.InitUStr($1)   }
 <<>>=
 registers   :   tyAt regs                      { $1, rev $2 }
@@ -1033,6 +1042,9 @@ targets     :   TARGETS names                  { $2 }
 <<>>=
 lvalueAt    :   lvalue                                 { A.LValueAt($1,p()) }
 lvalue      :   ID                                     { A.Var($1)          }
+            /*
+            |   STR ID                                 { A.Var($2)    }
+            */
             |   sty   LBRACKET exprAt aligned RBRACKET { A.Mem($1,$3,$4)    }
             |   sty   LBRACKET exprAt         RBRACKET { A.Mem($1,$3,None)  }
             |   ID    LBRACKET exprAt aligned RBRACKET
@@ -1176,8 +1188,8 @@ exports_    :   exports_ COMMA ID AS STR       { ($3,Some $5)::$1 }
             |   ID                             { [$1,None]        }
 
 names       :   names_ optcomma                { rev $1 }
-names_      :   names_ COMMA ID                { $3:: $1}
-            |   ID                             { [$1]   }
+names_      :   names_ COMMA optstr ID         { $4:: $1}
+            |   optstr ID                      { [$2]   }
 
 names0      :   names                          { $1 }
             |   /**/                           { [] }
@@ -1185,7 +1197,8 @@ names0      :   names                          { $1 }
 optcomma    :   COMMA                          {}
             |   /**/                           {}
 
-string      :   STR                            { $1 }
+optstr      :   STR                            { Some $1 }
+            |   /**/                           { None    }
 string16    :   UNICODE LPAREN STR RPAREN      { $3 }
 
 @

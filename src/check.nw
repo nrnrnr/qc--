@@ -1295,20 +1295,31 @@ and program env tt = E.Implode.map (toplevel env) tt
 
 To actually scan, parse, and check a file we provide a function
 [[check]] to be called with a file name.  It calls the parser to
-create the abstract syntax and calls the different phases of checking.
+create the abstract syntax and calls the different phases of checking. 
+In principle errors are propagated and [[checkProgram]] returns with
+[[Error.Error]] when a violation of a static semantic rule was found. 
+Sometimes a violation manifests itself only by bindings of the
+[[Error.Error]] value in the fat environment.  Thus, this is scanned
+for such bindings. Still, not all errors are detected: a
+re-declaration of a type or value is an error. When the second
+declaration is processed the re-declaration is detected and an error
+message is issued.  Currently the first (valid) declaration stays in
+the environment and the error stays invisible.
+
 
 <<check file>>=
 let check file =
-    let fd          = try open_in file 
-                      with Sys_error(msg) -> E.error msg                 in
-    let finally ()  = close_in fd                                        in
-    let lexbuf      = Lexing.from_channel fd                             in
-    let map         = Srcmap.empty                                       in
-    let scanner     = Scan.scan map                                      in
+    let fd          = try open_in file
+                      with Sys_error(msg) -> E.error msg    in
+    let finally ()  = close_in fd                           in
+    let lexbuf      = Lexing.from_channel fd                in
+    let map         = Srcmap.empty                          in
+    let scanner     = Scan.scan map                         in
         try
             ( Srcmap.sync map 0 (file,1,1)
-            ; let ast        = Parse.program scanner lexbuf              in
-                checkProgram (F.create map) ast   
+            ; let ast        = Parse.program scanner lexbuf in
+              let env        = F.create map                 in
+                E.Implode.pair (checkProgram env ast, F.errorfree env)   
             )
         with
             | Parsing.Parse_error ->
