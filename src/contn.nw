@@ -1,0 +1,62 @@
+
+% ------------------------------------------------------------------ 
+\section{Continuations}
+% ------------------------------------------------------------------ 
+
+\emph{Would an object-oriented representation be better? --CL}
+
+A continutation is a pinter-sized {\PAL} \emph{value}. As such, it can
+be passed around and stored in registers. However, not all data
+necessary to represent a continuation fit into a pointer and therefore
+the pointer points to a pair of two values: first, a pointer to the code
+belonging to a continuation, and second, a stack pointer value. We call
+this pair the continuation \emph{representation}. The representation is
+stored in the activation record of a procedure and is initialized when
+the procedure becomes active.
+
+To deal with the different aspects of a continuation, this module
+provides an abstraction.
+
+<<contn.mli>>=
+type t =
+    { block:      Block.t     (* memory block for pair *)
+    ; sp:         Rtl.loc     (* location inside block for sp *)
+    ; pc:         Rtl.loc     (* location in block for code ptr *)
+    }
+
+(* observers *)
+val value:  t -> Rtl.exp            (* the value (pointer to pair) *)
+val init:   t -> sp:Rtl.loc -> pc:Rtl.exp -> Rtl.rtl list    
+@
+
+
+A continuation is a block of memory with two locations: one for a stack
+pointer, and another for a code pointer. A target provides a function to
+create a continuation.
+
+A continuation [[value]] is a pointer to the block. The block resides in
+the stack frame of a procedure. It initializes the block by passing the
+stack pointer location and the address of the continuation code to
+[[init]]. The call returns a list of instructions that perform the
+initialization of the block.
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+<<contn.ml>>=
+type t =
+    { block:      Block.t     (* memory block for pair *)
+    ; sp:         Rtl.loc     (* location inside block for sp *)
+    ; pc:         Rtl.loc     (* location in block for code ptr *)
+    }
+
+let value t = Block.base t.block        (* pointer to block *)
+
+let init t ~(sp:Rtl.loc) ~(pc:Rtl.exp) =
+    let width = Rtlutil.Width.loc t.sp in
+    [ Rtl.store t.pc pc width
+    ; Rtl.store t.sp (Rtl.fetch sp width) width
+    ]
+@
+
