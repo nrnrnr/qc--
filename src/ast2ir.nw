@@ -557,11 +557,11 @@ let rec jumpStmt (cconv,e,args,targets (*unused*)) =
     let out, actuals = actuals cc.C.call_actuals args in
     let jumpi        = target.T.jump.T.embed (expr e) in
     let ()           = add_oldblock out.C.overflow    in  (* jump overflow = old *)
-    G.instruction g out.C.pre_sp            **>
-    G.instruction g (out.C.shuffle actuals) **>
-    G.instruction g restore_nvrs            **>
-    (* AT THIS SPOT WE MUST WORK OUR MAGIC WITH THE SAVED RETURN ADDRESS *)
-    G.instruction g out.C.post_sp           **>
+    G.instruction g out.C.pre_sp                                  **>
+    G.instruction g (out.C.shuffle actuals)                       **>
+    G.instruction g restore_nvrs                                  **>
+    G.instruction g (R.store proc_cc.C.ra saved_ra pointersize)   **>
+    G.instruction g out.C.post_sp                                 **>
     G.jump        g jumpi ~targets ~uses:(RS.union out.C.regs cc.C.nvregs)
 <<auxiliaries>>=
 let noregs = Register.Set.empty
@@ -794,7 +794,8 @@ let proc containing_spans (cconv,procname,args,procbody) =
       R.par (List.map (fun i -> R.store i.reg (R.fetch i.tmp i.w) i.w) nvr_info) in
     let save_ra, saved_ra =
       let loc = proc_cc.C.saved_ra temps in
-      R.store loc proc_cc.C.ra pointersize, R.fetch loc pointersize in
+      let w   = pointersize in
+      R.store loc (R.fetch proc_cc.C.ra w) w, R.fetch loc w in
 
     <<Make continuation bundles>> in
     <<using [[env]] and [[expr]], build funs for formals, actuals, and results>> in    

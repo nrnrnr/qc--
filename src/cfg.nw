@@ -330,7 +330,7 @@ module type S = sig
   type kind = (* all the kinds of nodes *)
     | Join | Instruction | Branch | Cbranch | Mbranch
     | Jump | Call | Return | CutTo
-    | Entry | Exit | Sentinel | Dataflow | Impossible
+    | Entry | Exit | Sentinel | Impossible
   <<graph and node observers>>
   <<graph and node constructors>>  
   <<graph and node mutators>>
@@ -583,7 +583,6 @@ val call         : 'i cfg -> 'i -> altrets:'i contedge list -> succ:'i node ->
 val cut_to       : 'i cfg -> 'i -> cuts_to:'i contedge list -> aborts:bool ->
                      uses:regs -> 'i node
 val return       : 'i cfg -> 'i -> uses:regs -> 'i node
-  (* NEEDS DOCO SAYING IT CAN FLOW THROUGH DATAFLOW TO THE EXIT NODE *)
 @ N.B. So that a [[call]] can be composed in sequence just like an
 [[instruction]], the ordinary return from a call is called [[succ]].
 The [[spans]] argument to a [[call]] requires that the properties be
@@ -598,4 +597,69 @@ val illegal      : 'i cfg -> 'i node  (* a node that must never be reached *)
 \section{Implementation}
 <<cfg.ml>>=
 <<exported signatures>>
+@ 
+Abbreviations:
+\begin{quote} 
+\noindent
+\begin{tabular}{>{\ttfamily}ll}
+ent& Entry\\
+exi& Exit\\
+joi& Join\\
+ins& Instruction\\
+ass& Assertion\\
+bra& Branch\\
+cbr& Conditional branch\\
+mbr& Multiway branch (computed goto)\\
+cal& Call\\
+cut& Cut to\\
+ret& Return\\
+jum& Jump\\
+imp& Impossible\\
+ill& Illegal\\
+\end{tabular}
+\end{quote}
 
+<<cfg.ml>>=
+type label = string
+
+type ('i, 'n) ent = { mutable ent_succ  : 'n }
+type ('i, 'n) exi = { exi : unit }  (* trouble ?? also a join point *)
+type ('i, 'n) joi = { mutable labels    : label list
+                    ; mutable preds     : 'n list (* set ??? *)
+                    ; mutable joi_succ  : 'n
+                    ; mutable joi_lpred : 'n   (* layout predecessor *)
+                    }
+type ('i, 'n) ins = { mutable ins_i    : 'i
+                    ; mutable ins_pred : 'n
+                    ; mutable ins_succ : 'n
+                    }
+type ('i, 'n) ass = { mutable ass_i    : 'i
+                    ; mutable ass_pred : 'n
+                    ; mutable ass_succ : 'n
+                    }
+type ('i, 'n) bra = { bra : unit}
+type ('i, 'n) cbr = { cbr : unit}
+type ('i, 'n) mbr = { mbr : unit}
+type ('i, 'n) cal = { cal : unit}
+type ('i, 'n) cut = { cut : unit}
+type ('i, 'n) ret = { ret : unit}
+type ('i, 'n) jum = { jum : unit}
+type ('i, 'n) imp = { imp : unit}
+type ('i, 'n) ill = { ill : unit}
+
+
+type 'i node =
+  | Ent of ('i, 'i node) ent  
+  | Exi of ('i, 'i node) exi  
+  | Joi of ('i, 'i node) joi  
+  | Ins of ('i, 'i node) ins  
+  | Ass of ('i, 'i node) ass  
+  | Bra of ('i, 'i node) bra  
+  | Cbr of ('i, 'i node) cbr  
+  | Mbr of ('i, 'i node) mbr  
+  | Cal of ('i, 'i node) cal  
+  | Cut of ('i, 'i node) cut  
+  | Ret of ('i, 'i node) ret  
+  | Jum of ('i, 'i node) jum  
+  | Imp of ('i, 'i node) imp  
+  | Ill of ('i, 'i node) ill  
