@@ -142,12 +142,7 @@ procedure Main()\\
 %-------------------------------------------------------------------
 
 <<graph coloring types>>=
-module G        = Cfg4
-module T        = Target2
-module P        = Cfgprop
-module RM       = Register.Map
-module RS       = Register.Set
-module LI       = Olive.Make(G)
+module T = Target2
 @
 
 <<graph coloring types>>=
@@ -170,13 +165,13 @@ module CompareMoves = struct
 end
 module MS = Set.Make(CompareMoves)
 
-let fold_fwd = Cfgutil.fold_fwd
 let is_tmp target (s,_,_) = Target2.is_tmp target s 
 @
 
 Temps and moves are stored in worklists. A temp can only be in one of these
 worklists at a time.
 We use imperative lists to improve the efficiency of removing items.
+WHAT ARE THE MEASUREMENTS THAT JUSTIFY THIS USE?
 
 Worklists are gathered in related groups called [[impListGroup]];
 a list item can only be on one of these lists at a time.
@@ -189,6 +184,7 @@ an imperative list.
 It is a dynamic invariant that each member will have the same [[list]] type as
 every other member of its imperative list.
 
+IS IT WORTH PUTTING IMPERATIVE LISTS IN A SEPARATE MODULE?
 <<imperative lists>>=
 type ('a,'b) impListItem = { v : 'b
                            ; mutable list : 'a
@@ -336,7 +332,7 @@ type 'a colorGraph = { mutable adjSet : EdgeSet.t
                      ; mutable moveListMap : (moveList,G.node) impListItem list RM.t
                      ; mutable aliasMap : Register.t RM.t
                      ; mutable colorMap : color RM.t
-                     ; mutable spills : Register.Set.t
+                     ; mutable spills : RS.t
 
                      ; mutable regToItem : (tempList,Register.t) impListItem RM.t
                      ; mutable tempLG : (tempList, Register.t) impListGroup
@@ -398,7 +394,7 @@ let cgInfo =
        ; spills = RS.empty
        ; moveLG = moveFn
 
-	   ; luaColorOverride = V.Nil
+       ; luaColorOverride = V.Nil
        ; colors = SpaceMap.empty
        ; allColors = []
        ; k = 0
@@ -446,7 +442,7 @@ let clearCGInfo cg {Proc.cc = colors} =
     let () = cg.spills <- RS.empty in
     let () = cg.moveLG <- moveFn in
 
-    let () = cg.allColors <- colors.Target2.allocatable in
+    let () = cg.allColors <- P.allocatable colors in
     let () =
 		(match cg.luaColorOverride with
 		 | V.Nil      -> ()
@@ -553,13 +549,11 @@ We also build a map ([[regToItem]]) from a register to a listgroup item.
 
 <<build>>=
 let build cg {Proc.cfg = cfg; Proc.target = target} =
-    let () = if not (!(cg.tempLG Initial) = None)
-			 then Impossible.impossible "Temps on initial list prematurely" in
-    let regs = fold_fwd cfg
-                (fun node rst ->
-                    (Register.Set.union
-                        (Register.Set.union (G.defs node) (G.uses node)) rst))
-                Register.Set.empty in
+    let () = if not (!(cg.tempLG Initial) = None) then
+               Impossible.impossible "Temps on initial list prematurely" in
+    let regs =
+      G.fold_nodes (fun node allregs -> G.defs node ++ G.uses node ++ allregs)
+      RS.empty cfg in
     let regMap =
         RS.fold (fun r map -> resetDegree target cg r
                             ; if is_tmp target r
@@ -568,10 +562,9 @@ let build cg {Proc.cfg = cfg; Proc.target = target} =
                 regs cg.regToItem in
     let () = cg.regToItem <- regMap in
     <<addInterference>>
-    let () = fold_fwd cfg addInterference () in
-        true
+    G.iter_nodes addInterference cfg;
+    true
 @
-
 We add an edge between the temps defined in an instruction and those that
 are live after this instruction [[node]]. Note that the defined temps must
 interfere with each other. If [[node]] is a move instruction of the form
@@ -581,25 +574,23 @@ coalescing.
 
 TEST CASE: try an instruction with multiple defs. Each def must interfere with the
 other defs.
-
 <<addInterference>>=
-let addInterference node () =
-	let live = (G.property node).P.liveout in
-	let defs = G.defs node in
-	let live =
-		if isMoveInstruction node target
-		then
-			let uses = G.uses node in
-			(let item = ilg_add cg.moveLG WorklistMove node in
-				 cg.moveListMap <- RS.fold (listMapAdd item)
-									(RS.union defs uses) cg.moveListMap;
-			 RS.diff live uses)
-		else live in
-	let live = RS.union live defs in
-	let addAllEdges def =
-		RS.iter (fun liveNode -> addEdge target cg liveNode def) live
-	in
-		RS.iter addAllEdges defs in
+let addInterference node =
+  let live = LI.live_out node in
+  let defs = G.defs node in
+  let live =
+    if isMoveInstruction node target then
+      let uses = G.uses node in
+      (let item = ilg_add cg.moveLG WorklistMove node in
+      cg.moveListMap <- RS.fold (listMapAdd item)
+	  (defs ++ uses) cg.moveListMap;
+      RS.diff live uses)
+    else
+      live in
+  let live = live ++ defs in
+  let addAllEdges def =
+    RS.iter (fun liveNode -> addEdge target cg liveNode def) live in
+  RS.iter addAllEdges defs in
 @
 
 %-------------------------------------------------------------------
@@ -995,7 +986,7 @@ let applyColors cg ({Proc.cfg = cfg; Proc.target = target;
 					call_varMap
 			else call_varMap
 		end in
-        let _ = fold_fwd cfg subst_rtl CallVarMap.empty in
+        let _ = G.fold_fwd cfg subst_rtl CallVarMap.empty in
         true
 @
 
@@ -1058,19 +1049,17 @@ temp.
 
 <<resetProgram>>=
 let updateProgram cg {Proc.cfg = cfg} =
-	let () = ilg_iter (fun n -> G.gm_delete_assign n.v) (!(cg.moveLG CoalescedMove)) in
-	true
+  let () = ilg_iter (fun n -> G.delete n.v) (!(cg.moveLG CoalescedMove)) in
+  true
 @
 
 A pair of convenience functions for adding lists of \cfg nodes:
 
 <<insert spills>>=
 let cfg_ins_lst_before lst node =
-	let _ = List.fold_right G.gm_insert_assign_before lst node
-	in ()
+  ignore (List.fold_right G.gm_insert_assign_before lst node)
 let cfg_ins_lst_after lst node =
-	let _ = List.fold_left G.gm_insert_assign_after node lst
-	in ()
+  ignore (List.fold_left  G.gm_insert_assign_after node lst)
 @
 
 The [[reads_writes]] function checks whether a location [[loc]] is
@@ -1093,24 +1082,21 @@ memory location [[mem]], where the value of the spillee is held.
 
 <<insert spills>>=
 let update proc (spillee, mem) node =
-	let target = proc.Proc.target in
-	let reads, writes = reads_writes (G.instr node) spillee in
-	let lookup = Target2.space target in
-		if reads || writes then
-				( let tmp   = Talloc.Multiple.reg_like proc.Proc.temps
-													   spillee in
-				  let subst = fun x -> if x = spillee then tmp else x in 
-				  ( if reads  then 
-						(cfg_ins_lst_before 
-							(target.T.reload (T.space target) tmp mem) node)
-				  ; if writes then 
-						(cfg_ins_lst_after  
-							(target.T.spill  (T.space target) tmp mem) node)
-				  ; G.upd_instr node (Rtlutil.Subst2.reg ~map:subst)
-				  )
-				; Some tmp
-				)
-		 else None
+  let target = proc.Proc.target in
+  let reads, writes = reads_writes (G.instr node) spillee in
+  let lookup = Target2.space target in
+  if reads || writes then
+    let tmp   = Talloc.Multiple.reg_like proc.Proc.temps spillee in
+    let subst = fun x -> if x = spillee then tmp else x in 
+    ( if reads then 
+        (cfg_ins_lst_before (target.T.reload lookup tmp mem) node)
+    ; if writes then 
+        (cfg_ins_lst_after  (target.T.spill  lookup tmp mem) node)
+    ; G.upd_instr node (Rtlutil.Subst2.reg ~map:subst)
+    ; Some tmp
+    )
+  else
+    None
 @
 
 In addition to adding store and fetch instructions to replace the spilled
@@ -1119,9 +1105,7 @@ generated.
 
 <<insert spills>>=
 let rewrite proc spillees =
-	let spill_slot ((_,_,w):Register.t) =
-		Automaton2.to_loc (Automaton2.allocate proc.Proc.priv w None) in
-	let smPairs = ilg_map (fun s -> (s.v, spill_slot s.v)) spillees in 
+	let smPairs = ilg_map (fun s -> (s.v, P.spill_slot_for proc s.v)) spillees in 
 	(* newTemps is an accumulating param *)
 	let updateNode smPairs node newTemps =
 		(List.fold_left
@@ -1130,7 +1114,7 @@ let rewrite proc spillees =
 							| Some tmp -> tmp::tmps)
 			newTemps smPairs)
 	in
-		fold_fwd proc.Proc.cfg (updateNode smPairs) []
+		G.fold_fwd proc.Proc.cfg (updateNode smPairs) []
 @
 
 
@@ -1183,6 +1167,14 @@ module Make (BackplaneT : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.M.actio
             (ProcT : Lua.Lib.TYPEVIEW with type 'a t = Proc.t
                                   and type 'a combined = 'a BackplaneT.combined)
        : Lua.Lib.TYPEFUL with type 'a combined = 'a BackplaneT.combined
+
+module NewGCT : Lua.Lib.USERTYPE
+module NewMake (BackplaneT : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.M.action)
+            (GCT : Lua.Lib.TYPEVIEW with type 'a t = 'a NewGCT.t
+                                  and type 'a combined = 'a BackplaneT.combined)
+            (ProcT : Lua.Lib.TYPEVIEW with type 'a t = Ast2ir.proc
+                                  and type 'a combined = 'a BackplaneT.combined)
+       : Lua.Lib.TYPEFUL with type 'a combined = 'a BackplaneT.combined
 @
 
 A few convenience functions for handling lists. Perhaps the lists that use
@@ -1202,37 +1194,185 @@ let listMapAdd value key listMap =
 \subsection{Lua registration}
 
 <<colorgraph.ml>>=
+module RM = Register.Map
+module RS = Register.Set
+let ( ++ ) = RS.union 
 <<imperative lists>>
-<<graph coloring types>>
-module GCT : Lua.Lib.USERTYPE with type 'a t = 'a colorGraph = struct
-    type 'a t = 'a colorGraph
-    let tname = "Graph Coloring"
-    let eq _ x y = x = y
-    let to_string vs _ = "<cgInfo>"
+module type GRAPH = sig
+  type cfg
+  type node
+  val fold_fwd : cfg  -> (node -> 'a -> 'a) -> 'a -> 'a
+  val instr    : node -> Rtl.rtl
+  val node_info_string : node -> string
+  val defs : node -> Register.Set.t  (* includes kills!!! *)
+  val uses : node -> Register.Set.t
+  val upd_instr : node -> (Rtl.rtl -> Rtl.rtl) -> unit
+  val is_call : node -> bool
+  val gm_insert_assign_after:     node -> Rtl.rtl -> node (* after assign! *)
+  val gm_insert_assign_before:    Rtl.rtl -> node -> node (* any node   *)
+
+  val delete     : node -> unit
+  val fold_nodes : (node->'a -> 'a) -> 'a -> cfg -> 'a
+  val iter_nodes : (node->unit) -> cfg -> unit
+  val eq : node -> node -> bool
+
 end
-module Make (BackplaneT : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.M.action)
-            (GCT : Lua.Lib.TYPEVIEW with type 'a t = 'a GCT.t
-                                  and type 'a combined = 'a BackplaneT.combined)
-            (ProcT : Lua.Lib.TYPEVIEW with type 'a t = Proc.t
-                                  and type 'a combined = 'a BackplaneT.combined)
-       : Lua.Lib.TYPEFUL with type 'a combined = 'a BackplaneT.combined =
-  struct
-    type 'a combined = 'a BackplaneT.combined
-    module M (Interp : Lua.Lib.CORE
-                with type 'a V.userdata' = 'a BackplaneT.combined) = struct
-        module V = Interp.V
-        let cgmap = GCT.makemap V.userdata V.projection
+<<colorgraph.ml>>=
+module type LIVENESS = sig
+  type node
+  val live_out : node -> Register.Set.t
+end
+<<colorgraph.ml>>=
+module OldG : GRAPH with type node = Cfg4.node with type cfg = Cfg4.cfg = struct 
+  include Cfg4
+  let fold_fwd g f z = Cfg4.gm_enumerate g; Cfgutil.fold_fwd g f z
+  let iter_nodes f g = fold_fwd g (fun n () -> f n) ()
+  let fold_nodes f z g = fold_fwd g f z
+  let eq = (=)
+  let delete = gm_delete_assign
+end
+<<colorgraph.ml>>=
+module OldL : LIVENESS with type node = OldG.node = struct
+  module G = Cfg4
+  module P = Cfgprop
+  type node = G.node
+  let live_out node = (G.property node).P.liveout
+  module L = Olive.Make(G)
+end
 
-		module RT = Register.RT (Interp)
-		let register = RT.map
+<<colorgraph.ml>>=
+module NewG : GRAPH with type node = Rtl.rtl Cfgx.M.node
+                    with type cfg  = Rtl.rtl Cfgx.M.cfg = struct
+  module G = Cfgx.M
+  type node = Rtl.rtl G.node
+  type cfg  = Rtl.rtl G.cfg
+  let fold_fwd _ _ _ = assert false
+  let node_info_string n = "???"
 
-        <<graph coloring builtins>>
+  let nop = Rtl.par []
+  let instr n = Aux.Option.get nop (G.to_instr n)
+  let iter_nodes = G.iter_nodes
+  let fold_nodes = G.fold_nodes
+  let eq = G.eq
 
-        let init g =
-          Interp.register_module "ColorGraph" graph_coloring_module g;
-          Lua.Lib.StringList.empty (* FIX -- replace with init code *)
-    end
+  let irwk = Rtlutil.ReadWriteKill.sets
+  let defs node =
+    let defs = match G.to_instr node with
+    | None   -> RS.empty
+    | Some i -> let uses, defs, kills = irwk i in defs ++ kills in
+    G.union_over_outedges node (fun n -> defs)
+      (fun {G.node = n'; G.defs = d; G.kills = k} -> defs ++ d ++ k)
+      
+  let uses node =
+    let uses = match G.to_instr node with
+    | None   -> RS.empty
+    | Some i -> let uses, defs, kills = irwk i in uses in
+    G.add_inedge_uses node uses
+    
+  let upd_instr n f = G.update_instr f n
+  let is_call n = G.kind n = G.Call
+
+  let insert_assign splice node rtl =
+    let g = G.of_node node in
+    let n' = G.instruction g rtl (G.illegal g) in
+    splice ~entry:n' ~exit:n' node;
+    n'
+
+  let gm_insert_assign_after = insert_assign G.splice_after
+  let gm_insert_assign_before r n = insert_assign G.splice_before n r
+  let delete = G.delete
+end
+<<colorgraph.ml>>=
+module NewL : LIVENESS with type node = NewG.node = struct
+  module G = Cfgx.M
+  type node = Rtl.rtl G.node
+  let live_out = Cfgx.Live.live_out
+end
+<<colorgraph.ml>>=
+module type PROC = sig
+  type automaton
+  type cfg
+  type cc
+  type automatonspec
+  type tgt = (automatonspec, cc) Target2.t'
+  type t = (automaton, cfg, cc, tgt) Proc.t'
+  val allocatable : cc -> Register.t list
+  val spill_slot_for : t -> Register.t -> Automaton.loc
+  (* let spill_slot_for (_, _, w) proc = Automaton2.allocate proc.Proc.priv w None *)
+
+end
+
+<<colorgraph.ml>>=
+module PreMake (G : GRAPH) (LI : LIVENESS with type node = G.node) 
+               (P : PROC with type cfg = G.cfg) 
+               (N : sig val name : string end) = struct
+
+  <<graph coloring types>>
+  module GCT : Lua.Lib.USERTYPE with type 'a t = 'a colorGraph = struct
+      type 'a t = 'a colorGraph
+      let tname = "Graph Coloring"
+      let eq _ x y = x = y
+      let to_string vs _ = "<cgInfo>"
   end
+  module Make (BackplaneT : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.M.action)
+              (GCT : Lua.Lib.TYPEVIEW with type 'a t = 'a GCT.t
+                                    and type 'a combined = 'a BackplaneT.combined)
+              (ProcT : Lua.Lib.TYPEVIEW with type 'a t = P.t
+                                    and type 'a combined = 'a BackplaneT.combined)
+         : Lua.Lib.TYPEFUL with type 'a combined = 'a BackplaneT.combined =
+    struct
+      type 'a combined = 'a BackplaneT.combined
+      module M (Interp : Lua.Lib.CORE
+                  with type 'a V.userdata' = 'a BackplaneT.combined) = struct
+          module V = Interp.V
+          let cgmap = GCT.makemap V.userdata V.projection
+  
+                  module RT = Register.RT (Interp)
+                  let register = RT.map
+  
+          <<graph coloring builtins>>
+  
+          let init g =
+            Interp.register_module N.name graph_coloring_module g;
+            Lua.Lib.StringList.empty (* FIX -- replace with init code *)
+      end
+    end
+end
+<<colorgraph.ml>>=
+module OldProc = struct
+  type automaton = Automaton2.t
+  type automatonspec = Automaton2.spec
+  type cfg = Cfg4.cfg
+  type cc = Automaton2.spec Target2.cc'
+  type tgt = (Automaton2.spec, cc) Target2.t'
+  type t = (automaton, cfg, cc, tgt) Proc.t'
+  let allocatable cc = cc.Target2.allocatable
+  let spill_slot_for proc (_, _, w)  =
+    Automaton.of_old (Automaton2.allocate proc.Proc.priv w None)
+
+end
+
+module Old = PreMake (OldG) (OldL) (OldProc) (struct let name = "ColorGraph" end)
+<<colorgraph.ml>>=
+module NewProc = struct
+  module C = Call
+  type automaton = Automaton.t
+  type automatonspec = Rtl.exp->Automaton.t
+  type cfg = Rtl.rtl Cfgx.M.cfg
+  type cc = Call.t
+  type tgt = (automatonspec, cc) Target2.t'
+  type t = (automaton, cfg, cc, tgt) Proc.t'
+  let allocatable cc = RS.elements (cc.C.nvregs ++ cc.C.volregs)
+  let spill_slot_for proc (_, _, w)  = Automaton.allocate proc.Proc.priv w ""
+end
+
+module New = PreMake (NewG) (NewL) (NewProc) (struct let name = "NewColorGraph" end)
+@ 
+<<colorgraph.ml>>=
+module GCT = Old.GCT
+module Make = Old.Make
+module NewGCT = New.GCT
+module NewMake = New.Make
 @
 
 
@@ -1262,12 +1402,6 @@ Embedding the functions in the Lua interpreter.
 let proc = ProcT.makemap V.userdata V.projection
 let ( **-> ) = V.( **-> )
 let stageFn  = cgmap **-> proc **-> V.result V.bool
-
-let writedot compress _ proc =
-    prerr_string (Cfgutil.cfg2dot compress "CFG" proc.Proc.cfg);
-    flush stderr;
-    true
-
 let graph_coloring_module =
   [ "build",            V.efunc stageFn build
   ; "makeWorklist",     V.efunc stageFn makeWorklist
@@ -1284,11 +1418,10 @@ let graph_coloring_module =
   ; "printCG",          V.efunc stageFn printCGInfo
   ; "printCFGLive",     V.efunc stageFn printCFGLive
   ; "pCFG",             V.efunc stageFn pCFG
-  ; "writedot",         V.efunc (V.bool **-> V.result (V.func stageFn)) writedot
   ; "cgInfo",           cgmap.V.embed cgInfo
   ; "setRegisters",     V.efunc (V.value **-> V.result V.unit)
-						(fun value -> cgInfo.luaColorOverride <- value
-									; cgInfo.colors           <- SpaceMap.empty)
+      (fun value -> cgInfo.luaColorOverride <- value
+	          ; cgInfo.colors           <- SpaceMap.empty)
   ]
 @
 
@@ -1299,53 +1432,64 @@ This startup code sets up the right passes.
 -- Graph-Coloring Register Allocator
 ------------------------------------------------------------------ 
 
-ColorGraph = ColorGraph or error('predefined ColorGraph is nil??') -- has some primitives
-B  = Backplane
+Liveness = Liveness or {}
+function Liveness.backend(v, proc) 
+  return backend.liveness(v, proc)
+end
 
-ColorGraph.makeGraph = B.seq 
-    { Liveness.liveness
-    , ColorGraph.build 
-    }
-    
-ColorGraph.orderVars = B.seq 
-    { ColorGraph.makeWorklist
-    , B.fix(B.unless_do(ColorGraph.simplify,
-                            B.unless_do(ColorGraph.coalesce,
-                                B.unless_do(ColorGraph.freeze,
-                                    ColorGraph.selectSpill))))
-    }
+function ColorGraph_init (CG, B) -- carefully don't define table
+  CG = CG or error('predefined ColorGraph is nil??') -- has some primitives
 
-ColorGraph.pcg = 
-    B.ignore(ColorGraph.printCG)
-ColorGraph.pcfg = 
-    B.ignore(ColorGraph.pCFG)
+  CG.makeGraph = 
+    B.seq {
+      { fn = Liveness.backend, creates = 'liveness' },
+         -- can't use backend.liveness directly since it might change
+      { fn = CG.build, uses = {'liveness', 'no vars'}, creates = 'no temps' }
+    } 
+      
+  CG.orderVars = B.seq 
+      { CG.makeWorklist
+      , B.fix(B.unless_do(CG.simplify,
+                              B.unless_do(CG.coalesce,
+                                  B.unless_do(CG.freeze,
+                                      CG.selectSpill))))
+      }
+  
+  CG.pcg = 
+      B.ignore(CG.printCG)
+  CG.pcfg = 
+      B.ignore(CG.pCFG)
+  
+  CG.color = 
+    B.share
+      ( CG.cgInfo
+      , "cgInfo"
+      , B.seq 
+                  { CG.clearCGInfo
+          , B.fix 
+              ( B.seq 
+                  { B.ignore (B.seq
+                      { CG.makeGraph
+                      , CG.orderVars
+                      , CG.assignColors
+                      })
+                  , 
+                     B.when_do
+                      ( CG.haveSpilledTemps
+                      , CG.resetProgram
+                      )
+                  } 
+              )    
+          , B.seq 
+              { CG.updateProgram
+              , CG.applyColors
+              }
+          }        
+      )
+end
 
-ColorGraph.color = 
-  B.share
-    ( ColorGraph.cgInfo
-    , "cgInfo"
-    , B.seq 
-		{ ColorGraph.clearCGInfo
-        , B.fix 
-            ( B.seq 
-                { B.ignore (B.seq
-                    { ColorGraph.makeGraph
-                    , ColorGraph.orderVars
-                    , ColorGraph.assignColors
-                    })
-                , 
-                   B.when_do
-                    ( ColorGraph.haveSpilledTemps
-                    , ColorGraph.resetProgram
-                    )
-                } 
-            )    
-        , B.seq 
-            { ColorGraph.updateProgram
-            , ColorGraph.applyColors
-            }
-        }        
-    )
+ColorGraph_init (ColorGraph, Backplane)
+ColorGraph_init (NewColorGraph, NewBackplane)
 @
 
 \subsection{Debugging support}
@@ -1402,11 +1546,14 @@ Printing functions for the [[cfInfo]] record.
 
 <<print CGInfo>>=
 let printCFGLive _ {Proc.cfg = cfg} =
-    let printNodeLive node _ =
-        let live = (G.property node).P.liveout in
-        cfgSay ["LIVE "; string_of_int (G.number node); ": "];
+    let printNodeLive node =
+        let nodes = G.fold_nodes (fun x y -> x :: y) [] cfg in
+        let nnodes = Aux.foldri (fun i n ns -> (i, n) :: ns) nodes [] in
+        let number node = fst (List.find (fun (i, n) -> G.eq node n) nnodes) in
+        let live = LI.live_out node in
+        cfgSay ["LIVE "; string_of_int (number node); ": "];
         cfgSay (List.map printReg (RS.elements live)); cfgSay ["\n"]; in
-    fold_fwd cfg printNodeLive (); false
+    G.iter_nodes printNodeLive cfg; false
 
 let print_cgInfo cgInfo =
     let _ = cgSay ["\nCGINFO\n"] in
@@ -1447,11 +1594,13 @@ let printCGInfo param _ = print_cgInfo param; false
 
 <<print CGInfo>>=
     let print_cfg cfg =
+        let nodes = G.fold_nodes (fun x y -> x :: y) [] cfg in
+        let nnodes = Aux.foldri (fun i n ns -> (i, n) :: ns) nodes [] in
+        let number node = fst (List.find (fun (i, n) -> G.eq node n) nnodes) in
         cfgSay ["CFG\n===\n"];
-        G.gm_enumerate cfg;
-        ( fold_fwd cfg
+        ( G.fold_fwd cfg
             (fun node () ->
-                cfgSay [ string_of_int (G.number node)
+                cfgSay [ string_of_int (number node)
                       ; ": "
                       ; Rtlutil.ToString.rtl (G.instr node)
                       ; "\n"

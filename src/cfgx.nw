@@ -2,15 +2,21 @@
 <<cfgx.mli>>=
 module X : Cfg.X
 module M : Cfg.S with module X = X
+module Live : Live.S with module G = M
 @ 
 <<cfgx.ml>>=
 module X = struct
-  type jx = unit
-  type fx = unit
-  type nx = unit
-  let jx () = ()
-  let fx () = ()
-  let nx () = ()
+  type jx = Live.info
+  type fx = Live.info
+  type nx = Live.info
+  let jx = Live.mk
+  let fx = Live.mk
+  let nx = Live.mk
 end
 module M = Cfg.Make(X)
-
+module Live = Live.Make (struct
+  module G = M
+  let jx x = x
+  let nx x = x
+  let fx x = x
+end)

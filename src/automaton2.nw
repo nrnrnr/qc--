@@ -65,7 +65,6 @@ to.
 class type location = object
     method fetch:   (*width*) int -> Rtl.exp
     method store:   Rtl.exp -> (*width*) int -> Rtl.rtl
-    method to_loc:  Rtl.loc
 end
 
 type result = { overflow : Block.t
@@ -109,25 +108,16 @@ following two functions:
 val fetch : loc -> width:int -> Rtl.exp
 val store : loc -> Rtl.exp -> width:int -> Rtl.rtl
 @
-
 Because locations are abstract they can handle difficult cases where a
 value is stored in part in a hardware register and in part in memory.
-Some complicated calling conventions may require such concepts of a
-location.  However, the very most cases are much simpler and we like to
-represent those as [[Rtl.loc]] values, which are also very general but
-can't deal with values split into different memory spaces.  The
-following function allows to transform a sufficiently simple [[loc]]
-value to a [[Rtl.loc]] value.  If a conversion is not possible,
-[[Invalid_argument]] is raised as a checked run-time error.
-
+Most times, however, a location is a sensible RTL location, in which
+case we make it abstract using [[of_loc]].\footnote
+{The former [[to_loc]] was not needed and has been expunged.}
 <<automaton2.mli>>=
-val to_loc : loc -> Rtl.loc
 val of_loc : Rtl.loc -> loc
 @
-
 When an automaton [[t]] is frozen, it responds with the memory
 [[Block.t]] that it used for locations it handed out.
-
 <<automaton2.mli>>=
 val freeze  : t -> Block.t
 val freeze' : t -> result
@@ -229,7 +219,6 @@ let freeze t              = (t#freeze ()).overflow
 
 let fetch loc ~width      = loc#fetch width
 let store loc expr ~width = loc#store expr width
-let to_loc loc            = loc#to_loc
 let of_loc loc            = Impossible.unimp "Automaton.of_rtl_loc"
 @
 
@@ -274,7 +263,6 @@ object
     
     method store expr width = Rtl.store _loc expr width 
     method fetch width      = Rtl.fetch _loc width
-    method to_loc           = _loc
 end
 @
 

@@ -35,11 +35,12 @@ module NewBackplane = Backplane.Make(
     let lua_type_name = "new backplane action"
   end)
 
-module T1 = Lua.Lib.Combine.T4
+module T1 = Lua.Lib.Combine.T5
                 (DocType)                   (* T1.T1 *)
                 (Luaiolib.T)                (* T1.T2 *)
                 (AsmType)                   (* T1.T3 *)
                 (AstType)                   (* T1.T4 *)
+                (Colorgraph.NewGCT)         (* T1.T5 *)
 
 module T    = Lua.Lib.Combine.T10           (* types *)
                 (T1)
@@ -60,6 +61,7 @@ module DocT        = T1V.T1
 module LuaioT      = T1V.T2
 module AsmT        = T1V.T3
 module AstT        = T1V.T4
+module NewColorgraphT = T1V.T5
 
 module NewBackplaneT = T.T2
 module EnvT        = T.T3
@@ -74,13 +76,14 @@ module BlockT      = T.T10
 module IO = Lua.Lib.Extend (LuaioT)
 
 module L1 = 
-  Lua.Lib.Combine.L8                   (* up to 10 libraries *)
+  Lua.Lib.Combine.L9                   (* up to 10 libraries *)
     (Luaiolib.Make (LuaioT))
     (IO (Luastrlib.M))
     (IO (Luamathlib.M))
     (MakeLib (AsmT) (AstT) (EnvT) (ProcT) (TargetT) (NewProcT) (NewTargetT) (DocT) (LuaioT) (BlockT))
     (OldBackplane.MakeLua  (BackplaneT) (ProcT))
     (Colorgraph.Make (BackplaneT) (ColorgraphT) (ProcT))
+    (Colorgraph.NewMake (BackplaneT) (NewColorgraphT) (NewProcT))
     (Linscan.Make (ProcT))
     (IO (Luautil.MakeLib))
                 
@@ -268,8 +271,10 @@ C.register_module "Asm"
   [ "cmm"     , V.efunc (Map.outchan **-> V.result Map.asm) AstAsm.asm     
   ; "new_cmm" , V.efunc (Map.outchan **-> V.result Map.new_asm) NewAstAsm.asm     
   ; "ast"     , V.efunc (Map.outchan **-> V.result Map.asm) AstAsm.asm
-  ; "dot"     , V.efunc (Map.outchan **-> V.result Map.asm) Dotasm.asm
-  ; "new_dot" , V.efunc (Map.outchan **-> V.result Map.new_asm) Dotasm.new_asm
+  ; "dot"     , V.efunc (Map.outchan **-> V.result Map.asm) (Dotasm.asm ~compress:true)
+  ; "big_dot"     , V.efunc (Map.outchan **-> V.result Map.asm) (Dotasm.asm ~compress:false)
+  ; "new_dot" , V.efunc (Map.outchan **-> V.result Map.new_asm) (Dotasm.new_asm ~compress:true)
+  ; "new_big_dot" , V.efunc (Map.outchan **-> V.result Map.new_asm) (Dotasm.new_asm ~compress:false)
   ; "asdl"    , V.efunc (Map.outchan **-> V.result Map.asm) Asdlasm.asm 
   ; "x86"     , V.efunc (Map.outchan **-> V.result Map.asm) (X86asm.make Cfgutil.emit)
   ; "new_x86" , V.efunc (Map.outchan **-> V.result Map.new_asm) (X86asm.make Cfgutil.new_emit)
@@ -330,13 +335,16 @@ C.register_module "Driver"
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Expander"
-  [ "x86f" , V.efunc (V.value **-> Map.proc **-> V.result V.bool) X86.X.cfg
+  [ "x86f"     , V.efunc (V.value **-> Map.proc **-> V.result V.bool) X86.X.cfg
+  ; "new_x86f" , V.efunc (V.value **-> Map.new_proc **-> V.result V.bool) X86.X.new_cfg
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Liveness"
   [ "liveness", V.efunc (V.value **-> Map.proc **-> V.result V.bool)
        (fun _ p -> 
           let module LI = Olive.Make(Cfg4) in LI.liveness p.Proc.cfg; true)
+  ; "new_liveness", V.efunc (V.value **-> Map.new_proc **-> V.result V.bool) 
+       (fun _ p -> Cfgx.Live.set_live p.Proc.cfg; true)
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Placevar"
@@ -360,6 +368,23 @@ C.register_module "Stack"
                    in fun p -> 
                       V.Table.of_list (List.map embed (Stack.blocks p)))
   ] g;                    
+@ 
+PERHAPS THIS CODE SHOULD REPLACE THE SOMEWHAT HEAVYWEIGHT [[Asm.dot]]???
+<<register modules to [[g]] in alphabetical order>>=
+C.register_module "Stages"
+  [ "writedot",  V.efunc (V.value **-> Map.proc **-> V.result V.bool)
+      (fun _ proc -> 
+        prerr_string
+          (Cfgutil.cfg2dot ~compress:true ~name:proc.Proc.symbol#mangled_text proc.Proc.cfg);
+        flush stderr;
+        true)
+  ; "new_writedot", V.efunc (V.value **-> Map.new_proc **-> V.result V.bool)
+      (fun _ proc -> 
+        prerr_string
+          (Cfgutil.new_cfg2dot ~compress:true ~name:proc.Proc.symbol#mangled_text proc.Proc.cfg);
+        flush stderr;
+        true)
+  ]  g;
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Targets"
   [ "dummy32l",   Map.target.V.embed Dummy.dummy32l
@@ -378,5 +403,8 @@ C.register_module "Typecheck"
 "Expander.x86 = { fn = Expander.x86f, uses = { 'proper widths', 'no vars' }, \
                   name = 'Expander.x86', creates = { 'x86 invariant' }, \
                   doc = 'A prototype code expander for the x86' }";
+"Expander.new_x86 = { fn = Expander.new_x86f, uses = { 'proper widths', 'no vars' }, \
+                  name = 'Expander.new_x86', creates = { 'x86 invariant' }, \
+                  doc = 'A prototype code expander for the x86 (new proc)' }";
 ""
 @

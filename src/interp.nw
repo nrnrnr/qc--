@@ -204,7 +204,6 @@ class argument_location (index:int): Automaton2.location =
 object
     method store expr width = Flow.store_space Flow.argument index expr
     method fetch width      = Flow.fetch_space Flow.argument index width
-    method to_loc           = assert false
 end
 
 class arguments (base:Rtl.exp): Automaton2.automaton =
@@ -228,15 +227,6 @@ object (this)
                     )
 end
 
-class loc (loc:Rtl.loc): Automaton2.location =
-object
-    val _loc   = loc
-    
-    method store expr width = Rtl.store _loc expr width 
-    method fetch width      = Rtl.fetch _loc width
-    method to_loc           = _loc
-end
-
 class global_location (index:int) (width:int): Automaton2.location =
     let var = 
         let s = Printf.sprintf "global_%d" index in 
@@ -244,7 +234,6 @@ class global_location (index:int) (width:int): Automaton2.location =
 in object
     method store expr width = Flow.store_space Flow.global index expr
     method fetch width      = Flow.fetch_space Flow.global index width
-    method to_loc           = var
 end
 
 
@@ -262,7 +251,7 @@ object (this)
     method allocate width hint = 
         let ()      = assert (_frozen = false) in          
         match hint with 
-        | Some "IEEE 754 rounding mode" -> new loc fp_mode
+        | Some "IEEE 754 rounding mode" -> Automaton2.of_loc fp_mode
         | Some x -> Impossible.impossible ("unknown hardware register "^x) 
         | None   -> ( _index <- _index + 1
                     ; new global_location _index width 

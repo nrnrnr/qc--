@@ -190,7 +190,7 @@ alias here. See \module{backplane.nw} for details.
 
 <<Lua Boot Script>>=
 B      = Backplane 
-Stages = Stages    and error('Stages not empty') or {}
+Stages = Stages or {}
 
 function Stages.nullf () return nil end
 Stages.null = B.stage { name="empty stage", fn = Stages.nullf }
@@ -258,58 +258,9 @@ end
 \subsection{Graph-Coloring Register Allocator}
 % ------------------------------------------------------------------ 
 
-The graph-coloring register allocator is part of the compiler backplane.
-It is composed of several pieces that are combined here. Some more
-informations what a user can do here would be welcome. 
-
-The [[ColorGraph]] has predefined primitives which we expect to have
-available here. 
-
+Defined in file \texttt{colorgraph.nw}.
 <<Lua Boot Script>>=
-ColorGraph = ColorGraph or error('predefined ColorGraph is empty')
-
-ColorGraph.makeGraph = B.seq 
-    { Liveness.liveness
-    , ColorGraph.build 
-    }
-    
-ColorGraph.orderVars = B.seq 
-    { ColorGraph.makeWorklist
-    , B.fix(B.unless_do(ColorGraph.simplify,
-                            B.unless_do(ColorGraph.coalesce,
-                                B.unless_do(ColorGraph.freeze,
-                                    ColorGraph.selectSpill))))
-    }
-
-ColorGraph.pcg  = B.ignore(ColorGraph.printCG)
-ColorGraph.pcfg = B.ignore(ColorGraph.pCFG)
-
-ColorGraph.color = 
-  B.share
-    ( ColorGraph.cgInfo
-    , "cgInfo"
-    , B.seq 
-                { ColorGraph.clearCGInfo
-        , B.fix 
-            ( B.seq 
-                { B.ignore (B.seq
-                    { ColorGraph.makeGraph
-                    , ColorGraph.orderVars
-                    , ColorGraph.assignColors
-                    })
-                , 
-                   B.when_do
-                    ( ColorGraph.haveSpilledTemps
-                    , ColorGraph.resetProgram
-                    )
-                } 
-            )    
-        , B.seq 
-            { ColorGraph.updateProgram
-            , ColorGraph.applyColors
-            }
-        }        
-    )
+<<Lua startup code for [[Colorgraph]] module>>
 @
 
 % ------------------------------------------------------------------ 
@@ -324,7 +275,8 @@ All register allocators are made available in the table [[Ralloc]].
 <<Lua Boot Script>>=
 Ralloc = Ralloc or error('missing primitives in Ralloc')
 
-Ralloc.color = ColorGraph.color
+Ralloc.color    = ColorGraph.color
+Ralloc.new_color = NewColorGraph.color
 -- Ralloc.linscan is a primitives. 
 @
 % ------------------------------------------------------------------ 
@@ -383,58 +335,49 @@ a backend are primitives, and thus cannot be simply constructed in Lua.
 <<Lua Boot Script>>=
 Backend = Backend and error('Backend not empty') or {}
 
-Backend.dummy32l = 
-  { target    = Targets.dummy32l
-  , widen     = Stages.null
-  , placevars = Stages.null
-  , expand    = Stages.null
-  , liveness  = Stages.null
-  , ralloc    = Stages.null
-  , freeze    = Stack.layout
-  , asm       = Asm.cmm
-  , emit      = Driver.assemble
-  }   
+function Backend.make(b)
+  return
+    { target    = b.target    or error('target not specified')
+    , widen     = b.widen     or Stages.null
+    , placevars = b.placevars or Stages.null
+    , expand    = b.expand    or Stages.null
+    , liveness  = b.liveness  or Liveness.liveness
+    , ralloc    = b.ralloc    or Stages.null
+    , freeze    = b.freeze    or Stack.layout
+    , asm       = b.asm       or Asm.cmm
+    , emit      = b.emit      or Driver.assemble
+    }   
+end
 
-Backend.dummy32b = 
-  { target    = Targets.dummy32b
-  , widen     = Stages.null
-  , placevars = Stages.null
-  , expand    = Stages.null
-  , liveness  = Stages.null
-  , ralloc    = Stages.null
-  , freeze    = Stack.layout
-  , asm       = Asm.cmm
-  , emit      = Driver.assemble
-  }   
+Backend.dummy32l = Backend.make {target=Targets.dummy32l}
+Backend.dummy32b = Backend.make {target=Targets.dummy32b}
+Backend.dummy    = Backend.dummy32b -- alias
 
-Backend.dummy = Backend.dummy32b -- alias
+Backend.interp = Backend.make {target=Targets.interp, asm=Asm.interp}
 
 Backend.x86 =     
   { target    = Targets.x86
   , widen     = Stages.null
   , placevars = Placevar.fortran
   , expand    = Expander.x86
-  , liveness  = Stages.null
+  , liveness  = Liveness.liveness
   , ralloc    = Ralloc.color
   , freeze    = Stack.layout
   , asm       = Asm.x86
   , emit      = Driver.assemble
   }   
 
-Backend.interp =     
-  { target    = Targets.interp
-  , widen     = Stages.null
-  , placevars = Stages.null
-  , expand    = Stages.null
-  , liveness  = Stages.null
-  , ralloc    = Stages.null
-  , freeze    = Stack.layout
-  , asm       = Asm.interp
+Backend.new_x86 =     
+  { target    = Targets.new_x86
+  , widen     = nil -- Stages.null
+  , placevars = Placevar.new_fortran
+  , expand    = Expander.new_x86
+  , liveness  = Liveness.new_liveness
+  , ralloc    = Ralloc.new_color
+  , freeze    = nil -- Stack.layout
+  , asm       = Asm.new_big_dot -- Asm.new_x86
   , emit      = Driver.assemble
   }   
-
-
-
 @
 
 % ------------------------------------------------------------------ 

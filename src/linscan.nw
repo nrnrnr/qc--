@@ -404,8 +404,7 @@ livetime, and all occurrences of [[tmp]] substituted by [[r]] in the
 let replace tmp reg      = fun t -> if t = tmp then reg else t
 
 (* reserve a spill slot using automaton *)
-let spill_slot (a:Automaton2.t) ((_,w,_):Register.t) =
-    Automaton2.to_loc (Automaton2.allocate a w None)
+let spill_slot (a:Automaton2.t) ((_,w,_):Register.t) = Automaton2.allocate a w None
 
 let replace_tmp proc node tmp lifetimes next_tmp spill =
   let iter cfg f = Cfgutil.fold_fwd cfg (fun node ()-> G.upd_instr node f) () in
@@ -423,8 +422,7 @@ let replace_tmp proc node tmp lifetimes next_tmp spill =
   | None -> (* out of register - must spill *)
       let allocatable = proc.Proc.cc.T.allocatable              in 
       let is_tmp      = T.is_tmp proc.Proc.target in
-      let spillable (sp,_,_ as loc) = 
-        List.mem loc allocatable in
+      let spillable (sp,_,_ as loc) = List.mem loc allocatable in
       let spillee, interval = find_spillee spillable lifetimes tmp node in 
       let mem               = spill_slot proc.Proc.priv spillee     in 
         spill proc spillee mem interval
@@ -655,6 +653,7 @@ and spill proc spillee mem interval =
     let last  = I.right interval in 
     let nodes = G.scan_fwd proc.Proc.cfg ~first ~limit:last
                     (fun n set -> NodeSet.add n set) NodeSet.empty in
+    let mem   = Automaton.of_old mem in
         ( G.scan_fwd proc.Proc.cfg ~first ~limit:last 
             (fun n () -> update proc interval nodes spillee mem n) ()
         ; linscan proc (* start over *)

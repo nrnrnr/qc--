@@ -54,22 +54,24 @@ One day we hope to get clever about minimizing the amount of
 cached information while still making [[live_in]] and [[live_out]]
 cost constant time, but that day is not yet.
 <<live.mli>>=
-type live_info
-val mk : unit -> live_info
+type info
+val mk : unit -> info
 
 module type Arg = sig
   module G : Cfg.S
-  val jx : G.X.jx -> live_info 
-  val nx : G.X.nx -> live_info   
-  val fx : G.X.fx -> live_info   
+  val jx : G.X.jx -> info 
+  val nx : G.X.nx -> info   
+  val fx : G.X.fx -> info   
 end
 
-module Make (A : Arg): sig
-  val set_live : Rtl.rtl A.G.cfg -> unit
+module type S = sig
+  module G : Cfg.S
+  val set_live : Rtl.rtl G.cfg -> unit
   (* following may be run only after [[set_live]] and without mutation *)
-  val live_out : Rtl.rtl A.G.node -> A.G.regs
-  val live_in  : Rtl.rtl A.G.node -> A.G.regs 
+  val live_out : Rtl.rtl G.node -> G.regs
+  val live_in  : Rtl.rtl G.node -> G.regs 
 end
+module Make (A : Arg): S with module G = A.G
 @
 
 % ------------------------------------------------------------------ 
@@ -82,16 +84,24 @@ each node.
 module RS = Register.Set
 module R  = Rtl
 
-type live_info = { mutable cached_live_out : RS.t }
+type info = { mutable cached_live_out : RS.t }
 let mk () = { cached_live_out = RS.empty }
 @ 
 Here are the structures promised in the interface.
 <<live.ml>>=
 module type Arg = sig
   module G : Cfg.S
-  val jx : G.X.jx -> live_info 
-  val nx : G.X.nx -> live_info   
-  val fx : G.X.fx -> live_info   
+  val jx : G.X.jx -> info 
+  val nx : G.X.nx -> info   
+  val fx : G.X.fx -> info   
+end
+
+module type S = sig
+  module G : Cfg.S
+  val set_live : Rtl.rtl G.cfg -> unit
+  (* following may be run only after [[set_live]] and without mutation *)
+  val live_out : Rtl.rtl G.node -> G.regs
+  val live_in  : Rtl.rtl G.node -> G.regs 
 end
 
 module Make (A : Arg) = struct 
@@ -205,7 +215,7 @@ let merge node live =
     ) 
 let init_info = RS.empty
 let (with_predecessor's_outedge : Rtl.rtl G.node -> RS.t ->
-        (RS.t -> defs:RS.t -> kills:RS.t -> RS.t) -> RS.t) = assert false
+        (RS.t -> defs:RS.t -> kills:RS.t -> RS.t) -> RS.t) = fun _ -> assert false
 let propagate node live =
   (info node).cached_live_out <- live;
   let live = match G.to_instr node with

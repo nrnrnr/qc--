@@ -690,6 +690,10 @@ Caml, we provide sensible defaults for unspecified members of the stage record.
 let embedString   = V.string.V.embed
 let projectString = V.string.V.project
 
+let project_opt_strings v =
+  try [V.string.V.project v]
+  with V.Projection (_, _) -> (V.optlist V.string).V.project v
+
 let stage_name g v =
   match V.objname g v with
   | None -> "<anonymous stage>"
@@ -711,7 +715,7 @@ let projectStage g stage' = match stage' with
     }
   | V.Table stage ->
       let field f      = V.Table.find stage (embedString f) in
-      let string_set v = list2SSet ((V.optlist V.string).V.project v) in
+      let string_set v = list2SSet (project_opt_strings v) in
       { name = (match field "name" with
                 | V.Nil -> stage_name (V.state()) stage'
                 | s     -> projectString s)

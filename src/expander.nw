@@ -273,16 +273,18 @@ val don't_touch_me : Rtl.Private.effect list -> bool
 The [[Proc.t]] gives the expander a supply of temporaries.
 <<expander.mli>>=
 module type S = sig
-  val expand : Proc.t -> Rtl.rtl -> Rtl.rtl list
-  val cfg    : 'a -> Proc.t -> bool
+  val expand : ('a, 'b, 'c, 'd) Proc.t' -> Rtl.rtl -> Rtl.rtl list
+  val cfg    : 'a -> Proc.t ->      bool
+  val new_cfg: 'a -> Ast2ir.proc -> bool
 end 
 module IntFloatAddr (Post : Postexpander.S) : S
 @ 
 Here are some abbreviations and utilities.
 <<expander.ml>>=
 module type S = sig
-  val expand : Proc.t -> Rtl.rtl -> Rtl.rtl list
+  val expand : ('a, 'b, 'c, 'd) Proc.t' -> Rtl.rtl -> Rtl.rtl list
   val cfg    : 'a -> Proc.t -> bool
+  val new_cfg: 'a -> Ast2ir.proc -> bool
 end 
 
 module R  = Rtl
@@ -809,6 +811,28 @@ let cfg _ proc =
             (*don't set modified := true --- hope for the best*)
   in
   List.iter exp nodes;
+  !modified
+<<generic flow-graph expander>>=
+let new_cfg _ proc =
+  let module G = Cfgx.M in
+  let g = proc.Proc.cfg in
+  let t = proc.Proc.target in
+  let modified = ref false in
+  let exp n =
+    match G.to_instr n with
+    | None -> ()
+    | Some i ->
+        match expand proc i with
+        | []     -> G.update_instr (fun _ -> R.par []) n
+        | [last] -> G.update_instr (fun _ -> last)     n
+        | last :: last_new :: preds ->
+            let last_new = G.instruction g last_new ~succ:(G.illegal g) in
+            let insert   = List.fold_left (fun next i -> G.instruction g i ~succ:next)
+                           last_new preds in
+            G.splice_before ~entry:insert ~exit:last_new n;
+            G.update_instr (fun _ -> last) n;
+            modified := true in
+  G.iter_nodes exp g;
   !modified
 @
 
