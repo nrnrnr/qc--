@@ -80,7 +80,9 @@ module F        = Fenv.Clean
 
 module G  = Cfg3 
 module IO = Copyinout.Make(G)
+module R  = Rtl
 module RP = Rtl.Private
+module RU = Rtlutil
 
 <<Make expressions>>
 <<Make constant evaluation>>
@@ -542,20 +544,20 @@ sequence, otherwise it branches to a provided label.
 \def\C#1{{\cal C}[\![#1]\!]}
 \let\i\textit
 
-The translation is summarized by the following function $\C\cdot$ that takes
-a boolean expression $e$ and a label $k$ to branch if the expression
-evaluates to false. The result is a sequence of nodes, that branches to
-$k$ if $e$ is false, and falls through otherwise.
+The translation is summarized by the following function $\C{\cdot}~f$
+that takes a boolean expression $e$ and a continuatio $f$ to branch if
+the expression evaluates to false. The result is a sequence of nodes,
+that branches to $f$ if $e$ is false, and falls through otherwise.
 
 \begin{center}
 \begin{eqnarray*}
-    \C{\i{true}}~k              & \to & \i{nop}\\
-    \C{\i{false}}~k             & \to & \i{goto}~k\\
-    \C{x \vee y}~k              & \to & \C x~l; l: \C y~k\\
-    \C{x \wedge y}~k            & \to & \C x~k; \C y~k\\
-    \C{\lnot x}~k               & \to & \C x~l; \i{goto}~k; l:\\
+    \C{\i{true}}~f              & \to & \i{nop}\\
+    \C{\i{false}}~f             & \to & \i{goto}~f\\
+    \C{x \vee y}~f              & \to & \C x~l; l: \C y~f\\
+    \C{x \wedge y}~f            & \to & \C x~f; \C y~f\\
+    \C{\lnot x}~f               & \to & \C x~l; \i{goto}~f; l:\\
     \C{\oplus(e_1, \dots, e_n)} & \to & 
-        \i{if}(\lnot \oplus(e_1, \dots, e_n)\{\i{goto}~k\}
+        \i{if}(\lnot \oplus(e_1, \dots, e_n)\{\i{goto}~f\}
 \end{eqnarray*}
 \end{center}
 
@@ -563,8 +565,69 @@ The last line covers the case of an application with a boolean result
 but non-boolean arguments. Currently only the logical operators $\lnot$,
 $\vee$, and $\wedge$ \emph{take} boolean arguments.
 
+The implementation first translates the governing expression into an
+{\rtl} and then tranlate it into the sequence of nodes.
+
+\begin{quote}\it
+    I think the code below shows a design weakness: we have decided to
+    have explicit label nodes in the {\cfg}. In order to jump or branch
+    to a node one needs the symbol associated with the label. This,
+    however, cannot be observed. This means, labels can only be used
+    where they are constructed. In the implementation of the {\cfg}
+    labels could be made a sub-class of nodes. However, since we shield
+    the object-oriented nature of nodes behind standard types, this is
+    not easily possible. Nodes must be more abstract or labels must
+    become special.  --CL
+\end{quote}
+
 \endgroup
 
+<<Make statements>>=
+and guard state succ fail e = 
+    let rec guard' succ fail = function
+
+    | RP.Const(RP.Bool(true))         -> succ
+    | RP.Const(RP.Bool(false))        -> fail
+    | RP.Const(_)                     -> assert false
+    | RP.Fetch(_)                     -> assert false
+    | RP.App(("conjoin",_), [x;y])    -> 
+        let ll    = Idgen.label state.proc    in
+        let ls    = F.symbol state.env ll     in
+        let fail  = G.gm_label state.cfg ll ls fail in
+            let tail = guard' succ fail y in
+            let head = guard' tail fail x in
+                head
+    | RP.App(("not",_), [x])          -> guard' fail succ x
+    | RP.App(("disjoin",_), [x;y])    ->
+        let ll    = Idgen.label state.proc    in
+        let ls    = F.symbol state.env ll     in
+        let succ  = G.gm_label state.cfg ll ls succ in
+        let y     = guard' succ fail y    in
+        let lexp  = Rtl.link ls state.target.Target.pointersize in
+        let lrtl  = state.target.Target.goto.Target.embed lexp in
+        let succ  = G.gm_goto state.cfg lrtl [G.lookup state.cfg ll] in
+                guard' succ y x              
+    | RP.App(opr, args) as e -> 
+        let sl    = Idgen.label state.proc    in
+        let ss    = F.symbol state.env sl     in
+        let succ  = G.gm_label state.cfg sl ss succ in
+        
+        let fl    = Idgen.label state.proc    in
+        let fs    = F.symbol state.env fl     in
+        let fail  = G.gm_label state.cfg fl fs fail in
+        
+        let oexp  = Rtl.link fs state.target.Target.pointersize in
+        let ortl  = state.target.Target.goto.Target.embed oexp in
+        let fail  = G.gm_goto state.cfg ortl [G.lookup state.cfg fl] in
+        
+        let e     = R.Revert.exp e in
+        let link  = Rtl.link ss state.target.Target.pointersize in
+        let rtl   = state.target.Target.branch.Target.embed (e,link)  in
+            G.gm_branch state.cfg rtl succ fail 
+    in
+        { state with node = guard' succ fail e }
+        
+@
 
 
 An if-statement is translated into a seqence of nodes such that the
@@ -583,8 +646,8 @@ taken otherwise and ends with a [[goto]] around the other branch.
 \item A label [[l2]] in front of the code following the [[if]] statement. 
 \end{enumerate}
 
-<<Make statements>>=
-and ifStmt state (e,ifso,ifnot) =
+<<Make statements old>>=
+and ifStmt' state (e,ifso,ifnot) =
     let l_ifso = Idgen.label state.proc in (* label for ifso/left *)
     let l_join = Idgen.label state.proc in (* label for join *)
     let s_ifso = F.symbol state.env l_ifso in   (* register symbol *)
@@ -603,6 +666,22 @@ and ifStmt state (e,ifso,ifnot) =
         { ifnot with node = 
           G.gm_branch state.cfg rtl ifso.node ifnot.node
         }
+
+<<Make statements>>=
+and ifStmt state (e,ifso,ifnot) =
+    let l_join = Idgen.label state.proc in (* label for join *)
+    let s_join = F.symbol state.env l_join in   (* register symbol *)
+    let n_join = G.gm_label state.cfg l_join s_join state.node in
+    let ifso   = foldr body ifso { state with node = n_join } in
+    
+    let l2exp  = Rtl.link s_join state.target.Target.pointersize in
+    let l2rtl  = state.target.Target.goto.Target.embed l2exp in
+    let l2goto = G.gm_goto state.cfg l2rtl [G.lookup state.cfg l_join] in
+    let ifnot  = foldr body ifnot {ifso with node = l2goto} in
+    
+    let e      = R.Convert.exp (expr state.env state.target e) in
+        guard ifnot ifso.node ifnot.node e in
+        
 
 and assignStmt state (lhs,rhs) =
     let effect lhs (guard,rhs) =
