@@ -118,7 +118,7 @@ short-lived temporaries which can hopefully easyly assigned to
 hardware registers.
 
 \begin{quote}\it
-The register alloctor is quite simple and room for improvements
+The register allocator is quite simple and room for improvements
 includes:
 
 \begin{itemize}
@@ -155,7 +155,7 @@ end
 <<linscan.mli>>=
 <<exported module types>>
 module Make (A: Args) (G: G): sig
-    val linscan: G.t -> unit
+    val linscan: G.t -> Target2.t -> unit
 end
 @
 
@@ -171,15 +171,9 @@ to implement everything that is provided by [[Arg]] and get rid of it.
 
 <<exported module types>>=
 module type Args = sig
-    val fits : Rtl.space -> Register.t -> bool
-        (* fits s r = true, iff r can hold any value from space s *) 
-    val is_tmp : Rtl.space -> bool
-        (* true, iff space belongs to the temporary space *)
-    
     (* 
      * for spilling
      *)
-     
     val mkTmp:      Rtl.loc -> Register.t
         (* create a new tmp for a value currently held by loc *)
     val spill:      dst:Rtl.loc    -> src:Register.t -> Rtl.rtl list
@@ -231,6 +225,7 @@ module Make (A: Args) (G: G) = struct
     module LI       = Live.Make(G)
     module RM       = Register.Map
     module RS       = Register.Set
+    module T        = Target2
  
     type lifetimes  = LT.t RM.t  (* lt *)  (* map from register to its lifetimes *)
     type loc        = Register.t    
@@ -311,11 +306,14 @@ let close_regs point regs state = List.fold_left (close_intv point) state regs
 The [[lifetimes]] function computes a map that associates a register
 with its lifetime.  The the lifetimes are inferred from the live sets
 that are part of the control-flow graph.  The initial map [[lt]] is
-supplied by the client.  After the last node of the control-flow graph
-is processed, all still open intervals must be closed. 
+constructed from the list of free registers provided by the client. 
+After the last node of the control-flow graph is processed, all still
+open intervals must be closed. 
 
 <<compute lifetimes>>=
-let lifetimes cfg lt =
+let lifetimes cfg registers =
+    let lt          = List.fold_left (fun map r -> RM.add r LT.empty map) 
+                                     RM.empty registers            in
     let initial     = (RM.empty, lt)                               in
     let domain map  = RM.fold (fun key _ list -> key::list) map [] in
     let scan node (oldset, state) =
@@ -372,20 +370,20 @@ of a {\cfg}, register allocation starts over after spilling.
 \end{quote}
 
 <<linscan>>=
-let rec linscan cfg =
+let rec linscan cfg target =
     let _          = LI.liveness cfg     in
-    let _          = G.gm_enumerate cfg in
+    let _          = G.gm_enumerate cfg  in
     let rec next_node lifetimes node = match node with 
         | None      -> ()
-        | Some node -> alloc node lifetimes next_node spill
+        | Some node -> alloc target node lifetimes next_node spill
     in
-        next_node (lifetimes cfg RM.empty) (Some (G.first cfg)) 
+        next_node (lifetimes cfg target.T.allocatable) (Some (G.first cfg))
 @
 <<alloc>>=
-let alloc node lifetimes success spill =
-    let rec next_tmp lifetimes = match find_tmp node with
-        | None     -> success lifetimes (G.next node)
-        | Some tmp -> replace_tmp node tmp lifetimes next_tmp spill      
+let alloc target node lifetimes next_node spill =
+    let rec next_tmp lifetimes = match find_tmp target node with
+        | None     -> next_node lifetimes (G.next node)
+        | Some tmp -> replace_tmp target node tmp lifetimes next_tmp spill      
     in
         next_tmp lifetimes 
 @
@@ -415,21 +413,21 @@ livetime, and all occurrences of [[tmp]] substituted by [[r]] in the
 <<replace>>=
 let replace tmp reg      = fun t -> if t = tmp then reg else t
 
-let replace_tmp node tmp lifetimes success spill =
+let replace_tmp target node tmp lifetimes next_tmp spill =
   let iter cfg f = G.fold_fwd cfg (fun node () -> G.set_rtl node f) () in
   let lifetime   = lookup lifetimes                                    in
   let cfg         = G.cfg node                                         in
-  match find_reg lifetimes tmp with
+  match find_reg target lifetimes tmp with
   | Some r -> (* successfully found a hardware register r *)
       let lifetimes = RM.add r (LT.union (lifetime r) (lifetime tmp))
                                lifetimes                               in
       let lifetimes = RM.remove tmp lifetimes                          in
       let ()        = iter cfg (Rtlutil.Subst.reg (replace tmp r))     in
-          success lifetimes
+          next_tmp lifetimes
   | None -> (* out of register - must spill *)
       let spillee, interval = find_spillee lifetimes tmp node          in
       let mem               = A.mkMem spillee                          in
-          spill cfg spillee mem interval
+          spill target cfg spillee mem interval
 @
 
 % ------------------------------------------------------------------ 
@@ -458,10 +456,10 @@ or written by an {\rtl} and thus we have to look for temporaries
 explicitly.
 
 <<find tmp>>=
-let find_tmp node = 
+let find_tmp target node = 
     let uses space index width = function
-        | None when A.is_tmp space -> Some (space, index, width)
-        | x                      -> x 
+        | None when target.T.is_tmp space -> Some (space, index, width)
+        | x                               -> x 
     in
         Rtlutil.read_write_lists uses uses (G.rtl node) None    
 @       
@@ -493,9 +491,9 @@ register [[r]], that respects all of the following conditions, or
 \end{enumerate}
 
 <<find reg>>=
-let first_fit lifetimes t =
+let first_fit target lifetimes t =
     let fits' (sp,_,_ as t) r = 
-        A.fits sp r &&
+        target.T.fits sp r &&
         not (LT.overlaps (LT.bbox (lookup lifetimes t)) 
                                 (lookup lifetimes r))
     in
@@ -611,16 +609,16 @@ instructions with a post-pass.
 \subsection{Spilling Implementation}
 % ------------------------------------------------------------------ 
 
-The spiller walk over a region [[interval]] of nodes and updates it
+The spiller walks over a region [[interval]] of nodes and updates it
 such that the [[spillee]] is help in memory [[mem]] most of the time. 
 When the spillee is used, it is re-loaded into a temporary.
 
 <<spill>>=
-and spill cfg spillee mem interval = 
+and spill target cfg spillee mem interval = 
     let first = I.left  interval in
     let last  = I.right interval in 
         ( G.scan_fwd cfg first last (fun n () -> update interval spillee mem n) ()
-        ; linscan cfg (* start over *)
+        ; linscan cfg target (* start over *)
         )
 @
 
@@ -638,8 +636,7 @@ and reads_writes rtl loc =
 @
 
 The [[extern]] function returns all nodes from a list of nodes that do
-not belong to an [[interval]]. Edges from such nodes to nodes inside
-the interval must be augmented with assignments; this is done by 
+not belong to an [[interval]]. 
 
 <<update>>=
 and extern interval = 
