@@ -862,6 +862,9 @@ section     :   procedure                      { A.Procedure($1)     }
             |   span                           { A.SSpan($1)         }
             |   declAt                         { A.Decl($1)          }
 
+@ 
+You might hope to have a nonterminal for an optional type, but this
+little optimization leads to shift-reduce conflicts.
 <<parse.mly>>=
 declAt      :   decl                           { A.DeclAt($1,p()) }   
 decl        :   INVARIANT REGISTER registers SEMI
@@ -872,10 +875,11 @@ decl        :   INVARIANT REGISTER registers SEMI
                     { A.Registers(mkRegs A.Variant $2)   }
             |   /*-----*/ /*----*/ registers SEMI
                     { A.Registers(mkRegs A.Variant $1)   }
-
-            |   EXPORT    exports  SEMI        { A.Export(None, $2)    }
+          
             |   EXPORT ty exports  SEMI        { A.Export(Some $2, $3) }
-            |   IMPORT ty imports  SEMI        { A.Import($2,$3)           }
+            |   EXPORT    exports  SEMI        { A.Export(None,$2)    }
+            |   IMPORT ty imports  SEMI        { A.Import(Some $2,$3)           }
+            |   IMPORT    imports  SEMI        { A.Import(None,$2)           }
             |   CONST     ID EQUAL exprAt SEMI { A.Const(None,$2,$4)       }
             |   CONST  ty ID EQUAL exprAt SEMI { A.Const(Some $2,$3,$5)    }
             |   TYPEDEF ty names SEMI          { A.Typedef($2,rev $3)      }
@@ -1016,7 +1020,7 @@ nameOrMem0  :   ID                            { A.Name(None, $1)    }
             |   mem_type LBRACKET exprAt mem_properties RBRACKET { ast_mem $1 $3 $4 }
 
 mem_type : sty { $1 }
-         | ID  { A.AliasTy($1) }
+         | ID  { A.TypeSynonym($1) }
 
 mem_properties : aligned opt_in_ids { (Some $1, $2) }
                | IN ids opt_aligned { ($3, $2) }
@@ -1034,7 +1038,7 @@ nameOrMems_ :   nameOrMems_ COMMA nameOrMemAt  { $3 :: $1 }
 
 tyAt        :   ty                             { A.TyAt($1,p()) }
 ty          :   sty                            { $1             }
-            |   ID                             { A.AliasTy($1)  }
+            |   ID                             { A.TypeSynonym($1)  }
 
 sty         :   BITSn                          { A.BitsTy($1)     }
 

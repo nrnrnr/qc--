@@ -148,7 +148,7 @@ let char i      = P.text ("'"  ^ Char.escaped(Char.chr i) ^ "'")
 let rec ty = function
     | A.TyAt(x,_)       -> ty x
     | A.BitsTy(n)       -> P.text "bits"  ^^ int n
-    | A.AliasTy(name)   -> P.text name
+    | A.TypeSynonym(name)   -> P.text name
 @
 
 
@@ -315,6 +315,10 @@ let conv = function
 
     
 <<astpp.ml>>=
+let opt_ty t = ( match t with 
+               | Some t -> P.break ^^ ty t
+               | None   -> P.empty
+               )
 let export t ns =
     let export' = function
         | (x, Some y) -> P.agrp (id x ^/ P.text "as" ^/ str y)
@@ -323,10 +327,7 @@ let export t ns =
         P.agrp begin
         ~~ P.agrp begin 
            ~~ P.text "export" 
-           ^^ ( match t with 
-              | Some t -> P.break ^^ ty t
-              | None   -> P.empty
-              )
+           ^^ opt_ty t
            end
            ^/ commablock export' ns
            ^^ semi
@@ -576,7 +577,7 @@ and decl is_global = function
         | (None  , y) -> id y
         in
             P.agrp begin
-            ~~ P.agrp (P.text "import" ^/ ty t)
+            ~~ P.agrp (P.text "import" ^/ opt_ty t)
             ^/ commablock import' ns
             ^^ semi
             end

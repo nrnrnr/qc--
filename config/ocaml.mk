@@ -75,5 +75,5 @@ $B&.cmx:Q: $B&.ml
 %.output:       %.mly
 	$OCAMLYACC -v $stem.mly
 
-%.sig:          %.ml
+%.sig:D:          %.ml
 	$OCAMLC $OCAMLC_FLAGS -c -i $stem.ml > $target

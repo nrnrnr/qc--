@@ -127,16 +127,16 @@ end
 <<testdrv.lua>>=
 $debug 1
 Test = Test  or {}
-Test.errors = 0         -- number of failures found
-Test.verbose = nil      -- provide detailed failure info
-Test.skip_files = nil   -- skip input source files
-Test.trust_exe = nil    -- trust exe output for test status
-Test.on_error = {}      -- error handlers
-Test.files = {}         -- input source files
-Test.tst_file = ""      -- name of config file
--- Test.update = nil       -- update differing files
+Test.errors     = 0      -- number of failures found
+Test.verbose    = nil    -- provide detailed failure info
+Test.skip_files = nil    -- skip input source files
+Test.trust_exe  = nil    -- trust exe output for test status
+Test.on_error   = {}     -- error handlers
+Test.files      = {}     -- input source files
+Test.tst_file   = ""     -- name of config file
+-- Test.update  = nil    -- update differing files
 @ 
-Lua doee not have a function to get the number of entries in a table/list.
+Lua does not have a function to get the number of entries in a table/list.
 <<testdrv.lua>>=
 function Test.list_len(l)
   local i = 1
@@ -149,10 +149,10 @@ In the case of an error, we may need to clear the status line before,
 anything else is printed.
 <<testdrv.lua>>=
 function Test.status_line(i, len)
-  local left = format("Processing test %d of %d", i, len)
+  local left  = format("Processing test %d of %d", i, len)
   local right = format("[ %0.2f %% ]", 100 * (i-1) / len)
-  local len = 80 - strlen(left)
-  local fmt = format('%%s%%%ds\r', len)
+  local len   = 80 - strlen(left)
+  local fmt   = format('%%s%%%ds\r', len)
   write(format(fmt, left, right))
 end
 
@@ -277,6 +277,9 @@ function Test.build_exe(inputs, s_file)
 
   local other = ""
   if inputs["other"] then other = inputs["other"] end
+
+-- more idiomatic: local other = inputs.other or ""
+
   local cmd = format("cc -o %s %s %s", exe_file, s_file, other)
 
   Test.log(cmd)
@@ -323,7 +326,7 @@ is generated.
 function Test.check_update_file(inputs, file)
   local  ext = Caml.Filename.extension(file)
   if     ext == ".s"  then exp = inputs["asm"]
-  elseif ext == ".s1" then exp = inputs["asmout"]
+  elseif ext == ".s1" then exp = inputs["asmout"]  -- more idiomatic: inputs.asmout
   elseif ext == ".s2" then exp = inputs["asmerr"]
   elseif ext == ".1"  then exp = inputs["stdout"]
   elseif ext == ".2"  then exp = inputs["stderr"] end
@@ -444,6 +447,7 @@ function Test.process_file(files)
   local inp = Caml.Filename.chop_extension(files["source"])
 
   if not files["name"] then files["name"] = bn end
+   -- more idiomatic: files.name = files.name or bn
 
   Test.compute_filename(files, "stdin",  Test.source,  name .. ".0")
   Test.compute_filename(files, "stdout", Test.results, name .. ".1")

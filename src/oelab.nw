@@ -117,7 +117,7 @@ environment.
 
 <<oelab.mli>>=
 module Targets : sig
-    val global: 'p Fenv.Dirty.env' -> Ast.program -> 'p Fenv.Dirty.env'
+    val global: 'p Ofenv.Dirty.env' -> Ast.program -> 'p Ofenv.Dirty.env'
 end
 @
 
@@ -129,8 +129,8 @@ module Typedefs : sig
     module Decl:     Topsort.Sortable
     module DeclSort: Topsort.S with type decl = Decl.decl
 
-    val global: 'p Fenv.Dirty.env' -> Ast.program   -> 'p Fenv.Dirty.env'
-    val local:  'p Fenv.Dirty.env' -> Ast.proc      -> 'p Fenv.Dirty.env'
+    val global: 'p Ofenv.Dirty.env' -> Ast.program   -> 'p Ofenv.Dirty.env'
+    val local:  'p Ofenv.Dirty.env' -> Ast.proc      -> 'p Ofenv.Dirty.env'
 end
 @
 
@@ -149,16 +149,16 @@ module Consts : sig
     end
              
     module Eval: sig
-        val evalExpr  : 'p Fenv.Dirty.env' -> Ast.expr 
+        val evalExpr  : 'p Ofenv.Dirty.env' -> Ast.expr 
                         -> (Types.ty * Rtl.exp) Error.error
-        val evalExprs : 'p Fenv.Dirty.env' -> Ast.expr list 
+        val evalExprs : 'p Ofenv.Dirty.env' -> Ast.expr list 
                         -> (Types.ty * Rtl.exp) list Error.error
-        val doConst   : 'p Fenv.Dirty.env' -> Decl.decl list 
-                        -> 'p Fenv.Dirty.env'
+        val doConst   : 'p Ofenv.Dirty.env' -> Decl.decl list 
+                        -> 'p Ofenv.Dirty.env'
     end
 
-    val global: 'p Fenv.Dirty.env'  -> Ast.program   -> 'p Fenv.Dirty.env'
-    val local:  'p Fenv.Dirty.env'  -> Ast.proc      -> 'p Fenv.Dirty.env'
+    val global: 'p Ofenv.Dirty.env'  -> Ast.program   -> 'p Ofenv.Dirty.env'
+    val local:  'p Ofenv.Dirty.env'  -> Ast.proc      -> 'p Ofenv.Dirty.env'
 end
 @
 
@@ -170,9 +170,9 @@ all values like registers into the environment beeing built.
 
 <<oelab.mli>>=
 module Env : sig 
-    val setDefaults : 'p Fenv.Dirty.env'                  -> 'p Fenv.Dirty.env'
-    val global      : 'p Fenv.Dirty.env' -> Ast.program   -> 'p Fenv.Dirty.env'
-    val local       : 'p Fenv.Dirty.env' -> Ast.proc      -> 'p Fenv.Dirty.env'
+    val setDefaults : 'p Ofenv.Dirty.env'                  -> 'p Ofenv.Dirty.env'
+    val global      : 'p Ofenv.Dirty.env' -> Ast.program   -> 'p Ofenv.Dirty.env'
+    val local       : 'p Ofenv.Dirty.env' -> Ast.proc      -> 'p Ofenv.Dirty.env'
 end
 @
 
@@ -182,7 +182,7 @@ environment.
 
 <<oelab.mli>>=
 module Check : sig
-    val global: 'p Fenv.Dirty.env' -> Ast.program   -> 'p Fenv.Dirty.env'
+    val global: 'p Ofenv.Dirty.env' -> Ast.program   -> 'p Ofenv.Dirty.env'
 end
 @
     
@@ -191,7 +191,7 @@ end
 % ------------------------------------------------------------------ 
 
 The key to understand the implementation is the fat environment
-[[Fenv.Dirty]]; it defines a symbol table that holds the type, value, and
+[[Ofenv.Dirty]]; it defines a symbol table that holds the type, value, and
 target environment.  Names are chosen similar to the non-terminals
 used in the grammar.
 
@@ -199,7 +199,7 @@ used in the grammar.
 module T  = Types
 module E  = Error
 module A  = Ast
-module F  = Fenv.Dirty
+module F  = Ofenv.Dirty
 module B  = Bits
 module R  = Rtl
 module RP = Rtl.Private
@@ -410,7 +410,7 @@ undefined and therefore an [[E.error]] type is used.
 let rec evalTy env = function
     | A.TyAt(x,r)    -> E.catch (error r env) (evalTy env) x
     | A.BitsTy(size) -> E.Ok(Types.Bits size)
-    | A.AliasTy(n)   -> snd (F.findt n env)
+    | A.TypeSynonym(n)   -> snd (F.findt n env)
 @
 
 The static semantics of procedures are checked after everything
@@ -435,7 +435,7 @@ let procedures ast =
         List.fold_left toplevel [] ast
 @    
 
-The interface to [[Fenv]] has changed and somtimes the old interface
+The interface to [[Ofenv]] has changed and somtimes the old interface
 was just more convenient. Here are some handy conversion functions.
 
 <<auxiliaries>>=
@@ -445,7 +445,7 @@ let findv name     env = let (_,scope),entry = F.findv name env in scope,entry
 let findt name     env = let (_,scope),entry = F.findt name env in scope,entry
 @
 
-The fat environment [[Fenv]] holds informations about the size of
+The fat environment [[Ofenv]] holds informations about the size of
 pointers and words as number of bits.  For type checking purposes the
 [[Types.ty]] type is more adequate.  The following functions
 [[wordTy]] and [[pointerTy]] provide types for words and pointers. 
@@ -685,7 +685,7 @@ on another type if its type is itself just a name.
 let defines ((t,names),_) = names
 let uses    ((t,names),_) = match t with
     | A.BitsTy(_)   -> []
-    | A.AliasTy(x)  -> [x]
+    | A.TypeSynonym(x)  -> [x]
     | A.TyAt _      -> assert false
 @
 
@@ -929,8 +929,8 @@ let rec uses ((t,n,e),r) = freeExprVars e
 
     Several reasons: We would need a translation from {\AST} to
     [[Rtl.env]]. The existing one in \module{ast3ir} is written against
-    the [[Fenv.Clean]] interface, but we need one written against the
-    [[Fenv.Dirty]] interface. The translation of an application needs
+    the [[Ofenv.Clean]] interface, but we need one written against the
+    [[Ofenv.Dirty]] interface. The translation of an application needs
     the widths of its arguments. Therefore type-checking using
     [[Oexpcheck]] would be done twice: once before translation and then
     again during translation. Detailed error messages are simpler to
@@ -1124,7 +1124,7 @@ is bound to [[Error.Error]].
 let rec ty r env = function
     | A.TyAt(x,r)       -> E.catch (error r env) (ty r env) x
     | A.BitsTy(n)       -> E.Ok(T.bits n)
-    | A.AliasTy(n)      -> snd (F.findt n env)
+    | A.TypeSynonym(n)      -> snd (F.findt n env)
 @
 
 <<module Env>>=
@@ -1258,17 +1258,28 @@ Imported values have global scope and thus must not be recorded when
 we are in a [[Local]] [[scope]].
     
 <<module Env>>=
+and ast_ty = function
+  | Types.Bool -> assert false
+  | Types.Bits n -> A.BitsTy n 
+  
 and ldecl r scope env = function
     | A.DeclAt(x,r)    -> E.catch' env (error r env) (ldecl r scope env) x
-    | A.Import(ty,ii)  when scope=Global 
-                       -> imports r env ty ii
+    | A.Import(Some ty,ii)  when scope=Global -> imports r env ty ii
+    | A.Import(None,ii)  when scope=Global ->
+        (match pointerTy env with
+        | E.Ok t -> imports r env (ast_ty t) ii
+        | E.Error -> imports r env (A.BitsTy 32) ii)
     | A.Registers(rr)  when scope = Local
                        -> foldl (register r scope) env rr
     | _                -> env
 
 and gdecl r env = function
     | A.DeclAt(x,r)    -> E.catch' env (error r env) (gdecl r env) x
-    | A.Import(ty,ii)  -> imports r env ty ii
+    | A.Import(Some ty,ii) -> imports r env ty ii
+    | A.Import(None,ii) ->
+        (match pointerTy env with
+        | E.Ok t -> imports r env (ast_ty t) ii
+        | E.Error -> imports r env (A.BitsTy 32) ii)
     | A.Registers(rr)  -> foldl (register r Global) env rr
     | _                -> env
 @

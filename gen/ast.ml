@@ -22,7 +22,7 @@
   and ty =
         TyAt of (ty * region)
       | BitsTy of (size)
-      | AliasTy of (name)
+      | TypeSynonym of (name)
   
   and name_or_mem =
         NameOrMemAt of (name_or_mem * region)
@@ -43,7 +43,7 @@
   and import = (StdPrims.std_string option * name)
   and export = (name * StdPrims.std_string option)
   and invariant =
-        Invariant
+        Invariant | Invisible
       | Variant
   
   and register = (invariant * hint option * ty * name * reg option)
@@ -58,7 +58,7 @@
   
   and decl =
         DeclAt of (decl * region)
-      | Import of (ty * import list)
+      | Import of (ty option * import list)
       | Export of (ty option * export list)
       | Const of (ty option * name * expr)
       | Typedef of (ty * name list)

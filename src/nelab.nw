@@ -313,9 +313,9 @@ they can be used.  The evaluation can fail in case the name is
 undefined and therefore an [[E.error]] type is used.
 <<auxiliaries>>=
 let rec evalTy env = function
-    | A.TyAt(x,r)    -> E.catch (error r env) (evalTy env) x
-    | A.BitsTy(size) -> E.Ok(Types.Bits size)
-    | A.TypeSynonym(n) -> snd (F.findt n env)
+    | A.TyAt (x,r)    -> E.catch (error r env) (evalTy env) x
+    | A.BitsTy size   -> E.Ok(Types.Bits size)
+    | A.TypeSynonym n -> snd (F.findt n env)
 @
 The static semantics of procedures are checked after everything
 else has been checked. The following function returns the list of
@@ -684,24 +684,7 @@ let bind_section_labels env _ = unimp "section-label binding" in
 let check_exports env _ = unimp "export checking" in
 @ 
 ================================================================
-@ 
-Labels and names for procedures have fixed types.  Types of register
-and import declarations on the other hand can refer to named types
-which may be undefined. A declaration which refers to an undefined type
-is bound to [[Error.Error]].
-<<module Env>>=
-let rec ty r env = function
-    | A.TyAt(x,r)       -> E.catch (error r env) (ty r env) x
-    | A.BitsTy(n)       -> E.Ok(T.bits n)
-    | A.TypeSynonym(n)      -> snd (F.findt n env)
 @
-<<module Env>>=
-@
-The following functions traverse the abstract syntax of the global or
-local scope and enter all names into the environment -- except for
-constants.  The parameter [[scope]] indicates whether local or global
-symbols are bound.
-
 Global symbols are all those on the top level and section level.
 Additionally all labels for code inside procedures are also
 bound because they have global scope. When local symbols (inside a
@@ -709,12 +692,6 @@ procedure) are bound, labels are bound a second time with a local scope
 in the environment. This helps to decide whether a symbol is local or
 global when it is accessed from inside a procedure.
 
-An imported symbol always has global scope. This was changed during
-the development of the compiler to make the mapping between {\PAL}
-names and assembly level names easier.
-<<module Env>>=
-@ 
-<<module Env>>=
 @
 A [[datum]] label is a [[F.Label(F.Data)]] when the datum belongs to a
 top-level datum, and a [[F.Label(F.Stack)]] when the datum belongs to

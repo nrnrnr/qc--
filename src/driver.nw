@@ -45,7 +45,7 @@ This module provides new Lua types like [[asm]] and [[ast]] for the
 interpreter, and a library that uses them. 
 <<driver.mli>>=
 val check     : 
-  Srcmap.map * Ast.program -> 'proc Asm.assembler -> 'proc Fenv.Clean.env'
+  Srcmap.map * Ast.program -> 'proc Asm.assembler -> 'proc Ofenv.Clean.env'
 val emit_asdl : 'a * Ast.program -> unit
 val parse     : string -> Srcmap.map * Ast.program
 val print     : Pp.doc -> int -> out_channel -> unit
@@ -53,7 +53,7 @@ val pretty    : 'a * Ast.toplevel list -> Pp.doc
 val scan      : string -> unit
 val version   : unit -> unit
 val compile : (Ast2ir.proc -> unit) -> bool -> 'a * Ast.program -> Ast2ir.tgt
-                -> Ast2ir.proc Fenv.Clean.env' -> Ast2ir.proc Asm.assembler
+                -> Ast2ir.proc Ofenv.Clean.env' -> Ast2ir.proc Asm.assembler
 val reinit    : unit -> unit
 @
 
@@ -62,14 +62,14 @@ val reinit    : unit -> unit
 % ------------------------------------------------------------------ 
 <<driver.ml>>=
 module E   = Error
-module F   = Fenv.Clean
+module F   = Ofenv.Clean
 <<driver.ml>>=
 let version () =
     ( This.name     stdout 
     ; output_string stdout " "
     ; This.version  stdout 
     ; output_string stdout 
-        "See also http://www.cminusminus.org\n"
+        " (see also http://www.cminusminus.org)\n"
     )
 <<driver.ml>>=
 let scan file =
@@ -157,14 +157,14 @@ let consistency_check env (t:('a, 'b) Target.t) =
 @
 <<driver.ml>>=
 let check (map,ast) (asm) =
-    let env      = Fenv.Dirty.empty map asm          in
-    let env      = Fenv.Dirty.push env (Fenv.Dirty.emptyscope) in
-    let env      = Elab.Env.global   env ast         in
-    let env      = Elab.Check.global env ast         in
-    let env      = Elab.Env.setDefaults env          in
-    let ()       = if Fenv.Dirty.errorFlag env then 
+    let env      = Ofenv.Dirty.empty map asm          in
+    let env      = Ofenv.Dirty.push env (Ofenv.Dirty.emptyscope) in
+    let env      = Oelab.Env.global   env ast         in
+    let env      = Oelab.Check.global env ast         in
+    let env      = Oelab.Env.setDefaults env          in
+    let ()       = if Ofenv.Dirty.errorFlag env then 
                       Error.error "compilation aborted because of errors." in
-    Fenv.clean env
+    Ofenv.clean env
 
 let compile opt exportglobals (map,ast) target env  =
     let () = consistency_check env target in   

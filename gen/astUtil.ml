@@ -140,8 +140,8 @@
               Ast.TyAt(ty1, region1)
             | "ast_BitsTy" -> let size1 = (sexp_rd_size s_) in
               Ast.BitsTy(size1)
-            | "ast_AliasTy" -> let name1 = (sexp_rd_name s_) in
-              Ast.AliasTy(name1)
+            | "ast_TypeSynonym" -> let name1 = (sexp_rd_name s_) in
+              Ast.TypeSynonym(name1)
             | _ -> (SexpPkl.die ()))
           (* end match *) in
         begin
@@ -257,6 +257,7 @@
         let tmp_ = let t = (SexpPkl.get_sym s_) in
           (match (t) with 
               "ast_Invariant" -> Ast.Invariant
+            | "ast_Invisible" -> Ast.Invisible
             | "ast_Variant" -> Ast.Variant
             | _ -> (SexpPkl.die ()))
           (* end match *) in
@@ -315,7 +316,7 @@
               "ast_DeclAt" -> let decl1 = (sexp_rd_decl s_) in
               let region1 = (sexp_rd_region s_) in
               Ast.DeclAt(decl1, region1)
-            | "ast_Import" -> let ty1 = (sexp_rd_ty s_) in
+            | "ast_Import" -> let ty1 = (SexpPkl.rd_option sexp_rd_ty s_) in
               let import_list1 = (SexpPkl.rd_list sexp_rd_import s_) in
               Ast.Import(ty1, import_list1)
             | "ast_Export" -> let ty_opt1 = (SexpPkl.rd_option sexp_rd_ty s_) in
@@ -886,9 +887,9 @@
             (sexp_wr_size size1 s_);
             (SexpPkl.wr_rp s_)
           end
-        | (Ast.AliasTy(name1)) -> begin
+        | (Ast.TypeSynonym(name1)) -> begin
             (SexpPkl.wr_lp s_);
-            (SexpPkl.wr_sym "ast_AliasTy" s_);
+            (SexpPkl.wr_sym "ast_TypeSynonym" s_);
             (sexp_wr_name name1 s_);
             (SexpPkl.wr_rp s_)
           end)
@@ -1021,6 +1022,11 @@
             (SexpPkl.wr_sym "ast_Invariant" s_);
             (SexpPkl.wr_rp s_)
           end
+        | Ast.Invisible -> begin
+            (SexpPkl.wr_lp s_);
+            (SexpPkl.wr_sym "ast_Invisible" s_);
+            (SexpPkl.wr_rp s_)
+          end
         | Ast.Variant -> begin
             (SexpPkl.wr_lp s_);
             (SexpPkl.wr_sym "ast_Variant" s_);
@@ -1102,7 +1108,7 @@
         | (Ast.Import(ty1, import_list1)) -> begin
             (SexpPkl.wr_lp s_);
             (SexpPkl.wr_sym "ast_Import" s_);
-            (sexp_wr_ty ty1 s_);
+            (SexpPkl.wr_option sexp_wr_ty ty1 s_);
             (SexpPkl.wr_list sexp_wr_import import_list1 s_);
             (SexpPkl.wr_rp s_)
           end

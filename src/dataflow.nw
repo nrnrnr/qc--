@@ -2,6 +2,42 @@
 
 \section{Support for forward dataflow problems}
 
+This documentation is written long after the event, so one may be
+suspicious of errors. 
+
+We want to solve both forward and backward problems, so we talk about
+a ``split,'' which will be a join point in one direction and a merge
+point in the other.
+A~value of type [[('i, 'a)]] problem is a dataflow problem over nodes
+with instructions represented by~[['i]] and the dataflow information
+represented by~[['a]].
+All problems incrementally build up information at each split node until we
+reach a fixed point.
+This means each split node holds suitable mutable state of type~[['a]].
+
+Each dataflow problem has these parts:
+\begin{itemize}
+\item
+[[init_info]]: Initial (bottom) value of dataflow information.
+\item
+[[propagate]]: Push the dataflow information through a non-split node.
+\item
+[[split_info]]: Extract the dataflow information from a split node.
+\item 
+[[merge_split_info]]:
+Using the dataflow equations, merge a new dataflow value with the
+value already stored at the split node (e.g., by taking the least
+upper bound).
+Return a Boolean indicating whether this operation changed the
+(mutable) value at the split node.
+\end{itemize}
+
+Given a problem, [[fwd_iteration]] runs one forward iteration and
+returns a Boolean indicating whether anything changed.
+It can be repeated until it reaches a fixed point.
+@
+\section{Implementation}
+
 <<dataflow.mli>>=
 module Make (G : Cfg.S) : sig
   type ('i, 'a) problem =

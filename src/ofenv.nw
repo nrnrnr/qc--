@@ -92,10 +92,10 @@ The two sub-modules [[Dirty]] and [[Clean]] just differ in the meaning
 of [[info]] and [[partial]].  A clean environment ensures that all
 values are present and that they are good.
 
-<<fenv.mli>>=
+<<ofenv.mli>>=
 <<module type Env>>
 
-<<fenv.mli>>=
+<<ofenv.mli>>=
 module Dirty : Env
     with type 'a info    = 'a Error.error
     with type 'a partial = 'a option
@@ -105,6 +105,7 @@ module Clean : Env
     with type 'a partial = 'a 
 
 val clean: 'proc Dirty.env' -> 'proc Clean.env'
+val dirty_metrics : 'proc Dirty.env' -> Metrics.t Error.error
 @
 The only way to obtain a clean environment is by cleaning a dirty
 environment.  However, the dirty environment must not be really dirty: 
@@ -140,11 +141,9 @@ type scope
 <<types>>
 val map : ('b -> 'a) -> 'a env' -> 'b env'
 
-val empty   : Srcmap.map -> Metrics.t -> 'proc Asm.assembler -> 'proc env'
-                       (* empty scope stack *)
-val srcmap  : 'proc env' -> Srcmap.map
-val asm     : 'proc env' -> 'proc Asm.assembler
-val metrics : 'proc env' -> Metrics.t
+val empty:      Srcmap.map -> 'proc Asm.assembler -> 'proc env' (* empty scope stack *)
+val srcmap:     'proc env' -> Srcmap.map
+val asm:        'proc env' -> 'proc Asm.assembler
 @
 % ------------------------------------------------------------------ 
 \subsection{Scopes and the Fat Environment}
@@ -278,7 +277,6 @@ variables.
 and  variable =     { index:        int
                     ; rhint:        reghint
                     ; loc:          Automaton.loc option
-                    ; variance:     Ast.invariant
                     }
 @
 The [[int]] value in the procedure denotation is the number of local
@@ -292,8 +290,7 @@ and  kind           = Proc          of Symbol.t * scope partial * int
 
 and  denotation     = Constant      of Bits.bits
                     | Label         of kind
-                    | Import        of string * Symbol.t
-                          (* external name, assembly symbol *)
+                    | Import        of string option * Symbol.t
                     | Variable      of variable
                     | Continuation  of string * Symbol.t   (* MEANING??? *)
                           (* String is internal name for link-time
@@ -394,6 +391,50 @@ to the following law:
 val flagError       : 'p env' -> 'p env'
 val errorFlag       : 'p env' -> bool
 @
+
+% ------------------------------------------------------------------ 
+\subsection{Target}
+% ------------------------------------------------------------------ 
+
+The environment stores information about the target platform.  These
+data may have some defaults and is specified in a {\PAL} program by
+the [[target]] declaration.  Once an information is bound for a target
+all subsequent binds must provide the same information.  In case an
+inconsistent update is attempted the binding becomes erroneous.  In
+order to provide a meaningful error message for this case, the bind
+functions receive a source code position.
+\begin{quote}
+    Should the error reporting be factored out by reporting
+    inconsistencies with an exception?
+\end{quote}
+<<types>>=
+and  endianness     = Big | Little
+and  target         = { memsize:      int        partial info
+                      ; endianness:   endianness partial info
+                      ; word:         int        partial info
+                      ; pointer:      int        partial info
+                      ; float:        string     partial info
+                      ; charset:      string     partial info
+                      }
+
+@ 
+REFACTOR: Pass [[Ast.arch]] directly to a single binding function.
+<<signature Env>>=
+val bindMemsize     : Srcmap.rgn -> int        -> 'p env' -> 'p env'
+val bindEndianness  : Srcmap.rgn -> endianness -> 'p env' -> 'p env' 
+val bindWordsize    : Srcmap.rgn -> int        -> 'p env' -> 'p env'
+val bindPointersize : Srcmap.rgn -> int        -> 'p env' -> 'p env'
+val bindFloat       : Srcmap.rgn -> string     -> 'p env' -> 'p env'
+val bindCharset     : Srcmap.rgn -> string     -> 'p env' -> 'p env'
+
+val findTarget      : 'p env' -> target
+(* delenda *)
+val findMemsize     : 'p env' -> int        partial info 
+val findEndianness  : 'p env' -> endianness partial info
+val findWordsize    : 'p env' -> int        partial info
+val findPointersize : 'p env' -> int        partial info
+val findFloat       : 'p env' -> string     partial info
+val findCharset     : 'p env' -> string     partial info
 @
 
 % ------------------------------------------------------------------ 
@@ -655,7 +696,7 @@ argument [[Arg]] of type [[Arg]].  The main part of the implementation
 is thus the generic functor [[Env]] which is described in the
 following section.
 
-<<fenv.ml>>=
+<<ofenv.ml>>=
 module E            = Error     (* handy abbreviations *)
 module T            = Types
 module Asm          = Asm    
@@ -665,7 +706,7 @@ The [[Arg]] modules captures the diverse aspects of [[Clean]] and
 [[Dirty]].  Different [[Arg]] implementations are passed to functor
 [[Env]] to create [[Clean]] and [[Dirty]].
 
-<<fenv.ml>>=
+<<ofenv.ml>>=
 module type Arg = sig
     type 'a partial
     type 'a info
@@ -673,8 +714,11 @@ module type Arg = sig
     val good    : 'a   -> 'a info
     val asgood  : 'a info -> 'a option
     val bad     : unit -> 'a info
+    val update  : 'a partial info -> 'a -> (unit -> unit) -> 'a partial info
+    val default : 'a   -> 'a partial info
 end
 @
+
 \begin{itemize}
     \item First of all, informations are more vaguely represented in
     [[Dirty]] than in [[Clean]]: a [[partial]] information might be
@@ -704,11 +748,11 @@ which are instances of [[Env]], which basically is \emph{the}
 implementation of this module.  The arguments to [[Env]] are
 implementations of [[Arg]].
 
-<<fenv.ml>>=
+<<ofenv.ml>>=
 <<module type Env>>
 module Env (Arg: Arg) = struct <<module Env>> end
 
-<<fenv.ml>>=
+<<ofenv.ml>>=
 module Dirty = Env (struct
     type 'a partial = 'a option
     type 'a info    = 'a Error.error
@@ -718,9 +762,21 @@ module Dirty = Env (struct
     let asgood = function
         | Error.Ok(x) -> Some x
         | Error.Error -> None
+    
+    let update old new' error =
+        E.sequence old
+        ( function
+        | Some x as old when x = new' -> Error.Ok(old)
+        | Some x                      -> ( error ()
+                                         ; Error.Error
+                                         )
+        | None                        -> Error.Ok(Some new') 
+        )
+
+    let default x = Error.Ok(None)
 end)
 
-<<fenv.ml>>=
+<<ofenv.ml>>=
 module Clean = Env (struct
     type 'a partial             = 'a 
     type 'a info                = 'a
@@ -728,6 +784,8 @@ module Clean = Env (struct
     let good x                  = x
     let asgood x                = Some x
     let bad  x                  = assert false
+    let update old new' f       = new'
+    let default x               = x
 end)
 @
 
@@ -735,7 +793,7 @@ end)
 The function [[clean]] translates a dirty environment into a clean
 environment. 
 
-<<fenv.ml>>=
+<<ofenv.ml>>=
 <<clean function>>
 @
 
@@ -762,7 +820,7 @@ type 'proc env'    =  { scopes          :    scope list (* top = hd scopes *)
                       ; srcmap          :    Srcmap.map
                       ; asm             :    'proc Asm.assembler
                       ; error           :    bool
-                      ; metrics         :    Metrics.t
+                      ; target          :    target
                       ; extern          :    extern
                       ; globals         :    string  list(* global registers *)
                       ; stackdata       :    stackdata
@@ -818,7 +876,7 @@ let map f { scopes      = scopes
           ; srcmap      = srcmap     
           ; asm         = asm        
           ; error       = error      
-          ; metrics     = metrics     
+          ; target      = target     
           ; extern      = extern     
           ; globals     = globals    
           ; stackdata   = stackdata  
@@ -827,7 +885,7 @@ let map f { scopes      = scopes
           ; srcmap      = srcmap     
           ; asm         = Asm.map f asm        
           ; error       = error      
-          ; metrics     = metrics     
+          ; target      = target     
           ; extern      = extern     
           ; globals     = globals    
           ; stackdata   = stackdata  
@@ -839,8 +897,13 @@ let map f { scopes      = scopes
 % ------------------------------------------------------------------ 
 
 Given the stack semantics for scopes, the implementation is obvious. 
+The [[Arg.default]] function returns a [[None]] value in case the
+environment is [[Dirty]]; the defaults for a [[Clean]] environment
+should never be used because a clean environment is obtained by
+cleaning a dirty one. 
+
 <<module Env>>=
-let empty map metrics asm =  
+let empty  map asm =  
     { scopes    = []
     ; srcmap    = map
     ; asm       = asm
@@ -850,23 +913,30 @@ let empty map metrics asm =
                   ; soffset    = 0
                   ; sname      = "can't happen"
                   }
-    ; metrics   = metrics
+    ; target    = { memsize    = Arg.default 8
+                  ; endianness = Arg.default Little
+                  ; word       = Arg.default 32
+                  ; pointer    = Arg.default 32
+                  ; float      = Arg.default "ieee754"
+                  ; charset    = Arg.default "latin1"
+                  }
     ; extern    = { imported   = Strutil.Set.empty
                   ; exported   = Strutil.Set.empty
                   ; nam2sym    = Strutil.Map.empty
                   }
     } 
 @
+
 The implementation of the [[scope]] stack provides no surprises.
+
 <<module Env>>=
 let emptyscope          = { venv   = Strutil.Map.empty
                           ; tenv   = Strutil.Map.empty 
                           ; rindex = 0
                           }
 
-let srcmap  {srcmap=m}  = m
-let asm     {asm=a}     = a 
-let metrics {metrics=m} = m 
+let srcmap {srcmap=m}   = m
+let asm    {asm=a}      = a 
 
 let top env = match env.scopes with
     | []    -> assert false
@@ -1030,6 +1100,87 @@ let errorFlag env = env.error
 @
 
 % ------------------------------------------------------------------ 
+\subsection{The \texttt{target} architecture}
+% ------------------------------------------------------------------ 
+
+The [[target]] directive in {\PAL} describes the target architecture
+an program is intended for. The information can be distributed over
+the program and can declare the same fact several times.  However, the
+informations about the target architecture must be consistent. 
+
+The implementation maintains a record of type [[target]] for the target
+informations where each information is captured by an [[option]] type. 
+Once an information has been supplied the [[bind]] functions enforce
+that only the same fact can be entered again.  When an inconsistent
+update is attempted the target information is bound to [[Error]] and an
+error message is issued.
+
+The [[update]] function computes the value inside the target record
+based on an existing value and a new one. In case the target record
+was un-set the new value is returned. Otherwise the new value must
+match the existing one, or an inconsistency was found. In the latter
+case [[Error]] is returned.
+
+<<module Env>>=
+let update_int r map old i errmsg =
+    if   i > 0 
+    then Arg.update old i errmsg
+    else ( error r map "positive number expected"
+         ; Arg.bad ()
+         ) 
+
+<<module Env>>=
+let bindMemsize r n env = (* delendum *)
+    let f ()     = error r env.srcmap "inconsistent memsize specification" in
+    let memsize' = update_int r env.srcmap env.target.memsize n f          in
+    let target'  = { env.target with memsize = memsize' }                  in
+        { env with  target = target' }
+
+<<module Env>>=
+let bindWordsize r n env =
+    let f ()     = error r env.srcmap "inconsistent word size specification" in
+    let word'    = update_int r env.srcmap env.target.word n f               in
+    let target'  = { env.target with word = word' }                          in
+        { env with  target = target' }
+
+let bindPointersize r n env =
+    let f ()     = error r env.srcmap "inconsistent word size specification" in
+    let pointer' = update_int r env.srcmap env.target.pointer n f            in
+    let target'  = { env.target with pointer = pointer' }                    in
+        { env with  target = target' }
+
+<<module Env>>=
+let bindEndianness r e env =
+    let f ()     = error r env.srcmap "inconsistent byteorder specification" in
+    let e'       = Arg.update env.target.endianness e f                      in
+    let target'  = { env.target with endianness = e' }                       in
+        { env with target = target' }
+        
+<<module Env>>=
+let bindFloat r fp env =
+    let f ()     = error r env.srcmap "inconsistent floating point specification" in
+    let fp'      = Arg.update env.target.float fp f               in
+    let target'  = { env.target with float = fp' }                in
+        { env with target = target' }
+
+<<module Env>>=
+let bindCharset r cs env =
+    let f ()     = error r env.srcmap "inconsistent charset specification" in
+    let cs'      = Arg.update env.target.charset cs f                      in
+    let target'  = { env.target with charset = cs' }                       in
+        { env with target = target' }
+
+<<module Env>>=
+let findTarget      env = env.target
+let findMemsize     env = env.target.memsize
+let findEndianness  env = env.target.endianness
+let findPointersize env = env.target.pointer 
+let findWordsize    env = env.target.word    
+let findFloat       env = env.target.float
+let findCharset     env = env.target.charset
+@   
+
+% ------------------------------------------------------------------ 
 \subsection{Imports, Exports, Symbols}
 % ------------------------------------------------------------------ 
 
@@ -1147,7 +1298,6 @@ let clean_reg r =
     { Clean.index = r.Dirty.index
     ; Clean.rhint = clean_rhint r.Dirty.rhint
     ; Clean.loc   = r.Dirty.loc
-    ; Clean.variance = r.Dirty.variance
     }
 
 let rec clean_venv map  =
@@ -1175,6 +1325,27 @@ and clean_tenv map =
         | _          -> assert false
     in
         Strutil.Map.fold copy map Strutil.Map.empty
+<<clean function>>=
+and clean_target = function
+    |   { Dirty.memsize    = E.Ok(Some n)
+        ; Dirty.endianness = E.Ok(Some e)
+        ; Dirty.word       = E.Ok(Some w)
+        ; Dirty.pointer    = E.Ok(Some p)
+        ; Dirty.float      = E.Ok(Some f)
+        ; Dirty.charset    = E.Ok(Some s)
+        } ->
+        { Clean.memsize    = n
+        ; Clean.endianness = ( match e with
+                             | Dirty.Little -> Clean.Little
+                             | Dirty.Big    -> Clean.Big
+                             )
+        ; Clean.word       = w
+        ; Clean.pointer    = p
+        ; Clean.float      = f
+        ; Clean.charset    = s
+        }
+    |   _ -> assert false 
+
 <<clean function>>=
 and clean_extern extern =
     { Clean.imported = extern.Dirty.imported
@@ -1206,9 +1377,33 @@ and clean env =
     ; Clean.srcmap    = env.Dirty.srcmap 
     ; Clean.asm       = env.Dirty.asm
     ; Clean.error     = env.Dirty.error
-    ; Clean.metrics   = env.Dirty.metrics
+    ; Clean.target    = clean_target env.Dirty.target
     ; Clean.stackdata = clean_stackdata env.Dirty.stackdata
     ; Clean.globals   = env.Dirty.globals
     ; Clean.extern    = clean_extern env.Dirty.extern
     }
 @
+<<clean function>>=
+let dirty_metrics env = match env.Dirty.target with
+    |   { Dirty.memsize    = E.Ok(Some n)
+        ; Dirty.endianness = E.Ok(Some e)
+        ; Dirty.word       = E.Ok(Some w)
+        ; Dirty.pointer    = E.Ok(Some p)
+        ; Dirty.float      = E.Ok(Some f)
+        ; Dirty.charset    = E.Ok(Some s)
+        } ->
+        E.Ok 
+        { Metrics.memsize    = n
+        ; Metrics.byteorder = ( match e with
+                             | Dirty.Little -> Rtl.LittleEndian
+                             | Dirty.Big    -> Rtl.BigEndian
+                             )
+        ; Metrics.wordsize   = w
+        ; Metrics.pointersize= p
+        ; Metrics.float      = f
+        ; Metrics.charset    = s
+        }
+    |   _ -> E.Error
+
+
+

@@ -126,7 +126,7 @@ module AstType = struct
     let to_string _ = fun t -> "<ast>" 
   end
 module EnvType = struct
-    type 'a t       = 'a Fenv.Clean.env'
+    type 'a t       = 'a Ofenv.Clean.env'
     let tname       = "env"
     let eq _        = fun x y -> x = y
     let to_string _ = fun t -> "<env>" 
@@ -134,15 +134,15 @@ end
 module ProcType : Lua.Lib.USERTYPE with type 'a t = Ast2ir.proc = 
 struct
     type 'a t       = Ast2ir.proc
-    let tname       = "new proc"
+    let tname       = "proc"
     let eq _        = fun x y -> x = y
-    let to_string _ = fun t -> ("<new proc "^t.Proc.symbol#mangled_text^">") 
+    let to_string _ = fun t -> ("<proc "^t.Proc.symbol#mangled_text^">") 
 end
 module NewTargetType = struct
     type 'a t       = Ast2ir.tgt
-    let tname       = "new target"
+    let tname       = "target"
     let eq _        = fun x y -> x = y
-    let to_string _ = fun t -> "<new target " ^ t.Target.name ^ ">" 
+    let to_string _ = fun t -> "<target " ^ t.Target.name ^ ">" 
 end
 module DocType = struct
     type 'a t       = Pp.doc
@@ -238,8 +238,8 @@ module Map = struct
     let asm = asm' proc
     let venv = EnvV.makemap    V.userdata V.projection
     let env' proc =
-      compose { V.embed   = Fenv.Clean.map proc.V.project
-              ; V.project = Fenv.Clean.map proc.V.embed 
+      compose { V.embed   = Ofenv.Clean.map proc.V.project
+              ; V.project = Ofenv.Clean.map proc.V.embed 
               ; V.is      = (fun _ -> true) } (* and more hope *)
       venv
     let env = env' proc
@@ -252,6 +252,7 @@ module Map = struct
     let outchan       = Luaiolib.out       channel    V.projection
     let stage proc    = V.func (V.value **-> proc **->> V.bool)
     let block         = BlockV.makemap     V.userdata V.projection
+    let placement     = V.enum "placement" ["high", Block.High; "low", Block.Low]
     let automaton     = AutomatonV.makemap V.userdata V.projection
 
     let ccstage       = CCStageV.makemap    V.userdata V.projection
@@ -356,18 +357,12 @@ let wideni n how =
                               else Unsupported.automaton_widen ~have:m ~want:n)
     | s -> V.projection (V.String s) "widening (should be 'multiple' or 'exact')") in
 
-let regalloc stage ctr regs reserve =
-  stage ctr regs (
-    match reserve with
-    | "reserve" -> true
-    | "normal"  -> false
-    | s -> V.projection (V.String reserve)
-               "regs_by_XXX (should be 'reserve' or 'normal')") in 
+let reserve =
+  V.default false (V.enum "register reservation" ["reserve", true; "normal", false]) in
 
 let regty = RL.map in
 let counterty = V.string in
 let counterpred = (V.int <@ (=)) <|> (V.func (V.int **->> V.bool)) in
-let reserve = V.default "normal" V.string in
 let align_fun = (V.int <@ (fun n w -> n)) <|> (V.func (V.int **->> V.int)) in
 
 C.register_module "Automaton"
@@ -384,15 +379,12 @@ C.register_module "Automaton"
                           ~growth:       (field growth    "growth")
                           ~max_alignment:(field V.int     "max_alignment"))
   ; "pad"         , V.efunc (counterty **->> stage) A.pad
-  ; "regs_by_args", V.efunc
-                    (counterty **-> V.list regty **-> reserve **->> stage)
-                    (regalloc A.regs_by_args)
-  ; "regs_by_bits", V.efunc
-                    (counterty **-> V.list regty **-> reserve **->> stage)
-                    (regalloc A.regs_by_bits)
+  ; "regs_by_args", V.efunc (counterty **-> V.list regty **-> reserve **->> stage)
+                    A.regs_by_args
+  ; "regs_by_bits", V.efunc (counterty **-> V.list regty **-> reserve **->> stage)
+                    A.regs_by_bits
   ; "unit"        , stage.V.embed                                     A.unit
-  ; "useregs"     , V.efunc (V.list regty **-> reserve **->> stage)
-                    (fun rs resstr -> A.useregs rs (resstr = "reserve"))
+  ; "useregs"     , V.efunc (V.list regty **-> reserve **->> stage)   A.useregs
   ; "widen"       , V.choose
                     [ V.alt (V.int **-> V.default "exact" V.string **->> stage) wideni
                     ; V.alt ((V.int --> V.int)                     **->> stage) A.widen
@@ -412,17 +404,22 @@ C.register_module "Automaton"
                     register_cc
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
+let block = Map.block in
 C.register_module "Block" 
-  [ "size",       V.efunc (Map.block **->> V.int)     Block.Lua.size
-  ; "alignment",  V.efunc (Map.block **->> V.int)     Block.Lua.alignment
-  ; "adjust",     V.efunc (Map.block **->> Map.block) Block.Lua.adjust
-  ; "cat",        V.efunc (V.int **-> V.list Map.block **->> Map.block) Block.Lua.cat
-  ; "overlap",    V.efunc (V.int **-> V.string **-> V.list Map.block **->> Map.block)
-                          (Block.Lua.overlap C.error)
-  ; "relative",   V.efunc (Map.block **-> V.string **-> V.int **-> V.int 
-                                     **->> Map.block) Block.Lua.relative
-  ; "base",       V.efunc (Map.block **->> V.string) Block.Lua.base
-  ; "constraints",V.efunc (Map.block **->> (V.list V.string)) Block.Lua.constraints
+  [ "size",         V.efunc (block **->> V.int)     Block.Lua.size
+  ; "alignment",    V.efunc (block **->> V.int)     Block.Lua.alignment
+  ; "adjust",       V.efunc (block **->> block)     Block.Lua.adjust
+  ; "cat",          V.efunc (V.int **-> V.list block **->> block) Block.Lua.cat
+  ; "overlap",      V.efunc (V.int **-> Map.placement **-> V.list block **->> block)
+                            Block.Lua.overlap 
+  ; "overlap_low",  V.efunc (V.int **-> V.list block **->> block)
+                            (fun n bs -> Block.Lua.overlap n Block.Low  bs)
+  ; "overlap_high", V.efunc (V.int **-> V.list block **->> block)
+                            (fun n bs -> Block.Lua.overlap n Block.High bs)
+  ; "relative",     V.efunc (block **-> V.string **-> V.int **-> V.int **->> block)
+                            Block.Lua.relative
+  ; "base",         V.efunc (block **->> V.string)          Block.Lua.base
+  ; "constraints",  V.efunc (block **->> (V.list V.string)) Block.Lua.constraints
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Boot" 
@@ -656,7 +653,7 @@ C.register_module "Pic"
 <<lua initialization>>=
 "Expander.x86 = { fn = Expander.x86f, uses = { 'proper widths', 'no vars' }, \
                   name = 'Expander.x86', creates = { 'x86 invariant' }, \
-                  doc = 'A prototype code expander for the x86 (new proc)' } \
+                  doc = 'A prototype code expander for the x86' } \
  Expander.ia64 = { fn = Expander.ia64f, uses = { 'proper widths', 'no vars' }, \
                    name = 'Expander.ia64', creates = { 'ia64 invariant' }, \
                    doc = 'A code expander for the ia64' }"

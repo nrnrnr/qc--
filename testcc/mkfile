@@ -58,43 +58,19 @@ asm :V: ${ARCHS:%=%-asm}
 #
 
 alpha-call.sigs:D:
-  $QCC -e \
-  'Debug.paths_proc(Backend.alpha.target, "C",
-                    { { type = "int"  , widths = {64} }
-                    , { type = "float", widths = {64} }
-                    })
-   Debug.path_2_in_overflow(Backend.alpha.target, "C")' \
-    > $target
+  $QCC tgt=Backend.alpha.target 'iwidths={64}' 'fwidths={64}' gensigs.lua > $target
 
 x86-call.sigs:D:
-  $QCC -e \
-  'Debug.paths_proc(Backend.x86.target, "C",
-                    { { type = "int"  , widths = {32} }
-                    , { type = "float", widths = {32} }
-                    })
-   Debug.path_2_in_overflow(Backend.x86.target, "C")' \
-    > $target
+  $QCC tgt=Backend.x86.target 'iwidths={32}' 'fwidths={32, 64}' gensigs.lua > $target
 
-#
-# should eventually put in widths={64} but for now fails because of
-# unimplemented register aggregation
 mips-call.sigs:D:
-  $QCC -e \
-  'Debug.paths_proc(Backend.mips.target, "C",
-                    { { type = "int"  , widths = {32}     }
-                    , { type = "float", widths = {32, 64} }
-                    })
-   Debug.path_2_in_overflow(Backend.mips.target, "C")' \
-    > $target
+  $QCC tgt=Backend.mips.target 'iwidths={32}' 'fwidths={32, 64}' gensigs.lua > $target
+
+ppc-call.sigs:D:
+  $QCC tgt=Backend.ppc.target 'iwidths={32}' 'fwidths={32, 64}' gensigs.lua > $target
 
 ia64-call.sigs:D:
-  $QCC -e \
-  'Debug.paths_proc(Backend.ia64.target, "C",
-                    { { type = "int"  , widths = {64} }
-                    , { type = "float", widths = {64} }
-                    })
-   Debug.path_2_in_overflow(Backend.ia64.target, "C")' \
-    > $target
+  $QCC tgt=Backend.ia64.target 'iwidths={64}' 'fwidths={64}' gensigs.lua > $target
 
 ppc-call.sigs:D:
   $QCC -e \

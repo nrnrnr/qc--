@@ -44,7 +44,7 @@ will all go away once the new flow graph ([[Cfg]]) takes over the compiler.
 type tgt  = ((Rtl.exp -> Automaton.t), Call.t) Target.t
 type proc = (Automaton.t, Rtl.rtl Cfgx.M.cfg, Call.t, tgt) Proc.t
 val translate :  tgt
-                -> proc Fenv.Clean.env'
+                -> proc Ofenv.Clean.env'
                 -> optimizer: (proc -> unit)
                 -> defineglobals: bool
                 -> Ast.program 
@@ -64,7 +64,7 @@ module AT = Automaton
 module C  = Call
 module Dn = Rtl.Dn
 module E  = Error
-module F  = Fenv.Clean
+module F  = Ofenv.Clean
 module G  = Cfgx.M  (* graph *)
 module R  = Rtl
 module RP = Rtl.Private
@@ -84,6 +84,7 @@ some of the usual suspects.
 <<utilities>>=
 let (<<) f g = fun x -> f (g x) (* function composition *)
 let impossible = Impossible.impossible
+let impossf x  = Printf.kprintf Impossible.impossible x
 @ 
 The [[**>]] function is an infix, right-associative function that
 makes it easy to create sequences of flow-graph nodes.
@@ -135,7 +136,7 @@ let translate target env ~optimizer ~defineglobals =
     <<mutually recursive nest of [[typed_expr]] and [[lvalue]]>> in
     (fun e -> fst (typed_expr e)), typed_expr, lvalue  in
   let expr, typed_expr, lvalue = 
-    let impcont _ _ _ = impossible "continuation at top level" in
+    let impcont _ = impossible "continuation at top level" in
     exprfuns env Strutil.Map.empty impcont in
   <<definitions of [[compile_const]], [[eval_const]], and [[link_const]]>> in
   <<definition of [[proc]], which translates one procedure>> in
@@ -187,7 +188,7 @@ let astwidth env =
   let rec astty = function
     | A.TyAt(x,r)  -> astty x
     | A.BitsTy(n)  -> Types.bits n
-    | A.AliasTy(x) -> snd (F.findt x env) in
+    | A.TypeSynonym(x) -> snd (F.findt x env) in
   tywidth << astty 
 @
 \subsubsection{The meanings of names}
@@ -230,7 +231,7 @@ let rvalue_name x =
   | F.Label(F.Code s)           -> Rtl.link s w
   | F.Label(F.Data s)           -> Rtl.link s w
   | F.Import(_,s)               -> Rtl.link s w
-  | F.Continuation(st,_)        -> cont_rvalue x st w
+  | F.Continuation(_,_)         -> cont_rvalue x
   | F.Label(F.Stack(None))      -> impossible ("no location for "^x)
   | F.Label(F.Stack(Some addr)) -> addr  (* a fetch would be wrong *)
   | F.Variable _                -> atfetch (lvalue_name x) in
@@ -913,9 +914,9 @@ representation.
 We also mark the continuation as escaping.
 <<definition of [[proc]], which translates one procedure>>=
   let continuation l =
-    try Strutil.Map.find l contenv with _ -> impossible "lost cont" in
+    try Strutil.Map.find l contenv with _ -> impossf "lost cont %s" l in
 <<definition of [[cont_rvalue]] for a procedure>>=
-  let cont_rvalue cname coffset w =
+  let cont_rvalue cname =
     let k = continuation cname in
     k.K.escapes <- true;
     Block.base (Contn.rep k.K.rep) in
@@ -1060,7 +1061,7 @@ The main thing here is dealing with all the blocks.
     ; Proc.target      = target
     ; Proc.formals     = formals
     ; Proc.temps       = temps
-    ; Proc.mk_symbol   = Fenv.Clean.symbol env
+    ; Proc.mk_symbol   = Ofenv.Clean.symbol env
     ; Proc.cfg         = g
     ; Proc.oldblocks   = (* parms must be first, so call List.rev *)
         { C.callee = List.rev (oldblocks.callee); 

@@ -143,8 +143,8 @@ Dummy.layout = { creates='no late consts' }
 
 function Dummy.layout.fn(dummy, proc)
     local blocks       = Stack.blocks(proc)
-    blocks.oldblocks.caller   = Block.overlap(32,"low" , blocks.oldblocks.caller)
-    blocks.youngblocks.caller = Block.overlap(32,"high", blocks.youngblocks.caller)
+    blocks.oldblocks.caller   = Block.overlap_low(32, blocks.oldblocks.caller)
+    blocks.youngblocks.caller = Block.overlap_low(32, blocks.youngblocks.caller)
     local layout =
         { blocks.oldblocks.caller
         , blocks.stackdata
@@ -182,10 +182,10 @@ Mips.layout = { creates='no late consts' }
 
 function Mips.layout["C"](dummy, proc)
     local blocks       = Stack.blocks(proc)
-    blocks.oldblocks.callee   = Block.overlap(32,"low",blocks.oldblocks.callee)
-    blocks.oldblocks.caller   = Block.overlap(32,"low",blocks.oldblocks.caller)
-    blocks.youngblocks.callee = Block.overlap(32,"low",blocks.youngblocks.callee)
-    blocks.youngblocks.caller = Block.overlap(32,"low",blocks.youngblocks.caller)
+    blocks.oldblocks.callee   = Block.overlap_low(32,blocks.oldblocks.callee)
+    blocks.oldblocks.caller   = Block.overlap_low(32,blocks.oldblocks.caller)
+    blocks.youngblocks.callee = Block.overlap_low(32,blocks.youngblocks.callee)
+    blocks.youngblocks.caller = Block.overlap_low(32,blocks.youngblocks.caller)
 
   -- Are oldparams and newparams necessary?  Everything seems to work fine
     -- with them commented out... -RO
@@ -225,8 +225,8 @@ end
 
 function Mips.layout["C'"](dummy, proc)
     local blocks       = Stack.blocks(proc)
-    blocks.oldblocks   = Block.overlap(32,"low" , blocks.oldblocks)  
-    blocks.youngblocks = Block.overlap(32,"low" , blocks.youngblocks)
+    blocks.oldblocks   = Block.overlap_low(32, blocks.oldblocks)  
+    blocks.youngblocks = Block.overlap_low(32, blocks.youngblocks)
     local layout =
         { blocks.oldblocks
         , blocks.vfp
@@ -285,10 +285,10 @@ i.e.~argument and result overflow blocks are allocated by the caller.
 <<Lua compiler configuration>>=
 function Alpha.layout["C"](dummy, proc)
     local blocks              = Stack.blocks(proc)
-    blocks.oldblocks.callee   = Block.overlap(64,"low",blocks.oldblocks.callee)
-    blocks.oldblocks.caller   = Block.overlap(64,"low",blocks.oldblocks.caller)
-    blocks.youngblocks.callee = Block.overlap(64,"low",blocks.youngblocks.callee)
-    blocks.youngblocks.caller = Block.overlap(64,"low",blocks.youngblocks.caller)
+    blocks.oldblocks.callee   = Block.overlap_low(64,blocks.oldblocks.callee)
+    blocks.oldblocks.caller   = Block.overlap_low(64,blocks.oldblocks.caller)
+    blocks.youngblocks.callee = Block.overlap_low(64,blocks.youngblocks.callee)
+    blocks.youngblocks.caller = Block.overlap_low(64,blocks.youngblocks.caller)
     local layout =
         { blocks.oldblocks.caller
         , blocks.oldblocks.callee
@@ -400,10 +400,11 @@ function X86.layout["C"](dummy,proc) --- really for a C convention only
     local blocks = Stack.blocks(proc)
     blocks.ra = Block.relative(blocks.vfp, "return address", 4, 4)
 
-    blocks.oldblocks.callee   = Block.overlap(32, "high", blocks.oldblocks.callee)
-    blocks.oldblocks.caller   = Block.overlap(32, "low", blocks.oldblocks.caller)
-    blocks.youngblocks.callee = Block.overlap(32, "high", blocks.youngblocks.callee)
-    blocks.youngblocks.caller = Block.overlap(32, "low", blocks.youngblocks.caller)
+    -- OVERLAP_HIGH CONSIDERED SUSPECT
+    blocks.oldblocks.callee   = Block.overlap_high(32, blocks.oldblocks.callee)
+    blocks.oldblocks.caller   = Block.overlap_low (32, blocks.oldblocks.caller)
+    blocks.youngblocks.callee = Block.overlap_high(32, blocks.youngblocks.callee)
+    blocks.youngblocks.caller = Block.overlap_low (32, blocks.youngblocks.caller)
     local layout = 
                 { blocks.oldblocks.caller       -- <-- high addresses
                 , blocks.oldblocks.callee
@@ -447,10 +448,10 @@ function X86.layout["C--"](dummy,proc)
     -- first old block is always the incoming parms
     blocks.oldblocks.callee[1] =
                     Block.cat(32, {blocks.oldblocks.callee[1], blocks.ra, blocks.vfp})
-    blocks.oldblocks.caller    = Block.overlap(32, "low", blocks.oldblocks.caller)
-    blocks.oldblocks.callee    = Block.overlap(32, "high", blocks.oldblocks.callee)
-    blocks.youngblocks.caller  = Block.overlap(32, "low", blocks.youngblocks.caller)
-    blocks.youngblocks.callee  = Block.overlap(32, "high", blocks.youngblocks.callee)
+    blocks.oldblocks.caller    = Block.overlap_low (32, blocks.oldblocks.caller)
+    blocks.oldblocks.callee    = Block.overlap_high(32, blocks.oldblocks.callee)
+    blocks.youngblocks.caller  = Block.overlap_low (32, blocks.youngblocks.caller)
+    blocks.youngblocks.callee  = Block.overlap_high(32, blocks.youngblocks.callee)
     local layout = 
                 { blocks.oldblocks.caller       -- <-- high addresses
                 -- On return, the ra must end up here, immediately followed by the sp
@@ -489,10 +490,10 @@ end
 
 function Ia64.layout["C"](dummy,proc) --- really for a C convention only
     local blocks = Stack.blocks(proc)
-    blocks.oldblocks.callee   = Block.overlap(64, "high", blocks.oldblocks.callee)
-    blocks.oldblocks.caller   = Block.overlap(64, "low", blocks.oldblocks.caller)
-    blocks.youngblocks.callee = Block.overlap(64, "high", blocks.youngblocks.callee)
-    blocks.youngblocks.caller = Block.overlap(64, "low", blocks.youngblocks.caller)
+    blocks.oldblocks.callee   = Block.overlap_high(64, blocks.oldblocks.callee)
+    blocks.oldblocks.caller   = Block.overlap_low (64, blocks.oldblocks.caller)
+    blocks.youngblocks.callee = Block.overlap_high(64, blocks.youngblocks.callee)
+    blocks.youngblocks.caller = Block.overlap_low (64, blocks.youngblocks.caller)
     local layout = 
                 { blocks.oldblocks.caller       -- <-- high addresses
                 , blocks.oldblocks.callee
@@ -524,10 +525,10 @@ function Interp.layout(dummy, proc)
         , blocks.vfp
         , blocks.sp
         , blocks.spills
-        , Block.overlap(32, "low",  blocks.oldblocks.caller)
-        , Block.overlap(32, "low",  blocks.oldblocks.callee)
-        , Block.overlap(32, "high", blocks.youngblocks.caller)
-        , Block.overlap(32, "high", blocks.youngblocks.callee)
+        , Block.overlap_low (32, blocks.oldblocks.caller)
+        , Block.overlap_low (32, blocks.oldblocks.callee)
+        , Block.overlap_high(32, blocks.youngblocks.caller)
+        , Block.overlap_high(32, blocks.youngblocks.callee)
         }
     local block = Block.cat(32, layout)
     Stack.freeze(proc, block)
