@@ -187,16 +187,11 @@ assembly-language output for [[.word]] and [[.half]].
 The SPARC has no 8-byte emission unit, so I fake one, assuming big-endian order.
 <<assembly methods>>=
 method value (v:Bits.bits) = 
-  let altfmt v =
-    let i64 = Bits.U.to_int64 v in
-    if Uint64.lt i64 (Uint64.of_int 256) then
-      string_of_int (Int64.to_int i64)
-    else
-      hexbits v  in
+  let altfmt = Bits.to_hex_or_decimal_string ~declimit:256 in
   match Bits.width v with
-  |  8 -> fprintf _fd ".byte %s\n"  (decbits v)
+  |  8 -> fprintf _fd ".byte %s\n" (decbits v)
   | 16 -> fprintf _fd ".word %s\n" (altfmt v)
-  | 32 -> fprintf _fd ".long %s\n"  (altfmt v)
+  | 32 -> fprintf _fd ".long %s\n" (altfmt v)
   | 64 ->
       let i = Bits.U.to_int64 v in
       output_string _fd (Int64.format ".long 0x%x\n" (Int64.shift_right_logical i 32));

@@ -72,8 +72,17 @@ end
 %subsection{Debugging} 
 % ------------------------------------------------------------------ 
 
+Function [[to_string]] converts to a string for debugging.
+Function [[to_decimal_string]] converts to a decimal string, possibly
+with sign.
+Function [[to_hex_or_decimal_string]] converts to decimal if the
+argument is ``unsigned less then'' [[declimit]]; otherwise it converts
+to form [["0x%x"]].
+
 <<bits.mli ((evaluating))>>=
-val to_string: bits -> string
+val to_string         : bits -> string
+val to_decimal_string : bits -> string
+val to_hex_or_decimal_string : declimit:int -> bits -> string
 @
 
 % ------------------------------------------------------------------ 
@@ -331,6 +340,13 @@ let check w =
 let zero w      = check w; (I.zero, w)
 
 let to_string (i,w) = Printf.sprintf "0x%Lx::bits%d" i w 
+let to_decimal_string (i,w) = Printf.sprintf "%Ld" i
+let to_hex_or_decimal_string ~declimit (i,w) =
+  assert (declimit >= 0);
+  if Uint64.lt i (I.of_int declimit) then
+    Printf.sprintf "%Ld" i
+  else
+    Printf.sprintf "0x%Lx" i
 @
 
 % ------------------------------------------------------------------ 
