@@ -37,7 +37,11 @@ val exp: out_channel -> Rtl.exp -> unit
 <<ToLua>>=
 module R     = Rtl.Private
 let fprintf  = Printf.fprintf
+
+let (<<) f g = fun x -> f (g x)
 @ 
+
+We first define a number of helper functions.
 
 <<ToLua>>=
 let quoted        q = "\"" ^ q ^ "\""
@@ -45,13 +49,13 @@ let quoted        q = "\"" ^ q ^ "\""
 let parenthesized p = "("  ^ p ^ ")"
 let luafunc       f args = "CMM." ^ f ^ parenthesized args ^ "\n"
 
-let push   kind c = luafunc ("push_" ^ kind) c
-let nopush kind c = c
+let luapush  kind c = luafunc ("push_" ^ kind) c
 
-let valstack   op s = op ^ s
-let argspace        = valstack
-let globalspace     = valstack
-let commentout _  _ = "comment"
+let valstack    op s = op ^ s
+let argspace    op s = op ^ s
+let globalspace op s = op ^ s
+let localspace  op s = op ^ s
+let commentout  _  _ = "comment"
 
 let tybits b = 
   match b with
@@ -59,61 +63,99 @@ let tybits b =
   | Types.Bits(i) -> "bits" ^ string_of_int i
 
 let hexbits v      = quoted (Printf.sprintf "0x%Lx" (Bits.U.to_int64 v))
-
-let const f c =
-    match c with
-    | R.Bool(true)    -> f "literal" (quoted "0x1" ^ ",1")
-    | R.Bool(false)   -> f "literal" (quoted "0x0" ^ ",1")
-    | R.Bits b        -> f "literal" (hexbits b ^ "," ^ 
-                                      string_of_int (Bits.width b))
-
-    | R.Link(sym,  _) -> f "symbol" (quoted sym#mangled_text)
-    | R.Late(name, _) -> f "symbol" (quoted name)
 @ 
 
+Function [[const]] converts an RTL constant to the Lua string form that causes
+this constant to be pushed atop the interpreter's value stack.
+
 <<ToLua>>=
+(* const : Rtl.Private.const -> string *)
+let const c =
+    match c with
+    | R.Bool(true)    -> luapush "literal" (quoted "0x1" ^ ",1")
+    | R.Bool(false)   -> luapush "literal" (quoted "0x0" ^ ",1")
+    | R.Bits b        -> luapush "literal" (hexbits b ^ "," ^ 
+                                      string_of_int (Bits.width b))
+
+    | R.Link(sym,  _) -> luapush "symbol" (quoted sym#mangled_text)
+    | R.Late(name, _) -> luapush "symbol" (quoted name)
+@ 
+
+[[opr]] converts an RTL operator (with given width instantiation) to an
+interpreter-style operator application, complete with width hints.
+
+<<ToLua>>=
+(* opr : string -> width list -> string *)
 let opr op w = 
   let opty, result = Rtlop.Types.mono (Rtl.opr op w) in
   luafunc "apply_operator"  ((quoted op) ^ "," ^
                              (quoted 
                                 ((String.concat "," (List.map tybits opty)) ^ 
                                  ":" ^ (tybits result))))
+@ 
 
+[[byteorder]] and [[alignment]] simply convert memory aggregation and
+alignment specifications and to Lua string form.
+For now, we convert all byteorder specifications to [["NATIVE"]] so we can
+more easily test code on different platforms without having to change
+[[target byteorder]] declarations.
+
+<<ToLua>>=
+(* byteorder : Rtl.aggregation -> string *)
 let byteorder = function
   | Rtl.BigEndian    -> quoted "NATIVE"
   | Rtl.LittleEndian -> quoted "NATIVE"
   | Rtl.Identity     -> Impossible.impossible "rtltolua cannot handle Identity"
 
-(* what is identity? *)
+let alignment _ = "0" (* string_of_int i *)
+@ 
 
-let alignment _ = "0"
- (* string_of_int *)
+[[expr']] is a private function that converts an RTL expression into its
+Lua string form.
+It, in turn, makes calls to [[const]], [[opr]], and [[location']] for
+assistance.
 
-let rec expr' f e =
+<<ToLua>>=
+(* expr' : Rtl.Private.exp -> string *)
+let rec expr' e =
     match e with
-    | R.Const c           -> const f c
+    | R.Const c           -> const c
 
+(* this was an attempt to figure out something about stackdata *)
+(* ***************************************************************************
     | R.Fetch(R.Mem (_,_,_,R.App(_,(R.Fetch(R.Reg('c',1,_),_))::ee),_), _) -> 
         let examine appexp =
           match appexp with
           | (R.Const (R.Bool _)) -> ""
           | (R.Const (R.Bits _)) -> ""        
-          | (R.Const c)          -> const f c
+          | (R.Const c)          -> const c
           | (_)                  -> ""
         in
             (String.concat "\n" (List.map examine ee))
+  ************************************************************************* *)
 
     | R.Fetch(loc, _)     -> 
         let (prefix, func_f, func_suffix, args) = location' loc in
         prefix ^ luafunc (func_f "fetch" func_suffix) args
-    | R.App((op, ww), ee) -> (String.concat "\n" (List.map (expr' push) ee)) ^ 
+    | R.App((op, ww), ee) -> (String.concat "\n" (List.map expr' ee)) ^ 
                              opr op ww
+
 @ 
 
+Helper [[location']] converts an RTL location into a 4-tuple of the form:
+$(prefix, func, funcSuffix, args)$.
+The plan is for this location tuple to ultimately be converted in the Lua
+function call $concat(prefix, func(X), funcSuffix)$[[(]]$args$[[)]] for some
+$X$ (likely either [[fetch]] or [[store]]).
+This allows us to retain similar structure whether we are making a fetch or
+a store.
+
 <<ToLua>>=
+(* location' : Rtl.Private.loc -> string * (string -> string -> string) *
+                                  string * string                            *)
 and location' = function
     | R.Mem (sp, agg, width, e, ass) -> 
-        ( expr' push e
+        ( expr' e
         , valstack
         , ""
         , string_of_int width ^ "," ^ byteorder agg ^ "," ^ alignment ass
@@ -148,28 +190,47 @@ and location' = function
                                         
     | R.Var   (name, index, width)   -> 
         ( ""
-        , valstack
+        , localspace
         , "_local"
         , string_of_int index
         )
-                 
+
+    (* NOTE: should R.Slice just fail an assertion? *)                 
     | R.Slice (w, i, loc)              -> 
         let (p, ff, s, a) = location' loc in ("-- slice\n" ^ p, ff, s, a)
+@ 
 
-(* NOTE: should R.Slice just fail an assertion? *)
+We export these mutually recursive functions [[expr']] and [[location']] via
+wrappers [[expr]] and [[location]], which take care of converting RTLs into
+private RTLs (and additionally take care of outputting strings in the case
+of [[expr]]).
 
-let (<<) f g   = fun x -> f (g x)
-
-let expr fd rtl = output_string fd ((expr' push) (Rtl.Dn.exp rtl))
+<<ToLua>>=
+let expr fd rtl = output_string fd (expr' (Rtl.Dn.exp rtl))
 let location  = location' << Rtl.Dn.loc
 @ 
 
-<<ToLua>>=
-let guard = function
-  | R.Const (R.Bool true) -> (""          , "" )
-  | g                     -> (expr' push g, "g")
+[[guard]] takes a guarded expression and yields a string form of the expression
+as well as a prefix to be used with any store operations (indicating whether
+or not the store is to be guarded).
 
-let print_rtl fd gg =
+<<ToLua>>=
+(* guard : Rtl.Private.exp -> string * string *)
+let guard = function
+  | R.Const (R.Bool true) -> (""     , "" )
+  | g                     -> (expr' g, "g")
+@ 
+
+Finally, [[rtl']] actually prints out an RTL in Lua form.
+To deal with the possibility of multiple assignments, it emits code that: 
+first evaluates the right-hand sides of all stores (having an effect of pushing
+the the values of the right-hand sides on the stack), and then performing the
+stores in reverse-order (because we are using a first-in first-out stack).
+
+Additionally, we take care to deal with guarded stores correctly.
+
+<<ToLua>>=
+let rtl' fd (R.Rtl gg) =
    let get_store = function
                  | (_ , R.Kill _)              -> 
                      Impossible.impossible "rtltolua : Rtl.Kill"
@@ -180,7 +241,7 @@ let print_rtl fd gg =
                      (fun ((gd_prefix, gd_f_prefix), 
                            (prefix, func_f, func_suffix, args), exp, w
                           ) -> 
-                       ( output_string fd (gd_prefix ^ prefix ^ expr' push exp)
+                       ( output_string fd (gd_prefix ^ prefix ^ expr' exp)
                        ; luafunc (gd_f_prefix ^ func_f "store" func_suffix)
                                  args
                        )
@@ -189,14 +250,10 @@ let print_rtl fd gg =
     List.iter (output_string fd) gg_stores
 @
 
+As above, we export [[rtl']] as [[rtl]]; and we export [[expr]] as [[exp]].
+
 <<ToLua>>=
-let rec rtl' fd (R.Rtl gg) = match gg with
-    | [] -> fprintf fd "-- skip\n"    
-    | _  -> print_rtl fd gg
-
 (* exported functions *)
-
 let rtl fd = (rtl' fd) << Rtl.Dn.rtl
 let exp    = expr
 @ 
-
