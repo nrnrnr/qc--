@@ -175,10 +175,11 @@ val gm_call:    cfg -> Rtl.rtl -> conts -> succ:node -> node
 val gm_branch:  cfg -> Rtl.rtl -> ifso:node -> ifnot:node -> node
 
 (* cfg mutators, ensures: not (enumerated cfg) *)
+(* all assignment insertions return the new node *)
 val gm_redirect_all:            src:node -> olddst:node -> newdst:node -> unit
-val gm_insert_assign_after:     Rtl.rtl list -> node -> unit (* see descr! *)
-val gm_insert_assign_before:    Rtl.rtl list -> node -> unit (* any node   *)
-val gm_insert_assign_between:   Rtl.rtl list -> src:node -> dst:node -> unit
+val gm_insert_assign_after:     node -> Rtl.rtl -> node (* see descr! *)
+val gm_insert_assign_before:    Rtl.rtl -> node -> node (* any node   *)
+val gm_insert_assign_between:   Rtl.rtl -> src:node -> dst:node -> node
 val gm_insert_dataflow_between: defs:locs -> uses:locs -> kills:locs ->
                                 src:node -> dst:node -> unit
 val gm_enumerate:               cfg -> unit (* post: enumerated cfg *)
@@ -359,27 +360,35 @@ Note, if several outgoing edges of a node point to the same
 successor, they \emph{all} get updated to the new node.  Hence,
 [[gm_redirect_all]] is not fully general.
 
-\item [[gm_insert_assign_after:    Rtl.rtl list -> node -> unit]]:
-Inserts [[assign]] nodes $a$ after a node $n$, using the supplied
-{\rtl}s.  It is a checked run-time error if the node $n$ was not created
+\item [[gm_insert_assign_after:    node -> Rtl.rtl -> node]]:
+Inserts [[assign]] node $a$ after a node $n$, using the supplied
+{\rtl}. 
+Returns~$a$.
+The signature is tuned for use with [[List.fold_left]].
+
+
+It is a checked run-time error if the node $n$ was not created
 by the [[gm_assign]] function, or is the [[entry]] node. This guarantees
 that it has only one outgoing edge and therefore this operation is well
 defined.  The (single) successor of $n$ becomes the successor of $a$ and
 $a$ becomes the only successor of $n$. 
 
-\item [[gm_insert_assign_before: Rtl.rtl list -> node -> unit]]:
-Places a sequence of [[assign]] nodes bewfore [[node]] such that
-\emph{all} incoming edges of [[node]] lead to the first node of the
-assignment sequence instead, and [[node]] becomes the (only) successor
-of the last assign-node.
+\item [[gm_insert_assign_before: Rtl.rtl -> node -> node]]:
+Inserts assign node~$a$ before [[node]] such that
+\emph{all} incoming edges of [[node]]  are redirected to point to~$a$.
+Therefore $a$~becomes the only predecessor of~[[node]].
+Returns~$a$.
+The signature is tuned for use with [[List.fold_right]].
 
 \item 
-[[gm_insert_assign_between: Rtl.rtl list -> src:node -> dst:node -> unit]]:
-Inserts assign nodes on every edge leading from [[src]] to [[dst]]. 
+[[gm_insert_assign_between: Rtl.rtl -> src:node -> dst:node -> node]]:
+Inserts assign node~$a$ before [[dst]], and every edge from  [[src]]
+to [[dst]] is redirected to point to~$a$.
 The predecessor/successor relationship of all nodes is updated to
 reflect the insertion of the assign nodes on all affected edges.  It
-is a checked run-time error, if no edge between [[src]] and [[dst]]
+is a checked run-time error if no edge between [[src]] and [[dst]]
 exists.
+Returns~$a$.
 
 \item
 \begin{verbatim}
@@ -685,21 +694,14 @@ let gm_branch = new X.branch
 let gm_redirect_all ~src ~olddst ~newdst =
     src#upd_succ (fun n -> if n = olddst then newdst else n)
 
-let gm_insert_assign_before (rtls:Rtl.rtl list) (node:node) =
-    let node = List.fold_right 
-                    (fun rtl n -> n#insert_assign_before rtl) rtls node 
-    in ()               
+let gm_insert_assign_before (rtl:Rtl.rtl) (node:node) =
+    node#insert_assign_before rtl
 
-let gm_insert_assign_after (rtls:Rtl.rtl list) (node:node) =
-    let node = List.fold_left
-                    (fun n rtl -> n#insert_assign_after rtl) node rtls
-    in ()
+let gm_insert_assign_after (node:node) (rtl:Rtl.rtl) =
+    node#insert_assign_after rtl
 
-let gm_insert_assign_between (rtls:Rtl.rtl list) (src:node) (dst:node) =
-    let node = List.fold_left
-                    (fun n rtl -> n#insert_assign_between rtl src) dst rtls
-    in ()
-    
+let gm_insert_assign_between (rtl:Rtl.rtl) (src:node) (dst:node) =
+    dst#insert_assign_on_edges_from rtl src
 
 let gm_insert_dataflow_between ~defs ~uses ~kills ~src ~dst =
     let cfg  = src#cfg          in
@@ -867,7 +869,7 @@ and node = object
     
     method insert_assign_before:  Rtl.rtl -> node (* returns new node *)
     method insert_assign_after :  Rtl.rtl -> node (* returns new node *)  
-    method insert_assign_between: Rtl.rtl -> before:node -> node (* new node *)
+    method insert_assign_on_edges_from: Rtl.rtl -> before:node -> node (* new node *)
 
     method comment:     string          (* included into ast *)
     method ast:         mangle:(string->string) 
@@ -911,8 +913,8 @@ end
       successor of [[this]] becomes the successor of the new node, which
       in turn becomes the new successor of [[this]].
 
-\item [[insert_assign_between]] creates a new [[assign]] node from an
-      [[Rtl.rtl]] and places it between [[this]] node and the node
+\item [[insert_assign_on_edges_from rtl before]] creates a new [[assign]] node from an
+      [[rtl]] and places it between [[this]] node and the node
       [[before]]. The new node is returned. All edges leading from the
       [[before]] node to [[this]] node lead through the new node afer
       the method is completed. It is a checked run-time error if no edge
@@ -1288,7 +1290,7 @@ object(this)
     method insert_assign_after (rtl:Rtl.rtl) = 
         invalid_arg "Cfg3: add_assign_after method for non-assignment node"
 
-    method insert_assign_between (rtl:Rtl.rtl) (before:node) =
+    method insert_assign_on_edges_from (rtl:Rtl.rtl) (before:node) =
         let ()          = assert (NodeSet.mem before _pred) in
         let this        = (this :> node) in
         let assign      = new assign _cfg rtl this in

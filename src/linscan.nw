@@ -616,12 +616,16 @@ edges for [[node]].
 and upd_incoming target interval spillee mem node =
     let pred  = extern interval (G.pred node) in
     let spill = target.T.spill target.T.space spillee mem in
-        List.iter (fun n -> G.gm_insert_assign_between spill n node) pred
+        List.iter (fun n -> insert_between spill n node) pred
 
 and upd_outgoing target interval spillee mem node = 
     let succ    = extern interval (G.succ node) in
     let reload  = target.T.reload target.T.space spillee mem          in
-        List.iter (fun n -> G.gm_insert_assign_between reload node n) succ
+        List.iter (fun n -> insert_between reload node n) succ
+
+and insert_between rtls node before =
+  ignore
+    (List.fold_right (fun rtl n -> G.gm_insert_assign_between rtl before n) rtls node)
 @
 
 The heart of the spiller is [[update]] that is applied to every
@@ -633,6 +637,12 @@ is held inside the [[interval]].  Edges entering or leaving the
 interval must be also updated such that the spillee's value is written
 to and read from [[mem]]. 
     
+\begin{quote}
+\emph{Question: is it really safe to use [[insert_before]] and
+[[insert_after]] in these cases, or are we better off using
+[[insert_between]]?}
+\end{quote}
+
 <<update>>=
 and update target interval spillee mem node = 
     upd_incoming target interval spillee mem node ;    
@@ -641,11 +651,11 @@ and update target interval spillee mem node =
             ( let tmp   = target.T.mk_tmp spillee in
               let subst = fun x -> if x = spillee then tmp else x in 
               ( if reads  then 
-                    (G.gm_insert_assign_before 
-                        (target.T.reload target.T.space tmp mem) node)
+                    ignore (List.fold_right G.gm_insert_assign_before
+                              (target.T.reload target.T.space tmp mem) node)
               ; if writes then 
-                    (G.gm_insert_assign_after  
-                        (target.T.spill  target.T.space tmp mem) node)
+                    ignore (List.fold_left G.gm_insert_assign_after node
+                              (target.T.spill  target.T.space tmp mem))
               ; G.set_rtl node (Rtlutil.Subst.reg subst)
               )
             );
