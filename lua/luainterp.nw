@@ -733,6 +733,7 @@ end
 
 %type <Ast.lval> var
 
+%token EOF
 %token COMMA LBRA RBRA LT GT COLON SEMI HAT STAR
 %token SLASH LPAR RPAR GETS PLUS MINUS DOT LSQ RSQ 
 
@@ -960,3 +961,266 @@ decinit	  : /* empty */  { [] }
 %%
 
 end
+
+% ------------------------------------------------------------------ 
+\subsection{Scanner}
+% ------------------------------------------------------------------ 
+
+\begin{itemize}
+\item The scanner compiles, but is untested otherwise.
+\item Pragma lines, starting with a [[$]] are skipped.
+\item The entry point of the scanner is [[token]]:
+      $$[[val token : Lexing.lexbuf -> Srcmap.map -> Parse.token]]$$
+
+      The second argument is a source map, that allows to reconstruct 
+      filename, line, and column from a character offset. The first
+      action after such a map was created using [[Srcmap.mk ()]] should
+      be a call to [[Srcmap.sync map 0 (filename,1,1)]] to establish 
+      a sync-point for the first character in the scanned character
+      stream. See the documentation of [[Srcmap]] for details.
+\end{itemize}
+
+<<scan.mll>>=
+{
+    module P = Parse     (* tokens are defined here *)
+    
+    exception Scan of string
+    
+    let error msg   = raise (Scan msg)
+
+    (* called at *every* newline in the source code *)
+    let nl lexbuf map =
+        let next = (Lexing.lexeme_start lexbuf) + 1     in
+            Srcmap.nl map next
+            
+    let location lexbuf map =
+        Srcmap.location map (Lexing.lexeme_start lexbuf)
+         
+    let get         = Lexing.lexeme
+    let getchar     = Lexing.lexeme_char
+    let strlen      = String.length
+    let pos_start   = Lexing.lexeme_start
+    let pos_end     = Lexing.lexeme_end
+
+    let keywords    = Hashtbl.create 27
+    let keyword s   = Hashtbl.find keywords s
+    let _ = Array.iter (fun (str,tok) -> Hashtbl.add keywords str tok)
+      [| ("and"         , P.AND)
+      ;  ("case"        , P.CASE)
+      ;  ("do"          , P.DO)
+      ;  ("else"        , P.ELSE)
+      ;  ("elseif"      , P.ELSEIF)
+      ;  ("end"         , P.END)
+      ;  ("function"    , P.FUNCTION)
+      ;  ("globmatch"   , P.GLOBMATCH)
+      ;  ("if"          , P.IF)
+      ;  ("local"       , P.LOCAL)
+      ;  ("nil"         , P.NIL)
+      ;  ("not"         , P.NOT)
+      ;  ("of"          , P.OF)
+      ;  ("or"          , P.OR)
+      ;  ("repeat"      , P.REPEAT)
+      ;  ("return"      , P.RETURN)
+      ;  ("then"        , P.THEN)
+      ;  ("until"       , P.UNTIL)
+      ;  ("while"       , P.WHILE) 
+      |]
+
+}
+
+
+let digit       = ['0'-'9']
+let alpha       = ['a'-'z' 'A'-'Z']
+let misc        = ['_']
+
+let sign        = ['+' '-']
+let exp         = ['e''E'] sign? digit+
+
+let number      = digit+ 
+                | digit+ '.' digit+ exp?
+
+let id          = (alpha | misc) (alpha | misc | digit)*
+let ws          = [' ' '\r'] (* newline gets extra treatment! *)
+let nl          = '\n'
+
+(* map is a Srcmap.map value that is used to record all newlines
+   such that every character position can be translated into
+   a file/line/column triple *)
+
+rule token = parse      (* raise Error in case of error *)
+    eof         { fun map ->  P.EOF }
+  | ws+         { fun map ->  token lexbuf map }
+  | nl          { fun map -> nl lexbuf map ; token lexbuf map }
+  | nl '$'      { fun map -> (* skip pragma line *)
+                  ( nl lexbuf map
+                  ; skip lexbuf map
+                  )
+                }
+  | '$'         { fun map -> (* skip pragma line *) 
+                  if Lexing.lexeme_start lexbuf = 0 then 
+                    skip lexbuf map     
+                  else
+                    error "illegal character" 
+                }
+                
+  | '#'         { fun map ->  (* skip # line if it's the first line *)
+                  if Lexing.lexeme_start lexbuf = 0 then 
+                    skip lexbuf map     
+                  else
+                    error "illegal character" 
+                }
+  | id          { fun map ->  let s = get lexbuf in
+                    try keyword s with Not_found -> P.NAME s
+                }
+
+  | number      { fun map ->  
+                  let s = get lexbuf in P.NUMBER (float_of_string s) 
+                }
+  
+  | ".."        { fun map ->  P.CONC  }
+  | "..."       { fun map ->  P.DOTS  }
+  | "<="        { fun map ->  P.LE    }
+  | "=="        { fun map ->  P.EQ    }
+  | "=>"        { fun map ->  P.ARROW }
+  | ">="        { fun map ->  P.GE    }
+  | "~="        { fun map ->  P.NE    }
+  | '('         { fun map ->  P.LPAR  }
+  | ')'         { fun map ->  P.RPAR  }
+  | '*'         { fun map ->  P.STAR  }
+  | '+'         { fun map ->  P.PLUS  }
+  | ','         { fun map ->  P.COMMA }
+  | '-'         { fun map ->  P.MINUS }
+  | '.'         { fun map ->  P.DOT   }
+  | '/'         { fun map ->  P.SLASH }
+  | ':'         { fun map ->  P.COLON }
+  | ';'         { fun map ->  P.SEMI  }
+  | '<'         { fun map ->  P.LT    }
+  | '='         { fun map ->  P.GETS  }
+  | '>'         { fun map ->  P.GT    }
+  | '['         { fun map ->  P.LSQ   }
+  | ']'         { fun map ->  P.RSQ   }
+  | '^'         { fun map ->  P.HAT   }
+  | '{'         { fun map ->  P.LBRA  }
+  | '}'         { fun map ->  P.RBRA  }
+
+ (* this token is defined in the LUA lex.c file but is not used
+  | '~'         { fun map ->  P.TILDE }   
+  *)
+
+  | "--" [^ '\n']*
+                { fun map ->  token lexbuf map }
+  | '\''        { fun map ->  shortstring lexbuf map "\'" (Buffer.create 80) }
+  | '"'         { fun map ->  shortstring lexbuf map "\"" (Buffer.create 80) }
+  | "[["        { fun map ->  longstring  lexbuf map (Buffer.create 160) }
+
+  | _           { fun map ->  error "illegal character" } 
+
+and skip = parse        (* skip to end of line *)
+    eof         { fun map ->  P.EOF        }
+  | [^'\n']+    { fun map ->  skip lexbuf map }
+  | nl          { fun map ->  nl lexbuf map ; token lexbuf map }
+
+and longstring = parse  (* parse a [[ .. ]] string *)
+    eof         { fun map buf -> error "end of file in [[..]] string" }
+  | "]]"        { fun map buf -> P.STRING (Buffer.contents buf) }
+  | [^']' '\n']+
+  | ']'         { fun map buf -> 
+                  let s = get lexbuf in
+                  ( Buffer.add_string buf s
+                  ; longstring lexbuf map buf
+                  )
+                }
+  | nl          { fun map buf -> 
+                   ( Buffer.add_char buf '\n'
+                   ; nl lexbuf map
+                   ; longstring lexbuf map buf
+                   )
+                }  
+
+and shortstring = parse (* parse an eos delimited string *)
+    eof         { fun map eos buf -> error "end of file in string" } 
+  | '\n'        { fun map eos buf -> error "end of line in string" }
+  | '\\' _      { fun map eos buf -> 
+                  let c = getchar lexbuf 1 in
+                  let k = match c with
+                      | 'n'  -> '\n'
+                      | 't'  -> '\t'
+                      | 'r'  -> '\r'
+                      | '\n' -> '\n'
+                      | _    -> c
+                  in   
+                     ( Buffer.add_char buf k
+                     ; shortstring lexbuf map eos buf
+                     )
+                 }
+  | [^'"' '\'' '\n' '\\']+  
+                 { fun map eos buf -> 
+                   let s = get lexbuf  in
+                     ( Buffer.add_string buf s
+                     ; shortstring lexbuf map eos buf
+                     )
+                 }
+  | ['"' '\'' ]  { fun map eos buf ->
+                   let s = get lexbuf in
+                      if s = eos then
+                        P.STRING (Buffer.contents buf)
+                      else
+                        ( Buffer.add_string buf s
+                        ; shortstring lexbuf map eos buf
+                        )
+                  }
+  | _             { fun map eos buf -> assert false }
+{
+        let tok2str = function
+          | P.AND         -> "AND"
+          | P.ARROW       -> "ARROW"
+          | P.CASE        -> "CASE"
+          | P.COLON       -> "COLON"
+          | P.COMMA       -> "COMMA"
+          | P.CONC        -> "CONC"
+          | P.DO          -> "DO"
+          | P.DOT         -> "DOT"
+          | P.DOTS        -> "DOTS"
+          | P.ELSE        -> "ELSE"
+          | P.ELSEIF      -> "ELSEIF"
+          | P.END         -> "END"
+          | P.EOF         -> "EOF"
+          | P.EQ          -> "EQ"
+          | P.FUNCTION    -> "FUNCTION"
+          | P.GE          -> "GE"
+          | P.GETS        -> "GETS"
+          | P.GLOBMATCH   -> "GLOBMATCH"
+          | P.GT          -> "GT"
+          | P.HAT         -> "HAT"
+          | P.IF          -> "IF"
+          | P.LBRA        -> "LBRA"
+          | P.LE          -> "LE"
+          | P.LOCAL       -> "LOCAL"
+          | P.LPAR        -> "LPAR"
+          | P.LSQ         -> "LSQ"
+          | P.LT          -> "LT"
+          | P.MINUS       -> "MINUS"
+          | P.NAME x      -> "NAME("^x^")"  
+          | P.NE          -> "NE"
+          | P.NIL         -> "NIL"
+          | P.NOT         -> "NOT"
+          | P.NUMBER _    -> "NUMBER" 
+          | P.OF          -> "OF"
+          | P.OR          -> "OR"
+          | P.PLUS        -> "PLUS"
+          | P.RBRA        -> "RBRA"
+          | P.REPEAT      -> "REPEAT"
+          | P.RETURN      -> "RETURN"
+          | P.RPAR        -> "RPAR"
+          | P.RSQ         -> "RSQ"
+          | P.SEMI        -> "SEMI"
+          | P.SLASH       -> "SLASH"
+          | P.STAR        -> "STAR"
+          | P.STRING x    -> "STRING("^x^")" 
+          | P.THEN        -> "THEN"
+          | P.UNARY       -> "UNARY"
+          | P.UNTIL       -> "UNTIL"
+          | P.WHILE       -> "WHILE"
+          | P.WRONGTOKEN  -> "WRONGTOKEN"
+    }          
+@

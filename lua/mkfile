@@ -1,6 +1,11 @@
-TOP=..
+TOP    =        ..
+LIBDIR =        ../lib
+
 <../config/ocaml.mk
 <../config/noweb.mk
+
+OCAMLC_FLAGS=-I $LIBDIR
+OCAMLO_FLAGS=-I $LIBDIR
 
 all:V: lua.cmi lua.cmo parse.cmo parse.cmi
 src:V: lua.ml lua.mli
@@ -8,6 +13,9 @@ src:V: lua.ml lua.mli
 parsex.mly: lua.nw
 	notangle -Rparse.mly $prereq | 
 	sed "s/','/COMMA/g;s/'{'/LBRA/g;s/'}'/RBRA/g;s/'<'/LT/g;s/'>'/GT/g;s/':'/COLON/g;s/';'/SEMI/g;s/'^'/HAT/g;s/'\*'/STAR/g;s@'/'@SLASH@g;s/'('/LPAR/g;s/')'/RPAR/g;s/'='/GETS/g;s/'+'/PLUS/;s/'-'/MINUS/g;s/'\.'/DOT/g;s/'\['/LSQ/g;s/'\]'/RSQ/g" > $target
+
+scan.mll: lua.nw
+	notangle -R$target $prereq > $target
 
 parse.ml: parsex.ml
 	cp $prereq $target
