@@ -273,6 +273,7 @@ val expand : (Rep.middle -> graph) -> (Rep.last -> graph) -> graph -> graph
 Successors.
 <<declarations of [[Rep]]'s public functions>>=
 val succs : last -> uid list
+val iter_succs : (uid -> unit) -> last -> unit
 @
 <<declarations of [[Rep]]'s public functions>>=
 val mid_instr  : middle -> Rtl.rtl
@@ -296,10 +297,15 @@ val fold_fwd_block :
 <<zipcfg.mli>>=
 val iter_nodes :
   (Rep.first -> unit) -> (Rep.middle -> unit) -> (Rep.last -> unit) -> graph -> unit
+val iter_rtls : (Rtl.rtl -> unit) -> graph -> unit
 @ 
 <<zipcfg.mli>>=
 val rtl_map  : (Rtl.rtl -> Rtl.rtl) -> graph    -> graph
 val rtl_mapl : (Rtl.rtl -> Rtl.rtl) -> Rep.last -> Rep.last
+@ 
+<<zipcfg.mli>>=
+val new_rtlm : Rtl.rtl -> Rep.middle -> Rep.middle
+val new_rtll : Rtl.rtl -> Rep.last   -> Rep.last
 @ 
 \paragraph{Observing data flow}
 As noted above a node can contribute defs, uses, and kills to each
@@ -693,6 +699,17 @@ let succs = function
   | Jump    _ -> []
   | Forbidden _ -> []
 
+let iter_succs f = function
+  | Exit    _ -> ()
+  | Branch  (_, l) -> f (fst l)
+  | Cbranch (_, te, fe) -> f (fst te); f (fst fe)  (* order meets layout constraint *)
+  | Mbranch (_, edges) -> List.iter (fun e -> f (fst e)) edges
+  | Call    c -> List.iter (fun e -> f (fst e.node)) c.cal_contedges
+  | Cut     (_, edges, _) -> List.iter (fun e -> f (fst e.node)) edges
+  | Return  _ -> ()
+  | Jump    _ -> ()
+  | Forbidden _ -> ()
+
 <<zipcfg.ml>>=
 let postorder_dfs g =
   let entry, blocks = entry g in
@@ -738,10 +755,30 @@ let iter_nodes first middle last g =
     | Last l -> last l in
     tail t in
   UM.iter block g
+
+let iter_rtls rfun g =
+  iter_nodes
+    (fun f -> ()) (fun m -> rfun (mid_instr m)) (fun l -> rfun (last_instr l)) g
 @ 
 <<zipcfg.ml>>=
 let fold_blocks f z bs = UM.fold (fun _ -> f) bs z
 let iter_blocks = UM.iter
+<<zipcfg.ml>>=
+let new_rtll rtl l = match l with
+| Exit    _ -> l
+| Branch  (r, l) -> Branch (rtl, l)
+| Cbranch (r, t, f) -> Cbranch (rtl, t, f)
+| Mbranch (r, tgts) -> Mbranch (rtl, tgts)
+| Call    c -> Call { c with cal_i = rtl }
+| Cut     (r, es, uses) -> Cut (rtl, es, uses)
+| Return  (i, r, uses) -> Return (i, rtl, uses)
+| Jump    (r, uses, tgts) -> Jump (rtl, uses, tgts)
+| Forbidden r -> Forbidden (rtl)
+
+let new_rtlm rtl m = match m with
+| Instruction r  -> Instruction rtl
+| Assertion r    -> Assertion rtl
+| Stack_adjust r -> Stack_adjust rtl
 <<zipcfg.ml>>=
 let rtl_mapl map l = match l with
 | Exit    _ -> l

@@ -21,7 +21,8 @@ extensions.
 module I : Lua.INTERP
 @
 <<lualink.ml>>=
-module G = Cfgx.M
+module G  = Zipcfg
+module GR = Zipcfg.Rep
 
 <<Linking QC-- Types>>
 
@@ -526,7 +527,9 @@ C.register_module "Caml"
 @
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Cfg" 
-    ["Tx" , V.Table (V.Table.of_list 
+    ["Tx" , 
+        let module G = Cfgx.M in
+        V.Table (V.Table.of_list 
         [ "set_limit",       V.efunc (V.int **->> V.unit)    G.Tx.set_limit
         ; "used",            V.efunc (V.unit **->> V.int)    G.Tx.used
         ; "last",            V.efunc (V.unit **->> V.string) G.Tx.last
@@ -675,14 +678,15 @@ C.register_module "Runtime"
 C.register_module "Simplify"
   [ "compile_time_ops", (V.list V.string).V.embed Simplify.compile_time_ops
   ] g;
-<<old register modules to [[g]] in alphabetical order>>=
+<<register modules to [[g]] in alphabetical order>>=
 C.register_module "Stack"
-  [ "freeze",  V.efunc (Map.proc **-> Map.block **->> V.unit)   Stack.freeze
+  [ "freeze",  V.efunc (Map.proc **-> Map.block **->> Map.proc)   Stack.freeze
   ; "blocks",  V.efunc (Map.proc **->> (V.record V.value))
                        (Stack.blocks Map.block.V.embed (V.list V.value).V.embed
                                      (V.record V.value).V.embed)
-  ; "ccname",  V.efunc (Map.proc **->> V.string) (fun p -> p.Proc.cc.Call.name)
-  ; "procname",V.efunc (Map.proc **->> V.string) (fun p -> p.Proc.symbol#original_text)
+  ; "ccname",  V.efunc (Map.proc **->> V.string) (fun (_,p) -> p.Proc.cc.Call.name)
+  ; "procname",V.efunc (Map.proc **->> V.string)
+                                            (fun (_,p) -> p.Proc.symbol#original_text)
   ] g;                    
 @ 
 PERHAPS THIS CODE SHOULD REPLACE THE SOMEWHAT HEAVYWEIGHT [[Asm.dot]]???
@@ -738,26 +742,26 @@ C.register_module "Typecheck"
 C.register_module "Unsupported" 
  [ "explain", V.efunc (V.int **-> V.int *****->> V.unit) Unsupported.explain
  ] g;
-<<old register modules to [[g]] in alphabetical order>>=
-let floats ws _ proc =
+<<register modules to [[g]] in alphabetical order>>=
+let floats ws _ (g, proc) =
   let rml = proc.Proc.target.Target.rounding_mode in
   let rm  = Rtlutil.fetch rml in
-  G.iter_nodes (G.update_instr (Widen.float ~rm ws)) proc.Proc.cfg;
-  1 in
-let const n _ proc = G.iter_nodes (G.update_instr (Widen.store_const n)) proc.Proc.cfg;
-  1 in
-let op_count _ proc =
+  let g   = G.rtl_map (Widen.float ~rm ws) g in
+  (g, proc), true in
+
+let const n _ (g, proc) =
+  let g = G.rtl_map (Widen.store_const n) g in
+  (g, proc), true in
+
+let op_count _ (g, proc) =
   Printf.printf "op_count called\n";
   let count = ref 0 in
-  let update_count r =
-    count := !count + Widen.app_count r
-  in
-  let do_count = G.update_instr (fun r -> update_count r; r) in
-  let () = G.iter_nodes do_count proc.Proc.cfg in
+  let update_count r = count := !count + Widen.app_count r in
+  G.iter_rtls update_count g;
   Printf.printf "Op count = %i\n" !count;
-  1
-in
-let width_cost _ proc =
+  (g, proc), false in
+
+let width_cost _ (g, proc) =
   Printf.printf "width_cost called\n";
   let sxcount = ref 0 in
   let zxcount = ref 0 in
@@ -766,64 +770,49 @@ let width_cost _ proc =
     let (sx, zx, lo) = Widen.width_cost r in
     sxcount := !sxcount + sx;
     zxcount := !zxcount + zx;
-    locount := !locount + lo;
-  in
-  let count   = G.update_instr (fun r -> update_count r; r) in
+    locount := !locount + lo in
+  G.iter_rtls update_count g;
   let total = !sxcount + !zxcount + !locount in
-  Printf.printf "Summary: total=%i, sx=%i, zx=%i, lo=%i\n" total !sxcount !zxcount !locount;
-  1
-in
-let update_gamma_counts _ proc =
-  let f x = try G.update_instr (Widen.update_gamma_counts proc.Proc.target) x with Widen.Don't_update -> ()
-  in
-  Widen.init_gamma_counts();
-  G.iter_nodes f proc.Proc.cfg; 1
-in
-let create_gamma _ _=
+  Printf.printf "Summary: total=%i, sx=%i, zx=%i, lo=%i\n"
+    total !sxcount !zxcount !locount;
+  (g, proc), false in
+
+let update_gamma_counts _ (g, proc) =
+  let update = Widen.update_gamma_counts proc.Proc.target in
+  G.iter_rtls update g;
+  (g, proc), false in
+
+let create_gamma _ gp =
 (*
   let done_this = ref false in
   (fun _ _ -> (if not !done_this then (done_this := true; Widen.create_gamma())); 1)
 *)
-Widen.create_gamma(); 1
-in
-let dpwiden _ proc =
-  let upd g r = if Widen.needs_widening proc.Proc.target r then g r
-              else raise Widen.Doesn't_need_widening in
-  (* better alternative *)
-  let widen node = match G.to_executable node with
-  | Some r when Widen.needs_widening proc.Proc.target r ->
-      G.update_instr (Widen.dpwiden proc) node
-  | _ -> () in
-  let f g x =
-    try 
-      G.update_instr (upd g) x
-    with Widen.Doesn't_need_widening -> ()
-  in
-  G.iter_nodes (f (Widen.dpwiden proc)) proc.Proc.cfg;
-  1
-in
-let widenlocs _ proc =
-  let upd g r = if Widen.needs_widening proc.Proc.target r then g r
-              else raise Widen.Doesn't_need_widening in
-  let f g x =
-    try
-      G.update_instr (upd g) x
-    with Widen.Doesn't_need_widening -> ()
-  in
-  G.iter_nodes (f (Widen.widenlocs proc.Proc.target)) proc.Proc.cfg;
-  1
-in
+  Widen.create_gamma(); (gp, true) in
+
+let dpwiden _ (g, proc) = 
+  let upd g r = if Widen.needs_widening proc.Proc.target r then g r else r in
+  let premature_optimization g =
+    let exists_rtl f g = Impossible.unimp "exists_rtl" in
+    if exists_rtl (Widen.needs_widening proc.Proc.target) g then
+      (G.rtl_map (upd (Widen.dpwiden (g, proc))) g, proc), true
+    else
+      (g, proc), false in
+  (G.rtl_map (upd (Widen.dpwiden (g, proc))) g, proc), true in
+
+let widenlocs _ (g, proc) =
+  let upd g r = if Widen.needs_widening proc.Proc.target r then g r else r in
+  (G.rtl_map (upd (Widen.widenlocs proc.Proc.target)) g, proc), true in
+
 C.register_module "Widen" 
- [ "x86_floats", V.efunc (V.value **-> Map.proc **->> V.int) (floats [80])
- ; "ppc_floats", V.efunc (V.value **-> Map.proc **->> V.int) (floats [64])
- ; "store_const",
-       V.efunc (V.int **->> V.func (V.value **-> Map.proc **->> V.int)) const
- ; "width_cost", V.efunc (V.value **-> Map.proc **->> V.int) width_cost
- ; "update_gamma_counts", V.efunc (V.value **-> Map.proc **->> V.int) update_gamma_counts
- ; "create_gamma", V.efunc (V.value **-> Map.proc **->> V.int) create_gamma
- ; "dpwiden", V.efunc (V.value **-> Map.proc **->> V.int) dpwiden
- ; "widenlocs", V.efunc (V.value **-> Map.proc **->> V.int) widenlocs
- ; "op_count", V.efunc (V.value **-> Map.proc **->> V.int) op_count
+ [ "x86_floats",          Map.stage.V.embed (floats [80])
+ ; "ppc_floats",          Map.stage.V.embed (floats [64])
+ ; "store_const",         V.efunc (V.int **->> Map.stage) const
+ ; "width_cost",          Map.stage.V.embed width_cost
+ ; "update_gamma_counts", Map.stage.V.embed update_gamma_counts
+ ; "create_gamma",        Map.stage.V.embed create_gamma
+ ; "dpwiden",             Map.stage.V.embed dpwiden
+ ; "widenlocs",           Map.stage.V.embed widenlocs
+ ; "op_count",            Map.stage.V.embed op_count
  ] g;
 <<old register modules to [[g]] in alphabetical order>>=
 let pic load_wkr use_return proc =

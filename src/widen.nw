@@ -50,9 +50,8 @@ variables.  The [[gamma]] environment is also used to get the original
 width of widened locations---unlike the fill type hints, this needs to
 be accurate.
 <<widen.mli>>=
-exception Don't_update
 val init_gamma_counts : unit -> unit
-val update_gamma_counts : ('a, 'b) Target.t -> Rtl.rtl -> Rtl.rtl
+val update_gamma_counts : ('a, 'b) Target.t -> Rtl.rtl -> unit
 val create_gamma : unit -> unit
 @ 
 
@@ -84,7 +83,6 @@ let null = function [] -> true | _ :: _ -> false
 
 exception Abort_unknown
 exception Doesn't_need_widening
-exception Don't_update
 @ 
 We're given [[goodwidths]], and our goal is to change all
 floating-point operations in an RTL to be using one of the widths in
@@ -1275,7 +1273,7 @@ Calling [[widen_loc]] never changes the width of the location---it
 simply fixes up any code in an addressing expression that might need
 widening. 
 <<widen.ml>>=
-let dpwiden proc r =
+let dpwiden (g,proc) r =
   let t           = proc.Proc.target in
   let targetwidth = t.Target.wordsize in
   let ptrwidth    = t.Target.pointersize in
@@ -1417,12 +1415,10 @@ let update_gamma_counts t r =
     | G -> c
     | Z -> {c with z=c.z+i; ni = n}
     | S -> {c with s=c.s+i; ni = n}
-    | H -> c (* {c with h=c.h+i; ni = n} *)
-  in
+    | H -> c (* {c with h=c.h+i; ni = n} *) in
   let update h x n t =
     if Hashtbl.mem h x then Hashtbl.replace h x (add (Hashtbl.find h x) 1 n t)
-    else Hashtbl.add h x (add {z=0; s=0; h=0; ni=n} 1 n t)
-  in
+    else Hashtbl.add h x (add {z=0; s=0; h=0; ni=n} 1 n t) in
   let targetwidth = t.Target.wordsize in
   let rec loc fty = function
     | (RP.Var(s,_,w)) -> 
@@ -1441,17 +1437,14 @@ let update_gamma_counts t r =
           ignore(List.map (fun (arg_ftys, _) -> List.map2 exp arg_ftys es) ftys);
           List.map snd ftys
         with _ -> [G])
-    | _ -> [G]
-  in
+    | _ -> [G] in
   let guard (g, eff) =
     (match eff with
     | RP.Store(l, r, w) -> List.iter (fun fty -> loc fty l) (exp G r)
     | RP.Kill l -> ());
-    ignore(exp Z g)
-  in
+    ignore(exp Z g) in
   let RP.Rtl es = Dn.rtl r in
-  List.iter guard es;
-  raise Don't_update
+  List.iter guard es
 @ 
 
 <<widen.ml>>=

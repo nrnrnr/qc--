@@ -19,7 +19,7 @@ The functions exported here are bound to Lua functions in module
 val blocks:
   (Block.t -> 'a) -> ('a list -> 'a) -> ((string * 'a) list -> 'a) ->
   Ast2ir.proc -> (string * 'a) list
-val freeze: Ast2ir.proc -> Block.t -> unit
+val freeze: Ast2ir.proc -> Block.t -> Ast2ir.proc
 @
 
 % ------------------------------------------------------------------ 
@@ -41,7 +41,7 @@ pointer and the virtual frame pointer respectively. It can be
 therefore used by the frame-assembling Lua function to define where the
 stack pointer points into the frame. 
 <<stack.ml>>=
-let blocks' frozen_block block list table p =
+let blocks' frozen_block block list table (g, p) =
     let blockspair p = table [ "callee", list (List.map block p.Call.callee)
                              ; "caller", list (List.map block p.Call.caller) ] in
     let vfp = p.Proc.target.Target.vfp in
@@ -56,9 +56,9 @@ let blocks' frozen_block block list table p =
 
 let blocks x = blocks' (fun a -> (Automaton.freeze a).Automaton.overflow) x
 
-let freeze' apply_to_proc p (stack:Block.t) = 
+let freeze' apply_to_proc (g, p) (stack:Block.t) = 
     let pointer  = p.Proc.target.Target.pointersize in            
-    let eqns     = p.Proc.eqns @ (Block.constraints stack) in
+    let eqns     = p.Proc.eqns @ Block.constraints stack in
     let solution = 
         try Rtleqn.solve pointer eqns 
         with Rtleqn.Can'tSolve -> <<complain of unsolved [[eqns]] for [[p]]>> in
@@ -87,17 +87,17 @@ let freeze' apply_to_proc p (stack:Block.t) =
                 else Impossible.impossible ("unbound late compile-time constant "^x)
             )  
         | x -> x in
-    apply_to_proc guard subst p
+    apply_to_proc guard subst (g, p)
 
 let () = Debug.register "stack" "show solutions to stack-layout equations"
 
 let freeze =
-  let module G = Cfgx.M in
-  let apply_to_proc guard subst ({Proc.cfg = g} as p) =
+  let apply_to_proc guard subst (g, p) =
     let subst_rtl  = Rtlutil.Subst.exp ~guard ~map:subst        in
     let subst_span = Rtlutil.Subst.exp_of_loc ~guard ~map:subst in
-    G.iter_nodes (G.update_instr (fun i -> Simplify.rtl (subst_rtl i))) g;
-    Runtimedata.upd_all_spans subst_span g in
+    let g = Zipcfg.rtl_map (fun i -> Simplify.rtl (subst_rtl i)) g in
+    Runtimedata.upd_all_spans subst_span g;
+    (g, p) in
   freeze' apply_to_proc
   (* unsafe simplifier is not needed until vfp is replaced *)
 @
