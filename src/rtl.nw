@@ -40,7 +40,6 @@ and remember.
 <<rtl.mli>>=
 <<abstract types>>
 <<concrete types>>
-<<utilities>>
 @
 
 % ------------------------------------------------------------------ 
@@ -142,20 +141,71 @@ type rtl        = Rtl of guarded list
 @
 
 % ------------------------------------------------------------------ 
-\subsubsection{{\rtl} utilities}
+\subsubsection{Constructors}
 % ------------------------------------------------------------------ 
+
+The [[Public]] sub-module provides constructor functions for {\rtl}s.
+Using them should be the \emph{only} way to create {\rtl}s when
+translating from the abstract syntax tree.
+
+<<rtl.mli>>=
+module Public : sig
+    <<sig Public body>>
+end
+@
+
+\begin{itemize}
+\item Constants.
+
+<<sig Public body>>=
+val truth     : const
+val falsehood : const
+val bits      : Bits.bits -> width -> const
+val linkconst : string -> width -> const
+@
+
+\item Expressions
+
+<<>>=
+val const     : const -> expr
+val fetch     : location -> width -> expr
+val app       : op -> expr list -> expr
+@
+
+\item Locations: cells and variables.
+
+Currently all locations created by [[cloc]] contain the [[none]]
+assertion. 
+
+<<>>=
+val cloc      : space -> aggregation -> width -> expr -> location
+val vloc      : string -> int -> width -> location
+@
+
+\item Effects
+
+<<>>=
+val store     : location -> expr -> width -> effect
+val kill      : location -> effect
+@
+
+\item {\rtl}s
+
+<<>>=
+val guarded   : expr -> effect -> expr * effect
+val rtl       : guarded list -> rtl
+@
+
+\end{itemize}
+
 
 Code that builds or manipulates {\rtl}s tends to use the same
 functionality over and over again. We try to define some useful values
 here.
 
-<<utilities>>=
-val truth:      expr            (* constant true *)
-@
-
 The [[width]] of an expression is only defined for value-expressions,
-but not for conditions. Applying [[width]] to a condition is will
-result in an assertion failure.
+but not for conditions.  Applying [[width]] to a condition will result
+in an assertion failure.
 
 <<>>=
 val width:      expr -> int     (* width of expression *)
@@ -175,7 +225,6 @@ defined in the interface and defines representations for the abstract types.
 <<rtl.ml>>=
 <<abstract types implementation>>
 <<concrete types>>
-<<utilities implementation>>
 @
 
 <<abstract types implementation>>=
@@ -184,15 +233,89 @@ let  none      = (-1)
 @
 
 % ------------------------------------------------------------------ 
-\subsubsection{Utilities}
+\subsubsection{Constructors}
 % ------------------------------------------------------------------ 
+
+As far as possible, we would like to avoid constucting {\rtl} values
+directly but use constructor functions instead.  This hopefully allows
+to alter the implementation of {\rtl}s without touching client code. 
+However, code in the back end of the compiler makes heavy use of
+pattern matching to re-write {\rtl}s to target specific code and thus
+needs to know the details of the implementation.  The ideal solution
+can not be expressed in {\ocaml}:  two different views of the same
+implementation where values created in one view are compatible with
+the other.  A public view would leave data types abstract and provide
+construction functions to create them.  A private view would give
+access to all the details. 
+
+The desired effect could be achieved without the compatibility: 
+values created in one view are not compatible with the other. 
+Conversion functions would be required that basically copy one
+representation into the other.
+
+\begin{quote}
+\begin{verbatim}
+module type PRIVATE = sig
+    type t
+    val one: t
+end
+
+module type PUBLIC = sig
+    type t = int
+    val one: t
+end
+
+module X = struct
+    type t  = int
+    let one = 1
+end
+
+module Public:  PUBLIC  = X
+module Private: PRIVATE = X
+\end{verbatim}
+\end{quote}
+
+In order to avoid the costly conversion we have chosen a simpler,
+albeit less secure approach:  we have just one implementation that
+offers construction functions in a sub-module [[Public]].  It is still
+possible for a client to access and construct values directly, which
+is discouraged, of course.
+
+<<rtl.ml>>=
+module Public = struct
+    <<module Public body>>
+end
+@
+
+<<module Public body>>=
+(* constant *)
+let truth                   = Bool true
+let falsehood               = Bool false
+let bits bits width         = Bits(bits,width) 
+let linkconst name width    = Link(name,width)
+
+(* expression *)
+let const c                 = Const(c)
+let fetch loc width         = Fetch(loc,width)
+let app op exprs            = App(op,exprs)
+
+(* location *)
+let cloc sp agg width expr  = Cell(sp,agg,width,expr,none)
+let vloc name index width   = Var(name,index,width)
+
+(* effect *)
+let store loc expr width    = Store(loc,expr,width)
+let kill  loc               = Kill(loc)
+
+(* rtl *)
+let guarded expr effect     = expr, effect
+let rtl guards              = Rtl(guards)
+@
 
 Below are the simple, nontheless frequently used functions and simple
 values on {\rtl}s.
 
-<<utilities implementation>>=
-let truth      = Const(Bool(true))
-
+<<>>=
 let width = function
     | Const(Bool _)     -> assert false
     | Const(Bits (_,w)) -> w
@@ -200,7 +323,7 @@ let width = function
     | Fetch(_,w)        -> w
     | App _             -> assert false (* not implemented *)
     
-let assign l r = Rtl [(truth, Store(l, r, width r))]
+let assign l r = Rtl [(const truth, Store(l, r, width r))]
 @
 
 
