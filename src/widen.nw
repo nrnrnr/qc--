@@ -11,7 +11,8 @@ let () =
   Debug.register "widen"      "show results of widener";
   Debug.register "widen-pre"  "show RTL before widening";
   Debug.register "widen-vars" "show when a variable is widened";
-  Debug.register "gamma"      "show how Gamma is constructed"
+  Debug.register "gamma"      "show how Gamma is constructed";
+  Debug.register "widen-op-solns" "show operator solutions during widening"
 let not_null = function [] -> false | _ :: _ -> true 
 @ 
 [[float]] is a simple widener for floating-point values.
@@ -719,7 +720,10 @@ time making it unnecessary to apply most of the rules.
 let apply_rules m soln =
   let all_general_rules = [subsume_fill_rule; natural_rule; fill_rule
                           ; widen_sigma; widen_garbage; widen_hw; narrow_rule
+                         ]
+(*
                           ; from_high_s_rule; from_high_z_rule; to_high_rule]
+*)
   in
 (* ouch, this just got uglier *)
   let all_general_rules = List.map (fun r -> r m) all_general_rules in
@@ -861,7 +865,6 @@ let mksolutions_op m args_solns opname ws args =
        want to accept a parameter width 1?
      *)
     let ws' = List.filter (fun x -> x > 1) ws' in
-
     { e    = RP.App((opname, ws), args);
       m    = result_index;
       cost = List.fold_left (+) 0 (List.map cost solns);
@@ -870,7 +873,11 @@ let mksolutions_op m args_solns opname ws args =
       n    = result_index;
       w    = w' }
   in
-  List.map mkopsoln solns_widths_and_taus
+  let solns = List.map mkopsoln solns_widths_and_taus in
+  if Debug.on "widen-op-solns" then
+    Printf.eprintf "solutions:\n\t%s\n"
+    (String.concat "\n\t" (List.map string_of_soln solns));
+  solns
 @ 
 
 Drop extention rule from the paper:
@@ -1091,6 +1098,15 @@ let minimum = function
   | [] -> impossf "empty list"
   | x :: rest -> List.fold_left min x rest
 @ 
+<<solution utilities>>=
+let string_of_soln s =
+  Printf.sprintf "%s -> %s :: %s[%i] : %i"
+    (RU.ToString.exp (Up.exp s.e))
+    (RU.ToString.exp (Up.exp s.e'))
+    (string_of_fill s.fill)
+    s.n
+    s.w
+@
 <<helpers>>=
 let ext_of_fill = function
   | S -> "sx"
@@ -1167,6 +1183,7 @@ let op_fill_types =
   ; "not",    [[Z],Z]
   ; "bool",   [[Z],Z]
   ; "disjoin", [[Z;Z],Z]
+  ; "conjoin", [[Z;Z],Z]
   ; "bit",    [[Z],G]
   ]
 
@@ -1249,7 +1266,7 @@ let needs_widening t r =
   List.fold_left (fun b e -> b || guard e) false es
 @ 
 
-I'll choose in the [[widen_guard]] code to find a solution of type Z,
+I'll choose in the [[widen_guarded]] code to find a solution of type Z,
 just to match what some C-- frontends seem to want to do...not that it
 matters.
 Calling [[widen_loc]] never changes the width of the location---it
@@ -1298,9 +1315,9 @@ let dpwiden proc r =
  \tenv,\menv \derives e \trans{c} \e :: \fty{n} : \bits{w}}
 {\tenv,\menv \derives x_w :=_w e \trans{c} x_w :=_w \e}
 \]
-Note that [[widen_guard]] doesn't seem to be checking the index of the result!
+Note that [[widen_guarded]] doesn't seem to be checking the index of the result!
 <<widen.ml>>=
-  let widen_guard (g, eff) =
+  let widen_guarded (g, eff) =
     try
       let effsoln = 
         match eff with
@@ -1328,7 +1345,7 @@ Note that [[widen_guard]] doesn't seem to be checking the index of the result!
     (Printf.eprintf "Widening %s\n" (rtl r); flush stderr) in
   let r' =
     let RP.Rtl es = Dn.rtl r in
-    Up.rtl (RP.Rtl (List.map widen_guard es)) in
+    Up.rtl (RP.Rtl (List.map widen_guarded es)) in
   if Debug.on "widen" && not (rtl r' =$= rtl r) then
     (Printf.eprintf "`->      %s\n" (rtl r'); flush stderr);
   r'
