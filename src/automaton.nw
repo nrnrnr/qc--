@@ -230,7 +230,9 @@ exactly the number of bits in the request.
 If there is no such~$n$, it barfs with an error message.
 <<exported values>>=
 val useregs : Register.t list -> errormsg:(int -> Register.t list -> string) -> stage
-@ 
+@ The [[useregs]] stage is stateful; a register handed out in response
+to an earlier request cannot be used to satisfy a later request.
+@
 \paragraph{Combination of multiple stages}
 It can be useful to hand out different registers from different piles.
 For example, we might want to use floating-point registers to satisfy
@@ -246,9 +248,11 @@ the hint predicate is satisfied.
 It is a checked run-time error if no predicate is satisfied.
 <<automaton.mli>>=
 val hint_choice : ((string -> bool) * stage) list -> stage
-@ Perhaps it would be sensible to use a general predicate (hint and
-width?) instead of the hint alone---but the hint alone seems to be the
+@ We also provide a general predicate (hint and
+width) instead of the hint alone---but the hint alone seems to be the
 common case.
+<<automaton.mli>>=
+val choice : ((string -> int -> bool) * stage) list -> stage
 @
 \paragraph{Exclusion and interference of registers}
 For the MIPS calling convention, we need additional goodies.
@@ -497,6 +501,71 @@ let useregs regs ~errormsg = wrap (useregs regs ~errormsg)
 let used = List.map regstring (RS.elements state.used) in
 Verbose.say 2 ["useregs automaton uses regs: "; String.concat ", " used; "\n"]
 @ 
+Now I'll try to do it right, with proper aggregation.
+Step one is to split locations
+<<automaton.ml>>=
+<<shift and mask functions>>
+let splitloc bo locs = match locs with
+| [l, w] -> l
+| _ ->
+    let rec little = function
+      | []  -> Impossible.impossible "split empty list of locations"
+      | [l, w] -> l
+      | (loc, w) :: rest ->
+          let loc' = little rest in
+          let w'   = List.fold_left (fun n (_, w) -> n + w) 0 rest in
+          { fetch = (fun ww ->
+                       assert (ww = w + w');
+                       orb ww (zx w ww (fetch loc w))
+                              (shl ww (zx w' ww (fetch loc' w')) w))
+          ; store = (fun v ww ->
+                       assert (ww = w + w');
+                       R.par [ store loc  (lobits ww  w v) w 
+                             ; store loc' (lobits ww w' (shrl ww v w)) w'])
+          } in
+    match bo with
+    | Rtl.LittleEndian -> little locs
+    | Rtl.BigEndian    -> little (List.rev locs)
+    | Rtl.Identity     -> Impossible.impossible "split without order"
+<<shift and mask functions>>=
+let const w k = R.bits (Bits.U.of_int k w) w
+let zx n w v = R.app (R.opr "zx" [n; w]) [v]
+let orb w x y = R.app (R.opr "or"  [w]) [x; y]
+let shl  w x k = R.app (R.opr "shl"  [w]) [x; const w k]
+let shrl w x k = R.app (R.opr "shrl" [w]) [x; const w k]
+let lobits w n x = R.app (R.opr "lobits" [w; n]) [x]
+@ 
+<<automaton.ml>>=
+let useregs' regs ~errormsg next =
+  let state = { avail = regs; used = RS.empty } in
+  let can_aggregate _ _ = false in (* not implemented yet *)
+  let aggregate _ _ = Impossible.unimp "register aggregation" in
+  let alloc ~width ~alignment ~hint =
+    let regloc ((_, _, w) as r) = of_loc (R.reg r), w in
+    let rec locs prev' w =
+      if w = 0 then
+        List.rev (List.map regloc prev')
+      else if w > 0 then
+        try
+          let (_, _, w') as r = getreg state in
+          let regs = 
+            match prev' with
+            | r' :: rs when can_aggregate r' r -> aggregate r' r :: rs
+            | _ -> r :: prev' in
+          locs regs (w - w')
+        with Failure _ ->
+          List.rev ((next.allocate w alignment hint, w) :: List.map regloc prev') 
+      else 
+        Impossible.impossible
+          (errormsg width state.avail ^ 
+           " (request should have been widened upstream of useregs?)") in
+    splitloc Rtl.Identity (locs [] width) in
+  let freeze regs mems =
+    <<prattle about registers used by [[useregs]]>>;
+    next.freeze (RS.union state.used regs) mems in
+  { freeze = freeze; allocate = alloc }
+let useregs' regs ~errormsg = wrap (useregs' regs ~errormsg)
+@ 
 
 @ 
 The dataflow here is kind of interesting.  
@@ -505,18 +574,21 @@ and join point, so it passes through exactly \emph{one} choice.
 But for the [[freeze]] method, we thread the call straight through the
 whole list, so it passes through \emph{all} choices.
 <<automaton.ml>>=
-let hint_choice choices next =
-    let add (hp, stage) alternative =
+let choice choices next =
+    let add (p, stage) alternative =
       let follows_choice = { allocate = next.allocate; freeze = alternative.freeze } in
       let choice = stage follows_choice in
       let alloc ~width ~alignment ~hint =
-        let alloc = if hp hint then choice.allocate else alternative.allocate in
+        let alloc = if p hint width then choice.allocate else alternative.allocate in
         alloc width alignment hint in
       { allocate = alloc; freeze = choice.freeze } in
     List.fold_right add choices
       { allocate = (fun ~width -> Impossible.impossible "missing hint choice")
       ; freeze = next.freeze }
+let hint_choice choices =
+  choice (List.map (fun (hp, s) -> ((fun h w -> hp h), s)) choices)
 let hint_choice = wrap_choice hint_choice
+let choice      = wrap_choice choice
 @ 
 
 \paragraph{Exclusion}

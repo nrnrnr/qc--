@@ -157,7 +157,7 @@ let cmm_results =
   A.overflow ~memsize:8 ~byteorder:bo ~growth:Memalloc.Down ~max_alignment:sp_align
 
 let cmm_arguments = 
-  A.widen  (Aux.round_up_to ~multiple_of:32) **>
+  A.widen (Aux.round_up_to ~multiple_of:32) **>
   A.useregs (RS.elements volregs) ~errormsg:imp **>
   A.overflow ~memsize:8 ~byteorder:bo ~growth:Memalloc.Up ~max_alignment:sp_align
 @
@@ -209,7 +209,7 @@ let epilog  =
   C.outgoing ~growth ~sp
     ~mkauto:(fun () -> Block.srelative vfp "out ovfl results" A.at specs.results)
     ~autosp:(fun r -> Block.base r.A.overflow)
-    ~postsp:(fun r -> addk r (-4))  (* irrelevant *) in
+    ~postsp:(fun r -> addk r (-4)) in
 @ 
 We need an assertion here!
 <<functions to transform automata>>=
@@ -221,7 +221,7 @@ let also_cuts_to =
 
 let cut_actuals base  =
   C.outgoing ~growth ~sp ~mkauto:(fun () -> A.at base specs.cutto)
-     ~autosp:(fun r -> spval)
+     ~autosp:(fun r -> spval)  (* should this be std_sp_location? *)
      ~postsp:(fun _ -> spval) in
 @ 
 \paragraph{Putting together the whole convention}

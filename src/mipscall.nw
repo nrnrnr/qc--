@@ -1,3 +1,4 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 
 % ------------------------------------------------------------------ 
 \section{{\mips} calling conventions}
@@ -53,6 +54,7 @@ registers. Is this a real problem? -- CL}
 
 <<mipscall.ml>>=
 module A  = Automaton
+module AE = Automaton.Exclude
 module C  = Call
 module R  = Rtl
 module RP = Rtl.Private
@@ -73,32 +75,28 @@ volatile register can be used without saving and restoring. Registers
 that are neither volatile nor non-volatile are unavailable for register
 allocation.
 
-How do we deal with the return address [[ra]] ([[$31]])? It needs to be
-saved by it is not available for register allocation? For now I treat it
-as non-volatile and it is part of [[nvl_int]]
-
+The return address [[ra]] is volatile.
+It can be used for register allocation, but the call instruction
+always writes it (and it is live on entry).
 <<mipscall.ml>>=
 let r n     = ('r',n,32)
 let f n     = ('f',n,32)
+let d n     = ('f',n,64)
 let vfp     = Vfp.mk 32
 
 let rec from first ~upto = 
     if first > upto then [] else first :: from (first+1) ~upto
 @
-
 Calling conventions treat floating point registers specially; therefore
 we have separate lists for them.
-
 <<mipscall.ml>>=
 let vol_int  = List.map r (from 2  ~upto:15 @ [24;25])
-let nvl_int  = List.map r (from 16 ~upto:23 @ [30;31])
+let nvl_int  = List.map r (from 16 ~upto:23 @ [30])
 let vol_fp   = List.map f (from 0  ~upto:18)
 let nvl_fp   = List.map f (from 20 ~upto:30)
 @
-
 Non-volatile registers are saved somewhere in the frame. Currently, we
 cannnot provide dedicated locations.
-
 <<mipscall.ml>>=
 let saved_nvr temps =
     let t = Talloc.Multiple.loc temps 't' in
@@ -174,13 +172,43 @@ let arguments =
             A.useregs [r 4; r 5; r 6; r 7] ~errormsg:fatal 
         ] **>
     A.overflow ~memsize:8 ~byteorder ~growth ~max_alignment:sp_align
+@ 
+To support varargs, each argument registers maps to a particular
+location, and there are overlapping locations for integer and
+floating-point parameters.
+Therefore the use of one argument register must exclude others.
+N.B.~We can't properly widen floating-point parameters, and we don't try.
+<<mipscall.ml>>=
+let spaces =
+  let module SS = Space.Standard32 in
+  let r = SS.r 32 byteorder [32; 64] in
+  let f = SS.f 32 byteorder [32; 64] in
+  function
+  | 'r' -> r
+  | 'f' -> f
+  | _   -> Impossible.impossible "register space in parameter passing"
+
+let arguments () =
+  (* N.B. exc is mutable and must be made fresh each time *)
+  let exc = A.Exclude.of_pairs spaces [ [r 4; r 5], [f 12; d 12]
+                                      ; [r 6; r 7], [f 14; d 14]
+                                      ] in
+  A.choice   
+      [ (fun h w -> h = "float" & w = 32),
+          A.sharedregs exc [f 12; f 14] ~errormsg:fatal
+      ; (fun h w -> h = "float" & w = 64),
+          A.sharedregs exc [d 12; d 14] ~errormsg:fatal
+      ; (fun h w -> h <> "float"),
+          A.widen (Aux.round_up_to ~multiple_of:32)        *>
+          A.sharedregs exc [r 4; r 5; r 6; r 7] ~errormsg:fatal 
+      ] **>
+  A.overflow ~memsize:8 ~byteorder ~growth ~max_alignment:sp_align
 @
         
 \paragraph{C~cut-to parameters}
 
 Since this is strictly internal calling convention, we can use whatever
 we like. We use all volatile registers.
-
 <<mipscall.ml>>=
 let cut_args = 
     A.hint_choice
@@ -201,13 +229,13 @@ let cut_args =
 <<transformations>>=
 let call_actuals  =
   C.outgoing ~growth ~sp
-    ~mkauto:(fun () -> Block.srelative vfp "out call parms" A.at arguments) 
+    ~mkauto:(fun () -> Block.srelative vfp "out call parms" A.at (arguments ()))
     ~autosp:(fun r  -> Block.base r.A.overflow)
     ~postsp:(fun sp -> sp) in  
 
 let prolog  =
   C.incoming ~growth ~sp
-    ~mkauto:(fun () -> Block.srelative vfp "in call parms" A.at arguments)
+    ~mkauto:(fun () -> Block.srelative vfp "in call parms" A.at (arguments ()))
     ~autosp:(fun _ -> vfp)
     ~postsp:(fun _ -> std_sp_location) in
 
@@ -257,8 +285,8 @@ let c ~return_to cut =
     ; C.cutto           = cut
     ; C.return          = return
     ; C.ra_on_entry      = (fun _   -> R.fetch ra 32)
-    ; C.where_to_save_ra = (fun _ t -> ra)
-    ; C.ra_on_exit       = (fun t b -> ra)
+    ; C.where_to_save_ra = (fun _ t -> Talloc.Multiple.loc t 't' 32)
+    ; C.ra_on_exit       = (fun t b -> t)
     }
 @
 
