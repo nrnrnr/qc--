@@ -125,7 +125,9 @@ let foldr = List.fold_right
 
 
 (* Useful for adding a list of RTL's to the cfg.
-   Usage: add_to_cfg cfg (f: G.node -> 'a -> 'a) (rtls: Rtl.rtl list) (succ:G.node, 'a) *)
+ * Usage: add_to_cfg cfg (f: G.node -> 'a -> 'a) (rtls: Rtl.rtl list)
+ *                       (succ:G.node, 'a)
+ *)
 let add_to_cfg cfg f =
     List.fold_right
         (fun rtl (succ,rst) ->
@@ -925,10 +927,10 @@ and contStmt state (label,args)  =
     let sp      = Rtl.fetch cc.Target.sp  ptr in
     let args    = List.map (formal state.env) args in
 
-    let contID =
+    let contID, symbol =
         match F.findv label state.env with
-        | (_,(F.Continuation (n,_),_)) -> n
-        | _                          -> Idgen.cont label in
+        | _,(F.Continuation(n,s),_) -> n,s
+        | _ -> assert false                               in
 
     let succ,state =
         if Strutil.Set.mem label state.esc_conts
@@ -936,25 +938,21 @@ and contStmt state (label,args)  =
             let variable  = Rtl.late contID ptr in
             let add       = Rtl.opr "add" [ptr] in
             let offset    = Rtl.app add [sp; variable] in
-            let newBase   = Rtl.late (Idgen.block ("contParams"^label)) ptr   in
+            let newBase   = Rtl.late (Idgen.block ("contParams"^label)) ptr in
             let rtls,area = IO.copyin args cc.Target.cont newBase in
             let copy,_ =
-                add_to_cfg state.cfg (fun n rst -> Register.Set.union rst (G.uses n))
+                add_to_cfg state.cfg (fun n rst ->
+                                          Register.Set.union rst (G.uses n))
                            rtls (state.node, Register.Set.empty) in
             let cont      = Contn.with_overflow state.target offset area in
-            let state     = { state with conts = Strutil.Map.add label cont state.conts} in
+            let state     = { state with conts =
+                                 Strutil.Map.add label cont state.conts} in
             copy,state
         end else begin
             state.node,state
         end in
-
-
-    let symbol  = match F.findv label state.env with
-                  | _,(F.Continuation(_,s),_) -> s
-                  | _ -> (Printf.fprintf stderr "notfound: %s\n" label;assert false)                            in
     let succ    = G.gm_label state.cfg label symbol succ         in
-    let result  = { state with node = succ } in
-        result
+        { state with node = succ }
 @
 
 A [[cut to]] instruction passes arguments according to a calling convention.
@@ -979,14 +977,14 @@ and cutStmt state (e, args, conts) =
     let ptr       = state.target.Target.pointersize                    in
     let size      = ptr / state.target.Target.memsize                  in
     let oflow     = Rtl.app (Rtl.opr "add" [ptr])
-                            [exp; Rtl.bits (Bits.S.of_int (2 * size) ptr) ptr] in
+                    [exp; Rtl.bits (Bits.S.of_int (2 * size) ptr) ptr] in
     let rtls,area = IO.copyout args cc.Target.cont oflow in
 
     (* solve the equations *)
     let solution =
         try Const2.solve ptr (Block.constraints area)
         with Const2.Can'tSolve -> Impossible.impossible 
-                ("can't solve equations in "^ state.proc)              in            
+                ("can't solve equations in "^ state.proc)              in
 
     (* substitute for the compile-time constants *)
     let map      = Strutil.assoc2map solution.Const2.known             in
@@ -995,18 +993,18 @@ and cutStmt state (e, args, conts) =
         | _                    -> false in
     let rec subst (e:RP.exp) = match e with              
         | RP.Const(RP.Late(x,_)) -> 
-            ( try Rtl.Convert.exp (Strutil.Map.find x map) with 
-            | Not_found -> e   (* we don't know all the constants yet *)
+            ( try Rtl.Convert.exp (Strutil.Map.find x map)
+              with Not_found -> e   (* we don't know all the constants yet *)
             )  
         | x -> x in
 
     let copy,defs =
         add_to_cfg state.cfg
-            (fun node rst ->
-                 let () = G.upd_instr node (Rtlutil.Subst2.exp ~guard ~map:subst) in
-                 let () = G.upd_instr node Rtleval2.rtl in
-                 Register.Set.union rst (G.defs node))
-            rtls (cut, Register.Set.empty) in
+          (fun node rst ->
+            let () = G.upd_instr node (Rtlutil.Subst2.exp ~guard ~map:subst) in
+            let () = G.upd_instr node Rtleval2.rtl in
+                Register.Set.union rst (G.defs node))
+           rtls (cut, Register.Set.empty) in
 
     let result    =    { state with node     = copy } in
     let ()      = G.gm_insert_dataflow_between
