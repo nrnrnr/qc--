@@ -118,6 +118,7 @@ module.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <setjmp.h>
 #include "label.h"
 #include "lualink.h"
 #include "interp.h"
@@ -265,7 +266,8 @@ ITERATE_UNARY_C_CALLERS(UNARY_C_CALLER_REGISTRATION)
 ITERATE_BINARY_C_CALLERS(BINARY_C_CALLER_REGISTRATION)
 ITERATE_TERNARY_C_CALLERS(TERNARY_C_CALLER_REGISTRATION)
 ITERATE_FOURARY_C_CALLERS(FOURARY_C_CALLER_REGISTRATION)
-register_c_sig("printf", c_caller_printf);
+register_c_sig("printf" , c_caller_printf );
+register_c_sig("fprintf", c_caller_fprintf);
 @
 
 We must also provide prototypes for the macro-generated functions that implement the registration of a C signature.
@@ -276,7 +278,8 @@ ITERATE_UNARY_C_CALLERS(UNARY_C_CALLER_PROTOTYPE)
 ITERATE_BINARY_C_CALLERS(BINARY_C_CALLER_PROTOTYPE)
 ITERATE_TERNARY_C_CALLERS(TERNARY_C_CALLER_PROTOTYPE)
 ITERATE_FOURARY_C_CALLERS(FOURARY_C_CALLER_PROTOTYPE)
-vptr c_caller_printf (vptr arguments, void (*f) (void));
+vptr c_caller_printf  (vptr arguments, void (*f) (void));
+vptr c_caller_fprintf (vptr arguments, void (*f) (void));
 @ 
 
 % ----------------------------------------------------------------------------
@@ -334,10 +337,12 @@ F(pointer, RETURNS_VAL )
 F(u_int16 , u_int16 , RETURNS_VAL ) \
 F(u_int32 , u_int32 , RETURNS_VAL ) \
 F(int     , int     , RETURNS_VAL ) \
+F(int     , pointer , RETURNS_VAL ) \
 F(unsigned, pointer , RETURNS_VAL ) \
 F(pointer , unsigned, RETURNS_VAL ) \
 F(pointer , int     , RETURNS_VAL ) \
 F(pointer , pointer , RETURNS_VAL ) \
+F(jmp_buf , int     , RETURNS_VAL ) \
 \
 F(int     , void    , RETURNS_VOID) \
 F(char    , void    , RETURNS_VOID) \
@@ -346,14 +351,18 @@ F(pointer , void    , RETURNS_VOID)
 
 #define ITERATE_BINARY_C_CALLERS(F) \
 F(int     , int     , int    , RETURNS_VAL ) \
+F(int     , pointer , pointer, RETURNS_VAL ) \
 F(pointer , pointer , int    , RETURNS_VAL ) \
 F(pointer , pointer , pointer, RETURNS_VAL ) \
 \
-F(int     , int     , void   , RETURNS_VOID)
+F(int     , int     , void   , RETURNS_VOID) \
+F(pointer , int     , void   , RETURNS_VOID) \
+F(pointer , pointer , void   , RETURNS_VOID)
 
 #define ITERATE_TERNARY_C_CALLERS(F) \
-F(pointer , unsigned, unsigned, pointer, RETURNS_VAL ) \
-F(pointer , int, int, void, RETURNS_VOID )
+F(pointer , unsigned, unsigned, pointer, RETURNS_VAL  ) \
+F(pointer , int     , int     , void   , RETURNS_VOID ) \
+F(pointer , pointer , int     , void   , RETURNS_VOID )
 
 #define ITERATE_FOURARY_C_CALLERS(F) \
 F(pointer , pointer , unsigned, pointer, pointer, RETURNS_VAL)
@@ -486,7 +495,7 @@ with a user-picked name (likely [[printf]]) and the special signature
 [["printf"]].
 
 <<function definitions>>=
-vptr c_caller_printf (vptr arguments, void (*f) (void)) {
+vptr c_caller_print  (FILE *fp, vptr arguments, void (*f) (void)) {
   char *fmt = (char *) arguments[0].ptr;
   int   nextarg = 1;
 
@@ -509,18 +518,26 @@ vptr c_caller_printf (vptr arguments, void (*f) (void)) {
         nextarg--;
         break;
       case 'f':
-        printf(fmt, *(VIEW(the_arg, float *)));
+        fprintf(fp, fmt, *(VIEW(the_arg, float *)));
         break;
       case 'x': case 'X':
       case 's':
-        printf(fmt, *(VIEW(the_arg, void **)));
+        fprintf(fp, fmt, *(VIEW(the_arg, void **)));
         break;
       default:
-        printf(fmt, *(VIEW(the_arg, unsigned *)));
+        fprintf(fp, fmt, *(VIEW(the_arg, unsigned *)));
       }
       fmt[offset]  = temp;
       fmt         += offset;
     }
   }
+}
+
+vptr c_caller_printf (vptr arguments, void (*f) (void)) {
+  c_caller_print(stdout, arguments, f);
+}
+
+vptr c_caller_fprintf (vptr arguments, void (*f) (void)) {
+  c_caller_print((FILE *) arguments[0].ptr, arguments + 1, f);
 }
 @ 
