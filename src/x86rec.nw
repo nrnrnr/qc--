@@ -190,6 +190,7 @@ accessible using the standard addressing modes.
 We've omitted the indexed modes, which use two registers.
 <<rules>>=
 regl : Reg('r', n, w) {: regname w n :}
+regl8: Reg('r', n, w) {: regname 8 n :}
 regpairl : RegPair(reg1:regl,reg2:regl) {: reg2 :}
 meml : Mem(reg,  w)   {: "(" ^ reg ^ ")" :}  -- indir
 meml : Mem(disp, w)   {: disp :}
@@ -206,6 +207,7 @@ To get a value for any of these, we fetch.
 We can also use a link-time constant as an effective address.
 <<rules>>=
 reg     : Fetch(regl    , w) {: regl     :}
+reg8    : Lobits(Fetch(regl8, w), nw:w) [{: guard (nw=8) :}] {: regl8     :}
 regpair : Fetch(regpairl, w) {: regpairl :}
 mem     : Fetch(meml    , w) {: meml     :}
 eaddr   : Fetch(eaddrl  , w) {: eaddrl   :}
@@ -255,10 +257,10 @@ inst : Store(dst:regl, Zx(Fetch(src:eaddrl, nw:w)), w)
   {: cat ["movz"; suffix nw; suffix w; " "; src; ","; dst] :}
 
 -- moving low bits (relies on proper name of source)
-inst : Store(dst:eaddrl, Lobits(Fetch(Reg('r', n, rw:w), fw:w)), nw:w)
+inst : Store(dst:eaddrl, Lobits(Fetch(Reg('r', n, rw:w), fw:w), lw:w), nw:w)
   {: cat ["mov"; suffix nw; " "; regname nw n; ","; dst] :}
 
-inst : Store(dst:regl, Lobits(src:mem), nw:w)
+inst : Store(dst:regl, Lobits(src:mem, sw:w), nw:w)
   {: cat ["mov"; suffix nw; " "; src; ","; dst] :}
 @ 
 \paragraph{Simple arithmetic}
@@ -291,6 +293,9 @@ inst : Withaflags(dst:regl, "mul_trunc", src:eaddr, w, "x86_mulflags")
 
 inst : Withaflags(dst:regpairl, "div", src:reg, w, "x86_divflags")
   {: cat ["idiv"; suffix w; " "; src; ", "; dst] :}
+
+inst : Withaflags(dst:regl, "shl", src:reg8, w, "x86_shlflags")
+  {: cat ["shl"; suffix w; " "; src; ", "; dst] :}
 
 inst : Llr(dst:regl, "shra", immed, w)
   {: cat ["sar "; immed; ","; dst] :}
@@ -371,7 +376,7 @@ any : Add(x:any, y:any) {: "Add(" ^ x ^ ", " ^ y ^ ")" :}
 any : Mul_trunc(x:any, y:any) {: "Mul_trunc(" ^ x ^ ", " ^ y ^ ")" :}
 any : Sx(any) {: "Sx(" ^ any ^ ")" :}
 any : Zx(any) {: "Zx(" ^ any ^ ")" :}
-any : Lobits(any) {: "Lobits(" ^ any ^ ")" :}
+any : Lobits(any, w) {: "Lobits(" ^ any ^ ", " ^ string_of_int w ^ ")" :}
 any : X86_subflags(l:any, r:any) {: "X86_subflags(" ^ l ^ ", " ^ r ^ ")" :}
 
 any : Mem(any, w) {: "Mem(" ^any ^ "," ^ string_of_int w ^ ")" :}
@@ -418,7 +423,7 @@ constructor for each operator.
 | RP.App(("mul_trunc", [w]), [x; y]) -> conMul_trunc (exp x) (exp y)
 | RP.App(("sx", [n;w]), [x])   -> conSx  (exp x)
 | RP.App(("zx", [n;w]), [x])   -> conZx  (exp x)
-| RP.App(("lobits", [w;n]), [x])   -> conLobits (exp x)
+| RP.App(("lobits", [w;n]), [x])   -> conLobits (exp x) n
 | RP.App(("x86_subflags", [w]), [x; y]) -> conX86_subflags (exp x) (exp y)
 | RP.App((("add"|"sub"|"mul_trunc"|"sx"|"zx"|"lobits"|"x86_subflags") as op, _), _) ->
     Impossible.impossible ("ill-formed " ^ op)

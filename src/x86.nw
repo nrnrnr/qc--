@@ -149,6 +149,7 @@ let eax_reg = ('r', 0, 32)
 let eax = temploc eax_reg
 let edx_reg = ('r', 2, 32)
 let edx = temploc edx_reg
+let ecx_reg = ('r', 1, 32)
 let esp = temploc ('r', 4, 32)
 let espreg = ('r', 4, 32)
 @ 
@@ -164,6 +165,7 @@ let addflags   x y w = R.store eflags (R.app (R.opr "x86_addflags"   [w]) [x; y]
 let mulflags   x y w = R.store eflags (R.app (R.opr "x86_mulflags"   [w]) [x; y]) 32
 let divflags   x y w = R.store eflags (R.app (R.opr "x86_divflags"   [w]) [x; y]) 32
 let logicflags exp w = R.store eflags (R.app (R.opr "x86_logicflags" [w]) [exp])  32
+let shlflags   x y w = R.store eflags (R.app (R.opr "x86_shlflags"   [w]) [x; y]) 32
 @ 
 \subsubsection{Data movement}
 Most data movement is simple assignment; the MOV instruction is quite powerful.
@@ -288,6 +290,15 @@ until we try it with other versions of the x86 divide instruction.
                              regpair (tempval y) 32 in
     let upint n = Up.const (RP.Bits(Bits.U.of_int n 32)) in
     move_rtl x eax_reg :: div :: (is @ (move_rtl eax_reg x :: move))
+@ 
+I don't know why it's safe to clobber ECX here.
+<<x86 postexpander>>=
+| "shl" ->
+    let cl = lobits 8 (tempval ecx_reg) in
+    let shl = exp_with_flags shlflags x (R.app (Up.opr op) [tempval x; cl])
+              (tempval x) cl 32 in
+    shl :: move_rtl ecx_reg y :: move
+<<x86 postexpander>>=
 | ("and"|"or"|"xor") -> with_lflags x (Up.opr op) x y 32 :: move
 | _  ->
     R.store (temploc x) (R.app (Up.opr op) [tempval x; tempval y]) (tempwidth x) :: move
