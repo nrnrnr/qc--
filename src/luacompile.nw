@@ -698,8 +698,9 @@ function Opt.standard(backend, asm, B)
   if backend.emit_data then
     emit_data = Opt.verb(B.stage { name = "emit_data", fn = backend.emit_data(asm)})
   end
+  print_cfg = B.stage {name="print cfg", fn=Debug.printcfg}
   local x = B.seq
-    { 
+    {
       Opt.verb(backend.intwiden)   or Stages.null
     , Opt.verb(backend.placevars)  or Stages.null
     , Opt.verb(backend.floatwiden) or Stages.null
@@ -959,11 +960,11 @@ Backend.ppc =
   , ralloc     = Ralloc.dls
   , freeze     = PPC.layout
   , rmvfp      = Backplane.seq
-		    { Stages.replace_vfp,
-		      Optimize.remove_nops }
+		    { Stages.replace_vfp
+		    , Optimize.remove_nops }
   , asm        = Asm.ppc
   , emit       = Driver.assemble
-  , emit_data  = Runtime.emit_data
+  --, emit_data  = Runtime.emit_data
   , compile    = Compile.file
   }   
 

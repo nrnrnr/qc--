@@ -22,6 +22,8 @@ val target : Ast2ir.tgt
 val placevars : Ast2ir.proc -> Automaton.t
 @ 
 <<ppc.ml>>=
+module B  = Bits
+module BO = Bits.Ops
 module R  = Rtl
 module RP = Rtl.Private
 module Up = Rtl.Up
@@ -263,14 +265,13 @@ Load immediate is a bit tricky because the PPC only allows 16-bit
 constants to be loaded directly.
 <<ppc postexpander>>=
 let li ~dst const =
-  let con w i = R.bits (Bits.S.of_int i w) w in
+  let con w i = R.bits (B.S.of_int i w) w in
   match const with
-  | RP.Bits b -> let l = Bits.Ops.lobits 16 b in
-                 let h = Bits.Ops.shrl b (Bits.S.of_int 16 32) in
-                 let l = R.app (R.opr "zx" [16;32]) [R.bits l 16] in
-                 [ tstore dst (R.app (R.opr "or"  [32]) [tval dst; l])
-                 ; tstore dst (R.app (R.opr "shl" [32]) [R.bits h 32; con 32 16])
-                 ]
+  | RP.Bits b -> let l     = R.bits (BO.lobits 16 b) 16 in
+                 let h     = BO.lobits 16 (BO.shrl b (B.S.of_int 16 32)) in
+                 let dsthi = R.slice 16 16 (R.reg dst) in
+                 [ R.store dsthi (R.bits h 16) 16
+                 ; tstore  dst   (R.app (R.opr "zx" [16;32]) [l]) ]
   | _         -> [ tstore dst (Up.const const) ]
 @ 
 Operators...

@@ -52,6 +52,12 @@ let guard b = if b then 0 else infinity
 @ 
 Utilities for instructions.
 <<code to precede the labeler>>=
+
+let fits b w =
+  let bitw = Bits.S.of_int w 32
+  and zero = Bits.zero (Bits.width b) in
+  Bits.Ops.shrl b bitw =*= zero
+
 let imports = ref ([] : string list)
 
 let ind_addr name =
@@ -78,8 +84,8 @@ Terminal [[bits]] is a constant of types [[Bits.bits]]; terminal
 [[symbol]] is a string.
 
 <<rules>>=
-const32:  Bits(bits) [{: guard (Bits.width bits = 32) :}] {: Bits.to_string bits :}
-const16:  Bits(bits) [{: guard (Bits.width bits = 16) :}] {: Bits.to_string bits :}
+const32:  Bits(bits) [{: guard (fits bits 32) :}] {: Bits.to_decimal_string bits :}
+const16:  Bits(bits) [{: guard (fits bits 16) :}] {: Bits.to_decimal_string bits :}
 
 lconst: Link(symbol, w:int)        {: symbol#mangled_text :}
 pic:    Diff(c1:lconst, c2:lconst) {: c1 ^ "-" ^ c2 :}
@@ -121,6 +127,9 @@ inst:  Store(lrl,  reg, w:int) {: "mtlr " ^ reg  :}
 inst:  Store(regl,  cr, w:int) {: "mfcr " ^ regl :}
 
 inst: Store(regl, const16, 32) {: "li " ^ regl ^","^ const16 :}
+
+inst: Store(Slice(16, 0, regl),  const16, 16) {: "li "  ^ regl ^","^ const16 :}
+inst: Store(Slice(16, 16, regl), const16, 16) {: "addis " ^ regl ^","^ regl ^","^ const16 :}
 
 inst: Store (regl, Fetch(Mem(addr      ), 32), 32) {: "lwz "  ^ regl ^","^ addr  :}
 inst: Store (regl, Fetch(Mem(index_addr), 32), 32) {: "lwzx " ^ regl ^","^ index_addr :}
@@ -237,7 +246,7 @@ any : Shrl(x:any, y:any) {: "Shrl(" ^ x ^ ", " ^ y ^ ")" :}
 any : Lobits(any, w) {: "Lobits(" ^ any ^ ", " ^ string_of_int w ^ ")" :}
 any : BitExtract(lsb:any, y:any, n:int) {: sprintf "BitExtract(%s, %s, %d)" lsb y n :}
 
-any : Slice(n:w, lsb:n, y:any) {: sprintf "Slice(%d, %d, %s)" n lsb y :}
+any : Slice(w:int, n:int, y:any) {: sprintf "Slice(%d, %d, %s)" w n y :}
 
 any : Mem(any) {: "Mem(" ^any ^ ")" :}
 any : Reg(char, n:int) {: sprintf "Reg(%s, %d)" (Char.escaped char) n :}
