@@ -23,6 +23,8 @@ QCCFLAGS = -v backend.emit_data=nil
 GEN      = ./call.pl
 CC       = cc
 
+ARCHS = ia64 x86
+
 #
 # The cmm-internal script generated an unknown number of files. Therefore
 # I cannot list them here. I don't know how to organize compiling and
@@ -40,8 +42,8 @@ CC       = cc
 all:VQ:
   mk call ; mk asm ; mk tarballs
 
-call:V: alpha-call x86-call mips-call
-asm :V: alpha-asm  x86-asm  mips-asm
+call:V: ${ARCHS:%=%-call}
+asm :V: ${ARCHS:%=%-asm}
 
 # A rule to pretty print a C-- source file
 
@@ -79,8 +81,8 @@ x86-call.sigs:D:
 mips-call.sigs:D:
   $QCC -e \
   'Debug.paths_proc(Backend.mips.target, "C",
-                    { { type = "int"  , widths = {32} }
-                    , { type = "float", widths = {32} }
+                    { { type = "int"  , widths = {32}     }
+                    , { type = "float", widths = {32, 64} }
                     })
    Debug.path_2_in_overflow(Backend.mips.target, "C")' \
     > $target
@@ -101,28 +103,24 @@ ia64-call.sigs:D:
 #
 
 alpha-call:V: alpha-call.sigs
-               $GEN -name=alpha-i                         -width=64 < $prereq
-              #$GEN -name=alpha-i-cmm0    -conv="cmm0"    -width=64 < $prereq
-              #$GEN -name=alpha-i-cmm1    -conv="cmm1"    -width=64 < $prereq 
-              #$GEN -name=alpha-i-cmm2    -conv="cmm2"    -width=64 < $prereq
-              #$GEN -name=alpha-i-cmm3    -conv="cmm3"    -width=64 < $prereq 
-               $GEN -name=alpha-x      -c                 -width=64 < $prereq
-              #$GEN -name=alpha-i-spec    -conv="C'"      -width=64 < $prereq
-              #$GEN -name=alpha-x-spec -c -conv="C'"      -width=64 < $prereq
+               mkdir -p alpha ; cd alpha
+               ../$GEN -name=alpha-i          -width=64 < ../$prereq
+               ../$GEN -name=alpha-x      -c  -width=64 < ../$prereq
 
 x86-call:V:   x86-call.sigs             
-               $GEN -name=x86-i                           -width=32 < $prereq
-               $GEN -name=x86-x        -c                 -width=32 < $prereq
-              #$GEN -name=x86-i-spec      -conv="C'"      -width=32 < $prereq
-              #$GEN -name=x86-x-spec   -c -conv="C'"      -width=32 < $prereq
-              #$GEN -name=x86-i-cmm       -conv="C--"     -width=32 < $prereq
-              #$GEN -name=x86-i-cmmspec   -conv="C--'"    -width=32 < $prereq
+               mkdir -p x86 ; cd x86
+               ../$GEN -name=x86-i            -width=32 < ../$prereq
+               ../$GEN -name=x86-x        -c  -width=32 < ../$prereq
 
 mips-call:V:  mips-call.sigs
-               $GEN -name=mips-i                          -width=32 < $prereq
-               $GEN -name=mips-x       -c                 -width=32 < $prereq
-              #$GEN -name=mips-i-spec     -conv="C'"      -width=32 < $prereq
-              #$GEN -name=mips-x-spec  -c -conv="C'"      -width=32 < $prereq
+               mkdir -p mips ; cd mips
+               ../$GEN -name=mips-i           -width=32 < ../$prereq
+               ../$GEN -name=mips-x       -c  -width=32 < ../$prereq
+
+ia64-call:V:  ia64-call.sigs
+               mkdir -p ia64 ; cd ia64
+               ../$GEN -name=ia64-i           -width=64 < ../$prereq
+               ../$GEN -name=ia64-x       -c  -width=64 < ../$prereq
 
 #
 # Compile *.c-- files to *.s code. Compilation depends on the desired
@@ -133,26 +131,40 @@ X86_CMM    = x86*.c--
 ALPHA_NUMS = 0 1 2 3 4 5 6 7
 ALPHA_CMM  = ${ALPHA_NUMS:%=alpha\\[%]??.c--}
 MIPS_CMM   = mips*.c--
+IA64_NUMS  = 0 1 2 3 4 5 6 7 8 9
+IA64_CMM   = ${IA64_NUMS:%=ia64\\?[%]??.c--}
 
 x86-asm:V:
+    cd x86
 	for f in "`echo "$X86_CMM" | tr ' ' '\n'`"; do
-		$QCC -e 'Options.globals=2' backend=Backend.x86 $QCCFLAGS \
+		../$QCC -e 'Options.globals=2' backend=Backend.x86 $QCCFLAGS \
 	    	 -stop .s `echo $f`
 	done
 
 alpha-asm:V:
+    cd alpha
     for f in $ALPHA_CMM; do
         PATTERN=`echo $f | tr '\\\\' '*'`
         FILES=`echo $PATTERN`
-		$QCC -e 'Options.globals=2' backend=Backend.alpha $QCCFLAGS \
+		../$QCC -e 'Options.globals=2' backend=Backend.alpha $QCCFLAGS \
               -stop .s $FILES
 	done
 
 mips-asm:V:
+    cd mips
 	for f in "`echo "$MIPS_CMM" | tr ' ' '\n'`" ; do
-		$QCC -e 'Options.globals=2' backend=Backend.mips $QCCFLAGS \
+		../$QCC -e 'Options.globals=2' backend=Backend.mips $QCCFLAGS \
         	 -stop .s `echo $f`
 	done
+
+ia64-asm:V:
+    cd ia64
+    for f in $IA64_CMM; do
+        PATTERN=`echo $f | tr '\\\\' '*'`
+        FILES=`echo $PATTERN`
+        ../$QCC -e 'Options.globals=2' backend=Backend.ia64 $QCCFLAGS \
+             -stop .s $FILES
+    done
 
 alpha%.dbg: alpha%.c--
   $QCC -e 'Options.globals=2' backend=Backend.alpha  \
@@ -162,20 +174,17 @@ alpha%.dbg: alpha%.c--
 # Run tests. This will only work on the right platform.
 #
 
-tarballs:V: alpha-test.tar.gz mips-test.tar.gz x86-test.tar.gz
-
+tarballs :V: ${ARCHS:%=%-test.tar.gz}
 %-tarball:V: %-test.tar.gz
 
-%-test.tar.gz: %.sh
-  cd ..
-  tar cf - testcc/$prereq testcc/$stem*.c testcc/$stem*.s | \
-    gzip -c > testcc/$target
-  cd testcc
+%-test.tar.gz: %/%.sh
+  tar cf - $stem/ | gzip -c > $target
 
-%-test:Q: %.sh
-  sh $prereq
+%-test:Q: %/%.sh
+  cd $stem
+  sh $stem.sh
 
-x86.sh:Q:
+x86/x86.sh:Q:
   echo '
   # set -x
   rm -f x86.log
@@ -200,7 +209,7 @@ x86.sh:Q:
   ' > $target  
   chmod +x $target
 
-alpha.sh:Q:
+alpha/alpha.sh:Q:
   echo '
   # set -x
   rm -f alpha.log
@@ -225,7 +234,7 @@ alpha.sh:Q:
   ' > $target
   chmod +x $target
 
-mips.sh:Q:
+mips/mips.sh:Q:
   echo '
   # set -x
   rm -f mips.log
@@ -252,10 +261,44 @@ mips.sh:Q:
   ' > $target
   chmod +x $target
 
-clean:V:
-   rm -f *.c-- *.c *.o *.s a.out *.sigs
-   rm -f alpha.sh mips.sh x86.sh
-   rm -f *.dbg *.pp *-test.tar.gz
-   rm -f *.log
+ia64/ia64.sh:Q:
+  echo '
+  # set -x
+  rm -f ia64.log
+  NFILES=`ls -1 ia64*.s | wc -l`
+  I=0
+  if echo ia64-i-*.s | grep -v \* > /dev/null; then
+    for f in ia64-i-*.s; do
+      (cc $f && ./a.out) | tee -a ia64.log | grep -v success
+      I=$((I + 1))
+      echo -n -e Finished $I of $NFILES tests: [ $((I * 100 / NFILES))% ]"\r"
+    done
+  fi
+  if echo ia64-x*-mn-*.s | grep -v \* > /dev/null; then
+    for f in ia64-x*-mn-*.s; do
+      g=`echo $f | sed -e "s/mn/callee/" -e "s/\.s/\.c/"`
+      (cc $f $g && ./a.out) | tee -a ia64.log | grep -v success
+      I=$((I + 1))
+      echo -n -e Finished $I of $NFILES tests: [ $((I * 100 / NFILES))% ]"\r"
+    done   
+  fi
+  echo Completed testing IA64 architecture.  Log file ia64.log created.
+  ' > $target
+  chmod +x $target
+
+ia64-clean:V:
+  rm -rf ia64/ ia64-call.sigs ia64-test.tar.gz
+
+x86-clean:V:
+  rm -rf x86/ x86-call.sigs x86-test.tar.gz
+
+alpha-clean:V:
+  rm -rf alpha/ alpha-call.sigs alpha-test.tar.gz
+
+mips-clean:V:
+  rm -rf mips/ mips-call.sigs mips-test.tar.gz
+
+clean:V: ${ARCHS:%=%-clean}
+   rm -f  *.dbg *.pp
 
 clobber:V: clean
