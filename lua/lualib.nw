@@ -124,7 +124,7 @@ core at all.
 <<signatures>>=
 module type BARE = 
   functor (C : CORE) -> sig
-    val init : C.V.state -> unit
+    val init : C.V.state -> StringList.t
   end
 @
 A \emph{typeful} library won't work with just any core---it works only
@@ -135,7 +135,7 @@ typeful library depends.
 module type TYPEFUL = sig
   type 'a combined  (* the combined type of all the view on which lib depends *)
   module M : functor (C : CORE with type 'a V.userdata' = 'a combined) -> sig
-    val init : C.V.state -> unit
+    val init : C.V.state -> StringList.t
   end
 end
 @ 
@@ -144,6 +144,14 @@ This means we occasionally need to extend a bare library to make it typeful.
 We put the type first, not the library, because the partial
 application is useful
 <<lualib.mli>>=
+module StringList : sig
+  type t
+  val empty  : t
+  val append : t -> t -> t
+  val cons   : string -> t -> t
+  val of_list : string list -> t
+  val apply  : t -> (string -> unit) -> unit
+end
 <<signatures>>
 module Extend (T : TYPEVIEW) (L : BARE) : TYPEFUL with type 'a combined = 'a T.combined
 @ 
@@ -206,6 +214,14 @@ We actually define combining modules for only the case $n=10$, then
 define some [[Unused]] types and libraries to use as placeholders for
 smaller values of~$n$.  The rest is bookkeeping.
 <<lualib.ml>>=
+module StringList = struct
+  type t = (string -> unit) -> unit
+  let empty f = ()
+  let of_list l f = List.iter f l
+  let append l1 l2 f = l1 f; l2 f
+  let cons s l f = f s; l f
+  let apply l = l
+end
 <<signatures>>
 @ 
 <<lualib.ml>>=
@@ -219,14 +235,14 @@ module Unused = struct
 
   module Bare =
       functor (C : CORE) -> struct
-        let init g = ()
+        let init g = StringList.empty
       end (*Unused.Bare*)
 
   module Typeful (L : TYPEFUL) =
     struct
       type 'a combined = 'a L.combined
       module M (C : CORE with type 'a V.userdata' = 'a combined) = struct
-        let init g = ()
+        let init g = StringList.empty
       end (*M*)
     end (*Unused.Typeful*)
 end
@@ -328,7 +344,7 @@ module Empty = struct
     struct
       type 'a combined = 'a Type.t
       module M (C : CORE with type 'a V.userdata' = 'a combined) = struct
-        let init g = ()
+        let init g = StringList.empty
       end (*M*)
     end (*Empty.Library*)
 end
@@ -358,8 +374,19 @@ end
       module M8 = L8.M(C)
       module M9 = L9.M(C)
       module M10 = L10.M(C)
-      let init g = M1.init g; M2.init g; M3.init g; M4.init g; M5.init g;
-                   M6.init g; M7.init g; M8.init g; M9.init g; M10.init g
+      let init g =
+        let l1  = M1.init  g in
+        let l2  = M2.init  g in
+        let l3  = M3.init  g in
+        let l4  = M4.init  g in
+        let l5  = M5.init  g in
+        let l6  = M6.init  g in
+        let l7  = M7.init  g in
+        let l8  = M8.init  g in
+        let l9  = M9.init  g in
+        let l10 = M10.init g in
+        let (<<) = StringList.append in
+        l1 << l2 << l3 << l4 << l5 << l6 << l7 << l8 << l9 << l10
     end (*Combine.L10.M*)
   end (* Combine.L10*)
 @

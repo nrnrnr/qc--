@@ -540,7 +540,8 @@ combined) =
         <<backplane builtins>>
 
         type state = Interp.V.state
-        let init = Interp.register_module "Backplane" backplane_builtins
+        let init g = Interp.register_module "Backplane" backplane_builtins g;
+          Lua.Lib.StringList.empty (* FIX *)
      end
   end
 @
@@ -626,15 +627,15 @@ let projectStage stage' = match stage' with
     ; paramExpected = (V.option V.string).V.project
                           (V.Table.find stage (embedString "paramExpected"))
     ; stateCreated = list2SSet
-                 (match (V.Table.find stage (embedString "stateCreated")) with
+                 (match (V.Table.find stage (embedString "creates")) with
                   | V.Nil -> [] 
                   | x -> ((V.list V.string).V.project x))
     ; stateDestroyed = list2SSet
-                 (match (V.Table.find stage (embedString "stateDestroyed")) with
+                 (match (V.Table.find stage (embedString "destroys")) with
                   | V.Nil -> [] 
                   | x -> ((V.list V.string).V.project x))
     ; stateUsed = list2SSet 
-                     (match (V.Table.find stage (embedString "stateUsed")) with
+                     (match (V.Table.find stage (embedString "uses")) with
                       | V.Nil -> [] 
                       | x -> ((V.list V.string).V.project x))
     }

@@ -52,7 +52,70 @@ function dynamic through Lua.
 Care would have to be taken to avoid paying for an expensive identity
 function (embedding/projection) at every application of such a function.
 @
+Here is a tentative signature for a postpass for an integer/float
+machine.
+<<postpass>>=
+module type POST = sig
+  val itemps : Space.t  (* spaces for temporaries *)
+  val ftemps : Space.t
 
+  val byte_order : Rtl.aggregation (* used on all access to memory *)
+  val wordsize   : int             (* used as width of register number! *)
+
+  type temp = Register.t
+  type exp = Rtl.Private.exp
+  type rtl = Rtl.rtl
+  type width = Rtl.width
+  type assertion = Rtl.Private.assertion
+  type operator = Rtl.Private.opr
+
+  <<generic expansion operations>>
+end
+@ 
+We provide basic load and store.
+<<generic expansion operations>>=
+module Address : sig
+  type t
+  val reg : temp -> t
+end
+
+val load  : dst:temp  -> addr:Address.t -> assertion -> rtl list
+val store : addr:Address.t -> src:temp -> assertion -> rtl list
+@
+We also provide sign-extending and zero extending loads
+as well as low-bit--extracting stores, all of which are used only
+with integer registers.
+<<generic expansion operations>>=
+val sxload  : dst:temp  -> addr:Address.t -> width -> assertion -> rtl list
+val zxload  : dst:temp  -> addr:Address.t -> width -> assertion -> rtl list
+val lostore : addr:Address.t  -> src:temp -> width -> assertion -> rtl list
+@
+We need a move operation.
+<<generic expansion operations>>=
+val move : dst:temp -> src:temp -> rtl list
+@ 
+Load immediate can take any constant except a Boolean.
+<<generic expansion operations>>=
+val li : dst:temp -> Rtl.Private.const -> rtl list
+@ 
+We provide simple shortcuts for binary and unary operators.
+I don't know if this is worthwhile.
+<<generic expansion operations>>=
+val binop : dst:temp -> operator -> temp -> temp -> rtl list
+val unop  : dst:temp -> operator -> temp         -> rtl list
+val rtlop : dst:temp -> operator -> temp list    -> rtl list
+@
+The arguments to these functions must satisfy the invariants that the
+temporaries are in the spaces the expander expects.
+It announces these spaces through argument and result contexts.
+<<generic expansion operations>>=
+type context = (width -> temp) * (Rtl.space -> bool)
+val icontext : context (* for ints *)
+val fcontext : context (* for floats *)
+val acontext : context (* for addresses *)
+val arg_contexts   : operator -> context list
+val result_context : operator -> context
+@ 
 This is not quite what a real code expander does, but it should
 suffice for experiments.
 The context has three parts, all of which require knowledge of the
@@ -81,6 +144,10 @@ val context : Target2.t -> context
 val expand : Talloc.Multiple.t -> context -> Rtl.rtl -> Rtl.rtl list
   (* returns *last* instruction at *head* of list (reverse execution order) *)
 val cfg : 'a -> Proc.t -> bool
+<<postpass>>
+module IntFloatAddr (Post : POST) : sig
+  val expand : Rtl.rtl -> Rtl.rtl list
+end 
 @ 
 Here are some abbreviations and utilities.
 <<expander.ml>>=
@@ -106,6 +173,7 @@ let empty = fun l -> l
 let unit x = fun l -> x :: l
 let (@::) x f = fun l -> x :: f l
 let (@@) f1 f2 = fun l -> f1 (f2 l)
+let to_hughes l = fun l' -> l @ l'
 let rec concat = function
   | [] -> empty
   | [x] -> x  (* premature optimization is the root of all evil *)
@@ -168,7 +236,160 @@ and loc l =
     | _ -> assert false (* any mem-like location must be a cell *)
   else
     uploc l, empty
+@ 
+% ----------------------------------------------------------------
+\subsection{A generic expander}
+% ----------------------------------------------------------------
+<<expander.ml>>=
+<<postpass>>
+module IntFloatAddr (Post : POST) = struct
+  let itemp = Talloc.Single.reg (Talloc.Single.for_space Post.itemps)
+  let ftemp = Talloc.Single.reg (Talloc.Single.for_space Post.ftemps)
+
+  <<generic expander>>
+end
+@ 
+The core of the expander is a function [[to_temp]], which takes an
+expression and returns a pair containing a list of instructions and a
+temporary such that executing those instructions develops the
+expression into that temporary.
+To get the right temporary, we work within a context, which makes it
+possible to allocate a fresh temporary and to check if an existing
+temporary is OK.
+Function [[temp_in_context]] inserts a move if needed.
+<<generic expander>>=
+let alloc (allocate, check) w = allocate w
+let ok    (allocate, check) space = check space
+
+let temp_in_context ((space, n, w) as t) context instructions =
+  if ok context space then
+    t, instructions
+  else
+    let t' = alloc context w in
+    t', to_hughes (Post.move t' t) @@ instructions
+<<context guessing>>
+@ 
+It's questionable whether the byte order of a register should be fixed
+to that of memory, but so be it.
+<<generic expander>>=
+let temploc (space, n, w) =
+  Rtl.cell Rtl.none space Post.byte_order w
+           (Rtl.bits (Bits.U.of_int n Post.wordsize) Post.wordsize)
+@ 
+<<generic expander>>=
+let expand =
+  let rec to_temp context e = match e with
+    | RP.Const k ->
+        let w = width e in
+        let t = alloc context w in
+        t, to_hughes (Post.li t k)
+    | RP.Fetch (RP.Cell ('m', agg, w, addr, assn), w') ->
+        let t = alloc context w in
+        let a, is = address addr in
+        assert (agg = Post.byte_order);
+        assert (w = w');
+        t, to_hughes (Post.load t a assn) @@ is
+    | RP.Fetch (RP.Cell (space, agg, w, RP.Const (RP.Bits b), assn), w') ->
+        assert (w = w');
+        temp_in_context (space, Bits.U.to_int b, w) context empty
+    | RP.Fetch _ ->
+        Impossible.impossible "memory-like access to non-memory space"
+    <<cases for sign-extending and zero-extending loads>>
+    | RP.App (op, args) ->
+        let (temps, is) =
+          List.split (List.map2 (fun c e -> to_temp c e) (Post.arg_contexts op) args)
+        in
+        let w = width e in
+        let t = alloc (Post.result_context op) w in
+        let compute = match temps with
+        | [x; y] -> Post.binop t op x y
+        | [x]    -> Post.unop  t op x
+        | _      -> Post.rtlop t op temps
+        in
+        temp_in_context t context (to_hughes compute @@ concat is)
+  <<other generic expander functions>>
+  and rtl r = match Rtl.Convert.rtl r with
+  | RP.Rtl [(g, RP.Store (left, right, w))] ->
+      guarded g left right w
+  | _ -> unit r (* no expansion takes place *)
+  in fun r -> rtl r []
+@ 
+Sign-extending and zero-extending loads are done into integer registers only.
+This fact should be documented in the [[POST]] interface.
+<<cases for sign-extending and zero-extending loads>>=
+| RP.App (("sx", [n; w]), [RP.Fetch (RP.Cell ('m', agg, n', addr, assn), n'')]) ->
+    assert (n == n' && n' == n'');
+    let t = alloc Post.icontext w in
+    let a, is = address addr in
+    assert (agg = Post.byte_order);
+    temp_in_context t context (to_hughes (Post.sxload t a n assn) @@ is)
+| RP.App (("zx", [n; w]), [RP.Fetch (RP.Cell ('m', agg, n', addr, assn), n'')]) ->
+    assert (n == n' && n' == n'');
+    let t = alloc Post.icontext w in
+    let a, is = address addr in
+    assert (agg = Post.byte_order);
+    temp_in_context t context (to_hughes (Post.zxload t a n assn) @@ is)
 @
+We might one day support multiple addressing modes, but for now, just registers. 
+<<other generic expander functions>>=
+and address exp =
+  let t, is = to_temp Post.acontext exp
+  in  Post.Address.reg t, is
+@
+It would be good to do something with multiple assignments and with
+guards, but for now I keep things very simple.
+
+(Need to be able to compile a guard to control flow.)
+The remaining functions are simple.
+<<other generic expander functions>>=
+and guarded g left right w =
+  match g with
+  | RP.Const (RP.Bool true) -> assign left right w
+  | _ ->
+      (* this case is bogus *)
+      let r, is  = to_temp (guess_context right) right in
+      let l, is' = loc left in
+      R.guard (up g) (R.store l (R.fetch (temploc r) w) w) @:: is @@ is'
+
+and assign left right w =
+  match left with
+  | RP.Cell ('m', agg, w, addr, assn) ->
+      assert (agg = Post.byte_order);
+      let a, is' = address addr in
+      (match right with
+      | <<\emph{pattern [[->]] action} for low-bit store>>
+      | _ ->
+          let r, is = to_temp (guess_context right) right in
+          to_hughes (Post.store a r assn) @@ is' @@ is)
+  | RP.Cell (space, agg, w, RP.Const (RP.Bits b), assn) ->
+      let r, is = to_temp (guess_context right) right in
+      to_hughes (Post.move ~dst:(space, (Bits.U.to_int b), w) ~src:r) @@ is
+  | _ ->
+      Impossible.impossible "memory-like access to non-memory space"
+<<\emph{pattern [[->]] action} for low-bit store>>=
+RP.App (("lobits", [w; n]), [rhs]) ->
+  let r, is = to_temp Post.icontext rhs in
+  to_hughes (Post.lostore a r n assn) @@ is' @@ is
+@   
+<<other generic expander functions>>=
+and loc l =
+  match l with
+  | RP.Cell ('m', agg, w, addr, assn) ->
+      let addr, is = to_temp (Post.acontext) addr in
+      uploc (RP.Cell ('m', agg, w, fetch (temploc addr), assn)), is
+  | _ -> uploc l, empty
+
+@
+
+We guess a context based on right-hand side.
+<<context guessing>>=
+let guess_context = function
+  | RP.Const k -> Post.icontext
+  | RP.Fetch (RP.Cell (space, agg, w, RP.Const (RP.Bits b), assn), w') when
+      (space = 'f' || space = 'u') -> Post.fcontext
+  | RP.Fetch _ -> Post.icontext
+  | RP.App (op, args) -> Post.result_context op
+@ 
 
 % ------------------------------------------------------------------ 
 \subsection{Test Code}
@@ -320,8 +541,16 @@ struct
       let ( **-> ) = V.( **-> )
       let proc     = ProcT.makemap V.userdata V.projection
       let pf t     = (V.pfunc t).V.embed    (* pure Lua function *)
-      let init = C.register_module "Expander" 
-          [ "toy" , pf (V.value **-> proc **-> V.result V.bool) cfg
-          ]
+      let init g = C.register_module "Expander" 
+          [ "toyf" , pf (V.value **-> proc **-> V.result V.bool) cfg
+          ] g;
+          Lua.Lib.StringList.of_list [ <<lua initialization>> ]
+          
     end (*M*)    
 end (*Lua*)            
+@ 
+<<lua initialization>>=
+"Expander.toy = { fn = Expander.toyf, uses = { 'proper widths', 'no vars' }, \
+                  name = 'Expander.toy', creates = { 'simple RHS' }, \
+                  doc = 'A toy code expander' }"
+@ 

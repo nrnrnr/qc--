@@ -40,9 +40,16 @@ OCAMLDEFS =     $TOP/config/autodefs.ocaml
 	$NOTANGLE -R$target $prereq | $CPIF $target
 
 
-# generate a self-contained LaTeX document from a LaTeX file that
+# Generate a self-contained LaTeX document from a LaTeX file that
 # is supposed to be read by \input from a master LaTeX file. This rule
 # allows to specify extra packages like tabularx to be included. 
+# A file can specify additional lines in the preamble by including 
+# a formal comment of the following form:
+#     % inc: <text to be included>
+# For example
+#     % inc: \usepackage{grammar}
+# The % sign must be in column 1.
+
 # The here-document ended by EOF relies on a single TAB character at
 # the beginning of a line - so don't substitute spaces for it .
 
@@ -59,6 +66,9 @@ NOWEBBREAKCODE=no
 	\pagestyle{noweb}
 	`if [ $NOWEBBREAKCODE = yes ]; then echo '\noweboptions{breakcode}'; fi`
 	\input{$TOP/config/macros.tex}
+	EOF
+	awk '/^%  *inc:  */ { $1 = ""; $2 = ""; printf "%s ", $0 }' $stem.inc
+	tr '\n' ' ' <<EOF
 	\begin{document}
 	\nwfilename{$stem.nw}
 	\tableofcontents

@@ -296,15 +296,26 @@ module type CORE = sig
        creating t if needed *)
 end
 @ 
-All a library does is add values to the initial state of an
-interpreter.
-These values are the functions, etc, provided by the library.
+A library does two things: add values to the initial state of an
+interpreter and provide code to be executed at startup time.
+The values are the functions, etc, provided by the library.
 If the library needs to attach private data to the state of the
 interpreter, it can either use closures to capture this state (see the
 I/O library for an example) or it can keep the state in the
 interpreter's global variables.
 If per-interpreter state must be shared among two or more libraries,
 global variables are the only option.
+The code is a list of strings, but it is represented in a format that
+enable constant-time concatenation.
+<<library support>>=
+module StringList : sig
+  type t
+  val empty  : t
+  val append : t -> t -> t
+  val cons   : string -> t -> t
+  val apply  : t -> (string -> unit) -> unit
+  val of_list : string list -> t
+end
 @
 A \emph{bare} library does not use any user types---only the basic
 ones built into every Lua interpreter.  That means it works with any
@@ -312,7 +323,7 @@ core at all.
 <<library support>>=
 module type BARE = 
   functor (C : CORE) -> sig
-    val init : C.V.state -> unit
+    val init : C.V.state -> StringList.t
   end
 @
 A \emph{typeful} library won't work with just any core---it works only
@@ -323,7 +334,7 @@ typeful library depends.
 module type TYPEFUL = sig
   type 'a combined  (* the combined type of all the views on which lib depends *)
   module M : functor (C : CORE with type 'a V.userdata' = 'a combined) -> sig
-    val init : C.V.state -> unit
+    val init : C.V.state -> StringList.t
   end
 end
 @ 
@@ -388,6 +399,9 @@ one must provide a parser to make this library.
 @
 The core interpreter contains a compiler for ASTs and some other
 stuff that I might feel like documenting one day.
+The function [[mk]] provides both an initial state and the startup
+code from libraries.  The startup code is intended to be passed
+[[dostring]].   
 <<lua.mli>>=
 module type INTERP_CORE = sig
   module Value : VALUE
@@ -397,8 +411,9 @@ module type INTERP_CORE = sig
   exception Error of string
   val compile : srcdbg:(Srcmap.map * bool) -> Ast.chunk list -> state -> value list
   val test    : unit -> (string * value list) list
-  val state   : unit -> state           (* produce a fresh, initialized state *)
-  val error   : state -> string -> 'a   (* error fallback *)
+  type startup_code = (string -> unit) -> unit
+  val pre_mk  : unit -> state * startup_code (* produce a fresh, initialized state *)
+  val error   : state -> string -> 'a    (* error fallback *)
 
   val getglobal : state -> value -> value
     (* get the named global variable *)
@@ -441,6 +456,8 @@ them out if you won't use them.
 Finally, to make a full-blown interpreter, you need to supply a
 parser.
 We then add the basic library.
+With the basic library in place, you get the function [[mk]], which
+makes a fresh state, including running any startup code.
 <<lua.mli>>=
 module type INTERP = sig
   include INTERP_CORE
@@ -448,6 +465,7 @@ module type INTERP = sig
   val do_lexbuf : sourcename:string -> state -> Lexing.lexbuf -> value list
   val dostring  : state -> string -> value list
   val dofile    : state -> string -> value list
+  val mk        : unit -> state
 end
 module MakeInterp (MakeParser : Parser.MAKER) (I : INTERP_CORE)
     : INTERP with module Value = I.Value
@@ -504,6 +522,7 @@ module type INTERP = sig
   val do_lexbuf : sourcename:string -> state -> Lexing.lexbuf -> value list
   val dostring  : state -> string -> value list
   val dofile    : state -> string -> value list
+  val mk        : unit -> state
 end
 module Run (I : INTERP) = Luarun.Make (I)
 module MakeCore = Luainterp.Make

@@ -27,7 +27,8 @@ module type S = sig
   exception Error of string
   val compile : srcdbg:(Srcmap.map * bool) -> Ast.chunk list -> state -> value list
   val test    : unit -> (string * value list) list (* simple and inadequate *)
-  val state   : unit -> state           (* produce a fresh, initialized state *)
+  type startup_code = (string -> unit) -> unit
+  val pre_mk  : unit -> state * startup_code (* produce a fresh, initialized state *)
   val error   : state -> string -> 'a   (* error fallback *)
 
   val getglobal : state -> value -> value
@@ -99,11 +100,12 @@ module Make  (T : Lualib.COMBINED_TYPE)
   end
   module L' = L.M(Core)
   include I
-  let state () = (* raw state + fallbacks + library initialization *)
+  type startup_code = (string -> unit) -> unit
+  let pre_mk () = (* raw state + fallbacks + library initialization + startup code*)
     let g = V.state() in
-    add_fallbacks g;
-    L'.init g;
-    g
+    let () = add_fallbacks g in
+    let initcode = L'.init g in
+    g, Lualib.StringList.apply initcode
 
 end (* Make *)
 @

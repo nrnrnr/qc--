@@ -100,15 +100,16 @@ qc="../bin/qc--"
 
 if [ $# -ne 1 ]; then
     echo "usage: $this file.c--"    
+    exit 1
 fi
 
 file="$1"
 
 # three rounds
 
-$qc -p $file           > $tmp/$this.$$.1
-$qc -p $tmp/$this.$$.1 > $tmp/$this.$$.2
-$qc -p $tmp/$this.$$.2 > $tmp/$this.$$.3
+$qc -pp $file           > $tmp/$this.$$.1
+$qc -pp $tmp/$this.$$.1 > $tmp/$this.$$.2
+$qc -pp $tmp/$this.$$.2 > $tmp/$this.$$.3
 
 diff -c $tmp/$this.$$.2 $tmp/$this.$$.3 || echo "@>>> $file "
 rc="$?"
@@ -170,7 +171,10 @@ compiler to make sure the old behavior is still matched.
 
 ## set defaults
 
-verbose=off
+case $VERBOSE in
+  -v) verbosity=on ;;
+  *)  verbosity=off ;;
+esac
 this="regr"
 tmp="${TMP:-/tmp}/$this.$$"
 stdin="/dev/null"
@@ -188,12 +192,12 @@ trap "rm -f $tmp.* ; exit 1" 1 2 3 15
 ## parse command line arguments and show usage
 
 if [ $# -lt 1 ]; then
-    cat @<<EOF
+    cat <<EOF
     
      $this cmd [-r] [-in ifile] [-out ofile] [-err efile] [-x n]  [-f file] .. 
     
      Regression test tool. Runs cmd and matches its behavior against specs
-     on the command line:
+     on the command line.  Verbosity is off unless VERBOSE is -v.  Options:
 
      
      -x n:        cmd is expected to exit with exitcode n (default 0)
@@ -214,7 +218,9 @@ if [ $# -lt 1 ]; then
                   The recording mode helps to build all the files for
                   later regression testing.  
 
-     -v           Verbose Flag.
+     -q           Verbosity off (quiet).
+
+     -v           Verbosity on (verbose).
 EOF
 exit 2
 fi
@@ -234,7 +240,9 @@ while : ; do
         -x)
             exitc="$2"; shift;;
         -v)
-            verbode="on";;
+            verbosity="on";;
+        -q)
+            verbosity="off";;
         -r)
             recording="on";;
         -f)
@@ -251,9 +259,13 @@ done
 # run cmd
 # shell quoting hell is upon us.
 
-if [ "$verbose" = "on" ]; then
-    echo "testing command: '$cmd'"
-fi
+function echov {  # echo if verbose
+  case $verbosity in
+    on) echo "$*" ;;
+  esac
+}
+
+echov "testing command: '$cmd'"
 
 if [ "$recording" = "off" ]; then 
     eval "$cmd < '$stdin' 2> '$tmp.stderr' > '$tmp.stdout'"
@@ -278,27 +290,40 @@ fi
 rc=0
 
 if ! [ "$returnc" = "$exitc" ]; then
-    echo "failed: '$cmd' exit code $returnc does not match $exitc"
+    echov "failed: '$cmd' exit code $returnc does not match $exitc"
+    failmsg="unexpected return code"
     rc=1
 fi
 
-if ! cmp "$stdout" "$tmp.stdout" ; then
-    echo "failed: '$cmd' stdout does not match expectation"
-    diff "$stdout" "$tmp.stdout"
+if [ ! -r "$stderr" ]; then
+    echo "Error in test suite: cannot compare '$stderr' with stderr" 1>&2
+    exit 1
+elif ! cmp "$stderr" "$tmp.stderr" > /dev/null ; then
+    echov "failed: '$cmd' stderr does not match expectation"
+    failmsg="stderr does not match"
+    if [ "$verbosity" = on ]; then diff "$stderr" "$tmp.stderr"; fi
     rc=1
 fi
 
-if ! cmp "$stderr" "$tmp.stderr" ; then
-    echo "failed: '$cmd' stderr does not match expectation"
-    diff "$stderr" "$tmp.stderr"
+if [ ! -r "$stdout" ]; then
+    echo "Error in test suite: cannot compare '$stdout' with stdout" 1>&2
+    exit 1
+elif ! cmp "$stdout" "$tmp.stdout" > /dev/null ; then
+    echov "failed: '$cmd' stdout does not match expectation"
+    failmsg="stdout does not match"
+    if [ "$verbosity" = on ]; then diff "$stdout" "$tmp.stdout"; fi
     rc=1
 fi
 
 for f in $files; do
     expect=`basename $f`
-    if ! cmp $f $expect; then 
-        echo "failed: $f does not match expectation $expect"
-        diff -c $f $expect
+    if [ ! -r "$expect" -o ! -r "$f" ]; then
+       echo "Error in test suite: cannot compare '$expect' with '$f'" 1>&2
+       exit 1
+    elif ! cmp $f $expect > /dev/null ; then 
+        echov "failed: $f does not match expectation $expect"
+        failmsg="$f does not match"
+        if [ "$verbosity" = on ]; then diff -c $f $expect; fi
         rm -f $f
         rc=1
         break
@@ -316,6 +341,10 @@ rm -f $tmp.*
 #
 # exit
 #
+
+if [ $verbosity = off -a $rc -ne 0 ]; then
+  echo "mk VERBOSE=-v $MKTARGET # (FAILED: $failmsg)"
+fi
 
 exit $rc
 @

@@ -13,6 +13,7 @@ module Add (MakeParser : Luaparser.MAKER) (I : Luainterp.S) : sig
   val do_lexbuf : sourcename:string -> state -> Lexing.lexbuf -> value list
   val dostring  : state -> string -> value list
   val dofile    : state -> string -> value list
+  val mk        : unit -> state  (* builds state and runs startup code *)
 end with module Value = I.Value
 <<luabaselib.ml>>=
 module Add (MakeParser : Luaparser.MAKER) (I : Luainterp.S) = struct
@@ -65,9 +66,10 @@ module Add (MakeParser : Luaparser.MAKER) (I : Luainterp.S) = struct
     ] 
 
   include I
-  let state () =
-    let g = I.state () in
+  let mk () =
+    let g, init = I.pre_mk () in
     I.register_globals luabaselib g;
+    init (fun s -> ignore (dostring g s));
     g
 end
 <<toplevel>>=

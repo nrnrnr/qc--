@@ -195,7 +195,7 @@ let main () =
     let args        = List.tl argv in
     let args        = expand_args args in
     let usage       = "usage: " ^ this ^ " -e 'arg' [arg arg ..]" in
-    let state       = I.state () in (* fresh Lua state *)       
+    let state       = I.mk () in (* fresh Lua state *)       
     let evaluate e  = ignore (I.dostring state e) in
     let ()          = I.register_module "Boot"  (* build Boot table *)
                         ["qc--.lua" , V.String This.boot] state in
@@ -470,7 +470,7 @@ Expand.stages =
     , generic   = B.mk("PV.expander" ,        PV.expander)
     , dummy     = B.mk("Dummyexpand.expand" , Dummyexpand.expand)
     , sparc     = B.mk("Sparcexpand.expand" , Sparcexpand.expand)
-    , toy       = B.mk("Expander.toy",        Expander.toy)
+    , toy       = Expander.toy -- not an error (this is the new way)
     }
 @ 
 Substantial additional thought needs to be given to how [[Default]]
@@ -658,8 +658,9 @@ function CommandLineOption.asdl  ()  Main.cc(Targets.Asdl,     Main.getfile()) e
 function CommandLineOption.pp    ()  Main.pp(Main.getfile())                   end
 function CommandLineOption.check ()  Main.check(Targets.Dummy, Main.getfile()) end
 function CommandLineOption.sparc ()  Targets.Default = Targets.Sparc end
-CommandLineOption.dump             =  Dump.vars
-CommandLineOption.script           =  Dump.script
+CommandLineOption.dump   =  Dump.vars
+Main.dump                =  Dump.vars
+CommandLineOption.script =  Dump.script
 @
 
 % ------------------------------------------------------------------  

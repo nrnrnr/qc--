@@ -25,30 +25,36 @@ MANDIR =    ../man
 SRC    = `echo *.c--`
 TEST   = ${SRC:%.c--=%.test}
 RECORD = ${SRC:%.c--=%.record}
+VERBOSE =
 
 test:VQ:        $TEST
+vtest:VQ:	mk $MKFLAGS VERBOSE=-v test
 record:VQ:      $RECORD
 
 # ------------------------------------------------------------------ 
 # useful targets to create test results
 # ------------------------------------------------------------------ 
 
-%.test:V:       %.c-- ../bin/qc-- fp regr
+%.test:VQ:       %.c-- ../bin/qc-- fp regr
 		SELF=$stem.c--
 		BASE=$stem
-		export SELF BASE
-                sed -n 's!^///!!p' $SELF | sh -x || true
+		MKTARGET=$target
+		case $VERBOSE in -v) SHX=-x ;; *) SHX= ;; esac
+		export SELF BASE MKTARGET
+                sed -n 's!^///!!p' $SELF | sh $SHX || true
+		case "$VERBOSE$stem" in -v*) ;; *0) echo "# tested $stem" ;; esac
 
 # The update rule updates the expected output of a test.  Use
 # only after you have verified that the factual output is indeed the
 # expected output!
 
-%.record:V:     %.c-- ../bin/qc-- fp regr       
+%.record:VQ:     %.c-- ../bin/qc-- fp regr       
 		SELF=$stem.c--
 		BASE=$stem
                 REGRFLAGS="-r"
 		export SELF BASE REGRFLAGS
                 sed -n 's!^///!!p' $SELF | sh -x || true
+		# why is there || true on the preceding line??
 
 # ------------------------------------------------------------------  
 # sources generated from noweb sources
