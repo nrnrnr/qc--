@@ -11,8 +11,10 @@
 % 
 % $Id$
 
+% inc: \usepackage{nchicago}
+
 % ------------------------------------------------------------------ 
-\section{Control-Flow Graph}
+\section{Control-Flow Graph Revisions}
 % ------------------------------------------------------------------ 
 
 Here are some possible revisions to the flow graph.
@@ -121,7 +123,419 @@ An infinite loop must contain an artificial edge so it can reach the
 exit.
 
 \end{itemize}
-
-<<cfg.mli>>=
-val node_labeled : t -> string -> node
 @ 
+
+\section{Goals}
+
+This section lists our goals for the control-flow graph.  
+It is cribbed from a similar section in the documentation for Machine
+SUIF. 
+\begin{itemize}
+\item
+\emph {Analysis.}
+Many compiler analyses assume a flow graph as a basic data
+structure. 
+Such analyses include
+liveness analysis, reaching definitions,
+and dead-code identification.
+We provide the ability to traverse and observe the nodes and edges in
+the flow graph.
+\item
+\emph{Transformation.}
+We also want to support control-flow transformation, e.g., by merging
+instructions, moving code out of loops, various forms of redundancy
+elimination, and so on.
+Davidson-style code expansion may also involve rewriting Boolean
+operations into control flow.
+\item
+\emph {Simple ordering.}
+To be able to emit a program, 
+we provide minimal support for mapping the flow graph onto an ordered
+list of code, data, and labels.
+While we wouldn't mind supporting automated code layout and
+code-layout optimizations, it is not a high priority.
+Furthermore, and following Machine SUIF, we make it possible to
+manipulate a flow graph that has no layout in memory---we require only
+that a layout be established before code is emitted.
+\item
+\emph{Minimize burden on clients.}
+We minimize the number of checked and unchecked run-time errors a
+client can commit.
+This policy may make the flow graph more complex and more expensive,
+but we believe it is better that this abstraction do as much of the
+hard work as possible.
+\end{itemize}
+
+
+\section{The Control-Flow Graph}
+
+Quick~{\PAL} uses a control-flow graph to represent a procedure.
+The flow-graph abstraction is inspired by \citeN{knoop:basic-block},
+who described the basic-block control-flow graph as a ``living
+dinosaur.''
+Accordingly, our flow graph does not use basic blocks; each node
+represents at most one instruction.
+
+This abstraction actually represents \emph{two} graphs: a control-flow
+graph and a physical-layout graph.
+A~\emph{control-flow edge} indicates the possibility that control may flow
+from one node to another during the dynamic execution of a program.
+A~\emph{layout edge} indicates that the code for one node
+appears before the code for another node in the image (assembly or binary)
+that is written to the output.\footnote
+{N.B.~The code for a third node may intervene.}
+When we refer to an unqualified edge, predecessor, or successor, we
+always refer to the control-flow graph, not to the layout graph.
+
+We classify a node according to the number of predecessors and
+successors it may have, and also according to the \emph{payload} it
+may carry.
+\begin{itemize}
+\item
+A \emph{join point} has arbitrarily many precedessors and exactly one
+successor. 
+Its payload is one or more \emph{labels} but no code.
+A join point is the only node with multiple predecessors.
+The layout successor a join point is its control-flow successor.
+
+The graph maintains the following invariant: the sucessor of a join
+point is never a join point.
+The graph transparently merges join points as needed to maintain this
+invariant, so it is safe for a graph-creation client to hang on to an
+old join point. 
+A graph-analysis client, however, should be cautioned about comparing
+to an old join point if the graph has changed.
+\item
+An \emph{ordinary instruction} has one predecessor and one successor.
+Its payload is one instruction.
+Its layout successor is its control-flow successor.
+\item
+A \emph{control-flow} instruction has one predecessor and one or more
+successors. 
+Every successor must be a join point.
+There are a variety of control-flow instructions with different
+numbers of successors and different constraints on layout.
+\begin{itemize}
+\item
+A \emph{branch node} performs a goto but is intended to implement no
+other useful computation.
+It has a unique predecessor and a unique successor.
+Its layout successor may be different from its control-flow successor.
+The standard RTL of a branch node is an unconditional assignment to the program
+counter. 
+\item
+A \emph{jump} node is a lot like a branch except its successor is the
+exit node, which is considered a join point \emph{ex officio}. 
+\item
+A \emph{conditional branch} has two
+successors, which are labeled true and false.
+It contains an RTL that normally satisfies the following properties:
+\begin{itemize}
+\item
+It contains a single effect, which is a guarded assignment to the
+program counter.
+\item
+The value assigned to the program counter is a label (link-time
+constant) associated with the join point that is the true successor.
+\end{itemize}
+If the second property is not satisfied, we say the node is
+\emph{dirty}.\footnote{We can and should prevent the node from ever
+becoming dirty.}
+The node must be clean before it can be passed to an assembler.
+
+If the graph has layout, the layout successor of a branch node must
+be its false successor.
+
+It is legitimate at any time to perform the following changes as one
+atomic operation:
+\begin{itemize}
+\item
+Swap the true and false successors
+\item
+Negate the condition on the guard
+\item
+Replace the label in the assignment with the new true successor.
+\end{itemize}
+The [[bnegate]] operation in the postexpander interface is useful here.
+\item
+A computed goto with multiple successors is a \emph{multiway branch}.
+Its layout successor is unconstrained.
+\item 
+A \emph{call} node has many successors, which are listed in this
+order:
+alternate return continuations, normal return, unwind continuations,
+cut-to continuations. 
+Its layout successor must implement the alternate return
+continuations, if any, and the successor after that must be the normal
+return continuations.
+(If there are no alternate return continuations, the direct successor
+implements the normal return continution.)
+\item
+A \emph{cut to} node
+normally has a single successor (the exit) but may have multiple
+successors. 
+Its layout successor is unconstrained. 
+\end{itemize}
+\item
+A \emph{dataflow node} has a unique predecessor and successor, but it
+contains no RTL or label and it generates no code.
+It contains definitions, uses, and kills.
+\item
+The entry node has a successor but no predecessor
+\item
+The exit node has one or more predecessors but no successor.
+It is therefore considered a kind of join point.
+\item
+A \emph{sentinel} node has no predecessors and no successors.
+It is used to initialize mutable successor and predecessor fields.
+\item
+An \emph{impossible} node has two successors.
+Its ordinary successor is its layout successor.
+Its impossible successor is always the exit node.
+(It exists to facilitate solution of backward dataflow problems, such
+as liveness.)
+An infinite loop must contain an impossible node so it can reach the
+exit.
+\end{itemize}
+
+\section{Interface}
+
+TO TRY: REMOVE THE GRAPH PARAMETER FROM AS MANY NODE-CREATION ROUTINES AS POSSIBLE.
+A SUCCESSOR ALREADY PROVIDES THE GRAPH!!
+<<cfg.mli>>=
+<<exported signatures>>
+<<exported signatures>>=
+module type X = sig
+  type jx  (* extension at join point *)
+  type fx  (* extension at fork point *)
+  type nx  (* extension at all nodes (including fork/join) *)
+end
+
+module type S = sig
+  module X : X
+
+  type label = string
+
+  type 'i cfg
+  type 'i node
+  type kind = (* all the kinds of nodes *)
+    | Join | Instruction | Branch | Cbranch | Mbranch
+    | Jump | Call | Return | CutTo
+    | Entry | Exit | Sentinel | Dataflow | Impossible
+  <<graph and node observers>>
+  <<graph and node constructors>>  
+  <<graph and node mutators>>
+end
+@ 
+\subsection{Interface summary}
+Details are given below, but here are the observers:
+<<graph and node observers>>=
+@  
+Here are the mutators:
+<<graph and node mutators>>=
+@  
+Here are the constructors:
+<<graph and node constructors>>=
+@
+\subsection{Observers}
+
+\paragraph{Observing nodes}
+We can ask about the kind of a node.
+<<graph and node observers>>=
+val kind       : 'i node -> kind
+@ 
+We can also ask particular predicates that relate to the kind.
+<<graph and node observers>>=
+val is_join    : 'i node -> bool
+val is_fork    : 'i node -> bool
+@ 
+We can ask for a label on a join node.
+<<graph and node observers>>=
+val label      : 'i node -> label    (* defined on any join node except exit *)
+@ 
+We can ask about the unique predecessor of a non-join node.
+It is a checked run-time error to call this function on a non-join,
+non-exit node.
+Similarly, we can ask about the unique succesor of a non-fork node.
+<<graph and node observers>>=
+val pred       : 'i node -> 'i node  (* defined on non-join, non-exit *)
+val succ       : 'i node -> 'i node  (* defined on non-fork *)
+@
+We can ask about the true and false successor of a conditional branch.
+It is a checked run-time error to call these functions on anything
+other than a conditional branch.
+<<graph and node observers>>=
+val tsucc      : 'i node -> 'i node  (* defined on conditional branch *)
+val fsucc      : 'i node -> 'i node  (* defined on conditional branch *)
+@
+We can ask for any successor by number, for any kind of node.
+Successors are numbered from zero, the true successor precedes the
+false successor (0~and~1), and the numbering for calls is
+complicated. 
+Function [[succ_n]] raises [[Invalid_argument]] if [[n]]~is
+negative or too large.  
+<<graph and node observers>>=
+val succ_n     : 'i node -> int -> 'i node  (* defined on any node *)
+@
+For any kind of node, we can ask for all its successors and
+predecessors.
+<<graph and node observers>>=
+val preds      : 'i node -> 'i node list  (* defined on any node *)
+val succs      : 'i node -> 'i node list  (* defined on any node *)
+@
+We can ask about the kinds of control-flow instructions.
+<<graph and node observers>>=
+val is_cti     : 'i node -> bool  (* is any control-flow 'i node *)
+val is_br      : 'i node -> bool  (* is direct branch *)
+val is_cbr     : 'i node -> bool  (* is conditional branch *)
+val is_mbr     : 'i node -> bool  (* is multiway branch *)
+val is_call    : 'i node -> bool
+val is_cut     : 'i node -> bool
+@ 
+\paragraph{Observing the graph}
+We can get the entry and exit nodes.
+<<graph and node observers>>=
+val entry      : 'i cfg -> 'i node
+val exit       : 'i cfg -> 'i node
+@ 
+We can observe all the nodes.
+We do so by providing higher-order functions.
+These functions work by enumerating  \emph{basic blocks}.
+A basic
+block is a sequence of nodes beginning in a \emph{head node} (a join
+point or the entry 
+node) and ending in a control-transfer node or the exit node.
+The basic blocks are enumerated in no particular order.
+Within a basic block, we enumerate nodes in order.
+If the client mutates the graph, we make no guarantees about what
+nodes may be visited.
+<<graph and node observers>>=
+val iter_nodes : ('i node -> unit)           -> 'i cfg -> unit
+val iter_heads : ('i node -> unit)           -> 'i cfg -> unit
+val fold_nodes : ('i node -> 'a -> 'a) -> 'a -> 'i cfg -> 'a
+val fold_heads : ('i node -> 'a -> 'a) -> 'a -> 'i cfg -> 'a
+@ 
+\subsection{Mutators}
+We can change the graph by any of the following operations:
+<<graph and node mutators>>=
+@ 
+\paragraph{Altering successors}
+We alter edges either by setting successors or by splicing in graphs.
+These functions do whatever it takes to maintain invariants, which
+means they may insert conditional branches or join points.
+Function [[set_succ_n]] raises [[Invalid_argument]] if [[n]]~is
+negative or too large.  
+<<graph and node mutators>>=
+val set_succ      : 'i node -> 'i node -> unit  (* defined on non-fork *)
+val set_tsucc     : 'i node -> 'i node -> unit  (* defined on conditional branch *)
+val set_fsucc     : 'i node -> 'i node -> unit  (* defined on conditional branch *)
+val set_succ_n    : 'i node -> int -> 'i node -> unit  (* defined on any node *)
+@ 
+The special function [[invert_cbr]] swaps the true and false
+successors of a conditional branch.
+It also updates the instruction payload appropriately.
+It is a checked run-time error to use [[invert_cbr]] on any
+instruction other than a conditional branch.
+<<graph and node mutators>>=
+val invert_cbr    : 'i node -> unit              (* defined on conditional branch *)
+@
+\paragraph{Splicing in new subgraphs}
+Although setting one or more successors is general enough to implement
+any graph mutation, we provide
+some convenient functions for splicing in a single-entry, single-exit
+subgraph.
+Such a subgraph is represented by its [[entry]], which must have
+exactly one predecessor, and its [[exit]], which must have exactly one
+successor.
+It is permissible that the [[entry]] and [[exit]] be the same node.
+<<graph and node mutators>>=
+val splice_before : entry:'i node -> exit:'i node -> 'i node -> unit (* node is not join *)
+val splice_after  : entry:'i node -> exit:'i node -> 'i node -> unit (* node is not fork *)
+@
+It is permissible to delete any node with one predecessor and one
+successor.
+It is never legal to delete a join point.
+<<graph and node mutators>>=
+val delete        : 'i node -> unit    (* must have unique pred and succ *)
+@
+\paragraph{Altering instructions}
+If a node carries an instruction payload, this function
+updates the instruction.
+If a node carries no instruction payload, this function silently does
+nothing. 
+Changing a branch or conditional-branch instruction automatically
+changes its successors; changing a computed goto, call, cut to, or
+jump does not.
+<<graph and node mutators>>=
+val update_instr  : ('i -> 'i) -> 'i node -> unit
+@ 
+\subsection{Constructors}
+We can make a fresh graph.
+Because the graph can insert join points at will, the client must
+provide a supply of private labels.
+The supply takes as argument a string~[[s]] and returns a unique label
+that begins with~[[s]].
+Because the graph must be able to insert conditional branches at will,
+it is up  to the client to supply the appropriate function on
+instructions.
+Undoubtedly we will have to add some information about branch negation
+as well. 
+Perhaps ultimately we will use an analog of the embedding/projection
+pairs specified in the [[Target]] module.
+<<graph and node constructors>>=
+type       label_supply        = string -> string
+type       'i instruction_info = { goto : (label, 'i) Target2.map' }
+val mk   : 'i instruction_info -> label_supply -> 'i cfg
+@ 
+We can clone the graph, simultaneously changing the representation of
+instructions. 
+N.B. the result is a ``shallow'' copy, not a ``deep'' one.
+The cloned graph may share mutable state with the original, typically
+in the extension fields.
+%%% ==> don't remove blank line following decl
+<<graph and node constructors>>=
+val copy : 'j instruction_info -> ('i -> 'j) -> 'i cfg -> 'j cfg
+
+@
+We can make a variety of individual nodes.
+These functions all mutate the graph, but we classify them as constructors anyway.
+<<graph and node constructors>>=
+val node_labeled : 'i cfg -> label -> 'i node
+@ This function returns a join point bearing the given label.
+If no such join point exists, one is created.
+This function is the only way to create a join point explicitly
+(though one may be created implicitly if two successors are set to the
+same point).
+@
+In most cases, when we create a node we supply its successors.
+The simple instruction is, well, simple.
+<<graph and node constructors>>=
+val instruction  : 'i cfg -> 'i -> succ:'i node -> 'i node
+@ 
+\paragraph{Control-flow nodes}
+The graph knows how to make an unconditional branch and a conditional
+branch. 
+Otherwise, it's up to the client to supply the instruction that does
+the transfer.
+<<graph and node constructors>>=
+val branch       : 'i cfg -> target:'i node -> 'i node
+val jump         : 'i cfg -> 'i -> targets:string list -> 'i node
+val cbranch      : 'i cfg -> Rtl.exp -> ifso:'i node -> ifnot:'i node -> 'i node
+val mbranch      : 'i cfg -> 'i -> targets:'i node list -> 'i node
+val call         : 'i cfg -> 'i -> altrets:'i node list -> ret:'i node ->
+                     unwinds_to:'i node list -> cuts_to:'i node list ->
+                     aborts:bool -> 'i node
+val cut_to       : 'i cfg -> 'i -> cuts_to:'i node list -> aborts:bool -> 'i node
+val return       : 'i cfg -> 'i -> cont:int -> alts:int -> 'i node
+  (* NEEDS DOCO SAYING IT CAN FLOW THROUGH DATAFLOW TO THE EXIT NODE *)
+@
+The wierd nodes.
+<<graph and node constructors>>=
+val impossible   : 'i cfg -> succ:'i node -> 'i node
+type regs        = Register.Set.t
+val dataflow     : defs:regs -> uses:regs -> kills:regs -> succ:'i node -> 'i node
+@
+\section{Implementation}
+<<cfg.ml>>=
+<<exported signatures>>
+

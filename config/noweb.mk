@@ -53,7 +53,8 @@ OCAMLDEFS =     $TOP/config/autodefs.ocaml
 
 NOWEBBREAKCODE=no
 
-%.tex:Q: %.inc
+%.tex:QD: %.inc
+	echo "Building $target from $prereq" 1>&2
 	(tr '\n' ' ' <<EOF
 	\documentclass{article}
 	\usepackage{noweb}
@@ -80,10 +81,9 @@ NOWEBBREAKCODE=no
 	EOF
 	) > $target
 
-%.inc:          %.nw
+%.inc:D:          %.nw
                 $NOWEAVE -delay -filter $OCAMLDEFS -index $prereq > $target
 
-%.html: %.nw
+%.html:D: %.nw
         cat $TOP/config/macros.tex $prereq |\
         $NOWEAVE -delay -filter $OCAMLDEFS -index -html -filter l2h - > $target
-

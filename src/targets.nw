@@ -54,11 +54,6 @@ module RP = Rtl.Private
 module S  = Space
 module T  = Target2
 
-type 'a map = 'a T.map =
-    { embed:    ('a -> Rtl.rtl)
-    ; project:  (Rtl.rtl -> 'a)
-    } 
-
 <<target-independent utilities>>
 @
 
@@ -298,8 +293,8 @@ let goto_project rtl = match R.Convert.rtl rtl with
 
 
 let goto =
-    { embed   = goto_embed
-    ; project = goto_project
+    { T.embed   = goto_embed
+    ; T.project = goto_project
     }
 
 let branch_embed (e,addr) = R.guard e (assign pc addr)
@@ -310,8 +305,8 @@ let branch_project rtl  = match R.Convert.rtl rtl with
     | _                                      -> assert false
 
 let branch =
-    { embed   = branch_embed
-    ; project = branch_project
+    { T.embed   = branch_embed
+    ; T.project = branch_project
     }
 @
 
@@ -632,28 +627,28 @@ let (>>) f g x  = f (g x)
 
 
 let goto  =
-    { embed   = special 'G' false' 
-    ; project = snd >> project
+    { T.embed   = special 'G' false' 
+    ; T.project = snd >> project
     }
 
 let jump =
-    { embed   = special 'J' false' 
-    ; project = snd >> project
+    { T.embed   = special 'J' false' 
+    ; T.project = snd >> project
     }
 
 let cutto =
-    { embed   = special 'T' false' 
-    ; project = snd >> project
+    { T.embed   = special 'T' false' 
+    ; T.project = snd >> project
     }
 
 let call =
-    { embed   = special 'S' false' 
-    ; project = snd >> project
+    { T.embed   = special 'S' false' 
+    ; T.project = snd >> project
     }
 
 let branch =
-    { embed   = (fun (x,y) -> special 'B' x y)
-    ; project = project
+    { T.embed   = (fun (x,y) -> special 'B' x y)
+    ; T.project = project
     }
 
 let sp = 
