@@ -198,13 +198,25 @@ end
 \paragraph{Stack Layout for the Alpha}
 % ------------------------------------------------------------------ 
 
+The stack layout depends on the calling convention, we thus dispatch
+on it.
+
 <<Lua compiler configuration>>=
 Alpha        = {} or Alpha
 Alpha.layout = { creates='no late consts' } -- what is this for? -CL
 
-function Alpha.layout.fn(dummy, proc)
+function Alpha.layout.fn(dummy,proc) --- dispatch on cc name
+    return Alpha.layout[Stack.ccname(proc)](dummy, proc)
+end
+@
+
+The following layout assumes the stack pointer does not move,
+i.e.~argument and result overflow blocks are allocated by the caller.
+
+<<Lua compiler configuration>>=
+function Alpha.layout["C"](dummy, proc)
     local blocks       = Stack.blocks(proc)
-    blocks.oldblocks   = Block.overlap(64,"low" , blocks.oldblocks)  
+    blocks.oldblocks   = Block.overlap(64,"low", blocks.oldblocks)  
     blocks.youngblocks = Block.overlap(64,"low", blocks.youngblocks)
     local layout =
         { blocks.oldblocks
@@ -226,11 +238,22 @@ function Alpha.layout.fn(dummy, proc)
                                   , 'sp'
                                   })
     end
+    
     local block = Block.cat(64, layout)
     block = Block.adjust(block) -- size is multiple of 16 byte
     Stack.freeze(proc, block)
     return 1
 end
+@
+
+The [[cmm]] conventions are part of an experimental setup to test the
+[[callspec]] interface to define calling conventions.
+
+<<Lua compiler configuration>>=
+function Alpha.layout["cmm0"] = Alpha.layout["C"]
+function Alpha.layout["cmm1"] = Alpha.layout["C"]
+function Alpha.layout["cmm2"] = Alpha.layout["C"]
+function Alpha.layout["cmm3"] = Alpha.layout["C"]
 @
   
 % ------------------------------------------------------------------ 
