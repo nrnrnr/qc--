@@ -332,14 +332,17 @@ let to_bool b = RP.Const (RP.Bool b)
 let const k   = RP.Const (RP.Bits k)
 @
 
-\paragraph{IEEE 754 Constants} How a rounding mode is represented is
-implementation specific. We just pick four values here.
+\paragraph{IEEE 754 Constants} 
 
+How a rounding mode is represented is
+implementation-specific, but the values we pick have to be consistent
+with the definitions of [[CMM_ROUND_*]] in the interpreter.
+These values happen to be good for the Intel platform.
 <<RTL operator implementations>>=
-let round_down    w args = RP.Const(RP.Bits(Bits.U.of_int 3 2))
+let round_down    w args = RP.Const(RP.Bits(Bits.U.of_int 1 2))
 let round_up      w args = RP.Const(RP.Bits(Bits.U.of_int 2 2))
-let round_nearest w args = RP.Const(RP.Bits(Bits.U.of_int 1 2))
-let round_zero    w args = RP.Const(RP.Bits(Bits.U.of_int 0 2))
+let round_nearest w args = RP.Const(RP.Bits(Bits.U.of_int 0 2))
+let round_zero    w args = RP.Const(RP.Bits(Bits.U.of_int 3 2))
 <<RTL operator implementations>>=
 let rec add ws args = 
     let w = match ws with [w] -> w | _ -> Impossible.impossible "ill-typed add" in

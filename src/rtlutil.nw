@@ -14,6 +14,16 @@
 
 This module provides functions to observe and transform {\rtl}s. 
 
+\subsection{Important types}
+To avoid circularity, this type is defined here, but it really goes in
+module [[Automaton]].
+<<rtlutil.mli>>=
+type aloc = 
+    { fetch  : Rtl.width -> Rtl.exp
+    ; store  : Rtl.exp -> Rtl.width -> Rtl.rtl
+    }
+@ 
+
 \subsection{Common operations on RTLs}
 These functions reassociate constants.
 It can be mildly useful to partially apply them to a width.
@@ -212,6 +222,10 @@ module Subst: sig
                     -> map:(Rtl.Private.loc -> Rtl.Private.loc) 
                     -> Rtl.rtl -> Rtl.rtl
     
+    val aloc:       guard:(Rtl.Private.loc -> bool)               
+                    -> map:(Rtl.Private.loc -> aloc) 
+                    -> Rtl.rtl -> Rtl.rtl
+    
     val exp:        guard:(Rtl.Private.exp -> bool)
                     -> map:(Rtl.Private.exp -> Rtl.Private.exp) 
                     -> Rtl.rtl -> Rtl.rtl
@@ -331,6 +345,13 @@ module RSX = Register.SetX
 
 let id     x = x
 let falsef x = false
+
+let unimpf fmt = Printf.kprintf Impossible.unimp fmt
+
+type aloc = 
+    { fetch  : Rtl.width -> Rtl.exp
+    ; store  : Rtl.exp -> Rtl.width -> Rtl.rtl
+    }
 
 module Width = struct
     <<Width>>
@@ -552,6 +573,32 @@ let loc'     guard map rtl = loc_gen' guard map rtl ~def:true  ~use:true
 let loc_def' guard map rtl = loc_gen' guard map rtl ~def:true  ~use:false
 let loc_use' guard map rtl = loc_gen' guard map rtl ~def:false ~use:true
 
+let aloc guard map rtl = 
+  let rec exp = function
+    | RP.Fetch (l, width)  -> fetch l width
+    | RP.App(opr, exprs)   -> RP.App(opr, List.map exp exprs)
+    | RP.Const c as e      -> e
+  and fetch l   w = if guard l then Dn.exp((map l).fetch w) else RP.Fetch (loc l, w)
+  and store l e w =
+    if guard l then
+      match Dn.rtl ((map l).store (Up.exp e) w) with
+      | RP.Rtl [RP.Const (RP.Bool true), eff] -> eff
+      | _ -> unimpf "aloc substitution on fancy location"
+    else
+      RP.Store (loc l, e, w)
+  and loc = function
+    | RP.Mem (sp,w,e,ass)  -> RP.Mem(sp, w, exp e, ass)
+    | RP.Slice (w,i,l)     -> if guard l then unimpf "aloc slice"
+                              else RP.Slice(w,i,loc l)
+    | (RP.Global _ | RP.Var _ | RP.Reg _) as l -> l
+  and effect = function      
+    | RP.Store (l,e,width) -> store l (exp e) width
+    | RP.Kill  (l)         -> if guard l then unimpf "aloc kill " else RP.Kill (loc l)
+  and guarded (e,eff)        = (exp e, effect eff)
+  and subst (RP.Rtl rtl)     = RP.Rtl (List.map guarded rtl) in    
+  subst rtl
+
+
 let subst_exp_loc ~eguard ~emap ~lguard ~lmap =
     let rec subst_exp e = if eguard e then emap e else match e with
         | RP.Fetch (l, width)  -> RP.Fetch(subst_loc l, width)
@@ -597,6 +644,7 @@ let loc_of_loc ~guard  ~map loc =
   DownUp.loc subst_loc loc
   
 let loc        ~guard  ~map rtl = DownUp.rtl (loc' guard  map) rtl 
+let aloc       ~guard  ~map rtl = DownUp.rtl (aloc guard  map) rtl 
 let reg                ~map rtl = DownUp.rtl (reg'        map) rtl 
 let reg_def            ~map rtl = DownUp.rtl (reg_def'    map) rtl 
 let reg_use            ~map rtl = DownUp.rtl (reg_use'    map) rtl 

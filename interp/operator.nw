@@ -157,6 +157,7 @@ void init_operators(void);
 #include <cii/mp.h>
 
 static double loophole[2];
+
 #define LOOPHOLE(TYFROM, TYTO, VAL) (AT(loophole, TYFROM) = (VAL), AT(loophole, TYTO))
 #define AT(ADDR, TY) (*(TY *)(ADDR))
 
@@ -199,6 +200,19 @@ typedef enum {
   FLOAT_GT  = 02U,
   UNORDERED = 03U
 } float_comparison;
+@ 
+These values can't be changed without also changing the values used in
+the simplifier in the compiler's front end.
+<<type definitions>>=
+typedef enum {
+  CMM_ROUND_NEAREST = 0,
+  CMM_ROUND_DOWN    = 1,
+  CMM_ROUND_UP      = 2,
+  CMM_ROUND_ZERO    = 3
+} cmm_round;
+<<function prototypes>>=
+unsigned cmm_round_to_fe(unsigned);
+unsigned cmm_round_of_fe(unsigned);
 @ 
 % ----------------------------------------------------------------------------
 \subsection{Memory Allocation}
@@ -290,11 +304,10 @@ BINARYOP (funordered, isunordered(v1, v2), v1,v2, float64, float64, bool,
                                                   bits64, bits64, bool)
 UNARYOP  (NaN, (float32) LOOPHOLE(u_int32, float32, (v1 & 0x7fffff) | 0x7f800000), v1, u_int32, float32, bits23, bits32)
 OP64(UNARYOP  (NaN, (float64) LOOPHOLE(u_int64, float64, (v1 & 0xfffffffffffffLL) | 0x7ff0000000000000LL), v1, u_int64, float64, bits52, bits64))
-/* NaN */
-NULLARYOP   (round_down,    { v1 = FE_DOWNWARD;   },  v1, u_int8, bits2)
-NULLARYOP   (round_up,      { v1 = FE_UPWARD;     },  v1, u_int8, bits2)
-NULLARYOP   (round_nearest, { v1 = FE_TONEAREST;  },  v1, u_int8, bits2)
-NULLARYOP   (round_zero,    { v1 = FE_TOWARDZERO; },  v1, u_int8, bits2)
+NULLARYOP   (round_down,    { v1 = CMM_ROUND_DOWN;    },  v1, u_int8, bits2)
+NULLARYOP   (round_up,      { v1 = CMM_ROUND_UP;      },  v1, u_int8, bits2)
+NULLARYOP   (round_nearest, { v1 = CMM_ROUND_NEAREST; },  v1, u_int8, bits2)
+NULLARYOP   (round_zero,    { v1 = CMM_ROUND_ZERO;    },  v1, u_int8, bits2)
 RMUNARYOP   (f2f  , (float64) v1  , v1, float32, float64, bits32, bits64)
 RMUNARYOP   (f2f  , (float32) v1  , v1, float64, float32, bits64, bits32)
 RMUNARYOP   (f2i  , nearbyintf(v1), v1, float32, s_int32, bits32, bits32)
@@ -772,3 +785,23 @@ static int hand_mod(int x, int y) {
 <<internal function prototypes>>=
 static int hand_mod(int x, int y);
 @ 
+<<function definitions>>=
+unsigned cmm_round_to_fe(unsigned round) {
+  switch(round) {
+    case CMM_ROUND_NEAREST : return FE_TONEAREST;
+    case CMM_ROUND_DOWN    : return FE_DOWNWARD;
+    case CMM_ROUND_UP      : return FE_UPWARD;
+    case CMM_ROUND_ZERO    : return FE_TOWARDZERO;
+    default : cmm_err_wint("cannot convert C-- mode %d to FE", round); return ~0;
+  }
+}
+  
+unsigned cmm_round_of_fe(unsigned round) {
+  switch(round) {
+    case FE_TONEAREST  : return CMM_ROUND_NEAREST;
+    case FE_DOWNWARD   : return CMM_ROUND_DOWN;
+    case FE_UPWARD     : return CMM_ROUND_UP;
+    case FE_TOWARDZERO : return CMM_ROUND_ZERO;
+    default : cmm_err_wint("cannot convert FE mode %d to C--", round); return ~0;
+  }
+}

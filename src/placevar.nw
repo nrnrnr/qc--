@@ -21,7 +21,13 @@ val mk_automaton : warn:(width:int -> alignment:int -> hint:string -> unit) ->
                    memspace:Rtl.space ->
                    (temps:(char -> Automaton.stage) -> Automaton.stage) ->
                    (Ast2ir.proc -> Automaton.t)
-val context   : (Ast2ir.proc -> Automaton.t) -> 'e -> Ast2ir.proc -> bool
+val context : (Ast2ir.proc -> Automaton.t) -> 'e -> Ast2ir.proc -> bool
+@ 
+The [[replace_globals]] placer replaces global variables with the
+locations in the procedure's [[global_map]], and otherwise it does
+nothing. 
+<<placevar.mli>>=
+val replace_globals : 'a -> Ast2ir.proc -> bool
 @
 Boilerplate for linking to Lua.
 <<placevar.ml>>=
@@ -320,3 +326,21 @@ let upd_var e = match R.Dn.loc e with
   | _              -> e in
 List.iter (fun (_,ss) -> RT.upd_spans upd_var ss) proc.Proc.spans;
 @
+@
+<<placevar.ml>>=
+let replace_globals _ ({ Proc.cfg = g; Proc.target = tgt; 
+                         Proc.global_map = gmap} as proc) =
+  let subst = RU.Subst.aloc ~guard:(function RP.Global _ -> true | _ -> false)
+                ~map:(function RP.Global (_, i, _) -> gmap.(i)
+                             | l -> Impossible.impossible "global replacement") in
+  let subst =
+    if Debug.on "placevar" then
+      (fun rtl ->
+        let rtl' = subst rtl in
+        Printf.eprintf "Placing vars maps\n  %s\nto\n  %s\n"
+          (RU.ToString.rtl rtl) (RU.ToString.rtl rtl');
+        rtl')
+    else
+      subst in
+  G.iter_nodes (G.update_instr subst) g;
+  true (* probably changed :-) *)

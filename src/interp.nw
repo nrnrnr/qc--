@@ -64,16 +64,6 @@ module Spaces = struct
                 ; Space.widths         = [8;16;32]
                 ; Space.classification = Space.Mem
                 }
-    let g   = Space.checked
-                { Space.space          = ('G', byteorder, Cell.of_size 1)
-                ; Space.doc            = "global register variables"
-                ; Space.cellwidth      = 1  (* hack *)
-                ; Space.indexwidth     = wordsize
-                ; Space.indexlimit     = None
-                ; Space.aggregation    = byteorder
-                ; Space.widths         = [8;16;32]
-                ; Space.classification = Space.Mem
-                }
     let d   = Space.checked
                 { Space.space          = ('d', Rtl.Identity, Cell.of_size 2)
                 ; Space.doc            = "FP rounding mode"
@@ -97,9 +87,7 @@ let ap:Rtl.loc            = Rtl.reg (c,2,Rtl.C 1)  (* arg pointer    *)
 let ra:Rtl.loc            = Rtl.reg (c,3,Rtl.C 1)  (* return address *)
 
 let arg_reg  x            = (Spaces.a.Space.space, x, Rtl.C 1)
-let glb_reg  x            = (Spaces.g.Space.space, x, Rtl.C 1)
 let argument x            = R.reg (arg_reg x)          (* arguments *) 
-let global   x            = R.reg (glb_reg x)          (* globals   *) 
 
 let fp_mode               = Rtl.reg(Spaces.d.Space.space,0,Rtl.C 1) (* rounding mode *) 
 let spval                 = Rtl.fetch sp wordsize
@@ -108,7 +96,6 @@ let std_sp_location       = vfp
 let std_sp_location       = RU.add pointersize 
                              vfp (R.late "minus frame size" pointersize)
 @
-                
 % ------------------------------------------------------------------ 
 \subsection{Control Flow and Instructions}
 % ------------------------------------------------------------------ 
@@ -117,7 +104,6 @@ Module [[Flow]]  provides us with {\rtl}s that encode control transfer.
 They are part of the [[target]] value that describes this target
 completely. \emph{The encoding of control transfers and other special
 instructions is shared with the recognizer.}
-
 <<interp.ml>>=
 module Flow = struct
     <<module Flow>>
@@ -129,11 +115,9 @@ ANOTHER SPACE SHOULD BE CHOSEN.
 let ewidth                = RU.Width.exp 
 let lwidth                = RU.Width.loc 
 @
-
 We are now defining instructions that model instructions in the
 interpreter. First, we define some helper functions that allow to define
 these instructions more easily.
-
 <<module Flow>>=
 let fetch loc     = R.fetch loc wordsize        
 let store loc e   = R.store loc e wordsize        
@@ -147,11 +131,9 @@ let inc loc       = R.store loc (add1 loc) wordsize
 let dec loc       = R.store loc (sub1 loc) wordsize
 let error         = Impossible.impossible
 @
-
 For most control-flow related {\rtl}s, [[Target.t]] demands we provide
 embedding and projection functions. \emph{As far as I can tell the
 projections are never used and we could simplify [[Target.t]].}
-
 <<module Flow>>=
 let bnegate _ = Impossible.unimp "bnegate not implemented"
 let goto = 
@@ -201,11 +183,9 @@ let jump   = goto                   (* must be different from goto!  *)
 let cutto  = cutto
 (* let return = store pc (fetch ra)    (* no embed/project needed *)*)
 @
-
 We use helper functions [[store_space]] and [[fetch_space]] to store or
 fetch a value in a register-like space, given a function [[spc]] that takes
 an index and returns a register location.
-
 <<module Flow>>=
 let store_space spc i e = R.store (spc i) e (ewidth e)
 let fetch_space spc i w = R.fetch (spc i) w
@@ -220,21 +200,28 @@ that we have an endless supply for each. We have just one automaton
 [[seq]] that does this. It is parameterized over a function [[reg]]
 that supplies the register.
 <<interp.ml>>=
-let seq (reg: int -> Register.t) next =
-    let index = ref (-1)                  in
-    let regs  = ref ([]: Register.t list) in
+let seq (get : int -> Rtl.width -> Register.t list ref -> AN.loc) next =
+    let index = ref 0  in
+    let regs  = ref [] in
     let allocate ~width ~alignment ~hint =
-        ( index := !index + 1
-        ; regs  := (reg !index) :: !regs
-        ; AN.of_loc (Rtl.reg (reg !index))
-        ) in
+      let n   = !index in
+      let loc = get n width regs in
+      index := !index + 1;
+      loc in
     let freeze rs mems =
         next.AN.freeze (RS.union (RS.of_list (!regs)) rs) mems in
     { AN.allocate = allocate; AN.freeze   = freeze }
+
+let getreg reg index _ regs =
+  regs  := (reg index) :: !regs;
+  AN.of_loc (Rtl.reg (reg index))
+
 let seq reg = AN.wrap (seq reg)
 
-let params      = seq arg_reg                       
-let globls base = AN.at ~start:base mspace (seq glb_reg)
+let params = seq (getreg arg_reg)
+let globals base =
+  let get i w _ = AN.of_loc (Rtl.global "unknown name" i w) in
+  AN.at ~start:base mspace (seq get)
 
 let ccspecs     = { AN.call = params; AN.results = params; AN.cutto = params }
 @
@@ -332,7 +319,7 @@ compiler.
 
 <<interp.ml>>=
 let target' = (* new style *)
-      let spaces = [ Spaces.m ; Spaces.c ;  Spaces.a ; Spaces.g ] in
+      let spaces = [ Spaces.m ; Spaces.c ; Spaces.a ] in
       { T.name     = arch
       ; T.capabilities      = T.incapable
       ; T.cc_specs = [ "C", ccspecs ; "C--", ccspecs ]
@@ -347,10 +334,10 @@ let target' = (* new style *)
       ; T.memsize           = memsize
       ; T.float             = Float.ieee754
       ; T.charset           = "latin1" 
-      ; T.globals           = globls
+      ; T.globals           = globals
       ; T.rounding_mode     = fp_mode
       ; T.named_locs        = Strutil.assoc2map 
-                                ["IEEE 754 rounding mode", fp_mode
+                                ["IEEE 754 rounding mode", fp_mode;
                                 ]
       ; T.spaces            = spaces
       ; T.reg_ix_map        = T.mk_reg_ix_map spaces

@@ -1233,11 +1233,9 @@ For now, we only support the natural byte-order of the machine on which the inte
                            pc             = next;
                            }
 @ 
-
 We only support fetches and stores in the machine's natural byte-order, so we
 can simply use [[memcpy]] from [[<stdlib.h>]] and trust it to properly
 aggregate / dis-aggregate data for unaligned multi-byte loads and stores.
-
 <<fetch value from given address>>=
   {
     value *fetched       = (value *) STACK_ELT(values, 0).ptr;
@@ -1249,7 +1247,6 @@ aggregate / dis-aggregate data for unaligned multi-byte loads and stores.
     STACK_ELT(values, 0) = v;
   }
 @ 
-
 <<store given value at given address>>=
   {
     value *tostore       = (value *) STACK_ELT(values, -1).ptr;
@@ -1258,7 +1255,6 @@ aggregate / dis-aggregate data for unaligned multi-byte loads and stores.
     memcpy(tostore, &(STACK_ELT(values, 0)), sz / 8);
   }
 @ 
-
 The argument to the operator application instruction should be a pointer to an [[operator]] record.
 We simply dereference the function pointer stored within this record, and pass
 [[values]] as an argument to this function.
@@ -1273,47 +1269,23 @@ Operator implementation functions return a new [[valstack]] so we set
                                              "values");
                            pc = next;
 @
-
 ``Fetching'' a rounding mode pushes the current hardware floating-point 
 rounding mode atop the value stack.
 ``Storing'' a rounding mode involves popping a 2-bit value off the value stack
 and setting it to be the current hardware floating-point rounding mode.
 See the [[features]] module for information about C language support for
 manipulating the hardware rounding mode.
-
 <<matching statement>>=
-    | FETCH_ROUND()     => switch (fegetround()) {
-                           case FE_TOWARDZERO: PUSH(to_CMM_value(0,2), values);
-                                               break;
-                           case FE_TONEAREST : PUSH(to_CMM_value(1,2), values);
-                                               break;
-                           case FE_UPWARD    : PUSH(to_CMM_value(2,2), values);
-                                               break;
-                           case FE_DOWNWARD  : PUSH(to_CMM_value(3,2), values);
-                                               break;
-                           default           : cmm_err("invalid rounding "
-                                                       "mode");
-                           }
+    | FETCH_ROUND()     => PUSH(to_CMM_value(cmm_round_of_fe(fegetround()),2), values);
                            pc = next;
     | STORE_ROUND()     => {
-                           value v = POP(values);
-                           int   rm; 
-
-                           switch (v.bits2) {
-                           case 0 : rm = FE_TOWARDZERO; break;
-                           case 1 : rm = FE_TONEAREST ; break;
-                           case 2 : rm = FE_UPWARD    ; break;
-                           case 3 : rm = FE_DOWNWARD  ; break;
-                           default: cmm_err_wint("invalid rounding mode (%d)", 
-                                                 v.bits2);
-                           }
-
+                           value v  = POP(values);
+                           int   rm = cmm_round_to_fe(v.bits2); 
                            cmm_assert(fesetround(rm) == 0, "could not "
                                       "set floating-pt rounding mode");
-                           pc      = next;
+                           pc       = next;
                            }
 @ 
-
 Fetching and storing from the argument space is not difficult.
 \useops{Push-Arg}
 \useops{Pop-Arg}

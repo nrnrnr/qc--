@@ -16,33 +16,26 @@ To run {\PAL} code through the interpreter, we must first convert it into
 the Lua-based format the interpreter expects.
 This module provides a translation from an RTL to a string representing its
 Lua-style counterpart.
-
 <<interpemitrtl.mli>>=
 val rtl: (string -> unit) -> Rtl.rtl -> unit
 val exp: (string -> unit) -> Rtl.exp -> unit
 @ 
-
 % ------------------------------------------------------------------ 
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
-
 <<interpemitrtl.ml>>=
 <<ToLua>>
 @ 
-
 % ------------------------------------------------------------------ 
 \subsubsection{Conversion to Lua}
 % ------------------------------------------------------------------ 
-
 <<ToLua>>=
 module R     = Rtl.Private
 let fprintf  = Printf.fprintf
 
 let (<<) f g = fun x -> f (g x)
 @ 
-
 We first define a number of helper functions.
-
 <<ToLua>>=
 let quoted        q = "\"" ^ q ^ "\""
 
@@ -64,10 +57,8 @@ let tybits b =
 
 let hexbits v      = quoted (Printf.sprintf "0x%Lx" (Bits.U.to_int64 v))
 @ 
-
 Function [[const]] converts an RTL constant to the Lua string form that causes
 this constant to be pushed atop the interpreter's value stack.
-
 <<ToLua>>=
 (* const : Rtl.Private.const -> string *)
 let const c =
@@ -81,10 +72,8 @@ let const c =
     | R.Diff _        -> Impossible.impossible "PIC not supported"
     | R.Late(name, _) -> luapush "symbol" (quoted name)
 @ 
-
 [[opr]] converts an RTL operator (with given width instantiation) to an
 interpreter-style operator application, complete with width hints.
-
 <<ToLua>>=
 (* opr : string -> width list -> string *)
 let opr op w = 
@@ -94,13 +83,11 @@ let opr op w =
                                 ((String.concat "," (List.map tybits opty)) ^ 
                                  ":" ^ (tybits result))))
 @ 
-
 [[byteorder]] and [[alignment]] simply convert memory aggregation and
 alignment specifications and to Lua string form.
 For now, we convert all byteorder specifications to [["NATIVE"]] so we can
 more easily test code on different platforms without having to change
 [[target byteorder]] declarations.
-
 <<ToLua>>=
 (* byteorder : Rtl.aggregation -> string *)
 let byteorder = function
@@ -110,12 +97,10 @@ let byteorder = function
 
 let alignment _ = "0" (* string_of_int i *)
 @ 
-
 [[expr']] is a private function that converts an RTL expression into its
 Lua string form.
 It, in turn, makes calls to [[const]], [[opr]], and [[location']] for
 assistance.
-
 <<ToLua>>=
 (* expr' : Rtl.Private.exp -> string *)
 let rec expr' e =
@@ -126,7 +111,6 @@ let rec expr' e =
         prefix ^ luafunc (func_f "fetch" func_suffix) args
     | R.App((op, ww), ee) -> (String.concat "\n" (List.map expr' ee)) ^ 
                              opr op ww
-
 @ 
 Helper [[location']] converts an RTL location into a 4-tuple of the form:
 $(prefix, func, funcSuffix, args)$.
@@ -153,14 +137,7 @@ and location' = function
         , string_of_int i
         )
 
-    | R.Reg   (('G',_,_), i, _)        ->  (* global register space           *)
-        ( ""
-        , globalspace
-        , "_global"
-        , string_of_int i
-        )
-
-	| R.Reg   (('V',_,_), 0, _)            ->  (* VFP space *)
+    | R.Reg   (('V',_,_), 0, _)            ->  (* VFP space *)
         ( ""
         , valstack
         , "_sp"
