@@ -254,14 +254,14 @@ let rec to_string = function
 @ 
 <<value toplevel>>=
 type objname = Fallback of string | Global of string | Element of string * value
-let key_matching iter t v =
+let key_matching iter t needle =
   let r = ref None in
-  iter (fun k v' -> if eq v v' then r := Some k else ()) t;
+  iter (fun k v -> if eq needle v then r := Some k else ()) t;
   !r
-let objname g v =
-  match key_matching Hashtbl.iter g.fallbacks v with
+let objname g needle =
+  match key_matching Hashtbl.iter g.fallbacks needle with
   | Some s -> Some (Fallback s)
-  | None -> match key_matching Luahash.iter g.globals v with
+  | None -> match key_matching Luahash.iter g.globals needle with
     | Some (String s) -> Some (Global s)
     | _ ->
         let r = ref None in
@@ -269,10 +269,10 @@ let objname g v =
           match !r with
           | None -> (match k, v with
             | String n, Table t ->
-                (match key_matching Luahash.iter t v with
+                (match key_matching Luahash.iter t needle with
                 | Some v -> r := Some (Element (n, v))
                 | None -> ())
-            | _, _ -> ())
+            | k, v -> ())
           | Some _ -> ()) g.globals;
         !r
 <<value toplevel>>=
