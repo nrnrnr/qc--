@@ -4,6 +4,15 @@
 
 <<luaiolib.mli>>=
 type 'a t = In of in_channel | Out of out_channel
+val out :
+    ('a t, 'b) Luavalue.ep ->
+    ('b -> string -> out_channel) ->
+    (out_channel, 'b) Luavalue.ep
+val in' :
+    ('a t, 'b) Luavalue.ep ->
+    ('b -> string -> in_channel) ->
+    (in_channel, 'b) Luavalue.ep
+
 module T : Lua.Lib.USERTYPE  with type 'a t = 'a t
 module Make (T : Lua.Lib.TYPEVIEW with type 'a t = 'a t)
     : Lua.Lib.TYPEFUL with type 'a combined = 'a T.combined
@@ -149,3 +158,19 @@ module Make (T : Lua.Lib.TYPEVIEW with type 'a t = 'a t)
          C.register_globals io_builtins g
      end (*M*)
   end (*Make*)
+@ 
+<<luaiolib.ml>>=
+module V = Luavalue
+let out (upper) fail =
+      { V.embed   = (fun x -> upper.V.embed (Out x))
+      ; V.project = (fun x -> match upper.V.project x with
+                    | Out x -> x
+                    | _ -> fail x "out_channel")
+      } 
+let in' (upper) fail =
+      { V.embed   = (fun x -> upper.V.embed (In x))
+      ; V.project = (fun x -> match upper.V.project x with
+                    | In x -> x
+                    | _ -> fail x "out_channel")
+      } 
+
