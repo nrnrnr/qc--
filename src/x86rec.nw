@@ -129,10 +129,22 @@ module RP = Rtl.Private
 module RU = Rtlutil
 module SS = Space.Standard32
 module Dn = Rtl.Dn      (* Convert Dn  to private repr. *)
-module Up = Rtl.Up       (* Convert Up    to abstract repr. *)
+module Up = Rtl.Up      (* Convert Up    to abstract repr. *)
 
 let ( =/  ) = RU.Eq.loc
 let ( =// ) = RU.Eq.exp
+@ 
+At one time, we used this to try to debug a problem in our code.
+<<unused code for logging the results of comparisons>>=
+let fd = open_out "qc--.log"
+let () = at_exit (fun () -> close_out fd)
+let log eq s x y=
+  let answer = eq x y in
+  Printf.fprintf fd "%s %s %s\n" (s x) (if answer then "==" else "!=") (s y);
+  answer
+
+let ( =/  ) = log RU.Eq.loc (fun l -> RU.ToString.loc (Up.loc l))
+let ( =// ) = log RU.Eq.exp (fun e -> RU.ToString.exp (Up.exp e))
 @
 If something goes wrong during recognition, we raise this exception.
 It's different from merely ``unrecognized;'' it means something
