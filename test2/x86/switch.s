@@ -205,10 +205,10 @@ Ljoin_l64:
 Ljoin_l59:
 	movl $2,%edx
 	cmpl %eax,%edx
-	jbe Lconj_true_l72
+	jbe Ljoin_l72
 Ljoin_l80:
 	jmp Ljoin_l58
-Lconj_true_l72:
+Ljoin_l72:
 	movl $3,%edx
 	cmpl %edx,%eax
 	jbe Ljoin_l57
@@ -225,26 +225,26 @@ Ljoin_l52:
 Ljoin_l47:
 	movl $5,%edx
 	cmpl %eax,%edx
-	jbe Lconj_true_l71
+	jbe Ljoin_l71
 Ljoin_l78:
-	jmp Lconj_false_l70
-Lconj_true_l71:
+	jmp Ljoin_l70
+Ljoin_l71:
 	movl $-1,%edx
 	cmpl %edx,%eax
 	jbe Ljoin_l45
 Ljoin_l77:
-	jmp Lconj_false_l70
-Lconj_false_l70:
+	jmp Ljoin_l70
+Ljoin_l70:
 	movl $0,%edx
 	cmpl %edx,%eax
 	je Ljoin_l45
-Lconj_false_l69:
+Ljoin_l69:
 	movl $-2147483648,%edx
 	cmpl %eax,%edx
-	jbe Lconj_true_l68
+	jbe Ljoin_l68
 Ljoin_l76:
 	jmp Ljoin_l46
-Lconj_true_l68:
+Ljoin_l68:
 	movl $-1,%edx
 	cmpl %edx,%eax
 	jbe Ljoin_l45

@@ -27,9 +27,13 @@ val placevars : Ast2ir.proc -> Automaton.t
 % ---------------------------------------------------------------------------
 
 <<ia64.ml>>=
-module SS = Space.Standard64
+module PX = Postexpander
 module R  = Rtl
 module RU = Rtlutil
+module SS = Space.Standard64
+
+let (<:>) = PX.(<:>)
+let rtl r = PX.Rtl r
 
 let arch  = "ia64"  (* architecture name *)
 @ 
@@ -106,10 +110,9 @@ let talloc = Postexpander.Alloc.temp
 let temploc  t = Rtl.reg t
 let tempwidth  = Register.width
 let tempval  t = R.fetch (temploc t) (tempwidth t)
-let tempstore tmp exp = R.store (temploc tmp) exp (tempwidth tmp)
 let mem addr = R.mem R.none mspace (R.C 8) addr
 
-let ui s = Printf.eprintf "*** unimp %s" s; []
+let ui = Impossible.unimp
 @ 
 \paragraph{Contexts}
 Addresses go in the integer registers, so we use these contexts:
@@ -146,16 +149,16 @@ everything is~64.
 let load ~dst ~addr assn =
   assert (tempwidth dst = 64);
   match Down.exp addr with
-  |	RP.App(op, [RP.Fetch(RP.Reg r, _); opnd]) ->
-         [R.store (temploc dst)
-            (R.fetch (R.mem assn mspace (R.C 8) (tempval r)) 64) 64
-         ;R.store (temploc r) addr 64]
-  |	_ -> [R.store (temploc dst) 
-			(R.fetch (R.mem assn mspace (R.C 8) addr) 64) 64]
+  | RP.App(op, [RP.Fetch(RP.Reg r, _); opnd]) ->
+      rtl (R.store (temploc r) addr 64) <:>
+      rtl (R.store (temploc dst)
+             (R.fetch (R.mem assn mspace (R.C 8) (tempval r)) 64) 64)
+  | _ -> rtl (R.store (temploc dst) 
+		(R.fetch (R.mem assn mspace (R.C 8) addr) 64) 64)
 
 let store ~addr ~src assn =
   assert (tempwidth src = 64);
-  [R.store (R.mem assn mspace (R.C 8) addr) (tempval src) 64]
+  rtl (R.store (R.mem assn mspace (R.C 8) addr) (tempval src) 64)
 @ 
 We also provide sign-extending loads and stores:
 NOTE THAT WE PROBABLY NEED TO FIX THIS UP TOO WITH RESPECT TO LOADS AND
@@ -166,28 +169,27 @@ let lobits        n e = R.app (R.opr "lobits" [64; n]) [e]
 let sxload ~dst ~addr n assn =
   if tempwidth dst <> 64 then Impossible.unimp "widening of temporaries";
   assert (Cell.divides mcell n);
-  [R.store (temploc dst)
-     (extend "sx" n (R.fetch (R.mem assn mspace (Cell.to_count mcell n) addr) n)) 64]
+  rtl (R.store (temploc dst)
+     (extend "sx" n (R.fetch (R.mem assn mspace (Cell.to_count mcell n) addr) n)) 64)
 let zxload ~dst ~addr n assn =
   assert (tempwidth dst = 64);
   assert (Cell.divides mcell n);
-  [R.store (temploc dst)
-     (extend "zx" n (R.fetch (R.mem assn mspace (Cell.to_count mcell n) addr) n)) 64]
+  rtl (R.store (temploc dst)
+     (extend "zx" n (R.fetch (R.mem assn mspace (Cell.to_count mcell n) addr) n)) 64)
 let lostore ~addr ~src n assn =
   assert (tempwidth src = 64);
   assert (Cell.divides mcell n);
-  [ R.store (R.mem assn mspace (Cell.to_count mcell n) addr) 
-            (lobits n (R.fetch (temploc src) 64)) n
-            (* we diverge from Pentium here; don't understand *)
-  ]
+  rtl (R.store (R.mem assn mspace (Cell.to_count mcell n) addr) 
+               (lobits n (R.fetch (temploc src) 64)) n)
+                 (* we diverge from Pentium here; don't understand *)
 @ 
 This code comes from x86.nw, which is not sure of floating-point compatability:
 <<ia64 postexpander>>=
-let move_rtl dst src = R.store (temploc dst) (tempval src) (tempwidth src)
-let move ~dst ~src   = if Register.eq dst src then [] else [move_rtl dst src]
+let move_rtl dst src = rtl (R.store (temploc dst) (tempval src) (tempwidth src))
+let move ~dst ~src   = if Register.eq dst src then PX.Nop else move_rtl dst src
 
-let li  ~dst const = [R.store (temploc dst) (Up.const const) (tempwidth dst)]
-let lix ~dst e     = [R.store (temploc dst) e                (tempwidth dst)]
+let li  ~dst const = rtl (R.store (temploc dst) (Up.const const) (tempwidth dst))
+let lix ~dst e     = rtl (R.store (temploc dst) e                (tempwidth dst))
 @ 
 
 \subsubsection{Operator Contexts}
@@ -204,8 +206,9 @@ let result_context (n, _) = try SM.find n resmap
                                     ("cannot find result context for "^n)
 let constant_context w = icontext
 
-let rtlop ~dst op tmpl = [tempstore dst 
-	                      (R.app (Up.opr op) (List.map tempval tmpl))]
+let rtlop ~dst op tmpl = 
+  let w = tempwidth dst in
+  rtl (R.store (temploc dst) (R.app (Up.opr op) (List.map tempval tmpl)) w)
 @ 
 IT BEGS EXPLANATION WHY INTEGER MULTIPLY IS BEING TRANSLATED INTO A
 FLOATING-POINT MULTIPLY!
@@ -214,10 +217,10 @@ let binop ~dst op tmp1 tmp2 = match op with
 | ("mul", ws) ->
     let f1 = talloc 'u' 64 in
     let f2 = talloc 'u' 64 in
-    let ops = [move_rtl f1 tmp1; move_rtl f2 tmp2]
-      @ (rtlop f1 ("fmul", ws) [f1; f2; (fspace,0,R.C 1)])
-      @ move dst f1
-    in List.rev ops
+    move_rtl f1 tmp1 <:>
+    move_rtl f2 tmp2 <:>
+    rtlop f1 ("fmul", ws) [f1; f2; (fspace,0,R.C 1)] <:>
+    move dst f1
 | _ -> rtlop dst op [tmp1;tmp2]
 
 let unop  ~dst op tmp       = rtlop dst op [tmp]
@@ -233,26 +236,25 @@ let pc_rhs = pc
 (* note that instructions need to be specified in reverse order! *)
 let br ~tgt = 
   let tempr = talloc 'v' 64 in
-  [ R.store pc_lhs (tempval tempr) 64
-  ; R.store (temploc tempr) (tempval tgt) 64 ]
-(* RRO temp
-[R.store pc_lhs (tempval  tgt) 64]
-*)
+  rtl (R.store (temploc tempr) (tempval tgt) 64), R.store pc_lhs (tempval tempr) 64
 
-let b  ~tgt = [R.store pc_lhs (Up.const tgt) 64]
+let b  ~tgt = PX.Nop, R.store pc_lhs (Up.const tgt) 64
 
 let effects = List.map Up.effect
-let call  ~tgt ~others = [R.par (R.store pc_lhs (Up.const tgt) 64 :: effects others)]
-let callr ~tgt ~others = [R.par (R.store pc_lhs (tempval tgt)  64 :: effects others)]
+let call  ~tgt ~others =
+  PX.Nop, R.par (R.store pc_lhs (Up.const tgt) 64 :: effects others)
+let callr ~tgt ~others =
+  PX.Nop, R.par (R.store pc_lhs (tempval tgt)  64 :: effects others)
 
-let cut_to effs = [R.par (effects effs)]
+let cut_to effs = PX.Nop, R.par (effects effs)
 
-let bc x (opr, ws) y ~tgt =
-  let tempr = talloc 'w' 1 in
+(* A FLAGRANT CHEAT HERE.  AT THE VERY LEAST, THE BITS/BOOL CONVERSIONS ARE MISSING*)
+let bc x (opr, ws) y ~ifso ~ifnot =
   assert (ws =*= [64]);
-  [ R.guard (tempval tempr) (R.store pc_lhs (Up.const tgt) 64)
-  ; R.store (temploc tempr) (R.app (R.opr opr ws) (List.map tempval [x;y])) 64
-  ]
+  let tempr = talloc 'w' 1 in
+  PX.Test (rtl (R.store (temploc tempr)
+                        (R.app (R.opr opr ws) [tempval x; tempval y]) 64),
+           (tempval tempr, ifso, ifnot))
 
 (* RRO FIX bnegate *)
 let bnegate r = match Down.rtl r with
@@ -260,20 +262,15 @@ let bnegate r = match Down.rtl r with
      Up.rtl (RP.Rtl [RP.App(("not", [64]), [g]), eff])
 | _ -> Impossible.impossible "ill-formed IA64 conditional branch"
 @
-
 \subsubsection{Other}
-
 <<ia64 postexpander>>=
 let don't_touch_me es = false
 @ 
-
 \subsection{Building the Target}
-
 We provide the IA64 postexpander as a parameter to the generic code expander.
 <<ia64.ml>>=
 module X = Expander.IntFloatAddr (Post)
 @ 
-
 Standard control flow.
 <<ia64.ml>>=
 module T = Target
@@ -301,6 +298,7 @@ let globals base =
 We write a helper function to take care of expanding out load/stores through
 offsets.
 <<ia64.ml>>=
+<<a nicer version of [[ldst_expand]], which does not actually work>>
 let ldst_expand rtl =
   let extract_reg_w op = function 
 	| [_; RP.Fetch((RP.Reg _) as r,w)] -> (r,w)
@@ -328,8 +326,7 @@ let ldst_expand rtl =
   (* default case *)
   |	_ -> [rtl]
 @ 
-
-<<how we would prefer to write the above code>>=
+<<a nicer version of [[ldst_expand]], which does not actually work>>=
 let ldst_expand rtl =
   let extract_reg_w op = function 
 	| [_; RP.Fetch((RP.Reg _) as r,w)] -> (r,w)
@@ -338,26 +335,22 @@ let ldst_expand rtl =
       Impossible.impossible ("could not find base register for ld/st") in
   match Down.rtl rtl with
   (* load from offset *)
-  |	RP.Rtl [g,RP.Store(dst,RP.Fetch(RP.Mem(s,agg,mw,
-					       (RP.App(op,exps) as e),assn),w'),w)
-           ] -> let (reg, regw) = extract_reg_w op exps in
-                List.map (fun x -> Up.rtl (RP.Rtl [g, x]))
-                    [ RP.Store(dst, e, regw)
-                    ; RP.Store(dst, RP.Fetch(RP.Mem(s,agg,mw,
-						    RP.Fetch(dst,regw),assn),
-					     w'), w) ]
+  | RP.Rtl [g,RP.Store(dst,RP.Fetch(RP.Mem(s,ct,(RP.App(op,exps) as e),assn),w'),w)] ->
+      let (reg, regw) = extract_reg_w op exps in
+      List.map (fun x -> Up.rtl (RP.Rtl [g, x]))
+        [ RP.Store(dst, e, regw);
+          RP.Store(dst, RP.Fetch(RP.Mem(s,ct, RP.Fetch(dst,regw),assn), w'), w); ]
 
   (* store from offset *)
-  |	RP.Rtl [g,RP.Store(RP.Mem(s,agg,mw,(RP.App(op,exps) as e),assn), src, w)
-           ] -> let (reg, regw) = extract_reg_w op exps in
-                let tempr = Down.loc (Post.temploc (Post.talloc 't' 64)) in
-                List.map (fun x -> Up.rtl (RP.Rtl [g, x]))
-                    [ RP.Store(tempr, e, regw)
-                    ; RP.Store(RP.Mem(s, agg, mw, RP.Fetch(tempr, regw), assn),
-							   src, w) ]
+  | RP.Rtl [g,RP.Store(RP.Mem(s,ct,(RP.App(op,exps) as e),assn), src, w)] ->
+      let (reg, regw) = extract_reg_w op exps in
+      let tempr = Down.loc (Post.temploc (Post.talloc 't' 64)) in
+      List.map (fun x -> Up.rtl (RP.Rtl [g, x]))
+        [ RP.Store(tempr, e, regw);
+          RP.Store(RP.Mem(s, ct, RP.Fetch(tempr, regw), assn), src, w) ]
 
   (* default case *)
-  |	_ -> [rtl]
+  | _ -> [rtl]
 @ 
 
 Spilling and reloading.

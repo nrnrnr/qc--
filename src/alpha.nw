@@ -28,6 +28,7 @@ condition codes.
 <<alpha.ml>>=
 module SS   = Space.Standard64
 module A    = Automaton
+module PX   = Postexpander
 module R    = Rtl
 module RU   = Rtlutil
 module RP   = Rtl.Private
@@ -111,6 +112,8 @@ let return e = R.store pc e wordsize
 % ------------------------------------------------------------------ 
 
 <<alpha.ml>>=
+let (<:>) = PX.(<:>)
+let rtl r = PX.Rtl r
 module Post = struct
     <<Alpha postexpander>>
 end
@@ -165,16 +168,16 @@ let tval t = R.fetch (tloc t) (twidth t)
 let load ~dst ~addr assn =
     let w = twidth dst in
         assert (w = wordsize); 
-        [R.store (tloc dst) (R.fetch (mem w addr) w) w]
+        rtl (R.store (tloc dst) (R.fetch (mem w addr) w) w)
     
 let store ~addr ~src assn =
     let w = twidth src in
         assert (w = wordsize); 
-        [R.store (mem w addr) (tval src) w]
+        rtl (R.store (mem w addr) (tval src) w)
 <<Alpha postexpander>>=
 let block_copy ~dst dassn ~src sassn w =
   match w with
-  | 64 -> let t = talloc 't' w in store dst t dassn @ load t src sassn
+  | 64 -> let t = talloc 't' w in load t src sassn <:> store dst t dassn
   | _  -> Impossible.unimp "general block copies on Alpha"
 @
 
@@ -190,9 +193,8 @@ let xload op ~dst ~addr n assn =
   let w = twidth dst in
   assert (w = wordsize);
   assert (Cell.divides mcell n);
-  [R.store (tloc dst)
-     (extend op n (R.fetch (R.mem assn mspace (Cell.to_count mcell n) addr) n))
-     w]
+  rtl (R.store (tloc dst)
+         (extend op n (R.fetch (R.mem assn mspace (Cell.to_count mcell n) addr) n)) w)
 
 let sxload = xload "sx"
 let zxload = xload "zx"
@@ -200,21 +202,23 @@ let zxload = xload "zx"
 let lostore ~addr ~src n assn =
   assert (reg_width src = wordsize);
   assert (Cell.divides mcell n);
-  [R.store (R.mem assn mspace (Cell.to_count mcell n) addr) (lobits n (tval src)) n]
+  rtl
+    (R.store (R.mem assn mspace (Cell.to_count mcell n) addr) (lobits n (tval src)) n)
 @
 The general move operation only works between temporaries of the same
 width. Load immediate loads a constant into a temporary.
 <<Alpha postexpander>>=
 let move ~dst ~src =
     assert (reg_width src = reg_width dst);
-    if Register.eq src dst then [] else [R.store (tloc dst) (tval src) (twidth src)]
+    if Register.eq src dst then PX.Nop
+    else rtl (R.store (tloc dst) (tval src) (twidth src))
 @
 Immediate load, and extended immediate load. An extended load-immediate
 can take sums and differences of compile-time constants (including late
 compile-time constants). 
 <<Alpha postexpander>>=
-let li  ~dst const = [R.store (tloc dst) (Up.const const) (twidth dst)]
-let lix ~dst e     = [R.store (tloc dst) e                (twidth dst)]  
+let li  ~dst const = rtl (R.store (tloc dst) (Up.const const) (twidth dst))
+let lix ~dst e     = rtl (R.store (tloc dst) e                (twidth dst))  
 @
 
 % ------------------------------------------------------------------ 
@@ -247,13 +251,13 @@ implies, that comparison operators are not expanded here before they are
 used as guards for branches.
 <<Alpha postexpander>>=
 let unop ~dst op x =
-    [R.store (tloc dst) (R.app (Up.opr op) [tval x]) (twidth dst)]
+    rtl (R.store (tloc dst) (R.app (Up.opr op) [tval x]) (twidth dst))
 
 let binop ~dst op x y =
-    [R.store (tloc dst) (R.app (Up.opr op) [tval x;tval y]) (twidth dst)]
+    rtl (R.store (tloc dst) (R.app (Up.opr op) [tval x;tval y]) (twidth dst))
 
 let rtlop ~dst op args =
-    [R.store (tloc dst) (R.app (Up.opr op) (List.map tval args)) (twidth dst)]
+    rtl (R.store (tloc dst) (R.app (Up.opr op) (List.map tval args)) (twidth dst))
 @
 
 % ------------------------------------------------------------------ 
@@ -268,8 +272,8 @@ let pc_rhs = pc         (* PC as captured by call   *)
 
 \paragraph{Unconditional Branches}
 <<Alpha postexpander>>=
-let br ~tgt = [R.store pc_lhs (tval tgt)     wordsize]  (* branch reg *)
-let b  ~tgt = [R.store pc_lhs (Up.const tgt) wordsize]  (* branch     *)
+let br ~tgt = PX.Nop, R.store pc_lhs (tval tgt)     wordsize  (* branch reg *)
+let b  ~tgt = PX.Nop, R.store pc_lhs (Up.const tgt) wordsize  (* branch     *)
 @
 
 \paragraph{Conditional Branches}
@@ -281,7 +285,9 @@ register, interprets it as a boolean, and branches accordingly.
 
 For the results of the comparison instructions we would like to allocate
 new temporaries. However, the Postexpander interface does not allow for
-it. We therefore store the result of $x \oplus y$ and $\lnot x$
+it. 
+THIS COMMENT IS OBSOLETE---WE CAN ALLOCATE TEMPORARIES NOW.
+We therefore store the result of $x \oplus y$ and $\lnot x$
 in $x$.
 
 Not all comparion operators are provided as primitives on the Alpha. We
@@ -294,50 +300,52 @@ mutate the argument.
 <<Alpha postexpander>>=
 let bit = R.opr "bit" [wordsize] 
 let com x =
-    let o = R.opr "com" [wordsize] in
-        R.store (tloc x)  (R.app o [tval x]) wordsize
+  let o = R.opr "com" [wordsize] in
+  rtl (R.store (tloc x) (R.app o [tval x]) wordsize)
 @
 [[relation]] implements a binary relation, where the result is
 stored in [[x]] \emph{as a value}. 
 <<Alpha postexpander>>=
 let relation op x y = 
-    let o   = R.opr op    [wordsize] in
-        R.store (tloc x) (R.app bit [R.app o [tval x;tval y]]) wordsize 
+  let o = R.opr op [wordsize] in
+  rtl (R.store (tloc x) (R.app bit [R.app o [tval x;tval y]]) wordsize )
 @
 [[cmp]] implements the {\rtl} comparision operators where the result is
 stored in the first argument. 
+THE NEED FOR A COMPLEMENT HERE IS SUSPECT.  MOST MACHINES MAKE IT
+POSSIBLE TO DO A COMPARISON IN THE SAME NUMBER OF INSTRUCTIONS
+REGARDLESS OF THE OPERATOR IN USE.
 <<Alpha postexpander>>=
 let cmp op x y = match op with
-    | "eq"          -> [relation "eq"  x y;]
-    | "ne"          -> [com x; relation "eq"  x y]
-    | "lt"          -> [relation "lt"  x y]
-    | "gt"          -> [com x; relation "le"  x y]
-    | "ge"          -> [com x; relation "lt"  x y]
-    | "ltu"         -> [relation "ltu" x y]
-    | "leu"         -> [relation "leu" x y]
-    | "gtu"         -> [com x; relation "leu" x y]
-    | "geu"         -> [com x; relation "ltu" x y]
-    | "feq"           -> unimp "floating-point comparison"
-    | "fne"           -> unimp "floating-point comparison"
-    | "flt"           -> unimp "floating-point comparison"
-    | "fle"           -> unimp "floating-point comparison"
-    | "fgt"           -> unimp "floating-point comparison"
-    | "fge"           -> unimp "floating-point comparison"
-    | "fordered"      -> unimp "floating-point comparison"
-    | "funordered"    -> unimp "floating-point comparison"
-    | _               -> impossible 
-                        "bad comparison in expanded Alpha conditional branch"
+    | "eq"          -> relation "eq"  x y
+    | "ne"          -> relation "eq"  x y <:> com x
+    | "lt"          -> relation "lt"  x y
+    | "gt"          -> relation "lt"  y x
+    | "ge"          -> relation "lt"  x y <:> com x
+    | "ltu"         -> relation "ltu" x y 
+    | "leu"         -> relation "leu" x y
+    | "gtu"         -> relation "ltu" y x
+    | "geu"         -> relation "leu" y x
+    | "feq"         
+    | "fne"         
+    | "flt"         
+    | "fle"         
+    | "fgt"         
+    | "fge"         
+    | "fordered"    
+    | "funordered"  -> unimp "floating-point comparison"
+    | _             -> impossible 
+                      "bad comparison in expanded Alpha conditional branch"
 @
 A conditional branch is a sequence of relational operators, followed by
 a [[cbranch]] on the result. 
+COULD THE SENSE OF COMPARISON BE REVERSED HERE?
+OR PERHAPS THE COMPARISON SHOULD BE RETURNED FROM [[cmp]]?
 <<Alpha postexpander>>=
-let cbranch op x tgt =
-    R.guard (R.app (R.opr op [wordsize]) [tval x; R.bits (Bits.zero 64) 64])
-            (R.store pc_lhs (Up.const tgt) wordsize)
-
-let bc x (opr, ws as op) y ~tgt =
-    assert (ws =*= [wordsize]);
-    (cbranch "eq" x tgt) :: (cmp opr x y)  
+let bc x (opr, ws as op) y ~ifso ~ifnot =
+  assert (ws =*= [wordsize]);
+  let bcond = R.app (R.opr "eq" [wordsize]) [tval x; R.bits (Bits.zero 64) 64] in
+  PX.Test (cmp opr x y, (bcond, ifso, ifnot))
 @
 [[bnegate]] inverts the condition in a conditional branch. Since we only
 compare for equality or inequality, this is easy. All the real work is
@@ -380,7 +388,11 @@ foo:
 @    
 The call and return instructions in general do not use the conventional
 registers. Here we expand them such that they do. We also add the
-[[ldgp]] instruction after a [[jsr]]. The [[ldgp]] instruction at the
+[[ldgp]] instruction after a [[jsr]]. 
+THIS IS PLAYING FAST AND LOOSE WITH THE COMPILER'S INTERNAL
+INVARIANTS.
+YOU'RE LYING TO THE COMPILER ABOUT THE CONTROL FLOW...
+The [[ldgp]] instruction at the
 beginning of a procedure is added by the assembler module
 \module{alphaasm}. The calling convention ensures that the return
 address is in register \$26 and thus the protocal is followed.
@@ -397,23 +409,17 @@ let ldgp_ra  = R.store (R.reg gp)
                        (R.app alpha_gp [fetch_word (R.reg ra)]) wordsize      
 
 let effects = List.map Up.effect
-let call  ~tgt ~others = 
-    [ ldgp_ra
-    ; R.par (store_word pc_lhs (fetch_word pv_loc) :: effects others)
-    ; R.store pv_loc (Up.const tgt) wordsize
-    ]
+let do_call ~tgt ~others =
+  rtl (R.store pv_loc tgt wordsize) <:>
+  rtl (R.par (store_word pc_lhs (fetch_word pv_loc) :: effects others)),
+  ldgp_ra  (* FLAGRANT LIE HERE---SHOULD BE PART OF CALLING CONVENTION *)
     
-let callr ~tgt ~others = 
-    [ ldgp_ra
-    ; R.par (store_word pc_lhs (fetch_word pv_loc) :: effects others)
-    ; R.store pv_loc (tval tgt) wordsize
-    ]
+let call  ~tgt ~others = do_call (Up.const tgt) others
+let callr ~tgt ~others = do_call (tval tgt) others
 @
-
 \paragraph{Cut-To}
-
 <<Alpha postexpander>>=
-let cut_to effs = [R.par (effects effs)]
+let cut_to effs = PX.Nop, R.par (effects effs)
 @
 
 \paragraph{Sacred instructions}

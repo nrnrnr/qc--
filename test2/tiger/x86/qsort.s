@@ -3242,14 +3242,14 @@ Ljoin_l151:
 	movl (%ecx),%eax
 	movl 44(%esp),%ecx
 	cmpl %eax,%ecx
-	jle Lif_true_l169
-Lif_false_l170:
+	jle Ljoin_l170
+Ljoin_l171:
 	movl $0,%eax
-	jmp Lend_if_l171
-Lif_true_l169:
+	jmp Ljoin_l169
+Ljoin_l170:
 	movl $1,%eax
-	jmp Lend_if_l171
-Lend_if_l171:
+	jmp Ljoin_l169
+Ljoin_l169:
 	jmp LifEnd_152
 Ljoin_l164:
 	jmp LifTrue_150
@@ -3393,14 +3393,14 @@ Ljoin_l157:
 	movl %edx,(%ecx)
 	movl $0,%ecx
 	cmpl %ecx,%eax
-	jle Lif_true_l172
-Lif_false_l173:
+	jle Ljoin_l173
+Ljoin_l174:
 	movl $0,%eax
-	jmp Lend_if_l174
-Lif_true_l172:
+	jmp Ljoin_l172
+Ljoin_l173:
 	movl $1,%eax
-	jmp Lend_if_l174
-Lend_if_l174:
+	jmp Ljoin_l172
+Ljoin_l172:
 	jmp LifEnd_152
 LifEnd_152:
 	movl $8,%ecx
@@ -3814,14 +3814,14 @@ Ljoin_l189:
 	movl (%ecx),%eax
 	movl 44(%esp),%ecx
 	cmpl %eax,%ecx
-	jg Lif_true_l207
-Lif_false_l208:
+	jg Ljoin_l208
+Ljoin_l209:
 	movl $0,%eax
-	jmp Lend_if_l209
-Lif_true_l207:
+	jmp Ljoin_l207
+Ljoin_l208:
 	movl $1,%eax
-	jmp Lend_if_l209
-Lend_if_l209:
+	jmp Ljoin_l207
+Ljoin_l207:
 	jmp LifEnd_167
 Ljoin_l202:
 	jmp LifTrue_165
@@ -3965,14 +3965,14 @@ Ljoin_l195:
 	movl %edx,(%ecx)
 	movl $0,%ecx
 	cmpl %ecx,%eax
-	jg Lif_true_l210
-Lif_false_l211:
+	jg Ljoin_l211
+Ljoin_l212:
 	movl $0,%eax
-	jmp Lend_if_l212
-Lif_true_l210:
+	jmp Ljoin_l210
+Ljoin_l211:
 	movl $1,%eax
-	jmp Lend_if_l212
-Lend_if_l212:
+	jmp Ljoin_l210
+Ljoin_l210:
 	jmp LifEnd_167
 LifEnd_167:
 	movl $8,%ecx
@@ -4844,14 +4844,14 @@ LifTrue_182:
 	addl %ebx,%ebp
 	movl (%ebp),%ebx
 	cmpl %ebx,%ecx
-	jl Lif_true_l281
-Lif_false_l282:
+	jl Ljoin_l282
+Ljoin_l283:
 	movl $0,%eax
-	jmp Lend_if_l283
-Lif_true_l281:
+	jmp Ljoin_l281
+Ljoin_l282:
 	movl $1,%eax
-	jmp Lend_if_l283
-Lend_if_l283:
+	jmp Ljoin_l281
+Ljoin_l281:
 	jmp LifEnd_184
 LifEnd_184:
 	movl $0,%ecx
@@ -4913,14 +4913,14 @@ LifTrue_189:
 	addl %ebp,%ebx
 	movl (%ebx),%ebp
 	cmpl %ebp,%ecx
-	jge Lif_true_l278
-Lif_false_l279:
+	jge Ljoin_l279
+Ljoin_l280:
 	movl $0,%eax
-	jmp Lend_if_l280
-Lif_true_l278:
+	jmp Ljoin_l278
+Ljoin_l279:
 	movl $1,%eax
-	jmp Lend_if_l280
-Lend_if_l280:
+	jmp Ljoin_l278
+Ljoin_l278:
 	jmp LifEnd_191
 LifEnd_191:
 	movl $0,%ecx

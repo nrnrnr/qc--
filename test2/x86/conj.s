@@ -14,10 +14,10 @@ Linitialize_continuations_l5:
 Lproc_body_start_l4:
 	movl $1,%edx
 	cmpl %edx,%eax
-	jne Lconj_true_l13
+	jne Ljoin_l13
 Ljoin_l17:
 	jmp Ljoin_l9
-Lconj_true_l13:
+Ljoin_l13:
 	movl $0,%edx
 	cmpl %edx,%eax
 	jne Ljoin_l8

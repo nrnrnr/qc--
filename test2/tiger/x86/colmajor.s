@@ -521,14 +521,14 @@ LifTrue_62:
 	addl %eax,%ebx
 	movl (%ebx),%eax
 	cmpl %eax,%edx
-	jge Lif_true_l46
-Lif_false_l47:
+	jge Ljoin_l47
+Ljoin_l48:
 	movl $0,%ecx
-	jmp Lend_if_l48
-Lif_true_l46:
+	jmp Ljoin_l46
+Ljoin_l47:
 	movl $1,%ecx
-	jmp Lend_if_l48
-Lend_if_l48:
+	jmp Ljoin_l46
+Ljoin_l46:
 	jmp LifEnd_64
 LifEnd_64:
 	movl $0,%eax
@@ -664,14 +664,14 @@ Ljoin_l67:
 	movl %edx,(%ecx)
 	movl $0,%ecx
 	cmpl %ecx,%eax
-	jne Lif_true_l79
-Lif_false_l80:
+	jne Ljoin_l80
+Ljoin_l81:
 	movl $0,%eax
-	jmp Lend_if_l81
-Lif_true_l79:
+	jmp Ljoin_l79
+Ljoin_l80:
 	movl $1,%eax
-	jmp Lend_if_l81
-Lend_if_l81:
+	jmp Ljoin_l79
+Ljoin_l79:
 	jmp LifEnd_90
 LifEnd_90:
 	movl $0,%ecx

@@ -32,6 +32,11 @@ module RU = Rtlutil
 module PX = Postexpander
 module T  = Target
 module A  = Automaton
+
+let rtl r = PX.Rtl r
+let (<:>) = PX.(<:>)
+
+let ui = Impossible.unimp
 <<spaces>>
 module Post = struct
   <<ppc postexpander>>
@@ -196,20 +201,18 @@ let result_context (n, _) = try SM.find n resmap
                                     ("cannot find result context for "^n)
 let constant_context w = if w > wordsize then fcontext else icontext
 @ 
-A few utility functions for building common RTL's.
+A few utility functions for building common RTLs.
 <<ppc postexpander>>=
-let ui s = Printf.eprintf "*** unimp %s" s; []
-
 let tloc t  = Rtl.reg t
 let twidth  = Register.width
 let tval t  = R.fetch (tloc t) (twidth t)
-let tstore tmp exp = R.store (tloc tmp) exp (twidth tmp)
+let tstore tmp exp = rtl (R.store (tloc tmp) exp (twidth tmp))
 
 let mem    assn w addr = R.mem assn mspace (Cell.to_count mcell w) addr
 let memval assn w addr = R.fetch (mem assn w addr) w
 @ 
 <<ppc postexpander>>=
-let set_xer2 opr x y = R.store xer (R.app opr [x; y]) 32
+let set_xer2 opr x y = rtl (R.store xer (R.app opr [x; y]) 32)
 @ 
 The load and store instructions on the ppc cannot use register 0 as a
 parameter. Right now this is avoided by not telling the register
@@ -218,12 +221,12 @@ allocator about register 0, so we don't have to worry about that here.
 let load ~dst ~addr assn =
   let w = twidth dst in
   assert (w = 8 || w = 16 || w = 32 || w = 64);
-  [R.store (tloc dst) (memval assn w addr) w]
+  rtl (R.store (tloc dst) (memval assn w addr) w)
 
 let store ~addr ~src assn =
   let w = twidth src in
   assert (w = 8 || w = 16 || w = 32 || w = 64);
-  [R.store (mem assn w addr) (tval src) w]
+  rtl (R.store (mem assn w addr) (tval src) w)
 @ 
 The [[xload]] and [[xstore]] functions apply an operator to an
 expression before loading or storing them in the final location. The
@@ -232,11 +235,11 @@ of these two functions.
 <<ppc postexpander>>=
 let xload op ~dst ~addr w assn =
   let ext = R.app (R.opr op [w; twidth dst]) [memval assn w addr] in
-  [tstore dst ext]
+  tstore dst ext
 
 let xstore op ~addr ~src w assn =
   let ext = R.app (R.opr op [twidth src; w]) [tval src] in
-  [R.store (mem assn w addr) ext w]
+  rtl (R.store (mem assn w addr) ext w)
 
 let sxload  = xload "sx"
 let zxload  = xload "zx"
@@ -245,8 +248,8 @@ let lostore = xstore "lobits"
 Immediate values and registers are copied into registers with
 [[tstore]].
 <<ppc postexpander>>=
-let move ~dst ~src = [tstore dst (tval src)]
-let lix  ~dst  exp = [tstore dst exp]
+let move ~dst ~src = tstore dst (tval src)
+let lix  ~dst  exp = tstore dst exp
 @ 
 Load immediate is a bit tricky because the PPC only allows 16-bit
 constants to be loaded directly.
@@ -254,47 +257,45 @@ constants to be loaded directly.
 let li ~dst const =
   let con w i = R.bits (B.S.of_int i w) w in
   match const with
-  | RP.Bits b -> let b'    = if B.compare b (B.zero 32) < 0
-                             then BO.neg b else b in
+  | RP.Bits b -> assert (B.width b = 32);
+                 let b'    = if BO.lt b (B.zero 32) then BO.neg b else b in
                  let l     = R.bits (BO.lobits 16 b) 16 in
                  let h     = BO.lobits 16 (BO.shrl b' (B.S.of_int 16 32)) in
                  let dsthi = R.slice 16 16 (R.reg dst) in
-                 [ R.store dsthi (R.bits h 16) 16
-                 ; tstore  dst   (R.app (R.opr "sx" [16;32]) [l]) ]
-  | _         -> [ tstore dst (Up.const const) ]
+                 tstore  dst   (R.app (R.opr "sx" [16;32]) [l]) <:>
+                 rtl (R.store dsthi (R.bits h 16) 16)
+  | _         -> tstore dst (Up.const const)
 @ 
 Operators...
 <<ppc postexpander>>=
-let rtlop ~dst op tmpl = [tstore dst (R.app (Up.opr op) (List.map tval tmpl))]
-
+let rtlop ~dst op tmpl = tstore dst (R.app (Up.opr op) (List.map tval tmpl))
 let binop ~dst op tmp1 tmp2 = rtlop dst op [tmp1;tmp2]
 let unop  ~dst op tmp       = rtlop dst op [tmp]
 @ 
-Block Copy...
+Block Copy\ldots
 <<ppc postexpander>>=
 let block_copy ~dst assn1 ~src assn2 width =
   let tmp = talloc 't' 32 in
   let reg_sl = function
-      32 -> tloc tmp
+    | 32 -> tloc tmp
     | n  -> R.slice n (32-n) (tloc tmp) in
-  let stx d w = R.store (mem assn1 w (RU.addk 16 dst d))
-                         (R.fetch (reg_sl w) w) w
-  and ld32 d  = R.store (tloc tmp) (memval assn2 32 (RU.addk 16 src d)) 32
-  in
+  let stx d w = rtl (R.store (mem assn1 w (RU.addk 16 dst d))
+                             (R.fetch (reg_sl w) w) w)
+  and ld32 d  = rtl (R.store (tloc tmp) (memval assn2 32 (RU.addk 16 src d)) 32) in
   let rec copy d =
     match width - d with
-    | 1 -> [stx d 8  ; ld32 d]
-    | 2 -> [stx d 16 ; ld32 d]
-    | 3 -> [stx d 8  ; stx d 16 ; ld32 d]
-    | 4 -> [stx d 32 ; ld32 d]
-    | n -> assert(n > 0); stx d 32 :: ld32 d :: copy (d + 4)
-  in copy 0
+    | 1 -> ld32 d <:> stx d  8
+    | 2 -> ld32 d <:> stx d 16
+    | 3 -> ld32 d <:> stx d  8 <:> stx d 16  (* LOOKING VERY SUSPECT *)
+    | 4 -> ld32 d <:> stx d 32
+    | n -> assert(n > 0); ld32 d <:> stx d 32 <:> copy (d + 4) in
+  copy 0
 @ 
 Branch and call rtls.
 <<ppc postexpander>>=
-let br ~tgt = [R.store pc_lhs (R.fetch lr wordsize) wordsize;
-               R.store lr (tval tgt) wordsize]
-let b ~tgt  = [R.store pc_lhs (Up.const tgt) wordsize]
+let br ~tgt = rtl (R.store lr (tval tgt) wordsize),
+              R.store pc_lhs (R.fetch lr wordsize) wordsize
+let b ~tgt  = PX.Nop, R.store pc_lhs (Up.const tgt) wordsize
 @ 
 Conditional branches are encoded as a comparison against the
 appropriate bit in the CR register. With this scheme, the opposite
@@ -313,9 +314,9 @@ let xer_condition = function
 
 let with_xer z x opr y =
   let opr' = "ppc_xer_" ^ opr in
-  [R.par [R.store (tloc z) (R.app (R.opr opr [32]) [tval x; tval y]) 32;
-          R.store xer (R.app (R.opr opr' []) [tval x; tval y]) 32;
-         ]]
+  rtl (R.par [R.store (tloc z) (R.app (R.opr opr [32]) [tval x; tval y]) 32;
+              R.store xer (R.app (R.opr opr' []) [tval x; tval y]) 32;
+             ])
 
 let bc_setup opr x y = match opr with
 | "add_overflows"  -> with_xer (talloc 't' 32) x "add" y
@@ -325,17 +326,13 @@ let bc_setup opr x y = match opr with
 | "div_overflows"  -> Impossible.unimp "%div_overflows"
 | _ -> Impossible.impossible "bc_setup"
 
-
-let bc x ((opr, ws) as op) y ~tgt =
+let bc x ((opr, ws) as op) y ~ifso ~ifnot =
   assert (ws =*= [wordsize]);
   match xer_condition opr with
-  | None -> 
-      [R.guard (R.app (Up.opr op) [tval x; tval y]) 
-        (R.store pc_lhs (Up.const tgt) wordsize)]
+  | None -> PX.Test (PX.Nop, (R.app (Up.opr op) [tval x; tval y], ifso, ifnot))
   | Some tst ->
-      R.guard (R.app (R.opr tst []) [R.fetch xer wordsize])
-        (R.store pc_lhs (Up.const tgt) wordsize) ::
-      bc_setup opr x y
+      PX.Test (bc_setup opr x y,
+               (R.app (R.opr tst []) [R.fetch xer wordsize], ifso, ifnot))
 
 let negate = function
   | "ne"            -> "eq"
@@ -348,13 +345,13 @@ let negate = function
   | "gtu"           -> "leu"
   | "leu"           -> "gtu"
   | "ltu"           -> "geu"
-  | "feq"           -> Impossible.unimp "floating-point comparison"
-  | "fne"           -> Impossible.unimp "floating-point comparison"
-  | "flt"           -> Impossible.unimp "floating-point comparison"
-  | "fle"           -> Impossible.unimp "floating-point comparison"
-  | "fgt"           -> Impossible.unimp "floating-point comparison"
-  | "fge"           -> Impossible.unimp "floating-point comparison"
-  | "fordered"      -> Impossible.unimp "floating-point comparison"
+  | "feq"          
+  | "fne"          
+  | "flt"          
+  | "fle"          
+  | "fgt"          
+  | "fge"          
+  | "fordered"     
   | "funordered"    -> Impossible.unimp "floating-point comparison"
   | _               -> Impossible.impossible 
                         "bad comparison in expanded MIPS conditional branch"
@@ -367,43 +364,29 @@ let bnegate r = match Dn.rtl r with
 @ 
 Call instructions are the same as branches with some additional effects.
 <<ppc postexpander>>=
-let call  ~tgt ~others = [R.par (List.hd (b  tgt) :: List.map Up.effect others)]
-let callr ~tgt ~others = [R.par (List.hd (br tgt) :: List.map Up.effect others)]
+let call_with branch ~tgt ~others =
+  let b, rtl = branch ~tgt in b, R.par (rtl :: List.map Up.effect others)
+let call  = call_with b
+let callr = call_with br
 
 let cut_to = function
   | [RP.Store(pc, tgt, w); restore_stack] ->
       let effects = [RP.Store(pc, RP.Fetch(Dn.loc lr, w), w); restore_stack] in
-      [R.par (List.map Up.effect effects); R.store lr (Up.exp tgt) w]
-  | effects -> [R.par (List.map Up.effect effects)]
+      rtl (R.store lr (Up.exp tgt) w), R.par (List.map Up.effect effects)
+  | effects -> PX.Nop, R.par (List.map Up.effect effects)
 @ 
 We want to prevent the expander from messing with the rtl [[pc := lr]]
 which is a return from procedure call.
 <<ppc postexpander>>=
 let don't_touch_me = function
-    [ RP.Store(l, RP.Fetch(r, _), _) ]
+  | [ RP.Store(l, RP.Fetch(r, _), _) ]
     when RU.Eq.loc l (Dn.loc pc_lhs) && RU.Eq.loc r (Dn.loc lr) -> true
   | [ RP.Store (_, RP.App (("add", _), [ _ ; RP.Const (RP.Diff _)]),_)] -> true
   | _ -> false
 @ 
 Stack operations...
 <<ppc postexpander>>=
-let opclass op = PX.Register
-
-let stack_depth = 8
-let stack_width = 80
-let stack_top_proxy_reg = (('\000', Rtl.Identity, Cell.of_size 80), 0, R.C 1)
-let stack_top_proxy = R.reg stack_top_proxy_reg
-
-let converts_stack_to_temp op = false
-let push ~addr assn = ui "push"
-let store_pop ~addr assn = ui "store_pop"
-let push_cvt op width ~addr assn = ui "push_cvt"
-let store_pop_cvt op width ~addr assn = ui "store_pop_cvt"
-let pushk const = ui "pushk_const"
-let pushk_cvt op width const = ui "pushk_cvt"
-let stack_op op = ui "stack_op"
-let bc_stack op ~tgt = ui "bc_stack"
-let is_stack_top_proxy loc = false
+include Postexpander.Nostack(Address)
 @ 
 % ---------------------------------------------------------------------------
 \section{Calling Conventions}

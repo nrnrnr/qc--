@@ -14,14 +14,16 @@
 
 \label{expander.sec}
 
-A back end is obligated to expand code to RTLs.
+A back end is obligated to expand code in such a way that each node in
+the flow graph bears an RTL that can be represented as a single
+instruction on the target machine (with a few exceptions noted below).
 To make retargeting easier, we provide here a generic code expander
 that reduces the machine-dependent obligation.
 If the machine can move data, operate on temporary registers, and
 provide a few simple control-flow operations, this module does the
 rest.
-In other words, this module expands an RTL into a sequence of much
-simpler RTLs.
+In other words, this module expands a flow-graph node into a subgraph of
+simpler nodes.
 The target-dependent code is relegated to a \emph{postexpander}.
 
 To explain what is happening, I use the following
@@ -74,9 +76,13 @@ pointer) is modified along with the branch.
 Here we don't need to know the details; all the expander needs to do is
 preserve the atomicity of the assignment, but it can (and does) expand
 out the right-hand sides.
-In the case of cut to, the atomicity is not real; 
+In the case of \mbox{[[cut to]]}, the atomicity is not real; 
 the illusion of atomicity is the result of
 a conspiracy among the [[Target.t]], the expander, and the recognizer.
+(The reason for the illusion is that between the time the stack
+pointer is mutated and the time the branch is taken, the program's
+internal invariants are no longer satisfied---in particular, it is not
+safe to spill at that point.)
 @
 Some machines, notably the Pentium floating-point unit, are not
 register machines but stack machines.
@@ -142,68 +148,100 @@ Care would have to be taken to avoid paying for an expensive identity
 function (embedding/projection) at every application of such a function.
 \end{quote}
 @
-\subsection{The target-dependent postexpander}
+\subsection{Support for expansion---the postexpander module}
 
-\label{expander.sec:Postexpander.S}
+The [[Postexpander]] module does two jobs:
+\begin{itemize}
+\item
+It exports a signature (module type)~[[S]], which defines the
+interface that every target-dependent postexpander must implement.
+\item
+It defines some types and utility functions that can be used by
+postexpanders. 
+\end{itemize}
 
-Here is a signature for a postexpander for an integer/float/address
-machine.
-These are the operations every target must implement.
+The overall structure of the postexpander is as follows:
 <<postexpander.mli>>=
+<<abstract types for postexpanders>>
 <<types for postexpanders>>
 <<exported utility functions for postexpanders>>
 <<exported utility functions for use by the generic expander>>
 <<signature of a postexpander>>
 <<postexpander.ml>>=
+type uid = int
 <<types for postexpanders>>
 <<signature of a postexpander>>
+@ 
+To make the interfaces more readable, we use these type abbreviations:
 <<types for postexpanders>>=
 type temp      = Register.t
 type rtl       = Rtl.rtl
+type exp       = Rtl.exp
 type width     = Rtl.width
 type assertion = Rtl.assertion
 type operator  = Rtl.Private.opr
-@ 
-Most postexpander functions return a \emph{block}, which is a
-single-entry, single-exit region of the control-flow graph.
-Such a region can include conditional and looping control flow.
-But expansion of a condition cannot itself be conditional; it must be
-straight-line code.
+@
+@
+\paragraph{Fragments of flow graphs}
 
-We use a dirty trick to make the same constructors do for both.
-If control flow is permitted, type parameter~[['a]] is [[exp]];
-otherwise it is [[void]].
+Working with the mutable control-flow graph is awkward and
+error-prone.
+We therefore define some special, immutable types to represent
+fragments of the flow graph after expansion.
+(Maybe before as well.)
+What kind of fragment we have depends on what sort of flow-graph node
+we are expanding.
+\begin{itemize}
+\item
+A node that represents straight-line control flow is expanded into a
+[[block]].
+A~[[block]] represents a subgraph with a single entry and single exit.
+\item
+A~node that represents an unconditional or multiway branch (including
+call) is expanded
+into a [[branch]].
+The [[branch]] consists of a (possibly empty) [[block]] followed by an
+RTL.
+The trailing RTL is always the branch (or call) instruction.
+Such a subgraph has a single entry, and while it may have multiple
+exits, all those exits are reached by the same instruction: the final
+RTL.
+\item
+A conditional branch is expanded into a [[cbranch]].
+This subgraph is somewhat more complicated because it has \emph{two}
+exits, which are designated by the Boolean values [[true]] and
+[[false]].
+Unlike the unconditional or multiway branches, the [[cbranch]] can
+have multiple internal nodes that reach one or both of the exits.
+This happens any time the condition involves the short-circuit Boolean
+operators [[conjoin]], [[disjoin]], and [[not]]. 
+\end{itemize}
+<<abstract types for postexpanders>>=
+type uid
 <<types for postexpanders>>=
-type 'a t = Rtl   of rtl
-          | Seq   of 'a t * 'a t
-          | Cond  of 'a * 'a t * 'a t
-          | While of 'a * 'a t
-type void  = Void of void
-type block = Rtl.exp t
-type rtls  = void t
-@ Meanings and invariants:
+type block   = Rtl   of rtl
+             | Seq   of block * block
+             | If    of cbranch * block * block
+             | While of cbranch * block
+             | Nop
+and  branch  = block * rtl (* block ending in branch, including multiway branch *)
+and  cbranch = Exit   of bool
+             | Test   of block * cbinst
+             | Shared of uid * cbranch  (* don't duplicate this node *)
+and  cbinst  = exp * cbranch * cbranch
+@ Note that since the only purpose of a conditional branch is to reach
+one of the two exits, there is never any straight-line code that
+intervenes between a conditional branch and the exit.
+Also note that a conditional branch can be simplified to
+unconditional; that's what a bare [[Exit]]  means.
+DOCUMENTATION BELOW WILL NEED TO BE REVISED!!!
+@
+We now explain what each of the above constructors and types means,
+and under what conditions it is deemed to satisfy the machine invariant.
 \begin{itemize}
-\item [[Rtl]] is an RTL that can be represented by a single
-instruction, with the following exceptions:
+\item [[Rtl]] wraps a \emph{non-branching} RTL that can be represented by a single
+instruction on the target machine, with this exception:
 \begin{itemize}
-\item
-If the target machine has delayed control-transfer instructions
-(branch\slash call\slash etc), we may use an RTL to represent an atomic
-two-instruction package consisting of the control transfer and the
-instruction in the delay slot.
-We do this because at present, we have no other way to constrain
-layout.
-\item
-For implementing [[cut to]], we use a single RTL representing two
-instructions: one that adjusts the stack pointer and one that
-branches.
-We need to package these atomically because once the stack pointer has
-been adjusted, the internal assumptions of the compiler are no longer
-valid.
-For example, it is not safe to spill a register after the stack
-pointer has been adjusted.
-We therefore treat the two instructions as an atomic unit by packaging
-them as one RTL.
 \item
 An RTL may be representible as a single instruction only under the
 optimistic assumption that a late compile-time constant is ``small.''
@@ -213,28 +251,120 @@ Either this sequence can be generated without using an additional
 register, or else the recognizer will have to reserve to itself a
 register for this purpose.
 \end{itemize}
+@
+\item
+An [[rtl]] in a [[branch]] pair is a branching
+RTL (including multiway branch and call) that can be represented by a
+single instruction on the target 
+machine, with these exceptions:
+\begin{itemize}
+\item
+If the target machine has delayed control-transfer instructions
+(branch\slash call\slash etc), we may use a single RTL to represent an atomic
+two-instruction package consisting of the control transfer and the
+instruction in the delay slot.
+We do this because at present, we have no other way to constrain
+layout.
+@
+\item
+For implementing [[cut to]], we use a single RTL that represents two
+instructions: one that adjusts the stack pointer and one that
+branches.
+We need to package these atomically because once the stack pointer has
+been adjusted, the internal assumptions of the compiler are no longer
+valid.
+For example, it is not safe to spill a register after the stack
+pointer has been adjusted.
+We therefore treat the two instructions as an atomic unit by packaging
+them as one RTL.
+\end{itemize}
+@
 \item
 A [[Seq]] node represents a sequence of instructions and executes
 first the left half, then the right.
+@
 \item
-A [[Cond]] node holds a condition, represented as an expression, such
+A [[If]] node holds a condition, represented as an expression, such
 that if the condition holds, 
 it executes the first block; otherwise, it executes the second.
-The condition must be expandable using the [[expand_cond]] function
-in the postexpander interface below.
-The condition need not satisfy any other invariants.
+The condition must be a Boolean, but it need not satisfy any other
+invariants:
+it will be expanded by the generic expander.
+It is up to each postexpander to be sure that each expansion of a
+[[If]] node will eventually result in a block without [[If]] or
+[[Loop]] nodes.
+@
 \item
 The [[While]] node corresponds to a C-style [[while]] statement:
 as long as the condition is satisfied, it executes the body.
-As in [[Cond]],
-the condition must be expandle using the [[expand_cond]] function
-in the postexpander interface below.
-The condition need not satisfy any other invariants.
-\item
-At need, we could add a 
-[[Nop]] to represent an empty sequence of instructions.
-\end{itemize}
+As in [[If]],
+The condition must be a Boolean, but it need not satisfy any other
+invariants:
+it will be expanded by the generic expander.
+It is up to each postexpander to be sure that each expansion of a
+[[Loop]] node will eventually result in a block without [[Loop]] nodes.
 @
+\item
+[[Nop]] represents an empty sequence of instructions.
+No postexpander should need to use [[Nop]], but it is useful in the
+generic expander.
+@
+\item
+A [[branch]] represents a [[block]] that is followed by a branch
+instruction, which is represented by an RTL that satisfies the machine
+invariant for branch instructions as described above.
+@
+\item
+A [[cbranch]] represents a [[block]] that is followed by a
+conditional-branch instruction.
+@
+\item
+A [[cbinst]] represents a subgraph that has two exits (designated
+[[true]] and [[false]]) and begins with a conditional-branch
+instruction.
+The [[exp]] must be a Boolean expression.
+If [[cbinst = (exp, t, f)]], its semantics are that if [[exp]] is
+true, execution continues with the [[t]]~continuation; otherwise it
+continues with the [[f]]~continuation.
+To satisfy the machine invariant,
+the [[cbinst]] must satisfy the
+invariant that the target machine has two related conditional-branch
+instructions: one that can branch on [[exp]] and one that can branch
+on [[%not(exp)]].
+The postexpander must produce these RTLs when [[exp]] is passed to the
+[[bc]] or [[bc_not]] functions in the postexpander interface below.
+@
+\item
+The [[Exit]] continuation represents control flow to one of the two
+exits of the subgraph.
+An [[Exit]] always satisfies the machine invariant.
+@
+\item
+The [[Continue]] continuation represents additional control flow which
+eventually leads to an exit.
+It satisfies the machine invariant if its [[cbranch]] does.
+\end{itemize} 
+@
+An example may help with the conditional branch.
+If the source code contains
+\begin{verbatim}
+if (n == 1 or n == 2) {
+  ...
+} else {
+  ...
+}
+\end{verbatim}
+The generic expander may translate the [[if]] expression to
+\begin{verbatim}
+  (Nop, (n == 1, Exit true, (Nop, n == 2, Exit true, Exit false)))
+\end{verbatim}
+On many machines this subgraph would be expanded further with the help
+of the postexpander.
+For example, each [[Nop]] might be replaced by a compare instruction,
+and the equality tests might be replaced by tests of the condition codes.
+@
+\paragraph{Postexpander utility functions}
+
 A postexpander may need to allocate a temporary or a slot in the stack
 frame, or it may need to emit initialized data (e.g., for a
 floating-point load). 
@@ -246,6 +376,62 @@ module Alloc : sig
   val slot : width -> Automaton.loc
 end
 @ 
+The postexpander might also like to create a loop or conditional and
+have the generic expander expand it further.
+These functions achieve mutual recursion
+between the generic expander and the postexpander;
+it is up to the postexpander to be sure that this recursion
+terminates. 
+Only a postexpander may safely call these functions;
+to call the functions while the generic expander is not active is an
+\emph{unchecked} run-time error.
+<<exported utility functions for postexpanders>>=
+module Expand : sig
+  val block   : block   -> block
+  val branch  : branch  -> branch
+  val cbranch : cbranch -> cbranch
+end
+@ 
+The [[extend_cbranch]] function makes it possible to specify the
+meaning of the true and false exits.
+<<XXX exported utility functions for postexpanders>>=
+val extend_cbranch : cbranch -> ifso:cbranch -> ifnot:cbranch -> cbranch
+@ 
+Sequential composition of blocks is also useful for the generic expander.
+It eliminates [[Nop]].
+<<exported utility functions for postexpanders>>=
+val (<:>) : block -> block -> block
+@ 
+The [[shared]] function makes a node shared, so that it will not be
+duplicated on conversion to a flow graph.
+The [[shared]] function guarantees uniqueness of the identifier, and
+it avoids wrapping [[Shared]] in [[Shared]].
+<<exported utility functions for postexpanders>>=
+val shared : cbranch -> cbranch
+@
+To convert a condition for use in [[If]] or [[While]], use [[cond]]. 
+<<exported utility functions for postexpanders>>=
+val cond : exp -> cbranch  (* branch taken iff exp true *)
+@
+We provide support for a set of nodes.
+<<exported utility functions for postexpanders>>=
+type 'a nodeset
+val empty : 'a nodeset
+val lookup : uid -> 'a nodeset -> 'a   (* raises Not_found *)
+val insert : uid -> 'a -> 'a nodeset -> 'a nodeset
+@
+\paragraph{Other utilities}
+
+We might be on our way to an applicative flow graph.
+<<exported utility functions for use by the generic expander>>=
+@
+
+\paragraph {The target-dependent postexpander}
+\label{expander.sec:Postexpander.S}
+
+Here is a signature for a postexpander for an integer/float/address
+machine.
+These are the operations every target must implement.
 <<signature of a postexpander>>=
 module type S = sig
   val byte_order : Rtl.aggregation (* used on all access to memory *)
@@ -263,8 +449,8 @@ end
 \subsubsection{Postexpander operations for register machines}
 We provide basic load and store.
 <<generic expansion operations for register machines>>=
-val load  : dst:temp  -> addr:Address.t -> assertion -> rtl list
-val store : addr:Address.t -> src:temp -> assertion -> rtl list
+val load  : dst:temp  -> addr:Address.t -> assertion -> block
+val store : addr:Address.t -> src:temp -> assertion -> block
 @
 We also provide sign-extending and zero extending loads
 as well as low-bit--extracting stores, all of which are used only
@@ -274,22 +460,22 @@ size-changing operators; other uses, such as compositions of widens
 and narrows, should be compiled to suitable code (shifts or identity)
 somewhere upstream.
 <<generic expansion operations for register machines>>=
-val sxload  : dst:temp  -> addr:Address.t -> width -> assertion -> rtl list
-val zxload  : dst:temp  -> addr:Address.t -> width -> assertion -> rtl list
-val lostore : addr:Address.t  -> src:temp -> width -> assertion -> rtl list
+val sxload  : dst:temp  -> addr:Address.t -> width -> assertion -> block
+val zxload  : dst:temp  -> addr:Address.t -> width -> assertion -> block
+val lostore : addr:Address.t  -> src:temp -> width -> assertion -> block
 @
 We need a move operation.
 <<generic expansion operations for register machines>>=
-val move : dst:temp -> src:temp -> rtl list
+val move : dst:temp -> src:temp -> block
 @ 
 Load immediate can take any constant except a Boolean.
 <<generic expansion operations for register machines>>=
-val li  : dst:temp -> Rtl.Private.const -> rtl list
+val li  : dst:temp -> Rtl.Private.const -> block
 @ 
 An extended load-immediate can take sums and differences of
 compile-time constants (including late compile-time constants). 
 <<generic expansion operations for register machines>>=
-val lix : dst:temp -> Rtl.exp           -> rtl list
+val lix : dst:temp -> Rtl.exp           -> block
 @ 
 We provide simple shortcuts for binary and unary operators.
 I don't know if the shortcuts are worthwhile.
@@ -299,9 +485,9 @@ Ordinary value operators are expected to be supported by these
 operations, but only at their natural widths.
 Perhaps the weird value operators should be supported also.
 <<generic expansion operations for register machines>>=
-val binop : dst:temp -> operator -> temp -> temp -> rtl list
-val unop  : dst:temp -> operator -> temp         -> rtl list
-val rtlop : dst:temp -> operator -> temp list    -> rtl list
+val binop : dst:temp -> operator -> temp -> temp -> block
+val unop  : dst:temp -> operator -> temp         -> block
+val rtlop : dst:temp -> operator -> temp list    -> block
 @
 The arguments to the functions above must satisfy the invariants that the
 temporaries are in the spaces the expander expects.
@@ -343,7 +529,7 @@ val itempwidth : int  (* maximum width for one integer temporary *)
 Every machine should be able to do a block copy.
 <<generic expansion operations for register machines>>=
 val block_copy :
-  dst:Address.t -> assertion -> src:Address.t -> assertion -> width -> rtl list
+  dst:Address.t -> assertion -> src:Address.t -> assertion -> width -> block
 @ 
 \paragraph{Control flow}
 To recognize control flow, the expander must be able to identify the
@@ -363,8 +549,8 @@ This RTL must be the last in the execution sequence (and therefore the
 head of the list that is returned).
 We can branch to a temporary drawn from [[acontext]] or to a constant. 
 <<generic expansion operations for register machines>>=
-val br : tgt:temp -> rtl list               (* branch register *)
-val b  : tgt:Rtl.Private.const -> rtl list  (* branch *)
+val br : tgt:temp -> branch               (* branch register *)
+val b  : tgt:Rtl.Private.const -> branch  (* branch *)
 @ 
 For a conditional branch,  the target must be a static label, but the
 postexpander provides any Boolean condition 
@@ -374,9 +560,9 @@ instruction can have its sense reversed with [[bnegate]], and the
 result is still representable by a single instruction on the target
 machine.
 <<generic expansion operations for register machines>>=
-val bc      : temp -> operator -> temp -> tgt:Rtl.Private.const -> rtl list
+val bc      : temp -> operator -> temp -> ifso:cbranch -> ifnot:cbranch -> cbranch
 val bnegate : rtl -> rtl  (* swap the condition in a conditional branch *)
-@ The last (head) instruction from [[bc]] is the \emph{only}
+@ The [[rtl]] part of the [[cbranch]] from [[bc]] is the \emph{only}
 instruction that may legitimately be passed to [[bnegate]].
 @ 
 The postexpander must be able to call direct and indirect.
@@ -386,13 +572,13 @@ The other effects, which originate from an undisclosed location in the
 compiler, are simply passed in and composed in parallel with the
 assignment to the~PC.
 <<generic expansion operations for register machines>>=
-val callr : tgt:temp              -> others:Rtl.Private.effect list -> rtl list
-val call  : tgt:Rtl.Private.const -> others:Rtl.Private.effect list -> rtl list
+val callr : tgt:temp              -> others:Rtl.Private.effect list -> branch
+val call  : tgt:Rtl.Private.const -> others:Rtl.Private.effect list -> branch
 @
 The [[cut to]] is as created by the target-dependent code, except
 right-hand sides have been expanded to temporaries.
 <<generic expansion operations for register machines>>=
-val cut_to : Rtl.Private.effect list -> rtl list
+val cut_to : Rtl.Private.effect list -> branch
 @
 The postexpander may insist on having some instructions untouched.
 This is possible only for an instruction with multiple effects and a
@@ -431,15 +617,15 @@ val converts_stack_to_temp : operator -> bool
 @
 We can push a value from memory or pop the stack into memory.
 <<generic expansion operations for stack machines>>=
-val push      : addr:Address.t -> assertion -> rtl list
-val store_pop : addr:Address.t -> assertion -> rtl list
+val push      : addr:Address.t -> assertion -> block
+val store_pop : addr:Address.t -> assertion -> block
 @ 
 We also have versions of these operations that convert between data
 formats while popping or pushing.
 We have to give the width of the value in memory.
 <<generic expansion operations for stack machines>>=
-val push_cvt      : operator -> width -> addr:Address.t -> assertion -> rtl list
-val store_pop_cvt : operator -> width -> addr:Address.t -> assertion -> rtl list
+val push_cvt      : operator -> width -> addr:Address.t -> assertion -> block
+val store_pop_cvt : operator -> width -> addr:Address.t -> assertion -> block
 @ 
 We can also imagine a whole bunch of stack operations:
 [[stack_copy]], [[dup]], [[exch]], [[pop]], and more.
@@ -448,16 +634,16 @@ We can also imagine a whole bunch of stack operations:
 We may have to push a constant.
 This, too, may happen with conversion.
 <<generic expansion operations for stack machines>>=
-val pushk     :                      Rtl.Private.const -> rtl list
-val pushk_cvt : operator -> width -> Rtl.Private.const -> rtl list
+val pushk     :                      Rtl.Private.const -> block
+val pushk_cvt : operator -> width -> Rtl.Private.const -> block
 @
 We may operate on the stack.
 <<generic expansion operations for stack machines>>=
-val stack_op : operator -> rtl list
+val stack_op : operator -> block
 @
 We may branch conditionally based on the result of a stack operation.
 <<generic expansion operations for stack machines>>=
-val bc_stack : operator -> tgt:Rtl.Private.const -> rtl list
+val bc_stack : operator -> ifso:cbranch -> ifnot:cbranch -> cbranch
 @ 
 To support a calling convention that passes arguments or results on
 the stack, we have to support push and pop instructions.
@@ -505,7 +691,7 @@ module Nostack (Address : sig type t val reg : temp -> t end) = struct
   let pushk _                   = Impossible.impossible "stack op on register machine"
   let pushk_cvt _ _ _           = Impossible.impossible "stack op on register machine"
   let stack_op _                = Impossible.impossible "stack op on register machine"
-  let bc_stack _ ~tgt           = Impossible.impossible "stack op on register machine"
+  let bc_stack _ ~ifso ~ifnot   = Impossible.impossible "stack op on register machine"
   let stack_top_proxy = Rtl.reg (('\000', Rtl.Identity, Cell.of_size 0), 0, Rtl.C 0)
   let is_stack_top_proxy _ = false
 end
@@ -513,6 +699,9 @@ end
 
 \subsection{Implementation outline}
 
+\subsubsection {Postexpander support}
+
+\paragraph{Allocation}
 The generic expander can temporarily install and uninstall allocators.
 <<exported utility functions for use by the generic expander>>=
 val remember_allocators : Talloc.Multiple.t -> Automaton.t -> unit
@@ -541,24 +730,99 @@ module Alloc = struct
   let badtemp : char -> width -> temp =
     fun _ _ -> Impossible.impossible "temporary allocator misconfigured"
   let valid = Reinit.ref false
-  let slotr = Reinit.ref badslot
-  let tempr = Reinit.ref badtemp
-  let slot w = !slotr w
-  let temp c w = !tempr c w
+  let theslot = Reinit.ref badslot
+  let thetemp = Reinit.ref badtemp
+  let slot w = !theslot w
+  let temp c w = !thetemp c w
 end
 let remember_allocators t s =
   if !Alloc.valid then
     Impossible.impossible "too many allocators";
   Alloc.valid := true;
-  Alloc.tempr := (fun c w -> Talloc.Multiple.reg c t w);
-  Alloc.slotr := (fun w -> Automaton.allocate s w "")
+  Alloc.thetemp := (fun c w -> Talloc.Multiple.reg c t w);
+  Alloc.theslot := (fun w -> Automaton.allocate s w "")
 let forget_allocators () = 
   if not !Alloc.valid then
     Impossible.impossible "too few allocators";
   Alloc.valid := false;
-  Alloc.slotr := Alloc.badslot;
-  Alloc.tempr := Alloc.badtemp
+  Alloc.theslot := Alloc.badslot;
+  Alloc.thetemp := Alloc.badtemp
 @
+\paragraph{Expansion}
+The generic expander can expand, recursively, for the postexpander.
+<<exported utility functions for use by the generic expander>>=
+val remember_expanders : 
+  (block -> block) -> (branch -> branch) -> (cbranch -> cbranch) -> unit
+val forget_expanders : unit -> unit
+@ The following are checked run-time errors:
+\begin{itemize}
+\item
+ To call [[remember_expanders]] twice
+consecutively without an intervening call to [[forget_expanders]]
+\end{itemize}
+The following are \emph{unchecked} run-time errors:
+\begin{itemize} 
+\item
+To call any function in [[Postexpander.S]] before any call to
+[[remember_expanders]].
+\item
+To call any function in [[Postexpander.S]] if [[forget_expanders]]
+has been called more recently than
+[[remember_expanders]].
+\end{itemize}
+@
+<<postexpander.ml>>=
+module Expand = struct
+  let bad : block -> block =
+    fun _ -> Impossible.impossible "block expander misconfigured"
+  let badb : branch -> branch =
+    fun _ -> Impossible.impossible "branch expander misconfigured"
+  let badcb : cbranch -> cbranch =
+    fun _ -> Impossible.impossible "conditional branch expander misconfigured"
+  let valid   = Reinit.ref false
+  let theblock   = Reinit.ref bad
+  let thebranch  = Reinit.ref badb
+  let thecbranch = Reinit.ref badcb
+  let block   b = !theblock   b
+  let branch  b = !thebranch  b
+  let cbranch b = !thecbranch b
+end
+let remember_expanders b br cb =
+  if !Expand.valid then
+    Impossible.impossible "too many expanders";
+  Expand.valid := true;
+  Expand.theblock   := b;
+  Expand.thebranch  := br;
+  Expand.thecbranch := cb
+let forget_expanders () = 
+  if not !Expand.valid then
+    Impossible.impossible "too few expanders";
+  Expand.valid := false;
+  Expand.theblock   := Expand.bad;
+  Expand.thebranch  := Expand.badb;
+  Expand.thecbranch := Expand.badcb
+@ 
+<<postexpander.ml>>=
+let (<:>) b b' = match b, b' with
+| Nop, b' -> b'
+| b, Nop  -> b
+| _, _    -> Seq (b, b')
+@ 
+<<postexpander.ml>>=
+let shared =
+  let n = Reinit.ref 0 in
+  fun c -> match c with
+  | Shared _ -> c
+  | _ -> n := !n + 1; Shared (!n, c)
+<<postexpander.ml>>=
+let cond e = Test (Nop, (e, Exit true, Exit false))
+<<postexpander.ml>>=
+type 'a nodeset = (uid * 'a) list
+let empty = []
+let lookup = List.assoc
+let insert i x l = (i, x) :: l
+@
+\subsubsection{More stuff}
 The [[Proc.t]] gives the expander a supply of temporaries.
 <<expander.mli>>=
 module type S = sig
@@ -585,6 +849,7 @@ module Up   = Rtl.Up
 module Down = Rtl.Dn
 
 let upassn = Rtl.Up.assertion
+let impossf fmt = Printf.kprintf Impossible.impossible fmt
 @ 
 \subsection{Utilities and debugging code}
 <<expander.ml>>=
@@ -597,7 +862,7 @@ module G = Cfgx.M
 let inst n =
   match G.to_instr n with
   | Some i -> i
-  | None   -> Impossible.impossible "Expanded node must have instruction"
+  | None   -> impossf "Expanded node must have instruction"
 @
 SOMEWHERE WE NEED A HIGH-LEVEL EXPLANATION OF WHAT THE FLOW-GRAPH HAS
 TO DO WITH EXPANSION. ---NR
@@ -608,17 +873,27 @@ We represent such a segment with a pair $(entry\_node, exit\_node)$.
 The empty segment is represented by a pair containing two copies of
 the illegal node---and \emph{only} the empty segment may contain an
 illegal node.
-<<flow-graph manipulation utilities>>=
+<<old flow-graph manipulation utilities>>=
 let emptyseg = let ill = G.illegal cfg in (ill,ill) in
 @
 <<expander.ml>>=
 let is_empty (xi,xf) = G.kind xi =*= G.Illegal && G.kind xf =*= G.Illegal
 @ To concatenate segments, we must recognize (and ignore) the empty segment.
-<<flow-graph manipulation utilities>>=
+<<old flow-graph manipulation utilities>>=
 let (@@) ((xi,xf) as x) ((yi,yf) as y) =
   if      is_empty x then y
   else if is_empty y then x
   else begin G.set_succ xf ~succ:yi; (xi, yf) end in
+@ 
+We provide three kinds of composition: blocks with blocks, blocks
+with branches, and blocks with conditional branches.
+<<flow-graph manipulation utilities>>=
+let (<:>) = PX.(<:>) in
+let (<::>) is (is', branch) = (is <:> is', branch) in
+let rec (<:::>) is cbranch = match cbranch with
+| PX.Exit b -> PX.Exit b
+| PX.Test (b, c) -> PX.Test (is <:> b, c)
+| PX.Shared (u, c) -> PX.Shared (u, is <:::> c) in
 @
 We provide several constructors for segments:
 \begin{itemize}
@@ -627,10 +902,13 @@ We provide several constructors for segments:
 reverse-execution order
 \item [[seg_concat]] concatenates a list of segments.
 \end{itemize}
-<<flow-graph manipulation utilities>>=
+<<old flow-graph manipulation utilities>>=
 let nunit      i = let n = G.instruction cfg i ~succ:(G.illegal cfg) in (n,n) in
 let to_segment l = List.fold_left (fun seg i -> nunit i @@ seg) emptyseg l in
 let seg_concat l = List.fold_right (@@) l emptyseg in
+@ 
+<<flow-graph manipulation utilities>>=
+let block_concat l = List.fold_right (<:>) l PX.Nop in
 @
 We also need to be able to take a single-entry, single-exit segment of control flow and
 insert it in place of an existing non-join node.
@@ -668,18 +946,72 @@ The expander writes debugging information as it goes;
 to activate it, try \texttt{VERBOSITY=5~qc--}.
 <<expander.ml>>=
 module D = struct (* debugging *)
-    let strings =
-      if Debug.on "expander" then
-        (fun ss -> Printf.eprintf "%s" (String.concat "" ss))
-      else
-        (fun ss -> ()) 
-    let int n = string_of_int n
-    let exp e = Rtlutil.ToString.exp (Up.exp e) 
-    let rtl r = Rtlutil.ToString.rtl r 
-    let pr_is   is = List.iter (fun r -> strings ["  "; rtl r; "\n"]) (seg_to_list is)
-    let pr_rtls rs = List.iter (fun r -> strings ["  "; rtl r; "\n"]) (List.rev rs)
-    let temp ((s, _, ms), n, c) =
-      "$" ^ Char.escaped s ^ "[" ^ int n ^ "] : " ^ int (Cell.to_width ms c) ^ " loc" 
+  let strings =
+    if Debug.on "expander" then
+      (fun ss -> Printf.eprintf "%s" (String.concat "" ss))
+    else
+      (fun ss -> ()) 
+  let int n = string_of_int n
+  let rtl r = Rtlutil.ToString.rtl r
+  let eprintf = Printf.eprintf 
+  let sprintf = Printf.sprintf 
+  let exp = Rtlutil.ToString.exp 
+  let rec cbi c = match c with
+  | e, PX.Exit true, PX.Exit false -> exp e
+  | e, PX.Exit false, PX.Exit true -> sprintf "!(%s)" (exp e)
+  | e, PX.Exit true, p -> sprintf "(%s || %s)" (exp e) (cbranch p)
+  | e, p, PX.Exit false -> sprintf "(%s && %s)" (exp e) (cbranch p)
+  | e, p, q -> sprintf "(%s ? %s : %s)" (exp e) (cbranch p) (cbranch q)
+  and cbranch c = match c with
+  | PX.Exit p -> if p then "true" else "false"
+  | PX.Shared (_, c) -> sprintf "[%s]" (cbranch c)
+  | PX.Test (PX.Nop, c) -> cbi c
+  | PX.Test (b, c) -> sprintf "{%s; %s}" (compact_block b) (cbi c)
+  and compact_block b =
+    let rec pr = function
+      | PX.Rtl r        -> sprintf "%s" (rtl r)
+      | PX.Seq (b, b')  -> sprintf "%s; %s" (pr b) (pr b')
+      | PX.If (c, t, f) -> sprintf "if (%s) { %s; } else { %s; }"
+            (cbranch c) (pr t) (pr f)
+      | PX.While (c, b) -> sprintf "while (%s) { %s; }" (cbranch c) (pr b)
+      | PX.Nop ->  "skip" in
+    pr b
+
+  let rec pr_block ind b =
+    let exp = Rtlutil.ToString.exp in
+    let rec pr = function
+      | PX.Rtl r          -> eprintf "%s%s;\n" ind (rtl r)
+      | PX.Seq (b, b')    -> pr b; pr b'
+      | PX.If (PX.Exit p, t, f) -> pr (if p then t else f)
+            (* true to semantics, but maybe not informative enough *)
+      | PX.If (PX.Shared (_, c), t, f) -> pr (PX.If(c, t, f))
+      | PX.If (PX.Test (PX.Nop, c), t, f) -> 
+          let ind' = ind ^ "  " in
+          eprintf "%sif (%s) {\n" ind (cbi c);
+          pr_block ind' t;
+          eprintf "%s} else {\n" ind;
+          pr_block ind' f;
+          eprintf "%s}\n" ind
+      | PX.If (PX.Test (b, cbi), t, f) ->
+          assert (Pervasives.(<>) b PX.Nop);
+          pr (PX.Seq (b, PX.If (PX.Test(PX.Nop, cbi), t, f)))
+      | PX.While (c, b) ->  (* not implemented really *)
+          let ind' = ind ^ "  " in
+          eprintf "%swhile (%s) {\n" ind (cbranch c);
+          pr_block ind' b;
+          eprintf "%s}\n" ind
+      | PX.Nop -> eprintf "%s<nop>\n" ind in
+    pr b
+  let pr_block = if Debug.on "expander" then pr_block "  " else fun _ -> ()
+  let cbranch =
+    if Debug.on "expander" then
+      cbranch
+    else
+      fun _ -> "<not showing cbranch>"
+  let pr_rtls rs = List.iter (fun r -> strings ["  "; rtl r; "\n"]) (List.rev rs)
+  let temp ((s, _, ms), n, c) =
+    "$" ^ Char.escaped s ^ "[" ^ int n ^ "] : " ^ int (Cell.to_width ms c) ^ " loc" 
+  let exp e = Rtlutil.ToString.exp (Up.exp e)
 end
 @ 
 This little hack
@@ -700,6 +1032,7 @@ address registers a synonym for integer registers.
 module IntFloatAddr (Post : Postexpander.S) = struct
   let pc_lhs = Down.loc Post.pc_lhs
   let pc_rhs = Down.loc Post.pc_rhs
+  <<internal utilities for the generic expander>>
   <<generic expander>>
   <<generic flow-graph expander>>
 end
@@ -764,13 +1097,14 @@ let ok    (allocate, check) reg = check reg
 Function [[temp_in_context]] takes an existing temporary and a
 context, and returns a (possibly new) temporary that is OK for the
 context (along with instructions that make it so). 
+The temporary is \emph{preceded} by the [[instructions]].
 <<flow-graph functions>>=
 let temp_in_context ((space, n, _) as t) context instructions =
   if ok context t then
     t, instructions
   else
     let t' = alloc context (Register.width t) in
-    t', instructions @@ to_segment (Post.move t' t) in
+    t', instructions <:> Post.move t' t in
 @ 
 Within the expander, we eagerly build some dynamic contexts:
 [[icontext]], [[acontext]], and [[fcontext]].
@@ -791,8 +1125,10 @@ let expand ({Proc.cfg = cfg} as proc) =
   let alloc_direct (allocator, _) = allocator proc.Proc.temps in
   <<flow-graph functions>>
   <<definitions of [[to_temp]], [[rtl]] and all the other generic expander functions>>
-  (Postexpander.remember_allocators proc.Proc.temps proc.Proc.priv;
-  (expand_cbranch,rtl))
+  let _ = Postexpander.remember_allocators proc.Proc.temps proc.Proc.priv in
+  let _ = Postexpander.remember_expanders block branch' expand_cbranch in
+  (block, branch', expand_cbranch)
+let number = 999
 @ 
 To find the context for the operands of a comparison, I use the
 dreadful hack that every floating-point 
@@ -855,26 +1191,26 @@ let rec to_temp' room context e =
   | RP.Const k ->
       let w = width e in
       let t = alloc context w in
-      t, to_segment (Post.li t k)
+      t, Post.li t k
   | RP.App (_, _) when is_compile_time_constant e ->
       let w = width e in
       let t = alloc context w in
-      t, to_segment (Post.lix t (Up.exp e))
+      t, Post.lix t (Up.exp e)
   | RP.Fetch (l, w) when Post.is_stack_top_proxy l ->
       let slot = exchange_slot w in
       let t, is = to_temp room context (fetch_slot slot w) in
-      t, assign_slot room slot e w @@ is
+      t, assign_slot room slot e w <:> is
   | RP.Fetch (RP.Mem (('m', agg, ms), c, addr, assn), w) ->
       let t = alloc context w in
       let a, is = address room addr in
       assert (agg =*= Post.byte_order);
       assert (w = Cell.to_width ms c);
-      t, is @@ to_segment (Post.load t a (upassn assn))
+      t, is <:> Post.load t a (upassn assn)
   | RP.Fetch (RP.Reg r, w) ->
       assert (w = Register.width r);
-      temp_in_context r context emptyseg
+      temp_in_context r context PX.Nop
   | RP.Fetch _ ->
-      Impossible.impossible "memory-like access to non-memory space"
+      impossf "memory-like access to non-memory space"
   <<cases for sign extending or zero extending a temporary>>
   <<cases for sign-extending and zero-extending loads>>
   <<cases for sign-extending and zero-extending divides>>
@@ -883,7 +1219,7 @@ let rec to_temp' room context e =
     when Post.converts_stack_to_temp cvt ->
       let slot = exchange_slot tempw in
       let t, is = to_temp room context (fetch_slot slot tempw) in
-      t, assign_slot room slot e tempw @@ is 
+      t, assign_slot room slot e tempw <:> is 
   | RP.App (("f2f_implicit_round", ws), [x]) ->
       to_temp room context (RP.App (("f2f", ws), [x; RP.Fetch(rounding_mode, 2)]))
   | RP.App (op, args) ->
@@ -893,26 +1229,22 @@ let rec to_temp' room context e =
             let w = Post.stack_width in
             let slot = exchange_slot w in
             let t, is = to_temp room context (fetch_slot slot w) in
-            t, assign_slot room slot e w @@ is
+            t, assign_slot room slot e w <:> is
         | PX.Register ->
             let (temps, is) =
               try
                 List.split (List.map2 (fun c e -> to_temp room (contextmap c) e)
                               (Post.arg_contexts op) args)
               with Invalid_argument (_) ->
-                Impossible.impossible 
-                  (Printf.sprintf "bad arity for operator %s (args %d vs context %d)"
-                    (fst op) (List.length args) (List.length (Post.arg_contexts op)))
-            in
+                impossf "bad arity for operator %s (args %d vs context %d)"
+                  (fst op) (List.length args) (List.length (Post.arg_contexts op)) in
             let w = width e in
             let t = alloc_direct (Post.result_context op) w in
             let compute = match temps with
             | [x; y] -> Post.binop t op x y  (* see note on binary operators below *)
             | [x]    -> Post.unop  t op x
-            | _      -> Post.rtlop t op temps
-            in
-            temp_in_context t context (seg_concat (List.rev is) @@
-                                       to_segment compute)
+            | _      -> Post.rtlop t op temps in
+            temp_in_context t context (block_concat (List.rev is) <:> compute)
       end
 <<other generic expander functions>> in
 @ The note on binary operators is that eventually the generic expander
@@ -930,13 +1262,13 @@ This fact is documented in the postexpander interface.
     let t = alloc icontext w in
     let a, is = address room addr in
     assert (agg =*= Post.byte_order);
-    temp_in_context t context (is @@ to_segment (Post.sxload t a n (upassn assn)))
+    temp_in_context t context (is <:> Post.sxload t a n (upassn assn))
 | RP.App (("zx", [n;w]), [RP.Fetch (RP.Mem (('m',agg,ms), c, addr, assn), n')]) ->
     assert (n = n' && n' = Cell.to_width ms c);
     let t = alloc icontext w in
     let a, is = address room addr in
     assert (agg =*= Post.byte_order);
-    temp_in_context t context (is @@ to_segment (Post.zxload t a n (upassn assn)))
+    temp_in_context t context (is <:> Post.zxload t a n (upassn assn))
 @
 <<cases for sign extending or zero extending a temporary>>=
 | RP.App (("sx", [n; w]), [RP.App(("lobits", [w'; n']), [x])]) when w = w' ->
@@ -959,7 +1291,7 @@ Here's a hack which is untested and probably useless.
     let tx, isx = to_temp room icontext x in
     let ty, isy = to_temp room icontext y in
     let divmod = Post.binop t ((divmod ^ "_trunc"), [n]) tx ty in
-    temp_in_context t context (isx @@ isy @@ to_segment (divmod))
+    temp_in_context t context (isx <:> isy <:> divmod)
 @ 
 For the bit operator, we generate two branches of control flow, create an rtl for a
 conditional branch, and pass everything over to [[expand_cbranch]].
@@ -967,27 +1299,10 @@ conditional branch, and pass everything over to [[expand_cbranch]].
 | RP.App (("sx", [n; w]), [RP.App (("bit", []), [e])]) ->
     assert (n = 1);
     let t       = alloc context w in
-    let pc_lhs_up = Rtl.Up.loc pc_lhs in
-
-    let tlabel  = Idgen.label "if_true" in
-    let tsym    = Rtl.codesym (proc.Proc.mk_symbol tlabel) (RU.Width.loc pc_lhs_up) in
-    let tjoin   = G.node_labeled cfg tlabel in
-    let (ti,tf) = to_segment (Post.li t (RP.Bits (Bits.S.of_int 1 w))) in
-    let ()      = G.set_succ tjoin ~succ:ti in
-
-    let flabel  = Idgen.label "if_false" in
-    let fjoin   = G.node_labeled cfg flabel in
-    let (fi,ff) = to_segment (Post.li t (RP.Bits (Bits.S.of_int 0 w))) in
-    let ()      = G.set_succ fjoin ~succ:fi in
-
-    let elabel = Idgen.label "end_if" in
-    let ejoin  = G.node_labeled cfg elabel in
-    let ()     = G.set_succ ff ~succ:(G.branch cfg ~target:ejoin) in
-    let ()     = G.set_succ tf ~succ:(G.branch cfg ~target:ejoin) in
-
-    let rtl = R.guard (Up.exp e) (RU.store pc_lhs_up tsym) in
-    let bi  = expand_cbranch rtl tjoin fjoin in
-    t, (bi,ejoin)
+    let tbranch = Post.li t (RP.Bits (Bits.S.of_int 1 w)) in
+    let fbranch = Post.li t (RP.Bits (Bits.S.of_int 0 w)) in
+    let cond    = expand_cbranch (PX.cond (Up.exp e)) in
+    t, PX.If (cond, tbranch, fbranch)
 @
 We might one day support multiple addressing modes, but for now, just registers. 
 <<other generic expander functions>>=
@@ -1007,7 +1322,7 @@ and is_compile_time_constant = function
 <<other generic expander functions>>=
 and to_stack' room e =
   if room < 1 then
-    Impossible.impossible "machine stack overflow in code generation";
+    impossf "machine stack overflow in code generation";
   if Rtlutil.Width.exp' e <> Post.stack_width then
      (Printf.eprintf "failing expression: %s\n" (Rtlutil.ToString.exp
                                                   (Rtl.Up.exp e));
@@ -1015,29 +1330,29 @@ and to_stack' room e =
          ~want:Post.stack_width);
   match e with
   | RP.Const k ->
-      to_segment (Post.pushk k)
+      Post.pushk k
   | RP.Fetch (l, _) when Post.is_stack_top_proxy l ->
-      emptyseg
+      PX.Nop
   | RP.Fetch (RP.Mem (('m', agg, ms), c, addr, assn), w) ->
       let a, is = address room addr in
       assert (agg =*= Post.byte_order);
       assert (w = Cell.to_width ms c);
-      is @@ to_segment (Post.push a (upassn assn))
+      is <:> Post.push a (upassn assn)
   | RP.Fetch (RP.Reg (space, i, c), w) ->
       let slot = exchange_slot w in
-      assign_slot room slot e w @@ to_stack room (fetch_slot slot w)
+      assign_slot room slot e w <:> to_stack room (fetch_slot slot w)
   | RP.Fetch _ ->
-      Impossible.impossible "memory-like access to non-memory space"
+      impossf "memory-like access to non-memory space"
   | RP.App (("f2f_implicit_round", ws), [x]) ->
       to_stack room (RP.App (("f2f", ws), [x; RP.Fetch(rounding_mode, 2)]))
   <<cases for converting pushes>>
   | RP.App (("i2f", [iw; fw] as i2f), [e; rm]) ->
       let slot = exchange_slot iw in
-      assign_slot room slot e iw @@
+      assign_slot room slot e iw <:>
       to_stack room (RP.App (i2f, [fetch_slot slot iw; rm]))
   | RP.App (("f2f", [w; _] as f2f), [e; rm]) ->
       let slot = exchange_slot w in
-      assign_slot room slot e w @@
+      assign_slot room slot e w <:>
       to_stack room (RP.App (f2f, [fetch_slot slot w; rm]))
   | RP.App (op, args) ->
       begin
@@ -1048,17 +1363,17 @@ and to_stack' room e =
               match dir with PX.LeftFirst -> args | PX.RightFirst -> List.rev args in
             let push_args room =
               let (is, _) =
-                List.fold_left (fun (is,r) e -> (is @@ to_stack r e, r-1))
-                (emptyseg,room) args in
+                List.fold_left (fun (is,r) e -> (is <:> to_stack r e, r-1))
+                (PX.Nop,room) args in
               is in
-            let compute room = push_args room @@ (to_segment (Post.stack_op op )) in
+            let compute room = push_args room <:> Post.stack_op op in
             if room >= depth then
               compute room
             else
-              save_stack room @@ compute Post.stack_depth @@ restore_stack 1 room
+              save_stack room <:> compute Post.stack_depth <:> restore_stack 1 room
         | PX.Register ->
             let r, is = to_temp room (guess_context e) e in
-            is @@ to_stack room (RP.Fetch (RP.Reg r, Register.width r))
+            is <:> to_stack room (RP.Fetch (RP.Reg r, Register.width r))
       end
 @ 
 <<rounding-mode checking>>=
@@ -1083,13 +1398,13 @@ and restore_stack number_to_keep number_to_restore =
     assert (n = n' && n' = Cell.to_width ms c);
     assert (agg =*= Post.byte_order);
     let a, is = address room addr in
-    is @@ to_segment (Post.push_cvt op n a (upassn assn))
+    is <:> Post.push_cvt op n a (upassn assn)
 | RP.App ((("f2f"|"f2i"|"i2f"), [n; w]) as op,
           [RP.Fetch (RP.Mem (('m',agg,ms), c, addr, assn), n'); roundingmode]) ->
     assert (n = n' && n' = Cell.to_width ms c);
     assert (agg =*= Post.byte_order);
     let a, is = address room addr in
-    is @@ to_segment (Post.push_cvt op n a (upassn assn))
+    is <:> Post.push_cvt op n a (upassn assn)
 @ 
 \subsection{Expanding RTLs}
 
@@ -1123,35 +1438,55 @@ Because there's no support for multiple assignment yet, the [[rtl']]
 function is trivial.
 Note that if the source code asks for a bare kill, even conditional,
 we're within our rights to implement it as a nop.
+Conditional branches should never be called by the [[rtl']] or
+[[branch']] functions; we handle conditional branches in
+the [[???]] function.
 <<other generic expander functions>>=
 and rtl' hr =
   let RP.Rtl gs = Down.rtl hr in
   if trivially Post.don't_touch_me gs then
-    nunit hr
+    PX.Rtl hr
   else
     match gs with
     | [(g, RP.Store (left, right, w))] -> guarded g left right w
-    | [(g, RP.Kill _)] -> nunit (R.par [])
-    | [] -> nunit hr (* a nop is a nop is a nop *)
-    | ((_::_::_) as effs) -> (<<handle RTL with multiple effects [[effs]]>>)
+    | [(g, RP.Kill _)] -> PX.Nop
+    | [] -> PX.Nop (* a nop is a nop is a nop *)
+    | ((_::_::_) as effs) -> (<<handle RTL with multiple effects [[effs]] (as RTL)>>)
+and rtl_to_branch' hr =
+  let RP.Rtl gs = Down.rtl hr in
+  if trivially Post.don't_touch_me gs then
+    PX.Nop, hr
+  else
+    match gs with
+    | [(RP.Const (RP.Bool true), RP.Store (left, right, w))] ->
+        if RU.Eq.loc left pc_lhs then  (* unconditional branch *)
+          match right with
+          | RP.Const c -> Post.b c
+          | _ ->          let r, is = to_temp Post.stack_depth acontext right in
+                          is <::> Post.br r
+        else
+          impossf "branch does not assign to program counter"
+
+    | [_] -> impossf "single branch effect is not unconditional store"
+    | [] -> impossf "nop as branch"
+    | ((_::_::_) as effs)-> (<<handle RTL with multiple effects [[effs]] (as branch)>>)
 @ 
 The type system tells us that anything in a guard must be a Boolean
 operator or a comparison operator.\footnote
 {Finally we get a payoff from NR's obsession with the distinction
 between [[bool]] and \mbox{[[#1 bits]]}.}
-Conditional branches should never be called by this function; we handle branches in
-the [[branch]] function.
 <<other generic expander functions>>=
 and guarded g left right w =
   match g with
-  | RP.Const (RP.Bool b) -> if b then assign left right w else emptyseg
-  | RP.Const _ -> Impossible.impossible "non-bool constant as guard"
-  | RP.Fetch _ -> Impossible.impossible "fetch as guard"
+  | RP.Const (RP.Bool b) -> if b then assign left right w else PX.Nop
+  | RP.Const _ -> impossf "non-bool constant as guard"
+  | RP.Fetch _ -> impossf "fetch as guard"
   | RP.App (cmp, [_; _]) ->
       Printf.eprintf "guarded: %s\n" (Rtlutil.ToString.exp (Up.exp g));
       Impossible.unimp "guard on other than conditional branch"
   | RP.App (cmp, _) ->
       Impossible.unimp "non-binary comparison in guard"
+@ 
 @ POSSIBLY  REFERENCES TO [[pc_lhs]] SHOULD BE REPLACED BY USING
 [[Target.goto.project]] AND FRIENDS.  IN GENERAL, WE NEED TO SEE
 ABOUT MERGING SIMILAR INFORMATION IN THE [[Target]] AND
@@ -1161,100 +1496,61 @@ To compile a Boolean, we require that
 a guarded effect with a nontrivial guard always be expanded into
 a sequence that ends in a conditional branch.
 To compile a comparison, we rely on the postexpander.
+SOMEHOW WE HAVE TO FIGURE OUT WHAT TO DO WITH [[right]]!
 <<other generic expander functions>>=
-and expand_cbranch_rtl g left right w ktrue kfalse =
-  assert (G.kind ktrue  =*= G.Join);
-  assert (G.kind kfalse =*= G.Join);
+and expand_cbinst g ktrue kfalse =
   let room = Post.stack_depth in
-  let rewrite_bc bc ktrue kfalse =
-    let new_cb = G.cbranch cfg (R.bool true) ktrue kfalse in
-    ( G.update_instr (fun _ -> inst bc) new_cb
-    ; G.set_tsucc new_cb ktrue
-    ; G.set_fsucc new_cb kfalse
-    ; if Pervasives.(<>) (G.kind (G.pred bc)) G.Illegal then
-        G.set_succ (G.pred bc) new_cb
-    ; new_cb
-    ) in
-  match g with
-  | RP.Const (RP.Bool b) -> if b then ktrue else kfalse
-  | RP.Const _ -> Impossible.impossible "non-bool constant as conditional guard"
-  | RP.Fetch _ -> Impossible.impossible "fetch as conditional guard"
-  | RP.App (("not", []), [g]) ->
-    expand_cbranch_rtl g left right w kfalse ktrue
-  | RP.App (("conjoin", []), [x;y]) ->
-    let true_case = expand_cbranch_rtl y left right w ktrue kfalse in
-    let ktrue'    = G.node_labeled cfg (Idgen.label "conj_true") in
-    G.set_succ ktrue' true_case;
-    expand_cbranch_rtl x left right w ktrue' kfalse 
-  | RP.App (("disjoin", []), [x;y]) ->
-    let false_case = expand_cbranch_rtl y left right w ktrue kfalse in
-    let kfalse'    = G.node_labeled cfg (Idgen.label "conj_false") in
-    G.set_succ kfalse' false_case;
-    expand_cbranch_rtl x left right w ktrue kfalse'
-  | RP.App (cmp, ([x; y] as args)) when RU.Eq.loc left pc_lhs ->
-      begin
-        match Post.opclass cmp with
-        | PX.Register ->
-            let context = cmp_context cmp in
-            let xt, xis = to_temp room context x in
-            let yt, yis = to_temp room context y in
-            (match right with
-            | RP.Const c ->
-              let (si, sf) = xis @@ yis @@ to_segment (Post.bc xt cmp yt c) in
-              let new_cb = rewrite_bc sf ktrue kfalse in
-              if G.eq si sf then new_cb else si
-            | _ -> Impossible.unimp "conditional branch to computed location")
-        | PX.Stack(dir, depth) ->
-            let args = List.filter is_not_rounding_mode args in (* cheat!!! *)
-            let args =
-              match dir with PX.LeftFirst -> args | PX.RightFirst -> List.rev args in
-            let push_args room =
-              let (is, _) =
-                List.fold_left (fun (is,r) e -> (is @@ to_stack r e, r-1))
-                (emptyseg,room) args in
-              is in
-            let compute room tsym ktrue kfalse =
-              match tsym with
-              | RP.Const c ->
-                let (si, sf) = push_args room @@ to_segment (Post.bc_stack cmp c) in
-                let new_cb   = rewrite_bc sf ktrue kfalse in
-                if G.eq si sf then new_cb else si
-              | _ -> Impossible.unimp "conditional branch to computed location" in
-            if room >= depth then
-              compute room right ktrue kfalse
-            else
-              (* PLAUSIBLE BUT COMPLETELY UNTESTED. *)
-              let tlabel = Idgen.label "fstack_true" in
-              let tsym   = Down.exp (Rtl.codesym (proc.Proc.mk_symbol tlabel)
-                                                 (RU.Width.loc (Up.loc pc_lhs))) in
-              let tjoin   = G.node_labeled cfg tlabel in
-              let (rti, rtf) = restore_stack 0 room in (* true  case *)
-              let ()         = G.set_succ tjoin ~succ:rti in
-              let jmp_tcase  = G.branch cfg ktrue in
-              let ()         = G.set_succ rtf ~succ:jmp_tcase in
-
-              let flabel  = Idgen.label "fstack_false" in
-              let fjoin   = G.node_labeled cfg flabel in
-              let (rfi, rff) = restore_stack 0 room in (* false case *)
-              let ()         = G.set_succ fjoin ~succ:rfi in
-              let jmp_fcase  = G.branch cfg kfalse in
-              let ()         = G.set_succ rff ~succ:jmp_fcase in
-              
-              let (ssi, ssf) = save_stack room in
-              ( G.set_succ ssf (compute Post.stack_depth tsym tjoin fjoin)
-              ; ssi
-              )
-      end
-  | RP.App (cmp, [_; _]) ->
-      Impossible.unimp "guard on other than conditional branch"
-  | RP.App (cmp, _) ->
-     Printf.eprintf "rtl exp: %s\n" (Rtlutil.ToString.exp (Up.exp g));
-      Impossible.unimp "non-binary comparison in conditional guard"
-and expand_cbranch' rtl ktrue kfalse =
-  match Down.rtl rtl with
-  | RP.Rtl [(g, RP.Store (left, right, w))] ->
-    expand_cbranch_rtl g left right w ktrue kfalse
-  | _ -> Impossible.impossible "unguarded conditional branch"
+  let rec expand g ktrue kfalse =
+    match g with
+    | RP.Const (RP.Bool b) -> if b then ktrue else kfalse
+    | RP.Const _ -> impossf "non-bool constant as conditional guard"
+    | RP.Fetch _ -> impossf "fetch as conditional guard"
+    | RP.App (("not", []), [g]) -> expand g kfalse ktrue
+    | RP.App (("conjoin", []), [x;y]) ->
+        let kfalse = PX.shared kfalse in expand x (expand y ktrue kfalse) kfalse 
+    | RP.App (("disjoin", []), [x;y]) ->
+        let ktrue  = PX.shared ktrue  in expand x ktrue (expand y ktrue kfalse)
+    | RP.App (cmp, ([x; y] as args)) ->
+        begin
+          match Post.opclass cmp with
+          | PX.Register ->
+              let context = cmp_context cmp in
+              let xt, xis = to_temp room context x in
+              let yt, yis = to_temp room context y in
+              xis <:> yis <:::> Post.bc xt cmp yt ktrue kfalse
+          | PX.Stack(dir, depth) ->
+              let args = List.filter is_not_rounding_mode args in (* cheat!!! *)
+              let args =
+                match dir with PX.LeftFirst -> args | PX.RightFirst -> List.rev args in
+              let push_args room =
+                let is, _ =
+                  List.fold_left (fun (is,r) e -> (is <:> to_stack r e, r-1))
+                  (PX.Nop,room) args in
+                is in
+              let compute room ktrue kfalse =
+                push_args room <:::> Post.bc_stack cmp ~ifso:ktrue ~ifnot:kfalse in
+              if room >= depth then
+                compute room ktrue kfalse
+              else
+                (* PLAUSIBLE BUT COMPLETELY UNTESTED. *)
+                let t = restore_stack 0 room <:::> ktrue  in
+                let f = restore_stack 0 room <:::> kfalse in
+                save_stack room <:::> compute Post.stack_depth t f
+        end
+    | RP.App (cmp, _) ->
+       Printf.eprintf "rtl exp: %s\n" (Rtlutil.ToString.exp (Up.exp g));
+        Impossible.unimp "non-binary comparison in conditional guard" in
+  expand g ktrue kfalse
+and expand_cbranch' c = match c with
+| PX.Exit _ -> c
+| PX.Shared (u, c) -> PX.Shared(u, expand_cbranch' c)
+| PX.Test (b, (g, ktrue, kfalse)) ->
+    let b = block b in
+    let rec extend c = match c with
+    | PX.Exit p -> PX.Exit p
+    | PX.Test (b', c) -> PX.Test (b <:> b', c)
+    | PX.Shared (u, c) -> PX.Shared(u, extend c) in
+    extend (expand_cbinst (Down.exp g) ktrue kfalse)
 @
 An assignment is either a goto, a store, or a computation where we put
 something in a temporary.
@@ -1266,11 +1562,7 @@ and assign_room room left right w =
       assign left (RP.App (("f2f", ws), [x; RP.Fetch(rounding_mode, 2)])) w
   | _ ->
       if RU.Eq.loc left pc_lhs then  (* unconditional branch *)
-        match right with
-        | RP.Const c -> to_segment (Post.b c)
-        | _ ->
-            let r, is = to_temp room acontext right in
-            is @@ to_segment (Post.br r)
+        impossf "assignment to pc is not a branch"
       else if Post.is_stack_top_proxy left then
         to_stack room right
       else
@@ -1289,44 +1581,44 @@ and assign_room room left right w =
                   | <<\emph{pattern [[->]] action} for converting store-pop>>
                   | _ -> 
                       let is = to_stack room right in
-                      is @@ is' @@ to_segment (Post.store_pop a (upassn assn)))
+                      is <:> is' <:> Post.store_pop a (upassn assn))
                 else
                   match right with
                   | RP.Fetch (RP.Mem(('m', _, _), ct, addr', assn'), w) ->
                       let a', is = address room addr' in
-                      is @@ is' @@
-                      to_segment (Post.block_copy a (upassn assn) a' (upassn assn') w)
+                      is <:> is' <:>
+                      Post.block_copy a (upassn assn) a' (upassn assn') w
                   | _ ->
                       let r, is = to_temp room (guess_context right) right in
-                      is @@ is' @@ to_segment (Post.store a r (upassn assn)))
+                      is <:> is' <:> Post.store a r (upassn assn))
         | RP.Mem (_, _, _, _) ->
             Impossible.unimp "memory space other than 'm'"
         | RP.Reg dst -> (* computation *)
             (match right with
-            | RP.Fetch (RP.Reg src, _) -> to_segment (Post.move ~dst ~src)
+            | RP.Fetch (RP.Reg src, _) -> Post.move ~dst ~src
             | _ -> let r, is = to_temp room (guess_context right) right in
-                   is @@ to_segment (Post.move ~dst ~src:r)
+                   is <:> Post.move ~dst ~src:r
             )
         | RP.Slice (_,_,_) -> Impossible.unimp "slice"
         | RP.Var (_,_,_) | RP.Global(_,_,_) ->
-            Impossible.impossible "variable passed to code expander"
+            impossf "variable passed to code expander"
 <<\emph{pattern [[->]] action} for low-bit store>>=
 RP.App (("lobits", [w; n]), [rhs]) ->
   let r, is = to_temp room icontext rhs in
-  is @@ is' @@ to_segment (Post.lostore a r n (upassn assn))
+  is <:> is' <:> Post.lostore a r n (upassn assn)
 | RP.Const (RP.Bits b) when w < Post.itempwidth ->
   let rhs = RP.Const (RP.Bits (Bits.Ops.zx Post.itempwidth b)) in
   let r, is = to_temp room icontext rhs in
-  is @@ is' @@ to_segment (Post.lostore a r w (upassn assn))
+  is <:> is' <:> Post.lostore a r w (upassn assn)
 <<\emph{pattern [[->]] action} for converting store-pop>>=
 RP.App ((("sx" | "zx"), [wsrc; wdst]) as op, [rhs]) ->
   (* what goes wrong if wsrc is not the width of the stack? *)
   let is = to_stack room rhs in
-  is @@ is' @@ to_segment (Post.store_pop_cvt op wdst a (upassn assn))
+  is <:> is' <:> Post.store_pop_cvt op wdst a (upassn assn)
 | RP.App ((("f2f" | "f2i" | "i2f"), [wsrc; wdst]) as op, [rhs; roundingmode]) ->
   (* what goes wrong if wsrc is not the width of the stack? *)
   let is = to_stack room rhs in
-  is @@ is' @@ to_segment (Post.store_pop_cvt op wdst a (upassn assn))
+  is <:> is' <:> Post.store_pop_cvt op wdst a (upassn assn)
 @ 
 A~splittable right-hand side looks like this: 
 \begin{quote}
@@ -1371,7 +1663,7 @@ let split_assignment ~lsw ~lw ~msw ~mw =
       rtl (R.par [R.store (R.mem assn mspace mc addr) msw mw;
                   R.store (R.mem assn mspace lc (offset mc)) lsw lw])
   | Rtl.Identity ->
-      Impossible.impossible "bad aggregation in split assignment" in
+      impossf "bad aggregation in split assignment" in
 @ 
 <<other generic expander functions>>=
 and fetch_slot slot w = Down.exp (A.fetch slot w)
@@ -1379,22 +1671,23 @@ and assign_slot room slot right w =
   match Down.rtl (A.store slot (Up.exp right) w) with
   | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (left, right, w))] ->
       assign_room room left right w
-  | _ -> Impossible.impossible "stack slot is not a simple store"
+  | _ -> impossf "stack slot is not a simple store"
 @ 
 Something with multiple effects is either a call, a [[cut to]], or a
 shuffle.
 In all three cases, the guard had better be trivial.
-<<handle RTL with multiple effects [[effs]]>>=
+<<internal utilities for the generic expander>>=
 let has_pc_on_left = function
   | RP.Store (pc, _, _) -> RU.Eq.loc pc pc_lhs
-  | RP.Kill _ -> false in
+  | RP.Kill _ -> false 
 let has_pc_on_right = function
   | RP.Store (_, e, _) -> RU.Exists.Loc.exp (RU.Eq.loc pc_rhs) e
-  | RP.Kill _ -> false in
-<<support for call, [[cut to]], and shuffle>>
+  | RP.Kill _ -> false 
+<<handle RTL with multiple effects [[effs]] (as branch)>>=
+<<support for call and [[cut to]]>>
 let effs = strip_trivial_guards effs in
 if Post.don't_touch_me effs then
-  nunit (R.par (List.map Up.effect effs))
+  PX.Nop, R.par (List.map Up.effect effs)
 else
   if List.exists has_pc_on_left effs then
     if List.exists has_pc_on_right effs then
@@ -1402,7 +1695,16 @@ else
     else
       make_cut_to effs
   else
-    make_shuffle effs
+    impossf "call or cut to without reference to PC"
+<<handle RTL with multiple effects [[effs]] (as RTL)>>=
+<<support for shuffle>>
+let effs = strip_trivial_guards effs in
+if Post.don't_touch_me effs then
+  PX.Rtl (R.par (List.map Up.effect effs))
+else
+  let _ = if List.exists has_pc_on_left effs then
+            impossf "straight-line code has PC on left" in
+  make_shuffle effs
 @ 
 When we know guards should be trivial, we just strip them off.
 When we don't know, we use the [[trivial]] function, which if guards
@@ -1422,51 +1724,51 @@ let trivially p l =
         | _ -> false in
   t [] l in
 @ 
-<<support for call, [[cut to]], and shuffle>>=
-let (<<) f g x = f (g x) in
+<<internal utilities for the generic expander>>=
+let (<<) f g x = f (g x) 
+<<support for call and [[cut to]]>>=
 let make_call effs = 
   let others = List.filter (not << has_pc_on_left) effs in
   match List.filter has_pc_on_left effs with
-  | [RP.Store(pc, RP.Const c, _)] -> to_segment (Post.call c others)
+  | [RP.Store(pc, RP.Const c, _)] -> Post.call c others
   | [RP.Store(pc, e, _)] ->
       let t, is = to_temp Post.stack_depth acontext e in
-      let is_type = (is : R.rtl G.node * R.rtl G.node) in
-      is @@ to_segment (Post.callr t others)
-  | _ -> Impossible.impossible "multiple pc := e in call" in
+      is <::> Post.callr t others
+  | _ -> impossf "multiple pc := e in call" in
 @ 
-<<support for call, [[cut to]], and shuffle>>=
+<<support for call and [[cut to]]>>=
 let make_cut_to effs =
   let expand e (preds, effs) = match e with
     | RP.Store (l, r, w) ->
         let t, is = to_temp Post.stack_depth (guess_context r) r in
-        (preds @@ is, RP.Store(l, RP.Fetch(RP.Reg t, w), w) :: effs)
+        (preds <:> is, RP.Store(l, RP.Fetch(RP.Reg t, w), w) :: effs)
     | RP.Kill l -> (preds, RP.Kill l :: effs) in
-  let preds, effs = List.fold_right expand effs (emptyseg, []) in
-  preds @@ to_segment (Post.cut_to effs) in
+  let preds, effs = List.fold_right expand effs (PX.Nop, []) in
+  preds <::> Post.cut_to effs in
 @ 
 Shuffle would be cooler if we carefully arranged to make things
 push-like, but never mind.
 As it is, we look for an effect that can go first (because its
 left-hand side doesn't alias with any other right-hand-side), and if
 we don't find one, we introduce a new temporary.
-<<support for call, [[cut to]], and shuffle>>=
+<<support for shuffle>>=
 let make_shuffle effs =
   let strip_store = function
     | RP.Store (l, r, w) -> (l, r, w)
-    | RP.Kill _ -> Impossible.impossible "kill in shuffle" in
+    | RP.Kill _ -> impossf "kill in shuffle" in
   let rec shuffle =
     let assign = noisy_assign in
     function
     | [(l, r, w)] -> assign l r w
-    | [] -> emptyseg
+    | [] -> PX.Nop
     | ((l, (r:RP.exp), w) :: rest) as effs ->
         <<definition of [[try_first_effect]]>>
         try_first_effect effs
-          (fun (l, r, w) rest -> assign l r w @@ shuffle rest)
+          (fun (l, r, w) rest -> assign l r w <:> shuffle rest)
           (fun () ->
             let t = alloc (guess_context r) w in
-            (assign (RP.Reg t) r w @@
-             shuffle rest @@
+            (assign (RP.Reg t) r w <:>
+             shuffle rest <:>
              assign l (RP.Fetch (RP.Reg t, w)) w))
   in shuffle (List.map strip_store effs) in
 <<definition of [[try_first_effect]]>>=
@@ -1481,6 +1783,17 @@ let try_first_effect effects succ fail =
           maybe ((l, r, w) :: bad) rest in
   maybe [] effects in
 @ 
+\subsection{Flow-graph fragments}
+<<other generic expander functions>>=
+and block b = match b with
+| PX.Rtl r        -> rtl r
+| PX.Seq (b, b')  -> block b <:> block b'
+| PX.If (c, t, f) -> PX.If (expand_cbranch c, block t, block f)
+| PX.While (e, b) -> Impossible.unimp "expand loop"
+| PX.Nop          -> PX.Nop
+and branch' (b, r) = let b', r = rtl_to_branch r in (block b <:> b', r)
+@ 
+
 \subsection{Debugging the expander}
 These wrapper functions show what the expander [[rtl]] and register
 targeter [[to_temp]] are doing.
@@ -1488,30 +1801,35 @@ targeter [[to_temp]] are doing.
 and rtl r =
   let _ = D.strings ["Expanding "; D.rtl r; "\n"] in
   let is = rtl' r in
-  let _ = D.strings ["Expanded "; D.rtl r; " into\n"]; D.pr_is is in
+  let _ = D.strings ["Expanded "; D.rtl r; " into\n"]; D.pr_block is in
   is
-and expand_cbranch r ktrue kfalse =
-  let _ = D.strings ["Expanding conditional branch "; D.rtl r; "\n"] in
-  let is = expand_cbranch' r ktrue kfalse in
+and rtl_to_branch r =
+  let _ = D.strings ["Expanding "; D.rtl r; "\n"] in
+  let is, b = rtl_to_branch' r in
+  let _ = D.strings ["Expanded "; D.rtl r; " into\n"]; D.pr_block (is <:> PX.Rtl b) in
+  is, b
+and expand_cbranch cb =
+  let _ = D.strings ["Expanding conditional branch "; D.cbranch cb; "\n"] in
+  let is = expand_cbranch' cb in
   let _ =
-    D.strings ["Expanded conditional branch "; D.rtl r; " into a mystery node\n"] in
+    D.strings ["Expanded conditional branch "; " into "; D.cbranch is; "\n"] in
   is
 and noisy_assign l r w =
   let is = assign l r w in
   let r = R.store (Up.loc l) (Up.exp r) w in
-  let _ = D.strings ["Shuffling "; D.rtl r; " into\n"]; D.pr_is is in
+  let _ = D.strings ["Shuffling "; D.rtl r; " into\n"]; D.pr_block is in
   is
 and to_temp room context e =
   let _ = D.strings ["Targeting "; D.exp e; "...\n"] in
   let t, is = to_temp' room context e in
   let _ = D.strings ["Targeted "; D.exp e; " => "; D.temp t; " by \n"] in
-  let _ = D.pr_is is in
+  let _ = D.pr_block is in
   t, is
 and to_stack room e =
   let _ = D.strings ["Pushing "; D.exp e; "...\n"] in
   let is = to_stack' room e in
   let _ = D.strings ["Pushed "; D.exp e; " by \n"] in
-  let _ = D.pr_is is in
+  let _ = D.pr_block is in
   is
 @ 
 \subsection{Stack-slot allocation}
@@ -1529,18 +1847,18 @@ let exchange_slot =
 \subsection{Old code no longer relevant}
 This is old stuff left over, which I might want to resurrect some day
 when I try to expand general guards.
-<<definitions of [[to_temp]], [[rtl]] and all the other generic expander functions>>=
+<<ZZZ definitions of [[to_temp]], [[rtl]] and all the other generic expander functions>>=
 let rec old_general_guard g left right w =
   (* this case is bogus *)
   let r, is  = to_temp Post.stack_depth (guess_context right) right in
   let l, is' = old_loc left in
-  is @@ is' @@ nunit (R.guard (Up.exp g) (R.store l (R.fetch (temploc r) w) w))
+  is <:> is' <:> PX.Rtl (R.guard (Up.exp g) (R.store l (R.fetch (temploc r) w) w))
 and old_loc l =
   match l with
   | RP.Mem (('m',_,_) as mspace, w, addr, assn) ->
       let addr, is = to_temp Post.stack_depth (acontext) addr in
       Up.loc (RP.Mem (mspace, w, fetch (temploc addr), assn)), is
-  | _ -> Up.loc l, emptyseg in
+  | _ -> Up.loc l, PX.Nop in
 @
 \subsection{The flow-graph expander}
 <<generic flow-graph expander>>=
@@ -1548,28 +1866,111 @@ let cfg _ ({Proc.cfg = cfg} as proc) =
   if proc.Proc.target.Target.memsize <> 8 then
     Impossible.unimp "may-alias detection for memsize <> 8";
   let modified = ref false in
-  let expand_cbranch, expand_rtl = expand proc in
+  <<block-conversion functions>>
+  let expand_block, expand_branch, expand_cbranch = expand proc in
+  let expand_rtl i = expand_block (PX.Rtl i) in
   let expand_node n =
     match G.to_instr n with
     | None -> ()
     | Some i ->
-        match G.kind n with G.Assertion | G.StackAdjust | G.Join | G.Exit -> ()
+        let pred = G.pred n in
+        let pred_set_succ n =
+          if Pervasives.(<>) (G.kind pred) G.Illegal then G.set_succ pred n in
+        let ill  = G.illegal cfg in
+        match G.kind n with
+        | G.Assertion | G.StackAdjust | G.Join | G.Exit -> ()
+        | G.Instruction ->
+            pred_set_succ ill;
+            pred_set_succ (block_replace (expand_rtl i) n)
         | G.Cbranch ->
-          let pred = G.pred    n   in
-          let ill  = G.illegal cfg in
-          let pred_set_succ n =
-            if Pervasives.(<>) (G.kind pred) G.Illegal then G.set_succ pred n in
+          let bi   = (Up.exp (branch_condition i), PX.Exit true, PX.Exit false) in
+          let b    = expand_cbranch (PX.Test (PX.Nop, bi)) in
           ( pred_set_succ ill
           ; G.delete    cfg n
-          ; pred_set_succ (expand_cbranch i (G.tsucc n) (G.fsucc n))
-          ; modified := true
+          ; pred_set_succ (cbranch2cfg b (G.tsucc n) (G.fsucc n))
           )
-        | _ -> modified := replace_node n (expand_rtl i) in
+        | _ ->
+            pred_set_succ ill;
+            let b, i = expand_branch (PX.Nop, i) in
+            G.update_instr (fun _ -> i) n;
+            pred_set_succ (block_before b n) in
 
   G.iter_nodes expand_node proc.Proc.cfg;
   Postexpander.forget_allocators();
+  Postexpander.forget_expanders();
   !modified
+<<internal utilities for the generic expander>>=
+let branch_condition rtl = match Down.rtl rtl with
+| RP.Rtl [(g, RP.Store (left, right, w))] ->
+    if not (RU.Eq.loc left pc_lhs) then
+      impossf "conditional branch assigns to non-PC";
+    g
+| _ -> impossf "ill-formed conditional branch"
 @
+Free reference [[modified]] is set only if a new node is added to the graph.
+IT MAY BE NECESSARY TO REASSOCIATE TO AVOID REPLACING INSTRUCTION $i$
+WITH $i; \mathtt{Nop$}. 
+<<block-conversion functions>>=
+let rec branch2cfg (block, branch) bnode =
+  G.update_instr (fun _ -> branch) bnode;
+  block_before block bnode 
+and block_before block succ =
+  let rec before b = match b with
+  | PX.Seq (PX.Nop, b) -> before b
+  | PX.Seq (b, PX.Nop) -> before b
+  | PX.Rtl i -> modified := true; G.instruction cfg i ~succ
+  | PX.Seq (b, b') -> block_before b (before b')
+  | PX.If (c, t, f) ->
+      let t = block_before t succ in
+      let f = block_before f succ in
+      cbranch2cfg c ~t ~f
+  | PX.While _ -> Impossible.unimp "PX.While"
+  | PX.Nop -> succ in
+  before block 
+and block_replace block n =
+  let rec repl b = match b with
+  | PX.Seq (PX.Nop, b) -> repl b
+  | PX.Seq (b, PX.Nop) -> repl b
+  | PX.Rtl i -> G.update_instr (fun _ -> i) n; n
+  | PX.Seq (b, b') -> block_before b (repl b')
+  | PX.If _ | PX.While _ -> block_before b (block_replace PX.Nop n)
+  | PX.Nop -> G.update_instr (fun _ -> R.par []) n; n in
+  repl block 
+@ 
+N.B. the sharing works only for a DAG---the graph must be acyclic.
+(Guaranteed by the rep.)
+<<block-conversion functions>>=
+and cbranch2cfg c ~t ~f =
+  let nodemap = ref PX.empty in
+  let rec cbi (e, tk, fk)  =
+    let tn = cbranch tk in
+    let fn = cbranch fk in
+    G.cbranch cfg e ~ifso:tn ~ifnot:fn
+  and cbranch c = match c with
+  | PX.Exit p        -> (if p then t else f)
+  | PX.Test   (b, i) -> let c = cbi i in block_before b c
+  | PX.Shared (u, c) -> shared u c
+  and shared u c =
+    try PX.lookup u (!nodemap) with
+    | Not_found ->
+        let n = cbranch c in
+        nodemap := PX.insert u n (!nodemap);
+        n in
+  modified := true;
+  cbranch c in
+
+(* got to keep this around somehow *)
+  let rewrite_bc bc ktrue kfalse =
+    let new_cb = G.cbranch cfg (R.bool true) ktrue kfalse in
+    ( G.update_instr (fun _ -> inst bc) new_cb
+    ; G.set_tsucc new_cb ktrue
+    ; G.set_fsucc new_cb kfalse
+    ; if Pervasives.(<>) (G.kind (G.pred bc)) G.Illegal then
+        G.set_succ (G.pred bc) new_cb
+    ; new_cb
+    ) in
+
+@ 
 
 \subsection{Compilation of Boolean expressions into control flow.}
 

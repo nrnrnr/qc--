@@ -1397,14 +1397,14 @@ Ljoin_l150:
 	movl %edx,(%ecx)
 	movl $0,%ecx
 	cmpl %ecx,%eax
-	jle Lif_true_l162
-Lif_false_l163:
+	jle Ljoin_l163
+Ljoin_l164:
 	movl $0,%eax
-	jmp Lend_if_l164
-Lif_true_l162:
+	jmp Ljoin_l162
+Ljoin_l163:
 	movl $1,%eax
-	jmp Lend_if_l164
-Lend_if_l164:
+	jmp Ljoin_l162
+Ljoin_l162:
 	jmp LifEnd_102
 LifEnd_102:
 	movl $0,%ecx
@@ -1472,14 +1472,14 @@ Ljoin_l131:
 	movl %edx,(%ecx)
 	movl $0,%ecx
 	cmpl %ecx,%eax
-	jle Lif_true_l159
-Lif_false_l160:
+	jle Ljoin_l160
+Ljoin_l161:
 	movl $0,%eax
-	jmp Lend_if_l161
-Lif_true_l159:
+	jmp Ljoin_l159
+Ljoin_l160:
 	movl $1,%eax
-	jmp Lend_if_l161
-Lend_if_l161:
+	jmp Ljoin_l159
+Ljoin_l159:
 	jmp LifEnd_118
 LifEnd_118:
 	movl $0,%ecx
@@ -2100,14 +2100,14 @@ LifTrue_135:
 Ljoin_l209:
 	movl $0,%ecx
 	cmpl %ecx,%eax
-	je Lif_true_l221
-Lif_false_l222:
+	je Ljoin_l222
+Ljoin_l223:
 	movl $0,%eax
-	jmp Lend_if_l223
-Lif_true_l221:
+	jmp Ljoin_l221
+Ljoin_l222:
 	movl $1,%eax
-	jmp Lend_if_l223
-Lend_if_l223:
+	jmp Ljoin_l221
+Ljoin_l221:
 	jmp LifEnd_137
 LifEnd_137:
 	movl $0,%ecx

@@ -5,18 +5,13 @@
 Required as part of the interface: postexpander, target, and variable
 placer.  May add other pieces as required by the recognizer (the main
 client of this module).
-
 <<sparc.mli>>=
 module X : Expander.S
 val target: Ast2ir.tgt
 val placevars : Ast2ir.proc -> Automaton.t
 @ 
-
-% ------------------------------------------------------------------
-\subsection{Storage spaces}
-% ------------------------------------------------------------------
-
 <<sparc.ml>>=
+module PX = Postexpander
 module S  = Space
 module SS = S.Standard32
 module R  = Rtl
@@ -27,13 +22,19 @@ module RP = R.Private
 module SM = Strutil.Map
 module A  = Automaton
 module T  = Target
-@ 
 
+let rtl r = PX.Rtl r
+let (<:>) = PX.(<:>)
+let rstore l r w = rtl (R.store l r w) 
+let astore l r w = rtl (A.store l r w) 
+@ 
 <<sparc.ml>>=
 let byteorder = R.BigEndian
 let wordsize  = 32
 @ 
-
+% ------------------------------------------------------------------
+\subsection{Storage spaces}
+% ------------------------------------------------------------------
 <<sparc.ml>>=
 module Spaces = struct
   let id = R.Identity
@@ -161,11 +162,9 @@ registers.
                     ; Space.classification = Space.Fixed
                     }
 @ 
-
 % ------------------------------------------------------------------
 \subsection{Registers}
 % ------------------------------------------------------------------
-
 <<sparc.ml>>=
 let locations = SS.locations Spaces.c
 let pc        = locations.SS.pc
@@ -198,24 +197,21 @@ let cwp  = (('k', Rtl.Identity, Cell.of_size 32), 0, R.C 1)
 let rounding_modesl   = Rtl.reg (dspace, 0, R.C 1)
 let rounding_resultsl = Rtl.reg (dspace, 1, R.C 1)
 @ 
-
 % ------------------------------------------------------------------
 \subsection{Utilities}
 % ------------------------------------------------------------------
-
 <<sparc.ml>>=
-let imposs     = Impossible.impossible
-let unimpf fmt = Printf.kprintf Impossible.unimp fmt
+let imposs      = Impossible.impossible
+let unimpf  fmt = Printf.kprintf Impossible.unimp fmt
+let impossf fmt = Printf.kprintf Impossible.impossible fmt
 let mem w addr = R.mem R.none mspace (Cell.to_count mcell w) addr
 let reg_width  = Register.width
 
 let rfetch t = R.fetch (R.reg t) (Register.width t)
 @ 
-
 % ------------------------------------------------------------------
-\subsection{Control-flow}
+\subsection{Control flow}
 % ------------------------------------------------------------------
-
 <<sparc.ml>>=
 module F = Mflow.MakeStandard
     (struct
@@ -225,18 +221,15 @@ module F = Mflow.MakeStandard
       let ra_offset = 4
     end)
 @ 
-
 <<sparc.ml>>=
 let return e =
   let one = R.bits (Bits.S.of_int 1 32) 32 in
   R.par [R.store npc e wordsize;
          R.store (R.reg cwp) (R.app (R.opr "add" [32]) [rfetch cwp; one]) wordsize]
 @ 
-
 % ------------------------------------------------------------------
 \subsection{Postexpander}
 % ------------------------------------------------------------------
-
 <<sparc.ml>>=
 module Post = struct
   let byte_order = byteorder
@@ -254,13 +247,10 @@ module Post = struct
   include Postexpander.Nostack(Address)
 end
 @ 
-
-Taken from the Alpha
+Our allocators.
 <<SPARC postexpander>>=
 let talloc = Postexpander.Alloc.temp
 let salloc = Postexpander.Alloc.slot
-let sfetch = A.fetch 
-let sstore = A.store
 @ 
 <<SPARC postexpander>>=
 type context = (Talloc.Multiple.t -> int -> Register.t) * (Register.t -> bool)
@@ -285,13 +275,13 @@ let itempwidth = 32
 let load ~dst ~addr assn =
   let w = reg_width dst in
   assert (w = wordsize || w = wordsize * 2); 
-  [R.store (R.reg dst) (R.fetch (mem w addr) w) w]
+  rtl (R.store (R.reg dst) (R.fetch (mem w addr) w) w)
 @ 
 <<SPARC postexpander>>=
 let store ~addr ~src assn =
   let w = reg_width src in
   assert (w = wordsize || w = wordsize * 2);
-  [R.store (mem w addr) (rfetch src) w]
+  rtl (R.store (mem w addr) (rfetch src) w)
 @ 
 <<SPARC postexpander>>=
 let extend  op n w e = R.app (R.opr op       [n; w]) [e]
@@ -299,8 +289,8 @@ let lobits     w n e = R.app (R.opr "lobits" [w; n]) [e]
 let xload op ~dst ~addr n assn =
   let w = reg_width dst in
   assert (w = wordsize || w = wordsize * 2); 
-  [R.store (R.reg dst)
-     (extend op n w (R.fetch (R.mem assn mspace (Cell.to_count mcell n) addr) n)) w]
+  rtl (R.store (R.reg dst)
+        (extend op n w (R.fetch (R.mem assn mspace (Cell.to_count mcell n) addr) n)) w)
 
 let sxload = xload "sx"
 let zxload = xload "zx"
@@ -308,25 +298,25 @@ let zxload = xload "zx"
 let lostore ~addr ~src n assn =
   let w = reg_width src in
   assert (w = wordsize || w = 2 * wordsize);
-  [R.store (R.mem assn mspace (Cell.to_count mcell n) addr)
-             (lobits w n (rfetch src)) n]
-@ Block copies are only implemented in powers of 2 up to 64-bits.
+  rtl (R.store (R.mem assn mspace (Cell.to_count mcell n) addr)
+               (lobits w n (rfetch src)) n)
+@ Block copies are only implemented in powers of 2 up to 64~bytes.
+IT'S NOT CLEAR WHY THE 64-BIT CASE DOESN'T USE [[load]] AND [[store]].
 <<SPARC postexpander>>=
 let block_copy ~dst dassn ~src sassn w =
   match w with
-  | 8  | 16 ->
+  | 8 | 16 ->
       let t = talloc 't' 32 in
-      lostore dst t w dassn @ zxload t src w sassn
+      zxload t src w sassn <:> lostore dst t w dassn
   | 32 ->
       let t = talloc 't' 32 in
-      store dst t dassn @ load t src sassn
+      load t src sassn <:> store dst t dassn
   | 64 ->
       let q = talloc 'q' 64 in
-      [R.store (mem w dst) (rfetch q) w;
-       R.store (R.reg q) (R.fetch (mem w src) w) w]
+      rstore (R.reg q) (R.fetch (mem w src) w) w <:>
+      rstore (mem w dst) (rfetch q) w
   | _  -> unimpf "general block copies on SPARC"
 @ 
-
 <<SPARC postexpander>>=
 let move ~dst ~src =
   let w = reg_width src in
@@ -335,8 +325,7 @@ let move ~dst ~src =
   | (('u', _, _), _, R.C 1), (('t', _, _), _, R.C 1)
   | (('t', _, _), _, R.C 1), (('u', _, _), _, R.C 1) ->
       let slot = salloc w in
-      [ R.store (R.reg dst) (sfetch slot w) w;
-        sstore slot (rfetch src) w ]
+      rtl (A.store slot (rfetch src) w) <:> rtl (R.store (R.reg dst) (A.fetch slot w)w)
 (*
       let offset = R.bits (Bits.S.of_int (23*4) 32) 32 in
       let addr   = R.app (R.opr "add" [32]) [rfetch sp; offset] in
@@ -346,27 +335,25 @@ let move ~dst ~src =
   | (('j', _, _), _, R.C 1), (('q', _, _), _, R.C 1)
   | (('q', _, _), _, R.C 1), (('j', _, _), _, R.C 1) ->
       let slot = salloc w in
-      [ R.store (R.reg dst) (sfetch slot w) w;
-        sstore slot (rfetch src) w ]
+      rtl (A.store slot (rfetch src) w) <:> rtl (R.store (R.reg dst) (A.fetch slot w)w)
 (*
       let offset = R.bits (Bits.S.of_int (24*4) 32) 32 in
       let addr   = R.app (R.opr "add" [32]) [rfetch sp; offset] in
       [ R.store (R.reg dst)   (R.fetch (mem w addr) w) w
       ; R.store (mem w addr) (rfetch src) w ]
 *)
-  | _, _ -> if Register.eq src dst then []
-            else [R.store (R.reg dst) (rfetch src) w]  
+  | _, _ -> if Register.eq src dst then PX.Nop
+            else rtl (R.store (R.reg dst) (rfetch src) w)
 @ 
-
 <<SPARC postexpander>>=
 let li  ~dst const =
   match dst, const with
   | (('u', _, _), _, R.C 1), _ -> (* we are forced to go through memory *)
       let t = talloc 't' 32 in
       let slot = salloc 32 in
-      [ R.store (R.reg dst) (sfetch slot 32) 32;
-        sstore slot (rfetch t) 32;
-        R.store (R.reg t) (Up.const const) 32 ]
+      rstore (R.reg t)   (Up.const const)  32 <:>
+      astore slot        (rfetch t)        32 <:>
+      rstore (R.reg dst) (A.fetch slot 32) 32
 (*
       let offset = R.bits (Bits.S.of_int (23*4) 32) 32 in
       let addr   = R.app (R.opr "add" [32]) [rfetch sp; offset] in
@@ -386,33 +373,31 @@ let li  ~dst const =
       (* now split the 64-bit literal into high and low 32 bits *)
       let hi = Bits.Ops.lobits 32 (Bits.Ops.shrl b (Bits.U.of_int 32 32)) in
       let lo = Bits.Ops.lobits 32 b in
-      [ R.store (R.reg dst)     (R.fetch (mem 64 addr1) 64) 64
-      ; R.store (mem 32 addr2) (rfetch t2)                 32
-      ; R.store (R.reg t2)      (Up.const (RP.Bits lo))     32
-      ; R.store (mem 32 addr1) (rfetch t1)                 32
-      ; R.store (R.reg t1)      (Up.const (RP.Bits hi))     32
-      ]
+      rstore (R.reg t1)     (Up.const (RP.Bits hi))     32 <:>
+      rstore (mem 32 addr1) (rfetch t1)                 32 <:>
+      rstore (R.reg t2)     (Up.const (RP.Bits lo))     32 <:>
+      rstore (mem 32 addr2) (rfetch t2)                 32 <:>
+      rstore (R.reg dst)    (R.fetch (mem 64 addr1) 64) 64 
   | (('t', _, _), _, R.C 1), _ ->
-      [R.store (R.reg dst) (Up.const const) 32]
+      rstore (R.reg dst) (Up.const const) 32
   | (('j', _, _), _, R.C 1), RP.Bits b ->
       let t1 = talloc 't' 32 in
       let t2 = talloc 't' 32 in
       (* now split the 64-bit literal into high and low 32 bits *)
       let hi = Bits.Ops.lobits 32 (Bits.Ops.shrl b (Bits.U.of_int 32 32)) in
       let lo = Bits.Ops.lobits 32 b in
-      [ R.store (R.reg dst)     (R.app (R.opr "sparc_mkj" []) [rfetch t1; rfetch t2]) 64
-      ; R.store (R.reg t2)      (Up.const (RP.Bits lo))     32
-      ; R.store (R.reg t1)      (Up.const (RP.Bits hi))     32
-      ]      
+      rstore (R.reg t1)      (Up.const (RP.Bits hi))     32 <:>
+      rstore (R.reg t2)      (Up.const (RP.Bits lo))     32 <:>
+      rstore (R.reg dst)     (R.app (R.opr "sparc_mkj" []) [rfetch t1; rfetch t2]) 64 
   | ((s, _, _), _, _) as r, RP.Bits b ->
       unimpf "loading immediate %s to a %d-bit register in space %%%c"
         (Bits.to_string b) (Register.width r) s
   | ((s, _, _), _, _) as r, _ ->
       unimpf "loading symbolic immediate to a %d-bit register in space %%%c"
         (Register.width r) s
-let lix ~dst e     = [R.store (R.reg dst) e                (reg_width dst)]
+let lix ~dst e = rtl (R.store (R.reg dst) e (reg_width dst))
+  (* IS THIS REALLY RIGHT? *)
 @ 
-
 What do argmap and resmap actually do??
 <<SPARC postexpander>>=
 let bcontext = (fun x y -> imposs "allocate from bcontext"), fun _ -> false
@@ -421,56 +406,45 @@ let operators = Context.standard icontext fcontext rcontext acontext bcontext
 let resmap = List.fold_left (fun m (n,a,r) -> SM.add n r m) SM.empty operators
 let argmap = List.fold_left (fun m (n,a,r) -> SM.add n a m) SM.empty operators
 @ 
-
 <<SPARC postexpander>>=
 let arg_contexts   (n, _) =
-  try SM.find n argmap with Not_found ->
-    Printf.eprintf "arg_context %s failed\n" n;
-    assert false
+  try SM.find n argmap with Not_found -> impossf "arg_context %s failed\n" n
 let result_context (n, _) =
-  try SM.find n resmap with Not_found ->
-    Printf.eprintf "result_context %s failed\n" n;
-    assert false
+  try SM.find n resmap with Not_found -> impossf "result_context %s failed\n" n
 let constant_context w = icontext
 @ 
-
 <<SPARC postexpander>>=
 let unop ~dst op x =
-  [R.store (R.reg dst)
-             (R.app (Up.opr op) [rfetch x]) (reg_width dst)]
+  rstore (R.reg dst) (R.app (Up.opr op) [rfetch x]) (reg_width dst)
 
 let binop ~dst op x y =
   let dstw = reg_width dst in
   match op with
 (* I think this is never used...
-  | ("f2i", ws) ->
+  | "f2i", ws ->
       begin match dst, x with
       | ('r', _, _), ('f', _, _) ->
           assert (dstw = 32);
           let ftmp = talloc 'u' dstw in
           let slot = salloc dstw in
-          [R.store (R.reg dst) (sfetch slot) dstw;
-           R.store (sstore slot) (rfetch ftmp); 
+          [R.store (R.reg dst) (A.fetch slot) dstw;
+           R.store (A.store slot) (rfetch ftmp); 
            R.store (R.reg ftmp) (R.app (Up.opr op) [rfetch x; rfetch y]) dstw]
       | _ -> [R.store (R.reg dst) (R.app (Up.opr op) [rfetch x; rfetch y]) dstw]
       end
 *)
-  | ("modu", ws) ->
-    [ R.store (R.reg dst) (R.app (R.opr "sub"  ws) [rfetch x; rfetch dst]) dstw
-    ; R.store (R.reg dst) (R.app (R.opr "mul"  ws) [rfetch y; rfetch dst]) dstw
-    ; R.store (R.reg dst) (R.app (R.opr "divu" ws) [rfetch x; rfetch y])   dstw
-    ]
-  | ("rem", ws) ->
-    [ R.store (R.reg dst) (R.app (R.opr "sub"  ws) [rfetch x; rfetch dst]) dstw
-    ; R.store (R.reg dst) (R.app (R.opr "mul"  ws) [rfetch y; rfetch dst]) dstw
-    ; R.store (R.reg dst) (R.app (R.opr "quot" ws) [rfetch x; rfetch y])   dstw
-    ]
-  | ("shrl", [64]) -> (* TOTALLY WRONG *)
-      [ R.store (R.reg dst) (R.app (R.opr "sparc_hi2lo" [64]) [rfetch x; rfetch y]) 64 ]
-
-  | ("shl", [64]) -> (* TOTALLY WRONG *)
-      [ R.store (R.reg dst) (R.app (R.opr "sparc_lo2hi" [64]) [rfetch x; rfetch y]) 64 ]
-
+  | "modu", ws ->
+      rstore (R.reg dst) (R.app (R.opr "divu" ws) [rfetch x; rfetch y])   dstw <:>
+      rstore (R.reg dst) (R.app (R.opr "mul"  ws) [rfetch y; rfetch dst]) dstw <:>
+      rstore (R.reg dst) (R.app (R.opr "sub"  ws) [rfetch x; rfetch dst]) dstw
+  | "rem", ws ->
+      rstore (R.reg dst) (R.app (R.opr "quot" ws) [rfetch x; rfetch y])   dstw <:>
+      rstore (R.reg dst) (R.app (R.opr "mul"  ws) [rfetch y; rfetch dst]) dstw <:>
+      rstore (R.reg dst) (R.app (R.opr "sub"  ws) [rfetch x; rfetch dst]) dstw
+  | "shrl", [64] -> (* TOTALLY WRONG *)
+      rstore (R.reg dst) (R.app (R.opr "sparc_hi2lo" [64]) [rfetch x; rfetch y]) 64
+  | "shl", [64] -> (* TOTALLY WRONG *)
+      rstore (R.reg dst) (R.app (R.opr "sparc_lo2hi" [64]) [rfetch x; rfetch y]) 64
 (*
       [ R.store (R.reg dst) (R.app (R.opr "sparc_shrl64" [])
           [x; y; talloc 't' 32]) 32 ]
@@ -501,32 +475,27 @@ let binop ~dst op x y =
           x+(((31-x) sra 31) & (31-x))
        *)
   | _ ->
-      [R.store (R.reg dst) (R.app (Up.opr op) [rfetch x; rfetch y]) dstw]
+      rstore (R.reg dst) (R.app (Up.opr op) [rfetch x; rfetch y]) dstw
 
 let rtlop ~dst op args =
-  [R.store (R.reg dst)
-             (R.app (Up.opr op) (List.map rfetch args)) (reg_width dst)]
+  rstore (R.reg dst) (R.app (Up.opr op) (List.map rfetch args)) (reg_width dst)
 @ 
-
 <<SPARC postexpander>>=
 let pc_lhs = npc        (* PC as assigned by branch *)
 let pc_rhs = pc         (* PC as captured by call   *)
 @ 
-
 <<SPARC postexpander>>=
-let br ~tgt = [R.store pc_lhs (rfetch tgt)   wordsize]  (* branch reg *)
-let b  ~tgt = [R.store pc_lhs (Up.const tgt) wordsize]  (* branch     *)
+let br ~tgt = PX.Nop, R.store pc_lhs (rfetch tgt)   wordsize  (* branch reg *)
+let b  ~tgt = PX.Nop, R.store pc_lhs (Up.const tgt) wordsize  (* branch     *)
 @ 
-
 Needs to be filled in
 <<SPARC postexpander>>=
-let bc x (opr, ws as op) y ~tgt =
+let bc x (opr, ws as op) y ~ifso ~ifnot =
   (* Might be a 64-bit float *)
   assert (ws =*= [wordsize] || ws =*= [wordsize*2]);
-  [ R.guard (R.app (R.opr ("sparc_"^opr) ws) [R.fetch cc 32])
-            (R.store pc_lhs (Up.const tgt) 32)
-  ; R.store cc (R.app (R.opr "sparc_subcc" ws) [rfetch x; rfetch y]) 32
-  ]
+  PX.Test (rstore cc (R.app (R.opr "sparc_subcc" ws) [rfetch x; rfetch y]) 32,
+           (R.app (R.opr ("sparc_"^opr) ws) [R.fetch cc 32], ifso, ifnot))
+
 (* Why won't the following work?  If I try it, I get a runtime error from
    the expander when it tries to call succ on an illegal node! *)
 (*
@@ -534,7 +503,6 @@ let bc x (opr, ws as op) y ~tgt =
             (R.store pc_lhs (Up.const tgt) 32) ]
 *)
 @ 
-
 <<SPARC postexpander>>=
 let bnegate r = 
     let zero   = R.bits (Bits.zero 32) 32 in
@@ -554,49 +522,40 @@ let bnegate r =
                 (R.store pc_lhs (Up.exp tgt) wordsize)
     | _ -> imposs "ill-formed SPARC conditional branch"
 @ 
-
 <<SPARC postexpander>>=
 let effects = List.map Up.effect
 let call  ~tgt ~others =
-  [R.par (R.store pc_lhs (Up.const tgt) wordsize
-          :: effects others)]
+  PX.Nop, R.par (R.store pc_lhs (Up.const tgt) wordsize :: effects others)
 let callr ~tgt ~others =
-  [R.par (R.store pc_lhs (rfetch tgt) wordsize
-          :: effects others)]
+  PX.Nop, R.par (R.store pc_lhs (rfetch tgt)   wordsize :: effects others)
 @ 
-
 <<SPARC postexpander>>=
-let cut_to effs = [R.par (effects effs)]
+let cut_to effs = PX.Nop, R.par (effects effs)
 @ 
-
+If an instruction modifies the current window pointer, it's a save or
+restore, and the generic expander must not touch it.
 <<SPARC postexpander>>=
 let don't_touch_me =
   let stores_to_cwp = function
     | RP.Store (RP.Reg maybe_cwp, _, _) when Register.eq maybe_cwp cwp -> true
-    | _                                                                -> false
-  in
+    | _                                                                -> false in
   List.exists stores_to_cwp
 @ 
-
 % ------------------------------------------------------------------ 
 \subsection{Expander}
 % ------------------------------------------------------------------ 
-
 <<sparc.ml>>=
 module X = Expander.IntFloatAddr(Post)
 @ 
-
 % ------------------------------------------------------------------
 \subsection{Target}
 % ------------------------------------------------------------------
-
 <<sparc.ml>>=
 let spill  p t l = (* assert (reg_width t = Rtlutil.Width.loc l); *)
   [A.store l (rfetch t) (reg_width t)]
 let reload p t l = 
-    let w = reg_width t in [R.store (R.reg t) (A.fetch l w) w]
+  let w = reg_width t in [R.store (R.reg t) (A.fetch l w) w]
 @ 
-
 <<sparc.ml>>=
 let ( *> ) = A.( *> )
 let globals base = 
@@ -607,7 +566,6 @@ let globals base =
   A.at mspace ~start:base (A.widen width *> A.align_to align *>
   A.overflow ~growth:Memalloc.Up ~max_alignment:16)
 @ 
-
 <<sparc.ml>>=
 let target =
     let spaces = [ Spaces.m
@@ -660,7 +618,6 @@ let target =
     ; T.charset             = "latin1" (* REMOVE THIS FROM TARGET.T *)
     }    
 @ 
-
 \subsection{Variable Placement}
 <<sparc.ml>>=
 let warning s = Printf.eprintf "backend warning: %s\n" s

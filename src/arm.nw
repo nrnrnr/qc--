@@ -22,6 +22,7 @@ module SS   = Space.Standard32
 module S    = Space
 module A    = Automaton
 let ( *> )  = A.( *> ) 
+module PX   = Postexpander
 module R    = Rtl
 module RP   = Rtl.Private
 module RU   = Rtlutil
@@ -32,6 +33,8 @@ module T    = Target
 
 let unimp               = Impossible.unimp
 let impossible          = Impossible.impossible
+let rtl r = PX.Rtl r
+let (<:>) = PX.(<:>)
 <<utilities that depend on [[byteorder]] or [[wordsize]]>>=
 let fetch_word l        = R.fetch l   wordsize
 let store_word l e      = R.store l e wordsize
@@ -148,7 +151,8 @@ There is no distinction between an integer and an address.
 @
 <<ARM postexpander>>=
 type context = (Talloc.Multiple.t -> int -> Register.t) * (Register.t -> bool)
-let icontext = Talloc.Multiple.reg 't', fun ((c,_,_), _, _) -> c =<= 'r' || c =<= 't'
+let icontext : context =
+  Talloc.Multiple.reg 't', fun ((c,_,_), _, _) -> c =<= 'r' || c =<= 't'
 let acontext = icontext
 let itempwidth = 32
 @
@@ -174,16 +178,16 @@ let twidth = Register.width
 let load ~dst ~addr assn =
     let w = twidth dst in
         assert (w = wordsize);
-        [R.store (tloc dst) (R.fetch (mem w addr) w) w]
+        rtl (R.store (tloc dst) (R.fetch (mem w addr) w) w)
 
 let store ~addr ~src assn =
     let w = twidth src in
         assert (w = wordsize);
-        [R.store (mem w addr) (tval src) w]
+        rtl (R.store (mem w addr) (tval src) w)
 
 let block_copy ~dst dassn ~src sassn w =
   match w with
-  | 32 -> let t = talloc 't' w in store dst t dassn @ load t src sassn
+  | 32 -> let t = talloc 't' w in load t src sassn <:> store dst t dassn
   | _  -> Impossible.unimp "general block copies on Arm"
 @
 The {\arm} provides sign- and zero-extending load operations for
@@ -194,32 +198,32 @@ let extend  op n e = R.app (R.opr op       [n; wordsize]) [e]
 let lobits     n e = R.app (R.opr "lobits" [wordsize; n]) [e]
 
 let xload op ~dst ~addr n assn =
-    let w = twidth dst in
-        assert (w = wordsize); 
-        [R.store (tloc dst)
-                 (extend op n (R.fetch (R.mem assn mspace (mcount n) addr) n)) 
-                 w]
+  let w = twidth dst in
+  assert (w = wordsize); 
+  rtl (R.store (tloc dst)
+         (extend op n (R.fetch (R.mem assn mspace (mcount n) addr) n)) w)
 
 let sxload = xload "sx"
 let zxload = xload "zx"
 
 let lostore ~addr ~src n assn =
-    assert (Register.width src = wordsize);
-    [R.store (R.mem assn mspace (mcount n) addr) (lobits n (tval src)) n]
+  assert (Register.width src = wordsize);
+  rtl (R.store (R.mem assn mspace (mcount n) addr) (lobits n (tval src)) n)
 @
 The general move operation only works between temporaries of the same
 width. Load immediate loads a constant into a temorary.
 <<ARM postexpander>>=
 let move ~dst ~src =
-    assert (Register.width src = Register.width dst);
-    if Register.eq src dst then [] else [R.store (tloc dst) (tval src) (twidth src)]
+  assert (Register.width src = Register.width dst);
+  if Register.eq src dst then PX.Nop
+  else rtl (R.store (tloc dst) (tval src) (twidth src))
 @
 Immediate load, and extended immediate load. An extended load-immediate
 can take sums and differences of compile-time constants (including late
 compile-time constants). 
 <<ARM postexpander>>=
-let li  ~dst const = [R.store (tloc dst) (Up.const const) (twidth dst)]
-let lix ~dst e     = [R.store (tloc dst) e                (twidth dst)]  
+let li  ~dst const = rtl (R.store (tloc dst) (Up.const const) (twidth dst))
+let lix ~dst e     = rtl (R.store (tloc dst) e                (twidth dst))  
 @
 
 % ------------------------------------------------------------------ 
@@ -257,13 +261,13 @@ implement a conditional branch.
 let subflags x y w = R.store cc (R.app (R.opr "arm_subcc" [w]) [x; y]) 32
 
 let unop ~dst op x =
-  [R.store (tloc dst) (R.app (Up.opr op) [tval x]) (twidth dst)]
+  rtl (R.store (tloc dst) (R.app (Up.opr op) [tval x]) (twidth dst))
 
 let binop ~dst op x y =
-  [R.store (tloc dst) (R.app (Up.opr op) [tval x; tval y]) (twidth dst)]
+  rtl (R.store (tloc dst) (R.app (Up.opr op) [tval x; tval y]) (twidth dst))
 
 let rtlop ~dst op args =
-  [R.store (tloc dst) (R.app (Up.opr op) (List.map tval args)) (twidth dst)]
+  rtl (R.store (tloc dst) (R.app (Up.opr op) (List.map tval args)) (twidth dst))
 @
 
 % ------------------------------------------------------------------ 
@@ -278,8 +282,8 @@ let pc_rhs = pc         (* PC as captured by call   *)
 
 \paragraph{Unconditional Branches}
 <<ARM postexpander>>=
-let br ~tgt = [R.store pc_lhs (tval tgt)     wordsize]  (* branch reg *)
-let b  ~tgt = [R.store pc_lhs (Up.const tgt) wordsize]  (* branch     *)
+let br ~tgt = PX.Nop, R.store pc_lhs (tval tgt)     wordsize  (* branch reg *)
+let b  ~tgt = PX.Nop, R.store pc_lhs (Up.const tgt) wordsize  (* branch     *)
 @
 
 \paragraph{Conditional Branches}
@@ -289,17 +293,16 @@ A conditional branch is represented by a guarded assignment to the PC.
 We turn each condition into an ARM-specific test of the condition
 code, where the ARM operators use the ARM assembly-language mnemonics.
 <<ARM postexpander>>=
-let cmp x y = [subflags (tval x) (tval y) 32] 
+let cmp x y = rtl (subflags (tval x) (tval y) 32) 
 
-let rec bc x (opr, ws as op) y ~tgt =
-  let branch cond = R.guard (R.app (R.opr cond [32]) [R.fetch cc 32])
-                            (R.store pc_lhs (Up.const tgt) 32) in
+let rec bc x (opr, ws as op) y ~ifso ~ifnot =
   assert (ws =*= [wordsize]);
+  let cond c = R.app (R.opr c [32]) [R.fetch cc 32] in
   match opr with
   | "eq" | "ne" | "lt" | "le" | "gt" | "ge" | "leu" | "gtu" ->
-      branch (arm_cond opr) :: cmp x y
-  | "ltu" -> bc y ("gtu", ws) x ~tgt
-  | "geu" -> bc y ("leu", ws) x ~tgt
+      PX.Test (cmp x y, (cond (arm_cond opr), ifso, ifnot))
+  | "ltu" -> bc y ("gtu", ws) x ~ifso ~ifnot
+  | "geu" -> bc y ("leu", ws) x ~ifso ~ifnot
   | _ -> Impossible.impossible
           "non-comparison in ARM conditional branch (or overflow not implemented)"
 and arm_cond = function
@@ -365,14 +368,14 @@ In an indirect call the target is held in a register.
 <<ARM postexpander>>=
 let effects = List.map Up.effect
 let call  ~tgt ~others = 
-  [R.par (R.store pc_lhs (Up.const tgt) wordsize :: effects others)]
+  PX.Nop, R.par (R.store pc_lhs (Up.const tgt) wordsize :: effects others)
 let callr ~tgt ~others = 
-  [R.par (R.store pc_lhs (tval tgt) wordsize :: effects others)]
+  PX.Nop, R.par (R.store pc_lhs (tval tgt) wordsize :: effects others)
 @
 
 \paragraph{Cut-To}
 <<ARM postexpander>>=
-let cut_to effs = [R.par (effects effs)]
+let cut_to effs = PX.Nop, R.par (effects effs)
 @
 
 \paragraph{No sacred instructions}

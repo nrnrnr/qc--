@@ -134,14 +134,14 @@ Ljoin_l16:
 	movl %ebx,(%ecx)
 	movl 36(%esp),%ecx
 	cmpl %eax,%ecx
-	jle Lif_true_l31
-Lif_false_l32:
+	jle Ljoin_l32
+Ljoin_l33:
 	movl $0,%eax
-	jmp Lend_if_l33
-Lif_true_l31:
+	jmp Ljoin_l31
+Ljoin_l32:
 	movl $1,%eax
-	jmp Lend_if_l33
-Lend_if_l33:
+	jmp Ljoin_l31
+Ljoin_l31:
 	jmp LifEnd_56
 LifEnd_56:
 	movl $4,%ecx
@@ -405,14 +405,14 @@ Ljoin_l52:
 	movl %edx,(%ecx)
 	movl $0,%ecx
 	cmpl %ecx,%eax
-	je Lif_true_l61
-Lif_false_l62:
+	je Ljoin_l62
+Ljoin_l63:
 	movl $0,%eax
-	jmp Lend_if_l63
-Lif_true_l61:
+	jmp Ljoin_l61
+Ljoin_l62:
 	movl $1,%eax
-	jmp Lend_if_l63
-Lend_if_l63:
+	jmp Ljoin_l61
+Ljoin_l61:
 	jmp LifEnd_69
 Ljoin_l53:
 	jmp LifTrue_67

@@ -1,4 +1,4 @@
-x% -*- mode: Noweb; noweb-code-mode: caml-mode; comment-column: 32 -*-
+% -*- mode: Noweb; noweb-code-mode: caml-mode; comment-column: 32 -*-
 
 % vim: ts=4 et:
 % Grades     ::=    "%%Grades:" Quality Importance Urgency
@@ -30,6 +30,11 @@ module Post : Postexpander.S
 module X    : Expander.S
 val target : Ast2ir.tgt
 val placevars : Ast2ir.proc -> Automaton.t
+@ 
+<<x86.ml>>=
+module PX = Postexpander
+let (<:>) = PX.(<:>)
+let rtl r = PX.Rtl r
 @ 
 
 \subsection{Name and storage spaces}
@@ -175,38 +180,39 @@ width of everything is~32.
 <<x86 postexpander>>=
 let load ~dst ~addr assn =
   assert (tempwidth dst = 32);
-  [R.store (temploc dst) (R.fetch (R.mem assn mspace (R.C 4) addr) 32) 32]
+  rtl (R.store (temploc dst) (R.fetch (R.mem assn mspace (R.C 4) addr) 32) 32)
 let store ~addr ~src assn =
   assert (tempwidth src = 32);
-  [R.store (R.mem assn mspace (R.C 4) addr) (tempval src) 32]
+  rtl (R.store (R.mem assn mspace (R.C 4) addr) (tempval src) 32)
 @ 
 The Pentium provides sign-extending loads and stores.
+It's a bit bogus to use EAX to do the [[lostore]], but we have no easy
+way of asking for a temporary that supports low-store instructions.
 <<x86 postexpander>>=
 let extend opname n e = R.app (R.opr opname   [n; 32]) [e]
 let lobits        n e = R.app (R.opr "lobits" [32; n]) [e]
 let sxload ~dst ~addr n assn =
   if tempwidth dst <> 32 then Impossible.unimp "widening of temporaries";
-  [R.store (temploc dst)
-             (extend "sx" n (R.fetch (R.mem assn mspace (mcount n) addr) n)) 32]
+  rtl (R.store (temploc dst)
+             (extend "sx" n (R.fetch (R.mem assn mspace (mcount n) addr) n)) 32)
 let zxload ~dst ~addr n assn =
   assert (tempwidth dst = 32);
-  [R.store (temploc dst)
-             (extend "zx" n (R.fetch (R.mem assn mspace (mcount n) addr) n)) 32]
+  rtl (R.store (temploc dst)
+             (extend "zx" n (R.fetch (R.mem assn mspace (mcount n) addr) n)) 32)
 let lostore ~addr ~src n assn =
   assert (tempwidth src = 32);
-  [ R.store (R.mem assn mspace (mcount n) addr) (lobits n (R.fetch eax n)) n
-  ; R.store eax (tempval src) 32
-  ]
+  rtl (R.store eax (tempval src) 32) <:>
+  rtl (R.store (R.mem assn mspace (mcount n) addr) (lobits n (R.fetch eax n)) n)
 @ 
 This code hasn't yet been checked for compatility with floating point.
 <<x86 postexpander>>=
-let move_rtl dst src = R.store (temploc dst) (tempval src) (tempwidth src)
-let move ~dst ~src   = if Register.eq dst src then [] else [move_rtl dst src]
+let move_rtl dst src = rtl (R.store (temploc dst) (tempval src) (tempwidth src))
+let move ~dst ~src   = if Register.eq dst src then PX.Nop else move_rtl dst src
 @ 
 Load immediate is also a simple move.
 <<x86 postexpander>>=
-let li  ~dst const = [R.store (temploc dst) (Up.const const) (tempwidth dst)]
-let lix ~dst e     = [R.store (temploc dst) e                (tempwidth dst)]
+let li  ~dst const = rtl (R.store (temploc dst) (Up.const const) (tempwidth dst))
+let lix ~dst e     = rtl (R.store (temploc dst) e                (tempwidth dst))
 @ 
 \subsubsection{Operator contexts}
 Here are tentative contexts for all the operators.
@@ -235,7 +241,7 @@ An arithmetic-like or comparison instruction needs {two} \emph{operands}
 to set the flags; a logical instruction needs only the \emph{result}.
 <<x86 postexpander>>=
 let exp_with_flags setflags dst exp x y w =
-  R.par [R.store (temploc dst) exp w; setflags x y w]
+  rtl (R.par [R.store (temploc dst) exp w; setflags x y w])
 
 let with_flags setflags dst op x y w =
   let x = tempval x in
@@ -247,7 +253,7 @@ let with_lflags dst op x y w =
   let x = tempval x in
   let y = tempval y in
   let exp = R.app op [x; y] in
-  R.par [R.store (temploc dst) exp w; logicflags exp w]
+  rtl (R.par [R.store (temploc dst) exp w; logicflags exp w])
 @ 
 We insist on using most operators at their natural 32-bit width, and
 this function is the forcing function that makes it so.
@@ -264,9 +270,9 @@ We start our implementation with a function that provides binary
 operators in $L \mathrel{:=} L \oplus R$ form. 
 <<x86 postexpander>>=
 let llr op x y move = match at32 op with
-| "add" -> with_flags addflags x (Up.opr op) x y 32 :: move
-| "sub" -> with_flags subflags x (Up.opr op) x y 32 :: move
-| "mul" -> with_flags mulflags x (Up.opr op) x y 32 :: move
+| "add" -> move <:> with_flags addflags x (Up.opr op) x y 32
+| "sub" -> move <:> with_flags subflags x (Up.opr op) x y 32
+| "mul" -> move <:> with_flags mulflags x (Up.opr op) x y 32
 @
 Division is rather painful on the x86.
 We have to place the dividend in the EDX:EAX register pair, and we have to represent
@@ -287,14 +293,13 @@ until we try it with other versions of the x86 divide instruction.
             (* notice the ill-typed shift-left *)
       let sethi =
         if unsigned then
-          [ R.store (temploc hreg) (R.bits (Bits.zero w) w) w ]
+          rtl (R.store (temploc hreg) (R.bits (Bits.zero w) w) w)
         else
           let sbit = temploc (talloc 't' w) in
           let sbitval = R.fetch sbit w in
-          [ R.store (temploc hreg) sbitval w
-          ; R.store sbit           (sh "shra" sbitval (w-1)) w
-          ; R.store sbit           (rval lreg) w
-          ] in
+          rtl (R.store sbit (rval lreg) w) <:>
+          rtl (R.store sbit (sh "shra" sbitval (w-1)) w) <:>
+          rtl (R.store (temploc hreg) sbitval w) in
       sethi, pairval in
     let (is, regpair) = regpairv 32 Rg.edx Rg.eax in
     let q, r = if unsigned then "divu", "modu" else "quot", "rem" in
@@ -302,7 +307,7 @@ until we try it with other versions of the x86 divide instruction.
                      R.store edx (R.app (R.opr r [64;32]) [regpair; tempval y]) 32;
                      undefflags] in
     let answer = if opname =$= "rem" || opname =$= "modu" then Rg.edx else Rg.eax in
-    move_rtl x answer :: div :: is @ move_rtl Rg.eax x :: move
+    move <:> move_rtl Rg.eax x <:> is <:> rtl div <:> move_rtl x answer
 @ 
 Unsigned, extended multiplication is also painful---especially as we
 don't have any 64-bit temporaries!
@@ -319,7 +324,7 @@ the EDX:EAX register pair.
       R.par [regpairstore edx eax
                (R.app (R.opr "mulux" [32]) [R.fetch eax 32; tempval y]);
              muluxflags (R.fetch eax 32) (tempval y) 32] in
-    move_rtl x Rg.eax :: mulux :: move_rtl Rg.eax x :: move
+    move <:> move_rtl Rg.eax x <:> rtl mulux <:> move_rtl x Rg.eax 
 @ 
 I don't know why it's safe to clobber ECX here.
 The problem would arise if the {\PAL} source mentioned ECX, perhaps
@@ -334,55 +339,31 @@ eliminating all those dead saves and restores.  So we live dangerously.
     let cl = R.fetch Rg.cl 8 in
     let sh = exp_with_flags (shflags shop) x (R.app (Up.opr op) [tempval x; cl])
               (tempval x) cl 32 in
-    sh :: move_rtl Rg.ecx y :: move
+    move <:> move_rtl Rg.ecx y <:> sh
 <<x86 postexpander>>=
-| ("and"|"or"|"xor") -> with_lflags x (Up.opr op) x y 32 :: move
+| ("and"|"or"|"xor") -> move <:> with_lflags x (Up.opr op) x y 32 
 | _  ->
-    R.store (temploc x) (R.app (Up.opr op) [tempval x; tempval y]) (tempwidth x) :: move
+    move <:>
+    rtl (R.store (temploc x) (R.app (Up.opr op) [tempval x; tempval y]) (tempwidth x))
 @ 
 <<x86 postexpander>>=
 let binop ~dst op x y = match at32 op with
 | _     -> llr op dst y (move dst x)
 @ 
-Multiplication and division are bound to be a nightmare.
-Here is some tentative code that will one day be generalized to ``move
-hardware registers out of the way.''
-<<x86 postexpander>>=
-let regpairv x y =
-  let rval r = R.fetch r 32 in
-  let zxreg l = R.app (R.opr "zx" [32; 64]) [rval l] in
-  let shl v = R.app (R.opr "shl" [64]) [v; R.bits (Bits.U.of_int 32 32) 32]
-  in R.app (R.opr "or" [64]) [shl (zxreg x); zxreg y]
-
-let divu_trunc icontext dst x y =
-    let (ialloc, _) = icontext in
-    let tmpd = ialloc 32 in
-    let tmpa = ialloc 32 in
-    let divmod = R.par
-        [ R.store eax (R.app (R.opr "divu" [64;32]) [regpairv edx eax; tempval y]) 32
-        ; R.store edx (R.app (R.opr "modu" [64;32]) [regpairv edx eax; tempval y]) 32
-        ; R.kill eflags
-        ]  in
-    [ move_rtl Rg.eax tmpa; move_rtl Rg.edx tmpd    (* restore *)
-    ; move_rtl dst Rg.eax; divmod                (* divide *)
-    ; move_rtl Rg.eax x; R.store (temploc Rg.eax) (upint32 0) 32
-    ; move_rtl tmpa Rg.eax; move_rtl tmpd Rg.edx    (* save *)
-    ]
-@ 
 Other operators are surely wrong.
 <<x86 postexpander>>=
 let inplace op x move = match at32 op with
-| "neg" -> R.par [R.store (temploc x) (R.app (Up.opr op) [tempval x]) 32;
-                  negflags (tempval x) 32]
-           :: move
+| "neg" ->
+    move <:> rtl (R.par [R.store (temploc x) (R.app (Up.opr op) [tempval x]) 32;
+                         negflags (tempval x) 32])
 | "lobits" -> move  (* lobits32 is identity *)
-| _ ->
-    R.store (temploc x) (R.app (Up.opr op) [tempval x]) (tempwidth x) :: move
+| _ -> move <:> rtl (R.store (temploc x) (R.app (Up.opr op) [tempval x]) (tempwidth x))
 
 let unop ~dst op x = inplace op dst (move dst x)
 
 let rtlop ~dst op args =
-  [R.store (temploc dst) (R.app (Up.opr op) (List.map tempval args)) (tempwidth dst)]
+  rtl (R.store (temploc dst)
+         (R.app (Up.opr op) (List.map tempval args)) (tempwidth dst))
 @ 
 \subsubsection{Control flow}
 
@@ -394,18 +375,20 @@ let pc_rhs = pc
 There are some hairy semantics attached to some Pentium jump
 instructions, but I~think we can stick with the simple ones for now. 
 <<x86 postexpander>>=
-let br ~tgt = [R.store pc_lhs (tempval tgt) 32]
-let b  ~tgt = [R.store pc_lhs (Up.const tgt) 32]
+let br ~tgt = PX.Nop, R.store pc_lhs (tempval tgt) 32
+let b  ~tgt = PX.Nop, R.store pc_lhs (Up.const tgt) 32
 @ 
 The call instructions came from us, so we can rely on the single extra effects pushing the program counter.
 <<x86 postexpander>>=
 let effects = List.map Up.effect
-let call  ~tgt ~others = [R.par (R.store pc_lhs (Up.const tgt) 32 :: effects others)]
-let callr ~tgt ~others = [R.par (R.store pc_lhs (tempval tgt) 32 :: effects others)]
+let call  ~tgt ~others =
+  PX.Nop, R.par (R.store pc_lhs (Up.const tgt) 32 :: effects others)
+let callr ~tgt ~others =
+  PX.Nop, R.par (R.store pc_lhs (tempval tgt) 32 :: effects others)
 @ 
 The [[cut to]] is our own little conspiracy.
 <<x86 postexpander>>=
-let cut_to effs = [R.par (effects effs)]
+let cut_to effs = PX.Nop, R.par (effects effs)
 @ 
 We don't touch anything that pops the PC.
 That means the return instruction!
@@ -442,13 +425,12 @@ and so one, would jump.
 let cmp x y =
   R.store eflags (R.app (R.opr "x86_subflags" [32]) [tempval x; tempval y]) 32
 
-let bc_x86 x86opname tgt =
-  R.guard (R.app (R.opr x86opname [32]) [R.fetch eflags 32]) 
-    (R.store pc_lhs (Up.const tgt) 32)
+let bc_x86_cond x86opname = R.app (R.opr x86opname [32]) [R.fetch eflags 32]
+let bc_x86 x86opname ~ifso ~ifnot = (bc_x86_cond x86opname, ifso, ifnot)
 
-let bc x (opr, ws) y ~tgt =
+let bc x (opr, ws) y ~ifso ~ifnot =
   assert (ws =*= [32]);
-  bc_x86 (cmpopr opr) tgt :: (cmpfun tgt opr) x y
+  PX.Test (cmpfun opr x y, bc_x86 (cmpopr opr) ifso ifnot)
 
 let bnegate r = match Down.rtl r with
 | RP.Rtl [RP.App((cop, [32]), [RP.Fetch (flags, 32)]), RP.Store (pc, tgt, 32)]
@@ -508,9 +490,9 @@ a bit more complex since a division overflow causes a fault. However,
 there is only one possibility for division overflow ($MIN_INT / -1$)
 to check for.
 <<important functions on $x$86 operators>>=
-let cmpfun tgt =
+let cmpfun =
   let set_flags op x y = binop (talloc 't' 32) (op, [32]) x y
-  and cmp x y = [subflags (tempval x) (tempval y) 32] in
+  and cmp x y = rtl (subflags (tempval x) (tempval y) 32) in
   let div_flags x y = Unsupported.div_overflows () in
   function
   | "eq"
@@ -533,7 +515,6 @@ let cmpfun tgt =
 @ 
 \subsection{Stack operations}
 <<x86 postexpander>>=
-module PX = Postexpander
 let opclass (op, _) =
   match op with
   | "i2f" | "f2f" | "f2f_implicit_round" | "f2i" | "fabs" | "fneg" | "fsqrt" ->
@@ -586,20 +567,20 @@ Impossible.impossible "push 80-bit float without conversion"
 
 let store_pop ~addr assn = 
   let store regval = R.store (R.mem assn mspace (mcount 80) addr) regval 80 in
-  [st_pop_with store] (* bound to break *)
+  rtl (st_pop_with store) (* bound to break *)
 (*Impossible.impossible "store 80-bit float without conversion"*)
 
 let push_cvt op w ~addr assn =
   assert (Cell.divides mcell w);
   let memval = R.fetch (R.mem assn mspace (mcount w) addr) w in
   let regval = R.app (Up.opr op) [memval; rounding_modes] in
-  [st_push regval]
+  rtl (st_push regval)
 
 let store_pop_cvt op w ~addr assn =
   assert (Cell.divides mcell w);
   let memval regval = R.app (Up.opr op) [regval; rounding_modes] in
   let store regval = R.store (R.mem assn mspace (mcount w) addr) (memval regval) w in
-  [st_pop_with store]
+  rtl (st_pop_with store)
 <<x86 postexpander>>=
 let pushk _ = Impossible.impossible "load 80-bit floating-point constant"
 let pushk_cvt _ _ _ = Impossible.unimp "load floating-point constant"
@@ -616,9 +597,9 @@ let stack_op op = match opclass op with
     let result = R.app (Up.opr op) argvals in
     let next_st = stadd (depth-1) in
     if depth = 1 then
-      [ R.store (freg_at next_st) result 80]
+      rtl ( R.store (freg_at next_st) result 80)
     else
-      [R.par [ R.store (freg_at next_st) result 80; R.store st next_st 3]]
+      rtl (R.par [ R.store (freg_at next_st) result 80; R.store st next_st 3])
 @ 
 The machine from hell:
 \begin{itemize}
@@ -672,26 +653,27 @@ let fpcmpopr = function
   | "funordered"  -> "x86_p"
   | _ -> Impossible.impossible "floating-point comparison operator"
 
-let bc_stack op ~tgt = match op with
+let bc_stack op ~ifso ~ifnot = match op with
 | ("fordered"|"funordered"|"flt"|"fgt"|"fle"|"fge"|"feq"|"fne") as opname, [w] ->
     let positions = Aux.from 0 1 in
     let argvals = List.map (fun n -> ffetch (stregplus n)) positions in
     let result = R.app (R.opr "x86_fcmp" [w]) argvals in
     let next_st = stadd 2 in
-    let setcc = R.par [R.store Rg.fpcc result 2; R.store st next_st 3] in
-    let fstsw = R.store Rg.ax (R.fetch Rg.fpustatus 16) 16 in
+    let setcc = rtl (R.par [R.store Rg.fpcc result 2; R.store st next_st 3]) in
+    let fstsw = rtl (R.store Rg.ax (R.fetch Rg.fpustatus 16) 16) in
     (match opname with
     | "feq" | "fne" ->
         let andb = R.opr "and" [8] in
         let xorb = R.opr "xor" [8] in
-        let logic f l r = R.par [f l r 8; logicflags r 8] in
+        let logic f l r = rtl (R.par [f l r 8; logicflags r 8]) in
         let clear_extra     = logic R.store Rg.ah (R.app andb [ah_val; upint8 0x45]) in
         let xor_with_eq_pat = logic R.store Rg.ah (R.app xorb [ah_val; upint8 0x40]) in
         (* at this point, ZF = 0 iff the flags showed floating eq *)
-        [bc_x86 (fpcmpopr opname) tgt; xor_with_eq_pat; clear_extra; fstsw; setcc]
+        PX.Test (setcc <:> fstsw <:> clear_extra <:> xor_with_eq_pat,
+                 bc_x86 (fpcmpopr opname) ifso ifnot)
     | _ ->
-        let sahf  = R.store eflags (R.app (R.opr "x86_ah2flags" []) [ah_val]) 16 in
-        [bc_x86 (fpcmpopr opname) tgt; sahf; fstsw; setcc])
+        let sahf = rtl (R.store eflags (R.app (R.opr "x86_ah2flags" []) [ah_val]) 16)in
+        PX.Test (setcc <:> fstsw <:> sahf, bc_x86 (fpcmpopr opname) ifso ifnot))
 | _ ->
     Impossible.impossible "strange operator in x86 bc_stack"
 @ 
@@ -708,12 +690,12 @@ let block_copy ~dst dassn ~src sassn w =
   match w with
   | 16 | 8 ->
       let t = talloc 't' 32 in
-      lostore dst t w dassn @ zxload t src w sassn
+      zxload t src w sassn <:> lostore dst t w dassn
   | 32 ->
       let t = talloc 't' 32 in
-      store dst t dassn @ load t src sassn
+      load t src sassn <:> store dst t dassn
   | 64 ->
-      store_pop_cvt f2i_80_64 64 dst dassn @ push_cvt i2f_64_80 64 src sassn
+      push_cvt i2f_64_80 64 src sassn <:> store_pop_cvt f2i_80_64 64 dst dassn
   | n ->
       let bytes     = n / 8
       and const n   = R.bits (Bits.S.of_int n 32) 32
@@ -725,48 +707,45 @@ let block_copy ~dst dassn ~src sassn w =
               ; R.store edi (sub edi (const bytes)) 32
               ; R.store (byte_at esi) (R.fetch (byte_at edi) 8) 8
               ; R.guard (R.fetch ecx 32) (R.store pc (R.fetch pc 32) 32)
-              ]
-      in
-      List.rev
-        [ R.store esi src 32
-        ; R.store edi dst 32
-        ; R.store ecx (const bytes) 32
-        ; repmovsb
-        ]
+              ] in
+      rtl (R.store esi src 32) <:>
+      rtl (R.store edi dst 32) <:>
+      rtl (R.store ecx (const bytes) 32) <:>
+      rtl repmovsb
 @
 \subsection{Building the target}
 With the postexpander in place, we can build a target.
 We begin with more utility functions
 <<x86.ml>>=
-module PX = Post
+module P = Post
 let pc        = pc
-let espval    = PX.tempval X86regs.esp
+let espval    = P.tempval X86regs.esp
 let add       = Rtlutil.add 32
 let sub x y   = R.app (R.opr "sub" [32]) [x; y]
 let const n   = R.bits (Bits.S.of_int n 32) 32
-let mem       = PX.mem
+let mem       = P.mem
 let fetch l   = R.fetch l 32
 let store l r = R.store l r 32
 @ 
 These functions help with instructions that push and pop.
 <<x86.ml>>=
 let pop_with f = (* rtl got by popping (f e), where e is top of stack *)
-  let top = fetch (PX.mem espval) in
-  R.par [ f top; store PX.esp (add espval (const 4)) ]
+  let top = fetch (P.mem espval) in
+  R.par [ f top; store P.esp (add espval (const 4)) ]
 
 let push e = (* effect of pushing e *)
   let next_sp = sub espval (const 4) in
-  R.par [ store (mem next_sp) e; store PX.esp next_sp ]
+  R.par [ store (mem next_sp) e; store P.esp next_sp ]
 @ 
 We now build the standard control flow.
 <<x86.ml>>=
 module T = Target
 module FS = Mflow.MakeStandard (
   struct
-     let pc_lhs = PX.pc_lhs
-     let pc_rhs = PX.pc_rhs
+     let pc_lhs = P.pc_lhs
+     let pc_rhs = P.pc_rhs
      let ra_reg =
-       PX.temploc (('?', Rtl.Identity, Cell.of_size 0), 99, R.C 1) (* not used *)
+       P.temploc (('?', Rtl.Identity, Cell.of_size 0), 99, R.C 1) (* not used *)
      let ra_offset = 33                       (* not used *)
   end)
 module F = struct
@@ -784,13 +763,13 @@ end
 There's no science here---just a lot of goo.
 The [[Target.t]] abstraction could use some thought.
 <<x86.ml>>=
-module X = Expander.IntFloatAddr (PX)
+module X = Expander.IntFloatAddr (Post)
 (* expansion here once caused infinite loop *)
 let spill_expand p r = [r]
 let spill  p t l =
-  spill_expand p (Automaton.store l (PX.tempval t) (PX.tempwidth t))
+  spill_expand p (Automaton.store l (P.tempval t) (P.tempwidth t))
 let reload p t l =
-  spill_expand p (R.store (PX.temploc t) (Automaton.fetch l (PX.tempwidth t)) (PX.tempwidth t))
+  spill_expand p (R.store (P.temploc t) (Automaton.fetch l (P.tempwidth t)) (P.tempwidth t))
 @ 
 Parts of the target record are reasonable.
 Parts are lies.
@@ -805,7 +784,7 @@ let ( *> ) = A.( *> )
 let globals base = 
   let width w = if w <= 8 then 8 else if w <= 16 then 16 else Aux.round_up_to 32 w in
   let align = function 8 -> 1 | 16 -> 2 | _ -> 4 in
-  A.at PX.mspace ~start:base 
+  A.at P.mspace ~start:base 
     (A.widen width *> A.align_to align *>
      A.overflow ~growth:Memalloc.Up ~max_alignment:4)
 
@@ -813,14 +792,14 @@ let target =
   let spaces = [Spaces.m; Spaces.r; Spaces.t; Spaces.c] in
   let b i = Types.Bits i in
   { T.name = "x86"
-  ; T.memspace = PX.mspace
+  ; T.memspace = P.mspace
   (* basic metrics and spaces are OK *)
-  ; T.byteorder   = PX.byte_order  
-  ; T.wordsize    = PX.wordsize
-  ; T.pointersize = PX.wordsize
+  ; T.byteorder   = P.byte_order  
+  ; T.wordsize    = P.wordsize
+  ; T.pointersize = P.wordsize
   ; T.vfp         = SS.vfp
   ; T.alignment = 1
-  ; T.memsize = PX.memsize
+  ; T.memsize = P.memsize
   ; T.spaces = spaces
   ; T.reg_ix_map          = T.mk_reg_ix_map spaces
   ; T.distinct_addr_sp = false
@@ -844,7 +823,7 @@ let target =
   ; T.cc_spec_to_auto  = X86call.cconv 
                            ~return_to:(fun ra -> 
                                          pop_with (fun ra -> store pc ra))
-                           (F.cutto PX.esp)
+                           (F.cutto P.esp)
 
   ; T.is_instruction = X86rec.M.is_instruction
 
@@ -944,7 +923,7 @@ let placevars =
         (fun w h _ -> w <= 32), A.widen (fun _ -> 32) *> temps 't';
         A.is_any,               A.widen (Aux.round_up_to ~multiple_of: 8);
       ] in
-  Placevar.mk_automaton ~warn ~vfp:target.T.vfp ~memspace:PX.mspace mk_stage
+  Placevar.mk_automaton ~warn ~vfp:target.T.vfp ~memspace:P.mspace mk_stage
 @ 
 \section{Tentative example Lua code}
 
