@@ -283,7 +283,23 @@ let unop  ~dst op tmp       = rtlop dst op [tmp]
 @ 
 Block Copy...
 <<ppc postexpander>>=
-let block_copy ~dst assn1 ~src assn2 width = ui "block_copy"
+let block_copy ~dst assn1 ~src assn2 width =
+  let tmp = talloc 't' 32 in
+  let reg_sl = function
+      32 -> tloc tmp
+    | n  -> R.slice n (32-n) (tloc tmp) in
+  let stx d w = R.store (mem assn1 w (RU.addk 16 dst d))
+                         (R.fetch (reg_sl w) w) w
+  and ld32 d  = R.store (tloc tmp) (memval assn2 32 (RU.addk 16 src d)) 32
+  in
+  let rec copy d =
+    match width - d with
+    | 1 -> [stx d 8  ; ld32 d]
+    | 2 -> [stx d 16 ; ld32 d]
+    | 3 -> [stx d 8  ; stx d 16 ; ld32 d]
+    | 4 -> [stx d 32 ; ld32 d]
+    | n -> assert(n > 0); stx d 32 :: ld32 d :: copy (d + 4)
+  in copy 0
 @ 
 Branch and call rtls.
 <<ppc postexpander>>=
