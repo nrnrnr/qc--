@@ -307,6 +307,8 @@ val dump_cutto   : tgt -> string -> (int * string) list -> unit
 val paths_proc   : tgt -> string -> (int * string) list -> unit
 val paths_return : tgt -> string -> (int * string) list -> unit
 val paths_cutto  : tgt -> string -> (int * string) list -> unit
+
+val path_2_in_overflow : tgt -> string -> unit
 @ 
 
 \subsection{Implementation}
@@ -409,6 +411,30 @@ let dump_cutto   = dump Automatongraph.print (fun s -> s.A.cutto)
 let paths_proc   = dump Automatongraph.paths (fun s -> s.A.call)
 let paths_return = dump Automatongraph.paths (fun s -> s.A.results)
 let paths_cutto  = dump Automatongraph.paths (fun s -> s.A.cutto)
+@ 
+
+And now we generate signatures that cause 1 and 2 parameters, respectively,
+to end up in an overflow block.
+<<call.ml>>=
+let findpath_1_in_overflow autofun target ccname =
+  let wordsize = target.Target.wordsize in
+  let automaton = autofun (get_ccspec target ccname) in
+  let rec find_overflow_1 tys =
+    let an  = A.at (Rtl.bits (Bits.zero wordsize) wordsize) automaton in
+    let tys = (wordsize, "unsigned") :: tys in
+    let _   = List.map (fun (w,h) -> A.allocate an ~width:w ~hint:h) tys in
+    let res = A.freeze an in
+    if res.A.mems_used == [] then find_overflow_1 tys else tys in
+  find_overflow_1 []
+
+let findpath_2_in_overflow autofun target ccname =
+  (target.Target.wordsize, "unsigned") :: 
+  (findpath_1_in_overflow autofun target ccname)
+
+let path_2_in_overflow target ccname =
+  List.iter (fun (h,w) -> Printf.printf "%d/int " target.Target.wordsize)
+    (findpath_2_in_overflow (fun s -> s.A.call) target ccname);
+  Printf.printf "\n"
 @ 
 
 \subsection{Potential new constructors for \texttt{Call.t}}

@@ -406,11 +406,12 @@ let wrap_choice f choices = S (fun (I next) ->
 @
 The overflow block is slightly interesting.
 <<automaton.ml>>=
-type state = { mutable mem : M.t; mutable frozen : bool }
+type state = { mutable mem       : M.t; mutable frozen : bool
+             ; mutable mems_list : R.loc list  }
 let overflow ~memsize ~byteorder ~growth ~max_alignment next =
   fun ~start ~ctrs ->
     let mem = M.at start growth in
-    let state = { mem = mem; frozen = false } in
+    let state = { mem = mem; frozen = false; mems_list = [] } in
     <<functions [[allocate]] and [[freeze]] for the overflow block>>
     { allocate = allocate; freeze = freeze }
 let overflow ~memsize ~byteorder ~growth ~max_alignment = 
@@ -432,10 +433,13 @@ let allocate ~width ~alignment ~hint =
   let mem  = M.align mem alignment in
   let mem' = M.allocate mem size in
   let addr = M.current (match growth with M.Up -> mem | M.Down -> mem') in
+  let loc  = (R.mem (R.aligned alignment) 'm' byteorder width addr) in
+  state.mems_list <- loc :: state.mems_list;
   state.mem <- mem';
-  of_loc (R.mem (R.aligned alignment) 'm' byteorder width addr) in
+  of_loc loc in
 @ 
 To freeze, we have to adjust the block alignment if the stack grows down.
+We might not want to be appending lists, but we do so now for simplicity.
 <<functions [[allocate]] and [[freeze]] for the overflow block>>=
 let freeze regs mems =
   state.frozen <- true;
@@ -444,8 +448,8 @@ let freeze regs mems =
   let mem    = match growth with 
                M.Up -> mem | M.Down -> M.align mem (M.alignment mem) in
   let block = M.freeze mem in
-  {overflow = block; regs_used = regs; mems_used = mems; align_state = astate} 
-  in
+  { overflow = block; regs_used = regs; mems_used = state.mems_list @ mems
+  ; align_state = astate } in
 @ 
 \paragraph{Higher-order functions for request transformers}
 
@@ -507,7 +511,7 @@ let choice choices next =
         alloc width alignment hint in
       { allocate = alloc; freeze = choice.freeze } in
     List.fold_right add choices
-      { allocate = (fun ~width -> imposs "missing hint choice")
+      { allocate = (fun ~width -> imposs "fell off end of choice stage")
       ; freeze = next.freeze }
 let choice = wrap_choice choice
 
