@@ -42,6 +42,7 @@ struct
     <<Make continuation bundles>>
     <<Make assignment>>    
     <<Make global registers>>    
+    <<Make formals and actuals>>    
     <<Make statements>>
     <<Make>>
 end
@@ -76,6 +77,9 @@ let rec astty env = function
 
 (* val astwidth : F.env -> A.ty -> int *)
 let astwidth env = width @<< (astty env) 
+
+let foldl = List.fold_left
+let foldr = List.fold_right
 @
 
 % ------------------------------------------------------------------ 
@@ -279,6 +283,18 @@ let rec assign env target globals lhs exp = match lhs with
             Rtl.store cell exp w
 @
 
+% ------------------------------------------------------------------
+\subsection{Formal and Actual Parameters}
+% ------------------------------------------------------------------ 
+
+<<Make formals and actuals>>=
+let actual env target globals (hint, e) =
+    let w   = width (ExprTypes.expr env target e) in
+    let exp = expr env target globals e           in
+        (exp, w, hint) 
+@
+
+
 % ------------------------------------------------------------------ 
 \subsection{Global Registers}
 % ------------------------------------------------------------------ 
@@ -320,41 +336,102 @@ let globals target (base:Rtl.exp) decls =
 % ------------------------------------------------------------------ 
 
 <<Make statements>>=
-let rec stmt env target globals after = function
-    | A.StmtAt(x,r)        -> stmt env target globals after x
-    | A.SpanStmt    x      -> spanStmt      env target globals after x
-    | A.IfStmt      x      -> ifStmt        env target globals after x
-    | A.SwitchStmt  x      -> switchStmt    env target globals after x
-    | A.LabelStmt   x      -> labelStmt     env target globals after x
-    | A.ContStmt    x      -> contStmt      env target globals after x
-    | A.AssignStmt  x      -> assignStmt    env target globals after x
-    | A.CallStmt    x      -> callStmt      env target globals after x
-    | A.PrimStmt    x      -> primStmt      env target globals after x
-    | A.GotoStmt    x      -> gotoStmt      env target globals after x
-    | A.JumpStmt    x      -> jumpStmt      env target globals after x
-    | A.CutStmt     x      -> cutStmt       env target globals after x
-    | A.ReturnStmt  x      -> returnStmt    env target globals after x 
-    | A.EmptyStmt          -> after     
-    | A.CommentStmt _      -> after    
 
-and body env target globals after = function
-    | A.BodyAt(x, _)        -> body env target globals after x
-    | A.DeclBody(d)         -> after (*XXX*)
-    | A.StmtBody(s)         -> stmt env target globals after s
-    | A.DataBody(dd)        -> after (*XXX*)
+type state =
+    { env:      F.env
+    ; target:   Target.t
+    ; globals:  string -> Automaton2.loc
+    ; cfg:      G.t
+    ; node:     G.node
+    ; outbase:  Rtl.exp
+    ; outgoing: Automaton2.area list
+    ; incoming: Automaton2.area list
+    }
+
+let rec stmt s state = match s with
+    | A.StmtAt(x,r)        -> stmt x state 
+    | A.SpanStmt    x      -> spanStmt      state x
+    | A.IfStmt      x      -> ifStmt        state x
+    | A.SwitchStmt  x      -> switchStmt    state x
+    | A.LabelStmt   x      -> labelStmt     state x
+    | A.ContStmt    x      -> contStmt      state x
+    | A.AssignStmt  x      -> assignStmt    state x
+    | A.CallStmt    x      -> callStmt      state x
+    | A.PrimStmt    x      -> primStmt      state x
+    | A.GotoStmt    x      -> gotoStmt      state x
+    | A.JumpStmt    x      -> jumpStmt      state x
+    | A.CutStmt     x      -> cutStmt       state x
+    | A.ReturnStmt  x      -> returnStmt    state x 
+    | A.EmptyStmt          -> state     
+    | A.CommentStmt _      -> state    
+
+and body b state = match b with
+    | A.BodyAt(x, _)        -> body x state
+    | A.DeclBody(d)         -> state (*XXX*)
+    | A.StmtBody(s)         -> stmt s state 
+    | A.DataBody(dd)        -> state (*XXX*)
     
-and spanStmt      env target globals after x  = assert false 
-and ifStmt        env target globals after x  = assert false 
-and switchStmt    env target globals after x  = assert false 
-and labelStmt     env target globals after x  = assert false 
-and contStmt      env target globals after x  = assert false 
-and assignStmt    env target globals after x  = assert false 
-and callStmt      env target globals after x  = assert false 
-and primStmt      env target globals after x  = assert false 
-and gotoStmt      env target globals after x  = assert false    
-and jumpStmt      env target globals after x  = assert false 
-and cutStmt       env target globals after x  = assert false 
-and returnStmt    env target globals after x  = assert false            
+
+and labelStmt state x =
+    let _   = G.set_label state.cfg x state.node in
+        state    
+
+and ifStmt state (e,ifso,ifnot) =
+    let left  = foldr body ifso  state  in
+    let right = foldr body ifnot left  in
+    let exp   = expr state.env state.target state.globals e in
+    let rtl   = state.target.Target.mkBranch exp in
+        { right with node = 
+          G.gm_branch state.cfg rtl left.node right.node
+        }
+
+and assignStmt state (lhs,rhs) =
+    let effect lhs (guard,rhs) =
+        let exp = expr   state.env state.target state.globals rhs     in
+        let rtl = assign state.env state.target state.globals lhs exp in 
+            ( match guard with
+            | None   -> rtl
+            | Some g -> Rtl.guard 
+                            (expr state.env state.target state.globals g) rtl
+            ) 
+    in
+    let rtl = Rtl.par (List.map2 effect lhs rhs) in
+        { state with node = G.gm_assign state.cfg rtl state.node }
+             
+and gotoStmt state (e,labels) =
+    let exp   = expr state.env state.target state.globals e  in
+    let rtl   = state.target.Target.mkGoto exp               in
+    let nodes = List.map (G.lookup state.cfg) labels         in
+        {state with node = G.gm_goto state.cfg rtl nodes}
+
+and jumpStmt state (cconv,e,args,labels) =
+    let exp     = expr state.env state.target state.globals e in
+    let cc      = state.target.Target.cc (Aux.Option.get default_cc cconv) in
+    let atm     = Automaton2.mk cc.Target.proc state.outbase     in
+    let rtl     = state.target.Target.mkJump exp  in
+    let args    = List.map 
+                        (actual state.env state.target state.globals) args in
+    let nodes   = List.map (G.lookup state.cfg) labels           in
+    let rtl     = state.target.Target.mkJump exp                 in
+    let jmp     = G.gm_jump state.cfg rtl nodes                  in
+        if args = [] then
+            { state with node = jmp }
+        else
+            let node, atm =  G.gm_copyo state.cfg args atm jmp in
+            { state with
+                node     = node
+            ;   outgoing = Automaton2.freeze atm :: state.outgoing
+            }  
+
+
+and returnStmt    state x = assert false
+and contStmt      state x  = assert false 
+and callStmt      state x  = assert false 
+and primStmt      state x  = assert false 
+and cutStmt       state x  = assert false 
+
+and spanStmt      state x  = Impossible.unimp "span"
+and switchStmt    state x  = Impossible.unimp "switch"
 @
 
 % ------------------------------------------------------------------ 
