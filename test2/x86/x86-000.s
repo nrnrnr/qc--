@@ -13,7 +13,7 @@ p:
 	movl %eax,32(%esp)
 initialize_continuations_l3:
 	movl $1,%eax
-	movl %eax,24(%esp)
+	movl %eax,20(%esp)
 	movl $2,%eax
 	movl %eax,16(%esp)
 	movl $3,%eax
@@ -21,18 +21,18 @@ initialize_continuations_l3:
 	movl 4(%esp),%eax
 	movl %eax,(%esp)
 	movl 16(%esp),%eax
-	movl 24(%esp),%ecx
+	movl 20(%esp),%ecx
 	movl %eax,(%ecx)
 	movl 16(%esp),%eax
 	movl %eax,(%esp)
 	movl 16(%esp),%eax
-	movl 24(%esp),%ecx
+	movl 20(%esp),%ecx
 	movb %al,(%ecx)
-	movl 24(%esp),%eax
+	movl 20(%esp),%eax
 	movsbl (%eax),%eax
 	movl %eax,8(%esp)
 	movl 8(%esp),%eax
-	movl 24(%esp),%ecx
+	movl 20(%esp),%ecx
 	movl %eax,(%ecx)
 	movl 16(%esp),%eax
 	movzbl (%eax),%eax
@@ -40,7 +40,7 @@ initialize_continuations_l3:
 	movl 12(%esp),%eax
 	movl 16(%esp),%ecx
 	movl %eax,(%ecx)
-	movl 24(%esp),%eax
+	movl 20(%esp),%eax
 	movl 16(%esp),%ecx
 	addl %ecx,%eax
 	movl (%esp),%ecx
@@ -49,12 +49,12 @@ initialize_continuations_l3:
 	movl $0,%ecx
 	movl %ecx,28(%esp)
 	leal 36(%esp), %ecx
-	movl %ecx,20(%esp)
-	movl 20(%esp),%ecx
+	movl %ecx,24(%esp)
+	movl 24(%esp),%ecx
 	movl 28(%esp),%edx
 	addl %edx,%ecx
-	movl %ecx,20(%esp)
-	movl 20(%esp),%ecx
+	movl %ecx,24(%esp)
+	movl 24(%esp),%ecx
 	movl 32(%esp),%edx
 	movl %edx,(%ecx)
 	leal 36(%esp), %esp

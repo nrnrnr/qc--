@@ -13,7 +13,7 @@ p:
 	movl %eax,44(%esp)
 initialize_continuations_l3:
 	movl $1,%eax
-	movl %eax,36(%esp)
+	movl %eax,32(%esp)
 	movl $2,%eax
 	movl %eax,28(%esp)
 	movl $0,%eax
@@ -43,7 +43,7 @@ join_l5:
 	movl %eax,4(%esp)
 	jmp join_l6
 join_l6:
-	movl 36(%esp),%eax
+	movl 32(%esp),%eax
 	movl 28(%esp),%ecx
 	addl %ecx,%eax
 	movl (%esp),%ecx
@@ -54,12 +54,12 @@ join_l6:
 	movl $0,%ecx
 	movl %ecx,40(%esp)
 	leal 48(%esp), %ecx
-	movl %ecx,32(%esp)
-	movl 32(%esp),%ecx
+	movl %ecx,36(%esp)
+	movl 36(%esp),%ecx
 	movl 40(%esp),%edx
 	addl %edx,%ecx
-	movl %ecx,32(%esp)
-	movl 32(%esp),%ecx
+	movl %ecx,36(%esp)
+	movl 36(%esp),%ecx
 	movl 44(%esp),%edx
 	movl %edx,(%ecx)
 	leal 48(%esp), %esp
