@@ -5,7 +5,7 @@
 # ------------------------------------------------------------------ 
 
 CC =        $config_cc
-CFLAGS =    
+CFLAGS =    -Wall
 
 %.o:        %.c
 	$CC $CFLAGS -c $stem.c -o $stem.o

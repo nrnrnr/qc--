@@ -204,6 +204,8 @@ typedef enum {
 These values can't be changed without also changing the values used in
 the simplifier in the compiler's front end.
 <<type definitions>>=
+<<type definitions for rounding mode>>
+<<type definitions for rounding mode>>=
 typedef enum {
   CMM_ROUND_NEAREST = 0,
   CMM_ROUND_DOWN    = 1,
@@ -324,8 +326,12 @@ T_RMBINARYOP(fmul , v1 * v2       , v1, v2, float32, bits32)
 T_RMBINARYOP(fmul , v1 * v2       , v1, v2, float64, bits64)
 BINARYOP    (fmulx, (float64) v1 * (float64) v2, v1, v2, 
                     float32, float32, float64, bits32, bits32, bits64)
-T_UNARYOP   (fabs , v1 < 0.0 ? -v1 : v1 , v1, float32, bits32)
-T_UNARYOP   (fabs , v1 < 0.0 ? -v1 : v1 , v1, float64, bits64)
+#define FABS(v) (sizeof(v) == sizeof(float)  ? fabsf(v) : \
+                 sizeof(v) == sizeof(double) ? fabs(v)  : \
+                 (assert(0),0.0))
+T_UNARYOP   (fabs , FABS(v1), v1, float32, bits32)
+T_UNARYOP   (fabs , FABS(v1), v1, float64, bits64)
+#undef FABS
 T_UNARYOP   (fneg , -(v1),                        v1, float32, bits32)
 T_UNARYOP   (fneg , -(v1),                        v1, float64, bits64)
 T_RMUNARYOP (fsqrt, (assert(sizeof(float )==(32/8)), sqrtf(v1)) , v1, float32, bits32)

@@ -160,7 +160,7 @@ function Testgen.emit(t)
   w('  optable:\n')
   w('  export optable;\n')
   w('  bits%d[] {\n', metrics.pointersize)
-  Target.section = 'pending'
+  Testgen.section = 'pending'
 
   local defined = { }
   local i = 1
@@ -177,6 +177,7 @@ function Testgen.emit(t)
   end
   w('  0, 0, 0, 0\n')
   w('  };\n\n')
+
   Testgen.drain_pending('data')
   w('}\n')
 
@@ -195,16 +196,24 @@ function Testgen.emit(t)
   end
 
 
-  --  w('target %s does *not* implement these operators:\n', name)
-  --  i = 1
-  --  local allops = Rtlop.opnames
-  --  while allops[i] do
-  --    if not defined[allops[i]] then
-  --      write(format('  %%%s\n', allops[i]))
-  --    end
-  --    i = i + 1
-  --  end
-  --  
+  w('section "data" {\n')
+  w('  unimptable:\n')
+  w('  export unimptable;\n')
+  w('  bits%d[] {\n', metrics.pointersize)
+  Testgen.section = 'pending'
+  i = 1
+  local allops = Rtlop.opnames
+  while allops[i] do
+    if not defined[allops[i]] then
+      w('    %s,\n', Testgen.emitstring(allops[i]))
+    end
+    i = i + 1
+  end
+  w('    0\n')
+  w('  };\n')
+  Testgen.drain_pending('data')
+  w('}\n')
+
   --  if cap.iwiden then Target.widen_ok (name, 'integer')        end
   --  if cap.fwiden then Target.widen_ok (name, 'floating-point') end
   --  if cap.block_copy then <announce block-copy support> end
