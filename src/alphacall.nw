@@ -153,6 +153,15 @@ let results =
     A.no_overflow 4 "multiple return values for Alpha C"    
 @
 
+As an alternative we provide [[cmm_results]] that returns every result
+in memory. This is for experiments with custom calling conventions.
+
+<<alphacall.ml>>=
+let cmm_results =
+    A.widths [64] ~errormsg:(badwidth "can only return 64-bit values") **>
+    A.overflow ~memsize:8 ~byteorder ~growth:Memalloc.Up ~max_alignment:sp_align
+@
+
 \paragraph{C~procedure parameters}
 
 Table 6-3 summarizes the calling convention: the location of an argument
@@ -342,15 +351,14 @@ let overflow x y = { CS.parameter_deallocator = x
                    ; CS.result_allocator      = y
                    }
 
-let cc return_to cut overflow  =
-    let template = CS.to_call cut (rtn return_to)  
+let template = (* conservative spec *)
         { CS.name           = "cmm"
         ; CS.wordsize       = 64
         ; CS.call           = arguments
         ; CS.results        = (fun () -> results)
         ; CS.cutto          = (fun () -> cut_args)
         ; CS.stack_growth   = Memalloc.Down
-        ; CS.overflow       = overflow 
+        ; CS.overflow       = overflow CS.Caller CS.Caller
         ; CS.sp             = r 30
         ; CS.sp_align       = sp_align
         ; CS.all_regs       = RS.of_list (List.concat [nvl_int; nvl_fp;
@@ -359,19 +367,38 @@ let cc return_to cut overflow  =
         ; CS.save_nvr       = saved_nvr
         ; CS.ra             = (ra, CS.ReturnAddress.SaveToTemp 't')
         }
-    in 
-        { template with C.ra_on_exit = (fun _ _ t -> ra) }
 @
 
-Finally, we can construct different calling conventions by shifting
-responsibility for allocation and deallocation for results and
-arguments.
+We build a [[Call.t]] value from a specification and do the final fixup
+for the return address. 
 
 <<alphacall.ml>>=
-let cmm0 ~return_to cut = cc return_to cut (overflow CS.Caller CS.Caller)
-let cmm1 ~return_to cut = cc return_to cut (overflow CS.Caller CS.Callee)
-let cmm2 ~return_to cut = cc return_to cut (overflow CS.Callee CS.Caller)
-let cmm3 ~return_to cut = cc return_to cut (overflow CS.Callee CS.Callee)
+let cc return_to cut spec =
+    let t = CS.to_call cut (rtn return_to) spec in 
+        { t with C.ra_on_exit = (fun _ _ t -> ra) }
+@
+
+Most variations we are interested in can be expressed in the
+specification. Here are calling conventions that we derive from our
+template.
+
+<<alphacall.ml>>=
+let cmm0 ~return_to cut = cc return_to cut 
+    { template with CS.name     = "cmm0"
+                  ; CS.overflow = overflow CS.Caller CS.Caller 
+    }
+let cmm1 ~return_to cut = cc return_to cut 
+    { template with CS.name     = "cmm1"
+                  ; CS.overflow = overflow CS.Caller CS.Callee 
+    }
+let cmm2 ~return_to cut = cc return_to cut 
+    { template with CS.name     = "cmm2"
+                  ; CS.overflow = overflow CS.Callee CS.Caller 
+    }
+let cmm3 ~return_to cut = cc return_to cut 
+    { template with CS.name     = "cmm3"
+                  ; CS.overflow = overflow CS.Callee CS.Callee 
+    }
 @
                                                    
     
