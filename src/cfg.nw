@@ -922,28 +922,9 @@ let succ node = match node with
   | Ill _ -> undef "succ" "illegal"
   | Boot  -> undef "succ" "boot"
 
-let eq node node' = match node, node' with
-  | Joi r, Joi r' -> r == r'
-  | Ins r, Ins r' -> r == r'
-  | Bra r, Bra r' -> r == r'
-  | Cbr r, Cbr r' -> r == r'
-  | Mbr r, Mbr r' -> r == r'
-  | Jum r, Jum r' -> r == r'
-  | Cal r, Cal r' -> r == r'
-  | Ret r, Ret r' -> r == r'
-  | Cut r, Cut r' -> r == r'
-  | Ent r, Ent r' -> r == r'
-  | Exi r, Exi r' -> r == r'
-  | Ass r, Ass r' -> r == r'
-  | Ill r, Ill r' -> r == r'
-  | Imp r, Imp r' -> r == r'
-  | Boot,  Boot   -> true
-  | _,     _      -> false
-
-
 let get_cfg start_node =
   let rec search n badlist =
-    if List.exists ((==) n) badlist then
+    if List.exists (eq n) badlist then
       imposs "cycle in cfg with no join node"
     else match n with
         | Exi e -> e.exi_cfg
@@ -1113,16 +1094,16 @@ let rec join_leading_to ~succ =
        if is_join p then p
        else let cfg  = get_cfg succ in
             let join = node_labeled cfg (cfg.mk_label "join") in
-            let () = if not (is_ill p) then set_succ_n p 0 ~succ:join in
-            let () = set_succ_n join 0 ~succ:succ in
+            let () = if not (is_ill p) then set_succ p ~succ:join in
+            let () = set_succ join ~succ:succ in  (* maybe use set_succ here? *)
             join
 @
 This black magic was on NR's whiteboard, but it still needs to be
 explained :-)
 <<set successors>>=
-and set_succ' single mult cbr node old_succ ~succ =
+and set_succ' ~single ~mult ~cbr ~node ~old_succ ~succ =
   if not (is_join succ) && not (is_ill succ) && not (is_ill (pred succ)) then
-    set_succ' single mult cbr old_succ node ~succ:(join_leading_to succ)
+    set_succ' ~single ~mult ~cbr ~node ~old_succ ~succ:(join_leading_to succ)
   else
     begin
       ( <<modify the $n$th successor of [[node]] because [[node]] is no longer a predecessor>>
@@ -1172,9 +1153,13 @@ match node with
 
 <<modify the $n$th successor of [[node]] because [[node]] is no longer a predecessor>>=
 let rec rem_1_list lst = match lst with
-                         | [] -> imposs "remove_pred: no preds"
-                         | n::rst when n == node -> rst
-                         | n::rst -> n :: rem_1_list rst in
+  | [] -> imposs "remove_pred: predecessor to be removed not found"
+  | n::rst when eq n node -> rst
+  | n::rst -> n :: rem_1_list rst in
+let rem_1_list l =
+  try rem_1_list l
+  with _ ->
+    imposs ("Error removing node from list with " ^ string_of_int (List.length l) ^ " nodes") in
 match old_succ with
 | Joi j -> j.joi_preds <- rem_1_list j.joi_preds
 | Exi e -> e.exi_preds <- rem_1_list e.exi_preds
@@ -1188,11 +1173,10 @@ match old_succ with
 | Cut c -> c.cut_pred  <- ill (get_cfg old_succ)
 | Ass a -> a.ass_pred  <- ill (get_cfg old_succ)
 | Imp i -> i.imp_pred  <- ill (get_cfg old_succ)
-| Ill _ -> imposs "illegal nodes have no pred"
-| Ent _ -> imposs "illegal nodes have no pred"
+| Ill _ -> ()
+| Ent _ -> imposs "entry node was a successor"
 | Boot  -> imposs "boot nodes should not live to remove_pred"
 @
-
 <<modify [[succ]] because [[node]] has become a predecessor>>=
 let join_pred cur_preds = match cur_preds with
   | [Ill _] -> [node]
@@ -1210,25 +1194,25 @@ match succ with
 | Cut c -> c.cut_pred  <- node
 | Exi e -> e.exi_preds <- join_pred e.exi_preds
 | Joi j -> j.joi_preds <- join_pred j.joi_preds
-| Ent e -> undef "add_pred" "entry"
-| Ill i -> undef "add_pred" "illegal"
+| Ent e -> imposs "something tried to become a predecessor of the entry node"
+| Ill i -> imposs "client can make a pointer dangle, but believed to be handled above"
 | Boot  -> undef "add_pred" "boot"
 @
 
 <<set successors>>=
 and set_succ_n node n ~succ:succ =
-  set_succ' (if n = 0 then (fun s -> s) else (fun s -> invalid_arg "successor index"))
-            (fun a f -> let s = a.(n) in a.(n) <- f s; s)
-            (if n = 0 then (fun () -> true) else if n = 1 then (fun () -> false)
+  set_succ'
+    ~single:(if n = 0 then (fun s -> s) else (fun s -> invalid_arg "successor index"))
+    ~mult:  (fun a f -> let s = a.(n) in a.(n) <- f s; s)
+    ~cbr:   (if n = 0 then (fun () -> true) else if n = 1 then (fun () -> false)
              else fun () -> invalid_arg "successor index")
-            (succ_n node n) node ~succ:succ
-
-let get_succ = succ
-let set_succ node ~succ =
-  set_succ' (fun s -> s)
-            (fun a f -> undef "set_succ" "multiple node not o/w specified")
-            (fun () ->  undef "set_succ" "fork")
-            (get_succ node) node ~succ:succ
+    ~node ~old_succ:(succ_n node n) ~succ
+and set_succ node ~succ:the_succ =
+  set_succ'
+    ~single: (fun s -> s)
+    ~mult:   (fun a f -> undef "set_succ" "multiple node not o/w specified")
+    ~cbr:    (fun () ->  undef "set_succ" "fork")
+    ~node ~old_succ:(succ node) ~succ:the_succ
 @
 
 <<set successors>>=
@@ -1407,58 +1391,62 @@ let j_leads_ce ce = {ce with node = join_leading_to ce.node}
 
 let call cfg i ~altrets ~succ ~unwinds_to ~cuts_to ~aborts ~uses ~defs ~kills
                ~spans =
-  let altrets       = List.map j_leads_ce altrets in
-  let unwinds_to    = List.map j_leads_ce unwinds_to in
-  let cuts_to       = List.map j_leads_ce cuts_to in
-  let altrets       = List.map j_leads_ce altrets in
-  let new_cedge n   = {kills = kills; defs = defs; node = n} in
-  let succ          = [new_cedge succ] in
-  let abort         = if aborts then [new_cedge cfg.exit] else [] in
-  let cedges        = Array.of_list ( altrets @ succ @ unwinds_to
-                                    @ cuts_to @ abort) in
+  let altrets     = List.map j_leads_ce altrets in
+  let unwinds_to  = List.map j_leads_ce unwinds_to in
+  let cuts_to     = List.map j_leads_ce cuts_to in
+  let altrets     = List.map j_leads_ce altrets in
+  let new_cedge n = {kills = kills; defs = defs; node = n} in
+  let succ        = [new_cedge succ] in
+  let abort       = if aborts then [new_cedge cfg.exit] else [] in
+  let edgelist    = List.flatten [altrets; succ; unwinds_to; cuts_to; abort] in
+  let ill         = ill cfg in
+  let illedge     = fun {kills=k; defs=d; node=n} -> {kills=k; defs=d; node=ill} in
   let cal =
     Cal { cal_i         = i
         ; cal_spans     = spans
-        ; cal_pred      = ill cfg
-        ; cal_contedges = cedges
+        ; cal_pred      = ill
+        ; cal_contedges = Array.of_list (List.map illedge edgelist)
         ; cal_fx        = X.fx ()
         ; cal_uses      = uses
         } in
-  let ()  =
-    Array.iteri (fun i n -> set_succ_n cal i ~succ:(ce_getnode n)) cedges in
+  let ()  = Aux.foldri (fun i n () -> set_succ_n cal i ~succ:n.node) edgelist () in
   cal
 
 let cut_to cfg i ~cuts_to ~aborts ~uses =
-  let cuts_to       = List.map j_leads_ce cuts_to in
-  let new_cedge n   = {kills = RS.empty; defs = RS.empty; node = n} in
-  let aborts        = if aborts then [new_cedge cfg.exit] else [] in
-  let cedges        = Array.of_list (cuts_to @ aborts) in
+  let cuts_to     = List.map j_leads_ce cuts_to in
+  let new_cedge n = {kills = RS.empty; defs = RS.empty; node = n} in
+  let aborts      = if aborts then [new_cedge cfg.exit] else [] in
+    (* UNKNOWN WHETHER EDGE TO EXIT MUST KILL NVR'S.  LET US HOPE NOT. *)
+  let edgelist    = List.flatten [cuts_to; aborts] in
+  let ill         = ill cfg in
+  let illedge     = fun {kills=k; defs=d; node=n} -> {kills=k; defs=d; node=ill} in
   let cut = Cut { cut_i         = i
-                ; cut_pred      = ill cfg
-                ; cut_lsucc     = ill cfg
-                ; cut_contedges = cedges
+                ; cut_pred      = ill
+                ; cut_lsucc     = ill
+                ; cut_contedges = Array.of_list (List.map illedge edgelist)
                 ; cut_fx        = X.fx ()
                 ; cut_uses      = uses
                 } in
-  let ()  =
-    Array.iteri (fun i n -> set_succ_n cut i ~succ:(ce_getnode n)) cedges in
+  let ()  = Aux.foldri (fun i n () -> set_succ_n cut i ~succ:n.node) edgelist () in
   cut
 @
 
 <<simple node constructors>>=
 let instruction cfg i ~succ =
+  let ill = ill cfg in
   let ins = Ins { ins_i    = i
-                ; ins_pred = ill cfg
-                ; ins_succ = succ
+                ; ins_pred = ill 
+                ; ins_succ = ill
                 ; ins_nx   = X.nx ()
                 } in
   let ()  = set_succ ins ~succ:succ in
   ins
 
 let assertion cfg i ~succ =
+  let ill = ill cfg in
   let ass = Ass { ass_i    = i
-                ; ass_pred = ill cfg
-                ; ass_succ = succ
+                ; ass_pred = ill 
+                ; ass_succ = ill
                 ; ass_nx   = X.nx ()
                 } in
   let ()  = set_succ ass ~succ:succ in
@@ -1468,7 +1456,7 @@ let branch cfg ~target =
   let succ = join_leading_to ~succ:target in
   let bra = Bra { bra_i     = cfg.inst_info.goto.Ep.embed (label succ)
                 ; bra_pred  = ill cfg
-                ; bra_succ  = succ
+                ; bra_succ  = ill cfg
                 ; bra_lsucc = succ
                 ; bra_nx    = X.nx ()
                 } in
@@ -1478,7 +1466,7 @@ let branch cfg ~target =
 let jump cfg i ~uses ~targets =
   let jum = Jum { jum_i     = i
                 ; jum_pred  = ill cfg
-                ; jum_succ  = cfg.exit
+                ; jum_succ  = ill cfg
                 ; jum_lsucc = ill cfg
                 ; jum_nx    = X.nx ()
                 ; jum_uses  = uses
@@ -1492,8 +1480,8 @@ let cbranch cfg cond ~ifso ~ifnot =
   let cbr = Cbr { cbr_i     = cfg.inst_info.branch.Ep.embed
                                     (cond, (label so_succ))
                 ; cbr_pred  = ill cfg
-                ; cbr_true  = so_succ
-                ; cbr_false = not_succ
+                ; cbr_true  = ill cfg
+                ; cbr_false = ill cfg
                 ; cbr_fx    = X.fx ()
                 } in
   let ()  = set_tsucc cbr ~succ:so_succ  in
@@ -1501,21 +1489,20 @@ let cbranch cfg cond ~ifso ~ifnot =
   cbr
 
 let mbranch cfg i ~targets =
-  let succs  =
-    Array.of_list (List.map (fun n -> join_leading_to ~succ:n) targets) in
+  let succs = Array.make (List.length targets) (ill cfg) in
   let mbr = Mbr { mbr_i     = i
                 ; mbr_pred  = ill cfg
                 ; mbr_succs = succs
                 ; mbr_lsucc = ill cfg
                 ; mbr_fx    = X.fx ()
                 } in
-  let ()  = Array.iteri (fun i n -> set_succ_n mbr i ~succ:n) succs in
+  let ()  = Aux.foldri (fun i n () -> set_succ_n mbr i ~succ:n) targets () in
   mbr
 
 let return cfg i ~uses =
   let ret = Ret { ret_i     = i
                 ; ret_pred  = ill cfg
-                ; ret_succ  = cfg.exit
+                ; ret_succ  = ill cfg
                 ; ret_lsucc = ill cfg
                 ; ret_nx    = X.nx ()
                 ; ret_uses  = uses
@@ -1526,22 +1513,51 @@ let return cfg i ~uses =
 let impossible cfg ~succ =
   let succ = join_leading_to succ in
   let imp  = Imp { imp_pred      = ill cfg
-                 ; imp_succ      = succ
-                 ; imp_exit_succ = cfg.exit
+                 ; imp_succ      = ill cfg
+                 ; imp_exit_succ = ill cfg
                  ; imp_fx        = X.fx ()
                  } in
-  let ()   = set_succ imp ~succ:succ in
+  let ()   = set_succ   imp   ~succ:succ     in
+  let ()   = set_succ_n imp 1 ~succ:cfg.exit in
   imp
 
 let illegal cfg = ill cfg
 @
-
+Node equality is the most important utility of all.
+We cannot safely compare nodes with [[==]], because the node type is
+an algebraic data type, and the Caml implementation is free to
+consider two nodes unequal even if they are both obtained by, e.g.,
+[[Ins r]].
+On the other hand, we cannot use~[[=]] because it is structural
+equality, and it is not guaranteed to terminate when applied to a
+structure with cycles.
+We therefore roll our own, using [[==]] only on the mutable record
+types, where we know it is safe.
+<<graph utilities>>=
+let eq node node' = match node, node' with
+  | Joi r, Joi r' -> r == r'
+  | Ins r, Ins r' -> r == r'
+  | Bra r, Bra r' -> r == r'
+  | Cbr r, Cbr r' -> r == r'
+  | Mbr r, Mbr r' -> r == r'
+  | Jum r, Jum r' -> r == r'
+  | Cal r, Cal r' -> r == r'
+  | Ret r, Ret r' -> r == r'
+  | Cut r, Cut r' -> r == r'
+  | Ent r, Ent r' -> r == r'
+  | Exi r, Exi r' -> r == r'
+  | Ass r, Ass r' -> r == r'
+  | Ill r, Ill r' -> r == r'
+  | Imp r, Imp r' -> r == r'
+  | Boot,  Boot   -> true
+  | _,     _      -> false
+@ 
 <<graph utilities>>=
 let imposs = Impossible.impossible
 let undef f n = imposs (Printf.sprintf "%s: undefined on %s nodes" f n)
 let log m = ()
 let uniq lst =
-  List.fold_left (fun rst n1 -> if List.exists (fun n2 -> n1 == n2) rst
+  List.fold_left (fun rst n1 -> if List.exists (eq n1) rst
                                 then rst else n1::rst)
                  [] lst
 
@@ -1553,8 +1569,7 @@ let is_exi node = match node with
   | Exi _ -> true
   | _     -> false
 
-let ce_getnode ce = ce.node
-let ce_getnodes ce = Array.map ce_getnode ce
+let ce_getnodes ce = Array.map (fun ce -> ce.node) ce
 @
 
 We merge two join points by combining the information in the second
