@@ -112,7 +112,7 @@ module Make (G : Cfg.S) (C : Call.S with type node = Rtl.rtl G.node) = struct
   <<statement-related types>>
   <<module [[K]], for continution info>>
   <<types for gathering stack and continuation info>>
-  type 'a csr = { reg : 'a; tmp : 'a; w : int }   (* for callee-saves info *)
+  type 'a nvr = { reg : 'a; tmp : 'a; w : int }   (* for callee-saves info *)
 
   let translate target env ccs ~optimizer =
     let pointersize = target.T.pointersize in
@@ -559,7 +559,8 @@ let rec jumpStmt (cconv,e,args,targets (*unused*)) =
     let ()           = add_oldblock out.C.overflow    in  (* jump overflow = old *)
     G.instruction g out.C.pre_sp            **>
     G.instruction g (out.C.shuffle actuals) **>
-    G.instruction g restore_csrs            **>
+    G.instruction g restore_nvrs            **>
+    (* AT THIS SPOT WE MUST WORK OUR MAGIC WITH THE SAVED RETURN ADDRESS *)
     G.instruction g out.C.post_sp           **>
     G.jump        g jumpi ~targets ~uses:(RS.union out.C.regs cc.C.nvregs)
 <<auxiliaries>>=
@@ -621,15 +622,17 @@ and returnStmt (cconv, kont, args) =
     let out, actuals = actuals cc.C.return_actuals args in
     let reti =
       match kont with
-      | None       -> cc.C.return 0 0 (* default *)
+      | None       ->
+          cc.C.return 0 0 saved_ra (* default *)
       | Some (i,n) ->
-          let k e = Bits.S.to_int (compile_const e) in cc.C.return (k i) (k n) in
+          let k e = Bits.S.to_int (compile_const e) in
+          cc.C.return (k i) (k n) saved_ra in
           (* WHY IS THIS Bits.S AND NOT Bits.U ??? *)
     let () = add_oldblock out.C.overflow in  (* outgoing jump overflow = incoming *)
     G.instruction g out.C.pre_sp            **>
     G.instruction g (out.C.shuffle actuals) **>
       (* SHOULD JUMP TO SHARED EPILOG HERE -- RESTORE REGS AND SP *)
-    G.instruction g restore_csrs            **>
+    G.instruction g restore_nvrs            **>
     G.instruction g out.C.post_sp           **>
     G.return      g reti ~uses:(RS.union out.C.regs cc.C.nvregs)
 @ 
@@ -778,16 +781,19 @@ let proc containing_spans (cconv,procname,args,procbody) =
 
     let expr, exprtype, lvalue = exprfuns env contenv cont_rvalue in
 
-    (* compute temps, save_csrs, restore_csrs *)
+    (* compute temps, save_nvrs, restore_nvrs *)
     let temps = Talloc.Multiple.for_spaces target.T.spaces in
-    let csr_info =
+    let nvr_info =
       let info ((_, _, w) as r) =
         { reg = R.reg r; tmp = proc_cc.C.saved_nvr temps r; w = w } in
       RS.fold (fun r i -> info r :: i) proc_cc.C.nvregs [] in
-    let save_csrs =
-      R.par (List.map (fun i -> R.store i.tmp (R.fetch i.reg i.w) i.w) csr_info) in
-    let restore_csrs =
-      R.par (List.map (fun i -> R.store i.reg (R.fetch i.tmp i.w) i.w) csr_info) in
+    let save_nvrs =
+      R.par (List.map (fun i -> R.store i.tmp (R.fetch i.reg i.w) i.w) nvr_info) in
+    let restore_nvrs =
+      R.par (List.map (fun i -> R.store i.reg (R.fetch i.tmp i.w) i.w) nvr_info) in
+    let save_ra, saved_ra =
+      let loc = proc_cc.C.saved_ra temps in
+      R.store loc proc_cc.C.ra pointersize, R.fetch loc pointersize in
 
     <<Make continuation bundles>> in
     <<using [[env]] and [[expr]], build funs for formals, actuals, and results>> in    
@@ -806,7 +812,8 @@ let proc containing_spans (cconv,procname,args,procbody) =
       G.instruction g in'.C.pre_sp            **>
       G.instruction g (in'.C.shuffle formals) **>
       G.instruction g in'.C.post_sp           **>
-      G.instruction g save_csrs               **>
+      G.instruction g save_ra                 **>
+      G.instruction g save_nvrs               **>
       labeln initcont                         **>
       bodies containing_spans procbody (G.exit g)) in
 
