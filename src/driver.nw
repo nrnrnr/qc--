@@ -36,6 +36,7 @@ raised.
 \item [[assemble]]: emits an assembler program.
 \item [[print]]: prints a [[doc]] value to [[stdout]], formatting the
       output for a line width of [[width]] characters.       
+\item [[reinit]]: re-initializes any mutable state.
 \end{itemize}
 
 The compiler is controlled by a Lua interpreter that is build in the
@@ -54,6 +55,7 @@ val scan      : string -> unit
 val version   : unit -> unit
 val compile : (Ast2ir.proc -> unit) -> 'a * Ast.program -> Ast2ir.tgt
                 -> Ast2ir.proc Fenv.Clean.env' -> Ast2ir.proc Asm.assembler
+val reinit    : unit -> unit
 @
 
 % ------------------------------------------------------------------ 
@@ -171,4 +173,11 @@ let compile (opt) (map,ast) (target) (env)  =
 <<driver.ml>>=
 let pretty (map,ast) = Astpp.program ast
 let print doc width channel = Pp.ppToFile channel width doc
+@
+If multiple files are ocmpiled in a single pass, we do not want to
+output to depend on the sequence in which the files are processed.
+Calling [[reinit]] will reset any mutable state that can effect the
+output. Currently only [[Idgen]] is known to have this problem.
+<<driver.ml>>=
+let reinit() = Idgen.reset()
 @
