@@ -1,10 +1,10 @@
 .globl main
 .globl Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY
-.data
+.section .data
 /* memory for global registers */
 Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY:
 Cmm.global_area:
-.data
+.section .data
 .align 8
 success:
 .byte 115
@@ -26,7 +26,7 @@ failed:
 .byte 100
 .byte 10
 .byte 0
-.text
+.section .text
 main:
 	leal -4(%esp), %esp
 	movl $4,%ecx
@@ -65,7 +65,7 @@ join_l7:
 	movl %eax,(%edx)
 	leal 4(%esp), %esp
 	ret
-.text
+.section .text
 callee:
 	leal -4(%esp), %esp
 	movl $4,%ecx

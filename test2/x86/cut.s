@@ -1,10 +1,10 @@
 .globl main
 .globl Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY
-.data
+.section .data
 /* memory for global registers */
 Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY:
 Cmm.global_area:
-.data
+.section .data
 nocut:
 .byte 110
 .byte 111
@@ -26,7 +26,7 @@ ret:
 .byte 110
 .byte 10
 .byte 0
-.text
+.section .text
 main:
 	leal -36(%esp), %esp
 	movl $4,%ecx
@@ -139,7 +139,7 @@ join_l14:
 	movl 8(%esp),%edi
 	leal 36(%esp), %esp
 	ret
-.text
+.section .text
 f:
 	leal -8(%esp), %esp
 	nop
@@ -179,7 +179,7 @@ join_l32:
 	movl %ecx,(%eax)
 	leal 8(%esp), %esp
 	ret
-.text
+.section .text
 g:
 	leal -4(%esp), %esp
 	movl $4,%ecx
@@ -221,7 +221,7 @@ join_l47:
 	movl %eax,(%edx)
 	leal 4(%esp), %esp
 	ret
-.text
+.section .text
 h:
 	nop
 	movl %eax,%ecx

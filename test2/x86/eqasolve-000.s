@@ -2,12 +2,12 @@
 .globl _stdprint
 .globl _stdputstr
 .globl Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY
-.data
+.section .data
 /* memory for global registers */
 Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY:
 Cmm.global_area:
-.text
-.text
+.section .text
+.section .text
 _main:
 	leal -208(%esp), %esp
 	movl %eax,8(%esp)
@@ -591,7 +591,7 @@ _i_49:
 	movl (%esp),%ebx
 	leal 8(%esp), %esp
 	ret
-.data
+.section .data
 _i_45:
 .byte 91
 .byte 32

@@ -1,11 +1,11 @@
 .globl main
 .globl my_data
 .globl Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY
-.data
+.section .data
 /* memory for global registers */
 Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY:
 Cmm.global_area:
-.data
+.section .data
 my_data:
 .byte 104
 .byte 101
@@ -22,7 +22,7 @@ my_data:
 .byte 33
 .byte 10
 .byte 0
-.text
+.section .text
 main:
 	leal -4(%esp), %esp
 	movl $4,%ecx

@@ -2,11 +2,11 @@
 .globl sp2
 .globl sp3
 .globl Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY
-.data
+.section .data
 /* memory for global registers */
 Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY:
 Cmm.global_area:
-.text
+.section .text
 sp1:
 	leal -20(%esp), %esp
 	movl %eax,8(%esp)

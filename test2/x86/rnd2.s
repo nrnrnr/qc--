@@ -1,9 +1,9 @@
 .globl Cmm.globalsig.bcPDWKVXdYZZBPSFTVVJOBXQNc
-.data
+.section .data
 /* memory for global registers */
 Cmm.globalsig.bcPDWKVXdYZZBPSFTVVJOBXQNc:
 Cmm.global_area:
-.text
+.section .text
 p:
 	nop
 	nop

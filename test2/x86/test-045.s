@@ -1,12 +1,12 @@
 .globl Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY
-.data
+.section .data
 /* memory for global registers */
 Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY:
 Cmm.global_area:
-.data
+.section .data
 str:
 .skip 1, 0
-.text
+.section .text
 f:
 	leal -64(%esp), %esp
 	nop
