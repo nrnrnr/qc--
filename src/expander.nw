@@ -648,6 +648,7 @@ context that's not known at compile-compile time.
 let expand ({Proc.cfg = cfg} as proc) =
   <<stack-slot allocation>>
   <<flow-graph manipulation utilities>>
+  <<functions for dealing with trivial guards>>
   let contextmap (allocator, checker) = (allocator proc.Proc.temps, checker) in
   let icontext = contextmap Post.icontext in
   let acontext = contextmap Post.acontext in
@@ -990,11 +991,16 @@ function is trivial.
 Note that if the source code asks for a bare kill, even conditional,
 we're within our rights to implement it as a nop.
 <<other generic expander functions>>=
-and rtl' r = match Down.rtl r with
-| RP.Rtl [(g, RP.Store (left, right, w))] -> guarded g left right w
-| RP.Rtl [(g, RP.Kill _)] -> nunit (R.par [])
-| RP.Rtl [] -> nunit r (* a nop is a nop is a nop *)
-| RP.Rtl ((_::_::_) as effs) -> (<<handle RTL with multiple effects [[effs]]>>)
+and rtl' hr =
+  let RP.Rtl effs = Down.rtl hr in
+  if trivially Post.don't_touch_me effs then
+    nunit hr
+  else
+    match effs with
+    | [(g, RP.Store (left, right, w))] -> guarded g left right w
+    | [(g, RP.Kill _)] -> nunit (R.par [])
+    | [] -> nunit hr (* a nop is a nop is a nop *)
+    | ((_::_::_) as effs) -> (<<handle RTL with multiple effects [[effs]]>>)
 @ 
 The type system tells us that anything in a guard must be a Boolean
 operator or a comparison operator.\footnote
@@ -1192,11 +1198,6 @@ Something with multiple effects is either a call, a [[cut to]], or a
 shuffle.
 In all three cases, the guard had better be trivial.
 <<handle RTL with multiple effects [[effs]]>>=
-let strip_trivial_guards l =
-  List.fold_right
-    (fun (g, e) l ->
-      match g with RP.Const (RP.Bool b) -> if b then e :: l else l
-      | _ -> Impossible.unimp "multiple effects with a nontrivial guard") l [] in
 let has_pc_on_left = function
   | RP.Store (pc, _, _) -> pc = pc_lhs
   | RP.Kill _ -> false in
@@ -1215,6 +1216,24 @@ else
       make_cut_to effs
   else
     make_shuffle effs
+@ 
+When we know guards should be trivial, we just strip them off.
+When we don't know, we use the [[trivial]] function, which if guards
+are trivial applies a predicate and if not returns [[false]].
+\nwaddbox{trivially : (RP.guarded list -> bool) -> RP.rtl -> bool}
+<<functions for dealing with trivial guards>>=
+let strip_trivial_guards l =
+  List.fold_right
+    (fun (g, e) l ->
+      match g with RP.Const (RP.Bool b) -> if b then e :: l else l
+      | _ -> Impossible.unimp "multiple effects with a nontrivial guard") l [] in
+let trivially p l =
+  let rec t es' = function
+    | [] -> p (List.rev es')
+    | (g, e) :: ges ->
+        match g with RP.Const (RP.Bool b) -> t (if b then e :: es' else es') ges
+        | _ -> false in
+  t [] l in
 @ 
 <<support for call, [[cut to]], and shuffle>>=
 let (<<) f g x = f (g x) in
