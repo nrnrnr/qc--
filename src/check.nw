@@ -379,7 +379,7 @@ let register scope env (_,t,name,_) = F.bindv name (regt scope (ty env t)) env
 let rec datum scope env = function
     | A.DatumAt(x,r)        -> E.catch' env (error r env) (datum scope env) x
     | A.Label(n)            -> if scope=F.Global then 
-                                  F.bindv n (codet scope) env 
+                                  F.bindv n (datat scope) env 
                                else env
     | _                     -> env
 
@@ -410,7 +410,7 @@ and decl scope env = function
 
 and body scope env = function
     | A.BodyAt(x, r) -> E.catch' env (error r env) (body scope env) x
-    | A.DeclBody(d)  -> decl scope env d 
+    | A.DeclBody(d)  -> if scope=F.Local then decl scope env d else env 
     | A.DataBody(dd) -> foldl (datum scope) env dd 
     | A.StmtBody(s)  -> stmt scope env s
 <<>>=       
@@ -430,11 +430,11 @@ let rec toplevel env = function
     | A.ToplevelAt(x, r)  -> E.catch' env (error r env) (toplevel env) x
     | A.Section(name, ss) -> foldl section env ss
     | A.TopDecl(d)        -> decl F.Global env d
-    | A.TopProcedure(p)   -> proc F.Local  env p 
+    | A.TopProcedure(p)   -> proc F.Global env p 
 
 <<>>=
 let globals env tt   = foldl toplevel env tt
-let locals  env bb   = foldl (body F.Local) env 
+let locals  env bb   = foldl (body F.Local) env bb
 @ 
 
 % ------------------------------------------------------------------ 
@@ -562,8 +562,12 @@ and evalExpr env = function
 let doConstDecl scope env = function
     | A.Const(Some t', name, expr) -> 
         ( match evalExpr env expr, evalTy env t' with 
-        | E.Ok(t,v),E.Ok(t') when t =t'  -> 
+        | E.Ok(t,v),E.Ok(t') when t =t' && t <> Types.bool -> 
             F.bindv name (scope,E.Ok(F.Constant(v),t)) env
+        | E.Ok(t,v),E.Ok(t') when t =t' && t = Types.bool -> 
+            ( E.errorPrt "contant has type bool but must have type bits"
+            ;  F.bindvError name scope env
+            )
         | E.Ok(t,v),E.Ok(t') when t<>t'  ->
             ( E.errorPrt ("type declared for constant "^name^" does not match actual type")
             ; F.bindvError name scope env
@@ -572,10 +576,15 @@ let doConstDecl scope env = function
         )
     | A.Const(None, name, expr) ->
         ( match evalExpr env expr with
-        | E.Ok(t,v) -> F.bindv name (scope,E.Ok(F.Constant(v),t)) env
-        | _         -> F.bindvError name scope env
+        | E.Ok(t,v) when t <> Types.bool ->
+            F.bindv name (scope,E.Ok(F.Constant(v),t)) env
+        | E.Ok(t,v) when t = Types.bool ->
+            ( E.errorPrt "contant has type bool but must have type bits"
+            ; F.bindvError name scope env
+            ) 
+        | _  -> F.bindvError name scope env
         )
-    | _             -> assert false
+    | _   -> assert false
 
 <<>>=
 let doConstDecls scope env dd =
@@ -668,10 +677,10 @@ let rec tyFetch env = function
                     | Some a -> E.error "alignment not a power of 2"
         in
             ( match te, t' with
-            | E.Error, _         -> E.Error
-            | _      , E.Error   -> E.Error
-            | E.Ok(t), E.Ok(t') when t' = Types.data -> E.Ok(t)
-            | _     -> E.error "memory reference by non-data pointer"
+            | E.Error , _         -> E.Error
+            | _       , E.Error   -> E.Error
+            | E.Ok(te), E.Ok(t') when te = Types.data -> E.Ok(t')
+            | _      -> E.error "memory reference by non-data pointer"
             )
 
 <<>>=
@@ -741,8 +750,7 @@ let memsize env = function
             | Types.Bits(x), size 
               when Const.val2i size > 0 -> Some (Const.val2i size)
             | otherwise                 -> E.error "invalid size"   in
-        let f x = E.emap f' x                                       in
-            f (ValueEnv.EvalConst.evalExpr env e)
+        E.emap f' (ValueEnv.EvalConst.evalExpr env e)
 <<>>=
 let memdecl env ty size = function 
     | None     -> E.Implode.pair (memsize env size, evalTy env ty)
@@ -814,19 +822,20 @@ the types of both sides of an assignment and therefore return the type
 of the \textit{lvalue}. 
 
 <<>>=
-let rec lvalue env lv =
+let rec lvalue is_call env lv =
     let align = function
         | Some a when not (is2power a) -> E.error "alignment not a power of 2"
         | Some _ (* ok *)              -> E.Ok()
         | None                         -> E.Ok()
     in match lv with 
-    | A.LValueAt (lv, r)   -> E.catch (error r env) (lvalue env) lv
+    | A.LValueAt (lv, r)   -> E.catch (error r env) (lvalue is_call env) lv
     | A.Var(name)          -> 
         ( match F.findv name env with
         | _, E.Ok(F.Register,t) -> E.Ok(t)
         | _, E.Ok(_)            -> E.error ("not a register: "^name)
         | _, E.Error            -> E.Error
         )
+    | A.Mem(t, e, a) when is_call -> E.error ("not a register") 
     | A.Mem(t, e, a)       -> 
         ( match tyExpr env e, evalTy env t, align a with
         | E.Ok(te), E.Ok(t), E.Ok() when te = T.data    ->
@@ -927,7 +936,7 @@ and assignStmt env (lvalues,exprs) =
                 E.error "length of lhs/rhs in assignment differs"
     in
     let pair (lhs,expr) =  
-        match lvalue env lhs, tyExpr env expr with
+        match lvalue false env lhs, tyExpr env expr with
         | E.Ok (t), E.Ok(te) when t = te -> E.Ok()
         | E.Error , _                    -> E.Error
         | _       , E.Error              -> E.Error
@@ -937,11 +946,11 @@ and assignStmt env (lvalues,exprs) =
 
 <<>>=
 and callStmt env (l,cc,e,args,ts,fs) =
-    let lt      = E.Implode.map (lvalue env) l   in
-    let ts'     = targets env ts                 in
-    let fs'     = flows env fs                   in
-    let args'   = List.map snd args              in
-    let argsTy  = E.Implode.map (tyExpr env) args' in
+    let lt      = E.Implode.map (lvalue true env) l in
+    let ts'     = targets env ts                    in
+    let fs'     = flows env fs                      in
+    let args'   = List.map snd args                 in
+    let argsTy  = E.Implode.map (tyExpr env) args'  in
         match tyExpr env e with
         | E.Error                 -> E.Error
         | E.Ok(t) when t = T.code -> E.Implode.quad (lt,ts',fs',argsTy)
@@ -949,7 +958,7 @@ and callStmt env (l,cc,e,args,ts,fs) =
              
 <<>>=
 and primStmt env (l,cc,op,args,fs) =
-    let l      = E.Implode.map (lvalue env) l                in
+    let l      = E.Implode.map (lvalue true env) l           in
     let fs     = flows env fs                                in
     let opTy   = snd (Const.Symbol.lookup op Const.constOps) in
     let args'  = List.map snd args                           in
@@ -990,7 +999,7 @@ and switchStmt env (r, expr, arms) =
     let at = ( match E.Raise.list (List.map (arm et env) arms) with
              | E.Ok([])    -> et 
              | E.Ok(t::tt) -> if   List.for_all ((=) t) tt then E.Ok(t)
-                              else E.error "type inconsistencies acress arms" 
+                              else E.error "type inconsistencies across arms" 
              | E.Error     -> E.Error
              ) in
     let rt = ( match r with
@@ -1008,8 +1017,8 @@ and switchStmt env (r, expr, arms) =
 <<>>=
 and body env = function
     | A.BodyAt(x, r) -> E.catch (error r env) (body env) x
-    | A.DeclBody(d)  -> E.Ok() (* XXX *)
-    | A.DataBody(dd) -> E.Implode.map (datum env) dd 
+    | A.DeclBody(d)  -> decl env d
+    | A.DataBody(dd) -> E.Implode.map (stackdatum env) dd 
     | A.StmtBody(s)  -> stmt env s       
 <<>>=
 and stmt env = function
@@ -1029,8 +1038,73 @@ and stmt env = function
     | A.SwitchStmt switch           -> switchStmt env switch         
 <<>>=
 and stmts env ss = E.Implode.map (stmt env) ss
-        
+
+<<>>=
+and export' env = function
+    | None, name   -> 
+        ( match F.findv' name env with
+        | E.Error                 -> E.Error
+        | E.Ok(F.Label(F.Proc),_) -> E.Ok()
+        | _                       -> E.error (name^" can't be exported")
+        )
+    | Some t, name -> 
+        ( match F.findv' name env, evalTy env t with
+        | E.Error                , _        -> E.Error
+        | _                      , E.Error  -> E.Error
+        | E.Ok(F.Label(F.Proc),t), E.Ok(t')
+            when t = t'                     -> E.Ok()
+        | E.Ok(F.Label(F.Proc),t), E.Ok(t') ->
+            E.error (name^" has not declared type")
+        | _                                 -> 
+            E.error (name^" can't be exported")
+           
+        )
+
+and export env t ns = E.Implode.map (fun (n,_) -> export' env (t,n)) ns
+
+<<>>=
+and decl env = function
+    | A.DeclAt(x,r)        -> E.catch (error r env) (decl env) x
+    | A.Import( t, ns)     -> E.Ok()
+    | A.Export( t, ns)     -> export env t ns
+    | A.Const (t,n,e)      -> E.Ok()
+    | A.Registers( rs)     -> E.Ok()
+    | A.Typedef (t,nn)     -> E.Ok()
+    | A.Target (arch)      -> E.Ok()
+    | A.Pragma             -> E.Ok()
+    
+<<>>=
+and formal env (hint, inv, ty, name) =
+    match evalTy env ty with
+    | E.Ok(t) -> F.bindv name (F.Local,E.Ok(F.Register,t)) env 
+    | E.Error -> F.bindvError name F.Local env
+    
+<<>>=
+and proc env (cc, name, ff, bb) =
+    let env0 = foldl formal env ff                     in 
+    let env1 = TypeEnv.doLocalTypes env0 bb             in
+    let env2 = ValueEnv.Bind.locals env1 bb            in
+    let env3 = ValueEnv.EvalConst.doLocalConst env2 bb in
+        E.Implode.map (body env3) bb            
+
+<<>>=
+and section env = function    
+    | A.SectionAt(x,r)     -> E.catch (error r env) (section env) x
+    | A.Decl(d)            -> E.Ok()
+    | A.Datum( d)          -> datum env d
+    | A.Procedure(p)       -> proc env p
+    | A.SSpan( e1, e2, ss) -> E.Ok()
+<<>>=
+let rec toplevel env = function
+    | A.ToplevelAt(x, r)   -> E.catch (error r env) (toplevel env) x
+    | A.Section(name, ss)  -> E.Implode.map (section env) ss 
+    | A.TopDecl(d)         -> decl env d
+    | A.TopProcedure(p)    -> proc env p 
+
+<<>>=
+and program env tt = E.Implode.map (toplevel env) tt
 @
+
 % ------------------------------------------------------------------ 
 \subsection{Checking a whole file}
 % ------------------------------------------------------------------ 
@@ -1054,7 +1128,7 @@ let check file =
               let env1       = TypeEnv.doGlobalTypes env0 ast            in
               let env2       = ValueEnv.Bind.globals env1 ast            in
               let env3       = ValueEnv.EvalConst.doGlobalConst env2 ast in
-                 E.Ok ()
+                    Semantics.program env3 ast 
                  
             )
         with

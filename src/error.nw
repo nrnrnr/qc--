@@ -175,177 +175,190 @@ type pretty         = string                    (* for the moment *)
 
 exception ErrorExn  of    pretty
 
+<<>>=
 let combine = function  
     | Ok x      -> x
     | Error     -> Error
 
+<<>>=
 let emap f = function
     | Ok x      -> Ok (f x)
     | Error     -> Error
 
+<<>>=
 let sequence f = function
     | Ok x      -> f x
     | Error     -> Error
+@
 
-@ Raising combinators raise the constructors of an [[error]] value inside
+Raising combinators raise the constructors of an [[error]] value inside
 a complex value to the top-level. A complex value is bad when one
 of its components is bad and good otherwise. The raising combinators
 deal with the most important data types: options, lists, and tuples.
 
 <<error.ml>>=    
-
 module Raise = struct
-
-    let option = function
-        | Some Error        -> Error
-        | Some (Ok x)       -> Ok (Some x)
-        | None              -> Ok (None)
-
-    let list xs =
-        let rec loop acc = function
-            | []            -> Ok (List.rev acc)
-            | (Ok x)::xs    -> loop (x::acc) xs
-            | Error::xs     -> Error 
-        in      
-            loop [] xs
-
-    let pair = function
-        | (Ok x, Ok y)          -> Ok (x,y)
-        | _                     -> Error
-            
-    let left = function
-        | (Ok x, y)             -> Ok (x,y)
-        | _                     -> Error
-
-    let right = function
-        | (x, Ok y)             -> Ok (x,y)
-        | _                     -> Error
-
-    let triple = function
-        | (Ok x, Ok y, Ok z)    -> Ok (x,y,z)
-        | _                     -> Error 
-
-    let quad = function
-        | (Ok a,Ok b,Ok c,Ok d) -> Ok (a,b,c,d)
-        | _                     -> Error
-
+    <<raise module>>
 end
+@
+<<raise module>>=
+let option = function
+    | Some Error        -> Error
+    | Some (Ok x)       -> Ok (Some x)
+    | None              -> Ok (None)
+<<>>=
+let list xs =
+    let rec loop acc = function
+        | []            -> Ok (List.rev acc)
+        | (Ok x)::xs    -> loop (x::acc) xs
+        | Error::xs     -> Error 
+    in      
+        loop [] xs
 
-@ Lowering functions take a complex [[error]] value and push the
+<<>>=
+let pair = function
+    | (Ok x, Ok y)          -> Ok (x,y)
+    | _                     -> Error
+        
+<<>>=
+let left = function
+    | (Ok x, y)             -> Ok (x,y)
+    | _                     -> Error
+
+<<>>=
+let right = function
+    | (x, Ok y)             -> Ok (x,y)
+    | _                     -> Error
+
+<<>>=
+let triple = function
+    | (Ok x, Ok y, Ok z)    -> Ok (x,y,z)
+    | _                     -> Error 
+
+<<>>=
+let quad = function
+    | (Ok a,Ok b,Ok c,Ok d) -> Ok (a,b,c,d)
+    | _                     -> Error
+@
+
+Lowering functions take a complex [[error]] value and push the
 constructor from the top-level to the values inside the [[error]]
 value. 
 
 <<error.ml>>=
-
 module Lower = struct
-
-    let pair = function
-        | Ok (x,y)              -> Ok x , Ok y
-        | Error                 -> Error, Error 
-
-    let triple = function
-        | Ok (x,y,z)            -> Ok x , Ok y , Ok z
-        | Error                 -> Error, Error, Error
-
-    let quad = function
-        | Ok (a,b,c,d)          -> Ok a , Ok b , Ok c , Ok d
-        | Error                 -> Error, Error, Error, Error
+    <<lower module>>
 end
+@
+
+<<lower module>>=
+let pair = function
+    | Ok (x,y)              -> Ok x , Ok y
+    | Error                 -> Error, Error 
+<<>>=
+let triple = function
+    | Ok (x,y,z)            -> Ok x , Ok y , Ok z
+    | Error                 -> Error, Error, Error
+<<>>=
+let quad = function
+    | Ok (a,b,c,d)          -> Ok a , Ok b , Ok c , Ok d
+    | Error                 -> Error, Error, Error, Error
 @ 
 
-@ Sometimes it is sufficient to distinguish between good and bad
+Sometimes it is sufficient to distinguish between good and bad
 values. Any complex value that has a bad value in it is itself bad.
 The [[Implode]] module reduces everything to [[unit Error]] values
 which means it (carefully) destroys informations.
 
-<<>>=
+<<error.ml>>=
 module Implode = struct
-    let singleton = function
-        | Ok _ -> Ok ()
-        | _    -> Error
-
-    let pair = function
-        | Ok _, Ok _ -> Ok ()
-        | _          -> Error
-
-    let triple = function
-        | Ok _, Ok _, Ok _ -> Ok ()
-        | _                -> Error
-    
-    let quad = function
-        | Ok _, Ok _, Ok _, Ok _ -> Ok ()
-        | _                      -> Error
-
-    let rec list = function
-        | []            -> Ok ()
-        | (Ok _)::xs    -> list xs
-        | _             -> Error 
-
-    let map f l =
-        let ok = Ok () in
-        let rec loop res = function
-            | []    -> res
-            | x::xs -> ( match res, f x with
-                       | Error, _     -> loop Error xs 
-                       |    _ , Error -> loop Error xs
-                       | _            -> loop ok    xs
-                       )
-        in
-            loop ok l 
-
+    <<implode module>>
 end
-@
 
+<<implode module>>=
+let singleton = function
+    | Ok _ -> Ok ()
+    | _    -> Error
+
+<<>>=
+let pair = function
+    | Ok _, Ok _ -> Ok ()
+    | _          -> Error
+
+<<>>=
+let triple = function
+    | Ok _, Ok _, Ok _ -> Ok ()
+    | _                -> Error
+
+<<>>=
+let quad = function
+    | Ok _, Ok _, Ok _, Ok _ -> Ok ()
+    | _                      -> Error
+
+<<>>=
+let rec list = function
+    | []            -> Ok ()
+    | (Ok _)::xs    -> list xs
+    | _             -> Error 
+
+<<>>=
+let map f l =
+    let ok = Ok () in
+    let rec loop res = function
+        | []    -> res
+        | x::xs -> ( match res, f x with
+                   | Error, _     -> loop Error xs 
+                   |    _ , Error -> loop Error xs
+                   | _            -> loop ok    xs
+                   )
+    in
+        loop ok l 
+@
 
 We provide functions to raise the error ([[ErrorExn]]) exception and
 issue warnings.
 
-                
-
 <<error.ml>>=
-
 let catch' default printer f arg =
     try f arg with
     | ErrorExn(msg) -> ( printer msg 
                        ; default
                        )
-    
+<<>>=    
 let catch printer f arg = catch' Error printer f arg
-                         
 let error msg           = raise (ErrorExn msg)
-
+<<>>=
 let warningPrt msg = 
     ( prerr_string "Warning: "
     ; prerr_string msg
     ; prerr_newline ()
     ) 
-
+<<>>=
 let errorPrt msg = 
     ( prerr_string "Error: "
     ; prerr_string msg
     ; prerr_newline ()
     )
-
+<<>>=
 let errorPointPrt  p msg = 
     ( Printf.eprintf "%s " (Srcmap.Str.point p)
     ; errorPrt msg
     )
-    
+<<>>=    
 let errorRegionPrt r msg =
     ( Printf.eprintf "%s " (Srcmap.Str.region r)
     ; errorPrt msg
     )
-    
+<<>>=    
 let errorPosPrt    p msg =
     ( Printf.eprintf "Character %d " p
     ; errorPrt msg
     )
-
+<<>>=
 let errorRegPrt (l,r) msg = 
     ( Printf.eprintf "Character %d-%d " l r
     ; errorPrt msg
     )
-    
 @
 
 
