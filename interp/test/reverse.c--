@@ -8,7 +8,7 @@
 // associated with the span tagged "GC_globals_backup" that encompasses the 
 // "main" procedure
 //
-/// ./tospanlua $SELF | ../clients/gc_client - -v > $BASE.cmm.1
+/// ../../bin/qc-- -e 'backend=Backend.interp' -c $SELF | ../clients/gc_client - -v > $BASE.cmm.1
 
 target 
        byteorder   little
@@ -56,7 +56,7 @@ section "data" {
   GC_print_symbol: bits8[] {1::bits8, 0::bits8};
   GC_reverse_list: bits8[] {1::bits8};
   GC_reverse_list_helper: bits8[] {1::bits8, 1::bits8, 1::bits8, 1::bits8};
-  GC_main:         bits8[] {1::bits8, 1::bits8};
+  GC_main:         bits8[] {0::bits8, 1::bits8, 1::bits8};
 }
 
 section "text" {
@@ -171,8 +171,10 @@ section "text" {
 
   span GC_globals_backup globals_backup {
     span GC GC_main {
-      main() {
+      main(bits32 glob_back) {
         bits32 list1, list2;
+
+        // BEGIN BODY OF TEST PROGRAM
 
         list1 = number_list(0, 3);
         print_list(list1);
@@ -194,6 +196,8 @@ section "text" {
         print_list(list1);
 
         gc();
+
+        // END BODY OF TEST PROGRAM
 
         return;
       }

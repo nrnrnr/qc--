@@ -32,9 +32,9 @@ typedef union {
   bits8   bits8;
   bits16  bits16;
   bits32  bits32;
-  /*  bits64  bits64; */
+/*  bits64  bits64; */
   float32 float32;
-  float64 float64;
+/*  float64 float64; */
 /*  float96 float96; */
   void    *ptr;
 } value;
@@ -55,6 +55,13 @@ This macro takes two arguments: [[VIEW(LVALUE, T)]].
 [[LVALUE]] is some sort of C lvalue and [[T]] is a C type.  
 The macro returns [[LVALUE]], properly viewed as a C value of type [[T]].
 
+Additionally, to embed a C value of somewhat arbitrary width into a [[value]],
+we provide [[to_CMM_value]].
+
+<<function prototypes>>=
+value to_CMM_value(unsigned v, unsigned width);
+@ 
+
 To perform some quick internal assertions about the [[value]] type, we provide helper [[check_value_types]].
 
 <<function prototypes>>=
@@ -69,20 +76,44 @@ void check_value_types(void);
 #include "value.h"
 
 #include <assert.h>
+#include "interp.h"
 
 <<function definitions>>
 @ 
 
 % ----------------------------------------------------------------------------
-\subsection{Utility Macros}
+\subsection{Utility Functions and Macros}
 % ----------------------------------------------------------------------------
 
-We define a number of macros to ease the notational burden of value and stack maniuplation.
+We define a number of macros/functions to ease the notational burden of value maniuplation.
 On the simplest level, we need to be able to interpret the bits of a C lvalue as if the value were a different type.
 C type casting does not do the trick, as it actually changes the bit-level value being examined; instead, we define the macro [[VIEW]].
+
 <<macro definitions>>=
 #define VIEW(LVALUE, T)       (*((T *) (&(LVALUE))))
 @
+
+[[to_CMM_value]] embeds a C value in a [[value]].
+
+<<function definitions>>=
+value to_CMM_value(unsigned v, unsigned width) {
+  value val;
+
+  /* zero it out */
+  val.bits32 = 0;
+
+  switch (width) {
+  case  1: val.bits1  = v; break;
+  case  8: val.bits8  = v; break;
+  case 16: val.bits16 = v; break;
+  case 32: val.bits32 = v; break;
+  default:
+    cmm_err("unsupported value type; cannot continue"); 
+  }
+
+  return val;
+}
+@ 
 
 % ----------------------------------------------------------------------------
 \subsection{Sanity Check}
@@ -101,7 +132,7 @@ void check_value_types (void) {
 /*  assert(sizeof(v.bits64) == 8); */
 
   assert(sizeof(v.float32) == 4);
-  assert(sizeof(v.float64) == 8);
+/*  assert(sizeof(v.float64) == 8); */
 /*  assert(sizeof(v.float96) == 12); */
 
   assert(sizeof(u_int8)  == 1);

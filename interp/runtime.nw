@@ -53,8 +53,9 @@ int             Cmm_ChangeActivation(Cmm_Activation **a);
 void           *Cmm_FindLocalVar(const Cmm_Activation *a, unsigned n);
 unsigned        Cmm_LocalVarCount(const Cmm_Activation *a);
 void           *Cmm_FindDeadLocalVar(const Cmm_Activation *a, unsigned n);
+void           *Cmm_FindStackData(const Cmm_Activation *a, unsigned n);
 Cmm_Dataptr     Cmm_GetDescriptor(const Cmm_Activation *a, Cmm_Word token);
-Cmm_Cont       *Cmm_GetCont(const Cmm_Activation *a, Cmm_Word token);
+Cmm_Cont       *Cmm_GetUnwindCont(const Cmm_Activation *a, Cmm_Word index);
 @ 
 
 % ----------------------------------------------------------------------------
@@ -213,9 +214,9 @@ Cmm_Cont *Cmm_CreateThread(Cmm_Codeptr f, Cmm_Dataptr x, void *s, unsigned n,
 
                       CMM_label_raddr(((CMM_label *) f))->label->name,
                       boot_id, boot_id, boot_id, boot_id, boot_id, boot_id,
-                      sizeof(void *), byteorder_string, 1, boot_id, 
-                      sizeof(void *), byteorder_string, 1, boot_id, boot_id, 
-                      sizeof(void *), byteorder_string, 1);
+                      8*sizeof(void *), byteorder_string, DEF_ALIGN, boot_id, 
+                      8*sizeof(void *), byteorder_string, DEF_ALIGN, boot_id, 
+                      boot_id, 8*sizeof(void *), byteorder_string, DEF_ALIGN);
 
   boot_id++;
 
@@ -329,14 +330,27 @@ unsigned Cmm_LocalVarCount(const Cmm_Activation *a) {
 }
 
 void *Cmm_FindDeadLocalVar(const Cmm_Activation *a, unsigned n) {
-  assert(0);
-
-  /* C CODE HERE */
-  /* FINISH */
-  return NULL;
+  /* will this do the trick? */
+  return (void *) (a->locals + n);
 }
 
-Cmm_Cont *Cmm_GetCont(const Cmm_Activation *a, Cmm_Word token) {
+void *Cmm_FindStackData(const Cmm_Activation *a, unsigned n) {
+  assert(0);
+  /* IMPLEMENT THIS ! */
+  return NULL;
+}
+@ 
+
+[[Cmm_GetDescriptor]] must look up the given [[token]] in the Lua span table of the given activation's thread; moreover, it must look for the innermost (table entry with greatest index) value associated with the token.
+
+<<stack-walking functions>>=
+Cmm_Dataptr Cmm_GetDescriptor(const Cmm_Activation *a, Cmm_Word token) {
+  return (Cmm_Dataptr) span_find_value((unsigned) a->pc, (unsigned) token);
+}
+@ 
+
+<<stack-walking functions>>=
+Cmm_Cont *Cmm_GetUnwindCont(const Cmm_Activation *a, Cmm_Word index) {
   thread *t    = find_thread(a->u);
   lua_State *L; /* = t->span_table.L; */
 
@@ -348,13 +362,13 @@ Cmm_Cont *Cmm_GetCont(const Cmm_Activation *a, Cmm_Word token) {
   t->callstack_free--;
   */
 
-  if (token != 0) {
+  if (index != 0) {
     Cmm_Activation *act = ((Cmm_Activation *) a) - 1;
     annotations    *ann = act->kappa;
     CMM_label      *lbl;
 
     lua_pushtable(L, ann->also_cuts_to);
-    lua_rawgeti(L, -1, (int) token);
+    lua_rawgeti(L, -1, (int) index);
     if (!lua_isuserdata(L, -1) ||
         lua_tag(L, -1) != lua_CMM_label_tag ||
         (lbl = lua_touserdata(L, -1)) == NULL)
@@ -374,21 +388,6 @@ Cmm_Cont *Cmm_GetCont(const Cmm_Activation *a, Cmm_Word token) {
   return (Cmm_Cont *) t;
 }
 @
-
-Finding a descriptor is harder.
-[[Cmm_GetDescriptor]] must look up the given [[token]] in the Lua span table of the given activation's thread; moreover, it must look for the innermost (table entry with greatest index) value associated with the token.
-
-<<stack-walking functions>>=
-Cmm_Dataptr Cmm_GetDescriptor(const Cmm_Activation *a, Cmm_Word token) {
-  return (Cmm_Dataptr) span_find_value((unsigned) a->pc, (unsigned) token);
-}
-@ 
-
-% ----------------------------------------------------------------------------
-\subsection{Returning Control To Client Runtime}
-% ----------------------------------------------------------------------------
-
-\ldots
 
 % ----------------------------------------------------------------------------
 \subsection{The Global Registers}

@@ -60,10 +60,10 @@ int lua_CMM_end_section(lua_State *L);
 <<encoding.c>>=
 #include "encoding.h"
 
+#include <assert.h>
 #include <mclib.h>
 #include <string.h>
 #include <stdlib.h>
-#include <cii/atom.h>
 
 #include "assemblyunit.h"
 #include "controlflow.h"
@@ -73,6 +73,8 @@ int lua_CMM_end_section(lua_State *L);
 #include "operator.h"
 #include "interp.h"
 #include "span.h"
+
+#include <cii/atom.h>
 
 <<bytecode generation>>
 @
@@ -622,14 +624,14 @@ int lua_CMM_byteorder(lua_State *L) {
 
   last_au = unit;
 
-  lua_assert_isstring(L, -1, "BYTEORDER must be either \"LITTLE\" or \"BIG\"");
+  lua_assert_isstring(L, -1, "BYTEORDER must be either \"LITTLE\", \"BIG\", "
+                             "or \"NATIVE\"");
 
-  if (strcasecmp(lua_tostring(L, -1), "LITTLE") == 0)
-    b = LITTLE;
-  else if (strcasecmp(lua_tostring(L, -1), "BIG") == 0)
-    b = BIG;
+  if (strcasecmp(lua_tostring(L, -1), "LITTLE") == 0)       b = LITTLE;
+  else if (strcasecmp(lua_tostring(L, -1), "BIG") == 0)     b = BIG;
+  else if (strcasecmp(lua_tostring(L, -1), "NATIVE") == 0)  b = DEF_BYTE_ORDER;
   else
-    cmm_err("BYTEORDER must be either \"LITTLE\" or \"BIG\"");
+    cmm_err("BYTEORDER must be either \"LITTLE\", \"BIG\", or \"NATIVE\"");
  
   lua_pop(L, 1);  
   unit->byte_order = b;
@@ -718,12 +720,12 @@ int lua_CMM_data(lua_State *L) {
 
     n = lua_getn(L, -1);
     for (i = 1; i <= n; i++) {
-      int num;
+      long int num;
       lua_rawgeti(L, -1, n);
 
       lua_assert_isstring(L, -1, 
-                    "data expects initialized arguments to be in string form");
-      if (sscanf(lua_tostring(L, -1), "%x", &num) != 1) {
+                    "data expects initialized arguments in string form (hex)");
+      if (sscanf(lua_tostring(L, -1), "%lx", &num) != 1) {
         cmm_err("could not parse given initialized data");
       }
 
@@ -783,10 +785,17 @@ We need to wrap the actual instruction encoding functions in simple Lua-style C 
 [[lua_CMM_push_literal]] looks for a string atop the Lua stack, pops it off, parses it as a [[long]], casts it to an unsigned 32-bit C integer, calls the encoding function [[push]] with the value, pops the string from the Lua stack, and returns 0 to signify it returns no value to Lua.
 <<bytecode generation>>=
 int lua_CMM_push_literal(lua_State *L) {
-  lua_assert_isstring(L, -1, "push_literal expects a string literal");
+  long int num;
 
-  push((u_int32) atol(lua_tostring(L, -1))); /* emit instruction */
-  lua_pop(L, 1);
+  lua_assert_isnumber(L, -1, "push_literal expects a width spec. (number)");
+  lua_assert_isstring(L, -2, "push_literal expects a string literal (hex)");
+
+  cmm_assert(sscanf(lua_tostring(L, -2), "%lx", &num) == 1,
+			 "could not parse literal; hexadecimal string literal expected");
+
+  /* emit instruction */
+  push((unsigned) num, (unsigned) lua_tonumber(L, -1)); 
+  lua_pop(L, 2);
 
   return 0;
 }
@@ -812,31 +821,32 @@ int lua_CMM_push_symbol(lua_State *L) {
 }
 @ 
 
-[[lua_CMM_fetch]] checks for three values atop the Lua stack: a numerical bit-size, a string indicating bit order (valid options are [["BIG"]] or [["LITTLE"]]), and a numerical alignment specification.
+[[lua_CMM_fetch]] checks for three values atop the Lua stack: a numerical bit-size, a string indicating bit order (valid options are [["BIG"]], [["LITTLE"]], or [["NATIVE"]]), and a numerical alignment specification.
 The endianness indication is converted into a [[byte_order]] value and then [[fetch]] is called with the values.
 
 <<bytecode generation>>=
 int lua_CMM_fetch(lua_State *L) {
-  unsigned   size;
+  unsigned   align, size;
   byte_order b;
-  unsigned   align;
 
   lua_assert_isnumber(L, -1, 
          "fetch requires a numerical alignment specification");
   lua_assert_isstring(L, -2, 
-         "fetch requires a byte-order specification of \"BIG\" or \"LITTLE\"");
+         "fetch requires a byte-order specification of \"BIG\", \"LITTLE\", "
+         "or \"NATIVE\"");
   lua_assert_isnumber(L, -3, 
          "fetch requires a numerical bit-size specification");
   
   size  = (unsigned int) lua_tonumber(L, -3);
-  if (strcasecmp(lua_tostring(L, -2), "LITTLE") == 0)
-    b = LITTLE;
-  else if (strcasecmp(lua_tostring(L, -2), "BIG") == 0)
-    b = BIG;
-  else
-    cmm_err( 
-         "fetch requires a byte-order specification of \"BIG\" or \"LITTLE\"");
+  if (strcasecmp(lua_tostring(L, -2), "LITTLE") == 0)       b = LITTLE;
+  else if (strcasecmp(lua_tostring(L, -2), "BIG") == 0)     b = BIG;
+  else if (strcasecmp(lua_tostring(L, -2), "NATIVE") == 0)  b = DEF_BYTE_ORDER;
+  else cmm_err( 
+         "fetch requires a byte-order specification of \"BIG\", \"LITTLE\", "
+         "or \"NATIVE\"");
+
   align = (unsigned int) lua_tonumber(L, -1);
+  if (align == 0) align = DEF_ALIGN;
 
   /* emit instruction */
   fetch(size, (unsigned) b, align);
@@ -849,26 +859,27 @@ int lua_CMM_fetch(lua_State *L) {
 
 <<bytecode generation>>=
 int lua_CMM_store(lua_State *L) {
-  unsigned   size;
+  unsigned   align, size;
   byte_order b;
-  unsigned   align;
 
   lua_assert_isnumber(L, -1, 
          "store requires a numerical alignment specification");
   lua_assert_isstring(L, -2, 
-         "store requires a byte-order specification of \"BIG\" or \"LITTLE\"");
+         "store requires a byte-order specification of \"BIG\", \"LITTLE\", "
+         "or \"NATIVE\"");
   lua_assert_isnumber(L, -3, 
          "store requires a numerical bit-size specification");
   
   size  = (unsigned int) lua_tonumber(L, -3);
-  if (strcasecmp(lua_tostring(L, -2), "LITTLE") == 0)
-    b = LITTLE;
-  else if (strcasecmp(lua_tostring(L, -2), "BIG") == 0)
-    b = BIG;
-  else
-    cmm_err( 
-        "store requires a byte-order specification of \"BIG\" or \"LITTLE\"");
+  if (strcasecmp(lua_tostring(L, -2), "LITTLE") == 0)       b = LITTLE;
+  else if (strcasecmp(lua_tostring(L, -2), "BIG") == 0)     b = BIG;
+  else if (strcasecmp(lua_tostring(L, -2), "NATIVE") == 0)  b = DEF_BYTE_ORDER;
+  else cmm_err( 
+        "store requires a byte-order specification of \"BIG\", \"LITTLE\", "
+        "or \"NATIVE\"");
+
   align = (unsigned int) lua_tonumber(L, -1);
+  if (align == 0) align = DEF_ALIGN;
 
   /* emit instruction */
   store(size, (unsigned) b, align);
@@ -884,19 +895,21 @@ int lua_CMM_gstore(lua_State *L) {
   lua_assert_isnumber(L, -1, 
         "gstore requires a numerical alignment specification");
   lua_assert_isstring(L, -2, 
-        "gstore requires a byte-order specification of \"BIG\" or \"LITTLE\"");
+        "gstore requires a byte-order specification of \"BIG\", \"LITTLE\", "
+        "or \"NATIVE\"");
   lua_assert_isnumber(L, -3, 
         "gstore requires a numerical bit-size specification");
   
   size  = (unsigned) lua_tonumber(L, -3);
-  if (strcasecmp(lua_tostring(L, -2), "LITTLE") == 0)
-    b = LITTLE;
-  else if (strcasecmp(lua_tostring(L, -2), "BIG") == 0)
-    b = BIG;
-  else
-    cmm_err( 
-        "gstore requires a byte-order specification of \"BIG\" or \"LITTLE\"");
+  if (strcasecmp(lua_tostring(L, -2), "LITTLE") == 0)       b = LITTLE;
+  else if (strcasecmp(lua_tostring(L, -2), "BIG") == 0)     b = BIG;
+  else if (strcasecmp(lua_tostring(L, -2), "NATIVE") == 0)  b = DEF_BYTE_ORDER;
+  else cmm_err( 
+        "gstore requires a byte-order specification of \"BIG\", \"LITTLE\", "
+        "or \"NATIVE\"");
+
   align = (unsigned) lua_tonumber(L, -1);
+  if (align == 0) align = DEF_ALIGN;
 
   /* emit instruction */
   gstore(size, (unsigned) b, align);

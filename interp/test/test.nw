@@ -287,24 +287,3 @@ emit Lua code, and runs the Lua code through the interpreter.
 ../../bin/qc-- -e 'backend=Backend.interp' -c $@ | ../interp -
 @ 
 
-To temporarily help run {\PAL} code that contains [[span]]s (before [[span]]s
-are implemented in the compiler), we provide script [[respan]].
-It should be run on Lua code emitted from the compiler, and emits revised Lua 
-code.
-
-<<tospanlua>>=
-#!/bin/sh
-( echo "C = CMM \
-  function C.gc_procedure(proc, loc, st) \
-  C.begin_span('1', 'GC_'..proc) \
-  C.procedure(proc, loc, st) \
-  end \
-  function C.gc_end_procedure() \
-    C.end_procedure() \
-    C.end_span('1') \
-  end" \
-; ../../bin/qc-- -e 'backend=Backend.interp' -c $@ \
-) | sed -e 's/CMM\.procedure/C\.gc_procedure/' \
-        -e 's/CMM\.end_procedure/C\.gc_end_procedure/'
-@ 
-

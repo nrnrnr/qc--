@@ -3,13 +3,13 @@
 -- begin assembly code
 
 CMM.exports({ "main", "random", "third" })
-CMM.imports({ "cmmprint" })
+CMM.imports({ "cmmprint16" })
 
 CMM.section("code")
    CMM.procedure("main", 2, 0)
       CMM.define_label("label1")
-        CMM.push_literal("5")
-        CMM.push_literal("3")
+        CMM.push_literal("0x5", 32)
+        CMM.push_literal("0x3", 32)
         CMM.push_symbol("label1")
 
         CMM.store_arg(0)
@@ -21,11 +21,11 @@ CMM.section("code")
         CMM.fetch_local(0)
         CMM.fetch_local(1)
 
-        CMM.push_literal("1")
+        CMM.push_literal("0x1", 1)
         CMM.cbrancht("otherlabel")
 
      CMM.define_label("backhere")
-        CMM.push_literal("1")
+        CMM.push_literal("0x1", 1)
 
      CMM.branchtf("theend", "infloop")
 CMM.end_section()
@@ -33,11 +33,11 @@ CMM.end_section()
 CMM.section("code2")
    CMM.procedure("random", 0, 0)
       CMM.define_label("otherlabel")
-        CMM.push_literal("63082")
+        CMM.push_literal("0x63082", 32)
 
-        CMM.push_literal("0")
+        CMM.push_literal("0x0", 1)
         CMM.cbranchf("backhere")
-        CMM.push_literal("666")
+        CMM.push_literal("0x666", 32)
 
       CMM.define_label("theend")
 

@@ -7,6 +7,8 @@ CC=gcc
 CFLAGS=-g -ansi -pedantic -Wall
 LIBS=-lm
 
+NOTANGLEOPTS='-L'
+
 TOOLS=$BINDIR/tools
 DEPEND=$CC -MM $INCLUDES
 
@@ -99,8 +101,12 @@ gc:V:  clients/gc_client
 
 lcc-interp:V:
        mk clean
-       mmm
+       mk code $MKFLAGS
        mk interp CC=lcc CFLAGS='-g -A -A -b'
+       mk clients/gc_client CC=lcc CFLAGS='-g -A -A -b'
+
+sparc-interp:V:
+       mk all $MKFLAGS MACHINE=sparc BINDIR=/home/lair/olinsky/bin/sparc
 
 code:V: $SRCS $HDRS
 
@@ -140,7 +146,7 @@ depend:V: $SRCS $HDRS
 
 clean:V: clean-tex clean-code clean-obj
 	rm -f $NWTEXFILES interfaces.nw clients/gc.tex interp clients/gc_client \
-          prof.out *~
+          prof.out core *~
 
 clean-tex:V:
 	rm -f *.blg *.log *.dvi *.inc *.toc *.aux clients/*.blg clients/*.inc
@@ -157,20 +163,23 @@ clean-obj:V:
 # source code targets
 #
 bytecode.sled:D: interp.nw
-	$NOTANGLE -L -R$target $prereq | $CPIF $target
+	$NOTANGLE $NOTANGLEOPTS -R$target $prereq | $CPIF $target
 
 decode.fetch:D: interp.nw
-    if [ -n "$BYTEORDER" ]; then
-      $NOTANGLE -L -R$target.$BYTEORDER | $CPIF $target;
-    else
-      $NOTANGLE -L -R$target.LITTLE $prereq | $CPIF $target;
-    fi
+    $NOTANGLE $NOTANGLEOPTS -R$target $prereq | $CPIF $target
+
+#decode.fetch:D: interp.nw
+#    if [ -n "$MACHINE" ]; then
+#      $NOTANGLE $NOTANGLEOPTS -R$target.$MACHINE $prereq | $CPIF $target;
+#    else
+#      $NOTANGLE $NOTANGLEOPTS -R$target.x86 $prereq | $CPIF $target;
+#    fi
 
 machine.h:D: interp.nw
-    if [ -n "$BYTEORDER" ]; then
-      $NOTANGLE -L -R$target.$BYTEORDER $prereq | $CPIF $target
+    if [ -n "$MACHINE" ]; then
+      $NOTANGLE $NOTANGLEOPTS -R$target.$MACHINE $prereq | $CPIF $target
     else
-      $NOTANGLE -L -R$target.LITTLE $prereq | $CPIF $target
+      $NOTANGLE $NOTANGLEOPTS -R$target.x86 $prereq | $CPIF $target
     fi
 
 encode.c encode.h: bytecode.sled
@@ -181,10 +190,10 @@ encode.c encode.h: bytecode.sled
 		bytecode.sled decode.fetch
 
 '(([^/]*/)*)(.*)\.h$':RD:       '\1\3.nw'
-	$NOTANGLE -L -R$stem3.h $prereq | $CPIF $target
+	$NOTANGLE $NOTANGLEOPTS -R$stem3.h $prereq | $CPIF $target
 
 '(([^/]*/)*)(.*)\.c$':RD:       '\1\3.nw'
-	$NOTANGLE -L -R$stem3.c $prereq | $CPIF $target
+	$NOTANGLE $NOTANGLEOPTS -R$stem3.c $prereq | $CPIF $target
 
 %.m:D: %.nw
     $NOTANGLE -R$target $prereq | $CPIF $target

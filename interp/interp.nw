@@ -550,6 +550,24 @@ void   lua_error_handle(int err_code, const char *fn);
 @
 
 % ----------------------------------------------------------------------------
+\subsection{Machine-Dependent Details}
+% ----------------------------------------------------------------------------
+
+Because the interpreter needs to perform a number of low-level fetches and
+stores to memory, it needs to know some basic facts about the machine on
+which it is running (for example, byte order).
+
+Helper function [[infer_architecture]] tries to infer as much about the machine
+on which it runs as is possible; and based on this information inferred,
+[[mem_aggregate]] is able to properly aggregate bytes for multi-byte loads
+and stores.
+
+<<function prototypes>>=
+void     infer_architecture(void);
+unsigned mem_aggregate(unsigned char *a, byte_order bo, unsigned num_bytes);
+@ 
+
+% ----------------------------------------------------------------------------
 \section{Implementation}
 % ----------------------------------------------------------------------------
 
@@ -595,7 +613,7 @@ patterns
            | GSTORE_LOCAL8  | GSTORE_GLOBAL8  | FETCH_ARG     | STORE_ARG
   any16   is STORE_LOCAL16  | STORE_GLOBAL16  | FETCH_LOCAL16 | FETCH_GLOBAL16
            | GSTORE_LOCAL16 | GSTORE_GLOBAL16
-  any32   is PUSH  | CALL   | DEFINE_PROC     | PUSH_SYMBOL
+  any32   is CALL           | DEFINE_PROC     | PUSH_SYMBOL
   memory  is FETCH | STORE  | GSTORE
   nullary is HALT  |  GOTO  | CMM_TAIL_CALL   | CUT           | END_PROC
 @ 
@@ -620,6 +638,7 @@ constructors
   any32          bits32               is any32;      bits32
   memory         bits8  bits8b bits8c is memory;     bits8;      bits8b; bits8c
   EMIT_RADDR     addr                 is bits32=addr
+  PUSH           bits32 bits8         is PUSH;       bits32;     bits8
   APPLY_OPERATOR bits32               is OP;         bits32
   CBRANCHT       addr                 is CBRANCHT;   bits32=addr
   CBRANCHF       addr                 is CBRANCHF;   bits32=addr
@@ -657,7 +676,7 @@ The conditional assembly present in the definition allows an instruction to be r
 % ----------------------------------------------------------------------------
 
 % ----------------------------------------------------------------------------
-\subsubsection{Initialization}
+\subsubsection{Initialization and Configuration}
 % ----------------------------------------------------------------------------
 
 The actual initial registration of operators occupies some of the body of helper function [[init_interp]].
@@ -666,6 +685,8 @@ With some preprocessor exploitation, we are able to reuse the same operator defi
 
 <<utility functions>>=
 static void init_interp(lua_State *L, int valstack_size, int argspace_size) {
+  /* infer information about architecture */
+  infer_architecture();
 
   /* initialize the contents of global tables */
   assembly_units_table   = fresh_table();
@@ -721,31 +742,142 @@ The sizes of these stacks are specified by arguments to the [[cmm_interp_open]] 
 The utility helper functions assist in error handling and performing some sanity checks on the [[typedef]]'d basic types.
 
 <<utility functions>>=
-<<sanity checks>>
+<<machine-dependent details>>
 <<error-handling functions>>
 @ 
 
 % ----------------------------------------------------------------------------
-\paragraph{Sanity Checks}
+\paragraph{Machine-Dependent Details}
 % ----------------------------------------------------------------------------
 
-Although likely unnecessary, we perform a few quick assertions to make sure nothing horribly wrong is going on before we begin to interpret code.
+We try to infer as much as possible about the machine on which the interpreter
+is running in [[infer_architecture]].
+The methods used here are borrowed from the implementation of the New Jersey
+Machine-Code Toolkit.
 
-<<sanity checks>>=
+<<global variable definitions>>=
+byte_order DEF_BYTE_ORDER;
+@ 
+
+<<machine-dependent details>>=
+void infer_architecture(void) {
+  static union { unsigned u; unsigned char c[sizeof(unsigned)]; } u =
+     { 0xaabbccdd };
+
+  switch (u.c[0]) {
+    case 0xaa: DEF_BYTE_ORDER = BIG;    break;
+    case 0xdd: DEF_BYTE_ORDER = LITTLE; break;
+    default:
+      error("error: machine has unknown natural byte-order");
+  }   
+}
+@ 
+
+Once we have inferred this byte-order information, helper [[mem_aggregate]]
+is able to properly order bytes so as to effectively allow multi-byte
+loads and stores.
+
+<<machine-dependent details>>=
+unsigned mem_aggregate(unsigned char *a, byte_order bo, unsigned num_bytes) {
+  int      i;
+  unsigned u = 0;
+
+  switch (bo) {
+    case LITTLE:
+      for (i = 0; i < num_bytes; i++)
+        u += (a[i] << (i * 8));
+      break;
+    case BIG:
+      for (i = 0; i < num_bytes; i++)
+        u += (a[i] << ((num_bytes - i - 1) * 8));
+      break;
+    default:
+      error("error: cannot aggregate data in unknown byte-order");
+  }
+
+  return u;
+}
+@ 
+
+We now define aggregated fetch functions for the NJ Machine-Code 
+Toolkit, using [[mem_aggregate]].
+
+<<decode.fetch>>=
+address type is "unsigned char *"
+fetch 8  using "mem_aggregate(%a,DEF_BYTE_ORDER,1)"
+fetch 16 using "mem_aggregate(%a,DEF_BYTE_ORDER,2)"
+fetch 32 using "mem_aggregate(%a,DEF_BYTE_ORDER,4)"
+@ 
+
+Finally, for all information we cannot accurately infer, we also define a few 
+constants in [[machine.h]] to provide information about the architecture on 
+which the interpreter is currently being run.
+
+<<machine.h.sparc>>=
+#ifndef _MACHINE_H
+#define _MACHINE_H
+
+#include "types.h"
+
+/* FIX :  the float types are here defined in a machine-dependent manner; */
+typedef float       float32;
+typedef double      float64;
+typedef long double float96; /* this one doesn't work on liz */
+
+typedef enum {
+  ROUND_DOWN    = 00U,
+  ROUND_UP      = 01U,
+  ROUND_NEAREST = 02U,
+  ROUND_ZERO    = 03U
+} rounding_mode;
+
+extern  byte_order DEF_BYTE_ORDER;
+
+#define DEF_MEMSIZE    8
+#define DEF_ALIGN      4
+
+typedef u_int32 Cmm_Word;
+#endif /* _MACHINE_H */
+@ 
+
+<<machine.h.x86>>=
+#ifndef _MACHINE_H
+#define _MACHINE_H
+
+#include "types.h"
+
+/* FIX :  the float types are here defined in a machine-dependent manner; */
+typedef float       float32;
+typedef double      float64;
+typedef long double float96; /* this one doesn't work on liz */
+
+typedef enum {
+  ROUND_DOWN    = 00U,
+  ROUND_UP      = 01U,
+  ROUND_NEAREST = 02U,
+  ROUND_ZERO    = 03U
+} rounding_mode;
+
+extern  byte_order DEF_BYTE_ORDER;
+
+#define DEF_MEMSIZE    8
+#define DEF_ALIGN      1
+
+typedef u_int32 Cmm_Word;
+#endif /* _MACHINE_H */
+@ 
+
+Although likely unnecessary, we also perform a few quick assertions to make 
+sure nothing horribly wrong is going on before we begin to interpret code.
+
+<<machine-dependent details>>=
 void check_architecture(assembly_unit *au) {
-  if (au->memsize != 8) {
-    fprintf(stderr, "this interpreter can only handle a MEMSIZE of 8");
-    exit(1);
-  }
-  if (au->ptrsize != 32) {
-    fprintf(stderr, "this interpreter can only handle a PTRSIZE of 32");
-    exit(1);
-  }
-  if (au->byte_order != DEF_BYTE_ORDER) {
-    fprintf(stderr, "this interpreter can only handle native byte-order memory"
-                    " access");
-    exit(1);
-  }
+  if (au->memsize != 8)
+    cmm_err("this interpreter can only handle a MEMSIZE of 8");
+  if (au->ptrsize != 32)
+    cmm_err("this interpreter can only handle a PTRSIZE of 32");
+  if (au->byte_order != DEF_BYTE_ORDER)
+    cmm_err("this interpreter can only handle native byteorder memory access");
 }
 @
 
@@ -753,9 +885,13 @@ void check_architecture(assembly_unit *au) {
 \paragraph{Error Handling}
 % ----------------------------------------------------------------------------
 
-Whenever we need to raise an error (with a few exceptios), we call [[cmm_err]].
-This function prints an appropriate error message, given its arguments, and [[longjmp]]s to the appropriate error-handling site.
-Note that this function's behavior is undefined if the error did not occur during assembly file loading ([[load_assembly_unit]]) or during bytecode interpreting (or relocation).
+Whenever we need to raise an error (with a few exceptions), we call 
+[[cmm_err]].
+This function prints an appropriate error message, given its arguments, and 
+[[longjmp]]s to the appropriate error-handling site.
+Note that this function's behavior is undefined if the error did not occur 
+during assembly file loading ([[load_assembly_unit]]) or during bytecode 
+interpreting (or relocation).
 
 <<error-handling functions>>=
 void cmm_err(char *fmt, ...) {
@@ -1213,24 +1349,25 @@ The local C variable [[next]] is set to the address of the immediately next inst
 @ 
 
 Literal value pushes, local/global stores and fetches are all straightforward.
-We push and pop values using our stack manipulation macros, and use the [[locals]] and [[globals]] arrays for local and global operations.
+We push and pop values using our stack manipulation macros and functions (see [[value.nw]] and [[stack.nw]]), and use the [[locals]] and [[globals]] arrays for local and global operations.
 
 \useops{Literal}
 <<matching statement>>=
-    | PUSH(v)           => PUSH(VIEW(v, value), values);  pc = next;
+    | PUSH(v, width)    => PUSH(to_CMM_value(v, width), values); 
+                           pc = next;
 @  
 
 \useops{Fetch-Local}
 \useops{Fetch-Global}
 <<matching statement>>=
-    | fetch_local(n)    => PUSH(locals[n], values);  pc = next;
+    | fetch_local(n)    => PUSH( locals[n], values); pc = next;
     | fetch_global(n)   => PUSH(globals[n], values); pc = next;
 @ 
 
 \useops{Store-Local}
 \useops{Store-Global}
 <<matching statement>>=
-    | store_local(n)    => locals[n] = POP(values);  pc = next;
+    | store_local(n)    =>  locals[n] = POP(values); pc = next;
     | store_global(n)   => globals[n] = POP(values); pc = next;
 @ 
 
@@ -1241,20 +1378,20 @@ Guarded local and global stores require a little more work; we must see if the e
 \useops{Guarded-Store-Global-True}
 \useops{Guarded-Store-Global-False}
 We first perform an underflow check to make sure that we can safely pop 2 values off the value stack (we do not use two sequential [[POP]]s here because that would introduce unnecessary intermediate pointer computations).
-We [[VIEW]] the next-to-top stack element, which we expect to be a boolean value.
+We observe the next-to-top stack element, which we expect to be a boolean value.
 If we find the boolean is true, we store the top stack value (the value to be stored) in the proper location.
 Either way, we must decrement the [[values]] pointer by 2 to simulate the popping of 2 values off the value stack.
 
 <<matching statement>>=
     | gstore_local(n)   => UNDERFLOW_CHECK(values, 2);
-                           if (VIEW(STACK_ELT(values, -1), bool)) {
+                           if (STACK_ELT(values, -1).bool) {
                              STACK_ELT(values, 0) = locals[n];
                            }
                            values -= 2;
                            pc = next;
 
     | gstore_global(n)  => UNDERFLOW_CHECK(values, 2);
-                           if (VIEW(STACK_ELT(values, -1), bool)) {
+                           if (STACK_ELT(values, -1).bool) {
                              STACK_ELT(values, 0) = globals[n];
                            }
                            values -= 2;
@@ -1291,7 +1428,7 @@ For now, we only support the natural byte-order of the machine on which the inte
                            assert(al == DEF_ALIGN);
                            assert(sz >  0);
                            UNDERFLOW_CHECK(values, 3);
-                           if (VIEW(STACK_ELT(values, -2), bool)) {
+                           if (STACK_ELT(values, -2).bool) {
                              <<store given value at given address>>
                            }
                            values -= 3;
@@ -1299,17 +1436,32 @@ For now, we only support the natural byte-order of the machine on which the inte
                            }
 @ 
 
-For now, we simply fetch and store by dereferencing pointers.
+\emph{This should ultimately be fixed to work!  Note that we are fetching more than asked to; this is bad!}
 
 <<fetch value from given address>>=
   {
-    value *fetched       = VIEW(STACK_ELT(values, 0), value *);
-    STACK_ELT(values, 0) = *fetched;
+    value *fetched       = (value *) STACK_ELT(values, 0).ptr;
+
+    if (((unsigned) fetched) % al == 0) {
+      /* if we are properly aligned we may just dereference */
+      STACK_ELT(values, 0) = *fetched;
+    } else {
+      /* otherwise, we must carefully aggregate */
+      unsigned u = mem_aggregate((void *) fetched, bo, sizeof(value));
+      STACK_ELT(values, 0) = VIEW(u, value);
+    }
   }
 @ 
+
+\emph{STORAGE DOES NOT WORK!!!}
+
 <<store given value at given address>>=
   {
-    value *tostore       = VIEW(STACK_ELT(values, -1), value *);
+    value *tostore       = (value *) STACK_ELT(values, -1).ptr;
+
+    /* for now, just assert we are properly aligned */
+    assert(((unsigned) tostore) % al == 0);
+
     *tostore             = STACK_ELT(values, 0);
   }
 @ 
@@ -1346,7 +1498,7 @@ For goto and branches, we simply conditionally (or unconditionally in the case o
 <<matching statement>>=
     | GOTO              => { 
                            value v = POP(values);
-                           pc      = VIEW(v, bytecodeptr);
+                           pc      = (bytecodeptr) v.ptr;
                            }
 @ 
 \useops{CBranchT-True}
@@ -1356,13 +1508,13 @@ For goto and branches, we simply conditionally (or unconditionally in the case o
 <<matching statement>>=
     | CBRANCHT(a)       => {
                            value v = POP(values);
-                           if (VIEW(v, bool)) {
+                           if (v.bool) {
                              pc = (bytecodeptr) a;
                            } else { pc = next; }
                            }
     | CBRANCHF(a)       => {
                            value v = POP(values);
-                           if (!(VIEW(v, bool))) {
+                           if (!v.bool) {
                              pc = (bytecodeptr) a;
                            } else { pc = next; }
                            }
@@ -1372,7 +1524,7 @@ For goto and branches, we simply conditionally (or unconditionally in the case o
 <<matching statement>>=
     | BRANCHTF(a, b)    => {
                            value v = POP(values);
-                           pc      = (bytecodeptr) (VIEW(v,bool) ? a : b);
+                           pc      = (bytecodeptr) (v.bool ? a : b);
                            }
 @ 
 
@@ -1394,13 +1546,13 @@ The encoding function [[lua_CMM_push_symbol]] writes a pointer to a [[CMM_label]
 										"symbol");
 
                              loc = location(lbl->lbl.raddr);
-                             v = VIEW(loc, value);
+                             v = to_CMM_value(loc, sizeof(void *) * 8);
                              break;
                              }
                            case CMM_PROCEDURE:
                            case CMM_CONTINUATION:
                            case CMM_CFUNCTION:
-                             v = VIEW(s, value);
+                             v.ptr = (void *) lbl;
                              break;
                            default:
                              cmm_err("internal label error");
@@ -1419,7 +1571,7 @@ We implement both {\PAL} and foreign C procedure calls with one matching case.
                            CMM_label   *lbl;
 
                            v    = POP(values);
-                           lbl  = VIEW(v, CMM_label *);
+                           lbl  = (CMM_label *) v.ptr;
                            ASSERT_EMPTY(values);
                            if (lbl->ty == CMM_CFUNCTION) {
                              <<perform C call>>
@@ -1602,7 +1754,7 @@ Once more, we pop a [[procedure]] struct pointer off the value stack for informa
                            procedure *proc;
 
                            v    = POP(values);
-                           lbl  = VIEW(v, CMM_label *);
+                           lbl  = (CMM_label *) v.ptr;
                            ASSERT_EMPTY(values);
 
                            cmm_assert(lbl->ty == CMM_PROCEDURE,
@@ -1730,7 +1882,7 @@ We restore state information from the destination activation and recover memory 
                            bytecodeptr   cont_pc;
 
                            v   = POP(values);
-                           lbl = VIEW(v, CMM_label *);
+                           lbl = (CMM_label *) v.ptr;
                            ASSERT_EMPTY(values);
 
                            cont = lbl->lbl.cont;
@@ -1943,7 +2095,6 @@ Putting it all together, we have [[interp.m]], the C file with NJ Machine-Code T
 <<interp.m>>=
 #include "interp.h"
 
-#include <cii/arena.h>
 #include <assert.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -1962,6 +2113,8 @@ Putting it all together, we have [[interp.m]], the C file with NJ Machine-Code T
 #include "span.h"
 #include "stack.h"
 #include "controlflow.h"
+
+#include <cii/arena.h>
 
 <<global variable definitions>>
 
@@ -2054,74 +2207,6 @@ int strcasecmp(const char *s1, const char *s2) {
 #endif /* strcasecmp */
 @ 
 
-% ----------------------------------------------------------------------------
-\paragraph{Machine-Dependent Details}
-% ----------------------------------------------------------------------------
-
-We must also remember to define aggregated fetch functions for the NJ Machine-Code Toolkit so it can read more than 8 bits of bytecode from memory at a time:
-
-<<decode.fetch.BIG>>=
-address type is "unsigned char *"
-fetch 8  using "*%a"
-fetch 16 using "%a[1] + (%a[0] << 8)"
-fetch 32 using "%a[3] + (%a[2] << 8) + (%a[1] << 16) + (%a[0] << 24)"
-@
-
-<<decode.fetch.LITTLE>>=
-address type is "unsigned char *"
-fetch 8  using "*%a"
-fetch 16 using "%a[0] + (%a[1] << 8)"
-fetch 32 using "%a[0] + (%a[1] << 8) + (%a[2] << 16) + (%a[3] << 24)"
-@
-
-We also define a few constants in [[machine.h]] to provide information about the architecture on which the interpreter is currently being run.
-
-<<machine.h.BIG>>=
-#ifndef _MACHINE_H
-#define _MACHINE_H
-
-/* FIX :  the float types are here defined in a machine-dependent manner; */
-typedef float       float32;
-typedef double      float64;
-typedef long double float96; /* this one doesn't work on liz */
-
-typedef enum {
-  ROUND_DOWN    = 00U,
-  ROUND_UP      = 01U,
-  ROUND_NEAREST = 02U,
-  ROUND_ZERO    = 03U
-} rounding_mode;
-
-#define DEF_MEMSIZE    8
-#define DEF_BYTE_ORDER BIG
-#define DEF_ALIGN      4
-
-typedef u_int32 Cmm_Word;
-#endif /* _MACHINE_H */
-@ 
-
-<<machine.h.LITTLE>>=
-#ifndef _MACHINE_H
-#define _MACHINE_H
-/* FIX :  the float types are here defined in a machine-dependent manner; */
-typedef float       float32;
-typedef double      float64;
-typedef long double float96; /* this one doesn't work on liz */
-
-typedef enum {
-  ROUND_DOWN    = 00U,
-  ROUND_UP      = 01U,
-  ROUND_NEAREST = 02U,
-  ROUND_ZERO    = 03U
-} rounding_mode;
-
-#define DEF_MEMSIZE    8
-#define DEF_BYTE_ORDER LITTLE
-#define DEF_ALIGN      1
-
-typedef u_int32 Cmm_Word;
-#endif /* _MACHINE_H */
-@ 
 
 % ----------------------------------------------------------------------------
 \paragraph{Shut Down}

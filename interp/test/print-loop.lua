@@ -1,16 +1,16 @@
 --- ./regr "../interp $SELF" $REGRFLAGS -out $BASE.1 -err $BASE.2
 
 CMM.exports({ "main" })
-CMM.imports({ "cmmprint" })
+CMM.imports({ "cmmprint16" })
 
 CMM.procedure("main", 2, 0)  -- BEGIN PROCEDURE main with 2 local variable
 
 -- locals[0] := 10
-   CMM.push_literal("10")
+   CMM.push_literal("0xa", 16)
    CMM.store_local(0)
 
 -- push 0
-   CMM.push_literal("0")
+   CMM.push_literal("0x0", 16)
 
    -- begin loop
    CMM.define_label("loop")
@@ -32,11 +32,11 @@ CMM.procedure("main", 2, 0)  -- BEGIN PROCEDURE main with 2 local variable
 
       -- print the top value on the value stack
       CMM.store_arg(0)
-      CMM.c_call("cmmprint")
+      CMM.c_call("cmmprint16")
       CMM.fetch_arg(0)
 
       -- mutate the top value by adding 1 to it
-      CMM.push_literal("1")
+      CMM.push_literal("0x1", 16)
       CMM.apply_operator("add", "bits16,bits16:bits16")
 
       -- continue looping

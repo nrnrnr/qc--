@@ -39,6 +39,8 @@ It should plug right along without changing the contents of the memory being dis
 #include "types.h"
 #include "controlflow.h"
 #include "operator.h"
+#include "interp.h"
+#include "machine.h"
 
 static void print_procedure(procedure *p) {
   if (p == NULL)
@@ -99,9 +101,11 @@ void disassemble_instructions(CMM_label *loc) {
         asmprintf(asmprintfd, " }");
         asmprintf(asmprintfd, "\n");
       }
-  | PUSH(bits32) => 
+  | PUSH(bits32, bits8) => 
       asmprintf(asmprintfd, "%x: %s", pc, "PUSH ");
       print_unsigned_bits32(bits32);
+      asmprintf(asmprintfd, " : width ");
+      print_unsigned_bits8(bits8);
       asmprintf(asmprintfd, "\n");
   | PUSH_SYMBOL(a) =>
       asmprintf(asmprintfd, "%x: %s", pc, "PUSH_SYMBOL ");

@@ -6,14 +6,14 @@
 -- begin assembly code
 
 CMM.exports({ "main", "main2" })
-CMM.imports({ "cmmprint" })
+CMM.imports({ "cmmprint32" })
 
 CMM.section("code")
   CMM.procedure("main", 0, 0)
     CMM.define_label("label2")
       CMM.store_arg(0)
       CMM.fetch_arg(0)
-      CMM.push_literal("1201230123")
+      CMM.push_literal("0x1201230123", 32)
       CMM.fetch_local(3)
       CMM.store_local(5)
       CMM.fetch_global(11)

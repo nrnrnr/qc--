@@ -110,10 +110,12 @@ int span_verbosity = 0;
 <<span.c>>=
 #include "span.h"
 
-#include <cii/arena.h>
+#include <assert.h>
 #include <lua.h>
 #include "interp.h"
 #include "lualink.h"
+
+#include <cii/arena.h>
 
 <<constant definitions>>
 <<global variable definitions>>
@@ -331,20 +333,11 @@ unsigned span_find_value(unsigned real_pc, unsigned tok) {
     return 0;
   }
 
-  low    = 1;
-  high   = lua_getn(L, -1);
+  <<find smallest span associated with [[real_pc]]>>
 
-  /* do binary search; only leave 'for' loop if we don't find span */
-  
-  for (middle = low + ((high - low) / 2); high - low >= 0; 
-       middle = low + ((high - low) / 2)) 
-  {
-    <<find smallest span associated with [[real_pc]]>>
-  }
   lua_pop(L, 2); /* pop 2 tables */
 
-  /* if can't find, return 0 */
-  return 0;
+  <<retrieve information from [[last_matching_span]] and return>>
 }
 @ 
 
@@ -352,6 +345,12 @@ We do an extended binary search to find the smallest span associated with the
 current program counter ([[real_pc]]).
 
 <<find smallest span associated with [[real_pc]]>>=
+  /* do binary search; only leave 'for' loop if we don't find span */
+  
+  for ( low = 1, high = lua_getn(L, -1), middle = low + ((high - low) / 2)
+      ; high - low >= 0
+      ; middle = low + ((high - low) / 2))
+  {
     lua_rawgeti(L, -1, middle);
     if (!lua_isuserdata(L, -1) || 
         lua_tag(L, -1) != lua_span_tag ||
@@ -364,52 +363,35 @@ current program counter ([[real_pc]]).
     }
     lua_pop(L, 1); /* pop span */
 
-    cmm_assert(location_known(sp->pc_begin), "internal span error");
-    cmm_assert(location_known(sp->pc_end),   "internal span error");
-    cmm_assert(location(sp->pc_begin) <= location(sp->pc_end),
+    cmm_assert(location_known(sp->pc_begin) && location_known(sp->pc_end) &&
+	           location(sp->pc_begin) <= location(sp->pc_end),
                "internal span error");
 
-    if (real_pc < location(sp->pc_begin)) {
+    if (real_pc < location(sp->pc_begin))
       high = middle - 1;
-      continue;
-    } else if (real_pc > location(sp->pc_end)) {
+    else if (real_pc > location(sp->pc_end))
       low  = middle + 1;
-      continue;
+    else {
+      /* otherwise real_pc must be in the closed interval [pc_begin, pc_end] */
+      low = middle + 1;
+      last_matching_span = sp;
     }
-
-    /* otherwise, real_pc must be in the closed interval [pc_begin, pc_end] */
-    assert(last_matching_span == NULL);
-    last_matching_span = sp;
-    for ( ; middle <= high; middle++) {
-      lua_rawgeti(L, -1, middle);
-
-      if (!lua_isuserdata(L, -1) || 
-        lua_tag(L, -1) != lua_span_tag ||
-        (sp = (span *) lua_touserdata(L, -1)) == NULL)
-      {
-        lua_pop(L, 3); /* pop bogus value, 2 tables */
-        fprintf(stderr, "internal error -- invalid span value at index %u:%d", 
-                tok, middle);
-        exit(1);
-      }
-      lua_pop(L, 1); /* pop span */
-
-      if (real_pc < location(sp->pc_begin) || middle >= high) {
-        lua_pop(L, 2); /* pop 2 tables */
-        cmm_assert(location_known(CMM_label_raddr(last_matching_span->value)),
-                   "span value references undefined label");
-
-        if (span_verbosity) {
-          printf("--- got descriptor for activation of [%s]\n",
-                 CMM_label_raddr(last_matching_span->value)->label->name);
-        }
-
-        return (unsigned) CMM_label_location(last_matching_span->value);
-      } else {
-        last_matching_span = sp;
-      }
-    }
-
-    /* we should never get down here */
-    assert(0);
+  }
 @ 
+
+<<retrieve information from [[last_matching_span]] and return>>=
+  if (last_matching_span != NULL) {
+    cmm_assert(location_known(CMM_label_raddr(last_matching_span->value)),
+               "span value references undefined label");
+
+    if (span_verbosity) {
+      printf("--- got descriptor for activation of [%s]\n",
+             CMM_label_raddr(last_matching_span->value)->label->name);
+    }
+
+    return (unsigned) CMM_label_location(last_matching_span->value);
+  }
+
+  /* if can't find, return 0 */
+  return 0;
+@

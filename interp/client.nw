@@ -100,6 +100,7 @@ Its implementation is split across files [[client.h]] and [[client.c]].
 #define _CLIENT_H
 
 #include "runtime.h"
+#include "types.h"
 
 <<constant definitions>>
 <<type definitions>>
@@ -206,31 +207,32 @@ void TCB_free(Cmm_TCB *tcb) {
 \subsection{Interpreter Interaction}
 % ----------------------------------------------------------------------------
 
-In this client, we register a couple of C functions with the interpreter: a simple printing function (that takes an [[int]], prints it, and returns it) and a simple input function.
+In this client, we register a couple of C functions with the interpreter: 
+a simple printing function (that takes a 16 bit [[int]], prints it, and 
+returns it) and a 32-bit version of this function.
 
 <<function prototypes>>=
-int cmmprint(int i);
-int cmminput(void);
+u_int16 cmmprint16(u_int16 i);
+u_int32 cmmprint32(u_int32 i);
 @ 
 
 <<interpreter interaction functions>>=
-int cmmprint(int i) {
+u_int16 cmmprint16(u_int16 i) {
   printf("[CMMPRINT] %u\n", i);
   return i;
 }
 
-int cmminput(void) {
-  int i;
-  assert(scanf("%d", &i));
+u_int32 cmmprint32(u_int32 i) {
+  printf("[CMMPRINT] %u\n", i);
   return i;
 }
-@ 
+@
 
 To register the functions, the client simply calls [[register_c_func]].
 
 <<register needed C functions with the interpreter>>=
-  register_c_func("cmmprint", (void *) cmmprint, "int:int");
-  register_c_func("cmminput", (void *) cmminput, "void:int");
+  register_c_func("cmmprint16", (void *) cmmprint16, "u_int16:u_int16");
+  register_c_func("cmmprint32", (void *) cmmprint32, "u_int32:u_int32");
 @ 
 
 % ----------------------------------------------------------------------------
@@ -352,7 +354,7 @@ We then tokenize the line read in and act appropriately.
     c = buff;
     do {
       *(c++) = (char) getchar();
-    } while (c[-1] != EOF && c[-1] != '\n' && c[-1] != '\r');
+    } while (c[-1] != EOF && c[-1] != '\n' && c[-1] != '\r' && c[-1] != ';');
 
     if (buff[0] == EOF) break;    
     if (c == buff + 1)  continue;

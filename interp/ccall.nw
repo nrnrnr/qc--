@@ -87,6 +87,7 @@ void init_c_sigs(void);
 #include "label.h"
 #include "lualink.h"
 #include "interp.h"
+#include "types.h"
 
 <<macro definitions>>
 <<macro-generated function prototypes>>
@@ -246,6 +247,8 @@ F(void, RETURNS_VOID) \
 F(int,  RETURNS_VAL )
 
 #define ITERATE_UNARY_C_CALLERS(F) \
+F(u_int16,  u_int16, RETURNS_VAL ) \
+F(u_int32,  u_int32, RETURNS_VAL ) \
 F(int,      int,     RETURNS_VAL ) \
 F(unsigned, pointer, RETURNS_VAL ) \
 F(pointer,  pointer, RETURNS_VAL ) \
@@ -305,7 +308,7 @@ sptr c_caller_void_##RETTY (sptr arguments, void *f) { \
   { \
   RETTY (*f_ty) (void) = (RETTY (*) (void)) f; \
   RETURNS(RETTY retval =, (void)) f_ty(); \
-  RETURNS(arguments[0] = VIEW(retval, value);, ) \
+  RETURNS(arguments[0] = to_CMM_value((unsigned) retval, 8*sizeof(RETTY));, ) \
   return arguments; \
 } }
 #define UNARY_C_CALLER(ARGTY, RETTY, RETURNS) \
@@ -313,7 +316,7 @@ sptr c_caller_##ARGTY##_##RETTY (sptr arguments, void *f) { \
   { \
   RETTY (*f_ty) (ARGTY) = (RETTY (*) (ARGTY)) f; \
   RETURNS(RETTY retval =, (void)) f_ty(VIEW(arguments[0], ARGTY)); \
-  RETURNS(arguments[0] = VIEW(retval, value);, ) \
+  RETURNS(arguments[0] = to_CMM_value((unsigned) retval, 8*sizeof(RETTY));, ) \
   return arguments; \
 } }
 #define BINARY_C_CALLER(ARGATY, ARGBTY, RETTY, RETURNS) \
@@ -323,7 +326,7 @@ sptr c_caller_##ARGATY##_##ARGBTY##_##RETTY (sptr arguments, void *f) { \
   RETURNS(RETTY retval =, (void)) \
       f_ty(VIEW(arguments[0], ARGATY), \
            VIEW(arguments[1], ARGBTY)); \
-  RETURNS(arguments[0] = VIEW(retval, value);, ) \
+  RETURNS(arguments[0] = to_CMM_value((unsigned) retval, 8*sizeof(RETTY));, ) \
   return arguments; \
 } }
 #define FOURARY_C_CALLER(ARGATY, ARGBTY, ARGCTY, ARGDTY, RETTY, RETURNS) \
@@ -338,7 +341,7 @@ sptr c_caller_##ARGATY##_##ARGBTY##_##ARGCTY##_##ARGDTY##_##RETTY \
            VIEW(arguments[1], ARGBTY), \
            VIEW(arguments[2], ARGCTY), \
            VIEW(arguments[3], ARGDTY)); \
-  RETURNS(arguments[0] = VIEW(retval, value);, ) \
+  RETURNS(arguments[0] = to_CMM_value((unsigned) retval, 8*sizeof(RETTY));, ) \
   return arguments; \
 } }
 @
