@@ -421,13 +421,14 @@ imports and exports have two effects
 type scope = Local | Global
 let program ~swap validate srcmap asm ast =
   E.seq (Metrics.of_ast ~swap srcmap ast.N.target) (fun metrics ->
-    let flag = function E.Error -> F.flagError | E.Ok _ -> (fun env -> env) in
+    let flag       = function E.Error -> F.flagError | E.Ok _ -> (fun env -> env) in
     let eprint r s = E.errorRegionPrt (srcmap, r) s in
     let errorf r   = Printf.kprintf (fun s -> eprint r s; E.Error) in
-    let pointerty = Types.Bits metrics.Metrics.pointersize in
-    let wordty    = Types.Bits metrics.Metrics.wordsize in
-    let vfp       = Vfp.mk metrics.Metrics.wordsize in
-    let memsize   = metrics.Metrics.memsize in
+    let findve r n = E.catch (eprint r) (fun env -> snd (F.findv n env)) in
+    let pointerty  = Types.Bits metrics.Metrics.pointersize in
+    let wordty     = Types.Bits metrics.Metrics.wordsize in
+    let vfp        = Vfp.mk metrics.Metrics.wordsize in
+    let memsize    = metrics.Metrics.memsize in
     <<definitions of name-binding functions>>
     <<definitions of elaboration functions>>
     (* phase one: create environment and bind all names *)
@@ -468,7 +469,7 @@ let proc env spans p =
   let env, conts = bind_and_return_continuations env p.N.continuations in
   let stackmem, stacklabels, env = stackdata env p.N.stackdata in
   let code = Elabstmt.elab_stmts validate srcmap p.N.region env p.N.code in
-  let _, den  = F.findv p.N.name env in
+  let _, den  = F.findv p.N.name env in (* lookup cannot fail *)
   E.ematch4 code locals (E.Raise.list spans) den (fun code locals spans den ->
     let sym = match den with
     | FE.Label (FE.Proc sym), _ -> sym
@@ -696,7 +697,7 @@ flagged with an error.
 let check_export env (r, ty, pairs) = 
   let errorf fmt = Printf.kprintf (fun s -> eprint r s; F.flagError env) fmt in
   let check_pair env (name, foreign) =
-    E.seq' env (snd (F.findv name env)) (fun (den, ty) ->
+    E.seq' env (findve r name env) (fun (den, ty) ->
       if Pervasives.(<>) ty pointerty then
         errorf "exported value must have native pointer type"
       else
@@ -743,7 +744,7 @@ let metrics = F.metrics env in
 let rec data spans ds rest = match ds with
 | [] -> (match rest with [] -> [] | (spans, ds) :: rest -> data spans ds rest)
 | (r, d) :: ds ->
-    let datalabel_meaning l = match snd (F.findv l env) with
+    let datalabel_meaning l = match findve r l env with
     | E.Ok (FE.Label (FE.Data sym), _) -> E.Ok (Datalabel sym)
     | E.Ok _ -> impossf "data label %s stands for something else?!" l
     | E.Error -> E.Error in

@@ -462,9 +462,10 @@
       begin
         (SexpPkl.rd_lp s_);
         (SexpPkl.rd_sym "ast_cformal" s_);
-        let tmp_ = let hint_opt1 = (SexpPkl.rd_option sexp_rd_hint s_) in
+        let tmp_ = let region1 = (sexp_rd_region s_) in
+          let hint_opt1 = (SexpPkl.rd_option sexp_rd_hint s_) in
           let name1 = (sexp_rd_name s_) in
-          (hint_opt1, name1) in
+          (region1, hint_opt1, name1) in
         begin
           (SexpPkl.rd_rp s_);
           tmp_
@@ -1362,9 +1363,10 @@
   
   and sexp_wr_cformal x_ s_ = 
       (match (x_) with 
-          ((hint_opt1, name1) : Ast.cformal) -> begin
+          ((region1, hint_opt1, name1) : Ast.cformal) -> begin
             (SexpPkl.wr_lp s_);
             (SexpPkl.wr_sym "ast_cformal" s_);
+            (sexp_wr_region region1 s_);
             (SexpPkl.wr_option sexp_wr_hint hint_opt1 s_);
             (sexp_wr_name name1 s_);
             (SexpPkl.wr_rp s_)

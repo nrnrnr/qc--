@@ -1,0 +1,45 @@
+target byteorder little;
+
+import printf, atol;
+export main;
+
+foreign "C" main(bits32 argc, "address" bits32 argv) {
+  bits32 n, m;
+  if (argc > 2) {
+    n = foreign "C" atol("address" bits32[argv+4]);
+    m = foreign "C" atol("address" bits32[argv+8]);
+  } else {
+    n, m = 10, 11;
+  }
+  bits32 nt, mt;
+  nt = tag(n);
+  mt = tag(m);
+  foreign "C" printf("address" tags, n, nt, m, mt);
+  handler = k;
+  sumt = tagged_add(nt, mt) also cuts to k;
+  sum = untag(sumt);
+  bits32 sum, sumt;
+  foreign "C" printf("address" sumfmt, sumt, sum);
+  foreign "C" return(0);
+continuation k(exn):
+  foreign "C" printf("address" exn);
+  foreign "C" return(1);
+}
+bits32 handler;
+section "data" { 
+ tags: bits8[] "%d tagged is %d and %d tagged is %d\n\0";
+ sumfmt: bits8[] "sum tagged is %d and untagged is %d\n\0";
+ overflow: bits8[] "addition overflows\n\0";
+}
+tagged_add(bits32 nt, bits32 mt) {
+  bits32 sum;
+  sum = (nt - 1) + mt;
+  if (%add_overflows(nt-1, mt)) {
+    jump raise(overflow);
+  }
+  return (sum);
+}
+tag  (bits32 n) { return ((n << 1) + 1); }
+untag(bits32 n) { return (n `shra` 1); }
+
+raise(bits32 exn) { cut to handler(exn); }

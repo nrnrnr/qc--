@@ -87,7 +87,7 @@
       | Align of (align)
       | MemDecl of (ty * memsize * init option)
   
-  and cformal = (hint option * name)
+  and cformal = (region * hint option * name)
   and flow =
         FlowAt of (flow * region)
       | CutsTo of (name list)

@@ -83,7 +83,6 @@ module N  = Nast
 let impossf fmt = Printf.kprintf Impossible.impossible fmt
 let is2power x = x > 0 && x land (x - 1) = 0
 @
-
 <<elabstmt.ml>>=
 module M = Metrics
 @ 
@@ -95,8 +94,9 @@ restrictions: if a statement is reachable by ordinary control flow, it
 Similarly, it had better not be the end of the procedure body.
 <<elabstmt.ml>>=
 let elab_functions validate srcmap r env =
-  let eprint r = E.errorRegionPrt (F.srcmap env, r) in
-  let errorf r = Printf.kprintf (fun s -> eprint r s; E.Error) in
+  let eprint r   = E.errorRegionPrt (F.srcmap env, r) in
+  let errorf r   = Printf.kprintf (fun s -> eprint r s; E.Error) in
+  let findve r n = E.catch (eprint r) (fun env -> snd (F.findv n env)) in
   let exp = Elabexp.elab_exp env in
   let con = Elabexp.elab_con env in
   let loc = Elabexp.elab_loc env in
@@ -192,8 +192,8 @@ let vrtl r rtl =
 @ 
 A formal parameter to a continuation must be a local register variable.
 <<elaboration of continuation formals>>=
-let cformal (hint, name) =
-  E.seq (snd (F.findv name env)) (fun den ->
+let cformal (rgn, hint, name) =
+  E.seq (findve rgn name env) (fun den ->
     match den with
     | FE.Variable v, _ when F.is_localv name env -> E.Ok (hint, v)
     | FE.Variable _, _ ->
@@ -326,14 +326,14 @@ A name appearing in a targets list must denote a local label,
 as must an expression without a targets list.
 We have two functions so we can issue suitable error messages.
 <<elaboration utilities>>=
-let goto_target r x = E.seq (snd (F.findv x env)) (fun (d, t) ->
+let goto_target r x = E.seq (findve r x env) (fun (d, t) ->
   match d with 
   | FE.Label (FE.Code _) when F.is_localv x env -> E.Ok x
   | FE.Label (FE.Code _) -> errorf r "may not goto %s (label in another procedure)" x
   | _ -> errorf r "may not goto %s %s" (FE.denotation's_category d) x) in
 let exp_is_local_code_label r e = match exp_as_name e with
 | None -> false
-| Some x -> match snd (F.findv x env) with
+| Some x -> match findve r x env with
   | E.Ok (FE.Label (FE.Code _), _) when F.is_localv x env -> true
   | E.Ok _ -> false
   | E.Error -> impossf "good target name came back as error" in
@@ -355,20 +355,27 @@ let call left conv p args targets flows alias =
   let tgts  = E.Raise.list (List.map (call_target r) targets) in
   let flow  = call_flow r conv flows in
   let alias = elab_alias r alias in
-  reject_uncallable p;
-  E.ematch6 left args (exp p) tgts flow alias (fun left args (p,pt) tgts flow alias ->
-    insist_pointer "procedure value" pt;
-    Call (left, conv, p, args, tgts, flow, alias)) in
+  E.seq (exp p) (fun (pe, pt) ->
+    reject_uncallable r p;
+    E.ematch5 left args tgts flow alias (fun left args tgts flow alias ->
+      insist_pointer "procedure value" pt;
+      Call (left, conv, pe, args, tgts, flow, alias))) in
+@ The double nesting avoids a double error (from both [[exp]] and
+[[reject_uncallable]]) in the case when [[p]] is an unknown name.
+But by doing [[reject_uncallable]] early, we can issue a suitable
+message even in the case when [[p]] is a good but uncallable [[exp]]
+and some other abstract syntax is bad as well.
 @
 The jump expression must be a (code) pointer.
 <<definitions of elaboration functions>>=
 let jump conv p args targets =
   let args = E.Raise.list (List.map (actual r) args) in
   let tgts = E.Raise.list (List.map (call_target r) targets) in
-  reject_uncallable p;
-  E.ematch3 args (exp p) tgts (fun args (p,pt) tgts ->
-    insist_pointer "procedure value" pt;
-    Jump (conv, p, args, tgts)) in
+  E.seq (exp p) (fun (pe, pt) ->
+    reject_uncallable r p;
+    E.ematch2 args tgts (fun args tgts ->
+      insist_pointer "procedure value" pt;
+      Jump (conv, pe, args, tgts))) in
 @ 
 Why is there no analog of [[reject_uncallable]]?
 Only Christian knows\ldots
@@ -419,9 +426,9 @@ As target of a call or jump,
 we reject out of hand (by raising [[E.ErrorExn]]) any name that is
 obviously not a procedure. 
 <<elaboration utilities>>=
-let reject_uncallable e = match exp_as_name e with
+let reject_uncallable r e = match exp_as_name e with
 | None -> ()
-| Some x -> match (snd (F.findv x env)) with
+| Some x -> match findve r x env with
   | E.Ok ((FE.Label (FE.Proc _) | FE.Import (_, _) | FE.Variable _), _) | E.Error -> ()
   | E.Ok (d, _) -> 
       E.errorf "cannot call or jump to %s %s" (FE.denotation's_category d) x in
@@ -453,7 +460,7 @@ let flow r conv default_aborts default_returns =
     if not (List.mem conv k.FE.returned_to) then
       k.FE.returned_to <- conv :: k.FE.returned_to in
   let rec ks r as_what prev' ns =
-    let continuation n = E.seq (snd (F.findv n env)) (function
+    let continuation n = E.seq (findve r n env) (function
       | FE.Continuation k, _ -> as_what k; E.Ok n
       | _ -> errorf r "%s is not a continuation" n) in
     match ns with
@@ -493,7 +500,7 @@ let cut_flow r cc fs =
 A call target must be either a procedure or an imported symbol with
 the native pointer type.
 <<elaboration utilities>>=
-let call_target r x = E.seq (snd (F.findv x env)) (function
+let call_target r x = E.seq (findve r x env) (function
   | (FE.Label (FE.Proc _) | FE.Import _), t when ispointer t -> E.Ok x
   | d, _ -> errorf r "target %s is a %s (must be a procedure or imported pointer)"
           x (FE.denotation's_category d)) in
