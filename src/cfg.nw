@@ -1504,9 +1504,8 @@ let splice_on_every_edge_between ~entry ~exit ~pred ~succ =
       upd_array_gen (fun ce -> {ce with node = upd_succ ce.node}) in
     match pred with
     | Cbr c ->
-      ( c.cbr_true  <- upd_succ c.cbr_true
-      ; c.cbr_false <- upd_succ c.cbr_false
-      )
+      if eq succ c.cbr_true  then set_tsucc pred entry; 
+      if eq succ c.cbr_false then set_fsucc pred entry
     | Imp i ->
       ( i.imp_succ      <- upd_succ i.imp_succ
       ; i.imp_exit_succ <- upd_succ i.imp_exit_succ
