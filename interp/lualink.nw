@@ -10,8 +10,8 @@ This document contains some code necessary for interaction with Lua from C.
 #ifndef _LUALINK_H
 #define _LUALINK_H
 
-#include <lua.h>
-#include <luadebug.h>
+#include <lua40/lua.h>
+#include <lua40/luadebug.h>
 #include "table.h"
 
 #define LUA_INVALIDLINE (-1)
@@ -35,6 +35,13 @@ and returns its [[lua_State *]].
 
 <<function prototypes>>=
 lua_State *init_lua_interp(void);
+@ 
+
+For ease of access, we export a global variable pointing to the Lua interpreter
+that [[lualink.nw]] uses.
+
+<<[[extern]] declarations for exported globals>>=
+extern lua_State *lua_interpreter;
 @ 
 
 % ----------------------------------------------------------------------------
@@ -77,7 +84,7 @@ void lua_assert_istable   (lua_State *L, int i, const char *err_msg);
 <<lualink.c>>=
 #include "lualink.h"
 
-#include <lualib.h>
+#include <lua40/lualib.h>
 
 #include "interp.h" 
 #include "encoding.h"
@@ -94,6 +101,7 @@ int lua_span_tag;
 
 int lua_linenumber = LUA_INVALIDLINE;
 
+<<global variable definitions>>
 <<function definitions>>
 @
 
@@ -121,12 +129,16 @@ extern int lua_linenumber;
 
 Here, we need to also open up interaction with the Lua base library so we can later use the Lua function [[foreach]].
 
+<<global variable definitions>>=
+lua_State *lua_interpreter = NULL;
+@ 
+
 <<function definitions>>=
 lua_State *init_lua_interp(void) {
   lua_State *lua_interp;
 
   /* FIX : for now, send lua_open 0; it will default to a stacksize of 1024 */
-  lua_interp = lua_open(0);
+  lua_interpreter = lua_interp = lua_open(0);
   lua_baselibopen(lua_interp);
   lua_setlinehook(lua_interp, lua_linehook);
 

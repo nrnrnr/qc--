@@ -54,6 +54,8 @@ Cmm_Cont       *Cmm_GetUnwindCont(const Cmm_Activation *a, Cmm_Word index);
 \subsection{The Global Registers}
 % ----------------------------------------------------------------------------
 
+\emph{Note that we do not export [[%GlobalSize]] to {\PAL} for now.}
+
 <<faux {\PAL} prototypes>>=
 SaveGlobals( bits32 gp );
 RestoreGlobals( bits32 gp );
@@ -266,21 +268,34 @@ Cmm_Cont *Cmm_RunThread (Cmm_Cont *k) {
 % ----------------------------------------------------------------------------
 
 Walking the stack is very easy, given our representation of activation stacks.
-To find the youngest activation, to determine if an activation is the oldest in its thread, and to find the activation of a given activation's caller, we simply perform pointer arithmetic.
-This arithmetic, of course, relies on the stacks' direction of growth and general layout (see [[thread.nw]]).
+Implementing most of these stack-walking functions is as simple as pointer arithmetic based on what we know of a thread's stack layout (see [[thread.nw]]).
 
+[[Cmm_YoungestActivation]] simply returns the newest activation record on
+the thread's stack (it should be located at [[t->stack_free - sizeof(activation)]]).
 <<stack-walking functions>>=
 Cmm_Activation *Cmm_YoungestActivation(const Cmm_Cont *t) {
   assert(t->stack_free > t->stack_base);
   return (Cmm_Activation *) (((activation *) t->stack_free) - 1);
 }
+@ 
 
+[[Cmm_isOldestActivation]] looks if the local variable space associated with 
+the given activation is at the beginning of the thread's stack (is located
+at [[t->stack_base]]).
+<<stack-walking functions>>=
 int Cmm_isOldestActivation(const Cmm_Activation *a) {
   thread *t = find_thread(a->u);
 
   return (t->stack_base == a->locals);
 }
+@ 
 
+[[Cmm_NextActivation]] simply returns a pointer to the activation that
+is located just before the given activation's associated local variable space
+(at [[a->locals - sizeof(activation)]]).
+Note that this function does not in any way actually pop activations off
+the stack; it merely observes the next youngest activation.
+<<stack-walking functions>>=
 Cmm_Activation *Cmm_NextActivation(const Cmm_Activation *a) {
   if (Cmm_isOldestActivation(a)) {
     runtime_sys_err("[runtime system] already at oldest activation in thread");
@@ -288,7 +303,12 @@ Cmm_Activation *Cmm_NextActivation(const Cmm_Activation *a) {
 
   return (Cmm_Activation *) (((activation *) (a->locals)) - 1);
 }
+@ 
 
+[[Cmm_ChangeActivation]] does not prune the stack either, but instead 
+conditionally changes a given activation handle--depending on whether we
+have walked off the stack or not.
+<<stack-walking functions>>=
 int Cmm_ChangeActivation(Cmm_Activation **a) {
   thread *t = find_thread((*a)->u);
 
@@ -296,87 +316,118 @@ int Cmm_ChangeActivation(Cmm_Activation **a) {
     return 0;
   else {
     (*a) = ((actptr) ((*a)->locals)) - 1;
-    /* LOOK AT THIS!!! */
-    /* t->stack_free = (void *) (((actptr) (*a)) + 1); */
     return 1;
   }
 }
 @ 
 
+[[Cmm_FindLocalVar]] returns a pointer to local variable number [[n]] in the
+given activation.
 <<stack-walking functions>>=
 void *Cmm_FindLocalVar(const Cmm_Activation *a, unsigned n) {
   return (void *) (a->locals + n);
 }
+@ 
 
+[[Cmm_LocalVarCount]] returns the number of local variables in the given
+activation.
+<<stack-walking functions>>=
 unsigned Cmm_LocalVarCount(const Cmm_Activation *a) {
   return (unsigned) (a->locals_end - a->locals);
 }
 @ 
 
-DOCUMENT
-\emph{These functions are unimplemented and fail assertions for now.}
-
+It is, for the moment, unclear whether or not this will do the trick for
+finding a ``dead local variable.''
+We look at the activation [[a]], which might be dead.
+If its [[locals]] pointer appears to be valid, we dereference it--offset by
+[[n]]; otherwise, we return [[NULL]].
 <<stack-walking functions>>=
 void *Cmm_FindDeadLocalVar(const Cmm_Activation *a, unsigned n) {
-  /* will this do the trick? */
-  return (void *) (a->locals + n);
-}
+  thread *t = find_thread(a->u);
 
+  if ((void *) a->locals >= t->stack_free 
+      && (void *) a->locals < t->stack_limit)
+  {
+    return (void *) (a->locals + n);
+  } else {
+    return NULL;
+  }
+}
+@ 
+
+[[Cmm_FindStackData]] should return a pointer to the location in memory
+associated with the given activation's [[n]]th stackdata label.
+\emph{This function is unimplemented and causes an error message for now.}
+<<stack-walking functions>>=
 void *Cmm_FindStackData(const Cmm_Activation *a, unsigned n) {
-  assert(0);
-  /* IMPLEMENT THIS ! */
+  runtime_sys_err("[runtime system] Cmm_FindStackData unimplemented");
+
+  /* we should not get down here for now */
   return NULL;
 }
 @ 
 
 [[Cmm_GetDescriptor]] must look up the given [[token]] in the Lua span table of the given activation's thread; moreover, it must look for the innermost (table entry with greatest index) value associated with the token.
 Fortunately, [[span.nw]] exports [[span_find_value]] to take care of the job.
-
 <<stack-walking functions>>=
 Cmm_Dataptr Cmm_GetDescriptor(const Cmm_Activation *a, Cmm_Word token) {
   return (Cmm_Dataptr) span_find_value((unsigned) a->pc, (unsigned) token);
 }
 @ 
 
-\emph{This function is unimplemented and fails an assertion.}
-
+[[Cmm_GetUnwindCont]] returns a pointer to a [[Cmm_Cont]] (a [[thread *]])
+that encapsulates the [[index]]th unwind continuation of the specified
+activation ([[a]]), where an [[index]] value of [[0]] retrieves the first
+unwind continuation noted at [[a]]'s call site.
+Note that it is an unchecked, runtime error to attempt to cut to a previously
+saved [[Cmm_Cont]] that points to an activation in the same thread as [[a]]
+and that is younger than [[a]], after the [[Cmm_Cont]] returned by
+[[Cmm_GetUnwindCont]] is cut to.
+\emph{Also note that the [[thread]] structure representing the thread in which [[a]] sits may not properly be freed, especially if [[Cmm_GetUnwindCont]] is used at some point.}
 <<stack-walking functions>>=
 Cmm_Cont *Cmm_GetUnwindCont(const Cmm_Activation *a, Cmm_Word index) {
-  thread *t    = find_thread(a->u);
-  lua_State *L; /* = t->span_table.L; */
+  thread      *t      = find_thread(a->u),
+              *new_t;
+  lua_State   *L      = lua_interpreter;
+  bytecodeptr  newpc;
+  actptr       a_caller;
 
-  /* FIX the definition of L */
-  assert(0);
+  if (Cmm_isOldestActivation(a)) {
+    runtime_sys_err("cannot unwind below oldest activation on stack");
+  }
 
-  /* HAVEN'T REDONE THIS STACK REDO */
-  /* STACK REDO
-  t->callstack_free--;
-  */
+  a_caller = ((actptr) a->locals) - 1;
 
-  if (index != 0) {
-    Cmm_Activation *act = ((Cmm_Activation *) a) - 1;
-    annotations    *ann = act->kappa;
+  {
+    annotations    *ann      = a_caller->kappa;
     CMM_label      *lbl;
 
-    lua_pushtable(L, ann->also_cuts_to);
-    lua_rawgeti(L, -1, (int) index);
+    lua_pushtable(L, ann->also_unwinds_to);
+    lua_rawgeti(L, -1, (int) (index + 1));
     if (!lua_isuserdata(L, -1) ||
         lua_tag(L, -1) != lua_CMM_label_tag ||
         (lbl = lua_touserdata(L, -1)) == NULL)
     {
       lua_pop(L, 2); /* pop bogus value, table */
-      runtime_sys_err("invalid continuation index given to Cmm_GetCont");
+      runtime_sys_err("invalid unwind index given to Cmm_GetUnwindCont");
     }
 
-    act->pc = CMM_label_location(lbl);
     lua_pop(L, 2);
+    newpc = CMM_label_location(lbl);
   }
- 
-  /* HAVEN'T REDONE THIS :: STACK REDO
-  (t->callstack_free - 1)->kappa = NULL;
-  */
 
-  return (Cmm_Cont *) t;
+  /* create a new thread handle, copying from t */
+  new_t  = (thread *) malloc(sizeof(thread));
+  *new_t = *t;
+
+  /* unwind to the correct activation in new thread handle */
+  new_t->stack_free = a->locals;
+
+  /* set new pc in new_t, but not yet in a */
+  new_t->pc = newpc;
+
+  return new_t;
 }
 @
 
@@ -385,6 +436,8 @@ Cmm_Cont *Cmm_GetUnwindCont(const Cmm_Activation *a, Cmm_Word index) {
 % ----------------------------------------------------------------------------
 
 We have full access to the global variables, so these three functions for accesing the global registers are easy to implement in their present form.
+We import [[int num_globals]] and the actual [[globals]] array from 
+[[interp.nw]]
 
 <<global register functions>>=
 void *Cmm_FindGlobalVar(void *gp, int n) {
@@ -407,6 +460,11 @@ void Cmm_SaveGlobals_helper(unsigned gpu);
 void Cmm_RestoreGlobals_helper(unsigned gpu);
 @ 
 
+Standard function [[memcpy]] copies the entire [[globals]] array into the
+space located at the provided location ([[gpu]]).
+It is an unchecked runtime error for [[gpu]] to point to space that has not
+first been properly allocated by the runtime system's client.
+
 <<global register functions>>= 
 void Cmm_SaveGlobals_helper(unsigned gpu) {
   void *gp = (void *) gpu;
@@ -416,7 +474,7 @@ void Cmm_SaveGlobals_helper(unsigned gpu) {
   if (gp == NULL)
     runtime_sys_err("SaveGlobals given NULL pointer");
   else
-    gp = memcpy(gp, globals, sizeof(value) * num_globals);
+    gp = memcpy(gp, globals, Cmm_GlobalSize());
 }
 
 void Cmm_RestoreGlobals_helper(unsigned gpu) {
@@ -427,7 +485,7 @@ void Cmm_RestoreGlobals_helper(unsigned gpu) {
   if (gp == NULL)
     runtime_sys_err("RestoreGlobals given NULL pointer");
   else
-    globals = memcpy(globals, gp, sizeof(value) * num_globals);
+    globals = memcpy(globals, gp, Cmm_GlobalSize());
 }
 @ 
 

@@ -113,53 +113,53 @@ interval_list *interval_list_add(interval_list *list, unsigned long lower,
      * list */
     if (upper < temp->lower - 1) {
 
-	/* If the lower end of the interval did not overlap with a previous
-	 * interval, insert it, solo, into the list */
-	if (beg == NULL) {
-	    new = (interval_list *) malloc(sizeof(interval_list));
-	    assert(new != NULL);
-	    new->next  = temp;
-	    new->lower = lower;
-	    new->upper = upper;
-	    if (last == NULL)
-		return new;
-	    else {
-		last->next = new;
-		return list;
-	    }
+    /* If the lower end of the interval did not overlap with a previous
+     * interval, insert it, solo, into the list */
+    if (beg == NULL) {
+        new = (interval_list *) malloc(sizeof(interval_list));
+        assert(new != NULL);
+        new->next  = temp;
+        new->lower = lower;
+        new->upper = upper;
+        if (last == NULL)
+        return new;
+        else {
+        last->next = new;
+        return list;
+        }
 
-	    /* Otherwise, it did overlap with a predecesor (beg != NULL) */
-	} else {
+        /* Otherwise, it did overlap with a predecesor (beg != NULL) */
+    } else {
 
-	    /* expand the overlapping intervals to have the largest upper edge*/
-	    beg->upper = max(upper, last->upper);
+        /* expand the overlapping intervals to have the largest upper edge*/
+        beg->upper = max(upper, last->upper);
 
-	    /* Free all the smaller intervals between the start of the overlap 
-	     * and the current (temp) node */
-	    for (free_temp = beg->next, free_last = NULL; 
-		    free_temp != NULL && free_temp != temp;
-		    free_last = free_temp, free_temp = free_temp->next)
-		free(free_last);
+        /* Free all the smaller intervals between the start of the overlap 
+         * and the current (temp) node */
+        for (free_temp = beg->next, free_last = NULL; 
+            free_temp != NULL && free_temp != temp;
+            free_last = free_temp, free_temp = free_temp->next)
+        free(free_last);
 
-	    /* fix pointers */
-	    beg->next  = temp;
+        /* fix pointers */
+        beg->next  = temp;
 
-	    return list;
-	}
+        return list;
+    }
     }
 
     /* If the new interval is enveloped be an old interval, we do not pay
      * attention to it; just return the old list */
     if (lower >= temp->lower && upper <= temp->upper)
-	return list;
+    return list;
 
 
     /* If the new interval overlaps with the current one, keep track of the
      * overlap for the next iteration */
     if ((lower <= temp->lower - 1 || lower <= temp->upper + 1) && beg == NULL)
     {
-	beg      = temp;
-	beg->lower = min (lower, temp->lower);
+    beg      = temp;
+    beg->lower = min (lower, temp->lower);
     }
   }
 
@@ -170,16 +170,16 @@ interval_list *interval_list_add(interval_list *list, unsigned long lower,
       new->lower = lower;
       new->upper = upper;
       if (last == NULL)
-	  return new;
+      return new;
       else {
-	  last->next = new;
-	  return list;
+      last->next = new;
+      return list;
       }
   } else {
       for (free_temp = beg->next, free_last = NULL; 
-	      free_temp != NULL && free_temp != temp;
-	      free_last = free_temp, free_temp = free_temp->next)
-	  free(free_last);
+          free_temp != NULL && free_temp != temp;
+          free_last = free_temp, free_temp = free_temp->next)
+      free(free_last);
 
       beg->next  = NULL;
       beg->upper = max(last->upper, upper);
@@ -194,39 +194,39 @@ interval_list *interval_list_remove(interval_list *list, unsigned long i) {
 
     for (temp = list, last = NULL; temp != NULL; last = temp, temp = temp->next)
     {
-	if (i == temp->lower && i == temp->upper) {
-	    if (last == NULL)
-		return temp->next;
-	    last->next = temp->next;
-	    return list;
-	}
+    if (i == temp->lower && i == temp->upper) {
+        if (last == NULL)
+        return temp->next;
+        last->next = temp->next;
+        return list;
+    }
 
-	if (i == temp->lower) {
-	    temp->lower++;
-	    return list;
-	}
+    if (i == temp->lower) {
+        temp->lower++;
+        return list;
+    }
 
-	if (i == temp->upper) {
-	    temp->upper--;
-	    return list;
-	}
+    if (i == temp->upper) {
+        temp->upper--;
+        return list;
+    }
 
-	if (i > temp->lower && i < temp->upper) {
+    if (i > temp->lower && i < temp->upper) {
 
-	    new = (interval_list *) malloc(sizeof(interval_list));
-	    assert(new != NULL);
-	    new->next   = temp->next;
-	    new->lower  = i + 1;
+        new = (interval_list *) malloc(sizeof(interval_list));
+        assert(new != NULL);
+        new->next   = temp->next;
+        new->lower  = i + 1;
         new->upper  = temp->upper;
 
         temp->next  = new;
-	    temp->upper = i - 1;
+        temp->upper = i - 1;
 
-	    if (last == NULL)
-		  return temp;
+        if (last == NULL)
+          return temp;
 
-	    return list;
-	}
+        return list;
+    }
     }
 
     return list;
@@ -234,8 +234,8 @@ interval_list *interval_list_remove(interval_list *list, unsigned long i) {
 
 int interval_list_member(interval_list *list, unsigned long i) {
     for ( ; list != NULL; list = list->next)
-	if (i >= list->lower && i <= list->upper)
-	    return 1;
+    if (i >= list->lower && i <= list->upper)
+        return 1;
 
     return 0;
 }
@@ -244,8 +244,8 @@ void interval_list_free(interval_list *list) {
     interval_list *last;
 
     for (last = NULL; list != NULL; last = list, list = list->next)
-	if (last != NULL)
-	    free(last);
+    if (last != NULL)
+        free(last);
 
     free(last);
 }
@@ -258,7 +258,7 @@ void interval_list_print_file (interval_list *list, FILE *out_file) {
     assert(out_file != NULL); 
 
     for ( ; list != NULL; list = list->next)
-	fprintf(out_file, "[%lu, %lu]\n", list->lower, list->upper);
+    fprintf(out_file, "[%lu, %lu]\n", list->lower, list->upper);
 }
 
 @ 

@@ -10,7 +10,7 @@ This document contains the interface and implementation of the interpreter's enc
 #ifndef _ENCODING_H
 #define _ENCODING_H
 
-#include <lua.h>
+#include <lua40/lua.h>
 #include "table.h"
 
 <<macro definitions>>
@@ -171,7 +171,11 @@ F(store_local) \
 F(store_global) \
 F(gstore_local) \
 F(gstore_global) \
+\
 F(apply_operator) \
+F(save_rounding) \
+F(restore_rounding) \
+\
 F(fetch_arg) \
 F(store_arg) \
 F(goto) \
@@ -695,13 +699,15 @@ int lua_CMM_globals(lua_State *L) {
   last_au = unit;
 
   lua_assert_isnumber(L, -1, "GLOBALS must be a number");
-  if (num_globals == INVALID || (g = (int) lua_tonumber(L, -1)) != num_globals)
+  g = (int) lua_tonumber(L, -1);
+  lua_pop(L, 1); /* pop arg */
+
+  if (num_globals != INVALID && g != num_globals)
     cmm_err("all assembly units must contain the same number of globals");
-  if (g <= 0)
+  if (g < 0)
     cmm_err("cannot declare a negative number of globals");
 
   num_globals = g;
-  lua_pop(L, 1); /* pop arg */
 
   return 0;
 }
@@ -799,7 +805,7 @@ int lua_CMM_emit_raddr(lua_State *L) {
   lua_assert_isstring(L, -2, "emit_raddr expects a symbol name (string)");
 
   cmm_assert(sscanf(lua_tostring(L, -1), "%lx", &offset) == 1,
-			 "could not parse offset; hexadecimal string literal expected");
+             "could not parse offset; hexadecimal string literal expected");
   lua_pop(L, 1);
 
   sym = Atom_string(lua_tostring(L, -1));
@@ -835,7 +841,7 @@ int lua_CMM_push_literal(lua_State *L) {
   lua_assert_isstring(L, -2, "push_literal expects a string literal (hex)");
 
   cmm_assert(sscanf(lua_tostring(L, -2), "%lx", &num) == 1,
-			 "could not parse literal; hexadecimal string literal expected");
+             "could not parse literal; hexadecimal string literal expected");
 
   /* emit instruction */
   push((unsigned) num, (unsigned) lua_tonumber(L, -1)); 
@@ -1183,6 +1189,8 @@ LUA_WRAP_NULLARY(goto_,         goto         )
 LUA_WRAP_NULLARY(cmm_tail_call, cmm_tail_call)
 LUA_WRAP_NULLARY(cut,           cut          )
 LUA_WRAP_NULLARY(end_proc,      end_procedure)
+LUA_WRAP_NULLARY(save_round,    save_rounding)
+LUA_WRAP_NULLARY(restore_round, restore_rounding)
 LUA_WRAP_NULLARY(breakpt,       breakpt      )
 
 /* LUA_WRAP_UNARY_INDEX(encodingFunctionName, nameStemForLua) */

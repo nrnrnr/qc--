@@ -373,7 +373,7 @@ We will limit our discussion of these libraries to the extent to which we need t
 #ifndef _INTERP_H
 #define _INTERP_H
 
-#include <lua.h>
+#include <lua40/lua.h>
 #include <mclib.h>
 
 #include "activation.h"
@@ -605,9 +605,10 @@ patterns
     GOTO          CBRANCHT       CBRANCHF       BRANCHTF
     CALL          CMM_TAIL_CALL  RETURN         CUT
     EMIT_RADDR    PUSH_SYMBOL    OP
+    SAVE_ROUND    RESTORE_ROUND
     PLACECODE     BREAKPT
     HALT
-  ] is op = {0 to 33}
+  ] is op = {0 to 35}
 @ 
 
 To add an instruction to the bytecode, one must simply add an instruction name to the [[op]] table above and increase the upper bound of [[op]]'s value range.
@@ -622,6 +623,7 @@ patterns
   any32   is CALL           | DEFINE_PROC     | PUSH_SYMBOL
   memory  is FETCH | STORE  | GSTORE
   nullary is HALT  |  GOTO  | CMM_TAIL_CALL   | CUT           | END_PROC
+           | SAVE_ROUND     | RESTORE_ROUND
            | BREAKPT
 @ 
 
@@ -833,13 +835,6 @@ typedef float       float32;
 typedef double      float64;
 typedef long double float96; /* this one doesn't work on liz */
 
-typedef enum {
-  ROUND_DOWN    = 00U,
-  ROUND_UP      = 01U,
-  ROUND_NEAREST = 02U,
-  ROUND_ZERO    = 03U
-} rounding_mode;
-
 extern  byte_order DEF_BYTE_ORDER;
 
 #define DEF_MEMSIZE    8
@@ -859,13 +854,6 @@ typedef u_int32 Cmm_Word;
 typedef float       float32;
 typedef double      float64;
 typedef long double float96; /* this one doesn't work on liz */
-
-typedef enum {
-  ROUND_DOWN    = 00U,
-  ROUND_UP      = 01U,
-  ROUND_NEAREST = 02U,
-  ROUND_ZERO    = 03U
-} rounding_mode;
 
 extern  byte_order DEF_BYTE_ORDER;
 
@@ -1311,8 +1299,19 @@ Finally, we get to the main part of the interpreter.  We start by initializing t
 We copy out the stored, suspended state from [[act]] into local C variables for matters of efficiency (to reduce memory fetches).
 This means, though, that the stored activation information will become out-of-date as we proceed through interpreting; we must make sure to update it when we have to leave the activation for any reason (calls, cuts, etc.).
 
+Note that we get the current [[pc]] from the given [[thread]] and not from
+the [[activation]].
+They might be different; if so, [[t->pc]] will be what we want.
+To see why, remember that [[Cmm_GetUnwindCont]] (from the runtime system)
+might return a thread handle to the client; to do so, it must create a 
+[[thread]] with a different [[pc]] than is stored in its youngest activation's
+frame record. 
+
 <<copy suspended state from [[act]] into local C variables>>=
-  pc            = act->pc;
+  /* we get pc from t */
+  pc            = t->pc;
+
+  /* we get rest from act */
   locals        = act->locals;
   locals_end    = act->locals;
   stackdata     = act->stackdata;
@@ -1507,6 +1506,21 @@ Operator implementation functions return a new [[sptr]] so we set [[values]] to 
                            pc = next;
 @
 
+Saving and restoring rounding modes involves the simple saving and restoring
+of a shared global variable.
+
+<<global variable definitions>>=
+int saved_rounding_mode;
+int saved_rounding_mode_exists = 0;
+@ 
+<<matching statement>>=
+    | SAVE_ROUND()      => saved_rounding_mode_exists = 1;
+                           saved_rounding_mode = fegetround();
+    | RESTORE_ROUND()   => if (saved_rounding_mode_exists) {
+                             fesetround(saved_rounding_mode);
+                           }
+@ 
+
 Fetching and storing from the argument space is not difficult.
 \useops{Push-Arg}
 \useops{Pop-Arg}
@@ -1569,10 +1583,10 @@ The encoding function [[lua_CMM_push_symbol]] writes a pointer to a [[CMM_label]
                            switch (lbl->ty) {
                            case CMM_LABEL:
                              {
-							 unsigned loc;
-							 cmm_assert(location_known(lbl->lbl.raddr),
-										"cannot push value of undefined "
-										"symbol");
+                             unsigned loc;
+                             cmm_assert(location_known(lbl->lbl.raddr),
+                                        "cannot push value of undefined "
+                                        "symbol");
 
                              loc = location(lbl->lbl.raddr);
                              v = to_CMM_value(loc, sizeof(void *) * 8);
@@ -1649,6 +1663,9 @@ To save the caller's activation record, we simply use the next free [[activation
                            saved->stackdata_end = stackdata_end;
                            saved->kappa         = ann;
                            saved->u             = u;
+
+						   /* also save pc in thread record */ 
+						   t->pc                = saved->pc;
 @
 
 We allocate memory for locals and stackdata from the thread's stack, create a fresh unique identifier using helper [[new_uid]], and set [[pc]] to the permanent address of the [[RAddr]] stored in [[proc]].
@@ -1706,6 +1723,9 @@ Unfortunately we cannot support an infinite number of C function types.
                              saved->kappa         = NULL;
                              saved->callee        = NULL;
                              saved->u             = u;
+
+                             /* also save pc in t */
+                             t->pc                = saved->pc;
                            }
 
                            <<[[call_helper]] $\leftarrow$ pointer to C caller>>
@@ -1836,7 +1856,7 @@ We implement both return rules with one matching case.
                              /* we free t -- THIS COULD BE DANGEROUS? */
                              free(t);
 
-						     /*
+                             /*
                               printf("[returned from specified procedure].\n");
                              */
 
@@ -1885,8 +1905,8 @@ We simply copy pointers to restore information from the activation record stored
                              lua_pop(L, 1); /* pop label */
 
                              cmm_assert(location_known(CMM_label_raddr(lbl)),
-										"cannot return to undefined "
-										"continuation");
+                                        "cannot return to undefined "
+                                        "continuation");
                              pc = CMM_label_location(lbl);
                            }
                            lua_pop(L, 1); /* pop table */
@@ -1984,6 +2004,9 @@ away [[next]] so that we do not end up in an infinite loop.
                                saved->kappa         = NULL;
                                saved->callee        = NULL;
                                saved->u             = u;
+
+						       /* also save pc in thread record */ 
+						       t->pc                = saved->pc;
                                }
 @
 
@@ -2051,8 +2074,8 @@ when it is about to interpret a certain bytecode instruction.
 
 <<matching statement>>=
     | BREAKPT()         => {
-	                       pc = next;
-	                       }
+                           pc = next;
+                           }
 @ 
 
 % ----------------------------------------------------------------------------
@@ -2145,6 +2168,7 @@ Putting it all together, we have [[interp.m]], the C file with NJ Machine-Code T
 #include <string.h>
 #include <ctype.h>
 #include <setjmp.h>
+#include <fenv.h>    /* C99 */
 
 #include "lualink.h"
 #include "encode.h"
@@ -2273,6 +2297,7 @@ assembly_unit_free_all();
            mc_free_all();
 
 lua_close(lua_interp);
+lua_interpreter = NULL;
 @
 
 % ----------------------------------------------------------------------------

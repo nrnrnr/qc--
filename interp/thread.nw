@@ -12,6 +12,7 @@ This document contains the interface and implementation of {\PAL} threads.
 
 #include "intervals.h"
 #include "label.h"
+#include "types.h"
 #include "uid.h"
 
 <<type definitions>>
@@ -33,6 +34,12 @@ We maintain one stack internal to a thread; it is from this that we allocate
 space for [[activation]]s, local variables, and stackdata.
 Please see the section below on stack layout for more information about this stack.
 
+Additionally, we include a program counter in the [[thread]] structure.
+The idea of this is that, in the runtime system, we might want to get some
+sort of ``handle'' on a resumption point of the youngest activation without
+yet changing the [[pc]] stored in this activation's actual [[activation]]
+record.
+
 <<type definitions>>=
 typedef struct {
   unsigned int   next_frame_id;
@@ -42,6 +49,8 @@ typedef struct {
   void          *stack_free;
 
   interval_list *dead_list;
+
+  bytecodeptr    pc;
 } thread;
 @ 
 
@@ -150,7 +159,7 @@ thread *find_thread(uid u);
 \subsection{Thread Initialization}
 % ----------------------------------------------------------------------------
 
-It takes a bit of work to initialize a thread.
+It takes a bit of work to initialize a new thread.
 
 Given sufficient space in memory, we set up a stack for storing locals,
 stackdata, and activations.
@@ -173,9 +182,11 @@ thread *init_thread(CMM_label *lbl, void *stack_space, unsigned n) {
   t->stack_limit = stack_limit;
   t->stack_free  = t->stack_base;
 
-  t->dead_list       = interval_list_new();
+  t->dead_list   = interval_list_new();
 
   <<set up first activation record>>
+
+  t->pc          = CMM_label_location(lbl);
 
   return t;
 }
