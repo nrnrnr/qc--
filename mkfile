@@ -2,11 +2,9 @@
 # $Id$
 # ------------------------------------------------------------------ 
 #
-# High level targets
-#
-# update:       compile everything and copy it to bin/, man/, ..
-# clean:        remove non-sources
-#
+# Building qc-- as a native code binary is for the moment not supported
+# because we fail to compile the machine-generated SPARC recognzier in
+# gen/.
 
 NAME =          qc--
 VERSION =       `date +%Y%m%d`

@@ -1,3 +1,4 @@
+# :vim ts=8 et sw=4:
 # ------------------------------------------------------------------ 
 # $Id$
 # ------------------------------------------------------------------ 
@@ -11,50 +12,46 @@
 #
 # To use the mkfile in `gen' mode, run `mk MODE=gen'.
 
+# Currently the compilation of sparcrec.ml to native code with ocamlopt
+# fails.  
+
 MODE=normal
-
-
-
 
 # ------------------------------------------------------------------ 
 # paths
 # ------------------------------------------------------------------ 
 
-TOP    =    ..
-INTERP =    evaluating
-DEPEND =    DEPEND
+TOP    =        ..
+INTERP =        evaluating
+DEPEND =        DEPEND
 
-LIBDIR =    ../lib
-BINDIR =    ../bin
-MANDIR =    ../man
+LIBDIR =        ../lib
+BINDIR =        ../bin
+MANDIR =        ../man
 
-prefix =    /usr/local
 
-TKDIR = /home/lair/nr/zephyr/cvs/toolkit
-TKRTL = $TKDIR/rtl
-SLEDLIBDIR = $TKDIR
-RTLSPECDIR = $TKRTL
-SLEDSPECDIR = /home/lair/nr/toolkit/www/specs
-LRTLHEAP=/usr/share/smlnj/bin/.heap/lrtl.x86-linux
+TKDIR =         /home/lair/nr/zephyr/cvs/toolkit
+TKRTL =         $TKDIR/rtl
+SLEDLIBDIR =    $TKDIR
+RTLSPECDIR =    $TKRTL
+SLEDSPECDIR =   /home/lair/nr/toolkit/www/specs
+LRTLHEAPi =     /usr/share/smlnj/bin/.heap/lrtl.x86-linux
 
 
 # ------------------------------------------------------------------ 
 # (high level) virtual targets
 # ------------------------------------------------------------------ 
 
-HTML =          `echo *.nw       | sed 's/\.nw/.html/g;'`
-INC  =          `echo *.nw       | sed 's/\.nw/.inc/g;'`
-
 all:V:          src cmo lib
 all.opt:V:      
+                echo "native code currently not supported"
+                
 update:V:       update-lib
 update.opt:V:   
+                echo "native code currently not supported"
 
-dvi:V:          $INC
-html:V:         $HTML
-
-test:VQ:
-                echo "nothing to be done"
+html dvi test:VQ:          
+                echo "nothing to be done"          
 
 depend:V:       $DEPEND
 
@@ -67,11 +64,6 @@ clobber:V:      clean
                 rm -rf ocamlerror ocamlerror.opt
                 rm -rf ocamlerror.pod ocamlerror.1
                 rm -rf *.aux *.log *.dvi *.tex *.inc *.toc
-
-install:V:      all.opt
-                install -s ocamlerror.opt $prefix/bin/ocamlerror
-                install    ocamlerror.1   $prefix/man/man1  
-
 
 # ------------------------------------------------------------------ 
 # rules and tools for OCaml
@@ -89,69 +81,69 @@ MACHINEREGEX=sparc
 OCAMLC_FLAGS =  -g -I $LIBDIR
 OCAMLO_FLAGS =     -I $LIBDIR
 
-
-
 # ------------------------------------------------------------------ 
 # important file sets
 # ------------------------------------------------------------------ 
 
-LOCAL =         sledlib.ml	\
-		sparc.ml	\
+LOCAL =         sledlib.ml      \
+                sparc.ml        \
                 sparcmkasm.ml   \
-		sparcrec.ml	\
+                sparcrec.ml     \
 
-LOCALI =        sledlib.mli	\
-		sparc.mli	\
-                sparcmkasm.mli   \
+LOCALI =        sledlib.mli     \
+                sparc.mli       \
+                sparcmkasm.mli  \
 
-BAREML  =		sparcrec.ml	\
+BAREML  =               sparcrec.ml     \
 
 sparcrec.cmi: sparcrec.cmo
-	# do nothing; the compiler does it
+        # do nothing; the compiler does it
 
 CMO =           `echo $LOCAL       | sed 's/\.ml/.cmo/g'`
 CMI =           `echo $LOCALI      | sed 's/\.mli/.cmi/g'` \
                 `echo $BAREML      | sed 's/\.ml/.cmi/g'`
-cmo:V: $CMO
 CMX =           `echo $LOCAL       | sed 's/\.ml/.cmx/g'`
 OBJ =           `echo $LOCAL       | sed 's/\.ml/.o/g'`
 
 SCAN =          $LOCAL $LOCALI
 
-src:V: $SCAN
+cmo:V:          $CMO
+cmx:V:          $CMX
+
+src:V:          $SCAN
 
 # ------------------------------------------------------------------ 
 # building binaries
 # ------------------------------------------------------------------ 
 
-LIBCMO =       gen.cma
-LIBCMX =       gen.cmxa
+LIBCMO =        gen.cma
+LIBCMX =        gen.cmxa
 
-lib:V: $LIBCMO
-update-lib:V: $LIBDIR/$LIBCMO
+lib:V:          $LIBCMO
+update-lib:V:   $LIBDIR/$LIBCMO
 
 $LIBCMO:        $CMO
-		$OCAMLC $OCAMLC_FLAGS -a -o $target $prereq
+                $OCAMLC $OCAMLC_FLAGS -a -o $target $prereq
                 
 
-$LIBCMX:	$CMX
-		$OCAMLO $OCAMLO_FLAGS -a -o $target $prereq
+$LIBCMX:        $CMX
+                $OCAMLO $OCAMLO_FLAGS -a -o $target $prereq
 
 # ------------------------------------------------------------------ 
 # update hierarchy
 # ------------------------------------------------------------------ 
 
 $LIBDIR/$LIBCMO:    $LIBCMO dirs $LOCALI $CMI
-		    for i in $LIBCMO $LOCALI $CMI
+                    for i in $LIBCMO $LOCALI $CMI
                     do
-		        cmp -s $i $LIBDIR/$i || cp $i $LIBDIR 
-		    done
+                        cmp -s $i $LIBDIR/$i || cp $i $LIBDIR 
+                    done
 
 $LIBDIR/$LIBCMX:    $LIBCMX dirs
-		    for i in $LIBCMX $NAME.a *.mli *.cmi
+                    for i in $LIBCMX $NAME.a *.mli *.cmi
                     do
-		        cmp -s $i $LIBDIR/$i || cp $i $LIBDIR
-		    done
+                        cmp -s $i $LIBDIR/$i || cp $i $LIBDIR
+                    done
 
 dirs:VQ:
                     for i in $LIBDIR; do
@@ -170,8 +162,8 @@ dirs:VQ:
 # ------------------------------------------------------------------ 
 
 depend:V: $DEPEND
-$DEPEND:	$SCAN
-		$OCAMLDEP -I $LIBDIR $SCAN > $DEPEND
+$DEPEND:        $SCAN
+                $OCAMLDEP -I $LIBDIR $SCAN > $DEPEND
 
 # ------------------------------------------------------------------ 
 # include dependencies
