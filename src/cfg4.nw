@@ -1022,19 +1022,36 @@ object (this)
         
     method interp fd =
         let e       = Interp.target.Target2.call.Target2.project _instr in
+        let open_span = function
+            | token, (Some s, offset) -> 
+                fprintf fd "CMM.begin_span(%d,'%s') -- offset: %d\n"
+                    (Bits.S.to_int token)
+                    (s#text)
+                    (Bits.S.to_int offset)
+            | token, (None  , offset) ->
+                Impossible.impossible 
+                    "cannot handle link-time constant in call#interp"
+        in
+        let close_span (token,_) =
+                fprintf fd "CMM.end_span(%d)\n" (Bits.S.to_int token)
+        in
+        
         (* We expect all continuation nodes to have a symbol. Is this
-           correct? *)
+           correct? Believe this to be correct --CL *)
         let label n = match n#symbol with
             | Some s -> sprintf "'%s'" (s#text)
-            | None   -> assert false in
+            | None   -> Impossible.impossible 
+                            "call#interp: continuation without label" in
             
-        ( Rtltolua.rtl fd _instr
+        ( List.iter open_span (List.rev spans) 
+        ; Rtltolua.exp fd e    (* was: rtl fd _instr -- why?? *)
         ; fprintf fd "CMM.call({%s}, {%s}, {%s}, %s) -- %s \n"
             (String.concat "," (List.map label _cuts))    
             (String.concat "," (List.map label _unwinds)) 
             (String.concat "," (List.map label _returns)) 
             (if _aborts then "1" else "0")
             "cuts, unwinds, returns, aborts"
+        ; List.iter close_span spans
         )   
 
     method is_call = true
