@@ -16,7 +16,9 @@ function fail {
 }
 
 function badout {
-  echo "$1 produces bad output on $2" 1>&2
+  echo "$1 produces bad output on $2; try" 1>&2
+  echo "  diff $3 $4" 1>&2
+  echo "  spiff -r$tolerance $3 $4" 1>&2
   exit 1
 }
 
@@ -132,6 +134,7 @@ do
       echo "==> Re-Run $0 with options -c -nop to create baseline for comparison" 1>&1
       exit 1
     fi
-    spiff -r$tolerance $baseline $i.out$INTERP$PROFILE > /dev/null || badout $test $i
+    spiff -r$tolerance $baseline $i.out$INTERP$PROFILE > /dev/null || 
+      badout "$interp" "$i" "$baseline" "$i.out$INTERP$PROFILE"
   done
 done
