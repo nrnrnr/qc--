@@ -61,12 +61,16 @@ module type PC = sig
   val ra_offset : int   (* at call, ra_reg  := PC + ra_offset *)
 end
 
+type cut_args = { new_sp : Rtl.exp; new_pc : Rtl.exp }
+
 module type S = sig (* see types Target2.t and Target2.map for doco *)
-  val goto  : Rtl.exp Target2.map
-  val jump  : Rtl.exp Target2.map
-  val cutto : (Rtl.loc * Rtl.exp * Rtl.exp) Target2.map
-  val call  : Rtl.exp Target2.map
-  val branch : (Rtl.exp * Rtl.exp) Target2.map
+  type 'a map = ('a, Rtl.rtl) Ep.map
+  val goto  : Rtl.exp map
+  val jump  : Rtl.exp map
+  val cutto : sp:Rtl.loc -> cut_args map  (* assumes sp and pc same width *)
+    (* N.B. sp is a dynamic argument because it could differ among call conventions *)
+  val call  : Rtl.exp map
+  val branch : (Rtl.exp * Rtl.exp) map  (* probably should also be record *)
 end
 <<mflow.mli>>=
 module MakeStandard (Pc : PC) : S
@@ -76,9 +80,9 @@ module MakeStandard (Pc : PC) : S
 module RU = Rtlutil
 module R  = Rtl
 module RP = Rtl.Private
-module T  = Target2
 
 module MakeStandard (P : PC) = struct
+  type 'a map = ('a, Rtl.rtl) Ep.map
   <<standard machine-level control flow>>
 end
 @ 
@@ -87,45 +91,45 @@ let w = RU.Width.loc P.pc_lhs
 let downrtl = R.Dn.rtl
 let uploc   = R.Up.loc
 let upexp   = R.Up.exp
-let goto = { T.embed   = (fun e -> R.store P.pc_lhs e w)
-           ; T.project = (fun r -> match downrtl r with
+let goto = { Ep.embed   = (fun e -> R.store P.pc_lhs e w)
+           ; Ep.project = (fun r -> match downrtl r with
                                    | RP.Rtl [(_, RP.Store(_, e, _))] -> upexp e
                                    | _ -> Impossible.impossible "projected non-goto")
            } 
 let jump = goto
-let cutto = { T.embed   = (fun (sp,newsp,newpc) -> 
-                               let assign loc e  =
-                                   Rtl.store loc e (Rtlutil.Width.exp e) in
-                               Rtl.par [assign sp newsp; assign P.pc_lhs newpc])
-            ; T.project = (fun r -> match downrtl r with
-                                    | RP.Rtl [ (_, RP.Store(sp, nsp, _))
-                                             ; (_, RP.Store(_ , npc, _))] ->
-                                         (uploc sp, upexp nsp, upexp npc)
-                                    | _ -> Impossible.impossible "projected non-cutto")
-            }
+let cutto ~sp =
+  { Ep.embed   = (fun {new_sp=new_sp; new_pc=new_pc} -> 
+                   let assign loc e = Rtl.store loc e w in
+                   Rtl.par [assign sp new_sp; assign P.pc_lhs new_pc])
+  ; Ep.project = (fun r -> match downrtl r with
+                          | RP.Rtl [ (_, RP.Store(_,  nsp, _))
+                                   ; (_, RP.Store(_ , npc, _))] ->
+                               { new_sp=upexp nsp; new_pc= upexp npc }
+                          | _ -> Impossible.impossible "projected non-cutto")
+  }
 
 let ra_val = 
   let pc = R.fetch P.pc_rhs w in
   RU.addk w pc P.ra_offset
 
-let call = { T.embed   = (fun e -> R.par [R.store P.pc_lhs e w;
+let call = { Ep.embed   = (fun e -> R.par [R.store P.pc_lhs e w;
                                           R.store P.ra_reg ra_val w])
-           ; T.project = (fun r -> match downrtl r with
+           ; Ep.project = (fun r -> match downrtl r with
                                    | RP.Rtl [(_, RP.Store(_, e, _)); _] -> upexp e
                                    | _ -> Impossible.impossible "projected non-call")
            } 
 
 let return = 
-    { T.embed   = (fun () -> R.store P.pc_lhs (R.fetch P.ra_reg w) w)
-    ; T.project = (fun r  -> match downrtl r with
+    { Ep.embed   = (fun () -> R.store P.pc_lhs (R.fetch P.ra_reg w) w)
+    ; Ep.project = (fun r  -> match downrtl r with
                   | RP.Rtl [(_, RP.Store(_, _, _))] -> ()
                   | _ -> Impossible.impossible "projected non-return"
                   )
     }              
 
 let branch =
-  { T.embed   = (fun (cond, tgt) -> R.guard cond (goto.T.embed tgt))
-  ; T.project = (fun r -> match downrtl r with
+  { Ep.embed   = (fun (cond, tgt) -> R.guard cond (goto.Ep.embed tgt))
+  ; Ep.project = (fun r -> match downrtl r with
                           | RP.Rtl [(b, RP.Store(_, e, _))] -> (upexp b, upexp e)
                           | _ -> Impossible.impossible "projected non-branch")
   } 

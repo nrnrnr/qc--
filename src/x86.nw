@@ -567,18 +567,7 @@ let target =
            ; T.ret  = Targets.dummy_automaton PX.byte_order
            ; T.allocatable = List.map (fun n -> ('r', n, 32)) [0; 1; 2; 3]
            ; T.stack_slots = Targets.dummy_automaton PX.byte_order
-           ; T.cutto =
-                 { T.embed   =
-                   (fun (newpc, newsp) ->
-                     let assign loc e =
-                       Rtl.store loc e (Rtlutil.Width.exp e) in
-                       Rtl.par [assign pc newpc; assign PX.esp newsp])
-                 ; T.project = (fun r -> match downrtl r with
-                                  | RP.Rtl [ (_, RP.Store(_, npc, _))
-                                           ; (_, RP.Store(_, nsp, _))] ->
-                                    (upexp nsp, upexp npc)
-                                  | _ -> Impossible.impossible "projected non-cutto")
-                 }
+           ; T.cutto = F.cutto PX.esp
            })
 
   (* bogosity *)
@@ -587,3 +576,56 @@ let target =
   ; T.data_section = "data" (* NOT REALLY A PROPERTY OF THE TARGET MACHINE... *)
   ; T.charset = "latin1" (* THIS IS NONSENSE!! NOT A PROPERTY OF THE MACHINE?? *)
   } 
+@ 
+<<x86.ml>>=
+let c_convention =
+  X86call.c (fun ra -> pop_with (fun ra -> store pc ra)) (F.cutto PX.esp)
+
+module A = Automaton
+let ( **> ) f x = f x
+let globals base = 
+  let width w = if w <= 8 then 8 else if w <= 16 then 16 else Aux.round_up_to 32 w in
+  let align = function 8 -> 1 | 16 -> 2 | _ -> 4 in
+  A.mk **> A.widen width **> A.align_to align **>
+  A.overflow ~memsize:8 ~byteorder:PX.byte_order ~start:base
+             ~growth:Memalloc.Up ~max_alignment:4
+
+let new_target =
+  { T.name = "x86"
+
+  (* basic metrics and spaces are OK *)
+  ; T.byteorder   = PX.byte_order  
+  ; T.wordsize    = PX.wordsize
+  ; T.pointersize = PX.wordsize
+  ; T.vfp         = SS.vfp
+  ; T.alignment = 1
+  ; T.memsize = 8
+  ; T.spaces = [Spaces.m; Spaces.r; Spaces.t; Spaces.f; Spaces.u; Spaces.c]
+
+  (* Does the Pentium really implement IEEE 754?  I think so *)
+  ; T.float = "ieee754"
+
+  (* spill and reload are believed OK *)
+  ; T.spill  = spill
+  ; T.reload = reload
+
+  (* control flow is solid, except [[cutto]] is a lie *)
+  ; T.goto = F.goto
+  ; T.jump = F.jump
+  ; T.call = { T.embed = (fun e -> R.par [F.goto.T.embed e; push (fetch pc)])
+             ; T.project = F.call.T.project (* should be OK *)
+             } 
+  ; T.branch = F.branch
+
+  ; T.cc = (function "c" | "c--" -> c_convention
+            | cc -> Impossible.impossible ("unsupported calling convention "^cc))
+  ; T.globals  = globals
+  ; T.is_rounding_mode = (fun loc -> loc = fpcond 0) (* see globals value *)
+  (* bogosity *)
+  ; T.data_section = "data" (* NOT REALLY A PROPERTY OF THE TARGET MACHINE... *)
+  ; T.charset = "latin1" (* THIS IS NONSENSE!! NOT A PROPERTY OF THE MACHINE?? *)
+  } 
+
+type tgt  = ((Rtl.exp -> Automaton.t), Call.t) Target2.t'
+let new_target = (new_target:tgt)
+

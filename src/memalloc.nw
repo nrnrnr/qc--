@@ -19,15 +19,20 @@ can be used as an address. After allocation is complete, the automaton
 is [[frozen]] and the allocated block is returned. A [[t]] value should
 not be used after it was frozen (allthough it is technically possible
 and safe).
+N.B. [[size]] is measured in units of [[memsize]].
 <<memalloc.mli>>=
 type t          (* immutable *)
 
-val at:         base:Rtl.exp -> t       (* provide base address *)
-val relative:   anchor:Rtl.exp -> dbg:string -> t (* unknown addr relative to anchor *)
-val allocate:   t -> size:int -> t      (* increase block *)
-val align:      t -> int -> t           (* align cursor *)
-val current:    t -> Rtl.exp            (* obtain cursor *)
-val freeze:     t -> Block.t            (* return allocated block *)
+type growth = Up | Down
+
+val at :            start:Rtl.exp -> growth -> t       (* provide start address *)
+val relative :      anchor:Rtl.exp -> dbg:string -> growth -> t (* unknown addr relative to anchor *)
+val allocate :      t -> size:int -> t      (* increase block *)
+val align :         t -> int -> t           (* align cursor *)
+val alignment :     t -> int                (* max alignment ever requested *)
+val current :       t -> Rtl.exp            (* obtain cursor *)
+val freeze :        t -> Block.t            (* return allocated, aligned block *)
+val num_allocated : t -> int
 @
 
 % ------------------------------------------------------------------ 
@@ -35,37 +40,49 @@ val freeze:     t -> Block.t            (* return allocated block *)
 % ------------------------------------------------------------------ 
 
 <<memalloc.ml>>=
+type growth = Up | Down
+type unchanging = 
+    { start  : Rtl.exp     (* start address of block *)
+    ; growth : growth
+    ; exp_at : int -> Rtl.exp  (* exp at distance k from start *)
+    } 
 type t =
-    { base:                 Rtl.exp     (* base of block      *)
-    ; width:                int         (* width of exp       *)
-    ; size:                 int         (* size of block      *)
-    ; alignment:            int         (* alignment of block *)
+    { u             : unchanging
+    ; num_allocated : int         (* size of block      *)
+    ; max_alignment : int         (* max alignment ever requested *)
     }
 
-let at ~base = 
-    { base      = base
-    ; width     = Rtlutil.Width.exp base
-    ; size      = 0
-    ; alignment = 1
+let at ~start g =
+  let w = Rtlutil.Width.exp start in
+  let addk = Rtlutil.addk w start in
+    { u = { start = start
+          ; growth = g
+          ; exp_at = match g with Up -> addk | Down -> fun k -> addk (-k)
+          } 
+    ; num_allocated = 0
+    ; max_alignment = 1
     }
 
-let relative ~anchor ~dbg = 
+let relative ~anchor ~dbg g = 
   let w = Rtlutil.Width.exp anchor in
-  at (Rtlutil.add w anchor (Rtl.late (Idgen.offset dbg) w))
+  at (Rtlutil.add w anchor (Rtl.late (Idgen.offset dbg) w)) g
 
 let allocate t ~size = 
     assert (size >= 0);    
-    { t with size = t.size + size }
+    { t with num_allocated = t.num_allocated + size }
 
 let align    t n = (* align both size and base alignment *)
     assert (n > 0);
-    { t with
-      alignment = max t.alignment n
-    ; size      = if t.size mod n = 0 
-                  then t.size
-                  else ((t.size / n) + 1) * n     (* next multiple of n *)
+    { t with max_alignment = max t.max_alignment n (*SHOULD BE LEAST COMMON MULTIPLE*)
+           ; num_allocated = Aux.round_up_to t.num_allocated ~multiple_of:n 
     }
-let current t = Rtlutil.addk t.width t.base t.size
+let current t = t.u.exp_at t.num_allocated
+let alignment t = t.max_alignment
 
-let freeze t = Block.at t.base t.size t.alignment
+let freeze t = match t.u.growth with
+| Up   -> Block.at t.u.start   t.num_allocated t.max_alignment
+| Down -> let t = align t t.max_alignment in
+          Block.at (current t) t.num_allocated t.max_alignment
+
+let num_allocated t = t.num_allocated
 @

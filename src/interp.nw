@@ -291,14 +291,14 @@ let target =
                ; T.allocatable = []
                ; T.cutto  = 
                  { T.embed   =
-                   (fun (newpc, newsp) ->
+                   (fun {Mflow.new_pc=newpc; Mflow.new_sp= newsp} ->
                      let assign loc e =
                        Rtl.store loc e (Rtlutil.Width.exp e) in
                        Rtl.par [assign Flow.sp newsp; assign Flow.pc newpc])
                  ; T.project = (fun r -> match downrtl r with
                                   | RP.Rtl [ (_, RP.Store(_, nsp, _))
                                            ; (_, RP.Store(_ , npc, _))] ->
-                                    (upexp nsp, upexp npc)
+                                    {Mflow.new_sp=upexp nsp; Mflow.new_pc= upexp npc}
                                   | _ -> Impossible.impossible "projected non-cutto")
                  }
                ; T.stack_slots  = new globals (* bogus *)

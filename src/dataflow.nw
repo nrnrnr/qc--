@@ -339,7 +339,45 @@ let postorder_dfs' g extend_answer =
       | node :: nodes -> (vnode node **> vnodes nodes **> k) answer visited in
   fun answer k -> vnode (G.entry g) answer emptyset k
 
-
+@ 
+We visit a list of nodes ([[vnodes]]) only when they are the successors of the
+current node.
+Therefore, when we are finished, the right thing to do is cons on the
+current node---thus the base case of [[vnodes]].
+<<supporting functions>>=
+let son_of_dias_postorder_dfs g cons nil =
+  let rec vnode node (acc, visited) =
+    let rec vnodes l (a,v) = match l with
+      | node :: nodes -> vnodes nodes (vnode node (a, v)) 
+      | [] -> (cons node a, v) in
+    if been_visited node visited then
+      (acc,visited)
+    else
+      vnodes (G.succs node) (acc, add node visited) in
+  fst (vnode (G.entry g) (nil, emptyset))
+@ 
+More from JD:
+To me, this is the intuitive way to do the traversal in cps.
+[[vnode]] is called on a node. If that node has not been visited, then
+[[vchildren]] is called on the node and its children. If there are no
+children, then the node is placed on the accumulated list and the
+continuation is called on the accumulated list.
+If there are children, then we call [[vnode]] to visit the first one,
+and the continuation becomes the closure formed by applying
+[[vchildren]] to the current node and the remaining children.
+<<supporting functions>>=
+let son_of_dias_cps_postorder_dfs g cons nil cont =
+  let rec vnode node cont acc visited =
+    if been_visited node visited then
+      cont acc visited
+    else
+      vchildren node (G.succs node) cont acc (add node visited)
+  and vchildren node children cont acc visited = 
+    let rec next children acc visited = match children with
+      | [] -> cont (cons node acc) visited
+      | n::rst -> vnode n (next rst) acc visited in
+    next children acc visited in
+  vnode (G.entry g) cont nil emptyset
 @ 
 Here's simple preorder BFS.
 <<supporting functions>>=
@@ -354,8 +392,6 @@ let nr_preorder_bfs g cons nil =
           visit (nodes @ G.succs node) (add node visited) (cons node acc) in
   visit [G.entry g] emptyset nil
 @ 
-Now we try a solver.
-This is a backwards thing, I wot.
 @
 <<dataflow.ml>>=
 module Test = struct
@@ -402,6 +438,7 @@ module Test = struct
       ; "bwd_postorder_dfs", bwd_postorder_dfs 
       ; "fwd_postorder_dfs_cps", fwd_postorder_dfs_cps
       ; "bwd_postorder_dfs_cps", bwd_postorder_dfs_cps 
+      ; "son_of_diasson_of_dias_postorder_dfs", son_of_dias_postorder_dfs
       ; "nr_preorder_dfs", nr_preorder_dfs
       ; "nr_preorder_bfs", nr_preorder_bfs
       ] 

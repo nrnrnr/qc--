@@ -1,0 +1,205 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+\section{X86 calling conventions}
+
+<<x86call.mli>>=
+val c : return_to:(Rtl.exp -> Rtl.rtl) -> Mflow.cut_args Target2.map -> Call.t
+  (* C calling convention *)
+@ 
+Information from the SYSV ABI, Third Edition, ISBN 0-13-104670-5.
+Values are aligned on 1-, 2-, or 4-byte boundaries.
+Doubles and long doubles are 4-byte aligned; others have the alignment
+of their size.
+
+Structures, arrays, and unions take the alignment of their most
+aligned component.
+<<x86call.ml>>=
+module A  = Automaton
+module C  = Call
+module R  = Rtl
+module RP = Rtl.Private
+module RS = Register.Set
+module RU = Rtlutil
+module T  = Target2
+@ 
+\paragraph{X86 stuff}
+<<x86call.ml>>=
+
+let xreg k = ('r', k, 32)
+
+let eax = xreg 0
+let ecx = xreg 1
+let edx = xreg 2
+let ebx = xreg 3
+let esp = xreg 4
+let ebp = xreg 5
+let esi = xreg 6
+let edi = xreg 7
+
+let vfp = Vfp.mk 32
+@ 
+From Figure 3-14,
+the return register is [[eax]], and the volatile registers are
+[[ebx]], [[esi]], and [[edi]].
+
+<<x86call.ml>>=
+let ( **> ) f x = f x
+let badwidth what w = Impossible.impossible
+    ("Unsupported (rounded) width " ^ string_of_int w ^ " in x86 " ^ what)
+
+let imp _ = Impossible.impossible "grave miscalculation in automaton"
+let results base = 
+  A.mk **>
+  A.widen  (Aux.round_up_to ~multiple_of:32) **>
+  A.widths [32] ~errormsg:(badwidth "x86 return convention") **>
+  A.useregs [eax] ~errormsg:imp **>
+  A.no_overflow base 4 "multiple return values for x86 C"
+@ 
+There's a different rule for returning floating-point results.
+We don't yet have appropriate combinators.
+<<x86call.ml>>=
+let float_results base = 
+  A.mk **>
+  A.widen  (Aux.round_up_to ~multiple_of:80) **>
+  A.widths [80] ~errormsg:(badwidth "x86 floating return convention") **>
+  A.useregs [('f', 0, 80)] ~errormsg:imp **>
+  A.no_overflow base 4 "multiple return values for x86 C"
+@ 
+Here are the volatile and nonvolatile registers.
+N.B. In position-independent code, [[ebx]] is reserved to point to the
+global offset table.
+Flags are also volatile, except that the direction flag must be set to
+``forward'' (that is, zero) on entry and exit.
+<<x86call.ml>>=
+let set l = List.fold_right RS.add l RS.empty
+let volregs = set [eax; ecx; edx]
+let nvregs  = set [ebx; esi; edi; ebp]
+let allregs = [eax; ecx; edx; ebx; esi; edi; ebp]
+@  N.B. We omit all floating-point registers.
+These are all volatile and available for allocation, although
+[[%st(0)]] can used to return a floating-point result.
+The ABI says that all these registers ``must be empty'' at entry and
+exit (except that [[%st(0)]] need not be empty if it holds a result).
+Understanding ``empty'' requires understanding $x$86 floating-point.
+@
+Page 3-10.  The stack is word-aligned.
+The stack pointer points at the last item on the stack, \emph{not} at
+an empty slot.
+<<x86call.ml>>=
+let sp = R.reg esp
+let pc = R.reg
+let growth = Memalloc.Down
+let sp_align = 4
+let bo = R.LittleEndian
+@ 
+Earlier arguments are stored in lower addresses, so even though the
+stack grows down, the overflow block grows up.
+An argument's size in increased, if necessary, to make it a multiple
+of words.  The ABI specifies padding, but we'll use [[widen]] because
+the machine is little-endian.
+<<x86call.ml>>=
+let arguments base = 
+  A.mk **>
+  A.widen  (Aux.round_up_to ~multiple_of:32) **>
+  A.overflow ~memsize:8 ~byteorder:bo ~start:base
+             ~growth:Memalloc.Up ~max_alignment:sp_align
+@
+On entry, the stack pointer points to the return address.
+This needs some aliasing info?
+<<x86call.ml>>=
+let ra = R.mem R.none 'm' bo 32 vfp
+@ 
+For now, let's save a nonvolatile register anywhere.
+<<x86call.ml>>=
+let saved_nvr temps =
+  let t = Talloc.Multiple.loc temps 't' in
+  fun (_, _, w) -> t w
+@ 
+N.B. the call instruction moves the stack pointer.
+<<x86call.ml>>=
+let addk = RU.addk 32
+let add  = RU.add  32
+let std_sp_location = add vfp (R.late "frame size" 32)
+let spval = R.fetch sp 32
+let call_actuals  =
+  C.outgoing ~growth ~sp ~spec:arguments
+    ~autosp:(fun r -> Block.base r.A.overflow)
+    ~postsp:(fun _ -> std_sp_location)
+    ~relative_to:vfp
+let prolog  =
+  C.incoming ~growth ~sp ~spec:arguments
+    ~autosp:(fun r -> addk (Block.base r.A.overflow) (-4))
+    ~postsp:(fun _ -> std_sp_location)
+    ~relative_to:vfp
+@ 
+This code works only for integer results.
+<<x86call.ml>>=
+let call_results  =
+  C.incoming ~growth ~sp ~spec:results
+    ~autosp:(fun r -> Block.base r.A.overflow)
+    ~postsp:(fun _ -> vfp)  (* irrelevant *)
+    ~relative_to:vfp
+let epilog  =
+  C.outgoing ~growth ~sp ~spec:results
+    ~autosp:(fun r -> Block.base r.A.overflow)
+    ~postsp:(fun _ -> vfp)  (* irrelevant *)
+    ~relative_to:vfp
+@ 
+<<x86call.ml>>=
+let cutto pc sp =
+  { T.embed = (fun (newpc, newsp) ->
+                 let assign loc e = Rtl.store loc e 32 in
+                 Rtl.par [assign pc newpc; assign sp newsp])
+  ; T.project = (fun r -> match R.Dn.rtl r with
+                          | RP.Rtl [ (_, RP.Store(_, npc, _))
+                                   ; (_, RP.Store(_, nsp, _))] ->
+                              (R.Up.exp nsp, R.Up.exp npc)
+                          | _ -> Impossible.impossible "projected non-cutto")
+  }
+
+let cut_args base = 
+  A.mk **>
+  A.widen  (Aux.round_up_to ~multiple_of:32) **>
+  A.widths [32] ~errormsg:(badwidth "x86 cut-to convention") **>
+  A.useregs allregs ~errormsg:imp **>
+  A.overflow ~memsize:8 ~byteorder:bo ~start:base
+             ~growth:Memalloc.Up ~max_alignment:sp_align
+
+let cut_actuals base  =
+  C.outgoing ~growth ~sp ~spec:arguments
+    ~autosp:(fun r -> spval)
+    ~postsp:(fun _ -> spval)
+    ~relative_to:base  (* BAD -- WILL LEAD TO UNSOLVED CONSTRAINT!! *)
+
+let also_cuts_to =
+  C.incoming ~growth ~sp ~spec:arguments
+    ~autosp:(fun r -> std_sp_location)
+    ~postsp:(fun _ -> std_sp_location)
+    ~relative_to:vfp
+@ 
+<<x86call.ml>>=
+let c ~return_to cut =
+  let return k n ~ra =
+    if k = 0 & n = 0 then return_to ra
+    else Impossible.impossible "alternate return using C calling convention" in
+  { C.call_actuals    = call_actuals
+  ; C.prolog          = prolog
+  ; C.epilog          = epilog
+  ; C.call_results    = call_results
+  ; C.cut_to_actuals  = cut_actuals
+       (* exp is continuation val; used to address overflow block *)
+  ; C.also_cuts_to    = also_cuts_to
+  ; C.return_actuals  = epilog
+  ; C.also_returns_to = call_results
+
+  ; C.stack_growth    = Memalloc.Down
+  ; C.sp_align        = 4               (* alignment of stack pointer at call/cut *)
+  ; C.ra              = ra              (* where return address is on entry *)
+  ; C.nvregs          = nvregs          (* registers preserved across calls *)
+  ; C.volregs         = volregs         (* registers not preserved across calls *)
+  ; C.saved_nvr       = saved_nvr
+  ; C.cutto           = cut
+  ; C.saved_ra        = (fun _ -> ra)
+  ; C.return          = return
+  ; C.stack_layout    = ()
+  } 

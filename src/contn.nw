@@ -47,7 +47,7 @@ type t
 
 val init_code:     t -> k_sp:Rtl.exp -> k_pc:Rtl.exp -> Rtl.rtl
 val rep : t -> Block.t               (* entire cont in memory *)
-val with_overflow: Target2.t -> base:Rtl.exp -> overflow:Block.t -> t
+val with_overflow: ('a, 'b) Target2.t' -> base:Rtl.exp -> overflow:Block.t -> t
 @
 
 The [[cutto]] function takes a pointer to the continuation ([[contn]])
@@ -58,7 +58,7 @@ The [[get_contn]] function takes pointers to a pc * sp pair
 from a continuation and returns a pointer to the continuation.
 
 <<contn.mli>>=
-val cutto : Target2.t -> (Rtl.exp * Rtl.exp -> Rtl.rtl)
+val cutto : ('a, 'b) Target2.t' -> (Mflow.cut_args -> Rtl.rtl)
                       -> contn:Rtl.exp -> Rtl.rtl
 val get_contn : Rtl.exp * Rtl.exp -> Rtl.exp
 @
@@ -107,7 +107,7 @@ let with_overflow t ~base ~overflow =
 let cutto t to_rtl ~contn =
   let w = t.T.pointersize in
   let pc, sp = pc_sp contn t in
-  to_rtl (R.fetch pc w, R.fetch sp w)
+  to_rtl {Mflow.new_pc=R.fetch pc w; Mflow.new_sp=R.fetch sp w}
 
 let get_contn (newpc, newsp) = newpc
 @

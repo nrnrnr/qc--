@@ -124,91 +124,80 @@ MORE TO COME.
 @
 \subsection{Interface}
 <<call.mli>>=
-module type S = sig
-  <<type definitions for module type S>>
-end  
+<<exported type definitions>>
 @ 
-<<type definitions for module type S>>=
-  type hint  = string option
-  type width = int
-  type types = (hint * width) list
+<<exported type definitions>>=
+type hint  = string
+type width = int
+type types = (hint * width) list
 
-  type growth_by = Increment | Decrement
-
-  type node (* CFG node for alternate return table *)
-
-  type answer =
-    { 
+type answer =
+  { 
 (* locs     : Automaton2.loc list *)  (* where passed values reside *)
-      overflow : Block.t              (* includes all locs for values passed in mem *)
+    overflow : Block.t              (* includes all locs for values passed in mem *)
 (*    ; sploc    : Rtl.exp              (* where sp is required when values are passed *) *)
-    ; insp     : Rtl.rtl              (* assign sp := conventional location;
-                                         used in assertions entries from calls, cuts *)
-    ; regs     : Register.Set.t       (* set of locations defined (used) by partner *)
-    ; pre_sp   : Rtl.rtl              (* conditional SP adjustment pre-shuffle *)
-    ; shuffle  : Rtl.rtl              (* shuffle parms where they go *)
-    ; post_sp  : Rtl.rtl              (* unconditional SP adjustment post-shuffle *)
-    }
+  ; insp     : Rtl.rtl              (* assign sp := conventional location;
+                                       used in assertions entries from calls, cuts *)
+  ; regs     : Register.Set.t       (* set of locations defined (used) by partner *)
+  ; pre_sp   : Rtl.rtl              (* conditional SP adjustment pre-shuffle *)
+  ; shuffle  : Rtl.rtl              (* shuffle parms where they go *)
+  ; post_sp  : Rtl.rtl              (* unconditional SP adjustment post-shuffle *)
+  }
+@ 
+<<exported type definitions>>=
+type 'a answer' = 'a list -> answer
+type outgoing = types -> Rtl.exp       answer'
+type incoming = types -> Automaton.loc answer'
 
-  type 'a answer' = 'a list -> answer
-  type outgoing = types -> Rtl.exp        answer'
-  type incoming = types -> Automaton2.loc answer'
+type t = (* part of a calling convention *)
+  (* we get 4 dual pairs *)
+  { call_actuals    : outgoing
+  ; prolog          : incoming   (* arg = procedure formals *)
+  ; epilog          : outgoing   (* arg = results returned *)
+  ; call_results    : incoming   (* normal return cont *)
+  ; cut_to_actuals  : Rtl.exp -> outgoing  
+       (* exp is continuation val; used to address overflow block *)
+  ; also_cuts_to    : incoming
+  ; return_actuals  : outgoing
+  ; also_returns_to : incoming
 
-  type t = (* part of a calling convention *)
-    (* we get 4 dual pairs *)
-    { call_actuals    : outgoing
-    ; prolog          : incoming   (* arg = procedure formals *)
-    ; epilog          : outgoing   (* arg = results returned *)
-    ; call_results    : incoming   (* normal return cont *)
-    ; cut_to_actuals  : Rtl.exp -> outgoing  
-         (* exp is continuation val; used to address overflow block *)
-    ; also_cuts_to    : incoming
-    ; return_actuals  : outgoing
-    ; also_returns_to : incoming
-
+  ; stack_growth : Memalloc.growth
 (*    ; sp : Rtl.loc                      (* stack pointer *)  *)
-    ; sp_align        : int             (* alignment of stack pointer at call/cut *)
-    ; ra : Rtl.loc                      (* where return address is on entry *)
-    ; nvregs : Register.Set.t           (* registers preserved across calls *)
-    ; volregs: Register.Set.t           (* registers not preserved across calls *)
-    ; saved_nvr : Talloc.Multiple.t -> Register.t -> Rtl.loc (* where to save a NVR *)
-    ; cutto  : (Rtl.exp * Rtl.exp) Target2.map    (* newpc * newsp map*)
-    ; saved_ra  : Talloc.Multiple.t -> Rtl.loc (* where to save the return address *)
-    ; return : int -> int -> ra:Rtl.exp -> Rtl.rtl    (* alternate return *)
-    ; alt_return_table : node list -> node
-    ; stack_layout : unit
-    } 
+  ; sp_align        : int             (* alignment of stack pointer at call/cut *)
+  ; ra : Rtl.loc                      (* where return address is on entry *)
+  ; nvregs : Register.Set.t           (* registers preserved across calls *)
+  ; volregs: Register.Set.t           (* registers not preserved across calls *)
+  ; saved_nvr : Talloc.Multiple.t -> Register.t -> Rtl.loc (* where to save a NVR *)
+  ; cutto  :  Mflow.cut_args Target2.map    (* newpc * newsp map*)
+  ; saved_ra  : Talloc.Multiple.t -> Rtl.loc (* where to save the return address *)
+  ; return : int -> int -> ra:Rtl.exp -> Rtl.rtl    (* alternate return *)
+(*  ; alt_return_table : node list -> node *)
+  ; stack_layout : unit
+  } 
 
-  type growth = Up | Down
 @ 
 We have the beginnings of an implementation that computes incoming and
-outgoing stuff.  The [[base]] parameter is pure hell and not obvious
+outgoing stuff.  The [[relative_to]] parameter is pure hell and not obvious
 to the amateur.  The [[postsp]] parameter is a bit tricky too.
 <<call.mli>>=
-module M : sig
-  include S
-  val outgoing : growth:growth -> sp:Rtl.loc -> spec:Automaton2.spec ->
-     postsp:(Rtl.exp -> Rtl.exp) -> base:Rtl.exp -> outgoing
-  val incoming : growth:growth -> sp:Rtl.loc -> spec:Automaton2.spec ->
-     postsp:(Rtl.exp -> Rtl.exp) -> base:Rtl.exp -> incoming
-end
+val outgoing : growth:Memalloc.growth -> sp:Rtl.loc -> spec:(Rtl.exp -> Automaton.t) ->
+     autosp:(Automaton.result -> Rtl.exp) ->
+     postsp:(Rtl.exp -> Rtl.exp) -> relative_to:Rtl.exp -> outgoing
+val incoming : growth:Memalloc.growth -> sp:Rtl.loc -> spec:(Rtl.exp -> Automaton.t) ->
+     autosp:(Automaton.result -> Rtl.exp) ->
+     postsp:(Rtl.exp -> Rtl.exp) -> relative_to:Rtl.exp -> incoming
 @ 
 \subsection{Implementation}
 
 A consummation most devoutly to be wished.
 <<call.ml>>=
-module A  = Automaton2
+module A  = Automaton
 module R  = Rtl
 module RS = Register.Set
 module RU = Rtlutil
-module type S = sig
-  <<type definitions for module type S>>
-end
+<<exported type definitions>>
 @ 
 <<call.ml>>=
-module M = struct
-<<type definitions for module type S>>
-
 let ignore r s = s
 
 let too_small growth sp target =
@@ -216,47 +205,45 @@ let too_small growth sp target =
   let ( >* ) x y = R.app (R.opr "gt" [w]) [x; y] in
   let ( <* ) x y = R.app (R.opr "lt" [w]) [x; y] in
   match growth with
-  | Down -> RU.fetch sp >* target
-  | Up   -> RU.fetch sp <* target
+  | Memalloc.Down -> RU.fetch sp >* target
+  | Memalloc.Up   -> RU.fetch sp <* target
 
-let outgoing ~growth ~sp ~spec ~postsp ~base types actuals =
-    let a = A.mk spec base in
+let outgoing ~growth ~sp ~spec ~autosp ~postsp ~relative_to types actuals =
+    let a = spec relative_to in
     let crank effects' (h, w) actual =
       let l = A.allocate a w h in
       A.store l actual w :: effects' in
     let shuffle = R.par (List.rev (List.fold_left2 crank [] types actuals)) in
-    let a = A.freeze' a in
-    let postsp = postsp a.A.sp_value in
+    let a = A.freeze a in
+    let autosp = autosp a in
+    let postsp = postsp autosp in
     let setsp  = RU.store sp postsp in
     let no r s = s in
     { overflow = a.A.overflow
-    ; insp     = RU.store sp a.A.sp_value
+    ; insp     = RU.store sp autosp
     ; regs     = RU.ReadWriteKill.fold ~read:RS.add ~write:no ~kill:no shuffle RS.empty
     ; shuffle  = shuffle
     ; post_sp  = setsp
     ; pre_sp   = R.guard (too_small growth sp postsp) setsp
     }
 
-let incoming ~growth ~sp ~spec ~postsp ~base types formals =
-    let a = A.mk spec base in
+let incoming ~growth ~sp ~spec ~autosp ~postsp ~relative_to types formals =
+    let a = spec relative_to in
     let crank effects' (h, w) formal =
       let l = A.allocate a w h in
       A.store formal (A.fetch l w) w :: effects' in
     let shuffle = R.par (List.rev (List.fold_left2 crank [] types formals)) in
-    let a = A.freeze' a in
-    let postsp = postsp a.A.sp_value in
+    let a = A.freeze a in
+    let autosp = autosp a in
+    let postsp = postsp autosp in
     let setsp  = RU.store sp postsp in
     let no r s = s in
     { overflow = a.A.overflow
-    ; insp     = RU.store sp a.A.sp_value
+    ; insp     = RU.store sp autosp
     ; regs     = RU.ReadWriteKill.fold ~write:RS.add ~read:no ~kill:no shuffle RS.empty
     ; shuffle  = shuffle
     ; post_sp  = setsp
     ; pre_sp   = R.guard (too_small growth sp postsp) setsp
     }
-
-
-
-end
 @ 
 

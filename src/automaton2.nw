@@ -269,9 +269,9 @@ with [[_block]]. Depending on [[T.up]] the [[_block]] grows on its high
 or low end.
 
 <<class [[Memory.t]]>>=
-class t (target:target) up aligned (anchor:Rtl.exp) dbg : automaton =
+class t (target:target) up aligned anchor dbg : automaton =
 object (this)
-    val mutable _block  = B.relative anchor dbg 0 1  (* initial block *)
+    val mutable _block  = (B.relative anchor dbg B.at) 0 1  (* initial block *)
     val mutable _frozen = false
     val mutable _maxalign = 1
     val         _add      = RU.add  target.pointersize
@@ -299,7 +299,7 @@ object (this)
         match hint with 
         | Some x -> Impossible.impossible "hint reached a memory automaton"
         | None ->
-            let slot = B.relative anchor "slots" bytes align in
+            let slot = (B.relative anchor "slots" B.at) bytes align in
                 ( if up then
                     _block <- B.cathl slot _block 
                   else

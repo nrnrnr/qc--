@@ -32,7 +32,8 @@ It is a checked run-time error to ask about a space not on the list
 for the target.
 
 <<type t>>=
-type t = { <<components of t>> }
+type ('automaton, 'cc) t' = { <<components of t>> }
+type t = (Automaton2.spec, Automaton2.spec cc') t'
 @
 
 Every target has a descriptive name.
@@ -62,20 +63,21 @@ a backplane function. This is useful for running tests and specifying a set
 of registers.
 
 <<type cc>>=
-type cc =      
+type 'automaton cc' =      
     { sp:           Rtl.loc         (* stack pointer                      *)
     ; return:       Rtl.rtl         (* machine instr passed to Cfg.return *)
        (* NEEDS TO TAKE ALTS AND INDEX AS PARAMETER *)
-    ; proc:         Automaton2.spec  (* pass parameter to a procedure      *)
-    ; cont:         Automaton2.spec  (* pass parameter to a continuation   *)
-    ; ret:          Automaton2.spec  (* return values                      *)
-    ; cutto  : (Rtl.exp * Rtl.exp) map    (* newpc * newsp map*)
+    ; proc:         'automaton  (* pass parameter to a procedure      *)
+    ; cont:         'automaton  (* pass parameter to a continuation   *)
+    ; ret:          'automaton  (* return values                      *)
+    ; cutto  : Mflow.cut_args map    (* newpc * newsp map*)
     ; mutable allocatable:  Register.t list (* regs for reg-allocation            *)
     (* THIS TYPE SHOULD INCLUDE INFORMATION ABOUT ALTERNATE RETURN CONTINUATIONS,
        IN PARTICULAR, HOW BIG IS EACH SLOT, AND DOES IT HOLD AN INSTRUCTION OR
        AN ADDRESS? *)
-    ; stack_slots:  Automaton2.spec (* where private data go *)
+    ; stack_slots:  'automaton (* where private data go *)
     }
+type cc = Automaton2.spec cc'
 @ 
 Continuations, spill locations and other private data of a procedures
 lives on the run-time stack. These locations are register-like (????) and
@@ -86,7 +88,7 @@ To obtain a calling convention, pass its name to the [[cc]] component
 which will return the convention response.  It is a checked run-time
 error to ask for an unknown calling convention.
 <<components of t>>=
-cc: string -> cc; (* raises Error.Exn if name is unknown *)
+cc: string -> 'cc; (* raises Error.Exn if name is unknown *)
 @ 
 Even though the stack pointer depends on the calling convention, the
 virtual frame pointer is the same everywhere.
@@ -117,7 +119,7 @@ alignment:      int               ; (* alignment of word access *)
 memsize:        int               ; (* smallest addressable unit, typically 8 *)
 float:          string            ; (* "ieee754" float representation    *)
 charset:        string            ; (* "latin1"  character encoding      *)
-globals:        Automaton2.spec   ; (* Automaton to allocate global vars *)
+globals:        'automaton   ; (* Automaton to allocate global vars *)
 @
 
 A target has many address spaces:  main memory, different register

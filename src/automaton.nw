@@ -1,0 +1,354 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% vim: ts=8 sw=4 et:
+%
+% Grades     ::=    "%%Grades:" Quality Importance Urgency
+% Quality    ::=    A|B|C|D|E
+% Importance ::=    Central|Subsystem|Peripheral
+% Urgency    ::=    Immediate|Soon|Later
+%
+% Example (at beginning of line): %%Grades: B Central Soon
+% $Id$
+%
+% Automaton.nw will be replaced by this module. The major difference is
+% that this modules relies on the simple Block abstraction.
+
+
+
+% ------------------------------------------------------------------ 
+\section{Automaton-Based Slot Allocation}
+% ------------------------------------------------------------------ 
+
+This module supports Bailey-Davidson automata for allocating locations
+for value-passing.
+An automaton manages a set of hardware locations, which it uses to
+satisfy allocation requests.
+In the Bailey-Davidson framework, the set of locations is split into
+two parts:
+\begin{itemize}
+\item
+A finite set of locations, which may be managed arbitrarily
+\item
+An infinite set of locations, which must be allocated sequentially and
+contiguously
+\end{itemize}
+We call the infinite set of locations the \emph{overflow block}.
+@
+The overflow block has a number of properties.
+\begin{itemize}
+\item
+The overflow block has a \emph{maximum alignment}.
+This alignment is the maximum possible alignment of any location in
+the block, and it is a function of the calling convention.
+\item
+The overflow block has a \emph{direction of growth}.
+\item
+The overflow block has a \emph{number of bytes allocated}.
+\end{itemize}
+The maximum alignment and direction of growth are fixed when the
+overflow block is created; the number of bytes allocated increases
+monotonically during allocation.
+@
+The Bailey-Davidson automaton has two parts: a finite-state control
+that manages the finite set of locations, and an infinite-state
+control for the overflow block.
+The infinite set of states is mapped to a finite set by considering
+only the number of bytes allocated modulo the maximum alignment.
+We use a value of type [[Memalloc.t]] to manage this part of the
+automaton.
+@
+The interface exports abstract types, concrete types, and values.
+<<automaton.mli>>=
+<<abstract types>>
+<<exposed types>>
+<<exported values>>
+@ 
+\subsection{Standard hints}
+
+We might use these hints:\\
+\begin{tabular}{>{\ttfamily}ll}
+signed& Signed integer\\
+unsigned& Unsigned integer\\
+address&  Address\\
+float&    Floating-point value\\
+\end{tabular}\\
+A missing or empty hint is assumed to be [[unsigned]].
+@
+\subsection{Observer-Mutator interface}
+An [[Automaton.t]] encapsulates mutable state.  
+Allocating a location mutates its state.
+After allocation is completed, an automaton is \emph{frozen},
+and it can no longer be mutated.
+A~frozen automaton gives us an overflow block, its state, and the set
+of locations handed out.
+The set implicitly includes every location in the overflow block; the
+rest of the set is explicit.
+<<abstract types>>=
+type t
+<<exposed types>>=
+type result =
+  { overflow    : Block.t
+  ; regs_used   : Register.Set.t
+  ; mems_used   : Rtl.loc list
+  ; align_state : int   (* final alignment state of overflow block *)
+  }
+@ 
+We allocate a location by identifying a value's type, which in {\PAL}
+is a width and a hint.
+<<exported values>>=
+val allocate : t -> width:int -> hint:string -> loc
+val freeze   : t -> result
+@
+In some conventions, a value must be split between two registers or
+between registers and memory.
+Accordingly, we need a special type of location.
+<<exposed types>>=
+type width = int
+type loc = { fetch : width -> Rtl.exp; store : Rtl.exp -> width -> Rtl.rtl }
+<<exported values>>=
+val fetch  : loc ->            width -> Rtl.exp
+val store  : loc -> Rtl.exp -> width -> Rtl.rtl
+@ 
+Most locations are easy.
+<<exported values>>=
+val of_loc : Rtl.loc -> loc
+@ 
+It can be useful to treat a wide location as a narrow one.
+This means inserting widening and narrowing operations on fetch and
+store.
+We provide three instances: signed narrow and widen, unsigned narrow
+and widen, and floating narrow and widen.
+If more instances are needed, there's a higher-order function lurking
+in the implementation. 
+<<exported values>>=
+val narrows : w:int -> n:int -> loc -> loc
+val narrowu : w:int -> n:int -> loc -> loc
+val narrowf : w:int -> n:int -> loc -> loc
+@ 
+This is a compatibility interface, which will go away.
+<<exported values>>=
+val of_old : Automaton2.loc -> loc
+val to_old : loc -> Automaton2.loc
+@ 
+\subsection{Constructor interface}
+Most clients will simply use an automaton, but some will need to
+create one.
+For these a representation with two functions: an allocator, and
+something that implements [[freeze]].
+The allocator takes an additional alignment, which it uses if it has
+to put the value in memory.
+If called directly from [[val allocate]], the alignment is always~$1$,
+but it may be changed by upstream implementations.
+The [[freeze]] function accumulates information about locations handed
+out, which information it passes to the right. 
+At the very end is the overflow block.
+<<exposed types>>=
+type implementation =
+    { allocate : width: int -> alignment: int -> hint: string -> loc
+    ; freeze   : Register.Set.t -> Rtl.loc list -> result
+    } 
+<<exported values>>=
+val mk       : implementation -> t
+@ 
+The idea is that we build an implementation by a composition of
+stages.
+We provide stages that change alignment, adjust widths, hand out
+locations, and so on.
+In addition, we expect that a client might write its own stages.
+<<exposed types>>=
+type stage = implementation -> implementation
+@ 
+The final stage in any implementation is the overflow block.
+To make an overflow block, you need a bunch of information about the
+machine and a bunch of information about the convention.
+<<exported values>>=
+val overflow :
+  memsize:int -> byteorder:Rtl.aggregation ->                     (* machine    *)
+  start:Rtl.exp -> growth:Memalloc.growth -> max_alignment:int -> (* convention *)
+  implementation
+@ 
+Another possible final stage is to have \emph{no} overflow block.
+Such a final stage is useful for conventions in which only finitely 
+many values can be passed,  such as the C~return
+convention.
+<<exported values>>=
+val no_overflow :
+  base:Rtl.exp -> max_alignment:int -> errormsg:string -> implementation
+@ 
+The [[widths]] stage can restrict the convention to satisfy only
+requests naming a listed width.
+<<exported values>>=
+val widths : int list -> errormsg:(int -> string) -> stage
+@
+The [[widen f]] stage  alters a request for a
+width~[[w]] so it has a width [[f w]], which must be at least as large as~[[w]].
+The widening operation depends on the hint.
+For a little-endian machine passing values in memory, widening an
+unsigned integer or address is
+equivalent to adding padding.
+For a big-endian machine, it isn't.
+It is an unchecked run-time error for [[f]] to return a result that is
+less than its argument.
+<<exported values>>=
+val widen : (int -> int) -> stage
+@ We expect stages such as
+[[Automaton.widen (Aux.round_up_to ~multiple_of:32)]] 
+to be useful.
+@
+If a value must be allocated in memory, it needs an alignment.
+All alignments start out at~1, but we can provide a function that
+maps a width to an alignment.
+Danger Will Robinson!
+The argument to the function is a width in \emph{bits}, but the
+alignment is a size in \emph{bytes} (actually the unit is not the byte
+but the cell size of target memory).
+<<exported values>>=
+val align_to : (int -> int) -> stage
+@ 
+Although it may not be terribly useful, we provide a simple stage that
+hands out registers sequentially.
+To satisfy a request, the stage takes the first~$n$ registers, where
+$n$~is chosen such that the number of bits in these registers is
+exactly the number of bits in the request.
+If there is no such~$n$, it barfs with an error message.
+<<exported values>>=
+val useregs : Register.t list -> errormsg:(int -> Register.t list -> string) -> stage
+@
+\section{Implementation}
+<<automaton.ml>>=
+<<exposed types>>
+type t = implementation
+
+module R  = Rtl
+module RS = Register.Set
+module RU = Rtlutil
+module B  = Block
+module M  = Memalloc
+@
+All the work of the implementation is in the closures.
+<<automaton.ml>>=
+let mk t = t
+let allocate t ~width ~hint = t.allocate width 1 hint
+let freeze t = t.freeze Register.Set.empty []
+
+let fetch loc width      = loc.fetch width
+let store loc expr width = loc.store expr width
+let of_loc loc           = { fetch = R.fetch loc; store = R.store loc }
+@
+The overflow block is slightly interesting.
+<<automaton.ml>>=
+type state = { mutable mem : M.t; mutable frozen : bool }
+let overflow ~memsize ~byteorder ~start ~growth ~max_alignment =
+  let mem = M.at start growth in
+  let state = { mem = mem; frozen = false } in
+  <<functions [[allocate]] and [[freeze]] for the overflow block>>
+  { allocate = allocate; freeze = freeze }
+@ 
+To allocate, we align and increment the memory block.
+The address of the new location depends on the direction of stack growth.
+<<functions [[allocate]] and [[freeze]] for the overflow block>>=
+let allocate ~width ~alignment ~hint =
+  assert (width mod memsize = 0);
+  assert (max_alignment mod alignment = 0);
+  assert (not (state.frozen));
+  let size = width / memsize in
+  let mem  = state.mem in
+  let mem  = M.align mem alignment in
+  let mem' = M.allocate mem size in
+  let addr = M.current (match growth with M.Up -> mem | M.Down -> mem') in
+  state.mem <- mem';
+  of_loc (R.mem (R.aligned alignment) 'm' byteorder width addr) in
+@ 
+To freeze, we have to adjust the block alignment if the stack grows down.
+<<functions [[allocate]] and [[freeze]] for the overflow block>>=
+let freeze regs mems =
+  state.frozen <- true;
+  let mem    = state.mem in
+  let astate = M.num_allocated mem mod max_alignment in
+  let mem = match growth with M.Up -> mem | M.Down -> M.align mem (M.alignment mem) in
+  let block = M.freeze mem in
+  { overflow = block; regs_used = regs; mems_used = mems; align_state = astate } in
+@ 
+\subsection{Other constructors}
+<<automaton.ml>>=
+let no_overflow ~base ~max_alignment ~errormsg =
+  let block = Block.relative base "return block" Block.at ~size:0 ~alignment:1 in
+  { allocate = (fun ~width ~alignment ~hint -> Impossible.impossible errormsg)
+  ; freeze   = (fun regs mems -> 
+     { overflow = block; regs_used = regs; mems_used = mems; align_state = 0 })
+  } 
+@ 
+<<automaton.ml>>=
+let widths ws ~errormsg next =
+  { allocate = (fun ~width ~alignment ~hint ->
+                  if List.exists ((==) width) ws then
+                    next.allocate width alignment hint
+                  else
+                    Impossible.impossible (errormsg width))
+  ; freeze   = next.freeze
+  } 
+@   
+Narrowing and widening.
+<<automaton.ml>>=
+let narrow nopname wopname ~w ~n loc =
+  let widen  = R.opr wopname [n; w] in 
+  let narrow = R.opr nopname [w; n] in 
+  { fetch = (fun n   -> R.app narrow [loc.fetch w])
+  ; store = (fun e n -> loc.store (R.app widen [e]) w)
+  } 
+let narrows = narrow "lobits" "sx"
+let narrowu = narrow "lobits" "zx"
+let narrowf = narrow "f2f" "f2f"
+@ 
+<<automaton.ml>>=
+let narrower = function
+  | "signed" -> narrows
+  | "float"  -> narrowf
+  | "unsigned" | "address" | "" -> narrowu
+  | _ -> narrowu
+
+let widen mk_w next = 
+  { allocate = (fun ~width:n ~alignment ~hint ->
+                  let w   = mk_w n in
+                  let loc = next.allocate w alignment hint in
+                  if w = n then loc else narrower hint ~n:n ~w loc)
+  ; freeze   = next.freeze
+  } 
+<<automaton.ml>>=
+let align_to mk_align next = 
+  { allocate = (fun ~width:w ~alignment ~hint -> next.allocate w (mk_align w) hint)
+  ; freeze   = next.freeze
+  } 
+<<automaton.ml>>=
+type regstate = { mutable avail : Register.t list; mutable used : Register.Set.t }
+let getreg state = match state.avail with
+| [] -> raise (Failure "get register")
+| r :: rs -> (state.avail <- rs; state.used <- RS.add r state.used; r)
+
+let useregs regs ~errormsg next =
+  let state = { avail = regs; used = RS.empty } in
+  let alloc ~width ~alignment ~hint =
+    try
+      let (_, _, w) as r = getreg state in
+      if w = width then
+        of_loc (R.reg r)
+      else if w < width then
+        Impossible.unimp "register aggregation"
+      else
+        Impossible.impossible (errormsg width state.avail)
+    with Failure _ -> next.allocate width alignment hint in
+  let freeze regs mems = next.freeze (RS.union state.used regs) mems in
+  { freeze = freeze; allocate = alloc }
+@ 
+
+\subsection{Compatibility}
+<<automaton.ml>>=
+let of_old l = { fetch = (fun w -> Automaton2.fetch l w)
+               ; store = (fun e w -> Automaton2.store l e w) }
+class loc' l =
+  object
+    method store = store l
+    method fetch = fetch l
+    method to_loc = (assert false : Rtl.loc)
+  end
+
+let to_old l = new loc' l

@@ -65,11 +65,12 @@ the less-specific information before the more-specific information.
 The functor parameters and the parameter of type [[string->Call.t]]
 will all go away once the new flow graph ([[Cfg]]) takes over the compiler.
 <<ast2ir.mli>>=
-module Make (G : Cfg.S) (Call : Call.S with type node = Rtl.rtl G.node) : sig
-  val translate :  Target2.t
+module Make (G : Cfg.S) (*(Call : Call.S with type node = Rtl.rtl G.node)*) : sig
+  type tgt  = ((Rtl.exp -> Automaton.t), Call.t) Target2.t'
+  type proc = (Automaton.t, Rtl.rtl G.cfg, Call.t, tgt) Proc.t'
+  val translate :  tgt
                 -> Fenv.Clean.env 
-                -> (string -> Call.t)
-                -> optimizer: (Proc.t -> unit)
+                -> optimizer: (proc -> unit)
                 -> Ast.program 
                 -> Asm3.assembler
 end
@@ -85,8 +86,7 @@ module T  = Target2
 module A  = Ast
 module E  = Error
 module F  = Fenv.Clean
-module AT = Automaton2
-module AM = Automaton2.Memory
+module AT = Automaton
 module R  = Rtl
 module RP = Rtl.Private
 module RU = Rtlutil
@@ -108,15 +108,20 @@ once at top level and once instead each procedure.
 The first instantiation is visible here; the second appears in 
 [[<<definition of [[proc]], which translates one procedure>>]].
 <<ast2ir.ml>>=
-module Make (G : Cfg.S) (C : Call.S with type node = Rtl.rtl G.node) = struct
+module Make (G : Cfg.S) (*(C : Call.S with type node = Rtl.rtl G.node)*) = struct
+  module C = Call
   <<statement-related types>>
   <<module [[K]], for continution info>>
   <<types for gathering stack and continuation info>>
   type 'a nvr = { reg : 'a; tmp : 'a; w : int }   (* for callee-saves info *)
 
-  let translate target env ccs ~optimizer =
+  type tgt = ((Rtl.exp -> Automaton.t), C.t) Target2.t'
+  type proc = (Automaton.t, Rtl.rtl G.cfg, C.t, tgt) Proc.t'
+
+  let translate target env ~optimizer =
     let pointersize = target.T.pointersize in
     let add = RU.add pointersize in
+    let ccs = target.T.cc in
     let to_cc cconv = ccs (Aux.Option.get default_cc cconv) in
     <<definition of [[lvalue_name_in_env]]>> in
     <<environment-independent support for formals, actuals, and results>> in
@@ -187,7 +192,7 @@ let lvalue_name_in_env env x =
   let (_,(denot,t)) = F.findv x env in
   let w = tywidth t                 in
   match denot with
-  | F.Register({F.loc=Some l}) -> l, w
+  | F.Register({F.loc=Some l}) -> AT.of_old l, w
   | F.Register({F.index=i;F.loc=None}) ->
       if F.is_localv x env then
         AT.of_loc (Rtl.var x i w), w
@@ -215,8 +220,8 @@ let rvalue_name x =
 @ 
 Help for fetching and storing automata locations.
 <<auxiliaries>>=
-let atfetch (loc, w)     = loc#fetch w
-let atstore (loc, w) exp = loc#store exp w
+let atfetch (loc, w)     = loc.AT.fetch w
+let atstore (loc, w) exp = loc.AT.store exp w
 @ 
 \subsubsection{General lvalues}
 
@@ -409,6 +414,7 @@ here for convenience.
 let convert_parms hint_parm cvt =
   let add x (hws, parms) =
     let hint, parm = hint_parm x in
+    let hint = Aux.Option.get "" hint in
     let parm, w = cvt parm in
     (hint, w) :: hws, parm :: parms in
   fun conv l ->
@@ -472,22 +478,22 @@ environment, the block of memory that holds overflow global variables,
 and a fingerprint of the declarations.
 <<definition of [[globals]]>>=
 let globals (base:Rtl.exp) names =
-    let t = AT.mk target.T.globals base in
+    let t = target.T.globals base in
     let decls = Buffer.create 128 in (* initial size - grows as needed *)
     let rec assign env n =
         try 
             ( match F.findv n env with
             | rgn, (F.Register(reg), ty) ->
-                let h,h'  = match reg.F.rhint with
-                            | F.RReg x -> Some x, x     (* h/w register *)
-                            | _        -> None  , "" in
+                let h  = match reg.F.rhint with
+                         | F.RReg x -> x     (* h/w register *)
+                         | _        -> "" in
                 let w     = tywidth ty in
                 (* sig is string representation of this declaration *)
-                let sign  = Printf.sprintf "[%d <%s>]" w h' in
+                let sign  = Printf.sprintf "[%d <%s>]" w h  in
                 let ()    = Buffer.add_string decls sign    in
                 let loc   = AT.allocate t w h in
                 let entry = ( rgn
-                            , (F.Register({reg with F.loc = Some loc}),ty)
+                            , (F.Register({reg with F.loc = Some (AT.to_old loc)}),ty)
                             ) in F.rebindv n entry env
             | _ -> impossible ("global register " ^ n ^ " not in environment")
             )
@@ -621,9 +627,12 @@ activation but uses the \emph{copy-out} method.  Don't get confused
 and refer to the big picture in \module{stack}. 
 <<supporting functions for translating statements>>=
 and returnStmt (cconv, kont, args) = 
-(* SHOULD RETURN BEAR A CALLING CONVENTION, OR DOES IT GET THE CONVENTION OF THE BODY? *)
+  (* SHOULD RETURN BEAR A CALLING CONVENTION,
+     OR DOES IT GET THE CONVENTION OF THE BODY? *)
     let cc = to_cc cconv                       in
     let out = actuals cc.C.return_actuals args in
+      (* WHAT ABOUT cc.C.epilog??  DO WE NEED ALTERNATE CONVENTION
+         FOR ALTERNATE RETURN? *)
     let reti =
       match kont with
       | None       ->
@@ -769,13 +778,13 @@ let proc containing_spans (cconv,procname,args,procbody) =
 
     let vfp = target.T.vfp in (* virtual frame pointer *)
     let spblock =
-      Block.relative ~anchor:vfp ~dbg:"sp" ~size:0 ~alignment:proc_cc.C.sp_align in
+      Block.relative vfp "sp" Block.at ~size:0 ~alignment:proc_cc.C.sp_align in
 
     (* calculate amount of user stack data - rebinds env! *)
     <<definition of [[stackdata]]>> in
     let env, stackd, contenv =
-      stackdata target (F.push env scope) (Memalloc.relative vfp "stackdata") procbody
-    in
+      let sdmem = Memalloc.relative vfp "stackdata" Memalloc.Up in
+      stackdata target (F.push env scope) sdmem procbody in
 
     (* define all the mutable state here *)
     let youngblocks       = ref [] in
@@ -844,15 +853,14 @@ let proc containing_spans (cconv,procname,args,procbody) =
 
     let i =    
         { Proc.symbol   = symbol
-        ; Proc.cc       = assert false (*proc_cc*)
+        ; Proc.cc       = proc_cc
         ; Proc.target   = target
         ; Proc.temps    = temps
-        ; Proc.cfg      = assert false (*cfg*)
+        ; Proc.cfg      = g
         ; Proc.incoming = incoming   (* incoming   block *)   
         ; Proc.outgoing = outgoing   (* outgoing   block *)   
         ; Proc.stackd   = stackd     (* stack data block *)
-        ; Proc.priv     = AM.relative (amtarget target) ~up:true ~aligned:true
-                                      ~anchor:vfp ~dbg:"private"
+        ; Proc.priv     = Block.relative vfp "private" aligned_mem target
         ; Proc.sp       = spblock
         ; Proc.eqns     = List.concat (!constraints)
         ; Proc.conts    = contblocks
@@ -861,8 +869,13 @@ let proc containing_spans (cconv,procname,args,procbody) =
         } in
     optimizer i (* runs optimizer, freezes, and assembles proc *)
 <<auxiliaries>>=
-let amtarget { T.pointersize = p; T.wordsize = w; T.memsize = m; T.byteorder = b } =
- { AM.pointersize = p; AM.wordsize = w; AM.memsize = m; AM.byteorder = b }
+let aligned_mem ~base target = 
+  let memsize = target.T.memsize in
+  let t = AT.overflow memsize target.T.byteorder base Memalloc.Up 1 in
+  let alloc ~width ~alignment ~hint =
+    let alignment = width / memsize in
+    t.AT.allocate width alignment hint
+  in AT.mk { AT.freeze = t.AT.freeze; AT.allocate = alloc }
 @
         
 \subsection{Continuation hell}
@@ -947,7 +960,7 @@ type 'i stackdata_state =
     }
 @ 
 <<definition of [[stackdata]]>>=
-let stackdata target env sd bb =
+let stackdata (target:tgt) env sd bb =
   <<definitions of stack-data procedures>> in
   let state = 
     { env    = env
@@ -1145,6 +1158,7 @@ and export_global_register_area () =
   let env
      ,area    
      ,digest   = globals base (F.globals env) in
+  let area     = area.AT.overflow in
   let digest   = String.escaped digest in
   let asm      = F.asm env in
   let digest   = asm#export digest in

@@ -415,7 +415,8 @@ object (this)
         | Some x -> this#hardware x
         | None ->
             let ()      = assert (width mod memsize = 0) in
-            let slot    = Block.relative base "slots" (width / memsize) pointersize in
+            let slot    = Block.relative base "slots"
+                          Block.at ~size:(width / memsize) ~alignment:pointersize in
             ( _block <- Block.cathl slot _block 
             ; this#memloc (Block.base slot) width
             )
@@ -478,15 +479,15 @@ let cc =
     ; T.ret             = new simple' Rtl.BigEndian
     ; T.stack_slots     = new simple' Rtl.BigEndian
     ; T.cutto           =
-                 { T.embed   =
-                   (fun (newpc, newsp) ->
+                 { T.embed   = 
+                   (fun {Mflow.new_pc=newpc; Mflow.new_sp=newsp} ->
                      let assign loc e =
                        Rtl.store loc e (Rtlutil.Width.exp e) in
                        Rtl.par [assign (reg 31) newsp; assign pc newpc])
                  ; T.project = (fun r -> match downrtl r with
                                   | RP.Rtl [ (_, RP.Store(_, nsp, _))
                                            ; (_, RP.Store(_ , npc, _))] ->
-                                    (upexp nsp, upexp npc)
+                                    {Mflow.new_sp=upexp nsp; Mflow.new_pc=upexp npc}
                                   | _ -> Impossible.impossible "projected non-cutto")
                  }
     ; T.allocatable     = List.concat 
@@ -692,7 +693,8 @@ object (this)
         match hint with 
         | Some x -> this#hardware x
         | None ->
-            let slot = Block.relative base "slots" (width / memsize) pointersize in
+            let slot =
+              (Block.relative base "slots" Block.at) (width / memsize) pointersize in
             ( _block <- Block.cathl slot _block 
             ; this#memloc (Block.base slot) width
             )
