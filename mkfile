@@ -41,29 +41,29 @@ SUBDIRS =       $LIBSRC $SRC
 all:V:          lib dirs
                 for i in $SRC; 
                 do 
-                    (echo "# entering $i" && cd $i && mk $MKFLAGS depend)
-                    (echo "# entering $i" && cd $i && mk $MKFLAGS update)
+                    (echo "# entering $i" && cd $i && mk $MKFLAGS depend) || exit 1
+                    (echo "# entering $i" && cd $i && mk $MKFLAGS update) || exit 1
                 done
 
 all.opt:V:      lib.opt dirs
                 for i in $SRC; 
                 do 
-                    (echo "# entering $i" && cd $i && mk $MKFLAGS depend)
-                    (echo "# entering $i" && cd $i && mk $MKFLAGS update.opt)
+                    (echo "# entering $i" && cd $i && mk $MKFLAGS depend)    || exit 1
+                    (echo "# entering $i" && cd $i && mk $MKFLAGS update.opt)|| exit 1
                 done
 
 lib:V:          dirs
                 for i in $LIBSRC; 
                 do 
-                    (echo "# entering $i" && cd $i && mk $MKFLAGS depend)
-                    (echo "# entering $i" && cd $i && mk $MKFLAGS update)
+                    (echo "# entering $i" && cd $i && mk $MKFLAGS depend) || exit 1
+                    (echo "# entering $i" && cd $i && mk $MKFLAGS update) || exit 1
                 done
 
 lib.opt:V:      dirs
                 for i in $LIBSRC; 
                 do 
-                    (echo "# entering $i" && cd $i && mk $MKFLAGS depend)
-                    (echo "# entering $i" && cd $i && mk $MKFLAGS update.opt)
+                    (echo "# entering $i" && cd $i && mk $MKFLAGS depend) || exit 1
+                    (echo "# entering $i" && cd $i && mk $MKFLAGS update.opt) || exit 1
                 done
 
 precompile:     
@@ -73,7 +73,7 @@ html            \
 dvi:V:          dirs
                 for i in $SUBDIRS; 
                 do 
-                    (echo "# entering $i" && cd $i && mk $MKFLAGS $target)
+                    (echo "# entering $i" && cd $i && mk $MKFLAGS $target) || exit 1
                 done
 
 test:V:         all
