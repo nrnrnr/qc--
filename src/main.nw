@@ -154,20 +154,20 @@ let asdl file =
     let lexbuf      = Lexing.from_channel fd                            in
     let map         = Srcmap.empty                                      in
     let scanner     = Scan.scan map                                     in
-        try
-            ( Srcmap.sync map 0 (file,1,1) 
-            ; let ast = Parse.program scanner lexbuf in
-                 AstUtil.sexp_wr_program ast stdout
-            ) 
-        with
+    let _           = Srcmap.sync map 0 (file,1,1)                      in
+    let asdl ()     = let ast = Parse.program scanner lexbuf in
+                         (Ok (AstUtil.sexp_wr_program ast stdout)) 
+        in try asdl () with
             | Parsing.Parse_error -> 
               ( finally()
-              ; errorAtPoint (map, Lexing.lexeme_start lexbuf) "parse error"
+              ; errorPointPrt (map, Lexing.lexeme_start lexbuf) "parse error"
+              ; Error
               )
-            | ErrorAt(Pos(pos),msg) ->
+            | ErrorExn msg ->
               ( finally()
-              ; errorAtPoint (map,pos) msg
-              )   
+              ; errorPointPrt (map, Lexing.lexeme_start lexbuf) msg
+              ; Error
+              )
             | e ->  
               ( finally()
               ; raise e
@@ -180,23 +180,21 @@ let pp file width =
     let lexbuf      = Lexing.from_channel fd                            in
     let map         = Srcmap.empty                                      in
     let scanner     = Scan.scan map                                     in
-        try
-            ( Srcmap.sync map 0 (file,1,1) 
-            ; let ast = Parse.program scanner lexbuf in
-                 ( Astpp.ppToFile stdout width ast 
-                 ; if false then Srcmap.dump map  
-                 )
-            ) 
-        with
+    let _           = Srcmap.sync map 0 (file,1,1)                      in
+    let pp ()       = let ast = Parse.program scanner lexbuf in
+                         (Ok (Astpp.ppToFile stdout width ast)) 
+        in try pp () with
             | Parsing.Parse_error -> 
               ( finally()
-              ; errorAtPoint (map, Lexing.lexeme_start lexbuf) "parse error"
+              ; errorPointPrt (map, Lexing.lexeme_start lexbuf) "parse error"
+              ; Error
               )
-            | ErrorAt(Pos(pos),msg) ->
+            | ErrorExn msg ->
               ( finally()
-              ; errorAtPoint (map,pos) msg
-              )   
-            | e ->  
+              ; errorPointPrt (map, Lexing.lexeme_start lexbuf) msg
+              ; Error
+              )
+            | e  ->
               ( finally()
               ; raise e
               )
@@ -221,16 +219,15 @@ let main () =
                          usage this;
                          exit 1
     in
-    let ok f x      = Ok (f x) in 
     let dispatch    = function
-        | Cmdline.Help          -> usage this
-        | Cmdline.Version	-> version ()
-        | Cmdline.Lex(file)     -> lex file 
+        | Cmdline.Help          -> usage this ; Ok ()
+        | Cmdline.Version	-> version () ; Ok ()
+        | Cmdline.Lex(file)     -> lex file   ; Ok ()
         | Cmdline.Asdl(file)    -> asdl file 
         | Cmdline.Pp(file,width)-> pp file width
         | Cmdline.Check(file)   -> Semant.check file
     in
-        match catch errorPrt (ok dispatch) cmd with
+        match catch errorPrt dispatch cmd with
             | Error -> exit 1
             | Ok _  -> exit 0
                 

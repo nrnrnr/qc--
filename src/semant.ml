@@ -55,7 +55,7 @@ let lookup = Symbol.lookup
 module Phase1 = struct
 
     let rec datum env = function
-        | DatumAt(x,_)        -> datum env x
+        | DatumAt(x,r)        -> catch' env (errorRegPrt r) (datum env) x
         | Label(n)            -> enter n (pointer,Memory) env
         | _                   -> env
         
@@ -65,12 +65,12 @@ module Phase1 = struct
     let register env ( v , t, n, reg) = enter n (ty t, Register) env
 
     let rec stmt env = function
-        | StmtAt(x,_)                 -> stmt env x
-        | IfStmt ( e, ss1, ss2)       -> let env' = stmts env ss1 in
-                                            stmts env' ss2 
-        | LabelStmt(n)                -> enter n (pointer,Memory) env
-        | SpanStmt(e1,e2,ss)          -> stmts env ss
-        | _                           -> env
+        | StmtAt(x,r)             -> catch' env (errorRegPrt r) (stmt env) x
+        | IfStmt ( e, ss1, ss2)   -> let env' = stmts env ss1 in
+                                        stmts env' ss2 
+        | LabelStmt(n)            -> enter n (pointer,Memory) env
+        | SpanStmt(e1,e2,ss)      -> stmts env ss
+        | _                       -> env
         
     and stmts env ss = foldl stmt env ss
 
@@ -78,15 +78,16 @@ module Phase1 = struct
         enter name (dummy,Constant(ExprConst(expr))) env
         
     let rec section env = function
-        | SectionAt(x,_)             -> section env x
-        | SSpan( e1, e2, ss)         -> foldl section env ss
-        | Datum( d)                  -> datum env d
-        | SExport (t, ns)            -> env
-        | Procedure(cc,n,fs, ds, ss) -> let env' = enter n (pointer,Memory) env in 
-                                        stmts env' ss 
+        | SectionAt(x,r)         -> catch' env (errorRegPrt r) (section env) x
+        | SSpan( e1, e2, ss)     -> foldl section env ss
+        | Datum( d)              -> datum env d
+        | SExport (t, ns)        -> env
+        | Procedure(cc,n,fs, ds, ss) -> 
+            let env' = enter n (pointer,Memory) env in 
+                stmts env' ss 
 
     let rec topdecl env = function
-        | TopDeclAt(x,_)  -> topdecl env x
+        | TopDeclAt(x,r)  -> catch' env (errorRegPrt r) (topdecl env) x
         | Import( t, ns)  -> let entry = (ty t, Memory) in
                              foldl (fun env n -> enter n entry env) env ns 
         | Export( t, ns)  -> env
@@ -256,18 +257,21 @@ let check file =
             ; let ast  = Parse.program scanner lexbuf in
               let env  = Phase1.program ast map in
               let env' = eval env               in
-                    ppToFile stdout 72 (Print.ppEnv env')
+                    Ok (ppToFile stdout 72 (Print.ppEnv env'))
             ) 
         with
             | Parsing.Parse_error -> 
               ( finally()
-              ; errorAtPoint (map, Lexing.lexeme_start lexbuf) "parse error"
+              ; errorPointPrt (map, Lexing.lexeme_start lexbuf) "parse error"
+              ; Error
               )
-            | ErrorAt(Pos(pos),msg) ->
+            | ErrorExn msg ->
               ( finally()
-              ; errorAtPoint (map,pos) msg
-              )   
+              ; errorPointPrt (map, Lexing.lexeme_start lexbuf) msg
+              ; Error
+              )
             | e ->  
               ( finally()
               ; raise e
               )
+            
