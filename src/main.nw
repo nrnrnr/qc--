@@ -54,7 +54,7 @@ let cmd_version   = literal "-version"      --> return CMDversion
 let cmd_lex       = literal "-lex" **> any  --> fun s -> CMDlex(s) 
 let cmd_parse     = literal "-asdl" **> any --> fun s -> CMDparse(s) 
 let cmd_pp        = literal "-pp" **> any   --> fun s -> CMDpp(s) 
-let cmd_default   = any                     --> fun s -> CMDlex(s)
+let cmd_default   = any                     --> fun s -> CMDpp(s)
 
 @ The basic parsers recognize a complete command line. As an
 abbreviation is a single file name interpreted as an argument to the
@@ -92,9 +92,10 @@ let usage this =
   let msg = 
   [   "\t -help                      (this to stdout)"
   ;   "\t -version                   (version to stdout)"
-  ;   "\t -l file                    (scan file)"
-  ;   "\t -c file                    (parse/compile file)"
-  ;   "\t file                       (same as -c file)"
+  ;   "\t -lex file                  (scan file)"
+  ;   "\t -asdl file                 (parse file)"
+  ;   "\t -pp file                   (parse and pretty print file)"
+  ;   "\t file                       (same as -pp file)"
   ] in
     Printf.printf "%s version %s command line syntax\n" this This.version;
     List.iter print_endline msg
@@ -261,7 +262,7 @@ Parse I<file> and print the abstract syntax in ASDL format to stdout.
 
 =item B<-pp> I<file>
 
-Parse I<file> and pretty print the abstract syntax in ASDL format to stdout.
+Parse I<file> and write a pretty printed concrete syntax to stdout.
 
 =item B<-lex> I<file>
 
