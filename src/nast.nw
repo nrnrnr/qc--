@@ -153,16 +153,31 @@ The parameters are:
 \end{tabular}
 \end{quote}
 Most of these accumulating parameters accumulate declarations.
+They are gathered in a record to ensure the OCaml compiler will
+compile calls to [[decl]] as tail calls.
+This bug has happened -- this is not premature optimization.
 <<nast.ml>>=
-let rec decl r imps exports lbls ks consts types regs archs data d k = match d with
-  | A.DeclAt(x,r)   -> decl r imps exports lbls ks consts types regs archs data x k
-  | A.Typedef d     -> k imps exports lbls ks consts ((r,d) :: types) regs archs data
-  | A.Import (t,ii) -> k ((r,t,ii)::imps) exports lbls ks consts types regs archs data
-  | A.Export (t,ee) -> k imps ((r,t,ee)::exports) lbls ks consts types regs archs data
-  | A.Const d       -> k imps exports lbls ks ((r,d) :: consts)  types regs archs data
-  | A.Registers rs  -> k imps exports lbls ks consts types ((r, rs) :: regs) archs data
-  | A.Target    t   -> k imps exports lbls ks consts types regs ((r, t) :: archs) data
-  | A.Pragma        -> k imps exports lbls ks consts types regs archs data
+type ('a) accumulation_disaster =
+  { imps : (A.region * A.ty option * A.import list) list
+  ; exps : (A.region * A.ty option * A.export list) list
+  ; lbls : 'a
+  ; ks : (Ast.region * (A.name * convention * (A.region * A.hint * A.name * aligned option) list)) list
+  ; consts : (A.region * (A.ty option * A.name * A.expr)) list
+  ; tys : (A.region * (A.ty * A.name list)) list
+  ; regs : (A.region * A.register list) list
+  ; archs : (A.region * A.arch list) list
+  ; data : ((A.region * datum) list) 
+  }
+
+let rec decl r accums d k = match d with
+  | A.DeclAt(x,r)   -> decl r accums x k
+  | A.Typedef d     -> k {accums with tys = ((r,d) :: accums.tys)}
+  | A.Import (t,ii) -> k {accums with imps = ((r,t,ii)::accums.imps)}
+  | A.Export (t,ee) -> k {accums with exps = ((r,t,ee)::accums.exps)}
+  | A.Const d       -> k {accums with consts = ((r,d) :: accums.consts)}
+  | A.Registers rs  -> k {accums with regs = ((r, rs) :: accums.regs)}
+  | A.Target    t   -> k {accums with archs = ((r, t) :: accums.archs)}
+  | A.Pragma        -> k accums
 @ 
 This is a generic lifting function.
 Function [[kmap f]] turns function [[f]] from a function on~[['a]] to
@@ -170,32 +185,26 @@ a function on \mbox{[['a list]]}.
 The function has to supply a value to its continuation;
 if it doesn't, use [[kmap_none]].
 <<nast.ml>>=
-let rec kmap f cons r imps exports lbls ks consts types regs archs data xs k =
-  match xs with
-  | []      -> k [] imps exports lbls ks consts types regs archs data
+let rec kmap f cons r accums xs k = match xs with
+  | []      -> k [] accums
   | x :: xs ->
-      kmap f cons r imps exports lbls ks consts types regs archs data xs
-      (fun xs imps exports lbls ks consts types regs archs data ->
-        f r imps exports lbls ks consts types regs archs data x
-          (fun x imps exports lbls ks consts types regs archs data  ->
-            k (cons x xs) imps exports lbls ks consts types regs archs data))
+     kmap f cons r accums xs
+          (fun xs accums -> f r accums x (fun x accums -> k (cons x xs) accums))
 
-let kmap_none f r imps exports lbls ks consts types regs archs data xs k =  
-  let xk f r imps exports lbls ks consts types regs archs data x k = 
-    f r imps exports lbls ks consts types regs archs data x (k []) in
-  kmap (xk f) (fun _ _ -> [])
-    r imps exports lbls ks consts types regs archs data xs (fun _ -> k)
+let kmap_none f r accums xs k =
+  let xk f r accums x k = f r accums x (k []) in
+  kmap (xk f) (fun _ _ -> []) r accums xs (fun _ -> k)
 @ 
 And now, processing a body item, which is liftable with [[kmap]].
 The continuation~[[k]] expects an optional statement, which is represented
 as a value of type [[stmt list -> stmt list]].
 If there can be no statement, [[k]]'s first argument is~[[id]].
 <<nast.ml>>=
-let rec body r imps exports lbls ks consts types regs archs data b k = match b with
-| A.BodyAt(b,r) -> body r imps exports lbls ks consts types regs archs data b k
-| A.DeclBody d  -> decl r imps exports lbls ks consts types regs archs data d (k id)
+let rec body r accums b k = match b with
+| A.BodyAt(b,r) -> body r accums b k
+| A.DeclBody d  -> decl r accums d (k id)
 | A.StmtBody s  -> (<<match [[stmt]] [[s]] at [[r]] and continue with [[k]]>>)
-| A.DataBody ds -> k id imps exports lbls ks consts types regs archs (fdata r ds data)
+| A.DataBody ds -> k id {accums with data = (fdata r ds accums.data)}
 and bodies r = kmap body (fun add ss -> add ss) r
 @ 
 Here are statements.
@@ -210,31 +219,27 @@ understand [[If]], you understand it all.
 <<match [[stmt]] [[s]] at [[r]] and continue with [[k]]>>=
 let rec stmt r s k = 
   let cons s ss = StmtAt (s, r) :: ss in
-  let atomic s = k (cons s) imps exports lbls ks consts types regs archs data in
+  let atomic s = k (cons s) accums in
   match s with
   | A.StmtAt(s,r) -> stmt r s k
   | A.IfStmt (c,b1,b2)   ->
-      bodies r imps exports lbls ks consts types regs archs data b2
-      (fun ss2 imps exports lbls ks consts types regs archs data ->
-        bodies r imps exports lbls ks consts types regs archs data b1 
-          (fun ss1 imps exports lbls ks consts types regs archs data ->
-            k (cons(If(c,ss1,ss2))) imps exports lbls ks consts types regs archs data))
+    bodies r accums b2
+      (fun ss2 accums ->
+         bodies r accums b1 (fun ss1 accums -> k (cons(If(c,ss1,ss2))) accums))
   | A.SwitchStmt (range,e,aa) ->
-      arms r imps exports lbls ks consts types regs archs data aa
-        (fun aa imps exports lbls ks consts types regs archs data ->
+      arms r accums aa
+        (fun aa accums ->
           let stmt = cons (Switch (range, e, aa)) in
-          k stmt imps exports lbls ks consts types regs archs data)
+          k stmt accums)
   | A.LabelStmt l ->
-      k (cons (Label l)) imps exports ((r, l) :: lbls) ks consts types regs archs data
+      k (cons (Label l)) {accums with lbls = ((r, l) :: accums.lbls)}
   | A.ContStmt (n, formals) ->
       let formals = List.map cformal formals in
       let cc      = convention None in
       let stmt    = cons (Cont (n, cc, formals)) in
-      k stmt imps exports lbls ((r, (n,cc,formals)) :: ks) consts types regs archs data
+      k stmt {accums with ks = ((r, (n,cc,formals)) :: accums.ks)}
   | A.SpanStmt(key,v,bs)   -> 
-      bodies r imps exports lbls ks consts types regs archs data bs
-      (fun ss imps exports lbls ks consts types regs archs data ->
-        k (cons (Span (key,v,ss))) imps exports lbls ks consts types regs archs data)
+      bodies r accums bs (fun ss accums -> k (cons (Span (key,v,ss))) accums)
   | A.AssignStmt (ls, rs) ->
       atomic (Assign (ls, rs))
   | A.CallStmt (ls, cc, p, a's, tgts, flows) ->
@@ -254,20 +259,17 @@ let rec stmt r s k =
   | A.ReturnStmt (cc, alt, a's) ->
       atomic (Return (convention cc, alt, List.map actual a's))
   | A.EmptyStmt
-  | A.CommentStmt _   ->
-      k id imps exports lbls ks consts types regs archs data in
+  | A.CommentStmt _   -> k id accums in
 stmt r s k
 @ PERHAPS IT SHOULD BE POSSIBLE TO SET THE CALLING CONVENTION FOR CUT TO
 AND FOR CONTINUATION?
 @
 Arm of a case statement.  Nothing interesting here.
 <<nast.ml>>=
-and arm r imps exports lbls ks consts types regs archs data a k = match a with
-| A.ArmAt (a,r) -> arm r imps exports lbls ks consts types regs archs data a k
+and arm r accums a k = match a with
+| A.ArmAt (a,r) -> arm r accums a k
 | A.Case (ranges,bs) -> 
-    bodies r imps exports lbls ks consts types regs archs data bs
-      (fun stmts imps exports lbls ks consts types regs archs data ->
-        k (ranges, stmts) imps exports lbls ks consts types regs archs data) 
+    bodies r accums bs (fun stmts accums -> k ((ranges, stmts)) accums)
 and arms r = kmap arm (fun x y -> x::y) r
 @
 A section simply accumulates data, so its continuation doesn't take an
@@ -275,55 +277,70 @@ additional argument before [[imps]].
 In other words, [[section]] is like [[decl]] and not like [[body]] or
 [[stmt]]. 
 <<nast.ml>>=
-let rec section r imps exports lbls ks consts types regs archs data s k = match s with
+let rec section r accums s k = match s with
 | A.SectionAt (s,r) ->
-    section r imps exports lbls ks consts types regs archs data s k
+    section r accums s k
 | A.Decl d ->
-    decl    r imps exports lbls ks consts types regs archs data d k
+    decl r accums d k
 | A.SSpan(key, v, ss) ->
-    sections r imps exports lbls ks consts types regs archs [] ss
-      (fun imps exports lbls ks pconsts ptypes pregs archs sdata ->
-        let data = (r, SSpan(key,v,sdata)) :: data in
-        k imps exports lbls ks pconsts ptypes pregs archs data)
+    sections r {accums with data = []} ss
+      (fun saccums ->
+        let data' = (r, SSpan(key,v, saccums.data)) :: accums.data in
+        k {saccums with data = data'})
 | A.Datum d ->
-    k imps exports lbls ks consts types regs archs (add_datum r d data)
+    k {accums with data = (add_datum r d accums.data)}
 | A.Procedure(cc,p,fs,bs,r) ->
-    bodies r imps exports [] [] [] [] [] archs [] bs
-    (fun ss imps exports plbls pks pconsts ptypes pregs archs pdata ->
-      let cdecls = { constants = pconsts; types = ptypes } in
-      let p = { cc = convention cc; name = p; formals = List.map formal fs; code = ss;
-                continuations = pks; labels = plbls; region = r;
-                locals = rflatten pregs; pdecls = cdecls; stackdata = pdata; } in
-      k imps exports (plbls::lbls) ks consts types regs archs ((r,Procedure p)::data))
+    bodies r { imps = accums.imps ; exps = accums.exps
+             ; lbls = [] ; ks = [] ; consts = [] ; tys = []
+             ; regs  = [] ; archs = accums.archs ; data = [] }
+           bs
+     (fun ss paccums ->
+       let cdecls = { constants = paccums.consts; types = paccums.tys } in
+       let p = { cc = convention cc; name = p; formals = List.map formal fs; code = ss;
+                 continuations = paccums.ks; labels = paccums.lbls; region = r;
+                 locals = rflatten paccums.regs; pdecls = cdecls;
+                 stackdata = paccums.data; } in
+      k {accums with imps  = paccums.imps;
+                     exps  = paccums.exps;
+                     lbls  = paccums.lbls :: accums.lbls;
+                     archs = paccums.archs;
+                     data  = (r,Procedure p)::accums.data})
 and sections r = kmap_none section r
 @ 
 At top level, we accumulate sections, where a section is a named list of data.
 Again, we could have a declaration at top level, so we use [[cons]]
 and [[id]] as before.  
 <<nast.ml>>=
-let rec toplevel r imps exports lbls ks consts types regs archs data t k = 
+let rec toplevel r accums t k =
   let cons s ss = (s, r) :: ss in
   match t with
   | A.ToplevelAt(t,r) ->
-      toplevel r imps exports lbls ks consts types regs archs data t k
+      toplevel r accums t k
   | A.Section(name, ss) ->
-      sections r imps exports lbls ks consts types regs archs [] ss
-        (fun imps exports lbls ks consts types regs archs sdata ->
-          k (cons (name, sdata)) imps exports lbls ks consts types regs archs data)
+      sections r {accums with data = []} ss
+        (fun saccums -> k (cons (name, saccums.data))
+                          {saccums with data = accums.data})
   | A.TopDecl d ->
-      decl r imps exports lbls ks consts types regs archs data d (k id)
+      decl r accums d (k id)
   | A.TopProcedure p ->
       let t = A.Section(default_proc_section, [A.Procedure p]) in
-      toplevel r imps exports lbls ks consts types regs archs data t k
+      toplevel r accums t k
 
 let program ts =
   let checknull what l =
     if not (null l) then Impossible.impossible ("some toplevel " ^ what) in
-  kmap toplevel (fun add t -> add t) Srcmap.null [] [] [] [] [] [] [] [] [] ts
-    (fun ss imps exports lbls ks consts types regs archs sdata ->
-      let _ = checknull "data" sdata in
-      let _ = checknull "continuations" ks in
-      { target = rflatten archs; imports = imps; exports = exports;
-        code_labels = lbls; globals = rflatten regs; sections = List.map fst ss;
-        udecls = { types = types; constants = consts };
+  kmap toplevel (fun add t -> add t)
+       Srcmap.null
+       { imps = [] ; exps = [] ; lbls = [] ; ks = [] ; consts = []
+       ; tys = [] ; regs = [] ; archs = [] ; data = [] }
+       ts
+    (fun ss saccums ->
+      let _ = checknull "data" saccums.data in
+      let _ = checknull "continuations" saccums.ks in
+      { target = rflatten saccums.archs
+      ; imports = saccums.imps; exports = saccums.exps
+      ; code_labels = saccums.lbls
+      ; globals = rflatten saccums.regs
+      ; sections = List.map fst ss
+      ; udecls = { types = saccums.tys; constants = saccums.consts }
       })
