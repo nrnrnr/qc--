@@ -108,12 +108,17 @@ let rec convert ~(from:int) ~(to':int) e =
 @ 
 Function [[rewrite]] rewrites all subexpressions to ensure the postcondition.
 Its major job is to call [[convert]] when it spots a floating-point subexpression.
+
+The third case (with the warning) might occur if we pass a
+widened floating-point variable to an integer comparison operation.
 <<floating-point widening>>=
 and rewrite e = match e with
   | RP.Const _      -> e
   | RP.Fetch (l, e) -> RP.Fetch(loc l, e)
   | RP.App (op, args) when Rtlop.Types.has_floating_result (Up.opr op) ->
-      Impossible.impossible "asked to rewrite (not convert) floating-point result"
+      Verbose.say 4 ["Warning -- rewriting (not converting) floating-point result"];
+      let w = Rtlutil.Width.exp' e in
+      convert w w e
   | RP.App (("f2i", [fw; iw]), [x; rm]) ->
       let fw' = bestwidth fw in
       make_cvt "f2i" fw' iw (convert ~from:fw ~to':fw' x) rm
@@ -159,10 +164,11 @@ let rtl r =
     | "fcmp"|"flt"|"fle"|"fgt"|"fge"|"feq"|"fne"|"fordered"|"funordered"|"f2i" -> true
     | _ -> false in
   if Rtlutil.ExistsOpr.rtl needs_conversion r then
+    let rtl = Rtlutil.ToReadableString.rtl in
+    let _ = Verbose.eprintf 6 "Widening %s...\r" (rtl r) in
     let r' =
       let RP.Rtl es = Down.rtl r in Up.rtl (RP.Rtl (List.map guarded es)) in
-    let rtl r = Rtlutil.ToReadableString.rtl r in
-    Verbose.say 5 ["Widened "; rtl r; " into\n  "; rtl r'; "\n"];
+    Verbose.eprintf 5 "Widened %s into\n  %s\n" (rtl r) (rtl r');
     r'
   else
     r in

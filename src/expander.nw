@@ -334,6 +334,13 @@ the stack.
 val opclass : operator -> operator_class
 val stack_depth : int
 val stack_width : int
+@ 
+We also need to identify an operator that takes a value from the stack
+and converts it for use in a temporary.  This sort of operator is
+needed on machines in which the width of stack is different from the
+width of a temporary (like the Pentium).
+<<generic expansion operations for stack machines>>=
+val converts_stack_to_temp : operator -> bool
 @
 We can push a value from memory or pop the stack into memory.
 <<generic expansion operations for stack machines>>=
@@ -403,6 +410,7 @@ module Nostack (Address : sig type t val reg : temp -> t end) = struct
   let opclass _ = Register
   let stack_depth = 0
   let stack_width = 0
+  let converts_stack_to_temp _ = false
   let push ~addr _              = Impossible.impossible "stack op on register machine"
   let store_pop ~addr _         = Impossible.impossible "stack op on register machine"
   let push_cvt _ _ ~addr _      = Impossible.impossible "stack op on register machine"
@@ -731,10 +739,11 @@ let rec to_temp' room context e =
   <<cases for sign-extending and zero-extending loads>>
   <<cases for sign-extending and zero-extending divides>>
   <<cases for converting a Boolean to a value>>
-  | RP.App (("f2i", [fw; iw]), _) as e ->
-      let slot = exchange_slot iw in
-      let t, is = to_temp room context (fetch_slot slot iw) in
-      t, assign_slot room slot e iw @@ is 
+  | RP.App ((_, [stackw; tempw]) as cvt, _) as e
+    when Post.converts_stack_to_temp cvt ->
+      let slot = exchange_slot tempw in
+      let t, is = to_temp room context (fetch_slot slot tempw) in
+      t, assign_slot room slot e tempw @@ is 
   | RP.App (("f2f_implicit_round", ws), [x]) ->
       to_temp room context (RP.App (("f2f", ws), [x; RP.Fetch(rounding_mode, 2)]))
   | RP.App (op, args) ->
@@ -1096,7 +1105,7 @@ and expand_cbranch_rtl g left right w ktrue kfalse =
   | RP.App (cmp, _) ->
      Printf.eprintf "rtl exp: %s\n" (Rtlutil.ToReadableString.exp (Up.exp g));
       Impossible.unimp "non-binary comparison in conditional guard"
-and expand_cbranch rtl ktrue kfalse =
+and expand_cbranch' rtl ktrue kfalse =
   match Down.rtl rtl with
   | RP.Rtl [(g, RP.Store (left, right, w))] ->
     expand_cbranch_rtl g left right w ktrue kfalse
@@ -1269,6 +1278,12 @@ and rtl r =
   let _ = D.strings ["Expanding "; D.rtl r; "\n"] in
   let is = rtl' r in
   let _ = D.strings ["Expanded "; D.rtl r; " into\n"]; D.pr_is is in
+  is
+and expand_cbranch r ktrue kfalse =
+  let _ = D.strings ["Expanding conditional branch "; D.rtl r; "\n"] in
+  let is = expand_cbranch' r ktrue kfalse in
+  let _ =
+    D.strings ["Expanded conditional branch "; D.rtl r; " into a mystery node\n"] in
   is
 and noisy_assign l r w =
   let is = assign l r w in
