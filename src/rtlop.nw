@@ -192,16 +192,22 @@ let optable =
   ;  "bitTransfer"  , int,   [T.var 1; T.var 1; T.var 1; T.var 1; T.var 1] --> T.var 1 
                     
   ] 
-
+<<Types>>=
 let optypes  = Strutil.assoc2map (List.map (fun (o, _, t) -> (o, t)) optable)
 let opfloats = Strutil.assoc2map (List.map (fun (o, f, _) -> (o, f)) optable)
-
+@ 
+Some operators are not visible.
+An operator is invisible if it is for internal use only or if it has
+been expunged from the {\PAL} specification.
+<<Types>>=
 let opnames =
   let visible = function
     | "bitExtract" | "bitInsert" | "bitTransfer" | "f2f_implicit_round" -> false
+    | "fcmp" | "float_lt" | "float_eq" | "float_gt" | "unordered" -> false (*expunged*)
     | _ -> true in
   List.filter visible (List.map (fun (o, _, _) -> o) optable)
 
+<<Types>>=
 let findopname name t =
   try Strutil.Map.find name t
   with Not_found ->
