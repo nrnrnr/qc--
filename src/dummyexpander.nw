@@ -131,11 +131,12 @@ that evaluates the expression into a register and return that register.
 Thus, two things are returned: the register where the expression's value
 can be found, and the sequence of {\rtl}s. To avoid decomposing returned
 pairs, these semantic actions are implemented as a state monad: the
-state is the list of accumulated {\rtl}s. A monadic action takes the
-state, and produces a pair of a new result and a new state:
+state is the list of accumulated {\rtl}s and a source for temporaries. A
+monadic action takes the state, and produces a pair of a new result and
+a new state:
 
 <<utilities>>=
-type state = R.rtl list
+type state = R.rtl list * Talloc.Multiple.t
 type 'a m  = state -> ('a * state)
 @
 
@@ -143,7 +144,7 @@ In particular, we save an {\rtl} in the state with [[exec]]. {\rtl}s are
 saved in \emph{reverse exceution order}.
 
 <<utilities>>=
-let exec  rtl  = fun s -> ((), rtl :: s) 
+let exec  rtl  = fun (rtls,tmp) -> ((), (rtl :: rtls,tmp)) 
 @
 
 The power of monads come from higher-order functions to deal with them.
@@ -160,9 +161,8 @@ We need a source for new temporaries; the functions [[itmp]] and
 new temporary.
 
 <<utilities>>=
-let tmps   = Talloc.Multiple.for_spaces (Targets.dummy.T.spaces)
-let itmp w = return (Talloc.Multiple.loc tmps 't' w)
-let ftmp w = return (Talloc.Multiple.loc tmps 'u' w) 
+let itmp w = fun (rtls,tmp as state) -> (Talloc.Multiple.loc tmp 't' w, state)
+let ftmp w = fun (rtls,tmp as state) -> (Talloc.Multiple.loc tmp 'u' w, state)
 @
 
 {\rtl} operators do not distinguish between floating point and integer
@@ -228,7 +228,7 @@ values and recognized by their terminal type. The following types are
 terminal:
 
 <<terminal types>>=
-%term const width opr exps space agg ass index bool bits link late x
+%term k width opr exps space agg ass index bool bits link late x
 @
 
 Note, that in a {\burg} pattern a variable $v$ is an abbreviation for
@@ -248,6 +248,7 @@ purpose.
     [[ireg]]        & register holding result of integer expression\\
                     & also used as general purpose location\\
     [[freg]]        & register holding result of floating-point expression\\
+    [[creg]]        & control register\\
     [[mem]]         & memory location\\
     [[const]]       & constant value\\
     [[addr]]        & memory address\\
@@ -264,8 +265,8 @@ A constant is loaded into a register. This does not work for boolean
 constants! Do we have to treat the different constants seperately?
 
 <<rules>>=
-const:      Const(const)
-            {: U.exp (RP.Const(const)) :}
+const:      Const(k)
+            {: U.exp (RP.Const(k)) :}
 
 -- r := k   
 ireg:       const [1]
@@ -349,7 +350,8 @@ fregs:      Cons(freg, fregs)
 We expect memory locations, tempraries, and hardware registers in the
 code to expand.  These locations are classified into memory and
 integer/floating-point registers.  Memory is addressed by registers
-([[addr]] is a synonym for [[ireg]], we might add [[const]] later).
+([[addr]] is a synonym for [[ireg]], we might add [[const]] later) and
+registers are addressed by [[const]].
 
 <<rules>>=
 addr:       ireg  {: ireg >>= fun r -> return (fetch r) :}
@@ -360,28 +362,20 @@ mem:        Cell("m", agg, width, addr, ass)
                 addr >>= fun a ->
                 return (R.cell (U.assertion ass) 'm' agg width a) 
             :}
-ireg:       Cell("r", agg, width, addr, ass)
-            {: 
-                addr >>= fun a ->
-                return (R.cell (U.assertion ass) 'r' agg width a)
-            :}
-ireg:       Cell("t", agg, width, addr, ass)
-            {: 
-                addr >>= fun a ->
-                return (R.cell (U.assertion ass) 't' agg width a)
-            :}
+            
+ireg:       Cell("r", agg, width, const, ass)
+            {: return (R.cell (U.assertion ass) 'r' agg width const) :}
+ireg:       Cell("t", agg, width, const, ass)
+            {: return (R.cell (U.assertion ass) 't' agg width const) :}
 
 
-freg:       Cell("f", agg, width, addr, ass)
-            {:
-                addr >>= fun a ->
-                return (R.cell (U.assertion ass) 'f' agg width a)
-            :}
-freg:       Cell("u", agg, width, addr, ass)
-            {:
-                addr >>= fun a ->
-                return (R.cell (U.assertion ass) 'u' agg width a)
-            :}
+freg:       Cell("f", agg, width, const, ass)
+            {: return (R.cell (U.assertion ass) 'f' agg width const) :}
+freg:       Cell("u", agg, width, const, ass)
+            {: return (R.cell (U.assertion ass) 'u' agg width const) :}
+
+creg:       Cell("c", agg, width, const, ass)
+            {: return (R.cell (U.assertion ass) 'c' agg width const) :}
 
 error:      Cell(x:string, agg, width, addr, ass)
             {:
@@ -399,13 +393,30 @@ iop:        Op(opr) [{: if not (is_float_op opr) then 0 else C.inf_cost :}]
             {: U.opr opr :}
 @
 
-To make sure we can cover every {\rtl} we allow an integer register to
-be used as a floating-point register, and vice versa. However, we don't
-like these conversion and penalize them with a high cost.
+To make sure we can cover every {\rtl} we can move integer registers
+into floating-point temporaies, and floating-point registers into
+integer temporaries. We do not like these conversions so we penalize
+them with high costs.
 
 <<rules>>=
-ireg:       freg [2]    {: freg :}  -- do something more?
-freg:       ireg [2]    {: ireg :}
+-- t := f
+ireg:       freg [2]    
+            {:  
+                freg                                >>= fun u  ->
+                let w = W.loc u in 
+                itmp w                              >>= fun t  ->
+                exec (R.store t (R.fetch u w) w)    >>= fun () ->
+                return t
+            :} 
+-- f := t            
+freg:       ireg [2]    
+            {:  
+                ireg                                >>= fun t ->
+                let w = W.loc t in
+                ftmp w                              >>= fun u  ->
+                exec (R.store u (R.fetch t w) w)    >>= fun () ->
+                return u
+            :} 
 @
 
 
@@ -444,6 +455,15 @@ stmt:       Store(left:freg, right:freg, width)
                 right >>= fun r ->
                 return (R.store l (R.fetch r width) width)
             :}    
+
+-- c := t (assignment to PC is the only case in the Dummy target)
+stmt:       Store(creg, ireg, width)
+            {:
+                creg  >>= fun c ->
+                ireg  >>= fun r ->
+                return (R.store c (R.fetch r width) width)
+            :}    
+
 @
 
 I don't know how to handle guarded statements. The guard expression is a
@@ -516,6 +536,7 @@ and loc = function
                 | 'm' -> "m"
                 | 'u' -> "u"
                 | 't' -> "t"
+                | 'c' -> "c"
                 | _   -> error (Printf.sprintf "unknown space `%c'" sp)
                 )
         in
@@ -538,11 +559,11 @@ When this plan is executed, it returns a monadic value that includes the
 desired expanded {\rtl}s.
 
 <<tail>>=
-let expand (r: R.rtl) = 
+let expand tmps (r: R.rtl) = 
     let plan = rtl (D.rtl r) in
     try
-        match plan.rtl.Camlburg.action () [] with
-            | (), rtls -> rtls
+        match plan.rtl.Camlburg.action () ([],tmps) with
+            | (), (rtls,_) -> rtls
     with 
         Camlburg.Uncovered -> 
             ( List.iter prerr_endline
@@ -572,10 +593,11 @@ structure of the procedure's {\cfg} had to be modified.
 <<tail>>=
 let cfg proc =
     let nodes       = GU.fold_bwd proc.Proc.cfg (fun n ns -> n::ns) []
+    and tmps        = proc.Proc.temps   (* source for temporaries *)
     and insert n i  = G.gm_insert_assign_before i n
     and modified    = ref false in
     let expnd node =
-        match expand (G.rtl node) with
+        match expand tmps (G.rtl node) with
         | last :: preds ->
             ( ignore (List.fold_left insert node preds)
             ; G.set_rtl node (fun _ -> last)

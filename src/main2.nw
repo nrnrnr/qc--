@@ -270,17 +270,21 @@ end
 
 CodeExpandStages = 
     { placeVars = mkS("placeVars", PV.placeVars)
-    -- generic expander:
-    -- expander  = mkS("expander" , PV.expander)
-    , expander = mkS("expander", Dummyexpand.expand)
+    , generic   = mkS("expander" , PV.expander)
+    , dummy     = mkS("expander" , Dummyexpand.expand)
     }
 
 
 codeExpand = 
     seq({ single(CodeExpandStages.placeVars)
-        , single(CodeExpandStages.expander)
+        , single(CodeExpandStages.generic)
         })
 
+codeDummyExapnd = -- experimental expander for CL
+    seq({ single(CodeExpandStages.placeVars)
+        , single(CodeExpandStages.dummy)
+        })
+    
 placeVars = single(CodeExpandStages.placeVars)
 
 pcg     = ignore(single(CGStages.printCG))
@@ -350,6 +354,24 @@ function expand (proc)
         }
     run(action, proc, {})    
 end    
+
+-- run the Burg generated dummy expander -- experimental for CL
+function dummy (proc)
+    local action = seq
+        { single(CodeExpandStages.placeVars)
+        , single(CodeExpandStages.dummy)
+        } 
+    run(action, proc, {})    
+end    
+        
+-- just run the variable placer
+function place (proc)
+    local action = seq
+        { single(CodeExpandStages.placeVars)
+        } 
+    run(action, proc, {})    
+end    
+        
 
 ------------------------------------------------------------------ 
 -- Driver
