@@ -510,6 +510,24 @@ And now for the rules: \\
   {\state \pc {k\cons{}V} \rho \spt g \sigma A u {s\cons{}S}}
   {\state {\pc_k} V {\rho_k} {\spt_k} g \sigma A {u_k} {s''}}
 }
+\section{Prerequisites}
+In order to build and use the interpreter, there are a few externally available libraries that you need:
+
+\begin{itemize}
+\item We make use of an embedded Lua interpreter in our C code.  To download the source code and/or binaries for the Lua language, please visit [[http://www.lua.org]].
+We link Lua libraries [[liblua.a]] and [[liblualib.a]] together with our code.
+
+\item We make use of the New Jersey Machine-Code Toolkit to preprocess our C code on its way to the compiler.
+To download the source code and/or binaries for the toolkit, please visit [[http://www.eecs.harvard.edu/~nr/toolkit/]].
+We use the binary [[tools]] to preprocess our code, and link the library [[mclib.o]] together with our code.
+
+\item If you want to build the NJ Machine-Code Toolkit library yourself from the source code, you will need to have access to an Icon compiler or bytecode compiler.
+Visit [[http://www.cs.arizona.edu/icon/]] to download Icon.
+
+\item We make use of David Hanson's \textit{C Interfaces and Implementations} library of C coding idioms.
+Visit [[http://www.cs.princeton.edu/software/cii/]] to download the source code needed to build this library.
+
+\end{itemize}
 
 \section{Interpreter Interfaces}
 This section contains interfaces to the major abstractions used in the development of the Quick~{\PAL} Interpreter.  The interpreter's interfaces, as we present them, consist of type definitions, function prototypes, and ``faux prototypes'' for macros defined elsewhere.  These are all placed in two C header files, [[interp.h]] and [[intervals.h]].\footnote{That is, with the exception of the faux macro prototypes, which need not appear in our C source code at all.}  Those interfaces particular to the interpreter may be found in the former, while that of our natural number set library is present in the latter.
@@ -847,10 +865,13 @@ The operational semantics for procedure-calling and continuation-calling instruc
 We create types [[procedure]] and [[continuation]] to encapsulate the necessary information for representing procedures and continuations.  
 Note that we use [[RAddr]]s to represent addresses in program memory, for these structures are used during the interpretation of the input Lua script before sections of program memory are permanently located at addresses.  
 An [[RAddr]] is a relocatable address and is defined by the NJ Machine-Code Toolkit, as will be explained later.
+We must also make sure to store a copy of the uid of the continuation's activation; if a continuation were dead when we tried to cut to it, we would have to look at the continuation's [[u]] and not [[dest_act->u]], which may well have been overwritten by a live activation. 
 <<abstract types for storing internal state>>=
 typedef struct continuation {
   RAddr               raddr;
   actptr              dest_act;   /* pointer to destination activation  */
+  uid                 u;          /* uid of continuation's activation   */
+
   struct continuation *next;      /* for use in a procedure's cont_list */
 } continuation;
 
@@ -1027,10 +1048,11 @@ To keep track of which error handling site to jump to, we use the global variabl
 <<global variable definitions>>=
 static jmp_buf errorjmp;
 @ 
-As a minor helper macro, we use [[mem_assert]] to catch errors that occur when there is a memory allocation error.
-This macro should do nothing unless [[ptr]] is [[NULL]].
+As minor helper macros, we use [[mem_assert]] to catch errors that occur when there is a memory allocation error and [[cmm_assert]] to make assertions with better error messages.
+[[mem_assert]] should do nothing unless [[ptr]] is [[NULL]].
 <<faux prototypes>>=
 void mem_assert(void *ptr);
+void cmm_assert(int assertion, const char *err_msg);
 @ 
 For specific matters of Lua errors, we are assisted by error handler [[lua_error_handle]].
 This function properly interpets Lua library error codes, acts appropriately (e.g., warning the user, exiting).
@@ -1841,6 +1863,10 @@ To help catch memory allocation errors, we provide macro [[mem_assert]].
                                        : cmm_err("memory allocation error " \
                                                  "<"__FILE__":%d>", __LINE__))
 @ 
+To allow failed assertions to generate better error messages, we provide [[cmm_assert]].
+<<macro definitions>>=
+#define cmm_assert(A, MSG) ((A) ? (void)0 : cmm_err(MSG))
+@ 
 \subsection{Bytecode Generation}
 The main plan with bytecode generation is this: a Lua source file written using the functions listed at the top of this document is run using an embedded Lua interpreter that is extended with C functions implementing the {\PAL} Lua functions.  These C functions are more or less wrappers for C encoding functions that are automatically generated when the SLED definition of the interprer's instruction set ([[bytecode.sled]]) is run through the NJ Machine-Code Toolkit.  These generated functions emit bytecode into relocatable memory blocks ([[RBlock]]s), which we use to represent {\PAL} sections.
 \subsubsection{Lua Interaction Helpers}
@@ -2190,6 +2216,9 @@ int lua_CMM_continuation(lua_State *L) {
   cont->raddr    = lbl->lbl.raddr;
   label_define(cont->raddr->label, 0);
   cont->dest_act = NULL;
+
+  cont->u.thread = NULL;
+  cont->u.frame  = 0;
 
   lbl->unit = unit;
   lbl->ty = CMM_CONTINUATION;
@@ -3065,6 +3094,8 @@ int load_assembly_unit(char *filename) {
     <<perform bytecode relocation>>
   }
 
+  lua_linenumber = LUA_INVALIDLINE;
+
   return 0;
 }
 @ 
@@ -3591,7 +3622,8 @@ We also must ensure that [[cont->dest_act]] was listed as a valid ``also cuts to
 <<make sure [[cont]] is a valid cut continuation>>=
                            assert(cont != NULL);
                            assert(cont->dest_act != NULL);
-                           assert(islive_uid(cont->dest_act->u));
+                           cmm_assert(islive_uid(cont->u),
+									  "cannot cut to dead continuation");
 
                            /* FIX : look in kappa annotations in activation 
                               pointed to by called_by to make sure that
@@ -3642,6 +3674,7 @@ We need to store an activation pointer within each of the activations contained 
 
                            for (c = proc->cont_list; c != NULL; c = c->next) {
                              c->dest_act = t->callstack_free;
+                             c->u        = t->callstack_free->u;
                            }
 
                            curr_proc = proc;
