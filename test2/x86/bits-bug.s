@@ -38,9 +38,9 @@ main:
 	addl %ecx,%eax
 	movl (%eax),%eax
 	nop
+	leal 4(%esp), %ecx
 	leal 4(%esp), %eax
-	movl (%eax),%ecx
-	leal 4(%esp), %eax
+	movl (%ecx),%ecx
 	movl %ecx,(%eax)
 initialize_continuations_l3:
 	nop
@@ -58,10 +58,10 @@ join_l7:
 	nop
 	nop
 	leal 4(%esp), %eax
-	movl (%eax),%eax
 	movl $0,%ecx
 	leal 4(%esp), %edx
 	addl %ecx,%edx
+	movl (%eax),%eax
 	movl %eax,(%edx)
 	leal 4(%esp), %esp
 	ret
@@ -74,14 +74,14 @@ callee:
 	movl (%eax),%eax
 	nop
 	leal 4(%esp), %ecx
-	movl (%ecx),%edx
-	leal 4(%esp), %ecx
-	movl %edx,(%ecx)
-initialize_continuations_l15:
+	leal 4(%esp), %edx
+	movl (%ecx),%ecx
+	movl %ecx,(%edx)
+initialize_continuations_l16:
 	movl $-1420500317,%ecx
 	cmpl %ecx,%eax
-	jne join_l24
-join_l25:
+	jne join_l25
+join_l26:
 	nop
 	leal success,%eax
 	movl $-4,%ecx
@@ -90,21 +90,21 @@ join_l25:
 	movl %eax,(%edx)
 	nop
 	call printf
-join_l19:
+join_l20:
 	nop
 	nop
 	nop
 	nop
 	nop
 	leal 4(%esp), %eax
-	movl (%eax),%eax
 	movl $0,%ecx
 	leal 4(%esp), %edx
 	addl %ecx,%edx
+	movl (%eax),%eax
 	movl %eax,(%edx)
 	leal 4(%esp), %esp
 	ret
-join_l24:
+join_l25:
 	nop
 	leal failed,%eax
 	movl $-4,%ecx
@@ -113,17 +113,17 @@ join_l24:
 	movl %eax,(%edx)
 	nop
 	call printf
-join_l23:
+join_l24:
 	nop
 	nop
 	nop
 	nop
 	nop
 	leal 4(%esp), %eax
-	movl (%eax),%eax
 	movl $0,%ecx
 	leal 4(%esp), %edx
 	addl %ecx,%edx
+	movl (%eax),%eax
 	movl %eax,(%edx)
 	leal 4(%esp), %esp
 	ret

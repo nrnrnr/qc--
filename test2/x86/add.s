@@ -1,9 +1,9 @@
 .globl main
-.globl Cmm_globalsig_aQOYZWMPACZAJaMABGMOZeCCPY
+.globl Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY
 .data
 /* memory for global registers */
-Cmm_globalsig_aQOYZWMPACZAJaMABGMOZeCCPY:
-Cmm_global_area:
+Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY:
+Cmm.global_area:
 .data
 hello:
 .byte 104
@@ -41,9 +41,9 @@ main:
 	movl (%edx),%ecx
 	nop
 	leal 4(%esp), %ecx
-	movl (%ecx),%edx
-	leal 4(%esp), %ecx
-	movl %edx,(%ecx)
+	leal 4(%esp), %edx
+	movl (%ecx),%ecx
+	movl %ecx,(%edx)
 initialize_continuations_l3:
 	movl $1,%ecx
 	cmpl %ecx,%eax
@@ -69,10 +69,10 @@ join_l7:
 	nop
 	nop
 	leal 4(%esp), %eax
-	movl (%eax),%eax
 	movl $0,%ecx
 	leal 4(%esp), %edx
 	addl %ecx,%edx
+	movl (%eax),%eax
 	movl %eax,(%edx)
 	leal 4(%esp), %esp
 	ret

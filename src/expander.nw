@@ -427,7 +427,6 @@ let inst n =
   match G.to_instr n with
   | Some i -> i
   | None   -> Impossible.impossible "Expanded node must have instruction"
-<<flow-graph manipulation utilities>>
 @
 SOMEWHERE WE NEED A HIGH-LEVEL EXPLANATION OF WHAT THE FLOW-GRAPH HAS
 TO DO WITH EXPANSION. ---NR
@@ -439,16 +438,16 @@ The empty segment is represented by a pair containing two copies of
 the illegal node---and \emph{only} the empty segment may contain an
 illegal node.
 <<flow-graph manipulation utilities>>=
-let emptyseg cfg = let ill = G.illegal cfg in (ill,ill)
+let emptyseg = let ill = G.illegal cfg in (ill,ill) in
 @
-<<flow-graph manipulation utilities>>=
+<<expander.ml>>=
 let is_empty (xi,xf) = G.kind xi = G.Illegal && G.kind xf = G.Illegal
 @ To concatenate segments, we must recognize (and ignore) the empty segment.
 <<flow-graph manipulation utilities>>=
 let (@@) ((xi,xf) as x) ((yi,yf) as y) =
   if      is_empty x then y
   else if is_empty y then x
-  else begin G.set_succ xf ~succ:yi; (xi, yf) end
+  else begin G.set_succ xf ~succ:yi; (xi, yf) end in
 @
 We provide several constructors for segments:
 \begin{itemize}
@@ -458,28 +457,15 @@ reverse-execution order
 \item [[seg_concat]] concatenates a list of segments.
 \end{itemize}
 <<flow-graph manipulation utilities>>=
-let nunit cfg i = let n = G.instruction cfg i ~succ:(G.illegal cfg) in (n,n)
-let to_segment cfg l = List.fold_left (fun seg i -> nunit cfg i @@ seg) (emptyseg cfg) l
-let seg_concat cfg l = List.fold_right (@@) l (emptyseg cfg)
-@
-For debugging purposes, it's sometimes easier to look at a segment as a flat list;
-obviously, the list loses the structure of the segment.
-<<flow-graph manipulation utilities>>=
-let seg_to_list (xi,xf)  =
-  let rec to_list' n =
-    if G.kind n = G.Illegal then []
-    else let rst = if G.eq n xf then [] else
-                   List.concat (List.map to_list' (G.succs n))
-         in  match G.to_instr n with
-             | Some i -> i :: rst
-             | None   -> rst
-  in to_list' xi
+let nunit      i = let n = G.instruction cfg i ~succ:(G.illegal cfg) in (n,n) in
+let to_segment l = List.fold_left (fun seg i -> nunit i @@ seg) emptyseg l in
+let seg_concat l = List.fold_right (@@) l emptyseg in
 @
 We also need to be able to take a single-entry, single-exit segment of control flow and
 insert it in place of an existing non-join node.
 In the function [[replace_node]], [[xi]] is the single-entry and [[xf]] is the single
 exit in a control-flow segment.
-<<flow-graph manipulation utilities>>=
+<<expander.ml>>=
 let replace_node n ((xi,xf) as x) =
   if is_empty x then
        (G.update_instr (fun _ -> R.par []) n; false)
@@ -492,6 +478,19 @@ let replace_node n ((xi,xf) as x) =
            G.update_instr (fun _ -> inst xf) n;
            true
          end
+@
+For debugging purposes, it's sometimes easier to look at a segment as a flat list;
+obviously, the list loses the structure of the segment.
+<<expander.ml>>=
+let seg_to_list (xi,xf)  =
+  let rec to_list' n =
+    if G.kind n = G.Illegal then []
+    else let rst = if G.eq n xf then [] else
+                   List.concat (List.map to_list' (G.succs n))
+         in  match G.to_instr n with
+             | Some i -> i :: rst
+             | None   -> rst
+  in to_list' xi
 @
 Some debugging code is most helpful.
 The expander writes debugging information as it goes;
@@ -513,8 +512,6 @@ enables statement-count profiling to work even when the expander loops infinitel
 It was useful in debugging the expander.
 <<expander.ml>>=
 let _ = Sys.set_signal Sys.sigterm (Sys.Signal_handle (fun _ -> exit 0))
-@ 
-
 @ 
 % ----------------------------------------------------------------
 \subsection{A generic expander}
@@ -598,7 +595,7 @@ let temp_in_context ((space, n, w) as t) context instructions =
     t, instructions
   else
     let t' = alloc context w in
-    t', instructions @@ to_segment cfg (Post.move t' t) in
+    t', instructions @@ to_segment (Post.move t' t) in
 @ 
 Within the expander, we eagerly build some dynamic contexts:
 [[icontext]], [[acontext]], and [[fcontext]].
@@ -607,6 +604,7 @@ context that's not known at compile-compile time.
 \nextchunklabel{expander.contextmap}%
 <<generic expander>>=
 let expand ({Proc.cfg = cfg} as proc) =
+  <<flow-graph manipulation utilities>>
   let contextmap (space, checker) =
     (Talloc.Multiple.reg proc.Proc.temps space, checker) in
   let icontext = contextmap Post.icontext in
@@ -679,20 +677,20 @@ let rec to_temp' room context e =
   | RP.Const k ->
       let w = width e in
       let t = alloc context w in
-      t, to_segment cfg (Post.li t k)
+      t, to_segment (Post.li t k)
   | RP.App (_, _) when is_compile_time_constant e ->
       let w = width e in
       let t = alloc context w in
-      t, to_segment cfg (Post.lix t (Up.exp e))
+      t, to_segment (Post.lix t (Up.exp e))
   | RP.Fetch (RP.Mem ('m', agg, w, addr, assn), w') ->
       let t = alloc context w in
       let a, is = address room addr in
       assert (agg = Post.byte_order);
       assert (w = w');
-      t, is @@ to_segment cfg (Post.load t a (upassn assn))
+      t, is @@ to_segment (Post.load t a (upassn assn))
   | RP.Fetch (RP.Reg (space, i ,w), w') ->
       assert (w = w');
-      temp_in_context (space, i, w) context (emptyseg cfg)
+      temp_in_context (space, i, w) context emptyseg
   | RP.Fetch _ ->
       Impossible.impossible "memory-like access to non-memory space"
   <<cases for sign-extending and zero-extending loads>>
@@ -721,8 +719,8 @@ let rec to_temp' room context e =
             | [x]    -> Post.unop  t op x
             | _      -> Post.rtlop t op temps
             in
-            temp_in_context t context (seg_concat cfg (List.rev is) @@
-                                       to_segment cfg compute)
+            temp_in_context t context (seg_concat (List.rev is) @@
+                                       to_segment compute)
       end
 <<other generic expander functions>> in
 @ The note on binary operators is that eventually the generic expander
@@ -740,13 +738,13 @@ This fact is documented in the postexpander interface.
     let t = alloc icontext w in
     let a, is = address room addr in
     assert (agg = Post.byte_order);
-    temp_in_context t context (is @@ to_segment cfg (Post.sxload t a n (upassn assn)))
+    temp_in_context t context (is @@ to_segment (Post.sxload t a n (upassn assn)))
 | RP.App (("zx", [n; w]), [RP.Fetch (RP.Mem ('m', agg, n', addr, assn), n'')]) ->
     assert (n = n' && n' = n'');
     let t = alloc icontext w in
     let a, is = address room addr in
     assert (agg = Post.byte_order);
-    temp_in_context t context (is @@ to_segment cfg (Post.zxload t a n (upassn assn)))
+    temp_in_context t context (is @@ to_segment (Post.zxload t a n (upassn assn)))
 @ 
 Division is going to be a real problem; I can just tell.
 Here's a hack which is untested and probably useless.
@@ -757,7 +755,7 @@ Here's a hack which is untested and probably useless.
     let tx, isx = to_temp room icontext x in
     let ty, isy = to_temp room icontext y in
     let divmod = Post.binop t ((divmod ^ "_trunc"), [n]) tx ty in
-    temp_in_context t context (isx @@ isy @@ to_segment cfg (divmod))
+    temp_in_context t context (isx @@ isy @@ to_segment (divmod))
 @ 
 For the bit operator, we generate two branches of control flow, create an rtl for a
 conditional branch, and pass everything over to [[expand_cbranch]].
@@ -771,12 +769,12 @@ conditional branch, and pass everything over to [[expand_cbranch]].
     let tsym   = Rtl.link (proc.Proc.mk_symbol tlabel)
                           (RU.Width.loc pc_lhs_up) in
     let tjoin   = G.node_labeled cfg tlabel in
-    let (ti,tf) = to_segment cfg (Post.li t (RP.Bits (Bits.S.of_int 1 w))) in
+    let (ti,tf) = to_segment (Post.li t (RP.Bits (Bits.S.of_int 1 w))) in
     let ()      = G.set_succ tjoin ~succ:ti in
 
     let flabel  = Idgen.label "if_false" in
     let fjoin   = G.node_labeled cfg flabel in
-    let (fi,ff) = to_segment cfg (Post.li t (RP.Bits (Bits.S.of_int 0 w))) in
+    let (fi,ff) = to_segment (Post.li t (RP.Bits (Bits.S.of_int 0 w))) in
     let ()      = G.set_succ fjoin ~succ:fi in
 
     let elabel = Idgen.label "end_if" in
@@ -810,16 +808,16 @@ and to_stack' room e =
   if Rtlutil.Width.exp' e <> Post.stack_width then
     Unsupported.stack_width ~have:(Rtlutil.Width.exp' e) ~want:Post.stack_width;
   match e with
-  | RP.Const k -> to_segment cfg (Post.pushk k)
+  | RP.Const k -> to_segment (Post.pushk k)
   | RP.Fetch (RP.Mem ('m', agg, w, addr, assn), w') ->
       let a, is = address room addr in
       assert (agg = Post.byte_order);
       assert (w = w');
-      is @@ to_segment cfg (Post.push a (upassn assn))
+      is @@ to_segment (Post.push a (upassn assn))
   | RP.Fetch (RP.Reg (space, i ,w), w') ->
       let i = R.store (R.reg (space, i, w))
                 (R.app (R.opr "push onto machine stack" []) [Up.exp e]) w in
-      nunit cfg i
+      nunit i
       (*Impossible.unimp "pushing a register onto the machine stack"*)
   | RP.Fetch _ ->
       Impossible.impossible "memory-like access to non-memory space"
@@ -834,9 +832,9 @@ and to_stack' room e =
             let push_args room =
               let (is, _) =
                 List.fold_left (fun (is,r) e -> (is @@ to_stack r e, r-1))
-                (emptyseg cfg,room) args in
+                (emptyseg,room) args in
               is in
-            let compute room = push_args room @@ (to_segment cfg (Post.stack_op op )) in
+            let compute room = push_args room @@ (to_segment (Post.stack_op op )) in
             if room >= depth then
               compute room
             else
@@ -867,13 +865,13 @@ and restore_stack number_to_keep number_to_restore =
     assert (n = n' && n' = n'');
     assert (agg = Post.byte_order);
     let a, is = address room addr in
-    is @@ to_segment cfg (Post.push_cvt op n a (upassn assn))
+    is @@ to_segment (Post.push_cvt op n a (upassn assn))
 | RP.App ((("f2f"|"f2i"|"i2f"), [n; w]) as op,
           [RP.Fetch (RP.Mem ('m', agg, n', addr, assn), n''); roundingmode]) ->
     assert (n = n' && n' = n'');
     assert (agg = Post.byte_order);
     let a, is = address room addr in
-    is @@ to_segment cfg (Post.push_cvt op n a (upassn assn))
+    is @@ to_segment (Post.push_cvt op n a (upassn assn))
 @ 
 \subsection{Expanding RTLs}
 
@@ -910,8 +908,8 @@ we're within our rights to implement it as a nop.
 <<other generic expander functions>>=
 and rtl' r = match Down.rtl r with
 | RP.Rtl [(g, RP.Store (left, right, w))] -> guarded g left right w
-| RP.Rtl [(g, RP.Kill _)] -> nunit cfg (R.par [])
-| RP.Rtl [] -> nunit cfg r (* a nop is a nop is a nop *)
+| RP.Rtl [(g, RP.Kill _)] -> nunit (R.par [])
+| RP.Rtl [] -> nunit r (* a nop is a nop is a nop *)
 | RP.Rtl ((_::_::_) as effs) -> (<<handle RTL with multiple effects [[effs]]>>)
 @ 
 The type system tells us that anything in a guard must be a Boolean
@@ -923,7 +921,7 @@ the [[branch]] function.
 <<other generic expander functions>>=
 and guarded g left right w =
   match g with
-  | RP.Const (RP.Bool b) -> if b then assign left right w else emptyseg cfg
+  | RP.Const (RP.Bool b) -> if b then assign left right w else emptyseg
   | RP.Const _ -> Impossible.impossible "non-bool constant as guard"
   | RP.Fetch _ -> Impossible.impossible "fetch as guard"
   | RP.App (cmp, [_; _]) ->
@@ -969,7 +967,7 @@ and expand_cbranch_rtl g left right w ktrue kfalse =
             let yt, yis = to_temp room context y in
             (match right with
             | RP.Const c ->
-              let (si, sf) = xis @@ yis @@ to_segment cfg (Post.bc xt cmp yt c) in
+              let (si, sf) = xis @@ yis @@ to_segment (Post.bc xt cmp yt c) in
               let new_cb = rewrite_bc sf ktrue kfalse in
               if G.eq si sf then new_cb else si
             | _ -> Impossible.unimp "conditional branch to computed location")
@@ -980,12 +978,12 @@ and expand_cbranch_rtl g left right w ktrue kfalse =
             let push_args room =
               let (is, _) =
                 List.fold_left (fun (is,r) e -> (is @@ to_stack r e, r-1))
-                (emptyseg cfg,room) args in
+                (emptyseg,room) args in
               is in
             let compute room tsym ktrue kfalse =
               match tsym with
               | RP.Const c ->
-                let (si, sf) = push_args room @@ to_segment cfg (Post.bc_stack cmp c) in
+                let (si, sf) = push_args room @@ to_segment (Post.bc_stack cmp c) in
                 let new_cb   = rewrite_bc sf ktrue kfalse in
                 if G.eq si sf then new_cb else si
               | _ -> Impossible.unimp "conditional branch to computed location" in
@@ -1032,10 +1030,10 @@ and assign left right w =
   let room = Post.stack_depth in
   if left = pc_lhs then  (* unconditional branch *)
     match right with
-    | RP.Const c -> to_segment cfg (Post.b c)
+    | RP.Const c -> to_segment (Post.b c)
     | _ ->
         let r, is = to_temp room acontext right in
-        is @@ to_segment cfg (Post.br r)
+        is @@ to_segment (Post.br r)
   else
     match left with
     | RP.Mem ('m', agg, w, addr, assn) ->  (* some kind of store *)
@@ -1049,39 +1047,39 @@ and assign left right w =
               | <<\emph{pattern [[->]] action} for converting store-pop>>
               | _ -> 
                   let is = to_stack room right in
-                  is @@ is' @@ to_segment cfg (Post.store_pop a (upassn assn)))
+                  is @@ is' @@ to_segment (Post.store_pop a (upassn assn)))
             else
               match right with
               | RP.Fetch (RP.Mem('m', agg', w', addr', assn'), _) ->
                   let a', is = address room addr' in
                   is @@ is' @@
-                  to_segment cfg (Post.block_copy a (upassn assn) a' (upassn assn') w)
+                  to_segment (Post.block_copy a (upassn assn) a' (upassn assn') w)
               | _ ->
                   let r, is = to_temp room (guess_context right) right in
-                  is @@ is' @@ to_segment cfg (Post.store a r (upassn assn)))
+                  is @@ is' @@ to_segment (Post.store a r (upassn assn)))
     | RP.Mem (_, _, _, _, _) ->
         Impossible.unimp "memory space other than 'm'"
     | RP.Reg dst -> (* computation *)
         (match right with
-        | RP.Fetch (RP.Reg src, _) -> to_segment cfg (Post.move ~dst ~src)
+        | RP.Fetch (RP.Reg src, _) -> to_segment (Post.move ~dst ~src)
         | _ -> let r, is = to_temp room (guess_context right) right in
-               is @@ to_segment cfg (Post.move ~dst ~src:r)
+               is @@ to_segment (Post.move ~dst ~src:r)
         )
     | RP.Var (_,_,_) -> Impossible.impossible "variable passed to code expander"
     | RP.Slice (_,_,_) -> Impossible.unimp "slice"
 <<\emph{pattern [[->]] action} for low-bit store>>=
 RP.App (("lobits", [w; n]), [rhs]) ->
   let r, is = to_temp room icontext rhs in
-  is @@ is' @@ to_segment cfg (Post.lostore a r n (upassn assn))
+  is @@ is' @@ to_segment (Post.lostore a r n (upassn assn))
 <<\emph{pattern [[->]] action} for converting store-pop>>=
 RP.App ((("sx" | "zx"), [wsrc; wdst]) as op, [rhs]) ->
   (* what goes wrong if wsrc is not the width of the stack? *)
   let is = to_stack room rhs in
-  is @@ is' @@ to_segment cfg (Post.store_pop_cvt op wdst a (upassn assn))
+  is @@ is' @@ to_segment (Post.store_pop_cvt op wdst a (upassn assn))
 | RP.App ((("f2f" | "f2i" | "i2f"), [wsrc; wdst]) as op, [rhs; roundingmode]) ->
   (* what goes wrong if wsrc is not the width of the stack? *)
   let is = to_stack room rhs in
-  is @@ is' @@ to_segment cfg (Post.store_pop_cvt op wdst a (upassn assn))
+  is @@ is' @@ to_segment (Post.store_pop_cvt op wdst a (upassn assn))
 @ 
 Something with multiple effects is either a call, a [[cut to]], or a
 shuffle.
@@ -1101,7 +1099,7 @@ let has_pc_on_right = function
 <<support for call, [[cut to]], and shuffle>>
 let effs = strip_trivial_guards effs in
 if Post.don't_touch_me effs then
-  nunit cfg (R.par (List.map Up.effect effs))
+  nunit (R.par (List.map Up.effect effs))
 else
   if List.exists has_pc_on_left effs then
     if List.exists has_pc_on_right effs then
@@ -1116,11 +1114,11 @@ let (<<) f g x = f (g x) in
 let make_call effs = 
   let others = List.filter (not << has_pc_on_left) effs in
   match List.filter has_pc_on_left effs with
-  | [RP.Store(pc, RP.Const c, _)] -> to_segment cfg (Post.call c others)
+  | [RP.Store(pc, RP.Const c, _)] -> to_segment (Post.call c others)
   | [RP.Store(pc, e, _)] ->
       let t, is = to_temp Post.stack_depth acontext e in
       let is_type = (is : R.rtl G.node * R.rtl G.node) in
-      is @@ to_segment cfg (Post.callr t others)
+      is @@ to_segment (Post.callr t others)
   | _ -> Impossible.impossible "multiple pc := e in call" in
 @ 
 <<support for call, [[cut to]], and shuffle>>=
@@ -1130,8 +1128,8 @@ let make_cut_to effs =
         let t, is = to_temp Post.stack_depth (guess_context r) r in
         (preds @@ is, RP.Store(l, RP.Fetch(RP.Reg t, w), w) :: effs)
     | RP.Kill l -> (preds, RP.Kill l :: effs) in
-  let preds, effs = List.fold_right expand effs (emptyseg cfg, []) in
-  preds @@ to_segment cfg (Post.cut_to effs) in
+  let preds, effs = List.fold_right expand effs (emptyseg, []) in
+  preds @@ to_segment (Post.cut_to effs) in
 @ 
 Shuffle would be cooler if we carefully arranged to make things
 push-like, but never mind.
@@ -1147,7 +1145,7 @@ let make_shuffle effs =
     let assign = noisy_assign in
     function
     | [(l, r, w)] -> assign l r w
-    | [] -> emptyseg cfg
+    | [] -> emptyseg
     | ((l, (r:RP.exp), w) :: rest) as effs ->
         <<definition of [[try_first_effect]]>>
         try_first_effect effs
@@ -1204,13 +1202,13 @@ let rec old_general_guard g left right w =
   (* this case is bogus *)
   let r, is  = to_temp Post.stack_depth (guess_context right) right in
   let l, is' = old_loc left in
-  is @@ is' @@ nunit cfg (R.guard (Up.exp g) (R.store l (R.fetch (temploc r) w) w))
+  is @@ is' @@ nunit (R.guard (Up.exp g) (R.store l (R.fetch (temploc r) w) w))
 and old_loc l =
   match l with
   | RP.Mem ('m', agg, w, addr, assn) ->
       let addr, is = to_temp Post.stack_depth (acontext) addr in
       Up.loc (RP.Mem ('m', agg, w, fetch (temploc addr), assn)), is
-  | _ -> Up.loc l, emptyseg cfg in
+  | _ -> Up.loc l, emptyseg in
 @
 \subsection{The flow-graph expander}
 <<generic flow-graph expander>>=
