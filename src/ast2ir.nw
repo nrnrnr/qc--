@@ -427,24 +427,13 @@ and generate_return_to_entries k =
     k.K.succ) in
   List.iter (fun (ccname, labels) -> List.iter (gen ccname) labels) k.K.return_pcs
 @ 
-When we unwind, the argument variables are set by the run-time system's unwinding code.
-To ensure that each argument has been placed somewhere (and is live into the
-continuation), we assert an assignment to a bogus location, using each of the
-variables.
-The assignment to the bogus location is probably somewhat bogus.
-THIS ALL LOOKS EXTREMELY BOGUS TO ME.  SHOULDN'T THIS BE DEALT WITH BY
-A LIVENESS EDGE OUT OF THE CALL NODE?
+When we unwind, the argument variables are set by the run-time system's unwinding code;
+we just need to worry about setting the stack pointer.
 <<functions that translate statements, including [[stmts]]>>=
 and generate_unwind_to_entry k = 
-  let bogus_space = ('z', Rtl.Identity, Cell.of_size 1) in
-  let use_var (h,v,a) succ =
-    let w = RU.Width.loc v.FE.loc in
-    G.assertion g (RU.store (R.mem R.none bogus_space (R.C w)
-                                   (R.bits (Bits.S.of_int 0 w) w))
-                            (R.fetch (R.var "" v.FE.index w) w)) succ in
   G.set_succ g (G.non_local_join_labeled g k.K.unwind_pc)
   (G.assertion g (proc_cc.C.sp_on_unwind proc_cc.C.stable_sp_loc) **>
-   (List.fold_right use_var k.K.formals k.K.succ))
+   k.K.succ)
 @
 
 % ------------------------------------------------------------------ 

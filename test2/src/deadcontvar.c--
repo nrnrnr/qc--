@@ -1,0 +1,26 @@
+target byteorder little;
+
+import bits32 printf, exit;
+export main;
+
+section "data" {
+  my_data: bits8 [] "SUCCESS: continuation reached\n\0";
+}
+
+import bits32 do_unwind;
+
+unwind() {
+  foreign "paranoid C" do_unwind(k) also cuts to k also unwinds to k never returns;
+  continuation k():
+  foreign "C" exit(1) never returns;
+}
+
+foreign "C" main("unsigned" bits32 iargc, "address" bits32 iargv) {
+  bits32 dead;
+
+  unwind() also unwinds to k never returns;
+
+ continuation k(dead):
+  foreign "C" printf("address" my_data);
+  foreign "C" return(0);
+}

@@ -365,15 +365,15 @@ tiger_main:
 	movl %edi,(%esi)
 	jmp Ltry_end_48
 Lexn_35_U39:
-	movl 48(%esp),%edi
-	movl $21,%esi
-	cmpl %esi,%edi
+	movl $21,%edi
+	movl 48(%esp),%esi
+	cmpl %edi,%esi
 	je .Ljoin_l80
 .Ljoin_l81:
 	jmp Lskip_53
 Lskip_53:
-	movl $20,%esi
-	cmpl %esi,%edi
+	movl $20,%edi
+	cmpl %edi,%esi
 	je .Ljoin_l75
 .Ljoin_l76:
 	jmp Lskip_55
@@ -434,21 +434,21 @@ Ltry_end_48:
 .Ljoin_l68:
 	jmp Ltry_end_67
 Lexn_59_U44:
-	movl 44(%esp),%edi
-	movl $22,%esi
-	cmpl %esi,%edi
+	movl $22,%edi
+	movl 44(%esp),%esi
+	cmpl %edi,%esi
 	je .Ljoin_l64
 .Ljoin_l65:
 	jmp Lskip_71
 Lskip_71:
-	movl $21,%esi
-	cmpl %esi,%edi
+	movl $21,%edi
+	cmpl %edi,%esi
 	je .Ljoin_l59
 .Ljoin_l60:
 	jmp Lskip_73
 Lskip_73:
-	movl $20,%esi
-	cmpl %esi,%edi
+	movl $20,%edi
+	cmpl %edi,%esi
 	je .Ljoin_l54
 .Ljoin_l55:
 	jmp Lskip_75
