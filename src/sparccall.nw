@@ -22,10 +22,11 @@ let impossf fmt = Printf.kprintf Impossible.impossible fmt
 @ 
 <<SPARC calling convention automata in Lua>>=
 A = Automaton
-Sparc           = Sparc           or {}
-Sparc.cc        = Sparc.cc        or {}
-Sparc.cc["C"  ] = Sparc.cc["C"]   or {}
-Sparc.cc["C--"] = Sparc.cc["C--"] or {}
+Sparc              = Sparc           or {}
+Sparc.cc           = Sparc.cc        or {}
+Sparc.cc["C"  ]    = Sparc.cc["C"]   or {}
+Sparc.cc["notail"] = Sparc.cc["C"]   or {}
+Sparc.cc["C--"]    = Sparc.cc["C--"] or {}
 @ 
 \paragraph{SPARC registers and their conventional uses}
 Cheats, cheats, and more cheats...
@@ -106,16 +107,22 @@ Sparc.cc["C"].cutto =
   }
 @ 
 <<SPARC calling convention automata in Lua>>=
-Sparc.cc["C--"].call = Sparc.cc["C"].call
+Sparc.cc["C--"].call    = Sparc.cc["C"].call
+Sparc.cc["notail"].call = Sparc.cc["C"].call
+
 Sparc.cc["C--"].results = {
   Sparc.cc["C"].results,
   A.overflow { growth = "up", max_alignment = Sparc.sp_align }
 }
-Sparc.cc["C--"].cutto = Sparc.cc["C"].cutto
+Sparc.cc["notail"].results = Sparc.cc["C--"].results
+
+Sparc.cc["C--"].cutto    = Sparc.cc["C"].cutto
+Sparc.cc["notail"].cutto = Sparc.cc["C"].cutto
 @ 
 Finally we register the calling conventions.
 <<SPARC calling convention automata in Lua>>=
 A.register_cc(Backend.sparc.target, "C",   Sparc.cc["C"])
+A.register_cc(Backend.sparc.target, "notail", Sparc.cc["notail"])
 A.register_cc(Backend.sparc.target, "C--", Sparc.cc["C--"])
 A.register_cc(Backend.sparc.target, "C-- thread", Sparc.cc["C--"]) -- damn lies
 @ 
@@ -198,9 +205,23 @@ let where_to_save_ra ra_on_entry temp = Talloc.Multiple.loc temp 't' 32
 (* ra *)
 @ 
 <<sparccall.ml>>=
+let rtn ccname return_to k n ~ra =
+  if k > n then impossf "Return <k/n> has k:%d > n:%d\n" k n
+  else return_to ra
+(*
+    if k = 0 && n = 0 then return_to ra
+    else Impossible.impossible ("alternate return using "^ccname^" calling convention")
+*)
+@
+<<sparccall.ml>>=
 (* Really inteded for the C convention *)
-let to_call ~cutto ~return ccname auto =
+let to_call ~cutto ~return_to ~altret ccname auto =
     <<it's impossible for the stack pointer to be a useful register too>>;
+    let return k n ~ra =
+      if altret then rtn ccname return_to k n ~ra
+      else if k = 0 && n = 0 then return_to ra
+      else impossf "alternate return not allowed in %s calling convention" ccname
+    in
     { C.name           = ccname
     ; C.overflow_alloc = c_overflow
     ; C.call_parms     = {C.in'=prolog       auto; C.out=call_actuals auto}
@@ -231,20 +252,18 @@ if Register.Set.mem spr all_regs then
 else
   ()
 @
-<<sparccall.ml>>=
-let rtn ccname return_to k n ~ra =
-    if k = 0 && n = 0 then return_to ra
-    else Impossible.impossible ("alternate return using "^ccname^" calling convention")
-
-let c ~return_to ccname cut auto = to_call cut (rtn ccname return_to) ccname auto (* postprocess auto *)
-@ 
 Here's our CC lookup function.
 <<sparccall.ml>>=
+let c ~altret ~return_to cut ccname auto =
+  to_call ~altret ~cutto:cut ~return_to ccname auto (* postprocess auto *)
+
 let cconv ~return_to cut ccname stage =
   let f =
     match ccname with
-	| "C" | "C--" -> c ccname
-        | "C-- thread" -> c "C--"  (* damn lies *)
-        | _ -> Impossible.unimp ccname
-  in f ~return_to cut stage
+    | "C--"        -> c ~altret:true
+    | "notail"     -> c ~altret:true
+    | "C"          -> c ~altret:false
+    | "C-- thread" -> c ~altret:false (* damn lies *)
+    | _            -> Impossible.unimp ccname
+  in f ~return_to cut ccname stage
 @ 

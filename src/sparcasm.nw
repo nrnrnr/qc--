@@ -16,6 +16,7 @@ val make :
 % ------------------------------------------------------------------ 
 
 <<sparcasm.ml>>=
+module G  = Cfgx.M
 module SM = Strutil.Map
 <<utilities>>
 <<definitions>>
@@ -140,8 +141,10 @@ method const (s: Symbol.t) (b:Bits.bits) =
 @ 
 For alternate returns, we need to know the size of a long jump.
 <<assembly methods>>=
-method longjmp_size () =
+method longjmp_size () = 4
+(*
   Impossible.unimp "longjmp size not set for SPARC -- needed for alternate returns"
+*)
 @
 <<assembly methods>>=
 method private instruction rtl =
@@ -150,9 +153,15 @@ method private instruction rtl =
   output_string _fd "\n"
 
 method private call node =
+  let longjmp node = fprintf _fd "\tba %s\n\tnop\n" (_mangle (G.label node)) in
+  let output_altret_jmps n =
+    let rec loop i =
+      if i > n then ()
+      else (longjmp (G.join_leading_to (G.succ_n node i)); loop (i+1)) in
+    loop 1 in
   match Cfgx.M.to_executable node with
   | None   -> ()
-  | Some i -> this#instruction i
+  | Some i -> this#instruction i; output_altret_jmps (G.altrets node)
 
 (* this better be only used for printing out functions... *)
 method cfg_instr proc  = 

@@ -68,8 +68,12 @@ let sp   = r 14 (* conventionally the same as %sp or %o6 *)
 let cwp  = Sparcregs.cwp
 let yreg = Sparcregs.y
 
+let rounding_model    = R.regx Sparcregs.fpround
+let rounding_mode_reg = R.fetch rounding_model
+(*
 let rounding_mode_reg = (dspace, 0, R.C 1)
 let rounding_model   = Rtl.reg rounding_mode_reg
+*)
 let rounding_mode    = R.fetch rounding_model 2
 let rounding_resultsl = Rtl.reg (dspace, 1, R.C 1)
 @ 
@@ -80,11 +84,13 @@ let rounding_resultsl = Rtl.reg (dspace, 1, R.C 1)
 let imposs      = Impossible.impossible
 let unimpf  fmt = Printf.kprintf Impossible.unimp fmt
 let impossf fmt = Printf.kprintf Impossible.impossible fmt
-let mem w addr = R.mem R.none mspace (Cell.to_count mcell w) addr
+let mem w assn addr = R.mem assn mspace (Cell.to_count mcell w) addr
 let rwidth  = Register.width
 
 let rfetch t = R.fetch (R.reg t) (rwidth t)
 let tstore t e = R.store (R.reg t) e (rwidth t)
+
+let shift dst op n = rtl (tstore dst (op 32 (rfetch dst) (RO.unsigned 32 n)))
 
 let at32 = function
   | opr, [32] -> opr
@@ -105,7 +111,7 @@ module F = Mflow.MakeStandard
 @ 
 <<sparc.ml>>=
 let return e =
-  let one = R.bits (Bits.S.of_int 1 32) 32 in
+  let one = RO.signed 32 1 in
   R.par [R.store npc e wordsize;
          R.store (R.reg cwp) (R.app (R.opr "add" [32]) [rfetch cwp; one]) wordsize]
 @ 
@@ -181,8 +187,8 @@ let rec load ~dst ~addr assn =
   assert (w = wordsize || w = wordsize * 2);
   let a = Dn.assertion assn in
   let align_a_plus n = Alignment.alignment (Alignment.add n (Alignment.init a)) in
-  let addr_plus n = RO.add 32 addr (R.bits (Bits.S.of_int n 32) 32) in
-  if a >= w / 8 then rtl (R.store (R.reg dst) (R.fetch (mem w addr) w) w)
+  let addr_plus n = RO.add 32 addr (RO.signed 32 n) in
+  if a >= w / 8 then rtl (R.store (R.reg dst) (R.fetch (mem w assn addr) w) w)
   else
     (* warn about expensive unaligned loads? *)
     match dst with
@@ -221,7 +227,7 @@ let rec load ~dst ~addr assn =
 let store ~addr ~src assn =
   let w = rwidth src in
   assert (w = wordsize || w = wordsize * 2);
-  rtl (R.store (mem w addr) (rfetch src) w)
+  rtl (R.store (mem w assn addr) (rfetch src) w)
 @ 
 <<SPARC postexpander>>=
 let rec block_copy ~dst dassn ~src sassn w =
@@ -230,7 +236,7 @@ let rec block_copy ~dst dassn ~src sassn w =
     else 
       let d' = talloc 't' 32 in
       let s' = talloc 't' 32 in
-      let i  = R.bits (Bits.U.of_int (x / 8) 32) 32 in
+      let i  = RO.unsigned 32 (x / 8) in
       block_copy ~dst dassn ~src sassn x <:>
       rtl (R.store (R.reg d') (RO.add 32 dst i) 32) <:>
       rtl (R.store (R.reg s') (RO.add 32 src i) 32) <:>
@@ -257,8 +263,8 @@ let rec block_copy ~dst dassn ~src sassn w =
       let wmod64 = w mod 64 in
       let f d' s' =
         let t       = talloc 't' 32 in
-        let i       = R.bits (Bits.U.of_int (64 / 8) 32) 32 in
-        let n64cpys = R.bits (Bits.U.of_int ((w - wmod64) / 8) 32) 32 in
+        let i       = RO.unsigned 32 (64 / 8) in
+        let n64cpys = RO.unsigned 32 ((w - wmod64) / 8) in
         rtl (R.store (R.reg t) (RO.add 32 (rfetch d') n64cpys) 32) <:>
         PX.While(PX.cond (RO.eq 32 (rfetch d') (rfetch t)),
                  block_copy ~dst:(rfetch d') dassn ~src:(rfetch s') sassn 64 <:>
@@ -308,8 +314,39 @@ let extract ~dst ~lsb ~src =
 let aggregate ~dst ~src = Impossible.unimp "aggregate"
 @ 
 <<SPARC postexpander>>=
-let hwset ~dst ~src = Impossible.unimp "setting hardware register"
-let hwget ~dst ~src = Impossible.unimp "getting hardware register"
+let weird_tmp tmp z = match z with
+| PX.WTemp (Register.Reg t)             -> t, PX.Nop
+| PX.WTemp (Register.Slice (w, 0, t))   -> t, PX.Nop
+| PX.WTemp (Register.Slice (w, lsb, t)) -> 
+    tmp, move tmp t <:> rtl (tstore tmp (RO.shrl 32 (rfetch tmp) (RO.unsigned 32 lsb)))
+| PX.WBits b -> tmp, rtl (tstore tmp (R.bits (Bits.Ops.zx 32 b) 32))
+@ 
+<<SPARC postexpander>>=
+let hwset ~dst ~src =
+  let rmask_clear = R.bits (Bits.U.of_int64 (Int64.of_string "0x3fffffff") 32) 32 in
+  if Register.eqx dst Sparcregs.fpround then
+    let slot      = salloc 32 4 in
+    let t         = talloc 't' 32 in
+    let t2, ldsrc = weird_tmp (talloc 't' 32) src in
+    rtl (slot.A.store (rfetch Sparcregs.fpctl) 32) <:>
+    rtl (tstore t (slot.A.fetch 32)) <:>
+    PX.Expand.block (rtl (tstore t (RO._and 32 (rfetch t) rmask_clear))) <:>
+    ldsrc <:>
+    rtl (tstore t2 (RO.shl 32 (rfetch t2) (RO.unsigned 32 30))) <:>
+    rtl (tstore t (RO.(or) 32 (rfetch t) (rfetch t2))) <:>
+    rtl (slot.A.store (rfetch t) 32) <:>
+    rtl (tstore Sparcregs.fpctl (slot.A.fetch 32))
+  else Impossible.unimp "setting hardware register"
+
+let hwget ~dst:(fill, dt) ~src =
+  if Register.eqx src Sparcregs.fpround then
+    let slot = salloc 32 4 in
+    rtl (slot.A.store (rfetch Sparcregs.fpctl) 32) <:>
+    rtl (tstore dt (slot.A.fetch 32)) <:>
+    match fill with
+    | PX.HighAny | PX.HighZ -> shift dt RO.shrl 30
+    | PX.HighS              -> shift dt RO.shra 30
+  else Impossible.unimp "getting hardware register"
 @ 
 <<SPARC postexpander>>=
 let li  ~dst const =
@@ -320,22 +357,6 @@ let li  ~dst const =
       rstore (R.reg t)   (Up.const const)  32 <:>
       astore slot        (rfetch t)        32 <:>
       rstore (R.reg dst) (A.fetch slot 32) 32
-  | (('q', _, _), _, R.C 1), RP.Bits b -> (* we are forced to go through memory *)
-      Printf.eprintf "Bad idea!!!!\n";
-      let t1 = talloc 't' 32 in
-      let t2 = talloc 't' 32 in
-      let offset1 = R.bits (Bits.S.of_int (24*4) 32) 32 in
-      let offset2 = R.bits (Bits.S.of_int (25*4) 32) 32 in
-      let addr1   = R.app (R.opr "add" [32]) [rfetch sp; offset1] in
-      let addr2   = R.app (R.opr "add" [32]) [rfetch sp; offset2] in
-      (* now split the 64-bit literal into high and low 32 bits *)
-      let hi = Bits.Ops.lobits 32 (Bits.Ops.shrl b (Bits.U.of_int 32 32)) in
-      let lo = Bits.Ops.lobits 32 b in
-      rstore (R.reg t1)     (Up.const (RP.Bits hi))     32 <:>
-      rstore (mem 32 addr1) (rfetch t1)                 32 <:>
-      rstore (R.reg t2)     (Up.const (RP.Bits lo))     32 <:>
-      rstore (mem 32 addr2) (rfetch t2)                 32 <:>
-      rstore (R.reg dst)    (R.fetch (mem 64 addr1) 64) 64 
   | (('t', _, _), _, R.C 1), _ ->
       rstore (R.reg dst) (Up.const const) 32
   | ((s, _, _), _, _) as r, RP.Bits b ->
@@ -378,25 +399,22 @@ let binop ~dst op x y =
       dblop ~dsthi:yreg ~dstlo:dst (Dn.opr (R.opr "mulx" [32])) x y
   | _ -> rstore (R.reg dst) (R.app (Up.opr op) [xv; yv]) dstw
 @ 
+Assuming 32-bit values.
 <<SPARC postexpander>>=
-let weird_tmp tmp z = match z with
-| PX.WTemp (Register.Reg t)             -> t, PX.Nop
-| PX.WTemp (Register.Slice (w, 0, t))   -> t, PX.Nop
-| PX.WTemp (Register.Slice (w, lsb, t)) -> 
-    tmp, move tmp t <:> rtl (tstore tmp (RO.shrl 32 (rfetch tmp) (RO.unsigned 32 lsb)))
-| PX.WBits b -> tmp, rtl (tstore tmp (R.bits (Bits.Ops.zx 32 b) 32))
-
 let carrybit = R.app (R.opr "sparc_carrybit" []) [RU.fetch cc]
 let adcflags x y w =
   R.store cc (R.app (R.opr "sparc_adcflags" [w]) [x; y; carrybit]) 32
-let sbbflags x y w =
+let sbbflags x y w = 
   R.store cc (R.app (R.opr "sparc_sbbflags" [w]) [x; y; carrybit]) 32
 
 let set_carry ~tmp z =
   let t, is = weird_tmp tmp z in
-  let bit0 = RO.lobits 32 1 (rfetch t) in
+  let bit0 = RO.sx 1 32 (RO.lobits 32 1 (rfetch t)) in
+  let d = talloc 't' 32 in
   is <:>
-  rtl (R.store cc (R.app (R.opr "sparc_setcarry" []) [RU.fetch cc; bit0]) 32)
+  PX.Expand.block (rtl (R.store (R.reg d) bit0 32)) <:>
+  rtl (R.store cc (R.app (R.opr "sparc_addcc" [32])
+                     [rfetch d; RO.signed 32 1]) 32)
 
 let wrdop ~dst op x y z =
   let is_add =
@@ -405,31 +423,32 @@ let wrdop ~dst op x y z =
     | "subb" -> false
     | _ -> impossf "wrdop: %s" (fst op)
   in
-  let dstv, yv = rfetch dst, rfetch y in
-  let flags = (if is_add then adcflags else sbbflags) dstv yv 32 in
+  let dstv, xv, yv = rfetch dst, rfetch x, rfetch y in
   set_carry ~tmp:dst z <:>
-  move dst x <:>
-  rtl (R.par [R.store (R.reg dst) (R.app (Up.opr op) [dstv; yv; carrybit]) 32; flags])
+  rtl (R.store (R.reg dst) (R.app (Up.opr op) [xv; yv; carrybit]) 32)
 
 let wrdrop ~dst:(fill, dt) op x y z =
-  let shift dst op n = rtl (tstore dst (op 32 (rfetch dst) (RO.unsigned 32 n))) in
   let is_add =
     match at32 op with
-    | "carry"  -> true
-    | "borrow" -> false
-    | _ -> impossf "wrdrop: %s" (fst op)
-  in
-  wrdop ~dst:dt ((if is_add then "addc" else "subb"), [32]) x y z <:>
+    | "carry" -> true | "borrow" -> false | _ -> impossf "wrdrop: %s" (fst op) in
+  let op = if is_add then "addc" else "subb" in
+  let t = talloc 't' 32 in
+  let xv, yv = rfetch x, rfetch y in
+  let zero = RO.signed 32 0 in
+  let flags = (if is_add then adcflags else sbbflags) xv yv 32 in
+  set_carry ~tmp:dt z <:>
+  rtl (R.par [R.store (R.reg dt) (R.app (R.opr op [32]) [xv; yv; carrybit]) 32; 
+              flags]) <:>
+  rtl (R.store (R.reg t) zero 32) <:>
+  rtl (R.store (R.reg dt) (RO.addc 32 (rfetch t) (rfetch t) carrybit) 32) <:>
   (match fill with
    | PX.HighAny -> PX.Nop
    | PX.HighZ   -> shift dt RO.shl 31 <:> shift dt RO.shrl 31  (* zxlo *)
    | PX.HighS   -> shift dt RO.shl 31 <:> shift dt RO.shra 31  (* sxlo *))
-
-(* Unsupported.singlebit ~op:(fst op) *)
-
+@ 
 <<SPARC postexpander>>=
 let with_rm rm b =
-  PX.with_hw ~hard:(Register.Reg rounding_mode_reg) ~soft:rm ~temp:(talloc 't' 32) b
+  PX.with_hw ~hard:Sparcregs.fpround ~soft:rm ~temp:(talloc 't' 32) b
 
 let f2i op dst x w = match dst, x with
 | (('u', _, _), _, _), (('u', _, _), _, _) ->
@@ -469,7 +488,7 @@ let bc x (opr, ws as op) y ~ifso ~ifnot =
 @ 
 <<SPARC postexpander>>=
 let bnegate r = 
-    let zero   = R.bits (Bits.zero 32) 32 in
+    let zero   = RO.signed 32 0 in
     let negate = function
         | "sparc_ne" -> "sparc_eq"
         | "sparc_eq" -> "sparc_ne"
@@ -494,7 +513,7 @@ let callr ~tgt ~others =
   PX.Nop, R.par (R.store pc_lhs (rfetch tgt)   wordsize :: effects others)
 @ 
 <<SPARC postexpander>>=
-let cut_to effs = PX.Rtl (R.store (R.reg cwp) (R.bits (Bits.zero 32) 32) 32),
+let cut_to effs = PX.Rtl (R.store (R.reg cwp) (RO.signed 32 0) 32),
                   R.par (effects effs)
 @ 
 If an instruction modifies the current window pointer, it's a save or

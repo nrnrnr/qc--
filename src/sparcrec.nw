@@ -111,7 +111,10 @@ dregnum   : Fetch(dregnuml, w) {: dregnuml :}
 dregnuml  : RegPair('f', n:int) {: n :}
 
 yreg : Fetch(yregl, w) {: yregl :}
-yregl : Reg('y', n:int) {: "y" :}
+yregl : Reg('y', n:int) {: "%y" :}
+
+fsr : Fetch(fsrl, w) {: fsrl :}
+fsrl : Reg('c', n:int) [{: guard (n = 4) :}] {: "%fsr" :}
 
 -- this is stupid, but we don't know how to deal with
 -- changing register windows at this point, so this allows
@@ -191,6 +194,9 @@ inst : Store(dst:regl, src:reg, w)
 inst : Store(dst:fregl, src:freg, w)
   {: sprintf "fmovs %s, %s" src dst :}
 
+inst : Store(dst:regl, src:yreg, w)
+  {: sprintf "rd %s, %s" src dst :}
+
 -- THIS SHOULD BE DONE IN THE POSTEXPANDER
 inst : Store(dst:dregnuml, src:dregnum, w)
   {: sprintf "fmovs %%f%d, %%f%d\nfmovs %%f%d, %%f%d" src dst (src+1) (dst+1):}
@@ -214,6 +220,9 @@ inst : Store(dst:fregl, src:mem, w)
 inst : Store(dst:dregl, src:mem, w)
   {: sprintf "ldd %s, %s" src dst :}
 
+inst : Store(dst:fsrl, src:mem, w)
+  {: sprintf "ld %s, %s" src dst :}
+
 -- memory store
 inst : Store(dst:meml, src:reg, w)
   {: sprintf "st %s, %s" src dst :}
@@ -228,6 +237,9 @@ inst : Store(dst:meml, src:freg, w)
 inst : Store(dst:meml, src:dreg, w)
   {: sprintf "std %s, %s" src dst :}
 
+inst : Store(dst:meml, src:fsr, w)
+  {: sprintf "st %s, %s" src dst :}
+
 -- memory store to offset
 -- note that y must be a 13-bit constant...probably need a different
 -- rule that can split 32-bit constants.
@@ -238,6 +250,9 @@ inst : Store(Mem(Add(x:reg, y:const),mw:w), src:freg, w)
 inst : Store(Mem(Add(x:reg, y:const),mw:w), src:dreg, w)
   {: sprintf "std %s, [%s+%s]" src x y :}
 
+inst : Store(Mem(Add(x:reg, y:const), mw:w), src:fsr, w)
+  {: sprintf "st %s, [%s+%s]" src x y :}
+
 -- memory load from offset
 inst : Store(dst:regl, Fetch(Mem(Add(x:reg, y:const), mw:w), w), w)
   {: sprintf "ld [%s+%s], %s" x y dst :}
@@ -246,7 +261,11 @@ inst : Store(dst:fregl, Fetch(Mem(Add(x:reg, y:const), mw:w), w), w)
 
 inst : Store(dst:dregl, Fetch(Mem(Add(x:reg, y:const), mw:w), w), w)
   {: sprintf "ldd [%s+%s], %s" x y dst :}
+
+inst : Store(dst:fsrl, Fetch(Mem(Add(x:reg, y:const), mw:w), w), w)
+  {: sprintf "ld [%s+%s], %s" x y dst :}
 @ 
+
 
 \paragraph{Arithmetic}
 <<rules>>=
@@ -406,6 +425,25 @@ inst: Goto(target) {: sprintf "ba %s\n\tnop" target :}
 -- indirect branches
 inst: Goto(reg)    {: sprintf "jmp %s\n\tnop" reg :}
 
+-- carry and borrow
+inst: Store(ccl, Sparcaddcc(x:reg, y:reg_or_const), w)
+   {: sprintf "addcc %s, %s, %%g0" x y :}
+
+inst: Store(d:regl, Addc(x:reg, y:reg_or_const, Sparccarrybit(cc)), w)
+   {: sprintf "addx %s, %s, %s" x y d :}
+
+inst: Store(d:regl, Subb(x:reg, y:reg_or_const, Sparccarrybit(cc)), w)
+   {: sprintf "subx %s, %s, %s" x y d :}
+
+     -- assumption: x and y are the same in both sub-expressions
+inst: Par(Store(d:regl, Addc(x:reg, y:reg_or_const, Sparccarrybit(cc)), w),
+          Store(ccl, Sparcadcflags(x:reg, y:reg_or_const, Sparccarrybit(cc)), w))
+   {: sprintf "addxcc %s, %s, %s" x y d :}
+
+inst: Par(Store(d:regl, Subb(x:reg, y:reg_or_const, Sparccarrybit(cc)), w),
+          Store(ccl, Sparcsbbflags(x:reg, y:reg_or_const, Sparccarrybit(cc)), w))
+   {: sprintf "subxcc %s, %s, %s" x y d :}
+
 -- conditional branches
 inst: Store(ccl, Sparcsubcc(x:reg, y:reg_or_const), w)
    {: sprintf "subcc %s, %s, %%g0" x y :}
@@ -516,7 +554,9 @@ any : Goto(any) {: s "Goto(%s)" any :}
 
 <<special cases for particular operators>>=
 | RP.App(("sub",   [w]), [x; y])  -> conSub    (exp x) (exp y)
+| RP.App(("subb",  [w]), [x; y; z]) -> conSubb (exp x) (exp y) (exp z)
 | RP.App(("add",   [w]), [x; y])  -> conAdd    (exp x) (exp y)
+| RP.App(("addc",  [w]), [x; y; z]) -> conAddc (exp x) (exp y) (exp z)
 | RP.App(("mul",   [32]), [x; y]) -> conMul    (exp x) (exp y)
 | RP.App(("neg",   [w]), [x])     -> conNeg    (exp x)
 | RP.App(("quot",  [w]), [x; y])  -> conQuot   (exp x) (exp y)
@@ -543,8 +583,13 @@ any : Goto(any) {: s "Goto(%s)" any :}
 | RP.App(("sx", [16;32]),    [x]) -> conSxhalf (exp x)
 
 | RP.App(("sparc_subcc", [w]), [x; y]) -> conSparcsubcc (exp x) (exp y)
+| RP.App(("sparc_addcc", [w]), [x; y]) -> conSparcaddcc (exp x) (exp y)
 | RP.App(("sparc_mulx_hi", [w]), [x; y]) -> conSparcmulxhi (exp x) (exp y)
 | RP.App(("sparc_mulux_hi", [w]), [x; y]) -> conSparcmuluxhi (exp x) (exp y)
+| RP.App(("sparc_adcflags", [w]), [x; y; z]) -> conSparcadcflags (exp x) (exp y) (exp z)
+| RP.App(("sparc_sbbflags", [w]), [x; y; z]) -> conSparcsbbflags (exp x) (exp y) (exp z)
+| RP.App(("sparc_carrybit", _), [x]) -> conSparccarrybit (exp x)
+
 | RP.App(("sparc_eq",    [w]), [x]) -> conSparceq  (exp x)
 | RP.App(("sparc_ne",    [w]), [x]) -> conSparcne  (exp x)
 | RP.App(("sparc_ge",    [w]), [x]) -> conSparcge  (exp x)
