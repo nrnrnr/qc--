@@ -252,20 +252,24 @@ CC =            gcc
 # binaries
 ################################################################
 
-SYSLIBS =       unix.cma str.cma
-MYLIBS  =	cllib.cma asdl.cma lua.cma rtllib.cma gen.cma
-CMOLIBS =       $SYSLIBS $MYLIBS
-CMXLIBS =       `echo $CMOLIBS | sed 's/.cma/.cmxa/g'` 
+CMOSYS  =       unix.cma str.cma
+CMOCMM  =	cllib.cma asdl.cma lua.cma rtllib.cma gen.cma
+CMOLIBS =       $CMOSYS $CMOCMM
 
-LIBSLASHCMOLIBS = `echo $MYLIBS | sed 's@^@../lib/@;s@ @ ../lib/@g'` 
+CMXSYS  =       `echo $CMOSYS | sed 's/.cma/.cmxa/g'`
+CMXCMM  =       `echo $CMOCMM | sed 's/.cma/.cmxa/g'` 
+CMXLIBS =       $CMXSYS $CMXCMM
+
+LIBSLASHCMOLIBS = `for f in $CMOCMM; do echo "$LIBDIR/$f"; done`
+LIBSLASHCMXLIBS = `for f in $CMXCMM; do echo "$LIBDIR/$f"; done`
 
 OBJ =           $LIBDIR/uint64p.o
 
-$NAME:          depend-check $CMO $LIBSLASHCMOLIBS
+$NAME:          depend-check $CMO $OBJ $LIBSLASHCMOLIBS
                 $OCAMLC $OCAMLC_FLAGS -custom -o $target $CMOLIBS $OBJ $CMO 
 
-$NAME.opt:      $CMX $OBJ
-                $OCAMLO $OCAMLO_FLAGS -o $target $CMXLIBS $OBJ $CMX
+$NAME.opt:      depend-check $CMX $OBJ $LIBSLASHCMXLIBS
+                $OCAMLO $OCAMLO_FLAGS         -o $target $CMXLIBS $OBJ $CMX
 
 ################################################################
 # copy files to their official directories
