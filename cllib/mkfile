@@ -116,17 +116,27 @@ echo:V:
 # update hierarchy
 # ------------------------------------------------------------------ 
 
-$LIBDIR/$LIBCMO:    $LIBCMO 
+$LIBDIR/$LIBCMO:    $LIBCMO dirs
 		    for i in $LIBCMO *.mli *.cmi 
                     do
 		        cmp -s $i $LIBDIR/$i || cp $i $LIBDIR 
 		    done
 
-$LIBDIR/$LIBCMX:    $LIBCMX 
+$LIBDIR/$LIBCMX:    $LIBCMX dirs
 		    for i in $LIBCMX $NAME.a *.mli *.cmi
                     do
 		        cmp -s $i $LIBDIR/$i || cp $i $LIBDIR
 		    done
+
+dirs:V:
+                    for i in $LIBDIR; do
+                        if [ ! -d $i ]; then
+                            echo "missing directory $i"
+                            echo "invoke mk from the toplevel the first time"
+                            echo "to create all directories"
+                            false
+                        fi
+                    done    
 
 # ------------------------------------------------------------------ 
 # recalculate dependencies
