@@ -17,7 +17,7 @@ VERSION =       `date +%Y%m%d`
 # SUBDIRS are made from left to right - order matters
 # ------------------------------------------------------------------ 
 
-SUBDIRS =       cllib lua asdl rtl gen camlburg tools doc src interp 
+SUBDIRS =       cllib asdl lua rtl gen camlburg tools doc src interp 
 
 # A note on profiling.  Profiling is controlled in subdirectories by a
 # PROFILE variable in each mkfile.  Profiling is turned on by default,
@@ -65,53 +65,50 @@ config:QV:
 	exit 1
 	fi
 
-qc--:V:         tools lib dirs
-	for i in src 
-	do 
-	  (echo "# cd $i" && cd $i && mk $MKFLAGS depend) || exit 1
-	  (echo "# cd $i" && cd $i && mk $MKFLAGS update) || exit 1
+qc--:VQ:         tools lib dirs
+	for i in src; do 
+	  (echo "# cd $i" && cd $i && mk $MKFLAGS depend && mk $MKFLAGS update) ||
+	  exit 1
 	done
 
-qc--.opt:V:     tools.opt lib.opt dirs
-	for i in src 
-	do 
-	  (echo "# cd $i" && cd $i && mk $MKFLAGS depend)    || exit 1
-	  (echo "# cd $i" && cd $i && mk $MKFLAGS update.opt)|| exit 1
+qc--.opt:VQ:     tools.opt lib.opt dirs
+	for i in src; do 
+	  (echo "# cd $i" && cd $i && mk $MKFLAGS depend && mk $MKFLAGS update.opt) ||
+	  exit 1
 	done
 
-lib:V:          dirs
-	for i in cllib lua asdl rtl gen 
-	do 
-	  (echo "# cd $i" && cd $i && mk $MKFLAGS depend) || exit 1
-	  (echo "# cd $i" && cd $i && mk $MKFLAGS update) || exit 1
+lib:VQ:          dirs
+	for i in cllib lua asdl rtl gen; do 
+	  (echo "# cd $i" && cd $i && mk $MKFLAGS depend && mk $MKFLAGS update) ||
+	  exit 1
 	done
 
-lib.opt:V:      dirs
+lib.opt:QV:      dirs
 	for i in cllib lua asdl rtl gen
 	do 
-	  (echo "# cd $i" && cd $i && mk $MKFLAGS depend) || exit 1
-	  (echo "# cd $i" && cd $i && mk $MKFLAGS update.opt) || exit 1
+	  (echo "# cd $i" && cd $i && mk $MKFLAGS depend && mk $MKFLAGS update.opt) ||
+	  exit 1
 	done
 
 tools:V:        lib dirs
 	for i in tools camlburg
 	do 
-	  (echo "# cd $i" && cd $i && mk $MKFLAGS depend) || exit 1
-	  (echo "# cd $i" && cd $i && mk $MKFLAGS update) || exit 1
+	  (echo "# cd $i" && cd $i && mk $MKFLAGS depend && mk $MKFLAGS update) ||
+	  exit 1
 	done
 
 tools.opt:V:    lib dirs
 	for i in tools camlburg
 	do 
-	  (echo "# cd $i" && cd $i && mk $MKFLAGS depend) || exit 1
-	  (echo "# cd $i" && cd $i && mk $MKFLAGS update.opt) || exit 1
+	  (echo "# cd $i" && cd $i && mk $MKFLAGS depend && mk $MKFLAGS update.opt) ||
+	  exit 1
 	done
 
 interp:V:       dirs
-	echo "# cd interp" && cd interp && mk $MKFLAGS update
+	(echo "# cd interp" && cd interp && mk $MKFLAGS update)
 
 doc:V:          dirs
-	echo "# cd doc" && cd doc && mk $MKFLAGS update 
+	(echo "# cd doc" && cd doc && mk $MKFLAGS update)
 
 test:V:         all
 	cd test2 && mk $MKFLAGS all
@@ -133,16 +130,20 @@ count:V:
 
 INST_DIRS=camlburg tools doc src interp
 
+# SHOULDN'T THESE TARGETS ALSO MK DEPEND???  ---NR
+
 install:QV: all
 	for d in $INST_DIRS
 	do
-	  (echo "# cd $d" && cd $d && mk $MKFLAGS install) || exit 1
+	  (echo "# cd $d" && cd $d && mk $MKFLAGS install) ||
+	  exit 1
 	done
 
 install.opt:QV: install all.opt
 	for d in $INST_DIRS
 	do
-	  (echo "# cd $d" && cd $d && mk $MKFLAGS install.opt) || exit 1
+	  (echo "# cd $d" && cd $d && mk $MKFLAGS install.opt) ||
+	  exit 1
 	done
 
 # ------------------------------------------------------------------ 
@@ -173,7 +174,8 @@ html            \
 dvi:V:          dirs
 	for i in $SUBDIRS; 
 	do 
-	  (echo "# cd $i" && cd $i && mk $MKFLAGS $target) || exit 1
+	  (echo "# cd $i" && cd $i && mk $MKFLAGS $target) ||
+	  exit 1
 	done
 
 # ------------------------------------------------------------------ 
