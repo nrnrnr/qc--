@@ -149,8 +149,8 @@ val fold_bwd:   cfg -> (node -> 'a -> 'a) -> 'a -> 'a (* must not use gm_xxx *)
 (* cfg traversal in linear order, requires (enumerated cfg)  *)
 val first:      cfg -> node (* wrt numbering *)
 val last:       cfg -> node (* wrt numbering *)
-val scan_fwd:   cfg -> first:int -> last:int -> (node -> 'a -> 'a) -> 'a -> 'a 
-val scan_bwd:   cfg -> first:int -> last:int -> (node -> 'a -> 'a) -> 'a -> 'a
+val scan_fwd:   cfg -> first:int -> limit:int -> (node -> 'a -> 'a) -> 'a -> 'a 
+val scan_bwd:   cfg -> first:int -> limit:int -> (node -> 'a -> 'a) -> 'a -> 'a
 val next:       node -> node option
 val prev:       node -> node option
 
@@ -170,9 +170,9 @@ val gm_dataflow: cfg -> defs:locs -> uses:locs -> kills:locs -> succ:node -> nod
 
 (* cfg mutators, ensures: not (enumerated cfg) *)
 val gm_redirect_all:            src:node -> olddst:node -> newdst:node -> unit
-val gm_insert_assign_before:    Rtl.rtl -> node -> unit (* any node   *)
-val gm_insert_assign_after:     Rtl.rtl -> node -> unit (* see descr! *)
-val gm_insert_assign_between:   Rtl.rtl -> src:node -> dst:node -> unit
+val gm_insert_assign_before:    Rtl.rtl list -> node -> unit (* any node   *)
+val gm_insert_assign_after:     Rtl.rtl list -> node -> unit (* see descr! *)
+val gm_insert_assign_between:   Rtl.rtl list -> src:node -> dst:node -> unit
 val gm_insert_dataflow_between: defs:locs -> uses:locs -> kills:locs ->
                                 src:node -> dst:node -> unit
 val gm_enumerate:               cfg -> unit (* post: enumerated cfg *)
@@ -276,18 +276,18 @@ The first node with respect to numbering.
 \item [[last: cfg -> node]]:
 The last node with respect to numbering.
 
-\item [[scan_fwd: cfg -> first:int -> last:int -> (node -> 'a -> 'a) -> 'a -> 'a]]: 
+\item [[scan_fwd: cfg -> first:int -> limit:int -> (node -> 'a -> 'a) -> 'a -> 'a]]: 
 Applies a function [[f]] to the range of nodes from [[first]] to
-[[last]] and passes an intermediate result.  The nodes are visited in
-increasing order with respect to the numbering.  It is an
-\emph{unchecked} run-time error if [[f]] calls a graph mutator; in
-order for [[f]] being applied to nodes [[first]]] $\leq$ [[last]] must
+[[limit]] (exclusive) and passes an intermediate result.  The nodes
+are visited in increasing order with respect to the numbering.  It is
+an \emph{unchecked} run-time error if [[f]] calls a graph mutator; in
+order for [[f]] being applied to nodes [[first]]] $<$ [[limit]] must
 hold, otherwise the intermediate result [['a]] is returned.
 
-\item [[scan_bwd: cfg -> first:int -> last:int -> (node -> 'a -> 'a) -> 'a -> 'a]]:
+\item [[scan_bwd: cfg -> first:int -> limit:int -> (node -> 'a -> 'a) -> 'a -> 'a]]:
 Dual function to [[scan_fwd]] in the sense that nodes are visited in
-decreasing order, starting with the node numbered [[last]].  Note,
-that [[first]] $\leq$ [[last]] still must hold.
+decreasing order, starting with the node before [[limit]].  Note,
+that [[first]] $<$ [[limit]] still must hold.
 
 \item [[next: node -> node option]]:
 The node following the argument [[node]] with respect to an
@@ -393,24 +393,25 @@ Note, that if several outgoing edges of a node point to the same
 successor, they \emph{all} get updated to the new node.  Hence,
 [[gm_redirect_all]] is not fully general.
 
-\item [[gm_insert_assign_before:    Rtl.rtl -> node -> unit]]:
-Inserts an [[assign]] node $a$ before a node $n$, using the
-supplied {\rtl}.  It is a checked run-time error if the node $n$
+\item [[gm_insert_assign_before:    Rtl.rtl list -> node -> unit]]:
+Inserts [[assign]] nodes $a$ before a node $n$, using the
+supplied {\rtl}s.  It is a checked run-time error if the node $n$
 was not created by the [[gm_assign]] function.  The successors of
 $n$ become successors of $a$ and $a$ becomes the only successor of
 $n$.
                  
-\item [[gm_insert_assign_after: Rtl.rtl -> node -> unit]]:
-Like [[insert_assign_before]], except that the assign node is placed
+\item [[gm_insert_assign_after: Rtl.rtl list -> node -> unit]]:
+Like [[insert_assign_before]], except that the assign nodes are placed
 after the node which must be an [[assign]] node.  This guarantees that
 it has only one outgoing edge and therefore this operation is well
 defined. 
 
-\item [[gm_insert_assign_between: Rtl.rtl -> src:node -> dst:node -> unit]]:
-Inserts an assign node on every edge leading from [[src]] to [[dst]]. 
+\item [[gm_insert_assign_between: Rtl.rtl list -> src:node -> dst:node -> unit]]:
+Inserts assign nodes on every edge leading from [[src]] to [[dst]]. 
 The predecessor/successor relationship of all nodes is updated to
-reflect the insertion of the assign node on all affected edges. 
-It is a checked run-time error, if no edge between [[src]] and [[dst]] exists.
+reflect the insertion of the assign nodes on all affected edges.  It
+is a checked run-time error, if no edge between [[src]] and [[dst]]
+exists.
 
 \item
 \begin{verbatim}

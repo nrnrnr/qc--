@@ -100,7 +100,6 @@ attempt to do otherwise results in an unchecked run-time error.
 type 'a map =   { embed:    ('a -> Rtl.rtl)
                 ; project:  (Rtl.rtl -> 'a)
                 }
-
 <<components of t>>=
 goto:           Rtl.exp map ;
 jump:           Rtl.exp map ;
@@ -108,6 +107,22 @@ cutto:          Rtl.exp map ;
 call:           Rtl.exp map ;
 branch:         (Rtl.exp * Rtl.exp) map;
 @
+
+The register allocator (see \module{linscan}) needs target-specific
+informations about hardware registers and temporaries. In particular:
+
+<<components of t>>=
+fits:           Rtl.space -> Register.t -> bool;
+is_tmp:         Rtl.space -> bool;
+@
+
+\begin{itemize}
+\item [[fits sp r]] is true, if (hardware) register [[r]] can hold any 
+      value from space [[sp]].
+
+\item [[is_tmp sp]] is true, if [[sp]] denotes a {\rtl} space that
+      holds temporaries.
+\end{itemize}
 
 % ------------------------------------------------------------------ 
 \subsection{Implementation}
@@ -152,6 +167,8 @@ let dummy: t =
     ; call            = m
     ; branch          = m
     ; cc              = lookup StrMap.empty
+    ; fits            = (fun sp (sp',index,width) -> sp = sp')
+    ; is_tmp          = (fun sp -> sp = 't')
     }
 @
         

@@ -34,8 +34,8 @@ The register allocator then tries to map temporary registers to
 hardware registers such that their lifetimes do not interfere.  If the
 number of available hardware registers is too small to map temporary
 registers, the register allocator runs out of registers.  The solution is
-to store some temporaries in memory and re-load them to a hardware
-register only when they are needed; this is called \emph{spilling}.
+to store some temporaries in memory and re-load them to  hardware
+registers only when they are needed; this is called \emph{spilling}.
 
 The register allocator is a linear-scan allocator, basically modeled
 after Traub et al.~\cite{traub:98:pldi} but without lazy spilling. 
@@ -43,41 +43,103 @@ It turned out that the simpler linear-scan register allocator by
 Poletto \cite{poletto:99:toplas} can not handle pre-assigned hardware
 registers as they are required by calling conventions.
 
+% ------------------------------------------------------------------ 
+\subsection{Overview}
+% ------------------------------------------------------------------ 
+
+Linear-scan register allocation works assumes a procedure is a linear
+sequence of control-flow nodes, which represent instructions.  Such an
+order can be easily obtained by enumerating the nodes in {\cfg}---of
+course, many possible enumerations exist.  Liveness analysis
+determines which registers, temporaries and hardware registers, are
+live on any control-flow edge.  Each node is marked with the registers
+that are live on its incoming edges.  These registers are said to be
+\emph{live before} that node.  Linear Register-allocation needs a more
+global perspective on liveness and computes a global map that
+associates with every register the set of nodes at which the register
+is \emph{live before}.  This situation is shown in Figure
+\ref{fig:linscan:overview}:  from the linearized flow graph in (1) a
+map in (2) is computed that shows at which regions the temporaries
+$t_0$, $t_1$ and the hardware register $r_0$ are live.  Typically most
+data lives in temporaries and only very few hardware registers are
+used, typically for parameter passing.  
+
+\begin{figure}[bh]
+\centerline{\includegraphics[width=\hsize]{../figures/linscan-1}}
+\caption{\label{fig:linscan:overview} Register allocation assigns
+temporaries to hardware registers.}
+\end{figure}
+
+The aim of the register-allocator is to place every temporary into a
+hardware register.  The allocator in this module implements basically
+policy the policy described by Poletto \cite{poletto:99:toplas}:  it
+scans the procedure in linear order and tries to place temporaries
+that are live at the node at hand.  In Figure
+\ref{fig:linscan:overview} the first live temporary is $t_0$.  The
+policy described by Poletto mandates that the \emph{bounding box},
+highlighted as a dotted rectangle, fits into the chose hardware
+register.  This is the case in situation (3) for $r_0$ and thus $t_0$
+is placed there.  Now every instruction in the {\cfg} that uses $t_0$
+is re-written to use $r_0$ instead. 
+
+Continuing scanning, the register allocator finds $t_1$.  However, the
+bounding box of its lifetime collides with the lifetime of $r_0$ and
+thus $r_0$ can not hold $t_1$.  Assuming that no other hardware
+register is available, the register allocator decides to spill
+temporary $t_1$.  This breaks $t_1$ into smaller intervals \emph{and}
+creates new temporaries $t_2$ and $t_3$ for each usage of $t_1$, as
+shown in Figure \ref{fig:linscan:overview} (5).  After a new round of
+liveness analysis and and scanning $t_1$, $t_2$, and $t_3$ can be
+assigned to $r_0$ and register allocation is complete. 
+ 
+
+\begin{figure}[htb]
+\centerline{\includegraphics[width=\hsize]{../figures/linscan-2}}
+\caption{\label{fig:linscan:spilling} Spilling $x$.}
+\end{figure}
+
+Spilling deserves a closer look because it requires that new nodes are
+added to a control-flow graph.  Figure \ref{fig:linscan:spilling}
+shows a situation where a register $x$ is spilled in sequence of
+nodes, called the spill region.  Outside the region $x$ is left
+untouched, inside the region the value of $x$ is held in a memory
+location, typically on the run-time stack.  Therefore on every edge
+that enters or leaves the region \emph{and} on which $x$ is live nodes
+must be inserted that transfer $x$ to or from memory.  These nodes are
+depicted as grey nodes on the border of the rectangle that marks the
+spill region. 
+
+For every use of the spilled register inside the spill-region $x$ must
+be re-loaded from memory and re-written, if it is live after the use. 
+The corresponding nodes are the two grey nodes inside the spill
+region.  However, $x$ is not re-loaded into $x$ but into a new
+temporary ($z$) for every use inside the spill region.  This creates a
+short-lived temporaries which can hopefully easyly assigned to
+hardware registers.
+
+\begin{quote}\it
+The register alloctor is quite simple and room for improvements
+includes:
+
+\begin{itemize}
+\item Re-writing the nodes of a {\cfg} to reflect assignments can be
+      delayed until spilling or register allocation is completed. 
+       
+\item The requirement that the bounding-box of a temporary's lifetime
+      must not interfere with a hardware register's lifetime can probably
+      be dropped. 
+\end{itemize}
+\end{quote}
+
+% ------------------------------------------------------------------ 
+\subsection{Interface}
+% ------------------------------------------------------------------ 
+
 Linear-scan register allocation requires a linear representation of a
 procedure.  This is provided by numbering nodes in the control-flow
 graph {\cfg}.  Of course, any change to the structure of the {\cfg}
 destroys a numbering.  This happens when code for spilling is inserted
 into a {\cfg}.
-
-The [[Arg]] module summarizes the functionality that we need from the
-environment.  Since it is just a type, we can put here whatever we
-want without having to provide an implementation.  Ultimately, we like
-to implement everything that is provided by [[Arg]] and get rid of it.
-
-<<exported module types>>=
-module type Args = sig
-    val fits : Rtl.space -> Register.t -> bool
-        (* fits s r = true, iff r can hold any value from space s *) 
-    val is_tmp : Rtl.space -> bool
-        (* true, iff space belongs to the temporary space *)
-    
-    (* 
-     * for spilling
-     *)
-     
-    val mkTmp:      Rtl.loc -> Register.t
-        (* create a new tmp for a value currently held by loc *)
-    val assign_loc: dst:Rtl.loc    -> src:Register.t -> Rtl.rtl 
-    val assign_reg: dst:Register.t -> src:Rtl.loc    -> Rtl.rtl 
-        (* create an assignment rtl that transfers a value from src to dst.
-         * The result types must become Rtl.rtl list because they have to
-         * respect the machine invariant.
-        *)
-    val mkMem:      Register.t -> Rtl.loc
-        (* create a new spill slot for a register. Incomplete - will 
-           use Area.builder that maintains stack slots *)
-end
-@
 
 Module type [[S]] summarizes the functionality we implement and export
 for clients.  
@@ -97,6 +159,42 @@ module Make (A: Args) (G: G): sig
 end
 @
 
+
+% ------------------------------------------------------------------ 
+\subsubsection{Things we want to get rid of}
+% ------------------------------------------------------------------ 
+
+The [[Arg]] module summarizes the functionality that we need from the
+environment.  Since it is just a type, we can put here whatever we
+want without having to provide an implementation.  Ultimately, we like
+to implement everything that is provided by [[Arg]] and get rid of it.
+
+<<exported module types>>=
+module type Args = sig
+    val fits : Rtl.space -> Register.t -> bool
+        (* fits s r = true, iff r can hold any value from space s *) 
+    val is_tmp : Rtl.space -> bool
+        (* true, iff space belongs to the temporary space *)
+    
+    (* 
+     * for spilling
+     *)
+     
+    val mkTmp:      Rtl.loc -> Register.t
+        (* create a new tmp for a value currently held by loc *)
+    val spill:      dst:Rtl.loc    -> src:Register.t -> Rtl.rtl list
+    val reload:     dst:Register.t -> src:Rtl.loc    -> Rtl.rtl list
+        (* create an assignment rtl that transfers a value from src to dst.
+         * The result types must become Rtl.rtl list because they have to
+         * respect the machine invariant.
+        *)
+    val mkMem:      Register.t -> Rtl.loc
+        (* create a new spill slot for a register. Incomplete - will 
+           use Area.builder that maintains stack slots *)
+end
+@
+
+
 % ------------------------------------------------------------------ 
 \subsection{Construction of Register Lifetimes}
 % ------------------------------------------------------------------ 
@@ -105,7 +203,7 @@ Liveness analysis (module \module{live}) annotates each node in the
 control-flow graph with the set of registers live \emph{before} that
 node.  From this we have to construct a global view that associates a
 variable with its lifetime.  A lifetime is a set of nodes where a
-register is life.  To make things easier, lifetimes are represented as
+register is live.  To make things easier, lifetimes are represented as
 sets of intervals, where an interval is a sequence of consecutive
 nodes with respect to the node numbering.  The first steps are
 therefore to establish a numbering and to construct the lifetime of
@@ -139,7 +237,6 @@ module Make (A: Args) (G: G) = struct
  
     <<compute lifetimes>>
     
-    module A = A open A (* never do that, but NR did *)
     let lookup table x = RM.find x table       (* lookup lifetime *)
 
     <<find tmp>>
@@ -149,6 +246,8 @@ module Make (A: Args) (G: G) = struct
     <<replace>> 
     <<alloc>> 
     <<linscan>>   
+    <<update>>        
+    <<spill>>
 end
 @
 
@@ -183,26 +282,25 @@ register from [[op]] and adding a new interval to its lifetime in
 [[lt]]. 
 
 <<compute lifetimes>>=
-(* type op    = P.t RM.t  (* map from register to opening point *)
- * type lt    = LT.t RM.t  (* map from register to lifetime      *)
- * type state = op * lt   
- *)
+type op    = P.t RM.t   (* map from register to opening point *)
+type lt    = LT.t RM.t  (* map from register to lifetime      *)
+type state = op * lt   
  
-let open_intv  point (op,lt) reg = (Register.Map.add reg point op, lt)
+let open_intv  point (op,lt:state) reg = (Register.Map.add reg point op, lt)
 
-let close_intv point (op,lt) reg = 
+let close_intv point (op,lt:state) reg = 
     let x = try Register.Map.find reg op with Not_found -> assert false in
     let y = point in
     let i = I.mk x y in
     let l = try Register.Map.find reg lt with Not_found -> LT.empty in
         ( Register.Map.remove reg op
-        , Register.Map.add reg (LT.mk i) lt
+        , Register.Map.add reg (LT.union (LT.mk i) l) lt
         ) 
 @
 
 Given a list of registers that open or close an interval we must fold
 this list such that all registers in the list update the current
-state. The state captures the lifetimes computes so far, plus the
+state. The state captures the lifetimes computed so far, plus the
 currently open intervals.
 
 <<compute lifetimes>>=
@@ -247,7 +345,7 @@ let lifetimes cfg lt =
 \subsection{Register Allocation Implementation}
 % ------------------------------------------------------------------ 
 
-The implementation must provided all the module types declared in the
+The implementation must provide all the module types declared in the
 interface.  The heart of the implementation is the functor [[Make]]
 with code to
 
@@ -263,7 +361,7 @@ with code to
 The linear-scan register allocator [[linscan]] visits all nodes of a
 {\cfg} in a linear order and [[alloc]]'ates hardware register for their
 temporaries.  The [[alloc]] function receives two continuations,
-[[loop]] and [[spill]].  It calls the latter, if no hardware register
+[[next_node]] and [[spill]].  It calls the latter, if no hardware register
 can be found for a temporary.  Because spilling mutates the structure
 of a {\cfg}, register allocation starts over after spilling.
 
@@ -277,61 +375,70 @@ of a {\cfg}, register allocation starts over after spilling.
 let rec linscan cfg =
     let _          = LI.liveness cfg     in
     let _          = G.gm_enumerate cfg in
-    let rec loop lifetimes = function (* over all nodes *)
+    let rec next_node lifetimes node = match node with 
         | None      -> ()
-        | Some node -> alloc node lifetimes loop spill
+        | Some node -> alloc node lifetimes next_node spill
     in
-        loop (lifetimes cfg RM.empty) (Some (G.first cfg)) 
-
-<<update>>        
-and spill cfg spillee mem interval = 
-    let first = I.left  interval     in
-    let last  = I.right interval - 1 in (* open interval semantics strikes *)
-        ( G.scan_fwd cfg first last (fun n () -> update interval spillee mem n) ()
-        ; linscan cfg (* start over *)
-        )
+        next_node (lifetimes cfg RM.empty) (Some (G.first cfg)) 
+@
+<<alloc>>=
+let alloc node lifetimes success spill =
+    let rec next_tmp lifetimes = match find_tmp node with
+        | None     -> success lifetimes (G.next node)
+        | Some tmp -> replace_tmp node tmp lifetimes next_tmp spill      
+    in
+        next_tmp lifetimes 
 @
 
 The [[alloc]] function loops over all temporaries of a given node and
-tries to replace them using [[replace_tmp]].  The [[replace_tmp]]
+tries to replace each using [[replace_tmp]].  The [[replace_tmp]]
 function again receives two continuation for the [[success]] and
 [[spill]] cases.
 
-<<alloc>>=
-let alloc node lifetimes success spill =
-    let rec loop lifetimes = match find_tmp node with
-        | None     -> success lifetimes (G.next node)
-        | Some tmp -> replace_tmp node tmp lifetimes loop spill      
-    in
-        loop lifetimes 
-@
+The functions [[alloc]] and [[replace_tmp]] together implement an
+algorithm of complexity $O(n^2)$, where $n$ is the number of nodes in
+the {\cfg}:  as soon a temporary can can be placed into a hardware
+register, the entire {\cfg} is updated, which affects $n$ nodes. 
+Potentially this happens at every node during the linear scan and
+hence we have an $O(n^2)$ complexity.  The obvious improvement is to
+collect all changes and to apply them in a single run over the {\cfg}.
 
 The real work is done in [[replace_tmp]].  For a given temporary
 [[tmp]] a register [[r]] must by found by [[find_reg]].  If this
 succeeds, the lifetime of [[tmp]] is joined with the register's
 livetime, and all occurrences of [[tmp]] substituted by [[r]] in the
-entire {\cfg}. However, if no [[r]] can be found, we must spill:
+\emph{entire} {\cfg}. However, if no [[r]] can be found, we must spill:
 [[find_spillee]] finds a candidate to spill and passes it to the
 [[spill]] continuation.
+  
 
 <<replace>>=
 let replace tmp reg      = fun t -> if t = tmp then reg else t
 
 let replace_tmp node tmp lifetimes success spill =
   let iter cfg f = G.fold_fwd cfg (fun node () -> G.set_rtl node f) () in
-  let lifetime   = lookup lifetimes in
-  let cfg         = G.cfg node    in
+  let lifetime   = lookup lifetimes                                    in
+  let cfg         = G.cfg node                                         in
   match find_reg lifetimes tmp with
-  | Some r -> (* successfully found a hardware register *)
-      let lifetimes = RM.add r (LT.union (lifetime r) (lifetime r)) lifetimes in
-      let lifetimes = RM.remove tmp lifetimes                      in
-      let ()        = iter cfg (Rtlutil.Subst.reg (replace tmp r)) in
+  | Some r -> (* successfully found a hardware register r *)
+      let lifetimes = RM.add r (LT.union (lifetime r) (lifetime tmp))
+                               lifetimes                               in
+      let lifetimes = RM.remove tmp lifetimes                          in
+      let ()        = iter cfg (Rtlutil.Subst.reg (replace tmp r))     in
           success lifetimes
-  | None ->
-      let spillee, interval = find_spillee lifetimes tmp node in 
-      let mem               = A.mkMem spillee                 in
+  | None -> (* out of register - must spill *)
+      let spillee, interval = find_spillee lifetimes tmp node          in
+      let mem               = A.mkMem spillee                          in
           spill cfg spillee mem interval
 @
+
+% ------------------------------------------------------------------ 
+\subsection{Policies}
+% ------------------------------------------------------------------ 
+
+The [[linscan]] register allocator depends on a number of policies to
+find temporaries and the hardware registers that replace them.  These
+are described below and can be changed easily.
 
 % ------------------------------------------------------------------ 
 \subsubsection{Finding a Temporary}
@@ -353,7 +460,7 @@ explicitly.
 <<find tmp>>=
 let find_tmp node = 
     let uses space index width = function
-        | None when is_tmp space -> Some (space, index, width)
+        | None when A.is_tmp space -> Some (space, index, width)
         | x                      -> x 
     in
         Rtlutil.read_write_lists uses uses (G.rtl node) None    
@@ -388,7 +495,7 @@ register [[r]], that respects all of the following conditions, or
 <<find reg>>=
 let first_fit lifetimes t =
     let fits' (sp,_,_ as t) r = 
-        fits sp r &&
+        A.fits sp r &&
         not (LT.overlaps (LT.bbox (lookup lifetimes t)) 
                                 (lookup lifetimes r))
     in
@@ -411,12 +518,13 @@ spill a register which can be either a hardware register, or a
 temporary.  The [[find_spillee]] function receives the [[lifetimes]]
 map, the register [[tmp]] that we could not find a register for, and
 the [[node]] under consideration in the linear scan.  The function
-returns a register to spill and a region, where to spill it.
+returns a register to spill and a region in which the spillee is
+spilled to memory.
 
 For finding a spillee, we use the policy described by
 \cite{poletto:99:toplas}:  consider the temporary that could not be
 placed and all hardware registers currently in use and spill the one
-that is used farest\footnote{with respect to the node numbering} in
+that is used furthest\footnote{with respect to the node numbering} in
 the program.  This means, we look at the bounding boxes of these
 registers and spill the one that ends last.
 
@@ -442,7 +550,7 @@ let longest_active: <<longest active type>> = fun node tmp lifetimes ->
     let here   = G.number node        in
     let active = active here lifetimes  in
     let max (loc1,lt1 as x) (loc2,lt2 as y) = 
-        if I.behind (LT.bbox lt1) (LT.bbox lt2) then x else y 
+        if I.ends_after (LT.bbox lt1) (LT.bbox lt2) then x else y 
     in
         List.fold_left max (tmp,lookup lifetimes tmp) active
 
@@ -458,7 +566,7 @@ let find_spillee: <<find spillee type>> = fun lifetimes tmp node ->
 @
 
 % ------------------------------------------------------------------ 
-\subsubsection{Spilling Design}
+\subsection{Spilling Design}
 % ------------------------------------------------------------------ 
 
 This is intended to be a very simple specification of spilling, which
@@ -498,11 +606,23 @@ It would be highly desirable to be able to separate the liveness tests
 here, so for example we could always insert [[r := m]] or [[m := r]]
 on edges that cross region boundaries, and then remove the unnecessary
 instructions with a post-pass.
-Some building blocks.
 
 % ------------------------------------------------------------------ 
-\subsubsection{Spilling Implementation}
+\subsection{Spilling Implementation}
 % ------------------------------------------------------------------ 
+
+The spiller walk over a region [[interval]] of nodes and updates it
+such that the [[spillee]] is help in memory [[mem]] most of the time. 
+When the spillee is used, it is re-loaded into a temporary.
+
+<<spill>>=
+and spill cfg spillee mem interval = 
+    let first = I.left  interval in
+    let last  = I.right interval in 
+        ( G.scan_fwd cfg first last (fun n () -> update interval spillee mem n) ()
+        ; linscan cfg (* start over *)
+        )
+@
 
 The [[reads_writes]] function checks whether a location [[loc]] is
 read or written by an {\rtl}.  It returns a pair $(r,w)$ of [[bool]]
@@ -512,10 +632,9 @@ otherwise.
 
 <<update>>=
 and reads_writes rtl loc =
-    let f sp index width (r,w) = 
-        let eq = (sp,index,width) = loc in (r || eq, w || eq) 
-    in
-        Rtlutil.read_write_lists f f rtl (false,false)
+    let reads  sp index width (r,w) = (r || loc = (sp,index,width), w) in
+    let writes sp index width (r,w) = (r, w || loc = (sp,index,width)) in
+        Rtlutil.read_write_lists reads writes rtl (false,false)
 @
 
 The [[extern]] function returns all nodes from a list of nodes that do
@@ -530,20 +649,20 @@ and extern interval =
 Edges entering and leaving the spilling interval must be modified to
 include assignment nodes:  outside the interval the [[spillee]] holds
 a value, inside the interval [[mem]].  Incoming edges therefore must
-write the [[spillee]] to [[mem]], outgoing edges [[mem]] to
+spill the [[spillee]] to [[mem]], outgoing edges reload [[mem]] to
 [[spillee]].  The following two functions [[upd_*]] functions update
 edges for [[node]]. 
 
 <<update>>=
 and upd_incoming interval spillee mem node =
     let pred  = extern interval (G.pred node) in
-    let write = A.assign_loc mem spillee          in
-        List.iter (fun n -> G.gm_insert_assign_between write n node) pred
+    let spill = A.spill mem spillee          in
+        List.iter (fun n -> G.gm_insert_assign_between spill n node) pred
 
 and upd_outgoing interval spillee mem node = 
-    let succ  = extern interval (G.succ node) in
-    let read  = A.assign_reg spillee mem          in
-        List.iter (fun n -> G.gm_insert_assign_between read node n) succ
+    let succ    = extern interval (G.succ node) in
+    let reload  = A.reload spillee mem          in
+        List.iter (fun n -> G.gm_insert_assign_between reload node n) succ
 @
 
 The heart of the spiller is [[update]] that is applied to every
@@ -557,19 +676,25 @@ to and read from [[mem]].
     
 <<update>>=
 and update interval spillee mem node = 
-    let _ = upd_incoming interval spillee mem node        in
-    let _ = upd_outgoing interval spillee mem node        in
+    upd_incoming interval spillee mem node ;    
     let reads, writes = reads_writes (G.rtl node) spillee in
-        if (reads || writes) then 
+        if reads || writes then 
             ( let tmp   = A.mkTmp mem in
               let subst = fun x -> if x = spillee then tmp else x in 
               ( if reads  then 
-                    (G.gm_insert_assign_before (A.assign_reg tmp mem) node)
+                    (G.gm_insert_assign_before (A.reload tmp mem) node)
               ; if writes then 
-                    (G.gm_insert_assign_after  (A.assign_loc mem tmp) node)
+                    (G.gm_insert_assign_after  (A.spill  mem tmp) node)
               ; G.set_rtl node (Rtlutil.Subst.reg subst)
               )
-            )
-        else
-            () (* done *)
+            );
+    upd_outgoing interval spillee mem node       
 @
+
+\begin{quote}\it
+    Spilling hardware registers is not save: if [[spillee]] is a
+    hardware register, it is re-loaded into a new temporary that
+    substitutes the hardware register in nodes. However, the hardware
+    register might the there because a calling convention demands it.
+    --CL
+\end{quote}

@@ -113,25 +113,107 @@ val freeze : t -> Area.t
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
 
+Until we know better we assume that automata for different platforms
+are probably quite different and a single implementation is unlikely
+to support them all.  We resort to an object-oriented implementation
+that allows to have several implementations for the same interface. 
+
+All real work is done by objects of class [[location]] and
+[[automaton]] that are used as representation for [[loc]] and [[t]]
+respectively. The class types define their shape but we are free to
+provide entirely different implementations.
+
 <<automaton.ml>>=
-type spec = unit
-type t    = unit
-type loc  = unit
+class type location = object
+    method fetch:   width:int -> Rtl.exp
+    method store:   Rtl.exp -> width:int -> Rtl.rtl
+end
 
-let dummy                = ()
-let mk () loc            = ()
-let ty () ~width ~hint   = ()
+class type automaton = object
+    method ty:      width:int -> hint:(string option) -> location
+    method freeze:  unit -> Area.t
+end
 
-let fetch () ~width      = Impossible.unimp "Automaton.fetch"
-let store () expr ~width = Impossible.unimp "Automaton.store"
+type spec = Rtl.exp -> automaton
+type t    = automaton
+type loc  = location
+@
 
-let freeze ()            = Impossible.unimp "Alloc.Reg.freeze"
+Because the representations for [[t]] and [[loc]] are objects the
+implementations for [[mk]], [[ty]] and so forth just pass their
+arguments to the objects at hand.
+
+<<automaton.ml>>=
+let mk spec ~address  = spec address
+let ty t ~width ~hint = t#ty width hint
+let freeze t          = t#freeze ()
+
+let fetch loc ~width      = loc#fetch ~width
+let store loc expr ~width = loc#store expr ~width
+@
+
+As a first implementation we provide an automaton that puts everything
+in memory, using the [[Area]] building block. 
+
+<<automaton.ml>>=
+module Dummy = struct
+    <<Dummy struct>>
+end
+
+let dummy = new Dummy.dummy 
 @
 
 % ------------------------------------------------------------------ 
-\subsubsection{Overlapping Areas}
+\subsection{Dummy Automaton}
 % ------------------------------------------------------------------ 
 
-<<overlapping areas implementation>>=
-let overlap place areas = Impossible.unimp "Alloc.overlap"
+The [[Dummy]] module makes some assumptions about the current
+architecture and implements an automaton that provides
+word size aligned locations in memory. 
+
+\begin{quote}\it
+    This needs a review. I'm not sure about alignments and widths. --CL
+\end{quote}
+
+<<Dummy struct>>=
+let byteorder           = Rtl.BigEndian
+let wordsize            = 32
+let pointersize         = 32
+let memsize             = 8
+let memspace            = ('m':Rtl.space)
 @
+
+The [[dummyloc]] class represents an address in [[memspace]] that is
+made of [[memsize]] cells, aggregated in [[byteorder]].  The width of
+the data stored there is variant.
+
+<<Dummy struct>>=
+class dummyloc (addr:Rtl.exp): location =
+object
+    val _loc   = Rtl.cell Rtl.none memspace byteorder memsize addr 
+    
+    method store expr ~width = Rtl.store _loc expr width 
+    method fetch ~width      = Rtl.fetch _loc width
+end
+
+class dummy (base:Rtl.exp): automaton =
+object (self)
+    val mutable _area   = Area.align (Area.mk base) wordsize
+    val mutable _frozen = false
+    
+    method freeze ()       =
+        let _ = _frozen <- true in
+            Area.freeze _area 
+    
+    method ty ~width ~hint = 
+        let _    = assert (_frozen = false)           in
+        let _    = assert (width < wordsize)          in
+        let _    = assert (width mod memsize = 0)     in
+        (* assertions above *)
+        let n    = width / memsize                    in (* how many cells*)
+        let addr = Area.location _area                in
+        let ()   = _area <- Area.alloc _area n        in (* allocate ..*)
+        let ()   = _area <- Area.align _area wordsize in (* and align  *)
+            new dummyloc addr
+end
+

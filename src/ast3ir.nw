@@ -17,8 +17,30 @@
 % l2h substitution forall forall
 % l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
 
+
+
+
 % ------------------------------------------------------------------ 
 \section{Translation to Intermediate Representation}
+% ------------------------------------------------------------------ 
+
+The [[translate]] function takes an environment, the actual target and
+a program and translates it into an abstract assembler program.  An
+assembler instruction is a control-flow graph and represents an entire
+procedure. 
+
+<<ast3ir.mli>>=
+module Make 
+        (G: Cfg3.S) 
+        (A: Asm2.S with type instruction = G.t
+                   and  type init        = unit)  : sig
+    
+    val translate: Fenv.Clean.env -> Target2.t -> Ast.program -> A.asm
+end
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
 % ------------------------------------------------------------------ 
 
 <<ast3ir.ml>>=
@@ -27,15 +49,12 @@ module A        = Ast
 module T        = Types
 module E        = Error
 module F        = Fenv.Clean
-module StrMap   = Map.Make(struct type t=string let compare=compare end)
 
 <<auxilliaries>>
 <<ExprTypes>>
-
-module Make
-    (G:     Cfg3.S)
-    (Asm:   Asm2.S with type instruction = G.t
-                   with type init        = unit) = 
+module Make (G: Cfg3.S) 
+            (Asm: Asm2.S with type instruction = G.t
+                         and  type init        = unit) =
 struct
     module IO = Copyinout.Make(G)
 
@@ -116,14 +135,7 @@ have a clean environment.
            with Error.ErrorExn msg -> assert false
 @
 
-% ------------------------------------------------------------------ 
-\subsection{Make}
-% ------------------------------------------------------------------ 
 
-<<Make auxilliaries>>=
-let (++)           = Asm.append
-let idwidth id env = match F.findv id env with (attr,(_,t)) -> width t
-@
 
 
 % ------------------------------------------------------------------ 
@@ -238,10 +250,23 @@ let link_const env target exp =
         Error.ErrorExn m -> assert false
 @
 
+% ------------------------------------------------------------------ 
+\subsection{Auxilliaries for Make}
+% ------------------------------------------------------------------ 
+
+
+<<Make auxilliaries>>=
+let (++)           = Asm.append
+let idwidth id env = match F.findv id env with (attr,(_,t)) -> width t
+@
 
 % ------------------------------------------------------------------ 
 \subsection{Continuation Bundles}
 % ------------------------------------------------------------------ 
+
+A continuation bundle on the {\AST} level is a record of names, and a
+record of nodes of the {\cfg} level.  The continuations function
+translates from the former to the latter.
 
 <<Make continuation bundles>>=
 let continuations ast cfg =
@@ -268,6 +293,11 @@ let continuations ast cfg =
 % ------------------------------------------------------------------ 
 \subsection{Assignment}
 % ------------------------------------------------------------------ 
+
+The left hand side of a simple assignment $x \gets y$ can be a memory
+cell, or a register which in turn can be local or global.  Each case
+requires its own method to compute the {\rtl} that represents the
+assignment.
 
 <<Make assignment>>=
 let rec assign env target lhs exp = match lhs with
@@ -300,6 +330,12 @@ let rec assign env target lhs exp = match lhs with
 % ------------------------------------------------------------------
 \subsection{Formal and Actual Parameters}
 % ------------------------------------------------------------------ 
+
+An actual parameter is an expression and must be translated to the
+format expected by the [[IO.copyout]] function.  A formal procedure
+parameter denotes a local variable, a formal continuation parameter
+either a local or \emph{global} variable.  Both are translated to the
+format expected by the [[IO.copyin]] function.
 
 <<Make formals and actuals>>=
 let actual env target (hint, e) =
@@ -384,6 +420,11 @@ let globals env target (base:Rtl.exp) names =
 \subsection{Statements}
 % ------------------------------------------------------------------ 
 
+The translation of statements in a procedure body requires a bunch of
+value that are passed as a functional [[state]] value around. Using
+\ocaml's functional record update this allows to add more informations
+as needed without breaking any code.
+
 <<Make statements>>=
 type state =
     { proc:         string           (* proc under translation (const) *)
@@ -397,7 +438,32 @@ type state =
     ; outgoing:     Area.t list      (* areas to be overlayed in OUTGOING *)   
     ; incoming:     Area.t list      (* ditto for INCOMING *)
     }
+@
+    
+\begin{itemize}
+\item [[proc]] is the name of the procedure under translation. The
+      name is used to generate labels with the name inside. Constant.
+\item [[env]] is the fat environment to resolve the meaning of names.
+      Constant. 
+\item [[target]] is the current target architecture. This provides
+      target-specific pointer sizes, {\rtl}s and so forth. Constant.
+\item [[cfg]] is the control-flow graph under construction. It
+      represents the body of the procedure. Constant.
+\item [[node]] is the node in the {\cfg} following the current unit
+      under translation.
+\item [[outbase]] is the run-time expression for the base-address of
+      the \emph{outgoing} area on the stack. See also \module{stack}.
+\item [[inbase]] is the run-time expression for the base-address of the
+      \emph{incoming} area.
+\item [[priv]] is a handler for the \emph{private} area on the stack which
+      is still under construction.
+\item [[outgoing]] contains areas of disjoint lifetimes that are overlaid
+      in the \emph{outgoing} area.
+\item [[incoming]] overlaid areas in the \emph{incoming} area.        
+\end{itemize}
 
+
+<<Make statements>>=
 let rec stmt s state = match s with
     | A.StmtAt(x,r)        -> stmt x state 
     | A.SpanStmt    x      -> spanStmt      state x
@@ -419,7 +485,7 @@ and body b state = match b with
     | A.BodyAt(x, _)        -> body x state
     | A.DeclBody(d)         -> state (* nothing to be done *)
     | A.StmtBody(s)         -> stmt s state 
-    | A.DataBody(dd)        -> state (* aleady done *)
+    | A.DataBody(dd)        -> state (* already done *)
     
 
 and labelStmt state x =
