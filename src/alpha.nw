@@ -1,4 +1,4 @@
-
+% vim: ts=8 sw=4 et:
 
 % ------------------------------------------------------------------ 
 \section{Back end for the Alpha}
@@ -34,6 +34,7 @@ condition codes.
 module SS   = Space.Standard64
 module A    = Automaton
 module R    = Rtl
+module RU   = Rtlutil
 module RP   = Rtl.Private
 module Up   = Rtl.Up
 module Dn   = Rtl.Dn
@@ -68,6 +69,8 @@ let reg n       = ('r',n,wordsize)
 let sp          = reg 30        (* stack pointer    *)
 let ra          = reg 26        (* return address   *)
 let zero        = reg 31        (* always zero      *)
+let gp          = reg 29        (* global pointer   *)
+let pv          = reg 27        (* procedure value  *)
 @
 
 % ------------------------------------------------------------------ 
@@ -91,22 +94,69 @@ We generate standard control-flow {\rtl}s. The \module{ast2ir.nw} module
 inserts these into the {\cfg} it builds. 
 
 <<alpha.ml>>=
+let ra_offset = 4                   (* instruction size *)
 module F = Mflow.MakeStandard
     (struct
         let pc_lhs    = pc
         let pc_rhs    = pc
         let ra_reg    = R.reg ra
-        let ra_offset = 0               (* not sure *)
+        let ra_offset = ra_offset
      end)   
 @
 
-Module [[F]] does not provide a return instruction. A return is simply a
-jump.
+To be able to load large immediate values, a procedure must set the
+\emph{global pointer) in register \$gp. This register is not preserved
+across procedure calls and thus it must be re-established after a call.
+The protocol to do this relies on register \$27 and $\26:
+
+\begin{itemize}
+\item On ontry to [[p]], the address of [[p]] is in register \$27.
+\item On exit  of [[p]], the return address is in register \$26.
+\end{itemize}
+
+Other registers could be used, but caller and callee must agree on them.
+Using \$27 and $\26, a call to and return from [[p]] looks like this:
+
+<<example for calling convention>>=
+    ...
+    jsr foo             /* ra in $26, foo in $27 */
+    ldgp $gp,0($26)     /* establish gp; $pc = $26 */
+
+
+foo:
+    ldgp $gp,0($27)     /* $27 = foo */
+    ...
+    ret ($26)
+@    
+
+The [[ldgp]] instruction can establish the global pointer using its
+\emph{own} address as it is provided registers \$27 at entry and \$26
+after a return. 
+
+Call and return are thus not single instructions, but really short
+sequences. Since our interfaces require single {\rtl}s for call and
+return, we encode them as multiple effects. Currently, we do \emph{not}
+encode the [[ldgp]] calls but simply add them in the recognizer. 
 
 <<alpha.ml>>=
-let return = R.store pc (fetch_word (R.reg ra))
-@
-
+let ra_val    = RU.addk wordsize (R.fetch pc wordsize) ra_offset
+let return e  = R.par [ R.store pc         e wordsize
+                      ; R.store (R.reg ra) e wordsize
+                      ]
+let call   e  = R.par [ R.store pc e wordsize
+                      ; R.store (R.reg ra) ra_val wordsize
+                      ; R.store (R.reg pv) e wordsize
+                      ] 
+let call_ep = 
+    let embed e   = call e    
+    and project r = match Dn.rtl r with
+                    | RP.Rtl([ (_,RP.Store(_,e,_));_;_])-> Up.exp e
+                    | _ -> impossible "projected non-call"
+    in
+        { Ep.embed   = embed
+        ; Ep.project = project
+        }
+@                    
 
 % ------------------------------------------------------------------ 
 \subsection{Postexpander}
@@ -371,13 +421,14 @@ let bnegate r =
 @
 
 \paragraph{Calls} In an indirect call the target is held in a register,
-otherwise it is an immediate constant.
-
+otherwise it is an immediate constant. The [[other]] effects are those
+that don't assign to the program counter. 
 
 <<Alpha postexpander>>=
 let effects = List.map Up.effect
 let call  ~tgt ~others = 
     [R.par (R.store pc_lhs (Up.const tgt) wordsize :: effects others)]
+
 let callr ~tgt ~others = 
     [R.par (R.store pc_lhs (tval tgt) wordsize :: effects others)]
 @
@@ -388,7 +439,7 @@ let callr ~tgt ~others =
 let cut_to effs = [R.par (effects effs)]
 @
 
-\paragraph{No sacred instructions}
+\paragraph{No Sacred instructions}
 
 <<Alpha postexpander>>=
 let don't_touch_me es = false
@@ -450,8 +501,7 @@ let globals base =
 % ------------------------------------------------------------------ 
 
 <<alpha.ml>>=
-let c_convention = Alphacall.c (fun ra -> (R.store pc ra wordsize)) 
-                               (F.cutto (Rtl.reg sp)) 
+let c_convention = Alphacall.c return (F.cutto (Rtl.reg sp)) 
 
 let target =
     { T.name                = "alpha"
@@ -475,7 +525,7 @@ let target =
     ; T.bnegate             = F.bnegate cc
     ; T.goto                = F.goto
     ; T.jump                = F.jump
-    ; T.call                = F.call
+    ; T.call                = call_ep
     ; T.branch              = F.branch
     
     ; T.cc                  = (fun _ -> c_convention)

@@ -113,6 +113,7 @@ bits n x w
 <<rules>>=
 const:      Bits(bits)          {: int64 bits           :}
 zero:       Bits(bits)          [{: guard (bits = Bits.zero 64) :}] {: () :}
+four:       Bits(bits)          [{: guard (bits = Bits.S.of_int 4 64) :}] {:():}
 symbol:     Link(x, w:int)      {: x#mangled_text       :}
 @
 
@@ -120,17 +121,21 @@ symbol:     Link(x, w:int)      {: x#mangled_text       :}
 
 <<rules>>=
 regl:       Reg('r', n:int, w:int)  {: reg  n :}
-regl:       Reg('f', n:int, w:int)  {: freg n :}
+fregl:      Reg('f', n:int, w:int)  {: freg n :}
 
 pcl:        Reg('c',  0, w:int) {: () :}
 spl:        Reg('r', 30, w:int) {: () :}
 ral:        Reg('r', 26, w:int) {: () :}
+pvl:        Reg('r', 27, w:int) {: () :}
 
-reg:        Fetch(regl,w:int)   {: regl   :}
+
+reg:        Fetch(regl,w:int)   {: regl    :}
+freg:       Fetch(fregl,w:int)  {: fregl   :}
+
 pc:         Fetch(pcl,64)       {: () :}
 sp:         Fetch(spl,64)       {: () :}
 ra:         Fetch(ral,64)       {: () :}
-
+pv:         Fetch(pvl,64)       {: () :}
 
 @
 
@@ -159,7 +164,7 @@ imm:        Add(imm,symbol)     {: sprintf "%s+%s" symbol imm :}
 \paragraph{Data Movement}
 
 Load register from memory. A load of a value smaller than 64 bits
-implies a zero or sign extension.  
+implies a zero or sign extension.  Todo: add floating-point support.
 
 <<rules>>=
 inst:       Store(regl,imm,64)
@@ -182,18 +187,26 @@ inst:       Store(regl, Zx(Fetch(mem,x:int)), w:int)
 @
 
 Store register to memory. No extension here; the 8, 32, or 64 bits are
-simply written to memory.
+simply written to memory. Floating-point registers use their own load
+and store instructions.
 
 <<rules>>=
 inst:       Store(meml, reg, w:int)
             {: sprintf "st%s %s, %s" (suffix w) reg meml :}
+
+inst:       Store(meml, freg, w:int)
+            {: sprintf "sts %s, %s" freg meml :}
 @
 
-Moves between registers.
+Moves between registers. We cannot move between data and fp registers
+directly.
 
 <<rules>>=
 inst:       Store(regl, reg, 64)
             {: sprintf "mov %s, %s" reg  regl :}
+
+inst:       Store(fregl, freg, 64)
+            {: sprintf "fmov %s, %s" freg  fregl :}
 @
 
 \paragraph{Control Flow}
@@ -204,12 +217,25 @@ inst:       Goto(symbol)
 
 inst:       Goto(reg)
             {: sprintf "jmp (%s)" reg  :}
-
-inst:       Par(Goto(addr),Store(ral,pc,64))     -- s/addr/symbol/g ? 
-            {: cat ["jsr"; " "; addr] :} 
 @
 
-Here are conditional branches. The {\rtl} operator names fit the {\mips}
+Call and return are complicated because we have to ensure that regsiters
+\$26 and \$27 are used to pass addresses. This is a bad solution,
+because we cannot optimize here.
+
+<<rules>>=
+set_ra:     Store(ral,Add(pc,four),64)      {: () :}
+set_pv:     Store(pvl,addr,64)              {: () :}    
+
+inst:       Par(Goto(addr),Par(set_ra, set_pv))
+            {: sprintf "jsr %s; ldgp $gp,0($26)" addr :}
+
+inst:       Par(Goto(reg),Store(ral,reg,64))
+            {: sprintf "mov %s, $26; ret ($26)" reg :}
+
+@
+
+Here are conditional branches. The {\rtl} operator names fit the Alpha
 assembly branch op-codes. We cannot inline the [[Cmp]] constructor
 because the [[op]] terminal symbol would be unaccessible. Only top-level
 terminals are in scope for the semantic action.
@@ -395,7 +421,7 @@ let dump msg rtl =
 let to_string r =
     try 
         let plan = rtl (Dn.rtl r) in
-        plan.inst.Camlburg.action ()
+        sprintf "\t%s" (plan.inst.Camlburg.action ())
     with
         | Camlburg.Uncovered -> cat ["not an instruction: "
                                     ; rtl_to_string r
