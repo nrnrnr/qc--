@@ -71,17 +71,16 @@ end
 \subsection{Name Mangling}
 % ------------------------------------------------------------------ 
 
-The assembler we emit code to has certain rules for its names. It
+The assembler we emit code for has certain rules for its names. It
 andvertises these rules in its [[A.mangle]] symbol. Names that are
 passed to the assembler are therefore first mangled with a function that
 was build with the help of [[A.mangle]]. The names that are created
-inside scontrol-flow graphs are \emph{not} mangled upon creation. But
+inside control-flow graphs are \emph{not} mangled upon creation. But
 each instruction includes the mangler function such that at any later
 time when instructions are passed to the assember the right mangler can
-be used to mangle the names that are passed. To summaraize: names passed
-to the assembler now are mangles, names part of instructions are not
-mangled, but the instruction includes a mangler to do so later as
-needed.
+be used to mangle the names. To summaraize: names passed to the
+assembler are mangled, names part of instructions are not mangled, but
+the instruction includes a mangler to do so later as needed.
 
 
 % ------------------------------------------------------------------ 
@@ -508,6 +507,12 @@ type state =
 \item [[incoming]] overlaid areas in the \emph{incoming} area.        
 \end{itemize}
 
+It is important that all areas in the [[outgoing]] list have a base
+address that is related to [[outbase]], and analogously for [[incoming]]
+and [[inbase]]. Otherwise the equations (c.f.~modules \module{eqn},
+\module{const}) that are generated when area are arranged to form an
+activation record won't be solvable.
+
 
 <<Make statements>>=
 let rec stmt s state = match s with
@@ -618,7 +623,7 @@ and jumpStmt state (cconv,e,args,labels) =
                                        state.inbase jmp in
             let result = 
                 { state with node     = node
-                ;            outgoing = area :: state.incoming
+                ;            incoming = area :: state.incoming
                 } in 
             let () = G.gm_insert_dataflow_between
 		  ~defs:Register.Set.empty ~uses:defs ~kills:Register.Set.empty
@@ -671,7 +676,7 @@ and callStmt state (lhs,cconv, e, args, targets (*unused*), conts) =
     let rtl     = state.target.Target.call.Target.embed exp      in
     (* linking nodes from back to front: copyin<-call<-copyout *) 
     let copyi,areai,uses = IO.copyin state.cfg (List.map lvalue lhs) 
-                      cc.Target.ret state.outbase  state.node  in
+                      cc.Target.ret state.inbase  state.node  in
     let call        = G.gm_call  state.cfg rtl conts copyi in
     let copyo,areao,defs = IO.copyout state.cfg args 
                       cc.Target.proc state.outbase call in
@@ -755,11 +760,10 @@ and cutStmt state (e, args, conts) =
     let rtl       = state.target.Target.cutto.Target.embed exp (*XXX*) in
     let conts     = continuations conts state.cfg                      in
     let cut       = G.gm_cutto state.cfg rtl conts                     in
-    let inbase    = Rtl.link "inbase for cont" 
-                    state.target.Target.pointersize (*XXX*) in
-    let copy,area,defs = IO.copyout state.cfg args cc.Target.cont inbase cut  in
+    let copy,area,defs = IO.copyout (* XXX *)
+                        state.cfg args cc.Target.cont state.inbase cut  in
     let result    =    { state with node     = cut
-                       ;            incoming = area :: state.outgoing
+                       ;            incoming = area :: state.incoming
                        } in
     let ()      = G.gm_insert_dataflow_between
 		  ~defs:Register.Set.empty ~uses:defs ~kills:Register.Set.empty
@@ -787,6 +791,8 @@ let proc env target (mangle:string->string)  asm (cconv,name,args,bdy) =
                       | _                        -> assert false in
     let env         = F.push env p.F.scope in  (* activate local scope *)
     let pointer     = target.Target.pointersize in
+    let cc          = target.Target.cc (Aux.Option.get default_cc cconv) in
+    let sp          = Rtl.fetch (cc.Target.sp) pointer in (* stack pointer *)
     let cfg         = G.mk ()   in      (* empty control-flow graph *)
     (* symbolic compile-time constants to be used for stack areas *)
     let eqns        = Const.empty pointer        in (* eqns over pointers *)
@@ -794,6 +800,7 @@ let proc env target (mangle:string->string)  asm (cconv,name,args,bdy) =
     let eqns, inb   = Const.sym "inbase"    eqns in
     let eqns, outb  = Const.sym "outbase"   eqns in
     let eqns, privb = Const.sym "private"   eqns in
+    let eqns        = Const.make_equal sp outb eqns in
     (* calculate amount of user stack data - updates env! *)
     let stackd      = Area.mk stack in
     let ( env, stackd, conts) = StackData.proc env target stackd bdy in
@@ -801,6 +808,9 @@ let proc env target (mangle:string->string)  asm (cconv,name,args,bdy) =
     let priv        = Automaton.mk target.Target.stack_slots privb in
     (* build CFG for body *)                    
     let exit        = G.set_label cfg (Idgen.exit name) (G.exit cfg) in
+    (* dummy area in outgoing area because the the body of the procedure
+       might not create any. This would confuse Area.overlap below *)
+    let dummy       = Area.freeze (Area.mk outb) in   
     let state = (* this is needed for translation of the body *)
         { proc      = name       (* name of this procedure *)
         ; env       = env        (* fat environment *)
@@ -808,14 +818,13 @@ let proc env target (mangle:string->string)  asm (cconv,name,args,bdy) =
         ; cfg       = cfg        (* cfg we are building *)
         ; node      = exit       (* what follows current element in cfg *)
         ; incoming  = []         (* overlapping areas in incoming area *)
-        ; outgoing  = []         (* overlapping areas in outgoing area *)
+        ; outgoing  = [dummy]    (* overlapping areas in outgoing area *)
         ; inbase    = inb
         ; outbase   = outb
         } in  
     (* translate body of procedure *)
     let state = foldr body bdy state in
     (* add nodes for incoming parameters *)
-    let cc    = state.target.Target.cc (Aux.Option.get default_cc cconv) in
     let atmi  = Automaton.mk cc.Target.proc  state.outbase   in
     let args  = List.map (procformal state.env) args in
     let copy,area,uses = IO.copyin state.cfg args 
@@ -1099,12 +1108,12 @@ should be exported but currently it is not.
 
 <<Make translate program>>=
 let translate env target prog =
-    let base_sym = "global base" in
+    let mangle   = Asm.mangle (F.nam2sym env) in 
+    let base_sym = mangle "global base" in
     let base     = Rtl.link base_sym target.Target.pointersize in (*XXX*)
     let env
        ,area
        ,digest   = globals env target base (F.globals env) in
-    let mangle   = Asm.mangle (F.nam2sym env) in 
     let digest   = mangle (String.escaped digest) in
     let asm      = Asm.init () in
     let asm      = asm ++ Asm.section (target.Target.data_section)

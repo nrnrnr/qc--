@@ -1,0 +1,63 @@
+
+
+% ------------------------------------------------------------------ 
+\section{Control-Flow Graph Utilities}
+% ------------------------------------------------------------------ 
+
+The \module{cfg3} module provides the essential functionality for
+control-flow graphs ({\cfg}s). In order to separate essential
+functionality from nice-to-have functionality this module provides
+additional functions on {\cfg}s whose implementation do not require
+knowledge of the internal details of \module{cfg3}.
+
+\begin{quote}\it
+    As the number of functions grows it might be useful to organize them
+    in sub-modules, similar to module \module{rtlutil}. --CL
+\end{quote}
+
+<<cfgutil.mli>>=
+type cfg  = Cfg3.cfg
+type node = Cfg3.node
+
+val fold_fwd:   cfg -> (node -> 'a -> 'a) -> 'a -> 'a (* req: enumerated cfg *) 
+val fold_bwd:   cfg -> (node -> 'a -> 'a) -> 'a -> 'a (* req: enumerated cfg *)
+val subst:      cfg -> (Rtl.rtl -> Rtl.rtl) -> unit
+@
+
+\begin{itemize}
+\item [[fold_fwd]], [[fold_bwd]]: work as their counterparts in [[Cfg3]]
+      except that they cover the entire {\cfg}. Note, that the [[cfg]]'s
+      nodes must be enumerated.
+
+\item [[subst]] substitutes {\rtl}s in all nodes of a [[cfg]].       
+\end{itemize}
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+No surprises here.
+
+<<cfgutil.ml>>=
+module G  = Cfg3
+type cfg  = G.cfg
+type node = G.node
+@
+
+The [[G.fold]] functions use open intervals to specify a region to fold
+over.  
+
+<<cfgutil.ml>>=
+let first cfg = G.number (G.first cfg)     (* smallest number *)
+let limit cfg = G.number (G.last  cfg) + 1 (* highest number + 1 *)
+
+let fold_fwd cfg f zero = G.scan_fwd cfg (first cfg) (limit cfg) f zero
+let fold_bwd cfg f zero = G.scan_bwd cfg (first cfg) (limit cfg) f zero
+
+let subst cfg (f: Rtl.rtl -> Rtl.rtl) = 
+    fold_fwd cfg (fun node () -> G.set_rtl node f) () 
+@
+
+        
+
+
