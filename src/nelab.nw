@@ -684,10 +684,7 @@ let bind_section_labels env _ = unimp "section-label binding" in
 <<definitions of name-binding functions>>=
 let check_exports env _ = unimp "export checking" in
 @ 
-================================================================
-% ------------------------------------------------------------------ 
 \subsection{Translation of \texttt{stackdata} declarations, accumulating labels}
-% ------------------------------------------------------------------ 
 
 We process [[stackdata]] declarations to accumulate three results:
 \begin{quote}
@@ -712,6 +709,11 @@ let rec stackdata mem stacklabels' env ds = match ds with
       (fun mem stacklabels' env -> stackdata mem stacklabels' env ds) 
 @ 
 Any error flags the environment and continues.
+We don't really care if [[mem]] or [[stacklabels']] becomes bad in that case.
+
+A [[stackdatum]] declaration must respect some constraints:  (1)~no
+initialized data, (2)~no [[[]]] used as a size, (3)~an
+alignment must be a power of two. 
 <<definitions of stack-data procedures>>=
 and stackdatum mem stacklabels' env (r, d) k =
   let errorf fmt = Printf.kprintf
@@ -721,6 +723,67 @@ and stackdatum mem stacklabels' env (r, d) k =
       let loc = Memalloc.current mem in
       let env = F.bindv l (r, E.Ok (F.Label (F.Stack loc), pointerty)) env in
       k mem (loc :: stacklabels') env
+  | N.Align n when is2power n ->
+      k (Memalloc.align mem n) stacklabels' env
+  | N.Align n -> errorf "alignment %d is not a power of 2" n
+  | N.ReserveMem(ty,size,Some _) -> errorf "initialization not permitted for stackdata"
+  | N.ReserveMem(ty,A.DynSize,_) -> errorf "illegal size for stackdata"
+  | N.ReserveMem(ty,size,None) ->
+      unimp "memdecl check";
+      (match Type.evalTy env ty with
+      | E.Error -> k mem stacklabels' env
+      | E.Ok Types.Bool -> impossf "boolean type in abstract syntax"
+      | E.Ok (Types.Bits w) ->
+          let finish size =
+            if w mod memsize = 0 then
+              k (Memalloc.allocate mem (size * (w / memsize))) stacklabels' env
+            else
+              errorf "width %d of initialized data is not a multiple of memsize %d"
+                w memsize in
+          match size with 
+          | A.NoSize    -> finish 1 
+          | A.DynSize   -> impossf "dynamic memory size"
+          | A.FixSize e ->
+              match Const.evalExpr env e with
+              | E.Ok (bits, _) -> finish (Bits.U.to_int bits)
+              | E.Error        -> k mem stacklabels' (F.flagError env)
+      )
+  | N.Procedure _ -> impossf "nested procedures"
+  | N.SSpan (_, _, _) -> impossf "span in stackdata"
+@
+================================================================
+
+Global symbols are all those on the top level and section level.
+Additionally all labels for code inside procedures are also
+bound because they have global scope. When local symbols (inside a
+procedure) are bound, labels are bound a second time with a local scope
+in the environment. This helps to decide whether a symbol is local or
+global when it is accessed from inside a procedure.
+
+@
+A [[datum]] label is a [[F.Label(F.Data)]] when the datum belongs to a
+top-level datum, and a [[F.Label(F.Stack)]] when the datum belongs to
+a [[stackdatum]]. We thus have two functions: [[datum]] and [[stackdatum]].
+<<xxxdefinitions of name-binding functions>>=
+let data env ds =
+  <<definitions of data procedures>> in
+  data env in
+@ 
+<<definitions of data procedures>>=
+let rec data env ds = match ds with
+| [] -> env
+| d :: ds ->
+    datum mem stacklabels' env d
+      (fun mem stacklabels' env -> data mem stacklabels' env ds) 
+@ 
+Any error flags the environment and continues.
+<<definitions of data procedures>>=
+and datum (r, d) k =
+  let errorf fmt = Printf.kprintf
+      (fun s -> error r env s; k mem stacklabels' (F.flagError env)) fmt in
+  match d with
+  | N.Datalabel l ->
+      F.bindv l (r, (F.Label (F.data (F.symbol env l)), pointerty))
   | N.Align n ->
       k (Memalloc.align mem n) stacklabels' env
   | N.ReserveMem(ty,size,Some _) -> errorf "initialization not permitted for stackdata"
@@ -746,41 +809,6 @@ and stackdatum mem stacklabels' env (r, d) k =
       )
   | N.Procedure _ -> impossf "nested procedures"
   | N.SSpan (_, _, _) -> impossf "span in stackdata"
-@
-Global symbols are all those on the top level and section level.
-Additionally all labels for code inside procedures are also
-bound because they have global scope. When local symbols (inside a
-procedure) are bound, labels are bound a second time with a local scope
-in the environment. This helps to decide whether a symbol is local or
-global when it is accessed from inside a procedure.
-
-@
-A [[datum]] label is a [[F.Label(F.Data)]] when the datum belongs to a
-top-level datum, and a [[F.Label(F.Stack)]] when the datum belongs to
-a [[stackdatum]]. We thus have two functions: [[datum]] and [[stackdatum]].
-<<module Env>>=
-let rec datum r scope env = function
-    | A.DatumAt(x,r) -> E.catch' env (error r env) (datum r scope env) x
-    | A.Label(n)     ->
-        let sym    = F.symbol env n in
-        let ventry = (E.ematch (pointerTy env) 
-                     (fun p -> F.Label(F.Data sym),p)) in
-        F.bindv n (r,ventry) env
-    | _              -> env
-@
-The denotation of a [[stackdatum]] label includes the [[offset]] into its
-procedure's stack data. This offset is not yet known and will be added
-in a later phase.
-WHY CAN'T THE LOCATION BE COMPUTED SYMBOLICALLY NOW?
-THIS CHANGE WOULD SIMPLIFY THE DATA TYPE.
-<<module Env>>=
-let rec stackdatum r scope env = function
-    | A.DatumAt(x,r) -> E.catch' env (error r env) (stackdatum r scope env) x
-    | A.Label(n)     -> F.bindv n (r,
-                                (E.ematch (pointerTy env) 
-                                    (fun p ->  F.Label(F.Stack(None)),p)))
-                                env
-    | _              -> env
 @
 Continuations are local to procedures and thus they are only bound
 when in [[Local]] mode; labels have global scope, but are bound a
@@ -814,43 +842,6 @@ let rec stmt r scope env = function
 and arm r range scope env = function
     | A.ArmAt(x,r)      -> E.catch' env (error r env) (arm r range scope env) x
     | A.Case(ranges, ss)-> foldl (body r scope) env ss
-@
-We have two functions to deal with declarations:  [[gdecl]] for
-(global) declarations on the program and section level, and [[ldecl]]
-for declarations on the procedure level.  Declarations processed by
-[[gdecl]] always have global scope.  Some declarations on the (local)
-procedure level declare \emph{global} values.  Therefore, local
-declarations are processed when collection global ([[scope]] =
-[[Global]]) declarations.
-
-Imported values have global scope and thus must not be recorded when
-we are in a [[Local]] [[scope]].
-<<module Env>>=
-and ldecl r scope env = function
-    | A.DeclAt(x,r)    -> E.catch' env (error r env) (ldecl r scope env) x
-    | A.Import(ty,ii)  when scope=Global 
-                       -> imports r env ty ii
-    | A.Registers(rr)  when scope = Local
-                       -> foldl (register r scope) env rr
-    | _                -> env
-
-and gdecl r env = function
-    | A.DeclAt(x,r)    -> E.catch' env (error r env) (gdecl r env) x
-    | A.Import(ty,ii)  -> imports r env ty ii
-    | A.Registers(rr)  -> foldl (register r Global) env rr
-    | _                -> env
-@
-A \textit{body} is always local to procedure.  However, a body also
-contains names of global scope (labels, imports) and thus must be
-traversed to bind them.
-<<module Env>>=
-and body r scope env = function
-    | A.BodyAt(x, r) -> E.catch' env (error r env) (body r scope env) x
-    | A.DeclBody(d)  -> ldecl r scope env d 
-    | A.DataBody(dd) when scope = Local 
-                     -> foldl (stackdatum r scope) env dd 
-    | A.StmtBody(s)  -> stmt r scope env s
-    | _              -> env
 @
 A procedure opens a local scope:  the procedure's parameters and all
 local [[typedef]], [[const]], [[continuation]] belong to the local
@@ -916,7 +907,7 @@ report it but continue to check the rest of a program.
 @
 Alignments must be a power of two.  This predicates is true, iff its
 argument is a positive power of two.
-<<Check auxiliaries>>=
+<<auxiliaries>>=
 let is2power x = x > 0 && x land (x - 1) = 0
 @
 
@@ -1056,27 +1047,6 @@ let memdecl env ty size init_exprs =
         | t, None  , _            -> env
         )
 @
-A [[stackdatum]] declaration must respect some constraints:  (1) no
-expressions to initialize memory, (2) no [[[]]] used as a size, (3) an
-alignment must be a power of two. 
-<<check>>=
-let rec stackdatum env = function
-    | A.DatumAt(x,r)            -> E.catch' (F.flagError env) (error r env) 
-                                      (stackdatum env) x
-    | A.Label(n) -> env
-    | A.Align(a) when not (is2power a) ->
-        E.error ("illegal alignment: " ^ string_of_int a)
-    | A.Align(a)                -> env 
-    | A.MemDecl(t,A.DynSize,_)  -> E.error ("illegal size for stack data")
-    | A.MemDecl(t,n,None)       -> 
-        let env = memdecl env t n None in
-            E.seq' env (memsize env n)
-            ( function 
-            | Some n -> env
-            | None   -> assert false        (* impossible *)
-            )
-    | A.MemDecl(t,n,_   )       -> 
-        E.error "no initial values allowed for stackdata"
 @
 Labels as part of memory data must not be processed because they have been
 already entered into the fat environment in a previous step. This leaves
