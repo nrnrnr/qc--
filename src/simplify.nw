@@ -279,7 +279,7 @@ let reg_offset = function
 let rec app o w args = match Safe.app o w args with
     | RP.App (("ne"|"eq"|"ltu"|"gtu"|"lt"|"gt" as op, w), [left;right]) as x ->
         ( match reg_offset left, reg_offset right with
-        | Some(r1,k1), Some(r2,k2) when r1 = r2 -> 
+        | Some(r1,k1), Some(r2,k2) when Register.eq r1 r2 -> 
             let r      = app op w [k1;k2] in
             let dbg () = Printf.eprintf "Simplify2.Unsafe.app: %s `%s` %s = %s\n"
                         (Rtlutil.ToString.exp (Rtl.Up.exp k1))
@@ -354,7 +354,7 @@ let rec add ws args =
 let sub ws args =
   let rec remove_one y xs = match xs with
   | [] -> Impossible.impossible "did not find removable expression"
-  | x :: xs when y = x -> xs
+  | x :: xs when RU.Eq.exp y x -> xs
   | x :: xs -> x :: remove_one y xs in
   let w = match ws with [w] -> w | _ -> Impossible.impossible "ill-typed sub" in
   match args with
@@ -365,7 +365,7 @@ let sub ws args =
     | [a]            -> a
     | []             -> RP.Const(RP.Bits(Bits.zero w))
     )
-  | [x; y] when x = y -> RP.Const(RP.Bits(Bits.zero w))
+  | [x; y] when RU.Eq.exp x y -> RP.Const(RP.Bits(Bits.zero w))
   | args      -> default "sub" ws args
 <<RTL operator implementations>>=
 let binop name w op = function

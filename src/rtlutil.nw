@@ -30,10 +30,17 @@ not readily available.
 val fetch : Rtl.loc -> Rtl.exp
 val store : Rtl.loc -> Rtl.exp -> Rtl.rtl
 @ 
-Calling [[space_eq]] avoids a possibly awkward use of the polymorphic
+% ------------------------------------------------------------------ 
+\subsection{Equality}
+% ------------------------------------------------------------------ 
+Calling [[space_eq]] or [[loc_eq]] avoids a possibly awkward use of the polymorphic
 equality.  (Awkward because one could compare a function.)
 <<rtlutil.mli>>=
-val space_eq : Rtl.space -> Rtl.space -> bool
+module Eq : sig
+  val space : Rtl.space       -> Rtl.space       -> bool
+  val loc   : Rtl.Private.loc -> Rtl.Private.loc -> bool
+  val exp   : Rtl.Private.exp -> Rtl.Private.exp -> bool
+end
 @ 
 % ------------------------------------------------------------------ 
 \subsection{Width}
@@ -1042,8 +1049,8 @@ module MayAlias = struct
         is_initialized_data l || is_initialized_data r
     | _ -> false
 
-  let with_mem s (R.C c) e = function  (* different stack slots don't alias *)
-    | RP.Mem (s', R.C c', e', _) ->
+  let with_mem (s,_,_) (R.C c) e = function  (* different stack slots don't alias *)
+    | RP.Mem ((s',_,_), R.C c', e', _) ->
         s = s' &&
         (match stack_slot e, stack_slot e' with
         | None,   Some _ -> not (is_initialized_data e)
@@ -1225,6 +1232,21 @@ module Fold = struct
 end 
 @ 
 <<rtlutil.ml>>=
-let space_eq  ((s:char), _, _)  ((s':char), _, _) = s = s'
+module Eq = struct
+let space  ((s:char), _, _)  ((s':char), _, _) = s = s'
 
+let rec loc l l' = match l, l' with
+| RP.Mem (sp,c,e,ass), RP.Mem (sp',c',e',ass') ->
+    space sp sp' && c = c' && exp e e' && ass = ass'
+| RP.Reg r, RP.Reg r' -> Register.eq r r'
+| RP.Var (_,i,_), RP.Var (_,i',_) -> i = i'
+| RP.Global (_,i,_), RP.Global (_,i',_) -> i = i'
+| RP.Slice (w,i,l), RP.Slice (w',i',l') -> w = w' && i = i' && loc l l'
+| _, _ -> false
+and exp e e' = match e, e' with
+| RP.Const c, RP.Const c' -> c = c'
+| RP.Fetch(l,w), RP.Fetch(l',w') -> w = w' && loc l l'
+| RP.App(op,es), RP.App(op',es') -> op = op' && List.for_all2 exp es es'
+| _, _ -> false
 
+end

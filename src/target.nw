@@ -306,9 +306,10 @@ The implementation does not hold any surprises. We use module [[Map]]
 to implement lookup tables for registers and calling conventions.
 
 <<target.ml>>=
-module R       = Rtl
-module S       = Space
-module RP      = Rtl.Private
+module R  = Rtl
+module S  = Space
+module RP = Rtl.Private
+module RU = Rtlutil
 <<type map>>
 <<type cc>>
 <<type t>>
@@ -318,7 +319,7 @@ let impossf fmt = Printf.kprintf Impossible.impossible fmt
 
 <<target.ml>>=
 let space t s = 
-  try List.find (fun x -> x.Space.space = s) t.spaces
+  try List.find (fun x -> RU.Eq.space x.Space.space s) t.spaces
   with Not_found ->
     let (s, _, _) = s in
     impossf "Space '%c' not found in target '%s'\n" s t.name
@@ -328,7 +329,7 @@ let is_tmp { spaces = spaces } =
   List.fold_right
     (fun s rest ->
       match s.Space.classification with
-      | Space.Temp _ -> (fun c -> c = s.Space.space || rest c)
+      | Space.Temp _ -> (fun c -> RU.Eq.space c s.Space.space || rest c)
       | _ -> rest)
     spaces
     (fun _ -> false)
@@ -354,12 +355,12 @@ let mk_reg_ix_map spaces =
 let space_fits tmp =
   match tmp.Space.classification with
   | Space.Temp {Space.stands_for=hw; Space.index_ok=locset} ->
-      fun (hw', idx, width) -> hw = hw' && locset idx
+      fun (hw', idx, width) -> RU.Eq.space hw hw' && locset idx
   | _ ->
       let (sp, _, _) = tmp.Space.space in
       impossf "space_fits called on non-temp of space '%c'" sp
 
 let fits t space =
   try
-    space_fits (List.find (fun s -> s.Space.space = space) t.spaces)
+    space_fits (List.find (fun s -> RU.Eq.space s.Space.space space) t.spaces)
   with Not_found -> assert false

@@ -61,9 +61,14 @@ end
 <<x86.ml>>=
 module R    = Rtl
 module RP   = Rtl.Private
+module RU   = Rtlutil
 module Up   = Rtl.Up
 module Down = Rtl.Dn
 module Rg   = X86regs
+
+let ( =$  ) = Register.eq
+let ( =/  ) = RU.Eq.loc
+let ( =// ) = RU.Eq.exp
 
 let dspace = ('d', Rtl.Identity, Cell.of_size 2)
 
@@ -202,7 +207,7 @@ let lostore ~addr ~src n assn =
 This code hasn't yet been checked for compatility with floating point.
 <<x86 postexpander>>=
 let move_rtl dst src = R.store (temploc dst) (tempval src) (tempwidth src)
-let move ~dst ~src   = if dst = src then [] else [move_rtl dst src]
+let move ~dst ~src   = if Register.eq dst src then [] else [move_rtl dst src]
 @ 
 Load immediate is also a simple move.
 <<x86 postexpander>>=
@@ -417,7 +422,7 @@ let don't_touch_me =
   | [ RP.Store (pc', _, _)
     ; RP.Store (RP.Reg sp, RP.App (("add", [32]), [RP.Fetch (RP.Reg sp2, _);
                                                       RP.Const (RP.Bits b)]), _)] ->
-      pc' = lowpc && sp = Rg.esp && sp2 = Rg.esp && Bits.S.to_int b = 4
+      pc' =/ lowpc && sp =$ Rg.esp && sp2 =$ Rg.esp && Bits.S.to_int b = 4
   | _ -> false
 @
 To implement the comparisons, we define new operators that are private

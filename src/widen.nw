@@ -76,6 +76,7 @@ val app_count : Rtl.rtl -> int
 <<widen.ml>>=
 module R = Rtl
 module RP = Rtl.Private
+module RU = Rtlutil
 
 module Down = Rtl.Dn
 module Up   = Rtl.Up
@@ -423,7 +424,7 @@ so [[redundant_given1]] throws away solutions that are essentially the
 same as a known solutions but with higher cost.
 <<comparable>>=
 let comparable a b =
-  ast a = ast b && width a = width b && fill a = fill b && a.m = b.m
+  RU.Eq.exp (ast a) (ast b) && width a = width b && fill a = fill b && a.m = b.m
 @ 
 
 \subsubsection{Width-changing and subtyping rules}
@@ -556,7 +557,7 @@ let widen_sigma m soln =
 <<applying rules>>=
 let widen_garbage m soln =
   if fill soln = G then
-    let w          = width soln in
+    let w         = width soln in
     let zx_widths = find_exts_from m w "zx" in
     let sx_widths = find_exts_from m w "sx" in
     let create fill' ext ws =

@@ -248,7 +248,7 @@ We have
 We solve for $\post k = k - k'$.
 <<supporting functions>>=
 let rec note_sp_changes rtl vfp k =
-  if RU.Exists.Loc.rtl ((=) sp) rtl then
+  if RU.Exists.Loc.rtl (RU.Eq.loc sp) rtl then
     let k' = find_k'_added_to_sp rtl in
     let post_k = k - k' in
     sp_plus post_k, post_k
@@ -257,7 +257,7 @@ let rec note_sp_changes rtl vfp k =
 and find_k'_added_to_sp (RP.Rtl ges) =
   let rec find found k' = function
     | [] -> k' (* could be zero if only assignment is guarded *)
-    | (RP.Const (RP.Bool b), RP.Store (sp', e, w)) :: ges when sp = sp' ->
+    | (RP.Const (RP.Bool b), RP.Store (sp', e, w)) :: ges when RU.Eq.loc sp sp' ->
         if not b then
           find found k' ges
         else if found then
@@ -265,22 +265,22 @@ and find_k'_added_to_sp (RP.Rtl ges) =
         else
           (match e with
           | RP.App (("add", [_]), [RP.Fetch(sp', _); RP.Const (RP.Bits k')])
-            when sp' = sp -> find true (Bits.S.to_int k') ges
+            when RU.Eq.loc sp' sp -> find true (Bits.S.to_int k') ges
           | RP.App (("add", [_]), [RP.Const (RP.Bits k'); RP.Fetch(sp', _)])
-            when sp' = sp -> find true (Bits.S.to_int k') ges
+            when RU.Eq.loc sp' sp -> find true (Bits.S.to_int k') ges
           | RP.App (("sub", [_]), [RP.Fetch(sp', _); RP.Const (RP.Bits k')])
-            when sp' = sp -> find true (- (Bits.S.to_int k')) ges
+            when RU.Eq.loc sp' sp -> find true (- (Bits.S.to_int k')) ges
           | RP.Fetch (sp', _)
-            when sp' = sp -> find true 0 ges
+            when RU.Eq.loc sp' sp -> find true 0 ges
 		  |	_ -> Printf.printf "illegal sp assignment: sp := %s\n" (RU.ToString.exp (Up.exp e)) ; 0)
 (* RRO temp
           | _ -> Impossible.impossible ("sp assigned other than sp + k: " ^
                                         RU.ToString.exp (Up.exp e)))
 *)
-    | (g, RP.Store (sp', e, w)) :: ges when sp = sp' ->
+    | (g, RP.Store (sp', e, w)) :: ges when RU.Eq.loc sp sp' ->
         Impossible.impossible ("assigned sp with nontrivial guard " ^
                                Rtlutil.ToString.exp (Rtl.Up.exp g))
-    | (g, RP.Kill sp') :: ges when sp = sp' -> 
+    | (g, RP.Kill sp') :: ges when RU.Eq.loc sp sp' -> 
         Impossible.impossible "killed sp"
     | _ :: ges -> find found k' ges in
   find false 0 ges

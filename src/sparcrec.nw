@@ -145,7 +145,7 @@ npcl: Reg('c',  1, w:int) {: () :}
 ccl:  Reg('c',  2, w:int) {: () :}
 spl:  Reg('r', 14, w:int) {: () :}
 fpl:  Reg('r', 30, w:int) {: () :}
-ral:  Reg('r', 15, w:int) {: () :}
+ral:  Reg('r', 31, w:int) {: () :}
 cwpl: Reg('k',  0, w:int) {: () :}
 
 pc:  Fetch(pcl,  w) {: () :}
@@ -460,7 +460,7 @@ inst : Save(x:pos, y:sp)
 
 -- increment register window and deallocate space on the stack
 restore: Store(cwpl, Add(cwp, one), w) {: () :}
-inst : Par(Return(), restore)
+inst : Par(Goto(ra), restore)
     {: (in_proc := false; "ret\n\trestore") :}
 
 -- branches
@@ -520,6 +520,56 @@ inst: Guarded(Sparcflt(cc), Goto(target))
 Why is this here?
 <<rules>>=
 inst : Nop() {: "! Why do you think there should be a nop? " :}
+@ 
+
+\paragraph{Diagnostic rules}
+<<rules>>=
+inst: any [100] {: "<" ^ any ^ ">" :}
+
+any : True  () {: "True"  :}
+any : False () {: "False" :}
+any : Link(symbol, w) {: "Link(" ^ symbol#mangled_text ^ "," ^ string_of_int w ^ ")" :}
+any : Late(string, w) {: "Late(" ^ string ^ "," ^ string_of_int w ^")" :}
+any : Diff(c1:any,c2:any) {: "Diff(" ^ c1 ^ "," ^ c2 ^ ")" :}
+any : Bits(bits)     {: sprintf "Bits(%s)" (Bits.to_string bits) :}
+
+any : Fetch (any, w) {: "Fetch(" ^ any ^ "," ^ string_of_int w ^ ")" :}
+
+any : And(x:any, y:any) {: "And(" ^ x ^ ", " ^ y ^ ")" :}
+any : Or(x:any, y:any)  {: "Or("  ^ x ^ ", " ^ y ^ ")" :}
+any : Xor(x:any, y:any) {: "Xor(" ^ x ^ ", " ^ y ^ ")" :}
+any : Com(x:any) {: "Com(" ^ x ^ ")" :}
+
+
+any : Add(x:any, y:any) {: "Add(" ^ x ^ ", " ^ y ^ ")" :}
+any : Mul(x:any, y:any) {: "Mul(" ^ x ^ ", " ^ y ^ ")" :}
+any : Fadd(x:any, y:any) {: sprintf "Fadd(%s, %s)" x y :}
+any : Fsub(x:any, y:any) {: sprintf "Fsub(%s, %s)" x y :}
+any : Fmul(x:any, y:any) {: sprintf "Fmul(%s, %s)" x y :}
+any : Fdiv(x:any, y:any) {: sprintf "Fdiv(%s, %s)" x y :}
+
+any : Fneg(any) {: sprintf "Fneg(%s)" any :}
+any : Fabs(any) {: sprintf "Fabs(%s)" any :}
+
+any : BitInsert(x:any, y:any, z:any) {: sprintf "BitInsert(%s, %s, %s)" x y z :}
+any : BitExtract(lsb:any, y:any, n:w) {: sprintf "BitExtract(%s, %s, %d)" lsb y n :}
+any : Slice(n:w, lsb:n, y:any) {: sprintf "Slice(%d, %d, %s)" n lsb y :}
+
+any : Sx(any) {: "Sx(" ^ any ^ ")" :}
+any : Zx(any) {: "Zx(" ^ any ^ ")" :}
+any : F2f(n:w, w, any) {: sprintf "F2f(%d, %d, %s)" n w any :}
+any : F2i(n:w, w, any) {: sprintf "F2i(%d, %d, %s)" n w any :}
+any : I2f(n:w, w, any) {: sprintf "I2f(%d, %d, %s)" n w any :}
+any : Lobits(any, w) {: "Lobits(" ^ any ^ ", " ^ string_of_int w ^ ")" :}
+any : Mem(any, w) {: "Mem(" ^any ^ ")" :}
+any : Reg  (char, n:int, w:int) {: sprintf "Reg(%s, %d)"   (Char.escaped char) n :}
+any : Store (dst:any, src:any, w)
+ {: "Store(" ^ dst ^ "," ^ src ^ "," ^ string_of_int w ^ ")" :}
+any : Kill(any) {: "Kill(" ^ any ^ ")" :}
+
+any : Guarded(guard:any, any) {: "Guarded(" ^ guard ^ "," ^ any ^ ")" :}
+any : Par(l:any, r:any) {: "Par(" ^ l ^ "," ^ r ^ ")" :}
+any : Goto(any) {: "Goto(" ^ any ^ ")" :}
 @ 
 
 \subsection{Interfacing {\rtl}s with the Expander}
@@ -638,13 +688,13 @@ we don't do the so-called ``leaf optimization''.
 <<code to follow the labeler>>=  
 and effect = function
   | RP.Store(RP.Reg(('c',_,_), i, c), r, _)
-    when (i = 1 (* i = npc *)) ->
-       if r = ra then conReturn () else conGoto (exp r)
+    when (i = 1 (* i = npc *)) -> conGoto (exp r)
 (*
   | RP.Store(RP.Reg('c',i, _), r, w)  -> error ("set $c["^string_of_int i^"]")
 *)
   | RP.Store(maybe_spl, RP.App(("add",_), [x;y]), _)
-    when (maybe_spl = spl && (x = sp || y = sp)) -> conSave (exp x) (exp y)
+    when (RU.Eq.loc maybe_spl spl && (RU.Eq.exp x sp || RU.Eq.exp y sp)) ->
+      conSave (exp x) (exp y)
   | RP.Store(l,e,w)                   -> conStore (loc l) (exp e) w
   | RP.Kill(l)                        -> unimp "sparc: kill effect"
 @

@@ -172,7 +172,7 @@ let vfp     = Vfp.mk wordsize
 
 let mcell = Cell.of_size 8
 let mspace = ('m', Rtl.BigEndian, mcell)
-let rspace = ('r', Rtl.Identity, Cell.of_size 32)
+let rspace = ('r', Rtl.BigEndian, Cell.of_size 32)
 let sspace = ('s', Rtl.Identity, Cell.of_size 64)
 let fspace = ('f', Rtl.Identity, Cell.of_size 32)
 let xspace = ('x', Rtl.Identity, Cell.of_size 64)
@@ -341,7 +341,8 @@ let move ~dst ~src =
       let addr   = R.app (R.opr "add" [32]) [rfetch sp; offset] in
       [ R.store (R.reg dst)   (R.fetch (mem w addr) w) w
       ; R.store (mem w addr) (rfetch src) w ]
-  | _, _ -> if src = dst then [] else [R.store (R.reg dst) (rfetch src) w]  
+  | _, _ -> if Register.eq src dst then []
+            else [R.store (R.reg dst) (rfetch src) w]  
 @ 
 
 <<SPARC postexpander>>=
@@ -538,8 +539,8 @@ let cut_to effs = [R.par (effects effs)]
 <<SPARC postexpander>>=
 let don't_touch_me =
   let stores_to_cwp = function
-    | RP.Store (RP.Reg maybe_cwp, _, _) when maybe_cwp = cwp -> true
-    | _                                                      -> false
+    | RP.Store (RP.Reg maybe_cwp, _, _) when Register.eq maybe_cwp cwp -> true
+    | _                                                                -> false
   in
   List.exists stores_to_cwp
 @ 

@@ -650,8 +650,8 @@ because we do not want to modify the cfg while traversing it.
 let cleanup cfg =
   let visit_node node rst =
     match get_copy_regs node with
-    | Some (r1,r2) when r1 = r2 -> node::rst
-    | _                         -> rst in
+    | Some (r1,r2) when Register.eq r1 r2 -> node::rst
+    | _                                   -> rst in
   List.iter (Cfgutil.delete cfg) (G.fold_nodes visit_node [] cfg) in
 @
 
@@ -850,7 +850,7 @@ name, not value, and one of the temps may be redefined and spilled, overwriting 
 other).
 <<choose\_register>>=
   let get_avail_reg ((state, map, a, c, h, av_not_lo) as s) t reg fail =
-    let split = List.partition ((=) reg) in
+    let split = List.partition (Register.eq reg) in
     match split a with
     | [r], rst -> (state, VM.add t (Reg r) map, rst, c, h, av_not_lo)
     | _   ->
@@ -866,7 +866,7 @@ other).
     match get_copy_regs node with
     | Some regs ->
       let (to_alloc, other) = order regs in
-      if to_alloc = t then
+      if Register.eq to_alloc t then
          ((*Printf.eprintf "allocating copy temp %s from %s\n" (printReg t) (printReg
                                                                            other);*)
           try let r = if is_tmp tgt other then choose_reg map other else other in

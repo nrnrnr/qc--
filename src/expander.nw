@@ -944,7 +944,7 @@ and to_stack' room e =
 <<rounding-mode checking>>=
 let rounding_mode = Down.loc proc.Proc.target.Target.rounding_mode in
 let is_not_rounding_mode arg = match arg with
-| RP.Fetch (loc, 2) -> loc <> rounding_mode
+| RP.Fetch (l, 2) -> not (RU.Eq.loc l rounding_mode)
 | _ -> true in
 <<junk>>=
 let insist_rounding_mode arg =
@@ -1071,7 +1071,7 @@ and expand_cbranch_rtl g left right w ktrue kfalse =
     let kfalse'    = G.node_labeled cfg (Idgen.label "conj_false") in
     G.set_succ kfalse' false_case;
     expand_cbranch_rtl x left right w ktrue kfalse'
-  | RP.App (cmp, ([x; y] as args)) when left = pc_lhs ->
+  | RP.App (cmp, ([x; y] as args)) when RU.Eq.loc left pc_lhs ->
       begin
         match Post.opclass cmp with
         | PX.Register ->
@@ -1145,7 +1145,7 @@ and assign_room room left right w =
   | RP.App (("f2f_implicit_round", ws), [x]) ->
       assign left (RP.App (("f2f", ws), [x; RP.Fetch(rounding_mode, 2)])) w
   | _ ->
-      if left = pc_lhs then  (* unconditional branch *)
+      if RU.Eq.loc left pc_lhs then  (* unconditional branch *)
         match right with
         | RP.Const c -> to_segment (Post.b c)
         | _ ->
@@ -1266,10 +1266,10 @@ shuffle.
 In all three cases, the guard had better be trivial.
 <<handle RTL with multiple effects [[effs]]>>=
 let has_pc_on_left = function
-  | RP.Store (pc, _, _) -> pc = pc_lhs
+  | RP.Store (pc, _, _) -> RU.Eq.loc pc pc_lhs
   | RP.Kill _ -> false in
 let has_pc_on_right = function
-  | RP.Store (_, e, _) -> RU.Exists.Loc.exp ((=) pc_rhs) e
+  | RP.Store (_, e, _) -> RU.Exists.Loc.exp (RU.Eq.loc pc_rhs) e
   | RP.Kill _ -> false in
 <<support for call, [[cut to]], and shuffle>>
 let effs = strip_trivial_guards effs in

@@ -440,11 +440,11 @@ let simplify_loc loc =
   let check w = if w mod wordsize <> 0 || w < 0 then
                    unimp (Printf.sprintf "unsupported size or alignment %d" w) in
   let is_vfp_offset e =
-    let rec exp e = if Up.exp e = vfp then true else match e with
+    let rec exp e = match e with
       | RP.Fetch (l,_)  -> loc l
       | RP.App (_,exps) -> List.fold_left (fun v e -> v || exp e) false exps
       | RP.Const _      -> false
-    and loc = function
+    and loc l = if Vfp.is_vfp l then true else match l with
       | RP.Mem   (_,_,e,_) -> exp e
       | RP.Slice (_,_,l)   -> loc l
       | _                  -> false in

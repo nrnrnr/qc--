@@ -141,7 +141,7 @@ let rec search_pairs list succ fail = match list with
                        (fun () -> search_pairs xs succ fail) in
 
 let subst1 (loc, e) rtl =
-  Simplify.rtl (RU.Subst.Fetch.rtl ~guard:((=) loc) ~fetch:(fun _ _ -> e) rtl) in
+  Simplify.rtl (RU.Subst.Fetch.rtl ~guard:(RU.Eq.loc loc) ~fetch:(fun _ _ -> e) rtl) in
 
 let subst2 (loc,e) (loc',e') rtl =
   Simplify.rtl (RU.Subst.Fetch.rtl ~guard:(fun l -> l = loc || l = loc')
@@ -183,7 +183,7 @@ let subst_one rtl avail succ fail =
   let is_some = function Some _ -> true | None -> false in
   let substitute loc =
     match Avail.in_loc avail loc with
-    | Some e -> RU.Subst.rhs_exp ~guard:((=) loc) ~map:(fun _ _ -> e) rtl
+    | Some e -> RU.Subst.rhs_exp ~guard:(RU.Eq.loc loc) ~map:(fun _ _ -> e) rtl
     | None -> Impossible.impossible "available location is not available?!" in
   let substitutable exp =
     RU.Find.Loc.exp (fun l -> is_some (Avail.in_loc avail l)) exp in
