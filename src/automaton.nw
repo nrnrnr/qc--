@@ -275,6 +275,23 @@ val is_hint  : string -> (string -> int -> bool)
 val is_width : int    -> (string -> int -> bool)
 val is_any   :           (string -> int -> bool)
 @ 
+\paragraph{Using an automaton as a stage}
+
+Although it is not necessary for calling conventions, we have found it
+convenient to abuse the abstraction by using an automaton [[inner]] as
+a stage in an [[outer]] automaton.
+The idea is to use [[as_stage inner]] as a stage.
+When this stage receives an allocation request, it passes the request
+to the [[inner]] automaton.  
+Thus [[as_stage inner]] behaves like an overflow block: it is the
+final stage in its automaton, and it has no successor.
+But when the [[outer]] automaton is frozen, it has no effect on the
+[[inner]] automaton, which can continue to satisfy allocation
+requests.
+<<automaton.mli>>=
+val as_stage : t -> stage
+@
+
 
 \paragraph{Exclusion and interference of registers}
 For the MIPS calling convention, we need additional goodies.
@@ -701,6 +718,19 @@ let argnoregs n regs = wrap (argnoregs n regs)
 let used = List.map regstring (RS.elements state.used) in
 Verbose.say 2 ["argnoregs automaton uses regs: "; String.concat ", " used; "\n"]
 @ 
+\paragraph{Using an automaton as a stage}
+
+To us an automaton as a stage, we pass on an allocation request but
+ignore a freeze request.
+<<automaton.ml>>=
+let as_stage inner next = 
+  fun ~start ->
+    let freeze regs mems =
+      { regs_used = regs; mems_used = mems;
+        overflow = Block.at start 0 0; align_state = 0; } in
+    { allocate = inner.allocate; freeze = freeze }
+let as_stage inner = swrap (as_stage inner)
+@
 \paragraph{Exclusion}
 <<automaton.ml>>=
 module Exclude = struct
