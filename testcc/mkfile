@@ -19,7 +19,7 @@ CC  =               cc
 
 ASM =               `ls -1 *.c-- | sed s'/\.c--/.s/'`
 
-all:V:              alpha-call x86-c-call
+all:V:              alpha-call x86-c-call mips-call
 asm:V:              $ASM
                     
 
@@ -36,6 +36,10 @@ alpha-call.sigs:    $QCC
 x86-c-call.sigs:    $QCC
                     t=$target
                     $QCC -e 'Debug.X86.c_proc_paths({32},{"int","float"})' > $t
+
+mips-call.sigs:     $QCC
+                    t=$target
+                    $QCC -e 'Debug.Mips.proc_paths({32},{"int"})' > $t
 
 #
 # Generate *.c-- files from one signature file. The test case generator
@@ -55,6 +59,9 @@ x86-c-call:V:       x86-c-call.sigs
                     $GEN -name=$target      -width=32 < $prereq
                     $GEN -name=$target-x -c -width=32 < $prereq
 
+mips-call:V:        mips-call.sigs
+                    $GEN -name=$target-x -c -width=32 < $prereq
+
 #
 # Compile *.c-- files to *.s code. Compilation depends on the desired
 # target.
@@ -65,6 +72,9 @@ x86%.s:             x86%.c--
 
 alpha%.s:           alpha%.c--                    
                     $QCC backend=Backend.alpha -S $prereq
+
+mips%.s:            mips%.c--
+                    $QCC backend=Backend.mips  -S $prereq
 
 alpha%.dbg:        alpha%.c--
                     $QCC backend=Backend.alpha  \
@@ -111,9 +121,20 @@ alpha.sh:V:
                     done   
                     ' > $target
 
-#
-# clean
-# 
+mips.sh:V:
+                    echo '
+                    set -x
+                    for f in mips-call-main-*.s; do
+                        cc $f 
+                        ./a.out
+                    done    
+                    
+                    for f in mips-call-x-main-*.s; do
+                        g=`echo $f | sed -e 's/main/callee/' -e 's/.s$/.c/'`
+                        cc $f $g 
+                        ./a.out
+                    done   
+                    ' > $target
 
 clean:V:
                     rm -f *.c--
@@ -123,6 +144,7 @@ clean:V:
                     rm -f *.sigs
                     rm -f a.out
                     rm -f alpha.sh
+                    rm -f *.dbg
 
 clobber:V:          clean
-
+                    
