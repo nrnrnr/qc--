@@ -30,7 +30,6 @@ clean:
 nuke:
 	    rm -f *~ include/*~
 	    for i in lib/regexp lib/bio lib/9 src; do (cd $$i; make nuke); done
-	    rm -f *.tat.gz
 
 FILE    :=  "mk-$(VERSION)"
 
@@ -38,9 +37,11 @@ FILE    :=  "mk-$(VERSION)"
 # to include everything, excpet derived files which are indentified by
 # patterns.
 
-export:
-	    ln -s . $(FILE)
-	    tar czvhf $(FILE).tar.gz		\
+tar:		$(FILE).tar.gz
+
+$(FILE).tar.gz:
+		ln -s . $(FILE)
+		tar czvhf $(FILE).tar.gz	\
 		`find .                         \
 			\( -name 'CVS' -type d	\
 			\) -prune		\
@@ -57,6 +58,9 @@ export:
 			\) -prune               \
 			-o -print               \
 			| sed "s|./|$(FILE)/|"`
-	    rm -f $(FILE)		
+		rm -f $(FILE)		
 
+www:		$(FILE).tar.gz
+		cp $(HOME)/../cminusminus/www/download
 
+	
