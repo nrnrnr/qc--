@@ -98,12 +98,13 @@ LINE =          '# %L "%F"%N'
 OCAMLTANGLE =   'for f in $target; do $NOTANGLE -L"$LINE" -R$f $prereq | $CPIF $f; done'
 MISCTANGLE  =   'for f in $target; do $NOTANGLE -R$f $prereq | $CPIF $f; done'
 
+HTML =          `echo *.nw       | sed 's/\.nw/.html/g;'`
+
 %.inc:          %.nw
                 $NOWEAVE -delay -index -autodefs ocaml $prereq > $target
 
-%.html:         %.tex
-                hevea $stem.hva $stem.tex || true
-                $TIDY -f /dev/null -imc $stem.html || true
+%.html:         %.nw
+                $NOWEAVE -delay -index -autodefs ocaml -html -filter l2h $prereq > $target
 
 %.dvi:          %.tex
                 $LATEX "\\scrollmode \\input $stem.tex"
@@ -116,6 +117,12 @@ MISCTANGLE  =   'for f in $target; do $NOTANGLE -R$f $prereq | $CPIF $f; done'
 
 %.ps:           %.dvi
                 dvips -Ppdf -o $target $prereq
+
+$NAME.dvi:      main.inc ast.inc parser.inc
+
+dvi:V:          $NAME.dvi
+ps:V:           $NAME.ps
+html:V:         $HTML
 
 # ------------------------------------------------------------------  
 # sources generated from noweb sources
@@ -147,13 +154,6 @@ ast.inc:        ast.nw
 # documentation
 # ------------------------------------------------------------------  
 
-$NAME.html      \
-$NAME.dvi:      main.inc ast.inc parser.inc
-
-
-html:V:         $NAME.html
-dvi:V:          $NAME.dvi
-ps:V:           $NAME.ps
 
 
 
