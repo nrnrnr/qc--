@@ -67,7 +67,10 @@ end
 @
 
 Register allocation may benefit from knowing whether an {\rtl} represents a
-move instruction.
+move instruction. [[singleAssignment]] returns a source and destination
+register pair if the input {\rtl} consists of a single, unconditional
+assignment with any number of unconditional kills. If the {\rtl} has a
+different form, [[singleAssignment]] returns [[None]].
 
 <<rtlutil.mli>>=
 module RTLType: sig
@@ -238,8 +241,6 @@ let exp map rtl =
 
 
 <<RTLType>>=
-(* first fn find _uncond_ store; separate fn to find unconditional kills;
-   explicitly use kill instead of _; a; *)
 let singleAssignment rtl =
     let rec firstAssignment rtls = match rtls with
     | [] -> (None, [])

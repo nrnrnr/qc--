@@ -188,10 +188,8 @@ let rec runProgram arg cfg = function
 
 
 <<error types>>=
-type 'a error = SError of string * string * string
-              | MissingInput of string
-              | MissingState of string
-              | MismatchedParams of string * string list * 'a action list
+type 'a aerror = Arg  of string option * string option * 'a action
+               | Live of string * 'a action
 @
 
 
@@ -293,11 +291,8 @@ are the same as When\_Do.
 this traversal.
 
 <<state checking>>=
-type newerror = Arg  of string option * string option * V.value action
-              | Live of string * V.value action
-
 module ErrorMod = struct
-    type t = newerror
+    type t = error
     let compare = compare
 end
 module ES = Set.Make(ErrorMod)
@@ -454,7 +449,8 @@ module Make (T1 : Lua.Lib.TYPEVIEW with type 'a t = 'a t')
 combined) =
       struct
         module V = Interp.V
-<<state checking>>
+		type error = V.value aerror
+		<<state checking>>
         <<backplane builtins>>
 
         type state = Interp.V.state
@@ -655,36 +651,25 @@ let rec printAction indent =
         let newIndent = indent ^ (makeIndent (String.length text)) in
             text ^ printAction newIndent action ^ ")"
 
-let printError indent =
+
+let printError err =
+	let printOpt opt = match opt with
+		| None -> "Nil"
+		| Some a -> noIndent ^ a in
     let identity x y = x ^ y in
     let error text = "Error: " ^ text
-    in function
-    | SError (errorFn, destroyingFn, var) ->
-        error ("Variable " ^ var ^ " used by " ^ errorFn ^
-               " was destroyed by " ^ destroyingFn ^ ".\n")
-    | MissingInput var ->
-        error ("Program expects the input variable: " ^ var ^ ".\n")
-    | MissingState var ->
-        error ("Program expects the input state: " ^ var ^ ".\n")
-    | MismatchedParams (fnName, formals, actuals) ->
-        let showFormals = printList indent ", " identity in
-        let showActuals = printList indent ", " printAction in
-            "Error: Function " ^ fnName ^ " expects arguments: " ^
-            (showFormals formals) ^ " but received: " ^
-            (showActuals actuals) ^ ".\n"
-
-(*
-let printNewError indent  =
-    let identity x = x in
-    let error text = "Error: " ^ text in
-	function
-	| 
+	in
+		match err with
+		| Arg (formal, actual, action) ->
+			error ("Cannot convert actual argument " ^ (printOpt actual) ^
+                   " to formal argument " ^ (printOpt formal) ^ " in action\n" ^
+				   (printAction noIndent action))
+		| Live (prop, action) -> 
+			error ("State property " ^ prop ^
+				   " that is used in a future stage is destroyed by action\n" ^
+				   (printAction noIndent action))
 
 
-
-type newerror = Arg  of string option * string option * V.value action
-              | Live of string * V.value action
-*)
 @
 
 

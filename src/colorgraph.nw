@@ -60,6 +60,14 @@ module G = Cfg3
 
 module Cheats = struct
 	let spill _ = assert false
+	let fold_fwd g = Cfg3.scan_fwd g (Cfg3.number (Cfg3.first g))
+                                     (Cfg3.number (Cfg3.last g) + 1)
+	let register_count _ = 15
+	let makeReg i = 'r', i, 32
+	let possibleColors _ = List.map makeReg [1;2;3;4;5;6;7;8;9;10;11;12;13;14;15]
+		
+
+	(* Not really cheats anymore.... *)
 
 	let source node =
 		match Rtlutil.RTLType.singleAssignment (G.rtl node) with
@@ -79,56 +87,48 @@ module Cheats = struct
 		match Rtlutil.RTLType.singleAssignment (G.rtl node) with
 		| Some ((s1,_,_), (s2,_,_)) -> s1 = s2
 		| None -> false
-	let fold_fwd g = Cfg3.scan_fwd g (Cfg3.number (Cfg3.first g))
-                                     (Cfg3.number (Cfg3.last g) + 1)
-	let register_count _ = 15
-	let makeReg i = 'r', i, 32
-	let possibleColors _ = List.map makeReg [1;2;3;4;5;6;7;8;9;10;11;12;13;14;15]
-		
 end
 
 
-    type regt = Register.t
-    module CompareRegPair = struct
-        type t = regt * regt
-        let compare = compare
-    end
-    module RegPairSet = Set.Make(CompareRegPair)
-    module CompareMoves = struct
-        type t = G.node
-        let compare = compare
-    end
-    module MS = Set.Make(CompareMoves)
-    module RM = Register.Map
-    module RS = Register.Set
+module CompareRegPair = struct
+	type t = Register.t * Register.t
+	let compare = compare
+end
+module RegPairSet = Set.Make(CompareRegPair)
+module CompareMoves = struct
+	type t = G.node
+	let compare = compare
+end
+module MS = Set.Make(CompareMoves)
+module RM = Register.Map
+module RS = Register.Set
 
 module LI       = Live.Make(G)
 
-type temp = int
 type move = G.node
 type color = Register.t
-type colorGraph = {mutable adjSet : RegPairSet.t
-                  ;mutable adjListMap : Register.t list RM.t
-                  ;mutable degreeMap : int RM.t
-                  ;mutable moveListMap : G.node list RM.t
-                  ;mutable aliasMap : Register.t RM.t
-                  ;mutable colorMap : color RM.t
-                  ;mutable precolored : Register.t list
-                  ;mutable initial : Register.t list
-                  ;mutable spills : Register.t list
-                  ;mutable simplifyWorklist : Register.t list
-                  ;mutable freezeWorklist : Register.t list
-                  ;mutable spillWorklist : Register.t list
-                  ;mutable spilledNodes : Register.t list
-                  ;mutable coalescedNodes : Register.t list
-                  ;mutable coloredNodes : Register.t list
-                  ;mutable selectStack : Register.t list
-                  ;mutable coalescedMoves : move list
-                  ;mutable constrainedMoves : move list
-                  ;mutable frozenMoves : move list
-                  ;mutable worklistMoves : move list
-                  ;mutable activeMoves : move list
-                  ;        k : int
+type colorGraph = { mutable adjSet : RegPairSet.t
+                  ; mutable adjListMap : Register.t list RM.t
+                  ; mutable degreeMap : int RM.t
+                  ; mutable moveListMap : G.node list RM.t
+                  ; mutable aliasMap : Register.t RM.t
+                  ; mutable colorMap : color RM.t
+                  ; mutable precolored : Register.t list
+                  ; mutable initial : Register.t list
+                  ; mutable spills : Register.t list
+                  ; mutable simplifyWorklist : Register.t list
+                  ; mutable freezeWorklist : Register.t list
+                  ; mutable spillWorklist : Register.t list
+                  ; mutable spilledNodes : Register.t list
+                  ; mutable coalescedNodes : Register.t list
+                  ; mutable coloredNodes : Register.t list
+                  ; mutable selectStack : Register.t list
+                  ; mutable coalescedMoves : move list
+                  ; mutable constrainedMoves : move list
+                  ; mutable frozenMoves : move list
+                  ; mutable worklistMoves : move list
+                  ; mutable activeMoves : move list
+                  ;         k : int
                   }
 @
 
@@ -160,36 +160,33 @@ procedure Main()\\
 \end{quote}
 
 
-A loose translation into our control flow language:
-
 <<color graph algorithm>>=
-let initInfo = {adjSet = RegPairSet.empty
-               ;adjListMap = RM.empty
-               ;degreeMap = RM.empty
-               ;moveListMap = RM.empty
-               ;aliasMap = RM.empty
-               ;colorMap = RM.empty
-               ;precolored = []
-               ;initial = []
-               ;spills = []
-               ;simplifyWorklist = []
-               ;freezeWorklist = []
-               ;spillWorklist = []
-               ;spilledNodes = []
-               ;coalescedNodes = []
-               ;coloredNodes = []
-               ;selectStack = []
-               ;coalescedMoves = []
-               ;constrainedMoves = []
-               ;frozenMoves = []
-               ;worklistMoves = []
-               ;activeMoves = []
-               ;k = Cheats.register_count ()
+let initInfo = { adjSet = RegPairSet.empty
+               ; adjListMap = RM.empty
+               ; degreeMap = RM.empty
+               ; moveListMap = RM.empty
+               ; aliasMap = RM.empty
+               ; colorMap = RM.empty
+               ; precolored = []
+               ; initial = []
+               ; spills = []
+               ; simplifyWorklist = []
+               ; freezeWorklist = []
+               ; spillWorklist = []
+               ; spilledNodes = []
+               ; coalescedNodes = []
+               ; coloredNodes = []
+               ; selectStack = []
+               ; coalescedMoves = []
+               ; constrainedMoves = []
+               ; frozenMoves = []
+               ; worklistMoves = []
+               ; activeMoves = []
+               ; k = Cheats.register_count ()
                }
 
 
-let haveSpilledNodes param _ =
-match T2'.map.V.project param with
+let haveSpilledNodes param _ = match T2'.map.V.project param with
     | CGInfo cg -> not (empty cg.spilledNodes)
 
 let haveSpilledNodesStage = { Backplane.name = "haveSpilledNodes"
