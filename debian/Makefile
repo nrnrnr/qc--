@@ -34,7 +34,7 @@ install: bin/qc--.opt man/man1/qc--.1 man/man1/qc--internals.1
 
 debian:	mkfile
 	dch -v `date +%Y%m%d` "nightly build"
-	dpkg-buildpackage -us -uc -rfakeroot -e lindig@eecs.harvard.edu
+	dpkg-buildpackage -us -uc -rfakeroot -elindig@eecs.harvard.edu
 
 distclean: mkfile
 	mk clobber
