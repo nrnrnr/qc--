@@ -197,6 +197,26 @@ let zero = function
     | [Bits(x);Bits(y)] -> Bits(B.zero (B.width x))
     | _                 -> assert false
 
+let ii2i op = function (* int x int -> int *)
+    | [Bits(x);Bits(y)] -> let wx = Bits.width x      in
+                           let wy = Bits.width y      in
+                           let x  = Bits.S.to_int64 x in
+                           let y  = Bits.S.to_int64 y in
+                           let _  = assert (wx = wy)  in 
+                               Bits (Bits.S.of_int64 (op x y) wx)
+    | _                 -> assert false
+
+let ii2b op = function (* int x int -> bool *)
+    | [Bits(x);Bits(y)] -> let wx = Bits.width x      in
+                           let wy = Bits.width y      in
+                           let x  = Bits.S.to_int64 x in
+                           let y  = Bits.S.to_int64 y in
+                           let _  = assert (wx = wy)  in 
+                               Bool (op x y)
+    | _                 -> assert false
+
+
+
 let neg = function
     | [Bits(x)]     -> Bits(B.zero (B.width x))
     | _             -> assert false
@@ -206,15 +226,15 @@ let true' = function
     | _                 -> assert false
 
 let ops = Strutil.assoc2map
-    [  "add"    , (zero  )
-    ;  "sub"    , (zero  )
-    ;  "div"    , (zero  )
+    [  "add"    , (ii2i Int64.add)
+    ;  "sub"    , (ii2i Int64.sub)
+    ;  "div"    , (ii2i Int64.div)
+    ;  "mul"    , (ii2i Int64.mul)
     ;  "neg"    , (neg   )
-    ;  "mult"   , (zero  )
     ;  "shl"    , (zero  )
     ;  "shra"   , (zero  )
     ;  "shrl"   , (zero  )
-    ;  "eq"     , (true' )
+    ;  "eq"     , (ii2b (=))
     ;  "zx"     , (zero  )
     ]
 

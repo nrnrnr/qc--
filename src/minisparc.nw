@@ -82,14 +82,32 @@ val stf : reg -> address -> t
 val xor : reg -> reg_or_imm -> reg -> t
 @
 
+The functions below allow to load late compile-time constants into a
+register, similar to [[imode]] and [[sethi]]. The generated {\rtl}s do
+\emph{not} represent machine instructions, but rely on a later
+substitution step. Once the late compile-time constants in the generated
+{\rtl}s are substituted by bit vectors \emph{and} constant expressions
+are simplified, the {\rtl}s again represent machine instructions and
+should be recognized by the decoder.
+
+<<S>>=
+type late =     Rtl.exp  (* must be a Late value *)
+val lmode       : late -> reg_or_imm
+val sethi_late  : late -> reg -> t
+@
+
+
 % ------------------------------------------------------------------ 
-\subsection{Enocoder Implementation}
+\subsection{Encoder Implementation}
 % ------------------------------------------------------------------ 
 
 
 <<msparcenc.ml>>=
 <<module types>>
 module R  = Rtl
+module RP = Rtl.Private
+module D  = Rtl.Convert (* Down *)
+module U  = Rtl.Revert  (* Up   *)
 module NI = Nativeint
 module Mk(Reloc: Sledlib.RELOCATABLE with type symbol = Reladdr.symbol) = 
     struct 
@@ -121,7 +139,7 @@ let r0   = r NI.zero
 @
 
 % ------------------------------------------------------------------ 
-\subsection{Encoder: Adressing Modes}
+\subsection{Encoder: Addressing Modes}
 % ------------------------------------------------------------------ 
 
 <<Mk Encoder>>=
@@ -136,7 +154,7 @@ let check_simm13 simm13 =
    
 let imode simm13 = 
     ( check_simm13 simm13     
-    ; Rtl.bits (Bitops.sx (Bits.U.of_native simm13 13) 32) 32
+    ; Rtl.bits (Bitops.sx (Bits.S.of_native simm13 13) 32) 32
     )
 
 let rmode rs2     = Rtl.fetch rs2 32
@@ -412,6 +430,35 @@ let stf fd address =
 let xor rs1 reg_or_imm rd = 
     Rtl.store rd (Rtl.app (Rtl.opr "xor" [32]) 
       [Rtl.fetch rs1 32; reg_or_imm]) 32
+@
+
+Below is the code for late compile-time constants. The generated {\rtl}s
+do \emph{not} represent machine instructions. After the embedded late
+compile-time constants are replaced by bit vectors, and after constant
+folding, the repective {\rtl} should be equivalent to {\rtl}s created by
+[[imode]] and [[sethi]].
+
+<<Mk Encoder>>=
+type late = Rtl.exp
+
+let is_late32 late =
+    match D.exp late with
+    | RP.Const(RP.Late(_,32)) -> true
+    | _                       -> false
+    
+let lmode late  = 
+    let ()        = assert (is_late32 late) in
+    let sx13  x   = Rtl.app (Rtl.opr "sx"  [32;13]) [x] in
+    let and32 x y = Rtl.app (Rtl.opr "and" [32]) [x;y]  in
+    let lo x      = and32 x (Rtl.bits (Bits.U.of_int 0b1111111111 32) 32) in
+        (sx13 (lo late))
+    
+let sethi_late late rd =
+    let ()        = assert (is_late32 late) in
+    let hi x      = Rtl.app (Rtl.opr "shrl" [32]) 
+                        [x; Rtl.bits (Bits.U.of_int 10 32) 32] in
+    let and32 x y = Rtl.app (Rtl.opr "and" [32]) in
+        Rtl.store rd (hi late) 32   (* good enough? *)
 @
 
 

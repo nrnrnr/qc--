@@ -1,4 +1,5 @@
 % -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% vim: ts=8 et sw=4:
 
 \input{../config/macros.tex}
 
@@ -33,6 +34,9 @@ registers and memory to pass values can be modeled with finite state
 automata.  The automaton receives a stream of enriched {\PAL} types
 and the automaton responds for each data type with a register-like
 location that the parameter is passed in.
+
+\emph{Did a cut--copy--paste error bring here the next paragraph? It
+seems only remotely related. -- CL}
 
 Memory used for parameter passing can be shared by all calls inside a
 procedure because it is never used by two calls at the same time.  The
@@ -71,20 +75,28 @@ run, the automaton returns abstract locations [[loc]].  The type
 abbreviations for alignment, width, and size are only for
 documentation purposes.
 
-\begin{quote}\it
-    The class types behind [[spec]], [[t]], and [[loc]] must be exposed.
-    Otherwise a specification for an automaton can only specified here
-    and target specific knowledge would spread out of the
-    [[Targets]] module to here. -- CL 
-\end{quote}
+We have not yet developed a sense what might be good constructor
+functions for an automaton specification. To avoid that we can specify
+(target specific) automata only here, I expose the class types
+[[location]] and [[automaton]] for types that we rather keep completely
+abstract. Now automata can be defined by the targets that they belong
+to.
 
 <<automaton.mli>>=
-type spec  (* specification of an automaton (immutable) *)
-type t     (* an automaton (mutable) *)
-type loc   (* a location provided by an automaton *)
+class type location = object
+    method fetch:   (*width*) int -> Rtl.exp
+    method store:   Rtl.exp -> (*width*) int -> Rtl.rtl
+    method to_loc:  Rtl.loc
+end
 
-val dummy:  spec    (* calling convention dummy automaton *)
-val global: spec    (* global variable    dummy automaton *)
+class type automaton = object
+    method ty:      (*width*) int -> (*hint*) (string option) -> location
+    method freeze:  unit -> Area.t
+end
+
+type spec = Rtl.exp -> automaton    (* should be abstract *)
+type loc  = location                (* should be abstract *)
+type t    = automaton               (* should be abstract *)
 @
 
 Supply an address of the overflow area, and get back an automaton in
@@ -126,6 +138,9 @@ val to_loc : loc -> Rtl.loc
 val of_loc : Rtl.loc -> loc
 @
 
+When an automaton [[t]] is frozen, it responds with the memory [[area]]
+that it used for locations it handed out.
+
 <<automaton.mli>>=
 val freeze : t -> Area.t
 @
@@ -166,131 +181,14 @@ implementations for [[mk]], [[ty]] and so forth just pass their
 arguments to the objects at hand.
 
 <<automaton.ml>>=
-let mk spec ~address  = spec address
-let ty t ~width ~hint = t#ty width hint
-let freeze t          = t#freeze ()
+let mk spec ~address     = spec address
+let ty t ~width ~hint    = t#ty width hint
+let freeze t             = t#freeze ()
 
 let fetch loc ~width      = loc#fetch width
 let store loc expr ~width = loc#store expr width
 let to_loc loc            = loc#to_loc
+let of_loc loc            = Impossible.unimp "Automaton.of_rtl_loc"
 @
 
-As a first implementation we provide an automaton that puts everything
-in memory, using the [[Area]] building block. 
 
-<<automaton.ml>>=
-module Dummy = struct
-    <<Dummy struct>>
-end
-
-let dummy  = new Dummy.dummy 
-let global = new Dummy.global
-
-let of_loc loc            = Dummy.of_rtl_loc loc
-@
-
-% ------------------------------------------------------------------ 
-\subsection{Dummy Automaton}
-% ------------------------------------------------------------------ 
-
-The [[Dummy]] module makes some assumptions about the current
-architecture and implements an automaton that provides word size aligned
-locations in memory. 
-
-\begin{quote}\it
-    This needs a review. I'm not sure about alignments and widths. --CL
-
-    As noted above, the interface needs to be changed such that the
-    automaton for a target can be defined outside this module. For the
-    time beeing, I will duplicate some target specific knowledge here.
-    -- CL
-\end{quote}
-
-<<Dummy struct>>=
-let byteorder           = Rtl.BigEndian
-let wordsize            = 32
-let pointersize         = 32
-let memsize             = 8
-let memspace            = ('m':Rtl.space)
-@
-
-The [[dummyloc]] class represents an address in [[memspace]] that is
-made of [[memsize]] cells, aggregated in [[byteorder]].  The width of
-the data stored there is variant.
-
-<<Dummy struct>>=
-class dummyloc (loc:Rtl.loc): location =
-object
-    val _loc   = loc
-    
-    method store expr width = Rtl.store _loc expr width 
-    method fetch width      = Rtl.fetch _loc width
-    method to_loc           = _loc
-end
-
-let memloc addr w = 
-    new dummyloc (Rtl.cell Rtl.none memspace byteorder w addr)
-
-    
-let const n width = Rtl.bits (Bits.U.of_int n width) width
-let fpcond n      = Rtl.cell Rtl.none 'd' Rtl.Identity  2 (const n 2)
-    
-let hwloc = function
-    | "IEEE 754 rounding modes"         -> new dummyloc (fpcond 0)
-    | "IEEE 754 rounding mode"          -> new dummyloc (fpcond 0)
-    | "IEEE 754 comparison results"     -> new dummyloc (fpcond 1)
-    | r             -> Error.error ("unknown hardware register "^r) 
-    
-let named_registers =
-  [ "IEEE 754 rounding modes",     fpcond 0
-  ; "IEEE 754 rounding mode",      fpcond 0
-  ; "IEEE 754 comparison results", fpcond 1
-  ] 
-    
-
-let of_rtl_loc loc = 
-    new dummyloc loc
-
-class dummy (base:Rtl.exp): automaton =
-object (self)
-    val mutable _area   = Area.align (Area.mk base) (wordsize/memsize)
-    val mutable _frozen = false
-    
-    method freeze ()       =
-        let _ = _frozen <- true in
-            Area.freeze _area 
-    
-    method ty  width  hint = 
-        let _     = assert (_frozen = false)           in
-        (* assertions above *)
-        let n     = max (width / memsize) 1            in (* how many cells*)
-        let addr  = Area.location _area                in
-        let align = wordsize / memsize                 in
-        let ()    = _area <- Area.alloc _area n        in (* allocate ..*)
-        let ()    = _area <- Area.align _area align in (* and align  *)
-            memloc addr width
-end
-
-class global (base:Rtl.exp): automaton =
-object (self)
-    val mutable _area   = Area.align (Area.mk base) (wordsize/memsize)
-    val mutable _frozen = false
-    
-    method freeze ()       =
-        let _ = _frozen <- true in
-            Area.freeze _area 
-    
-    method ty width hint = 
-        let _     = assert (_frozen = false)           in
-        (* assertions above *)
-        match hint with 
-        | None ->
-            let n     = max (width / memsize) 1            in 
-            let addr  = Area.location _area                in
-            let align = wordsize / memsize                 in
-            let ()    = _area <- Area.alloc _area n        in 
-            let ()    = _area <- Area.align _area align in 
-                memloc addr width
-        | Some x -> hwloc x          
-end
-@

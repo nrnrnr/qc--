@@ -11,10 +11,29 @@ supports.
 <<targets.mli>>=
 val dummy : Target2.t 
 val sparc : Target2.t
+@
 
+The targets are exported to Lua. When the following module is initalized
+at program startup, the targets become global values and in the Lua
+interpreter. 
+
+\begin{quote}
+    \begin{tabular}{ll}
+        \bf O'Caml value & \bf Lua value \\
+        \hline
+        [[dummy]]        & [[Targets.dummy]]\\
+        [[sparc]]        & [[Targets.sparc]]\\
+    \end{tabular}
+\end{quote}
+
+<<targets.mli>>=
 module MakeLib  (TargetV : Lua.Lib.TYPEVIEW with type 'a t = Target2.t)
     : Lua.Lib.TYPEFUL with type 'a combined = 'a TargetV.combined 
 @ 
+
+In principle it would be good enough to export targets only to Lua.
+However, the [[dummy]] target is used as model for the {\PAL} assembly
+output and must be visible in {\ocaml}. 
 
 % ------------------------------------------------------------------ 
 \subsection{Implementation}
@@ -51,7 +70,8 @@ end
 let sparc = SparcTarget.target
 @
 
-All targets are exported as Lua values. 
+All targets are exported as Lua values. The [[register_module]] function
+creates a new name space [[Targets]] if it does not yet exist.
 
 <<targets.ml>>=
 module MakeLib  (TargetV : Lua.Lib.TYPEVIEW with type 'a t = Target2.t)
@@ -74,6 +94,10 @@ end
 % ------------------------------------------------------------------ 
 \subsection{Target-independent Utilities}
 % ------------------------------------------------------------------ 
+
+A target description is a collection of lists and maps. The [[StrUtil]]
+and [[CharUtil]] functions provide [[lookup]] and [[list2map]] to work
+with them.
 
 <<target-independent utilities>>=
 module StrMap  = Map.Make(struct type t=string let compare=compare end)
@@ -135,6 +159,16 @@ end
 % ------------------------------------------------------------------ 
 
 <<DummyTarget>>=
+let memsize       = 8
+let wordsize      = 32
+let pointersize   = 32
+let const n width = Rtl.bits (Bits.U.of_int n width) width
+let fpcond n      = Rtl.cell Rtl.none 'd' Rtl.Identity  2 (const n 2)
+let reg n         = Rtl.cell Rtl.none 'r' Rtl.Identity 32 (const n 5)
+let pc            = Rtl.cell Rtl.none 'c' Rtl.Identity 32 (const 0 1)
+let mem addr      = Rtl.cell Rtl.none 'm' Rtl.LittleEndian 32 addr
+let assign loc e  = Rtl.store loc e (Rtlutil.Width.exp e)       
+
 let spaces = 
     [     { S.space = 'r'
           ; S.cellwidth   = 32
@@ -242,21 +276,6 @@ let spaces =
 
     ]     
 
-let const n width = Rtl.bits (Bits.U.of_int n width) width
-let fpcond n      = Rtl.cell Rtl.none 'd' Rtl.Identity  2 (const n 2)
-let reg n         = Rtl.cell Rtl.none 'r' Rtl.Identity 32 (const n 5)
-let pc            = Rtl.cell Rtl.none 'c' Rtl.Identity 32 (const 0 1)
-let mem addr      = Rtl.cell Rtl.none 'm' Rtl.LittleEndian 32 addr
-let assign loc e  = Rtl.store loc e (Rtlutil.Width.exp e)       
-
-    
-let named_registers =
-  [ "IEEE 754 rounding modes",     fpcond 0
-  ; "IEEE 754 comparison results", fpcond 1
-  ] 
-    
-
-
 (* this is total nonsense - it's just for toying around *)
 
 let goto_embed e     = assign pc e
@@ -281,13 +300,81 @@ let branch =
     { embed   = branch_embed
     ; project = branch_project
     }
+@
 
+Each target includes at least five automata that encapsulate important
+target-specific resource allocation policies. In a calling convention
+three automata had out location for paramter passing. The fourth
+automaton controls how global variables in a {\PAL} program are assigned
+to hardware registers, and a fifth automaton provides spill slots for
+the register allocator.
+
+Until the [[Automaton]] module provides constructor functions for these
+automata, we use the class based approach that is in its place for now.
+
+An [[Automaton.location]] captures a potentially complex location
+returned by an automaton. In our case such a location is basically an
+{\rtl} cell.
+
+<<DummyTarget>>=
+class loc (loc:Rtl.loc): Automaton.location =
+object
+    val _loc   = loc
+    
+    method store expr width = Rtl.store _loc expr width 
+    method fetch width      = Rtl.fetch _loc width
+    method to_loc           = _loc
+end
+@
+
+The [[simple]] automaton is a toy that we use for all purposes. All
+location it hands out are in memory, except when a hardware register is
+explicitly requested.
+
+<<DummyTarget>>=
+class simple (base:Rtl.exp): Automaton.automaton =
+object (this)
+    val mutable _area   = Area.align (Area.mk base) (wordsize/memsize)
+    val mutable _frozen = false
+    
+    method freeze ()       =
+        let _ = _frozen <- true in
+            Area.freeze _area 
+    
+    method private memloc addr w = 
+        new loc (Rtl.cell Rtl.none 'm' Rtl.BigEndian w addr)
+    
+    method private hardware hint = match hint with 
+    | "IEEE 754 rounding modes"         -> new loc (fpcond 0)
+    | "IEEE 754 rounding mode"          -> new loc (fpcond 0)
+    | "IEEE 754 comparison results"     -> new loc (fpcond 1)
+    | r     -> Impossible.impossible ("unknown hardware register "^r) 
+    
+    method ty width hint = 
+        let _     = assert (_frozen = false)           in
+        (* assertions above *)
+        match hint with 
+        | None ->
+            let n     = max (width / memsize) 1            in 
+            let addr  = Area.location _area                in
+            let align = wordsize / memsize                 in
+            let ()    = _area <- Area.alloc _area n        in 
+            let ()    = _area <- Area.align _area align in 
+                this#memloc addr width
+        | Some x -> this#hardware x          
+end
+@
+
+The [[cc]] value describes a calling convention. It is just a toy and
+probably is not good for anything.
+
+<<DummyTarget>>=
 let cc =
     { T.sp              = reg 31
     ; T.return          = assign pc (R.fetch (mem (R.fetch (reg 31) 32)) 32)
-    ; T.proc            = Automaton.dummy
-    ; T.cont            = Automaton.dummy
-    ; T.ret             = Automaton.dummy
+    ; T.proc            = new simple
+    ; T.cont            = new simple
+    ; T.ret             = new simple
     ; T.allocatable     = List.concat 
                             [ List.map (fun n -> ('r',n,32)) [1;2;3]
                             ; List.map (fun n -> ('f',n,32)) [1;2;3]
@@ -297,6 +384,7 @@ let cc =
  
 @
 
+Finally, this is the complete description of the [[Dummy]] target.
 
 <<DummyTarget>>=
 let target = 
@@ -307,11 +395,7 @@ let target =
     ; T.memsize         = 8
     ; T.float           = "ieee754"
     ; T.charset         = "latin1"
-    ; T.globals         = Automaton.global
-    (* registers: this is never used. The information is part of the
-       T.globals automaton. We must change the targets definition. See
-       automaton.nw *)
-    ; T.register        = StrUtil.lookup (StrUtil.list2map named_registers)
+    ; T.globals         = new simple
     ; T.goto            = goto
     ; T.jump            = goto
     ; T.cutto           = goto
@@ -323,7 +407,7 @@ let target =
     ; T.spill           = Spill.spill
     ; T.reload          = Spill.reload
     ; T.data_section    = "data"
-    ; T.stack_slots     = Automaton.dummy
+    ; T.stack_slots     = new simple
     }
 @ 
 
@@ -331,9 +415,15 @@ let target =
 \subsection{Sparc Target}
 % ------------------------------------------------------------------ 
 
+The target description of the Sparc is pretty similar to the one for the
+Dummy above. There are probably some mistakes here.
 
 
 <<SparcTarget>>=
+let memsize       = 8
+let wordsize      = 32
+let pointersize   = 32
+
 let spaces = 
     [     { S.space = 'r'
           ; S.cellwidth   = 32
@@ -406,6 +496,58 @@ let spaces =
 
     ]      
 @
+Here is our automaton for resource allocation. It now is similar to the
+one for Dummy but will diverge from it once we become more realistic.
+
+An [[Automaton.location]] captures a potentially complex location
+returned by an automaton. In our case such a location is basically an
+{\rtl} cell.
+
+<<SparcTarget>>=
+class loc (loc:Rtl.loc): Automaton.location =
+object
+    val _loc   = loc
+    
+    method store expr width = Rtl.store _loc expr width 
+    method fetch width      = Rtl.fetch _loc width
+    method to_loc           = _loc
+end
+@
+
+The [[simple]] automaton is a toy that we use for all purposes. All
+location it hands out are in memory, except when a hardware register is
+explicitly requested.
+
+<<SparcTarget>>=
+class simple (base:Rtl.exp): Automaton.automaton =
+object (this)
+    val mutable _area   = Area.align (Area.mk base) (wordsize/memsize)
+    val mutable _frozen = false
+    
+    method freeze ()       =
+        let _ = _frozen <- true in
+            Area.freeze _area 
+    
+    method private memloc addr w = 
+        new loc (Rtl.cell Rtl.none 'm' Rtl.BigEndian w addr)
+    
+    method private hardware hint = match hint with 
+    | r     -> Impossible.impossible ("unknown hardware register "^r) 
+    
+    method ty width hint = 
+        let _     = assert (_frozen = false)           in
+        (* assertions above *)
+        match hint with 
+        | None ->
+            let n     = max (width / memsize) 1            in 
+            let addr  = Area.location _area                in
+            let align = wordsize / memsize                 in
+            let ()    = _area <- Area.alloc _area n        in 
+            let ()    = _area <- Area.align _area align in 
+                this#memloc addr width
+        | Some x -> this#hardware x          
+end
+@
 
 The following functions encode special {\rtl}s and must be recognized by
 the code expander as such. It is not important that these {\rtl}s
@@ -464,9 +606,9 @@ let cc =
     { T.sp              = sp
     ; T.return          = special 'R' false' 
                             (R.bits (Bits.U.of_int 12345 32) 32)
-    ; T.proc            = Automaton.dummy
-    ; T.cont            = Automaton.dummy
-    ; T.ret             = Automaton.dummy
+    ; T.proc            = new simple
+    ; T.cont            = new simple
+    ; T.ret             = new simple
     ; T.allocatable     = List.concat 
                             [ List.map (fun n -> ('r',n,32)) [3;4;5]
                             ; List.map (fun n -> ('f',n,32)) [1;2;3]
@@ -481,8 +623,7 @@ let target =
     ; T.memsize         = 8
     ; T.float           = "ieee754"
     ; T.charset         = "latin1"
-    ; T.globals         = Automaton.dummy
-    ; T.register        = StrUtil.lookup StrMap.empty (* no registers *)
+    ; T.globals         = new simple
     ; T.goto            = goto
     ; T.jump            = jump
     ; T.cutto           = cutto
@@ -494,7 +635,7 @@ let target =
     ; T.spill           = Spill.spill
     ; T.reload          = Spill.reload
     ; T.data_section    = "data"
-    ; T.stack_slots     = Automaton.dummy
+    ; T.stack_slots     = new simple
     }
 @ 
 
