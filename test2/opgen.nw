@@ -1,0 +1,258 @@
+% -*- mode: Noweb; noweb-code-mode: c-mode -*-
+<<opgen.c>>=
+#include <stdio.h>
+#include <stdlib.h>
+#include <assert.h>
+
+#define MEMSIZE(E) (sizeof(E) / sizeof(char))
+#define BITSIZE(E) (8 * MEMSIZE(E))
+#define W BITSIZE(unsigned)
+
+static void emit_array(const char *name, void *p, int n);
+
+main(int argc, char *argv[]) {
+  int i, count;
+  unsigned *x, *xlim, *y, *ylim, *z, *zlim;
+  int uniq = 1;
+#define POINTERS(TY) TY *TY##px, *TY##py, *TY##pz;
+  POINTERS(unsigned)  POINTERS(int) POINTERS(float) POINTERS(double)
+  <<set [[count]] or exit, according to [[argc]] and [[argv]]>>
+  <<allocate $x$, $y$, and $z$ arrays and set variables from [[count]]>>
+  <<emit target definitions>>
+  printf("import printf; export main;\n");
+  printf("bits2 rm = \"IEEE 754 rounding mode\";\n");
+  <<fill $x$ and $y$ arrays with random bits>>
+  printf("section \"data\" {\n");
+  <<emit initialized data for $x$ and $y$ arrays>>
+  <<emit initialized data for results for each operator>>
+  <<emit printf format specifiers>>
+  printf("}\n\n");
+  <<emit comparison function>>;
+  return 0;
+}
+@ 
+<<set [[count]] or exit, according to [[argc]] and [[argv]]>>=
+switch(argc) {
+  case 1: count = 100; break;
+  case 2: count = atoi(argv[1]); break;
+  default:
+    fprintf(stderr, "Usage: %s [count]\n", argv[0]);
+    exit(1);
+}
+@ 
+<<allocate $x$, $y$, and $z$ arrays and set variables from [[count]]>>=
+x = malloc(sizeof(*x) * count);
+y = malloc(sizeof(*y) * count);
+z = malloc(sizeof(*z) * count);
+assert(x != NULL && y != NULL && z != NULL);
+xlim = x + count;
+ylim = y + count;
+zlim = z + count;
+@ 
+<<emit target definitions>>=
+{ unsigned face = 0xffaaccee;
+  switch(*(unsigned char *)&face) {
+  case 0xff: printf("target byteorder big "); break;
+  case 0xee: printf("target byteorder little "); break;
+  default: assert(0);
+  }
+  printf("wordsize %d pointersize %d;\n", W, W);
+}
+@ 
+<<fill $x$ and $y$ arrays with random bits>>=
+{   FILE *rand = fopen("/dev/urandom", "r");
+    int n;
+    if (!rand) {
+      perror("Cannot open /dev/urandom --- need a Linux box?");
+      exit(1);
+    }
+    n = fread(x, sizeof(*x), count, rand);
+    assert(n == count);
+    n = fread(y, sizeof(*y), count, rand);
+    assert(n == count);
+    fclose(rand);  
+}
+<<emit initialized data for $x$ and $y$ arrays>>=
+emit_array("x", x, count);
+emit_array("y", y, count);
+<<opgen.c>>=
+static void emit_array(const char *name, void *p, int n) {
+  int i;
+  printf("  %s: bits%d[%d] {", name, W, n);
+  for (i = 0; i < n; i++) {
+    if (i % 5 == 0) printf("\n    ");
+    printf("0x%08x, ", ((unsigned *)p)[i]);
+  }
+  printf("\n  };\n");
+}
+@ 
+<<emit initialized data for results for each operator>>=
+#define binr(TY, OP, OPNAME, ANAME, R)                      \
+  for (TY##px = (TY*)x, TY##py = (TY*)y, TY##pz = (TY*)z;               \
+       TY##px < (TY*)xlim && TY##py < (TY*)ylim && TY##pz < (TY*)zlim;  \
+       TY##px++, TY##py++, TY##pz++)                        \
+  *TY##pz = *TY##px OP (R);                                 \
+  emit_array(ANAME, z, (TY *)zlim - (TY *)z);   \
+  printf("  %s.fmt: bits8[] \"failed test: %%%%%s(0x%%08x, 0x%%08x) == 0x%%08x (expected 0x%%08x)\\n\\0\";\n", ANAME, OPNAME);
+#define binur(OP, OPNAME, ANAME, R) binr(unsigned, OP, OPNAME, ANAME, R)
+#define binu(OP, OPNAME)  binur(OP, OPNAME, OPNAME "u", *unsignedpy)
+#define binf(OP, OPNAME)  binr(float, OP, OPNAME, OPNAME "f", *floatpy)
+#define bini(OP, OPNAME)  binr(int, OP, OPNAME, OPNAME "i", *intpy)
+#define binu16(OP, OPNAME)  binur(OP, OPNAME, OPNAME "u16", *unsignedpy & 0xffff)
+#define bini16(OP, OPNAME)  binr(int, OP, OPNAME, OPNAME "i16", *intpy & 0xffff)
+#define shiftu(OP, OPNAME) binur(OP, OPNAME, OPNAME "u", *unsignedpy & 0x1f)
+#define shifti(OP, OPNAME) binr(int, OP, OPNAME, OPNAME "i", *intpy & 0x1f)
+#define infixu(OP, OPNAME) /* do nothing */
+#define infix_cmpu(OP, OPNAME) /* do nothing */
+#define cmpu(OP, OPNAME) binu(OP, OPNAME)
+#define cmpi(OP, OPNAME) bini(OP, OPNAME)
+  <<operator-macro applications>>
+#undef binr
+#undef binur
+#undef binu
+#undef binf
+#undef bini
+#undef binu16
+#undef bini16
+#undef shiftu
+#undef shifti
+#undef infixu
+#undef infix_cmpu
+#undef cmpu
+#undef cmpi
+@ 
+<<operator-macro applications>>=
+binu(+, "add");
+binu(-, "sub");
+binu(/, "divu");
+binu16(/, "divu");
+binu(%, "modu");
+binu16(%, "modu");
+binu(*, "mul");
+binu(&, "and");
+binu(|, "or");
+binu(^, "xor");
+shiftu(<<, "shl");
+shiftu(>>, "shrl");
+shifti(>>, "shra");
+bini(+, "add");
+bini(-, "sub");
+bini(/, "quot");
+bini(%, "rem");
+bini16(/, "quot");
+bini16(%, "rem");
+bini(&, "and");
+bini(|, "or");
+bini(^, "xor");
+binf(+, "fadd");
+binf(-, "fsub");
+binf(/, "fdiv");
+binf(*, "fmul");
+infixu(/, "divu");
+infixu(%, "modu"); // unimplemented
+// infixu(*, "mulu"); // confusion about mult. ops
+infixu(+, "add");
+infixu(-, "sub");
+infixu(>>, "shrl");
+infixu(<<, "shl");
+infixu(&, "and");
+infixu(|, "or");
+infixu(^, "xor");
+cmpu(==, "eq");
+cmpu(!=, "ne");
+cmpu(<, "ltu");
+cmpu(>, "gtu");
+cmpu(<=, "leu");
+cmpu(>=, "geu");
+cmpi(==, "eq");
+cmpi(!=, "ne");
+cmpi(<, "lt");
+cmpi(>, "gt");
+cmpi(<=, "le");
+cmpi(>=, "ge");
+infix_cmpu(==, "eq");
+infix_cmpu(!=, "ne");
+infix_cmpu(<, "ltu");
+infix_cmpu(>, "gtu");
+infix_cmpu(<=, "leu");
+infix_cmpu(>=, "geu");
+@   
+<<emit comparison function>>=
+#define binap(TY, OP, OPNAME, ANAME, APP, RP)                                        \
+  printf("  i = 0;\n");                                                              \
+  printf("  L.%s.%d:\n", ANAME, ++uniq);                                             \
+  APP; \
+  printf("  if (%sz != bits%d[%s+i]) {\n", #TY, BITSIZE(TY), ANAME);                 \
+  printf("    foreign \"C\" printf(\"address\" %s.fmt,\n\tbits%d[x+i], " RP ", %sz, " \
+         "bits%d[%s+i]);\n",                                                         \
+         ANAME, BITSIZE(TY), BITSIZE(TY), #TY, BITSIZE(TY), ANAME);                  \
+  printf("    failed = failed + 1;\n");                                              \
+  printf("  }\n");                                                                   \
+  printf("  i = i + %d;\n", MEMSIZE(TY));                                            \
+  printf("  if (i < %d) { goto L.%s.%d; }\n", count * MEMSIZE(TY), ANAME, uniq);     \
+
+#define binrp(TY, OP, OPNAME, ANAME, R, RP) \
+  binap(TY, OP, OPNAME, ANAME, \
+    printf("  %sz = %%%s(bits%d[x+i], " R ");\n", #TY, OPNAME,                       \
+         BITSIZE(TY), BITSIZE(TY)), RP)
+
+#define infix(TY, OP, OPNAME, ANAME, R) \
+  binap(TY, OP, OPNAME, ANAME, \
+    printf("  %sz = bits%d[x+i] %s " R ";\n", #TY,                       \
+         BITSIZE(TY), #OP, BITSIZE(TY)), R)
+
+#define cmp(TY, OP, OPNAME, ANAME) \
+  binap(TY, OP, OPNAME, ANAME, \
+    printf("  if (%%%s(bits%d[x+i], bits%d[y+i])) { %sz = 1; } else { %sz = 0; };\n", \
+           OPNAME, BITSIZE(TY), BITSIZE(TY), #TY, #TY), "bits%d[y+y]")
+
+#define infix_cmp(TY, OP, OPNAME, ANAME) \
+  binap(TY, OP, OPNAME, ANAME, \
+    printf("  if (bits%d[x+i] %s bits%d[y+i]) { %sz = 1; } else { %sz = 0; };\n", \
+           BITSIZE(TY), #OP, BITSIZE(TY), #TY, #TY), "bits%d[y+y]")
+
+#define infix_cmpu(OP, OPNAME) infix_cmp(unsigned, OP, OPNAME, OPNAME "u")
+
+#define cmpu(OP, OPNAME) cmp(unsigned, OP, OPNAME, OPNAME "u")
+#define cmpi(OP, OPNAME) cmp(int, OP, OPNAME, OPNAME "i")
+
+#define binr(TY, OP, OPNAME, ANAME, R) binrp(TY, OP, OPNAME, ANAME, R, R)
+
+#define binur(OP, OPNAME, ANAME, R) binr(unsigned, OP, OPNAME, ANAME, R)
+#define binu(OP, OPNAME)  binur(OP, OPNAME, OPNAME "u", "bits%d[y+i]")
+#define infixu(OP, OPNAME)  infix(unsigned, OP, OPNAME, OPNAME "u", "bits%d[y+i]")
+#define binf(OP, OPNAME)  \
+    binrp(float, OP, OPNAME, OPNAME "f", "bits%d[y+i], rm", "bits%d[y+i]")
+#define bini(OP, OPNAME)  binr(int, OP, OPNAME, OPNAME "i", "bits%d[y+i]")
+#define shiftu(OP, OPNAME) binur(OP, OPNAME, OPNAME "u", "bits%d[y+i] & 0x1f")
+#define shifti(OP, OPNAME) binr(int, OP, OPNAME, OPNAME "i", "bits%d[y+i] & 0x1f")
+#define binu16(OP, OPNAME)  binur(OP, OPNAME, OPNAME "u16", "bits%d[y+i] & 0xffff")
+#define bini16(OP, OPNAME)  binr(int, OP, OPNAME, OPNAME "i16", "bits%d[y+i] & 0xffff")
+  printf("foreign \"C\" main(bits%d argc, \"address\" bits%d argv) {\n", W, W);
+#define TEMP(TY)  printf("  bits%d %sz;\n", BITSIZE(TY), #TY)
+  TEMP(unsigned); TEMP(int); TEMP(float); TEMP(double);
+  printf("  bits%d i, failed;\n", W);
+  printf("  failed = 0;\n");
+  <<operator-macro applications>>
+  printf("  if (failed > 0) {\n");
+  printf("    foreign \"C\" printf (\"address\" failed.fmt, failed);\n");
+  printf("  } else {\n");
+  printf("    foreign \"C\" printf (\"address\" passed.fmt);\n");
+  printf("  }\n");
+  printf("  foreign \"C\" return (0);\n");
+  printf("}\n");
+#undef binr
+#undef binur
+#undef binu
+#undef binf
+#undef bini
+#undef binu16
+#undef shiftu
+<<emit printf format specifiers>>=
+printf("  failed.fmt: bits8[] \"%s\";\n", "failed %d tests\\n\\0");
+printf("  passed.fmt: bits8[] \"%s\";\n", "passed all tests\\n\\0");
+@ 
+
+
+
+  
