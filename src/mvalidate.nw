@@ -1,0 +1,55 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+\section{RTL Validation}
+
+<<mvalidate.mli>>=
+val validate : ('a, 'b) Target.t -> Rtl.rtl -> string option
+@ 
+
+<<mvalidate.ml>>=
+module RP = Rtl.Private
+module Down = Rtl.Dn
+module Up   = Rtl.Up
+@ 
+
+Check that all operators are at widths no larger than those supported
+by the target.
+<<mvalidate.ml>>=
+exception RTLRejected of string
+let validate t r =
+  let m  = t.Target.machine_env.Target.ops in
+  let w  = t.Target.wordsize in
+  let ns = t.Target.machine_env.Target.literal in
+  let rec loc = function
+    | RP.Mem(_,_,n,e,_) -> exp e (* not clear what else to do *)
+    | RP.Reg(_,_,n)     -> List.mem n ns
+    | RP.Var(_,_,n)     -> n <= w
+    | RP.Global(_,_,n)  -> true  (* what to check here? *)
+    | RP.Slice(w,_,l)   -> true  (* what to check here? *)
+  and exp = function
+    | RP.Fetch(l, n) -> loc l && n <= w
+    | RP.App((opname, ws), es) ->
+        List.for_all exp es
+          (* && lookup op name, ws <= target list *)
+    | RP.Const c -> const c
+  and const = function
+    | RP.Link(_,_,n) -> List.exists (fun w -> n <= w) ns
+    | RP.Diff(x,y)   -> const x && const y
+    | RP.Late(_,n)   -> List.exists (fun w -> n <= w) ns
+    | RP.Bits b      -> Bits.width b <= w
+    | RP.Bool _      -> true
+  in
+  let check (g, eff) =
+    let eff' =
+      match eff with
+      | RP.Store(l, r, w) -> loc l && exp r
+      | RP.Kill l -> loc l
+    in
+    eff' && exp g
+  in
+  let RP.Rtl es = Down.rtl r in
+  try
+    (List.for_all check es; None)
+  with RTLRejected s -> Some s
+@ 
+
