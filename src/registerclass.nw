@@ -23,99 +23,68 @@ $alias(C_1) \subset alias(C_2)$?
 \cap alias(class_{n2}) \neq \emptyset\] 
 \end{itemize}
 
-<<exported types>>=
+<<register class interface>>=
 module type REGISTERCLASS = sig
-  type t
-  val alias: t -> t -> t
-  val alias_eq: t -> t -> t -> bool
-  val alias_contained: t -> t -> t -> bool
-  val intersection: t -> t -> t
-  val eq: t -> t -> bool
+  type t = Register.Set.t
+  val is_empty: t -> bool
+  val aliases: t -> t
+  val alias_eq: t -> t -> bool
+  val alias_contained:  t -> t -> bool
   val may_alias: t -> t -> bool
-  val fromList: Register.Set.elt list -> t
-  val mkClass: Rtl.space -> ('a, 'b) Target.t -> Register.t list -> t
-  val isEmpty: t -> bool
+  val inter: t -> t -> t
+  val eq: t -> t -> bool
   val to_string: t -> string
   val cardinal: t -> int
+  val mkClass: Rtl.space -> ('a, 'b) Target.t -> t
+  val init: Register.t list -> unit
 end
 
-module RegisterClass : REGISTERCLASS 
 @
 
 <<register classes>>=
-module type REGISTERCLASS = sig
-  type t
-  val alias: t -> t -> t
-  val alias_eq: t -> t -> t -> bool
-  val alias_contained: t -> t -> t -> bool
-  val intersection: t -> t -> t
-  val eq: t -> t -> bool
-  val may_alias: t -> t -> bool
-  val fromList: Register.Set.elt list -> t
-  val mkClass: Rtl.space -> ('a, 'b) Target.t -> Register.t list -> t
-  val isEmpty: t -> bool
-  val to_string: t -> string
-  val cardinal: t -> int
-end
 
 module RegisterClass:REGISTERCLASS = struct
-   type t = RS.t 
-
-   let aliases c1 allregs = 
-       let regToAliases reg = RS.filter (RU.MayAlias.regs reg) allregs in
-       RS.fold (fun reg set -> RS.union (regToAliases reg) set) c1 RS.empty
-   
-   let alias c1 allRegs = aliases c1 allRegs
-   
-   let alias_eq c1 c2 allRegs = RS.equal (alias c1 allRegs) (alias c2 allRegs)
-   
-   let alias_contained c1 c2 allRegs = RS.subset (alias c1 allRegs) 
-                                                 (alias c2 allRegs)
-   
-  let isEmpty = RS.is_empty
-  let intersection c1 c2 = RS.inter c1 c2
+  type t = RS.t 
+  let is_empty = RS.is_empty
+  let inter c1 c2 = RS.inter c1 c2
   let eq c1 c2 = RS.equal c1 c2
-@
-
-(Smith Ramsey Holloway 04) Since we define [[aliases]] to determine an alias 
-set given a universe of registers to consider, [[may_alias]] can be simplified
-from 
-\[
-alias(class_{n1}) \cap class_{n2} \neq \emptyset \  \vee \ 
-class_{n1} \cap alias(class_{n2}) \neq \emptyset
-\] 
-to
-\[
-\mathit{aliases}(class_{n1}, class_{n2}) \neq \emptyset \  \vee \ 
-\mathit{aliases}(class_{n2}, class_{n1}) \neq \emptyset
-\]
-(Double check with yourself that this is indeed equivalent)
-
-<<register classes>>=
-let may_alias c1 c2 = 
-    let a1 = aliases c1 c2 in
-    let a2 = aliases c2 c1 in
-    if Debug.on "colorgraph" then begin
-      Printf.eprintf "alias %s given %s = %s\n" (RS.to_string c1)(RS.to_string c2)
-      (if eq RS.empty a1 then "empty" else (RS.to_string a1))  ;
-      Printf.eprintf "alias %s given %s = %s\n" (RS.to_string c2)(RS.to_string c1) 
-      (if eq RS.empty a2 then "empty" else (RS.to_string a2));
-      not (RS.is_empty a1) || not (RS.is_empty a2)
-    end else
-      not (RS.is_empty a1) || not (RS.is_empty a2)
-  
-  let mkClass space target allRegs = 
-    List.fold_left 
-      (fun set reg -> if Target.fits target space reg then 
-        RS.add reg set 
-      else set)
-      RS.empty allRegs
-      
-  let fromList l = List.fold_left (fun set reg -> RS.add reg set) RS.empty l
   let to_string = RS.to_string
   let cardinal = RS.cardinal
-end
+@
 
+We need to keep around the universe of registers.  Sigh.
+
+<<register classes>>=        
+  
+  let fromList l = List.fold_left (fun set reg -> RS.add reg set) RS.empty l      
+  let all_regs = ref RS.empty 
+  let init allregs = 
+    all_regs := List.fold_left (fun set reg -> RS.add reg set) RS.empty allregs
+@ 
+
+To get the aliases for one class, filter the global set of registers on
+whether or not there is a register in [[c]] that aliases.  This does result
+in scanning the register class set [[c]] quite a bit, but I think it should
+be better than creating several mostly equal sets (the set of registers
+that alias with each register in the class) and then unioning them.
+
+<<register classes>>=        
+
+  let aliases c = 
+    let alias_filter reg = RS.exists (fun elt -> RU.MayAlias.regs reg elt) c in
+    RS.filter alias_filter !all_regs
+	  
+  let alias_eq c1 c2 = RS.equal (aliases c1) (aliases c2)
+  let alias_contained c1 c2 = RS.subset (aliases c1) (aliases c2)
+       
+  let may_alias c1 c2 = not (is_empty (inter (aliases c1) (aliases c2)))
+      
+  let mkClass space target = 
+    RS.fold 
+      (fun reg set -> if Target.fits target space reg then 
+        RS.add reg set else set)
+      !all_regs RS.empty
+end
 @ 
 
 %-------------------------------------------------------------------
@@ -126,9 +95,23 @@ We represent the register classes in a tree structure to better compute the
 squeeze estimate.  I'm sure that the list operations I'm doing are horribly slow;
 if this worries you and you have suggestions please let me know!
 
-<<class trees>>=
-  module ClassTree = struct
+<<class tree interface>>=
+  module type CLASSTREE = sig
     type t = Vertex of RegisterClass.t list ref * t list ref
+    val classes: t -> RegisterClass.t list
+    val down: t -> RegisterClass.t list
+    val mkTree: RegisterClass.t list -> t
+    val mkTreeList:  Rtl.space list -> Register.t list ->('a, 'b) Target.t -> t list
+    val space_to_tree: Rtl.space -> t
+  end
+        
+@             
+
+<<class trees>>=  
+  module ClassTree:CLASSTREE = struct
+    type t = Vertex of RegisterClass.t list ref * t list ref
+    let tree_map = Spacetbl.create 5
+    let space_to_tree s = Spacetbl.find tree_map s
     let classes = function Vertex(c, _) -> !c 
     let rec down = function Vertex(c, kids) ->
       List.flatten (!c::List.map down !kids)
@@ -155,25 +138,25 @@ Alias equivalence is transitive, therefore we only check the head of
 the vertex list.
 
 <<make tree>>=
-let mkTree (regs:RegisterClass.t) (xs:RegisterClass.t list) = match xs with
+let mkTree (xs:RegisterClass.t list) = match xs with
 (x::classL) ->
   let first = Vertex(ref [x], ref []) in 
   let rec addToTree root c = match root with 
     Vertex(classes, children) -> let rep = List.hd (!classes) in 
-    if RegisterClass.alias_eq c rep regs then begin
+    if RegisterClass.alias_eq c rep then begin
       classes := c::(!classes);
       root
-    end else if RegisterClass.alias_contained rep c regs then
+    end else if RegisterClass.alias_contained rep c then
       Vertex (ref [c], ref [root])
-    else if RegisterClass.alias_contained c rep regs then begin
+    else if RegisterClass.alias_contained c rep then begin
       match (!children) with 
         [] -> let () = children := [Vertex(ref [c], ref [])] in root
       |  _ -> let eqNode = function Vertex(cs, _) -> 
-          RegisterClass.alias_eq c (List.hd !cs) regs in
+          RegisterClass.alias_eq c (List.hd !cs) in
         let eqCd = function Vertex(cs, _) ->
-          RegisterClass.alias_contained c (List.hd !cs) regs in
+          RegisterClass.alias_contained c (List.hd !cs) in
         let eqCs = function Vertex(cs, _) ->
-          RegisterClass.alias_contained (List.hd !cs) c regs in
+          RegisterClass.alias_contained (List.hd !cs) c  in
         let newKids = 
           if List.exists (fun n -> eqNode n || eqCd n || eqCs n) 
               !children then
@@ -189,18 +172,19 @@ let mkTree (regs:RegisterClass.t) (xs:RegisterClass.t list) = match xs with
 | [] -> Impossible.impossible "Cannot build class tree from empty list" 
 @
 
-[[mkTreeList]] creates a list of class trees given a target. 
+[[mkTreeList]] initializes the class trees given a target. 
 The class trees and register classes
 should hold the information about what registers a temp can be assigned to now
 rather than cginfo.
 
 <<make tree>>=
 let mkTreeList spaces allRegs target = 
-  let uSet = RegisterClass.fromList allRegs in
+  RegisterClass.init allRegs;
   let splitAliases classLl space = 
-    let rClass = RegisterClass.mkClass space target allRegs in 
+    let rClass = RegisterClass.mkClass space target in 
+    Spacetbl.add class_map space rClass;
     let belongs c l = List.exists 
-    (fun elt -> RegisterClass.isEmpty (RegisterClass.intersection c elt)) l in
+        (fun elt -> RegisterClass.is_empty (RegisterClass.inter c elt)) l in
     let rec addToList l2 = match l2 with
       [] -> [[rClass]]
     | head::rest -> if belongs rClass head then 
@@ -210,13 +194,42 @@ let mkTreeList spaces allRegs target =
     addToList classLl
   in
   let partitionedList = List.fold_left splitAliases [] spaces in
-  List.map (mkTree uSet) partitionedList
+  let treeList = List.map mkTree partitionedList in
 @
 
+It should always be the case that if [[c]] is alias contained in the
+register class of the root, then there is a vertex [[v]] in this
+tree that contains class [[c]].
+
+<<make tree>>=
+   List.iter 
+    (fun s -> let sClass = space_to_class s in
+              let tree = List.find (fun aTree -> 
+                RegisterClass.alias_contained sClass 
+                  (List.hd (classes aTree))) treeList in
+              Spacetbl.add tree_map s tree) 
+  spaces;
+  treeList    
+@ 
 %-------------------------------------------------------------------
 \subsection{Utilities to implement}
 %-------------------------------------------------------------------
+We keep a mapping from each space to the register class for that space.
 
+<<tracked state>>=
+
+module HashableSpace = struct
+  type t = Rtl.space
+  let equal a b = Rtlutil.Compare.space a b = 0
+  let hash (name, _, size) = int_of_char name
+end
+
+module Spacetbl = Hashtbl.Make(HashableSpace)
+
+let class_map = Spacetbl.create 5
+let space_to_class s = Spacetbl.find class_map s
+
+@ 
 %-------------------------------------------------------------------
 \subsubsection{Estimating worst}
 %-------------------------------------------------------------------
@@ -231,7 +244,10 @@ We need to create a table of $\mathit{worst}^1(N,C)$
 
 
 <<registerclass.mli>>=
-  <<exported types>>
+  <<register class interface>>
+  module RegisterClass : REGISTERCLASS 
+  <<class tree interface>>
+  module ClassTree:CLASSTREE
 @
 
 \subsection{Lua registration}
@@ -248,6 +264,9 @@ let () = Debug.register "registerclass" "generalized register classes"
 @
 
 <<registerclass.ml>>=
+  <<tracked state>>
+  <<register class interface>>
   <<register classes>>
+  <<class tree interface>>
   <<class trees>>
 @
