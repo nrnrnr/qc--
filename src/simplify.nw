@@ -54,6 +54,7 @@ will tell us whether it needs further ecaluation at link-time or
 run-time.
 
 <<simplify.ml>>=
+module BO = Bits.Ops
 module RS = Reloc.Simple
 module R  = Rtl
 module RP = Rtl.Private
@@ -115,7 +116,7 @@ let bits e =
           (location_category l)
     | RP.App ((opr, _), es) ->
         List.iter (fun e -> ignore (cvt e)) es;
-        Error.error "cannot evaluate operator %%%s at compile time" opr in
+        Error.errorf "cannot evaluate operator %%%s at compile time" opr in
   cvt (Safe.exp (D.exp e))
              
 let bool e = match Safe.exp (D.exp e) with
@@ -137,8 +138,9 @@ let link e = match Safe.exp (D.exp e) with
     Error.error ("Bad link-time constant " ^ Rtlutil.ToReadableString.exp e)
 
 let compile_time_ops = 
-    [ "add"; "and"; "div"; "eq"; "mul"; "neg"; "ne"; "shl"; "shra";
-      "shrl"; " sub"; "sx"; "zx"]
+    [ "add"; "and"; "com"; "divu"; "eq"; "ge"; "geu"; "gt"; "gtu"; "le"; "leu";
+      "lobits"; "lt"; "ltu"; "mul_trunc"; "ne"; "neg"; "or"; "shl"; "shra";
+      "shrl"; " sub"; "sx"; "xor"; "zx"]
 @
 
 % ------------------------------------------------------------------ 
@@ -155,17 +157,17 @@ let default op w args = RP.App((op,w),args)
 let app o w args = match o with
     |  "NaN" 		-> default o w args
     |  "add" 		-> add w args
-    |  "and" 		-> default o w args
+    |  "and" 		-> binop o w BO.and' args
     |  "bit" 		-> default o w args
     |  "bool" 		-> default o w args
     |  "borrow" 	-> default o w args
     |  "carry" 		-> default o w args
-    |  "com" 		-> default o w args
+    |  "com" 		-> unop o w BO.com args
     |  "conjoin" 	-> default o w args
     |  "disjoin" 	-> default o w args
     |  "div" 		-> default o w args
-    |  "divu" 		-> default o w args
-    |  "eq" 		-> eq w args
+    |  "divu" 		-> binop o w BO.divu args
+    |  "eq" 		-> cmp_bits o w BO.eq args
     |  "f2f" 		-> default o w args
     |  "f2i" 		-> default o w args
     |  "fabs" 		-> default o w args
@@ -188,27 +190,27 @@ let app o w args = match o with
     |  "fsqrt" 		-> default o w args
     |  "fsub" 		-> default o w args
     |  "funordered" 	-> default o w args
-    |  "ge" 		-> default o w args
-    |  "geu" 		-> default o w args
-    |  "gt" 		-> gt  w args
-    |  "gtu" 		-> gtu w args
+    |  "ge" 		-> cmp_bits o w (fun x y -> BO.lt  y x) args
+    |  "geu" 		-> cmp_bits o w (fun x y -> BO.ltu y x) args
+    |  "gt" 		-> cmp_bits o w BO.gt args
+    |  "gtu" 		-> cmp_bits o w BO.gtu args
     |  "i2f" 		-> default o w args
-    |  "le" 		-> default o w args
-    |  "leu" 		-> default o w args
+    |  "le" 		-> cmp_bits o w (fun x y -> BO.gt  y x) args
+    |  "leu" 		-> cmp_bits o w (fun x y -> BO.gtu y x) args
     |  "lobits" 	-> lobits w args
-    |  "lt" 		-> lt w args
-    |  "ltu" 		-> ltu w args
+    |  "lt" 		-> cmp_bits o w BO.lt args
+    |  "ltu" 		-> cmp_bits o w BO.ltu args
     |  "minf" 		-> default o w args
     |  "mod" 		-> default o w args
     |  "modu" 		-> default o w args
     |  "mul" 		-> default o w args
-    |  "mul_trunc" 	-> mul_trunc w args
+    |  "mul_trunc" 	-> binop o w BO.mul_trunc args
     |  "mulu" 		-> default o w args
     |  "mzero" 		-> default o w args
-    |  "ne" 		-> ne  w args
-    |  "neg" 		-> neg w args
+    |  "ne" 		-> cmp_bits o w BO.ne args
+    |  "neg" 		-> unop  o w BO.neg args
     |  "not" 		-> default o w args
-    |  "or" 		-> default o w args
+    |  "or" 		-> binop o w BO.or' args
     |  "pinf" 		-> default o w args
     |  "popcnt" 	-> default o w args
     |  "pzero" 		-> default o w args
@@ -220,13 +222,15 @@ let app o w args = match o with
     |  "round_nearest" 	-> round_nearest w args
     |  "round_up" 	-> round_up w args
     |  "round_zero" 	-> round_zero w args
-    |  "shl" 		-> shl w args
-    |  "shra" 		-> shra w args
-    |  "shrl" 		-> default o w args
+    |  "shl" 		-> binop o w BO.shl args
+                               (* likely to break machine invariant on PPC? *)
+
+    |  "shra" 		-> binop o w BO.shra args
+    |  "shrl" 		-> binop o w BO.shrl args
     |  "sub" 		-> sub w args
     |  "sx" 		-> sx w args
     |  "unordered" 	-> default o w args
-    |  "xor" 		-> default o w args
+    |  "xor" 		-> binop o w BO.xor args
     |  "zx" 		-> zx w args
     |  "bitExtract" 	-> default o w args
     |  "bitInsert" 	-> default o w args
@@ -249,7 +253,6 @@ and loc = function
 let effect = function
     | RP.Store(l,e,w)               -> RP.Store(loc l, exp e, w)
     | RP.Kill(l)                    -> RP.Kill(loc l)
-
 
 let guarded (e, eff)                = (exp e, effect eff)
 let rtl (RP.Rtl(es))                = RP.Rtl(List.map guarded es)
@@ -347,36 +350,17 @@ let rec add ws args =
     | [x; RP.Const (RP.Bits y)] when Bits.Ops.eq (Bits.U.of_int 0 w) y -> x
     | args  ->  default "add" ws args
 
-let shra w = function
-    | [RP.Const(RP.Bits(x)); RP.Const(RP.Bits(y))] 
-                 -> const (Bits.Ops.shra x y)
-    | args       -> default "shra" w args
+let binop name w op = function
+    | [RP.Const(RP.Bits x); RP.Const(RP.Bits y)] -> const (op x y)
+    | args       -> default name w args
 
-let mul_trunc w = function
-    | [RP.Const(RP.Bits(x)); RP.Const(RP.Bits(y))] 
-                -> const (Bits.Ops.mul_trunc x y)
-    | args      -> default "mul_trunc" w args  
+let cmp_bits name w op = function
+    | [RP.Const(RP.Bits x); RP.Const(RP.Bits y)] -> to_bool (op x y)
+    | args       -> default name w args
 
-let eq w = function
-    | [RP.Const(RP.Bits(x)); RP.Const(RP.Bits(y))] 
-                -> to_bool (Bits.Ops.eq x y)
-    | args      -> default "eq" w args
-    
-let ne w = function
-    | [RP.Const(RP.Bits(x)); RP.Const(RP.Bits(y))] 
-                -> to_bool (Bits.Ops.ne x y)
-    | args      -> default "ne" w args
-    
-let neg ws = function
-    | [RP.Const(RP.Bits(x))] 
-                -> const (Bits.Ops.neg x)
-    | args      -> default "neg" ws args
-    
-
-(* likely to break machine invariant on PPC? *)
-let shl w args  = match args with
-    | [RP.Const(RP.Bits(x)); RP.Const(RP.Bits(y))] -> const (Bits.Ops.shl x y)
-    | _         -> default "shl" w args
+let unop name w op = function
+    | [RP.Const(RP.Bits x)] -> const (op x)
+    | args       -> default name w args
 
 let sub ws args =
     let w = match ws with [w] -> w | _ -> Impossible.impossible "ill-typed add" in
@@ -392,41 +376,37 @@ let sub ws args =
     | [x; y] when x = y -> D.exp (R.bits (Bits.U.of_int 0 w) w)
     | args      -> default "sub" ws args
     
+let or' ws args = 
+    let w = match ws with [w] -> w | _ -> Impossible.impossible "ill-typed or" in
+    match args with
+    | [RP.Const (RP.Bits x); RP.Const (RP.Bits y)] ->  
+                RP.Const (RP.Bits (Bits.Ops.or' x y))
+    | [x; RP.Const (RP.Bits y)] when Bits.Ops.eq (Bits.U.of_int 0 w) y -> x
+    | [RP.Const (RP.Bits x); y] when Bits.Ops.eq (Bits.U.of_int 0 w) x -> y
+    | args  ->  default "or" ws args
+
+let and' ws args = 
+    let w = match ws with [w] -> w | _ -> Impossible.impossible "ill-typed and" in
+    match args with
+    | [RP.Const (RP.Bits x); RP.Const (RP.Bits y)] ->  
+                RP.Const (RP.Bits (Bits.Ops.and' x y))
+    | [x; RP.Const (RP.Bits y) as zero] when Bits.Ops.eq (Bits.U.of_int 0 w) y -> zero
+    | [RP.Const (RP.Bits x) as zero; y] when Bits.Ops.eq (Bits.U.of_int 0 w) x -> zero
+    | args  ->  default "and" ws args
+
+
+
 let sx w args   = match (w,args) with
-    | [i;j],[RP.Const(RP.Bits(x))]
-                -> const (Bits.Ops.sx j x)
-    | [i;j], [x] when i = j -> x
-    | _         -> default "sx" w args
+| [i;j],[RP.Const(RP.Bits x)] -> const (Bits.Ops.sx j x)
+| [i;j], [x] when i = j -> x
+| _         -> default "sx" w args
 
 let zx w args   = match (w,args) with
-    | [i;j],[RP.Const(RP.Bits(x))]
-                -> const (Bits.Ops.zx j x)
-    | [i;j], [x] when i = j -> x
-    | _         -> default "zx" w args
+| [i;j],[RP.Const(RP.Bits(x))] -> const (Bits.Ops.zx j x)
+| [i;j], [x] when i = j -> x
+| _         -> default "zx" w args
 
 let lobits w args   = match (w,args) with
     | [i;j], [x] when i = j -> x
     | _         -> default "lobits" w args
-
-let ltu w = function 
-    | [RP.Const(RP.Bits(x)); RP.Const(RP.Bits(y))] 
-                -> to_bool (Bits.Ops.ltu x y)
-    | args      -> default "ltu" w args
-
-let gtu w = function
-    | [RP.Const(RP.Bits(x)); RP.Const(RP.Bits(y))] 
-                -> to_bool (Bits.Ops.gtu x y)
-    | args      -> default "gtu" w args
-
-let lt w = function
-    | [RP.Const(RP.Bits(x)); RP.Const(RP.Bits(y))] 
-                -> to_bool (Bits.Ops.lt x y)
-    | args      -> default "lt" w args
-
-let gt w = function
-    | [RP.Const(RP.Bits(x)); RP.Const(RP.Bits(y))]
-                -> to_bool (Bits.Ops.gt x y)
-    | args      -> default "gt" w args
-    
-
 @

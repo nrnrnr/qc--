@@ -49,7 +49,7 @@ type 'a proc =
   } 
 
 type 'a datum =
-  | Datalabel         of name
+  | Datalabel         of name  (* must be asm level not source level *)
   | Align             of int
   | InitializedData   of (exp * ty) list
   | UninitializedData of int  (* counts the number of mems *)
@@ -363,16 +363,14 @@ module Const = struct
   let eval env (r, (ty, name, e)) =
     let errorf x =
       Printf.kprintf (fun s -> E.errorRegionPrt (F.srcmap env, r) s; E.Error) x in
-    E.seq (evalExpr env e) (fun (b, t) ->
-      if t = Types.bool then errorf "constant has type bool but must have a bits type"
-      else
-        match ty with
-        | None -> E.Ok (b, t)
-        | Some ty ->
-            E.seq (Elabexp.elab_ty env ty) (fun t' ->
-              if t = t' then E.Ok (b, t)
-              else errorf "constant %s declared with type %s has actual type %s"
-                           name (Types.to_string t') (Types.to_string t)))
+    E.seq (Elabexp.elab_con env e) (fun (b, w) ->
+      match ty with
+      | None -> E.Ok (b, Types.Bits w)
+      | Some ty ->
+          E.seq (Elabexp.elab_ty env ty) (fun t ->
+            if t = Types.Bits w then E.Ok (b, t)
+            else errorf "constant %s declared with type %s has actual type bits%d"
+                           name (Types.to_string t) w))
   let bind name (r, typed_exp) env = 
     F.bindv name (r, E.ematch typed_exp (fun (b, t) -> F.Constant b, t)) env
 end
@@ -405,106 +403,6 @@ and freeLValueVars l tail = match l with
 | A.NameOrMemAt(x,r) -> freeLValueVars x tail
 | A.Mem(_,e,_, _)    -> freeExprVars e tail
 | A.Name(_,name)     -> if List.mem name tail then tail else name :: tail
-@
-
-% ------------------------------------------------------------------ 
-\paragraph  {Evaluating constant declarations}
-% ------------------------------------------------------------------ 
-
-\begin{quote}\it
-    Module [[Expcheck]] also provides code to check the static
-    semantics of an expression and [[Simplify]] could be used to evaluate
-    it. Why are we not using it here? --CL 
-
-    Several reasons: We would need a translation from {\AST} to
-    [[Rtl.env]]. The existing one in \module{ast3ir} is written against
-    the [[Ofenv.Clean]] interface, but we need one written against the
-    [[Ofenv.Dirty]] interface. The translation of an application needs
-    the widths of its arguments. Therefore type-checking using
-    [[Expcheck]] would be done twice: once before translation and then
-    again during translation. Detailed error messages are simpler to
-    generate with the existing approach. --CL
-\end{quote}
-
-Constant declarations must be sorted topologically before they can be
-processed.  Processing includes checking their types and evaluating
-their values.  Both type and value are bound in the environment.
-
-Processing a constant declaration means to
-\begin{enumerate}
-\item infer its type and compare it to an optionally supplied type that
-      is part of its declaration,
-\item evaluate it,
-\item bind the value and the type in the environment.
-\end{enumerate}
-
-The topological sorting guarantees that every named value a constant
-declaration depends on, is already processed and the name is bound in
-the environment.  However, we can still encounter undefined names
-which are cought by [[F.findv]].  The following functions type check
-and evaluate constants in a single step.  Each function returns a pair
-of a type and a value. 
-
-[[literalExpr]] must be outside the [[let rec]] because it is
-polymorphic.
-<<utility functions for constants>>=
-let literalExpr env v ty cvt  =
-    E.ematch ty
-    ( function 
-    | T.Bool            -> E.error "a named constant value must have type bitsXX"
-    | T.Bits width as t -> (cvt v width, t) 
-    )
-@ 
-<<utility functions for constants>>=
-let rec evalFetch env = function
-    | A.NameOrMemAt(x,r) -> E.catch (error r env) (evalFetch env) x
-    | A.Mem (_,_,_,_)    -> E.error "memory access in const declaration"
-    | A.Name(hint,id)  -> 
-            ( match snd (F.findv id env) with
-            | E.Error                  -> E.Error
-            | E.Ok(F.Constant bits,ty) -> E.Ok(bits, ty)
-            | _ -> E.error ("access of non-constant "^id^ " in constant expression")
-            ) 
-@
-Applications to primitives operators must be type checked. Only if the
-type check passes we apply the values to the implementation [[f]] of the
-operator and get the result.  Both result and type are returned.
-<<utility functions for constants>>=
-and evalPrimOp env op args =
-    E.ematch (E.Raise.list (List.map (evalExpr env) args))
-    (fun args ->
-        let v,t       = List.split args                 in
-        let rt,opr    = Rtlop.Translate.operator op t   in
-        let of_bits b = R.bits b (B.width b)            in
-        let e         = Simplify.exp (Rtl.app opr (List.map of_bits v))    in
-            ( match Dn.exp e with
-            | RP.Const(RP.Bits b) -> b, rt
-            | _     -> E.error ("not a compile-time operator: "^op)
-            )
-    )
-@
-The {\AST} contains literal values as strings. The reason is that the
-width of a literal cannot be known when the literal is parsed. Here we
-know the exact type and thus are able to parse the literal into a
-[[Bits.bits]] value.
-<<utility functions for constants>>=
-and evalExprs env es = E.Raise.list (List.map (evalExpr env) es)
-and evalExpr env =
-  let wordTy env = E.Ok (Types.Bits (F.metrics env).Metrics.wordsize) in
-  let ty = Elabexp.elab_ty in
-  function
-    | A.ExprAt(x,r)       -> E.catch (error r env) (evalExpr env) x
-    | A.Int  (n  , Some t)-> literalExpr env n (ty     env t) B.U.of_string
-    | A.Int  (n  , None)  -> literalExpr env n (wordTy env)   B.U.of_string
-    | A.Float(n  , Some t)-> literalExpr env n (ty     env t) B.U.of_string
-    | A.Float(n  , None)  -> literalExpr env n (wordTy env)   B.U.of_string
-    | A.Char (n  , Some t)-> literalExpr env n (ty     env t) B.U.of_int
-    | A.Char (n  , None)  -> literalExpr env n (E.Ok(T.bits 8)) B.U.of_int
-    
-    | A.Fetch  (v)        -> evalFetch env v
-    | A.BinOp  (l,op,r)   -> evalPrimOp env op [l;r]
-    | A.UnOp   (op,expr)  -> evalPrimOp env op [expr]
-    | A.PrimOp (op,args)  -> evalPrimOp env op (List.map snd args)
 @
 
 % ------------------------------------------------------------------ 
@@ -753,7 +651,7 @@ and stackdatum mem stacklabels' env (r, d) k =
           | A.NoSize    -> finish 1 
           | A.DynSize   -> impossf "dynamic memory size"
           | A.FixSize e ->
-              match Const.evalExpr env e with
+              match Elabexp.elab_con env e with
               | E.Ok (bits, _) -> finish (Bits.U.to_int bits)
               | E.Error        -> k mem stacklabels' (F.flagError env)
       )
@@ -828,6 +726,11 @@ let rec data spans ds rest = match ds with
 | [] -> (match rest with [] -> [] | (spans, ds) :: rest -> data spans ds rest)
 | (r, d) :: ds ->
     match d with
+(* NEED A LOOKUP HERE TO GET ASM SYM! *)
+(*let s = match F.findv n env with
+                               | _,(F.Label(F.Data(s)),_) -> s 
+                               | _ -> impossible "unbound data label" in 
+*)
     | N.Datalabel l -> let d = E.Ok (Datalabel l) in d :: data spans ds rest
     | N.Align n     -> let d = E.Ok (Align n)     in d :: data spans ds rest
     | N.Procedure p -> let d = proc env spans p   in d :: data spans ds rest
@@ -878,15 +781,12 @@ and init_size r = function
   | A.DynSize   -> E.Ok (None)
   | A.NoSize    -> E.Ok (Some 1)
   | A.FixSize e ->
-      E.seq (Const.evalExpr env e) (fun (bits, ty) -> 
-        match ty with
-        | Types.Bits _ ->
-            (try
-              let size = Bits.S.to_int bits in
-              if size >= 0 then E.Ok (Some size)
-              else errorf r "negative count for initialized data"
-            with Bits.Overflow -> errorf r "overflow computing size")
-        | _ -> errorf r "Boolean count for initialized data")
+      E.seq (Elabexp.elab_con env e) (fun (bits, _) -> 
+        (try
+          let size = Bits.S.to_int bits in
+          if size >= 0 then E.Ok (Some size)
+          else errorf r "negative count for initialized data"
+        with Bits.Overflow -> errorf r "overflow computing size"))
 @    
 All initial values for a memory declaration must match the declared
 type [[t]] of the memory declaration. The [[init]] function checks for

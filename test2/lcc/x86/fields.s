@@ -633,27 +633,21 @@ L.43:
 	movl %eax,8(%esp)
 	call f1
 join_l62:
-	movl $60,%eax
-	movl $2,%ecx
-	movl $15,%edx
-	movl $0,%ebx
-	andl %edx,%ebx
-	shll %cl, %ebx
-	andl %eax,%ebx
-	movl $-61,%eax
-	movl 8(%esp),%ecx
-	movl (%ecx),%edx
-	andl %eax,%edx
-	orl %ebx,%edx
-	movl %edx,(%ecx)
-	movl $0,%ecx
-	movl %ecx,%eax
-	leal 12(%esp), %ecx
+	movl $0,%eax
+	movl $-61,%ecx
+	movl 8(%esp),%edx
+	movl (%edx),%ebx
+	andl %ecx,%ebx
+	orl %eax,%ebx
+	movl %ebx,(%edx)
 	movl $0,%edx
-	leal 12(%esp), %ebx
-	addl %edx,%ebx
-	movl (%ecx),%edx
-	movl %edx,(%ebx)
+	movl %edx,%eax
+	leal 12(%esp), %edx
+	movl $0,%ebx
+	leal 12(%esp), %ecx
+	addl %ebx,%ecx
+	movl (%edx),%ebx
+	movl %ebx,(%ecx)
 	movl 4(%esp),%ebx
 	leal 12(%esp), %esp
 	ret

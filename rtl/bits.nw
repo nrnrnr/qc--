@@ -80,19 +80,25 @@ val to_string: bits -> string
 \subsection{Arithmetic}
 % ------------------------------------------------------------------ 
 
-We prefer to use {\PAL} names, not OCaml names, so logical or is 
-[[or]] and not [[logor]].
-Except that because [[or]] is a reserved word, it's [[or']].
+We prefer to use {\PAL} names, not OCaml names, so logical
+\textbf{and} and \textbf{or} are 
+[[and]] and [[or]], not [[logand]] and [[logor]].
+Except that because [[and]] and [[or]] are reserved words, it's
+[[and']] and [[or']].
 <<bits.mli ((evaluating))>>=
 module Ops : sig
   val add       : bits -> bits -> bits
+  val and'      : bits -> bits -> bits
+  val com       : bits -> bits 
+  val divu      : bits -> bits -> bits
+  val mul_trunc : bits -> bits -> bits
+  val neg       : bits -> bits
+  val or'       : bits -> bits -> bits
   val sub       : bits -> bits -> bits
   val shra      : bits -> bits -> bits
   val shrl      : bits -> bits -> bits
   val shl       : bits -> bits -> bits
-  val or'       : bits -> bits -> bits
-  val mul_trunc : bits -> bits -> bits
-  val neg       : bits -> bits
+  val xor       : bits -> bits -> bits
 
   val sx        : int  -> bits -> bits
   val zx        : int  -> bits -> bits
@@ -324,7 +330,7 @@ let check w =
   if w <= 0 || w > 64 then Impossible.impossible ("Bits.bits width " ^ string_of_int w)
 let zero w      = check w; (I.zero, w)
 
-let to_string (i,w) = Printf.sprintf "%Lx::bits%d" i w 
+let to_string (i,w) = Printf.sprintf "0x%Lx::bits%d" i w 
 @
 
 % ------------------------------------------------------------------ 
@@ -372,10 +378,9 @@ let gt x y = lt y x
 
 let ltu (b, w) (b', w') =
   assert (w = w');
-  (if w = 64 then Impossible.unimp "ltu on 64-bit vectors");
   let n  = zx64 b  w  in
   let n' = zx64 b' w' in
-  n < n'
+  Uint64.lt n n'
 let gtu x y = ltu y x
 
 let neg (b,w) = (Int64.neg (sx64 b w), w)
@@ -392,6 +397,12 @@ let mul_trunc (b,w) (b', w') =
     let n  = sx64 b  w  in
     let n' = sx64 b' w' in
         (Int64.mul n n', w)
+
+let divu (b,w) (b', w') =
+    assert (w = w');
+    let n  = zx64 b  w  in
+    let n' = zx64 b' w' in
+        (Uint64.div n n', w)
 
 let eq (b,w) (b',w') =
     assert (w = w');
@@ -431,6 +442,18 @@ let shl (b,w) (b',w') =
 let or' (b,w) (b',w') =
     assert (w = w');
     (zx64 (Int64.logor b b') w, w)
+
+let and' (b,w) (b',w') =
+    assert (w = w');
+    (zx64 (Int64.logand b b') w, w)
+
+let xor (b,w) (b',w') =
+    assert (w = w');
+    (zx64 (Int64.logxor b b') w, w)
+
+
+
+let com (b,w) = (Int64.lognot (zx64 b w), w)
 @
 <<bits.ml ((evaluating))>>=
 <<string scanning>>

@@ -53,7 +53,7 @@ We expose two types of functions:
 The conversion functions for frame size and overflow-block size use
 the number of variables and the virtual frame pointer in addition to
 the expression representing the size.
-These functions cannot ask for a record of type [[Ast2ir.proc]] because
+These functions cannot ask for a record of type [[Oast2ir.proc]] because
 they may be used before such a record exists. 
 <<runtimedata.mli>>=
 type span = Bits.bits * Rtl.exp
@@ -82,14 +82,14 @@ We can convert the return address, callee-save registers, and variable assignmen
 val ra_to_span        : wordsize:int -> Rtl.loc -> span
 val csregs_to_spans   : wordsize:int -> nvars:int -> Register.Set.t ->
                         (Register.t * Rtl.loc) list -> span list
-val var_asst_to_spans : Ast2ir.proc -> (int * Automaton.loc) list -> span list
+val var_asst_to_spans : Oast2ir.proc -> (int * Automaton.loc) list -> span list
 @
 After we have placed all the data in spans, we emit
 the data as assembly by calling [[emit_as_asm]].
 The function should be partially applied to an assembler, then added
 to the optimization pipeline.
 <<runtimedata.mli>>=
-val emit_as_asm : Ast2ir.proc Asm.assembler -> 'v -> Ast2ir.proc-> bool
+val emit_as_asm : Oast2ir.proc Asm.assembler -> 'v -> Oast2ir.proc-> bool
 @
 
 % ------------------------------------------------------------------ 

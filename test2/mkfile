@@ -8,7 +8,9 @@ PATH =          $PATH:$TOP/bin
 QC   =          $TOP/bin/qc--
 TST  =          `echo *.tst`
 
+<               $TOP/config/config.mk
 <               $TOP/config/noweb.mk
+<               $TOP/config/c.mk
 
 # ------------------------------------------------------------------ 
 # High level virtual targets. 
@@ -44,3 +46,17 @@ tiger.tst:QV:
 	else
 	  echo "# Cannot execute Tiger compiler" 1>&2
 	fi
+
+################################################################
+
+opgen: opgen.o
+	$CC $CFLAGS -o $target $prereq
+
+ops%.c--:D: opgen
+	./opgen $stem > $target
+
+%: %.c--
+	$QC -v -globals -o $target $prereq
+
+'^optest([0-9]*)$':VR: ops'\1'
+	./$prereq

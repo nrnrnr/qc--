@@ -29,6 +29,15 @@ module I' = Lua.MakeInterp (Lua.Parser.MakeStandard) (Oldinterp.Make3 (T2) (C'))
 
 module I'' = Lua.MakeInterp (Lua.Parser.MakeStandard) (Lua.MakeEval (T) (C))
 
+module V = I''.Value
+let ( **-> ) = V. ( **-> )
+let ( **->> ) x y = x **-> V.result y
+let my_atan2 = 
+   let t = V.func (V.float **-> V.float **->> V.float) 
+   in  t.V.embed atan2
+
+type value = V.value
+let my_atan2 = (my_atan2 : value)
 
 
 module Go = Lua.Run(I'')
