@@ -89,13 +89,12 @@ sub rand_bits {
 
 sub formals {
     my $r = "";
-    my $i = 0 ;
     while (@_) {
         my $hint  = shift @_;
         my $width = shift @_;
         my $val   = shift @_;
         my $v     = shift @_;
-        $r = $r . sprintf "\"%s\" bits%d i%d", $hint, $width, $i++;
+        $r = $r . sprintf "\"%s\" bits%d $v", $hint, $width;
         if (@_) { $r = $r . "," }
     }    
     return "($r)";     
@@ -107,13 +106,12 @@ sub formals {
 
 sub c_formals {
     my $r = "";
-    my $i = 0 ;
     while (@_) {
         my $hint  = shift @_;
         my $width = shift @_;
         my $val   = shift @_;
         my $v     = shift @_;
-        $r = $r . sprintf "%s i%d", lookup("$width/$hint"), $i++;
+        $r = $r . sprintf "%s $v", lookup("$width/$hint");
         if (@_) { $r = $r . "," }
     }    
     return "($r)";     
@@ -268,7 +266,8 @@ while (defined($sig=<STDIN>)) {
             my $hint  = $2;
             my $width = $1;
             my $msb   = 4;  ## don't use this many most significant bits
-            my @v = ($hint, $width, rand_bits($width-$msb), "i$n");
+            my $x     = $hint eq "float" ? "a" : "i";
+            my @v = ($hint, $width, rand_bits($width-$msb), "$x$n");
             $n++;
             push @args, @v;
         } else {
