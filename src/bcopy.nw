@@ -1,0 +1,113 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% vim: ts=8 sw=4 et sts=4
+% Grades     ::=    "%%Grades:" Quality Importance Urgency
+% Quality    ::=    A|B|C|D|E
+% Importance ::=    Central|Subsystem|Peripheral
+% Urgency    ::=    Immediate|Soon|Later
+%
+% Example (at beginning of line): %%Grades: B Central Soon
+
+Support for block copies.
+Problem: what if we do and do not know about aliasing?
+<<bcopy.mli>>=
+val block_copy :
+  ('a, 'b) Target.t -> (int -> Rtl.loc) -> 
+  dst:Rtl.exp -> Rtl.assertion -> src:Rtl.exp -> Rtl.assertion -> Rtl.width ->
+  Postexpander.block
+@ 
+This code is stolen from \texttt{lcc}. 
+<<bcopy.ml>>=
+module C  = Cell
+module Px = Postexpander
+module R  = Rtl
+module RO = Rewrite.Ops
+module RU = Rtlutil
+module T  = Target
+
+let (<:>) = Px.(<:>)
+
+let rec block_copy target talloc ~dst dassn doff ~src sassn soff width =
+  let wordsize = target.T.wordsize in
+  let tmp1, tmp2 = talloc wordsize, talloc wordsize in
+  let (_, _, mcell) as mspace = target.T.memspace in
+  let R.C intcount = C.to_count mcell target.T.wordsize in
+  assert (intcount land (intcount - 1) = 0);
+  let unrolled_limit = 4 * intcount in
+  let loop_stride = 2 * intcount in  (* must be power of 2 *)
+  let to_bits count = C.to_width mcell (R.C count) in
+  let addk = RU.addk target.T.pointersize in
+  let R.C max_unaligned_load = target.T.max_unaligned_load in
+  let salign = R.alignment sassn in
+  let dalign = R.alignment dassn in
+  assert (max_unaligned_load > 0);
+  let rec copy doff soff count =
+    if count = 0 then
+      Px.Nop
+    else if count < intcount then
+      let rec fraction bit off =
+        if bit >= intcount then
+          Px.Nop
+        else
+          let this_part =
+            if bit land count = 0 then
+              Px.Nop
+            else
+              unroll bit (doff+off) (soff+off) bit in
+          this_part <:> fraction (bit lsl 1) (off+bit) in
+      fraction 1 0
+    else if count <= unrolled_limit then
+      let blkcount = count land (lnot (intcount - 1)) in
+      unroll intcount doff soff blkcount <:>
+      copy (doff+blkcount) (soff+blkcount) (count land (intcount-1))
+    else
+      let stride_mask = loop_stride - 1 in
+      let rounded_down = count land (lnot stride_mask) in
+      copy (doff+rounded_down) (soff+rounded_down) (count land stride_mask) <:>
+      let sreg = talloc wordsize in
+      let dreg = talloc wordsize in
+      let tmp  = talloc wordsize in
+      let dregv = R.fetch dreg wordsize in
+      let sregv = R.fetch sreg wordsize in
+      let tmpv  = R.fetch tmp  wordsize in
+      Px.Rtl (R.store sreg (addk src rounded_down) wordsize) <:>
+      Px.Rtl (R.store dreg dst wordsize) <:>
+      Px.Rtl (R.store tmp (addk dregv rounded_down) wordsize) <:>
+      Px.While (Px.cond (RO.gt wordsize tmpv dregv),
+                Px.Rtl (R.store tmp (addk tmpv (-loop_stride)) wordsize) <:>
+                block_copy target talloc
+                  ~dst:tmpv  (R.shift_multiple loop_stride dassn) doff
+                  ~src:sregv (R.shift_multiple loop_stride sassn) (soff-loop_stride)
+                  (to_bits loop_stride) <:>
+                Px.Rtl (R.store sreg (addk sregv (-loop_stride)) wordsize))
+  and unroll k soff doff count =
+    if k > max_unaligned_load && (k > salign || k > dalign) then
+      unroll (max_unaligned_load) soff doff count
+    else
+      let rec loop i =
+        if i + k < count then
+          fetch k (soff+i)   tmp1 <:>
+          fetch k (soff+i+k) tmp2 <:>
+          store k (doff+i)   tmp1 <:>
+          store k (doff+i+k) tmp2 <:>
+          loop (i + 2 * k)
+        else if i < count then
+          fetch k (soff+i)   tmp1 <:>
+          store k (doff+i)   tmp1
+        else
+          Px.Nop in
+      loop 0
+  and fetch count off tmp =
+    let addr = R.mem (R.shift off sassn) mspace (R.C count) (addk src off) in
+    let v = R.fetch addr (to_bits count) in
+    let v = if count = intcount then v else RO.sx (to_bits count) wordsize v in
+    Px.Rtl (R.store tmp v wordsize)
+  and store count off tmp =
+    let addr = R.mem (R.shift off dassn) mspace (R.C count) (addk dst off) in
+    let v = R.fetch tmp (to_bits count) in
+    let v = if count = intcount then v else RO.lobits wordsize (to_bits count) v in
+    Px.Rtl (R.store addr v wordsize) in
+  let R.C count = C.to_count mcell width in
+  copy doff soff count
+
+let block_copy target talloc ~dst dassn ~src sassn count =
+  block_copy target talloc ~dst dassn 0 ~src sassn 0 count

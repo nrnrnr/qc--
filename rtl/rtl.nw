@@ -125,12 +125,17 @@ A [[loc]] may be:
 An [[assertion]] is a claim about alignment or placement of an address~$a$.
 We can [[shift]] an assertion by an integer~$k$ in order to get a
 claim about the address $a+k$. 
+We can also [[shift_multiple]], which shifts an assertion by an
+unknown multiple of~$k$.
+Finally, we can ask what alignment is implied by an assertion.
 <<definitions of exported, exposed types>>=
 type count = Register.count = C of int
 <<types and functions exported at top level>>=
 val none     : assertion
 val aligned  : int -> assertion
 val shift    : int -> assertion -> assertion
+val shift_multiple : int -> assertion -> assertion
+val alignment: assertion -> int
 val mem      : assertion -> space -> count -> exp -> loc
 val reg      : Register.t -> loc
 val regx     : Register.x -> loc
@@ -358,8 +363,11 @@ type rtl       = Private.rtl
 type opr       = Private.opr        
 type assertion = Private.assertion  
 @
+If we switch to [[Alignment.t]], [[shift]] and [[shift_multiple]] will
+no longer be the same.
 <<definitions of types and functions exported at top level>>=
 let aligned k = k
+let alignment k = k
 let shift k' k = 
   let rec gcd (m:int) (n:int) =
     let rec g m n = if n = 0 then m else g n (m mod n) in
@@ -367,6 +375,7 @@ let shift k' k =
     else if m < n then gcd n m
     else g m n in
   gcd k k'
+let shift_multiple = shift  (* OK for this rep, which is lossy *)
 let none = aligned 1
 @
 

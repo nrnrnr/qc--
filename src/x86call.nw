@@ -309,6 +309,13 @@ let c_call_results  =
    ~autosp
    ~postsp:(fun _ _ -> std_sp_location)     (* irrelevant? *)
    ~insp:(fun a _ _ -> autosp a) in
+let c_returns_struct_call_results  =
+  let autosp = (fun r -> addk (Block.base r.A.overflow) 4) in
+  C.incoming ~growth ~sp
+   ~mkauto:(fun () -> Block.srelative vfp "in ovfl results" autoAt specs.A.results)
+   ~autosp
+   ~postsp:(fun _ _ -> std_sp_location)     (* irrelevant? *)
+   ~insp:(fun a _ _ -> autosp a) in
 let cmm_call_results  =
   C.incoming ~growth ~sp
     ~mkauto:(fun () -> Block.srelative vfp "in ovfl results" autoAt specs.A.results)
@@ -319,6 +326,11 @@ let epilog  =
   C.outgoing ~growth ~sp
     ~mkauto:(fun () -> Block.srelative vfp "out ovfl results" autoAt specs.A.results)
     ~autosp:(fun r -> Block.base r.A.overflow)
+    ~postsp:(fun _ r -> addk r (-4)) in
+let epilog_returns_struct  =
+  C.outgoing ~growth ~sp
+    ~mkauto:(fun () -> Block.srelative vfp "out ovfl results" autoAt specs.A.results)
+    ~autosp:(fun r -> addk (Block.base r.A.overflow) 4)
     ~postsp:(fun _ r -> addk r (-4)) in
 @ 
 We need an assertion here!
@@ -343,7 +355,7 @@ let rtn return_to k n ~ra =
   if k > n then impossf "Return <k/n> has k:%d > n:%d\n" k n
   else return_to ra
 
-let conv ~preserved ~jump ~altret name specs ~return_to cut =
+let conv ~preserved ~jump ~struct' ~altret name specs ~return_to cut =
   <<functions to transform automata>>
   let return k n ~ra =
     if altret then rtn return_to k n ~ra
@@ -358,8 +370,10 @@ let conv ~preserved ~jump ~altret name specs ~return_to cut =
       }
   ; C.call_parms = { C.in' = prolog;       C.out = call_actuals}
   ; C.cut_parms  = { C.in' = also_cuts_to; C.out = cut_actuals}
-  ; C.results    = { C.in' = if jump then cmm_call_results else c_call_results
-                   ; C.out = epilog}
+  ; C.results    = { C.in' = if jump then cmm_call_results
+                             else if struct' then c_returns_struct_call_results
+                             else c_call_results
+                   ; C.out = if struct' then epilog_returns_struct else epilog}
 
   ; C.stack_growth     = Memalloc.Down
   ; C.stable_sp_loc    = std_sp_location
@@ -369,7 +383,9 @@ let conv ~preserved ~jump ~altret name specs ~return_to cut =
   ; C.where_to_save_ra = (fun _ t -> Talloc.Multiple.loc t 't' 32)
       (* can't afford to leave ra where it is, even for the C convention,
          because we might make a tail call from C to C-- *)
-  ; C.ra_on_exit       = (fun _ b _ -> amem (addk (Block.base b) (-4)))
+  ; C.ra_on_exit       = 
+        (let adjust = if struct' then 0 else -4 in
+        (fun _ b _ -> amem (addk (Block.base b) adjust)))
   ; C.sp_on_unwind     = (fun exp -> RU.store sp exp)
   ; C.sp_on_jump       =
       if jump then (fun b _ -> RU.store sp (addk (Block.base b) (-4)))
@@ -440,12 +456,15 @@ convention.
 <<x86 calling convention automata in Lua>>=
 X86.cc["paranoid C"]        = X86.cc["C"]
 X86.layout["paranoid C"]    = X86.layout["C"]
+X86.cc["C returns struct"]  = X86.cc["C"]
+X86.layout["C returns struct"]  = X86.layout["C"]
 
 -- layout for "notail" is defined in luacompile.nw (uses the "C" layout)
 X86.cc["notail"]            = X86.cc["C--"]
 
 A.register_cc(Backend.x86.target,"C"     ,    X86.cc["C"     ])
 A.register_cc(Backend.x86.target,"paranoid C",X86.cc["paranoid C"])
+A.register_cc(Backend.x86.target,"C returns struct", X86.cc["C returns struct"])
 A.register_cc(Backend.x86.target,"C'"    ,    X86.cc["C"     ])
 A.register_cc(Backend.x86.target,"C--"   ,    X86.cc["C--"   ])
 A.register_cc(Backend.x86.target,"C-- thread",    X86.cc["C-- thread"])
@@ -457,15 +476,17 @@ of registers preserved accross calls, i.e. non-volatile or callee-saved
 registers.
 <<x86call.ml>>=
 let cconv ~return_to cut ccname stage =
+  let cconv = conv ~struct':false in
   let f =
     match ccname with
-    | "C--"         -> conv ~jump:true  ~altret:true  ~preserved:nvregs
+    | "C--"         -> cconv ~jump:true  ~altret:true  ~preserved:nvregs
     | "C-- thread"  -> (fun ccname stage ~return_to cut -> thread cut stage)
-    | "lightweight" -> conv ~jump:true  ~altret:true  ~preserved:nvregs
-    | "notail"      -> conv ~jump:false ~altret:true  ~preserved:nvregs
-    | "paranoid C"  -> conv ~jump:false ~altret:false ~preserved:RS.empty
-    | "C"           -> conv ~jump:false ~altret:false ~preserved:nvregs
-    | "gc"          -> conv ~jump:false ~altret:false 
+    | "lightweight" -> cconv ~jump:true  ~altret:true  ~preserved:nvregs
+    | "notail"      -> cconv ~jump:false ~altret:true  ~preserved:nvregs
+    | "paranoid C"  -> cconv ~jump:false ~altret:false ~preserved:RS.empty
+    | "C"           -> cconv ~jump:false ~altret:false ~preserved:nvregs
+    | "C returns struct" -> conv ~struct':true ~jump:false ~altret:false ~preserved:nvregs
+    | "gc"          -> cconv ~jump:false ~altret:false 
                             ~preserved:(RS.of_list [ecx;edx;ebx;esi;edi;ebp])
     | _ -> Unsupported.calling_convention ccname
   in f ccname stage ~return_to cut

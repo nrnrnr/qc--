@@ -3,4 +3,4 @@
 #
 
 %.man:D:          %.1
-	nroff -man $prereq > $target
+	nroff -man -Tascii $prereq > $target

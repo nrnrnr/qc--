@@ -199,12 +199,12 @@ fallback.
 <<state dumping>>
 let rec fallback fbname g args =
   let call f g args = match f with
-  | V.Function (_, f) -> f args
+  | V.Function (info, f) -> with_stack info g f args
   | v when fbname <> "function" -> fallback "function" g (v :: args)
   | v -> default_error_fallback g [V.String "`function' fallback not a function"] in
   let fbval = try Hashtbl.find g.V.fallbacks fbname
-              with Not_found -> <<fallback failure>>
-  in call fbval g args
+              with Not_found -> <<fallback failure>> in
+  call fbval g args
 <<definition of [[catcherrorfallback]]>>
 @ 
 It should never happen that we don't have a fallback.
