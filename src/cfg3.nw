@@ -199,7 +199,10 @@ val conts: cuts:node list -> unwinds:node list ->
            returns:node list -> aborts: bool -> conts 
 
 (* observation *)
-val ast:    cfg -> name:string -> (mangle:string -> string) -> Ast.proc
+val ast:    cfg -> name:string                  (* of procedure *)
+                -> (mangle:string -> string)    (* C-- name mangler *)
+                -> target:Target2.t             (* to translate RTLs *)
+                -> Ast.proc
 @
 
 % ------------------------------------------------------------------ 
@@ -460,6 +463,14 @@ val conts: cuts:node list -> unwinds:node list ->
 \end{verbatim}
 
 Construct a continuation bundle from the arguments.
+
+\item [[ast]] returns an {\PAL} abstract syntax tree (\AST) representing
+      the {\cfg}. This is intended as a debugging tool to make the
+      {\cfg} visible using a pretty-printer for the {\AST} (c.f.~module
+      \module{ast}). The function receives a \emph{mangler} for names.
+      This mangler must respect the {\PAL} rules for names. See module
+      \module{mangle} for details.
+
 \end{itemize}
 
 
@@ -505,6 +516,7 @@ type property   = unit              (* functorize over property? *)
 module X = struct
     module A   = Ast
     module R2A = Rtl2ast
+    module T   = Target2
     <<module X>>                    (* the OO implementation *)
 end
 
@@ -685,11 +697,11 @@ let set_property (node:node) (p:property) = node#set_property p
 
 
 <<cfg3.ml>>=
-let ast (cfg:cfg) (name:string) (mangle:string -> string) = 
+let ast (cfg:cfg) (name:string) (mangle:string->string) (target:Target2.t) = 
     ( None
     , mangle name
     , []
-    , cfg#ast mangle
+    , cfg#ast mangle target
     )
 @
     
@@ -723,7 +735,9 @@ class type cfg = object
     method enumeration: node array      (* req: enumerated *)
     method get_id:      unit -> int     (* unique *)
     method test:        unit            (* test integrity of this *)
-    method ast:         (string->string) -> Ast.body list (* req: enumerated *)
+    method ast:         (mangle:string->string) 
+                        -> Target2.t
+                        -> Ast.body list 
 end
 @
 
@@ -768,11 +782,10 @@ end
 
 \item [[ast]] returns a {\PAL} representation of [[this]]. More
       precisely, it returns the abstract syntax of a procedure's body
-      that represents [[this]] {\cfg}. Invoking [[ast]] requires that
-      nodes are enumerated, otherwise it is a checked run-time error.
-      The [[ast]] method receives a \emph{mangler} function that is used
-      to transform labels and symbolic constants withing [[this]] to
-      {\PAL} syntax. See module \module{mangle} for details.
+      that represents [[this]] {\cfg}. The [[ast]] method receives a
+      \emph{mangler} function that is used to transform labels and
+      symbolic constants withing [[this]] to {\PAL} syntax. See module
+      \module{mangle} for details.
 
 \end{itemize}
 
@@ -803,7 +816,9 @@ and node = object
     method insert_assign_after : Rtl.rtl -> node (* returns new node *)  
 
     method comment:     string          (* included into ast *)
-    method ast:         mangle:(string->string) -> Ast.body list
+    method ast:         mangle:(string->string) 
+                        -> Target2.t
+                        -> Ast.body list
     method linorder:    node option * node list (* immediate/delayed succs *)
     
     (* for debugging only *)
@@ -1102,14 +1117,14 @@ object (this)
 
 
     (* create AST of this *)
-    method ast (mangle:string -> string) =
+    method ast (mangle:string -> string) (target:Target2.t) =
         let this = (this :> cfg) in
         if not this#enumerated then this#enumerate else ();
         let enum          = 
             match _enumeration with 
             | Some x -> x 
             | _      -> assert false                  in
-        let f node result = node#ast mangle :: result in
+        let f node result = node#ast mangle target :: result in
             List.concat (Array.fold_right f enum [])
             
 end
@@ -1203,7 +1218,7 @@ object(this)
     method comment =
         "node"
 
-    method ast (mangle:string->string) = 
+    method ast (mangle:string->string) (target:Target2.t) = 
         let this    = (this :> node) in
         let label l = stmt (A.LabelStmt (mangle l)) in
         let labels  = List.map label _labels in
@@ -1316,11 +1331,12 @@ and exit cfg: node =
 object(this)
     inherit vnode cfg Rtl.null as super
 
-    method comment = "exit"    
+    method comment = "exit - should be unreachable from entry!"    
     method linorder = (None, [])
 end
 @
 
+(* ------------------------------------------------------------------ *) 
 The [[assign]] object provides an [[add_assign_after]] method that
 allows to insert a new [[assign]] node before the successor. 
 
@@ -1349,8 +1365,8 @@ object (this)
             ; assign
             )
 
-    method ast mangle =
-        let labels = super#ast mangle    in
+    method ast mangle target =
+        let labels = super#ast mangle target in
         let s      = R2A.rtl mangle _rtl in
             labels@[stmt s]
 
@@ -1379,6 +1395,12 @@ object (this)
         _exit <- map _exit
 
     method comment = "return"    
+
+    method ast mangle target =
+        let labels = super#ast mangle target    in
+        let s      = A.ReturnStmt(None,None,[]) in
+            labels@[stmt s]
+        
     method linorder = (None, [])
 
 end
@@ -1402,6 +1424,14 @@ object (this)
         _targets <- List.map map _targets 
 
     method comment = "goto"    
+    
+    method ast mangle target =
+        let labels = super#ast mangle target      in
+        let exp    = target.T.goto.T.project _rtl in
+        let exp    = R2A.expr mangle exp          in
+        let s      = A.GotoStmt (exp, [])         in
+            labels@[stmt s]
+
     method linorder = (None, _targets)
 end
 
@@ -1423,6 +1453,13 @@ object (this)
     method succ = [_exit]   (*XXX*)
     
     method linorder = (None, [])
+    
+    method ast mangle target =
+        let labels = super#ast mangle target      in
+        let exp    = target.T.jump.T.project _rtl in
+        let exp    = R2A.expr mangle exp          in
+        let s      = A.JumpStmt (None,exp, [],[]) in
+            labels@[stmt s]
     
     method comment = "jump"    
     method upd_succ map =
@@ -1456,6 +1493,14 @@ object (this)
         ) 
     
     method comment = "call"    
+
+    method ast mangle target =
+        let labels = super#ast mangle target      in
+        let exp    = target.T.call.T.project _rtl in
+        let exp    = R2A.expr mangle exp          in
+        let s      = A.CallStmt ([], None, exp, [], [], []) in
+            labels@[stmt s]
+
     method linorder = 
         ( Some _succ
         , uniq(List.concat[_cuts;_unwinds;_returns])
@@ -1486,6 +1531,14 @@ object (this)
         ) 
     
     method comment = "cutto"    
+
+    method ast mangle target =
+        let labels = super#ast mangle target      in
+        let exp    = target.T.cutto.T.project _rtl in
+        let exp    = R2A.expr mangle exp          in
+        let s      = A.CutStmt (exp, [], [])      in
+            labels@[stmt s]
+    
     method linorder = 
         ( None
         , uniq(List.concat[_cuts;_unwinds;_returns])
@@ -1515,6 +1568,16 @@ object (this)
         ( _ifso  <- map _ifso
         ; _ifnot <- map _ifnot
         )
+
+    method ast mangle target =
+        let labels       = super#ast mangle target           in
+        let guard,label = target.T.branch.T.project _rtl     in
+        let guard        = R2A.expr mangle guard             in
+        let label        = R2A.expr mangle label             in
+        let goto         = A.GotoStmt (label,[])             in
+        let s            = A.IfStmt (guard, [stmt goto], []) in
+            labels@[stmt s]
+
     
     method linorder = 
         ( Some _ifnot
