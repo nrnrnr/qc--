@@ -33,7 +33,7 @@ CC  =               cc
 #
 # Therefore I reverted to the more explicit asm rule below.
 
-all:V:              alpha-call x86-c-call mips-call
+all:V:              alpha-call x86-call mips-call
 asm:V:
                     for f in *.c--; do
                         mk `basename $f .c--`.s
@@ -84,6 +84,7 @@ x86-call:V:         x86-call.sigs
                     $GEN -name=$target-cmm  -width=32 -conv="notail" < $prereq
                     $GEN -name=$target      -width=32 < $prereq
                     $GEN -name=$target-x -c -width=32 < $prereq
+                    $GEN -name=$target-cspec -conv="c'" -c -width=32 < $prereq
                     
 
 mips-call:V:        mips-call.sigs
@@ -118,6 +119,10 @@ x86-test:V:         asm
                         cc $f && ./a.out
                     done
                     for f in x86-call-x-main-*.s; do
+                        g=`echo $f | sed -e 's/main/callee/' -e 's/\.s/.c/'`
+                        cc $f $g && ./a.out
+                    done    
+                    for f in x86-call-cspec-main-*.s; do
                         g=`echo $f | sed -e 's/main/callee/' -e 's/\.s/.c/'`
                         cc $f $g && ./a.out
                     done    
