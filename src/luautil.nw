@@ -215,15 +215,26 @@ Compare files ignoring whitespace. All whitespace characters are
 converted into single space character using a simple one character
 buffer.
 <<utility functions>>=
-let files_nonwhite_equivalent f1 f2 =
+let rec files_nonwhite_equivalent f1 f2 =
+  let finish answer = answer in
   try
+    let ch1 = open_in f1 in
+    let finish answer = (close_in ch1; finish answer) in
+    try
+      let ch2 = open_in f2 in
+      let finish answer = (close_in ch2; finish answer) in
+      finish (compare_channels ch1 ch2)
+    with _ -> finish false
+  with _ -> finish false
+and compare_channels ch1 ch2 =          
+  try
+    let ch1 = ch1, ref 0 in
+    let ch2 = ch2, ref 0 in
     let sp i = i == int_of_char ' '
     and input_chr ch = int_of_char (
       match input_char ch with
       | ' ' | '\t' | '\n' | '\r' -> ' '
       | c -> c) in
-    let ch1 = (open_in f1, ref 0)
-    and ch2 = (open_in f2, ref 0) in
     let rec get_char (ch,buf) =
       let last = !buf in
       let rec scan_forward () =

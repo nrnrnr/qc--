@@ -21,7 +21,7 @@ Test.skip_files = nil    -- skip input source files
 Test.on_error   = {}     -- error handlers
 Test.files      = {}     -- input source files
 Test.tst_file   = nil    -- name of config file
---Test.update     = nil    -- update differing files
+Test.update     = Test.update  -- update differing files (default nil)
 Test.gen_args   = ""     -- additional arguments for generator
 Test.qc         = getenv("QC") or Sys.cmd or "../bin/qc--"
 @ 
@@ -94,27 +94,20 @@ boundaries.  Thanks, INRIA.
 function Test.rename(src, dest)
   local x, y = rename(src, dest)
   if not x and strfind(y, "cross-device") then
-    return Test.copy_file(src, dest) and remove(src)
+    return execute("mv " .. src .. " " .. dst) == 0
   else
     return x, y
   end
 end
-
-function Test.copy_file(src, dest)
-  if not readfrom(src) then return nil end
-  if not writeto(dest) then readfrom(); return nil end
-  local l = read()
-  while l do
-    if not write(l .. "\n") then
-      readfrom()
-      writeto()
-      return nil
-    end
-    l = read() 
-  end
-  writeto()
-  readfrom()
-  return 1
+<<testdrv.lua>>=
+function Test.record_output(src, dest)
+  local rc = execute(format([[
+    if [ `wc -c < %s` -gt 0 ]; then
+      cp %s %s; exit $?
+    else
+      rm %s; exit $?
+    fi]], src, src, dest, dest))
+  return rc == 0
 end
 @ 
 \paragraph{Running commands}
@@ -188,11 +181,11 @@ function Test.on_error[".s"](expected, output)
   else
     local linecount = 10
     local cmd = format([[if [ `wc -c < %s` -le %d ]; then
-        echo "Unexpected nonempty output follows:" ; cat %s
+        echo "Unexpected nonempty output follows:" ; sed 's/^/| /' %s
       else
         echo "Unexpected nonempty output; first %d lines follow:"
-        head -%d %s
-        echo "..."
+        head -%d %s | sed 's/^/| /'
+        echo "  ..."
       fi]], output, linecount, output, linecount, linecount, output)
     Test.log(format("show_nonempty %d %s", linecount, output))
     execute(cmd)
@@ -234,7 +227,9 @@ function that returns non-nil, so its normal termination will be
 distinguishable from the exceptional case.
 <<testdrv.lua>>=
 function Test.translate(file)
+Test.xxx =  'no return from call translate_files\n'
   CMD.translate_files(file, CMD.compilertab)
+Test.xxx = 'normal return from translate_files\n'
   return 1
 end
 @ 
@@ -345,8 +340,8 @@ function Test.check_update_file(inputs, file, i)
   if not equiv then
     if Test.update then
       write(format("[new %s] ", exp))
-      if not Test.copy_file(file, exp) then
-        print(format(" !! error moving file %s to %s !!", file,  exp))
+      if not Test.record_output(file, exp) then
+        print(format(" !! error recording output %s as %s !!", file,  exp))
       end
     else
       if nonempty then
@@ -370,8 +365,8 @@ function Test.check_update_file(inputs, file, i)
         Test.log("%s output is empty (as expected)", ext)
       end
     end
+    return 0
   end
-  return 0
 end
 @ 
 <<testdrv.lua>>=
