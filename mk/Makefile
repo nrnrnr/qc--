@@ -6,12 +6,13 @@
 # 1.0 released on  5 March 2002
 # 1.1 released on 11 March 2002
 # 1.2 released on 15 May   2002
-# 1.3 releades on  5 June  2002
+# 1.3 released on  5 June  2002
+# 1.4 released on 29 July  2002
 
 # VERSION is incremented AFTER a release. After the release of 1.1 we are 
 # thus working for a while on 1.2.
 
-VERSION = 1.4
+VERSION = 1.5
 
 PREFIX  = /usr/local
 BINDIR  = $(PREFIX)/bin
