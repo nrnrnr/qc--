@@ -96,6 +96,9 @@ type spacedescr = { cellwidth: int              (* bits *)
                   }
 @
 
+Of course, cells that belong to a space must meet its constraints. 
+See below for when a cell is well typed with respect to its space
+description.
 
 % ------------------------------------------------------------------ 
 \subsubsection{Public View}
@@ -127,7 +130,7 @@ val opr       : string -> width list -> opr
 @
 
 
-A [[loc]] may be
+A [[loc]] may be:
 \begin{itemize}
 \item A \emph{cell} that belongs to some [[space]], where it has an
       address [[exp]].  We always have an [[assertion]] that tells us
@@ -139,7 +142,7 @@ A [[loc]] may be
 \item A \emph{slice} from a location at a known width and least-significant
       bit.
 \end{itemize}
-%
+
 <<types and functions exported at top level>>=
 val none     : assertion
 val aligned  : int -> assertion
@@ -148,10 +151,19 @@ val var      : string -> index:int -> width -> loc
 val slice    : width -> lsb:int -> loc -> loc
 @
 
+A [[cell]] [[c]] of some [[space]], described by a [[spacedesc]] value
+[[s]], is well-typed, if all of the following conditions are met:
+
+\begin{enumerate}
+\item The cell's aggregation equals [[s.byteorder]]
+\item The cell's width equals [[s.cellwidth]]
+\item The cell's address expression width equals [[s.addrwidth]]
+\end{enumerate}
+
 An effect alters one or more [[loc]]s.  A [[store]] puts the value of
 [[exp]] into a location; a [[kill]] invalidates a location's content.
 Effects are represented as {\rtl}s.
-%
+
 <<types and functions exported at top level>>=
 val store     : loc -> exp -> width -> rtl
 val kill      : loc -> rtl
