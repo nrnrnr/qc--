@@ -1,0 +1,54 @@
+// dayofweek.c--
+//
+// computes day of week
+//
+// dow takes month (1-12), day (1-31), year (1900-2099)
+// returns: 0 for saturday, 1 for sunday, ..., 6 for friday
+//
+// does not work for days during the first few months of leap years
+//
+/// ./regr "./qrun $SELF" $REGRFLAGS -out $BASE.cmm.1 -err $BASE.cmm.2
+
+target 
+       byteorder   little
+       memsize     8
+       wordsize    32
+       pointersize 32
+;
+
+export main;
+import bits32 cmmprint;
+
+section "data" {
+  month_codes: bits8[]   {0::bits8}; // placeholder
+               bits8[]   {1::bits8, 4::bits8, 4::bits8, 0::bits8, 2::bits8,
+                          5::bits8, 0::bits8, 3::bits8, 6::bits8, 1::bits8, 
+                          4::bits8, 6::bits8};
+}
+
+section "text" {
+
+  dow( bits32 month, bits32 day, bits32 year) {
+    bits32 temp, code;
+
+    temp  = %zx32(%divu(year - 1900, 4::bits16));
+
+    temp  = temp + (year - 1900) + day;
+
+    code  = %zx32(bits8[month_codes + month]);
+    temp  = temp + code;
+
+    temp  = %modu(temp, 7::bits32);
+
+    return( temp );
+  }
+
+  main() {
+    bits32 x;
+
+    x = dow(7, 22, 2002);
+    foreign "C" cmmprint(x);
+
+    return;
+  }
+}
