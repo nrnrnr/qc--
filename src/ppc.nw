@@ -230,17 +230,16 @@ expression before loading or storing them in the final location. The
 remaining postexpander load and store operations are defined in terms
 of these two functions.
 <<ppc postexpander>>=
-let xload op ~dst ~addr w assn =
-  let ext = R.app (R.opr op [w; twidth dst]) [memval assn w addr] in
-  tstore dst ext
-
-let xstore op ~addr ~src w assn =
-  let ext = R.app (R.opr op [twidth src; w]) [tval src] in
+let lostore ~addr ~src w assn =
+  let ext = RO.lobits (twidth src) w (tval src) in
   rtl (R.store (mem assn w addr) ext w)
 
-let sxload  = xload "sx"
-let zxload  = xload "zx"
-let lostore = xstore "lobits"
+let zxload ~dst ~addr w assn =
+  tstore dst (RO.zx w (twidth dst) (memval assn w addr))
+
+let sxload ~dst ~addr w assn =
+  zxload dst addr w assn <:>
+  tstore dst (RO.sx 8 (twidth dst) (RO.lobits (twidth dst) 8 (tval dst)))
 @ 
 Registers are copied into registers with
 [[tstore]].
@@ -253,6 +252,8 @@ let lix ~dst exp =
   let {Rewrite.hi = hi; Rewrite.lo = lo} = Rewrite.splits 32 16 exp in
   tstore dst hi <:>
   tstore dst (RO.add 32 (tval dst) lo)
+
+let li ~dst const = lix dst (Up.exp (RP.Const const))
 @ 
 <<ppc postexpander>>=
 let extract ~dst ~lsb ~src = Impossible.unimp "extract"
@@ -261,22 +262,6 @@ let aggregate ~dst ~src = Impossible.unimp "aggregate"
 <<ppc postexpander>>=
 let hwset ~dst ~src = Impossible.unimp "setting hardware register"
 let hwget ~dst ~src = Impossible.unimp "getting hardware register"
-@ 
-Load immediate is a bit tricky because the PPC only allows 16-bit
-constants to be loaded directly.
-A~BETTER ALTERNATIVE HERE WOULD BE [[lix dst (R.bits const 32)]], POSSIBLY SIMPLIFIED. 
-<<ppc postexpander>>=
-let li ~dst const =
-  let con w i = R.bits (B.S.of_int i w) w in
-  match const with
-  | RP.Bits b -> assert (B.width b = 32);
-                 let b'    = if BO.lt b (B.zero 32) then BO.neg b else b in
-                 let l     = R.bits (BO.lobits 16 b) 16 in
-                 let h     = BO.lobits 16 (BO.shrl b' (B.S.of_int 16 32)) in
-                 let dsthi = R.slice 16 16 (R.reg dst) in
-                 tstore  dst   (R.app (R.opr "sx" [16;32]) [l]) <:>
-                 rtl (R.store dsthi (R.bits h 16) 16)
-  | _         -> tstore dst (Up.const const)
 @ 
 Machine Environment for PPC backend.
 <<ppc postexpander>>=
@@ -517,7 +502,6 @@ which is a return from procedure call.
 let don't_touch_me = function
   | [ RP.Store(l, RP.Fetch(r, _), _) ]
     when RU.Eq.loc l (Dn.loc pc_lhs) && RU.Eq.loc r (Dn.loc lr) -> true
-  | [ RP.Store (_, RP.App (("add", _), [ _ ; RP.Const (RP.Diff _)]),_)] -> true
   | _ -> false
 @ 
 Stack operations...

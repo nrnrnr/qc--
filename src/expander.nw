@@ -49,6 +49,7 @@ For a register machine, we reduce RTLs to the following forms:
 {\def\gets{\mathrel{:=}}%
 \def\rm{{\mathit{rm}}}%
 $$\begin{array}{r@{}c@{}l@{\mskip10mu}ll}
+\multicolumn4{l}{\mbox{\emph{Data movement}}}\\
 m[t_l] & {}\gets{} & t     &\mbox{\texttt{store}}\\
 t      & \gets & m[t_l]&\mbox{\texttt{load}} \\
 t_1    & \gets & t_2   &\mbox{\texttt{move}} \\
@@ -56,7 +57,11 @@ t      & \gets & r   &\mbox{\texttt{hwget}} \\
 r      & \gets & t   &\mbox{\texttt{hwset}} \\
 t      & \gets & t@[\mathit{lo}..\mathit{hi}] & \mbox{\texttt{extract}} \\
 t      & \gets & t_{\mathit{lo}},\ldots,t_{\mathit{hi}} & \mbox{\texttt{aggregate}} \\
+m[t_l] & \gets & \mathtt{lobits}_n(t)     &\mbox{\texttt{lostore} (store byte/halfword)}\\
+t      & \gets & \mathtt{sx}(m[t_l])       &\mbox{\texttt{sxload} (load signed b/h)} \\
+t      & \gets & \mathtt{zx}(m[t_l])       &\mbox{\texttt{zxload} (load unsigned b/h)} \\
 t      & \gets & k     &\mbox{\texttt{li} (load immediate constant)}\\
+[3pt]\multicolumn4{l}{\mbox{\emph{Computation}}}\\
 t      & \gets & t_1 \oplus t_2 &  
            \mbox{a binary ALU operation (\texttt{binop})}\\
 t      & \gets & \mathit{op}(t_1) &  
@@ -73,9 +78,7 @@ t_{\mathit{hi}}, t_{\mathit{lo}}      & \gets & t_1 \otimes t_2 &
             \mbox{an extended multiply operation (\texttt{dblop})}\\
 %%t      & \gets & \oplus(t_1, \ldots, t_n) & 
 %%  \mbox{ordinary ALU operations (\texttt{binop}, \texttt{unop}, etc)}\\
-m[t_l] & \gets & \mathtt{lobits}_n(t)     &\mbox{\texttt{lostore} (store byte/halfword)}\\
-t      & \gets & \mathtt{sx}(m[t_l])       &\mbox{\texttt{sxload} (load signed b/h)} \\
-t      & \gets & \mathtt{zx}(m[t_l])       &\mbox{\texttt{zxload} (load unsigned b/h)} \\
+[3pt]\multicolumn4{l}{\mbox{\emph{Control flow}}}\\
 \mathit{PC}& \gets & L &\mbox{\texttt{b} (branch)}\\
 \mathit{PC}& \gets & t &\mbox{\texttt{br} (branch register)}\\
 t \mathbin? t \rightarrow \mathit{PC}& \gets & L &\mbox{\texttt{bc} (branch conditional)}\\
@@ -547,14 +550,15 @@ val lostore : addr:Address.t  -> src:temp -> width -> assertion -> block
 might correspond to a ``load signed halfword'' instruction.
 A~[[lostore]] with width of~8 might correspond to ``store byte.''
 @
-We need a move operation.
-It has to handle not only moves within a single register space but
-also moves from space to space (e.g., move a value from an integer register into a
-floating-point register).
+The [[move]] operation moves data between two registers of the same
+width. 
+It must handle not only moves within a single register space but
+also moves from space to space (e.g., move a value from an integer
+register into a floating-point register).
 <<generic expansion operations for register machines>>=
 val move : dst:temp -> src:temp -> block
 @ 
-On some machines, we will have to move data between registers of
+On some machines, we have to move data between registers of
 different widths.
 For example, it might be necessary to move a value from a 64-bit
 floating-point register into two 32-bit integer registers (or vice

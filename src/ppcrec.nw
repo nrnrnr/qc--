@@ -53,12 +53,6 @@ let guard b = if b then 0 else infinity
 @ 
 Utilities for instructions.
 <<code to precede the labeler>>=
-let fits b w =  (* REPLACE WITH Bits.S.fits?? *)
-  let i  = Bits.S.to_int64 b in
-  let i' = Int64.abs i in
-  let i' = Int64.shift_right i' w in
-  Int64.compare i' Int64.zero = 0
-
 let imports = ref ([] : string list)
 
 let ind_addr name =
@@ -84,9 +78,26 @@ n w bits symbol
 Terminal [[bits]] is a constant of types [[Bits.bits]]; terminal
 [[symbol]] is a string.
 
+Nonterminal [[const16]] always appears in contexts
+where it is sign-extended.
 <<rules>>=
-const32:  Bits(bits) [{: guard (fits bits 32) :}] {: Bits.to_decimal_string bits :}
-const16:  Bits(bits) [{: guard (fits bits 16) :}] {: Bits.to_decimal_string bits :}
+const16:  Bits(bits) [{: guard (Bits.S.fits 16 bits) :}]
+                     {: Bits.to_decimal_string bits :}
+
+k15 : Bits(bits)
+        [{: guard (Bits.width bits > 5 &&
+                   Bits.eq bits (Bits.U.of_int 15 (Bits.width bits))) :}]
+        {: () :}
+
+k16 : Bits(bits)
+        [{: guard (Bits.width bits > 5 &&
+                   Bits.eq bits (Bits.U.of_int 16 (Bits.width bits))) :}]
+        {: () :}
+
+k4 : Bits(bits)
+        [{: guard (Bits.width bits > 5 &&
+                   Bits.eq bits (Bits.U.of_int 4 (Bits.width bits))) :}]
+        {: () :}
 
 lconst: Link(symbol, w:int)        {: symbol#mangled_text :}
 pic:    Diff(c1:lconst, c2:lconst) {: s "%s-%s" c1 c2 :}
@@ -125,9 +136,7 @@ inst: Store(regl,  lr, w:int) {: s "mflr %s" regl :}
 inst: Store(lrl,  reg, w:int) {: s "mtlr %s" reg  :}
 inst: Store(regl,  cr, w:int) {: s "mfcr %s" regl :}
 
-inst: Store(regl,                const16, 32) {: s "addi %s,0,%s" regl const16 :}
-inst: Store(Slice(16, 0, regl),  const16, 16) {: s "addi %s,0,%s" regl const16 :}
-inst: Store(Slice(16, 16, regl), const16, 16) {: s "addis %s,%s,%s" regl regl const16 :}
+inst: Store(regl, const16, 32) {: s "addi %s,0,%s" regl const16 :}
 
 inst: Store (regl, Fetch(Mem(addr    ),32), 32)     {: s "lwz %s,%s" regl addr  :}
 inst: Store (regl, Fetch(Mem(ndx_addr),32), 32)     {: s "lwzx %s,%s" regl ndx_addr :}
@@ -135,10 +144,8 @@ inst: Store (regl, Zx(Fetch(Mem(addr),8)), 32)      {: s "lbz %s,%s" regl addr  
 inst: Store (regl, Zx(Fetch(Mem(ndx_addr),8)), 32)  {: s "lbzx %s,%s" regl ndx_addr  :}
 inst: Store (regl, Zx(Fetch(Mem(addr),16)), 32)     {: s "lhz %s,%s" regl addr  :}
 inst: Store (regl, Zx(Fetch(Mem(ndx_addr),16)), 32) {: s "lhzx %s,%s" regl ndx_addr  :}
-inst: Store (regl, Sx(Fetch(Mem(addr),8)), 32)
-    {: s "lbz %s,%s\n\textsb %s,%s" regl addr regl regl :}
-inst: Store (regl, Sx(Fetch(Mem(ndx_addr),8)), 32)
-    {: s "lbzx %s,%s\n\textsb %s,%s" regl ndx_addr regl regl :}
+inst: Store (regl, Sxlo(reg,  8), 32)               {: s "extsb %s,%s" regl reg :}
+inst: Store (regl, Sxlo(reg, 16), 32)               {: s "extsh %s,%s" regl reg :}
 inst: Store (regl, Sx(Fetch(Mem(addr),16)), 32)     {: s "lha %s,%s" regl addr  :}
 inst: Store (regl, Sx(Fetch(Mem(ndx_addr),16)), 32) {: s "lhax %s,%s" regl ndx_addr  :}
 
@@ -151,11 +158,13 @@ inst: Store (Mem(ndx_addr), Lobits(reg,16),16) {: s "sthx %s,%s" reg ndx_addr  :
 @ 
 \paragraph{Position-independent Code}
 <<rules>>=
-inst:  Store(regl, Add(reg,pic), 32)
-    {: s "addis %s,%s,ha16(%s)\n\tla %s,lo16(%s)(%s)" regl reg pic regl pic regl :}
+inst : Store(regl, Add(reg, ha16), 32) {: s "addis %s,%s,%s" regl reg ha16 :}
+inst : Store(regl, ha16, 32)           {: s "addis %s,0,%s" regl ha16 :}
 
-inst:  Store(regl, pic, 32)
-    {: s "li %s,ha16(%s)\n\tla %s,lo16(%s)(%s)" regl pic regl pic regl :}
+inst : Store(regl, Add(reg, Sxlo(pic,16)),32) {: s "addi %s,%s,lo16(%s)" regl reg pic :}
+inst : Store(regl, Sxlo(pic, 16), 32)         {: s "addi %s,0,lo16(%s)" regl pic :}
+
+ha16: Ha16(pic) {: s "ha16(%s)" pic :}
 @
 \paragraph{Control Flow}
 <<rules>>=
@@ -170,7 +179,7 @@ inst : Par(Goto(lr),Store(regl,reg,w:int)) {: sprintf "mr %s, %s; blr" regl reg 
 The [[next]] pattern covers the expression $PC + 4$ which denotes the
 instruction following the branch instruction.
 <<rules>>=
-next:  Add(cia,const32) {: () :}
+next:  Add(cia,k4) {: () :}
 inst:  Par(Goto(lr    ), Store(lrl,next,32)) {: "blrl" :}
 inst:  Par(Goto(lconst), Store(lrl,next,32)) {: s "bl %s" (ind_addr lconst) :}
 @
@@ -190,8 +199,7 @@ inst : Guarded(OvSet(Fetch(xerl,32)), Goto(lconst))
 @ 
 \paragraph{Instructions}
 <<rules>>=
-
-inst: Store(regl,  Add(x:reg, y:reg), 32)       {: s "add  %s,%s,%s" regl x y :}
+inst: Store(regl,  Add(x:reg, y:reg), 32)       {: s "add %s,%s,%s" regl x y :}
 inst: Store(regl,  Add(x:reg, y:const16), 32)   {: s "addi %s,%s,%s" regl x y :}
 
 inst: Store(regl, Unop (opr:string,x:reg),      32) {: s "%s  %s,%s"    opr regl x :}
@@ -216,10 +224,15 @@ any : Fetch (any, w:int) {: s "Fetch(%s,%d)" any w :}
 
 any : Sx(any)           {: s "Sx(%s)" any  :}
 any : Zx(any)           {: s "Zx(%s)" any  :}
+any : Sxlo(any,w:int)   {: s "Sxlo(%s,%d)" any w :}
+any : Zxlo(any,w:int)   {: s "Zxlo(%s,%d)" any w :}
 any : Add(x:any, y:any) {: s "Add(%s, %s)" x y :}
 
-any : Unop (op:string, x:any)         {: s "%s of %s" op x  :}
-any : Binop(op:string, x:any, y:any)  {: s "%s of %s,%s" op x y  :}
+any: Ha16(any) {: s "Ha16(%s)" any :}
+
+
+any : Unop (op:string, x:any)         {: s "Unop(%s,%s)" op x  :}
+any : Binop(op:string, x:any, y:any)  {: s "Binop(%s,%s,%s)" op x y  :}
 
 any : Nop () {: "nop" :}
 
@@ -265,8 +278,9 @@ let is_cmp (opr,ws) =
   | _     -> error "comparison not at 32 bits in PPC recognizer"
 
 let rtl2ppc = function
-    "and"  -> "and"
+  | "and"  -> "and"
   | "divu" -> "divwu"
+  | "quot" -> "divw"
   | "mul"  -> "mullw"
   | "neg"  -> "neg"
   | "or"   -> "or"
@@ -279,6 +293,9 @@ let rtl2ppc = function
 let rec exp = function
   | RP.Const(k)                  -> const (k)
   | RP.Fetch(l,w)                -> conFetch (loc l) w
+  <<case for [[ha16(e)]]>>
+  | RP.App(("sx", [n; _]), [RP.App (("lobits", [_;_]), [x])]) -> conSxlo (exp x) n
+  | RP.App(("zx", [n; _]), [RP.App (("lobits", [_;_]), [x])]) -> conZxlo (exp x) n
   | RP.App(("sx", [8 ;32]), [x]) -> conSx (exp x)
   | RP.App(("sx", [16;32]), [x]) -> conSx (exp x)
   | RP.App(("zx", [8 ;32]), [x]) -> conZx (exp x)
@@ -297,6 +314,22 @@ let rec exp = function
                                        else conBinop (rtl2ppc opr) (exp x) (exp y)
 
   | RP.App((o,_),_) -> error (sprintf "unknown operator %s" o)
+@ 
+This job can't be done in BURG because the expression in question
+appears in two places.
+<<case for [[ha16(e)]]>>=
+| RP.App (("shl", [32]), [<<pic_hi16 + pic_15>>; RP.Const (RP.Bits k16)]) 
+   when Bits.eq k16 (Bits.U.of_int 16 32) && Bits.eq k16' (Bits.U.of_int 16 32)
+     && Bits.eq k15 (Bits.U.of_int 15 32) && RU.Eq.exp e e' ->
+     conHa16 (exp e)
+<<pic_hi16 + pic_15>>=
+RP.App(("add", [32]), [<<pic_hi16>>; <<pic15>>])
+<<pic_hi16>>=
+RP.App(("shrl", [32]), [e; RP.Const (RP.Bits k16')])
+<<pic15>>=
+RP.App(("zx", [1;32]),
+       [RP.App (("lobits", [32;1]),
+                [RP.App(("shrl", [32]), [e'; RP.Const (RP.Bits k15)])])])
 @ 
 <<code to follow the labeler>>=  
 and loc l = match l with
