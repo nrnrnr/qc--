@@ -8,11 +8,11 @@ CFLAGS=-g
 TOOLS=$BINDIR/tools
 DEPEND=$CC -MM -I$INCLUDEDIR
 
-HDRS=encode.h interp.h machine.h intervals.h
+HDRS=encode.h interp.h machine.h intervals.h runtime.h client.h
 SRCS=assert.c atom.c bcdis-dec.c encode.c except.c interp-dec.c intervals.c \
-     mclib.c mem.c
+     mclib.c mem.c runtime.c client.c
 OBJS=assert.o atom.o bcdis-dec.o encode.o except.o interp-dec.o intervals.o \
-     mclib.o mem.o
+     mclib.o mem.o runtime.o client.o
 
 TOP=..
 INTERP=evaluating
@@ -33,9 +33,9 @@ interp.tex: interp.nw
 	$NOWEAVE -delay -autodefs c -index $prereq > $target
 
 depend:V: $SRCS $HDRS
-    (cp mkfile mkfile.bak ;\
-     sed '/^# DO NOT DELETE/q' mkfile.bak > mkfile ;\
-     $DEPEND $SRCS >> mkfile)
+    cp mkfile mkfile.bak
+    sed '/^# DO NOT DELETE/q' mkfile.bak > mkfile
+    $DEPEND $SRCS >> mkfile
 
 clean:V: clean-tex clean-code clean-obj
 	rm -f design.tex state.tex bytecode.tex interp.tex intervals.tex opgen.tex interp *~
@@ -124,3 +124,7 @@ interp-dec.o: interp-dec.c interp.h intervals.h include/mclib.h \
 intervals.o: intervals.c intervals.h
 mclib.o: mclib.c
 mem.o: mem.c
+runtime.o: runtime.c runtime.h interp.h intervals.h include/mclib.h \
+ encode.h machine.h
+client.o: client.c client.h interp.h intervals.h include/mclib.h \
+ encode.h machine.h runtime.h
