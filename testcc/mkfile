@@ -88,8 +88,8 @@ x86-call:V:         x86-call.sigs
                     
 
 mips-call:V:        mips-call.sigs
-                    #$GEN -name=$target      -width=32 < $prereq
                     $GEN -name=$target-x -c -width=32 < $prereq
+                    $GEN -name=$target-x-cspec -c -conv="c'" -width=32 < $prereq
 
 #
 # Compile *.c-- files to *.s code. Compilation depends on the desired
@@ -163,12 +163,17 @@ mips.sh:
                         cc $f 
                         ./a.out
                     done    
-                    
                     for f in mips-call-x-main-*.s; do
                         g=`echo $f | sed -e 's/main/callee/' -e 's/.s$/.c/'`
                         cc $f $g 
                         ./a.out
                     done   
+                    for f in mips-call-x-cspec-main-*.s; do
+                        g=`echo $f | sed -e 's/main/callee/' -e 's/.s$/.c/'`
+                        cc $f $g 
+                        ./a.out
+                    done   
+                    
                     ' > $target
 
 clean:V:
