@@ -491,7 +491,7 @@ method test =
 method ast i2ast =
     let this = (this :> 'i cfg) in
         ( if not this#enumerated then this#enumerate else ()
-        ; let f node result = (*debug: A.CommentStmt(node#comment) :: *) 
+        ; let f node result = A.CommentStmt(node#comment) ::  
                               node#ast i2ast :: result in
             Array.fold_right f this#enumeration []
         )
@@ -533,8 +533,9 @@ object (this)
     method unlink =
         assert false    (* not defined in the general case! *)
 
-    method link_pred node =
-        _pred <- node :: _pred
+    method link_pred node = 
+        if not (List.mem node _pred) then 
+            _pred <- node :: _pred
         
     method unlink_pred node =
         assert (List.mem node _pred);
@@ -765,7 +766,12 @@ object (this)
     
     method unlink =
         let this = (this :> 'i node) in
-        let pred = match _pred with [x] -> x | _ -> assert false in
+        let pred = match _pred with 
+            | [x] -> x 
+            | _   -> ( Printf.printf "problem: %s" this#comment
+                     ; assert false 
+                     )
+        in
             ( pred#upd_succ (fun n -> if n = this then _succ else n)
             ; _succ#unlink_pred this
             ; _succ#link_pred pred
