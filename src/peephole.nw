@@ -61,6 +61,7 @@ module ToString = RU.ToReadableString
 module D  = Dataflow.Make (G)
 
 let () = Debug.register "peephole" "peephole optimizer"
+let peephole = "peephole"  (* avoid allocating again and again... *)
 
 let subst_forward _ proc =
   let ok =
@@ -94,10 +95,10 @@ one, when peephole optimizing.
 let propagate node avail =
   <<substitution>>
   let update rtl =
-    G.Tx.start_exn proc.P.cfg;
+    G.Tx.start_exn peephole;
     G.update_instr (replace rtl) node;
     changed := true;
-    G.Tx.finish proc.P.cfg in
+    G.Tx.finish () in
   let () = 
     match G.to_executable node with
     | Some rtl ->

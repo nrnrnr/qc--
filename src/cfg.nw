@@ -530,15 +530,18 @@ fail.
 
 N.B.~All flow graphs in a program share a single transaction counter
 and limit. 
+Each transaction is named so that we can identify what part of the
+compiler made a faulty transaction.
 <<graph and node mutators>>=
 module Tx : sig
   exception Exhausted
-  val start_cond : 'i cfg -> bool   (* returns true iff transaction OK *)
-  val start_exn  : 'i cfg -> unit   (* raises Exhausted iff transaction not OK *)
-  val finish     : 'i cfg -> unit   (* marks end of transaction *)
+  val start_cond : string -> bool   (* returns true iff transaction OK *)
+  val start_exn  : string -> unit   (* raises Exhausted iff transaction not OK *)
+  val finish     : unit   -> unit   (* marks end of transaction *)
 
   val set_limit  : int -> unit      (* set the transaction limit *)
   val used       : unit -> int      (* say how many transactions were used *)
+  val last       : unit -> string   (* string passed to the last transaction *)
 end
 @ 
 \paragraph{Altering successors}
@@ -1506,21 +1509,22 @@ the interface yet.
 <<graph and node mutators implementation>>=
 module Tx = struct
   exception Exhausted
-  type t = { mutable limit : int; mutable remaining : int; }
-  let ts = { limit = max_int; remaining = max_int; }
+  type t = { mutable limit : int; mutable remaining : int; mutable last : string; }
+  let ts = { limit = max_int; remaining = max_int; last = "<none>"; }
 
-  let start_cond _ =
+  let start_cond who =
     if ts.remaining > 0 then
-      ( ts.remaining <- ts.remaining - 1; true )
+      ( ts.remaining <- ts.remaining - 1; ts.last <- who; true )
     else
       false
   
-  let start_exn g = if start_cond g then () else raise Exhausted
+  let start_exn who = if start_cond who then () else raise Exhausted
 
   let finish _ = ()
 
   let set_limit n = ts.limit <- n; ts.remaining <- n
   let used _ = ts.limit - ts.remaining
+  let last _ = ts.last
 
   let _ = Reinit.at (fun () -> ts.remaining <- ts.limit)      
 end
