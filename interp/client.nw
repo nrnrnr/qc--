@@ -82,7 +82,7 @@ typedef struct {
   Cmm_Cont    *cont;
 
   Cmm_Dataptr stack_space;
-  Cmm_Dataptr stack_space_limit;
+  unsigned    stack_space_size;
 
   Cmm_Dataptr limit_cookie;
 } Cmm_TCB;
@@ -102,7 +102,7 @@ Cmm_TCB *TCB_new(void) {
 
   tcb->stack_space       = (Cmm_Dataptr) malloc(stack_size * sizeof(*data));
   mem_assert(tcb->stack_space);
-  tcb->stack_space_limit = tcb->stack_space + stack_size;
+  tcb->stack_space_size = stack_size;
 
   return tcb;
 }
@@ -269,7 +269,7 @@ Special commands [[verbosity]] and [[stacksize]] allow the user to slightly alte
     } else if (strcasecmp(command, "verbosity") == 0) {
       verbosity = !verbosity;
       printf("verbosity is %s\n", (verbosity ? "ON" : "OFF"));
-	} else if (strcasecmp(command, "stacksize") == 0) {
+    } else if (strcasecmp(command, "stacksize") == 0) {
       if ((arg = strtok(NULL, " ")) != NULL) {
         int i = atoi(arg);
         if (i <= 32)
@@ -321,7 +321,7 @@ The runtime system takes care of bytecode interpreting, as long as it is passed 
 @ 
 Creating and running a {\PAL} thread with a continuation to execute the code at [[loc]] is as easy as calling runtime library functions [[Cmm_CreateThread]] and [[Cmm_RunThread]] (see [[runtime.nw]] for more information). 
 <<[[tcb]] $\leftarrow$ thread to execute program at [[loc]]>>=
-  tcb->cont = Cmm_CreateThread(loc, tcb->stack_space, tcb->stack_space_limit,
+  tcb->cont = Cmm_CreateThread(loc, tcb->stack_space, tcb->stack_space_size,
                                &(tcb->limit_cookie));
 @
 <<run continuation in [[tcb]]>>=

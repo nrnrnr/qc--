@@ -13,6 +13,7 @@ SRCS=assert.c atom.c bcdis-dec.c encode.c except.c interp-dec.c intervals.c \
      mclib.c mem.c runtime.c client.c
 OBJS=assert.o atom.o bcdis-dec.o encode.o except.o interp-dec.o intervals.o \
      mclib.o mem.o runtime.o client.o
+STDBASIS=stdbasis.lua
 
 TOP=..
 INTERP=evaluating
@@ -38,7 +39,7 @@ depend:V: $SRCS $HDRS
     $DEPEND $SRCS >> mkfile
 
 clean:V: clean-tex clean-code clean-obj
-	rm -f design.tex state.tex bytecode.tex interp.tex intervals.tex opgen.tex interp *~
+	rm -f design.tex state.tex bytecode.tex interp.tex intervals.tex opgen.tex client.tex runtime.tex interp *~
 
 clean-tex:V:
 	rm -f *.blg *.log *.dvi *.inc *.toc *.aux 
@@ -52,6 +53,9 @@ clean-obj:V:
 #
 # source code targets
 #
+stdbasis.lua: runtime.nw
+    $NOTANGLE -R$target $prereq > $target
+
 intervals.c: intervals.nw
     $NOTANGLE -L -R$target $prereq > $target
 
@@ -107,7 +111,7 @@ optest:V: opgen
 #
 # compiled targets
 #
-interp: $OBJS
+interp: $OBJS $STDBASIS
     $CC -g -lm -L$LIBDIR -o $target $OBJS $LIBDIR/liblua.a $LIBDIR/liblualib.a
 
 #

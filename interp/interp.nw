@@ -57,13 +57,13 @@ following {\PAL} related functions:\\
 Begins the definition of a section named [[name]].
 \\\hline
 [[CMM.end_section]]         &$()$                                   &
-Marks the end the currently defined section.
+Marks the end of the current section.
 \\\hline
 [[CMM.define_label]]        &$(string$ [[name]]$)$                  &
-Defines a the label [[name]] at the current location in the bytecode stream.
+Defines the label [[name]] at the current location in the bytecode stream.
 \\\hline
 [[CMM.procedure]]           &$(string$ [[name]]$, number$ [[numLocals]]$, number$ [[stackdataSize]]$)$ &
-Defines the procedure [[name]] with a number of local variables equal to [[numLocals]] and stack-data of size of [[stackdataSize]] at the present location.
+Defines the procedure [[name]] with a number of local variables equal to [[numLocals]] and stack-data of size [[stackdataSize]] at the present location.
 \\\hline
 [[CMM.continuation]]        &$(string$ [[name]]$)$ &
 Defines the continuation [[name]].
@@ -97,12 +97,20 @@ Specifies the number of global variables used in this assembly unit.
 \end{tabularx}
 
 \begin{tabularx}{\linewidth}{|lY|Y|}\hline
-[[CMM.align]]     &($number$ [[align]]$)$&
+[[CMM.align]]     &$(number$ [[align]]$)$&
 Aligns instructions/data that follow this call on an [[align]] [[memsize]] boundary.
 \\\hline
-[[CMM.data]]      &($number$ [[size]]$, table$ [[init]]$)$&
+[[CMM.skip]]      &$(number$ [[n]]$)$&
+Skips (increases emitting location counter) by [[n]] [[memsize]] units.
+\\\hline
+[[CMM.data]]      &$(number$ [[size]]$, table$ [[init]]$)$&
 Reserves space for data of bit-width [[size]]; if [[init]] is a non-nil table, then its numerically-indexed elements (which are each of size [[size]]) are stored in memory at the current location.
+\\\hline
+[[CMM.emit_raddr]] &$(string$ [[s]]$, number$ [[offset]]$)$&
+Emits the address of symbol [[s]], offset by [[offset]] [[memsize]] units.
 \\\hline\hline
+
+
 [[CMM.push_literal]]        &$(string$ [[value]]$)$                 &
 Pushes literal [[value]] onto the value stack.
 \\\hline
@@ -127,12 +135,13 @@ Pops a value off the value stack and stores it in local variable [[index]].
 [[CMM.store_global]]        &$(number$ [[index]]$)$                 &
 Pops a value off the value stack and stores it in global variable [[index]].
 \\\hline
-[[CMM.gstore]]              &$(number$ [[size]]$, number$ [[byte_order]]$, number$ [[align]]$)$ &
-Pops a value, an address, and a boolean off the value stack; if the boolean is true, the value is stored at that address in memory space, using [[byte_order]] byte-order and [[align]] alignment.
-\\\hline
+
 \end{tabularx}
 
 \begin{tabularx}{\linewidth}{|lY|Y|}\hline
+[[CMM.gstore]]              &$(number$ [[size]]$, number$ [[byte_order]]$, number$ [[align]]$)$ &
+Pops a value, an address, and a boolean off the value stack; if the boolean is true, the value is stored at that address in memory space, using [[byte_order]] byte-order and [[align]] alignment.
+\\\hline
 [[CMM.gstore_local]]        &$(number$ [[index]]$)$                 &
 Pops a value and a boolean off the value stack; if the boolean is true, the value is stored in local variable [[index]].
 \\\hline
@@ -154,12 +163,12 @@ Pops an address off the value stack and sets the program counter to the address.
 [[CMM.cbrancht]]            &$(string$ [[destLabel]]$)$             &
 Pops a boolean off the value stack; if the boolean is true, the program counter is set to the address of label [[destLabel]].  Otherwise, control flow falls through.
 \\\hline
-[[CMM.cbranchf]]            &$(string$ [[destLabel]]$)$             &
-Pops a boolean off the value stack; if the boolean is false, the program counter is set to the address of label [[destLabel]].  Otherwise, control flow falls through.
-\\\hline
 \end{tabularx}
 
 \begin{tabularx}{\linewidth}{|lY|Y|}\hline
+[[CMM.cbranchf]]            &$(string$ [[destLabel]]$)$             &
+Pops a boolean off the value stack; if the boolean is false, the program counter is set to the address of label [[destLabel]].  Otherwise, control flow falls through.
+\\\hline
 [[CMM.branchtf]]            &$(string$ [[labelT]]$, $ [[labelF]]$)$ &
 Pops a boolean off the value stack; the program counter is set to the address of label [[labelT]] if the boolean is true, and to the address of label [[labelF]] if the boolean is false.
 \\\hline
@@ -857,7 +866,7 @@ typedef struct {
 @ 
 Helper functions [[init_thread]] and [[find_thread]] assist in thread management: [[init_thread]] initializes the data members of a [[thread]] object, given a sufficient amount of space to devote to storing the activation stack and local environment.  [[find_thread]] returns the thread uniquely identified by some [[uid]].
 <<function prototypes>>=
-thread *init_thread(CMM_label *lbl, void *stack_space, void *stack_limit);
+thread *init_thread(CMM_label *lbl, void *stack_space, unsigned n);
 thread *find_thread(uid u);
 @
 \paragraph{{\PAL} Procedures and Continuations}
@@ -1082,10 +1091,10 @@ patterns
     GSTORE_LOCAL8 GSTORE_LOCAL16 GSTORE_GLOBAL8 GSTORE_GLOBAL16
     GOTO          CBRANCHT       CBRANCHF       BRANCHTF
     CMM_CALL      CMM_TAIL_CALL  C_CALL         RETURN
-    CUT           BEGIN_SPAN     END_SPAN
+    CUT           BEGIN_SPAN     END_SPAN       EMIT_RADDR
     PLACECODE
     HALT
-  ] is op = {0 to 32}
+  ] is op = {0 to 33}
 @ 
 To add an instruction to the bytecode, one must simply add an instruction name to the [[op]] table above and increase the upper bound of [[op]]'s value range.
 We next define another set of patterns to ease constructor generation of similarly structure instructions.
@@ -1115,6 +1124,7 @@ constructors
   any16          bits16               is any16;      bits16
   any32          bits32               is any32;      bits32
   memory         bits8  bits8b bits8c is memory;     bits8;      bits8b; bits8c
+  EMIT_RADDR     addr                 is EMIT_RADDR; bits32=addr
   BEGIN_SPAN     bits32 addr          is BEGIN_SPAN; bits32;     bits32=addr
   PUSH_SYMBOL    bits32               is PUSH;       bits32
   APPLY_OPERATOR bits32               is OP;         bits32
@@ -1188,18 +1198,19 @@ Note that [[UNDERFLOW_CHECK]], [[OVERFLOW_CHECK]], and [[ASSERT_EMPTY]] all depe
    S will not cause it to underflow
  */
 #define UNDERFLOW_CHECK(S, N) \
-(((S) - (S##_base) > -1) ? (void)0 : \
- cmm_err("failed underflow check on empty stack ["#S"]"))
+cmm_assert(((S) - (S##_base) > -1), \
+           "failed underflow check on empty stack ["#S"]")
 
 /* OVERFLOW_CHECK(S, N) checks to make sure that pushing N elements onto stack
    S will not cause it to overflow
  */
 #define OVERFLOW_CHECK(S, N)  \
-(((S##_limit) - (S) >= 0) ? (void)0 : \
- cmm_err("failed overflow check on full stack ["#S"]"))
+cmm_assert(((S##_limit) - (S) >= 0), \
+           "failed overflow check on full stack ["#S"]")
 
-#define ASSERT_EMPTY(V) (assert(1))
-/* (assert((V) == (V##_base))) */
+#define ASSERT_EMPTY(V) \
+cmm_assert(((V) + 1 == (V##_base)), \
+           "stack [" #V  "] not empty at call/return/cut")
 @ 
 <<utility functions>>=
 void print_value_stack(stack s, sptr s_base, const char *s_name) {
@@ -1544,10 +1555,12 @@ Please see below for information on the macros used here.
 <<register C function signatures>>=
 ITERATE_UNARY_C_CALLERS(UNARY_C_CALLER_REGISTRATION)
 ITERATE_BINARY_C_CALLERS(BINARY_C_CALLER_REGISTRATION)
+ITERATE_FOURARY_C_CALLERS(FOURARY_C_CALLER_REGISTRATION)
 @
 <<function prototypes>>=
 ITERATE_UNARY_C_CALLERS(UNARY_C_CALLER_PROTOTYPE)
 ITERATE_BINARY_C_CALLERS(BINARY_C_CALLER_PROTOTYPE)
+ITERATE_FOURARY_C_CALLERS(FOURARY_C_CALLER_PROTOTYPE)
 @ 
 \paragraph{C Function Callers Implementation}
 We use a number of macros to implement our C calling mechanism.
@@ -1562,35 +1575,46 @@ The macro may then pass 2 arguments to whichever of these two macros it receives
 #define RETURNS_VAL(X, Y)  X
 #define RETURNS_VOID(X, Y) Y
 @ 
-[[ITERATE_UNARY_C_CALLERS]] and [[ITERATE_BINARY_C_CALLERS]] are the iterator macros mentioned above; each takes a macro name as its only argument and calls this macro with the C function signatures its family supports.
+[[ITERATE_UNARY_C_CALLERS]], [[ITERATE_BINARY_C_CALLERS]], and company are the iterator macros mentioned above; each takes a macro name as its only argument and calls this macro with the C function signatures its family supports.
 <<macro definitions>>=
 #define ITERATE_UNARY_C_CALLERS(F) \
-F(int,    int,    RETURNS_VAL ) \
+F(int,      int,  RETURNS_VAL ) \
 \
-F(int,    void,   RETURNS_VOID) \
-F(char,   void,   RETURNS_VOID)
+F(int,      void, RETURNS_VOID) \
+F(char,     void, RETURNS_VOID) \
+F(unsigned, void, RETURNS_VOID)
 
 #define ITERATE_BINARY_C_CALLERS(F) \
 F(int, int, int,  RETURNS_VAL ) \
 \
 F(int, int, void, RETURNS_VOID)
+
+#define ITERATE_FOURARY_C_CALLERS(F) \
+F(unsigned, unsigned, unsigned, unsigned, unsigned, RETURNS_VAL)
 @ 
 All C callers take two arguments, an argument-passing stack and a [[void *]] function pointer, and return a new pointer to the argument-passing stack.
 <<macro definitions>>=
-#define UNARY_C_CALLER_PROTOTYPE(ARGTY, RETTY, RETURNS) \
-sptr c_caller_##ARGTY##_##RETTY (sptr arguments, void *f);
+#define UNARY_C_CALLER_PROTOTYPE(A, RETTY, RETURNS) \
+sptr c_caller_##A##_##RETTY (sptr arguments, void *f);
 
-#define BINARY_C_CALLER_PROTOTYPE(ARGATY, ARGBTY, RETTY, RETURNS) \
-sptr c_caller_##ARGATY##_##ARGBTY##_##RETTY (sptr arguments, void *f);
+#define BINARY_C_CALLER_PROTOTYPE(A, B, RETTY, RETURNS) \
+sptr c_caller_##A##_##B##_##RETTY (sptr arguments, void *f);
+
+#define FOURARY_C_CALLER_PROTOTYPE(A, B, C, D, RETTY, RETURNS) \
+sptr c_caller_##A##_##B##_##C##_##D##_##RETTY (sptr arguments, void *f);
 @ 
 Registration of C callers involves a simple call to [[register_c_sig]]; this associates a C function signature with a C caller implementation.
 <<macro definitions>>=
-#define UNARY_C_CALLER_REGISTRATION(ARGTY, RETTY, RETURNS) \
-register_c_sig(#ARGTY ":" #RETTY, c_caller_##ARGTY##_##RETTY);
+#define UNARY_C_CALLER_REGISTRATION(A, RETTY, RETURNS) \
+register_c_sig(#A ":" #RETTY, c_caller_##A##_##RETTY);
 
-#define BINARY_C_CALLER_REGISTRATION(ARGATY, ARGBTY, RETTY, RETURNS) \
-register_c_sig(#ARGATY "," #ARGBTY ":" #RETTY, \
-               c_caller_##ARGATY##_##ARGBTY##_##RETTY);
+#define BINARY_C_CALLER_REGISTRATION(A, B, RETTY, RETURNS) \
+register_c_sig(#A "," #B ":" #RETTY, \
+               c_caller_##A##_##B##_##RETTY);
+
+#define FOURARY_C_CALLER_REGISTRATION(A, B, C, D, RETTY, RETURNS) \
+register_c_sig(#A "," #B "," #C "," #D ":" #RETTY, \
+               c_caller_##A##_##B##_##C##_##D##_##RETTY);
 @ 
 The actual implementation of the C callers are simple functions that pop the correct number of arguments from the argument-passing stack, call the indicated C function with these arguments, push the C call's return values atop the argument-passing stack, and return a new pointer to the argument-passing stack.
 <<macro definitions>>=
@@ -1611,14 +1635,30 @@ sptr c_caller_##ARGATY##_##ARGBTY##_##RETTY (sptr arguments, void *f) { \
   RETURNS(RETTY retval =, (void)) \
       f_ty(VIEW(STACK_ELT(arguments, -1), ARGATY),   \
            VIEW(STACK_ELT(arguments,  0), ARGBTY)); \
-  RETURNS(STACK_ELT(arguments, 0) = VIEW(retval, value);, ) \
+  RETURNS(STACK_ELT(arguments, -1) = VIEW(retval, value);, ) \
   return RETURNS(arguments - 1, arguments - 2); \
+} }
+#define FOURARY_C_CALLER(ARGATY, ARGBTY, ARGCTY, ARGDTY, RETTY, RETURNS) \
+sptr c_caller_##ARGATY##_##ARGBTY##_##ARGCTY##_##ARGDTY##_##RETTY \
+     (sptr arguments, void *f) \
+{ \
+  UNDERFLOW_CHECK(arguments, 4); \
+  { \
+  RETTY (*f_ty) (ARGATY, ARGBTY, ARGCTY, ARGDTY) = f; \
+  RETURNS(RETTY retval =, (void)) \
+      f_ty(VIEW(STACK_ELT(arguments, -3), ARGATY), \
+           VIEW(STACK_ELT(arguments, -2), ARGBTY), \
+           VIEW(STACK_ELT(arguments, -1), ARGCTY), \
+           VIEW(STACK_ELT(arguments,  0), ARGDTY)); \
+  RETURNS(STACK_ELT(arguments, -3) = VIEW(retval, value);, ) \
+  return RETURNS(arguments - 3, arguments - 4); \
 } }
 @
 Last but not least, we actually generate the implementations of the C callers with a call to each of the iterators.
 <<utility functions>>=
 ITERATE_UNARY_C_CALLERS(UNARY_C_CALLER)
 ITERATE_BINARY_C_CALLERS(BINARY_C_CALLER)
+ITERATE_FOURARY_C_CALLERS(FOURARY_C_CALLER)
 @ 
 \subsubsection{Utility Functions}
 The utility helper functions assist in managing representation datatypes (e.g., threads, $\uid$s, etc.), as well as doing some sanity checks on the [[typedef]]'d basic types.
@@ -1682,8 +1722,10 @@ Given sufficient space in memory, we must break the space in three parts: for an
 For now, we divide the space handed into [[init_thread]] into three \emph{equal} pieces.
 We also have to remember to initialize the [[thread]]'s fields.
 <<[[thread]] helpers>>=
-thread *init_thread(CMM_label *lbl, void *stack_space, void *stack_limit) {
-  int    space_size;
+thread *init_thread(CMM_label *lbl, void *stack_space, unsigned n) {
+  int     space_size;
+  void   *stack_limit = (void *) (((u_int8 *) stack_space) + n);
+
   thread *t = (thread *) malloc(sizeof(thread));
   mem_assert(t);
 
@@ -2016,7 +2058,9 @@ F(exports) \
 F(globals) \
 \
 F(align) \
-F(data)  \
+F(skip) \
+F(data) \
+F(emit_raddr) \
 \
 F(push_literal) \
 F(push_symbol) \
@@ -2588,6 +2632,15 @@ int lua_CMM_align(lua_State *L) {
   return 0;
 }
 @ 
+[[lua_CMM_skip]] calls toolkit API function [[addlc]] and returns no values to Lua.
+<<bytecode generation>>=
+int lua_CMM_skip(lua_State *L) {
+  lua_assert_isnumber(L, -1, "skip expects a number argument");
+  addlc((unsigned) (((unsigned) lua_tonumber(L, -1)) * unit->memsize / 8));
+  lua_pop(L, 1);
+  return 0;
+}
+@ 
 DOCUMENTATION FOR CODE GOES HERE
 \emph{This is not finished; there is currently no way to include anything except for literal bit-strings in an initialized data statement.  I also do not think that this allows uninitialized data declarations.}
 \emph{FIX do we have to make sure that data is given outside of procedures?}
@@ -2604,7 +2657,7 @@ int lua_CMM_data(lua_State *L) {
    * byte-order
    */
   if (lua_istable(L, -1)) {
- 	int t = lua_gettop(L);
+    int t = lua_gettop(L);
     lua_pushnil(L);
     while (lua_next(L, t)) {
       /* key is at -2, val is at -1 */
@@ -2620,6 +2673,35 @@ int lua_CMM_data(lua_State *L) {
   lua_pop(L, 2); /* pop both arguments */
 
   assert(lua_gettop(L) == 0);
+
+  return 0;
+}
+@ 
+To emit the address of a symbol, [[lua_CMM_emit_raddr]] lets the Toolkit do all the work.
+<<bytecode generation>>=
+int lua_CMM_emit_raddr(lua_State *L) {
+  CMM_label *lbl;
+  RAddr      found_raddr, raddr_to_emit;
+  char      *sym;
+  int        offset;
+
+  lua_assert_isstring(L, -2, "emit_raddr expects a symbol name (string)");
+  lua_assert_isnumber(L, -1, "emit_raddr expects an offset value (number)");
+
+  offset = (int) lua_tonumber(L, -1);
+  lua_pop(L, 1);
+
+  sym = Atom_string(lua_tostring(L, -1));
+  lbl = get_label(L, sym);
+
+  found_raddr = CMM_label_raddr(lbl);
+  assert(found_raddr != NULL);
+
+  raddr_to_emit = (offset == 0 ? found_raddr 
+                               : addr_new(found_raddr->label, offset));
+
+  /* emit instruction */
+  emit_raddr(raddr_to_emit);
 
   return 0;
 }
@@ -3087,7 +3169,7 @@ int load_assembly_unit(char *filename) {
 
   if (setjmp(errorjmp)) {
     fprintf(stderr, "error: unrecoverable error; cannot finish loading "
-                    "file\n");
+                    "file [%s]\n", filename);
     return 1;
   } else {
     <<run Lua source file [[filename]]>>
@@ -3357,8 +3439,8 @@ We pop a pointer to a C [[procedure]] structure off the value stack, and derefer
 
                            assert(ann != NULL);
 
-                           ASSERT_EMPTY(values);
                            lbl  = VIEW(POP(values), CMM_label *);
+                           ASSERT_EMPTY(values);
                            if (lbl->ty != CMM_PROCEDURE) {
                              cmm_err("target label not a procedure");
                            }
@@ -3414,8 +3496,8 @@ Once more, we pop a [[procedure]] struct pointer off the value stack for informa
                            CMM_label *lbl;
                            procedure *proc;
 
-                           ASSERT_EMPTY(values);
                            lbl  = VIEW(POP(values), CMM_label *);
+                           ASSERT_EMPTY(values);
 
                            if (lbl->ty != CMM_PROCEDURE) {
                              cmm_err("target label not a procedure");
@@ -3557,7 +3639,7 @@ We simply copy pointers to restore information from the activation record stored
                              lua_pop(L, 1); /* pop label */
 
                              assert(location_known(CMM_label_raddr(lbl)));
-                             pc = (bytecodeptr) location(CMM_label_raddr(lbl));
+                             pc = CMM_label_location(lbl);
                            }
                            lua_pop(L, 1); /* pop table */
 
@@ -3585,8 +3667,8 @@ We restore state information from the destination activation and recover memory 
                            bytecodeptr  cont_pc;
                            actptr a, saved;
 
-                           ASSERT_EMPTY(values);
                            lbl = VIEW(POP(values), CMM_label *);
+                           ASSERT_EMPTY(values);
 
                            cont = lbl->lbl.cont;
                            cont_pc = CMM_label_location(lbl);
@@ -3623,7 +3705,7 @@ We also must ensure that [[cont->dest_act]] was listed as a valid ``also cuts to
                            assert(cont != NULL);
                            assert(cont->dest_act != NULL);
                            cmm_assert(islive_uid(cont->u),
-									  "cannot cut to dead continuation");
+                                      "cannot cut to dead continuation");
 
                            /* FIX : look in kappa annotations in activation 
                               pointed to by called_by to make sure that
@@ -3705,10 +3787,11 @@ The value is stored in the last entry in the token's table.
                            lua_rawseti(L, -2, lua_getn(L, -2) + 1);
 
                            lua_pop(L, 1); /* pop table */
+                           pc = next;
                            }
 @ 
 For [[END_SPAN]] we simply remove the last entry from the token's table (within the span table).
-<<matchin statement>>=
+<<matching statement>>=
     | END_SPAN(tok)     => {
                            lua_State *L = t->span_table.L;
                            int        n;
@@ -3728,7 +3811,12 @@ For [[END_SPAN]] we simply remove the last entry from the token's table (within 
                            lua_rawseti(L, -1, n);
 
                            lua_pop(L, 2); /* pop two tables */
+                           pc = next;
                            }
+@ 
+Finally, we simply ignore the instructions that should have no interpreted behavior.
+<<matching statement>>=
+    | EMIT_RADDR(r)     => { pc = next; }
 @ 
 \subsubsection{Finding a Label}
 To allow clients to find exported {\PAL} labels once code has been read into memory, we export the helper function [[cmm_find_export]].
@@ -3892,8 +3980,8 @@ static int       lua_assembly_unit_tag;
 static int       lua_RBlock_tag;
 static int       lua_c_func_tag;
 static int       lua_c_sig_tag;
-static int       lua_CMM_label_tag;
 static int       lua_operator_tag;
+int              lua_CMM_label_tag;
 int              lua_CMM_span_value_tag;
 
 static table     c_sig_table          = fresh_table();
@@ -4188,6 +4276,10 @@ void disassemble_instructions(CMM_label *loc) {
       asmprintf(asmprintfd, "%x: %s", pc, "END_SPAN ");
       print_unsigned_bits32(a);
       asmprintf(asmprintfd, "\n");
+  | EMIT_RADDR(a) =>
+      asmprintf(asmprintfd, "%x: %s", pc, "EMIT_RADDR ");
+      disprintreloc((unsigned) a);
+      asmprintf(asmprintfd, "\n");
   | HALT =>
       return;
   else asmprintf(asmprintfd, "%x: %s", pc, "<unknown instruction>");
@@ -4214,8 +4306,6 @@ Should macro-generated functions look like [[op_xor_bits16]] or like [[op_xor_bi
 [[label_new]] does NOT copy its string argument; do NOT free anything you pass off to [[label_new]]!
 
 What do the namespaces look like?  Is there one namespace for labels, procedure names, continuation names, section names?  Or are they separate?  As it is, I effectively have one namespace for all these because I use their names as their label names instead of prepending to it a tag of some sort.
-
-Do we need to allow an [[emit_raddr]] instruction in our VM?
 
 What kind of a symbol does [[push_symbol]] expect to be pushing?  A label?  An external symbol?  A procedure name?  A continuation name?  Any of these?
 
@@ -4246,13 +4336,8 @@ We have to release all lua references when done?
 Consider making use of the [[lua_State *]] in the [[table]] structure.
 
 How should we handle [[return]]s from the first procedure interpreted; that is, if our interpreter starts code execution by running a procedure named [[main]], how should it handle a [[return]] from procedure main?
-Right now, it would fail an assertion when trying to pop an element off the empty [[callstack]].
 
 Consider adding assertions to [[lua_CMM_cbrancht]] and its siblings; what if [[get_label]] returns the [[CMM_label]] for a procedure?
-
-Document operator tables.
-
-Document C function tables.
 
 Use ``higher-order'' macros to declare, define and register operator implementations (instead of the current [[#undef]] business).
 
@@ -4274,9 +4359,6 @@ Remember that spans can only be placed in a section; consider asserting this.
 Quote from manual: \emph{All separately compiled modules must have} identical \emph{top-level variable declarations}.
 
 \section{To Do Immediately}
-Do we need some function like [[lua_CMM_define_continuation]]?
-Do we need to add another type to the [[enum]] field ([[ty]]) of [[CMM_label]]?
-
 Consider changing operator representation/implementation so that OP bytecode does not need to carry around a 32-bit value (right now it carries around an (operator *)).
 
 Figure out how to get initialized data to work when given as a label or a string or some other value.
@@ -4286,8 +4368,6 @@ Consider removing bookkeeping with [[CMM_label]]s from the matching cases for cu
 For the purposes of the interpreter's input assembly files, should return continuations be defined with [[lua_CMM_define_label]] or with [[lua_CMM_continuation]]?
 
 Use dynamic arrays!  Stop with this assertion failure business.
-
-Do we really have to perform emptiness checks on the value stack whenever we call a procedure or return, etc.?
 
 Figure out what's up with [[curr_proc]] during interpreting time.
 
