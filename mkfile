@@ -29,7 +29,7 @@ dvi:V:          dirs
                 for i in $SUBDIRS; do (cd $i && mk $MKFLAGS $target); done
 
 depend:V:       
-                for i in src; do (cd $i && mk $MKFLAGS $target); done
+                for i in src lua; do (cd $i && mk $MKFLAGS $target); done
 
 clean:V:
                 for i in $SUBDIRS; do (cd $i && mk $MKFLAGS $target); done
