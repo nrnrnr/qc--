@@ -274,33 +274,39 @@ appropriate bit in the CR register. With this scheme, the opposite
 condition can be derived by changing the guard operator.
 I am using a bits value of 0 because using 1 gives the wrong number.
 <<ppc postexpander>>=
-let bc tmp1 ((opr,ws) as op) tmp2 ~tgt =
-  assert(ws = [32]);
-  let tmp = talloc 't' 32
-  and one = R.bits (Bits.U.of_int 0 1) 1
-  and crf = match opr with
-  | "eq"  -> EQ
-  | "ne"  -> EQ
-  | "lt"  -> EQ
-  | "le"  -> EQ
-  | "gt"  -> EQ
-  | "ge"  -> EQ
-  | "ltu" -> EQ
-  | "leu" -> EQ
-  | "gtu" -> EQ
-  | "geu" -> EQ
-  | _ -> Impossible.impossible "non-comparison in ppc conditional branch"
-  in
-  let crb = R.fetch (R.slice 1 (cr_flag_to_bit crf) cr) 1 in
-  R.guard (R.app (R.opr "ne" [1;1]) [one;crb]) (List.hd (b tgt))
-  :: binop tmp op tmp1 tmp2
+let bc x (opr, ws as op) y ~tgt =
+    assert (ws = [wordsize]);
+    [ R.guard (R.app (Up.opr op) [tval x; tval y]) 
+              (R.store pc_lhs (Up.const tgt) wordsize)  (* effect *)
+    ]
 
-let bnegate rtl =
-  (* Printf.eprintf "\n\n%s\n\n" (Rtlutil.ToReadableString.rtl rtl); *)
-  match Down.rtl rtl with
-  | RP.Rtl[RP.App(("ne", ws), exps), effs] ->
-      Up.rtl(RP.Rtl[RP.App(("eq", ws), exps), effs])
-  | _ -> Impossible.impossible "ill-formed ppc conditional branch"
+let negate = function
+  | "ne"            -> "eq"
+  | "eq"            -> "ne"
+  | "ge"            -> "lt"
+  | "gt"            -> "le"
+  | "le"            -> "gt"
+  | "lt"            -> "ge"
+  | "geu"           -> "ltu"
+  | "gtu"           -> "leu"
+  | "leu"           -> "gtu"
+  | "ltu"           -> "geu"
+  | "feq"           -> Impossible.unimp "floating-point comparison"
+  | "fne"           -> Impossible.unimp "floating-point comparison"
+  | "flt"           -> Impossible.unimp "floating-point comparison"
+  | "fle"           -> Impossible.unimp "floating-point comparison"
+  | "fgt"           -> Impossible.unimp "floating-point comparison"
+  | "fge"           -> Impossible.unimp "floating-point comparison"
+  | "fordered"      -> Impossible.unimp "floating-point comparison"
+  | "funordered"    -> Impossible.unimp "floating-point comparison"
+  | _               -> Impossible.impossible 
+                        "bad comparison in expanded MIPS conditional branch"
+
+let bnegate r = match Down.rtl r with
+    |           RP.Rtl [RP.App( (op,       [32]),[x;y]), RP.Store (pc,tgt,32)]
+      when pc = Down.loc pc_lhs ->
+        Up.rtl (RP.Rtl [RP.App( (negate op,[32]),[x;y]), RP.Store (pc,tgt,32)])
+    | _ -> Impossible.impossible "ill-formed MIPS conditional branch"
 @ 
 Call instructions are the same as branches with some additional effects.
 <<ppc postexpander>>=
@@ -343,8 +349,10 @@ let is_stack_top_proxy loc = false
 module C  = Call
 module RS = Register.Set
 @ 
-Integer registers r0, and r2-r12 are volatile, r1 is the stack
-pointer, and r13-r31 are non-volatile. For floating point,
+Integer registers r0 is not used because of the restrictions on the arguments
+of load/store instructions, r1 is the stack pointer,
+r2 is reserved for position-independent code,
+r3-r12 are volatile, and r13-r31 are non-volatile. For floating point,
 registers f1-f13 are volatile, and f14-131 are not.
 <<calling conventions>>=
 let sp_reg = ('r', 1, 32)
@@ -352,7 +360,7 @@ let sp     = R.reg sp_reg
 let vfp    = Vfp.mk 32
 
 let regset s w l = RS.of_list (List.map (fun r-> (s,r,w)) l)
-let vregs  = regset 'r' 32 [2;3;4;5;6;7;8;9;10;11;12]
+let vregs  = regset 'r' 32 [3;4;5;6;7;8;9;10;11;12]
 let nvregs = regset 'r' 32 [13;14;15;16;17;18;19;20;21;
                             22;23;24;25;26;27;28;29;30;31]
 let fvregs  = regset 'f' 64 [0;1;2;3;4;5;6;7;8;9;10;11;12;13]
@@ -553,10 +561,10 @@ let target =
 
   (* global or hardware registers *)
   ; T.globals  = globals
-  ; T.rounding_mode = R.reg ('?', 99, 32)
+  ; T.rounding_mode = R.reg ('?', 99, 2)
   ; T.named_locs   = Strutil.assoc2map 
-                     ["IEEE 754 rounding mode", R.reg ('?', 99, 32)
-                     ;"IEEE 754 rounding results", R.reg ('?', 99, 32)
+                     ["IEEE 754 rounding mode", R.reg ('?', 99, 2)
+                     ;"IEEE 754 rounding results", R.reg ('?', 99, 2)
                      ]
   
   (* bogosity *)
