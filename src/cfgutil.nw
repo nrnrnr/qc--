@@ -20,6 +20,8 @@ knowledge of the internal details of \module{cfg3}.
 val cfg2dot:    compress:bool -> live:bool -> name:string -> Rtl.rtl Cfgx.M.t -> string
 val cfg2ast: ('i -> Ast.stmt) -> 'i Cfgx.M.t -> name:string -> Ast.proc
 val emit  :   'i Cfgx.M.t -> ('i -> unit) -> (string -> unit) -> unit
+val delete :  'i Cfgx.M.t -> 'i Cfgx.M.node -> unit
+  (* unsplice and delete a node *)
 @
 WHAT DO [[cfg2ast]] AND [[emit]] DO? PLEASE EXPLAIN THE PARAMETERS. --CL
 
@@ -144,3 +146,9 @@ let cfg2ast instr g ~name =
     , List.map (fun s -> Ast.StmtBody s) (List.rev graph)
     )
 @ 
+<<cfgutil.ml>>=
+let delete g n =
+  let pred = G.pred n in
+  let succ = G.succ n in
+  G.set_succ pred ~succ;
+  G.delete g n
