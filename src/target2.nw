@@ -1,3 +1,4 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 
 \input{../config/macros.tex}
 
@@ -31,9 +32,11 @@ be passed at run-time (rather than by a module, which can not).
 <<type cc>>
 <<type map>>
 <<type t>>
-val dummy: t        (* our only target for now *)
+val space : t -> Rtl.space -> Space.t
+@ The [[space]] function returns information about a particular space.
+It is a checked run-time error to ask about a space not on the list
+for the target.
 @
-
 <<type t>>=
 type t = { <<components of t>> }
 @
@@ -106,12 +109,12 @@ expressions for a space share a common width.  For example, memory
 might by addressed by 32-bit wide addresses, registers by 5-bit wide
 addresses. 
                 
-The [[space]] function returns a description of a given space.  It is
-a checked run-time error to ask for the description of an unknown
-space.
-
+The [[spaces]] list enumerates all spaces used to compile for the
+machine, including temporary spaces as well as the real hardware
+spaces.
+No space appears more than once on the list.
 <<components of t>>=
-space:          Rtl.space -> Space.t;
+spaces:          Space.t list;
 @
 
 \begin{quote}\it
@@ -119,7 +122,7 @@ space:          Rtl.space -> Space.t;
     properties of the [[m]] [[space]]. I like the more general idea
     of address spaces but I'm not sure whether we should get rid of the
     more specialized properties or should keep them as abbreviations.
-    The hole problem stems from the fact that I only over time begin
+    The whole problem stems from the fact that I only over time begin
     to understand what describes a target. --CL
 \end{quote}
 
@@ -255,32 +258,12 @@ to implement lookup tables for registers and calling conventions.
 module R       = Rtl
 module S       = Space
 module RP      = Rtl.Private
-module StrMap  = Map.Make(struct type t=string let compare=compare end)
-module CharMap = Map.Make(struct type t=char   let compare=compare end)
 module F       = Fenv.Clean
-
-module MapUtil (M: Map.S) = struct
-    let lookup map key =
-        try  M.find key map 
-        with Not_found -> Impossible.impossible ("Target.lookup key not found")
-
-    let list2map assoc =
-        let add map (key,value) = M.add key value map in
-        List.fold_left add M.empty assoc  
-end
-
-module StrUtil  = MapUtil(StrMap)
-module CharUtil = MapUtil(CharMap) 
 
 <<type map>>
 <<type cc>>
 <<type t>>
 
-module D = struct       (* D holds dummy target *)
-    <<module D>>
-end
-
-let dummy = D.t
 @
 
 The [[check]] function compares expectations about a target recorded in
@@ -309,194 +292,7 @@ let check (t:t) (env:F.env) =
     else
         ()
 @
-    
-
-% ------------------------------------------------------------------ 
-\subsection{Dummy Target}
-% ------------------------------------------------------------------ 
-
-\begin{center}
-    \begin{tabular}{ll}
-    \hline
-    \multicolumn{2}{c}{Memory Space \emph{R}}\\
-    \hline
-    Cellwidth    & 32                    \\
-    Byteorder    & indentity             \\
-    Addresswidth & 5                     \\
-    \hline
-    Index        & Purpose               \\
-    \hline
-    0            & PC                    \\
-    1            & SP                    \\
-    2            & Return                \\
-    \dots        & general purpose       \\
-    \end{tabular}
-\end{center}    
-
-
-<<module D>>=
-let m = { embed   = (fun _ -> assert false)
-        ; project = (fun _ -> assert false)
-        }
-
-
-let const n width = Rtl.bits (Bits.of_int n width) width
-let reg n         = Rtl.cell Rtl.none 'r' Rtl.Identity 32 (const n 5)
-let assign loc e  = Rtl.store loc e (Rtlutil.Width.exp e)       
-    
-(* this is total nonsense - it's just for toying around *)
-
-let goto_embed e     = assign (reg 0) e
-let goto_project rtl = match R.Convert.rtl rtl with
-    | RP.Rtl([(_,RP.Store(loc,exp,width))]) -> R.Revert.exp exp
-    | _                                     -> assert false
-
-
-let goto =
-    { embed   = goto_embed
-    ; project = goto_project
-    }
-
-let branch_embed (e,addr) = R.guard e (assign (reg 0) addr)
-let branch_project rtl  = match R.Convert.rtl rtl with
-    | RP.Rtl([(e,RP.Store(loc,addr,width))]) -> ( R.Revert.exp e
-                                                , R.Revert.exp addr
-                                                )
-    | _                                      -> assert false
-
-let branch =
-    { embed   = branch_embed
-    ; project = branch_project
-    }
-
-
-let cc =
-    { sp      = reg 1
-    ; return  = assign (reg 2) (R.fetch (reg 1) 32)
-    ; proc    = Automaton.dummy
-    ; cont    = Automaton.dummy
-    ; ret     = Automaton.dummy
-    }
-
-
-let spaces = CharUtil.list2map
-    [('r',{ S.cellwidth   = 32
-          ; S.aggregation = Rtl.Identity
-          ; S.indexwidth  = 5
-          ; S.indexlimit  = None
-          ; S.aggsize     = [1]
-          ; S.classification = S.Reg
-          ; S.doc         = "hardware register"
-          }) 
-
-    ;('m',{ S.cellwidth   = Dummy.wordsize
-          ; S.aggregation = Dummy.byteorder 
-          ; S.indexwidth  = Dummy.pointersize
-          ; S.indexlimit  = None
-          ; S.aggsize     = [1;2;4]
-          ; S.classification = S.Mem
-          ; S.doc         = "main memory"
-          
-          })
-          
-    ;('t',{ S.cellwidth   = 32
-          ; S.aggregation = Rtl.Identity
-          ; S.indexwidth  = 16
-          ; S.indexlimit  = None
-          ; S.aggsize     = [1]
-          ; S.classification = S.Reg
-          ; S.doc         = "32 bit temporaries"
-          })
-          
-    ;('u',{ S.cellwidth   = 16
-          ; S.aggregation = Rtl.Identity
-          ; S.indexwidth  = 16
-          ; S.indexlimit  = None
-          ; S.aggsize     = [1]
-          ; S.classification = S.Reg
-          ; S.doc         = "16 bit temporaries"
-          })
-          
-    ;('v',{ S.cellwidth   = 8
-          ; S.aggregation = Rtl.Identity
-          ; S.indexwidth  = 16
-          ; S.indexlimit  = None
-          ; S.aggsize     = [1]
-          ; S.classification = S.Reg
-          ; S.doc         = "8 bit temporaries"
-          })
-
-    ]      
-    
-
-let tmp_counter = ref 0     
-
-let new_tmp (sp,index,width) =
-    incr tmp_counter;
-    match width with
-    | 8  -> ('v',!tmp_counter,width)
-    | 16 -> ('u',!tmp_counter,width)
-    | 32 -> ('t',!tmp_counter,width)
-    | _  -> invalid_arg "unsupported register width in target2.nw"
-@
-
-The [[assign]] function converts both registers to [[Rtl.loc]] values and
-then uses the [[Rtl]] framework to create an assignment. Returned
-{\rtl}s must respect the machine invariant. This is currently not the
-case!   
-
-% XXX
-
-<<module D>>=
-let assign lookup ~src:(src_sp,_,src_w as src) ~dst:(dst_sp,_,dst_w as dst) =
-    if src_w <> dst_w then
-        invalid_arg "Target2.assign source and destination width don't match"
-    else
-        let src_loc = Register.to_loc lookup src  in
-        let dst_loc = Register.to_loc lookup dst  in
-            Rtl.store dst_loc (Rtl.fetch src_loc src_w)  dst_w
-
-let spill lookup ~reg:(sp,index,width as reg) ~loc =
-    if Rtlutil.Width.loc loc <> width then
-        invalid_arg "Target2.spill size mismatch"
-    else
-        let reg_loc = Register.to_loc lookup reg in
-        let rtl     = Rtl.store loc (Rtl.fetch reg_loc width) width in
-            [rtl]
-
-let reload lookup ~reg:(sp,index,width as reg) ~loc =
-    if Rtlutil.Width.loc loc <> width then
-        invalid_arg "Register.spill size mismatch"
-    else
-        let reg_loc = Register.to_loc lookup reg  in
-        let rtl     = Rtl.store reg_loc (Rtl.fetch loc width) width in
-            [rtl]
-    
-let t = 
-    { byteorder       = Dummy.byteorder         
-    ; wordsize        = Dummy.wordsize
-    ; pointersize     = Dummy.pointersize
-    ; memsize         = Dummy.memsize
-    ; float           = Dummy.float
-    ; charset         = Dummy.charset
-    ; globals         = Automaton.dummy
-    ; register        = StrUtil.lookup StrMap.empty (* no registers *)
-    ; goto            = goto
-    ; jump            = goto
-    ; cutto           = goto
-    ; call            = goto
-    ; branch          = branch
-    ; cc              = StrUtil.lookup (StrUtil.list2map [("C--",cc)])
-    ; fits            = (fun sp (sp',index,width) -> sp = sp')
-    ; is_tmp          = (function 't' | 'u' | 'v' -> true | _ -> false)
-    ; allocatable     = List.map (fun n -> ('r',n,5)) [3;4;5;6;7;8;9;10]
-    ; space           = CharUtil.lookup spaces 
-    ; mk_tmp          = new_tmp 
-    ; assign          = assign
-    ; spill           = spill
-    ; reload          = reload
-    ; data_section    = "data"
-    ; stack_slots     = Automaton.dummy
-    }
+<<target2.ml>>=
+let space t s = List.find (fun x -> x.Space.space = s) t.spaces
 @
         

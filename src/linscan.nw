@@ -615,12 +615,12 @@ edges for [[node]].
 <<update>>=
 and upd_incoming target interval spillee mem node =
     let pred  = extern interval (G.pred node) in
-    let spill = target.T.spill target.T.space spillee mem in
+    let spill = target.T.spill (T.space target) spillee mem in
         List.iter (fun n -> insert_between spill n node) pred
 
 and upd_outgoing target interval spillee mem node = 
     let succ    = extern interval (G.succ node) in
-    let reload  = target.T.reload target.T.space spillee mem          in
+    let reload  = target.T.reload (T.space target) spillee mem          in
         List.iter (fun n -> insert_between reload node n) succ
 
 and insert_between rtls node before =
@@ -652,10 +652,10 @@ and update target interval spillee mem node =
               let subst = fun x -> if x = spillee then tmp else x in 
               ( if reads  then 
                     ignore (List.fold_right G.gm_insert_assign_before
-                              (target.T.reload target.T.space tmp mem) node)
+                              (target.T.reload (T.space target) tmp mem) node)
               ; if writes then 
                     ignore (List.fold_left G.gm_insert_assign_after node
-                              (target.T.spill  target.T.space tmp mem))
+                              (target.T.spill  (T.space target) tmp mem))
               ; G.set_rtl node (Rtlutil.Subst.reg subst)
               )
             );

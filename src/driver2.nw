@@ -109,7 +109,7 @@ end
 module Personality = struct
     type instr = Proc.t
     
-    let target = Target2.dummy
+    let target = Targets.dummy
 
     let ext (p:Proc.t) target (optimizer: Proc.t -> unit) = 
         let () = optimizer p in
@@ -132,7 +132,7 @@ type optimize   = proc -> unit
 
 <<Caml>>=
 
-let dummy   = Target2.dummy
+let dummy   = Targets.dummy
 
 <<Caml>>=
 let version () =
@@ -299,10 +299,7 @@ struct
       module V = C.V
       let ( **-> ) = V.( **-> )
       <<bind exports to tables: builtins, targets>> 
-      let init g = 
-         ( C.register_module "Driver"  builtins g
-         ; C.register_module "Targets" targets  g
-         )
+      let init = C.register_module "Driver"  builtins 
     end (*M*)
 end (*MakeLib*)
 @ 
@@ -328,10 +325,6 @@ module Map = struct
     let target    = TargetV.makemap V.userdata V.projection
     let optimize  = V.func (proc **-> V.runit)
 end
-
-let targets =
-  [ "dummy"     , Map.target.V.embed                    Caml.dummy 
-  ]
 
 let builtins =
   [ "assemble"  , pf (Map.asm  **-> V.result Map.doc)   Caml.assemble
