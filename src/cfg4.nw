@@ -157,6 +157,8 @@ val number:     node -> int          (* pre: enumerated cfg *)
 val defs:       node -> locs         (* locs defined by node *)
 val uses:       node -> locs         (* locs used by node    *)
 val kills:      node -> locs         (* locs killed by node  *)
+
+val node_info_string:      node -> string
 @
 
 The instruction inside a node can be updated using [[upd_instr]]. The
@@ -278,7 +280,7 @@ and  node = object
     method insert_assign_after :        Rtl.rtl -> node (* returns new node *)  
     method insert_assign_on_edges_from: Rtl.rtl -> before:node -> node 
 
-    method comment:     string          (* included into ast *)
+    method node_info_string:     string          (* included into ast *)
     method ast:         (Rtl.rtl -> Ast.stmt) -> Ast.stmt
     method linorder:    node option * node list (* default/other succs *)
 
@@ -566,7 +568,7 @@ method test =
 method ast i2ast =
     let this = (this :> cfg) in
         ( if not this#enumerated then this#enumerate else ()
-        ; let f node result = (* A.CommentStmt(node#comment) :: *)
+        ; let f node result = (* A.CommentStmt(node#node_info_string) :: *)
                               node#ast i2ast :: result in
             Array.fold_right f this#enumeration []
         )
@@ -645,7 +647,7 @@ object (this)
             )
     
     (* comment about node kind *)
-    method comment = 
+    method node_info_string = 
         let this = (this :> node) in
         let live = (this#property).Property.liveout in 
             Printf.sprintf 
@@ -843,7 +845,7 @@ object (this)
         let this = (this :> node) in
         let pred = match _pred with 
             | [x] -> x 
-            | _   -> ( Printf.printf "problem: %s" this#comment
+            | _   -> ( Printf.printf "problem: %s" this#node_info_string
                      ; assert false 
                      )
         in
@@ -878,7 +880,7 @@ object (this)
         let map = upd (this :> node) map in
         _exit <- map _exit
 
-    method comment  = super#comment ^ " return"    
+    method node_info_string  = super#node_info_string ^ " return"    
     method linorder = (None, [_exit])
 end
 @
@@ -1194,6 +1196,8 @@ let pred        (node:node) = node#pred
 let property    (node:node) = node#property
 let number      (node:node) = node#number
 
+let node_info_string     (node: node) = node#node_info_string
+
 let kills (node:node) = Register.Set.empty
 let defs  (node:node) = 
     let _,write = Rtlutil.ReadWrite.sets (instr node) in write
@@ -1230,8 +1234,8 @@ let gm_insert_dataflow_between ~defs ~uses ~kills ~src ~dst =
     let exit = cfg#exit         in
     (*** debugging 
     let _    =
-        ( Printf.printf "src: %d %s\n" src#id src#comment
-        ; Printf.printf "dst: %d %s\n" dst#id dst#comment
+        ( Printf.printf "src: %d %s\n" src#id src#node_info_string
+        ; Printf.printf "dst: %d %s\n" dst#id dst#node_info_string
         ) in
      ***)    
     let node = new OO.dataflow cfg exit defs uses kills in
