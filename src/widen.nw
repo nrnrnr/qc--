@@ -15,6 +15,10 @@ val width_cost : Rtl.rtl -> (int * int * int)
   (* count extension and truncation operations (#sign, #zero, #lobits) *)
   (* we don't count these operations applied to locations or constants *)
 
+val app_count : Rtl.rtl -> int
+  (* this probably shouldn't be here...it just counts the number of
+     RP.App present in the rtl *)
+
 val dpwiden : Rtl.rtl -> Rtl.rtl
   (* do integer widening using dynamic programming *)
 
@@ -205,6 +209,7 @@ let width_cost r =
   and do_count ((sx, zx, lo) as c) = function
     | RP.Const _ -> c
     | RP.Fetch(l, w) -> c
+(* considering sx(const) the same as const *)
     | RP.App ((("sx"|"zx"), _), [(RP.Const _ | RP.Fetch _)]) -> c
     | RP.App (("sx", _), [arg]) -> do_count (sx+1, zx, lo) arg
     | RP.App (("zx", _), [arg]) -> do_count (sx, zx+1, lo) arg
@@ -228,6 +233,39 @@ let width_cost r =
   in
   Printf.printf "Counted %i sx, %i zx, %i lo\n" sx zx lo;
   (sx, zx, lo)
+@ 
+
+<<widen.ml>>=
+let app_count r =
+  let rec count_loc c = function
+    | RP.Mem(_,_,_,e,_) -> do_count c e
+    | RP.Slice(_,_,l)   -> count_loc c l
+    | _                 -> failwith "count_loc can only handle mem and slice"
+  and do_count c = function
+    | RP.Const _     -> c
+    | RP.Fetch(l, w) -> c
+
+    | RP.App ((("sx"|"zx"), _), [(RP.Const _ | RP.Fetch _)]) -> c
+    | RP.App (("lobits", _),    [RP.Const(RP.Bits _)])       -> c
+
+    | RP.App (_, args) -> 1 + List.fold_left do_count c args
+  in
+  let do_count_guard c (g, eff) =
+    let c' = 
+      match eff with
+      | RP.Store(l, r, w) -> do_count c r
+      | RP.Kill l         -> c
+    in
+    do_count c' g
+  in
+  let rtl = Rtlutil.ToReadableString.rtl in
+  let _ = Printf.printf "Counting %s\n" (rtl r) in
+  let count =
+    let RP.Rtl es = Down.rtl r in
+    List.fold_left do_count_guard 0 es
+  in
+  Printf.printf "Counted %i ops\n" count;
+  count
 @ 
 
 \subsection{DP Integer Widening}
@@ -776,6 +814,40 @@ let find_exts_to w extname =
 @ 
 
 <<widen.ml>>=
+let dpwiden r =
+  let find_best_soln r tau w =
+    let solns  = all_solutions r in
+    let solns  = List.find_all (fun s -> width s = w && fill s = tau) solns in
+    (minimum_cost solns).e'
+  in
+  let rec widen_loc = function
+    | RP.Mem(sp,agg,w,e,a) -> RP.Mem(sp,agg,w,find_best_soln e Z 64,a)
+    | RP.Slice(w,i,l)      -> RP.Slice(w,i, widen_loc l)
+    | l                    -> l
+  in
+  let widen_guard (g, eff) =
+    let effsoln = 
+      match eff with
+      | RP.Store(l, r, w) -> RP.Store(widen_loc l, find_best_soln r S w, w)
+      | RP.Kill l         -> RP.Kill (widen_loc l)
+    in
+    let gsoln = find_best_soln g Z 1 in
+    (gsoln, effsoln)
+  in
+  let rtl = Rtlutil.ToReadableString.rtl in
+  let () = Printf.printf "Widening %s\n" (rtl r) in
+  let r' =
+    let RP.Rtl es = Down.rtl r in
+    Up.rtl (RP.Rtl (List.map widen_guard es))
+  in
+  let () = 
+    if (rtl r') <> (rtl r) then Printf.printf "\\->      %s\n" (rtl r')
+  in
+  r'
+@ 
+
+The old version of DP widening didn't print out the cost.
+<<old>>=
 let dpwiden r =
   let find_best_soln r tau w =
     let solns  = all_solutions r in

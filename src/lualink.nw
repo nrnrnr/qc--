@@ -606,6 +606,17 @@ let floats ws _ proc =
   1 in
 let const n _ proc = G.iter_nodes (G.update_instr (Widen.store_const n)) proc.Proc.cfg;
   1 in
+let op_count _ proc =
+  Printf.printf "op_count called\n";
+  let count = ref 0 in
+  let update_count r =
+    count := !count + Widen.app_count r
+  in
+  let do_count = G.update_instr (fun r -> update_count r; r) in
+  let () = G.iter_nodes do_count proc.Proc.cfg in
+  Printf.printf "Op count = %i\n" !count;
+  1
+in
 let width_cost _ proc =
   Printf.printf "width_cost called\n";
   let sxcount = ref 0 in
@@ -618,8 +629,10 @@ let width_cost _ proc =
     locount := !locount + lo;
   in
   let count   = G.update_instr (fun r -> update_count r; r) in
+(*  let ()      = Widen.time (G.iter_nodes count) proc.Proc.cfg in *)
   let ()      = Widen.time (G.iter_nodes count) proc.Proc.cfg in
-  Printf.printf "Summary: sx=%i, zx=%i, lo=%i\n" !sxcount !zxcount !locount;
+  let total = !sxcount + !zxcount + !locount in
+  Printf.printf "Summary: total=%i, sx=%i, zx=%i, lo=%i\n" total !sxcount !zxcount !locount;
   1
 in
 let dpwiden _ proc =
@@ -637,6 +650,7 @@ C.register_module "Widen"
  ; "width_cost", V.efunc (V.value **-> Map.proc **->> V.int) width_cost
  ; "dpwiden", V.efunc (V.value **-> Map.proc **->> V.int) dpwiden
  ; "badwiden", V.efunc (V.value **-> Map.proc **->> V.int) badwiden
+ ; "op_count", V.efunc (V.value **-> Map.proc **->> V.int) op_count
  ] g;
 <<register modules to [[g]] in alphabetical order>>=
 let pic load_wkr use_return proc =
