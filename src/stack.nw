@@ -42,13 +42,15 @@ stack pointer points into the frame.
 let blocks' frozen_block block list p =
     let cc  = p.Proc.cc                        in
     let vfp = p.Proc.target.Target.vfp         in
-        [ "sp"              , block p.Proc.sp
-        ; "vfp"             , block (Block.at vfp 0 (Block.alignment p.Proc.sp))
-        ; "oldblocks"       , list (List.map block p.Proc.oldblocks)
-        ; "stackdata"       , block p.Proc.stackd            
-        ; "continuations"   , block p.Proc.conts
-        ; "spills"          , block (frozen_block p.Proc.priv)
-        ; "youngblocks"     , list (List.map block p.Proc.youngblocks)
+        [ "sp"                 , block p.Proc.sp
+        ; "vfp"                , block (Block.at vfp 0 (Block.alignment p.Proc.sp))
+        ; "oldblocks_callee"   , list (List.map block p.Proc.oldblocks_callee)
+        ; "oldblocks_caller"   , list (List.map block p.Proc.oldblocks_caller)
+        ; "stackdata"          , block p.Proc.stackd            
+        ; "continuations"      , block p.Proc.conts
+        ; "spills"             , block (frozen_block p.Proc.priv)
+        ; "youngblocks_callee" , list (List.map block p.Proc.youngblocks_callee)
+        ; "youngblocks_caller" , list (List.map block p.Proc.youngblocks_caller)
         ]
 
 let blocks x = blocks' (fun a -> (Automaton.freeze a).Automaton.overflow) x

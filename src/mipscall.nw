@@ -259,10 +259,12 @@ the case here.
 
 <<transformations>>=
 let prolog  =
+  let autosp = (fun _  -> vfp) in
   C.incoming ~growth ~sp
     ~mkauto:(fun () -> Block.srelative vfp "in call parms" A.at (arguments ()))
-    ~autosp:(fun _  -> vfp)
-    ~postsp:(fun _ _ -> std_sp_location) in
+    ~autosp
+    ~postsp:(fun _ _ -> std_sp_location)
+    ~insp:(fun a _ _ -> autosp a) in
 
 let epilog  =
   C.outgoing ~growth ~sp
@@ -277,16 +279,20 @@ let call_actuals  =
     ~postsp:(fun a sp -> std_sp_location) in
 
 let call_results  =
+  let autosp = (fun r   -> std_sp_location) in
   C.incoming ~growth ~sp
     ~mkauto:(fun ()  -> Block.srelative vfp "in ovfl results" A.at results)
-    ~autosp:(fun r   -> std_sp_location)
-    ~postsp:(fun _ _ -> std_sp_location) in
+    ~autosp
+    ~postsp:(fun _ _ -> std_sp_location)
+    ~insp:(fun a _ _ -> autosp a) in
 
 let also_cuts_to =
+  let autosp = (fun r -> std_sp_location) in
   C.incoming ~growth ~sp
     ~mkauto:(fun () -> Block.srelative vfp "in cont parms" A.at cut_args)
-    ~autosp:(fun r -> std_sp_location)
-    ~postsp:(fun _ _ -> std_sp_location) in
+    ~autosp
+    ~postsp:(fun _ _ -> std_sp_location)
+    ~insp:(fun a _ _ -> autosp a) in
 
 let cut_actuals base  =
    C.outgoing ~growth ~sp ~mkauto:(fun () -> A.at base cut_args)
@@ -301,7 +307,10 @@ let c ~return_to cut =
         if k = 0 & n = 0 then return_to ra
         else impossible "alternate return using C calling convention" in
     { C.name            = "C"
-    ; C.jump_ok         = false
+    (*; C.jump_ok         = false*)
+		; C.overflow_alloc  = { C.parameter_deallocator = C.Caller
+                          ; C.result_allocator      = C.Caller
+													}
     ; C.call_parms      = { C.in' = prolog;       C.out = call_actuals}
     ; C.cut_parms       = { C.in' = also_cuts_to; C.out = cut_actuals}
     ; C.results         = { C.in' = call_results; C.out = epilog}
@@ -318,6 +327,7 @@ let c ~return_to cut =
     ; C.ra_on_entry      = (fun _     -> R.fetch ra 32)
     ; C.where_to_save_ra = (fun _ t   -> Talloc.Multiple.loc t 't' 32)
     ; C.ra_on_exit       = (fun _ _ t -> ra)
+    ; C.sp_on_jump       = (fun _ _ -> Rtl.null)
     }
 @
 
@@ -376,7 +386,7 @@ let spec =
         ; CS.results        = (fun () -> results)   
         ; CS.cutto          = (fun () -> cut_args)
         ; CS.stack_growth   = Memalloc.Down
-        ; CS.overflow       = CS.overflow CS.Caller CS.Caller
+        ; CS.overflow       = CS.overflow C.Caller C.Caller
         ; CS.sp             = r 29
         ; CS.sp_align       = sp_align
         ; CS.all_regs       = RS.of_list (List.concat [nvl_int; nvl_fp;

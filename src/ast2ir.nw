@@ -413,8 +413,8 @@ module K = struct
     ; mutable cut_to      : bool
     ; mutable returned_to : bool
     ; mutable unwound_to  : bool
-    ;         cut_in      : Rtl.rtl C.answer    (* move vals at cut (uses rep) *)
-    ;         return_in   : Rtl.rtl C.answer    (* move vals at also returns *)
+    ;         cut_in      : (Block.t -> Rtl.rtl) C.answer    (* move vals at cut (uses rep) *)
+    ;         return_in   : (Block.t -> Rtl.rtl) C.answer    (* move vals at also returns *)
     ;         rep         : Contn.t     (* representation as C-- value (incl block) *)
     ; mutable succ        : 'i G.node   (* filled in by 2nd pass time *)
     }
@@ -563,7 +563,7 @@ stack pointer.
 and generate_cut_to_entry k =
   let in' = k.K.cut_in in
   G.set_succ (G.node_labeled g k.K.cut_pc) (
-  G.assertion    g in'.C.insp     **>
+  G.assertion    g (in'.C.insp (Contn.rep k.K.rep))     **>
   G.stack_adjust g in'.C.pre_sp   **>
   G.instruction  g in'.C.shuffle  **>
   G.stack_adjust g in'.C.post_sp  **>
@@ -575,11 +575,13 @@ NEED A DIFFERENT ENTRY POINT DEPENDING ON THE CALLING CONVENTION OF
 THE CALL SITE.  BLOG!
 <<functions that translate statements, including [[bodies]]>>=
 and generate_return_to_entry k = 
-  let cc = ccs default_cc in
+  let cc  = ccs default_cc in
   let in' = k.K.return_in in
-  let () = add_youngblock in'.C.overflow in
+  let ()  = if cc.C.overflow_alloc.C.result_allocator = C.Caller
+            then add youngblocks_caller in'.C.overflow
+            else add youngblocks_callee in'.C.overflow in
   G.set_succ (G.node_labeled g k.K.return_pc) (
-  G.assertion    g in'.C.insp     **>
+  G.assertion    g (in'.C.insp (Contn.rep k.K.rep))    **>
   G.stack_adjust g in'.C.pre_sp    **>
   G.instruction  g in'.C.shuffle   **>
   G.stack_adjust g in'.C.post_sp   **>
@@ -660,23 +662,26 @@ N.B.~We don't use the [[targets]] list, which is there for future
 interprocedural optimization and call-graph analysis.
 <<supporting functions for translating statements>>=
 and jumpStmt (cconv,e,args,targets (*unused*)) = 
-    let cc     = to_cc cconv in
+    let cc      = to_cc cconv in
     <<insist that [[cc]] matches [[proc_cc]] and supports jumps>>
-    let out    = actuals cc.C.call_parms.C.out args in
-    let ra_out = cc.C.ra_on_exit saved_ra out.C.overflow temps in
-    let jumpi  = target.T.jump.T.embed (expr e) in
-    let ()     = add_oldblock out.C.overflow    in  (* jump overflow = old *)
+    let out     = actuals cc.C.call_parms.C.out args in
+    let ra_out  = cc.C.ra_on_exit saved_ra out.C.overflow temps in
+    let jump_sp = cc.C.sp_on_jump out.C.overflow temps in
+    let jumpi   = target.T.jump.T.embed (expr e) in
+    let ()  = if cc.C.overflow_alloc.C.parameter_deallocator = C.Caller
+              then impossible "cc does not support tail call but used anyways"
+              else add oldblocks_callee out.C.overflow in
     G.stack_adjust g out.C.pre_sp                                  **>
     G.instruction  g out.C.shuffle                                 **>
     G.instruction  g restore_nvrs                                  **>
     G.instruction  g (RU.store ra_out (RU.fetch saved_ra))         **>
-    G.stack_adjust g out.C.post_sp                                 **>
+    G.stack_adjust g jump_sp                                       **>
     G.jump         g jumpi ~targets ~uses:(RS.union out.C.regs nvregs)
 <<insist that [[cc]] matches [[proc_cc]] and supports jumps>>=
 let () = if cc.C.name <> proc_cc.C.name then
            impossible "calling conv mismatch in jump" in
-let () = if not cc.C.jump_ok then
-           impossible ("calling conv " ^ cc.C.name ^ " does not support jump") in
+let () = if not (cc.C.overflow_alloc.C.parameter_deallocator = C.Callee) then
+         impossible ("calling conv " ^ cc.C.name ^ " does not support jump") in
 @
 
 \paragraph{Calls}
@@ -687,15 +692,19 @@ and callStmt (lhs,cconv, e, args, targets (*unused*), conts) succ =
   let in'   = results cc.C.results.C.in' lhs      in
   let calli = target.T.call.T.embed (expr e)      in
   let conts = continuations cc conts false        in
-  let () = add_youngblock out.C.overflow          in  (* outgoing overflow parms *)
-  let () = add_youngblock in'.C.overflow          in  (* incoming overflow results *)
+  let ()  = if cc.C.overflow_alloc.C.parameter_deallocator = C.Caller
+            then add youngblocks_caller out.C.overflow
+            else add youngblocks_callee out.C.overflow in
+  let ()  = if cc.C.overflow_alloc.C.result_allocator = C.Caller
+            then add youngblocks_caller in'.C.overflow
+            else add youngblocks_callee in'.C.overflow in
   G.stack_adjust g out.C.pre_sp                **>
   G.instruction  g out.C.shuffle               **>
   G.stack_adjust g out.C.post_sp               **>
   G.call         g calli ~uses:out.C.regs ~defs:in'.C.regs ~kills:cc.C.volregs
                          ~altrets:conts.returns ~unwinds_to:conts.unwinds
                          ~cuts_to:conts.cuts ~aborts:conts.aborts ~spans:props  **>
-  G.assertion    g in'.C.insp              **>
+  G.assertion    g (in'.C.insp out.C.overflow)              **>
   G.stack_adjust g in'.C.pre_sp            **>  (* DOUBTS ABOUT THIS *)
   G.instruction  g in'.C.shuffle           **>
   G.stack_adjust g in'.C.post_sp           **>
@@ -722,7 +731,9 @@ and returnStmt (cconv, kont, args) =
           let k e = Bits.S.to_int (compile_const e) in
           cc.C.return (k i) (k n) (RU.fetch ra_out) in
           (* WHY IS THIS Bits.S AND NOT Bits.U ??? *)
-    let () = add_oldblock out.C.overflow in  (* outgoing jump overflow = incoming *)
+    let ()  = if cc.C.overflow_alloc.C.result_allocator = C.Caller
+              then add oldblocks_caller out.C.overflow
+              else add oldblocks_callee out.C.overflow in
     G.stack_adjust g out.C.pre_sp            **>
     G.instruction  g out.C.shuffle           **>
     G.instruction  g restore_nvrs            **>
@@ -807,20 +818,13 @@ reader).
 The important state here is [[youngblocks]], [[oldblocks]], and
 [[constraints]]. 
 <<definition of [[proc]], which translates one procedure>>=
-  let youngblocks      = ref [] in
-  let oldblocks        = ref [] in
-  let add_youngblock b = (youngblocks := b :: !youngblocks) in
-  let add_oldblock   b = (oldblocks   := b :: !oldblocks  ) in
-  let add_youngblock b =
-    Verbose.say 3 [Printf.sprintf "Adding young block of %d bytes at %s\n"
-                     (Block.size b) (Rtlutil.ToReadableString.exp (Block.base b))];
-    add_youngblock b in
-  let add_oldblock b =
-    Verbose.say 3 [Printf.sprintf "Adding old block of %d bytes at %s\n"
-                     (Block.size b) (Rtlutil.ToReadableString.exp (Block.base b))];
-    add_oldblock b in
-  let constraints       = ref [] in
-  let add_constraints c = (constraints := c :: !constraints) in
+  let youngblocks_callee = ref [] in
+  let youngblocks_caller = ref [] in
+  let oldblocks_callee   = ref [] in
+  let oldblocks_caller   = ref [] in
+  let add blocks b       = (blocks := b :: !blocks) in
+  let constraints        = ref [] in
+  let add_constraints c  = (constraints := c :: !constraints) in
 @   
 \paragraph{Setting up the environment and functions that use it (stack
 data, continuations, expressions, parameters)}
@@ -930,7 +934,9 @@ create a label node [[initcont]] as a placeholder.
 The initialization code is inserted at [[initcont]] after the translation.
 <<definition of [[proc]], which translates one procedure>>=
   let initcont = G.node_labeled g (Idgen.label "initialize continuations") in
-  let () = add_oldblock in'.C.overflow in
+  let ()  = if proc_cc.C.overflow_alloc.C.parameter_deallocator = C.Caller
+            then add oldblocks_caller in'.C.overflow
+            else add oldblocks_callee in'.C.overflow in
   let () = 
     let labelnode node ~succ = (G.set_succ node succ; node) in
     G.set_succ (G.entry g) (
@@ -962,21 +968,23 @@ The main thing here is dealing with all the blocks.
     let symbol, nvars = match F.findv procname env with
       | _, (F.Label(F.Proc (sym,scope,i)),_) -> sym, i
       | _ -> impossible "no environment for procedure" in
-    { Proc.symbol      = symbol
-    ; Proc.cc          = proc_cc
-    ; Proc.target      = target
-    ; Proc.temps       = temps
-    ; Proc.cfg         = g
-    ; Proc.oldblocks   = List.rev (!oldblocks) (* parms must be first *)
-    ; Proc.youngblocks = !youngblocks          (* order doesn't matter *)
-    ; Proc.stackd      = stackd     (* stack data block *)
-    ; Proc.priv        = Block.relative vfp "private"
-                         (aligned_mem ~align:proc_cc.C.sp_align) target 
-    ; Proc.sp          = Block.at proc_cc.C.stable_sp_loc 0 proc_cc.C.sp_align 
-    ; Proc.eqns        = List.concat (!constraints)
-    ; Proc.conts       = contblocks
-    ; Proc.vars        = nvars       (* number of variables *)
-    ; Proc.varMap      = Proc.VarMap.empty
+    { Proc.symbol             = symbol
+    ; Proc.cc                 = proc_cc
+    ; Proc.target             = target
+    ; Proc.temps              = temps
+    ; Proc.cfg                = g
+    ; Proc.oldblocks_callee   = List.rev (!oldblocks_callee) (* parms must be first *)
+    ; Proc.oldblocks_caller   = List.rev (!oldblocks_caller) (* parms must be first *)
+    ; Proc.youngblocks_callee = !youngblocks_callee          (* order doesn't matter *)
+    ; Proc.youngblocks_caller = !youngblocks_caller          (* order doesn't matter *)
+    ; Proc.stackd             = stackd     (* stack data block *)
+    ; Proc.priv               = Block.relative vfp "private"
+                                (aligned_mem ~align:proc_cc.C.sp_align) target 
+    ; Proc.sp                 = Block.at proc_cc.C.stable_sp_loc 0 proc_cc.C.sp_align 
+    ; Proc.eqns               = List.concat (!constraints)
+    ; Proc.conts              = contblocks
+    ; Proc.vars               = nvars       (* number of variables *)
+    ; Proc.varMap             = Proc.VarMap.empty
     } in
   optimizer i (* runs optimizer, freezes, and assembles proc *)
 @ 

@@ -57,7 +57,7 @@ Structures, arrays, and unions take the alignment of their most
 aligned component.
 
 From Figure 3-14,
-the return register is  [[eax]], and the volatile registers are
+the return register is [[eax]], and the volatile registers are
 [[ebx]], [[esi]], and [[edi]].
 @ 
 \paragraph{X86 registers and their conventional uses}
@@ -173,16 +173,19 @@ candidates for defaulting.
 \paragraph{Automata for passing values---{\PAL}~convention}
 N.B. YOU CANNOT AFFORD TO TAKE \emph{ALL} THE SCRATCH REGISTERS AWAY
 FROM THE ALLOCATOR.
+In fact, you should leave two registers available.
 WE NEED A BETTER WAY OF DETECTING THIS ERROR OTHER THAN HAVING THE
 REGISTER ALLOCATOR DUMP CORE.
 <<x86call.ml>>=
 let cmm_results =
-  results [eax; ecx] *>
+  (*results [eax; ecx] *>*)
+  results [eax] *>
   A.overflow ~memsize:8 ~byteorder:bo ~growth:Memalloc.Down ~max_alignment:sp_align
 
-let cmm_arguments = 
+let cmm_arguments =
   A.widen (Aux.round_up_to ~multiple_of:32) *>
-  A.useregs [eax; ecx] ~errormsg:imp *>
+  (*A.useregs [eax; ecx] ~errormsg:imp *>*)
+  A.useregs [eax] ~errormsg:imp *>
   A.overflow ~memsize:8 ~byteorder:bo ~growth:Memalloc.Up ~max_alignment:sp_align
 @
 \paragraph{Managing the stack pointer and return address}
@@ -216,19 +219,30 @@ let call_actuals  =
     ~autosp:(fun r -> Block.base r.A.overflow)
     ~postsp:(fun _ sp -> sp) in  (* was ~postsp:(fun _ -> std_sp_location) *)
 let prolog  =
+  let autosp = (fun _ -> vfp) in
   C.incoming ~growth ~sp
     ~mkauto:(fun () -> A.at (addk vfp 4) specs.call)
-    ~autosp:(fun _ -> vfp)
-    ~postsp:(fun _ _ -> std_sp_location) in
+    ~autosp
+    ~postsp:(fun _ _ -> std_sp_location)
+	  ~insp:(fun a _ _ -> autosp a) in
    (* alternate: ~mkauto:Block.relative vfp "in call parms" specs.call *)
    (*   ~autosp:(fun r -> addk (Block.base r.A.overflow) (-4)) *)
 @ 
 <<functions to transform automata>>=
-let call_results  =
+let c_call_results  =
+  let autosp = (fun r -> Block.base r.A.overflow) in
+  C.incoming ~growth ~sp
+    ~mkauto:(fun () -> Block.srelative vfp "in ovfl results" A.at specs.results)
+    ~autosp
+    ~postsp:(fun _ _ -> std_sp_location)     (* irrelevant? *)
+    ~insp:(fun a _ _ -> autosp a) in
+let cmm_call_results  =
   C.incoming ~growth ~sp
     ~mkauto:(fun () -> Block.srelative vfp "in ovfl results" A.at specs.results)
     ~autosp:(fun r -> Block.base r.A.overflow)
-    ~postsp:(fun _ _ -> std_sp_location) in  (* irrelevant? *)
+    ~postsp:(fun _ _ -> std_sp_location)     (* irrelevant? *)
+    ~insp:(fun _ _ out_parm_block ->
+				     addk (Block.base out_parm_block) (Block.size out_parm_block)) in
 let epilog  =
   C.outgoing ~growth ~sp
     ~mkauto:(fun () -> Block.srelative vfp "out ovfl results" A.at specs.results)
@@ -238,10 +252,12 @@ let epilog  =
 We need an assertion here!
 <<functions to transform automata>>=
 let also_cuts_to =
+  let autosp = (fun r -> std_sp_location) in
   C.incoming ~growth ~sp
     ~mkauto:(fun () -> Block.srelative vfp "in cont parms" A.at specs.cutto)
-    ~autosp:(fun r -> std_sp_location)
-    ~postsp:(fun _ _ -> std_sp_location) in
+    ~autosp
+    ~postsp:(fun _ _ -> std_sp_location)
+	  ~insp:(fun a _ _ -> autosp a) in
 
 let cut_actuals base  =
   C.outgoing ~growth ~sp ~mkauto:(fun () -> A.at base specs.cutto)
@@ -257,10 +273,14 @@ let conv name jump specs ~return_to cut =
     if k = 0 & n = 0 then return_to ra
     else Impossible.impossible "alternate return using C calling convention" in
   { C.name       = name
-  ; C.jump_ok    = jump
+  (*; C.jump_ok    = jump*)
+	; C.overflow_alloc  = { C.parameter_deallocator = if jump then C.Callee else C.Caller
+												; C.result_allocator      = C.Caller
+												}
   ; C.call_parms = { C.in' = prolog;       C.out = call_actuals}
   ; C.cut_parms  = { C.in' = also_cuts_to; C.out = cut_actuals}
-  ; C.results    = { C.in' = call_results; C.out = epilog}
+  ; C.results    = { C.in' = if jump then cmm_call_results else c_call_results
+                   ; C.out = epilog}
 
   ; C.stack_growth     = Memalloc.Down
   ; C.stable_sp_loc    = std_sp_location
@@ -271,6 +291,9 @@ let conv name jump specs ~return_to cut =
                          else         (fun _ _ -> ra)
   ; C.ra_on_exit       = if jump then (fun _ b _ -> amem (addk (Block.base b) (-4)))
                          else         (fun _ _ _ -> ra)
+  ; C.sp_on_jump       =
+             if jump then (fun b _ -> RU.store sp (addk (Block.base b) (-4)))
+						 else (fun _ _ -> Impossible.impossible "tail calls not supported by cc")
   ; C.pre_nvregs       = nvregs          (* registers preserved across calls *)
   ; C.volregs          = volregs         (* registers not preserved across calls *)
   ; C.saved_nvr        = saved_nvr
@@ -313,7 +336,7 @@ let template = (* conservative spec *)
         ; CS.results        = (fun () -> assert false)   
         ; CS.cutto          = (fun () -> assert false)
         ; CS.stack_growth   = Memalloc.Down
-        ; CS.overflow       = CS.overflow CS.Caller CS.Caller
+        ; CS.overflow       = CS.overflow C.Caller C.Caller
         ; CS.sp             = esp
         ; CS.sp_align       = 4
         ; CS.all_regs       = RS.union volregs nvregs
@@ -328,7 +351,7 @@ let rtn return_to k n ~ra =
 
 let cc return_to cut spec =
     let t    = CS.to_call cut (rtn return_to) spec                   in  
-    let jump = spec.CS.overflow.CS.parameter_deallocator = CS.Callee in 
+    let jump = spec.CS.overflow.C.parameter_deallocator = C.Callee in 
         { t with (* fix what Callspec got wrong *)
             C.ra_on_exit = if jump 
                            then (fun _ b _ -> amem (addk (Block.base b) (-4)))

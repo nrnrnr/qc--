@@ -9,31 +9,15 @@ A calling convention is represented by a [[Call.t]] value. Since this is
 a quite complicated type, this module provides a client-oriented
 interface to build such a value.
 
-Responsibility for actions on the stack is split between the caller and
-the callee. A [[party]] value identifies one of them.
-
+We provide a convenience function and two default values that represent whether the
+caller or callee allocate/deallocate overflow blocks.
 <<callspec.mli>>=
-type party              = Caller | Callee
+val overflow      : dealloc:Call.party -> alloc:Call.party -> Call.overflow
+val c_overflow    : Call.overflow
+val tail_overflow : Call.overflow
 @
-
-In particular, either one can allocate a block for results or deallocate
-the parameter overflow block. Who does what has implications for tail
-calls. We provide two default values.
-
-<<callspec.mli>>=
-type overflow = 
-    { parameter_deallocator:    party
-    ; result_allocator:         party
-    }
-
-val overflow: dealloc:party -> alloc:party -> overflow (* convenience fn *)
-val c_overflow:     overflow
-val tail_overflow:  overflow
-@
-
 When a (general) register is spilled, a stack slot must be allocated. A
 [[nvr_saver]] provides a slot for a non-volatile register.
-
 <<callspec.mli>>=
 type nvr_saver = Talloc.Multiple.t -> Register.t -> Rtl.loc
 (* suggested by NR, but not used 
@@ -93,7 +77,7 @@ type t =
     ; results           : unit -> Automaton.stage
     ; cutto             : unit -> Automaton.stage
     ; stack_growth      : Memalloc.growth   (* up or down *)
-    ; overflow          : overflow          (* overflow handling *)
+    ; overflow          : Call.overflow     (* overflow handling *)
     ; sp                : Register.t        (* stack pointer register *)
     ; sp_align          : int               (* alignment of sp *)
     ; all_regs          : Register.Set.t    (* regs visible to allocator *)
@@ -125,26 +109,20 @@ module T  = Talloc.Multiple
 module C  = Call
 module A  = Automaton
 
-type party    = Caller | Callee
-type overflow = 
-    { parameter_deallocator : party
-    ; result_allocator      : party
-    }
-
 let overflow ~dealloc ~alloc = 
-    { parameter_deallocator = dealloc
-    ; result_allocator      = alloc
+    { C.parameter_deallocator = dealloc
+    ; C.result_allocator      = alloc
     }
 
 
 let tail_overflow = 
-    { parameter_deallocator = Callee
-    ; result_allocator      = Caller
+    { C.parameter_deallocator = C.Callee
+    ; C.result_allocator      = C.Caller
     }
 
 let c_overflow =
-    { parameter_deallocator = Caller
-    ; result_allocator      = Caller
+    { C.parameter_deallocator = C.Caller
+    ; C.result_allocator      = C.Caller
     } 
 
 type nvr_saver = Talloc.Multiple.t -> Register.t -> Rtl.loc
@@ -197,12 +175,14 @@ allocated by the caller.
 
 <<callspec.ml>>=
 let prolog t = 
+    let autosp = (fun a -> young_end (wordsize t) t.stack_growth a.A.overflow) in
     C.incoming ~growth:t.stack_growth ~sp:(R.reg t.sp)
         ~mkauto:(mk_automaton (wordsize t) "in call parms" t.call)
                         
         (* ~autosp:(fun _ -> vfp (wordsize t)) *)
-        ~autosp:(fun a -> young_end (wordsize t) t.stack_growth a.A.overflow)
+        ~autosp:autosp
         ~postsp:(fun _ _ -> std_sp_location (wordsize t)) 
+        ~insp:(fun a _ _ -> autosp a)
 @
 
 Before the epliog, [[sp]] points at the standard location, independent
@@ -223,11 +203,11 @@ let epilog t =
         ~mkauto:(mk_automaton (wordsize t) "out ovfl results" t.results)
         ~autosp:(fun r -> std_sp_location (wordsize t))
         ~postsp:(match t.overflow with
-                | {parameter_deallocator=Caller; result_allocator=Caller} ->
+                | {C.parameter_deallocator=C.Caller; C.result_allocator=C.Caller} ->
                     (fun _ _ -> vfp (wordsize t)) 
-                | {parameter_deallocator=Callee; result_allocator=Caller} 
-                | {parameter_deallocator=Caller; result_allocator=Callee} 
-                | {parameter_deallocator=Callee; result_allocator=Callee} -> 
+                | {C.parameter_deallocator=C.Callee; C.result_allocator=C.Caller} 
+                | {C.parameter_deallocator=C.Caller; C.result_allocator=C.Callee} 
+                | {C.parameter_deallocator=C.Callee; C.result_allocator=C.Callee} -> 
                     (fun a _ -> 
                         young_end (wordsize t) t.stack_growth a.A.overflow)
                 )
@@ -256,10 +236,12 @@ callee-allocated result block.
 
 <<callspec.ml>>=
 let call_results t =
+    let autosp = (fun a   -> young_end (wordsize t) t.stack_growth a.A.overflow) in
     C.incoming ~growth:t.stack_growth ~sp:(R.reg t.sp)
         ~mkauto:(mk_automaton (wordsize t) "in ovfl results" t.results)
-        ~autosp:(fun a   -> young_end (wordsize t) t.stack_growth a.A.overflow)
+        ~autosp
         ~postsp:(fun _ _ -> std_sp_location (wordsize t)) 
+        ~insp:(fun a _ _ -> autosp a)
 @
 
 Parameter passing for cuts is independent of parameter passing for
@@ -267,10 +249,12 @@ procedures.
 
 <<callspec.ml>>=
 let also_cuts_to t =
+    let autosp = (fun r   -> std_sp_location (wordsize t)) in
     C.incoming ~growth:t.stack_growth ~sp:(R.reg t.sp)
         ~mkauto:(mk_automaton (wordsize t) "in cont parms" t.cutto)
-        ~autosp:(fun r   -> std_sp_location (wordsize t))
+        ~autosp
         ~postsp:(fun _ _ -> std_sp_location (wordsize t)) 
+        ~insp:(fun a _ _ -> autosp a)
 
 let cut_actuals t base  =
     C.outgoing ~growth:t.stack_growth ~sp:(R.reg t.sp) 
@@ -307,24 +291,26 @@ let where_to_save_ra t = fun ra_on_entry temp -> match style t with
     | ReturnAddress.SaveToTemp s -> Talloc.Multiple.loc temp s (wordsize t) 
 
 let to_call ~cutto ~return t =
-    { C.name          = t.name
-    ; C.jump_ok       = t.overflow.parameter_deallocator = Callee
-    ; C.call_parms    = { C.in' = prolog t       ; C.out = call_actuals t }
-    ; C.cut_parms     = { C.in' = also_cuts_to t ; C.out = cut_actuals t  }
-    ; C.results       = { C.in' = call_results t ; C.out = epilog t       }
+    { C.name           = t.name
+(*    ; C.jump_ok        = t.overflow.C.parameter_deallocator = C.Callee*)
+    ; C.overflow_alloc = t.overflow
+    ; C.call_parms     = { C.in' = prolog t       ; C.out = call_actuals t }
+    ; C.cut_parms      = { C.in' = also_cuts_to t ; C.out = cut_actuals t  }
+    ; C.results        = { C.in' = call_results t ; C.out = epilog t       }
     
-    ; C.stack_growth  = t.stack_growth
-    ; C.stable_sp_loc = std_sp_location (wordsize t)
-    ; C.replace_vfp   = Cfgx.Vfp.replace_with ~sp:(R.reg t.sp)
-    ; C.sp_align      = t.sp_align
-    ; C.ra_on_entry   = ra_on_entry t
+    ; C.stack_growth     = t.stack_growth
+    ; C.stable_sp_loc    = std_sp_location (wordsize t)
+    ; C.replace_vfp      = Cfgx.Vfp.replace_with ~sp:(R.reg t.sp)
+    ; C.sp_align         = t.sp_align
+    ; C.ra_on_entry      = ra_on_entry t
     ; C.where_to_save_ra = where_to_save_ra t
-    ; C.ra_on_exit    = ra_on_exit t
-    ; C.pre_nvregs    = t.nv_regs
-    ; C.volregs       = Register.Set.diff t.all_regs t.nv_regs
-    ; C.saved_nvr     = t.save_nvr
-    ; C.cutto         = cutto
-    ; C.return        = return
+    ; C.ra_on_exit       = ra_on_exit t
+    ; C.sp_on_jump       = (fun _ _ -> Rtl.null)
+    ; C.pre_nvregs       = t.nv_regs
+    ; C.volregs          = Register.Set.diff t.all_regs t.nv_regs
+    ; C.saved_nvr        = t.save_nvr
+    ; C.cutto            = cutto
+    ; C.return           = return
     }
 @
 

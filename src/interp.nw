@@ -262,16 +262,20 @@ let call_actuals  =
     ~postsp:(fun _ sp -> sp) in  
 
 let prolog  =
+  let autosp = (fun _ -> vfp) in
   C.incoming ~growth ~sp
     ~mkauto:(fun () -> Block.srelative vfp "in call parms" AN.at params)
-    ~autosp:(fun _ -> vfp)
-    ~postsp:(fun _ _ -> std_sp_location) in
+    ~autosp
+    ~postsp:(fun _ _ -> std_sp_location)
+    ~insp:(fun a _ _ -> autosp a) in
 
 let call_results  =
+  let autosp = (fun r -> Block.base r.AN.overflow) in
   C.incoming ~growth ~sp
     ~mkauto:(fun () -> Block.srelative vfp "in ovfl results" AN.at params)
-    ~autosp:(fun r -> Block.base r.AN.overflow)
-    ~postsp:(fun _ _ -> std_sp_location) in
+    ~autosp
+    ~postsp:(fun _ _ -> std_sp_location)
+    ~insp:(fun a _ _ -> autosp a) in
 
 let epilog  =
   C.outgoing ~growth ~sp
@@ -280,10 +284,12 @@ let epilog  =
     ~postsp:(fun _ _ -> vfp) in
 
 let also_cuts_to =
+  let autosp = (fun r -> std_sp_location) in
   C.incoming ~growth ~sp
     ~mkauto:(fun () -> Block.srelative vfp "in cont parms" AN.at params)
-    ~autosp:(fun r -> std_sp_location)
-    ~postsp:(fun _ _ -> std_sp_location) in
+    ~autosp
+    ~postsp:(fun _ _ -> std_sp_location)
+    ~insp:(fun a _ _ -> autosp a) in
 
 let cut_actuals base  =
    C.outgoing ~growth ~sp ~mkauto:(fun () -> AN.at base params)
@@ -296,7 +302,10 @@ let cc' = (* new style *)
     let growth = Memalloc.Down            in (* irrelevant *) 
     <<transformations>>
     { C.name             = "interp"
-    ; C.jump_ok          = true
+    (*; C.jump_ok          = true*)
+    ; C.overflow_alloc  = { C.parameter_deallocator = C.Callee
+                          ; C.result_allocator      = C.Caller
+                          }
     ; C.call_parms       = { C.in' = prolog;       C.out = call_actuals}
     ; C.cut_parms        = { C.in' = also_cuts_to; C.out = cut_actuals}
     ; C.results          = { C.in' = call_results; C.out = epilog}
@@ -313,6 +322,7 @@ let cc' = (* new style *)
     ; C.ra_on_entry      = (fun _     -> R.fetch ra wordsize)
     ; C.where_to_save_ra = (fun _ t   -> ra)
     ; C.ra_on_exit       = (fun t b _ -> ra)
+    ; C.sp_on_jump       = (fun _ _ -> Rtl.null)
     }
 @
 

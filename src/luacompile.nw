@@ -128,26 +128,26 @@ Dummy.layout = { creates='no late consts' }
 
 function Dummy.layout.fn(dummy, proc)
     local blocks       = Stack.blocks(proc)
-    blocks.oldblocks   = Block.overlap(32,"low" , blocks.oldblocks)  
-    blocks.youngblocks = Block.overlap(32,"high", blocks.youngblocks)
+    blocks.oldblocks_caller   = Block.overlap(32,"low" , blocks.oldblocks_caller)  
+    blocks.youngblocks_caller = Block.overlap(32,"high", blocks.youngblocks_caller)
     local layout =
-        { blocks.oldblocks
+        { blocks.oldblocks_caller
         , blocks.stackdata
         , blocks.vfp
         , blocks.continuations
         , Block.relative(blocks.sp, "six words", 24, 16)
         , blocks.spills
-        , blocks.youngblocks
+        , blocks.youngblocks_caller
         , blocks.sp
         }
     if Debug.stack then
         write('****** cc name = ', Stack.ccname(proc), '\n')
-        Debug.showblocks (blocks, { 'oldblocks'
+        Debug.showblocks (blocks, { 'oldblocks_caller'
                                   , 'stackdata'
                                   , 'vfp'
                                   , 'continuations'
                                   , 'spills'
-                                  , 'youngblocks'
+                                  , 'youngblocks_caller'
                                   , 'sp'
                                   })
     end
@@ -373,24 +373,28 @@ function X86.layout["C"](dummy,proc) --- really for a C convention only
     local blocks = Stack.blocks(proc)
     blocks.ra = Block.relative(blocks.vfp, "return address", 4, 4)
 
-    blocks.oldblocks   = Block.overlap(32, "low", blocks.oldblocks)
-    blocks.youngblocks = Block.overlap(32, "low", blocks.youngblocks)
+    blocks.oldblocks_callee   = Block.overlap(32, "high", blocks.oldblocks_callee)
+    blocks.oldblocks_caller   = Block.overlap(32, "low", blocks.oldblocks_caller)
+    blocks.youngblocks_callee = Block.overlap(32, "high", blocks.youngblocks_callee)
+    blocks.youngblocks_caller = Block.overlap(32, "low", blocks.youngblocks_caller)
     local layout = 
-                { blocks.oldblocks               -- <-- high addresses
+                { blocks.oldblocks_caller       -- <-- high addresses
+                , blocks.oldblocks_callee
                 , blocks.ra
                 , blocks.vfp
                 , blocks.stackdata
                 , blocks.continuations
                 , blocks.spills
-                , blocks.youngblocks
+                , blocks.youngblocks_caller
                 , blocks.sp                     -- <-- low addresses 
+                , blocks.youngblocks_callee
                 }
     if Debug.stack then
       write('======= using stack layout for C/notail =======\n')
       write('****** cc name = ', Stack.ccname(proc), '\n')
-      Debug.showblocks (blocks, {'oldblocks', 'ra', 'vfp', 'stackdata',
-                                 'continuations', 'spills', 'youngblocks'
-                                 , 'sp'})
+      Debug.showblocks (blocks, {'oldblocks_caller', 'oldblocks_callee', 'ra', 'vfp',
+					                       'stackdata', 'continuations', 'spills',
+																 'youngblocks_caller', 'youngblocks_callee', 'sp'})
     end
     local block = Block.cat(32, layout)
     Stack.freeze(proc,block)
@@ -406,30 +410,37 @@ function X86.layout["C--"](dummy,proc)
       write('======= using stack layout for C-- with tail calls =======\n')
       local i = 1
       local keys = { }
-      while blocks.oldblocks[i] do keys[i] = i; i = i + 1 end
-      write('old blocks:\n')
-      Debug.showblocks(blocks.oldblocks, keys)
+      while blocks.oldblocks_callee[i] do keys[i] = i; i = i + 1 end
+      write('oldblocks_callee:\n')
+      Debug.showblocks(blocks.oldblocks_callee, keys)
       write('\n')
     end
 
     blocks.ra = Block.relative(blocks.vfp, "return address", 4, 4)
     -- first old block is always the incoming parms
-    blocks.oldblocks[1] = Block.cat(32, {blocks.oldblocks[1], blocks.ra, blocks.vfp})
-    blocks.oldblocks   = Block.overlap(32, "high", blocks.oldblocks)
-    blocks.youngblocks = Block.overlap(32, "high", blocks.youngblocks)
+    blocks.oldblocks_callee[1] =
+                    Block.cat(32, {blocks.oldblocks_callee[1], blocks.ra, blocks.vfp})
+    blocks.oldblocks_caller    = Block.overlap(32, "low", blocks.oldblocks_caller)
+    blocks.oldblocks_callee    = Block.overlap(32, "high", blocks.oldblocks_callee)
+    blocks.youngblocks_caller  = Block.overlap(32, "low", blocks.youngblocks_caller)
+    blocks.youngblocks_callee  = Block.overlap(32, "high", blocks.youngblocks_callee)
     local layout = 
-                { blocks.oldblocks               -- <-- high addresses
-                --- , blocks.ra  -- joined to incoming block
-                --- , blocks.vfp
+                { blocks.oldblocks_caller       -- <-- high addresses
+								-- On return, the ra must end up here, immediately followed by the sp
+								, blocks.oldblocks_callee
+                -- , blocks.ra  -- joined to incoming block
+                -- , blocks.vfp
                 , blocks.stackdata
                 , blocks.continuations
                 , blocks.spills
+								, blocks.youngblocks_caller
                 , blocks.sp                     -- <-- low addresses 
-                , blocks.youngblocks
+                , blocks.youngblocks_callee
                 }
     if Debug.stack then
-      Debug.showblocks (blocks, {'oldblocks', 'ra', 'vfp', 'stackdata',
-                                 'continuations', 'spills', 'sp', 'youngblocks'})
+      Debug.showblocks (blocks, {'oldblocks_caller', 'oldblocks_callee', 'ra', 'vfp',
+					                       'stackdata', 'continuations', 'spills',
+																 'youngblocks_caller', 'youngblocks_callee', 'sp'})
     end
     local block = Block.cat(32, layout)
     Stack.freeze(proc,block)
@@ -479,6 +490,7 @@ All register allocators are made available in the table [[Ralloc]].
 <<Lua compiler configuration>>=
 Ralloc           = Ralloc and error('Ralloc not empty') or {}
 Ralloc.color     = NewColorGraph.color
+Ralloc.dls       = DLS.dls
 @
 % ------------------------------------------------------------------ 
 \subsection{Optimizer}
