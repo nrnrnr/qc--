@@ -29,6 +29,7 @@ end
 @
 A few abbreviations.
 <<modules>>=
+module BO   = Bits.Ops
 module RP   = Rtl.Private
 module RU   = Rtlutil
 module SS   = Space.Standard32
@@ -54,9 +55,10 @@ Utilities for instructions.
 <<code to precede the labeler>>=
 
 let fits b w =
-  let bitw = Bits.S.of_int w 32
-  and zero = Bits.zero (Bits.width b) in
-  Bits.Ops.shrl b bitw =*= zero
+  let i  = Bits.S.to_int64 b in
+  let i' = Int64.abs i in
+  let i' = Int64.shift_right i' w in
+  Int64.compare i' Int64.zero = 0
 
 let imports = ref ([] : string list)
 
