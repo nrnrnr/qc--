@@ -88,10 +88,11 @@ ra    : Fetch(ral,w)   [{: guard (w = 64) :}] {: () :}
 \paragraph{Data movement}
 <<rules>>=
 -- load immediate
---inst : Store(dst:regl, src:lconst, w)
---  {: cat ["addl"; " "; dst; " = @ltoff("; src; "), gp"] :}
-inst : Store(dst:regl, src:target, w)
-  {: cat ["addl "; dst; " = "; src] :}
+inst : Store(dst:regl, src:lconst, w)
+  {: cat ["addl"; " "; dst; " = @ltoff("; src; "), gp ;;\n"; 
+          "\t"; "ld8 "; dst; " = ["; dst; "]"] :}
+--inst : Store(dst:regl, src:target, w)
+--  {: cat ["addl "; dst; " = "; src] :}
 
 -- register move
 inst : Store(dst:eregl, src:reg, w)
@@ -122,7 +123,8 @@ next: Add(pc,const) {: () :}
 inst: Par(Goto(target), Store(ral,next,w)) {: "br.call.sptk.many b0 = " ^ target :}
 
 -- return
-inst: Par(Goto(a:reg), Goto(b:reg)) {: "br.ret.sptk.many b0" :}
+inst: Par(Goto(a:reg), Goto(b:reg)) 
+  {: "mov ar.pfs = r32 ;;\n"^"\tbr.ret.sptk.many b0" :}
 -- THE ABOVE IS COMMENTED OUT UNTIL WE FIGURE OUT HOW TO PROPERLY RECOGNIZE A
 --   RETURN.
 
@@ -135,7 +137,7 @@ inst: Goto(reg)    {: "br.sptk.many " ^ reg :}
 
 \paragraph{Other Instructions}
 <<rules>>=
-inst : Nop() {: "" :}
+inst : Nop() {: "// " :}
 @ 
 
 \subsection{Interfacing {\rtl}s with the Expander}

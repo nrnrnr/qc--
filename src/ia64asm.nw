@@ -139,6 +139,7 @@ method private instruction rtl =
   output_string _fd (Ia64rec.to_asm rtl);
   output_string _fd " ;;\n"
 
+(* this better be only used for printing out functions... *)
 method cfg_instr proc  = 
     (* We have to emit a label/whatever for the procedure's 
        entry point. This is what symbol is for. Simply use this#label?  *)
@@ -146,6 +147,7 @@ method cfg_instr proc  =
     and symbol = proc.Proc.symbol in
     let label l = this#label (try SM.find l _syms with Not_found -> this#local l) in
     this#label symbol;
+    output_string _fd "\talloc r32 = ar.pfs, 0, 1, 8, 0 ;;\n";
     (emitter cfg (this#instruction) label : unit)
 @ 
 

@@ -287,13 +287,13 @@ let ldst_expand rtl =
   match Down.rtl rtl with
   (* load from offset *)
   |	RP.Rtl [g,RP.Store(dst,RP.Fetch(RP.Mem(s,agg,mw,
-										   (RP.App(op,exps) as e),assn),w'),w)
+					       (RP.App(op,exps) as e),assn),w'),w)
            ] -> let (reg, regw) = extract_reg_w op exps in
                 List.map (fun x -> Up.rtl (RP.Rtl [g, x]))
-                    [ RP.Store(reg, e, regw)
+                    [ RP.Store(dst, e, regw)
                     ; RP.Store(dst, RP.Fetch(RP.Mem(s,agg,mw,
-													RP.Fetch(reg,regw),assn),
-											 w'), w) ]
+						    RP.Fetch(dst,regw),assn),
+					     w'), w) ]
 
   (* store from offset *)
   |	RP.Rtl [g,RP.Store(RP.Mem(s,agg,mw,(RP.App(op,exps) as e),assn), src, w)
@@ -312,7 +312,7 @@ let ldst_expand rtl =
 Spilling and reloading.
 <<ia64.ml>>=
 (* expansion here once caused infinite loop *)
-let spill_expand p r = (* [r] *) (* ldst_expand r *) [r]
+let spill_expand p r = (* [r] *) ldst_expand r
 let spill  p t l =
   spill_expand p (Automaton.store l (Post.tempval t) (Post.tempwidth t))
 let reload p t l =

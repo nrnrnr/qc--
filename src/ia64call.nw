@@ -29,7 +29,7 @@ let b i = ('a', i, 64)
 let r i = ('r', i, 64)
 let vol_regs = RS.of_list (List.map r ([2; 3; 8; 9; 10; 11] @ 
 		 							   (Aux.from 14 ~upto:31)))
-let nv_regs  = RS.of_list (List.map r [0; 1; 4; 5; 6; 7; 12; 13])
+let nv_regs  = RS.of_list (List.map r [4; 5; 6; 7; 12; 13])
 let branch_regs = RS.of_list (List.map b (Aux.from 1 ~upto:7))
 let all_regs = RS.union (RS.union vol_regs nv_regs) branch_regs
 
@@ -90,7 +90,7 @@ Ia64.cc["C"].call =
                                    , A.is_any, A.unit
                                    } 
                         } 
-             , A.is_any, A.regs_by_bits("bits", r(32) .. r(39))
+             , A.is_any, A.regs_by_bits("bits", r(33) .. r(40))
              } 
   , A.overflow { memsize = 8, byteorder = Ia64.byteorder, growth = "up"
                , max_alignment = Ia64.sp_align
@@ -103,7 +103,7 @@ Ia64.cc["C"].call =
   { A.widen(64, "multiple")
   , A.bitcounter("bits")
   , A.choice { "float" , A.regs_by_bits("bits", f(8)  .. f(15))
-             , A.is_any, A.regs_by_bits("bits", r(32) .. r(39))
+             , A.is_any, A.regs_by_bits("bits", r(33) .. r(40))
              } 
   , A.overflow { memsize = 8, byteorder = Ia64.byteorder, growth = "up"
                , max_alignment = Ia64.sp_align
@@ -130,7 +130,7 @@ let postprocess cconv =
 <<IA64 calling convention automata in Lua>>=
 Ia64.cc["C"].cutto =
   { A.widen(64)
-  , A.useregs(r(32) .. r(39))
+  , A.useregs(r(33) .. r(40))
   , A.overflow { memsize = 8, byteorder = Ia64.byteorder, growth = "up"
                , max_alignment = Ia64.sp_align
                }
