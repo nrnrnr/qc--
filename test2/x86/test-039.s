@@ -115,93 +115,105 @@ initialize_continuations_l16:
 	leal 32(%esp), %esp
 	jmp sp2_help
 sp2_help:
-	leal -48(%esp), %esp
-	movl %eax,(%esp)
+	leal -64(%esp), %esp
+	movl %eax,4(%esp)
 	movl $4,%ecx
-	leal 48(%esp), %eax
+	leal 64(%esp), %eax
 	addl %ecx,%eax
-	movl (%eax),%ecx
-	movl $8,%eax
-	leal 48(%esp), %edx
-	addl %eax,%edx
-	movl (%edx),%eax
-	movl %eax,40(%esp)
-	nop
-	leal 48(%esp), %eax
 	movl (%eax),%eax
-	movl %eax,36(%esp)
+	movl %eax,(%esp)
+	movl $8,%ecx
+	leal 64(%esp), %eax
+	addl %ecx,%eax
+	movl (%eax),%eax
+	movl %eax,60(%esp)
+	nop
+	leal 64(%esp), %eax
+	movl (%eax),%eax
+	movl %eax,56(%esp)
 initialize_continuations_l26:
 	movl $1,%eax
-	movl %eax,4(%esp)
-	movl 4(%esp),%eax
-	movl (%esp),%edx
-	cmpl %eax,%edx
+	movl 4(%esp),%ecx
+	cmpl %eax,%ecx
 	je join_l29
 join_l30:
 	nop
-	movl $1,%eax
-	movl %eax,24(%esp)
-	movl (%esp),%eax
-	movl %eax,28(%esp)
-	movl 28(%esp),%eax
-	movl 24(%esp),%edx
-	subl %edx,%eax
-	movl %eax,28(%esp)
-	movl 28(%esp),%eax
-	movl %ecx,20(%esp)
-	movl 20(%esp),%ecx
-	movl (%esp),%edx
+	movl $1,%ecx
+	movl 4(%esp),%eax
+	movl %eax,48(%esp)
+	movl 48(%esp),%eax
+	subl %ecx,%eax
+	movl %eax,48(%esp)
+	movl 48(%esp),%eax
+	movl (%esp),%ecx
+	movl %ecx,44(%esp)
+	movl 44(%esp),%ecx
+	movl 4(%esp),%edx
 	addl %edx,%ecx
-	movl %ecx,20(%esp)
+	movl %ecx,44(%esp)
 	movl $4,%ecx
-	movl %ecx,16(%esp)
-	leal 48(%esp), %ecx
-	movl 16(%esp),%edx
-	addl %edx,%ecx
-	movl 20(%esp),%edx
-	movl %edx,(%ecx)
-	movl 40(%esp),%ecx
-	movl %ecx,12(%esp)
-	movl 12(%esp),%ecx
-	movl (%esp),%edx
-	imull %edx,%ecx
-	movl %ecx,12(%esp)
-	movl $8,%ecx
-	leal 48(%esp), %edx
-	movl %edx,44(%esp)
-	movl 44(%esp),%edx
-	addl %ecx,%edx
-	movl %edx,44(%esp)
-	movl 12(%esp),%ecx
-	movl 44(%esp),%edx
-	movl %ecx,(%edx)
-	movl $0,%ecx
-	leal 48(%esp), %edx
-	movl %edx,32(%esp)
-	movl 32(%esp),%edx
-	addl %ecx,%edx
-	movl %edx,32(%esp)
+	movl %ecx,36(%esp)
+	leal 64(%esp), %ecx
+	movl %ecx,32(%esp)
 	movl 32(%esp),%ecx
+	movl %ecx,40(%esp)
+	movl 40(%esp),%ecx
 	movl 36(%esp),%edx
+	addl %edx,%ecx
+	movl %ecx,40(%esp)
+	movl 44(%esp),%ecx
+	movl 40(%esp),%edx
+	movl %ecx,(%edx)
+	movl 60(%esp),%ecx
+	movl %ecx,28(%esp)
+	movl 28(%esp),%ecx
+	movl 4(%esp),%edx
+	imull %edx,%ecx
+	movl %ecx,28(%esp)
+	movl $8,%ecx
+	movl %ecx,24(%esp)
+	leal 64(%esp), %ecx
+	movl 24(%esp),%edx
+	addl %edx,%ecx
+	movl 28(%esp),%edx
 	movl %edx,(%ecx)
-	leal 48(%esp), %esp
+	movl $0,%ecx
+	leal 64(%esp), %edx
+	movl %edx,52(%esp)
+	movl 52(%esp),%edx
+	addl %ecx,%edx
+	movl %edx,52(%esp)
+	movl 52(%esp),%ecx
+	movl 56(%esp),%edx
+	movl %edx,(%ecx)
+	leal 64(%esp), %esp
 	jmp sp2_help
 join_l29:
 	nop
-	movl %ecx,%eax
+	movl (%esp),%eax
 	movl $12,%ecx
+	movl %ecx,12(%esp)
+	leal 64(%esp), %ecx
 	movl %ecx,8(%esp)
-	leal 48(%esp), %ecx
-	movl 8(%esp),%edx
+	movl 8(%esp),%ecx
+	movl %ecx,16(%esp)
+	movl 16(%esp),%ecx
+	movl 12(%esp),%edx
 	addl %edx,%ecx
-	movl 40(%esp),%edx
+	movl %ecx,16(%esp)
+	movl 16(%esp),%ecx
+	movl 60(%esp),%edx
 	movl %edx,(%ecx)
 	movl $8,%ecx
-	leal 48(%esp), %edx
+	leal 64(%esp), %edx
+	movl %edx,20(%esp)
+	movl 20(%esp),%edx
 	addl %ecx,%edx
-	movl 36(%esp),%ecx
-	movl %ecx,(%edx)
-	leal 56(%esp), %esp
+	movl %edx,20(%esp)
+	movl 20(%esp),%ecx
+	movl 56(%esp),%edx
+	movl %edx,(%ecx)
+	leal 72(%esp), %esp
 	ret
 sp3:
 	leal -44(%esp), %esp
