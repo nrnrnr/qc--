@@ -1,0 +1,120 @@
+
+% Grades     ::=    "%%Grades:" Quality Importance Urgency
+% Quality    ::=    A|B|C|D|E
+% Importance ::=    Central|Subsystem|Peripheral
+% Urgency    ::=    Immediate|Soon|Later
+%
+% Example (at beginning of line): %%Grades: B Central Soon
+
+% ------------------------------------------------------------------ 
+\section{Typechecking Expressions}
+% ------------------------------------------------------------------ 
+
+The {\qcc} compiler type checks expressions during several phases: 
+evaluation of constant expressions, static semantics, translation to
+intermediate representation.  To avoid code duplication, type checks
+for expressions are factored out into this module. 
+
+The type of an expression depends on the types of named values, named
+types and the target dependent word size. These are supplied as a
+record [[env]] for the [[check]] function. 
+
+<<types>>=
+type env = 
+    { tlookup:  string -> Types.ty       Error.error    (* type aliases *)
+    ; vlookup:  string -> Types.ty       Error.error    (* types of values *)
+    ; wordsize:           Types.ty       Error.error
+    ; pointersize:        Types.ty       Error.error
+    }   
+@
+
+<<oexpcheck.mli>>=
+<<types>>
+val check: env -> Ast.expr -> Types.ty Error.error      (* Error.ErrorExn *)
+@
+
+The [[check]] function allows to work with incomplete functions,
+indicated by [[Error.Error]] values.  The policy is as follows:
+
+\begin{itemize}
+\item In case of a success, [[check]] returns the type of the
+      expression at hand as a [[Error.Ok]] value.
+\item If the type check must use an erroneous information from the
+      environment, it propagates this error and returns [[E.Error]].
+\item If the type check detects a new error, for example a type
+      inconsistency, the [[Error.ErrorExn]] exception is raised.
+\end{itemize}
+
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+<<oexpcheck.ml>>=
+module A = Ast
+module E = Error
+
+<<types>> (* from interface *)
+
+let (@<<) f g = fun x -> f (g x) (* function composition *)
+    
+let rec is2power = function
+    | 1 -> true
+    | x -> x > 0 && (x mod 2) = 0 && is2power (x/2)
+
+(* NEAR-DUPLICATION WITH Ast2ir.astty *)
+let rec astty env  = function
+    | A.TyAt(x,r)  -> astty env x
+    | A.BitsTy(n)  -> E.Ok(Types.bits n)
+    | A.AliasTy(x) -> env.tlookup x
+
+let rec astFetch env = function
+    | A.NameOrMemAt(x,r)   -> astFetch env x
+    | A.Name(hint,id)    -> env.vlookup id
+    | A.Mem(ty,e,aligned,_)     -> 
+        let _ = ( match aligned with
+                | None   -> ()
+                | Some a -> if is2power a then () else 
+                            E.error "alignment is not a power of 2"
+                ) 
+        in E.ematchTriple  (expr env e, astty env ty, env.pointersize) 
+            (fun (et,at,ws) -> 
+                if et = ws then at 
+                else E.error "memory reference by non-pointer")
+@
+
+<<oexpcheck.ml>>=
+and primOp env op args =
+    let argtys = (E.Raise.list @<< List.map (expr env)) args in
+        E.ematch argtys (fun tys -> fst (Rtlop.Translate.operator op tys))
+            
+and expr env exp =
+    let optty default cvt x ty =
+        let w   = match ty with
+                  | None    -> default
+                  | Some ty -> astty env ty  in
+        let omsg w =
+	  Printf.sprintf "literal bit vector overflows when packed into %d bits" w in
+        let bmsg = "literal bit vector appears when bool expected" in
+        let msg = "literal value does not match type" in
+        E.sequence w (fun t -> match t with
+                               | (Types.Bits w as t) ->
+                                 (try let _ = cvt x w in Error.Ok t
+                                  with Bits.Overflow ->   Error.error (omsg w))
+                               | Types.Bool          ->   Error.error bmsg)
+    in match exp with
+        | A.ExprAt(x,r)     -> expr env x
+        | A.Int   (x,ty)    -> optty env.wordsize         Bits.U.of_string x ty
+        | A.Float (x,ty)    -> optty env.wordsize         Bits.U.of_string x ty
+        | A.Char  (x,ty)    -> optty (E.Ok(Types.bits 8)) Bits.U.of_int    x ty
+        | A.Fetch (v)       -> astFetch env v
+        | A.BinOp (l,op,r)  -> primOp env op [l;r]
+        | A.UnOp  (op,e)    -> primOp env op [e]
+        | A.PrimOp(op,args) -> primOp env op (List.map snd args)
+
+let check = expr
+@
+
+
+
+

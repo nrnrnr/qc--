@@ -1,0 +1,47 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+% Grades     ::=    "%%Grades:" Quality Importance Urgency
+% Quality    ::=    A|B|C|D|E
+% Importance ::=    Central|Subsystem|Peripheral
+% Urgency    ::=    Immediate|Soon|Later
+%
+% Example (at beginning of line): %%Grades: B Central Soon
+
+
+% ------------------------------------------------------------------ 
+\section{Target Platform Metrics}
+% ------------------------------------------------------------------ 
+
+This interface describes only low-level metrics such as might be used
+when elaborating a {\PAL} program or when bootstrapping a [[Target.t]].
+<<metrics.mli>>=
+<<exposed types>>
+val default : t
+val of_ast  : Ast.arch list -> t Error.error
+@ 
+
+Field [[alignment]] is the alignment required to load or store a word
+of size [[pointersize]].
+<<exposed types>>=
+type t = {
+  byteorder   : Rtl.aggregation ; (* big/little endian, id *)
+  wordsize    : int             ; (* bits *)
+  pointersize : int             ; (* bits *)
+  memsize     : int             ; (* smallest addressable unit, typically 8 *)
+  float       : string          ; (* "ieee754" float representation    *)
+  charset     : string          ; (* "latin1"  character encoding      *)
+}
+@
+\section{Implementation}
+<<metrics.ml>>=
+<<exposed types>>
+let default = {
+  byteorder   = Rtl.Identity;
+  wordsize    = 32;
+  pointersize = 32;
+  memsize     = 8;
+  float       = "ieee754";
+  charset     = "latin1";
+}
+
+let of_ast l = Error.Error
