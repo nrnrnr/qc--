@@ -1,3 +1,4 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 
 % ------------------------------------------------------------------ 
 \section{{\mips} Assembler}
@@ -115,17 +116,18 @@ method value (v:Bits.bits) = match Bits.width v with
     | 32 -> fprintf _fd ".word %Ld\n"  (int64 v)
     | w ->  unimp (sprintf "unsupprted width %d in mips assembler" w)
 
-method addr a = match Reloc.Simple.normalize a with
-    | None, bits   -> this#value bits
-    | Some s, bits -> fprintf _fd ".word %s + %Lx\n" s#mangled_text (int64 bits)
+method addr a =
+  match Reloc.if_bare a with
+  | Some b -> this#value b
+  | None -> let const bits = Printf.sprintf "0x%Lx" (Bits.U.to_int64 bits) in
+            assert (Reloc.width a = 32);
+            fprintf _fd ".word %s\n" (Asm.reloc_string const a)
 
 method emit = ()
 @
-
 The SPIM {\mips} simulator expects comments to start with a [[#]], the
 \textit{as}(1) assembler on IRIX uses the C~convention. To be on the
 save side I disable comments for the moment.
-
 <<assembly methods>>=
 method comment s = fprintf _fd "#  %s   \n" s
 method comment s = fprintf _fd "/* %s */\n" s

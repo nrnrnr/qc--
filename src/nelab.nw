@@ -16,7 +16,7 @@ Procedures and sections in nice normal form.
 It's depressing that formals and locals don't have the same type.
 <<exposed types>>=
 type index = int
-type linktime = Bits.bits Reloc.Simple.relocatable
+type linktime = Reloc.t
 type 'a proc =
   { env     : 'a Fenv.Dirty.env';
     sym     : Symbol.t;  (* assembly-language symbol for this procedure *)
@@ -781,7 +781,7 @@ and init r ty i =
           errorf r "type of an initial value does not match declared type %s"
             (Types.to_string ty))
   | A.InitStr s ->
-      let to_texpr c = Reloc.Simple.of_const (Bits.U.of_int (Char.code c) 8), 8 in
+      let to_texpr c = Reloc.of_const (Bits.U.of_int (Char.code c) 8), 8 in
       if ty =*= T.Bits 8 then
         E.Ok (Aux.String.foldr (fun c l -> to_texpr c :: l) s [])
       else

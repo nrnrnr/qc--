@@ -40,6 +40,10 @@ not readily available.
 val fetch : Rtl.loc -> Rtl.exp
 val store : Rtl.loc -> Rtl.exp -> Rtl.rtl
 @ 
+For convenience, conversion of a relocatable address back to an expression. 
+<<rtlutil.mli>>=
+val reloc : Reloc.t -> Rtl.width -> Rtl.exp
+@ 
 It's useful to check and see if a location is a hardware register.
 It is a checked run-time error to call [[to_hardware l]] unless
 [[is_hardware l]].
@@ -323,6 +327,7 @@ module ToString: sig
     val rtl: Rtl.rtl -> string
     val exp: Rtl.exp -> string
     val loc: Rtl.loc -> string
+    val const: Rtl.Private.const -> string
 end
 @
 
@@ -1457,3 +1462,10 @@ module Compare = struct
       | diff    -> diff)
   let rtl (RP.Rtl l) (RP.Rtl r) = Aux.compare_list guarded l r
 end
+<<rtlutil.ml>>=
+let reloc addr w =
+  let const b = R.bits b w in
+  let sym (s, mk) = mk s w in
+  let infix op a b = R.app (R.opr op [w]) [a; b] in
+  let add, sub = infix "add", infix "sub" in
+  Reloc.fold ~const ~sym ~add ~sub addr

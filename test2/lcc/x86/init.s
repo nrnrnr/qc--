@@ -78,8 +78,8 @@ x:
 .align 4
 y:
 .long x
-.long x + 0x14
-.long x + 0x28
+.long 0x14 + x
+.long 0x28 + x
 .long 0
 .section .text
 main:

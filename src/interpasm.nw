@@ -116,7 +116,7 @@ let hexbits v      = Printf.sprintf "0x%Lx" (Bits.U.to_int64 v)
 
 exception Unsupported of string
 let unsupported msg = raise (Unsupported msg)
-type reloc = Bits.bits Reloc.Simple.relocatable 
+type reloc = Reloc.t
 @
 
 % ------------------------------------------------------------------ 
@@ -256,7 +256,7 @@ object (this)
             this#append (initdata sz [i])
         
     method addr (a: reloc) = 
-        match Reloc.Simple.normalize a with
+        match Reloc.as_simple a with
         | None,   bits -> 
             this#append (initdata (Bits.width bits) [(hexbits bits)])
         | Some s, bits ->

@@ -132,10 +132,18 @@ a monomorphic version improved compile time by over~10\%.
 module Compare = struct
     type t = reg 
     let compare (((xs,_,_),xi,C xc):t) (((ys,_,_),yi,C yc):t) =
-        let x = Pervasives.compare xs ys in
+        let x = comparec xs ys in
         if x <> 0 then x
-        else let i = compare xi yi in if i <> 0 then i 
-        else compare xc yc
+        else let i = comparei xi yi in if i <> 0 then i 
+        else comparei xc yc
+    let compare' x y = compare y x
+
+    let compare (((xs,_,_),xi,C xc) as x:t) (((ys,_,_),yi,C yc) as y:t) =
+      let answer = compare x y in
+      let prime = compare y x in
+      if prime <> -answer then
+        Printf.kprintf Impossible.impossible "$%c[%d:%d] ? $%c[%d:%d] == %d (neg %d)\n" xs xi xc ys yi yc answer prime;
+      answer
 end
 let compare = Compare.compare
 let eq r r' = Compare.compare r r' = 0

@@ -94,7 +94,7 @@ val emit_as_asm : tgt -> 'a Asm.assembler -> procsym:Symbol.t ->
 It appears that the interpreter needs to know about user-defined spans and
 stackdata.
 <<runtimedata.mli>>=
-val user_spans : spans -> (Bits.bits * Bits.bits Reloc.Simple.relocatable) list
+val user_spans : spans -> (Bits.bits * Reloc.t) list
 val stackdata  : spans -> Rtl.loc list
 @ 
 The compiler can emit data for the run-time system, such as the
@@ -258,8 +258,8 @@ and the other to the data associated with the stopping point:
 \end{verbatim}
 <<emit proc to run-time data map>>=
   asm#section "pcmap";
-  asm#addr (Reloc.Simple.of_sum Rtl.codesym (asm#local stop_l) zero);
-  asm#addr (Reloc.Simple.of_sum Rtl.datasym frame_label        zero);
+  asm#addr (Reloc.of_sym (asm#local stop_l, Rtl.codesym) wordsize);
+  asm#addr (Reloc.of_sym (frame_label, Rtl.datasym)      wordsize);
 @
 The second area keeps track of the per-PC information.
 A~picture of
@@ -312,7 +312,7 @@ asm#label frame_label;
 emit_loc spans.S.inalloc;
 emit_loc spans.S.outalloc;
 emit_loc spans.S.ra;
-asm#addr (Reloc.Simple.of_sum Rtl.datasym sd_label zero);
+asm#addr (Reloc.of_sym (sd_label, Rtl.datasym) wordsize);
 emit_int (List.length (List.filter nonredundant spans.S.csregs));
 emit_int (Array.length spans.S.vars);
 @
@@ -386,8 +386,8 @@ First, we define a slew of helpers to emit the different types of values.
 let reg_ix r =
   try  RM.find r (snd target.T.reg_ix_map)
   with Not_found -> imposs "Register not found in map" in
-let emit_dead_loc      ()    = asm#value zero in
-let emit_link_const mk sym   = asm#addr (Reloc.Simple.of_sum mk sym zero) in
+let emit_dead_loc      () = asm#value zero in
+let emit_link_const sym   = asm#addr (Reloc.of_sym sym wordsize) in
 let offset_w = wordsize - 1 in
 let emit_offset bits = (* possibly an offset *)
   let value    = Bits.S.to_int bits in
@@ -412,7 +412,7 @@ let emit_loc l =
   let mklink kind s w = Up.exp (RP.Const (RP.Link(s, kind, w))) in
   match Dn.loc (simplify_loc l) with
   | RP.Mem (_,_, RP.Const (RP.Link (sym,kind,_)),_)  ->
-     emit_link_const (mklink kind) sym
+     emit_link_const (sym, mklink kind)
   | RP.Mem (_,_, RP.Const (RP.Bits bs),_)            -> emit_offset   bs
   | RP.Reg r                                         -> emit_reg  (reg_ix r) 0
   | RP.Slice (_, i, RP.Reg r)                        -> emit_reg  (reg_ix r) i
@@ -461,7 +461,7 @@ let emit_conts conts =
                          (n+1) conts);
   let emit_cont_block (pc, sp, vars) =
     emit_int (List.length vars);
-    asm#addr (Reloc.Simple.of_sum Rtl.datasym (asm#local pc) zero);
+    asm#addr (Reloc.of_sym (asm#local pc, Rtl.datasym) wordsize);
     emit_loc sp;
     List.iter (fun (h,i,a) -> emit_int i; emit_int (Ctypes.enum_int h)) vars in
   List.iter emit_cont_block conts in

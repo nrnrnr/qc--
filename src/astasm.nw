@@ -32,15 +32,12 @@ module type PERSONALITY = sig
     val cfg2ast : proc -> Ast.proc
 end
 @
-
 The assembler constructor receices the output channel for the assembler. 
-
 <<S>>=
 module type S = sig
     type proc
     val asm: out_channel -> proc Asm.assembler
 end    
-
 <<astasm.mli>>=
 <<PERSONALITY>>
 <<S>>
@@ -53,7 +50,6 @@ module Make(P: PERSONALITY): S with type proc = P.proc
 
 The implementation provides no surprises. It builds up an {\AST} and
 emits it to [[stdout]] when the [[emit]] method is called.
-
 <<astasm.ml>>=
 module T        = Target
 module A        = Ast
@@ -80,9 +76,8 @@ let zero        = A.Sint( "0" , Some (bits P.memsize)) (* memsize *)
 
 exception Unsupported of string
 let unsupported msg = raise (Unsupported msg)
-type reloc = Bits.bits Reloc.Simple.relocatable 
+type reloc = Reloc.t
 @
-
 % ------------------------------------------------------------------ 
 \subsubsection{Name Mangling}
 % ------------------------------------------------------------------ 
@@ -91,7 +86,6 @@ Since we emit {\PAL} code we have to make sure that symbols respect the
 {\PAL} naming conventions. The \module{mangle} module provides name
 mangling support. To highlight the destinction between names and symbols
 we prefix every symbol with [[sym]].
-
 <<Make>>=
 let spec =
     let reserved =
@@ -122,8 +116,6 @@ let spec =
             ; Mangle.avoid      = (fun x -> x ^ "$")
             }
 @
-
-
 % ------------------------------------------------------------------ 
 \subsubsection{Relocatable Addresses}
 % ------------------------------------------------------------------ 
@@ -131,17 +123,12 @@ let spec =
 Relocatable addresses come in a generic format. We have to provide a
 translation into the {\PAL} abstract syntax. A relocatable address has
 the same width as a pointer.
-
 <<Make>>=
 let reladdr (a:reloc) =
-    let width           = P.pointersize in
-    let const (i:int64) = A.Uint(Printf.sprintf "0x%Lx" i, Some pointer) in
-    let sym   s         = A.Fetch (A.Name(None,s#mangled_text,None)) in
-        match Reloc.Simple.normalize a with
-        | None  , bits -> const (Bits.S.to_int64 bits)
-        | Some s, bits -> A.PrimOp("add", [(None, sym s,None)
-                                          ;(None, const (Bits.S.to_int64 bits),None)
-                                          ])
+  let const b = Rtlutil.ToAST.expr (Rtl.bits b (Bits.width b)) in
+  let sym (s,_) = A.Fetch (A.Name(None,s#mangled_text,None)) in
+  let binop op l r = A.BinOp(l, op, r) in
+  Reloc.fold ~const ~sym ~add:(binop "+") ~sub:(binop "-") a
 @
 
 % ------------------------------------------------------------------ 
@@ -263,7 +250,7 @@ object (this)
             this#append (A.Datum(A.MemDecl(ty, A.FixSize one, Some init)))
             
     method addr (a: reloc) = 
-        let ty   = pointer          in      (* e is of native pointer type *)
+        let ty   = bits (Reloc.width a) in
         let init = A.InitExprs([reladdr a]) in
             this#append (A.Datum(A.MemDecl(ty, A.FixSize one, Some init)))
 

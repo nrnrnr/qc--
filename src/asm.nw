@@ -17,17 +17,12 @@ symbol tables and expressions.  To avoid that all aspects of the
 compiler must be functorized over the different assemblers we have
 chosen to use a very polymorphic interface that uses Objective Caml's
 object system.
-
-PLEASE EXPLAIN THE PURPOSE OF MAP HERE. -CL
-
 <<asm.mli>>=
-<<interface>>
+<<exported class types>>
 val map : ('a -> 'b) -> 'b assembler -> 'a assembler
-<<asm.ml>>=
-<<interface>>
-@
-
-<<interface>>=
+val reloc_string : (Bits.bits -> string) -> Reloc.t -> string
+     (* make string form of relocatable address using mangled text of symbols *)
+<<exported class types>>=
 class type ['proc] assembler = object
     <<assembler methods>>
 end
@@ -72,7 +67,7 @@ method cfg_instr   : 'proc -> unit
 
 (* emit data *)
 method value  : Bits.bits -> unit
-method addr   : Bits.bits Reloc.Simple.relocatable -> unit  
+method addr   : Reloc.t -> unit  
 method zeroes : int -> unit             (* n bytes of zeroes *)
 
 (* announce number of global variables -- used only in interpreter *)
@@ -143,9 +138,9 @@ After all instructions and data has been passed to an [[assembler]]
 object the [[emit]] method must be called. It finishes any remaining
 business. It is an unchecked run-time error to invoke any [[assembler]]
 method subsequently.
-
 @
 <<asm.ml>>=
+<<exported class types>>
 class ['proc] mapped_asm f (asm : 'a assembler) : ['proc] assembler =
 object
     (* declarations *)
@@ -179,4 +174,9 @@ object
     method emit = asm#emit
 end
 let map f asm = new mapped_asm f asm
-
+@ 
+<<asm.ml>>=
+let reloc_string const =
+  let sym (s, _) = s#mangled_text in
+  let infix op a b = String.concat "" [a; " "; op; " "; b] in
+  Reloc.fold ~const ~sym ~add:(infix "+") ~sub:(infix "-")

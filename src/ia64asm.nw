@@ -102,19 +102,15 @@ method value (v:Bits.bits) =
 @ 
 <<assembly methods>>=
 method addr a =
-  match Reloc.Simple.normalize a with
-  | None, bits   -> this#value bits
-  | Some s, bits -> 
-      if Bits.Ops.eq bits (Bits.zero 64) then
-        fprintf _fd "data8 %s\n" s#mangled_text
-      else
-        fprintf _fd "data8 %s + 0x%Lx\n" s#mangled_text (Bits.U.to_int64 bits)
+  match Reloc.if_bare a with
+  | Some b -> this#value b
+  | None -> let const bits = Printf.sprintf "0x%Lx" (Bits.U.to_int64 bits) in
+            assert (Reloc.width a = 64);
+            fprintf _fd "data8 %s\n" (Asm.reloc_string const a)
 @ 
-
 <<assembly methods>>=
 method emit = ()
 @ 
-
 <<assembly methods>>=
 method comment s = fprintf _fd "/* %s */\n" s
 

@@ -10,31 +10,10 @@
 \section{Relocatable Addresses}
 % ------------------------------------------------------------------ 
 
-\begin{quote}\it
-    There is some confusion about relocatable addresses. We had the
-    [[Reladdr]] abstraction but NR did not like it for the back end and
-    came up with a new one in [[Sledlib]]. This module is an attempt to
-    consolidate the matter but I am not sure it is successful. --CL (Thu
-    Apr 11 14:25:33 EDT 2002) 
-\end{quote}
-
-
-A relocatable address is either a constant or a sum of a symbol and a
-constant. A symbol is an assembler-specific representation of a
-link-time constant.
-
-<<reloc.mli>>=
-<<module type RELOCATABLE>>
-<<module Simple>>
-@
-
-We are not yet sure about our representation for relocatable addresses.
-We define a module type that covers the intended use and take clues from
-the machine generated code in directory [[gen/]].
-
+A relocatable address formed by sums and differences of symbolic and
+literal constants.
 A [['a relocatable]] value represents a bit vector of type [[['a]] whose
-value might not be known until link time. A relocatable is constructed
-as a sum of a symbol and many constants. Since the representation is 
+value might not be known until link time. Since the representation is 
 polymorphic over the type of the constant, [[add_const]] receives as
 first argument a function that adds constants.
 
@@ -42,68 +21,62 @@ It might be necessary to turn a relocatable address back into an
 expression, which might conceivably undergo a PIC transformation.
 For that reason, to make a relocatable address from a symbol, it is
 necessary to supply a suitable function.
-<<module type RELOCATABLE>>=
-module type RELOCATABLE = sig
-    type symbol                 
-    type 'a relocatable         
+<<reloc.mli>>=
+type symbol = Symbol.t * (Symbol.t -> Rtl.width -> Rtl.exp)
+type t
 
-    (* constructors *)
-    val of_const:   'a           -> 'a relocatable
-    val of_sum:     (symbol -> Rtl.width -> Rtl.exp) -> symbol -> 'a -> 'a relocatable
-    val add_const:  ('a -> 'a -> 'a) -> 'a relocatable -> 'a -> 'a relocatable
+(* constructors *)
+val of_const : Bits.bits -> t
+val of_sym   : symbol -> Rtl.width -> t
+val add :  t -> t -> t
+val sub :  t -> t -> t
 
-    (* observer *)
-    val normalize:  'a relocatable -> symbol option * 'a
-    val expnormalize:  
-       'a relocatable -> (symbol * (symbol -> Rtl.width -> Rtl.exp)) option * 'a
-end
-<<junk>>=
-module type S = sig
-    type symbol
-    type 'a relocatable = 
-      | Const of 'a
-      | Sym   of 
-      | Sum   of 'a relocatable * 'a relocatable
+(* observers *)
+val fold : const:(Bits.bits -> 'a) -> sym:(symbol -> 'a) ->
+           add:('a -> 'a -> 'a) -> sub:('a -> 'a -> 'a) -> t -> 'a
 
-    val of_const:   'a           -> 'a relocatable
-    val of_sym:     (symbol -> Rtl.width -> Rtl.exp) -> symbol -> 'a relocatable
-    val add:  ('a -> 'a -> 'a) -> 'a relocatable -> 'a relocatable -> 'a relocatable
-    val sub:  ('a -> 'a -> 'a) -> 'a relocatable -> 'a relocatable -> 'a relocatable
-
-    val normalize:  'a relocatable -> symbol option * 'a
-    val expnormalize:  
-       'a relocatable -> (symbol * (symbol -> Rtl.width -> Rtl.exp)) option * 'a
-end
+val width : t -> Rtl.width
+val if_bare : t -> Bits.bits option (* if not a bare value, returns None *)
+val as_simple : t -> Symbol.t option * Bits.bits
+   (* checked RTE if not simple *)
 @
-
-The [[MkSimple]] functor allows to build a representation easily and
-[[Simple]] is a particular instance of that.
-
-<<module Simple>>=
-module MkSimple(S: sig type t end): RELOCATABLE with type symbol = S.t
-module Simple:                      RELOCATABLE with type symbol = Symbol.t
-@
-
 % ------------------------------------------------------------------ 
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
 
+No known need for efficiency here.
 <<reloc.ml>>=
-<<module type RELOCATABLE>>
+type symbol = Symbol.t * (Symbol.t -> Rtl.width -> Rtl.exp)
+let eqsym (s,_) (s',_) = s#mangled_text =$= s'#mangled_text
 
-module MkSimple(S: sig type t end) = struct
-    type symbol          = S.t
-    type 'a relocatable  = (symbol * (symbol -> Rtl.width -> Rtl.exp)) option * 'a
-    let of_const c       = (None, c)
-    let of_sum mk s c    = (Some (s, mk), c)
-    let add_const (+)    = fun (s, c) c' -> (s, c + c')
-    let expnormalize r   = r
-    let normalize (s, c) = match s with
-    | None -> None, c
-    | Some (s, _) -> Some s, c
-end
+type exp = Pos of symbol * Rtl.width | Neg of symbol * Rtl.width
+let neg = function Pos (s, w) -> Neg (s, w) | Neg (s, w) -> Pos (s, w)
 
-module Simple = MkSimple(Symbol)
+type t  = exp list * Bits.bits
+let of_const c    = ([], c)
+let of_sym s w    = ([Pos (s, w)], Bits.zero w)
+let add (xs, xc) (ys, yc) = (xs @ ys, Bits.Ops.add xc yc)
+let sub (xs, xc) (ys, yc) = (xs @ List.map neg ys, Bits.Ops.sub xc yc)
+let fold ~const ~sym ~add ~sub (ss, c) =
+  let extend e = function Pos (s, w) -> add e (sym s)
+                        | Neg (s, w) -> sub e (sym s) in
+  match ss with
+  | Pos (s, w) :: ss when Bits.is_zero c -> List.fold_left extend (sym s)   ss
+  | _                                    -> List.fold_left extend (const c) ss
 @
-
-
+<<reloc.ml>>=
+let width (_, b) = Bits.width b
+let if_bare = function ([], b) -> Some b | (_::_, _) -> None
+let as_simple a =
+  let w = Bits.width (snd a) in
+  let const bits = (None, bits) in
+  let sym (s, _) = (Some s, Bits.zero w) in
+  let add (s, b) (s', b') = match s, s' with
+  | Some s, None   -> (Some s, Bits.Ops.add b b')
+  | None, Some s   -> (Some s, Bits.Ops.add b b')
+  | None, None     -> (None, Bits.Ops.add b b')
+  | Some _, Some _ -> Impossible.impossible "added symbols in simple reloc" in
+  let sub (s, b) (s', b') = match s' with
+  | None -> (s, Bits.Ops.sub b b')
+  | Some _ -> Impossible.impossible "subtracted symbols in simple reloc" in
+  fold ~const ~sym ~add ~sub a

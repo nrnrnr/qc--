@@ -236,7 +236,7 @@ module K = struct
     ;         base        : Block.t     (* base address; to be composed with rep *)
     ;         convention  : string
     ; mutable succ        : 'i G.node   (* filled in by 2nd pass time *)
-    ; mutable spans       : (Bits.bits  * Bits.bits Reloc.Simple.relocatable) list
+    ; mutable spans       : (Bits.bits  * Reloc.t) list
                             (* user-defined spans at the continuation *)
     }
   <<definition of [[K.mk]], which initializes continuation information>>
@@ -1007,7 +1007,7 @@ let emit_global_register_area ~export =
         asm#section (target.T.data_section);
         asm#label localref;
         asm#comment "reference to global-register signature";
-        asm#addr (Reloc.Simple.of_sum Rtl.impsym digest (Bits.zero pointersize));
+        asm#addr (Reloc.of_sym (digest, Rtl.impsym) pointersize);
       end in
   gmap
 @

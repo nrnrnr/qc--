@@ -22,7 +22,7 @@ evaluating expressions inside of them. The promise is, that the returned
 val rtl:    Rtl.rtl -> Rtl.rtl
 val exp:    Rtl.exp -> Rtl.exp
 val bits:   Rtl.exp -> Bits.bits    (* Error.ErrorExn, convenient function *)
-val link:   Rtl.exp -> Bits.bits Reloc.Simple.relocatable
+val link:   Rtl.exp -> Reloc.t
 val bool:   Rtl.exp -> bool         (* Error.ErrorExn, convenient function *)
 @
 The [[Unsafe]] module provides an simplification of {\rtl}s tries to
@@ -49,7 +49,6 @@ will tell us whether it needs further ecaluation at link-time or
 run-time.
 <<simplify.ml>>=
 module BO = Bits.Ops
-module RS = Reloc.Simple
 module R  = Rtl
 module RP = Rtl.Private
 module RU = Rtlutil
@@ -57,7 +56,7 @@ module Dn = Rtl.Dn
 module Up = Rtl.Up
 
 exception Error of string
-type reloc     = Bits.bits RS.relocatable
+type reloc     = Reloc.t
 
 let error msg  = raise (Error msg)
 let impossf fmt = Printf.kprintf Impossible.impossible fmt
@@ -121,19 +120,19 @@ let bool e = match Safe.exp (Dn.exp e) with
 
 let mklink kind s w = Up.exp (RP.Const (RP.Link(s, kind, w)))
 
-let link e = match Safe.exp (Dn.exp e) with
-| RP.Const(RP.Bits b)   -> Reloc.Simple.of_const b
-| RP.Const(RP.Link(l,kind,w)) -> Reloc.Simple.of_sum (mklink kind) l (Bits.zero w)
-| RP.Const(RP.Diff(c1,c2)) ->
-    Impossible.unimp "difference of link-time constants"
-| RP.App(("add",_),[RP.Const(RP.Link(l,kind,w)); RP.Const(RP.Bits(b))]) ->
-    Reloc.Simple.of_sum (mklink kind) l b
-| RP.App(("sub",_),[RP.Const(RP.Link(l,kind,w)); RP.Const(RP.Bits(b))]) ->
-    Reloc.Simple.of_sum (mklink kind) l (Bits.Ops.neg b)
-| RP.App(("sub",_),[RP.Const(RP.Link(l,_,w)); RP.Const(RP.Link(l',_,w'))]) ->
-    Impossible.unimp "difference of link-time constants"
-| _ ->
-    Error.error ("Bad link-time constant " ^ Rtlutil.ToString.exp e)
+let link e =
+  let rec const c = match c with
+  | RP.Bits b   -> Reloc.of_const b
+  | RP.Link(l,kind,w) -> Reloc.of_sym (l, mklink kind) w
+  | RP.Diff(c1,c2) -> Reloc.sub (const c1) (const c2)
+  | _ -> Error.errorf "Bad link-time constant %s" (Rtlutil.ToString.const c) in
+  let rec exp e = match e with
+  | RP.App(("add",_),[x; y]) -> Reloc.add (exp x) (exp y)
+  | RP.App(("sub",_),[x; y]) -> Reloc.sub (exp x) (exp y)
+  | RP.Const c -> const c
+  | _ -> Error.errorf "Bad link-time constant expression %s"
+                      (Rtlutil.ToString.exp (Up.exp e)) in
+  exp (Safe.exp (Dn.exp e)) 
 
 let compile_time_ops = 
     [ "add"; "and"; "com"; "divu"; "eq"; "ge"; "geu"; "gt"; "gtu"; "le"; "leu";
