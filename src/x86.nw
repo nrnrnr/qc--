@@ -155,8 +155,8 @@ let esp = temploc Rg.esp
 let esi = temploc Rg.esi
 let edi = temploc Rg.edi
 
-let upint32 n = Up.const (RP.Bits(Bits.U.of_int n 32))
-let upint8  n = Up.const (RP.Bits(Bits.U.of_int n 8))
+let upint32 n = RO.unsigned 32 n
+let upint8  n = RO.unsigned 8  n
 
 let ah_val = R.fetch Rg.ah 8
 let carrybit = R.app (R.opr "x86_carrybit" []) [RU.fetch eflags]
@@ -177,6 +177,7 @@ let subflags   x y w = R.store eflags (R.app (R.opr "x86_subflags"   [w]) [x; y]
 let addflags   x y w = R.store eflags (R.app (R.opr "x86_addflags"   [w]) [x; y]) 32
 let mulflags   x y w = R.store eflags (R.app (R.opr "x86_mulflags"   [w]) [x; y]) 32
 let muluxflags x y w = R.store eflags (R.app (R.opr "x86_muluxflags" [w]) [x; y]) 32
+let mulxflags  x y w = R.store eflags (R.app (R.opr "x86_mulxflags"  [w]) [x; y]) 32
 let undefflags       = R.store eflags (R.app (R.opr "x86_undefflags" [])  [])     32
 let logicflags exp w = R.store eflags (R.app (R.opr "x86_logicflags" [w]) [exp])  32
 let shflags sh x y w =
@@ -296,8 +297,8 @@ until we try it with other versions of the x86 divide instruction.
     let regpairv w hreg lreg =
       let rval  r = R.fetch (temploc r) w in
       let sh op l r = R.app (R.opr op [w]) [l; R.bits (Bits.U.of_int r w) w] in
-      let zxreg l = R.app (R.opr "zx" [w; w*2]) [rval l] in
-      let pairval = R.app (R.opr "or" [w*2]) [sh "shl" (zxreg hreg) w; zxreg lreg] in
+      let zxreg l = RO.zx w (w*2) (rval l) in
+      let pairval = RO.(or) (w*2) (sh "shl" (zxreg hreg) w) (zxreg lreg) in
             (* notice the ill-typed shift-left *)
       let sethi =
         if unsigned then
@@ -311,8 +312,8 @@ until we try it with other versions of the x86 divide instruction.
       sethi, pairval in
     let (is, regpair) = regpairv 32 Rg.edx Rg.eax in
     let q, r = if unsigned then "divu", "modu" else "quot", "rem" in
-    let div = R.par [R.store eax (R.app (R.opr q [64;32]) [regpair; tempval y]) 32;
-                     R.store edx (R.app (R.opr r [64;32]) [regpair; tempval y]) 32;
+    let div = R.par [R.store eax (R.app (R.opr q [32]) [regpair; tempval y]) 32;
+                     R.store edx (R.app (R.opr r [32]) [regpair; tempval y]) 32;
                      undefflags] in
     let finish = match opname with
     | "rem" | "modu" -> move_rtl x Rg.edx
@@ -322,23 +323,6 @@ until we try it with other versions of the x86 divide instruction.
         PX.Expand.block d
     | _ -> move_rtl x Rg.eax in
     move_rtl Rg.eax x <:> is <:> rtl div <:> finish
-@ 
-Unsigned, extended multiplication is also painful---especially as we
-don't have any 64-bit temporaries!
-The multiplicand goes in EAX and the product winds up in 
-the EDX:EAX register pair.
-<<unused code for x86 postexpander>>=
-| "mulux" ->
-    let regpairstore hreg lreg v =
-      let lobits32 v = R.app (R.opr "lobits" [32]) [v] in
-      let hibits32 v = lobits32 (R.app (R.opr "shrl" [64])
-                                 [v; R.bits (Bits.U.of_int 32 64) 64]) in
-      R.par [R.store hreg (hibits32 v) 32; R.store lreg (lobits32 v) 32] in
-    let mulux =
-      R.par [regpairstore edx eax
-               (R.app (R.opr "mulux" [32]) [R.fetch eax 32; tempval y]);
-             muluxflags (R.fetch eax 32) (tempval y) 32] in
-    move_rtl Rg.eax x <:> rtl mulux <:> move_rtl x Rg.eax 
 @ 
 I don't know why it's safe to clobber ECX here.
 The problem would arise if the {\PAL} source mentioned ECX, perhaps
@@ -380,7 +364,22 @@ let rtlop ~dst op args =
   rtl (R.store (temploc dst)
          (R.app (Up.opr op) (List.map tempval args)) (tempwidth dst))
 <<x86 postexpander>>=
-let dblop ~dsthi ~dstlo op x y = Unsupported.mulx_and_mulux()
+let extended_multiply op y =
+  let opfun, flagfun = match op with
+  | "mulx"  -> RO.mulx,  mulxflags
+  | "mulux" -> RO.mulux, muluxflags
+  | _ -> impossf "non-multiplying dblop" in
+  let product = opfun 32 (tempval Rg.eax) (tempval y) in
+  rtl (R.par [R.store edx (RO.lobits 64 32 (RO.shrl 64 product (RO.unsigned 64 32)))32;
+              R.store eax (RO.lobits 64 32 product) 32;
+              flagfun (tempval Rg.eax) (tempval y) 32])
+              
+let dblop ~dsthi ~dstlo op x y =
+  move Rg.eax x <:>
+  extended_multiply (at32 op) y <:>
+  move dsthi Rg.edx <:>
+  move dstlo Rg.eax
+
 <<x86 postexpander>>=
 let weird_tmp tmp z = match z with
 | PX.WTemp t -> t, PX.Nop
@@ -388,7 +387,7 @@ let weird_tmp tmp z = match z with
 
 let set_carry ~tmp z =
   let t, is = weird_tmp tmp z in
-  let bit0 = R.app (R.opr "lobits" [32; 1]) [tempval t] in
+  let bit0 = RO.lobits 32 1 (tempval t) in
   is <:>
   rtl (R.store eflags (R.app (R.opr "x86_setcarry" []) [RU.fetch eflags; bit0]) 32)
 
@@ -593,7 +592,7 @@ let stval = R.fetch st 3
 let freg_at a = R.mem R.none fspace (R.C 1) a
 let streg = freg_at stval
 let stadd = Rtlutil.addk 3 stval
-let stsub n = R.app (R.opr "sub" [3]) [stval; R.bits (Bits.U.of_int n 3) 3]
+let stsub n = RO.sub 3 stval (RO.unsigned 3 n)
 let stregplus n = freg_at (stadd n)
 let ffetch l = R.fetch l 80
 <<x86 postexpander>>=
@@ -719,11 +718,9 @@ let bc_stack op ~ifso ~ifnot = match op with
     let fstsw = rtl (R.store Rg.ax (R.fetch Rg.fpustatus 16) 16) in
     (match opname with
     | "feq" | "fne" ->
-        let andb = R.opr "and" [8] in
-        let xorb = R.opr "xor" [8] in
         let logic f l r = rtl (R.par [f l r 8; logicflags r 8]) in
-        let clear_extra     = logic R.store Rg.ah (R.app andb [ah_val; upint8 0x45]) in
-        let xor_with_eq_pat = logic R.store Rg.ah (R.app xorb [ah_val; upint8 0x40]) in
+        let clear_extra     = logic R.store Rg.ah (RO._and 8 ah_val (upint8 0x45)) in
+        let xor_with_eq_pat = logic R.store Rg.ah (RO.xor  8 ah_val (upint8 0x40)) in
         (* at this point, ZF = 0 iff the flags showed floating eq *)
         PX.Test (setcc <:> fstsw <:> clear_extra <:> xor_with_eq_pat,
                  bc_x86 (fpcmpopr opname) ifso ifnot)
@@ -752,8 +749,8 @@ let block_copy ~dst dassn ~src sassn w =
       push_cvt i2f_64_80 64 src sassn <:> store_pop_cvt f2i_80_64 64 dst dassn
   | n ->
       let bytes     = n / 8
-      and const n   = R.bits (Bits.S.of_int n 32) 32
-      and sub r c   = R.app (R.opr "sub" [32]) [R.fetch r 32; c]
+      and const n   = RO.signed 32 n
+      and sub r c   = RO.sub 32 (R.fetch r 32) c
       and byte_at r = R.mem R.none mspace (R.C 1) (R.fetch r 32) in
       let repmovsb =
         R.par [ R.store ecx (sub ecx (const 1)) 32
@@ -775,8 +772,8 @@ module P = Post
 let pc        = pc
 let espval    = P.tempval X86regs.esp
 let add       = Rtlutil.add 32
-let sub x y   = R.app (R.opr "sub" [32]) [x; y]
-let const n   = R.bits (Bits.S.of_int n 32) 32
+let sub x y   = RO.sub 32 x y
+let const n   = RO.signed 32 n
 let mem       = P.mem
 let fetch l   = R.fetch l 32
 let store l r = R.store l r 32

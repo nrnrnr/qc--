@@ -140,6 +140,7 @@ let error msg = raise (Error msg)
 We should be using [[sprintf]] more.
 <<code to precede the labeler>>=
 let sprintf = Printf.sprintf
+let s       = Printf.sprintf
 @ 
 
 
@@ -372,41 +373,41 @@ and reg/eaddr but not eaddr/eaddr, there are two varieties of each.
 <<rules>>=
 -- pic code
 inst : Store(dst:eaddrl, pic, w)
-  {: cat ["mov"; suffix w; " "; pic; ","; dst] :}
+  {: s "mov%s %s,%s" (suffix w) pic dst :}
 
 inst : Store(dst:eaddrl, src:immed, w) 
-  {: cat ["mov"; suffix w; " "; src; ","; dst] :}
+  {: s "mov%s %s,%s" (suffix w) src dst :}
 
 inst : Store(dst:regl, src:lconst, w) 
-  {: cat ["lea"; suffix w; " "; src; ","; dst] :}
+  {: s "lea%s %s,%s" (suffix w) src dst :}
 
 -- straight load/store/move
 inst : Store(dst:eaddrl, src:reg, w) 
-  {: cat ["mov"; suffix w; " "; src; ","; dst] :}
+  {: s "mov%s %s,%s" (suffix w) src dst :}
 
 inst : Store(dst:regl, src:eaddri, w) 
-  {: cat ["mov"; suffix w; " "; src; ","; dst] :}
+  {: s "mov%s %s,%s" (suffix w) src dst :}
 
 -- sign extension
 inst : Store(dst:eaddrl, Sx(Fetch(src:regl, nw:w)), w)
-  {: cat ["movs"; suffix nw; suffix w; " "; src; ","; dst] :}
+  {: s "movs%s%s %s,%s" (suffix nw) (suffix w) src dst :}
 
 inst : Store(dst:regl, Sx(Fetch(src:eaddrl, nw:w)), w)
-  {: cat ["movs"; suffix nw; suffix w; " "; src; ","; dst] :}
+  {: s "movs%s%s %s,%s" (suffix nw) (suffix w) src dst :}
 
 -- zero extension
 inst : Store(dst:eaddrl, Zx(Fetch(src:regl, nw:w)), w)
-  {: cat ["movz"; suffix nw; suffix w; " "; src; ","; dst] :}
+  {: s "movz%s%s %s,%s" (suffix nw) (suffix w) src dst :}
 
 inst : Store(dst:regl, Zx(Fetch(src:eaddrl, nw:w)), w)
-  {: cat ["movz"; suffix nw; suffix w; " "; src; ","; dst] :}
+  {: s "movz%s%s %s,%s" (suffix nw) (suffix w) src dst :}
 
 -- moving low bits (relies on proper name of source)
 inst : Store(dst:eaddrl, Lobits(Fetch(Reg('r', n), fw:w), lw:w), nw:w)
-  {: cat ["mov"; suffix nw; " "; regname nw n; ","; dst] :}
+  {: s "mov%s %s,%s" (suffix nw) (regname nw n) dst :}
 
 inst : Store(dst:regl, Lobits(src:mem, sw:w), nw:w)
-  {: cat ["mov"; suffix nw; " "; src; ","; dst] :}
+  {: s "mov%s %s,%s" (suffix nw) src dst :}
 
 -- block copy
 inst : Par(Llr(ecx1:ecx, "sub", n0:const, w1:w),
@@ -424,40 +425,46 @@ These are the well-behaved instructions, which don't require hairy
 special registers.
 <<rules>>=
 inst : Store(dst:regl, disp, w) [{:guard (w = 32):}]
-  {: cat ["leal "; disp; ", "; dst] :}
+  {: s "leal %s, %s" disp dst :}
 
 inst : Llr(dst:regl, "add", const, w) [{:guard (w=32):}]
-  {: cat ["leal "; const; "("; dst; ")"; ", "; dst] :}
+  {: s "leal %s(%s), %s" const dst dst :}
 
 inst : Withcarryflags(dst:eaddrl, "addc", src:reg, w, "x86_adcflags")
-  {: cat ["adc"; suffix w; " "; src; ","; dst] :}
+  {: s "adc%s %s,%s" (suffix w) src dst :}
 
 inst : Withcarryflags(dst:eaddrl, "subb", src:reg, w, "x86_sbbflags")
-  {: cat ["sbb"; suffix w; " "; src; ","; dst] :}
+  {: s "sbb%s %s,%s" (suffix w) src dst :}
 
 inst : Withcarryzero(dst:eaddrl, "addc", src:reg, w, "x86_adcflags")
-  {: cat ["add"; suffix w; " "; src; ","; dst] :}
+  {: s "add%s %s,%s" (suffix w) src dst :}
 
 inst : Withaflags(dst:eaddrl, "add", src:reg, w, "x86_addflags")
-  {: cat ["add"; suffix w; " "; src; ","; dst] :}
+  {: s "add%s %s,%s" (suffix w) src dst :}
 
 inst : Withaflags(dst:regl, "add", src:eaddri, w, "x86_addflags")
-  {: cat ["add"; suffix w; " "; src; ","; dst] :}
+  {: s "add%s %s,%s" (suffix w) src dst :}
 
 inst : Withaflags(dst:eaddrl, "sub", src:reg, w, "x86_subflags")
-  {: cat ["sub"; suffix w; " "; src; ","; dst] :}
+  {: s "sub%s %s,%s" (suffix w) src dst :}
 
 inst : Withaflags(dst:regl, "sub", src:eaddri, w, "x86_subflags")
-  {: cat ["sub"; suffix w; " "; src; ","; dst] :}
+  {: s "sub%s %s,%s" (suffix w) src dst :}
 
 inst : Withaflagsunary("neg", dst:eaddrl, w, "x86_negflags")
-  {: cat ["neg"; suffix w; " "; dst] :}
+  {: s "neg%s %s" (suffix w) dst :}
 
 inst : Withaflags(dst:eaddrl, "mul", src:reg, w, "x86_mulflags")
-  {: cat ["imul "; suffix w; " "; src; ", "; dst] :}
+  {: s "imul %s %s, %s" (suffix w) src dst :}
+
+inst : Pairdestwithflags(edx, eax, Fetch(eax,w), "mulx", eaddr, "x86_mulxflags")
+  {: s "imull %s" eaddr :}
+
+inst : Pairdestwithflags(edx, eax, Fetch(eax,w), "mulux", eaddr, "x86_muluxflags")
+  {: s "mull %s" eaddr :}
 
 inst : Withaflags(dst:regl, "mul", src:eaddri, w, "x86_mulflags")
-  {: cat ["imul"; suffix w; " "; src; ","; dst] :}
+  {: s "imul%s %s,%s" (suffix w) src dst :}
 
 edx_eax : RegPair(edx, eax) {: () :}
 
@@ -490,19 +497,19 @@ inst : Llr(dst:regl, "shrl", immed, w)
 N.B. The crazy AT\&T assembly language does comparisons backward.
 <<rules>>=
 inst : Setflags(X86_subflags(l:eaddr, r:reg))
-  {: cat ["cmp"; suffix 32; " "; r; ","; l] :} -- POSSIBLE BUG IN WIDTH
+  {: s "cmp%s %s,%s" (suffix 32) r l :} -- POSSIBLE BUG IN WIDTH
 inst : Setflags(X86_subflags(l:reg, r:eaddri))
-  {: cat ["cmp"; suffix 32; " "; r; ","; l] :} -- POSSIBLE BUG IN WIDTH
+  {: s "cmp%s %s,%s" (suffix 32) r l :} -- POSSIBLE BUG IN WIDTH
 
-inst : UnaryInPlace(dst:regl, "com", w) {: cat ["not"; suffix w; " "; dst] :} 
+inst : UnaryInPlace(dst:regl, "com", w) {: s "not%s %s" (suffix w) dst :} 
 
 inst : Withlflags(dst:eaddrl, logical:string, src:reg, w, "x86_logicflags")
   [{: match logical with "and" | "or" | "xor" -> 0 | _ -> infinity :}]
-  {: cat [logical; suffix w; " "; src; ","; dst] :}
+  {: s "%s%s %s,%s" logical (suffix w) src dst :}
 
 inst : Withlflags(dst:regl, logical:string, src:eaddri, w, "x86_logicflags")
   [{: match logical with "and" | "or" | "xor" -> 0 | _ -> infinity :}]
-  {: cat [logical; suffix w; " "; src; ","; dst] :}
+  {: s "%s%s %s,%s" logical (suffix w) src dst :}
 
 inst : Withlflags(dst:regl8H, logical:string, src:immed8, w, "x86_logicflags")
   [{: (guard (w=8)) + match logical with "and" | "or" | "xor" -> 0 | _ -> infinity :}]
@@ -547,7 +554,7 @@ The [[cut to]] is supposed to look atomic, but it is a sequence of two
 instructions. 
 <<rules>>=
 inst : Par(Goto(target),Store(espl,frame:eaddri,w))
-  {: cat ["movl "; frame; ", %esp; jmp "; target] :}
+  {: s "movl %s, %%esp; jmp %s" frame target :}
 @ 
 There are two ways to recognize a pop, depending on whether the ML
 code sees it as an $L \mathrel{:=} L \oplus R$ instruction.
@@ -645,7 +652,7 @@ ahval : BitExtract(eight, Fetch(eax, fw:w), w) [{: guard (w = 8) :}] {: "%ah" :}
 ahval : Fetch(ah, w) [{: guard (w=8) :}] {: ah :}
 
 inst : Store(eax, BitInsert(zero, Fetch(eax, w), fpustatus), sw:w) {: "fstsw %ax" :}
-inst : Store(ax,  fpustatus, w) [{: guard (w = 16) :}] {: cat ["fstsw "; ax] :}
+inst : Store(ax,  fpustatus, w) [{: guard (w = 16) :}] {: s "fstsw %s" ax :}
 inst : Setflags(Ah2flags(ahval)) {: "sahf" :}
 inst : Store(ah,  Flags2ah(Fetch(eflags, fw:w)), w) {: "lahf" :}
 @ 
@@ -792,7 +799,7 @@ constructor for each operator.
 | RP.App((("gt"|"lt"|"ge"|"le"|"eq"|"ne"), [w]) as op, [l; r]) ->
     conCmp op (exp l) (exp r)
 | RP.App((("shra"|"shrl"|"shl") as op, [w]), [x; y]) -> conShift op (exp x) (exp y)
-| RP.App((("quot"|"rem"|"div"|"mod"|"divu"|"modu") as op, [w; n]), [x; y]) -> 
+| RP.App((("quot"|"rem"|"div"|"mod"|"divu"|"modu"|"mulx"|"mulux") as op, [w]), [x; y])->
     conNonLlrOp op
 | RP.App((("neg") as op, [w]), [x]) -> conNonLlrOp op
 | RP.App((("add"|"sub"|"mul"|"sx"|"zx"|"lobits"|"x86_subflags"|"bitInsert"|
@@ -862,13 +869,14 @@ and rtl (RP.Rtl es) = geffects es
 and geffects = function
     | [] -> conNop ()
     | [g, s] -> guarded g s
+    <<horrible pattern match for [[Pairdestwithflags]]>>
     <<horrible pattern match for [[Withflags]]>>
     <<horrible pattern match for [[addc]] and [[subb]]>>
     | (g, s) :: t -> conPar (guarded g s) (geffects t)
 and is8 b =
   Bits.width b > 3 & Bits.Ops.eq b (Bits.U.of_int 8  (Bits.width b))
-and is64 b =
-  Bits.width b > 6 & Bits.Ops.eq b (Bits.U.of_int 64 (Bits.width b))
+and is32 b =
+  Bits.width b > 5 & Bits.Ops.eq b (Bits.U.of_int 32 (Bits.width b))
 @ 
 Dealing with a guard is straightforward.
 Either it's trivial, it's a conditional branch, or we pass it off to
@@ -891,12 +899,12 @@ and begins_x86_ s =
 Oh, the joy of the flags\ldots
 <<truepat>>=
 RP.Const(RP.Bool true)
-<<unused, horrible pattern match for [[Withflags]]>>=
+<<horrible pattern match for [[Pairdestwithflags]]>>=
 | [ (<<truepat>>, <<pattern for [[hi]] := hi32([[l]] [[o]] [[r]] at 32)>>)
   ; (<<truepat>>, <<pattern for [[lo]] := lo32([[l']] [[o']] [[r']] at 32)>>)
   ; (<<truepat>>, <<pattern for flags := [[fo]] ([[l'']], [[r'']])>>)
-  ] when l =// l' && o = o' && r =// r' && l =// RP.Fetch(l'', 32) && r =// r''
-      && is64 k64 && flag_index = SS.indices.SS.cc ->
+  ] when l =// l' && o =$= o' && r =// r' && l =// RP.Fetch(l'', 32) && r =// r''
+      && is32 k32 && flag_index = SS.indices.SS.cc ->
         conPairdestwithflags (loc hi) (loc lo) (exp l) o (exp r) fo
 <<horrible pattern match for [[Withflags]]>>=
 | [ (<<truepat>>, <<pattern for [[l]] := [[l']] [[o]] [[r]] at [[w]]>>)
@@ -1055,7 +1063,7 @@ let to_asm r =
     let plan = rtl (Dn.rtl r) in
     plan.inst.Camlburg.action ()
   with 
-  | Camlburg.Uncovered -> cat [" not an instruction: " ; RU.ToString.rtl r]
+  | Camlburg.Uncovered -> s " not an instruction: %s"  (RU.ToString.rtl r)
   | Error msg -> (errmsg r msg; " error in recognizer: " ^ msg)
 
 let () = Debug.register "x86rec" "diagnose rejected instructions in x86 recognizer"

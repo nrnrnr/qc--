@@ -24,6 +24,8 @@ type block = Postexpander.block
 <<rewrite.mli>>=
 module Ops : sig
   <<type signatures for applying standard operators>>
+  val signed   : width -> int -> exp
+  val unsigned : width -> int -> exp
 end
 @ 
 There are too many options for rewriting division.
@@ -80,15 +82,15 @@ module R  = Rtl
 
 module Ops = struct
   <<automatically generated implementations of operators>>
+  let signed   w n = R.bits (B.S.of_int n w) w
+  let unsigned w n = R.bits (B.U.of_int n w) w
 end
 module O = Ops
 
-let signed   n w = R.bits (B.S.of_int n w) w
-let unsigned n w = R.bits (B.U.of_int n w) w
 
 let div_overflows w x y =
   let minint = R.bits (BO.shl (B.U.of_int 1 w) (B.U.of_int (w-1) w)) w in
-  O.conjoin (O.eq w x minint) (O.eq w y (signed (-1) w))
+  O.conjoin (O.eq w x minint) (O.eq w y (O.signed w (-1)))
 
 let (mod) w x y = O.sub w x (O.mul w y (O.div  w x y))
 let modu  w x y = O.sub w x (O.mul w y (O.divu w x y))
@@ -96,11 +98,11 @@ let rem   w x y = O.sub w x (O.mul w y (O.quot w x y))
 @ 
 <<rewrite.ml>>=
 let sxlo n w x =
-  let shamt = unsigned (w-n) w in
+  let shamt = O.unsigned w (w-n) in
   O.shra w (O.shl w x shamt) shamt
 
 let zxlo n w x =
-  let shamt = unsigned (w-n) w in
+  let shamt = O.unsigned w (w-n) in
   O.shrl w (O.shl w x shamt) shamt
 @ 
 \section{Things not to be looked at}
@@ -336,8 +338,8 @@ int njdiv(int x, int y) {
 <<rewrite.ml>>=
 let div2 w ~dst x y =
   let return e = PX.Rtl (R.store dst e w) in
-  let one  = signed 1 w in
-  let zero = signed 0 w in
+  let one  = O.signed w 1 in
+  let zero = O.signed w 0 in
   PX.If (PX.cond (O.ge w y zero),
          PX.If (PX.cond (O.ge w x zero),
                 return (O.quot w x y),
@@ -361,8 +363,8 @@ int njfast (int x, int y) {
 <<rewrite.ml>>=
 let div1_3 w ~dst x y =
   let return e = PX.Rtl (R.store dst e w) in
-  let one  = signed 1 w in
-  let zero = signed 0 w in
+  let one  = O.signed w 1 in
+  let zero = O.signed w 0 in
   PX.If (PX.cond (O.ge w (O.xor w x y) zero),
          return (O.quot w x y),
   PX.If (PX.cond (O.ge w y zero),
@@ -384,9 +386,9 @@ int m3div (int x, int y) {
 <<rewrite.ml>>=
 let div' w ~dst x y ~quot ~rem =
   let return e = PX.Rtl (R.store dst e w) in
-  PX.If (PX.cond (O.conjoin (O.lt w (O.xor w x y) (signed 0 w))
-                            (O.ne w rem (signed 0 w))),
-         return (O.sub w quot (signed 1 w)),
+  PX.If (PX.cond (O.conjoin (O.lt w (O.xor w x y) (O.signed w 0))
+                            (O.ne w rem (O.signed w 0))),
+         return (O.sub w quot (O.signed w 1)),
          return quot)
 
 <<divtest.c>>=
