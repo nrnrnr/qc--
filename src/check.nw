@@ -685,18 +685,18 @@ declarations.
 and stmt r dd = function
     | A.StmtAt(x,r)     -> stmt r dd x
     | A.SpanStmt(_,_,bb)-> foldl (body r) dd bb
-    | A.IfStmt _     -> dd
-    | A.SwitchStmt _ -> dd
-    | A.LabelStmt _  -> dd
-    | A.ContStmt _   -> dd
-    | A.AssignStmt _ -> dd
-    | A.CallStmt _   -> dd
-    | A.PrimStmt _   -> dd
-    | A.GotoStmt _   -> dd
-    | A.JumpStmt _   -> dd
-    | A.CutStmt _    -> dd
-    | A.ReturnStmt _ -> dd
-    | A.EmptyStmt    -> dd    
+    | A.IfStmt      _   -> dd
+    | A.SwitchStmt  _   -> dd
+    | A.LabelStmt   _   -> dd
+    | A.ContStmt    _   -> dd
+    | A.AssignStmt  _   -> dd
+    | A.CallStmt    _   -> dd
+    | A.PrimStmt    _   -> dd
+    | A.GotoStmt    _   -> dd
+    | A.JumpStmt    _   -> dd
+    | A.CutStmt     _   -> dd
+    | A.ReturnStmt  _   -> dd
+    | A.EmptyStmt       -> dd
 
 <<>>=
 let rec section r dd = function
@@ -1028,15 +1028,15 @@ and tyPrimOp env op args =
  (* tyExpr: F.env -> A.expr -> Types.ty E.error *)
 and tyExpr env = function
     | A.ExprAt(x,r) -> E.catch (error r env) (tyExpr env) x
-    | A.Int (str, Some t)            -> evalTy env t
-    | A.Int (str, None)              -> E.Ok(T.word     )
+    | A.Int   (str, Some t)          -> evalTy env t
+    | A.Int   (str, None)            -> E.Ok(T.word     )
     | A.Float (str, Some t)          -> evalTy env t
     | A.Float (str, None)            -> E.Ok(T.word     )
-    | A.Char (str, Some t)           -> evalTy env t
-    | A.Char (str, None)             -> E.Ok(T.word     )
-    | A.Fetch(v)                     -> tyFetch env v
-    | A.BinOp(l,op,r)                -> tyPrimOp env op [l;r]
-    | A.UnOp(op,expr)                -> tyPrimOp env op [expr]
+    | A.Char  (str, Some t)          -> evalTy env t
+    | A.Char  (str, None)            -> E.Ok(T.word     )
+    | A.Fetch (v)                    -> tyFetch env v
+    | A.BinOp (l,op,r)               -> tyPrimOp env op [l;r]
+    | A.UnOp  (op,expr)              -> tyPrimOp env op [expr]
     | A.PrimOp(op,args)              -> tyPrimOp env op (List.map snd args)
 @
 
@@ -1356,7 +1356,7 @@ and contStmt env n ns =
 
 A [[return]] may specify alternate return continuations.  The
 expressions $e_1/e_2$ must be both of the native word type and $0 \leq
-e1 \eq e_2$.
+e1 \leq e_2$.
 
 <<>>=
 and returnStmt env cc alt args =
