@@ -833,8 +833,43 @@ module MayAlias = struct
     | RP.Var (_, vi', _) -> vi = vi'
     | _ -> false
 
-  let with_mem = function  (* VERY APPROXIMATE *)
-    | RP.Mem (s', a', w', e', _) -> true
+  let memsize = 8 (* big risk *)
+
+  type slot = string * int  (* symbol and offset *)
+
+  let stack_slot = function
+    | RP.Fetch(RP.Reg('V', 0, _), _) -> Some ("", 0)
+    | RP.App (("add", [_]), [RP.Fetch(RP.Reg('V', 0, _), _); offset]) ->
+        (match offset with
+        | RP.Const (RP.Bits k') -> Some ("", Bits.S.to_int k')
+        | RP.Const (RP.Late (s, _)) -> Some (s, 0)
+        | RP.App (("add", [_]), [RP.Const l; RP.Const r]) ->
+            (match l, r with
+            | RP.Late (s, _), RP.Bits k -> Some (s, Bits.S.to_int k)
+            | RP.Bits k, RP.Late (s, _) -> Some (s, Bits.S.to_int k)
+            | _ -> None)
+        | _ -> None)
+    | _ -> None
+
+  let rec is_initialized_data = function
+    | RP.Const (RP.Link(_, _)) -> true
+    | RP.App ((("add"|"sub"), [_]), [RP.Const _ as l; RP.Const _ as r]) ->
+        is_initialized_data l || is_initialized_data r
+    | _ -> false
+
+  let with_mem s w e = function  (* different stack slots don't alias *)
+    | RP.Mem (s', a', w', e', _) ->
+        s = s' &&
+        (match stack_slot e, stack_slot e' with
+        | None,   Some _ -> not (is_initialized_data e)
+        | Some _, None   -> not (is_initialized_data e')
+        | None,   None   -> true
+        | Some (sym, n), Some(sym', n') ->
+(*
+Verbose.say 4 [Printf.sprintf "--> comparing stack slots %s+%d and %s+%d\n"
+sym n sym' n'];
+*)
+                sym = sym' && not (n + w * memsize <= n' || n' + w' + memsize <= n))
     | _ -> false
 
   let unslice f l =
@@ -846,7 +881,7 @@ module MayAlias = struct
   let rec locs' l = match l with
     | RP.Reg r               -> unslice (with_reg  r)
     | RP.Var (_, i, _)       -> unslice (with_vari i)
-    | RP.Mem (s, a, w, e, _) -> unslice (with_mem   )
+    | RP.Mem (s, a, w, e, _) -> unslice (with_mem s w e)
     | RP.Slice (_, _, l)     -> locs' l
   and locs l =
     let alias = locs' (Down.loc l) in
@@ -863,7 +898,17 @@ module MayAlias = struct
       | RP.App (_, es') :: es -> has es (es' :: ess) in
     has [e] []
 
-  let exp' l = has_loc (locs' l)
+  let exp' l =
+    let may_alias = has_loc (locs' l) in
+    fun e ->
+      let answer = may_alias e in
+      let module S = ToReadableString in
+(*
+      Verbose.say 4 ["*** Expression "; S.exp (Rtl.Up.exp e);
+                     (if answer then " may " else " may not ");
+                     "alias with location "; S.loc (Rtl.Up.loc l); "\n"];
+*)
+      answer
 
   let exp l =
     let alias = exp' (Down.loc l) in

@@ -27,16 +27,18 @@ let float ~rm goodwidths =
 let foo = 33
 
 <<widening>>=
-let f2f srcw dstw e =
+let f2f' combine srcw dstw e =
   if srcw = dstw then
     e
   else
-    match e with
-    | RP.App(("f2f", [from; to']), [e; rm]) ->
+    match e with 
+    | RP.App(("f2f", [from; to']), [e; rm]) when combine ->
         assert (to' = srcw);
         RP.App(("f2f", [from; dstw]), [e; rm])
     | e -> 
         RP.App(("f2f", [srcw; dstw]), [e; rm]) in
+let f2f = f2f' true in
+let force_f2f = f2f' false in
 let rec convert ~(from:int) ~(to':int) e =
   let cvt = convert ~from ~to' in
   match e with
@@ -84,7 +86,7 @@ let guarded (g, eff) =
   | RP.Store(l, r, w) ->
       if is_floating_exp r && bestwidth w <> w then
         let r = convert ~from:w ~to':(bestwidth w) r in
-        RP.Store(loc l, f2f (bestwidth w) w r, bestwidth w)
+        RP.Store(loc l, force_f2f (bestwidth w) w r, bestwidth w)
       else
         RP.Store(loc l, rewrite r, w)
   | RP.Kill l -> RP.Kill (loc l) in

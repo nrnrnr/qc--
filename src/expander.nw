@@ -257,7 +257,13 @@ val fcontext : context (* for floats *)
 val acontext : context (* for addresses *)
 val arg_contexts   : operator -> context list
 val result_context : operator -> context
+@
+Every machine should be able to do a block copy.
+<<generic expansion operations for register machines>>=
+val block_copy :
+  dst:Address.t -> assertion -> src:Address.t -> assertion -> width -> rtl list
 @ 
+\paragraph{Control flow}
 To recognize control flow, the expander must be able to identify the
 program counter.
 We could provide an abstract test of type [[Rtl.loc -> bool]],
@@ -970,8 +976,14 @@ and assign left right w =
               | <<\emph{pattern [[->]] action} for converting store-pop>>
               | _ -> is @@ is' @@ to_segment (Post.store_pop a (upassn assn)))
             else
-              let r, is = to_temp room (guess_context right) right in
-              is @@ is' @@ to_segment (Post.store a r (upassn assn)))
+              match right with
+              | RP.Fetch (RP.Mem('m', agg', w', addr', assn'), _) ->
+                  let a', is = address room addr' in
+                  is @@ is' @@
+                  to_segment (Post.block_copy a (upassn assn) a' (upassn assn') w)
+              | _ ->
+                  let r, is = to_temp room (guess_context right) right in
+                  is @@ is' @@ to_segment (Post.store a r (upassn assn)))
     | RP.Mem (_, _, _, _, _) ->
         Impossible.unimp "memory space other than 'm'"
     | RP.Reg dst -> (* computation *)
@@ -1128,6 +1140,8 @@ and old_loc l =
 \subsection{The flow-graph expander}
 <<generic flow-graph expander>>=
 let cfg _ proc =
+  if proc.Proc.target.Target.memsize <> 8 then
+    Impossible.unimp "may-alias detection for memsize <> 8";
   let modified = ref false in
   let expand_rtl = expand proc in
   let expand_node n =

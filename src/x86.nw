@@ -119,6 +119,7 @@ let get_talloc () = match !talloc with
   | Some s -> s
   | None   -> Impossible.impossible "Temp allocator not registered with postexpander"
 let remember_allocator ta = talloc := Some ta
+let talloc space = Talloc.Multiple.reg (get_talloc ()) space (* don't eta-reduce *)
 @ 
 \paragraph{Contexts}
 Addresses go in the integer registers, so we use these contexts:
@@ -126,6 +127,7 @@ Addresses go in the integer registers, so we use these contexts:
 type context = Rtl.space * (Register.t -> bool)
 let icontext = 't', fun (c, _, _) -> c = 'r' || c = 't'
 let fcontext = 'u', fun (c, _, _) -> c = 'f' || c = 'u'
+let fcontext = icontext  (* should be better with the stack?? *)
 let acontext = icontext
 @ 
 \paragraph{Addressing modes}
@@ -281,8 +283,8 @@ until we try it with other versions of the x86 divide instruction.
     let regpairv w hreg lreg =
       let rval      r = R.fetch (temploc r) w in
       let sxreg     l = R.app (R.opr "sx" [w; w*2]) [rval l] in
-      let sbit        = Talloc.Multiple.reg (get_talloc ()) 't' w in
-      let high_reg    = Talloc.Multiple.reg (get_talloc ()) 't' w in
+      let sbit        = talloc 't' w in
+      let high_reg    = talloc 't' w in
       let sh op dst s = R.app (R.opr op [w]) [ dst
                                              ; R.bits (Bits.U.of_int s w) w] in
       let shl  = sh "shl"  in
@@ -540,6 +542,19 @@ let stack_op op = match opclass op with
     [R.par [ R.store (freg_at next_st) result 80; R.store st next_st 3]]
 
 let bc_stack op ~tgt = Impossible.unimp "branch on floating code"
+@ 
+<<x86 postexpander>>=
+let i2f_64_80 = ("i2f", [64; 80])
+let f2i_80_64 = ("f2i", [80; 64])
+let block_copy ~dst dassn ~src sassn w =
+  match w with
+  | 32 ->
+      let t = talloc 't' 32 in
+      store dst t dassn @ load t src sassn
+  | 64 ->
+      store_pop_cvt f2i_80_64 64 dst dassn @ push_cvt i2f_64_80 64 src sassn
+  | _ ->
+      Impossible.unimp "general block copies on x86"
 @
 \subsection{Building the target}
 With the postexpander in place, we can build a target.

@@ -164,6 +164,10 @@ The postexpander may need to allocate temporaries.
 <<MIPS postexpander>>=
 let talloc = ref None
 let remember_allocator ta = talloc := Some ta
+let get_talloc () = match !talloc with
+  | Some s -> s
+  | None   -> Impossible.impossible "Temp allocator not registered with postexpander"
+let talloc space = Talloc.Multiple.reg (get_talloc ()) space (* don't eta-reduce *)
 @
 \paragraph{Contexts}
 There is no distinction between an integer and an address.
@@ -200,12 +204,16 @@ let load ~dst ~addr assn =
     let w = twidth dst in
         assert (w = wordsize); (* remove when we have 64-bit spaces *)
         [R.store (tloc dst) (R.fetch (mem w addr) w) w]
-    
 
 let store ~addr ~src assn =
     let w = twidth src in
         assert (w = wordsize); (* remove when we have 64-bit spaces *)
         [R.store (mem w addr) (tval src) w]
+
+let block_copy ~dst dassn ~src sassn w =
+  match w with
+  | 32 -> let t = talloc 't' w in store dst t dassn @ load t src sassn
+  | _  -> Impossible.unimp "general block copies on Mips"
 @
 
 The {\mips} provides sign- and zero-extending load operations for
