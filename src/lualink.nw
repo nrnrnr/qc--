@@ -28,56 +28,51 @@ module Reloc        = Sledlib.MkReloc (struct type symbol = Symbol.t end)
 module NewBackplane = Backplane.M'
 
 module T1 = Lua.Lib.Combine.T5
-                (DocType)                   (* T1.T1 *)
-                (Luaiolib.T)                (* T1.T2 *)
-                (AsmType)                   (* T1.T3 *)
-                (AstType)                   (* T1.T4 *)
-                (Colorgraph.NewGCT)         (* T1.T5 *)
+                (DocType)                   (* T1.TV1 *)
+                (Luaiolib.T)                (* T1.TV2 *)
+                (AsmType)                   (* T1.TV3 *)
+                (AstType)                   (* T1.TV4 *)
+                (Colorgraph.NewGCT)         (* T1.TV5 *)
 
 module T    = Lua.Lib.Combine.T6            (* types *)
-                (T1)                        (* T1 *)
-                (NewBackplane.T)            (* T2 *)
-                (EnvType)                   (* T3 *)
-                (NewProcType)               (* T4 *)
-                (NewTargetType)             (* T5 *)
-                (BlockType)                 (* T6 *)
+                (T1)                        (* T.TV1 *)
+                (NewBackplane.T)            (* T.TV2 *)
+                (EnvType)                   (* T.TV3 *)
+                (ProcType)                  (* T.TV4 *)
+                (NewTargetType)             (* T.TV5 *)
+                (BlockType)                 (* T.TV6 *)
 
-module T1V = Lua.Lib.Lift (T1) (T.T1)
+module T1' = Lua.Lib.Lift (T1) (T.TV1)
 
-module DocT             = T1V.T1
-module LuaioT           = T1V.T2
-module AsmT             = T1V.T3
-module AstT             = T1V.T4
-module NewColorgraphT   = T1V.T5
+module DocTV             = T1'.TV1
+module LuaioTV           = T1'.TV2
+module AsmTV             = T1'.TV3
+module AstTV             = T1'.TV4
+module NewColorgraphTV   = T1'.TV5
 
-module NewBackplaneT    = T.T2
-module EnvT             = T.T3
-module NewProcT         = T.T4
-module NewTargetT       = T.T5
-module BlockT           = T.T6
+module NewBackplaneTV    = T.TV2
+module EnvTV             = T.TV3
+module NewProcTV         = T.TV4
+module NewTargetTV       = T.TV5
+module BlockTV           = T.TV6
 
-module IO = Lua.Lib.Extend (LuaioT)
+module WT = Lua.Lib.WithType (T)
 
-module L1 = 
-  Lua.Lib.Combine.L6                   (* up to 10 libraries *)
-    (Luaiolib.Make (LuaioT))
-    (IO (Luastrlib.M))
-    (IO (Luamathlib.M))
+module C = 
+  Lua.Lib.Combine.C7                   (* up to 10 libraries *)
+    (Luaiolib.Make (LuaioTV))
+    (WT (Luastrlib.M))
+    (WT (Luamathlib.M))
     (MakeLib 
-        (AsmT) (AstT) (EnvT) (NewProcT) (NewTargetT) (DocT) (LuaioT) (BlockT))
-    (Colorgraph.NewMake (NewBackplaneT) (NewColorgraphT) (NewProcT))
-    (IO (Luautil.MakeLib))
-                
-
-module L2 = 
-  Lua.Lib.Combine.L2                    (* up to 9 more libs *)
-    (L1)
-    (NewBackplane.MakeLua  (NewBackplaneT) (NewProcT))
+        (AsmTV) (AstTV) (EnvTV) (NewProcTV) (NewTargetTV) (DocTV) (LuaioTV) (BlockTV))
+    (Colorgraph.NewMake (NewBackplaneTV) (NewColorgraphTV) (NewProcTV))
+    (WT (Luautil.MakeLib))
+    (NewBackplane.MakeLua  (NewBackplaneTV) (NewProcTV))
 
 module I = 
   Lua.MakeInterp                            (* our interpreter *)
     (Lua.Parser.MakeStandard)
-    (Lua.MakeCore (T) (L2))
+    (Lua.MakeEval (T) (C))
 @
 
 
@@ -126,7 +121,8 @@ module EnvType = struct
     let eq _        = fun x y -> x = y
     let to_string _ = fun t -> "<env>" 
 end
-module NewProcType = struct
+module ProcType : Lua.Lib.USERTYPE with type 'a t = Ast2ir.proc = 
+struct
     type 'a t       = Ast2ir.proc
     let tname       = "new proc"
     let eq _        = fun x y -> x = y
@@ -157,7 +153,7 @@ module MakeLib
                               and  type 'a combined = 'a AsmV.combined)
   (EnvV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a EnvType.t 
                               and  type 'a combined = 'a AsmV.combined)
-  (NewProcV   : Lua.Lib.TYPEVIEW with type 'a t     = 'a NewProcType.t
+  (ProcV   : Lua.Lib.TYPEVIEW with type 'a t     = 'a ProcType.t
                               and  type 'a combined = 'a AsmV.combined)
   (NewTargetV : Lua.Lib.TYPEVIEW with type 'a t     = 'a NewTargetType.t 
                               and  type 'a combined = 'a AsmV.combined)
@@ -168,11 +164,11 @@ module MakeLib
   (BlockV  : Lua.Lib.TYPEVIEW with type 'a t        = 'a BlockType.t    
                               and  type 'a combined = 'a AsmV.combined)
     
-    : Lua.Lib.TYPEFUL with type 'a combined = 'a AsmV.combined =
+    : Lua.Lib.USERCODE with type 'a userdata' = 'a AsmV.combined =
 
 struct
-  type 'a combined = 'a AsmV.combined
-  module M (C : Lua.Lib.CORE with type 'a V.userdata' = 'a combined) =
+  type 'a userdata' = 'a AsmV.combined
+  module M (C : Lua.Lib.CORE with type 'a V.userdata' = 'a userdata') =
     struct
       module V = C.V
       let ( **-> ) = V.( **-> )
@@ -191,7 +187,7 @@ module Map = struct
        ; V.project = (fun x -> lo.V.project (hi.V.project x))
        } 
     let ast       = AstV.makemap    V.userdata V.projection
-    let proc      = NewProcV.makemap   V.userdata V.projection
+    let proc      = ProcV.makemap   V.userdata V.projection
     let vasm      = AsmV.makemap    V.userdata V.projection
       (* embeds and projects a V.value assembler *)
     let asm' proc =
@@ -270,15 +266,23 @@ C.register_module "Boot"
 
 We create a [[Caml]] module for functions that come straight out of
 {\ocaml} libraries. Unlike the other modules, this has two levels, like
-in [[Caml.Filename.checksuffix]].
+in [[Caml.Filename.check_suffix]].
 
+We make the extension functions from [[Filename]] more forgiving of
+files without dots.
 <<register modules to [[g]] in alphabetical order>>=
+let extension s =
+  try
+    let without = Filename.chop_extension s in
+    String.sub s (String.length without) (String.length s - String.length without)
+  with Invalid_argument _ -> "" in
+let chop s = try Filename.chop_extension s with Invalid_argument _ -> s in
 C.register_module "Caml"
     ["Filename" , V.Table (V.Table.of_list 
-        [ "checksuffix", V.efunc (V.string **-> V.string **-> V.result V.bool)
+        [ "check_suffix", V.efunc (V.string **-> V.string **-> V.result V.bool)
                          Filename.check_suffix
-        ; "chopsuffix",  V.efunc (V.string **-> V.result V.string)
-                         Filename.chop_extension
+        ; "chop_extension",  V.efunc (V.string **-> V.result V.string) chop
+        ; "extension",   V.efunc (V.string **-> V.result V.string) extension
         ])
     ] g;
 @

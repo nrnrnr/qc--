@@ -21,27 +21,520 @@ $debug 1
 -- $Id$
 --
 
-<<Debuging Tools>>
-<<Lua compiler configuration>>
-<<Lua command line driver>>
+<<list functions>>
+<<Debugging Tools>>
+<<Lua compiler configuration>> -- defined in luacompile.nw
+<<Lua command-line driver>>
 
 --
 -- Global Variables
 --
 
-backend = nil   -- initialized by command line driver
+backend = nil   -- initialized by command-line driver
 
 -- 
 -- Everything starts from here
 --
 
-CMD.cmdline(Sys.argv)
-return CMD.run()
-@
+CMD.parse(Sys.argv)
+CMD.whatfuns[CMD.what or "-compile"]()
+CMD.remove_derived_files()
+@ 
+\subsection{Interface}
+
+
 
 To keep the Lua name space clean, related functionality is grouped into
 tables which are used like modules. By convention, the names of tables
 are capitalized.
+
+\begin{tabularx}{\linewidth}{|@{}lX@{}|}
+\hline
+[[CMD.parse]]& Parse the command line and set values in [[Options]].\\
+[[CMD.run]]& Run code requested by command line.\\
+[[CMD.what]]&
+  String saying what the driver should do on this run (default is
+  [[-compile]]).\\
+[[CMD.whatfuns]]&
+  Table of functions, indexed by string in [[CMD.what]].\\
+[[CMD.derived]]&
+  List of derived files.\\
+[[CMD.qslist]]&
+  List of [[.qs]] files to be linked if using the interpreter.\\
+\hline
+[[Options.stop]]&
+  Set of extensions with which translation should stop.\\
+[[Options.stop_count]]&
+  Size of [[Options.stop]].\\
+[[Options.stop_at]]&
+  Add an item to [[Options.stop]]\\
+[[Options.the_stop]]&
+  Function returning the extension, if any, at which to stop translating.\\
+[[Options.keep]]&
+  Set of extensions that should be kept (as derived files) or nil to
+  keep all.
+  Any derived file with extension in [[Options.stop]] is also kept.\\
+\hline
+\end{tabularx}
+It would probably be useful to have an [[optfuns]] as the counterpart
+of [[whatfuns]], so that other compilers could add new options.
+@
+The most interesting flow is the ``compile'' flow, which does this as
+governed by [[Options.stop]]:
+\begin{verbatim}
+            <source>
+               |
+             .c--
+           /   |   \
+         .s   .qs  .pp
+          |
+         .o
+\end{verbatim}
+
+
+% ------------------------------------------------------------------ 
+\subsection{Command Line Handling and Driver}
+% ------------------------------------------------------------------ 
+
+Command-line parsing is implemented in Lua. The command line is passed
+as a list to [[CMD.parse]], which records the results in the
+[[Options]] table. From there it is read by [[CMD.run]] that decides
+what to do and triggers the compilation of all the files on the command
+line. 
+For the compile and interpret paths, what needs to be done for each
+file is decided by [[CMD.dispatch]]. 
+<<Lua command-line driver>>=
+Options = Options and error('Options not empty') or {}
+
+Options.verbose    = 0        -- -v
+Options.output     = nil      -- -o
+Options.stop       = { }
+Options.stop_count = 0
+Options.keep       = { }
+Options.argc       = 0        -- number of files
+Options.argv       = {}       -- argv[1], .. , argv[argc]
+
+Options.tempdir  = getenv("TMP") or getenv("TEMP") or "/tmp"
+
+function Options.stop_at(ext) -- insert ext into stop set
+  if Options.stop[ext] == nil then
+    if Options.stop_count == 0 then
+      Options.stop[ext] = 1
+      Options.stop_count = Options.stop_count + 1
+    else
+      CMD.error('Cannot stop translating after both ' ..
+                Options.the_stop() .. ' and ' .. ext)
+    end
+  end
+end
+
+function Options.the_stop()
+  return next(Options.stop, nil)
+end
+@
+The command-line driver calls an external assembler [[as]], linker
+[[ld]] and interpreter for linking interpreter files. They have their
+own tables.
+<<Lua command-line driver>>=
+As = As and error ('As not empty') or {}
+
+As.path    = "as"           -- binary 
+--As.options = "-a --gstabs"             -- options passed to binary
+As.options = ""             -- options passed to binary
+function As.cmd(out, in)
+  return format('%s%s -o %s %s', As.path, As.options, out, in)
+end
+@  
+<<Lua command-line driver>>=
+Ld = Ld and error ('Ld not empty') or {}
+Ld.path     = "cc"          -- binary
+Ld.options  = ""            -- options
+Ld.rtstart  = ""            -- initial run-time system
+Ld.objects  = ""            -- object files from this compilation
+Ld.libs     = ""            -- libraries and library options
+Ld.rtend    = ""            -- trailing run-time system
+
+function Ld.cmd(exe)
+  return
+    format ("%s%s -o %s%s%s%s%s",
+            Ld.path , Ld.options , exe , Ld.rtstart, Ld.objects, Ld.libs, Ld.rtend)
+end
+@ 
+<<Lua command-line driver>>=
+Interp = Interp or {}
+Interp.hashbang = "#! /usr/bin/env qc--interp"
+@
+All logic for the command line is encapsulated in the [[CMD]] module.
+\emph{We should define how to deal with errors and in particular whether
+this code should return to {\ocaml}}.
+<<Lua command-line driver>>=
+CMD = CMD and error('CMD not empty') or {}
+CMD.what = nil -- set by CMD.parse
+CMD.whatfuns = { }
+CMD.derived = { }
+@ 
+<<Lua command-line driver>>=
+function CMD.remove_derived_files()
+  local i = 1
+  while CMD.derived[i] do
+    local d = CMD.derived[i]
+    if Options.stop[Caml.Filename.extension(d)] or not Options.keep or
+       Options.keep[Caml.Filename.extension(d)]
+    then
+       -- do nothing
+    else
+       CMD.exec('rm ' .. d)
+    end
+    i = i + 1
+  end
+end
+@
+The [[-i]]~option triggers a read--eval loop that gives the user
+interactive access to the interpreter. This is most useful for debugging
+Lua code.
+<<Lua command-line driver>>=
+function CMD.whatfuns["-i"] ()
+    local prompt = "\n-- "
+    local stmt
+    write ("-- This is Lua for QC--\n")
+    write ("-- Call Inspect.globals() to dump name space")
+    
+    write(prompt)
+    stmt = read()
+    while stmt ~= nil do
+        dostring(stmt)
+        write(prompt)
+        stmt = read()
+    end           
+end
+@
+Simple command-line options are implemented in the [[CMD]] module
+directly. 
+<<Lua command-line driver>>=
+function CMD.whatfuns["-help"]()
+  write(CMD.help)
+end
+CMD.help = [[
+qc-- [option | file] ...
+
+qc-- processes options from left to right, and then all file name
+arguments from left to right.
+
+-c          Stop compiling after producing .o files
+-S          Stop compiling after producing .s files
+-keep .ext  Keep derived files whose names end in .ext
+-keep all   Keep all derived files
+-o output   Name the output file output.  If -o is not used,
+            the output file defaults to "a.out".
+-Ldir       Add dir to the library search path. 
+-lname      Add library name to the list of libraries to be searched. 
+-interp     Generate code for qc--interp(1).
+-v          Print commands as they are executed. 
+-version    Print version to stdout and stop with exit code 0.
+-help       Summarize options to stdout and stop with exit code 0.
+-man        Write manual page to stdout and stop with exit code 0.
+var=value   Assign the variable var in qc--'s Lua interpreter the 
+            new value. 
+
+See also: qc--(1), qc--internals(1), http://www.cminusminus.org/.            
+]]
+<<Lua command-line driver>>=
+-- The manual page is automatically included into the qc-- binary and 
+-- available as Boot.manual from within Lua.
+
+CMD.manpage = Boot.manual
+function CMD.whatfuns["-man"]()
+  write(CMD.manpage)
+end
+<<Lua command-line driver>>=
+-- Boot.version writes to a channel such that you cannot use the version
+-- to control program behavior. 
+
+function CMD.whatfuns["-version"] ()
+    write ("Quick C-- Version ")
+    Boot.version(Driver.stdout) 
+    write ("\n")
+end    
+@ 
+Driver code should use [[CMD.error]] to indicate an error during
+compilation or on the command line.  
+The built-in Lua [[error]] should be reserved for an internal error
+that should never happen.
+<<Lua command-line driver>>=
+function CMD.error (msg)
+    write ("Error: " .. msg .. "\n")
+    exit(2)
+end    
+@
+The [[CMD.parse]] function is the heart of the module. It takes a list
+(represented as table) with all command line arguments and parses it.
+The results are recorded in the global table [[Options]].
+
+Files to be compiled are accumulated in the variable [[Options.argv]], using
+[[Options.argc]] as an index to the last argument. The files in [[argv]]
+are compiled and linked in this order. Since linking is sensitive to
+order, we have to treat options like [[-L]] and [[-l]] as files.
+<<Lua command-line driver>>=
+function CMD.parse (args)
+  local O = Options
+  
+  local i = 1
+  while args[i] and type(args[i]) == "string" do
+    local v = args[i]
+    if CMD.whatfuns[v] then
+      if not CMD.what or CMD.what == v then
+        CMD.what = v
+      else
+        CMD.error('options ' .. CMD.what .. ' and ' .. v ..
+                  ' are mutually incompatible')
+      end
+    elseif v == "-c"       then O.stop_at(".o")
+    elseif v == "-S"       then O.stop_at(".s") -- also does duty for .qs
+    elseif v == "-v"       then O.verbose = O.verbose + 1
+    elseif v == "-vv"      then O.verbose = O.verbose + 2
+    elseif strfind(v, "=") then local _ = dostring(v) or exit(2)
+    elseif v == "-o" then 
+        i,v    = i+1, args[i+1] or CMD.error("argument for option -o missing") 
+        O.output = v
+    elseif v == "-e" then 
+        i, v   = i+1, args[i+1] or CMD.error("argument for option -e missing")
+        local _ = dostring(v) or exit(2)
+    elseif v == "-keep" then 
+        i, v   = i+1, args[i+1] or CMD.error("argument for option -keep missing")
+        if v and v == 'all' then
+          Options.keep = nil
+        elseif strfind(v, '^%.') then
+          Options.keep[v] = 1
+        else
+          CMD.error('in -keep x, x must be "all" or an extension, not ' .. v)
+        end
+    elseif strfind(v, '^-') and not strfind(v, '^-[lL]') then
+        CMD.error("unknown option: ".. v, 1)
+    else -- it is a file or is -L or -l and must be treated as a file
+        O.argc         = O.argc + 1
+        O.argv[O.argc] = v 
+    end
+    i = i+1
+  end
+  if O.output and O.stop_count > 0 and O.argc > 1 then
+    CMD.error('You cannot translate multiple files with -o option and ' ..
+              'also stop at ' .. Options.the_stop())    
+  end
+end
+@
+[[CMD.run]] starts the real work. It inspects the [[Options]] table to
+see what the user has requested and starts doing it. In a loop it passes
+all file arguments to [[CMD.dispatch]] which decides what to do based on
+the file's suffix and the options.
+
+It turned out that compiling for bytecode and native code cannot be
+uinfied gracefully. We therefore have distinct dispatch functions for
+each case.
+<<Lua command-line driver>>=
+function CMD.whatfuns["-interp"]()
+  backend = backend or Backend.interp
+  CMD.dispatch = CMD.dispatch or CMD.interp_dispatch
+  if Options.argc == 0 then return CMD.whatfuns["-help"]() end
+  CMD.dispatch_files()
+  if Options.stop_count == 0 then CMD.qs2exe(CMD.qslist, Options.output) end
+end
+
+function CMD.whatfuns["-compile"]()
+  backend = backend or Backend.x86
+  CMD.dispatch = CMD.dispatch or CMD.compile_dispatch
+  if Options.argc == 0 then return CMD.whatfuns["-help"]() end
+  CMD.dispatch_files()
+  if Options.stop_count == 0 then
+    CMD.exec(Ld.cmd(Options.output or 'a.out'))
+  elseif Options.verbose > 0 then
+    write('Stopping at ', Options.the_stop() or ('??nothing?? with count ' .. Options.stop_count), '\n')
+  end    
+end
+
+function CMD.dispatch_files()
+  local O = Options
+  local i = 1
+  while i <= O.argc do
+    CMD.dispatch(O.argv[i],O.output)
+    i = i+1
+  end
+end
+@ 
+<<Lua command-line driver>>=
+function CMD.whatfuns["-pp"]()
+  local O = Options
+  if O.argc > 1 and O.pretty and O.output then
+    CMD.error("Cannot specify -o and -pp with multiple compilations")
+  end
+  CMD.dispatch = CMD.dispatch or CMD.pretty_dispatch
+  CMD.dispatch_files()
+end
+@
+[[CMD.dispatch]] decides what needs to be done with an individual file,
+based on its file name suffix and returns the file name of the final
+result. This is simple in principle and complicated in practice because
+of the [[-o]] flag. Depending on the situation this flag affects the
+file name of produced files. I strongly recommend that you test this
+code thoroughly if you make changes.
+
+The [[CMD.cmm2asm]] does what it names suggest: it takes the name of a
+{\PAL} source file and compiles it to an assembly file. If the second
+parameter [[out]] is not [[nil]] it specifies the file name of the
+resulting file. Otherwise the [[cmm2asm]] is free to pick a name. This
+applies to the other functions $x$[[2]]$y$ analogously.
+<<Lua command-line driver>>=
+CMD.compilertab = { }
+function CMD.compilertab[".lua"](file, out) 
+  local _ = dofile(file) or exit(2) -- fails on error
+end
+function CMD.compilertab[".c--"](file, out) 
+  if not Options.stop[".c--"] then
+    local asm = Caml.Filename.chop_extension(file) .. ".s"
+    if Options.stop['.s'] and out then 
+      asm = out
+    else
+      tinsert(CMD.derived, asm)
+    end
+    if Options.verbose > 0 then write('Compiling ', file, ' to ', asm, '\n') end
+    backend.compile(backend, file, asm)
+    CMD.compilertab[".s"](asm, out)
+  end
+end
+CMD.compilertab[".cmm"] = CMD.compilertab[".c--"]
+
+function CMD.compilertab[".s"](file, out) 
+  if not Options.stop[".s"] then
+    local obj = Caml.Filename.chop_extension(file) .. ".o"
+    if Options.stop['.o'] and out then 
+      obj = out
+    else
+      tinsert(CMD.derived, obj)
+    end
+    CMD.exec(As.cmd(obj, file))
+    CMD.compilertab[".o"](obj, out)
+  end
+end
+function CMD.compilertab[".o"](file, out) 
+  if not Options.stop[".o"] then
+    Ld.objects = Ld.objects .. " " .. file
+  end
+end
+
+CMD.compilertab[".a"]  = CMD.compilertab[".o"]
+CMD.compilertab[".so"] = CMD.compilertab[".o"]
+
+function CMD.compile_dispatch(file,out)
+    if strfind(file, '^-[lL]') then
+       return CMD.compilertab[".o"](file, out) -- passed to linker as if a file
+    elseif CMD.compilertab[Caml.Filename.extension(file)] then
+       return CMD.compilertab[Caml.Filename.extension(file)](file, out)
+    else
+       error('qc-- compiler does not recognize extension of file ' .. file)
+    end
+end
+<<Lua command-line driver>>=
+CMD.interptab = { }
+function CMD.interptab[".c--"](file, out) 
+  if not Options.stop[".c--"] then
+    local asm = Caml.Filename.chop_extension(file) .. ".qs"
+    if Options.stop['.s'] and out then -- N.B. check stop-at .s not .qs
+      asm = out
+    else
+      tinsert(CMD.derived, asm)
+    end
+    if Options.verbose > 0 then write('Compiling ', file, ' to ', asm, '\n') end
+    backend.compile(backend, file, asm)
+    CMD.interptab[".qs"](asm, out)
+  end
+end
+CMD.interptab[".cmm"] = CMD.interptab[".c--"]
+CMD.interptab[".lua"] = CMD.compilertab[".lua"]
+
+function CMD.interptab[".qs"](file, out)
+  tinsert(CMD.qslist, file)
+end
+
+function CMD.compilertab[".qs"](file, out)
+  CMD.error('file ' .. file .. ' is for the Quick C-- interpreter, not native code')
+end
+
+function CMD.interptab[".s"](file, out)
+  CMD.error('file ' .. file .. ' is for native code, not the Quick C-- interpreter')
+end
+
+function CMD.interp_dispatch(file,out)
+  if CMD.interptab[Caml.Filename.extension(file)] then
+     return CMD.interptab[Caml.Filename.extension(file)](file, out)
+  else
+     error('qc-- interpreter does not recognize extension of file ' .. file)
+  end
+end
+@
+[[Caml.Filename.chop_extension]] strips an extension from a file and
+and returns it. Unlike 
+the Unix \textit{basename}(1) it does not strip of the directory part of
+the name.
+[[Caml.Filename.extension]] is an add-on that computes the extension
+(with dot).
+
+As explained above, a function of name $x$[[2]]$y$ takes a file name of
+type $x$, creates a file of type $y$, and returns its name. If the
+[[out]] parameter is not nil, the name of the returned file must be the
+the value of [[out]].
+<<Lua command-line driver>>=
+-- needs to be tidied up later
+function CMD.pretty_dispatch(file,out)
+    local base = Caml.Filename.chop_extension(file)
+    local pp   = out or base .. ".pp"
+    Debug.prettyprint(file,pp)
+    return pp
+end
+@
+Depending on the verbosity level, commands are silently executed (0),
+shown before executions (1), only shown, but not executed (2).
+<<Lua command-line driver>>=
+function CMD.exec(cmd)
+    if Options.verbose == 1 then write(format("executing: %s\n", cmd)) end
+    if Options.verbose == 2 then 
+        write(format("simulating: %s\n", cmd)) 
+    else
+        if not execute(cmd) then exit(1) end
+    end    
+end
+@
+Lua files are linked by concatenating them with one Lua statement
+between any two files. The head of the file is a [[#!]] line taken from
+[[Interp.hashbang]]; finally, the resulting file is marked as
+executable.
+<<Lua command-line driver>>=
+function CMD.qs2exe(objs, out)    
+    local exe = out or "a.out"
+    if writeto(exe) == nil then CMD.error ("cannot open file " .. exe) end
+    write(Interp.hashbang .. "\n")
+    local i = 1
+    while objs[i] do
+        if type (objs[i]) == "string" then
+            if readfrom(objs[i]) == nil then
+                writeto() -- restore stdout
+                CMD.error ("cannot open file "..objs[i]) 
+            end
+            
+            local s = read() -- copy file, line by line
+            while s ~= nil do
+                write(s)
+                write("\n")
+                s = read()
+            end
+            write("CMM.new_assembly_unit()\n")
+            readfrom() -- close file, restore stdin
+        end
+        i = i+1
+    end
+    writeto() -- close input, restore stdout
+    CMD.exec("chmod +x " .. exe)
+    return exe
+end    
+@
 
 % ------------------------------------------------------------------ 
 \subsection{Introspection}
@@ -57,7 +550,7 @@ the interpreter to stdout.
 
 [[Inspect.type]] returns the type of a table entry. It tries to be smart
 about userdata.
-<<Debuging Tools>>=
+<<Debugging Tools>>=
 Inspect = Inspect and error('Inspect not empty') or {}
 
 function Inspect.type (val)  -- identify the value
@@ -76,7 +569,7 @@ end
 [[Inspect.globals]] and [[Inspect.table]] dump the table of all global
 variables and a regular table, respectively. Both functions recurse if
 they find a table, which they pass to [[Inspect.table]].
-<<Debuging Tools>>=
+<<Debugging Tools>>=
 function Inspect.globals ()
     local key,val = nextvar(nil)
     while key do
@@ -111,14 +604,14 @@ end
 This script is stored as a string in [[Inspect["qc--.lua"]]]. For
 convenience we provide an [[Inspect.script]] function that dumps it to
 stdout.
-<<Debuging Tools>>=
+<<Debugging Tools>>=
 function Inspect.script () write(Boot["qc--.lua"]) end    
 @
 
 The [[Inspect.find]] searches trough all tables for a key [[x]] and
 returns the path to first [[x]] it finds as a string, or [[nil]].
 
-<<Debuging Tools>>=
+<<Debugging Tools>>=
 function Inspect.find(x)
     local i, v, ii, vv
     -- search global tables for x
@@ -148,440 +641,16 @@ function Inspect.find(x)
     return nil
 end
 @
-
-
-% ------------------------------------------------------------------ 
-\subsection{Command Line Handling and Driver}
-% ------------------------------------------------------------------ 
-
-Command line parsing is implemented in Lua. The command line is passed
-as an table to [[CMD.cmdline]] which records the results in the
-[[Options]] table. From there it is read by [[CMD.run]] that decides
-what to do and triggers the compilation of all the files on the command
-line. What needs to be done for each file is decided by
-[[CMD.dispatch]]. 
-
-<<Lua command line driver>>=
-Options = Options and error('Options not empty') or {}
-
-Options.to_obj   = nil      -- -c
-Options.to_asm   = nil      -- -S
-Options.verbose  = 0        -- -v
-Options.output   = nil      -- -o
-Options.help     = nil      -- -help
-Options.man      = nil      -- -man
-Options.version  = nil      -- -versions
-Options.interact = nil      -- -i
-Options.interp   = nil      -- -interp
--- debug options below
-Options.pretty   = nil      -- -pp
-
-Options.argc     = 0        -- number of files
-Options.argv     = {}       -- argv[1], .. , argv[argc]
-
-Options.tempdir  = getenv("TMP") or getenv("TEMP") or "/tmp"
-@
-
-The command line driver calls an external assembler [[as]], linker
-[[ld]] and interpreter for linking interpreter files. They have their
-own tables.
-
-<<Lua command line driver>>=
-As = As and error ('As not empty') or {}
-
-As.path    = "as"           -- binary 
---As.options = "-a --gstabs"             -- options passed to binary
-As.options = ""             -- options passed to binary
-
-Ld = Ld and error ('Ld not empty') or {}
-Ld.path     = "cc"          -- binary
-Ld.options  = ""            -- options
-
-Interp = Interp or {}
-Interp.hashbang = "#! /usr/bin/env qc--interp"
-@
-
-All logic for the command line is encapsulated in the [[CMD]] module.
-\emph{We should define how to deal with errors and in particular whether
-this code should return to {\ocaml}}.
-
-<<Lua command line driver>>=
-CMD = CMD and error('CMD not empty') or {}
-@
-
-[[CMD.interact]] implements an read--eval loop that gives the user
-interactive access to the interpreter. This is most useful for debugging
-Lua code.
-
-<<Lua command line driver>>=
-function CMD.interact ()
-    local prompt = "\n-- "
-    local stmt
-    write ("-- This is Lua for QC--\n")
-    write ("-- Call Inspect.globals() to dump name space")
-    
-    write(prompt)
-    stmt = read()
-    while stmt ~= nil do
-        dostring(stmt)
-        write(prompt)
-        stmt = read()
-    end           
-end
-@
-Simple command-line options are implemented in the [[CMD]] module
-directly. 
-<<Lua command line driver>>=
-CMD.help = [[
-qc-- [option | file] ...
-
-qc-- processes options from left to right, and then all file name
-arguments from left to right.
-
--c          Compile to object code, do not link. 
--S          Compile to assembly code, do not assemble or link.
--o output   Name the output file output.  If -o is not used,
-            the output file defaults to "a.out".
--Ldir       Add dir to the library search path. 
--lname      Add library name to the list of libraries to be searched. 
--interp     Generate code for qc--interp(1).
--v          Print commands as they are executed. 
--version    Print version to stdout and stop with exit code 0.
--help       Summarize options to stdout and stop with exit code 0.
--man        Write manual page to stdout and stop with exit code 0.
-var=value   Assign the variable var in qc--'s Lua interpreter the 
-            new value. 
-
-See also: qc--(1), qc--internals(1), http://www.cminusminus.org/.            
-]]
-
--- The manual page is automatically included into the qc-- binary and 
--- available as Boot.manual from within Lua.
-
-CMD.manpage = Boot.manual
-
-
--- Boot.version writes to a channel such that you cannot use the version
--- to control program behavior. 
-
-function CMD.version ()
-    write ("Quick C-- Version ")
-    Boot.version(Driver.stdout) 
-    write ("\n")
-end    
-
-function CMD.error (msg)
-    write ("Error: " .. msg .. "\n")
-end    
-@
-
-The [[CMD.cmdline]] function is the heart of the module. It takes a list
-(represented as table) with all command line arguments and parses it.
-The results are recorded in the global table [[Options]].
-
-File arguments are accumulated in the variable [[Options.argv]], using
-[[Options.argc]] as an index to the last argument. The files in [[argv]]
-are compiled and linked in this order. Since linking is sensitive to
-order, we have to treat options like [[-L]] and [[-l]] that affect
-linking. 
-
-We have to be careful when using tables as lists, as tables do not
-guarantee any order when traversed using [[next()]]. Therefore we rely
-on indices. All our tables are indexed by consecutive numbers $1 \dots
-n$.
-<<Lua command line driver>>=
-function CMD.cmdline (args)
-    local O = Options
-    
+Function [[tinsert]] inserts at the end of a list.
+<<list functions>>=
+function tinsert(l, x)
+  local n = l.n
+  if not n then
     local i = 1
-    O.original_argc = 0
-    while args[i] and type(args[i]) == "string" do
-	O.original_argc = i
-        local v = args[i]
-        if     v == "-c"            then O.to_obj       = not nil 
-        elseif v == "-S"            then O.to_asm       = not nil 
-        elseif v == "-i"            then O.interact     = not nil
-        elseif strsub(v,1,2)== "-L" then O.argc = O.argc+1; O.argv[O.argc] = v
-        elseif strsub(v,1,2)== "-l" then O.argc = O.argc+1; O.argv[O.argc] = v
-        elseif v == "-v"            then O.verbose = O.verbose + 1
-        elseif v == "-vv"           then O.verbose = O.verbose + 2
-        elseif v == "-version"      then O.version      = not nil
-        elseif v == "-help"         then O.help         = not nil
-        elseif v == "-man"          then O.man          = not nil
-        elseif v == "-pp"           then O.pretty       = not nil
-        elseif v == "-interp"       then 
-            O.interp = not nil
-            backend  = backend or Backend.interp
-        elseif strfind(v, "=") then dostring (v) 
-        elseif v == "-o" then 
-            i,v    = i+1, args[i+1]
-            if not v then error("argument for option -o missing") end
-            O.output = v 
-        elseif v == "-e" then 
-            O.exe  = not nil
-            i, v   = i+1, args[i+1]
-            if not v then error("argument for option -e missing") end
-            dostring(v)
-        elseif strsub(v, 1, 1) == "-" then 
-            CMD.error("unknown option: "..v)
-            CMD.usage()
-            exit(2)
-        else -- it is a file    
-            O.argc         = O.argc + 1
-            O.argv[O.argc] = v 
-        end
-        i = i+1
-    end
+    while l[i] do i = i + 1 end
+    n = i - 1
+  end
+  l[n+1] = x
+  l.n = n + 1
 end
 @
-
-[[CMD.run]] starts the real work. It inspects the [[Options]] table to
-see what the user has requested and starts doing it. In a loop it passes
-all file arguments to [[CMD.dispatch]] which decides what to do based on
-the file's suffix and the options.
-
-It turned out that compiling for bytecode and native code cannot be
-uinfied gracefully. We therefore have distinct dispatch functions for
-each case.
-
-<<Lua command line driver>>=
-function CMD.run ()
-    local O = Options
-    
-    if O.interp and not backend then
-        backend = Backend.interp
-    elseif not backend then
-        backend = Backend.x86
-    end -- else backend was set in command line 
-    
-    if      O.help                     then write(CMD.help)   ; return 0
-    elseif  O.man                      then write(CMD.manpage); return 0
-    elseif  O.version                  then CMD.version() ; return 0
-    elseif  O.interact                 then CMD.interact(); return 0
-    elseif  O.original_argc == 0       then write(CMD.help)   ; return 0
-    elseif  O.argc == 0                then                 return 0
-    
-    elseif  O.to_obj  and O.to_asm then 
-        CMD.error("Options -c and -S exclude each other")
-        return 1
-    elseif  O.argc > 1 and O.to_asm and O.output then
-        CMD.error("Cannot specify -o and -S with multiple compilations")
-        return 1
-    elseif  O.argc > 1 and O.to_obj and O.output then
-        CMD.error("Cannot specify -o and -c with multiple compilations")
-        return 1
-    elseif  O.argc > 1 and O.pretty and O.output then
-        CMD.error("Cannot specify -o and -pp with multiple compilations")
-        return 1
-    else
-        local i = 1
-        local obj
-        local objs= {}
-        objs.n = 0      -- safe in OCaml implementation?
-
-        if not CMD.dispatch then -- wizards can set CMD.dispatch
-            if O.interp then
-                CMD.dispatch = CMD.interp_dispatch
-            else
-                CMD.dispatch = CMD.compile_dispatch
-            end    
-        end
-        while i <= O.argc do
-            obj = CMD.dispatch(Options.argv[i],O.output)
-            -- skip nil entries resulted from *.lua
-            if obj then objs.n=objs.n+1; objs[objs.n] = obj end
-            i = i+1
-        end 
-        if not O.to_asm and not O.to_obj and not O.pretty then
-            if O.interp then
-                CMD.qs2exe(objs, O.output)
-            else
-                CMD.obj2exe(objs, O.output)
-            end    
-        end
-    end
-    return 0
-end    
-@
-[[CMD.dispatch]] decides what needs to be done with an individual file,
-based on its file name suffix and returns the file name of the final
-result. This is simple in principle and complicated in practice because
-of the [[-o]] flag. Depending on the situation this flag affects the
-file name of produced files. I strongly recommend that you test this
-code thoroughly if you make changes.
-
-The [[CMD.cmm2asm]] does what it names suggest: it takes the name of a
-{\PAL} source file and compiles it to an assembly file. If the second
-parameter [[out]] is not [[nil]] it specifies the file name of the
-resulting file. Otherwise the [[cmm2asm]] is free to pick a name. This
-applies to the other functions $x$[[2]]$y$ analogously.
-<<Lua command line driver>>=
-function CMD.compile_dispatch(file,out)
-    if Caml.Filename.checksuffix(file, ".c--") or 
-       Caml.Filename.checksuffix(file, ".cmm") then 
-        if      Options.to_asm -- -S option
-        then    return CMD.cmm2asm(file, out) 
-        elseif  Options.pretty
-        then    return CMD.cmm2pp(file, out)
-        else    return CMD.cmm2obj(file, Options.to_obj and out)
-        end
-    elseif Caml.Filename.checksuffix(file, ".s") then 
-        if      Options.to_asm -- -S option
-        then    return file    -- what do, if out ~= file?
-        else    return CMD.asm2obj(file, Options.to_obj and out)
-        end
-    elseif Caml.Filename.checksuffix(file, ".lua") then 
-        return dofile(file)
-    else -- catches -L* -l* *.o *.a *.so
-        return file    
-    end
-    return nil
-end
-
-function CMD.interp_dispatch(file,out)
-    if Caml.Filename.checksuffix(file, ".c--") or 
-       Caml.Filename.checksuffix(file, ".cmm") then 
-        if      Options.pretty
-        then    return CMD.cmm2pp(file, out)
-        else    return CMD.cmm2qs(file, (Options.to_obj or Options.to_asm) 
-                                        and out)
-        end
-    elseif Caml.Filename.checksuffix(file, ".qs") then
-        return  file
-    elseif Caml.Filename.checksuffix(file, ".lua") then 
-        return  dofile(file)
-    else -- catches -L* -l* *.o *.a *.so
-        CMD.error("don't know what to do with file "..file)
-    end
-    return nil
-end
-@
-
-[[Util.chopsuffix]] strips a suffix from a file and and returns it. Unlike
-the Unix \textit{basename}(1) it does not strip of the directory part of
-the name.
-
-As explained above, a function of name $x$[[2]]$y$ takes a file name of
-type $x$, creates a file of type $y$, and returns its name. If the
-[[out]] parameter is not nil, the name of the returned file must be the
-the value of [[out]].
-
-<<Lua command line driver>>=
-function CMD.cmm2pp(file,out)
-    local base = Caml.Filename.chopsuffix(file)
-    local pp   = out or base .. ".pp"
-    Debug.prettyprint(file,pp)
-    return pp
-end
-
-function CMD.cmm2qs(file,out)
-    local base = Caml.Filename.chopsuffix(file)
-    local qs   = out or base .. ".qs"
-    backend.compile(backend, file, qs)
-    return qs
-end
-
-function CMD.cmm2obj(file,out)
-    local base = Caml.Filename.chopsuffix(file)
-    local asm  = base .. ".s"
-    backend.compile(backend, file, asm)
-    local obj  = CMD.asm2obj(asm,out)
-    return obj
-end    
-
-function CMD.cmm2asm(file,out)
-    local base = Caml.Filename.chopsuffix(file)
-    local asm  = out or base .. ".s"
-    backend.compile(backend, file, asm)
-    return asm
-end    
-
-function CMD.asm2obj(file,out)
-    local obj = out or Caml.Filename.chopsuffix(file) .. ".o"
-    local cmd = format ("%s %s -o %s %s"
-                       , As.path
-                       , As.options
-                       , obj
-                       , file
-                       )
-    CMD.exec(cmd)
-    return obj
-    
-end
-@
-
-Depending on the verbosity level, commands are silently executed (0),
-shown before executions (1), only shown, but not executed (2).
-
-<<Lua command line driver>>=
-function CMD.exec(cmd)
-    if Options.verbose == 1 then write(format("executing: %s\n", cmd)) end
-    if Options.verbose == 2 then 
-        write(format("simulating: %s\n", cmd)) 
-    else
-        if not execute(cmd) then error(cmd) end
-    end    
-end
-@
-
-The linker takes a list of object files in a table [[objs]] and an
-optional output file. 
-
-<<Lua command line driver>>=
-function CMD.obj2exe(objs,out)
-    local exe = out or "a.out"
-    local cmd 
-    cmd = format ("%s %s -o %s"
-                 , Ld.path
-                 , Ld.options
-                 , exe
-                 )
-    local i = 1
-    while i <= objs.n do
-        if type(objs[i]) == "string" then
-            cmd = cmd ..  " " .. objs[i]
-        end    
-        i = i + 1
-    end
-    CMD.exec(cmd)
-    return exe
-end    
-@
-
-Lua files are linked by concatenating them with one Lua statement
-between any two files. The head of the file is a [[#!]] line taken from
-[[Interp.hashbang]]; finally, the resulting file is marked as
-executable.
-
-<<Lua command line driver>>=
-function CMD.qs2exe(objs, out)    
-    local exe = out or "a.out"
-    local i = 1
-    local s
-    
-    if writeto(exe) == nil then CMD.error ("cannot open file "..objs[i]) end
-    write(Interp.hashbang .. "\n")
-    while i <= objs.n do
-        if type (objs[i]) == "string" then
-            if readfrom(objs[i]) == nil then
-                writeto() -- restore stdout
-                CMD.error ("cannot open file "..objs[i]) 
-            end
-            
-            s = read() -- copy file, line by line
-            while s ~= nil do
-                write(s)
-                write("\n")
-                s = read()
-            end
-            write("CMM.new_assembly_unit()\n")
-            readfrom() -- close file, restore stdin
-        end
-        i = i+1
-    end
-    writeto() -- close input, restore stdout
-    CMD.exec("chmod +x " .. exe)
-    return exe
-end    
-@
-
