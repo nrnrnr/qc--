@@ -139,12 +139,13 @@ Linear-scan register allocation requires a linear representation of a
 procedure.  This is provided by numbering nodes in the control-flow
 graph {\cfg}.  Of course, any change to the structure of the {\cfg}
 destroys a numbering.  This happens when code for spilling is inserted
-into a {\cfg}. The [[Automaton.t]] argument supplies spill locations in a
+into a {\cfg}. The  private area in the [[Proc.t]] argument supplies
+spill locations in a 
 procedure's activation record.
 
 
 <<linscan.mli>>=
-val linscan: Cfg3.t -> Target2.t -> Automaton.t -> unit
+val linscan: Proc.t -> bool
 @
 
 % ------------------------------------------------------------------ 
@@ -267,7 +268,9 @@ After the last node of the control-flow graph is processed, all still
 open intervals must be closed. 
 
 <<compute lifetimes>>=
-let lifetimes cfg registers =
+let lifetimes proc =
+    let cfg         = proc.Proc.cfg                                in
+    let registers   = proc.Proc.target.T.allocatable               in
     let lt          = List.fold_left (fun map r -> RM.add r LT.empty map) 
                                      RM.empty registers            in
     let initial     = (RM.empty, lt)                               in
@@ -326,21 +329,20 @@ of a {\cfg}, register allocation starts over after spilling.
 \end{quote}
 
 <<linscan>>=
-let rec linscan cfg target automaton =
-    let _          = LI.liveness cfg     in
-    let _          = G.gm_enumerate cfg  in
+let rec linscan proc =
+    let _ = LI.liveness proc.Proc.cfg     in
+    let _ = G.gm_enumerate proc.Proc.cfg  in
     let rec next_node lifetimes node = match node with 
-        | None      -> ()
-        | Some node -> alloc target automaton node lifetimes next_node spill
+        | None      -> true (* lies!  risky... *)
+        | Some node -> alloc proc node lifetimes next_node spill
     in
-        next_node (lifetimes cfg target.T.allocatable) (Some (G.first cfg))
+        next_node (lifetimes proc) (Some (G.first proc.Proc.cfg))
 @
 <<alloc>>=
-let alloc target automaton node lifetimes next_node spill =
-    let rec next_tmp lifetimes = match find_tmp target node with
+let alloc proc node lifetimes next_node spill =
+    let rec next_tmp lifetimes = match find_tmp proc node with
         | None     -> next_node lifetimes (G.next node)
-        | Some tmp -> replace_tmp 
-                        target automaton node tmp lifetimes next_tmp spill      
+        | Some tmp -> replace_tmp proc node tmp lifetimes next_tmp spill      
     in
         next_tmp lifetimes 
 @
@@ -374,11 +376,11 @@ let replace tmp reg      = fun t -> if t = tmp then reg else t
 let spill_slot (a:Automaton.t) ((_,w,_):Register.t) =
     Automaton.to_loc (Automaton.ty a w None)
 
-let replace_tmp target automaton node tmp lifetimes next_tmp spill =
+let replace_tmp proc node tmp lifetimes next_tmp spill =
   let iter cfg f = Cfgutil.fold_fwd cfg (fun node () -> G.set_rtl node f) () in
   let lifetime   = lookup lifetimes                                    in
-  let cfg         = G.cfg node                                         in
-  match find_reg target lifetimes tmp with
+  let cfg        = G.cfg node                                          in
+  match find_reg proc lifetimes tmp with
   | Some r -> (* successfully found a hardware register r *)
       let lifetimes = RM.add r (LT.union (lifetime r) (lifetime tmp))
                                lifetimes                               in
@@ -387,8 +389,8 @@ let replace_tmp target automaton node tmp lifetimes next_tmp spill =
           next_tmp lifetimes
   | None -> (* out of register - must spill *)
       let spillee, interval = find_spillee lifetimes tmp node          in
-      let mem               = spill_slot automaton spillee             in
-          spill target cfg automaton spillee mem interval
+      let mem               = spill_slot proc.Proc.priv spillee        in
+          spill proc spillee mem interval
 @
 
 % ------------------------------------------------------------------ 
@@ -417,10 +419,10 @@ or written by an {\rtl} and thus we have to look for temporaries
 explicitly.
 
 <<find tmp>>=
-let find_tmp target node = 
+let find_tmp proc node = 
     let uses space index width = function
-        | None when target.T.is_tmp space -> Some (space, index, width)
-        | x                               -> x 
+        | None when T.is_tmp proc.Proc.target space -> Some (space, index, width)
+        | x                                      -> x 
     in
         Rtlutil.ReadWrite.fold uses uses (G.rtl node) None    
 @       
@@ -452,9 +454,9 @@ register [[r]], that respects all of the following conditions, or
 \end{enumerate}
 
 <<find reg>>=
-let first_fit target lifetimes t =
+let first_fit proc lifetimes t =
     let fits' (sp,_,_ as t) r = 
-        target.T.fits sp r &&
+        T.fits proc.Proc.target sp r &&   (* ALERT! should partially apply *)
         not (LT.overlaps (LT.bbox (lookup lifetimes t)) 
                                 (lookup lifetimes r))
     in
@@ -575,12 +577,12 @@ such that the [[spillee]] is held in memory [[mem]] most of the time.
 When the spillee is used, it is re-loaded into a temporary.
 
 <<spill>>=
-and spill target cfg automaton spillee mem interval = 
+and spill proc spillee mem interval = 
     let first = I.left  interval in
     let last  = I.right interval in 
-        ( G.scan_fwd cfg first last 
-                (fun n () -> update target interval spillee mem n) ()
-        ; linscan cfg target automaton (* start over *)
+        ( G.scan_fwd proc.Proc.cfg first last 
+                (fun n () -> update proc interval spillee mem n) ()
+        ; linscan proc (* start over *)
         )
 @
 
@@ -644,11 +646,12 @@ to and read from [[mem]].
 \end{quote}
 
 <<update>>=
-and update target interval spillee mem node = 
-    upd_incoming target interval spillee mem node ;    
+and update proc interval spillee mem node = 
+    upd_incoming proc.Proc.target interval spillee mem node ;    
     let reads, writes = reads_writes (G.rtl node) spillee in
+    let target = proc.Proc.target in
         if reads || writes then 
-            ( let tmp   = target.T.mk_tmp spillee in
+            ( let tmp   = Talloc.Multiple.reg_like proc.Proc.temps spillee in
               let subst = fun x -> if x = spillee then tmp else x in 
               ( if reads  then 
                     ignore (List.fold_right G.gm_insert_assign_before

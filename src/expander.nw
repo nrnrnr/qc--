@@ -49,10 +49,9 @@ hold the result of the expression.
 <<expander.mli>>=
 type context 
   = (Rtl.Private.loc -> bool)           (* say if a location is memory-like *)
-  * (Rtl.space -> int -> Rtl.loc)       (* get a temp for space and width *)
   * (Rtl.Private.exp -> Rtl.space)      (* find a temp space to hold this exp *)
 val context : Target2.t -> context
-val expand : context -> Rtl.rtl -> Rtl.rtl list
+val expand : Talloc.Multiple.t -> context -> Rtl.rtl -> Rtl.rtl list
   (* returns *last* instruction at *head* of list (reverse execution order) *)
 val cfg : 'a -> Proc.t -> bool
 @ 
@@ -94,10 +93,10 @@ expression into that temporary.
 <<expander.ml>>=
 type context 
   = (Rtl.Private.loc -> bool)           (* say if a location is memory-like *)
-  * (Rtl.space -> int -> Rtl.loc)       (* get a temp for space and width *)
   * (Rtl.Private.exp -> Rtl.space)      (* find a temp space to hold this exp *)
 
-let expand ((mem_like : RP.loc -> bool), (temp_for : char -> int -> R.loc), space_for) =
+let expand temps (mem_like, space_for) =
+  let temp_for = Talloc.Multiple.loc temps in
   let rec to_temp e = match e with
     | RP.Const k ->
         let w = width e in
@@ -209,38 +208,10 @@ let context t =
          else
            rest)
       t.T.spaces (fun _ -> false) in
-  <<division>>
-  let allocator space =
-    let next = ref 22000 in
-    let divide = divideby space.S.cellwidth in (* premature optimization *)
-    fun width ->
-      let n = divide width in
-      (* could check to see if width is supported ... *)
-      let k = !next in
-      let _ = next := k + n in
-      let k = Bits.of_int k space.S.indexwidth in
-      let index = (Rtl.bits k space.S.indexwidth) in
-      Rtl.cell Rtl.none space.S.space space.S.aggregation width index in
-
-  let fail c =
-    prerr_string ("Space '" ^ Char.escaped c ^ "' is not a temporary space\n");
-    flush stderr;
-    assert false in
 
   let is_temp s = match s.S.classification with
   | S.Temp _ -> true
   | _ -> false  in
-
-  let alloc  =
-    List.fold_right
-      (fun s rest ->
-         if is_temp s then
-           let a = allocator s in
-           fun c -> if c = s.S.space then a else rest c
-         else
-           rest)
-      t.T.spaces fail in
-
   let first_temp =
     try (List.find is_temp t.T.spaces).S.space
       with Not_found ->
@@ -248,17 +219,7 @@ let context t =
         flush stderr;
         assert false in
 
-  (fun loc -> mem_like (space_of loc)), alloc, fun _ -> first_temp
-@ 
-This bit of cleverness may get the compiler to optimize division using
-right shifts.  If not, we could write the right shifts ourselves.
-<<division>>=
-let divideby = function
-  | 32 -> fun n -> n / 32
-  | 8  -> fun n -> n / 8
-  | 64 -> fun n -> n / 64
-  | m  -> fun n -> n / m  in
-  
+  (fun loc -> mem_like (space_of loc)), fun _ -> first_temp
 @ 
 <<expander.ml>>=
 module G  = Cfg3
@@ -268,7 +229,7 @@ let cfg _ proc =
   let t = proc.Proc.target in
   let _ = G.gm_enumerate g in
   let nodes = GU.fold_bwd g (fun x y -> x::y) [] in
-  let expand = expand (context t) in
+  let expand = expand proc.Proc.temps (context t) in
   let modified = ref false in
   let exp n =
     match expand (G.rtl n) with

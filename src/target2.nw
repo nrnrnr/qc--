@@ -32,6 +32,7 @@ be passed at run-time (rather than by a module, which can not).
 <<type cc>>
 <<type map>>
 <<type t>>
+<<exported functions>>
 val space : t -> Rtl.space -> Space.t
 @ The [[space]] function returns information about a particular space.
 It is a checked run-time error to ask about a space not on the list
@@ -171,36 +172,25 @@ The register allocator (see \module{linscan}) needs target-specific
 informations about hardware registers and temporaries. In particular:
 
 <<components of t>>=
-fits:           Rtl.space -> Register.t -> bool;
-is_tmp:         Rtl.space -> bool;
-allocatable:    Register.t list;
+allocatable:    Register.t list;        (*ALERT! should be calling convention*)
+<<exported functions>>=
+val is_tmp : t -> Rtl.space -> bool  (* partially apply me *)
+val fits:    t -> Rtl.space -> Register.t -> bool
 @
-
 \begin{itemize}
-\item [[fits sp r]] is true, if (hardware) register [[r]] can hold any 
-      value from space [[sp]].
+\item [[fits t sp r]] is true, if (hardware) register [[r]] can hold any 
+      value from space [[sp]].  It is an unchecked run-time error
+      unless [[sp]] is a temporary space from the target~[[t]].
 
-\item [[is_tmp sp]] is true, if [[sp]] denotes a {\rtl} space that
-      holds temporaries.
+\item [[is_tmp t sp]] is true, if [[sp]] denotes a {\rtl} space that
+      holds temporaries.  It should be partially applied for efficiency.
 
 \item [[allocatable]] is the list of registers that are available for 
       register allocation on this platform.
+\emph{ALERT!   This is a function of calling convention, not target
+machine! ---NR}
 \end{itemize}
-
-In general temporaries come in different widths, for example 8, 16,
-and 32 bit.  These belong to different spaces and only the target
-knows how they are related.  Therefore only the target can provide a
-function that creates new temporaries.
-
-<<components of t>>=
-mk_tmp:         Register.t -> Register.t;       (* Invalid_argument *)
 @
-
-The function [[mk_tmp r]] creates a new temporary for register [[r]].
-A target typically supports temporaries only for certain registers
-widths. If [[r]] is not supported this is a checked run-time error and
-[[Invalid_argument]] will be raised.
-
 The [[assign]] function creates an [[Rtl.rtl]] that transfers a value
 from one register to another.  The source and destination must be
 assignment compatible, otherwise it is a checked run-time error which
@@ -222,6 +212,8 @@ spill:  (Rtl.space -> Space.t) -> Register.t -> Rtl.loc -> Rtl.rtl list;
 reload: (Rtl.space -> Space.t) -> Register.t -> Rtl.loc -> Rtl.rtl list;
 @ The RTLs should be returned in \emph{execution order}, i.e., the
 first element of the list is the first to be executed.
+\emph{ALERT! Perhaps we ought to revisit these interfaces, since the role of the
+first argument is baffling. ---NR}
 @
 
 % ------------------------------------------------------------------ 
@@ -299,4 +291,24 @@ let check (t:t) (env:F.env) =
 <<target2.ml>>=
 let space t s = List.find (fun x -> x.Space.space = s) t.spaces
 @
-        
+<<target2.ml>>=
+let is_tmp { spaces = spaces } =
+  List.fold_right
+    (fun s rest ->
+      match s.Space.classification with
+      | Space.Temp _ -> (fun c -> c = s.Space.space || rest c)
+      | _ -> rest)
+    spaces
+    (fun _ -> false)
+@ 
+<<target2.ml>>=
+let space_fits tmp =
+  match tmp.Space.classification with
+  | Space.Temp {Space.stands_for=hw; Space.index_ok=locset} ->
+      fun (hw', idx, width) -> hw = hw' && locset idx
+  | _ -> assert false
+
+let fits t space =
+  try
+    space_fits (List.find (fun s -> s.Space.space = space) t.spaces)
+  with Not_found -> assert false

@@ -30,7 +30,7 @@ combined = 'a BackplaneT.combined)
 	module RP = Rtl.Private
 	module TM = Map.Make(struct type t = int let compare = compare end)
 
-	let placeVars _ {Proc.cfg = cfg; Proc.target = target} =
+	let placeVars _ {Proc.cfg = cfg; Proc.target = target; Proc.temps = temps} =
 		<<walk RTL>>
 		let updateNode node tMap = 
 			let newRtl, tMap' = walkRtl (Cfg3.rtl node) tMap in
@@ -50,8 +50,8 @@ combined = 'a BackplaneT.combined)
 
 
 <<walk RTL>>=
-(* NOTE: in the mk_tmp call below, the space is _completely bogus_. *)
-let new_tmp = target.Target2.mk_tmp in
+(* NOTE: using space 't' is hopeful, but ultimately bogus. *)
+let new_tmp = Talloc.Multiple.loc temps 't' in
 let print_var (s, i, w) = prerr_string ("VAR: " ^ s ^ " " ^ string_of_int i ^
                                         " " ^ string_of_int w ^ "\n") in
 let rec walkLoc loc tMap = match loc with
@@ -62,8 +62,7 @@ let rec walkLoc loc tMap = match loc with
 		(try TM.find i tMap, tMap
 		 with Not_found ->
 			let _ = print_var (s, i, w) in
-			let t = Rtl.Convert.loc (Register.to_loc (Target2.space target)
-                                                     (new_tmp ('Z', i, w))) in
+			let t = Rtl.Convert.loc (new_tmp w) in
 			(t, TM.add i t tMap))
 	| RP.Slice (w, i, l) ->
 		let l', tMap' = walkLoc l tMap in

@@ -78,10 +78,11 @@ module Cheats = struct
     let gm_insert_lst_after lst node =
         let _ = List.fold_left G.gm_insert_assign_after node lst
 		in ()
-    let update target (spillee, mem) node =
+    let update proc (spillee, mem) node =
+        let target = proc.Proc.target in
         let reads, writes = reads_writes (G.rtl node) spillee in
             if reads || writes then
-                    ( let tmp   = target.T.mk_tmp spillee in
+                    ( let tmp   = Talloc.Multiple.reg_like proc.Proc.temps spillee in
                       let subst = fun x -> if x = spillee then tmp else x in 
                       ( if reads  then 
                             (gm_insert_lst_before 
@@ -95,14 +96,14 @@ module Cheats = struct
                     )
              else None
 
-    let spill {Proc.cfg = cfg; Proc.priv = a; Proc.target = target} spillees =
+    let spill ({Proc.cfg = cfg; Proc.priv = a; Proc.target = target} as proc) spillees =
         let spill_slot ((_,w,_):Register.t) =
             Automaton.to_loc (Automaton.ty a w None) in
         let smPairs = List.map (fun s -> (s, spill_slot s)) spillees in 
         (* newTemps is an accumulating param *)
         let updateNode smPairs node newTemps =
             (List.fold_left
-                (fun tmps sm -> match update target sm node with
+                (fun tmps sm -> match update proc sm node with
                                 | None -> tmps
                                 | Some tmp -> tmp::tmps)
                 newTemps smPairs)

@@ -109,7 +109,6 @@ let cc =
     ; T.ret     = Automaton.dummy
     }
 
-
 let spaces = 
     [     { S.space = 'r'
           ; S.cellwidth   = 32
@@ -147,17 +146,6 @@ let spaces =
           }
           
     ]      
-    
-
-let tmp_counter = ref 0     
-
-let new_tmp (sp,index,width) =
-    incr tmp_counter;
-    match width with
-    | 8  -> ('v',!tmp_counter,width)
-    | 16 -> ('u',!tmp_counter,width)
-    | 32 -> ('t',!tmp_counter,width)
-    | _  -> invalid_arg "unsupported register width in target2.nw"
 @
 
 The [[assign]] function converts both registers to [[Rtl.loc]] values and
@@ -208,11 +196,8 @@ let dummy =
     ; T.call            = goto
     ; T.branch          = branch
     ; T.cc              = StrUtil.lookup (StrUtil.list2map [("C--",cc)])
-    ; T.fits            = (fun sp (sp',index,width) -> sp = sp')
-    ; T.is_tmp          = (function 't' | 'u' | 'v' -> true | _ -> false)
     ; T.allocatable     = List.map (fun n -> ('r',n,5)) [3;4;5;6;7;8;9;10]
     ; T.spaces          = spaces 
-    ; T.mk_tmp          = new_tmp 
     ; T.assign          = assign
     ; T.spill           = spill
     ; T.reload          = reload
