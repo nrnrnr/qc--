@@ -978,20 +978,14 @@ The main thing here is dealing with all the blocks.
     } in
   optimizer i (* runs optimizer, freezes, and assembles proc *)
 @ 
-We define a special automaton to allocate locations that are suitably
-aligned. 
+We define an automaton to allocate suitably aligned locations. 
 <<utilities>>=
 let aligned_mem ~align ~base target = 
-  let memsize = target.T.memsize in
-  let (AT.I t) = AT.overflow memsize target.T.byteorder Memalloc.Up align in
-  let t = t ~start:base in
-  let alloc ~width ~alignment ~hint =
-    let alignment = width / memsize in
-    t.AT.allocate width alignment hint
-  in AT.of_methods { AT.freeze = t.AT.freeze; AT.allocate = alloc }
+  let ( *> ) = AT.( *> ) in
+  AT.at ~start:base (
+    AT.align_to (fun w -> w / target.T.memsize) *>
+    AT.overflow target.T.memsize target.T.byteorder Memalloc.Up align)
 @
-        
-
 % ------------------------------------------------------------------ 
 \subsection{Translation of \texttt{stackdata} declarations, accumulating labels}
 % ------------------------------------------------------------------ 

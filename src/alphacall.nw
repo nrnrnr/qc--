@@ -123,8 +123,7 @@ let sp_align  = 16                      (* SP always 16-byte aligned *)
 let std_sp_location = 
     RU.add wordsize vfp (R.late "minus frame size" wordsize)
 
-let ( **> ) f x   = f x
-let (  *> ) f g x = f (g x)
+let ( *> ) = A.( *> )
 
 let badwidth (msg:string) (w:int) = 
     impossible (sprintf "unsupported (rounded) width %d in Alpha: %s" w msg)
@@ -142,15 +141,14 @@ floating-point result (up to two 64-bit values) in [[$f0]] and [[$f1]].
 let results =
     A.choice
         [ (A.is_hint "float"),  
-            A.widen (Aux.round_up_to ~multiple_of: 64)              *>
+            A.widen (Aux.round_up_to ~multiple_of: 64)            *>
             A.widths [64] ~errormsg:(badwidth "Alpha FP return")  *>
             A.useregs [f 0; f 1] ~errormsg:fatal
         ; A.is_any,
-            A.widen (Aux.round_up_to ~multiple_of: 64)              *>
+            A.widen (Aux.round_up_to ~multiple_of: 64)            *>
             A.widths [64] ~errormsg:(badwidth "Alpha return")     *>  
             A.useregs [r 0] ~errormsg:fatal
-        ] **>
-    A.no_overflow 4 "multiple return values for Alpha C"    
+        ]
 @
 
 As an alternative we provide [[cmm_results]] that returns every result
@@ -158,7 +156,7 @@ in memory. This is for experiments with custom calling conventions.
 
 <<alphacall.ml>>=
 let cmm_results =
-    A.widths [64] ~errormsg:(badwidth "can only return 64-bit values") **>
+    A.widths [64] ~errormsg:(badwidth "can only return 64-bit values") *>
     A.overflow ~memsize:8 ~byteorder ~growth:Memalloc.Up ~max_alignment:sp_align
 @
 
@@ -215,7 +213,7 @@ let arguments () =
       ; (fun h w -> h <> "float" && w = 64),
           A.widen (Aux.round_up_to ~multiple_of:64)        *>
           A.sharedregs exc [r 16; r 17; r 18; r 19; r 20; r 21] ~errormsg:fatal
-      ] **>
+      ] *>
   A.overflow ~memsize:8 ~byteorder ~growth:Memalloc.Up ~max_alignment:sp_align
 @
 
@@ -238,7 +236,7 @@ let arguments' () =
         ; A.is_any,
           A.widen (Aux.round_up_to ~multiple_of:64) *>
           A.offsetregs ctr [r 16; r 17; r 18; r 19; r 20; r 21]
-        ]) **>  
+        ]) *>  
   A.overflow ~memsize:8 ~byteorder ~growth:Memalloc.Up ~max_alignment:sp_align
 @          
 
@@ -255,7 +253,7 @@ let cut_args =
         ; A.is_any,
             A.widen (Aux.round_up_to ~multiple_of:64)        *>
             A.useregs vol_int ~errormsg:fatal 
-        ] **>
+        ] *>
     A.overflow ~memsize:8 ~byteorder ~growth ~max_alignment:sp_align
 @
 

@@ -116,8 +116,7 @@ stage followed by stage is stage,
 and 
 stage followed by implementation is implementation.
 <<x86call.ml>>=
-let ( **> ) f x = f x
-let ( *> ) f1 f2 x = f1 (f2 x)
+let ( *> ) = A.( *> )
 @ 
 We provide error parameters to automata.
 <<x86call.ml>>=
@@ -143,7 +142,7 @@ let results iregs =
                            A.widths [32] ~errormsg:(badwidth "x86 return convention") *>
                            A.useregs iregs ~errormsg:imp
      ]
-let c_results = results [eax] **> A.no_overflow 4 "multiple return values for x86 C"
+let c_results = results [eax]
 @
 When passing procedure parameters, we put
 earlier arguments in lower addresses, so even though the
@@ -153,17 +152,17 @@ of words.  The ABI specifies padding, but we'll use [[widen]] because
 the machine is little-endian.
 <<x86call.ml>>=
 let c_arguments = 
-  A.widen  (Aux.round_up_to ~multiple_of:32) **>
+  A.widen  (Aux.round_up_to ~multiple_of:32) *>
   A.overflow ~memsize:8 ~byteorder:bo ~growth:Memalloc.Up ~max_alignment:sp_align
-let _ = (c_arguments : A.implementation)
+let _ = (c_arguments : A.stage)
 @ 
 When passing cut-to parameters, we use all the registers---there's no
 reason not to.
 <<x86call.ml>>=
 let cut_args = 
-  A.widen  (Aux.round_up_to ~multiple_of:32) **>
-  A.widths [32] ~errormsg:(badwidth "x86 cut-to convention") **>
-  A.useregs allregs ~errormsg:imp **>
+  A.widen  (Aux.round_up_to ~multiple_of:32) *>
+  A.widths [32] ~errormsg:(badwidth "x86 cut-to convention") *>
+  A.useregs allregs ~errormsg:imp *>
   A.overflow ~memsize:8 ~byteorder:bo ~growth:Memalloc.Up ~max_alignment:sp_align
 @ 
 It's worth studying these automata to see what's likely to remain
@@ -178,12 +177,12 @@ WE NEED A BETTER WAY OF DETECTING THIS ERROR OTHER THAN HAVING THE
 REGISTER ALLOCATOR DUMP CORE.
 <<x86call.ml>>=
 let cmm_results =
-  results [eax; ecx] **>
+  results [eax; ecx] *>
   A.overflow ~memsize:8 ~byteorder:bo ~growth:Memalloc.Down ~max_alignment:sp_align
 
 let cmm_arguments = 
-  A.widen (Aux.round_up_to ~multiple_of:32) **>
-  A.useregs [eax; ecx] ~errormsg:imp **>
+  A.widen (Aux.round_up_to ~multiple_of:32) *>
+  A.useregs [eax; ecx] ~errormsg:imp *>
   A.overflow ~memsize:8 ~byteorder:bo ~growth:Memalloc.Up ~max_alignment:sp_align
 @
 \paragraph{Managing the stack pointer and return address}

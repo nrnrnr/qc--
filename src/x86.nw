@@ -465,12 +465,12 @@ let c'_convention = (* uses Callspec implementation *)
   X86call.c'     (fun ra -> pop_with (fun ra -> store pc ra)) (F.cutto PX.esp)
 
 module A = Automaton
-let ( **> ) f x = f x
+let ( *> ) = A.( *> )
 let globals base = 
   let width w = if w <= 8 then 8 else if w <= 16 then 16 else Aux.round_up_to 32 w in
   let align = function 8 -> 1 | 16 -> 2 | _ -> 4 in
-  A.at ~start:base **> A.widen width **> A.align_to align **>
-  A.overflow ~memsize:8 ~byteorder:PX.byte_order ~growth:Memalloc.Up ~max_alignment:4
+  A.at ~start:base (A.widen width *> A.align_to align *>
+  A.overflow ~memsize:8 ~byteorder:PX.byte_order ~growth:Memalloc.Up ~max_alignment:4)
 
 let target =
   { T.name = "x86"
@@ -535,7 +535,7 @@ X86.CC = Call.make(X86.target)
 function X86.CC.results(rs) 
   local CC = X86.CC
   return 
-    { CC.choice ( 'float',  { CC.widen(CC.multiple_of(80))
+      CC.choice ( 'float',  { CC.widen(CC.multiple_of(80))
                             , CC.widths(80, "x86 FP too wide")
                             , CC.useregs(X86.Regs.f[0], "internal error")
                             }
@@ -543,9 +543,7 @@ function X86.CC.results(rs)
                             , CC.widths(32, "x86 return too wide")
                             , CC.useregs(rs, "internal error")
                             }
-                ),
-    , CC.no_overflow(4, "multiple return values for x86 return")
-    }
+                )
 end
 
 function X86.setccs() 

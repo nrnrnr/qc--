@@ -1,3 +1,4 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 % vim: ts=8 sw=4 et:
 
 % ------------------------------------------------------------------ 
@@ -473,18 +474,18 @@ I am not sure what the best alignments are. Maybe every slot should be
 8-byte aligned.
 
 <<alpha.ml>>=
-let ( **> ) f x = f x
+let ( *> ) = A.( *> )
 let globals base = 
   let width w = if      w <= 8  then 8  
                 else if w <= 16 then 16 
                 else if w <= 32 then 32
                 else Aux.round_up_to wordsize w in
   let align = function _ -> 8 in
-  A.at ~start:base **> A.widen width **> A.align_to align **>
+  A.at ~start:base (A.widen width *> A.align_to align *>
   A.overflow ~memsize:8 
              ~byteorder:byteorder 
              ~growth:Memalloc.Up 
-             ~max_alignment:8
+             ~max_alignment:8)
 @
 
 % ------------------------------------------------------------------ 

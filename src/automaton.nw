@@ -159,7 +159,7 @@ THAT GROW DOWN.)
 <<exposed types>>=
 type implementation = I of (start:Rtl.exp -> methods)
 <<exported values>>=
-val at : start:Rtl.exp -> implementation -> t
+val at : start:Rtl.exp -> stage -> t
 val of_methods : methods -> t
 @ 
 The idea is that we build an implementation by a composition of
@@ -168,13 +168,15 @@ We provide stages that change alignment, adjust widths, hand out
 locations, and so on.
 In addition, we expect that a client might write its own stages.
 <<exposed types>>=
-type stage = implementation -> implementation
+type stage = S of (implementation -> implementation)
+<<exported values>>=
+val ( *> ) : stage -> stage -> stage
 @ 
 Because it's a nuisance to manage the threading of the [[start]]
 parameter through the stages, we provide a function that builds
 stages.
 <<exported values>>=
-val wrap : (methods -> methods) -> stage
+val wrap  : (methods -> methods) -> stage
 @ 
 \paragraph{The overflow block, if any}
 The final stage in any implementation is the overflow block.
@@ -184,15 +186,14 @@ machine and a bunch of information about the convention.
 val overflow :
   memsize:int -> byteorder:Rtl.aggregation ->                     (* machine    *)
   growth:Memalloc.growth -> max_alignment:int ->                  (* convention *)
-  implementation
-
+  stage
 @ 
-Another possible final stage is to have \emph{no} overflow block.
-Such a final stage is useful for conventions in which only finitely 
+It is possible to have {no} overflow block.
+In this case, it's up to clients to gather that only finitely many
+requests are made and that the automaton satisfies all of them.
+Such an automaton is useful for conventions in which only finitely 
 many values can be passed,  such as the C~return
 convention.
-<<exported values>>=
-val no_overflow : max_alignment:int -> errormsg:string -> implementation
 @ 
 \paragraph{Selection and adjustment of width}
 The [[widths]] stage can restrict the convention to satisfy only
@@ -250,7 +251,7 @@ val argnoregs  : int ref -> Register.t list -> stage
 @ 
 And this is documented nowhere, not even in the paper.
 <<exported values>>=
-val postprocess : implementation -> (result -> result) -> implementation
+val postprocess : stage -> (result -> result) -> stage
 @
 \paragraph{Combination of multiple stages}
 It can be useful to hand out different registers from different piles.
@@ -326,19 +327,9 @@ We can use this thing by providing a version of [[useregs]] that uses
 shared state to keep track of which registers have been excluded.
 Notice that an excluded register is \emph{not} the same as a ``used''
 register in a result.
-
-The [[sharedoverflow]] marks all registers [[regs]] as used. This helps
-to implement the typical requirement convention, that no register is
-allocated once we allocate from memory. 
-
 <<automaton.mli>>=
 val sharedregs : 
   Exclude.t -> Register.t list -> errormsg:(int -> Register.t list -> string) -> stage
-val sharedoverflow :
-  Exclude.t -> Register.t list ->
-  memsize:int -> byteorder:Rtl.aggregation ->               (* machine    *)
-  growth:Memalloc.growth -> max_alignment:int ->            (* convention *)
-  implementation
 @
 \paragraph{Other forms of history}
 Most calling conventions keep track of little history beyond knowing
@@ -387,10 +378,25 @@ module RU = Rtlutil
 module B  = Block
 module M  = Memalloc
 let imposs = Impossible.impossible
+@ 
+The big idea here is hooking up the end of the pipeline:
+<<automaton.ml>>=
+let ( *> ) (S f1) (S f2) = S (fun rhs -> f1 (f2 rhs))
+
+let pipeline_end =
+  I (fun ~start ->
+  let block = Block.at ~base:start ~size:0 ~alignment:1 in
+  { allocate = (fun ~width ~alignment ~hint ->
+                Impossible.impossible
+                  "fell off end of pipeline -- multiple return values from C?")
+  ; freeze   =
+      (fun regs mems -> 
+        { overflow = block; regs_used = regs; mems_used = mems; align_state = 0 })
+  })
 @
 All the work of the implementation is in the closures.
 <<automaton.ml>>=
-let at ~start (I f) = f ~start
+let at ~start (S s) = let I f = s pipeline_end in f ~start
 let of_methods t = t
 let allocate t ~width ~hint = t.allocate width 1 hint
 let freeze t = t.freeze Register.Set.empty []
@@ -398,22 +404,37 @@ let freeze t = t.freeze Register.Set.empty []
 let fetch loc width      = loc.fetch width
 let store loc expr width = loc.store expr width
 let of_loc loc           = { fetch = R.fetch loc; store = R.store loc }
+@ 
+\subsection{Wrapping etc.}
+
+There's substantial bookkeeping in passing the start address around.
+We prefer to program in terms of [[methods]] rather than
+implementation.
+\nwaddbox{wrap        : (methods                   -> methods) -> stage}
+\nwaddbox{swrap       : (methods -> ~start:Rtl.exp -> methods) -> stage}
+\nwaddbox{wrap_choice : (('a*(methods->methods)) list -> methods -> methods) -> ('a * stage) list -> stage}
+<<automaton.ml>>=
+let wrap  f = S (fun (I next) -> I (fun ~start -> f (next ~start)))
+let swrap f = S (fun (I next) -> I (fun ~start -> f (next ~start) ~start))
+let wrap_choice f choices = S (fun (I next) ->
+  let apply (I f) = f in
+  let downchoice c ~start = fun meths -> apply (c (I (fun ~start -> meths))) ~start in
+  I (fun ~start ->
+      let choices = List.map (fun (p, (S c)) -> (p, downchoice c ~start)) choices in
+      f choices (next ~start)))
 @
 The overflow block is slightly interesting.
 <<automaton.ml>>=
 type state = { mutable mem : M.t; mutable frozen : bool }
-let overflow ~memsize ~byteorder ~growth ~max_alignment =
-  I (fun ~start ->
+let overflow ~memsize ~byteorder ~growth ~max_alignment next =
+  fun ~start ->
     let mem = M.at start growth in
     let state = { mem = mem; frozen = false } in
     <<functions [[allocate]] and [[freeze]] for the overflow block>>
-    { allocate = allocate; freeze = freeze })
-
+    { allocate = allocate; freeze = freeze }
+let overflow ~memsize ~byteorder ~growth ~max_alignment = 
+ swrap (overflow ~memsize ~byteorder ~growth ~max_alignment) 
 @ 
-
-
-
-
 To allocate, we align and increment the memory block.
 The address of the new location depends on the direction of stack growth.
 <<functions [[allocate]] and [[freeze]] for the overflow block>>=
@@ -442,36 +463,6 @@ let freeze regs mems =
   let mem = match growth with M.Up -> mem | M.Down -> M.align mem (M.alignment mem) in
   let block = M.freeze mem in
   { overflow = block; regs_used = regs; mems_used = mems; align_state = astate } in
-@ 
-\subsection{Other constructors}
-
-There's substantial bookkeeping in passing the start address around.
-We prefer to program in terms of [[methods]] rather than
-implementation.
-\nwaddbox{wrap        : (methods -> methods) -> stage}
-\nwaddbox{wrap_choice : (('a*(methods->methods)) list -> methods -> methods) -> ('a * stage) list -> stage}
-<<automaton.ml>>=
-let wrap f (I next) = I (fun ~start -> f (next ~start))
-let wrap_choice f choices (I next) =
-  let apply (I f) = f in
-  let downchoice c ~start = fun meths -> apply (c (I (fun ~start -> meths))) ~start in
-  I (fun ~start ->
-      let choices = List.map (fun (p, c) -> (p, downchoice c ~start)) choices in
-      f choices (next ~start))
-@
-<<automaton.ml>>=
-let no_overflow ~max_alignment ~errormsg =
-  I (fun ~start ->
-  let block = Block.at ~base:start ~size:0 ~alignment:1 in
-  { allocate = (fun ~width ~alignment ~hint -> Impossible.impossible errormsg)
-  ; freeze   =
-      (fun regs mems -> 
-        let () = <<prattle about [[no_overflow]] register usage>> in
-        { overflow = block; regs_used = regs; mems_used = mems; align_state = 0 })
-  })
-<<prattle about [[no_overflow]] register usage>>=
-let used = List.map regstring (RS.elements regs) in
-Verbose.say 2 ["no_overflow automaton uses regs: "; String.concat ", " used; "\n"]
 @ 
 <<automaton.ml>>=
 let widths ws ~errormsg next =
@@ -863,19 +854,6 @@ let sharedregs ex regs ~errormsg next =
   let freeze regs mems = next.freeze (RS.union state.used regs) mems in
   { freeze = freeze; allocate = alloc }
 let sharedregs ex regs ~errormsg = wrap (sharedregs ex regs ~errormsg)
-@
-
-<<automaton.ml>>=
-let sharedoverflow ex regs ~memsize ~byteorder ~growth ~max_alignment =
-  I (fun ~start ->
-    let mem = M.at start growth in
-    let state = { mem = mem; frozen = false } in
-    <<functions [[allocate]] and [[freeze]] for the overflow block>>
-    let allocate ~width ~alignment ~hint = 
-        let ()  = List.iter (fun r -> Exclude.use ex r) regs in
-        allocate ~width ~alignment ~hint
-    in
-    { allocate = allocate ; freeze = freeze})
 @ 
 \subsection{Compatibility}
 <<old compatibility interface as part of automaton.ml>>=
@@ -896,10 +874,11 @@ val unit : stage
 let unit = wrap (fun next -> next)
 @ 
 <<automaton.ml>>=
-let postprocess (I i) f =
+let postprocess (S stage) f = S (fun imp ->
+  let I i = stage imp in
   I (fun ~start ->
       let m = i start in
       { allocate = m.allocate
       ; freeze = (fun rs ms -> f (m.freeze rs ms))
-      } )
+      } ))
 

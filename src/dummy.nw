@@ -60,6 +60,8 @@ module type ARCH = sig
     val memsize:        int
 end
 
+let ( *> ) = AN.( *> ) 
+
 module Make(A: ARCH) = struct
     let id          = Rtl.Identity
     let wordsize    = A.wordsize
@@ -159,19 +161,16 @@ with them.}
 
 <<global register allocation>>=
 let globals base = 
-    let ( **> ) f x = f x in
     let width w     = if w <= 8 then 8 else if w <= 16 then 16 else
                       Aux.round_up_to 32 w in
         AN.at ~start:base
-              **> AN.widen width 
-              **> AN.align_to (function 8 -> 1 | 16 -> 2 | _ -> 4)
-              **> AN.overflow ~memsize:A.memsize
+              (AN.widen width 
+               *> AN.align_to (function 8 -> 1 | 16 -> 2 | _ -> 4)
+               *> AN.overflow ~memsize:A.memsize
                               ~byteorder:A.byte_order
                               ~growth:Memalloc.Down
-                              ~max_alignment:4  
+                              ~max_alignment:4)
 @
-
-
 
 % ------------------------------------------------------------------ 
 \subsection{Spaces}
@@ -297,9 +296,6 @@ let std_sp_location = RU.add pointersize
 \paragraph{Generic Automaton Support}
 
 <<calling convention>>=
-let ( **> ) f x   = f x
-let (  *> ) f g x = f (g x)
-
 let badwidth msg width = 
     Impossible.impossible 
         (Printf.sprintf "Unsupported (rounded) width %d in Dummy: %s" width msg)
@@ -322,7 +318,7 @@ let simple =
         ; AN.is_any,         AN.widen (Aux.round_up_to ~multiple_of:32)
                           *> AN.widths  [32]    ~errormsg:(badwidth "simple")
                           *> AN.useregs  regs   ~errormsg:error
-        ] **> 
+        ] *> 
     AN.overflow ~memsize:A.memsize
                 ~byteorder:A.byte_order
                 ~growth:Memalloc.Down

@@ -140,8 +140,7 @@ let sp_align  = 16                      (* SP always 16-byte aligned *)
 let std_sp_location = 
     RU.add 32 vfp (R.late "minus frame size" 32)
 
-let ( **> ) f x   = f x
-let (  *> ) f g x = f (g x)
+let ( *> ) = A.( *> )
 
 let badwidth (msg:string) (w:int) = 
     impossible (sprintf "unsupported (rounded) width %d in MIPS: %s" w msg)
@@ -167,8 +166,7 @@ let results =
             A.widen (Aux.round_up_to ~multiple_of: 32)              *>
             A.widths [32;64] ~errormsg:(badwidth "MIPS return")     *>  
             A.useregs [r 2; r 3] ~errormsg:fatal
-        ] **>
-    A.no_overflow 4 "multiple return values for MIPS C"    
+        ]
 @
 
 \paragraph{C~procedure parameters}
@@ -191,10 +189,10 @@ let who_do_you_believe = Lcc
 let arguments' () =
     let bits = ref 0 in
     let arg  = ref 0 in
-    A.widen (Aux.round_up_to ~multiple_of: 32) **>
-    A.widths [32;64] ~errormsg:(badwidth "MIPS argument") **>
-    A.bitcounter bits **>
-    A.argcounter arg  **>
+    A.widen (Aux.round_up_to ~multiple_of: 32) *>
+    A.widths [32;64] ~errormsg:(badwidth "MIPS argument") *>
+    A.bitcounter bits *>
+    A.argcounter arg  *>
     A.first_choice 
     [ A.is_hint "float",
         A.choice
@@ -217,7 +215,7 @@ let arguments' () =
         ; A.is_any,
             A.offsetregs bits [r 4; r 5; r 6; r 7] 
         ]  
-    ] **>
+    ] *>
     A.overflow ~memsize:8 ~byteorder ~growth:Memalloc.Up 
                ~max_alignment:sp_align
 
@@ -245,7 +243,7 @@ let cut_args =
         ; A.is_any,
             A.widen (Aux.round_up_to ~multiple_of:32)        *>
             A.useregs vol_int ~errormsg:fatal 
-        ] **>
+        ] *>
     A.overflow ~memsize:8 ~byteorder ~growth ~max_alignment:sp_align
 @
 

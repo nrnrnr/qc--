@@ -1,3 +1,4 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 
 
 % ------------------------------------------------------------------ 
@@ -414,17 +415,17 @@ THIS AUTOMATON SEEMS QUITE UNIVERSAL FOR 32 BIT ARCHITECTURES. MOVE IT
 TO Automaton.Standard32?
 
 <<mips.ml>>=
-let ( **> ) f x = f x
+let ( *> ) = A.( *> )
 let globals base = 
   let width w = if      w <= 8  then 8  
                 else if w <= 16 then 16 
                 else Aux.round_up_to 32 w in
   let align = function 8 -> 1 | 16 -> 2 | _ -> 4 in
-  A.at ~start:base **> A.widen width **> A.align_to align **>
+  A.at ~start:base (A.widen width *> A.align_to align *>
   A.overflow ~memsize:8 
              ~byteorder:byteorder 
              ~growth:Memalloc.Up 
-             ~max_alignment:4
+             ~max_alignment:4)
 @
 
 % ------------------------------------------------------------------ 
