@@ -268,7 +268,7 @@ void Cmm_show_map(void) {
 <<show stack-data table [[sdt]]>>=
 assert(sdt);
 if (sdt->num_entries == 0) {
-  printf ("    <no stackdata>\n");
+  printf ("    (no stackdata)\n");
 } else {
   int i;
   for (i = 0; i < sdt->num_entries; i++) {
@@ -284,12 +284,14 @@ if (sdt->num_entries == 0) {
   int r = idx->entry->num_registers;
   int i;
   location* regs = registers(idx->entry);
-  printf("    unchanged registers:");
-  for (i = 0; i < r; i+=2) {
-    if (regs[i].l == regs[i+1].l)
-      printf(" %d", i/2);
+  if (r > 0) {
+    printf("    unchanged registers:");
+    for (i = 0; i < r; i+=2) {
+      if (regs[i].l == regs[i+1].l)
+        printf(" %d", i/2);
+    }
+    printf("\n");
   }
-  printf("\n");
   for (i = 0; i < r; i+=2) {
     if (regs[i].l == regs[i+1].l) continue;
     printf("      reg %2d: caller = ", i/2);
