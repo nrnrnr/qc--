@@ -177,6 +177,40 @@ val ppToFile : out_channel -> int -> doc -> unit
 @
 
 % ------------------------------------------------------------------  
+\subsubsection{Auxiliaries}
+% ------------------------------------------------------------------ 
+
+When using the prerry printer it turned out that some functions are
+frequently defined. Here are some they:
+
+
+@ A list of objects which are seperated by some seperator is very
+common.  The [[list sep f]] function takes care to insert the
+separator only bewteen objects but not at the end of the list.  It
+creates a [[sep]] separated list.  Individual items are printed using
+[[f]].  For the common case where commas are used for separating we
+also provide an extra definition.
+
+<<>>=
+val list      : doc -> ('a -> doc) -> 'a list -> doc 
+val commalist :        ('a -> doc) -> 'a list -> doc
+
+@ Instead of writing [[x ^^ break ^^ y]] to insert a [[break]] it is
+convenient to define an operator for this: [[x ^/ y]] joins [[x]] and
+[[y]] with a [[break]].
+
+<<>>=
+val (^/)      : doc -> doc -> doc
+
+@ A [[block]] contains objects [[xs]] formatted by [[f]] and enclosed
+by curly braces.  Its body will be indented in case it does not fit on
+a single line. 
+
+<<>>=
+val block     : ('a -> doc) -> 'a list -> doc
+@
+
+% ------------------------------------------------------------------  
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
 
@@ -365,6 +399,32 @@ let ppToString w doc =
 
 let ppToFile oc w doc =
     sdocToFile oc (format w 0 [0,Flat,agrp(doc)])
+
+@ ------------------------------------------------------------------ 
+\subsubsection{Useful functions}
+% ------------------------------------------------------------------ 
+
+<<>>=
+let rec list sep f xs =
+    let rec loop acc = function
+        | []    -> acc
+        | [x]   -> acc ^^ f x 
+        | x::xs -> loop (acc ^^ f x ^^ sep) xs
+    in
+        loop empty xs 
+
+let commalist f = list (text "," ^^ break) f
+
+let (^/) x y   = x ^^ break ^^ y 
+let (~~) x     = x
+
+let block f xs =   
+    text "{"
+    ^^ nest 4 begin
+       ~~ break
+       ^^ list break f xs
+       end 
+    ^/ text "}"
 
 @ ------------------------------------------------------------------  
 \subsubsection{Auxiliaries}
