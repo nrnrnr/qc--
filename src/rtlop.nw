@@ -14,9 +14,13 @@ This module provides the translation of a {\PAL} operator to an {\rtl}
 operator.  {\PAL} and {\rtl} operators are closely related: a {\PAL}
 operator is in general an instance of a polymorphic {\rtl} operator.
 
-The [[operator]] function returns the type of the operator's result, and
+Three different translations are provided: for the prefix named form
+[[%name(...)]], for the infix binary form, and for the symbolic unary
+form.
+Different translations are needed because the [[-]] symbol translates
+into [[%sub]] when binary but [[%neg]] when unary.
+Each translation returns the type of the operator's result and
 an {\rtl} operator that implements the {\PAL} operator.
-
 <<rtlop.mli>>=
 module Translate : sig
     val prefix: string -> Types.ty list -> Types.ty * Rtl.opr (*ErrorExn*)
@@ -200,7 +204,6 @@ let mono op = let _, ws = Rtl.Dn.opr op in Types.instantiate (findop op optypes)
 
 let has_floating_result op = findop op opfloats
 @
-
 % ------------------------------------------------------------------ 
 \subsection{Translation from {\PAL} operators to {\rtl} operators}
 % ------------------------------------------------------------------ 
@@ -215,15 +218,35 @@ The exceptions are {\PAL} operators like [[zx32]] that encodes the size
 of their return value in the name. {\rtl} operators are more polymorphic
 than {\PAL} operators and thus there are no separate operators [[zx1]],
 \dots, [[zx32]], \dots, but a single polymorphic operator [[zx]]:
-
+%
 $$[[zx]]: \forall~\alpha,\beta.[[bits]]\alpha \to [[bits]]\beta$$
-
+%
 An application [[zx32 (1::bits10)]] is translated into the {\rtl}
 operator [[(zx,[10,32])]], where [[10]] is bound by $\alpha$, and [[32]]
 by $\beta$ in the above type scheme. Hence, the size of the result,
 which is inferred from the name, is always the \emph{last}
 value in the \emph{width list} of an {\rtl} operator.
-
+@
+If an operator name has a numerical component, it denotes the size of
+the result. Such a size always becomes the last element in the width
+list of an operator. 
+<<Translate>>=
+let prefix op argtys =
+  try 
+    let op, retsize = T.split op in
+    let opty        = Types.findopname op Types.optypes in
+    let argwidths   = T.widthlist opty argtys in
+    ( match retsize with
+    | None   -> T.appl opty argtys, Rtl.opr op argwidths
+    | Some n -> T.bits n,           Rtl.opr op (argwidths@[n])
+    )            
+  with
+  | Not_found  -> Error.error ("unknown operator "^op)
+  | T.MatchExn -> Error.error "type error in application"
+@ 
+Infix and prefix symbols are stored in tables.
+Nothing should go wrong  in lookup because the only symbols that make
+it this far should have been blessed by the parser.
 <<Translate>>=
 let binops = Strutil.assoc2map 
     [  "+"      , "add"
@@ -244,36 +267,13 @@ let unops = Strutil.assoc2map
     [  "-"      , "neg"
     ;  "~"      , "com"
     ]
-@
-
-{\PAL} uses infix symbols as aliases for alphanumeric operator names. If
-we find the current operator in the [[alias]] map we replace it with the
-official name. If we don't find it, we assume it is an official name
-already.
-
-If an operator name has a numerical component, it denotes the size of
-the result. Such a size always becomes the last element in the width
-list of an operator. 
-<<Translate>>=
-let prefix op argtys =
-  try 
-    let op, retsize = T.split op in
-    let opty        = Types.findopname op Types.optypes in
-    let argwidths   = T.widthlist opty argtys in
-    ( match retsize with
-    | None   -> T.appl opty argtys, Rtl.opr op argwidths
-    | Some n -> T.bits n,           Rtl.opr op (argwidths@[n])
-    )            
-  with
-  | Not_found  -> Error.error ("unknown operator "^op)
-  | T.MatchExn -> Error.error "type error in application"
 
 let binary op =
   try prefix (Strutil.Map.find op binops) 
-  with Not_found -> Error.error ("unknown binary infix operator "^op)
+  with Not_found -> Impossible.impossible ("unknown binary infix operator "^op)
 
 let unary op =
   try prefix (Strutil.Map.find op unops) 
-  with Not_found -> Error.error ("unknown unary symbolic operator "^op)
+  with Not_found -> Impossible.impossible ("unknown unary symbolic operator "^op)
 @        
 
