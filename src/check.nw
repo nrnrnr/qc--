@@ -356,25 +356,23 @@ and body is_global env = function
     | A.DataBody(dd) -> if is_global then foldl datum env dd   else env 
     | A.StmtBody(s)  -> stmt env s
 <<>>=       
-let proc env (_,name,_,bb) = 
+let proc is_global env (_,name,_,bb) = 
     let env' = F.bindv name proct env in
-        foldl (body false) env bb
-
-
+        foldl (body is_global) env bb
 <<>>=
 let rec section env = function
     | A.SectionAt(x,r)     -> E.catch' env (E.errorRegPrt r) (section env) x
     | A.Decl(d)            -> decl true env d
     | A.SSpan( e1, e2, ss) -> foldl section env ss
     | A.Datum( d)          -> datum env d
-    | A.Procedure(p)       -> proc env p
+    | A.Procedure(p)       -> proc true env p
 
 <<>>=
 let rec toplevel env = function 
     | A.ToplevelAt(x, r)  -> E.catch' env (E.errorRegPrt r) (toplevel env) x
     | A.Section(name, ss) -> foldl section env ss
     | A.TopDecl(d)        -> decl true env d
-    | A.TopProcedure(p)   -> proc env p 
+    | A.TopProcedure(p)   -> proc true env p 
 
 <<>>=
 let program env tt = foldl toplevel env tt
