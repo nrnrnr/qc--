@@ -228,22 +228,8 @@ depend:V:   $SRCS $HDRS
 # documentation-related files
 # ------------------------------------------------------------------
 
-interfaces:V: interfaces.dvi
-
-interfaces.nw: $INTERFACES
-    rm -f interfaces.nw
-    touch interfaces.nw
-    for i in $INTERFACES;
-    do
-       echo "\section{Interface: [[$i]]}" >> interfaces.nw
-       sed -e '/noweb-code-mode/d' \
-           -e '/^This document contains /d' \
-           -e '/section{Interface/d' \
-           -e '/section{Implementation/q' $i | \
-       sed -e '/section{Implementation/d' >> interfaces.nw
-    done
-
 NWTEXFILES = ${NWFILES:%.nw=%.tex}
+NWINCFILES = ${NWFILES:%.nw=%.inc}
 
 INTERFACES = activation.nw \
              assemblyunit.nw \
@@ -263,8 +249,30 @@ INTERFACES = activation.nw \
              uid.nw \
              value.nw
 
-interp.tex: interp.nw
+interfaces:V: interfaces.dvi
+
+interfaces.nw: $INTERFACES
+    echo > interfaces.nw
+    # choosing a sensible order would be good here
+    for i in $INTERFACES
+    do
+	awk '/^This document contains / { next }
+	     /\\section{[Ii]nterface}/ {
+                 ++scount
+                 print "\\section{Interface to \\texttt{'$i'}}" 
+		 next
+             }
+             /\\section{/ { if (++scount >= 2) { exit } }
+	     { print }' $i >> interfaces.nw
+    done
+
+doc.tex: doc.nw
 	$NOWEAVE -delay -autodefs c -index $prereq > $target
+
+inputs:V: $NWINCFILES
+	for i in $prereq; do echo "\\myinput{$i}"; done
+
+doc.dvi: $NWINCFILES
 
 ### some old documentation files
 
