@@ -99,6 +99,10 @@ The {\cfg} abstraction is characterized by the following invariants:
             exceptional successors.
       \end{enumerate}
 
+\item A node can have any number of predecessors. 
+      It is a checked run-time error if a node with more than one
+      predecessor is unlabeled. 
+
 \item A node \emph{defines}, \emph{uses}, and \emph{kills} locations.
 \item A node has mutable properties.
 \end{itemize}
@@ -124,22 +128,17 @@ behaviors, the following name scheme is used:
 <<types and ops>>=
 type cfg        
 type t = cfg                    (* Cfg.t looks JustBetter *)
-type node
+type node                       (* control-flow node *)
 type locs = Register.Set.t      (* locations for liveness analysis *)
-type conts
+type conts                      (* continuation bundle *)
+type property                   (* abstract type for data inside nodes *)
 
-(* abstract type for data inside nodes *)
-type property
-
-val conts: cuts:node list -> unwinds:node list -> 
-           returns:node list -> aborts: bool -> conts 
- 
 (* cfg creation *)
 val mk:         unit -> cfg
 
 (* label mutator/observation *)
 val set_label:  cfg -> string -> node -> unit
-val lookup:     cfg -> string -> node  (* never fails -- see description *)
+val lookup:     cfg -> string -> node           (* always succeeds! *)
 
 (* cfg observation, fold order unspecified *)
 val entry:      cfg -> node 
@@ -166,8 +165,8 @@ val gm_branch:  cfg -> Rtl.rtl -> ifso:node -> ifnot:node -> node
 
 (* cfg mutators, ensures: not (enumerated cfg) *)
 val gm_redirect_all:            src:node -> olddst:node -> newdst:node -> unit
-val gm_insert_assign_before:    Rtl.rtl list -> node -> unit (* any node   *)
 val gm_insert_assign_after:     Rtl.rtl list -> node -> unit (* see descr! *)
+val gm_insert_assign_before:    Rtl.rtl list -> node -> unit (* any node   *)
 val gm_insert_dataflow_between: defs:locs -> uses:locs -> kills:locs ->
                                 src:node -> dst:node -> unit
 val gm_enumerate:               cfg -> unit (* post: enumerated cfg *)
@@ -186,6 +185,10 @@ val kills:      node -> locs            (* locs killed by node  *)
 (* node mutators *)
 val set_rtl:        node -> (Rtl.rtl -> Rtl.rtl) -> unit
 val set_property:   node -> property -> unit 
+
+(* continuation bundle constructor *)
+val conts: cuts:node list -> unwinds:node list -> 
+           returns:node list -> aborts: bool -> conts 
 @
 
 % ------------------------------------------------------------------ 
@@ -273,7 +276,7 @@ The last node with respect to numbering.
 
 \item [[scan_fwd: cfg -> first:int -> limit:int -> (node -> 'a -> 'a) -> 'a -> 'a]]: 
 Applies a function [[f]] to the range of nodes from [[first]] to
-[[limit]] (exclusive) and passes an intermediate result.  The nodes
+[[limit]] (excluded) and passes an intermediate result.  The nodes
 are visited in increasing order with respect to the numbering.  It is
 an \emph{unchecked} run-time error if [[f]] calls a graph mutator; in
 order for [[f]] being applied to nodes [[first]]] $<$ [[limit]] must
@@ -303,7 +306,6 @@ on them take different arguments:  the graph a node belongs to, an
 continuation bundle that includes several nodes, denoting
 continuations that can be reached from that node.
 
-
 The creation of a node also adds it to the {\cfg}; because of this,
 all node creating functions are marked as graph mutators.  Graph
 mutators must not be called by traversal functions.  Using a mutator
@@ -317,51 +319,7 @@ gm_jump:    cfg -> Rtl.rtl -> node list -> node
 gm_cutto:   cfg -> Rtl.rtl -> conts     -> node
 gm_call:    cfg -> Rtl.rtl -> conts -> succ:node -> node
 gm_branch:  cfg -> Rtl.rtl -> ifso:node -> ifnot:node -> node
-gm_dummy:   cfg -> node
-gm_dataflow: cfg -> def:locs -> use:locs -> kill:locs -> succ:node -> node
 \end{verbatim}
-
-A [[dummy]] node has one successor which is initially set to itself. 
-Use [[gm_redirect_all]] to redirect its outgoing edge to a different
-node.  Dummy nodes are used as place holders for labeled nodes that
-are not yet defined.  
-
-A [[gm_dataflow]] node has one successor and takes lists for the
-locations it uses, defines, and kills explicitly.  It does not
-generate code but its sole purpose is to provided data-flow
-information.
-
-% Parameter passing is implemented by sequences of [[assign]] nodes that
-% transfer parameters from location determined by calling conventions to
-% registers, and vice versa.  These sequences of assignments are created
-% by functions \emph{copy-in} and \emph{copy-out} that take their
-% successor as argument return the topmost node of the sequence they
-% create.  Calling conventions are implemented by automata that are
-% passed to the functions and returned in an advanced state.  The
-% [[copyi]] function implements receiving parameters, the [[copyo]]
-% function passing actual parameters. 
-% 
-% Formal parameters are implicitly declared local registers when used
-% for procedures.  A continuation's formal parameter must be an already
-% declared local \emph{or global} register.  Since local registers are
-% basically represented as names, but global registers as abstract
-% locations of type [[Automaton2.loc]], the [[formal]] type must
-% accommodate both.
-% 
-% ((type formal))=
-% type repr       = Local  of  string           (* name            *)
-%                 | Global of  Alloc.Reg.loc    (* abstr. location *)     
-%                 
-% type formal =   { width:    Rtl.width
-%                 ; hint:     string option
-%                 ; repr:     repr              (* representation *)
-%                 }
-%                  
-% ((type actual))=
-% type actual     = Rtl.exp 
-%                 * Rtl.width 
-%                 * string option               (* hint *)
-% @
 
 % ------------------------------------------------------------------ 
 \subsubsection{Graph Mutation}
@@ -475,10 +433,28 @@ Set the {\rtl} of a node to a new value using a mapping function.
 Set the properties associated with the [[node]] at hand.
 \end{itemize}
 
+% ------------------------------------------------------------------ 
+\subsubsection{Various Functions}
+% ------------------------------------------------------------------ 
+
+
+\begin{itemize}
+\item
+\begin{verbatim}
+val conts: cuts:node list -> unwinds:node list -> 
+           returns:node list -> aborts: bool -> conts 
+\end{verbatim}
+
+Construct a continuation bundle from the arguments.
+\end{itemize}
+
 
 % ------------------------------------------------------------------ 
 \subsection{Putting the Interface together}
 % ------------------------------------------------------------------ 
+
+The interface announde in the module type [[S]] is directly implemented
+by the module. 
 
 <<cfg3.mli>>=
 module type S = sig
@@ -502,19 +478,20 @@ mutiple implementations, each for every kind.  Because the
 object-oriented style also integrates with the imperative nature of
 the interface we chose to use it to implement the control-flow graph.
 To avoid name-clashes for useful names like [[cfg]] and [[node]], the
-implementation lives in its own sub-module [[X]]. The implementation
-of the exported functions refers simply to [[X]].
+oo-implementation lives in its own sub-module [[X]]. 
 
 <<cfg3.ml>>=
 module type S = sig
     <<types and ops>>
 end
 
-type locs       = Register.Set.t  (* defs/uses/kills *)
-type property   = unit
+type locs       = Register.Set.t    (* defs/uses/kills *)
+type property   = unit              (* functorize over property? *)  
 
 module X = struct
-    <<module X>>
+    module A   = Ast
+    module R2A = Rtl2ast
+    <<module X>>                    (* the OO implementation *)
 end
 
 type cfg        = X.cfg           (* class type cfg  *)
@@ -641,6 +618,7 @@ class type cfg = object
     method add:         node -> unit    (* add node to this *)
     method enumerate:   unit -> unit    (* enumerate all node in this *)
     method get_id:      unit -> int     (* unique *)
+    method test:        unit            (* test integrity of this *)
 end
 @
 
@@ -695,6 +673,11 @@ and node = object
     
     method insert_assign_before: Rtl.rtl -> node (* returns new node *)
     method insert_assign_after : Rtl.rtl -> node (* returns new node *)  
+
+    method ast:         mangle:(string->string) -> Ast.body list
+    
+    (* for debugging only *)
+    method test:        unit            (* test integrity of this *)
 end
 @
 
@@ -715,6 +698,23 @@ end
 \item [[upp_succ]] updates links to successors using a map-function.
       Note that a map-function can collapse different links to a
       single node but can't reverse the effect.
+\item [[defs]], [[uses]], [[kills]] reports locations defined, used, or
+       killed by a node.
+
+\item [[insert_assign_before]] creates a new [[assign]] node from an
+      [[Rtl.rtl]] before [[this]] node and returns it. The predecessors
+      of [[this]] become the predecessor of the [[assign]] node.
+
+\item [[insert_assign_after]] creates a new [[assign]] node from an
+      [[Rtl.rtl]] after a node and returns it. It is a checked run-time
+      error if [[this]] is not an [[assign]] node. The successor of
+      [[this]] becomes the successor of the new node, which in turn
+      becomes the new successor of [[this]].
+
+\item [[ast]] returns a representation of the node as abstract {\PAL}
+      syntax. The method receives a \emph{mangler} function that is used 
+      to transform labels into {\PAL} syntax. See \module{mangle} for
+      details. 
 \end{itemize}      
 
 The implementation of labels requires a third type [[proxy]]
@@ -726,7 +726,7 @@ label, once this node is defined.
 
 <<module X>>=
 class type proxy = object
-    inherit node
+    inherit node 
     method set_succ: node -> unit       (* set succ for this *)
 end
 @
@@ -784,9 +784,31 @@ let upd (this:node) (map:node->node) = fun n ->
             n
 @
 
+When generating an {\AST} for each node we repeatedly have to emebd
+statements in the [[A.BodyStmt]] constructor. Using a constructor
+function makes it a little bit easier.
+
+<<module X>>=
+let stmt x = A.StmtBody x
+let decl x = A.DeclBody x
+let data x = A.DataBody x
+@
+
+
 % ------------------------------------------------------------------ 
 \subsection{Classes}
 % ------------------------------------------------------------------ 
+
+The [[graph]] class maintains two maps for labeled nodes: [[_labels]]
+and [[_dummies]]. The former holds labeled nodes, the latter (labeled)
+[[proxy]] nodes. These are created by the [[lookup]] method when the
+requested label is not yet defined. A lookup therefore searches first
+the [[_labels]] map, next the [[_dummies]] map, and if it can not find
+the label creates enters a new proxy node into the [[_dummies]] map. The
+[[set_label]] method first has to check whether a proxy was defined for
+the node that is to be labeled. If this is the case the node becomes the
+dummy's successor, otherwise the node is just entered into the
+[[_labels]] map.
 
 <<module X>>=
 class graph: cfg =
@@ -851,11 +873,19 @@ object (this)
         ( _id <- _id + 1
         ; _id
         )
+
+    (* test integrity of CFG *)
+    method test =
+        ( assert (_entry <> None)
+        ; assert (_exit  <> None)
+        ; NodeSet.iter (fun n -> n#test) _nodes
+        )
+
 end
 @
 
 To insert a new [[assign]] node before [[this]] we first create an
-assign node that has the [[exit]] node as its successor for now. Then we
+assign node that has the [[exit]] node as its successor. Then we
 redirect all incoming edges to the new assign node and finally its
 outgoing edge towards [[this]] node.
 
@@ -932,6 +962,27 @@ object(this)
     method insert_assign_after (rtl:Rtl.rtl) = 
         invalid_arg "Cfg3: add_assign_after method for non-assignment node"
 
+    method ast (mangle:string->string) = 
+        let label l = stmt (A.LabelStmt (mangle l)) in
+        let labels  = List.map label _labels in
+        let id      = stmt (A.CommentStmt (string_of_int _id)) in
+            id::labels
+
+    (* this node must be in the predecessor list of each successor
+     * if this node has more than two predecessors it must be labeled
+     *    this is not enforced by this module but a dynamic property we
+     *    like the client to maintain 
+     *)
+
+    method test =
+        let this = (this :> node) in
+        let succ = this#succ in
+        let pred = this#pred in
+            ( assert (List.fold_left 
+                (fun r n -> r && (List.mem this n#pred)) true succ)
+            ; assert ((List.length pred <= 1) || (_labels <> [])) 
+            )
+    
 end (* of vnode class *)
 
 (* ------------------------------------------------------------------ *) 
@@ -939,7 +990,7 @@ end (* of vnode class *)
 <<module X>>=
 and virtual vcut cfg rtl (conts: conts) =
 object (this)
-    inherit vnode cfg rtl
+    inherit vnode cfg rtl as super
 
     val mutable _cuts    = conts.cuts
     val mutable _unwinds = conts.unwinds
@@ -959,7 +1010,7 @@ end
 <<module X>>=
 and dummy cfg label: proxy =
 object(this)
-    inherit vnode cfg Rtl.null
+    inherit vnode cfg Rtl.null as super
 
     val mutable _succ   = (None: node option) 
 
@@ -988,7 +1039,7 @@ end
 <<module X>>=
 and entry cfg exit: node =
 object(this)
-    inherit vnode cfg Rtl.null
+    inherit vnode cfg Rtl.null as super
 
     val mutable _succ = (exit:node)
 
@@ -1006,7 +1057,7 @@ end
 <<module X>>=
 and exit cfg: node =
 object(this)
-    inherit vnode cfg Rtl.null
+    inherit vnode cfg Rtl.null as super
 end
 @
 
@@ -1016,7 +1067,7 @@ allows to insert a new [[assign]] node before the successor.
 <<module X>>=
 and assign cfg rtl succ : node =
 object (this)
-    inherit vnode cfg rtl
+    inherit vnode cfg rtl as super
 
     val mutable _succ = succ
 
@@ -1037,6 +1088,11 @@ object (this)
             ; _succ#link_pred this
             ; assign
             )
+
+    method ast mangle =
+        let labels = super#ast mangle    in
+        let s      = R2A.rtl mangle _rtl in
+            labels@[stmt s]
 end
 
 (* ------------------------------------------------------------------ *) 
@@ -1044,7 +1100,7 @@ end
 <<module X>>=
 class return cfg rtl (x,y) : node  =
 object (this)  
-    inherit vnode cfg rtl
+    inherit vnode cfg rtl as super
 
     val         _x    = (x:int)
     val         _y    = (y:int)
@@ -1066,7 +1122,7 @@ end
 <<module X>>=
 class goto cfg rtl targets : node =
 object (this)
-    inherit vnode cfg rtl
+    inherit vnode cfg rtl as super
 
     val mutable _targets = targets
 
@@ -1085,7 +1141,7 @@ end
 <<module X>>=
 class jump cfg rtl targets : node =
 object (this)
-    inherit vnode cfg rtl
+    inherit vnode cfg rtl as super
 
     val mutable _targets = targets
     val mutable _exit    = cfg#exit     (* artifical edge to exit *)
@@ -1107,7 +1163,7 @@ end
 <<module X>>=
 class call cfg rtl conts ~succ : node =
 object (this)
-    inherit vcut cfg rtl conts
+    inherit vcut cfg rtl conts as super
 
     val mutable _succ = (succ: node)
 
@@ -1131,7 +1187,7 @@ end
 <<module X>>=
 class cutto cfg rtl conts : node =
 object (this)
-    inherit vcut cfg rtl conts
+    inherit vcut cfg rtl conts as super
 
     val mutable _exit = cfg#exit        (* artifical edge to exit *)
 
@@ -1155,7 +1211,7 @@ end
 <<module X>>=
 class branch cfg rtl (ifso:node) (ifnot:node) : node =
 object (this)
-    inherit vnode cfg rtl 
+    inherit vnode cfg rtl  as super
 
     val mutable _ifso  = ifso
     val mutable _ifnot = ifnot
@@ -1181,7 +1237,7 @@ end
 <<module X>>=
 class dataflow cfg (succ:node) (defs:locs) (uses:locs) (kills:locs) : node =
 object (this)
-    inherit vnode cfg (Rtl.null)
+    inherit vnode cfg (Rtl.null) as super
 
     val mutable _succ = succ
     val _defs  = defs
@@ -1203,5 +1259,40 @@ object (this)
     method kills  = _kills
 end
 @
+
+%
+% ATTIC
+% 
+
+% transfer parameters from location determined by calling conventions to
+% registers, and vice versa.  These sequences of assignments are created
+% by functions \emph{copy-in} and \emph{copy-out} that take their
+% successor as argument return the topmost node of the sequence they
+% create.  Calling conventions are implemented by automata that are
+% passed to the functions and returned in an advanced state.  The
+% [[copyi]] function implements receiving parameters, the [[copyo]]
+% function passing actual parameters. 
+% 
+% Formal parameters are implicitly declared local registers when used
+% for procedures.  A continuation's formal parameter must be an already
+% declared local \emph{or global} register.  Since local registers are
+% basically represented as names, but global registers as abstract
+% locations of type [[Automaton2.loc]], the [[formal]] type must
+% accommodate both.
+% 
+% ((type formal))=
+% type repr       = Local  of  string           (* name            *)
+%                 | Global of  Alloc.Reg.loc    (* abstr. location *)     
+%                 
+% type formal =   { width:    Rtl.width
+%                 ; hint:     string option
+%                 ; repr:     repr              (* representation *)
+%                 }
+%                  
+% ((type actual))=
+% type actual     = Rtl.exp 
+%                 * Rtl.width 
+%                 * string option               (* hint *)
+% @
 
 % vim:tw=72:ts=4:et:
