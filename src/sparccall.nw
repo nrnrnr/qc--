@@ -73,7 +73,6 @@ function f(i) return (reg("f", i, Sparc.wordsize)) end
 function x(i) return (reg("x", i, Sparc.wordsize * 2)) end
 function o(i) return (reg("o", i, Sparc.wordsize)) end
 function i(i) return (reg("i", i, Sparc.wordsize)) end
-function s(i) return (reg("s", i, Sparc.wordsize * 2)) end
 
 Sparc.vol_fp  = (f(0)..f(7)) .. (x(0)..x(7))
 @ 
@@ -93,23 +92,22 @@ let bo       = R.BigEndian
 
 <<SPARC calling convention automata in Lua>>=
 Sparc.cc["C"].results =
-  A.choice { "float",
-               A.useregs { f(0)..f(7)},
+  A.choice { "float",  A.useregs (f(0)..f(7)),
              A.is_any, { A.widen(32, "multiple")
                        , A.widths {32}
-                       , A.useregs { i(0)..i(5) }
+                       , A.useregs { i(0) }
                        } 
            } 
 
 Sparc.cc["C"].call =
   { A.widen(32, "multiple")
-  , A.useregs { o(0)..o(5) }
+  , A.useregs (o(0)..o(5))
   , A.overflow { growth = "up", max_alignment = Sparc.sp_align }
   }	
 <<SPARC calling convention automata in Lua>>=
 Sparc.cc["C"].cutto =
   { A.widen(32)
-  , A.useregs {o(0)..o(5)}
+  , A.useregs (o(0)..o(5))
   , A.overflow { growth = "up", max_alignment = Sparc.sp_align }
   }
 @ 
