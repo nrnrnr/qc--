@@ -39,6 +39,7 @@ type endianness = Big | Little
 
 type denotation = Constant of value
                 | Label    of kind
+                | Import
                 | Register
                 | Continuation
 
@@ -54,6 +55,8 @@ val bindvError      : string -> scope   -> env -> env
 val bindtError      : string -> scope   -> env -> env
 val findv           : string -> env     -> ventry
 val findt           : string -> env     -> tentry
+val findv'          : string -> env     -> (denotation * ty) Error.error
+val findt'          : string -> env     -> ty Error.error
 
 @
 
@@ -150,7 +153,10 @@ let findt name env =
         StrMap.find name env.tenv
     with
         Not_found -> E.error ("unknown type: "^name)
-@        
+<<>>=
+let findv' name env = snd (findv name env)
+let findt' name env = snd (findt name env)
+@
 
 The [[target]] directive in {\PAL} describes the target architecture
 an program is intended for. The information can be distributed over

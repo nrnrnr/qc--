@@ -30,6 +30,7 @@ following steps:
 % ------------------------------------------------------------------ 
 
 <<check.ml>>=
+module T = Types
 module E = Error
 module A = Ast
 module F = Fatenv
@@ -206,7 +207,7 @@ declarations are processed first.
 Conceptually all declarations and language constructs that create a
 named value could be treated as a declaration -- most of them
 depending on no other.  But to improve performance constant
-delarations are treated separately because only they require a
+declarations are treated separately because only they require a
 topological sort.  We thus traverse the abstract syntax and bind all
 non-constant values into the environment.  Then we collect all
 constant declarations, sort and process them.  Because sorting fails
@@ -219,6 +220,8 @@ module ValueEnv = struct
         <<module TV>>
     end
     module TSort = Topsort.Make(TV)
+   
+    <<bind global values>>
 end
 @
 
@@ -269,7 +272,113 @@ let rec uses = function
     | _                    , _   -> []
 @
     
+% ------------------------------------------------------------------ 
+\subsubsection{Binding Value Symbols}
+% ------------------------------------------------------------------ 
 
+Global labels and procedures have fixed types that can be entered into
+the environment. Register and Import declarations on the other hand
+carry user provided types with them. In case these types are names
+they may be undefined; this leads to register and import declarations which
+are bound to [[Error]]. 
+
+<<bind global values>>=
+let proct     = (F.Global, E.Ok(F.Label(F.Proc),T.code))
+let codet     = (F.Global, E.Ok(F.Label(F.Code),T.code))
+let datat     = (F.Global, E.Ok(F.Label(F.Data),T.data))
+
+<<>>=
+let regt = function 
+    | E.Ok(t) -> (F.Global, E.Ok(F.Register,t))
+    | E.Error -> (F.Global, E.Error)
+<<>>=
+let importt = function 
+    | E.Ok(t) -> (F.Global, E.Ok(F.Import,t))
+    | E.Error -> (F.Global, E.Error)
+<<>>=
+let rec ty env = function
+    | A.TyAt(x,r)       -> E.catch (E.errorRegPrt r) (ty env) x
+    | A.BitsTy(n)       -> E.Ok(T.bits n)
+    | A.AliasTy(n)      -> F.findt' n env
+@
+
+The following functions traverse the abstract syntax and enter all
+names of global scope into the environment -- except for constants. 
+In particular, these are:  all import, register, and procedure
+declarations on the top-level and section-level.  Additionally all
+label for code and data anywhere in the compilation unit because they
+have global scope.
+
+    
+<<>>=
+let import t env = function
+    | Some foreign, name -> F.bindv name (importt (ty env t)) env
+    | None        , name -> F.bindv name (importt (ty env t)) env
+<<>>=
+let target env = function
+    | A.Memsize(i)        -> F.bindMemsize i env
+    | A.ByteorderBig      -> F.bindendianness F.Big env
+    | A.ByteorderLittle   -> F.bindendianness F.Little env 
+    
+<<>>=
+let imports env t ii          = foldl (import t) env ii
+let register env (_,t,name,_) = F.bindv name (regt (ty env t)) env
+
+<<>>=
+let rec datum env = function
+    | A.DatumAt(x,r)        -> E.catch' env (E.errorRegPrt r) (datum env) x
+    | A.Label(n)            -> F.bindv n codet env 
+    | _                     -> env
+
+<<>>=
+let rec stmt env = function 
+    | A.StmtAt(x,r)           -> E.catch' env (E.errorRegPrt r) (stmt env) x
+    | A.IfStmt ( e, ss1, ss2) -> foldl stmt (foldl stmt env ss1) ss2
+    | A.LabelStmt(n)          -> F.bindv n codet env
+    | A.SpanStmt(e1,e2,ss)    -> foldl (body false) env ss
+    | A.SwitchStmt (r,e,arms) -> foldl arm  env arms
+    | _                       -> env
+
+and arm env = function
+    | A.ArmAt(x,r)            -> E.catch' env (E.errorRegPrt r) (arm env) x
+    | A.Case(ranges, ss)      -> foldl stmt env ss
+<<>>=
+and decl is_global env = function
+    | A.DeclAt(x,r)    -> E.catch' env (E.errorRegPrt r) (decl is_global env) x
+    | A.Import(ty,ii)  -> if is_global then imports env ty ii     else env
+    | A.Registers(rr)  -> if is_global then foldl register env rr else env
+    | A.Target(aa)     -> if is_global then foldl target env aa   else env
+    | _                -> env
+
+and body is_global env = function
+    | A.BodyAt(x, r) -> E.catch' env (E.errorRegPrt r) (body is_global env) x
+    | A.DeclBody(d)  -> if is_global then decl is_global env d else env
+    | A.DataBody(dd) -> if is_global then foldl datum env dd   else env 
+    | A.StmtBody(s)  -> stmt env s
+<<>>=       
+let proc env (_,name,_,bb) = 
+    let env' = F.bindv name proct env in
+        foldl (body false) env bb
+
+
+<<>>=
+let rec section env = function
+    | A.SectionAt(x,r)     -> E.catch' env (E.errorRegPrt r) (section env) x
+    | A.Decl(d)            -> decl true env d
+    | A.SSpan( e1, e2, ss) -> foldl section env ss
+    | A.Datum( d)          -> datum env d
+    | A.Procedure(p)       -> proc env p
+
+<<>>=
+let rec toplevel env = function 
+    | A.ToplevelAt(x, r)  -> E.catch' env (E.errorRegPrt r) (toplevel env) x
+    | A.Section(name, ss) -> foldl section env ss
+    | A.TopDecl(d)        -> decl true env d
+    | A.TopProcedure(p)   -> proc env p 
+
+<<>>=
+let program env tt = foldl toplevel env tt
+@ 
 
 % ------------------------------------------------------------------ 
 \subsection{Checking a whole file}
@@ -282,16 +391,17 @@ create the abstract syntax and calls the different phases of checking.
 <<check file>>=
 let check file =
     let fd          = try open_in file 
-                      with Sys_error(msg) -> E.error msg     in
-    let finally ()  = close_in fd                            in
-    let lexbuf      = Lexing.from_channel fd                 in
-    let map         = Srcmap.empty                           in
-    let scanner     = Scan.scan map                          in
+                      with Sys_error(msg) -> E.error msg      in
+    let finally ()  = close_in fd                             in
+    let lexbuf      = Lexing.from_channel fd                  in
+    let map         = Srcmap.empty                            in
+    let scanner     = Scan.scan map                           in
         try
             ( Srcmap.sync map 0 (file,1,1)
-            ; let ast        = Parse.program scanner lexbuf  in
-              let env        = F.empty                       in
-              let env'       = TypeEnv.doGlobalTypes env ast in
+            ; let ast        = Parse.program scanner lexbuf   in
+              let env0       = F.empty                        in
+              let env1       = TypeEnv.doGlobalTypes env0 ast in
+              let env2       = ValueEnv.program env1 ast      in 
                  ( E.Ok ()
                  )
             )

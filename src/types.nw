@@ -34,7 +34,6 @@ type key        = int
 type 'a t       = Bool
                 | Bits of 'a 
                 | Procedure of 'a t list * 'a t
-                | Undefined
 
 type size       = Const of int
                 | Var   of key
@@ -80,6 +79,31 @@ val ppTy'        :   tyscheme -> Pp.doc
 @
 
 
+% ------------------------------------------------------------------ 
+\subsection{Useful abbreviations}
+% ------------------------------------------------------------------ 
+
+When dealing with type the same types are used over and over again. 
+Here are some useful definitions for them.  There are at least three
+target dependent types:  the natural word type [[word]], the natural
+code pointer type [[code]], and the natural data pointer type.  We
+define types for them here, but only for the moment. 
+
+<<abbrevs>>=
+val bitsc  : int -> size t              (* fixed/constant size  *)
+val bitsv  : key -> size t              (* variable size        *)
+val bits   : 'a -> 'a t                 (* polymorphis size     *)
+val bool   : 'a t                       (* bool                 *)
+val proc   : 'a t list -> 'a t -> 'a t  (* build proc type      *)
+val word   : int t                      (* natural word         *)
+val code   : int t                      (* natural code pointer *)
+val data   : int t                      (* natural data pointer *)
+val char   : int t                      (* char                 *)
+val uchar  : int t                      (* unicode char         *)
+val dummy  : 'a t
+@
+
+
 % ------------------------------------------------------------------  
 \subsection{Interface}
 % ------------------------------------------------------------------ 
@@ -89,6 +113,7 @@ val ppTy'        :   tyscheme -> Pp.doc
 <<unify>>
 <<subst>>
 <<pp>>
+<<abbrevs>>
 @
 
 % ------------------------------------------------------------------ 
@@ -144,7 +169,6 @@ and unify' xs ys sigma = match xs, ys with
     | x::xs         , y::ys     -> unify' xs ys (unify x y sigma)
 
 let rec subst sigma = function
-    | Undefined         -> Undefined
     | Bool              -> Bool
     | Bits(Const(x))    -> Bits(x)
     | Procedure(xs,x)   -> Procedure (List.map (subst sigma) xs, subst sigma x)
@@ -157,13 +181,12 @@ The list code is dublicated from the [[Astpp]]] module and should go
 into the [[Pp]] module. 
 
 <<>>=
-
-open Pp
+open Pp (* convert this to module P = Pp *)
 
 let (~~) x     = x
 let nest       = nest 4    
 let int i      = text (string_of_int i)
-
+<<>>=
 let tuple f xs =   
     text "("
     ^^ nest begin
@@ -171,27 +194,39 @@ let tuple f xs =
        ^^ list (break ^^ text "x" ^^ break) f xs
        end 
     ^/ text ")"
-
+<<>>=
 let rec ppProcTy f args return =
     agrp begin
     ~~ tuple f args
     ^/ text "->"
     ^/ f return
     end
-
+<<>>=
 let rec ppTy = function
-    | Undefined                 -> text "undefined"
     | Bool                      -> text "bool"
     | Bits(i)                   -> text "bits" ^^ int i
     | Procedure(args,return)    -> ppProcTy ppTy args return
-
+<<>>=
 and ppTy' = function
-    | Undefined                 -> text "undefined"
     | Bool                      -> text "bool"
     | Bits(Const(i))            -> text "bits"  ^^ int i
     | Bits(Var(i))              -> text "bits#" ^^ int i
     | Procedure(args,return)    -> ppProcTy ppTy' args return
-
 @
 
-                           
+The implementation of the abbreviations is trivial:
+
+<<>>=
+let bitsc x         = Bits(Const(x))
+let bitsv x         = Bits(Var(x))
+let bits  x         = Bits(x)
+let bool            = Bool
+let proc args res   = Procedure(args,res)
+let word            = bits 32   (* for now *)
+let code            = bits 32
+let data            = bits 16
+let char            = bits 8
+let uchar           = bits 16
+let dummy           = bool
+@                           
+
