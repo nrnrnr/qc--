@@ -1,0 +1,71 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% vim: ts=2 sw=2 et: 
+% Grades     ::=    "%%Grades:" Quality Importance Urgency
+% Quality    ::=    A|B|C|D|E
+% Importance ::=    Central|Subsystem|Peripheral
+% Urgency    ::=    Immediate|Soon|Later
+%
+% Example (at beginning of line): %%Grades: B Central Soon
+% 
+
+% inc: \usepackage{nchicago}
+
+% ------------------------------------------------------------------ 
+\section{Simple Optimization}
+% ------------------------------------------------------------------ 
+
+If you are looking for real optimizations, they don't exist yet.
+But we hope to make some effort in that direction in the near future.
+For now, we have a few simple transformations of the control-flow graph.
+
+% ------------------------------------------------------------------ 
+\subsection{The Optimizations}
+% ------------------------------------------------------------------ 
+
+It is possible to build a flow graph such that a node cannot be reached
+by following successors from the entry node, but it can be reached by
+following predecessors from the exit node.
+<<optimize.mli>>=
+val trim_unreachable_code: 'i Cfgx.M.cfg -> unit
+@
+
+% ------------------------------------------------------------------ 
+\subsection{The Implementations}
+% ------------------------------------------------------------------ 
+
+We provide each of the optimization in turn.
+<<optimize.ml>>=
+module G = Cfgx.M
+@
+
+A forward dfs followed by a backwards dfs will find nodes reachable from the entry
+(following successors) and nodes reachable from the exit (following predecessors).
+Since we want to catch loops, we can't just look for nodes that have no successors.
+Instead, we compare the nodes we can reach from the entry node with the nodes we can
+reach from the exit node.
+We break any loops among these nodes by setting the successor of each join node to the
+illegal node.
+Finally, we can delete any nodes that have no successors.
+<<optimize.ml>>=
+let trim_unreachable_code cfg =
+  let module IS = Set.Make (struct type t = int let compare = compare end) in
+  let nodes_from_entry =
+    G.postorder_dfs (fun n set -> IS.add (G.num n) set) IS.empty cfg in
+  let nodes_from_exit  = G.reverse_podfs (fun n rst -> n :: rst) [] cfg in
+  let to_delete = List.filter (fun n -> not (IS.mem (G.num n) nodes_from_entry))
+                              nodes_from_exit in
+  let () = List.iter (fun n -> if G.kind n = G.Join then G.set_succ n (G.illegal cfg))
+                     to_delete in
+  let hanging_nodes =
+    List.filter (fun n -> G.kind n <> G.Entry &&
+                          List.for_all (fun p -> G.kind p = G.Illegal) (G.preds n)) in
+  let rec delete_nodes = function
+    | []       -> ()
+    | n :: rst -> 
+      (Printf.eprintf "deleting node %d\n" (G.num n);
+      let succs = G.succs n in
+      G.delete cfg n;
+      Printf.eprintf "succs: %d\n" (List.length succs);
+      delete_nodes (hanging_nodes succs @ rst)) in
+  delete_nodes (hanging_nodes to_delete)
+@
