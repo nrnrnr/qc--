@@ -84,7 +84,7 @@ helps to minimize errors with the right number of successors. Except for
 one predecessor.
 
 <<interface>>=
-val gm_label:   'i cfg -> string -> Reladdr.symbol -> succ:'i node -> 'i node 
+val gm_label:   'i cfg -> string -> Symbol.t -> succ:'i node -> 'i node 
 val gm_assign:  'i cfg -> 'i -> succ:'i node -> 'i node
 val gm_return:  'i cfg -> 'i -> int * int -> 'i node
 val gm_goto:    'i cfg -> 'i -> 'i node list -> 'i node
@@ -106,7 +106,7 @@ Nodes have observable properties.
 <<interface>>=
 val cfg:        'i node -> 'i cfg       (* cfg this node belongs to *)
 val instr:      'i node -> 'i           (* embedded instruction *)
-val symbol:     'i node -> Reladdr.symbol option (* labels have symbols *)
+val symbol:     'i node -> Symbol.t option (* labels have symbols *)
 val succ:       'i node -> 'i node list (* wrt. cf *)
 val pred:       'i node -> 'i node list (* wrt. cf *)
 val property:   'i node -> property
@@ -189,7 +189,7 @@ class type ['i] cfg = object
     method entry:       'i node             (* entry node of this *)
     method exit:        'i node             (* exit node of this *)
     method lookup:      string -> 'i node   (* find labeled node *)
-    method label:       string -> Reladdr.symbol -> 'i node -> 'i node
+    method label:       string -> Symbol.t -> 'i node -> 'i node
                                             (* insert label before node *)
     
     method add:         'i node -> unit     (* add node to this; 
@@ -202,7 +202,7 @@ class type ['i] cfg = object
     method test:        unit                (* test integrity of this *)
     method ast:         ('i -> Ast.stmt) -> Ast.stmt list 
     method nodes:       'i node list        (* for debugging *)
-    method anon:        string * Reladdr.symbol (* anon name/symbol pair *)
+    method anon:        string * Symbol.t (* anon name/symbol pair *)
 end
 @
 
@@ -210,7 +210,7 @@ end
 and ['i] node = object
     method cfg:         'i cfg          (* cfg this belongs to *)
     method instr:       'i              (* embedded instruction *)
-    method symbol:      Reladdr.symbol option 
+    method symbol:      Symbol.t option 
                                         (* symbols of this *)
     method id:          int             (* int of this *)
     method number:      int             (* number of this; req:cfg enumerated *)
@@ -247,7 +247,7 @@ end
 class type ['i] labl = object
     inherit ['i] node 
     method set_succ:    'i node -> unit       (* set succ for this *)
-    method set_symbol:  Reladdr.symbol -> unit
+    method set_symbol:  Symbol.t -> unit
 end
 
 <<OO>>=
@@ -319,7 +319,7 @@ defined. In that case a label node is created, but is successor is
 unknown. It is patched in by the method that defines labels. 
 
 <<OO>>=
-class symbol (s:string) : Reladdr.symbol =
+class symbol (s:string) : Symbol.t =
 object
     method text = s
 end
@@ -652,7 +652,7 @@ object(this)
     inherit ['i] vnode cfg (cfg#nop) as super
 
     val mutable _succ   = (None: 'i node option) 
-    val mutable _symbol = (None: Reladdr.symbol option)
+    val mutable _symbol = (None: Symbol.t option)
     
     method symbol =
         ( assert (_symbol <> None) 
@@ -1047,7 +1047,7 @@ let lookup cfg (label:string) = cfg#lookup label
 let entry cfg                 = cfg#entry
 let exit cfg                  = cfg#exit
 
-let gm_label cfg (label:string) (sym:Reladdr.symbol) ~(succ:'i node) =
+let gm_label cfg (label:string) (sym:Symbol.t) ~(succ:'i node) =
     cfg#label label sym succ 
 
 let first cfg = 

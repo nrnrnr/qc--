@@ -33,13 +33,15 @@ constant to an [[Symbol.reladdr]] value.
 \end{quote}
 
 <<rtleval.mli>>=
-type symbol = Reladdr.symbol 
+type symbol = Symbol.t 
+type reloc  = Bits.bits Reloc.Simple.relocatable  
+
 type value  =
     | CompileTime of Bits.bits       (* compile-time *)
-    | LinkTime    of Reladdr.t       (* link-time    *)
+    | LinkTime    of reloc
     
 (* raise Error.ErrorExn in case of error *)
-val link:     Rtl.exp -> Reladdr.t 
+val link:     Rtl.exp -> reloc
 val eval:     Rtl.exp -> value   
 val compile:  Rtl.exp -> Bits.bits                            
 @
@@ -65,12 +67,14 @@ values and list of values.
 module E  = Error
 module R  = Rtl
 module RP = Rtl.Private
+module RS = Reloc.Simple
 
 
-type symbol = Reladdr.symbol 
+type symbol = Symbol.t 
+type reloc  = Bits.bits RS.relocatable
 type value  =
     | CompileTime of Bits.bits       (* compile-time *)
-    | LinkTime    of Reladdr.t       (* link-time    *)
+    | LinkTime    of reloc
     
 <<Make>>
 @
@@ -81,18 +85,8 @@ in two sub-modules, [[LinkTime]] and [[CompileTime]].
 
 <<Make>>=
 module LinkTime = struct
-    let add = function
-        | [x;y] -> Reladdr.add x y 
-        | _     -> E.error "wrong number of arguments to link-time add"
-
-    let sub = function
-        | [x;y] -> Reladdr.sub x y
-        | _     -> E.error "wrong number of arguments to link-time sub"
-
     let rec apply (op,wl) exps =
         let f    = match op with
-                   | "add" | "+" -> add
-                   | "sub" | "-" -> sub
                    | x           -> E.error ("unknown link-time op "^x)
         in
             f exps
@@ -127,7 +121,7 @@ using [[link_time]]. This is done, when the evaluation detects that a
 value is not a compile-time value.
 
 <<Make>>=
-let link_time (k:Bits.bits ->Reladdr.t) = function
+let link_time (k:Bits.bits ->reloc) = function
     | LT x -> x
     | CT x -> k x     
 @
@@ -139,7 +133,7 @@ a list of compile-time values, if all values are compile-time values, or
 a list of link-time values, if at least on value is a link-time value.
 
 <<Make>>=
-let lift (k:Bits.bits ->Reladdr.t) values = 
+let lift (k:Bits.bits ->reloc) values = 
     let rec choose = function
         | (cts, [])                     -> CT (List.rev cts)
         | (cts, (CT x)  :: xs)          -> choose (x::cts, xs)
@@ -154,7 +148,7 @@ let rec const = function
     | RP.Late (x,w)  -> 
         E.error "late compile-time value in link-time expression"
     | RP.Bits b      -> CT(b)
-    | RP.Link (l,w)  -> LT(Reladdr.symbol l)
+    | RP.Link (l,w)  -> LT(RS.of_sum l (Bits.U.of_int 0 w))
 @    
 
 The [[exp]] function evaluates an expression. The point is the
@@ -163,7 +157,7 @@ whether the result will be a link- or compile-time value and also which
 [[apply]] function to call.
  
 <<Make>>= 
-and exp (k:Bits.bits->Reladdr.t) = function
+and exp (k:Bits.bits->reloc) = function
     | RP.Const c           -> const c 
     | RP.Fetch (loc,width) -> E.error "register/memory access in constant"
     | RP.App(op,exps)      -> 
@@ -172,7 +166,7 @@ and exp (k:Bits.bits->Reladdr.t) = function
         | LT args       -> LT (LinkTime.apply    op args)
 
 let link e = 
-    let k bits = Reladdr.bits (Bits.U.to_int64 bits) 
+    let k bits = RS.of_const bits 
     in match exp k (Rtl.Convert.exp e) with
     | LT x      -> x
     | CT x      -> k x
@@ -184,7 +178,7 @@ let compile e =
     | LT _      -> E.error "not a compile-time constant expression"
 
 let eval e =  
-    let k bits = Reladdr.bits (Bits.U.to_int64 bits) 
+    let k bits = RS.of_const bits 
     in match exp k (Rtl.Convert.exp e) with
     | CT x      -> CompileTime x
     | LT x      -> LinkTime x

@@ -45,7 +45,7 @@ let fprintf = Printf.fprintf
 % ------------------------------------------------------------------ 
 
 <<definitions>>=
-class symbol (n:string) : Reladdr.symbol = 
+class symbol (n:string) : Symbol.t = 
 object(this)
     method text    = n
 end
@@ -160,7 +160,7 @@ static AsmSymbol asm_offset (qname, p, n)
 The symbol bound to a label should be made local if it isn't already.
 The name of this method should probably change to [[define_label]].
 <<assembly methods>>=
-method label (s: Reladdr.symbol) = fprintf _fd "%s:\n" s#text
+method label (s: Symbol.t) = fprintf _fd "%s:\n" s#text
 <<SPARC assembly interface procedures>>=
 static void asm_define_label (name) char *name; {
   AsmSymbol lab = asm_sym_lookup(asmtab, name, ASM_LOCAL);
@@ -290,7 +290,7 @@ static void asm_asm (s) char *s; { print("%s", s); }
 <<assembly methods>>=
 method comment s = fprintf _fd "/* %s */\n" s
 
-method const (s: Reladdr.symbol) (b:Bits.bits) =
+method const (s: Symbol.t) (b:Bits.bits) =
   Impossible.unimp "no assembly directive of the form symbol=bits"
 @ 
 This almost certainly doesn't work---we must linearize the flow graph
@@ -303,7 +303,7 @@ instruction-based assemblers.
 method private instruction rtl =
   Sledlib.String.app (output_string _fd) (Asm.to_asm (Rtl.Convert.rtl rtl))
 
-method cfg_instr (cfg:G.rtlcfg) (symbol:Reladdr.symbol) = 
+method cfg_instr (cfg:G.rtlcfg) (symbol:Symbol.t) = 
     (* We have to emit a label/whatever for the procedure's 
        entry point. This is what symbol is for. Simply use this#label?  *)
     this#label symbol;

@@ -1,0 +1,76 @@
+
+% ------------------------------------------------------------------ 
+\section{Relocatable Addresses}
+% ------------------------------------------------------------------ 
+
+\begin{quote}\it
+    There is some confusion about relocatable addresses. We had the
+    [[Reladdr]] abstraction but NR did not like it for the back end and
+    came up with a new one in [[Sledlib]]. This module is an attempt to
+    consolidate the matter but I am not sure it is successful. --CL (Thu
+    Apr 11 14:25:33 EDT 2002) 
+\end{quote}
+
+
+A relocatable address is either a constant or a sum of a symbol and a
+constant. A symbol is an assembler-specific representation of a
+link-time constant.
+
+<<reloc.mli>>=
+<<module type RELOCATABLE>>
+<<module Simple>>
+@
+
+We are not yet sure about our representation for relocatable addresses.
+We define a module type that covers the intended use and take clues from
+the machine generated code in directory [[gen/]].
+
+A [['a relocatable]] value represents a bit vector of type [[['a]] whose
+value might not be known until link time. A relocatable is constructed
+as a sum of a symbol and many constants. Since the representation is 
+polymorphic over the type of the constant, [[add_const]] receives as
+first argument a function that adds constants.
+
+<<module type RELOCATABLE>>=
+module type RELOCATABLE = sig
+    type symbol                 
+    type 'a relocatable         
+
+    (* constructors *)
+    val of_const:   'a           -> 'a relocatable
+    val of_sum:     symbol -> 'a -> 'a relocatable
+    val add_const:  ('a -> 'a -> 'a) -> 'a relocatable -> 'a -> 'a relocatable
+
+    (* observer *)
+    val normalize:  'a relocatable -> symbol option * 'a
+end
+@
+
+The [[MkSimple]] functor allows to build a representation easily and
+[[Simple]] is a particular instance of that.
+
+<<module Simple>>=
+module MkSimple(S: sig type t end): RELOCATABLE with type symbol = S.t
+module Simple:                      RELOCATABLE with type symbol = Symbol.t
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+<<reloc.ml>>=
+<<module type RELOCATABLE>>
+
+module MkSimple(S: sig type t end) = struct
+    type symbol         = S.t
+    type 'a relocatable = symbol option * 'a
+    let of_const c      = (None, c)
+    let of_sum s c      = (Some s, c)
+    let add_const (+)   = fun (s, c) c' -> (s, c + c')
+    let normalize r     = r
+end
+
+module Simple = MkSimple(Symbol)
+@
+
+
