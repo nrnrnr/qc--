@@ -353,7 +353,7 @@ let rpo_dfs cfg =
   G.of_blocks blockmap in
 @
 <<dls algorithm>>=
-let dls () (cfg, ({Proc.cc = cc; Proc.target = tgt} as proc)) =
+let dls _ (cfg, ({Proc.cc = cc; Proc.target = tgt} as proc)) =
   <<set up [[spillMap]]>>
   let ((cfg, proc), _) = Optimize.trim_unreachable_code () (cfg, proc) in
   if Debug.on "dls" then <<print [[cfg]] plus live-in and live-out sets>>;
@@ -370,7 +370,7 @@ let dls () (cfg, ({Proc.cc = cc; Proc.target = tgt} as proc)) =
   let cfg = cleanup cfg in
   <<add spans for variable locations>>;
   if Debug.on "dls" then <<print [[cfg]] plus live-in and live-out sets>>;
-  true
+  (cfg, proc), true
 (* Diagnostic:
 let dls a proc = time (proc.Proc.symbol#original_text) (dls a) proc
 *)
@@ -1121,31 +1121,10 @@ end
 %-------------------------------------------------------------------
 Boilerplate for exposing this register allocator to Lua.
 <<dls.mli>>=
-module Make (BackplaneT : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.M.action)
-            (ProcT : Lua.Lib.TYPEVIEW with type 'a t = Ast2ir.proc
-                                  and type 'a combined = 'a BackplaneT.combined)
-       : Lua.Lib.USERCODE with type 'a userdata' = 'a BackplaneT.combined
+val dls: 'a -> Ast2ir.proc -> Ast2ir.proc * bool
 @
 More code for exposing the register allocator to Lua.
 <<dls.ml>>=
-module Make (BackplaneT : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.M.action)
-            (ProcT : Lua.Lib.TYPEVIEW with type 'a t = Ast2ir.proc
-                                  and type 'a combined = 'a BackplaneT.combined)
-       : Lua.Lib.USERCODE with type 'a userdata' = 'a BackplaneT.combined = struct
-  type 'a userdata' = 'a BackplaneT.combined
-  module M (Interp : Lua.Lib.CORE with type 'a V.userdata' = 'a userdata') = struct
-
-    <<dls type declarations and utilities>>
-    <<dls algorithm>>
-
-    module V       = Interp.V
-    let proc       = ProcT.makemap V.userdata V.projection
-    let ( **-> )   = V.( **-> )
-    let stageFn    = V.unit **-> proc **-> V.result V.bool
-    let dls_module = [ "dls", V.efunc stageFn dls ]
-
-    let init = Interp.register_module "DLS" dls_module
-      (* FIX -- replace with init code *)
-  end
-end
+<<dls type declarations and utilities>>
+<<dls algorithm>>
 @
