@@ -169,15 +169,17 @@ function Mips.layout.fn(dummy, proc)
     local blocks       = Stack.blocks(proc)
     blocks.oldblocks   = Block.overlap(32,"low" , blocks.oldblocks)  
     blocks.youngblocks = Block.overlap(32,"low" , blocks.youngblocks)
-    blocks.params      = Block.relative(blocks.vfp, "parameters", 16, 4)
+    blocks.oldparams   = Block.relative(blocks.vfp, "old parameters", 16, 4)
+    blocks.newparams   = Block.relative(blocks.vfp, "new parameters", 16, 4)
     local layout =
         { blocks.oldblocks
+        , blocks.oldparams     -- block to save params in regs
         , blocks.vfp
         , blocks.spills
         , blocks.continuations
         , blocks.stackdata
-        , blocks.youngblocks
-        , blocks.params
+        , blocks.youngblocks    
+        , blocks.newparams     -- block to save params in regs
         , blocks.sp
         }
     if Debug.stack then
