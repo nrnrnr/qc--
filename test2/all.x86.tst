@@ -11,11 +11,12 @@ Test.files = { "add.c--"
              , "altret.c--"
              , { source="altret2.c--", stdin="altret2.0" }
              , { source="altret3.c--", argv='src/altret3.c-- nonexists .' }
+             , "arglist.c--"
              , "bits-bug.c--"
              , "bool.c--"
              , "blockcpy.c--"
+	     , { source = 'carry.c--', other = 'src/ctest.c' }
              , "cut.c--"
-             , "arglist.c--"
              , "conj.c--"
 	     , "divmod.c--"
 	     , "emptyifbody.c--"

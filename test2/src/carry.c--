@@ -1,0 +1,54 @@
+target byteorder little;
+
+export lladd, llsub, llmul;
+
+foreign "C" lladd(bits64 x, bits64 y) {
+  bits32 xhi, xlo, yhi, ylo;
+  bits32 zhi, zlo;
+  bits1 c;
+  xhi = %lobits32(x >> 32::bits64);
+  xlo = %lobits32(x);
+  yhi = %lobits32(y >> 32::bits64);
+  ylo = %lobits32(y);
+  zlo = %addc(xlo, ylo, 0::bits1);
+  c   = %carry(xlo, ylo, 0::bits1);
+  zhi = %addc(xhi, yhi, c);
+  bits64 z;
+  z = %zx64(zlo) `or` (%zx64(zhi) << 32 :: bits64);
+  foreign "C" return (z);
+}
+
+foreign "C" llsub(bits64 x, bits64 y) {
+  bits32 xhi, xlo, yhi, ylo;
+  bits32 zhi, zlo;
+  bits1 c;
+  xhi = %lobits32(x >> 32::bits64);
+  xlo = %lobits32(x);
+  yhi = %lobits32(y >> 32::bits64);
+  ylo = %lobits32(y);
+  zlo = %subb(xlo, ylo, 0::bits1);
+  c   = %borrow(xlo, ylo, 0::bits1);
+  zhi = %subb(xhi, yhi, c);
+  bits64 z;
+  z = %zx64(zlo) `or` (%zx64(zhi) << 32 :: bits64);
+  foreign "C" return (z);
+}
+
+foreign "C" llmul(bits64 x, bits64 y) {
+  bits32 xhi, xlo, yhi, ylo;
+  bits32 zhi, zlo;
+  bits64 z;
+  bits1 c;
+  xhi = %lobits32(x >> 32::bits64);
+  xlo = %lobits32(x);
+  yhi = %lobits32(y >> 32::bits64);
+  ylo = %lobits32(y);
+
+  /* (xhi * b + xlo) * (yhi * b + yhi) ==
+        xlo * ylo + (xlo * yhi * b) + (xi * ylo * b)  */
+  z = %mulux(xlo, ylo);
+  zlo = %lobits32(z) ;
+  zhi = %lobits32(z >> 32 :: bits64) + xlo * yhi + xhi * ylo;
+  z = %zx64(zlo) `or` (%zx64(zhi) << 32 :: bits64);
+  foreign "C" return (z);
+}

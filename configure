@@ -57,6 +57,7 @@ $x{sizeof_char} = ""   ;         # 1
 $x{stdc_version}= ""   ;         # 199409 - from     __STDC_VERSION__
 $x{stdc_iec559} = ""   ;         # defined/undefined __STDC_IEC_559__
 $x{arch}        = ""   ;         # x86-linux  
+$x{wordsize}    = ""   ;         # 32
 $x{ocaml_version} = "" ;         # OCaml Version
 
 $x{build_interp} = ""  ;         # whether we build qc--interp
@@ -280,6 +281,9 @@ $result && eval($result);
 $x{arch}=`./arch-os`;
 $x{arch} && chop($x{arch});
 
+$x{wordsize} = 32 if ($x{arch} =~ /^(sparc|x86|mips|powerpc)-/);
+$x{wordsize} = 64 if ($x{arch} =~ /^(alpha|ia64)-/);
+
 chdir ("../..") || die "cannot cd back to top level: $!";
 
 # ------------------------------------------------------------------ 
@@ -349,6 +353,7 @@ print LOG <<EOF;
     Architecture
     ------------------------------------------------------------------ 
     Architecture:   $x{arch}
+    Word size:      $x{wordsize}
     Endianness:     $x{endian}
     Sizes:          int:$x{sizeof_int} int*:$x{sizeof_ptr} char:$x{sizeof_char}
 
@@ -408,6 +413,7 @@ EOF
 # ------------------------------------------------------------------ 
 
 my @export = ( "arch"
+             , "wordsize"
              , "endian"
              , "cc"
              , "stdc_version"
