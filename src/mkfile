@@ -250,6 +250,10 @@ aux.ml          \
 aux.mli:        aux.nw
                 eval $OCAMLTANGLE
 
+fenv2.ml        \
+fenv2.mli:      fenv2.nw
+                eval $OCAMLTANGLE
+
 fenv.ml         \
 fenv.mli:       fenv.nw
                 eval $OCAMLTANGLE
@@ -262,6 +266,7 @@ agraph.ml       \
 agraph.mli:     agraph.nw
                 eval $OCAMLTANGLE
 
+rtl.smlview     \
 rtl.view        \
 rtl.asdl:       rtl.nw
                 eval $MISCTANGLE
@@ -281,6 +286,10 @@ uint64p.c:      uint64.nw
 
 value.mli       \
 value.ml:       value.nw
+                eval $OCAMLTANGLE
+
+elab2.mli       \
+elab2.ml:       elab2.nw
                 eval $OCAMLTANGLE
 
 elab.mli        \
@@ -375,12 +384,21 @@ VIEWS =         ast.view        \
                 rtl.view        \
                 fgraph.view     \
 
-master.asdl:    $ASDL $VIEWS
+SMLVIEWS =      rtl.smlview     \
+
+
+ocaml.asdl:     $ASDL $VIEWS
                 cat $ASDL           >  $target
                 echo "view OCaml {" >> $target
                 cat $VIEWS          >> $target
                 echo "}"            >> $target
-                
+
+sml.asdl:       $ASDL $SMLVIEWS
+                cat $ASDL           >  $target
+                echo "view SML {"   >> $target
+                cat $SMLVIEWS       >> $target
+                echo "}"            >> $target
+
 ast.ml          \
 ast.mli         \
 astUtil.ml      \
@@ -394,8 +412,24 @@ rtlUtil.mli     \
 fgraph.ml       \
 fgraph.mli      \
 fgraphUtil.ml   \
-fgraphUtil.mli: master.asdl                
+fgraphUtil.mli: ocaml.asdl                
                 asdlGen --ocaml --pickler=sexp $prereq
+
+ast.sml         \
+ast.sig         \
+astUtil.sml     \
+astUtil.sig     \
+                \
+rtl.sml         \
+rtl.sig         \
+rtlUtil.sml     \
+rtlUtil.sig     \
+                \
+fgraph.sml      \
+fgraph.sig      \
+fgraphUtil.sml  \
+fgraphUtil.sig: sml.asdl                
+                asdlGen --sml --pickler=sexp $prereq
 
 # ------------------------------------------------------------------ 
 # binaries
