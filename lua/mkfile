@@ -73,6 +73,25 @@ html:V:		$NWHTML
 dvi:VQ:
 	echo "nothing to be done for $target"     
 
+COUNTED=\
+  lua.nw \
+  luaast.nw \
+  luabaselib.nw \
+  luahash.nw \
+  luaiolib.nw \
+  lualib.nw \
+  luamathlib.nw \
+  luarun.nw \
+  luastrlib.nw \
+  luasyntax.nw \
+  luavalue.nw \
+  stdluainterp.nw \
+
+
+count:V: $COUNTED
+	nocount $prereq
+
+
 clean.opt:V:
 	rm -f $B*.cmx $B*.cmxa $B*.o $B*.a
 	rm -f $B$INTERP/*.cmx $B$INTERP/*.cmxa $B$INTERP/*.o $B$INTERP/*.a
@@ -178,6 +197,8 @@ LIBMLI = 	log.mli		\
 LIBMLI = ${LIBMLI:%.mli=$B%.mli}
 LIBCMI = ${LIBMLI:%.mli=%.cmi}
 
+rawcount:V: $LIBMLI $LIBML	
+	wc $prereq
 
 ${B}lua-$INTERP.cma:	$LIBCMO $LIBCMI
 	$OCAMLC $OCAMLC_FLAGS -a -o $target $LIBCMO

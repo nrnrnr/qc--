@@ -9,21 +9,17 @@
 <<luastrlib.mli>>=
 module M : Lua.Lib.BARECODE
 <<string builtins>>=
-let unimp s =
-  V.caml_func (fun _ -> I.error ("string library does not implement `" ^ s ^ "'"))
-
 <<support for [[format]]>>
 type 'a parser = int -> (int -> (unit -> 'a) -> 'a) -> (unit -> 'a) -> 'a
 
-let strindex = { V.embed = (fun n -> V.int.V.embed (n+1))
+let strindex = { V.embed   = (fun n -> V.int.V.embed (n+1))
                ; V.project = (fun v -> V.int.V.project v - 1)
                ; V.is = V.int.V.is
                } 
 
 let string_builtins =
-  let error s = I.error s in
   let invalid f x =
-    try f x with Invalid_argument m -> error ("Invalid argument: " ^ m) in
+    try f x with Invalid_argument m -> I.error ("Invalid argument: " ^ m) in
   let wrap_inv = function
     | V.Function (l, f) -> V.Function(l, invalid f)
     | v -> raise (V.Projection (v, "function")) in
@@ -62,7 +58,7 @@ let string_builtins =
   ; "ascii",   V.efunc (V.string **-> V.default 0 strindex **->> V.int)
                (fun s i -> Char.code (String.get s i))
   ; "format",  ifunc (V.string **-> V.value *****->> V.string) format
-  ; "gsub",    unimp "gsub"
+  ; "gsub",    V.caml_func (fun _ -> I.error "string library does not implement gsub")
   ] 
 @ 
 <<luastrlib.ml>>=
@@ -173,7 +169,7 @@ let find pat s =
   let pairs = ref [] in
   let push l x = l := x :: !l in
   let pop l =
-    match !l with n :: ns -> (l := ns; n) | [] -> error "unmatched )" in
+    match !l with n :: ns -> (l := ns; n) | [] -> I.error "unmatched )" in
   let lparen lp i succ fail =
     push lefts (lp, i); succ i (fun () -> ignore (pop lefts);  fail()) in
   let rparen i succ fail =
@@ -246,7 +242,7 @@ let percent = function
   | 'u' -> upper  | 'U' -> non upper
   | 'w' -> alnum  | 'W' -> non alnum
   | c when non alnum c -> (=) c
-  | _ -> error "bad % escape in pattern"   in
+  | _ -> I.error "bad % escape in pattern"   in
 @ 
 <<character-matching functions>>=
 let cclass cs = 
@@ -264,7 +260,7 @@ let cclass cs =
   | c   :: '-' :: ']' :: cs -> orp ((=) c) ((=) '-'), cs
   | c   :: '-' :: c'  :: cs -> orr (range c c') (pos3 cs)
   | c   :: cs               -> orr ((=) c) (pos3 cs)
-  | [] -> error "Bad character class in pattern" in
+  | [] -> I.error "bad character class in pattern" in
   match cs with
   | '^' :: cs -> let p, cs = pos cs in non p, cs
   | _ -> pos cs   in

@@ -162,20 +162,6 @@ arguments by using the embedding/projection pair produced by
   val func     : 'a mapf -> 'a map                 (* function *)
   val closure  : 'a mapf -> 'a map                 (* function or table+apply method *)
   val efunc    : 'a mapf -> 'a -> value            (* efunc f = (closure f).embed *)
-@ Here's an example: we embed the [[String.sub]] function, then apply
-it to some arguments.
-<<tests>>=
-let sub = (func (string **-> int **-> int **-> result string)).embed String.sub
-let apply = function Function (_, f) -> fun args -> take1 (f args)
-                   | v -> raise (Projection (v, "function"))
-let check = string.project (apply sub [string.embed "hello"; int.embed 0; int.embed 2])
-let _ = assert (check = "he")
-@ 
-If a function is impure (needs access to the Lua state) we use
-[[func]].
-<<tests>>=
-let setglobal {globals=g; fallbacks=f} n v = Table.bind g (String n) v
-let sg s = ((func (string **-> value **-> runit)).embed (setglobal s) : value)
 @ 
 \paragraph{Support for dynamically typed Lua functions}
 Type-based dispatch defines several alternatives for a function and
@@ -228,7 +214,6 @@ module Make (U : USERDATA) : S with type 'a userdata'  = 'a U.t
 module Make (U : USERDATA) : S with type 'a userdata'  = 'a U.t 
 = struct
   <<value toplevel>>
-  <<tests>>
 end
 @ 
 I have to repeat the datatype definition.
