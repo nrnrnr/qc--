@@ -10,6 +10,7 @@
 <$TOP/config/latex.mk
 
 NOWEAVE =       noweave
+NOTANGLE =      nofake
 NOTANGLE =      notangle
 CPIF =          cpif
 LINE =          '# %L "%F"%N'

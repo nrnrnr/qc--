@@ -41,32 +41,39 @@ all:V:          qc--     interp doc
 all.opt:V:      qc--.opt interp doc
 
 
-qc--:V:         lib dirs
+qc--:V:         tools lib dirs
                 for i in src 
                 do 
                     (echo "# cd $i" && cd $i && mk $MKFLAGS depend) || exit 1
                     (echo "# cd $i" && cd $i && mk $MKFLAGS update) || exit 1
                 done
 
-qc--.opt:V:     lib.opt dirs
-                for i in src doc
+qc--.opt:V:     tools lib.opt dirs
+                for i in src 
                 do 
                     (echo "# cd $i" && cd $i && mk $MKFLAGS depend)    || exit 1
                     (echo "# cd $i" && cd $i && mk $MKFLAGS update.opt)|| exit 1
                 done
 
 lib:V:          dirs
-                for i in cllib lua asdl rtl gen camlburg tools
+                for i in cllib lua asdl rtl gen 
                 do 
                     (echo "# cd $i" && cd $i && mk $MKFLAGS depend) || exit 1
                     (echo "# cd $i" && cd $i && mk $MKFLAGS update) || exit 1
                 done
 
 lib.opt:V:      dirs
-                for i in cllib lua asdl rtl gen camlburg tools
+                for i in cllib lua asdl rtl gen
                 do 
                     (echo "# cd $i" && cd $i && mk $MKFLAGS depend) || exit 1
                     (echo "# cd $i" && cd $i && mk $MKFLAGS update.opt) || exit 1
+                done
+
+tools:V:        lib dirs
+                for i in tools camlburg
+                do 
+                    (echo "# cd $i" && cd $i && mk $MKFLAGS depend) || exit 1
+                    (echo "# cd $i" && cd $i && mk $MKFLAGS update) || exit 1
                 done
 
 interp:V:       dirs
