@@ -1,6 +1,8 @@
-
 #include <stdio.h>
+
+#ifndef NOLUA
 #include <lua.h>
+#endif
 
 static union 
     { unsigned u; 
@@ -9,7 +11,10 @@ static union
 
 main(int argc, char **argv)
 {
+#ifndef NOLUA
     printf("$x{lua_version}='%s';\n", LUA_VERSION);
+#endif
+
     switch(endian.c[0]) {
         case 0xaa:  printf("$x{endian}='big';\n"); break;
         case 0xdd:  printf("$x{endian}='little';\n"); break;

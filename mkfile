@@ -17,7 +17,7 @@ VERSION =       `date +%Y%m%d`
 # SUBDIRS are made from left to right - order matters
 # ------------------------------------------------------------------ 
 
-SUBDIRS =       cllib asdl gen lua rtl camlburg tools doc src interp 
+SUBDIRS =       cllib asdl gen lua rtl camlburg tools doc src interp
 
 # A note on profiling.  Profiling is controlled in subdirectories by a
 # PROFILE variable in each mkfile.  Profiling is turned on by default,
@@ -43,8 +43,8 @@ SUBDIRS =       cllib asdl gen lua rtl camlburg tools doc src interp
 
 
 
-all:V:          config qc--     interp doc
-all.opt:V:      config qc--.opt interp doc
+all:V:          config qc--     $config_build_interp doc
+all.opt:V:      config qc--.opt $config_build_interp doc
 
 config:QV:
 	if [ -f config/config.mk ]; then
@@ -128,7 +128,7 @@ count:V:
 # delegate to subdirs
 # ------------------------------------------------------------------ 
 
-INST_DIRS=camlburg tools doc src interp
+INST_DIRS=camlburg tools doc src $config_build_interp
 
 # SHOULDN'T THESE TARGETS ALSO MK DEPEND???  ---NR
 

@@ -23,41 +23,43 @@ $configure_log  = "configure.log";          # log file
 # variables. You can set them here directly, if the script cannot find
 # them.
 
-$x{prefix}     = "/usr/local";  # where we install
+$x{prefix}      = "/usr/local";  # where we install
 
-$x{lua_h}      = ""   ;         # "/path/to/lua.h"
-$x{lualib_h}   = ""   ;         # "/path/to/lualib.h"    
-$x{liblua}     = ""   ;         # "/path/to/liblua.so"  
-$x{liblualib}  = ""   ;         # "/path/to/liblualib.so"
-$x{lua_inc}    = ""   ;         # -I for lua.h    "-I/usr/local/include/lua"
-$x{lua_lib}    = ""   ;         # -L for liblua.so "-L/usr/local/lib"
-$x{lua_libs}   = ""   ;         # "-llua -llualib" ld(1) flags for Lua libs
+$x{lua_h}       = ""   ;         # "/path/to/lua.h"
+$x{lualib_h}    = ""   ;         # "/path/to/lualib.h"    
+$x{liblua}      = ""   ;         # "/path/to/liblua.so"  
+$x{liblualib}   = ""   ;         # "/path/to/liblualib.so"
+$x{lua_inc}     = ""   ;         # -I for lua.h    "-I/usr/local/include/lua"
+$x{lua_lib}     = ""   ;         # -L for liblua.so "-L/usr/local/lib"
+$x{lua_libs}    = ""   ;         # "-llua -llualib" ld(1) flags for Lua libs
 
 # the binaries below are checked to be on $PATH. It does not make sense
 # to set them since we never use the full PATH. Extend PATH instead.
 
-$x{ocamlc}     = ""   ;         # "/path/to/binary"
-$x{ocamlc}     = ""   ;
-$x{ocamlyacc}  = ""   ;
-$x{notangle}   = ""   ;
-$x{cpif}       = ""   ;
-$x{awk}        = ""   ;
-$x{cc}         = ""   ;
-$x{mk}         = ""   ;
-$x{latex}      = ""   ;
-$x{pod2html}   = ""   ;
+$x{ocamlc}      = ""   ;         # "/path/to/binary"
+$x{ocamlc}      = ""   ;
+$x{ocamlyacc}   = ""   ;
+$x{notangle}    = ""   ;
+$x{cpif}        = ""   ;
+$x{awk}         = ""   ;
+$x{cc}          = ""   ;
+$x{mk}          = ""   ;
+$x{latex}       = ""   ;
+$x{pod2html}    = ""   ;
 
 # these values are always tested, you cannot set them
 
-$x{lua_version}= ""   ;         # from LUA_VERSION macro
-$x{endian}     = ""   ;         # big/little
-$x{sizeof_int} = ""   ;         # 4  
-$x{sizeof_ptr} = ""   ;         # 4
-$x{sizeof_char}= ""   ;         # 1
-$x{stdc_version}= ""  ;         # 199409 - from     __STDC_VERSION__
-$x{stdc_iec559}= ""  ;          # defined/undefined __STDC_IEC_559__
-$x{arch}       = ""   ;         # x86-linux  
-$x{ocaml_version}     = ""   ;         # OCaml Version
+$x{lua_version} = ""   ;         # from LUA_VERSION macro
+$x{endian}      = ""   ;         # big/little
+$x{sizeof_int}  = ""   ;         # 4  
+$x{sizeof_ptr}  = ""   ;         # 4
+$x{sizeof_char} = ""   ;         # 1
+$x{stdc_version}= ""   ;         # 199409 - from     __STDC_VERSION__
+$x{stdc_iec559} = ""   ;         # defined/undefined __STDC_IEC_559__
+$x{arch}        = ""   ;         # x86-linux  
+$x{ocaml_version} = "" ;         # OCaml Version
+
+$x{build_interp} = ""  ;         # whether we build qc--interp
 
 # ------------------------------------------------------------------ 
 # Important Search Paths
@@ -189,9 +191,12 @@ sub failure {
     (1) Enlarge your PATH to make sure all tools are found; then run
         this script again.
 
-    (2) If Lua-related variables are undefined, try to add more
-        directories to the list of the searched directories at the top
-        of this script. Run ./configure again.
+    (2) If only Lua-related variables are undefined, you should still
+        be able to compile qc-- but will not be able to compile
+        qc--interp (the Quick C-- Interpreter).  If you want to
+        compile qc--interp you should try to add more directories
+        to the list of the searched directories at the top of this
+        script and run ./configure again.
 
     (3) Create config/config.mk from config/config.mk.default and edit
         it manually. No need to run this script again.
@@ -252,6 +257,16 @@ $x{lua_inc}         = $x{lua_inc}      || "-I" . dirname($x{lua_h});
 $x{lua_lib}         = $x{lua_lib}      || "-L" . $path;
 $x{lua_libs}        = $x{lua_libs}     || "$liblua $liblualib";
 
+# if we don't find Lua we need to let our config.c code know that
+$config_c_flags  = "";
+$x{build_interp} = "interp";
+
+if ($x{lua_h} eq '') {
+	$config_c_flags = "-DNOLUA";
+	$x{build_interp} = "";
+}
+
+
 # ------------------------------------------------------------------ 
 # Run tests. The config.c test script emits Perl code that sets
 # variables, hence the output is eval'ed.
@@ -259,7 +274,7 @@ $x{lua_libs}        = $x{lua_libs}     || "$liblua $liblualib";
 
 chdir("config/aux") || die "cannot cd to config/aux: $!";
 
-$result = $x{cc} && runtest($x{cc}, "$x{lua_inc} config.c");
+$result = $x{cc} && runtest($x{cc}, "$x{lua_inc} $config_c_flags config.c");
 $result && eval($result);
 $x{arch}=`./arch-os`;
 $x{arch} && chop($x{arch});
@@ -270,10 +285,19 @@ chdir ("../..") || die "cannot cd back to top level: $!";
 # Collect undefined configuration variables
 # ------------------------------------------------------------------ 
 
+$fatal = 0;
+
 @missing = ();
 foreach my $v (keys %x) {
     if (not defined($x{$v})) { print LOG "undefined: $v\n" }
-    if ($x{$v} eq '')        { push(@missing,$v)       }
+
+    # RRO -- this is a hack below so we don't complain about not finding
+    #  build_interp and further confuse anyone using this scripts...
+    if (($x{$v} eq '') && ($v ne 'build_interp')) {
+		push(@missing,$v);
+
+        if ($v !~ /lua/) { $fatal = 1; }
+	}
 }
 
 # ------------------------------------------------------------------ 
@@ -338,8 +362,9 @@ if (@missing) {
     variables: 
     
         @missing
+
 EOF
-    failure();    
+	if ($fatal) { failure(); }
 }
     
 
@@ -359,13 +384,21 @@ EOF
     failure();
 }
 
-if ($x{lua_version} !~ /4\./) {
+if (!$x{lua_version}) {
+	print <<EOF;
+    You need an installation of Lua to compile qc--interp.  Disabling
+    compilation of qc--interp.
+
+EOF
+    $x{build_interp} = "";
+} elsif ($x{lua_version} !~ /4\./) {
     print <<EOF;
 
     You need an installation of Lua 4.x, but we found $x{lua_version}.
+    Disabling compilation of qc--interp.
 
 EOF
-    failure();
+    $x{build_interp} = "";
 }
    
 # ------------------------------------------------------------------ 
@@ -381,6 +414,7 @@ my @export = ( "arch"
              , "lua_lib"
              , "lua_libs"
              , "prefix"
+             , "build_interp"
              );
              
 open(OUT,"> $config_mk") || die "cannot open $config_mk";
@@ -452,7 +486,7 @@ close(OUT) || die "cannot close file $config_mk: $!";
 
 print LOG "configuration written to $config_mk\n";
 print <<EOF;
-    The configuration was successful! The following files were written:
+    The configuration was successful. The following files were written:
 
         log file:       $configure_log
         configuration:  $config_mk
