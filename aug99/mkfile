@@ -1,0 +1,134 @@
+NOWEAVE=noweave
+
+SOURCES=asm cmmir ast
+# SOURCES=`cmsrcs *.cm | sed 's/\.nw$//'`
+SOURCESDOTDEFS=`echo $SOURCES | sed 's/ /.defs /g;s/$/.defs/'`
+SOURCESDOTTEX=`echo   $SOURCES | sed 's/ /.tex /g;s/$/.tex/'`
+SOURCESDOTHTML=`echo   $SOURCES solve | sed 's/ /.html /g;s/$/.html/'`
+SOURCESDOTNW=`echo   $SOURCES solve | sed 's/ /.nw /g;s/$/.nw/'`
+SOURCESREGEXP=`echo $SOURCES | sed 's/ /|/g'`
+
+NWLIB1=/usr/public/pkg/noweb/lib
+NWLIB2=/usr/local/lib/noweb
+NWLIB3=/usr/cs/contrib/lib/noweb
+NWLIB4=/usr/local/noweb/lib
+
+# change code to put things in derived locations
+
+HTMLDIR=WWW/
+TEXDIR=TEX/
+
+%.g: %.nw
+	notangle -L -R$target $prereq | cpif $target
+
+
+all:V: html
+
+clean:V: 
+	rm -f *.html *~ *.t cm.dot cm.ps cm.eps 
+	rm -f *.aux *.dvi *.toc *.ps *.log *.blg
+
+clobber:V: clean
+	rm -f *.g *.sml *.sig *.ord *.lex *.tab
+	rm -f *.tex *.html *.defs cm.gif
+	rm -rf CM NW WWW
+
+html:V: $SOURCESDOTHTML
+
+################################################################
+#
+#	counting lines of code
+
+counts:V: count
+count:V: $SOURCESDOTNW
+	PATH="$NWLIB1:$NWLIB2:$NWLIB3:$NWLIB4:$PATH"
+	export PATH
+	markup $prereq | elide 'refman:*' '\*' | nocount -f
+
+deadcount:V: $SOURCESDOTNW
+	roots=`noroots $prereq | sed "/'/d;"'/^<<refman:/d;s/"/\\"/g;s/^<</-R"/;s/>>$/"/' | fgrep ' '`
+	eval notangle -filter \"elide 'refman:*'\" \"-R*\" $roots $SOURCESDOTNW | wc
+	
+
+
+$TEXDIR%.ps: %.dot
+	dot -Tps $prereq > $target
+
+%.eps: %.ps
+	ps2epsi $prereq $target
+
+$HTMLDIR%.gif: %.dot
+	egrep -v '^  (page|size|ratio) = ' $prereq |
+	dot -Tgif | giftool -rgb white > $target
+
+$HTMLDIR%.html: %.nw
+	echo '\section*{Contents}
+	\tableofcontents' |
+	$NOWEAVE -filter 'elide refman:*' -filter l2h -autodefs sml -html -index - $prereq | htmltoc > $target
+
+${HTMLDIR}index.html: index.nw
+	$NOWEAVE -filter l2h -html $prereq | htmltoc | htmlgif > $target
+
+
+################ defined identifiers
+
+^($SOURCESREGEXP)'\.'defs:R: '\1'.nw 
+	nodefs -auto ocaml $prereq > $target
+
+all.defs: $SOURCESDOTDEFS 
+	sort -u $prereq | cpif $target
+
+################ literate source 
+
+^old($SOURCESREGEXP)'\.'tex:R: '\1'.nw all.defs
+	$NOWEAVE -filter 'elide refman:*' -autodefs sml -indexfrom all.defs -n $stem1.nw >$target
+
+^($SOURCESREGEXP)'\.'tex:R: '\1'.nw 
+	$NOWEAVE -x -n $stem1.nw >$target
+
+DOCINPUTS="doc.tex $SOURCESDOTTEX doc.nwi"
+
+docin:V: $DOCINPUTS
+
+doc.dvi: $DOCINPUTS
+
+doc.tex: doc.nw
+	$NOWEAVE -delay doc.nw >$target
+
+doc_check:V: doc.tex
+	for i in $SOURCESDOTTEX; do 
+	  j=`basename $i .tex`
+	  fgrep -s "\include{$j}" doc.tex || echo "$i not in doc" 1>&2
+        done
+
+%.nwi: %.tex
+	noindex $prereq
+
+
+###################
+#
+#  
+
+caml:V: asm.cmi asm.cmo cmmIR.cmi cmmIR.cmo cMinusMinus.cmi cMinusMinus.cmo
+
+CAMLOPTS="-I /home/cellar/nr/zephyr/asdlGen-19990816/src/ocaml"
+
+asm.mli asm.ml asmUtil.mli asmUtil.ml: asm.asdl
+	camlGen --ocaml --pickler=sexp $prereq
+
+cmmIR.mli cmmIR.ml rTL.mi rTL.ml: crtl.asdl cmmir.asdl
+	camlGen --ocaml --pickler=sexp $prereq
+
+cMinusMinus.mli cMinusMinus.ml cMinusMinusUtil.mli cMinusMinusUtil.ml: ast.asdl
+	camlGen --ocaml --pickler=sexp $prereq
+
+%.asdl: %.nw
+	notangle -R$target -L' --#line %-1L "%F"%N'  $prereq > $target
+
+%.cmi: %.mli
+	ocamlc $CAMLOPTS -c $prereq
+%.cmo: %.ml
+	ocamlc $CAMLOPTS -c $prereq
+
+cmmIR.cmi: rTL.mli
+cmmIR.cmo: rTL.ml

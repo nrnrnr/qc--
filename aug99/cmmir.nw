@@ -1,0 +1,88 @@
+\section{Intermediate-code nodes}
+
+<<cmmir.asdl>>=
+module CmmIR (imports RTL) {
+  -- defines the intermediate form of C-- (just the IR nodes)
+  -- needs to be supplemented by an assembly-language interface and a wrapper
+  --   to be a full layer
+
+  <<ASDL definitions for nodes of abstract \PAL>>
+}
+@ 
+Because ASDL handles trees, not graphs, we represent the graph as a
+list of nodes, and we refer to nodes using integer node ids.
+<<ASDL definitions for nodes of abstract \PAL>>=
+graph = (node*) -- node ids are indexes into this list
+nodeid = (int)
+@
+Flow-graph nodes are taken from Table 2 of 
+the paper ``Exceptions Need Not Be Exceptional.''
+<<ASDL definitions for nodes of abstract \PAL>>=
+node = Entry (continuation*, nodeid next)
+     | Exit
+     | Copyin  (formal*, copy_context, string convention, nodeid next)
+     | Copyout (actual*, copy_context, string convention, nodeid next)
+     | Calleesaves (string* variables, nodeid next)
+     | Assign (RTL.rtl, nodeid next)
+     | Branch (RTL.exp, nodeid true, nodeid false) -- exp is condition
+     | Goto (RTL.exp, nodeid* targets)             -- exp is address of target
+     | Call (RTL.exp, contbund)
+     | Jump (RTL.exp, nodeid last)
+     | Invoke (RTL.exp, nodeid last)
+     | Yield (RTL.exp, contbund)
+attributes (keyvalue* properties) -- used for spans
+keyvalue = (string, RTL.exp)
+@
+A continuation is a named node.
+<<ASDL definitions for nodes of abstract \PAL>>=
+continuation = (string, nodeid)
+@
+
+The copy nodes ([[Copyin]] for formals and [[Copyout]] for actuals) 
+are used in three different contexts.  The contexts must be
+identified, because each context is likely to have a different
+value-passing convention.
+<<ASDL definitions for nodes of abstract \PAL>>=
+copy_context = ProcedureParameters    -- used in call, jump, prologue
+             | ProcedureResults       -- used in call, return
+             | ContinuationParameters -- used in invoke, continuation
+@ A formal or actual carries a type and an optional hint.
+<<ASDL definitions for nodes of abstract \PAL>>=
+formal = (RTL.location, RTL.ty, hint?) 
+actual = (RTL.exp,      RTL.ty, hint?)
+   -- note RTL.location could be variable, temporary, or h/w register
+@ Note that the type is an RTL type; in particular, the distinction
+between [[bits]]$k$ and [[float]]$k$ has been folded into the hints,
+according to the following table:
+\begin{quote}
+\begin{tabular}{|l|l||l|l|}
+\hline
+\multicolumn2{|c||}{Source}&\multicolumn2{c|}{Intermediate}\\
+Type&Hint&Type&Hint\\
+\hline
+[[bits]]$k$& --- & $k$ & --- \\
+\hline
+[[bits]]$k$& \emph h & $k$ & \emph h \\
+\hline
+[[float]]$k$& --- & $k$ & \texttt{float} \\
+\hline
+[[float]]$k$& \emph  h & $k$ & \texttt{float-} \emph h \\
+\hline
+\end{tabular}
+\end{quote}
+<<ASDL definitions for nodes of abstract \PAL>>=
+hint = (string)
+@
+The continuation bundle attached to a call shows the possible
+continuations: normal, cuts, unwinds, and returns.
+<<ASDL definitions for nodes of abstract \PAL>>=
+contbund = 
+  (nodeid normal, nodeid* cuts, nodeid* unwinds, nodeid* returns, nodeid? aborts)
+@ 
+For an entire procedure, we want its name, its name-mangling
+convention, its formal parameters, its local variables, and its flow graph.
+(We don't need the calling convention as it's embodied in the copy
+nodes in the flow graph.)
+<<ASDL definitions for nodes of abstract \PAL>>=
+proc = (string name, string mangling, formal* args, formal* locals, graph)
+@

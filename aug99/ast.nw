@@ -1,0 +1,247 @@
+%----------------------------------
+\section{Abstract syntax for C--}
+%----------------------------------
+
+<<ast.asdl>>=
+<<c--.asdl>>
+<<c--.asdl>>= 
+module CMinusMinus { -- change to AbstractSyntax or AST?
+
+  <<definitions>>
+
+}
+
+@ 
+%-------------------------------------------------------
+\subsection{Names}
+%-------------------------------------------------------
+
+<<definitions>>=
+var_name     = (string)          -- Args, local, and global variables
+const_name   = (string)          -- Procedures and labels in data blocks
+cont_name    = (string)          -- Name of a continuation
+label_name   = (string)          -- Name of a label in a procedure
+segment_name = (string)
+
+alignment = (int bytes)       -- Align on an n-byte boundary
+
+primop_name = (string)
+
+char = (int)            -- ASDL has no char type!
+@ 
+A [[var_name]] is the name of a \emph{variable}; that is, a 
+procedure argument, local variable, or global register.  You can't take
+the address of a variable; you can assign to it.  Variables cannot be
+imported or exported.
+
+A [[const_name]] is the name of a \emph{constant}, often the address of
+a memory location.  A [[const_name]] names a value, not a location; it is
+immutable and you can't assign to it.
+Constants defined at the top level can be imported and
+exported.  The value of a constant may not be fixed until link time.
+
+@
+% -------------------------------------------------------
+\subsection{Programs}
+%-------------------------------------------------------
+
+Any names introduced by any [[decl]] are in scope everywhere
+in the module, including before the declaration site. 
+
+<<definitions>>=
+program = (decl*) 
+
+decl = Import( const_name name, mangling_info mangle )
+     | Export( const_name name, mangling_info mangle )
+
+     | Const( const_name, compile_static_expr value )
+     | Data( segment_name? segment, datum* data )
+
+     | Procedure( segment_name? segment
+                , calling_convention? conv
+                , const_name name
+                , formal* formals
+                , stmt* body
+                )
+     | Global   (var_name name, type, string? register)
+     | SpanDecl (compile_static_expr token, link_static_expr value, decl*)
+@ 
+
+%-------------------------------------------------------
+\subsection{Data blocks}
+%-------------------------------------------------------
+
+Initialized data may be specified either value by value, or as an
+entire block of memory, given as a string.
+The lexer may support multiple ways of writing string literals, e.g.,
+C-style literals plus literals encoded using UTF-8.
+No matter how the literals are written in the surface syntax, in the
+abstract syntax they are represented as the contents of the
+initialized memory.%
+\footnote{So to convert UTF-8 to abstract syntax, the lexer will need
+to know the byte order of the target machine.}
+<<definitions>>=
+datum = Align( alignment alignment )
+      | DataLabel( const_name name )
+      | InitializedData( type, link_static_expr value )
+      | InitializedBlock( string memory_contents )
+      | UninitializedData( type, int how_many )
+@ Note that initialisers must be computable at link time.
+@
+
+%-------------------------------------------------------
+\subsection{Procedures}
+%-------------------------------------------------------
+
+Hints on both formal and actual parameters are used to lower parameter
+passing.
+Along with types, the hints label transitions in a Bailey-Davidson
+automaton \cite{bailey:formal}.
+<<definitions>>=
+formal = Formal( type type, var_name name )
+@ 
+
+%-------------------------------------------------------
+\subsection{Statements}
+%-------------------------------------------------------
+
+Variable declarations can appear anywhere in a procedure body, including after
+the first use of the variable, but there are
+no nested scopes---the scope of a declaration is the entire procedure.
+(If you prefer, all declarations are logically gathered together
+and placed at the top.)
+<<definitions>>=
+stmt = VarDecl( var_name name, type type )
+     | StackDecl( datum* data )         -- No initialisation allowed
+     <<other constructors for [[stmt]]>>
+@ 
+{\PAL} has multiple assignment.
+<<other constructors for [[stmt]]>>=
+| Assignments( assignment* )
+<<definitions>>=
+assignment = Assign ( lvalue lhs, expr rhs )
+lvalue     = Var( var_name name )
+           | Mem( expr address, alignment, type )
+@ 
+Control flow includes if-then-else and goto-with-label.
+We've decided not to include goto with parameters; if necessary, that
+construct can be treated as syntactic sugar.
+<<other constructors for [[stmt]]>>=
+| IfThenElse( boolean_expr condition, stmt* then, stmt* else)
+| GoTo ( expr target, label_name* possible_targets )
+| Label( label_name name )
+@ If the list of possible target labels is empty, the target address
+must be the name of a label.
+@
+Continuations are a bit like labels, except they may take parameters,
+and their values are not known until run time.
+<<other constructors for [[stmt]]>>=
+| Continuation( cont_name name, var_names? formals)
+<<definitions>>=
+var_names = (var_name*)
+@
+The switch statement is like the Modula-3 case statement, except that
+ranges $l\mathtt{..}h$, when $l \mathrel{>_u} h$, are given a ``wrap
+around modulo~$2^n$'' interpretation, where $n$ is the number of bits in
+$l$~and~$h$.
+<<other constructors for [[stmt]]>>=
+| Switch( expr scrutinee, switch_alt* alts )
+<<definitions>>=
+switch_alt = Alt( range* ranges, stmt* rhs )
+range      = (int lo, int? hi)
+@ 
+Calls, jumps, and invocation may all have hints about the calling
+convention.
+<<other constructors for [[stmt]]>>=
+| Call	( var_name* results
+        , calling_convention? conv
+        , expr address
+        , actual* actuals
+        , call_annotation* annotations
+        )
+| Jump  ( calling_convention? conv
+        , expr address
+      	, actual* actuals
+        )
+| Invoke( calling_convention? conv
+        , expr continuation
+      	, actual* actuals
+        )
+<<definitions>>=
+actual = (string? hint, expr value)
+call_annotation = CutsTo    (cont_name cont)
+                | UnwindsTo (cont_name cont)
+                | ReturnsTo (cont_name cont)
+                | Aborts
+@ Returns also bear hints about the values returned, but they need not
+identify the calling convention, as that is implicit in the definition
+of the procedure.
+<<other constructors for [[stmt]]>>=
+| Return( actual* results, calling_convention? conv )
+@ 
+Spans can cover statements as well as declarations
+<<other constructors for [[stmt]]>>=
+| SpanStmt (compile_static_expr token, link_static_expr value, stmt*)
+@ 
+
+%-------------------------------------------------------
+\subsection{Expressions}
+%-------------------------------------------------------
+
+As when initializing data, the lexer erases distinctions among
+different sorts of string literals.
+<<definitions>>=
+expr = SimpleLit( simple_lit value )
+     | StringLiteral( string value )
+
+     | Fetch( lvalue )
+
+     | PrimOp( primop_name op, expr* args )
+@ Do primops need more structure?  I think not.
+@
+The value of a [[compile_static_expr]] can be computed at compile time.
+The value of a [[link_static_expr]] can be computed at link time.
+A [[boolean_expr]] must have type [[bool]].
+<<definitions>>=
+compile_static_expr = (expr)
+link_static_expr    = (expr)
+boolean_expr        = (expr)
+@ 
+
+
+%-------------------------------------------------------
+\subsection{Types (rather simple!)}
+%-------------------------------------------------------
+
+Widths are in bits.
+<<definitions>>=
+type = BitsType(  int width )
+     | FloatType( int width )
+@ 
+
+%-------------------------------------------------------
+\subsection{Literals}
+%-------------------------------------------------------
+
+Each literal has a well defined size, independent of the context in
+which it appears.
+Therefore, we need some way of specifying the size.
+<<definitions>>=
+simple_lit = Bits( int value )
+           | AsciiChar( char value )
+           | UnicodeChar( string value )  -- Two ASCII chards in UTF8
+@ 
+
+%-------------------------------------------------------
+\subsection{Name mangling and calling conventions}
+%-------------------------------------------------------
+
+We aren't sure what to do yet.
+
+<<definitions>>=
+mangling_info = NoManglingInfo
+
+calling_convention  = (string)
+@ 
+
+
