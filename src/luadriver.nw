@@ -27,13 +27,10 @@ $debug 1
 
 Frontends = Frontends or { }
 
---
--- Global Variables
---
+Backend["x86-linux"]     = Backend.x86
+Backend["powerpc-darwn"] = Backend.ppc
+backend = Backend[Boot.arch_os]  -- can be changed on command line
 
-backend = nil   -- initialized by command-line driver
-if Boot.arch_os == "x86-linux"       then backend = Backend.x86 end
-if Boot.arch_os == "powerpc-darwin"  then backend = Backend.ppc end
 
 -- 
 -- Everything starts from here
@@ -471,7 +468,6 @@ end
 But they use different tables and different linking commands.
 <<Lua command-line driver>>=
 function CMD.whatfuns["-compile"]()
-  backend = backend or Backend.x86
   CMD.translate_files(Options.argv, CMD.compilertab)
   if Options.stop_count == 0 and Ld.objects ~= "" then
     CMD.exec(Ld.cmd(Options.output or 'a.out'))
@@ -485,7 +481,6 @@ function CMD.whatfuns["-compile"]()
 end
 
 function CMD.whatfuns["-interp"]()
-  backend = backend or Backend.interp
   CMD.translate_files(Options.argv, CMD.interptab)
   if Options.stop_count == 0 then
     CMD.qs2exe(CMD.qslist, Options.output) 
