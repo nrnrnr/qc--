@@ -250,7 +250,15 @@ rule token = parse
   | ws+         { fun map -> token lexbuf map }
   | tab         { fun map -> tab lexbuf map; token lexbuf map }
   | nl          { fun map -> nl lexbuf map ; token lexbuf map }
-  | ws* '#'     { fun map -> line lexbuf map 0; token lexbuf map }
+  | nl ws* '#'  { fun map -> line lexbuf map 0; token lexbuf map }
+  | ws* '#'     { fun map -> 
+                  if Lexing.lexeme_start lexbuf = 0 then 
+                        ( line lexbuf map 0
+                        ; token lexbuf map
+                        )
+                  else
+                        error lexbuf map "illegal character" 
+                }
   | ";"         { fun map -> P.SEMI         }
   | ":"         { fun map -> P.COLON        }
   | "::"        { fun map -> P.CCOLON       }
