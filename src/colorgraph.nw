@@ -305,6 +305,10 @@ type moveList = CoalescedMove
 @
 
 
+%-------------------------------------------------------------------
+\subsection{Graph Coloring State}
+%-------------------------------------------------------------------
+
 The [[colorGraph]] record type represents the interference graph and maintains
 the current state of the graph coloring.
 
@@ -359,20 +363,25 @@ Additional information is also stored:
 
 <<graph coloring types>>=
 type color = Register.t
+type igNode = (tempList,Register.t) impListItem
+type moveNode = (moveList, G.node) impListItem
+type moveWorklist = (moveList, move) impListGroup
+type tempWorklist = (tempList, Register.t) impListGroup
+
 type 'a colorGraph = { mutable adjSet : EdgeSet.t
-                     ; mutable adjListMap : (tempList,Register.t) impListItem list RM.t
+                     ; mutable adjListMap : igNode list RM.t
                      ; mutable degreeMap : int RM.t
-                     ; mutable moveListMap : (moveList,G.node) impListItem list RM.t
+                     ; mutable moveListMap : moveNode list RM.t
                      ; mutable aliasMap : Register.t RM.t
                      ; mutable colorMap : color RM.t
                      ; mutable spills : RS.t
                      ; mutable spillMap : (Automaton.loc * Register.t list) RM.t
 
-                     ; mutable regToItem : (tempList,Register.t) impListItem RM.t
-                     ; mutable tempLG : (tempList, Register.t) impListGroup
+                     ; mutable regToItem : igNode RM.t
+		     ; mutable regToClass : RC.t RM.t
 
-                     ; mutable moveLG : (moveList, move) impListGroup
-
+                     ; mutable tempLG : tempWorklist
+                     ; mutable moveLG : moveWorklist
                      ; mutable luaColorOverride : 'a
                      ; mutable allColors : color list
                      ; mutable colors : RS.t SpaceMap.t
@@ -419,6 +428,7 @@ let cgInfo =
         | ActiveMove      -> actvm in
        { adjSet = EdgeSet.empty
        ; regToItem = RM.empty
+       ; regToClass = RM.empty
        ; adjListMap = RM.empty
        ; degreeMap = RM.empty
        ; moveListMap = RM.empty
@@ -468,6 +478,7 @@ let clearCGInfo cg {Proc.cc = colors} =
         | ActiveMove      -> actvm in
     let () = cg.adjSet <- EdgeSet.empty in
     let () = cg.regToItem <- RM.empty in
+    let () = cg.regToClass <- RM.empty in
     let () = cg.adjListMap <- RM.empty in
     let () = cg.degreeMap <- RM.empty in
     let () = cg.moveListMap <- RM.empty in
@@ -540,17 +551,19 @@ because the temp must interfere with registers in other register spaces.
 Instead, we set $degree[t] = K - R$, where $K$ is the total number of registers and
 $R$ is the number of registers in temp $t$'s register space.
 
-The predicate [[interfere]] determines whether two registers interfere.
+The predicate [[interfere]] determines whether two temporaries compete for
+registers.
 <<build>>=
 let resetDegree target cg temp =
     cg.degreeMap <-
         RM.add temp (cg.k - (regs_in_space target cg temp)) cg.degreeMap
 
-let interfere (s1,_,_ as t1) (s2,_,_ as t2) target cg =
-    RU.Eq.space s1 s2 ||
-        let s1 = possibleColors target cg t1 in    
-        let s2 = possibleColors target cg t2 in
-            not (RS.is_empty (RS.inter s1 s2))
+let interfere t1 t2 target cg =
+   let c1 = RM.find t1 cg.regToClass in
+   let c2 = RM.find t2 cg.regToClass in
+   let competes = RC.may_alias c1 c2 in
+   Debug.eprintf "colorgraph" "Interferes? %b\n" competes;
+   competes
 @
 
 We don't add an edge to the interference graph if it already exists or if
@@ -581,23 +594,33 @@ the [[cg]] record.
 Then, we build the interference graph by folding over every node of the \cfg,
 adding interferences as necessary.
 We also build a map ([[regToItem]]) from a register to a listgroup item.
+We also want to map each interference graph node to its register class.
 
 <<build>>=
 let build cg {Proc.cfg = cfg; Proc.target = target} =
-  (*Debug.eprintf "colorgraph" "Colorgraph\n"; *)
   let () = if Aux.Option.is_some (!(cg.tempLG Initial)) then
     Impossible.impossible "Temps on initial list prematurely" in
-  let regs =
-    G.fold_nodes (fun node allregs -> G.defs node ++ G.uses node ++ allregs)
+  let temps =
+    G.fold_nodes (fun node alltemps -> G.defs node ++ G.uses node ++ alltemps)
       RS.empty cfg in
-  Debug.eprintf "colorgraph" "build regs: %s" (Register.Set.to_string regs);
+  Debug.eprintf "colorgraph" "build temps: %s\n" (RS.to_string temps);
   let regMap =
-    RS.fold (fun r map -> resetDegree target cg r
-        ; if is_tmp target r
-        then RM.add r (ilg_add cg.tempLG Initial r) map
-        else RM.add r (ilg_add cg.tempLG Precolored r) map)
-      regs cg.regToItem in
-  let () = cg.regToItem <- regMap in
+    RS.fold (fun r map -> resetDegree target cg r;
+                          let item = if is_tmp target r then 
+			                ilg_add cg.tempLG Initial r
+			             else ilg_add cg.tempLG Precolored r in
+			  RM.add r item map) 
+            temps cg.regToItem in
+  let classMap = 
+    RS.fold (fun ((s,_,_) as r) map -> 
+      let c = RC.mkClass s target cg.allColors  in
+      RM.add r c map) temps cg.regToClass in
+  let () = cg.regToClass <- classMap in
+  let () = cg.regToItem <- regMap in 
+  Debug.eprintf "colorgraph" "registerclass map \n %s\n"
+    (RM.fold (fun (((c,_,_),_,_) as tmp) rclass rest -> 
+      Printf.sprintf "%s ->  %s \n %s" (register_to_string tmp) (RC.to_string rclass) rest ) 
+       cg.regToClass "");
   <<addInterference>>
   G.iter_nodes addInterference cfg;
   true
@@ -647,14 +670,15 @@ into worklists:
 
 let makeWorklist cg _ = 
       let addToLists = function
-        | temp when RM.find temp.v cg.degreeMap >= cg.k ->
-            ilg_switch cg.tempLG SpillWorklist temp
+        | temp when RM.find temp.v cg.degreeMap >= 
+            (RC.cardinal (RM.find temp.v cg.regToClass)) ->
+              ilg_switch cg.tempLG SpillWorklist temp
         | temp when moveRelated temp cg ->
             ilg_switch cg.tempLG FreezeWorklist temp
         | temp ->
-           ilg_switch cg.tempLG SimplifyWorklist temp in
-    let () = ilg_iter addToLists (!(cg.tempLG Initial)) in
-        true
+            ilg_switch cg.tempLG SimplifyWorklist temp in
+      let () = ilg_iter addToLists (!(cg.tempLG Initial)) in
+      true
 @
 
 It is useful to have observers that take a [[temp]] as an argument and
@@ -1249,6 +1273,16 @@ let listMapAdd value key listMap =
   RM.add key (value::(listMapFind key listMap)) listMap
 @
 
+Lazy debugging function to convert a register to a debug string.
+
+<<register to string>>=
+let register_to_string ((s,_,_), i, Register.C n) = 
+  if n = 1 then
+    Printf.sprintf "%c%d" s i
+  else
+    Printf.sprintf "%c%d:%d" s i n
+@ 
+
 \subsection{Lua registration}
 
 <<colorgraph.ml>>=
@@ -1261,6 +1295,7 @@ module RM  = R.Map
 module RS  = R.Set
 module RSX = R.SetX
 module RU  = Rtlutil
+module RC  = Registerclass.RegisterClass
 let ( ++ ) = RS.union 
 let imposs = Impossible.impossible
 
@@ -1451,6 +1486,7 @@ module Make = All.Make
     let cgSay  = cfgSay
 
     <<list as set>>
+    <<register to string>>
     <<node observers>>
     <<print CGInfo>>
     <<init cgInfo>>
