@@ -17,6 +17,8 @@ Test.files = { "add.c--"
              , "conj.c--"
 	           , "divmod.c--"
 	           , "emptyifbody.c--"
+	           , "if-false.c--"
+	           , "if-false2.c--"
              , norun("eqasolve-000.c--")
              , "exp-000.c--"
              , norun("exp-001.c--")
