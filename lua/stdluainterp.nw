@@ -782,11 +782,24 @@ The [[with_stack]] function handles the stack: it pushes new info, and
 it pops on both normal and exceptional termination.
 Too bad Caml doesn't have try-finally.
 <<interp [[with_stack]]>>=
+let indent = ref 0
 let with_stack info g f x =
   let _ = currentloc_tostack g in
   let _ = g.V.callstack <- (info, None) :: g.V.callstack in
   let _ = currentloc_fromstack g in
-  let pop () = g.V.callstack <- List.tl g.V.callstack; currentloc_fromstack g in
+(*
+let _ = (prerr_string (String.make (!indent) ' ');
+         prerr_string "=> ";
+             List.iter prerr_string (V.activation_strings g (info, None));
+             prerr_endline "") in
+*)
+  let pop () = g.V.callstack <- List.tl g.V.callstack; currentloc_fromstack g
+(*
+; indent := !indent - 1; prerr_string (String.make (!indent) ' ')
+; prerr_string "[]\n"
+*)
+  in
+(*let _ = indent := !indent + 1 in*)
   let answer = try f x with e -> (pop(); raise e) in
   let _ = pop() in
   answer

@@ -136,6 +136,15 @@ A common case is to use a table as a record, with string keys
 and homogenous values.
 <<signatures>>=
   val record : 'a map -> (string * 'a) list map
+@ 
+Another common case is to represent an enumeration type using strings.
+The string passed to [[enum]] is the name of the type, which is used
+in projection errors.
+The list passed to [[enum]] must contain \emph{every} value of
+type~[['a]], which must be comparable using~[[=]].
+To do otherwise is to risk an assertion failure during embedding.
+<<signatures>>=
+  val enum   : string -> (string * 'a) list -> 'a map
 @
 Here is the support for converting functions.
 First, if one wants a Lua function to be curried (as the Caml
@@ -377,8 +386,8 @@ let float =
 let digit       = ['0'-'9']
 let sign        = ['+' '-']
 let exp         = ['e''E'] sign? digit+
-let number      = digit+ exp?
-                | digit+ '.' digit+ exp?
+let number      = sign? digit+ exp?
+                | sign? digit+ '.' digit+ exp?
 rule length = parse number { Lexing.lexeme_end lexbuf } | _ { -1 }
 @ 
 <<value toplevel>>=
@@ -400,6 +409,17 @@ let unit =  { embed = (fun () -> Nil)
             ; project = (function Nil -> () | v -> raise (Projection (v, "unit")))
             ; is = (function Nil -> true | _ -> false)
             } 
+@ 
+<<value toplevel>>=
+let enum typename pairs = 
+  { embed = (fun v' -> try String (fst (List.find (fun (k, v) -> v = v') pairs))
+                       with Not_found -> assert false)
+  ; project = (function String k ->
+                 (try List.assoc k pairs
+                  with Not_found -> raise (Projection (String k, typename)))
+              | v -> raise (Projection (v, typename)))
+  ; is = (function String k -> List.mem_assoc k pairs | _ -> false)
+  } 
 @ 
 <<value toplevel>>=
 let option t = { embed = (function None -> Nil | Some x -> t.embed x)
