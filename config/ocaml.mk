@@ -13,11 +13,13 @@ OCAMLTOP =      ocamlmktop
 OCAMLDEP =      ocamldep
 OCAMLYACC =     ocamlyacc
 OCAMLLEX =      ocamllex
-INSTRUMENT =    "ocamlprof -instrument"
+INSTRUMENT =    "ocamlprof -instrument -m a"
 
 # setup profiling stuff
 # PCHECK should end up being empty, or the user will get an error
-#  from the rules in depend.mk
+# from the rules in depend.mk
+# 
+# FOr profiling, call as "mk P=count" or "mk P=gprof"
 
 P=
 PCHECK = ${P:count=""}
@@ -28,6 +30,14 @@ INSTR = ${INSTR:gprof=""}
 
 GPROF = ${P:gprof="-p"}
 GPROF = ${GPROF:count=""}
+
+#
+# PROFCMO defines modules that must be linked when profiling is on.
+# Make sure you link these modules exactly once.
+# 
+
+PROFCMO = ${P:count="profiling.cmo"}
+PROFCMO = ${PROFCMO:gprof=""}
 
 # provide these two where you have included this file
 #

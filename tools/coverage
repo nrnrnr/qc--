@@ -1,0 +1,29 @@
+#! /usr/bin/perl -w
+# 
+# $Id$
+# 
+# usage: ocamlprof -F @@@ foo.ml | coverage foo.ml
+# 
+# Coverage computes the approximate test coverage from an execution profile. It # takes the ratio of non-zero counters to all counters. 
+# 
+
+$hit    = 0;
+$missed = 0;
+$sum    = 0;
+$file   = $ARGV[0] || "<stdin>";
+
+while (<STDIN>) {
+    foreach $word ( split ) {
+        if ($word =~ /\@\@\@([0-9]+)/) {
+            $1 == 0 ? $missed++ : $hit++;
+            $sum++;
+        }    
+    }
+}
+
+if ($sum == 0) {
+    printf "%-30s %5.1f%% (%3d/%3d)\n", $file, 100.0, $hit, $sum; 
+} else {    
+    printf "%-30s %5.1f%% (%3d/%3d)\n", $file, $hit*100/$sum, $hit, $sum; 
+}    
+exit 0; 

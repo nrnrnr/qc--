@@ -41,6 +41,8 @@ PROFILE      =  -p
 OCAMLC_FLAGS = 	-I $B$INTERP -I $B$LIBDIR -g
 OCAMLO_FLAGS =	-I $B$INTERP -I $B$LIBDIR $PROFILE
 # if you change -I flags here, also change when $OCAMLDEP is used
+# profiling is also handled in ocaml.mk. So maybe it should not be
+# handled locally, too? --CL Fri Feb  6 16:19:41 CET 2004
 
 NWSRC=`echo *.nw`
 NWHTML=${NWSRC:%.nw=%.html}
@@ -231,18 +233,18 @@ $BINDIR/oclbench%:Q: oclbench%
 # ------------------------------------------------------------------ 
 
 ML =	${B}main.ml 
-CMO =	${ML:%.ml=%.cmo}
+CMO =	${ML:%.ml=%.cmo} 
 CMX =	${ML:%.ml=%.cmx}
-
+# PROFCMO is defined in ocaml.mk when profiling
 
 oclua-$INTERP:	${B}lua-$INTERP.cma $CMO
-	$OCAMLC $OCAMLC_FLAGS -o $target unix.cma cllib.cma $prereq
+	$OCAMLC $OCAMLC_FLAGS -o $target $PROFCMO unix.cma cllib.cma $prereq
 
 oclua-$INTERP.opt: 	${B}lua-$INTERP.cmxa $CMX
 	$OCAMLO $OCAMLO_FLAGS -o $target unix.cmxa cllib.cmxa $prereq 
 
 oclbench-$INTERP:	${B}lua-$INTERP.cma ${B}bench.cmo
-	$OCAMLC $OCAMLC_FLAGS -o $target unix.cma cllib.cma $prereq 
+	$OCAMLC $OCAMLC_FLAGS -o $target $PROFCMO unix.cma cllib.cma $prereq 
 
 oclbench-$INTERP$PROFILE.opt: 	${B}lua-$INTERP.cmxa ${B}bench.cmx
 	$OCAMLO $OCAMLO_FLAGS -o $target unix.cmxa cllib.cmxa $prereq 
