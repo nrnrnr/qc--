@@ -787,16 +787,15 @@ let proc env target (*props*) asm (cconv,name,args,bdy) =
 % ------------------------------------------------------------------ 
 
 <<Make memory declarations>>=
-(*XXX*)
-let initialized_data asm expr = 
+let initialized_data asm expr = (*XXX*)
     Impossible.unimp "initialized data in global memory declaration"
 
-(*XXX*)    
 let rec init env target asm = function
     | A.InitAt(x,_)   -> init env target asm x
     | A.InitExprs(es) -> foldl initialized_data asm es
-    | A.InitStr(s)    -> Impossible.unimp "initialized data in global memory declaration"
-    | A.InitUStr(s)   -> Impossible.unimp "initialized data in global memory declaration"
+    | A.InitUStr(_)      (*XXX*)
+    | A.InitStr(_)    -> (*XXX*)
+        Impossible.unimp "initialized data in global memory declaration"
 @
 
 In order to reserve memory for data we have to know how many objects
@@ -869,10 +868,12 @@ module StackData = struct
         ; target: Target.t
         }
 
-    let stackdatum state = function
+    let rec stackdatum state = function
+        | A.DatumAt(x,_) -> stackdatum state x
         | A.Label(l) -> 
             let loc = Area.location state.mem in
-                ( match F.findv l state.env with
+                let x = F.findv l state.env in
+                ( match x with
                 | (r,(F.Label(F.Stack(None)),t)) ->
                     { state with env = 
                         F.rebindv l (r,(F.Label(F.Stack(Some loc)),t)) 
@@ -921,7 +922,7 @@ module StackData = struct
             ; target = target
             ; mem    = priv
             } in
-        let state' = foldl body state bb in 
+        let state = foldl body state bb in 
                 (state.env, state.mem)
 
 end (* of module StackData *)
