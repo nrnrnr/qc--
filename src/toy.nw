@@ -1,0 +1,119 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+\section{Toy language for possibly cyclic definitions}.
+
+\subsection{Topological sort}
+<<toposort.mli>>=
+module type S = sig
+  type decl
+  exception Cycle of decl list
+  val sort : decl list -> decl list (* raises Cycle *)
+end
+<<toposort.mli>>=
+module type Sortable = sig
+  type decl
+  val defines : decl -> string
+  val uses    : decl -> string list
+end
+module Make (S : Sortable) : (S with type decl = S.decl)
+@ 
+<<toposort.ml>>=
+module type S = sig
+  type decl
+  exception Cycle of decl list
+  val sort : decl list -> decl list (* raises Cycle *)
+end
+module type Sortable = sig
+  type decl
+  val defines : decl -> string
+  val uses    : decl -> string list
+end
+module Make (S : Sortable) = struct
+  type decl = S.decl
+  exception Cycle of S.decl list
+  let sort decls = raise (Cycle decls)
+end
+
+
+@ 
+\subsection{A toy language}
+<<toy.mli>>=
+type name = string
+type decl
+  = Typedef of name * tyexp
+  | Const   of name * expr
+and tyexp
+  = Bits of int
+  | Tyname of name
+and expr 
+  = Lit of int
+  | Name of name
+  | Add of expr * expr
+type ast = decl list
+<<toy.ml>>=
+<<toy.mli>>
+@ 
+
+    
+<<fatenv.mli>>=
+module type S = sig
+  type env
+  type scope = Global | Local
+  type denotation
+  type ty
+  val bindv : scope -> string -> denotation -> ty -> env -> env
+  val bindt : scope -> string -> ty               -> env -> env
+  val findt : env -> string -> ty
+end
+@ 
+
+<<example.ml>>=
+module Make (Env : Fatenv.S with type ty = int) = struct
+  module TyDecl = struct
+    type decl = string * Toy.tyexp
+    let defines (n, _) = n
+    let freeTyVars = function
+      | Toy.Bits _   -> []
+      | Toy.Tyname n -> [n]  
+    let uses (_, t) = freeTyVars t
+  end
+  module TSort = Toposort.Make(TyDecl)
+
+  let rec foldTypeDecls f zero = function
+    | [] -> zero
+    | Toy.Typedef (n, te) :: tail -> foldTypeDecls f (f (n, te) zero) tail
+    | Toy.Const _         :: tail -> foldTypeDecls f zero             tail
+
+  let evalTy env = function
+    | Toy.Bits k   -> k
+    | Toy.Tyname n -> Env.findt env n
+
+  let addTypeDecl env (n, ty) =
+    Env.bindt Env.Global (*wrong*) n (evalTy env ty) env
+
+  let fold = foldTypeDecls
+  let add = addTypeDecl
+
+  let doTypes env ast =
+    let cons a b = a :: b in  (* I do not know caml *)
+    let tyDecls = TSort.sort (fold cons [] ast) in
+    List.fold_left add env tyDecls
+
+end
+
+module type MyType = sig
+  module D : Toposort.Sortable
+  module Env : Fatenv.S
+  val add : Env.env -> D.decl -> Env.env
+  val fold : (D.decl -> 'a -> 'a) -> Toy.ast -> 'a -> 'a
+end
+
+module Make2 (Thing : MyType) = struct
+  module TSort = Toposort.Make(Thing.D)
+
+  let doThing env ast =
+    let cons a b = a :: b in  (* I do not know caml *)
+    let tyDecls = TSort.sort (Thing.fold cons [] ast) in
+    List.fold_left Thing.add env tyDecls
+end
+
