@@ -576,29 +576,16 @@ let target =
 let unimp               = Impossible.unimp
 let impossible          = Impossible.impossible
 
-let from_temps proc space = (* stage to allocate a temporary location *)
-  let allocator = Talloc.Multiple.loc proc.Proc.temps space in
-  let alloc ~width:w ~alignment:a ~hint:h = A.of_loc (allocator w) in
-  A.wrap (fun methods -> {A.allocate = alloc; A.freeze = methods.A.freeze})
-
-let placevars proc = 
+let placevars = 
   let is_float w hint _ = w <= 32 && hint = "float" in
-  let warn methods =
-    let alloc ~width:w ~alignment:a ~hint:h =
-      if w > 32 then
-        unimp (Printf.sprintf "%d-bit values not supported"  w);
-      methods.A.allocate w a h
-    in
-    {A.allocate = alloc; A.freeze = methods.A.freeze} in
-  Block.srelative vfp "variables placed in memory" 
-    (A.at ~memsize:Post.memsize ~byteorder:Post.byte_order)
-  (
-    A.wrap warn *>
+  let warn ~width:w ~alignment:a ~hint:h =
+    if w > 32 then unimp (Printf.sprintf "%d-bit values not supported"  w) in
+  let mk_stage ~temps =
     A.choice
       [ is_float,               A.widen (Aux.round_up_to ~multiple_of: 32); 
-        (fun w h _ -> w <= 32), A.widen (fun _ -> 32) *> from_temps proc 't';
+        (fun w h _ -> w <= 32), A.widen (fun _ -> 32) *> temps 't';
         A.is_any,               A.widen (Aux.round_up_to ~multiple_of: 8);
-      ] *>
-    A.as_stage proc.Proc.priv
-  )
+      ] in
+  Placevar.mk_automaton ~warn ~vfp ~memsize:Post.memsize
+                        ~byteorder:Post.byte_order mk_stage
 @ 
