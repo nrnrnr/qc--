@@ -11,6 +11,8 @@ module and must be shipped with any generated code.
 <<camlburg.mli>>=
 (* $Id$ *)
 
+exception Uncovered                     (* if no action defined *)
+
 type cost = int                         (* matching cost for a rule *)
 type 'a nt =                            (* cost/action pair for a nonterm *)
     { cost : cost
@@ -30,6 +32,8 @@ val matches : 'a -> 'a -> int           (* cost function for literals *)
 (* $Id$ *)
 
 type cost = int
+exception Uncovered
+
 
 type 'a nt = 
     { cost:     cost
@@ -39,7 +43,7 @@ type 'a nt =
 let inf_cost    = max_int / 2
 let infinity = 
     { cost = inf_cost
-    ; action = (fun () -> assert false) 
+    ; action = (fun () -> raise Uncovered) 
     }
 
 let min x y     = if x.cost < y.cost then x else y
