@@ -831,6 +831,9 @@ varmaps because we may have to set a spill location for the temp.
       (state, VM.add t (Reg r) map, rst, c, h, not_lo)
     | ([],     _,      _,      r::rst) when not (RS.mem t live_out) ->
       (state, VM.add t (Reg r) map, a, c, h, rst)
+    | ([],     _,      _,      r::rst) ->
+      let (state,spill_loc) = get_spill_loc state t in
+      (state, VM.add t (Reg r) (VM.add t (Mem spill_loc) map), a, c, h, rst)
     | ([],     r::rst, _,      [])                                  ->
       let (state,map) = spill_reg true_fun (state, map) r in
       (state, VM.add t (Reg r) map, a, rst, h, not_lo)
