@@ -10,6 +10,25 @@
 
 %%Grades: A Subsystem Later
 
+\section{Things yet to be covered in this document}
+\begin{enumerate}
+\item
+Kill effects
+\item
+When to use [[don't_touch_me]]
+\item
+The problem of instructions with multiple effects:
+The generic expander can't expand while maintaining multiple effects
+\item
+Contexts really aren't general enough---need to say something about
+widths, and hardware registers would be nice
+\item
+Not covered to sufficient detail: mutual recursion between generic
+expander and postexpander 
+(e.g., tying of recursive knot places restrictions on use)
+\end{enumerate}
+
+
 \section{A generic, parameterized code expander}
 
 \label{expander.sec}
@@ -187,8 +206,7 @@ type operator  = Rtl.Private.opr
 Working with the mutable control-flow graph is awkward and
 error-prone.
 We therefore define some special, immutable types to represent
-fragments of the flow graph after expansion.
-(Maybe before as well.)
+fragments of the flow graph (subgraphs) both before and after expansion.
 What kind of fragment we have depends on what sort of flow-graph node
 we are expanding.
 \begin{itemize}
@@ -197,13 +215,15 @@ A node that represents straight-line control flow is expanded into a
 [[block]].
 A~[[block]] represents a subgraph with a single entry and single exit.
 \item
-A~node that represents an unconditional or multiway branch (including
-call) is expanded
+A~node that represents unconditional control transfer  (including
+unconditional branch,  multiway branch, call, return, [[cut to]], etc.)
+is expanded
 into a [[branch]].
 The [[branch]] consists of a (possibly empty) [[block]] followed by an
 RTL.
-The trailing RTL is always the branch (or call) instruction.
-Such a subgraph has a single entry, and while it may have multiple
+The trailing RTL is always the control-transfer instruction.
+A  subgraph represented by a [[branch]] has a single entry, and while
+it may have multiple 
 exits, all those exits are reached by the same instruction: the final
 RTL.
 \item
@@ -211,10 +231,18 @@ A conditional branch is expanded into a [[cbranch]].
 This subgraph is somewhat more complicated because it has \emph{two}
 exits, which are designated by the Boolean values [[true]] and
 [[false]].
+The subgraph represents decision logic \emph{only}; the sole job of
+the subgraph is to decide on one of the two exits.\footnote
+{Later in compilation, the peephole optimizer may combine computation
+with decision.}
+
 Unlike the unconditional or multiway branches, the [[cbranch]] can
 have multiple internal nodes that reach one or both of the exits.
 This happens any time the condition involves the short-circuit Boolean
-operators [[conjoin]], [[disjoin]], and [[not]]. 
+operators [[%conjoin]] or [[%disjoin]].
+
+Unlike the other subgraphs, the [[cbranch]] can represent a DAG, not
+just a tree---hence the [[Shared]] node.
 \end{itemize}
 <<abstract types for postexpanders>>=
 type uid
@@ -234,15 +262,16 @@ one of the two exits, there is never any straight-line code that
 intervenes between a conditional branch and the exit.
 Also note that a conditional branch can be simplified to
 unconditional; that's what a bare [[Exit]]  means.
-DOCUMENTATION BELOW WILL NEED TO BE REVISED!!!
 @
 We now explain what each of the above constructors and types means,
 and under what conditions it is deemed to satisfy the machine invariant.
 \begin{itemize}
-\item [[Rtl]] wraps a \emph{non-branching} RTL that can be represented by a single
+\item [[Rtl]] wraps a \emph{non-branching} RTL.
+It satisfies the machine invariant if the RTL  can be represented by a single
 instruction on the target machine, with this exception:
 \begin{itemize}
 \item
+\label{sec:optimism}
 An RTL may be representible as a single instruction only under the
 optimistic assumption that a late compile-time constant is ``small.''
 If the assumption is violated, it must be possible for the recognizer
@@ -253,8 +282,9 @@ register for this purpose.
 \end{itemize}
 @
 \item
-An [[rtl]] in a [[branch]] pair is a branching
-RTL (including multiway branch and call) that can be represented by a
+An [[rtl]] in a [[branch]] pair represents an unconditional
+control-transfer instruction.
+It satisfies the machine invariant if it can be represented by a
 single instruction on the target 
 machine, with these exceptions:
 \begin{itemize}
@@ -284,55 +314,67 @@ A [[Seq]] node represents a sequence of instructions and executes
 first the left half, then the right.
 @
 \item
-A [[If]] node holds a condition, represented as an expression, such
-that if the condition holds, 
-it executes the first block; otherwise, it executes the second.
-The condition must be a Boolean, but it need not satisfy any other
-invariants:
-it will be expanded by the generic expander.
-It is up to each postexpander to be sure that each expansion of a
-[[If]] node will eventually result in a block without [[If]] or
-[[Loop]] nodes.
+A [[If]] node makes a decision and executes one of its two blocks,
+depending on the outcome of the condition.
+The decision is represented by a [[cbranch]] node.
 @
 \item
 The [[While]] node corresponds to a C-style [[while]] statement:
-as long as the condition is satisfied, it executes the body.
-As in [[If]],
-The condition must be a Boolean, but it need not satisfy any other
-invariants:
-it will be expanded by the generic expander.
-It is up to each postexpander to be sure that each expansion of a
-[[Loop]] node will eventually result in a block without [[Loop]] nodes.
+as long as the decision is for the [[true]] exit, it executes the body.
 @
 \item
 [[Nop]] represents an empty sequence of instructions.
-No postexpander should need to use [[Nop]], but it is useful in the
+[[Nop]] may be useful in [[If]], as the first part of a [[branch]],
+and in various places in the 
 generic expander.
 @
 \item
 A [[branch]] represents a [[block]] that is followed by a branch
 instruction, which is represented by an RTL that satisfies the machine
 invariant for branch instructions as described above.
+Typically the [[block]] is empty, or it computes the address used in
+the branch.
 @
 \item
-A [[cbranch]] represents a [[block]] that is followed by a
+A [[cbranch]] represents the ability to make a decision:
+\begin{itemize}
+\item
+An [[Exit]] node makes the decision for the exit identified by the
+Boolean.
+\item
+A [[Test]] node makes the decision by executing a 
+[[block]], then a
 conditional-branch instruction.
+Typically the [[block]] sets condition codes.
+\item
+A [[Shared]] node wraps another node with a unique identifier, which
+keeps it from being duplicated when the [[cbranch]] tree is converted
+to a flow graph.
+A~[[Shared]] node can be created only by the [[shared]] function
+exported by the [[Postexpander]] interface.
+Typically, [[Shared]] nodes are created only by the generic expander,
+when it compiles [[%conjoin]] and [[%disjoin]].
+But if a postexpander should use a [[cbranch]] in two different
+contexts, it should apply [[shared]] first.
+\end{itemize}
 @
 \item
-A [[cbinst]] represents a subgraph that has two exits (designated
-[[true]] and [[false]]) and begins with a conditional-branch
+A [[cbinst]] represents a conditional-branch
 instruction.
 The [[exp]] must be a Boolean expression.
 If [[cbinst = (exp, t, f)]], its semantics are that if [[exp]] is
-true, execution continues with the [[t]]~continuation; otherwise it
-continues with the [[f]]~continuation.
+true, execution continues with~[[t]]; otherwise it
+continues with~[[f]].
 To satisfy the machine invariant,
-the [[cbinst]] must satisfy the
-invariant that the target machine has two related conditional-branch
-instructions: one that can branch on [[exp]] and one that can branch
-on [[%not(exp)]].
-The postexpander must produce these RTLs when [[exp]] is passed to the
-[[bc]] or [[bc_not]] functions in the postexpander interface below.
+the [[cbinst]] must satisfy two properties:
+\begin{itemize}
+\item
+If [[target.branch.embed]] is applied to the [[exp]] and a label, it
+produces an RTL that can be represented as a single conditional-branch
+instruction on the target machine.
+\item
+The resulting RTL can be changed with [[bnegate]] and still be
+representable as a single instruction on the target machine.
 @
 \item
 The [[Exit]] continuation represents control flow to one of the two
@@ -344,19 +386,21 @@ The [[Continue]] continuation represents additional control flow which
 eventually leads to an exit.
 It satisfies the machine invariant if its [[cbranch]] does.
 \end{itemize} 
+\end{itemize}
 @
 An example may help with the conditional branch.
 If the source code contains
 \begin{verbatim}
-if (n == 1 or n == 2) {
+if (n == 1 `disjoin` n == 2) {
   ...
 } else {
   ...
 }
 \end{verbatim}
-The generic expander may translate the [[if]] expression to
+The generic expander may translate the [[if]] expression to the
+following conditional branch:
 \begin{verbatim}
-  (Nop, (n == 1, Exit true, (Nop, n == 2, Exit true, Exit false)))
+  Test (Nop, (n == 1, Exit true, Test (Nop, (n == 2, Exit true, Exit false))))
 \end{verbatim}
 On many machines this subgraph would be expanded further with the help
 of the postexpander.
@@ -392,11 +436,6 @@ module Expand : sig
   val cbranch : cbranch -> cbranch
 end
 @ 
-The [[extend_cbranch]] function makes it possible to specify the
-meaning of the true and false exits.
-<<XXX exported utility functions for postexpanders>>=
-val extend_cbranch : cbranch -> ifso:cbranch -> ifnot:cbranch -> cbranch
-@ 
 Sequential composition of blocks is also useful for the generic expander.
 It eliminates [[Nop]].
 <<exported utility functions for postexpanders>>=
@@ -413,17 +452,13 @@ To convert a condition for use in [[If]] or [[While]], use [[cond]].
 <<exported utility functions for postexpanders>>=
 val cond : exp -> cbranch  (* branch taken iff exp true *)
 @
-We provide support for a set of nodes.
+To help deal with expansion of DAGs containing [[Shared]] nodes, 
+we provide support for a set of nodes.
 <<exported utility functions for postexpanders>>=
 type 'a nodeset
 val empty : 'a nodeset
 val lookup : uid -> 'a nodeset -> 'a   (* raises Not_found *)
 val insert : uid -> 'a -> 'a nodeset -> 'a nodeset
-@
-\paragraph{Other utilities}
-
-We might be on our way to an applicative flow graph.
-<<exported utility functions for use by the generic expander>>=
 @
 
 \paragraph {The target-dependent postexpander}
@@ -432,10 +467,11 @@ We might be on our way to an applicative flow graph.
 Here is a signature for a postexpander for an integer/float/address
 machine.
 These are the operations every target must implement.
+The [[byte_order]] is used to check that access to memory uses the
+target's byte order.
 <<signature of a postexpander>>=
 module type S = sig
-  val byte_order : Rtl.aggregation (* used on all access to memory *)
-  val wordsize   : int             (* used as width of register number! *)
+  val byte_order : Rtl.aggregation (* used to check access to memory *)
 
   module Address : sig
     type t
@@ -445,9 +481,20 @@ module type S = sig
   <<generic expansion operations for register machines>>
   <<generic expansion operations for stack machines>>
 end
+@ A value of type [[Address.t]] is a target-dependent way of holding
+an address.  At present, the only way to create an address is by using
+a temporary, which is expected to hold the address.
+A~typical implementation will let [[Address.t]] be [[Rtl.exp]] and
+will define a [[reg]] function that simply fetches the address.
+(WORTH PUTTING IN A [[Standard.Address]]?)
 @ 
 \subsubsection{Postexpander operations for register machines}
 We provide basic load and store.
+The [[assertion]] gives the alignment of the [[Address.t]], which
+tells the postexpander 
+whether it can use a normal load or may (on some targets) need special
+unaligned load and store instructions (e.g., ``load unaligned left''
+or ``load unaligned right'').
 <<generic expansion operations for register machines>>=
 val load  : dst:temp  -> addr:Address.t -> assertion -> block
 val store : addr:Address.t -> src:temp -> assertion -> block
@@ -459,21 +506,64 @@ This is the only place the back end is required to support
 size-changing operators; other uses, such as compositions of widens
 and narrows, should be compiled to suitable code (shifts or identity)
 somewhere upstream.
+In each case, the [[width]] is the width of the value loaded and
+stored, and the [[assertion]] gives the alignment of the
+[[Address.t]].
 <<generic expansion operations for register machines>>=
 val sxload  : dst:temp  -> addr:Address.t -> width -> assertion -> block
 val zxload  : dst:temp  -> addr:Address.t -> width -> assertion -> block
 val lostore : addr:Address.t  -> src:temp -> width -> assertion -> block
+@ For example, an [[sxload]] with width of~16 on a 32-bit machine
+might correspond to a ``load signed halfword'' instruction.
+A~[[lostore]] with width of~8 might correspond to ``store byte.''
 @
 We need a move operation.
+It has to handle not only moves within a single register space but
+also moves from space to space (e.g., move a value from an integer register into a
+floating-point register).
 <<generic expansion operations for register machines>>=
 val move : dst:temp -> src:temp -> block
 @ 
 Load immediate can take any constant except a Boolean.
 <<generic expansion operations for register machines>>=
 val li  : dst:temp -> Rtl.Private.const -> block
-@ 
+@ Usage note:
+\begin{quote}\slshape
+Depending on the capabilities of the target machine, there are three
+common strategies for implementing load-immediate:
+\begin{enumerate}
+\item
+The target machine can hold the entire constant in an immediate field
+of an instruction (e.g., integer values on Pentium and other CISC
+machines).
+On this sort of machine, the postexpander can just issue a single
+load-immediate instruction.
+\item
+The target machine can hold some constants in an immediate field, but
+not a constant as large as the one being loaded.
+On a machine like this, it typically requires a two-instruction
+sequence to load an immediate constant.
+Different machines use different sequences:
+\begin{itemize}
+\item
+MIPS: ``load upper immediate; or immediate''
+\item
+SPARC: ``sethi; or immediate''
+\item
+PPC: some sort of load-upper instruction followed by ``add immediate''
+\end{itemize}
+Machines vary depending on where in word the split is made (e.g,
+$16/16$ versus $22/10$) and whether the constant can simply be split
+or whether something more complicated has to happen because low bits
+are going to be sign-extended then added.
+Ideally, we would have some generic support for such machines.
+\end{enumerate}
+\end{quote}
+@
 An extended load-immediate can take sums and differences of
 compile-time constants (including late compile-time constants). 
+The [[lix]] may make optimistic assumptions about the size of
+constants, as noted above on page~\pageref{sec:optimism}.
 <<generic expansion operations for register machines>>=
 val lix : dst:temp -> Rtl.exp           -> block
 @ 
@@ -483,19 +573,62 @@ N.B.~no operator passed to any of these functions expects or returns a
 Boolean! 
 Ordinary value operators are expected to be supported by these
 operations, but only at their natural widths.
-Perhaps the weird value operators should be supported also.
+Weird value operators such as carry, borrow, or multiply-extended are
+not supported. 
 <<generic expansion operations for register machines>>=
 val binop : dst:temp -> operator -> temp -> temp -> block
 val unop  : dst:temp -> operator -> temp         -> block
 val rtlop : dst:temp -> operator -> temp list    -> block
-@
-The arguments to the functions above must satisfy the invariants that the
-temporaries are in the spaces the expander expects.
-It announces these spaces through argument and result contexts.
-The context names a temporary space from which to draw temporaries and
-it also says when a temporary satisfies that context.
-\nextchunklabel{expander.Postexpander.context}%
+@ Usage notes:
+\begin{quote}
+\slshape
+The interface contains multiple functions to make life easy for those
+writing postexpanders by hand.
+If the target machine is sufficiently regular, the postexpander may
+certainly use an implementation such as
+\begin{verbatim}
+let binop ~dst op x y = rtlop ~dst op [x; y]
+\end{verbatim}
 
+It is almost certainly true that not every operator is implemented on
+every machine.
+The ability to expand blocks recursively is intended to make it easy
+to use algebraic equivalents, although at present
+we lack a library of such equivalents.
+For example, for a machine without an unsigned modulus instruction,
+one might consider roughly (many conversions omitted):
+\begin{verbatim}
+let binop ~dst op x y = match op with
+| "modu", ws -> 
+   let e = R.app sub [x; R.app mul [y; R.app divu [x; y]]] in
+   Postexpander.Expand.block (R.store dst e)
+...
+\end{verbatim}
+\end{quote}
+@
+The generic expander guarantees that
+the arguments to functions above satisfy the precondition that the
+temporaries are in the spaces the postexpander expects.
+The postexpander must announce these spaces through argument and result contexts.
+A~context has two parts.
+The first part provides the ability to allocate temporaries, perhaps
+of more than one width.\footnote
+{For example, the SPARC floating-point context should support both 32-
+  and 64-bit floats.}
+The second part provides a predicate that says when a temporary
+satisfies that context. 
+\nextchunklabel{expander.Postexpander.context}%
+<<generic expansion operations for register machines>>=
+type context = (Talloc.Multiple.t -> int -> Register.t) * (Register.t -> bool)
+val icontext : context (* for ints *)
+val fcontext : context (* for floats *)
+val acontext : context (* for addresses *)
+val constant_context : width    -> context
+val arg_contexts     : operator -> context list
+val result_context   : operator -> context
+@ It probably would be a good idea if a context were extended to say
+exactly what widths are supported by the target machine.
+@
 THE REAL STORY HAS GOT TO BECOME MORE COMPLICATED.
 HERE ARE THE CONTEXTS WE FIND ON THE X86:
 \begin{itemize}
@@ -512,14 +645,7 @@ THE EXPANDER SHOULD BE UPDATED TO PROVIDE THIS FULL INFORMATION AS THE
 ARGUMENT AND RESULT CONTEXT FOR EVERY OPERATOR.
 THEN IT CAN BE THE JOB OF THE EXPANDER TO DO SUCH THINGS AS ALLOCATE
 MEMORY SLOTS, ETC.
-<<generic expansion operations for register machines>>=
-type context = (Talloc.Multiple.t -> int -> Register.t) * (Register.t -> bool)
-val icontext : context (* for ints *)
-val fcontext : context (* for floats *)
-val acontext : context (* for addresses *)
-val constant_context : width    -> context
-val arg_contexts     : operator -> context list
-val result_context   : operator -> context
+
 @ 
 We have to know when a right-hand side is too big to try to cram into
 a single temporary.
@@ -551,7 +677,10 @@ We can branch to a temporary drawn from [[acontext]] or to a constant.
 <<generic expansion operations for register machines>>=
 val br : tgt:temp -> branch               (* branch register *)
 val b  : tgt:Rtl.Private.const -> branch  (* branch *)
-@ 
+@ The implementation of [[b]] will normally assume, optimistically,
+that the branch target is within range of a PC-relative branch
+instruction. 
+@
 For a conditional branch,  the target must be a static label, but the
 postexpander provides any Boolean condition 
 applied to temporaries.
@@ -564,6 +693,40 @@ val bc      : temp -> operator -> temp -> ifso:cbranch -> ifnot:cbranch -> cbran
 val bnegate : rtl -> rtl  (* swap the condition in a conditional branch *)
 @ The [[rtl]] part of the [[cbranch]] from [[bc]] is the \emph{only}
 instruction that may legitimately be passed to [[bnegate]].
+
+Usage notes:
+\begin{quote}
+\slshape
+For machines with condition codes, the implementation of [[bc]] will
+almost certainly involve the invention of new RTL operators that set
+and query the condition codes.
+Such invention is not absolutely required, but it enables two major
+simplifications:
+First, the postexpander and recognizer are much easier to write by
+hand.
+Second, many fewer RTL nodes are allocated at compile time.
+
+The typical game is to invent two classes of operators:
+\begin{itemize}
+\item
+One class of operators \emph{sets} the condition codes.
+On a clean, simple, regular machine, there might be only one way to
+set condition codes, say by a compare instruction.
+One might invent an RTL operator called [[vax_compare]], for example.
+On a messy machine like the Pentium, there might be a half dozen
+different ways to set condition codes. 
+Each needs its own RTL operator.
+\item
+The other class of operators \emph{queries} the condition codes.
+One might define operators such as [[vax_lt]] or [[vax_ovflw]].
+\end{itemize}
+Once the operators are invented, the expansion of [[bc]] uses one
+instruction from each class.
+For example, [[bc x lt y ifso ifnot]] might become
+\begin{verbatim}
+  P.Test (cc := x `vax_lt` y, (vax_lt cc, ifso, ifnot))
+\end{verbatim}
+\end{quote}
 @ 
 The postexpander must be able to call direct and indirect.
 A~call instruction may include multiple effects, but the postexpander
@@ -574,20 +737,39 @@ assignment to the~PC.
 <<generic expansion operations for register machines>>=
 val callr : tgt:temp              -> others:Rtl.Private.effect list -> branch
 val call  : tgt:Rtl.Private.const -> others:Rtl.Private.effect list -> branch
+@ There's no need for a [[return]], as on most machine a [[return]] is
+just a branch instruction anyway.  On a machine like the Pentium, in
+which a return changes both program counter and stack pointer, the
+instruction will have to be protected by using [[don't_touch_me]].
 @
 The [[cut to]] is as created by the target-dependent code, except
 right-hand sides have been expanded to temporaries.
+We need a special function for [[cut to]] because this is the one
+case, explained above, in which we produce a single RTL that normally
+stands for a two-instruction sequence.
+We do this because that sequence \emph{must not} be broken up.
 <<generic expansion operations for register machines>>=
 val cut_to : Rtl.Private.effect list -> branch
 @
 The postexpander may insist on having some instructions untouched.
 This is possible only for an instruction with multiple effects and a
 single guard.
+It is useful for protecting target-specific, multi-effect instructions such as
+returns. 
 <<generic expansion operations for register machines>>=
 val don't_touch_me : Rtl.Private.effect list -> bool
 @
 \subsubsection{Postexpander operations for stack machines}
 
+Most postexpanders will not need this section and can simply placate
+the gods by writing
+\begin{verbatim}
+  include Postexpander.Nostack(Address)
+\end{verbatim}
+to get implementations of the functions below.
+But if you do have to deal with a machine without real registers (like
+the x86 floating-point unit), read on.
+@
 For simplicity, we assume the target machine has at most one stack.
 If we need more generality, we can add it later.
 @
@@ -595,7 +777,6 @@ To begin, we have to know which operators use the stack.
 If an operator uses the stack, we need to know whether to push its
 left operand first or its right operand first, and we need to know how
 much stack room it needs to execute successfully.
-room they need.
 <<types for postexpanders>>=
 type operator_class = Register | Stack of push * int
 and  push = LeftFirst | RightFirst
@@ -678,24 +859,43 @@ A postexpander for a register-only machine can simply include a
 module Nostack (Address : sig type t val reg : temp -> t end) : sig
  <<generic expansion operations for stack machines>>
 end
-<<postexpander.ml>>=
-module Nostack (Address : sig type t val reg : temp -> t end) = struct
-  let opclass _ = Register
-  let stack_depth = 0
-  let stack_width = 0
-  let converts_stack_to_temp _ = false
-  let push ~addr _              = Impossible.impossible "stack op on register machine"
-  let store_pop ~addr _         = Impossible.impossible "stack op on register machine"
-  let push_cvt _ _ ~addr _      = Impossible.impossible "stack op on register machine"
-  let store_pop_cvt _ _ ~addr _ = Impossible.impossible "stack op on register machine"
-  let pushk _                   = Impossible.impossible "stack op on register machine"
-  let pushk_cvt _ _ _           = Impossible.impossible "stack op on register machine"
-  let stack_op _                = Impossible.impossible "stack op on register machine"
-  let bc_stack _ ~ifso ~ifnot   = Impossible.impossible "stack op on register machine"
-  let stack_top_proxy = Rtl.reg (('\000', Rtl.Identity, Cell.of_size 0), 0, Rtl.C 0)
-  let is_stack_top_proxy _ = false
-end
 @ 
+\subsubsection{Relationship of postexpander and recognizer}
+
+It is often said that the recognizer must accept anything emitted by
+the postexpander.
+The truth is more subtle:
+If an RTL is emitted by the postexpander, that RTL must be accepted by
+the recognizer \emph{after} register allocation and simplification.
+\begin{itemize}
+\item
+The postexpander must collude with the register allocator such that
+after an acceptable substitution of hardware registers for
+temporaries, the recognizer will accept the resulting RTL.
+IT SHOULD BE DOCUMENTED SOMEWHERE HOW TO COMMUNICATE TO THE REGISTER
+ALLOCATOR WHAT CONSTITUTES AN ACCEPTABLE SUBSTITUTION.  WHERE IS THAT?
+\item
+The simplifier evaluates many expressions at compile time.
+For example, the expression $\mathtt{sx}_{16-32}(\mathtt{0xffff})$
+will be simplified to  $\mathtt{0xffffffff}$.
+Even if the postexpander emits the former, the recognizer must be
+prepared to accept the latter.
+In fact, if what the machine instruction does is sign-extend a 16-bit
+constant to 32~bits, the recognizer must accept \emph{exactly} those
+32-bit constants that can be obtained by sign-extending 16-bit
+constants.
+(The postexpander, by contrast, can choose either representation.)
+\item
+The typical recognizer should be prepared to accept additional RTLs that are
+not emitted by the postexpander but may be computed by peephole
+optimization.
+But unlike the previous two requirements, recognizing additional
+instructions is optional.
+This is because unlike the register allocator and simplifier, the
+peephole optimizer is \emph{guarded} by a call to the recognizer.
+\end{itemize}
+@
+\clearpage
 
 \subsection{Implementation outline}
 
@@ -821,6 +1021,25 @@ type 'a nodeset = (uid * 'a) list
 let empty = []
 let lookup = List.assoc
 let insert i x l = (i, x) :: l
+@ 
+\subsubsection{Placeholders for machines without stacks}
+<<postexpander.ml>>=
+module Nostack (Address : sig type t val reg : temp -> t end) = struct
+  let opclass _ = Register
+  let stack_depth = 0
+  let stack_width = 0
+  let converts_stack_to_temp _ = false
+  let push ~addr _              = Impossible.impossible "stack op on register machine"
+  let store_pop ~addr _         = Impossible.impossible "stack op on register machine"
+  let push_cvt _ _ ~addr _      = Impossible.impossible "stack op on register machine"
+  let store_pop_cvt _ _ ~addr _ = Impossible.impossible "stack op on register machine"
+  let pushk _                   = Impossible.impossible "stack op on register machine"
+  let pushk_cvt _ _ _           = Impossible.impossible "stack op on register machine"
+  let stack_op _                = Impossible.impossible "stack op on register machine"
+  let bc_stack _ ~ifso ~ifnot   = Impossible.impossible "stack op on register machine"
+  let stack_top_proxy = Rtl.reg (('\000', Rtl.Identity, Cell.of_size 0), 0, Rtl.C 0)
+  let is_stack_top_proxy _ = false
+end
 @
 \subsubsection{More stuff}
 The [[Proc.t]] gives the expander a supply of temporaries.
@@ -1909,7 +2128,7 @@ let branch_condition rtl = match Down.rtl rtl with
 @
 Free reference [[modified]] is set only if a new node is added to the graph.
 IT MAY BE NECESSARY TO REASSOCIATE TO AVOID REPLACING INSTRUCTION $i$
-WITH $i; \mathtt{Nop$}. 
+WITH $i; \mathtt{Nop}$. 
 <<block-conversion functions>>=
 let rec branch2cfg (block, branch) bnode =
   G.update_instr (fun _ -> branch) bnode;
