@@ -138,7 +138,7 @@ type machine = PC * value stack * var_env * stack_pointer * var_env
 State will be represented by a tuple of the form: $\dstate$, where: \\
 \\
 \begin{tabularx}{\linewidth}{@{\hskip2em}rlX@{}}
-$\pc$&:    \texttt{location}& program counter\\
+$\pc$&:    \texttt{address}& program counter\\
 $V$&:      \texttt{value stack}& value data stack\\
 $\rho$&:   \texttt{var\_env}& the current local environment (stores local variables)\\
 $\spt$&:   \texttt{stack\_pointer}& pointer to stack used to store local stack-data\\
@@ -157,7 +157,7 @@ The activation stack represents all live activations, but does \emph{not} includ
 \\
 \begin{tabularx}{\linewidth}{@{\hskip2em}rlX@{}}
 $\pc$&:    \texttt{address}& program counter for this activation\\
-$\rho$&:   \texttt{local\_env}& local environment for this activation (local variables)\\
+$\rho$&:   \texttt{var\_env}& local environment for this activation (local variables)\\
 $\spt$&:    \texttt{stack\_pointer}& pointer to stack used to store local stack-data for this activation\\
 $\kappa$&: \texttt{contAnnotations}& continuation bundle that indicates to which continuations the object of this activation's pending call may cut, unwind, or return; also indicates if same object may be aborted\\
 $u$&:   \texttt{uid}& unique identifier for this activation\\
@@ -200,7 +200,10 @@ datatype instruction = (* RTL instructions *)
                      | STORE         of space * size
                      | STORE_LOCAL   of index
                      | STORE_GLOBAL  of index
-                     | GUARDED_STORE of space * size
+
+                     | GUARDED_STORE        of space * size
+					 | GUARDED_STORE_LOCAL  of space * size
+					 | GUARDED_STORE_GLOBAL of space * size
 
                      | PUSH_ARG
                      | POP_ARG
@@ -365,6 +368,40 @@ Also, one notational comment: if $\pc$ is the index into the instruction array r
 {i[\pc] = \mathtt{guarded}\dash\mathtt{store}\dash{}space\dash{}size}
 {\step
   {\state \pc {v\cons{}a\cons{}\mathtt{\#f}\cons{}V} \rho \spt g \sigma A u s}
+  {\state \newpc V \rho \spt g \sigma A u s}
+}
+\\
+\ops{Guarded-Store-Local-True}
+{\twoline
+{i[\pc] = \mathtt{guarded}\dash\mathtt{store}\dash\mathtt{local}\dash{}x}
+{\rho' = \rho\{x\mapsto{}v\}}
+}
+{\step
+  {\state \pc {v\cons\mathtt{\#t}\cons{}V} \rho \spt g \sigma A u s}
+  {\state \newpc V {\rho'} \spt g \sigma A u s}
+}
+\\
+\ops{Guarded-Store-Local-False}
+{i[\pc] = \mathtt{guarded}\dash\mathtt{store}\dash\mathtt{local}\dash{}x}
+{\step
+  {\state \pc {v\cons\mathtt{\#f}\cons{}V} \rho \spt g \sigma A u s}
+  {\state \newpc V \rho \spt g \sigma A u s}
+}
+\\
+\ops{Guarded-Store-Global-True}
+{\twoline
+{i[\pc] = \mathtt{guarded}\dash\mathtt{store}\dash\mathtt{global}\dash{}x}
+{g' = g\{x\mapsto{}v\}}
+}
+{\step
+  {\state \pc {v\cons\mathtt{\#t}\cons{}V} \rho \spt g \sigma A u s}
+  {\state \newpc V \rho \spt {g'} \sigma A u s}
+}
+\\
+\ops{Guarded-Store-Global-False}
+{i[\pc] = \mathtt{guarded}\dash\mathtt{store}\dash\mathtt{global}\dash{}x}
+{\step
+  {\state \pc {v\cons\mathtt{\#f}\cons{}V} \rho \spt g \sigma A u s}
   {\state \newpc V \rho \spt g \sigma A u s}
 }
 \\
