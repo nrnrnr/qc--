@@ -185,6 +185,7 @@ val overflow :
   memsize:int -> byteorder:Rtl.aggregation ->                     (* machine    *)
   growth:Memalloc.growth -> max_alignment:int ->                  (* convention *)
   implementation
+
 @ 
 Another possible final stage is to have \emph{no} overflow block.
 Such a final stage is useful for conventions in which only finitely 
@@ -285,15 +286,18 @@ The second argument provides an exclusion relation that is pure
 software convention.
 If a pair [[rs, rs']] is passed, the use of \emph{any} placement
 in~[[rs]] excludes \emph{all} the placements in [[rs']], and vice
-versa.
-(That is, the exclusion relation is symmetric.)
+versa.  That is, the exclusion relation is symmetric. To build an
+asymmetric relation, use [[of_directed_pairs]]. Any register on the left
+excludes all registers on the right---the opposite does not hold.
+
 <<automaton.mli>>=
 module Exclude : sig
   type pair = Register.t list * Register.t list
   type t  (* mutable *)
-  val of_pairs  : (char -> Space.t) -> pair list -> t
-  val use       : t -> Register.t -> unit
-  val available : t -> Register.t -> bool
+  val of_pairs           : (char -> Space.t) -> pair list -> t
+  val of_directed_pairs  : (char -> Space.t) -> pair list -> t
+  val use                : t -> Register.t -> unit
+  val available          : t -> Register.t -> bool
 end
 @ As an example, the MIPS calling convention might use
 <<example code based on MIPS R3000 calling convention>>=
@@ -306,9 +310,19 @@ We can use this thing by providing a version of [[useregs]] that uses
 shared state to keep track of which registers have been excluded.
 Notice that an excluded register is \emph{not} the same as a ``used''
 register in a result.
+
+The [[sharedoverflow]] marks all registers [[regs]] as used. This helps
+to implement the typical requirement convention, that no register is
+allocated once we allocate from memory. 
+
 <<automaton.mli>>=
 val sharedregs : 
   Exclude.t -> Register.t list -> errormsg:(int -> Register.t list -> string) -> stage
+val sharedoverflow :
+  Exclude.t -> Register.t list ->
+  memsize:int -> byteorder:Rtl.aggregation ->               (* machine    *)
+  growth:Memalloc.growth -> max_alignment:int ->            (* convention *)
+  implementation
 @
 \paragraph{Other forms of history}
 Most calling conventions keep track of little history beyond knowing
@@ -378,7 +392,12 @@ let overflow ~memsize ~byteorder ~growth ~max_alignment =
     let state = { mem = mem; frozen = false } in
     <<functions [[allocate]] and [[freeze]] for the overflow block>>
     { allocate = allocate; freeze = freeze })
+
 @ 
+
+
+
+
 To allocate, we align and increment the memory block.
 The address of the new location depends on the direction of stack growth.
 <<functions [[allocate]] and [[freeze]] for the overflow block>>=
@@ -627,7 +646,7 @@ use all its components.
 <<exclusion functions>>=
 let map_union map key set = try RS.union set (RM.find key map) with Not_found -> set
 
-let use' t r =
+let use' t r = (* old, not used *)
   let excluded = map_union t.excludes r t.excluded in
   let excluded = RS.add r excluded in
   let excluded = match t.cellcount r with
@@ -636,14 +655,17 @@ let use' t r =
   t.excluded <- excluded
 @ 
 
-Given a register with multiple components, the above [[use]] function
-does not exclude a register that is excluded by one of the components.
-In my opinion, the [[use]] function must recursively ``use'' all
-register components. 
+For [[use]] and [[exclude]] we take a fine-grained approach: compound
+registers (like pairs) are always broken up and the individual registers
+are marked as excluded. This does not interfere with the set of used
+registers [[frozen]] reports, because the exclusion state is completely
+private to [[Exclude]]. Caveat: currently the user can still specify
+compounds for the [[excludes]] data structure. Im unsure whether
+this is a good idea or not.
 
-In [[use']], the [[exclude]] sub function computes the set of all
+Within [[use]], the [[exclude]] function computes the set of all
 registers excluded by a given register. If we use a compound register,
-we mark its component as used, but not itself. Otherwise the
+we mark its components as used, but not itself. Otherwise the
 [[available]] function cannot tell that that a component was already in
 use. 
 
@@ -653,18 +675,25 @@ let use t r =
         | 1 -> map_union t.excludes r (RS.singleton r) 
         | n -> List.fold_right (fun r ex -> RS.union (exclude r) ex)
                                (reg_components n r)
-                               RS.empty (*?? RS.singleton r ?? *)
+                               RS.empty 
     in
        t.excluded <- RS.union t.excluded (exclude r)
 @       
 
 Something is available if it is not excluded and if none of its
-components are excluded.
+components are excluded. Watch out: [[t.excluded]] may contain register
+pairs because [[t.excludes]] may contain them! See the discussion above.
+
 <<exclusion functions>>=
 let rec available t r = match t.cellcount r with
-    | 1 -> not (RS.mem r t.excluded)
+    | 1 -> not (RS.mem r t.excluded)    
     | n -> List.for_all (available t) (reg_components n r)
 @ 
+
+To make the exclusion relation more useful, I could imagine to make it
+a directed relation, i.e.~asymmetric. This is implemented in
+[[of_diretced_pairs]].
+
 <<exclusion functions>>=
 let of_pairs spaces exclusions =
   let regset l = List.fold_right RS.add l RS.empty in
@@ -673,6 +702,17 @@ let of_pairs spaces exclusions =
   let add (rs, rs') map =
     let map = List.fold_right (addx (regset rs')) rs  map in
     let map = List.fold_right (addx (regset rs )) rs' map in
+    map in
+  let excludes = List.fold_right add exclusions RM.empty in
+  let cellcount (s, _, w) = w / (spaces s).Space.cellwidth in
+  { excluded = RS.empty; excludes = excludes; cellcount = cellcount }
+
+let of_directed_pairs spaces exclusions =
+  let regset l = List.fold_right RS.add l RS.empty in
+  let find map r = try RM.find map r with Not_found -> RS.empty in
+  let addx rset r map = RM.add r (map_union map r rset) map in
+  let add (rs, rs') map =
+    let map = List.fold_right (addx (regset rs')) rs  map in
     map in
   let excludes = List.fold_right add exclusions RM.empty in
   let cellcount (s, _, w) = w / (spaces s).Space.cellwidth in
@@ -696,8 +736,21 @@ let first_choice choices next =
   { allocate = allocate; freeze = freeze }
 let first_choice = wrap_choice first_choice
 @ 
+
+The global [[getreg]] marks a register as used. We don't want this in
+case it is just excluded but not used. Otherwise excluded, but unused
+registers, would be reported in the result, which is used for liveness
+analysis.  Therefore, we implement [[getreg]] and [[usereg]] locally:
+[[getreg]] returns the next register; only if it is not excluded, we
+mark it as used. 
+
 <<automaton.ml>>=
 let sharedregs ex regs ~errormsg next =
+    let getreg state = match state.avail with
+    | [] -> raise (Failure "get register")
+    | r :: rs -> (state.avail <- rs; r) in
+    let usereg state r = state.used <- RS.add r state.used in
+    
   let state = { avail = regs; used = RS.empty } in
   let rec alloc ~width ~alignment ~hint =
     try
@@ -705,6 +758,7 @@ let sharedregs ex regs ~errormsg next =
       if Exclude.available ex r then
         if w = width then
           begin
+            usereg state r;
             Exclude.use ex r;
             of_loc (R.reg r)
           end
@@ -718,6 +772,19 @@ let sharedregs ex regs ~errormsg next =
   let freeze regs mems = next.freeze (RS.union state.used regs) mems in
   { freeze = freeze; allocate = alloc }
 let sharedregs ex regs ~errormsg = wrap (sharedregs ex regs ~errormsg)
+@
+
+<<automaton.ml>>=
+let sharedoverflow ex regs ~memsize ~byteorder ~growth ~max_alignment =
+  I (fun ~start ->
+    let mem = M.at start growth in
+    let state = { mem = mem; frozen = false } in
+    <<functions [[allocate]] and [[freeze]] for the overflow block>>
+    let allocate ~width ~alignment ~hint = 
+        let ()  = List.iter (fun r -> Exclude.use ex r) regs in
+        allocate ~width ~alignment ~hint
+    in
+    { allocate = allocate ; freeze = freeze})
 @ 
 \subsection{Compatibility}
 <<old compatibility interface as part of automaton.ml>>=

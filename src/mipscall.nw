@@ -54,6 +54,7 @@ arguments are the width and hints to try in every state of an automaton.
 
 <<mipscall.mli>>=
 val dump_proc:      int list -> string list -> unit
+val dump_proc':     (int * string) list -> unit    (* dump these types *)
 val dump_return:    int list -> string list -> unit
 val dump_cutto:     int list -> string list -> unit
 val paths_proc:      int list -> string list -> unit
@@ -188,17 +189,34 @@ let spaces =
 
 To use my test framework I allow 64-bit integer arguments and treat them
 like 64 bit floating-point arguments. There are no 64-bit integers on
-the {\mips}.
+the {\mips}. Use [[./qc-- -e 'Debug.Mips.proc_all()']] to obtain all
+relevant argument lists.
+
+After we have allocated a single integer register, we never allocate a
+floating-point register. Therefore, any integer register excludes all
+floating-point registers. Unfortunately we cannot express (with the
+exclusion relation), that once we go into the overflow block, we never
+allocate a register. Consider: [[float]], [[float]], [[int]],
+[[double]], [[int]]. The [[double]] goes into an overflow block, but
+register 7 is still unused. How do we prevent the following [[int]] to
+go there? 
+
+I believe the calling convention is correct for all 32-bit arguments. I
+am not sure about the direction arguments should grow to in the overflow
+block. Everything with 64 bit floating-point arguments is pure hell.
 
 <<mipscall.ml>>=
 let arguments () =
-    let exc = A.Exclude.of_pairs spaces [[r 4] , [f 12] 
-                                        ;[f 12], [f 13]
-                                        ;[f 14], [f 15]
-                                        ;[r 5] , [f 13; f 14] 
-                                     (* ;[r 6] , [f 14]  *)
-                                     (* ;[r 7] , [f 15]  *)
-                                         ] in
+    let exc = A.Exclude.of_directed_pairs spaces (* directed!! *)
+            [[r 4; r 5; r 6; r 7] , [f 12; f 13; f 14; f 15] 
+            ;[f 12], [r 4]
+            ;[f 13], [r 5]
+            ;[f 14], [r 4; r 5]
+            ;[f 15], [r 4; r 5; r 6 ; r 7]
+            ;[r 5] , [r 4]
+            ;[r 6] , [r 4; r 5]
+            ;[r 7] , [r 4; r 5; r 6]
+            ] in
 
     A.first_choice 
     [ (fun w h -> h = "float"),
@@ -208,7 +226,7 @@ let arguments () =
         [ (fun h w -> h="float" && w=32),
             A.sharedregs exc [f 12; f 14; r 6; r 7] ~errormsg:fatal   
         ; (fun h w -> w=64), (* h = "float" *)
-            A.sharedregs exc [d 12; d 14] ~errormsg:fatal
+            A.sharedregs exc [d 12; d 14; l 6] ~errormsg:fatal
         ; (fun h w -> w=32), 
             A.sharedregs exc [r 4; r 5; r 6; r 7] ~errormsg:fatal
         ] 
@@ -222,7 +240,10 @@ let arguments () =
             A.sharedregs exc [l 4; l 6] ~errormsg:fatal
         ]  
     ] **>
-    A.overflow ~memsize:8 ~byteorder ~growth ~max_alignment:sp_align
+    A.sharedoverflow 
+        exc
+        [r 4; r 5; r 6; r 7]    (* exclude these *)
+        ~memsize:8 ~byteorder ~growth ~max_alignment:sp_align
 @ 
 
        
@@ -324,6 +345,19 @@ let dump what automaton widths hints =
         ~widths ~hints
         
 let dump_proc     = dump Automatongraph.print arguments 
+@
+
+The [[Automatongraph.print]] function generates either too many or too
+few types that are tested. As a quick fix, here are all the types we
+care about.
+
+<<mipscall.ml>>=
+let dump_proc' types = 
+    Automatongraph.print' 
+        ~mk:(fun () -> A.at (Rtl.bits (Bits.zero 32) 32) (arguments ()))
+        types
+
+
 let dump_return   = dump Automatongraph.print (fun () -> results)
 let dump_cutto    = dump Automatongraph.print (fun () -> cut_args)
 let paths_proc     = dump Automatongraph.paths arguments 

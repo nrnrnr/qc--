@@ -34,8 +34,15 @@ outgoing edge at a node.
 val print:  mk:(unit -> Automaton.t) 
                      -> widths:int list -> hints:string list 
                      -> unit
+val print': mk:(unit -> Automaton.t) 
+                     -> (int * string) list (* width * hint *)
+                     -> unit
+
 val paths:  mk:(unit -> Automaton.t) 
                      -> widths:int list -> hints:string list 
+                     -> unit
+val paths': mk:(unit -> Automaton.t) 
+                     -> (int * string) list (* width * hint *)
                      -> unit
 @
 
@@ -172,7 +179,12 @@ now the standard output format.
 
 <<automatongraph.ml>>=
 module ToDot = struct
-    let register (sp,i,_) = sprintf "$%c%i" sp i
+    let size = function
+        | 32 -> ""
+        | 64 -> "q"
+        | n  -> sprintf ":%d" n
+        
+    let register (sp,i,w) = sprintf "$%c%i%s" sp i (size w)
     let ty (width,hint)   = sprintf "%d/%s" width hint
     let node s            = sprintf "\"%i:%s\"" 
                                         s.align 
@@ -280,14 +292,14 @@ contains the node corresponding to the initial state and is otherwise
 empty.
   
 <<automatongraph.ml>>=
-let print ~mk ~widths ~hints = 
+let print' ~mk dirs =
     let dump g  = print_endline (ToString.graph g) in
-    let dirs    = combine widths hints in
     let init    = {regs=[]; align=0}   in
     let g       = graph init           in
     let g       = dfs mk dirs g [] {regs=[]; align=0} in
         ( ToDot.graph g
         )
+let print ~mk ~widths ~hints = print' ~mk (combine widths hints)
 @
 
 % ------------------------------------------------------------------ 
@@ -387,13 +399,14 @@ let interesting_paths graph =
     let (paths,_) = explore graph ES.empty [] [] graph.start in
         List.map List.rev (List.concat paths)
 
-let paths ~mk ~widths ~hints = 
+let paths' ~mk dirs =
     let dump g  = print_endline (ToString.graph g) in
-    let dirs    = combine widths hints in
     let init    = {regs=[]; align=0}   in
     let g       = graph init           in
     let g       = dfs mk dirs g [] {regs=[]; align=0} in
         ToDot.paths (interesting_paths g)
-@
+
+let paths ~mk ~widths ~hints = 
+    paths' ~mk (combine widths hints)
 
             
