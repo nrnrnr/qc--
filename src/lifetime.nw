@@ -1,3 +1,4 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 
 \input{macros.tex}
                         
@@ -25,20 +26,35 @@ The implementation is a functor [[Make]] that takes the a [[Point]]
 module as parameter and returns a module of type [[S]].  detailed
 below.
 
-<<lifetime.mli>>=
+<<interval.mli>>=
 <<module type POINT>>
-<<module type S>>
-module Make (Point: POINT): (S with type point = Point.t)
-@
+<<module type S of Interval>>
+module Make (Point: POINT): (S with module Point = Point)
+@ 
+<<module type S of Interval>>=
+module type S = sig
+    module Point : POINT 
+    type t
+    (* primitives *)
+    val empty: t
+    val mk: Point.t -> Point.t -> t  (* note conditions above *) 
+    (* constructors *)
+    val union : t -> t -> t
+    (* observers *)
+    val isempty  : t -> bool
+    val overlaps : t -> t -> bool
+    val precedes : t -> t -> bool
 
-Module type [[S]] describes the result of the [[Make]] functor. Since
-we habe repreat it in the implementation we make it a named code chunk
-such that we can re-use it later.
-
-<<module type S>>=
-module type S = sig 
-    <<type S sig>>
+    module Set : Set.S with type elt = t
+      (* Elements with different left-hand sides are ordered by that left-hand side.
+         Note the ordering here is *not* the same as the partial order defined
+         by [[precedes]]. *)
 end
+
+
+<<lifetime.mli>>=
+<<module type S of Lifetime>>
+module Make (Interval : Interval.S): (S with module Interval = Interval)
 @
 
 Points must be ordered and in addition provide a single point
@@ -69,19 +85,6 @@ of the following cases:
 \item $x \leq \mathit{zero}$
 \item $y \leq \mathit{zero}$
 \end{enumerate}
-
-<<type S sig>>= 
-type point
-
-module Interval: sig
-    type t
-    (* primitives *)
-    val empty: t
-    val mk: point -> point -> t  (* note conditions above *) 
-    (* observers *)
-    val overlaps: t -> t -> bool
-    val precedes: t -> t -> bool
-end
 @
 
 The following algebraic laws explain the interaction between the
@@ -126,8 +129,9 @@ to an checked run-time error.
     symmetrical [[union]] operation. --CL
 \end{quote}
 
-<<type S sig>>=
-module Lifetime: sig
+<<module type S of Lifetime>>=
+module type S = sig
+    module Interval : Interval.S
     type t
     (* primitives *)
     val empty: t
@@ -168,25 +172,29 @@ operators for points.  The real implementation happens in the body of
 [[Make]], and the bodies of [[Interval]] and [[Lifetime]] in
 particular.
  
-<<lifetime.ml>>=
+<<interval.ml>>=
 <<module type POINT>>
-<<module type S>>
+<<module type S of Interval>>
 module Make (Point: POINT) = struct
-    type point = Point.t
+    module Point = Point
     module Order = struct
         let eq x y  = (Point.compare x y) = 0
         let lt x y  = (Point.compare x y) < 0 
         let gt x y  = (Point.compare x y) > 0
         let le x y  = lt x y || eq x y
         let ge x y  = gt x y || eq x y
+        let min x y = if lt x y then x else y
+        let max x y = if lt x y then y else x
     end
-    module Interval = struct
-        <<module Interval struct>>
-    end
-    module Lifetime = struct
-        <<module Lifetime struct>>
-    end 
+    <<module Interval struct>>
 end
+@ 
+<<lifetime.ml>>=
+<<module type S of Lifetime>>
+module Make (Interval : Interval.S) = struct
+    module Interval = Interval
+    <<module Lifetime struct>>
+end 
 @
 
 
@@ -214,9 +222,6 @@ To order intervals, they are compared by their first component first
 and then by their second. 
 
 <<module Interval struct>>=
-let cmp (x1,y1) (x2,y2) = match Point.compare x1 y1, Point.compare x2 y2 with
-    | 0,x -> x
-    | x,_ -> x
 @
 
 Two intervals overlap, if an end point falls onto an end point of the
@@ -237,13 +242,22 @@ precedes no other interval.
 let precedes i1 i2 = match i1, i2 with
     | i1     , i2  when isempty i1 || isempty i2 -> false
     | (x1,y1), (x2,y2)  -> (Order.le y1 x2 || Order.lt y2 x1)
-@
-
-To model a lifetime we need sets of intervals.  The standard set
-construction does the job. 
-
+@ 
+Union depends on ordering
 <<module Interval struct>>=
-module Set = Set.Make (struct type t=t' let compare=cmp end)
+let union i1 i2 = match i1, i2 with
+    | i1     , i2  when isempty i1  -> i2
+    | i1     , i2  when isempty i2  -> i1
+    | (x1,y1), (x2,y2)  -> Order.min x1 x1, Order.max y1 y2
+@
+<<module Interval struct>>=
+module Set = Set.Make (struct
+  type another_name_for_interval_dot_t = t   (* type t = t would be cyclic *)
+  type t = another_name_for_interval_dot_t
+  let compare (x1,y1) (x2,y2) = match Point.compare x1 y1, Point.compare x2 y2 with
+      | 0,x -> x
+      | x,_ -> x
+end)
 @
 
 
@@ -257,7 +271,8 @@ live in a procedure.  Lifetimes are the \emph{disjoint} union of
 lifetimes leads to an checked run-time error. 
 
 <<module Lifetime struct>>=
-type t = Interval.Set.t
+
+type t = Interval.Set.t  (* no element is an empty interval *)
 
 let empty = Interval.Set.empty
 @
@@ -286,9 +301,7 @@ let bbox t =
     if t = Interval.Set.empty then
         Interval.empty
     else
-        let (x1,_ ) = Interval.Set.min_elt t in
-        let (_ ,y2) = Interval.Set.max_elt t in
-            (x1,y2)   
+        Interval.union (Interval.Set.min_elt t) (Interval.Set.max_elt t)
 @
 
 The union of two lifetimes is only meaningful when the two are
