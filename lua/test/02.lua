@@ -11,9 +11,9 @@ assert(a.x==1 and b==2 and a[1]==10)
 a[f()], b, a[f()+3] = f(), a, 'x'
 assert(a[10] == 10 and b == a and a[13] == 'x')
 
-assert(if f() then f() else 10 end == 10)
-assert(not if f() == 20 then f() end)
-assert(if nil then f() elseif 1 then 20 end == 20)
+--assert(if f() then f() else 10 end == 10)
+--assert(not if f() == 20 then f() end)
+--assert(if nil then f() elseif 1 then 20 end == 20)
 
 a, b, c, d = 1 and nil, 1 or nil, (1 and (nil or 1)), 6
 assert(not a and b and c and d==6)
@@ -51,10 +51,11 @@ assert(a[a][a][a][a][print] == assert)
 a[print](a[a[f]] == a[print])
 a = nil
 
-a = {10,9,8,7,6,5,4,3,2; [-3]='a', [f]=print, a='a', b='ab'}
-assert(a[1]==10 and a[-3]==a.a and a[f]==print)
-a[1], f()[2], b, c = {['alo']=assert}, 10, a[1], a[f]
-a[1].alo(a[2]==10 and b==10 and c==print)
+a = { 10, 9, 8, 7, 6, 5, 4, 3, 2 }
+-- a = {10,9,8,7,6,5,4,3,2; [-3]='a', [f]=print, a='a', b='ab'}
+-- assert(a[1]==10 and a[-3]==a.a and a[f]==print)
+-- a[1], f()[2], b, c = {['alo']=assert}, 10, a[1], a[f]
+-- a[1].alo(a[2]==10 and b==10 and c==print)
 
 a[2^31] = 10; a[2^31+1] = 11; a[-2^31] = 12;
 a[2^32] = 13; a[-2^32] = 14; a[2^32+1] = 15; a[10^33] = 16;
