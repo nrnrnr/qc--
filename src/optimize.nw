@@ -22,6 +22,11 @@ For now, we have a few simple transformations of the control-flow graph.
 \subsection{The Optimizations}
 % ------------------------------------------------------------------ 
 
+We can simplify the expressions in the rtl's in a flow graph by calling
+[[simplify_exps]].
+<<optimize.mli>>=
+val simplify_exps : 'a -> Ast2ir.proc -> bool
+@
 It is possible to build a flow graph such that a node cannot be reached
 by following successors from the entry node, but it can be reached by
 following predecessors from the exit node.
@@ -52,6 +57,16 @@ module G = Cfgx.M
 module RP = Rtl.Private
 module Down = Rtl.Dn
 module Up = Rtl.Up
+@
+
+We traverse the flow graph and simplify rtl's.
+<<optimize.ml>>=
+let simplify_exps _ {Proc.cfg = cfg} =
+  let simplify_node n rst =
+    match G.to_instr n with
+    | None   -> rst
+    | Some i -> G.update_instr Simplify.rtl n; true in
+  G.fold_nodes simplify_node false cfg
 @
 
 A forward dfs followed by a backwards dfs will find nodes reachable from the entry
