@@ -136,26 +136,32 @@ The solver maintains a set [[t]] of equations. A [[sum]] is a linear
 combination of [[terms]] with integers as coefficients.  An equation is
 added to [[t]] by [[make_zero]]: it takes a set [[t]], a [[sum]]  $s$,
 and adds the equation $s=0$ to the set [[t]]. The solver reports its
-results as a list that associates each variable with its term. If too
-few equations are given to eliminate all variables the terms found for
-the variables still contain variables. These can be considered
-constraints of the solution.  If the solver fails to find a solution,
-[[Can'tSolve]] is raised with a message that hints at the problem.
+results as two lists that associate each variable with its term: the
+known and the dependent variables. If too few equations are given to
+eliminate all variables terms found for dependent variables still
+contain variables, in contrast to the terms of known variables. If the
+solver fails to find a solution, [[Can'tSolve]] is raised with a message
+that hints at the problem.
 
 <<S>>=
 module type S = sig
-    exception Can'tSolve of string
-    
     type t                                      (* set of equations *)
     type term
-    type sum    = (int * term) list
-    
+    type sum      = (int * term) list
+
+    type solution = 
+        { known:     (string * sum) list
+        ; dependent: (string * sum) list
+        }
+
     val empty:          t                       (* empty set of equations *)
     val make_zero:      sum -> t -> t           (* add equation *)
-    val solve:          t -> (string * sum) list (* Can'tSolve *)
+    val solve:          t -> solution           (* Can'tSolve *)
 end
 
 <<eqn.mli>>=
+exception Can'tSolve of string    
+
 <<EXP>>
 <<S>>
 module Make (E: EXP): S with type term = E.t
@@ -173,13 +179,17 @@ following holds: $t_i \prec t_j \Rightarrow i < j$. In addition, no term
 $t$ appears twice in a sum.
 
 <<eqn.ml>>=
+exception Can'tSolve of string    
+
+    
 <<EXP>>
 <<S>>
 module Make (E: EXP) = struct
-    type term = E.t
-    
+    type term     = E.t
+
     <<Make>>
 end    
+
 
 module Test = struct
     <<Test>>
@@ -194,6 +204,11 @@ solutions.
 
 type sum   = (int * E.t) list                 (* invariant: ordered *)
 type assoc = string * sum
+
+type solution = 
+    { known:     (string * sum) list
+    ; dependent: (string * sum) list
+    }
 
 type t   = 
     { set:      sum   list        (* invariant: normalized *)
@@ -361,14 +376,20 @@ let rec solver t =
 
 After all equations have been eliminated the solution can be found in
 the [[t.env]] value. To eliminate $n$ variables $n$ independent
-equations are necessary. If this condition is not met the problem is
+equations are necessary. If this condition is violated, the problem is
 under-specified and the terms of variables still contain independent
-variables.  
+variables.  The solution [[env.t]] is partitioned into two association
+lists: the first includes all variables that are completely knwon, the
+other all other, i.e. those that still depend on other variables.
 
 <<Make>>=
 let solve t =
-    let t     = solver t in
-        t.env
+    let t          = solver t in
+    let known  sum = List.for_all (fun (_,e) -> E.variable e = None) sum in 
+    let k,d        = List.partition (fun (_,sum) -> known sum) t.env in
+        { known     = k
+        ; dependent = d
+        }
 @        
    
 The [[make_zero]] function establishes the invariants for equations:
@@ -430,13 +451,17 @@ let eqns2 =
 
 (*
 let _ = assert 
-        (test eqns1 = ["x", [5, E.Unit]; "z", [2, E.Unit]; "y", [-3, E.Unit]])    
+        (test eqns1 = 
+            { S.known = ["x", [5, E.Unit]; "z", [2, E.Unit]; "y", [-3, E.Unit]]
+            ; S.dependent = []
+            })
+                
 let _ = assert 
-        (test eqns2 = ["y", [5, E.Unit]; "x", [2, E.Unit]; "z", [-4, E.Unit]])
+        (test eqns2 = 
+            { S.known = ["y", [5, E.Unit]; "x", [2, E.Unit]; "z", [-4, E.Unit]]
+            ; S.dependent = []
+            })
+        
 *)
-@
-        
-        
-
         
 

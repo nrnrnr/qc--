@@ -17,74 +17,331 @@
 % l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
 
 % ------------------------------------------------------------------ 
-\section{Compile-time constants}
+\section{Symbolic compile-time constants}
 % ------------------------------------------------------------------ 
 
-There are a bunch of values, such as ``the size of the stack frame,''
-which are compile-time constants whose values aren't known until late
-in compilation.  We want to borrow the notion of ``link-time
-constant'' but use it for compile-time constants.
+Some compile-time values, like the size of parameter passing areas, are
+unknown until late in the compile process, yet they are used before
+that. This module provides symbolic names for compile-time values that
+can be used immediately  and defined later. This idea is related to
+link-time constants which also have symbolic names that are resolved
+later during linking. 
+
+In the compiler context symbolic compile-time constants are part of
+{\rtl} expressions. The [[HighLevel]] interface allows to equate
+these expression to gain knowledge about their embedded constants. A
+[[LowLevel]] interface provides access to equation solving in a less
+{\rtl} centric way.
+
 
 <<const.mli>>=
-val register : string -> int -> Rtl.exp
-  (* Creates a named value of a given width. The name is registered in
-     the interface such that it can be refined by calls to [[make_equal]].
-   *) 
+module HighLevel: sig
+    <<HighLevel interface>>        
+end
 
-val lookup : string -> Rtl.exp
-  (* Returns the RTL expression denoting the value of the constant
-     with the given name.  Does *not* always return the
-     same value; for example, if the name gets bound to a constant,
-     that may change the result returned by value. *)
-
-exception Cannot_solve of Rtl.exp * Rtl.exp
-val make_equal : Rtl.exp -> Rtl.exp -> unit
-
-  (* updates internal bindings for compile-time constants to force these two
-     expressions equal.  Raises Cannot_solve if equating the 
-     two expressions does not lead to a binding.
-
-     Expressions in the following forms are guaranteed to work:
-         make_equal (value s) (Rtl.bits b w)
-         make_equal (value s) (value s')
-
-     Note that after a call to [[make_equal (value s) (value s')]], we
-     are guaranteed that [[value s = value s']] (because [[value]] is
-     not purely applicative but depends on the global state that is
-     mutated by [[make_equal]]).
-   *)
+module LowLevel: sig
+    <<LowLevel interface>>
+end
 @
-   
+
+% ------------------------------------------------------------------ 
+\subsection{Symbolic RTL compile-time constants}
+% ------------------------------------------------------------------ 
+
+A symbolic compile-time constant $v$ is represented by an [[Rtl.link]]
+value and is created when it is needed. It then becomes part of other
+{\rtl}s.  Knowledge about $v$'s value comes from equations in which $v$
+takes part, like $v = \sum_i e_i$, where $e$ are other expressions.
+Equations are collected in an equation system that is later solved to
+find $v$'s value, as well as the values of other compile-time constants
+it contains.
+
+<<HighLevel interface>>=
+exception Can'tSolve
+
+type t                                          (* eqn. system *)
+type solution =
+    { known:        (string * Rtl.exp) list
+    ; dependent:    (string * Rtl.exp) list
+    }
+
+val empty: width:int -> t
+val register:   Rtl.exp -> t -> t               (* req: Rtl.exp = Rtl.link *)
+val make_equal: Rtl.exp -> Rtl.exp -> t -> t 
+
+val solve: t -> solution                        (* Can'tSolve *)
+@
+
+Symbolic compile-time constants, created by [[Rtl.link]],  must be
+[[registered]] in the equation system [[t]] that is used to find their
+values. It is a checked run-time error to pass anything but an
+[[Rtl.link]] value to [[register]].
+
+Equations $e_1 = e_2$ are added to an equation system by ([[make_equal]]
+$e_1$ $e_2$). Both expressions must be of the same width, otherwise it is
+an unchecked run-time error. One of the two equations must include at
+least one symbolic (and registered) compile-time constant, otherwise
+[[solve]] will raise [[Can'tSolve]]. All expression must be of the same
+[[width]] (that is typically the native pointer size) that is announced
+when the [[empty]] set of equations is created.
+
+The [[solve]] function takes an equation system [[t]] and tries to
+determine the values of all registered symbolic constants. The
+[[solution]] contains two association lists: [[known]] for all symbolic
+constants whose values are expressed as [[Rtl.exp]] values that do not
+contain any other registered symbolic constants. If the equation system
+is under-specified not all symbolic constants can be eliminated. This
+results in expressions for symbolic constants that depend on other
+symbolic constants. These are reported in the [[dependent]] component.
+Note, that this situation is different from a [[Can'tSolve]] situation.
+In the latter the solver fails to express a variable in terms of
+expressions at all.
+
+% ------------------------------------------------------------------ 
+\subsection{Symbolic Constants in Expression}
+% ------------------------------------------------------------------ 
+
+The high-level interface above is centered around {\rtl} expressions.
+This somewhat lower-level interface offers its own, less {\rtl}
+dependent, expression syntax to describe symbolic constants and
+variables.
+
+<<module type CONST>>=
+module type CONST = sig
+    type t
+    val rtl: t -> Rtl.exp
+end    
+
+<<module type S>>=
+module type S = sig
+    exception Can'tSolve of string   
+
+    type exp                            
+    type t                                      (* eqation system *)
+    type const                                  (* opaque constant *)
+    type solution =
+        { known: (string * exp) list
+        ; dependent: (string * exp) list
+        }
+
+    val sym:    string -> exp                   (* symbolic constant *)
+    val int:    int    -> exp                   (* integer literal   *)
+    val const:  const  -> exp                   (* constant          *)
+    val add:    exp -> exp -> exp               (* sum               *)
+    val sub:    exp -> exp -> exp               (* difference        *)
+    
+    val rtl:    width:int -> exp -> Rtl.exp
+    
+    val empty: t                                (* empty eqn. system *)
+    val make_equal: exp -> exp -> t -> t        (* add e1 = e2 to t  *)
+    val solve: t -> solution                    (* Can'tSolve        *)
+end
+
+<<LowLevel interface>>=
+<<module type CONST>>
+<<module type S>>
+module Make(C: CONST): S with type const = C.t
+@
+Expressions are sums of symbolic constants, integers, and opaque
+constants. For observation, an expression can be transformed into an
+{\rtl} expression. Since in a sum all components must be of the same
+width, the [[rtl]] function takes the assumed [[width]] and uses it to
+contruct an [[Rtl.exp]] value of that width.  A client-provided function
+[[rtl]] is used to convert an opaque constant into an [[Rtl.exp]] value.
+
+Equations $e_1 = e_2$ are created by [[make_equal]] that adds the new
+equation to an equation system [[t]]. An [[empty]] equation system gets
+the process started.
+
+The [[solve]] function reports the solution as an association list. If
+the equation system is under-specified, expression denoting the value of
+dependent constants include other symbolic constants.
+
 % ------------------------------------------------------------------ 
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
 
-The implementation uses an imperative hash table to record bindings in
-the implementation. 
+The implementation of the {\rtl}-centric [[HighLevel]] module relies on
+the more detailed [[LowLevel]] implementation, which in turn uses the
+generic [[Eqn]] solver. 
+
+\begin{quote}\it
+    I'm not sure that all these functors really pay of when we 
+    basically have only single arguments to supply. --CL
+\end{quote}
 
 <<const.ml>>=
-let bindings = Hashtbl.create 500
+module LowLevel = struct
+    <<module type CONST>>
+    <<module type S>>
 
-let register id width = 
-    let expr = Rtl.link id width in
-        ( Hashtbl.add bindings id expr
-        ; expr 
-        )
-         
-let lookup id = 
-    try Hashtbl.find bindings id
-    with Not_found -> assert false
 
-exception Cannot_solve of Rtl.exp * Rtl.exp
+    module Make(C: CONST) = struct
+        <<Make>>
+    end
+end
+
+module HighLevel = struct
+    <<HighLevel>>
+end
 @
 
-The [[make_equal]] function is extremely limited: it can only be used
-to replace a link-time constant with another value.
+% ------------------------------------------------------------------ 
+\subsection{RTL-centric Implementation}
+% ------------------------------------------------------------------ 
 
-<<const.ml>>=
-let make_equal x y =
-    match Rtl.Convert.exp x with
-    | Rtl.Private.Const (Rtl.Private.Link(id,w)) -> Hashtbl.add bindings id y
-    | _                                          -> raise (Cannot_solve(x,y))
+The simple interface of the {\rtl}-centric implementation requires to
+parse the involved {rtl} expression and transform them into a linear
+form, because only linear equation can be solved with the [[Eqn]]
+solver. The low-level interface provides bascially an expression syntax
+for linear terms that include symbolic constants, literal constants and
+opaque constant for everything that does not fit into one of the former
+categories. Opaque constants are left touched by the equation solver.
+
+Symbolic constants are represented by [[Rtl.link]] values but not every
+[[Rtl.link]] value is a symbolic constant. Therefore the client must
+\emph{register} symbolic constants. The implementation keeps them in a
+set such that only registered [[Rtl.link]] values become symbols.
+
+<<HighLevel>>=
+module RP    = Rtl.Private
+module Const = struct
+    type t = RP.exp
+    let rtl e = Rtl.Revert.exp e
+end
+module Eqns = LowLevel.Make(Const)
+
+exception Can'tSolve
+
+type t = 
+    { symbols:  Str.Set.t
+    ; eqns:     Eqns.t
+    ; width:    int
+    }
+
+type solution =
+    { known:        (string * Rtl.exp) list
+    ; dependent:    (string * Rtl.exp) list
+    }
+
+let empty width =
+    { symbols   = Str.Set.empty
+    ; eqns      = Eqns.empty
+    ; width     = width
+    }
+
+let register exp t = match Rtl.Convert.exp exp with
+    | RP.Const(RP.Link (x,_)) -> { t with symbols = Str.Set.add x t.symbols }
+    | _                       -> invalid_arg "Const.HighLevel.register"
+
 @
 
+To convert an [[Rtl.exp]] value into an [[Eqns.exp]] value the
+expression at hand must be parsed. Registered [[Rtl.Link]] values
+becomes variables, [[Rtl.bits]] values integers, applications of [[add]]
+and [[sub]] sums, and everything else opaque constants.
+
+<<HighLevel>>=
+let const t = function
+    | RP.Bits(b)                                -> Eqns.int (Bits.to_int b)
+    | RP.Link(x,_) when Str.Set.mem x t.symbols -> Eqns.sym x
+    | x                                         -> Eqns.const (RP.Const x )
+        
+                        
+let rec exp t = function
+    | RP.Const(c)      -> const t c
+    | RP.Fetch _ as k  -> Eqns.const k
+    | RP.App(("add",_),[e1;e2]) -> Eqns.add (exp t e1) (exp t e2)
+    | RP.App(("sub",_),[e1;e2]) -> Eqns.sub (exp t e1) (exp t e2)
+    | x                -> Eqns.const x
+    
+    
+let make_equal e1 e2 t = 
+    let e1   = Rtl.Convert.exp e1 in
+    let e2   = Rtl.Convert.exp e2 in
+    let eqns = Eqns.make_equal (exp t e1) (exp t e2) t.eqns in
+        { t with eqns = eqns }
+
+let solve t =
+    let exp2rtl (s,e) = (s,Eqns.rtl t.width e) in
+    try 
+        let x = Eqns.solve t.eqns in
+            { known     = List.map exp2rtl x.Eqns.known
+            ; dependent = List.map exp2rtl x.Eqns.dependent
+            }
+    with
+        Eqns.Can'tSolve _ -> raise Can'tSolve
+    
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Low-Level Implementation}
+% ------------------------------------------------------------------ 
+
+<<Make>>=
+type const      = C.t
+type term       = Const of const
+                | Sym   of string
+                | Unit
+
+type exp        = (int * term) list
+type solution   =
+    { known:     (string * exp) list
+    ; dependent: (string * exp) list
+    }
+    
+exception Can'tSolve of string
+let error msg = raise (Can'tSolve msg)
+
+let sym x       = [(1, Sym x)]
+let int i       = [(i, Unit)]
+let const k     = [(1, Const k)]
+let add x y     = x @ y
+let sub x y     = x @ List.map (fun (i,y) -> (-i,y)) y
+
+let rtl (width:int) (e:exp) = 
+    let add    = Rtl.opr "add"  [width] in
+    let mult   = Rtl.opr "mult" [width] in 
+    let bits i = Rtl.bits (Bits.of_int i width) width    in 
+    let link x = Rtl.link x width in
+    let summand = function
+        | (1,Sym x)   -> link x 
+        | (i,Sym x)   -> Rtl.app mult [bits i; link x] 
+        | (i,Unit)    -> bits i 
+        | (1,Const k) -> C.rtl k
+        | (i,Const k) -> Rtl.app mult [bits i;C.rtl k] in
+    let rec loop e = function
+        | []    -> e
+        | [s]   -> Rtl.app add [e;summand s]
+        | s::ss -> loop (Rtl.app add [e;summand s]) ss
+    in
+        match e with
+        | []    -> assert false
+        | s::ss -> loop (summand s) ss 
+
+module Exp = struct
+    type t = term
+    
+    let variable = function 
+        | Sym(s) -> Some s
+        | _      -> None
+        
+    let compare = compare
+end
+
+module E = Eqn.Make(Exp)
+
+type t         = E.t
+let empty      = E.empty
+let make_equal left right t =
+    E.make_zero (sub left right) t
+
+let solve t = 
+    try 
+        let s = E.solve t in
+            { known     = s.E.known
+            ; dependent = s.E.dependent
+            }
+            
+with Eqn.Can'tSolve msg -> error msg
+@
