@@ -2,6 +2,172 @@
 exception Unimplemented
 let compile ~srcdbg cs = 
   fun g -> raise Unimplemented 
+
+exception NotWritten of string
+exception Return of value list
+
+
+let rec exp e rho xi = 
+   (match e with
+       | A.Lit v  -> v
+       (*| A.Var x -> (match lookup rho x with
+                     | Global  -> getglobal xi (V.String x)
+                     | Local n -> getlocal rho n)*) 
+       (* problem with rho as an array and list above. I need a new lookup
+	function *) 
+       | A.Index (tab, key) -> let tabval = exp tab rho xi in
+                               let keyval = exp key rho xi in
+			       index xi tabval keyval
+      (* | A.Table (lists, bindings) ->
+                (* check with list bindings *)
+                let size = List.length bindings + List.length lists in
+		let t = V.Table.create size in
+		(* write bind and listbind *)
+    *)
+
+       | A.Binop (e1, op, e2) ->
+               (match op with
+	        | A.And -> let v1 = exp e1 rho xi in
+		           (match v1 with
+			   | V.Nil -> v1
+			   | _ -> exp e2 rho xi)
+		| A.Or  -> let v1 = exp e1 rho xi in
+		           (match v1 with
+			   | V.Nil -> exp e2 rho xi
+			   | _ -> v1)
+	        | _  ->
+                   let op = binop op in
+		   let v1 = exp e1 rho xi in
+		   let v2 = exp e2 rho xi in
+		   op v1 v2 xi)
+       | A.Unop (op, e) -> 
+                   let op = unop op in
+		   let v = exp e rho xi in
+		   op v xi
+
+      (* why are the results in the std interp trimmed? Is there ever a place
+       where the multiple returns will be seen? The stmt disregards the results,
+       only calling funcs for side effects... *)
+       | A.Call c -> trim1 (call c rho xi)
+       | _ -> raise Unimplemented )
+
+and call c rho xi = (match c with
+    _ -> raise Unimplemented)
+   
+(* This is problematic b/c a state list is expected and I am passing a value
+ list *)
+(*| A.Funcall (f, args) -> 
+       let f = exp f rho xi in
+       let args = List.map (fun x -> exp x rho xi) args in
+       (try apply f args with Return v -> v)
+   | A.Methcall (obj, meth, args) ->
+       let obj = exp obj rho xi in
+       let meth = V.String meth in
+       let f = index xi obj meth in
+       let args = List.map (fun x -> exp x rho xi) args in
+       (try apply f args with Return v -> v) *)
+and explist es rho xi = 
+       List.map (fun x -> exp x rho xi) es
+       (*List.fold_left (function (x, _) -> exp x rho xi) es V.Nil *)
+
+
+       (* Fill in *)
+               
+   
+@
+Note that in a loop you will propagaet the environment through each iteration,
+where as in a function-call to a block, the rho environment will be lost and the
+xi propagated.
+When do local variables go out of scope?
+
+<<compiler ((ast))>>=
+let rec stmt s rho xi = (match s with
+  | A.Stmt' _ -> raise (NotWritten "Stmt'")
+  | A.WhileDo (cond, body) -> 
+            if notnil (exp cond rho xi) then  
+	      let rho = block body rho xi in
+	      stmt s rho xi 
+	    else rho
+  | A.RepeatUntil (body, cond) -> 
+	    let rho = block body rho xi in
+            if notnil (exp cond rho xi) then stmt s rho xi
+	    else rho
+  | A.If (cond, t, alts, f) -> 
+            let alts = (cond, t)::alts in
+	    let f = (match f with None -> [] | Some ss -> ss) in 
+            let rec ifeval testlist fail = match testlist with
+	        | [] ->              fail
+	        | (cond, t)::rest -> let cond = exp cond rho xi in
+	                             if notnil cond then t 
+		   		     else ifeval rest fail in
+	    block (ifeval alts f) rho xi
+  | A.Return es ->
+            let vs = explist es rho xi in
+            raise (Return vs)
+       
+@
+I write Assign below to assign variables one at a time and them assign the rest.
+A special case is if the right hand expressions [[res]] end in [[A.Call c]]. In
+this case, we must consider the possibility of multiple returns, and so make the
+call to [[call]] directly.
+
+<<compiler ((ast))>>=
+  | A.Assign (lvs, res) ->
+       let rec assign lvs res rho = (match (lvs, res) with
+           | ([], res) -> List.map (function x -> exp x rho xi) res;
+	   		  rho
+	   | (lvs, []) -> let nil_assign x rho = lvar x V.Nil rho xi in
+	                  List.fold_right nil_assign rho lvs
+	   (* | (lvs, [A.Call c]) -> let rvs = try call c rho xi with 
+	                                   Return rvs' -> rvs' in
+				  stmt (A.Assign (lvs, rvs)) rho xi *)
+	   (* for above and below I have to do some sort of map or lavrs 
+	    function, not stmt Assign and assign *)
+	   (* | (lv::lvs, re::res) -> assign lvs res (lvar lv (exp re rho xi))
+	    *)
+           | _ -> raise Unimplemented)
+        in assign lvs res rho
+
+  (* | A.Local (vs, es) -> stmt (x::rho) (A.Assign ((A.Lvar x), es)) theta ret
+           stmt (A.Assign (List.map (function x -> A.Lvar x) vs, es)) 
+                (List.rev_append vs rho) xi *) (* just not right *)
+
+@
+Why does call not take the global environment
+<<compiler ((ast))>>=
+  | A.Callstmt c -> call c rho xi; rho
+  | _ -> raise Unimplemented)
+and lvar lv rv rho xi = (match lv with 
+  | A.Lindex (tab, key) ->
+           let tabval = exp tab rho xi in
+           let keyval = exp key rho xi in
+      	   settable xi tabval key rv
+  | A.Lvar x ->
+           (match lookup rho x with
+	    | Global  -> setglobal xi (V.String x) rv
+	    | Local n -> setlocal rho n rv))
+  ; rho
+and block body rho xi =
+  match body with
+  | [] -> rho
+  | s :: ss -> let rho = stmt s (extend rho s) xi in
+               block ss rho xi
+
+  
+  
+
+
+
+  
+  (* | A.Assign (A.Lindex (tab, key), e) ->
+           let v = exp e rho xi in
+           let tabval = exp tab rho xi in
+           let keyval = exp key rho xi in
+      	   settable xi tabval key v
+  | A.Assign (A.Lvar x, e) ->
+           let v = exp e rho xi in
+           (match lookup rho x with
+	    | Global  -> setglobal xi (V.String x) v
+	    | Local n -> setlocal rho n v) *)
+  
 @ 
-
-
