@@ -264,11 +264,17 @@ IBINARYOP(fcmp, { if isunordered(v1, v2)    ans = UNORDERED;
                 }, v1, v2, ans, float32, float32, bits2,
                                 bits2  , bits2  , bits2)
 BINARYOP (feq, v1 == v2, v1,v2, float32, float32, bool, bits32, bits32, bool)
+BINARYOP (feq, v1 == v2, v1,v2, float64, float64, bool, bits64, bits64, bool)
 BINARYOP (fge, v1 >= v2, v1,v2, float32, float32, bool, bits32, bits32, bool)
+BINARYOP (fge, v1 >= v2, v1,v2, float64, float64, bool, bits64, bits64, bool)
 BINARYOP (fgt, v1 >  v2, v1,v2, float32, float32, bool, bits32, bits32, bool)
+BINARYOP (fgt, v1 >  v2, v1,v2, float64, float64, bool, bits64, bits64, bool)
 BINARYOP (fle, v1 <= v2, v1,v2, float32, float32, bool, bits32, bits32, bool)
+BINARYOP (fle, v1 <= v2, v1,v2, float64, float64, bool, bits64, bits64, bool)
 BINARYOP (flt, v1 <  v2, v1,v2, float32, float32, bool, bits32, bits32, bool)
+BINARYOP (flt, v1 <  v2, v1,v2, float64, float64, bool, bits64, bits64, bool)
 BINARYOP (fne, v1 != v2, v1,v2, float32, float32, bool, bits32, bits32, bool)
+BINARYOP (fne, v1 != v2, v1,v2, float64, float64, bool, bits64, bits64, bool)
 BINARYOP (fordered,   !isunordered(v1,v2), v1,v2, float32, float32, bool,
                                                   bits32, bits32, bool) 
 BINARYOP (funordered, isunordered(v1, v2), v1,v2, float32, float32, bool,
@@ -313,23 +319,25 @@ As with the floating-point operations, we write one macro call per integer opera
 
 <<integer operator definitions>>=
 /* INTEGER operators begin here. */
-T_BINARYOP(add,     v1 + v2             , v1, v2 ,s_int16,bits16)
-T_BINARYOP(add,     v1 + v2             , v1, v2 ,s_int32,bits32)
-T_BINARYOP(and,     v1 & v2             , v1, v2 ,u_int16,bits16)
-T_BINARYOP(and,     v1 & v2             , v1, v2 ,u_int32,bits32)
-UNARYOP   (bit,     v1                  , v1     ,bool   ,u_int1,bool  ,bits1 )
+T_BINARYOP(add,     v1 + v2             , v1, v2,s_int16,bits16)
+T_BINARYOP(add,     v1 + v2             , v1, v2,s_int32,bits32)
+T_BINARYOP(and,     v1 & v2             , v1, v2,u_int16,bits16)
+T_BINARYOP(and,     v1 & v2             , v1, v2,u_int32,bits32)
+UNARYOP   (bit,     v1                  , v1    ,bool   ,u_int1,bool  ,bits1 )
 /* bitExtract  */
 /* bitInsert   */
 /* bitTransfer */
-T_UNARYOP (lobits,  v1                  , v1     ,u_int32,bits32)
-UNARYOP   (lobits,  v1 & 0xff           , v1     ,u_int32,u_int8,bits32,bits8 )
-UNARYOP   (bool,    v1                  , v1     ,u_int1 ,bool  ,bits1 ,bool  )
+T_UNARYOP (lobits,  v1                  , v1    ,u_int32,bits32)
+UNARYOP   (lobits,  v1 & 0xffff         , v1    ,u_int32,u_int16,bits32,bits16)
+UNARYOP   (lobits,  v1 & 0xff           , v1    ,u_int32,u_int8 ,bits32,bits8 )
+UNARYOP   (lobits,  v1 & 0xff           , v1    ,u_int16,u_int8 ,bits16,bits8 )
+UNARYOP   (bool,    v1                  , v1    ,u_int1 ,bool   ,bits1 ,bool  )
 /* borrow      */
 /* carry       */
-T_UNARYOP (com,     ~v1                 , v1     ,u_int16,bits16)
-T_UNARYOP (com,     ~v1                 , v1     ,u_int32,bits32)
-T_BINARYOP(conjoin, (v1 != 0 ? v2 : 0)  , v1, v2 ,bool   ,bits1 )
-T_BINARYOP(disjoin, (v1 != 0 ? 1 : v2)  , v1, v2 ,bool   ,bits1 )
+T_UNARYOP (com,     ~v1                 , v1    ,u_int16,bits16)
+T_UNARYOP (com,     ~v1                 , v1    ,u_int32,bits32)
+T_BINARYOP(conjoin, (v1 != 0 ? v2 : 0)  , v1, v2,bool   ,bits1 )
+T_BINARYOP(disjoin, (v1 != 0 ? 1 : v2)  , v1, v2,bool   ,bits1 )
 IBINARYOP (div, { div_t temp = div(v1, v2);
                   ans = (temp.quot < 0 ? temp.quot - (temp.rem > 0)
                                        : temp.quot + (temp.rem > 0));
