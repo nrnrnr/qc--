@@ -12,11 +12,15 @@ BINDIR  = $(DESTDIR)/usr/bin
 MAN1DIR = $(DESTDIR)/usr/share/man/man1
 LIBDIR  = $(DESTDIR)/usr/lib/qc--
 INCDIR  = $(DESTDIR)/usr/include/qc--
+DOCDIR  = $(DESTDIR)/usr/share/doc/qcmm
 
 all:    mkfile
 	mk timestamps
 	mk all.opt
+	(cd doc && mk release.pdf)
 
+# The directories in file 'dirs' are created automatically, no need to
+# do it again here
 install: bin/qc--.opt man/man1/qc--.1 man/man1/qc--internals.1
 	# qc-- compiler
 	install -m755 -s bin/qc--.opt $(BINDIR)/qc--
@@ -33,7 +37,9 @@ install: bin/qc--.opt man/man1/qc--.1 man/man1/qc--internals.1
 	# the runtime system 
 	install -m664 runtime/runtime.a $(LIBDIR)
 	install -m664 runtime/pcmap.ld $(LIBDIR)
-	#conflict with interpreter# install -m664 runtime/qc--runtime.h $(INCDIR)
+	#conflict with interp# install -m664 runtime/qc--runtime.h $(INCDIR)
+	# documentation
+	install -m664 doc/release.pdf $(DOCDIR)
 
 debian:	mkfile
 	dch -v `date +%Y%m%d` "nightly build"
