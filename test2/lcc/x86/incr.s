@@ -190,17 +190,17 @@ Lproc_body_start_l46:
 	movl $1,%ecx
 	movl %edx,%eax
 	addl %ecx,%eax
-	movzbl (%edx),%edx
+	movsbl (%edx),%edx
 	addl %ecx,%eax
 	movl %eax,%ecx
-	movzbl (%eax),%edx
+	movsbl (%eax),%edx
 	movl $-1,%edx
 	movl %ecx,%eax
 	addl %edx,%eax
-	movzbl (%ecx),%ecx
+	movsbl (%ecx),%ecx
 	addl %edx,%eax
 	movl %eax,%edx
-	movzbl (%eax),%edx
+	movsbl (%eax),%edx
 	movl $0,%eax
 	leal 4(%esp), %edx
 	movl $0,%ecx
