@@ -21,8 +21,8 @@ typedef Cmm_Cont;
 [[Cmm_RunThread]] commences execution on a {\PAL} continuation (a suspended {\PAL} computation) as returned from [[Cmm_CreateThread]].
 
 <<function prototypes>>=
-Cmm_Cont       *Cmm_CreateThread(Cmm_Codeptr f, Cmm_Dataptr s, unsigned n,
-                                 Cmm_Dataptr *limit_cookie);
+Cmm_Cont       *Cmm_CreateThread(Cmm_Codeptr f, Cmm_Dataptr x, void *s,
+                                 unsigned n, void **limit_cookie);
 Cmm_Cont       *Cmm_RunThread   (Cmm_Cont *k);
 @ 
 
@@ -32,7 +32,7 @@ It returns two values: the created thread, and a cookie pointing to the limit of
 [[CreateThread]] takes 
 
 <<faux {\PAL} prototypes>>=
-bits32 CreateThread(bits32 f, bits32 s, bits32 n, bits32 cookie_ptr);
+bits32 CreateThread(bits32 f, bits32 x, bits32 s, bits32 n, bits32 cookie_ptr);
 @ 
 
 \subsection{Walking the Stack}
@@ -137,18 +137,88 @@ The work of creating a thread is farmed out to [[init_thread]], as defined in [[
 \emph{FIX: for the moment, it is unclear what exactly [[Cmm_RunThread]] should return, if anything at all.}
 
 <<thread functions>>=
-Cmm_Cont *Cmm_CreateThread(Cmm_Codeptr f, Cmm_Dataptr s, unsigned n,
-                           Cmm_Dataptr *limit_cookie) {
-  thread *t = init_thread(f, s, n);
-  *limit_cookie = (Cmm_Dataptr) t->callstack_base;
+Cmm_Cont *Cmm_CreateThread(Cmm_Codeptr f, Cmm_Dataptr x, void *s, unsigned n,
+                           void **limit_cookie) {
+  static unsigned  boot_id  = 0;
+  int              rc;
+  thread          *t;
+  CMM_label       *lbl;
+
+  char            *byteorder_string = (DEF_BYTE_ORDER == BIG ? "'BIG'" 
+                                                             : "'LITTLE'");
+
+  /* FIX -- MACHINE SPECIFIC */
+  char *bootstring = (char *) malloc(sizeof(char) * 1024);
+  sprintf(bootstring, "CMM.imports({ '%s' })               \n"
+                      "CMM.exports({ '_boot_proc_%u' })    \n"
+                      "CMM.section('_boot_section_%u')     \n"
+                      "CMM.define_label('_boot_f_%u')      \n"
+                      "CMM.skip(4)                         \n"
+                      "CMM.define_label('_boot_x_%u')      \n"
+                      "CMM.skip(4)                         \n"
+                      "CMM.procedure('_boot_proc_%u',1,0)  \n"
+
+                      "CMM.push_symbol('_boot_x_%u')       \n"
+                      "CMM.fetch(%d,%s,%d)                 \n"
+
+                      "CMM.store_local(0)                  \n"
+                      "CMM.fetch_local(0)                  \n"
+                      "CMM.cbranchf('_boot_label_%u')      \n"
+
+                      "CMM.fetch_local(0)                  \n"
+                      "CMM.fetch(%d,%s,%d)                 \n"
+                      "CMM.store_arg(0)                    \n"
+
+                      "CMM.define_label('_boot_label_%u')  \n"
+                      "CMM.push_symbol('_boot_f_%u')       \n"
+                      "CMM.fetch(%d,%s,%d)                 \n"
+                      "CMM.call({}, {}, {}, 0)             \n"
+                      "CMM.cmm_return(0, 0)                \n"
+                      "CMM.end_section()                   \n",
+
+                      CMM_label_raddr(((CMM_label *) f))->label->name,
+                      boot_id, boot_id, boot_id, boot_id, boot_id, boot_id,
+                      sizeof(void *), byteorder_string, 1, boot_id, 
+                      sizeof(void *), byteorder_string, 1, boot_id, boot_id, 
+                      sizeof(void *), byteorder_string, 1);
+
+  boot_id++;
+
+  rc = load_assembly_unit(bootstring, SRC_STRING);
+  if (rc) {
+    fprintf(stderr, "error: could not boot up thread\n");
+    exit(1);
+  }
+
+  sprintf(bootstring, "_boot_proc_%u", boot_id - 1);
+  lbl = cmm_find_export(bootstring);
+
+  free(bootstring);
+  assert(lbl != NULL);
+
+  /* initialize thread */
+  t = init_thread(lbl, s, n);
+  *limit_cookie = (void *) t->callstack_limit;
+
+  /* initialize f and x placeholders in loaded bootstring unit */
+  assert(location_known(CMM_label_raddr((CMM_label *) lbl)));
+  {
+    void **loc = (void **) CMM_label_location((CMM_label *) lbl);
+
+    /* f */
+    loc[-2] = (void *) f;
+
+    /* x */
+    loc[-1] = (void *) x;
+  }
+
   return (Cmm_Cont *) t;
 }
 
 Cmm_Cont *Cmm_RunThread (Cmm_Cont *k) {
   run_interp((thread *) k);
 
-  /* NOTE i think that this func should return the thread as it is when control
-   * is sent back to the runtime system
+  /* NOTE this function should not return!
    */
   return NULL;
 }
@@ -160,11 +230,12 @@ We write [[Cmm_CreateThread_helper]] simply to wrap up a call to [[Cmm_CreateThr
 For now this involves only some simple type casting (pointer arguments are passed as [[void *]]s).
 
 <<thread functions>>=
-void *Cmm_CreateThread_helper(void *f, void *s, unsigned n,
+void *Cmm_CreateThread_helper(void *f, void *x, void *s, unsigned n,
                                  void *limit_cookie)
 {
-  return (void *) Cmm_CreateThread((Cmm_Codeptr) f, (Cmm_Dataptr) s, n,
-                                   (Cmm_Dataptr *) limit_cookie);
+  return (void *) Cmm_CreateThread((Cmm_Codeptr) f, (Cmm_Dataptr) x, 
+                                   (void *) s, (unsigned) n,
+                                   (void **) limit_cookie);
 }
 @ 
 
@@ -344,8 +415,8 @@ int Cmm_open(int valstack_size, int argspace_size) {
                   "unsigned:void");
   register_c_func("RestoreGlobals", (void *) Cmm_RestoreGlobals_helper, 
                   "unsigned:void");
-  register_c_func("CreateThread",   (void *) Cmm_CreateThread_helper,
-                  "pointer,pointer,unsigned,pointer:pointer");
+  /* register_c_func("CreateThread",   (void *) Cmm_CreateThread_helper,
+                  "pointer,pointer,unsigned,pointer:pointer"); */
 
   if (rc != 0) { return rc; }
   

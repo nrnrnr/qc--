@@ -20,9 +20,11 @@ INTERP=evaluating
 
 <../config/noweb.mk
 
-all:V: interp
+all:V: interp gc
 
 gc:V:  clients/gc_client
+
+code:V: $SRCS $HDRS
 
 doc:V: design.ps state.ps
 
@@ -62,10 +64,18 @@ bytecode.sled:D: interp.nw
 	$NOTANGLE -L -R$target $prereq > $target
 
 decode.fetch:D: interp.nw
-    $NOTANGLE -L -R$target $prereq > $target
+    if [ -n "$BYTEORDER" ]; then
+      $NOTANGLE -L -R$target.$BYTEORDER $prereq > $target;
+    else
+      $NOTANGLE -L -R$target.LITTLE $prereq > $target;
+    fi
 
 machine.h:D: interp.nw
-    $NOTANGLE -L -R$target $prereq > $target
+    if [ -n "$BYTEORDER" ]; then
+      $NOTANGLE -L -R$target.$BYTEORDER $prereq > $target;
+    else
+      $NOTANGLE -L -R$target.LITTLE $prereq > $target;
+    fi
 
 encode.c encode.h: bytecode.sled
     $TOOLS -lc-cons-names -encoder encode $prereq

@@ -549,11 +549,10 @@ The Quick~{\PAL} Interpreter also makes use of a number of external libraries no
 
 #include <assert.h>
 #include <stdlib.h>
-#include <stdint.h>
+#include <inttypes.h>
 #include <stdarg.h>
 #include <math.h>
 #include <string.h>
-#include <error.h>
 #include <setjmp.h>
 #include <lua.h>
 #include <lualib.h>
@@ -584,7 +583,7 @@ For now we will ignore the constant and macro definitions present in [[interp.h]
 
 \subsection{Representation}
 \paragraph{Basic Types}
-To ensure that {\PAL} values are stored in C variables of the correct bit width, we make use of the type definitions in [[<stdint.h>]], a part of the ISO C99 standard library.  We simply [[typedef]] these types to basic types of our own:
+To ensure that {\PAL} values are stored in C variables of the correct bit width, we make use of the type definitions in [[<inttypes.h>]], a part of the ISO C99 standard library.  We simply [[typedef]] these types to basic types of our own:
 <<basic types>>=
 /* unsigned integer types */
 typedef uint8_t  u_int1;
@@ -609,22 +608,8 @@ typedef u_int64  bits64;
 @ 
 We have not been able to find a standard header file that [[typedef]]s standard bit-width floating-point types.
 For now, then, we store some machine-dependent [[typedef]]s in a separate header file, [[machine.h]].
-<<machine.h>>=
-#ifndef _MACHINE_H
-#define _MACHINE_H
-/* FIX :  the float types are here defined in a machine-dependent manner; */
-typedef float       float32;
-typedef double      float64;
-typedef long double float96;
+See the bottom of this document for the definition of [[machine.h]].
 
-typedef enum {
-  ROUND_DOWN    = 00U,
-  ROUND_UP      = 01U,
-  ROUND_NEAREST = 02U,
-  ROUND_ZERO    = 03U
-} rounding_mode;
-#endif /* _MACHINE_H */
-@ 
 So the interpreter can properly simulate the execution of {\PAL} code
 on a target machine, we must also keep track of such
 architecture-related information as byte-order. 
@@ -650,7 +635,7 @@ typedef union {
   bits64  bits64;
   float32 float32;
   float64 float64;
-  float96 float96;
+/*  float96 float96; */
   void    *ptr;
 } value;
 
@@ -887,10 +872,12 @@ typedef struct continuation {
 } continuation;
 
 typedef struct {
-  RAddr        raddr;
-  unsigned int num_locals;
-  unsigned int stackdata_size;
+  RAddr         raddr;
+  unsigned int  num_locals;
+  unsigned int  stackdata_size;
   continuation *cont_list;
+
+  table         span_table;
 } procedure;
 @
 To keep track of the current procedure, we use a global pointer.
@@ -961,12 +948,12 @@ RAddr       CMM_label_raddr(CMM_label *lbl);
 bytecodeptr CMM_label_location(CMM_label *lbl);
 @ 
 \subsection{Bytecode Generation}
-To assist in generating bytecode, we use the NJ Machine-Code toolkit.  As a client of this library, we are responsible for writing a general allocation function and a closure allocation function (allocates [[RClosure]]s).  Additionally, when using certain toolkit functions we are required to supply an error printing function that takes a format string and a variable number of arguments and returns nothing.  Because the [[error]] function in [[<error.h>]] does not exactly fit this specification, we simply wrap it in [[error_wrapper]].
+To assist in generating bytecode, we use the NJ Machine-Code toolkit.  As a client of this library, we are responsible for writing a general allocation function and a closure allocation function (allocates [[RClosure]]s).  Additionally, when using certain toolkit functions we are required to supply an error printing function that takes a format string and a variable number of arguments and returns nothing.
 <<function prototypes>>=
 void *mc_alloc(int size, Mc_alloc_pool pool);
 RClosure mc_alloc_closure(unsigned size, RBlock dest_block,
                                  unsigned dest_lc);
-void error_wrapper(char *fmt, ...);
+void error(char *fmt, ...);
 @
 \paragraph{Basic Lua Interaction}
 To ease the notational burden of interacting with type-checking values on the Lua stack, we provide a small family of macros.
@@ -1101,9 +1088,9 @@ patterns
     GOTO          CBRANCHT       CBRANCHF       BRANCHTF
     CALL          CMM_TAIL_CALL  RETURN         CUT
     BEGIN_SPAN    END_SPAN       EMIT_RADDR
-    PLACECODE
+    PLACECODE     PUSH_SYMBOL
     HALT
-  ] is op = {0 to 32}
+  ] is op = {0 to 33}
 @ 
 To add an instruction to the bytecode, one must simply add an instruction name to the [[op]] table above and increase the upper bound of [[op]]'s value range.
 We next define another set of patterns to ease constructor generation of similarly structure instructions.
@@ -1113,7 +1100,7 @@ patterns
            | GSTORE_LOCAL8  | GSTORE_GLOBAL8  | FETCH_ARG     | STORE_ARG
   any16   is STORE_LOCAL16  | STORE_GLOBAL16  | FETCH_LOCAL16 | FETCH_GLOBAL16
            | GSTORE_LOCAL16 | GSTORE_GLOBAL16
-  any32   is PUSH  | CALL   | DEFINE_PROC     | END_SPAN
+  any32   is PUSH  | CALL   | DEFINE_PROC     | END_SPAN      | PUSH_SYMBOL
   memory  is FETCH | STORE  | GSTORE
   nullary is HALT  |  GOTO  | CUT             |  CMM_TAIL_CALL
 @ 
@@ -1135,7 +1122,6 @@ constructors
   memory         bits8  bits8b bits8c is memory;     bits8;      bits8b; bits8c
   EMIT_RADDR     addr                 is bits32=addr
   BEGIN_SPAN     bits32 addr          is BEGIN_SPAN; bits32;     bits32=addr
-  PUSH_SYMBOL    bits32               is PUSH;       bits32
   APPLY_OPERATOR bits32               is OP;         bits32
   CBRANCHT       addr                 is CBRANCHT;   bits32=addr
   CBRANCHF       addr                 is CBRANCHF;   bits32=addr
@@ -1333,7 +1319,7 @@ We write 5 macros to generate function definitions for members of these categori
 <<macro definitions>>=
 #define BINARYOP(NAME, EXP, X, Y, TX, TY, T, BX, BY, B) \
 \
-sptr op##_##NAME##_##BX (sptr values) {      \
+sptr op_##NAME##_##BX##_##BY##_##B (sptr values) { \
   TY Y;                                      \
   TX X;                                      \
   UNDERFLOW_CHECK(values, 2);                \
@@ -1345,7 +1331,7 @@ sptr op##_##NAME##_##BX (sptr values) {      \
 
 #define UNARYOP(NAME, EXP, X, TX, T, BX, B)  \
 \
-sptr op##_##NAME##_##BX (sptr values) {      \
+sptr op_##NAME##_##BX##_##B (sptr values) {  \
   TX X;                                      \
   UNDERFLOW_CHECK(values, 1);                \
   X = VIEW(STACK_ELT(values, 0).BX, TX);     \
@@ -1357,7 +1343,7 @@ sptr op##_##NAME##_##BX (sptr values) {      \
 <<macro definitions>>=
 #define NULLARYOP(NAME, STMS, X, T, B) \
 \
-sptr op##_##NAME##_##B (sptr values) {     \
+sptr op_##NAME##_##B (sptr values) {       \
   T X;                                     \
   OVERFLOW_CHECK(values, 1);               \
   STMS                                     \
@@ -1368,7 +1354,7 @@ sptr op##_##NAME##_##B (sptr values) {     \
 /* IUNARYOP is an imperative form of UNARYOP; destroys value at values */
 #define IUNARYOP(NAME, STMS, X, TX, T, BX, B)  \
 \
-sptr op##_##NAME##_##BX (sptr values) {      \
+sptr op_##NAME##_##BX##_##B (sptr values) {  \
   TX X;                                      \
   UNDERFLOW_CHECK(values, 1);                \
   X = VIEW(STACK_ELT(values, 0).BX, TX);     \
@@ -1490,6 +1476,7 @@ BINARYOP  (leu, v1 <= v2, v1,v2, u_int32, u_int32,bool , bits32, bits32, bool )
 /* mod  */
 BINARYOP  (modu, v1 % v2, v1,v2, u_int16, u_int8, u_int8, bits16,bits8, bits8 )
 BINARYOP  (modu, v1 % v2, v1,v2, u_int32, u_int16,u_int16,bits32,bits16,bits16)
+BINARYOP  (modu, v1 % v2, v1,v2, u_int32, u_int32,u_int32,bits32,bits32,bits32)
 BINARYOP  (mul,  v1 * v2, v1, v2,s_int8 , s_int8 ,s_int16,bits8 ,bits8 ,bits16)
 BINARYOP  (mul,  v1 * v2, v1, v2,s_int16, s_int16,s_int32,bits16,bits16,bits32)
 T_BINARYOP(mul_trunc, v1 * v2, v1, v2, u_int16, bits16)
@@ -1520,12 +1507,14 @@ T_BINARYOP(shrl,    v1 >> v2          , v1, v2, u_int16, bits16)
 T_BINARYOP(shrl,    v1 >> v2          , v1, v2, u_int32, bits32)
 T_BINARYOP(sub ,    v1 - v2           , v1, v2, s_int16, bits16)
 T_BINARYOP(sub ,    v1 - v2           , v1, v2, s_int32, bits32)
-UNARYOP   (sx  ,    (s_int16) v1      , v1, s_int8, s_int16, bits8, bits16)
-UNARYOP   (sx  ,    (s_int32) v1      , v1, s_int16,s_int32, bits16,bits32)
+UNARYOP   (sx  ,    (s_int16) v1      , v1, s_int8 , s_int16, bits8 , bits16)
+UNARYOP   (sx  ,    (s_int32) v1      , v1, s_int16, s_int32, bits16, bits32)
+UNARYOP   (sx  ,    (s_int32) v1      , v1, s_int8 , s_int32, bits8 , bits32)
 T_BINARYOP(xor ,    v1 ^ v2           , v1, v2, s_int16, bits16)
 T_BINARYOP(xor ,    v1 ^ v2           , v1, v2, s_int32, bits32)
-UNARYOP   (zx  ,    (u_int16) v1      , v1, u_int8, u_int16, bits8, bits16)
-UNARYOP   (zx  ,    (u_int32) v1      , v1, u_int16,u_int32, bits16,bits32)
+UNARYOP   (zx  ,    (u_int16) v1      , v1, u_int8 , u_int16, bits8 , bits16)
+UNARYOP   (zx  ,    (u_int32) v1      , v1, u_int16, u_int32, bits16, bits32)
+UNARYOP   (zx  ,    (u_int32) v1      , v1, u_int8 , u_int32, bits8 , bits32)
 /* INTEGER operators end here. */
 @ 
 \paragraph{Operator Registration}
@@ -1694,7 +1683,8 @@ The macro may then pass 2 arguments to whichever of these two macros it receives
 [[ITERATE_UNARY_C_CALLERS]], [[ITERATE_BINARY_C_CALLERS]], and company are the iterator macros mentioned above; each takes a macro name as its only argument and calls this macro with the C function signatures its family supports.
 <<macro definitions>>=
 #define ITERATE_NULLARY_C_CALLERS(F) \
-F(void, RETURNS_VOID)
+F(void, RETURNS_VOID) \
+F(int,  RETURNS_VAL )
 
 #define ITERATE_UNARY_C_CALLERS(F) \
 F(int,      int,     RETURNS_VAL ) \
@@ -1980,7 +1970,7 @@ void check_value_types (void) {
 
   assert(sizeof(v.float32) == 4);
   assert(sizeof(v.float64) == 8);
-  assert(sizeof(v.float96) == 12);
+/*  assert(sizeof(v.float96) == 12); */
 
   assert(sizeof(u_int8)  == 1);
   assert(sizeof(u_int16) == 2);
@@ -2004,7 +1994,7 @@ void check_architecture(assembly_unit *au) {
     fprintf(stderr, "this interpreter can only handle a PTRSIZE of 32");
     exit(1);
   }
-  if (au->byte_order != LITTLE) {
+  if (au->byte_order != DEF_BYTE_ORDER) {
     fprintf(stderr, "this interpreter can only handle LITTLE-ENDIAN memory "
                     "access");
     exit(1);
@@ -2361,6 +2351,8 @@ int lua_CMM_procedure(lua_State *L) {
   proc->stackdata_size = (unsigned int) lua_tonumber(L, -1);
 
   proc->cont_list      = NULL;
+  proc->span_table     = fresh_table();
+  proc->span_table.L   = L;
 
   lbl->unit = unit;
   lbl->ty = CMM_PROCEDURE;
@@ -3288,13 +3280,15 @@ int lua_copy_block_contents(lua_State *L) {
 @ 
 \paragraph{Helper Functions}
 Such functions in the API of the NJ Machine-Code Toolkit as [[apply_closure]] require error-handling functions that take a format string indicating the error and a variable number of arguments supplying values formatted by the string.
-Unfortunately, the [[error]] function declared in [[<error.h>]] takes two additional arguments.
-So, we simply write a wrapper for [[error]]:
+The [[error]] function is taken from page 174 of Kernighan and Ritchie's \emph{The C Programming Language: Second Edition}.
 <<bytecode generation>>=
-void error_wrapper(char *fmt, ...) {
+void error(char *fmt, ...) {
   va_list args;
+
   va_start(args, fmt);
-  error(0, 0, fmt, args);
+  fprintf(stderr, "error: ");
+  vfprintf(stderr, fmt, args);
+  fprintf(stderr, "\n");
   va_end(args);
   exit(1);
 }
@@ -3366,7 +3360,7 @@ We must then make sure to apply all closures stored away in the C [[closures]] a
 <<perform bytecode relocation>>=
   /* apply closures in closure table */
   for (cl = closures_base; cl < closures_free; cl++) {
-    apply_closure(*cl, cl_emitm, error_wrapper);
+    apply_closure(*cl, cl_emitm, error);
   }
 
   /* reclaim memory */
@@ -3417,7 +3411,7 @@ Finally, we get to the main part of the interpreter.  We start by initializing t
 
   /* FIX reset global variables */
   curr_proc = NULL;
-  values    = values_base    - 1;
+  values    = values_base - 1;
 @ 
 We copy out the stored, suspended state from [[act]] into local C variables for matters of efficiency (to reduce memory fetches).
 This means, though, that the stored activation information will become out-of-date as we proceed through interpreting; we must make sure to update it when we have to leave the activation for any reason (calls, cuts, etc.).
@@ -3461,7 +3455,7 @@ void run_interp(thread *t) {
       | HALT              => {
                              cmm_err("fell off end of a C-- section");
                              }
-      else error_wrapper("unsupported instruction encoutered\n");
+      else cmm_err("unsupported instruction encoutered");
       endmatch
 
       if (err_occurred || done) break;
@@ -3524,34 +3518,38 @@ For now, we only support the natural byte-order of the machine on which the inte
 \useops{Guarded-Store-True}
 \useops{Guarded-Store-False}
 <<matching statement>>=
-    | FETCH(sz,bo,al)   => assert(bo == DEF_BYTE_ORDER);
+    | FETCH(sz,bo,al)   => {
+                           assert(bo == DEF_BYTE_ORDER);
                            <<fetch value from given address>>
                            pc = next;
-    | STORE(sz,bo,al)   => assert(bo == DEF_BYTE_ORDER);
+                           }
+    | STORE(sz,bo,al)   => {
+                           assert(bo == DEF_BYTE_ORDER);
                            <<store given value at given address>>
                            values -= 2;
                            pc = next;
-    | GSTORE(sz,bo,al)  => assert(bo == DEF_BYTE_ORDER);
+                           }
+    | GSTORE(sz,bo,al)  => {
+                           assert(bo == DEF_BYTE_ORDER);
                            UNDERFLOW_CHECK(values, 3);
                            if (VIEW(STACK_ELT(values, -2), bool)) {
                              <<store given value at given address>>
                            }
                            values -= 3;
                            pc      = next;
+                           }
 @ 
 For now, we simply fetch and store by dereferencing pointers.
 <<fetch value from given address>>=
   {
-    value *fetched = (value *) CMM_label_location(VIEW(STACK_ELT(values, 0), 
-                                                  CMM_label *));
+    value *fetched       = VIEW(STACK_ELT(values, 0), value *);
     STACK_ELT(values, 0) = *fetched;
   }
 @ 
 <<store given value at given address>>=
   {
-    value *tostore = (value *) CMM_label_location(VIEW(STACK_ELT(values, -1), 
-                                                  CMM_label *));
-    *tostore = STACK_ELT(values, 0);
+    value *tostore       = VIEW(STACK_ELT(values, -1), value *);
+    *tostore             = STACK_ELT(values, 0);
   }
 @ 
 The argument to the operator application instruction should be a pointer to an [[operator]] record.
@@ -3578,13 +3576,9 @@ Pushing and popping to the argument stack is not difficult.
                            PUSH(arguments[n], values); pc = next;
 @ 
 For goto and branches, we simply conditionally (or unconditionally in the case of goto) assign a new value to [[pc]].
-Although these instructions were encoded using [[RAddr]]s for arguments, the Toolkit is able to translate these addresses to actual pointers by the time we reach this matching statement.
 \useops{Goto}
 <<matching statement>>=
-    | GOTO              => {
-                           CMM_label *lbl = VIEW(POP(values), CMM_label *);
-                           pc = CMM_label_location(lbl);
-                           }
+    | GOTO              => { pc = VIEW(POP(values), bytecodeptr); }
 @ 
 \useops{CBranchT-True}
 \useops{CBranchT-False}
@@ -3602,6 +3596,37 @@ Although these instructions were encoded using [[RAddr]]s for arguments, the Too
 \useops{BranchTF-False}
 <<matching statement>>=
     | BRANCHTF(a, b)    => pc = (bytecodeptr) (VIEW(POP(values),bool) ? a : b);
+@ 
+\useops{PushSymbol}
+The encoding function [[lua_CMM_push_symbol]] writes a pointer to a [[CMM_label]] in memory; here, we must actually find the address or structure the label represents.
+<<matching statement>>=
+    | PUSH_SYMBOL(s)    => {
+                           CMM_label *lbl = (CMM_label *) s;
+                           value      v;
+
+                           if (lbl == NULL) {
+                             cmm_err("cannot push value of undefined symbol");
+                           }
+
+                           switch (lbl->ty) {
+                           case CMM_LABEL:
+                             {
+                             unsigned loc = location(lbl->lbl.raddr);
+                             v = VIEW(loc, value);
+                             break;
+                             }
+                           case CMM_PROCEDURE:
+                           case CMM_CONTINUATION:
+                           case CMM_CFUNCTION:
+                             v = VIEW(s, value);
+                             break;
+                           default:
+                             cmm_err("internal label error");
+                           }
+
+                           PUSH(v, values);
+                           pc = next;
+                           }
 @ 
 We implement both {\PAL} and foreign C procedure calls with one matching case.
 <<matching statement>>=
@@ -3783,7 +3808,6 @@ We implement both return rules with one matching case.
                            assert(i <= count);
                            
                            /* FIX for now we allow walking off stack */
-                           /* assert(t->callstack_free > t->callstack_base); */
                            if (t->callstack_free <= t->callstack_base) {
                              printf("[returned from specified procedure].\n");
                              done = 1;
@@ -3943,7 +3967,7 @@ We need to store an activation pointer within each of the activations contained 
 
                            for (c = proc->cont_list; c != NULL; c = c->next) {
                              c->dest_act = t->callstack_free;
-                             c->u        = t->callstack_free->u;
+                             c->u        = u;
                            }
 
                            curr_proc = proc;
@@ -4099,6 +4123,7 @@ Here, we need to also open up interaction with the Lua base library so we can la
   lua_interp = lua_open(0);
   lua_baselibopen(lua_interp);
   lua_setlinehook(lua_interp, lua_linehook);
+  <<extend Lua initial basis>>
 @ 
 We also have to create user-defined Lua tags for the non-standard userdata we store in Lua tables: [[RAddr]]s, [[RBlock]]s, [[RLabel]]s, and [[procedure]]s.
 <<initialize a Lua interpreter>>=
@@ -4110,6 +4135,20 @@ We also have to create user-defined Lua tags for the non-standard userdata we st
   lua_c_sig_tag          = lua_newtag(lua_interp);
   lua_operator_tag       = lua_newtag(lua_interp);
   lua_CMM_span_value_tag = lua_newtag(lua_interp);
+@ 
+The Lua initial basis consists of a few helper Lua functions that we wish had been included with Lua in the first place.
+<<extend Lua initial basis>>=
+  {
+    const char *lua_extension = "function copytable (t) \n"
+                                "  local newtable = {}  \n"
+                                "  for i, v in t do     \n"
+                                "    newtable[i] = v    \n"
+                                "  end                  \n"
+                                "  return newtable      \n"
+                                "end                    \n";
+    lua_error_handle(lua_dostring(lua_interp, lua_extension), 
+                     "<internal code>");
+  }
 @ 
 Now we must register all C functions that we wish to be exported to Lua.
 A call to [[ITERATE_CMM_FUNCS]] takes care of registering the encoding functions, and two remaining calls register [[lua_relocate_block]] and [[lua_copy_block_contents]].
@@ -4191,35 +4230,88 @@ And now for the hackery that lets us define and register operators with the same
 #undef POPCNT
 
 #define BINARYOP(NAME, EXP, X, Y, TX, TY, T, BX, BY, B) \
-register_operator(#NAME, op##_##NAME##_##BX, 2, #BX "," #BY ":" #B);
+register_operator(#NAME, op_##NAME##_##BX##_##BY##_##B, 2, #BX "," #BY ":" #B);
 
 #define UNARYOP(NAME, EXP, X, TX, T, BX, B) \
-register_operator(#NAME, op##_##NAME##_##BX, 1, #BX ":" #B);
+register_operator(#NAME, op_##NAME##_##BX##_##B, 1, #BX ":" #B);
 
 #define IUNARYOP(NAME, STMS, X, TX, T, BX, B) \
-register_operator(#NAME, op##_##NAME##_##BX, 1, #BX ":" #B);
+register_operator(#NAME, op_##NAME##_##BX##_##B, 1, #BX ":" #B);
 
 #define NULLARYOP(NAME, STMS, X, T, B) \
-register_operator(#NAME, op##_##NAME##_##B,  0, ":" #B);
+register_operator(#NAME, op_##NAME##_##B,  0, ":" #B);
 
 #define POPCNT(T, B) \
-register_operator("popcnt", op_popcnt##_##B, 1, #B ":" #B);
+register_operator("popcnt", op_popcnt_##B, 1, #B ":" #B);
 @ 
+
 \paragraph{Machine-Dependent Details}
-Next, we must also remember to define aggregated fetch functions for the NJ Machine-Code Toolkit so it can read more than 8 bits of bytecode from memory at a time:
-<<decode.fetch>>=
+
+We must also remember to define aggregated fetch functions for the NJ Machine-Code Toolkit so it can read more than 8 bits of bytecode from memory at a time:
+
+<<decode.fetch.BIG>>=
+address type is "unsigned char *"
+fetch 8  using "*%a"
+fetch 16 using "%a[1] + (%a[0] << 8)"
+fetch 32 using "%a[3] + (%a[2] << 8) + (%a[1] << 16) + (%a[0] << 24)"
+@
+<<decode.fetch.LITTLE>>=
 address type is "unsigned char *"
 fetch 8  using "*%a"
 fetch 16 using "%a[0] + (%a[1] << 8)"
 fetch 32 using "%a[0] + (%a[1] << 8) + (%a[2] << 16) + (%a[3] << 24)"
 @
+
 We also define a few constants in [[machine.h]] to provide information about the architecture on which the interpreter is currently being run.
-<<machine.h>>=
+
+<<machine.h.BIG>>=
+#ifndef _MACHINE_H
+#define _MACHINE_H
+/* FIX :  the float types are here defined in a machine-dependent manner; */
+typedef float       float32;
+typedef double      float64;
+typedef long double float96; /* this one doesn't work on liz */
+
+typedef enum {
+  ROUND_DOWN    = 00U,
+  ROUND_UP      = 01U,
+  ROUND_NEAREST = 02U,
+  ROUND_ZERO    = 03U
+} rounding_mode;
+
 #define DEF_MEMSIZE    8
-#define DEF_BYTE_ORDER LITTLE
+#define DEF_BYTE_ORDER BIG
+#define DEF_ALIGN      4
 
 typedef u_int32 Cmm_Word;
+#endif /* _MACHINE_H */
 @ 
+
+<<machine.h.LITTLE>>=
+#ifndef _MACHINE_H
+#define _MACHINE_H
+/* FIX :  the float types are here defined in a machine-dependent manner; */
+typedef float       float32;
+typedef double      float64;
+typedef long double float96; /* this one doesn't work on liz */
+
+typedef enum {
+  ROUND_DOWN    = 00U,
+  ROUND_UP      = 01U,
+  ROUND_NEAREST = 02U,
+  ROUND_ZERO    = 03U
+} rounding_mode;
+
+#define DEF_MEMSIZE    8
+#define DEF_BYTE_ORDER LITTLE
+#define DEF_ALIGN      1
+
+typedef u_int32 Cmm_Word;
+#endif /* _MACHINE_H */
+@ 
+
+\paragraph{Shut Down}
+
 Finally, we have to properly shut down the interpreter (this code sits in [[cmm_interp_close]]).
 <<gracefully shut down>>=
 /* free malloc'd space */
@@ -4317,6 +4409,10 @@ void disassemble_instructions(CMM_label *loc) {
   | PUSH(bits32) => 
       asmprintf(asmprintfd, "%x: %s", pc, "PUSH ");
       print_unsigned_bits32(bits32);
+      asmprintf(asmprintfd, "\n");
+  | PUSH_SYMBOL(a) =>
+      asmprintf(asmprintfd, "%x: %s", pc, "PUSH_SYMBOL ");
+      disprintreloc(a);
       asmprintf(asmprintfd, "\n");
   | GSTORE(a, b, c) =>
       asmprintf(asmprintfd, "%x: %s", pc, "GSTORE ");
@@ -4487,15 +4583,9 @@ Should macro-generated functions look like [[op_xor_bits16]] or like [[op_xor_bi
 
 [[label_new]] does NOT copy its string argument; do NOT free anything you pass off to [[label_new]]!
 
-What do the namespaces look like?  Is there one namespace for labels, procedure names, continuation names, section names?  Or are they separate?  As it is, I effectively have one namespace for all these because I use their names as their label names instead of prepending to it a tag of some sort.
-
-What kind of a symbol does [[push_symbol]] expect to be pushing?  A label?  An external symbol?  A procedure name?  A continuation name?  Any of these?
-
 No way to push boolean right now, except for simply pushing 0 or 1 and making sure the bits work out.
 
 Need to add citations!!!
-
-Document the two 0's sent to [[error]] within [[error_wrapper]].
 
 Move over the 3 stacks to 1 stack!  Place activation at extremum!
 
@@ -4504,8 +4594,6 @@ Look through standard C header files / libraries for info on bit-standardized ty
 Add activation stack diagram!
 
 Use CII: arenas for [[RBlock]]s and [[RClosure]]s, maybe sequences to store closure pointers, check out Hanson's [[malloc]] interface (that allows debugging), maybe rings for the dead set, look at dvars and [[array_t]].
-
-Implement data directives.
 
 Only procedures, declarations, and other sections may be in toplevel ``section.''
 
@@ -4518,8 +4606,6 @@ We have to release all lua references when done?
 Consider making use of the [[lua_State *]] in the [[table]] structure.
 
 How should we handle [[return]]s from the first procedure interpreted; that is, if our interpreter starts code execution by running a procedure named [[main]], how should it handle a [[return]] from procedure main?
-
-Consider adding assertions to [[lua_CMM_cbrancht]] and its siblings; what if [[get_label]] returns the [[CMM_label]] for a procedure?
 
 Use ``higher-order'' macros to declare, define and register operator implementations (instead of the current [[#undef]] business).
 
@@ -4543,11 +4629,7 @@ Quote from manual: \emph{All separately compiled modules must have} identical \e
 \section{To Do Immediately}
 Consider changing operator representation/implementation so that OP bytecode does not need to carry around a 32-bit value (right now it carries around an (operator *)).
 
-Figure out how to get initialized data to work when given as a label or a string or some other value.
-
-Consider removing bookkeeping with [[CMM_label]]s from the matching cases for cuts, calls, etc. and place it in the [[push_symbol]] case.
-
-For the purposes of the interpreter's input assembly files, should return continuations be defined with [[lua_CMM_define_label]] or with [[lua_CMM_continuation]]?
+Figure out how to get initialized data to work when given as a string or some other value.
 
 Use dynamic arrays!  Stop with this assertion failure business.
 
@@ -4557,6 +4639,8 @@ For what kind of calls do we have to bundle up the current activation in a half-
 Only for cuts or for C calls as well?
 
 Where do we free threads?
+
+We should apply closures before each interpreting run, not after each loading run!!!  What about imports??
 % end file
 \nwfilename{interp.nw}
 \bibliographystyle{alpha}

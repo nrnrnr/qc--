@@ -3,8 +3,8 @@ This document contains a description of the responsibilities of a client of the 
 Additionally, a sample client implementation may be found at the bottom of this document.
 \section{Clients of the Interpreter}
 The Quick~{\PAL} Interpreter is not a standalone application.
-Rather, it works in conjunction with a client (a front-end runtime system).
-The client must tell the interpreter which files to load as assembly units, which pieces of {\PAL} code to bundle up as ``thread''s, which threads to execute, etc.
+Rather, it works in conjunction with a client (a front-end runtime system).T
+he client must tell the interpreter which files to load as assembly units, which pieces of {\PAL} code to bundle up as ``thread''s, which threads to execute, etc.
 A client is responsible for creating a C function named [[main]].
 This is where control flow begins for the application; this function should drive the interpreter as it sees fit.
 \subsection{Functions Exported by the Interpreter}
@@ -80,12 +80,12 @@ A [[Cmm_TCB]] ({\PAL} thread control block) contains the actual thread given us 
 We use this cookie to tell if we've gone off the end of a stack (perhaps by returning or unwinding from the oldest activation on the stack).
 <<type definitions>>=
 typedef struct {
-  Cmm_Cont    *cont;
+  Cmm_Cont *cont;
 
-  Cmm_Dataptr stack_space;
-  unsigned    stack_space_size;
+  void     *stack_space;
+  unsigned  stack_space_size;
 
-  Cmm_Dataptr limit_cookie;
+  void     *limit_cookie;
 } Cmm_TCB;
 @ 
 \subsection{Utility Functions}
@@ -119,19 +119,31 @@ void TCB_free(Cmm_TCB *tcb) {
 @ 
  
 \subsection{Interpreter Interaction}
-In this client, we register one C function with the interpreter: a simple printing function that takes an [[int]], prints it, and returns it.
+In this client, we register a couple of C functions with the interpreter: a simple printing function (that takes an [[int]], prints it, and returns it) and a simple input function.
+
 <<function prototypes>>=
 int cmmprint(int i);
+int cmminput(void);
 @ 
+
 <<interpreter interaction functions>>=
 int cmmprint(int i) {
   printf("[CMMPRINT] %u\n", i);
   return i;
 }
+
+int cmminput(void) {
+  int i;
+  assert(scanf("%d", &i));
+  return i;
+}
 @ 
-To register this function, the client simply calls [[register_c_func]].
+
+To register the functions, the client simply calls [[register_c_func]].
+
 <<register needed C functions with the interpreter>>=
   register_c_func("cmmprint", cmmprint, "int:int");
+  register_c_func("cmminput", cmminput, "void:int");
 @ 
 \subsection{Application Driver}
 To drive our sample client application, we have a loop that prompts the user for a command, and acts accordingly--exiting when the user types [[quit]] or an [[EOF]] is sent to the program.
@@ -215,7 +227,8 @@ Note that if any source files are read in using command line arguments, the inte
       if (loc == NULL) {
         fprintf(stderr, "error: cannot find procedure \"main\"\n");
       } else {
-        <<run code at address [[loc]]>>
+        int *arg_int_p = NULL;
+        <<run code at address [[loc]] with possible arg [[arg_int_p]]>>
       }
     }
   }
@@ -262,9 +275,24 @@ Special commands [[verbosity]] and [[stacksize]] allow the user to slightly alte
         <<disassemble code at label [[arg]] (address [[loc]])>>
       }
     } else if (strcasecmp(command, "run") == 0) {
-      while ((arg = strtok(NULL, " ")) != NULL) {
-        <<[[loc]] $\leftarrow$ address of label [[arg]]>>
-        <<run code at address [[loc]]>>
+      arg = strtok(NULL, " ");
+      if (arg != NULL) {
+        char *arg_str;
+        int   arg_int;
+        int  *arg_int_p = NULL;
+
+        for (;;) {
+          <<[[loc]] $\leftarrow$ address of label [[arg]]>>
+          arg_str = strtok(NULL, " ");
+          if (arg_str != NULL) {
+            sscanf(arg_str, "%d", &arg_int);
+            arg_int_p = &arg_int;
+          }
+          <<run code at address [[loc]] with possible arg [[arg_int_p]]>>
+          break;
+        }
+      } else {
+          printf("nothing to run!\n");
       }
     } else if (strcasecmp(command, "verbosity") == 0) {
       verbosity = !verbosity;
@@ -291,12 +319,14 @@ To load a given assembly file, we call on [[load_assembly_unit]].
 \paragraph{Finding Labels and Procedures}
 To find a label, we call on [[cmm_find_export]].
 <<[[loc]] $\leftarrow$ address of label [[arg]]>>=
+{
   loc = cmm_find_export(arg);
   if (loc == NULL) {
     fprintf(stderr, "error: cannot find specified exported C-- label: %s\n", 
                     arg);
     break;
   }
+}
 @ 
 \paragraph{Disassembling Bytecode}
 Disassembling the bytecode for a sequence of instructions should yield the instructions originally encoded.
@@ -309,7 +339,7 @@ For now [[disassemble_instructions]] sends all output to [[stdout]].
 @
 \paragraph{Interpreting the Bytecode}
 The runtime system takes care of bytecode interpreting, as long as it is passed off a location or thread at which to start.
-<<run code at address [[loc]]>>=
+<<run code at address [[loc]] with possible arg [[arg_int_p]]>>=
   {
   Cmm_TCB     *tcb = TCB_new();
 
@@ -321,8 +351,8 @@ The runtime system takes care of bytecode interpreting, as long as it is passed 
 @ 
 Creating and running a {\PAL} thread with a continuation to execute the code at [[loc]] is as easy as calling runtime library functions [[Cmm_CreateThread]] and [[Cmm_RunThread]] (see [[runtime.nw]] for more information). 
 <<[[tcb]] $\leftarrow$ thread to execute program at [[loc]]>>=
-  tcb->cont = Cmm_CreateThread(loc, tcb->stack_space, tcb->stack_space_size,
-                               &(tcb->limit_cookie));
+  tcb->cont = Cmm_CreateThread(loc, (void *) arg_int_p, tcb->stack_space, 
+                               tcb->stack_space_size, &(tcb->limit_cookie));
 @
 <<run continuation in [[tcb]]>>=
   tcb->cont = Cmm_RunThread(tcb->cont);
