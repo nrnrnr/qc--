@@ -20,12 +20,12 @@ B<qc--> [I<option> | I<file>] ...
 
 =head1 DESCRIPTION
 
-B<qc--> is a compiler for the C-- language. It takes I<options> and
-I<file> names as arguments and compiles, assembles, and links the files
-on the command line into an executable C<a.out>. Options have the form
-C<->I<name> or C<->I<name>C<=>I<value>, all other arguments B<qc-->
-regards as files.  The treatment of a file depends on the ending of its
-name:
+B<qc--> is a compiler for the C-- language. It takes I<file> names as
+arguments and compiles, assembles, and links the files on the command
+line into an executable (by default C<a.out>). An option I<option> has
+the form C<->I<name> or C<->I<name>C<=>I<value>, any other argument
+B<qc--> regards as a I<file> name.  The treatment of a file depends on
+the ending of its name:
 
 =over 12
 
@@ -33,31 +33,31 @@ name:
 
 C-- source file; compile, assemble, link.  A file C<file.c--> is taken
 as a C-- source file. Unless I<options> specify otherwise, a C-- source
-file is compiled to assembly code, assembled to an object file that is
-linked with the object files derived from the other command line
+file is compiled to assembly code and assembled to an object file that
+is linked with the object files derived from the other I<file>
 arguments.
 
 =item C<.o>
 
-Object code file; link.  A file C<file.o> is considered an object file.
-B<qc--> does not touch this file but passes it the linker such that is
-linked with the other files from the command line.
+Object code file: link.  A file C<file.o> is considered an object file.
+B<qc--> does not touch this file but passes it to the linker such that
+it is linked with the other files from the command line.
 
 =item C<.a> or C<.so>
 
-Archive file; link.  A file C<file.a> or C<file.so> is considered an
+Archive file: link.  A file C<file.a> or C<file.so> is considered an
 archive file that is passed untouched to the linker.
 
 =item C<.s>
 
-Assembler source; assemble, link. A file C<file.s> is taken as an
+Assembler source: assemble, link. A file C<file.s> is taken as an
 assembly source file. It is assembled to an object file that is linked
 with the other files from the command line.
 
 
 =item C<.lua>
 
-Lua source file; interpret. A file C<file.lua> is taken as a Lua source
+Lua source file: interpret. A file C<file.lua> is taken as a Lua source
 code file for the Lua interpreter built into the B<qc--> compiler. Such
 a file is executed by the interpreter. Note below the order in which
 options and file arguments are processed.
@@ -65,7 +65,7 @@ options and file arguments are processed.
 =back
 
 If invoked with no file argument, B<qc--> summarizes its options on the
-standard error and exists with exit code C<1>.
+standard error and exits with exit code C<1>.
 
 B<qc--> removes intermediate files, like assembly files, unless options
 specify otherwise. Linking is always the last stage, unless the B<-c> or
@@ -101,7 +101,7 @@ output file defaults to C<a.out>.
 =item B<-L>I<dir>
 
 Add I<dir> to the library search path. This option is passed to the
-linker.
+linker. 
 
 =item B<-l>I<name>
 
@@ -127,7 +127,7 @@ targets are supported:
 
 =over 20
 
-=item C<dummy>
+=item C<dummy/dummy>
 
 Symbolic target for debugging the compiler
 
@@ -152,7 +152,8 @@ Use the alternate assembler I<path>, instead the default one.
 =item B<-as.options=>I<options>
 
 Pass I<options> to the assembler when calling it. When this option is
-repeated, the options are accumulated into one list.
+repeated, the options are accumulated into one list. 
+I<What do we say about one string versus mutiple strings?>
 
 =item B<-ld.path=>I<path>
 
@@ -160,7 +161,11 @@ Like B<-as.path>, but for the linker.
 
 =item B<-ld.options=>I<options>
 
-Like B<-as.options>, but for the linker.
+Like B<-as.options>, but for the linker. Instead of using options B<-L>
+and B<-l> one could use B<-as.options> to pass these options to the
+linker.  However, the specific options B<-L> and B<-l> have
+traditionally been accepted by compilers and thus we provide them
+despite have the more general B<-as.options>.  
 
 =item B<-tempdir=>I<dir>
 
@@ -205,22 +210,22 @@ the Lua interpreter, see qc--internals(1).
 
 =item QCMMLUAPATH
 
-The Lua interpreter built into B<qc--> controls the compiler. At
-startup it tries to find the file C<qc--.lua> using a search path taken
-from the environment variable C<QCMMLUAPATH>.  If the environment
-variable is undefined, the default is "C<:.:*>". A search path contains
-a list of colon separated directories. Two directory names are special:
-the empty directory refers to an implementation-dependent system-wide
-directory, like C</usr/local/lib/qc-->. The star C<*> refers to a
-``directory'' that is actually compiled into the B<qc--> executable.
-With the default search path, B<qc--> therefore looks first in the
+The Lua interpreter built into B<qc--> controls the compiler. At startup
+it tries to find the file C<qc--.lua> using a search path taken from the
+environment variable C<QCMMLUAPATH>.  If the environment variable is
+undefined, the default is "C<:.:*>". A search path contains a list of
+colon separated directories. Two directory names are special: the empty
+directory refers to an implementation-dependent system-wide directory,
+like C</usr/local/lib/qc-->. The star C<*> refers to a ``directory''
+that is actually compiled into the B<qc--> executable.  With the default
+search path (empty, dot, star), B<qc--> therefore looks first in the
 system-wide directory for C<qc--.lua>, then in the current directory,
 and then takes the built-in C<qc--.lua>. 
 
 =item TMP, TEMP, TMPDIR
 
 The environment variables C<TMP>, C<TEMP>, and C<TMPDIR> are checked in
-this order. The first one found to define an non-empty string defines
+this order. The first one found to define a non-empty string defines
 the path to the directory where temporary files are stored. Otherwise a
 platform specific default directory is used. This directory is
 overridden by the B<-tempdir> option.
