@@ -214,7 +214,9 @@ garbage collection will dominate all efforts by the callee. This means:
 we are not using any register such that the caller is free to use them
 as temporaries.
 
+
 <<x86 calling convention automata in Lua>>=
+-- CURRENTLY NOT IN EFFECT BECAUSE OVERRIDDEN LATER IN THIS FILE.
 X86.cc["gc"].results = 
   { A.choice { "float" , { A.widen(80)
                          , A.useregs { X86.stack_top_proxy_reg }
@@ -373,8 +375,8 @@ X86.cc["paranoid C"]        = X86.cc["C"]
 X86.layout["paranoid C"]    = X86.layout["C"]
 
 -- uncomment the next two lines to make "gc" a synonym for "C--"
--- X86.cc["gc"]                = X86.cc["C--"]
--- X86.layout["gc"]            = X86.layout["C"]
+X86.cc["gc"]                = X86.cc["C--"]
+X86.layout["gc"]            = X86.layout["C--"]
 
 -- layout for "notail" is defined in luacompile.nw (uses the "C" layout)
 X86.cc["notail"]            = X86.cc["C--"]
@@ -393,11 +395,11 @@ let cconv ~return_to cut ccname stage =
   let f =
     match ccname with
     | "C--"         -> conv ~jump:true  ~altret:true ~calleesaves:true
+    | "gc"          -> conv ~jump:true  ~altret:true ~calleesaves:true
     | "lightweight" -> conv ~jump:true  ~altret:true ~calleesaves:true
     | "notail"      -> conv ~jump:false ~altret:true ~calleesaves:true
     | "paranoid C"  -> conv ~jump:false ~altret:false ~calleesaves:false
     | "C"           -> conv ~jump:false ~altret:false ~calleesaves:true
-    | "gc"          -> conv ~jump:false ~altret:false ~calleesaves:true
     | _ -> Unsupported.calling_convention ccname
   in f ccname stage ~return_to cut
 @
