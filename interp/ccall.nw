@@ -263,6 +263,7 @@ void init_c_sigs(void) {
 ITERATE_NULLARY_C_CALLERS(NULLARY_C_CALLER_REGISTRATION)
 ITERATE_UNARY_C_CALLERS(UNARY_C_CALLER_REGISTRATION)
 ITERATE_BINARY_C_CALLERS(BINARY_C_CALLER_REGISTRATION)
+ITERATE_TERNARY_C_CALLERS(TERNARY_C_CALLER_REGISTRATION)
 ITERATE_FOURARY_C_CALLERS(FOURARY_C_CALLER_REGISTRATION)
 register_c_sig("printf", c_caller_printf);
 @
@@ -273,6 +274,7 @@ We must also provide prototypes for the macro-generated functions that implement
 ITERATE_NULLARY_C_CALLERS(NULLARY_C_CALLER_PROTOTYPE)
 ITERATE_UNARY_C_CALLERS(UNARY_C_CALLER_PROTOTYPE)
 ITERATE_BINARY_C_CALLERS(BINARY_C_CALLER_PROTOTYPE)
+ITERATE_TERNARY_C_CALLERS(TERNARY_C_CALLER_PROTOTYPE)
 ITERATE_FOURARY_C_CALLERS(FOURARY_C_CALLER_PROTOTYPE)
 vptr c_caller_printf (vptr arguments, void *f);
 @ 
@@ -333,6 +335,7 @@ F(u_int32,  u_int32,  RETURNS_VAL ) \
 F(int,      int,      RETURNS_VAL ) \
 F(unsigned, pointer,  RETURNS_VAL ) \
 F(pointer,  unsigned, RETURNS_VAL ) \
+F(pointer,  int,      RETURNS_VAL ) \
 F(pointer,  pointer,  RETURNS_VAL ) \
 \
 F(int,      void,     RETURNS_VOID) \
@@ -345,6 +348,9 @@ F(int,     int,     int,     RETURNS_VAL ) \
 F(pointer, pointer, pointer, RETURNS_VAL ) \
 \
 F(int,     int,     void,    RETURNS_VOID)
+
+#define ITERATE_TERNARY_C_CALLERS(F) \
+F(pointer, unsigned, unsigned, pointer, RETURNS_VAL )
 
 #define ITERATE_FOURARY_C_CALLERS(F) \
 F(pointer, pointer, unsigned, pointer, pointer, RETURNS_VAL)
@@ -363,6 +369,9 @@ vptr c_caller_##A##_##RETTY (vptr arguments, void *f);
 #define BINARY_C_CALLER_PROTOTYPE(A, B, RETTY, RETURNS) \
 vptr c_caller_##A##_##B##_##RETTY (vptr arguments, void *f);
 
+#define TERNARY_C_CALLER_PROTOTYPE(A, B, C, RETTY, RETURNS) \
+vptr c_caller_##A##_##B##_##C##_##RETTY (vptr arguments, void *f);
+
 #define FOURARY_C_CALLER_PROTOTYPE(A, B, C, D, RETTY, RETURNS) \
 vptr c_caller_##A##_##B##_##C##_##D##_##RETTY (vptr arguments, void *f);
 @ 
@@ -380,6 +389,10 @@ register_c_sig(#A ":" #RETTY, c_caller_##A##_##RETTY);
 #define BINARY_C_CALLER_REGISTRATION(A, B, RETTY, RETURNS) \
 register_c_sig(#A "," #B ":" #RETTY, \
                c_caller_##A##_##B##_##RETTY);
+
+#define TERNARY_C_CALLER_REGISTRATION(A, B, C, RETTY, RETURNS) \
+register_c_sig(#A "," #B "," #C ":" #RETTY, \
+               c_caller_##A##_##B##_##C##_##RETTY);
 
 #define FOURARY_C_CALLER_REGISTRATION(A, B, C, D, RETTY, RETURNS) \
 register_c_sig(#A "," #B "," #C "," #D ":" #RETTY, \
@@ -419,6 +432,20 @@ vptr c_caller_##ARGATY##_##ARGBTY##_##RETTY (vptr arguments, void *f) { \
   RETURNS(arguments[0] = to_CMM_value((unsigned) retval, 8*sizeof(RETTY));, ) \
   return arguments; \
 } }
+#define TERNARY_C_CALLER(ARGATY, ARGBTY, ARGCTY, RETTY, RETURNS) \
+vptr c_caller_##ARGATY##_##ARGBTY##_##ARGCTY##_##RETTY \
+     (vptr arguments, void *f) \
+{ \
+  { \
+  RETTY (*f_ty) (ARGATY, ARGBTY, ARGCTY) = \
+                     (RETTY (*) (ARGATY, ARGBTY, ARGCTY)) f; \
+  RETURNS(RETTY retval =, (void)) \
+      f_ty(VIEW(arguments[0], ARGATY), \
+           VIEW(arguments[1], ARGBTY), \
+           VIEW(arguments[2], ARGCTY)); \
+  RETURNS(arguments[0] = to_CMM_value((unsigned) retval, 8*sizeof(RETTY));, ) \
+  return arguments; \
+} }
 #define FOURARY_C_CALLER(ARGATY, ARGBTY, ARGCTY, ARGDTY, RETTY, RETURNS) \
 vptr c_caller_##ARGATY##_##ARGBTY##_##ARGCTY##_##ARGDTY##_##RETTY \
      (vptr arguments, void *f) \
@@ -443,6 +470,7 @@ with a call to each of the iterators.
 ITERATE_NULLARY_C_CALLERS(NULLARY_C_CALLER)
 ITERATE_UNARY_C_CALLERS(UNARY_C_CALLER)
 ITERATE_BINARY_C_CALLERS(BINARY_C_CALLER)
+ITERATE_TERNARY_C_CALLERS(TERNARY_C_CALLER)
 ITERATE_FOURARY_C_CALLERS(FOURARY_C_CALLER)
 @ 
 
