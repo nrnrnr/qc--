@@ -68,10 +68,12 @@ module F  = Fenv.Clean
 module G  = Cfgx.M  (* graph *)
 module R  = Rtl
 module RP = Rtl.Private
+module RT = Runtimedata
 module RU = Rtlutil
 module RS = Register.Set
 module T  = Target
 module Up = Rtl.Up
+module W  = Rtlutil.Width
 @ 
 Utility functions and so on.
 <<ast2ir.ml>>=
@@ -420,6 +422,7 @@ module K = struct
     ;         return_in   : (Block.t -> Rtl.rtl) C.answer    (* move vals at also returns *)
     ;         rep         : Contn.t     (* representation as C-- value (incl block) *)
     ; mutable succ        : 'i G.node   (* filled in by 2nd pass time *)
+    ; mutable spans       : (Bits.bits * Rtl.exp) list (* spans at the continuation *)
     }
   <<definition of [[K.mk]], which initializes continuation information>>
 end
@@ -440,6 +443,7 @@ let mk name args rep g ~cut_in ~return_in  =
   ; cut_in      = cut_in
   ; return_in   = return_in
   ; succ        = G.illegal g
+  ; spans       = []
   }
 @ 
 The actual first pass takes place inside the [[stackdata]] function, where we have
@@ -463,7 +467,9 @@ successor.
 We return an illegal node since nothing may fall through to a continuation.
 <<supporting functions for translating statements>>=
 let rec contStmt2 (label,args) succ =
-  (continuation label).K.succ <- succ;
+  let k = continuation label in
+  k.K.spans <- props;
+  k.K.succ  <- succ;
   G.illegal g (* should be not reached *) 
 @
 We translate flow annotations into a continuation bundle.
@@ -514,8 +520,10 @@ let continuations cc ast default_aborts =
 \subsubsection{Third pass: code for initializing and entering continuations}
 @ 
 The rest of the compilation happens at the end of the procedure.
-There are two steps:
+There are three steps:
 \begin{itemize}
+\item
+Store spans at each escaping continuation (for use by the runtime system).
 \item
 Initialize any escaping continuations ([[insert_init_cont_nodes]])
 \item
@@ -529,8 +537,12 @@ inserts code to do the initialization.
 let insert_init_cont_nodes contmap init_node =
   let one_node cname k succ = 
     if k.K.escapes then
-      let pc    = exp_of_label k.K.cut_pc in
-      let sp    = proc_cc.C.stable_sp_loc in
+      let pc              = exp_of_label k.K.cut_pc in
+      let sp              = proc_cc.C.stable_sp_loc in
+      let frame_size_span = stable_frame_size   in
+      let ()    =
+        add_spans (k.K.cut_pc, ra_span :: overflow_size_span :: frame_size_span ::
+                               (csregs_spans @ k.K.spans)) in
       let pc_sp = { Mflow.new_pc = pc; Mflow.new_sp = sp } in
       G.instruction g (Contn.init_code k.K.rep pc_sp) succ
     else
@@ -556,7 +568,7 @@ let rec finish_compiling_continuation k =
     if k.K.returned_to then
       generate_return_to_entry k;
     if k.K.unwound_to then
-      generate_return_to_entry k;
+      generate_unwind_to_entry k;
   end
 @ 
 If we cut to a continuation, the overflow parameters live in its
@@ -590,6 +602,8 @@ and generate_return_to_entry k =
 @ 
 BUG ALERT! THIS CODE IS MISSING A NECESSARY ASSERTION ON THE VALUE
 OF THE STACK POINTER.
+
+LET'S JUST ADMIT IT: THIS FEATURE IS NOT YET IMPLEMENTED.
 <<functions that translate statements, including [[bodies]]>>=
 and generate_unwind_to_entry k = 
   let assign_unspecified_to args = R.par [] in (* BOGUS *)
@@ -686,31 +700,38 @@ let () = if cc.C.overflow_alloc.C.parameter_deallocator <> C.Callee then
 \paragraph{Calls}
 <<supporting functions for translating statements>>=
 and callStmt (lhs,cconv, e, args, targets (*unused*), conts) succ = 
-  let cc    = to_cc cconv                         in
-  let out   = actuals cc.C.call_parms.C.out args  in
-  let in'   = results cc.C.results.C.in' lhs      in
-  let calli = target.T.call.T.embed (expr e)      in
-  let conts = continuations cc conts false        in
+  let cc    = to_cc cconv                        in
+  let out   = actuals cc.C.call_parms.C.out args in
+  let in'   = results cc.C.results.C.in' lhs     in
+  let calli = target.T.call.T.embed (expr e)     in
+  let conts = continuations cc conts false       in
   let () =
     add youngblocks cc.C.overflow_alloc.C.parameter_deallocator out.C.overflow in
                                         (* outgoing overflow parms *)
   let () = add youngblocks cc.C.overflow_alloc.C.result_allocator in'.C.overflow in
                                         (* incoming overflow results *)
-  let call_node =
-    let c    = G.call g calli ~uses:out.C.regs ~defs:in'.C.regs ~kills:cc.C.volregs
-                              ~altrets:conts.returns ~unwinds_to:conts.unwinds
-                              ~cuts_to:conts.cuts ~aborts:conts.aborts ~spans:props in
-    add_call_site {Runtimedata.node = ()};
-    c in
-  G.stack_adjust g out.C.pre_sp                **>
-  G.instruction  g out.C.shuffle               **>
-  G.stack_adjust g out.C.post_sp               **>
-  call_node                                    **>
-  G.assertion    g (in'.C.insp out.C.overflow)              **>
-  G.stack_adjust g in'.C.pre_sp            **>  (* DOUBTS ABOUT THIS *)
-  G.instruction  g in'.C.shuffle           **>
-  G.stack_adjust g in'.C.post_sp           **>
-  succ
+
+  let frame_size_span =
+    if cc.C.overflow_alloc.C.parameter_deallocator = C.Caller then
+      RT.frame_size_to_span nvars vfp (Block.base out.C.overflow)
+    else stable_frame_size in
+
+  let call_succ  =
+    G.assertion    g (in'.C.insp out.C.overflow)              **>
+    G.stack_adjust g in'.C.pre_sp            **>  (* DOUBTS ABOUT THIS *)
+    G.instruction  g in'.C.shuffle           **>
+    G.stack_adjust g in'.C.post_sp           **>
+    succ in
+  let call_succ' = G.join_leading_to call_succ in
+  add_spans (G.label call_succ', ra_span :: overflow_size_span :: frame_size_span ::
+                                 (csregs_spans @ props));
+  G.stack_adjust g out.C.pre_sp                                        **>
+  G.instruction  g out.C.shuffle                                       **>
+  G.stack_adjust g out.C.post_sp                                       **>
+  G.call g calli ~uses:out.C.regs ~defs:in'.C.regs ~kills:cc.C.volregs
+                 ~altrets:conts.returns ~unwinds_to:conts.unwinds
+                 ~cuts_to:conts.cuts ~aborts:conts.aborts              **>
+  call_succ'
 @
 \paragraph{Returns}
 In the presence of tail calls, [[f]] might call [[g]] with
@@ -829,8 +850,6 @@ reader).
 \paragraph{Managing mutable state: blocks, constraints, and call site information}
 The important state here is [[youngblocks]], [[oldblocks]], and
 [[constraints]]. 
-TRY TO REFACTOR THIS CODE SO THAT [[add]] CAN TAKE CALLER/CALLEE AS
-PARAMETER. 
 <<definition of type [[blocklists]]>>=
 type 'a blocklists = { mutable caller : 'a list; mutable callee : 'a list }
 <<definition of [[proc]], which translates one procedure>>=
@@ -839,11 +858,16 @@ type 'a blocklists = { mutable caller : 'a list; mutable callee : 'a list }
   let add blocks party b = match party with
   | C.Caller -> blocks.caller <- b :: blocks.caller
   | C.Callee -> blocks.callee <- b :: blocks.callee in
-  let constraints        = ref [] in
-  let call_site_info     = ref [] in
-  let add_to_list lst    = fun c -> lst := c :: !lst in
-  let add_constraints    = add_to_list constraints in
-  let add_call_site      = add_to_list call_site_info in
+  let constraints         = ref [] in
+  let add_constraints  c  = constraints  := c :: !constraints        in
+@   
+To avoid threading state around, we store spans as mutable state.
+Most spans are associated with specific call-sites.
+However, some spans, such as stackdata information, are accessible globally within
+the procedure; for these spans, we associate them with the current procedure's label.
+<<definition of [[proc]], which translates one procedure>>=
+  let spans        = ref [] in
+  let add_spans s  = spans := s :: !spans              in
 @   
 \paragraph{Setting up the environment and functions that use it (stack
 data, continuations, expressions, parameters)}
@@ -854,15 +878,27 @@ continuation to its information as type [[K.t]] (see
 chunk~\subpageref{ast2ir.K.t}). 
 The [[stackdata]] function includes the first pass of translation of
 continuations. 
+
+We also gather all the stackdata labels and convert them to spans to pass on
+to the run-time system.
+Order is important -- an earlier span in the procedure must precede a later span in
+the list passed to the runtime system.
+Because stackdata labels are visible at any stopping point in a procedure, we associate
+the spans with the label for the current procedure.
 <<definition of [[proc]], which translates one procedure>>=
+  let sd_labels = ref [] in
   <<definition of [[stackdata]]>> in
   let env, (stackd, contenv) =
-    let scope = match F.findv procname env with
-    | _,(F.Label(F.Proc (sym,scope,i)),_) -> scope
+    let proc_sym, scope = match F.findv procname env with
+    | _,(F.Label(F.Proc (sym,scope,i)),_) -> sym, scope
     | _ -> impossible "no environment for procedure" in
     let sdmem = Memalloc.relative vfp "stackdata" Memalloc.Up in
     let env   = F.push env scope in
-    env ,stackdata target (F.push env scope) sdmem procbody in
+    let proc_label = proc_sym#original_text in
+    let sd = stackdata target (F.push env scope) sdmem procbody in
+    add_spans (proc_label, RT.stackdata_to_spans ~wordsize:target.T.wordsize ~vfp
+                                                 (List.rev (!sd_labels)));
+    env, sd in
 @ 
 We provide a lookup of continuation by name.
 If a continuation is used as an rvalue, we get the address of its
@@ -919,21 +955,46 @@ spilled to that block.
 <<types for nonvolatile registers>>=
 type 'a nvr = { reg : 'a; tmp : 'a }   (* for callee-saves info *)
 <<definition of [[proc]], which translates one procedure>>=
-  let in'    = formals proc_cc.C.call_parms.C.in' args  in
-  let nvregs = RS.diff proc_cc.C.pre_nvregs in'.C.regs in
-  let nvr_info =
-    let info ((_, _, w) as r) =
-      { reg = R.reg r; tmp = proc_cc.C.saved_nvr temps r } in
-    RS.fold (fun r i -> info r :: i) nvregs [] in
+  let proc_in'    = formals proc_cc.C.call_parms.C.in' args  in
+  let nvregs = RS.diff proc_cc.C.pre_nvregs proc_in'.C.regs in
+  let nvr_temps = 
+    RS.fold (fun r i -> (r, proc_cc.C.saved_nvr temps r) :: i) nvregs [] in
+  let nvr_info = List.map (fun (r,t) -> {reg = R.reg r; tmp = t}) nvr_temps in
   let save_nvrs =
     R.par (List.map (fun i -> RU.store i.tmp (RU.fetch i.reg)) nvr_info) in
   let restore_nvrs =
     R.par (List.map (fun i -> RU.store i.reg (RU.fetch i.tmp)) nvr_info) in
   let save_ra, saved_ra =
-    let ra_in = proc_cc.C.ra_on_entry in'.C.overflow in
+    let ra_in = proc_cc.C.ra_on_entry proc_in'.C.overflow in
     let loc   = proc_cc.C.where_to_save_ra ra_in temps in
     let w     = pointersize in
     R.store loc ra_in w, loc in
+@ 
+<<definition of [[proc]], which translates one procedure>>=
+  let symbol, nvars = match F.findv procname env with
+    | _, (F.Label(F.Proc (sym,scope,i)),_) -> sym, i
+    | _ -> impossible "no environment for procedure" in
+@
+For each procedure, we create a span that represents the incoming stack
+space that must be deallocated by the procedure.
+<<definition of [[proc]], which translates one procedure>>=
+  let symbol, nvars = match F.findv procname env with
+    | _, (F.Label(F.Proc (sym,scope,i)),_) -> sym, i
+    | _ -> impossible "no environment for procedure" in
+  let overflow_size_span =
+    let base = Block.base proc_in'.C.overflow in
+    if proc_cc.C.overflow_alloc.C.parameter_deallocator = C.Callee then
+      RT.overflow_size_to_span nvars vfp
+          (Rtlutil.addk (W.exp base) base (Block.size proc_in'.C.overflow))
+    else RT.overflow_size_to_span nvars vfp base in
+  let stable_frame_size = RT.frame_size_to_span nvars vfp proc_cc.C.stable_sp_loc in
+@ 
+Similarly, spans for the return address and callee-saves registers may be repeated
+throughout a procedure.
+<<definition of [[proc]], which translates one procedure>>=
+  let ra_span = RT.ra_to_span ~wordsize:target.T.wordsize ~nvars saved_ra in
+  let csregs_spans = RT.csregs_to_spans ~wordsize:target.T.wordsize ~nvars
+                                        nvregs nvr_temps in
 @ 
 \paragraph{Supporting procedures}
 We now have enough information in scope to drop in the definitions of
@@ -953,17 +1014,17 @@ create a label node [[initcont]] as a placeholder.
 The initialization code is inserted at [[initcont]] after the translation.
 <<definition of [[proc]], which translates one procedure>>=
   let initcont = G.node_labeled g (Idgen.label "initialize continuations") in
-  let () =
-    add oldblocks proc_cc.C.overflow_alloc.C.parameter_deallocator in'.C.overflow in
+  let () = add oldblocks proc_cc.C.overflow_alloc.C.parameter_deallocator
+                         proc_in'.C.overflow in
   let labelnode node ~succ = (G.set_succ node succ; node) in
   let () = 
     G.set_succ (G.entry g) (
-    G.stack_adjust g in'.C.pre_sp    **>
-    G.instruction  g in'.C.shuffle   **>
-    G.stack_adjust g in'.C.post_sp   **>
-    G.instruction  g save_ra         **>
-    G.instruction  g save_nvrs       **>
-    labelnode initcont               **>
+    G.stack_adjust g proc_in'.C.pre_sp    **>
+    G.instruction  g proc_in'.C.shuffle   **>
+    G.stack_adjust g proc_in'.C.post_sp   **>
+    G.instruction  g save_ra              **>
+    G.instruction  g save_nvrs            **>
+    labelnode initcont                    **>
     bodies containing_spans procbody (G.exit g)) in 
 @ And as promised, the third pass.
 We initialize continuations, finish compiling them, and accumulate
@@ -988,9 +1049,6 @@ The main thing here is dealing with all the blocks.
                             | _ -> Impossible.impossible "formal is not a var???")
                 args in
   let i =    
-    let symbol, nvars = match F.findv procname env with
-      | _, (F.Label(F.Proc (sym,scope,i)),_) -> sym, i
-      | _ -> impossible "no environment for procedure" in
     { Proc.symbol      = symbol
     ; Proc.cc          = proc_cc
     ; Proc.target      = target
@@ -1012,7 +1070,7 @@ The main thing here is dealing with all the blocks.
     ; Proc.conts          = contblocks
     ; Proc.vars           = nvars       (* number of variables *)
     ; Proc.varMap         = Array.make nvars None
-    ; Proc.call_site_info = !call_site_info
+    ; Proc.spans          = !spans
     } in
   optimizer i (* runs optimizer, freezes, and assembles proc *)
 @ 
@@ -1057,6 +1115,7 @@ let rec stackdatum state = function
     | A.DatumAt(x,_) -> stackdatum state x
     | A.Label(l) -> 
         let loc = Memalloc.current state.mem in
+            sd_labels := loc :: !sd_labels;
             let x = F.findv l env in
             ( match x with
             | (r,(F.Label(F.Stack(None)),t)) ->
