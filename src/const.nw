@@ -220,7 +220,7 @@ module Eqns = LowLevel.Make(RtlConst)
 exception Can'tSolve
 
 type t = 
-    { symbols:  Str.Set.t
+    { symbols:  Strutil.Set.t
     ; eqns:     Eqns.t
     ; width:    int
     }
@@ -231,18 +231,18 @@ type solution =
     }
 
 let empty width =
-    { symbols   = Str.Set.empty
+    { symbols   = Strutil.Set.empty
     ; eqns      = Eqns.empty
     ; width     = width
     }
 
 let register exp t = match Rtl.Convert.exp exp with
-    | RP.Const(RP.Link (x,_)) -> { t with symbols = Str.Set.add x t.symbols }
+    | RP.Const(RP.Link (x,_)) -> { t with symbols = Strutil.Set.add x t.symbols }
     | _                       -> invalid_arg "Const.HighLevel.register"
 
 
 let sym x t =
-    { t with symbols = Str.Set.add x t.symbols }, Rtl.link x t.width 
+    { t with symbols = Strutil.Set.add x t.symbols }, Rtl.link x t.width 
 @
 
 To convert an [[Rtl.exp]] value into an [[Eqns.exp]] value the
@@ -253,7 +253,7 @@ and [[sub]] sums, and everything else opaque constants.
 <<HighLevel>>=
 let const t = function
     | RP.Bits(b)                                -> Eqns.int (Bits.to_int b)
-    | RP.Link(x,_) when Str.Set.mem x t.symbols -> Eqns.sym x
+    | RP.Link(x,_) when Strutil.Set.mem x t.symbols -> Eqns.sym x
     | x                                         -> Eqns.const (RP.Const x )
         
                         

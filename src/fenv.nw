@@ -430,9 +430,9 @@ symbols.  The union of the imported and exported sets equals the range
 of the map.
 
 <<signature Env>>=
-val imported: env -> Str.Set.t
-val exported: env -> Str.Set.t
-val nam2sym:  env -> string Str.Map.t    (* need this? *)
+val imported: env -> Strutil.Set.t
+val exported: env -> Strutil.Set.t
+val nam2sym:  env -> string Strutil.Map.t    (* need this? *)
 @
 
 % ------------------------------------------------------------------ 
@@ -616,17 +616,17 @@ two sets of assembly symbols:  [[imported]] and [[exported]], and a
 map from {\PAL} names to symbols.
 
 <<module Env>>=
-and asm             = { imported:     Str.Set.t
-                      ; exported:     Str.Set.t
-                      ; nam2sym:      string Str.Map.t
+and asm             = { imported:     Strutil.Set.t
+                      ; exported:     Strutil.Set.t
+                      ; nam2sym:      string Strutil.Map.t
                       }
 @
 
 A [[scope]] is record of two maps for values and types respectively:
 
 <<module Env>>=
-and scope           = { venv:   ventry Str.Map.t
-                      ; tenv:   tentry Str.Map.t
+and scope           = { venv:   ventry Strutil.Map.t
+                      ; tenv:   tentry Strutil.Map.t
                       }
 @
 
@@ -673,9 +673,9 @@ let empty  map =
                   ; float      = Arg.default "ieee754"
                   ; charset    = Arg.default "latin1"
                   }
-    ; asm       = { imported   = Str.Set.empty
-                  ; exported   = Str.Set.empty
-                  ; nam2sym    = Str.Map.empty
+    ; asm       = { imported   = Strutil.Set.empty
+                  ; exported   = Strutil.Set.empty
+                  ; nam2sym    = Strutil.Map.empty
                   }
     } 
 @
@@ -683,7 +683,7 @@ let empty  map =
 The implementation of the [[scope]] stack provides no surprises.
 
 <<module Env>>=
-let emptyscope          = { venv  = Str.Map.empty; tenv = Str.Map.empty }
+let emptyscope          = { venv  = Strutil.Map.empty; tenv = Strutil.Map.empty }
 let srcmap {srcmap=m}   = m
 
 let top env = match env.scopes with
@@ -698,7 +698,7 @@ let push env scope = { env with scopes = scope :: env.scopes }
 @
 
 <<module Env>>=
-let foldv f {venv=v} z = Str.Map.fold f v z
+let foldv f {venv=v} z = Strutil.Map.fold f v z
 @
 
 
@@ -721,11 +721,11 @@ let bindv name (rgn,x as ventry) env =
                 | []    -> assert false
                 | s::ss -> s
                 ) in
-    try let (rgn',x) = Str.Map.find name scope.venv in
+    try let (rgn',x) = Strutil.Map.find name scope.venv in
         ( error rgn  env.srcmap ("re-declaration of value "^name)
         ; error rgn' env.srcmap ("previously declared here")
         ; let scope = 
-            { scope with venv = Str.Map.add name (rgn',Arg.bad()) scope.venv} 
+            { scope with venv = Strutil.Map.add name (rgn',Arg.bad()) scope.venv} 
           in
             { env with 
               scopes = scope :: List.tl env.scopes  
@@ -733,7 +733,7 @@ let bindv name (rgn,x as ventry) env =
             }
         )              
     with Not_found -> 
-        let scope = { scope with venv = Str.Map.add name ventry scope.venv} in
+        let scope = { scope with venv = Strutil.Map.add name ventry scope.venv} in
         let env   = { env with scopes = scope :: List.tl env.scopes } in
             ( match Arg.asgood x with
             | Some(Register _,_) when List.length env.scopes = 1 ->
@@ -748,11 +748,11 @@ let bindt name (rgn,x as tentry) env =
                 | []    -> assert false
                 | s::ss -> s
                 ) in
-    try let (rgn',x) = Str.Map.find name scope.tenv in
+    try let (rgn',x) = Strutil.Map.find name scope.tenv in
         ( error rgn  env.srcmap ("re-declaration of type "^name)
         ; error rgn' env.srcmap ("previously declared here")
         ; let scope = 
-            { scope with tenv = Str.Map.add name (rgn',Arg.bad()) scope.tenv} 
+            { scope with tenv = Strutil.Map.add name (rgn',Arg.bad()) scope.tenv} 
           in
             { env with 
               scopes = scope :: List.tl env.scopes  
@@ -760,7 +760,7 @@ let bindt name (rgn,x as tentry) env =
             }
         )              
     with Not_found -> 
-        let scope = { scope with tenv = Str.Map.add name tentry scope.tenv} in
+        let scope = { scope with tenv = Strutil.Map.add name tentry scope.tenv} in
         let env   = { env with scopes = scope :: List.tl env.scopes } in
             env
 @
@@ -773,7 +773,7 @@ move to the bottom. The first binding found is returned, and
 let findv name env =
     let rec loop = function
         | []    -> E.error ("unknown value: "^name)
-        | s::ss -> ( try Str.Map.find name s.venv with
+        | s::ss -> ( try Strutil.Map.find name s.venv with
                    | Not_found -> loop ss
                    )
     in
@@ -782,7 +782,7 @@ let findv name env =
 let findt name env =
     let rec loop = function
         | []    -> E.error ("unknown type: "^name)
-        | s::ss -> ( try Str.Map.find name s.tenv with
+        | s::ss -> ( try Strutil.Map.find name s.tenv with
                    | Not_found -> loop ss
                    )
     in
@@ -796,8 +796,8 @@ the name is not bound in the environment, it is returned unaltered.
 let rebindv name x env =
     let rec loop = function
         | []    -> []
-        | s::ss -> if Str.Map.mem name s.venv 
-                   then { s with venv = Str.Map.add name x s.venv } :: ss
+        | s::ss -> if Strutil.Map.mem name s.venv 
+                   then { s with venv = Strutil.Map.add name x s.venv } :: ss
                    else loop ss
     in
         { env with scopes = loop env.scopes }
@@ -810,7 +810,7 @@ let is_localv name env =
     ( match env.scopes with
     | []    -> assert false
     | [s]   -> false
-    | s::ss -> Str.Map.mem name s.venv
+    | s::ss -> Strutil.Map.mem name s.venv
     )
 @
     
@@ -923,25 +923,25 @@ and assembly symbols can be found in \module{mangle}.
 
 <<module Env>>=
 let import r sym name env =
-    if Str.Set.mem sym env.asm.exported 
+    if Strutil.Set.mem sym env.asm.exported 
     then ( error r env.srcmap ("import of an exported name: "^name)
          ; flagError env
          )
     else let asm = { exported = env.asm.exported
-                   ; imported = Str.Set.add sym env.asm.imported
-                   ; nam2sym  = Str.Map.add name sym env.asm.nam2sym
+                   ; imported = Strutil.Set.add sym env.asm.imported
+                   ; nam2sym  = Strutil.Map.add name sym env.asm.nam2sym
                    }
          in
             { env with asm = asm }
 
 let export r name sym env =
-    if Str.Set.mem sym env.asm.imported 
+    if Strutil.Set.mem sym env.asm.imported 
     then ( error r env.srcmap ("export of an imported name: "^name)
          ; flagError env
          )
     else let asm = { imported = env.asm.imported
-                   ; exported = Str.Set.add sym env.asm.exported
-                   ; nam2sym  = Str.Map.add name sym env.asm.nam2sym
+                   ; exported = Strutil.Set.add sym env.asm.exported
+                   ; nam2sym  = Strutil.Map.add name sym env.asm.nam2sym
                    }
          in
             { env with asm = asm }
@@ -1011,17 +1011,17 @@ let rec clean_venv map  =
                 | Dirty.Register(n)               -> Clean.Register(clean_reg n)
                 | Dirty.Continuation(n)           -> Clean.Continuation(n)
             in
-                 Str.Map.add key (pos,(denot',ty)) map
+                 Strutil.Map.add key (pos,(denot',ty)) map
         |  _  -> assert false
     in
-        Str.Map.fold copy map Str.Map.empty      
+        Strutil.Map.fold copy map Strutil.Map.empty      
 <<clean function>>=
 and clean_tenv map =
     let copy key data map = match data with
-        | p, E.Ok(t) -> Str.Map.add key (p,t) map
+        | p, E.Ok(t) -> Strutil.Map.add key (p,t) map
         | _          -> assert false
     in
-        Str.Map.fold copy map Str.Map.empty
+        Strutil.Map.fold copy map Strutil.Map.empty
 <<clean function>>=
 and clean_target = function
     |   { Dirty.memsize    = E.Ok(Some n)

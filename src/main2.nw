@@ -122,6 +122,21 @@ development it is easier to have an external file.
 Command line arguments are evaluated as follows:
 
 \begin{itemize}
+\item From left to right, all arguments of the form [[-]]$a$, where
+$a$~is not [[e]] or [[i]], are converted to [[-e Main.]]$a$[[()]].
+<<main2.ml>>=
+let expandable_regexp = Str.regexp "-[a-zA-Z0-9_]$"
+let is_expandable opt = Str.string_match expandable_regexp opt 0
+let rec expand_args = function
+  | "-e" :: a :: args -> "-e" :: a :: expand_args args
+  | "-i" :: args -> "-i" :: expand_args args
+  | opt  :: args when is_expandable opt ->
+      "-e" :: ("Main." ^ String.sub opt 1 (String.length opt - 1) ^ "()") ::
+      expand_args args
+  | a :: args -> a :: expand_args args
+  | [] -> []
+@                
+                                       
 \item From left to right, all arguments to [[-e]] are collected.
 \item When the next command line argument is [[-i]]:
     \begin{itemize}
@@ -141,6 +156,7 @@ let main () =
     let argv        = Array.to_list Sys.argv in
     let this        = Filename.basename (List.hd argv) in
     let args        = List.tl argv in
+    let args        = expand_args args in
     let usage       = "usage: " ^ this ^ " -e 'arg' [arg arg ..]" in
     let state       = I.state () in (* fresh Lua state *)       
     let evaluate e  = ignore (I.dostring state e) in
@@ -300,6 +316,7 @@ function Main.compile ()
     local doc = Driver.assemble(asm)
     Driver.print(doc,Default.linewidth)
 end    
+Main.c = Main.compile -- abbreviation
 @
 
  

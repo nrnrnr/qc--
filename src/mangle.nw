@@ -250,7 +250,7 @@ It is created from a [[symbol]] value, and an initial [[strmap]] from
 imported or exported {\PAL} names to their corresponding symbols.
 
 <<mangle.mli>>=
-type strmap = string Str.Map.t
+type strmap = string Strutil.Map.t
              
 val mk:         symbol -> strmap -> mangler     (* create a mangler *)
 @
@@ -265,8 +265,8 @@ things first:  here are the types and modules declared in the
 interface, which provide no surprises.
 
 <<mangle.ml>>=
-type strset         = Str.Set.t
-type strmap         = string Str.Map.t
+type strset         = Strutil.Set.t
+type strmap         = string Strutil.Map.t
 
 type mangler        = string -> string
 type symbol         = { preprocess:  string -> string
@@ -282,8 +282,8 @@ be calculated from the map:
 
 <<mangle.ml>>=
 let range map =
-    let add name sym set = Str.Set.add sym set in
-        Str.Map.fold add map Str.Set.empty
+    let add name sym set = Strutil.Set.add sym set in
+        Strutil.Map.fold add map Strutil.Set.empty
 @
 
 A [[mangler]] must maintain some state: the set of used symbols, and the
@@ -304,13 +304,13 @@ the new symbol are recorded in the mutable state.
 <<mangle.ml>>=
 let mk symbol map =
     let state    = { used = List.fold_right 
-                                Str.Set.add symbol.reserved (range map) 
+                                Strutil.Set.add symbol.reserved (range map) 
                    ; map  = map
                    } 
     in
     
     let rec avoid s  =
-            if   Str.Set.mem s state.used 
+            if   Strutil.Set.mem s state.used 
             then avoid (symbol.avoid s)
             else s 
     in
@@ -321,13 +321,13 @@ let mk symbol map =
                      String.set s' i (symbol.replace (String.get s' i))
                    done in
         let s'   = avoid s' in
-            ( state.used <- Str.Set.add s' state.used
-            ; state.map  <- Str.Map.add s s' state.map
+            ( state.used <- Strutil.Set.add s' state.used
+            ; state.map  <- Strutil.Map.add s s' state.map
             ; s'
             )
     in         
     let mangle s = 
-        try  Str.Map.find s state.map 
+        try  Strutil.Map.find s state.map 
         with Not_found -> newMangle s
     in
         mangle

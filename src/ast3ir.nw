@@ -820,10 +820,10 @@ let freeze (p:Proc.t) =
     let stack,eqns = Area.concat stack p.Proc.eqns in
     let solution = Const.solve eqns in
     let ()       = assert (solution.Const.dependent = []) in
-    let map      = Str.assoc2map solution.Const.known     in
+    let map      = Strutil.assoc2map solution.Const.known     in
     let rec subst (e:RP.exp) = match e with              
         | RP.Const(RP.Link(x,_)) -> 
-            ( try Rtl.Convert.exp (Str.Map.find x map) with 
+            ( try Rtl.Convert.exp (Strutil.Map.find x map) with 
             | Not_found -> e
             )  
         | RP.App(op,exprs) -> RP.App (op, List.map subst exprs)
@@ -1139,11 +1139,11 @@ are registered in the fat environment.  For details, see modules
 
 <<Make translate program>>=
 let exports env asm = 
-    Str.Set.fold (fun s asm -> snd (Asm.export s asm)) 
+    Strutil.Set.fold (fun s asm -> snd (Asm.export s asm)) 
     (F.exported env) asm
 
 let imports env asm =
-    Str.Set.fold (fun s asm -> snd (Asm.import s asm)) 
+    Strutil.Set.fold (fun s asm -> snd (Asm.import s asm)) 
     (F.imported env) asm
 @
 
