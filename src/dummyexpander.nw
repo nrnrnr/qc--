@@ -432,7 +432,13 @@ bop:        Op(opr) [{: if is_bool_op opr   then 0 else C.inf_cost :}]
 fcmp:       Op(opr) [{: match opr with ("fcmp",_) -> 0 | _ -> C.inf_cost :}]
             {: U.opr opr :}
 
-iop:        Op(opr) [1] -- matches if, nothing above matches
+            -- The rule below matches if none of the rules above match.
+            -- It is dangerous not to have an explicit guard here
+            -- because if the cost of the other solutions is high
+            -- enough, out of a sudden a bop operator might be
+            -- considered an iop. Therefore we have a high cost below.
+            
+iop:        Op(opr) [100] -- matches if nothing above matches
             {: U.opr opr :}
 @            
 
