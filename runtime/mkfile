@@ -102,8 +102,8 @@ pcmap.ld:D: pcmap.nw
 &.o: &.s
 	as -o $target $stem.s
 
-'^'(runtime|pcmap|gcc-linux).s'$':R: '\1'.c
-	gcc -Wall -S -g $stem1.c
+'^'(runtime|pcmap|gcc-linux|trace).s'$':R: '\1'.c
+	gcc -Wall -S -I. -g $stem1.c
 
 # ------------------------------------------------------------------ 
 # machine-dependent code
@@ -129,7 +129,10 @@ sparc-solaris.o:
 	$NOTANGLE -L $prereq -R$target > $target
 
 qc--runtime.h:D: runtime.nw
-	$NOTANGLE -L $prereq -R$target > $target
+	$NOTANGLE -L -filter "../config/nocond $config_arch" $prereq -R$target > $target
+
+runtime.c:D: runtime.nw
+	$NOTANGLE -L -filter "../config/nocond $config_arch" $prereq -R$target > $target
 
 ${B}cut.c--:D: runtime.nw
 	$NOTANGLE -L $prereq -R$target > $target
@@ -142,5 +145,8 @@ ${B}thread.c--:D: runtime.nw
 	$QCMM $config_swapopt -S -o $tmp ${B}$stem1.c--
 	sed '/globalsig/d;/ref_to_global_area/d' $tmp > $target
 	rm -f $tmp
+
+'^'${B}(test).s'$':DR: ${B}'\1'.c-- $QCMM
+	$QCMM $config_swapopt -S -globals ${B}$stem1.c--
 
 <      $TOP/config/install.mk

@@ -9,14 +9,7 @@ For now, we are ignoring threads, and a number of interface functions.
 #ifndef QCMM_RUNTIME_H
 #define QCMM_RUNTIME_H
 
-/* In future, these defines will come out of the compiler.
-   Please ignore this embarrassing hack -PG
- */
-#define WORDSIZE 4
-#define NUM_REGS 12
-#define ESP 8 // r[4]
-#define EBP 9 // r[5]
-#define PC  0 // c[0]
+<<machine-dependent macro definitions for the public interface>>
 
 <<data structures>>
 <<public functions>>
@@ -74,8 +67,19 @@ These functions are currently unimplemented.
 <<unimplemented public functions>>=
 void*    Cmm_FindGlobalVar (int n);
 @ 
+\section{Implementation}
+
+First, the machine-dependent register information.
+<<machine-dependent macro definitions for the public interface ((x86-linux))>>=
+#define NUM_REGS 12
+<<machine-dependent macro definitions for the implementation ((x86-linux))>>=
+#define ESP 8 // r[4]
+#define EBP 9 // r[5]
+#define PC  0 // c[0]
+@ 
+
 % ---------------------------------------------------------------------------
-\section{Walking the stack}
+\subsection{Walking the stack}
 % ---------------------------------------------------------------------------
 This implementation assumes that a [[C--]] thread can only be
 suspended at a continuation. Particularly, this means we do not expect
@@ -311,7 +315,7 @@ switch(vartype) {
 }
 @
 % ---------------------------------------------------------------------------
-\section{Span Data}
+\subsection{Span Data}
 % ---------------------------------------------------------------------------
 For any activation, the client may ask for the inner-most enclosing
 span associated with a given token. The user spans are contained in the
@@ -337,7 +341,7 @@ Cmm_GetDescriptor(const Cmm_Activation *a, Cmm_Word token) {
 }
 @
 % ---------------------------------------------------------------------------
-\section{Accessing Local Variables}
+\subsection{Accessing Local Variables}
 % ---------------------------------------------------------------------------
 Local variables for an activation can can be found either on the
 stack, or in registers. The location of parameters is computed using
@@ -462,6 +466,7 @@ stitch things together.
 #include <assert.h>
 #include <stdio.h>
 #include <stdarg.h>
+<<machine-dependent macro definitions for the implementation>>
 <<external functions>>
 <<private functions>>
 <<public function implementations>>
@@ -474,7 +479,7 @@ void print_stack(int* fp) {
   }
 }
 @ 
-\section{{\PAL} runtime}
+\subsection{{\PAL} runtime}
 
 <<cut.c-->>=
 target byteorder little;
