@@ -1,0 +1,163 @@
+// reverse.c--
+// 
+// note: runtime system is responsible for allocating memory on heap to store
+// backups of globals; pointer to this memory should be stored at label
+// "globals_backup"
+// 
+// the runtime system can find the label's address by looking for the value 
+// associated with the span tagged "GC_globals_backup" that encompasses the 
+// "main" procedure
+
+target 
+       byteorder   little
+       memsize     8
+       wordsize    32
+       pointersize 32
+;
+
+export main;
+import bits32 cmmprint, alloc;
+
+import bits32 SaveGlobals, RestoreGlobals;
+
+// tokens for use with spans
+const GC                = 1;
+const GC_GLOBALS        = 2;
+const GC_globals_backup = 3;
+
+const nil       = 0;
+
+section "data" {
+  // needed by front-end runtime system
+  globals_backup:  bits32[1];
+
+  // GC information -- which variables are pointers
+  GC_allocate:     bits8[] {0::bits8, 1::bits8};
+  GC_symbolify:    bits8[] {0::bits8, 1::bits8};
+  GC_cons:         bits8[] {1::bits8, 1::bits8};
+  GC_car:          bits8[] {1::bits8};
+  GC_cdr:          bits8[] {1::bits8};
+  GC_number_list:  bits8[] {0::bits8, 0::bits8, 1::bits8, 1::bits8, 1::bits8};
+  GC_print_list:   bits8[] {1::bits8, 1::bits8};
+  GC_print_symbol: bits8[] {1::bits8, 0::bits8};
+  GC_reverse_list: bits8[] {1::bits8};
+  GC_reverse_list_helper: bits8[] {1::bits8, 1::bits8, 1::bits8, 1::bits8};
+  GC_main:         bits8[] {1::bits8, 1::bits8};
+}
+
+section "text" {
+
+  span GC GC_allocate {
+    allocate( bits32 size ) {
+      bits32 new;
+
+      SaveGlobals(bits32[globals_backup]);
+      new = foreign "C" alloc(size / 8);
+      RestoreGlobals(bits32[globals_backup]);
+
+      return( new );
+    }
+  }
+
+  span GC GC_symbolify {
+    symbolify( bits32 s ) {
+      bits32 new;
+      new = allocate(32);
+      bits32[new] = s;
+      return( new );
+    }
+  }
+
+  span GC GC_cons {
+    cons( bits32 car, bits32 cdr ) {
+      bits32 new;
+      new             = allocate(64);
+      bits32[new]     = car;
+      bits32[new + 1] = cdr;
+      return( new );
+    }
+  }
+
+  span GC GC_car {
+    car( bits32 c ) {
+      return( bits32[c] );
+    }
+  }
+
+  span GC GC_cdr {
+    cdr( bits32 c ) {
+      return( bits32[c] );
+    }
+  }
+
+  span GC GC_number_list {
+    number_list( bits32 lo, bits32 hi ) {
+      bits32 s, elt, cdr;
+    
+      if lo >= hi { return( nil ); }
+      cdr = number_list(lo + 1, hi);
+      s = symbolify(lo);
+      elt = cons(s, cdr);
+      return( elt );
+    }
+  }
+
+  span GC GC_print_list {
+    print_list( bits32 list ) {
+      bits32 s;
+    
+      if list == nil { return; }
+      s = car(list);
+      print_symbol(s);
+      s = cdr(list);
+      jump print_list(s);
+    }
+  }
+
+  span GC GC_print_symbol {
+    print_symbol( bits32 s ) {
+      bits32 v;
+      v = bits32[s];
+
+      SaveGlobals(bits32[globals_backup]);
+      foreign "C" cmmprint(v);
+      RestoreGlobals(bits32[globals_backup]);
+
+      return;
+    }
+  }
+
+  span GC GC_reverse_list {
+    reverse_list( bits32 list) {
+      jump reverse_list_helper(list, nil);
+    }
+  }
+
+  span GC GC_reverse_list_helper {
+    reverse_list_helper( bits32 list, bits32 accum ) {
+      bits32 s, acc_new;
+
+      if list == nil { return( accum ); }
+      s       = car(list);
+      acc_new = cons(s, accum);
+      s       = cdr(list);
+      jump reverse_list_helper(s, acc_new);
+    }
+  }
+
+  span GC_globals_backup globals_backup {
+    span GC GC_main {
+      main() {
+        bits32 list1, list2;
+
+        list1 = number_list(0, 100);
+        list2 = reverse_list(list1);
+        print_list(list1);
+        print_list(list2);
+
+        return;
+      }
+    }
+  }
+
+}
