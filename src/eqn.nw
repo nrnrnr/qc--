@@ -90,12 +90,19 @@ And finally: $v_3 = 2$, which yields the solution: $v_2 = -3$, $v_1 =
 In the general case the intermediate solutions in the map are also sums
 containing variables: variables on the left hand side of the map are
 \emph{dependent} on the \emph{independent} variables on the right hand
-side. Initially all variables and independent; during the solving
+side. Initially all variables are independent; during the solving
 process more and more variables become dependent, and later \emph{known}
-when their right hand side contains no longer variables.  Whenever a new
-term for a variable is found it must be used to rewrite the set
-\emph{and} the map. However, only the set is normalized after such a
-step.
+when their right hand side contains no longer variables.
+Whenever a new term for a variable is found it must be used to rewrite the set
+\emph{and} the map. However, only the set is normalized after such a step.
+
+In practice, we delay the rewriting of each equation in the set until it is
+next examined (i.e. we perform lazy updates).
+Why? Because when we have a large number of variables and equations,
+we don't want to rewrite the equations a quadratic number of times.
+We take another measure to ensure the efficiency of rewriting the environment:
+we keep track of which environment bindings depend on variables, so when a variable
+changes, we update only the environment bindings that depend on the variable.
 
 Here is a set of equations that the solver cannot find the solution $v_1
 = 3$, $v_2 = -5$ for:
@@ -177,8 +184,6 @@ following holds: $t_i \prec t_j \Rightarrow i < j$. In addition, no term
 $t$ appears twice in a sum.
 
 <<eqn.ml>>=
-
-    
 <<EXP>>
 <<S>>
 module Make (E: EXP) = struct
@@ -187,43 +192,42 @@ module Make (E: EXP) = struct
     <<Make>>
 end    
 
-
 module Test = struct
     <<Test>>
 end
 @
-
-Type [[t]] represents a set of equations and the solutions for variables
-found so far. An initially [[empty]] set has no equations, and no
-solutions.
-
+Type [[t]] represents a set of equations, the solutions for variables
+found so far, and a mapping from a variable to the solutions that depend
+on the variable (for efficiency, as explained above).
+An initially [[empty]] set has no equations and no solutions.
 <<Make>>=
 type sum   = (int * E.t) list                 (* invariant: ordered *)
 type assoc = string * sum
 
 type solution = 
-    { known:     (string * sum) list
-    ; dependent: (string * sum) list
+    { known     : (string * sum) list
+    ; dependent : (string * sum) list
     }
 
+module SM = Map.Make (struct type t = string let compare = compares end)
 type t   = 
-    { set:      sum   list        (* invariant: normalized *)
-    ; env:      assoc list
+    { set  : sum list          (* invariant: normalized *)
+    ; env  : sum SM.t
+    ; deps : string list SM.t
     }
 
 let empty = 
     { set  = []
-    ; env  = []
+    ; env  = SM.empty
+    ; deps = SM.empty
     }
 
 exception Can'tSolve of t
 let error msg = raise (Can'tSolve msg)
 @
-
 The [[dump]] function prints a [[t]] value to [[stdout]] for debugging.
 Because terms are abstract they cannot be printed, except when they
 denote variables. It helped to track down some bugs, though.
-
 <<Make>>=
 let dump t =
   let spr = Printf.sprintf in
@@ -240,18 +244,17 @@ let dump t =
     let neg = List.filter (fun (i, t) -> i <  0)  s in
     let neg = List.map    (fun (i, t) -> (-i, t)) neg in
     spr "  %s = %s" (sum pos) (sum neg) in
-  let assoc (v,s) = spr "  %s :-> %s" v (sum s) in
+  let assoc v s rst = spr "  %s :-> %s" v (sum s) :: rst in
   let multiple f s = String.concat "\n" (List.map f s) in
+  let set f s = String.concat "\n" (SM.fold assoc s []) in
   Printf.printf
     "Eqn.t: unsolved equations\n%s\n------ solved variables:\n%s\n------ Eqn.t ends\n"
-    (multiple eqn t.set) (multiple assoc t.env);
+    (multiple eqn t.set) (set assoc t.env);
   flush stdout
 @
-
-Normalizing an equation means to divide it by the greatest common
+Normalizing an equation means dividing it by the greatest common
 divisor (gcd) of its coefficients. The gcd of two numbers is found by
 the following algorithm \cite{Knuth:ACP68-1}:
-
 <<Make>>=
 let rec gcd (m:int) (n:int) =
     let rec g m n = if n = 0 then m else g n (m mod n) in
@@ -269,12 +272,10 @@ let normalize = function
             else
                 sum
 @            
-
 The central operation on sums $s_1$, $s_2$ is the computation of their
 linear combination $c s_1 + s_2$.  The function [[combine]] does this by
 taking advantage of the ordering of terms. Any component with a
 coefficient of zero does not appear in the result.
-
 <<Make>>=
 let combine (k1:int) (sum1:sum) (sum2:sum) =
     let rec loop = function 
@@ -302,12 +303,10 @@ let combine (k1:int) (sum1:sum) (sum2:sum) =
     in
 	loop (sum1,sum2)
 @
-
 For the substitution of a variable, the variable must be found in a sum.
 The [[split]] function takes a variable $v$ and a sum $s$ and returns
 the coefficient $c$ of $v$ in $s = + \dots c v + \dots$ and $s - cv$. If
 $v$ does not appear in $s$, then $c = 0$ is assumed.
-
 <<Make>>=
 let split (v:string) (sum:sum) =
     let rec loop a = function
@@ -320,83 +319,111 @@ let split (v:string) (sum:sum) =
     in 
         loop [] sum
 @    
-
 Elimination of a variable $v$ in a sum $s = \dots + c t + \dots$ means
-to replace $c t$ with the value of $c v$. The [[elim]] function takes a
+replacing $c t$ with the value of $c v$. The [[elim]] function takes a
 variable [[v]], its value [[vsum]] and replace it in [[sum]].
-
 <<Make>>=
 let elim (v:string) (vsum:sum) (sum:sum) =  
     match split v sum with
     | (0,_)    -> sum
     | (c,sum') -> combine c vsum sum'
 @
-
-To make progress, the solver scans the set of equation and tries to find
-a variable $v$ with a unit ($\pm 1$) coefficient. If this succeeds, the
-equation $s=0$ that the variable is part of is rewritten to
-$v=\mathit{vsum}$, and the pair $(v, \mathit{vsum})$ is returned. 
-
+To update equations (or, more accurately, the solution environment),
+we need to know the variables in an equation.
 <<Make>>=
-let candidate (eqns: sum list) =
-    let negate        = List.map (fun (c,t) -> (-c,t))                         in
-    let unitvar (c,t) = Aux.Option.is_some (E.variable t) && (c = 1 || c = -1) in
-    let rec loop = function
-       | []        -> None (* all eqns scanned *)
-       | sum::sums -> 
-        try let v      = match E.variable (snd (List.find unitvar sum)) with
-                         | Some v -> v
-                         | None   -> assert false in   
-            let c,vsum = split v sum in 
-                match c with
-                | -1 -> Some (v, vsum)
-                |  1 -> Some (v, negate vsum)
-                | _  -> assert false    (* c is a unit, i.e. +/-1 *)
-        with Not_found -> loop sums (* check next equation *)
-    in
-        loop eqns
+let vars (sum:sum) =
+  let rec loop vs = function
+    | (_, t as ct)::s ->
+       ( match E.variable t with
+       | Some v -> loop (v::vs) s
+       | _      -> loop vs s
+       )
+    | [] -> vs in 
+  loop [] sum
 @
-
+Given an environment, the [[elim_all]] function replaces each variable in the
+[[sum]] with its soultion in [[env]].
+<<Make>>=
+let elim_all env (sum:sum) =
+  let vs = vars sum in
+  List.fold_left (fun sum v -> try elim v (SM.find v env) sum
+                               with Not_found -> sum) sum vs
+@
 A [[sum]] is zero, only if it is empty or all coefficients are zero.
-
 <<Make>>=
 let rec zero = function
    | []                        -> true
    | (0,_)::rest               -> zero rest
    | _                         -> false
 @
-
-An elimination step on the level of all equations replaces a variable by
-its value in all equations and all found solutions. Equations are
-normalized, and redundant equations ($0 = 0$) are removed. The new
-solution $v \mapsto \mathit{vsum}$ is recorded.
-
+To make progress, the solver scans the set of equation and tries to find
+a variable $v$ with a unit ($\pm 1$) coefficient. If this succeeds, the
+equation $s=0$ that the variable is part of is rewritten to
+$v=\mathit{vsum}$, and the pair $(v, \mathit{vsum})$ is returned. 
+Before considering each equation, the equation must be updated with the solutions we
+have found, and normalized (this is the lazy equation update).
+As a consequence of lazy update, we must be prepared to find that all the
+equations are zero sums.
+Hence, the function takes two continuations as arguments:
+[[found]] is called when a candidate variable is found;
+[[finished]] is called if there are no non-zero sums.
 <<Make>>=
-let eliminate (v:string) (vsum:sum) (t:t) =
-   let set  = List.fold_right
-                (fun sum p -> 
-                    let sum' = normalize (elim v vsum sum) in
-                    if zero sum' then p else sum'::p)
-                t.set [] in
-   let env  = List.map (fun (x,xsum) -> x, elim v vsum xsum) t.env in
-   let env  = (v,vsum):: env               in
-        { set  = set
-        ; env  = env
-        }
+let candidate t found finished =
+    let negate          = List.map (fun (c,trm) -> (-c,trm))                       in
+    let unitvar (c,trm) = Aux.Option.is_some (E.variable trm) && (c = 1 || c = -1) in
+    let rec loop accum_set = function
+       | []        -> (* all eqns scanned *)
+           (match accum_set with
+           | [] -> finished { t with set = accum_set }
+           | _  -> error    { t with set = accum_set }
+           )
+       | sum::sums -> 
+           let sum = normalize (elim_all t.env sum) in
+           if zero sum then
+             loop accum_set sums
+           else 
+             try let v      = match E.variable (snd (List.find unitvar sum)) with
+                              | Some v -> v
+                              | None   -> assert false in   
+                 let c,vsum = split v sum in 
+                     match c with
+                     | -1 -> found (v, vsum,        { t with set = accum_set @ sums })
+                     |  1 -> found (v, negate vsum, { t with set = accum_set @ sums })
+                     | _  -> assert false    (* c is a unit, i.e. +/-1 *)
+             with Not_found -> loop (sum::accum_set) sums (* check next equation *)
+    in
+        loop [] t.set
 @
-
+An elimination step on the level replaces a variable by
+its value in all found solutions that depend on the variable
+(as witnessed by the [[deps]] map).
+Then, the [[deps]] map must be updated:
+the solutions that depended on the new variable must be updated to depend
+on the variables in the new solution,
+and the new variable must be added.
+Finally, the new solution $v \mapsto \mathit{vsum}$ is recorded.
+<<Make>>=
+let update (v:string) (vsum:sum) t =
+  let find x map = try SM.find x map with Not_found -> [] in
+  let depends_on_v = find v t.deps in
+  let env = List.fold_left (fun env v' -> SM.add v' (elim v vsum (SM.find v' env)) env)
+                           t.env depends_on_v in
+  let vs = vars vsum in
+  let new_deps = v :: depends_on_v in
+  let add deps v' = SM.add v' (new_deps @ find v' deps) deps in
+  { set  = t.set
+  ; env  = SM.add v vsum env
+  ; deps = List.fold_left add t.deps vs
+  }
+@
 The [[solver]] iterates over [[t]] as long as it can find a candidate
 variable for elimination. 
-
 <<Make>>=
-let rec solver t =
-    match t.set with [] -> t
-    | _ :: _ -> 
-        match candidate t.set with
-        | None          -> error t
-        | Some (v,vsum) -> solver (eliminate v vsum t) 
+let solver t =
+  let rec loop t =
+    candidate t (fun (v, vsum, t') -> loop (update v vsum t')) (fun t' -> t') in
+  loop t
 @
-
 After all equations have been eliminated, the solution can be found in
 the [[t.env]] value. To eliminate $n$ variables, $n$ independent
 equations are necessary. If this condition is violated, the problem is
@@ -411,7 +438,9 @@ let solve t =
   let t         = try solver t with Can'tSolve x -> (dump x; error x)in
   (* let ()     = dump t in *)
   let known sum = List.for_all (fun (_,e) -> Aux.Option.is_none (E.variable e)) sum in
-  let k,d       = List.partition (fun (_,sum) -> known sum) t.env in
+  let k,d       =
+    SM.fold (fun s sum (k,d) -> if known sum then ((s,sum)::k,d) else (k, (s,sum)::d))
+            t.env ([], []) in
       { known     = k
       ; dependent = d
       }
