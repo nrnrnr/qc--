@@ -42,30 +42,30 @@ module G = Fgraph
 @
 
 <<>>=
-let rec ty env = function
-    | A.TyAt(x,_)       -> ty env x
+let rec ty env ir = function
+    | A.TyAt(x,_)       -> ty env ir x
     | A.BitsTy(n)       -> true
     | A.AliasTy(name)   -> true
 
 <<>>=
-let rec lvalue env = function
-    | A.LValueAt(x,_)   -> lvalue env x
+let rec lvalue env ir = function
+    | A.LValueAt(x,_)   -> lvalue env ir x
     | A.Var(None,x)     -> true
     | A.Var(Some h,x)   -> true
     | A.Mem(t,e,a)      -> true
      
 
 <<>>=
-and actual env = function
+and actual env ir = function
     | (Some hint, e) -> true
     | (None     , e) -> true
 
 <<>>=
-and actuals env xs = true
+and actuals env ir xs = true
 
 <<>>=
-and expr env = function
-    | A.ExprAt(x,_)             -> expr env x
+and expr env ir = function
+    | A.ExprAt(x,_)             -> expr env ir x
     | A.Int( i, None)           -> true
     | A.Int( i, Some t)         -> true
     | A.Float( f, None)         -> true
@@ -79,21 +79,21 @@ and expr env = function
 
 
 <<>>=
-let memsize env = function
+let memsize env ir = function
     | A.NoSize        -> true
     | A.DynSize       -> true
     | A.FixSize(e)    -> true
 
 <<>>=
-let rec init env = function
-    | A.InitAt(x,_)   -> init env x
+let rec init env ir = function
+    | A.InitAt(x,_)   -> init env ir x
     | A.InitExprs(es) -> true
     | A.InitStr(s)    -> true
     | A.InitUStr(s)   -> true
 
 <<>>=
-let rec datum env = function
-    | A.DatumAt(x,_)        -> datum env x
+let rec datum env ir = function
+    | A.DatumAt(x,_)        -> datum env ir x
     | A.Label(n)            -> true
     | A.Align(a)            -> true
     | A.MemDecl(t,m,Some i) -> true
@@ -103,32 +103,32 @@ let rec datum env = function
 let formal (h, v, t, n) = true
 
 <<>>=
-let formals  env xs               = true
-let register env (v , t, n, reg)  = true
-let altcont  env (e1,e2)          = true   
-let targets env                   = true 
+let formals  env ir xs               = true
+let register env ir (v , t, n, reg)  = true
+let altcont  env ir (e1,e2)          = true   
+let targets env ir                   = true 
     
 <<>>=
-let rec flow env = function
-    | A.FlowAt(x,_)     -> flow env x
+let rec flow env ir = function
+    | A.FlowAt(x,_)     -> flow env ir x
     | A.CutsTo(ns)      -> true
     | A.UnwindsTo(ns)   -> true
     | A.ReturnsTo(ns)   -> true
     | A.Aborts          -> true
 
 <<>>=
-let flows env       = true
-let conv env        = true
-let export env t ns = true
+let flows env ir       = true
+let conv env ir        = true
+let export env ir t ns = true
 
 <<>>=
-let range env = function
+let range env ir = function
     | A.Point(e)        -> true
     | A.Range(e1,e2)    -> true
 
 <<>>=
-let rec stmt env = function
-    | A.StmtAt(x,_)                        -> stmt env x
+let rec stmt env ir = function
+    | A.StmtAt(x,_)                        -> stmt env ir x
     | A.IfStmt ( e, ss1, ss2)              -> true
     | A.LabelStmt(n)                       -> true
     | A.ContStmt(n,ns)                     -> true
@@ -144,18 +144,18 @@ let rec stmt env = function
     | A.SwitchStmt (r,e,arms)              -> true
         
 <<>>=
-and body env = function
-    | A.BodyAt(x, _)    -> body env x
+and body env ir = function
+    | A.BodyAt(x, _)    -> body env ir x
     | A.DeclBody(d)     -> true
     | A.StmtBody(s)     -> true
     | A.DataBody(dd)    -> true
     
 <<>>=
-and proc env (cc,n,fs,ss) =  true
+and proc env ir (cc,n,fs,ss) =  true
 
 <<>>=
-and decl env = function
-    | A.DeclAt(x,_)    -> decl env x
+and decl env ir = function
+    | A.DeclAt(x,_)    -> decl env ir x
     | A.Import( t, ns) -> true
     | A.Export( t, ns) -> true
     | A.Const (t,n,e)  -> true
@@ -165,27 +165,27 @@ and decl env = function
     | A.Pragma         -> true
 
 <<>>=
-and section env = function
-    | A.SectionAt(x,_)     -> section env x
+and section env ir = function
+    | A.SectionAt(x,_)     -> section env ir x
     | A.Decl(d)            -> true
     | A.Datum( d)          -> true
     | A.Procedure(p)       -> true
     | A.SSpan( e1, e2, ss) -> true
             
 <<>>=
-and arm env = function
-    | A.ArmAt(x,_)          -> arm env x
+and arm env ir = function
+    | A.ArmAt(x,_)          -> arm env ir x
     | A.Case(ranges, stmts) -> true
     
 <<>>=
-let rec toplevel env = function
-    | A.ToplevelAt(x, _)  -> toplevel env x
+let rec toplevel env ir = function
+    | A.ToplevelAt(x, _)  -> toplevel env ir x
     | A.Section(name, ss) -> true
     | A.TopDecl(d)        -> true
     | A.TopProcedure(p)   -> true
 
 <<>>=
-let program env ds = true
+let program env ir ds = true
 @
 
 The function [[ast2ir]] scans, parses, and checks a file before the
