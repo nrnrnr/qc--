@@ -17,7 +17,7 @@ module type ESCAPE =
     type void
     val coerce : void -> 'a
     val escape : (('a -> void) -> 'a) -> 'a
-  end;;
+  end
 
 module Escape : ESCAPE
     
@@ -26,7 +26,7 @@ module type CONTROL =
     type ans
     val reset : (unit -> ans) -> ans
     val shift : (('a -> ans) -> ans) -> 'a
-  end;;
+  end
 
 
 module Control(A : sig type ans end):CONTROL with type ans = A.ans
@@ -44,21 +44,21 @@ module type ESCAPE =
     type void
     val coerce : void -> 'a
     val escape : (('a -> void) -> 'a) -> 'a
-  end;;
+  end
 
 module Escape : ESCAPE =
   struct
     type void = VOID of void
     let rec coerce (VOID v) = coerce v
     let escape f = Callcc.callcc (fun k -> f (fun x -> Callcc.throw k x))
-  end;;
+  end
 
 module type CONTROL =
   sig
     type ans
     val reset : (unit -> ans) -> ans
     val shift : (('a -> ans) -> ans) -> 'a
-  end;;
+  end
 
 module Control(A : sig type ans end): CONTROL
 with type ans = A.ans =
