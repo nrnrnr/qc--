@@ -18,13 +18,13 @@ The [[block]] area must be at least [[Cmm_TCB_size]] bytes long,
 and aligned on a 64-bit boundary.
 <<exported functions>>=
 typedef void *(*Cmm_stack_callback)(void *closure, unsigned long size);
-Cmm_tcb Cmm_New_TCB ( void *block
-                    , void *stack
-                    , Cmm_stack_callback get_stack
-                    , void *get_stack_closure
-                    , unsigned long stack_size_hint
-                    , Cmm_program_counter pc
-                    );
+extern Cmm_tcb Cmm_New_TCB ( void *block
+                           , void *stack
+                           , Cmm_stack_callback get_stack
+                           , void *get_stack_closure
+                           , unsigned long stack_size_hint
+                           , Cmm_program_counter pc
+                           );
 extern unsigned long Cmm_TCB_size;   /* minimum size of a TCB */
 @ If [[get_stack]] is [[NULL]], then there can only be one {\PAL}
 thread, and it runs on the system stack.
@@ -78,8 +78,20 @@ activation in place.
 I'm inclined to go for a functional style, since it is easy to
 implement mutate-in-place that way; the only cost is it makes simple
 loops slightly awkward.
+An unanswered question is \emph{what is the lifetime of an
+activation?}, i.e., how long is it valid for the runtime to call
+operations that depend on that activation?%
+\footnote{An alternative that might solve several problems at once is
+this:  suppose that instead of having a separate representation of
+activations, we make the ``activation currently under examination'' a
+part of the thread-control block.
+[[FirstActivation]] and [[NextActivation]] would then mutate this
+state, and [[SetActivation]], would unwind the stack to the
+activation currently under examination, so that future calls to
+[[FirstActivation]] would ``go back to'' that activation --- old
+activations that had been above it would be permanently lost.}
 <<exported functions>>=
-Cmm_activation Cmm_NextActivation (const Cmm_activation *a, int *underflow);
+extern Cmm_activation Cmm_NextActivation (const Cmm_activation *a, int *underflow);
 @ If activation [[*a]] is the bottommost activation on the stack, set
 [[*underflow]] to~0 and return [[*a]].
 Otherwise, leave [[underflow]] unchanged and return that activation
@@ -137,53 +149,61 @@ returns a pointer to a location containing the last known value
 of~[[v]], if any such location exists, and [[NULL]] otherwise. 
 It is an unchecked run-time error to store into such a location.
 <<exported functions>>=
-extern void *Cmm_FindDeadVar( Cmm_activation a, int var_index );
+extern void *Cmm_FindDeadVar( Cmm_activation a, unsigned var_index );
 @ 
 
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Changing the flow of control and altering return values}
 
+In support of exception handling, we might want to forcibly unwind the
+stack to a given activation.
+\mbox{[[Cmm_SetActivation(t, a)]]} modifies the thread-control block [[t]] so
+that the execution of the thread will resume in activation~[[a]], at
+the normal continuation of the call site at which [[a]]~is suspended.
+<<exported functions>>=
+extern void Cmm_SetActivation( Cmm_tcb t, const Cmm_activation *a );
+@ 
+We might want to direct control flow to an alternate continuation.
+The ``unwind continuations'' at a call site are numbered from zero in
+the order in which they appear in [[also unwinds to]] annotations;
+[[Cmm_SetUnwindCont(t, i)]] arranges for control to return to unwind
+continuation~[[i]] of the call site of the activation at which
+[[t]]~is suspended.
+It is a checked run-time error to pass an~[[i]] that is out of range.
+<<exported functions>>=
+extern void Cmm_SetUnwoundCont( Cmm_tcb t, unsigned cont_index );
+@
+We might instead want to invoke a continuation for which we have a
+{\PAL} value.
+<<exported functions>>=
+extern void Cmm_SetInvokedCont( Cmm_tcb t, Cmm_continuation k );
+@ As noted in the papers, a continuation is represented by a value of
+native data pointer type.
+<<exported types>>=
+typedef Cmm_dataptr Cmm_continuation;
+@ 
+If we pick a new continuation, we probably need to set its parameters.
+Parameters are numbered from zero, and it is a checked run-time error
+to pass a [[param_index]] that is out of range.
+<<exported functions>>=
+extern void *Cmm_FindContParam( Cmm_tcb t, unsigned param_index );
+@ Note that even if the continuation is the usual, ordinary return
+continuation, we can still use [[Cmm_FindContParam]] to change the
+results returned. 
 
-
-
-\item[]]void SetActivation( tcb *t, activation a )]]]
-modifies the thread-control block [[t]] so that the execution of the thread will
-resume with activation~[[a]].
-It is used to unwind the stack, e.g., when handling exceptions.
-%
-\item[]]void SetContinuation( tcb *t, int cont_index )]].] If thread [[t]] is suspended at a call site, 
-[[SetContinuation]] arranges that when
-the thread is resumed, it will do so at the continuation whose ordinal number
-is [[cont_index]].
-The normal continuation counts as continuation~0, so
-[[SetContinuation(t, [[$k$]])]] may be called only when
-thread~[[t]] is suspended at a call site with more than~$k$ return
-continuations.
-%
-\item[]]void *FindReturnLocation( tcb *t, int result_index )]].]
-If thread [[t]] is suspended at a call site, [[FindReturnLocation]]
-returns a pointer to the location in which the thread expects to
-receive the value(s) returned by the call.
-[[result_index]] is the \emph{ordinal number} of the result, starting
-from~0.
-[[FindReturnLocation(a, [[$n$]])]] may be called only when
-thread~[[t]] is suspended at a call site which will resume
-with a continuation expecting more
-than~$n$ return values.
-
-We use [[result_index]], not the number of the variable that will
+N.B. We use [[result_index]], not the number of the variable that will
 receive the result, because we expect that doing so will significantly
 reduce the amount of information that must be saved by the back end.
-For example, under a C-like calling convention, [[FindReturnLocation(a, 0)]]
+For example, under a C-like calling convention, [[FindContParam(a, 0)]]
 might always return the same register.
 
-Notice that, unlike [[FindVar]], [[FindReturnLocation]] only applies to the
+Notice that, unlike [[FindVar]], [[FindContParam]] only applies to the
 top-most activation --- hence we pass a pointer to the thread-control block,
 rather than an activation handle.  For other activations it is nonsense to
 talk of the return locations, whereas for the topmost activation it makes
 perfect sense; for example, the first return value might be returned in
 register 1, which is held in the thread-control block.
-%
+
 
 
 
