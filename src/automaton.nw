@@ -213,12 +213,14 @@ object
     method to_loc            = _loc
 end
 
-let memloc addr = new dummyloc (Rtl.cell Rtl.none memspace byteorder memsize addr)
-let of_rtl_loc loc = new dummyloc loc
+let memloc addr = 
+    new dummyloc (Rtl.cell Rtl.none memspace byteorder memsize addr)
+let of_rtl_loc loc = 
+    new dummyloc loc
 
 class dummy (base:Rtl.exp): automaton =
 object (self)
-    val mutable _area   = Area.align (Area.mk base) wordsize
+    val mutable _area   = Area.align (Area.mk base) (wordsize/memsize)
     val mutable _frozen = false
     
     method freeze ()       =
@@ -226,14 +228,15 @@ object (self)
             Area.freeze _area 
     
     method ty ~width ~hint = 
-        let _    = assert (_frozen = false)           in
-        let _    = assert (width <= wordsize)         in
-        let _    = assert (width mod memsize = 0)     in
+        let _     = assert (_frozen = false)           in
+        let _     = assert (width <= wordsize)         in
+        let _     = assert (width mod memsize = 0)     in
         (* assertions above *)
-        let n    = width / memsize                    in (* how many cells*)
-        let addr = Area.location _area                in
-        let ()   = _area <- Area.alloc _area n        in (* allocate ..*)
-        let ()   = _area <- Area.align _area wordsize in (* and align  *)
+        let n     = width / memsize                    in (* how many cells*)
+        let addr  = Area.location _area                in
+        let align = wordsize / memsize                 in
+        let ()    = _area <- Area.alloc _area n        in (* allocate ..*)
+        let ()    = _area <- Area.align _area align in (* and align  *)
             memloc addr
 end
 @
