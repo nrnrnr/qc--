@@ -11,20 +11,20 @@ PS2PDF=         ps2pdf
 RERUN =         Rerun (LaTeX|to get cross-references right)
 
 %.bbl:  %.aux
-        BIBINPUTS="$TOP/doc:" bibtex $stem 
-                    
+	BIBINPUTS="$TOP/doc:" bibtex $stem 
+
 %.dvi:  %.tex 
-        $LATEX "\\scrollmode \\input $stem.tex"
-        ltxcount=3
-        while egrep -s "$RERUN" $stem.log && [ $ltxcount -gt 0 ]
-        do
-            $LATEX "\\scrollmode \\input $stem.tex"
-            ltxcount=`expr $ltxcount - 1`
-        done
+	$LATEX "\\scrollmode \\input $stem.tex"
+	ltxcount=3
+	while egrep -s "$RERUN" $stem.log && [ $ltxcount -gt 0 ]
+	do
+	  $LATEX "\\scrollmode \\input $stem.tex"
+	  ltxcount=`expr $ltxcount - 1`
+	done
 
 %.ps:   %.dvi
-        dvips -Ppdf -o $target $prereq
+	dvips -Ppdf -o $target $prereq
 
 
 %.pdf:  %.ps
-        ps2pdf $prereq
+	ps2pdf $prereq
