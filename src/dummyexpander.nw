@@ -179,12 +179,6 @@ operators, taking and yielding floating point values.
 
 <<utilities>>=
 module StringSet = Set.Make(struct type t = string let compare = compare end)
-
-let float_ops = 
-    List.fold_right 
-        StringSet.add 
-        ["fadd"; "fsub"; "fdiv"; "fmul"; "fabs"; "fneg"; "fsqrt"]
-        StringSet.empty
 @
 
 To simplify guarded effects we have to know which operators return
@@ -193,15 +187,13 @@ have been re-written into control-flow structures and do not show up
 here. The operators listed here all take non-boolean arguments.
 
 <<utilities>>=
-let bool_ops = (* boolean valued primitive with non-boolean args *)
-    List.fold_right
-        StringSet.add
-        ["bool"; "eq"; "ge"; "geu"; "gt"; "gtu"; "le"; "leu"; "lt"; "ltu";
-         "ne"]
+let bool_ops2 = (* boolean valued primitive with non-boolean args *)
+    List.fold_right StringSet.add
+        ["eq"; "ge"; "geu"; "gt"; "gtu"; "le"; "leu"; "lt"; "ltu"; "ne"]
          StringSet.empty
 
-let is_float_op (op,_) = StringSet.mem op float_ops
-let is_bool_op  (op,_) = StringSet.mem op bool_ops
+let is_bool_op2  op     = StringSet.mem op bool_ops2
+let is_bool_op1  op     = op = "bool"
 @
 
 To create a fetch from a location we have to know the size of the
@@ -209,6 +201,33 @@ location. The [[fetch]] function makes this easy.
 
 <<utilities>>=
 let fetch t = R.fetch t (W.loc t)
+
+let app1 tmp s x arg1 =
+    arg1 >>= fun a1 ->
+    let opr   = R.opr s x in
+    let exp   = R.app opr [fetch a1] in
+    let width = W.exp exp in
+    tmp width >>= fun t ->
+    exec (R.store t exp width) >>= fun () ->
+    return t
+
+let app2 tmp s x arg1 arg2 =
+    arg1 >>= fun a1 -> arg2 >>= fun a2 ->
+    let opr   = R.opr s x in
+    let exp   = R.app opr [fetch a1; fetch a2] in
+    let width = W.exp exp in
+    tmp width >>= fun t ->
+    exec (R.store t exp width) >>= fun () ->
+    return t
+
+let app3 tmp s x arg1 arg2 arg3 =
+    arg1 >>= fun a1 -> arg2 >>= fun a2 -> arg3 >>= fun a3 ->
+    let opr   = R.opr s x in
+    let exp   = R.app opr [fetch a1; fetch a2; fetch a3] in
+    let width = W.exp exp in
+    tmp width >>= fun t ->
+    exec (R.store t exp width) >>= fun () ->
+    return t
 @
 
 % ------------------------------------------------------------------ 
@@ -275,49 +294,8 @@ ireg:       Fetch(mem,width) [1]
                 itmp width    >>= fun t -> 
                 exec (R.store t (R.fetch m width) width) >>= fun () ->
                 return t
-            :}    
-@
-Fetches from registers must not to be rewritten, but the fetch
-instruction disappears. It is inserted when the value is used in
-a right-hand-side context.
-
-<<rules>>=
-ireg:       Fetch(ireg,width) {: ireg :}
-
--- r := op(r,..,r)
-ireg:       App(iop, iregs) [1]
-            {:  
-                iregs                                     >>= fun rs ->
-                let fetches = List.map fetch rs           in 
-                let exp     = R.app iop fetches           in
-                let width   = W.exp exp                   in
-                itmp width                                >>= fun t  ->
-                exec (R.store t exp width)                >>= fun () ->
-                return t
-            :}
-
---
--- hardware registers for floating point compare result
---
-
-dreg:      App(fcmp, fregs) [1]
-            {:
-                fregs >>= fun us ->
-                let exp     = R.app fcmp (List.map fetch us) in
-                let const n width = R.bits (Bits.U.of_int n width) width in
-                let fpcond n = R.cell R.none 'd' R.Identity  2 (const n 2) in
-                let r        = fpcond 1 in
-                exec (R.store r exp 2) >>= fun () ->
-                return r
-            :}    
-
-dreg:      Fetch(dreg,width) {: dreg :} 
-@
-
-Floating-point expressions are analogously developed into floating-point
-registers that hold the values.
-
-<<rules>>=
+            :}  
+            
 -- f := $m[addr]
 freg:       Fetch(mem,width) [1]
             {:  mem           >>= fun m ->
@@ -325,43 +303,94 @@ freg:       Fetch(mem,width) [1]
                 exec (R.store u (R.fetch m width) width) >>= fun () ->
                 return u
             :}
-            
+@
 
-
-freg:       Fetch(freg,width) {: freg :}    
-
--- f := op(f, .., f)
-freg:       App(fop, fregs) [1]
-            {:  
-                fregs                                     >>= fun us ->
-                let fetches = List.map fetch us           in 
-                let exp     = R.app fop fetches           in
-                let width   = W.exp exp                   in
-                ftmp width                                >>= fun t  ->
-                exec (R.store t exp width)>>= fun () ->
-                return t
-            :}
-@            
-
-Lists of expressions are decomposed into list of registers holding their
-values. Lists are either for integer or floating-point values, but not
-both. We also have lists of hardware registers with floating point
-results. The latter is part of a hack.
+Fetches from registers must not to be rewritten, but the fetch
+instruction disappears. It is inserted when the value is used in
+a right-hand-side context.
 
 <<rules>>=
-iregs:      Nil() {: return [] :}
-iregs:      Cons(ireg, iregs) 
-            {:  ireg >>= fun r -> iregs >>= fun rs -> return (r::rs) :}
-
-
-fregs:      Nil() {: return [] :}
-fregs:      Cons(freg, fregs)
-            {: freg  >>= fun u -> fregs >>= fun us -> return (u::us) :}
-
-dregs:      Nil() {: return [] :}
-dregs:      Cons(dreg, dregs)
-            {: dreg  >>= fun u -> dregs >>= fun us -> return (u::us) :}
+ireg:       Fetch(ireg,width) {: ireg :}
+freg:       Fetch(freg,width) {: freg :}    
+dreg:       Fetch(dreg,width) {: dreg :} 
 @
+
+Applications.
+
+<<rules>>=
+ireg:       App1("com",  x, r1:ireg)          {: app1 itmp "com"  x r1 :}
+ireg:       App1("lobits", x, r1:ireg)        {: app1 itmp "lobits" x r1 :}
+ireg:       App1("sx",  x, r1:ireg)           {: app1 itmp "sx"  x r1 :}
+ireg:       App1("zx",  x, r1:ireg)           {: app1 itmp "zx"  x r1 :}
+
+<<rules>>=
+ireg:       App2("add",  x, r1:ireg, r2:ireg) {: app2 itmp "add"  x r1 r2 :}
+ireg:       App2("div",  x, r1:ireg, r2:ireg) {: app2 itmp "div"  x r1 r2 :}
+ireg:       App2("divu", x, r1:ireg, r2:ireg) {: app2 itmp "divu" x r1 r2 :}
+ireg:       App2("mod",  x, r1:ireg, r2:ireg) {: app2 itmp "mod"  x r1 r2 :}
+ireg:       App2("modu", x, r1:ireg, r2:ireg) {: app2 itmp "modu" x r1 r2 :}
+ireg:       App2("mul",  x, r1:ireg, r2:ireg) {: app2 itmp "mul"  x r1 r2 :}
+ireg:       App2("mulu", x, r1:ireg, r2:ireg) {: app2 itmp "mulu" x r1 r2 :}
+ireg:       App2("quot", x, r1:ireg, r2:ireg) {: app2 itmp "quot" x r1 r2 :}
+ireg:       App2("rem",  x, r1:ireg, r2:ireg) {: app2 itmp "rem"  x r1 r2 :}
+ireg:       App2("rotl", x, r1:ireg, r2:ireg) {: app2 itmp "rotl" x r1 r2 :}
+ireg:       App2("rotr", x, r1:ireg, r2:ireg) {: app2 itmp "rotr" x r1 r2 :}
+ireg:       App2("shl",  x, r1:ireg, r2:ireg) {: app2 itmp "shl"  x r1 r2 :}
+ireg:       App2("shra", x, r1:ireg, r2:ireg) {: app2 itmp "shra" x r1 r2 :}
+ireg:       App2("shrl", x, r1:ireg, r2:ireg) {: app2 itmp "shrl" x r1 r2 :}
+ireg:       App2("sub",  x, r1:ireg, r2:ireg) {: app2 itmp "sub"  x r1 r2 :}
+
+freg:       App1("fneg", x, r1:freg)          {: app1 ftmp "fneg" x r1 :}
+
+freg:       App2("f2i",  x, r1:freg, r2:ireg) {: app2 ftmp "f2i"  x r1 r2 :}
+freg:       App2("fadd", x, r1:freg, r2:freg) {: app2 ftmp "fadd" x r1 r2 :}
+freg:       App2("fdiv", x, r1:freg, r2:freg) {: app2 ftmp "fdiv" x r1 r2 :}
+freg:       App2("fmul", x, r1:freg, r2:freg) {: app2 ftmp "fmul" x r1 r2 :}
+freg:       App2("fsub", x, r1:freg, r2:freg) {: app2 ftmp "fsub" x r1 r2 :}
+
+<<rules off>>=
+-- When these rules are active, certain RTLs that don't use these
+-- operators fail to expand. I dunno why. Bug in OCamlBurg?
+
+freg:       App2("i2f",  x, r1:ireg, r2:dreg) {: app2 ftmp "i2f"  x r1 r2 :}
+freg:       App2("f2f",  x, r1:ireg, r2:dreg) {: app2 ftmp "f2f"  x r1 r2 :}
+
+<<rules off>>=
+-- catch all rules with high costs
+ireg:       App1(s:string, x, r:ireg) [20] 
+            {: app1 itmp s x r :}
+ireg:       App2(s:string, x, r1:ireg, r2:ireg) [20] 
+            {: app2 itmp s x r1 r2 :}
+ireg:       App3(s:string, x, r1:ireg, r2:ireg, r3:ireg) [20] 
+            {: app3 itmp s x r1 r2 r3 :}
+
+freg:       App1(s:string, x, r:freg) [20] 
+            {: app1 ftmp s x r :}
+freg:       App2(s:string, x, r1:freg, r2:freg) [20] 
+            {: app2 ftmp s x r1 r2 :}
+freg:       App3(s:string, x, r1:freg, r2:freg, r3:freg) [20] 
+            {: app3 ftmp s x r1 r2 r3 :}
+
+
+<<rules>>=
+--
+-- Floating point comparison results are ALWAYS stored in a hardware
+-- register. This is a hack.
+--
+
+dreg:      App2("fcmp", x, f1:freg, f2:freg) [1]
+            {:
+                f1 >>= fun f1 -> f2 >>= fun f2 ->
+                let o  = R.opr "fcmp" x in
+                let exp     = R.app o (List.map fetch [f1;f2]) in
+                let const n width = R.bits (Bits.U.of_int n width) width in
+                let fpcond n = R.cell R.none 'd' R.Identity  2 (const n 2) in
+                let r        = fpcond 1 in
+                exec (R.store r exp 2) >>= fun () ->
+                return r
+            :}    
+@
+
 
 We expect memory locations, temporaries, and hardware registers in the
 code to expand.  These locations are classified into memory and
@@ -378,7 +407,8 @@ mem:        Cell('m', agg, width, addr, ass)
                 addr >>= fun a ->
                 return (R.cell (U.assertion ass) 'm' agg width a) 
             :}
-            
+
+-- ireg == r/t (32) and g/v (8)
 ireg:       Cell('r', agg, width, const, ass)
             {: 
                 const >>= fun k ->
@@ -389,7 +419,6 @@ ireg:       Cell('t', agg, width, const, ass)
                 const >>= fun k ->
                 return (R.cell (U.assertion ass) 't' agg width k) 
             :}
-
 ireg:       Cell('g', agg, width, const, ass)
             {: 
                 const >>= fun k ->
@@ -401,7 +430,7 @@ ireg:       Cell('v', agg, width, const, ass)
                 return (R.cell (U.assertion ass) 'v' agg width k) 
             :}
 
-
+-- freg == f/u (32)
 freg:       Cell('f', agg, width, const, ass)
             {: 
                 const >>= fun k ->
@@ -413,15 +442,14 @@ freg:       Cell('u', agg, width, const, ass)
                 return (R.cell (U.assertion ass) 'u' agg width k) 
             :}
 
-
-
+-- dreg == d (2)
 dreg:       Cell('d', agg, width, const, ass)
             {: 
                 const >>= fun k ->
                 return (R.cell (U.assertion ass) 'd' agg width k) 
             :}
 
-
+--
 creg:       Cell('c', agg, width, const, ass)
             {: 
                 const >>= fun k ->
@@ -434,31 +462,6 @@ error:      Cell(x:char, agg, width, addr, ass) [10]
             :}    
 @
 
-Operators are classified to integer or floating-point operators. We use
-a cost expression that is evaluated at run-time to classify an operator:
-an integer operator is also considered a floating-point operator but is
-associated with extreme costs and thus will be never selected.
-
-<<rules>>=
-fop:        Op(opr) [{: if is_float_op opr  then 0 else C.inf_cost :}] 
-            {: U.opr opr :}
-
-bop:        Op(opr) [{: if is_bool_op opr   then 0 else C.inf_cost :}]
-            {: U.opr opr :}
-
-fcmp:       Op(opr) [{: match opr with ("fcmp",_) -> 0 | _ -> C.inf_cost :}]
-            {: U.opr opr :}
-
-            -- The rule below matches if none of the rules above match.
-            -- It is dangerous not to have an explicit guard here
-            -- because if the cost of the other solutions is high
-            -- enough, out of a sudden a bop operator might be
-            -- considered an iop. Therefore we have a high cost below.
-            
-iop:        Op(opr) [100] -- matches if nothing above matches
-            {: U.opr opr :}
-@            
-
 To make sure we can cover every {\rtl}, we allow to move integer
 registers into floating-point temporaries, and floating-point registers
 into integer temporaries.  We do not like these conversions so we
@@ -466,7 +469,7 @@ penalize them with high costs.
 
 <<rules>>=
 -- t := f
-ireg:       freg [2]    
+ireg:       freg [10]    
             {:  
                 freg                                >>= fun u  ->
                 let w = W.loc u in 
@@ -476,7 +479,7 @@ ireg:       freg [2]
             :} 
 
 -- f := t            
-freg:       ireg [2]    
+freg:       ireg [10]    
             {:  
                 ireg                                >>= fun t ->
                 let w = W.loc t in
@@ -523,11 +526,18 @@ stmt:       Store(left:freg, right:freg, width)
             :}    
 
 -- c := t (assignment to PC is the only case in the Dummy target)
-stmt:       Store(creg, ireg, width)
+stmt:       Store(creg, ireg, width) [1]
             {:
                 creg  >>= fun c ->
                 ireg  >>= fun r ->
                 return (R.store c (R.fetch r width) width)
+            :}    
+-- c := k
+stmt:       Store(creg, const, width)
+            {:
+                creg  >>= fun c ->
+                const >>= fun k ->
+                return (R.store c k width)
             :}    
 
 -- d := d
@@ -551,18 +561,34 @@ not expand it.
 <<rules>>=
 guard:      True()  {: return (R.bool true)  :}
 guard:      False() {: return (R.bool false) :}
-guard:      App(bop, iregs)
+
+guard:      App2(o:string, x, r1:ireg, r2:ireg) 
+            [{: if is_bool_op2 o then 0 else C.inf_cost  :}]
             {:  
-                iregs >>= fun rs ->
-                return (R.app bop (List.map fetch rs))
+                r1 >>= fun r1 -> r2 >>= fun r2 ->
+                let opr = R.opr o x in
+                return (R.app opr [fetch r1; fetch r2])
             :}    
 
-guard:      App(bop, dregs)
+-- we need an extra rule for floating point results that always
+-- stay in 'd' space.
+
+guard:      App2(o:string, x, r1:dreg, r2:dreg) 
+            [{: if is_bool_op2 o then 0 else C.inf_cost  :}]
             {:  
-                dregs >>= fun rs ->
-                return (R.app bop (List.map fetch rs))
+                r1 >>= fun r1 -> r2 >>= fun r2 ->
+                let opr = R.opr o x in
+                return (R.app opr [fetch r1; fetch r2])
             :}    
 
+guard:      App1(o:string, x, r1:ireg)
+            [{: if is_bool_op1 o then 0 else C.inf_cost  :}]
+            {:  
+                r1 >>= fun r1 -> 
+                let opr = R.opr o x in
+                return (R.app opr [fetch r1])
+            :}    
+           
 gstmt:      GStmt(guard,stmt)
             {: 
                 guard >>= fun g ->
@@ -625,7 +651,12 @@ let rec exp = function
     | RP.Const(RP.Bool(false))  -> conFalse()
     | RP.Const(k)               -> conConst(k)
     | RP.Fetch(l,w)             -> conFetch (loc l) w
-    | RP.App(opr,exps)          -> conApp (conOp opr) (map exp exps)
+    | RP.App((o,x),[e1])        -> conApp1 o x (exp e1)
+    | RP.App((o,x),[e1;e2])     -> conApp2 o x (exp e1) (exp e2)
+   (*
+    | RP.App((o,x),[e1;e2;e3])  -> conApp3 o x (exp e1) (exp e2) (exp e3)
+    *)
+    | _                         -> error "application with too many args"
 
 and loc = function
     | RP.Cell(char, aff, w, e, ass) -> conCell char aff w (exp e) ass 
