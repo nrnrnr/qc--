@@ -727,7 +727,7 @@ let coalesce cg ({Proc.target = target} as proc) =
         let y = RM.find (dest move.v)   cg.regToItem in
         let (u, v) = if y.list = Precolored then (y, x) else (x, y) in
         let () =
-            if u = v
+            if getAlias u cg = getAlias v cg
             then begin
                  ilg_switch cg.moveLG CoalescedMove move
                ; addWorklist u cg
@@ -760,8 +760,8 @@ the [[simplifyWorklist]].
 
 <<coalesce move>>=
 let addWorklist temp cg =
-    if not ((temp.list = Precolored) || (moveRelated temp cg) ||
-            (RM.find temp.v cg.degreeMap >= cg.k))
+    if not ((temp.list = Precolored) || (temp.list = Coalesced) ||
+            (moveRelated temp cg) || (RM.find temp.v cg.degreeMap >= cg.k))
     then ilg_switch cg.tempLG SimplifyWorklist temp
 @
 
@@ -977,6 +977,7 @@ module CallVarMap = Map.Make (struct type t = G.node let compare = compare end)
 module VM = Proc.VarMap
 
 let applyColors cg ({Proc.cfg = cfg; Proc.target = target; Proc.varMap = vMap}) =
+  let () = print_cgInfo cg in
   let find ((s, i, _) as t) =
     try RM.find t cg.colorMap
     with
@@ -1223,6 +1224,7 @@ module type GRAPH = sig
   type cfg
   type node
   val instr    : node -> Rtl.rtl
+  val num      : node -> int
   val node_info_string : node -> string
   val defs : node -> Register.Set.t  (* includes kills!!! *)
   val uses : node -> Register.Set.t
@@ -1230,6 +1232,9 @@ module type GRAPH = sig
   val is_call : node -> bool
   val gm_insert_assign_after:     node -> Rtl.rtl -> node (* after assign! *)
   val gm_insert_assign_before:    Rtl.rtl -> node -> node (* any node   *)
+
+	val preds : node -> node list
+	val succs : node -> node list
 
   val delete     : node -> unit
   val fold_nodes : (node->'a -> 'a) -> 'a -> cfg -> 'a
@@ -1242,23 +1247,6 @@ module type LIVENESS = sig
   type node
   val live_out : node -> Register.Set.t
 end
-<<old code, remove from colorgraph.ml>>=
-module OldG : GRAPH with type node = Cfg4.node with type cfg = Cfg4.cfg = struct 
-  include Cfg4
-  let fold_fwd g f z = Cfg4.gm_enumerate g; Cfgutil.fold_fwd g f z
-  let iter_nodes f g = fold_fwd g (fun n () -> f n) ()
-  let fold_nodes f z g = fold_fwd g f z
-  let eq = (=)
-  let delete = gm_delete_assign
-end
-<<old code, remove from colorgraph.ml>>=
-module OldL : LIVENESS with type node = OldG.node = struct
-  module G = Cfg4
-  module P = Cfgprop
-  type node = G.node
-  let live_out node = (G.property node).P.liveout
-  module L = Olive.Make(G)
-end
 
 <<colorgraph.ml>>=
 module NewG : GRAPH with type node = Rtl.rtl Cfgx.M.node
@@ -1270,6 +1258,9 @@ module NewG : GRAPH with type node = Rtl.rtl Cfgx.M.node
 
   let nop = Rtl.par []
   let instr n = Aux.Option.get nop (G.to_instr n)
+	let preds = G.preds
+	let succs = G.succs
+  let num n = G.num n
   let iter_nodes = G.iter_nodes
   let fold_nodes = G.fold_nodes
   let eq = G.eq
@@ -1553,14 +1544,14 @@ let printReg (s, i, w) = Printf.sprintf "%c%d" s i
 let printMove node = printReg (source node)
                    ^ " -> "
                    ^ printReg (dest node)
-let printColorMap cm =
-    cgSay ["    ColorMap:\n"];
+let printAliasMap mapName am =
+    cgSay ["    " ^ mapName ^ ":\n"];
     RM.iter (fun tmp reg -> cgSay [ "        "
                                   ; printReg tmp
                                   ; " -> "
                                   ; printReg reg
                                   ; "\n"
-                                  ]) cm
+                                  ]) am
 @
 
 The [[print_cgInfo]] function prints the graph coloring information in a
@@ -1611,7 +1602,8 @@ let print_cgInfo cgInfo =
         List.iter printRegIlist (regILists cgInfo);
         cgSay ["    K: "; string_of_int cgInfo.k; "\n"];
         List.iter printMoveIlist (moveILists cgInfo);
-        printColorMap cgInfo.colorMap
+        printAliasMap "aliasMap" cgInfo.aliasMap;
+        printAliasMap "colorMap" cgInfo.colorMap
 
 let printCGInfo param _ = print_cgInfo param; false
 @
@@ -1625,7 +1617,7 @@ let printCGInfo param _ = print_cgInfo param; false
         ( G.iter_nodes
             (fun node ->
               cfgSay (List.flatten
-				       [ [ string_of_int (number node)
+				       [ [ string_of_int (G.num node)
                          ; ": "
                          ; Rtlutil.ToReadableString.rtl (G.instr node)
                          ; "\n"
@@ -1633,6 +1625,12 @@ let printCGInfo param _ = print_cgInfo param; false
 						 ; ["Live_out: "]
 					   ; RS.fold (fun r rst -> Printf.sprintf "%s, " (printReg r)
 						                          :: rst) (LI.live_out node) []
+						 ; ["Preds: "]
+					   ; List.fold_right (fun n rst -> Printf.sprintf "%d, " (G.num n)
+						                          :: rst) (G.preds node) []
+						 ; ["Succs: "]
+					   ; List.fold_right (fun n rst -> Printf.sprintf "%d, " (G.num n)
+						                          :: rst) (G.succs node) []
 					   ; [ "\t"
                          ; G.node_info_string node
                          ; "\n"
