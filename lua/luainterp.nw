@@ -1,0 +1,249 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+\section{Experiment for embedding lua in caml}
+
+If we are to configure the compiler dynamically, we need a
+configuration language.  I'm proposing we borrow Lua, version~2.5,
+but with a Caml interface based on a style of embedding and projection
+that is inspired by Olivier Danvy's work on type-directed partial
+evaluation. 
+This file sketches some of the supporting details, focusing on the
+embedding and projection, which is the new part.
+
+As in Lua, we keep the value space simple and small.
+Unlike Lua, we have only one kind of function.
+(Also unlike Lua, functions return a single value.  
+This is a mistake on my part and should be corrected.
+Another mistake is that a function should take a (mutable) Lua state
+as an argument, because Lua functions can have side effects.)
+The type of [[userdata]] is not specified here; it is intended to be a
+functor parameter.
+<<signatures>>=
+module type VALUE = sig
+  type userdata
+  type value
+    = Nil
+    | Number   of float
+    | String   of string
+    | Function of (value list -> value)
+    | Userdata of userdata
+    | Table    of table  (* should use a hash table *)
+  and table = (value, value) Hashtbl.t
+@ 
+Lua tables are not quite like Caml tables, but they are close.
+<<signatures>>=
+  module Table : sig
+    val create : sizehint:int -> table
+    val find   : table -> key:value -> value
+    val bind   : table -> key:value -> data:value -> unit
+  end
+@ 
+Now, for embedding and projection.
+This is a key, as it completely replaces the stupid stack-based
+interface found in~C.
+Instead, we use higher-order functions to whip up functionality as needed.
+If a projection fails, it raises [[Projection]] giving the value it
+tried to project and a string indicating what it tried to project to.
+<<signatures>>=
+  exception Projection of value * string
+  type ('a,'b) ep = { embed : 'a -> 'b; project : 'b -> 'a }
+  type 'a map  = ('a, value) ep
+  type 'a mapf  (* used to build function maps that curry/uncurry *)
+@ 
+These functions enable us to convert the basic types.
+<<signatures>>=
+  val float  : float  map
+  val int    : int    map
+  val bool   : bool   map
+  val string : string map
+@
+Here is the support for converting functions.
+First, if one wants a Lua function to be curried (as the Caml
+functions are), one can simply use [[-->]].
+There's a small gotcha, in that we can't make [[-->]] right
+associative.
+That's OK, as it probably shouldn't be used for curried functions.
+
+For curried functions that should take lists of arguments in Lua,
+we use [[**->]], [[func]], and [[result]].
+The idea is this: if we have a Caml function type
+[[t -> u -> v -> w]], we can turn this into a Lua function of three
+arguments by using the embedding/projection pair produced by
+\begin{quote}
+[[func (t **-> u **-> v **-> result w)]]
+\end{quote}
+<<signatures>>=
+  val ( -->  ) : 'a map  -> 'b map  -> ('a -> 'b) map
+  val ( **-> ) : 'a map  -> 'b mapf -> ('a -> 'b) mapf
+  val result   : 'a map  -> 'a mapf
+  val func     : 'a mapf -> 'a map
+end
+@ Here's an example: we embed the [[String.sub]] function, then apply
+it to some arguments.
+<<tests>>=
+let sub = (func (string **-> int **-> int **-> result string)).embed String.sub
+let apply = function Function f -> f | v -> raise (Projection (v, "function"))
+let check = string.project (apply sub [string.embed "hello"; int.embed 0; int.embed 2])
+let _ = assert (check = "he")
+@ 
+For the rest of the interface, we can make Lua values by supplying an
+appropriate [[userdata]] type.  
+<<signatures>>=
+module type USERDATA = sig type t end
+<<lua.mli>>=
+<<signatures>>
+module MkValue (U : USERDATA) : VALUE with type userdata = U.t
+@ 
+\subsection{Implementation}
+<<lua.ml>>=
+<<signatures>>
+module MkValue (U : USERDATA) = struct
+  <<value toplevel>>
+  <<tests>>
+end
+@ 
+I have to repeat the datatype definition.
+<<value toplevel>>=
+type userdata = U.t
+type value
+  = Nil
+  | Number   of float
+  | String   of string
+  | Function  of (value list -> value)
+  | Userdata of userdata
+  | Table    of table
+  and table = (value, value) Hashtbl.t
+@ 
+Now, for embedding and projection.  More repeats.
+<<value toplevel>>=
+exception Projection of value * string
+type ('a,'b) ep = { embed : 'a -> 'b; project : 'b -> 'a }
+type 'a map  = ('a, value) ep
+type 'a mapf = ('a, value list -> value) ep
+@ 
+Here are the embedding/projection pairs for the simple types.
+There are subtle mismatches between Caml types and Lua types, so I do
+my best to patch them.
+<<value toplevel>>=
+let string = { embed = (fun s -> String s)
+             ; project = function String s -> s | v -> raise (Projection (v, "string"))
+             } 
+
+let pervasive_float = float
+let float = { embed = (fun x -> Number x)
+            ; project = function Number x -> x | v -> raise (Projection (v, "float"))
+            } 
+
+let to_int x = 
+  let n = truncate x in
+  if pervasive_float n = x then n else raise (Projection (Number x, "int"))
+
+let int   = { embed = (fun n -> Number (pervasive_float n))
+            ; project = function Number x -> to_int x 
+                               | v -> raise (Projection (v, "int"))
+            } 
+
+let bool  = { embed = (fun b -> if b then String "t" else Nil)
+            ; project = function Nil -> false | _ -> true
+            } 
+@ 
+Here is a simple function from one argument to one result.
+We implement the usual Lua game of ``adjusting'' the argument list.
+<<value toplevel>>=
+let trim1 = function  (* trim list of arguments to a single argument *)
+  | [] -> Nil
+  | h::t -> h
+
+let (-->) arg result =
+  { embed =   (fun f -> 
+               Function (fun args -> result.embed (f (arg.project (trim1 args)))))
+  ; project = function Function f -> fun x -> result.project (f [arg.embed x])
+                     | v -> raise (Projection (v, "function"))
+  } 
+@ 
+What we have above would be enough, except that Caml likes functions
+to be curried and Lua likes them uncurried.
+We provide [[**->]], [[result]], and [[func]] for embedding and
+projecting curried functions.
+The functions are a bit subtle, but if you follow the types, you
+shouldn't be too baffled. 
+<<value toplevel>>=
+let ( **-> ) (firstarg : 'a map) (lastargs : 'b mapf) : ( ('a -> 'b) mapf ) =
+  let apply (f : 'a -> 'b) args = 
+    let h, t = match args with [] -> Nil, [] | h :: t -> h, t in
+    let f = f (firstarg.project h) in
+    lastargs.embed f t
+  in
+  let unapp f' =
+    fun (x : 'a) -> lastargs.project (function t -> f' (firstarg.embed x :: t)) in
+  { embed = apply; project = unapp }
+
+let result (r : 'a map) : ('a mapf) = 
+  { embed   = (fun f -> fun args -> r.embed f)
+  ; project = (fun f -> r.project (f []))
+  } 
+
+let func (arrow : 'a mapf) : ('a map) =
+  { embed   = (fun f -> Function (arrow.embed f))
+  ; project = (function Function f -> arrow.project f 
+                      | v -> raise (Projection (v, "function")))
+  } 
+@ 
+Lua tables are very nearly Caml hash tables, except they never have
+multiple elements.
+<<value toplevel>>=
+module Table = struct
+  let create = Hashtbl.create
+  let find t k = try Hashtbl.find t k with Not_found -> Nil
+  let bind t k v =
+    Hashtbl.remove t k;
+    match v with Nil -> ()
+    | _ -> Hashtbl.add t k v
+end
+@ 
+\subsection{Steps toward the full language}
+
+Values alone aren't enough: we need declarations, statements,
+expressions, and an interpreter.
+What follows is some highly speculative infrastructure.
+<<signatures>>=
+module type Language = sig
+  module Value : VALUE
+  type value = Value.value
+  type state = { globals : Value.table; fallbacks : Value.table }
+  type stmt
+  type exp
+
+  val run  : stmt -> state -> state
+  val eval : exp  -> state -> value
+
+  module Lvalue : sig
+    type t
+    val var   : string -> t
+    val index : table:exp -> value:exp -> t
+  end
+
+  module Statement : sig
+    val assign : Lvalue.t list -> exp list -> stmt
+    val block : stmt list -> stmt    
+    val while' : exp -> stmt list -> stmt
+    val repeat_until : stmt list -> exp -> stmt
+    val if' : (exp * stmt) list -> stmt option -> stmt
+    (* local declaration *)
+    val return : exp list -> stmt
+  end   
+
+  module Exp : sig
+    val lit   : value -> exp
+    val index : table:exp -> key:exp -> exp
+    type op = And | Or | Lt | Le | Gt | Ge | Eq | Ne | Concat
+            | Plus | Minus | Times | Div | Not | Uminus | Hat
+    val binop : exp -> op -> exp -> exp
+    val unop  :        op -> exp -> exp
+    val table : exp list * (string * exp) list -> exp
+    val call  : exp * exp list -> exp
+    val methcall : exp * string * exp list -> exp
+  end
+end
+
+  
