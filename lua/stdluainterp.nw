@@ -245,7 +245,9 @@ We do this by maniupulating continuations.
 \nwaddbox{trim1 : value list -> value}
 \nwaddbox{fb1   : string -> state -> value list -> value}
 <<interp toplevel>>=
-let trim1 = function [] -> V.Nil | h :: t -> h
+let trim1 = function
+  | [] -> V.Nil
+  | h :: t -> h
 let fb1 name state args = trim1 (fallback name state args)
 @ 
 \subsubsection{Implementations of the infix operators}
@@ -253,6 +255,7 @@ A binary arithmetic operator converts its arguments to floating-point
 numbers.
 If anything goes wrong, it calls the ``arith'' fallback.
 \nwaddbox{arith : string -> (float -> float -> float) -> ???}
+\deeperbox{14pt}
 <<interp toplevel>>=
 let arith opname op =
   let opname = V.String opname in (* allocate early and share *)
@@ -273,8 +276,11 @@ let negate x g = try
 An ordering operation takes two forms: a numeric form and a string
 form.
 Its result is a Boolean.
-\nwaddbox{order : string -> (float -> float -> bool) -> (string -> string -> bool) -> value -> value -> state -> value}
+\nwaddbox{order : string -> fcmp -> scmp -> value -> value -> state -> value}
+\deeperbox{14pt}
 <<interp toplevel>>=
+type fcmp = float  -> float  -> bool
+type scmp = string -> string -> bool
 let order opname nop sop =
   let opname = V.String opname in
   let f x y g =
@@ -300,6 +306,7 @@ denotation as a function.
 The [[unop]] function is similar.
 The short-circuit operators can't be handled this way.
 \nwaddbox{binop : A.op -> value -> value -> state -> value}
+\deeperbox{14pt}
 <<interp toplevel>>=
 let binop = function
   | A.Plus   -> arith "add" (+.)
@@ -779,6 +786,7 @@ then applies body continuation to the state to get the answer.
 There is extra bookkeeping using [[info]] and [[with_stack]] to
 maintain the stack.  
 \nwaddbox{lambda : Srcmap.map * bool -> Srcmap.location -> string list -> bool -> A.block -> V.info * V.func}
+\deeperbox{14pt}
 <<interp toplevel>>=
 let value_list = V.list V.value
 let lambda (src, debug) (file, line, col) args varargs body =
