@@ -161,17 +161,21 @@ We need a source for new temporaries; the functions [[itmp]] and
 new temporary.
 
 <<utilities>>=
-let itmp w = fun (rtls,tmp as state) -> (Talloc.Multiple.loc tmp 't' w, state)
-let ftmp w = fun (rtls,tmp as state) -> (Talloc.Multiple.loc tmp 'u' w, state)
+let itmp = function
+    | 32 -> fun (rtls,tmp as state) -> (Talloc.Multiple.loc tmp 't' 32, state)
+    | 8  -> fun (rtls,tmp as state) -> (Talloc.Multiple.loc tmp 'v'  8, state)
+    | w  -> Impossible.impossible 
+                (Printf.sprintf "unsupported width for int register: %d" w)
+let ftmp = function
+    | 32 -> fun (rtls,tmp as state) -> (Talloc.Multiple.loc tmp 'u' 32, state)
+    | w  -> Impossible.impossible 
+                (Printf.sprintf "unsupported width for float register: %d" w)
 @
 
 {\rtl} operators do not distinguish between floating point and integer
 values, but we assume the [[Dummy]] machine does. As an oversimplified
 experiment, we declare the following operators to be floating point
 operators, taking and yielding floating point values.
-
-\emph{The [[fcmp]] operator yields a 2 bit value, not a floating-point
-value! It should be in its own category. --CL}
 
 <<utilities>>=
 module StringSet = Set.Make(struct type t = string let compare = compare end)
@@ -386,6 +390,17 @@ ireg:       Cell('t', agg, width, const, ass)
                 return (R.cell (U.assertion ass) 't' agg width k) 
             :}
 
+ireg:       Cell('g', agg, width, const, ass)
+            {: 
+                const >>= fun k ->
+                return (R.cell (U.assertion ass) 'g' agg width k) 
+            :}
+ireg:       Cell('v', agg, width, const, ass)
+            {: 
+                const >>= fun k ->
+                return (R.cell (U.assertion ass) 'v' agg width k) 
+            :}
+
 
 freg:       Cell('f', agg, width, const, ass)
             {: 
@@ -397,6 +412,8 @@ freg:       Cell('u', agg, width, const, ass)
                 const >>= fun k ->
                 return (R.cell (U.assertion ass) 'u' agg width k) 
             :}
+
+
 
 dreg:       Cell('d', agg, width, const, ass)
             {: 
@@ -411,7 +428,7 @@ creg:       Cell('c', agg, width, const, ass)
                 return (R.cell (U.assertion ass) 'c' agg width k) 
             :}
 
-error:      Cell(x:char, agg, width, addr, ass)
+error:      Cell(x:char, agg, width, addr, ass) [10]
             {:
                 error (Printf.sprintf "cell in space '%c'" x)
             :}    
@@ -443,8 +460,8 @@ iop:        Op(opr) [100] -- matches if nothing above matches
 @            
 
 To make sure we can cover every {\rtl}, we allow to move integer
-registers into floating-point temporairies, and floating-point registers
-into integer temporaries. We do not like these conversions so we
+registers into floating-point temporaries, and floating-point registers
+into integer temporaries.  We do not like these conversions so we
 penalize them with high costs. 
 
 <<rules>>=

@@ -210,7 +210,7 @@ locations in memory.
 let byteorder           = Rtl.BigEndian
 let wordsize            = 32
 let pointersize         = 32
-let memsize             = 32
+let memsize             = 8
 let memspace            = ('m':Rtl.space)
 @
 
@@ -228,8 +228,8 @@ object
     method to_loc           = _loc
 end
 
-let memloc addr = 
-    new dummyloc (Rtl.cell Rtl.none memspace byteorder memsize addr)
+let memloc addr w = 
+    new dummyloc (Rtl.cell Rtl.none memspace byteorder w addr)
 
     
 let const n width = Rtl.bits (Bits.U.of_int n width) width
@@ -268,7 +268,7 @@ object (self)
         let align = wordsize / memsize                 in
         let ()    = _area <- Area.alloc _area n        in (* allocate ..*)
         let ()    = _area <- Area.align _area align in (* and align  *)
-            memloc addr
+            memloc addr width
 end
 
 class global (base:Rtl.exp): automaton =
@@ -290,7 +290,7 @@ object (self)
             let align = wordsize / memsize                 in
             let ()    = _area <- Area.alloc _area n        in 
             let ()    = _area <- Area.align _area align in 
-                memloc addr
+                memloc addr width
         | Some x -> hwloc x          
 end
 @
