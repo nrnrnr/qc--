@@ -817,7 +817,12 @@ Falling off produces the empty list, and returning [[results]]
 produces those results.
 
 We return a dynamic function suitable for use as a Lua function value.
-It takes state and arguments, allocates an array for locals and temporaries,
+It takes state and arguments, allocates an array for locals and
+temporaries,\footnote
+{We don't allocate space for unused locals, but we do allocate space
+  for formals, even if formals are not used.  The reason is we hope
+  they're used in the common case, and we'd rather not add the
+  additional check to every formal parameter.}
 initializes the array with the values of the actual parameters,
 then applies body continuation to the state to get the answer.
 We don't have to maintain the stack because that is done in function
@@ -830,7 +835,7 @@ let lambda (src, debug) (file, line, col) args varargs body state =
   let rho = let args' = List.rev args in if varargs then "arg" :: args' else args' in
   let block, count = block_compiler src state in
   let body = block ~debug rho body (fun l -> []) (fun results -> results) in
-  let n = count() in
+  let n = max (count()) (List.length rho) in
   let srcloc = V.srcloc file line in
   srcloc, 
   fun argv ->

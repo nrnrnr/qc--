@@ -23,6 +23,7 @@ Test.files = { "add.c--"
 	     , "if-false.c--"
 	     , "if-false2.c--"
              , "err-000.c--"
+             , "err-001.c--"
              , "exp-000.c--"
              , "exp-001.c--"
              , "fadd.c--"
@@ -56,6 +57,7 @@ Test.files = { "add.c--"
              , { source = {'tail2.c--', 'call3.c--'} }
              , { source = {'tailnot.c--', 'call3.c--'} }
 	     , 'test-050.c--'
+             , 'wtizzy.c--'
              , "x86-000.c--"
              , "x86-001.c--"
              }

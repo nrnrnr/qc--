@@ -1,0 +1,26 @@
+target byteorder little;
+
+     bits2 rm = "IEEE 754 rounding mode";
+
+export main; import printf;
+foreign "C" f()
+{
+ // both arguments are required to send the widener into a tizzy
+ foreign "C" c_fun(0x0098374817263847::bits64, %i2f64(32::bits32, rm));
+ foreign "C" return;
+}
+
+foreign "C" c_fun(bits64 n, bits64 x) {
+  bits32 rc;
+  rc = foreign "C" printf("address" fmt, n, "float" x);
+  foreign "C" return;
+}
+
+foreign "C" main(bits32 argc, "address" bits32 argv) {
+  foreign "C" f();
+  foreign "C" return(0);
+}
+
+section "data" {
+  fmt: bits8[] "called c_fun(0x%016llx, %lf)\n\0";
+}
