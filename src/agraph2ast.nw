@@ -37,6 +37,12 @@ please refer to \module{agraph}.  Additionally, some extras are
 provided. Most useful is the function [[ast]], which translates a
 [[graph]] into {\PAL} abstract syntax.
 
+To create a graph, a [[ginit]] value is passed to the creating
+function.  We store this value inside the graph and make it accessible
+with an extra function [[ginit]].  The current purpose of [[ginit]] is
+to store the name and the local current scope of a procedure.
+
+
 <<agraph2ast.mli>>=
 module Graph: sig
     include Agraph.S
@@ -45,9 +51,9 @@ module Graph: sig
     type block = string * Rtl.rtl list
     val blocks: graph -> block list
     val stmts : graph -> Mangle.mangler -> Ast.stmt list
-    val name  : graph -> string
+    val ginit : graph -> ginit
 end 
-    with type Make.ginit = string
+    with type ginit = string * Fenv.Clean.scope
 @
 
 % ------------------------------------------------------------------ 
@@ -79,8 +85,9 @@ A basic [[block]] is a list of {\rtl}s that starts with a label.  A
 reference to the graph it belongs to.
 
 <<types>>=
+type ginit =   string * Fenv.Clean.scope
 type block =   string * Rtl.rtl list    (* label and RTLs *)
-type graph =   { name:              string
+type graph =   { init:              ginit
                ; mutable bbs:       block list
                }
 
@@ -154,16 +161,16 @@ which maintains a reversed list of basic blocks.  The [[bblock]]
 function does this by side-effect.
 
 <<module Make>>=
-type ginit = string
-let graph name = { name  = name
-                 ; bbs  = [] 
-                 }
+let graph ginit = { init   = ginit
+                  ; bbs    = [] 
+                  }
 
 let terminal g = { graph = g 
                  ; rtls  = []
                  }
 
-let graph_of {graph=g} = g
+let graph_of {graph=g}    = g
+let name_of  {init=(n,_)} = n
 
 let bblock node name = 
     let g = graph_of node in
@@ -202,7 +209,7 @@ basic block.
 let make_cont node cuts                 = node
 let call expr cont p =
     let g = graph_of cont in
-        ( bblock cont (Idgen.id' g.name)
+        ( bblock cont (Idgen.id' (name_of g))
         ; terminal (graph_of cont)
         ) 
 @
@@ -220,15 +227,15 @@ end the one above them.
 <<>>=
 let entry n p =
     let g = graph_of n in 
-        ( bblock n g.name
+        ( bblock n (name_of g)
         ; terminal g
         )
 
 <<>>=
 let branch e t f p =
     let g = graph_of t in
-        ( bblock f (Idgen.id' g.name)
-        ; bblock t (Idgen.id' g.name)
+        ( bblock f (Idgen.id' (name_of g))
+        ; bblock t (Idgen.id' (name_of g))
         ; terminal g
         )
        
@@ -246,7 +253,7 @@ let label n node p =
 A block's name is returned by [[name]]:
 
 <<extras implementation>>=
-let name {name=n} = n 
+let ginit {init=i} = i 
 @
 
 The list of basic blocks is returned by [[blocks]]:

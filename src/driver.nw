@@ -264,19 +264,60 @@ between the various module types in the following code is subtle:
 <<>>=
 module Graph0   = Agraph2ast.Graph
 module Graph1   = Lowercopy.Make(Graph0)
+@
 
+The [[Personality]] structure determines the calling convention,
+byteorder and many other aspects of the target architecture.  It also
+defines what is an instruction in our assembler.  An instruction is en
+entire procedure and is represented by an asbtract flow graph. 
+
+<<>>=
 module Personality = struct
-    let target          = dummy
-    type instr          = Graph1.graph (* = Graph0.graph *)
-    
-    let map             = Mangle.StrMap.empty
-    let mangle          = Mangle.make cmangle map
-    let ext i           = 
-        let name  = mangle (Graph0.name  i) in 
-        let stmts = Graph0.stmts i mangle   in
-            (None, name, [], List.map (fun s -> Ast.StmtBody s) stmts) 
+    module F = Fenv.Clean
+    module A = Ast
+
+    <<module Personality>>
 end
 
+<<module Personality>>=
+let target          = dummy
+type instr          = Graph1.graph (* = Graph0.graph *)
+
+let map             = Mangle.StrMap.empty
+let mangle          = Mangle.make cmangle map
+@
+
+Our assembler creates {\PAL} abstract syntax.  Consequently,
+instructions must be translated to an {\AST}, too.  This is done by
+the [[ext]] function, that translates an instruction to an
+[[Ast.proc]] value.
+
+The body of the procedure can be obtained from the [[Graph0.stmts]]
+function,  that returns a list of (assign-) statements. These
+statements use local variables that need to be declared. Declarations
+are (re-) constructed by scanning the [[scope]] of the procedure for
+register declarations.
+
+<<>>=
+let decl mangle name ventry dd = match ventry with
+    | (_, (F.Register _ , Types.Bits n)) -> 
+        let r = (A.Variant, None, A.BitsTy n ,mangle name, None)
+        in
+            A.DeclBody(A.Registers([r]))::dd
+            
+    | _ -> dd
+
+<<>>=
+let ext i           = 
+    let (name,scope)= Graph0.ginit i                    in
+    let name  = mangle name                             in 
+    let stmts = Graph0.stmts i mangle                   in
+    let stmts = List.map (fun s -> A.StmtBody s) stmts  in 
+    let decls = F.foldv (decl mangle) scope []          in
+        (None, name, [], decls @ stmts)
+@
+
+<<driver.ml>>=
 module Asm      = Asm2ast.Make(Personality)
 module Ast2IR   = Ast2ir.Make (Graph1) (Asm)
 @
@@ -304,12 +345,6 @@ let compile target file =
             ; 0
             )
 @
-        
-    
-
-                      
-
-
 
 % ------------------------------------------------------------------ 
 \subsection{Dispatch over command line options}

@@ -180,6 +180,15 @@ manipulated.
        in an assertion violation.
 \end{itemize}
 
+To inspect the value bindings in a (local) [[scope]], [[foldv]] is
+provided:  [[foldv f s z]] applies f to all [[ventry]] values found in
+scope [[s]] together with a result value of type [['a]] passed along;
+[[z]] is the initial value for the result.
+
+<<>>=
+val foldv:      (string -> ventry -> 'a -> 'a) -> scope -> 'a -> 'a
+@  
+
 % ------------------------------------------------------------------ 
 \subsection{Bindings for Values and Types}
 % ------------------------------------------------------------------
@@ -610,7 +619,7 @@ in the implementation as well.
 
 <<>>=
 <<types>>
-and env            = { scopes   :      scope list (* top = hd scopes *)
+and env            =  { scopes   :      scope list (* top = hd scopes *)
                       ; srcmap   :      Srcmap.map
                       ; error    :      bool
                       ; target   :      target
@@ -702,6 +711,8 @@ let empty  map =  { scopes   = []
                   } 
 @
 
+The implementation of the [[scope]] stack provides no surprises.
+
 <<>>=
 let emptyscope          = { venv  = StrMap.empty; tenv = StrMap.empty }
 let srcmap {srcmap=m}   = m
@@ -716,6 +727,11 @@ let pop env = match env.scopes with
 
 let push env scope = { env with scopes = scope :: env.scopes } 
 @
+
+<<>>=
+let foldv f {venv=v} z = StrMap.fold f v z
+@
+
 
 % ------------------------------------------------------------------ 
 \subsection{Binding and Finding Names and Values}

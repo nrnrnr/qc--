@@ -30,9 +30,9 @@ semantics have been found correct it is translated into abstract
 
 <<ast2ir.mli>>=
 module Make 
-    (G      : Agraph.S with type Make.ginit  = string   ) 
+    (G      : Agraph.S with type ginit       = string * Fenv.Clean.scope) 
     (Asm    : Asm2.S   with type instruction = G.graph
-                       with type init = unit) :
+                       with type init        = unit) :
 sig
     module StrMap: Map.S with type key = string
     type program = Automaton.location StrMap.t * Asm.asm
@@ -69,7 +69,7 @@ end
 
 
 module Make
-  (G         : Agraph.S with type Make.ginit = string)
+  (G         : Agraph.S with type ginit = string * Fenv.Clean.scope)
   (Asm       : Asm2.S   with type instruction  = G.graph
                         with type init = unit) =
 struct
@@ -565,22 +565,22 @@ for a procedure is found in its entry in the fat environment.
 
 <<module Make>>=
 and proc env (target: Target.info) globals props (asm: Asm.asm) (cc,n,fs,bb) =  
-    let decorate n = G.bind props n                                        in
-    let env        = match F.findv n env with
-                     | _,(F.Label(F.Proc {F.scope = s}),_) -> F.push env s
-                     | _  -> assert false                                  in
-    let graph      = GM.graph n  (* fresh graph for this proc *)           in
+    let decorate n = G.bind props n                                    in
+    let scope      = match F.findv n env with
+                     | _,(F.Label(F.Proc {F.scope = s}),_) -> s
+                     | _  -> assert false                              in
+    let env        = F.push env scope                                  in
+    let ginit      = (n, scope)                                        in
+    let graph      = GM.graph ginit  (* fresh graph for this proc *)   in
     let cc         = find_cc (Aux.Option.get default_convention cc) target in
-    let entry a    = decorate (GM.entry a)                                 in
+    let entry a    = decorate (GM.entry a)                             in
     let copy  a    = decorate (GM.copy_in                                  
                         (List.map (fun (_,_,_,n) -> formal env n) fs)
-                        AG.ProcParameters cc a)                            in
-    let bdy   a    = body env target globals props graph a  bb             in
-    let exit       = decorate (GM.exit graph)                              in
-    let node       = (entry << copy << bdy) exit                           in
+                        AG.ProcParameters cc a)                        in
+    let bdy   a    = body env target globals props graph a  bb         in
+    let exit       = decorate (GM.exit graph)                          in
+    let node       = (entry << copy << bdy) exit                       in
          asm ++ Asm.instr (GM.graph_of node)
-         (* what about defining a symbol here, etc?? *)
-        
 @
 
 Local declarations are ignored for the moment. 
