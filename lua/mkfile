@@ -7,23 +7,24 @@ LIBDIR =        ../lib
 OCAMLC_FLAGS=-I $LIBDIR -g
 OCAMLO_FLAGS=-I $LIBDIR
 
-OBJ=thashtbl.cmo floatscan.cmo value.cmo ast.cmo parse.cmo scan.cmo lua.cmo builtins.cmo main.cmo
+OBJ=thashtbl.cmo floatscan.cmo value.cmo ast.cmo parse.cmo scan.cmo lua.cmo builtins.cmo io.cmo main.cmo
 OPT=`echo $OBJ | sed 's/\.cmo/.cmx/g'`
 
 all:V: oclua
 
 oclua: $OBJ
-	ocamlc $OCAMLC_FLAGS -o $target cllib.cma $prereq 
+	ocamlc $OCAMLC_FLAGS -o $target unix.cma cllib.cma $prereq 
 
 oclua.opt: $OPT
-	ocamlopt $OCAMLO_FLAGS -o $target cllib.cmxa $prereq 
+	ocamlopt $OCAMLO_FLAGS -o $target unix.cmxa cllib.cmxa $prereq 
 
-bin:V: lua.cmi lua.cmo parse.cmo parse.cmi scan.cmi scan.cmo main.cmo builtins.cmi builtins.cmo
+bin:V: lua.cmi lua.cmo parse.cmo parse.cmi scan.cmi scan.cmo main.cmo builtins.cmi builtins.cmo 
 src:V: lua.ml lua.mli
 
-TEST=02
-test:V: oclua
-	for i in $TEST; do oclua test/$i.lua; done	
+TEST=03 04 05 06 07 08 10 12 02
+# 09 needs I/O library -- dofile needs to return nil on error
+test:V: oclua.opt
+	for i in $TEST; do $prereq test/$i.lua; done	
 
 parsex.mly: syntax.nw
 	[ -r $target ] && chmod +w $target
