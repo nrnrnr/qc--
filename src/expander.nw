@@ -574,7 +574,7 @@ Boolean!
 Ordinary value operators are expected to be supported by these
 operations, but only at their natural widths.
 Weird value operators such as carry, borrow, or multiply-extended are
-not supported. 
+supported by special-purpose functions described further below.
 <<generic expansion operations for register machines>>=
 val binop : dst:temp -> operator -> temp -> temp -> block
 val unop  : dst:temp -> operator -> temp         -> block
@@ -587,6 +587,32 @@ Perhaps one day we will understand the role of the extended
 floating-point multiplies as well.)
 <<generic expansion operations for register machines>>=
 val dblop : dsthi:temp -> dstlo:temp -> operator -> temp -> temp -> block
+@ 
+A weird value operator that has a 1-bit or 2-bit argument, but a
+normal result, is
+supported by  [[wrdop]].
+These operators include [[addc]] and [[subb]] (as well as a host of
+floating-point operators that are not actually supported in this
+interface at this time).
+<<generic expansion operations for register machines>>=
+val wrdop  : dst:temp  -> operator -> temp -> temp -> warg -> block
+@ A~weird value operator that has a weird argument and also a weird
+result is supported by [[wrdrop]].
+These operators include only [[carry]] and [[borrow]].
+<<generic expansion operations for register machines>>=
+val wrdrop : dst:wtemp -> operator -> temp -> temp -> warg -> block
+@
+If it is not a constant, a~weird (narrow) value must be stored in an
+ordinary temporary. 
+The narrow value is in the low bits, and we record a fill type,
+which may be either guaranteed (in argument position) or demanded (in
+result position).
+A~weird argument may also be a literal.
+<<types for postexpanders>>=
+type wtemp = fill * temp
+and  fill  = HighS | HighZ | HighAny  
+and  warg  = WBits of Bits.bits
+           | WTemp of temp  (* the high bits could contain anything *)
 @ 
 Usage notes:
 \begin{quote}
@@ -1433,6 +1459,7 @@ let rec to_temp' room context e =
   <<cases for sign extending or zero extending a temporary>>
   <<cases for sign-extending and zero-extending loads>>
   <<cases for sign-extending and zero-extending divides>>
+  <<cases for narrow weird value operators>>
   <<cases for converting a Boolean to a value>>
   | RP.App ((_, [stackw; tempw]) as cvt, _) as e
     when Post.converts_stack_to_temp cvt ->
@@ -1501,6 +1528,52 @@ This fact is documented in the postexpander interface.
     to_temp' room context
       (RP.App (("shrl", [w]), [RP.App(("shl", [w]), [x; sh_amt]); sh_amt]))
 @ 
+To get a result of normal width, 
+we can see a weird value operator in two contexts: a weird result is
+extended or a normal result is used
+<<cases for narrow weird value operators>>=
+| RP.App ((("sx"|"zx") as xop, [n; w]),
+          [RP.App((("carry"|"borrow"), [n']) as wrdop, args) as e]) ->
+    if n <> n' then Impossible.impossible "ill-typed %sx/%zx(...)";
+    let signed = xop =$= "sx" in
+    let x, y, z, is = compile_weird_args room wrdop args in
+    let t = alloc_direct (Post.result_context wrdop) w in
+    let fill = if signed then PX.HighS else PX.HighZ in
+    t, is <:> Post.wrdrop ~dst:(fill,t) wrdop x y z 
+<<cases for narrow weird value operators>>=
+| RP.App ((("addc"|"subb"), [w]) as wrdop, args) ->
+    let x, y, z, is = compile_weird_args room wrdop args in
+    let t = alloc_direct (Post.result_context wrdop) w in
+    t, is <:> Post.wrdop ~dst:t wrdop x y z 
+<<other generic expander functions>>=
+and compile_weird_args room op args = match args, Post.arg_contexts op with
+| [x; y; z], [xc; yc; zc] ->
+    let x, xis = to_temp room (contextmap xc) x in
+    let y, yis = to_temp room (contextmap yc) y in
+    let z, zis = to_warg room (contextmap zc) z in
+    x, y, z, xis <:> yis <:> zis
+| _ -> impossf "wrong number of args or contexts to %%%s" (fst op)
+@ 
+To compute a weird argument, we have either a literal or a temporary.
+We might have to fetch a weird argument from a hardware register, but
+that's not implemented (yet).
+<<other generic expander functions>>=
+and to_warg room context e = match e with
+| RP.App (("lobits", [w; n]), [e]) ->
+    let t, is = to_temp room context e in
+    (PX.WTemp t), is
+| RP.App ((("carry"|"borrow"), [w]) as wrdop, args) ->
+    let x, y, z, is = compile_weird_args room wrdop args in
+    let t = alloc_direct (Post.result_context wrdop) w in
+    let t, is = 
+      temp_in_context t context (is <:> Post.wrdrop (PX.HighAny, t) wrdop x y z) in
+    (PX.WTemp t), is
+| RP.Const (RP.Bits b) ->
+    PX.WBits b, PX.Nop
+| RP.Fetch _ -> Impossible.unimp "narrow argument straight from location"
+| e -> impossf "trying to put %s into a weird temporary" (RU.ToString.exp (Up.exp e))
+@ 
+\paragraph{Division}
 Division is going to be a real problem; I can just tell.
 Here's a hack which is untested and probably useless.
 <<cases for sign-extending and zero-extending divides>>=

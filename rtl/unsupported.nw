@@ -21,6 +21,7 @@ val div_and_mod : unit -> 'a
 val div_overflows : unit -> 'a
 val floatlit : int -> 'a
 val mulx_and_mulux : unit -> 'a
+val singlebit : op:string -> 'a
 @ 
 <<unsupported.ml>>=
 exception Unsupported
@@ -161,3 +162,11 @@ let floatlit = getn (ex1 (fun n ->
 
 let floatlit d =
   fail (nosupport (s "%d-bit floating-point literal" d)) floatlit [d]
+@ 
+<<unsupported.ml>>=
+let singlebit_n = getn (fun _ ->
+  ["This target does not support extended addition and subtraction using";
+   "single-bit values with the %%addc, %%carry, %%subb, and %%borrow operators.";
+  ])
+let singlebit ~op =
+  fail (nosupport (s "%%%s operator" op)) singlebit_n []
