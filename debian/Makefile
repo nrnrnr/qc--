@@ -21,7 +21,7 @@ all:    mkfile
 
 # The directories in file 'dirs' are created automatically, no need to
 # do it again here
-install: bin/qc--.opt man/man1/qc--.1 man/man1/qc--internals.1
+install: bin/qc--.opt manual
 	# qc-- compiler
 	install -m755 -s bin/qc--.opt $(BINDIR)/qc--
 	install -m644 man/man1/qc--.1 $(MAN1DIR)
@@ -40,7 +40,14 @@ install: bin/qc--.opt man/man1/qc--.1 man/man1/qc--internals.1
 	#conflict with interp# install -m664 runtime/qc--runtime.h $(INCDIR)
 	# documentation
 	install -m664 doc/release.pdf $(DOCDIR)
+	install -m664 doc/c--manual.pdf $(DOCDIR)
 
+# the C-- language reference manual is not part of the source distribution but
+# we would like to include it. 
+
+manual:
+	cd doc; wget http://www.cminusminus.org/rsync/dist/c--manual.pdf
+	
 debian:	mkfile
 	dch -v `cat src/DATE` "nightly build"
 	dpkg-buildpackage -us -uc -rfakeroot -elindig@eecs.harvard.edu
@@ -48,4 +55,4 @@ debian:	mkfile
 distclean: mkfile
 	mk clobber
 
-.PHONY: debian install all distclean	
+.PHONY: debian install all distclean manualn	
