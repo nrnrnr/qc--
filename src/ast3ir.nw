@@ -425,15 +425,41 @@ and body b state = match b with
 and labelStmt state x =
     let _   = G.set_label state.cfg x state.node in
         state    
+@
 
+An if-statement is translated into a seqence of nodes such that the
+two branches are linearized.  The branch is taken is the governing
+expression is evaluated to [[false]].  The fall-through-branch is
+taken otherwise and ends with a [[goto]] around the other branch. 
+
+\begin{enumerate}
+\item A branch node holding the governing expression and a label [[l1]].
+      If the expression evaluates to true at run-time, the branch is taken
+      to [[l1]]. Otherwise the branch falls trough.
+\item Nodes for the [[ifnot]] branch of the statement.
+\item A jump to label [[l2]].
+\item A label [[l1]] that marks the entry to the node for the [[ifso]] branch.
+\item Nodes for the [[ifso]] branch.
+\item A label [[l2]] in front of the code following the [[if]] statement. 
+\end{enumerate}
+
+<<Make statements>>=
 and ifStmt state (e,ifso,ifnot) =
-    let left  = foldr body ifso  state  in
-    let right = foldr body ifnot left  in
-    let exp   = expr state.env state.target e in
-    let label = Rtl.link "label" state.target.Target.pointersize in
-    let rtl   = state.target.Target.branch.Target.embed (exp,label)  in
-        { right with node = 
-          G.gm_branch state.cfg rtl left.node right.node
+    let l_ifso = Idgen.label state.proc in (* label for ifso/left *)
+    let l_join = Idgen.label state.proc in (* label for join *)
+    let _      = G.set_label state.cfg l_join state.node in (* label join *) 
+    let ifso   = foldr body ifso state  in
+    let _      = G.set_label state.cfg l_ifso ifso.node  in (* label ifso *)
+    
+    let l2exp  = Rtl.link l_join state.target.Target.pointersize in
+    let l2rtl  = state.target.Target.goto.Target.embed l2exp in
+    let l2goto = G.gm_goto state.cfg l2rtl [G.lookup state.cfg l_join] in
+    let ifnot  = foldr body ifnot {ifso with node = l2goto} in
+    let exp    = expr state.env state.target e in
+    let link   = Rtl.link l_ifso state.target.Target.pointersize in
+    let rtl    = state.target.Target.branch.Target.embed (exp,link)  in
+        { ifnot with node = 
+          G.gm_branch state.cfg rtl ifso.node ifnot.node
         }
 
 and assignStmt state (lhs,rhs) =
@@ -503,6 +529,10 @@ and jumpStmt state (cconv,e,args,labels) =
 statement. A data-flow node expresses inter-procedural data-flow.}
 \end{figure}
 
+\begin{quote}\it
+    We need data-flow-edges for the conintuations, too. --CL
+\end{quote}
+
 <<Make statements>>=
 and callStmt state (lhs,cconv, e, args, targets, conts) = 
     let rec lvalue = function
@@ -522,11 +552,16 @@ and callStmt state (lhs,cconv, e, args, targets, conts) =
     let call        = G.gm_call  state.cfg rtl conts copyi in
     let copyo,areao,defs = IO.copyout state.cfg args 
                       cc.Target.proc state.outbase call in
-        { state with
-            node     = copyo
-        ;   outgoing = areao :: state.outgoing
-        ;   incoming = areai :: state.incoming
-        }  
+    let result = { state with
+                     node     = copyo
+                 ;   outgoing = areao :: state.outgoing
+                 ;   incoming = areai :: state.incoming
+                 } in
+    (* fix data-flow *)
+    let () = G.gm_insert_dataflow_between 
+            ~defs:uses ~uses:defs ~kills:Register.Set.empty
+            ~src:call ~dst:copyo in
+        result        
 @
 
 A procedure returns value in the \emph{incoming} area of its
@@ -540,21 +575,18 @@ and refer to the big picture in \module{stack}.
 
 <<Make statements>>=
 and returnStmt state (cconv, kont, args) = 
-    let const e   = Bits.to_int (compile_const state.env state.target e)     in
-    let cc        = state.target.Target.cc (Aux.Option.get default_cc cconv) in
-    let (x,y)     = match kont with
-                    | None       -> (0,0) (* default *)
-                    | Some (x,y) -> (const x, const y) in
-    let rtl       = cc.Target.return                                         in
-    let args      = List.map
-                    (actual state.env state.target) args       in
-    let ret       = G.gm_return state.cfg rtl (x, y)   in
-    let copy,area,defs = IO.copyout 
-                    state.cfg args cc.Target.ret state.inbase ret in
-        { state with
-            node     = ret
-        ;   incoming = area :: state.incoming
-        }
+    let const e = Bits.to_int (compile_const state.env state.target e)     in
+    let cc      = state.target.Target.cc (Aux.Option.get default_cc cconv) in
+    let (x,y)   = match kont with
+                  | None       -> (0,0) (* default *)
+                  | Some (x,y) -> (const x, const y) in
+    let rtl     = cc.Target.return                                         in
+    let args    = List.map
+                  (actual state.env state.target) args       in
+    let ret     = G.gm_return state.cfg rtl (x, y)   in
+    let copy, area, defs =
+                  IO.copyout state.cfg args cc.Target.ret state.inbase ret in
+        { state with node = ret; incoming = area :: state.incoming}
 @
 
 A continuation receives its parameters in the \emph{incoming} area of
@@ -610,7 +642,8 @@ and switchStmt    state x  = Impossible.unimp "switch"
 % ------------------------------------------------------------------ 
 
 \begin{quote}\it
-    Todo: callee saved registers, data-flow-nodes. --CL
+    Todo: callee saved registers, data-flow-nodes. Do we put a label here
+    for the procedure or is this handled on the assermbler level? --CL
 \end{quote}
 
 <<Make procedure>>=

@@ -165,17 +165,13 @@ val gm_branch:  cfg -> Rtl.rtl -> ifso:node -> ifnot:node -> node
 val gm_dummy:   cfg -> node
 val gm_dataflow: cfg -> defs:locs -> uses:locs -> kills:locs -> succ:node -> node
 
-(* obsolete and deprecated
- * add linear sequence of assign nodes to cfg, ensures: not (enumerated cfg
- * val gm_copyin:  cfg -> formal list -> Alloc.Reg.t -> succ:node -> node * Alloc.Reg.t
- * val gm_copyout: cfg -> actual list -> Alloc.Reg.t -> succ:node -> node * Alloc.Reg.t
- *)
-
 (* cfg mutators, ensures: not (enumerated cfg) *)
 val gm_redirect_all:            src:node -> olddst:node -> newdst:node -> unit
 val gm_insert_assign_before:    Rtl.rtl -> node -> unit (* any node   *)
 val gm_insert_assign_after:     Rtl.rtl -> node -> unit (* see descr! *)
 val gm_insert_assign_between:   Rtl.rtl -> src:node -> dst:node -> unit
+val gm_insert_dataflow_between: defs:locs -> uses:locs -> kills:locs ->
+                                src:node -> dst:node -> unit
 val gm_enumerate:               cfg -> unit (* post: enumerated cfg *)
 
 (* node observation *)
@@ -411,7 +407,18 @@ defined.
 Inserts an assign node on every edge leading from [[src]] to [[dst]]. 
 The predecessor/successor relationship of all nodes is updated to
 reflect the insertion of the assign node on all affected edges. 
-Nothing happens, if no edge between [[src]] and [[dst]] exists.
+It is a checked run-time error, if no edge between [[src]] and [[dst]] exists.
+
+\item
+\begin{verbatim}
+gm_insert_dataflow_between: defs:locs -> uses:locs -> kills:locs ->
+                            src:node -> dst:node -> unit
+\end{verbatim}
+Inserts a node between [[src]] and [[dst]] that announces locations
+being defined, used, and killed.  This node is used to provide
+data-flow analysis about inter-procedural data-flow that can not be
+deduced from the other nodes.  It is a checked run-time error, if no
+edge between [[src]] and [[dst]] exists.
 
 \item [[gm_enumerate: cfg -> unit]]:
 Establishes a numbering for all nodes of a {\cfg}; until a graph
