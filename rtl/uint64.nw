@@ -264,25 +264,27 @@ static char* parse_base (char *p, int *base)
 }
 @
 Convert a string to an unsigned [[int64]] value.  In case of syntax
-errors [[Failure]] is raised.  No overflow checks are performed
-currently.
+errors or overflow, raise [[Failure]].  
 <<uint64p.c>>=
 value uint64_of_string(value s)          /* ML */
 {
+    uint64 max_uint64 = ~(uint64)0;
     char * p;
-    uint64 res, next;
+    uint64 res, threshold;
     int base, d;
 
     p = parse_base (String_val(s), &base);
+    threshold = max_uint64 / (uint64) base;
     for (res = 0; /*nothing*/; p++) {
         d = parse_digit(p);
         if (d < 0 || d >= base) break;
-        /* check for overflow? */
-        next = base * res + d;
-        if (next < res) failwith("overflow");
-        res = next;
+        /* Detect overflow in multiplication base * res */
+        if (threshold < res) caml_failwith("overflow");
+        res = res * (uint64)base + (uint64)d;
+        /* Detect overflow in addition (base * res) + d */
+        if (res < (uint64)d) caml_failwith("overflow");
     }
     if (base == 10 && (*p == 'u' || *p == 'U')) p++;
-    if (*p != 0) failwith("syntax");
+    if (p != String_val(s) + caml_string_length(s)) failwith("syntax");
     return copy_int64(res);
 }
