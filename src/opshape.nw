@@ -18,15 +18,37 @@ Here's where it happens.
 We call a pattern of arguments and results a ``shape,'' and we have to
 ensure that each shape is handled either in the generic expander or by
 each postexpander.
-
+To see a complete list of operators with their type schemes,
+try
+\begin{verbatim}
+  qc-- -e 'Rtlop.Types.print_shapes()'
+\end{verbatim}
+@
 We export an analysis function that the generic expander can use to
 pass the buck to the postexpander.
 <<opshape.mli>>=
+<<exported type definitions>>
+<<exported type definitions>>=
 type opr = Rtl.Private.opr
 type exp = Rtl.Private.exp
-val analyze : opr -> exp list ->
-  binop:(exp -> exp -> 'a) ->
-  'a
+type 'a hi = Hi of 'a
+type 'a lo = Lo of 'a
+type ('temp, 'warg) t =
+  | Binop  of 'temp * 'temp
+  | Unop   of 'temp
+  | Binrm  of 'temp * 'temp * 'warg
+  | Unrm   of 'temp * 'warg
+  | Cmp    of 'temp * 'temp
+  | Dblop  of 'temp * 'temp
+  | Wrdop  of 'temp * 'temp * 'warg
+  | Wrdrop of 'temp * 'temp * 'warg
+  | Width
+  | Fpcvt  of 'temp * 'warg
+  | Bool
+  | Nullary
+<<opshape.mli>>=
+val of_opr : opr -> (unit, unit) t
+val apply  : (exp -> 'temp) -> (exp -> 'warg) -> opr -> exp list -> ('temp, 'warg) t
 @ 
 \begingroup
 \def\bits#1{\mathtt{bits}\##1}
@@ -70,7 +92,8 @@ and [[unop]].
 @
 \subsubsection{Ordinary value operators with rounding mode}
 
-These value operators aren't dealt with yet.
+These value operators correspond to postexpander functions [[binrm]]
+and [[unrm]].
 \optype{\forall  n . \bits n \cross \bits n \cross \bits 2 \arrow \bits n}
   \oplist{fadd, fdiv, fmul, fsub}
 \optype{\forall  n . \bits n \cross \bits 2 \arrow \bits n}
@@ -140,3 +163,65 @@ These operators are turned into constants in the simplifier.
   \oplist{bitTransfer}
 
 \endgroup
+@
+<<opshape.ml>>=
+module SM = Strutil.Map
+module T  = Types
+
+let impossf fmt = Printf.kprintf Impossible.impossible fmt
+
+<<exported type definitions>>
+@ 
+Here are the type variables:
+<<'a>>=
+T.Bits (T.Var 1)
+<<'b>>=
+T.Bits (T.Var 2)
+<<bits1>>=
+T.Bits (T.Const 1)
+<<bits2>>=
+T.Bits (T.Const 2)
+<<rm>>=
+<<bits2>>
+@ 
+<<opshape.ml>>=
+let shape scheme = match scheme with
+| [<<'a>>; <<'a>>           ], <<'a>>               -> Binop ((), ())
+| [<<'a>>                   ], <<'a>>               -> Unop ()
+| [<<'a>>; <<'a>>; <<rm>>   ], <<'a>>               -> Binrm ((), (), ())
+| [<<'a>>; <<rm>>           ], <<'a>>               -> Unrm ((), ())
+| [<<'a>>; <<'a>>           ], T.Bool               -> Cmp ((), ())
+| [<<'a>>; <<'a>>           ], T.Bits (T.Double 1)  -> Dblop ((), ())
+| [<<'a>>; <<'a>>; <<bits1>>], <<'a>>               -> Wrdop ((), (), ())
+| [<<'a>>; <<'a>>; <<bits1>>], <<bits1>>            -> Wrdrop ((), (), ())
+| [<<'a>>                   ], <<'b>>               -> Width
+| [<<'a>>; <<rm>>           ], <<'b>>               -> Fpcvt ((), ())
+| [T.Bool|<<bits1>>         ], (T.Bool | <<bits1>>) -> Bool
+| [T.Bool; T.Bool           ], T.Bool               -> Bool
+| [                         ], (<<'a>>|<<bits2>>)   -> Nullary
+| _ -> impossf "unrecognized operator type %s" (Types.scheme_string scheme)
+
+
+
+let shapetab = Rtlop.Types.fold (fun o t z -> SM.add o (shape t) z) SM.empty
+
+let of_opr (o, _) =
+  try SM.find o shapetab with _ -> impossf "operator %%%s has no shape" o
+
+let args () = impossf "wrong number of arguments to operator"
+
+let appfun t w = function
+  | Binop  _ -> (function [x; y]    -> Binop  (t x, t y)      | _ -> args())
+  | Unop   _ -> (function [x]       -> Unop   (t x)           | _ -> args())
+  | Binrm  _ -> (function [x; y; r] -> Binrm  (t x, t y, w r) | _ -> args())
+  | Unrm   _ -> (function [x;r ]    -> Unrm   (t x, w r)      | _ -> args())
+  | Cmp    _ -> (function [x; y]    -> Cmp    (t x, t y)      | _ -> args())
+  | Dblop  _ -> (function [x; y]    -> Dblop  (t x, t y)      | _ -> args())
+  | Wrdop  _ -> (function [x; y; c] -> Wrdop  (t x, t y, w c) | _ -> args())
+  | Wrdrop _ -> (function [x; y; c] -> Wrdrop (t x, t y, w c) | _ -> args())
+  | Width    -> (function [x]       -> Width                  | _ -> args())
+  | Fpcvt  _ -> (function [x;r ]    -> Fpcvt  (t x, w r)      | _ -> args())
+  | Bool     -> (function _         -> Bool)
+  | Nullary  -> (function []        -> Nullary                | _ -> args())
+
+let apply to_temp to_warg opr = appfun to_temp to_warg (of_opr opr)

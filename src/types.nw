@@ -78,16 +78,17 @@ type scheme the width of a value is one of the following:
       above.
 \end{itemize}
 <<exported type definitions>>=
-type 'a t       = Bool
-                | Bits of 'a 
-type ty         = int t
+<<definition of type [[size]]>>
+type 'a t = Bool
+          | Bits of 'a 
+type ty   = int t
 @
 The type of a function is a pair of a list of operand types and a result
 type. A [[tyscheme]] describes a type scheme, a [[monotype]] the
 instance of a type scheme.
 <<exported type definitions>>=
-type tyscheme   = (size t) list * (size t)
-type monotype   = (int  t) list * (int  t)
+type tyscheme = (size t) list * (size t)
+type monotype = (int  t) list * (int  t)
 @
 Unlike in the formalism that uses $\forall$ to bind type variables
 explicitly, type variables in the implementation are bound implicitly:
@@ -155,7 +156,6 @@ target dependent types:  the native word type [[word]], the native
 code pointer type [[code]], and the native data pointer type.  We
 define types for them here, but only for the moment. 
 <<abbrevs>>=
-type key = int  (* positive *)
 val fixbits : int -> size t              (* fixed/constant size       *)
 val var     : key -> size t              (* variable size             *)
 val double  : key -> size t              (* doubled width - see above *)
@@ -169,7 +169,6 @@ val largest_key : tyscheme -> key
 @
 Finally, here we put together the interface file.
 <<types.mli>>=
-type size
 <<exported type definitions>>
 <<appl>>
 <<abbrevs>>
@@ -184,12 +183,13 @@ A substitution associates a width variable (identified by an [[int]])
 with an integer bit width. We use a map to implement a substitution.  In
 addition to the functions provided by [[Map]] we define some helper
 functions. 
+<<definition of type [[size]]>>=
+type key  = int
+type size = Const  of int
+          | Var    of key
+          | Double of key      
+          | Half   of key
 <<types.ml>>=
-type key        = int
-type size       = Const  of int
-                | Var    of key
-                | Double of key      
-                | Half   of key
 <<exported type definitions>>  (* types from the interface definition *)
 @
 \emph{Rather than having a fixed operator [[Double]] we could implement a

@@ -111,6 +111,7 @@ let unimp  = Impossible.unimp
 
 (* Don't touch the user-defined spans -- not necessary *)
 let upd_spans upd spans =
+  let spans = S.expose spans in
   let maybe_upd l = match l with
     | Some l -> (try Some (upd l) with DeadValue -> None)
     | None   -> None in
@@ -186,6 +187,7 @@ let sd_label = asm#local (Idgen.label "stackdata") in
 let emit_sd_spans () =
   match node_spans with
   | (_, spans)::_ ->
+      let spans = S.expose spans in
       asm#section "pcmap_data";
       asm#label   sd_label;
       asm#value   (Bits.U.of_int (List.length spans.S.sds) target.T.wordsize);
@@ -208,6 +210,7 @@ If a stopping point is a call node, its successor is the label we are suspended 
 otherwise, we expect the argument node to have a label.
 <<define [[emit_sd_spans]] and [[emit_site_spans]]>>=
 let emit_site_spans (node, spans) =
+  let spans = S.expose spans in
   let stop_l = match G.kind node with
     | G.Call ->
         let n = G.altrets node in
@@ -471,8 +474,8 @@ let simplify_loc loc =
 It appears that the interpreter needs to know about user-defined spans and
 stackdata.
 <<runtimedata.ml>>=
-let user_spans spans = spans.S.users
-let stackdata  spans = spans.S.sds
+let user_spans spans = (S.expose spans).S.users
+let stackdata  spans = (S.expose spans).S.sds
 @
 The run-time system needs to know how the register are mapped to constants.
 <<runtimedata.ml>>=

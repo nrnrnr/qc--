@@ -43,6 +43,8 @@ unknown, [[Not_found]] is raised.
 module Types: sig
   val mono: Rtl.opr -> Types.monotype      (* Not_found *)
   val has_floating_result : Rtl.opr -> bool
+  val print_shapes : unit -> unit
+  val fold : (string -> Types.tyscheme -> 'a -> 'a) -> 'a -> 'a
 end
 @ 
 \subsection{Enumerating operators}
@@ -198,22 +200,24 @@ let opfloats = Strutil.assoc2map (List.map (fun (o, f, _) -> (o, f)) optable)
 @ 
 We once printed operators' signatures
 <<Types>>=
-let () = 
-  if false then
-    List.iter (fun (o, _, t) ->
-      Printf.printf "%16s : %s\n" o (Types.scheme_string t)) optable
+let print_shapes () = 
+  List.iter (fun (o, _, t) ->
+    Printf.printf "%16s : %s\n" o (Types.scheme_string t)) optable
 @ 
 Some operators are not visible.
 An operator is invisible if it is for internal use only or if it has
 been expunged from the {\PAL} specification.
 <<Types>>=
-let opnames =
-  let visible = function
-    | "bitExtract" | "bitInsert" | "bitTransfer" | "f2f_implicit_round" -> false
-    | "fcmp" | "float_lt" | "float_eq" | "float_gt" | "unordered" -> false (*expunged*)
-    | _ -> true in
-  List.filter visible (List.map (fun (o, _, _) -> o) optable)
+let visible = function
+  | "bitExtract" | "bitInsert" | "bitTransfer" | "f2f_implicit_round" -> false
+  | "fcmp" | "float_lt" | "float_eq" | "float_gt" | "unordered" -> false (*expunged*)
+  | _ -> true 
 
+let opnames = List.filter visible (List.map (fun (o, _, _) -> o) optable)
+
+let fold f z =
+  List.fold_left (fun z (o, _, t) -> if visible o then f o t z else z) z optable
+@ 
 <<Types>>=
 let findopname name t =
   try Strutil.Map.find name t
