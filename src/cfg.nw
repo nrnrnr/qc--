@@ -1072,6 +1072,65 @@ and set_succ_n node n ~succ =
   | Ill _, _ -> undef "set_succ" "illegal"
   | Boot , _ -> undef "set_succ" "boot"
 
+let join_leading_to = verify_join
+let rec set_succ' single mult cbr node ~succ =
+  if not (is_join succ) && not (is_ill (pred succ)) then
+    set_succ' single mult cbr node ~succ:(join_leading_to succ)
+  else
+    begin
+      (<<modify the $n$th successor of [[node]] because [[node]] is no longer a predecessor>>);
+      (<<modify [[succ]] because [[node]] has become a predecessor>>);
+      (<<update [[node]]'s $n$th successor field to point to [[succ]]>>)
+    end
+
+<<update [[node]]'s $n$th successor field to point to [[succ]]>>=
+match node with
+| Joi j -> j.joi_succ <- single succ
+| Ins i -> i.ins_succ <- single succ
+| Ass a -> a.ass_succ <- single succ
+| Jum j -> j.jum_succ <- single succ
+| Ret r -> r.ret_succ <- single succ
+| Imp i -> i.imp_succ <- single succ
+| Ent e -> e.ent_succ <- single succ
+| Mbr m -> ignore (mult m.mbr_succ (fun _ -> join_leading_to succ))
+| Cal c -> ignore (mult c.cal_succ (fun _ -> succ))
+| Cut c -> ignore (mult c.cut_succ (fun _ -> succ))
+| Bra b ->
+  let succ = verify_join succ in
+  ( b.bra_i <- (get_cfg node).inst_info.goto.T.embed (label succ)
+  ; b.bra_succ <- single succ
+  )
+| Cbr c -> 
+  let succ = verify_join succ in
+  let cfg = get_cfg node in
+  (if cbr () then
+     c.cbr_true  <- succ
+   else
+     c.cbr_false <- succ
+  );
+  let (cond, _) = cfg.inst_info.branch.T.project c.cbr_i in
+  c.cbr_i <- cfg.inst_info.branch.T.embed (cond, label c.cbr_true)
+
+| Exi _ -> undef "set_succ" "exit"
+| Ill _ -> undef "set_succ" "illegal"
+| Boot  -> undef "set_succ" "boot"
+@ 
+<<modify the $n$th successor of [[node]] because [[node]] is no longer a predecessor>>=
+assert false
+<<modify [[succ]] because [[node]] has become a predecessor>>=
+assert false
+<<set_successors>>=
+let new_set_succ_n n =
+  set_succ' (if n = 0 then (fun s -> s) else (fun s -> invalid "successor index"))
+            (fun a f -> let s = a.(n) in a.(n) <- f s; s)
+            (if n = 0 then (fun () -> true) else if n = 1 then (fun () -> false)
+             else fun () -> invalid "successor index")
+let new_set_succ =
+  set_succ' (fun s -> s)
+            (fun a f -> undef "set_succ" "multiple node not o/w specified")
+            (fun () ->  undef "set_succ" "cbr")
+
+<<set successors>>=
 let set_succ node ~succ = match node with
   | Ins _ -> set_succ_n node 0 ~succ
   | Ass _ -> set_succ_n node 0 ~succ 
