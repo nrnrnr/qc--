@@ -75,12 +75,14 @@ nwclean:V:
 # ------------------------------------------------------------------ 
 
 MLI =           error.mli   \
+                srcmap.mli  \
                 cmdline.mli \
                 ast.mli     \
                 astUtil.mli \
                 parse.mli   \
 
 ML =            error.ml    \
+                srcmap.ml   \
                 this.ml     \
                 ast.ml      \
                 astUtil.ml  \
@@ -120,10 +122,10 @@ MISCTANGLE  =   'for f in $target; do $NOTANGLE -R$f $prereq | $CPIF $f; done'
 HTML =          `echo *.nw       | sed 's/\.nw/.html/g;'`
 
 %.inc:          %.nw
-                $NOWEAVE -delay -index -autodefs ocaml $prereq > $target
+                $NOWEAVE -delay -filter ../config/autodefs.ocaml -index $prereq > $target
 
 %.html:         %.nw
-                $NOWEAVE -delay -index -autodefs ocaml -html -filter l2h $prereq > $target
+                $NOWEAVE -delay -filter ../config/autodefs.ocaml -index -html -filter l2h $prereq > $target
 
 %.dvi:          %.tex
                 $LATEX "\\scrollmode \\input $stem.tex"
@@ -137,7 +139,7 @@ HTML =          `echo *.nw       | sed 's/\.nw/.html/g;'`
 %.ps:           %.dvi
                 dvips -Ppdf -o $target $prereq
 
-$NAME.dvi:      main.inc ast.inc parser.inc
+$NAME.dvi:      main.inc ast.inc parser.inc srcmap.inc
 
 dvi:V:          $NAME.dvi
 ps:V:           $NAME.ps
@@ -169,11 +171,9 @@ $NAME.pod:      main.nw
 ast.inc:        ast.nw         
                 $NOWEAVE -delay $prereq > $target
 
-# ------------------------------------------------------------------  
-# documentation
-# ------------------------------------------------------------------  
-
-
+srcmap.mli      \
+srcmap.ml:      srcmap.nw
+                eval $OCAMLTANGLE
 
 
 # ------------------------------------------------------------------ 

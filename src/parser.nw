@@ -1,6 +1,10 @@
 
+% l2h substitution C C--
+% l2h substitution asdl ASDL
+% l2h substitution ocaml OCaml
+
 % ------------------------------------------------------------------  
-\section{Lexical Analysis}
+\section{Lexical Analysis}\label{sec:scanner}
 % ------------------------------------------------------------------  
 
 The scanner for lexical anaylis is generated from a specificaton for
@@ -196,8 +200,11 @@ returns the matching token or raises [[Not_found]].
 
 } (* end of prolog *)
 
-
-(* declarations *)
+@
+% ------------------------------------------------------------------  
+\subsection{Declarations for Regular Expressions}
+% ------------------------------------------------------------------  
+<<scan.mll>>=
 
 let digit       = ['0'-'9']
 let octal       = ['0'-'7']
@@ -222,7 +229,11 @@ let nl          = '\n'
 let tab         = '\t'
 let flag        = '{' alpha+ '}' 
 
-(* lexer entry point *)
+@
+% ------------------------------------------------------------------  
+\subsection{The Main Lexer}
+% ------------------------------------------------------------------  
+<<scan.mll>>=
 
 rule token = parse
     eof         { EOF          }
@@ -291,8 +302,11 @@ rule token = parse
  
   | _                           { lexerror lexbuf "illegal character" }
 
-
-(* character literals *)
+@
+% ------------------------------------------------------------------  
+\subsection{Character Literals}
+% ------------------------------------------------------------------  
+<<scan.mll>>=
 
 and character = parse
     printable      "'"          { CHAR (get lexbuf) }
@@ -306,7 +320,11 @@ and character = parse
   | '\\' _                      { lexerror lexbuf "illegal character escape" }
   | _                           { lexerror lexbuf "illegal character constant" }
 
-(* level holds the comment nesting level *)
+@
+% ------------------------------------------------------------------  
+\subsection{Comments}
+% ------------------------------------------------------------------  
+<<scan.mll>>=
 
 and comment = parse
     eof                         { fun level ->
@@ -336,7 +354,11 @@ and comment = parse
                                   comment lexbuf level 
                                 }
 
-(* string gets passed a buffer where the scanned string is accumulated *)
+@
+% ------------------------------------------------------------------  
+\subsection{Strings}
+% ------------------------------------------------------------------  
+<<scan.mll>>=
 
 and string = parse
     eof                         { fun buf -> 
@@ -573,7 +595,7 @@ all tokens for a file together with their positions.
 
 
 % ------------------------------------------------------------------  
-\section{Grammatical Analysis}
+\section{Grammatical Analysis}\label{sec:parser}
 % ------------------------------------------------------------------  
 
 The parser reads a token stream created by the scanner (module
