@@ -32,6 +32,7 @@ module type S = sig
     <<module type s>>
 end
 
+<<unused>>=
 module type ASM = sig
     type instruction 
     type proc_info
@@ -40,7 +41,6 @@ end
 module Make (A: ASM): S 
     with type instruction = A.instruction
     with type proc_info   = A.proc_info
-    
 @
 
 % ------------------------------------------------------------------ 
@@ -82,6 +82,12 @@ type action         = Import of ..
                     | ...
 
 let append asm a    = { asm with actions = a :: asm.actions }
+@
+
+The [[nop]] action does nothing. 
+
+<<>>=
+val nop:            action
 @
 
 A program is created by an [[init]] function that receives a string
@@ -185,6 +191,16 @@ val define_label    : symbol -> action
 val define_const    : symbol -> Bits.bits -> action
 @
 
+To make the handling of local symbols easier, [[define_local]] is
+provided: 
+
+<<>>=
+val define_local    : name -> action
+@
+
+The action [[define_local]] defines a symbol like [[local]] and
+instantly binds it to the current value of the location counter.  
+
 % ------------------------------------------------------------------ 
 \subsection{Relocatable Addresses}
 % ------------------------------------------------------------------ 
@@ -247,4 +263,16 @@ contain only printable characters and especially no newline character.
 val comment         : string -> action 
 @
 
+% ------------------------------------------------------------------ 
+\subsection{Symbols}
+% ------------------------------------------------------------------ 
 
+The textual syntax of names is a private property of an assembler. 
+A [[mangle]] function provides a translation from {\PAL} names to
+assembly symbols.  The connection between {\PAL} names and symbols
+depends on the set of symbols imported and exported from an assembly
+program, as explained in \module{mangle}.
+
+<<>>=
+val mangle: Mangle.mangler      (* string -> string *)
+@

@@ -37,7 +37,11 @@ Currently empty.
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
 
-This module need a whole bunch of other modules.
+The generator for the intermediate representation is parameterized
+over the assembler we use.  The assembler interface in turn is
+abstract as well and is parameterized over the instruction set.  As a
+first step into code generation we generate assembly code that uses a
+flow graph to represent the body of procedures. 
 
 <<ast2ir.ml>>=
 module A  = Ast
@@ -48,16 +52,16 @@ module F  = Fenv.Clean
 <<auxiliaries>>
 
 module R = struct
-    <<module R>>
+    <<module R>>        (* RTL stuff *)
 end
 
-module Expr = struct
+module Expr = struct    (* Expressions *)
     <<module Expr>>
 end
 
 module Make
-  (G   : Agraph.S) 
-  (Asm : Asm.S with type instruction = G.node) = 
+  (G   : Agraph.S)      
+  (Asm : Asm2.S with type instruction = G.node) = 
 struct
     module GM = G.Make
     <<module Make>> 
@@ -76,10 +80,10 @@ view for [[Rtl.space]].  However, the [[char]] type is only used in
 annotate the [[default_memory]] definition. 
 
 <<auxiliaries>>=
-let default_convention         = "C--"  (* gospel truth *)
-let default_assertion          = -1     (* unused *)
-let default_memory             = 'm'    (* Rtl.space *)
-let toplevel_section           = "toplevel" (* bogus *)
+let default_convention         = "C--"          (* gospel truth *)
+let default_assertion          = -1             (* unused *)
+let default_memory             = 'm'            (* Rtl.space *)
+let toplevel_section           = "toplevel"     (* bogus *)
 @
 
 <<>>=
@@ -149,19 +153,8 @@ flow graph interface [[Agraph]]. The functions in [[Make]] create
 a flow graph. The flow graph will in later steps replaced by real
 machine instructions.
 
-An assembly program is basically a list of [[Asm.action]] value. We
-like to avoid building this list directly and instead use a new type
-[[asm]] with a some operations.  This gives us the chance to maintain
-some state about the list constructed in order to respect constraints
-that may be attached to an assembly program.  Rather than using the
-[[::]] operator to build the list we use a function that can check its
-current argument against some state.  
-
 <<module Make>>=
-type asm                = ASM of Asm.action list
-let  empty              = ASM []
-let (^^) x (ASM y)      = ASM (x::y)
-let actions (ASM x)     = x
+let (++) = Asm.append   (* infix, left associative *)
 @
 
 The [[ty]] function returns the number of bits denoted by a type in
@@ -305,7 +298,7 @@ and expr env = function
 
 
 <<>>=
-let memsize env x asm = match x with
+let memsize env asm = function
     | A.NoSize        -> true
     | A.DynSize       -> true
     | A.FixSize(e)    -> true
@@ -313,17 +306,17 @@ let memsize env x asm = match x with
 <<module Make>>=
 let initialized_data asm expr = assert false
 
-let rec init env x asm = match x with
-    | A.InitAt(x,_)   -> init env x asm
-    | A.InitExprs(es) -> foldr initialized_data es asm
+let rec init env asm = function
+    | A.InitAt(x,_)   -> init env asm x
+    | A.InitExprs(es) -> foldl initialized_data asm es
     | A.InitStr(s)    -> assert false
     | A.InitUStr(s)   -> assert false
 
 <<module Make>>=
-let rec datum env x asm = match x with
-    | A.DatumAt(x,_)        -> datum env x asm
+let rec datum env asm = function
+    | A.DatumAt(x,_)        -> datum env asm x
     | A.Label(n)            -> assert false
-    | A.Align(a)            -> Asm.Align a ^^ asm
+    | A.Align(a)            -> asm ++ Asm.align a 
     | A.MemDecl(t,m,Some i) -> assert false
     | A.MemDecl(t,m,None)   -> assert false
 
@@ -355,21 +348,6 @@ let rec flows cont = function
 % ------------------------------------------------------------------ 
 
 A procedure's body includes statements, declarations, and stack data. 
-Statements are translated into an abstract flow graph, while
-declarations are translated into abstract assembly code.  Since
-statements and declarations can be mixed arbitrarily, their
-translation can not be separated.  So the translation of a body
-produces two results:  a flwo graph, and abstract assembly code.  To
-make the handling of this pair easier, and to anticipate future
-additions, they are bundled together as a new type [[ic]]
-(intermediate code).  \ocaml's [[with]] syntax for functional record
-``updates'' makes the handling of this type especially easy.
-
-<<>>=
-type ic         = { node:       G.node
-                  ; asm:        asm
-                  }
-@
 
 A statement is part of a [[body]]; the [[body]] function receives
 arguments that we need for all statements:  [[env]] is the clean
@@ -378,18 +356,18 @@ translated.  We return a new flow-graph node.  [[ic]] is a
 representation of the node and assembly code following this statement. 
 
 <<>>=
-let rec body env props graph (ic: ic) bb =
+let rec body env props graph after bb =
     let decorate n       = G.bind props n           in
     let rec stmt s after = match s with
         | A.StmtAt(x,_)     -> stmt x after
         <<cases for translating statements>>        in
-    let rec body b ic = match b with
-        | A.BodyAt(x, _)    -> body x ic
+    let rec body b after = match b with
+        | A.BodyAt(x, _)    -> body x after
         | A.DeclBody(d)     -> assert false  (* to do *)
-        | A.StmtBody(s)     -> stmt s ic
+        | A.StmtBody(s)     -> stmt s after
         | A.DataBody(dd)    -> assert false  (* to do *)
     in
-        List.fold_right body bb ic
+        List.fold_right body bb after
 @
 
 <<cases for translating statements>>=
@@ -398,13 +376,13 @@ let rec body env props graph (ic: ic) bb =
         List.map2 (fun lhs rhs -> 
                    R.assign (lvalue env lhs) (expr env rhs)) lhs rhs
     in 
-        { ic with node = decorate (GM.assign (R.par effects) ic.node) }
+        decorate (GM.assign (R.par effects) after) 
 
 <<cases for translating statements>>=
 | A.IfStmt ( e, ss1, ss2) ->
-    let ic1 = List.fold_right stmt ss1 ic in
-    let ic2 = List.fold_right stmt ss2 ic1 in
-    { ic2 with node = decorate (GM.branch (expr env e) ic1.node ic2.node) }
+    let node1 = List.fold_right stmt ss1 after  in
+    let node2 = List.fold_right stmt ss2 after  in
+        decorate (GM.branch (expr env e) node1 node2)
 @
 
 <<cases for translating statements>>=
@@ -416,10 +394,10 @@ let rec body env props graph (ic: ic) bb =
     let cout a          = decorate (GM.copy_out actuals G.ProcResults cc a)in
     let ret  a          = decorate (GM.return graph
                                     (un_const cont) (un_const count))      in
-        { ic with node = (cout << ret) ic.node }
+        (cout << ret) after
 
 <<cases for translating statements>>=
-| A.LabelStmt(n)       -> {ic with node = decorate (GM.label n ic.node)}
+| A.LabelStmt(n)       -> decorate (GM.label n after)
 @
 
 
@@ -454,7 +432,7 @@ node.
                      then decorate (GM.copy_in (List.map lvalue lhs)
                                        G.ProcResults cc after)
                      else after                                   in
-        { ic with node = (cout << call << cin) ic.node }
+        (cout << call << cin) after
 @
 
 A continuation is represented by a labeled node.  This node is a
@@ -468,7 +446,7 @@ A continuation is represented by a labeled node.  This node is a
                     then decorate (GM.copy_in args G.ContParameters cc after)
                     else after                                          in
     let lbl after = decorate (GM.label n after)                         in
-        { ic with node = (lbl << cin) ic.node }
+        (lbl << cin) after
 
 <<cases for translating statements>>=
 | A.EmptyStmt -> after
@@ -488,15 +466,14 @@ sequence of statements.
                         decorate (GM.copy_out args G.ProcParameters cc after)
                      else after                               in
     let jump after = decorate (GM.jump graph (expr env e) ts) in
-        { ic with node = (cout << jump) ic.node }
+        (cout << jump) after 
 @
 
 The translation of a [[goto]] statement is straight forward; the
 [[after]] node is unused because it can't be reached.
 
 <<cases for translating statements>>=
-| A.GotoStmt(e,ts) -> 
-        { ic with node = decorate (GM.goto graph (expr env e) ts) }
+| A.GotoStmt(e,ts) -> decorate (GM.goto graph (expr env e) ts) 
 @
 
 A [[span]]'s attributes are a compile-time constant value and a
@@ -512,7 +489,7 @@ link-time constant.
                 | Rtl.Const(c)                -> c
                 | _                           -> assert false
                 ) in
-        body env (G.Props.add_span key value props) graph ic ss
+        body env (G.Props.add_span key value props) graph after ss
 @
 
 
@@ -552,59 +529,46 @@ environment belonging to a procedure.  The local environment [[env]]
 for a procedure is found in its entry in the fat environment.
 
 <<module Make>>=
-and proc env props (asm: asm) (cc,n,fs,bb) =  
-    let decorate n = G.bind props n                                in
+and proc env props (asm: Asm.asm) (cc,n,fs,bb) =  
+    let decorate n = G.bind props n                              in
     let env        = match F.findv n env with
                      | _,(F.Label(F.Proc e),_) -> e
-                     | _  -> assert false                          in
-    let graph      = GM.graph () (* fresh graph for this proc *)   in
-    let cc         = Aux.Option.get default_convention cc          in
-    let frml       = fun (h,i,t,n) -> (n,ty env t,h)               in
-    let entry ic   = { ic with node = decorate (GM.entry ic.node)} in
-    let copy  ic   = { ic with node = decorate (GM.copy_in (List.map frml fs)
-                       G.ProcParameters cc ic.node) }              in
-    let bdy   ic   = body env props graph ic bb                    in
-    let exit       = { node = decorate (GM.exit graph)
-                     ; asm  = asm
-                     }                                             in
-    let ic         = (entry << copy << bdy) exit                   in
-    let sym        = Asm.Local(n)                                  in
-        (  Asm.Function sym
-        ^^ Asm.DefineSymbolHere sym
-        ^^ Asm.EmitInstruction ic.node
-        ^^ ic.asm
-        )
-@   
-
-<<>>=    
-and decl env x (asm: asm) = asm
+                     | _  -> assert false                        in
+    let graph      = GM.graph () (* fresh graph for this proc *) in
+    let cc         = Aux.Option.get default_convention cc        in
+    let frml       = fun (h,i,t,n) -> (n,ty env t,h)             in
+    let entry a    = decorate (GM.entry a)                       in
+    let copy  a    = decorate (GM.copy_in (List.map frml fs)
+                                          G.ProcParameters cc a) in
+    let bdy   a    = body env props graph a  bb                  in
+    let exit       = decorate (GM.exit graph)                    in
+    let node       = (entry << copy << bdy) exit                 in
+         asm ++ Asm.instr node
+         (* what about defining a symbol here, etc?? *)
+        
 @
 
-<<unused>>=
-and decl env x (asm: asm) = match x with
-    | A.DeclAt(x,_)    -> decl env x asm
-    | A.Import( t, ns) -> 
-        let import = function
-            | (None        , name )   -> Asm.Import name 
-            | (Some foreign, _    )   -> Asm.Import foreign
-        in
-            foldr (fun n asm -> import n ^^ asm) ns asm 
-    | A.Export( t, ns) -> 
-        let export = function 
-            | (name, Some foreign)    -> Asm.Export foreign
-            | (name, None        )    -> Asm.Export name
-        in foldr (fun n asm -> export n ^^ asm) ns asm 
+<<>>=    
+and ldecl env x (asm: Asm.asm) = asm
+@
+
+<<>>=
+and gdecl env (asm: Asm.asm) = function
+    | A.DeclAt(x,_)    -> gdecl env asm x
+    | A.Registers( rs) -> asm (* todo *)
+     
+    | A.Import( t, ns) -> asm (* skip *)
+    | A.Export( t, ns) -> asm (* skip *)
     | A.Const (t,n,e)  -> asm (* skip *)
-    | A.Registers( rs) -> asm (* skip *)
     | A.Typedef (t,nn) -> asm (* skip *)
     | A.Target (arch)  -> asm (* skip *)
     | A.Pragma         -> asm (* skip *)
 
 <<module Make>>=
-let rec section env props x (asm: asm) = match x with
-    | A.SectionAt(x,_)     -> section env props x asm 
-    | A.Decl(d)            -> assert false
-    | A.Datum( d)          -> assert false
+let rec section env props (asm: Asm.asm) = function
+    | A.SectionAt(x,_)     -> section env props asm x
+    | A.Decl(d)            -> gdecl env asm d 
+    | A.Datum( d)          -> assert false  (* todo *)
     | A.Procedure(p)       -> proc env props asm p
     | A.SSpan( e1, e2, ss) -> assert false
 @            
@@ -619,14 +583,13 @@ because otherwise they will end up in whatever section is currently
 active which just seems wrong.
 
 <<module Make>>=
-let rec toplevel env x asm = match x with
-    | A.ToplevelAt(x, _)  -> toplevel env x asm 
-    | A.Section(name, ss) -> let s = foldr (section env G.Props.empty) ss asm 
-                             in Asm.Section(name) ^^ s
-    | A.TopDecl(d)        -> decl env d asm 
-    | A.TopProcedure(p)   -> (  Asm.Section(toplevel_section) 
-                             ^^ proc env G.Props.empty asm p
-                             )
+let rec toplevel env asm = function
+    | A.ToplevelAt(x, _)  -> toplevel env asm x
+    | A.Section(name, ss) -> let asm = asm ++ Asm.section name  
+                             in  foldl (section env G.Props.empty) asm ss
+    | A.TopDecl(d)        -> gdecl env asm d
+    | A.TopProcedure(p)   -> let asm = asm ++ Asm.section toplevel_section  
+                             in proc env G.Props.empty asm p
 @
 
 
@@ -635,10 +598,7 @@ let rec toplevel env x asm = match x with
 % ------------------------------------------------------------------ 
 
 <<>>=
-let program env tt =
-    let asm = foldr (toplevel env) tt empty in
-        ([],actions asm) 
-      
+let program env tt asm = foldl (toplevel env) asm 
 @
 
 % ------------------------------------------------------------------ 
