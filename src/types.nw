@@ -226,13 +226,24 @@ let widthlist (args',r) args =
 @
 
 
-The implementation of [[spilt]] uses the lexical combinator module
-[[Lc]]:  the first part of an operator is scanned using the [[some
-alpha]] scanner, the second by the [[many num]] scanner whose result
-is also saved. A successful scan must consume the whole string and
-return the (possibly empty) string of the matched numbers.
+The implementation of [[spilt]] uses regular expressions to split off
+a trailing number.
 
 <<types.ml>>=
+let rtlop = Str.regexp "^\([a-z0-9]*[a-z]\)\([0-9]+\)?$"
+
+let split op =
+    let matched n l = Str.matched_group n l in  
+    if Str.string_match rtlop op 0 then
+        let basename = matched 1 op in
+        let size     = try Some (int_of_string (matched 2 op))
+                       with Not_found -> None in
+            (basename, size)
+    else
+        assert false
+            
+
+<<old implementation of split>>=
 let split op =
     let ( *** ) = Lc.seq                              in
     let isnum c = '0' <= c && c <= '9'                in
