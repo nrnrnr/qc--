@@ -175,7 +175,7 @@ let rec evalFetch set env = function
 
 and evalPrimOp set env op args = 
     let env', xs = evalExprs set env args  in
-    let f, t     = lookup op primOps       in
+    let f, t     = lookup op primOps       in 
     let xt       = List.map fst xs         in
     let xv       = List.map snd xs         in
     let sigma    = ( try Types.unify t (proc xt bool) Types.empty with 
