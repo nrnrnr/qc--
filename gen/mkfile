@@ -91,20 +91,18 @@ OCAMLO_FLAGS =     -I $LIBDIR -nolabels
 
 LOCAL =         sledlib.ml      \
                 sparc.ml        \
-                sparc2.ml       \
                 sparcmkasm.ml   \
                 sparcrec.ml     \
                 sparcrtl.ml     \
 
 LOCALI =        sledlib.mli     \
                 sparc.mli       \
-                sparc2.mli      \
                 sparcmkasm.mli  \
 
-BAREML  =               sparcrec.ml     \
+BAREML  =       sparcrec.ml     \
 
-sparcrec.cmi: sparcrec.cmo
-        # do nothing; the compiler does it
+sparcrec.cmi:   sparcrec.cmo
+                # do nothing; the compiler does it
 
 CMO =           `echo $LOCAL       | sed 's/\.ml/.cmo/g'`
 CMI =           `echo $LOCALI      | sed 's/\.mli/.cmi/g'` \
@@ -118,6 +116,17 @@ cmo:V:          $CMO
 cmx:V:          $CMX
 
 src:V:          $SCAN
+
+# ------------------------------------------------------------------ 
+# the SLED library
+# ------------------------------------------------------------------ 
+
+
+sledlib.mli:    caml-lib.nw
+	        notangle -L"$LINE" -R$target $prereq > $target
+
+sledlib.ml:     caml-lib.nw
+	        notangle -L"$LINE" -R$target $prereq > $target
 
 # ------------------------------------------------------------------ 
 # building binaries

@@ -1,0 +1,227 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% modeline for vim: ts=8 sw=4 et:
+
+@
+% ------------------------------------------------------------------ 
+\chapter{Caml runtime library}
+% ------------------------------------------------------------------ 
+
+Note that the signatures used in Caml emission must match these
+signatures.
+Indeed, one could argue for moving that code here!
+
+Here is a possible emitter at which the ML bindings could be targeted.
+I don't yet have the emission code working, so I can't yet comment
+about how this fits in, but a code emitter might be parameterized by
+something like this.
+
+<<sledlib.mli>>=
+<<exported exceptions and module types>>
+<<exported modules and values>>
+@ 
+
+We include [[fail_unless]] because its monomorphic type makes it
+possible to create a residualizing implementation for use in the a
+specializer based on type-directed partial evaluation.
+
+<<exported exceptions and module types>>=
+exception Failure of string list (* raised on failure to encode *)
+
+<<exported modules and values>>=
+val fail        : string list -> 'a                 (* raises Failure *)
+val fail_unless : bool -> string list -> unit       (* raises Failure *)
+@ 
+
+<<exported exceptions and module types>>=
+module type EMITTER = sig
+  type token_stream
+  val emit32 : nativeint * token_stream -> token_stream
+  val emit16 : int       * token_stream -> token_stream
+  val emit : value:nativeint -> width:int -> token_stream -> token_stream
+end
+@
+
+In ML, we can talk about very general relocatable addresses.  The intent
+is that there exist a [[force]] procedure with type 
+\mbox{[['a relocatable -> 'a option]]}.  I don't put such a procedure in the
+signature, because this signature must be implemented by the user of the
+toolkit, and I want not to insist on a version that uses mutable state.
+
+Eventually there must be a connection between ``late'' relocatable
+addresses and the link-time constants of Quick {\PAL}.
+
+<<exported exceptions and module types>>=
+module type RELOCATABLE = sig
+  type 'a relocatable   (* a bit vector of type 'a
+                           whose value may not be known until link time *)
+
+  val early : 'a -> 'a relocatable                  (* a value we know now *)
+  val late  : string -> offset:'a -> 'a relocatable (* label + offset *)
+
+  (* not clear what the rest of the interface should be.  
+     Here are three candidates:
+
+     C style  
+     val known : 'a relocatable -> bool
+     val force : 'a relocatable -> 'a
+
+     CPS?
+     val test  : 'a relocatable -> known:('a -> 'b) -> unknown:(unit -> 'b) -> b
+
+     vanilla ML
+     val force : 'a relocatable -> 'a option
+  *)
+end
+<<exported modules and values>>=
+module TrivialReloc : RELOCATABLE with type 'a relocatable = 'a
+@
+
+The model above is not a very good model for use with {\burg}
+specifications, which we would like to use to create relocatable
+addresses.  Accordingly, here is a better model.  Instead of querying
+``known'' and ``force'' properties, which is suitable for emitting
+binary, it simply normalizes a relocatable address, producing something
+that is suitable for passing down to a lower level.  The function
+[[add_const]] is higher-order; it expects a function that knows how to
+add integers.
+
+<<exported exceptions and module types>>=
+module type NEW_RELOCATABLE = sig
+  (* A relocatable address in this model is `symbol + constant' *)
+  type ('sym, 'const) relocatable   (* a bit vector of type 'const 
+                                       whose value may not be known 
+                                       until link time *)
+
+  (* constructors *)
+  val of_const : 'c       -> ('s, 'c) relocatable    (* a known constant *)
+  val of_sum   : 's -> 'c -> ('s, 'c) relocatable    (* label + offset *)
+  val add_const :
+      ('c -> 'c -> 'c) -> ('s, 'c) relocatable -> 'c -> ('s, 'c) relocatable
+
+  (* observer *)
+  val normalize : ('s, 'c) relocatable -> 's option * 'c
+end
+<<exported modules and values>>=
+module NewReloc : NEW_RELOCATABLE
+@
+
+Span-dependent instructions may have a range of sizes.  If we know the
+location of an instruction and the values of relocatable addresses on
+which it may depend, we can find its exact size.
+
+<<exported exceptions and module types>>=
+module type INSTRUCTION_SIZE = sig
+  type instruction
+  type address       (* location of instruction, value of relocatable operands
+                        --- an integer type *)
+  module Reloc : RELOCATABLE
+  type range = { min : int; max : int }
+  val sizeRange : inst : instruction -> range
+  val size      : inst   : instruction ->
+		  cur_pc : nativeint option ->
+		  force  : (address Reloc.relocatable -> address option) ->
+		  int
+end
+@ 
+
+The ML encoder might not throw off closures.  Instead, it's likely to be
+called only when all locations are known.  In any case, that's one
+possible assumption.  This signature will undoubtedly change.
+
+<<exported exceptions and module types>>=
+module type ENCODER = sig
+  type instruction 
+  type address
+  module Reloc : RELOCATABLE
+  module Emitter : EMITTER
+
+  val encodeAt :
+    instruction -> address -> (address Reloc.relocatable -> address) 
+    -> Emitter.token_stream
+        -> Emitter.token_stream
+end
+@ 
+
+We provide strings with constant-time concatentation.
+
+<<exported modules and values>>=
+module String : sig
+  type t
+  val of_string : string -> t              (* constant time *)
+  val cat : t -> t -> t                    (* constant time *)
+  val app : (string -> unit) -> t -> unit  (* call f on each part of string *)
+
+  val signed_operand   : nativeint -> t
+  val unsigned_operand : nativeint -> t
+  val hex_operand      : nativeint -> t
+  val getname : string array -> nativeint -> operandname:string -> t
+end
+
+module type RELOC_PRINT = sig
+  include RELOCATABLE
+  val to_string : ('a -> String.t) -> 'a relocatable -> String.t
+end
+@ 
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+The main thing that's needed here is the exception, which is raised when
+an instruction can't be encoded.  [[cons]] and [[nil']] exist to support
+the creation of lists of strings, but in practice they should be
+rewritten to use the standard ML notation for lists.
+
+<<sledlib.ml>>=
+<<exported exceptions and module types>>
+let fail l = raise (Failure l)
+let fail_unless condition l = if condition then () else fail l
+
+module TrivialReloc = struct
+  type 'a relocatable = 'a
+  let early x = x
+  let late label offset = 
+    fail ["Trivial relocatable addresses don't support labels"]
+end
+
+module NewReloc = struct
+  type ('s, 'c) relocatable = 's option * 'c
+  let of_const c = (None, c)
+  let of_sum s c = (Some s, c)
+  let add_const (+) = fun (s, c) c' -> (s, c + c')
+  let normalize r = r
+end
+@ 
+
+<<sledlib.ml>>=
+module String = struct
+  type t = (string -> unit) -> unit
+  let of_string s f = f s
+  let cat s s' = fun f -> (s f; s' f)
+  let app f s = s f
+
+  let d = Printf.sprintf "%d"
+  let u = Printf.sprintf "%u"
+  let x = Printf.sprintf "%x"
+
+  let fmt print n = of_string (print (Nativeint.to_int n))
+
+  let signed_operand   = fmt d
+  let unsigned_operand = fmt u
+  let hex_operand      = fmt x
+
+  let getname a n name =
+    let n = Nativeint.to_int n in
+    of_string (try Array.get a n
+               with Invalid_argument _ -> "??" ^ name ^ "=" ^ d n ^ "?!")
+end
+let asmprintreloc _ = String.of_string "<relocatable>"
+@ 
+
+<<sledlib.ml>>=
+module type RELOC_PRINT = sig
+  include RELOCATABLE
+  val to_string : ('a -> String.t) -> 'a relocatable -> String.t
+end
+
+
