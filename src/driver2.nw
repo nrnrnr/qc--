@@ -1,3 +1,4 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 
 % ------------------------------------------------------------------ 
 \section{Driver}
@@ -211,14 +212,15 @@ module AsmT: Lua.Lib.USERTYPE = struct
     let eq _        = fun x y -> x = y
     let to_string _ = fun t -> "<asm>" 
 end
-module AstT: Lua.Lib.USERTYPE = struct
+module AstT: Lua.Lib.USERTYPE with type 'a t = Caml.ast =
+  struct
     type 'a t       = Caml.ast
     let tname       = "ast"
     let eq _        = fun x y -> x = y
     let to_string _ = fun t -> "<ast>" 
-end
+  end
 module EnvT: Lua.Lib.USERTYPE = struct
-    type 'a t       = Caml.ast
+    type 'a t       = Caml.env
     let tname       = "env"
     let eq _        = fun x y -> x = y
     let to_string _ = fun t -> "<env>" 
@@ -249,3 +251,49 @@ module FrameT: Lua.Lib.USERTYPE = struct
 end
 @
 
+@
+<<driver2.ml>>=
+module MakeLib
+  (AsmV    : Lua.Lib.TYPEVIEW with type 'a t = 'a Export.AsmT.t)
+  (AstV    : Lua.Lib.TYPEVIEW with type 'a t = 'a Export.AstT.t and type 'a combined = 'a AsmV.combined)
+  (EnvV    : Lua.Lib.TYPEVIEW with type 'a t = 'a Export.EnvT.t and type 'a combined = 'a AsmV.combined)
+  (CfgV    : Lua.Lib.TYPEVIEW with type 'a t = 'a Export.CfgT.t and type 'a combined = 'a AsmV.combined)
+  (TargetV : Lua.Lib.TYPEVIEW with type 'a t = 'a Export.TargetT.t and type 'a combined = 'a AsmV.combined)
+  (DocV    : Lua.Lib.TYPEVIEW with type 'a t = 'a Export.DocT.t and type 'a combined = 'a AsmV.combined)
+  (FrameV  : Lua.Lib.TYPEVIEW with type 'a t = 'a Export.FrameT.t and type 'a combined = 'a AsmV.combined)
+    : Lua.Lib.TYPEFUL with type 'a combined = 'a AsmV.combined =
+struct
+  type 'a combined = 'a AsmV.combined
+  module M (C : Lua.Lib.CORE with type 'a V.userdata' = 'a combined) =
+    struct
+      module V = C.V
+      let ( **-> ) = V.( **-> )
+      <<bind exported Lua functions to [[builtins]]>>
+      <<definition of [[bind_table]]>>
+      let init g = 
+        bind_table g "Driver" builtins
+    end (*M*)
+end (*MakeLib*)
+@ 
+<<definition of [[bind_table]]>>=
+let bind_table g tabname members =
+  let t = C.getglobal g (V.String tabname) in
+  let t = match t with
+  | V.Nil -> V.Table.create (List.length members)
+  | V.Table t -> t
+  | _ -> C.error g ("Global value " ^ tabname ^ " is not a table") in
+  let _ = V.Table.bind g.V.globals (V.String tabname) (V.Table t) in
+  List.iter (fun (k, v) -> V.Table.bind t (V.String k) v) members
+@ 
+<<bind exported Lua functions to [[builtins]]>>=
+let pf t = (V.pfunc t).V.embed 
+let func t = (V.func t).V.embed 
+
+module Map = struct
+  let ast = AstV.makemap V.userdata V.projection
+  (* ... etc ... *)
+end
+
+let builtins =
+  [ "parse", pf (V.string **-> V.result Map.ast) Caml.parse
+  ] 
