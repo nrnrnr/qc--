@@ -1,0 +1,406 @@
+% vim: ts=8 et sw=4:
+
+\def\nofake{{\small NOFAKE}}
+\def\noweb{{\small NOWEB}}
+\def\notangle{\texttt{notangle}}
+
+% ------------------------------------------------------------------ 
+\section{NoFake}
+% ------------------------------------------------------------------ 
+
+{\nofake} is a Perl script that acts as a simple substitute for the
+{\notangle} command from the {\noweb} literate programming system. When
+using {\noweb}, program documentation and source code are kept together
+in a single file (by convention named with the \texttt{.nw} suffix). The
+{\notangle} command takes such a \emph{noweb} file and extracts the
+source code from it for compilation. However, not everybody who wants to
+compile the source code has a full {\noweb} installation available. For
+these cases {\nofake} can be shipped with the source code to provide a
+substitute for the {\notangle} command. {\nofake} has a much simpler and
+less general architecture than {\notangle} and can handle only the most
+common cases correctly. Therefore it is no substitute during program
+development.
+
+{\nofake} is derived from NegWeb 1.0.1 that was released by its author
+Darrell Johnson \url|<darrell@boswa.com>|.  into the public domain at
+\url|http://boswa.com/misc/negweb/|.
+
+Note that quoting hell is upon you: this source is itself a literate
+program in {\noweb} syntax. It has to use the delimiters [[@<<]] and
+[[@>>]] literally and hence has to escape them with a preceding [[@]].
+
+% ------------------------------------------------------------------ 
+\subsection{Manual Page}
+% ------------------------------------------------------------------ 
+
+Perl manual pages are written in Perl's Plain Old Document ({\small
+POD}) format. They can be included into a script and extracted from
+there. This makes sure, they do not get lost when the script is passed
+around. For the syntax, see the \texttt{perlpod} manual.
+
+<<manual page in POD format>>=
+=head1 NAME
+
+nofake - simple notangle replacement for the Noweb literate programming tool
+
+=head1 SYNOPSIS
+
+nofake [B<-R>I<chunk>] [B<-L>[I<format>]] [I<file>]
+
+nofake [B<-version>|B<-v>]
+
+=head1 DESCRIPTION
+
+Noweb(1) is a literate-programming tool like Knuth's WEB. A noweb file
+contains program source code interleaved with documentation. Extracting
+the source code for compilation requires notangle(1). To allow source
+code to be shipped to users not using noweb(1), B<nofake> offers the
+most commonly used functionality of notangle(1) as a simple perl(1)
+script. Alas, B<nofake> extracts source code from a file in noweb(1)
+syntax: B<nofake> reads I<file> and extracts the code chunke named
+I<chunk> to stdout. If no I<file> is provided, B<nofake> reads from
+stdin, if no I<chunk> is named, B<nofake> extracts the chunk C<*>.
+
+=head1 OPTIONS
+
+=over 4
+
+=item B<-R>I<chunk>
+
+Extract chunk I<chunk> (recursively) from the noweb file and write it to
+stdout.  Unlike notangle, only one chunk can be extracted per invocation
+of B<nofake>.
+
+=item B<-L>[I<format>]
+
+B<nofake> emits cpp(1)-style C<#line> directives to allow a compiler
+emit error messages that refer to I<file> rather than the extracted
+source code directly.  The optional I<format> allows to provided the
+format of the line directive: C<-L'#line %L "%F"%N'>. In I<format> C<%F>
+indicates the name of the source file, C<%L> the line number, and C<%N>
+a newline. The default is C<#line %L "%F"%N> suitable for C compilers.
+
+=back
+
+=head1 SYNTAX OF NOWEB FILES
+
+The authoritive source for the syntax of noweb files is the noweb(1)
+documentation. However, here is an example:
+
+    @<<hello.c@>>=
+    @<<includes@>>
+
+    int main(int argc, char** argv) 
+    {
+        @<<say hello@>>
+        return 0;
+    }
+
+    @<<say hello@>>=
+    printf("Hello World!\n");
+    @
+
+    @<<includes@>>=
+    #include <stdio.h> /* for printf */
+    @
+
+A chunk is defined by C<E<lt>E<lt>chunkE<gt>E<gt>=> and reaches up to
+the next definition or a line starting with C<@>. A chunk can
+recursivley refer to other chunks: chunk C<hello.c> refers to
+C<includes> and C<say hello>. A chunk is referred to by
+C<E<lt>E<lt>chunkE<gt>E<gt>>. To use the C<E<lt>E<lt>> and C<E<gt>E<gt>>
+character literally in a program, precede them with a C<@>.
+
+=head1 LIMITATIONS
+
+The B<nofake> architecture is much simpler than that of notangle(1) and
+therefore many things do not work. In particular:
+
+=over 4
+
+=item *
+
+B<nofake> accepts the B<-R>I<chunk> option only once.
+
+=item *
+
+Line directives (C<#line>) are indented. In the case of cpp(1)-style
+line directives this is still ANSI/ISO C conforming but might cause
+problems with other directives and older versions of cpp(1).
+
+=item *
+
+Do not use C<@> in chunk names.
+
+=item * 
+
+B<nofake> does not accept the B<-filter> I<command> option that
+B<notangle> use to filter chunks before they are emitted.
+
+=item *
+
+A noweb file must not refer to more than one chunk per line. The
+following code is I<not> handled correctly by B<nofake> because the
+chunk C<*> contains two chunk references in one line.
+
+    @<<*@>>=
+    @<<one@>> @<<one@>>
+
+    @<<one@>>=
+    one
+    @
+    
+
+=back
+
+=head1 COPYRIGHT
+
+Copyright (c) 2002 Christian Lindig <lindig@eecs.harvard.edu>.  
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+
+=over 4    
+
+=item 
+
+Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+    
+=item
+
+Redistributions in binary form must reproduce the above copyright
+notice, this list of conditions and the following disclaimer in the
+documentation and/or other materials provided with the distribution.
+
+=back
+
+THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESS OR IMPLIED
+WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR AND COPYRIGHT HOLDER BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,
+OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR
+TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
+THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+SUCH DAMAGE.
+
+=head1 AUTHOR
+
+Christian Lindig <lindig@eecs.harard.edu>
+
+=head1 SEE ALSO
+
+noweb(1), notangle(1), perl(1), cpp(1)
+
+Norman Ramsey, Literate programming simplified, IEEE Software
+11(5):97-105, September 1994.
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+<<nofake>>=
+#!/usr/bin/perl -w
+# Generated from nofake.nw. Do not edit! Edit nofake.nw instead.
+
+sub version {
+    print @<<EOF;
+    NoFake 1.0 (c) 2002 Christian Lindig <lindig\@eecs.harvard.edu>
+    
+    NoFake is derived from the public domain NegWeb 1.0.1 
+    http://boswa.com/misc/negweb by Darrell Johnson <darrell\@boswa.com>.
+EOF
+}
+
+<<defaults>>
+
+<<line_directive>>
+<<read_file>>
+<<extract>>
+
+<<process command line and extract chunk>>
+__END__
+
+<<manual page in POD format>>
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Variables}
+% ------------------------------------------------------------------ 
+
+All (code) chunks are stored in the global hash table [[chunks]]. A
+chunk may contain references to other chunks. These are ignored when a
+chunk is read and expanded when then chunk itself is expanded.
+
+<<defaults>>=
+$lineformat='#line %L "%F"%N';      #default format for #line directive 
+$sync=0;                            #default: do not emit #line directives 
+
+$fname='';                          #file name of noweb file
+$chunk='*';                         #default chunk to extract
+%chunks=();                         #hash table for chunks
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Functions}
+% ------------------------------------------------------------------ 
+
+If we compile source code that was extracted from a noweb file, we want
+the error messages point to the noweb file and not the file extracted
+from it. Therefore we emit [[#line]] directives that connect the
+extracted file back with the noweb file and that many compiler
+understand. 
+
+The [[line_directive]] returns the string used as a line directive. The
+formatting is taken from [[lineformat]] that is controlled by the [[-L]]
+command line option.
+
+<<line_directive>>=
+sub line_directive {
+    my ($fname,$line)=@_;
+    my $ret=$lineformat;
+    $ret=~s/%F/$fname/g;
+    $ret=~s/%L/$line/g;
+    $ret=~s/%N/\n/g;
+    return "\n$ret";
+}
+@
+
+The [[read_line]] function reads a file line-by-line and recognizes
+chunk-definitions. Each chunk is put under its name into the global
+[[chunks]] hash table. The [[sync]] flag controls whether line
+directives are emitted.
+
+<<read_file>>=
+sub read_file { 
+    my ($fname,$sync)=@_;
+    local *INFILE;
+    if($fname eq ''){
+        *INFILE=STDIN;
+        $fname="Standard Input";
+    }else{
+        if(!open(INFILE, '<'.$fname)){
+            print STDERR "can't open file '$fname'\n";
+            exit(1);
+        }
+    }
+    my $chunk='';   # name of actual chunk, '' iff outside of chunk
+    my $line;
+    for(my $i=1;$line=<INFILE>;$i++) {
+        if($line =~ /^@<<([^<>]+)@>>=\s*$/){
+            $chunk=$1;
+            if(!exists $chunks{$chunk}){
+                $chunks{$chunk}='';
+            }
+            if($sync){
+                $chunks{$chunk}.=line_directive($fname,$i+1);
+            }
+        } elsif($chunk ne '') { 
+            #inside <<foo>= ... @ chunk
+            if($line=~/^@\s*$/){ 
+                # reached end of chunk
+                $chunk='';
+            }else{
+                # regular line inside chunk
+                $chunks{$chunk}.=$line;
+            }
+        } # else outside chunk - nothing to do
+    }
+}
+@
+
+The [[extract]] function takes a chunk name and extracts this chunk
+recursively from the [[chunks]] hash table. The output is returned as a
+string.
+
+While we look for chunk names in lines to extract we have to be
+careful: if a chunk name delimiter is preceded by a an [[@]] it does
+not denote a chunk, but the delimiter literally. 
+
+We try to preserve the indentation of expanded chunks: a line with a
+chunk reference is split into prefix, reference, and postfix. The first
+line from the referenced chunk is prefixed with the prefix, all
+following lines with as many whitespace as the prefix is long. The
+postfix is appended to the last line of the chunk.
+
+<<extract>>=
+%cache=();
+%being_extracted=();
+sub extract { 
+    my ($chunk)=@_;
+    
+    if(exists $being_extracted{$chunk}){
+        print STDERR 
+            "Code chunk @<<$chunk@>> is used in its own definition.\n";
+        exit(1);
+    }
+    if(exists $cache{$chunk}){
+        return $cache{$chunk};
+    }
+    if(!exists $chunks{$chunk}){
+        print STDERR 
+            "Code chunk @<<$chunk@>> is requested, but doesn't exist.\n";
+        exit(1);
+    }
+    $being_extracted{$chunk}=1;
+    $cache{$chunk}='';
+    # obtain chunk and process it recursively
+    foreach my $line (split /\n/, $chunks{$chunk}){
+        if($line =~/^(.*[^\@]*)@<<([^<>@]+)@>>(.*)$/){
+            my $prefix=$1;
+            my $postfix=$3;
+            my $next=$2;
+            my $indent = length($prefix);
+            my $i = 0;
+                
+            # first line from $next is prefixed with $prefix
+            # following lines are indented by length($prefix)
+            # $i denotes line counter for lines from $next
+            $cache{$chunk} .= $prefix;
+            $cache{$chunk} .= 
+                join("\n", map {$i++; ($i > 1 ? $prefix : " " x $indent) . $_} 
+                                split(/\n/,extract($next)));
+            $cache{$chunk} .= "$postfix\n";
+            
+        }else{
+            $line =~ s/\@(@<<|@>>)/$1/g;
+            $cache{$chunk}.="$line\n";
+        }
+    }
+    return $cache{$chunk};
+}
+@
+
+We parse the command line and start to work: reading the noweb file and
+then extracting the chunk in the [[chunk]] variable.
+
+<<process command line and extract chunk>>=
+sub usage {
+    print STDERR <<EOF;
+    Unknown command line argument. See the manual page for help which is
+    also included at the end of this Perl script.
+
+    nofake [-Rchunk] [-L[format]] [file]
+    nofake [-version|-v]
+EOF
+}
+
+foreach (@ARGV) {
+    if(/^\-L(.*)/){ $sync=1; $ldpattern = ($1 ne '' ? $1 : $ldpattern);}
+    elsif(/^\-R(.+)/){$chunk=$1}
+    elsif(/^\-(v|-version)$/){version();exit(0);}
+    elsif(/^\-/){usage(); exit(1);}
+    else{$fname=$_}
+}
+
+read_file($fname,$sync);
+print extract($chunk);
+exit(0);    # exit successfully
+@
