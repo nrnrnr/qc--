@@ -1488,18 +1488,12 @@ This startup code sets up the right passes.
 -- Graph-Coloring Register Allocator
 ------------------------------------------------------------------ 
 
-Liveness = Liveness or {}
-function Liveness.backend(v, proc) 
-  return backend.liveness(v, proc)
-end
-
 function ColorGraph_init (CG, B) -- carefully don't define table
   CG = CG or error('predefined ColorGraph is nil??') -- has some primitives
 
   CG.makeGraph = 
     B.seq {
-      { fn = Liveness.backend, creates = 'liveness' },
-         -- can't use backend.liveness directly since it might change
+      Liveness.liveness,
       { fn = CG.build, uses = {'liveness', 'no vars'}, creates = 'no temps' }
     } 
       
