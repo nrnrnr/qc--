@@ -1,5 +1,5 @@
 % -*- mode: Noweb; noweb-code-mode: caml-mode -*-
-% vim: ts=8 et sw=4 sts=4
+% vim: ts=8 et sw=4 
 
 % ------------------------------------------------------------------ 
 \section{SPARC Assembler}
@@ -304,8 +304,12 @@ method private instruction rtl =
   Sledlib.String.app (output_string _fd) (Asm.to_asm (Rtl.Convert.rtl rtl))
 
 method cfg_instr (cfg:Cfg3.cfg) (symbol:Reladdr.symbol) = 
-  G.gm_enumerate cfg;
-  GU.fold_fwd cfg (fun n _ -> this#instruction (G.rtl n)) ()
+    (* We have to emit a label/whatever for the procedure's 
+       entry point. This is what symbol is for. Simply use this#label?  *)
+    GU.emit cfg (fun rtl ()  -> this#instruction rtl)
+                (fun sym ()  -> this#label sym)
+                ()
+  
 @
 We should do better here---it would be good to print an ascii form
 of unmatched RTLs.
@@ -313,7 +317,10 @@ Eventually unmatched will be an assembly-time error.
 <<utilities>>=
 module Asm = struct
   let default_string rtl =
-    Sledlib.String.of_string "unimp 0 /* <not an instruction> */"
+    Sledlib.String.of_string 
+        ( Printf.sprintf "unimp 0 /* not an instruction: %s */\n"
+          (Rtlutil.ToString.rtl (Rtl.Revert.rtl rtl))   
+        )  
   module A = Sparcrec.Make (Sparcmkasm.M (Idreloc.M))
   let to_asm rtl =
     try A.defaultOfInstruction rtl
