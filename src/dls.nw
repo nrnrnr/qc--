@@ -134,20 +134,20 @@ defined at a node.
 The registers may be divided into five categories:
 \begin{enumerate}
 \item unused: The registers are available for use.
-\item used\_free\_evict: The registers are in use but may be evicted without a store
+\item [[used_free_evict]]: The registers are in use but may be evicted without a store
   instruction to spill the contents (because the contents has already been stored).
-\item used\_can\_spill: The registers are in use but may be evicted, at the cost of
+\item [[used_can_spill]]: The registers are in use but may be evicted, at the cost of
   a store instruction to spill the contents.
 \item unavailable: The registers not only cannot be used to satisfy an allocation, but
   any temp using one of these registers must be evicted.
-\item unavailable\_if\_liveout: The registers are unavailable for temps that are
-  live\_out.
+\item [[unavailable_if_liveout]]: The registers are unavailable for temps that are
+  [[live_out]].
 \end{enumerate}
 It is possible that the union of these four sets will not contain all the
 registers.
 For example, in a variable map that can only keep each variable in one location, if we
 have a temp that is placed in a register for a use, then that register cannot be used
-for a definition if the variable is live\_out.
+for a definition if the variable is [[live_out]].
 But that does not mean we need to evict the variable; we just need to avoid using that
 register.
 <<varmap module type>>=
@@ -159,8 +159,8 @@ register.
   val unavailable_if_liveout : reg_classes -> reg list
 @
 We also provide a function that makes two variable maps consistent.
-The first map (the inmap) holds the variable that are live\_in to the node, and the
-second map (the outmap) holds the variables that are live\_out of the node.
+The first map (the inmap) holds the variable that are [[live_in]] to the node, and the
+second map (the outmap) holds the variables that are [[live_out]] of the node.
 Because the second map may require spills to be inserted before the node, the maps have
 to be synchronized.
 <<varmap module type>>=
@@ -453,9 +453,9 @@ The [[state]] is used to pass information as we traverse the flow graph:
 \item allocated:  the set of nodes that have been allocated (by node number)
 \item spillMap:   a map from a temp to its spill location
 \item varInMaps:  a map from a node (by node number) to the varMap representing
-                  the location of each temp live\_in to the node
+                  the location of each temp [[live_in]] to the node
 \item varOutMaps: a map from a node (by node number) to the varMap representing
-                  the location of each temp live\_out from the node
+                  the location of each temp [[live_out]] from the node
 \end{itemize}
 <<type declarations>>=
 type state = { allocated  : IS.t
@@ -505,7 +505,7 @@ before [[alloc_node]] is applied to $n$.
 [[dls]] puts the allocator together: [[rpo_dfs]] is called with [[alloc_node]] to
 place each temp at a node.
 [[alloc_node]] calls [[choose_varMaps]] to decide where each temp belongs.
-<<rpo\_dfs determines the order for visiting nodes>>=
+<<[[rpo_dfs]] determines the order for visiting nodes>>=
 <<define [[print_prefs]] to print preferences>>
 <<updating preferences>>
 let rpo_dfs (state, prefs) =
@@ -557,9 +557,9 @@ let dls () ({Proc.cfg = cfg; Proc.cc = cc; Proc.target = tgt} as proc) =
   <<define spill functions>>
   <<define [[buffer_if_succ_is_join]] to insert a nop after instr leading to join>>
   <<definition of shuffle>>
-  <<choose\_varMaps finds varIn and varOut maps for a node>>
-  <<alloc\_node allocates registers at a single node>>
-  <<rpo\_dfs determines the order for visiting nodes>>
+  <<[[choose_varMaps]] finds varIn and varOut maps for a node>>
+  <<[[alloc_node]] allocates registers at a single node>>
+  <<[[rpo_dfs]] determines the order for visiting nodes>>
   let state' = rpo_dfs (empty_state (RS.elements alloc_regset)) in
   cleanup   cfg;
   (*Cfgutil.print_cfg cfg;*)
@@ -579,7 +579,7 @@ To allocate registers at a single node, we follow a simple process:
 \item Insert a shuffle of moves, loads, and stores to settle differences
       between varMaps in adjacent nodes.
 \end{enumerate}
-<<alloc\_node allocates registers at a single node>>=
+<<[[alloc_node]] allocates registers at a single node>>=
 let alloc_node state prefs node =
   let state = mark_allocated state node                                          in
   let preds = List.filter (is_allocated state) (G.preds node)                    in
@@ -610,7 +610,7 @@ let buffer_if_succ_is_join state node =
     (set_varOut (set_varIn (mark_allocated state n') n' varOut) n' varOut, n')
   | _ -> (state, node) in
 @
-<<alloc\_node allocates registers at a single node>>=
+<<[[alloc_node]] allocates registers at a single node>>=
   let (state, node) = buffer_if_succ_is_join state node in
   let state = List.fold_left (fun state s -> shuffle state node s) state succs   in
   {state with allocated = IS.add (G.num node) state.allocated}                   in
@@ -619,7 +619,7 @@ We clean up any move instruction where the source register is the same as the
 destination register.
 We accumulate the list of nodes we intend to delete before deleting them
 because we do not want to modify the cfg while traversing it.
-<<alloc\_node allocates registers at a single node>>=
+<<[[alloc_node]] allocates registers at a single node>>=
 let cleanup cfg =
   let visit_node node rst =
     match get_copy_regs node with
@@ -633,7 +633,7 @@ out of each node.
 This particular version does not do any preferencing.
 We begin by gathering some useful information about registers
 at the node.
-<<choose\_varMaps finds varIn and varOut maps for a node>>=
+<<[[choose_varMaps]] finds varIn and varOut maps for a node>>=
 let choose_varMaps state prefs node preds succs =
   let defs              = defs node                         in
   let uses              = uses node                         in
@@ -642,7 +642,7 @@ let choose_varMaps state prefs node preds succs =
   let temp_uses,hw_uses = partition_regs tgt uses           in
   let temp_defs,hw_defs = partition_regs tgt defs           in
 
-  <<define remove\_last\_uses, alloc, initial\_inmap, and alloc\_hw\_regs>>
+  <<define [[remove_last_uses]], alloc, [[initial_inmap]], and [[alloc_hw_regs]]>>
   let state, inmap = initial_inmap state preds succs in
   (*Printf.eprintf "choose_varMaps called on %s\n" (G.print_node node);
   VM.print "prefs" prefs.varMap;
@@ -661,13 +661,13 @@ If a temp is already in a register, then we remove that register from the [[hico
 and [[cheap]] sets (alternatively, we could check whether the var is also in memory to
 figure out which set to remove from).
 After this part, this inmap is done.
-<<choose\_varMaps finds varIn and varOut maps for a node>>=
-  <<choose\_register>>
+<<[[choose_varMaps]] finds varIn and varOut maps for a node>>=
+  <<[[choose_register]]>>
   let (state,inmap) =
     alloc_temps alloc_uses state VM.classify_inregs prefs.regs temp_uses inmap in
 @
 Now, we expire any temps that die at this node and move on to the defs at the node.
-<<choose\_varMaps finds varIn and varOut maps for a node>>=
+<<[[choose_varMaps]] finds varIn and varOut maps for a node>>=
   let midmap = expire_last_uses inmap in
   let (state,outmap) =
     alloc_temps (alloc_defs inmap) state VM.classify_outregs prefs.regs temp_defs
@@ -676,7 +676,7 @@ Now, we expire any temps that die at this node and move on to the defs at the no
 Here's an interesting case. If we have a def that is never used again, then we must
 assign it a register, but we don't want it in the outmap.
 So, we have a separate defmap and outmap, where the defmap keeps any dead definitions.
-<<choose\_varMaps finds varIn and varOut maps for a node>>=
+<<[[choose_varMaps]] finds varIn and varOut maps for a node>>=
   let inmap,outmap = VM.sync_maps inmap outmap in
   let defmap = outmap in
   let outmap = expire_dead_defs outmap in
@@ -692,7 +692,7 @@ both x's must be placed in the same register.
 It is the expander's responsibility to place the x's in different temps if more
 flexibility is desired.
 In any case, we still have to remove obsolete memory references from the variable map.
-<<define remove\_last\_uses, alloc, initial\_inmap, and alloc\_hw\_regs>>=
+<<define [[remove_last_uses]], alloc, [[initial_inmap]], and [[alloc_hw_regs]]>>=
 let expire regset guard map =
   RS.fold (fun t m ->
              let regs, mems = part_locs (VM.var_locs m t)          in
@@ -712,7 +712,7 @@ In an attempt to be fast, we will only take the first predecessor's variable map
 It may be a better idea to combine the maps of each of the predecessors.
 If none of the predecessors have allocated a temp, we choose a new location for the
 temp, preferring registers, if available.
-<<define remove\_last\_uses, alloc, initial\_inmap, and alloc\_hw\_regs>>=
+<<define [[remove_last_uses]], alloc, [[initial_inmap]], and [[alloc_hw_regs]]>>=
 let initial_inmap state preds succs =
   let alloc_remaining (s,_,_ as t) (state, map, used) =
     match diff (get_regs_for_space tgt prefs.regs s) used with
@@ -747,7 +747,7 @@ let initial_inmap state preds succs =
     let (state', inmap, _) = RS.fold alloc_remaining temps (state, VM.empty, used) in
     state', inmap in
 @
-The predecessor's outmap must map each live\_in temp to some location.
+The predecessor's outmap must map each [[live_in]] temp to some location.
 <<check pred map invariant>>=
   let () = let temp_live_in,_ = partition_regs tgt live_in in
            assert (RS.fold (fun t b -> b && not (null (VM.var_locs inmap t)))
@@ -797,7 +797,7 @@ varmaps because we may have to set a spill location for the temp.
 %-------------------------------------------------------------------
 \subsection{Choosing a Register for a Single Temp}
 %-------------------------------------------------------------------
-<<choose\_register>>=
+<<[[choose_register]]>>=
   let default_alloc (state, map, a, c, h, not_lo) t =
     match (a, c, h, not_lo) with
     | (r::rst, _,      _,      _)                                   ->
@@ -821,7 +821,7 @@ remember that multiple temps are in the same register and 2.) when spilling, spi
 temps in the register to separate spill slots (b/c spill slots are allocated by temp
 name, not value, and one of the temps may be redefined and spilled, overwriting the
 other).
-<<choose\_register>>=
+<<[[choose_register]]>>=
   let get_avail_reg ((state, map, a, c, h, av_not_lo) as s) t reg fail =
     let split = List.partition ((=) reg) in
     match split a with
@@ -851,7 +851,7 @@ other).
   let alloc_uses            = allocate (alloc_copy (fun (d,s) -> (s,d)) prefs.varMap) in
   let alloc_defs uses_map   = allocate (alloc_copy (fun (d,s) -> (d,s)) uses_map)     in
 @
-<<choose\_register>>=
+<<[[choose_register]]>>=
   let remove_preallocs map to_alloc cheap hicost =
     let to_alloc', regs_used =
       List.fold_left (fun (rst, r_used) t -> try let r = choose_reg map t in
@@ -865,7 +865,7 @@ register.
 There is an opportunity for optimization here: even if the temp is not used in this
 instruction, we could try to allocate it to a register if there are any free registers.
 This optimization would insert a move instruction instead of a store.
-<<choose\_register>>=
+<<[[choose_register]]>>=
   let alloc_temps alloc state classify regs temps map =
     <<spill used registers>>
     let temp_map = separate (RS.elements temps) in
@@ -896,11 +896,11 @@ let state,map =
 \subsection{Shuffling Establishes Consistency}
 %-------------------------------------------------------------------
 \begin{alltt}
-  loads = in succ\_vm, but not in pred\_vm
+  loads = in [[succ_vm]], but not in [[pred_vm]]
 
   moves = in both, but not in same place
 
-  stores = in pred\_vm, but not in succ\_vm; live into succ
+  stores = in [[pred_vm]], but not in [[succ_vm]]; live into succ
 \end{alltt}
 
 <<definition of shuffle>>=
