@@ -16,7 +16,7 @@
 
 
 % ------------------------------------------------------------------ 
-\section{Translation into Abstract {\PAL}}
+\section{Translation to Abstract {\PAL}}
 % ------------------------------------------------------------------ 
 
 After a source file has been successfully parsed and its static
@@ -170,7 +170,6 @@ let rec actual env (hint, e) =
     let width = bits (Expr.tyExpr env e) in
     let e     = expr env e               in
         (e, width, hint)
-    
 @
  
 
@@ -313,9 +312,9 @@ annotations and adds them to a provided [[Fgraph.cont]] value.
 <<>>=
 let rec flows cont = function 
 | (A.FlowAt (x,_)):: xx -> flows cont (x::xx)
-| (A.CutsTo n)    :: xx -> flows {cont with GM.cuts    = n @ cont.GM.cuts } xx
-| (A.UnwindsTo n) :: xx -> flows {cont with GM.unwinds = n @ cont.GM.unwinds} xx 
-| (A.ReturnsTo n) :: xx -> flows {cont with GM.returns = n @ cont.GM.unwinds} xx 
+| (A.CutsTo n)    :: xx -> flows {cont with GM.cuts    = n@cont.GM.cuts } xx
+| (A.UnwindsTo n) :: xx -> flows {cont with GM.unwinds = n@cont.GM.unwinds} xx 
+| (A.ReturnsTo n) :: xx -> flows {cont with GM.returns = n@cont.GM.unwinds} xx 
 | (A.Aborts)      :: xx -> flows {cont with GM.aborts  = true } xx
 | []                    -> cont     
 @
@@ -333,20 +332,19 @@ that follows this statement.
 
 <<>>=
 let rec body env props graph after bb =
+    let decorate n       = G.bind props n           in
     let rec stmt s after = match s with
         | A.StmtAt(x,_)     -> stmt x after
-        <<cases for translating statements>>
-    in
+        <<cases for translating statements>>        in
     let rec body b after = match b with
         | A.BodyAt(x, _)    -> body x after
         | A.DeclBody(d)     -> after (* ignore decls *)
         | A.StmtBody(s)     -> stmt s after
         | A.DataBody(dd)    -> after (* ignore data for the moment *)
-    in
-        List.fold_right body bb (G.bind G.Props.empty (GM.exit graph))
-        
-@ 
-
+                                                    in
+    let exit             = decorate (GM.exit graph) in
+        List.fold_right body bb exit
+@
 
 <<cases for translating statements>>=
 | A.AssignStmt(lhs,rhs) ->
@@ -354,13 +352,13 @@ let rec body env props graph after bb =
         List.map2 (fun lhs rhs -> 
                    R.assign (lvalue env lhs) (expr env rhs)) lhs rhs
     in 
-        props (GM.assign (R.par effects) after)
+        decorate (GM.assign (R.par effects) after)
 
 <<cases for translating statements>>=
 | A.IfStmt ( e, ss1, ss2) ->
     let n1 = List.fold_right stmt ss1 after in
     let n2 = List.fold_right stmt ss2 after in
-    props (GM.branch (expr env e) n1 n2)
+    decorate (GM.branch (expr env e) n1 n2)
 @
 
 <<cases for translating statements>>=
@@ -368,11 +366,11 @@ let rec body env props graph after bb =
     let const n = A.Int (Bits.of_int n Bits.maxwidth, None)   in
     let (cont, count) = Aux.Option.get (const 0, const 0) alt in
     let cc = Aux.Option.get default_convention cc             in
-        props (GM.copy_out (List.map (actual env) args) Fgraph.ProcResults cc (
-        props (GM.return graph (un_const cont) (un_const count))))
+        decorate (GM.copy_out (List.map (actual env) args) Fgraph.ProcResults cc (
+        decorate (GM.return graph (un_const cont) (un_const count))))
 
 <<cases for translating statements>>=
-| A.LabelStmt(n)                       -> props (GM.label n after)
+| A.LabelStmt(n)                       -> decorate (GM.label n after)
 @
 
 
@@ -395,18 +393,18 @@ node.
     let rec lvalue = function
                      | A.LValueAt(x,_) -> lvalue x
                      | A.Var(hint,n)   -> (n,idTy n env ,hint)
-                     | A.Mem _         -> assert false         in
-    let cc         = Aux.Option.get default_convention cc      in
+                     | A.Mem _         -> assert false            in
+    let cc         = Aux.Option.get default_convention cc         in
     let cout after = if args <> []
-                     then props (GM.copy_out (List.map (actual env) args)
+                     then decorate (GM.copy_out (List.map (actual env) args)
                                     Fgraph.ProcParameters cc after)
-                     else after                                in
-    let cont after = flows (GM.empty_cont after) fs            in
-    let call after = props (GM.call (expr env e) (cont after)) in
+                     else after                                   in
+    let cont after = flows (GM.empty_cont after) fs               in
+    let call after = decorate (GM.call (expr env e) (cont after)) in
     let cin  after = if lhs <> []
-                     then props (GM.copy_in (List.map lvalue lhs)
+                     then decorate (GM.copy_in (List.map lvalue lhs)
                                        Fgraph.ProcResults cc after)
-                     else after                                in
+                     else after                                   in
         (cout << call << cin) after
 @
 
@@ -418,9 +416,9 @@ A continuation is represented by a labeled node.  This node is a
     let cc        = default_convention                                  in
     let args      = List.map (fun (hint,n) -> (n, idTy n env, hint)) ns in
     let cin after = if ns <> []
-                    then props (GM.copy_in args Fgraph.ContParameters cc after)
+                    then decorate (GM.copy_in args Fgraph.ContParameters cc after)
                     else after                                          in
-    let lbl after = props (GM.label n after)                            in
+    let lbl after = decorate (GM.label n after)                         in
         (lbl << cin) after
 
 <<cases for translating statements>>=
@@ -435,12 +433,12 @@ sequence of statements.
 
 <<cases for translating statements>>=
 | A.JumpStmt(cc,e,args,ts) ->
-    let cc         = Aux.Option.get default_convention cc  in
-    let args       = List.map (actual env) args            in
+    let cc         = Aux.Option.get default_convention cc     in
+    let args       = List.map (actual env) args               in
     let cout after = if args <> [] then 
-                        props (GM.copy_out args Fgraph.ProcParameters cc after)
-                     else after                            in
-    let jump after = props (GM.jump graph (expr env e) ts) in
+                        decorate (GM.copy_out args Fgraph.ProcParameters cc after)
+                     else after                               in
+    let jump after = decorate (GM.jump graph (expr env e) ts) in
         (cout << jump) after
 @
 
@@ -448,14 +446,30 @@ The translation of a [[goto]] statement is straight forward; the
 [[after]] node is unused because it can't be reached.
 
 <<cases for translating statements>>=
-| A.GotoStmt(e,ts) -> props (GM.goto graph (expr env e) ts)
+| A.GotoStmt(e,ts) -> decorate (GM.goto graph (expr env e) ts)
 @
+
+A [[span]]'s attributes are a compile-time constant value and a
+link-time constant.
+
+<<cases for translating statements>>=
+| A.SpanStmt(e1,e2,ss) ->
+    let key   = ( match dummy_expression with (* constant eval *)
+                | Rtl.Const(Rtl.Bits(bits,w)) -> bits
+                | _                           -> assert false
+                ) in
+    let value = ( match dummy_expression with (* link-time constant *)
+                | Rtl.Const(c)                -> c
+                | _                           -> assert false
+                ) in
+        body env (G.Props.add_span key value props) graph after ss
+@
+
 
 The following statements are just skipped for the moment.    
 
 <<cases for translating statements>>=
 | A.PrimStmt(lhs, cc, n, args, fs)     -> assert false
-| A.SpanStmt(e1,e2,ss)                 -> assert false
 | A.CutStmt(e, args, fs)               -> assert false
 | A.SwitchStmt (r,e,arms)              -> assert false
 @
@@ -480,22 +494,25 @@ graph is anchored with a label in an [[Agraph.graph]] data structure
 under the name of the procedure. 
 
 A procedure starts with a [[CopyIn]] node that assigns the incoming
-parameters to the named registers and ends with an [[Exit]] node. The
+parameters to the named registers and ends with an [[Exit]] node.  The
 types of the formal parameters are bound in the local environment
-belonging to a procedure. 
-
+belonging to a procedure.  The local environment [[env]] for a
+procedure is found in its entry in the fat environment.
 
 <<module Make>>=
 and proc env env props graph (cc,n,fs,bb) =  
-    let env   = match F.findv n env with 
-                | _,(F.Label(F.Proc e),_) -> e
-                | _  -> assert false                                       in
-    let cc    = Aux.Option.get default_convention cc                       in
-    let exit  = G.bind G.Props.empty (GM.exit graph)                       in
-    let bdy   = body env props graph exit bb                               in
-    let frml  = fun (h,i,t,n) -> (n,ty env t,h)                            in
-    let copy  = GM.copy_in (List.map frml fs) Fgraph.ProcParameters cc bdy in
-        props (GM.label n (props copy))
+    let decorate n = G.bind props n                       in
+    let env        = match F.findv n env with 
+                     | _,(F.Label(F.Proc e),_) -> e
+                     | _  -> assert false                 in
+    let cc         = Aux.Option.get default_convention cc in
+    let frml       = fun (h,i,t,n) -> (n,ty env t,h)      in
+    let label a    = decorate (GM.label n a)              in
+    let copy  a    = decorate (GM.copy_in (List.map frml fs)
+                     Fgraph.ProcParameters cc a)          in
+    let bdy   a    = body env props graph a bb            in
+    let exit       = decorate (GM.exit graph)             in
+        (label << copy << bdy) exit
 @
     
     
