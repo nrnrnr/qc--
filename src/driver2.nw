@@ -310,10 +310,12 @@ struct
     struct
       module V = C.V
       let ( **-> ) = V.( **-> )
-      <<bind exported Lua functions to [[builtins]]>>
+      <<bind exports to tables: builtins, targets>> 
       <<definition of [[bind_table]]>>
       let init g = 
-        bind_table g "Driver" builtins
+         ( bind_table g "Driver"  builtins
+         ; bind_table g "Targets" targets
+         )
     end (*M*)
 end (*MakeLib*)
 @ 
@@ -336,7 +338,7 @@ Here we finally bind the [[Caml]] values to names in the Lua
 interpreter. The [[compile]] function receives a lua value such that it
 can call Lua functions while it is active.
 
-<<bind exported Lua functions to [[builtins]]>>=
+<<bind exports to tables: builtins, targets>>=
 let pf t   = (V.pfunc t).V.embed 
 let func t = (V.func t).V.embed 
 
@@ -351,9 +353,12 @@ module Map = struct
     let optimize  = V.pfunc (cfg **-> frame **-> V.runit)
 end
 
+let targets =
+  [ "dummy"     , Map.target.V.embed                    Caml.dummy 
+  ]
+
 let builtins =
-  [ "dummy"     , Map.target.V.embed                    Caml.dummy
-  ; "assemble"  , pf (Map.asm  **-> V.result Map.doc)   Caml.assemble
+  [ "assemble"  , pf (Map.asm  **-> V.result Map.doc)   Caml.assemble
   ; "check"     , pf (Map.ast  **-> V.result Map.env)   Caml.check
   ; "emit_asdl" , pf (Map.ast  **-> V.runit)            Caml.emit_asdl
   ; "parse"     , pf (V.string **-> V.result Map.ast)   Caml.parse
