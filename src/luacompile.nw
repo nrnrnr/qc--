@@ -594,8 +594,9 @@ function Opt.standard(backend, asm, B)
   end
   local x = B.seq
     { 
-      Opt.verb(backend.widen)      or Stages.null
+      Opt.verb(backend.intwiden)   or Stages.null
     , Opt.verb(backend.placevars)  or Stages.null
+    , Opt.verb(backend.widen)      or Stages.null
     , Opt.verb(Optimize.simplify_exps) or Stages.null
     , Opt.verb(backend.preopt)     or Stages.null
     , Opt.verb(backend.pic)        or Stages.null
@@ -792,12 +793,12 @@ Backend.widentest2 =
 
 Backend.x86w =
   { target    = Targets.x86
-  , widen     = NewBackplane.seq
+  , intwiden  = NewBackplane.seq
                    { Widen.widenlocs,
-                     Widen.dpwiden}
-  , placevars = NewBackplane.seq
-                   { Placevar.context(Placevar.x86, "x86"),
-                     Widen.x86_floats,
+                     Widen.dpwiden }
+  , placevars = Placevar.context(Placevar.x86, "x86")
+  , widen     = NewBackplane.seq
+                   { Widen.x86_floats,
                      Widen.store_const(32),
                      Stages.assert('proper widths') }
   , preopt    = Optimize.remove_nops
@@ -821,10 +822,10 @@ Backend.x86w =
 
 Backend.x86 =
   { target    = Targets.x86
-  , widen     = nil
-  , placevars = NewBackplane.seq
-                   { Placevar.context(Placevar.x86, "x86"),
-                     Widen.x86_floats,
+  , intwiden  = nil
+  , placevars = Placevar.context(Placevar.x86, "x86")
+  , widen     = NewBackplane.seq
+                   { Widen.x86_floats,
                      Widen.store_const(32),
                      Stages.assert('proper widths') }
   , preopt    = Optimize.remove_nops
