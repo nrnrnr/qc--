@@ -161,6 +161,7 @@ ARGUMENT TO SUBFLAGS AND ADDFLAGS.  THIS WILL MEAN CHANGES IN THE
 RECOGNIZER, OF COURSE.
 @ 
 <<x86 postexpander>>=
+let negflags   x   w = R.store eflags (R.app (R.opr "x86_negflags"   [w]) [x])    32
 let subflags   x y w = R.store eflags (R.app (R.opr "x86_subflags"   [w]) [x; y]) 32
 let addflags   x y w = R.store eflags (R.app (R.opr "x86_addflags"   [w]) [x; y]) 32
 let mulflags   x y w = R.store eflags (R.app (R.opr "x86_mulflags"   [w]) [x; y]) 32
@@ -253,7 +254,9 @@ this function is the forcing function that makes it so.
 let at32 = function
   | opr, [32] -> opr
   | opr, [n]  -> Impossible.unimp ("%" ^ opr ^ string_of_int n ^ "(...)")
-  | opr, _    -> Impossible.impossible ("ill-formed " ^ opr)
+  | opr, ws   ->
+      Impossible.impossible
+        (Printf.sprintf "operator %%%s specialized to %d widths" opr (List.length ws))
 @ 
 We start our implementation with a function that provides binary
 operators in $L \mathrel{:=} L \oplus R$ form. 
@@ -340,8 +343,14 @@ let divu_trunc icontext dst x y =
 @ 
 Other operators are surely wrong.
 <<x86 postexpander>>=
-let unop ~dst op x =
-  [R.store (temploc dst) (R.app (Up.opr op) [tempval x])             (tempwidth dst)]
+let inplace op x move = match at32 op with
+| "neg" -> R.par [R.store (temploc x) (R.app (Up.opr op) [tempval x]) 32;
+                  negflags (tempval x) 32]
+           :: move
+| _ ->
+    R.store (temploc x) (R.app (Up.opr op) [tempval x]) (tempwidth x) :: move
+
+let unop ~dst op x = inplace op dst (move dst x)
 
 let rtlop ~dst op args =
   [R.store (temploc dst) (R.app (Up.opr op) (List.map tempval args)) (tempwidth dst)]

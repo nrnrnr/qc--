@@ -290,6 +290,9 @@ inst : Withaflags(dst:eaddrl, "sub", src:reg, w, "x86_subflags")
 inst : Withaflags(dst:regl, "sub", src:eaddr, w, "x86_subflags")
   {: cat ["sub"; suffix w; " "; src; ","; dst] :}
 
+inst : Withaflagsunary("neg", dst:eaddrl, w, "x86_negflags")
+  {: cat ["neg"; suffix w; " "; dst] :}
+
 inst : Withaflags(dst:eaddrl, "mul_trunc", src:reg, w, "x86_mulflags")
   {: cat ["imul "; suffix w; " "; src; ", "; dst] :}
 
@@ -437,13 +440,17 @@ constructor for each operator.
 <<special cases for particular operators>>=
 | RP.App(("add", [w]), [x; y]) -> conAdd (exp x) (exp y)
 | RP.App(("sub", [w]), [x; y]) -> conSub (exp x) (exp y)
+(*| RP.App(("neg", [w]), [x])    -> conNeg (exp x)*)
 | RP.App(("mul_trunc", [w]), [x; y]) -> conMul_trunc (exp x) (exp y)
 | RP.App(("sx", [n;w]), [x])   -> conSx  (exp x)
 | RP.App(("zx", [n;w]), [x])   -> conZx  (exp x)
 | RP.App(("lobits", [w;n]), [x])   -> conLobits (exp x) n
 | RP.App(("x86_subflags", [w]), [x; y]) -> conX86_subflags (exp x) (exp y)
-| RP.App((("add"|"sub"|"mul_trunc"|"sx"|"zx"|"lobits"|"x86_subflags") as op, _), _) ->
-    Impossible.impossible ("ill-formed " ^ op)
+| RP.App((("add"|"sub"|"mul_trunc"|"sx"|"zx"|"lobits"|"x86_subflags") as op, ws), xs)->
+    Impossible.impossible
+      (Printf.sprintf
+         "operator %%%s specialized to %d widths & applied to %d arguments"
+         op (List.length ws) (List.length xs))
 @ 
 Here is the rest of the mapping.  
 <<code to follow the labeler>>=  
@@ -522,6 +529,10 @@ Oh, the joy of the flags\ldots
   ; (RP.Const(RP.Bool true), <<pattern for flags := [[fo]] ([[l'']], [[r']])>>)
   ] when l = l' && l = l'' && r = r' && flag_index = SS.indices.SS.cc ->
       conWithaflags (loc l) o (exp r) w fo
+| [ (RP.Const(RP.Bool true), <<pattern for [[l]] := [[o]] [[l']] at [[w]]>>)
+  ; (RP.Const(RP.Bool true), <<pattern for flags := [[fo]] [[l'']])>>)
+  ] when l = l' && l = l'' && flag_index = SS.indices.SS.cc ->
+      conWithaflagsunary o (loc l) w fo
 | [ (RP.Const(RP.Bool true), <<pattern for [[d]] := rp:[[l1/l2]] [[o]] [[r]] at [[w]]>>)
   ; (RP.Const(RP.Bool true), <<pattern for flags := [[fo]] ([[l1'/l2']], [[r']])>>)
   ] when l1 = l1' && l2 = l2' && r = r' && flag_index = SS.indices.SS.cc ->
@@ -536,6 +547,11 @@ RP.Store(l, RP.App((o, _), [RP.Fetch(l',_); r]), w)
 <<pattern for flags := [[fo]] ([[l'']], [[r']])>>=
 RP.Store(RP.Reg('c', flag_index, _),
          RP.App((fo, _), [RP.Fetch(l'',_); r']), _)
+<<pattern for [[l]] := [[o]] [[l']] at [[w]]>>=
+RP.Store(l, RP.App((o, _), [RP.Fetch(l',_)]), w) 
+<<pattern for flags := [[fo]] [[l'']])>>=
+RP.Store(RP.Reg('c', flag_index, _),
+         RP.App((fo, _), [RP.Fetch(l'',_)]), _)
 <<pattern for [[d]] := rp:[[l1/l2]] [[o]] [[r]] at [[w]]>>=
 RP.Store(d, RP.App((o, _),
                    [ (RP.App(("or",_), [ RP.App(("shl",_),
