@@ -1,26 +1,52 @@
-% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
+
+% ------------------------------------------------------------------ 
+\section{Runtime Module \texttt{Camlburg}}
+% ------------------------------------------------------------------ 
+
+The code genreated by module \module{Burg} relies of a few function that
+are provided by its runtime system. All this code resides in this small
+module and must be shipped with any generated code.
 
 <<camlburg.mli>>=
-type cost = int
-type 'a ntrec = { cost : cost; action : unit -> 'a }
-val infinity : 'a ntrec
-val infinite_cost : cost
-val choice : (cost * (unit -> 'a)) list -> 'a ntrec
-val matches : 'a -> 'a -> cost
+(* $Id$ *)
+
+type cost = int                         (* matching cost for a rule *)
+type 'a nt =                            (* cost/action pair for a nonterm *)
+    { cost : cost
+    ; action : unit -> 'a; 
+    } 
+val inf_cost : int                      (* maximal cost *)
+val infinity : 'a nt                    (* the least defined nt *)
+val choice : 'a nt list -> 'a nt        (* find cheapest nt *)
+val matches : 'a -> 'a -> int           (* cost function for literals *)
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
 <<camlburg.ml>>=
+(* $Id$ *)
+
 type cost = int
-type 'a ntrec = { cost : cost; action : unit -> 'a }
-let infinite_cost = 32767 
-let infinity = { cost = infinite_cost; action = fun () -> assert false }
 
-let rec choice = function
-  | [] -> infinity
-  | [(c, a)] -> { cost = c; action = a }
-  | (c, a) :: t ->
-      let t = choice t in
-      if c < t.cost then { cost = c; action = a } else t
+type 'a nt = 
+    { cost:     cost
+    ; action:   unit -> 'a
+    }
 
-let choice = (choice : (cost * (unit -> 'a)) list -> 'a ntrec)
+let inf_cost    = max_int / 2
+let infinity = 
+    { cost = inf_cost
+    ; action = (fun () -> assert false) 
+    }
 
-let matches c k = if c = k then 0 else infinite_cost
+let min x y     = if x.cost < y.cost then x else y
+let choice nts  = List.fold_left min (List.hd nts) (List.tl nts)
+let matches x y = if x = y then 0 else inf_cost
+@
+
+
+
 

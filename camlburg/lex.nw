@@ -1,80 +1,299 @@
-% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
-<<lex.mll>>=
-{
-module T = Token
-let brace_depth = ref 0
-let k x = fun map -> x
-<<prolog>>
-}
-let alpha       = ['a'-'z' 'A'-'Z' '_']
-let delim       = ['(' ')' ',' ':' ';' '[' ']' '<' '>' '{' '}']
-let symbol      = ['.' '_' '$' '@' '%' '!' '#' '^' '&' '*' '+' '=' '~' '`' '|' 
-                   '/' '?' '-']
-let digit       = ['0'-'9']
-let nl          = '\n'          
-let id          = alpha(digit|alpha)*
+% :vim ts=8 et sw=4:
 
-rule token = parse
-    [' ' '\t']+          { token lexbuf }     (* skip blanks *)
-  | nl                  { fun map -> nl lexbuf map ; T.Eol }
-  | nl '#'              { fun map -> line lexbuf map 0; token lexbuf map }
-  | digit+              { k (T.Int(int_of_string(Lexing.lexeme lexbuf))) }
-  | id                  { k (T.alnum  (Lexing.lexeme lexbuf)) }
-  | symbol+             { k (T.symbol (Lexing.lexeme lexbuf)) }
-  | delim               { k (T.delim  (Lexing.lexeme lexbuf)) }
-  | "{:"                { fun map -> 
-                          let here = Srcmap.location map (Lexing.lexeme_start lexbuf)in
-                          brace_depth := 1;
-                          T.Code (here, String.concat "" (braces lexbuf map)) }
-  | eof                 { k T.Eof }
-and braces = parse
-    nl                  { fun map -> nl lexbuf map; "\n" :: braces lexbuf map }
-  | [^ ':' '{' '}' '\n']+  { fun map -> 
-                          let t = Lexing.lexeme lexbuf in t :: braces lexbuf map }
-  | "{:"                { fun map -> incr brace_depth;
-                          let t = Lexing.lexeme lexbuf in t :: braces lexbuf map }
-  | ":}"                { fun map ->
-                          decr brace_depth;
-                          if !brace_depth = 0 then []
-                          else let t = Lexing.lexeme lexbuf in t :: braces lexbuf map }
-  | [':' '{' '}']       { fun map -> 
-                          let t = Lexing.lexeme lexbuf in t :: braces lexbuf map }
-<<line numbers>>
-<<token.ml>>=
-type t = Eol | Eof | Int of int | Name of string | Reserved of string
-       | Code of Srcmap.location * string
-let alnum s = Name s
-let reserved = ["%"; "%%"]
-let symbol s = if List.exists ((=) s) reserved then Reserved s else Name s
-let delim s = Reserved s
-let to_string = function
-  | Eol -> "<newline>"
-  | Eof -> "<end of file>"
-  | Int n -> string_of_int n
-  | Name s -> s
-  | Reserved s -> s
-  | Code (loc, s) -> "<code fragment>"
-@ 
+% ------------------------------------------------------------------ 
+\section{Scanner for Burg Specification}
+% ------------------------------------------------------------------ 
+
+This is a scanner for a burg specifcation, written in the specification
+language for the Obkective Caml scanner generator {\small OCamlLex}. It
+defines three scanners: [[token]], [[action]], and [[line]]. All
+scanners use a common set of named regular expression that define the
+syntax of identifiers and other tokens of the scanned language. The
+prolog of the scanner specifocation contain commonly used functions.
+
+<<lex.mll>>=
+{   
+    let rcsid = "$Id$"
+
+    exception Error of string
+    let error msg = raise (Error msg)
+    
+    <<prolog>>
+}
+<<regular expressions>>
+<<token>>
+<<action>>
+<<line>>
+<<string>>
+{
+    <<epilog>>
+}    
+@
+
+The scanner's entry point is the function [[token]]. In the case of an
+error it raises the [[Error]] exception. The typical case is an illegal
+character found in the input stream.
+
+% ------------------------------------------------------------------ 
+\subsection{Prolog}
+% ------------------------------------------------------------------ 
+
+The prolog in the scanner specification contain Objective Caml code that
+is local to the generated scanner. It defines functions that commonly
+used in semantic actions.
+
+The type definition for tokens returned by the scanner are in the
+parser. This is an oddity enforced by the Objective Caml scanner and
+parser generators.
+
+<<prolog>>=
+module T = Parse
+@
+
+The scanner maintains the current position in the imput stream as an
+integer offset from the start of the string. For a more readable
+position we maintain a \emph{source map} that associates with every
+offset a file, line, column triple. These two views must be synchronized
+at every newline in the input stream; the [[nl]] function does this and
+is called at \emph{every} newline in the input stream.
+
 <<prolog>>=
 let nl lexbuf map =
-    let next = (Lexing.lexeme_start lexbuf) + 1     in
+    let next = (Lexing.lexeme_start lexbuf) + 1 in
         Srcmap.nl map next
-@ 
-The current location can be obtained by passing the current position
-to [[Srcmap.loc]]:
-<<prolog>>=
-let location lexbuf map =
-    Srcmap.location map (Lexing.lexeme_start lexbuf)
 @
-<<line numbers>>=
+
+The [[return]] function makes it a little bit easier to write semantic
+actions which take a source map argument.
+
+<<prolog>>=
+let return x = fun map -> x
+@
+
+Here are some useful function to retrieve matched strings from the
+matching engine.
+
+<<prolog>>=
+let get         = Lexing.lexeme
+let getchar     = Lexing.lexeme_char
+@
+
+All keywords are stored in a hash table that associates them with their
+token. The [[keword]] function does a lookup and returns either the
+found token, or [[ID]].
+
+<<prolog>>=
+let keywords    = Hashtbl.create 27
+let keyword s   = try Hashtbl.find keywords s with Not_found -> T.ID(s)
+let _ = Array.iter (fun (str,tok) -> Hashtbl.add keywords str tok)
+    [| "start"  , T.START
+    ;  "term"   , T.TERM
+    ;  "type"   , T.TYPE 
+    ;  "head"   , T.HEAD
+    |]
+@
+
+% ------------------------------------------------------------------
+\subsection{Regular Expressions}
+% ------------------------------------------------------------------ 
+
+The following regular expressions name commonly used regular expressions
+that are used in the scanner definitions. They can be composed into
+larger regular expressions when needed.
+
+Identifies cannot start with an underscore or a dot. This allows us
+later to generate identifiers that cannot collide with identifiers from
+the specification.
+
+<<regular expressions>>=
+let alpha       = ['a'-'z' 'A'-'Z']
+let digit       = ['0'-'9']
+let nl          = '\n'          
+let id          = alpha(digit|alpha|['_' '.'])*
+@
+
+% ------------------------------------------------------------------ 
+\subsection{The Scanner}
+% ------------------------------------------------------------------ 
+
+The entry point of the scanner is the scanner [[token]]. It uses
+sub-scanners if needed; however, those are never called from the parser.
+All semantic actions take a [[map]] argument for the source map we are
+building. If [[map]] is unused, the [[return]] function defined above is
+used for convenience. 
+
+<<token>>=
+rule token = parse
+    eof                     { fun map -> T.EOF(map) }
+  | [' ' '\t' '\r']         { fun map -> token lexbuf map } 
+  | "--" [^ '\n']*          { fun map -> token lexbuf map } (* comment *)
+  | nl                      { fun map -> nl lexbuf map; token lexbuf map }
+  | nl '#'                  { fun map -> line lexbuf map 0; token lexbuf map }
+  | '#'                     { fun map ->
+                              if Lexing.lexeme_start lexbuf = 0 then
+                                (line lexbuf map 0; token lexbuf map)
+                              else
+                                error "illegal character `#'"
+                            }    
+  | digit+                  { return (T.INT(int_of_string(get lexbuf)))}
+  | id                      { return (keyword (get lexbuf)) }
+  | "{:"                    { fun map -> 
+                              let p = Lexing.lexeme_start lexbuf + 2 in 
+                              let s = action lexbuf 0 map (Buffer.create 80) in
+                                T.CODE(Srcmap.location map p,s)
+                            } 
+  
+  | '"'                     { fun map ->
+                              let s = string lexbuf map (Buffer.create 80) in 
+                                T.STRING(s)
+                            }    
+  | '%'                     { return T.PERCENT }
+  | "%%"                    { return T.PPERCENT }
+  | '<'                     { return T.LT }
+  | '>'                     { return T.GT }
+  | ':'                     { return T.COLON }
+  | '('                     { return T.LPAREN }
+  | ')'                     { return T.RPAREN }
+  | '['                     { return T.LBRACKET }
+  | ']'                     { return T.RBRACKET }
+  
+  | ','                     { return T.COMMA }
+  
+  | _                       { fun map ->
+                              error ( "illegal character `"
+                                    ^ get lexbuf
+                                    ^ "' in specification"
+                                    )
+                            }        
+@
+
+
+% ------------------------------------------------------------------   
+\subsection{Semantic Action}
+% ------------------------------------------------------------------ 
+
+The code portions of a rule are strings that are enclosed by [[{:]] and
+[[:}]]; these delimiters are allowed to nest properly. Otherwise, no
+structure is assumed and the action is returned as a string in the token
+[[CODE]]. 
+
+The scanner for the action takes three parameters: the source map, a
+counter for nested braces, and a buffer into which the action is put.
+
+We don't recognize {\small CPP} line directives here. If there are any,
+they simply go into the returned string.
+
+<<action>>=
+and action = parse 
+    eof                     { fun n map buf ->
+                              error "unexpected EOF in semantic action"
+                            }
+  | ":}"                    { fun n map buf ->
+                              if n = 0 then (Buffer.contents buf)
+                              else ( Buffer.add_string buf ":}"
+                                   ; action lexbuf (n-1) map buf 
+                                   )
+                            }
+  
+  | "{:"                    { fun n map buf ->
+                              ( Buffer.add_string buf (get lexbuf)
+                              ; action lexbuf (n+1) map buf
+                              )
+                            }  
+  | [^ ':' '{' '\n']+
+  | ':'
+  | '{'                     { fun n map buf ->
+                              let s = get lexbuf in
+                              ( Buffer.add_string buf s
+                              ; action lexbuf n map buf
+                              )
+                            }
+                            
+  | nl                      { fun n map buf -> 
+                              ( Buffer.add_char buf '\n'
+                              ; nl lexbuf map
+                              ; action lexbuf n map buf
+                              )
+                            }
+  | _                       { fun n map buf ->
+                              error ("illegal character `"
+                                    ^ get lexbuf
+                                    ^ "'in action string"
+                                    )
+                            }  
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Strings}
+% ------------------------------------------------------------------ 
+
+A string is delimitted by double quotes and must contain no (unescaped)
+newline character. The scanner recogzines backslash escapes: see the
+code below for the details.
+
+<<string>>=
+and string = parse 
+    eof         { fun map buf -> 
+                    error ("end of file in string: " ^ Buffer.contents buf) }   
+  | '\n'        { fun map buf -> 
+                    error ("end of line in string: " ^ Buffer.contents buf) }
+  | '\\' _      { fun map buf -> 
+                  let c = getchar lexbuf 1 in
+                  let k = match c with
+                      | 'n'  -> '\n'
+                      | 't'  -> '\t'
+                      | 'r'  -> '\r'
+                      | '\n' -> '\n'
+                      | _    -> c
+                  in   
+                     ( Buffer.add_char buf k
+                     ; string lexbuf map buf
+                     )
+                }
+  | [^'"' '\'' '\n' '\\']+  
+                { fun map buf -> 
+                   let s = get lexbuf  in
+                     ( Buffer.add_string buf s
+                     ; string lexbuf map buf
+                     )
+                }
+  | '"'         { fun map buf -> Buffer.contents buf }
+                 
+  | _           { fun map buf -> 
+                  error ( "illegal character in string: " 
+                        ^ Buffer.contents buf
+                        ) 
+                }
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Line directive}
+% ------------------------------------------------------------------ 
+
+A line directive informs us where the source of the actual line is
+coming from. We put a synchronization point into the source map to keep
+track of it. The scanner looks for a (line) number and a string in
+double quotes. The number is taken as the line number, the string as a
+file name. Additional identifies are skipped. Typical line directives
+look like these:
+
+\begin{quote}
+\begin{verbatim}
+#line 23 "foo"
+# 23 "foo"
+\end{verbatim}
+\end{quote}
+
+<<line>>=
 and line = parse 
     eof                 { fun map l ->
-                          error lexbuf map "unterminated line directive" 
+                          error "unterminated line directive" 
                         }
   | [' ' '\t']+         { line lexbuf }
   | '"' [^ '"']+ '"'    { fun map l ->
-                          let string = Lexing.lexeme lexbuf in
-                          let file   = String.sub string 1 (String.length string-2) in
+                          let string = get lexbuf in
+                          let len    = String.length string in
+                          let file   = String.sub string 1 (len-2) in
                           let pos    = Lexing.lexeme_start lexbuf in
                           let loc    = file, l-1, 1 in
                                 ( Srcmap.sync map pos loc
@@ -82,19 +301,83 @@ and line = parse
                                 )
                         }
   | digit+              { fun map l -> 
-                          
                           (* inline'ing the l' expression caused an
                           int_of_string failure with ocamlopt *)
-                          
                           let l' = int_of_string (Lexing.lexeme lexbuf)
                           in  line lexbuf map l'
                         }
   | id                  { line lexbuf }
   | _                   { fun map l -> 
-                          error lexbuf map 
-                          "illegal character in line directive"
+                          error "illegal character in line directive"
                         }
+@
 
-@ 
-<<prolog>>=
-let error _ _ s = (prerr_string (s^"\n"); assert false)
+
+
+% ------------------------------------------------------------------ 
+\subsection{Epilog}
+% ------------------------------------------------------------------ 
+
+For debugging we provide some function in the epilog of the scanner.
+
+<<epilog>>=
+let to_string = function
+    | T.ID(s)               -> Printf.sprintf "id(%s)" s
+    | T.CODE((f,l,c),s)     -> Printf.sprintf "action(%s)" s 
+    | T.INT(d)              -> Printf.sprintf "int(%d)" d
+    | T.STRING(s)           -> Printf.sprintf "\"%s\"" (String.escaped s)
+
+    | T.COLON     -> ":"
+    | T.COMMA     -> ","  
+    | T.EOF _     -> "<eof>"
+    | T.EOL       -> "<eol>"
+    | T.GT        -> ">"
+    | T.LBRACKET  -> "["
+    | T.LPAREN    -> "("
+    | T.LT        -> "<"
+    | T.PERCENT   -> "%"
+    | T.PPERCENT  -> "%%"
+    | T.RBRACKET  -> "]"
+    | T.RPAREN    -> ")"
+    | T.SEMI      -> ";"  
+    | T.START     -> "start"  
+    | T.TERM      -> "term"
+    | T.TYPE      -> "type"  
+    | T.HEAD      -> "head" 
+@
+
+<<epilog>>=    
+let scan file =
+    let fd          = try open_in file
+                      with Sys_error(msg) -> error msg      in
+    let finally ()  = close_in fd                           in
+    let lexbuf      = Lexing.from_channel fd                in
+    let map         = Srcmap.mk ()                          in
+    let scanner lb  = token lb map                          in
+    let location lb = Srcmap.location map (Lexing.lexeme_start lb) in
+    let rec loop lb =
+        match scanner lb with
+            | T.EOF _   -> ()
+            | tok       ->
+                let (file,line,col) = location lb           in
+                let tok             = to_string tok         in
+                    ( Printf.printf "%-16s %3d %2d %s\n" file line col tok
+                    ; flush stdout
+                    ; loop lb
+                    )
+    in
+        ( Srcmap.sync map 0 (file,1,1)
+        ; loop lexbuf
+        ; finally ()
+        )
+
+<<epilog>>=
+let main () =
+    let argv        = Array.to_list Sys.argv in
+    let this        = Filename.basename (List.hd argv) in
+        match List.tl argv with
+        | file::_   -> scan file; exit 0
+        | []        -> error "file name expected on command line"
+
+(* let _ = main () *)
+@

@@ -1,128 +1,336 @@
-% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% vim: set ts=8 sw=4 et:
 
-\section{A BURG specification}
+% ------------------------------------------------------------------ 
+\section{Abstract Burg Specification}
+% ------------------------------------------------------------------ 
 
-<<exported type definitions>>=
-type nonterm = string  (* the *type* (not the name) of a nonterminal symbol *)
-type term    = string  (* ditto for terminals *)
+This module defines a Burg specification as an Objective Caml data type.
+A specification as it is read from a file is represented as a [[Spec.t]]
+value.
 
-type constant =
-  | Int of int
-  | String of string
-
-type tree =
-  | Tree  of string * tree list
-  | Var   of string * nonterm
-  | Const of constant
-
-type cost = Code.exp
-type code = Code.exp
-
-type rule = nonterm * tree * cost * code
-
-type arg_type = (* type of argument to catamorphism parameter *)
-  | Polymorphic    (* standard argument/result type *)
-  | Fixed of term  (* nonterminal or constant of fixed type *)
-type signature = arg_type list
-
-type ty = string
-type t = { terminals    : StringSet.t
-         ; nonterminals : (string * ty) list   (* explain this! *)
-         ; start        : string
-         ; rules        : rule list
-         ; signatures   : signature StringMap.t   (* signature of each constructor *)
-         ; head         : Code.fragment list      (* emit before derived code*)
-         ; chains       : rule list StringMap.t   (* rules with nt on right-hand side *)
-         } 
-<<exported values>>=
-val arg_type : terminals:StringSet.t -> tree -> arg_type
-val sig_string : signature -> string
-val sig_type   : signature -> Syntax.Ty.ty
-
-val fold_tree_types : ('a -> string -> 'a) -> 'a -> tree -> 'a
-val fold_rule_types : ('a -> string -> 'a) -> 'a -> rule -> 'a
-
-val fold_tree_constructors : ('a -> string -> tree list -> 'a) -> 'a -> tree -> 'a
-val fold_rule_constructors : ('a -> string -> tree list -> 'a) -> 'a -> rule -> 'a
-<<exported modules>>=
+<<spec.mli>>=
 module StringSet : Set.S with type elt = string
 module StringMap : Map.S with type key = string
-<<more exported modules>>=
-module TreeComp  : Map.OrderedType with type t = string * tree list
-@ 
-<<spec.mli>>=
-<<exported modules>>
+
 <<exported type definitions>>
-<<more exported modules>>
 <<exported values>>
-@ 
-The implementation is uninteresting.
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Errors}
+% ------------------------------------------------------------------ 
+
+The functions in this module report errors by raising the [[Error]]
+excpetion with a descriptive message.
+
+<<exported type definitions>>=
+exception Error of string
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Types}
+% ------------------------------------------------------------------ 
+
+Patterns are similar to ML patterns. A literal in the pattern matches
+exactly that literal in the subject tree.
+
+<<exported type definitions>>=
+type literal =
+    | Int       of int
+    | String    of string
+@
+
+Variables are typed: they either have a terminal (Objective Caml) type,
+or a nonterminal type. Both are represented as strings.
+
+<<exported type definitions>>=
+type ty =
+    | NonTerm   of string
+    | Term      of string
+@
+
+A pattern is a literal, a variable, or a constructor with patterns as
+arguments. A terminal variable matches a literal in the subject tree, a
+nonterminal variable matches a Burg nonterminal value which is
+constructed at run-time of the generated code.  
+
+
+<<exported type definitions>>=
+type pattern =
+    | Literal   of literal
+    | Var       of string * ty
+    | Con       of string * pattern list
+@
+
+A constructor has a type which is the list of types of its arguments. A
+constructor argument is either a monomorphic nonterminal type, or a
+polymorphic type. A constructor must be used consistently in all rules,
+hence the type of a constructor is unique and can be inferred from a
+Burg specification.
+
+<<exported type definitions>>=
+type argtype =
+    | Poly
+    | Mono of string            (* a nonterminal type       *)
+type contype = argtype list     (* type of a constructor    *)
+@
+
+A rule defines a nonterminal which is considered the type of the rule:
+at run-time the rule produces a value of that type.  The main part of
+the rule is its tree-shaped pattern that is matched against the subject
+tree.
+
+<<exported type definitions>>=
+type rule =
+    { nonterm   : string        (* type of the rule *)
+    ; pattern   : pattern       
+    ; cost      : Code.exp
+    ; code      : Code.exp
+    }
+@
+
+A specification declares terminal types, may include raw code in
+[[heads]], rules, and a map for source code locations.
+
+<<exported type definitions>>=
+type t =
+    { terms     : StringSet.t
+    ; heads     : Code.exp list
+    ; rules     : rule list
+    ; srcmap    : Srcmap.map
+    }
+@
+
+
+% ------------------------------------------------------------------ 
+\subsection{Values}
+% ------------------------------------------------------------------ 
+
+The [[cmp]] function provides a total order over patterns. Two patterns
+are considered equal when they only differ in the names of embedded
+variables.
+
+<<exported values>>=
+val cmp: pattern -> pattern -> int (* -1 / 0 / 1 *)
+@
+
+[[Fold_con]] is a fold function over patterns that passes all
+constructors and their arguments to a function.
+
+<<exported values>>=
+val fold_con: ('a -> string -> pattern list -> 'a) -> 'a -> pattern -> 'a
+@
+
+A pattern contains named variables; [[freevars]] returns them in a list.
+If a variable appears twice in a pattern, which it should not, it
+appears twice in the returned list.
+
+<<exported values>>=
+val freevars: pattern -> string list
+@
+
+[[Con_type]] infers constructor types from a list of rules and returns
+them in a map. In case of inconsistencies [[Error]] is raised.
+
+<<exported values>>=
+val con_types: rule list -> contype StringMap.t (* Error *)
+@
+
+The [[PrettyPrint]] sub-module provides pretty printers for rules.
+Mostly used for debugging during development.
+
+<<exported values>>=
+module PrettyPrint: sig
+    val rule:   rule      -> Pp.doc
+    val rules:  rule list -> Pp.doc
+end
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
 <<spec.ml>>=
+let rcsid = "$Id$"
+
 module StringSet = Set.Make(struct type t = string let compare = compare end)
 module StringMap = Map.Make(struct type t = string let compare = compare end)
 <<exported type definitions>>
-let rec fold_tree_types f zero = function
-  | Var (_, nt) -> f zero nt
-  | Tree (_, args) -> List.fold_left (fold_tree_types f) zero args
-  | Const _ -> zero
 
-let fold_rule_types f zero (nt, tree, _, _) = fold_tree_types f (f zero nt) tree
+(* helper functions *)
+let error msg = raise (Error msg)
 
-let rec fold_tree_constructors f zero = function
-  | Var _ -> zero
-  | Tree (c, args) -> List.fold_left (fold_tree_constructors f) (f zero c args) args
-  | Const _ -> zero
+<<pattern equivalence>>
+<<pattern iterators>>
+<<free variables>>
+<<type check>>
 
-let fold_rule_constructors f zero (_, tree, _, _) = fold_tree_constructors f zero tree
-@ 
-<<spec.ml>>=
-module TreeComp = struct
-  type t = string * tree list
-  let listcmp c =
-    let rec cmp l1 l2 = match l1, l2 with
-      | [], [] -> 0
-      | h1::t1, h2::t2 ->
-          let n = cmp t1 t2 in
-          if n <> 0 then n else c h1 h2
-      | _::_, [] -> 1
-      | [], _::_ -> -1
-    in cmp 
-
-  let nodecmp t1 t2 = match t1, t2 with
-  | Tree _, _ -> assert false
-  | _, Tree _ -> assert false
-  | Var (_, nt), Var(_, nt') -> compare nt nt'
-  | Var _, _ -> -1
-  | Const _, Var _ -> 1
-  | Const c, Const c' -> compare c c'
-
-  let compare (c1, kids1) (c2, kids2) =
-    let n = compare c1 c2 in
-    if n <> 0 then n
-    else listcmp nodecmp kids1 kids2
+module PrettyPrint = struct
+    <<PrettyPrint>>
 end
-@ 
-<<spec.ml>>=
-let const_type = function
-  | Int _ -> "int"
-  | String _ -> "string"
+@
 
-let arg_type terminals = function
-  | Tree _ -> Polymorphic
-  | Var (v, ty) -> if StringSet.mem ty terminals then Fixed ty else Polymorphic
-  | Const c -> Fixed (const_type c)
-@ 
-<<spec.ml>>=
-let sig_string args = 
-  let add t s = match t with
-  | Polymorphic -> "'a -> " :: s
-  | Fixed t     -> t :: " -> " :: s
-  in String.concat "" (List.fold_right add args ["'a"])
 
-module Ty = Syntax.Ty
-let sig_type args = 
-  let alpha = Ty.Var "a" in
-  let add t s = match t with
-  | Polymorphic -> Ty.arrow alpha            s
-  | Fixed t     -> Ty.arrow (Ty.App (t, [])) s
-  in List.fold_right add args alpha
+% ------------------------------------------------------------------ 
+\subsection{Pattern Analysis}
+% ------------------------------------------------------------------ 
+
+<<pattern equivalence>>=
+let rec cmp x y = match x,y with
+    | Literal x    , Literal y     -> compare x y
+    | Var(_,x)     , Var(_,y)      -> compare x y
+    | Con(c1,cs1)  , Con(c2, cs2)  -> let n = compare c1 c2 in
+                                      if n <> 0 then n else listcmp cs1 cs2
+    | Literal _    , _             -> -1
+    | Var _        , Literal _     -> 1
+    | Var _        , Con _         -> -1
+    | Con _        , _             -> 1
+
+and listcmp l1 l2 = match l1, l2 with
+    | h1::t1 , h2::t2   -> let n = cmp h1 h2 in 
+                           if n <> 0 then n else listcmp t1 t2
+    | []     , []       -> 0
+    | _::_   , []       -> 1
+    | []     , _::_     -> -1
+@
+
+We provide iterators for patterns, i.e.~functions that fold over
+patterns: [[fold_con f]] passes all constructors and their arguments to
+[[f]].
+
+<<pattern iterators>>=
+let rec fold_con f unit = function
+    | Literal _     -> unit
+    | Var _         -> unit
+    | Con (c, args) -> List.fold_left (fold_con f) (f unit c args) args
+@
+
+Function [[freevars]] returns the names of free variables in a pattern.
+In a pattern every variable must be unique and therefore we do not care
+about duplicates.
+
+<<free variables>>=
+let freevars (p:pattern) =
+    let rec loop vs = function
+        | Literal _    -> vs
+        | Var(n,_)     -> n::vs
+        | Con(_,args)  -> List.fold_left loop vs args
+    in
+        List.rev (loop [] p)
+@        
+
+
+% ------------------------------------------------------------------ 
+\subsection{Type Check}
+% ------------------------------------------------------------------ 
+
+A constructor must be used consistently in all patterns in a Burg
+specification. Each constructor has a fixed arity and each argument
+position is either of a fixed terminal type, or polymorphic over all
+nonterminal types. Two constructor types are compatible, if they are
+syntactically equal.
+
+We build a map from constructors to their types.  When we add a
+constructor and find a type for it already, both types must be equal,
+otherwise we report a type error.
+
+<<type check>>=
+let argty = function
+    | Literal(String _) -> Mono "string"
+    | Literal(Int _)    -> Mono "int"
+    | Var(_, Term x)    -> Mono x
+    | Var(_, NonTerm _) -> Poly
+    | Con _             -> Poly
+@
+
+[[Add]] computes the type of a constructor based on its arguments and
+adds it under the constructor to the map. If an entry for [[con]]
+already exists it must be equal to the computed type, or we have found
+an inconsistency.
+
+<<type check>>=
+let add types con args =
+    let contype = List.map argty args in
+    try
+        if contype = StringMap.find con types then
+            types
+        else
+            error (Printf.sprintf "constructor `%s' is used inconsistently" 
+                   con)
+    with Not_found -> (* first time we see con *)
+        StringMap.add con contype types
+            
+let con_types rules =
+    List.fold_left 
+        (fun types rule -> fold_con add types rule.pattern) 
+        StringMap.empty 
+        rules
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Pretty Printing}
+% ------------------------------------------------------------------ 
+
+Currently we have only pretty-printing for rules implemented and not the
+declarations that are also part of a specification.
+
+<<PrettyPrint>>=
+module P = Pp
+
+let (^^)   = P.(^^)     (* concat *)
+let (^/)   = P.(^/)     (* concat with break *)
+let (~~) x = x          (* used for uniformity *)
+
+let nest   = P.nest 4
+
+(* nested automatic group - most versatile *)
+let angrp x =
+    P.agrp begin 
+    ~~ nest begin
+       ~~ x
+       end
+    end
+
+let str s       = P.text ("\"" ^ String.escaped s ^ "\"")
+let int n       = P.text (string_of_int n)
+let lit x       = P.text x
+
+let literal = function
+    | Int(i)    -> int i
+    | String(s) -> lit s
+
+let rec pattern = function
+    | Literal(c)         -> literal c
+    | Var(s,Term(ty))    -> lit s ^^ P.text ":" ^/ lit ty
+    | Var(s,NonTerm(ty)) -> lit s ^^ P.text ":" ^/ lit ty
+    | Con(s,args) -> 
+        angrp begin
+        ~~ lit s
+        ^^ P.text "(" 
+        ^^ P.list (P.text "," ^^ P.break) pattern args
+        ^^ P.text ")"
+        end
+
+let rule r =
+    angrp begin
+    ~~ P.text r.nonterm
+    ^^ P.text ":"
+    ^/ pattern r.pattern
+    ^/ angrp begin
+       ~~ P.text "["
+       ^^ Code.Print.exp r.cost
+       ^^ P.text "]"
+       end
+    ^/ angrp begin 
+       ~~ P.text "{:"
+       ^/ Code.Print.exp r.code
+       ^/ P.text ":}"
+       end
+    end
+
+let rules rs =
+    P.vgrp (P.list P.break rule rs ^^ P.break)
+@
+
+
+

@@ -1,94 +1,157 @@
-ML=	myList.ml	\
-	pprint.ml	\
-	syntax.ml	\
-	code.ml		\
-	spec.ml		\
-	image.ml	\
-	pcagain.ml	\
-	token.ml	\
-	lex.ml		\
-	parse.ml	\
-	norm.ml		\
-	burg.ml		\
-	main.ml		\
-	
-MLI=			\
-	burg.mli	\
-	code.mli	\
-	image.mli	\
-	norm.mli	\
-	parse.mli	\
-	pprint.mli	\
-	spec.mli	\
-	syntax.mli	\
-	myList.mli	\
-	
-CMO=`echo $ML | sed 's/\.ml/.cmo/g'`
+# :vim ts=8 sw=4 et:
+# ------------------------------------------------------------------ 
+# $Id$ 
+# ------------------------------------------------------------------ 
+#
+# This directory depends on ../cllib, and specifically the targets
+# update and update.opt there.
 
-TEST=test.ml test2.ml
+# ------------------------------------------------------------------ 
+# paths
+# ------------------------------------------------------------------ 
+
+TOP    =    ..
+INTERP =    evaluating
+DEPEND =    DEPEND
+
+LIBDIR =    ../lib
+BINDIR =    ../bin
+MANDIR =    ../man
+
+prefix =    /usr/local
+
+# ------------------------------------------------------------------ 
+# (high level) virtual targets
+# ------------------------------------------------------------------ 
+
+HTML =          `echo *.nw       | sed 's/\.nw/.html/g;'`
+DVI  =          `echo *.nw       | sed 's/\.nw/.dvi/g;'`
+PS   =          `echo *.nw       | sed 's/\.nw/.ps/g;'`
+
+all:V:          mlburg      runtime
+all.opt:V:      mlburg.opt  runtime.opt  
+
+runtime:V:      camlburg.cmo camlburg.cmi camlburg.mli camlburg.ml
+runtime.opt:V:  camlburg.cmx camlburg.cmi camlburg.mli camlburg.ml camlburg.o
+
+update update.opt:QV:   
+                echo "nothing to be done"
+
+dvi:V:          $DVI
+html:V:         $HTML
+ps:V:           $PS
+
+man:V:          
+
+test:VQ:
+                echo "nothing to be done"
+
+depend:V:       $DEPEND
+
+clean:V:    
+                rm -f *.cmo *.cmi *.cmx *.o *.sig 
+                rm -f *.output
+                
+clobber:V:      clean
+                rm -f mlburg mlburg.opt
+                rm -f *.ml *.mll *.mli $DEPEND *.mly
+                rm -f *.aux *.log *.dvi *.tex *.inc *.toc *.html
+
+# ------------------------------------------------------------------ 
+# rules and tools for OCaml
+# ------------------------------------------------------------------ 
 
 <../config/ocaml.mk
+<../config/noweb.mk
 
-all:V: mlburg
+# compiler flags used by the rules just included
 
-LIBDIR=../lib
-OCAMLC_FLAGS=-I $LIBDIR
+OCAMLC_FLAGS =  -g -I $LIBDIR
+OCAMLO_FLAGS =     -I $LIBDIR
 
-LINE =          '# %L "%F"%N'
+# ------------------------------------------------------------------ 
+# new rule for Burg specifications
+# cause ambiguities with noweb rules :-(
+# ------------------------------------------------------------------ 
 
-%.tex: %.nw
-	noweave -autodefs ocaml -index $prereq > $target
+# %.ml:           %.mlb ./mlburg
+#                ./mlburg $stem.mlb > $target
 
-%.ml: %.nw
-	notangle -L"$LINE" -R$target $prereq > $target
+# ------------------------------------------------------------------ 
+# important file sets
+# ------------------------------------------------------------------ 
 
-%.mli: %.nw
-	notangle -L"$LINE" -R$target $prereq > $target
+ML =            # in link order \
+                code.ml         \
+                spec.ml         \
+                parseerror.ml   \
+                parse.ml        \
+                lex.ml          \
+                norm.ml         \
+                burg.ml         \
+                main.ml         \
+                camlburg.ml     \
+                
+
+MLI =           # in alphabetical order \
+                burg.mli        \
+                camlburg.mli    \
+                code.mli        \
+                main.mli        \
+                norm.mli        \
+                parse.mli       \
+                parseerror.mli  \
+                spec.mli        \
 
 
-lex.mll: lex.nw
-	notangle -R$target $prereq > $target
+SCAN =          $ML $MLI
 
-main.ml: burg.nw
-	notangle -L"$LINE" -R$target $prereq > $target
+CMO =           `echo $ML       | sed 's/\.ml/.cmo/g'`
+CMX =           `echo $ML       | sed 's/\.ml/.cmx/g'`
 
-mlburg: $CMO
-	$OCAMLC $OCAMLC_FLAGS -o $target cllib.cma $prereq 
+# ------------------------------------------------------------------ 
+# building binaries
+# ------------------------------------------------------------------ 
 
-clean:V:
-	rm -f *.cmi *.cmo
-	rm -f *~
+mlburg:         $LIBDIR/cllib.cma  $CMO 
+                $OCAMLC $OCAMLC_FLAGS -o $target $prereq
+                
+mlburg.opt:     $LIBDIR/cllib.cmxa $CMX
+                $OCAMLO $OCAMLO_FLAGS -o $target $prereq
 
-clobber:V: clean
-	rm -f mlburg
+# ------------------------------------------------------------------ 
+# extra rules for cases not covered by noweb.mk or to resolve
+# ambiguities
+# ------------------------------------------------------------------ 
 
-bin:V: $BIN
+lex.mll:        lex.nw
+	        $NOTANGLE -R$target $prereq > $target
 
-lex.ml: lex.mll
-	ocamllex $prereq
+lex.ml:         lex.mll
+                $OCAMLLEX $prereq
 
-test:V: sample.cmo
+parse.mly:      parse.nw
+                $NOTANGLE -R$target $prereq > $target
 
-^(sample|iburg)'\.'ml'$':R: '\1'.mlb mlburg
-	mlburg $stem1.mlb > $target
+parse.ml:       parse.mly
 
-a.out:	test.cmo test2.cmo
-	$OCAMLC -o $target $prereq
+parse.mli       \
+parse.ml        \
+parse.output:   parse.mly
+                $OCAMLYACC -v parse.mly
 
-test.ml: ss.ml gen.ml
-	cat $prereq > $target
 
-gen.ml: sample.mlb mlburg
-	mlburg sample.mlb > $target
+# ------------------------------------------------------------------ 
+# recalculate dependencies
+# make sure that generators are run first
+# ------------------------------------------------------------------ 
 
-token.ml: lex.nw
-        notangle -L"$LINE" -R$target $prereq > $target
+$DEPEND:        $SCAN
+                $OCAMLDEP $SCAN > $DEPEND
 
-<DEPEND
+# ------------------------------------------------------------------ 
+# include dependencies
+# ------------------------------------------------------------------ 
 
-depend:V: DEPEND
-DEPEND: $ML $MLI
-	$OCAMLDEP $prereq > DEPEND
+<$DEPEND
 
-ss.ml:
-	# do nothing

@@ -1,116 +1,216 @@
-% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
-<<parse.mli>>=
-type decls = { start : Spec.nonterm list
-             ; types : (Spec.ty * Spec.nonterm list) list
-             ; terms : string list
-             ; head  : Code.fragment list
-             }
-val spec : Token.t list -> (decls * Spec.rule list) * Token.t list
-<<parse.ml>>=
-module Pc = Pcagain  (* embarrassing -- too many parser combinators *)
-open Pc
-module T = Token
+% vim: set ts=8 et sw=4:
+
+% ------------------------------------------------------------------ 
+\section{Parser}
+% ------------------------------------------------------------------ 
+
+This is the parser for the Burg specification language, specified in the
+OCamlYacc parser generator language. The parser returns a [[Spec.t]]
+value with no static checks performed. 
+
+<<parse.mly>>=
+%{
+    let rcsid = "$Id$"
+
+    <<prolog>>
+%}
+<<token definitions>>
+%start spec
+%type <Spec.t>spec
+%%
+<<grammar>>
+%%
+(* empty epilog *)
+@
+
+The parser's entry point is [[spec]]. The function returns an [[Spec.t]]
+value and raises [[Parsing.Parse_error]] in the case of a parse error.
+
+% ------------------------------------------------------------------ 
+\subsection{Prolog}
+% ------------------------------------------------------------------ 
+
+The prolog holds code commonly used in the semantic actions of the
+grammar.
+
+<<prolog>>=
 module S = Spec
-let satisfy = Pc.satisfy' T.to_string
-type 'a producer = ('a, Token.t) Pc.parse
-let some f = Pc.some' T.to_string f
+@
 
-let quote s = "`" ^ s ^ "'"
+If a semantic action detects an error, we report it with the
+[[Parseerror.Error]] exception. We would like to declare our own
+exception but there is no way in OCamlYacc to declare it in the
+(generated) interface. 
 
-let name   = satisfy "name" (function T.Name _ -> true | _ -> false) >> T.to_string
-let is_name n =
-  satisfy (quote n) (function T.Name n' when n = n' -> true | _ -> false)
-  >> const ()
-let (!* ) s = satisfy (quote s) ((=) (T.Reserved s)) >> T.to_string
-let newline = satisfy "newline" ((=) T.Eol)
-let int  = some "integer"   (function T.Int n  -> Some n | _ -> None)
-let xxx = Some "gi"
+<<prolog>>=
+let error msg = raise (Parseerror.Error msg)
+@
 
-let exp_of_code frags = Code.Raw frags
-let some_code = function T.Code (l, c) -> Some [Code.Synch l; Code.Line c] | _ -> None
-let raw_code = some "{: ... :}" some_code
-let code = raw_code >> exp_of_code
+The parser provides character offset for symbols in the grammar. We use
+them to annotate our abstract specification.
+
+<<prolog>>=
+let p  ()  = (Parsing.symbol_start (), Parsing.symbol_end())
+let px x   = (Parsing.rhs_start x    , Parsing.rhs_end x)
+let rev    = List.rev   
+@
+
+We collect declarations into a record, starting with the [[empty]]
+record below. Two terminals are predifined: [[int]] and
+[[string]]---they correspond to the types of literals.
+
+<<prolog>>=
+type decls = 
+    { terms     : S.StringSet.t
+    ; heads     : Code.exp list     (* in reversed order *)
+    }
+
+let empty =
+    { terms     = List.fold_right 
+                    S.StringSet.add 
+                    ["int"; "string"] 
+                    S.StringSet.empty
+    ; heads     = []
+    }
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Token Definitions}
+% ------------------------------------------------------------------ 
+
+We have simplified the specifiaction language and have to remove
+superficial tokens here. 
+
+<<token definitions>>=
+%token<string>                      ID  
+%token<int>                         INT  
+%token<Srcmap.location * string>    CODE        
+%token<string>                      STRING
+%token<Srcmap.map>                  EOF
+
+%token START
+%token TERM
+%token TYPE
+%token HEAD
+
+%token PERCENT 
+%token PPERCENT
+%token EOL
+%token LT
+%token GT
+%token COLON
+%token LPAREN
+%token RPAREN
+%token SEMI
+%token LBRACKET
+%token RBRACKET
+%token COMMA
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Grammar}
+% ------------------------------------------------------------------ 
+
+We occasionally put functions into the semantic actions when the value
+of the action depends on some inherited value. 
+
+<<grammar>>=
+spec    : decls PPERCENT rules EOF  { let d   = $1 in 
+                                      let r   = $3 d.terms 
+                                      and map = $4 
+                                      in
+                                        { S.terms  = d.terms
+                                        ; S.heads  = rev d.heads
+                                        ; S.rules  = rev r
+                                        ; S.srcmap = map
+                                        }
+                                     }   
+        | decls EOF                 { { S.terms  = $1.terms
+                                      ; S.heads  = rev $1.heads
+                                      ; S.rules  = []
+                                      ; S.srcmap = $2
+                                      }
+                                    }  
+        
+
+decls   : decls decl                { $2 $1 }
+        | /**/                      { empty }
+        
+       
+decl    : PERCENT TERM idlist       { fun d -> 
+                                      {d with terms = List.fold_right 
+                                        S.StringSet.add $3 d.terms}    
+                                    }  
+
+        | PERCENT HEAD CODE         { fun d -> 
+                                    {d with heads = Code.Raw($3) :: d.heads}
+                                    }
+        ;
+        
+idlist  : idlist ID                 { $2 :: $1 }
+        | ID                        { [$1]     }
+        ;
+@
+
+A rule receives the set of terminal types from the declaration. It
+passes it on to the pattern sub-grammar.
+
+<<grammar>>=
+rules   : rules  rule               { fun terms -> $2 terms :: $1 terms }
+        | /**/                      { fun terms -> []             }
+        ;
+        
+rule    : ID COLON toppat cost code { fun terms ->
+                                        { S.nonterm  = $1
+                                        ; S.pattern  = $3 terms
+                                        ; S.cost     = $4
+                                        ; S.code     = $5
+                                        }
+                                    }    
+@
+
+A pattern receives the set of declared terminal types [[ts]]. This set
+is used to decide about the type of an explicitly typed variable. A
+variable $x$ without an explicit type defaults to $x:x$ where $x$ is
+treated as a non-terminal type. 
+
+<<grammar>>=
+pat     : INT                       { fun ts -> S.Literal(S.Int($1)) }
+        | STRING                    { fun ts -> S.Literal(S.String($1))}
+        | ID LPAREN pats RPAREN     { fun ts -> S.Con($1, rev ($3 ts))}
+        | ID                        { fun ts -> S.Var($1, S.NonTerm $1)}
+        | ID COLON ID               { fun ts -> 
+                                      let t = if S.StringSet.mem $3 ts
+                                              then S.Term $3 else S.NonTerm $3  
+                                      in S.Var($1, t)
+                                    }
+        ;
+        
+toppat  : ID LPAREN pats RPAREN     { fun ts -> S.Con($1, rev ($3 ts))}
+        | ID                        { fun ts -> S.Var($1, S.NonTerm $1)}
+        | ID COLON ID               { fun ts -> 
+                                      let t = if S.StringSet.mem $3 ts
+                                              then error "terminal variable"
+                                              else S.NonTerm $3  
+                                      in S.Var($1, t)
+                                    }
+        ;
+
+pats    : pats COMMA pat            { fun ts -> $3 ts :: $1 ts }
+        | pat                       { fun ts -> [$1 ts] }
+        | /**/                      { fun ts -> [] }
+        ;
 
 
-let ( *$-- ) a p = !* a -- !!p >> snd
-let ( *--$ ) p a = p -- !! (!* a) >> fst
+cost    : LBRACKET INT    RBRACKET  { Code.Int($2) }
+        | LBRACKET code   RBRACKET  { $2           }
+        | /**/                      { Code.Int(0)  }
+        ;
 
-let rec commas p tokens = (p -- ("," *$-- commas p || empty) >> cons) tokens
-
-let getOpt o default = match o with
-  | Some x -> x
-  | None -> default
-    
-let rec tree tokens = (
-  name --> (  "(" *$-- commas tree *--$ ")" >> (fun l n -> S.Tree (n, l))
-           || optional (":" *$-- name) >> (fun nt n -> S.Var (n, getOpt nt n))
-           )
-  || int >> (fun n -> S.Const (S.Int n))
-) tokens
-
-
-let (-^-) x y = x -- y >> (fun (x, y) -> x ^ " " ^ y)
+code    : CODE                      { let (loc,src) = $1 in 
+                                       Code.Raw(loc,"("^src^")") }
+@
 
 
 
-let apply (f, l) = match l with
-| [] -> f
-| _  -> List.fold_left (fun f arg -> Code.Apply (f, arg)) f l
-let rec funapps    p = p -- repeat p >> apply
-let rec ssep comma p = p -- repeat (!* comma ->- p) >> cons
-let tuple = function [e] -> e | l -> Code.Tuple l
-let _ = (funapps : Code.exp producer -> Code.exp producer)
-let _ = (ssep : string -> 'a producer -> 'a list producer)
-
-let rec mlexp toks =
-  let mlexp = (mlexp : Code.exp producer) in
-  funapps (  name                                  >> (fun x -> Code.id x)
-          || int                                   >> (fun n -> Code.Int n)
-          || !* "(" ->- ssep "," mlexp -<- !* ")"  >> (fun l -> tuple l)
-          || !* "[" ->- ssep ";" mlexp -<- !* "]"  >> (fun l -> Code.List l)
-          ) toks
-
-let cost = "[" *$-- mlexp *--$ "]"
-
-let zero = Code.Int 0
-
-let (rule : S.rule producer) = 
-  name *--$ ":" -- !!tree -- !!(optional cost >> (fun c -> getOpt c zero)) -- !!code
-  >> (fun (((nt, t), cost), code) -> (nt, t, cost, code))
-
-let rule = rule -<- newline -<- repeat newline
-
-let nonterm = name
-
-let key n p = !*"%" ->- is_name n ->- !! p
-
-type decl = Start of S.nonterm | Type of S.ty * S.nonterm list | Newline
-
-let ty = name
-
-type decls = { start : S.nonterm list
-             ; types : (S.ty * S.nonterm list) list
-             ; terms : string list
-             ; head  : Code.fragment list
-             }
-let decl =
-  let start nt ({ start=s; types=tys; terms=ts; head=h } as state) =
-    if List.exists ((=) nt) s then state
-    else {start=nt::s; types=tys; terms=ts; head=h}  in
-  let addty (t, nts) { start=s; types=tys; terms=ts; head=h } =
-    { start=s; types=(t, nts)::tys; terms=ts; head=h }  in
-  let addterms terms { start=s; types=tys; terms=ts; head=h } =
-    { start=s; types=tys; terms=terms@ts; head=h }  in
-  let addheader frags { start=s; types=tys; terms=ts; head=h } =
-    { start=s; types=tys; terms=ts; head=h@frags }  in
-  
-     key "start" nonterm                                  >> start
-  || key "type"  ("<" *$-- ty *--$ ">" -- repeat nonterm) >> addty
-  || key "term"  (repeat name)                            >> addterms
-  || key "head"  raw_code                                 >> addheader
-  || newline                                              >> (fun _ s -> s)
-
-let decls = fold decl {start=[]; types=[]; terms=[]; head=[]}
-
-let spec = !! (decls *--$ "%%" -<- repeat newline -- repeat rule -<- eof T.to_string)
 

@@ -1,92 +1,330 @@
-% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 
-Here we export code types.
-Values of these types represent expressions, programs, etc.
-<<exported types>>=
-type fragment = Line of string | Synch of Srcmap.location
-type exp =
-  | Record of (string * exp) list
-  | Tuple  of exp list
-  | List   of exp list
-  | Case   of exp * (pat * exp) list
-  | Fun    of string list * exp
-  | Apply  of exp * exp
-  | Qualid of string list
-  | Let    of (pat * exp) list * exp
-  | Raw    of fragment list
-  | Int    of int
-  | String of string
-and pat =
-  | Con    of string * pat list
-  | Var    of string
-  | Any
-@ 
+% ------------------------------------------------------------------ 
+\section{Code Representation}
+% ------------------------------------------------------------------ 
+
+This module provides an abstract syntax for a sub-language of Objective
+Caml and a pretty printer to emit it.
+
 <<code.mli>>=
-<<exported types>>
-val pprint : exp -> unit
-val id     : string -> exp
-val print_frags : fragment list -> unit
+<<types>>
+<<values>>
+@
 
-val plus : exp -> exp -> exp
-val let' : pat -> exp -> exp -> exp
+<<types>>=
+type loc = string * int * int
 
-val to_syntax : exp -> 'a Syntax.bExp
-@ 
+type ty =           (* very incomplete *)
+    | TyVar         of string       (* 'a  *)
+    | TyID          of string       (* int *)
+
+type tyrep =        (* incomplete *)
+    | TyProd        of (string * ty) list       (* add: mutable flag *)
+
+type tydecl =       
+    { params:       string list
+    ; name:         string
+    ; rep:          tyrep option
+    }
+
+(* top level definitions *)
+type toplevel =
+    | Def           of (string * exp) list
+
+(* expressions *)
+and exp =
+    | Apply         of (exp * exp)
+    | Fun           of (pat list * exp)
+    | Id            of string
+    | If            of (exp * exp * exp)
+    | Int           of int
+    | Let           of ((pat * exp) list * exp)
+    | List          of exp list
+    | Raw           of (loc * string)
+    | Record        of (string * exp) list
+    | RecordWith    of (string * (string * exp) list)
+    | Seq           of exp list
+    | String        of string
+    | Tuple         of exp list
+
+(* patterns *)
+and pat =
+    | Con           of (string * pat list)
+    | Var           of string
+    | Any
+@
+
+Constructors on Objective Caml can not be treated as functions and thus
+using them directly to construct programs is a burden. Constructor
+functions come to our rescue.
+
+<<values>>=
+val tyvar:      string -> ty
+val typrod:     (string * ty) list -> tyrep
+
+val def:        (string * exp) list -> toplevel
+
+val apply:      exp -> exp -> exp
+val fun':       pat list -> exp -> exp
+val id:         string -> exp
+val longid:     string list -> exp
+val if':        exp -> exp -> exp -> exp
+val int:        int -> exp
+val let':       ((pat * exp) list) -> exp -> exp
+val list:       exp list -> exp
+val raw:        loc -> string -> exp
+val record:     (string * exp) list -> exp
+val recordwith: string -> (string * exp) list -> exp
+val seq:        exp list -> exp
+val string:     string -> exp
+val tuple:      exp list -> exp
+val unit:       exp
+val id:         string -> exp
+
+val con:        string -> pat list -> pat
+val var':       string -> pat
+val any:        pat
+val none:       pat     (* unit pattern = () *)
+@
+
+The pretty-printing functions create composable [[doc]] values which can
+be printed.
+
+<<values>>=
+module Print: sig
+    val toplevel:   toplevel -> Pp.doc
+    val exp:        exp -> Pp.doc
+    val tydecl:     tydecl -> Pp.doc
+    val doc:        Pp.doc -> unit  (* to stdout *)
+end
+@
+
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
 <<code.ml>>=
-<<exported types>>
+<<types>>
+<<convenience functions>>
 
-<<prettyprinting>>
+module Print = struct
+    <<pretty printing>>
+end    
+@
 
-let id x = Qualid [x]
+% ------------------------------------------------------------------ 
+\subsection{Convenience Functions}
+% ------------------------------------------------------------------ 
 
-let plus n m = match n, m with
-  | Int 0, m -> m
-  | n, Int 0 -> n
-  | _        -> Apply (Apply (id "+", n), m)
-let let' p e' e = Let ([p, e'], e)
-@ 
+<<convenience functions>>=
+let tyvar name              = TyVar  name
+let tyid  name              = TyID   name 
+let typrod binds            = TyProd binds 
 
-<<prettyprinting>>=
-module S = Syntax
-let error s = (prerr_endline s; exit 1)
-let blanks = function
-  | 0 -> ""
-  | k -> let s = String.create k in (String.fill s 0 k ' '; s)
-let synch_string file line col =
-  "# " ^ string_of_int line ^ " \"" ^ file ^ "\"\n" ^ blanks (col-1)
-let raw_to_string l =
-  String.concat ""
-  (List.map (function Line n -> n ^ "\n" | Synch (f, l, c) -> synch_string f l c) l)
+let def bindings            = Def bindings
 
-let location_prefix (file, line, col) = "\n" ^ synch_string file line col
+let apply f x               = Apply(f,x)
+let fun' pats body          = Fun(pats,body)
+let id x                    = Id x
+let if' guard left right    = If(guard, left, right)
+let int x                   = Int x
+let let' bindings body      = Let(bindings,body)
+let list  es                = List es
+let longid ids              = id (String.concat "." ids)
+let raw loc code            = Raw(loc,code)
+let record bindings         = Record bindings
+let recordwith r bindings   = RecordWith(r,bindings)
+let seq es                  = Seq(es)
+let string s                = String s
+let tuple es                = Tuple es
+let unit                    = Tuple []
 
-let print_frags = List.iter
-  (function Line n -> (Format.print_string n; Format.print_newline ())
-          | Synch (f, l, c) -> (Format.print_string (synch_string f l c)))
+let con c args              = Con(c, args)
+let var' v                  = Var(v)
+let any                     = Any
+let none                    = Con("",[])
+@
 
-let rec to_syntax = function
-  | Record l -> S.RECORD (List.map (fun (n, e) -> n, to_syntax e) l)
-  | Tuple  l -> S.TUPLE  (List.map to_syntax l)
-  | List   l -> S.LIST   (List.map to_syntax l)
-  | Case   (e, arms) ->
-      (let unvar = function Var v -> v | _ -> error "non-var in case" in
-       let cvt (p, rhs) = match p with
-       | Con (c, args) -> (c,  List.map unvar args, to_syntax rhs)
-       | _ -> error "non-Con in case"  in
-       S.CASEGEN (to_syntax e, List.map cvt arms, None))
-  | Fun    (args, e) ->
-      List.fold_right (fun x e -> S.LAM (S.ID x, e)) args (to_syntax e)
-  | Apply  (f, a) -> S.APP (to_syntax f, to_syntax a)
-  | Qualid l -> S.VAR (String.concat "." l)
-  | Let (bs, e') -> S.LET (List.map (fun (p, e) -> pat_syntax p, to_syntax e) bs,
-                           to_syntax e')
-  | Raw (c) -> S.VAR ("(\n" ^ raw_to_string c ^ ")")
-  | Int n -> S.INT n
-  | String s -> S.STR s
-and pat_syntax = function
-  | Con ("", args) -> S.TUPLEPAT (List.map pat_syntax args)
-  | Con (c,  args) -> error "constructor as pat"
-  | Var v -> S.ID v
-  | Any -> S.ID "_"
+% ------------------------------------------------------------------ 
+\subsection{Pretty-Printing}
+% ------------------------------------------------------------------ 
 
-let pprint e = S.pprint (fun _ -> ()) (to_syntax e)
+The pretty printer is implemented with Wadler's pretty printer
+combinators. This could be improved by taking precedence of operators
+into account.
+
+<<pretty printing>>=
+module P = Pp
+
+let (^^)      = P.(^^)                  (* concat *)
+let (^/)      = P.(^/)                  (* concat with break *)
+let (^.) x y  = x ^^ P.text " " ^^ y    (* non-breakable space *)
+let (~~) x    = x                       (* used for uniformity *)
+
+let indent x    = P.nest 4 (P.break ^^ x)
+
+let tyvar x = P.text ("'" ^ x)
+let tyvars vs =
+    P.agrp (P.text "(" ^^ indent (P.commalist tyvar vs) ^/ P.text ")")
+
+let rec tybinding (x,e) = 
+    P.agrp (P.text x ^^ P.text ":" ^^ indent (ty e)) 
+
+and ty = function
+    | TyVar x -> tyvar x
+    | TyID x  -> P.text x
+
+let tyrep = function
+    | TyProd (binds) ->
+        P.agrp begin
+        ~~ P.text "{" 
+        ^^ indent (P.list (P.text ";" ^^ P.break) tybinding binds)
+        ^/ P.text "}"
+        end
+
+let tydecl decl = match decl.rep with
+    | Some r   ->
+        P.agrp begin
+        ~~ P.text "type"
+        ^^ match decl.params with
+           | [] -> P.empty
+           | vs -> indent (tyvars decl.params)
+        ^/ P.text decl.name
+        ^/ P.text "=" 
+        end
+        ^^ indent (tyrep r)
+    | None ->
+        P.agrp begin
+        ~~ P.text "type"
+        ^^ match decl.params with
+           | [] -> P.empty
+           | vs -> indent (tyvars decl.params)
+        ^/ P.text decl.name
+        end
+        
+
+let rec toplevel = function
+    | Def bindings ->
+        P.agrp begin
+        ~~ P.text "let rec" 
+        ^/ P.list (P.break ^^ P.text "and ") binding bindings
+        ^^ P.break
+        end
+
+and pat = function
+    | Con(con, pats) -> 
+        P.agrp begin
+        ~~ P.text con
+        ^^ P.text "("
+        ^^ P.list (P.text "," ^^ P.break) pat pats
+        ^^ P.text ")"
+        end
+    | Var(x) -> P.text x 
+    | Any    -> P.text "_" 
+
+and exp = function
+    | Apply     (fexp, exp)     -> apply fexp exp
+    | Fun       (formals, exp)  -> func formals exp
+    | Id        x               -> P.text x
+    | If        (cond,e1,e2)    -> if' cond e1 e2
+    | Int       (i)             -> P.text (string_of_int i)
+    | Let       (cases, exp)    -> let' cases exp    
+    | List      (exps)          -> list exps
+    | Raw       (fragments)     -> raw fragments
+    | Record    (elements)      -> record elements
+    | RecordWith(r,binds)       -> recordwith r binds 
+    | Seq       (exps)          -> seq exps
+    | String    (s)             -> P.text ("\"" ^ (String.escaped s) ^ "\"")
+    | Tuple     (exps)          -> tuple exps
+
+and doc d = P.ppToFile stdout 77 d
+
+(* ------------------------------------------------------------------ *)
+
+and binding (x,e) = 
+    P.agrp (P.text x ^^ P.text " =" ^^ indent (exp e)) 
+
+and tuple es = 
+    P.agrp (P.text "(" ^^ P.list (P.break ^^ P.text ",") exp es ^^ P.text ")") 
+
+and list es = 
+    P.agrp (P.text "[" ^^ P.list (P.break ^^ P.text ";") exp es ^^ P.text "]") 
+
+and seq es = 
+    P.agrp (P.list (P.text ";" ^^ P.break) exp es) 
+    
+and apply fexp e = 
+    let par e = match e with
+        | Fun _  | Let _ | Apply _ -> P.text "(" ^^ exp e ^^ P.text ")" 
+        | _              -> exp e  in
+    let doc = match fexp with
+    | Apply(Id "+" ,e') -> exp e' ^/ P.text "+"  ^/ exp e
+    | Apply(Id ">=",e') -> exp e' ^/ P.text ">=" ^/ exp e
+    | fexp              -> par fexp ^^ indent (par e)  
+    in
+        P.agrp doc
+    
+and raw f =
+    let frag ((file, line, _), src) =  
+            ~~ P.text (Printf.sprintf "\n# %d \"%s\"" line file)   
+            ^/ P.text src
+    in
+        P.vgrp (frag f) 
+    
+and func formals e = 
+    P.agrp begin
+    ~~ P.agrp begin 
+       ~~ P.text "fun" 
+       ^/ begin 
+            if formals = [] then P.text "()" 
+            else P.list P.break pat formals 
+          end
+       ^/ P.text "->"
+       end
+    ^^ indent (exp e)
+    end
+
+and record bindings =
+    P.agrp begin
+    ~~ P.text "{"
+    ^^ (P.list (P.break ^^ P.text ";") binding bindings)
+    ^/ P.text "}"
+    end
+
+and recordwith r bindings =
+    P.agrp begin
+    ~~ P.text "{" ^/ P.text r ^/ P.text "with"
+    ^^ indent (P.list (P.text ";" ^^ P.break) binding bindings)
+    ^/ P.text "}"
+    end
+
+and case e cases = 
+    let case (p,e) = P.agrp (pat p ^/ P.text "->" ^^ indent (exp e))
+    in
+        P.agrp begin
+        ~~ P.agrp (P.text "match" ^/ exp e ^/ P.text "with")
+        ^/ P.agrp (P.list (P.text "|" ^^ P.break) case cases)
+        end
+        
+and let' cases e =
+    let par x      = P.text "(" ^^ exp e ^^ P.text ")"
+    and case (p,e) = P.agrp (indent (pat p ^^ P.text " =" ^/ exp e))
+    in match cases with
+        | []    -> exp e
+        | cs    -> P.agrp begin
+                   ~~ P.text "let"
+                   ^^ P.list (P.break ^^ P.text "and") case cs
+                   ^/ P.text "in" 
+                   ^^ indent (exp e)
+                   end
+
+and if' cond e1 e2 =
+    P.agrp begin
+    ~~ P.agrp (P.text "if" ^^ indent (exp cond) ^/ P.text "then") 
+    ^^ indent (exp e1)
+    ^/ P.text "else" 
+    ^^ indent (exp e2)
+    end
+@
+

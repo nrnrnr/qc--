@@ -1,7 +1,7 @@
-%start stmt
-%type <string> disp rc stmt
-%type <int> reg
-%term int
+--
+-- This an MLburg specification
+--
+
 %head {:
   type regnum = int
   type rtl = string list
@@ -19,27 +19,47 @@
 :}
 
 %%
+
 stmt : ASGNI (disp, reg) [1]     {: pair disp reg >>= fun (d, r) ->
                                     exec [d;  " := ";  regstring r] :}
 stmt : reg                       {: mmap ignore reg :}
 reg  : ADDI (reg, rc)    [1]     {: ((getreg: int monad) >>= (fun r ->
                                     pair reg rc >>= fun (reg, rc) ->
-	                            exec [regstring r;  ":= ";  regstring reg;  " + ";  rc]
-                                    >>= fun () -> unit r)) : int monad :}
+	                            exec [ regstring r;  ":= "
+                                         ; regstring reg
+                                         ; " + "
+                                         ; rc
+                                         ] >>= fun () -> unit r)) : int monad 
+                                 :}
+
 reg  : 	CVCI(INDIRC(disp)) [1]   {: (getreg >>= fun r ->
                                     disp >>= fun disp ->
-                                    exec [regstring r;  " := sx (";  disp;  ")"] >>=
-                                    fun () -> unit r : int monad) :}
-reg  : CNSTI (0)                 {: unit 0 :}
-reg  : disp                [1]   {: getreg >>= fun r ->
-                                    exec [regstring r;  ":=";  disp] >>=
-                                    fun () -> unit r :}
-disp : ADDI(reg, con)            {: pair reg con >>= fun (r, c) ->
-                                      unit (regstring r ^ " + " ^ string_of_int c) :}
-disp : ADDRLP(s:string)          {: unit s :}
+                                    exec [regstring r
+                                         ;  " := sx ("
+                                         ;  disp
+                                         ;  ")"
+                                         ] >>= fun () -> unit r : int monad) 
+                                 :}
 
-rc : con                         {: mmap string_of_int con :}
-rc : reg                         {: mmap (fun n -> "r" ^ string_of_int n) con :}
+reg  : disp                [1]  {: getreg >>= fun r -> disp >>= fun disp ->
+                                   exec [regstring r;  ":=";  disp] >>=
+                                   fun () -> unit r 
+                                :}
 
-con  : CNSTI (n:int)             {: unit n :}
+reg  : CNSTI (0)                {: unit 0 :}
+
+disp : ADDI(reg, con)           {: pair reg con >>= fun (r, c) ->
+                                     unit ( regstring r 
+                                          ^ " + " 
+                                          ^ string_of_int c
+                                          ) 
+                                :}
+
+disp : ADDRLP(s:string)         {: unit s :}
+
+
+rc : con                        {: mmap string_of_int con :}
+rc : reg                        {: mmap (fun n -> "r" ^ string_of_int n) reg :}
+
+con  : CNSTI (n:int)            {: unit n :}
 
