@@ -206,6 +206,7 @@ rule token = parse
   | ws+         { fun map -> token lexbuf map }
   | tab         { fun map -> tab lexbuf map; token lexbuf map }
   | nl          { fun map -> nl lexbuf map ; token lexbuf map }
+  | nl '#'      { fun map -> line lexbuf map 0; token lexbuf map }
 
   | ";"         { fun map -> SEMI         }
   | ":"         { fun map -> COLON        }
@@ -490,6 +491,70 @@ and pragma3 = parse
                                   pragma3 lexbuf map level 
                                 }
 
+@
+
+% ------------------------------------------------------------------ 
+\subsubsection{C-Style Line Pragma}
+% ------------------------------------------------------------------ 
+
+Although not intended it is likely that \C~is used with the C
+preprocessor.  It emits directives to link a line in its output to a
+another source file.  In principle the [[line]] pragma is intended for
+this task.  However, the C preprocessor can not emit this pragmas
+instead and thus we provide support for the C preprocessor directive.
+
+The implementation is a new scanner context that requires that the
+line directive is matched by the following regular expression (in the
+syntax used by \ocaml-Lex and using expressions defined above):
+
+\begin{center}
+[['#' ws+ nat '"'[^ '"']*'"' ws* '\n']]
+\end{center}
+
+The current line is linked to line number given in the directive and
+the file enclosed in quotes.
+
+Line directive may not appear inside \C~pragmas and comments.  More
+precisely they are only recognized in the [[token]] context.  As a
+side effect a syncronization point is entered into the source location
+map after the file name is found.  When the context becomes active the
+initial [[#]] has already been consumed. The context is left after the
+quoted file name is recognized. 
+
+This implementation does not check the right 
+
+<<>>=
+and line = parse 
+    eof                 { fun map l ->
+                          error lexbuf map "unterminated line directive" 
+                        }
+  | ws+                 { fun map l -> line lexbuf map l }
+  | tab                 { fun map l -> line lexbuf map l }
+  | '"'                 { fun map l ->
+                          let buf      = Buffer.create 80 in
+                          let _        = string lexbuf map buf in
+                          let file     = Buffer.contents buf in
+                          let pos      = Lexing.lexeme_start lexbuf in
+                          let location = file, l, 1 in
+                                ( Srcmap.sync map pos location
+                                ; () (* return *)
+                                )
+                        }
+  | nat                 { fun map l -> 
+                          line lexbuf map (int_of_string (get lexbuf))
+                        }
+  | _                   { fun map l -> 
+                          error lexbuf map 
+                          "illegal character in line directive"
+                        }
+@
+following syntax of the line directive:
+
+
+
+
+<<>>=                                
+
 { (* start of epilog *)
                                
 <<scanner entry point>>
@@ -518,6 +583,7 @@ all tokens for a file together with their positions.
     | COMMA             -> "COMMA"
     | CONST             -> "CONST"
     | CONTINUATION      -> "CONTINUATION"
+    | CPP               -> "CPP"
     | CUT               -> "CUT"
     | CUTS              -> "CUTS"
     | ELSE              -> "ELSE"
@@ -684,6 +750,7 @@ let atoi  = int_of_string
 
 /* pragmas */
 
+%token CPP
 %token PRAGMA
 
 @ We need two tokens for [[pragma line]]:  [[LINE_]] is only used
@@ -766,16 +833,16 @@ toplevel    :   IMPORT ty names  SEMI             { Import($2,rev $3)        }
                     { Registers (mkRegs Invariant $3)                        }
             |   /*-----*/ REGISTER registers SEMI
                     { Registers (mkRegs Variant   $2)                        }
-            
-            |   SECTION STR LBRACE sections RBRACE { Section($2,rev $4) }
-            |   pragma                            { $1                  }
+            |   SECTION STR LBRACE sections RBRACE { Section($2,rev $4)      }
+            |   pragma                            { $1                       }
+            |   procedure                         { TopProcedure($1)         }
 
 
 sections    :   sections sectionAt                { $2 :: $1 }
             |   /**/                              { []       }
 
 sectionAt   :   section                           { SectionAt($1,p())         }
-section     :   procedure                         { $1                        }
+section     :   procedure                         { Procedure($1)             }
             |   datum                             { Datum($1)                 }
             |   span                              { $1                        }
             |   EXPORT    names  SEMI             { SExport (None   , rev $2) }
@@ -837,10 +904,10 @@ conv        :   FOREIGN STR                 { Some $2         }
 aligned     :   ALIGNED INT                 { Some(atoi $2)   }
 
 procedure   :   conv ID frmls body      { let (dec,stmt) = $4 in
-                                          Procedure($1  ,$2,$3,dec,stmt) 
+                                          ($1  ,$2,$3,dec,stmt) 
                                         }
             |        ID frmls body      { let (dec,stmt) = $3 in
-                                          Procedure(None,$1,$2,dec,stmt) 
+                                          (None,$1,$2,dec,stmt) 
                                         }
 
 
@@ -967,7 +1034,6 @@ expr:       |   sexpr                            { $1 }
             |   exprAt CARET      exprAt         { BinOp($1,$2,$3)    }
             |   exprAt BAR        exprAt         { BinOp($1,$2,$3)    }
             |   exprAt AMPERSAND  exprAt         { BinOp($1,$2,$3)    }
-            |   exprAt TILDE      exprAt         { BinOp($1,$2,$3)    }
             |   exprAt EEQ        exprAt         { BinOp($1,$2,$3)    }
             |   exprAt NEQ        exprAt         { BinOp($1,$2,$3)    }
             |   exprAt LT         exprAt         { BinOp($1,$2,$3)    }
@@ -975,7 +1041,7 @@ expr:       |   sexpr                            { $1 }
             |   exprAt GEQ        exprAt         { BinOp($1,$2,$3)    }
             |   exprAt GT         exprAt         { BinOp($1,$2,$3)    }
             
-            |          TILDE      exprAt         { UnOp($1,$2)        }
+            |   TILDE      exprAt  %prec TILDE   { UnOp($1,$2)        }
 
 exprs       :   exprs COMMA exprAt               { $3 :: $1 }
             |   exprAt                           { [$1]     }

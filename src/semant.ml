@@ -81,6 +81,7 @@ module Phase1 = struct
         | Const ( cs)     -> foldl constant env cs
         | Section( n, ss) -> foldl section env ss
         | Registers( rs)  -> foldl register env rs
+        | TopProcedure(p) -> env
         | Pragma          -> env
 
     let program ds srcmap = 

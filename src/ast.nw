@@ -51,12 +51,13 @@ region      = (int,int) -- (* Srcmap.reg *)
 
 program     = (topdecl*)
 
-topdecl     = TopDeclAt (topdecl, region)
-            | Import    (ty, name*)
-            | Export    (ty?,name*)
-            | Const     (const*)
-            | Section   (name, section*)
-            | Registers (register*)
+topdecl     = TopDeclAt     (topdecl, region)
+            | Import        (ty, name*)
+            | Export        (ty?,name*)
+            | Const         (const*)
+            | Section       (name, section*)
+            | Registers     (register*)
+            | TopProcedure  (proc)
             -- pragmas
             | Pragma                          -- just for testing
 
@@ -72,16 +73,13 @@ const       = (name, expr)
 
 register    = (invariant, ty, name, reg?)
 
+proc        = (conv?, name, formal*, decl*, stmt*)
+
 section     = SectionAt(section, region)
             | SSpan (expr key, expr value, section*)
             | Datum (datum)
             | SExport (ty?, name*)            
-            | Procedure ( conv?
-                        , name
-                        , formal*
-                        , decl*
-                        , stmt*
-                        )
+            | Procedure (proc)
 memsize     = NoSize
             | DynSize
             | FixSize (expr)
@@ -133,11 +131,6 @@ lvalue      = LValueAt (lvalue, region)
 assign      = (lvalue,expr)
 altcont     = (expr, expr)
 
-stmts       = (stmt*)
-targets     = (target*)
-flows       = (flow*)
-lvalues     = (lvalue*)
-
 @ The abstract syntax does not make a difference between an empty list
 of statements and an absent optional list of statements. An [[if]]
 statement without an [[else]] block looks on this level like an [[if]]
@@ -146,16 +139,16 @@ with an empty [[else]] block.
 <<ast declaration>>=
 
 stmt        = StmtAt (stmt, region)
-            | IfStmt     (expr, stmts, stmts)
+            | IfStmt     (expr, stmt*, stmt*)
             | LabelStmt  (name)
             | ContStmt   (name, name*)
-            | SpanStmt   (expr key, expr value, stmts)
+            | SpanStmt   (expr key, expr value, stmt*)
             | AssignStmt (assign*)
-            | CallStmt   (lvalue*, conv?, expr, actual*, targets, flows)
-            | PrimStmt   (lvalue*, conv?, name, actual*, flows)
-            | GotoStmt   (expr, targets)
-            | JumpStmt   (conv?, expr, actual*, targets)
-            | CutStmt    (name, actual*, flows)
+            | CallStmt   (lvalue*, conv?, expr, actual*, target*, flow*)
+            | PrimStmt   (lvalue*, conv?, name, actual*, flow*)
+            | GotoStmt   (expr, target*)
+            | JumpStmt   (conv?, expr, actual*, target*)
+            | CutStmt    (name, actual*, flow*)
             | ReturnStmt (conv?, altcont?, actual*)
             | EmptyStmt  
 
@@ -421,7 +414,7 @@ let formals xs = agrp (text "(" ^^ commalist formal xs ^^ text ")")
 
                  
 let register ( v , t, n, reg) = 
-    agrp begin 
+    angrp begin 
     ~~ (if v = Invariant then text "invariant" ^^ break else empty)
     ^^ text "register"
     ^/ ty t
@@ -556,33 +549,29 @@ let rec stmt = function
         
     | PrimStmt( lhs, cc, n, args, fs)     -> 
         angrp begin
-        ~~ ( if lhs <> [] 
-             then fngrp begin 
+        ~~ ( if lhs <> [] then 
                   ~~ commalist lvalue lhs 
                   ^/ text "="
                   ^^ break
-                 end
              else empty
            )
         ^^ ( match cc with 
            | Some c -> agrp (text "foreign" ^/ str c ^^ break)
            | None   -> empty
            ) 
-        ^^ angrp begin 
+        ^^ fngrp begin 
            ~~ text "%%" 
            ^^ id n
-           ^^ fngrp begin 
-              ~~ break 
-              ^^ text "(" 
-              ^^ commalist actual args 
-              ^^ text ")"
-              end
+           ^^ break 
+           ^^ text "(" 
+           ^^ commalist actual args 
+           ^^ text ")"
            end
         ^^ (if fs <> [] then break ^^ flows fs else empty)
         ^^ semi
         end
     | GotoStmt(e,ts)                      -> 
-        agrp begin
+        angrp begin
         ~~ text "goto"
         ^/ expr e
         ^^ (if ts <> [] then break ^^ targets ts else empty)
@@ -616,17 +605,18 @@ let rec stmt = function
            | Some c -> agrp (text "foreign" ^/ str c) ^^ break
            | None   -> empty
            )
-        ^^ angrp (text "jump" ^/ expr e)
-        ^^ ( if args <> [] 
-             then fngrp begin 
-                  ~~ break 
-                  ^^ text "(" 
-                  ^^ commalist actual args 
-                  ^^ text ")"
-                  end
-             else empty
-           )
-        ^^ (if ts <> [] then break ^^ targets ts else empty)
+        ^^ fngrp begin 
+           ~~ (text "jump" ^/ expr e)
+           ^^ ( if args <> [] then 
+                    ~~ break 
+                    ^^ text "(" 
+                    ^^ commalist actual args 
+                    ^^ text ")"
+                 else 
+                    empty
+              )
+           ^^ (if ts <> [] then break ^^ targets ts else empty)
+           end
         ^^ semi
         end
     | EmptyStmt -> semi
@@ -644,36 +634,37 @@ let export t ns =
        ^^ semi
     end
 
+let proc (cc,n,fs, ds, ss) =  
+    agrp begin 
+    ~~ agrp begin
+       ~~ begin match cc with 
+          | Some c -> text "foreign" ^/ str c ^^ break
+          | None   -> empty
+          end
+       ^^ id n
+       ^^ formals fs
+       end
+    ^/ text "{"
+    ^^ nest begin
+       ~~ break
+       ^^ list break decl ds
+       ^^ break ^^ break
+       ^^ list break stmt ss
+       end 
+    ^/ text "}" 
+    end
 
 let rec section = function
     | SectionAt(x,_) -> section x
     | SSpan( e1, e2, ss) ->  
-            agrp begin
-            ~~ agrp (text "span" ^/ expr e1 ^/ expr e2)
-            ^/ block section ss
-            end
+        agrp begin
+        ~~ agrp (text "span" ^/ expr e1 ^/ expr e2)
+        ^/ block section ss
+        end
     | Datum( d) ->  
-            datum d
+        datum d
     | SExport (t, ns) -> export t ns
-    | Procedure(cc,n,fs, ds, ss)  ->  
-            agrp begin 
-            ~~ agrp begin
-               ~~ begin match cc with 
-                  | Some c -> text "foreign" ^/ str c ^^ break
-                  | None   -> empty
-                  end
-               ^^ id n
-               ^^ formals fs
-               end
-            ^/ text "{"
-            ^^ nest begin
-               ~~ break
-               ^^ list break decl ds
-               ^^ break ^^ break
-               ^^ list break stmt ss
-               end 
-            ^/ text "}" 
-            end
+    | Procedure(p)  -> proc p
 
 let rec topdecl = function
     | TopDeclAt(x,_) -> topdecl x
@@ -700,6 +691,7 @@ let rec topdecl = function
             vgrp begin
             ~~ list break register rs
             end
+    | TopProcedure (p) -> proc p
             
     | Pragma ->
             comment "<pragma>"
