@@ -65,13 +65,13 @@ clobber:V: clean
 
 C = runtime.c pcmap.c gcc-linux.c
 CMM = cut.c--
-S   = x86cont.s
+S = x86cont.s
 H = qc--runtime.h pcmap.h
 
 C = ${C:%.c=$B%.c}
 CMM = ${CMM:%=$B%}
 H = ${H:%.h=$B%.h}
-O = ${C:%.c=%.o} ${CMM:%.c--=%.o} ${S:%.s=%.o}
+O = ${C:%.c=%.o} ${CMM:%.c--=%.o}
 
 SCAN = $C trace.c
 # <$TOP/config/depend.mk
@@ -93,6 +93,9 @@ test.exe: $O test.o trace.o pcmap.ld
 	gcc -o $target $prereq
 
 pcmap.ld:D: pcmap.nw
+	$NOTANGLE $prereq -R$target > $target
+
+x86cont.s: x86cont.nw
 	$NOTANGLE $prereq -R$target > $target
 
 &.o: &.s
