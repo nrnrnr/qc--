@@ -45,6 +45,18 @@ all:V:          lib dirs
                     (echo "# entering $i" && cd $i && mk $MKFLAGS update) || exit 1
                 done
 
+dot:V:		graph.dot
+print-dot:V:	graph.ps
+	lpr $prereq
+
+%.ps: %.dot:D:
+	dot -Tps $prereq > $target
+
+DEPENDFILES=cllib/DEPEND.evaluating gen/DEPEND lua/DEPEND.std rtl/DEPEND.evaluating \
+		src/DEPEND.evaluating
+graph.dot:D:	$DEPENDFILES
+	cat $prereq | ocamldot -landscape > $target
+
 all.opt:V:      lib.opt dirs
                 for i in $SRC; 
                 do 
