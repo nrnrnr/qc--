@@ -78,6 +78,7 @@ int lua_CMM_end_section(lua_State *L);
 #include "span.h"
 
 #include <cii/atom.h>
+#include <cii/mp.h>
 
 <<bytecode generation>>
 @
@@ -835,15 +836,27 @@ from the Lua stack, and returns 0 to signify it returns no value to Lua.
 <<bytecode generation>>=
 int lua_CMM_push_literal(lua_State *L) {
   long int num;
+  unsigned width;
+  MP_T     mp_num;
 
   lua_assert_isnumber(L, -1, "push_literal expects a width spec. (number)");
   lua_assert_isstring(L, -2, "push_literal expects a string literal (hex)");
 
-  cmm_assert(sscanf(lua_tostring(L, -2), "%lx", &num) == 1,
-             "could not parse literal; hexadecimal string literal expected");
+  width = lua_tonumber(L, -1);
+
+  /* FIX this should be more elegant */
+  if (width > 32) {
+    MP_set(width);
+    mp_num = MP_new(0);
+    mp_num = MP_fromstr(mp_num, lua_tostring(L, -2), 16, NULL);
+    num    = (long int) mp_num;
+  } else {
+    cmm_assert(sscanf(lua_tostring(L, -2), "%lx", &num) == 1,
+               "could not parse literal; hexadecimal string literal expected");
+  }
 
   /* emit instruction */
-  push((unsigned) num, (unsigned) lua_tonumber(L, -1)); 
+  push((unsigned) num, width);
   lua_pop(L, 2);
 
   return 0;

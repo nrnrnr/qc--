@@ -1408,7 +1408,11 @@ We push and pop values using our stack manipulation macros and functions (see [[
 
 \useops{Literal}
 <<matching statement>>=
-    | PUSH(v, width)    => PUSH(to_CMM_value(v, width), values); 
+    | PUSH(v, width)    => if (width > 32) {  /* FIX this could be better */
+                             width = sizeof(MP_T);
+                           }
+
+                           PUSH(to_CMM_value(v, width), values); 
                            pc = next;
 @  
 
@@ -1536,11 +1540,34 @@ rounding mode atop the value stack.
 and setting it to be the current hardware floating-point rounding mode.
 
 <<matching statement>>=
-    | FETCH_ROUND()     => PUSH(to_CMM_value(fegetround(), 2), values);
+    | FETCH_ROUND()     => switch (fegetround()) {
+                           case FE_TOWARDZERO: PUSH(to_CMM_value(0,2), values);
+                                               break;
+                           case FE_TONEAREST : PUSH(to_CMM_value(1,2), values);
+                                               break;
+                           case FE_UPWARD    : PUSH(to_CMM_value(2,2), values);
+                                               break;
+                           case FE_DOWNWARD  : PUSH(to_CMM_value(3,2), values);
+                                               break;
+                           default           : cmm_err("invalid rounding "
+                                                       "mode");
+                           }
                            pc = next;
     | STORE_ROUND()     => {
                            value v = POP(values);
-                           fesetround(v.bits2);
+                           int   rm; 
+
+                           switch (v.bits2) {
+                           case 0 : rm = FE_TOWARDZERO; break;
+                           case 1 : rm = FE_TONEAREST ; break;
+                           case 2 : rm = FE_UPWARD    ; break;
+                           case 3 : rm = FE_DOWNWARD  ; break;
+                           default: cmm_err("invalid rounding mode (%d)", 
+                                            v.bits2);
+                           }
+
+                           cmm_assert(fesetround(rm) == 0, "could not "
+                                      "set floating-pt rounding mode");
                            pc      = next;
                            }
 @ 
@@ -2214,6 +2241,7 @@ Putting it all together, we have [[interp.m]], the C file with NJ Machine-Code T
 #include "controlflow.h"
 
 #include <cii/arena.h>
+#include <cii/mp.h>
 
 <<global variable definitions>>
 

@@ -20,22 +20,22 @@ Header file [[float-features.h : iec60559]] makes use of IEC 60559
 floating-point arithmetic features.
 
 \item
-Header file [[c-features.h : no_c99]] is a dummy header file that warns the 
+Header file [[c-features.h : no-c99]] is a dummy header file that warns the 
 user and performs a no-op anytime a C99-only feature is used.
 
 \item
-Header file [[float-features.h : no_iec60559]] is a dummy header file that 
+Header file [[float-features.h : no-iec60559]] is a dummy header file that 
 warns the user and performs a no-op anytime an IEC 60559-only feature is used.
 
 \end{itemize}
 
 To enable use of C99 language extensions, the [[c99]] version of
 [[c-features.h]] should be extracted from this noweb document; otherwise
-the [[no_c99]] version should be extracted.
+the [[no-c99]] version should be extracted.
 
 To enable use of IEC 60559 floating-point extensions, the [[iec60559]] version
 of [[float-features.h]] should be extracted from this noweb document; otherwise
-the [[no_iec60559]] version should be extracted.
+the [[no-iec60559]] version should be extracted.
 
 C code should include [[c-features.h]] or [[float-features.h]] as needed.
 
@@ -80,8 +80,9 @@ fprintf(stderr, "WARNING: C99 operation '%s' not supported; further runtime " \
 <<float-features.h.iec60559>>=
 #ifndef _FLOAT_FEATURES_H
 #define _FLOAT_FEATURES_H
-
+ 
 #include <fenv.h>
+#pragma STDC FENV_ACCESS ON
 
 #endif /* _FLOAT_FEATURES_H */
 @
@@ -127,6 +128,16 @@ fprintf(stderr, "WARNING: IEC 60559 floating-point operation '%s' " \
 #define isgreater(X,Y) \
 ( _IEC60559_NOOP(isgreater) \
 , 0 \
+)
+
+#define nearbyintf(X) \
+( _IEC60559_NOOP(nearbyintf) \
+, 0.0 \
+)
+
+#define nearbyint(X) \
+( _IEC60559_NOOP(nearbyint) \
+, 0.0 \
 )
 
 #endif /* _FLOAT_FEATURES_H */

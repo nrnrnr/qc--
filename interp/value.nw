@@ -11,6 +11,7 @@ This document contains the interface and implementation of {\PAL} primitive oper
 #define _VALUE_H
 
 #include "types.h"
+#include <cii/mp.h>
 
 <<type definitions>>
 <<macro definitions>>
@@ -33,17 +34,25 @@ are as of now unsupported.
 
 <<type definitions>>=
 typedef union {
-  bool    bool   ;
-  bits1   bits1  ;
-  bits2   bits2  ;
-  bits8   bits8  ;
-  bits16  bits16 ;
-  bits32  bits32 ;
-  /*  bits64  bits64 ; */
-  float32 float32;
-  float64 float64;
+  bool     bool   ;
+  bits1    bits1  ;
+  bits2    bits2  ;
+  bits8    bits8  ;
+  bits16   bits16 ;
+  bits32   bits32 ;
+  MP_T     bits64 ;
+  float32  float32;
+  float64  float64;
   /*  float96 float96; */  /* UNSUPPORTED for now */
+
   void    *ptr;
+  u_int8   u_int8;
+  u_int16  u_int16;
+  u_int32  u_int32;
+
+  s_int8   s_int8;
+  s_int16  s_int16;
+  s_int32  s_int32;
 } value;
 
 typedef value  *stack;     /* value stack */
@@ -104,7 +113,7 @@ C type casting does not do the trick, as it actually changes the bit-level value
 
 [[to_CMM_value]] embeds a C value in a [[value]] without subverting the C
 type system.
-For now, though, it only works for integer values.
+Unfortunately, this helper only works for integer values.
 
 <<function definitions>>=
 value to_CMM_value(unsigned v, unsigned width) {
@@ -114,12 +123,13 @@ value to_CMM_value(unsigned v, unsigned width) {
   val.bits32 = 0;
 
   switch (width) {
-  case  1: val.bits1  = v; break;
-  case  2: val.bits8  = v; break;
-  case  8: val.bits8  = v; break;
-  case 16: val.bits16 = v; break;
-  case 32: val.bits32 = v; break;
-	/*  case 64: val.bits64 = v; break; */
+  case  1: val.bits1  = v       ; break;
+  case  2: val.bits8  = v       ; break;
+  case  8: val.bits8  = v       ; break;
+  case 16: val.bits16 = v       ; break;
+  case 32: val.bits32 = v       ; break;
+  case 64: val.bits64 = (MP_T) v; break;
+
   default:
     cmm_err("unsupported value type; cannot continue"); 
   }
@@ -145,7 +155,6 @@ void check_value_types (void) {
   assert(sizeof(v.bits8 ) == 1);
   assert(sizeof(v.bits16) == 2);
   assert(sizeof(v.bits32) == 4);
-  /*   assert(sizeof(v.bits64) == 8); */
 
   assert(sizeof(v.float32) == 4);
   assert(sizeof(v.float64) == 8);
@@ -154,12 +163,10 @@ void check_value_types (void) {
   assert(sizeof(u_int8)  == 1);
   assert(sizeof(u_int16) == 2);
   assert(sizeof(u_int32) == 4);
-  /*   assert(sizeof(u_int64) == 8); */
 
   assert(sizeof(s_int8)  == 1);
   assert(sizeof(s_int16) == 2);
   assert(sizeof(s_int32) == 4);
-  /*   assert(sizeof(s_int64) == 8); */
 
   assert(sizeof(void *)   == sizeof(v.bits32));
 }

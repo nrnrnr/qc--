@@ -144,6 +144,7 @@ void init_operators(void);
 
 #include <cii/atom.h>
 #include <cii/arena.h>
+#include <cii/mp.h>
 
 <<macro definitions>>
 <<operator definitions>>
@@ -247,7 +248,7 @@ IBINARYOP(fcmp, { if isunordered(v1, v2)    ans = UNORDERED;
                   else if isgreater(v1, v2) ans = FLOAT_GT;
                   else if isless(v1, v2)    ans = FLOAT_LT;
                   else ans = FLOAT_EQ;
-                }, v1, v2, ans, float32, float32, float_comparison, 
+                }, v1, v2, ans, float32, float32, bits2,
                                 bits2  , bits2  , bits2)
 BINARYOP (feq, v1 == v2, v1,v2, float32, float32, bool, bits32, bits32, bool)
 BINARYOP (fge, v1 >= v2, v1,v2, float32, float32, bool, bits32, bits32, bool)
@@ -260,20 +261,29 @@ BINARYOP (fordered,   !isunordered(v1,v2), v1,v2, float32, float32, bool,
 BINARYOP (funordered, isunordered(v1, v2), v1,v2, float32, float32, bool,
                                                   bits32, bits32, bool)
 /* NaN */
-NULLARYOP  (round_down,    { v1 = FE_DOWNWARD;   }, v1, u_int8, bits2)
-NULLARYOP  (round_up,      { v1 = FE_UPWARD;     }, v1, u_int8, bits2)
-NULLARYOP  (round_nearest, { v1 = FE_TONEAREST;  }, v1, u_int8, bits2)
-NULLARYOP  (round_zero,    { v1 = FE_TOWARDZERO; }, v1, u_int8, bits2)
-/* f2f */
-RMUNARYOP   (f2i  , (s_int32) v1, v1, float32, s_int32, bits32, bits32)
-RMUNARYOP   (i2f  , (float32) v1, v1, s_int32, float32, bits32, bits32)
-T_RMBINARYOP(fadd , v1 + v2,  v1, v2, float32, bits32)
-T_RMBINARYOP(fsub , v1 - v2,  v1, v2, float32, bits32)
-T_RMBINARYOP(fdiv , v1 / v2,  v1, v2, float32, bits32)
-T_RMBINARYOP(fmul , v1 * v2,  v1, v2, float32, bits32)
-/* fmulx */
+NULLARYOP   (round_down,    { v1 = FE_DOWNWARD;   },  v1, u_int8, bits2)
+NULLARYOP   (round_up,      { v1 = FE_UPWARD;     },  v1, u_int8, bits2)
+NULLARYOP   (round_nearest, { v1 = FE_TONEAREST;  },  v1, u_int8, bits2)
+NULLARYOP   (round_zero,    { v1 = FE_TOWARDZERO; },  v1, u_int8, bits2)
+RMUNARYOP   (f2f  , (float64) v1  , v1, float32, float64, bits32, bits64)
+RMUNARYOP   (f2f  , (float32) v1  , v1, float64, float32, bits64, bits32)
+RMUNARYOP   (f2i  , nearbyintf(v1), v1, float32, s_int32, bits32, bits32)
+RMUNARYOP   (f2i  , nearbyint (v1), v1, float64, s_int32, bits64, bits32)
+RMUNARYOP   (i2f  , (float32) v1  , v1, s_int32, float32, bits32, bits32)
+RMUNARYOP   (i2f  , (float64) v1  , v1, s_int32, float64, bits32, bits64)
+T_RMBINARYOP(fadd , v1 + v2       , v1, v2, float32, bits32)
+T_RMBINARYOP(fadd , v1 + v2       , v1, v2, float64, bits64)
+T_RMBINARYOP(fsub , v1 - v2       , v1, v2, float32, bits32)
+T_RMBINARYOP(fsub , v1 - v2       , v1, v2, float64, bits64)
+T_RMBINARYOP(fdiv , v1 / v2       , v1, v2, float32, bits32)
+T_RMBINARYOP(fdiv , v1 / v2       , v1, v2, float64, bits64)
+T_RMBINARYOP(fmul , v1 * v2       , v1, v2, float32, bits32)
+T_RMBINARYOP(fmul , v1 * v2       , v1, v2, float64, bits64)
+BINARYOP    (fmulx, (float64) v1 * (float64) v2, v1, v2, 
+                    float32, float32, float64, bits32, bits32, bits64)
 T_UNARYOP   (fabs , (float32) fabs((double) v1) , v1, float32, bits32)
 T_UNARYOP   (fneg , -(v1),                        v1, float32, bits32)
+T_UNARYOP   (fneg , -(v1),                        v1, float64, bits64)
 T_RMUNARYOP (fsqrt, (float32) sqrt((double) v1) , v1, float32, bits32)
 /* minf  */
 NULLARYOP   (mzero, { v1 = (float32)     -0.0; }, v1, float32, bits32)
@@ -501,9 +511,9 @@ sptr op_##NAME##_##BX##_##BY##_##B (sptr values) { \
   TY Y;                                      \
   TX X;                                      \
   UNDERFLOW_CHECK(values, 2);                \
-  Y = VIEW(STACK_ELT(values,  0).BY, TY);    \
-  X = VIEW(STACK_ELT(values, -1).BX, TX);    \
-  VIEW(STACK_ELT(values, -1).B, T) = (EXP);  \
+  Y = VIEW(STACK_ELT(values,  0).TY, TY);    \
+  X = VIEW(STACK_ELT(values, -1).TX, TX);    \
+  VIEW(STACK_ELT(values, -1).T, T) = (EXP);  \
   return values-1;                           \
 }
 
@@ -515,9 +525,9 @@ sptr op_##NAME##_##BX##_##BY##_bits2_##B (sptr values) { \
   u_int8 _rmode;                             \
   UNDERFLOW_CHECK(values, 3);                \
   _rmode = VIEW(STACK_ELT(values,  0).bits2, u_int8); \
-  Y = VIEW(STACK_ELT(values, -1).BY, TY);    \
-  X = VIEW(STACK_ELT(values, -2).BX, TX);    \
-  VIEW(STACK_ELT(values, -2).B, T) = (EXP);  \
+  Y = VIEW(STACK_ELT(values, -1).TY, TY);    \
+  X = VIEW(STACK_ELT(values, -2).TX, TX);    \
+  VIEW(STACK_ELT(values, -2).T, T) = (EXP);  \
   return values-2;                           \
 }
 
@@ -526,8 +536,8 @@ sptr op_##NAME##_##BX##_##BY##_bits2_##B (sptr values) { \
 sptr op_##NAME##_##BX##_##B (sptr values) {  \
   TX X;                                      \
   UNDERFLOW_CHECK(values, 1);                \
-  X = VIEW(STACK_ELT(values, 0).BX, TX);     \
-  VIEW(STACK_ELT(values, 0).B, T) = (EXP);   \
+  X = VIEW(STACK_ELT(values, 0).TX, TX);     \
+  VIEW(STACK_ELT(values, 0).T, T) = (EXP);   \
   return values;                             \
 }
 
@@ -538,8 +548,8 @@ sptr op_##NAME##_##BX##_bits2_##B (sptr values) {  \
   u_int8 _rmode;                             \
   UNDERFLOW_CHECK(values, 2);                \
   _rmode = VIEW(STACK_ELT(values, 0).bits2, u_int8); \
-  X = VIEW(STACK_ELT(values, -1).BX, TX);     \
-  VIEW(STACK_ELT(values, -1).B, T) = (EXP);   \
+  X = VIEW(STACK_ELT(values, -1).TX, TX);     \
+  VIEW(STACK_ELT(values, -1).T, T) = (EXP);   \
   return values-1;                           \
 }
 @ 
@@ -552,7 +562,7 @@ sptr op_##NAME##_##B (sptr values) {       \
   T X;                                     \
   OVERFLOW_CHECK(values, 1);               \
   STMS                                     \
-  VIEW(STACK_ELT(values, 1).B, T) = X;     \
+  VIEW(STACK_ELT(values, 1).T, T) = X;     \
   return values + 1;                       \
 }
 
@@ -564,10 +574,10 @@ sptr op_##NAME##_##BX##_##BY##_##B (sptr values) { \
   TY Y;                                      \
   T  RES;                                    \
   UNDERFLOW_CHECK(values, 2);                \
-  Y = VIEW(STACK_ELT(values,  0).BY, TY);    \
-  X = VIEW(STACK_ELT(values, -1).BX, TX);    \
+  Y = VIEW(STACK_ELT(values,  0).TY, TY);    \
+  X = VIEW(STACK_ELT(values, -1).TX, TX);    \
   STMS;                                      \
-  VIEW(STACK_ELT(values, 0).B, T) = RES;     \
+  VIEW(STACK_ELT(values, 0).T, T) = RES;     \
   return values;                             \
 }
 @ 
@@ -599,10 +609,10 @@ By writing these as macros, we make it much easier to instantiate these operator
 sptr op_popcnt##_##B (sptr values) {       \
   T v, count;                              \
   UNDERFLOW_CHECK(values, 1);              \
-  v = VIEW(STACK_ELT(values, 0).B, T);     \
+  v = VIEW(STACK_ELT(values, 0).T, T);     \
   for ( ; v != 0; v >>= 1)                 \
     count += (v & 1);                      \
-  VIEW(STACK_ELT(values, 0).B, T) = count; \
+  VIEW(STACK_ELT(values, 0).T, T) = count; \
   return values;                           \
 }
 
