@@ -367,17 +367,24 @@ The compiler keeps track of all this information through the use of spans, which
 (index, Rtl.exp) pairs.
 Because the frontend can only use whole numbers to index spans, we can easily
 distinguish between user-defined spans and compiler-defined spans.
+
+We fill in any gaps in the user-defined spans with 0's.
 <<emit frame data>>=
 asm#section "pcmap_data";
 asm#label frame_label;
 let source_spans, cmm_spans = 
-  let spans = List.map (fun (n,e) -> (Bits.S.to_int n,e)) spans in
-  let ss, cs = List.partition (fun (n,_) -> n >= 0) spans in
+  let spans       = List.map (fun (n,e) -> (Bits.S.to_int n,e)) spans in
+  let ss, cs      = List.partition (fun (n,_) -> n >= 0) spans in
+  let max_span_ix = List.fold_left (fun best (i,_) -> max i best) (-1) ss in
+  let ss =
+    let span_arr = Array.init (max_span_ix + 1) (fun i -> (i,dead_value)) in
+    List.iter (fun (i,span) -> span_arr.(i) <- (i,span)) ss;
+    Array.to_list span_arr in
   let num_span = (num_spans_ix,
-                  R.bits (to_bits (List.length ss)) proc.P.target.T.wordsize) in
-  ss, (num_span :: cs) in
-List.iter (fun (_,v) -> emit_val_loc v) (sort_neg_spans cmm_spans);
-List.iter (fun (_,v) -> emit_val_loc v) (sort_spans source_spans);
+                  R.bits (to_bits (max_span_ix+1)) proc.P.target.T.wordsize) in
+  sort_spans ss, sort_neg_spans (num_span :: cs) in
+List.iter (fun (_,v) -> emit_val_loc v) cmm_spans;
+List.iter (fun (_,v) -> emit_val_loc v) source_spans;
 @
 We cover each section of the frame data in detail.
 In addition to emitting spans as assembly data, we provide functions
@@ -486,11 +493,6 @@ let simplify_exp exp =
   | RP.Fetch (loc,_) -> Simplify.exp (flatten 0 loc)
   | _                -> Simplify.exp exp in
 @
-
-
-
-
-
 
 % ------------------------------------------------------------------ 
 \subsubsection{Frame size and overflow size}
