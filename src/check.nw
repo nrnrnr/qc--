@@ -120,13 +120,25 @@ let rec evalTy env = function
 <<building the type environment>>
 <<building the value environment>>
 <<checking the static semantics>>
+@
+
+The default [[target memsize]] is [[8]]. If the user has not specified
+a memsize we set it explicitly because the static semantic checks need
+it. 
+
+<<>>=
+let setDefaults env =
+    match F.findMemsize env with
+    | Some x -> env
+    | None   -> F.bindMemsize 8 env
 
 <<>>=
 let checkProgram env program =
     let env1       = TypeEnv.doGlobalTypes env  program            in
     let env2       = ValueEnv.Bind.globals env1 program            in
     let env3       = ValueEnv.EvalConst.doGlobalConst env2 program in
-        Semantics.program env3 program
+    let env4       = setDefaults env3                              in
+        Semantics.program env4 program
 
 <<check file>>
 @
@@ -408,8 +420,8 @@ let import scope t env = function
 <<>>=
 let target env = function
     | A.Memsize(i)        -> F.bindMemsize i env
-    | A.ByteorderBig      -> F.bindendianness F.Big env
-    | A.ByteorderLittle   -> F.bindendianness F.Little env 
+    | A.ByteorderBig      -> F.bindEndianness F.Big env
+    | A.ByteorderLittle   -> F.bindEndianness F.Little env 
     
 <<>>=
 let imports  scope env t ii         = foldl (import scope t) env ii
