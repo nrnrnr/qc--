@@ -533,16 +533,19 @@ Compile entry points for continuations as needed ([[finish_compiling_continuatio
 For each continuation we have reserved memory on the stack that must be
 initialized when the procedure is entered. The following function
 inserts code to do the initialization.
+
+We also attach spans to each continuation that escapes.
 <<definition of [[insert_init_cont_nodes]]>>=
 let insert_init_cont_nodes contmap init_node =
   let one_node cname k succ = 
     if k.K.escapes then
-      let pc              = exp_of_label k.K.cut_pc in
-      let sp              = proc_cc.C.stable_sp_loc in
-      let frame_size_span = stable_frame_size   in
+      let pc              = exp_of_label k.K.cut_pc    in
+      let sp              = proc_cc.C.stable_sp_loc    in
+      let frame_size_span = RT.frame_size_to_span vfp proc_cc.C.stable_sp_loc in
+      let cont_size_span  = RT.conts_to_spans target.T.wordsize in
       let ()    =
         add_spans (k.K.cut_pc, ra_span :: overflow_size_span :: frame_size_span ::
-                               (csregs_spans @ k.K.spans)) in
+                               List.concat [cont_size_span; csregs_spans; k.K.spans]) in
       let pc_sp = { Mflow.new_pc = pc; Mflow.new_sp = sp } in
       G.instruction g (Contn.init_code k.K.rep pc_sp) succ
     else
@@ -713,9 +716,11 @@ and callStmt (lhs,cconv, e, args, targets (*unused*), conts) succ =
                                         (* incoming overflow results *)
 
   let frame_size_span =
+    let base = Block.base out.C.overflow in
     if cc.C.overflow_alloc.C.parameter_deallocator = C.Caller then
-      RT.frame_size_to_span nvars vfp (Block.base out.C.overflow)
-    else stable_frame_size in
+      RT.frame_size_to_span vfp base
+    else RT.frame_size_to_span vfp (Rtlutil.addk (W.exp base) base
+                                                 (Block.size out.C.overflow)) in
 
   let call_succ  =
     G.assertion    g (in'.C.insp out.C.overflow)              **>
@@ -724,8 +729,9 @@ and callStmt (lhs,cconv, e, args, targets (*unused*), conts) succ =
     G.stack_adjust g in'.C.post_sp           **>
     succ in
   let call_succ' = G.join_leading_to call_succ in
+  let cont_spans = RT.conts_to_spans target.T.wordsize in (* BOGUS FOR NOW.... *)
   add_spans (G.label call_succ', ra_span :: overflow_size_span :: frame_size_span ::
-                                 (csregs_spans @ props));
+                                 List.concat [cont_spans; csregs_spans; props]);
   G.stack_adjust g out.C.pre_sp                                        **>
   G.instruction  g out.C.shuffle                                       **>
   G.stack_adjust g out.C.post_sp                                       **>
@@ -985,15 +991,14 @@ space that must be deallocated by the procedure.
   let overflow_size_span =
     let base = Block.base proc_in'.C.overflow in
     if proc_cc.C.overflow_alloc.C.parameter_deallocator = C.Callee then
-      RT.overflow_size_to_span nvars vfp
+      RT.overflow_size_to_span vfp
           (Rtlutil.addk (W.exp base) base (Block.size proc_in'.C.overflow))
-    else RT.overflow_size_to_span nvars vfp base in
-  let stable_frame_size = RT.frame_size_to_span nvars vfp proc_cc.C.stable_sp_loc in
+    else RT.overflow_size_to_span vfp base in
 @ 
 Similarly, spans for the return address and callee-saves registers may be repeated
 throughout a procedure.
 <<definition of [[proc]], which translates one procedure>>=
-  let ra_span = RT.ra_to_span ~wordsize:target.T.wordsize ~nvars saved_ra in
+  let ra_span = RT.ra_to_span ~wordsize:target.T.wordsize saved_ra in
   let csregs_spans = RT.csregs_to_spans ~wordsize:target.T.wordsize ~nvars
                                         nvregs nvr_temps in
 @ 
@@ -1069,7 +1074,8 @@ The main thing here is dealing with all the blocks.
     ; Proc.sp             = Block.at proc_cc.C.stable_sp_loc 0 proc_cc.C.sp_align 
     ; Proc.eqns           = List.concat (!constraints)
     ; Proc.conts          = contblocks
-    ; Proc.vars           = nvars       (* number of variables *)
+    ; Proc.vars           = nvars              (* number of variables *)
+    ; Proc.nvregs         = RS.cardinal nvregs (* number of non-volatile regs *)
     ; Proc.varMap         = Array.make nvars None
     ; Proc.spans          = !spans
     } in

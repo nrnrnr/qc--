@@ -386,14 +386,14 @@ let fold_arri f a z =
     else z in
   do_fold 0 z in
 let var_spans =
-  fold_arri (fun i loc rst -> match loc with None   -> rst
-                                           | Some l -> RT.var_asst_to_span proc i l
-																					             :: rst)
-            tMap [] in
+  let vars =
+    fold_arri (fun i loc rst -> match loc with None   -> rst
+                                             | Some l -> (i,l) :: rst) tMap [] in
+  RT.var_asst_to_spans proc vars in
 let newspans =
   List.map (fun (l,spans as p) -> if l = proc.Proc.symbol#original_text
                                   then p
-																	else (l, var_spans@spans))
+                                  else (l, var_spans@spans))
            proc.Proc.spans in
 proc.Proc.spans <- newspans;
 @

@@ -9,6 +9,7 @@
 
 % inc: \usepackage{alltt}
 
+
 % ------------------------------------------------------------------ 
 \section{Collecting and emitting data for the run-time system}
 % ------------------------------------------------------------------ 
@@ -56,8 +57,8 @@ These functions cannot ask for a record of type [[Ast2ir.proc]] because
 they may be used before such a record exists. 
 <<runtimedata.mli>>=
 type span = Bits.bits * Rtl.exp
-val frame_size_to_span    : nvars:int -> vfp:Rtl.exp -> Rtl.exp -> span
-val overflow_size_to_span : nvars:int -> vfp:Rtl.exp -> Rtl.exp -> span
+val frame_size_to_span    : vfp:Rtl.exp -> Rtl.exp -> span
+val overflow_size_to_span : vfp:Rtl.exp -> Rtl.exp -> span
 @
 Occasionally, it is useful to represent a value as being dead at a stopping point.
 For example, if a variable is not live, we represent it with the [[dead_value]].
@@ -66,24 +67,22 @@ val dead_value            : Rtl.exp
 @
 To facilitate unwinding the stack, we must be able to look up unwind continuations.
 UNFORTUNATELY, WE DO NOT YET HAVE A USEFUL IMPLEMENTATION.
+Note: Even if no continuations may be unwound to, this function must be called in order
+to create the span for the number of continuations.
 <<runtimedata.mli>>=
-val conts_to_spans : unit -> span
+val conts_to_spans : wordsize:int -> span list
 @
 The locations of stackdata labels must be exposed through the run-time system.
 <<runtimedata.mli>>=
 val stackdata_to_spans : wordsize:int -> vfp:Rtl.exp -> Rtl.exp list -> span list
 @
-Any run-time data that relies on the locations of variables or temporaries
-requires information from a variable map.
-There are three kinds of run-time data that require this information:
-the return address, callee-save registers, and variables.
-The callee-save register are special because we emit consecutive spans, one indicating
-the callee-save register, and the next indicating where it is stored.
+We can convert the return address, callee-save registers, and variable assignments
+(from variable placement) to spans.
 <<runtimedata.mli>>=
-val ra_to_span       : wordsize:int -> nvars:int -> Rtl.loc -> span
-val csregs_to_spans  : wordsize:int -> nvars:int -> Register.Set.t ->
-                       (Register.t * Rtl.loc) list -> span list
-val var_asst_to_span : Ast2ir.proc -> int -> Automaton.loc -> span
+val ra_to_span        : wordsize:int -> Rtl.loc -> span
+val csregs_to_spans   : wordsize:int -> nvars:int -> Register.Set.t ->
+                        (Register.t * Rtl.loc) list -> span list
+val var_asst_to_spans : Ast2ir.proc -> (int * Automaton.loc) list -> span list
 @
 After we have placed all the data in spans, we emit
 the data as assembly by calling [[emit_as_asm]].
@@ -159,23 +158,33 @@ indices as follows:
                                      | source spans          |
                                   0: |                       |
                                      +-----------------------+
-                                 -1: |                       |
-                                     | local variables       |
-                             -nvars: |                       |
+                                 -1: | frame size            +
                                      +-----------------------+
-                       -(nvars + 1): | frame size            |
+                                 -2: | overflow size         +
                                      +-----------------------+
-                       -(nvars + 2): | overflow size         |
+                                 -3: | return address        +
                                      +-----------------------+
-                       -(nvars + 3): | return address        |
+                                 -4: | stackdata table       +
                                      +-----------------------+
-                       -(nvars + 4): |                       |
+                                 -5: | num registers         +
+                                     +-----------------------+
+                                 -6: | num locals            +
+                                     +-----------------------+
+                                 -7: | num spans             +
+                                     +-----------------------+
+                                 -8: | num continuations     +
+                                     +-----------------------+
+                                 -9: |                       |
                                      | callee-save registers |
-             -(2*nregs + nvars + 3): |                       |
+                     -(2*nregs + 8): |                       |
                                      +-----------------------+
-             -(2*nregs + nvars + 4): |                       |
+                     -(2*nregs + 9): |                       |
+                                     | local variables       |
+             -(nvars + 2*nregs + 8): |                       |
+                                     +-----------------------+
+             -(nvars + 2*nregs + 9): |                       |
                                      | continuations         |
-    -(nconts + 2*nregs + nvars + 3): |                       |
+    -(nconts + nvars + 2*nregs + 8): |                       |
                                      +-----------------------+
 \end{verbatim}
 
@@ -193,18 +202,19 @@ some work. We omit the identity function on source span indices.
 
 The local variables, frame size, overflow size, and return-address location are simple:
 <<runtimedata.ml>>=
-let var_ix             i       = -(i + 1)
-let frame_size_ix      nvars   = -(nvars + 1)
-let overflow_size_ix   nvars   = -(nvars + 2)
-let ra_ix              nvars   = -(nvars + 3)
+let var_ix           nregs i = -(2*nregs + 9 + i)
+let frame_size_ix            = -1
+let overflow_size_ix         = -2
+let ra_ix                    = -3
 @
-We also define predicates to determine whether an index is of a given type.
-Note that the predicates correspond directly to the diagram above.
-<<define span index predicates>>=
-let var_pred           i = i <= -1 && i >= -nvars in
-let frame_size_pred    i = i = -(nvars+1) in
-let overflow_size_pred i = i = -(nvars+2) in
-let ra_pred            i = i = -(nvars+3) in
+We also need an index for the label of the stackdata table, as well as the number
+entries.
+<<runtimedata.ml>>=
+let sd_table_ix   = -4
+let num_reg_ix    = -5
+let num_locals_ix = -6
+let num_spans_ix  = -7
+let num_conts_ix  = -8
 @
 The callee-save registers are indexed in sorted order, where the order is defined
 over the (space, index, width) type of a register.
@@ -218,71 +228,17 @@ let mk_csreg_ix_map nvregs = snd (Register.reg_int_map nvregs)
 Using a map from registers to indices, we can easily look up the index for a
 callee-save register.
 <<runtimedata.ml>>=
-let csreg_ix nvars r regmap = -(nvars + 4 + 2 * (RM.find r regmap))
+let csreg_ix nvars r regmap = -(9 + 2*(RM.find r regmap))
 @
-The rest of the indices and predicates are straightforward.
-<<define span index predicates>>=
-let csreg_pred i = i <= -(nvars + 4) && i >= -(2*nregs + nvars + 3) in
+The rest of the indices are straightforward.
+<<runtimedata.ml>>=
+let cont_ix nregs nvars cn  = -(nvars + 2*nregs + 9 + cn)
 @
 <<runtimedata.ml>>=
-let cont_ix   nregs nvars  cn  = -(2*nregs + nvars + 4 + cn)
-@
-<<define span index predicates>>=
-let cont_pred i = i <= -(2*nregs + nvars + 4) in
-let source_pred i = i >= 0 in
-@
-We also support the opposite operation: taking a list of spans and grouping
-them by the type of data they store.
-THIS CODE IS HIDEOUS.
-FORTUNATELY, IF WE FIX THE CODE TO FOLLOW MY SUGGESTION ABOVE (INDEXING THE SPANS IN
-THE RIGHT ORDER), THIS CODE WILL DISAPPEAR (AS IF BY MAGIC).
-<<runtimedata.ml>>=
-type pseudo_span = int * Rtl.exp
-type span_groups = { frame    : pseudo_span option
-                   ; overflow : pseudo_span option
-                   ; return   : pseudo_span option
-                   ; register : pseudo_span list
-                   ; local    : pseudo_span list
-                   ; source   : pseudo_span list
-                   ; cont     : pseudo_span list
-                   }
 let pspan conv (b,e) =
   V.eprintf verb "span: (%d,%s)\n" (conv b) (RU.ToReadableString.exp e)
 let print_span        = pspan Bits.S.to_int
 let print_pseudo_span = pspan (fun x -> x)
-let split_spans proc spans =
-  (*V.eprintf verb "\n%d Spans in proc %s:\n" (List.length spans)
-                   proc.Proc.symbol#original_text; *)
-  List.iter print_span spans;
-  let nvars = proc.Proc.vars in
-  let nregs = RS.cardinal proc.Proc.cc.C.pre_nvregs in
-  <<define span index predicates>>
-  let spans = List.map (fun (n,e) -> (Bits.S.to_int n,e)) spans in
-  let add_span spans (i,_ as s) =
-    match (frame_size_pred i, overflow_size_pred i, ra_pred i, var_pred i,
-           csreg_pred i,      cont_pred i, source_pred i) with
-    | true, _, _, _, _, _, _       ->
-      (match spans.frame with None -> {spans with frame = Some s}
-                            | _    -> imposs "multiple frame sizes at one site")
-    | _, true, _, _, _, _, _       ->
-      (match spans.frame with None -> {spans with overflow = Some s}
-                            | _    -> imposs "multiple overflow sizes at one site")
-    | _, _, true, _, _, _, _       ->
-      (match spans.frame with None -> {spans with return = Some s}
-                            | _    -> imposs "multiple return addresses at one site")
-    | _, _, _, true, _, _, _       -> {spans with local    = s :: spans.local}
-    | _, _, _, _, true, _, _       -> {spans with register = s :: spans.register}
-    | _, _, _, _, _, true, _       -> {spans with cont     = s :: spans.cont}
-    | _, _, _, _, _, _, true       -> {spans with source   = s :: spans.source}
-    | _, _, _, _, _, _, _          -> imposs "unrecognized span" in
-  let empty = { frame = None; overflow = None; return = None; register = []
-              ; local = [];   source   = [];   cont   = []} in
-  let split_spans = List.fold_left add_span empty spans in
-  match split_spans.frame, split_spans.overflow, split_spans.return with
-  | None, _, _ -> imposs "0 frame spans"
-  | _, None, _ -> imposs "0 overflow spans"
-  | _, _, None -> imposs "0 return spans"
-  | _, _, _    -> split_spans
 @
 Before emitting spans, we should always be sure to sort them in the proper order.
 <<runtimedata.ml>>=
@@ -317,18 +273,21 @@ let emit_as_asm asm _ proc =
 Stackdata spans have been paired with the label for the current procedure.
 We separate out these spans from the spans that are valid only at particular stopping
 points within the procedure.
+For each set of site spans, we add a span pointing to the table of stackdata spans.
 <<define [[partition_site_spans]] [[emit_sd_spans]] and [[emit_site_spans]]>>=
+let sd_label = asm#local (Idgen.label "stackdata") in
 let partition_site_spans spans =
-  (*V.eprintf verb "partitioning in proc %s with %d vars\n" (proc.P.symbol#original_text)
-     proc.Proc.vars;*)
-  List.partition (fun (site,_) -> site = proc.P.symbol#original_text) spans in
+  let sd_spans, site_spans =
+    List.partition (fun (site,_) -> site = proc.P.symbol#original_text) spans in
+  let sd_span = (to_bits sd_table_ix, Rtl.link sd_label proc.P.target.T.pointersize) in
+  let site_spans = List.map (fun (l,ss) -> (l, sd_span::ss)) site_spans in
+  sd_spans, site_spans in
 @
 \paragraph{Emitting Stackdata Spans}
 A stackdata map for $n$ stackdata labels is of size $n + 1$ words.
 The first word gives the number of stackdata labels.
 The next $n$ words give the stackdata labels in order.
 <<define [[partition_site_spans]] [[emit_sd_spans]] and [[emit_site_spans]]>>=
-let sd_label = asm#local (Idgen.label "stackdata") in
 let emit_sd_spans sd_spans =
   match sd_spans with
   | [(_,spans)] ->
@@ -399,9 +358,9 @@ frame_data_lbl:
 +--------------------+
 | locals             |
 +--------------------+
-| spans              |
-+--------------------+
 | continuations      |
++--------------------+
+| spans              |
 +--------------------+
 \end{verbatim}
 The compiler keeps track of all this information through the use of spans, which are
@@ -411,15 +370,14 @@ distinguish between user-defined spans and compiler-defined spans.
 <<emit frame data>>=
 asm#section "pcmap_data";
 asm#label frame_label;
-let spans = split_spans proc spans in
-<<emit [[frame_size]] and [[overflow_size]]>>
-<<emit return address>>
-<<emit [[sd_table]] location>>
-<<emit nums: registers, locals, source-level spans, continuations>>
-<<emit registers>>
-<<emit locals>>
-<<emit spans>>
-<<emit continuations>>
+let source_spans, cmm_spans = 
+  let spans = List.map (fun (n,e) -> (Bits.S.to_int n,e)) spans in
+  let ss, cs = List.partition (fun (n,_) -> n >= 0) spans in
+  let num_span = (num_spans_ix,
+                  R.bits (to_bits (List.length ss)) proc.P.target.T.wordsize) in
+  ss, (num_span :: cs) in
+List.iter (fun (_,v) -> emit_val_loc v) (sort_neg_spans cmm_spans);
+List.iter (fun (_,v) -> emit_val_loc v) (sort_spans source_spans);
 @
 We cover each section of the frame data in detail.
 In addition to emitting spans as assembly data, we provide functions
@@ -515,7 +473,7 @@ let simplify_exp exp =
        check offset; check w;
        (*V.eprintf verb "Adding an offset %d of width %d\n" offset w;*)
        Rtlutil.add w (R.app (R.opr "sub" [w]) [Up.exp e; vfp])
-                            (Rtl.bits (Bits.S.of_int offset w) w)
+                            (R.bits (Bits.S.of_int offset w) w)
     | RP.Reg (_,_,w) ->
        check w; check offset;
        let l_up = Up.loc l in
@@ -529,19 +487,18 @@ let simplify_exp exp =
   | _                -> Simplify.exp exp in
 @
 
+
+
+
+
+
 % ------------------------------------------------------------------ 
 \subsubsection{Frame size and overflow size}
 % ------------------------------------------------------------------ 
 We encode the frame size and overflow size as offsets from the virtual frame pointer.
 <<runtimedata.ml>>=
-let frame_size_to_span    ~nvars ~vfp = offset_to_span (frame_size_ix    nvars) vfp
-let overflow_size_to_span ~nvars ~vfp = offset_to_span (overflow_size_ix nvars) vfp
-@
-We emit the frame size and overflow sizes as integer offsets.
-<<emit [[frame_size]] and [[overflow_size]]>>=
-let just = function Some x -> x | None -> imposs "expected value but found None" in
-emit_val_loc (snd (just spans.frame));
-emit_val_loc (snd (just spans.overflow));
+let frame_size_to_span    ~vfp = offset_to_span frame_size_ix    vfp
+let overflow_size_to_span ~vfp = offset_to_span overflow_size_ix vfp
 @
 
 % ------------------------------------------------------------------ 
@@ -549,36 +506,9 @@ emit_val_loc (snd (just spans.overflow));
 % ------------------------------------------------------------------ 
 The return address is some location.
 <<runtimedata.ml>>=
-let ra_to_span ~wordsize ~nvars loc =
+let ra_to_span ~wordsize loc =
   let to_bits i = Bits.S.of_int i wordsize in
-  (to_bits (ra_ix nvars), RU.fetch loc)
-@
-<<emit return address>>=
-emit_val_loc (snd (just spans.return));
-@
-The [[sd_label]] is ... just a label.
-<<emit [[sd_table]] location>>=
-asm#addr (Reloc.Simple.of_sum sd_label zero);
-@
-
-% ------------------------------------------------------------------ 
-\subsubsection{Numer of registers, locals, spans, and continuations}
-% ------------------------------------------------------------------ 
-We emit the number of register, locals, spans, and continuations, as constants.
-<<emit nums: registers, locals, source-level spans, continuations>>=
-emit_val_loc (R.bits (to_bits (List.length spans.register)) wordsize);
-emit_val_loc (R.bits (to_bits (List.length spans.local))    wordsize);
-@
-For source-level spans, we assume a compact set of spans indexed by small
-whole numbers, so we emit all of them.
-<<emit nums: registers, locals, source-level spans, continuations>>=
-(*V.eprintf verb "Source-level spans:\n";
-List.iter print_pseudo_span spans.source;*)
-let max_span_ix = List.fold_left (fun best (i,_) -> max i best) (-1) spans.source in
-emit_val_loc (R.bits (to_bits (max_span_ix + 1)) wordsize);
-@
-<<emit nums: registers, locals, source-level spans, continuations>>=
-emit_val_loc (R.bits (to_bits (List.length spans.cont)) wordsize);
+  (to_bits ra_ix, RU.fetch loc)
 @
 
 % ------------------------------------------------------------------ 
@@ -591,17 +521,14 @@ The second span indicates where it has been stored.
 let csregs_to_spans ~wordsize ~nvars nvregs csregs =
   let to_bits i     = Bits.S.of_int i wordsize         in 
   let csreg_map     = mk_csreg_ix_map (RS.elements nvregs) in
+  let num_span      =
+    (to_bits num_reg_ix, R.bits (to_bits (2 * List.length csregs)) wordsize) in
   let to_span rst (r,loc) =
     let ix = csreg_ix nvars r csreg_map in
     (to_bits (ix-1), RU.fetch loc) ::
-    (to_bits (ix-1), RU.fetch (R.reg r)) ::
+    (to_bits (ix), RU.fetch (R.reg r)) ::
     rst in
-  List.fold_left to_span [] csregs
-@
-<<emit registers>>=
-(*V.eprintf verb "NVR's:\n";
-List.iter print_pseudo_span spans.register;*)
-List.iter (fun (_, e) -> emit_val_loc e) (sort_neg_spans spans.register);
+  num_span :: List.fold_left to_span [] csregs
 @
 
 % ------------------------------------------------------------------ 
@@ -609,14 +536,14 @@ List.iter (fun (_, e) -> emit_val_loc e) (sort_neg_spans spans.register);
 % ------------------------------------------------------------------ 
 Locals are stored as fetches from simple locations.
 <<runtimedata.ml>>=
-let var_asst_to_span proc var_num loc =
-  let to_bits i        = Bits.S.of_int i proc.Proc.target.T.wordsize    in 
-  (to_bits (var_ix var_num), RU.fetch (A.simple loc))
-@
-<<emit locals>>=
-(*V.eprintf verb "Local spans:\n";
-List.iter print_pseudo_span spans.local;*)
-List.iter (fun (_, e) -> emit_val_loc e) (sort_neg_spans spans.local);
+let var_asst_to_spans proc vars =
+  let wordsize  = proc.P.target.T.wordsize in
+  let to_bits i = Bits.S.of_int i wordsize in 
+  let num_span  =
+    (to_bits num_locals_ix, R.bits (to_bits (List.length vars)) wordsize) in
+  num_span :: List.map (fun (var_num, loc) -> (to_bits (var_ix proc.P.nvregs var_num),
+                                               RU.fetch (A.simple loc)))
+                       vars
 @
 
 % ------------------------------------------------------------------ 
@@ -628,26 +555,15 @@ let stackdata_to_spans ~wordsize ~vfp sd_exps =
   snd (List.fold_left (fun (i,rst) e -> (i+1, offset_to_span i vfp e :: rst))
                       (0,[]) sd_exps)
 @
-% ------------------------------------------------------------------ 
-\subsubsection{Location of source-level spans}
-% ------------------------------------------------------------------ 
-We initialize an array of expressions for local variables to the dead
-variable value.
-Then, we set the live variables to their actual locations.
-<<emit spans>>=
-let span_arr = Array.make (max_span_ix + 1) (R.bool false) in
-List.iter  (fun (i,span) -> span_arr.(i) <- span) (sort_spans spans.source);
-Array.iter emit_val_loc span_arr;
-@
 
 % ------------------------------------------------------------------ 
 \subsubsection{Location of continuations}
 % ------------------------------------------------------------------ 
 DUMMY IMPLEMENTATION
 <<runtimedata.ml>>=
-let conts_to_spans () = unimp "Run-time system not yet ready for getting continuations"
-@
-
-<<emit continuations>>=
-();
+let conts_to_spans ~wordsize =
+  let to_bits i     = Bits.S.of_int i wordsize         in 
+  let num_span      =
+    (to_bits num_conts_ix, R.bits (to_bits 0) wordsize) in
+  [num_span]
 @
