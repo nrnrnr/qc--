@@ -75,6 +75,8 @@ If a projection fails, it raises [[Projection]] giving the value it
 tried to project and a string indicating what it tried to project to.
 We re-export [[ep]] to make it easier for clients to get the [[embed]]
 and [[project]] fields from the locations of their choice.
+WE MIGHT HAVE TO ADD FLEXIBILITY BY MAKING
+   [[type 'a map = state -> ('a, value) ep]].
 <<signatures>>=
   exception Projection of value * string
   val projection : value -> string -> 'a
@@ -105,7 +107,8 @@ If so, we take that to be the number of elements; otherwise we use the table's
 population.  (In the latter case, lists cannot contain [[nil]].)
 This way, users are free to include [[n]] or not as they choose.
 <<signatures>>=
-  val list : 'a map -> 'a list map
+  val list    : 'a map -> 'a list map   (* does not project nil *)
+  val optlist : 'a map -> 'a list map   (* projects nil to empty list *)
 @ 
 If for some reason a Caml function operates on Lua values, we need an
 identity pair.  We also enable functions that expect tables.
@@ -336,7 +339,7 @@ let option t = { embed = (function None -> Nil | Some x -> t.embed x)
                }
 @ 
 <<value toplevel>>=
-let list (ty : 'a map) = 
+let list' nil_ok (ty : 'a map) = 
   let table l =
     let n = List.length l in
     let t = Table.create n in
@@ -355,7 +358,10 @@ let list (ty : 'a map) =
       else ty.project (Table.find t (Number (pervasive_float i))) :: elems (i + 1) in
     elems 1
   in { embed = table; project = (function Table t -> untable t
+                                        | Nil when nil_ok -> []
                                         | v -> raise (Projection (v, "list"))) }
+let list    ty = list' false ty
+let optlist ty = list' true  ty
 @
 <<value toplevel>>=
 let value = { embed = (fun x -> x); project = (fun x -> x) }

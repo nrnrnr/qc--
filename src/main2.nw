@@ -356,15 +356,6 @@ the name of a Lua function.
 
 
 B = Backplane
-
--- THIS FUNCTION SHOULD BE RENAMED B.stage AND SHOULD BY DEFAULT TAKE A SINGLE
--- FUNCTION AS ITS ARGUMENT.  IT SHOULD THEN LOOK IN THE LUA STATE TO FIND
--- A SENSIBLE NAME FOR THAT FUNCTION.  IF NEEDED, AN EXPLICIT NAME CAN BE AN 
--- OPTIONAL SECOND PARAMETER.
-
-function B.mk (n, f) 
-    return { name = n, fn = f }
-end
 @ 
 Because only a real hero is going to mess with the internals of the
 register allocator, 
@@ -378,67 +369,68 @@ register-allocator source.
 
 CG = CG or {}   -- has some primitives
 
+--- NR must fix a fault in projection to enable name lookup.  Then these names
+--- could be defaulted.
+
 CG.stages =
-    { liveness          = B.mk("liveness",          CG.liveness)
-    , build             = B.mk("build",             CG.build)
-    , setColors         = B.mk("setColors",         CG.setColors)
-    , makeWorklist      = B.mk("makeWorklist",      CG.makeWorklist)
-    , simplify          = B.mk("simplify",          CG.simplify)
-    , coalesce          = B.mk("coalesce",          CG.coalesce)
-    , freeze            = B.mk("freeze",            CG.freeze)
-    , selectSpill       = B.mk("selectSpill",       CG.selectSpill)
-    , assignColors      = B.mk("assignColors",      CG.assignColors)
-    , haveSpilledTemps  = B.mk("haveSpilledTemps",  CG.haveSpilledTemps)
-    , resetProgram      = B.mk("resetProgram",      CG.resetProgram)
-    , updateProgram     = B.mk("updateProgram",     CG.updateProgram)
-    , applyColors       = B.mk("applyColors",       CG.applyColors)
-    , printCG           = B.mk("printCG",           CG.printCG)
-    , printCFGLive      = B.mk("printCFGLive",      CG.printCFGLive)
-    , pCFG              = B.mk("pCFG",              CG.pCFG)
+    { liveness          = B.stage { name="liveness",          fn=CG.liveness }
+    , build             = B.stage { name="build",             fn=CG.build }
+    , setColors         = B.stage { name="setColors",         fn=CG.setColors }
+    , makeWorklist      = B.stage { name="makeWorklist",      fn=CG.makeWorklist }
+    , simplify          = B.stage { name="simplify",          fn=CG.simplify }
+    , coalesce          = B.stage { name="coalesce",          fn=CG.coalesce }
+    , freeze            = B.stage { name="freeze",            fn=CG.freeze }
+    , selectSpill       = B.stage { name="selectSpill",       fn=CG.selectSpill }
+    , assignColors      = B.stage { name="assignColors",      fn=CG.assignColors }
+    , haveSpilledTemps  = B.stage { name="haveSpilledTemps",  fn=CG.haveSpilledTemps }
+    , resetProgram      = B.stage { name="resetProgram",      fn=CG.resetProgram }
+    , updateProgram     = B.stage { name="updateProgram",     fn=CG.updateProgram }
+    , applyColors       = B.stage { name="applyColors",       fn=CG.applyColors }
+    , printCG           = B.stage { name="printCG",           fn=CG.printCG }
+    , printCFGLive      = B.stage { name="printCFGLive",      fn=CG.printCFGLive }
+    , pCFG              = B.stage { name="pCFG",              fn=CG.pCFG }
     }
 
 CG.makeGraph = B.seq 
-    { B.single(CG.stages.liveness) -- BETTER:  B.stage(CG.liveness) --- NR
-    , B.single(CG.stages.build)
+    { CG.stages.liveness
+    , CG.stages.build 
     }
     
----  Try  `B.single(CG.stages.xxx)' becomes `B.stage(CG.xxx)'
-
 
 CG.orderVars = B.seq 
-    { B.single(CG.stages.makeWorklist)
-    , B.fix(B.unless_do(B.single(CG.stages.simplify),
-                            B.unless_do(B.single(CG.stages.coalesce),
-                                B.unless_do(B.single(CG.stages.freeze),
-                                    B.single(CG.stages.selectSpill)))))
+    { CG.stages.makeWorklist
+    , B.fix(B.unless_do(CG.stages.simplify,
+                            B.unless_do(CG.stages.coalesce,
+                                B.unless_do(CG.stages.freeze,
+                                    CG.stages.selectSpill))))
     }
 
 CG.pcg = 
-    B.ignore(B.single(CG.stages.printCG))
+    B.ignore(CG.stages.printCG)
 
 CG.color = 
     B.share
     ( CG.makeInitInfo ()
     , "cgInfo"
     , B.seq 
-        { B.single(CG.stages.setColors)
+        { CG.stages.setColors
         , B.fix 
             ( B.seq 
                 { B.ignore (B.seq
                     { CG.makeGraph
                     , CG.orderVars
                     , CG.pcg
-                    , B.single(CG.stages.assignColors)
+                    , CG.stages.assignColors
                     })
                 , B.when_do
-                    ( B.single(CG.stages.haveSpilledTemps)
-                    , B.seq {CG.pcg, B.single(CG.stages.resetProgram), CG.pcg }
+                    ( CG.stages.haveSpilledTemps
+                    , B.seq {CG.pcg, CG.stages.resetProgram, CG.pcg }
                     )
                 } 
             )    
         , B.seq 
-            { B.single(CG.stages.updateProgram)
-            , B.single(CG.stages.applyColors)
+            { CG.stages.updateProgram
+            , CG.stages.applyColors
             }
             
         }        
@@ -449,7 +441,7 @@ CG.color =
 ------------------------------------------------------------------ 
 
 Linscan = Linscan or {}
-Linscan.scan = B.single(B.mk("linscan", Linscan.allocate))    
+Linscan.scan = B.stage { name="linscan", fn = Linscan.allocate }
 @ 
 The organization of the following code seems confused.
 One reasonable principle would be to organize code by target.
@@ -467,10 +459,10 @@ and code expanders are mixed together.
 Expand = Expand or {}
 
 Expand.stages = 
-    { placeVars = B.mk("fortran variable placer", Placevar.fortran)
-    , dummy     = B.mk("Dummyexpand.expand" , Dummyexpand.expand)
-    , sparc     = B.mk("Sparcexpand.expand" , Sparcexpand.expand)
-    , toy       = Expander.toy -- not an error (this is the new way)
+    { placeVars = B.stage { name="fortran variable placer", fn = Placevar.fortran }
+    , dummy     = B.stage { name="Dummyexpand.expand", fn = Dummyexpand.expand }
+    , sparc     = B.stage { name="Sparcexpand.expand", fn = Sparcexpand.expand }
+    , toy       = Expander.toy -- not an error (expt'l hack)
     }
 @ 
 Substantial additional thought needs to be given to how [[Default]]
@@ -511,12 +503,12 @@ end
 
 function Opt.dummy(proc)
     local action = B.seq
-        { B.single(Expand.stages.placeVars)
-        , B.single(Expand.stages.dummy)
+        { Expand.stages.placeVars
+        , Expand.stages.dummy
         , Default.allocator
-        , B.single(B.mk("freeze stack frame", Driver.freeze))
-        , B.single(B.mk("assemble procedure",
-                        Driver.proc_assembler(Driver.cmmasm(Driver.stdout)))) -- hack!
+        , B.stage { name="freeze stack frame", fn = Driver.freeze }
+        , B.stage { name="assemble procedure", fn =
+                        Driver.proc_assembler(Driver.cmmasm(Driver.stdout)) } -- hack!
         }
     B.run(action, proc, {})
 end
@@ -524,24 +516,24 @@ end
 
 function Opt.sparc(proc)
     local action = B.seq
-        { B.single(Expand.stages.placeVars)
-        , B.single(Expand.stages.sparc)
+        { Expand.stages.placeVars
+        , Expand.stages.sparc
         , Default.allocator
-        , B.single(B.mk("freeze stack frame", Driver.freeze))
-        , B.single(B.mk("assemble procedure",
+        , B.stage { name="freeze stack frame", fn = Driver.freeze }
+        , B.stage { name="assemble procedure", fn = 
                         Driver.proc_assembler(Targets.sparc_asm(Default.solaris,
-                                                                Driver.stdout)))) -- hack!
+                                                                Driver.stdout)) } -- hack!
         }
     B.run(action, proc, {})
 end
 
 function Opt.sparc_dbg (proc)
     local action = B.seq
-        { B.single(Expand.stages.placeVars)
-        -- , B.single(Expand.stages.sparc)
-        , B.single(B.mk("freeze stack frame", Driver.freeze))
-        , B.single(B.mk("assemble procedure",
-                        Driver.proc_assembler(Driver.cmmasm(Driver.stdout)))) -- hack!
+        { Expand.stages.placeVars
+        -- , Expand.stages.sparc
+        , B.stage { name="freeze stack frame", fn = Driver.freeze }
+        , B.stage { name="assemble procedure", fn = 
+                        Driver.proc_assembler(Driver.cmmasm(Driver.stdout)) } -- hack!
         }
     B.run(action, proc, {})
 end
@@ -580,8 +572,8 @@ Targets.Dummy =
 -- should be possible with a simple command-line assignment
 Targets.Toy =
     { asm       = Driver.cmmasm     -- function io -> asm
-    , opt       = { placer    = B.single (Expand.stages.placeVars)
-                  , expander  = B.single (Expand.stages.toy)
+    , opt       = { placer    = Expand.stages.placeVars
+                  , expander  = Expand.stages.toy
                   , ralloc    = Default.allocator
                   } 
     , id        = Targets.dummy
@@ -592,7 +584,7 @@ function Targets.Toy.opt.apply(self, proc)
         { self.placer
         , self.expander
         , self.ralloc
-        , B.single(B.mk("freeze stack frame", Driver.freeze))
+        , { name="freeze stack frame", fn = Driver.freeze }
         }
     B.run(action, proc, {})
 end
@@ -684,29 +676,29 @@ The following represents groping toward a more regular structure.
 <<qc--.lua>>=
 Stages = Stages or { }
 function Stages.nullf () return nil end
-Stages.null = B.mk("empty stage", Stages.nullf)
+Stages.null = B.stage { name="empty stage", fn = Stages.nullf }
 
 Backend = Backend or { }
 
 Backend.debug =     --- debugging back end
   { target    = Targets.dummy
   , widen     = Stages.null
-  , placevars = B.single (B.mk("fortran variable placer", Placevar.fortran))
+  , placevars = B.stage { name="fortran variable placer", fn = Placevar.fortran }
   , expand    = Expander.toy
   , liveness  = Stages.null
   , ralloc    = CG.color
-  , freeze    = B.single (B.mk("freeze stack frame", Driver.freeze))
+  , freeze    = B.stage { name="freeze stack frame", fn = Driver.freeze }
   , asm       = Driver.cmmasm
   }   
 
 Backend.old =     --- compatible with old back end
   { target    = Targets.dummy
   , widen     = Stages.null
-  , placevars = B.single(Expand.stages.placeVars)
-  , expand    = B.single(Expand.stages.dummy)
+  , placevars = Expand.stages.placeVars
+  , expand    = Expand.stages.dummy
   , liveness  = Stages.null
   , ralloc    = Default.allocator
-  , freeze    = B.single (B.mk("freeze stack frame", Driver.freeze))
+  , freeze    = B.stage { name="freeze stack frame", fn = Driver.freeze }
   , asm       = Driver.cmmasm
   }   
 
@@ -718,7 +710,7 @@ function run_assembler(self)
 end
 
 function assembler_stage(asm)
-  return B.single { name = "assembler " .. Util.funname(asm)
+  return B.stage  { name = "assembler " .. Util.funname(asm)
                   , fn = { asm = asm, apply = run_assembler }
                   } 
 end
@@ -732,7 +724,7 @@ function Opt.standard(backend, asm)
     , backend.liveness   or Stages.null
     , backend.ralloc     or Stages.null
     , backend.freeze     or Stages.null
-    , B.single(B.mk("assemble procedure", Driver.proc_assembler(asm)))
+    , B.stage { name="assemble procedure", fn = Driver.proc_assembler(asm) }
     } 
   return x
 end

@@ -125,12 +125,11 @@ type proc = Proc.t
 type 'a camlFunction = 'a -> proc -> bool
 <<stage type>>
 <<action type>>
-<<backplane types>>
 
 val list2SSet : string list -> SS.t
 
-module T : Lua.Lib.USERTYPE with type 'a t = 'a t'
-module Make (T1 : Lua.Lib.TYPEVIEW with type 'a t = 'a t')
+module T : Lua.Lib.USERTYPE with type 'a t = 'a action
+module Make (T1 : Lua.Lib.TYPEVIEW with type 'a t = 'a action)
             (T2 : Lua.Lib.TYPEVIEW with type 'a t = Proc.t with type 'a combined
 = 'a T1.combined)
     : Lua.Lib.TYPEFUL with type 'a combined = 'a T1.combined
@@ -529,14 +528,9 @@ actually executes the compiler step represented by a stage. [[Stage]]'s include
 the state property information that is associated with a [[StateFn]].
 [[Action]]'s, as before, are the types that indicate a control flow between
 these stages.
-
-<<backplane types>>=
-    type 'a t' = Action of 'a action
-               | Stage of 'a stage
 @
 
 Putting it all together:
-
 <<backplane.ml>>=
 module StringMod = struct
     type t = string
@@ -560,7 +554,6 @@ type 'a camlFunction = 'a -> proc -> bool
 let backSay = Verbose.say 10
 <<stage type>>
 <<action type>>
-<<backplane types>>
 <<error types>>
 <<printing>>
 <<runProgram>>
@@ -570,20 +563,20 @@ let backSay = Verbose.say 10
 
 To construct a Lua interpreter, we need two modules: T and Make.
 
+N.B. Although the Caml level recognizes two distinct types, stage and
+action, at the Lua level there is only an action.
+A~stage is automatically coerced into the [[Single]] action containing
+that stage.
+
 <<lua library modules>>=
-module T : Lua.Lib.USERTYPE with type 'a t = 'a t' = struct
-    type 'a t = 'a t'
+module T : Lua.Lib.USERTYPE with type 'a t = 'a action = struct
+    type 'a t = 'a action
     let tname = "Backplane"
-    let eq veq x y = match x, y with
-    | Action  x, Action  y -> x = y
-    | Stage  x, Stage  y -> x = y
-    | _, _ -> false
-    let to_string vs = function
-    | Action a -> printAction  (makeIndent 26) a
-    | Stage s -> "<stage>"
+    let eq veq x y = x = y
+    let to_string vs a = printAction  (makeIndent 26) a
 end
 
-module Make (T1 : Lua.Lib.TYPEVIEW with type 'a t = 'a t')
+module Make (T1 : Lua.Lib.TYPEVIEW with type 'a t = 'a action)
             (T2 : Lua.Lib.TYPEVIEW with type 'a t = Proc.t with type 'a combined
 = 'a T1.combined)
     : Lua.Lib.TYPEFUL with type 'a combined = 'a T1.combined =
@@ -594,11 +587,8 @@ combined) =
       struct
         module V = Interp.V
         <<state checking>>
-        <<backplane builtins>>
-
         type state = Interp.V.state
-        let init g = Interp.register_module "Backplane" backplane_builtins g;
-          Lua.Lib.StringList.empty (* FIX *)
+        <<Lua initialization>>
      end
   end
 @
@@ -610,7 +600,7 @@ LARGE UGLY BOGON!  THE ACTION MAP, IF IT IS PASSED A TABLE, SHOULD GO
 AHEAD AND ATTEMPT TO PROJECT THAT TABLE INTO A STAGE.  IF SUCCESSFUL,
 IT SHOULD THEN APPLY SINGLE TO THE RESULT.  THIS WAY, SINGLE NEVER
 SHOWS UP AT THE LUA LEVEL. ---NR
-<<backplane builtins>>=
+<<Lua initialization>>=
 let {V.embed = embed; V.project = project} = T1.makemap V.userdata V.projection
 
 let ( **-> ) = V.( **-> )
@@ -619,17 +609,13 @@ let stageFn = V.pfunc (V.value **-> proc **-> V.result V.bool)
 
 <<stage map>>
 
-let projectAsAction v =
-  match project v with
-  | Action a -> a
-  | _ -> raise (V.Projection (v, "action"))
-  
 let projectAction v = match v with
-  | V.Userdata _ -> projectAsAction v
+  | V.Userdata _ -> project v
   | V.Table _    -> single (projectStage v)
-  | _ -> raise (V.Projection (v, "action"))
+  | V.Function _ -> single (projectStage v)
+  | _            -> raise (V.Projection (v, "action"))
 
-let action = { V.embed   = (fun a -> embed (Action a))
+let action = { V.embed   = embed 
              ; V.project = projectAction 
              }
 let inputs = { V.embed = (fun s -> (V.list V.string).V.embed (SS.elements s))
@@ -642,12 +628,15 @@ let inputs = { V.embed = (fun s -> (V.list V.string).V.embed (SS.elements s))
 
 
 Finally, we make the list of builtins that will be visible in Lua.
-
-<<backplane builtins>>=
+N.B. that the ``[[stage]]'' builtin is not necessary except as a way
+of eagerly projecting a function or table into an action.
+<<Lua initialization>>=
 <<run>>
 let ( **-> ) = V.( **-> )
 
-let backplane_builtins =
+let id x = x
+let init g =
+  Interp.register_module "Backplane" 
   [ "seq",       (V.pfunc ((V.list action)     **-> V.result action)).V.embed seq
   ; "when_do",   (V.pfunc (action  **-> action **-> V.result action)).V.embed when_do
   ; "unless_do", (V.pfunc (action  **-> action **-> V.result action)).V.embed unless_do
@@ -655,10 +644,11 @@ let backplane_builtins =
   ; "share",     (V.pfunc (V.value **-> V.string **-> action **->
                                                     V.result action)).V.embed share
   ; "ignore",    (V.pfunc (action  **->             V.result action)).V.embed ignore
-  ; "single",    (V.pfunc (stage   **->             V.result action)).V.embed single
+  ; "stage",     (V.pfunc (action  **->             V.result action)).V.embed id
   ; "run",       (V.pfunc (action **-> proc **-> inputs **-> 
                                                     V.result V.bool)).V.embed run
-  ]
+  ] g
+; Lua.Lib.StringList.empty
 @
 
 
@@ -667,35 +657,40 @@ provide the embedding/projection pair for a stage. When we project a stage into
 Caml, we provide sensible defaults for unspecified members of the stage record.
 
 <<stage map>>=
-let embedString = V.string.V.embed
+let embedString   = V.string.V.embed
 let projectString = V.string.V.project
 
+let stage_name g v =
+  match V.objname g v with
+  | None -> "<anonymous stage>"
+  | Some (V.Fallback s) -> s
+  | Some (V.Global s) -> s
+  | Some (V.Element (s, V.String n)) -> s ^ "." ^ n
+  | Some (V.Element (s, V.Number x)) -> s ^ "[" ^ string_of_int (int_of_float x) ^ "]"
+  | Some (V.Element (s, _         )) -> s ^ ".?"
+
+
 let projectStage stage' = match stage' with
-  | (V.Table stage) ->
-    { name = (match V.Table.find stage (embedString "name") with
-              | V.Nil ->
-                  (match V.objname (V.state ()) stage' with
-                   | None -> "<anonymous stage>"
-                   | Some (V.Fallback s) -> s
-                   | Some (V.Global s) -> s
-                   | Some (V.Element (s, _)) -> s)
-              | s -> projectString s)
-    ; fn = stageFn.V.project (V.Table.find stage (embedString "fn"))
-    ; paramExpected = (V.option V.string).V.project
-                          (V.Table.find stage (embedString "paramExpected"))
-    ; stateCreated = list2SSet
-                 (match (V.Table.find stage (embedString "creates")) with
-                  | V.Nil -> [] 
-                  | x -> ((V.list V.string).V.project x))
-    ; stateDestroyed = list2SSet
-                 (match (V.Table.find stage (embedString "destroys")) with
-                  | V.Nil -> [] 
-                  | x -> ((V.list V.string).V.project x))
-    ; stateUsed = list2SSet 
-                     (match (V.Table.find stage (embedString "uses")) with
-                      | V.Nil -> [] 
-                      | x -> ((V.list V.string).V.project x))
+  | V.Function (_, f) ->
+    { name = stage_name (V.state()) stage'
+    ; fn   = stageFn.V.project stage'
+    ; paramExpected  = None
+    ; stateCreated   = SS.empty
+    ; stateDestroyed = SS.empty
+    ; stateUsed      = SS.empty
     }
+  | V.Table stage ->
+      let field f      = V.Table.find stage (embedString f) in
+      let string_set v = list2SSet ((V.optlist V.string).V.project v) in
+      { name = (match field "name" with
+                | V.Nil -> stage_name (V.state()) stage'
+                | s     -> projectString s)
+      ; fn = stageFn.V.project (field "fn")
+      ; paramExpected  = (V.option V.string).V.project (field "paramExpected")
+      ; stateCreated   = string_set (field "creates")
+      ; stateDestroyed = string_set (field "destroys")
+      ; stateUsed      = string_set (field "uses")
+      }
   | _ -> raise (V.Projection (stage', "stage"))
 
 
