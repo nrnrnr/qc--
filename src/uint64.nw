@@ -28,6 +28,7 @@ very different numerical values.
 
 <<uint64.mli>>=
 <<external functions>>
+<<internal functions>>
 @
 
 <<external functions>>=
@@ -47,12 +48,35 @@ return values as unsigned integers. Otherwise they implement the
 behavior of the corresponding functions in the [[Int64]] module.
 
 <<>>=
-external compare:    int64 -> int64 -> int           = "uint64_compare"
-external addu:       int64 -> int64 -> int64         = "uint64_add"
-external subu:       int64 -> int64 -> int64         = "uint64_sub"
-external mulu:       int64 -> int64 -> int64         = "uint64_mul"
-external divu:       int64 -> int64 -> int64         = "uint64_div"
+external cmp:        int64 -> int64 -> int           = "uint64_compare"
+external add:        int64 -> int64 -> int64         = "uint64_add"
+external sub:        int64 -> int64 -> int64         = "uint64_sub"
+external mul:        int64 -> int64 -> int64         = "uint64_mul"
+external div:        int64 -> int64 -> int64         = "uint64_div"
 external modu:       int64 -> int64 -> int64         = "uint64_mod"
+@
+
+Conversion functions.
+
+<<>>=
+external of_string:  string -> int64                 = "uint64_of_string"
+@
+
+Unisgned comparison of [[int64]] values.
+
+<<internal functions>>=
+val eq:              int64 -> int64 -> bool     (* equal         *)
+val lt:              int64 -> int64 -> bool     (* less than     *)
+val gt:              int64 -> int64 -> bool     (* greather than *)
+val le:              int64 -> int64 -> bool     (* less equal    *)
+val ge:              int64 -> int64 -> bool     (* greater equal *)
+@
+
+Shift operations for unsigned [[int64]] values.
+
+<<>>=
+val shl:             int -> int64 -> int64      (* shift left  *)
+val shr:             int -> int64 -> int64      (* shift right *)
 @
 
 % ------------------------------------------------------------------ 
@@ -64,8 +88,33 @@ It simply provides some additional operations in the same style as the
 [[Int64]] implementation. 
 
 <<uint64.ml>>=
+module I = Int64
 <<external functions>>
 @
+
+Comparison functions are implemented with the help of the [[cmp]]
+primitive. 
+
+<<>>=
+let eq  x y =    (cmp x y) = 0
+let lt  x y =    (cmp x y) < 0
+let gt  x y =    (cmp x y) > 0
+let le  x y =    (lt x y) || (eq x y)
+let ge  x y =    (gt x y) || (eq x y)
+@
+
+The shift-operations can be taken from the [[Int64]] module because
+they are the same for signed and unsigned values. This applies to many
+other operations as well.
+
+<<>>=
+let shl n x =    I.shift_left x n
+let shr n x =    I.shift_right_logical x n  
+@
+
+% ------------------------------------------------------------------ 
+\subsection{C implementation of the primitives}
+% ------------------------------------------------------------------ 
 
 <<uint64p.c>>=
 #include <caml/fail.h>
@@ -74,13 +123,19 @@ It simply provides some additional operations in the same style as the
 #include <caml/config.h>
 @
 
+Unsigned omparison of [[int64]] values; this implements the
+(mathematical) sign function of the difference of the two values. 
+
 <<>>=
 value uint64_compare(value v1, value v2)
 {
-  uint64 i1 = Int64_val(v1);
-  uint64 i2 = Int64_val(v2);
-  return i1 == i2 ? Val_int(0) : i1 < i2 ? Val_int(-1) : Val_int(1);
+    uint64 i1 = Int64_val(v1);
+    uint64 i2 = Int64_val(v2);
+    return i1 == i2 ? Val_int(0) : i1 < i2 ? Val_int(-1) : Val_int(1);
 }
+@
+
+Bitwise conversion of a [[float]] to a [[int64]].
 
 <<>>=
 value uint64_f2i(value f)
@@ -89,7 +144,9 @@ value uint64_f2i(value f)
     buffer.d = Double_val(f);
     return copy_int64(buffer.i);
 }
+@
 
+Bitwise conversion of a [[int64]] value to to [[float]].
 <<>>=
 value uint64_i2f(value i)
 {
@@ -100,7 +157,8 @@ value uint64_i2f(value i)
 @
 
 The following function is a quick hack and not portable to 64 bit
-architectures. 
+architectures.  It converts an [[int]] value bitwise into an [[int64]]
+value. 
 
 <<>>=
 value uint64_i2i(value i)
@@ -112,12 +170,15 @@ value uint64_i2i(value i)
 
     return copy_int64(buffer.j);
 }
+@
 
+Implementation of unsigned arithmetic operators.
 
+<<>>=
 value uint64_add(value v1, value v2)  /* ML */
 { return copy_int64((uint64)Int64_val(v1) + (uint64)Int64_val(v2)); }
-<<>>=
 
+<<>>=
 value uint64_sub(value v1, value v2)  /* ML */
 { return copy_int64((uint64)Int64_val(v1) - (uint64)Int64_val(v2)); }
 
@@ -139,6 +200,73 @@ value uint64_mod(value v1, value v2)  /* ML */
     int64 divisor = Int64_val(v2);
     if (divisor == 0) raise_zero_divide();
     return copy_int64((uint64)Int64_val(v1) % (uint64)divisor);
+}
+@
+
+Some more code stolen from the {\ocaml} implementation because it is
+declared [[static]] there such that we can't access it.
+[[parse_digit]] returns the value of a digit in its string
+representation. 
+
+<<>>=
+static int parse_digit(char * p)
+{
+    int c = *p;
+    if (c >= '0' && c <= '9')
+        return c - '0';
+    else if (c >= 'A' && c <= 'F')
+        return c - 'A' + 10;
+    else if (c >= 'a' && c <= 'f')
+        return c - 'a' + 10;
+    else
+        return -1;
+}
+@
+
+A string number contains its radix implicitly. This function sets the
+[[base]] accordingly and returns an advanced [[p]] such that a header
+like [[0x]] is skipped.
+
+<<>>=
+static char* parse_base (char *p, int *base)
+{
+    *base = 10;
+    if (*p == '0') {
+        switch (p[1]) {
+        case 'x': case 'X':
+            *base = 16; p += 2; break;
+        case 'o': case 'O':
+            *base = 8; p += 2; break;
+        case 'b': case 'B':
+            *base = 2; p += 2; break;
+        default:
+            *base = 8; break;
+        }
+    }
+    return p;
+}
+@
+
+Convert a string to an unsigned [[int64]] value.  In case of syntax
+errors [[Failure]] is raised.  No overflow checks are performed
+currently.
+
+<<>>=
+value uint64_of_string(value s)          /* ML */
+{
+    char * p;
+    uint64 res;
+    int base, d;
+
+    p    = parse_base (String_val(s), &base);
+    for (res = 0; /*nothing*/; p++) {
+        d = parse_digit(p);
+        if (d < 0 || d >= base) break;
+        /* check for overflow? */
+        res = base * res + d;
+    }
+    if (*p != 0) failwith("int_of_string");
+    return copy_int64(res);
 }
 @
 

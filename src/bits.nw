@@ -1,0 +1,167 @@
+% l2h substitution C C--
+% l2h substitution PAL C--
+% l2h substitution asdl ASDL
+% l2h substitution ocaml OCaml
+% l2h substitution forall forall
+
+% ------------------------------------------------------------------ 
+\section{Bits -- low level representation of values}
+% ------------------------------------------------------------------ 
+
+Values in {\PAL} can be either of type [[bool]] or [[bits]]. While
+[[bool]] values can be represented by the {\ocaml} type [[bool]], [[bits]]
+require a data structure.  Conceptually a [[bits]] value can hold a
+declared but arbitrary large number of bits.  
+
+% ------------------------------------------------------------------ 
+\subsection{Interface}
+% ------------------------------------------------------------------ 
+
+A [[bits]] value has a [[width]] which is the number of bits it can
+hold. The conversion of [[bits]] from and to other representations can
+cause overflows which are reported by an exception [[Overflow]].
+Requests for an unsupported [[width]] results in a [[Size]] exception.
+Currently 64 bits and less are supported.
+
+<<bits.mli>>=
+type bits
+type width      = int
+
+<<>>=
+exception Overflow
+exception Size
+
+A [[bits]] value can be created from and represented as a string.  The
+string representation can use a decimal, octal, or hexadecimal radix. 
+The characters to represent the respective radices in strings are
+shown below.  Conversion to and from strings always considers a
+[[bits]] value as an unsigned integer.
+
+\begin{quote}
+    \begin{tabularx}{\hsize}{ll}
+    Radix        & characters \\
+    \hline
+    octal        & \ttfamily 0 1 2 3 4 5 6 7     \\
+    decimal      & \ttfamily 0 1 2 3 4 5 6 7 8 9 \\
+    hexadecimal  & \ttfamily 0 1 2 3 4 5 6 7 8 9 a b c d e f A B C D E F \\
+    \end{tabular}
+\end{quote}
+@
+
+<<>>=
+type radix      = 
+                | Octal
+                | Decimal
+                | Hex
+@
+
+The width of a [[bits]] value is determined when it is created. The
+[[width]] function provides access to it. In case the requested size
+is not supported by the implementation [[Size]] is raised.
+
+<<>>=
+val width       : bits -> width
+@
+
+A [[bits]] value is created from an integer ([[of_int]], or string
+([[of_string]]).  The radix of a string is determined by its first two
+characters:
+
+\begin{itemize}
+\item A string starting with [[0x]] or [[0X]] is considered a
+      dexadecimal number.
+\item A string starting with [[0]] is considered a string of octal
+      numbers.
+\item All other strings are considered as strings with decimal numbers.
+\end{itemize}
+
+A [[Failure "of_string"]] excpetion is raised when the string contains illegal
+characters. 
+
+<<>>=
+val of_int      : int    -> width -> bits  (* Size *)
+val of_string   : string -> width -> bits  (* Size, Overflow, Failure *)
+@
+
+A [[bits]] value can be converted to an integer or string. If the
+[[bits]] do not fit into an [[int]], [[Overflow]] is raised. 
+
+<<>>=
+val to_int      : bits -> int                       (* raises Overflow *)
+val to_string   : radix option -> bits -> string    
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+A [[bits]] is represented as an [[int64]].  The reason not to
+implement arbitrary large bit vectors is the need for IEEE 754
+floating point operations:  an [[int64]] value can be considered as a
+C [[float]] value of 64 bits for which floating point operations are
+available.
+
+<<bits.ml>>=
+module I = Int64
+module U = Uint64
+
+exception Overflow
+exception Size
+
+Values of type [[bits]] are represented as pairs of width and value.
+
+type width      = int
+type bits       = width * int64
+@
+
+Operations on [[bits]] frequently must [[check]] that the requested
+with is inside the implementation's limits and an actual value fits
+into that many bits. The [[check]] function raises [[Size]] or
+[[Overflow]] in case the mentioned rules are violated.
+ 
+<<>>=
+let check width uint64 =
+    if (width <= 0) || (width > 64) then
+        raise Size
+    else if (width < 64) && (U.ge uint64 (U.shl width I.one)) then
+        raise Overflow
+    else 
+        ()
+@
+
+The value converted by [[of_int]] must fit into [[width]] bits.
+    
+<<>>=
+let of_int width uint64 =
+    check width uint64;
+    (width,uint64)
+
+The value obtained from a string must fit into [[width]] bits.  The
+function raises [[Failure]] in case of syntactical errors in the
+string.
+
+<<>>=
+let of_string str width =
+    let uint64 = U.of_string str in
+        ( check width uint64
+        ; (width,uint64)
+        )
+
+The [[to_int]] function checks that the [[bits]] value can be
+represented as a positive integer and raises [[Overflow]] otherwise. 
+
+<<>>=
+let to_int (width,uint64) =
+    if uint64 > I.of_int(max_int) then
+        raise (Overflow)
+    else
+        I.to_int uint64
+
+This is buggy: the [[I.to_string]] function considers the [[bits]]
+value as a signed integer. We also ignore the radix for the moment.
+        
+let to_string radix (width,uint64) = I.to_string uint64 (* wrong *)
+@
+
+
+
