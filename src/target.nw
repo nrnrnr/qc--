@@ -66,7 +66,7 @@ type info =     { name          : string (* name of this target *)
                 ; float         : string (* like "ieee754" *) 
                 ; charset       : string (* like "latin1" - belongs here? *) 
                 ; conv          : conv StrMap.t
-                ; registers     : Automaton.t (* global reg allocation *)
+                ; globals       : Automaton.t (* global reg allocation *)
                 }
 @
 
@@ -101,6 +101,12 @@ In case the informations found in the fat environment are
 incompatible, an error message is issued as a side effect and
 [[false]] is returned.  On the other hand, ff the source code and the
 target are found to be compatible, the result is [[true]].
+
+For experiments, we provide a [[dummy]] target description.
+
+<<>>=
+val dummy: info
+@
 
 % ------------------------------------------------------------------ 
 \subsection{Implementation}
@@ -148,4 +154,19 @@ let validate env info =
         else true
 @
 
+% ------------------------------------------------------------------ 
+\subsection{Dummy Target}
+% ------------------------------------------------------------------ 
+
+<<>>=
+let dummy = { name              = "dummy"
+            ; byteorder         = Rtl.BigEndian
+            ; wordsize          = 32
+            ; pointersize       = 32
+            ; memsize           = 8
+            ; float             = "ieee754"
+            ; charset           = "latin1"
+            ; conv              = assert false
+            ; globals           = assert false
+            }
 

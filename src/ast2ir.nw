@@ -60,8 +60,8 @@ end
 
 
 module Make
-  (G   : Agraph.S with type Make.ginit  = unit  )      
-  (Asm : Asm2.S   with type instruction = G.node) =
+  (G   : Agraph.S with type Make.ginit   = unit )      
+  (Asm : Asm2.S   with type instruction  = G.graph) =
 struct
     module GM = G.Make
     <<module Make>> 
@@ -507,7 +507,7 @@ and proc env (target: Target.info) props (asm: Asm.asm) (cc,n,fs,bb) =
     let bdy   a    = body env target props graph a  bb           in
     let exit       = decorate (GM.exit graph)                    in
     let node       = (entry << copy << bdy) exit                 in
-         asm ++ Asm.instr node
+         asm ++ Asm.instr (GM.graph_of node)
          (* what about defining a symbol here, etc?? *)
         
 @
@@ -596,13 +596,32 @@ need so way to record such an assignment.  All other locations for
 global registers are determined by an automaton, see module
 \module{callconv}. 
 
+A [[span]] on the section level must be pushed to the statement level: 
+when we come across a [[span]] we modify the properties [[props]]
+accordingly.  The next time we come across a procedure, the properties
+including the span will be used.
+
 <<module Make>>=
-let rec section env target props (asm: Asm.asm) = function
+let rec sspan env target props asm (e1,e2,ss) =    
+    let key   = ( match dummy_expression with (* constant eval *)
+                | Rtl.Const(Rtl.Bits(bits,w)) -> bits
+                | _                           -> assert false
+                ) in
+    let value = ( match dummy_expression with (* link-time constant *)
+                | Rtl.Const(c)                -> c
+                | _                           -> assert false
+                ) in
+    let props = G.Props.add_span key value props 
+    in
+        foldl (section env target props) asm ss 
+
+<<>>=
+and section env target props (asm: Asm.asm) = function
     | A.SectionAt(x,_)     -> section env target props asm x
     | A.Decl(d)            -> asm
     | A.Datum( d)          -> datum env target asm d
     | A.Procedure(p)       -> proc env target props asm p
-    | A.SSpan( e1, e2, ss) -> assert false (* how? *)
+    | A.SSpan ss           -> sspan env target props asm ss
 @            
 
 What to do with top-level procedures? They should go into some section
@@ -638,6 +657,12 @@ let exports env asm =
 let imports env asm =
     Fenv.StrSet.fold (fun s asm -> asm ++ Asm.import (Asm.mangle s)) 
     (F.imported env) asm
+@
+
+The global registers of a {\PAL} program are assigned to registers and
+memory locations. The assignment is performed by an automaton provided
+by the [[target]] value. The sequence of all global register
+declarations can be obtained from the fat environment.
 
 (* assign global registers *)
 
