@@ -12,6 +12,7 @@ module Post : Postexpander.S
 module X    : Expander.S
 
 val target: Ast2ir.tgt
+val placevars : Ast2ir.proc -> Automaton.t
 @
 
 % ------------------------------------------------------------------ 
@@ -101,6 +102,7 @@ let reg n       = ('r',n,32)
 let sp          = reg 29        (* stack pointer    *)
 let ra          = reg 31        (* return address   *)
 let r0          = reg 0         (* register 0       *)
+let rm_reg      = ('d', 0, 2)
 @
 
 % ------------------------------------------------------------------ 
@@ -167,16 +169,17 @@ let remember_allocator ta = talloc := Some ta
 let get_talloc () = match !talloc with
   | Some s -> s
   | None   -> Impossible.impossible "Temp allocator not registered with postexpander"
-let talloc space = Talloc.Multiple.reg (get_talloc ()) space (* don't eta-reduce *)
+let talloc space = Talloc.Multiple.reg space (get_talloc ()) (* don't eta-reduce *)
 @
 \paragraph{Contexts}
 There is no distinction between an integer and an address.
 @
 <<MIPS postexpander>>=
-type context = Rtl.space * (Register.t -> bool)
-let icontext = 't', fun (c, _, _) -> c = 'r' || c = 't'
-let fcontext = 'u', fun (c, _, _) -> c = 'f' || c = 'u'
+type context = (Talloc.Multiple.t -> int -> Register.t) * (Register.t -> bool)
+let icontext = Talloc.Multiple.reg 't', fun (c, _, _) -> c = 'r' || c = 't'
+let fcontext = Talloc.Multiple.reg 'u', fun (c, _, _) -> c = 'f' || c = 'u'
 let acontext = icontext
+let rcontext = (fun x y -> unimp "unsupported soft rounding mode"), fun r -> r = rm_reg
 @
 \paragraph{Addressing modes}
 <<MIPS postexpander>>=
@@ -266,8 +269,8 @@ We have no boolean context because boolean operations are rewritten into
 control flow.
 
 <<MIPS postexpander>>=
-let bcontext = ' ', fun _ -> false  (* should never be used *)
-let operators = Context.standard icontext fcontext acontext bcontext
+let bcontext = (fun x y -> impossible "allocate from bcontext"), fun _ -> false
+let operators = Context.standard icontext fcontext rcontext acontext bcontext
 
 let resmap = List.fold_left (fun m (n, a, r)-> SM.add n r m) SM.empty operators
 let argmap = List.fold_left (fun m (n, a, r)-> SM.add n a m) SM.empty operators
@@ -440,7 +443,33 @@ let globals base =
              ~growth:Memalloc.Up 
              ~max_alignment:4)
 @
+This variable placer is a simplified version of the x86 placer.
+<<mips.ml>>=
+let from_temps proc space = (* stage to allocate a temporary location *)
+  let allocator = Talloc.Multiple.loc proc.Proc.temps space in
+  let alloc ~width:w ~alignment:a ~hint:h = A.of_loc (allocator w) in
+  A.wrap (fun methods -> {A.allocate = alloc; A.freeze = methods.A.freeze})
 
+let placevars proc = 
+  let is_float    hint w = w <= 32 && hint = "float" in
+  let warn methods =
+    let alloc ~width:w ~alignment:a ~hint:h =
+      if w > 32 then
+        unimp (Printf.sprintf "%d-bit values not supported"  w);
+      methods.A.allocate w a h
+    in
+    {A.allocate = alloc; A.freeze = methods.A.freeze} in
+  Block.srelative vfp "variables placed in memory" A.at
+  (
+    A.wrap warn *>
+    A.choice
+      [ is_float,               A.widen (Aux.round_up_to ~multiple_of: 32); 
+        (fun h w -> w <= 32),   A.widen (fun _ -> 32) *> from_temps proc 't';
+        A.is_any,               A.widen (Aux.round_up_to ~multiple_of: 8);
+      ] *>
+    A.as_stage proc.Proc.priv
+  )
+@ 
 % ------------------------------------------------------------------ 
 \subsection{The target record}
 % ------------------------------------------------------------------ 
@@ -478,7 +507,7 @@ let target =
                                 (F.cutto (Rtl.reg sp))
                     
     ; T.globals             = globals
-    ; T.rounding_mode       = Rtl.reg ('d', 0, 2)
+    ; T.rounding_mode       = Rtl.reg rm_reg
     ; T.named_locs          = Strutil.assoc2map
                               ["v0", Rtl.reg (reg 2) (* for SPIM *)
                               ]

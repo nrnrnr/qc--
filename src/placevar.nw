@@ -177,15 +177,16 @@ type counts = { mutable intc   : float
               }
 @
 <<initialize context count structures>>=
-let new_count _ = { intc = 0.0; floatc = 0.0; addrc = 0.0; boolc = 0.0}  in
-let var_counts = Array.init proc.Proc.vars new_count                     in
-let inc_int   i f = let record = var_counts.(i)                          in
-                    record.intc <- record.intc +. f                      in
-let inc_float i f = let record = var_counts.(i)                          in
-                    record.floatc <- record.floatc +. f                  in
-let inc_addr  i f = let record = var_counts.(i)                          in
-                    record.addrc <- record.addrc +. f                    in
-let inc_bool  i f = Error.warningPrt "variable found in boolean context" in
+let new_count _ = { intc = 0.0; floatc = 0.0; addrc = 0.0; boolc = 0.0}        in
+let var_counts = Array.init proc.Proc.vars new_count                           in
+let inc_int   i f = let record = var_counts.(i)                                in
+                    record.intc <- record.intc +. f                            in
+let inc_float i f = let record = var_counts.(i)                                in
+                    record.floatc <- record.floatc +. f                        in
+let inc_addr  i f = let record = var_counts.(i)                                in
+                    record.addrc <- record.addrc +. f                          in
+let inc_bool  i f = Error.warningPrt "variable found in boolean context"       in
+let inc_rm    i f = Error.warningPrt "variable found in rounding mode context" in
 @
 A call to [[Context.standard]] returns a list of (operator, parameter list, result)
 triples, where the argument list and result tell us in what context the arguments and 
@@ -194,7 +195,7 @@ To speed lookup, we use a map to hold this information.
 <<get operator contexts>>=
 let ops =
   List.fold_left (fun map (op, parms, res) -> SM.add op (parms, res) map)
-                 SM.empty (Context.standard inc_int inc_float inc_addr inc_bool) in
+                 SM.empty (Context.standard inc_int inc_float inc_rm inc_addr inc_bool) in
 let ctxt_parms  op = try Some (fst (SM.find op ops)) with Not_found -> None in
 let ctxt_result op = try Some (snd (SM.find op ops)) with Not_found -> None in
 @

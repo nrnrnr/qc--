@@ -251,7 +251,7 @@ ARGUMENT AND RESULT CONTEXT FOR EVERY OPERATOR.
 THEN IT CAN BE THE JOB OF THE EXPANDER TO DO SUCH THINGS AS ALLOCATE
 MEMORY SLOTS, ETC.
 <<generic expansion operations for register machines>>=
-type context = Rtl.space * (Register.t -> bool)
+type context = (Talloc.Multiple.t -> int -> Register.t) * (Register.t -> bool)
 val icontext : context (* for ints *)
 val fcontext : context (* for floats *)
 val acontext : context (* for addresses *)
@@ -635,14 +635,13 @@ context that's not known at compile-compile time.
 let expand ({Proc.cfg = cfg} as proc) =
   <<stack-slot allocation>>
   <<flow-graph manipulation utilities>>
-  let contextmap (space, checker) =
-    (Talloc.Multiple.reg proc.Proc.temps space, checker) in
+  let contextmap (allocator, checker) = (allocator proc.Proc.temps, checker) in
   let icontext = contextmap Post.icontext in
   let acontext = contextmap Post.acontext in
   let fcontext = contextmap Post.fcontext in
   <<rounding-mode checking>>
   <<context guessing>>
-  let alloc_direct (space, _) = Talloc.Multiple.reg proc.Proc.temps space in
+  let alloc_direct (allocator, _) = allocator proc.Proc.temps in
   <<flow-graph functions>>
   <<definitions of [[to_temp]], [[rtl]] and all the other generic expander functions>>
   (Post.remember_allocator proc.Proc.temps;

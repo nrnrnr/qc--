@@ -73,7 +73,8 @@ let zero        = reg 31        (* always zero      *)
 let gp          = reg 29        (* global pointer   *)
 let pv          = reg 27        (* procedure value  *)
 
-let pv_loc      = R.reg pv 
+let pv_loc      = R.reg pv
+let rm_reg      = ('d', 0, 2)
 @
 
 % ------------------------------------------------------------------ 
@@ -137,16 +138,17 @@ let remember_allocator ta = talloc := Some ta
 let get_talloc () = match !talloc with
   | Some s -> s
   | None   -> Impossible.impossible "Temp allocator not registered with postexpander"
-let talloc space = Talloc.Multiple.reg (get_talloc ()) space (* don't eta-reduce *)
+let talloc space = Talloc.Multiple.reg space (get_talloc ()) (* don't eta-reduce *)
 @
 \paragraph{Contexts}
 There is no distinction between an integer and an address.
 @
 <<Alpha postexpander>>=
-type context = Rtl.space * (Register.t -> bool)
-let icontext = 't', fun (c, _, _) -> c = 'r' || c = 't'
-let fcontext = 'u', fun (c, _, _) -> c = 'f' || c = 'u'
+type context = (Talloc.Multiple.t -> int -> Register.t) * (Register.t -> bool)
+let icontext = Talloc.Multiple.reg 't', fun (c, _, _) -> c = 'r' || c = 't'
+let fcontext = Talloc.Multiple.reg 'u', fun (c, _, _) -> c = 'f' || c = 'u'
 let acontext = icontext
+let rcontext = (fun x y -> unimp "Unsupported soft rounding mode"), fun r -> r = rm_reg
 @
 \paragraph{Addressing modes}
 <<Alpha postexpander>>=
@@ -236,8 +238,8 @@ We have no boolean context because boolean operations are rewritten into
 control flow.
 
 <<Alpha postexpander>>=
-let bcontext = ' ', fun _ -> false  (* should never be used *)
-let operators = Context.standard icontext fcontext acontext bcontext
+let bcontext = (fun x y -> impossible "allocate from bcontext"), fun _ -> false
+let operators = Context.standard icontext fcontext rcontext acontext bcontext
 
 let resmap = List.fold_left (fun m (n, a, r)-> SM.add n r m) SM.empty operators
 let argmap = List.fold_left (fun m (n, a, r)-> SM.add n a m) SM.empty operators
@@ -537,7 +539,7 @@ let target =
                                    (F.cutto (Rtl.reg sp))
 
     ; T.globals             = globals
-    ; T.rounding_mode       = Rtl.reg ('d', 0, 2)
+    ; T.rounding_mode       = Rtl.reg rm_reg
     ; T.named_locs          = Strutil.Map.empty
     ; T.data_section        = "data"
     ; T.charset             = "latin1" (* REMOVE THIS FROM TARGET.T *)

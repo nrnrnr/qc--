@@ -137,16 +137,19 @@ let get_talloc () = match !talloc with
   | Some s -> s
   | None   -> Impossible.impossible "Temp allocator not registered with postexpander"
 let remember_allocator ta = talloc := Some ta
-let talloc space = Talloc.Multiple.reg (get_talloc ()) space (* don't eta-reduce *)
+let talloc space = Talloc.Multiple.reg space (get_talloc ()) (* don't eta-reduce *)
 @ 
 \paragraph{Contexts}
 Addresses go in the integer registers, so we use these contexts:
 <<x86 postexpander>>=
-type context = Rtl.space * (Register.t -> bool)
-let icontext = 't', fun (c, _, _) -> c = 'r' || c = 't'
-let fcontext = 'u', fun (c, _, _) -> c = 'f' || c = 'u'
+type context = (Talloc.Multiple.t -> int -> Register.t) * (Register.t -> bool)
+let tmr s a = Talloc.Multiple.reg s a
+let icontext = Talloc.Multiple.reg 't', fun (c, _, _) -> c = 'r' || c = 't'
+let fcontext = Talloc.Multiple.reg 'u', fun (c, _, _) -> c = 'f' || c = 'u'
 let fcontext = icontext  (* should be better with the stack?? *)
 let acontext = icontext
+let rcontext = (fun x y -> Impossible.unimp "Unsupported soft rounding mode")
+               ,fun r -> r = ('d', 0, 2)
 @ 
 \paragraph{Addressing modes}
 The only addressing mode is the obvious one.
@@ -253,8 +256,9 @@ let lix ~dst e     = [R.store (temploc dst) e                (tempwidth dst)]
 Here are tentative contexts for all the operators.
 Anything that has to do with rounding modes is surely wrong.
 <<x86 postexpander>>=
-let bcontext = ' ', fun _ -> false  (* should never be used *)
-let operators = Context.standard icontext fcontext acontext bcontext
+let bcontext = (fun x y -> Impossible.impossible "allocate from bcontext")
+               ,fun _ -> false
+let operators = Context.standard icontext fcontext rcontext acontext bcontext
 
 module SM = Strutil.Map
 let resmap = List.fold_left (fun m (n, a, r)-> SM.add n r m) SM.empty operators

@@ -19,12 +19,12 @@ type parameter.
 <<context.mli>>=
 type 'c op = string * 'c list * 'c        (* op, arguments, result *)
 @ 
-On most machines operators can be described by four contexts: integer,
-floating point, address, and boolean. The [[standard]] function returns
-an association for all {\rtl} operators, that states standard operator
-contexts. 
+On most machines operators can be described by five contexts: integer,
+floating point, rounding mode, address, and boolean. The [[standard]]
+function returns an association for all {\rtl} operators, that states
+standard operator contexts.
 <<context.mli>>=
-val standard: int:'c -> fp:'c -> addr:'c -> bool:'c -> 'c op list
+val standard: int:'c -> fp:'c -> rm:'c -> addr:'c -> bool:'c -> 'c op list
 @
 
 @
@@ -33,7 +33,7 @@ val standard: int:'c -> fp:'c -> addr:'c -> bool:'c -> 'c op list
 % ------------------------------------------------------------------ 
 <<context.ml>>=
 type 'c op = string * 'c list * 'c        (* op, arguments, result *)
-let standard ~int ~fp ~addr ~bool =
+let standard ~int ~fp ~rm ~addr ~bool =
     [ "add"           , [int; int], int
     ; "and"           , [int; int], int
     ; "bit"           , [bool], int
@@ -55,26 +55,26 @@ let standard ~int ~fp ~addr ~bool =
     ; "fle"           , [fp; fp], bool
     ; "flt"           , [fp; fp], bool
     ; "fne"           , [fp; fp], bool
-    ; "f2f"           , [fp; fp], fp
+    ; "f2f"           , [fp; rm], fp
     ; "f2f_implicit_round"     , [fp], fp
-    ; "f2i"           , [fp; fp], fp  (* conversion done in float unit?? *)
+    ; "f2i"           , [fp; rm], fp  (* conversion done in float unit?? *)
     ; "fabs"          , [fp], fp
-    ; "fadd"          , [fp; fp; fp], fp  (* ROUNDING MODES *)
+    ; "fadd"          , [fp; fp; rm], fp
     ; "fcmp"          , [fp; fp], fp
-    ; "fdiv"          , [fp; fp; fp], fp  (* ROUNDING MODES *)
+    ; "fdiv"          , [fp; fp; rm], fp
     ; "float_eq"      , [], fp
     ; "float_gt"      , [], fp
     ; "float_lt"      , [], fp
-    ; "fmul"          , [fp; fp; fp], fp  (* ROUNDING MODES *)
+    ; "fmul"          , [fp; fp; rm], fp
     ; "fmulx"         , [fp; fp], fp
     ; "fneg"          , [fp], fp
-    ; "fsqrt"         , [fp; fp], fp  (* ROUNDING MODES *)
-    ; "fsub"          , [fp; fp; fp], fp  (* ROUNDING MODES *)
+    ; "fsqrt"         , [fp; rm], fp
+    ; "fsub"          , [fp; fp; rm], fp
     ; "ge"            , [int; int], bool
     ; "geu"           , [int; int], bool
     ; "gt"            , [int; int], bool
     ; "gtu"           , [int; int], bool
-    ; "i2f"           , [fp; fp], fp  (* conversion done in float unit? *)
+    ; "i2f"           , [fp; rm], fp  (* conversion done in float unit? *)
     ; "le"            , [int; int], bool
     ; "leu"           , [int; int], bool
     ; "lobits"        , [int], int
@@ -97,10 +97,10 @@ let standard ~int ~fp ~addr ~bool =
     ; "pzero"         , [], fp
     ; "quot"          , [int; int], int
     ; "rem"           , [int; int], int
-    ; "round_down"    , [], int         (* ROUNDING MODES *)
-    ; "round_nearest" , [], int         (* ROUNDING MODES *)
-    ; "round_up"      , [], int         (* ROUNDING MODES *)
-    ; "round_zero"    , [], int         (* ROUNDING MODES *)
+    ; "round_down"    , [], rm
+    ; "round_nearest" , [], rm
+    ; "round_up"      , [], rm
+    ; "round_zero"    , [], rm
     ; "shl"           , [int; int], int
     ; "shra"          , [int; int], int
     ; "shrl"          , [int; int], int
