@@ -94,8 +94,6 @@ type contedge = { kills:regs; defs:regs; node:uid }
 
 
 val uid : unit -> uid
-val address : uid -> Rtl.exp
-
 type machine = ((Rtl.exp -> Automaton.t), Call.t) Target.t
 
 val label        : machine -> uid -> string -> zgraph -> zgraph  (* spans? *)
@@ -220,6 +218,8 @@ module type BLOCKS = sig
   val insert : block -> t -> t
   val find   : t -> uid -> block 
   val focus  : t -> uid -> block * t
+  val union  : t -> t -> t
+  val exit   : int -> t -> block * t
 end
 
 module Blocks : BLOCKS = struct
@@ -235,6 +235,8 @@ module Blocks : BLOCKS = struct
         if id b = u then b, List.rev_append prev' bs
         else f (b::prev') bs in
     f [] blocks
+  let union = (@)
+  let exit blocks = unimpf "Blocks.find_exit"
 end
 @ 
 <<zipcfg.ml>>=  
@@ -253,6 +255,17 @@ let zip =
   | End    (h, l)    -> revapp h (Last l)
 
 let unzip (n, ns) = Start (n, ns)
+
+let rec goto_start block = match block with
+| Middle (Head (h, m'), m, t) -> goto_start (Middle (h, m', Tail (m', t)))
+| _ -> unimpf "goto_start"
+
+let rec goto_end block = match block with
+| Start  (f, Tail (m, t))     -> goto_end (Middle (First f, m, t))
+| Start  (f, Last l)          -> First f, l
+| Middle (h, m, Tail (m', t)) -> goto_end (Middle (Head (h, m), m', t))
+| Middle (h, m, Last l)       -> Head (h, m), l
+| End (h, l)                  -> h, l
 @ 
 <<zipcfg>>=
 @ 
@@ -278,7 +291,7 @@ let unreachable = function
   | Last (Branch _) -> ()
   | _ -> Printf.eprintf "warning: unreachable code?\n"
 
-let consl last g = match g with
+let consl last g = match entry g with
 | (Start (Entry, tail), blocks) ->
     unreachable tail;
     (Start (Entry, Last last), blocks)
@@ -303,6 +316,48 @@ let label tgt =
       Start (Entry, Last (Branch (goto uid, uid))),
       Blocks.insert (Label (uid, Some name), tail) blocks
   | _ -> impossf "focus not on entry node"
+@ 
+<<zipcfg.ml>>=
+let exit_to_head block =
+  match goto_end (unzip block) with
+  | h, Exit _ -> h
+  | _ -> impossf "unexpected non-exit"
+<<zipcfg.ml>>=
+let splice_before (focus, blocks) g =
+  (* first extend the head with the entry of g, then 
+     if we have not reached the exit of g,
+     make the exit of g the new head *)
+  let splice head after_head =
+    let gentry, gblocks = entry g in
+    match gentry with
+    | Start (Entry, gnodes) ->
+        let rec extend head gnodes = match gnodes with
+        | Tail (mid, gnodes) -> extend (Head (head, mid)) gnodes
+        | Last (Exit n) ->
+            assert (n = 0);
+            after_head head, Blocks.union blocks gblocks
+        | Last _ ->
+            let gexit, gblocks = Blocks.exit 0 gblocks in
+            after_head (exit_to_head gexit), Blocks.union blocks gblocks in
+        extend head gnodes
+    | _ -> impossf "ill-formed entry node" in
+  match focus with
+  | Start _ -> impossf "splicing before a first node"
+  | Middle (head, mid, tail) -> splice head (fun head -> Middle (head, mid, tail))
+  | End (head, last) -> splice head (fun head -> End (head, last))
+
+
+let make_target ((b, bs) as gz) = match b with
+| Start (Label (u, _), tail) -> u, Blocks.insert (zip b) bs
+| Start (Entry, tail) -> unimpf "make entry a target"
+| _ ->
+    (* splice in Entry -> goto u; Label u -> Exit *)
+    let machine = unimpf "machine" in
+    let u = uid () in
+    let l = Idgen.label "branch target" in
+    let g = unfocus (branch machine u (unfocus (label machine u l (entry empty)))) in
+    let g = unfocus (splice_before gz g) in
+    u, g
 @ 
 <<zipcfg.ml>>=
 let call rtl ~altrets ~unwinds_to ~cuts_to ~aborts

@@ -59,6 +59,7 @@ val elab_stmts :
 val elab_cformals : 
   Ast.region -> 'a Fenv.Dirty.env' -> Nast.cformal list ->
     Fenv.variable kinded list Error.error
+val codelabels : stmt list -> label list
 @ The [[elab_*]] functions work with incomplete information,
 indicated by [[Error.Error]] values.  The policy is as follows:
 \begin{itemize}
@@ -563,3 +564,21 @@ let prim_flow r fs =
     else
       E.Ok f) in
 @ 
+<<elabstmt.ml>>=
+let codelabels ss =
+  let rec adds ss labels = List.fold_left add labels ss 
+  and add labels s = match s with
+  | If     (_, ts, fs) -> adds ts (adds fs labels)
+  | Switch (_, _, arms) ->
+      List.fold_left (fun labels (_, ss) -> adds ss labels) labels arms
+  | Label  l -> l :: labels
+  | Cont   _ -> labels
+  | Span   (_, ss) -> adds ss labels
+  | Assign _ 
+  | Call   _ 
+  | Goto   _ 
+  | Jump   _ 
+  | Cut    _ 
+  | Return _ -> labels in
+  adds ss []
+

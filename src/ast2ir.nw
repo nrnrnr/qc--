@@ -74,12 +74,17 @@ module RP = Rtl.Private
 module RU = Rtlutil
 module RS = Register.Set
 module S  = Elabstmt
+module SM = Strutil.Map
 module SP = Spans
 module T  = Target
 module Up = Rtl.Up
 module W  = Rtlutil.Width
 
 type aligned = int
+type label   = G.uid * string 
+let genlabel s =
+  let s = Idgen.label s in
+  (G.uid s, s)
 @ 
 Utility functions and so on.
 <<ast2ir.ml>>=
@@ -220,13 +225,12 @@ need to return to a different lable for each calling convention.
 \nextchunklabel{ast2ir.K.t}%
 <<module [[K]], for continution info>>=
 module K = struct
-  type label = string
   type convention = string
   type 'i t =
-    {         unwind_pc   : G.uid       (* uids may or may not be used *)
+    {         unwind_pc   : label       (* uids may or may not be used *)
     ;         unwind_sp   : Rtl.loc
-    ;         cut_pc      : G.uid
-    ; mutable return_pcs  : (convention * G.uid list) list
+    ;         cut_pc      : label
+    ; mutable return_pcs  : (convention * label list) list
     ;         escapes     : bool        (* properties of how it is used *)
     ;         cut_to      : bool
     ;         unwound_to  : bool
@@ -239,7 +243,7 @@ module K = struct
     ;         rep         : Contn.t     (* representation as C-- value (incl block) *)
     ;         base        : Block.t     (* base address; to be composed with rep *)
     ;         convention  : string
-    ; mutable succ        : G.uid option      (* filled in by 2nd pass time *)
+    ; mutable succ        : label option      (* filled in by 2nd pass time *)
     ; mutable spans       : (Bits.bits  * Bits.bits Reloc.Simple.relocatable) list
                             (* user-defined spans at the continuation *)
     }
@@ -255,9 +259,9 @@ let mk to_cc name den rep base g ~formals ~cut_in ~return_in ~unwind_sp =
   { escapes     = den.FE.escapes
   ; cut_to      = den.FE.cut_to
   ; unwound_to  = den.FE.unwound_to
-  ; unwind_pc   = G.uid ()  (* Idgen.ContEntry.unwind name *)
+  ; unwind_pc   = genlabel "unwind_entry"
   ; unwind_sp   = unwind_sp
-  ; cut_pc      = G.uid ()  (* Idgen.ContEntry.cut    name *)
+  ; cut_pc      = genlabel "cut_entry"
   ; return_pcs  = <<set the return pcs>>
   ; rep         = rep
   ; base        = base
@@ -280,7 +284,7 @@ List.map (fun cc -> (ccname cc,[])) den.FE.returned_to
 let get_return_pc cc k =
   let labels = try List.assoc cc.C.name k.return_pcs
                with Not_found -> impossf "Unknown alt-return convention %s" cc.C.name in
-  let new_label = G.uid() (*Idgen.ContEntry.return cc.C.name*) in
+  let new_label = genlabel "return_entry" in
   let new_entry = (cc.C.name, new_label :: labels) in
   k.return_pcs <- new_entry :: (List.remove_assoc cc.C.name k.return_pcs);
   new_label
@@ -307,7 +311,7 @@ let rec contStmt2 label succ =
   let (uid, g) = G.make_target succ in
   let k = continuation label in
   k.K.spans <- props;
-  k.K.succ  <- Some uid;
+  k.K.succ  <- Some (uid, label);
   unimpf "illegal flow"; (*G.illegal g*) (* should be not reached *) 
   G.entry g
 @ 
@@ -325,14 +329,14 @@ let continuations cc ast =
   let (--)    = RS.diff in
   let as_cut_to k =
     let defs  = k.K.cut_in.C.regs in
-    { G.defs  = defs; G.kills = allregs -- defs; G.node  = k.K.cut_pc } in
+    { G.defs  = defs; G.kills = allregs -- defs; G.node = fst k.K.cut_pc } in
   let as_unwinds k =
-    { G.defs  = RS.empty; G.kills = volregs; G.node  = k.K.unwind_pc } in
+    { G.defs  = RS.empty; G.kills = volregs; G.node = fst k.K.unwind_pc } in
     (* defs are variables and so can't be a register set.  NEED ANOTHER MECHANISM *)
   let as_returns k =
     let pc = K.get_return_pc cc k in
     let defs  = k.K.return_in.C.regs in
-    { G.defs  = defs; G.kills = volregs -- defs; G.node  = pc   } in
+    { G.defs  = defs; G.kills = volregs -- defs; G.node = fst pc } in
   let contmap f = List.map (f << continuation) in
   { S.cuts     = contmap as_cut_to  ast.S.cuts;
     S.unwinds  = contmap as_unwinds ast.S.unwinds;
@@ -363,7 +367,7 @@ inserts code to do the initialization.
 
 We also attach spans to each continuation that escapes.
 <<definition of [[insert_init_cont_nodes]]>>=
-let insert_init_cont_nodes contmap init_node =
+let insert_init_cont_nodes contmap (init_node, init_label) =
   unimpf "insert" (*
   let one_node cname k succ = 
     if k.K.escapes then
@@ -502,7 +506,7 @@ and stmt  props s  succ =
   | S.Goto (e, labels) ->
       (match Dn.exp e with
       | RP.Const (RP.Link (sym, _, w)) ->
-             branch ~target:(uid_of sym#original_text) (G.unfocus succ)
+             G.branch target ~target:(uid_of sym#original_text) (G.unfocus succ)
       | _ -> let instr   = target.T.goto.T.embed e in
              let targets = List.map uid_of labels in
              G.mbranch instr targets (G.unfocus succ))
@@ -531,7 +535,7 @@ and switchStmt range e arms props stmt_succ =
       Simplify.exp (
         List.fold_left (fun cond range -> RO.disjoin (e_in_interval range) cond)
                        (Rtl.bool false) ranges) in
-    let arm, g = G.make_target (stmts props body (branch endswitch g)) in
+    let arm, g = G.make_target (stmts props body (G.branch target endswitch g)) in
     G.make_target (G.cbranch target condition ~ifso:arm ~ifnot:next_test g) in
   let (first_test, g) = List.fold_right do_arm arms (endswitch, g) in
   G.focus first_test g
@@ -582,6 +586,7 @@ and call lhs cconv e args _targets conts alias succ =
   let outalloc = match cc.C.overflow_alloc.C.parameter_deallocator with
     | C.Caller -> to_mloc (young_end cc out.C.overflow)
     | C.Callee -> to_mloc (old_end   cc out.C.overflow) in
+  let label ((uid, l), x, y) = (l, x, y) in
   let spans = SP.to_spans ~inalloc ~outalloc ~ra:saved_ra
                           ~users:props ~csregs:nvr_temps
                           ~conts:(List.map label unwind_conts)
@@ -685,11 +690,15 @@ here anyway.
 let proc global_map proc =
   let proc_cc  = Call.get_cc target proc.N.cc in
   let vfp      = target.T.vfp in (* virtual frame pointer *)
-  let label    = G.label target in
-  let branch   = G.branch target in
-  let uid_of : string -> G.uid = fun _ -> unimpf "unique id for label" in
-  let label : G.uid * 'a * 'b -> string * 'a * 'b = (fun _ -> unimpf "labels") in
   let temps    = Talloc.Multiple.for_spaces target.T.spaces in
+@ 
+We'll remember labels, too.
+<<definition of [[proc]], which translates one procedure>>=
+  let uidmap =
+    let add map l = SM.add l (G.uid l) map in
+    List.fold_left add SM.empty (Elabstmt.codelabels proc.N.code) in
+  let uid_of s = 
+    try SM.find s uidmap with Not_found -> impossf "unknown code label" in
 @ 
 \paragraph{Setting up the control-flow graph}
 First step is to set up  the control-flow graph.
@@ -842,11 +851,11 @@ create a label node [[initcont]] as a placeholder.
 The initialization code is inserted at [[initcont]] after the translation.
 WE OUGHT TO BE ABLE TO DO WITHOUT ONE OF THESE LABEL NODES.
 <<definition of [[proc]], which translates one procedure>>=
-  let bodylbl = Idgen.label "proc body start" in
-  let contlbl = Idgen.label "initialize continuations" in
+  let bodylbl = genlabel "proc body start" in
+  let contlbl = genlabel "initialize continuations" in
   let () = add oldblocks proc_cc.C.overflow_alloc.C.parameter_deallocator
                          proc_in'.C.overflow in
-  let labelnode lbl succ = G.label target (uid_of lbl) lbl succ in
+  let labelnode (uid, lbl) succ = G.label target uid lbl succ in
   let prolog = 
     G.unfocus                           **>
     G.stack_adjust proc_in'.C.pre_sp    **>
@@ -865,7 +874,7 @@ CAN'T WE HAVE JUST ONE INSERTION POINT?
 AND WOULDN'T IT BE NICER JUST TO CONCATENATE BLOCKS DIRECTLY RATHER
 THAN MAKE A LIST AND THEN CONCATENATE?
 <<definition of [[proc]], which translates one procedure>>=
-  let () = insert_init_cont_nodes contenv (uid_of contlbl) in
+  let () = insert_init_cont_nodes contenv contlbl in
   let contblocks =
     let addblock name k blocks =
       finish_compiling_continuation k;
