@@ -31,7 +31,7 @@ VERSION   = `date +%Y%m%d`
 # ------------------------------------------------------------------
 
 TOP       = ..
-BINDIR    = ../bin
+BINDIR    = $TOP/bin
 MODE      = user
 # change to MODE=developer to turn on Toolkit features
 
@@ -66,6 +66,24 @@ clobber:V:  clean
             rm -f *.m *.i decode.fetch bytecode.sled clients/*.i
             rm -f $INTERPHDRS $INTERPSRCS
             rm -f $CLIENTHDRS $CLIENTSRCS
+
+# ------------------------------------------------------------------
+# rules and tools 
+# ------------------------------------------------------------------
+
+<mkfile.$MODE
+<../config/c.mk
+<../config/lua.mk
+<../config/noweb.mk
+<../config/man.mk
+
+LIBS         = -lm $LUALIBS
+INCLUDES     = -I./include -I./include/cii -I. $LUAINCLUDES
+
+CFLAGS       = -g -ansi -pedantic -Wall $INCLUDES
+
+NOTANGLEOPTS = -L
+
 
 # ------------------------------------------------------------------
 # important file sets
@@ -134,23 +152,6 @@ HDRS       = $COREHDRS $CLIENTHDRS
 SRCS       = $CORESRCS $CLIENTSRCS
 
 code:V:      $SRCS $HDRS
-
-# ------------------------------------------------------------------
-# rules and tools 
-# ------------------------------------------------------------------
-
-<mkfile.$MODE
-<../config/c.mk
-
-LIBS         = -lm -llua40 -llualib40
-INCLUDES     = -Iinclude -Iinclude/cii -I.
-
-CFLAGS       = -g -ansi -pedantic -Wall $INCLUDES
-
-<../config/noweb.mk
-<../config/man.mk
-
-NOTANGLEOPTS = -L
 
 # ------------------------------------------------------------------
 # copy files to their official directories
