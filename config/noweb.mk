@@ -16,20 +16,21 @@ LATEX =         latex
 RERUN =         Rerun (LaTeX|to get cross-references right)
 
 NOCOND =        $TOP/config/nocond $INTERP
-OCAMLDEFS =     $TOP/connfig/autodefs.ocaml
+OCAMLDEFS =     $TOP/config/autodefs.ocaml
 
 #
 # general rules to extract code from noweb files
 #
 
-%.ml:   %.nw
-        $NOTANGLE -L"$LINE" -filter "$NOCOND" -R$target $prereq  > $target
 
-%.mli:  %.nw
-        $NOTANGLE -L"$LINE" -filter "$NOCOND" -R$target $prereq  > $target
+'(([^/]*/)*)(.*)\.ml$':R:        '\1\3'.nw
+	$NOTANGLE -L"$LINE" -filter "$NOCOND" -R$stem3.ml $prereq | cpif $target
 
-%.c: 	%.nw
-	$NOTANGLE -L -R$target $prereq > $target
+'(([^/]*/)*)(.*)\.mli$':R:        '\1\3'.nw
+	$NOTANGLE -L"$LINE" -filter "$NOCOND" -R$stem3.mli $prereq | cpif $target
+
+'(([^/]*/)*)(.*)\.c$':R:       '\1\3.nw'
+	$NOTANGLE -L"$LINE" -R$stem3.c $prereq | cpif $target
 
 %.view: %.nw
 	$NOTANGLE -R$target $prereq > $target
