@@ -353,6 +353,13 @@ until we try it with other versions of the x86 divide instruction.
     move_rtl x answer :: div :: is @ move_rtl eax_reg x :: move
 @ 
 I don't know why it's safe to clobber ECX here.
+The problem would arise if the {\PAL} source mentioned ECX, perhaps
+because it wants to use ECX as the heap pointer or somethign like
+that.
+
+The safe thing to do would be to save and restore ECX before using it,
+but at present we don't have an optimization pass capable of
+eliminating all those dead saves and restores.  So we live dangerously.
 <<x86 postexpander>>=
 | ("shl" | "shrl" | "shra") as shop ->
     let cl = lobits 8 (tempval ecx_reg) in
