@@ -87,6 +87,8 @@ constructor.
 <<>>=
 type ventry     = (denotation * ty) Error.error
 type tentry     = ty                Error.error
+
+type attr       = Srcmap.reg * scope
 @ 
 
 The fat environment records the [[target]] annotation from a {\PAL}
@@ -114,6 +116,8 @@ Any attempt to re-declare a name in a scope is detected by the
 <<>>=
 val bindv           : string -> scope -> ventry  -> env -> env
 val bindt           : string -> scope -> tentry  -> env -> env
+val bindv'          : string -> attr  -> ventry  -> env -> env
+val bindt'          : string -> attr  -> tentry  -> env -> env
 val bindvError      : string -> scope            -> env -> env
 val bindtError      : string -> scope            -> env -> env
 @
@@ -183,8 +187,8 @@ module StrMap       = Map.Make(Comparable)
 
 <<type declarations>>
 
-type tenv           = (scope * tentry) StrMap.t
-type venv           = (scope * ventry) StrMap.t
+type tenv           = (attr * tentry) StrMap.t
+type venv           = (attr * ventry) StrMap.t
 type arch           = { memsize:      int option
                       ; endianness:   endianness option
                       }
@@ -205,6 +209,14 @@ let create map      = { tenv = StrMap.empty
 @
 
 % ------------------------------------------------------------------ 
+\subsubsection{Sourcemap}
+% ------------------------------------------------------------------ 
+
+<<>>=
+let srcmap env = env.srcmap
+@
+
+% ------------------------------------------------------------------ 
 \subsubsection{Bindings for types and values}
 % ------------------------------------------------------------------ 
 
@@ -215,6 +227,14 @@ values and type is therefore not allowed.  The implementations of
 new name and a possibly existing name in the environment.  No name can
 be added into the same scope where the same name is already declared.
 
+
+A handy error printing function: [[r]] is a [[Srcmap.reg]] source code
+position that is used to decribe the place where the error is located. 
+
+<<>>=
+let error r env msg = E.errorRegionPrt (srcmap env,r) msg 
+@
+
 When a name is re-declared we issue an error but the first declaration
 is considered valid.  It would be better to re-bind it to error to
 make the problem visible in the environment.  But the current error
@@ -222,30 +242,38 @@ reporting design does not allow to report an error and return a value
 at the same time.
 
 <<>>=
-let bindv name scope x env =
-    let add name x = {env with venv = StrMap.add name (scope,x) env.venv} in
+let bindv' name (reg,scope as attr) x env =
+    let add name x = {env with venv = StrMap.add name x env.venv} in
     try 
-        let (scope',_) = StrMap.find name env.venv in
+        let (reg',scope' as attr'),_ = StrMap.find name env.venv in
         if scope' = scope then
-            E.error ("value already declared: "^name)
+            ( error reg  env ("re-declaration of value "^name)
+            ; error reg' env ("previously declared here")
+            ; add name (attr',E.Error) (* re-bind orig. to Error *)
+            )
         else
-            add name x
+            add name (attr,x)
     with
-        Not_found -> add name x
-@
+        Not_found -> add name (attr,x)
+<<>>=        
+let bindv name scope x env = bindv' name (Srcmap.null,scope) x env
 
 <<>>=
-let bindt name scope x env =
-    let add name x = {env with tenv = StrMap.add name (scope,x) env.tenv} in
+let bindt' name (reg,scope as attr) x env =
+    let add name x = {env with tenv = StrMap.add name (attr,x) env.tenv} in
     try 
-        let (scope',_) = StrMap.find name env.tenv in
+        let (reg',scope'),_ = StrMap.find name env.tenv in
         if scope' = scope then
             E.error ("type already declared: "^name)
         else
             add name x
     with
         Not_found -> add name x
+@
+<<>>=
+let bindt name scope x env = bindt' name (Srcmap.null,scope) x env
 
+        
 <<>>=
 let bindvError name scope env = bindv name scope E.Error env
 let bindtError name scope env = bindt name scope E.Error env
@@ -257,14 +285,18 @@ an [[E.Error]] exception in case the name can not be found.
 <<>>=
 let findv name env =
     try
-        StrMap.find name env.venv
+        let (_,scope),x = StrMap.find name env.venv
+        in 
+            scope,x
     with 
         Not_found -> E.error ("unknown value: "^name)
 
 <<>>=
 let findt name env =
     try
-        StrMap.find name env.tenv
+        let (_,scope),x = StrMap.find name env.tenv
+        in
+            scope,x
     with
         Not_found -> E.error ("unknown type: "^name)
 @
@@ -276,14 +308,6 @@ only for convenience.
 <<>>=
 let findv' name env = snd (findv name env)
 let findt' name env = snd (findt name env)
-@
-
-% ------------------------------------------------------------------ 
-\subsubsection{Sourcemap}
-% ------------------------------------------------------------------ 
-
-<<>>=
-let srcmap env = env.srcmap
 @
 
 % ------------------------------------------------------------------ 

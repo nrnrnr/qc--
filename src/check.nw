@@ -274,7 +274,7 @@ a body.
 While descending into the abstract syntax we remember source-code
 positions.  The last source-code position we came across is paired
 with the declaration as its source-code location.  To simplify things
-we use the [[Srcmap.null]] source-code position at when we start to
+we use the [[Srcmap.null]] source-code position when we start to
 avoid dealing with optional source-code positions.
 
 <<collect type decls>>=
@@ -390,16 +390,18 @@ in the (fat) environment.
 
 <<process type decls>>=
 let bindError scope env decls = 
-    let names = List.concat (List.map TT.defines decls) in 
-        foldl (fun env name -> F.bindtError name scope env) env names
+    let bind env ((_,names),r) = 
+        foldl (fun env n -> F.bindt' n (r,scope) E.Error env) env names 
+    in 
+        foldl bind env decls
 @
 
 A [[typedef]] declares multiple names.  This function binds all
 [[names]] to the same [[ty]] in [[scope]]. 
 
 <<>>=
-let bindt names ty scope env =
-    foldl (fun env n -> F.bindt n scope ty env) env names
+let bindt names attr ty env =
+    foldl (fun env n -> F.bindt' n attr ty env) env names
 @
 
 While processing a declaration an error may occur. This is caught
@@ -407,10 +409,8 @@ here; the source-code position associated with a type declaration is
 used for error reporting.
 
 <<>>=
-let rec doTypeDecl env (d,r) = 
-    let bind (t,names) = bindt names (evalTy env t) F.Global env 
-    in
-        E.catch' env (error r env) bind d
+let rec doTypeDecl env ((t,names),r) = 
+    bindt names (r,F.Global) (evalTy env t) env 
 
 <<>>=
 let doTypeDecls env decls = foldl doTypeDecl env decls
@@ -896,7 +896,7 @@ let doConstDecl scope env ((ty,name,expr),r) =
                     )
          ) 
     in 
-         F.bindv name scope entry env
+         F.bindv' name (r,scope) entry env
 
 <<>>=
 let doConstDecls scope env dd =
@@ -908,8 +908,9 @@ in the (fat) environment.
 
 <<>>=
 let bindError scope env decls = 
-    let names = List.concat (List.map TV.defines decls) in 
-        foldl (fun env name -> F.bindvError name scope env) env names
+    let bind env ((_,name,_),r) = F.bindv' name (r,scope) E.Error env
+    in
+        foldl bind env decls
 @
 
 This functions reports an error for all names defined by declarations
