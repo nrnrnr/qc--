@@ -60,7 +60,7 @@ NOWEBBREAKCODE=no
 	\documentclass{article}
 	\usepackage{noweb}
 	\usepackage{tabularx,array}
-	\usepackage{hyperref}
+	\usepackage[hypertex]{hyperref}
 	\usepackage{path}
 	\usepackage[dvips]{graphicx}
 	`if [ $NOWEBBREAKCODE = yes ]; then echo '\noweboptions{breakcode}'; fi`
