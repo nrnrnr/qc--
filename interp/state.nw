@@ -1,0 +1,255 @@
+% -*- mode: Noweb; noweb-code-mode: sml-mode -*-
+\documentclass{article}
+\usepackage{noweb}
+\usepackage{amsmath,tabularx}
+
+\title{C-- Interpreter Internals}
+\author{Reuben Olinsky}
+\date{June 6, 2002}
+
+\pagestyle{empty}
+
+\input{state_macros.tex}
+
+\begin{document}
+
+\maketitle
+
+\subsection*{Representing State}
+
+\subsubsection*{Type Definitions}
+
+First, some type definitions:
+
+<<type definitions>>=
+datatype 'a stack    = STACK of 'a * stack
+                     | NIL
+type uid             = int
+type value           = bit vector
+
+type address         = bit vector      (* width of vector = PTRSIZE *)
+datatype location    = REGISTERS of int
+                     | DATA_MEMORY of address
+                     | PROGRAM_MEMORY of address
+type argument        = value
+type instruction     = int             (* index into table of instructions *)
+type register        = word            (* width of word defined in WORDSIZE *)
+
+type memoryCell      = bit vector      (* width of vector = MEMSIZE *)
+type memoryPage      = memoryCell array
+
+                    (* these locations will all be PROGRAM_MEMORY locations *)
+type contAnnotations = location list * location list * location list * boolean
+type activation      = location array * contAnnotations * uid
+
+type machine = (location * instruction array) *
+               (value stack * location stack) *
+               ((location * memoryPage) table, register array) *
+               argument stack * uid * activation stack
+@ 
+
+\subsubsection*{State Representation}
+
+State will be represented by a tuple of the form: $\dstate$, where: \\
+\\
+\begin{tabularx}{\linewidth}{@{\hskip2em}lX@{}}
+$\pc$ : \texttt{location}& program counter\\
+$I$ : \texttt{instruction array}& program space (instructions)\\
+$V$ : \texttt{value stack}& value data stack\\
+$L$ : \texttt{location stack}& location data stack\\
+$M$ : \texttt{(location * memoryPage) table}& C-- memory\\
+$R$ : \texttt{register array}& C-- hardware registers\\
+$A$ : \texttt{argument stack}& argument-passing area\\
+$\uid$ : \texttt{uid}& unique identifier\\
+$s$ : \texttt{activation stack}& activation stack\\
+\end{tabularx}\\
+\\
+An activation will be represented by a tuple of the form: $\dact$, where: \\
+\\
+\begin{tabularx}{\linewidth}{@{\hskip2em}lX@{}}
+$\rho$ : \texttt{location array}& local environment\\
+$\kappa$ : \texttt{contAnnotations}& continuation bundle that indicates to which continuations this activation may cut, unwind, or return; also indicates if this continuation may abort\\
+$\uid$ : \texttt{uid}& unique identifier\\
+\end{tabularx}\\
+\\
+Additional representation required: \\
+\\
+\begin{tabularx}{\linewidth}{@{\hskip2em}lX@{}}
+symbol table to manage labels& \texttt{(string * location) table}\\
+symbol table to manage external symbols& \texttt{(string * value) table}\\
+\end{tabularx}\\
+
+\subsubsection*{Lingering Questions}
+
+What's missing?
+
+\subsection*{Instructions}
+Here is a list of the RTL instructions available in the abstract C-- machine:\\
+\\
+\begin{tabularx}{\linewidth}{@{\hskip2em}lX@{}}
+\texttt{\#t}& Push true\\
+\texttt{\#f}& Push false\\
+{\emph{digits}[\texttt:\emph{digits}]}& Push bits\\
+\texttt{.}\emph{name}& Push value of external symbol\\
+\texttt{fetch-}\emph{size}& Pop location, fetch, push value\\
+\texttt{store-}\emph{size}& Pop location, pop value, store\\
+\texttt{fetch-local-}\emph{index}& Push value of local variable\\
+\texttt{store-local-}\emph{index}& Pop value and store in local variable\\
+\texttt{push-arg}& Pop a value from the value stack and push it on the
+  argument stack\\
+\texttt{pop-arg}& Pop a value from the argument stack and push it on the
+  value stack\\
+\emph{operator-name}\{\texttt-\emph{size}\}&
+  Apply RTL operator to values on stack\\
+\texttt{\$}\emph{space}[\texttt{-}\emph{size}]&
+  Push location on stack (index taken from value stack).\\
+\end{tabularx}\\
+\\
+Here is a list of the control-flow related instructions available in the abstract C-- machine:\\
+\\
+\begin{tabularx}{\linewidth}{@{\hskip2em}lX@{}}
+\texttt{branch-}\emph{test}\dash\emph{label}& branch to \emph{label} if \emph{test} is true\\
+\texttt{call-}\emph{label}\{\dash\emph{param}\}& call continuation \emph{label} with given parameters\\
+\texttt{return}\{\dash\emph{value}\}& return with any given values\\
+\texttt{goto-}\emph{label}& goto \emph{label}\\
+\texttt{cutto-}\emph{label}\{\dash\emph{param}\}& cut to continuation \emph{label} with given parameters\\
+\texttt{unwindto-}\emph{label}\{\dash\emph{param}\}& unwind to continuation \emph{label} with given parameters\\
+\end{tabularx}\\
+\\
+There will also be directives for blocks of data to be stored in memory, possibly ways of specifying WORDSIZE, MEMSIZE, PTRSIZE, and byte order, and ways to import and export symbols.  They are on the way \ldots
+
+And that's it for now. \emph{Is there anything huge missing or wrong?}
+
+\subsection*{Operational Semantics}
+
+Below is a sketch of the operational semantics of the legal instructions in the C-- interpreter \emph{(NOTE: far from complete!)} \ldots \\ \\
+
+$
+\twoline
+{I[\pc] = \mathtt{\#t}}
+{\step
+  {\dstate}
+  {\state {\pc{}+?} I {\mathtt{\#t}\cons{}V} L M R A \uid s}
+}
+$ \\ \\
+
+$
+\twoline
+{I[\pc] = \mathtt{\#f}}
+{\step
+  {\dstate}
+  {\state {\pc{}+?} I {\mathtt{\#f}\cons{}V} L M R A \uid s}
+}
+$\\ \\
+
+$
+\twoline
+{I[\pc] = digits}
+{\step
+  {\dstate}
+  {\state {\pc{}+?} I {digits\cons{}V} L M R A \uid s}
+}
+$\\ \\
+
+$
+\threeline
+{I[\pc] = .name}
+{a = lookup\_symbol(name)}
+{\step
+  {\dstate}
+  {\state {\pc{}+?} I {a\cons{}V} L M R A \uid s}
+}
+$\\ \\
+
+$
+\threeline
+{I[\pc] = \mathtt{fetch-}size}
+{v=aggregate(M,\ell,size,\mathtt{byte-order})}
+{\step
+  {\state \pc I V {\ell\cons{}L} M R A \uid s}
+  {\state {\pc{}+?} I {v\cons{}V} L M R A \uid s}
+}
+$\\ \\
+
+$
+\threeline
+{I[\pc] = \mathtt{store-}size}
+{store(M,\ell,v,size,\mathtt{byte-order})}
+{\step
+  {\state \pc I {v\cons{}V} {\ell\cons{}L} M R A \uid s}
+  {\state {\pc{}+?} I V L M R A \uid s}
+}
+$\\ \\
+
+$
+\threeline
+{I[\pc] = \mathtt{fetch-local-}i}
+{s=\dact}
+{\step
+  {\dstate}
+  {\state {\pc{}+?} I {\rho[i]\cons{}V} L M R {v\cons{}A} \uid s}
+}
+$\\ \\
+
+$
+\fourline
+{I[\pc] = \mathtt{store-local-}i}
+{s=\dact}
+{s'={\act {\rho\{i\mapsto{}v\}} \kappa \uid}}
+{\step
+  {\state \pc I {v\cons{}V} L M R A \uid {s\cons{}S}}
+  {\state {\pc{}+?} I V L M R A \uid {s'\cons{}S}}
+}
+$\\ \\
+
+$
+\twoline
+{I[\pc] = \mathtt{push-arg}}
+{\step
+  {\state \pc I {v\cons{}V} L M R A \uid s}
+  {\state {\pc{}+?} I V L M R {v\cons{}A} \uid s}
+}
+$\\ \\
+
+$
+\twoline
+{I[\pc] = \mathtt{pop-arg}}
+{\step
+  {\state \pc I V L M R {v\cons{}A} \uid s}
+  {\state {\pc{}+?} I {v\cons{}V} L M R A \uid s}
+}
+$\\ \\
+
+$
+\fiveline
+{I[\pc] = operator{-size}}
+{n = arity(operator)}
+{(v,V')=popn(V,n)}
+{v'=operator(v)}
+{\step
+  {\dstate}
+  {\state {\pc{}+?} I {v\cons{}V'} L M R A \uid s}
+}
+$\\ \\
+
+$
+\twoline
+{I[\pc] = \$r}
+{\step
+  {\state \pc I {v\cons{}V} L M R A \uid s}
+  {\state \pc I V {(REGISTERS,v)\cons{}L} M R A \uid s}
+}
+$\\ \\
+
+$
+\twoline
+{I[\pc] = \$M}
+{\step
+  {\state \pc I {v\cons{}V} L M R A \uid s}
+  {\state \pc I V {(DATA\_MEMORY,v)\cons{}L} M R A \uid s}
+}
+$\\
+\\ \\
+And there's more to come \ldots
+
+\end{document}
