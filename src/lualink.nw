@@ -94,8 +94,15 @@ module I =
 module Personality = struct
     let target = Targets.dummy
 end
+@
 
-module Asm = Astasm.Make(Personality)
+The assemblers for the {\AST} and the interpreter are polymorphic. We
+have to supply a target description that defines the sizes of words and
+so forth.
+
+<<Linking QC-- Types>>=
+module Asm       = Astasm.Make(Personality)
+module InterpAsm = Interpasm.Make(Interp)
 
 module AsmType = struct
     type 'a t       = Asm3.assembler
@@ -192,12 +199,14 @@ end
 
 let init g = 
   C.register_module "Asm"
-    [ "cmm"  , V.efunc (Map.outchan **-> V.result Map.asm)             Asm.asm     
-    ; "ast"  , V.efunc (Map.outchan **-> V.result Map.asm)             Asm.asm
-    ; "dot"  , V.efunc (Map.outchan **-> V.result Map.asm)             Dotasm.asm
-    ; "asdl" , V.efunc (Map.outchan **-> V.result Map.asm)             Asdlasm.asm 
-    ; "x86",   V.efunc (Map.outchan **-> V.result Map.asm)             X86asm.make
-    ; "sparc", V.efunc (V.bool **-> Map.outchan **-> V.result Map.asm) Msparcasm.asm
+    [ "cmm"     , V.efunc (Map.outchan **-> V.result Map.asm) Asm.asm     
+    ; "ast"     , V.efunc (Map.outchan **-> V.result Map.asm) Asm.asm
+    ; "dot"     , V.efunc (Map.outchan **-> V.result Map.asm) Dotasm.asm
+    ; "asdl"    , V.efunc (Map.outchan **-> V.result Map.asm) Asdlasm.asm 
+    ; "x86"     , V.efunc (Map.outchan **-> V.result Map.asm) X86asm.make
+    ; "interp"  , V.efunc (Map.outchan **-> V.result Map.asm) InterpAsm.asm
+    ; "sparc", V.efunc (V.bool **-> Map.outchan 
+                               **-> V.result Map.asm)       Msparcasm.asm
     ] g;
   C.register_module "Driver" 
     [ "assemble"  , V.efunc (Map.asm **-> V.runit)   (fun asm -> asm#emit)
@@ -215,25 +224,23 @@ let init g =
     ; "version"   , V.efunc (V.unit  **-> V.runit)            Driver2.version
     ; "stdin"     , Map.inchan.V.embed                        stdin (* hack *)
     ; "stdout"    , Map.outchan.V.embed                       stdout(* hack *)
-   (* replaced by Stack.freeze
-    ; "freeze"    , Map.stage.V.embed (fun v p -> Ast3ir.freeze p; true)
-    *)
-    ; "compile"   , V.efunc (Map.optimize **-> Map.ast  
-                                          **-> Map.target 
-                                          **-> Map.env 
-                                          **-> V.result Map.asm) Driver2.compile
+    ; "compile"   , V.efunc (Map.optimize 
+                            **-> Map.ast  **-> Map.target 
+                            **-> Map.env  **-> V.result Map.asm) Driver2.compile
     ] g;
   C.register_module "Expander"
     [ "x86f" , V.efunc (V.value **-> Map.proc **-> V.result V.bool) X86.X.cfg
     ] g;
   C.register_module "Liveness"
     [ "liveness", V.efunc (V.value **-> Map.proc **-> V.result V.bool)
-         (fun _ p -> let module LI = Live.Make(Cfg4) in LI.liveness p.Proc.cfg; true)
+         (fun _ p -> 
+            let module LI = Live.Make(Cfg4) in LI.liveness p.Proc.cfg; true)
     ] g;
   C.register_module "Targets"
-    [ "dummy",  Map.target.V.embed Targets.dummy 
-    ; "sparc",  Map.target.V.embed Targets.sparc
-    ; "x86",    Map.target.V.embed X86.target
+    [ "dummy",      Map.target.V.embed Targets.dummy 
+    ; "sparc",      Map.target.V.embed Targets.sparc
+    ; "x86",        Map.target.V.embed X86.target
+    ; "interp",     Map.target.V.embed Interp.target
     ] g;
   C.register_module "Block" 
     [ "size",       V.efunc (Map.block **-> V.result V.int)  Block.Lua.size

@@ -1,5 +1,6 @@
 % -*- mode: Noweb; noweb-code-mode: caml-mode -*-
-% vim: ts=4 et:
+% vim: sw=4 ts=8 et:
+
 % Grades     ::=    "%%Grades:" Quality Importance Urgency
 % Quality    ::=    A|B|C|D|E
 % Importance ::=    Central|Subsystem|Peripheral
@@ -69,7 +70,7 @@ type t  =
     ; indexwidth:       int             (* bits *)
     ; indexlimit:       int option      (* None = 2 ** indexwidth *)
     ; aggregation:      Rtl.aggregation      
-    ; widths:           int list        (* widths of supported aggregates *)
+    ; widths:           int list        (* bit widths of supported aggregates *)
     ; classification:   classification  
     }
 @
@@ -86,7 +87,7 @@ type t  =
 \item [[aggregation]]:  Supported aggregation.
 \item [[widths]]:       Widths of supported aggregates. For example, 
                         if an  memory space 8~bits wide supports 8-, 16-, and
-                        32-bit words, [[widths]] would be [[[1; 2; 4]]].
+                        32-bit words, [[widths]] would be [[[8;16;32]]].
 \item [[classification]]: Classification of a space, see below.
 
 \end{itemize}
@@ -105,7 +106,7 @@ type classification =
 \begin{itemize}
 \item A space is memory-like, if {\rtl} operands that address this space 
       take complex expressions as addresses.
-\item A space is memory-like, if {\rtl} operands that address this space
+\item A space is register-like, if {\rtl} operands that address this space
       only take integers as adresses.
 \item A space is fixed, if it can not be addresses explicitly, but
       {\rtl} operators address it implicitly. Typical example: status
@@ -158,18 +159,27 @@ let checked s =
 <<space.ml>>=
 module Standard32 = struct
   type generator = Rtl.aggregation -> Rtl.width list -> t
-  let m agg ws = checked { space = 'm'; doc = "memory"; cellwidth = 8
-                         ; indexwidth = 32 ; indexlimit = None
-                         ; aggregation = agg; widths = ws
-                         ; classification = Mem
-                         } 
+  let m agg ws = checked 
+    { space = 'm'
+    ; doc = "memory"
+    ; cellwidth = 8
+    ; indexwidth = 32 
+    ; indexlimit = None
+    ; aggregation = agg
+    ; widths = ws
+    ; classification = Mem
+    } 
 
-  let r ~count agg ws = checked { space = 'r'; doc = "general-purpose registers"
-                           ; cellwidth = 32
-                           ; indexwidth = indexwidth count; indexlimit = Some count
-                           ; aggregation = agg; widths = ws
-                           ; classification = Reg
-                           } 
+  let r ~count agg ws = checked 
+    { space = 'r'
+    ; doc = "general-purpose registers"
+    ; cellwidth = 32
+    ; indexwidth = indexwidth count
+    ; indexlimit = Some count
+    ; aggregation = agg
+    ; widths = ws
+    ; classification = Reg
+    } 
   let t agg ws   = checked { space = 't'; doc = "general-purpose temporaries"
                            ; cellwidth = 32
                            ; indexwidth = 32; indexlimit = None

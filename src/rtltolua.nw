@@ -19,7 +19,7 @@ For debugging, the [[proc]] function is exported to Lua in
 \module{lualink}.
 
 <<rtltolua.mli>>=
-val rtl: Rtl.rtl -> out_channel -> unit
+val rtl: out_channel -> Rtl.rtl -> unit
 val exp: Rtl.exp -> string
 val proc: Proc.t -> unit            (* to stdout, for debugging *)
 @ 
@@ -126,12 +126,43 @@ let guard = function
   | g                     -> "g"
 
 let print_guarded fd (g, eff) = fprintf fd "%s" (effect eff (guard g))
+@
 
-let rtl' (R.Rtl gg) fd = 
-  match gg with
-  | []     -> fprintf fd "-- skip\n"
-  | _ :: _ -> List.iter (print_guarded fd) gg
-let rtl = rtl' << Rtl.Convert.rtl
+We recognize special {\rtl}s that encode control-flow transfers and
+other special instructions. The encoding of these instructions is shared
+with module \module{interp}. 
+
+I know realize that this does not allow me to recover all informations I
+need. Therefore I will comment out this code for now.
+
+<<ToLua>>=
+let rtl' fd (R.Rtl gg) = match gg with
+
+    | [] -> 
+        fprintf fd "-- skip\n"
+    
+   (* 
+    | [(_,R.Store(R.Cell('c',_,_,R.Const(R.Bits(i)),_),e,_))] 
+        when Bits.U.to_int i = 0 -> assert false (* goto e *)
+         
+    | [_;(_,R.Store(R.Cell('c',_,_,R.Const(R.Bits(i)),_),e,_))] 
+        when Bits.U.to_int i = 0 -> assert false (* call e *)
+    
+    | [(c,R.Store(R.Cell('c',_,_,R.Const(R.Bits(i)),_),e,_))] 
+        when Bits.U.to_int i = 0 -> assert false (* if c, goto e *)
+    
+    | [(_,R.Store( R.Cell('c',_,_,R.Const(R.Bits(i0)),_)
+                 , R.Fetch(R.Cell('c',_,_,R.Const(R.Bits(i3)),_),_) 
+                 ,_))]    
+        when Bits.U.to_int i0 = 0 && Bits.U.to_int i3 = 3 ->
+        assert false (* return *)    
+    *)
+    
+    | _      -> List.iter (print_guarded fd) gg   (* standard RTL *)
+
+
+let rtl fd = (rtl' fd) << Rtl.Convert.rtl
+
 let exp = expr
 @ 
 
@@ -147,5 +178,5 @@ chosen such that it can be easily exported to Lua.
 let proc proc =
     let cfg         = proc.Proc.cfg in
     let iter cfg f  = Cfgutil.fold_fwd cfg (fun n () -> f n) () in
-        iter cfg (fun node -> rtl (Cfg4.instr node) stdout)
+        iter cfg (fun node -> rtl stdout (Cfg4.instr node))
 @
