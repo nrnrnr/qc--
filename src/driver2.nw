@@ -298,21 +298,14 @@ struct
     struct
       module V = C.V
       let ( **-> ) = V.( **-> )
-      <<bind exports to tables: builtins, targets>> 
-      let init g = C.register_module "Driver"  builtins g; Lua.Lib.StringList.empty
+      <<export goodies to Lua>>
     end (*M*)
 end (*MakeLib*)
 @ 
-
-All exported functions go into the Lua namespace [[Driver]].
-@ 
-
-
 Here we finally bind the exported values to names in the Lua
 interpreter. The [[compile]] function receives a lua value such that it
 can call Lua functions while it is active.
-
-<<bind exports to tables: builtins, targets>>=
+<<export goodies to Lua>>=
 let pf      t = (V.pfunc   t).V.embed 
 let func    t = (V.func    t).V.embed 
 let closure t = (V.closure t).V.embed 
@@ -332,36 +325,39 @@ module Map = struct
     let stage     = V.pfunc (V.value **-> proc **-> V.result V.bool)
 end
 
-let builtins =
-  [ "assemble"      , pf (Map.asm     **-> V.runit)            (fun asm -> asm#emit)
-  ; "proc_assembler", pf (Map.asm     **-> V.result Map.stage) 
-                        (fun asm v p -> asm#cfg_instr p.Proc.cfg p.Proc.symbol; true)
-  ; "check"         , pf (Map.ast     **-> Map.asm 
-                                      **-> V.result Map.env)   check
-  ; "emit_asdl"     , pf (Map.ast     **-> V.runit)            emit_asdl
-  ; "parse"         , pf (V.string    **-> V.result Map.ast)   parse
-  ; "print"         , pf (Map.doc     **-> V.int **-> V.runit) print
-  ; "pretty"        , pf (Map.ast     **-> V.result Map.doc)   pretty
-  ; "scan"          , pf (V.string    **-> V.runit)            scan
-  ; "version"       , pf (V.unit      **-> V.runit)            version
-  ; "cmmasm"        , pf (Map.outchan **-> V.result Map.asm)   Asm.asm     
-  ; "astasm"        , pf (Map.outchan **-> V.result Map.asm)   Asm.asm (*alias*)
-  ; "dotasm"        , pf (Map.outchan **-> V.result Map.asm)   Dotasm.asm
-  ; "asdlasm"       , pf (Map.outchan **-> V.result Map.asm)   Asdlasm.asm
-  ; "sparcasm"      , pf (V.bool **-> Map.outchan 
-                                 **-> V.result Map.asm)        Msparcasm.asm
-  ; "stdin"         , Map.inchan.V.embed                       stdin (* hack *)
-  ; "stdout"        , Map.outchan.V.embed                      stdout(* hack *)
-  ; "freeze"        , Map.stage.V.embed (fun v p -> Ast3ir.freeze p; true)
-  ; "compile"       , func (Map.optimize  **-> Map.ast  
-                                          **-> Map.target 
-                                          **-> Map.env 
-                                          **-> V.result Map.asm)
-                      (fun g opt -> compile (opt g))
-  ; "compilec"      , func (Map.optimize' **-> Map.ast  
-                                          **-> Map.target 
-                                          **-> Map.env 
-                                          **-> V.result Map.asm)
-                      (fun g opt -> compile (opt g))
-  ] 
+let init g = 
+  C.register_module "Asm"
+    [ "cmm"  , pf (            Map.outchan **-> V.result Map.asm) Asm.asm     
+    ; "ast"  , pf (            Map.outchan **-> V.result Map.asm) Asm.asm (*alias*)
+    ; "dot"  , pf (            Map.outchan **-> V.result Map.asm) Dotasm.asm
+    ; "asdl" , pf (            Map.outchan **-> V.result Map.asm) Asdlasm.asm
+    ; "sparc", pf (V.bool **-> Map.outchan **-> V.result Map.asm) Msparcasm.asm
+    ] g;
+  C.register_module "Driver" 
+    [ "assemble"      , pf (Map.asm     **-> V.runit)            (fun asm -> asm#emit)
+    ; "proc_assembler", pf (Map.asm     **-> V.result Map.stage) 
+                          (fun asm v p -> asm#cfg_instr p.Proc.cfg p.Proc.symbol; true)
+    ; "check"         , pf (Map.ast     **-> Map.asm 
+                                        **-> V.result Map.env)   check
+    ; "emit_asdl"     , pf (Map.ast     **-> V.runit)            emit_asdl
+    ; "parse"         , pf (V.string    **-> V.result Map.ast)   parse
+    ; "print"         , pf (Map.doc     **-> V.int **-> V.runit) print
+    ; "pretty"        , pf (Map.ast     **-> V.result Map.doc)   pretty
+    ; "scan"          , pf (V.string    **-> V.runit)            scan
+    ; "version"       , pf (V.unit      **-> V.runit)            version
+    ; "stdin"         , Map.inchan.V.embed                       stdin (* hack *)
+    ; "stdout"        , Map.outchan.V.embed                      stdout(* hack *)
+    ; "freeze"        , Map.stage.V.embed (fun v p -> Ast3ir.freeze p; true)
+    ; "compile"       , func (Map.optimize  **-> Map.ast  
+                                            **-> Map.target 
+                                            **-> Map.env 
+                                            **-> V.result Map.asm)
+                        (fun g opt -> compile (opt g))
+    ; "compilec"      , func (Map.optimize' **-> Map.ast  
+                                            **-> Map.target 
+                                            **-> Map.env 
+                                            **-> V.result Map.asm)
+                        (fun g opt -> compile (opt g))
+    ] g;
+  Lua.Lib.StringList.empty
 @  

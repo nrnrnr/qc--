@@ -83,6 +83,9 @@ module L1 =
     (IO (Luautil.MakeLib))
                 
 
+module XXX = MSparcRtlExpander.Lua
+
+
 module L2 = 
   Lua.Lib.Combine.L6                    (* up to 9 more libs *)
     (L1)
@@ -358,33 +361,32 @@ B = Backplane
 Linscan = Linscan or {}
 Linscan.scan = B.stage { name="linscan", fn = Linscan.allocate }
 @ 
-The organization of the following code seems confused.
-One reasonable principle would be to organize code by target.
-This would be fine if all machine-generated, but perhaps not so useful
-if different targets share (parameterizations of) passes.
-
-Another reasonable organization would be by pass.
-This is mostly what we have here, but for some reason variable placers
-and code expanders are mixed together.
+The Caml code exports mostly functions, but we want stages.
+Because the embedding/projection pairs have no access to interpreter
+state, we can't easily discover the name of a function.
+Accordingly, we patch things here.
 <<qc--.lua>>= 
 ------------------------------------------------------------------ 
--- Code Expander
+-- Stage patching
 ------------------------------------------------------------------ 
 
-Expand = Expand or {}
+function Util.make_stage(t, short, long)
+  if type(t[short]) == 'function' then
+    t[short] = B.stage { name=long, fn = t[short] }
+  end
+end
 
-Expand.stages = 
-    { placeVars = B.stage { name="fortran variable placer", fn = Placevar.fortran }
-    , dummy     = B.stage { name="Dummyexpand.expand", fn = Dummyexpand.expand }
-    , sparc     = B.stage { name="Sparcexpand.expand", fn = Sparcexpand.expand }
-    , toy       = Expander.toy -- not an error (expt'l hack)
-    }
+Util.make_stage(Placevar, 'fortran', "fortran variable placer")
+Util.make_stage(Expander, 'dummy',   'dummy expander')
+Util.make_stage(Expander, 'sparc',   'sparc expander')
+Util.make_stage(Driver,   'freeze',  'freeze stack frame')
 @ 
-Substantial additional thought needs to be given to how [[Default]]
+Some additional thought needs to be given to how [[Default]]
 should work.
-This is important because it would be pleasant if a great many simple
+It would be pleasant if a great many simple
 reconfigurations could be done simply by assigning to an element of
 the [[Default]] table.
+(But maybe they'll be done by assigning to [[backend]] instead.)
 <<qc--.lua>>= 
 ------------------------------------------------------------------ 
 -- Defaults (independent of target)
@@ -396,71 +398,36 @@ Default.linewidth = 72          -- for text assembler
 Default.solaris   = not nil     -- for sparc
 Default.allocator = CG.color 
 @ 
-I find too much duplicated structure below.
-<<qc--.lua>>= 
------------------------------------------------------------------- 
--- Optimizers (target specific)
------------------------------------------------------------------- 
-
-Opt = Opt or {}
-
--- helper functions
-
--- The functions below define the different optimizer we 
--- can use for a function.  
-
-function Opt.freeze(v, proc) -- can't do this (a Lua fun cannot be a stage)
-    write('about to call Driver.freeze\n')
-    local answer = Driver.freeze(v, proc)
-    write('returned from Driver.freeze\n')
-    return answer
-end
-
-function Opt.dummy(proc)
-    local action = B.seq
-        { Expand.stages.placeVars
-        , Expand.stages.dummy
-        , Default.allocator
-        , B.stage { name="freeze stack frame", fn = Driver.freeze }
-        , B.stage { name="assemble procedure", fn =
-                        Driver.proc_assembler(Driver.cmmasm(Driver.stdout)) } -- hack!
-        }
-    B.run(action, proc)
-end
-
-
-function Opt.sparc(proc)
-    local action = B.seq
-        { Expand.stages.placeVars
-        , Expand.stages.sparc
-        , Default.allocator
-        , B.stage { name="freeze stack frame", fn = Driver.freeze }
-        , B.stage { name="assemble procedure", fn = 
-                        Driver.proc_assembler(Targets.sparc_asm(Default.solaris,
-                                                                Driver.stdout)) } -- hack!
-        }
-    B.run(action, proc)
-end
-
-function Opt.sparc_dbg (proc)
-    local action = B.seq
-        { Expand.stages.placeVars
-        -- , Expand.stages.sparc
-        , B.stage { name="freeze stack frame", fn = Driver.freeze }
-        , B.stage { name="assemble procedure", fn = 
-                        Driver.proc_assembler(Driver.cmmasm(Driver.stdout)) } -- hack!
-        }
-    B.run(action, proc)
-end
+How to do some old-world things in the new world:
+\begin{itemize}
+\item
+To exercise the SPARC expander, instead of using the former [[Opt.sparc]],
+assign [[backend.expand=Expander.sparc]] and
+[[backend.target=Targets.sparc]] and
+[[backend.asm=Targets.sparc_asm]].
+\item
+To exercise the SPARC expander in debugging mode, instead of using the
+former [[Opt.sparc_dbg]], assign [[backend.expand=Expander.sparc]] and
+[[backend.target=Targets.sparc]].
+\item
+To exercise the toy code expander, assign 
+[[backend.expand=Expander.toy]].
+\item
+To emit dot output, assign [[backend.asm=Asm.dot]].
+\item
+To turn off any stage for debugging (e.g., to see code or dot output),
+assign [[nil]] to that stage.
+\item
+To check only, without emitting, assign [[backend.emit=nil]].
+\item
+To emit ASDL, assign [[backend.asm=Asm.asdl]].
+\end{itemize}
+\emph{It still remains to be done to try these cases out and add them
+to the test suite.}
 @ 
-Again, I find too much repeated structure here.
-I'm also concerned by the two levels of nesting ([[Opt]] instead
-[[Targets.]]$n$, and additional structure inside [[Opt]]).
-If people are to reconfigure easily by command line, we want a flat
-structure, because people aren't good at nested structure.
-
-As above, I observe a problem that the same sort of code is repeated
-again and again.  
+The [[Target]] and [[Targets]] stuff is still confusing.
+In particular, it's not clear what's the most convenient way to manage
+the interactions between a ``target'' and a ``backend.''
 <<qc--.lua>>= 
 ------------------------------------------------------------------ 
 -- Our Targets. Each target holds an assembler back end, an optimizer
@@ -473,70 +440,14 @@ Targets = Targets or {}
 
 -- helper function
 function Targets.sparc_asm(io) -- helper, Lua 2.5 has no lambda functions
-    return Driver.sparcasm(Default.solaris,io)
+    return Asm.sparc(Default.solaris,io)
 end    
-
-
-Targets.Dummy =
-    { asm       = Driver.cmmasm     -- function io -> asm
-    , opt       = Opt.dummy
-    , id        = Targets.dummy
-    }
-
--- shouldn't need a special target to exercise the toy code expander...
--- should be possible with a simple command-line assignment
-Targets.Toy =
-    { asm       = Driver.cmmasm     -- function io -> asm
-    , opt       = { placer    = Expand.stages.placeVars
-                  , expander  = Expand.stages.toy
-                  , ralloc    = Default.allocator
-                  } 
-    , id        = Targets.dummy
-    }
-
-function Targets.Toy.opt.apply(self, proc)
-    local action = B.seq
-        { self.placer
-        , self.expander
-        , self.ralloc
-        , { name="freeze stack frame", fn = Driver.freeze }
-        }
-    B.run(action, proc)
-end
-
--- more and more repeated structure.
--- these ends should be achieved by single assignments on command line,
--- not by permitting named `targets' to proliferate...
-
-Targets.Sparc =
-    { asm       = Targets.sparc_asm
-    , opt       = Opt.sparc
-    , id        = Targets.sparc
-    }
-    
-Targets.SparcDbg =
-    { asm       = Driver.cmmasm
-    , opt       = Opt.sparc_dbg
-    , id        = Targets.sparc
-    }
-
-Targets.Dot =
-    { asm       = Driver.dotasm
-    , opt       = Opt.dummy
-    , id        = Targets.dummy
-    }
-
-Targets.Asdl =
-    { asm       = Driver.asdlasm
-    , opt       = Opt.dummy
-    , id        = Targets.dummy
-    }
-
-Targets.Default  = Targets.Dummy
+@ 
+The modules [[Main]] and [[Util]] might be merged?
 <<qc--.lua>>=
 ------------------------------------------------------------------ 
 -- Main
--- High-level functions invoked from the command line
+-- High-level functions
 ------------------------------------------------------------------ 
 
 Main = Main or {}
@@ -551,44 +462,68 @@ function Main.getfile ()
     end
 end    
 
-function Main.cc (target,file) -- compile file
-    local ast = Driver.parse(file) 
-    local asm = target.asm(Driver.stdout) 
-    local env = Driver.check(ast,asm) -- asm is stored in env
-    Driver.compilec(target.opt, ast, target.id, env)
-    Driver.assemble(asm)
-end    
-
 function Main.pp (file) -- pretty print AST
     local ast = Driver.parse(file)
     local doc = Driver.pretty(ast)
     Driver.print(doc,Default.linewidth)
 end  
-
-function Main.check (target,file) 
-    local ast = Driver.parse(file)
-    local asm = target.asm (Driver.stdout)
-    Driver.check(ast,asm)
-end
-
--- The functions below define the command line options. The command line
--- option -x calls CommandLineOption.x, hence option -dot calls
--- CommandLineOption.dot and so forth.
+@ 
+The functions below define the command line options. The command line
+option [[-x]] calls [[CommandLineOption.x]], hence option [[-dot]] calls
+[[CommandLineOption.dot]] and so forth.
+<<qc--.lua>>= 
+------------------------------------------------------------------ 
+-- CommandLineOption
+-- Functions called directly by command-line option
+------------------------------------------------------------------ 
 
 CommandLineOption = CommandLineOption or { }
 
-function CommandLineOption.oc    ()  Main.cc(Targets.Default,  Main.getfile()) end
-function CommandLineOption.dot   ()  Main.cc(Targets.Dot,      Main.getfile()) end
-function CommandLineOption.asdl  ()  Main.cc(Targets.Asdl,     Main.getfile()) end
-function CommandLineOption.pp    ()  Main.pp(Main.getfile())                   end
-function CommandLineOption.check ()  Main.check(Targets.Dummy, Main.getfile()) end
-function CommandLineOption.sparc ()  Targets.Default = Targets.Sparc end
-CommandLineOption.dump   =  Dump.vars
-Main.dump                =  Dump.vars
-CommandLineOption.script =  Dump.script
+CLO = CommandLineOption
+
+function CLO.c     ()  Main.newcompile(backend, Main.getfile()) end
+function CLO.dot   ()  backend.asm = Asm.dot; CLO.c()           end
+function CLO.check ()  backend.emit = nil;    CLO.c()           end
+function CLO.pp    ()  Main.pp(Main.getfile())                  end
+CLO.dump   =  Dump.vars
+Main.dump  =  Dump.vars
+CLO.script =  Dump.script
+function CLO.sparc () -- wildly untested
+  backend.expand=Expander.sparc
+  backend.target=Targets.sparc
+  backend.asm=Targets.sparc_asm
+  CLO.c()
+end
 @
-The following represents groping toward a more regular structure.
+A backend is represented by a table that contains the following
+fields:\\
+\begin{tabularx}{\linewidth}{@{}lX@{}
+[[target]]&  
+  The target.  What's here and why it has to be here is a bit fuzzy,
+  but I think at minimum it is used to check to see that the {\PAL}
+  source code uses the same assumptions as the target machine.
+\\
+[[emit]]&
+  An assembly emitter.  The only reason to mess with this would be to
+  set it to [[nil]], which would stop the compiler from emitting
+  code.  Presto!  The compiler is now checks syntax and semantics.
+  (To suppress code generation would require turning off all the
+  passes as well.)
+\\
+\emph{passes}&
+  The backend must contain the following standard set of passes:
+  [[widen]], [[placevars]], [[expand]], [[liveness]], [[ralloc]],
+  [[freeze]], and [[asm]].  (The names are supposed to be verbs, and
+  most of them are.)  Each pass is a stage in the optimization
+  backplane.
+  Any pass can be turned off by assigning [[nil]]
+  to it.
+\\
+\end{tabularx}
 <<qc--.lua>>=
+------------------------------------------------------------------ 
+-- Backend
+------------------------------------------------------------------ 
 Stages = Stages or { }
 function Stages.nullf () return nil end
 Stages.null = B.stage { name="empty stage", fn = Stages.nullf }
@@ -598,26 +533,26 @@ Backend = Backend or { }
 Backend.debug =     --- debugging back end
   { target    = Targets.dummy
   , widen     = Stages.null
-  , placevars = B.stage { name="fortran variable placer", fn = Placevar.fortran }
+  , placevars = Placevar.fortran
   , expand    = Expander.toy
   , liveness  = Stages.null
   , ralloc    = CG.color
-  , freeze    = B.stage { name="freeze stack frame", fn = Driver.freeze }
-  , asm       = Driver.cmmasm
+  , freeze    = Driver.freeze
+  , asm       = Asm.cmm
+  , emit      = Driver.assemble
   }   
 
 Backend.old =     --- compatible with old back end
   { target    = Targets.dummy
   , widen     = Stages.null
-  , placevars = Expand.stages.placeVars
-  , expand    = Expand.stages.dummy
+  , placevars = Placevar.fortran
+  , expand    = Expander.dummy
   , liveness  = Stages.null
   , ralloc    = Default.allocator
-  , freeze    = B.stage { name="freeze stack frame", fn = Driver.freeze }
-  , asm       = Driver.cmmasm
+  , freeze    = Driver.freeze
+  , asm       = Asm.cmm
+  , emit      = Driver.assemble
   }   
-
-Opt = Opt or { }
 
 function run_assembler(self)
   Driver.assemble(self.asm)
@@ -630,6 +565,14 @@ function assembler_stage(asm)
                   } 
 end
                 
+@ 
+The standard optimizer simply runs the standard passes in the standard
+sequence.
+<<qc--.lua>>=
+------------------------------------------------------------------ 
+-- Opt -- the standard optimizer
+------------------------------------------------------------------ 
+Opt = Opt or { }
 
 function Opt.standard(backend, asm)
   local x = B.seq
@@ -654,11 +597,10 @@ function Main.newcompile(backend, file)
     local env = Driver.check(ast,asm) -- asm is stored in env
     local opt = { apply = Main.run_optimizer, action = Opt.standard(backend, asm) }
     Driver.compilec(opt, ast, backend.target, env)
-    Driver.assemble(asm)
+    if backend.emit then backend.emit(asm) end
 end    
 
 backend = Backend.old
-function CommandLineOption.c ()  Main.newcompile(backend, Main.getfile()) end
 @
 % ------------------------------------------------------------------  
 \section{Manual Page}
@@ -801,7 +743,8 @@ L<OPTIONS>.
 =item B<CommandLineOption.check()>
 
 Check static semantic of file named as first command line argument. Does
-a type check, but generates no code.
+a type check, but generates no code.  
+I<LEGACY OPTION; MAY DISAPPEAR.  ASSIGN> B<backend.emit=nil> I<INSTEAD.>
 
 =item B<CommandLineOption.c()>
 
@@ -813,12 +756,15 @@ defaults for the targets, optimizer, and assembler. Emits to stdout.
 Compiles the file named as the first command line argument and emits the
 control flow graph of each procedure as a B<dot> diagram to stdout.
 Uses Lua defaults for the targets, optimizer, and assembler. 
+I<LEGACY OPTION; MAY DISAPPEAR.  ASSIGN> B<backend.asm=Asm.dot> I<INSTEAD.>
+
 
 =item B<CommandLineOption.asdl()>
 
 Compiles the file named as the first command line argument and each
 procedure in ASDL format to stdout.  Uses Lua defaults for the targets,
 optimizer, and assembler. 
+I<LEGACY OPTION; MAY DISAPPEAR.  ASSIGN> B<backend.asm=Asm.asdl> I<INSTEAD.>
 
 =item B<CommandLineOption.sparc()>
 
@@ -968,11 +914,11 @@ once experiments are finished and revision is complete.)
 =item B<Driver.print>(I<doc>, I<number>). Formats I<doc> for a line width
 of I<number> characters and prints it to stdout.
 
-=item B<Driver.cmmasm>(I<io>). Creates an assembler that emits C-- code.
+=item B<Asm.cmm>(I<io>). Creates an assembler that emits C-- code.
 
-=item B<Driver.dotasm>(I<io>). Creates an assembler that emits B<dot> output.
+=item B<Asm.dot>(I<io>). Creates an assembler that emits B<dot> output.
 
-=item B<Driver.sparcasm>(I<bool>,I<io>). Creates an assembler that emits output
+=item B<Asm.sparc>(I<bool>,I<io>). Creates an assembler that emits output
 for the I<SPARC> assembler. The boolean flag is false (zero) on SunOS
 systems.  I<(Is falsehood zero or nil???)>
 

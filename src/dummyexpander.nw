@@ -681,8 +681,7 @@ let cfg proc =
 
 Code expansion is part of {\qcc}'s backend that is controlled by a Lua
 interpreter. To make the expander accessible for Lua code, it is
-exported as a Lua primitive [[Dummyexpand.expand]].
-
+exported as a Lua primitive [[Expander.dummy]].
 <<tail>>=
 module Make (ProcT: Lua.Lib.TYPEVIEW with type 'a t = Proc.t): 
     Lua.Lib.TYPEFUL with type 'a combined = 'a ProcT.combined =
@@ -690,22 +689,17 @@ struct
     type 'a combined = 'a ProcT.combined
     module M (C : Lua.Lib.CORE with type 'a V.userdata' = 'a combined) =
     struct
-        <<export expander>>
-        let init g =
-          C.register_module "Dummyexpand" builtins g;
-	  Lua.Lib.StringList.empty (* FIX -- want proper stage *)
+      module V  = C.V
+
+      let ( **-> ) = V.( **-> )
+      let proc     = ProcT.makemap V.userdata V.projection
+      let pf t     = (V.pfunc t).V.embed    (* pure Lua function *)
+      let init g =
+        C.register_module "Expander" 
+        [ "dummy", pf (V.value **-> proc **-> V.result V.bool) (fun _ -> cfg)
+        ] g;
+	Lua.Lib.StringList.empty (* FIX -- want proper stage *)
     end (*M*)    
 end (*Make*)            
-
-<<export expander>>=
-module V  = C.V
-
-let ( **-> ) = V.( **-> )
-let proc     = ProcT.makemap V.userdata V.projection
-let pf t     = (V.pfunc t).V.embed    (* pure Lua function *)
-
-let builtins =
-    [ "expand" , pf (V.value **-> proc **-> V.result V.bool) (fun _ -> cfg)
-    ]
 @
 

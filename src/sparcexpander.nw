@@ -577,22 +577,16 @@ struct
     type 'a combined = 'a ProcT.combined
     module M (C : Lua.Lib.CORE with type 'a V.userdata' = 'a combined) =
     struct
-        <<export expander>>
-        let init g =
-          C.register_module "Sparcexpand" builtins g;
-          Lua.Lib.StringList.empty (* FIX - proper stage *)
+      module V  = C.V
+
+      let ( **-> ) = V.( **-> )
+      let proc     = ProcT.makemap V.userdata V.projection
+      let pf t     = (V.pfunc t).V.embed    (* pure Lua function *)
+      let init g =
+        C.register_module "Expander" 
+        [ "sparc", pf (V.value **-> proc **-> V.result V.bool) (fun _ -> cfg)
+        ] g;
+	Lua.Lib.StringList.empty (* FIX -- want proper stage *)
     end (*M*)    
-end (*Lua*)            
-
-<<export expander>>=
-module V  = C.V
-
-let ( **-> ) = V.( **-> )
-let proc     = ProcT.makemap V.userdata V.projection
-let pf t     = (V.pfunc t).V.embed    (* pure Lua function *)
-
-let builtins =
-    [ "expand" , pf (V.value **-> proc **-> V.result V.bool) (fun _ -> cfg)
-    ]
-@
-
+end (*Make*)            
+@ 
