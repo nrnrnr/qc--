@@ -25,8 +25,8 @@ module Caml: sig    (* in case of error Error.ErrorExn is raised! *)
     type optimize  = proc -> unit
 
     val dummy:      target                  (* our only target right now *)
-    val cmmasm:     unit -> asm             (* C-- emitting assembler *)
-    val dotasm:     unit -> asm             (* DOT emitting assembler *)
+    val cmmasm:     out_channel -> asm      (* C-- emitting assembler *)
+    val dotasm:     out_channel -> asm      (* DOT emitting assembler *)
     
     val version:    unit -> unit            (* print version to stdout   *)
     val scan:       file:string -> unit     (* for debugging the scanner *)
@@ -92,6 +92,8 @@ module Export : sig
       (TargetV : Lua.Lib.TYPEVIEW with type 'a t        = 'a TargetT.t 
                                   and  type 'a combined = 'a AsmV.combined)
       (DocV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a DocT.t 
+                                  and  type 'a combined = 'a AsmV.combined)
+      (InOutV  : Lua.Lib.TYPEVIEW with type 'a t        = 'a Luaiolib.T.t    
                                   and  type 'a combined = 'a AsmV.combined)
         : Lua.Lib.TYPEFUL with type 'a combined = 'a AsmV.combined 
 end
@@ -204,8 +206,8 @@ Assemblers are objects. We therefore need function to create them, Here
 are our current assemblers.
 
 <<Caml>>=
-let cmmasm () = Asm.asm () 
-let dotasm () = Dotasm.asm ()
+let cmmasm (c:out_channel) = Asm.asm    c 
+let dotasm (c:out_channel) = Dotasm.asm c
 @
 
 The user specifies in the source code some target properties. They must
@@ -330,6 +332,9 @@ module MakeLib
                               and  type 'a combined = 'a AsmV.combined)
   (DocV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a DocT.t 
                               and  type 'a combined = 'a AsmV.combined)
+  (InOutV  : Lua.Lib.TYPEVIEW with type 'a t        = 'a Luaiolib.T.t    
+                              and  type 'a combined = 'a AsmV.combined)
+    
     : Lua.Lib.TYPEFUL with type 'a combined = 'a AsmV.combined =
 
 struct
@@ -364,20 +369,26 @@ module Map = struct
     let doc       = DocV.makemap    V.userdata V.projection
     let target    = TargetV.makemap V.userdata V.projection
     let optimize  = V.func (proc **-> V.runit)
+    let channel   = InOutV.makemap  V.userdata V.projection
+    let inchan    = Luaiolib.in'    channel    V.projection
+    let outchan   = Luaiolib.out    channel    V.projection
 end
 
 let builtins =
-  [ "assemble"  , pf (Map.asm  **-> V.runit)            Caml.assemble
-  ; "check"     , pf (Map.ast  **-> Map.asm 
-                               **-> V.result Map.env)   Caml.check
-  ; "emit_asdl" , pf (Map.ast  **-> V.runit)            Caml.emit_asdl
-  ; "parse"     , pf (V.string **-> V.result Map.ast)   Caml.parse
-  ; "print"     , pf (Map.doc  **-> V.int **-> V.runit) Caml.print
-  ; "pretty"    , pf (Map.ast  **-> V.result Map.doc)   Caml.pretty
-  ; "scan"      , pf (V.string **-> V.runit)            Caml.scan
-  ; "version"   , pf (V.unit   **-> V.runit)            Caml.version
-  ; "cmmasm"    , pf (V.unit   **-> V.result Map.asm)   Caml.cmmasm     
-  ; "dotasm"    , pf (V.unit   **-> V.result Map.asm)   Caml.dotasm
+  [ "assemble"  , pf (Map.asm     **-> V.runit)            Caml.assemble
+  ; "check"     , pf (Map.ast     **-> Map.asm 
+                                  **-> V.result Map.env)   Caml.check
+  ; "emit_asdl" , pf (Map.ast     **-> V.runit)            Caml.emit_asdl
+  ; "parse"     , pf (V.string    **-> V.result Map.ast)   Caml.parse
+  ; "print"     , pf (Map.doc     **-> V.int **-> V.runit) Caml.print
+  ; "pretty"    , pf (Map.ast     **-> V.result Map.doc)   Caml.pretty
+  ; "scan"      , pf (V.string    **-> V.runit)            Caml.scan
+  ; "version"   , pf (V.unit      **-> V.runit)            Caml.version
+  ; "cmmasm"    , pf (Map.outchan **-> V.result Map.asm)   Caml.cmmasm     
+  ; "astasm"    , pf (Map.outchan **-> V.result Map.asm)   Caml.cmmasm (*alias*)
+  ; "dotasm"    , pf (Map.outchan **-> V.result Map.asm)   Caml.dotasm
+  ; "stdin"     , Map.inchan.V.embed    stdin   (* hack, for now *)
+  ; "stdout"    , Map.outchan.V.embed   stdout  (* hack, for now *)
   ; "compile"   , func (Map.optimize  **-> Map.ast  
                                       **-> Map.target 
                                       **-> Map.env 

@@ -16,10 +16,13 @@ that defines the size of pointers and words.
 module type PERSONALITY = sig
     val target: Target2.t
 end
+@
+
+The assembler constructor receices the output channel for the assembler. 
 
 <<S>>=
 module type S = sig
-    val asm: unit -> Asm3.assembler
+    val asm: out_channel -> Asm3.assembler
 end    
 
 <<astasm.mli>>=
@@ -169,8 +172,9 @@ file or similar. We don't use it at the momement.
 type init = unit
 type i    = Proc.t
 
-class asm () : Asm.assembler = 
+class asm (fd:out_channel): Asm.assembler = 
 object (this)
+    val         _fd       = fd
     val mutable _section  = "this can't happen"
     val mutable _exported = Strutil.Set.empty
     val mutable _imported = Strutil.Set.empty
@@ -316,7 +320,7 @@ object (this)
             | Some i, Some e -> target :: A.TopDecl(i) :: A.TopDecl(e) 
                              :: sections in
         let doc = Astpp.program ast in
-            Pp.ppToFile stdout 72 doc
+            Pp.ppToFile _fd 72 doc
 end    
 @
 
@@ -325,5 +329,5 @@ end
 % ------------------------------------------------------------------ 
 
 <<Make>>=
-let asm () = new asm ()
+let asm fd = new asm fd
 @

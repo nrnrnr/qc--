@@ -4,10 +4,11 @@
 % ------------------------------------------------------------------ 
 
 This module implements an assembler that emits every procedure as a
-graph in \textsc{dot} format.
+graph in \textsc{dot} format. The assember constructor receives the
+output channel for the assembler.
 
 <<dotasm.mli>>=
-val asm: unit -> Asm3.assembler
+val asm: out_channel -> Asm3.assembler
 @                      
 
 % ------------------------------------------------------------------ 
@@ -24,7 +25,7 @@ exception Unsupported of string
 let unsupported msg = raise (Unsupported msg)
 
 <<Make>>
-let asm () = new asm ()
+let asm fd = new asm fd
 @
 
 
@@ -79,7 +80,7 @@ let spec =
 % ------------------------------------------------------------------ 
 
 <<Make>>=
-class asm () : Asm.assembler =
+class asm (fd:out_channel) : Asm.assembler =
 object (this)
     val mutable _section = "this can't happen"
 
@@ -108,7 +109,7 @@ object (this)
     (* instructions *)
     method cfg_instr (cfg:Cfg3.cfg) (s:Symbol.symbol) =
         let mangle  = Mangle.mk spec in
-        print_endline (Cfgutil.cfg2dot true (mangle s#text) cfg)
+        output_string fd (Cfgutil.cfg2dot true (mangle s#text) cfg)
 
     method zeroes n = ()
     method value v = ()

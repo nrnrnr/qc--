@@ -46,7 +46,7 @@ module L    = Lua.Lib.Combine.L9                        (* libraries *)
                 (IO (Luastrlib.M))
                 (IO (Luamathlib.M))
                 (Driver2.Export.MakeLib (T.T1) (T.T2) (T.T3) (T.T4) 
-                                        (T.T5) (T.T6))
+                                        (T.T5) (T.T6) (T.T7))
                 (Backplane.Make  (T.T8) (T.T4))
                 (Colorgraph.Make (T.T8) (T.T9) (T.T4))
                 (Targets.MakeLib (T.T5))
@@ -308,7 +308,7 @@ Default = Default or {}
 Default.target          = Targets.dummy          -- target
 Default.optimizer       = Optimizer.default
 Default.linewidth       = 72                     -- output line width
-Default.asm             = Driver.cmmasm          -- function nil -> asm
+Default.asm             = Driver.cmmasm          -- function io -> asm
 
 function Default.runopt(cfg, frame)
   local opt = Default.optimizer
@@ -333,7 +333,7 @@ function Main.check ()
     if f == nil then error("Main.check: no file in Sys.argv[1]") end
         
     local ast = Driver.parse(f)
-    local asm = Default.asm (nil)
+    local asm = Default.asm (Driver.stdout)
     Driver.check(ast,asm)
 end
 
@@ -346,7 +346,7 @@ function Main.compile ()
     if f == nil then error("Main.compile: no file in Sys.argv[1]") end
 
     local ast = Driver.parse(f)
-    local asm = Default.asm(nil)    
+    local asm = Default.asm(Driver.stdout)    
     local env = Driver.check(ast,asm)
     local asm = Driver.compile(Default.runopt, ast, Default.target, env)
     Driver.assemble(asm)
