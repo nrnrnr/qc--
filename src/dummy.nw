@@ -97,6 +97,13 @@ module Make(A: ARCH) = struct
 
         (* the new-style target *)
     let target' : ((Rtl.exp -> Automaton.t), Call.t) Target.t = 
+      let spaces  = [ Spaces.m 
+                    ; Spaces.c 
+                    ; Spaces.r 
+                    ; Spaces.f
+                    ; Spaces.t
+                    ; Spaces.u
+                    ] in
         { T.name         = A.arch
         ; T.cc_specs     = [ "C--", ccspecs
                            ; "C"  , ccspecs
@@ -115,13 +122,8 @@ module Make(A: ARCH) = struct
                            ["IEEE 754 rounding mode", fp_mode
                            ;"IEEE 754 rounding results", fp_fcmp
                            ]
-        ; T.spaces       = [ Spaces.m 
-                           ; Spaces.c 
-                           ; Spaces.r 
-                           ; Spaces.f
-                           ; Spaces.t
-                           ; Spaces.u
-                           ]
+        ; T.spaces       = spaces
+        ; T.reg_ix_map   = T.mk_reg_ix_map spaces
         ; T.distinct_addr_sp = false
         ; T.bnegate      = Flow.bnegate eflags
         ; T.goto         = Flow.goto
