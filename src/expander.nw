@@ -54,6 +54,7 @@ type context
 val context : Target2.t -> context
 val expand : context -> Rtl.rtl -> Rtl.rtl list
   (* returns *last* instruction at *head* of list (reverse execution order) *)
+val cfg : 'a -> Proc.t -> bool
 @ 
 Here are some abbreviations and utilities.
 <<expander.ml>>=
@@ -243,6 +244,7 @@ let context t =
     try (List.find is_temp t.T.spaces).S.space
       with Not_found ->
         prerr_string ("No temporary spaces in target " ^ t.T.name ^ "\n");
+        flush stderr;
         assert false in
 
   (fun loc -> mem_like (space_of loc)), alloc, fun _ -> first_temp

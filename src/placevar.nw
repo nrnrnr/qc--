@@ -1,0 +1,107 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+<<placevar.mli>>=
+module Make (BackplaneT : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.t')
+            (ProcT : Lua.Lib.TYPEVIEW with type 'a t = Proc.t and type 'a
+                                             combined = 'a BackplaneT.combined)
+    : Lua.Lib.TYPEFUL with type 'a combined = 'a BackplaneT.combined
+
+@ 
+
+<<placevar.ml>>=
+module Make (BackplaneT : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.t')
+            (ProcT : Lua.Lib.TYPEVIEW with type 'a t = Proc.t and type 'a
+combined = 'a BackplaneT.combined)
+    : Lua.Lib.TYPEFUL with type 'a combined = 'a BackplaneT.combined =
+  struct
+    type 'a combined = 'a BackplaneT.combined
+    module M (Interp : Lua.Lib.CORE with type 'a V.userdata' = 'a BackplaneT.combined) = struct
+        module V = Interp.V
+    
+        <<builtins>>
+
+        let init g =
+          Interp.register_module "PV" placevar_module g
+    end
+  end
+@
+
+<<builtins>>=
+	module RP = Rtl.Private
+	module TM = Map.Make(struct type t = int let compare = compare end)
+
+	let placeVars _ {Proc.cfg = cfg; Proc.target = target} =
+		<<walk RTL>>
+		let updateNode node tMap = 
+			let newRtl, tMap' = walkRtl (Cfg3.rtl node) tMap in
+			let _ = Cfg3.set_rtl node (fun _ -> newRtl) in
+				tMap' in
+		let _ = Cfg3.fold_fwd cfg updateNode TM.empty in
+        true
+
+	let proc = ProcT.makemap V.userdata V.projection
+	let ( **-> ) = V.( **-> )
+	let stageFn = (V.pfunc (V.value **-> proc **-> V.result V.bool)).V.embed
+
+    let placevar_module = [ "placeVars", stageFn placeVars
+                          ; "expander",  stageFn Expander.cfg
+                          ]
+@
+
+
+<<walk RTL>>=
+(* NOTE: in the mk_tmp call below, the space is _completely bogus_. *)
+let new_tmp = target.Target2.mk_tmp in
+let print_var (s, i, w) = prerr_string ("VAR: " ^ s ^ " " ^ string_of_int i ^
+                                        " " ^ string_of_int w ^ "\n") in
+let rec walkLoc loc tMap = match loc with
+	| RP.Cell (sp, ag, w, e, ass) ->
+		let e', tMap' = walkExp e tMap in
+		RP.Cell (sp, ag, w, e', ass), tMap'
+	| RP.Var (s, i, w) ->
+		(try TM.find i tMap, tMap
+		 with Not_found ->
+			let _ = print_var (s, i, w) in
+			let t = Rtl.Convert.loc (Register.to_loc (Target2.space target)
+                                                     (new_tmp ('Z', i, w))) in
+			(t, TM.add i t tMap))
+	| RP.Slice (w, i, l) ->
+		let l', tMap' = walkLoc l tMap in
+		RP.Slice (w, i, l'), tMap'
+
+and walkExp exp tMap = match exp with
+	| RP.Const _ -> exp, tMap
+	| RP.Fetch (l, w) ->
+		let l', tMap' = walkLoc l tMap in
+		RP.Fetch (l', w), tMap'
+	| RP.App (op, exps) ->
+		let (exps', tMap') =
+			List.fold_right (fun e (rst, tMap) ->
+                                let e', tMap' = walkExp e tMap
+								in e'::rst, tMap')
+                            exps ([], tMap) in
+		RP.App(op, exps'), tMap'
+	
+and walkEffect effect tMap = match effect with
+	| RP.Store (l, e, w) ->
+		let l', tMap' = walkLoc l tMap in
+		let e', tMap'' = walkExp e tMap' in
+		RP.Store (l', e', w), tMap''
+	| RP.Kill l ->
+		let l', tMap' = walkLoc l tMap in
+		RP.Kill l', tMap' in
+
+let walkGuard (exp, effect) tMap =
+	let (exp', tMap') = walkExp exp tMap in
+	let (effect', tMap'') = walkEffect effect tMap in
+	(exp', effect'), tMap'' in
+
+let walkRtl r tMap = match Rtl.Convert.rtl r with
+	| RP.Rtl gs ->
+		let (gs', tMap') =
+			List.fold_right (fun g (rst, tMap) ->
+								let g', tMap' = walkGuard g tMap
+                                in g'::rst, tMap')
+                            gs ([], tMap) in
+		Rtl.Revert.rtl (RP.Rtl gs'), tMap' in
+@
