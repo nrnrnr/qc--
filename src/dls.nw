@@ -521,7 +521,7 @@ let rpo_dfs (state, prefs) =
         visit (state, prefs) node delays k                                            in
       let alloc_curr_node (state, prefs, delays) =
         let state, prefs =
-				  if G.kind node = G.Illegal then state, prefs
+          if G.kind node = G.Illegal then state, prefs
           else
             let state = alloc_node state prefs node in
             let prefs =
@@ -533,9 +533,9 @@ let rpo_dfs (state, prefs) =
           ) in
       let rec iter_preds preds spd =
         match preds with
-				| []     -> alloc_curr_node spd
-				| p::rst -> visit_pred p spd (iter_preds rst) in
-			iter_preds to_vis (state, prefs, prev_delays) in
+        | []     -> alloc_curr_node spd
+        | p::rst -> visit_pred p spd (iter_preds rst) in
+      iter_preds to_vis (state, prefs, prev_delays) in
   let id x = x in
   let rec handle_delays (state, _, ds) = match List.concat ds with
     | []  -> state
@@ -579,6 +579,7 @@ let alloc_node state prefs node =
   let preds = List.filter (is_allocated state) (G.preds node)                    in
   let succs = List.filter (is_allocated state) (G.succs node)                    in
 
+  (*Printf.eprintf "dls adding varmap for node %d\n" (G.num node);*)
   let state, varIn, defMap, varOut = choose_varMaps state prefs node preds succs in
   let state = set_varIn  state node varIn                                        in
   let state = set_varOut state node varOut                                       in
@@ -588,20 +589,26 @@ let alloc_node state prefs node =
   let state = List.fold_left (fun state p -> shuffle state p node) state preds   in
   let (state, node) = buffer_if_succ_is_join state node in
   let state = List.fold_left (fun state s -> shuffle state node s) state succs   in
+  let state = {state with allocated = IS.add (G.num node) state.allocated}       in
 
-  (* Not sufficient; what about assertions whose successor is a join point?
+  (* Not sufficient; doesn't save any time *)
+  (*
   let free_unused_maps state n =
-    if G.is_fork n || G.is_join n || G.kind n = G.Branch ||
-       List.exists (fun p -> not (is_allocated state p)) (G.preds n) ||
-       List.exists (fun s -> not (is_allocated state s)) (G.succs n) then
+    let not_all_allocated lst = List.exists (fun p -> not (is_allocated state p)) lst in
+    let k = G.kind n in
+    if G.is_join n || G.is_fork n || k = G.Assertion || k = G.Branch ||
+       not_all_allocated  (G.preds n) ||
+       not_all_allocated  (G.succs n)
+    then
        state
     else
-      {state with varInMaps  = IM.remove (G.num n) state.varInMaps;
-                  varOutMaps = IM.remove (G.num n) state.varOutMaps} in
-  let state = List.fold_left free_unused_maps state (preds @ succs) in
+      ((*Printf.eprintf "dls removing varmap for node %d\n" (G.num n);*)
+       {state with varInMaps  = IM.remove (G.num n) state.varInMaps;
+                   varOutMaps = IM.remove (G.num n) state.varOutMaps}) in
+  let state = List.fold_left free_unused_maps state preds              in
+  let state = List.fold_left free_unused_maps state (node::succs)      in
   *)
-
-  {state with allocated = IS.add (G.num node) state.allocated}                   in
+  state in
 @
 Before shuffling with the successors, we have to make sure that if the node is not a
 control instruction, its immediate successor is not a join point.
@@ -958,10 +965,8 @@ we insert the necessary store instructions before the successor's predecessors,
 We also update each variable map that is changed.
 <<define [[shuffle_around]] and [[shuffle_between]]>>=
 let shuffle_around state pred succ =
-  assert (G.kind succ = G.Join);
-  (*VM.print "pred:\n" pred_vm;
-  VM.print "succ:\n" succ_vm;
-  *)
+  assert (G.is_join succ);
+  (*VM.print "pred:\n" pred_vm; VM.print "succ:\n" succ_vm; *)
 
   let find_inconsistents temp succ_locs rst =
     let pred_regs, pred_mems = part_locs (VM.var_locs pred_vm temp) in
@@ -1005,8 +1010,10 @@ We update the successor's variable map to have each inconsistent temp in memory.
 
   let handle_pred state pred =
     let pred_vm = try IM.find (G.num pred) state.varOutMaps
-                  with Not_found -> (Cfgutil.print_cfg cfg; Printf.eprintf "node %d\n"
-                  (G.num pred); Impossible.impossible "vis node with not varmaps") in
+                  with Not_found ->
+                    (Cfgutil.print_cfg cfg;
+                     Printf.eprintf "node %d; pred %d\n" (G.num succ) (G.num pred);
+                     Impossible.impossible "shuffling: pred node with no outmap") in
     let (state, stores) =
       RS.fold (fun t (state, stores) ->
                  match part_locs (VM.var_locs pred_vm t) with
@@ -1120,8 +1127,8 @@ let rewrite_spans (lbl, ss as rst) =
     let rewrite_span (i, e) =
       let map r = if is_tmp tgt r then
                     match VM.var_locs vm r with
-										| (Reg r)::_ -> Rtl.reg r
-										| (Mem l)::_ -> A.simple l
+                    | (Reg r)::_ -> Rtl.reg r
+                    | (Mem l)::_ -> A.simple l
                     | [] -> raise Not_found
                   else Rtl.reg r in
       (i, try Rtlutil.Subst2.loc_of_exp ~map e
