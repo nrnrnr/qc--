@@ -1,3 +1,25 @@
+* Literal values are not constants: a constant has width (or a type),
+  while the width/type of a literal is unknown. Currently literals are treated
+  as constants which is wrong. Update: literals are stored in 64 bit
+  Bit.bits but their TYPE may be smaller.  Bits.width must never be used
+  to find the type of a literal.
+
+* Driver/Asm2ast needs a review. This is currently just some old code
+  thrown togther to make qc-- compile and link.
+
+* CFG: do we really need two methods for traversing the cfg? We have one
+  based on the linear order of nodes and another unspecified one. Having
+  just the one based on a linear order seem enough for me.
+
+* CFG/AST2IR: targets of a jump statement are translated into nodes. I
+  believe this is wrong because a jump target is a procedure and
+  therefore not represented by a node.
+
+* How can a labeled node tell it is only reached by [[goto]]? This
+  information is often known by the function that creates a node and
+  could passed into it. Of course, some kind of local flow-analysis
+  could also find out but this seems to be a bit complex. --CL
+
 * CFG creation: who is responsible to insert jumps and labels into the 
   CFG such that it can be brought into linear form? This means that
   every node with more than one predecessor must be labeled. Currently
@@ -113,9 +135,6 @@
   When a view maps foo to char the M.bar type becomes Bar of char, but
   M.foo is still int. 
   
-* Literal values are not constants: a constant has width (or a type),
-  while the width/type of a literal is unknown. Currently literals are treated
-  as constants which is wrong. 
 
 * Implement charset, character, and string handling as proposed by NR
   in the changes file.  The current handling of characters and
