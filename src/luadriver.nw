@@ -212,11 +212,13 @@ end
 All logic for the command line is encapsulated in the [[CMD]] module.
 Any error causes the process to exit.
 <<Lua command-line driver>>=
+Test = Test and error('Test not empty') or {}
 CMD = CMD and error('CMD not empty') or {}
 CMD.what = nil -- set by CMD.parse
 CMD.whatfuns = { }
 CMD.derived = { }
 CMD.qslist = { }
+CMD.exit = exit  -- may be reset for better handling
 @ 
 When the dust settles, we remove derived files (or not, according to
 the settings of [[Options.stop]] and [[Options.keep]]).
@@ -243,7 +245,7 @@ that should never happen.
 <<Lua command-line driver>>=
 function CMD.error (msg)
     write ("Error: " .. msg .. "\n")
-    exit(2)
+    CMD.exit(2)
 end    
 @ 
 Depending on the verbosity level, commands are silently executed (0),
@@ -254,7 +256,7 @@ function CMD.exec(cmd)
   if Options.verbose == 2 then 
       write(format("simulating: %s\n", cmd)) 
   else
-      if execute(cmd) ~= 0 then exit(1) end
+      if execute(cmd) ~= 0 then CMD.exit(1) end
   end    
 end
 @ 
@@ -284,14 +286,14 @@ function CMD.parse (args)
     elseif v == "-v"       then O.verbose = O.verbose + 1
     elseif v == "-vv"      then O.verbose = O.verbose + 2
     elseif v == "-globals" then O.globals = 1  -- emit globals for 1 file
-    elseif strfind(v, "=") then local _ = dostring(v) or exit(2)
+    elseif strfind(v, "=") then local _ = dostring(v) or CMD.exit(2)
     elseif v == "-o" then 
         i,v    = i+1, args[i+1] or CMD.error("argument for option -o missing") 
         O.output = v
     elseif v == "-e" then 
         CMD.dashe = 1
         i, v   = i+1, args[i+1] or CMD.error("argument for option -e missing")
-        local _ = dostring(v) or exit(2)
+        local _ = dostring(v) or CMD.exit(2)
     elseif v == "-keep" then 
         i, v   = i+1, args[i+1] or CMD.error("argument for option -keep missing")
         O.do_keep(v)
@@ -401,7 +403,7 @@ When a file is translated, it may return additional files to be
 translated, and so on until completion.
 <<Lua command-line driver>>=
 function CMD.translate_files(files, txtab)
-  if Options.argc == 0 and not CMD.dashe then CMD.whatfuns["-help"](); exit(1) end
+  if Options.argc == 0 and not CMD.dashe then CMD.whatfuns["-help"](); CMD.exit(1) end
   if txtab then CMD.txtab = CMD.txtab or txtab end --- set translator's table
   if files then
     if type(files) == 'string' then
@@ -523,7 +525,7 @@ A Lua file is interpreted for side effect.
 If an error occurs, we exit.
 <<Lua command-line driver>>=
 function CMD.compilertab[".lua"](file) 
-  local _ = Util.dosearchfile(file, nil) or exit(2) -- fails on error
+  local _ = Util.dosearchfile(file, nil) or CMD.exit(2) -- fails on error
 end
 @ 
 {\PAL} source is translated to assembly code.
