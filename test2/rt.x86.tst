@@ -10,5 +10,6 @@ Test.source  = "src"
 Test.files = { { source = 'unwind.c--', other = 'src/unwindt.c' }
              , { source = 'fork.c--',   other = 'src/forkmain.c' }
              , { source = 'fact.c--',   other = 'src/factmain.c' }
+             , { source = 'nest.c--',   other = 'src/nestmain.c' }
              }
 

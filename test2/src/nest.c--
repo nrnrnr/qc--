@@ -1,0 +1,24 @@
+  target byteorder little wordsize 32 ;
+
+  export nest;
+
+section "text" {
+  span 1 outer {
+    foreign "C" nest() {
+      span 1 inner {
+        import trace;
+        foreign "C" trace(k) also cuts to k also aborts;
+        foreign "C" return (0);
+
+        continuation k():
+	  foreign "C" return(1);
+      }
+    }
+  }
+}
+
+section "data" {
+  outer: bits8[] "outer\0";
+  inner: bits8[] "inner\0";
+}
+
