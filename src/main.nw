@@ -40,6 +40,7 @@ type cmd =        | Help
                   | Lex      of string
                   | Asdl     of string
                   | Pp       of string * int
+                  | Check    of string
 
 @ The concrete syntax of the command line is specified through the
 parser combinators that recognizes them. The [[Pc]] module defines
@@ -59,6 +60,7 @@ let cmd_help      = literal "-help"         --> return Cmdline.Help
 let cmd_version   = literal "-version"      --> return Cmdline.Version
 let cmd_lex       = literal "-lex" **> any  --> fun s -> Cmdline.Lex(s) 
 let cmd_asdl      = literal "-asdl" **> any --> fun s -> Cmdline.Asdl(s) 
+let cmd_check     = literal "-check" **> any --> fun s -> Cmdline.Check(s) 
 let cmd_default   = any                     --> fun s -> Cmdline.Pp(s,default_width)
 
 let cmd_width     = literal "-w" **> any    
@@ -87,6 +89,7 @@ let cmdline       = (  cmd_version
                    ||| cmd_lex
                    ||| cmd_asdl 
                    ||| cmd_pp
+                   ||| cmd_check
                    ||| cmd_default 
                     ) **< eof
 
@@ -224,6 +227,7 @@ let main () =
             | Cmdline.Lex(file)     -> lex file 
             | Cmdline.Asdl(file)    -> asdl file 
             | Cmdline.Pp(file,width)-> pp file width
+            | Cmdline.Check(file)   -> Semant.check file
             );
             exit 0
        with 

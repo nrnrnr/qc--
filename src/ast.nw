@@ -246,51 +246,18 @@ indentation.  The exact outcome is determined by the pretty printer.
 It is easiest to think of [[break]]s as spaces that might be turned
 into line breaks.
 
-<<astpp.ml>>=
-
-let (~~) x     = x
-let (^/) x y   = x ^^ break ^^ y 
-
 @ To achieve a consistent nesting we re-define here the nesting operator.
 
 <<astpp.ml>>=
 
+let (~~) x     = x
 let nestn      = nest      (* save old definition *)
 let nest       = nest 4    (* define new nest with standard indentation *)
 
-
-@ A list of objects which are seperated by some seperator is very
-common.  The [[list]] function takes care to insert the separator only
-bewteen objects.  It creates a [[sep]] separated list.  Individual
-items are printed using [[f]].  For the common case where commas are
-used for separating we also provide an extra definition.
+@ The [[commablock]] is just a handy special case of the [[block]] defined
+in [[Pp]]. 
 
 <<astpp.ml>>=
-
-let rec list sep f xs =
-    let rec loop acc = function
-        | []    -> acc
-        | [x]   -> acc ^^ f x 
-        | x::xs -> loop (acc ^^ f x ^^ sep) xs
-    in
-        loop empty xs 
-
-
-let commalist f = list (text "," ^^ break) f
-
-@ A [[block]] contains objects [[xs]] formatted by [[f]] and enclosed
-by curly braces.  Its body will be indented in case it does not fit on
-a single line.  The [[commablock]] is just a handy special case. 
-
-<<astpp.ml>>=
-
-let block f xs =   
-    text "{"
-    ^^ nest begin
-       ~~ break
-       ^^ list break f xs
-       end 
-    ^/ text "}"
 
 let commablock f xs =
     nest begin

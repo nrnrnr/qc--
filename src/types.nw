@@ -19,7 +19,7 @@ power of two.  Every value in \C~is monomorphic except for primitive
 operators like [[add]], which can be polymorphic in the size of their
 operators: 
 
-$$[[add]]: \forall~#n.[[bits]]#n \times [[bits]]#n \to [[bits]]#n$$
+$$[[add]]: \forall~\#n.[[bits]]\#n \times [[bits]]\#n \to [[bits]]\#n$$
  
 A polymorphic values is described by a \textit{type scheme} that may
 contains bound variables for the size part of a [[bits]] type. Types,
@@ -69,6 +69,15 @@ substitution. In that case the [[SubstExn]] is raised.
 val subst  : subst -> tyscheme -> ty
 @
 
+For debugging types and type schema can be pretty printed into
+[[Pp.doc]] values. These can be printed into a string or a file.
+
+<<pp>>=
+val ppTy         :   ty -> Pp.doc
+val ppTy'        :   tyscheme -> Pp.doc
+@
+
+
 % ------------------------------------------------------------------  
 \subsection{Interface}
 % ------------------------------------------------------------------ 
@@ -77,7 +86,7 @@ val subst  : subst -> tyscheme -> ty
 <<types>>
 <<unify>>
 <<subst>>
-
+<<pp>>
 @
 
 % ------------------------------------------------------------------ 
@@ -130,4 +139,45 @@ let rec subst sigma = function
     | Bits(Var(x))      -> try Bits(lookup x sigma)
                            with Not_found -> substExn ()
 @
+
+The pretty printer for types ueses the pretty printer module [[Pp]]. 
+The list code is dublicated from the [[Astpp]]] module and should go
+into the [[Pp]] module. 
+
+<<>>=
+
+open Pp
+
+let (~~) x     = x
+let nest       = nest 4    
+let int i      = text (string_of_int i)
+
+let tuple f xs =   
+    text "("
+    ^^ nest begin
+       ~~ break
+       ^^ list (break ^^ text "x" ^^ break) f xs
+       end 
+    ^/ text ")"
+
+let rec ppProcTy f args return =
+    agrp begin
+    ~~ tuple f args
+    ^/ text "->"
+    ^/ f return
+    end
+
+let rec ppTy = function
+    | Bool                      -> text "bool"
+    | Bits(i)                   -> text "bits" ^^ int i
+    | Procedure(args,return)    -> ppProcTy ppTy args return
+
+and ppTy' = function
+    | Bool                      -> text "bool"
+    | Bits(Const(i))            -> text "bits"  ^^ int i
+    | Bits(Var(i))              -> text "bits#" ^^ int i
+    | Procedure(args,return)    -> ppProcTy ppTy' args return
+
+@
+
                            
