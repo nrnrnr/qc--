@@ -30,13 +30,17 @@ The type of an expression depends on the types of named values, named
 types and the target dependent word size. These are supplied as a
 record [[env]] for the [[check]] function. 
 
-<<expcheck.mli>>=
+<<types>>=
 type env = 
     { tlookup:  string -> Types.ty Error.error
     ; vlookup:  string -> Types.ty Error.error
     ; wordsize:           Types.ty Error.error
+    ; pointersize:        Types.ty Error.error
     }   
+@
 
+<<expcheck.mli>>=
+<<types>>
 val check: env -> Ast.expr -> Types.ty Error.error
 @
 
@@ -61,11 +65,7 @@ indicated by [[Error.Error]] values.  The policy is as follows:
 module A = Ast
 module E = Error
 
-type env = 
-    { tlookup:  string -> Types.ty Error.error
-    ; vlookup:  string -> Types.ty Error.error
-    ; wordsize:           Types.ty Error.error
-    }   
+<<types>> (* from interface *)
 
 let (@<<) f g = fun x -> f (g x) (* function composition *)
     
@@ -87,7 +87,7 @@ let rec astFetch env = function
                 | Some a -> if is2power a then () else 
                             E.error "alignment is not a power of 2"
                 ) 
-        in E.ematchTriple  (expr env e, astty env ty, env.wordsize) 
+        in E.ematchTriple  (expr env e, astty env ty, env.pointersize) 
             (fun (et,at,ws) -> 
                 if et = ws then at 
                 else E.error "memory reference by non-pointer")

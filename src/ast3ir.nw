@@ -90,6 +90,21 @@ let foldr = List.fold_right
 
 <<ExprTypes body>>=
 
+let expr' env target exp =
+    let word      = Error.Ok(Types.bits target.Target.wordsize)    in
+    let pointer   = Error.Ok(Types.bits target.Target.pointersize) in
+    let tlookup   = fun x -> Error.Ok(snd (F.findt x env))         in
+    let vlookup   = fun x -> Error.Ok( match (F.findv x env) with
+                                     | (_,(_,t)) -> t 
+                                     ) in
+    let e = { Expcheck.wordsize    = word
+            ; Expcheck.pointersize = pointer
+            ; Expcheck.tlookup     = tlookup
+            ; Expcheck.vlookup     = vlookup
+            } 
+    in Expcheck.check e exp
+        
+    
 let rec astFetch env target = function
     | A.LValueAt(x,r)   -> astFetch env target x
     | A.Var(hint,id)    -> (match F.findv id env with (attr,(_,t)) -> t)
@@ -107,7 +122,7 @@ operators.
 <<ExprTypes body>>=
 and primOp env target op args =
     let argtys = List.map (expr env target) args     in
-    let opty   = snd (Value.Ops.lookup op Value.ops) in (*XXX*)
+    let opty   = snd (Value.lookup op Value.ops) in (*XXX*)
         Types.appl opty argtys 
             
 and expr env target exp =
@@ -202,7 +217,7 @@ and variable env target hint x =
     
 and prim env target op args =
     let argtys  = List.map (ExprTypes.expr env target) args in
-    let opty    = snd (Value.Ops.lookup op Value.ops)      in (*XXX*)
+    let opty    = snd (Value.lookup op Value.ops)      in (*XXX*)
     let widths  = Types.widthlist opty argtys               in
         Rtl.app (Rtl.opr op widths) (List.map (expr env target) args)
 
