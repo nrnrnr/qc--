@@ -368,25 +368,22 @@ inserts code to do the initialization.
 
 We also attach spans to each continuation that escapes.
 <<definition of [[insert_init_cont_nodes]]>>=
-let insert_init_cont_nodes contmap (init_node, init_label) =
-  unimpf "insert" (*
-  let one_node cname k succ = 
+let insert_init_cont_nodes contmap init_label g =
+  let one_node cname k g = 
     if k.K.escapes then
       let pc    = exp_of_code_label k.K.cut_pc in
       let sp    = proc_cc.C.stable_sp_loc      in
       let spans = SP.to_spans ~inalloc ~outalloc:(to_mloc sp) ~ra:saved_ra
                               ~users:k.K.spans ~csregs:nvr_temps ~conts:[]
                               ~sds:sd_locs ~vars:(var_array ()) in
-      let n  = G.non_local_join_labeled g k.K.cut_pc in
-      let () = G.set_spans n spans in
+      let g  = G.focus (fst k.K.cut_pc) g in
+      let () = G.set_spans g spans in
       let pc_sp = { Mflow.new_pc = pc; Mflow.new_sp = sp } in
-      G.instruction g (Contn.init_code k.K.rep pc_sp) succ
+      let init = G.instruction (Contn.init_code k.K.rep pc_sp) (G.entry G.empty) in
+      G.unfocus (G.splice_after g (G.unfocus init))
     else
-      succ in
-  let next = G.succ init_node in
-  G.set_succ g init_node (G.illegal g);  (* avoid extra join before next *)
-  G.set_succ g init_node (Strutil.Map.fold one_node contmap next)
-*)
+      g in
+  Strutil.Map.fold one_node contmap g
 @ 
 When we finish compiling a continuation, we make sure any label that
 is used leads to sensible code.
@@ -886,7 +883,7 @@ CAN'T WE HAVE JUST ONE INSERTION POINT?
 AND WOULDN'T IT BE NICER JUST TO CONCATENATE BLOCKS DIRECTLY RATHER
 THAN MAKE A LIST AND THEN CONCATENATE?
 <<definition of [[proc]], which translates one procedure>>=
-  let () = insert_init_cont_nodes contenv contlbl in
+  let g = insert_init_cont_nodes contenv contlbl g in
   let contblocks =
     let addblock name k blocks =
       finish_compiling_continuation k;

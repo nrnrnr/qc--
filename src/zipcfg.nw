@@ -130,6 +130,11 @@ to which the entry flows in.
 <<zipcfg.mli>>=
 val make_target : machine -> zgraph -> label * zgraph
 @ 
+Mutation---ugh!
+<<zipcfg.mli>>=
+val set_spans : zgraph -> Spans.t -> unit  (* set spans at focus *)
+@ 
+\subsection{Implementation}
 <<zipcfg.ml>>=
 module R = Rtl
 module T = Target
@@ -164,7 +169,7 @@ type contedge = { kills:regs; defs:regs; node:label }
 type user = User of bool  (* is label a user label? *)
 type first
   = Entry
-  | Label of label * user  (* user labels can't be deleted *)
+  | Label of label * user * Spans.t option ref  (* user labels can't be deleted *)
 
 type middle
   = Instruction  of Rtl.rtl
@@ -278,7 +283,7 @@ end
 
 module Blocks : BLOCKS = struct
   type t = block list
-  let id = function (Entry,_) -> entry_uid | (Label ((u, _), _),_) -> u
+  let id = function (Entry,_) -> entry_uid | (Label ((u, _), _, _),_) -> u
   let empty = []
   let insert b bs = b :: bs
   let find blocks u = List.find (fun b -> id b = u) blocks
@@ -358,7 +363,7 @@ let label' user tgt =
   fun lbl g -> match g with
   | (Start (Entry, tail), blocks) -> 
       Start (Entry, Last (Branch (goto lbl, lbl))),
-      Blocks.insert (Label (lbl, user), tail) blocks
+      Blocks.insert (Label (lbl, user, ref None), tail) blocks
   | _ -> impossf "focus not on entry node"
 let label        = label' (User true)
 let privatelabel = label' (User false)
@@ -432,7 +437,7 @@ let splice_after (focus, blocks) g =
   | End (tail, last) -> impossf "splicing after a last node"
 <<zipcfg.ml>>=
 let make_target machine ((b, bs) as gz) = match b with
-| Start (Label (u, _), tail) -> u, gz
+| Start (Label (u, _, _), tail) -> u, gz
 | Start (Entry, Last (Branch (_, u))) -> u, gz
 | Start (Entry, _) ->
     let lbl = (uid (), Idgen.label "branch target") in
@@ -458,5 +463,11 @@ let call machine exp ~altrets ~unwinds_to ~cuts_to ~aborts
   | _ -> impossf "internal error in call constructor"
 @ 
 <<zipcfg.ml>>=
+let set_spans (bz, blocks) spans = match bz with
+| Start (Label (l, u, r), _) -> r := Some spans
+| _ -> impossf "setting spans on non-label"
+@ 
+<<zipcfg.ml>>=
 let followed_by g n g' = unimpf "graph stitching"
 let replace_focus gz g = unimpf "node replacement"
+@ 
