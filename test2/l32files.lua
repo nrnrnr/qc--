@@ -10,6 +10,7 @@ Test.files = { "add.c--"
 	     , { source = 'carry.c--', other = 'src/ctest.c' }
              , "cut.c--"
              , "conj.c--"
+       , 'deadcut.c--'
 	     , "divmod.c--"
 	     , "emptyifbody.c--"
 	     , "if-false.c--"

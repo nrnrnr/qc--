@@ -385,7 +385,7 @@ Cmm_Cont* Cmm_MakeUnwindCont(Cmm_Activation *a, Cmm_Word index, ...) {
   assert(a->rtdata);
   conts = continuations(a->rtdata);
   if (index >= conts->num_entries)
-    die("C-- run-time error: index %d out of bounds in Cmm_MakeUnwindCont");
+    die("C-- run-time error: index %d out of bounds in Cmm_MakeUnwindCont", index);
   block = (struct contblock *) ((Cmm_Word *) conts + conts->entries[index]);
   <<write variadic parameters into [[block->vars]]>>
 
@@ -431,6 +431,7 @@ In that case, we consume the actual parameter but make no assignment.
 #define ASSIGN(L,R) \
   { L *formalp = (L*) Cmm_FindLocalVar(a, block->vars[i].localnum); \
     R actual   = va_arg(ap, R); \
+if (!formalp) fprintf(stderr, "formal %d not found\n", i); \
     if (formalp) *formalp = (L) actual; \
   } 
 switch(block->vars[i].ctype) {

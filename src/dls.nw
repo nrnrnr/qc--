@@ -934,13 +934,14 @@ other).
   let alloc_defs uses_map   = allocate (alloc_copy (fun (d,s) -> (d,s)) uses_map)     in
 @
 <<choose\_register>>=
-  let remove_preallocs map to_alloc cheap hicost =
+  let remove_preallocs map to_alloc cheap hicost av_not_lo =
     let to_alloc', regs_used =
       List.fold_left (fun (rst, r_used) t -> try let r = choose_reg map t in
                                                  (rst, RS.add r r_used)
                                              with Not_found -> (t::rst,r_used))
                      ([],RS.empty) to_alloc in
-    (to_alloc', diff cheap regs_used, diff hicost regs_used) in
+    (to_alloc', diff cheap regs_used, diff hicost regs_used,
+     diff av_not_lo regs_used) in
 @
 If any temps are in an unavailable register, then we need to spill the temp from that
 register.
@@ -956,7 +957,8 @@ This optimization would insert a move instruction instead of a store.
       let avail, cheap, hicost, av_not_lo =
         VM.unused reg_classes,         VM.used_free_evict reg_classes,
         VM.used_can_spill reg_classes, VM.unused_not_lo reg_classes in
-      let (to_alloc, cheap, hicost) = remove_preallocs map temps cheap hicost in
+      let (to_alloc, cheap, hicost, av_not_lo) =
+        remove_preallocs map temps cheap hicost av_not_lo in
       let (state, map, _, _, _, _)  =
         alloc (state, map, avail, cheap, hicost, av_not_lo) to_alloc in
       (state, map) in
