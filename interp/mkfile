@@ -4,8 +4,15 @@ INCLUDEDIR=include/
 
 CC=gcc
 CFLAGS=-g
-LDFLAGS=-c
+
 TOOLS=$BINDIR/tools
+DEPEND=$CC -MM -I$INCLUDEDIR
+
+HDRS=encode.h interp.h machine.h intervals.h
+SRCS=assert.c atom.c bcdis-dec.c encode.c except.c interp-dec.c intervals.c \
+     mclib.c mem.c
+OBJS=assert.o atom.o bcdis-dec.o encode.o except.o interp-dec.o intervals.o \
+     mclib.o mem.o
 
 TOP=..
 INTERP=evaluating
@@ -24,6 +31,11 @@ state.tex: state.inc
 
 interp.tex: interp.nw
 	$NOWEAVE -delay -autodefs c -index $prereq > $target
+
+depend:V: $SRCS $HDRS
+    (cp mkfile mkfile.bak ;\
+     sed '/^# DO NOT DELETE/q' mkfile.bak > mkfile ;\
+     $DEPEND $SRCS >> mkfile)
 
 clean:V: clean-tex clean-code clean-obj
 	rm -f design.tex state.tex bytecode.tex interp.tex intervals.tex opgen.tex interp *~
@@ -53,41 +65,29 @@ machine.h:D: interp.nw
     $NOTANGLE -L -R$target $prereq > $target
 
 encode.c encode.h: bytecode.sled
-	$TOOLS -lc-cons-names -encoder encode $prereq
+    $TOOLS -lc-cons-names -encoder encode $prereq
 
 %-dec.c:D: %.m bytecode.sled decode.fetch
-	$TOOLS -lc-cons-names -decoder $target -matcher $stem.m \
+    $TOOLS -lc-cons-names -decoder $target -matcher $stem.m \
 		bytecode.sled decode.fetch
 
 %.h:D: %.nw
     $NOTANGLE -L -R$target $prereq > $target
 
 %.m:D: interp.nw
-    $NOTANGLE -L -R$target $prereq > $target
+    $NOTANGLE -R$target $prereq > $target
 
 #
-# intermediate preprocessed code (*.i) targets
+# intermediate code targets
 #
-interp-dec.i:D: interp-dec.c interp.h
-    $CC -P -E -I$INCLUDEDIR interp-dec.c > $target
+%.i: %.c
+    $CC -P -E -I$INCLUDEDIR $stem.c > $stem.i
 
 #
 # object code targets
 #
-intervals.o: intervals.c intervals.h
-    $CC $CFLAGS -c -o $target intervals.c
-
-interp.o: interp-dec.i intervals.h encode.h machine.h
-    $CC $CFLAGS -c -o $target interp-dec.i
-
-bcdis.o: bcdis-dec.c
-	$CC $CFLAGS -P -E -c -I$INCLUDEDIR -o bcdis-dec.i bcdis-dec.c
-	$CC $CFLAGS -c -o $target bcdis-dec.i
-
 %.o: %.c
-    $CC $CFLAGS -c -I$INCLUDEDIR -o $target $prereq
-
-cii:V: atom.o mem.o except.o assert.o
+    $CC $CFLAGS -c -I$INCLUDEDIR -o $target $stem.c
 
 #
 # operator generator targets (not currently used)
@@ -107,5 +107,20 @@ optest:V: opgen
 #
 # compiled targets
 #
-interp: interp.o intervals.o encode.o mclib.o cii bcdis.o
-    $CC -g -lm -L$LIBDIR -o $target interp.o intervals.o encode.o mclib.o $LIBDIR/liblua.a $LIBDIR/liblualib.a atom.o mem.o except.o assert.o bcdis.o
+interp: $OBJS
+    $CC -g -lm -L$LIBDIR -o $target $OBJS $LIBDIR/liblua.a $LIBDIR/liblualib.a
+
+#
+# dependencies 
+#
+# DO NOT DELETE THIS LINE -- mk depend depends on it
+assert.o: assert.c
+atom.o: atom.c
+bcdis-dec.o: bcdis-dec.c interp.h intervals.h encode.h machine.h
+encode.o: encode.c encode.h
+except.o: except.c
+interp-dec.o: interp-dec.c interp.h intervals.h include/mclib.h \
+ encode.h machine.h
+intervals.o: intervals.c intervals.h
+mclib.o: mclib.c
+mem.o: mem.c
