@@ -46,10 +46,10 @@
 % ------------------------------------------------------------------ 
 
 The [[translate]] function takes an environment, the actual target and
-a program and translates it into an abstract assembler program.  An
-assembler instruction is a control-flow graph and represents an entire
-procedure. 
-
+a program and translates it into an abstract assembler program.  The
+assembler is functorized over the data type of instructions. This module
+puts a whole procedure body into a single instruction by basically
+treating a control-flow graph as an instruction. 
 
 <<ASM>>=
 Asm2.S with type instruction = G.t                      (* CFG *)
@@ -68,6 +68,23 @@ module Make
                                   -> A.asm
 end
 @
+
+% ------------------------------------------------------------------ 
+\subsection{Name Mangling}
+% ------------------------------------------------------------------ 
+
+The assembler we emit code to has certain rules for its names. It
+andvertises these rules in its [[A.mangle]] symbol. Names that are
+passed to the assembler are therefore first mangled with a function that
+was build with the help of [[A.mangle]]. The names that are created
+inside scontrol-flow graphs are \emph{not} mangled upon creation. But
+each instruction includes the mangler function such that at any later
+time when instructions are passed to the assember the right mangler can
+be used to mangle the names that are passed. To summaraize: names passed
+to the assembler now are mangles, names part of instructions are not
+mangled, but the instruction includes a mangler to do so later as
+needed.
+
 
 % ------------------------------------------------------------------ 
 \subsection{Implementation}
