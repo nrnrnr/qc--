@@ -373,11 +373,38 @@ and string = parse
                                   lexerror lexbuf "illegal character in string"
                                 }
 
-(* handle pragmas *)
+@
 
-(* find the identifier (target) of the pragma and return the
-   corresponding keyword in case it is known *)
+% ------------------------------------------------------------------  
+\subsection{Pragmas}
+% ------------------------------------------------------------------ 
 
+Pragmas are special because the work on the lexical as well as on the
+grammatical level: 
+
+\begin{itemize}
+\item A \textit{known} pragma is handled like a keyword -- normal
+      scanning and parsing resumes.
+
+\item An \textit{unknown} pragma is skipped by the scanner. 
+\end{itemize}
+
+The split personality of pragmas leads to a scanner that uses a
+sequence of three scanner contexts to simulate some parsing in case an
+unknown pragma must be skipped over.
+
+To decide whether a pragma is known we look at its
+\textit{target}---the identifier following the [[pragma]] keyword.
+While looking for the identifier white space is skipped and special
+characters are noticed. It is an error when no identifier is found.
+
+When an identifier is found but it is not in the [[keywords]] table
+the pragma must be skipped by the parser.  This requires to find the
+body of the pragma that is enclosed by curly brackets.  Looking for
+the opening bracket takes place in the [[pragma2]] scanner context.
+
+<<scan.mll>>=
+ 
 and pragma1 = parse
     eof                 { EOF }
   | ws+                 { pragma1 lexbuf }
@@ -388,7 +415,6 @@ and pragma1 = parse
                         }
   | _                   { lexerror lexbuf "id for pragma expected" }
 
-(* look for the body of the pragma and call pragma3 to skip over it *)
 
 and pragma2 = parse
     eof                 { lexerror lexbuf "pragma body expected" }
@@ -398,9 +424,22 @@ and pragma2 = parse
   | '{'                 { pragma3 lexbuf 0 }
   | _                   { lexerror lexbuf "pragma body expected" }
 
-(* skip an unknown pragma.  We must recognize strings, comments, and
-   character literals because they might contain the terminating
-   character. *)
+@ It is an error when the opening bracket is not found. Once it is
+found the body of the pragma is skipped over in context [[pragma3]]. A
+body of a pragma must contain legal \C~tokens. We don't have to care
+for the details but must consider only the following cases:
+
+\begin{itemize}
+\item The curly brackets may nest. So we keep a [[level]] to find the
+      matching closing bracket.
+
+\item Brackets inside of strings literals, character literals, and
+      comments are not considered. Each of these are handled in their
+      own scanner contexts.
+\end{itemize}
+
+
+<<scan.mll>>=
 
 and pragma3 = parse
     eof                         { fun level ->
@@ -440,6 +479,19 @@ and pragma3 = parse
   | _                           { fun level ->
                                   pragma3 lexbuf level 
                                 }
+@
+
+% ------------------------------------------------------------------  
+\subsection{Debugging the Scanner}
+% ------------------------------------------------------------------  
+
+In case of an parse error the problem may be actually caused by the
+scanner.  For debugging we define a function [[tok2str]] that turns a
+token (as defined in [[parse.mli]]) into a string.  This is used in
+the [[Main]] module to define a function that reports the stream of
+all tokens for a file together with their positions.
+
+<<scan.mll>>=
 
 {
 
@@ -507,13 +559,13 @@ and pragma3 = parse
     | STAR(s)           -> "STAR      (" ^ s ^ ")"
     | TILDE(s)          -> "TILDE     (" ^ s ^ ")"
     
-    | ID(s)             -> "ID(" ^ s ^ ")"
-    | STR(s)            -> "STR(" ^ s ^ ")"
-    | INT(i)            -> "INT(" ^ string_of_int i ^ ")"
-    | FLT(f)            -> "FLT(" ^ f ^ ")"
-    | BITSn(i)          -> "BITSn(" ^ string_of_int i ^ ")"
-    | FLOATn(i)         -> "FLOATSn(" ^ string_of_int i ^ ")"
-    | CHAR(c)           -> "CHAR(" ^ c ^ ")"
+    | ID(s)             -> "ID      (" ^ s               ^ ")"
+    | STR(s)            -> "STR     (" ^ s               ^ ")"
+    | INT(i)            -> "INT     (" ^ string_of_int i ^ ")"
+    | FLT(f)            -> "FLT     (" ^ f               ^ ")"
+    | BITSn(i)          -> "BITSn   (" ^ string_of_int i ^ ")"
+    | FLOATn(i)         -> "FLOATSn (" ^ string_of_int i ^ ")"
+    | CHAR(c)           -> "CHAR    (" ^ c               ^ ")"
     
 }
 
@@ -524,12 +576,12 @@ and pragma3 = parse
 \section{Grammatical Analysis}
 % ------------------------------------------------------------------  
 
+The parser reads a token stream created by the scanner (module
+[[Scan]]) and return the abstract syntax of the input, as defined by
+module [[Ast]]. 
+
 <<parse.mly>>=
-/*
-// $Id$
-// 
-// Expect 2 shift/reduce conflicts.
-*/
+/* Do not edit; edit $RCSfile$ insted.  */
 
 %{
 
@@ -543,6 +595,12 @@ let localReg region = function
     | (var,ty,id,None) -> DeclAt(Register(var,ty,id),region)
     | (var,ty,id,_)    -> parse_error "no hint allowed for local variable"
 
+@ Multiple assignments are defined as a list of pairs in the abstract syntax
+but two lists in the concrete syntax. The [[assign]] function implements
+the classic [[zip]] function to join them into a list of pairs.
+
+<<parse.mly>>= 
+
 let assign left right = 
     let rec loop = function 
         | [], []            -> []
@@ -551,15 +609,16 @@ let assign left right =
         | (l::ll),(r::rr)   -> (l,r)::loop (ll,rr) 
     in
         loop (left,right)
-
-(* not used - we will do this check later in oder to create better
-   error messages *)
-
-let rec varsOnly = function
-    | []                 -> []
-    | (Var(_) as v)::vv  -> v :: varsOnly vv
-    | _                  -> parse_error "mem location in multiple assignment"
      
+@ [[p]] returns the region for the left hand symbol in the current
+production.  A region (of type [[int * int]] contains the position of
+the first character character of the symbol in input stream, and the
+position of the first character after the symbol. These regions are
+attached to important nodes in the abstract syntax. The function
+[[pn]] returns the region for symbol [[n]] on the right hand side,
+where the leftmost symbol has index 1.
+
+<<parse.mly>>=
 
 let p  () = (Parsing.symbol_start (), Parsing.symbol_end())
 let pn n  = (Parsing.rhs_start n, Parsing.rhs_end n)
@@ -623,6 +682,13 @@ let pn n  = (Parsing.rhs_start n, Parsing.rhs_end n)
 %token <string> PLUS MINUS               
 %token <string> PERCENT STAR SLASH       
 %token <string> TILDE                    
+
+
+@ The abstract syntax is defined by an \asdl~specification which does not
+provide data types for characters and floating point numbers. For this
+reason strings are used to capture the values of the respective literals.
+
+<<parse.mly>>=
 
 %token <string> ID
 %token <int>    INT
@@ -774,16 +840,10 @@ tyAt        :   ty                                { TyAt($1,p()) }
 ty          :   BITSn                             { BitsTy($1)   }
             |   FLOATn                            { FloatTy($1)  }
 
-            /*
-             *  the next production causes 2 shift/reduce
-             *  conflicts because both decls and stmts can be
-             *  empty
-             */
-
 body        :   LBRACE decls stmts RBRACE    { $2, rev $3 }
 block       :   LBRACE       stmts RBRACE    {     rev $2 }
 
-returnto    :   LT expr SLASH expr GT        { Some ($2,$4) }
+returnto    :   LT sexprAt SLASH sexprAt GT  { Some ($2,$4) }
             |   /**/                         { None         }
 
 stmtAt      :   stmt                         { StmtAt($1,p())           }
@@ -822,8 +882,18 @@ stmt        :   SEMI                         { EmptyStmt                }
 stmts       :   stmts stmtAt                     { $2 :: $1 }
             |   /**/                             { []       }
 
-exprAt      :   expr                             { ExprAt($1, p())    }
-expr        :   INT                              { Int($1, None)      }
+@ Simple expressions [[sexpr]] are a subset of full expressions
+[[expr]].  We use them only in the parser but not in the abstract
+syntax.  Their only purpose is to provide an [[expr]] subset that does
+not include a slash [[/]].  The slash is used by the [[return]]
+statement and is bracketed by two expressions which make the whole
+thing look like a division expression.  When the expressions are
+restricted to [[sexpr]] this ambiguity is gone.
+
+<<parse.mly>>= 
+
+sexprAt     :   sexpr                            { ExprAt($1, p())    }
+sexpr       :   INT                              { Int($1, None)      }
             |   INT COLON INT                    { Int($1, Some $3)   }
             |   FLT                              { Float($1, None)    }
             |   FLT COLON INT                    { Float($1, Some $3) }
@@ -831,6 +901,9 @@ expr        :   INT                              { Int($1, None)      }
             |   CHAR COLON INT                   { Char($1, Some $3)  }
             |   lvalueAt                         { Fetch($1)          }
             |   PERCENT ID actls                 { PrimOp($2, $3)     }
+
+exprAt      :   expr                             { ExprAt($1, p())    }
+expr:       |   sexpr                            { $1 }
             |   LPAREN exprAt RPAREN             { $2                 }
 
             |   exprAt PLUS       exprAt         { BinOp($1,$2,$3)    }
@@ -859,8 +932,6 @@ names       :   names COMMA ID                   { $3 :: $1 }
 
 names0      :   names                            { $1 }
             |   /**/                             { [] }
-
-
 
 string      :   STR                              { $1 }
 string16    :   UNICODE LPAREN STR RPAREN        { $3 }
