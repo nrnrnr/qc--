@@ -134,7 +134,7 @@ TRIVIAL TO DO.
 module SS : Set.S with type elt = string
 val list2SSet : string list -> SS.t
 
-type inputs = SS.t
+type inputs  = SS.t
 type outputs = SS.t
 
 <<exported module types>>
@@ -178,8 +178,8 @@ The state fields are represented by sets instead of lists to facilitate set
 operations such as union and intersection, which will be useful during
 the semantic checking phase.
 <<stage type>>=
-type 'a stage = { name : string
-                ; fn   : 'a camlFunction
+type 'a stage = { name           : string
+                ; fn             : 'a camlFunction
                 ; paramExpected  : string option
                 ; stateCreated   : outputs
                 ; stateDestroyed : outputs
@@ -199,7 +199,6 @@ type 'a action = Seq       of 'a action list
                | Single    of 'a stage
 @
 
-
 To clarify the meanings of the action types, we provide the operational
 semantics for the execution of an action. Each action is $a$ is executed from
 the starting configuration $\langle a, x, \sigma \rangle$ and ends in the
@@ -211,7 +210,6 @@ state of the world, including the \cfg \ and other stored information that
 may be modified imperatively. The action results in the Boolean value $v$,
 and the state after execution is represented by $\sigma'$. We use $T$ and $F$
 to represent the Boolean constants true and false. 
-
 
 \noindent $[[Seq]](a_1, a_2, ..., a_n)$ performs a list of actions in sequence:
 \[
@@ -289,7 +287,6 @@ compiler stage):
      {\langle [[Single]](f) , x , \sigma \rangle \Downarrow \langle v, \sigma' \rangle}
 \]
 
-
 @ 
 
 Here's the code that implements the execution rules:
@@ -301,29 +298,26 @@ let verbosity v =
   v'
 
 let rec runProgram arg proc = function
-    | Seq actionList ->
-        let seqHelp truth (action) =
-            let result = runProgram arg proc action in
-                truth || result in
-        List.fold_left seqHelp false actionList
-    | When_Do (whenExp, doExp) ->
-           runProgram arg proc whenExp
-        && runProgram arg proc doExp
-    | Unless_Do (unlessExp, doExp) ->
-           runProgram arg proc unlessExp
-        || runProgram arg proc doExp
-    | Fix action ->
-           runProgram arg proc action
-        && runProgram arg proc (Fix action)
-    | Ignore action ->
-        let _ = runProgram arg proc action in false
-    | Single {fn = func; name = name} -> 
-        begin
-          if !the_verbosity then
-            List.iter prerr_string ["Running stage "; name; "\n"];
-          func arg proc
-        end
-    | Share (param, _, action) -> runProgram param proc action
+  | Seq actionList ->
+    let seqHelp truth (action) =
+      let result = runProgram arg proc action in
+        truth || result in
+    List.fold_left seqHelp false actionList
+  | When_Do (whenExp, doExp) ->
+       runProgram arg proc whenExp && runProgram arg proc doExp
+  | Unless_Do (unlessExp, doExp) ->
+    runProgram arg proc unlessExp || runProgram arg proc doExp
+  | Fix action ->
+     runProgram arg proc action && runProgram arg proc (Fix action)
+  | Ignore action ->
+    let _ = runProgram arg proc action in false
+  | Single {fn = func; name = name} -> 
+    begin
+      if !the_verbosity
+      then List.iter prerr_string ["Running stage "; name; "\n"];
+      func arg proc
+    end
+  | Share (param, _, action) -> runProgram param proc action
 @
 
 
@@ -361,21 +355,24 @@ We define three types of errors that can cause an illegal control flow:
       is not provided by the [[Share]] action that is currently in scope. 
 \item A [[NoProp]] error occurs if an action expects a state property, but
       this property is never established. This error occurs when we attempt
-	  to use a control flow that expects input parameters we never provide -
-	  this is not the result of a conflict between actions in the control
-	  flow.
+      to use a control flow that expects input parameters we never provide -
+      this is not the result of a conflict between actions in the control
+      flow.
 \item A [[DestProp]] error occurs if an action $a$ expects a state property, but
       another action has destroyed the property before it can reach $a$.
 \end{itemize}
 <<error types>>=
-type prop = string
-type destroysAction = string
-type usesAction = string
-type formal = string option
-type actual = string option
-type error = DestProp of prop * destroysAction * usesAction
-           | NoProp   of prop * usesAction
-           | Sharing of formal * actual * usesAction
+type destroyed_prop   = { dprop       : string
+                        ; dest_action : string
+                        ; use_action  : string
+                        }
+type sharing_conflict = { formal      : string option
+                        ; actual      : string option
+                        ; call_action : string
+                        }
+type error = DestProp of destroyed_prop
+           | NoProp   of action_prop
+           | Sharing  of sharing_conflict
 @
 
 The following rules determine the set of information determined from each type
@@ -454,28 +451,28 @@ the rules for [[Unless_Do]] are the same as [[When_Do]].
 [[walk]] implements these rules, and [[stateCheck]] initializes and calls
 this traversal.
 <<state checking>>=
-let ( ++ ) = SP.union
-let ( -- ) = SP.diff
+let ( ++ ) = AP.union
+let ( -- ) set1 set2 =
+  AP.filter (fun ap1 -> not (AP.exists (fun ap2 -> ap1.prop = ap2.prop) set2)) set1
 let ( ** ) live destroys =
-    let inter = SP.inter live destroys in
-    let live = SP.filter (fun (x,_) -> SP.exists (fun (y,_) -> x = y) inter) live in
-    let makeError (l1, l2) rst =
-        let dest = SP.filter (fun (d1,_) -> l1 = d1) destroys in
-        let _ = assert (SP.cardinal dest = 1) in
-        let (_, d2) = SP.choose dest in
-            (* prop, destroys, uses *)
-            DestProp (l1, d2, l2) :: rst
-    in
-        SP.fold makeError live []
+  let check_error l_ap rst =
+    let d_aps = AP.filter (fun d_ap -> l_ap.prop = d_ap.prop) destroys in
+    if AP.cardinal d_aps = 0 then rst
+    else (DestProp { dprop = l_ap.prop
+                   ; dest_action = (AP.choose d_aps).action
+                   ; use_action = l_ap.action
+                   } :: rst) in
+  AP.fold check_error live []
+
 <<state checking>>=
 (* should find errors of destruction here *)
 let checkArg formal actual fnName = match formal, actual with
     | None, _ -> []
-    | f, a when f != a -> [Sharing (f, a, fnName)]
+    | f, a when f != a -> [Sharing {formal = f; actual = a; call_action = fnName}]
     | _ -> []
 
 let spSet_from_sSet name sSet =
-    SS.fold (fun elt set -> SP.add (name, elt) set) sSet SP.empty
+    SS.fold (fun elt set -> AP.add {action = name; prop = elt} set) sSet AP.empty
 @ 
 <<state checking>>=
 (* walk : action -> string option -> create * destroy * use *
@@ -491,7 +488,7 @@ let rec walk arg a =
              seqdestroys ++ (destroys -- seqcreates),
              uses ++ (sequses -- creates),
              mkLive << seqMkLive) in
-        List.fold_right seqWalk aList (SP.empty, SP.empty, SP.empty, fun a -> a)
+        List.fold_right seqWalk aList (AP.empty, AP.empty, AP.empty, fun a -> a)
     | When_Do (cond, body) ->
         let ccreates, cdestroys, cuses, cMkLive = walk arg cond in
         let bcreates, bdestroys, buses, bMkLive = walk arg body in
@@ -512,22 +509,21 @@ let rec walk arg a =
                              
     | Ignore a -> walk arg a
     | Single {name = fnName; stateUsed = uses; stateCreated = creates;
-	          stateDestroyed = destroys; paramExpected = formal} ->
-	 (match List.map (spSet_from_sSet fnName) [creates; destroys; uses] with
-	 | [creates; destroys; uses] ->
-	     (creates, destroys, uses,
-	          fun (live', errors') ->
-		    ((live' -- creates) ++ uses,
-		     errors' @ (live' ** destroys) @ (creates ** destroys)
-		             @ (checkArg formal arg fnName)))
-	 | _ -> assert false)
+              stateDestroyed = destroys; paramExpected = formal} ->
+     (match List.map (spSet_from_sSet fnName) [creates; destroys; uses] with
+      | [creates; destroys; uses] ->
+         (creates, destroys, uses,
+              fun (live', errors') ->
+            ((live' -- creates) ++ uses,
+             errors' @ (live' ** destroys) @ (creates ** destroys)
+                     @ (checkArg formal arg fnName)))
+      | _ -> assert false)
     | Share (_, localArg, a) -> walk (Some localArg) a
 
 let stateErrors a =
     let (_, _, _, check) = walk None a in
-    let live, errors = check (SP.empty, []) in
-    let errors = List.map (fun (x,y) -> NoProp (x, y)) (SP.elements live) @ errors in
-    errors
+    let live, errors = check (AP.empty, []) in
+    List.map (fun ap -> NoProp ap) (AP.elements live) @ errors
 @
 
 
@@ -545,11 +541,8 @@ let run main proc =
   | []   -> runProgram V.Nil proc main
   | errs -> let msg = String.concat "\n" (List.map error_string errs) in
             let pgm = printAction "  " main in
-            (*
             Impossible.impossible ("incorrect backplane configuration:\n" ^ msg
                                    ^ "\n  ... program is:\n    " ^ pgm)
-            *)
-            runProgram V.Nil proc main (* seeing false errors *)
 @
 The backplane introduces three new types. A [[StageFn]] is the function that
 actually executes the compiler step represented by a stage. [[Stage]]'s include
@@ -561,15 +554,17 @@ these stages.
 Putting it all together:
 <<backplane.ml>>=
 module StringMod = struct
-    type t = string
-    let compare = compare
+  type t = string
+  let compare = compare
 end
 module SS = Set.Make(StringMod)
-module StringPairMod = struct
-    type t = string * string
-    let compare = fun (a,_) (b,_) -> compare a b
+
+type action_prop = { action : string ; prop : string }
+module ActionProp = struct
+  type t = action_prop
+  let compare = compare
 end
-module SP = Set.Make(StringPairMod)
+module AP = Set.Make(ActionProp)
 
 let list2SSet lst = List.fold_right SS.add lst SS.empty
 
@@ -681,7 +676,7 @@ let embedString   = V.string.V.embed
 let projectString = V.string.V.project
 
 let project_opt_strings v =
-  try [V.string.V.project v]
+  try [projectString v]
   with V.Projection (_, _) -> (V.optlist V.string).V.project v
 
 let stage_name g v =
@@ -834,18 +829,16 @@ let rec printAction indent =
 
 (* WE OLD SML PROGRAMMERS NEED TO REMEMBER [[Printf.sprintf]] *)
 let error_string err =
-    let spr = Printf.sprintf in
-    match err with
-    | DestProp (prop, dest, uses) ->
-        spr "  property `%s' needed by `%s' is destroyed by `%s'" prop uses dest
-    | NoProp (uses, prop) ->
-        spr "  stage `%s' needs property `%s', which is never established" uses prop
-    | Sharing (formal, actual, fnName) ->
-        let valOf = Aux.Option.get "None" in
-        let formal = valOf formal in
-        let actual = valOf actual in
-        spr "  type mismatch: `%s' expects arg of type `%s' but was passed type `%s'"
-        fnName formal actual
+  let spr = Printf.sprintf in
+  match err with
+  | DestProp { dprop = prop ; dest_action = dest ; use_action = use } ->
+    spr "  property `%s' needed by `%s' is destroyed by `%s'" prop use dest
+  | NoProp { prop = prop ; action = action } ->
+    spr "  stage `%s' needs property `%s', which is never established" action prop
+  | Sharing { formal = formal ; actual = actual ; call_action = action } ->
+    let valOf = Aux.Option.get "None" in
+    spr "  type mismatch: `%s' expects arg of type `%s' but was passed type `%s'"
+        action (valOf formal) (valOf actual)
 @
 
 <<old backplane definition that can be removed from backplane.ml>>=
