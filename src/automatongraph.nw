@@ -1,3 +1,7 @@
+% vim: ts=8 et sw=4
+%
+% $Id$
+%
 
 % ------------------------------------------------------------------ 
 \section{Automaton-Graph}
@@ -16,9 +20,10 @@ The module traverses this state graph and emits it for analysis.
 
 Function [[print]] takes a function [[mk]], that creates an automaton in
 its initial state a list of widths, and list of hints. It prints all
-edges of the automaton to [[stdout]].  The widths and hints are used to
-construct requests: in every state of the automaton, every combination
-of a width and a hint are explored to reach a new state.
+edges of the automaton to [[stdout]] in the Dot language.  The widths
+and hints are used to construct requests: in every state of the
+automaton, every combination of a width and a hint are explored to reach
+a new state.
 
 <<automatongraph.mli>>=
 val print:  mk:(unit -> Automaton.t) 
@@ -26,6 +31,12 @@ val print:  mk:(unit -> Automaton.t)
                      -> unit
 @
 
+I now realize that the [[graph]] type defined in the implementation is
+basically an isomorphism of the automaton defined in
+\module{automaton.nw}. Given the graph, the underlying automaton can be
+simulated.  After this realization I changed the type definition of
+[[graph]] to make simulation easy. This should help to apply Bailey's
+algorithm to find interesting paths.
 
 
 % ------------------------------------------------------------------ 
@@ -41,13 +52,13 @@ limited set of stack alignments. Once the graph is explored, we can
 print it.
 
 The state of an automaton can only be observed after is was
-\emph{frozen}. This presents a small dificulty: to observe a given
+\emph{frozen}. This presents a small difficulty: to observe a given
 state, we have to freeze it. But to follow a new edge we need an
 unfrozen automaton, thus we have to re-construct the automaton's state
 such that we can make the transition. To do that, we maintain a
 \emph{path} of types that allows to reconstruct the state automaton,
 starting from the initial state of an automaton. This in turn requires,
-to create an automaton in its inital state when needed.
+to create an automaton in its initial state when needed.
 
 
 <<automatongraph.ml>>=
@@ -94,6 +105,7 @@ node, corresponding to the start state of the automaton.
 
 <<automatongraph.ml>>=
 module NS = Set.Make (struct type t=node let compare=compare end)
+module ES = Set.Make (struct type t=edge let compare=compare end)
 module T  = Map.Make (struct type t=edge let compare=compare end)
 
 type graph =    { nodes:    NS.t            (* all the nodes *)
@@ -125,9 +137,7 @@ let add (n,t as edge) node graph =
 @
 
 For debugging, the [[ToString]] module provides us with function to
-represent all our types as strings. Feel free to improve this. Another
-idea would be a [[ToDOT]] module, that implements output for
-\textit{dot}(1).
+represent all our types as strings. Feel free to improve this. 
 
 <<automatongraph.ml>>=
 module ToString = struct
@@ -140,10 +150,42 @@ module ToString = struct
                                 (node  src)
                                 (ty    label)
                                 (node  dst)
+    let path p            = String.concat " "  (List.map ty p) 
+    let paths ps          = String.concat "\n" (List.map path ps)
     let graph g = 
         let add_edge (src,label) dst strs = edge src label dst :: strs in
         let edges = T.fold add_edge g.edges [] in
             String.concat "\n" edges
+end
+@
+
+Below is a rather ugly emitter for the AT\&T graph layouter Dot. This is
+now the standard output format.
+
+<<automatongraph.ml>>=
+module ToDot = struct
+    let register (sp,i,_) = sprintf "$%c%i" sp i
+    let ty (width,hint)   = sprintf "%d/%s" width hint
+    let node s            = sprintf "\"%i:%s\"" 
+                                        s.align 
+                                        (String.concat "" 
+                                            (List.map register s.regs))
+    let edge src label dst= printf "%s -> %s [label=\"%s\"]\n"
+                                (node  src)
+                                (node  dst)
+                                (ty    label)
+    
+    let path p            = String.concat " "  (List.map ty p) 
+    let paths ps          = List.iter (fun s -> printf "// %s\n" s)
+                                                (List.map path ps)
+    
+    let graph g = 
+        ( printf "digraph \"calling convention\" {\n"
+        ; printf "size=\"6,9\"\n"
+        ; let print_edge (src,label) dst () = edge src label dst  in
+            T.fold print_edge g.edges () 
+        ; printf "}\n"
+        )
 end
 @
 
@@ -211,12 +253,106 @@ contains the node corresponding to the initial state and is otherwise
 empty.
   
 <<automatongraph.ml>>=
+<<interesting paths>>
 let print ~mk ~widths ~hints = 
     let dump g  = print_endline (ToString.graph g) in
     let dirs    = combine widths hints in
     let init    = {regs=[]; align=0}   in
     let g       = graph init           in
     let g       = dfs mk dirs g [] {regs=[]; align=0} in
-        dump g
+        ( ToDot.graph g
+        ; printf "// Interesting paths:\n"
+        ; ToDot.paths (interesting_paths g)
+        )
 @
 
+% ------------------------------------------------------------------ 
+\subsection{Interesting Paths}
+% ------------------------------------------------------------------ 
+
+To test a calling convention, we like to find interesting parameter
+lists, which correspond to interesting paths in a [[graph]]. The goal is
+to find enough paths such that for any node, each pair of incoming and
+outgoing edge is covered by at leat one path. This criterion was
+proposed by Bailey in his Ph.D.~thesis. The parameter list that
+corresponds to a path is simply the list of edge labels. 
+
+The alogithm by Bailey is a variant of a depth-first search: we move
+along edges and collect their labels in a list called [[path]]. When we
+come to a node, we build (reversed) parameter lists by taking our path
+and prefixing it with each of the labels of the node's outgoing edges:
+say, our current path is $w$ and the labels of the outgoing edges are
+$a$, $b$, and $c$, so we build the parameter lists $aw$, $bw$ and $cw$.
+Next we mark the edge on which we reached the node.  This implies that
+we have generated parameter lists that cover our incoming edge and all
+outgoing edges of the node we just reached.  We continue on all
+\emph{unmarked} outgoing edges; we extend our path with the label of the
+chosen edge, as we move along.  The algorithms carries two main results:
+the set of visited edges, and the generated argument lists. The
+functional implementation passes them around; a more imperative
+algorithm could also use global state.  
+
+[[next]] returns the [[node]] at the end of an edge.
+
+<<interesting paths>>=
+let next graph edge = T.find edge graph.edges
+@
+
+[[outgoing]] returns the labels (types) on outgoing edges of a given
+[[node]].
+
+<<interesting paths>>=
+let outgoing graph node =
+    let add_label (src, label) dst labels =
+        if src = node then label :: labels else labels
+    in    
+        T.fold add_label graph.edges []
+@
+
+All paths and parameter lists are reversed, because we append results in
+the front.
+
+The [[explore]] function implements the depth-first algorithm explained
+above. 
+\begin{itemize}
+\item [[visited]] is the set of visited (or marked) edges. We never
+       follow a marked edge to reach new nodes.
+\item [[path]] is the reversed list of types that lead from the start
+      node of the graph to the current [[node]].
+\item [[paths]] are constructed parameter lists. For efficiency, it is a
+      list of path lists that is flattened later.
+\item [[node]] is the node we just reached having followed [[path]].       
+\item [[labels]] are the labels on outgoing edges of [[node]].
+\end{itemize}
+
+The [[follow]] function follows an edge to a new node. It
+carries the visited edges and parameter lists constructed so far. If the
+current edge is already marked, it is not followed, but the current
+result is just returned. Otherwise the edge is marked, the current path
+extened and the reached recursively explored.
+
+<<interesting paths>>=
+let rec explore graph (visited:ES.t) (path:path) (paths:path list list) node =
+    let labels  = outgoing graph node in
+    let paths  = (List.map (fun l -> l::path) labels) :: paths in
+    let follow (node, ty as edge) visited paths =
+        if ES.mem edge visited then
+            (paths, visited)    (* do nothing, return result *)
+        else
+            explore 
+                graph (ES.add edge visited) (ty::path) paths (next graph edge)
+    in
+        List.fold_left 
+            (fun (paths,visited) edge -> follow edge visited paths)
+            (paths,visited)
+            (List.map (fun ty -> (node,ty)) labels)
+@
+
+The main function extracts the parameter lists, flattens and reverses
+them.
+
+<<interesting paths>>=
+let interesting_paths graph = 
+    let (paths,_) = explore graph ES.empty [] [] graph.start in
+        List.map List.rev (List.concat paths)
+@            
