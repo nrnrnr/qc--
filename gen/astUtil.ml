@@ -485,6 +485,7 @@
               Ast.UnwindsTo(name_list1)
             | "ast_ReturnsTo" -> let name_list1 = (SexpPkl.rd_list sexp_rd_name s_) in
               Ast.ReturnsTo(name_list1)
+            | "ast_NeverReturns" -> Ast.NeverReturns
             | "ast_Aborts" -> Ast.Aborts
             | _ -> (SexpPkl.die ()))
           (* end match *) in
@@ -1354,6 +1355,11 @@
             (SexpPkl.wr_lp s_);
             (SexpPkl.wr_sym "ast_ReturnsTo" s_);
             (SexpPkl.wr_list sexp_wr_name name_list1 s_);
+            (SexpPkl.wr_rp s_)
+          end
+        | Ast.NeverReturns -> begin
+            (SexpPkl.wr_lp s_);
+            (SexpPkl.wr_sym "ast_NeverReturns" s_);
             (SexpPkl.wr_rp s_)
           end
         | Ast.Aborts -> begin

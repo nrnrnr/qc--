@@ -25,11 +25,14 @@ val round_up_to : multiple_of:int -> int -> int
 val foldri : (int -> 'a -> 'b -> 'b) -> 'a list -> 'b -> 'b
   (* fold list elements right to left, passing index for List.nth *)
 
+val last : 'a list -> 'a (* raises Invalid_argument on empty list *)
+
 val from: int -> upto:int -> int list
   (* from x ~upto:y is the list of integers x, .., y *)
 
 module Option : sig 
     val get: 'a -> 'a option -> 'a
+    val map : ('a -> 'b) -> ('a option -> 'b option)
 end
 
 module String : sig
@@ -73,6 +76,7 @@ module Option = struct
     let get x = function
         | Some y -> y
         | None   -> x
+    let map f = function Some x -> Some (f x) | None -> None
 end
 
 <<aux.ml>>=
@@ -101,3 +105,8 @@ module String = struct
     down_from (String.length s - 1) z
 end
 
+<<aux.ml>>=
+let rec last = function
+  | [] -> raise (Invalid_argument "empty list")
+  | [x] -> x
+  | x :: xs -> last xs

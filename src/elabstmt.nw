@@ -36,7 +36,7 @@ type stmt =
             * name flow
   | Goto   of exp * name list
   | Jump   of convention * exp * actual list * procname list
-  | Cut    of exp * actual list * name flow 
+  | Cut    of convention * exp * actual list * name flow 
   | Return of convention * int * int * actual list
 @
 <<elabstmt.mli>>=
@@ -110,9 +110,12 @@ let elab_stmts env =
           c
     | N.Span (k, v, ss) -> span k v ss
     | N.Assign (lhs, rhs) -> assign lhs rhs
-    | N.Call (lhs, conv, p, args, tgts, flow) -> call r lhs conv p args tgts flow
-    | N.Jump (conv, p, args, tgts) -> jump r conv p args tgts
-    | _ -> unimp "statements" in
+    | N.Goto (tgt, tgts) -> goto tgt tgts
+    | N.Call (lhs, conv, p, args, tgts, flow) -> call lhs conv p args tgts flow
+    | N.Jump (conv, p, args, tgts) -> jump conv p args tgts
+    | N.Cut  (conv, k, args, flow) -> cut conv k args flow
+    | N.Prim (lhs, conv, p, args, flow) -> prim lhs conv p args flow
+    | N.Return (conv, altcont, args) -> return conv altcont args in
     stmt s
   and stmts r ss = stmts' false r ss
   and stmts' procbody r ss =
@@ -129,20 +132,36 @@ let elab_stmts env =
                      | N.StmtAt (s, _) -> jumps s
                      | N.Span (_, _, ss) -> jumps (Aux.last ss)
                      | _ -> false in
-(*
-  | N.Prim   of 'l list * convention * name * 'e actual list * flow
-  | N.Goto   of 'e * label list
-  | N.Cut    of 'e * 'e actual list * cflow 
-  | N.Return of convention * ('e * 'e) option * 'e actual list
-*)
   stmts' true Srcmap.null
-<<definitions of elaboration functions>>=
+@ 
+Here are a couple of basic utilities.
+We sometimes do extra checking if an expression is just a name.
+<<elaboration utilities>>=
+let rec exp_as_name = function
+  | A.ExprAt(x,_) -> exp_as_name x
+  | A.Fetch(A.NameOrMemAt(x,_)) -> exp_as_name (A.Fetch x)
+  | A.Fetch(A.Name(_,x)) -> Some x
+  | _ -> None in
+@ 
+Lots of things have to be the native pointer type.
+<<elaboration utilities>>=
+let ispointer =
+  function Types.Bits n when n = metrics.M.pointersize -> true | _ -> false in
+let insist_pointer what t =
+  if ispointer t then ()
+  else E.error (what ^ " must be a bit vector of the native pointer type") in
+@ 
+A formal parameter to a continuation must be a local register variable.
+<<elaboration utilities>>=
 let cformal (hint, name) =
   E.seq (snd (F.findv name env)) (fun den ->
     match den with
     | F.Variable _, _ when F.is_localv name env -> E.Ok (hint, name)
-    | _ -> errorf r
-             "continuation parameter '%s' is not a local register variable" name) in
+    | F.Variable _, _ ->
+        errorf r "continuation parameter '%s' may not be a global variable" name
+    | d, _ ->
+        errorf r "continuation parameter '%s' is a %s, not a local register variable"
+          name (F.denotation's_category d)) in
 @
 The type of the switch expression must be matched by the guarding
 ranges of the arms.  An empty switch-statement is an error because no
@@ -166,10 +185,8 @@ let span k v ss =
     | Types.Bits n when n = metrics.M.wordsize -> k
     | _ -> errorf r "span token (key) must be a bit vector of native word size") in
   let linktime v = E.seq (exp v) (fun (v, vt) ->
-    let v = E.catch (eprint r) (ok Simplify.link) v in
-    match vt with
-    | Types.Bits n when n = metrics.M.pointersize -> v
-    | _ -> errorf r "span value must be a bit vector of native pointer size") in
+    insist_pointer "span value" vt;
+    E.catch (eprint r) (ok Simplify.link) v) in
   E.ematch3 (const k) (linktime v) (stmts r ss) (fun k v ss ->
     Span (k, v, ss)) in
 @
@@ -182,10 +199,9 @@ The right hand side may contain optional guarding expressions of type
 [[bool]].
 <<definitions of elaboration functions>>=
 let assign lhs rhs =
-  <<definitions of assignment functions>>
   try E.ematch (E.Raise.list (List.map2 effect lhs rhs)) (fun es -> Assign(Rtl.par es))
   with Invalid_argument _ -> <<complain about length mismatch in assignment>> in
-<<definitions of assignment functions>>=
+<<elaboration utilities>>=
 let effect lhs (guard,rhs) =
   let guard = Aux.Option.map exp guard in
   E.seq2 (loc lhs) (exp rhs) (fun (loc, w) (e, ty) ->
@@ -209,7 +225,37 @@ else
   errorf r
     "assignment has %d locations on the left but only %d expressions on the right"
     (List.length lhs) (List.length rhs)
+@
+A [[goto]] statement must name all possible (local) targets [[ts]] for
+its code pointer expression [[e]].  Targets may be omitted only if the
+expression is a statically known target, i.e.~a local code label. 
+<<definitions of elaboration functions>>=
+let goto tgt tgts =
+  let tgts = E.Raise.list (List.map (goto_target r) tgts) in
+  E.ematch2 (exp tgt) tgts (fun (te, t) tgts ->
+    insist_pointer "target of goto" t;
+    if null tgts && not (exp_is_local_code_label r tgt) then
+      E.error "target list omitted and target is not a local code label";
+    Goto (te, tgts)) in 
+@
+A name appearing in a targets list must denote a local label,
+as must an expression without a targets list.
+We have two functions so we can issue suitable error messages.
+<<elaboration utilities>>=
+let goto_target r x = E.seq (snd (F.findv x env)) (fun (d, t) ->
+  match d with 
+  | F.Label (F.Code _) when F.is_localv x env -> E.Ok x
+  | F.Label (F.Code _) -> errorf r "may not goto %s (label in another procedure)" x
+  | _                  -> errorf r "may not goto %s %s" (F.denotation's_category d)x)in
+let exp_is_local_code_label r e = match exp_as_name e with
+| None -> false
+| Some x -> match snd (F.findv x env) with
+  | E.Ok (F.Label (F.Code _), _) when F.is_localv x env -> true
+  | E.Ok _ -> false
+  | E.Error -> impossf "good target name came back as error" in
 @ 
+
+\subsection{Value-passing statements: calls and so on}
 A call need not name targets;
 the only requirement is that the expression by of the native pointer
 type.  
@@ -219,29 +265,65 @@ details of the assignment in a [[Call]] context are handled by
 argument to [[E.seq']] includes [[left]] and [[at]] although only the
 type of [[exp]] is used.
 <<definitions of elaboration functions>>=
-let call r left conv p args targets flows =
+let call left conv p args targets flows =
   let left = E.Raise.list (List.map (Elabexp.elab_hinted_name env) left) in
   let args = E.Raise.list (List.map (actual r) args) in
   let tgts = E.Raise.list (List.map (call_target r) targets) in
   let flow = call_flow r flows in
   reject_uncallable p;
   E.ematch5 left args (exp p) tgts flow (fun left args (p,pt) tgts flow ->
-    match pt with
-    | Types.Bits n when n = metrics.M.pointersize ->
-        Call (left, conv, p, args, tgts, flow)
-    | _ -> E.error "procedure value must be a bit vector of native pointer size") in
+    insist_pointer "procedure value" pt;
+    Call (left, conv, p, args, tgts, flow)) in
 @
 The jump expression must be a (code) pointer.
 <<definitions of elaboration functions>>=
-let jump r conv p args targets =
+let jump conv p args targets =
   let args = E.Raise.list (List.map (actual r) args) in
   let tgts = E.Raise.list (List.map (call_target r) targets) in
   reject_uncallable p;
   E.ematch3 args (exp p) tgts (fun args (p,pt) tgts ->
-    match pt with
-    | Types.Bits n when n = metrics.M.pointersize -> Jump (conv, p, args, tgts)
-    | _ -> E.error "procedure value must be a bit vector of native pointer size") in
+    insist_pointer "procedure value" pt;
+    Jump (conv, p, args, tgts)) in
 @ 
+Why is there no analog of [[reject_uncallable]]?
+Only Christian knows\ldots
+<<definitions of elaboration functions>>=
+let cut conv k args flows =
+  let args = E.Raise.list (List.map (actual r) args) in
+  let flow = cut_flow r flows in
+  E.ematch3 args (exp k) flow (fun args (k,kt) flow ->
+    insist_pointer "continuation value" kt;
+    Cut (conv, k, args, flow)) in
+@ 
+@
+A [[return]] may specify alternate return continuations.  The
+expressions $e_1/e_2$ must be both of the native word type and $0 \leq
+e1 \leq e_2$.
+<<definitions of elaboration functions>>=
+let return conv alt args =
+  let args = E.Raise.list (List.map (actual r) args) in
+  let i, n = match alt with
+  | None -> E.Ok 0, E.Ok 0
+  | Some (i, n) ->
+      let okbits f x = E.Ok (Bits.S.to_int (f x)) in
+      let const k = E.seq (exp k) (fun (k, kt) ->
+        E.catch (eprint r) (okbits Simplify.bits) k) in
+      const i, const n in
+  E.ematch3 i n args (fun i n args ->
+    if i >= 0 && n >= 0 && i <= n then
+      Return (conv, i, n, args)
+    else
+      <<raise error exn with bad continuation numbers>>) in
+@ 
+<<raise error exn with bad continuation numbers>>=
+if i < 0 then
+  E.errorf "in return <i/n>, i must be nonnegative but you have i = %d" i
+else if n < 0 then
+  E.errorf "in return <i/n>, n must be nonnegative but you have n = %d" n
+else if i > n then
+  E.errorf "in return <i/n>, i must be at most n but you have i = %d and n = %d" i n
+else
+  impossf "bad <i/n> with i = %d and n = %d, but no better error message" i n
 <<elaboration utilities>>=
 let actual r (hint, e) = E.seq (exp e) (fun (e, ty) ->
   match ty with
@@ -252,20 +334,12 @@ As target of a call or jump,
 we reject out of hand (by raising [[E.ErrorExn]]) any name that is
 obviously not a procedure. 
 <<elaboration utilities>>=
-let rec reject_uncallable = function
-  | A.ExprAt(x,_) -> reject_uncallable x
-  | A.Fetch(A.NameOrMemAt(x,_)) -> reject_uncallable (A.Fetch x)
-  | A.Fetch(A.Name(_,x)) -> reject_uncallable_denotation x (snd (F.findv x env))
-  | _ -> ()
-and reject_uncallable_denotation name d =
-  let bad thing = E.error (Printf.sprintf "cannot call or jump to %s %s" thing name) in
-  match d with
-  | E.Ok (F.Constant _, _)        -> bad "constant"
-  | E.Ok (F.Label (F.Code  _), _) -> bad "code label"
-  | E.Ok (F.Label (F.Data  _), _) -> bad "data label"
-  | E.Ok (F.Label (F.Stack _), _) -> bad "stackdata label"
-  | E.Ok (F.Continuation _, _)    -> bad "continuation"
-  | E.Ok ((F.Label (F.Proc _) | F.Import (_, _) | F.Variable _), _) | E.Error -> () in
+let reject_uncallable e = match exp_as_name e with
+| None -> ()
+| Some x -> match (snd (F.findv x env)) with
+  | E.Ok ((F.Label (F.Proc _) | F.Import (_, _) | F.Variable _), _) | E.Error -> ()
+  | E.Ok (d, _) -> 
+      E.errorf "cannot call or jump to %s %s" (F.denotation's_category d) x in
 @    
 \paragraph{Checking flow annotations}
 For the moment, we elaborate flow of names into flow of names, doing only checking.
@@ -302,8 +376,8 @@ let flow r default_aborts default_returns =
 The rules for flow are slightly different for calls and cuts.
 <<elaboration utilities>>=
 let call_flow r fs = flow r false true fs in
+let null = function [] -> true | _ :: _ -> false in
 let cut_flow r fs =
-  let null = function [] -> true | _ :: _ -> false in
   E.seq (flow r true false fs) (fun f ->
     if not (null f.unwinds) then
       errorf r "'also unwinds to' is meaningless on a 'cut to'"
@@ -316,7 +390,49 @@ A call target must be either a procedure or an imported symbol with
 the native pointer type.
 <<elaboration utilities>>=
 let call_target r x = E.seq (snd (F.findv x env)) (function
-  | (F.Label (F.Proc _) | F.Import _), t when t = Types.Bits metrics.M.pointersize ->
-      E.Ok x
+  | (F.Label (F.Proc _) | F.Import _), t when ispointer t -> E.Ok x
   | _ -> errorf r "target %s is not a procedure or imported pointer" x) in
+@
+A call of a primitive is type checked: argument types must have the
+expected types. This is done by [[Rtlop.Translate.check]].
+<<definitions of elaboration functions>>=
+let prim lhs conv op args flows =
+  let lhs  = E.Raise.list (List.map (Elabexp.elab_hinted_name env) lhs) in
+  let args = E.Raise.list (List.map (fun (h, e) -> E.Raise.right (h, exp e)) args) in
+  let flow = prim_flow r flows in
+  E.ematch3 lhs args flow (fun lhs args flow ->
+    let nonempty_hint (h, _) = h <> "" in
+    if List.exists nonempty_hint lhs || List.exists nonempty_hint args then
+      E.error "calls to primitive operators may use only empty hints"
+    else
+      match lhs with
+      | [_, (result, w)] ->
+          let argtys  = List.map (fun (_, (_, t)) -> t) args in
+          let argexps = List.map (fun (_, (e, _)) -> e) args in
+          let t, opr  = Rtlop.Translate.operator op argtys in
+          if t <> Types.Bits w then
+            <<raise error exn on primop type mismatch>>
+          else
+            Assign (AT.store result (Rtl.app opr argexps) w)
+      | _ -> E.error "primitive operator produces exactly one result") in
+<<raise error exn on primop type mismatch>>=
+Printf.kprintf E.error
+  "left-hand side has type bits%d, but primitive operator produces results of type %s"
+  w (Types.to_string t)
+@ 
+<<elaboration utilities>>=
+let prim_flow r fs =
+  E.seq (flow r false true fs) (fun f ->
+    if not (null f.unwinds) then
+      errorf r "'also unwinds to' is meaningless on a primitive operator"
+    else if not (null f.cuts) then
+      errorf r "'also cuts to' is meaningless on a primitive operator"
+    else if not (null f.areturns) then
+      errorf r "alternate returns on primitive operators are not yet implemented"
+    else if f.aborts then
+      errorf r "'also aborts' is meaningless on a primitive operator"
+    else if not f.returns then
+      errorf r "'never returns' is meaningless on a primitive operator"
+    else
+      E.Ok f) in
 @ 

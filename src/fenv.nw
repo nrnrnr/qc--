@@ -290,7 +290,10 @@ and  denotation     = Constant      of Bits.bits
                     | Variable      of variable
                     | Continuation  of continuation
 and continuation =  { base : Block.t;   (* always empty; used only for address *)
-                      mutable escapes : bool  (* used as rvalue *)
+                      mutable escapes     : bool;  (* used as rvalue *)
+                      mutable cut_to      : bool;  (* mentioned in annotation *)
+                      mutable unwound_to  : bool;  (* mentioned in annotation *)
+                      mutable returned_to : bool;  (* mentioned in annotation *)
                     }
 @
 The complete entry [[ventry]] for a value includes not only its
@@ -298,6 +301,11 @@ denotation, but also its type [[Types.ty]], and its source code
 position as a [[Srcmap.rgn]] value.
 <<types>>=
 and  ventry         = Srcmap.rgn * (denotation * Types.ty) info
+@ 
+For error messages, we provide a way of saying what kind of thing a
+symbol denotes.
+<<signature Env>>=
+val denotation's_category : denotation -> string
 @
 Bindings for types, which are also scoped, are much simpler. A
 [[tentry]] for a type includes just its source code position and the
@@ -726,6 +734,17 @@ position that is used to describe the place where an error is located.
 let error r map msg = E.errorRegionPrt (map,r) msg 
 @
 
+<<module Env>>=
+let denotation's_category = function
+  | Label (Proc  _) -> "procedure"
+  | Label (Code  _) -> "code label"
+  | Label (Data  _) -> "data label"
+  | Label (Stack _) -> "stackdata label"
+  | Constant _      -> "constant"
+  | Continuation _  -> "continuation"
+  | Import (_, _)   -> "imported symbol"
+  | Variable _      -> "register variable"
+@ 
 % ------------------------------------------------------------------ 
 \subsection{Mapping}
 % ------------------------------------------------------------------ 
@@ -1070,6 +1089,9 @@ let clean_reg r =
 let clean_cont c =
     { Clean.base = c.Dirty.base
     ; Clean.escapes = c.Dirty.escapes
+    ; Clean.cut_to = c.Dirty.cut_to
+    ; Clean.unwound_to = c.Dirty.unwound_to
+    ; Clean.returned_to = c.Dirty.returned_to
     }
 
 let rec clean_venv map  =

@@ -23,6 +23,7 @@ evaluating expressions inside of them. The promise is, that the returned
 val rtl:    Rtl.rtl -> Rtl.rtl
 val exp:    Rtl.exp -> Rtl.exp
 val bits:   Rtl.exp -> Bits.bits    (* Error.ErrorExn, convenient function *)
+val link:   Rtl.exp -> Bits.bits Reloc.Simple.relocatable
 val bool:   Rtl.exp -> bool         (* Error.ErrorExn, convenient function *)
 @
 
@@ -99,6 +100,21 @@ let bits e = match Safe.exp (D.exp e) with
 let bool e = match Safe.exp (D.exp e) with
              | RP.Const(RP.Bool(b)) -> b
              | _                    -> Error.error "not a constant condition"
+
+let link e = match Safe.exp (D.exp e) with
+| RP.Const(RP.Bits(b))   -> Reloc.Simple.of_const b
+| RP.Const(RP.Link(l,w)) -> Reloc.Simple.of_sum l (Bits.zero w)
+| RP.Const(RP.Diff(c1,c2)) ->
+    Impossible.unimp "difference of link-time constants"
+| RP.App(("add",_),[RP.Const(RP.Link(l,w)); RP.Const(RP.Bits(b))]) ->
+    Reloc.Simple.of_sum l b
+| RP.App(("sub",_),[RP.Const(RP.Link(l,w)); RP.Const(RP.Bits(b))]) ->
+    Reloc.Simple.of_sum l (Bits.Ops.neg b)
+| RP.App(("sub",_),[RP.Const(RP.Link(l,w)); RP.Const(RP.Link(l',w'))]) ->
+    Impossible.unimp "difference of link-time constants"
+| _ ->
+    Error.error ("Bad link-time constant " ^ Rtlutil.ToReadableString.exp e)
+
 
 let compile_time_ops = 
     [ "add"; "and"; "div"; "eq"; "mul"; "neg"; "ne"; "shl"; "shra";

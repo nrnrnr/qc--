@@ -35,6 +35,7 @@ type 'a error       = Error                     (* bad result  *)
 
 exception ErrorExn  of string
 val error :         string -> 'a (* ErrorExn *)
+val errorf : ('a, unit, string, 'b) format4 -> 'a
 @
 
 Now that a bad result can be either signaled by returning an [[Error]]
@@ -73,6 +74,12 @@ values of type [[error]].
 val combine     : 'a error error -> 'a error
 val ematch      : 'a error -> ('a -> 'b) -> 'b error
 val ematch2     : 'a error -> 'b error -> ('a -> 'b -> 'c) -> 'c error
+val ematch3     : 'a error -> 'b error -> 'c error ->
+                  ('a -> 'b -> 'c -> 'd) -> 'd error
+val ematch4     : 'a error -> 'b error -> 'c error -> 'd error -> 
+                  ('a -> 'b -> 'c -> 'd -> 'e) -> 'e error
+val ematch5     : 'a error -> 'b error -> 'c error -> 'd error -> 'e error ->
+                  ('a -> 'b -> 'c -> 'd -> 'e -> 'f) -> 'f error
 val ematchPair  : 'a error * 'b error -> ('a * 'b -> 'c) -> 'c error
 val ematchTriple: 'a error * 'b error * 'c error -> 
                    ('a * 'b * 'c -> 'd) -> 'd error
@@ -364,6 +371,9 @@ let combine = function
 let ematch x f = match x with Ok x -> Ok (f x) | Error -> Error
 let ematch2 x y f =
   match x with Ok x -> (match y with  Ok y -> Ok (f x y) | _ -> Error) | _ -> Error
+let ematch3 x y z f     = match x with Ok x -> ematch2 y z     (f x) | Error -> Error
+let ematch4 x y z w f   = match x with Ok x -> ematch3 y z w   (f x) | Error -> Error
+let ematch5 x y z w v f = match x with Ok x -> ematch4 y z w v (f x) | Error -> Error
 let ematchPair    x2 = ematch (Raise.pair x2)
 let ematchTriple  x3 = ematch (Raise.triple x3)
 let ematchQuad    x4 = ematch (Raise.quad x4)
@@ -392,6 +402,7 @@ let catch' default printer f arg =
 <<error.ml>>=
 let catch printer f arg = catch' Error printer f arg
 let error msg           = raise (ErrorExn msg)
+let errorf fmt = Printf.kprintf error fmt
 @
 
 The following functions print error and warning messages. They differ

@@ -93,6 +93,7 @@
       | CutsTo of (name list)
       | UnwindsTo of (name list)
       | ReturnsTo of (name list)
+      | NeverReturns
       | Aborts
   
   and altcont = (expr * expr)

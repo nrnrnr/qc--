@@ -305,21 +305,10 @@ ONLY AN ASSEMBLER KNOWS WHAT LINK-TIME CONSTANTS IT CAN SUPPORT.
 <<definitions of [[compile_const]], [[eval_const]], and [[link_const]]>>=
 let compile_const exp     = Simplify.bits (expr exp)
 and eval_const    asm exp = Simplify.exp  (expr exp)  
-and link_const    asm exp = 
-    match Dn.exp (Simplify.exp  (expr exp)) with
-    | RP.Const(RP.Bits(b))   -> Reloc.Simple.of_const b
-    | RP.Const(RP.Link(l,w)) -> Reloc.Simple.of_sum l (Bits.zero w)
-    | RP.Const(RP.Diff(c1,c2)) ->
-        Impossible.unimp "difference of link-time constants"
-    | RP.App(("add",_),[RP.Const(RP.Link(l,w)); RP.Const(RP.Bits(b))]) ->
-        Reloc.Simple.of_sum l b
-    | RP.App(("sub",_),[RP.Const(RP.Link(l,w)); RP.Const(RP.Bits(b))]) ->
-        Reloc.Simple.of_sum l (Bits.Ops.neg b)
-    | RP.App(("sub",_),[RP.Const(RP.Link(l,w)); RP.Const(RP.Link(l',w'))]) ->
-        Impossible.unimp "difference of link-time constants"
-    | e ->
-        impossible
-          ("Bad link-time constant " ^ Rtlutil.ToReadableString.exp (Up.exp e))
+and link_const    asm exp =
+  try Simplify.link (expr exp)
+  with Error.ErrorExn msg ->
+    impossible "bad link-time expression not caught in front end"
 @
 % ------------------------------------------------------------------
 \subsection{The translation of actual parameters, formal parameters, and results}
@@ -513,9 +502,9 @@ let continuations cc ast default_aborts =
     | A.CutsTo    ns -> { cs with cuts    = contmap as_cut_to  ns @ cs.cuts    }
     | A.UnwindsTo ns -> { cs with unwinds = contmap as_unwinds ns @ cs.unwinds }
     | A.ReturnsTo ns -> { cs with returns = contmap as_returns ns @ cs.returns }
-    | A.Aborts       -> { cs with aborts  = true                               } in
+    | A.Aborts       -> { cs with aborts  = true                               } 
   (*| A.NeverAborts  -> { cs with aborts  = false                              } in*)
-  (*| A.NeverReturns -> ??? *)
+    | A.NeverReturns -> cs  (* can't be represented *) in
   let empty = { cuts = []; unwinds = []; returns = [] ; aborts = default_aborts } in
   List.fold_right add ast empty
 @

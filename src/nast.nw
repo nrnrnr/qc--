@@ -62,6 +62,7 @@ type cflow = flow
 Statements.  Types [['l]], [['e]], and [['a]] are locations,
 expressions, and assignments, which we expect to be [[Ast]] types
 first and [[Rtl]] types later.
+THIS TYPE PARAMETERIZATION SEEMED NICE, BUT IT WILL HAVE TO GO EVENTUALLY.
 <<exposed types>>=
 type ('l, 'e, 'a) stmt =
   | StmtAt of ('l, 'e, 'a) stmt * Ast.region
@@ -75,7 +76,7 @@ type ('l, 'e, 'a) stmt =
   | Prim   of 'l list * convention * name * 'e actual list * flow
   | Goto   of 'e * label list
   | Jump   of convention * 'e * 'e actual list * procname list
-  | Cut    of 'e * 'e actual list * cflow 
+  | Cut    of convention * 'e * 'e actual list * cflow 
   | Return of convention * ('e * 'e) option * 'e actual list
 @ 
 Both compilation units and procedures can contain type and constant definitions.
@@ -141,6 +142,7 @@ type t = {
 @ 
 <<nast.mli>>=
 <<exposed types>>
+val program : Ast.toplevel list -> t
 @ 
 \section{Implementation}
 
@@ -286,7 +288,7 @@ let rec stmt r s k =
   | A.JumpStmt (cc, p, a's, tgts) ->
       atomic (Jump (convention cc, p, List.map actual a's, tgts))
   | A.CutStmt (e, a's, flows) ->
-      atomic (Cut (e, List.map actual a's, flows))
+      atomic (Cut (convention None, e, List.map actual a's, flows))
   | A.ReturnStmt (cc, alt, a's) ->
       atomic (Return (convention cc, alt, List.map actual a's))
   | A.EmptyStmt

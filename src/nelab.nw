@@ -1011,106 +1011,6 @@ the returned value has type [[(Types.ty * F.value) E.error]]
 <<check>>=
 let constExpr env e = Consts.evalExpr env e
 @
-A target for a [[goto]] statement must be a local code pointer.
-<<check>>=
-let checkGotoTarget env x = E.seq' env (snd (F.findv x env))
-    ( function 
-    | (F.Label(F.Code _),_) when F.is_localv x env -> env
-    | (F.Label(F.Code _),_)  -> E.error (x^" not a local label")
-    | (F.Label(_)     ,_)    -> E.error (x^" is not a goto label")
-    | otherwise              -> E.error (x^" is not a label")
-    )
-@
-The [[isLabel env e]] function returns [[true]] if the expression [[e]]
-denotes a statically known label for [[goto]]. Analogously,
-[[isNoFunction]] is true, if an expression is statically known
-\emph{not} to address a function. Basically, an expression is known not
-to be a function if it is a name that does not denote a function.
-<<check>>=
-let rec isGotoLabel env = function
-    | A.ExprAt(x,_)                             -> isGotoLabel env x
-    | A.Fetch(A.NameOrMemAt(x,_))               -> isGotoLabel env (A.Fetch x)
-    | A.Fetch(A.Name(_,x))                      -> 
-          ( match F.findv x env with
-          | _       ,E.Error                    -> false
-          | scope   ,E.Ok(F.Label(F.Code(_)),_) -> true
-          | _                                   -> false
-          )        
-    | _                                         -> false
-
-@
-A [[goto]] statement must name all possible (local) targets [[ts]] for
-its code pointer expression [[e]].  Targets may be omitted if the
-expression is a statically known target, i.e.~a label. 
-<<check>>=
-and gotoStmt env (e,ts) =
-    let msg1 = "goto-expression has no pointer type" in
-    let msg2 = "no target list for goto or not a goto target" in
-    let env  = foldl checkGotoTarget env ts          in
-    let env  = E.seq' (F.flagError env) (E.Raise.pair ( tyExpr env e
-                                                      , pointerTy env  
-                                                      ))
-        ( function 
-        | t,p when t = p -> env
-        | _              -> E.error msg1
-        )
-    in
-        if ts = [] && not (isGotoLabel env e)
-        then E.error msg2
-        else env
-@
-@
-A call of a primitive is type checked: argument types must have the
-expected types. This is done by [[Rtlop.Translate.check]].
-<<check>>=
-and primStmt env (left,cc,op,args,fs) =
-    let left   = E.Raise.list (List.map (lvalue PrimCall env) left) in
-    let env    = foldl (checkFlow false) env fs                     in
-    let args   = List.map snd args                                  in
-    let t      = E.Raise.list (List.map (tyExpr env) args)          in 
-    let right  = E.ematch t (fun t -> fst (Rtlop.Translate.operator op t)) in
-        E.seq' (F.flagError env) (E.Raise.pair (left,right)) (fun _ -> env)
-@
-A continuation expression must have a continuation type. 
-<<check>>=
-and cutStmt env (e,args,fs) =
-    let msg1 = "expression not of continuation type"     in
-    let args = List.map (tyExpr env) (List.map snd args) in
-    let env  = foldl (checkFlow true) env fs             in
-        E.seq' (F.flagError env)
-               (E.Raise.triple (tyExpr env e, E.Raise.list args, pointerTy env))
-               ( fun (t,_,p) ->
-                 if   t <> p
-                 then E.error msg1
-                 else env
-               )
-@
-A [[return]] may specify alternate return continuations.  The
-expressions $e_1/e_2$ must be both of the native word type and $0 \leq
-e1 \leq e_2$.
-<<check>>=
-and returnStmt env (cc,alt,args) =
-    let args  = List.map snd args  in
-    let env   = E.seq' (F.flagError env) 
-                       (E.Raise.list (List.map (tyExpr env) args)) 
-                       (fun _ -> env) in
-        match alt with
-        | None         -> env
-        | Some (e1,e2) -> 
-            let e1' = constExpr env e1 in
-            let e2' = constExpr env e2 in
-                E.seq' (F.flagError env) (E.Raise.triple (e1',e2',wordTy env))
-                ( function 
-                | (tx, x),(ty, y),w when
-                   (  tx = w
-                   && ty = w
-                   && Bits.S.to_int (to_bits x) >= 0 
-                   && Bits.S.to_int (to_bits y) >= 0 
-                   && Bits.S.to_int (to_bits x) <= Bits.S.to_int (to_bits y)
-                   )  -> env 
-                | _ -> E.error "illegal <x/y> combination"
-                )
-@
 The type of range-expressions in a [[switch]] statement must match the
 type [[t]] of the [[switch]] expression.  The parameter [[t]] is in
 the [[E.error]] domain and thus function from the [[E]] module are
@@ -1149,24 +1049,6 @@ and arm t env = function
             | [] -> E.error "must specify range for this arm"
             | _  -> env
             )
-@
-The [[stmt]] function catches errors detected in individual statements
-and flags them in the environment. Nothing needs to be done for most
-declarations and labels since they were entered into [[env]] in
-previous steps.
-<<check>>=
-and stmt env = function
-    | A.AssignStmt x    -> assignStmt env x
-    | A.CallStmt x      -> callStmt   env x
-    | A.PrimStmt x      -> primStmt   env x
-    | A.GotoStmt x      -> gotoStmt   env x
-    | A.CutStmt x       -> cutStmt    env x
-    | A.ReturnStmt x    -> returnStmt env x
-    | A.JumpStmt x      -> jumpStmt   env x
-    | A.ContStmt x      -> contStmt   env x
-    | A.SwitchStmt x    -> switchStmt env x
-    | A.EmptyStmt       -> env        (* nothing to do *)  
-    | A.CommentStmt _   -> env
 @
 A top level [[span]] contains [[section]]s but otherwise behaves like a
 [[span]] statement: the two expressions [[e1]] and [[e2]] must denote a
