@@ -6,7 +6,7 @@
 -- (or nil if there are no errors)
 
 function try (f, ...)
-  call(f, arg, "x", function (msg) %arg.msg = msg end)
+  call(f, arg) --- not supported in 2.5 -- , "x", function (msg) %arg.msg = msg end)
   return arg.msg
 end
 
@@ -37,15 +37,17 @@ end
 
 
 function blowup (n)
-  if mod(n,2) ~= 0 then error "Lo_Exception"
-  else error "Hi_Exception"
+  if mod(n,2) ~= 0 then error ("Lo_Exception")
+  else error ("Hi_Exception")
   end
 end
 
 
 N = (arg and arg[1]) or 1
-for i=1,N do
+i = 1
+while i <= N do
   some_function(i)
+  i = i + 1
 end
 
 print(format("Exceptions: HI=%d / LO=%d", HI, LO))

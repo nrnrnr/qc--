@@ -91,6 +91,8 @@ while [ $# -gt 0 ]; do
     -std|-old|-stdu|-c) INTERP=$1 ; shift ;;
     -p) PROFILE=-p ; shift ;;
     -nop) PROFILE= ; shift ;;
+    -size) size="${2-size}"; shift; shift ;;
+    -size2) size2="${2-size2}"; shift; shift ;;
     *) break ;;
   esac
 done
@@ -105,8 +107,8 @@ do
   i="$base.lua"
   echo $i 1>&2
   truesize=`goodsize $base $size $size2`
-  for interp in oclbench${INTERP}${PROFILE}.opt  # oclbenchna # lbench oclbench # oclbenchu
-  do
+  interp=oclbench${INTERP}${PROFILE}.opt
+
     if [ -r $i.Input ]; then
       input=$i.Input
     else
@@ -117,14 +119,19 @@ do
        -f "version=$version base=$base size=$truesize size2=$size INTERP=$INTERP PROFILE=$PROFILE sec=%e memmax=%M memavg=%K" \
        -o $i.stats -a \
       <$input $interp $i $truesize $size2 > $i.out$INTERP$PROFILE || fail $interp $i
-  done
+
   case $base in
      random) tolerance=1.0 ;;
      heapsort) tolerance=0.5 ;;
      *)      tolerance=0.01 ;;
   esac
-  for test in lbench oclbenchna
+  for suffix in -c # lbench oclbenchna
   do
-    spiff -r$tolerance $i.out.lbench $i.out.$test > /dev/null || badout $test $i
+    baseline=$i.out$suffix  # baseline output believed to be correct
+    if [ ! -r $baseline ]; then
+      echo "==> Re-Run $0 with options -c -nop to create baseline for comparison" 1>&1
+      exit 1
+    fi
+    spiff -r$tolerance $baseline $i.out$INTERP$PROFILE > /dev/null || badout $test $i
   done
 done
