@@ -1010,11 +1010,17 @@ object (this)
         
     method interp fd =
         let e       = Interp.target.Target2.call.Target2.project _instr in
+        (* We expect all continuation nodes to have a symbol. Is this
+           correct? *)
+        let label n = match n#symbol with
+            | Some s -> sprintf "'%s'" (s#text)
+            | None   -> assert false in
+            
         ( Rtltolua.rtl fd _instr
         ; fprintf fd "CMM.cmm_call({%s}, {%s}, {%s}, %s) -- %s \n"
-            (String.concat "," []) (* FIX *)
-            (String.concat "," []) (* FIX *)
-            (String.concat "," []) (* FIX *)
+            (String.concat "," (List.map label _cuts))    
+            (String.concat "," (List.map label _unwinds)) 
+            (String.concat "," (List.map label _returns)) 
             (if _aborts then "1" else "0")
             "annotations missing"
         )   
@@ -1093,7 +1099,13 @@ object (this)
         )
     
     method interp fd =
-        fprintf fd "-- don't know how to translate branch node\n"
+        let (g,e) = Interp.target.Target2.branch.Target2.project _instr in
+        let s     = match Rtl.Convert.exp e with
+                    | Rtl.Private.Const(Rtl.Private.Link(s,_)) -> s
+                    | _ -> assert false in
+        ( Rtltolua.exp fd g
+        ; fprintf fd "CMM.cbrancht('%s')\n" s#text
+        )
 
 end
 @
@@ -1131,8 +1143,8 @@ object (this)
     method kills  = _kills
    
     method linorder = ( Some _succ , [])
-    method interp fd =
-        fprintf fd "-- don't know how to translate data flow node\n"
+    method interp fd =    
+        fprintf fd "-- data flow node\n"
 end
 @
 
