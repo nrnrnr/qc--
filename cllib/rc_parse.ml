@@ -11,7 +11,7 @@ type token =
   | EOF
 
 open Parsing
-# 6 "rc_parse.mly"
+# 2 "rc_parse.mly"
 open Rc_ast 
 (* Line 5, file rc_parse.ml *)
 let yytransl_const = [|
@@ -135,17 +135,17 @@ let yyact = [|
 ; (fun parser_env ->
     let _1 = (peek_val parser_env 1 : 'rclines) in
     Obj.repr((
-# 25 "rc_parse.mly"
+# 19 "rc_parse.mly"
                                                   _1            ) : Rc_ast.rcdict))
 ; (fun parser_env ->
     Obj.repr((
-# 27 "rc_parse.mly"
+# 21 "rc_parse.mly"
                                                   empty         ) : 'rclines))
 ; (fun parser_env ->
     let _1 = (peek_val parser_env 1 : 'rclines) in
     let _2 = (peek_val parser_env 0 : 'rcline) in
     Obj.repr((
-# 28 "rc_parse.mly"
+# 22 "rc_parse.mly"
                                                   let (id,rc) = _2 in
                                                   add id rc _1
                                                 ) : 'rclines))
@@ -153,53 +153,53 @@ let yyact = [|
     let _1 = (peek_val parser_env 2 : string) in
     let _3 = (peek_val parser_env 0 : 'value) in
     Obj.repr((
-# 32 "rc_parse.mly"
+# 26 "rc_parse.mly"
                                                   (_1,_3)       ) : 'rcline))
 ; (fun parser_env ->
     let _1 = (peek_val parser_env 2 : string) in
     let _3 = (peek_val parser_env 0 : 'values) in
     Obj.repr((
-# 33 "rc_parse.mly"
+# 27 "rc_parse.mly"
                                                   (_1,RClist(List.rev _3))  ) : 'rcline))
 ; (fun parser_env ->
     let _1 = (peek_val parser_env 0 : string) in
     Obj.repr((
-# 35 "rc_parse.mly"
+# 29 "rc_parse.mly"
                                                   RCstr(_1)     ) : 'value))
 ; (fun parser_env ->
     let _1 = (peek_val parser_env 0 : string) in
     Obj.repr((
-# 36 "rc_parse.mly"
+# 30 "rc_parse.mly"
                                                   RCstr(_1)     ) : 'value))
 ; (fun parser_env ->
     Obj.repr((
-# 37 "rc_parse.mly"
+# 31 "rc_parse.mly"
                                                   RCbool(true)  ) : 'value))
 ; (fun parser_env ->
     Obj.repr((
-# 38 "rc_parse.mly"
+# 32 "rc_parse.mly"
                                                   RCbool(false) ) : 'value))
 ; (fun parser_env ->
     let _1 = (peek_val parser_env 0 : int) in
     Obj.repr((
-# 39 "rc_parse.mly"
+# 33 "rc_parse.mly"
                                                   RCint(_1)     ) : 'value))
 ; (fun parser_env ->
     let _1 = (peek_val parser_env 0 : float) in
     Obj.repr((
-# 40 "rc_parse.mly"
+# 34 "rc_parse.mly"
                                                   RCfloat(_1)   ) : 'value))
 ; (fun parser_env ->
     let _1 = (peek_val parser_env 2 : 'value) in
     let _3 = (peek_val parser_env 0 : 'value) in
     Obj.repr((
-# 42 "rc_parse.mly"
+# 36 "rc_parse.mly"
                                                   [_3  ; _1]    ) : 'values))
 ; (fun parser_env ->
     let _1 = (peek_val parser_env 2 : 'values) in
     let _3 = (peek_val parser_env 0 : 'value) in
     Obj.repr((
-# 43 "rc_parse.mly"
+# 37 "rc_parse.mly"
                                                    _3 :: _1     ) : 'values))
 (* Entry rcfile *)
 ; (fun parser_env -> raise (YYexit (peek_val parser_env 0)))
