@@ -60,14 +60,30 @@ asm :V: alpha-asm  x86-asm  mips-asm
 # unknown on the MIPS.
 
 alpha-call.sigs:D:
-  $QCC -e 'Debug.paths_proc(Backend.alpha.target, "C", {64}, {"int","float"})'\
+  $QCC -e \
+  'Debug.paths_proc(Backend.alpha.target, "C",
+                    { { type = "int"  , widths = {64} }
+                    , { type = "float", widths = {64} }
+                    })' \
     > $target
 
 x86-call.sigs:D:
-  $QCC -e 'Debug.paths_proc(Backend.x86.target, "C", {32}, {"int"})' > $target
+  $QCC -e \
+  'Debug.paths_proc(Backend.x86.target, "C",
+                    { { type = "int"  , widths = {32} }
+                    , { type = "float", widths = {32} }
+                    })' \
+    > $target
 
+#
+# should eventually put in widths={64} but for now fails because of
+# unimplemented register aggregation
 mips-call.sigs:D:
-  $QCC -e 'Debug.paths_proc(Backend.mips.target, "C", {32},{"float","int"})' \
+  $QCC -e \
+  'Debug.paths_proc(Backend.mips.target, "C",
+                    { { type = "int"  , widths = {32} }
+                    , { type = "float", widths = {32} }
+                    })' \
     > $target
 
 #
@@ -93,7 +109,7 @@ x86-call:V:   x86-call.sigs
 mips-call:V:  mips-call.sigs
                $GEN -name=mips                            -width=32 < $prereq
                $GEN -name=mips-x -c                       -width=32 < $prereq
-              #$GEN -name=mips-x-cspec -c -conv="c'"      -width=32 < $prereq
+               $GEN -name=mips-x-cspec -c -conv="C'"      -width=32 < $prereq
 
 #
 # Compile *.c-- files to *.s code. Compilation depends on the desired
