@@ -216,7 +216,7 @@ $n$~is chosen such that the number of bits in these registers is
 exactly the number of bits in the request.
 If there is no such~$n$, it barfs with an error message.
 <<exported values>>=
-val useregs : Register.t list -> stage
+val useregs : Register.t list -> bool -> stage
 @ The [[useregs]] stage is stateful; a register handed out in response
 to an earlier request cannot be used to satisfy a later request.
 @
@@ -622,9 +622,9 @@ let reg_placer of_width agg n regs reserve next =
 let bitcounter   = counter (fun w -> w)
 let regs_by_bits = reg_placer (fun w -> w)
 
-let useregs regs = 
-   swrap (fun next ~start ~memsize ~byteorder ~ctrs -> let c = ref 0 in
-            (bitcounter c) ((regs_by_bits (Some byteorder) c regs false) next))
+let useregs regs reserve = 
+  swrap (fun next ~start ~memsize ~byteorder ~ctrs -> let c = ref 0 in
+          (bitcounter c) ((regs_by_bits (Some byteorder) c regs reserve) next))
 
 let bitcounter   = wrap_counter (fun _ _ -> bitcounter)
 let regs_by_bits label rs reserve =
