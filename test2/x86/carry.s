@@ -9,52 +9,52 @@ Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY:
 Cmm.global_area:
 .section .text
 lladd:
-	leal -52(%esp), %esp
-	leal 52(%esp), %edx
-	movl $4,%ecx
-	addl %ecx,%edx
-	leal 52(%esp), %ecx
-	movl %edx,24(%esp)
-	movl $-52,%edx
+	leal -48(%esp), %esp
+	leal 48(%esp), %ecx
+	movl $4,%edx
 	addl %edx,%ecx
-	movl 24(%esp),%edx
-	fildq (%edx)
-	fistpq (%ecx)
-	leal 52(%esp), %ecx
-	movl $12,%edx
-	addl %edx,%ecx
-	leal 52(%esp), %edx
-	movl %ecx,28(%esp)
-	movl $-44,%ecx
-	addl %ecx,%edx
-	movl 28(%esp),%ecx
-	fildq (%ecx)
-	fistpq (%edx)
-Linitialize_continuations_l6:
-Lproc_body_start_l5:
-	leal 52(%esp), %edx
+	leal 48(%esp), %edx
+	movl %ecx,24(%esp)
 	movl $-48,%ecx
 	addl %ecx,%edx
-	movl (%edx),%ecx
-	leal 52(%esp), %edx
+	movl 24(%esp),%ecx
+	fildq (%ecx)
+	fistpq (%edx)
+	leal 48(%esp), %edx
+	movl $12,%ecx
+	addl %ecx,%edx
+	leal 48(%esp), %ecx
+	movl %edx,28(%esp)
+	movl $-40,%edx
+	addl %edx,%ecx
+	movl 28(%esp),%edx
+	fildq (%edx)
+	fistpq (%ecx)
+Linitialize_continuations_l6:
+Lproc_body_start_l5:
+	leal 48(%esp), %ecx
+	movl $-44,%edx
+	addl %edx,%ecx
+	movl (%ecx),%edx
+	leal 48(%esp), %ecx
 	movl %ebx,32(%esp)
-	movl $-52,%ebx
-	addl %ebx,%edx
-	movl (%edx),%ebx
-	leal 52(%esp), %edx
+	movl $-48,%ebx
+	addl %ebx,%ecx
+	movl (%ecx),%ebx
+	leal 48(%esp), %ecx
 	movl %ebp,36(%esp)
-	movl $-40,%ebp
-	addl %ebp,%edx
-	movl (%edx),%ebp
-	leal 52(%esp), %edx
+	movl $-36,%ebp
+	addl %ebp,%ecx
+	movl (%ecx),%ebp
+	leal 48(%esp), %ecx
 	movl %esi,40(%esp)
-	movl $-44,%esi
-	addl %esi,%edx
-	movl (%edx),%esi
-	movl $0,%edx
-	btl $0,%edx
-	movl %ebx,%edx
-	adcl %esi,%edx
+	movl $-40,%esi
+	addl %esi,%ecx
+	movl (%ecx),%esi
+	movl $0,%ecx
+	btl $0,%ecx
+	movl %ebx,%ecx
+	adcl %esi,%ecx
 	movl %edi,44(%esp)
 	movl $0,%edi
 	btl $0,%edi
@@ -62,92 +62,87 @@ Lproc_body_start_l5:
 	movl $0,%ebx
 	lahf
 	shrl $8, %eax
-	movl $31,%ebx
-	movl %ecx,48(%esp)
-	movl %ebx,%ecx
-	shll %cl, %eax
-	movl $31,%ecx
-	sarl %cl, %eax
+	shll $31, %eax
+	sarl $31, %eax
 	btl $0,%eax
-	movl 48(%esp),%eax
-	adcl %ebp,%eax
-	leal 52(%esp), %ebp
-	movl $-36,%ecx
-	addl %ecx,%ebp
-	movl %edx,(%ebp)
-	leal 52(%esp), %edx
-	movl $-32,%ebp
-	addl %ebp,%edx
-	movl %eax,(%edx)
-	leal 52(%esp), %eax
-	movl $-36,%edx
-	addl %edx,%eax
-	movl (%eax),%eax
-	leal 52(%esp), %edx
-	movl $-32,%ebp
-	addl %ebp,%edx
-	movl (%edx),%edx
-	leal 52(%esp), %ebp
-	leal 52(%esp), %ecx
+	adcl %ebp,%edx
+	leal 48(%esp), %ebp
+	movl $-32,%eax
+	addl %eax,%ebp
+	movl %ecx,(%ebp)
+	leal 48(%esp), %ecx
+	movl $-28,%ebp
+	addl %ebp,%ecx
+	movl %edx,(%ecx)
+	leal 48(%esp), %ecx
+	movl $-32,%edx
+	addl %edx,%ecx
+	movl (%ecx),%eax
+	leal 48(%esp), %ecx
+	movl $-28,%edx
+	addl %edx,%ecx
+	movl (%ecx),%edx
+	leal 48(%esp), %ecx
+	leal 48(%esp), %ebp
 	movl $0,%ebx
-	addl %ebx,%ecx
-	movl (%ebp),%ebx
-	movl %ebx,(%ecx)
+	addl %ebx,%ebp
+	movl (%ecx),%ebx
+	movl %ebx,(%ebp)
 	movl 32(%esp),%ebx
 	movl 36(%esp),%ebp
 	movl 40(%esp),%esi
 	movl 44(%esp),%edi
-	leal 52(%esp), %esp
+	leal 48(%esp), %esp
 	ret
 .section .text
 .section .text
 llsub:
-	leal -52(%esp), %esp
-	leal 52(%esp), %edx
-	movl $4,%ecx
-	addl %ecx,%edx
-	leal 52(%esp), %ecx
-	movl %edx,24(%esp)
-	movl $-52,%edx
+	leal -48(%esp), %esp
+	leal 48(%esp), %ecx
+	movl $4,%edx
 	addl %edx,%ecx
-	movl 24(%esp),%edx
-	fildq (%edx)
-	fistpq (%ecx)
-	leal 52(%esp), %ecx
-	movl $12,%edx
-	addl %edx,%ecx
-	leal 52(%esp), %edx
-	movl %ecx,28(%esp)
-	movl $-44,%ecx
-	addl %ecx,%edx
-	movl 28(%esp),%ecx
-	fildq (%ecx)
-	fistpq (%edx)
-Linitialize_continuations_l18:
-Lproc_body_start_l17:
-	leal 52(%esp), %edx
+	leal 48(%esp), %edx
+	movl %ecx,24(%esp)
 	movl $-48,%ecx
 	addl %ecx,%edx
-	movl (%edx),%ecx
-	leal 52(%esp), %edx
+	movl 24(%esp),%ecx
+	fildq (%ecx)
+	fistpq (%edx)
+	leal 48(%esp), %edx
+	movl $12,%ecx
+	addl %ecx,%edx
+	leal 48(%esp), %ecx
+	movl %edx,28(%esp)
+	movl $-40,%edx
+	addl %edx,%ecx
+	movl 28(%esp),%edx
+	fildq (%edx)
+	fistpq (%ecx)
+Linitialize_continuations_l18:
+Lproc_body_start_l17:
+	leal 48(%esp), %ecx
+	movl $-44,%edx
+	addl %edx,%ecx
+	movl (%ecx),%edx
+	leal 48(%esp), %ecx
 	movl %ebx,32(%esp)
-	movl $-52,%ebx
-	addl %ebx,%edx
-	movl (%edx),%ebx
-	leal 52(%esp), %edx
+	movl $-48,%ebx
+	addl %ebx,%ecx
+	movl (%ecx),%ebx
+	leal 48(%esp), %ecx
 	movl %ebp,36(%esp)
-	movl $-40,%ebp
-	addl %ebp,%edx
-	movl (%edx),%ebp
-	leal 52(%esp), %edx
+	movl $-36,%ebp
+	addl %ebp,%ecx
+	movl (%ecx),%ebp
+	leal 48(%esp), %ecx
 	movl %esi,40(%esp)
-	movl $-44,%esi
-	addl %esi,%edx
-	movl (%edx),%esi
-	movl $0,%edx
-	btl $0,%edx
-	movl %ebx,%edx
-	sbbl %esi,%edx
+	movl $-40,%esi
+	addl %esi,%ecx
+	movl (%ecx),%esi
+	movl $0,%ecx
+	btl $0,%ecx
+	movl %ebx,%ecx
+	sbbl %esi,%ecx
 	movl %edi,44(%esp)
 	movl $0,%edi
 	btl $0,%edi
@@ -155,42 +150,37 @@ Lproc_body_start_l17:
 	movl $0,%ebx
 	lahf
 	shrl $8, %eax
-	movl $31,%ebx
-	movl %ecx,48(%esp)
-	movl %ebx,%ecx
-	shll %cl, %eax
-	movl $31,%ecx
-	sarl %cl, %eax
+	shll $31, %eax
+	sarl $31, %eax
 	btl $0,%eax
-	movl 48(%esp),%eax
-	sbbl %ebp,%eax
-	leal 52(%esp), %ebp
-	movl $-36,%ecx
-	addl %ecx,%ebp
-	movl %edx,(%ebp)
-	leal 52(%esp), %edx
-	movl $-32,%ebp
-	addl %ebp,%edx
-	movl %eax,(%edx)
-	leal 52(%esp), %eax
-	movl $-36,%edx
-	addl %edx,%eax
-	movl (%eax),%eax
-	leal 52(%esp), %edx
-	movl $-32,%ebp
-	addl %ebp,%edx
-	movl (%edx),%edx
-	leal 52(%esp), %ebp
-	leal 52(%esp), %ecx
+	sbbl %ebp,%edx
+	leal 48(%esp), %ebp
+	movl $-32,%eax
+	addl %eax,%ebp
+	movl %ecx,(%ebp)
+	leal 48(%esp), %ecx
+	movl $-28,%ebp
+	addl %ebp,%ecx
+	movl %edx,(%ecx)
+	leal 48(%esp), %ecx
+	movl $-32,%edx
+	addl %edx,%ecx
+	movl (%ecx),%eax
+	leal 48(%esp), %ecx
+	movl $-28,%edx
+	addl %edx,%ecx
+	movl (%ecx),%edx
+	leal 48(%esp), %ecx
+	leal 48(%esp), %ebp
 	movl $0,%ebx
-	addl %ebx,%ecx
-	movl (%ebp),%ebx
-	movl %ebx,(%ecx)
+	addl %ebx,%ebp
+	movl (%ecx),%ebx
+	movl %ebx,(%ebp)
 	movl 32(%esp),%ebx
 	movl 36(%esp),%ebp
 	movl 40(%esp),%esi
 	movl 44(%esp),%edi
-	leal 52(%esp), %esp
+	leal 48(%esp), %esp
 	ret
 .section .text
 .section .text

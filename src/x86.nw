@@ -176,6 +176,12 @@ let mem addr  = R.mem R.none mspace (R.C 4) addr  (* single word in memory *)
 let upint32 n = RO.unsigned 32 n
 let upint8  n = RO.unsigned 8  n
 @ 
+And another for doing shifts.  Parameter [[op]] should be, e.g., 
+[[RO.shl]].
+<<x86 postexpander>>= 
+let shift dst op n =
+  rtl (R.store (temploc dst) (op 32 (tempval dst) (RO.unsigned 32 n)) 32) 
+@ 
 Here are some important locations and values.
 <<x86 postexpander>>=
 let {SS.pc = pc; SS.cc = eflags} = SS.locations Spaces.c
@@ -432,6 +438,10 @@ let dblop ~dsthi ~dstlo op x y =
   move dsthi Rg.edx <:>
   move dstlo Rg.eax
 @ 
+\paragraph{Add with carry, subtract with borrow}
+
+Function [[weird_tmp]] returns a register that holds a weird value,
+plus the instructions needed to get the value into the register.
 <<x86 postexpander>>=
 let weird_tmp tmp z = match z with
 | PX.WTemp (Register.Reg t) -> t, PX.Nop
@@ -441,22 +451,37 @@ let weird_tmp tmp z = match z with
     move tmp t <:>
     rtl (R.store (temploc tmp) (RO.shrl 32 (tempval tmp) (RO.unsigned 32 lsb)) 32)
 | PX.WBits b -> tmp, rtl (R.store (temploc tmp) (R.bits (Bits.Ops.zx 32 b) 32) 32)
-
+@ 
+I don't want to model the details of the flags, so I provide a
+function to insert a new carry bit.
+For performance, the simplifier has to know that
+[[x86_carrybit (x86_setcarry (eflags, c)) = c]].
+Unfortunately, that code lurks in the simplifier.
+It would be good to find a way to distribute such rules.
+<<x86 postexpander>>=
 let set_carry ~tmp z =
   let t, is = weird_tmp tmp z in
   let bit0 = RO.lobits 32 1 (tempval t) in
   is <:>
   rtl (R.store eflags (R.app (R.opr "x86_setcarry" []) [RU.fetch eflags; bit0]) 32)
-
-let wrdop  ~dst op x y z =
+@ 
+Add with carry and subtract with borrow use essentially the same code.
+We're missing a chance to optimize when we know the carry in is a literal~0.
+<<x86 postexpander>>=
+let wrdop ~dst op x y z =
   let dv, yv = tempval dst, tempval y in
   let is_add =
     match at32 op with "addc" -> true | "subb" -> false | _ -> impossf "wrdop" in
   let flags  = (if is_add then adcflags else sbbflags) dv yv 32 in
   let arith  = R.store (temploc dst) (R.app (Up.opr op) [dv; yv; carrybit]) 32 in
   set_carry ~tmp:dst z <:> move dst x <:> rtl (R.par [arith; flags])
+@ 
+Getting the carry bit out is a real trip.
+We start with the instruction above, then play games with flags.
+And we have to fill the result as requested by the generic expander.
+We don't use [[Rewrite]] for the fills,  because we would miss
+the opportunity to use the Pentium's special immediate-shift instructions.
 <<x86 postexpander>>=
-let rcl _ = impossf "don't do this; you'll lose the carry flag!  use jcs!"
 let wrdrop  ~dst:(fill, dt) op x y z =
   let is_add =
     match at32 op with "carry" -> true | "borrow" -> false | _ -> impossf "wrdrop" in
@@ -468,11 +493,10 @@ let wrdrop  ~dst:(fill, dt) op x y z =
   rtl (R.store (temploc dt) (R.fetch eax 32) 32) <:>
   match fill with
   | PX.HighAny -> PX.Nop
-  | PX.HighZ -> 
-      PX.Expand.block (rtl (R.store (temploc dt) (Rewrite.zxlo 1 32 (tempval dt)) 32))
-  | PX.HighS ->
-      PX.Expand.block (rtl (R.store (temploc dt) (Rewrite.sxlo 1 32 (tempval dt)) 32))
+  | PX.HighZ   -> shift dt RO.shl 31 <:> shift dt RO.shrl 31  (* zxlo *)
+  | PX.HighS   -> shift dt RO.shl 31 <:> shift dt RO.shra 31  (* sxlo *)
 @ 
+\paragraph{Hardware registers}
 Setting the rounding mode is an experience.
 History:
 \begin{verbatim}
@@ -509,17 +533,15 @@ let hwset ~dst ~src =
 let hwget ~dst:(fill,dt) ~src =
   if Register.eqx src rounding_mode_reg then
     let slot      = PX.Alloc.slot 16 in
-    let shift op n =
-      rtl (R.store (temploc dt) (op 32 (tempval dt) (RO.unsigned 32 n)) 32) in
     rtl (slot.A.store (R.fetch Rg.fpuctl 16) 16) <:>                   (* fnstcw *)
     rtl (R.store (temploc dt) (RO.zx 16 32 (slot.A.fetch 16)) 32) <:>  (* movzwl *)
     match fill with
     | PX.HighAny ->
-        shift RO.shrl 10
+        shift dt RO.shrl 10
     | PX.HighZ ->
-        shift RO.shl 20 <:> shift RO.shrl 30
+        shift dt RO.shl 20 <:> shift dt RO.shrl 30
     | PX.HighS ->
-        shift RO.shl 20 <:> shift RO.shra 30
+        shift dt RO.shl 20 <:> shift dt RO.shra 30
   else
     impossf "getting unexposed hardware register"
 @ 
