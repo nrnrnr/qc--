@@ -369,6 +369,7 @@ function Test.run_test_case(inputs)
   local to_remove = { }
   local all_compiles_ok = 'true'
   inputs.diffs = ""
+
   while sources[i] do
     local file = sources[i]
     local s_file, so, se, compiles_ok = Test.compile_file(file, i)
@@ -383,7 +384,7 @@ function Test.run_test_case(inputs)
     Test.list_add(to_remove, s_file, so, se)
   end
 
-  if inputs.runnable and (Test.update or status > 0) then
+  if inputs.runnable and (Test.update or Test.force or inputs.force or status > 0) then
     if all_compiles_ok then
       local exe_file = Test.build_exe(inputs, s_files)
       if exe_file then
@@ -483,7 +484,12 @@ if eq(pso0, inputs.stdout) and eq(pse0, inputs.stderr) and
    (not eq(pso, inputs.stdout) or not eq(pse, inputs.stderr)) then
    -- everything is OK
 else
-  CMD.error("asked to isolate optimizer bug, but outputs won't work")
+  local o0 = eq(pso0, inputs.stdout) and "OK" or "not OK"
+  local e0 = eq(pse0, inputs.stderr) and "OK" or "not OK"
+  local o  = eq(pso, inputs.stdout)  and "useless" or "useful" 
+  local e  = eq(pse, inputs.stderr)  and "useless" or "useful" 
+  CMD.error(format("asked to isolate optimizer bug, but outputs won't work: \n" ..
+      "stdout0 %s; stderr0 %s; stdout %s; stderr %s\n", o0, e0, o, e))
 end
 @ 
 Binary search on files is unlikely to be worthwhile---linear search is

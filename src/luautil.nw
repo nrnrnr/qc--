@@ -202,34 +202,31 @@ converted into single space character using a simple one character
 buffer.
 <<utility functions>>=
 let files_nonwhite_equivalent f1 f2 =
-  let sp i = i == int_of_char ' '
-  and input_chr ch = int_of_char (
-    match input_char ch with
-    | ' ' | '\t' | '\n' | '\r' -> ' '
-    | c -> c)
-  in
-  let ch1 = (open_in f1, ref 0)
-  and ch2 = (open_in f2, ref 0) in
-  let rec get_char (ch,buf) =
-    let last = !buf in
-    let rec scan_forward () =
-      try let chr = input_chr ch in
-          if sp last && sp chr
-          then scan_forward ()
-          else buf := chr
-      with End_of_file -> buf := -1
-    in
-    scan_forward (); last
-  in
-  let rec cmp_char() =
-    let c1 = get_char ch1
-    and c2 = get_char ch2 in
-    if c1 == c2 then
-      if c1 == -1 then true
-      else cmp_char() 
-    else false
-  in
-  try cmp_char() with _ -> false
+  try
+    let sp i = i == int_of_char ' '
+    and input_chr ch = int_of_char (
+      match input_char ch with
+      | ' ' | '\t' | '\n' | '\r' -> ' '
+      | c -> c) in
+    let ch1 = (open_in f1, ref 0)
+    and ch2 = (open_in f2, ref 0) in
+    let rec get_char (ch,buf) =
+      let last = !buf in
+      let rec scan_forward () =
+        try let chr = input_chr ch in
+            if sp last && sp chr then scan_forward ()
+            else buf := chr
+        with End_of_file -> buf := -1 in
+      scan_forward (); last in
+    let rec cmp_char() =
+      let c1 = get_char ch1
+      and c2 = get_char ch2 in
+      if c1 == c2 then
+        if c1 == -1 then true
+        else cmp_char() 
+      else false in
+    cmp_char()
+  with _ -> false
 @
 
 The code below is actually implemented in Lua.  We stick this code into
