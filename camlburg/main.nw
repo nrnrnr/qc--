@@ -159,7 +159,7 @@ are nonterminals.
 
 In addition to the grammar above, a rule pattern must not be a literal
 number, literal string, or a terminal variable. Those can only appear as
-constructor arguments! 
+constructor arguments. 
 
     alpha       = ['a'-'z' 'A'-'Z']
     digit       = ['0'-'9']
@@ -168,9 +168,16 @@ constructor arguments!
 
 A I<string> is enclosed in double quotes, a I<number> is a non-negative
 integer, I<camlcode> is arbitrary code that may include properly nested
-pairs of B<{:> and B<:}>. An identifier must start with a character and
+pairs of C<{:> and C<:}>. An identifier must start with a character and
 can be followed by characters, numbers, and underscores. Comments start
-with two hypens and go to the end of the line.  Here is an example. 
+with two hyphens and go to the end of the line.  
+
+Certain identifier are keywords and cannot be used as variables or
+nonterminals: C<start>, C<term>, C<type>, C<head>. Two terminal types
+are predefined: C<int> and C<string>. They correspond to number and
+string literals.
+
+Here is an example for a specification:
 
     -- 
     -- sample.mlb
@@ -198,11 +205,11 @@ with two hypens and go to the end of the line.  Here is an example.
     str    : number                [1]    {: string_of_int number :}
     number : str                   [1]    {: int_of_string str    :}
 
-Code associated with a B<%head> declaration is copied verbatim to the
+Code associated with a C<%head> declaration is copied verbatim to the
 output. Its is used to declare type and values used by user code in the
-rules. A B<%term> declaration lists Objective Caml types used for
-variables in rules. In the example above, B<x:number> is a nonterminal
-variable, and B<x:string> is a terminal variable, because B<string> was
+rules. A C<%term> declaration lists Objective Caml types used for
+variables in rules. In the example above, C<x:number> is a nonterminal
+variable, and C<x:string> is a terminal variable, because C<string> was
 declared as a terminal type.
 
 A rule defines a nonterminal (type) that is to the left of the colon,
@@ -220,11 +227,11 @@ run-time, it computes a value of the nonterminal of its left hand side.
 A variable I<x> without a type annotation stands for a nonterminal
 variable I<x>B<:>I<x>. This often allows to omit types from
 nonterminals.  The two so-called chain rules at the end of the
-specification are an example: the B<number> variable in the first rule
-stands for B<number:number> and thus matches a B<number> nonterminal
+specification are an example: the C<number> variable in the first rule
+stands for C<number:number> and thus matches a C<number> nonterminal
 value. Chain rules are rules that have only a non-terminal variable as
 pattern. They provide conversions between nonterminal values: a
-B<number> nonterminal value can be converted into a B<str> nonterminal
+C<number> nonterminal value can be converted into a C<str> nonterminal
 value at cost one by the first rule. The two rules are recursive but the
 associated costs of one prevent that they are applied indefinitely.
 
@@ -276,19 +283,19 @@ constructor. For the example above, these are:
 To find the cheapest cover for a subject tree, the client walks over the
 subject tree and calls the appropriate function for the actual node: For
 every pattern constructor I<C> the generated code contains a function
-B<con>I<C>.  At a leave with an integer constant, it calls B<conCONST>.
-There are two rules for the B<CONST> constructor, depending on the
+C<con>I<C>.  At a leave with an integer constant, it calls C<conCONST>.
+There are two rules for the C<CONST> constructor, depending on the
 integer constant the generated code will select the cheaper one and
-return a value of type B<t>. This value represents the user-provided
+return a value of type C<t>. This value represents the user-provided
 code of the selected rule and the associated cost.  If the client comes
-to a node with an B<ADD> constructor, it calls B<conADD> and passes
+to a node with an C<ADD> constructor, it calls C<conADD> and passes
 values as arguments that were returned by the above functions when the
 child notes were visited. Finally, the client comes to the root node and
-receives a final B<t> value for it. This value represents the cheapest
+receives a final C<t> value for it. This value represents the cheapest
 cover for the subject tree. 
 
 Typically, the root node of a subject tree is covered only by a single
-nonterminal, for example the B<number> nonterminal. When the B<action>
+nonterminal, for example the C<number> nonterminal. When the C<action>
 for this nonterminal is triggered, the user action from the rules for
 the cheapest cover are computed:
 
@@ -296,19 +303,17 @@ the cheapest cover are computed:
     let t = conADD(left,right) in
         t.number.Camlburg.action ()     (* an int value *)
 
-The generated code thus has constructed a value B<t> that represents the
+The generated code thus has constructed a value C<t> that represents the
 cheapest set of rules (and therefore actions) that cover the walked
-tree. The B<action> field of the finally returned value gives access to
+tree. The C<action> field of the finally returned value gives access to
 the actions. In the example, the tree is some kind of expression tree
 and the constructed action is an evaluation. Because of the chain rules,
-tree that is covered by a B<number> value is also covered by a B<str>
+tree that is covered by a C<number> value is also covered by a C<str>
 value. This allows to obtain a string value as well:
 
     ...
     let t = conADD(left,right) in
         t.str.Camlburg.action ()        (* an string value *)
-
-
 
 =head1 SEE ALSO
 
