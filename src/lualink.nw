@@ -296,6 +296,8 @@ C.register_module "Block"
   ; "at",         V.efunc (Map.block **-> V.int **-> V.int 
                                      **-> V.option V.string
                                      **-> V.result Map.block) Block.Lua.at
+  ; "base",       V.efunc (Map.block **-> V.result V.string) Block.Lua.base
+  ; "constraints",V.efunc (Map.block **-> V.result (V.list V.string)) Block.Lua.constraints
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Boot" 
@@ -357,16 +359,12 @@ C.register_module "Simplify"
   ] g;
 
 <<register modules to [[g]] in alphabetical order>>=
-(* someone who groks the Lua map mechanism could rewrite the embedding
-   below of Stack.blocks: Proc.t -> (string * Block.t) list. I don't know
-   how to map string * Block.t into a table easily -- CL *)
 C.register_module "Stack"
-  [ "freeze",     V.efunc (Map.proc **-> Map.block **-> V.result V.unit) 
-                      Stack.freeze
-  ; "blocks",     V.efunc (Map.proc **-> V.result V.table)
-                  (let embed (str,blk) = (str, Map.block.V.embed blk)
-                   in fun p -> 
-                      V.Table.of_list (List.map embed (Stack.blocks p)))
+  [ "freeze",     V.efunc (Map.proc **-> Map.block **-> V.runit) Stack.freeze
+  ; "blocks",     V.efunc (Map.proc **-> V.result (V.record Map.block))  Stack.blocks
+  ; "new_freeze", V.efunc (Map.new_proc **-> Map.block **-> V.runit) Stack.new_freeze
+  ; "new_blocks", V.efunc (Map.new_proc **-> V.result (V.record Map.block))
+                  Stack.new_blocks
   ] g;                    
 @ 
 PERHAPS THIS CODE SHOULD REPLACE THE SOMEWHAT HEAVYWEIGHT [[Asm.dot]]???
@@ -384,6 +382,8 @@ C.register_module "Stages"
           (Cfgutil.new_cfg2dot ~compress:true ~live:true ~name:proc.Proc.symbol#mangled_text proc.Proc.cfg);
         flush stderr;
         true)
+  ; "replace_vfp", V.efunc (V.value **-> Map.new_proc **-> V.result V.bool)
+      (fun _ proc -> proc.Proc.cc.Call.replace_vfp proc.Proc.cfg; true)
   ]  g;
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Targets"

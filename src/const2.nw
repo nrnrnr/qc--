@@ -1,3 +1,4 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 % vim: ts=8 sw=4 et:
 %
 % Grades     ::=    "%%Grades:" Quality Importance Urgency
@@ -94,11 +95,23 @@ To aid debugging, we like to have a printable representation of terms.
 <<const2.ml>>=
 module ToString = struct
     let term = function
-        | Const(exp) -> "const:" (* ^ (Rtlutil.ToString.exp exp) *)
+        | Const(exp) -> "(" ^ Rtlutil.ToReadableString.exp exp ^ ")"
         | Var(s)     -> s
-        | Unit       -> "unit"
-    let summand (i,t) = Printf.sprintf "(%d,%s)" i (term t)
-    let t sum         = String.concat "+" (List.map summand sum)
+        | Unit       -> "1"
+    let summand (i,t) = match i with
+        | 1 -> term t
+        | n ->
+            match t with
+            | Unit -> Printf.sprintf "%d" i
+            | _    -> Printf.sprintf "%d * %s" i (term t) 
+    let t sum = (* no thought for efficiency *)
+      let pos = List.filter (fun (i, n) -> i >= 0)  sum in
+      let neg = List.filter (fun (i, n) -> i <  0)  sum in
+      let neg = List.map    (fun (i, n) -> (-i, n)) neg in
+      let side = function
+        | [] -> "0"
+        | sum -> String.concat " + " (List.map summand sum) in
+      side pos ^ " = " ^ side neg
 end
 let to_string = ToString.t
 @

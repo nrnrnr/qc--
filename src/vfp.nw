@@ -134,10 +134,16 @@ assignment can be optimized away.
 val mk : Rtl.width -> Rtl.exp
 type x
 val mkx : unit -> x
-module Make (G : Cfg.S with type X.jx = x) : sig
+module type ARG = sig
+  module G : Cfg.S
+  val jx : G.X.jx -> x
+end
+module type S = sig
+  module G : Cfg.S
   val replace_with : sp:Rtl.loc -> Rtl.rtl G.cfg -> unit
     (* useful to partially apply *)
 end
+module Make (Arg : ARG) : S with module G = Arg.G
 @ 
 <<vfp.ml>>=
 module RP = Rtl.Private
@@ -149,6 +155,15 @@ let is_vfp = function
 <<vfp.ml>>=
 type x = { mutable vfp_minus_sp : int } (* max_int represents unknown *)
 let mkx () = { vfp_minus_sp = max_int }
+module type ARG = sig
+  module G : Cfg.S
+  val jx : G.X.jx -> x
+end
+module type S = sig
+  module G : Cfg.S
+  val replace_with : sp:Rtl.loc -> Rtl.rtl G.cfg -> unit
+    (* useful to partially apply *)
+end
 @ 
 We replace $\vfp$ by $\sp+k$ using the identity
 $\vfp = \sp + (\vfp - \sp)$.
@@ -156,7 +171,9 @@ $\vfp = \sp + (\vfp - \sp)$.
 module R  = Rtl
 module RU = Rtlutil
 module Down = Rtl.Dn
-module Make (G : Cfg.S with type X.jx = x) = struct
+module Make (Arg : ARG) = struct
+  module G = Arg.G
+  let jx node = (Arg.jx (G.jx node))
   module D  = Dataflow.Make (G)
   let replace_with ~sp =
     let w = RU.Width.loc sp in
@@ -167,10 +184,10 @@ module Make (G : Cfg.S with type X.jx = x) = struct
     let sp_plus k = Down.exp (sp_plus k) in
     <<supporting functions>> in
     let info node =
-      let k = (G.jx node).vfp_minus_sp in
+      let k = (jx node).vfp_minus_sp in
       sp_plus k, k in
     let merge node (vfp, k) =
-      let x = G.jx node in
+      let x = jx node in
       if x.vfp_minus_sp = k then false
       else if x.vfp_minus_sp = max_int then (x.vfp_minus_sp <- k; true)
       else Impossible.impossible "inconsistent stack-pointer location" in
@@ -181,7 +198,9 @@ module Make (G : Cfg.S with type X.jx = x) = struct
       | Some i ->
           let rtl = Down.rtl i in
           if RU.HasLoc.rtl is_vfp rtl then
-            G.update_instr (fun rtl -> Rtleval2.rtl (replace_vfp vfp rtl)) node;
+            (let simp = if G.kind node = G.StackAdjust then Rtleval2.Unsafe.rtl
+                       else Rtleval2.rtl in
+             G.update_instr (fun rtl -> simp (replace_vfp vfp rtl)) node);
           let vfp, k = note_sp_changes rtl vfp k in
           vfp, k in
     let fwd = D.fwd_iteration { D.split_info = info; D.merge_split_info = merge

@@ -139,6 +139,8 @@ module Lua: sig
     val cat:        Rtl.width -> t list -> t
     val overlap:    (string -> placement) -> Rtl.width -> string -> t list -> t
     val at:         t -> int (*size*) -> int -> string option -> t
+    val base:       t -> string  (* show base address *)
+    val constraints:t -> string list
 end
 @
 
@@ -301,5 +303,6 @@ let at block size alignment name =
     let addr  = offset (base block) name width in
         at addr size alignment
 @
-
-
+<<Block primitives for Lua>>=
+let base block = Rtlutil.ToReadableString.exp (base block)
+let constraints block = List.map Const2.to_string (constraints block)

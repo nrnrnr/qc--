@@ -58,39 +58,27 @@ module Make (G : Cfg.S) = struct
   <<iteration functions>>
 end
 @ 
+Revised to use the new flow-graph traversal.
 <<iteration functions>>=
 let fwd_iteration {split_info=join_info; merge_split_info= merge_join_info;
                    init_info= init_info; propagate= propagate} g =
   let changed = ref false in
   let merge_join_info n i = if merge_join_info n i then changed := true in
+  let heads = G.postorder_dfs (fun n hs -> if G.is_head n then n :: hs else hs) [] g in
   <<forward solver functions>> in
-  follow_all (continue (G.entry g) init_info emptyqueue emptyset) emptyset;
+  List.iter follow heads;
   !changed
 
 <<forward solver functions>>=
-let rec continue node info to_follow followed =
+let rec continue info node =
   if G.is_join node then
-    let join = node in
-    let to_follow =
-      if member join followed || G.kind join = G.Exit then to_follow
-      else enqueue join to_follow in
-    begin
-      merge_join_info join info;
-      to_follow
-    end
+    merge_join_info node info
   else
     let info = propagate node info in
-    List.fold_left (fun to_f s -> continue s info to_f followed)
-                   to_follow (G.succs node)  in
-
-let rec follow join to_follow followed =
-  let to_follow = continue (G.succ join) (join_info join) to_follow followed in
-  follow_all to_follow (add join followed)
-and follow_all to_follow followed =
-  dequeue to_follow
-    (fun j js ->
-      if member j followed then follow_all js followed else follow j js followed)
-    (fun () -> ())
+    List.iter (continue info) (G.succs node) 
+and follow head =
+  let info = if G.is_join head then join_info head else init_info in
+  continue info (G.succ head)
 @ 
 <<iteration functions>>=
 let bwd_iteration {split_info=fork_info; merge_split_info= merge_fork_info;

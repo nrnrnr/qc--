@@ -154,13 +154,13 @@ let app o w args = match o with
     |  "funordered" 	-> default o w args
     |  "ge" 		-> default o w args
     |  "geu" 		-> default o w args
-    |  "gt" 		-> default o w args
+    |  "gt" 		-> gt  w args
     |  "gtu" 		-> gtu w args
     |  "i2f" 		-> default o w args
     |  "le" 		-> default o w args
     |  "leu" 		-> default o w args
     |  "lobits" 	-> default o w args
-    |  "lt" 		-> default o w args
+    |  "lt" 		-> lt w args
     |  "ltu" 		-> ltu w args
     |  "minf" 		-> default o w args
     |  "mod" 		-> default o w args
@@ -225,14 +225,16 @@ let rtl (RP.Rtl(es))                = RP.Rtl(List.map guarded es)
 and $k$ a constant, and returns either boths as a pair, or [[None]].
 
 <<unsafe RTL simplification>>=
+let zero w = RP.Bits (Bits.U.of_int 0 w)
 let reg_offset = function
     | RP.App(("add", _), [RP.Fetch(RP.Reg(r),_); RP.Const(k)]) -> Some (r,k)
+    | RP.Fetch(RP.Reg r, w)                                    -> Some (r, zero w)
     | _                                                        -> None
 @
 
 <<unsafe RTL simplification>>=
 let rec app o w args = match Safe.app o w args with
-    | RP.App (("eq"|"ltu"|"gtu" as op, w),
+    | RP.App (("eq"|"ltu"|"gtu"|"lt"|"gt" as op, w),
         [ RP.App(("add", _), [RP.Fetch(RP.Reg(r1),_); RP.Const(_) as k1 ])
         ; RP.App(("add", _), [RP.Fetch(RP.Reg(r2),_); RP.Const(_) as k2 ])
         ]) when r1 = r2 -> app op w [k1;k2]
@@ -372,13 +374,23 @@ let sx w args   = match (w,args) with
 
 let ltu w args  = match args with
     | [x;y] when is_bits x && is_bits y
-                -> to_bool (uint64 x <= uint64 y)
+                -> to_bool (uint64 x < uint64 y)
     | _         -> default "ltu" w args
 
 let gtu w args  = match args with
     | [x;y] when is_bits x && is_bits y
-                -> to_bool (uint64 x >= uint64 y)
+                -> to_bool (uint64 x > uint64 y)
     | _         -> default "gtu" w args
+
+let lt w args  = match args with
+    | [x;y] when is_bits x && is_bits y
+                -> to_bool (int64 x < int64 y)
+    | _         -> default "lt" w args
+
+let gt w args  = match args with
+    | [x;y] when is_bits x && is_bits y
+                -> to_bool (int64 x > int64 y)
+    | _         -> default "gt" w args
     
 
 @

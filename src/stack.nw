@@ -18,6 +18,9 @@ The functions exported here are bound to Lua functions in module
 <<stack.mli>>=
 val blocks: Proc.t -> (string * Block.t) list
 val freeze: Proc.t -> Block.t -> unit
+
+val new_blocks: Ast2ir.proc -> (string * Block.t) list
+val new_freeze: Ast2ir.proc -> Block.t -> unit
 @
 
 % ------------------------------------------------------------------ 
@@ -40,7 +43,7 @@ pointer and the virtual frame pointer respectively. It can be
 therefore used by the frame-assembling Lua function to define where the
 stack pointer points into the frame. 
 <<stack.ml>>=
-let blocks (p:Proc.t) =
+let blocks' frozen_block p =
     let cc  = p.Proc.cc                        in
     let vfp = p.Proc.target.Target.vfp         in
         [ "sp"              , p.Proc.sp
@@ -48,27 +51,24 @@ let blocks (p:Proc.t) =
         ; "incoming"        , p.Proc.incoming
         ; "stackdata"       , p.Proc.stackd            
         ; "continuations"   , p.Proc.conts
-        ; "spills"          , AT.freeze p.Proc.priv 
+        ; "spills"          , frozen_block p.Proc.priv 
         ; "outgoing"        , p.Proc.outgoing
         ]
+
+let new_blocks = blocks' (fun a -> (Automaton.freeze a).Automaton.overflow)
+let blocks     = blocks' Automaton2.freeze
         
 
-let freeze (p:Proc.t) (stack:Block.t) = 
+let freeze' apply_to_cfg p (stack:Block.t) = 
     let pointer  = p.Proc.target.Target2.pointersize in            
     let eqns     = p.Proc.eqns @ (Block.constraints stack) in
     let solution = 
         try Const2.solve pointer eqns 
-        with Const2.Can'tSolve -> Impossible.impossible 
-                ("can't solve equations in "^ p.Proc.symbol#mangled_text)    
-    in            
-    let ()       = assert (solution.Const2.dependent = []) in
-    let ()       = assert (solution.Const2.known <>    []) in
-    let map      = Strutil.assoc2map solution.Const2.known     in
-    (*
-     * let ()       = List.iter 
-     *               (fun (key,_) -> Printf.printf "%s\n" key) 
-     *                solution.Const2.known in 
-     *)
+        with Const2.Can'tSolve -> <<complain of unsolved [[eqns]] for [[p]]>> in
+    let null = function [] -> true | _ :: _ -> false in
+    let ()   = assert (null solution.Const2.dependent)   in
+    let ()   = assert (not (null solution.Const2.known)) in
+    let map  = Strutil.assoc2map solution.Const2.known     in
     (* The guard protects the subst function. If the guard is true
      * the subst function is applied to an expression *)
     let guard    = function
@@ -84,9 +84,18 @@ let freeze (p:Proc.t) (stack:Block.t) =
                 if false then e else Impossible.impossible ("cannot find: "^x)
             )  
         | x -> x in
-    let () = Cfgutil.subst p.Proc.cfg (Rtlutil.Subst2.exp ~guard ~map:subst)
-    and () = Cfgutil.subst p.Proc.cfg Rtleval2.rtl (* const folding *)
-    in
-        ()
-@
+    apply_to_cfg (Rtlutil.Subst2.exp ~guard ~map:subst) p.Proc.cfg
 
+let (<<) f g = fun x -> f (g x)
+let freeze = freeze' (fun f g -> Cfgutil.subst g (Rtleval2.rtl << f))
+
+let new_freeze =
+  let module G = Cfgx.M in
+  freeze' (fun f g -> G.iter_nodes (G.update_instr (fun i -> Rtleval2.rtl (f i))) g)
+  (* unsafe simplifier is not needed until vfp is replaced *)
+@
+<<complain of unsolved [[eqns]] for [[p]]>>=
+let eqns = List.map Const2.to_string eqns in
+Impossible.impossible 
+  ("for procedure " ^ p.Proc.symbol#original_text ^ "; can't solve these eqns:\n" ^
+   String.concat "\n" eqns)

@@ -166,6 +166,7 @@ type t = (* part of a calling convention *)
           and should be set to on arrival at a continuation *)
 
   ; stack_growth : Memalloc.growth
+  ; replace_vfp  : Rtl.rtl Cfgx.M.cfg -> unit
 (*    ; sp : Rtl.loc                      (* stack pointer *)  *)
   ; sp_align        : int             (* alignment of stack pointer at call/cut *)
   ; ra : Rtl.loc                      (* where return address is on entry *)
@@ -184,10 +185,12 @@ We have the beginnings of an implementation that computes incoming and
 outgoing stuff.  The [[relative_to]] parameter is pure hell and not obvious
 to the amateur.  The [[postsp]] parameter is a bit tricky too.
 <<call.mli>>=
-val outgoing : growth:Memalloc.growth -> sp:Rtl.loc -> spec:(Rtl.exp -> Automaton.t) ->
+val outgoing : what:string ->
+     growth:Memalloc.growth -> sp:Rtl.loc -> spec:(Rtl.exp -> Automaton.t) ->
      autosp:(Automaton.result -> Rtl.exp) ->
      postsp:(Rtl.exp -> Rtl.exp) -> relative_to:Rtl.exp -> outgoing
-val incoming : growth:Memalloc.growth -> sp:Rtl.loc -> spec:(Rtl.exp -> Automaton.t) ->
+val incoming : what:string ->
+     growth:Memalloc.growth -> sp:Rtl.loc -> spec:(Rtl.exp -> Automaton.t) ->
      autosp:(Automaton.result -> Rtl.exp) ->
      postsp:(Rtl.exp -> Rtl.exp) -> relative_to:Rtl.exp -> incoming
 @ 
@@ -212,8 +215,8 @@ let too_small growth sp target =
   | Memalloc.Down -> RU.fetch sp >* target
   | Memalloc.Up   -> RU.fetch sp <* target
 
-let outgoing ~growth ~sp ~spec ~autosp ~postsp ~relative_to types actuals =
-    let a = spec relative_to in
+let outgoing ~what ~growth ~sp ~spec ~autosp ~postsp ~relative_to types actuals =
+    let a = Block.relative relative_to (what ^ " out ovfl") (fun ~base -> spec base) in
     let crank effects' (h, w) actual =
       let l = A.allocate a w h in
       A.store l actual w :: effects' in
@@ -231,8 +234,8 @@ let outgoing ~growth ~sp ~spec ~autosp ~postsp ~relative_to types actuals =
     ; pre_sp   = R.guard (too_small growth sp postsp) setsp
     }
 
-let incoming ~growth ~sp ~spec ~autosp ~postsp ~relative_to types formals =
-    let a = spec relative_to in
+let incoming ~what ~growth ~sp ~spec ~autosp ~postsp ~relative_to types formals =
+    let a = Block.relative relative_to (what ^ " in ovfl") (fun ~base -> spec base) in
     let crank effects' (h, w) formal =
       let l = A.allocate a w h in
       A.store formal (A.fetch l w) w :: effects' in

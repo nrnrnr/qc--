@@ -122,24 +122,24 @@ let add  = RU.add  32
 let std_sp_location = add vfp (R.late "frame size" 32)
 let spval = R.fetch sp 32
 let call_actuals  =
-  C.outgoing ~growth ~sp ~spec:arguments
+  C.outgoing ~what:"call" ~growth ~sp ~spec:arguments
     ~autosp:(fun r -> Block.base r.A.overflow)
     ~postsp:(fun _ -> std_sp_location)
     ~relative_to:vfp
 let prolog  =
-  C.incoming ~growth ~sp ~spec:arguments
+  C.incoming ~what:"prolog" ~growth ~sp ~spec:arguments
     ~autosp:(fun r -> addk (Block.base r.A.overflow) (-4))
     ~postsp:(fun _ -> std_sp_location)
     ~relative_to:vfp
 @ 
 <<x86call.ml>>=
 let call_results  =
-  C.incoming ~growth ~sp ~spec:results
+  C.incoming ~what:"results" ~growth ~sp ~spec:results
     ~autosp:(fun r -> Block.base r.A.overflow)
     ~postsp:(fun _ -> std_sp_location)  (* irrelevant? *)
     ~relative_to:vfp
 let epilog  =
-  C.outgoing ~growth ~sp ~spec:results
+  C.outgoing ~what:"epilog" ~growth ~sp ~spec:results
     ~autosp:(fun r -> Block.base r.A.overflow)
     ~postsp:(fun _ -> vfp)  (* irrelevant *)
     ~relative_to:vfp
@@ -165,13 +165,13 @@ let cut_args base =
              ~growth:Memalloc.Up ~max_alignment:sp_align
 
 let cut_actuals base  =
-  C.outgoing ~growth ~sp ~spec:arguments
+  C.outgoing ~what:"cut to" ~growth ~sp ~spec:arguments
     ~autosp:(fun r -> spval)
     ~postsp:(fun _ -> spval)
     ~relative_to:base  (* BAD -- WILL LEAD TO UNSOLVED CONSTRAINT!! *)
 
 let also_cuts_to =
-  C.incoming ~growth ~sp ~spec:arguments
+  C.incoming ~what:"continuation" ~growth ~sp ~spec:arguments
     ~autosp:(fun r -> std_sp_location)
     ~postsp:(fun _ -> std_sp_location)
     ~relative_to:vfp
@@ -193,6 +193,7 @@ let c ~return_to cut =
 
   ; C.stack_growth    = Memalloc.Down
   ; C.stable_sp_loc   = std_sp_location
+  ; C.replace_vfp     = Cfgx.Vfp.replace_with ~sp
   ; C.sp_align        = 4               (* alignment of stack pointer at call/cut *)
   ; C.ra              = ra              (* where return address is on entry *)
   ; C.nvregs          = nvregs          (* registers preserved across calls *)

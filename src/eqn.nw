@@ -1,3 +1,4 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 % vim:ts=8 sw=4 et:
 
 % Grades     ::=    "%%Grades:" Quality Importance Urgency
@@ -225,17 +226,21 @@ denote variables. It helped to track down some bugs, though.
 
 <<Make>>=
 let dump t =
-    let product (i,term) = Printf.printf "(%d,%s)" i (E.print term) in
+    let product (i,term) =
+        if i = 1 then
+	    Printf.printf "%s"        (E.print term) 
+	else
+ 	    Printf.printf "%d * %s" i (E.print term) in
     let eqn s =
         ( Printf.printf "0 = "; List.iter product s; Printf.printf "\n")in
     let assoc (v,sum) =
         ( Printf.printf "%s :-> " v; List.iter product sum; Printf.printf "\n") 
     in
-        ( Printf.printf "Eqn.t:\n"
+        ( Printf.printf "Eqn.t: unsolved equations\n"
         ; List.iter eqn t.set    
-        ; Printf.printf "---\n"
+        ; Printf.printf "------ solved variables:\n"
         ; List.iter assoc t.env
-        ; Printf.printf "---\n"
+        ; Printf.printf "------ Eqn.t ends\n"
         ; flush stdout
         )
 @

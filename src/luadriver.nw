@@ -251,6 +251,45 @@ function Stack.layout(dummy,proc)
     Stack.freeze(proc,block)
     return 1
 end    
+@ 
+The new layout supports the virtual frame pointer.
+<<Lua Boot Script>>=
+Debug = Debug or {}
+function Debug.showblocks(blocks, keys)
+  local i = 1
+  while keys[i] do
+    local block = blocks[keys[i]]
+    write(format('block %13s is %d bytes at %s\n',
+                 keys[i], Block.size(block), Block.base(block)))
+    local constraints = Block.constraints(block)
+    local j = 1
+    while constraints[j] do
+      write(format('  where %s\n', constraints[j]))
+      j = j + 1
+    end
+    i = i + 1
+  end
+end
+
+function Stack.new_layout(dummy,proc) --- really for a C convention only
+    local blocks = Stack.new_blocks(proc)
+    local layout = 
+                { blocks.incoming               -- <-- high addresses
+                , blocks.vfp
+                , blocks.stackdata
+                , blocks.continuations
+                , blocks.spills
+                , blocks.outgoing
+                , blocks.sp                     -- <-- low addresses 
+                }
+    if Debug.stack then
+      Debug.showblocks (blocks, {'incoming', 'vfp', 'stackdata', 'continuations',
+                                 'spills', 'outgoing', 'sp'})
+    end
+    local block = Block.cat(999, layout)
+    Stack.new_freeze(proc,block)
+    return 1
+end    
 @
 
 
@@ -317,6 +356,7 @@ function Opt.standard(backend, asm, B)
     , backend.liveness   or Stages.null
     , backend.ralloc     or Stages.null
     , backend.freeze     or Stages.null
+    , backend.rmvfp      or Stages.null
     , B.stage { name="assemble procedure", fn = Driver.proc_assembler(asm) }
     } 
 --verbose('built a standard optimizer with ', whichB(B), '\n')
@@ -374,7 +414,8 @@ Backend.new_x86 =
   , expand    = Expander.new_x86
   , liveness  = Liveness.new_liveness
   , ralloc    = Ralloc.new_color
-  , freeze    = nil -- Stack.layout
+  , freeze    = Stack.new_layout
+  , rmvfp     = Stages.replace_vfp
   , asm       = Asm.new_big_dot -- Asm.new_x86
   , emit      = Driver.assemble
   }   

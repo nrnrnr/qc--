@@ -361,9 +361,13 @@ val kind       : 'i node -> kind
 val eq         : 'i node -> 'i node -> bool
 @ 
 We can also ask particular predicates that relate to the kind.
+A join node includes the exit node.
+A \emph{head} node is the head of an extended basic block; it is
+either the entry node or a join node that is not the exit node.
 <<graph and node observers>>=
 val is_join    : 'i node -> bool
 val is_fork    : 'i node -> bool
+val is_head    : 'i node -> bool
 @ 
 We can ask for a label, or for all the labels, on a join node.
 <<graph and node observers>>=
@@ -838,6 +842,9 @@ let kind node = match node with
 
 let is_join node = match node with
   | Joi _ | Exi _ -> true
+  | _             -> false
+let is_head node = match node with
+  | Joi _ | Ent _ -> true
   | _             -> false
 let is_fork node = match node with
   | Cbr _ | Mbr _ | Cal _ | Cut _ | Imp _ -> true

@@ -115,6 +115,11 @@ identity pair.  We also enable functions that expect tables.
 <<signatures>>=
   val value  : value map
   val table  : table map
+@ 
+A common case is to use a table as a record, with string keys
+and homogenous values.
+<<signatures>>=
+  val record : 'a map -> (string * 'a) list map
 @
 Here is the support for converting functions.
 First, if one wants a Lua function to be curried (as the Caml
@@ -368,6 +373,21 @@ let value = { embed = (fun x -> x); project = (fun x -> x) }
 let table = { embed = (fun x -> Table x)
             ; project = (function Table t -> t | v -> raise (Projection (v, "table")))
             }
+@ 
+<<value toplevel>>=
+let projectRecord ty v = match v with
+| Table t ->
+    let rec addpairs (k, v) =
+      (string.project v, ty.project v) ::
+      try addpairs (Luahash.next t k) with Not_found -> [] in
+    (try addpairs (Luahash.first t) with Not_found -> [])
+| _ -> raise (Projection (v, "table (as record)"))
+  
+let record ty =
+  { embed = (fun pairs ->
+             Table (Table.of_list (List.map (fun (k, v) -> (k, ty.embed v)) pairs)))
+  ; project = projectRecord ty
+  } 
 @ 
 Here is a simple function from one argument to one result.
 We implement the usual Lua game of ``adjusting'' the argument list.
