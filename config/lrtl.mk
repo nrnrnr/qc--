@@ -1,13 +1,15 @@
 # things we can do using \-RTL
 
+# imports LRTLHEAP and MACHINEREGEX
+
 LRTL=lrtl -lower
 
-%.ml %.mli: %.sled %.rtl $LRTLHEAP
-	$LRTL -inst $stem
+^($MACHINEREGEX).ml'$' ($MACHINEREGEX).mli'$':R: '\1'.sled '\1'.rtl $LRTLHEAP
+	$LRTL -inst $stem1
 
-%rec.ml: %.sled %.rtl $LRTLHEAP
-	$LRTL -recog4 $stem
+^($MACHINEREGEX)rec.ml'$':R: '\1'.sled '\1'.rtl $LRTLHEAP
+	$LRTL -recog4 $stem1
 
-%mkasm.ml %mkasm.mli: %.sled $LRTLHEAP
-	$LRTL -emitasm $stem
+^($MACHINEREGEX)mkasm.ml'$' ($MACHINEREGEX)mkasm.mli'$':R: '\1'.sled $LRTLHEAP
+	$LRTL -emitasm $stem1
 
