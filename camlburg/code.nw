@@ -15,8 +15,8 @@ Caml and a pretty printer to emit it.
 type loc = string * int * int
 
 type ty =           (* very incomplete *)
-    | TyVar         of string       (* 'a  *)
-    | TyID          of string       (* int *)
+    | TyVar         of string                       (* 'a  *)
+    | Ty            of ty list * string             (* ('a,int) foo *)
 
 type tyrep =        (* incomplete *)
     | TyProd        of (bool * string * ty) list       (* true == mutable *)
@@ -62,6 +62,7 @@ functions come to our rescue.
 
 <<values>>=
 val tyvar:      string -> ty
+val ty:         ty list -> string -> ty
 val typrod:     (bool * string * ty) list -> tyrep
 
 val def:        (string * exp) list -> toplevel
@@ -123,7 +124,7 @@ end
 
 <<convenience functions>>=
 let tyvar name              = TyVar  name
-let tyid  name              = TyID   name 
+let ty vs name              = Ty(vs,name)
 let typrod binds            = TyProd binds 
 
 let def bindings            = Def bindings
@@ -183,8 +184,15 @@ let rec tybinding (mtbl, x, e) =
     end
 
 and ty = function
-    | TyVar x -> tyvar x
-    | TyID x  -> P.text x
+    | TyVar x   -> tyvar x
+    | Ty([],x)  -> P.text x
+    | Ty(vs,x)  -> 
+        P.agrp begin
+        ~~ P.text "("
+        ^^ indent (P.list (P.text "," ^^ P.break) ty vs)
+        ^/ P.text ")"
+        ^/ P.text x
+        end
 
 let tyrep = function
     | TyProd (binds) ->
