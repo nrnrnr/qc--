@@ -93,13 +93,29 @@ $x{build_interp} = ""  ;         # whether we build qc--interp
 # for file in dirs and return, full path, if found, and "" otherwise.
 #
 
-sub search {
-    my $file = shift (@_);
-    
+sub search { search_with( sub($) { return (-f shift) }, @_) }
+
+sub searchx {
+    my $f = sub($) {
+        my $x = shift;
+        if (-f $x) {
+            `$x a -nt b 2>&1 > /dev/null`;
+            $r = $? ^ 0x100;
+            return ($r == 0 || $r == 1);
+        }
+        return (1==2); # how do you write false in perl?
+    };
+    search_with($f, @_)
+}
+
+sub search_with {
+    my $p    = shift;
+    my $file = shift;
+   
     printf(LOG "searching for %-20s", $file); 
     while ($f = shift (@_)) {
         my $x = "$f/$file";
-        if (-f $x) { 
+        if (&$p($x)) { 
             print LOG "found $x\n"; 
             return $x 
         }
@@ -108,26 +124,6 @@ sub search {
     return "";
 }
 
-# blarg
-
-sub searchx {
-    my $file = shift (@_);
-
-    printf(LOG "searching for %-20s", $file); 
-    while ($f = shift (@_)) {
-        my $x = "$f/$file";
-        if (-f $x) {
-            `$x a -nt b 2>&1 > /dev/null`;
-            $r = $? ^ 0x100;
-            if ($r == 0 || $r == 1) {
-                print LOG "found $x\n";
-                return $x;
-            }
-        }
-    }
-    print LOG "not found\n";
-    return "";
-}
 
 #
 # compile and run a small C program to find out about architecture
