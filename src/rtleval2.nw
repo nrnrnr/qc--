@@ -18,11 +18,23 @@ possible to minimize computation at run-time. This module provides
 routines to evaluate {\rtl} expressions and to simplify {\rtl}s by
 evaluating expressions inside of them. The promise is, that the returned
 {\rtl}s and expressions are simpler as the ones provided.
+
 <<rtleval2.mli>>=
 val rtl:    Rtl.rtl -> Rtl.rtl
 val exp:    Rtl.exp -> Rtl.exp
 val bits:   Rtl.exp -> Bits.bits    (* Error.ErrorExn, convenient function *)
 val bool:   Rtl.exp -> bool         (* Error.ErrorExn, convenient function *)
+@
+
+The [[Unsafe]] module provides an simplification of {\rtl}s tries to
+evaluate guarding expressions by elimination of registers in relations
+of the form $r+k = r+k'$. However, this elimination is not semantics
+preserving if the $r+k$ would overflow, but $k$ not.  
+
+<<rtleval2.mli>>=
+module Unsafe: sig
+    val rtl:    Rtl.rtl -> Rtl.rtl
+end
 @
 
 We export the list of operators we can evaluate at compile time. 
@@ -47,32 +59,44 @@ module RP = Rtl.Private
 module D  = Rtl.Dn 
 module U  = Rtl.Up
 
+exception Error of string
 type reloc     = Bits.bits RS.relocatable
+
+let error msg  = raise (Error msg)
 let impossible = Impossible.impossible
 
-module Private = struct
-    exception Error of string
-    let error msg = raise (Error msg)
-
+module Safe = struct
     <<RTL operator implementations>>
     <<traverse RTL>>
 end    
 @
 
+The [[Unsafe]] module implements a more agressive simplification of
+{\rtl}s that requires certain pre-conditions to be met. In particular,
+it tries to evaluate guarding relational expressions like $r+k < r+k'$.
+The simplification assumes that it is safe to eliminate the $r$ on both
+sides of the $<$ operator.
+
+<<rtleval2.ml>>=
+module Unsafe = struct
+    <<unsafe RTL simplification>>
+end
+@
+
 The exported function work on the public representation of {\rtl}s
 
 <<rtleval2.ml>>=
-let rtl r  = try U.rtl (Private.rtl (D.rtl r))
-             with Private.Error msg -> Impossible.impossible msg
+let rtl r  = try U.rtl (Safe.rtl (D.rtl r))
+             with Error msg -> Impossible.impossible msg
 
-let exp e  = try U.exp (Private.exp (D.exp e))
-             with Private.Error msg -> Impossible.impossible msg
+let exp e  = try U.exp (Safe.exp (D.exp e))
+             with Error msg -> Impossible.impossible msg
 
-let bits e = match Private.exp (D.exp e) with
+let bits e = match Safe.exp (D.exp e) with
              | RP.Const(RP.Bits(b)) -> b
              | _                    -> Error.error "not a constant value"
              
-let bool e = match Private.exp (D.exp e) with
+let bool e = match Safe.exp (D.exp e) with
              | RP.Const(RP.Bool(b)) -> b
              | _                    -> Error.error "not a constant condition"
 
@@ -131,13 +155,13 @@ let app o w args = match o with
     |  "ge" 		-> default o w args
     |  "geu" 		-> default o w args
     |  "gt" 		-> default o w args
-    |  "gtu" 		-> default o w args
+    |  "gtu" 		-> gtu w args
     |  "i2f" 		-> default o w args
     |  "le" 		-> default o w args
     |  "leu" 		-> default o w args
     |  "lobits" 	-> default o w args
     |  "lt" 		-> default o w args
-    |  "ltu" 		-> default o w args
+    |  "ltu" 		-> ltu w args
     |  "minf" 		-> default o w args
     |  "mod" 		-> default o w args
     |  "modu" 		-> default o w args
@@ -192,6 +216,49 @@ let effect = function
 let guarded (e, eff)                = (exp e, effect eff)
 let rtl (RP.Rtl(es))                = RP.Rtl(List.map guarded es)
 @
+
+% ------------------------------------------------------------------ 
+\subsection{Unsafe Simplification}
+% ------------------------------------------------------------------ 
+
+[[reg_offset]] recognizes a $r+k$ expression, where $r$ is a register
+and $k$ a constant, and returns either boths as a pair, or [[None]].
+
+<<unsafe RTL simplification>>=
+let reg_offset = function
+    | RP.App(("add", _), [RP.Fetch(RP.Reg(r),_); RP.Const(k)]) -> Some (r,k)
+    | _                                                        -> None
+@
+
+<<unsafe RTL simplification>>=
+let rec app o w args = match Safe.app o w args with
+    | RP.App (("eq"|"ltu"|"gtu" as op, w),
+        [ RP.App(("add", _), [RP.Fetch(RP.Reg(r1),_); RP.Const(_) as k1 ])
+        ; RP.App(("add", _), [RP.Fetch(RP.Reg(r2),_); RP.Const(_) as k2 ])
+        ]) when r1 = r2 -> app op w [k1;k2]
+    | x -> x    
+        
+let rec exp = function
+    | RP.Const _ as c               -> c
+    | RP.Fetch (l, w)               -> RP.Fetch (loc l, w)
+    | RP.App ((o,w),args)           -> app o w (List.map exp args) 
+        
+and loc = function
+    | RP.Mem(sp, agg, w, e, ass)    -> RP.Mem(sp, agg, w, exp e, ass)
+    | RP.Slice(w,i,l)               -> RP.Slice(w, i, loc l)
+    | RP.Reg(sp, i, w) as v         -> v
+    | RP.Var(s,i,w) as v            -> v
+
+let effect = Safe.effect
+
+let guarded (e, eff)                = (exp e, effect eff)
+let rtl' (RP.Rtl(es))               = RP.Rtl(List.map guarded es)
+
+let rtl r  = try U.rtl (rtl' (D.rtl r)) 
+             with Error msg -> Impossible.impossible msg
+
+@
+
 % ------------------------------------------------------------------ 
 \subsection{RTL Operator Implementations}
 % ------------------------------------------------------------------ 
@@ -201,6 +268,10 @@ Here are some helper functions used below.
 <<RTL operator implementations>>=
 let int64 = function
     | RP.Const(RP.Bits(x)) -> Bits.S.to_int64 x
+    | _                    -> assert false
+
+let uint64 = function
+    | RP.Const(RP.Bits(x)) -> Bits.U.to_int64 x
     | _                    -> assert false
 
 let int = function
@@ -298,4 +369,16 @@ let sx w args   = match (w,args) with
     | [i;j],[x] when is_bits x
                 -> to_bits (int64 x) j
     | _         -> default "sx" w args
+
+let ltu w args  = match args with
+    | [x;y] when is_bits x && is_bits y
+                -> to_bool (uint64 x <= uint64 y)
+    | _         -> default "ltu" w args
+
+let gtu w args  = match args with
+    | [x;y] when is_bits x && is_bits y
+                -> to_bool (uint64 x >= uint64 y)
+    | _         -> default "gtu" w args
+    
+
 @
