@@ -17,27 +17,28 @@ NAME =      ocamlburg
 
 TOP    =    ..
 INTERP =    evaluating
-DEPEND =    DEPEND
-
-LIBDIR =    ../lib
-BINDIR =    ../bin
-MANDIR =    ../man
 
 < ../config/config.mk
+DEPEND = ${B}DEPEND.$INTERP
+
+LIBDIR = ${B}../lib
+BINDIR = ../bin
+MANDIR = ../man
 
 # ------------------------------------------------------------------ 
 # (high level) virtual targets
 # ------------------------------------------------------------------ 
 
-HTML =          `echo *.nw       | sed 's/\.nw/.html/g;'`
-DVI  =          `echo *.nw       | sed 's/\.nw/.dvi/g;'`
-PS   =          `echo *.nw       | sed 's/\.nw/.ps/g;'`
+NW   = `echo *.nw`
+HTML = ${NW:%.nw=%.html}
+DVI  = ${NW:%.nw=%.dvi}
+PS   = ${NW:%.nw=%.ps}
 
 # ------------------------------------------------------------------ 
 # files that belong to the runtime system
 # ------------------------------------------------------------------ 
-RTCMO =         camlburg.cmo camlburg.cmi camlburg.mli 
-RTCMX =         camlburg.cmx camlburg.cmi camlburg.mli camlburg.o
+RTCMO = ${B}camlburg.cmo ${B}camlburg.cmi ${B}camlburg.mli 
+RTCMX = ${B}camlburg.cmx ${B}camlburg.cmi ${B}camlburg.mli ${B}camlburg.o
 
 # ------------------------------------------------------------------ 
 # high level (virtual) targets
@@ -80,26 +81,22 @@ test:VQ:        sample.cmo iburg.cmo
 
 depend:V:       $DEPEND
 
-runtime:V:      camlburg.ml $RTCMO
-runtime.opt:V:  camlburg.ml $RTCMX
+runtime:V:      $RTCMO
+runtime.opt:V:  $RTCMX
 
 clean.opt:V:
-	rm -f *.cmx *.o
-	rm -f *.cmxa *.a
+	rm -f $B*.cmx $B*.cmxa $B*.o $B*.a
 
-clean:V:        clean.opt
-	rm -f *.cmo *.cmi 
+clean:V: clean.opt
+	rm -f $B*.cmi $B*.cmo $B*.cma
 
-clobber:V:      clean
+clobber:V: dep-clobber clean
 	rm -f ocamlburg ocamlburg.opt 
 	rm -f nofake
 	rm -f *.pod *.1
 	rm -f *.ps *.pdf
-	rm -f *.output
-	rm -f *.mll *.mly
-	rm -f *.ml *.mli 
+	rm -f $B*.ml $B*.ml[ily] $B*.output
 	rm -f *.aux *.log *.dvi *.tex *.inc *.toc *.html
-	rm -f $DEPEND 
 	rm -f pp.*
 	rm -f srcmap.*
 	rm -f pod2htm*
@@ -108,16 +105,13 @@ clobber:V:      clean
 # rules and tools for OCaml
 # ------------------------------------------------------------------ 
 
-<../config/ocaml.mk
-<../config/noweb.mk
-<../config/man.mk
+<$TOP/config/ocaml.mk
+<$TOP/config/noweb.mk
+<$TOP/config/man.mk
 
 # compiler flags used by the rules just included
-
-PROFILE = -p
-# no profiling for camlburg
-OCAMLC_FLAGS =  -g -I $LIBDIR
-OCAMLO_FLAGS =     -I $LIBDIR
+OCAMLC_FLAGS = -I $LIBDIR
+OCAMLO_FLAGS = -I $LIBDIR
 
 # ------------------------------------------------------------------ 
 # important file sets
@@ -142,47 +136,47 @@ MLI =           burg.mli        \
                 parseerror.mli  \
                 spec.mli        \
 
+ML  = ${ML:%.ml=$B%.ml}
+MLI = ${MLI:%.mli=$B%.mli}
 
-SCAN =          $ML $MLI \
-                camlburg.ml camlburg.mli\
-                sampleclient.ml \
+CMO = ${ML:%.ml=%.cmo}
+CMX = ${ML:%.ml=%.cmx}
 
-
-CMO =           `echo $ML       | sed 's/\.ml/.cmo/g'`
-CMX =           `echo $ML       | sed 's/\.ml/.cmx/g'`
+SCAN = $ML $MLI ${B}camlburg.ml ${B}camlburg.mli
+<$TOP/config/depend.mk
 
 # ------------------------------------------------------------------ 
 # building binaries
 # ------------------------------------------------------------------ 
 
-ocamlburg:      $LIBDIR/cllib.cma  $CMO 
-	$OCAMLC $OCAMLC_FLAGS -o $target $prereq
+ocamlburg:      $CMO 
+	$OCAMLC $OCAMLC_FLAGS -o $target cllib.cma $prereq
 
-ocamlburg.opt:  $LIBDIR/cllib.cmxa $CMX
-	$OCAMLO $OCAMLO_FLAGS -o $target $prereq
+ocamlburg.opt:  $CMX
+	$OCAMLO $OCAMLO_FLAGS -o $target cllib.cmxa $prereq
 
 # ------------------------------------------------------------------ 
 # extra rules for cases not covered by noweb.mk or to resolve
 # ambiguities
 # ------------------------------------------------------------------ 
 
-lex.mll:        lex.nw
-	$NOTANGLE -R$target $prereq > $target
+${B}lex.mll:D:        lex.nw
+	$NOTANGLE -Rlex.mll $prereq > $target
 
-lex.ml:         lex.mll
+${B}lex.ml: ${B}lex.mll
 	$OCAMLLEX $prereq
 
-parse.mly:      parse.nw
-	$NOTANGLE -R$target $prereq > $target
+${B}parse.mly:D:      parse.nw
+	$NOTANGLE -Rparse.mly $prereq > $target
 
-parse.ml:       parse.mly
+${B}parse.mli \
+${B}parse.ml: ${B}parse.mly
+	$OCAMLYACC -v $prereq
 
-parse.mli       \
-parse.ml        \
-parse.output:   parse.mly
-	$OCAMLYACC -v parse.mly
+${B}camlburg.o:V:
+	echo "tried to make $target"
 
-ocamlburg.pod:  main.nw
+ocamlburg.pod:D:  main.nw
 	$NOTANGLE -R$target $prereq > $target
 
 ocamlburgfix.1:D: ocamlburgfix
@@ -272,18 +266,4 @@ tartest:V:      tar
 
 www:V:          $FILE.tar.gz
 	cp $prereq $HOME/../cminusminus/www/download
-
-# ------------------------------------------------------------------ 
-# recalculate dependencies
-# make sure that generators are run first
-# ------------------------------------------------------------------ 
-
-$DEPEND:        $SCAN
-	$OCAMLDEP $SCAN > $DEPEND
-
-# ------------------------------------------------------------------ 
-# include dependencies
-# ------------------------------------------------------------------ 
-
-<$DEPEND
 

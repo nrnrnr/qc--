@@ -17,19 +17,22 @@
 # Currently the compilation of sparcrec.ml to native code with ocamlopt
 # fails.  
 
-MODE=normal
+MODE = normal
+NAME = gen
+TOP  = ..
+<      $TOP/config/config.mk
 
 # ------------------------------------------------------------------ 
 # paths
 # ------------------------------------------------------------------ 
 
-TOP    =        ..
-INTERP =        evaluating
-DEPEND =        DEPEND
+LIBCMA  = ${B}$NAME.cma      # bytecode library
+LIBCMXA = ${B}$NAME.cmxa     # native library
+
+INTERP = evaluating
+DEPEND = ${B}DEPEND.$INTERP  # store depend information here
 
 LIBDIR =        ../lib
-BINDIR =        ../bin
-MANDIR =        ../man
 
 # extend PATH for special tools
 
@@ -46,44 +49,39 @@ LRTLHEAP =     /usr/local/smlnj/bin/.heap/lrtl.x86-linux
 # (high level) virtual targets
 # ------------------------------------------------------------------ 
 
-all:V:          src cmo libcmo
-all.opt:V:      src cmx libcmx
-	
-# update and update.opt are defined below. They rely on variables
-# that are not visible here.
+all:V:     $LIBCMA
+all.opt:V: $LIBCMXA
+depend:V:  $DEPEND
 
-html dvi test:VQ:          
-	echo "nothing to be done"          
+html \
+dvi  \
+test:VQ:
+	echo "nothing to be done"
 
-depend:V:       $DEPEND
+# update and update.opt targets
+<$TOP/config/libupdate.mk
+update:V: libupdate
+update.opt:V: libupdate.opt
 
-# I decided that 'clobber' does not remove files that are in the
-# repository but also can be derived using special tools that are
-# unavailable to most developers. --CL
-#
-# Sparcreg is expensive to derive and thus is not removed by clean.
+# ------------------------------------------------------------------ 
+# cleanup
+# ------------------------------------------------------------------ 
 
 clean.opt:V:
-	rm -f `find . -not -name 'sparcrec*' -name '*.cmx'` 
-	rm -f `find . -not -name 'sparcrec*' -name '*.o'` 
-	rm -f *.cmxa *.a
+	rm -f $B*.cmx $B*.cmxa $B*.o $B*.a
 
-clean:V:        clean.opt
-	rm -f `find . -not -name 'sparcrec*' -name '*.cm[io]'` 
-	rm -f *.cma
-	
-clobber:V:      clean
-	rm -f sparcrec*.cm[xio] sparcrec*.o
-	rm -f *.output
-	rm -f $DEPEND
-	rm -f *.aux *.log *.dvi *.tex *.inc *.toc
+clean:V: clean.opt
+	rm -f $B*.cmi $B*.cmo $B*.cma
+
+clobber:V: dep-clobber clean
+	rm -f *.aux *.log *.dvi *.toc *.html
 
 # ------------------------------------------------------------------ 
 # rules and tools for OCaml
 # ------------------------------------------------------------------ 
 
-<../config/ocaml.mk
-<../config/noweb.mk
+<$TOP/config/noweb.mk
+<$TOP/config/ocaml.mk
 
 MACHINEREGEX=sparc|x86i
 
@@ -94,9 +92,8 @@ MACHINEREGEX=sparc|x86i
 # We compile with -nolabels until the code generators are updated
 # to generate OCaml 3.04 compliant code.
 
-PROFILE = -p
-OCAMLC_FLAGS =  -g -I $LIBDIR -nolabels
-OCAMLO_FLAGS =  $PROFILE -I $LIBDIR -nolabels
+OCAMLC_FLAGS =  -I $LIBDIR -nolabels
+OCAMLO_FLAGS =  -I $LIBDIR -nolabels
 
 # ------------------------------------------------------------------ 
 # important file sets
@@ -127,82 +124,51 @@ LOCALI =        sledlib.mli     \
                 astUtil.mli     \
                 rtlasdl.mli     \
                 rtlasdlUtil.mli \
-                
 
 BAREML  =       # sparcrec.ml    
 
 sparcrec.cmi:   sparcrec.cmo
                 # do nothing; the compiler does it
 
-CMO = ${LOCAL:%.ml=%.cmo}
-CMI1 = ${LOCALI:%.mli=%.cmi} 
-CMI2 = ${BAREML:%.ml=%.cmi}
-CMI = $CMI1 $CMI2
-CMX = ${LOCAL:%.ml=%.cmx}
-OBJ = ${LOCAL:%.ml=%.o}
+# regular sources
+ML  = ${LOCAL:%.ml=$B%.ml}
+MLI = ${LOCALI:%.mli=$B%.mli}
+CMO = ${ML:%.ml=%.cmo}
+CMX = ${ML:%.ml=%.cmx}
 
-SCAN =          $LOCAL $LOCALI
-
-cmo:V:          $CMO
-cmx:V:          $CMX
-
-src:V:          $SCAN
+SCAN = $ML $MLI
+<$TOP/config/depend.mk
 
 # ------------------------------------------------------------------ 
 # building binaries
 # ------------------------------------------------------------------ 
 
-LIBCMO =        gen.cma
-LIBCMX =        gen.cmxa
-LIBOBJ =        gen.a
+$LIBCMA:  dep-chk $CMO
+        $OCAMLC $OCAMLC_FLAGS -a -o $target $CMO
 
-libcmo          \
-$LIBCMO:        $CMO
-	$OCAMLC $OCAMLC_FLAGS -a -o $LIBCMO $prereq
-	
-libcmx          \
-$LIBCMX:        $CMX
-	$OCAMLO $OCAMLO_FLAGS -a -o $LIBCMX $prereq
+$LIBCMXA: dep-chk $CMX
+        $OCAMLO $OCAMLO_FLAGS -a -o $target $CMX
 
 # ------------------------------------------------------------------ 
-# update hierarchy
+# extra rules to avoid conflicts between .nw .ml
 # ------------------------------------------------------------------ 
 
-update:V:           $LIBCMO dirs $LOCALI $CMI
-	for i in $LIBCMO $LOCALI $CMI
-	do
-	  cmp -s $i $LIBDIR/$i || cp $i $LIBDIR 
-	done
+C=${B:%/=%}
 
-update.opt:V:       $LIBCMX dirs $LOCALI $CMI
-	for i in $LIBCMX $LOCALI $CMI $LIBOBJ
-	do
-	  cmp -s $i $LIBDIR/$i || cp $i $LIBDIR
-	done
+$C/ast.ml: ast.ml
+	cp $prereq $target
 
-dirs:VQ:
-	for i in $LIBDIR; do
-	    if [ ! -d $i ]; then
-	        echo "missing directory $i"
-	        echo "invoke mk from the toplevel the first time"
-	        echo "to create all directories"
-	        false
-	    fi
-	done    
+$C/ast.mli: ast.mli
+	cp $prereq $target
 
+$C/rtlasdl.ml: rtlasdl.ml
+	cp $prereq $target
 
-# ------------------------------------------------------------------ 
-# recalculate dependencies
-# make sure that generators are run first
-# ------------------------------------------------------------------ 
+$C/rtlasdl.mli: rtlasdl.mli
+	cp $prereq $target
 
-depend:V: $DEPEND
-$DEPEND:D:        $SCAN
-	$OCAMLDEP -I $LIBDIR $SCAN > $DEPEND
+$C/&.mli: &.mli
+	cp $prereq $target
 
-# ------------------------------------------------------------------ 
-# include dependencies
-# ------------------------------------------------------------------ 
-
-<$DEPEND
-
+$C/&.ml: &.ml
+	cp $prereq $target

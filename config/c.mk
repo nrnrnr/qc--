@@ -4,8 +4,6 @@
 # rules and tools to compile C source code
 # ------------------------------------------------------------------ 
 
-<           $TOP/config/config.mk
-
 CC =        $config_cc
 CFLAGS =    
 

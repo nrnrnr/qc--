@@ -10,12 +10,11 @@ TOP    =    ..
 INTERP =    evaluating
 DEPEND =    DEPEND
 
-LIBDIR =    ../lib
-BINDIR =    ../bin
-MANDIR =    ../man
-
-< ../config/config.mk
-prefix = $config_prefix
+<$TOP/config/config.mk
+LIBDIR = ${B:%/tools/=%/lib}
+BINDIR = ../bin
+MANDIR = ../man
+B=""
 
 # ------------------------------------------------------------------ 
 # (high level) virtual targets
@@ -72,7 +71,7 @@ clean:V:        clean.opt
 	rm -f *.cmi *.cmo
 	rm -f *.cma 
 
-clobber:V:      clean
+clobber:V: dep-clobber clean
 	rm -f *.output
 	rm -f *.ml *.mli
 	rm -f *.mly *.mll
@@ -84,45 +83,38 @@ clobber:V:      clean
 	rm -f nofake 
 	rm -f grades 
 	rm -f newer
-	rm -f $DEPEND
 
 # ------------------------------------------------------------------ 
 # rules and tools for OCaml
 # ------------------------------------------------------------------ 
 
-<../config/ocaml.mk
-<../config/noweb.mk
-<../config/c.mk
-<../config/man.mk
+<$TOP/config/ocaml.mk
+<$TOP/config/noweb.mk
+<$TOP/config/c.mk
+<$TOP/config/man.mk
 
 # compiler flags used by the rules just included
-
-OCAMLC_FLAGS =  -g -I $LIBDIR
-# no profiling in the tools directory
-OCAMLO_FLAGS =     -I $LIBDIR
+OCAMLC_FLAGS = -I $LIBDIR
+OCAMLO_FLAGS = -I $LIBDIR
 
 # ------------------------------------------------------------------ 
 # important file sets
 # ------------------------------------------------------------------ 
 
-ML  =           ocamlscan.ml    \
-                ocamlerror.ml   \
+ML  = ocamlscan.ml ocamlerror.ml
 
-MLI =           
+CMO = ${ML:%.ml=%.cmo}
+CMX = ${ML:%.ml=%.cmo}
 
-
-SCAN =          $ML $MLI
-
-CMO =           `echo $ML       | sed 's/\.ml/.cmo/g'`
-CMX =           `echo $ML       | sed 's/\.ml/.cmx/g'`
-OBJ =           `echo $ML       | sed 's/\.ml/.o/g'`
+SCAN = $ML
+<$TOP/config/depend.mk
 
 # ------------------------------------------------------------------ 
 # building binaries
 # ------------------------------------------------------------------ 
 
-CMOLIBS =       str.cma  cllib.cma
-CMXLIBS =       str.cmxa cllib.cmxa
+CMOLIBS = str.cma  cllib.cma
+CMXLIBS = str.cmxa cllib.cmxa
 
 ocamlerror:     ocamlscan.cmo ocamlerror.cmo 
 	$OCAMLC $OCAMLC_FLAGS -custom -o $target $CMOLIBS $prereq
@@ -200,19 +192,3 @@ tartest:V:      $FILE.tar.gz
 
 www:V:          $FILE.tar.gz
 	cp $prereq $HOME/../cminusminus/www/download
-
-
-# ------------------------------------------------------------------ 
-# recalculate dependencies
-# make sure that generators are first
-# ------------------------------------------------------------------ 
-
-$DEPEND: 	$SCAN
-	$OCAMLDEP $SCAN > $DEPEND
-
-# ------------------------------------------------------------------ 
-# include dependencies
-# ------------------------------------------------------------------ 
-
-<$DEPEND
-

@@ -2,69 +2,69 @@
 # $Id$ 
 # ------------------------------------------------------------------ 
 
-NAME =     rtllib 
+NAME = rtllib 
+TOP  = ..
+<      $TOP/config/config.mk
 
 # ------------------------------------------------------------------ 
 # paths
 # ------------------------------------------------------------------ 
 
-TOP    =    ..
-INTERP =    evaluating
-DEPEND =    DEPEND.$INTERP
+LIBCMA  = ${B}$NAME.cma      # bytecode library
+LIBCMXA = ${B}$NAME.cmxa     # native library
+
+INTERP = evaluating
+DEPEND = ${B}DEPEND.$INTERP  # store depend information here
 
 LIBDIR =    ../lib
-BINDIR =    ../bin
-MANDIR =    ../man
 
 # ------------------------------------------------------------------ 
 # (high level) virtual targets
 # ------------------------------------------------------------------ 
 
-HTML =          `echo *.nw       | sed 's/\.nw/.html/g;'`
-INC  =          `echo *.nw       | sed 's/\.nw/.inc/g;'`
-LIBCMX =        $NAME.cmxa
-LIBCMO =        $NAME.cma
+NW   = `echo *.nw`
+HTML = ${NW:=%.nw=%.html}
+INC  = ${NW:=%.nw=%.inc}
 
-all:V:          $LIBCMO 
-all.opt:V:      $LIBCMX
-update:V:       $LIBDIR/$LIBCMO 
-update.opt:V:   $LIBDIR/$LIBCMX
-
+all:V:          $LIBCMA
+all.opt:V:      $LIBCMXA
 dvi:V:          $INC
 html:V:         $HTML
-
-test:VQ:
-	echo "nothing to be done"
-
 depend:V:       $DEPEND
 
-clean.opt:V:    
-	rm -f *.cmx *.o
-	rm -f *.cmxa *.a *.cma
+# update and update.opt targets
+<$TOP/config/libupdate.mk
+update:V: libupdate
+        cp ${B}uint64p.o ${B}../lib
 
-clean:V:        clean.opt
-	rm -f *.cmo *.cmi
+update.opt:V: libupdate.opt
 
-clobber:V:      clean
-	rm -f *.output
-	rm -f *.html
-	rm -f *.dvi *.aux *.toc *.log *.tex *.inc *.ps
-	rm -f *.ml *.mli
-	rm -f *.c
-	rm -f $DEPEND                
+# ------------------------------------------------------------------ 
+# cleanup
+# ------------------------------------------------------------------ 
+
+clean.opt:V:
+	rm -f $B*.cmx $B*.cmxa $B*.o $B*.a
+
+clean:V: clean.opt
+	rm -f $B*.cmi $B*.cmo $B*.cma
+
+clobber:V: dep-clobber clean
+	rm -f *.aux *.log *.dvi *.toc *.html *.inc *.ps
+	rm -f $B*.ml $B*.ml[ily] $B*.output $B*.c
 
 # ------------------------------------------------------------------ 
 # rules and tools for OCaml
 # ------------------------------------------------------------------ 
 
-<../config/ocaml.mk
-<../config/noweb.mk
+<$TOP/config/ocaml.mk
+<$TOP/config/noweb.mk
+<$TOP/config/c.mk
 
 # compiler flags used by the rules just included
 
-PROFILE =
-OCAMLC_FLAGS =  -I $LIBDIR -g
-OCAMLO_FLAGS =  -I $LIBDIR $PROFILE
+OCAMLC_FLAGS = -I $LIBDIR
+OCAMLO_FLAGS = -I $LIBDIR
 
 # ------------------------------------------------------------------ 
 # important file sets
@@ -80,85 +80,45 @@ ML  =		impossible.ml   \
 		bitops.ml	\
                 register.ml     \
                 rtl.ml          \
-                
+
 # alphabetical                
 MLI =           base.mli        \
 		bitops.mli	\
                 bits.mli        \
                 impossible.mli  \
                 register.mli    \
-                reloc.ml        \
+                reloc.mli       \
                 rtl.mli         \
                 symbol.mli      \
                 uint64.mli      \
 
-SCAN =          $ML $MLI
 
+ML  = ${ML:%.ml=$B%.ml}
+MLI = ${MLI:%.mli=$B%.mli}
 CMO = ${ML:%.ml=%.cmo}
 CMX = ${ML:%.ml=%.cmx}
-OBJ = uint64p.o
+OBJ = ${B}uint64p.o
+
+SCAN = $ML $MLI
+<$TOP/config/depend.mk
 
 # ------------------------------------------------------------------ 
 # build the libraries
 # ------------------------------------------------------------------ 
 
-$LIBCMO:        $CMO $OBJ
+$LIBCMA:  dep-chk $CMO $OBJ
 	$OCAMLC $OCAMLC_FLAGS -a -o $target $CMO
-	
 
-$LIBCMX:	$CMX $OBJ
+$LIBCMXA: dep-chk $CMX $OBJ
 	$OCAMLO $OCAMLO_FLAGS -a -o $target $CMX
-
-# ------------------------------------------------------------------ 
-# update hierarchy
-# ------------------------------------------------------------------ 
-
-$LIBDIR/$LIBCMO:    $LIBCMO dirs $OBJ
-	for i in $LIBCMO *.mli *.cmi $OBJ; do
-	  cmp -s $i $LIBDIR/$i || cp $i $LIBDIR 
-	done
-
-$LIBDIR/$LIBCMX:    $LIBCMX dirs $OBJ
-	for i in $LIBCMX $NAME.a *.mli *.cmi $OBJ; do
-	  cmp -s $i $LIBDIR/$i || cp $i $LIBDIR
-	done
-
-dirs:VQ:
-	for i in $LIBDIR; do
-	    if [ ! -d $i ]; then
-	        echo "missing directory $i"
-	        echo "invoke mk from the toplevel the first time"
-	        echo "to create all directories"
-	        false
-	    fi
-	done    
 
 # ------------------------------------------------------------------ 
 # extra rules for cases not covered by noweb.mk
 # ------------------------------------------------------------------ 
 
-uint64.cmo      \
-uint64.cmx:     uint64p.o
+${B}uint64p.c:D:      uint64.nw
+	$NOTANGLE -L -Ruint64p.c $prereq > $target
 
-uint64p.o:      uint64p.c
-	$OCAMLC $OCAMLC_FLAGS -c $prereq
-
-uint64p.c:      uint64.nw
-	$NOTANGLE -L -R$target $prereq > $target
-
-uint64.inc:     uint64.nw
+uint64.inc:D:     uint64.nw
 	$NOWEAVE -delay -autodefs c -index $prereq > $target
 
-# ------------------------------------------------------------------ 
-# recalculate dependencies
-# make sure that generators are run first
-# ------------------------------------------------------------------ 
-
-$DEPEND: 	$SCAN
-	$OCAMLDEP $SCAN > $DEPEND
-
-# ------------------------------------------------------------------ 
-# include dependencies
-# ------------------------------------------------------------------ 
-
-<$DEPEND

@@ -7,14 +7,27 @@
 # ------------------------------------------------------------------ 
 
 OCAML =         ocaml
-# use the following for execution profiling
-OCAMLC =        ocamlcp -p a    
 OCAMLC =        ocamlc 
 OCAMLO =        ocamlopt 
 OCAMLTOP =      ocamlmktop
 OCAMLDEP =      ocamldep
 OCAMLYACC =     ocamlyacc
 OCAMLLEX =      ocamllex
+INSTRUMENT =    "ocamlprof -instrument"
+
+# setup profiling stuff
+# PCHECK should end up being empty, or the user will get an error
+#  from the rules in depend.mk
+
+P=
+PCHECK = ${P:count=""}
+PCHECK = ${PCHECK:gprof=""}
+
+INSTR = ${P:count="-pp $INSTRUMENT"}
+INSTR = ${INSTR:gprof=""}
+
+GPROF = ${P:gprof="-p"}
+GPROF = ${GPROF:count=""}
 
 # provide these two where you have included this file
 #
@@ -25,14 +38,34 @@ OCAMLLEX =      ocamllex
 # rules
 # ------------------------------------------------------------------ 
 
-%.cmi:          %.mli
-	$OCAMLC $OCAMLC_FLAGS -c $stem.mli
+# these rules are a bit long to make the display nice for the user
 
-%.cmo:          %.ml
-	$OCAMLC $OCAMLC_FLAGS -c $stem.ml
+$B&.cmi:Q: $B&.mli
+	(if [ ! -z "$B" ]; then
+	  cd $B;
+	  echo "(in $B) $OCAMLC $OCAMLC_FLAGS -c $stem.mli"
+	else
+	  echo "$OCAMLC $OCAMLC_FLAGS -c $stem.mli"
+	fi;
+	$OCAMLC $OCAMLC_FLAGS -c $stem.mli)
 
-%.o %.cmx:      %.ml
-	$OCAMLO $OCAMLO_FLAGS -c $stem.ml
+$B&.cmo:Q: $B&.ml
+	(if [ ! -z "$B" ]; then
+	  cd $B;
+	  echo "(in $B) $OCAMLC $INSTR $OCAMLC_FLAGS -c $stem.ml"
+	else
+	  echo "$OCAMLC $INSTR $OCAMLC_FLAGS -c $stem.ml"
+	fi;
+	$OCAMLC $INSTR $OCAMLC_FLAGS -c $stem.ml)
+
+$B&.cmx:Q: $B&.ml
+	(if [ ! -z "$B" ]; then
+	  cd $B;
+	  echo "(in $B) $OCAMLO $INSTR $GPROF $OCAMLO_FLAGS -c $stem.ml"
+	else
+	  echo "$OCAMLO $INSTR $GPROF $OCAMLO_FLAGS -c $stem.ml"
+	fi;
+	$OCAMLO $INSTR $GPROF $OCAMLO_FLAGS -c $stem.ml)
 
 %.ml:           %.mll
 	$OCAMLLEX $stem.mll

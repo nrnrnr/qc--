@@ -4,8 +4,6 @@
 # in OCaml in directory lua/.
 #
 
-<   $TOP/config/config.mk
-
 # Add cc(1) compiler options to find the header file "lua.h". On Debian,
 # the header files are in /usr/inlcude/lua40.
 

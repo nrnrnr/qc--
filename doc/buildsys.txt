@@ -1,0 +1,142 @@
+
+The qc-- build system supports separate build directories, and five
+flavors of binary which are sensible combinations of profiling
+information with native and byte-code binaries. The system is not
+meant to be used on a read-only source tree, and would not support say
+building from a CD-ROM. Some final products and documentation are
+placed in the source directories for convenience. The qc-- build
+system strives to be easy to use for both end-users and mkfile writers
+as much as is possible.
+
+Build Directories
+-----------------
+
+First some information for mkfile writers. Each mkfile is required to
+include the following lines.
+
+    TOP  = ..
+    <      $TOP/config/config.mk
+
+The first line, TOP, is the relative path to the top-level src
+directory.
+
+The variable HERE can also be defined before including config.mk to set where
+in the build directory results should be placed.
+
+The HERE variable should be set so that the build directory has the
+same relation to the top-level build directory as the source directory
+has to the top-level source directory. For instance, if your sources
+live in the subdirectory "src", then HERE should be set to "src". This
+convention keeps the build directory looking like the source
+directory. If HERE is not set, then config.mk will set it to:
+
+    HERE = `basename $PWD`
+
+If this is not correct for your situation, then add a line before
+including config.mk to set HERE to whatever is desired.
+
+The second line includes the site configuration created by the
+configure script. The config.mk file includes, among other things, the
+definition of B the build directory for your sources, and BT the
+top-level build directory location. The BT variable may be set on the
+command line to change the location of derived files. For example:
+
+    BT           HERE          B
+    /tmp         src           /tmp/src/
+    .            src           ""  (empty - special case)
+    ../../x      src           /real/path/to/x/src/
+
+
+Most of the complexity of the build system is encapsulated in the
+computation of B which must handle some special cases. Happily, this
+is done for us in config.mk.
+
+After the inclusion of the config.mk file, all derived files should be
+prefixed with B which may be empty. An example rule for extracting
+code from noweb files might be:
+
+    ${B}code.ml:D: code.nw
+        notangle -R$stem.ml $prereq > $target
+
+After adding new mk rules, it is a good idea to test them with BT set
+to a directory outside the source tree and with BT="." or BT="". The
+intention is that setting BT="." tells the build system to act as
+though it does not know about build directories. By default BT is set
+to "." and most users will not need to change this.
+
+The depend.mk file does some checking of the B and BT variables. If a
+problem is found then a message will appear similiar to:
+
+    Your B variable (B=../../broken) looks strange to me. I am quiting.
+    Maybe you set B when you wanted to set BT?
+
+
+Dependencies and Cleaning
+-------------------------
+
+Dependencies are handled by the standard depend.mk file found in the
+config directory. Each mkfile must define the variable SCAN to the
+names of all of the files that will need dependency information
+calculated, and the variable DEPEND which is the name of the file
+which will contain dependency information. The depend file should be
+located in the build directory defined by B. The following code
+fragment is sufficient for most mkfiles:
+
+    DEPEND=${B}DEPEND
+
+    all:V: dep-chk ...
+    depend:V: $DEPEND
+
+    clobber:V: dep-clobber clean
+        rm -f $B*.ml $B*.ml[iyl]
+        <more clobbering code>
+
+    SCAN = <my .ml and .mli files>
+    <$TOP/config/depend.mk
+
+The dep-chk target checks that dependency information is up to date,
+and also does some consistency checking described in the next section.
+The dep-clobber target will cleanup any files created by the depend
+targets.
+
+Take care to always include the B variable when removing files in the
+cleaning targets.
+
+Profiling
+---------
+
+Profiling comes in three flavors, and is controlled by the variable P.
+The mkfile writer does not need to worry about P since it is all
+handled by the standard build rules. Having said that, the valid
+settings for P are:
+
+    ""          no profiling
+    count       ocamlprof profiling
+    gprof       gprof enabled native binary
+
+The gprof setting only effects native binaries built with all.opt and
+related targets. The count setting is supported in both byte-code an
+native code binaries.
+
+A typical use would be to set the BT and P options together to produce
+a profiled binary in an alternate build directory.
+
+   mk BT=/tmp/profiled P=count depend
+   mk BT=/tmp/profiled P=count all
+   mk BT=/tmp/profiled P=count all.opt
+
+Once a build directory has been configured with "mk depend" it cannot
+be used with a different P setting. In the previous example, if you
+were to then try:
+
+   mk BT=/tmp/profiled all
+
+An error message would be printed similar to:
+
+  The build directory /tmp/profiled/ is configured for P=count not P=
+  You must run mk clobber followed by mk depend
+
+Setting P to something other than "count", "gprof", or "" will also
+result in an error. It is best to avoid setting P to something
+invalid, but if a strang value is found then the build system will
+print a message and quit.

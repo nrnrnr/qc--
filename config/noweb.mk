@@ -23,15 +23,14 @@ OCAMLDEFS =     $TOP/config/autodefs.ocaml
 # general rules to extract code from noweb files
 #
 
+$B&.ml:D: &.nw
+	$NOTANGLE -L"$LINE" -filter "$NOCOND" -R$stem.ml $prereq > $target
 
-'(([^/]*/)*)(.*)\.ml$':RD:        '\1\3'.nw
-	$NOTANGLE -L"$LINE" -filter "$NOCOND" -R$stem3.ml $prereq > $target
+$B&.mli:D: &.nw
+	$NOTANGLE -L"$LINE" -filter "$NOCOND" -R$stem.mli $prereq | $CPIF $target
 
-'(([^/]*/)*)(.*)\.mli$':RD:        '\1\3'.nw
-	$NOTANGLE -L"$LINE" -filter "$NOCOND" -R$stem3.mli $prereq | $CPIF $target
-
-'(([^/]*/)*)(.*)\.c$':RD:       '\1\3.nw'
-	$NOTANGLE -L"$LINE" -R$stem3.c $prereq > $target
+$B&.c:D: &.nw
+	$NOTANGLE -L"$LINE" -R$stem.c $prereq > $target
 
 %.view:D: %.nw
 	$NOTANGLE -R$target $prereq > $target
