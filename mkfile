@@ -3,7 +3,7 @@
 # ------------------------------------------------------------------ 
 
 
-NAME =          qcc
+NAME =          qc--
 VERSION =       `date +%Y%m%d`
 
 # ------------------------------------------------------------------ 
@@ -16,7 +16,7 @@ SUBDIRS =       cllib asdl src
 # high level targets
 # ------------------------------------------------------------------ 
 
-update all:V: dirs
+update all:V:   dirs
                 for i in $SUBDIRS; do (cd $i && mk $target); done
 
 clean:V:
@@ -25,9 +25,9 @@ clean:V:
 
 # make sure appropriate empty directories exist
 dirs:V:
-        for i in bin lib man man/man1; do
-          [ -d $i ] || mkdir $i
-        done
+                for i in bin lib man man/man1; do
+                  [ -d $i ] || mkdir $i
+                done
 
 # ------------------------------------------------------------------ 
 # build distributions
