@@ -88,6 +88,7 @@ let dofile   g file  = ignore(C.apply (V.String "dofile")   g  [file])
 let dostring g str   = ignore(C.apply (V.String "dostring") g  [str])
 let error g msg      = ignore(C.fallback "error" g [V.String msg])
 
+let defaultdir       = "/usr/local/lib/qc--"    (*XXX fix XXX*)
 let dosearchfile g table file =
     let path = try Sys.getenv "QC--LUAPATH" with Not_found -> ":*" in
     let dirs = split path in
@@ -100,7 +101,7 @@ let dosearchfile g table file =
               with Not_found -> search rem
             )
         | dir :: rem -> (*XXX fix system path XXX*)
-            let d    = if dir = "" then "/usr/local/lib/qc--" else dir in
+            let d    = if dir = "" then defaultdir else dir in
             let path = Filename.concat dir file in
                 if Sys.file_exists path then
                     dofile g (V.String path)
