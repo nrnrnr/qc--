@@ -29,16 +29,12 @@ actions of the assembler in {\PAL}.
 \subsection{Interface}
 % ------------------------------------------------------------------ 
 
-The interface is a sub-type of [[Asm2.S]]: it provides everything
-outlined there.
-
 An assembler reflects many of the characteristics of the underlying
 target architecture.  Since {\PAL} is quite flexible with respect to
 pointer sizes, byteorder and such, we like to functorize our
-implementation over these aspects, which we call the
-\emph{personality} of the assembler.  A functor seems to be a good
-compromise between a fixed personality, and a run-time configured
-personality.
+implementation over these aspects, which we call the \emph{personality}
+of the assembler.  A functor seems to be a good compromise between a
+fixed personality, and a run-time configured personality.
 
 The personality provides additionally an abstract representation of
 instructions. In this specific implementation a single instruction is
@@ -50,12 +46,11 @@ Names that are passed to the assembler become {\PAL} names in the output
 and therefore must obey certain rules. We assume that the client side
 knows about these rules and passes only legal names. This means in
 practice that names passed into this interface are not touched here and
-should be mangled previously (see module \module{mangle}).
-
-The assembler is initialized with a value of type [[init]]. 
+should be mangled previously (see module \module{mangle}). See the note
+in \module{asm2} about future plans.
 
 <<init type>>=
-(optimizer: Proc.t -> unit)
+unit
 @
 
 <<module type personality>>=
@@ -82,9 +77,7 @@ end
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
 
-It is a bit ironic, that the abstract interface to assemblers (module
-\module{asm2}) does not match perfectly with the abstract syntax of
-{\PAL}, the portable assembler. 
+The assembler implementation is parameterized over its personality. 
 
 <<asm2ast.ml>>=
 <<module type personality>>
@@ -94,11 +87,24 @@ module Make (P: PERSONALITY) = struct
 
     <<module make>>
 end
+@
+
+The personality determines the native pointer-, and wordsize. The
+following functions help to emit values. 
 
 <<module make>>=
 module T        = Target2
 module A        = Ast
-module Symbol   = Map.Make(struct type t=string let compare=compare end)
+
+let pointer     = A.BitsTy(P.target.T.pointersize)
+let bits n      = A.BitsTy n
+let int n       = A.Int( Bits.of_int n P.target.T.wordsize
+                       , Some (bits P.target.T.wordsize)
+                       )
+let one         = int 1 (* wordsize *)
+let zero        = A.Int( Bits.of_int 0 P.target.T.memsize
+                       , Some (bits P.target.T.memsize)
+                       ) (* memsize *)
 @
 
 The [[Unsupported]] exception is raised when using features provided
@@ -143,63 +149,11 @@ let symbol =
         ; Mangle.reserved   = reserved
         ; Mangle.avoid      = (fun x -> x ^ "$")
         }
-@
 
-<<module make>>=
 let mangle = Mangle.mk symbol   
 @
-    
-The assembler maintains a current section. To guarantee that
-everything goes into a meaningful section, the first action is to
-start the [[text]] section.
-                      
-<<Make translate program>>=
-let program env target asm tt = 
-    let asm = asm ++ Asm.section "text"           in
-    let asm = exports env asm                     in
-    let asm = imports env asm                     in
-        foldl (toplevel env target) asm tt
 
-
-An assembler is not independent from the personality of the underlying
-architecture. The personality module [[P]] provides us with the
-necessary informations. The following functions helps to create types
-and values in {\AST} syntax.
-
-<<module make>>=
-let pointer     = A.BitsTy(P.target.T.pointersize)
-let bits n      = A.BitsTy n
-let int n       = A.Int( Bits.of_int n P.target.T.wordsize
-                       , Some (bits P.target.T.wordsize)
-                       )
-let one         = int 1 (* wordsize *)
-let zero        = A.Int( Bits.of_int 0 P.target.T.memsize
-                       , Some (bits P.target.T.memsize)
-                       ) (* memsize *)
-@
-
-The following types for section names, sizes and alignments are
-dictated by the assembly interface.
-
-<<module make>>=
-type section    = string
-type size       = int
-type align      = int
-@
-
-A [[sym]] value is created from the [[mksym]] function.  A [[symbol]]
-represents a label that was registered in the assemblers symbol table.
-
-<<module make>>=
-type symclass   = Import        
-                | Export
-                | Local
-                | Common of size * align * section
-type symbol     = string * symclass
-type sym        = Sym of string
-@                
-
-An assembler program is represented by an [[asm]] value; it contains: 
+An assembly program is represented by an [[asm]] value; it contains: 
 
 \begin{itemize}
 \item A symbol table: the assembler interface allows to create symbols
@@ -220,8 +174,11 @@ An assembler program is represented by an [[asm]] value; it contains:
 \end{itemize}
 
 <<module make>>=
-type init = <<init type>>
-type asm =      { symbols:      symbol Symbol.t
+module Symbol = Str.Map
+
+<<type symbol>>
+and init = <<init type>>
+and asm =       { symbols:      symbol Symbol.t
                 ; section:      string
                 ; actions':     A.section list
                 ; toplevel':    (string * A.section list) list
@@ -229,17 +186,50 @@ type asm =      { symbols:      symbol Symbol.t
                 }
 @
 
-The initially empty {\PAL} program puts everything into the ``this
-can't happen'' section.  This is admittedly ugly. 
+The initially empty {\PAL} program puts everything into the ``this can't
+happen'' section.  This is admittedly ugly. 
 
 <<module make>>=
-let init (args:init) =
+let init (x:init) =
     { symbols           = Symbol.empty
     ; section           = "this can't happen"
     ; actions'          = []
     ; toplevel'         = []
-    ; init              = args
+    ; init              = x
     }
+@
+
+    
+The assembler maintains a current section. To guarantee that
+everything goes into a meaningful section, a client should define a
+section as its first action.
+
+<<module make>>=
+let current asm = asm.section
+@
+
+A symbol falls in one of four classes. Symbols are simply created from
+the names provided at their declaration. A binart emitter would do
+something more complicated.
+
+<<type symbol>>=
+type symbol = 
+    | Local    of string
+    | Import   of string
+    | Export   of string
+    | Common   of string
+@
+ 
+<<module make>>=
+let declare s sym asm = (sym, {asm with symbols = Symbol.add s sym asm.symbols})
+let local  s asm      = declare s (Local s)  asm
+let export s asm      = declare s (Export s) asm
+let import s asm      = declare s (Import s) asm
+let common s _        = unsupported "Asm2ast.common"
+@
+
+<<module make>>=
+let lookup name asm = Symbol.find name asm.symbols
 @
 
 An assembly [[action]] roughly corresponds to an [[Ast.section]]. 
@@ -252,16 +242,7 @@ an action.
 type action     = NewSection    of string
                 | CurSection    of A.section
                 | Instruction   of instruction
-                | DefSym        of symbol
                 | Nop
-@
-
-The [[mksym]] function creates [[sym]] values.  Symbols ultimately
-create {\PAL} names. We assume that the client only passes legal
-(i.e.~mangled) names and thus don't touch them.
-
-<<module make>>=
-let mksym s    = Sym s
 @
 
 The [[append]] function adds an [[action]] to an [[asm]] value.  It
@@ -290,19 +271,6 @@ let append asm = function
         let proc = A.Procedure(P.ext i P.target asm.init) in
         { asm with actions' = proc :: asm.actions' }
 
-    | DefSym (n,c) -> 
-        if Symbol.mem n asm.symbols
-        then asm
-        else let actions = 
-            ( match c with
-            | Import   -> A.Decl(A.Import(pointer,[(None,n)])) :: asm.actions'
-            | Export   -> A.Decl(A.Export(None,[(n,None)])) :: asm.actions'
-            | Local    -> asm.actions' (* ignored - ok ?*)
-            | Common _ -> asm.actions' (* ignored *)
-            ) in { asm with 
-                   actions' = actions
-                 ; symbols = Symbol.add n (n,c) asm.symbols
-                 }
     | Nop          -> asm
 @
 
@@ -312,17 +280,11 @@ in some cases.
 
 [[section]] closes the [[current]] section and starts a new one.  The
 names of sections are \emph{not} mangled before they are used in the
-{\AST}.
+{\AST}.  For completeness, a \emph{no-operation} is provided.
 
 <<module make>>=
 let section s   = NewSection s
-let current asm = asm.section
-@
-
-For completeness, a \emph{no-operation} is provided.
-
-<<module make>>=
-let nop = Nop
+let nop         = Nop
 @
 
 Our assembler does not announce procedures.  Since instructions are
@@ -333,17 +295,17 @@ type proc_info = unit
 let proc () = Nop
 @
 
-{\PAL} provides no concept of a directly accessible location counter
-and thus it can't be set.  Since all code we are generating here is
-outside of procedures the [[align]] action must denote an alignment
-for data and can not denote an align statement.
+{\PAL} provides no concept of a directly accessible location counter and
+thus it can't be set.  Since all code we are generating here is outside
+of procedures the [[align]] action must denote an alignment for data and
+cannot denote an align statement.
 
 <<module make>>=
 let org    n = unsupported "no location counter in this implementation"
 let align  n = CurSection(A.Datum(A.Align n))
 @
 
-We represent [[addloc]] that advances the location counter by emitting
+We represent [[addloc]], which advances the location counter, by emitting
 uninitialized data.
 
 <<module make>>=
@@ -358,23 +320,22 @@ let addloc n =
 The actions related to symbols define new symbols, which are also entered
 into the symbol table. The [[lookup]] function helps to find them.
 
-<<module make>>=
-let import (Sym n)                  = DefSym(n,Import)
-let export (Sym n)                  = DefSym(n,Export)
-let local  (Sym n)                  = DefSym(n,Local)
-let common (Sym n) size algn sect   = DefSym(n,Common(size,algn,sect))
-let lookup (Sym n) asm              = Symbol.find n asm.symbols
-@
 
 We assume that the client is aware of the naming restrictions for labels
 and thus just put them into the {\AST} \emph{without} mangling them.
 
 <<module make>>=
-let define_label (n,c)      = CurSection(A.Datum(A.Label n))
-let define_const (n,c) b    = 
-    let bits = A.Int(b,Some (bits (Bits.width b))) 
-    in CurSection(A.Decl(A.Const(None,n,bits)))  
-let define_local (Sym n)    = CurSection(A.Datum(A.Label n))
+let define_label = function
+    | Local s  -> CurSection(A.Datum(A.Label s))
+    | Export s -> CurSection(A.Datum(A.Label s))
+    | _        -> assert false
+    
+let define_const s b = 
+    let bits = A.Int(b,Some (bits (Bits.width b))) in
+    match s with
+    | Local s  -> CurSection(A.Decl(A.Const(None,s,bits)))  
+    | Export s -> CurSection(A.Decl(A.Const(None,s,bits)))  
+    | _        -> assert false
 @
 
 A link-time constant is an expression of the native pointer type or is
@@ -387,9 +348,15 @@ module RelAddr = struct
 end
 
 <<RelAddr>>=
-type t = A.expr
+type t   = A.expr
+type sym = symbol 
 
-let sym   l = A.Fetch (A.Var(None,l))   (*XXX ?? *)
+let sym = function
+    | Local l  -> A.Fetch (A.Var(None,l))   (*XXX ?? *)
+    | Export l -> A.Fetch (A.Var(None,l))   (*XXX ?? *)
+    | Import l -> A.Fetch (A.Var(None,l))   (*XXX ?? *)
+    | _        -> assert false
+    
 let const k = A.Int(k, Some(A.BitsTy(Bits.width k)))
 let add x y = A.PrimOp ("add", [(None,x);(None,y)])
 let sub x y = A.PrimOp ("sub", [(None,x);(None,y)])
@@ -414,11 +381,13 @@ let zeroes n =
         if n = 0 
         then Nop
         else CurSection(A.Datum(A.MemDecl(ty,A.FixSize(size),init n)))
+
 <<module make>>=
 let value  v = 
     let ty   = bits (Bits.width v)              in
     let init = A.InitExprs([A.Int(v, Some ty)]) in
         CurSection(A.Datum(A.MemDecl(ty, A.FixSize one, Some init)))
+
 <<module make>>=
 let addr e  =
     let ty   = pointer          in      (* e is of native pointer type *)
@@ -477,13 +446,35 @@ let personality =
 @
 
 <<module make>>=
+let globals p asm =
+    let f name symbol names =
+        if p symbol then name::names else names
+    in
+        Str.Map.fold f asm.symbols []
+            
+let exports asm = 
+    match globals (function Export _ -> true | _ -> false) asm with
+    | []    -> None
+    | names -> Some (A.Export(Some pointer, List.map (fun n -> n, None) names))
+        
+let imports asm = 
+    match globals (function Import _ -> true | _ -> false) asm with
+    | []    -> None
+    | names -> Some (A.Import(pointer, List.map (fun n -> None, n) names))
+
+
 let ast asm = 
     let section  = (asm.section, List.rev asm.actions') in
     let toplevel = List.rev (section :: asm.toplevel')  in
     let sections = List.map (fun (name,sect) -> A.Section(name,sect)) 
                             toplevel                    in
     let target   = A.TopDecl(A.Target personality)      in
-        target :: sections
+        match imports asm, exports asm with
+        | None  , None   -> target :: sections
+        | Some i, None   -> target :: A.TopDecl(i) :: sections
+        | None  , Some e -> target :: A.TopDecl(e) :: sections
+        | Some i, Some e -> target :: A.TopDecl(i) :: A.TopDecl(e) :: sections
+        
 @
 
 

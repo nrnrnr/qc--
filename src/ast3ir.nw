@@ -57,7 +57,7 @@ treating a control-flow graph as an instruction.
 
 <<ASM>>=
 Asm2.S with type instruction = Proc.t
-       and  type init        = (Proc.t -> unit)
+       and  type init        = unit
 @
 
 
@@ -284,14 +284,16 @@ and expr env target exp =
 \subsection{Constant Evaluation}
 % ------------------------------------------------------------------ 
 
-We translate constants  to {\rtl} expressions which then evaluate.
+We translate constants to {\rtl} expressions which we then evaluate.
 
 <<Make constant evaluation>>=
 module Eval = Rtleval.Make(Asm.RelAddr)
 
-let compile_const env target exp = Eval.compile (expr env target exp)
-let link_const    env target exp = Eval.link    (expr env target exp)
-let eval_const    env target exp = Eval.eval    (expr env target exp)
+let compile_const env target exp     = Eval.compile (expr env target exp)
+let link_const    env target asm exp = 
+    Eval.link (expr env target exp) (fun s -> Asm.Local s) (*XXX*)     
+let eval_const    env target asm exp = 
+    Eval.eval (expr env target exp) (fun s -> Asm.Local s) (*XXX*)
 @
 
 % ------------------------------------------------------------------ 
@@ -829,11 +831,12 @@ let freeze (p:Proc.t) =
             RP.Fetch(RP.Cell(sp,agg,w,subst e,ass),w')
         | _ -> e in
     let subst' e = Rtl.Revert.exp (subst (Rtl.Convert.exp e)) in
-    let ()       = Cfgutil.subst p.Proc.cfg (Rtlutil.Subst.exp subst') in
-        p.Proc.frozen <- true
+    let ()       = Cfgutil.subst p.Proc.cfg (Rtlutil.Subst.exp subst')
+    in
+        ()
 
 
-let proc env target (mangle:string->string)  asm (cconv,name,args,bdy) = 
+let proc env target mangle optimizer asm (cconv,name,args,bdy) = 
     let p           = match F.findv name env with
                       | _,(F.Label(F.Proc p),_) -> p
                       | _                        -> assert false in
@@ -904,10 +907,9 @@ let proc env target (mangle:string->string)  asm (cconv,name,args,bdy) =
         ; Proc.stackd   = stackd     (* stack data *)
         ; Proc.priv     = priv       (* Automaton for spill loc, etc *)
         ; Proc.eqns     = eqns       (* constraints for compile-time consts *)
-        ; Proc.frozen   = false
-        ; Proc.freeze   = freeze
-        } 
-    in
+        } in
+    let () = optimizer i in
+    let () = freeze i    in
         asm ++ Asm.instr i
 @
         
@@ -1010,7 +1012,7 @@ end (* of module StackData *)
 
 <<Make memory declarations>>=
 let initialized_data env target asm expr = 
-        match eval_const env target expr with
+        match eval_const env target asm expr with
         | Eval.LinkTime e    -> asm ++ Asm.addr e
         | Eval.CompileTime b -> asm ++ Asm.value b
 
@@ -1071,7 +1073,7 @@ assembly actions.
 <<Make memory declarations>>=
 let rec datum env target mangle asm = function
     | A.DatumAt(x,_)        -> datum env target mangle asm x
-    | A.Label(n)            -> asm ++ Asm.define_local (Asm.mksym (mangle n))
+    | A.Label(n)            -> asm ++ Asm.define_label (Asm.Local (mangle n))
     | A.Align(a)            -> asm ++ Asm.align a 
     | A.MemDecl(t,m,init)   -> memdecl env target asm t m init
 @
@@ -1094,19 +1096,19 @@ accordingly.  The next time we come across a procedure, the properties
 including the span will be used.
 
 <<Make toplevel>>=
-let rec sspan env target mangle asm (e1,e2,ss) =    
-    let key   = compile_const env target e1 in
-    let value = link_const    env target e2 in
+let rec sspan env target mangle optimizer asm (e1,e2,ss) =    
+    let key   = compile_const env target      e1 in
+    let value = link_const    env target  asm e2 in
     (* construct props value, pass it to section. not implemented *)
-        foldl (section env target mangle) asm ss 
+        foldl (section env target mangle optimizer) asm ss 
 
 <<Make toplevel>>=
-and section env target mangle (asm: Asm.asm) = function
-    | A.SectionAt(x,_)     -> section env target mangle asm x
+and section env target mangle optimizer (asm: Asm.asm) = function
+    | A.SectionAt(x,_)     -> section env target mangle optimizer asm x
     | A.Decl(d)            -> asm
     | A.Datum( d)          -> datum   env target mangle asm d
-    | A.Procedure(p)       -> proc    env target mangle asm p
-    | A.SSpan ss           -> sspan   env target mangle asm ss
+    | A.Procedure(p)       -> proc    env target mangle optimizer asm p
+    | A.SSpan ss           -> sspan   env target mangle optimizer asm ss
 @            
 
 What to do with top-level procedures? They should go into some section
@@ -1114,14 +1116,14 @@ because otherwise they will end up in whatever section is currently
 active which just seems wrong.
 
 <<Make toplevel>>=
-let rec toplevel env target mangle asm = function
-    | A.ToplevelAt(x, _)  -> toplevel env target mangle asm x
+let rec toplevel env target mangle optimizer asm = function
+    | A.ToplevelAt(x, _)  -> toplevel env target mangle optimizer asm x
     | A.Section(name, ss) -> 
         let asm = asm ++ Asm.section (mangle name)in  
-            foldl (section env target mangle (*props*)) asm ss
+            foldl (section env target mangle (*props*) optimizer) asm ss
     | A.TopDecl(d)        -> asm (* nothing to do here *)
     | A.TopProcedure(p)   -> let asm = asm ++ Asm.section default_section  
-                             in proc env target mangle (*props*) asm p
+                             in proc env target mangle optimizer asm p
 @
 
 
@@ -1136,11 +1138,11 @@ are registered in the fat environment.  For details, see modules
 
 <<Make translate program>>=
 let exports env asm = 
-    Str.Set.fold (fun s asm -> asm ++ Asm.export (Asm.mksym s)) 
+    Str.Set.fold (fun s asm -> snd (Asm.export s asm)) 
     (F.exported env) asm
 
 let imports env asm =
-    Str.Set.fold (fun s asm -> asm ++ Asm.import (Asm.mksym s)) 
+    Str.Set.fold (fun s asm -> snd (Asm.import s asm)) 
     (F.imported env) asm
 @
 
@@ -1149,11 +1151,11 @@ everything goes into a meaningful section, the first action is to
 start the [[text]] section.
                       
 <<Make translate program>>=
-let program env target mangle asm tt = 
+let program env target mangle asm optimizer tt = 
     let asm = asm ++ Asm.section "text"           in
     let asm = exports env asm                     in
     let asm = imports env asm                     in
-        foldl (toplevel env target mangle) asm tt
+        foldl (toplevel env target mangle optimizer) asm tt
 @
 
 The finger print [[disgest]] for global register declarations is a 16
@@ -1177,13 +1179,13 @@ let translate env target optimizer prog =
        ,area
        ,digest   = globals env target base (F.globals env) in
     let digest   = mangle (String.escaped digest) in
-    let asm      = Asm.init optimizer in
+    let asm      = Asm.init () in
     let asm      = asm ++ Asm.section (target.Target.data_section)
                        ++ Asm.comment "memory for global registers"
                        ++ Asm.align area.Area.align
                        ++ Asm.addloc area.Area.size
-                       ++ Asm.define_local (Asm.mksym base_sym) (*XXX ok? *)
-                       ++ Asm.define_local (Asm.mksym digest) (*XXX*)
+                       ++ Asm.define_label (Asm.Local base_sym) (*XXX ok? *)
+                       ++ Asm.define_label (Asm.Local digest) (*XXX*)
     in   
-        program env target mangle asm prog  (* asm *)
+        program env target mangle asm optimizer prog  (* asm *)
 @    
