@@ -17,6 +17,7 @@
 #   (1) add src/foo.c--
 #   (2) add src/foo.0           if the compiled foo needs input from stdin
 #   (3) mk  -a src/foo.record   runs foo.c-- for all targets, records outputs
+#      N.B. THIS DOES NOT PROPERLY RUN THE PROGRAM AND UPDATE THE STDOUT FILE!
 #   (4) cvs add src/foo.* target/foo.*
 #
 # To run an individual test src/foo.c-- on all targets: 
@@ -54,15 +55,16 @@ record:V:           dummy.record x86.record
 
 dummy.record:V:     ${TESTS:src/%.c--=dummy/%.s} 
 x86.record:V:       ${TESTS:src/%.c--=x86/%.s} 
+	# N.B. THIS DOES NOT PROPERLY RUN THE PROGRAM AND UPDATE THE STDOUT FILE!
 
 test-lua:V:         testdrv.lua example.tst
-                    qc-- testdrv.lua example.tst
+	qc-- testdrv.lua example.tst
 
 clean:V:            
-                    rm -f *.dvi *.log *.aux *.inc *.tex *.toc
+	rm -f *.dvi *.log *.aux *.inc *.tex *.toc
 
 clobber:V:          clean
-                    rm -f testqc testdrv.lua *.tst
+	rm -f testqc testdrv.lua *.tst
 
 # ------------------------------------------------------------------ 
 # Rules for individual test cases
@@ -71,39 +73,39 @@ clobber:V:          clean
 # ------------------------------------------------------------------ 
 
 %.test:V:       %.c-- testqc
-                for t in $TARGETS; do
-                    ./testqc $TESTFLAGS -v -target=$t $stem.c--
-                done    
+	for t in $TARGETS; do
+	  ./testqc $TESTFLAGS -v -target=$t $stem.c--
+	done    
 
 %.record:V:     %.c-- 
-                for t in $TARGETS; do
-                    mk $MKFLAGS $t/`basename $stem`.s
-                done    
+	for t in $TARGETS; do
+	  mk $MKFLAGS $t/`basename $stem`.s
+	done    
 
 %.tst:D:        testdrv.nw
-                $NOTANGLE -L -R$target $prereq > $target
+	$NOTANGLE -L -R$target $prereq > $target
 
 # ------------------------------------------------------------------ 
 # Tests for the different targets 
 # ------------------------------------------------------------------ 
 
 dummy-test:QV:  testqc
-                echo "# testing target dummy"
-                echo -n "# "
-                for f in $TESTS; do
-                    ./testqc $TESTFLAGS -target=dummy $f
-                    echo -n '#'
-                done
-                echo 
+	echo "# testing target dummy"
+	echo -n "# "
+	for f in $TESTS; do
+	  ./testqc $TESTFLAGS -target=dummy $f
+	  echo -n '#'
+	done
+	echo 
 
 x86-test:QV:    testqc
-                echo "# testing target x86"
-                echo -n "# "
-                for f in $TESTS; do
-                    ./testqc $TESTFLAGS -target=x86 $f
-                    echo -n '#'
-                done
-                echo
+	echo "# testing target x86"
+	echo -n "# "
+	for f in $TESTS; do
+	  ./testqc $TESTFLAGS -target=x86 $f
+	  echo -n '#'
+	done
+	echo
 
 
 # ------------------------------------------------------------------ 
@@ -111,35 +113,33 @@ x86-test:QV:    testqc
 # ------------------------------------------------------------------ 
 
 testqc:D:       testqc.nw
-                echo "#! /usr/bin/perl -w "      >  $target
-                $NOTANGLE -L -R$target testqc.nw >> $target
-                chmod +x $target
+	echo "#! /usr/bin/perl -w "      >  $target
+	$NOTANGLE -L -R$target testqc.nw >> $target
+	chmod +x $target
 
 testdrv.lua:D:  testdrv.nw
-   $NOTANGLE -L'$file "%F"%N$line %L%N' -R$target $prereq > $target
+	$NOTANGLE -L'$file "%F"%N$line %L%N' -R$target $prereq > $target
 
 # ------------------------------------------------------------------ 
 # record output
 # ------------------------------------------------------------------ 
 
 dummy/%.s:      src/%.c--
-                t="dummy"
-                b="backend=Backend.dummy"
-                cmd="$QC $b -S -o $t/$stem.s ./src/$stem.c--"
-                $cmd 2> $t/$stem.s2 > $t/$stem.s1 || true 
-                touch $t/$stem.s
-                touch $t/$stem.1
-                touch $t/$stem.2
-                touch src/$stem.0
+	t="dummy"
+	b="backend=Backend.dummy"
+	cmd="$QC -globals $b -stop .s -o $t/$stem.s ./src/$stem.c--"
+	$cmd 2> $t/$stem.s2 > $t/$stem.s1 || true 
+	touch $t/$stem.s
+	touch $t/$stem.1
+	touch $t/$stem.2
+	touch src/$stem.0
 
 x86/%.s:        src/%.c--
-                t="x86"
-                b="backend=Backend.x86"
-                cmd="$QC $b -S -o $t/$stem.s ./src/$stem.c--"
-                $cmd 2> $t/$stem.s2 > $t/$stem.s1 || true 
-                touch $t/$stem.s
-                touch $t/$stem.1
-                touch $t/$stem.2
-                touch src/$stem.0
-
-
+	t="x86"
+	b="backend=Backend.x86"
+	cmd="$QC -globals $b -stop .s -o $t/$stem.s ./src/$stem.c--"
+	$cmd 2> $t/$stem.s2 > $t/$stem.s1 || true 
+	touch $t/$stem.s
+	touch $t/$stem.1
+	touch $t/$stem.2
+	touch src/$stem.0

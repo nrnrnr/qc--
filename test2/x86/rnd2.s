@@ -1,8 +1,8 @@
-.globl _223_030___183_2383_144_190E_157j_151_006_240o
+.globl Cmm.globalsig.bcPDWKVXdYZZBPSFTVVJOBXQNc
 .data
 /* memory for global registers */
-Cmm_private_global_area:
-_223_030___183_2383_144_190E_157j_151_006_240o:
+Cmm.globalsig.bcPDWKVXdYZZBPSFTVVJOBXQNc:
+Cmm.global_area:
 .text
 p:
 	nop

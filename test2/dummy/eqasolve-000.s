@@ -532,19 +532,16 @@ _Class,
     _xzerop;
 
 export bits32
-\212\029\140\217\143\000\178\004\233\128\t\152\236\248B~,
+Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY,
     _main,
     _stdprint,
     _stdputstr;
 
 section "data" { align 1; }
 
-section "data" { sym@Cmm_private_global_area: }
+section "data" { sym@Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY: }
 
-section "data"
-{
-    sym@@212@029@140@217@143@000@178@004@233@128@t@152@236@248B@:
-}
+section "data" { sym@Cmm.global_area: }
 
 section "data" { bits8[0::bits32]; }
 

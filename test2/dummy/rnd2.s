@@ -6,13 +6,13 @@ target
     charset "latin1"
     float "ieee754";
 
-export bits32 \223\030;*\183\2383\144\190E\157j\151\006\240o;
+export bits32 Cmm.globalsig.bcPDWKVXdYZZBPSFTVVJOBXQNc;
 
 section "data" { align 1; }
 
-section "data" { sym@Cmm_private_global_area: }
+section "data" { sym@Cmm.globalsig.bcPDWKVXdYZZBPSFTVVJOBXQNc: }
 
-section "data" { sym@@223@030@@@183@2383@144@190E@157j@151@006@240o: }
+section "data" { sym@Cmm.global_area: }
 
 section "data" { bits8[0::bits32]; }
 
