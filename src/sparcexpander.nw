@@ -25,10 +25,10 @@ specification.
 :}
 
 %head {: <<head>> :}
-<<terminal types>>
 %tail {: <<tail>> :}
 %tail {: end (* of Make *) :}
 
+%term <<terminal types>>
 %%
 <<rules>>
 @
@@ -121,8 +121,8 @@ Register $rs[0]$ is special on the Sparc.
 
 <<head>>=
 let r0 = I.reg 'r' 0
-let fp = I.reg 'r' 30
-let sp = I.reg 'r' 14
+let fp = I.reg 'r' 30   (* frame pointer *)
+let sp = I.reg 'r' 14   (* stack pointer *)
 @
 
 The following address is on the stack and used to move data between 
@@ -163,7 +163,7 @@ values, or monomorphic terminal ({\ocaml}) values. Terminal types must
 be declared:
 
 <<terminal types>>=
-%term k width opr exps agg ass index bool bits link late x symbol
+k width opr exps agg ass index bool bits link late x symbol
 @
 
 The following table summarizes the nonterminals from the rule set. 
@@ -272,8 +272,8 @@ freg:       Fetch(mem, width) [1]
 Fetches from registers.
 
 <<rules>>=
-reg:        Fetch(reg, width)  {: reg :}
-freg:       Fetch(freg, width) {: freg :}
+reg:        Fetch(rcell, width)     {: rcell :}
+freg:       Fetch(fcell, width)     {: fcell :}
 @
 
 
@@ -281,11 +281,11 @@ Registers are categorized into interger, floating point, and control
 registers. Note, that temporaries are treated like hardware registers.
 
 <<rules>>=
-reg:        Cell(s:char, agg, width, k:const, ass) 
+rcell:      Cell(s:char, agg, width, k:const, ass) 
             [{: guard 0 (s = 'r' || s = 't') :}]
             {: return (I.reg s (N.to_int k)) :}    
             
-freg:       Cell(s:char, agg, width, k:const, ass)
+fcell:      Cell(s:char, agg, width, k:const, ass)
             [{: guard 0 (s = 'f' || s = 'u') :}]
             {: return (I.reg s (N.to_int k)) :}
 @
@@ -300,11 +300,11 @@ register allocator. For the moment I assume that $\textit{fp}-8$ is
 reserved.
 
 <<rules>>=
-stmt:       Store(reg, rc, width) [1]
-            {: reg >>= fun r  -> rc  >>= fun rc -> exec (I.mov rc r) :}
+stmt:       Store(rcell, rc, width) [1]
+            {: rcell >>= fun r  -> rc  >>= fun rc -> exec (I.mov rc r) :}
             
-stmt:       Store(f1:freg, f2:freg, width) [1]
-            {: f1 >>= fun f1 -> f2 >>= fun f2 -> exec (I.fmovs f2 f1) :}
+stmt:       Store(fcell, freg, width) [1]
+            {: fcell >>= fun f1 -> freg >>= fun f2 -> exec (I.fmovs f2 f1) :}
 
 <<rules>>=
 reg:        freg [10] -- penality
@@ -442,7 +442,8 @@ Instructions are classified into branches, calls, and so on.
 rtl:        Branch(guard, reloc) [1]
             {:
                 guard >>= fun branch ->
-                exec (branch reloc)
+                exec (branch reloc) >>= fun () ->
+                exec (I.nop)    (* delay slot *)
             :}
 
 rtl:        Goto(reloc) [1]
@@ -467,7 +468,7 @@ let const = function
     | RP.Bool(true)             -> conTrue  ()
     | RP.Bool(false)            -> conFalse ()
     | RP.Link(s,w)              -> conLink s w
-    | RP.Late(s,w)              -> error "late compile time constant"
+    | RP.Late(s,w)              -> error ("late compile-time constant: "^s) 
     | RP.Bits(b)                -> conBits(b)
 
 let rec exp = function
@@ -502,13 +503,7 @@ and rtl = function
         | 'G' -> conGoto   (exp e)
         | _   -> error_rtl (U.rtl rtl)
         )
-    | RP.Rtl(_) as rtl -> 
-            ( List.iter prerr_endline
-                [ "cannot expand this RTL:"
-                ; RU.ToString.rtl (U.rtl rtl)
-                ]
-            ; assert false
-            )        
+    | RP.Rtl(_) as rtl -> error "cannot expand this RTL"
 @
 
 The [[rtl]] function returns (the best) plan to rewrite a given {\rtl}.
@@ -517,18 +512,26 @@ desired expanded instructionss.
 
 <<tail>>=
 let expand tmps (r: R.rtl) = 
-    let plan = rtl (D.rtl r) in
     try
+        let plan = rtl (D.rtl r) in
         match plan.rtl.Camlburg.action () ([],tmps) with
             | (), (is,_) -> is (* instructions in reverse exec order *)
     with 
-        Camlburg.Uncovered -> 
+        | Camlburg.Uncovered -> 
             ( List.iter prerr_endline
                 [ "cannot expand this RTL:"
                 ; RU.ToString.rtl r
                 ]
             ; assert false
             )
+        | Error(msg) ->
+            ( List.iter prerr_endline
+                [ msg
+                ; RU.ToString.rtl r
+                ]
+            ; assert false
+            )
+
 @                        
 
 % ------------------------------------------------------------------ 

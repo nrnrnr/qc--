@@ -1,4 +1,4 @@
-% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% -* mode: Noweb; noweb-code-mode: caml-mode -*-
 % vim: ts=8 sw=4 et sts=4
 
 \input{../config/macros.tex}
@@ -938,6 +938,7 @@ let freeze (p:Proc.t) =
     let stack,eqns = Area.concat stack p.Proc.eqns in
     let solution = Const.solve eqns in
     let ()       = assert (solution.Const.dependent = []) in
+    let ()       = assert (solution.Const.known <>    []) in
     let map      = Strutil.assoc2map solution.Const.known     in
     
     (* The guard protects the subst function. If the guard is true
@@ -946,15 +947,17 @@ let freeze (p:Proc.t) =
         | RP.Const(RP.Late(_)) -> true
         | _                    -> false in
     
-    (* This is the guareded substitution - we replace certain RP.Link 
-     * values *)
+    (* This is the guareded substitution - we replace certain RP.Late
+       values *)
     let rec subst (e:RP.exp) = match e with              
         | RP.Const(RP.Late(x,_)) -> 
             ( try Rtl.Convert.exp (Strutil.Map.find x map) with 
-            | Not_found -> e
+            | Not_found -> 
+                if false then e else Impossible.impossible ("cannot find: "^x)
             )  
         | x -> x in
-    let ()       = Cfgutil.subst p.Proc.cfg (Rtlutil.Subst2.exp ~guard ~map:subst)
+    let ()       = Cfgutil.subst p.Proc.cfg 
+                        (Rtlutil.Subst2.exp ~guard ~map:subst)
     in
         ()
 
@@ -1033,7 +1036,7 @@ let proc env target optimizer asm (cconv,name,args,bdy) =
         ; Proc.eqns     = eqns       (* constraints for compile-time consts *)
         } in
     let () = optimizer i in
-    let () = freeze i    in
+    let () = (**) freeze i (**)   in
         asm#cfg_instr i.Proc.cfg i.Proc.symbol
         
 @

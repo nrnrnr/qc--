@@ -278,8 +278,12 @@ let bne t =
         1]) (Rtl.store 
       (Rtl.cell Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.U.of_int 5 3) 3)) 
       (target t) 32)
+@
 
+The {\rtl} for [[subcc]] is inconsistent with the pattern that should
+match it. Another problem is its shere size.
 
+<<Mk Encoder off>>=
 let subcc rs1 reg_or_imm rd = Rtl.par [Rtl.store rd (Rtl.app
     (Rtl.opr "sub" [32]) [Rtl.fetch rs1 32; reg_or_imm]) 32;
     Rtl.guard (Rtl.app (Rtl.opr "lt" [32]) [Rtl.app (Rtl.opr "sub" [32])
@@ -328,6 +332,20 @@ let subcc rs1 reg_or_imm rd = Rtl.par [Rtl.store rd (Rtl.app
     (Rtl.cell Rtl.none 'i' Rtl.Identity 32 (Rtl.bits (Bits.U.of_int 0 3)
     3))) (Rtl.app (Rtl.opr "borrow" [32]) [Rtl.fetch rs1 32;
     reg_or_imm; Rtl.bits (Bits.U.of_int 0 1) 1]) 1]
+@
+
+Below is a much simpler encoding for the [[subcc]] instruction.
+
+<<Mk Encoder>>=
+let subcc rs1 reg_or_imm rd = 
+    let i     = Rtl.cell Rtl.none 
+                    'i' Rtl.Identity 32 (Rtl.bits (Bits.U.of_int 0 3) 3) in
+    let undef = Rtl.app (Rtl.opr "undef" [32]) [] in           
+        Rtl.par
+            [ Rtl.store rd (Rtl.app (Rtl.opr "sub" [32]) 
+                [Rtl.fetch rs1 32; reg_or_imm]) 32
+            ; Rtl.store i undef 32
+            ]
 
 let cmp rs1 reg_or_imm = 
     subcc rs1 reg_or_imm r0
@@ -626,9 +644,13 @@ when Base.to_bool (Bitops.eq arg5623 (Bits.U.of_int 5 3)) ->
 when Base.to_bool (Bitops.eq arg5650 (Bits.U.of_int 0 3) && Bitops.eq 
     arg5651 (Bits.U.of_int 0 1) && Bitops.eq arg5652 
     (Bits.U.of_int 5 3)) -> Instruction.bne (target t)
-    
+@    
 
-<<instructions>>=
+The machine-generated pattern below does not match the machine-generated
+representation. For the time being we replace both with simple
+hand-written constructors and patterns.
+
+<<instructions off>>=
 | RP.Rtl [(RP.Const (RP.Bool true), 
   RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
     RP.App (("sub", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
@@ -834,8 +856,26 @@ when true (* Base.to_bool (rs1 = rs1'''''''''''' && rs1 = rs1''''''''''' &&
     (Bits.U.of_int 0 3) && Bitops.eq arg665 (Bits.U.of_int 0 1))) *) -> 
    Instruction.subcc (Bits.U.to_native rs1) (Instruction.imode 
          (Bits.U.to_native arg701)) (Bits.U.to_native rd) 
+@
 
+We replace the above pattern with a new pattern that corresponds to the
+new constructor function in the encoder module.
 
+<<instructions>>=
+| RP.Rtl 
+    [(RP.Const (RP.Bool true), 
+        RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
+        RP.App (("sub", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
+        RP.Const (RP.Bits rs1), _), 32); RP.Const (RP.Bits arg663)]), 32))
+   ; (RP.Const (RP.Bool true),
+       RP.Store (RP.Cell ('i', Rtl.Identity, 32, RP.Const (RP.Bits _), _),
+       RP.App (("undef", [32]), []), 32))
+   ] 
+when   Base.to_bool (Bitops.fits_signed arg663 13) ->
+   Instruction.subcc (Bits.U.to_native rs1) (Instruction.imode 
+         (Bits.U.to_native arg663)) (Bits.U.to_native rd) 
+
+<<instructions>>=
 | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (RP.Cell ('f', Rtl.Identity, 
     32, RP.Const (RP.Bits fd), _), RP.Fetch (RP.Cell ('f', Rtl.Identity, 
     32, RP.Const (RP.Bits fs2), _), 32), 32))] -> 
@@ -869,6 +909,15 @@ when Base.to_bool (Bitops.fits_signed arg37 13) ->
 when Base.to_bool (Bitops.fits_signed arg215 13) -> 
    Instruction.or_ (Bits.U.to_native rs1) (Instruction.imode 
          (Bits.U.to_native arg215)) (Bits.U.to_native rd) 
+
+| RP.Rtl [(RP.Const (RP.Bool true), 
+RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
+  RP.App (("or", [32]), [RP.Fetch (RP.Cell ('r', Rtl.Identity, 32, 
+      RP.Const (RP.Bits rs1), _), 32); RP.Fetch (RP.Cell ('r', 
+        Rtl.Identity, 32, RP.Const (RP.Bits rs2), _), 32)]), 32))] -> 
+   Instruction.or_ (Bits.U.to_native rs1) (Instruction.rmode 
+         (Bits.U.to_native rs2)) (Bits.U.to_native rd) 
+
       
 | RP.Rtl [(RP.Const (RP.Bool true), 
   RP.Store (RP.Cell ('r', Rtl.Identity, 32, RP.Const (RP.Bits rd), _), 
