@@ -1043,20 +1043,20 @@ targets     :   TARGETS names                  { $2 }
 The grammar uses [[lvalue]] not only at the left hand side of
 assignments but also as part of expressions where they denote the
 values of registers and memory.  The introduction of hints for
-registers has lead to serious reduce/reduce conflicts caused by the
-use of [[lvalueAt]] in [[sexpr]].  One way of getting rid of them was
-to split the original [[lvalueAt]] into [[lvalueAt0]] and
-[[lvalueAt]]: [[lvalueAt0]] does not include [[STR ID]] which is not
-needed for [[sexpr]].
+registers (implemented as [[opstr ID]] or similar) has lead to serious
+reduce/reduce conflicts caused by the use of [[lvalueAt]] in
+[[sexpr]].  One way of getting rid of them was to split the original
+[[lvalueAt]] into [[lvalueAt0]] and [[lvalueAt]]:  [[lvalueAt0]] does
+not include [[STR ID]] which is not needed for [[sexpr]].
 
 <<>>=
 lvalueAt    :   lvalue                         { A.LValueAt($1,p()) } 
 lvalue      :   lvalue0                        { $1 } 
-            |   STR ID                         { A.Var($2) } 
+            |   STR ID                         { A.Var(Some $1,$2) } 
             
 <<>>=
 lvalueAt0   :   lvalue0                                { A.LValueAt($1,p()) }
-lvalue0     :   ID                                     { A.Var($1)          }
+lvalue0     :   ID                                     { A.Var(None, $1)    }
             |   sty   LBRACKET exprAt aligned RBRACKET { A.Mem($1,$3,$4)    }
             |   sty   LBRACKET exprAt         RBRACKET { A.Mem($1,$3,None)  }
             |   ID    LBRACKET exprAt aligned RBRACKET
@@ -1152,8 +1152,11 @@ stmts       :   stmts stmtAt                   { $2 :: $1 }
 <<>>=
 sexprAt     :   sexpr                          { A.ExprAt($1, p()) }
 sexpr       :   INT                            { A.Int   $1        }
+            |   INT CCOLON tyAt                { A.Int   $1        }
             |   FLT                            { A.Float $1        }
+            |   FLT CCOLON tyAt                { A.Float $1        }
             |   CHAR                           { A.Char  $1        }
+            |   CHAR CCOLON tyAt               { A.Char  $1        }
             |   lvalueAt0                      { A.Fetch $1        }
             |   PRIMOP actls                   { A.PrimOp($1,$2)   }
 <<>>=
