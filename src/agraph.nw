@@ -150,10 +150,12 @@ if two nodes are related they belong to the same graph.
 We start translating back to front, with the [[exit]] node.  As we
 build the flow graph, we always have edges that provide the control
 flow out of the node and through the graph, all the way to an
-unconditional [[goto]] or to the exit node.
+unconditional [[goto]] or to the exit node. The top node of a flow
+graph, that is of a procedure, is an [[entry]] node. The
 
 <<constructor functions>>=
-val exit : graph -> unode (* the unique exit node of this graph *)
+val exit  : graph -> unode (* the unique exit node of this graph *)
+val entry : node -> unode  (* the unique entry node of this graph *)
 @ 
 
 When we specify a [[goto]], we also need to say what graph it belongs
@@ -191,7 +193,6 @@ An abstract continuation bundle contains a node for the normal
 continuation and the names for all other. The type declaration is put
 into a {\noweb} chunk so it can be re-used in the implementation.
 
-<<constructor functions>>=
 <<cont type>>=
 type cont = { normal  : node
             ; cuts    : string list
@@ -204,10 +205,16 @@ type cont = { normal  : node
 <<constructor functions>>=
 <<cont type>>
 val empty_cont : node -> cont
+@
 
+A call receives a [[cont]] that includes the continuation for normal
+and abnormal returns.  The {\AST} includes a list of targets for a
+call which is ignored in the flow graph and thus not passed to
+[[call]].  A [[jump]], on the other hand, does receive a list of
+targets.
 
 <<constructor functions>>=
-val call : Rtl.expr -> cont -> unode
+val call : Rtl.expr -> cont -> unode  (* no target labels *)
 val jump : graph -> Rtl.expr -> label list -> unode
 @ 
 

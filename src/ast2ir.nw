@@ -341,9 +341,8 @@ let rec body env props graph after bb =
         | A.DeclBody(d)     -> after (* ignore decls *)
         | A.StmtBody(s)     -> stmt s after
         | A.DataBody(dd)    -> after (* ignore data for the moment *)
-                                                    in
-    let exit             = decorate (GM.exit graph) in
-        List.fold_right body bb exit
+    in
+        List.fold_right body bb after
 @
 
 <<cases for translating statements>>=
@@ -492,7 +491,9 @@ and arm env ir = function
 Each procedure is translated into a control flow graph that shares no
 nodes with any other control flow graph.  A procedure's control flow
 graph is anchored with a label in an [[Agraph.graph]] data structure
-under the name of the procedure. 
+with the name of the procedure. 
+
+\emph{Is this true? What about the [[entry]] node?}
 
 A procedure starts with a [[CopyIn]] node that assigns the incoming
 parameters to the named registers and ends with an [[Exit]] node.  The
