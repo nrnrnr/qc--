@@ -18,6 +18,10 @@
 \section{Automaton-Based Slot Allocation}
 % ------------------------------------------------------------------ 
 
+\emph{The predicates for [[choice]] and [[first_choice]] take [[width]]
+and [[hint]] in different orders. Maybe we should define an extra type
+alias. --CL}
+
 This module supports Bailey-Davidson automata for allocating locations
 for value-passing.
 An automaton manages a set of hardware locations, which it uses to
@@ -623,7 +627,7 @@ use all its components.
 <<exclusion functions>>=
 let map_union map key set = try RS.union set (RM.find key map) with Not_found -> set
 
-let use t r =
+let use' t r =
   let excluded = map_union t.excludes r t.excluded in
   let excluded = RS.add r excluded in
   let excluded = match t.cellcount r with
@@ -631,15 +635,34 @@ let use t r =
   | n -> List.fold_right RS.add (reg_components n r) excluded in
   t.excluded <- excluded
 @ 
+
+Given a register with multiple components, the above [[use]] function
+does not exclude a register that is excluded by one of the components.
+In my opinion, the [[use]] function must recursively ``use'' all
+register components. 
+
+In [[use']], the [[exclude]] sub function computes the set of all
+registers excluded by a given register. If we use a compound register,
+we mark its component as used, but not itself. Otherwise the
+[[available]] function cannot tell that that a component was already in
+use. 
+
+<<exclusion functions>>=
+let use t r =
+    let rec exclude r = match t.cellcount r with
+        | 1 -> map_union t.excludes r (RS.singleton r) 
+        | n -> List.fold_right (fun r ex -> RS.union (exclude r) ex)
+                               (reg_components n r)
+                               RS.empty (*?? RS.singleton r ?? *)
+    in
+       t.excluded <- RS.union t.excluded (exclude r)
+@       
+
 Something is available if it is not excluded and if none of its
 components are excluded.
 <<exclusion functions>>=
-let rec available t r =
-  if RS.mem r t.excluded then
-    false
-  else
-    match t.cellcount r with
-    | 1 -> true
+let rec available t r = match t.cellcount r with
+    | 1 -> not (RS.mem r t.excluded)
     | n -> List.for_all (available t) (reg_components n r)
 @ 
 <<exclusion functions>>=

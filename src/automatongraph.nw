@@ -213,6 +213,10 @@ state and a [[path]] of types. It feeds [[path]] through the automaton,
 observes its final state, and returns it as a [[node]].
 
 <<automatongraph.ml>>=
+let noloc = { A.fetch = (fun _ -> assert false)
+            ; A.store = (fun _ -> assert false)
+            }
+
 let goto mk path =
     let t    = mk ()                        in
     let ()   = List.iter (fun (w,h) -> ignore (A.allocate t w h)) path in
@@ -221,6 +225,19 @@ let goto mk path =
         ; align = res.A.align_state
         }
 @
+
+Given an abstract location, we would like to know the registers it
+contains. To find out, we use a trick: we store a (possibly ill-sized)
+constant into the location and receive an {\rtl} for this operation.
+This we can analyse and we should find the registers we are looking for.
+
+<<automatongraph.ml>>=
+let registers loc =
+    let c   = Rtl.bits (Bits.zero 32) 32 in
+    let rtl = A.store loc c 32 in
+    let (read, written) = Rtlutil.ReadWrite.sets rtl in
+        written
+@    
 
 The heart of the algorithm are two mutually recursive functions,
 [[dfs]] and [[follow]]. The depth-search function [[dfs]] explores a

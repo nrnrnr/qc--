@@ -94,6 +94,7 @@ always writes it (and it is live on entry).
 
 <<mipscall.ml>>=
 let r n     = ('r',n,32)
+let l n     = ('r',n,64)    (* "long" - used for 64-bit floats in 4/5, 6/7 *) 
 let f n     = ('f',n,32)
 let d n     = ('f',n,64)
 let vfp     = Vfp.mk 32
@@ -175,25 +176,6 @@ building blocks from the \module{automaton.nw} module. The simple
 convention here should work for integer argument lists.
 
 <<mipscall.ml>>=
-let arguments =
-    A.hint_choice
-        [ ((=) "float"),
-            A.widen (Aux.round_up_to ~multiple_of:32)        *>
-            A.useregs [f 12; f 14] ~errormsg:fatal   (* INCORRECT!!! *)
-        ; (fun _ -> true),
-            A.widen (Aux.round_up_to ~multiple_of:32)        *>
-            A.useregs [r 4; r 5; r 6; r 7] ~errormsg:fatal 
-        ] **>
-    A.overflow ~memsize:8 ~byteorder ~growth ~max_alignment:sp_align
-@
-
-@ 
-To support varargs, each argument registers maps to a particular
-location, and there are overlapping locations for integer and
-floating-point parameters.
-Therefore the use of one argument register must exclude others.
-N.B.~We can't properly widen floating-point parameters, and we don't try.
-<<mipscall.ml>>=
 let spaces =
   let module SS = Space.Standard32 in
   let r = SS.r 32 byteorder [32; 64] in
@@ -202,24 +184,48 @@ let spaces =
   | 'r' -> r
   | 'f' -> f
   | _   -> Impossible.impossible "register space in parameter passing"
-
-let arguments () =
-  (* N.B. exc is mutable and must be made fresh each time *)
-  let exc = A.Exclude.of_pairs spaces [ [r 4; r 5], [f 12; d 12]
-                                      ; [r 6; r 7], [f 14; d 14]
-                                      ] in
-  A.choice   
-      [ (fun h w -> h = "float" & w = 32),
-          A.sharedregs exc [f 12; f 14] ~errormsg:fatal
-      ; (fun h w -> h = "float" & w = 64),
-          A.sharedregs exc [d 12; d 14] ~errormsg:fatal
-      ; (fun h w -> h <> "float"),
-          A.widen (Aux.round_up_to ~multiple_of:32)        *>
-          A.sharedregs exc [r 4; r 5; r 6; r 7] ~errormsg:fatal 
-      ] **>
-  A.overflow ~memsize:8 ~byteorder ~growth ~max_alignment:sp_align
 @
-        
+
+To use my test framework I allow 64-bit integer arguments and treat them
+like 64 bit floating-point arguments. There are no 64-bit integers on
+the {\mips}.
+
+<<mipscall.ml>>=
+let arguments () =
+    let exc = A.Exclude.of_pairs spaces [[r 4] , [f 12] 
+                                        ;[f 12], [f 13]
+                                        ;[f 14], [f 15]
+                                        ;[r 5] , [f 13; f 14] 
+                                     (* ;[r 6] , [f 14]  *)
+                                     (* ;[r 7] , [f 15]  *)
+                                         ] in
+
+    A.first_choice 
+    [ (fun w h -> h = "float"),
+        A.widen (Aux.round_up_to ~multiple_of: 32) *>
+        A.widths [32;64] ~errormsg:(badwidth "MIPS argument") *>
+        A.choice
+        [ (fun h w -> h="float" && w=32),
+            A.sharedregs exc [f 12; f 14; r 6; r 7] ~errormsg:fatal   
+        ; (fun h w -> w=64), (* h = "float" *)
+            A.sharedregs exc [d 12; d 14] ~errormsg:fatal
+        ; (fun h w -> w=32), 
+            A.sharedregs exc [r 4; r 5; r 6; r 7] ~errormsg:fatal
+        ] 
+    ; (fun _ _ -> true),
+        A.widen (Aux.round_up_to ~multiple_of: 32) *>
+        A.widths [32;64] ~errormsg:(badwidth "MIPS argument") *>
+        A.choice
+        [ (fun h w -> w=32),
+            A.sharedregs exc [r 4; r 5; r 6; r 7] ~errormsg:fatal
+        ; (fun h w -> w=64), (* h = "float" *)
+            A.sharedregs exc [l 4; l 6] ~errormsg:fatal
+        ]  
+    ] **>
+    A.overflow ~memsize:8 ~byteorder ~growth ~max_alignment:sp_align
+@ 
+
+       
 \paragraph{C~cut-to parameters}
 
 Since this is strictly internal calling convention, we can use whatever
