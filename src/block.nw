@@ -1,0 +1,151 @@
+% Area.nw is going to be replaced by this module. It is much simpler and
+% purely functional.
+
+% ------------------------------------------------------------------ 
+\section{Memory Blocks}
+% ------------------------------------------------------------------ 
+
+This module defines memory blocks that can be composed into complex
+blocks. The main application is the definition of a procedure's stack
+frame. However, this module is completely general.
+
+A block [[t]] is a contiguous piece of memory with a base address $b$
+and a size $s$. It covers the open address interval $[b, b+s)$. The base
+address $b$ respects the alignment requirement $a$: at run time, $b
+\bmod a = 0$ is known to hold. The base, size, and alignment are used to
+construct a block and can be observed as well.
+
+<<block.mli>>=
+type t
+
+(* constructors *)
+val mk: base:Rtl.exp -> size:int -> alignment:int -> t
+
+(* observers *)
+val base:           t -> Rtl.exp
+val size:           t -> int
+val alignment:      t -> int
+val constraints:    t -> Const2.t list
+@
+
+The base address of a block is typically not fixed, but contains some
+\emph{late compile-time constants}. The values of these are determined
+by the compositions a block takes part in. Once all compositions are
+done, the final constraints can be observed and fed into an equation
+solver. The result of the constraints are values for the late
+compile-time constants. A separate substitution step must replace the
+late compile-time constants in {\rtl} expressions that emerged from the
+block operations.
+
+Two blocks whose data are live at the same time can be concatenated into
+one bigger block. Inside the new block, the data from the first block
+occupies the lower addresses, and the second block the higher addresses.
+Both address spaces do not overlap. Between those two blocks might be a
+gap to fulfill the alignment requirements of both blocks.
+
+Two blocks whose data are never live at the same time can be overlapped
+into one block where the two blocks share memory. In the resulting block
+the two original blocks can either share their [[Low]] or [[High]] end.
+Both blocks must be \emph{adjusted}: their size is a multiple of their
+alignment requirement. The [[adjust]] function enlarges a block if
+necessary to make it adjusted.
+
+<<block.mli>>=
+type placement = High | Low
+
+val cat:        t -> t -> t
+val overlap:    placement -> t -> t -> t     (* req: arguments are adjusted *)
+val adjust:     t -> t                       (* result is adjusted *)
+@
+
+% ------------------------------------------------------------------ 
+\section{Implementation}
+% ------------------------------------------------------------------ 
+
+<<block.ml>>=
+module C = Const2
+
+type t =
+    { base:         Rtl.exp
+    ; size:         int
+    ; alignment:    int
+    ; constraints:  C.t list
+    }
+
+let base t          = t.base
+let size t          = t.size
+let alignment t     = t.alignment
+let constraints t   = t.constraints
+
+let mk ~base ~size ~alignment =
+    { base          = base
+    ; size          = size
+    ; alignment     = alignment
+    ; constraints   = []
+    }
+
+type placement = High | Low
+@
+
+[[Align x n]] returns the smallest multiple of $n$ that is not smaller
+than $x$. Think of $x$ becoming $n$-aligned. 
+
+<<block.ml>>=
+let align x n = let q = x / n in if q = 0 then x else n * (q+1)
+@
+
+[[Add]] adds an integer to an {\rtl} expression and returns an {\rtl}
+expression.
+
+<<block.ml>>=
+let add exp i = 
+    let width = Rtlutil.Width.exp exp in
+    let opr   = Rtl.opr "add" [width] in
+        Rtl.app opr [exp; Rtl.bits (Bits.S.of_int i width) width]
+@
+
+When concatenating, we have to leave a gap between the first and the
+second block to make sure we respect the alignment of the second block.
+We do so by virtually increasing the size of the first block to
+[[size']] which is a multiple of the second block's allignment. The
+alignment of the resulting block is the maximum of the two incoming
+alignments.
+
+<<block.ml>>=
+let cat x y =
+    let size' = align (size x) (alignment y) + size x in
+        { base          = base x
+        ; size          = size'
+        ; alignment     = max (alignment x) (alignment y)
+        ; constraints   = C.equate (add (base x) size') (base y)  
+                          :: (constraints x) @ (constraints y) 
+        }
+@
+
+When overlapping blocks, the resulting block must be large enough for
+the bigger of the two. The constraints express that either the lower
+ends align, or the higher ends.
+
+<<block.ml>>=
+let overlap place x y = 
+    assert ((size x) mod (alignment x) = 0);
+    assert ((size y) mod (alignment y) = 0);
+    match place with
+    | Low ->      
+        { base          = base x
+        ; size          = max (size x) (size y)
+        ; alignment     = max (alignment x) (alignment y)
+        ; constraints   = C.equate (base x) (base y)
+                          :: (constraints x) @ (constraints y)
+        }    
+    | High ->      
+        { base          = if size x > size y then base x else base y
+        ; size          = max (size x) (size y)
+        ; alignment     = max (alignment x) (alignment y)
+        ; constraints   = C.equate (add (base x) (size x))
+                                   (add (base y) (size y))
+                          :: (constraints x) @ (constraints y)
+        }           
+
+let adjust t = { t with size = align (size t) (alignment t) }
+@        
