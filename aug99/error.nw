@@ -1,0 +1,176 @@
+% -*- mode: Noweb; noweb-code-mode: sml-mode -*-
+\chapter{Error information and its propagation}
+The idea is that we use type [['a error]] to propagate possibly
+erroneous [['a]]'s without cascading error messages.
+[[error]] is really like [[option]], but it comes with a different set
+of expectations.
+See the paper
+\nwanchorto{http://www.eecs.harvard.edu/~nr/pubs/error-abstract.html}{\emph{Eliminating
+Spurious Error Messages\ldots}} for a detailed explanation.
+<<interface>>=
+datatype 'a error = Error | Ok of 'a
+type pretty = string (* something that can be printed nicely *)
+exception ErrorExn of Sourcemap.location * pretty list
+
+(* combinators *)
+val combine  : 'a error error -> 'a error
+val map      : ('a -> 'b) -> 'a error -> 'b error
+val sequence : ('a -> 'b error) -> 'a error -> 'b error
+val errorEnv : (('a -> 'b) -> 'c -> 'd) -> ('a -> 'b error) -> 'c -> 'd error
+val errorEnvOption : 
+      (('a -> 'b option) -> 'c -> 'd) -> ('a -> 'b error option) -> 'c -> 'd error
+
+(* raising combinators *)
+module Raise : sig
+  val option : 'a error option -> 'a option error
+  val list   : 'a error list -> 'a list error
+  val pair   : 'a error * 'b error -> ('a * 'b) error
+  val left   : 'a error * 'b       -> ('a * 'b) error
+  val right  : 'a       * 'b error -> ('a * 'b) error
+  val triple : 'a error * 'b error * 'c error -> ('a * 'b * 'c) error
+  val quad   : 'a error * 'b error * 'c error * 'd error -> ('a * 'b * 'c * 'd) error
+end
+
+module Lower : sig
+  val pair   : ('a * 'b)           error -> 'a error * 'b error
+  val triple : ('a * 'b * 'c)      error -> 'a error * 'b error * 'c error
+  val quad   : ('a * 'b * 'c * 'd) error -> 'a error * 'b error * 'c error * 'd error
+end
+
+
+val warning  : Sourcemap.location -> string list -> unit
+val warningp : SourceMap.location -> pretty list -> unit
+
+(* functions that raise Error *)
+val error  : Sourcemap.location -> string list -> 'a
+val errorp : Sourcemap.location -> pretty list -> 'a
+
+(* functions that issue messages but do not raise Error *)
+val errormsg  : Sourcemap.location -> string list -> unit
+val errormsgp : Sourcemap.location -> pretty list -> unit
+val ppErr : pretty -> unit
+
+val catch  :       (pretty -> unit) -> ('a -> 'b error) -> 'a -> 'b error
+val catch' : 'a -> (pretty -> unit) -> ('b -> 'a)       -> 'b -> 'a
+val catchDelayed :
+   (unit -> 'a) -> (pretty -> unit) -> ('b -> 'a)       -> 'b -> 'a
+<<implementation>>=
+type 'a error = Error | Ok of 'a
+type pretty = string
+exception ErrorExn of Sourcemap.location * pretty list
+@ 
+The raising combinators move [[error]] to be a top-level type
+constructor.
+<<implementation>>=
+module Raise = struct
+  <<raising>>
+end
+@ 
+We manipulate these things in stylized ways.
+[[list]] takes [['a error list]] into [['a list error]].
+If any value is bad, the list is bad, and we do no further computing
+with it.
+<<raising>>=
+let list l =
+  let rec u = function
+        | ([], stripped) -> Ok (List.rev stripped)
+        | (Ok h::t, stripped) -> u(t, h::stripped)
+        | (Error::_, _) -> Error
+  in  u(l, [])
+@ 
+[[pair]] does the same for pairs.
+<<raising>>=
+let pair = function (Ok x, Ok y) -> Ok (x, y)
+                  | _ -> Error
+@ 
+We can do left or right values only.
+<<raising>>=
+let left  = function (Ok x, y) -> Ok (x, y)
+                   | _ -> Error
+let right = function (x, Ok y) -> Ok (x, y)
+                   | _ -> Error
+@
+<<raising>>=
+let option = function
+  | (None) -> Ok None
+  | (Some (Ok x)) -> Ok (Some x)
+  | (Some Error) -> Error
+@ 
+[[triple]] and [[quad]] do the same for triples and quadruples.
+<<raising>>=
+let triple = function
+  | (Ok x, Ok y, Ok z) -> Ok (x, y, z)
+  | _ -> Error
+let quad = function
+  | (Ok x, Ok y, Ok z, Ok w) -> Ok (x, y, z, w)
+  |  _ -> Error
+let xxx = 3
+@ 
+And lowering is the dual operation.
+<<implementation>>=
+module Lower = struct
+  let pair   = function (Error) -> (Error, Error)
+                      | (Ok (x, y)) -> (Ok x, Ok y)
+  let triple = function (Error) -> (Error, Error, Error)
+                      | (Ok (x, y, z)) -> (Ok x, Ok y, Ok z)
+  let quad   = function (Error) -> (Error, Error, Error, Error)
+                      | (Ok (x, y, z, w)) -> (Ok x, Ok y, Ok z, Ok w)
+end
+@ 
+We use [[map]] to propagate errors, by analogy with [[List.map]].
+[[f]] either  returns a good value or raises [[Error]].
+<<implementation>>=
+let map f = function Ok x -> Ok (f x) | Error -> Error
+@ 
+In case we wind up with [['a error error]], we can combine the two
+[[error]] constructors. 
+[[combine o map]] is useful.
+<<implementation>>=
+let combine = function Error -> Error | (Ok x) -> x
+@ 
+Now we can do something a little more tricky.  Suppose we have a
+function on a clean environment, and we want to pass it an environment
+that can return [['a error]].  Here's what we do:
+<<implementation>>=
+exception Lookup
+let errorEnv : (('a -> 'b) -> 'c -> 'd) -> ('a -> 'b error) -> 'c -> 'd error =
+  fun f env x ->
+    let env' n = match env n with Ok x -> x | Error -> raise Lookup
+    in  try Ok (f env' x) with Lookup -> Error
+
+let errorEnvOption 
+  : (('a -> 'b option) -> 'c -> 'd) -> ('a -> 'b error option) -> 'c -> 'd error
+  = fun f env x ->
+      let env' n = match env n 
+                    with Some (Ok x) -> Some x
+                       | Some Error -> raise Lookup
+                       | None -> None
+      in  try Ok (f env' x) with Lookup -> Error
+@ 
+[[catch']] catches the [[Error]] exception and turns it into a
+default value, usually [[Error]].
+<<implementation>>=
+let msg ty loc l = Sourcemap.Location.string loc :: " " :: ty :: ": " :: l
+let ppErr = List.iter prerr_string 
+let catch' default consumer f x =
+  try f x with ErrorExn (loc, pp) -> (consumer (msg "Error" loc pp); default)
+let catchDelayed default consumer f x =
+  try f x
+  with ErrorExn (loc, pp) -> (consumer (msg "Error" loc pp); default ())
+let catch x  = catch' Error x (* obey value restriction *)
+@ 
+<<implementation>>=
+let error  loc msg = raise (ErrorExn (loc, msg))
+let errorp loc msg = raise (ErrorExn (loc, msg))
+let warning  loc mm = ppErr (msg "Warning" loc mm)
+let warningp = warning
+@ 
+<<implementation>>=
+let errormsg loc msg =
+  ( prerr_string (Sourcemap.Location.string loc)
+  ; prerr_string " Error: "
+  ; List.iter prerr_string msg
+  ; prerr_newline ()
+  )
+let errormsgp loc pp = ppErr (msg "Error" loc pp)
+
