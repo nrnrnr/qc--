@@ -45,6 +45,9 @@ the linking allows us to load in multiple assembly units at once and then
 properly relocate the [[RBlock]]s associated with each one just loaded (in
 the correct order).
 
+NOTE: the [[definitions_yet]] field is a boolean indicating whether or not the
+interpreter has seen any label or procedure definitions in the assembly unit.
+
 <<type definitions>>=
 typedef struct au {
   unsigned   int id;
@@ -56,6 +59,8 @@ typedef struct au {
   RBlock     def_section;
   table      section_table;
   table      label_table;
+
+  unsigned   int definitions_yet;
 
   struct au *next;
 } assembly_unit;
@@ -196,6 +201,8 @@ assembly_unit *enter_new_assembly_unit(lua_State *L) {
 
   assembly_unit *au = assembly_unit_new();
   mem_assert(au);
+
+  au->definitions_yet = 0;
 
   au->id          = next_au_id++;
   au->byte_order  = DEF_BYTE_ORDER;
