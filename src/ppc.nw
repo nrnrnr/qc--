@@ -534,12 +534,21 @@ A.register_cc(Backend.ppc.target,"notail",PPC.cc["C--"])
 <<PPC stack layout in Lua>>=
 PPC = PPC or {}
 PPC.layout = { creates='no late consts' }
-
+@ 
+We have a nasty problem on the PowerPC: if we call a varargs function,
+we have to be careful to reserve space on the stack to hold up to
+eight parameter registers.
+The documentation is unclear, but we believe this hack is \emph{not}
+necessary for calling a non-varargs function.
+It might be nice, at some time in the future, to scrutinize the
+[[ccname]] and reserve the varargs area only when needed.
+<<PPC stack layout in Lua>>=
 function PPC.layout.fn(dummy,proc) --- dispatch on cc name
-  return PPC.layout[Stack.ccname(proc)](dummy, proc)
+  return PPC.layout[Stack.ccname(proc)](dummy, proc, 'varargs')
+    -- might one day optimize and not always pass 'varargs'
 end
 
-function PPC.layout["C"](dummy, proc)
+function PPC.layout["C"](dummy, proc, varargs)
   local blocks  = Stack.blocks(proc)
 
   local old, young = blocks.oldblocks, blocks.youngblocks
@@ -553,6 +562,11 @@ function PPC.layout["C"](dummy, proc)
       , callee = Block.relative(blocks.sp , "our linkage area"     , 24, 16)
       }     -- Mach-O Runtime Conventions for PowerPC, pp47--48
 
+  local youngparms = Block.cat(32, {young.caller, young.callee})
+  if varargs then
+    youngparms = Block.overlap_low(32, {youngparms,
+                      Block.relative(blocks.vfp, "varargs flush area", 32, 4) })
+  end
 
   local layout =
       { Block.cat (32, {old.caller, old.callee, linkage.caller})
@@ -560,7 +574,7 @@ function PPC.layout["C"](dummy, proc)
       , blocks.spills
       , blocks.continuations
       , blocks.stackdata
-      , Block.cat (32, {young.caller, young.callee, linkage.callee})
+      , Block.cat (32, {youngparms, linkage.callee})
       , blocks.sp
       }
 
