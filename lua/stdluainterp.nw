@@ -29,7 +29,7 @@ module type S = sig
   val compile : srcdbg:(Srcmap.map * bool) -> Ast.chunk list -> state -> compiled
   type startup_code = (string -> unit) -> unit
   val pre_mk  : unit -> state * startup_code (* produce a fresh, initialized state *)
-  val error   : state -> string -> 'a   (* error fallback *)
+  val error   : string -> 'a   (* error fallback *)
 
   val getglobal : state -> value -> value
     (* get the named global variable *)
@@ -117,9 +117,12 @@ The error fallback is \emph{always} supposed to raise an exception; if
 it does return a value something is horribly wrong.
 We get to the error fallback from Caml by calling the [[error]]
 function; if it doesn't raise an exception, we complain bitterly.
-<<interp fallbacks>>=
-let error g s =
-  ignore (fallback "error" g [V.String s]);
+<<interp toplevel>>=
+exception Errorfallback of V.value list
+let error s = raise (Errorfallback [V.String s])
+<<definition of [[catcherrorfallback]]>>=
+let catcherrorfallback g vs =
+  ignore (fallback "error" g vs);
   raise (Error "Error fallback returned a value")
 @ 
 Here are the definitions of the builtin fallbacks.
@@ -194,6 +197,7 @@ let rec fallback fbname g args =
   let fbval = try Hashtbl.find g.V.fallbacks fbname
               with Not_found -> <<fallback failure>>
   in call fbval g args
+<<definition of [[catcherrorfallback]]>>
 @ 
 It should never happen that we don't have a fallback.
 But it can happen if a client registers an impure function as pure.
@@ -233,6 +237,7 @@ let apply f g args = match f with
   | V.Function (info, f) -> (* NOT SURE IF THIS with_stack IS NEEDED *)
          ( try (with_stack info g f args) with
          | V.Projection (v, what) -> <<projection error fallback>>
+         | Errorfallback vs -> catcherrorfallback g vs
         (*** need the stack trace
          | Invalid_argument msg -> <<argument error fallback>>
          ***)
@@ -894,7 +899,8 @@ let register_module tabname members g =
   let t = match t with
   | V.Nil       -> V.Table.create (List.length members)
   | V.Table t   -> t
-  | _           -> error g ("Global value " ^ tabname ^ " is not (table or nil)") in
+  | _           -> catcherrorfallback g
+                   [V.String ("Global value " ^ tabname ^ " is not (table or nil)")] in
   let _ = setglobal g (V.String tabname) (V.Table t) in
     List.iter (fun (k, v) -> V.Table.bind t (V.String k) v) members
 @ 

@@ -55,9 +55,9 @@ module Add (MakeParser : Luaparser.MAKER) (I : Luainterp.S) = struct
                      | V.Function (_,_) -> "function"
                      | V.Userdata _     -> "userdata")
     ; "assert",      V.efunc (V.value **-> V.runit)
-                     (function V.Nil -> I.error g "assertion failed!"
+                     (function V.Nil -> I.error "assertion failed!"
                              | _ -> ())
-    ; "error",       V.efunc (V.string **-> V.runit) (I.error g)
+    ; "error",       V.efunc (V.string **-> V.runit) I.error
     ; "setglobal",   V.efunc (V.value **-> V.value **-> V.runit)
                      (fun k v -> V.Table.bind g.V.globals k v)
     ; "getglobal",   V.efunc (V.value **->> V.value) (I.getglobal g)

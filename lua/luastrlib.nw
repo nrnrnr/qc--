@@ -10,7 +10,7 @@
 module M : Lua.Lib.BARECODE
 <<string builtins>>=
 let unimp g s =
-  V.caml_func (fun _ -> I.error g ("string library does not implement `" ^ s ^ "'"))
+  V.caml_func (fun _ -> I.error ("string library does not implement `" ^ s ^ "'"))
 
 <<support for [[format]]>>
 type 'a parser = int -> (int -> (unit -> 'a) -> 'a) -> (unit -> 'a) -> 'a
@@ -21,7 +21,7 @@ let strindex = { V.embed = (fun n -> V.int.V.embed (n+1))
                } 
 
 let string_builtins g =
-  let error s = I.error g s in
+  let error s = I.error s in
   let invalid f x =
     try f x with Invalid_argument m -> error ("Invalid argument: " ^ m) in
   let wrap_inv = function
@@ -103,7 +103,7 @@ let bprintf_internal g buf format =
         | c ->
             let arg, args =
               match args with h :: t -> h, t
-              | [] -> I.error g
+              | [] -> I.error 
                       "Not enough arguments to string-library function `format'" in
             match c with 
             | 's' ->
@@ -142,10 +142,10 @@ let bprintf_internal g buf format =
             Buffer.add_string buf (format_float (String.sub format i (j-i+1)) f);
             doprn (succ j) args
         | 'p' | 'q' ->
-            I.error g ("string library does not implement format specifier '%" ^
+            I.error   ("string library does not implement format specifier '%" ^
                        String.make 1 c ^ "'")
         | c ->
-            I.error g ("bad format specifier '%" ^ String.make 1 c ^ "'")
+            I.error   ("bad format specifier '%" ^ String.make 1 c ^ "'")
       end
     end
 
