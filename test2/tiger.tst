@@ -1,7 +1,7 @@
 
--- setup x86 backend with color-graph register allocator
+-- setup x86 backend with DLS register allocator
 backend = backend or Backend.x86
-backend.ralloc = backend.ralloc or Ralloc.color
+backend.ralloc = Ralloc.dls
 
 -- tiger setup
 function CMD.compilertab[".tig"](file)
@@ -17,7 +17,8 @@ Test.results = Test.tigertop .. "/test/x86"
 
 function Test.tigertest(filename, stdin)
   return { source = filename, stdin = stdin,
-           other = Test.tigertop .. "/runtime.o " .. Test.tigertop .. "/stdlib.a" }
+           other = Test.tigertop .. "/runtime.o " .. Test.tigertop .. "/stdlib.a " ..
+                   "../runtime/runtime.a ../runtime/pcmap.ld"}
 end
 
 -- source files live in src directory
