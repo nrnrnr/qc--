@@ -1,39 +1,26 @@
-
+% -*- mode: Noweb; noweb-code-mode: lua-mode -*-
 % ------------------------------------------------------------------ 
 \section{Lua Test Driver}
 % ------------------------------------------------------------------ 
 
 This is a lua driver for running the [[qc--]] regression tests. The
-test driver can be used with or without a configuration file. A test
-driver configuration file can specify the compiler configuration to
-use, the source and results directories, and which cases to run. Any
-of the configuration file options can be overridden on the command
-line.
+driver must be run with a test configuration file. A test driver
+configuration file can specify the compiler configuration to use, the
+source and results directories, and which source files to use.
 
 % ------------------------------------------------------------------ 
 \subsection{Usage}
 % ------------------------------------------------------------------ 
 
-The test driver can be used by specifying a set of source files, and
-a results direcotory on the command line.
-
-<<run output>>=
-# qc-- testdrv.lua test.results=\"x86\" src/*.c--
-Running Regression Tests.
-src/x86-001.c--
-  PASSED
-... more output ...
-
-@ A configuration file can also be used. The configuration files are
-lua source files with the extension [[tst]]. As such, the
-configuration files must have valid lua syntax. In addition to the
-compiler settings, the test files may set the following test
-variables:
+The configuration files are lua source files with the extension
+[[tst]]. As such, the configuration files must have valid lua syntax.
+In addition to the compiler settings, the test files may set the
+following test variables:
 
 \begin{itemize}
-\item [[test.results]] the directory containing results files.
-\item [[test.source]] the directory containing source files.
-\item [[test.files]] a table of filenames to test without extensions.
+\item [[Test.results]] directory containing expected results files.
+\item [[Test.source]] directory containing source files.
+\item [[Test.files]] list of source files to test.
 \end{itemize}
 
 <<example.tst>>=
@@ -42,130 +29,313 @@ backend = Backend.x86
 backend.ralloc = Ralloc.color
 
 -- compare results with files in x86
-test.results = "x86"
+Test.results = "x86"
 
--- test cases live in src directory
-test.source  = "src"
-test.files = { "add"
-             , "bits-bug"
-             , "cut"
-             , "hello"
-             , "ralloc-000"
-             , "rnd2"
-             , "x86-000"
-             , "x86-001"
+-- source files live in src directory
+Test.source  = "src"
+Test.files = { "add.c--"
+             , "bits-bug.c--"
+             , "cut.c--"
+             , "hello.c--"
+             , "ralloc-000.c--"
+             , "rnd2.c--"
+             , "x86-000.c--"
+             , "x86-001.c--"
              }
 
 @ To use this test configuration file, execute [[qc--]] with the test
 driver.
 <<run output>>=
-# qc-- testdrv.lua example.tst
-Running Regression Tests.
-src/x86-001.c--
-  PASSED
-src/rnd2.c--
-  PASSED
-src/hello.c--
-  PASSED
-src/cut.c--
-  PASSED
-src/bits-bug.c--
-  PASSED
-src/x86-000.c--
-  PASSED
-src/ralloc-000.c--
-  PASSED
-src/add.c--
-  PASSED
-
-@ The test cases can be changed on the command line by specifying whice
-source files to use.
+# ../bin/qc-- testdrv.lua example.tst
+# Running Regression Tests 6/23/2003
+../bin/qc-- -v testdrv.lua example.tst src/hello.c--.test
+# 1 errors detected.
+@
+In the case of errors, a single line will be printed that can be
+executed to get more detailed information on the error.
+@
+The expected outputs can also be updated using the test driver.
 <<run output>>=
-# qc-- testdrv.lua example.tst src/add.c--
-Running Regression Tests.
-src/add.c--
-  PASSED
+# ../bin/qc-- -v testdrv.lua example.tst src/hello.c--.record
+# Running Regression Tests 6/23/2003
+... mumble ...
+@ 
+% ------------------------------------------------------------------ 
+\subsubsection{Error Handling}
+% ------------------------------------------------------------------ 
+Test configuration files may also contain custom error handlers for
+specific files or file types. When an error is detected, the test
+driver will first look for an error handler associated with the source
+file that has caused the error. If one is not found, then a handler
+associated with the source file extension is executed. The test driver
+provides default error handlers for all of the known extensions.
 
+The example below adds a special error handler for the [[add.c--]]
+source file.
+<<example.tst>>=
+function Test.on_error["add.s"](expected, output)
+  -- provide special processing for detailed output
+  print("error in add.c--")
+  -- call default handler for .s files
+  Test.on_error[".s"](expected, output)
+end
 @ 
 % ------------------------------------------------------------------
 \section{Driver Implementation}
 % ------------------------------------------------------------------
-The driver supports two basic mode of operation. The first mode reads
-in a [[.tst]] file and calls [[translate_files]] for each of the test
-cases in the file. The second mode takes the test cases from the
-command line.
-
-In order to determine which mode we are in, we search the list of
-input files for non-lua and non-tst files.
-
 <<testdrv.lua>>=
-test = {}
-function test.files_specified()
+Test = Test and error("Test already defined") or {}
+Test.errors = 0         -- number of failures found
+Test.verbose = 0        -- provide detailed failure info
+Test.on_error = {}      -- error handlers
+Test.files = {}         -- input source files
+Test.skip_files = nil   -- skip input source files
+
+function Test.list_len(l)
   local i = 1
-  while i <= Options.argc
-  do
-    local ext = CMD.canonical_extension(Options.argv[i])
-    if ext ~= ".tst" then
-     if ext ~= ".lua" then return 1 end
-    end
-    i = i + 1
-  end
-  return nil
+  while l[i] do i = i + 1 end
+  return i - 1
 end
 
-@ A new [[compilertab]] entry handles the [[.tst]] files given on the
-command line. The [[.tst]] file is loaded into the environment with
-[[dofile]] before and processing.
+function Test.status_line(left, right)
+  local len = 80 - strlen(left)
+  write(format("%s%" .. len .. "s\r", left, right))
+end
 
+function Test.clear_status_line()
+  Test.status_line("", "")
+end
+
+function Test.expected(file, ext)
+  local bn = Caml.Filename.basename(file)
+  local cn = Caml.Filename.chop_extension(bn)
+  return Caml.Filename.concat(Test.results, cn .. ext)
+end
+
+-- tmpname's placement of files is unpredictable
+function Test.temp_name(ext)
+  local name = Caml.Filename.basename(tmpname())
+  return Caml.Filename.concat("/tmp", name .. ext)
+end
+@ 
+% -------------------------------------------------------------------
+\subsubection{Error Handlers}
+% -------------------------------------------------------------------
 <<testdrv.lua>>=
+function Test.on_error[".1"](expected, output)
+  local cmd = format("diff %s %s", expected, output)
+  print("# " .. cmd)
+  execute(cmd)
+end
+Test.on_error[".2"] = Test.on_error[".1"]
+Test.on_error[".s1"] = Test.on_error[".1"]
+Test.on_error[".s2"] = Test.on_error[".1"]
+
+-- .s files get a 'diff -y'
+function Test.on_error[".s"](expected, output)
+  local cmd = format("diff -y %s %s", expected, output)
+  print("# " .. cmd)
+  execute(cmd)
+end
+
+function Test.error(file, expected, actual)
+  Test.clear_status_line()
+  Test.errors = Test.errors + 1
+  local basename = Caml.Filename.basename(expected)
+  if Test.verbose > 0 then
+    if Test.on_error[basename] then
+      Test.on_error[basename](expected, actual)
+    else
+      local ext = Caml.Filename.extension(expected)
+      if (Test.on_error[ext]) then
+        Test.on_error[ext](expected, actual)
+      else
+        print(format("FAILED %s\n", expected))
+      end
+    end
+  else
+    print(format("../src/qc-- -v testdrv.lua example.tst %s.test", file))
+  end
+end
+@ 
+% -------------------------------------------------------------------
+\subsubection{Compile and test functions}
+% -------------------------------------------------------------------
+<<testdrv.lua>>=
+function Test.compile_file(file)
+  local s_file = Test.temp_name(".s")
+  local so = s_file .. "1"
+  local se = s_file .. "2"
+
+  Driver.reinit()
+  Options.stop_at(".s")
+  Options.globals = 1
+  Options.output = s_file
+
+  Util.redirect_stdout(so)
+  Util.redirect_stderr(se)
+  CMD.translate_files(file, CMD.compilertab)
+  Util.redirect_stdout()
+  Util.redirect_stderr()
+
+  return { s_file, so, se }
+end
+
+function Test.build_exe(s_file)
+  local exe_file = Test.temp_name(".exe")
+  local obj_file = Test.temp_name(".o")
+  local as_cmd = As.cmd(obj_file, s_file)
+
+  Ld.objects = obj_file
+  local ld_cmd = Ld.cmd(exe_file .. " ")
+  Ld.objects = ""
+
+  execute(as_cmd)
+  execute(ld_cmd)
+  remove(obj_file)
+
+  return exe_file
+end
+
+function Test.run_exe(exe_file)
+  local so = exe_file .. ".1"
+  local se = exe_file .. ".2"
+
+  local cmd = format("%s > %s 2> %s", exe_file, so, se)
+  execute(cmd)
+
+  return { so, se }
+end
+
+function Test.check_file(source, file)
+  local ext = Caml.Filename.extension(file)
+  local exp = Test.expected(source, ext)
+  local status = Util.compare_files(exp, file)
+  if not status then
+    Test.error(source, exp, file)
+    return nil
+  end
+  return 1
+end
+
+function Test.run_test_case(file)
+  local out_files = Test.compile_file(file)
+  local s_file = out_files[1]
+  local so = out_files[2]
+  local se = out_files[3]
+
+  if (not Test.check_file(file, s_file)
+      or not Test.check_file(file, so)
+      or not Test.check_file(file, se))
+      and Test.verbose > 0
+  then
+    exe_file = Test.build_exe(s_file)
+    local files = Test.run_exe(exe_file)
+    local pso = files[1]
+    local pse = files[2]
+    Test.check_file(file, pso)
+    Test.check_file(file, pse)
+    remove(pso)
+    remove(pse)
+    remove(exe_file)
+  end
+
+  remove(s_file)
+  remove(so)
+  remove(se)
+end
+@ 
+% -------------------------------------------------------------------
+\subsubection{Compiler Table Entries}
+% -------------------------------------------------------------------
+<<testdrv.lua>>=
+if CMD.compilertab[".record"] then
+  error("CMD.compilertab[.record] alread defined")
+end
+function CMD.compilertab[".record"](file)
+  print("record not implemented")
+end
+
+if CMD.compilertab[".test"] then
+  error("CMD.compilertab[.test] alread defined")
+end
+function CMD.compilertab[".test"](file)
+  Test.run_test_case(Caml.Filename.chop_extension(file))
+end
+
+if CMD.compilertab[".tst"] then
+  error("CMD.compilertab[.tst] alread defined")
+end
 function CMD.compilertab[".tst"](file)
   dofile(file)
-  if test.files_specified() then return end
-  if not test.files then return end
+  if Test.skip_files or not Test.files then return end
 
---  if not test.source then test.source="src" end
-  index, val = next(test.files, nil)
-  while index do
-    local filename = Caml.Filename.concat(test.source, val .. ".c--")
-    CMD.translate_files(filename, CMD.compilertab)
-    index, val = next(test.files, index)
+  local len = Test.list_len(Test.files)
+  local i = 1
+  while Test.files[i] do
+    Test.status_line(format("Processing test %d of %d", i, len),
+                     format("[ %0.2f %% ]", 100 * (i-1) / len))
+
+    local filename = Caml.Filename.concat(Test.source, Test.files[i])
+    Test.run_test_case(filename)
+
+    i = i + 1
+  end
+  Test.clear_status_line()
+  print(format("# %d errors detected.", Test.errors))
+end
+@ 
+<<testdrv.lua>>=
+function CMD.whatfuns["-compile"]()
+  backend = backend or Backend.x86
+  CMD.translate_files(Options.argv, CMD.compilertab)
+  if Options.stop_count == 0 then
+    execute(Ld.cmd(Options.output or 'a.out'))
+  elseif Options.verbose > 0 then
+    write('Stopping at ', Options.the_stop(), '\n')
+  end    
+end
+
+function CMD.whatfuns["-interp"]()
+  error("-interp flag not supported by testing...")
+end
+
+function CMD.whatfuns["-pp"]()
+  error("-pp flag not supported by testing...")
+end
+@ 
+% -------------------------------------------------------------------
+\subsubection{Startup}
+% -------------------------------------------------------------------
+<<testdrv.lua>>=
+function Test.test_redir()
+  local str = "my test output"
+  local tmp_out = tmpname()
+  Util.redirect_stdout(tmp_out)
+  print(str)
+  Util.redirect_stdout()
+  readfrom(tmp_out)
+  local line = read()
+  readfrom()
+  remove(tmp_out)
+  if line ~= str then
+    error("Unix.redirect_* does not seem to be working properly!")
   end
 end
 
-@ Figure out where the expected results file is based on the input
-filename.
+Test.test_redir()
+print(format("# Running Regression Tests %s", date()))
+Test.verbose = Options.verbose
+Options.verbose = 0
 
-<<testdrv.lua>>=
-function test.expected(file)
-  local bn = Caml.Filename.basename(file)
-  local cn = Caml.Filename.chop_extension(bn) .. ".s"
-  return Caml.Filename.concat(test.results, cn)
-end
-
-@ In order to support both modes of operation, we must override the
-[[.c--]] compile function. Is there a way to save the old function
-and call it from within the new one?
-
-<<testdrv.lua>>=
-function CMD.compilertab[".c--"](file)
-  Driver.reinit()
-  local tmp = tmpname()
-  print(file)
---fh = writeto("output.txt")
-  backend.compile(backend, file, tmp)
---writeto()
-
-  -- compare results
-  local expect = test.expected(file)
-  local status = execute(format("cmp -s %s %s", tmp, expect))
-  if status > 0 then
-     print("  FAILED")
-     -- XXX compile and test program output
-  else
-     print("  PASSED")
+local i = 1
+while i <= Options.argc do
+  local ext = CMD.canonical_extension(Options.argv[i])
+  if ext ~= ".lua" and ext ~= ".tst" then
+    Test.skip_files = 1
+    if ext ~= ".test" and ext ~= ".record" then
+      error("invalid command line arguments")
+    end
   end
-  remove(tmp)
+  i = i + 1
 end
-
-print("Running Regression Tests.")
-Options.stop_at(".s")
