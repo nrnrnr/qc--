@@ -28,7 +28,7 @@ x86-linux.test:V: all.x86.tst rt.x86.tst lcc.x86.tst tiger.x86.tst norun.x86.tst
 powerpc-darwin.test:V: all.ppc.tst
 # sparc-solaris.test:V: all.sparc8.tst lcc.sparc8.tst
 
-test-lua:V: testdrv.lua
+test-lua:V: testdrv.lua limited
 	$NOTANGLE -L'$file "%F"%N$line %L%N' -Rexample.tst testdrv.nw > example.tst
 	$QC testdrv.lua $QCFLAGS example.tst
 
@@ -36,26 +36,33 @@ clean:V:
 	rm -f *.dvi *.log *.aux *.inc *.tex *.toc *.o
 	rm -f opgen.lua copgen.lua copgen32.c optest-$config_arch
 	rm -f cmmopgen-*.c-- optest.c cmmfloat.h interp.h cmmfloat-*.c
+	rm -f limited limited.c
 
 clean.opt:V: clean
 clobber:V: clean
 	rm -f testdrv.lua example.tst ocamlprof.dump
 
 # ------------------------------------------------------------------ 
-# Rules for individual test cases
+# Rules for test components
 # ------------------------------------------------------------------ 
 
-testdrv.lua:D:  testdrv.nw
-	$NOTANGLE -L'$file "%F"%N$line %L%N' -R$target $prereq > $target
+testdrv.lua:D:  testdrv.nw limited
+	$NOTANGLE -L'$file "%F"%N$line %L%N' -R$target testdrv.nw > $target
 
 testdrv.inc:D: testdrv.nw
 	$NOWEAVE -delay -filter ../config/autodefs.lua -index testdrv.nw > testdrv.inc
 
-%.tst:VQ: testdrv.lua
+limited.c:D:  testdrv.nw
+	$NOTANGLE -L -R$target $prereq > $target
+
+limited: limited.c
+	$CC $CFLAGS -o $target $prereq
+
+%.tst:VQ: testdrv.lua limited
 	echo "# $QC testdrv.lua $QCFLAGS $target"
 	$QC testdrv.lua $QCFLAGS $target
 
-%.tst.opt:VQ: testdrv.lua
+%.tst.opt:VQ: testdrv.lua limited
 	mk QC=../bin/qc--.opt QCFLAGS="$QCFLAGS" $stem.tst
 
 # ----------------------------------------------------------------

@@ -13,6 +13,7 @@ Test.files = { "add.c--"
 	     , "emptyifbody.c--"
 	     , "if-false.c--"
 	     , "if-false2.c--"
+             ---  , "inf.c--"  -- infinite loop, used to test limit mechanism
              , "exp-000.c--"
              , "exp-001.c--"
              , "fadd.c--"

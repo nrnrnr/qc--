@@ -187,7 +187,6 @@ function Test.on_error[".s"](expected, output)
         head -%d %s | sed 's/^/| /'
         echo "  ..."
       fi]], output, linecount, output, linecount, linecount, output)
-    Test.log(format("show_nonempty %d %s", linecount, output))
     execute(cmd)
   end
 end
@@ -312,12 +311,45 @@ function Test.run_exe(exe_file, stdin, argv)
   local so = exe_file .. ".1"
   local se = exe_file .. ".2"
 
-  local cmd = format("%s %s < %s > %s 2> %s", exe_file, argv or "", stdin, so, se)
+  local cmd =
+    format("(./limited %d %s %s) < %s > %s 2> %s",
+           Test.limit or 2, exe_file, argv or "", stdin, so, se)
   Test.log(cmd)
   local rc = execute(cmd)
 
   return so, se, rc
 end
+@ 
+We limit CPU time for an executable under test, and we don't let it
+dump core.
+<<limited.c>>=
+#include <sys/time.h>
+#include <sys/resource.h>
+#include <unistd.h>
+#include <assert.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+int main(int argc, char *argv[], char *envp[]) {
+  struct rlimit r;
+  int cpulimit = 0;
+  int rc;
+  assert(argc > 2);
+  r.rlim_cur = r.rlim_max = 0;
+  rc = setrlimit(RLIMIT_CORE, &r);
+  assert(rc == 0);
+  rc = getrlimit(RLIMIT_CPU, &r);
+  assert(rc == 0);
+  cpulimit = atoi(argv[1]);
+  if (cpulimit <= 0) exit(3);
+  r.rlim_cur = cpulimit;
+  rc = setrlimit(RLIMIT_CPU, &r);
+  assert(rc == 0);
+  execve(argv[2], argv+2, envp);
+  perror("");
+  fprintf(stderr, "execve(\"%s\", ...) failed\n", argv[1]);
+  return 2;
+}
 @ 
 \subsection{Comparisons and updates}
 
