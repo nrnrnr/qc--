@@ -18,7 +18,10 @@
 # This interpreter is being used for performance experiments.  These
 # experiments involve plugging in multiple different interperter
 # modules.  For that reason, we configure the mkfile to get the
-# interpreter out of $INTERPDIR/interp.ml*.
+# interpreter out of $INTERP/luainterp.ml*.
+
+INTERP=std
+
 
 
 TOP    =        ..
@@ -27,10 +30,9 @@ LIBDIR =        ../lib
 <../config/ocaml.mk
 <../config/noweb.mk
 
-OCAMLC_FLAGS = 	-I $LIBDIR -g
-OCAMLO_FLAGS =	-I $LIBDIR -p
+OCAMLC_FLAGS = 	-I $INTERP -I $LIBDIR -g
+OCAMLO_FLAGS =	-I $INTERP -I $LIBDIR -p
 
-INTERPDIR=std
 NWSRC=`echo *.nw`
 NWHTML=${NWSRC:%.nw=%.html}
 
@@ -40,13 +42,18 @@ NWHTML=${NWSRC:%.nw=%.html}
 # high level (virtual) targets
 # ------------------------------------------------------------------ 
 
-all:V: 		lua.cma oclua     oclbench
-all.opt:V:      lua.cmx oclua.opt oclbench.opt
+all:V: 		lua-$INTERP.cma oclua-$INTERP     oclbench-$INTERP
+all.opt:V:      lua-$INTERP.cmx oclua-$INTERP.opt oclbench-$INTERP.opt
 
-update:V:	$LIBDIR/lua.cma 
-update.opt:V:   $LIBDIR/lua.cmxa
+update:V:	update-msg $LIBDIR/lua.cma 
+update.opt:V:   update-msg $LIBDIR/lua.cmxa
 
-depend:V:	DEPEND
+update-msg:VQ:
+	if [ $INTERP = std ]; then true
+	else echo "error: to mk update, must have INTERP=std" 1>&2; exit 1
+	fi
+
+depend:V:	DEPEND.$INTERP
 
 doc:V:		lua.ps
 
@@ -61,7 +68,7 @@ clean:V:
 		rm -f *~
 
 clobber:V:	clean
-		rm -f oclua oclua.opt *.cma *.cmxa *.a 
+		rm -f oclua-* oclua-*.opt *.cma *.cmxa *.a 
 		rm -f lua.ps
 
 
@@ -87,8 +94,7 @@ LIBML = 	log.ml		\
 		luascanner.ml	\
 		luabaselib.ml	\
 		lualib.ml		\
-		oldinterp.ml	\
-		luainterp.ml	\
+		$INTERP/luainterp.ml	\
 		luarun.ml	\
 		lua.ml          \
 		luastrlib.ml	\
@@ -107,8 +113,7 @@ LIBMLI = 	log.mli		\
 		lua.mli		\
 		luaast.mli	\
 		luabaselib.mli	\
-		oldinterp.mli	\
-		luainterp.mli	\
+		$INTERP/luainterp.mli	\
 		luaiolib.mli	\
 		lualib.mli	\
 		luamathlib.mli	\
@@ -121,25 +126,25 @@ LIBMLI = 	log.mli		\
 LIBCMI = ${LIBMLI:%.mli=%.cmi}
 
 
-lua.cma:	$LIBCMO $LIBCMI
+lua-$INTERP.cma:	$LIBCMO $LIBCMI
 		$OCAMLC $OCAMLC_FLAGS -a -o $target $LIBCMO
 
 # this target also creates *.o files and a lua.a library
-lua.cmxa:	$LIBCMX	$LIBCMI 
+lua-$INTERP.cmxa:	$LIBCMX	$LIBCMI 
 		$OCAMLO $OCAMLO_FLAGS -a -o $target $LIBCMX
 
 
-# copy library and interfaces to $LIBDIR. Note that lua.a is
-# implicitly built when lua.cmxa is built.
+# copy library and interfaces to $LIBDIR. Note that lua-std.a is
+# implicitly built when lua-std.cmxa is built.
 
-$LIBDIR/lua.cma: lua.cma $LIBMLI $LIBCMI dirs
-		for f in lua.cma $LIBMLI $LIBCMI
+$LIBDIR/lua.cma: lua-std.cma $LIBMLI $LIBCMI dirs
+		for f in lua-std.cma $LIBMLI $LIBCMI
 		do
 		    cmp -s $f $LIBDIR/$f || cp $f $LIBDIR
 		done
 
-$LIBDIR/lua.cmxa: lua.cmxa $LIBMLI $LIBCMI dirs
-		for f in lua.cmxa lua.a $LIBMLI $LIBCMI
+$LIBDIR/lua.cmxa: lua-std.cmxa $LIBMLI $LIBCMI dirs
+		for f in lua-std.cmxa lua-std.a $LIBMLI $LIBCMI
 		do
 		    cmp -s $f $LIBDIR/$f || cp $f $LIBDIR
 		done
@@ -153,16 +158,16 @@ CMO =	${ML:%.ml=%.cmo}
 CMX =	${ML:%.ml=%.cmx}
 
 
-oclua: 		lua.cma $CMO 
+oclua-$INTERP: 	lua-$INTERP.cma $CMO 
 		$OCAMLC $OCAMLC_FLAGS -o $target unix.cma cllib.cma $prereq 
 
-oclua.opt: 	lua.cmxa $CMX
+oclua-$INTERP.opt: 	lua-$INTERP.cmxa $CMX
 		$OCAMLO $OCAMLO_FLAGS -o $target unix.cmxa cllib.cmxa $prereq 
 
-oclbench:	lua.cma bench.cmo
+oclbench-$INTERP:	lua-$INTERP.cma bench.cmo
 		$OCAMLC $OCAMLC_FLAGS -o $target unix.cma cllib.cma $prereq 
 
-oclbench.opt: 	lua.cmxa bench.cmx
+oclbench-$INTERP.opt: 	lua-$INTERP.cmxa bench.cmx
 		$OCAMLO $OCAMLO_FLAGS -o $target unix.cmxa cllib.cmxa $prereq 
 
 
@@ -183,8 +188,18 @@ src:V: $SCAN
 # 09 needs I/O library -- dofile needs to return nil on error
 TEST=03 04 05 06 07 08 10 12 02
 
-test:V: 	oclua.opt
+test:V: 	oclua-$INTERP.opt
 		for i in $TEST; do ./$prereq test/$i.lua; done	
+
+# ------------------------------------------------------------------ 
+# main interpreter. We special rules to extract sources
+# from noweb files. 
+
+$INTERP/luainterp.ml: ${INTERP}luainterp.nw
+	$NOTANGLE -L"$LINE" -filter "$NOCOND" -R`basename $target` $prereq > $target
+
+$INTERP/luainterp.mli: ${INTERP}luainterp.nw
+	$NOTANGLE -L"$LINE" -filter "$NOCOND" -R`basename $target` $prereq | cpif $target
 
 # ------------------------------------------------------------------ 
 # lua scanner and parser. We need some extra rules to extract sources
@@ -238,8 +253,9 @@ dirs:VQ:
 	    fi
 	done    
 
-DEPEND: $SCAN
+DEPEND.$INTERP: $SCAN
 	$OCAMLDEP $prereq > $target
 
 
-<DEPEND
+<DEPEND.$INTERP
+

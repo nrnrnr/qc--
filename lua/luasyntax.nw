@@ -50,6 +50,8 @@ module MakeStandard : MAKER
 %token <string>  STRING
 %token <string>  NAME 
 
+%token <int> DEBUG_PRAGMA
+
 %token AND OR
 %token EQ NE LE GE
 %token CONC
@@ -70,8 +72,9 @@ module MakeStandard : MAKER
 chunks  : chunklist ret EOF { List.rev (List.map (fun s -> A.Statement s) $2 @ $1) }
 
 chunklist : /* empty */        { [] }
-	  | chunklist stat sc  { A.Statement $2 :: $1 }
-	  | chunklist function_ { $2 :: $1 }
+	  | chunklist stat sc      { A.Statement $2    :: $1 }
+	  | chunklist function_    { $2                :: $1 }
+          | chunklist DEBUG_PRAGMA { A.Debug ($2 <> 0) :: $1 }
 	  ;
 
 function_     : FUNCTION funcname body  { $2 $3 (Parsing.symbol_start()) };
@@ -364,8 +367,9 @@ rule token = parse      (* raise Error in case of error *)
                     error "illegal character" 
                 }
        
-  | nl "$line" ws+ { fun map -> line_pragma lexbuf map }
-  | nl "$file" ws+ { fun map -> file_pragma lexbuf map }  
+  | nl "$line"  ws+ { fun map -> line_pragma  lexbuf map }
+  | nl "$file"  ws+ { fun map -> file_pragma  lexbuf map }  
+  | nl "$debug" ws+ { fun map -> debug_pragma lexbuf map }
   
   | "$line" ws+ { fun map -> 
                   if Lexing.lexeme_start lexbuf = 0 then 
@@ -380,6 +384,12 @@ rule token = parse      (* raise Error in case of error *)
                     error "illegal $file pragma"
                 }  
        
+  | "$debug" ws+ { fun map -> 
+                   if Lexing.lexeme_start lexbuf = 0 then 
+                     debug_pragma lexbuf map 
+                   else 
+                     error "illegal $debug pragma" 
+                 }
   | '#'         { fun map ->  (* skip # line if it's the first line *)
                   if Lexing.lexeme_start lexbuf = 0 then 
                     skip lexbuf map     
@@ -481,6 +491,23 @@ and line_pragma = parse
 
 
 
+and debug_pragma = parse
+    eof         { fun map -> error "illegal $debug pragma" }
+  | digit+      { fun map -> 
+                    let s       = get lexbuf in
+                    let debug   = int_of_string s in
+                    P.DEBUG_PRAGMA debug
+                }        
+  | _           { fun map ->  error     
+                                ( Printf.sprintf 
+                                  "illegal character `%s' at character %d" 
+                                  (Char.escaped (Lexing.lexeme_char lexbuf 0))
+                                  (Lexing.lexeme_start lexbuf)
+                                )  
+                }
+
+
+
 and longstring = parse  (* parse a [[ .. ]] string *)
     eof         { fun n map buf -> error "end of file in [[..]] string" }
   | "]]"        { fun n map buf ->
@@ -556,6 +583,7 @@ and shortstring = parse (* parse an eos delimited string *)
           | P.COLON       -> "COLON"
           | P.COMMA       -> "COMMA"
           | P.CONC        -> "CONC"
+          | P.DEBUG_PRAGMA n-> "DEBUG_PRAGMA" ^ (string_of_int n)
           | P.DO          -> "DO"
           | P.DOT         -> "DOT"
           | P.DOTS        -> "DOTS"
