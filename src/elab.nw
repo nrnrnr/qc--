@@ -149,8 +149,9 @@ all values like registers into the environment beeing built.
 
 <<>>=
 module Env : sig 
-    val global: Fenv.Dirty.env -> Ast.program   -> Fenv.Dirty.env
-    val local : Fenv.Dirty.env -> Ast.proc      -> Fenv.Dirty.env
+    val setDefaults : Fenv.Dirty.env                  -> Fenv.Dirty.env
+    val global      : Fenv.Dirty.env -> Ast.program   -> Fenv.Dirty.env
+    val local       : Fenv.Dirty.env -> Ast.proc      -> Fenv.Dirty.env
 end
 @
 
@@ -291,6 +292,14 @@ checks need it.
             | E.Ok(Some x) -> env
             | E.Ok(None)   -> F.bindPointersize Srcmap.null 32 env
             | E.Error      -> E.error "pointer size specification inconsistent" in
+        let env = match F.findCharset env with
+            | E.Ok(Some x) -> env
+            | E.Ok(None)   -> F.bindCharset Srcmap.null "latin1" env
+            | E.Error      -> E.error "target charset spec. inconsistent" in
+        let env = match F.findFloat env with
+            | E.Ok(Some x) -> env
+            | E.Ok(None)   -> F.bindFloat Srcmap.null "ieee754" env
+            | E.Error      -> E.error "target float spec. inconsistent" in
         let env = match F.findWordsize env with
             | E.Ok(Some x) -> env
             | E.Ok(None)   -> F.bindWordsize Srcmap.null 32 env
@@ -1064,9 +1073,9 @@ names and assembly level names easier.
 <<>>=
 let import r t env (foreign,name) = 
     bindv name r (E.ematch (ty r env t) (fun t -> F.Import foreign,t)) env
-         
-<<>>=
 let imports r env t ii          = foldl (import r t) env ii
+
+<<>>=
 let register r scope env = function
     | (_,Some h,t,name,Some x) ->
                         E.error "can't have hint and hardware register"
@@ -1114,7 +1123,16 @@ let rec stackdatum r scope env = function
 @
 
 Continuations are local to procedures and thus they are only bound
-when in [[local]] mode.
+when in [[Local]] mode; labels have global scope, but are bound a
+second time in the local environment. This has the following advantages:
+
+\begin{itemize}
+\item The second binding clashes with any other local binding that
+      might shadows the global binding.
+
+\item A [[goto]] must have a local target. Now is is possible to test
+      for this. 
+\end{itemize}
 
 <<>>=
 let rec stmt r scope env = function 
@@ -1122,45 +1140,62 @@ let rec stmt r scope env = function
         E.catch' env (error r env) (stmt r scope env) x
     | A.IfStmt ( e, ss1, ss2)     ->
         foldl (stmt r scope) (foldl (stmt r scope) env ss1) ss2
-    | A.LabelStmt(n)              ->
-        bindv n (r) 
-             (E.ematch (pointerTy env) (fun p -> F.Label(F.Code),p)) 
-             env
+    | A.LabelStmt(n) ->
+        bindv n (r) (E.ematch (pointerTy env) (fun p -> F.Label(F.Code),p)) env
     | A.SpanStmt(e1,e2,ss)        ->
         foldl (body r scope) env ss
     | A.SwitchStmt (range,e,arms) ->
         foldl (arm r range scope)  env arms
-    | A.ContStmt(n,ee)            ->
-        if scope=Global then env
-        else bindv n r 
-                  (E.ematch (pointerTy env) (fun p -> F.Continuation,p)) 
-                  env
+    | A.ContStmt(n,ee) when scope = Global ->
+        bindv n r (E.ematch (pointerTy env) (fun p -> F.Continuation,p)) env
     | otherwise                   ->
         env
 
 and arm r range scope env = function
     | A.ArmAt(x,r)      -> E.catch' env (error r env) (arm r range scope env) x
     | A.Case(ranges, ss)-> foldl (stmt r scope) env ss
+@
+
+We have two functions to deal with declarations:  [[gdecl]] for
+(global) declarations on the program and section level, and [[ldecl]]
+for declarations on the procedure level.  Declarations processed by
+[[gdecl]] always have global scope.  Some declarations on the (local)
+procedure level declare \emph{global} values.  Therefore, local
+declarations are processed when collection global ([[scope]] =
+[[Global]]) declarations.
+
+
+Imported values have global scope and thus must not be recorded when
+we are in a [[Local]] [[scope]].
+    
 <<>>=
-and decl r scope env = function
-    | A.DeclAt(x,r)    -> E.catch' env (error r env) (decl r scope env) x
+and ldecl r scope env = function
+    | A.DeclAt(x,r)    -> E.catch' env (error r env) (ldecl r scope env) x
+    | A.Import(ty,ii)  when scope=Global 
+                       -> imports r env ty ii
+    | A.Registers(rr)  when scope = Local
+                       -> foldl (register r scope) env rr
+    | _                -> env
+
+and gdecl r env = function
+    | A.DeclAt(x,r)    -> E.catch' env (error r env) (gdecl r env) x
     | A.Import(ty,ii)  -> imports r env ty ii
-    | A.Registers(rr)  -> foldl (register r scope) env rr 
+    | A.Registers(rr)  -> foldl (register r Global) env rr
     | _                -> env
 @
 
-A \textit{body} is always local to procedure and therefore its
-declarations are only processed when local values are bound. However,
-a body also contains names of global scope and thus must be traversed
-to bind them.
+A \textit{body} is always local to procedure.  However, a body also
+contains names of global scope (labels, imports) and thus must be
+traversed to bind them.
 
 <<>>=
 and body r scope env = function
     | A.BodyAt(x, r) -> E.catch' env (error r env) (body r scope env) x
-    | A.DeclBody(d)  -> if scope=Local then decl r scope env d else env 
-    | A.DataBody(dd) -> if scope=Local then foldl (stackdatum r scope) env dd 
-                        else env
+    | A.DeclBody(d)  -> ldecl r scope env d 
+    | A.DataBody(dd) when scope = Local 
+                     -> foldl (stackdatum r scope) env dd 
     | A.StmtBody(s)  -> stmt r scope env s
+    | _              -> env
 @
 
 A procedure opens a local scope:  the procedure's parameters and all
@@ -1202,7 +1237,7 @@ functions that do the real work.
 <<>>=
 let rec section r env = function
     | A.SectionAt(x,r)     -> E.catch' env (error r env) (section r env) x
-    | A.Decl(d)            -> decl r Global env d
+    | A.Decl(d)            -> gdecl r env d
     | A.SSpan( e1, e2, ss) -> foldl (section r) env ss
     | A.Datum( d)          -> datum r Global env d
     | A.Procedure(p)       -> proc r env p
@@ -1211,7 +1246,7 @@ let rec section r env = function
 let rec toplevel r env = function 
     | A.ToplevelAt(x, r)  -> E.catch' env (error r env) (toplevel r env) x
     | A.Section(name, ss) -> foldl (section r) env ss
-    | A.TopDecl(d)        -> decl r Global env d
+    | A.TopDecl(d)        -> gdecl r env d
     | A.TopProcedure(p)   -> proc r env p 
 
 @
@@ -1520,8 +1555,7 @@ A target for a [[goto]] statement must have be a local code pointer.
 <<>>=
 let checkGotoTarget env x = E.seq' env (snd (F.findv x env))
     ( function 
-    | (F.Label(F.Code),_) 
-        when F.is_localv x env -> env
+    | (F.Label(F.Code),_) when F.is_localv x env -> env
     | (F.Label(F.Code),_)    -> E.error (x^" not a local label")
     | (F.Label(_)     ,_)    -> E.error (x^" is not a goto label")
     | otherwise              -> E.error (x^" is not a label")

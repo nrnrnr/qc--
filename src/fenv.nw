@@ -21,8 +21,8 @@
 % ------------------------------------------------------------------ 
 
 The meaning, or denotation, of names in a {\PAL} program are recorded
-in one environment.  Because only one environment is used for all
-different kinds of names it is called fat.  The fat environment not
+in an environment.  Because only one environment is used for all
+different kinds of names, it is called fat.  The fat environment not
 only serves the classic symbol table purpose but also represents some
 global state of the compiler.  It is used to pass around informations
 between the different phases of the compiler.  In particular the fat
@@ -32,9 +32,8 @@ environment holds informations about:
 \item Values, like constants, labels for goto and data, procedures.
 \item Types, as they are declared by the [[typedef]] directive.
 \item Target architecture, as declared by the [[target]] directive.
-\item Source code positions, as recored by a [[Srcmap.map]].
 \item An Index counter for registers.
-\item A flag, indicating a serious error.
+\item A flag that indicates a serious error.
 \end{itemize}
 
 The fat environment comes in two variants:  a \textit{dirty} and a
@@ -52,11 +51,11 @@ statically that all its bound values are good.
 \subsection{Interface: Clean vs.~Dirty}
 % ------------------------------------------------------------------ 
 
-A dirty and a clean environment are structurally too different that
-one polymorphic implementation of an environment could provide both. 
-As a consequence, two modules are provided:  [[Dirty]] and [[Clean]]. 
-The interfaces of both modules can be derived from a single interface
-[[Env]]:
+A dirty and a clean environment are structurally too different for one
+polymorphic implementation of an environment to provide both.  As a
+consequence, two modules are provided:  [[Dirty]] and [[Clean]]. 
+However, the interfaces of both modules still can be derived from a
+single interface [[Env]]:
 
 <<module type Env>>=
 module type Env = sig
@@ -68,14 +67,16 @@ module type Env = sig
 end
 @
 
-The types [[info]] and [[partial]] are used to describe possibly
-``bad'' values in the rest of the signature.
+By defininig [[info]] and [[partial]] appropriately, the interface for
+the [[Dirty]] and the [[Clean]] modules can be derived.  The types
+[[info]] and [[partial]] describe possibly ``bad'' or unknown values
+in the the signature.
 
 \begin{itemize}
-\item An [['a info]] is a possibly erroneous [['a]] value in a dirty
+\item An [['a info]] is a possibly erroneous value [['a]] in a dirty
       environment, but always an [['a]] in a clean environment.
 
-\item An [['a partial]] is a possibly unavailable [['a]] value in a
+\item An [['a partial]] is a possibly unavailable value [['a]] in a
       dirty environment, but always an [['a]] value in a clean
       environment.
 
@@ -85,7 +86,7 @@ The types [[info]] and [[partial]] are used to describe possibly
 \end{itemize}      
 
 The two sub-modules [[Dirty]] and [[Clean]] just differ in the meaning
-of [[info]] and [[partial]]. A clean environment that all values are
+of [[info]] and [[partial]].  A clean environment that all values are
 present and that are good.
 
 <<fenv.mli>>=
@@ -108,28 +109,45 @@ val clean: Dirty.env -> Clean.env
 
 The only wae to obtain a clean environment is by cleaning a dirty
 environment.  However, the dirty environment must not be really dirty: 
-all informations must be provided and they must be good.  Trying to
-clean a dirty environment with bad values will result in an run-time
-error.
+all informations must be provided, and they must be ``good''.  Trying
+to clean a dirty environment with bad values will result in an
+run-time error.
 
 % ------------------------------------------------------------------ 
 \subsection{General Interface \texttt{Env}}
 % ------------------------------------------------------------------ 
 
 The main purpose of the fat environment is to bind values to names. 
-In {\PAL} some names have a single (global) scope, like [[target]]
-declarations, and other may have multiple scopes, like register
-declarations.  The interface provides a fat environment [[env]], that
-holds all bindings with a single scope.  To hold scoped bindings, an
-[[env]] maintains a stack of [[scope]]s.  Bindings inside an [[env]]
-may contain source code positions; in order to give these positions a
-meaning, a [[Srcmap.map]] value is required.  This value must be
-passed to [[empty]] when an [[env]] is created.
+In {\PAL} same names have the same meaning everyhwhere in a program,
+and others may differ inside and outside of a procedure.  Example of
+the former are [[target]] declarations, and bindings for types and
+values for the latter; these bindings are called \emph{scoped}.  This
+interface provides a fat environment [[env]], that holds all bindings,
+regardless whether they are scoped or unscoped. 
 
-The scope stack of an [[empty]] environment is empty.  This means,
-that the scope for global types and values must be [[push]]'ed to it
-after it was created.  Asking for the [[top]] scope when the stack is
-empty results in a run-time error.
+Bindings for types and values have two scopes: the global scope of the
+entire compilation unit, and the scope inside of a procedure. So in
+principle, the scope changes, when a procedure is entered. However,
+{\PAL} has some anomalies with respect to these well known static
+scoping rules: 
+
+\begin{itemize}
+\item Labels defined inside procedures have global scope: they are
+      visible in the entire compilation unit.
+\item Values imported inside a procedure have global scoper, too.
+\end{itemize}
+
+After a procedure is left, only the global bindings are in effect. 
+Since a procedure is entered many times in a multi-pass compiler it
+pays off, to save the bindings for a procedure instead of re-computing
+them every time the procedure is entered.  To facilitate this, an
+[[env]] value is internally devided into halfs:  the first is a stack
+of [[scope]]s for values and types, and the second holds all other
+\emph{global} informations.  The bottom scope in the scope stack
+contains all global name and type bindings.  And when a procedure is
+active, all its name and type bindindings are in the top-scope.  A
+procedure's bindings can be saved by saving the [[top]] scope and
+re-used, by [[pop]]'ing it later.
 
 <<signature Env>>=
 type env 
@@ -146,17 +164,21 @@ val pop:        env -> env              (* pop empty = assert false *)
 val push:       env -> scope -> env
 @
 
-Scoped bindings are always bound in the top scope, and the stack is
-searched from top to bottom to find a binding.  To save bindings, one
-can obtain them using [[top]] and re-use them by [[push]]'ing them
-again.  This mechanism is intended to save a procedure's local
-bindings after they are computed once and to re-use them later.
+This sounds more complicated than it is.  Since everything is part of
+an [[env]] value, it is the only value that is passed around.  Only
+before entering or leaving a procedure the scope stack must be
+manipulated.
 
-Since it is well known which bindings are scoped, and which are not, a
-user almost never has to think about scopes as a stack.  All functions
-dealing with bindings take an [[env]] as argument.  The implementation
-knows, whether to look for a binding inside [[env]] or the stack of
-scopes that is also part of an [[env]] value.
+\begin{itemize}
+\item  The scope stack of an [[empty]] [[env]] is also empty. Thus, an
+       [[emptyscope]] should be [[push]]'ed first.  An [[env]]
+       includes a [[Srcmpa.map]] value, which is required to give
+       source code positions (type [[Scrpmap.rgn]] stored in the
+       environment a meaning.
+
+\item  Applying [[top]] or [[pop]] to an empty stack scope will result
+       in an assertion violation.
+\end{itemize}
 
 % ------------------------------------------------------------------ 
 \subsection{Bindings for Values and Types}
@@ -177,9 +199,16 @@ capture the structure of values in {\PAL}.
       index that identifies it for the run-time API.
 \item Labels come in different flavors: labels in [[goto]] or inside
       data declarations are vanilla-plain. Procedures in a clean
-      environment include the bindings for their local [[scope]] and
-      informations about the local data on the run-time stack.
+      environment include their saved  local [[scope]] and
+      informations about local stack data on the run-time stack. 
 \end{itemize}
+
+Some care must be taken when dealing with [[goto]] labels and imported
+values because of {\PAL} idiosyncrasies.  Both have global scope, even
+when they are defined inside a procedure.  Consequently, they are
+added to the environment (and bottom scope) during the first pass,
+that enters all globally bound values.  A later pass that enters only
+locally visible values must ignore them. 
 
 <<types>>=
 type proc = 
@@ -228,18 +257,28 @@ and  tentry         = Srcmap.rgn * Types.ty info
 \subsection{Binding and Finding Names and Values}
 % ------------------------------------------------------------------ 
 
-The following functions bind and find names and types in an
-environment.  Since both are scoped, the scopes inside an environment
-are searched from top to bottom and the first binding found is
-returned.  The exception [[Error.ErrorExn]] is raised, if no binding can be
-found, an assertion failes.  If the stack of scopes is empty when a
-[[bind]] function is called, an [[emptyscope]] is pushed on
-the scope stack and is subsequently used for the new binding.
+The following functions bind and find names and types in the top of
+the scope stack inside an environment.  The scopes inside the
+environment are searched from top to bottom and the first binding
+found is returned.  The exception [[Error.ErrorExn]] is raised, if no
+binding can be found (applies also when the scope stack is empty). 
+ 
 
 Since it is illegal to re-bind names and values in the same scope, any
 attempt to do so is reported as an error to stdout.  Additionally the
 existing binding is re-bound to be bad in case the environment was a
 Dirty one, and the error flag (see below) is set.
+
+The denotation of some values include optional informations that are
+added by later passes, after an initial binding was entered into the
+environment.  Since [[bind]] reports any re-binding as an error, a
+special function [[rebindv]] is introduced for this purpose. 
+[[rebindv]] introduces the new binding in the topmost scope that has a
+binding for the name at hand.  So if you want to update a global
+binding make sure, that this scope is at the top because otherwise it
+may be shadowed by a binding in a local scope and this one would be
+replaced.  If no binding for the given name is found, the environment
+is returned unaltered.
  
 <<signature Env>>=
 val bindv           : string -> ventry  -> env -> env
@@ -252,10 +291,10 @@ val findt           : string -> env -> tentry   (* Error.ErrorExn *)
 \emph{Think of algebraic rules that describe the interaction of bind
 and find}.
 
-Sometimes is is necessary to know, whether a value is bound in the
-[[top env]] scope.  The following predicate is true, if and only if a
-given name is bound in the top scope, and the top scope is not the
-bottom scope at the same time. It is an assertion failure to supply an
+Sometimes is is necessary to know, whether a value is bound in a local
+scope.  The following predicate is true, if and only if a given name
+is bound in the top scope, \emph{and} the top scope is not the bottom
+scope at the same time.  It is an assertion failure to supply an
 unknown value.
 
 <<>>=
@@ -389,6 +428,8 @@ all imports and exports of a {\PAL} program must be registered.  This
 is done with [[import]] and [[export]].  To provide meaningful error
 messages, both function receive the region of the statement at hand in
 the source code. 
+
+\emph{Describe interaction with bindv}
 
 <<>>=
 val import: Srcmap.rgn -> string -> string -> env -> env (* import g as f *)
