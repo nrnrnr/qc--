@@ -1,9 +1,11 @@
-print("[factorial-tail.lua] Proc. [main2] should print out 7 then 7! = 5040")
-print("Tests: recursive procedure tail-calls & default returns, some operators") 
+-- [factorial-tail.lua] Proc. [main] should print out 7 then 7! = 5040
+-- Tests: recursive procedure tail-calls & default returns, some operators
+--
+--- ./regr "../interp $SELF" $REGRFLAGS -out $BASE.1 -err $BASE.2
 
-CMM.exports({ "main2" })
+CMM.exports({ "main" })
 
-CMM.procedure("main2", 0, 0)
+CMM.procedure("main", 0, 0)
 
    CMM.push_literal("7")
    CMM.push_arg()

@@ -1,5 +1,7 @@
-print("[cut.lua] Proc. [main] should print out the numbers 0-10 and then 0")
-print("Tests: procedure calls, cutting to a continuation")
+-- [cut.lua] Proc. [main] should print out the numbers 0-10 and then 0
+-- Tests: procedure calls, cutting to a continuation
+--
+--- ./regr "../interp $SELF" $REGRFLAGS -out $BASE.1 -err $BASE.2
 
 CMM.exports({ "main" })
 

@@ -1,0 +1,65 @@
+#
+# Adding a new test:
+# (1) create a test file: foo.lua
+# (2) the head of the test file must include a test commands:
+#     --- ./regr "../interp $SELF" $REGRFLAGS -out $BASE.1 -err $BASE.2
+# (3) call 'mk foo.record'  to record expected results in foo.1
+# (4) check that the results are indeed the expected ones
+# (5) add foo.lua foo.1 (foo.2) to CVS
+
+# ------------------------------------------------------------------ 
+# paths
+# ------------------------------------------------------------------ 
+
+TOP    =    ../..
+
+
+< $TOP/config/noweb.mk
+
+# ------------------------------------------------------------------  
+# high level targets
+# ------------------------------------------------------------------  
+
+SRC    = `echo *.lua`
+TEST   = ${SRC:%.lua=%.test}
+RECORD = ${SRC:%.lua=%.record}
+VERBOSE =
+
+test:VQ:        $TEST
+vtest:VQ:	mk $MKFLAGS VERBOSE=-v test
+record:VQ:      $RECORD
+
+# ------------------------------------------------------------------ 
+# useful targets to create test results
+# ------------------------------------------------------------------ 
+
+%.test:VQ:       %.lua ../interp regr
+		SELF=$stem.lua
+		BASE=$stem
+		MKTARGET=$target
+		case $VERBOSE in -v) SHX=-x ;; *) SHX= ;; esac
+		export SELF BASE MKTARGET
+                sed -n 's!^---!!p' $SELF | sh $SHX || true
+		case "$VERBOSE$stem" in -v*) ;; *0) echo "# tested $stem" ;; esac
+
+# The update rule updates the expected output of a test.  Use
+# only after you have verified that the factual output is indeed the
+# expected output!
+
+%.record:VQ:     %.lua ../interp regr       
+		SELF=$stem.lua
+		BASE=$stem
+                REGRFLAGS="-r"
+		export SELF BASE REGRFLAGS
+                sed -n 's!^---!!p' $SELF | sh -x || true
+		# why is there || true on the preceding line??
+
+# ------------------------------------------------------------------  
+# sources generated from noweb sources
+# ------------------------------------------------------------------  
+
+regr:           test.nw
+                $NOTANGLE -R$target $prereq > $target
+                chmod +x $target
+
+html:V:         test.html

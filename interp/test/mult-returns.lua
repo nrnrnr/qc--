@@ -1,5 +1,7 @@
-print("[mult-returns.lua] Procedure [main] should print out 5 twice.")
-print("Tests: procedure calls, alternate return continuations")
+-- [mult-returns.lua] Procedure [main] should print out 5 twice.
+-- Tests: procedure calls, alternate return continuations
+--
+--- ./regr "../interp $SELF" $REGRFLAGS -out $BASE.1 -err $BASE.2
 
 CMM.exports({ "main" })
 

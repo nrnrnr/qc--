@@ -1,5 +1,7 @@
-print("This code should not run.")
-print("It is only useful, when disassembled, to verify encoding.")
+-- This code should not run.
+-- It is only useful, when disassembled, to verify encoding.
+--
+--- ./regr "../interp $SELF" $REGRFLAGS -out $BASE.1 -err $BASE.2
 
 -- begin assembly code
 

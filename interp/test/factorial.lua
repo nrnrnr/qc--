@@ -1,5 +1,7 @@
-print("[factorial.lua] Procedure [main] should print out 7 and then 7! = 5040")
-print("Tests: recursive procedure calls & default returns, some operators") 
+-- [factorial.lua] Procedure [main] should print out 7 and then 7! = 5040
+-- Tests: recursive procedure calls & default returns, some operators
+--
+--- ./regr "../interp $SELF" $REGRFLAGS -out $BASE.1 -err $BASE.2
 
 CMM.exports({ "main" })
 

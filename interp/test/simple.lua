@@ -1,3 +1,5 @@
+--- ./regr "../interp $SELF" $REGRFLAGS -out $BASE.1 -err $BASE.2
+
 -- begin assembly code
 
 CMM.exports({ "main", "random", "third" })

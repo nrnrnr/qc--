@@ -1,3 +1,5 @@
+--- ./regr "../interp $SELF" $REGRFLAGS -out $BASE.1 -err $BASE.2
+
 CMM.exports({ "main" })
 
 CMM.procedure("main", 2, 0)  -- BEGIN PROCEDURE main with 2 local variable
