@@ -457,7 +457,7 @@ and stmt  props s  succ =
   | S.If (e, so, not) ->
       G.cbranch g e ~ifso:(stmts props so succ) ~ifnot:(stmts props not succ)
   | S.Label n              -> let l = G.node_labeled g n in (G.set_succ l succ; l)
-  | S.Switch _             -> Impossible.unimp "switch"
+  | S.Switch (range, e, arms) -> switchStmt range e arms props succ
   | S.Cont (name, _, _)    -> contStmt2 name succ
   | S.Span (kv, bs)        -> stmts (kv :: props) bs succ
   | S.Assign rtl           -> G.instruction g rtl succ
@@ -480,7 +480,7 @@ QUESTION: are the [[disjoin]]s below suitably short-circuited?
 Is it premature to optimize for lo == hi below?
 
 <<supporting functions for translating statements>>=
-and switchStmt (range, e, arms) props stmt_succ =
+and switchStmt range e arms props stmt_succ =
   (* what are we supposed to do with the optional range? *)
   let w  = RU.Width.exp e in
   let e_eq guard = Rtl.app (Rtl.opr "eq" [w]) [e; guard] in
