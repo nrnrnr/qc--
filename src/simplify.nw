@@ -18,7 +18,6 @@ possible to minimize computation at run-time. This module provides
 routines to evaluate {\rtl} expressions and to simplify {\rtl}s by
 evaluating expressions inside of them. The promise is, that the returned
 {\rtl}s and expressions are simpler as the ones provided.
-
 <<simplify.mli>>=
 val rtl:    Rtl.rtl -> Rtl.rtl
 val exp:    Rtl.exp -> Rtl.exp
@@ -26,20 +25,16 @@ val bits:   Rtl.exp -> Bits.bits    (* Error.ErrorExn, convenient function *)
 val link:   Rtl.exp -> Bits.bits Reloc.Simple.relocatable
 val bool:   Rtl.exp -> bool         (* Error.ErrorExn, convenient function *)
 @
-
 The [[Unsafe]] module provides an simplification of {\rtl}s tries to
 evaluate guarding expressions by elimination of registers in relations
 of the form $r+k = r+k'$. However, this elimination is not semantics
 preserving if the $r+k$ would overflow, but $k$ not.  
-
 <<simplify.mli>>=
 module Unsafe: sig
     val rtl:    Rtl.rtl -> Rtl.rtl
 end
 @
-
 We export the list of operators we can evaluate at compile time. 
-
 <<simplify.mli>>=
 val compile_time_ops: string list
 @
@@ -52,7 +47,6 @@ The implementation relies on the following idea: we evaluate an
 expression (or {\rtl}) bottom up as far as possible. The final result
 will tell us whether it needs further ecaluation at link-time or
 run-time.
-
 <<simplify.ml>>=
 module BO = Bits.Ops
 module RS = Reloc.Simple
@@ -78,21 +72,17 @@ module Safe = struct
     <<traverse RTL>>
 end    
 @
-
 The [[Unsafe]] module implements a more agressive simplification of
 {\rtl}s that requires certain pre-conditions to be met. In particular,
 it tries to evaluate guarding relational expressions like $r+k < r+k'$.
 The simplification assumes that it is safe to eliminate the $r$ on both
 sides of the $<$ operator.
-
 <<simplify.ml>>=
 module Unsafe = struct
     <<unsafe RTL simplification>>
 end
 @
-
-The exported function work on the public representation of {\rtl}s
-
+The exported functions work on the public representation of {\rtl}s.
 <<simplify.ml>>=
 let rtl r  = try Up.rtl (Safe.rtl (Dn.rtl r))
              with Error msg -> Impossible.impossible msg
@@ -150,101 +140,99 @@ let compile_time_ops =
       "lobits"; "lt"; "ltu"; "mul"; "ne"; "neg"; "or"; "shl"; "shra";
       "shrl"; " sub"; "sx"; "xor"; "zx"]
 @
-
 % ------------------------------------------------------------------ 
 \subsection{RTL Traversal}
 % ------------------------------------------------------------------ 
 
 All operator implementations have an easy way out: they just construct a
 run-time expression from their arguments and return it. 
-
 <<RTL operator implementations>>=
 let default op w args = RP.App((op,w),args)
-
+@ 
 <<traverse RTL>>=   
 let app o w args = match o with
-    |  "NaN" 		-> nan w args
-    |  "add" 		-> add w args
-    |  "and" 		-> binop o w BO.and' args
-    |  "bit" 		-> bit  w args
-    |  "bool" 		-> bool w args
-    |  "borrow" 	-> default o w args
-    |  "carry" 		-> default o w args
-    |  "com" 		-> unop o w BO.com args
-    |  "conjoin" 	-> conjoin w args
-    |  "disjoin" 	-> disjoin w args
-    |  "div" 		-> default o w args
-    |  "divu" 		-> binop o w BO.divu args
-    |  "eq" 		-> cmp_bits o w BO.eq args
-    |  "f2f" 		-> default o w args
-    |  "f2i" 		-> default o w args
-    |  "fabs" 		-> default o w args
-    |  "fadd" 		-> default o w args
-    |  "fcmp" 		-> default o w args
-    |  "fdiv" 		-> default o w args
-    |  "feq" 		-> default o w args
-    |  "fge" 		-> default o w args
-    |  "fgt" 		-> default o w args
-    |  "fle" 		-> default o w args
-    |  "float_eq" 	-> default o w args
-    |  "float_gt" 	-> default o w args
-    |  "float_lt" 	-> default o w args
-    |  "flt" 		-> default o w args
-    |  "fmul" 		-> default o w args
-    |  "fmulx" 		-> default o w args
-    |  "fne" 		-> default o w args
-    |  "fneg" 		-> default o w args
-    |  "fordered" 	-> default o w args
-    |  "fsqrt" 		-> default o w args
-    |  "fsub" 		-> default o w args
-    |  "funordered" 	-> default o w args
-    |  "ge" 		-> cmp_bits o w (fun x y -> BO.lt  y x) args
-    |  "geu" 		-> cmp_bits o w (fun x y -> BO.ltu y x) args
-    |  "gt" 		-> cmp_bits o w BO.gt args
-    |  "gtu" 		-> cmp_bits o w BO.gtu args
-    |  "i2f" 		-> default o w args
-    |  "le" 		-> cmp_bits o w (fun x y -> BO.gt  y x) args
-    |  "leu" 		-> cmp_bits o w (fun x y -> BO.gtu y x) args
-    |  "lobits" 	-> lobits w args
-    |  "lt" 		-> cmp_bits o w BO.lt args
-    |  "ltu" 		-> cmp_bits o w BO.ltu args
-    |  "minf" 		-> minf w args
-    |  "mod" 		-> default o w args
-    |  "modu" 		-> default o w args
-    |  "mul"     	-> binop o w BO.mul args
-    |  "mulux" 		-> default o w args
-    |  "mulx" 		-> default o w args
-    |  "mzero" 		-> mzero w args
-    |  "ne" 		-> cmp_bits o w BO.ne args
-    |  "neg" 		-> unop  o w BO.neg args
-    |  "not" 		-> not' w args
-    |  "or" 		-> binop o w BO.or' args
-    |  "pinf" 		-> pinf w args
-    |  "popcnt" 	-> default o w args
-    |  "pzero" 		-> pzero w args
-    |  "quot" 		-> default o w args
-    |  "rem" 		-> default o w args
-    |  "rotl" 		-> default o w args
-    |  "rotr" 		-> default o w args
-    |  "round_down" 	-> round_down w args
-    |  "round_nearest" 	-> round_nearest w args
-    |  "round_up" 	-> round_up w args
-    |  "round_zero" 	-> round_zero w args
-    |  "shl" 		-> binop o w BO.shl args
-                               (* likely to break machine invariant on PPC? *)
+    | "NaN" 	      -> nan w args
+    | "add" 	      -> add w args
+    | "and" 	      -> binop o w BO.and' args
+    | "bit" 	      -> bit  w args
+    | "bool" 	      -> bool w args
+    | "borrow" 	      -> default o w args
+    | "carry" 	      -> default o w args
+    | "com" 	      -> unop o w BO.com args
+    | "conjoin"       -> conjoin w args
+    | "disjoin"       -> disjoin w args
+    | "div" 	      -> default o w args
+    | "divu" 	      -> binop o w BO.divu args
+    | "eq" 	      -> cmp_bits o w BO.eq args
+    | "f2f" 	      -> default o w args
+    | "f2i" 	      -> default o w args
+    | "fabs" 	      -> default o w args
+    | "fadd" 	      -> default o w args
+    | "fcmp" 	      -> default o w args
+    | "fdiv" 	      -> default o w args
+    | "feq" 	      -> default o w args
+    | "fge" 	      -> default o w args
+    | "fgt" 	      -> default o w args
+    | "fle" 	      -> default o w args
+    | "float_eq"      -> default o w args
+    | "float_gt"      -> default o w args
+    | "float_lt"      -> default o w args
+    | "flt" 	      -> default o w args
+    | "fmul" 	      -> default o w args
+    | "fmulx" 	      -> default o w args
+    | "fne" 	      -> default o w args
+    | "fneg" 	      -> default o w args
+    | "fordered"      -> default o w args
+    | "fsqrt" 	      -> default o w args
+    | "fsub" 	      -> default o w args
+    | "funordered"    -> default o w args
+    | "ge" 	      -> cmp_bits o w (fun x y -> BO.lt  y x) args
+    | "geu" 	      -> cmp_bits o w (fun x y -> BO.ltu y x) args
+    | "gt" 	      -> cmp_bits o w BO.gt args
+    | "gtu" 	      -> cmp_bits o w BO.gtu args
+    | "i2f" 	      -> default o w args
+    | "le" 	      -> cmp_bits o w (fun x y -> BO.gt  y x) args
+    | "leu" 	      -> cmp_bits o w (fun x y -> BO.gtu y x) args
+    | "lobits" 	      -> lobits w args
+    | "lt" 	      -> cmp_bits o w BO.lt args
+    | "ltu" 	      -> cmp_bits o w BO.ltu args
+    | "minf" 	      -> minf w args
+    | "mod" 	      -> default o w args
+    | "modu" 	      -> default o w args
+    | "mul"           -> binop o w BO.mul args
+    | "mulux" 	      -> default o w args
+    | "mulx" 	      -> default o w args
+    | "mzero" 	      -> mzero w args
+    | "ne" 	      -> cmp_bits o w BO.ne args
+    | "neg" 	      -> unop  o w BO.neg args
+    | "not" 	      -> not' w args
+    | "or" 	      -> binop o w BO.or' args
+    | "pinf" 	      -> pinf w args
+    | "popcnt" 	      -> default o w args
+    | "pzero" 	      -> pzero w args
+    | "quot" 	      -> default o w args
+    | "rem" 	      -> default o w args
+    | "rotl" 	      -> default o w args
+    | "rotr" 	      -> default o w args
+    | "round_down"    -> round_down w args
+    | "round_nearest" -> round_nearest w args
+    | "round_up"      -> round_up w args
+    | "round_zero"    -> round_zero w args
+    | "shl" 	      -> binop o w BO.shl args
+                            (* likely to break machine invariant on PPC? *)
 
-    |  "shra" 		-> binop o w BO.shra args
-    |  "shrl" 		-> binop o w BO.shrl args
-    |  "sub" 		-> sub w args
-    |  "sx" 		-> sx w args
-    |  "unordered" 	-> default o w args
-    |  "xor" 		-> binop o w BO.xor args
-    |  "zx" 		-> zx w args
-    |  "bitExtract" 	-> default o w args
-    |  "bitInsert" 	-> default o w args
-    |  "bitTransfer" 	-> default o w args
-    |  "x86_carrybit"   -> x86_carrybit w args
-    |  o                -> default o w args
+    | "shra" 	      -> binop o w BO.shra args
+    | "shrl" 	      -> binop o w BO.shrl args
+    | "sub" 	      -> sub w args
+    | "sx" 	      -> sx w args
+    | "unordered"     -> default o w args
+    | "xor" 	      -> binop o w BO.xor args
+    | "zx" 	      -> zx w args
+    | "bitExtract"    -> default o w args
+    | "bitInsert"     -> default o w args
+    | "bitTransfer"   -> default o w args
+    | "x86_carrybit"  -> x86_carrybit w args
+    | o               -> default o w args
                       
 let rec exp e =
     match e with
@@ -254,7 +242,7 @@ let rec exp e =
                             
 and loc = function          
     | RP.Mem(sp, w, e, ass) -> RP.Mem(sp, w, exp e, ass)
-    | RP.Slice(w,i,l)       -> RP.Slice(w, i, loc l)
+    | RP.Slice(n,lsb,l)     -> (<<rewrite slice [[l@lsb:n]]>>)
     | RP.Reg(sp, i, w) as v -> v
     | RP.Var   (s,i,w) as v -> v
     | RP.Global(s,i,w) as v -> v
@@ -460,6 +448,30 @@ let lobits =
   else
     lobits
 
+<<rewrite slice [[l@lsb:n]]>>=
+match loc l with
+| <<big-endian memory location>>
+  when Cell.divides mcell n && Cell.divides mcell lsb ->
+    let w          = Cell.to_width mcell ct in
+    let R.C offset = Cell.to_count mcell (w - n - lsb) in
+    let addr       = Dn.exp (RU.addk (RU.Width.exp' addr) (Up.exp addr) offset) in
+    RP.Mem (mspace, Cell.to_count mcell n, addr, assn)
+| <<little-endian memory location>> 
+  when Cell.divides mcell n && Cell.divides mcell lsb ->
+    let R.C offset = Cell.to_count mcell lsb in
+    let addr       = Dn.exp (RU.addk (RU.Width.exp' addr) (Up.exp addr) offset) in
+    RP.Mem (mspace, Cell.to_count mcell n, addr, assn)
+| <<big-endian register location>> 
+  when Cell.divides rcell n && Cell.divides rcell lsb ->
+    let w          = Cell.to_width rcell count in
+    let R.C offset = Cell.to_count rcell (w - n - lsb) in
+    RP.Reg (rspace, index + offset, Cell.to_count rcell n)
+| <<little-endian register location>> 
+  when Cell.divides rcell n && Cell.divides rcell lsb ->
+    let R.C offset = Cell.to_count rcell lsb in
+    RP.Reg (rspace, index + offset, Cell.to_count rcell n)
+| l -> RP.Slice(n,lsb,l)
+@ 
 <<cases for rewriting aggregates in big-endian or little-endian memory>>=
 | [w;n],[<<little-endian memory fetch>>] when Cell.divides mcell n ->
     RP.Fetch (RP.Mem (mspace, Cell.to_count mcell n, addr, assn), n)
@@ -485,9 +497,13 @@ let lobits =
     else
       default "lobits" ws args
 <<little-endian memory fetch>>=
-RP.Fetch(RP.Mem ((sp, Rtl.LittleEndian, mcell) as mspace, w', addr, assn), w'')
+RP.Fetch(<<little-endian memory location>>, w')
+<<little-endian memory location>>=
+RP.Mem ((sp, Rtl.LittleEndian, mcell) as mspace, ct, addr, assn)
 <<big-endian memory fetch>>=
-RP.Fetch(RP.Mem ((sp, Rtl.BigEndian, mcell) as mspace, w', addr, assn), w'')
+RP.Fetch(<<big-endian memory location>>, w'')
+<<big-endian memory location>>=
+RP.Mem ((sp, Rtl.BigEndian, mcell) as mspace, ct, addr, assn)
 <<cases for rewriting aggregates in big-endian or little-endian registers>>=
 | [w;n],[<<little-endian register fetch>>] when Cell.divides rcell n ->
     RP.Fetch (RP.Reg (rspace, index, Cell.to_count rcell n), n)
@@ -513,9 +529,13 @@ RP.Fetch(RP.Mem ((sp, Rtl.BigEndian, mcell) as mspace, w', addr, assn), w'')
     else
       default "lobits" ws args
 <<little-endian register fetch>>=
-RP.Fetch(RP.Reg ((sp, Rtl.LittleEndian, rcell) as rspace, index, count), w'')
+RP.Fetch(<<little-endian register location>>, w'')
 <<big-endian register fetch>>=
-RP.Fetch(RP.Reg ((sp, Rtl.BigEndian,    rcell) as rspace, index, count), w'')
+RP.Fetch(<<big-endian register location>>, w'')
+<<little-endian register location>>=
+RP.Reg ((sp, Rtl.LittleEndian, rcell) as rspace, index, count)
+<<big-endian register location>>=
+RP.Reg ((sp, Rtl.BigEndian,    rcell) as rspace, index, count)
 @ 
 <<RTL operator implementations>>=
 let unsigned n w = RP.Const (RP.Bits (Bits.U.of_int n w))
