@@ -11,24 +11,14 @@ temporaries and registers.
 
 
 <<minisparc.mli>>=
-module Reloc:  sig
-  type ('sym, 'const) relocatable   
-  (* constructors *)
-  val of_const : 'c       -> ('s, 'c) relocatable    (* a known constant *)
-  val of_sum   : 's -> 'c -> ('s, 'c) relocatable    (* label + offset *)
-  val add_const :
-      ('c -> 'c -> 'c) -> ('s, 'c) relocatable -> 'c -> ('s, 'c) relocatable
-
-  (* observer *)
-  val normalize : ('s, 'c) relocatable -> 's option * 'c
-end
+module Reloc: Sledlib.RELOCATABLE with type symbol = Reladdr.symbol
 
 type t          = Rtl.rtl
 type reg_or_imm = Rtl.exp
 type address    = Rtl.exp
 type regaddr    = Rtl.exp
 type reg        = Rtl.loc
-type target     = (Reladdr.symbol, nativeint) Reloc.relocatable
+type target     = nativeint Reloc.relocatable
 
 val reg         : Rtl.space -> int -> reg
 
@@ -78,18 +68,9 @@ val xor : reg -> reg_or_imm -> reg -> t
 % ------------------------------------------------------------------ 
 
 <<minisparc.ml>>=
-module R  = Rtl
-module NI = Nativeint
-
-module Reloc = struct
-  type ('s, 'c) relocatable = 's option * 'c
-  type t                    = (Reladdr.symbol, nativeint) relocatable
-  
-  let of_const c    = (None, c)
-  let of_sum s c    = (Some s, c)
-  let add_const (+) = fun (s, c) c' -> (s, c + c')
-  let normalize r   = r
-end
+module R     = Rtl
+module NI    = Nativeint
+module Reloc = Sledlib.MkReloc(struct type symbol = Reladdr.symbol end)
 
 type t          = Rtl.rtl
 type reg_or_imm = Rtl.exp
@@ -154,7 +135,13 @@ let absolutea simm13 =
 
 let indexa rs1 rs2 = 
   Rtl.app (Rtl.opr "add" [32]) [Rtl.fetch rs1 32; Rtl.fetch rs2 32]
+@
 
+A [[target]] inside an instruction is a relocatable address. It is
+represented by an expression that is either a 32-bit value, or a sum of
+symbol and a 32-bit value. The recognizer knows about this convention.
+
+<<minisparc.ml>>=
 let target t =
     match Reloc.normalize t with
     | None  , c -> Rtl.bits (Bits.of_nativeint c 32)  32

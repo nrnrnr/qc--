@@ -1,4 +1,3 @@
-module Reloc = Sledlib.TrivialReloc
 type reg_or_imm = Rtl.exp
 type address = Rtl.exp
 type regaddr = Rtl.exp

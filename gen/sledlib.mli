@@ -90,6 +90,6 @@ module String : sig
   val getname : string array -> nativeint -> operandname:string -> t
 end
 module type RELOC_PRINT = sig
-  include OLD_RELOCATABLE
+  include RELOCATABLE
   val to_string : ('a -> String.t) -> 'a relocatable -> String.t
 end

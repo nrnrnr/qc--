@@ -112,7 +112,7 @@ end
 let asmprintreloc _ = String.of_string "<relocatable>"
 # 198 "/home/lair/nr/zephyr/cvs/toolkit/caml-lib.nw"
 module type RELOC_PRINT = sig
-  include OLD_RELOCATABLE
+  include RELOCATABLE
   val to_string : ('a -> String.t) -> 'a relocatable -> String.t
 end
 
