@@ -1,6 +1,18 @@
 
 \input{macros.tex}
 
+
+% l2h substitution ast AST
+% l2h substitution rtl RTL
+% l2h substitution noweb NOWEB
+% l2h substitution qcc QC--
+% l2h substitution C C--
+% l2h substitution PAL C--
+% l2h substitution pal C--
+% l2h substitution asdl ASDL
+% l2h substitution ocaml OCaml
+% l2h substitution forall forall
+
 % ------------------------------------------------------------------ 
 \section{The Fat Environment}
 % ------------------------------------------------------------------ 
@@ -227,8 +239,17 @@ functions receive a source code position.
 <<>>=
 val bindMemsize     : Srcmap.rgn -> int        -> env -> env
 val bindEndianness  : Srcmap.rgn -> endianness -> env -> env 
+val bindWordsize    : Srcmap.rgn -> int        -> env -> env
+val bindPointersize : Srcmap.rgn -> int        -> env -> env
+val bindFloat       : Srcmap.rgn -> string     -> env -> env
+val bindCharset     : Srcmap.rgn -> string     -> env -> env
+
 val findMemsize     : env -> int        partial info 
 val findEndianness  : env -> endianness partial info
+val findWordsize    : env -> int        partial info
+val findPointersize : env -> int        partial info
+val findFloat       : env -> string     partial info
+val findCharset     : env -> string     partial info
 @
 
 % ------------------------------------------------------------------ 
@@ -244,6 +265,7 @@ in the following section.
 
 <<fenv.ml>>=
 module E            = Error
+module T            = Types
 @
 
 Name spaces are implemented as polymorphic functional maps from
@@ -399,9 +421,8 @@ and  venv           = (attr * ventry) StrMap.t
 <<>>=
 and  target         = { memsize:      int        partial info
                       ; endianness:   endianness partial info
-                      ; word:         Types.ty   partial info
-                      ; code:         Types.ty   partial info
-                      ; data:         Types.ty   partial info
+                      ; word:         int        partial info
+                      ; pointer:      int        partial info
                       ; float:        string     partial info
                       ; charset:      string     partial info
                       }
@@ -436,9 +457,8 @@ let empty  map      = { tenv   = StrMap.empty
                       ; error  = false
                       ; target = { memsize    = Arg.default 8
                                  ; endianness = Arg.default Little
-                                 ; word       = Arg.default Types.word
-                                 ; code       = Arg.default Types.code
-                                 ; data       = Arg.default Types.data
+                                 ; word       = Arg.default 32
+                                 ; pointer    = Arg.default 32
                                  ; float      = Arg.default "ieee754"
                                  ; charset    = Arg.default "latin1"
                                  }
@@ -545,10 +565,31 @@ match the existing one, or an inconsistency was found. In the latter
 case [[Error]] is returned.
 
 <<>>=
+let update_int r map old i errmsg =
+    if   i > 0 
+    then Arg.update old i errmsg
+    else ( error r map "positive number expected"
+         ; Arg.bad ()
+         ) 
+
+<<>>=
 let bindMemsize r n env =
     let f ()     = error r env.srcmap "inconsistent memsize specification" in
-    let memsize' = Arg.update env.target.memsize n f                       in
+    let memsize' = update_int r env.srcmap env.target.memsize n f          in
     let target'  = { env.target with memsize = memsize' }                  in
+        { env with  target = target' }
+
+<<>>=
+let bindWordsize r n env =
+    let f ()     = error r env.srcmap "inconsistent word size specification" in
+    let word'    = update_int r env.srcmap env.target.word n f               in
+    let target'  = { env.target with word = word' }                          in
+        { env with  target = target' }
+
+let bindPointersize r n env =
+    let f ()     = error r env.srcmap "inconsistent word size specification" in
+    let pointer' = update_int r env.srcmap env.target.pointer n f            in
+    let target'  = { env.target with pointer = pointer' }                    in
         { env with  target = target' }
 
 <<>>=
@@ -558,10 +599,28 @@ let bindEndianness r e env =
     let target'  = { env.target with endianness = e' }                       in
         { env with target = target' }
         
+<<>>=
+let bindFloat r fp env =
+    let f ()     = error r env.srcmap "inconsistent floating point specification" in
+    let fp'      = Arg.update env.target.float fp f               in
+    let target'  = { env.target with float = fp' }                in
+        { env with target = target' }
 
 <<>>=
-let findMemsize    env = env.target.memsize
-let findEndianness env = env.target.endianness
+let bindCharset r cs env =
+    let f ()     = error r env.srcmap "inconsistent charset specification" in
+    let cs'      = Arg.update env.target.charset cs f                      in
+    let target'  = { env.target with charset = cs' }                       in
+        { env with target = target' }
+
+<<>>=
+let findMemsize     env = env.target.memsize
+let findEndianness  env = env.target.endianness
+let findPointersize env = env.target.pointer 
+let findWordsize    env = env.target.word    
+let findFloat       env = env.target.float
+let findCharset     env = env.target.charset
+
 @   
 
 % ------------------------------------------------------------------ 
@@ -609,8 +668,7 @@ and clean_target = function
     |   { Dirty.memsize    = E.Ok(Some n)
         ; Dirty.endianness = E.Ok(Some e)
         ; Dirty.word       = E.Ok(Some w)
-        ; Dirty.data       = E.Ok(Some d)
-        ; Dirty.code       = E.Ok(Some c)
+        ; Dirty.pointer    = E.Ok(Some p)
         ; Dirty.float      = E.Ok(Some f)
         ; Dirty.charset    = E.Ok(Some s)
         } ->
@@ -620,9 +678,8 @@ and clean_target = function
                              | Dirty.Big    -> Clean.Big
                              )
         ; Clean.word       = w
-        ; Clean.data       = d
+        ; Clean.pointer    = p
         ; Clean.float      = f
-        ; Clean.code       = c
         ; Clean.charset    = s
         }
     |   _ -> assert false 

@@ -35,6 +35,7 @@ module T  = Types
 module E  = Error
 module F  = Fenv.Clean
 
+<<auxiliaries>>
 
 module R = struct
     <<module R>>
@@ -43,8 +44,6 @@ end
 module Expr = struct
     <<module Expr>>
 end
-
-<<auxiliaries>>
 
 module Make (G : Agraph.S) = struct
     module GM = G.Make
@@ -72,7 +71,7 @@ let dummy_expression    = Rtl.Const(Rtl.Bits(Bits.zero 32, 32))
 @
 
 [[bits]] extracts a [[width]] from a type, i.e.~the number of bits.
-This must be never applied to a [[bool]] type.
+This must be never applied to a [[bool]] value.
 
 <<>>=
 let bits = function
@@ -95,6 +94,18 @@ produce a small itneger.  [[un_const]] is surely the wrong name.
 let un_const e = 333 (* bogus *)
 @ 
 
+The target dependent sizes of pointers and words are recorded in the
+fat environment.  The following two functions provide access to them. 
+Additionally [[wordBits]] and [[pointerBits]] provide the bit sizes of
+both.
+
+<<>>=
+let wordBits env        = F.findWordsize env 
+let wordTy env          = T.bits (wordBits env)
+let pointerBits env     = F.findPointersize env
+let pointerTy env       = T.bits (pointerBits env)
+@
+
 % ------------------------------------------------------------------ 
 \subsubsection{Module \texttt{Make}}
 % ------------------------------------------------------------------ 
@@ -116,11 +127,11 @@ let rec ty env = function
                            )
 @
 
-The [[tyOf]] function returns the number of bits denoted by a name
+The [[idTy]] function returns the number of bits denoted by a name
 [[n]] which is looked up in the fat environment.
 
 <<>>=                           
-let tyOf n env = match F.findv n env with attr, (denot,ty) -> bits ty
+let idTy n env = match F.findv n env with attr, (denot,ty) -> bits ty
 @
 
                              
@@ -168,11 +179,11 @@ and primOp env op args =
 
 and expr env = function 
     | A.ExprAt(x,_)         -> expr env x
-    | A.Int( i, None)       -> Rtl.Const(Rtl.Bits(i,bits T.word))
+    | A.Int( i, None)       -> Rtl.Const(Rtl.Bits(i,wordBits env))
     | A.Int( i, Some t)     -> Rtl.Const(Rtl.Bits(i,ty env t))
-    | A.Float( f, None)     -> Rtl.Const(Rtl.Bits(f,bits T.word))
+    | A.Float( f, None)     -> Rtl.Const(Rtl.Bits(f,wordBits env))
     | A.Float( f, Some t)   -> Rtl.Const(Rtl.Bits(f,ty env t))
-    | A.Char( c, None)      -> Rtl.Const(Rtl.Bits(c,bits T.word))
+    | A.Char( c, None)      -> Rtl.Const(Rtl.Bits(c,wordBits env))
     | A.Char( c, Some t)    -> Rtl.Const(Rtl.Bits(c, ty env t))
     | A.Fetch(v)            -> let width = bits (Expr.tyFetch env v) in 
                                Rtl.Fetch(lvalue env v,width)
@@ -300,7 +311,7 @@ Since the flow graph is build up backwards the [[CopyIn]] node comes first.
 | A.CallStmt(lhs, cc, e, args, ts, fs) ->
     let rec lvalue = function
         | A.LValueAt(x,_) -> lvalue x
-        | A.Var(hint,n)   -> (n,tyOf n env ,hint)
+        | A.Var(hint,n)   -> (n,idTy n env ,hint)
         | A.Mem _         -> assert false in     
     let cc    = Aux.Option.get default_convention cc in
     let copyi = if lhs <> []
@@ -324,7 +335,7 @@ A continuation is represented by a labeled node.  This node is a
 | A.ContStmt(n,ns) -> 
     let hint  = None                                          in
     let cc    = default_convention                            in
-    let args  = List.map (fun n -> (n, tyOf n env, hint )) ns in
+    let args  = List.map (fun n -> (n, idTy n env, hint )) ns in
     let copy  = if ns <> []
                 then props (GM.copy_in args Fgraph.ContParameters cc after)
                 else after                           
@@ -514,11 +525,11 @@ and op env o args =
 and tyExpr env = function
     | A.ExprAt(x,r)            -> tyExpr env x
     | A.Int   (str, Some t)    -> evalTy env t
-    | A.Int   (str, None)      -> T.word
+    | A.Int   (str, None)      -> wordTy env
     | A.Float (str, Some t)    -> evalTy env t
-    | A.Float (str, None)      -> T.word
+    | A.Float (str, None)      -> wordTy env
     | A.Char  (str, Some t)    -> evalTy env t
-    | A.Char  (str, None)      -> T.word
+    | A.Char  (str, None)      -> wordTy env
     | A.Fetch (v)              -> tyFetch env v
     | A.BinOp (l,op,r)         -> tyPrimOp env op [l;r]
     | A.UnOp  (op,expr)        -> tyPrimOp env op [expr]
