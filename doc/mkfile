@@ -4,16 +4,15 @@
 
 TOP     = ..
 
-NOWEAVE = noweave
-
-<../config/config.mk
-<../config/latex.mk
-<../config/man.mk
+<$TOP/config/config.mk
+<$TOP/config/latex.mk
+<$TOP/config/noweb.mk
+<$TOP/config/man.mk
 
 
 PS =            cfg.ps better.ps working.ps newtarget.ps modules.ps \
                 backend.ps refactor.ps qc--.ps qc--internals.ps	qc--interp.ps \
-		release.ps
+		release.ps index.ps
 
 # ------------------------------------------------------------------ 
 # High level targets
@@ -40,7 +39,7 @@ install.opt:V: install
 clean:V:
 	rm -f *.dvi *.aux *.log *.toc *.ps               
 	rm -f cfg.tex modules.ps*
-	rm -f stack.tex stack.inc
+	rm -f stack.tex stack.inc index.tex index.inc
 	rm -f refactor.tex refactor.inc
 	rm -f qc--.1 qc--internals.1 qc--interp.1
 	rm -f qc--.pdf
@@ -60,11 +59,10 @@ depend:VQ:
 # The details
 # ------------------------------------------------------------------ 
 
-'^'(cfg|refactor)'\.'tex'$':RD:        '\1'.nw
+cfg.tex:D: cfg.nw
 	$NOWEAVE -delay $prereq > $target 
-
-'^'(index|stack)'\.'tex'$':RD:        '\1'.nw
-	$NOWEAVE        $prereq > $target 
+refactor.tex:D: refactor.nw
+	$NOWEAVE -delay $prereq > $target 
 
 modules.ps:     modules.txt
 	a2ps -B -9 -r -f 12 -o $target modules.txt

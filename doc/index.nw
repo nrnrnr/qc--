@@ -8,7 +8,30 @@
 \section{The Module Landscape of the Quick C\hbox{-{}-} Compiler}
 % ------------------------------------------------------------------ 
 
-The Quick {\C} compiler currently is a collection of over one hundred
+\ifx\module\undefined
+  \newcommand\module[1]
+    {\hyperlink{module.#1}{\texttt{#1} module} (Ch\ref{#1-module}, p\pageref{#1-module})}
+  \newcommand\inmodule[2]{\hyperlink{module.#1}{\emph{#2}} (\texttt{#1.nw})}
+  \newcommand\markmodule[1]{\hypertarget{module.#1}{\label{#1-module}}}
+  \renewcommand\module[1]{\texttt{#1.nw}}
+\fi
+
+% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
+% l2h macro inmodule 2 <a href="#$1.html">#2</a>
+% l2h ignore markmodule {
+
+% l2h let htmlcontents tableofcontents
+
+% l2h ignore catcode ==
+
+\begin{center}
+\textbf{Last major revision: June 2002}\\
+\catcode`\$=10 % space
+Last CVS checkin: $Date$
+\end{center}
+
+
+The Quick {\PAL} compiler currently is a collection of over one hundred
 modules. This document tries to sketch the landscape and to identify
 some landmarks for orientation.
 
@@ -16,7 +39,7 @@ some landmarks for orientation.
 \subsection{Driver}
 % ------------------------------------------------------------------ 
 
-The Quick {\C} compiler is held together by a few driver modules that
+The Quick {\PAL} compiler is held together by a few driver modules that
 interact with the user. 
 
 \begin{itemize} 
@@ -36,14 +59,14 @@ the compiler.
 \item \module{../src/driver2}. This module exports front end data
 structures and functions to the Lua interpreter. For example,
 [[Driver2]] implements a new Lua data type [[ast]] that represents the
-abstract syntax of a {\C} source file. 
+abstract syntax of a {\PAL} source file. 
 \end{itemize}
 
 % ------------------------------------------------------------------ 
 \subsection{Front End}
 % ------------------------------------------------------------------ 
 
-The \emph{front end} reads a {\C} source file and translates it into a
+The \emph{front end} reads a {\PAL} source file and translates it into a
 target-independent intermediate representation which the \emph{back end}
 will later translate to machine code. Almost all aspects of the front
 end are independent independent of the actual target. All syntactic and
@@ -105,6 +128,44 @@ functions error-aware, allowing them to deal with inputs that might be
 bad.
 
 \end{itemize}
+
+New front end modules as of January 2004:
+\begin{itemize}
+\item
+\module{../src/nast}.
+``Normalized AST.''
+The Quick~{\PAL} AST follows the concrete syntax directly.
+As such, it is very flexible for the front end and correspondingly
+complicated to process.
+The goal of this module is to put the AST into a sort of a normal
+form.
+The normal form collects and segregates declarations for simpler
+processing.
+Every AST is normalizable, so this module never causes an error.
+\item
+\module{../src/nelab},
+\module{../src/elabexp},
+\module{../src/elabstmt}.
+Elaboration of an AST.
+These modules split what was done by \module{../src/elab} in the old
+front end.
+Unlike the old front end, they not only detect errors but also put the
+program into an elaborated normal form.
+Thus, some work that was deferred to \module{../src/ast2ir} in the old
+front end is done here in the new front end.
+
+To ease understanding, elaboration is split across three modules:
+\module{../src/elabexp} for expressions,
+\module{../src/elabstmt} for statements,
+and 
+\module{../src/nelab} for programs.
+
+These modules are the \emph{only} modules that detect and return error values.
+Upstream, no errors are detected, and downstream, all errors are
+assumed to have been detected here.
+\end{itemize}
+
+
 
 % ------------------------------------------------------------------ 
 \subsection{Translation to Intermediate Representation}
