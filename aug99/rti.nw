@@ -1,0 +1,214 @@
+% -*- mode: Noweb; noweb-code-mode: c-mode -*-
+
+% l2h substitition PAL C--
+
+\section{The {\PAL} run-time interface}
+
+Conventions are approximately those of Hanson's \emph{C~Interfaces and
+Implementations}.
+@ 
+\subsection{Thread-control blocks}
+A thread-control block is an abstraction.
+<<exported types>>=
+typedef struct Cmm_tcb_st *Cmm_tcb;
+@ We create a thread-control block by providing an area [[block]] for the control
+block, a way to get stack space, and a program counter for the initial
+{\PAL} procedure. 
+The [[block]] area must be at least [[Cmm_TCB_size]] bytes long,
+and aligned on a 64-bit boundary.
+<<exported functions>>=
+typedef void *(*Cmm_stack_callback)(void *closure, unsigned long size);
+Cmm_tcb Cmm_New_TCB ( void *block
+                    , void *stack
+                    , Cmm_stack_callback get_stack
+                    , void *get_stack_closure
+                    , unsigned long stack_size_hint
+                    , Cmm_program_counter pc
+                    );
+extern unsigned long Cmm_TCB_size;   /* minimum size of a TCB */
+@ If [[get_stack]] is [[NULL]], then there can only be one {\PAL}
+thread, and it runs on the system stack.
+Otherwise, [[get_stack]] and [[get_stack_closure]] form a closure that
+the {\PAL} implementation 
+can call to get stack space for this thread.
+When this thread runs out of stack space, the {\PAL} runtime will ask
+for [[stack_size_hint]] bytes, or the minimum number of bytes needed
+to hold an activation record, whichever is larger.%
+\footnote{The reasoning behind this behavior is that preallocating
+unneeded stack space can cause poor performance in systems with many
+thousands of threads.}
+
+When execution of the thread is begun, it begins
+at program counter~[[pc]], which should be the address of
+a {\PAL} procedure with no parameters.
+@
+To get control to a thread, [[Resume]] it.
+<<exported functions>>=
+extern int Cmm_Resume (Cmm_tcb t);
+@ When
+the thread yields control 
+back to the system thread, the value it yields (the \emph{yield code})
+is returned as the result of [[Resume]]; 
+this value is the thread's \emph{yield code}.
+@
+\subsection{Activations}
+
+When execution of a \PAL{} program is suspended, its state is
+captured in its thread-control block.
+[[FirstActivation]] uses the thread-control block to 
+initialise an activation, which corresponds to the {\PAL} activation that will
+execute when the thread's execution is resumed.
+<<exported functions>>=
+extern Cmm_activation Cmm_FirstActivation( Cmm_tcb t );
+@ We would like to leave activations abstract, but we suffer the usual
+problem of who owns the memory needed to hold the abstraction.
+We therefore make the [[Cmm_activation]] abstraction the
+\emph{structure} holding the information we need, \emph{not} a pointer
+to that structure---this way,
+the
+front-end run-time system can allocate activations as local variables.
+But we therefore must expose the representation of activations.
+Faugh!
+<<exported types>>=
+typedef struct Cmm_activation_st Cmm_activation;
+@ 
+To walk the stack, we need to provide one activation to get another.
+It's not clear whether we want to use a functional or to mutate the
+activation in place.
+I'm inclined to go for a functional style, since it is easy to
+implement mutate-in-place that way; the only cost is it makes simple
+loops slightly awkward.
+<<exported functions>>=
+Cmm_activation Cmm_NextActivation (const Cmm_activation *a, int *underflow);
+@ If activation [[*a]] is the bottommost activation on the stack, set
+[[*underflow]] to~0 and return [[*a]].
+Otherwise, leave [[underflow]] unchanged and return that activation
+underneath it on the stack.
+Note that aliasing is OK, as in \mbox{[[a = Cmm_NextActivation(&a, &u)]]}.
+%%  %%% docs for alternative modify-in-place version %%%
+%%  modifies the activation handle [[a]] to refer to the activation record of
+%%  [[a]]'s~caller, or more precisely, to the activation to which control will return
+%%  when [[a]]~returns.
+%%  [[NextActivation]] returns nonzero
+%%  if there is such an activation record, and zero if 
+%%  there is not.
+%%  That is, [[NextActivation(&a)]] returns zero if and only if activation handle~[[a]]
+%%  refers to the bottom-most record on the {\PAL}  stack.
+%%  %
+@
+
+\subsection{Descriptors}
+
+The actual C~types used to represent the native data pointer type or
+[[bits32]] may vary, so we use [[Cmm_dataptr]] and [[Cmm_bits32]].
+<<exported functions>>=
+extern Cmm_dataptr Cmm_GetDescriptor( Cmm_activation a, Cmm_bits32 token );
+@ As noted above, [[GetDescriptor]] returns the value
+associated with the smallest {\PAL} span tagged 
+with [[token]] and containing the safe point where the activation is suspended.
+It is a checked runtime error if no such span encloses the point.
+@
+[[FindVar]] interrogates an activation for the 
+location of a parameter or local variable.
+These are numbered in the order in which they are declared,
+starting with zero.
+<<exported functions>>=
+extern void* Cmm_FindVar( Cmm_activation a, int var_index );
+@ [[FindVar]] returns a pointer to the 
+location containing the value of
+the specified variable, or
+[[NULL]] if the variable is dead.
+It is a checked runtime error to pass a [[var_index]] that is out of range.
+
+Names bound by [[stack]] declarations are considered variables for
+purposes of [[FindVar]], even though they are immutable.
+For such names, [[FindVar]] returns the 
+{value} that the name has in {\PAL}~source code, i.e., the address of
+the stack-allocated 
+block of storage.
+Storing through this address is meaningful; it alters the contents of
+the activation record~[[a]].
+Stack locations are not subject to liveness analysis.
+@
+If a variable is dead, but its value is still sitting in a register or
+stack location, it would be unfair to hide the value from a debugger.
+Accordingly, [[FindDeadVar(a, v)]]
+returns a pointer to a location containing the last known value
+of~[[v]], if any such location exists, and [[NULL]] otherwise. 
+It is an unchecked run-time error to store into such a location.
+<<exported functions>>=
+extern void *Cmm_FindDeadVar( Cmm_activation a, int var_index );
+@ 
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+
+
+\item[]]void SetActivation( tcb *t, activation a )]]]
+modifies the thread-control block [[t]] so that the execution of the thread will
+resume with activation~[[a]].
+It is used to unwind the stack, e.g., when handling exceptions.
+%
+\item[]]void SetContinuation( tcb *t, int cont_index )]].] If thread [[t]] is suspended at a call site, 
+[[SetContinuation]] arranges that when
+the thread is resumed, it will do so at the continuation whose ordinal number
+is [[cont_index]].
+The normal continuation counts as continuation~0, so
+[[SetContinuation(t, [[$k$]])]] may be called only when
+thread~[[t]] is suspended at a call site with more than~$k$ return
+continuations.
+%
+\item[]]void *FindReturnLocation( tcb *t, int result_index )]].]
+If thread [[t]] is suspended at a call site, [[FindReturnLocation]]
+returns a pointer to the location in which the thread expects to
+receive the value(s) returned by the call.
+[[result_index]] is the \emph{ordinal number} of the result, starting
+from~0.
+[[FindReturnLocation(a, [[$n$]])]] may be called only when
+thread~[[t]] is suspended at a call site which will resume
+with a continuation expecting more
+than~$n$ return values.
+
+We use [[result_index]], not the number of the variable that will
+receive the result, because we expect that doing so will significantly
+reduce the amount of information that must be saved by the back end.
+For example, under a C-like calling convention, [[FindReturnLocation(a, 0)]]
+might always return the same register.
+
+Notice that, unlike [[FindVar]], [[FindReturnLocation]] only applies to the
+top-most activation --- hence we pass a pointer to the thread-control block,
+rather than an activation handle.  For other activations it is nonsense to
+talk of the return locations, whereas for the topmost activation it makes
+perfect sense; for example, the first return value might be returned in
+register 1, which is held in the thread-control block.
+%
+
+
+
+\subsection{Machine dependencies}
+
+<<machine-dependent types ((x86-linux))>>=
+typedef unsigned long Cmm_bits32;
+typedef void *Cmm_dataptr;
+typedef void (*Cmm_program_counter)(void);
+@ 
+
+\subsection{Boilerplate}
+
+<<cmmrti.h>>=
+#ifndef CMMRTI_H
+<<included files>>
+<<machine-dependent types>>
+<<exported types>>
+<<exported functions>>
+<<private data types, which are exposed because C requires it>>
+#endif
+<<included files>>=
+@ 
+Eventually, this code chunk will be drawn from the modules that
+implement the run-time system
+<<private data types, which are exposed because C requires it>>=
+struct Cmm_activation_st { void *bogus; };
+@ 
