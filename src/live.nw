@@ -137,13 +137,25 @@ let info node =
 @
 We use these
 set operations.
+When we use [[--]] to subtract a register~$r$, we have to be sure to
+remove not only~$r$ but also any slices completely contained in~$r$.
+Furthermore, we expect it never to happen that there is a slice that
+overlaps with~$r$ but is not completely contained in it.
+But we don't check.
+<<liveness functions>>=
+let diff live killed =
+  let is_killed r = RSX.exists (fun r' -> Register.contains r' r) killed in
+  RSX.filter (fun r -> not (is_killed r)) live 
+@ 
+%
 The [[--*]] operation expresses our expectation that a killed register should
 never be live. 
 <<liveness functions>>=
 let ( ++  ) = RSX.union
-let ( --  ) = RSX.diff 
+let ( --  ) = diff 
 let ( --* ) live killed =
-  if RSX.exists (fun x -> RSX.mem x killed) live then
+  let is_killed r = RSX.exists (fun r' -> Register.contains r' r) killed in
+  if RSX.exists is_killed live then
     (*<complain of live variables in killed set>; live--killed *)
     Impossible.impossible "live variable is in killed set"
   else
