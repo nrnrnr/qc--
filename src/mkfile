@@ -113,14 +113,14 @@ ML =            uint64.ml     \
                 astpp.ml      \
                 rtleval.ml    \
                 elab.ml       \
-		const.ml      \
+                const.ml      \
                 register.ml   \
                 rtlutil.ml    \
                 area.ml       \
                 automaton.ml  \
                 target2.ml    \
-		asm2.ml       \
-		cmdline.ml    \
+                asm2.ml       \
+                cmdline.ml    \
                 driver.ml     \
                 main.ml       \
 
@@ -129,7 +129,7 @@ ML =            uint64.ml     \
 
 MLEXTRA =       cfg3.ml         \
                 lifetime.ml     \
-		linscan.ml	\
+                linscan.ml      \
                 live.ml         \
                 ast3ir.ml       \
                 copyinout.ml    \
@@ -151,8 +151,8 @@ GENERATED =     this.ml     \
                 astUtil.ml  \
                 astUtil.mli \
 
-MLY =	        parse.mly
-MLL =	        scan.mll
+MLY =           parse.mly
+MLL =           scan.mll
 
 src:V:          $ML $MLI $MLY $MLL $MLEXTRA
 
@@ -171,37 +171,37 @@ OBJ =           `echo $ML       | sed 's/\.ml/.o/g'`
 # conditional code happens to be in the general case.
 
 interval.mli: lifetime.nw
-	$NOTANGLE -L"$LINE" -R$target $prereq > $target
+    $NOTANGLE -L"$LINE" -R$target $prereq > $target
 interval.ml: lifetime.nw
-	$NOTANGLE -L"$LINE" -R$target $prereq > $target
+    $NOTANGLE -L"$LINE" -R$target $prereq > $target
 
 uint64p.c:      uint64.nw
-	$NOTANGLE -L -R$target $prereq > $target
+    $NOTANGLE -L -R$target $prereq > $target
 
 topsorttest.ml: topsort.nw
-	$NOTANGLE -L"$LINE" -R$target $prereq > $target
+    $NOTANGLE -L"$LINE" -R$target $prereq > $target
 
 
 cmdline.ml: main.nw
-	$NOTANGLE -L"$LINE" -R$target $prereq > $target
+    $NOTANGLE -L"$LINE" -R$target $prereq > $target
 cmdline.mli: main.nw
-	$NOTANGLE -L"$LINE" -R$target $prereq > $target
+    $NOTANGLE -L"$LINE" -R$target $prereq > $target
 this.mli: main.nw
-	$NOTANGLE -L"$LINE" -R$target $prereq > $target
+    $NOTANGLE -L"$LINE" -R$target $prereq > $target
 this.in: main.nw
-	$NOTANGLE -L"$LINE" -R$target $prereq > $target
+    $NOTANGLE -L"$LINE" -R$target $prereq > $target
 
-astpp.mli: 	ast.nw
-	$NOTANGLE -L"$LINE" -R$target $prereq > $target
-astpp.ml:	ast.nw
-	$NOTANGLE -L"$LINE" -R$target $prereq > $target
+astpp.mli:  ast.nw
+    $NOTANGLE -L"$LINE" -R$target $prereq > $target
+astpp.ml:   ast.nw
+    $NOTANGLE -L"$LINE" -R$target $prereq > $target
 
-parse.mly:	parser.nw
-	$NOTANGLE -R$target $prereq > $target
+parse.mly:  parser.nw
+    $NOTANGLE -R$target $prereq > $target
 scan.mll:       parser.nw
-	$NOTANGLE -R$target $prereq > $target
+    $NOTANGLE -R$target $prereq > $target
 scan.mli:       parser.nw
-	$NOTANGLE -L"$LINE" -R$target $prereq > $target
+    $NOTANGLE -L"$LINE" -R$target $prereq > $target
 
 #
 # LaTeX documentation for non OCaml code
@@ -222,13 +222,13 @@ ast.inc:        ast.nw
 #
 
 $NAME.pod:      main.nw 
-	$NOTANGLE -R$target $prereq > $target
+    $NOTANGLE -R$target $prereq > $target
 
 ${NAME}grammar.pod:      main.nw parse.output
-	$NOTANGLE  -R$target $prereq > $target
-	echo '/##grammar##/d
-	.r !grep "^  *[0-9]" parse.output
-	wq' | ed ${NAME}grammar.pod
+    $NOTANGLE  -R$target $prereq > $target
+    echo '/##grammar##/d
+    .r !grep "^  *[0-9]" parse.output
+    wq' | ed ${NAME}grammar.pod
 
 ################################################################
 # LaTeX documentation
@@ -341,9 +341,9 @@ $MANDIR/man1/${NAME}grammar.1:   ${NAME}grammar.1
 ################################################################
 
 this.ml:        this.in mkfile
-		sed 	-e "s/@this@/$NAME-$VERSION/"\
-			-e "s/@arch@/$ARCH/"\
-		this.in > $target
+        sed     -e "s/@this@/$NAME-$VERSION/"\
+            -e "s/@arch@/$ARCH/"\
+        this.in > $target
                 
 ################################################################
 # recalculate dependencies
@@ -351,26 +351,26 @@ this.ml:        this.in mkfile
 ################################################################
 
 
-depend:V:	src
-		$OCAMLDEP *.mli *.ml > $DEPEND
+depend:V:   src
+        $OCAMLDEP *.mli *.ml > $DEPEND
 
 # make sure DEPEND is up to date
 depend-check:VQ: newer
-	# check for $DEPEND
-	if ./newer $DEPEND mkfile; then true;
-	else
-	  echo "$DEPEND is out of date; you must run 'mk depend' before continuing" 1>&2
-	  exit 1
-	fi
-	
+    # check for $DEPEND
+    if ./newer $DEPEND mkfile; then true;
+    else
+      echo "$DEPEND is out of date; you must run 'mk depend' before continuing" 1>&2
+      exit 1
+    fi
+    
 newer: newer.c
-	$CC -o $target $prereq
+    $CC -o $target $prereq
 
 #
 # create tags for vi(1)
 #
 
-tags:V:		src
+tags:V:     src
                 mltags *.ml *.mli *.mly
 
 ################################################################
@@ -383,18 +383,18 @@ update:V:       $BINDIR/$NAME                 \
                 $MANDIR/man1/${NAME}grammar.1 \
 
 clean:V:        
-	        rm -f *.cmo *.cmx *.o
-	        rm -f *.asdl *.view *.smlview
-	        rm -f *.cmi
-	        rm -f *.ml *.mli *.c *.mly *.mll this.in
-	        rm -f *.sig *.sml
-	        rm -f *.dvi *.log *.aux *.bbl *.blb *.blg
-	        rm -f parse.output
-	        rm -f *.html *.1 *.ps *.pod
-	        rm -f *~
+            rm -f *.cmo *.cmx *.o
+            rm -f *.asdl *.view *.smlview
+            rm -f *.cmi
+            rm -f *.ml *.mli *.c *.mly *.mll this.in
+            rm -f *.sig *.sml
+            rm -f *.dvi *.log *.aux *.bbl *.blb *.blg
+            rm -f parse.output
+            rm -f *.html *.1 *.ps *.pod
+            rm -f *~
 
-clobber:V:	clean
-	        rm -f $NAME $NAME.opt newer
+clobber:V:  clean
+            rm -f $NAME $NAME.opt newer
 
 
 
@@ -403,3 +403,6 @@ clobber:V:	clean
 ################################################################
 
 <$DEPEND
+
+
+# vim:tw=72:ts=4:et:

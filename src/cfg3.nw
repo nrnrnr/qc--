@@ -100,8 +100,8 @@ The {\cfg} abstraction is characterized by the following invariants:
       \end{enumerate}
 
 \item A node can have any number of predecessors. 
-      It is a checked run-time error if a node with more than one
-      predecessor is unlabeled. 
+      \emph{It is a checked run-time error if a node with more than one
+      predecessor is unlabeled}. 
 
 \item A node \emph{defines}, \emph{uses}, and \emph{kills} locations.
 \item A node has mutable properties.
@@ -124,6 +124,14 @@ behaviors, the following name scheme is used:
 % ------------------------------------------------------------------ 
 \subsection{Signature}
 % ------------------------------------------------------------------ 
+
+\begin{quote}\it
+    Currently we have two ways to traverse the {\cfg}: [[scan]] and
+    [[fold]]. Since I have no idea it what way they both could differ I
+    believe a traversal based on a linear order is enough. I would like
+    to remove [[fold_fwd]] and [[fold_bwd]] from the interface or at
+    least state that they depend on the linear order. --CL
+\end{quote}
 
 <<types and ops>>=
 type cfg        
@@ -274,7 +282,8 @@ The first node with respect to numbering.
 \item [[last: cfg -> node]]:
 The last node with respect to numbering.
 
-\item [[scan_fwd: cfg -> first:int -> limit:int -> (node -> 'a -> 'a) -> 'a -> 'a]]: 
+\item 
+[[scan_fwd: cfg -> first:int -> limit:int -> (node -> 'a -> 'a) -> 'a -> 'a]]: 
 Applies a function [[f]] to the range of nodes from [[first]] to
 [[limit]] (excluded) and passes an intermediate result.  The nodes
 are visited in increasing order with respect to the numbering.  It is
@@ -282,7 +291,8 @@ an \emph{unchecked} run-time error if [[f]] calls a graph mutator; in
 order for [[f]] being applied to nodes [[first]]] $<$ [[limit]] must
 hold, otherwise the intermediate result [['a]] is returned.
 
-\item [[scan_bwd: cfg -> first:int -> limit:int -> (node -> 'a -> 'a) -> 'a -> 'a]]:
+\item 
+[[scan_bwd: cfg -> first:int -> limit:int -> (node -> 'a -> 'a) -> 'a -> 'a]]:
 Dual function to [[scan_fwd]] in the sense that nodes are visited in
 decreasing order, starting with the node before [[limit]].  Note,
 that [[first]] $<$ [[limit]] still must hold.
@@ -315,7 +325,7 @@ causes a node numbering to become \emph{absent}.
 gm_assign:  cfg -> Rtl.rtl -> succ:node -> node
 gm_return:  cfg -> Rtl.rtl -> int * int -> node
 gm_goto:    cfg -> Rtl.rtl -> node list -> node
-gm_jump:    cfg -> Rtl.rtl -> node list -> node
+gm_jump:    cfg -> Rtl.rtl -> node list -> node 
 gm_cutto:   cfg -> Rtl.rtl -> conts     -> node
 gm_call:    cfg -> Rtl.rtl -> conts -> succ:node -> node
 gm_branch:  cfg -> Rtl.rtl -> ifso:node -> ifnot:node -> node
@@ -352,7 +362,8 @@ Like [[insert_assign_after]], except that the assign nodes are placed
 before the node which can be any node.  
 
 
-% \item [[gm_insert_assign_between: Rtl.rtl list -> src:node -> dst:node -> unit]]:
+% \item 
+% [[gm_insert_assign_between: Rtl.rtl list -> src:node -> dst:node -> unit]]:
 % Inserts assign nodes on every edge leading from [[src]] to [[dst]]. 
 % The predecessor/successor relationship of all nodes is updated to
 % reflect the insertion of the assign nodes on all affected edges.  It
@@ -527,16 +538,90 @@ let entry cfg =
 let exit cfg =
     cfg#exit
 
-let fold_fwd cfg f zero = assert false
-let fold_bwd cfg f zero = assert false
 
-let first cfg = assert false
-let last  cfg = assert false
+let first cfg = 
+    assert (cfg#enumerated);
+    assert ((Array.length (cfg#enumeration)) >= 2);
+    let enum = cfg#enumeration in
+        enum.(0)
 
-let scan_fwd cfg ~first:int ~limit:int f zero = assert false
-let scan_bwd cfg ~first:int ~limit:int f zero = assert false
-let next (node:node) = assert false
-let prev (node:node) = assert false
+let last  cfg = 
+    assert (cfg#enumerated);
+    assert ((Array.length (cfg#enumeration)) >= 2);
+    let enum = cfg#enumeration    in
+    let len  = Array.length enum in
+        enum.(len-1)
+@
+
+The indices [[first]] and [[limit]] are one-based, the array of nodes is
+zero-based. The [[loop]] index [[n]] is also one-based and therefore
+[[f]] is passed node [[n-1]] from the array.
+
+<<cfg3.ml>>=
+let scan_fwd (cfg:cfg) ~(first:int) ~(limit:int) f zero = 
+    assert (cfg#enumerated);
+    assert (first >= 1);
+    assert (limit <= ((Array.length (cfg#enumeration)) + 1));
+    let enum = cfg#enumeration in
+    let rec loop n result =     (* n is one-based *)
+        if n = limit then 
+            result
+        else
+            loop (n+1) (f enum.(n-1) result)
+    in
+        loop first zero
+
+
+<<cfg3.ml>>=
+let scan_bwd (cfg:cfg) ~(first:int) ~(limit:int) f zero = 
+    assert (cfg#enumerated);
+    assert (first >= 1);
+    assert (limit <= ((Array.length (cfg#enumeration)) + 1));
+    let enum = cfg#enumeration in
+    let rec loop n result =     (* n is one-based *)
+        if n < first then 
+            result
+        else
+            loop (n-1) (f enum.(n-1) result)
+    in
+        loop (limit-1) zero
+
+<<cfg3.ml>>=
+let fold_fwd cfg f zero = 
+    assert (cfg#enumerated);
+    let enum = cfg#enumeration in
+        scan_fwd cfg 1 (Array.length enum) f zero
+    
+<<cfg3.ml>>=
+let fold_bwd cfg f zero = 
+    assert (cfg#enumerated);
+    let enum = cfg#enumeration in
+        scan_bwd cfg 1 (Array.length enum) f zero
+@
+
+The node numbered [[n]] is at the array position [[n-1]]. Consequently
+is the next node at [[n]] and the previous one at position [[n-2]]. 
+
+<<cfg3.ml>>=
+let next (node:node) = 
+    assert (node#cfg#enumerated);
+    let n    = node#number     in   (* 1 ... |G|   *)
+    let cfg  = node#cfg        in
+    let enum = cfg#enumeration in   (* 0 ..  |G|-1 *)
+        if n < (Array.length enum) then
+            Some enum.(n)
+        else
+            None
+    
+let prev (node:node) = 
+    assert (node#cfg#enumerated);
+    let n    = node#number     in   (* 1 ... |G|   *)
+    let cfg  = node#cfg        in
+    let enum = cfg#enumeration in   (* 0 ..  |G|-1 *)
+        if 1 < n then
+            Some enum.(n-2)
+        else
+            None
 
 <<cfg3.ml>>=
 let gm_assign = new X.assign
@@ -615,8 +700,11 @@ class type cfg = object
     method lookup:      string -> node  (* find labeled node *)
     method set_label:   string -> node -> unit  (* assign label to node *)
     
-    method add:         node -> unit    (* add node to this *)
-    method enumerate:   unit -> unit    (* enumerate all node in this *)
+    method add:         node -> unit    (* add node to this; 
+                                           est: enumerated = false *)
+    method enumerate:   unit            (* enumerate all node in this *)
+    method enumerated:  bool            (* true, iff nodes are enumerated *)
+    method enumeration: node array      (* req: enumerated *)
     method get_id:      unit -> int     (* unique *)
     method test:        unit            (* test integrity of this *)
 end
@@ -640,10 +728,20 @@ end
       proxy's successor.  It is an checked run-time error if [[node]]
       does not belong to this {\cfg}. 
       
-\item [[add]] adds a node to this {\cfg}. 
+\item [[add]] adds a node to this {\cfg}. This invalidates a potential 
+      linerar order (i.e. enumeration) and causes [[enumerated]] to be
+      [[false]].
 
 \item [[enumerate]] assigns numbers $1,2,\dots$ to the nodes in this
-      {\cfg}.
+      {\cfg}. As a consequence, [[enumerated]] becomes true.
+      
+\item [[enumerated]] is [[true]], if nodes are enumerated. The
+      enumeration of nodes is invalidated when nodes are inserted into
+      [[this]]. 
+
+\item [[enumeration]] is the array of nodes in the linear order
+      established by [[enumerate]]. It is a checked run-time error to invoke
+      this method if the [[enumerated]] predicate is false.       
 
 \item [[get_id]] returns a unique number (in this {\cfg}) at every
       invocation.  Used by nodes for their unique ID.
@@ -666,6 +764,7 @@ and node = object
     method upd_succ:    (node -> node) -> unit (* redirect succs of this *)
     method set_rtl:     Rtl.rtl -> unit (* set rtl to new value *)
     method set_property: property -> unit (* set property *)
+    method set_number:  int -> unit     (* defines number *)
 
     method defs:        locs            (* defined by this *)
     method uses:        locs            (* used by this    *)
@@ -675,6 +774,7 @@ and node = object
     method insert_assign_after : Rtl.rtl -> node (* returns new node *)  
 
     method ast:         mangle:(string->string) -> Ast.body list
+    method linorder:    node option * node list (* immediate/delayed succs *)
     
     (* for debugging only *)
     method test:        unit            (* test integrity of this *)
@@ -688,7 +788,8 @@ end
       its [[cfg]].
 \item [[number]] the number of this node. It is a checked run-time
       error to invoke this method if the [[cfg]] is not enumerated.
-\item [[succ]] are succeeding control-flow nodes.
+\item [[succ]] are succeeding control-flow nodes. 
+
 \item [[pred]] are preceding control-flow nodes.
 \item [[link_pred]] informs this node that another node has become a
       predecessor of this node. 
@@ -711,6 +812,9 @@ end
       [[this]] becomes the successor of the new node, which in turn
       becomes the new successor of [[this]].
 
+\item [[linorder]] provides contraints for the linear order of node. See
+      section \ref{sect:cfg3:linorder} for details.
+
 \item [[ast]] returns a representation of the node as abstract {\PAL}
       syntax. The method receives a \emph{mangler} function that is used 
       to transform labels into {\PAL} syntax. See \module{mangle} for
@@ -729,6 +833,78 @@ class type proxy = object
     inherit node 
     method set_succ: node -> unit       (* set succ for this *)
 end
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Linear Ordering}\label{sect:cfg3:linorder}
+% ------------------------------------------------------------------ 
+
+The {\cfg} abstraction includes the \emph{enumeration} of a {\cfg}: a
+linear order is defined that respects the control-flow. Such a
+linear order is used for liveness and data-flow analysis and also
+defines the code layout after nodes are translated to machine
+instructions. Since linear-scan register allocation
+(c.f.~\module{linscan}) is sensitive to code layout it is desirable to
+provide some control over it, instead of using a generic depth-first
+traversal to define a linear order. Using depth-first the two branches
+of an [[if]] statement that are close on the {\PAL} source level often
+would be very far apart in the linear order. This is undesirable because
+is possibly introduces very long live-ranges for intervals that are used
+in both branches. A good linear order therefore should keep nodes
+together whose source-level instruction are also close.
+
+Each node announces its control-flow successors (with method [[succ]])
+and predecessors (with method [[pred]]). However, these two are not
+enough to implement a linear order. The list of successors does not tell
+which one should follow the node at hand and a linear order algorithm is
+not free to pick just any of them: a [[call]] node, for example should
+be followed by the node the calls returns to. But this node can not be
+identified easily from the list of successors. Therefore another node
+method [[linorder]] tells constraints for an algorithm that constructs a linear
+order:
+
+\begin{quote}
+\begin{verbatim}
+val linorder: node option * node list
+\end{verbatim}
+\end{quote}
+
+The first element describes the \emph{immediate successor} node that
+must follow [[this]] node because of direct control-flow. The second
+element describes a list of \emph{delayed} labeled nodes that [[this]]
+node might branch to. 
+
+The [[enumerate]] method of a [[graph]] instance defines a linear order
+for all nodes that are part of the {\cfg}. It starts at the [[_entry]]
+node and follows the linear order suggested by each node. Nodes that are
+branch targets are kept in a first-in-first-out list. An element is
+processed from this list whenever a node indicates that it has no direct
+successor.
+
+Each node is assigned a number that reflects its position in the linear
+order. The first node has number 1 and is stored in index position 0 of
+the array. The rationale is that 0 is reserved for empty intervals in
+the \module{lifetime} implementation. 
+
+<<enumerate method>>=
+let rec loop (i:int) (acc: node list) visited todo = match todo with
+    | []                               -> acc
+    | n::nn when NodeSet.mem n visited -> loop i acc visited nn
+    | n::nn -> 
+        let visited = NodeSet.add n visited in
+        let acc     = n::acc in     (* reverse order *)
+        let i       = i+1 in
+        let ()      = n#set_number i in
+            ( match n#linorder with
+            | Some x, [] -> loop i acc visited (x::nn) 
+            | Some x, tt -> loop i acc visited (x::nn@tt) (*XXX O(n^2) *)
+            | None  , [] -> loop i acc visited nn
+            | None  , tt -> loop i acc visited (nn@tt)    (*XXX O(n^2) *) 
+            ) in
+let entry = match _entry with None -> assert false | Some n -> n  in          
+let nodes = loop 0 [] NodeSet.empty [entry] in
+let nodes = List.rev nodes in
+     _enumeration <- Some (Array.of_list nodes)
 @
 
 % ------------------------------------------------------------------ 
@@ -817,7 +993,6 @@ object (this)
     val         _dummies        = (Hashtbl.create 47: (string,proxy) Hashtbl.t)
     val mutable _nodes          = NodeSet.empty
     val mutable _id             = 0
-    val mutable _enumerated     = false
     val mutable _enumeration    = (None: node array option)
     val mutable _entry          = (None: node option)
     val mutable _exit           = (None: node option)
@@ -861,19 +1036,26 @@ object (this)
             )
 
     method add node =
-        ( _enumerated <- false
+        ( _enumeration <- None
         ; _nodes <- NodeSet.add node _nodes
         )
 
-    method enumerate () =
-        ( _enumerated <- true 
-        )
+    method enumerate =
+        <<enumerate method>>
+
+    method enumerated = 
+        _enumeration <> None 
+
+    method enumeration =
+        match _enumeration with
+        | None       -> assert false
+        | Some nodes -> nodes
 
     method get_id () =
         ( _id <- _id + 1
         ; _id
         )
-
+    
     (* test integrity of CFG *)
     method test =
         ( assert (_entry <> None)
@@ -912,7 +1094,10 @@ object(this)
     method pred     = NodeSet.elements _pred
     method succ     = ([]: node list)   (* make virtual? *)
     method id       = _id
-    method number   = _num
+    
+    method number   = 
+        assert (_cfg#enumerated); 
+        _num
     
     method add_label (x:string) = 
         _labels <- x::_labels
@@ -947,6 +1132,9 @@ object(this)
     method set_property (p:property) = 
         _prop <- p 
 
+    method set_number i =
+        _num <- i
+
     method property =
         _prop
 
@@ -967,6 +1155,8 @@ object(this)
         let labels  = List.map label _labels in
         let id      = stmt (A.CommentStmt (string_of_int _id)) in
             id::labels
+
+    method virtual linorder: node option * node list
 
     (* this node must be in the predecessor list of each successor
      * if this node has more than two predecessors it must be labeled
@@ -1024,7 +1214,7 @@ object(this)
     
     method succ =
         match _succ with
-            | None   -> []
+            | None   -> assert false (* must not happen *)
             | Some n -> [n]
     
     method upd_succ map =
@@ -1032,6 +1222,13 @@ object(this)
         match _succ with
             | None   -> ()
             | Some n -> _succ <- Some (map n)
+
+    method linorder = 
+        ( match _succ with
+          | None -> assert false (* must not happen *)
+          | x    -> x
+        , []
+        )
 end
 
 (* ------------------------------------------------------------------ *) 
@@ -1045,6 +1242,8 @@ object(this)
 
     initializer 
         _succ # link_pred (this :> node)
+
+    method linorder = (Some _succ, [])
     
     method succ = [_succ]
     method upd_succ map = 
@@ -1058,6 +1257,8 @@ end
 and exit cfg: node =
 object(this)
     inherit vnode cfg Rtl.null as super
+
+    method linorder = (None, [])
 end
 @
 
@@ -1093,6 +1294,8 @@ object (this)
         let labels = super#ast mangle    in
         let s      = R2A.rtl mangle _rtl in
             labels@[stmt s]
+
+    method linorder = (Some _succ,[])
 end
 
 (* ------------------------------------------------------------------ *) 
@@ -1115,6 +1318,8 @@ object (this)
         let map = upd (this :> node) map in
         _exit <- map _exit
 
+    method linorder = (None, [])
+
 end
 
 (* ------------------------------------------------------------------ *) 
@@ -1134,22 +1339,28 @@ object (this)
     method upd_succ map =
         let map = upd (this :> node) map in
         _targets <- List.map map _targets 
+
+    method linorder = (None, _targets)
 end
 
 (* ------------------------------------------------------------------ *) 
+(* here is something wrong: a jump target is never a node
+   inside the actual procedure *)
 
 <<module X>>=
 class jump cfg rtl targets : node =
 object (this)
     inherit vnode cfg rtl as super
 
-    val mutable _targets = targets
+    val mutable _targets = targets      (*XXX*)
     val mutable _exit    = cfg#exit     (* artifical edge to exit *)
     
     initializer
         List.iter (fun n -> n#link_pred (this :> node)) (_exit::_targets)
 
-    method succ = uniq (_exit::_targets)      
+    method succ = [_exit]   (*XXX*)
+    
+    method linorder = (None, [])
     
     method upd_succ map =
         let map = upd (this :> node) map in
@@ -1180,6 +1391,11 @@ object (this)
         ; _returns  <- List.map map _returns
         ; _succ     <- map _succ
         ) 
+    
+    method linorder = 
+        ( Some _succ
+        , uniq(List.concat[_cuts;_unwinds;_returns])
+        )
 end
 
 (* ------------------------------------------------------------------ *) 
@@ -1204,6 +1420,11 @@ object (this)
         ; _returns  <- List.map map _returns
         ; _exit     <- map _exit
         ) 
+    
+    method linorder = 
+        ( None
+        , uniq(List.concat[_cuts;_unwinds;_returns])
+        )
 end
 
 (* ------------------------------------------------------------------ *) 
@@ -1228,6 +1449,11 @@ object (this)
         let map = upd (this :> node) map in
         ( _ifso  <- map _ifso
         ; _ifnot <- map _ifnot
+        )
+    
+    method linorder = 
+        ( Some _ifnot
+        , [_ifso]
         )
 end
 
@@ -1257,6 +1483,11 @@ object (this)
     method defs   = _defs
     method uses   = _uses
     method kills  = _kills
+
+    method linorder =
+        ( Some _succ
+        , []
+        )
 end
 @
 
