@@ -264,6 +264,16 @@ type tempList = Precolored
               | Coalesced
               | Colored
               | SelectStack
+let str_of_list = function
+  | Precolored       -> "Precolored"
+	| Initial          -> "Initial"
+	| SimplifyWorklist -> "Simplify"
+	| FreezeWorklist   -> "Freeze"
+	| SpillWorklist    -> "Spill Wlist"
+	| Spilled          -> "Spilled Temp"
+	| Coalesced        -> "Coalesced"
+	| Colored          -> "Colored"
+	| SelectStack      -> "Select"
 
 type moveList = CoalescedMove
               | ConstrainedMove
@@ -854,7 +864,7 @@ let freezeMoves temp cg =
                 then RM.find (getAlias x cg) cg.regToItem
                 else RM.find (getAlias y cg) cg.regToItem in
         let () = ilg_switch cg.moveLG FrozenMove move in
-		if (empty (nodeMoves v cg)) &&
+		if (v.list <> Precolored && empty (nodeMoves v cg)) &&
 		   (RM.find v.v cg.degreeMap < cg.k)
 		then ilg_switch cg.tempLG SimplifyWorklist v
     in List.iter freezeMove (nodeMoves temp cg)
@@ -1224,6 +1234,7 @@ module type GRAPH = sig
   type node
   val instr    : node -> Rtl.rtl
   val num      : node -> int
+	val print_node : node -> string
   val node_info_string : node -> string
   val defs : node -> Register.Set.t  (* includes kills!!! *)
   val uses : node -> Register.Set.t
@@ -1253,6 +1264,7 @@ module NewG : GRAPH with type node = Rtl.rtl Cfgx.M.node
   module G = Cfgx.M
   type node = Rtl.rtl G.node
   type cfg  = Rtl.rtl G.cfg
+	let print_node = G.print_node
   let node_info_string n = "???"
 
   let nop = Rtl.par []
@@ -1479,10 +1491,10 @@ function ColorGraph_init (CG, B) -- carefully don't define table
           , B.fix 
               ( B.seq 
                   { B.ignore (B.seq
-                      { CG.pcg
-                      , CG.makeGraph
+                      { CG.makeGraph
         							, CG.pcg
                       , CG.orderVars
+											, CG.pcg
                       , CG.assignColors
                       })
                   , 
@@ -1545,14 +1557,16 @@ let printReg (s, i, w) = Printf.sprintf "%c%d" s i
 let printMove node = printReg (source node)
                    ^ " -> "
                    ^ printReg (dest node)
-let printAliasMap mapName am =
+let printMap p1 p2 mapName sm =
     cgSay ["    " ^ mapName ^ ":\n"];
-    RM.iter (fun tmp reg -> cgSay [ "        "
-                                  ; printReg tmp
+    RM.iter (fun tmp s -> cgSay [ "        "
+                                  ; p1 tmp
                                   ; " -> "
-                                  ; printReg reg
+                                  ; p2 s
                                   ; "\n"
-                                  ]) am
+                                  ]) sm
+let printStringMap mapName sm = printMap printReg (fun x -> x) mapName sm
+let printAliasMap  mapName am = printMap printReg printReg     mapName am
 @
 
 The [[print_cgInfo]] function prints the graph coloring information in a
@@ -1604,7 +1618,9 @@ let print_cgInfo cgInfo =
         cgSay ["    K: "; string_of_int cgInfo.k; "\n"];
         List.iter printMoveIlist (moveILists cgInfo);
         printAliasMap "aliasMap" cgInfo.aliasMap;
-        printAliasMap "colorMap" cgInfo.colorMap
+        printAliasMap "colorMap" cgInfo.colorMap;
+				printStringMap "listMap"
+            (RM.fold (fun r i map -> RM.add r (str_of_list i.list) map) cgInfo.regToItem RM.empty)
 
 let printCGInfo param _ = print_cgInfo param; false
 @
@@ -1618,24 +1634,11 @@ let printCGInfo param _ = print_cgInfo param; false
         ( G.iter_nodes
             (fun node ->
               cfgSay (List.flatten
-				       [ [ string_of_int (G.num node)
-                         ; ": "
-                         ; Rtlutil.ToReadableString.rtl (G.instr node)
-                         ; "\n"
-						 ]
-						 ; ["Live_out: "]
+				     [ [G.print_node node]
+						 ; ["    Live_out: "]
 					   ; RS.fold (fun r rst -> Printf.sprintf "%s, " (printReg r)
 						                          :: rst) (LI.live_out node) []
-						 ; ["Preds: "]
-					   ; List.fold_right (fun n rst -> Printf.sprintf "%d, " (G.num n)
-						                          :: rst) (G.preds node) []
-						 ; ["Succs: "]
-					   ; List.fold_right (fun n rst -> Printf.sprintf "%d, " (G.num n)
-						                          :: rst) (G.succs node) []
-					   ; [ "\t"
-                         ; G.node_info_string node
-                         ; "\n"
-                         ]
+						 ; ["\n"]
 					   ]))
             cfg);
         cfgSay ["END CFG\n===\n"]
