@@ -1,4 +1,4 @@
-% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+    % -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 % vim: ts=8 et sw=4:
 % Grades     ::=    "%%Grades:" Quality Importance Urgency
 % Quality    ::=    A|B|C|D|E
@@ -47,16 +47,6 @@ type t          = bits
 val width       : bits -> width         (* observer *)
 val zero        : width -> t            (* constructor *)
 @ 
-\subsubsection{Arithmetic}
-<<bits.mli ((evaluating))>>=
-module Ops : sig
-  val add : bits -> bits -> bits
-  val lt  : bits -> bits -> bool
-  val gt  : bits -> bits -> bool
-  val ltu : bits -> bits -> bool
-  val gtu : bits -> bits -> bool
-end
-@
 
 If a conversion fails, it raises an exception. The [[Overflow]]
 exception indicates that the target range is too small for a give
@@ -77,6 +67,29 @@ module U: sig (* unsigned *)
     <<interface U>>
 end
 @
+
+% ------------------------------------------------------------------ 
+%subsection{Debugging} 
+% ------------------------------------------------------------------ 
+
+<<bits.mli ((evaluating))>>=
+val to_string: bits -> string
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Arithmetic}
+% ------------------------------------------------------------------ 
+
+<<bits.mli ((evaluating))>>=
+module Ops : sig
+  val add : bits -> bits -> bits
+  val lt  : bits -> bits -> bool
+  val gt  : bits -> bits -> bool
+  val ltu : bits -> bits -> bool
+  val gtu : bits -> bits -> bool
+end
+@
+
 
 % ------------------------------------------------------------------ 
 \subsection{Signed Constructors}
@@ -270,10 +283,6 @@ interface to [[bits]].
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
 
-A [[bits]] value is represented as an [[int64]], whose standard
-operations consider it to be signed.  Unsigned operations on [[int64]]
-values are provided by the [[Uint64]] module.
-
 <<bits.ml ((evaluating))>>=
 module I = Int64        (* signed   operations *)
 
@@ -298,6 +307,8 @@ let width (_,w) = w
 let check w =
   if w <= 0 || w > 64 then Impossible.impossible ("Bits.bits width " ^ string_of_int w)
 let zero w      = check w; (I.zero, w)
+
+let to_string (i,w) = Printf.sprintf "%Lx::bits%d" i w 
 @
 
 \subsection{Sign and zero extension}
