@@ -95,12 +95,13 @@ let tx (g, proc) =
 
 let subst_forward v gproc =
   let pass = D.a_t Availpass.analysis (tx gproc) in
-  Backplane.of_dataflow (D.forward_rewrite pass) v gproc
+  Backplane.of_dataflow (D.forward_rewrite pass ~entry_fact:Avail.unknown) v gproc
 
 let sequential v (g,proc) =
   let pass = D.a_t Availpass.analysis (tx (g,proc)) in
-  D.forward_anal Availpass.analysis g;
-  Backplane.of_dataflow (D.forward_rewrite_solved pass) v (g,proc)
+  D.forward_anal Availpass.analysis Avail.unknown g;
+  Backplane.of_dataflow (D.forward_rewrite_solved pass ~entry_fact:Avail.unknown)
+                        v (g,proc)
 @ 
 In one pass, we simultaneously propagate dataflow information and
 mutate RTLs.

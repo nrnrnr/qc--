@@ -167,15 +167,16 @@ let prop = Unique.Prop.prop matcher
 
 let fact sp = {
   D.fact_name = "vfp location";
-  D.init_info = (sp, 0);
+  D.init_info = (sp, unknown);
   D.add_info =
     (fun (vfp, k as a) (vfp', k' as a') ->
+      let () = Debug.eprintf "vfp" "updating vfp dataflow fact\n" in
       if k = k' then a
       else if k = unknown then a'
       else if k' = unknown then a
       else (* accept inconsistency at exit and entry points to cut and unwind contn's *)
         if false (* G.kind node =*= G.Exit || G.is_non_local_join node *) then a
-        else impossf "inconsistent stack-pointer location");
+        else impossf "inconsistent stack-pointer location: %d and %d" k k');
   D.changed = (fun ~old:(_, k) ~new':(_, k') -> k <> k');
   D.prop = prop;
 }
@@ -216,7 +217,7 @@ let replace_with ~sp =
 
   let repl =
     { D.name = "replace vfp"; D.middle_out = middle_out; D.last_outs = last_outs; } in
-  D.forward_rewrite (fact, repl)
+  D.forward_rewrite (fact, repl) ~entry_fact:(Dn.exp spval, 0)
 @ 
 <<definition of [[simp]], which is verbose>>=
 let simp rtl =

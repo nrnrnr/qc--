@@ -70,14 +70,15 @@ RESULT OF RUNNING A PASS.
 \paragraph{Analyses (the dataflow engine)}
 The analysis function sets properties on unique IDs.
 <<declarations of exported values>>=
-val forward_anal : 'a analysis -> Zipcfg.graph -> unit
+val forward_anal : 'a analysis -> entry_fact:'a -> Zipcfg.graph -> unit
 @ The rewrite pass sets properties and also rewrites the graph.
 The Boolean result tells if the graph changed.
 <<declarations of exported values>>=
-val forward_rewrite : 'a pass -> Zipcfg.graph -> Zipcfg.graph * bool
+val forward_rewrite : 'a pass -> entry_fact:'a -> Zipcfg.graph -> Zipcfg.graph * bool
 @ If the graph is already solved, we can take a short cut.
 <<declarations of exported values>>=
-val forward_rewrite_solved : 'a pass -> Zipcfg.graph -> Zipcfg.graph * bool
+val forward_rewrite_solved :
+  'a pass -> entry_fact:'a -> Zipcfg.graph -> Zipcfg.graph * bool
 @ 
 \paragraph{Composition operators}
 Here we will make new passes from old ones.
@@ -117,7 +118,7 @@ We don't compute and return the \emph{in} fact for block; instead, we
 use [[P.set]] to attach that fact to the block's unique~ID.
 We iterate until no more facts have changed.
 <<definitions of exported functions>>=
-let forward_anal (fact, comp) graph =
+let forward_anal (fact, comp) ~entry_fact graph =
   let changed = ref false in
   let update u a =
     let old_a = P.get fact.prop u in
@@ -133,11 +134,15 @@ let forward_anal (fact, comp) graph =
     | GR.Tail (m, t) -> forward (comp.middle_out in' m) t
     | GR.Last l -> comp.last_outs in' l update in
     let f, t = b in
+    let blockname = match f with GR.Entry -> "<entry>" | GR.Label ((_, l), _, _) -> l in
+    Debug.eprintf "dataflow" "Setting successor fact of block %s\n" blockname;
     forward (P.get fact.prop (GR.fid f)) t in
 
   (* get blocks, initialize, and iterate to fixed point *)
   let blocks = G.postorder_dfs graph in
-  let init () = List.iter (fun b -> P.set fact.prop (GR.id b) fact.init_info) blocks in
+  let init () = 
+    List.iter (fun b -> P.set fact.prop (GR.id b) fact.init_info) blocks;
+    P.set fact.prop GR.entry_uid entry_fact in
   let rec iterate n =
     let () = changed := false in
     let () = List.iter set_successor_facts blocks in
@@ -162,11 +167,11 @@ let comp_with_exit comp exit_fact_ref =
 Given this function, we can now solve a graph simply by doing a
 backward analysis on the modified computation.
 <<definitions of exported functions>>=
-let rec solve_graph fact comp graph in_fact =
+let rec solve_graph fact comp in_fact graph =
   let exit_fact_ref = ref fact.init_info in
-  general_forward fact (comp_with_exit comp exit_fact_ref) in_fact graph;
+  general_forward fact (comp_with_exit comp exit_fact_ref) graph in_fact;
   !exit_fact_ref
-and general_forward fact comp entry_fact graph =
+and general_forward fact comp graph entry_fact =
   let changed = ref false in
   let update u a =
     let old_a = P.get fact.prop u in
@@ -184,15 +189,17 @@ and general_forward fact comp entry_fact graph =
              (Rtlutil.ToString.rtl (GR.mid_instr m));
            match comp.middle_out in' m with
            | Dataflow a -> set_tail_facts a t
-           | Rewrite g -> set_tail_facts (solve_graph fact comp g in') t)
+           | Rewrite g -> set_tail_facts (solve_graph fact comp in' g) t)
       | GR.Last l -> 
           match comp.last_outs in' l with
-          | Dataflow setter -> setter (P.set fact.prop)
-          | Rewrite g -> ignore (solve_graph fact comp g in') in
+          | Dataflow setter -> setter update
+          | Rewrite g -> ignore (solve_graph fact comp in' g) in
     let f, t = b in
     let in' = match f with
     | GR.Entry -> entry_fact
-    | GR.Label ((u, _), _, _) -> P.get fact.prop u in
+    | GR.Label ((u, l), _, _) ->
+        Debug.eprintf "dataflow" "Solving block with label: %s\n" l;
+        P.get fact.prop u in
     set_tail_facts in' t in
   let blocks = G.postorder_dfs graph in
   let init () = List.iter (fun b -> P.set fact.prop (GR.id b) fact.init_info) blocks in
@@ -216,12 +223,12 @@ key job is done by [[propagate]], which propagates a fact of type~[['a]]
 between a head and tail.
 The tail is in final form; the head is still to be rewritten.
 <<definitions of exported functions>>=
-let rec solve_and_rewrite fact comp graph in_fact changed =
-  solve_graph fact comp graph in_fact;                              (* pass 1 *)
+let rec solve_and_rewrite fact comp in_fact graph changed =
+  solve_graph fact comp in_fact graph;                              (* pass 1 *)
   let exit_ref = ref fact.init_info in
-  let gc = forward_rewrite fact (comp_with_exit comp exit_ref) graph in_fact changed in
+  let gc = forward_rewrite fact (comp_with_exit comp exit_ref) in_fact graph changed in
   !exit_ref, gc
-and forward_rewrite (fact : 'a fact) comp graph entry_fact changed =
+and forward_rewrite (fact : 'a fact) comp entry_fact graph changed =
   let rec rewrite_blocks rewritten fresh changed : G.graph * bool = match fresh with
   | [] -> G.of_block_list rewritten, changed
   | b :: bs ->
@@ -241,7 +248,7 @@ and forward_rewrite (fact : 'a fact) comp graph entry_fact changed =
             | Dataflow a -> propagate (GR.Head (h, m)) a t rewritten changed
             | Rewrite g ->
                 Debug.eprintf "dataflow" "Rewriting middle node...\n";
-                let a, (g, _) = solve_and_rewrite fact comp g in' changed in
+                let a, (g, _) = solve_and_rewrite fact comp in' g changed in
                 Debug.eprintf "dataflow" "Rewrite of middle node completed\n";
                 let h, t, rewritten = splice_in_forward h g t rewritten in
                 propagate h a t rewritten true)
@@ -256,18 +263,19 @@ and forward_rewrite (fact : 'a fact) comp graph entry_fact changed =
       rewrite_next_block () in
   rewrite_blocks [] (G.postorder_dfs graph) changed
 
-let forward_rewrite_solved (fact, comp) g =
-  forward_rewrite fact comp g fact.init_info false
+let forward_rewrite_solved (fact, comp) ~entry_fact g =
+  forward_rewrite fact comp entry_fact g false
 
-let forward_rewrite (fact, comp) g =
-  snd (solve_and_rewrite fact comp g fact.init_info false)
+let forward_rewrite (fact, comp) ~entry_fact g =
+  snd (solve_and_rewrite fact comp entry_fact g false)
 <<utilities>>=
 let eqfact fact a a' = (* poor man's approximation of equality *)
   not (fact.changed a a' or fact.changed a' a)
 let check_property_match fact u a =
   let a' = P.get fact.prop u in
   if not (eqfact fact a a') then
-    impossf "property changed after supposedly reaching fixed point" 
+    impossf "property '%s' changed after supposedly reaching fixed point"
+            fact.fact_name
 @
 <<utilities>>=
 module UM = Unique.Map
