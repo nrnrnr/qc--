@@ -19,7 +19,7 @@ registers.  Registers come in different flavors (c.f.~module
 \begin{center}
 \begin{tabular}{@{\quad}ll}
 $r$& an integer hardware register, or an integer temporary\\
-$f$& an floating-point hardware registerm or a floating-point temporary\\
+$f$& a floating-point hardware register or a floating-point temporary\\
 $m$& memory space\\
 $k$& non-bool constant\\
 $\oplus$& {\rtl} integer {\rtl} operator \\
@@ -81,7 +81,7 @@ floating point values.
 
 A {\burg} specification consists of non-deterministic rules to cover a
 tree. Code generated from that specification finds with dynamic
-programming at run-time the rules that cover a given tree with minmal
+programming at run-time the rules that cover a given tree with minimal
 cost. For code expansion the tree to be covered is an {\rtl}. For the
 details of how {\burg} works, see the manual of {\small MLBURG} and
 Fraser and Hanson: \textit{Engineering a Simple, Efficient Code
@@ -182,7 +182,7 @@ let float_ops =
 let is_float_op (op,_) = StringSet.mem op float_ops
 @
 
-To create a fetch from a loaction we have to know the size of the
+To create a fetch from a location we have to know the size of the
 location. The [[fetch]] function makes this easy.
 
 <<utilities>>=
@@ -199,7 +199,7 @@ values and recognized by their terminal type. The following types are
 terminal:
 
 <<terminal types>>=
-%term k width opr exps space agg ass index bool bits link late x
+%term k width opr exps agg ass index bool bits link late x
 @
 
 Note, that in a {\burg} pattern a variable $v$ is an abbreviation for
@@ -318,7 +318,7 @@ fregs:      Cons(freg, fregs)
             {: freg  >>= fun u -> fregs >>= fun us -> return (u::us) :}
 @
 
-We expect memory locations, tempraries, and hardware registers in the
+We expect memory locations, temporaries, and hardware registers in the
 code to expand.  These locations are classified into memory and
 integer/floating-point registers.  Memory is addressed by registers
 ([[addr]] is a synonym for [[ireg]], we might add [[const]] later) and
@@ -328,35 +328,35 @@ registers are addressed by [[const]].
 addr:       ireg  {: ireg >>= fun r -> return (fetch r) :}
 
 
-mem:        Cell("m", agg, width, addr, ass)
+mem:        Cell('m', agg, width, addr, ass)
             {:  
                 addr >>= fun a ->
                 return (R.cell (U.assertion ass) 'm' agg width a) 
             :}
             
-ireg:       Cell("r", agg, width, const, ass)
+ireg:       Cell('r', agg, width, const, ass)
             {: return (R.cell (U.assertion ass) 'r' agg width const) :}
-ireg:       Cell("t", agg, width, const, ass)
+ireg:       Cell('t', agg, width, const, ass)
             {: return (R.cell (U.assertion ass) 't' agg width const) :}
 
 
-freg:       Cell("f", agg, width, const, ass)
+freg:       Cell('f', agg, width, const, ass)
             {: return (R.cell (U.assertion ass) 'f' agg width const) :}
-freg:       Cell("u", agg, width, const, ass)
+freg:       Cell('u', agg, width, const, ass)
             {: return (R.cell (U.assertion ass) 'u' agg width const) :}
 
-creg:       Cell("c", agg, width, const, ass)
+creg:       Cell('c', agg, width, const, ass)
             {: return (R.cell (U.assertion ass) 'c' agg width const) :}
 
-error:      Cell(x:string, agg, width, addr, ass)
+error:      Cell(x:char, agg, width, addr, ass)
             {:
-                error ("cell in space '"^x^"'")
+                error (Printf.sprintf "cell in space '%c'" x)
             :}    
 @
 
 Operators are classified to integer or floating-point operators. We use
 a cost expression that is evaluated at run-time to classify an operator:
-an iteger operator is also considered a floatin-point operator but is
+an integer operator is also considered a floating-point operator but is
 associated with extreme costs and thus will be never selected.
 
 <<rules>>=
@@ -368,9 +368,9 @@ iop:        Op(opr) [{: if not (is_float_op opr) then 0 else C.inf_cost :}]
 @
 
 To make sure we can cover every {\rtl} we can move integer registers
-into floating-point temporaies, and floating-point registers into
+into floating-point temporairies, and floating-point registers into
 integer temporaries. We do not like these conversions so we penalize
-them with high costs.
+them with high costs. 
 
 <<rules>>=
 -- t := f
@@ -503,18 +503,7 @@ and exp = function
     | RP.App(opr,exps)  -> conApp (conOp opr) (map exp exps)
 
 and loc = function
-    | RP.Cell(sp, aff, w, e, ass) -> 
-        let s = ( match sp with
-                | 'r' -> "r"
-                | 'f' -> "f"
-                | 'm' -> "m"
-                | 'u' -> "u"
-                | 't' -> "t"
-                | 'c' -> "c"
-                | _   -> error (Printf.sprintf "unknown space `%c'" sp)
-                )
-        in
-            conCell s aff w (exp e) ass
+    | RP.Cell(char, aff, w, e, ass) -> conCell char aff w (exp e) ass 
     | RP.Var(s, i, w)   -> conVar ()
     | RP.Slice(w,i,loc) -> conSlice ()
     
@@ -588,9 +577,9 @@ let cfg proc =
 \subsection{Exporting the Expander to Lua}
 % ------------------------------------------------------------------ 
 
-Code expansion is part {\qcc}'s backend that is controlled by a 
-Lua interpreter. To make it accessible for Lua code, the expander is
-exported as a Lua primitive.
+Code expansion is part of {\qcc}'s backend that is controlled by a Lua
+interpreter. To make the expander accessible for Lua code, it is
+exported as a Lua primitive [[Dummyexpand.expand]].
 
 <<tail>>=
 module Make (ProcT: Lua.Lib.TYPEVIEW with type 'a t = Proc.t): 
