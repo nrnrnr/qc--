@@ -225,7 +225,7 @@ function mkS (nm, f)
 -- that have been embedded into Lua.
 
 CGStages = { liveness = mkS("liveness", CG.liveness)
-           , build = nil -- build should be added by calling makeBuild
+           , build = mkS("build", CG.build)
            , makeWorklist = mkS("makeWorklist", CG.makeWorklist)
            , simplify = mkS("simplify", CG.simplify)
            , coalesce = mkS("coalesce", CG.coalesce)
@@ -241,9 +241,7 @@ CGStages = { liveness = mkS("liveness", CG.liveness)
            , pCFG = mkS("pCFG", CG.pCFG)
            }
 
-function makeInitInfo () return CG.makeInitInfo() end
-function makeBuild (colors)
-    CGStages.build = mkS("build", CG.makeBuild(colors)) end
+function makeInitInfo (colors) return CG.makeInitInfo(colors) end
 
 CodeExpandStages = { placeVars = mkS("placeVars", PV.placeVars)
                    , expander  = mkS("expander", PV.expander)
@@ -262,9 +260,8 @@ plive = seq({single(CGStages.liveness), single(CGStages.printCFGLive)})
 live = single(CGStages.liveness)
 
 function graphColoring (colors)
-  makeBuild(colors);
   return
-     share(makeInitInfo(), "cgInfo",
+     share(makeInitInfo(colors), "cgInfo",
         seq {fix(
                seq {ignore(seq
                       { single(CGStages.liveness)

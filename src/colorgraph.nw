@@ -68,60 +68,47 @@ the temps are replaced by the assigned registers in the \cfg, and register
 allocation is complete.
 
 Register allocation must handle temporaries in different register spaces and
-irregular features such as 
+constructs of irregular architectures, including register pairs. Multiple
+register spaces are supported by initializing the degree of each temp to
+degree[t] = (K - R) + N, where K is the total number of registers in all
+register spaces, R is the number of registers in the register space for temp
+t, and N is the number of neighbors of t. This trick avoids the overhead of
+having to actually create interferences between t and registers in different
+register spaces.
+
+Traditionally, register pairs have been handled by adding extra edges in the
+interference graph, but this is not yet handled in this allocator.
 
 handle multiple register spaces
 K may be inaccurate on irregular register sets (smith, holloway)
 
+from Appel 244:
+\begin{quote}
+\begin{tabbing}
+xx\=xx\=xx\=xx\=xx\=xx\=xx\=xx\=\kill
+procedure Main()\\
+    LivenessAnalysis()\\
+    Build()\\
+    MakeWorklist()\\
+    [[repeat]]\\
+\>      [[if]] simplifyWorklist != \{\} [[then]] Simplify()\\
+\>      [[else if]] worklistMoves != \{\} [[then]] Coalesce()\\
+\>      [[else if]] freezeWorklist != \{\} [[then]] Freeze()\\
+\>      [[else if]] spillWorklist != \{\} [[then]] SelectSpill()\\
+    [[until]] simplifyWorklist = \{\} [[and]] worklistMoves = \{\}\\
+\>            [[and]] simplifyWorklist = \{\} [[and]] spillWorklist = \{\}\\
+    AssignColors()\\
+    [[if]] spilledTemps != \{\} [[then]]\\
+\>      RewriteProgram(spilledTemps)\\
+\>      Main()\\
+\end{tabbing}
+\end{quote}
 
-<<colorgraph.mli>>=
-module GCT : Lua.Lib.USERTYPE
-module Make (BackplaneT : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.t')
-            (GCT : Lua.Lib.TYPEVIEW with type 'a t = 'a GCT.t
-		                          and type 'a combined = 'a BackplaneT.combined)
-            (ProcT : Lua.Lib.TYPEVIEW with type 'a t = Proc.t
-			                      and type 'a combined = 'a BackplaneT.combined)
-       : Lua.Lib.TYPEFUL with type 'a combined = 'a BackplaneT.combined
-@
 
 
 %-------------------------------------------------------------------
 \subsection{Data Structures}
 %-------------------------------------------------------------------
-Information stored for each temp:
-\begin{itemize}
-\item AdjListMap - a map to the adjacency list of temps that interfere with
-                   each temp
-\item degreeMap - a map containing the current degree of each temp
-\item moveListMap - a map from a temp to the list of move instructions it is
-                    involved in
-\item aliasMap - when a move is coalesced, the "discarded" temp must be aliased
-                 to the temp we keep
-\item colorMap - map from temp to assigned color
-\end{itemize}
-
-Every temp is a member of exactly one of these lists:
-\begin{itemize}
-\item precolored - machine registers, preassigned a color
-\item initial - temps, not yet processed
-\item simplifyWorklist - list of low-degree non-move-related temps
-\item freezeWorklist - low-degree move-related temps
-\item spillWorklist - high-degree temps
-\item spilledTemps - potential spills
-\item spills - potential spills
-\item coalescedTemps - temps that have been coalesced out of the graph
-\item coloredTemps - temps successfully colored
-\item selectStack - stack of temps removed from the graph
-\end{itemize}
-
-Every move instruction is in one and only one of these lists:
-\begin{itemize}
-\item coalescedMoves - moves that have been coalesced
-\item constrainedMoves - moves whose source and target interfere
-\item frozenMoves - move that will no longer be considered for coalescing
-\item worklistMoves - moves enabled for possible coalescing
-\item activeMoves - moves not yet ready for coalescing
-\end{itemize}
 
 <<graph coloring types>>=
 module G        = Cfg3
@@ -132,7 +119,7 @@ module RS       = Register.Set
 module LI       = Live.Make(G)
 @
 
-Set structures are needed for register pairs and moves.
+CHANGE THIS TO "EDGES"
 
 <<graph coloring types>>=
 module CompareRegPair = struct
@@ -152,13 +139,46 @@ let fold_fwd = Cfgutil.fold_fwd
 let is_tmp (s,_,_) target = Target2.is_tmp target s 
 @
 
-The [[colorGraph]] record type contains the data used to perform the graph
-coloring algorithm. The choice between lists and sets is often difficult and
-should be revisited for each case individually. An invariant of this
-algorithm maintains that each temp should be on exactly one of a set of
-lists, so sets are often easier to use, but clearly the select stack should
-be used as a stack, and there may be other lists we want to keep ordered (by
-using lists) or we may simply not need the functionality of a sets.
+The [[colorGraph]] record type represents the interference graph and maintains
+the current state of the graph coloring.
+The choice between lists and sets is not always obvious and
+should be revisited for each case individually. 
+
+\begin{itemize}
+\item AdjSet - a set of all edges in the interference graph, where an edge is
+               represented by a pair of registers
+\item AdjListMap - a map from a temp [[t]] to the list of temps that interfere
+				   with [[t]]
+\item degreeMap - a map containing the current degree of each temp
+\item moveListMap - a map from a temp to the list of move instructions it is
+                    involved in
+\item aliasMap - when a move is coalesced, the coalesced temp must be aliased
+                 to the temp we maintain in the graph
+\item colorMap - map from temp to assigned color
+\end{itemize}
+
+Every temp is a member of exactly one of these lists:
+\begin{itemize}
+\item precolored - preassigned machine registers
+\item initial - temps, not yet preprocessed for graph coloring
+\item simplifyWorklist - low-degree non-move-related temps
+\item freezeWorklist - low-degree move-related temps
+\item spillWorklist - high-degree temps
+\item spilledTemps - potential spills
+\item spills - short-living temps introduced for spilling (spill temps)
+\item coalescedTemps - temps that have been coalesced out of the graph
+\item coloredTemps - temps successfully colored
+\item selectStack - stack of temps removed from the graph
+\end{itemize}
+
+Every move instruction is in one and only one of these lists:
+\begin{itemize}
+\item coalescedMoves - moves that have been coalesced
+\item constrainedMoves - moves whose source and target interfere
+\item frozenMoves - move that will no longer be considered for coalescing
+\item worklistMoves - moves enabled for possible coalescing
+\item activeMoves - moves not yet ready for coalescing
+\end{itemize}
 
 <<graph coloring types>>=
 type color = Register.t
@@ -186,6 +206,139 @@ type colorGraph = { mutable adjSet : RegPairSet.t
                   ; mutable colors : color list
                   ; mutable k : int
                   }
+@
+
+[[makeInitInfo]] constructs an empty [[colorGraph]] record, initialized with
+the set of valid colors.
+
+<<init cgInfo>>=
+	let makeInitInfo colors =
+		let col = Cheats.makeRegs colors in
+		   { adjSet = RegPairSet.empty
+		   ; adjListMap = RM.empty
+		   ; degreeMap = RM.empty
+		   ; moveListMap = RM.empty
+		   ; aliasMap = RM.empty
+		   ; colorMap = RM.empty
+		   ; precolored = []
+		   ; initial = []
+		   ; spills = []
+		   ; simplifyWorklist = []
+		   ; freezeWorklist = []
+		   ; spillWorklist = []
+		   ; spilledTemps = []
+		   ; coalescedTemps = []
+		   ; coloredTemps = []
+		   ; selectStack = []
+		   ; coalescedMoves = []
+		   ; constrainedMoves = []
+		   ; frozenMoves = []
+		   ; worklistMoves = []
+		   ; activeMoves = []
+		   ; colors = col
+		   ; k = List.length col
+		   }
+	let makeInitInfo colors = embed (makeInitInfo (V.table.V.project colors))
+@
+
+%-------------------------------------------------------------------
+\subsection{Graph Coloring Algorithm}
+%-------------------------------------------------------------------
+
+%-------------------------------------------------------------------
+\subsubsection{LivenessAnalysis}
+%-------------------------------------------------------------------
+
+The liveness analysis algorithm is implemented in the [[live]] module.
+This algorithm annotates each node in the (\cfg) with a [[live_out]] set
+containing the temps that are alive after the node.
+
+<<livenessAnalysis>>=
+let liveness _ {Proc.cfg = cfg} =
+    LI.liveness cfg; true
+@
+
+%-------------------------------------------------------------------
+\subsubsection{Build}
+%-------------------------------------------------------------------
+
+Using the liveness information, we can build the interference graph by
+scanning the \cfg and recording temps that interfere.
+The build stage requires that liveness analysis has been performed on the
+\cfg and the cgInfo data structure has been initialized.
+
+When we reset the degree of a temp, it should not necessarily be reset to 0
+because the temp must interfere with registers in other register spaces.
+Instead, we set degree[t] = K - R, where K is the total number of registers and
+R is the number of registers in temp t's register space.
+
+<<build>>=
+let resetDegree target cg temp =
+    cg.degreeMap <-
+        RM.add temp (cg.k - (regs_in_space target cg temp)) cg.degreeMap
+@
+
+We don't add edges to the interference graph if they already exist. Also, we
+don't need to keep track of the neighbors of precolored temps.
+
+<<build>>=
+let addEdge u v cg =
+    if not ((RegPairSet.mem (u, v) cg.adjSet) || (u = v))
+    then
+        let _ = cg.adjSet <- List.fold_right RegPairSet.add [(u, v); (v, u)]
+                                             cg.adjSet in
+        let _ =
+            if not (List.mem u cg.precolored)
+            then
+                cg.adjListMap <- listMapAdd v u cg.adjListMap;
+                cg.degreeMap <- RM.add u (RM.find u cg.degreeMap + 1)
+                                        cg.degreeMap in
+        let _ =
+            if not (List.mem v cg.precolored)
+			then
+				cg.adjListMap <- listMapAdd u v cg.adjListMap;
+				cg.degreeMap <- RM.add v (RM.find v cg.degreeMap + 1)
+									 cg.degreeMap
+            in ()
+@
+
+<<build>>=
+let build cg {Proc.cfg = cfg; Proc.target = target} =
+			let _ = fold_fwd cfg (fun n () -> RS.iter (resetDegree target cg)
+												(RS.union (G.defs n)
+												          (G.uses n)))
+											  () in
+            let addInterference node () =
+                let live = (G.property node).P.liveout in
+                let defs = G.defs node in
+                let uses = G.uses node in
+                let live =
+                    if isMoveInstruction node target
+                    then
+                        (cg.moveListMap <- RS.fold (listMapAdd node)
+                                            (RS.union defs uses) cg.moveListMap;
+                        cg.worklistMoves <- node::cg.worklistMoves;
+                        RS.diff live uses)
+                    else live in
+                let live = RS.union live defs in
+                let addAllEdges def =
+                    RS.iter (fun liveNode -> addEdge liveNode def cg) live
+                in
+                    RS.iter addAllEdges defs in
+            let _ = fold_fwd cfg addInterference () in
+            let regs = fold_fwd cfg
+                        (fun node rst ->
+                            (Register.Set.union
+                                (Register.Set.union (G.defs node)
+                                                    (G.uses node))
+                                rst)) Register.Set.empty in
+            let temps, pregs =
+                List.partition (fun r -> is_tmp r target)
+                               (Register.Set.elements regs) in
+            let _ = cg.initial <- temps in
+            let _ = cg.precolored <- pregs in
+                true
+let build cg = build (project cg)
 @
 
 We include two observers for the [[colorGraph]] type. [[possibleColors]]
@@ -226,9 +379,10 @@ module Cheats = struct
 		luaTableMapApp (fun space rlist ->
 						List.map (reg space) ((V.list V.int).V.project rlist))
 	                regTable
+end
+@
 
-
-
+<<insert spills>>=
     let cfg_ins_lst_before lst node =
         let _ = List.fold_right G.gm_insert_assign_before lst node
         in ()
@@ -261,10 +415,9 @@ module Cheats = struct
              else None
 
 
-    let rewrite ({Proc.cfg = cfg; Proc.priv = a; Proc.target = target}
-            as proc) spillees =
+    let rewrite proc spillees =
         let spill_slot ((_,_,w):Register.t) =
-            Automaton.to_loc (Automaton.ty a w None) in
+            Automaton.to_loc (Automaton.ty proc.Proc.priv w None) in
         let smPairs = List.map (fun s -> (s, spill_slot s)) spillees in 
         (* newTemps is an accumulating param *)
         let updateNode smPairs node newTemps =
@@ -274,8 +427,7 @@ module Cheats = struct
                                 | Some tmp -> tmp::tmps)
                 newTemps smPairs)
         in
-            fold_fwd cfg (updateNode smPairs) []
-end
+            fold_fwd proc.Proc.cfg (updateNode smPairs) []
 @
 
 <<node observers>>=
@@ -320,165 +472,6 @@ end
 			List.iter (fun n -> Cfg3.gm_delete_assign n(*; Cfg3.gm_enumerate
 					cfg*))
 		        	  coalescedMoves
-@
-
-%-------------------------------------------------------------------
-\subsection{Coloring Algorithm}
-%-------------------------------------------------------------------
-
-
-from Appel 244:
-\begin{quote}
-\begin{tabbing}
-xx\=xx\=xx\=xx\=xx\=xx\=xx\=xx\=\kill
-procedure Main()\\
-    LivenessAnalysis()\\
-    Build()\\
-    MakeWorklist()\\
-    [[repeat]]\\
-\>      [[if]] simplifyWorklist != \{\} [[then]] Simplify()\\
-\>      [[else if]] worklistMoves != \{\} [[then]] Coalesce()\\
-\>      [[else if]] freezeWorklist != \{\} [[then]] Freeze()\\
-\>      [[else if]] spillWorklist != \{\} [[then]] SelectSpill()\\
-    [[until]] simplifyWorklist = \{\} [[and]] worklistMoves = \{\}\\
-\>            [[and]] simplifyWorklist = \{\} [[and]] spillWorklist = \{\}\\
-    AssignColors()\\
-    [[if]] spilledTemps != \{\} [[then]]\\
-\>      RewriteProgram(spilledTemps)\\
-\>      Main()\\
-\end{tabbing}
-\end{quote}
-
-
-<<color graph algorithm>>=
-let makeInitInfo _ =
-         embed { adjSet = RegPairSet.empty
-               ; adjListMap = RM.empty
-               ; degreeMap = RM.empty
-               ; moveListMap = RM.empty
-               ; aliasMap = RM.empty
-               ; colorMap = RM.empty
-               ; precolored = []
-               ; initial = []
-               ; spills = []
-               ; simplifyWorklist = []
-               ; freezeWorklist = []
-               ; spillWorklist = []
-               ; spilledTemps = []
-               ; coalescedTemps = []
-               ; coloredTemps = []
-               ; selectStack = []
-               ; coalescedMoves = []
-               ; constrainedMoves = []
-               ; frozenMoves = []
-               ; worklistMoves = []
-               ; activeMoves = []
-               ; colors = []
-               ; k = 0
-               }
-
-let haveSpilledTemps cg _ = not (empty (project cg).spilledTemps)
-@
-
-
-%-------------------------------------------------------------------
-\subsubsection{LivenessAnalysis}
-%-------------------------------------------------------------------
-
-The liveness analysis algorithm is implemented in the [[live]] module.
-This algorithm annotates each node in the (\cfg) with a live-in set.
-
-<<livenessAnalysis>>=
-let liveness _ {Proc.cfg = cfg} =
-    LI.liveness cfg; true
-@
-
-%-------------------------------------------------------------------
-\subsubsection{Build}
-%-------------------------------------------------------------------
-
-Each node in the CFG corresponds to one machine instruction - this is the
-machine invariant.
-
-<<build>>=
-let numMapFind key listMap =
-    try RM.find key listMap with Not_found -> 0
-let listMapFind key listMap =
-    try RM.find key listMap with Not_found -> []
-let listMapAdd value key listMap =
-    RM.add key (value::(listMapFind key listMap)) listMap
-let listMapUnion value key listMap =
-    RM.add key (value @ (listMapFind key listMap)) listMap
-
-
-let addEdge u v cg =
-    if not ((RegPairSet.mem (u, v) cg.adjSet) || (u = v))
-    then
-        let _ = cg.adjSet <- List.fold_right RegPairSet.add [(u, v); (v, u)]
-                                             cg.adjSet in
-        let _ =
-            if not (List.mem u cg.precolored)
-            then
-                cg.adjListMap <- listMapAdd v u cg.adjListMap;
-                cg.degreeMap <- RM.add u (numMapFind u cg.degreeMap + 1)
-                                        cg.degreeMap in
-        let _ =
-            if not (List.mem v cg.precolored)
-                 then
-                    cg.adjListMap <- listMapAdd u v cg.adjListMap;
-                     cg.degreeMap <- RM.add v (numMapFind v cg.degreeMap + 1)
-                                           cg.degreeMap
-            in ()
-
-let resetDegree target cg temp =
-    cg.degreeMap <-
-        RM.add temp (cg.k - (regs_in_space target cg temp)) cg.degreeMap
-
-let printCFGLive _ {Proc.cfg = cfg} =
-    let printNodeLive node _ =
-        let live = (G.property node).P.liveout in
-        cfgSay ["LIVE "; string_of_int (G.number node); ": "];
-        cfgSay (List.map printReg (RS.elements live)); cfgSay ["\n"]; in
-    fold_fwd cfg printNodeLive (); false
-
-let build colors cg {Proc.cfg = cfg; Proc.target = target} =
-			cg.colors <- Cheats.makeRegs colors;
-		    cg.k <- List.length cg.colors;
-            let addInterference node () =
-                let live = (G.property node).P.liveout in
-                let defs = G.defs node in
-                let uses = G.uses node in
-                let live =
-                    if isMoveInstruction node target
-                    then
-                        (cg.moveListMap <- RS.fold (listMapAdd node)
-                                            (RS.union defs uses) cg.moveListMap;
-                        cg.worklistMoves <- node::cg.worklistMoves;
-                        RS.diff live uses)
-                    else live in
-                let live = RS.union live defs in
-                let _ = RS.iter (resetDegree target cg) defs in
-                let addAllEdges def =
-                    RS.iter (fun liveNode -> addEdge liveNode def cg) live
-                in
-                    RS.iter addAllEdges defs in
-            let _ = fold_fwd cfg addInterference () in
-            let regs = fold_fwd cfg
-                        (fun node rst ->
-                            (Register.Set.union
-                                (Register.Set.union (G.defs node)
-                                                    (G.uses node))
-                                rst)) Register.Set.empty in
-            let temps, pregs =
-                List.partition (fun r -> is_tmp r target)
-                               (Register.Set.elements regs) in
-            let _ = cg.initial <- temps in
-            let _ = cg.precolored <- pregs in
-                true
-let build colors cg = build ((V.table).V.project colors) (project cg)
-let makeBuildStage colors = build colors 
-        
-
 @
 
 %-------------------------------------------------------------------
@@ -779,9 +772,11 @@ attempt at graph coloring, in preparation for the next iteration.
 Temporaries are spilled and the [[cg]] record is reset.
 
 <<selectSpill>>=
+<<insert spills>>
+
 let resetProgram cg proc =
     (* handle addition of new temps to the cfg (those in spilledTemps) *)
-    let newTemps = Cheats.rewrite proc cg.spilledTemps in
+    let newTemps = rewrite proc cg.spilledTemps in
     let _ = cg.initial <- cg.coloredTemps @ cg.coalescedTemps @ newTemps in
     let _ = cg.spills <- cg.spills @ newTemps in
     let _ = cg.adjSet <- RegPairSet.empty in
@@ -805,27 +800,50 @@ let resetProgram cg proc =
         true
 let resetProgram cg = resetProgram (project cg)
 
+let haveSpilledTemps cg _ = not (empty (project cg).spilledTemps)
+
 let updateProgram cg {Proc.cfg = cfg} =
     let _ = removeCoalescedMoves cfg cg.coalescedMoves in
         true
 let updateProgram cg = updateProgram (project cg)
 @
 
+The interface enables the graph coloring functions to be embedded in the Lua
+interpreter.
 
-<<colorgraph.ml>>=
-    exception IllegalParam of string
+<<colorgraph.mli>>=
+module GCT : Lua.Lib.USERTYPE
+module Make (BackplaneT : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.t')
+            (GCT : Lua.Lib.TYPEVIEW with type 'a t = 'a GCT.t
+		                          and type 'a combined = 'a BackplaneT.combined)
+            (ProcT : Lua.Lib.TYPEVIEW with type 'a t = Proc.t
+			                      and type 'a combined = 'a BackplaneT.combined)
+       : Lua.Lib.TYPEFUL with type 'a combined = 'a BackplaneT.combined
+@
+
+A few convenience functions for handling lists. Perhaps the lists that use
+[[union]] should be converted to sets.
+
+<<list as set>>=
     let empty lst = match lst with
         | [] -> true
         | _ -> false
     let union move lst = if List.mem move lst then lst else move::lst
+	let numMapFind key listMap =
+		try RM.find key listMap with Not_found -> 0
+	let listMapFind key listMap =
+		try RM.find key listMap with Not_found -> []
+	let listMapAdd value key listMap =
+		RM.add key (value::(listMapFind key listMap)) listMap
+	let listMapUnion value key listMap =
+		RM.add key (value @ (listMapFind key listMap)) listMap
 
-
-    <<graph coloring types>>
 @
 
 
 
 <<colorgraph.ml>>=
+<<graph coloring types>>
 module GCT : Lua.Lib.USERTYPE with type 'a t = colorGraph = struct
     type 'a t = colorGraph
     let tname = "Graph Coloring"
@@ -862,9 +880,11 @@ module Make (BackplaneT : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.t')
     let cfgSay = Verbose.say 18
 	let cgSay = cfgSay
 
+	<<list as set>>
 	<<node observers>>
     <<cheats>>
     <<print CGInfo>>
+    <<init cgInfo>>
 	<<graph modifiers>>
     <<livenessAnalysis>>
     <<build>>
@@ -873,7 +893,6 @@ module Make (BackplaneT : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.t')
     <<coalesce>>
     <<freeze>>
     <<selectSpill>>
-    <<color graph algorithm>>
 @
 
 Embedding the functions in the Lua interpreter.
@@ -896,7 +915,7 @@ let writedot compress _ proc =
 
 let graph_coloring_module =
         [ "liveness",         stageFn liveness
-        ; "makeBuild",        param2StageFn build
+        ; "build",            stageFn build
         ; "makeWorklist",     stageFn makeWorklist
         ; "simplify",         stageFn simplify
         ; "coalesce",         stageFn coalesce
@@ -973,6 +992,13 @@ let printColorMap cm =
 Printing functions for the [[cfInfo]] record.
 
 <<print CGInfo>>=
+let printCFGLive _ {Proc.cfg = cfg} =
+    let printNodeLive node _ =
+        let live = (G.property node).P.liveout in
+        cfgSay ["LIVE "; string_of_int (G.number node); ": "];
+        cfgSay (List.map printReg (RS.elements live)); cfgSay ["\n"]; in
+    fold_fwd cfg printNodeLive (); false
+
 let print_cgInfo cgInfo =
     let _ = cgSay ["\nCGINFO\n"] in
     let printItemList pr (name, itemlist) = match itemlist with
