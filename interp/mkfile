@@ -18,3 +18,20 @@ clean:V: clean-tex
 
 clean-tex:V:
 	rm -f *.blg *.log *.dvi *.inc *.toc *.aux
+
+bytecode.sled:D: bytecode.nw
+	$NOTANGLE -L -R$target $prereq > $target
+
+decode.fetch:D: bytecode.nw
+	$NOTANGLE -L -R$target $prereq > $target
+
+decode.m:D: bytecode.nw
+	$NOTANGLE -L -R$target $prereq > $target
+
+encode.c encode.h: bytecode.sled
+	tools -lc-cons-names -encoder encode $prereq
+
+%.c:D: %.m bytecode.sled decode.fetch
+	tools -lc-cons-names -decoder $target -matcher $stem.m \
+		bytecode.sled decode.fetch
+
