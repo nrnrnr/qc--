@@ -30,6 +30,7 @@ be passed at run-time (rather than by a module, which can not).
 <<target2.mli>>=
 <<type cc>>
 <<type map>>
+<<type space>>
 <<type t>>
 val dummy: t        (* our only target for now *)
 @
@@ -84,6 +85,8 @@ float:          string            ; (* "ieee754" float representation    *)
 charset:        string            ; (* "latin1"  character encoding      *)
 globals:        Automaton.spec    ; (* Automaton to allocate global vars *)
 register:       string -> Rtl.loc ; (* rtl for named hardware register   *)
+                                    (*XXX Register.t instead *)          
+                                      
 @
 
 The nodes in the control-flow graph (module \module{cfg}) contain
@@ -114,7 +117,7 @@ informations about hardware registers and temporaries. In particular:
 <<components of t>>=
 fits:           Rtl.space -> Register.t -> bool;
 is_tmp:         Rtl.space -> bool;
-allocatable:    Register.t list
+allocatable:    Register.t list;
 @
 
 \begin{itemize}
@@ -128,6 +131,42 @@ allocatable:    Register.t list
       register allocation on this platform.
 \end{itemize}
 
+
+A target has many address spaces:  main memory, different register
+sets, temporaries.  A [[Rtl.loc]] value describes a location within
+such a space.  Each space is homogenous in the sense that all its
+cells have the same width.  When cells within one space are aggregated
+a common aggregation scheme is used, described by a space-specific
+[[Rtl.aggregation]] value.  The cells within a space are addressed by
+an integer expression denoting their \emph{address}.  All address
+expressions for a space share a common width.  For example, memory
+might by addressed by 32-bit wide addresses, registers by 5-bit wide
+addresses. 
+
+<<type space>>=
+type space =    { cellwidth:    int
+                ; aggregation:  Rtl.aggregation
+                ; addrwidth:    int
+                }
+@
+                
+The [[space]] function returns a description of a given
+space. It is a checked run-time error to ask for the description of an
+unknown space.
+
+<<components of t>>=
+space:          Rtl.space -> space;
+@
+
+\begin{quote}\it
+    Target properties like [[pointersize]], or [[memsize]] are just
+    properties of the [[m]] [[space]]. I like the more general idea
+    of address spaces but I'm not sure whether we should get rid of the
+    more specialized properties or should keep them as abbreviations.
+    The hole problem stems from the fact that I only over time begin
+    to understand what describes a target. --CL
+\end{quote}
+
 % ------------------------------------------------------------------ 
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
@@ -136,26 +175,42 @@ The implementation does not hold any surprises. We use module [[Map]]
 to implement lookup tables for registers and calling conventions.
 
 <<target2.ml>>=
-module StrMap = Map.Make(struct type t=string let compare=compare end)
+module StrMap  = Map.Make(struct type t=string let compare=compare end)
+module CharMap = Map.Make(struct type t=char   let compare=compare end)
+
+module MapUtil (M: Map.S) = struct
+    let lookup map key =
+        try  M.find key map 
+        with Not_found -> Impossible.impossible ("Target.lookup key not found")
+
+    let list2map assoc =
+        let add map (key,value) = M.add key value map in
+        List.fold_left add M.empty assoc  
+end
+
+module StrUtil  = MapUtil(StrMap)
+module CharUtil = MapUtil(CharMap) 
+
 <<type map>>
 <<type cc>>
+<<type space>>
 <<type t>>
 <<dummy>>
 @
 
 <<dummy>>=
-let lookup map key =
-    try  StrMap.find key map 
-    with Not_found -> Impossible.impossible ("Target.lookup "^key^" not found")
-
-let list2map assoc =
-    let add map (key,value) = StrMap.add key value map in
-    List.fold_left add StrMap.empty assoc  
 
 let m = { embed   = (fun _ -> assert false)
         ; project = (fun _ -> assert false)
         }
-    
+
+let spaces = CharUtil.list2map
+    [('m',{ cellwidth   =Dummy.wordsize
+          ; aggregation =Dummy.byteorder 
+          ; addrwidth   =Dummy.pointersize
+          })
+    ]      
+          
 let dummy: t = 
     { byteorder       = Dummy.byteorder
     ; wordsize        = Dummy.wordsize
@@ -164,16 +219,17 @@ let dummy: t =
     ; float           = Dummy.float
     ; charset         = Dummy.charset
     ; globals         = Automaton.dummy
-    ; register        = lookup StrMap.empty (* no registers *)
+    ; register        = StrUtil.lookup StrMap.empty (* no registers *)
     ; goto            = m
     ; jump            = m
     ; cutto           = m
     ; call            = m
     ; branch          = m
-    ; cc              = lookup StrMap.empty
+    ; cc              = StrUtil.lookup StrMap.empty
     ; fits            = (fun sp (sp',index,width) -> sp = sp')
     ; is_tmp          = (fun sp -> sp = 't')
     ; allocatable     = [] (* need something more sensible *)
+    ; space           = fun sp -> CharUtil.lookup spaces sp
     }
 @
         
