@@ -35,6 +35,12 @@ holds an expression.
 val in_loc  : t -> Rtl.Private.loc -> Rtl.Private.exp option
 val has_exp : t -> Rtl.Private.exp -> Rtl.Private.loc option
 @ 
+We can substitute for locations that are known to be available.
+When calling [[subst_exp a ls e]], it is a checked run-time error for
+list [[ls]] to contain a location that is not availabe in~[[a]].
+<<avail.mli>>=
+val subst_exp : t -> Rtl.Private.loc list -> Rtl.Private.exp -> Rtl.Private.exp
+@ 
 
 
 \subsection{Implementation}
@@ -69,10 +75,16 @@ LHS OR WE NEED TO GIVE UP.
 the same expression, and it is not clear which one(s) to use.)
 <<avail.ml>>=
 <<kills>>
+<<substitution>>
 let forward rtl pairs =
   let locs = locs_killed rtl in
   let alocs = List.map RU.MayAlias.locs' locs in
   let aexps = List.map RU.MayAlias.exp'  locs in
+  let add_new_pair l r new_pairs =
+    if List.exists (fun aexp -> aexp r) aexps then
+      <<if all interfering locations can be substituted, keep [[l, r]]; otherwise not>>
+    else
+      (l, r) :: new_pairs in
   let invalidated (l, r) =
     List.exists (fun aloc -> aloc l) alocs || List.exists (fun aexp -> aexp r) aexps in
   let pairs =
@@ -82,10 +94,17 @@ let forward rtl pairs =
       pairs in
   (* massive pessimism: do registers only *)
   let extend guarded pairs = match guarded with
-  | RP.Const (RP.Bool true), RP.Store(RP.Reg _ as l, r, _) -> (l, r) :: pairs
+  | RP.Const (RP.Bool true), RP.Store(RP.Reg _ as l, r, _) -> add_new_pair l r pairs
   | _ -> pairs in
   let RP.Rtl effects = Dn.rtl rtl in
   List.fold_right extend effects pairs
+@ 
+<<if all interfering locations can be substituted, keep [[l, r]]; otherwise not>>=
+let badlocs = List.filter (fun l -> RU.MayAlias.exp' l r) locs in
+if List.for_all (fun l -> List.mem_assoc l pairs) badlocs then
+  (l, subst_exp pairs badlocs r) :: new_pairs
+else
+  new_pairs
 @ 
 We never remember a memory location, so we need only to identify
 registers that are killed.
@@ -99,4 +118,7 @@ let locs_killed rtl =
   RU.ReadWriteKill.fold_promote ~write:add_reg ~kill:add_reg ~read:(fun _ locs -> locs)
     rtl []
 @ 
-  
+<<substitution>>=
+let subst_exp a ls e =
+  RU.Subst.Fetch.exp' ~guard:(fun l -> List.mem l ls)
+    ~fetch:(fun l w -> List.assoc l a) e

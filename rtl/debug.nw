@@ -1,0 +1,44 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+% Grades     ::=    "%%Grades:" Quality Importance Urgency
+% Quality    ::=    A|B|C|D|E
+% Importance ::=    Central|Subsystem|Peripheral
+% Urgency    ::=    Immediate|Soon|Later
+%
+% Example (at beginning of line): %%Grades: B Central Soon
+\section{Diagnostic output}
+
+Uses environment variable [[QCDEBUG]] to make noise.
+This variable contains a comma-separated list of words;
+if a word is on the list, output happens.
+<<debug.mli>>=
+val on : string -> bool   (* debugging on for this word *)
+val eprintf : string -> ('a, out_channel, unit) format -> 'a
+  (* if debugging on, print to stderr *)
+@
+You can ask for information about what's known, which is provided by
+[[register]].
+It's a checked error to register the same word more than once.
+<<debug.mli>>=
+val explain : unit -> unit   (* print known words to stderr *)
+val register : word:string -> meaning:string -> unit
+@ 
+<<debug.ml>>=
+let debugging =
+  try Str.split (Str.regexp ",") (Sys.getenv "QCDEBUG") with _ -> []
+let on s = List.mem s debugging
+
+let refs = ref ([] : (string * string) list)
+let register ~word ~meaning =
+  if List.mem_assoc word (!refs) then
+    Impossible.impossible ("Debug.register: multiple registrations of " ^ word)
+  else
+    refs := (word, meaning) :: !refs
+
+let rec ign x = Obj.magic ign
+let eprintf s = if on s then Printf.eprintf else ign
+@ 
+<<debug.ml>>=
+let explain () =
+  Printf.eprintf "Words recognized in QCDEBUG:\n";
+  List.iter (fun (w, e) -> Printf.eprintf "  %-15s  %s\n" w e) (!refs)

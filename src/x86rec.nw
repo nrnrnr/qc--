@@ -60,6 +60,7 @@ val fpustatus : Rtl.loc (* the FPU status word *)
 %type const8 {: string :}
 %type disp {: string :}
 %type eaddr {: string :}
+%type eaddri {: string :}
 %type eaddrl {: string :}
 %type eax {: unit :}
 %type ecx {: unit :}
@@ -316,6 +317,8 @@ reg_cl  : Lobits(Fetch(regl_ecx, w), nw:w) [{: guard (nw=8) :}] {: () :}
 regpair : Fetch(regpairl, w) {: regpairl :}
 mem     : Fetch(meml    , w) {: meml     :}
 eaddr   : Fetch(eaddrl  , w) {: eaddrl   :}
+eaddri  : eaddr              {: eaddr    :}
+eaddri  : immed              {: immed    :}
 -- eaddr : lconst {: lconst :} -- absolute addressing mode
 -- indexed modes to come
 @ 
@@ -343,6 +346,9 @@ inst: Guarded(Cmp(string, esp, slotaddr), Store(espl, s2:slotaddr, w))
 inst: Store(dst:eaddrl, slotaddr, w) {: sprintf "%s := %s" dst slotaddr :}
 
 -- inst: Store(dst:eaddrl, lateconst, w) {: sprintf "%s := %s" dst lateconst :}
+
+disp : Add(vfp, const) {:  const ^ "(%vfp)" :}
+disp : Add(const, vfp) {:  const ^ "(%vfp)" :}
 @ 
 
 \paragraph{Data movement}
@@ -357,14 +363,14 @@ inst : Store(dst:eaddrl, pic, w)
 inst : Store(dst:eaddrl, src:immed, w) 
   {: cat ["mov"; suffix w; " "; src; ","; dst] :}
 
-inst : Store(dst:eaddrl, src:lconst, w) 
+inst : Store(dst:regl, src:lconst, w) 
   {: cat ["lea"; suffix w; " "; src; ","; dst] :}
 
 -- straight load/store/move
 inst : Store(dst:eaddrl, src:reg, w) 
   {: cat ["mov"; suffix w; " "; src; ","; dst] :}
 
-inst : Store(dst:regl, src:eaddr, w) 
+inst : Store(dst:regl, src:eaddri, w) 
   {: cat ["mov"; suffix w; " "; src; ","; dst] :}
 
 -- sign extension
@@ -412,19 +418,13 @@ inst : Llr(dst:regl, "add", const, w) [{:guard (w=32):}]
 inst : Withaflags(dst:eaddrl, "add", src:reg, w, "x86_addflags")
   {: cat ["add"; suffix w; " "; src; ","; dst] :}
 
-inst : Withaflags(dst:regl, "add", src:eaddr, w, "x86_addflags")
-  {: cat ["add"; suffix w; " "; src; ","; dst] :}
-
-inst : Withaflags(dst:regl, "add", src:immed, w, "x86_addflags")
+inst : Withaflags(dst:regl, "add", src:eaddri, w, "x86_addflags")
   {: cat ["add"; suffix w; " "; src; ","; dst] :}
 
 inst : Withaflags(dst:eaddrl, "sub", src:reg, w, "x86_subflags")
   {: cat ["sub"; suffix w; " "; src; ","; dst] :}
 
-inst : Withaflags(dst:regl, "sub", src:eaddr, w, "x86_subflags")
-  {: cat ["sub"; suffix w; " "; src; ","; dst] :}
-
-inst : Withaflags(dst:regl, "sub", src:immed, w, "x86_subflags")
+inst : Withaflags(dst:regl, "sub", src:eaddri, w, "x86_subflags")
   {: cat ["sub"; suffix w; " "; src; ","; dst] :}
 
 inst : Withaflagsunary("neg", dst:eaddrl, w, "x86_negflags")
@@ -433,7 +433,7 @@ inst : Withaflagsunary("neg", dst:eaddrl, w, "x86_negflags")
 inst : Withaflags(dst:eaddrl, "mul", src:reg, w, "x86_mulflags")
   {: cat ["imul "; suffix w; " "; src; ", "; dst] :}
 
-inst : Withaflags(dst:regl, "mul", src:eaddr, w, "x86_mulflags")
+inst : Withaflags(dst:regl, "mul", src:eaddri, w, "x86_mulflags")
   {: cat ["imul"; suffix w; " "; src; ","; dst] :}
 
 inst : Withundefflags(dst:regpairl, "quot", src:reg, w)
@@ -465,7 +465,7 @@ N.B. The crazy AT\&T assembly language does comparisons backward.
 <<rules>>=
 inst : Setflags(X86_subflags(l:eaddr, r:reg))
   {: cat ["cmp"; suffix 32; " "; r; ","; l] :} -- POSSIBLE BUG IN WIDTH
-inst : Setflags(X86_subflags(l:reg, r:eaddr))
+inst : Setflags(X86_subflags(l:reg, r:eaddri))
   {: cat ["cmp"; suffix 32; " "; r; ","; l] :} -- POSSIBLE BUG IN WIDTH
 
 inst : UnaryInPlace(dst:regl, "com", w) {: cat ["not"; suffix w; " "; dst] :} 
@@ -474,7 +474,7 @@ inst : Withlflags(dst:eaddrl, logical:string, src:reg, w, "x86_logicflags")
   [{: match logical with "and" | "or" | "xor" -> 0 | _ -> infinity :}]
   {: cat [logical; suffix w; " "; src; ","; dst] :}
 
-inst : Withlflags(dst:regl, logical:string, src:eaddr, w, "x86_logicflags")
+inst : Withlflags(dst:regl, logical:string, src:eaddri, w, "x86_logicflags")
   [{: match logical with "and" | "or" | "xor" -> 0 | _ -> infinity :}]
   {: cat [logical; suffix w; " "; src; ","; dst] :}
 
@@ -508,7 +508,7 @@ eip  : Reg('c', n, w) [{: guard (n = SS.indices.SS.pc && w = 32):}] {: () :}
 The [[cut to]] is supposed to look atomic, but it is a sequence of two
 instructions. 
 <<rules>>=
-inst : Par(Goto(target),Store(espl,frame:eaddr,w))
+inst : Par(Goto(target),Store(espl,frame:eaddri,w))
   {: cat ["movl "; frame; ", %esp; jmp "; target] :}
 @ 
 There are two ways to recognize a pop, depending on whether the ML
@@ -660,6 +660,7 @@ any : I2f(n:w, w, any) {: sprintf "I2f(%d, %d, %s)" n w any :}
 any : Lobits(any, w) {: "Lobits(" ^ any ^ ", " ^ string_of_int w ^ ")" :}
 any : X86_subflags(l:any, r:any) {: "X86_subflags(" ^ l ^ ", " ^ r ^ ")" :}
 any : X86_addflags(l:any, r:any) {: "X86_addflags(" ^ l ^ ", " ^ r ^ ")" :}
+any : X86ccop(string, cc:any) {: "X86ccop(" ^ string ^ ", " ^ cc ^ ")" :}
 
 any : Mem(any, w) {: "Mem(" ^any ^ "," ^ string_of_int w ^ ")" :}
 any : Reg  (char, n, w) {: sprintf "Reg(%s, %d, %d)"   (Char.escaped char) n w :}
@@ -726,6 +727,9 @@ constructor for each operator.
 | RP.App(("fneg", [w]), [x]) -> conFneg (exp x)
 | RP.App(("fabs", [w]), [x]) -> conFabs (exp x)
 | RP.App(("x86_fcmp", [w]), [x; y]) -> conFcmp (exp x) (exp y)
+| RP.App((("x86_e" | "x86_ne" | "x86_l" | "x86_le" | "x86_g" | "x86_ge"
+          | "x86_b" | "x86_be" | "x86_a" | "x86_ae") as o, _), [x]) ->
+              conX86ccop o (exp x)
 | RP.App(("lobits", [w;n]), [x])   -> conLobits (exp x) n
 | RP.App(("x86_subflags", [w]), [x; y]) -> conX86_subflags (exp x) (exp y)
 | RP.App(("x86_addflags", [w]), [x; y]) -> conX86_addflags (exp x) (exp y)
@@ -846,6 +850,10 @@ RP.Const(RP.Bool true)
   ; (<<truepat>>, <<pattern for flags := [[fo]] ([[l'']], [[r']])>>)
   ] when l = l' && l = l'' && r = r' && flag_index = SS.indices.SS.cc ->
       conWithaflags (loc l) o (exp r) w fo
+| [ (<<truepat>>, <<pattern for [[l]] := [[l']] at [[w]]>>)
+  ; (<<truepat>>, <<pattern for flags := [[fo]] ([[l'']], [[Const b]])>>)
+  ] when l = l' && l = l'' && b = Bits.zero w && flag_index = SS.indices.SS.cc ->
+      conWithaflags (loc l) "add" (exp (RP.Const (RP.Bits b))) w fo
 | [ (<<truepat>>, <<pattern for [[l]] := [[o]] [[l']] at [[w]]>>)
   ; (<<truepat>>, <<pattern for flags := [[fo]] [[l'']])>>)
   ] when l = l' && l = l'' && flag_index = SS.indices.SS.cc ->
@@ -893,9 +901,14 @@ RP.Store(RP.Reg('c', flag_index, _), RP.App(("x86_undefflags", _), []), _)
 RP.Store(RP.Reg('c', flag_index, _), RP.App((fo, _), [flag_left']), _)
 <<pattern for [[l]] := [[l']] [[o]] [[r]] at [[w]]>>=
 RP.Store(l, RP.App((o, _), [RP.Fetch(l',_); r]), w) 
+<<pattern for [[l]] := [[l']] at [[w]]>>=
+RP.Store(l, RP.Fetch(l',_), w) 
 <<pattern for flags := [[fo]] ([[l'']], [[r']])>>=
 RP.Store(RP.Reg('c', flag_index, _),
          RP.App((fo, _), [RP.Fetch(l'',_); r']), _)
+<<pattern for flags := [[fo]] ([[l'']], [[Const b]])>>=
+RP.Store(RP.Reg('c', flag_index, _),
+         RP.App((fo, _), [RP.Fetch(l'',_); RP.Const (RP.Bits b)]), _)
 <<pattern for flags := [[fo]] ([[l'']], [[r'']])>>=
 RP.Store(RP.Reg('c', flag_index, _),
          RP.App((fo, _), [RP.Fetch(l'',_); r'']), _)
@@ -947,10 +960,17 @@ let to_asm r =
   | Camlburg.Uncovered -> cat [" not an instruction: " ; RU.ToReadableString.rtl r]
   | Error msg -> (errmsg r msg; " error in recognizer: " ^ msg)
 
+let () = Debug.register "x86rec" "diagnose rejected instructions in x86 recognizer"
+
 let is_instruction r =
   try
     let plan = rtl (Down.rtl r) in
-    plan.inst.Camlburg.cost < 100  (* should be true, but shade this... *)
+    if plan.inst.Camlburg.cost < 100 then  (* should be true, but shade this... *)
+      true
+    else
+      (if Debug.on "x86rec" then
+         Printf.eprintf "x86rec: rejected RTL %s\n" (plan.inst.Camlburg.action());
+       false)
   with 
   | Camlburg.Uncovered -> false
   | Error msg -> (errmsg r msg; false)

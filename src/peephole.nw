@@ -60,23 +60,28 @@ module ToString = RU.ToReadableString
 <<peephole.ml>>=
 module D  = Dataflow.Make (G)
 
+let () = Debug.register "peephole" "peephole optimizer"
+
 let subst_forward _ proc =
   let ok =
-    if Verbose.verbosity < 4 then proc.P.target.T.is_instruction
-    else (fun i -> if proc.P.target.T.is_instruction i then true
-                   else (Printf.eprintf "### rejected substitution %s\n"
-                           (ToString.rtl i); false)) in
+    if Debug.on "peephole" then
+      (fun i -> if proc.P.target.T.is_instruction i then true
+                else (Printf.eprintf "### rejected substitution %s\n"
+                           (ToString.rtl i); false))
+    else
+      proc.P.target.T.is_instruction in
   let changed = ref false in
   let init = Avail.empty in
   let split _ = Avail.empty in
   let merge _ _ = false in
   let replace =
-    if Verbose.verbosity < 4 then (fun rtl _ -> rtl)
-    else
+    if Debug.on "peephole" then
       (fun rtl old ->
         Printf.eprintf "Replacing old rtl %s\n     with new rtl %s\n"
           (ToString.rtl old) (ToString.rtl rtl);
-        rtl) in
+        rtl) 
+    else
+      (fun rtl _ -> rtl) in
   <<propagation>>
   let fwd = D.fwd_iteration { D.split_info = split; D.merge_split_info = merge
                             ; D.init_info = init; D.propagate = propagate } in
@@ -91,17 +96,19 @@ let propagate node avail =
   let update rtl = G.update_instr (replace rtl) node; changed := true in
   let () = 
     match G.to_executable node with
-    | None -> ()
     | Some rtl ->
-        Verbose.eprintf 4 "=> Considering %s\n" (ToString.rtl rtl);
-        let try_pair l l' resume =
-          let rtl' = subst2 l l' rtl in
-          if ok rtl' then update rtl' else resume () in
-        let try_one l resume =
-          let rtl' = subst1 l rtl in
-          if ok rtl' then update rtl' else resume () in
-        let cs = candidates (Dn.rtl rtl) in
-        search_pairs cs (wrap2 try_pair) (fun () -> search cs (wrap try_one) (fun () -> ())) in
+        if G.kind node <> G.StackAdjust then
+          Debug.eprintf "peephole" "=> Considering %s\n" (ToString.rtl rtl);
+          let try_pair l l' resume =
+            let rtl' = subst2 l l' rtl in
+            if ok rtl' then update rtl' else resume () in
+          let try_one l resume =
+            let rtl' = subst1 l rtl in
+            if ok rtl' then update rtl' else resume () in
+          let cs = candidates (Dn.rtl rtl) in
+          search_pairs cs (wrap2 try_pair) (fun () -> search cs (wrap try_one)
+                          (fun () -> ()))
+    | None -> () in
   match G.kind node with
   | G.Instruction | G.Assertion ->
       (match G.to_instr node with
@@ -129,29 +136,41 @@ let rec search_pairs list succ fail = match list with
                        (fun () -> search_pairs xs succ fail) in
 
 let subst1 (loc, e) rtl =
-  RU.Subst.rhs_exp ~guard:((=) loc) ~map:(fun _ _ -> e) rtl in
+  RU.Subst.Fetch.rtl ~guard:((=) loc) ~fetch:(fun _ _ -> e) rtl in
 
 let subst2 (loc,e) (loc',e') rtl =
-  RU.Subst.rhs_exp ~guard:(fun l -> l = loc || l = loc')
-                   ~map:(fun l _ -> if l = loc then e else e') rtl in
+  RU.Subst.Fetch.rtl ~guard:(fun l -> l = loc || l = loc')
+                     ~fetch:(fun l _ -> if l = loc then e else e') rtl in
 @ 
-
-
 <<utilities>>=
+let is_copy rtl = match Dn.rtl rtl with
+| RP.Rtl [(RP.Const (RP.Bool true),
+           RP.Store(RP.Reg _, RP.Fetch(RP.Reg _, _), _))] -> true
+| _ -> false
+@ 
+<<utilities>>=
+let () =
+  Debug.register "peephole-search"
+    "search for a substitutable location in peephole optimizer"
+
 let wrap = 
-  if Verbose.verbosity < 4 then (fun succ -> succ)
-  else (fun succ l resume ->
-    Printf.eprintf "Substituting for %s\n" (ToString.loc (Up.loc (fst l)));
-    succ l (fun () ->
-      (Printf.eprintf "Abandoning %s\n" (ToString.loc (Up.loc (fst l))); resume())))
+  if Debug.on "peephole-search" then
+    (fun succ l resume ->
+      Printf.eprintf "Substituting for %s\n" (ToString.loc (Up.loc (fst l)));
+      succ l (fun () ->
+        (Printf.eprintf "Abandoning %s\n" (ToString.loc (Up.loc (fst l))); resume())))
+  else
+    (fun succ -> succ)
 
 let wrap2 = 
-  if Verbose.verbosity < 4 then (fun succ -> succ)
-  else (fun succ l l' resume ->
-    Printf.eprintf "Substituting for %s and %s\n" (ToString.loc (Up.loc (fst l))) 
-      (ToString.loc (Up.loc (fst l')));
-    succ l l' (fun () ->
-      (Printf.eprintf "Abandoning %s and %s\n" (ToString.loc (Up.loc (fst l))) (ToString.loc (Up.loc (fst l'))); resume())))
+  if Debug.on "peephole-search" then
+    (fun succ l l' resume ->
+      Printf.eprintf "Substituting for %s and %s\n" (ToString.loc (Up.loc (fst l))) 
+        (ToString.loc (Up.loc (fst l')));
+      succ l l' (fun () ->
+        (Printf.eprintf "Abandoning %s and %s\n" (ToString.loc (Up.loc (fst l))) (ToString.loc (Up.loc (fst l'))); resume())))
+  else
+    (fun succ -> succ)
 @ 
 Here's a nasty backtracking search for a substitutable location.
 <<old substitution>>=

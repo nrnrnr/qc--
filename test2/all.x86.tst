@@ -13,7 +13,7 @@ Test.files = { "add.c--"
              , "blockcpy.c--"
              , "cut.c--"
              , "arglist.c--"
-             , norun("conj.c--")
+             , "conj.c--"
              , norun("eqasolve-000.c--")
              , norun("exp-000.c--")
              , norun("exp-001.c--")

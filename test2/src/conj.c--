@@ -1,10 +1,25 @@
 target wordsize 32 pointersize 32 byteorder little;
 
-foreign "C" foo (bits32 i)
+foo (bits32 i)
 {
      bits32 x;
-     if ((x != 1) `conjoin` (x != 0)) {x=0;};
-     x=1;
-     foreign "C" return(x);
+     if ((i != 1) `conjoin` (i != 0)) {x=999;}
+     else {x=0;}
+     return(x);
 }
 
+export main; import printf;
+
+foreign "C" main("unsigned" bits32 iargc, "address" bits32 iargv) {
+  bits32 a, b, c;
+  a = foo(0);
+  b = foo(1);
+  c = foo(2);
+
+  foreign "C" printf("address" fmt, a, b, c);
+  foreign "C" return(0);
+}
+
+section "data" {
+  fmt: bits8[] "foo(0) = %d; foo(1) = %d; foo(2) = %d\n\0";
+}

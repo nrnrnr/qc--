@@ -202,10 +202,14 @@ module Subst: sig
     
     val reg_use:    map:(Register.t -> Register.t) -> Rtl.rtl -> Rtl.rtl
 
-    val rhs_exp:    guard:(Rtl.Private.loc -> bool) ->
-                    map:(Rtl.Private.loc -> Rtl.width -> Rtl.Private.exp) ->
+    module Fetch : sig   (* substitute for Fetch(l, w) *)
+      val rtl:      guard:(Rtl.Private.loc -> bool) ->
+                    fetch:(Rtl.Private.loc -> Rtl.width -> Rtl.Private.exp) ->
                     Rtl.rtl -> Rtl.rtl
-      (* argument implements Fetch *)
+      val exp':     guard:(Rtl.Private.loc -> bool) ->
+                    fetch:(Rtl.Private.loc -> Rtl.width -> Rtl.Private.exp) ->
+                    Rtl.Private.exp -> Rtl.Private.exp
+    end
 end
 @
 
@@ -553,22 +557,27 @@ let reg_use            ~map rtl = DownUp.rtl (reg_use'    map) rtl
 @
 
 <<Subst>>=
-let rhs_exp ~guard ~map =
-  let rec exp = function
-    | RP.Fetch (l, width) when guard l -> map l width
-    | RP.Fetch (l, width) -> RP.Fetch (loc l, width)
-    | RP.App(opr, exprs)  -> RP.App(opr, List.map exp exprs)
+module Fetch = struct
+  let rec exp ~guard ~fetch = function
+    | RP.Fetch (l, width) when guard l -> fetch l width
+    | RP.Fetch (l, width) -> RP.Fetch (loc ~guard ~fetch l, width)
+    | RP.App(opr, exprs)  -> RP.App(opr, List.map (exp ~guard ~fetch) exprs)
     | RP.Const _ as e     -> e
-  and loc l = match l with
-  | RP.Mem (sp,agg,w,e,ass)  -> RP.Mem(sp, agg, w, exp e, ass)
-  | RP.Slice (w,i,l)         -> RP.Slice(w,i,loc l)
-  | RP.Reg _ | RP.Var _ | RP.Global _ -> l in
-  let effect = function
-    | RP.Store (l,e,width)     -> RP.Store(loc l, exp e, width)
-    | RP.Kill  (l)             -> RP.Kill (loc l) in
-  let guarded (e,eff)  = (exp e, effect eff) in
-  let rtl (RP.Rtl rtl) = RP.Rtl (List.map guarded rtl) in
-  fun r -> Up.rtl (rtl (Dn.rtl r))
+  and loc ~guard ~fetch l = match l with
+  | RP.Mem (sp,agg,w,e,ass)  -> RP.Mem(sp, agg, w, exp ~guard ~fetch e, ass)
+  | RP.Slice (w,i,l)         -> RP.Slice(w,i,loc ~guard ~fetch l)
+  | RP.Reg _ | RP.Var _ | RP.Global _ -> l 
+  let rtl ~guard ~fetch rtl =
+    let RP.Rtl effs = Dn.rtl rtl in
+    let loc = loc ~guard ~fetch in
+    let exp = exp ~guard ~fetch in
+    let effect = function
+      | RP.Store (l,e,width)     -> RP.Store(loc l, exp e, width)
+      | RP.Kill  (l)             -> RP.Kill (loc l) in
+    let guarded (e,eff)  = (exp e, effect eff) in
+    Up.rtl (RP.Rtl (List.map guarded effs))
+  let exp' = exp
+end
 @
 
 % ------------------------------------------------------------------ 
