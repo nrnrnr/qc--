@@ -50,59 +50,49 @@ Lproc_body_start_l3:
 	movl (%ecx),%eax
 	xorl %edx,%eax
 	movl (%edx),%eax
-	movl %edx,(%esp)
 	movl %ecx,%edx
 	addl %eax,%edx
 	movl (%esp),%edx
 	movl (%edx),%eax
-	movl %edx,(%esp)
 	movl %ecx,%edx
 	subl %eax,%edx
 	movl (%esp),%edx
 	movl (%edx),%eax
-	movl %edx,(%esp)
 	movl %ecx,%edx
 	andl %eax,%edx
 	movl (%esp),%edx
 	movl (%edx),%eax
-	movl %edx,(%esp)
 	movl %ecx,%edx
 	orl %eax,%edx
 	movl (%esp),%edx
 	movl (%edx),%eax
-	movl %edx,(%esp)
 	movl %ecx,%edx
 	xorl %eax,%edx
 	movl %ecx,12(%esp)
 	movl (%esp),%eax
 	movl (%eax),%ecx
 	movl %ebx,16(%esp)
-	movl %eax,(%esp)
 	movl 12(%esp),%eax
 	movl %eax,%ebx
 	addl %ecx,%ebx
 	movl %ebx,(%edx)
 	movl (%esp),%ebx
 	movl (%ebx),%ecx
-	movl %ebx,(%esp)
 	movl %eax,%ebx
 	subl %ecx,%ebx
 	movl %ebx,(%edx)
 	movl (%esp),%ebx
 	movl (%ebx),%ecx
-	movl %ebx,(%esp)
 	movl %eax,%ebx
 	andl %ecx,%ebx
 	movl %ebx,(%edx)
 	movl (%esp),%ebx
 	movl (%ebx),%ecx
-	movl %ebx,(%esp)
 	movl %eax,%ebx
 	orl %ecx,%ebx
 	movl %ebx,(%edx)
 	movl (%esp),%ebx
 	movl (%ebx),%ecx
-	movl %ebx,(%esp)
 	movl %eax,%ebx
 	xorl %ecx,%ebx
 	movl %ebx,(%edx)

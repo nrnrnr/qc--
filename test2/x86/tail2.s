@@ -207,7 +207,6 @@ Ljoin_l34:
 	movl %eax,%edx
 	subl %ecx,%edx
 	movl $-28,%ecx
-	movl %eax,12(%esp)
 	leal 36(%esp), %eax
 	addl %ecx,%eax
 	movl %edx,(%eax)

@@ -68,7 +68,6 @@ Ljoin_l18:
 	addl %ecx,%edx
 	movl 20(%esp),%ecx
 	movl %ecx,(%edx)
-	movl %ecx,20(%esp)
 	movl %eax,24(%esp)
 	call printf
 Ljoin_l15:
@@ -87,7 +86,6 @@ Ljoin_l15:
 	addl %eax,%ecx
 	movl 24(%esp),%eax
 	movl %eax,(%ecx)
-	movl %eax,24(%esp)
 	call printf
 Ljoin_l12:
 	leal pcmp,%eax
@@ -297,7 +295,6 @@ Ljoin_l42:
 	movl %eax,%edx
 	subl %ecx,%edx
 	movl $-28,%ecx
-	movl %eax,12(%esp)
 	leal 36(%esp), %eax
 	addl %ecx,%eax
 	movl %edx,(%eax)

@@ -231,7 +231,6 @@ Ljoin_l76:
 	leal 96(%esp), %esi
 	addl %ebp,%esi
 	movl %ebx,(%esi)
-	movl %edx,16(%esp)
 	movl %ecx,36(%esp)
 	call open_
 	.byte 0xe9

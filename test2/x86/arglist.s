@@ -90,7 +90,6 @@ Ljoin_l43:
 	jmp Ljoin_l37
 Ljoin_l36:
 	leal ok,%ecx
-	movl %edx,12(%esp)
 	movl $-40,%edx
 	movl %eax,36(%esp)
 	leal 40(%esp), %eax
@@ -123,7 +122,6 @@ Ljoin_l44:
 	jmp Ljoin_l32
 Ljoin_l31:
 	leal ok,%ecx
-	movl %edx,16(%esp)
 	movl $-40,%edx
 	movl %eax,36(%esp)
 	leal 40(%esp), %eax
@@ -158,7 +156,6 @@ Ljoin_l45:
 	jmp Ljoin_l27
 Ljoin_l26:
 	leal ok,%ecx
-	movl %edx,20(%esp)
 	movl $-40,%edx
 	movl %eax,36(%esp)
 	leal 40(%esp), %eax
@@ -193,7 +190,6 @@ Ljoin_l46:
 	jmp Ljoin_l22
 Ljoin_l21:
 	leal ok,%ecx
-	movl %edx,24(%esp)
 	movl $-40,%edx
 	movl %eax,36(%esp)
 	leal 40(%esp), %eax
@@ -228,7 +224,6 @@ Ljoin_l47:
 	jmp Ljoin_l17
 Ljoin_l16:
 	leal ok,%ecx
-	movl %edx,28(%esp)
 	movl $-40,%edx
 	movl %eax,36(%esp)
 	leal 40(%esp), %eax
@@ -263,7 +258,6 @@ Ljoin_l48:
 	jmp Ljoin_l12
 Ljoin_l11:
 	leal ok,%ecx
-	movl %edx,32(%esp)
 	movl $-40,%edx
 	movl %eax,36(%esp)
 	leal 40(%esp), %eax
@@ -494,7 +488,6 @@ Ljoin_l80:
 	jmp Ljoin_l74
 Ljoin_l73:
 	leal ok,%ecx
-	movl %edx,12(%esp)
 	movl $-28,%edx
 	movl %eax,24(%esp)
 	leal 28(%esp), %eax
@@ -529,7 +522,6 @@ Ljoin_l81:
 	jmp Ljoin_l69
 Ljoin_l68:
 	leal ok,%ecx
-	movl %edx,16(%esp)
 	movl $-28,%edx
 	movl %eax,24(%esp)
 	leal 28(%esp), %eax
@@ -564,7 +556,6 @@ Ljoin_l82:
 	jmp Ljoin_l64
 Ljoin_l63:
 	leal ok,%ecx
-	movl %edx,20(%esp)
 	movl $-28,%edx
 	movl %eax,24(%esp)
 	leal 28(%esp), %eax

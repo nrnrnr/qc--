@@ -52,19 +52,9 @@ We expose two types of functions:
 \end{itemize}
 The first conversion function takes a user's key and value and produces a span.
 <<runtimedata.mli>>=
-type spans
+type spans = Spans.t
 exception DeadValue
-type label = string
-type link  = Bits.bits Reloc.Simple.relocatable
-val to_spans : sp:Rtl.loc -> prev_sp:Rtl.loc -> ra:Rtl.loc ->
-               users:((Bits.bits * link) list) ->
-               csregs:((Register.t * Rtl.loc option) list) ->
-               conts:((label * Rtl.loc * (string * int) list) list) ->
-               sds:(Rtl.loc list)                          ->
-               vars:(Rtl.loc option array)                 ->
-               spans
-val upd_spans : (Rtl.loc -> Rtl.loc) -> spans -> unit
-                (* may raise DeadValue *)
+val upd_spans : (Rtl.loc -> Rtl.loc) -> spans -> unit   (* may raise DeadValue *)
 @ 
 The run-time system needs to know how the register are mapped to constants.
 <<runtimedata.mli>>=
@@ -91,23 +81,11 @@ val stackdata  : spans -> Rtl.loc list
 % ------------------------------------------------------------------ 
 A number of shorthands are used throughout the implementation.
 <<runtimedata.ml>>=
-type tgt   = ((Rtl.exp -> Automaton.t), Call.t) Target.t
 let imposs = Impossible.impossible
 let impossf fmt = Printf.kprintf Impossible.impossible fmt
 let unimp  = Impossible.unimp
 
-type label = string
-type link  = Bits.bits Reloc.Simple.relocatable
-type spans = { mutable sp            : Rtl.loc
-             ; mutable prev_sp       : Rtl.loc
-             ; mutable ra            : Rtl.loc
-             ; mutable users         : (Bits.bits * link) list
-             ; mutable csregs        : (Register.t * Rtl.loc option) list
-             ; mutable conts         : (label * Rtl.loc * (string * int) list) list
-                                    (* (ra, sp, (hint, var number) list) *)
-             ; mutable sds           : Rtl.loc list
-             ; mutable vars          : Rtl.loc option array
-             }
+type spans = Spans.t
 exception DeadValue
 let to_spans ~sp ~prev_sp ~ra ~users ~csregs ~conts ~sds ~vars =
   { sp = sp;       prev_sp = prev_sp; ra = ra; users = users; csregs = csregs;

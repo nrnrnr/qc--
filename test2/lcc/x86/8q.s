@@ -149,7 +149,6 @@ Ljoin_l46:
 	movl %edx,%ebx
 	movl 4(%esp),%ecx
 	subl %ecx,%ebx
-	movl %ecx,4(%esp)
 	movl 16(%esp),%ecx
 	shll %cl, %ebx
 	addl %ebp,%ebx
@@ -161,7 +160,6 @@ Ljoin_l44:
 	movl %edx,%ebx
 	movl 4(%esp),%ecx
 	addl %ecx,%ebx
-	movl %ecx,4(%esp)
 	movl 16(%esp),%ecx
 	shll %cl, %ebx
 	addl %ebp,%ebx
@@ -255,7 +253,6 @@ L.23:
 	shll %cl, %eax
 	addl %ebx,%eax
 	movl %edx,(%eax)
-	movl %esi,4(%esp)
 	movl %ebp,%edx
 	movl 20(%esp),%esi
 	jmp L.18

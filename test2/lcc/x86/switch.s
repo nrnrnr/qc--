@@ -85,7 +85,6 @@ Ljoin_l37:
 	movl 20(%esp),%ecx
 	movsbl (%ecx),%edx
 	movl $-20,%ebx
-	movl %ecx,20(%esp)
 	leal 24(%esp), %ecx
 	addl %ebx,%ecx
 	movl %edx,(%ecx)
@@ -548,7 +547,6 @@ L.39:
 	leal 24(%esp), %edi
 	addl %edx,%edi
 	movl %ecx,(%edi)
-	movl %ecx,12(%esp)
 	movl %eax,20(%esp)
 	call printf
 Ljoin_l94:

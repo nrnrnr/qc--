@@ -251,7 +251,6 @@ Ljoin_l47:
 	subl %edx,%eax
 	movl 4(%esp),%edx
 	addl %ecx,%edx
-	movl %ecx,(%esp)
 	movl $4,%ecx
 	movl %ebx,16(%esp)
 	leal 24(%esp), %ebx

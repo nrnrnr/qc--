@@ -53,7 +53,6 @@ Ljoin_l45:
 	addl %eax,%ebx
 	movl (%edx),%eax
 	movl %eax,(%ebx)
-	movl %ecx,24(%esp)
 	call atol
 Ljoin_l44:
 	movl $8,%ecx
@@ -105,7 +104,6 @@ Ljoin_l34:
 	leal 72(%esp), %ebx
 	addl %edx,%ebx
 	movl %eax,(%ebx)
-	movl %ecx,40(%esp)
 	movl %eax,44(%esp)
 	call printf
 Ljoin_l31:
@@ -610,7 +608,6 @@ Lproc_body_start_l63:
 	subl %eax,%ecx
 	movl 4(%esp),%eax
 	addl %eax,%ecx
-	movl %eax,4(%esp)
 	movl $1,%eax
 	subl %eax,%edx
 	movl 4(%esp),%eax

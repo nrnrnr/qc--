@@ -149,7 +149,6 @@ Ljoin_l23:
 	addl %edx,%ecx
 	flds (%ecx)
 	fcompp
-	movl %eax,40(%esp)
 	fstsw %ax
 	sahf
 	ja Ljoin_l20
@@ -168,7 +167,6 @@ Ljoin_l19:
 	leal 52(%esp), %ebx
 	addl %eax,%ebx
 	movl %ecx,(%ebx)
-	movl %ecx,36(%esp)
 	call printf
 Ljoin_l17:
 	jmp L.22
@@ -184,7 +182,6 @@ L.21:
 	leal 52(%esp), %ebx
 	addl %eax,%ebx
 	movl %ecx,(%ebx)
-	movl %ecx,36(%esp)
 	call printf
 Ljoin_l14:
 	jmp L.22
@@ -218,10 +215,8 @@ L.22:
 	leal 52(%esp), %ecx
 	addl %ebp,%ecx
 	movl %edx,(%ecx)
-	movl %eax,40(%esp)
 	call printf
 Ljoin_l11:
-	movl %ebx,36(%esp)
 	jmp L.19
 Ljoin_l20:
 	jmp L.19

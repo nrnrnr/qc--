@@ -64,7 +64,6 @@ loop:
 	movl %ebx,(%edx)
 	leal msg,%edx
 	movl $-28,%ebx
-	movl %ecx,8(%esp)
 	leal 28(%esp), %ecx
 	addl %ebx,%ecx
 	movl %edx,(%ecx)

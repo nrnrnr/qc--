@@ -559,7 +559,6 @@ Ljoin_l64:
 	movl %ecx,%edx
 	andl %eax,%edx
 	movl $-156,%eax
-	movl %ecx,344(%esp)
 	leal 404(%esp), %ecx
 	addl %eax,%ecx
 	movl %edx,(%ecx)
@@ -642,7 +641,6 @@ Ljoin_l61:
 	movl %ecx,%edx
 	andl %eax,%edx
 	movl $-156,%eax
-	movl %ecx,360(%esp)
 	leal 404(%esp), %ecx
 	addl %eax,%ecx
 	movl %edx,(%ecx)

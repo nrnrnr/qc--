@@ -179,7 +179,6 @@ _i_30:
 	leal -8(%esp), %esp
 	movl $2,%ebx
 	movl %eax,%edx
-	movl %ecx,8(%esp)
 	movl %ebx,%ecx
 	shll %cl, %edx
 	movl 12(%esp),%ecx
@@ -189,7 +188,6 @@ _i_30:
 	movl %ebx,%eax
 	movl $1,%ebx
 	movl $-216,%edx
-	movl %ecx,12(%esp)
 	leal 216(%esp), %ecx
 	addl %edx,%ecx
 	movl %ebx,(%ecx)

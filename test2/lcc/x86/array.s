@@ -523,7 +523,6 @@ L.55:
 	movl 8(%esp),%ecx
 	addl %ecx,%ebx
 	movl $2,%edx
-	movl %ecx,8(%esp)
 	movl %eax,%ecx
 	movl %ecx,24(%esp)
 	movl %edx,%ecx
@@ -580,10 +579,8 @@ L.63:
 	addl %ecx,%ebx
 	movl (%ebx),%ebx
 	movl %ebp,32(%esp)
-	movl %ecx,12(%esp)
 	movl 28(%esp),%ecx
 	movl %ecx,%ebp
-	movl %ecx,28(%esp)
 	movl %edx,%ecx
 	shll %cl, %ebp
 	addl %ebx,%ebp

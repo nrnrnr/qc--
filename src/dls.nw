@@ -91,8 +91,6 @@ the domain of a variable map.
 
 We have some simple types for temps and locations, and location sets.
 <<varmap module type>>=
-type loc  = Reg of Register.t
-          | Mem of Automaton.loc
 type tgt = ((Rtl.exp -> Automaton.t), Call.t) Target.t
 type loc_pair = { reg : Register.t option; mem : Automaton.loc option }
 @
@@ -108,16 +106,18 @@ temp from a map.
 module type VarMap = sig
   type t
   val empty            : t
-  val add              : temp  -> loc -> t -> t
-  val remove           : temp  -> loc -> t -> t
+  val add_reg          : temp -> Register.t    -> t -> t
+  val add_mem          : temp -> Automaton.loc -> t -> t
+  val remove_reg       : temp -> Register.t    -> t -> t
+  val remove_mem       : temp -> Automaton.loc -> t -> t
 @
 We can also fold over a map, fold over each location a temp is in (the range), observe
 the locations where a temp is stored, observe the temp stored in a register, or print a
 map.
 <<varmap module type>>=
-  val fold             : (temp -> loc list -> 'a -> 'a) -> t -> 'a -> 'a
-  val fold_range       : (temp -> loc -> 'a -> 'a)      -> t -> 'a -> 'a
-  val var_locs         : t -> temp -> loc list
+  val fold             : (temp -> Register.t    -> 'a -> 'a) ->
+                         (temp -> Automaton.loc -> 'a -> 'a) -> t -> 'a -> 'a
+  val var_locs'        : t -> temp -> loc_pair
   val reg_contents     : t -> reg  -> temp option
   val print            : string -> t -> unit
 @
@@ -186,28 +186,23 @@ The constructors and observers are simple.
   let empty_pair       = {reg = None; mem = None}
   let def_reg pair r   = {pair with reg = r}
   let def_mem pair m   = {pair with mem = m}
-  let pair_to_list p   = match p with
-    | {mem = Some m; reg = Some r} -> [Reg r; Mem m]
-    | {mem = None  ; reg = Some r} -> [Reg r]
-    | {mem = Some m; reg = None  } -> [Mem m]
-    | {mem = None  ; reg = None  } -> []
   let pair_map_find    t   m = try RM.find t m with Not_found -> empty_pair
   let upd_pair_map upd t v m = RM.add t (upd (pair_map_find t m) v) m
 
+
   let empty            = (RM.empty, RM.empty)
-  let remove t l (vm, lm) =
-    match l with
-    | Reg r ->
+  let remove_reg t r (vm, lm as maps) =
       let lm' = RM.remove r lm in
-      if Aux.Option.is_none (pair_map_find t vm).mem then
-        (RM.remove t vm, lm')
-      else
-        (upd_pair_map def_reg t None vm, lm')
-    | Mem m ->
-      if Aux.Option.is_none (pair_map_find t vm).reg then
-        (RM.remove t vm, lm)
-      else
-        (upd_pair_map def_mem t None vm, lm)
+      try match (RM.find t vm).mem with
+          | None   -> (RM.remove t vm, lm')
+          | Some m as m'-> (RM.add t {reg = None; mem = m'} vm, lm') (* lp = loc_pair *)
+      with Not_found -> Impossible.impossible "DLS: Tried to remove unknown reg"
+
+  let remove_mem t _ (vm, lm as maps) =
+      try match (RM.find t vm).reg with
+          | None   -> (RM.remove t vm, lm)
+          | Some r as r' -> (RM.add t {reg = r'; mem = None} vm, lm)
+      with Not_found -> Impossible.impossible "DLS: Tried to remove unknown mem"
 @
 We allow each temp to be in only one register and one memory location at a time.
 There's an interesting time vs. memory tradeoff here:
@@ -217,26 +212,30 @@ to the register -- that way, the add function need not change the [[lm]] map,
 possibly saving memory.
 location of the temp in the [[vm]] map
 <<varmap module>>=
-  let add t l (vm, lm) = match l with
-    | Reg r ->
-      let lm = match (pair_map_find t vm).reg with
-               | Some r -> RM.remove r lm
-               | None   -> lm                 in
-      (upd_pair_map def_reg t (Some r) vm, RM.add r t lm)
-    | Mem m -> (upd_pair_map def_mem t (Some m) vm, lm)
-  let var_locs (vm, _) temp    = pair_to_list (RM.find temp vm)
+  let add_reg t r (vm, lm) =
+    try let lp = RM.find t vm in
+        let lm' = match lp.reg with
+                  | Some r_old -> RM.remove r_old lm
+                  | None -> lm in
+        (RM.add t {lp with reg = Some r} vm, RM.add r t lm')
+    with Not_found -> (RM.add t {reg = Some r; mem = None} vm, RM.add r t lm)
+
+  let add_mem t m (vm, lm) =
+    try (RM.add t {(RM.find t vm) with mem = Some m} vm, lm)
+    with Not_found -> (RM.add t {reg = None; mem = Some m} vm, lm)
+
+  let var_locs' (vm, _) temp = RM.find temp vm
   let reg_contents (_, lm) reg = try Some (RM.find reg lm) with Not_found -> None
-  let fold f (vm, _) zero      = RM.fold (fun t ls z -> f t (pair_to_list ls) z) vm zero
-  let fold_range f map zero    =
-    fold (fun t ls z -> List.fold_right (f t) ls z) map zero
+  let fold f_r f_m (vm, _) zero =
+    let app f t v z = match v with Some s -> f t s z | None -> z in
+    RM.fold (fun t lp z -> app f_m t lp.mem (app f_r t lp.reg z)) vm zero
 @
 Printing is easy.
 <<varmap module>>=
   let print msg map =
-    let string_of_loc = function | Reg r -> printReg r | Mem _ -> "mem_loc" in
     ( Printf.eprintf "%s\nOneLocVarMap:\n" msg
-    ; fold_range (fun t l () -> Printf.eprintf "%s -> %s\n"
-                                               (printReg t) (string_of_loc l))
+    ; fold (fun t (r:Register.t) () -> Printf.eprintf "%s -> %s\n" (printReg t) (printReg r))
+           (fun t m () -> Printf.eprintf "%s -> mem_loc\n" (printReg t))
            map ()
     ; flush stderr
     )
@@ -250,7 +249,7 @@ Note: We fold over the outmap, with the inmap as the accumulating parameter.
                 match loc_pair.mem with
                 | Some m ->
                   if Aux.Option.is_none (pair_map_find temp im_vm').mem then
-                    add temp (Mem m) inmap'
+                    add_mem temp m inmap'
                   else
                     inmap'
                 | None   -> inmap')
@@ -379,15 +378,23 @@ let update_pref_varmap state prefs alloced_preds =
 <<define [[avoid]] and [[aim_for]] to decrease or increase the likelihood of choosing a register>>
 let update_prefs_at_node prefs node =
   let temp_defs,hw_defs = partition_regs tgt (defs node)                        in
-  let get_regs = get_regs prefs.varMap                                          in
+  let app f v z = match v with Some s -> f s z | None -> z in
+  let to_avoid =
+    RS.fold (fun t rst -> try app RS.add (VM.var_locs' prefs.varMap t).reg rst
+                          with Not_found -> rst)
+                         temp_defs (RS.inter hw_defs alloc_regset)              in
+
+  (*let get_regs = get_regs prefs.varMap                                          in
   let to_avoid = RS.fold (fun t rst -> List.fold_right RS.add (get_regs t) rst)
                          temp_defs (RS.inter hw_defs alloc_regset)              in
+*)
+
   let vm = match get_copy_regs node with
            | Some (d, s) when is_tmp tgt s ->
                if is_tmp tgt d then 
-                  try VM.add s (Reg (choose_reg prefs.varMap d)) prefs.varMap
+                  try VM.add_reg s (choose_reg prefs.varMap d) prefs.varMap
                   with Not_found  -> prefs.varMap
-               else VM.add s (Reg d) prefs.varMap
+               else VM.add_reg s d prefs.varMap
            | _ -> prefs.varMap in
   { regs   = avoid prefs.regs to_avoid
   ; varMap = vm
@@ -720,18 +727,20 @@ It is the expander's responsibility to place the x's in different temps if more
 flexibility is desired.
 In any case, we still have to remove obsolete memory references from the variable map.
 <<define remove\_last\_uses, alloc, initial\_inmap, and alloc\_hw\_regs>>=
-let expire regset guard map =
-  RS.fold (fun t m ->
-             let regs, mems = part_locs (VM.var_locs m t)          in
-             let m          = List.fold_right (VM.remove t) mems m in
-             if guard t m then
-               m
-             else
-               List.fold_right (VM.remove t) regs m)
-          (rem_regs tgt regset) map in
+let expire regset guard_r guard_m map =
+  let app g f t v z = match v with Some s when g -> f t s z | _ -> z in
+  let exp_tmp t map =
+    if is_tmp tgt t then
+      let lp = VM.var_locs' map t in
+      app (guard_r t) VM.remove_reg t lp.reg
+          (app (guard_m t) VM.remove_mem t lp.mem map)
+    else map in
+  RS.fold exp_tmp regset map in
 let expire_last_uses =
-  expire uses (fun t m -> RS.mem t live_out || RS.mem t defs) in
-let expire_dead_defs = expire defs (fun t m -> RS.mem t live_out) in
+  expire uses (fun t -> not (RS.mem t live_out  || RS.mem t defs))
+              (fun t -> not (RS.mem t live_out) || RS.mem t defs) in
+let expire_dead_defs =
+  expire defs (fun t -> not (RS.mem t live_out)) (fun t -> not (RS.mem t live_out)) in
 @
 In [[initial_inmap]], we need to find an inmap that will have each live-in variable in
 some location.
@@ -743,28 +752,22 @@ temp, preferring registers, if available.
 let initial_inmap state preds succs =
   let alloc_remaining (s,_,_ as t) (state, map, used) =
     match diff (get_regs_for_space tgt prefs.regs s) used with
-    | r::rst -> (state, VM.add t (Reg r) map, RS.add r used)
+    | r::rst -> (state, VM.add_reg t r map, RS.add r used)
     | []     -> let state, l = get_spill_loc state t in
-                (state, VM.add t (Mem l) map, used) in
+                (state, VM.add_mem t l map, used) in
   match preds with
   | p::rst ->
     let predmap = try IM.find (G.num p) state.varOutMaps with Not_found -> VM.empty in
-    let choose_loc t (map, used, rem) =
+    let choose_loc t (map, used) =
       if is_tmp tgt t then
-        let locs    = VM.var_locs predmap t in
-        let regs    =
-        List.fold_left (fun rst t -> match t with | Reg r -> r::rst | _ -> rst)
-                         [] locs in
-        ( List.fold_left (fun m l -> VM.add t l m) map  locs
-        , List.fold_left (fun s r -> RS.add r s)   used regs
-        , rem
+        let app f v z = match v with Some s -> f s z | None -> z in
+        let lp = VM.var_locs' predmap t in
+        ( app (VM.add_mem t) lp.mem (app (VM.add_reg t) lp.reg map)
+        , app RS.add lp.reg used
         )
-      else (map, RS.add t used, rem) in
-    let (inmap, used_regs, remaining) =
-      RS.fold choose_loc live_in (VM.empty, RS.empty, RS.empty) in
-    let (state', inmap, _) =
-      RS.fold alloc_remaining remaining (state, inmap, used_regs) in
-    state', inmap
+      else (map, RS.add t used) in
+    let (inmap, used_regs) = RS.fold choose_loc live_in (VM.empty, RS.empty) in
+    state, inmap
   | []   ->
     (*Printf.eprintf "bad case...\n";
     printTempSet "live_in" live_in;
@@ -777,20 +780,34 @@ let initial_inmap state preds succs =
 The predecessor's outmap must map each live\_in temp to some location.
 <<check pred map invariant>>=
   let () = let temp_live_in,_ = partition_regs tgt live_in in
-           assert (RS.fold (fun t b -> b && not (null (VM.var_locs inmap t)))
-                           temp_live_in true) in
+           let check t b =
+             match VM.var_locs' inmap t with
+             | {reg = None; mem = None} -> false
+             | _                        -> b in
+           assert (RS.fold check temp_live_in true) in
 @
 Any allocation of registers must meet the requirement that a node's inmap must be a
 subset of the outmap of each predecessor.
 I don't currently check this invariant because it only needs to be true after any
 shuffling has occurred.
 Since I'm not calculating the outmap on shuffled node, this check is useless.
-<<check inmap invariant>>=
+<<OBSOLETE: check inmap invariant>>=
 let pred_maps =
   List.fold_left (fun rst p -> try  (G.num p, IM.find (G.num p) state.varOutMaps) :: rst
                                with Not_found -> rst) [] preds in
 let check_map (pnum,pmap) =
-  VM.fold_range (fun t l () ->
+  let fail () =
+    VM.print (Printf.sprintf "outmap for node %d" pnum) pmap;
+              VM.print (Printf.sprintf "inmap for node %d" (G.num node)) inmap;
+              impossf "inmap invariant failed\n") inmap () in
+  let check_reg t r () =
+    let plocs = try VM.var_locs pmap t with Not_found -> [] in
+    if List.mem (Reg r) plocs then () else fail ()
+  let check_mem t m () =
+    let plocs = try VM.var_locs pmap t with Not_found -> [] in
+    if List.exists (function Mem _ -> true | _ -> false) plocs then () else fail ()
+  VM.fold check_reg check_mem inmap ()
+(*VM.fold_range (fun t l () ->
                    let plocs = try VM.var_locs pmap t with Not_found -> [] in
                    match l with
                    | Reg r when List.mem l plocs -> ()
@@ -800,6 +817,7 @@ let check_map (pnum,pmap) =
                           VM.print (Printf.sprintf "inmap for node %d" (G.num node))
                                    inmap;
                           impossf "inmap invariant failed\n") inmap () in
+*)
 let () = List.iter check_map pred_maps in
 @
 %-------------------------------------------------------------------
@@ -815,7 +833,7 @@ varmaps because we may have to set a spill location for the temp.
       ({state with spillMap = RM.add temp l state.spillMap},l) in
   let spill state temp reg map =
     let (state,spill_loc) = get_spill_loc state temp in
-    (state,VM.add temp (Mem spill_loc) (VM.remove temp (Reg reg) map)) in
+    (state,VM.add_mem temp spill_loc (VM.remove_reg temp reg map)) in
   let spill_reg guard (state, map) reg =
     match VM.reg_contents map reg with
     | Some t when guard t -> spill state t reg map
@@ -828,18 +846,18 @@ varmaps because we may have to set a spill location for the temp.
   let default_alloc (state, map, a, c, h, not_lo) t =
     match (a, c, h, not_lo) with
     | (r::rst, _,      _,      _)                                   ->
-      (state, VM.add t (Reg r) map, rst, c, h, not_lo)
+      (state, VM.add_reg t r map, rst, c, h, not_lo)
     | ([],     _,      _,      r::rst) when not (RS.mem t live_out) ->
-      (state, VM.add t (Reg r) map, a, c, h, rst)
+      (state, VM.add_reg t r map, a, c, h, rst)
     | ([],     _,      _,      r::rst) ->
       let (state,spill_loc) = get_spill_loc state t in
-      (state, VM.add t (Reg r) (VM.add t (Mem spill_loc) map), a, c, h, rst)
+      (state, VM.add_reg t r (VM.add_mem t spill_loc map), a, c, h, rst)
     | ([],     r::rst, _,      [])                                  ->
       let (state,map) = spill_reg true_fun (state, map) r in
-      (state, VM.add t (Reg r) map, a, rst, h, not_lo)
+      (state, VM.add_reg t r map, a, rst, h, not_lo)
     | ([],     [],     r::rst, [])                                  ->
       let (state,map) = spill_reg true_fun (state, map) r in
-      (state, VM.add t (Reg r) map, a, c, rst, not_lo)
+      (state, VM.add_reg t r map, a, c, rst, not_lo)
     | ([],     _,      _,     _)                                    ->
         impossf "No register available for temp %s" (printReg t) in
 @
@@ -855,10 +873,10 @@ other).
   let get_avail_reg ((state, map, a, c, h, av_not_lo) as s) t reg fail =
     let split = List.partition (Register.eq reg) in
     match split a with
-    | [r], rst -> (state, VM.add t (Reg r) map, rst, c, h, av_not_lo)
+    | [r], rst -> (state, VM.add_reg t r map, rst, c, h, av_not_lo)
     | _   ->
       (match split av_not_lo with
-       | [r], rst -> (state, VM.add t (Reg r) map, a, c, h, rst)
+       | [r], rst -> (state, VM.add_reg t r map, a, c, h, rst)
        | _        -> fail s t) in
   (* include preferences *)
   let alloc_prefs s t =
@@ -984,7 +1002,7 @@ let shuffle state pred succ =
 @
 First, we find the temps that are placed inconsistently between the nodes.
 We insert the necessary load instructions after the succesor, and
-we insert the necessary store instructions before the successor's predecessors,
+we insert the necessary store instructions before the successor's predecessors.
 We also update each variable map that is changed.
 <<define [[shuffle_around]] and [[shuffle_between]]>>=
 let shuffle_around state pred succ =
@@ -994,7 +1012,18 @@ let shuffle_around state pred succ =
    VM.print (Printf.sprintf "\nsucc %d:" (G.num succ)) succ_vm;
   *)
 
-  let find_inconsistents temp succ_locs rst =
+  let regs temp succ_reg (state, ts, loads as rst) =
+    match (VM.var_locs' pred_vm temp).reg with
+    | Some r when R.eq r succ_reg -> rst
+    | _ -> let state', l = load state temp succ_reg in
+           (state', RS.add temp ts, l::loads) in
+  let mems temp succ_mem (state, ts, loads as rst) =
+    match (VM.var_locs' pred_vm temp).mem with
+    | None -> (state, RS.add temp ts, loads)
+    | _    -> rst in
+  let (state,temps,loads) = VM.fold regs mems succ_vm (state,RS.empty,[]) in
+
+(*let find_inconsistents temp succ_locs rst =
     let pred_regs, pred_mems = part_locs (VM.var_locs pred_vm temp) in
     let mems = not (null pred_mems) in
     List.fold_left
@@ -1006,15 +1035,25 @@ let shuffle_around state pred succ =
            let state', l = load state temp r in (state', RS.add temp ts, l::loads))
       rst succ_locs in
   let (state,temps,loads) = VM.fold find_inconsistents succ_vm (state,RS.empty,[]) in
+*)
 @
 We update the successor's variable map to have each inconsistent temp in memory.
 <<define [[shuffle_around]] and [[shuffle_between]]>>=
   let succ_vm =
-    RS.fold (fun t vm ->
-               let vm' = List.fold_left (fun vm l -> VM.remove t l vm)
-                                        vm (get_locs vm t) in
-               VM.add t (Mem (RM.find t state.spillMap)) vm')
+    let app f t v z = match v with Some s -> f t s z | None -> z in
+    RS.fold (fun t vm -> let lp = VM.var_locs' vm t in
+                         let vm' = app VM.remove_reg t lp.reg vm in
+                         VM.add_mem t (RM.find t state.spillMap) vm')
             temps succ_vm in
+(*
+    let vM_remove t =function Reg r -> VM.remove_reg t r | Mem m -> VM.remove_mem t m in
+    RS.fold (fun t vm ->
+               let vm' = List.fold_left (fun vm l -> vM_remove t l vm)
+                                        vm (get_locs vm t) in
+               VM.add_mem t (RM.find t state.spillMap) vm')
+            temps succ_vm in
+*)
+
   let state = set_varIn  state succ succ_vm in
   let state = set_varOut state succ succ_vm in
 @
@@ -1050,13 +1089,11 @@ We update the successor's variable map to have each inconsistent temp in memory.
 		*)
     let (state, stores) =
       RS.fold (fun t (state, stores) ->
-                 match part_locs (VM.var_locs pred_vm t) with
-                 | (_, _::_)      -> (state, stores)
-                 | (Reg r::_, []) ->
-                   let (state', s) = store state t r in
-                   (state', s::stores)
-                 | (_, _)         ->
-                   impossf "Unallocated temp in pred's outmap")
+                 match VM.var_locs' pred_vm t with
+                 | {mem = Some _} -> (state, stores)
+                 | {reg = Some r} -> let (state', s) = store state t r in
+                                     (state', s::stores)
+                 | _ -> impossf "Unallocated temp in pred's outmap")
               temps (state, []) in
     let state, pred_vm, nodes' = make_nodes' state pred_vm stores in
 
@@ -1069,6 +1106,38 @@ We update the successor's variable map to have each inconsistent temp in memory.
 @
 <<define [[shuffle_around]] and [[shuffle_between]]>>=
 let shuffle_between state pred succ =
+  let shuffle_err temp =
+    impossf "%s %s %s %d %s %d %s %s"
+            "DLS register allocator error in shuffle(): Temp" (printReg temp)
+            "allocated in succ" (G.num succ) "but not pred" (G.num pred)
+            "map in function" (proc.Proc.symbol#original_text) in
+  let fail () = VM.print "Pred VM:" pred_vm;
+                VM.print "Succ VM:" succ_vm;
+                impossf "Varmap has temp in unexpected locations" in
+  let regs temp succ_reg (state, ms, ls, ss as state_lsts) =
+    match VM.var_locs' pred_vm temp with
+    | {reg = Some r} when R.eq succ_reg r -> state_lsts
+    | {reg = Some r} -> (state, (temp, succ_reg, r)::ms, ls, ss)
+    | {mem = Some m} -> let state', l = load state temp succ_reg in
+                        (state', ms, l::ls, ss)
+    | {reg = None; mem = None} -> shuffle_err temp in
+(*  let pred_regs, pred_mems = part_locs (get_locs pred_vm temp) in
+    if List.mem (Reg succ_reg) pred_regs then state_lsts
+    else match (pred_regs, pred_mems) with   
+         | (Reg s::_, _)    -> (state, (temp, succ_reg, s)::ms, ls, ss)
+         | ([],       _::_) -> let state', l = load state temp succ_reg in
+                               (state', ms, l::ls, ss)
+         | ([],       [])   -> shuffle_err temp
+         | (_,        _)    -> fail () in
+*)
+  let mems temp succ_mem (state, ms, ls, ss as state_lsts) =
+    match VM.var_locs' pred_vm temp with
+    | {mem = Some m} -> state_lsts
+    | {reg = Some r} -> let state', s = store state temp r in
+                        (state', ms, ls, s::ss)
+    | {reg = None; mem = None} -> shuffle_err temp in
+  let state, moves, loads, stores = VM.fold regs mems succ_vm (state,[],[],[]) in
+(*
   let find_shuffles temp succ_locs state_lists =
     let pred_regs, pred_mems = part_locs (get_locs pred_vm temp) in
     let one_loc (state, ms, ls, ss as state_lists) l =
@@ -1091,8 +1160,8 @@ let shuffle_between state pred succ =
         VM.print "Succ VM:" succ_vm;
         impossf "Varmap has temp in unexpected locations" in
     List.fold_left one_loc state_lists succ_locs in
-
   let state, moves, loads, stores = VM.fold find_shuffles succ_vm (state, [],[],[]) in
+*)
   if null loads && null moves && null stores
   then state
   else
@@ -1110,24 +1179,22 @@ let shuffle_between state pred succ =
 @
 To reconcile variable maps, we need to create move, store, and load rtl's.
 <<define [[assign]], [[move]], [[store]], and [[load]]>>=
-let make_loc_empty loc vm =
-  match loc with
-  | Mem _ -> impossf "DLS: make_loc_empty called on memory location"
-  | Reg r -> match VM.reg_contents vm r with
-             | Some t -> VM.remove t loc vm
-             | None   -> vm                 in
+let make_reg_empty r vm =
+  match VM.reg_contents vm r with
+  | Some t -> VM.remove_reg t r vm
+  | None   -> vm                 in
 let space = Target.space tgt in
 let move temp ((_,_,ms),_,c as dst) src =
   let w = Cell.to_width ms c in
-  ((fun vm -> VM.add temp (Reg dst) (make_loc_empty (Reg dst) vm)),
+  ((fun vm -> VM.add_reg temp dst (make_reg_empty dst vm)),
    [Rtl.store (Rtl.reg dst) (Rtl.fetch (Rtl.reg src) w) w]) in
 let store state temp src =
   let state', loc = get_spill_loc state temp in
-  (state', ((fun vm -> VM.add temp (Mem loc) vm),
+  (state', ((fun vm -> VM.add_mem temp loc vm),
             tgt.Target.spill  space src loc)) in
 let load state temp dst =
   let state', loc = get_spill_loc state temp in
-  (state', ((fun vm -> VM.add temp (Reg dst) (make_loc_empty (Reg dst) vm)),
+  (state', ((fun vm -> VM.add_reg temp dst (make_reg_empty dst vm)),
             tgt.Target.reload space dst loc)) in
 let make_nodes' state start_vm shuffles =
   let rec make_node_lst (s, vm, rst) (upd_vm, rtls) =
@@ -1164,10 +1231,10 @@ let rewrite_spans (node, ss as rst) =
      let guard = function RP.Reg r -> is_tmp tgt r | _ -> false in
      let map l = match l with
        | RP.Reg r ->
-           (try match VM.var_locs vm r with
-                | Reg r :: _ -> RP.Reg r
-                | Mem l :: _ -> Dn.loc (Automatonutil.aloc l (Register.width r))
-                | [] -> raise RTD.DeadValue
+           (try match VM.var_locs' vm r with
+                | {reg = Some r} -> RP.Reg r
+                | {mem = Some m} -> Dn.loc (Automatonutil.aloc m (Register.width r))
+                | _ -> raise RTD.DeadValue
             with Not_found -> raise RTD.DeadValue)
        | _          -> impossf "DLS reg allocator emitting RT data: guard failed" in
      Rtlutil.Subst.loc_of_loc ~guard ~map l in
@@ -1240,21 +1307,17 @@ let get_live_out n = R.promote_rxset (Cfgx.Live.live_out n)
 @
 <<utilities>>=
 let null = function [] -> true | _ -> false
-let part_locs lst = part (function | Reg _ -> true | Mem _ -> false) lst
 
-let get_locs vm t = try VM.var_locs vm t with Not_found -> []
-let get_regs vm t =
-  List.fold_left (fun rst l -> match l with Reg r -> r::rst | _ -> rst)
-                 [] (get_locs vm t)
 let choose_reg vm t =
-  match get_regs vm t with
-  | r::_ -> r
-  | []   -> raise Not_found
+  match (VM.var_locs' vm t).reg with
+  | Some r -> r
+  | None   -> raise Not_found
 
 let regs_in_vm tgt vm temps =
   RS.fold (fun t set ->
              if is_tmp tgt t then
-               List.fold_left (fun set r -> RS.add r set) set (get_regs vm t)
+               match (VM.var_locs' vm t).reg with Some r -> RS.add r set
+                                                | None   -> set
              else RS.add t set)
           temps RS.empty
 

@@ -298,7 +298,6 @@ L.15:
 	movl %eax,%edx
 	jmp L.19
 L.19:
-	movl %eax,4(%esp)
 	movl $-24,%eax
 	movl %ecx,8(%esp)
 	leal 24(%esp), %ecx
@@ -580,7 +579,6 @@ Ljoin_l155:
 	addl %eax,%edi
 	movl 8(%esp),%eax
 	movl %eax,(%edi)
-	movl %eax,8(%esp)
 	movl %ecx,12(%esp)
 	call strcmp
 Ljoin_l153:
@@ -723,7 +721,6 @@ L.43:
 	addl %ecx,%edx
 	movl 8(%esp),%ecx
 	movl %ecx,(%edx)
-	movl %ecx,8(%esp)
 	call strlen
 Ljoin_l132:
 	movl $1,%ecx
@@ -1121,7 +1118,6 @@ Ljoin_l184:
 	leal i_68,%eax
 	movl 12(%esp),%ecx
 	movl (%ecx),%edx
-	movl %ecx,12(%esp)
 	movl $12,%ecx
 	movl %ebp,20(%esp)
 	movl %ebx,16(%esp)
@@ -1129,7 +1125,6 @@ Ljoin_l184:
 	movl %ebx,%ebp
 	addl %ecx,%ebp
 	movl $-16,%ecx
-	movl %ebx,12(%esp)
 	leal 24(%esp), %ebx
 	addl %ecx,%ebx
 	movl (%ebp),%ecx
@@ -1269,7 +1264,6 @@ L.72:
 Ljoin_l209:
 	movl (%esp),%eax
 	movsbl (%eax),%edx
-	movl %eax,(%esp)
 	movl $0,%eax
 	cmpl %eax,%edx
 	jne Ljoin_l206

@@ -209,7 +209,6 @@ Ljoin_l45:
 	movl %edx,%eax
 	movl %eax,%edx
 	sarl $31, %edx
-	movl %ecx,4(%esp)
 	movl 8(%esp),%ecx
 	idivl %ecx, %eax
 	movl $-20,%ecx
@@ -438,13 +437,11 @@ L.16:
 	movl 12(%esp),%eax
 	movl %eax,(%ecx)
 	movl $-32,%ecx
-	movl %eax,12(%esp)
 	leal 36(%esp), %eax
 	addl %ecx,%eax
 	movl 16(%esp),%ecx
 	movl %ecx,(%eax)
 	movl $-28,%eax
-	movl %ecx,16(%esp)
 	leal 36(%esp), %ecx
 	addl %eax,%ecx
 	movl %edx,(%ecx)
@@ -457,7 +454,6 @@ Ljoin_l90:
 	movl 12(%esp),%ecx
 	movl %ecx,(%edx)
 	movl $-32,%edx
-	movl %ecx,12(%esp)
 	leal 36(%esp), %ecx
 	addl %edx,%ecx
 	movl 16(%esp),%edx
@@ -617,7 +613,6 @@ Lproc_body_start_l105:
 	movl (%ebx),%ebx
 	jmp L.22
 L.22:
-	movl %ecx,8(%esp)
 	movl 12(%esp),%ecx
 	cmpl %eax,%ecx
 	jl Ljoin_l112
@@ -628,7 +623,6 @@ Ljoin_l113:
 	movl 8(%esp),%ecx
 	addl %ecx,%edx
 	movl $-52,%ebx
-	movl %ecx,8(%esp)
 	leal 52(%esp), %ecx
 	addl %ebx,%ecx
 	movl %edx,(%ecx)
@@ -682,7 +676,6 @@ Ljoin_l122:
 L.28:
 	movl $2,%ebp
 	movl %eax,%esi
-	movl %ecx,8(%esp)
 	movl %ebp,%ecx
 	shll %cl, %esi
 	movl 8(%esp),%ecx
@@ -696,16 +689,13 @@ Ljoin_l120:
 	jge Ljoin_l117
 Ljoin_l118:
 	movl $2,%esi
-	movl %ecx,8(%esp)
 	movl %ebp,%ecx
 	movl %ecx,40(%esp)
 	movl %esi,%ecx
-	movl %ebp,12(%esp)
 	movl 40(%esp),%ebp
 	shll %cl, %ebp
 	movl 8(%esp),%ecx
 	addl %ecx,%ebp
-	movl %ecx,8(%esp)
 	movl $-52,%ecx
 	movl %edi,44(%esp)
 	leal 52(%esp), %edi
@@ -720,7 +710,6 @@ Ljoin_l118:
 	leal 52(%esp), %edi
 	addl %esi,%edi
 	movl %ebp,(%edi)
-	movl %ecx,8(%esp)
 	movl %eax,28(%esp)
 	movl %edx,48(%esp)
 	call exchange
@@ -734,7 +723,6 @@ Ljoin_l116:
 Ljoin_l117:
 	jmp L.30
 L.30:
-	movl %ebp,12(%esp)
 	movl 36(%esp),%esi
 	movl 32(%esp),%ebp
 	jmp L.22
@@ -750,7 +738,6 @@ L.24:
 	movl $1,%ebp
 	movl 12(%esp),%esi
 	addl %ebp,%esi
-	movl %ecx,8(%esp)
 	movl %esi,%ecx
 	movl 36(%esp),%esi
 	jmp L.25
@@ -851,7 +838,6 @@ Lproc_body_start_l133:
 	movl %ebp,%eax
 	movl %eax,%ebp
 	sarl $31, %ebp
-	movl %edx,12(%esp)
 	movl %ebp,%edx
 	movl 28(%esp),%ebp
 	idivl %ebp, %eax
@@ -862,7 +848,6 @@ Lproc_body_start_l133:
 	movl 16(%esp),%eax
 	movl %eax,%ebx
 	subl %ecx,%ebx
-	movl %eax,16(%esp)
 	movl %ebx,%eax
 	movl %eax,%edx
 	sarl $31, %edx

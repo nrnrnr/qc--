@@ -227,7 +227,6 @@ Ljoin_l11:
 	movl %ecx,%eax
 	movl %edx,8(%esp)
 	movl %ecx,%edx
-	movl %ecx,4(%esp)
 	movl $4,%ecx
 	movl %ebx,12(%esp)
 	leal 24(%esp), %ebx
@@ -249,7 +248,6 @@ Ljoin_l13:
 	movl %eax,8(%esp)
 	movl %ecx,%eax
 	movl %ecx,%edx
-	movl %ecx,4(%esp)
 	movl $4,%ecx
 	movl %edi,16(%esp)
 	leal 24(%esp), %edi
@@ -305,7 +303,6 @@ Ljoin_l17:
 Ljoin_l21:
 	movl %ecx,%eax
 	movl %ecx,%edx
-	movl %ecx,4(%esp)
 	movl $4,%ecx
 	movl %edi,16(%esp)
 	leal 24(%esp), %edi
@@ -417,7 +414,6 @@ Ljoin_l41:
 	movl %edx,(%eax)
 	movl %ecx,%eax
 	movl %ecx,%edx
-	movl %ecx,4(%esp)
 	movl $4,%ecx
 	movl %ebx,8(%esp)
 	leal 24(%esp), %ebx
@@ -444,7 +440,6 @@ Ljoin_l43:
 	movl %eax,(%edx)
 	movl %ecx,%eax
 	movl %ecx,%edx
-	movl %ecx,4(%esp)
 	movl $4,%ecx
 	movl %edi,16(%esp)
 	leal 24(%esp), %edi
@@ -506,7 +501,6 @@ Ljoin_l47:
 Ljoin_l51:
 	movl %ecx,%eax
 	movl %ecx,%edx
-	movl %ecx,4(%esp)
 	movl $4,%ecx
 	movl %edi,16(%esp)
 	leal 24(%esp), %edi

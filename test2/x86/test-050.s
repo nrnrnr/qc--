@@ -29,7 +29,6 @@ Lproc_body_start_l3:
 	addl %eax,%ecx
 	movl 8(%esp),%eax
 	movl %eax,(%ecx)
-	movl %eax,8(%esp)
 	call printf
 Ljoin_l14:
 	leal fmt,%eax
@@ -42,7 +41,6 @@ Ljoin_l14:
 	addl %eax,%edx
 	movl 8(%esp),%eax
 	movl %eax,(%edx)
-	movl %eax,8(%esp)
 	call printf
 Ljoin_l11:
 	leal fmt,%eax

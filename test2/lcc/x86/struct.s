@@ -157,7 +157,6 @@ L.19:
 L.20:
 	movl $8,%edx
 	movl $-16,%ebx
-	movl %ecx,8(%esp)
 	leal 32(%esp), %ecx
 	addl %ebx,%ecx
 	addl %edx,%ecx
@@ -216,7 +215,6 @@ L.25:
 	movl (%eax),%ecx
 	movl $12,%eax
 	movl $-16,%ebx
-	movl %edx,(%esp)
 	leal 32(%esp), %edx
 	addl %ebx,%edx
 	addl %eax,%edx
@@ -1145,7 +1143,6 @@ L.76:
 	movl (%esi),%edi
 	movl $12,%esi
 	movl $-116,%ebp
-	movl %ebx,36(%esp)
 	leal 188(%esp), %ebx
 	addl %ebp,%ebx
 	addl %esi,%ebx

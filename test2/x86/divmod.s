@@ -82,7 +82,6 @@ Ljoin_l23:
 	movl 40(%esp),%ebp
 	movl %ebp,(%ebx)
 	movl $-36,%ebx
-	movl %ebp,40(%esp)
 	leal 48(%esp), %ebp
 	addl %ebx,%ebp
 	movl %eax,(%ebp)
