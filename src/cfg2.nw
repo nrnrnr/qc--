@@ -234,13 +234,12 @@ stored in every node and can be updated by side effect using
 val live:     node' -> set
 @
 
-A [[cfg]] is created from a list of nodes.  The function 
-[[foldl cfg f]] 
-walks over the list from head to tail and applies [[f]] to each node. 
-At each node, [[f]] receives the current [[node']] and an intermediate
-result [['a]] which it combines to a new result [['a]].  The
-intermediate result for the first node is the 3rd argument to
-[[foldl]]. \emph{This is a rather clumsy description.}
+A [[cfg]] is created from a list of nodes.  The function [[foldl cfg
+f]] walks over the list from head to tail and applies [[f]] to each
+node.  At each node, [[f]] receives the current [[node']] and an
+intermediate result [['a]] which it combines to a new result [['a]]. 
+The intermediate result for the first node is the 3rd argument to
+[[foldl]].  \emph{This is a rather clumsy description.}
   
 <<abstract types and values>>=
 val foldl: cfg -> (node' -> 'a -> 'a) -> 'a -> 'a
@@ -289,7 +288,7 @@ locations in the domain of [[map]] are replaced by the associated
 location.
 
 <<abstract types and values>>=
-val subst: cfg -> Rtl.loc Rtlutil.LocMap.t -> cfg
+val subst: cfg -> (Rtl.loc -> Rtl.loc) -> cfg
 @
 
 % ################################################################## 
@@ -700,8 +699,8 @@ Substitution of locations inside an [[Rtl.rtl]] is implemented by
 to provide a substitution at the level of kinds.
 
 <<implementation of S>>=
-let subst_loc: kind -> Rtl.loc Rtlutil.LocMap.t -> kind = fun kind map -> 
-    let subst = Rtlutil.subst map in 
+let subst_loc: kind -> (Rtl.loc -> Rtl.loc) -> kind = fun kind map -> 
+    let subst = Rtlutil.Subst.loc map in 
         match kind with
         | Goto   (rtl,x)    -> Goto (subst rtl,x)
         | Call   (rtl,x)    -> Call (subst rtl,x)

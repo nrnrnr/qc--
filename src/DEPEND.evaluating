@@ -7,10 +7,10 @@ astUtil.cmi: ast.cmi bits.cmi
 astpp.cmi: ast.cmi 
 automaton.cmi: rtl.cmi types.cmi 
 automaton2.cmi: rtl.cmi 
-bitops.cmi: base.cmi bits.cmi 
+bitops.cmi: bits.cmi 
 bits.cmi: base.cmi 
 cfg.cmi: acfg.cmi ast.cmi fenv.cmi target.cmi 
-cfg2.cmi: automaton2.cmi register.cmi rtl.cmi rtlutil.cmi 
+cfg2.cmi: automaton2.cmi register.cmi rtl.cmi 
 const.cmi: rtl.cmi 
 consteval.cmi: bits.cmi rtl.cmi 
 driver.cmi: cmdline.cmi 
@@ -19,6 +19,8 @@ elab.cmi: ast.cmi error.cmi fenv.cmi topsort.cmi types.cmi value.cmi
 error.cmi: srcmap.cmi 
 fenv.cmi: bits.cmi error.cmi srcmap.cmi types.cmi 
 lifetime.cmi: interval.cmi 
+linscan.cmi: cfg2.cmi 
+linscan2.cmi: cfg2.cmi lifetime.cmi register.cmi rtl.cmi 
 lowercopy.cmi: acfg.cmi 
 parse.cmi: ast.cmi bits.cmi 
 register.cmi: base.cmi rtl.cmi 
@@ -81,16 +83,16 @@ driver.cmx: asm2ast.cmx ast.cmx ast2ir.cmx astUtil.cmx astpp.cmx cfg.cmx \
     parse.cmx scan.cmx srcmap.cmx target.cmx this.cmx types.cmx driver.cmi 
 dummy.cmo: rtl.cmi dummy.cmi 
 dummy.cmx: rtl.cmx dummy.cmi 
-elab.cmo: ast.cmi aux.cmi bits.cmi error.cmi fenv.cmi idgen.cmi srcmap.cmi \
-    topsort.cmi types.cmi value.cmi elab.cmi 
-elab.cmx: ast.cmx aux.cmx bits.cmx error.cmx fenv.cmx idgen.cmx srcmap.cmx \
-    topsort.cmx types.cmx value.cmx elab.cmi 
+elab.cmo: ast.cmi aux.cmi bits.cmi env.cmi error.cmi fenv.cmi idgen.cmi \
+    srcmap.cmi topsort.cmi types.cmi value.cmi elab.cmi 
+elab.cmx: ast.cmx aux.cmx bits.cmx env.cmx error.cmx fenv.cmx idgen.cmx \
+    srcmap.cmx topsort.cmx types.cmx value.cmx elab.cmi 
 env.cmo: error.cmi env.cmi 
 env.cmx: error.cmx env.cmi 
 error.cmo: srcmap.cmi error.cmi 
 error.cmx: srcmap.cmx error.cmi 
-fenv.cmo: bits.cmi error.cmi srcmap.cmi types.cmi fenv.cmi 
-fenv.cmx: bits.cmx error.cmx srcmap.cmx types.cmx fenv.cmi 
+fenv.cmo: bits.cmi env.cmi error.cmi srcmap.cmi types.cmi fenv.cmi 
+fenv.cmx: bits.cmx env.cmx error.cmx srcmap.cmx types.cmx fenv.cmi 
 idgen.cmo: idgen.cmi 
 idgen.cmx: idgen.cmi 
 impossible.cmo: impossible.cmi 
@@ -99,8 +101,14 @@ interval.cmo: interval.cmi
 interval.cmx: interval.cmi 
 lifetime.cmo: interval.cmi lifetime.cmi 
 lifetime.cmx: interval.cmx lifetime.cmi 
-linscan2.cmo: cfg.cmi cfg2.cmi lifetime.cmi register.cmi rtl.cmi linscan2.cmi 
-linscan2.cmx: cfg.cmx cfg2.cmx lifetime.cmx register.cmx rtl.cmx linscan2.cmi 
+linscan.cmo: cfg2.cmi interval.cmi lifetime.cmi register.cmi linscan.cmi 
+linscan.cmx: cfg2.cmx interval.cmx lifetime.cmx register.cmx linscan.cmi 
+linscan2.cmo: cfg.cmi cfg2.cmi lifetime.cmi register.cmi rtl.cmi rtlutil.cmi \
+    linscan2.cmi 
+linscan2.cmx: cfg.cmx cfg2.cmx lifetime.cmx register.cmx rtl.cmx rtlutil.cmx \
+    linscan2.cmi 
+live.cmo: cfg2.cmi register.cmi rtlutil.cmi 
+live.cmx: cfg2.cmx register.cmx rtlutil.cmx 
 lowercopy.cmo: acfg.cmi automaton.cmi rtl.cmi target.cmi types.cmi \
     lowercopy.cmi 
 lowercopy.cmx: acfg.cmx automaton.cmx rtl.cmx target.cmx types.cmx \
@@ -117,12 +125,10 @@ rtl.cmo: bits.cmi rtl.cmi
 rtl.cmx: bits.cmx rtl.cmi 
 rtl2ast.cmo: ast.cmi bits.cmi rtl.cmi rtlutil.cmi types.cmi rtl2ast.cmi 
 rtl2ast.cmx: ast.cmx bits.cmx rtl.cmx rtlutil.cmx types.cmx rtl2ast.cmi 
-rtlutil.cmo: base.cmi bits.cmi rtl.cmi rtlutil.cmi 
-rtlutil.cmx: base.cmx bits.cmx rtl.cmx rtlutil.cmi 
+rtlutil.cmo: base.cmi bits.cmi register.cmi rtl.cmi rtlutil.cmi 
+rtlutil.cmx: base.cmx bits.cmx register.cmx rtl.cmx rtlutil.cmi 
 scan.cmo: bits.cmi error.cmi parse.cmi srcmap.cmi scan.cmi 
 scan.cmx: bits.cmx error.cmx parse.cmx srcmap.cmx scan.cmi 
-spill.cmo: spill.cmi 
-spill.cmx: spill.cmi 
 srcmap.cmo: srcmap.cmi 
 srcmap.cmx: srcmap.cmi 
 target.cmo: automaton.cmi bits.cmi error.cmi fenv.cmi rtl.cmi target.cmi 

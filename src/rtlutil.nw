@@ -61,12 +61,20 @@ val read_write_lists : read:'a regfun -> write:'a regfun -> Rtl.rtl -> 'a -> 'a
 *)
 @
 
+The [[read_write_lists]] function has the advantage that it does not
+allocate memory while it traverses a {\rtl} to find registers.  Below
+is a more convenient, but less efficient function that returns the
+registers read and written by an {\rtl} as two sets.
+
+<<rtlutil.mli>>=
+val read_write_sets: Rtl.rtl -> Register.Set.t * Register.Set.t
+@
+
 Liveness analysis and register allocation deal with [[Rtl.loc]]
 locations.  Sets and maps of locations are essential data structures.
 
 <<rtlutil.mli>>=
 module LocSet: Set.S with type elt = Rtl.loc
-module LocMap: Map.S with type key = Rtl.loc
 @
 
 The [[loc f rtl]] function substitutes locations in [[rtl]].  Every
@@ -82,7 +90,7 @@ end
     
 The predicate [[uses locs rtl]] is true, if and only if [[rtl]]
 contains any of the locations in the set [[locs]].  \emph{This should
-also go into a separate sub-module}.
+also go into a separate sub-module; do we need it at all?}. 
 
 <<rtlutil.mli>>=
 val uses : LocSet.t -> Rtl.rtl -> bool
@@ -150,6 +158,26 @@ let read_write_lists (read:'a regfun) (write:'a regfun) =
         | RP.App (_, es) -> List.fold_left exp z es
   in  fun r z -> rtl z (Rtl.Convert.rtl r)
 @
+
+The registers read and written by an {\rtl} are advertised by
+[[RtlUtil.read_write_lists]].  It receives two functions that recieve
+the read and written registers repectively.  Since the order in which
+locations are passed to these functions is unspecified it is in
+ingeneral impossible to use a single set that represents the set live
+variables.  We therefore use the function [[rw_sets]] that returns a
+pair $(r,w)$ of two sets.
+
+<<rtlutil.ml>>=
+let read_write_sets: Rtl.rtl -> (Register.Set.t * Register.Set.t) = fun rtl ->
+    let reg space index width = (space,index,width) in
+    let add_left  space index width (left,right) = 
+        (Register.Set.add (reg space index width) left, right) in
+    let add_right  space index width (left,right) = 
+        (left, Register.Set.add (reg space index width) right) in
+    let empty = (Register.Set.empty, Register.Set.empty) in
+        read_write_lists add_left add_right rtl empty
+@
+
 
 The [[subst map rtl]] function substitutes all locations in [[rtl]] by
 passing locations to the [[map]] function.

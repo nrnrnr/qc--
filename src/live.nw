@@ -69,29 +69,6 @@ let (union: Register.Set.t list -> Register.Set.t) =
         List.fold_left R.union R.empty            
 @
 
-The registers read and written by an {\rtl} are advertised by
-[[RtlUtil.read_write_lists]].  It receives two functions that recieve
-the read and written registers repectively.  Since the order in which
-locations are passed to these functions is unspecified it is in
-ingeneral impossible to use a single set that represents the set live
-variables.  We therefore use the function [[rw_sets]] that returns a
-pair $(r,w)$ of two sets.
-
-<<struct Make>>=
-let (reg: Rtl.space -> int -> Rtl.width -> Register.t) = fun 
-    space index width -> (space,index,width)
-
-let add_left  space index width (left,right) = 
-    (Register.Set.add (reg space index width) left, right)
-
-let add_right  space index width (left,right) = 
-    (left, Register.Set.add (reg space index width) right)
-
-let rw: Rtl.rtl -> (Register.Set.t * Register.Set.t) = fun rtl ->
-    let empty = (Register.Set.empty, Register.Set.empty) in
-        Rtlutil.read_write_lists add_left add_right rtl empty
-@
-    
 The [[live]] function computes the set of variable live \emph{before}
 [[node]].  It does so by looking at the live sets of its successors. 
 The idea is, that variables live at successor nodes must be either
@@ -117,7 +94,7 @@ $$
 
 <<struct Make>>=
 let rec standard cfg node rtl =
-    let (read,write) = rw rtl                                       in
+    let (read,write) = Rtlutil.read_write_sets rtl                  in
     let live         = Register.Set.diff (after cfg node) write     in
         Register.Set.union live read   
 @
