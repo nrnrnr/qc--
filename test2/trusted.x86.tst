@@ -15,4 +15,5 @@ Test.files = { "add.c--"
              , "fadd.c--"
              , "hello.c--"
              , "ovrflow.c--"
+             , "blockcpy.c--"
              }

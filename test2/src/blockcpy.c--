@@ -1,0 +1,44 @@
+target byteorder little;
+
+import bits32 printf;
+export main;
+
+section "data" {
+  w: bits32[] { 5, 6, 7, 8 };
+  x: bits32[] { 1, 2, 3, 4 };
+  y: bits32[] { 0, 0, 0, 0 };
+  z: bits32[] { 0, 0, 0, 0,
+                0, 0, 0, 0 };
+
+  msg: bits8[] "%d \000";
+  nl : bits8[] "\n\000";
+}
+
+print(bits32 a, bits32 n) {
+  bits32 i;
+  i = 0;
+
+loop:
+  foreign "C" printf(msg, bits32[a]);
+  i = i + 1;
+  a = a + 4;
+  if (i < n) { goto loop; }
+
+  foreign "C" printf(nl);
+  return();
+}
+
+foreign "C" main()
+{
+  print(y, 4);
+  bits128[y] = bits128[w];
+  print(y, 4);
+
+  print(z, 8);
+  bits256[z] = bits256[x];
+  print(z, 8);
+
+  print(w, 20);
+
+  return();
+}
