@@ -174,36 +174,38 @@ cause errors in the first phase.
     \end{center}
 \end{table}
 
-<<phase1>>=
-    
+<<phase1 module>>=
 module Phase1 = struct
+    <<phase1>>
+end
 
-    let foldl = List.fold_left
+<<phase1>>=
+let foldl = List.fold_left
 
-    let rec ty = function
-        | TyAt(x,_)       -> ty x
-        | BitsTy(n)       -> Types.Bits(n)
-        | FloatTy(n)      -> Types.Bits(n)
+let rec ty = function
+    | TyAt(x,_)       -> ty x
+    | BitsTy(n)       -> Types.Bits(n)
+    | FloatTy(n)      -> Types.Bits(n)
+
+let rec datum env = function
+    | DatumAt(x,r)        -> catch' env (errorRegPrt r) (datum env) x
+    | Label(n)            -> enter n (pointer,Memory) env
+    | _                   -> env
     
-    let rec datum env = function
-        | DatumAt(x,r)        -> catch' env (errorRegPrt r) (datum env) x
-        | Label(n)            -> enter n (pointer,Memory) env
-        | _                   -> env
-        
-    let formal env ( h, v, t, n) = env
-    let formals env xs = env
+let formal env ( h, v, t, n) = env
+let formals env xs = env
 
-    let register env ( v , t, n, reg) = enter n (ty t, Register) env
+let register env ( v , t, n, reg) = enter n (ty t, Register) env
 
-    let rec stmt env = function
-        | StmtAt(x,r)             -> catch' env (errorRegPrt r) (stmt env) x
-        | IfStmt ( e, ss1, ss2)   -> let env' = stmts env ss1 in
-                                        stmts env' ss2 
-        | LabelStmt(n)            -> enter n (pointer,Memory) env
-        | SpanStmt(e1,e2,ss)      -> stmts env ss
-        | _                       -> env
-        
-    and stmts env ss = foldl stmt env ss
+let rec stmt env = function
+    | StmtAt(x,r)             -> catch' env (errorRegPrt r) (stmt env) x
+    | IfStmt ( e, ss1, ss2)   -> let env' = stmts env ss1 in
+                                    stmts env' ss2 
+    | LabelStmt(n)            -> enter n (pointer,Memory) env
+    | SpanStmt(e1,e2,ss)      -> stmts env ss
+    | _                       -> env
+    
+and stmts env ss = foldl stmt env ss
 @
 
 Constants are entered unevaluated into the symbol table. Their type is
@@ -211,34 +213,33 @@ not yet known, as is their value. During a second phase these entries
 are replaced by the correct types and values.
 
 <<>>=
-    let constant env (name,expr) = 
-        enter name (dummy,Constant(ExprConst(expr))) env
-        
-    let rec section env = function
-        | SectionAt(x,r)         -> catch' env (errorRegPrt r) (section env) x
-        | SSpan( e1, e2, ss)     -> foldl section env ss
-        | Datum( d)              -> datum env d
-        | SExport (t, ns)        -> env
-        | Procedure(cc,n,fs, ds, ss) -> 
-            let env' = enter n (pointer,Memory) env in 
-                stmts env' ss 
+let constant env (name,expr) = 
+    enter name (dummy,Constant(ExprConst(expr))) env
+    
+let rec section env = function
+    | SectionAt(x,r)         -> catch' env (errorRegPrt r) (section env) x
+    | SSpan( e1, e2, ss)     -> foldl section env ss
+    | Datum( d)              -> datum env d
+    | SExport (t, ns)        -> env
+    | Procedure(cc,n,fs, ds, ss) -> 
+        let env' = enter n (pointer,Memory) env in 
+            stmts env' ss 
 
-    let rec topdecl env = function
-        | TopDeclAt(x,r)  -> catch' env (errorRegPrt r) (topdecl env) x
-        | Import( t, ns)  -> let entry = (ty t, Memory) in
-                             foldl (fun env n -> enter n entry env) env ns 
-        | Export( t, ns)  -> env
-        | Const ( cs)     -> foldl constant env cs
-        | Section( n, ss) -> foldl section env ss
-        | Registers( rs)  -> foldl register env rs
-        | TopProcedure(p) -> env
-        | Pragma          -> env
+let rec topdecl env = function
+    | TopDeclAt(x,r)  -> catch' env (errorRegPrt r) (topdecl env) x
+    | Import( t, ns)  -> let entry = (ty t, Memory) in
+                         foldl (fun env n -> enter n entry env) env ns 
+    | Export( t, ns)  -> env
+    | Const ( cs)     -> foldl constant env cs
+    | Section( n, ss) -> foldl section env ss
+    | Registers( rs)  -> foldl register env rs
+    | TopProcedure(p) -> env
+    | Pragma          -> env
 
-    let program ds srcmap = 
-        let env = Symbol.empty     in
-            foldl topdecl env ds  
+let program ds srcmap = 
+    let env = Symbol.empty     in
+        foldl topdecl env ds  
 
-end (* of module Phase1 *)
 @
 
 % ------------------------------------------------------------------  
@@ -297,6 +298,13 @@ help to build the type-schemes describing their types.  Infix and
 binary operators are as abbreviations to primitive operations.  For
 example, [[+]] and [[%add]] share the same type and implementation
 [[add]]. 
+
+<<phase2 module>>=
+module Phase2 = struct
+    <<primitives>>
+    <<eval>>
+    <<driver>>
+end
 
 <<primitives>>=
 let bitsc x         = Types.Bits(Types.Const(x))
@@ -430,7 +438,6 @@ and evalConst set env id =
         | (t, Constant(x))                  -> (t,x,env)
         | x -> error (Printf.sprintf "reference to non-constant %s" id) 
 
-<<driver>>
 @
 
 % ------------------------------------------------------------------  
@@ -453,7 +460,7 @@ let check file =
             ( Srcmap.sync map 0 (file,1,1) 
             ; let ast  = Parse.program scanner lexbuf in
               let env  = Phase1.program ast map in
-              let env' = eval env               in
+              let env' = Phase2.eval env        in
                     Ok (ppToFile stdout 72 (Print.ppEnv env'))
             ) 
         with
@@ -492,9 +499,11 @@ open Error
 
 <<symtab>>
 <<print>>
-<<phase1>>
-<<primitives>>
-<<eval>>
+
+<<phase1 module>>
+<<phase2 module>>
+
 <<check>>
+
 @
 
