@@ -37,9 +37,9 @@ main:
 	movl (%ecx),%ecx
 	movl %ecx,(%eax)
 initialize_continuations_l3:
-	leal x,%eax
-	flds (%eax)
 	leal y,%eax
+	flds (%eax)
+	leal x,%eax
 	flds (%eax)
 	faddp
 	leal z,%eax
