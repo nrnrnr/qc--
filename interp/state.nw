@@ -16,7 +16,6 @@
 %% beginning of macros
 
 % render a state
-% \newcommand\state[6]{\langle #1, #2, #3, #4, #5, #6 \rangle}
 \newcommand\dash{\texttt{-}}
 \newcommand\state[9]{\langle #1, #2, #3, #4, #5, #6, #7, #8, #9 \rangle}
 \newcommand\act[5]{\langle #1, #2, #3, #4, #5 \rangle}
@@ -24,23 +23,17 @@
 \newcommand\pc{{\mathit{PC}}}   % program counter
 \newcommand\ls{{\mathit{ls}}}   % location stack
 \newcommand\uid{{\mathit{uid}}} % unique identifier
-\newcommand\spt{{\mathit{sp}}}
-
-\newcommand\newpc{\widehat{\pc}}
-% \newcommand\cmm{\texttt{C-- }}
-
-% give state of data stack as parameter, other components standard
-% \newcommand\dstate[1]{\state I \pc {#1} l s A}
-\newcommand\dstate{\state \pc V \rho \spt g \sigma A u s}
-% \newcommand\dstate{\state \pc i V \ls M r A \uid s}
-\newcommand\dact{\act \pc \rho \spt \kappa u}
-
-\newcommand\bundle{\langle \kappa_{c}, \kappa_{u}, \kappa_{r}, abort \rangle}
-
+\newcommand\spt{{\mathit{sp}}}  % stack pointer
 \newcommand\emptystack{{\mathit{nil}}}
 
-% give state of arg-passing area as parameter, other components standard
-%\newcommand\astate[1]{\state i \pc d l s #1}
+\newcommand\newpc{\widehat{\pc}}
+
+% default state and activation record
+\newcommand\dstate{\state \pc V \rho \spt g \sigma A u s}
+\newcommand\dact{\act \pc \rho \spt \kappa u}
+
+% continuation bundle
+\newcommand\bundle{\langle \kappa_{c}, \kappa_{u}, \kappa_{r}, abort \rangle}
 
 % for building inference rules
 \newcommand{\xfrac}[3][c]{{\displaystyle\genfrac{}{}{0pt}{}{%
@@ -215,13 +208,13 @@ datatype instruction = (* RTL instructions *)
 
                        (* CFG instructions *)
                      | GOTO          (* pops target PC off stack *)
-                     | CBRANCH       of PC
+                     | CBRANCHT      of PC
+                     | CBRANCHF      of PC
                      | BRANCH2       of PC * PC
 
                      | CMM_CALL      of contAnnotations
                      | CMM_TAIL_CALL (* pops target PC off stack *)
                      | C_CALL        of C_function_signature
-
                      | RETURN        of index * count
                      | CUT           (* pops target PC off stack *)
 
@@ -352,7 +345,7 @@ Also, one notational comment: if $\pc$ is the index into the instruction array r
 }
 \\
 \ops{Store-Global}
-{i[\pc] = \mathtt{store}\dash\mathtt{global}\dash{}x \andalso g' = g{x\mapsto{}v\}}}
+{i[\pc] = \mathtt{store}\dash\mathtt{global}\dash{}x \andalso g' = g\{x\mapsto{}v\}}
 {\step
   {\state \pc {v\cons{}V} \rho \spt g \sigma A u s}
   {\state \newpc V \rho \spt {g'} \sigma A u s}
@@ -405,18 +398,32 @@ And now for the operational semantics of control-flow related instructions: \\
   {\state {\pc'} V \rho \spt g \sigma A u s}
 }
 \\
-\ops{CBranchTrue}
-{i[\pc] = \mathtt{cbranch}\dash\pc'}
+\ops{CBranchT-True}
+{i[\pc] = \mathtt{cbrancht}\dash\pc'}
 {\step
   {\state \pc {\mathtt{\#t}\cons{}V} \rho \spt g \sigma A u s}
   {\state {\pc'} V \rho \spt g \sigma A u s}
 }
 \\
-\ops{CBranchFalse}
-{i[\pc] = \mathtt{cbranch}\dash\pc'}
+\ops{CBranchT-False}
+{i[\pc] = \mathtt{cbrancht}\dash\pc'}
 {\step
   {\state \pc {\mathtt{\#f}\cons{}V} \rho \spt g \sigma A u s}
   {\state \newpc V \rho \spt g \sigma A u s}
+}
+\\
+\ops{CBranchF-True}
+{i[\pc] = \mathtt{cbranchf}\dash\pc'}
+{\step
+  {\state \pc {\mathtt{\#t}\cons{}V} \rho \spt g \sigma A u s}
+  {\state \newpc V \rho \spt g \sigma A u s}
+}
+\\
+\ops{CBranchF-False}
+{i[\pc] = \mathtt{cbranchf}\dash\pc'}
+{\step
+  {\state \pc {\mathtt{\#f}\cons{}V} \rho \spt g \sigma A u s}
+  {\state {\pc'} V \rho \spt g \sigma A u s}
 }
 \\
 \ops{Branch2True}
@@ -511,7 +518,6 @@ And now for the operational semantics of control-flow related instructions: \\
 {s' = {\act {\pc_k} {\rho_k} {\spt_k} {\kappa_k} {u_k}}}
 {\texttt{is\_live(}u_k\texttt{)} = true}
 {\kappa_i.aborts = true \textrm{ for all activations above } s' \textrm{ in thread identified by } u_k.thread}
-% {somethingaboutbeingabortable} %
 }
 {\step
   {\state \pc {k\cons{}V} \rho \spt g \sigma A u {s\cons{}S}}
