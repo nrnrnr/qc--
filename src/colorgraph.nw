@@ -56,11 +56,29 @@ Every move instruction is in one and only one of these lists:
 
 <<graph coloring types>>=
 
+module G = Cfg3
+
 module Cheats = struct
 	let spill _ = assert false
-	let dest _ = assert false
-	let source _ = assert false
-	let isMoveInstruction _ = false
+
+	let source node =
+		match Rtlutil.RTLType.singleAssignment (G.rtl node) with
+		| Some (s, _) -> s
+		| _ -> assert false
+	let dest node =
+		match Rtlutil.RTLType.singleAssignment (G.rtl node) with
+		| Some (_, d) -> d
+		| _ -> assert false
+
+	(*
+     * singleAssignment returns a (Register.t * Register.t) option
+     * First get the assignment, then verify that the source and dest are
+     * in the same reg. space
+     *)
+	let isMoveInstruction node =
+		match Rtlutil.RTLType.singleAssignment (G.rtl node) with
+		| Some ((s1,_,_), (s2,_,_)) -> s1 = s2
+		| None -> false
 	let fold_fwd g = Cfg3.scan_fwd g (Cfg3.number (Cfg3.first g))
                                      (Cfg3.number (Cfg3.last g) + 1)
 	let register_count _ = 15
@@ -69,7 +87,7 @@ module Cheats = struct
 		
 end
 
-module G = Cfg3
+
     type regt = Register.t
     module CompareRegPair = struct
         type t = regt * regt

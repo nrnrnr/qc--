@@ -71,7 +71,7 @@ move instruction.
 
 <<rtlutil.mli>>=
 module RTLType: sig
-	val isMoveInst:		Rtl.rtl -> bool
+    val singleAssignment:    Rtl.rtl -> (Register.t * Register.t) option
 end
 @
 
@@ -96,7 +96,7 @@ module Subst = struct
 end    
 
 module RTLType = struct
-	<<RTLType>>
+    <<RTLType>>
 end
 @
 
@@ -240,12 +240,24 @@ let exp map rtl =
 <<RTLType>>=
 (* first fn find _uncond_ store; separate fn to find unconditional kills;
    explicitly use kill instead of _; a; *)
-let isMoveInst rtl =
-	let rec isMove rtls move = match rtls with
-		| [] -> move
-		| (_, RP.Store(_, _, _))::rst -> if move then false else isMove rst true
-		| _::rst -> isMove rst move
-	in
-		match (Rtl.Convert.rtl rtl) with RP.Rtl guardeds ->
-			isMove guardeds false
+let singleAssignment rtl =
+    let rec firstAssignment rtls = match rtls with
+    | [] -> (None, [])
+    | (RP.Const(RP.Bool true), RP.Store(loc1, RP.Fetch(loc2, _), _))::rst ->
+        (try (Some (Register.of_loc (Rtl.Revert.loc loc1),
+                    Register.of_loc (Rtl.Revert.loc loc2)),
+              rst)
+        with Invalid_argument _ -> (None, []))
+    | _::rst -> firstAssignment rst in
+    let getFirstAssignment (RP.Rtl guardeds) = firstAssignment guardeds in
+
+    let isKill rtl = match rtl with
+    | (RP.Const(RP.Bool true), RP.Kill _) -> true
+    | _ -> false in
+    let rec allKills rtls = List.for_all isKill rtls in
+
+    let (assign, rst) = getFirstAssignment (Rtl.Convert.rtl rtl) in
+        match assign with
+        | Some _ when allKills rst -> assign
+        | _ -> None
 @
