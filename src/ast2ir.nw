@@ -42,7 +42,7 @@ The functor parameters and the parameter of type [[string->Call.t]]
 will all go away once the new flow graph ([[Cfg]]) takes over the compiler.
 <<ast2ir.mli>>=
 type tgt  = ((Rtl.exp -> Automaton.t), Call.t) Target.t
-type proc = (Automaton.t, Rtl.rtl Cfgx.M.cfg, Call.t, tgt) Proc.t
+type proc = (Automaton.t, Zipcfg.graph, Call.t, tgt) Proc.t
 val translate :  tgt
                 -> proc Fenv.Clean.env'
                 -> optimizer: (proc -> unit)
@@ -66,7 +66,7 @@ module Dn = Rtl.Dn
 module E  = Error
 module F  = Fenv.Clean
 module FE = Fenv
-module G  = Cfgx.M  (* graph *)
+module G  = Zipcfg
 module N  = Nelab
 module R  = Rtl
 module RO = Rewrite.Ops
@@ -91,20 +91,21 @@ some of the usual suspects.
 let (<<) f g = fun x -> f (g x) (* function composition *)
 let impossible = Impossible.impossible
 let impossf x  = Printf.kprintf Impossible.impossible x
+let unimpf  x  = Printf.kprintf Impossible.unimp x
 @ 
 The [[**>]] function is an infix, right-associative function that
 makes it easy to create sequences of flow-graph nodes.
 (I'm always amazed at how useful it is to have an infix,
 right-associative form of the identity function.)
 <<utilities>>=
-let ( **> ) f x = f ~succ:x
+let ( **> ) f x = f x
 @
 Some of these type definitions are called for in the interface; others
 are internal.
 The types in module [[K]] are used to translate continuations.
 <<ast2ir.ml>>=
 type tgt = ((Rtl.exp -> Automaton.t), C.t) Target.t
-type proc = (Automaton.t, Rtl.rtl G.cfg, C.t, tgt) Proc.t
+type proc = (Automaton.t, G.graph, C.t, tgt) Proc.t
 <<module [[K]], for continution info>>
 <<types for nonvolatile registers>>
 @ 
@@ -212,17 +213,20 @@ so we run the calling convention, again knowing that we may not need
 the results.
 We also compute the representation of the continuation in case it is
 cut to or it escapes.
-THE [[return_pcs]] FIELD BEGS EXPLANATION.
+The [[return_pcs]] field is needed because 
+potentially each calling convention puts the overflow parameters in a
+different place (or adjusts the stack differently), so therefore we
+need to return to a different lable for each calling convention.
 \nextchunklabel{ast2ir.K.t}%
 <<module [[K]], for continution info>>=
 module K = struct
   type label = string
   type convention = string
   type 'i t =
-    {         unwind_pc   : label       (* labels may or may not be used *)
+    {         unwind_pc   : G.uid       (* uids may or may not be used *)
     ;         unwind_sp   : Rtl.loc
-    ;         cut_pc      : label
-    ; mutable return_pcs  : (convention * label list) list
+    ;         cut_pc      : G.uid
+    ; mutable return_pcs  : (convention * G.uid list) list
     ;         escapes     : bool        (* properties of how it is used *)
     ;         cut_to      : bool
     ;         unwound_to  : bool
@@ -235,7 +239,7 @@ module K = struct
     ;         rep         : Contn.t     (* representation as C-- value (incl block) *)
     ;         base        : Block.t     (* base address; to be composed with rep *)
     ;         convention  : string
-    ; mutable succ        : 'i G.node   (* filled in by 2nd pass time *)
+    ; mutable succ        : G.uid option      (* filled in by 2nd pass time *)
     ; mutable spans       : (Bits.bits  * Bits.bits Reloc.Simple.relocatable) list
                             (* user-defined spans at the continuation *)
     }
@@ -251,9 +255,9 @@ let mk to_cc name den rep base g ~formals ~cut_in ~return_in ~unwind_sp =
   { escapes     = den.FE.escapes
   ; cut_to      = den.FE.cut_to
   ; unwound_to  = den.FE.unwound_to
-  ; unwind_pc   = Idgen.ContEntry.unwind name
+  ; unwind_pc   = G.uid ()  (* Idgen.ContEntry.unwind name *)
   ; unwind_sp   = unwind_sp
-  ; cut_pc      = Idgen.ContEntry.cut    name
+  ; cut_pc      = G.uid ()  (* Idgen.ContEntry.cut    name *)
   ; return_pcs  = <<set the return pcs>>
   ; rep         = rep
   ; base        = base
@@ -261,7 +265,7 @@ let mk to_cc name den rep base g ~formals ~cut_in ~return_in ~unwind_sp =
   ; formals     = formals
   ; cut_in      = cut_in
   ; return_in   = return_in
-  ; succ        = G.illegal g
+  ; succ        = None
   ; spans       = []
   }
 @ 
@@ -276,7 +280,7 @@ List.map (fun cc -> (ccname cc,[])) den.FE.returned_to
 let get_return_pc cc k =
   let labels = try List.assoc cc.C.name k.return_pcs
                with Not_found -> impossf "Unknown alt-return convention %s" cc.C.name in
-  let new_label = Idgen.ContEntry.return cc.C.name in
+  let new_label = G.uid() (*Idgen.ContEntry.return cc.C.name*) in
   let new_entry = (cc.C.name, new_label :: labels) in
   k.return_pcs <- new_entry :: (List.remove_assoc cc.C.name k.return_pcs);
   new_label
@@ -300,10 +304,12 @@ successor.
 We return an illegal node since nothing may fall through to a continuation.
 <<supporting functions for translating statements>>=
 let rec contStmt2 label succ =
+  let (uid, g) = G.make_target succ in
   let k = continuation label in
   k.K.spans <- props;
-  k.K.succ  <- succ;
-  G.illegal g (* should be not reached *) 
+  k.K.succ  <- Some uid;
+  unimpf "illegal flow"; (*G.illegal g*) (* should be not reached *) 
+  G.entry g
 @ 
 As continuations appear in flow annotations, we set the [[cut_to]],
 [[unwound_to]], and [[returned_to]] fields as needed.
@@ -319,17 +325,14 @@ let continuations cc ast =
   let (--)    = RS.diff in
   let as_cut_to k =
     let defs  = k.K.cut_in.C.regs in
-    { G.defs  = defs; G.kills = allregs -- defs;
-      G.node  = G.non_local_join_labeled g k.K.cut_pc } in
+    { G.defs  = defs; G.kills = allregs -- defs; G.node  = k.K.cut_pc } in
   let as_unwinds k =
-    { G.defs  = RS.empty; G.kills = volregs;
-      G.node  = G.non_local_join_labeled g k.K.unwind_pc } in
+    { G.defs  = RS.empty; G.kills = volregs; G.node  = k.K.unwind_pc } in
     (* defs are variables and so can't be a register set.  NEED ANOTHER MECHANISM *)
   let as_returns k =
     let pc = K.get_return_pc cc k in
     let defs  = k.K.return_in.C.regs in
-    { G.defs  = defs; G.kills = volregs -- defs;
-      G.node  = G.node_labeled g pc   } in
+    { G.defs  = defs; G.kills = volregs -- defs; G.node  = pc   } in
   let contmap f = List.map (f << continuation) in
   { S.cuts     = contmap as_cut_to  ast.S.cuts;
     S.unwinds  = contmap as_unwinds ast.S.unwinds;
@@ -361,6 +364,7 @@ inserts code to do the initialization.
 We also attach spans to each continuation that escapes.
 <<definition of [[insert_init_cont_nodes]]>>=
 let insert_init_cont_nodes contmap init_node =
+  unimpf "insert" (*
   let one_node cname k succ = 
     if k.K.escapes then
       let pc    = exp_of_code_label k.K.cut_pc in
@@ -377,6 +381,7 @@ let insert_init_cont_nodes contmap init_node =
   let next = G.succ init_node in
   G.set_succ g init_node (G.illegal g);  (* avoid extra join before next *)
   G.set_succ g init_node (Strutil.Map.fold one_node contmap next)
+*)
 @ 
 When we finish compiling a continuation, we make sure any label that
 is used leads to sensible code.
@@ -404,28 +409,31 @@ representation on the stack, so we need only shuffle and manage the
 stack pointer.
 <<functions that translate statements, including [[stmts]]>>=
 and generate_cut_to_entry k =
+unimpf "cut to" (*
   let in' = k.K.cut_in in
   G.set_succ g (G.non_local_join_labeled g k.K.cut_pc) (
   G.assertion    g (in'.C.insp (Contn.rep k.K.rep))     **>
   G.stack_adjust g in'.C.pre_sp   **>
   G.instruction  g in'.C.shuffle  **>
   G.stack_adjust g in'.C.post_sp  **>
-  k.K.succ)
+  k.K.succ) *)
 @ 
 If we return to a continuation, we must remember the overflow block.
 <<functions that translate statements, including [[stmts]]>>=
 and generate_return_to_entries k = 
+  unimpf "return to" (*
   let gen ccname label =
     let cc  = Call.get_cc target ccname in
     let in' = k.K.return_in in
     let ()  = add youngblocks cc.C.overflow_alloc.C.result_allocator in'.C.overflow in
-    G.set_succ g (G.node_labeled g label) (
+    G.set_succ g (uid_of label) (
     G.assertion    g (in'.C.insp in'.C.overflow)    **>
     G.stack_adjust g in'.C.pre_sp    **>
     G.instruction  g in'.C.shuffle   **>
     G.stack_adjust g in'.C.post_sp   **>
     k.K.succ) in
   List.iter (fun (ccname, labels) -> List.iter (gen ccname) labels) k.K.return_pcs
+*)
 @ 
 When we unwind, the argument variables are set by the run-time system's unwinding code.
 To ensure that each argument has been placed somewhere (and is live into the
@@ -436,6 +444,7 @@ THIS ALL LOOKS EXTREMELY BOGUS TO ME.  SHOULDN'T THIS BE DEALT WITH BY
 A LIVENESS EDGE OUT OF THE CALL NODE?
 <<functions that translate statements, including [[stmts]]>>=
 and generate_unwind_to_entry k = 
+unimpf "unwind to" (*
   let bogus_space = ('z', Rtl.Identity, Cell.of_size 1) in
   let use_var (h,v,a) succ =
     let w = RU.Width.loc v.FE.loc in
@@ -445,6 +454,7 @@ and generate_unwind_to_entry k =
   G.set_succ g (G.non_local_join_labeled g k.K.unwind_pc)
   (G.assertion g (proc_cc.C.sp_on_unwind proc_cc.C.stable_sp_loc) **>
    (List.fold_right use_var k.K.formals k.K.succ))
+*)
 @
 
 % ------------------------------------------------------------------ 
@@ -478,24 +488,27 @@ and stmt  props s  succ =
   <<supporting functions for translating statements>> in
   match s with
   | S.If (e, so, not) ->
-      G.cbranch g e ~ifso:(stmts props so succ) ~ifnot:(stmts props not succ)
-  | S.Label n              -> let l = G.node_labeled g n in (G.set_succ g l succ; l)
+      let endif, g = G.make_target succ in
+      let so,    g = G.make_target (stmts props so  (G.focus endif g)) in
+      let not,   g = G.make_target (stmts props not (G.focus endif g)) in
+      G.cbranch target e ~ifso:so ~ifnot:not g
+  | S.Label n              -> G.label target (uid_of n) n succ 
   | S.Switch (rg, e, arms) -> switchStmt rg e arms props succ
   | S.Cont (name, _, _)    -> contStmt2 name succ
   | S.Span (kv, bs)        -> stmts (kv :: props) bs succ
-  | S.Assign rtl           -> G.instruction g rtl succ
+  | S.Assign rtl           -> G.instruction rtl succ
   | S.Call (lhs, cc, e, args, targets, conts, alias) ->
       call lhs cc e args targets conts alias succ
   | S.Goto (e, labels) ->
       (match Dn.exp e with
       | RP.Const (RP.Link (sym, _, w)) ->
-             G.branch g ~target:(G.node_labeled g (sym#original_text))
+             branch ~target:(uid_of sym#original_text) (G.unfocus succ)
       | _ -> let instr   = target.T.goto.T.embed e in
-             let targets = List.map (G.node_labeled g) labels in
-             G.mbranch g instr targets)
-  | S.Jump (cc, e, args, targets) -> jump cc e args targets
-  | S.Cut (cc, k, args, conts)    -> cut cc k args conts
-  | S.Return (cc, i, n, args)     -> return cc i n args
+             let targets = List.map uid_of labels in
+             G.mbranch instr targets (G.unfocus succ))
+  | S.Jump (cc, e, args, targets) -> jump cc e args targets (G.unfocus succ)
+  | S.Cut (cc, k, args, conts)    -> cut cc k args conts (G.unfocus succ)
+  | S.Return (cc, i, n, args)     -> return cc i n args (G.unfocus succ)
 @
 \paragraph{[[switch]] statements}
 
@@ -512,14 +525,16 @@ and switchStmt range e arms props stmt_succ =
       RO.eq w e (Rtl.bits lo w)
     else
       RO.conjoin (RO.leu w (Rtl.bits lo w) e) (RO.leu w e (Rtl.bits hi w)) in
-  let do_arm (ranges, body) succ =
+  let endswitch, g = G.make_target stmt_succ in
+  let do_arm (ranges, body) (next_test, g) =
     let condition =
       Simplify.exp (
         List.fold_left (fun cond range -> RO.disjoin (e_in_interval range) cond)
                        (Rtl.bool false) ranges) in
-    G.cbranch g condition ~ifso:(stmts props body stmt_succ)
-                          ~ifnot:(G.branch g ~target:succ)
-  in List.fold_right do_arm arms stmt_succ
+    let arm, g = G.make_target (stmts props body (branch endswitch g)) in
+    G.make_target (G.cbranch target condition ~ifso:arm ~ifnot:next_test g) in
+  let (first_test, g) = List.fold_right do_arm arms (endswitch, g) in
+  G.focus first_test g
 @
 \subsubsection{Statements that go between procedures}
 
@@ -529,7 +544,7 @@ The outgoing overflow parameters passed by a tail call go into the
 N.B.~We don't use the [[targets]] list, which is there for future
 interprocedural optimization and call-graph analysis.
 <<supporting functions for translating statements>>=
-and jump cconv e args targets(*unused*) = 
+and jump cconv e args targets g = 
     let cc      = Call.get_cc target cconv in
     let out     = actuals cc.C.call_parms.C.out args in
     let ra_out  = cc.C.ra_on_exit saved_ra out.C.overflow temps in
@@ -537,16 +552,17 @@ and jump cconv e args targets(*unused*) =
     let jump_sp = cc.C.sp_on_jump out.C.overflow temps in
     let () =
       add oldblocks cc.C.overflow_alloc.C.parameter_deallocator out.C.overflow in
-    G.stack_adjust g out.C.pre_sp                                  **>
-    G.instruction  g out.C.shuffle                                 **>
-    G.instruction  g restore_nvrs                                  **>
-    G.instruction  g (RU.store ra_out (RU.fetch saved_ra))         **>
-    G.stack_adjust g jump_sp                                       **>
-    G.jump         g jumpi ~targets ~uses:(RS.union out.C.regs nvregs)
+    G.stack_adjust out.C.pre_sp                                  **>
+    G.instruction  out.C.shuffle                                 **>
+    G.instruction  restore_nvrs                                  **>
+    G.instruction  (RU.store ra_out (RU.fetch saved_ra))         **>
+    G.stack_adjust jump_sp                                       **>
+    G.jump         jumpi ~targets ~uses:(RS.union out.C.regs nvregs) **>
+    g
 @
 \paragraph{Calls}
 <<supporting functions for translating statements>>=
-and call lhs cconv e args targets(*unused*) conts alias succ = 
+and call lhs cconv e args _targets conts alias succ = 
   let cc    = Call.get_cc target cconv in
   let out   = actuals cc.C.call_parms.C.out args in
   let in'   = results cc.C.results.C.in' lhs     in
@@ -567,22 +583,23 @@ and call lhs cconv e args targets(*unused*) conts alias succ =
     | C.Caller -> to_mloc (young_end cc out.C.overflow)
     | C.Callee -> to_mloc (old_end   cc out.C.overflow) in
   let spans = SP.to_spans ~inalloc ~outalloc ~ra:saved_ra
-                          ~users:props ~csregs:nvr_temps ~conts:unwind_conts
+                          ~users:props ~csregs:nvr_temps
+                          ~conts:(List.map label unwind_conts)
                           ~sds:sd_locs ~vars:(var_array ()) in
-  G.stack_adjust g out.C.pre_sp                                        **>
-  G.instruction  g out.C.shuffle                                       **>
-  G.stack_adjust g out.C.post_sp                                       **>
-  G.call g calli ~uses:out.C.regs ~defs:in'.C.regs ~kills:cc.C.volregs
-                 ~altrets:conts.S.areturns ~unwinds_to:conts.S.unwinds
-                 ~cuts_to:conts.S.cuts ~aborts:conts.S.aborts
-                 ~reads:alias.S.reads ~writes:alias.S.writes ~spans:(Some spans) **>
+  G.stack_adjust out.C.pre_sp                                        **>
+  G.instruction  out.C.shuffle                                       **>
+  G.stack_adjust out.C.post_sp                                       **>
+  G.call calli ~uses:out.C.regs ~defs:in'.C.regs ~kills:cc.C.volregs
+               ~altrets:conts.S.areturns ~unwinds_to:conts.S.unwinds
+               ~cuts_to:conts.S.cuts ~aborts:conts.S.aborts
+               ~reads:alias.S.reads ~writes:alias.S.writes ~spans:(Some spans) **>
   (if conts.S.returns then
-    G.assertion    g (in'.C.insp in'.C.overflow)                       **>
-    G.stack_adjust g in'.C.pre_sp              (* DOUBTS ABOUT THIS *) **>
-    G.instruction  g in'.C.shuffle                                     **>
-    G.stack_adjust g in'.C.post_sp ~succ
+    G.assertion    (in'.C.insp in'.C.overflow)                       **>
+    G.stack_adjust in'.C.pre_sp              (* DOUBTS ABOUT THIS *) **>
+    G.instruction  in'.C.shuffle                                     **>
+    G.stack_adjust in'.C.post_sp succ
    else
-    G.exit g)
+    G.exit 0 (G.unfocus succ))
 @
 \paragraph{Returns}
 In the presence of tail calls, [[f]] might call [[g]] with
@@ -592,7 +609,7 @@ to return to~[[f]] with convention~$A$.
 Therefore, it is not only sensible but necessary to annotate the
 [[return]] with its own convention.
 <<supporting functions for translating statements>>=
-and return cconv i n args = 
+and return cconv i n args g = 
   let cc  = Call.get_cc target cconv in
   let out = actuals cc.C.results.C.out args  in
   <<verbosely announce the registers used by the return>>
@@ -604,13 +621,14 @@ and return cconv i n args =
   let reti   = cc.C.return i n (RU.fetch ra_out) in
   add oldblocks cc.C.overflow_alloc.C.result_allocator out.C.overflow;
                       (* outgoing jump overflow = incoming *)
-  G.instruction  g upd_ra                  **>
-  G.stack_adjust g out.C.pre_sp            **>
-  G.instruction  g out.C.shuffle           **>
-  G.instruction  g (RU.store ra_out (RU.fetch saved_ra))  **>
-  G.instruction  g restore_nvrs            **>
-  G.stack_adjust g out.C.post_sp           **>
-  G.return       g reti ~uses:(RS.union out.C.regs nvregs)
+  G.instruction  upd_ra                  **>
+  G.stack_adjust out.C.pre_sp            **>
+  G.instruction  out.C.shuffle           **>
+  G.instruction  (RU.store ra_out (RU.fetch saved_ra))  **>
+  G.instruction  restore_nvrs            **>
+  G.stack_adjust out.C.post_sp           **>
+  G.return       ~exit:i reti ~uses:(RS.union out.C.regs nvregs) **>
+  g
 @ The code above is safe only so long as the outgoing area doesn't
 overlap with the spill area.
 This restriction is unfortunate, as if we could atomically shuffle
@@ -632,14 +650,15 @@ The overflow block is part of the representation of the continuation
 and is placed in the stack elsewhere, but we need to remember any
 constraints associated with this block.
 <<supporting functions for translating statements>>=
-and cut cc k args conts = 
+and cut cc k args conts g = 
   let cc    = Call.get_cc target cc in
   let out   = actuals (cc.C.cut_parms.C.out k) args in
   let cuti  = Contn.cutto target cc.C.cutto.Target.embed ~contn:k in
   let ()    = add_constraints (Block.constraints out.C.overflow) in
   let conts = ccontinuations cc conts in
-  G.instruction g out.C.shuffle **>
-  G.cut_to      g cuti ~cuts_to:conts.S.ccuts ~aborts:conts.S.caborts ~uses:out.C.regs
+  G.instruction out.C.shuffle **>
+  G.cut_to      cuti ~cuts_to:conts.S.ccuts ~aborts:conts.S.caborts ~uses:out.C.regs **>
+  g
 @ A couple of notes:
 The constraints from [[out.C.overflow]] have to get to the solver in
 order to resolve the addresses used in [[out.C.shuffle]].
@@ -666,6 +685,10 @@ here anyway.
 let proc global_map proc =
   let proc_cc  = Call.get_cc target proc.N.cc in
   let vfp      = target.T.vfp in (* virtual frame pointer *)
+  let label    = G.label target in
+  let branch   = G.branch target in
+  let uid_of : string -> G.uid = fun _ -> unimpf "unique id for label" in
+  let label : G.uid * 'a * 'b -> string * 'a * 'b = (fun _ -> unimpf "labels") in
   let temps    = Talloc.Multiple.for_spaces target.T.spaces in
 @ 
 \paragraph{Setting up the control-flow graph}
@@ -675,26 +698,7 @@ should be simple enough to drop it (reducing the cognitive load on the
 reader). 
 <<definition of [[proc]], which translates one procedure>>=
   let exp_of_code_label l = R.codesym ((F.asm env)#local l) pointersize in
-  let g =
-    let exp_to_label e = match Dn.exp e with
-    | RP.Const(RP.Link (l, _, _))
-    | RP.Const(RP.Diff (RP.Link (l, _, _), _)) -> l#original_text
-    | _ -> impossible "bad label projection" in
-    let guarded_exp_of_code_label (g,l) =
-      (g, (R.codesym ((F.asm env)#local l) pointersize)) in
-    let guarded_exp_to_label (e1,e2) = match (e1, Dn.exp e2) with
-    | (g, RP.Const(RP.Link (l, _, _)))
-    | (g, RP.Const(RP.Diff (RP.Link (l, _, _), _))) -> (g, l#original_text)
-    | _                           -> impossible "bad label projection" in
-    let info = { G.goto = { T.embed = target.T.goto.T.embed << exp_of_code_label
-                          ; T.project = exp_to_label << target.T.goto.T.project }
-               ; G.branch = { T.embed = target.T.branch.T.embed
-                                 << guarded_exp_of_code_label
-                            ; T.project = guarded_exp_to_label
-                                 << target.T.branch.T.project }
-               ; G.bnegate = target.T.bnegate
-               } in
-    G.mk info Idgen.label in (* empty control-flow graph *)
+  let g = G.empty in
 @ 
 \paragraph{Managing mutable state: blocks, constraints, and call site information}
 The important state here is [[youngblocks]], [[oldblocks]], and
@@ -842,18 +846,18 @@ WE OUGHT TO BE ABLE TO DO WITHOUT ONE OF THESE LABEL NODES.
   let contlbl = Idgen.label "initialize continuations" in
   let () = add oldblocks proc_cc.C.overflow_alloc.C.parameter_deallocator
                          proc_in'.C.overflow in
-  let labelnode lbl ~succ =
-    let node = G.node_labeled g lbl in (G.set_succ g node succ; node) in
-  let () = 
-    G.set_succ g (G.entry g) (
-    G.stack_adjust g proc_in'.C.pre_sp    **>
-    G.instruction  g proc_in'.C.shuffle   **>
-    G.stack_adjust g proc_in'.C.post_sp   **>
-    G.instruction  g save_ra              **>
-    G.instruction  g save_nvrs            **>
-    labelnode contlbl                     **>
-    labelnode bodylbl                     **>
-    stmts proc.N.spans proc.N.code (G.exit g)) in 
+  let labelnode lbl succ = G.label target (uid_of lbl) lbl succ in
+  let prolog = 
+    G.unfocus                           **>
+    G.stack_adjust proc_in'.C.pre_sp    **>
+    G.instruction  proc_in'.C.shuffle   **>
+    G.stack_adjust proc_in'.C.post_sp   **>
+    G.instruction  save_ra              **>
+    G.instruction  save_nvrs            **>
+    labelnode contlbl                   **>
+    labelnode bodylbl                   **>
+    stmts proc.N.spans proc.N.code (G.entry g) in 
+  let g = G.unfocus (G.splice_after (G.entry g) prolog) in
 @ And as promised, the third pass.
 We initialize continuations, finish compiling them, and accumulate
 their blocks into [[contblocks]].
@@ -861,7 +865,7 @@ CAN'T WE HAVE JUST ONE INSERTION POINT?
 AND WOULDN'T IT BE NICER JUST TO CONCATENATE BLOCKS DIRECTLY RATHER
 THAN MAKE A LIST AND THEN CONCATENATE?
 <<definition of [[proc]], which translates one procedure>>=
-  let () = insert_init_cont_nodes contenv (G.node_labeled g contlbl) in
+  let () = insert_init_cont_nodes contenv (uid_of contlbl) in
   let contblocks =
     let addblock name k blocks =
       finish_compiling_continuation k;
@@ -908,7 +912,8 @@ The main thing here is dealing with all the blocks.
 Before running the optimizer, we trim away any unreachable code,
 as well as spans associated with unreachable code.
 <<definition of [[proc]], which translates one procedure>>=
-  let _ = Optimize.trim_unreachable_code () i in
+  let fixup = (fun _ -> unimpf "transformations on new graph") in
+  let _ = fixup Optimize.trim_unreachable_code () i in
   optimizer i (* runs optimizer, freezes, and assembles proc *)
 @ 
 We define an automaton to allocate suitably aligned locations. 

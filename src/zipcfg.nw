@@ -47,7 +47,8 @@ type zgraph
 
 val empty   : graph
 val entry   : graph -> zgraph           (* focus on entry node *)
-val focus   : graph -> uid -> zgraph    (* focus on node with uid *)
+val exit    : int -> graph -> zgraph    (* focus on exit node *)
+val focus   : uid -> graph -> zgraph    (* focus on node with uid *)
 val unfocus : zgraph -> graph           (* lose focus *)
 @ 
 Subgraph replacement:
@@ -60,14 +61,32 @@ graph's entry node.
 <<zipcfg.mli>>=
 val replace_focus : zgraph -> graph -> zgraph
 @ 
+We can insert a single-entry, single-exit subgraph either before or
+after the current focus.
+If before, the focus must be on a [[middle]] or [[last]] node.
+If after, the focus must be on a [[first]] or [[middle]] node.
+The focus does not move.
+<<zipcfg.mli>>=
+val splice_before : zgraph -> graph -> zgraph
+val splice_after  : zgraph -> graph -> zgraph
+@ 
 Stitch two graphs together:
 <<zipcfg.mli>>=
 val followed_by : graph -> int -> graph -> graph
   (* followed_by g n g' = connect Exit n of g to entry of g' *)
 @ 
+Sometimes we need to create a branch target in the middle of a graph.
+Calling [[make_target gz]] returns a new graph and a unique identifier
+that flows into the focus.
+<<zipcfg.mli>>=
+val make_target : zgraph -> uid * graph
+@ 
 Building a graph.
-In each of these cases, the focus of the [[zgraph]] must be on the
-entry node; otherwise it is a checked run-time error.
+When we add a node that can flow through to its successor, we insert
+the node before the focus.
+But when we add a node that cannot flow to its successor, we add it to
+an unfocused graph.
+In either case,  the new node becomes the new focus.
 <<zipcfg.mli>>=
 type regs  = Register.Set.t  (* sets of regs for dataflow *)
 type xregs = Register.SetX.t (* sets of regs for dataflow *)
@@ -77,22 +96,24 @@ type contedge = { kills:regs; defs:regs; node:uid }
 val uid : unit -> uid
 val address : uid -> Rtl.exp
 
-val label        : ('a, 'b) Target.t -> uid -> string -> zgraph -> zgraph  (* spans? *)
+type machine = ((Rtl.exp -> Automaton.t), Call.t) Target.t
+
+val label        : machine -> uid -> string -> zgraph -> zgraph  (* spans? *)
 val instruction  : Rtl.rtl -> zgraph -> zgraph
 val stack_adjust : Rtl.rtl -> zgraph -> zgraph
 val assertion    : Rtl.rtl -> zgraph -> zgraph
-val branch       : ('a, 'b) Target.t -> target:uid -> zgraph -> zgraph
-val jump         : Rtl.rtl -> uses:regs -> targets:string list -> zgraph -> zgraph
-val cbranch      : Rtl.rtl -> ifso:uid -> ifnot:uid -> zgraph -> zgraph
-val mbranch      : Rtl.rtl -> targets:uid list -> zgraph -> zgraph
+val branch       : machine -> target:uid -> graph -> zgraph
+val jump         : Rtl.rtl -> uses:regs -> targets:string list -> graph -> zgraph
+val cbranch      : machine -> Rtl.exp -> ifso:uid -> ifnot:uid -> graph -> zgraph
+val mbranch      : Rtl.rtl -> targets:uid list -> graph -> zgraph
 val call         : Rtl.rtl -> altrets:contedge list -> 
                      unwinds_to:contedge list -> cuts_to:contedge list ->
                      aborts:bool -> uses:regs -> defs:regs -> kills:regs ->
                      reads:string list option -> writes:string list option ->
                      spans:Spans.t option -> zgraph -> zgraph
 val cut_to       : Rtl.rtl -> cuts_to:contedge list -> aborts:bool ->
-                     uses:regs -> zgraph -> zgraph
-val return       : Rtl.rtl -> exit:int -> uses:regs -> zgraph -> zgraph
+                     uses:regs -> graph -> zgraph
+val return       : Rtl.rtl -> exit:int -> uses:regs -> graph -> zgraph
 @ 
 <<zipcfg.ml>>=
 module R = Rtl
