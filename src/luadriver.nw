@@ -487,8 +487,9 @@ Options.argv     = {}       -- argv[1], .. , argv[argc]
 Options.tempdir  = getenv("TMP") or getenv("TEMP") or "/tmp"
 @
 
-The command line driver calls an external assembler [[as]] and linker
-[[ld]]. They have their own tables.
+The command line driver calls an external assembler [[as]], linker
+[[ld]] and interpreter for linking interpreter files. They have their
+own tables.
 
 <<Lua Boot Script>>=
 As = As and error ('As not empty') or {}
@@ -496,9 +497,13 @@ As = As and error ('As not empty') or {}
 As.path    = "as"           -- binary 
 As.options = ""             -- options passed to binary
 
-Ld = Ld and errir ('Ld not empty') or {}
+Ld = Ld and error ('Ld not empty') or {}
 Ld.path     = "ld"          -- binary
 Ld.options  = ""            -- options
+
+Interp = Interp and error('Interp not empty') or {}
+Interp.path     = "qc--interp"
+Interp.options  = ""
 @
 
 All logic for the command line is encapsulated in the [[CMD]] module.
@@ -823,7 +828,8 @@ function CMD.link(objs,out)
                      , exe
                      )
     else
-        cmd = format ("calling qc--interp to link files into %s:"
+        cmd = format ("%s -o %s"
+                     , Interp.path      -- Interp.options ignored
                      , exe
                      )
     end    
