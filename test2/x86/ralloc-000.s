@@ -29,7 +29,7 @@ initialize_continuations_l3:
 	movl 32(%esp),%edx
 	cmpl %ecx,%edx
 	jge join_l5
-join_l12:
+join_l13:
 	jmp join_l6
 join_l5:
 	movl $3,%ecx

@@ -73,7 +73,7 @@ sp2:
 	leal 40(%esp), %ecx
 	movl (%ecx),%ecx
 	movl %ecx,32(%esp)
-initialize_continuations_l16:
+initialize_continuations_l17:
 	nop
 	movl $1,%ecx
 	movl %ecx,12(%esp)
@@ -131,12 +131,12 @@ sp2_help:
 	leal 64(%esp), %eax
 	movl (%eax),%eax
 	movl %eax,56(%esp)
-initialize_continuations_l26:
+initialize_continuations_l28:
 	movl $1,%eax
 	movl 4(%esp),%ecx
 	cmpl %eax,%ecx
-	je join_l29
-join_l30:
+	je join_l31
+join_l32:
 	nop
 	movl $1,%ecx
 	movl 4(%esp),%eax
@@ -188,7 +188,7 @@ join_l30:
 	movl %edx,(%ecx)
 	leal 64(%esp), %esp
 	jmp sp2_help
-join_l29:
+join_l31:
 	nop
 	movl (%esp),%eax
 	movl $12,%ecx
@@ -221,7 +221,7 @@ sp3:
 	leal 44(%esp), %ecx
 	movl (%ecx),%ecx
 	movl %ecx,40(%esp)
-initialize_continuations_l38:
+initialize_continuations_l41:
 	movl $1,%ecx
 	movl %ecx,28(%esp)
 	movl $1,%ecx
@@ -234,8 +234,8 @@ loop:
 	movl %ecx,24(%esp)
 	movl 24(%esp),%ecx
 	cmpl %ecx,%eax
-	je join_l40
-join_l41:
+	je join_l43
+join_l44:
 	movl 28(%esp),%ecx
 	addl %eax,%ecx
 	movl %ecx,28(%esp)
@@ -251,7 +251,7 @@ join_l41:
 	movl 20(%esp),%ecx
 	subl %ecx,%eax
 	jmp loop
-join_l40:
+join_l43:
 	nop
 	movl 28(%esp),%eax
 	movl $4,%ecx

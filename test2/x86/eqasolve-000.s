@@ -141,10 +141,10 @@ join_l69:
 	movl (%eax),%eax
 	leal _true,%ecx
 	movl (%ecx),%ecx
-	movl (%ecx),%ecx
 	movl $-212,%edx
 	leal 216(%esp), %ebx
 	addl %edx,%ebx
+	movl (%ecx),%ecx
 	movl %ecx,(%ebx)
 	movl $72,%ecx
 	movl $-216,%edx
@@ -225,7 +225,7 @@ _i_33:
 	movl 12(%esp),%eax
 	cmpl %eax,%ebx
 	jl join_l42
-join_l96:
+join_l97:
 	jmp _i_27
 join_l42:
 	jmp _i_30
@@ -385,10 +385,10 @@ _i_40:
 	movl $-184,%edx
 	leal 216(%esp), %ecx
 	addl %edx,%ecx
-	movl (%ecx),%ecx
 	movl $-216,%edx
 	leal 216(%esp), %ebx
 	addl %edx,%ebx
+	movl (%ecx),%ecx
 	movl %ecx,(%ebx)
 	movl $0,%ecx
 	movl $-212,%edx
@@ -493,7 +493,7 @@ _stdprint:
 	leal 20(%esp), %eax
 	movl (%eax),%eax
 	movl %eax,(%esp)
-initialize_continuations_l99:
+initialize_continuations_l100:
 	leal -8(%esp), %esp
 	movl $8,%ecx
 	leal _s_stdout,%eax
@@ -523,7 +523,7 @@ initialize_continuations_l99:
 	leal _xlprint,%ecx
 	movl (%ecx),%ecx
 	call %ecx
-join_l106:
+join_l107:
 	nop
 	nop
 	nop
@@ -538,7 +538,7 @@ join_l106:
 	leal _xlterpri,%ecx
 	movl (%ecx),%ecx
 	call %ecx
-join_l103:
+join_l104:
 	nop
 	nop
 	nop
@@ -560,7 +560,7 @@ _stdputstr:
 	movl (%eax),%eax
 	movl %eax,4(%esp)
 	movl %ebx,(%esp)
-initialize_continuations_l112:
+initialize_continuations_l114:
 	leal -4(%esp), %esp
 	movl $8,%edx
 	leal _s_stdout,%eax
@@ -576,7 +576,7 @@ initialize_continuations_l112:
 	leal _xlputstr,%ecx
 	movl (%ecx),%ecx
 	call %ecx
-join_l116:
+join_l118:
 	nop
 	nop
 	nop
