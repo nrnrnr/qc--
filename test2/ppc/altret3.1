@@ -1,0 +1,58 @@
+target byteorder little;
+
+import printf, "read" as sysread, "open" as sysopen, close, errno, write, perror;
+export main;
+
+read(bits32 fd, bits32 buf, bits32 size) {
+  bits32 rc;
+  rc = foreign "C" sysread(fd, buf, size);
+  if rc `gt` 0 {
+    return <2/2> (rc);
+  } else { if rc == 0 {
+    return <0/2>;
+  } else {
+    return <1/2> (bits32[errno]);
+  } }
+}
+
+open(bits32 path, bits32 flags) {
+  bits32 rc;
+  rc = foreign "C" sysopen(path, flags);
+  if rc `ge` 0 {
+    return <1/1> (rc);
+  } else {
+    return <0/1> (bits32[errno]);
+  }
+}
+
+
+foreign "C" main(bits32 argc, "address" bits32 argv) {
+  bits32 i;
+  i = 0;
+ L:
+  i = i + 1;
+  if (i == argc) { foreign "C" return (0); }
+  bits32 fd;
+  fd = open(bits32[argv+4*i], 0) also returns to error;
+ loop:
+  stackdata { buf: bits8[BUF]; }
+  const BUF=50;
+  n = read(fd, buf, BUF) also returns to eof, error;
+  bits32 n;
+  foreign "C" write(1, "address" buf, n);
+  goto loop;
+
+  continuation eof(): goto L;
+ 
+  continuation error(n):
+  foreign "C" printf("address" errcode, n);
+  foreign "C" perror(aread);
+  goto L;
+}
+
+section "data" {
+  errcode: bits8[] "Error code is %d\n\0";
+  aread: bits8[] "altread\0";
+}
+Error code is 2
+Error code is 21
