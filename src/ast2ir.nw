@@ -768,6 +768,15 @@ and cutStmt (e, args, conts) =
   let conts = continuations cc conts true in
   G.instruction g out.C.shuffle **>
   G.cut_to      g cuti ~cuts_to:conts.cuts ~aborts: conts.aborts ~uses:out.C.regs
+@ A couple of notes:
+The constraints from [[out.C.overflow]] have to get to the solver in
+order to resolve the addresses used in [[out.C.shuffle]].
+Because the overflow block [[out.C.overflow]] is not part of the stack
+frame, these constraints could go to the solver independently (and
+right away).
+But because the names used in each block are unique, it's just as
+safe, and perhaps easier, to send these constraints to the solver
+along with all the other constraints of this activation.
 @
 
 % ------------------------------------------------------------------ 
