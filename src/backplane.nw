@@ -1,0 +1,690 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+% ------------------------------------------------------------------
+\section{Backplane}
+% ------------------------------------------------------------------
+
+% ------------------------------------------------------------------
+\subsection{Overview}
+% ------------------------------------------------------------------
+
+The backplane allows the user to customize the backend of the compiler. The
+building blocks of the backplane are the stages between which the user can
+define a control flow. Stages represent compiler components, such as the
+optimizer or the register allocator. The backplane can also be used with a
+finer level of granularity of compiler components, such as individual
+optimization stages.
+
+Each stage is a record containing information about the semantic properties
+of the stage, as well as a function that carries out the action of the
+stage. The semantic properties indicate program state that is expected at
+the start of the stage, as well as state that is created and destroyed by
+the stage. If it is possible to reach a stage without satisfying the expected
+properties of the stage, then the control flow is invalid. Validity of the
+control flow is verified in a static checking phase.
+
+
+<<backplane.mli>>=
+module SS : Set.S with type elt = string
+type inputs = SS.t
+type outputs = SS.t
+type cfg = Cfg3.cfg
+
+type 'a camlFunction = 'a -> cfg -> bool
+<<stage type>>
+<<action type>>
+<<backplane types>>
+
+val list2SSet : string list -> SS.t
+
+module T : Lua.Lib.USERTYPE with type 'a t = 'a t'
+module Make (T1 : Lua.Lib.TYPEVIEW with type 'a t = 'a t')
+            (T2 : Lua.Lib.TYPEVIEW with type 'a t = Cfg3.cfg with type 'a combined
+= 'a T1.combined)
+    : Lua.Lib.TYPEFUL with type 'a combined = 'a T1.combined
+@
+
+
+
+% ------------------------------------------------------------------
+\subsubsection{Stages and Control Flow}
+% ------------------------------------------------------------------
+
+A stage represents an individual step of the compiler. This step is
+performed by a function, which may expect a single input parameter. Each stage
+also expects a particular set of states to be valid when this stage begins;
+states may be created or destroyed during the execution of the function.
+
+<<stage type>>=
+type 'a stage = { name : string
+                ; fn : 'a camlFunction
+                ; paramExpected : string option
+                ; stateCreated : outputs
+                ; stateDestroyed : outputs
+                ; stateUsed : inputs
+                }
+@
+
+The [[action]]'s determines the control flow when a program is
+executed.
+
+<<action type>>=
+type 'a action = Seq       of 'a action list
+               | When_Do   of 'a action * 'a action
+               | Unless_Do of 'a action * 'a action
+               | Fix       of 'a action
+               | Share     of 'a * string * 'a action
+               | Ignore    of 'a action
+               | Single    of 'a stage
+@
+
+
+To clarify the meanings of the action types, we provide the operational
+semantics for the execution of an action. Each action is $a$ is executed from
+the starting configuration $\langle a, x, \rho \rangle$ and ends in the
+configuration $\langle v, \rho'\rangle$. $a$ represents an action which is
+executed in the environment $\rho$, with a local variable $x$. The action
+results in the Boolean value $v$, and the environment after execution is
+represented by $\rho'$. We use $T$ and $F$ to represent the Boolean
+constants true and false. 
+
+
+\noindent $Seq(a_1, a_2, ..., a_n)$ performs a list of actions in sequence:
+\[
+\frac{\langle a_1 , x , \rho_0\rangle \Downarrow \langle v_1 , \rho_1 \rangle
+      \ \ \ \ 
+      \langle a_2 , x , \rho_1\rangle \Downarrow \langle v_2 , \rho_2 \rangle
+      \ \ \ \ \dots \ \ \ \
+      \langle a_n , x , \rho_{n - 1}\rangle \Downarrow \langle v_n , \rho_n
+\rangle}
+     {\langle Seq(a_1 ; a_2; \dots; a_n) , x , \rho_0\rangle \Downarrow \langle v_1 \vee v_2 \vee \dots \vee v_n , \rho_n\rangle}
+\]
+
+\noindent The action $When\_Do(cond, body)$ evaluates the $body$ action only
+if the $cond$ action returns a true result:
+\[
+\frac{\langle cond , x , \rho \rangle \Downarrow \langle F , \rho' \rangle}
+     {\langle When\_Do(cond, body) , x , \rho \rangle \Downarrow \langle F ,
+\rho' \rangle}
+\]
+\[
+\frac{\langle cond , x , \rho \rangle \Downarrow \langle T , \rho' \rangle
+      \ \ \ \ \langle body , x , \rho' \rangle \Downarrow \langle v_2 , \rho'' \rangle}
+     {\langle When\_Do(cond, body) , x , \rho \rangle \Downarrow \langle v_2 , \rho'' \rangle}
+\]
+
+\noindent Conversely, $Unless\_Do(cond, body)$ evaluates the $body$ action only
+if the $cond$ action returns a false result:
+\[
+\frac{\langle cond , x , \rho \rangle \Downarrow \langle T , \rho' \rangle}
+     {\langle Unless\_Do(cond, body) , x , \rho \rangle \Downarrow \langle
+T , \rho' \rangle}
+\]
+\[
+\frac{\langle cond , x , \rho \rangle \Downarrow \langle F , \rho' \rangle
+      \ \ \ \ \langle body , x , \rho' \rangle \Downarrow \langle v_2 ,
+\rho'' \rangle}
+     {\langle Unless\_Do(cond, body) , x , \rho \rangle \Downarrow \langle
+r_2 , \rho'' \rangle}
+\]
+
+\noindent $Fix(a)$ evaluates an action until it returns a false result:
+\[
+\frac{\langle a , x , \rho \rangle \Downarrow \langle F , \rho' \rangle}
+     {\langle Fix(a) , x , \rho \rangle \Downarrow \langle F , \rho' \rangle}
+\]
+\[
+\frac{\langle a , x , \rho \rangle \Downarrow \langle T , \rho' \rangle
+      \ \ \ \ \langle Fix(a) , x , \rho' \rangle \Downarrow \langle v ,
+\rho'' \rangle}
+     {\langle Fix(a) , x \rangle \Downarrow \langle v , \rho'' \rangle}
+\]
+
+\noindent $Ignore(a)$ evaluates an action and returns false, regardless of the
+action's result:
+\[
+\frac{\langle a , x , \rho \rangle \Downarrow \langle v , \rho' \rangle}
+     {\langle Ignore(a) , x , \rho \rangle \Downarrow \langle F , \rho' \rangle}
+\]
+
+\noindent $Share(a, x')$ supplies a new input parameter $x'$ for the action $a$:
+\[
+\frac{\langle a , x' , \rho \rangle \Downarrow \langle v , \rho' \rangle}
+     {\langle Share(a, x'), x , \rho \rangle \Downarrow \langle v , \rho' \rangle}
+\]
+
+\noindent $Single(f)$ evaluates the function $f$ ($f$ executes a a single
+compiler stage):
+\[
+\frac{\langle f(x) , x , \rho \rangle \Downarrow \langle v , \rho' \rangle}
+     {\langle Single(f) , x , \rho \rangle \Downarrow \langle v, \rho' \rangle}
+\]
+
+
+Here's the code that implements the execution rules:
+
+<<runProgram>>=
+let rec runProgram arg cfg = function
+    | Seq actionList ->
+        let seqHelp truth (action) =
+            let result = runProgram arg cfg action in
+                truth || result in
+        List.fold_left seqHelp false actionList
+    | When_Do (whenExp, doExp) ->
+        let result = runProgram arg cfg whenExp in
+            if result then runProgram arg cfg doExp else result
+    | Unless_Do (unlessExp, doExp) ->
+        let result = runProgram arg cfg unlessExp in
+            if result then result else runProgram arg cfg doExp
+    | Fix action ->
+        let result = runProgram arg cfg action in
+            if result then runProgram arg cfg (Fix action) else result
+    | Ignore action ->
+        let _ = runProgram arg cfg action in false
+    | Single {fn = func} -> func arg cfg
+    | Share (param, _, action) -> runProgram param cfg action
+@
+
+
+
+<<error types>>=
+type 'a error = SError of string * string * string
+              | MissingInput of string
+              | MissingState of string
+              | MismatchedParams of string * string list * 'a action list
+@
+
+
+% ------------------------------------------------------------------
+\subsection{Semantic Analysis}
+% ------------------------------------------------------------------
+
+A semantic analysis phase is performed to ensure that the control flow is
+legal, based on the state information associated with each stage. An illegal
+control flow is one that may destroy a state property before it can reach a
+stage where the property is needed.
+
+In order to perform the semantic analysis, we walk the [[action]]'s in a
+depth-first, reverse post-order traversal. At each [[action]], we make any
+necessary recursive calls, then we return information about the state properties
+for the current [[action]]. The information we return consists of the sets of
+state properties that are either used, created, or destroyed in the current
+[[action]]. We also return a closure that will compute the set of state
+properties that must be live on entering the current [[action]] and the set
+of errors that have been found. This closure depends on the input pair of
+the errors that have already been found and the set of properties that must
+be live after the action is completed (we know this information because we
+are performing a reverse post-order traversal).
+
+The following rules determine the set of information determined from each type
+of [[action]].
+
+\noindent{Single $a$:}
+
+    $live(live') = (live' - creates_a) \cup use_a$
+
+    $errors(errors') = errors' \cup (live' \cap destroys_a)
+                               \cup (creates_a \cap destroys_a)$
+
+    $creates = creates_a$
+
+    $destroys = destroys_a$
+
+    $uses = uses_a$
+
+\noindent{When\_Do ($cond$, $body$):}
+
+    $live(live') = live_{cond}(live' \cup live_{body}(live'))$
+
+    $errors(errors') = errors_{cond}(errors_{body}(errors'))$
+
+    $creates = creates_{cond} - destroys_{body}$
+
+    $destroys = destroys_{cond} \cup destroys_{body}$
+
+    $uses = uses_{cond} \cup (uses_{body} - creates_{cond})$
+
+\noindent{Fix ($a$):}
+
+    $live(live') = (live' - {creates}_a) \cup {use}_a$
+
+    $errors(errors') = errors' \cup (live' \cap destroys_a)
+                               \cup (live \cap destroys_a)
+                               \cup (creates_a \cap destroys_a)$
+
+    $creates = creates_a$
+
+    $destroys = destroys_a$
+
+    $uses = uses_a$
+
+\noindent{Sequence ($a_1$;...;$a_n$):}
+
+    $live(live') = live_{a_1}(...(live_{a_{n-1}}(live_{a_n}(live'))))$
+
+    $errors(errors') =
+        errors_{a_1}(...(errors_{a_{n-1}}(errors_{a_n}(errors'))))$
+
+    $accum\_creates_{a_i} = accum\_creates_{a_{i+1}} \cup
+                            (creates_{a_i} - accum\_destroys_{a_{i+1}})$
+
+    $accum\_creates_{a_{n+1}} = \emptyset$
+
+    $creates = accum\_creates_{a_1}$
+
+    $accum\_destroys_{a_i} = accum\_destroys_{a_{i+1}} \cup
+                             (destroys_{a_i} - accum\_creates_{a_{i+1}})$
+
+    $accum\_destroys_{a_{n+1}} = \emptyset$
+
+    $destroys = accum\_destroys_{a_1}$
+
+    $accum\_uses_{a_i} = uses_{a_{i+1}} \cup
+                         (accum\_uses_{a_i} - creates_{a_{i+1}})$
+
+    $accum\_uses_{a_{n+1}} = \emptyset$
+
+    $uses = accum\_uses_{a_1}$
+
+The rules for Ignore and Share are the same as Single; the rules for Unless\_Do
+are the same as When\_Do.
+
+[[walk]] implements these rules, and [[stateCheck]] initializes and calls
+this traversal.
+
+<<state checking>>=
+type newerror = Arg  of string option * string option * V.value action
+              | Live of string * V.value action
+
+module ErrorMod = struct
+    type t = newerror
+    let compare = compare
+end
+module ES = Set.Make(ErrorMod)
+
+let ( /@@ ) = ES.union
+
+let ( ++ ) = SS.union
+let ( -- ) = SS.diff
+let ( ** ) = SS.inter
+
+let checkArg formal actual action = match formal, actual with
+    | None, _ -> ES.empty
+    | f, a when f != a -> ES.singleton (Arg (f, a, action))
+    | _ -> ES.empty
+
+
+(* walk : action -> string option -> create * destroy * use *
+                                     (live * errors -> live * errors) *)
+let rec walk arg a =
+    let ( /++ ) errSet sSet =
+        SS.fold (fun s eSet -> ES.add (Live (s, a)) eSet) sSet errSet in
+    match a with
+    | Seq aList ->
+        let seqWalk a (seqcreates, seqdestroys, sequses, seqanalyze) =
+            let (creates, destroys, uses, analyze) = walk arg a in
+            (seqcreates ++ (creates -- seqdestroys),
+             seqdestroys ++ (destroys -- seqcreates),
+             uses ++ (sequses -- creates),
+             fun (live', errors') ->
+                let (seqlive, seqerrors) = seqanalyze (live', errors') in
+                    analyze (seqlive, seqerrors))
+        in
+            List.fold_right seqWalk aList
+                            (SS.empty, SS.empty, SS.empty, fun a -> a)
+    | When_Do (cond, body) ->
+        let ccreates, cdestroys, cuses, canalyze = walk arg cond in
+        let bcreates, bdestroys, buses, banalyze = walk arg body in
+            (ccreates -- bdestroys,
+             cdestroys ++ bdestroys,
+             cuses ++ (buses -- ccreates),
+             fun (live', errors') ->
+                let (blive, berrors) = banalyze (live', errors') in
+                    canalyze (live' ++ blive, berrors))
+    | Unless_Do (cond, body) -> walk arg (When_Do (cond, body))
+    | Fix a ->
+        let creates, destroys, uses, analyze = walk arg a in
+            (creates, destroys, uses,
+             fun (live', errors') ->
+                let live = (live' -- creates) ++ uses in
+                    (live,
+                     errors' /++ (live' ** destroys)
+                             /++ (live ** destroys)
+                             /++ (creates ** destroys)))
+    | Ignore a -> walk arg a
+    | Single luaStage -> (match luaStage with
+        {name = fnName; stateUsed = uses; stateCreated = creates;
+                   stateDestroyed = destroys; paramExpected = formal} ->
+        (creates, destroys, uses,
+         fun (live', errors') ->
+            ((live' -- creates) ++ uses,
+             errors' /++ (live' ** destroys) /++ (creates ** destroys)
+                     /@@ (checkArg formal arg a))))
+    | Share (_, localArg, a) -> walk (Some localArg) a
+
+let stateCheck a =
+    let (_, _, _, check) = walk None a in
+        check (SS.empty, ES.empty)
+@
+
+
+% ------------------------------------------------------------------
+\subsubsection{Running}
+% ------------------------------------------------------------------
+
+To run a program of [[action]]'s, we first perform a semantic check, and barring
+errors, we run the program.
+
+<<run>>=
+exception MismatchedParameters of string
+
+let run main cfg input =
+    let _ = prerr_string "Running stateCheck()\n"; flush stderr in
+    let (liveIn, errors) = stateCheck main
+    in
+        if ES.is_empty errors
+        then
+            (prerr_string "No Errors. Running runProgram()\n"; flush stderr;
+             runProgram V.Nil cfg main)
+        else
+            (prerr_string "Errors in control flow.\n"; flush stderr; false)
+
+@
+
+The backplane introduces three new types. A [[StageFn]] is the function that
+actually executes the compiler step represented by a stage. [[Stage]]'s include
+the state property information that is associated with a [[StateFn]].
+[[Action]]'s, as before, are the types that indicate a control flow between
+these stages.
+
+<<backplane types>>=
+    type 'a t' = Action of 'a action
+               | Stage of 'a stage
+@
+
+Putting it all together:
+
+<<backplane.ml>>=
+module StringMod = struct
+    type t = string
+    let compare = compare
+end
+module SS = Set.Make(StringMod)
+
+let list2SSet lst = List.fold_right SS.add lst SS.empty
+
+type inputs = SS.t
+type outputs = SS.t
+
+type cfg = Cfg3.cfg
+type 'a camlFunction = 'a -> cfg -> bool
+
+<<stage type>>
+<<action type>>
+<<backplane types>>
+<<error types>>
+<<printing>>
+<<runProgram>>
+
+<<lua library modules>>
+@
+
+To construct a Lua interpreter, we need two modules: T and Make.
+
+<<lua library modules>>=
+module T : Lua.Lib.USERTYPE with type 'a t = 'a t' = struct
+    type 'a t = 'a t'
+    let tname = "Backplane"
+    let eq veq x y = match x, y with
+    | Action  x, Action  y -> x = y
+    | Stage  x, Stage  y -> x = y
+    | _, _ -> false
+    let to_string vs = function
+    | Action a -> printAction  (makeIndent 26) a
+    | Stage s -> "<stage>"
+end
+
+module Make (T1 : Lua.Lib.TYPEVIEW with type 'a t = 'a t')
+            (T2 : Lua.Lib.TYPEVIEW with type 'a t = Cfg3.cfg with type 'a combined
+= 'a T1.combined)
+    : Lua.Lib.TYPEFUL with type 'a combined = 'a T1.combined =
+  struct
+    type 'a combined = 'a T1.combined
+    module M (Interp : Lua.Lib.CORE with type 'a V.userdata' = 'a
+combined) =
+      struct
+        module V = Interp.V
+<<state checking>>
+        <<backplane builtins>>
+
+        type state = Interp.V.state
+        let init g =
+            List.iter (fun (k, v) -> V.Table.bind g.V.globals (V.String k)
+v) backplane_builtins
+     end
+  end
+@
+
+
+We provide embedding/projection pairs for each of the backplane types.
+
+<<backplane builtins>>=
+let {V.embed = embed; V.project = project} = T1.makemap V.userdata V.projection
+let action = { V.embed = (fun a -> embed (Action a))
+             ; V.project = (fun v -> match project v with
+                                     | Action a -> a
+                                     | _ -> raise (V.Projection (v, "action")))
+             }
+let cfg = T2.makemap V.userdata V.projection
+let ( **-> ) = V.( **-> )
+let stageFn = V.pfunc (V.value **-> cfg **-> V.result V.bool)
+let inputs = { V.embed = (fun s -> (V.list V.string).V.embed (SS.elements s))
+             ; V.project = (fun v ->
+                               try List.fold_left (fun a b -> SS.add b a)
+                                      SS.empty ((V.list V.string).V.project v)
+                               with _ -> raise (V.Projection (v, "inputs")))
+             }
+<<stage map>>
+@
+
+
+Finally, we make the list of builtins that will be visible in Lua.
+
+<<backplane builtins>>=
+<<run>>
+
+let ( **-> ) = V.( **-> )
+
+let backplane_builtins =
+    [ "run", (V.pfunc (action **-> cfg **-> inputs **-> V.result V.bool)).V.embed run
+
+    ; "seq", (V.pfunc ((V.list action) **-> V.result action)).V.embed seq
+    ; "when_do", (V.pfunc (action **-> action **-> V.result action)).V.embed when_do
+    ; "unless_do", (V.pfunc (action **-> action **-> V.result action)).V.embed unless_do
+    ; "fix", (V.pfunc (action **-> V.result action)).V.embed fix
+    ; "share", (V.pfunc (V.value **-> V.string **-> action **->
+                                                 V.result action)).V.embed share
+    ; "ignore", (V.pfunc (action **-> V.result action)).V.embed ignore
+    ; "single", (V.pfunc (stage **-> V.result action)).V.embed single
+    ]
+@
+
+
+In order to use the Lua interpreter to control the backplane, we must
+provide the embedding/projection pair for a stage. When we project a stage into
+Caml, we provide sensible defaults for unspecified members of the stage record.
+
+<<stage map>>=
+let embedString = V.string.V.embed
+let projectString = V.string.V.project
+
+let projectStage stage' = match stage' with
+  | (V.Table stage) ->
+    { name = (match V.Table.find stage (embedString "name") with
+              | V.Nil ->
+                  (match V.objname (V.state ()) stage' with
+                   | None -> "<anonymous stage>"
+                   | Some (V.Fallback s) -> s
+                   | Some (V.Global s) -> s
+                   | Some (V.Element (s, _)) -> s)
+              | s -> projectString s)
+    ; fn = stageFn.V.project (V.Table.find stage (embedString "fn"))
+    ; paramExpected = (V.option V.string).V.project
+                          (V.Table.find stage (embedString "paramExpected"))
+    ; stateCreated = list2SSet
+                 (match (V.Table.find stage (embedString "stateCreated")) with
+                  | V.Nil -> [] 
+                  | x -> ((V.list V.string).V.project x))
+    ; stateDestroyed = list2SSet
+                 (match (V.Table.find stage (embedString "stateDestroyed")) with
+                  | V.Nil -> [] 
+                  | x -> ((V.list V.string).V.project x))
+    ; stateUsed = list2SSet 
+                     (match (V.Table.find stage (embedString "stateUsed")) with
+                      | V.Nil -> [] 
+                      | x -> ((V.list V.string).V.project x))
+    }
+  | _ -> raise (V.Projection (stage', "stage"))
+
+
+let embedStage stage =
+    let stageLabels =
+        [ embedString "name"
+        ; embedString "fn"
+        ; embedString "paramExpected"
+        ; embedString "stateCreated"
+        ; embedString "stateDestroyed"
+        ; embedString "stateUsed"
+        ] in
+    let stageValues =
+        [ embedString stage.name
+        ; stageFn.V.embed stage.fn
+        ; (V.option V.string).V.embed stage.paramExpected
+        ; (V.list V.string).V.embed (SS.elements stage.stateCreated)
+        ; (V.list V.string).V.embed (SS.elements stage.stateDestroyed)
+        ; (V.list V.string).V.embed (SS.elements stage.stateUsed)
+        ] in
+    let newTab = (V.Table.create (List.length stageLabels)) in
+    let _ = List.iter2 (V.Table.bind newTab) stageLabels stageValues
+    in
+        V.Table newTab
+
+let stage = { V.embed = embedStage
+            ; V.project = projectStage
+            }
+@
+
+
+We set up wrappers to create the [[action]] types. These functions will
+be the primitives visible in Lua.
+
+<<stage map>>=
+let seq alst = Seq alst
+let when_do a1 a2 = When_Do(a1, a2)
+let unless_do a1 a2 = Unless_Do(a1, a2)
+let fix a = Fix a
+let share value name a = Share(value, name, a)
+let ignore a = Ignore a
+let single a = Single a
+@
+
+
+
+% ------------------------------------------------------------------
+\subsection{Miscellaneous Procedures}
+% ------------------------------------------------------------------
+
+% ------------------------------------------------------------------
+\subsubsection{Printing}
+% ------------------------------------------------------------------
+
+We provide relatively straightforward printing functions for [[action]]'s,
+macro [[definition]]'s, [[program]]'s, and [[error]]'s. [[makeIndent]] is
+used to create a blank indentation of the input size, and [[printList]] is
+a higher-order function used to print a list of any type, when passed an
+appropriate output function for that type.
+
+<<printing>>=
+let makeIndent length =
+    let blank = " " in
+    let rec makeIndentHelp indent = function
+        | 0 -> indent
+        | num -> makeIndentHelp (indent ^ blank) (num - 1)
+    in
+        makeIndentHelp "" length
+let noIndent = makeIndent 0
+
+let rec printList indent separator appFn = function
+    | [] -> ""
+    | [el] -> appFn indent el
+    | el::rst ->
+        (appFn indent el) ^
+        (separator ^ indent) ^
+        (printList indent separator appFn rst)
+
+let rec printAction indent =
+    let printActionList indent =
+        printList indent ",\n" printAction
+    in function
+    | Seq actions ->
+        let text = "Seq[" in
+        let newIndent = indent ^ (makeIndent (String.length text)) in
+            text ^ printActionList newIndent actions ^
+            "]"
+    | When_Do (whenExp, doExp) ->
+        let text = "When_Do(" in
+        let newIndent = indent ^ (makeIndent (String.length text)) in
+            text ^ printAction newIndent whenExp ^
+            ",\n" ^ indent ^ printAction newIndent doExp ^ ")"
+    | Unless_Do (unlessExp, doExp) ->
+        let text = "Unless_Do(" in
+        let newIndent = indent ^ (makeIndent (String.length text)) in
+            text ^ printAction newIndent unlessExp ^
+            ",\n" ^ indent ^ printAction newIndent doExp ^ ")"
+    | Fix action ->
+        let text = "Fix(" in
+        let newIndent = indent ^ (makeIndent (String.length text)) in
+            text ^ printAction newIndent action ^ ")"
+    | Ignore action ->
+        let text = "Ignore(" in
+        let newIndent = indent ^ (makeIndent (String.length text)) in
+            text ^ printAction newIndent action ^ ")"
+    | Single {name = name} -> name
+    | Share (param, paramType, action) ->
+        let text = "Share(" ^ paramType ^ ", " in
+        let newIndent = indent ^ (makeIndent (String.length text)) in
+            text ^ printAction newIndent action ^ ")"
+
+let printError indent =
+    let identity x y = x ^ y in
+    let error text = "Error: " ^ text
+    in function
+    | SError (errorFn, destroyingFn, var) ->
+        error ("Variable " ^ var ^ " used by " ^ errorFn ^
+               " was destroyed by " ^ destroyingFn ^ ".\n")
+    | MissingInput var ->
+        error ("Program expects the input variable: " ^ var ^ ".\n")
+    | MissingState var ->
+        error ("Program expects the input state: " ^ var ^ ".\n")
+    | MismatchedParams (fnName, formals, actuals) ->
+        let showFormals = printList indent ", " identity in
+        let showActuals = printList indent ", " printAction in
+            "Error: Function " ^ fnName ^ " expects arguments: " ^
+            (showFormals formals) ^ " but received: " ^
+            (showActuals actuals) ^ ".\n"
+
+(*
+let printNewError indent  =
+    let identity x = x in
+    let error text = "Error: " ^ text in
+	function
+	| 
+
+
+
+type newerror = Arg  of string option * string option * V.value action
+              | Live of string * V.value action
+*)
+@
+
+
