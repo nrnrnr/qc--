@@ -225,14 +225,15 @@ let rtl (RP.Rtl(es))                = RP.Rtl(List.map guarded es)
 and $k$ a constant, and returns either boths as a pair, or [[None]].
 
 <<unsafe RTL simplification>>=
-let zero w = RP.Bits (Bits.U.of_int 0 w)
+let zero w = RP.Const(RP.Bits (Bits.U.of_int 0 w))
 let reg_offset = function
-    | RP.App(("add", _), [RP.Fetch(RP.Reg(r),_); RP.Const(k)]) -> Some (r,k)
-    | RP.Fetch(RP.Reg r, w)                                    -> Some (r, zero w)
-    | _                                                        -> None
+    | RP.App(("add", _), [RP.Fetch(RP.Reg(r),_); RP.Const(_) as k]) -> 
+        Some (r,k)
+    | RP.Fetch(RP.Reg r, w) -> Some (r, zero w)
+    | _                     -> None
 @
 
-<<unsafe RTL simplification>>=
+<<unsafe RTL simplification old>>=
 let rec app o w args = match Safe.app o w args with
     | RP.App (("eq"|"ltu"|"gtu"|"lt"|"gt" as op, w),
         [ RP.App(("add", _), [RP.Fetch(RP.Reg(r1),_); RP.Const(_) as k1 ])
@@ -240,6 +241,24 @@ let rec app o w args = match Safe.app o w args with
         ]) when r1 = r2 -> app op w [k1;k2]
     | x -> x    
         
+<<unsafe RTL simplification>>=
+let rec app o w args = match Safe.app o w args with
+    | RP.App (("eq"|"ltu"|"gtu"|"lt"|"gt" as op, w), [left;right]) as x ->
+        ( match reg_offset left, reg_offset right with
+        | Some(r1,k1), Some(r2,k2) when r1 = r2 -> 
+            let r = app op w [k1;k2] in
+                ( Printf.eprintf "Rtleval2.app %s `%s` %s = %s\n"
+                    (Rtlutil.ToReadableString.exp (Rtl.Up.exp k1))
+                    op
+                    (Rtlutil.ToReadableString.exp (Rtl.Up.exp k2))
+                    (Rtlutil.ToReadableString.exp (Rtl.Up.exp r))
+                ; flush stderr    
+                ; r
+                )    
+        | _                                     -> x
+        )
+    | x -> x
+
 let rec exp = function
     | RP.Const _ as c               -> c
     | RP.Fetch (l, w)               -> RP.Fetch (loc l, w)
@@ -373,23 +392,23 @@ let sx w args   = match (w,args) with
     | _         -> default "sx" w args
 
 let ltu w args  = match args with
-    | [x;y] when is_bits x && is_bits y
-                -> to_bool (uint64 x < uint64 y)
+    | [RP.Const(RP.Bits(x)); RP.Const(RP.Bits(y))] 
+                -> to_bool (Bits.Ops.ltu x y)
     | _         -> default "ltu" w args
 
 let gtu w args  = match args with
-    | [x;y] when is_bits x && is_bits y
-                -> to_bool (uint64 x > uint64 y)
+    | [RP.Const(RP.Bits(x)); RP.Const(RP.Bits(y))] 
+                -> to_bool (Bits.Ops.gtu x y)
     | _         -> default "gtu" w args
 
 let lt w args  = match args with
-    | [x;y] when is_bits x && is_bits y
-                -> to_bool (int64 x < int64 y)
+    | [RP.Const(RP.Bits(x)); RP.Const(RP.Bits(y))] 
+                -> to_bool (Bits.Ops.lt x y)
     | _         -> default "lt" w args
 
 let gt w args  = match args with
-    | [x;y] when is_bits x && is_bits y
-                -> to_bool (int64 x > int64 y)
+    | [RP.Const(RP.Bits(x)); RP.Const(RP.Bits(y))]
+                -> to_bool (Bits.Ops.gt x y)
     | _         -> default "gt" w args
     
 
