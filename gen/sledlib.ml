@@ -1,57 +1,56 @@
-# 28 "caml-lib.nw"
+# 20 "/home/lair/nr/zephyr/cvs/toolkit/caml-lib.nw"
 exception Failure of string list (* raised on failure to encode *)
-
-# 36 "caml-lib.nw"
+# 26 "/home/lair/nr/zephyr/cvs/toolkit/caml-lib.nw"
 module type EMITTER = sig
   type token_stream
   val emit32 : nativeint * token_stream -> token_stream
   val emit16 : int       * token_stream -> token_stream
   val emit : value:nativeint -> width:int -> token_stream -> token_stream
 end
-# 54 "caml-lib.nw"
-module type RELOCATABLE = sig
+# 43 "/home/lair/nr/zephyr/cvs/toolkit/caml-lib.nw"
+module type OLD_RELOCATABLE = sig
   type 'a relocatable   (* a bit vector of type 'a
                            whose value may not be known until link time *)
 
-  val early : 'a -> 'a relocatable                  (* a value we know now *)
-  val late  : string -> offset:'a -> 'a relocatable (* label + offset *)
+  val early : 'a -> 'a relocatable      (* a value we know now *)
+  val late  : string -> offset:'a -> 'a relocatable
+                                        (* label + offset *)
 
-  (* not clear what the rest of the interface should be.  
-     Here are three candidates:
+  (* not clear what the rest of the interface should be.  Here are three candidates:
 
      C style  
-     val known : 'a relocatable -> bool
-     val force : 'a relocatable -> 'a
+       val known : 'a relocatable -> bool
+       val force : 'a relocatable -> 'a
 
      CPS?
-     val test  : 'a relocatable -> known:('a -> 'b) -> unknown:(unit -> 'b) -> b
+       val test  : 'a relocatable -> known:('a -> 'b) -> unknown:(unit -> 'b) -> b
 
      vanilla ML
-     val force : 'a relocatable -> 'a option
+       val force : 'a relocatable -> 'a option
   *)
 end
-# 89 "caml-lib.nw"
-module type NEW_RELOCATABLE = sig
+# 78 "/home/lair/nr/zephyr/cvs/toolkit/caml-lib.nw"
+module type RELOCATABLE = sig
   (* A relocatable address in this model is `symbol + constant' *)
-  type ('sym, 'const) relocatable   (* a bit vector of type 'const 
-                                       whose value may not be known 
-                                       until link time *)
+  type symbol    
+  type 'a relocatable   (* a bit vector of type 'a
+                           whose value may not be known until link time *)
 
   (* constructors *)
-  val of_const : 'c       -> ('s, 'c) relocatable    (* a known constant *)
-  val of_sum   : 's -> 'c -> ('s, 'c) relocatable    (* label + offset *)
+  val of_const : 'a           -> 'a relocatable    (* a known constant *)
+  val of_sum   : symbol -> 'a -> 'a relocatable    (* label + offset *)
   val add_const :
-      ('c -> 'c -> 'c) -> ('s, 'c) relocatable -> 'c -> ('s, 'c) relocatable
+      ('a -> 'a -> 'a) -> 'a relocatable -> 'a -> 'a relocatable
 
   (* observer *)
-  val normalize : ('s, 'c) relocatable -> 's option * 'c
+  val normalize : 'a relocatable -> symbol option * 'a
 end
-# 113 "caml-lib.nw"
+# 100 "/home/lair/nr/zephyr/cvs/toolkit/caml-lib.nw"
 module type INSTRUCTION_SIZE = sig
   type instruction
   type address       (* location of instruction, value of relocatable operands
                         --- an integer type *)
-  module Reloc : RELOCATABLE
+  module Reloc : OLD_RELOCATABLE
   type range = { min : int; max : int }
   val sizeRange : inst : instruction -> range
   val size      : inst   : instruction ->
@@ -59,11 +58,11 @@ module type INSTRUCTION_SIZE = sig
 		  force  : (address Reloc.relocatable -> address option) ->
 		  int
 end
-# 132 "caml-lib.nw"
+# 118 "/home/lair/nr/zephyr/cvs/toolkit/caml-lib.nw"
 module type ENCODER = sig
   type instruction 
   type address
-  module Reloc : RELOCATABLE
+  module Reloc : OLD_RELOCATABLE
   module Emitter : EMITTER
 
   val encodeAt :
@@ -71,25 +70,24 @@ module type ENCODER = sig
     -> Emitter.token_stream
         -> Emitter.token_stream
 end
-# 177 "caml-lib.nw"
+# 155 "/home/lair/nr/zephyr/cvs/toolkit/caml-lib.nw"
 let fail l = raise (Failure l)
 let fail_unless condition l = if condition then () else fail l
-
-module TrivialReloc = struct
+module TrivialOldReloc = struct
   type 'a relocatable = 'a
   let early x = x
-  let late label offset = 
-    fail ["Trivial relocatable addresses don't support labels"]
+  let late label offset = fail ["Trivial relocatable addresses don't support labels"]
 end
 
-module NewReloc = struct
-  type ('s, 'c) relocatable = 's option * 'c
+module MkReloc (S : sig type symbol end) = struct
+  type symbol = S.symbol
+  type 'a relocatable = symbol option * 'a
   let of_const c = (None, c)
   let of_sum s c = (Some s, c)
   let add_const (+) = fun (s, c) c' -> (s, c + c')
   let normalize r = r
 end
-# 197 "caml-lib.nw"
+# 174 "/home/lair/nr/zephyr/cvs/toolkit/caml-lib.nw"
 module String = struct
   type t = (string -> unit) -> unit
   let of_string s f = f s
@@ -112,9 +110,9 @@ module String = struct
                with Invalid_argument _ -> "??" ^ name ^ "=" ^ d n ^ "?!")
 end
 let asmprintreloc _ = String.of_string "<relocatable>"
-# 222 "caml-lib.nw"
+# 198 "/home/lair/nr/zephyr/cvs/toolkit/caml-lib.nw"
 module type RELOC_PRINT = sig
-  include RELOCATABLE
+  include OLD_RELOCATABLE
   val to_string : ('a -> String.t) -> 'a relocatable -> String.t
 end
 
