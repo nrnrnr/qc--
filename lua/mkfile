@@ -15,6 +15,11 @@
 # If you have trouble with depdencies check LIBML, LIBMLI, and SCAN.
 # Rebuild dependencies with "mk depend".
 
+# This interpreter is being used for performance experiments.  These
+# experiments involve plugging in multiple different interperter
+# modules.  For that reason, we configure the mkfile to get the
+# interpreter out of $INTERPDIR/interp.ml*.
+
 
 TOP    =        ..
 LIBDIR =        ../lib
@@ -24,6 +29,12 @@ LIBDIR =        ../lib
 
 OCAMLC_FLAGS = 	-I $LIBDIR -g
 OCAMLO_FLAGS =	-I $LIBDIR -p
+
+INTERPDIR=std
+NWSRC=`echo *.nw`
+NWHTML=${NWSRC:%.nw=%.html}
+
+# also reasonable: old
 
 # ------------------------------------------------------------------ 
 # high level (virtual) targets
@@ -39,12 +50,13 @@ depend:V:	DEPEND
 
 doc:V:		lua.ps
 
-dvi \
-html:VQ:
+html:V:		$NWHTML
+dvi:VQ:
                 echo "nothing to be done for $target"     
 clean:V:
 		rm -f *.cmi *.cmo *.ml *.mli *.mly *.mll *.cmx *.o
 		rm -f *.aux *.log *.dvi *.toc *.tex *.inc
+		rm -f $NWHTML
 		rm -f luaparsex.output tspecl lspecl *.icn
 		rm -f *~
 
@@ -83,9 +95,9 @@ LIBML = 	log.ml		\
 		luamathlib.ml	\
 		luaiolib.ml	\
 
-LIBCMO =	`echo $LIBML | sed 's/\.ml/.cmo/g'`
-LIBCMX =	`echo $LIBML | sed 's/\.ml/.cmx/g'`
-LIBOBJ =	`echo $LIBML | sed 's/\.ml/.o/g'`
+LIBCMO = ${LIBML:%.ml=%.cmo}
+LIBCMX = ${LIBML:%.ml=%.cmx}
+LIBOBJ = ${LIBML:%.ml=%.o}
 
 # order does not matter here - so keep it alphabetical
 # we wan't easily deduce LIBMLI from LIBML because there might be
@@ -106,7 +118,7 @@ LIBMLI = 	log.mli		\
 		luavalue.mli	\
 		luahash.mli	\
 
-LIBCMI =	`echo $LIBMLI | sed 's/\.mli/.cmi/g'`
+LIBCMI = ${LIBMLI:%.mli=%.cmi}
 
 
 lua.cma:	$LIBCMO $LIBCMI
@@ -136,9 +148,9 @@ $LIBDIR/lua.cmxa: lua.cmxa $LIBMLI $LIBCMI dirs
 # lua standalone interpreter (for tests)
 # ------------------------------------------------------------------ 
 
-ML =    	main.ml 
-CMO =		`echo $ML | sed 's/\.ml/.cmo/g'`
-CMX =		`echo $ML | sed 's/\.ml/.cmx/g'`
+ML =	main.ml 
+CMO =	${ML:%.ml=%.cmo}
+CMX =	${ML:%.ml=%.cmx}
 
 
 oclua: 		lua.cma $CMO 
