@@ -58,4 +58,5 @@ Test.files = { "add.c--"
              , 'wtizzy.c--'
              , "x86-000.c--"
              , "x86-001.c--"
+             , "zerou.c--"
              }
