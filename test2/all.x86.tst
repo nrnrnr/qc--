@@ -42,6 +42,7 @@ Test.files = { "add.c--"
              , "not.c--"
              , "ovrflow.c--"
              , norun("ralloc-000.c--")
+	     , { source='r64.c--', other='src/r64main.c' }
              , "rnd2.c--"
 	     , { source="spdemo.c--", argv="4" }
              , "sub.c--"

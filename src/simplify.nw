@@ -58,8 +58,9 @@ module BO = Bits.Ops
 module RS = Reloc.Simple
 module R  = Rtl
 module RP = Rtl.Private
-module D  = Rtl.Dn 
-module U  = Rtl.Up
+module RU = Rtlutil
+module Dn = Rtl.Dn 
+module Up = Rtl.Up
 
 exception Error of string
 type reloc     = Bits.bits RS.relocatable
@@ -88,10 +89,10 @@ end
 The exported function work on the public representation of {\rtl}s
 
 <<simplify.ml>>=
-let rtl r  = try U.rtl (Safe.rtl (D.rtl r))
+let rtl r  = try Up.rtl (Safe.rtl (Dn.rtl r))
              with Error msg -> Impossible.impossible msg
 
-let exp e  = try U.exp (Safe.exp (D.exp e))
+let exp e  = try Up.exp (Safe.exp (Dn.exp e))
              with Error msg -> Impossible.impossible msg
 
 let rec location_category = function
@@ -117,15 +118,15 @@ let bits e =
     | RP.App ((opr, _), es) ->
         List.iter (fun e -> ignore (cvt e)) es;
         Error.errorf "cannot evaluate operator %%%s at compile time" opr in
-  cvt (Safe.exp (D.exp e))
+  cvt (Safe.exp (Dn.exp e))
              
-let bool e = match Safe.exp (D.exp e) with
+let bool e = match Safe.exp (Dn.exp e) with
              | RP.Const(RP.Bool(b)) -> b
              | _                    -> Error.error "not a constant condition"
 
-let mklink kind s w = U.exp (RP.Const (RP.Link(s, kind, w)))
+let mklink kind s w = Up.exp (RP.Const (RP.Link(s, kind, w)))
 
-let link e = match Safe.exp (D.exp e) with
+let link e = match Safe.exp (Dn.exp e) with
 | RP.Const(RP.Bits b)   -> Reloc.Simple.of_const b
 | RP.Const(RP.Link(l,kind,w)) -> Reloc.Simple.of_sum (mklink kind) l (Bits.zero w)
 | RP.Const(RP.Diff(c1,c2)) ->
@@ -315,7 +316,7 @@ let rtl' (RP.Rtl(es))               =
 
 (*let rtl' (RP.Rtl es) = RP.Rtl (List.map guarded es)*)
 
-let rtl r  = try U.rtl (rtl' (D.rtl r)) 
+let rtl r  = try Up.rtl (rtl' (Dn.rtl r)) 
              with Error msg -> Impossible.impossible msg
 
 @
@@ -429,11 +430,45 @@ let rec sx w args   = match (w,args) with
 | [n;w],[RP.App (("zx", [n';w']), [x])] when w' > n' -> assert (w' = n); zx [n';w] [x]
 | [i;j], [x] when i = j -> x
 | _         -> default "sx" w args
-
-let lobits w args   = match (w,args) with
+@ 
+Here we do some fast and loose playing with assertions, as well as
+assume that the memsize is~8.
+<<RTL operator implementations>>=
+let rec lobits ws args   = match (ws,args) with
 | [i;j],[RP.Const(RP.Bits x)] -> const (Bits.Ops.lobits j x)
+| [w;n],[<<little-endian memory fetch>>] ->
+    RP.Fetch (RP.Mem (sp, Rtl.LittleEndian, n, addr, assn), n)
+| [w;n],[<<big-endian memory fetch>>] ->
+    let memsize = 8 in
+    let offset  = (w - n) / memsize in
+    let addr    = Dn.exp (RU.addk (RU.Width.exp' addr) (Up.exp addr) offset) in
+    RP.Fetch (RP.Mem (sp, Rtl.BigEndian, n, addr, assn), n)
+| [w;n],[RP.App(("shrl", [_]),
+                [<<little-endian memory fetch>>; RP.Const(RP.Bits b)])] ->
+    let shamt = Bits.U.to_int b in
+    let memsize = 8 in
+    if shamt mod memsize = 0 then
+      let offset = shamt / memsize in
+      let addr    = Dn.exp (RU.addk (RU.Width.exp' addr) (Up.exp addr) offset) in
+      lobits [w-shamt; n]
+        [RP.Fetch (RP.Mem (sp, Rtl.LittleEndian, w-shamt, addr, assn), w-shamt)]
+    else
+      default "lobits" ws args
+| [w;n],[RP.App(("shrl", [_]), [<<big-endian memory fetch>>; RP.Const(RP.Bits b)])] ->
+    let shamt = Bits.U.to_int b in
+    let memsize = 8 in
+    if shamt mod memsize = 0 then
+      lobits [w-shamt; n]
+        [RP.Fetch (RP.Mem (sp, Rtl.BigEndian, w-shamt, addr, assn), w-shamt)]
+    else
+      default "lobits" ws args
 | [i;j], [x] when i = j -> x
-| _         -> default "lobits" w args
+| _         -> default "lobits" ws args
+<<little-endian memory fetch>>=
+RP.Fetch(RP.Mem (sp, Rtl.LittleEndian, w', addr, assn), w'')
+<<big-endian memory fetch>>=
+RP.Fetch(RP.Mem (sp, Rtl.BigEndian, w', addr, assn), w'')
+@ 
 <<RTL operator implementations>>=
 let unsigned n w = RP.Const (RP.Bits (Bits.U.of_int n w))
 

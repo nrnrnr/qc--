@@ -36,6 +36,7 @@ test:V: all test.exe
 doc.dvi: doc.tex $INC
 
 update:V: all
+	cp $LIBA $TOP/lib
 update.opt:V: update
 
 # ------------------------------------------------------------------ 
@@ -64,14 +65,14 @@ clobber:V: clean
 # ------------------------------------------------------------------ 
 
 C = runtime.c pcmap.c gcc-linux.c
-CMM = cut.c--
+CMM = cut.c-- thread.c--
 S = x86cont.s
 H = qc--runtime.h pcmap.h
 
 C = ${C:%.c=$B%.c}
 CMM = ${CMM:%=$B%}
 H = ${H:%.h=$B%.h}
-O = ${C:%.c=%.o} ${CMM:%.c--=%.o}
+O = ${C:%.c=%.o} ${CMM:%.c--=%.o} ${S:%.s=%.o}
 
 SCAN = $C trace.c
 # <$TOP/config/depend.mk
@@ -104,9 +105,6 @@ x86cont.s: x86cont.nw
 &.s: &.c
 	gcc -Wall -S $stem.c
 
-&.s:D: &.c--
-	$QCMM -globals -stop .s $prereq -o $target
-
 # ------------------------------------------------------------------ 
 # extra rules for cases not covered by noweb.mk
 # ------------------------------------------------------------------ 
@@ -120,8 +118,11 @@ qc--runtime.h:D: runtime.nw
 ${B}cut.c--:D: runtime.nw
 	$NOTANGLE -L $prereq -R$target > $target
 
-cut.s:D: ${B}cut.c-- $QCMM
-	tmp=/tmp/cut$$
-	$QCMM -S -o $tmp ${B}cut.c--
+${B}thread.c--:D: runtime.nw
+	$NOTANGLE -L $prereq -R$target > $target
+
+${B}&.s:D: ${B}&.c--
+	tmp=/tmp/$stem$$
+	$QCMM -S -o $tmp ${B}$stem.c--
 	sed '/globalsig/d;/ref_to_global_area/d' $tmp > $target
 	rm -f $tmp
