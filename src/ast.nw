@@ -1,0 +1,124 @@
+
+\section{Abstract Syntax Definition}
+
+The abstract syntax for \C~is not directly encoded into \ocaml~data
+types but specified as a \asdl~\cite{adsl97} definition.  This
+\asdl~compiler generates suitable data types and additionally code to
+serialize the abstract syntax.  This permits to exchange the abstract
+syntax with applications written in languages other than \ocaml~more
+easily. 
+
+The abstract syntax is specified in [[ast.asdl]]; the resulting
+modules are [[Ast]] and [[AstUtil]].
+
+<<ast.asdl>>=
+module ast {
+    <<ast declaration>>
+}
+
+<<ast declaration>>=
+name        = (string)
+conv        = (string)  -- names for calling conventions
+hint        = (string)  -- hints for register allocation
+reg         = (string)  -- names for global registers
+target      = (string)  -- labels
+size        = (int)     -- power of 2 (bits8, float16, ..)
+align       = (int)     -- power of 2
+aligned     = (int)     -- power of 2
+op          = (string)
+
+program     = (topdecl*)
+
+topdecl     = Import (ty, name*)
+            | Export (name*)
+            | Const  (const*)
+            | Section (name, section*)
+            | Global (register*)
+
+const       = (name, expr)
+
+register    = (invariant, ty, name, reg?)
+
+section     = SSpan (expr key, expr value, section*)
+            | Datum (datum)
+            | Procedure ( conv?
+                        , name
+                        , formal*
+                        , decl*
+                        , stmt*
+                        )
+memsize     = NoSize
+            | DynSize
+            | FixSize (expr)
+                       
+datum       = Label (name)
+            | Align (align)
+            | MemDecl (ty, memsize, init?)
+
+@ Escape sequence in the concrete syntax are removed during the
+translation to the abstract syntax.  So [[InitStr]] and [[InitUStr]]
+do not contain escaped characters.
+
+<<ast declaration>>=
+init        = InitExprs (expr*)
+            | InitStr   (string)
+            | InitUStr  (string)
+
+ty          = BitsTy  (size)
+            | FloatTy (size)
+
+@ To encode the [[invariant]] keyword a boolean value would suffice.
+But this type is not provided by \asdl.
+
+<<ast declaration>>=
+
+invariant   = Invariant
+            | Variant
+
+formal      = (hint?, invariant, ty, name)
+actual      = (hint?, expr)
+
+decl        = Register(invariant, ty, name)
+            | Stackdata (datum*)
+           
+flow        = CutsTo (name*)
+            | UnwindsTo (name*)
+            | ReturnsTo (name*)
+            | Aborts
+
+lvalue      = Var (name)
+            | Mem (ty, expr, aligned?)
+
+assign      = (lvalue,expr)
+altcont     = (expr, expr)
+
+stmts       = (stmt*)
+targets     = (target*)
+flows       = (flow*)
+lvalues     = (lvalue*)
+
+stmt        = IfStmt (expr, stmts, stmts)
+            | LabelStmt (name)
+            | ContStmt (name, name*)
+            | SpanStmt (expr key, expr value, stmts)
+            | AssignStmt (assign*)
+            | CallStmt (lvalue*, conv?, expr, actual*, targets, flows)
+            | PrimStmt (lvalue*, conv?, name, actual*, flows)
+            | GotoStmt (expr, targets)
+            | JumpStmt (conv?, expr, actual*, targets)
+            | CutStmt  (name, actual*, flows)
+            | ReturnStmt (conv?, altcont?, actual*)
+            | EmptyStmt
+
+expr        = Int    (int,size?)
+            | Float  (string,size?)
+            | Char   (string,size?)
+            | Fetch  (lvalue)
+            | BinOp  (expr, op, expr)
+            | UnOp   (op, expr)
+            | PrimOp (name, actual*)
+
+@ Infix operators are abbreviations for primitive operations. The
+parser could perform this translation right away. But we want to
+unparse the abstract syntax back to concrete syntax and thus we keep
+them. 

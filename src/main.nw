@@ -1,0 +1,184 @@
+
+\section{Main}
+
+This module contains the [[main]] function that is executed when the
+\C~compiler starts.  Its main purposes are command line processing,
+catching of exceptions, and providing the exit code.
+
+The [[Main]] module opens the modules is most frequently uses:
+
+
+<<main.ml>>=
+open Pc                         (* parser combinators for cmd line *)
+open Error			(* error handling *)
+open Cmdline                    (* cmd line abstract syntax *)
+
+@ The module [[Arg]] for command line processing from the standard
+library enforces an imperative programming style and can not be used
+to parse highly structured command lines.  We use parser combinators
+from module [[Pc]] for command line processing that capture the
+structure of the command line in an abstract syntax tree which then is
+processed. 
+
+The data type [[cmd]] describes the abstract syntax of the command
+line; it is defined in module [[Cmdline]]. Currently the structure is
+very simple:  the command line can ask the program for different actions:
+
+\begin{enumerate}
+\item Display a usage information.
+\item Display a version information.
+\item Scan a file and show the token stream.
+\item Parse a file. 
+\end{enumerate}
+
+<<cmdline.mli>>=
+type cmd =        | CMDhelp                                               
+                  | CMDversion                                  
+                  | CMDlex      of string
+                  | CMDparse    of string
+
+@ The concrete syntax of the command line is specified through the
+parser combinators that recognizes them. The [[Pc]] module defines
+several infix operators which makes the notation of parser combinators
+rather suggestive: [[***]], [[**>]], and [[**<]] recognize a sequence
+of tokens; [[**>]] returns only the string of the right hand side as a
+semantic value. Semantic values are processed by functions defined on
+the right hand side of [[-->]]. The string recognized by [[any]] after
+a flag [[-c]] is passed to a function that injects the string into a
+[[CMDparse]] constructor that asks to parse a file.
+  
+<<main.ml>>=
+let cmd_help      = literal "-help"         --> return CMDhelp
+let cmd_version   = literal "-version"      --> return CMDversion
+let cmd_lex       = literal "-l" **> any    --> fun s -> CMDlex(s) 
+let cmd_parse     = literal "-c" **> any    --> fun s -> CMDparse(s) 
+let cmd_default   = any                     --> fun s -> CMDlex(s)
+
+@ The basic parsers recognize a complete command line. As an
+abbreviation is a single file name interpreted as an argument to the
+[[-c]] flag. 
+
+The structure of the whole command line is recognized by the
+[[cmdline]] parser: it simply recognizes the first successfully parsed
+command line. The end of the command line that is recognized by
+[[eof]] must terminate a successfully parsed token sequence in order
+for [[cmdline]] to be successful.
+
+<<main.ml>>=
+let cmdline       = (  cmd_version 
+                   ||| cmd_help 
+                   ||| cmd_lex
+                   ||| cmd_parse
+                   ||| cmd_default 
+                    ) **< eof
+
+@ The command line flags [[-version]] and [[-help]] trigger short
+messages going to stdout.  The [[usage]] function is also called from
+[[main]] when the command line syntax is wrong. 
+
+<<main.ml>>= 
+
+let version () =
+    Printf.printf 
+    	"%s version %s (c) 1999 Christian Lindig <lindig@eecs.harvard.edu>\n" 
+	This.name 
+	This.version
+
+
+let usage this =
+  let msg = 
+  [   "\t -help                      (this to stdout)";
+      "\t -version                   (version to stdout)";
+      "\t -l file                    (compile file)";
+  ] in
+    Printf.printf "%s version %s command line syntax\n" this This.version;
+    List.iter print_endline msg
+
+(* lex *)
+
+let lex file =
+    let fd          = try open_in file with Sys_error msg -> error msg  in
+    let finally ()  = close_in fd                                       in
+    let lexbuf      = Lexing.from_channel fd                            in
+    let rec loop lb = 
+        match Scan.token lb with
+            | Parse.EOF -> ()
+            | tok       -> let (file,line,col) = Scan.pos lb      in
+                           let tok             = Scan.tok2str tok in
+                           ( Printf.printf "%3d,%2d %s\n" line col tok 
+                           ; loop lb
+                           )
+    in
+        ( Scan.init file
+        ; loop lexbuf
+        ; finally ()
+        ) 
+        
+(* parse *)
+
+let parse file =
+    let fd          = try open_in file with Sys_error msg -> error msg  in
+    let finally ()  = close_in fd                                       in
+    let lexbuf      = Lexing.from_channel fd                            in
+        try
+            ( Scan.init file
+            ; let ast = Parse.program Scan.token lexbuf in
+                 AstUtil.sexp_wr_program ast stdout
+            ) 
+        with
+            | Parsing.Parse_error | Error(_) ->
+              ( finally()
+              ; let (file,line,col) = Scan.pos lexbuf in
+                    error (Printf.sprintf "%3d,%2d parse error" line col)
+              )
+            | e ->  ( finally()
+                    ; raise e
+                    )
+ 
+@ The [[main]] function gets the command line arguments and tries to
+parse them using the [[cmdline]] parser.  It returns the abstract
+syntax as defined in Module [[Cmdline]] which is used to decide which
+function to call.  In case of no error all functions return here and
+the program end with exit code zero.  However, in case of an error the
+[[Error]] exception is raised and caught here.  This leads to a non
+zero exit code. 
+
+<<main.ml>>=
+
+let main () =
+    let argv        = Array.to_list Sys.argv in
+    let this        = Filename.basename (List.hd argv) in
+    let args        = List.tl argv in
+    let (cmd,_)     = try cmdline args with Pc.Error msg -> 
+                         Printf.eprintf "%s command line syntax: %s\n"
+                            this msg;
+                         usage this;
+                         exit 1
+    in try
+            ( match cmd with
+            | CMDhelp               -> usage this
+	    | CMDversion	    -> version ()
+            | CMDlex(f)             -> lex f 
+            | CMDparse(f)           -> ignore(parse f) 
+            );
+            exit 0
+       with 
+            Error(msg)  -> Printf.eprintf "%s: %s\n" this msg;
+            exit 1
+
+@ In \ocaml~no [[main]] function like in C exists but simply all
+values in a module are evaluated.  However, we simulate this by
+evaluating [[main ()]]. 
+
+<<main.ml>>=
+let _ = main ()
+
+@
+  
+          
+      
+
+          
+          
+      
+
