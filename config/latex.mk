@@ -8,7 +8,7 @@
 
 LATEX =         latex
 PS2PDF=         ps2pdf
-RERUN =         Rerun (LaTeX|to get cross-references right)
+RERUN =         Rerun (LaTeX|to get )
 
 %.bbl:  %.aux
 	BIBINPUTS="$TOP/doc:" bibtex $stem 

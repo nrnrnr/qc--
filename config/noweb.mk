@@ -68,6 +68,7 @@ NOWEBBREAKCODE=no
 	\noweboptions{smallcode}
 	`if [ $NOWEBBREAKCODE = yes ]; then echo '\noweboptions{breakcode}'; fi`
 	\input{$TOP/config/macros.tex}
+	\usepackage[round,sectionbib]{natbib}
 	EOF
 	awk '/^%  *inc:  */ { $1 = ""; $2 = ""; printf "%s ", $0 }' $stem.inc
 	tr '\n' ' ' <<EOF
@@ -79,8 +80,8 @@ NOWEBBREAKCODE=no
 	EOF
 	cat $stem.inc
 	tr '\n' ' ' <<EOF
-	\bibliographystyle{alpha}
-	\bibliography{qc--}
+	\bibliographystyle{plainnat}
+	\bibliography{../doc/qc--}
 	\end{document}
 	EOF
 	) > $target

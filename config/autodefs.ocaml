@@ -15,8 +15,8 @@ while (defined($line = <>)) {
     # make sure we only index code we know how to deal with
     if ($code) {
         # *.ml
-        if ($line =~ /^\@text (let|and|external)\s+(rec\s+)?([-a-zA-Z0-9_']+)/) {
-            $id    = $3;
+        if ($line =~ /^\@text (let|and|external|type)\s+(rec\s+)?(['][a-zA-Z-]+\s+)?([a-zA-Z_][-a-zA-Z0-9_']+)/) {
+            $id    = $4;
             printf "\@index localdefn %s\n", $id unless $id eq "_";
             next ;
         }
@@ -27,7 +27,7 @@ while (defined($line = <>)) {
         }
 
         # *.mli - symbols are externally visible
-        if ($line =~ /^\@text \s{0,10}(val|external)\s+(rec\s+)?([a-zA-Z0-9_'-]+)/) {
+        if ($line =~ /^\@text \s{0,10}(val|external|type)\s+(rec\s+)?([a-zA-Z_][a-zA-Z0-9_'-]+)/) {
             $id    = $3;
             printf "\@index defn %s\n", $id;
             next ;
