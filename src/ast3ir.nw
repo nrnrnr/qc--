@@ -557,12 +557,10 @@ and ifStmt state (e,ifso,ifnot) =
     let l_join = Idgen.label state.proc in (* label for join *)
     let s_ifso = F.symbol state.env l_ifso in   (* register symbol *)
     let s_join = F.symbol state.env l_join in   (* register symbol *)
-    let state  = { state with (* label join *)
-                   node = G.gm_label state.cfg l_join s_join state.node } in  
-    let ifso   = foldr body ifso state  in
-    let state  = { state with (* label ifso *)
-                   node = G.gm_label state.cfg l_ifso s_ifso ifso.node  } in 
-    
+    let n_join = G.gm_label state.cfg l_join s_join state.node in
+    let ifso   = foldr body ifso { state with node = n_join } in
+    let ifso   = { ifso with node = 
+                   G.gm_label state.cfg l_ifso s_ifso ifso.node } in
     let l2exp  = Rtl.link s_join state.target.Target.pointersize in
     let l2rtl  = state.target.Target.goto.Target.embed l2exp in
     let l2goto = G.gm_goto state.cfg l2rtl [G.lookup state.cfg l_join] in
