@@ -23,7 +23,7 @@
 % ------------------------------------------------------------------ 
 
 Liveness analysis determines for every node in a flow graph (see
-module \module{cfg2}) the set of variables that will be used in any of
+module \module{cfg3}) the set of variables that will be used in any of
 its succeeding nodes.  This set of variables is called the \emph{live
 set}.  Since nodes use and define variables, liveness is actually only
 defined \emph{between} adjacent notes.  Therefore, the set of live
@@ -38,7 +38,7 @@ The [[liveness]] function annotates the nodes in a control-flow graph
 [[cfg]] with the set of live registers \emph{before} that node.
 
 <<live.mli>>=
-module Make (G: Cfg2.S) : sig
+module Make (G: Cfg3.S) : sig
     val liveness: G.cfg -> unit
 end
 @
@@ -54,7 +54,7 @@ flow graph and the liveness analysis.
 
 <<live.ml>>=
 module R = Register.Set
-module Make(G: Cfg2.S) = struct
+module Make(G: Cfg3.S) = struct
     <<struct Make>>
 end
 
@@ -92,18 +92,11 @@ $$\mathit{live} =
     ) \cup \mathit{read}
 $$
 
-<<struct Make>>=
-let rec standard cfg node rtl =
-    let (read,write) = Rtlutil.read_write_sets rtl                  in
-    let live         = Register.Set.diff (after cfg node) write     in
-        Register.Set.union live read   
-@
-
 The [[after]] function computes the union of the live sets of a node's
 successors.
 
 <<struct Make>>=
-and after cfg node = union (List.map (live cfg) (G.succ cfg node)) 
+let rec after node = union (List.map live (G.succ node)) 
 @
 
 Not all liveness information can be deduced from nodes' {\rtl}s.  Some
@@ -113,17 +106,11 @@ by the [[live]] function.  In this particular case nodes advertise
 which registers are used such that they are kept live.
 
 <<struct Make>>=
-and live: G.cfg -> G.node' -> Register.Set.t = fun cfg node -> 
-    match G.kind node with
-    | G.Goto   (rtl,_)     -> standard  cfg node rtl
-    | G.Call   (rtl,_)     -> standard  cfg node rtl (* wrong *)
-    | G.Assign  rtl        -> standard  cfg node rtl
-    | G.Branch (rtl,_)     -> standard  cfg node rtl
-    | G.Label _            -> after cfg node
-    | G.Jump   (use,rtl,_) -> Register.Set.union use (standard  cfg node rtl) 
-    | G.Cutto  (use,rtl,_) -> Register.Set.union use (standard  cfg node rtl)
-    | G.Return (use,rtl,_) -> Register.Set.union use (standard  cfg node rtl)
-    | G.Exit               -> Register.Set.empty
+and live: G.node -> Register.Set.t = fun node -> 
+    let use          = Register.Set.empty (* dummy *)           in
+    let (read,write) = Rtlutil.read_write_sets (G.rtl node)     in
+    let live         = Register.Set.diff (after node) write     in
+        Register.Set.union live read
 @
 
 Computing the live sets of a control-flow graph (\cfg) is a fix-point
@@ -133,8 +120,8 @@ currently stored in the node.  If both differ the mutable
 [[changed]] flag is set.  
 
 <<struct Make>>=
-let process cfg changed node =
-    let l = live cfg node in
+let process changed node =
+    let l = live node in
         if l <> G.live node then
             ( changed := true; G.set_live node l )
         else
@@ -144,14 +131,16 @@ let process cfg changed node =
 The [[process]] function, which updates the live set of a node, is
 repeatedly applied to all nodes in [[cfg]].  This is done until
 [[process]] does not change any live set which means the fix point is
-reached. 
+reached.  We use [[G.fold]] to implement an iteration function
+[[iter]] over the nodes of a {\cfg}. 
 
 <<struct Make>>=
 let liveness cfg =
-    let changed = ref false in
+    let changed = ref false                                in
+    let iter cfg f = G.fold cfg (fun node () -> f node) () in
     let rec loop () = 
         ( changed := false
-        ; G.iter cfg (process cfg changed)
+        ; iter cfg (process changed) 
         ; if !changed then loop () else ()
         )
     in loop ()
