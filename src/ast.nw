@@ -108,7 +108,7 @@ export      = (name, string?)
 @
        
 <<>>=
-register    = (invariant, ty, name, reg?)
+register    = (invariant, hint?, ty, name, reg?)
 proc        = (conv?, name, formal*, body*)
 
 body        = BodyAt        (body, region)
@@ -504,10 +504,11 @@ let cformals xs = P.agrp (P.text "(" ^^ P.commalist cformal xs ^^ P.text ")")
     
 
 <<>>=                 
-let register is_global (v , t, n, reg) = 
+let register is_global (v , hint, t, n, reg) = 
     angrp begin 
     ~~ (if v = A.Invariant then P.text "invariant" ^^ P.break else P.empty)
     ^^ (if is_global       then P.text "register"  ^^ P.break else P.empty)
+    ^^ (match hint with Some h -> P.break ^^ str h | None -> P.empty)
     ^^ ty t
     ^/ id n
     ^^ (match reg with Some r -> P.break ^^ str r | None -> P.empty)

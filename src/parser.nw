@@ -796,8 +796,8 @@ let px ()  = (Parsing.symbol_start ())
 let rev    = List.rev
 
 <<>>=
-let mkRegs v (ty,regs) =
-    let r (id,hint) = (v, ty, id, hint) 
+let mkRegs v (hint,ty,regs) =
+    let r (id,reg) = (v, hint, ty, id, reg) 
     in
         List.map r regs
 <<>>=
@@ -939,8 +939,10 @@ init        :   LBRACE   exprs RBRACE          { A.InitExprs($2)  }
             |   STR                            { A.InitStr($1)    }
             |   string16                       { A.InitUStr($1)   }
 <<>>=
-registers   :   tyAt regs                      { $1, rev $2 }
-            |   tyAt regs COMMA                { $1, rev $2 }
+registers   :   STR    tyAt regs               { Some $1, $2, rev $3 }
+            |   STR    tyAt regs COMMA         { Some $1, $2, rev $3 }
+            |          tyAt regs COMMA         { None   , $1, rev $2 }
+            |          tyAt regs               { None   , $1, rev $2 }
 
 regs        :   regs COMMA ID STR              { ($3, Some $4)::$1 }
             |   regs COMMA ID                  { ($3, None   )::$1 }

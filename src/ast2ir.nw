@@ -82,10 +82,11 @@ view for [[Rtl.space]].  However, the [[char]] type is only used in
 annotate the [[default_memory]] definition. 
 
 <<auxiliaries>>=
-let default_convention         = "C--"          (* gospel truth *)
-let default_assertion          = -1             (* unused *)
-let default_memory             = 'm'            (* Rtl.space *)
-let toplevel_section           = "toplevel"     (* bogus *)
+let default_convention         = "C--"              (* gospel truth *)
+let default_assertion          = -1                 (* unused *)
+let default_memory             = 'm'                (* Rtl.space *)
+let toplevel_section           = "toplevel"         (* bogus *)
+let stackdata                  = "stackdata base"
 @
 
 <<>>=
@@ -221,7 +222,11 @@ and lvalue env = function
                                       ( x
                                       , scope s
                                       , r.F.index
-                                      , r.F.hwreg  
+                                      , ( match r.F.rhint with 
+                                        | F.RReg s -> Some s
+                                        | F.RHint _
+                                        | F.RNone  -> None
+                                        )
                                       , width
                                       )
             | _                -> assert false (* impossible *)
@@ -250,18 +255,34 @@ and variable env = function
             | F.Label(F.Proc _)-> Rtl.Const(Rtl.Link(x, bits t))
             | F.Label(F.Code)  -> Rtl.Const(Rtl.Link(x, bits t))
             | F.Label(F.Data)  -> Rtl.Const(Rtl.Link(x, bits t))
-            | F.Label(F.Stack _)-> assert false (* don't know how *)
+            | F.Label(F.Stack k)-> 
+                let width   = bits t                in
+                let pointer = F.findPointersize env in 
+                let loc   = Rtl.Cell
+                    ( default_memory
+                    , byteorder env
+                    , width
+                    , assert false (* to do *)
+                    , default_assertion
+                    ) in
+                Rtl.Fetch(loc,width)
             | F.Import(None)   -> Rtl.Const(Rtl.Link(x, bits t))
             | F.Import(Some n) -> Rtl.Const(Rtl.Link(n, bits t))
-            | F.Register(r)    -> let width = bits t in 
-                                  let v = Rtl.Var
-                                      ( x
-                                      , scope s
-                                      , r.F.index
-                                      , r.F.hwreg
-                                      , width
-                                      ) 
-                                  in Rtl.Fetch(v,width)
+            | F.Register(r)    -> 
+                let width = bits t in
+                let loc = Rtl.Var
+                  ( x
+                  , scope s
+                  , r.F.index
+                  , ( match r.F.rhint with 
+                    | F.RReg s -> Some s
+                    | F.RHint _
+                    | F.RNone  -> None
+                    )
+                  , width
+                  ) 
+                in Rtl.Fetch(loc,width)
+                                  
             | F.Continuation   -> assert false (* don't know how *)
             )
     | A.Mem (t,e,a)            -> let width = ty env t      in
@@ -536,6 +557,10 @@ let rec init env asm = function
     | A.InitUStr(s)   -> assert false
 @
 
+In order to reserve memory for data we have to know how many objects
+an sequence of initializing expressions defined. This number is
+returned by [[init_size]].
+
 <<>>=
 let rec init_size = function
     | None   -> 1
@@ -548,6 +573,9 @@ let rec init_size = function
                     loop i 
 @
 
+Data can be declared initialized or un-initialized. The amount of
+memory used by a declaration is the size of the base-type times the
+number of values of this type. 
 
 <<>>=
 let memdecl env asm t size ini = 

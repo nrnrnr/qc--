@@ -1061,11 +1061,18 @@ let import r t env (foreign,name) =
 <<>>=
 let imports r env t ii          = foldl (import r t) env ii
 let register r scope env = function
-    | (_,t,name,Some x) when scope = F.Local ->
+    | (_,Some h,t,name,Some x) ->
+                        E.error "can't have hint and hardware register"
+    | (_,h,t,name,Some x) when scope = F.Local ->
                         E.error "local registers can't be maped to hardware"
-    | (_,t,name,reg) -> let i = { F.index = F.getIndex env
-                                ; F.hwreg = reg
-                                }
+    | (_,h,t,name,reg) -> let i = { F.index = F.getIndex env
+                                  ; F.rhint = ( match h,reg with
+                                              | None  , None   -> F.RNone
+                                              | Some h, None   -> F.RHint h
+                                              | None  , Some r -> F.RReg r
+                                              | _ -> assert false
+                                              ) 
+                                  }
                         in
                             bindv name (r,scope) (E.ematch (ty r env t)
                             (fun t -> F.Register(i),t)) (F.incrIndex env)
@@ -1158,7 +1165,10 @@ bound in the environment and the [[goto]] labels in its body.
 let formal r env (hint, inv, ty, name) =
     match evalTy env ty with
     | E.Ok(t) -> let i = { F.index = F.getIndex env (* run-time API *)
-                         ; F.hwreg = None           (* h/w register *)
+                         ; F.rhint = ( match hint with
+                                     | Some h -> F.RHint h
+                                     | None   -> F.RNone
+                                     ) 
                          }
                      in
                          F.bindv name ((r,F.Local),(E.Ok(F.Register(i),t))) 

@@ -136,8 +136,12 @@ tells us the details.
 \end{itemize}
       
 <<>>=
+type reghint        = RReg  of string   (* hardare reg *)
+                    | RHint of string   (* calling convention hint *)
+                    | RNone             (* none of above *)
+
 type register       = { index:      int           (* for run-time API *)
-                      ; hwreg:      string option (* hardware register *)
+                      ; rhint:      reghint       
                       }
 
 type proc           = { env:        env partial
@@ -324,7 +328,7 @@ For each procedure an [[offset]] is maintained that counts the amount
 of memory declared on the stack and whose value is bound to label
 inside of stack data declarations.  Since procedures do not nest in
 {\PAL}, a single counter in the [[env]] is sufficient.  We have
-decided to maintain the [[offset]] counter inside the fat environemt
+decided to maintain the [[offset]] counter inside the fat environment
 because the [[offset]] must be maintained over many functions and
 becomes a non-local property.
 
@@ -338,12 +342,15 @@ val offset          : env -> int
 
 Each procedure sets the offset to zero by calling [[resetOffset]].  A
 data declaration increments the offset by its size using
-[[incrOffset]].  The [[alignOffset n]] fuction advances the [[offset]]
+[[incrOffset]].  The [[alignOffset n]] function advances the [[offset]]
 to the next multiple of [[n]] unless [[offset]] is already a multiple
 of [[n]].  The maximal alignment constraint is also remembered and
 returned by [[maxOffsetAlign]].  For labels and the total amount of
 [[stackdata]] [[offset]] reports the current value of the offset
 counter.
+
+Beware:  the value of [[offset]] is only meaningful in the context of
+a procedure and not a global program property.
 
 % ------------------------------------------------------------------ 
 \subsubsection{Imports and Exports}
@@ -539,8 +546,12 @@ type endianness     = Big | Little
 @            
 
 <<>>=
+type reghint        = RReg  of string   (* hardare reg *)
+                    | RHint of string   (* calling convention hint *)
+                    | RNone             (* none of above *)
+
 type register       = { index:      int           (* for run-time API *)
-                      ; hwreg:      string option (* hardware register *)
+                      ; rhint:      reghint       
                       }
 @
 
@@ -684,7 +695,7 @@ let bindv name ((reg,scope as attr),x) env =
             ; add name (attr',Arg.bad ()) (flagError env)
             )
         else match Arg.asgood x with 
-        | Some (Register({hwreg=Some hw} as reg),t) ->
+        | Some (Register({rhint=RReg hw} as reg),t) ->
                { env with venv   = StrMap.add name (attr,x) env.venv
                ;          hwregs = (name,reg,t) :: env.hwregs  
                }          
@@ -934,7 +945,11 @@ let clean_scope = function
 
 let clean_reg r =
     { Clean.index = r.Dirty.index
-    ; Clean.hwreg = r.Dirty.hwreg
+    ; Clean.rhint = ( match r.Dirty.rhint with
+                    | Dirty.RReg  s -> Clean.RReg  s
+                    | Dirty.RHint s -> Clean.RHint s
+                    | Dirty.RNone   -> Clean.RNone 
+                    )
     }
 
 let rec clean_venv map  =
