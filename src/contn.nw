@@ -48,9 +48,6 @@ type t
 val init_code:     t -> k_sp:Rtl.exp -> k_pc:Rtl.exp -> Rtl.rtl
 val rep : t -> Block.t               (* entire cont in memory *)
 val with_overflow: Target2.t -> base:Rtl.exp -> overflow:Block.t -> t
-  (* NR IS STILL NOT HAPPY WITH THIS CODE.  THE OVERFLOW BLOCK ALREADY HAS A BASE 
-     ADDRESS, SO WHY DO WE NEED ANOTHER ONE?  THE STORY HAS TO TELL SOMETHING
-     ABOUT THE *VALUE* OF THE CONTINUATION. *)
 @
 
 The [[cutto]] function takes a pointer to the continuation ([[contn]])
@@ -72,6 +69,7 @@ val get_contn : Rtl.exp * Rtl.exp -> Rtl.exp
 
 <<contn.ml>>=
 module T = Target2
+module R = Rtl
 
 type t =
     { block:      Block.t     (* memory block for pair *)
@@ -87,20 +85,29 @@ let init_code t ~k_sp ~k_pc =
 
 let rep t = t.block
 
+let offset base n w  = Rtlutil.addk w base n
+
+let pc_sp base t =
+  let ptrcells = t.T.pointersize / t.T.memsize in
+  let mem addr = Rtl.mem Rtl.none 'm' t.T.byteorder t.T.pointersize  addr in
+  let pc = mem (offset base 0        t.T.pointersize) in
+  let sp = mem (offset base ptrcells t.T.pointersize) in
+  pc, sp
+
 let with_overflow t ~base ~overflow =
-    let addk      = Rtlutil.addk t.T.pointersize in
-    let offset n  = addk base n in
-    let cell addr = Rtl.cell Rtl.none 'm' t.T.byteorder t.T.pointersize  addr in
-    let size = t.T.pointersize / t.T.memsize in
-        { block = Block.cathl overflow (Block.at ~base ~size:(2 * size)
-                                               ~alignment:t.T.alignment)
-        ; sp    = cell (offset size)
-        ; pc    = cell (offset 0)
-        ; overflow = Block.base overflow
-        }
+  let size = t.T.pointersize / t.T.memsize in
+  let pc, sp = pc_sp base t in
+  { block = Block.cathl overflow (Block.at ~base ~size:(2 * size)
+                                           ~alignment:t.T.alignment)
+  ; sp    = sp
+  ; pc    = pc
+  ; overflow = Block.base overflow
+  }
 
 let cutto t to_rtl ~contn =
-    to_rtl (contn, Rtlutil.addk t.T.pointersize contn (t.T.pointersize/t.T.memsize))
+  let w = t.T.pointersize in
+  let pc, sp = pc_sp contn t in
+  to_rtl (R.fetch pc w, R.fetch sp w)
 
 let get_contn (newpc, newsp) = newpc
 @
