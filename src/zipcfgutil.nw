@@ -1,0 +1,179 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+% Grades     ::=    "%%Grades:" Quality Importance Urgency
+% Quality    ::=    A|B|C|D|E
+% Importance ::=    Central|Subsystem|Peripheral
+% Urgency    ::=    Immediate|Soon|Later
+%
+% Example (at beginning of line): %%Grades: B Central Soon
+
+% ------------------------------------------------------------------ 
+\section{Control-Flow Graph Utilities}
+% ------------------------------------------------------------------ 
+
+The \module{cfg3} module provides the essential functionality for
+control-flow graphs ({\cfg}s). In order to separate essential
+functionality from nice-to-have functionality this module provides
+additional functions on {\cfg}s whose implementation do not require
+knowledge of the internal details of \module{cfg3}.
+<<zipcfgutil.mli>>=
+val cfg2ast: (Rtl.rtl -> Ast.stmt) -> Zipcfg.graph -> name:string -> Ast.proc
+@
+WHAT DO [[cfg2ast]] AND [[emit]] DO? PLEASE EXPLAIN THE PARAMETERS. --CL
+\begin{itemize}
+\item [[limit]], [[first]]: node numbers for {\cfg} traversing functions 
+      in \module{cfg3}.
+      
+\item [[fold_fwd]], [[fold_bwd]]: work as their counterparts in [[Cfg]]
+      except that they cover the entire {\cfg}. Note, that the [[cfg]]'s
+      nodes must be enumerated.
+
+\item [[subst]] substitutes {\rtl}s in all nodes of a [[cfg]].       
+
+\item [[cfg2dot]]: returns a {\cfg} in the \textsc{dot} input language.
+       The parameter [[compress]] tells \texttt{dot} to compress the
+      output graph to fit on one sheet of paper (\texttt{ratio=compress}).
+
+\item [[emit]]: Fold over {\cfg} in enumeration order and pass {\rtl}s
+      and symbols to the provided functions. Enumerates the {\cfg} if it is
+      not already enumerated.
+
+\item [[find_join_node]]: Find the join node with the given label, or return
+      the illegal node if no such node can be found.
+\end{itemize}
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+<<zipcfgutil.ml>>=
+module A  = Ast 
+module G  = Zipcfg
+module GR = Zipcfg.Rep
+module OG = Cfgx.M 
+
+let emit cfg call_emit rtl_emit sym_emit =
+  let labels n = if OG.kind n =*= OG.Join then OG.labels n else [] in
+  let visit node =
+    if OG.kind node =*= OG.Call then call_emit node
+    else (List.iter sym_emit (labels node)
+         ; match OG.to_executable node with
+           | None   -> ()
+           | Some i -> rtl_emit i
+         ) in
+  OG.fold_layout (fun n () -> visit n) () cfg
+        
+
+<<zipcfgutil.ml>>=
+let extend_with preds nodes =
+  let rec add_predecessors visited candidates = match candidates with
+  | [] -> visited
+  | node :: candidates ->
+      if List.exists (OG.eq node) visited then
+        add_predecessors visited candidates
+      else
+        add_predecessors (node :: visited) (preds node @ candidates) in
+  add_predecessors nodes (List.flatten (List.map preds nodes))
+
+let cfg2dot ~compress ~live ~name g =
+  let () = if live then assert false in
+  let original_nodes = OG.fold_layout (fun x y -> x :: y) [] g in
+  let nodes = extend_with OG.preds original_nodes in
+  let nodes = extend_with OG.succs nodes in
+  let nnodes = Aux.foldri (fun i n ns -> (i, n) :: ns) nodes [] in
+  let number node = fst (List.find (fun (i, n) -> OG.eq node n) nnodes) in
+  let nodename node = Printf.sprintf "\"N%d\"" (number node) in
+  let number_and_rtl node =
+    (if List.exists (OG.eq node) original_nodes then "" else "*") ^
+    let tag = "N" ^ string_of_int (number node) in
+    match OG.to_instr node with
+    | Some rtl -> tag ^ ": " ^ String.escaped (Rtlutil.ToString.rtl rtl)
+    | None ->
+        match OG.kind node with
+        | OG.Join -> List.fold_right (fun l t -> l ^ ": " ^ t) (OG.labels node) tag
+        | OG.Entry -> "Entry"
+        | OG.Exit  -> "Exit"
+        | OG.Illegal -> "<illegal>"
+        | OG.Impossible -> "<impossible>"
+        | _ -> tag ^ "???" in
+  let dotnode  node = nodename node ^ " [label=\"" ^ number_and_rtl node ^ "\"]" in
+  let edge_fwd from to' =
+    let edge = nodename from ^ " -> " ^ nodename to' in
+    if live then
+      (* edge ^ "[label=\"" ^ Register.SetX.to_string (L.live_in to') ^ "\"]\n" *)
+      assert false
+    else
+      edge ^ "\n" in
+  let edge_bwd from to' = nodename to'  ^ " -> " ^ nodename from ^
+                         "[dir=back,style=dotted]\n" in
+  let edges_leaving node tail =
+    let add_edge dir edges n = dir node n :: edges in
+    let tail = List.fold_left (add_edge edge_fwd) tail (OG.succs node) in
+    let tail = List.fold_left (add_edge edge_bwd) tail (OG.preds node) in
+    tail in
+  let oldv = Rtlutil.ToAST.verbosity Rtlutil.ToAST.Low in
+  let openg  = "digraph " ^ name ^ " {\n" in
+  let closeg = "}\n" in
+  let pagesize = "  page=\"8,10.5\"\n" in
+  let compress = if compress then "  ratio=compress\n" else "" in
+  let body = List.fold_right (fun n t -> edges_leaving n t)      nodes [closeg] in
+  let body = List.fold_right (fun n t -> dotnode n :: "\n" :: t) nodes body     in
+  let _ = Rtlutil.ToAST.verbosity oldv in
+  String.concat "" (openg :: pagesize :: compress :: body)
+@
+THE FOLLOWING CODE IS BOGUS --- IT ACTUALLY NEEDS TO VISIT THE NODES
+IN LAYOUT ORDER.
+<<zipcfgutil.ml>>=
+let cfg2ast instr g ~name =
+  let mid n is =
+    let is = match n with
+    | GR.Assertion _ -> A.CommentStmt "the preceding node is merely asserted" :: is
+    | _ -> is in
+    instr (GR.mid_instr n) :: is in
+  let first n tail = match n with
+  | GR.Label (l,_,_) -> List.fold_right (fun (_,l) t -> A.LabelStmt l :: t) [l] tail
+  | GR.Entry -> tail in
+  let last n tail = match n with
+  | GR.Exit 0 -> tail
+  | GR.Exit n -> A.CommentStmt "nonzero exit number?!" :: tail
+  | GR.Forbidden _ -> A.CommentStmt "forbidden to reach this point" :: tail
+  | _ -> instr (GR.last_instr n) :: tail in
+  let rec head h is = match h with
+  | GR.First f -> first f is
+  | GR.Head (h, m) -> head h (mid m is) in
+  let block b tail =
+    let h, l = GR.goto_end (GR.unzip b) in
+    head h (last l tail) in
+  let oldv = Rtlutil.ToAST.verbosity Rtlutil.ToAST.Low in
+  let blocks = G.postorder_dfs g in
+  let _ = Rtlutil.ToAST.verbosity oldv in
+    ( None
+    , name
+    , []
+    , List.map (fun s -> Ast.StmtBody s) (List.fold_right block blocks [])
+    , Srcmap.null
+    )
+@ 
+<<zipcfgutil.ml>>=
+let delete g n =
+  let pred = OG.pred n in
+  let succ = OG.succ n in
+  OG.set_succ g n ~succ:(OG.illegal g);
+  OG.set_succ g pred ~succ;
+  OG.delete g n
+@
+<<zipcfgutil.ml>>=
+let print_cfg cfg =
+  let () = Printf.eprintf "\nBEGIN CFG\n" in
+  let () = OG.iter_nodes (fun n -> Printf.eprintf "%s\n" (OG.print_node n)) cfg in
+  let () = Printf.eprintf "END CFG\n" in
+  flush stderr
+@
+<<zipcfgutil.ml>>=
+let rec find_join_node cfg lbl =
+  let f node res =
+    if OG.is_join node && List.mem lbl (OG.labels node)
+    then node else res
+  in
+  OG.fold_heads f (OG.illegal cfg) cfg
+@
