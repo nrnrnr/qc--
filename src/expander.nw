@@ -824,11 +824,11 @@ conditional branch, and pass everything over to [[expand_cbranch]].
 
     let elabel = Idgen.label "end_if" in
     let ejoin  = G.node_labeled cfg elabel in
-    G.set_succ ff    ~succ:(G.branch cfg ~target:ejoin);
-    G.set_succ tf    ~succ:(G.branch cfg ~target:ejoin);
+    let ()     = G.set_succ ff ~succ:(G.branch cfg ~target:ejoin) in
+    let ()     = G.set_succ tf ~succ:(G.branch cfg ~target:ejoin) in
 
     let rtl = R.guard (Up.exp e) (RU.store pc_lhs_up tsym) in
-    let bi = expand_cbranch rtl tjoin fjoin in
+    let bi  = expand_cbranch rtl tjoin fjoin in
     t, (bi,ejoin)
 @
 We might one day support multiple addressing modes, but for now, just registers. 
@@ -991,6 +991,8 @@ a sequence that ends in a conditional branch.
 To compile a comparison, we rely on the postexpander.
 <<other generic expander functions>>=
 and expand_cbranch_rtl g left right w ktrue kfalse =
+  assert (G.kind ktrue  = G.Join);
+  assert (G.kind kfalse = G.Join);
   let room = Post.stack_depth in
   let rewrite_bc bc ktrue kfalse =
     let new_cb = G.cbranch cfg (R.bool true) ktrue kfalse in
@@ -1006,9 +1008,16 @@ and expand_cbranch_rtl g left right w ktrue kfalse =
   | RP.Fetch _ -> Impossible.impossible "fetch as conditional guard"
   | RP.App (("not", []), [g]) ->
     expand_cbranch_rtl g left right w kfalse ktrue
-  | RP.App ((("conj" | "disj"), []), [g]) ->
-      Impossible.unimp "conjunction or disjunction in generic code expander"
-      (* one day to be expanded into control flow *)
+  | RP.App (("conjoin", []), [x;y]) ->
+    let true_case = expand_cbranch_rtl y left right w ktrue kfalse in
+    let ktrue'    = G.node_labeled cfg (Idgen.label "conj_true") in
+    G.set_succ ktrue' true_case;
+    expand_cbranch_rtl x left right w ktrue' kfalse 
+  | RP.App (("disjoin", []), [x;y]) ->
+    let false_case = expand_cbranch_rtl y left right w ktrue kfalse in
+    let kfalse'    = G.node_labeled cfg (Idgen.label "conj_false") in
+    G.set_succ kfalse' false_case;
+    expand_cbranch_rtl x left right w ktrue kfalse'
   | RP.App (cmp, ([x; y] as args)) when left = pc_lhs ->
       begin
         match Post.opclass cmp with
