@@ -127,6 +127,7 @@ let translate target env ~optimizer ~defineglobals =
   let pointersize = target.T.pointersize in
   let add = RU.add pointersize in
   let to_cc = Call.get_cc target in
+  let asm = F.asm env in
   <<environment-independent support for formals, actuals, and results>> in
   <<definition of [[proc]], which translates one procedure>> in
   <<definition of [[globals]]>> in
@@ -315,7 +316,8 @@ let continuations cc ast =
     (* defs are variables and so can't be a register set.  NEED ANOTHER MECHANISM *)
   let as_returns k =
     let pc = try List.assoc cc.C.name k.K.return_pcs
-             with Not_found -> Impossible.impossible "alt-return call convention" in
+             with Not_found -> Impossible.impossible
+                                 ("Unknown alt-return call convention " ^ cc.C.name) in
     let defs = k.K.return_in.C.regs in
     { G.defs = defs;     G.kills = volregs -- defs; G.node=entry pc   } in
   let contmap f = List.map (f << continuation) in
@@ -406,7 +408,7 @@ and generate_return_to_entries k =
     let in' = k.K.return_in in
     let ()  = add youngblocks cc.C.overflow_alloc.C.result_allocator in'.C.overflow in
     G.set_succ (G.node_labeled g label) (
-    G.assertion    g (in'.C.insp (Contn.rep k.K.rep))    **>
+    G.assertion    g (in'.C.insp in'.C.overflow)    **>
     G.stack_adjust g in'.C.pre_sp    **>
     G.instruction  g in'.C.shuffle   **>
     G.stack_adjust g in'.C.post_sp   **>
@@ -545,10 +547,9 @@ and call lhs cconv e args targets(*unused*) conts alias succ =
   let in'   = results cc.C.results.C.in' lhs     in
   let calli = target.T.call.T.embed e            in
   let conts = continuations cc conts             in
-  let () =
-    add youngblocks cc.C.overflow_alloc.C.parameter_deallocator out.C.overflow in
+  let () = add youngblocks cc.C.overflow_alloc.C.parameter_deallocator out.C.overflow in
                                         (* outgoing overflow parms *)
-  let () = add youngblocks cc.C.overflow_alloc.C.result_allocator in'.C.overflow in
+  let () = add youngblocks cc.C.overflow_alloc.C.result_allocator      in'.C.overflow in
                                         (* incoming overflow results *)
 
   let frame_size_span =
@@ -566,7 +567,7 @@ and call lhs cconv e args targets(*unused*) conts alias succ =
                    ~cuts_to:conts.S.cuts ~aborts:conts.S.aborts
                    ~reads:alias.S.reads ~writes:alias.S.writes ~succ    in
   let call_succ  =
-    G.assertion    g (in'.C.insp out.C.overflow)              **>
+    G.assertion    g (in'.C.insp in'.C.overflow)              **>
     G.stack_adjust g in'.C.pre_sp            **>  (* DOUBTS ABOUT THIS *)
     G.instruction  g in'.C.shuffle           **>
     G.stack_adjust g in'.C.post_sp           **>
@@ -591,9 +592,14 @@ and return cconv i n args =
     let out = actuals cc.C.results.C.out args  in
     <<verbosely announce the registers used by the return>>
     let ra_out = cc.C.ra_on_exit saved_ra out.C.overflow temps in
+    let w      = Rtlutil.Width.loc saved_ra in
+    let upd_ra = if i > 0 then RU.store saved_ra (RU.addk w (RU.fetch saved_ra)
+                                                            (i * asm#longjmp_size ()))
+      else R.null in
     let reti   = cc.C.return i n (RU.fetch ra_out) in
-    let () = add oldblocks cc.C.overflow_alloc.C.result_allocator out.C.overflow in
+    let ()     = add oldblocks cc.C.overflow_alloc.C.result_allocator out.C.overflow in
                         (* outgoing jump overflow = incoming *)
+    G.instruction  g upd_ra                  **>
     G.stack_adjust g out.C.pre_sp            **>
     G.instruction  g out.C.shuffle           **>
     G.instruction  g (RU.store ra_out (RU.fetch saved_ra))  **>
@@ -603,7 +609,7 @@ and return cconv i n args =
 @ The code above is safe only so long as the outgoing area doesn't
 overlap with the spill area.
 This restriction is unfortunate, as if we could atomically shuffle
-nonvolatile registesrs, outgoing parameters, and the return address
+nonvolatile registers, outgoing parameters, and the return address
 all in one go, we could overlap the two areas---except for spills.
 @
 <<verbosely announce the registers used by the return>>=
@@ -1040,7 +1046,6 @@ declarations.
 \end{itemize}
 <<function [[program]], which translates an entire program>>=
 let program prog =
-  let asm = F.asm env in
   <<supporting functions for fooling with the global-register area>> in
   let global_map = emit_global_register_area defineglobals in
   let section asm (name, data) =

@@ -19,8 +19,9 @@ It implements the
 
 The assembler constructor receives the output channel for the assembler. 
 <<ppcasm.mli>>=
+type node = Rtl.rtl Cfgx.M.node
 val make : 
-  ('cfg -> (Rtl.rtl -> unit) -> (string -> unit) -> unit) ->
+  ('cfg -> (node -> unit) -> (Rtl.rtl -> unit) -> (string -> unit) -> unit) ->
   out_channel -> ('a, 'cfg, 'b, 'c) Proc.t Asm.assembler
   (* pass Cfgutil.emit or Cfgutil.emit *)
 @
@@ -36,6 +37,7 @@ emits it to [[stdout]] when the [[emit]] method is called.
 module SM = Strutil.Map
 <<utilities>>
 <<definitions>>
+type node = Rtl.rtl Cfgx.M.node
 let make emitter fd = new asm emitter fd
 @
 <<utilities>>=
@@ -253,6 +255,11 @@ method comment s = fprintf _fd "; %s\n" s
 method const (s: Symbol.t) (b:Bits.bits) = 
   fprintf _fd ".set %s, 0x%Lx" s#mangled_text (Bits.U.to_int64 b)
 @ 
+For alternate returns, we need to know the size of a long jump.
+<<assembly methods>>=
+method longjmp_size () =
+  Impossible.unimp "longjmp size not set for PPC -- needed for alternate returns"
+@
 This almost certainly doesn't work---we must linearize the flow graph
 and know to emit labels.
 This code belongs elsewhere; assemblers shouldn't have to know more
@@ -264,6 +271,11 @@ method private instruction rtl =
   output_string _fd "\t";
   output_string _fd (Ppcrec.M.to_asm rtl (!imports));
   output_string _fd "\n"
+
+method private call node =
+  match Cfgx.M.to_executable node with
+  | None   -> ()
+  | Some i -> this#instruction i
 
 method private emit_pic symbol =
   let label = "L" ^ symbol#original_text in
@@ -283,7 +295,7 @@ method cfg_instr proc  =
     let is_pic rtl = if not(!pic) then pic := true in
     this#label symbol;
 (*    if (emitter cfg is_pic (fun _ -> ()); !pic) then this#emit_pic symbol; *)
-    (emitter cfg (this#instruction) label : unit)
+    (emitter cfg (this#call) (this#instruction) label : unit)
 
 <<unused utilities>>=
 module Asm = Ppcrec.M

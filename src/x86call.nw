@@ -264,8 +264,7 @@ let cmm_call_results  =
     ~mkauto:(fun () -> Block.srelative vfp "in ovfl results" autoAt specs.A.results)
     ~autosp:(fun r -> Block.base r.A.overflow)
     ~postsp:(fun _ _ -> std_sp_location)     (* irrelevant? *)
-    ~insp:(fun _ _ out_parm_block ->
-                     addk (Block.base out_parm_block) (Block.size out_parm_block)) in
+    ~insp:(fun a _ out_parm_block -> Block.base a.A.overflow) in
 let epilog  =
   C.outgoing ~growth ~sp
     ~mkauto:(fun () -> Block.srelative vfp "out ovfl results" autoAt specs.A.results)
@@ -290,11 +289,19 @@ let cut_actuals cont  =
 @ 
 \paragraph{Putting together the whole convention}
 <<x86call.ml>>=
-let conv ~jump name specs ~return_to cut =
+let rtn return_to k n ~ra =
+  if k > n then
+    Impossible.impossible (Printf.sprintf "Return <k/n> has k:%d > n:%d\n" k n)
+  else return_to ra
+
+let conv ~jump ~altret name specs ~return_to cut =
   <<functions to transform automata>>
   let return k n ~ra =
-    if k = 0 & n = 0 then return_to ra
-    else Impossible.impossible "alternate return using C calling convention" in
+    if altret then rtn return_to k n ~ra
+    else if k = 0 & n = 0 then return_to ra
+    else
+      Impossible.impossible
+        (Printf.sprintf "alternate return not allowed in %s calling convention" name) in
   { C.name       = name
   ; C.overflow_alloc  = 
       { C.parameter_deallocator = if jump then C.Callee else C.Caller
@@ -354,10 +361,6 @@ let template = (* conservative spec *)
         ; CS.ra             = (ra, CS.ReturnAddress.KeepInPlace)
         }
 
-let rtn return_to k n ~ra =
-    if k = 0 && n = 0 then return_to ra
-    else Impossible.impossible "alternate return using C calling convention" 
-
 let cc auto return_to cut spec =
     let t    = CS.to_call cut (rtn return_to) auto spec            in  
     let jump = spec.CS.overflow.C.parameter_deallocator = C.Callee in 
@@ -376,10 +379,10 @@ And finally, our lookup function.
 let cconv ~return_to cut ccname stage =
   let f =
     match ccname with
-    | "C--"         -> conv ~jump:true
-    | "lightweight" -> conv ~jump:true
-    | "notail"      -> conv ~jump:false
+    | "C--"         -> conv ~jump:true  ~altret:true
+    | "lightweight" -> conv ~jump:true  ~altret:true
+    | "notail"      -> conv ~jump:false ~altret:true
     | "C'"          -> c'
-    |  _            -> conv ~jump:false
+    |  _            -> conv ~jump:false ~altret:false
   in f ccname stage ~return_to cut
 @

@@ -401,17 +401,27 @@ function X86.layout["C"](dummy,proc) --- really for a C convention only
     blocks.oldblocks.caller   = Block.overlap_low (32, blocks.oldblocks.caller)
     blocks.youngblocks.callee = Block.overlap_high(32, blocks.youngblocks.callee)
     blocks.youngblocks.caller = Block.overlap_low (32, blocks.youngblocks.caller)
+
+    -- It is _vital_ that there be no padding inserted between the stack pointer
+    -- and the overflow areas. If there is padding, then the callee has no hope
+    -- of matching the caller's expectations.
+    -- Hence, we concatenate these blocks before attaching them to the rest of the
+    -- procedure, which might introduce strange alignment requirements.
+    local old_end   = Block.cat(32, { blocks.oldblocks.caller
+                                    , blocks.oldblocks.callee
+                                    , blocks.ra
+                                    , blocks.vfp
+                                    })
+    local young_end = Block.cat(32, { blocks.youngblocks.caller
+                                    , blocks.sp
+                                    , blocks.youngblocks.callee
+                                    })
     local layout = 
-                { blocks.oldblocks.caller       -- <-- high addresses
-                , blocks.oldblocks.callee
-                , blocks.ra
-                , blocks.vfp
+                { old_end                       -- <-- high addresses
                 , blocks.stackdata
                 , blocks.continuations
                 , blocks.spills
-                , blocks.youngblocks.caller
-                , blocks.sp                     -- <-- low addresses 
-                , blocks.youngblocks.callee
+                , young_end                     -- <-- low addresses
                 }
     if Debug.stack then
       write('======= using stack layout for C/notail =======\n')
@@ -451,18 +461,29 @@ function X86.layout["C--"](dummy,proc)
     blocks.oldblocks.callee    = Block.overlap_high(32, blocks.oldblocks.callee)
     blocks.youngblocks.caller  = Block.overlap_low (32, blocks.youngblocks.caller)
     blocks.youngblocks.callee  = Block.overlap_high(32, blocks.youngblocks.callee)
+
+    -- It is _vital_ that there be no padding inserted between the stack pointer
+    -- and the overflow areas. If there is padding, then the callee has no hope
+    -- of matching the caller's expectations.
+    -- Hence, we concatenate these blocks before attaching them to the rest of the
+    -- procedure, which might introduce strange alignment requirements.
+    local old_end   = Block.cat(32, { blocks.oldblocks.caller
+                                    -- On return, the ra must end up here,
+                                    -- immediately followed by the sp
+                                    , blocks.oldblocks.callee
+                                    -- , blocks.ra  -- joined to incoming block
+                                    -- , blocks.vfp
+                                    })
+    local young_end = Block.cat(32, { blocks.youngblocks.caller
+                                    , blocks.sp
+                                    , blocks.youngblocks.callee
+                                    })
     local layout = 
-                { blocks.oldblocks.caller       -- <-- high addresses
-                -- On return, the ra must end up here, immediately followed by the sp
-                , blocks.oldblocks.callee
-                -- , blocks.ra  -- joined to incoming block
-                -- , blocks.vfp
+                { old_end               -- <-- high addresses
                 , blocks.stackdata
                 , blocks.continuations
                 , blocks.spills
-                , blocks.youngblocks.caller
-                , blocks.sp                     -- <-- low addresses 
-                , blocks.youngblocks.callee
+                , young_end             -- <-- low addresses
                 }
     if Debug.stack then
       Debug.showblocks (blocks, {'oldblocks', 'ra', 'vfp',

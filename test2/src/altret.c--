@@ -1,0 +1,74 @@
+target byteorder little;
+import printf;
+export main;
+
+section "data" {
+  usage: bits8[] "Error: 1 command-line arg required!\n\000";
+  msg : bits8[] "returning...\n\000";
+  msg0: bits8[] "Normal return:%d%d%d\n\000";
+  msg1: bits8[] "Alt return 1:%d%d%d\n\000";
+  msg2: bits8[] "Alt return 2:%d%d%d%d%d%d\n\000";
+  cmm : bits8[] "Cmm calling conv...\n\000";
+  notail : bits8[] "notail calling conv...\n\000";
+}
+
+g("int" bits32 i) {
+  foreign "C" printf(cmm);  
+  foreign "C" printf(msg);  
+
+  switch (i) {
+    case 0: { return <0/2> (i,i,i); }
+    case 1: { return <1/2> (i,2,3,4,5,6); }
+    case 2: { return <2/2> (i,i,i); }
+  }
+  return <2/2> (i,i,i);
+}
+
+foreign "notail" g_notail("int" bits32 i) {
+  foreign "C" printf(notail);  
+  foreign "C" printf(msg);  
+
+  switch (i) {
+    case 0: { foreign "notail" return <0/2> (i,i,i); }
+    case 1: { foreign "notail" return <1/2> (i,2,3,4,5,6); }
+    case 2: { foreign "notail" return <2/2> (i,i,i); }
+  }
+  foreign "notail" return <2/2> (i,i,i);
+}
+
+f(bits32 i) {
+  bits32 a,b,c;
+  bits32 x,y,z;
+  
+  if(%lt(i,0)) {
+    i = %mul(i,-1);
+  }
+
+  if(%gt(i,2)) {
+    i = %rem(i,3);
+    x,y,z = g(i) also returns to k1,k2;
+  } else {
+    x,y,z = foreign "notail" g_notail(i) also returns to k1,k2;
+  }
+  foreign "C" printf(msg0, x,y,z);
+  return();
+
+
+  continuation k1("int" x, "int" y, "int" z):
+  foreign "C" printf(msg1, x,y,z);
+  return();
+  
+  continuation k2("int" x, "int" y, "int" z, "int" a, "int" b, "int" c):
+  foreign "C" printf(msg2, x,y,z,a,b,c);
+  return();
+}
+
+foreign "C" main(bits32 argc, "address" bits32 argv) {
+  f(0);
+  f(1);
+  f(2);
+  f(3);
+  f(4);
+  f(5);
+  foreign "C" return(0);
+}

@@ -9,6 +9,8 @@ function norun(file) return { source = file, runnable="false" } end
 -- source files live in src directory
 Test.source  = "src"
 Test.files = { "add.c--"
+             , "altret.c--"
+             , "altret2.c--"
              , "bits-bug.c--"
              , "bool.c--"
              , "blockcpy.c--"

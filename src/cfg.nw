@@ -274,6 +274,11 @@ If a graph has layout, the layout successor of a call node is a
 (possibly empty) table of alternate return continuations.
 This table may be a list of RTLs or a data block containing addresses.
 The layout successor of the table is the normal return continuation.
+
+HOWEVER, IGNORING THE JUMP TABLE FOR ALTERNATE RETURNS, WE LAY OUT THE
+NORMAL RETURN FIRST, THEN THE ALTERNATE RETURNS. FOR NOW, WE RELY ON THE
+ASSEMBLER TO EMIT THE JUMP TABLE IMMEDIATELY AFTER THE CALL NODE.
+
 \item
 A \emph{cut to} node
 normally has a single successor (the exit) but may have multiple
@@ -1777,21 +1782,20 @@ let mk_call i ~pred ~contedges ~lsucc ~uses ~altrets ~unwinds_to ~cuts_to
         }
 
 let call cfg i ~altrets ~succ ~unwinds_to ~cuts_to ~aborts ~uses ~defs ~kills ~reads ~writes =
-  let () = if List.length altrets > 0
-           then Impossible.unimp "alternate returns not yet supported" in
   let altrets     = List.map join_leading_to_ce altrets in
   let unwinds_to  = List.map join_leading_to_ce unwinds_to in
   let cuts_to     = List.map join_leading_to_ce cuts_to in
   let new_cedge n = {kills = kills; defs = defs; node = n} in
   let succ        = [new_cedge (join_leading_to succ)] in
   let abort       = if aborts then [new_cedge cfg.exit] else [] in
-  let edgelist    = List.flatten [altrets; succ; unwinds_to; cuts_to; abort] in
+  let edgelist    = List.flatten [succ; altrets; unwinds_to; cuts_to; abort] in
+  (*let edgelist    = List.flatten [altrets; succ; unwinds_to; cuts_to; abort] in*)
   let illedge     = fun {kills=k; defs=d; node=n} -> {kills=k; defs=d; node=cfg.ill} in
   let contedges   = Array.of_list (List.map illedge edgelist) in
   let cal =
     mk_call i ~pred:cfg.ill ~contedges ~lsucc:cfg.ill ~uses ~reads ~writes
-            ~altrets:(List.length altrets) ~unwinds_to:(List.length unwinds_to)
-            ~cuts_to:(List.length cuts_to) in
+              ~altrets:(List.length altrets) ~unwinds_to:(List.length unwinds_to)
+              ~cuts_to:(List.length cuts_to) in
   let ()  = Aux.foldri (fun i n () -> set_succ_n cal i ~succ:n.node)
                        edgelist () in
   cal

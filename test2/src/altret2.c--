@@ -1,0 +1,42 @@
+target byteorder little;
+
+import printf;
+import read;
+import close;
+
+export main;
+
+doread() {
+  bits32 cnt;
+  stackdata {
+    buffer: bits32[4];
+  }
+
+  /* read from stdin */
+  cnt = foreign "C" read(0, buffer, 10);
+  if(%lt(cnt, 0)) {
+    return <0/1> (cnt);
+  }
+  foreign "C" close(0); /* ignore if fails... */
+  return<1/1>(cnt);
+}
+
+foreign "C" main(bits32 argc, bits32 argv) {
+  bits32 cnt;
+  bits32 err;
+
+  cnt = doread() also returns to read_fail;
+  foreign "C" printf(success_read, cnt);
+  cnt = doread() also returns to read_fail;
+  foreign "C" printf(success_read, cnt);
+  return(0);
+
+  continuation read_fail(err):
+  foreign "C" printf(fail_to_read, err);
+  return(1);
+}
+
+section "data" {
+  success_read: bits8[] "read() read %d bytes\n\000";
+  fail_to_read: bits8[] "Error: read() returned %d\n\000";
+}

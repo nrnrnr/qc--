@@ -11,8 +11,9 @@ to be saved. I assume that we do not use these but emit code directly
 that implements spilling.
 
 <<mipsasm.mli>>=
+type node = Rtl.rtl Cfgx.M.node
 val make : 
-  ('cfg -> (Rtl.rtl -> unit) -> (string -> unit) -> unit) ->
+  ('cfg -> (node -> unit) -> (Rtl.rtl -> unit) -> (string -> unit) -> unit) ->
   out_channel -> ('a, 'cfg, 'b, 'c) Proc.t Asm.assembler
   (* pass Cfgutil.emit or Cfgutil.emit *)
 @
@@ -51,6 +52,8 @@ No suprises here. See the sepecification of the interface in
 
 <<mipsasm.ml>>=
 module SM = Strutil.Map
+
+type node = Rtl.rtl Cfgx.M.node
 
 let fprintf = Printf.fprintf
 let sprintf = Printf.sprintf
@@ -131,9 +134,18 @@ method comment s = ()
 method const (s: Symbol.t) (b:Bits.bits) = 
     fprintf _fd "%s = %Lx" s#mangled_text (int64 b)
 
+method longjmp_size () =
+  Impossible.unimp "longjmp size not set for mips -- needed for alternate returns"
+
 method private instruction rtl =
     output_string _fd (Mipsrec.to_string rtl);
     output_string _fd "\n"
+
+method private call node =
+  match Cfgx.M.to_executable node with
+  | None   -> ()
+  | Some i -> this#instruction i
+
 
 method cfg_instr proc  = 
     let cfg    = proc.Proc.cfg
@@ -144,7 +156,7 @@ method cfg_instr proc  =
     Printf.fprintf _fd ".abicalls       /* HACK! NetBSD needs this */\n";
     this#label symbol;
     Printf.fprintf _fd ".cpload $25     /* HACK! NetBSD needs this */\n";
-    (emitter cfg (this#instruction) label : unit)
+    (emitter cfg (this#call) (this#instruction) label : unit)
 @
 
 

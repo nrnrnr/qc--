@@ -19,7 +19,8 @@ knowledge of the internal details of \module{cfg3}.
 <<cfgutil.mli>>=
 val cfg2dot:    compress:bool -> live:bool -> name:string -> Rtl.rtl Cfgx.M.t -> string
 val cfg2ast: ('i -> Ast.stmt) -> 'i Cfgx.M.t -> name:string -> Ast.proc
-val emit  :   'i Cfgx.M.t -> ('i -> unit) -> (string -> unit) -> unit
+val emit  :   'i Cfgx.M.t -> ('i Cfgx.M.node -> unit) -> ('i -> unit) ->
+              (string -> unit) -> unit
 val delete :  'i Cfgx.M.t -> 'i Cfgx.M.node -> unit
   (* unsplice and delete a node *)
 val print_cfg: Rtl.rtl Cfgx.M.t -> unit
@@ -58,13 +59,15 @@ module A = Ast
 module G = Cfgx.M 
 module L = Cfgx.Live 
 
-let emit cfg rtl_emit sym_emit =
+let emit cfg call_emit rtl_emit sym_emit =
   let labels n = if G.kind n = G.Join then G.labels n else [] in
   let visit node =
-    List.iter sym_emit (labels node);
-    match G.to_executable node with
-    | None   -> ()
-    | Some i -> rtl_emit i in
+    if G.kind node = G.Call then call_emit node
+    else (List.iter sym_emit (labels node)
+         ; match G.to_executable node with
+           | None   -> ()
+           | Some i -> rtl_emit i
+         ) in
   G.fold_layout (fun n () -> visit n) () cfg
         
 
