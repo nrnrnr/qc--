@@ -13,7 +13,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <setjmp.h>
-#include <fenv.h>    /* C99 */
+/* #include <fenv.h> */    /* C99 */
 
 #include "lualink.h"
 #include "encode.h"
@@ -395,7 +395,7 @@ void run_interp(thread *t) {
       { 
         next = (((MATCH_p) + 0));
         
-        #line 856 "interp.m"
+        #line 859 "interp.m"
         cmm_err("unsupported instruction encoutered");
         
         
@@ -412,7 +412,7 @@ void run_interp(thread *t) {
               unsigned p = MATCH_w_32_8 /* bits32 at 8 */;
               next = (((MATCH_p) + 5));
               
-              #line 832 "interp.m"
+              #line 835 "interp.m"
                {
                                                  procedure    *proc = (procedure *) p;
                                                  continuation *c;
@@ -437,7 +437,7 @@ void run_interp(thread *t) {
             { 
               next = (((MATCH_p) + 1));
               
-              #line 845 "interp.m"
+              #line 848 "interp.m"
                {
                                                  curr_proc = NULL;
               
@@ -927,7 +927,7 @@ void run_interp(thread *t) {
               unsigned a = MATCH_w_32_8 /* bits32 at 8 */;
               next = (((MATCH_p) + 5));
               
-              #line 523 "interp.m"
+              #line 524 "interp.m"
                {
                                                  value        v;
                                                  CMM_label   *lbl;
@@ -1049,7 +1049,8 @@ void run_interp(thread *t) {
               
                                                                                                            stackdata     = t->stack_free;
                                                                                                            t->stack_free = (void *)(((dataptr) t->stack_free) +
-                                                                                                                                   proc->stackdata_size);
+                                                                                                                             proc->stackdata_size +
+                                                                                                                             proc->stackdata_size % DEF_ALIGN);
                                                                                                            stackdata_end = (dataptr) (t->stack_free);
                                                                                                            mem_assert(t->stack_free <= t->stack_limit);
               
@@ -1073,7 +1074,7 @@ void run_interp(thread *t) {
             { 
               next = (((MATCH_p) + 1));
               
-              #line 657 "interp.m"
+              #line 659 "interp.m"
                {
                                                  value      v;
                                                  CMM_label *lbl;
@@ -1094,7 +1095,8 @@ void run_interp(thread *t) {
               
                                                                             stackdata     = (datastack) (locals_end = locals + 
                                                                                                           proc->num_locals);
-                                                                            stackdata_end = stackdata + proc->stackdata_size;
+                                                                            stackdata_end = stackdata + proc->stackdata_size +
+                                                                                            proc->stackdata_size % DEF_ALIGN;
                                                                             t->stack_free = (void *) stackdata_end;
                                                                             mem_assert(t->stack_free <= t->stack_limit);
               
@@ -1121,7 +1123,7 @@ void run_interp(thread *t) {
               unsigned count = MATCH_w_8_16 & 0xff /* bits8b at 16 */;
               next = (((MATCH_p) + 3));
               
-              #line 687 "interp.m"
+              #line 690 "interp.m"
                { 
                                                  actptr     caller;
                                                  lua_State *L;
@@ -1204,7 +1206,7 @@ void run_interp(thread *t) {
             { 
               next = (((MATCH_p) + 1));
               
-              #line 758 "interp.m"
+              #line 761 "interp.m"
                {
                                                  value         v;
                                                  CMM_label    *lbl;
@@ -1290,7 +1292,7 @@ void run_interp(thread *t) {
             { 
               next = (((MATCH_p) + 0));
               
-              #line 856 "interp.m"
+              #line 859 "interp.m"
               cmm_err("unsupported instruction encoutered");
               
               
@@ -1317,9 +1319,10 @@ void run_interp(thread *t) {
                                                  case CMM_LABEL:
                                                    {
                                                    unsigned loc;
-                                                   cmm_assert(location_known(lbl->lbl.raddr),
-                                                              "cannot push value of undefined "
-                                                              "symbol");
+                                                   if (!location_known(lbl->lbl.raddr))
+                                                     cmm_err("cannot push value of undefined "
+                                                             "symbol \"%s\"", 
+                                                             lbl->lbl.raddr->label->name);
               
                                                    loc = location(lbl->lbl.raddr);
                                                    v = to_CMM_value(loc, sizeof(void *) * 8);
@@ -1368,7 +1371,7 @@ void run_interp(thread *t) {
               next = (((MATCH_p) + 1));
               
               #line 458 "interp.m"
-               PUSH(to_CMM_value(fegetround(), 2), values);
+               /* PUSH(to_CMM_value(fegetround(), 2), values); */
                                                  pc = next;
               
               
@@ -1384,7 +1387,7 @@ void run_interp(thread *t) {
               #line 460 "interp.m"
                {
                                                  value v = POP(values);
-                                                 fesetround(v.bits2);
+                                                 /* fesetround(v.bits2); */
                                                  pc      = next;
                                                  }
                           /* ARGS OK */
@@ -1400,7 +1403,7 @@ void run_interp(thread *t) {
             { 
               next = (((MATCH_p) + 1));
               
-              #line 850 "interp.m"
+              #line 853 "interp.m"
                {
                                                  pc = next;
                                                  }
@@ -1415,7 +1418,7 @@ void run_interp(thread *t) {
             { 
               next = (((MATCH_p) + 1));
               
-              #line 853 "interp.m"
+              #line 856 "interp.m"
                {
                                            cmm_err("fell off end of a C-- section");
                                            }
@@ -1430,7 +1433,7 @@ void run_interp(thread *t) {
   } 
 }
 
-#line 858 "interp.m"
+#line 861 "interp.m"
 
       if (err_occurred || done) break;
     }

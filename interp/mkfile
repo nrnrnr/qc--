@@ -40,7 +40,7 @@ MODE      = user
 # ------------------------------------------------------------------
 
 INTERP    = evaluating
-DEPEND    = $CC -MM $INCLUDES
+DEPEND    = -MM
 
 all:V:      $NAME
 all.opt:V:  all
@@ -48,10 +48,15 @@ all.opt:V:  all
 update:V:     $BINDIR/$NAME
 update.opt:V: update
 
-depend:V:   $DEPEND
+depend:V:   $SRCS $HDRS
+            cp mkfile mkfile.bak
+            sed '/^# DO NOT DELETE/q' mkfile.bak > mkfile
+            $CC $DEPEND $INCLUDES $SRCS | \
+                sed 's/gc\.o:/clients\/gc\.o:/' >> mkfile
 
 test:VQ:
-            (cd test; mk $MKFLAGS test)
+            cd test
+            mk $MKFLAGS test
 
 clean:V:
             rm -f *.o clients/*.o
@@ -61,7 +66,8 @@ clean.opt:V: clean
 clobber:V:  clean
 	        rm -f *.blg *.log *.dvi *.inc *.toc *.aux 
             rm -f clients/*.blg clients/*.inc
-	        rm -f $NWTEXFILES interfaces.nw clients/gc.tex prof.out core *~
+	        rm -f $NWTEXFILES interfaces.nw clients/gc.tex
+            rm -f prof.out core *~
             rm -f $NAME clients/gc_client
             rm -f *.m *.i decode.fetch bytecode.sled clients/*.i
             rm -f $INTERPHDRS $INTERPSRCS
@@ -177,14 +183,29 @@ clients/gc_client: $COREOBJS clients/gc.o
 ###
 ### alternately built binaries (for sparc, lcc, etc.)
 
-lcc-interp:V: clobber
+atac-interp:V:
+    rm -f $NAME
+    mk $MKFLAGS MODE=$MODE NOTANGLEOPTS= CC='atac gcc' sparc-interp
+    sed '/\#line/d' interp-dec.c > interp-dec.c
+    sed '/\#line/d' disasm-dec.c > disasm-dec.c
+    cp $NAME $BINDIR/$NAME
+
+lcc-interp:V:
     mk $MKFLAGS MODE=$MODE code
     mk $MKFLAGS MODE=$MODE CC=lcc CFLAGS='-g -A -A -b $INCLUDES' $NAME
     mk $MKFLAGS MODE=$MODE CC=lcc CFLAGS='-g -A -A -b $INCLUDES' clients/gc_client
 
 sparc-interp:V:
-    mk $MKFLAGS MODE=$MODE MACHINE=sparc \
-    TOOLS=/home/lair/olinsky/bin/sparc/tools $NAME
+    mk $MKFLAGS MODE=$MODE MACHINE=sparc NOTANGLEOPTS=$NOTANGLEOPTS \
+    TOOLS=/home/lair/olinsky/bin/sparc/tools $NAME \
+    LUAINCLUDES=-I/home/lair/olinsky/include \
+    LUALIBS='/home/lair/olinsky/lib/sparc/o/*.o' \
+    CC='$CC'
+    mk gc $MKFLAGS MODE=$MODE MACHINE=sparc NOTANGLEOPTS=$NOTANGLEOPTS \
+    TOOLS=/home/lair/olinsky/bin/sparc/tools $NAME \
+    LUAINCLUDES=-I/home/lair/olinsky/include \
+    LUALIBS='/home/lair/olinsky/lib/sparc/o/*.o' \
+    CC='$CC'
 
 # ------------------------------------------------------------------
 # documentation-related files
@@ -259,15 +280,6 @@ machine.h:D: interp.nw
     $NOTANGLE -R$target $prereq | $CPIF $target
 
 # ------------------------------------------------------------------ 
-# recalculate dependencies
-# ------------------------------------------------------------------ 
-
-depend:V: $SRCS $HDRS
-    cp mkfile mkfile.bak
-    sed '/^# DO NOT DELETE/q' mkfile.bak > mkfile
-    $DEPEND $SRCS | sed 's/gc\.o:/clients\/gc\.o:/' >> mkfile
-
-# ------------------------------------------------------------------ 
 # intermediate code targets
 # ------------------------------------------------------------------ 
 #
@@ -317,17 +329,9 @@ ccall.o: ccall.c ccall.h table.h value.h types.h machine.h label.h \
 controlflow.o: controlflow.c controlflow.h activation.h table.h \
  types.h machine.h uid.h value.h interp.h assemblyunit.h intervals.h \
  label.h thread.h
-disasm-dec.o: disasm-dec.c disasm.h label.h assemblyunit.h \
- controlflow.h activation.h table.h types.h machine.h uid.h value.h \
- operator.h
-encode.o: encode.c encode.h
 encoding.o: encoding.c encoding.h table.h assemblyunit.h controlflow.h \
  activation.h types.h machine.h uid.h value.h encode.h label.h \
  lualink.h operator.h interp.h intervals.h thread.h span.h
-interp-dec.o: interp-dec.c interp.h activation.h table.h types.h \
- machine.h uid.h value.h assemblyunit.h controlflow.h intervals.h \
- label.h thread.h lualink.h encode.h ccall.h operator.h encoding.h \
- span.h stack.h
 intervals.o: intervals.c intervals.h
 label.o: label.c label.h assemblyunit.h controlflow.h activation.h \
  table.h types.h machine.h uid.h value.h lualink.h interp.h \
@@ -353,10 +357,20 @@ thread.o: thread.c thread.h intervals.h label.h assemblyunit.h \
  interp.h
 uid.o: uid.c uid.h intervals.h thread.h label.h assemblyunit.h \
  controlflow.h activation.h table.h types.h machine.h value.h
-value.o: value.c value.h types.h machine.h
+value.o: value.c value.h types.h machine.h interp.h activation.h \
+ table.h uid.h assemblyunit.h controlflow.h intervals.h label.h \
+ thread.h
+interp-dec.o: interp-dec.c interp.h activation.h table.h types.h \
+ machine.h uid.h value.h assemblyunit.h controlflow.h intervals.h \
+ label.h thread.h lualink.h encode.h ccall.h operator.h encoding.h \
+ span.h stack.h
+disasm-dec.o: disasm-dec.c disasm.h label.h assemblyunit.h \
+ controlflow.h activation.h table.h types.h machine.h uid.h value.h \
+ operator.h interp.h intervals.h thread.h
+encode.o: encode.c encode.h
 client.o: client.c client.h runtime.h label.h assemblyunit.h \
  controlflow.h activation.h table.h types.h machine.h uid.h value.h \
  interp.h intervals.h thread.h disasm.h ccall.h
 clients/gc.o: clients/gc.c clients/gc.h runtime.h label.h assemblyunit.h \
  controlflow.h activation.h table.h types.h machine.h uid.h value.h \
- interp.h intervals.h thread.h ccall.h
+ interp.h intervals.h thread.h ccall.h span.h

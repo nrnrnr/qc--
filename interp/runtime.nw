@@ -192,35 +192,28 @@ Cmm_Cont *Cmm_CreateThread(Cmm_Codeptr f, Cmm_Dataptr x, void *s, unsigned n,
                       "CMM.exports({ '_boot_proc_%u' })    \n"
                       "CMM.section('_boot_section_%u')     \n"
                       "CMM.align(%d)                       \n"
-                      "CMM.define_label('_boot_f_%u')      \n"
-                      "CMM.skip(4)                         \n"
                       "CMM.define_label('_boot_x_%u')      \n"
+                      "CMM.skip(%d)                        \n"
+                      "CMM.define_label('_boot_f_%u')      \n"
                       "CMM.skip(4)                         \n"
                       "CMM.procedure('_boot_proc_%u',1,0)  \n"
 
                       "CMM.push_symbol('_boot_x_%u')       \n"
                       "CMM.fetch(%d,%s,%d)                 \n"
-
-                      "CMM.store_local(0)                  \n"
-                      "CMM.fetch_local(0)                  \n"
-                      "CMM.cbranchf('_boot_label_%u')      \n"
-
-                      "CMM.fetch_local(0)                  \n"
-                      "CMM.fetch(%d,%s,%d)                 \n"
                       "CMM.store_arg(0)                    \n"
 
-                      "CMM.define_label('_boot_label_%u')  \n"
                       "CMM.push_symbol('_boot_f_%u')       \n"
                       "CMM.fetch(%d,%s,%d)                 \n"
                       "CMM.call({}, {}, {}, 0)             \n"
+
                       "CMM.cmm_return(0, 0)                \n"
                       "CMM.end_section()                   \n",
 
                       CMM_label_raddr(((CMM_label *) f))->label->name, boot_id,
-                      boot_id, DEF_ALIGN, boot_id, boot_id, boot_id, boot_id,
-                      8*sizeof(void *), byteorder_string, DEF_ALIGN, boot_id, 
-                      8*sizeof(void *), byteorder_string, DEF_ALIGN, boot_id, 
-                      boot_id, 8*sizeof(void *), byteorder_string, DEF_ALIGN);
+                      boot_id, DEF_ALIGN, boot_id, sizeof(value), 
+                      boot_id, boot_id, boot_id,
+                      8*sizeof(value *), byteorder_string, DEF_ALIGN, boot_id,
+                      8*sizeof(void  *), byteorder_string, DEF_ALIGN);
 
   boot_id++;
 
@@ -243,13 +236,16 @@ Cmm_Cont *Cmm_CreateThread(Cmm_Codeptr f, Cmm_Dataptr x, void *s, unsigned n,
   /* initialize f and x placeholders in loaded bootstring unit */
   assert(location_known(CMM_label_raddr((CMM_label *) lbl)));
   {
-    void **loc = (void **) CMM_label_location((CMM_label *) lbl);
+    void  **f_loc = ((void **) CMM_label_location((CMM_label *) lbl)) - 1;
+    value  *x_loc = ((value *) f_loc) - 1;
 
     /* f */
-    loc[-2] = (void *) f;
+    *f_loc = (void *) f;
 
     /* x */
-    loc[-1] = (void *) x;
+    if (x != NULL) {
+      *x_loc = *((value *) x);
+    }
   }
 
   return (Cmm_Cont *) t;
@@ -564,7 +560,7 @@ static void runtime_sys_err(char *fmt, ...) {
     fprintf(stderr, "\n");
   }
 
-  fprintf(stderr, "error: C-- runtime system error; cannot continue");
+  fprintf(stderr, "error: C-- runtime system error; cannot continue\n");
   va_end(args);
 
   exit(1);

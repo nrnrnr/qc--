@@ -88,14 +88,15 @@ Note that [[UNDERFLOW_CHECK]], [[OVERFLOW_CHECK]], and [[ASSERT_EMPTY]] all depe
 
 <<macro definitions>>=
 /* PUSH(V, S) pushes value V onto value stack S and returns void */
+
 #define PUSH(V, S)            (OVERFLOW_CHECK(S, 1),         \
-                               (STACK_ELT(0, (++(S)))) = V,  \
+                               (STACK_ELT((++(S)), 0)) = V,  \
                                print_value_stack((S), S##_base, #S))
 
 /* POP(S) pops the value on top of stack S and returns it */
 #define POP(S)                (UNDERFLOW_CHECK(S, 1),                \
                                print_value_stack((S)-1, S##_base, #S), \
-                               (STACK_ELT(0, ((S)--))))
+                               (STACK_ELT(((S)--), 0)))
 
 /* UNDERFLOW_CHECK(S, N) checks to make sure that popping N elements off stack
    S will not cause it to underflow
