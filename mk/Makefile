@@ -3,7 +3,9 @@
 #  Edit the variables below if neccessary and call "make".
 # 
 
-VERSION = 1.0
+# 1.0 released on 5 March 2002
+
+VERSION = 1.1
 
 PREFIX  = /usr/local
 BINDIR  = $(PREFIX)/bin
