@@ -180,27 +180,15 @@ Position & Integer  & Floating-Point \\
 \end{tabular}
 \end{quote}
 
-We encode this by exclusion rules between corresponding integer and
-floating-point registers.
+The implementation below uses the \emph{position} of a parameter to
+determine the register it is passed in. The [[counter]] stage counts
+the number of bits requested for allocation; the [[offsetregs]] stages
+looks at its list of registers, ignores as many registers as are
+needed to account for bits already allocated and then uses any
+remaining register to satisfy the request.
 
-<<alphacall.ml>>=
-let spaces =
-  let module SS = Space.Standard64 in
-  let r = SS.r 32 byteorder [64] in
-  let f = SS.f 32 byteorder [64] in
-  function
-  | 'r' -> r
-  | 'f' -> f
-  | _   -> Impossible.impossible "register space in parameter passing"
-@
-
-Here is an alternative implementation of the parameter automaton. Rather
-than using an exclusion relation, it uses the \emph{position} of a
-parameter to determine the register it is passed in. The [[counter]]
-stage counts the number of bits requested for allocation; the
-[[offsetregs]] stages looks at its list of registers, ignores as many
-registers as are needed to account for bits already allocated and then
-uses any remaining register to satisfy the request.
+Note that the direction of [[growth]] in the overflow block is
+independent of the stack growth. 
         
 <<alphacall.ml>>=        
 let arguments () = 
@@ -219,8 +207,8 @@ let arguments () =
 
 \paragraph{C~cut-to parameters}
 
-Since this is strictly internal calling convention, we can use whatever
-we like. We use all volatile registers.
+Since this is strictly an internal calling convention, we can use
+whatever we like. We use all volatile registers.
 <<alphacall.ml>>=
 let cut_args = 
     A.choice

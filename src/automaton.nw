@@ -129,11 +129,6 @@ val narrows : w:int -> n:int -> loc -> loc
 val narrowu : w:int -> n:int -> loc -> loc
 val narrowf : w:int -> n:int -> loc -> loc
 @ 
-This is a compatibility interface, which will go away.
-<<old compatibility interface as par of exported values>>=
-val of_old : Automaton2.loc -> loc
-val to_old : loc -> Automaton2.loc
-@ 
 \subsection{Constructor interface}
 Most clients will simply use an automaton, but some will need to
 create one.
@@ -184,8 +179,8 @@ To make an overflow block, you need a bunch of information about the
 machine and a bunch of information about the convention.
 <<exported values>>=
 val overflow :
-  memsize:int -> byteorder:Rtl.aggregation ->                     (* machine    *)
-  growth:Memalloc.growth -> max_alignment:int ->                  (* convention *)
+  memsize:int -> byteorder:Rtl.aggregation ->               (* machine    *)
+  growth:Memalloc.growth -> max_alignment:int ->            (* convention *)
   stage
 @ 
 It is possible to have {no} overflow block.
@@ -239,17 +234,27 @@ val useregs : Register.t list -> errormsg:(int -> Register.t list -> string) -> 
 @ The [[useregs]] stage is stateful; a register handed out in response
 to an earlier request cannot be used to satisfy a later request.
 @
-See the paper for this.
+See the paper for this, noting that [[offsetregs]] implements the
+[[regs_by_bits]] constructor discussed in the paper.
 <<exported values>>=
 val bitcounter    : int ref -> stage
 val offsetregs : int ref -> Register.t list -> stage
 @ 
-And also see the paper for this:
+And also see the paper for this, noting that [[argnoregs]] implements
+the [[regs_by_args]] constructor from the paper:
 <<exported values>>=
 val argcounter : int ref -> stage
 val argnoregs  : int ref -> Register.t list -> stage
 @ 
-And this is documented nowhere, not even in the paper.
+To help Lua code get a new [[int ref]] we provide a helper function
+that creates a new counter and initializes it to the provided value.
+<<exported values>>=
+val new_counter : int -> int ref
+@ 
+And this is documented nowhere, not even in the paper.  It is used
+to post-process the results from a [[freeze]] request.  For example,
+\module{mipscall.nw} uses [[postprocess]] to require that the overflow
+block is padded with an extra 16-byte block.
 <<exported values>>=
 val postprocess : stage -> (result -> result) -> stage
 @
@@ -292,6 +297,7 @@ requests.
 val as_stage : t -> stage
 @
 \paragraph{Other forms of history}
+
 Most calling conventions keep track of little history beyond knowing
 what locations have been used.
 The MIPS convention is unusual in that the placement a second
@@ -424,18 +430,21 @@ let freeze regs mems =
   { overflow = block; regs_used = regs; mems_used = mems; align_state = astate } in
 @ 
 \paragraph{Higher-order functions for request transformers}
+
 <<automaton.ml>>=
 type allocator = width: int -> alignment: int -> hint: string -> loc
-let txstage f = wrap (fun next -> { allocate = f next.allocate; freeze = next.freeze })
+let txstage f = wrap (fun next -> 
+                        { allocate = f next.allocate; freeze = next.freeze })
 let _ = (txstage : (allocator -> allocator) -> stage)
 @ 
 <<automaton.ml>>=
 let widths ws ~errormsg = txstage (
   (fun nalloc ~width ~alignment ~hint ->
-                  if List.exists ((=) width) ws then
-                    nalloc width alignment hint
-                  else
-                    Impossible.impossible (errormsg width)))
+     if   List.exists ((=) width) ws
+     then nalloc width alignment hint
+     else Impossible.impossible (errormsg width)))
+
+
 @   
 Narrowing and widening.
 <<automaton.ml>>=
@@ -457,12 +466,14 @@ let narrower = function
   | _ -> narrowu
 
 let widen mk_w = txstage (fun nalloc ~width:n ~alignment ~hint ->
-                  let w   = mk_w n in
-                  let loc = nalloc w alignment hint in
-                  if w = n then loc else narrower hint ~n:n ~w loc)
+  let w   = mk_w n in
+  let loc = nalloc w alignment hint in
+  if w = n then loc else narrower hint ~n:n ~w loc)
+
 <<automaton.ml>>=
 let align_to mk_align =
   txstage (fun nalloc ~width:w ~alignment ~hint -> nalloc w (mk_align w) hint)
+
 <<automaton.ml>>=
 type regstate = { mutable avail : Register.t list; mutable used : Register.Set.t }
 let getreg state = match state.avail with
@@ -492,8 +503,8 @@ let used = List.map regstring (RS.elements state.used) in
 Verbose.say 6 ["useregs automaton uses regs: "; String.concat ", " used; "\n"]
 @ 
 Now I'll try to do it right, with proper aggregation.
-Step one is to split locations
-<<automaton.ml>>=
+Step one is to split locations.
+<<alternative implementation of [[useregs]]>>=
 <<shift and mask functions>>
 let splitloc bo locs = match locs with
 | [l, w] -> l
@@ -525,7 +536,10 @@ let shl  w x k = R.app (R.opr "shl"  [w]) [x; const w k]
 let shrl w x k = R.app (R.opr "shrl" [w]) [x; const w k]
 let lobits w n x = R.app (R.opr "lobits" [w; n]) [x]
 @ 
-<<automaton.ml>>=
+This implementation below looks newer and looks like it has at least considered
+the possibility of splitting an allocation across resources, but it still
+seems unfinished and untested. -RRO
+<<alternative implementation of [[useregs]]>>=
 let useregs' regs ~errormsg next =
   let state = { avail = regs; used = RS.empty } in
   let can_aggregate _ _ = false in (* not implemented yet *)
@@ -583,6 +597,8 @@ let choice      = wrap_choice choice
 let is_hint  h' h w = h = h'
 let is_width w' h w = w = w'
 let is_any      h w = true
+
+let new_counter i = ref i
 @ 
 \paragraph{Register assignment by offset}
 <<automaton.ml>>=
@@ -667,6 +683,7 @@ let as_stage inner next =
 let as_stage inner = swrap (as_stage inner)
 @
 \paragraph{First choice}
+
 <<automaton.ml>>=
 let first_choice choices next =
   let choices = List.map (fun (p, c) -> (p, c next)) choices in
@@ -686,6 +703,18 @@ let first_choice choices next =
 let first_choice = wrap_choice first_choice
 @ 
 \paragraph{UNIT STUFF --- FIX ME}
+
+The [[unit]] stage essentially does nothing, passing on an allocation
+or freeze request straight to the stages that follow it in the pipeline.
+It is pretty much only useful as a default stage in a [[choice]] stage
+(along with the [[is_any]] primitive) to make sure we don't fall off
+the end of [[choice]].
+
+RRO: I wonder if it might be better to modify the semantics of [[choice]]
+to allow falling off the end if none of the primitives are made true,
+simply proceeding on to the next stage. This [[unit]] business looks like
+it could use some work (i.e. see the existing FIX ME annotation above).
+
 <<automaton.mli>>=
 val unit : stage
 <<automaton.ml>>=
