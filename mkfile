@@ -127,9 +127,6 @@ clobber:V:      dirs clean
                         \) -prune -o -type f -exec rm '{}' \;
                 
                 
-test:V:         all
-                cd test && mk $MKFLAGS $target
-
 # make sure appropriate empty directories exist
 dirs:V:
                 for i in bin lib man man/man1; do
