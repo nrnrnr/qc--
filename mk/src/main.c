@@ -231,7 +231,7 @@ main(int argc, char **argv)
 			if(tail->next == 0)
 				mk(tail->s);
 			else {
-				addrules(head, tail, strdup(""), VIR, mkinline, 0);
+				addrules(head, tail, strdup9(""), VIR, mkinline, 0);
 				mk(head->s);
 			}
 		}

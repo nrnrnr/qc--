@@ -31,7 +31,7 @@ atimeof(int force, char *name)
 	else{
 		atimes(archive);
 		/* mark the aggegate as having been done */
-		symlook(strdup(archive), S_AGG, "")->value = (void *)t;
+		symlook(strdup9(archive), S_AGG, "")->value = (void *)t;
 	}
 		/* truncate long member name to sizeof of name field in archive header */
 	snprint(buf, sizeof(buf), "%s(%.*s)", archive, SARNAME, member);
@@ -112,7 +112,7 @@ atimes(char *ar)
 			i--;
 		h.name[i+1]=0;		/* can stomp on date field */
 		sprint(buf, "%s(%s)", ar, h.name);
-		symlook(strdup(buf), S_TIME, (void *)t)->value = (void *)t;
+		symlook(strdup9(buf), S_TIME, (void *)t)->value = (void *)t;
 		t = atol(h.size);
 		if(t&01) t++;
 		LSEEK(fd, t, 1);
@@ -147,7 +147,7 @@ split(char *name, char **member)
 {
 	char *p, *q;
 
-	p = strdup(name);
+	p = strdup9(name);
 	q = utfrune(p, '(');
 	if(q){
 		*q++ = 0;

@@ -53,7 +53,7 @@ readenv(void)
 				p[len] = 0;
 			w = encodenulls(p, len);
 			free(p);
-			p = strdup(e[i].name);
+			p = strdup9(e[i].name);
 			setvar(p, (void *) w);
 			symlook(p, S_EXPORTED, (void*)"")->value = (void*)"";
 		}
@@ -154,7 +154,7 @@ dirtime(char *dir, char *path)
 				sprint(buf, "%s%s", path, db[i].name);
 				if(symlook(buf, S_TIME, 0))
 					continue;
-				symlook(strdup(buf), S_TIME, t)->value = t;
+				symlook(strdup9(buf), S_TIME, t)->value = t;
 			}
 		}
 		close(fd);
@@ -357,7 +357,7 @@ rcopy(char **to, Resub *match, int n)
 			p = match->e.ep;
 			c = *p;
 			*p = 0;
-			*to = strdup(match->s.sp);
+			*to = strdup9(match->s.sp);
 			*p = c;
 		}
 		else

@@ -215,7 +215,7 @@ outofdate(Node *node, Arc *arc, int eval)
 		sym = symlook(buf, S_OUTOFDATE, 0);
 		if(sym == 0 || eval){
 			if(sym == 0)
-				str = strdup(buf);
+				str = strdup9(buf);
 			ret = pcmp(arc->prog, node->name, arc->n->name);
 			if(sym)
 				sym->value = (void *)ret;

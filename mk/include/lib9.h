@@ -132,7 +132,7 @@ extern	int	print(char*, ...);
 extern	int	snprint(char*, int, char*, ...);
 extern	int	sprint(char*, char*, ...);
 extern	int	fprint(int, char*, ...);
-extern	char*	strdup(const char*);
+extern	char*	strdup9(const char*);
 #ifdef LONGLONG
 #define strtoll(s, t, i)	strtoll_inferno(s, t, i)
 extern	vlong	strtoll_inferno(const char*, char**, int);

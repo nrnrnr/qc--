@@ -29,7 +29,7 @@ readenv(void)
 			w = newword("");
 		if (symlook(*p, S_INTERNAL, 0))
 			continue;
-		s = strdup(*p);
+		s = strdup9(*p);
 		setvar(s, (void *)w);
 		symlook(s, S_EXPORTED, (void*)"")->value = (void*)"";
 	}
@@ -54,7 +54,7 @@ exportenv(Envy *e)
 			sprint(buf, "%s=%s", e->name,  wtos(e->values, IWS));
 		else
 			sprint(buf, "%s=", e->name);
-		p[i] = strdup(buf);
+		p[i] = strdup9(buf);
 	}
 	p[i] = 0;
 	environ = p;
@@ -80,7 +80,7 @@ dirtime(char *dir, char *path)
 				continue;
 			if(symlook(buf, S_TIME, 0))
 				continue;
-			symlook(strdup(buf), S_TIME, t)->value = t;
+			symlook(strdup9(buf), S_TIME, t)->value = t;
 		}
 		closedir(dirp);
 	}
@@ -310,7 +310,7 @@ rcopy(char **to, Resub *match, int n)
 			p = match->e.ep;
 			c = *p;
 			*p = 0;
-			*to = strdup(match->s.sp);
+			*to = strdup9(match->s.sp);
 			*p = c;
 		}
 		else

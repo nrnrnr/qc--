@@ -13,7 +13,7 @@ newarc(Node *n, Rule *r, char *stem, Resub *match)
 	a = (Arc *)Malloc(sizeof(Arc));
 	a->n = n;
 	a->r = r;
-	a->stem = strdup(stem);
+	a->stem = strdup9(stem);
 	rcopy(a->match, match, NREGEXP);
 	a->next = 0;
 	a->flag = 0;

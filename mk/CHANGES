@@ -1,35 +1,240 @@
+2004-04-20 13:26  lindig
 
-Mon Jul 29 17:44:11 EDT 2002 -CL
-  + Bug fixed in graph.c. Return value was missing in function
-    safe_regexec(). Bug noticed on Sparc/Solaris by
-    syryu@eecs.harvard.edu.
-    
-Fri Jul 12 13:26:08 EDT 2002 - NR
-  + Bugs documented in man page.
+        * Renamed strdup() to strdup9() to avoid name clash with
+        function in libc on some systems. Bumped up version number in
+        the Makefile. Updated this CHANGES by using cvs2cl(1).
 
-Wed May 15 14:26:52 EDT 2002 - CL
-  + Patch by William Josephson <wkj@eecs.harvard.edu> for FreeBSD 
-    integrated.      
+2004-04-16 09:22  lindig
 
-Mon Mar 11 10:55:20 EST 2002 - CL
-  + Checked compilation with lcc(1) on Linux and cc(1) on SunOS 5.5.1.
-    Call to mkdir(2) missed 2nd parameter. Definition of ulon in lib9.h
-    adjusted for lcc(1). 
+	* debian/changelog: 
+	
+	Changelog entry for NR's change.
 
-Fri Mar  8 10:07:37 EST 2002 - CL
-  + Removed includes for features.h and endian.h from include/lib9.h.
-    Now mk compiles on Solaris for me.
+2004-04-15 20:22  nr
 
-Tue Jul  3 10:26:47 EDT 2001 - CL
-  + Stripped out unnecessary .o files (leaving source files in place but
-    not used)
-  + Changed fprint to printf or fprintf.
-  + Removed bug in function squote, sh.c line 28 -- first n was added twice
-  + Need to do: introduce dependencies on .h files
+	* include/lib9.h, lib/9/dirstat-Nt.c, lib/9/dirstat-posix.c,
+	lib/9/dirstat.c: 
+	
+	Removed uid and gid fields from structure representing a directory.
+	 mk does not use these fields, but they are present by default in
+	lib9.  The advantage is we get to eliminate calls to getpwuid and
+	getpwgid, which in turn means we don't have to open a connection to
+	a YP (NIS) server.   With this change, mk in a small directory that
+	needs no change runs twice as fast, and on those occasions when the
+	YP server is overburdened, may save a factor of twenty on average
+	(since mk no longer freezes for seconds waiting for the YP server).
 
-Sat Apr 13 16:16:10 EDT 2002 - NR
-  + Expunged #includes CL left in by #if 0, per Kevin Redwine email
+2004-03-05 13:39  lindig
 
-Fri May 31 17:30:40 EDT 2002 - NR
-  + better info message when multiple command-line args are up to date 
-  (src/main.c)
+	* debian/: Makefile.debian, README.Debian, changelog, compat,
+	control, copyright, dirs, docs, files, mk.doc-base,
+	mk.postinst.debhelper, mk.prerm.debhelper, mk.substvars, rules:
+	Added debian/ which contains files necessary to build a Debian .deb
+	package for mk. I've tested package building on
+	lakeland.eecs.harvard.edu whose package-building tools are slighty
+	out of date.
+
+2004-01-07 16:00  lindig
+
+	* Makefile: Added new target tartest: builds tar distribution file
+	and tests it.
+
+2003-12-01 06:29  govereau
+
+	* Makefile, include/lib9.h, lib/9/dirstat.c, lib/9/doprint.c:
+	changes for OSX
+
+2003-07-14 23:30  govereau
+
+	* lib/9/newprint.c, lib/9/print.c, src/Inferno.c, src/Nt.c,
+	src/Posix.c, src/bufblock.c, src/dir.c, src/plan9.c: 4096 -> 8192
+
+2002-07-29 23:49  lindig
+
+	* Makefile: 
+	
+	Version bumped up.
+
+2002-07-29 23:48  lindig
+
+	* CHANGES: 
+	
+	Bug fix documented.
+
+2002-07-29 23:41  lindig
+
+	* src/graph.c: 
+	
+	Return value was missing in safe_regexec() in graph.c. This caused
+	a subtle bug with regexp rules on Sparc.
+
+2002-07-12 19:26  lindig
+
+	* CHANGES: 
+	
+	updated.
+
+2002-07-12 18:20  nr
+
+	* mk.1: notable bugs in mk.1
+
+2002-07-10 16:45  redwine
+
+	* mk.1: new bug added
+
+2002-06-05 19:48  lindig
+
+	* Makefile: 
+	
+	New release.
+
+2002-05-31 23:30  nr
+
+	* src/main.c: improve silly "command line arguments" message when
+	all up to date
+
+2002-05-31 23:29  nr
+
+	* mk-a4.pdf, mk-usl.pdf: two paper sizes of doco
+
+2002-05-31 23:29  nr
+
+	* CHANGES, CHANGES: log change
+
+2002-05-31 23:28  nr
+
+	* lib/9/create.c: use proper permissions for new directory
+
+2002-05-15 20:29  lindig
+
+	* Makefile: 
+	
+	Version bumped up after release.
+
+2002-05-15 20:28  lindig
+
+	* CHANGES, include/lib9.h: 
+	
+	Patch for FreeBSD by William Josephson <wkj@eecs.harvard.edu>.
+
+2002-04-13 22:09  nr
+
+	* include/lib9.h: dropped unused endian.h and features.h
+
+2002-03-11 17:07  lindig
+
+	* Makefile: 
+	Version incremented after release of 1.1.
+
+2002-03-11 16:59  lindig
+
+	* CHANGES, include/lib9.h, lib/9/create.c: 
+	Mk now compiles with lcc(1) on Linux and cc(1) on SunOS 5.5.1.
+
+2002-03-08 16:10  lindig
+
+	* CHANGES: 
+	Forget to update these.
+
+2002-03-08 16:03  lindig
+
+	* include/lib9.h: 
+	includes of features.h and endian.h removed. They are not required
+	and do not exist on Solaris.
+
+2002-03-07 16:13  lindig
+
+	* Makefile: 
+	Version number incremented after release of 1.0
+
+2002-02-01 21:58  lindig
+
+	* Makefile: 
+	Typo fixed.
+
+2002-02-01 21:57  lindig
+
+	* Makefile: 
+	New targets: tar, www.
+
+2002-02-01 21:53  lindig
+
+	* Makefile: 
+	New targets: www and tar.
+
+2002-02-01 17:35  lindig
+
+	* .cvsignore, Makefile: 
+	Taking care of *.tar.gz.
+
+2002-02-01 17:17  lindig
+
+	* Makefile: 
+	New target export to create *.tar.gz for source distribution.
+
+2001-08-15 16:55  nr
+
+	* lib/regexp/: Makefile, regcomp.h: larger "big" regexps
+
+2001-08-10 18:06  nr
+
+	* src/graph.c: handle out-of-space; better cycle diagnosis
+
+2001-08-10 17:31  nr
+
+	* lib/9/doprint.c: long long protection in wrong place
+
+2001-07-25 23:05  nr
+
+	* .cvsignore: ignore binaries
+
+2001-07-16 20:01  nr
+
+	* include/lib9.h, lib/9/newprint.c, src/fns.h, src/main.c,
+	src/mk.c, src/parse.c, src/run.c, src/shprint.c: private assert is
+	now "myassert"
+
+2001-07-16 19:36  nr
+
+	* lib/9/: Makefile, newprint.c, print.c: replaced sprint and
+	snprint with functions that use stdio
+
+2001-07-05 22:16  nr
+
+	* lib/: lib9.a, libbio.a, libregexp.a: no binaries in the
+	repository!
+
+2001-07-03 18:38  lindig
+
+	* CHANGES, LICENCE, Makefile, README, mk.1, mk.pdf, include/ar.h,
+	include/bio.h, include/lib9.h, include/regexp.h, lib/lib9.a,
+	lib/libbio.a, lib/libregexp.a, lib/9/Makefile, lib/9/charstod.c,
+	lib/9/create.c, lib/9/dirstat-Inferno.c, lib/9/dirstat-Nt.c,
+	lib/9/dirstat-posix.c, lib/9/dirstat.c, lib/9/dirwstat.c,
+	lib/9/doprint.c, lib/9/errstr-Inferno.c, lib/9/errstr-Nt.c,
+	lib/9/errstr-posix.c, lib/9/exits.c, lib/9/fltconv.c,
+	lib/9/getfields.c, lib/9/getuser-Inferno.c, lib/9/getuser-Nt.c,
+	lib/9/getuser-posix.c, lib/9/icossin.c, lib/9/icossin2.c,
+	lib/9/log-Inferno.c, lib/9/log-Nt.c, lib/9/log-posix.c,
+	lib/9/pow10.c, lib/9/print.c, lib/9/qsort.c, lib/9/rune.c,
+	lib/9/runestrlen.c, lib/9/seek.c, lib/9/setbinmode-Nt.c,
+	lib/9/strdup.c, lib/9/strtoll.c, lib/9/utflen.c, lib/9/utfrrune.c,
+	lib/9/utfrune.c, lib/bio/Makefile, lib/bio/bbuffered.c,
+	lib/bio/bfildes.c, lib/bio/bflush.c, lib/bio/bgetc.c,
+	lib/bio/bgetd.c, lib/bio/bgetrune.c, lib/bio/binit.c,
+	lib/bio/boffset.c, lib/bio/bprint.c, lib/bio/bputc.c,
+	lib/bio/bputrune.c, lib/bio/brdline.c, lib/bio/bread.c,
+	lib/bio/bseek.c, lib/bio/bwrite.c, lib/regexp/Makefile,
+	lib/regexp/regaux.c, lib/regexp/regcomp.c, lib/regexp/regcomp.h,
+	lib/regexp/regerror.c, lib/regexp/regexec.c, lib/regexp/regsub.c,
+	lib/regexp/rregexec.c, lib/regexp/rregsub.c, lib/regexp/test.c,
+	lib/regexp/test2.c, src/Inferno.c, src/Makefile, src/Nt.c,
+	src/Posix.c, src/arc.c, src/archive.c, src/bufblock.c, src/dir.c,
+	src/env.c, src/file.c, src/fns.h, src/graph.c, src/job.c,
+	src/lex.c, src/main.c, src/match.c, src/mk.c, src/mk.h,
+	src/parse.c, src/plan9.c, src/rc.c, src/recipe.c, src/rule.c,
+	src/run.c, src/sh.c, src/shprint.c, src/symtab.c, src/var.c,
+	src/varsub.c, src/word.c: 
+	
+	Open source MK sources from the Inferno project.
+

@@ -30,7 +30,7 @@ bulkmtime(char *dir)
 	}
 	if (symlook(s, S_BULKED, 0))
 		return;
-	ss = strdup(s);
+	ss = strdup9(s);
 	symlook(ss, S_BULKED, (void *)ss);
 	dirtime(s, buf);
 }

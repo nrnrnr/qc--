@@ -5,8 +5,12 @@ Revisions Copyright © 2001 Norman Ramsey.  All rights reserved.
 */
 #include "lib9.h"
 
+/*
+renamed from strdup() to avoid conflict with strdup in libc on some
+systems CL
+*/
 char*
-strdup(const char *s) 
+strdup9(const char *s) 
 {  
 	char *os;
 

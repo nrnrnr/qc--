@@ -78,7 +78,7 @@ front(char *s)
 	int i, j;
 	char *flds[512];
 
-	q = strdup(s);
+	q = strdup9(s);
 	i = getfields(q, flds, 512, 0, " \t\n");
 	if(i > 5){
 		flds[4] = flds[i-1];

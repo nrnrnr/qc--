@@ -28,7 +28,7 @@ parse(char *f, int fd, int varoverride)
 		Exit();
 	}
 	ipush();
-	infile = strdup(f);
+	infile = strdup9(f);
 	mkinline = 1;
 	Binit(&in, fd, OREAD);
 	buf = newbuf();
@@ -200,7 +200,7 @@ rhead(char *line, Word **h, Word **t, int *attr, char **prog)
 				if (pp == 0 || *pp == 0)
 					goto eos;
 				*pp = 0;
-				*prog = strdup(p);
+				*prog = strdup9(p);
 				*pp = ':';
 				p = pp;
 				break;
@@ -262,7 +262,7 @@ rbody(Biobuf *in)
 			mkinline++;
 	}
 	insert(buf, 0);
-	p = strdup(buf->start);
+	p = strdup9(buf->start);
 	freebuf(buf);
 	return p;
 }

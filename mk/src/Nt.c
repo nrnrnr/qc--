@@ -47,7 +47,7 @@ readenv(void)
 			w = newword("");
 		if (symlook(*p, S_INTERNAL, 0))
 			continue;
-		s = strdup(*p);
+		s = strdup9(*p);
 		setvar(s, (void *)w);
 		symlook(s, S_EXPORTED, (void *)"")->value = "";
 	}
@@ -105,7 +105,7 @@ dirtime(char *dir, char *path)
 			continue;
 		if(symlook(buf, S_TIME, 0))
 			continue;
-		symlook(strdup(buf), S_TIME, t)->value = t;
+		symlook(strdup9(buf), S_TIME, t)->value = t;
 	} while(FindNextFile(handle, &wfd) == TRUE);
 
 	FindClose(handle);
@@ -279,7 +279,7 @@ execsh(char *args, char *cmd, Bufblock *buf, Envy *e)
 	}
 
 	arg = malloc(sizeof(*arg));
-	arg->cmd = strdup(cmd);
+	arg->cmd = strdup9(cmd);
 	arg->handle = inout;
 	if(CreateThread(0, 0, writecmd, arg, 0, &tid) == FALSE) {
 		perror("spawn writecmd");
@@ -406,7 +406,7 @@ rcopy(char **to, Resub *match, int n)
 			p = match->e.ep;
 			c = *p;
 			*p = 0;
-			*to = strdup(match->s.sp);
+			*to = strdup9(match->s.sp);
 			*p = c;
 		} else
 			*to = 0;

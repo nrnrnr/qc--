@@ -63,7 +63,7 @@ timeinit(char *s)
 		} while(*s);
 		c = *s;
 		*s = 0;
-		symlook(strdup(cp), S_TIME, (void *)t)->value = (void *)t;
+		symlook(strdup9(cp), S_TIME, (void *)t)->value = (void *)t;
 		if (c)
 			*s++ = c;
 		while(*s){

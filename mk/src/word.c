@@ -13,7 +13,7 @@ newword(char *s)
 	Word *w;
 
 	w = (Word *)Malloc(sizeof(Word));
-	w->s = strdup(s);
+	w->s = strdup9(s);
 	w->next = 0;
 	return(w);
 }
@@ -55,7 +55,7 @@ wtos(Word *w, int sep)
 			insert(buf, sep);
 	}
 	insert(buf, 0);
-	cp = strdup(buf->start);
+	cp = strdup9(buf->start);
 	freebuf(buf);
 	return(cp);
 }
@@ -133,7 +133,7 @@ nextword(char **s)
 				bufcpy(b, w->s, strlen(w->s));
 				insert(b, 0);
 				free(w->s);
-				w->s = strdup(b->start);
+				w->s = strdup9(b->start);
 				b->current = b->start;
 			}
 			if(head){
@@ -141,7 +141,7 @@ nextword(char **s)
 				bufcpy(b, w->s, strlen(w->s));
 				insert(b, 0);
 				free(tail->s);
-				tail->s = strdup(b->start);
+				tail->s = strdup9(b->start);
 				tail->next = w->next;
 				free(w->s);
 				free(w);
@@ -165,7 +165,7 @@ out:
 			bufcpy(b, b->start, cp-b->start);
 			insert(b, 0);
 			free(tail->s);
-			tail->s = strdup(cp);
+			tail->s = strdup9(cp);
 		} else {
 			insert(b, 0);
 			head = newword(b->start);
