@@ -213,9 +213,10 @@ the actual directory.
 
 <<qc--.lua>>=
 ------------------------------------------------------------------ 
--- Optimizer
+-- Optimizer Backplane
 -- I think these functions should go into Optimize or a similar name
--- space --CL
+-- space. I also would like to see primitives like run(), seq() and
+-- others to go into their own name space. --CL
 ------------------------------------------------------------------ 
 
 function mkS (nm, f)
@@ -297,8 +298,13 @@ end
 
 colors = {r={31,11,12,13}, f={11,12,13}}
 
--- optimizer, using graph coloring allocator
 
+------------------------------------------------------------------ 
+-- Optimizer
+-- to use linscan: ./qc-- -e 'Default.optimizer=linscan' -c foo.c--
+------------------------------------------------------------------ 
+
+-- graph coloring allocator
 function graphColoringAllocator (proc) 
     local action = seq
         { codeExpand
@@ -306,6 +312,23 @@ function graphColoringAllocator (proc)
         } 
     run(action, proc, {})     
 end
+
+-- linear scan allocator, experimental, will be rewritten
+function linscan (proc)
+    local action = seq
+        { codeExpand
+        , single(CGStages.linscan)
+        }
+    run(action, proc, {})    
+end 
+
+-- just run the code expander, for debugging
+function expand (proc)
+    local action = seq
+        { codeExpand
+        }
+    run(action, proc, {})    
+end    
 
 
 ------------------------------------------------------------------ 
@@ -317,29 +340,6 @@ Default.target          = Targets.dummy          -- target
 Default.optimizer       = graphColoringAllocator --
 Default.linewidth       = 72                     -- output line width
 Default.asm             = Driver.cmmasm          -- function io -> asm
-
------------------------------------------------------------------- 
--- Linear Scan register allocator - Experimental
--- activate it: ./qc-- -e 'Default.optimizer=linscan' -c foo.c--
------------------------------------------------------------------- 
-
--- optimizer, using linear scan register allocation
-
-function linscan (proc)
-    local action = 
-        seq
-        { codeExpand
-        , single(CGStages.linscan)
-        }
-    run(action, proc, {})    
-end 
-
-function expand ()
-    return 
-        seq
-        { codeExpand
-        }
-end    
 
 ------------------------------------------------------------------ 
 -- Main
