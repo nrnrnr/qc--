@@ -14,10 +14,27 @@ let unimp g s =
 
 let getopt x y = match x with None -> y | Some x -> x
 
+
 <<support for [[format]]>>
+type 'a parser = int -> (int -> (unit -> 'a) -> 'a) -> (unit -> 'a) -> 'a
 
 let string_builtins g =
-  [ "strfind", unimp g "strfind"
+  let error s = I.error g s in
+  let invalid f x =
+    try f x with Invalid_argument m -> error ("Invalid argument: " ^ m) in
+  <<support for matching>> 
+  let strfind s pat init plain =
+    let init = match init with Some n -> n-1 | None -> 0 in
+    let int    i = V.int.V.embed    i in
+    let string s = V.string.V.embed s in
+    match plain with
+    | Some _ -> error "string library does not implement `plain' strfind"
+    | None ->
+        find pat s init
+          (fun caps i j _ -> int (i+1) :: int j :: List.map string caps)
+          (fun () -> [V.Nil]) in
+  [ "strfind", V.efunc (V.string **-> V.string **-> V.option V.int **->
+                        V.option V.int **-> V.values) strfind
   ; "strlen",  V.efunc (V.string **-> V.result V.int) String.length
   ; "strsub",
     (V.efunc (V.string **-> V.int **-> V.option V.int **-> V.result V.string))
@@ -26,7 +43,7 @@ let string_builtins g =
       let last = match last with None -> String.length s
                                | Some n -> min n (String.length s) in
       let len = last - start in
-      String.sub s start len)
+      invalid (String.sub s start) len)
   ; "strlower", V.efunc (V.string **-> V.result V.string) String.lowercase
   ; "strupper", V.efunc (V.string **-> V.result V.string) String.uppercase
   ; "strrep",   V.efunc (V.string **-> V.int **-> V.result V.string)
@@ -39,14 +56,9 @@ let string_builtins g =
                     String.concat "" (list [] n))
   ; "ascii",   V.efunc (V.string **-> V.option V.int **-> V.result V.int)
                (fun s i -> Char.code (String.get s (getopt i 1 - 1)))
-  ; "format",  V.caml_func (format g)
+  ; "format",  V.caml_func (invalid (format g))
   ; "gsub",    unimp g "gsub"
   ] 
-@ 
-Escape character is [[%]].
-Specials include [[^$*?.([%]].
-<<pattern matching>>=
-le
 @ 
 <<luastrlib.ml>>=
 module M (I : Lua.Lib.CORE) = struct
@@ -139,3 +151,116 @@ let bprintf_internal g buf format =
 let format g args =
   let fmt, args = match args with h :: t -> h, t | [] -> V.Nil, [] in
   [V.String (bprintf_internal g (Buffer.create 16) (V.string.V.project fmt) args)]
+@ 
+A recognizer takes as arguments a position and success and failure continuations.
+<<support for matching>>=
+let explode s =
+  let rec add n cs = if n = 0 then cs else add (n-1) (s.[n-1] :: cs) in
+  add (String.length s) []  in
+<<character-matching functions>>
+let find pat s =
+  let prerr_string s = () in
+  let length = String.length s in
+  let () = prerr_string "=========\n" in
+  let lefts  = ref [] in
+  let pairs = ref [] in
+  let push l x = l := x :: !l in
+  let pop l =
+    match !l with n :: ns -> (l := ns; n) | [] -> error "unmatched )" in
+  let lparen lp i succ fail =
+    push lefts (lp, i); succ i (fun () -> ignore (pop lefts);  fail()) in
+  let rparen i succ fail =
+    let lp, start = pop lefts in
+    push pairs (lp, start, i);
+    succ i (fun () -> ignore (pop pairs); push lefts (lp, start); fail()) in
+  let captures () =
+    let rec insert ((i, l, r) as p) = function
+      | [] -> [p]
+      | (i', _, _) as p' :: ps -> if i < i' then p :: p' :: ps else p' :: insert p ps
+    in let pairs = List.fold_right insert (!pairs) [] in
+    List.map (fun (_, l, r) -> String.sub s l (r-l)) pairs in
+  let atend i   succ fail = if i == length then succ i fail else fail () in
+  let atstart i succ fail = if i == 0      then succ i fail else fail () in
+  let opt  r i succ fail = r i succ (fun () -> succ i fail) in
+  let (||) r r' i succ fail =
+    r i succ (fun () -> r' i succ fail) in
+  let (>>) r r' i succ fail =
+    r i (fun i' resume -> r' i' succ resume) fail in
+  let atzero r i succ fail = r i (succ 0) fail in
+  let rec anywhere r i succ fail =
+    r i (succ i) (fun () -> if i = length then fail ()
+                            else anywhere r (i+1) succ fail) in
+  let nonempty (r:'a parser) i succ fail =
+    r i (fun i' resume -> if i = i' then resume () else succ i' resume) fail in
+  let empty i succ fail = succ i fail in
+  let rec star (r : 'a parser) = ((fun i -> ((nonempty r >> star r) || empty) i) : 'a parser) in
+  let char p i succ fail =
+    if (try p s.[i] with _ -> false) then succ (i+1) fail else fail () in
+  let comp pat =
+    let rec comp lps c cs = 
+      let rec finish (p, cs) = 
+        match cs with
+        | '*' :: cs -> finish (star p, cs)
+        | '?' :: cs -> finish (opt  p, cs)
+        | []        -> p
+        | c :: cs   -> p >> comp lps c cs in
+      match c, cs with
+      | '%', c :: cs -> finish (char (percent c), cs)
+      | '$', []      -> atend
+      | '.', cs      -> finish (char (fun _ -> true), cs)
+      | '[', cs      -> let p, cs = cclass cs in finish(char p, cs)
+      | '(', c :: cs -> lparen lps >> comp (lps+1) c cs
+      | ')', c :: cs -> rparen     >> comp lps     c cs
+      | ')', []      -> rparen
+      | c  , cs      -> finish (char ((==) c), cs) in
+    match explode pat with
+    | [] -> fun i succ fail -> if i <= length then succ i i fail else fail ()
+    | '^' :: [] -> atzero atstart
+    | '^' :: c :: cs -> atzero (atstart >> comp 0 c cs)
+    | c :: cs -> anywhere (comp 0 c cs) in
+  let with_caps p i succ fail = p i (fun i res -> succ (captures()) i res) fail in
+  with_caps (comp pat) in
+<<character-matching functions>>=
+let andp p1 p2 c = p1 c && p2 c   in
+let orp  p1 p2 c = p1 c || p2 c   in
+let range l h c = l <= c && c <= h    in
+let lower = range 'a' 'z'   in
+let upper = range 'A' 'Z'   in
+let digit = range '0' '9'   in
+let space c = c == ' ' || c == '\t' || c == '\r' || c == '\n'   in
+let letter = orp lower upper   in
+let alnum  = orp letter digit   in
+let non p c = not (p c)   in
+let percent = function
+  | 'a' -> letter | 'A' -> non letter
+  | 'd' -> digit  | 'D' -> non digit 
+  | 'l' -> lower  | 'L' -> non lower 
+  | 's' -> space  | 'S' -> non space
+  | 'u' -> upper  | 'U' -> non upper
+  | 'w' -> alnum  | 'W' -> non alnum
+  | c when non alnum c -> (==) c
+  | _ -> error "bad % escape in pattern"   in
+@ 
+<<character-matching functions>>=
+let cclass cs = 
+  let orr p (p', cs) = orp p p', cs in
+  let rec pos cs = match cs with
+    | ']' :: cs -> orr ((==) ']') (pos2 cs)
+    | cs -> pos2 cs
+  and pos2 cs = match cs with
+  | '-' :: cs -> orr ((==) '-') (pos3 cs)
+  | ']' :: cs -> (fun _ -> false), cs
+  | _         -> pos3 cs
+  and pos3 cs = match cs with
+  | '%' :: c :: cs -> orr (percent c) (pos3 cs)
+  | ']' :: cs      -> (fun _ -> false), cs
+  | c   :: '-' :: ']' :: cs -> orp ((==) c) ((==) '-'), cs
+  | c   :: '-' :: c'  :: cs -> orr (range c c') (pos3 cs)
+  | c   :: cs               -> orr ((==) c) (pos3 cs)
+  | [] -> error "Bad character class in pattern" in
+  match cs with
+  | '^' :: cs -> let p, cs = pos cs in non p, cs
+  | _ -> pos cs   in
+
+
+

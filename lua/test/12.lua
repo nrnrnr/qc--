@@ -40,7 +40,9 @@ print('+')
 a1 = [["isto e' um string com várias 'aspas'"]]
 a2 = "'aspas'"
 
--- assert(strfind(a1, a2) == 31) -- strfind not implemented
+assert(strfind(a1, a2) == 31)
+p1, p2 = strfind(a1, a2)
+assert(p2 == 37)
 print('+')
 
 a1 = [[temp = [[um valor qualquer]]; ]]
