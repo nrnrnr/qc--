@@ -544,6 +544,81 @@ end
 @
 
 % ------------------------------------------------------------------ 
+\paragraph{Stack Layout for the SPARC}
+% ------------------------------------------------------------------ 
+
+<<Lua compiler configuration>>=
+Sparc = Sparc or {}
+Sparc.layout = { creates='no late consts' }
+
+function Sparc.layout.fn(dummy,proc) --- dispatch on cc name
+  return Sparc.layout[Stack.ccname(proc)](dummy, proc)
+end
+
+--    local layout = 
+--                    -- high addresses
+--                { blocks.oldblocks.caller       --| incoming parameters
+--                , blocks.oldblocks.callee       --| outgoing results
+--                , blocks.vfp                    --  %fp
+--                , blocks.stackdata              --  what goes here?
+--                , blocks.continuations          --  
+--                , blocks.spills                 --  temps, etc?
+--                , blocks.youngblocks.caller     --| outgoing parameters
+--                , blocks.youngblocks.callee     --| incoming results
+--                -- Here's what's supposed to be here, but this doesn't work
+--                -- right because the compiler wants to shift the %sp around
+--                -- before and after calls, which we don't want.
+--                -- , Block.relative(blocks.sp, "register storage", 18*4, 6*4)
+--                -- , Block.relative(blocks.sp, "hidden param", 17*4, 4)
+--                -- , Block.relative(blocks.sp, "register window", 16*4, 16*4)
+--                , blocks.sp                     --  %sp (no space)
+--                    -- low addresses 
+--                }
+
+function Sparc.layout["C"](dummy,proc) --- really for a C convention only
+    local blocks = Stack.blocks(proc)
+    blocks.oldblocks.callee   = Block.overlap_high(32, blocks.oldblocks.callee)
+    blocks.oldblocks.caller   = Block.overlap_low (32, blocks.oldblocks.caller)
+    blocks.youngblocks.callee = Block.overlap_high(32, blocks.youngblocks.callee)
+    blocks.youngblocks.caller = Block.overlap_low (32, blocks.youngblocks.caller)
+    local linkage =
+      { caller = Block.relative(blocks.vfp, "caller's linkage area", 23*4, 16)
+      , callee = Block.relative(blocks.sp , "our linkage area"     , 23*4, 16)
+      }
+    local old_end = Block.cat(32, { blocks.oldblocks.caller
+                                  , linkage.caller
+                                  , blocks.vfp
+                                  , blocks.oldblocks.callee
+                                  })
+    local young_end = Block.cat(32, { blocks.youngblocks.caller
+                                    , linkage.callee
+                                    , blocks.sp
+                                    , blocks.youngblocks.callee
+                                    })
+    local layout = { old_end
+                   , blocks.stackdata
+                   , blocks.continuations
+                   , blocks.spills
+                   , young_end
+                   }
+    if Debug.stack then
+      write('======= using stack layout for C/notail =======\n')
+      write('****** cc name = ', Stack.ccname(proc), '\n')
+      Debug.showblocks (blocks, {'oldblocks', 'vfp',
+                                 'stackdata', 'continuations', 'spills',
+                                 'youngblocks', 'sp'})
+    end
+    local block = Block.cat(32, layout)
+    if Debug.stack then
+      Debug.showblocks({frame=block}, {'frame'})
+    end
+    if Debug.framesize then Debug.showframesize(block,proc) end
+    Stack.freeze(proc,block)
+    return 1
+end    
+@
+
+% ------------------------------------------------------------------ 
 \paragraph{Stack Layout for the Interpreter}
 % ------------------------------------------------------------------ 
 
@@ -901,6 +976,27 @@ Backend.ia64 =
   , emit_data  = Runtime.emit_data
   , compile    = Compile.file
   }
+
+--
+-- Sparc Backend (32 bit, big-endian)
+--
+Backend.sparc =
+  { target     = Targets.sparc
+  , placevars  = Placevar.context(Placevar.sparc, "sparc")
+  , floatwiden = Stages.assert('proper widths')
+  , preopt     = Optimize.remove_nops
+  , expand     = Expander.sparc
+  , liveness   = Liveness.liveness
+  , ralloc     = Ralloc.dls
+  , freeze     = Sparc.layout
+  , rmvfp      = Backplane.seq
+		    { Stages.replace_vfp,
+		      Optimize.remove_nops }
+  , asm        = Asm.sparc
+  , emit       = Driver.assemble
+  , emit_data  = Runtime.emit_data
+  , compile    = Compile.file
+  }
 @
 
 % ------------------------------------------------------------------ 
@@ -920,6 +1016,7 @@ even though they all come together in [[qc--.lua]].
 <<MIPS calling convention automata in Lua>>
 <<PPC calling convention automata in Lua>>
 <<IA64 calling convention automata in Lua>>
+<<SPARC calling convention automata in Lua>>
 @ 
 <<calling convention utilities>>=
 Util = Util or {}
