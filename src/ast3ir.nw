@@ -532,7 +532,7 @@ and labelStmt state x =
         | _, (F.Label(F.Code(s)),_) -> s
         | _ -> assert false
     in    
-        { state with node = G.set_label state.cfg x s state.node }
+        { state with node = G.gm_label state.cfg x s state.node }
 @
 
 An if-statement is translated into a seqence of nodes such that the
@@ -558,10 +558,10 @@ and ifStmt state (e,ifso,ifnot) =
     let s_ifso = F.symbol state.env l_ifso in   (* register symbol *)
     let s_join = F.symbol state.env l_join in   (* register symbol *)
     let state  = { state with (* label join *)
-                   node = G.set_label state.cfg l_join s_join state.node } in  
+                   node = G.gm_label state.cfg l_join s_join state.node } in  
     let ifso   = foldr body ifso state  in
     let state  = { state with (* label ifso *)
-                   node = G.set_label state.cfg l_ifso s_ifso ifso.node  } in 
+                   node = G.gm_label state.cfg l_ifso s_ifso ifso.node  } in 
     
     let l2exp  = Rtl.link s_join state.target.Target.pointersize in
     let l2rtl  = state.target.Target.goto.Target.embed l2exp in
@@ -732,7 +732,7 @@ and contStmt state (label,args)  =
     let symbol  = match F.findv label state.env with
                   | _,(F.Continuation(_,s),_) -> s
                   | _ -> assert false                            in
-    let copy    = G.set_label state.cfg label symbol copy        in
+    let copy    = G.gm_label state.cfg label symbol copy         in
     let result  = { state with
                     node     = copy
                   ; incoming = area :: state.incoming
@@ -854,7 +854,7 @@ let proc env target optimizer asm (cconv,name,args,bdy) =
     (* build CFG for body *)                    
     let exit_label  = Idgen.exit name in
     let exit_symbol = F.symbol env exit_label in
-    let exit        = G.set_label cfg exit_label exit_symbol (G.exit cfg) in
+    let exit        = G.gm_label cfg exit_label exit_symbol (G.exit cfg) in
     (* dummy area in outgoing area because the the body of the procedure
        might not create any. This would confuse Area.overlap below *)
     let dummy       = Area.freeze (Area.mk outb) in   
