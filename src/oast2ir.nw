@@ -657,10 +657,42 @@ and stmt props s succ =
   | A.JumpStmt    x -> jumpStmt   x
   | A.CutStmt     x -> cutStmt    x 
   | A.ReturnStmt  x -> returnStmt x 
-  | A.SwitchStmt  x -> Impossible.unimp "switch"
+  | A.SwitchStmt  x -> switchStmt x props succ
   | A.PrimStmt    x -> Impossible.unimp "primitive"
   | A.EmptyStmt     -> succ
   | A.CommentStmt _ -> succ
+@
+
+\paragraph{[[switch]] statements}
+
+QUESTION: are the [[disjoin]]s below suitably short-circuited?
+
+<<supporting functions for translating statements>>=
+and switchStmt (range, e, arms) props stmt_succ =
+  (* what are we supposed to do with the optional range? *)
+  let e  = expr e in
+  let w  = RU.Width.exp e in
+  let e_eq bits = Rtl.app (Rtl.opr "eq" [w]) [e; Rtl.bits bits w] in
+  let e_in_interval lo hi =
+     Rtl.app (Rtl.opr "conjoin" [])
+             [ Rtl.app (Rtl.opr "leu" [w]) [Rtl.bits lo w; e]
+             ; Rtl.app (Rtl.opr "geu" [w]) [Rtl.bits hi w; e]
+             ] in
+  let rec do_arm arm succ = match arm with
+    | A.ArmAt (arm   , _    ) -> do_arm arm succ
+    | A.Case  (ranges, code ) ->
+       let condition =
+         List.fold_left (fun or_exp range ->
+                          let opnd1 = match range with
+                            | A.Point e        -> e_eq (compile_const e)
+                            | A.Range (lo, hi) -> e_in_interval
+                                                    (compile_const lo)
+                                                    (compile_const hi)
+                          in Rtl.app (Rtl.opr "disjoin" []) [opnd1; or_exp])
+                         (Rtl.bool false) ranges in
+       G.cbranch g condition ~ifso:(bodies props code stmt_succ)
+                             ~ifnot:(G.branch g ~target:succ)
+  in List.fold_right do_arm arms stmt_succ
 @
 
 \subsubsection{Statements that go between procedures}
@@ -1146,7 +1178,7 @@ and stmt state = function
     | A.StmtAt(x,r)        -> stmt state x
     | A.SpanStmt(_,_,bs)   -> bodies state bs
     | A.IfStmt      x      -> ifStmt state x
-    | A.SwitchStmt  x      -> Impossible.unimp "switch"
+    | A.SwitchStmt  x      -> switchStmt state x
     | A.ContStmt(n,args)   -> contStmt1 state n args
     | _                    -> state
 <<definitions of stack-data procedures>>=
@@ -1161,6 +1193,11 @@ and ifStmt state (e,ifso,ifnot) =
     let state = bodies state ifso  in
     let state = bodies state ifnot in
     state
+and switchStmt state (_, _, arms) =
+    let rec do_arm state = function
+	  | A.ArmAt (arm, _   ) -> do_arm state arm
+      | A.Case  (_  , code) -> bodies state code in
+    List.fold_left do_arm state arms
 @
       
 % ------------------------------------------------------------------ 
