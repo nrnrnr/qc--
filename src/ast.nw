@@ -3,7 +3,9 @@
 %
 
 
+% ------------------------------------------------------------------  
 \section{Abstract Syntax Definition}
+% ------------------------------------------------------------------  
 
 The abstract syntax for \C~is not directly encoded into \ocaml~data
 types but specified as a \asdl~\cite{adsl97} definition.  This
@@ -152,3 +154,368 @@ expr        = Int    (pos, int,size?)
 parser could perform this translation right away. But we want to
 unparse the abstract syntax back to concrete syntax and thus we keep
 them. 
+
+% ------------------------------------------------------------------  
+\section{Pretty Printer}
+% ------------------------------------------------------------------  
+
+For debugging and regression testing we provide a module that pretty
+prints the abstract syntax into the concrete syntax.  The
+implementation uses an implementation of Philip Wadler's algebraic
+pretty printer \cite{wadler99:_a_prettier_printer} from the [[Pp]]
+module. 
+
+% ------------------------------------------------------------------  
+\subsection{Interface}
+% ------------------------------------------------------------------  
+
+The interface provides only one function [[ppToFile]] to print a program in
+abstract syntax to an open file. The second parameter controls the
+line width the output is formatted for.
+
+<<astpp.mli>>=
+
+val ppToFile : out_channel -> int -> Ast.program -> unit
+
+@
+
+
+% ------------------------------------------------------------------  
+\subsection{Implementation}
+% ------------------------------------------------------------------  
+
+The implementation builds an abstract representation of the pretty
+printed concrete synatx in a purely functional way. The abstract
+representation is than written to an open file.
+
+
+<<astpp.ml>>=
+
+(*
+    $Id$
+*)
+
+open Pp     (* pretty printer from cllib *)
+open Ast    (* abstract syntax *)
+
+
+@ The module [[Pp]] provides the pretty printing primitives.  The
+concatenation of two abstract pretty printed objects is denoted by the
+infix operator [[^^]].  We define two more; the first is only to
+achieve a more consistent source code layout.  The second joins two
+objects with a [[break]].  A [[break]] is either represented as a
+space, or as a line break followed by a number of spaces for
+indentation.  The exact outcome is determined by the pretty printer. 
+It is easiest to think of [[break]]s as spaces that might be turned
+into line breaks.
+
+<<astpp.ml>>=
+
+let (~~) x     = x
+let (^/) x y   = x ^^ break ^^ y 
+
+@ To achieve a consistent nesting we re-define here the nesting operator.
+
+<<astpp.ml>>=
+
+let nestn      = nest      (* save old definition *)
+let nest       = nest 4    (* define new nest with standard indentation *)
+
+
+@ A list of objects which are seperated by some seperator is very
+common.  The [[list]] function takes care to insert the separator only
+bewteen objects.  It creates a [[sep]] separated list.  Individual
+items are printed using [[f]].  For the common case where commas are
+used for separating we also provide an extra definition.
+
+<<astpp.ml>>=
+
+let rec list sep f xs =
+    let rec loop acc = function
+        | []    -> acc
+        | [x]   -> acc ^^ f x 
+        | x::xs -> loop (acc ^^ f x ^^ sep) xs
+    in
+        loop empty xs 
+
+
+let commalist f = list (text "," ^^ break) f
+
+@ A [[block]] contains object [[xs]] formatted by [[f]] and enclosed
+by curly braces.  Its body will be indented in case it does not fit on
+a single line.  The [[commablock]] is just a handy special case. 
+
+<<astpp.ml>>=
+
+let block f xs =   
+    text "{"
+    ^^ nest begin
+       ~~ break
+       ^^ list break f xs
+       end 
+    ^/ text "}"
+
+let commablock f xs =
+    nest begin
+        ~~ break
+        ^^ list (text "," ^^ break) f xs
+    end
+
+@ Most of the names used below refer directly to the grammar or
+abstract syntax. Since the overall purpose of this is clear we don't
+comment the code much.
+
+<<astpp.ml>>=
+
+let id i        = text i
+let int n       = text (string_of_int n)
+let float f     = text f
+let semi        = text ";"
+
+@ The escape functions provided by \ocaml~do not exactly match the
+escape rules of \C. We must replace them with our own.
+
+<<astpp.ml>>=
+
+let str s       = text ("\"" ^ String.escaped s ^ "\"")
+let char c      = text ("'"  ^ String.escaped c   ^ "'" )
+    
+
+let ty = function
+    | BitsTy(_,n)       -> text "bits"  ^^ int n
+    | FloatTy(_,n)      -> text "float" ^^ int n
+    
+let rec lvalue = function
+    | Var(_,x)          -> id x
+    | Mem(_,t,e,a)      -> 
+        ~~ ty t 
+        ^^ text "["
+        ^^ expr e 
+        ^^ begin match a with 
+                | Some i -> break ^^ text "aligned" ^/ int i 
+                | None   -> empty
+           end 
+        ^^ text "]"
+                        
+and actual = function
+    | (_, Some hint, e) -> agrp (str hint ^/ expr e)
+    | (_, None     , e) -> expr e
+
+and actuals xs = agrp (text "(" ^^ commalist actual xs ^^ text ")")
+    
+and expr = function
+    | Int(_, i, None)           -> int i
+    | Int(_, i, Some size)      -> int i ^^ text ":" ^^ int size
+    | Float(_, f, None)         -> float f
+    | Float(_, f, Some size)    -> float f ^^ text ":" ^^ int size
+    | Char(_, c, None)          -> char c 
+    | Char(_, c, Some size)     -> char c ^^ text ":" ^^ int size
+    | Fetch(_,v)                -> lvalue v
+    | BinOp(_,l,op,r)           -> agrp begin
+                                     ~~ text "(" ^^ expr l
+                                     ^^ nest begin
+                                        ~~ text op
+                                        ^^ breakWith ""
+                                        ^^ expr r
+                                        end
+                                     ^^ text ")"
+                                   end
+
+    | UnOp(_,op,e)              -> agrp (str op ^^ expr e)
+    | PrimOp(_,n,xs)            -> agrp (text "%" ^^ id n ^^ actuals xs)
+
+let constant (_,name,e) =       agrp begin 
+                                ~~ id name 
+                                ^/ text "="
+                                ^/ nest begin
+                                    ~~ expr e
+                                    ^^ semi
+                                   end
+                                end
+
+let memsize = function
+    | NoSize        -> empty
+    | DynSize       -> text "[]"
+    | FixSize(e)    -> text "[" ^^ expr e ^^ text "]"
+
+let init = function
+    | InitExprs(es) -> 
+            fgrp begin
+                ~~ text "{"
+                ^/ nest begin
+                    ~~ commalist expr es
+                end
+                ^/ text "}"
+            end
+    | InitStr(s) -> str s
+    | InitUStr(s) -> 
+            agrp begin
+                ~~ text "unicode"
+                ^/ text "("
+                ^/ nest begin
+                   ~~ str s
+                   end
+                ^/ text ")"
+            end
+
+let datum = function
+    | Label(_,n)            -> id n ^^ text ":"
+    | Align(_,a)            -> agrp (text "align" ^/ int a ^^ semi)
+    | MemDecl(_,t,m,Some i) -> agrp (ty t ^^ memsize m ^/ init i ^^ semi)
+    | MemDecl(_,t,m,None)   -> agrp (ty t ^^ memsize m ^^ semi) 
+
+let formal (_, h, v, t, n) =
+        agrp begin
+            ~~ (match h with Some hint -> str hint ^^ break | None -> empty)
+            ^^ (if v = Invariant then text "invariant" ^^ break else empty)
+            ^^ ty t
+            ^/ id n
+        end
+
+let formals xs = agrp (text "(" ^^ commalist formal xs ^^ text ")")
+
+let decl = function
+    | Register(_, Invariant, t, n) ->   
+            agrp begin
+                ~~ text "invariant"
+                ^/ ty t
+                ^/ id n
+                ^^ semi
+            end
+
+    | Register(_, Variant  , t, n) ->   
+            agrp begin 
+                ~~ ty t
+                ^/ id n
+                ^^ semi
+            end
+    
+    | Stackdata(_, dd) ->                
+            agrp begin
+                ~~ text "stackdata"
+                ^/ block datum dd
+            end
+
+
+let altcont (e1,e2) =   
+            agrp begin 
+                ~~ text "<" 
+                ^^ expr e1 
+                ^^ text "," 
+                ^/ expr e2
+                ^^ text ">"
+            end
+
+let targets = function
+    | []    -> empty
+    | ts    -> agrp (text "targets" ^/ nest (commalist id ts))
+    
+let flow f =
+    let also s ns = agrp (text "also" ^/ text s ^/ text "to" 
+                         ^/ nest (commalist id ns))
+    in match f with
+    | CutsTo(_,ns)      -> also "cuts"    ns
+    | UnwindsTo(_,ns)   -> also "unwinds" ns
+    | ReturnsTo(_,ns)   -> also "returns" ns
+    | Aborts(_)         -> text "also aborts"
+
+let flows = function
+    | []    -> empty
+    | xs    -> nest (agrp (list break flow xs))
+
+
+let conv = function
+    | Some cc       -> agrp (text "foreign" ^/ str cc)
+    | None          -> empty 
+
+let dummy = text "<stmt>;"
+
+let stmt = function
+    | IfStmt (_, e, ss1, [])    -> dummy
+    | IfStmt (_, e, ss1, ss2)   -> dummy
+    | LabelStmt(_,n)            -> dummy
+    | ContStmt(_,n,ns)          -> dummy
+    | SpanStmt(_,e1,e2,ss)      -> dummy
+    | AssignStmt(_,xs)          -> dummy
+    | CallStmt(_, lhs, cc, e, args, ts, fs) -> dummy
+    | PrimStmt(_, lhs, cc, n, args, fs) -> dummy
+    | GotoStmt(_,e,ts)          -> dummy
+    | CutStmt(_,n, args, fs)    -> dummy
+    | ReturnStmt(_,cc, alt, args) -> dummy
+    | JumpStmt(_,cc,e,args,ts)  -> dummy
+    | EmptyStmt(_)              -> text ";"
+
+let rec section = function
+    | SSpan(_, e1, e2, ss) ->  
+            agrp begin
+                agrp (text "span" ^/ expr e1 ^/ expr e2)
+                ^/ block section ss
+            end
+    | Datum(_, d) ->  
+            datum d
+    | Procedure(_,cc,n,fs, ds, ss)  ->  
+            agrp begin 
+                agrp (conv cc ^/ id n ^^ formals fs)
+                ^/ text "{"
+                ^^ nest begin
+                   ~~ break
+                   ^^ list break decl ds
+                   ^^ break ^^ break
+                   ^^ list break stmt ss
+                   end 
+                ^/ text "}" 
+            end
+                 
+let register (_, v , t, n, reg) = 
+    agrp begin 
+        ~~ (if v = Invariant then text "invariant" ^^ break else empty)
+        ^^ ty t
+        ^/ id n
+        ^^ (match reg with Some r -> break ^^ str r | None -> empty)
+        ^^ semi
+    end 
+
+let topdecl = function
+    | Import(_, t, ns) -> 
+            agrp begin 
+                agrp (text "import" ^/ ty t)
+                ^/ commablock id ns
+                ^^ semi
+            end
+    | Export(_, ns) ->
+            agrp begin 
+                ~~ text "export"
+                ^/ commablock id ns
+                ^^ semi
+            end 
+    | Const (_, cs) ->
+            agrp begin 
+                ~~ text "const"
+                ^/ block constant cs
+            end
+    | Section(_, n, ss) ->
+            agrp begin 
+                agrp (text "section" ^/ str n)
+                ^/ block section ss
+            end
+                   
+    | Global(_, rs) ->
+            agrp begin 
+                ~~ text "global"
+                ^/ block register rs
+            end
+    | Pragma(_) ->
+            text "<pragma>"
+
+let program(_,ds) = vgrp begin
+                        list (break ^^ break) topdecl ds
+                    end
+            
+                                            
+@ The [[ppToFile]] function is the only one visible to the out side.
+
+<<astpp.ml>>=
+    
+let ppToFile fd width prog = Pp.ppToFile fd width (program prog)
+                        
+@
