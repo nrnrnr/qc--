@@ -40,7 +40,7 @@ module T    = Lua.Lib.Combine.T9                         (* types *)
 
 module IO   = Lua.Lib.Extend (T.T7)
 
-module L    = Lua.Lib.Combine.L8                        (* libraries *)
+module L    = Lua.Lib.Combine.L9                        (* libraries *)
                 (Luaiolib.Make (T.T7))
                 (IO (Luastrlib.M))
                 (IO (Luamathlib.M))
@@ -50,6 +50,7 @@ module L    = Lua.Lib.Combine.L8                        (* libraries *)
                 (Colorgraph.Make (T.T8) (T.T9) (T.T4))
                 (Targets.MakeLib (T.T5))
                 (Placevar.Make (T.T8) (T.T4))
+                (IO (Luautil.MakeLib))
                 
 module I    = Lua.MakeInterp                            (* our interpreter *)
                 (Lua.Parser.MakeStandard)
@@ -329,7 +330,8 @@ function Main.check ()
     if f == nil then error("Main.check: no file in Sys.argv[1]") end
         
     local ast = Driver.parse(f)
-    Driver.check(ast)
+    local asm = Driver.cmmasm("dummy") -- should go into Default
+    Driver.check(ast,asm)
 end
 
 -- compile
