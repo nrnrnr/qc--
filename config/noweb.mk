@@ -63,6 +63,8 @@ OCAMLDEFS =     $TOP/config/autodefs.ocaml
 	.
 	\$
 	a
+	\bibliographystyle{alpha}
+	\bibliography{qc--}
 	\end{document}
 	.
 	w
