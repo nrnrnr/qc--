@@ -8,6 +8,7 @@
 # to configure the compilation process. The script assumes that 
 # mk(1) from qc--/mk is already installed.
 
+use File::Basename;
 #
 # search (file, dir, dir, dir, ..), call as search(file, @dirs)
 # search for file in @dirs and return, full path, if found, and ""
@@ -76,10 +77,11 @@ $lua_h      = search("lua.h", @include);
 $lualib_h   = search("lualib.h", @include);
 $liblua     = search("liblua.a", @libs) || search("liblua40.a", @libs);
 $liblualib  = search("liblualib.a", @libs) || search("liblualib40.a", @libs);
-$luav       = $lua_h && `grep LUA_VERSION $lua_h` =~ /Lua (\d.\d)/ && $1;  
+$lua_inc    = "-I" . dirname($lua_h);
+$lua_lib    = "-L" . dirname($liblua);
 
 #
-# run some tests ...
+# run some tests ..
 # 
 
 chdir("config/aux") || die "$!";
@@ -93,6 +95,11 @@ else  { die "cannot determine endianess; 64 bit machine?" }
 
 # .. wordsize
 $sizes = runtest("sizes.c");
+
+# .. Lua version from Lua header file
+$result = runtest ("$lua_inc lua.c");
+if ($result =~ /Lua (\d.\d)/) { $luav = $1 } 
+
 
 
 print <<EOF;    
@@ -109,6 +116,8 @@ print <<EOF;
     lualib.h:       $lualib_h
     liblua:         $liblua
     liblualib:      $liblualib
+    Lua -I          $lua_inc
+    Lua -L          $lua_lib
     Lua Version:    $luav
     Endianness:     $endian
     Sizes:          $sizes
