@@ -173,8 +173,16 @@ let argument x  = R.cell R.none 'A' R.Identity 1 x
 let global   x  = R.cell R.none 'G' R.Identity 1 x 
 
 (* the following RTLs are not type correct *)
-let push_arg e  = R.par [R.store (argument (fetch ap)) e (ewidth e); inc ap] 
-let pop_arg w   = R.fetch (argument (fetch ap)) w
+(* x is an expression *)
+(*
+let store_arg i e = R.par [R.store (argument (fetch ap)) e (ewidth e); inc ap] 
+let fetch_arg i w = R.fetch (argument (fetch ap)) w
+*)
+
+let exp_of_index i = R.bits (Bits.S.of_int i wordsize) wordsize
+
+let store_arg i e  = R.store (argument (exp_of_index i)) e (ewidth e)
+let fetch_arg i w  = R.fetch (argument (exp_of_index i)) w
 @
 
 % ------------------------------------------------------------------ 
@@ -182,10 +190,10 @@ let pop_arg w   = R.fetch (argument (fetch ap)) w
 % ------------------------------------------------------------------ 
 
 <<interp.ml>>=
-class argument_location: Automaton2.location =
+class argument_location (index:int): Automaton2.location =
 object
-    method store expr width = Flow.push_arg expr
-    method fetch width      = Flow.pop_arg width
+    method store expr width = Flow.store_arg index expr
+    method fetch width      = Flow.fetch_arg index width
     method to_loc           = assert false
 end
 
@@ -193,6 +201,10 @@ class arguments (base:Rtl.exp): Automaton2.automaton =
 object (this)
     val mutable _block  = Block.mk base (*size*) 0 (*align*) 1  
     val mutable _frozen = false
+
+    (* *)
+    val mutable _index  = -1
+    (* *)
     
     method freeze () =
         let _ = _frozen <- true in _block  (* return block *)
@@ -201,7 +213,9 @@ object (this)
         let ()      = assert (_frozen = false) in          
         match hint with 
         | Some x -> Impossible.impossible ("unknown hardware register "^x) 
-        | None   -> new argument_location 
+        | None   -> ( _index <- _index + 1
+                    ; new argument_location _index
+                    )
 end
 
 class global_location (index:int) (width:int): Automaton2.location =
@@ -271,4 +285,3 @@ let target =
       ; T.reload       = (fun _ -> assert false)
       }
 @
-

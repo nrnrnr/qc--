@@ -48,13 +48,16 @@ let luafunc       f args = "CMM." ^ f ^ parenthesized args ^ "\n"
 let push   kind c = luafunc ("push_" ^ kind) (quoted c)
 let nopush kind c = c
 
+(*
 let argstack op s =
   match op with
   |	"fetch" -> "pop" ^ s
   |	"store" -> "push" ^ s
   |	_       -> assert false
+*)
 
 let valstack   op s = op ^ s
+let argstack        = valstack
 let commentout _  _ = "comment"
 
 let tybits b = 
@@ -104,10 +107,10 @@ let rec expr' f e =
 and location' = function
     | R.Cell (sp, agg, width, e, ass) ->
 		(match sp with
-        | 'A' -> (expr' push e,
+        | 'A' -> ("",
                   argstack,
                   "_arg",
-                  "")
+                  expr' nopush e)
         | 'm' -> (expr' push e,
                   valstack,
 				  "",
@@ -134,7 +137,7 @@ let location  = location' << Rtl.Convert.loc
 <<ToLua>>=
 let effect eff func_prefix =
     match eff with
-    | R.Kill loc            -> ""
+    | R.Kill loc            -> assert false;
     | R.Store (loc, exp, w) -> 
 		let (prefix, func_f, func_suffix, args) = location' loc in
 		prefix ^ expr' push exp ^ 
@@ -176,18 +179,21 @@ let rec rtl' fd (R.Rtl gg) = match gg with
         when Bits.U.to_int i0 = 0 && Bits.U.to_int i3 = 3 ->
         assert false (* return *)    
     *)
-    
-    | [(_,R.Store(R.Cell('A',_,_,_,_), e,_));_] ->
+
+(*    
+    | [(_,R.Store(R.Cell('A',_,_,ae,_), e,_));_] ->
         ( output_string fd ((expr' push) e)
-        ; Printf.fprintf fd "CMM.push_arg()\n"
+        ; Printf.fprintf fd "CMM.push_arg("
+        ; Printf.fprintf fd ")\n"
         )
 
     | [(_,R.Store(R.Var(_,i,_),R.Fetch (R.Cell('A',_,_,_,_),_),_))] ->
         ( Printf.fprintf fd "CMM.pop_arg()\n"
         ; Printf.fprintf fd "CMM.store_local(%d) -- CL\n" i
         )
-    
+
     | [(_,R.Store(_,R.Fetch (R.Cell('A',_,_,_,_),_),_))] -> assert false
+*)
     
     | _      -> List.iter (print_guarded fd) gg   (* standard RTL *)
 
