@@ -19,7 +19,7 @@ Test.verbose    = nil    -- provide detailed failure info
 Test.skip_files = nil    -- skip input source files
 Test.on_error   = {}     -- error handlers
 Test.files      = {}     -- input source files
-Test.tst_file   = ""     -- name of config file
+Test.tst_file   = nil    -- name of config file
 --Test.update     = nil    -- update differing files
 Test.gen_args   = ""     -- additional arguments for generator
 Test.qc         = getenv("QC") or Sys.cmd or "../bin/qc--"
@@ -246,7 +246,13 @@ function Test.build_exe(inputs, s_files)
   local exe_file = Test.temp_name(".exe")
 
   local other = inputs.other or ""
-  local cmd   = format("cc -o %s %s %s", exe_file, s_files, other)
+  local snames = s_files
+  if type(snames) == 'table' then
+    snames = s_files[1] or ""
+    local i = 2
+    while s_files[i] do snames = snames .. ' ' .. s_files [i]; i = i + 1; end
+  end
+  local cmd   = format("cc -o %s %s %s", exe_file, snames, other)
 
   Test.log(cmd)
   if execute(cmd) ~= 0 then
@@ -269,6 +275,15 @@ end
 The rename library function does not work across filesystem
 boundaries.
 <<testdrv.lua>>=
+function Test.rename(src, dest)
+  local x, y = rename(src, dest)
+  if not x and strfind(y, "cross-device") then
+    return Test.copy_file(src, dest) and remove(src)
+  else
+    return x, y
+  end
+end
+
 function Test.copy_file(src, dest)
   if not readfrom(src) then return nil end
   if not writeto(dest) then readfrom(); return nil end
@@ -395,25 +410,16 @@ function Test.iso_test_case(inputs)
   if not inputs.runnable then
     CMD.error('tried to isolate the bad optimization on a non-runnable test case')
   end
+  local eq = Util.files_nonwhite_equivalent 
   local sources = inputs.source
-  local i = 1
+  local sourcecount = Test.list_len(sources)
   local to_remove = { }
-  local all_compiles_ok = 'true'
-  local off_outputs, on_outputs = { }, { } -- unoptimized and optimized .s files
-  while sources[i] do
-    local file = sources[i]
-    local s_file,  so,  se,  compiles_ok  = Test.compile_file(file, i)     -- on
-    local s_file0, so0, se0, compiles_ok0 = Test.compile_file(file, i, 0)  -- off
-    all_compiles_ok = all_compiles_ok and compiles_ok and compiles_ok0
-    assert(s_file and s_file0)
-    off_outputs[i] = s_file0
-    on_outputs[i]  = s_file
+  local compok = 'true'
+  local off_outputs, on_outputs, txcounts = { }, { }, { }
+      -- unoptimized and optimized .s files; transaction counts
+  <<compile [[sources]], set [[*_outputs]], [[txcounts]], [[to_remove]], [[compok]]>>
 
-    i = i + 1
-    Test.list_add(to_remove, so, so0, se, se0)
-  end
-
-  if all_compiles_ok then
+  if compok then
     -- embarrassing to run assembler multiple times...
     local off_exe = Test.build_exe(inputs, off_outputs)
     local on_exe  = Test.build_exe(inputs, on_outputs)
@@ -438,11 +444,26 @@ function Test.iso_test_case(inputs)
   Test.remove(to_remove)
 end
 @ 
+<<compile [[sources]], set [[*_outputs]], [[txcounts]], [[to_remove]], [[compok]]>>=
+local i = 1
+while sources[i] do
+  local file = sources[i]
+  local s_file,  so,  se,  compiles_ok  = Test.compile_file(file, i)     -- on
+  txcounts[i] = Cfg.Tx.used()
+  local s_file0, so0, se0, compiles_ok0 = Test.compile_file(file, i, 0)  -- off
+  compok = compok and compiles_ok and compiles_ok0
+  assert(s_file and s_file0)
+  off_outputs[i] = s_file0
+  on_outputs[i]  = s_file
+
+  i = i + 1
+  Test.list_add(to_remove, so, so0, se, se0)
+end
+@ 
 With optimizations off, everything has to match.
 But with optimizations on, as long as either standard error or
 standard output are different, we can isolate.
 <<insist [[ps[eo]]] and [[ps[eo]0]] enable isolation, otherwise error>>=
-local eq = Util.files_nonwhite_equivalent 
 if eq(pso0, inputs.stdout) and eq(pse0, inputs.stderr) and
    (not eq(pso, inputs.stdout) or not eq(pse, inputs.stderr)) then
    -- everything is OK
@@ -450,9 +471,102 @@ else
   CMD.error("asked to isolate optimizer bug, but outputs won't work")
 end
 @ 
+Binary search on files is unlikely to be worthwhile---linear search is
+good enough.
 <<set [[i]] such that optimizing exactly files $1..[[i]]$ fails>>=
+local sfiles = { }
+local found_it = nil
+i = 1
+repeat
+  assert(sources[i])
+  Test.iso_status_line(i, sourcecount)
+  local exe = Test.build_exe(inputs, Test.pick_iso_files(i, on_outputs, off_outputs))
+  assert(exe)
+  local pso, pse = Test.run_exe(exe, inputs.stdin)
+  if not eq(pso, inputs.stdout) or not eq(pse, inputs.stderr) then
+    found_it = 'yes'
+  else
+    i = i + 1
+  end
+  Test.remove(exe, pso, pse)
+until found_it   -- had better terminate with differing outputs
+@ 
+<<testdrv.lua>>=
+function Test.pick_iso_files(i, ons, offs)
+  local fs = { }
+  local j = 1
+  local useme = ons
+  while useme[j] do
+    fs[j] = useme[j]
+    if j == i then useme = offs end
+    j = j + 1
+  end
+  return fs
+end
+@ 
+Loop invariant: [[goods]] holds output compiling with [[lo]]
+transactions;
+[[bads]] holds output compiling with [[hi]] transactions.
 <<set [[n]] such that optimizing [[n]] times succeeds, but not $[[n]]+1$>>=
+local sfiles = Test.pick_iso_files(i, on_outputs, off_outputs)
+local lo, hi = 0, txcounts[i]  -- invariant: lo succeeds, hi fails
+local goods, bads = off_outputs[i], on_outputs[i]
+while lo < hi - 1 do
+  local mid = floor((lo + hi) / 2) -- lo < mid < hi always
+  assert(lo < mid and mid < hi)
+  Test.iso_status_line(i, sourcecount, mid, txcounts[i])
+  local s, so, se, ok = Test.compile_file(sources[i], i, mid)
+  assert(ok)
+  sfiles[i] = s
+  local exe = Test.build_exe(inputs, sfiles)
+  local pso, pse = Test.run_exe(exe, inputs.stdin)
+  if not eq(pso, inputs.stdout) or not eq(pse, inputs.stderr) then
+    -- mid is bad
+    Test.remove(bads)
+    hi, bads = mid, s
+  else
+    Test.remove(goods)
+    lo, goods = mid, s   
+  end
+  Test.remove(exe, pso, pse, so, se)
+end
+n = lo
 <<print [[n]] and write good and bad assembly files somewhere>>=
+local goodname = inputs.name .. "-good.s"
+local badname  = inputs.name .. "-bad.s"
+Test.rename(goods, goodname)
+Test.rename(bads,  badname)
+Test.clear_status_line()
+write('# runs ok with ', n, ' transactions; not ok with ', n+1, '\n')
+write('# good output on ', goodname, '; bad output on ', badname,
+      '; to see last bad, run\n')
+write(Test.qc, ' -e "Cfg.Tx.set_limit(', n+1, ')"\n')
+@ 
+<<testdrv.lua>>=
+function Test.iso_status_line(i, len, tx, txlimit)
+  local out   = format("Optimizing %d files of %d", i, len)
+                .. (tx and format(" (%d of %d transactions)", tx, txlimit) or "")
+  local len   = 80 - strlen(out)
+  local fmt   = format('%%s%%%ds\r', len)
+  if Test.verbose then
+    fmt = format('%%s%%%ds\n', len)
+  end
+  write(format(fmt, out, ''))
+end
+@ 
+<<testdrv.lua>>=
+if CMD.compilertab[".iso"] then
+  error("CMD.compilertab[.iso] already defined")
+end
+function CMD.compilertab[".iso"](file)
+  file = Caml.Filename.chop_extension(file)
+  Test.did_something = 1
+  local entry = Test.find_entry(file)
+  if not entry then
+    error("Could not find test case named " .. file)
+  end
+  Test.iso_test_case(Test.complete_test_table(entry))
+end
 @ 
 These two function fill in defaults for any options not specified for
 a test case, before running the test case.
@@ -476,6 +590,10 @@ function Test.compute_filenames(files, entry, dir, sources, extension)
 end
 <<testdrv.lua>>=
 function Test.process_file(files)
+  Test.run_test_case(Test.complete_test_table(files))
+end
+
+function Test.complete_test_table(files)
   if type(files) == "string" then
     files = { source = files }
   end
@@ -516,7 +634,7 @@ function Test.process_file(files)
   if files.runnable ~= "true" then files.runnable = nil end
 
   Test.gen_args = files.args or ""
-  Test.run_test_case(files)
+  return files
 end
 @ 
 % -------------------------------------------------------------------
@@ -551,6 +669,7 @@ if CMD.compilertab[".record"] then
   error("CMD.compilertab[.record] already defined")
 end
 function CMD.compilertab[".record"](file)
+  Test.did_something = 1
   file = Caml.Filename.chop_extension(file)
   local entry = Test.find_entry(file)
   if not entry then
@@ -564,6 +683,7 @@ if CMD.compilertab[".test"] then
   error("CMD.compilertab[.test] already defined")
 end
 function CMD.compilertab[".test"](file)
+  Test.did_something = 1
   file = Caml.Filename.chop_extension(file)
   local entry = Test.find_entry(file)
   if not entry then
@@ -576,20 +696,16 @@ if CMD.compilertab[".tst"] then
   error("CMD.compilertab[.tst] already defined")
 end
 function CMD.compilertab[".tst"](file)
-  dofile(file)
-  if Test.skip_files or not Test.files then return end
-
-  local len = Test.list_len(Test.files)
-  local i = 1
-  while Test.files[i] do
-    Test.status_line(i, len);
-    Test.process_file(Test.files[i])
-    i = i + 1
+  if Test.tst_file then
+    CMD.error('test driver expects exactly one .tst file; got ' .. Test.tst_file ..
+              ' and ' .. file)
+  else
+    Test.tst_file = file
   end
-  Test.clear_status_line()
-  local plural = "s"
-  if Test.errors == 1 then plural = "" end
-  print(format("# %d error%s detected out of %d tests.", Test.errors, plural, i - 1))
+  dofile(file)
+  if not Test.files then
+    CMD.error('file ', file, ' did not assign Test.files?!')
+  end
 end
 <<testdrv.lua>>=
 if CMD.compilertab[".gen"] then
@@ -606,10 +722,25 @@ function CMD.compilertab[".gen"](file)
 end
 @ 
 Overrides for standard compiler actions.
+The default action (compile) first translates all the files named,
+then if we didn't do anything interesting, it runs all the tests we
+know about.
 <<testdrv.lua>>=
 function CMD.whatfuns["-compile"]()
   backend = backend or Backend.x86
   CMD.translate_files(Options.argv, CMD.compilertab)
+  if Test.did_something or not Test.files then return end
+  local len = Test.list_len(Test.files)
+  local i = 1
+  while Test.files[i] do
+    Test.status_line(i, len);
+    Test.process_file(Test.files[i])
+    i = i + 1
+  end
+  Test.clear_status_line()
+  local plural = "s"
+  if Test.errors == 1 then plural = "" end
+  print(format("# %d error%s detected out of %d tests.", Test.errors, plural, i - 1))
 end
 
 function CMD.whatfuns["-interp"]()
@@ -657,23 +788,5 @@ Test.log("Running Regression Tests %s", date())
 if Options.verbose > 0 then
   Test.verbose = 1
   Options.verbose = 0
-end
-@
-... and then we do some basic checking of command line arguments. We
-are depending on the fact that the command line arguments have been
-fully processed before the driver is loaded.
-<<testdrv.lua>>=
-local i = 1
-while i <= Options.argc do
-  local ext = CMD.canonical_extension(Options.argv[i])
-  if ext ~= ".lua" and ext ~= ".tst" then
-    Test.skip_files = 1
-    if ext ~= ".test" and ext ~= ".record" then
-      error("invalid command-line arguments")
-    end
-  elseif ext == ".tst" then
-    Test.tst_file = Options.argv[i]
-  end
-  i = i + 1
 end
 @ 
