@@ -76,26 +76,26 @@ let lex map buf = Luascanner.token buf map
 let do_lexbuf ~sourcename:filename g buf =
   let map = Srcmap.mk () in
   let _ = Srcmap.sync map 0 (filename, 1, 1) in
-  let chunks =
-    try P.chunks (lex map) buf
-    with Parsing.Parse_error ->
+  try
+    let chunks = P.chunks (lex map) buf in
+    let pgm = I.compile ~srcdbg:(map, false) chunks g in
+    match pgm () with
+    | [] -> [I.Value.String "executed without errors"]
+    | answers -> answers
+  with
+  | Parsing.Parse_error ->
       let file, line, _ = Srcmap.last map in begin
         prerr_string file;
         prerr_string ", line ";
         prerr_int line;
         prerr_endline ": syntax error";
         []
-      end in
-  let pgm = I.compile ~srcdbg:(map, false) chunks g in
-  try
-    match pgm () with
-    | [] -> [I.Value.String "executed without errors"]
-    | answers -> answers
-  with
+      end 
   | I.Error s -> (prerr_endline "Lua interpreter halted with error"; [])
   | I.Value.Projection (v, w) -> (prerr_endline ("error projecting to " ^ w); [])
+
 let dostring g s = 
-  I.with_stack (V.info ("dostring('" ^ s ^ "')") 0) g
+  I.with_stack (V.srcloc ("dostring('" ^ s ^ "')") 0) g
     (do_lexbuf ~sourcename:"<string>" g) (Lexing.from_string s)
 
 let dofile g infile =
@@ -103,7 +103,7 @@ let dofile g infile =
     let f = match infile with "-" -> stdin | _ -> open_in infile in
     let close () = if infile <> "-" then close_in f else () in
     try 
-      let answer = I.with_stack (V.info ("dofile('" ^ infile ^ "')") 0) g
+      let answer = I.with_stack (V.srcloc ("dofile('" ^ infile ^ "')") 0) g
                      (do_lexbuf ~sourcename:infile g) (Lexing.from_channel f)
       in  (close(); answer)
     with e -> (close (); raise e)
