@@ -213,17 +213,31 @@ type block = first * tail
 @ 
 We expose some utility functions:
 <<declarations of [[Rep]]'s public functions>>=
+val id : block -> uid
+
 val zip   : zblock -> block
 val unzip : block  -> zblock
-val goto_start : zblock -> first * tail
-val goto_end   : zblock -> head  * last
+
 val first      : zblock -> first
 val last       : zblock -> last
+val goto_start : zblock -> first * tail
+val goto_end   : zblock -> head  * last
 @ 
 Access to the representation:
 <<zipcfg.mli>>=
 val to_blocks : graph -> Rep.block Unique.Map.t
 val of_blocks : Rep.block Unique.Map.t -> graph
+@ 
+Traversal: [[postorder_dfs]] returns a list of blocks reachable from
+the entry node.
+The postorder depth-first-search order means the list is in roughly
+first-to-last order, as suitable for use in a forward dataflow problem.
+<<zipcfg.mli>>=
+val postorder_dfs : graph -> Rep.block list
+@ 
+Successors.
+<<declarations of [[Rep]]'s public functions>>=
+val succs : last -> uid list
 @ 
 \subsection{Implementation}
 <<zipcfg.ml>>=
@@ -231,6 +245,7 @@ module R = Rtl
 module T = Target
 module U  = Unique
 module UM = Unique.Map
+module US = Unique.Set
 
 let impossf fmt = Printf.kprintf Impossible.impossible fmt
 let unimpf  fmt = Printf.kprintf Impossible.unimp      fmt
@@ -276,6 +291,9 @@ type call = {         cal_i          : Rtl.rtl
             }
 @
 \paragraph{Block manipulations}
+<<definitions of [[Rep]]'s public functions>>=
+let id = function (Entry,_) -> entry_uid | (Label ((u, _), _, _),_) -> u
+@ 
 Convert block between forms.
 <<definitions of [[Rep]]'s public functions>>=
 let goto_start =
@@ -332,7 +350,6 @@ end
 
 module Blocks : BLOCKS with type t = block UM.t = struct
   type t = block UM.t
-  let id = function (Entry,_) -> entry_uid | (Label ((u, _), _, _),_) -> u
   let empty = UM.empty
   let insert block = UM.add (id block) block 
   let find blocks u = UM.find u blocks
@@ -521,4 +538,34 @@ let add_blocks blocks (focus, newblocks) =
       Blocks.fold add newblocks blocks
   | Start (Entry, _) -> impossf "entry contains nontrivial code"
   | _ -> impossf "focus not on entry"
+@ 
+<<definitions of [[Rep]]'s public functions>>=
+let succs = function
+  | Exit    _ -> []
+  | Branch  (_, l) -> [fst l]
+  | Cbranch (_, t, f) -> [fst t; fst f]
+  | Mbranch (_, edges) -> List.map fst edges
+  | Call    c -> List.map (fun e -> fst e.node) c.cal_contedges
+  | Cut     (_, edges, _) -> List.map (fun e -> fst e.node) edges
+  | Return  _ -> []
+  | Jump    _ -> []
+  | Forbidden _ -> []
 
+<<zipcfg.ml>>=
+let postorder_dfs g =
+  let entry, blocks = entry g in
+  let rec vnode block cont acc visited =
+    let u = id block in
+    if US.mem u visited then
+      cont acc visited
+    else
+      vchildren block (get_children block) cont acc (US.add u visited)
+  and get_children block =
+    let uids = succs (last (unzip block)) in
+    List.map (Blocks.find blocks) uids
+  and vchildren block children cont acc visited = 
+    let rec next children acc visited = match children with
+      | [] -> cont (block :: acc) visited
+      | n::rst -> vnode n (next rst) acc visited in
+    next children acc visited in
+  vnode (zip entry) (fun acc _visited -> acc) [] US.empty
