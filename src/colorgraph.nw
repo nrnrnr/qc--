@@ -331,23 +331,23 @@ Additional information is also stored:
 <<graph coloring types>>=
 type color = Register.t
 type 'a colorGraph = { mutable adjSet : EdgeSet.t
-                  ; mutable adjListMap : (tempList,Register.t) impListItem list RM.t
-                  ; mutable degreeMap : int RM.t
-                  ; mutable moveListMap : (moveList,G.node) impListItem list RM.t
-                  ; mutable aliasMap : Register.t RM.t
-                  ; mutable colorMap : color RM.t
-                  ; mutable spills : Register.Set.t
+                     ; mutable adjListMap : (tempList,Register.t) impListItem list RM.t
+                     ; mutable degreeMap : int RM.t
+                     ; mutable moveListMap : (moveList,G.node) impListItem list RM.t
+                     ; mutable aliasMap : Register.t RM.t
+                     ; mutable colorMap : color RM.t
+                     ; mutable spills : Register.Set.t
 
-                  ; mutable regToItem : (tempList,Register.t) impListItem RM.t
-                  ; mutable tempLG : (tempList, Register.t) impListGroup
+                     ; mutable regToItem : (tempList,Register.t) impListItem RM.t
+                     ; mutable tempLG : (tempList, Register.t) impListGroup
 
-                  ; mutable moveLG : (moveList, move) impListGroup
+                     ; mutable moveLG : (moveList, move) impListGroup
 
-                  ; mutable luaColorOverride : 'a
-                  ; mutable allColors : color list
-                  ; mutable colors : RS.t SpaceMap.t
-                  ; mutable k : int
-                  }
+                     ; mutable luaColorOverride : 'a
+                     ; mutable allColors : color list
+                     ; mutable colors : RS.t SpaceMap.t
+                     ; mutable k : int
+                     }
 @
 
 [[cgInfo]] is the mutable data structure passed around the register allocator.
@@ -493,19 +493,6 @@ let regs_in_space target cg temp =
 %-------------------------------------------------------------------
 \subsection{Graph Coloring Stages}
 %-------------------------------------------------------------------
-
-%-------------------------------------------------------------------
-\subsubsection{Liveness Analysis}
-%-------------------------------------------------------------------
-
-The liveness analysis algorithm is implemented in the [[live]] module.
-This algorithm annotates each node in the (\cfg) with a [[live_out]] set
-containing the temps that are alive after the node.
-
-<<livenessAnalysis>>=
-let liveness _ {Proc.cfg = cfg} =
-    LI.liveness cfg; true
-@
 
 %-------------------------------------------------------------------
 \subsubsection{Build}
@@ -1166,14 +1153,6 @@ let isMoveInstruction inst t =
 @
 
 
-
-
-
-
-
-
-
-
 The interface provides the modules to embed the graph coloring functions in the
 Lua interpreter.
 
@@ -1231,7 +1210,6 @@ module Make (BackplaneT : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.action)
         <<graph coloring builtins>>
 
         let init g =
-          (* PLEASE CHANGE 'CG' TO 'Colorgraph' *)
           Interp.register_module "ColorGraph" graph_coloring_module g;
           Lua.Lib.StringList.empty (* FIX -- replace with init code *)
     end
@@ -1248,7 +1226,6 @@ module Make (BackplaneT : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.action)
     <<node observers>>
     <<print CGInfo>>
     <<init cgInfo>>
-    <<livenessAnalysis>>
     <<build>>
     <<makeWorklist>>
     <<simplify>>
@@ -1273,8 +1250,7 @@ let writedot compress _ proc =
     true
 
 let graph_coloring_module =
-  [ "liveness",         V.efunc stageFn liveness
-  ; "build",            V.efunc stageFn build
+  [ "build",            V.efunc stageFn build
   ; "makeWorklist",     V.efunc stageFn makeWorklist
   ; "simplify",         V.efunc stageFn simplify
   ; "coalesce",         V.efunc stageFn coalesce
@@ -1308,7 +1284,7 @@ ColorGraph = ColorGraph or error('predefined ColorGraph is nil??') -- has some p
 B  = Backplane
 
 ColorGraph.makeGraph = B.seq 
-    { ColorGraph.liveness
+    { Liveness.liveness
     , ColorGraph.build 
     }
     

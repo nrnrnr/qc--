@@ -217,6 +217,10 @@ let init g =
     [ "toyf" , V.efunc (V.value **-> Map.proc **-> V.result V.bool) Expander.cfg
     ; "x86f" , V.efunc (V.value **-> Map.proc **-> V.result V.bool) X86.X.cfg
     ] g;
+  C.register_module "Liveness"
+    [ "liveness", V.efunc (V.value **-> Map.proc **-> V.result V.bool)
+         (fun _ p -> let module LI = Live.Make(Cfg4) in LI.liveness p.Proc.cfg; true)
+    ] g;
   C.register_module "Targets"
     [ "dummy",  Map.target.V.embed Targets.dummy 
     ; "sparc",  Map.target.V.embed Targets.sparc
@@ -232,3 +236,4 @@ let init g =
                   name = 'Expander.x86', creates = { 'x86 invariant' }, \
                   doc = 'A prototype code expander for the x86' }";
 ""
+@
