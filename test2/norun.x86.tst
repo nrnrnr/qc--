@@ -21,6 +21,7 @@ function norun(file) return { source = file, runnable="false" } end
 i = 1
 while Test.files[i] do
   Test.files[i] = norun(Test.files[i])
+  i = i + 1
 end
 
 print('# these tests pass if they assemble successfully (diffs in .s only)')
