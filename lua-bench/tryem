@@ -74,6 +74,35 @@ function goodsize {
   esac
 }
 
+# 
+function longsize {
+  case $1 in
+    ackermann) echo 6 ;;  # could be 7 if times improve (29sec) EXP
+    matrix) echo 10 ;;
+    ary)  echo 250000 ;;  # notable nonlinearity from 20000 to 40000
+    ary2) echo 250000 ;;  # notable nonlinearity from 20000 to 40000
+    ary3) echo 2100    ;;  # expected to be quadratic
+    fibo) echo 29    ;;  # EXP
+    hash) echo 100000 ;;  # more gets into nonlinear region
+    heapsort) echo 30000 ;; # newcurve pts 200 0.09 1000 1.04 2000 4.0 3000 9.26 4000 16.73
+    lists) echo 15000 ;;
+       # newgraph newline pts 4000 1.68 6000 3.10 8000 4.79 10000 6.78
+    methcall) echo 90000 ;;   # is quadratic for oclbench, linear for lbench
+    nestedloop) echo 10 ;;    # exponential; hard to push to 7
+    objinst)  echo 60000 ;;  # quadratic
+    random)   echo 150000 ;;  # quadratic
+    reversefile) echo 0  ;;  # not used
+    strcat2) echo 15000 ;;    # quadratic, as expected
+    sumcol) echo 0       ;;  # not used
+    matrix) echo 100       ;;  # linear
+    hash2)  echo 75       ;;  # linear
+    sieve)  echo 50       ;;
+    spellcheck) echo 0   ;;  # not used
+    *) findsize $1 $2 $3 ;;
+  esac
+}
+
+
 function smallsize {
   case $1 in
     ackermann) echo 6 ;;  # could be 7 if times improve (29sec)
@@ -84,6 +113,7 @@ function smallsize {
 
 size=${SIZE-2}
 size2=${SIZE2-100}
+thesize=goodsize
 
 INTERP=-std
 PROFILE=-p
@@ -95,6 +125,7 @@ while [ $# -gt 0 ]; do
     -nop) PROFILE= ; shift ;;
     -size) size="${2-size}"; shift; shift ;;
     -size2) size2="${2-size2}"; shift; shift ;;
+    -long) thesize=longsize ; shift;; 
     *) break ;;
   esac
 done
@@ -108,7 +139,7 @@ do
   base="`echo $base | sed 's/\.lua$//'`"
   i="$base.lua"
   echo $i 1>&2
-  truesize=`goodsize $base $size $size2`
+  truesize=`$thesize $base $size $size2`
   interp=oclbench${INTERP}${PROFILE}.opt
 
     if [ -r $i.Input ]; then
