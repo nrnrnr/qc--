@@ -479,26 +479,14 @@ void init_operators(void) {
   <<integer operator definitions>>
 
   <<set global Lua value [[CMM.tables.operators]] equal to [[operator_table]]>>
+}
 @ 
 
 To allow a user to access a list of those operators we register at runtime,
 we export [[operator_table]] as the Lua global value [[CMM.tables.operators]].
 
 <<set global Lua value [[CMM.tables.operators]] equal to [[operator_table]]>>=
-  {
-    lua_error_handle(lua_dostring(lua_interpreter,
-           "CMM               = CMM               or {}   \n"
-           "CMM.tables        = CMM.tables        or {}   \n"), 
-       "<internal code>");
-    lua_getglobal (lua_interpreter, "CMM"          );
-    lua_pushstring(lua_interpreter, "tables"       );
-    lua_gettable  (lua_interpreter, -2);
-    lua_pushstring(lua_interpreter, "operators"    );
-    lua_pushtable (lua_interpreter,  operator_table);
-    lua_settable  (lua_interpreter, -3);
-    lua_pop       (lua_interpreter,  2);
-  }
-}
+  table_exporttolua(lua_interpreter, &operator_table, "operators");
 @ 
 
 And now for the hackery that lets us define and register operators with the

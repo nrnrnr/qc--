@@ -361,7 +361,7 @@ void cbrancht(RAddr addr) {
         /* this line intentionally left blank */
       }  
        
-      { emitm(33, 1); emitm(0, 4); } 
+      { emitm(34, 1); emitm(0, 4); } 
     } 
 }
 /**************
@@ -405,7 +405,7 @@ void cbranchf(RAddr addr) {
         /* this line intentionally left blank */
       }  
        
-      { emitm(33, 1); emitm(0, 4); } 
+      { emitm(34, 1); emitm(0, 4); } 
     } 
 }
 /**************
@@ -469,7 +469,7 @@ void branchtf(RAddr addr, RAddr addr2) {
         /* this line intentionally left blank */
       }  
        
-      { emitm(33, 1); emitm(0, 4); emitm(0, 4); } 
+      { emitm(34, 1); emitm(0, 4); emitm(0, 4); } 
     } 
 }
 /**************
@@ -487,11 +487,11 @@ void return_(unsigned /* [0..255] */ bits8, unsigned /* [0..255] */ bits8b) {
 }
 /**************
 
-halt  is (HALT) op == 35
+halt  is (HALT) op == 36
 
 ***********/
 void halt(void) {
-  emitm(35, 1);
+  emitm(36, 1);
 }
 /**************
 
@@ -543,11 +543,19 @@ void store_round(void) {
 }
 /**************
 
-breakpt  is (BREAKPT) op == 34
+fetch_sp  is (FETCH_SP) op == 33
+
+***********/
+void fetch_sp(void) {
+  emitm(33, 1);
+}
+/**************
+
+breakpt  is (BREAKPT) op == 35
 
 ***********/
 void breakpt(void) {
-  emitm(34, 1);
+  emitm(35, 1);
 }
 /**************
 

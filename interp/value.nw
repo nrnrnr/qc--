@@ -79,6 +79,13 @@ The only bit widths currently supported are: [[1]], [[2]], [[8]], [[16]],
 value to_CMM_value(unsigned v, unsigned width);
 @ 
 
+To easily initialize a [[value]] to ``0'', we provide helper function
+[[value_zero]] that returns a zeroed-out [[value]].
+
+<<function prototypes>>=
+value value_zero(void);
+@ 
+
 To perform some quick internal consistency assertions about the [[value]] type
 (and to verify assumptions made about this type), we provide helper 
 [[check_value_types]].
@@ -118,10 +125,8 @@ Unfortunately, this helper only works for integer values.
 
 <<function definitions>>=
 value to_CMM_value(unsigned v, unsigned width) {
-  value val;
-
-  /* zero it out */
-  val.bits32 = 0;
+  /* set val = 0 */
+  value val = value_zero();
 
   switch (width) {
   case  1: val.bits1  = v       ; break;
@@ -136,6 +141,21 @@ value to_CMM_value(unsigned v, unsigned width) {
   }
 
   return val;
+}
+@ 
+
+[[value_zero]] does nothing special.
+
+<<function definitions>>=
+value value_zero(void) {
+  static void *zero = NULL;
+  value        v;
+
+  if (zero == NULL)  zero = calloc(1, sizeof(v));
+
+  /* zero out the bits of v and return it*/
+  memcpy(&v, zero, sizeof(v));
+  return v;
 }
 @ 
 

@@ -71,11 +71,11 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
   { 
     unsigned /* [0..255] */ MATCH_w_8_0 = 
       (mem_aggregate((((MATCH_p) + 0)),DEF_BYTE_ORDER,1));
-    if (36 <= (MATCH_w_8_0 & 0xff) /* op at 0 */ && (MATCH_w_8_0 & 0xff) /* op at 0 */ < 256) { 
+    if (37 <= (MATCH_w_8_0 & 0xff) /* op at 0 */ && (MATCH_w_8_0 & 0xff) /* op at 0 */ < 256) { 
       { 
         next = (((MATCH_p) + 0));
         
-        #line 230 "disasm.m"
+        #line 233 "disasm.m"
         {
                  asmprintf(fd, "%x: <data: %x>\n", pc, *((u_int32 *) pc));
                  next = pc + 4;
@@ -656,12 +656,12 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
             } 
           }
           break;
-        case 28: case 33: 
+        case 28: case 34: 
           { 
             { 
               next = (((MATCH_p) + 0));
               
-              #line 230 "disasm.m"
+              #line 233 "disasm.m"
               {
                        asmprintf(fd, "%x: <data: %x>\n", pc, *((u_int32 *) pc));
                        next = pc + 4;
@@ -750,13 +750,13 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
             } 
           }
           break;
-        case 34: 
+        case 33: 
           { 
             { 
               next = (((MATCH_p) + 1));
               
               #line 225 "disasm.m"
-                    asmprintf(fd, "%x: %s", pc, "BREAKPT ");
+                    asmprintf(fd, "%x: %s", pc, "FETCH_SP ");
                     asmprintf(fd, "\n");
               
               
@@ -770,10 +770,24 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
               next = (((MATCH_p) + 1));
               
               #line 228 "disasm.m"
-                    return;
+                    asmprintf(fd, "%x: %s", pc, "BREAKPT ");
+                    asmprintf(fd, "\n");
               
               
               #line 3801 "generated-code" 
+            } 
+          }
+          break;
+        case 36: 
+          { 
+            { 
+              next = (((MATCH_p) + 1));
+              
+              #line 231 "disasm.m"
+                    return;
+              
+              
+              #line 3901 "generated-code" 
             } 
           }
           break;
@@ -782,7 +796,7 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
   } 
 }
 
-#line 235 "disasm.m"
+#line 238 "disasm.m"
 
     pc = next;
   }
@@ -791,5 +805,5 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
 }
 
 
-#line 3901 "generated-code"
+#line 4001 "generated-code"
 

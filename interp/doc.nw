@@ -32,19 +32,15 @@
 
 \paragraph{Translation from compiler}
 \begin{itemize}
-    \item  Stackdata translation unimplemented!
     \item  "Cut to" is not properly translated
       (assertions fail, labels are not found, translation is wrong, etc.)!
     \item  Continuations are not properly translated
       (see above; also, continuations must be specially defined with
        [[define_continuation]] assembly instruction---[[define_label]] is not 
        good enough for interpreter as of now)!
-
     \item  Interpreter is not told correct number of global registers.
-
     \item  Multiple returns have not been tested 
       (contingent upon continuations; see above)
-
     \item  Translation of guarded-RTLs is not tested.
 \end{itemize}
 
@@ -53,12 +49,13 @@
 \begin{itemize}
     \item  Not all C standard library functions are registered.  In fact, 
       only a few are (e.g., malloc, free, printf, exit, and others).
-    \item  The registration of printf is special yet is not documented.
 \end{itemize}
 
  \paragraph{runtime system}
 \begin{itemize}
-    \item  [[Cmm_FindStackData]] is unimplemented.
+    \item  [[Cmm_FindStackData]] is unimplemented.  It is unclear how the
+      runtime system will be able to access stackdata labels by index; perhaps
+      the interpreter will have to build a table of some sort.
     \item  [[Cmm_RunThread]] is no longer in the language definition, yet is 
       required by this implementation in order to run a thread.
     \item  We use static boot-up code to pass an argument off to an initial 
@@ -70,11 +67,6 @@
 
  \paragraph{interpreter}
 \begin{itemize} 
-    \item  It is unclear how stackdata access is to be handled in the 
-      interpreter; this is strongly dependent on how the compiler will be able
-      to inform the interpreter of stackdata labels, sizes and of how 
-      references to stackdata labels will be successfully translated to 
-      interpreter Lua code
     \item  Mutual dependencies among separate assembly units is not allowed 
       for now.
     \item  When calls are made from a {\PAL} procedure to a {\PAL} procedure, 
@@ -110,8 +102,6 @@ FIX FIX have to change [[ROTL]] and [[ROTR]] so they deal with the case when $d 
 
 Use CII: maybe sequences to store closure pointers, check out Hanson's [[malloc]] interface (that allows debugging), maybe rings for the dead set, look at dvars and [[array_t]].
 
-Make clear that what I mean by an unnamed section is actually just the toplevel part of the assembly unit (i.e., declarations and procedures not in a section).
-
 Consider making better use of the [[lua_State *]] in the [[table]] structure.
 
 Use ``higher-order'' macros to declare, define and register operator implementations (instead of the current [[#undef]] business).
@@ -144,7 +134,8 @@ We use the binary [[tools]] to preprocess our code, and link the library [[mclib
 Visit [[http://www.cs.arizona.edu/icon/]] to download Icon.
 
 \item We make use of David Hanson's \textit{C Interfaces and Implementations} library of C coding idioms.
-Visit [[http://www.cs.princeton.edu/software/cii/]] to download the source code needed to build this library.
+The necessary header files and code files are included with the interpreter.
+Visit [[http://www.cs.princeton.edu/software/cii/]] for background information about this library.
 
 \end{itemize}
 
@@ -250,6 +241,7 @@ more complicated depths of the interpreter.
 \input{ccall.inc}
 \input{span.inc}
 \input{disasm.inc}
+\input{inspect.inc}
 \input{runtime.inc}
 
 \endgroup
@@ -285,6 +277,7 @@ For ease of reading, the modules' interfaces are reproduced here as well.
 \input{ccall.inc}
 \input{span.inc}
 \input{disasm.inc}
+\input{inspect.inc}
 \input{runtime.inc}
 
 % ----------------------------------------------------------------------------

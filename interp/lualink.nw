@@ -28,7 +28,7 @@ This document contains some code necessary for interaction with Lua from C.
 \subsection{Initializing a Lua Interpreter}
 % ----------------------------------------------------------------------------
 
-To initialize a Lua interpreter, there are serveral things to be done;
+To initialize a Lua interpreter, there are several things to be done;
 we must register C functions with Lua, turn on certain Lua debugging options,
 create Lua tags, etc.
 
@@ -72,6 +72,19 @@ Lua stack.
 int lua_getfromref(lua_State *L);
 @ 
 
+\paragraph{Accessing [[table]]s from Lua}
+
+We provide helper [[table_exporttolua]] to export a [[table]] as a Lua global.
+Although [[table]]s are represented as Lua tables, they are not necessarily
+visible in the Lua global environment.
+Note that a [[table *]] must be passed in, and not a [[table]] structure
+itself, because the [[table]] record may be updated as a result of the
+export operation.
+
+<<function prototypes>>=
+void table_exporttolua(lua_State *L, table *t, const char *name);
+@ 
+
 \paragraph{Debugging}
 
 For extra debugging information, we use the Lua debugging library in
@@ -109,6 +122,11 @@ void lua_assert_istable   (lua_State *L, int i, const char *err_msg);
 #include "interp.h" 
 #include "encoding.h"
 #include "operator.h" /* for use of operator_table */
+
+/* for exporting of tables to Lua */
+#include "label.h"
+#include "span.h"
+#include "assemblyunit.h"
 
 int lua_assembly_unit_tag;
 int lua_RBlock_tag;
@@ -179,10 +197,10 @@ lua_State *init_lua_interp(void) {
 
   lua_setlinehook(lua_interp, lua_linehook);
 
-  <<extend Lua initial basis>>
   <<create Lua userdata tags>>
   <<register C functions with lua>>
   <<bind global tables to global Lua symbols>>
+  <<extend Lua initial basis>>
 
   return lua_interp;
 }
@@ -204,7 +222,11 @@ tables: [[RAddr]]s, [[RBlock]]s, [[RLabel]]s, etc.
 @ 
 
 The Lua initial basis consists of helper Lua functions that we wish had been
-included with Lua in the first place.
+included with Lua in the first place, as well as some {\PAL} specific Lua
+functions that allow the user to inspect interpreter internals (see
+[[inspect.nw]]).
+Note that we expect external file [[inspect.clua]] to contain a single C string
+representing Lua source code.
 
 <<extend Lua initial basis>>=
   {
@@ -216,6 +238,14 @@ included with Lua in the first place.
                                 "  return newtable      \n"
                                 "end                    \n";
     lua_error_handle(lua_dostring(lua_interp, lua_extension), 
+                     "<internal code>");
+  }
+
+  {
+    const char *lua_extension =
+                                #include "inspect.clua"
+	                            ;
+    lua_error_handle(lua_dostring(lua_interp, lua_extension),
                      "<internal code>");
   }
 @ 
@@ -242,12 +272,18 @@ we bind some such tables to global Lua symbols.
 <<bind global tables to global Lua symbols>>=
   /* store tables under CMM.tables */
   lua_getglobal(lua_interp, "CMM");
+
   lua_pushstring(lua_interp, "tables");
   lua_newtable(lua_interp);
   lua_settable(lua_interp, -3);
 
+  /* FIX export the tables (is there a better place to do this?) */
+  table_exporttolua(lua_interp, &exports_table       , "exports"       );
+  table_exporttolua(lua_interp, &assembly_units_table, "assembly_units");
+  table_exporttolua(lua_interp, &span_table          , "spans"         );
+
   lua_pop(lua_interp, 1);
-@
+@ 
 
 % ----------------------------------------------------------------------------
 \subsection{Utility Functions and Macros}
@@ -297,6 +333,26 @@ int lua_getfromref(lua_State *L) {
 }
 @ 
 
+\paragraph{Accessing [[table]]s from Lua}
+
+We require [[t]] to be a [[table *]] because we may need to implicitly update
+[[*t]] as a side effect of the [[lua_pushtable]] call.
+
+<<function definitions>>=
+void table_exporttolua(lua_State *L, table *t, const char *name) {
+  lua_error_handle(lua_dostring(lua_interpreter,
+         "CMM               = CMM               or {}   \n"
+         "CMM.tables        = CMM.tables        or {}   \n"),
+     "<internal code>");
+  lua_getglobal (L, "CMM"   );
+  lua_pushstring(L, "tables");
+  lua_gettable  (L, -2      );
+  lua_pushstring(L,  name   );
+  lua_pushtable (L,  *t     );
+  lua_settable  (L, -3      );
+  lua_pop       (L,  2      );
+}
+@ 
 
 \paragraph{Debugging}
 

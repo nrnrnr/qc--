@@ -2,7 +2,9 @@
 This document contains information about the interpreter.
 \fi
 
+% ----------------------------------------------------------------------------
 \section{The Quick~{\PAL} Interpreter Assembly Language}
+% ----------------------------------------------------------------------------
 
 The Quick~{\PAL} interpreter reads source code in a Lua-based assembly
 language.
@@ -86,7 +88,9 @@ CMM.section("text")
 CMM.end_section()
 \end{verbatim}
 
+% ----------------------------------------------------------------------------
 \subsection{Source Code Functions}
+% ----------------------------------------------------------------------------
 
 The Quick~{\PAL} Interpreter reads in Lua source code that may make use of
 standard Lua functions as well as the following {\PAL} related functions:\\ 
@@ -209,6 +213,10 @@ a separate namespace.}
 {Pushes the value of [[label]] onto the value stack.}
 {"label1"}
 
+\manentry{fetch\_sp}{}
+{Pushes a pointer to the current activation's stackdata space onto the value stack.}
+{}
+
 \manentry{fetch}
 {$number$ [[size]]$, string$ [[byte_order]]$, number$ [[align]]}
 {Pops an address off the value stack and fetches [[size]] bits from that address in memory space, using [[byte_order]] byte-order and [[align]] alignment.  If [[align]] $= 0$, the machine's default alignment is used.}
@@ -222,14 +230,14 @@ a separate namespace.}
 {Fetches global variable [[index]] and pushes it onto the value stack.}
 {1}
 
+\end{tabularx}
+
+\begin{tabularx}{\linewidth}{|lY|Y|}\hline
+
 \manentry{store}
 {$number$ [[size]]$, number$ [[byte_order]]$, number$ [[align]]}
 {Pops a value and an address off the value stack, and then stores that value at that address in memory space, using [[byte_order]] byte-order and [[align]] alignment.  If [[align]] $= 0$, the machine's default alignment is used.}
 {8, "NATIVE", 0}
-
-\end{tabularx}
-
-\begin{tabularx}{\linewidth}{|lY|Y|}\hline
 
 \manentry{store\_local}{$number$ [[index]]}
 {Pops a value off the value stack and stores it in local variable [[index]].}
@@ -252,6 +260,10 @@ a separate namespace.}
 {Pops a value and a boolean off the value stack; if the boolean is true, the value is stored in global variable [[index]].}
 {4}
 
+\end{tabularx}
+
+\begin{tabularx}{\linewidth}{|lY|Y|}\hline
+
 \manentry{store\_arg}{$number$ [[index]]}
 {Pops a value off the value stack and stores it in argument space at index [[index]].}
 {3}
@@ -261,10 +273,6 @@ a separate namespace.}
 {7}
 
 % --
-
-\end{tabularx}
-
-\begin{tabularx}{\linewidth}{|lY|Y|}\hline
 
 \manentry{apply\_operator}{$string$ [[stem_name]]$, string$ [[bit-widths]]}
 {Applies operator [[stem_name]] to some nonnegative number of values atop the value stack (popping any such values off), and pushes the result onto the stack; [[bit-widths]] is a string-based type signature for the operator (e.g., [["bits32,bits16:bits8"]]).}
@@ -287,13 +295,13 @@ floating-point rounding mode to this value.}
 {Pops a boolean off the value stack; if the boolean is true, the program counter is set to the address of label [[destLabel]].  Otherwise, control flow falls through.}
 {"label1"}
 
-\manentry{cbranchf}{$string$ [[destLabel]]}
-{Pops a boolean off the value stack; if the boolean is false, the program counter is set to the address of label [[destLabel]].  Otherwise, control flow falls through.}
-{"label1"}
-
 \end{tabularx}
 
 \begin{tabularx}{\linewidth}{|lY|Y|}\hline
+
+\manentry{cbranchf}{$string$ [[destLabel]]}
+{Pops a boolean off the value stack; if the boolean is false, the program counter is set to the address of label [[destLabel]].  Otherwise, control flow falls through.}
+{"label1"}
 
 \manentry{branchtf}{$string$ [[labelT]]$, $ [[labelF]]}
 {Pops a boolean off the value stack; the program counter is set to the address of label [[labelT]] if the boolean is true, and to the address of label [[labelF]] if the boolean is false.}
@@ -315,5 +323,33 @@ Annotations are ignored if procedure is a foreign C procedure; C procedures must
 \manentry{cut}{}
 {Pops an address off the value stack and cuts to the continuation located at the address.}
 {}
+
+\end{tabularx}
+
+% ----------------------------------------------------------------------------
+\section{Inspection Functions for Lua}
+% ----------------------------------------------------------------------------
+
+To allow a user of the interpreter to inspect some details of the interpreter's
+internals, we provide a Lua-based inspection facility.
+
+The following Lua functions are currently exported to Lua source code run
+through the interpreter:\\
+
+\def\inspectentry#1#2#3{%
+{\Tt{\large{CMM.inspect.#1}}\nwendquote} & $($#2$)$ & #3 \\\hline\hline}
+
+\def\inspectheader{\textbf{Lua Function} & \textbf{Arguments} & %
+\textbf{Description} \\\hline\hline}
+
+\begin{tabularx}{\linewidth}{|lY|Y|}\hline
+
+\inspectheader
+
+\inspectentry{dump\_operators}{}
+{Writes to [[stdout]] an alphabetically sorted list of all {\PAL} operators registered (and thus available for use) in the interpreter, as well as a comprehensive list of all types at which these operators are instantiated.}
+
+\inspectentry{dump\_ccall}{}
+{Writes to [[stdout]] a list of all C function type signatures registered with the interpreter's C calling mechanism, as well as a list of all C functions that have been thus far registered with the interpreter's C calling mechanism.}
 
 \end{tabularx}

@@ -130,7 +130,7 @@ int cmm_interp_open(int valstack_size, int argspace_size);
 We internally use helper [[init_interp]] to perform basic interpreter initialization (including operator registration, etc.).
 
 <<internal function prototypes>>=
-static void init_interp(lua_State *L, int valstack_size, int argspace_size);
+static void init_interp(int valstack_size, int argspace_size);
 @ 
 
 We also make sure that defined [[MEMSIZE]]s and [[PTRSIZE]]s will work with the current architecture.
@@ -255,10 +255,10 @@ patterns
     GOTO          CBRANCHT       CBRANCHF       BRANCHTF
     CALL          CMM_TAIL_CALL  RETURN         CUT
     EMIT_RADDR    PUSH_SYMBOL    OP
-    FETCH_ROUND   STORE_ROUND
+    FETCH_ROUND   STORE_ROUND    FETCH_SP
     PLACECODE     BREAKPT
     HALT
-  ] is op = {0 to 35}
+  ] is op = {0 to 36}
 @ 
 
 To add an instruction to the bytecode, one must simply add an instruction name to the [[op]] table above and increase the upper bound of [[op]]'s value range.
@@ -274,7 +274,7 @@ patterns
   any32   is CALL           | DEFINE_PROC     | PUSH_SYMBOL
   memory  is FETCH | STORE  | GSTORE
   nullary is HALT  |  GOTO  | CMM_TAIL_CALL   | CUT           | END_PROC
-           | FETCH_ROUND    | STORE_ROUND
+           | FETCH_ROUND    | STORE_ROUND     | FETCH_SP
            | BREAKPT
 @ 
 
@@ -343,7 +343,9 @@ and initializes default-registered C function signatures and primitive
 arithmetic operators.
 
 <<utility functions>>=
-static void init_interp(lua_State *L, int valstack_size, int argspace_size) {
+static void init_interp(int valstack_size, int argspace_size) {
+  lua_State *L;
+
   /* infer information about architecture */
   infer_architecture();
 
@@ -355,6 +357,9 @@ static void init_interp(lua_State *L, int valstack_size, int argspace_size) {
 
   c_func_table           = fresh_table();
   c_sig_table            = fresh_table();
+
+  /* initialize a Lua interpreter */
+  L = init_lua_interp();
 
   /* initialize the lua_State field of global tables */
   assembly_units_table.L = L;
@@ -1101,6 +1106,19 @@ Either way, we must decrement the [[values]] pointer by 2 to simulate the poppin
                            pc             = next;
 @ 
 
+[[FETCH_SP]] is an easy instruction to interpret.
+We simply push the current value of [[stackdata]].
+
+<<matching statement>>=
+    | FETCH_SP()        => {
+                           value v = value_zero();
+                           v.ptr   = (void *) stackdata;
+                           PUSH(v, values); 
+
+                           pc      = next;
+                           }
+@ 
+
 Memory space fetches, stores, and guarded stores are more complex.
 They theoretically involve correctly aggregating / breaking up data into small pieces, arranged by the specified byte-order.
 For now, we only support the natural byte-order of the machine on which the interpreter is running (e.g., little-endian byte-order on x86 machines).
@@ -1148,7 +1166,7 @@ aggregate / dis-aggregate data for unaligned multi-byte loads and stores.
 <<fetch value from given address>>=
   {
     value *fetched       = (value *) STACK_ELT(values, 0).ptr;
-    value  v;
+    value  v             = value_zero();
 
     cmm_assert(fetched != NULL, "attempted to FETCH at address NULL");
 
@@ -1277,7 +1295,7 @@ label arithmetic); all other [[CMM_label]]s are pushed atop the stack as
 <<matching statement>>=
     | PUSH_SYMBOL(s)    => {
                            CMM_label *lbl = (CMM_label *) s;
-                           value      v;
+                           value      v   = value_zero();
 
                            assert(lbl != NULL);   /* this can't happen */
 
@@ -1806,8 +1824,6 @@ In [[cmm_interp_open]], we get everything ready for future source-code encoding 
 <<application initialization>>=
 int cmm_interp_open(int valstack_size, int argspace_size)
 {
-  lua_State   *lua_interp;
-
   if (valstack_size <= 0) valstack_size = DEF_VALSTACK_SIZE;
   if (argspace_size <= 0) argspace_size = DEF_ARGSPACE_SIZE;
 
@@ -1822,8 +1838,7 @@ int cmm_interp_open(int valstack_size, int argspace_size)
     check_value_types();
 
     <<prepare for encoding library>>
-    <<initialize a Lua interpreter>>
-    <<initialize the {\PAL} interpreter>>
+    <<initialize a Lua interpreter and the {\PAL} interpreter>>
   }
   return 0;
 }
@@ -1839,10 +1854,11 @@ void cmm_interp_close(void) {
 % ----------------------------------------------------------------------------
 
 Initializing the {\PAL} interpreter involves a simple call to helper [[init_interp]].
-This helper initializes the operator table and a few other things.
+This helper initializes the operator table and a few other things (as well as
+starting up a Lua interpreter).
 
-<<initialize the {\PAL} interpreter>>= 
-  init_interp(lua_interp, valstack_size, argspace_size);
+<<initialize a Lua interpreter and the {\PAL} interpreter>>=
+  init_interp(valstack_size, argspace_size);
 @ 
 
 Before using the NJ Machine-Code Toolkit encoding library, we must first prepare by creating an array to store closures ([[RClosure]]s).
@@ -1855,13 +1871,6 @@ Before using the NJ Machine-Code Toolkit encoding library, we must first prepare
   mem_assert(closures_base);
   closures_free = closures_base;
   closures_limit = closures_base + DEF_CLOSURESARRAY_SIZE;
-@ 
-
-To initialize the Lua interpreter, we must initialize transactions with the Lua C library.
-This is wrapped up in function [[init_lua_interp]], as defined in the [[lualink]] module.
-
-<<initialize a Lua interpreter>>=
-  lua_interp = init_lua_interp();
 @ 
 
 % ----------------------------------------------------------------------------

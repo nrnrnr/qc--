@@ -35,6 +35,7 @@ extern void cut(void);
 extern void end_proc(void);
 extern void fetch_round(void);
 extern void store_round(void);
+extern void fetch_sp(void);
 extern void breakpt(void);
 extern void store_local(unsigned /* [0..65535] */ bits16);
 extern void store_global(unsigned /* [0..65535] */ bits16);

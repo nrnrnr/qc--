@@ -127,6 +127,7 @@ The client's implementation is split across files [[client.h]] and
 #ifndef _CLIENT_H
 #define _CLIENT_H
 
+#include <lua.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include "runtime.h"
@@ -178,6 +179,8 @@ The following table describes the commands that the interpreter currently unders
 [[disasm]] $\{label\}^{*}$ & disassembles (to stdout) the program bytecode chunks located at each of the labels listed
 \\\hline
 [[run]] $label$ $[arg]$ & runs (interprets) the program bytecode (should be a procedure) located at the given label, optionally passing $arg$ to the code as a parameter
+\\\hline
+[[inspect]] & enter inspection mode (experimental)
 \\\hline
 \end{tabularx}
 For information about the client's command line mode, please see the section
@@ -564,6 +567,8 @@ Special commands [[verbosity]] and [[stacksize]] allow the user to slightly alte
           stack_size = (unsigned) i;
       }
       printf("stacksize is now %u\n", stack_size);
+    } else if (strcmp(command, "inspect") == 0) {
+      <<enter inspection mode>>
     } else if (strcmp(command, "quit") == 0) {
       break;
     } else
@@ -635,3 +640,39 @@ Creating and running a {\PAL} thread with a continuation to execute the code at 
 <<run continuation in [[tcb]]>>=
   tcb->cont = Cmm_RunThread(tcb->cont);
 @
+
+% ----------------------------------------------------------------------------
+\paragraph{Inspection Mode}
+% ----------------------------------------------------------------------------
+
+<<global variable definitions>>=
+extern lua_State *lua_interpreter;
+@ 
+
+Inspection mode is experimental.
+
+<<enter inspection mode>>=
+  {
+    char *ic;
+
+    printf("[Entering inspection mode.  An EOF quits inspection mode.]\n");
+
+    for (;;) {
+      printf("Inspect> ");
+
+      ic = buff;  
+      do {
+        *(ic++) = (char) getchar();
+      } while (ic[-1] != EOF && ic[-1] != '\n' && ic[-1] != '\r');
+
+      if (buff[0] == EOF) break;    
+      if (ic == buff + 1) continue;
+      ic[-1] = '\0';
+
+      assert(lua_interpreter);
+      lua_dostring(lua_interpreter, buff);
+    }
+
+    printf("\n[Leaving inspection mode.]\n");
+  }
+@ 

@@ -14,7 +14,7 @@ import bits32 cmmprint;
 
 section "text" {
   main() {
-    subroutine(0) also cuts to cont;
+    subroutine(0, cont) also cuts to cont;
     return;
 
     continuation cont():
@@ -22,13 +22,13 @@ section "text" {
       return;
   }
 
-  subroutine(bits8 x) {
+  subroutine(bits8 x, bits32 cc) {
     foreign "C" cmmprint(x);
     if %geu(x, 10::bits8) {
-      cut to cont();
+      cut to cc();
     } else {
       x = x + 1::bits8;
-      subroutine(x) also cuts to cont;
+      subroutine(x, cc);
 
       // this shouldn't execute
       foreign "C" cmmprint(x);

@@ -67,8 +67,9 @@ clobber:V:  clean
             rm -f *.m *.i decode.fetch bytecode.sled clients/*.i
             rm -f $INTERPHDRS $INTERPSRCS
             rm -f $CLIENTHDRS $CLIENTSRCS
+            rm -f inspect.lua inspect.clua
 
-# cleani does _not_ rm mclib.o or the CII *.o
+# cleani does _not_ remove mclib.o or the CII *.o (which don't change often)
 cleani:V:
             rm -f $INTERPOBJS client.o clients/*.o
 
@@ -183,13 +184,13 @@ interp:V: $NAME
 gc:V:     clients/gc_client
 exn:V:    clients/exn_client
 
-$NAME:    $COREOBJS client.o inspect.lua
+$NAME:    $COREOBJS client.o
     $CC $CFLAGS $LIBS -o $target $COREOBJS client.o
 
-clients/gc_client:  $COREOBJS clients/gc.o inspect.lua
+clients/gc_client:  $COREOBJS clients/gc.o
     $CC $CFLAGS $LIBS -o $target $COREOBJS clients/gc.o
 
-clients/exn_client: $COREOBJS clients/exn.o inspect.lua
+clients/exn_client: $COREOBJS clients/exn.o
     $CC $CFLAGS $LIBS -o $target $COREOBJS clients/exn.o
 
 ###
@@ -278,6 +279,7 @@ INTERFACES = features.nw \
              ccall.nw \
              span.nw \
              disasm.nw \
+             inspect.nw \
              runtime.nw \
 
 interfaces:V: interfaces.dvi
@@ -332,8 +334,15 @@ float-features.h:D: features.nw
 %.m:D: %.nw
     $NOTANGLE -R$target $prereq | $CPIF $target
 
-inspect.lua:D: inspect.nw
+inspect.lua:D:  inspect.nw
     $NOTANGLE -R$target $prereq > $target
+
+inspect.clua:D: inspect.lua
+    sed -e 's/\\/\\\\/g' \
+        -e 's/"/\\"/g'   \
+        -e 'i \'         \
+        -e '\"\\'        \
+        -e 's/$/\\n"/'   $prereq > $target
 
 # ------------------------------------------------------------------ 
 # intermediate code targets
@@ -385,7 +394,7 @@ assemblyunit.o: assemblyunit.c assemblyunit.h controlflow.h \
  activation.h table.h types.h machine.h uid.h stack.h value.h \
  lualink.h encoding.h interp.h intervals.h label.h thread.h \
  c-features.h
-c-features.o: c-features.c
+c-features.o: c-features.c c-features.h
 ccall.o: ccall.c ccall.h table.h stack.h value.h types.h machine.h \
  label.h assemblyunit.h controlflow.h activation.h uid.h lualink.h \
  interp.h intervals.h thread.h c-features.h
@@ -402,7 +411,8 @@ label.o: label.c label.h assemblyunit.h controlflow.h activation.h \
  intervals.h thread.h c-features.h
 lualink.o: lualink.c lualink.h table.h interp.h activation.h types.h \
  machine.h uid.h stack.h value.h assemblyunit.h controlflow.h \
- intervals.h label.h thread.h c-features.h encoding.h
+ intervals.h label.h thread.h c-features.h encoding.h operator.h \
+ inspect.clua
 operator.o: operator.c operator.h table.h stack.h value.h types.h \
  machine.h c-features.h float-features.h lualink.h interp.h \
  activation.h uid.h assemblyunit.h controlflow.h intervals.h label.h \
