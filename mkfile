@@ -20,13 +20,23 @@ SUBDIRS =       cllib lua asdl src
 # ------------------------------------------------------------------ 
 # high level targets
 # ------------------------------------------------------------------ 
+# this does not work: "all: depend update" because dependencies are
+# not satisfied from left to right.
 
-all:V:          depend update
-all.opt:V:      depend update.opt
+all:V:          depend 
+                for i in $SUBDIRS; 
+                do 
+                    (echo "# entering $i" && cd $i && mk $MKFLAGS update)
+                done
+
+all.opt:V:      depend 
+                for i in $SUBDIRS; 
+                do 
+                    (echo "# entering $i" && cd $i && mk $MKFLAGS update.opt)
+                done
+
 
 depend          \
-update          \
-update.opt      \
 html            \
 dvi:V:          dirs
                 for i in $SUBDIRS; 
