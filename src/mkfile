@@ -339,30 +339,36 @@ uint64p.o:      uint64p.c
 # asdl
 # ------------------------------------------------------------------ 
 
+# ASDL does not support seperate compilation:  modules referring to
+# each other must be in one file.  To overcome this limitation we
+# concatenate all asdl files to one file and pass it to the asdlGen
+# compiler.
+
 ASDL =          asdlGen
 
-%.ml            \
-%.mli           \
-%Util.ml        \
-%Util.mli:      %.asdl
-                $ASDL --ocaml --pickler=sexp $prereq 
+master.asdl:    ast.asdl ir.asdl asm.asdl
+                cat $prereq > $target
 
-#
-# The fgraphUtil files do not compile because of ASDL weirdness - 
-# we ignore them and thus can't serialize the flow graph.
-#
-# We can't use the generic rule from above because multiple modules
-# are generated from ir.asdl
-
+ast.ml          \
+ast.mli         \
+astUtil.ml      \
+astUtil.mli     \
+                \
+asm.ml          \
+asm.mli         \
+asmUtil.ml      \
+asmUtil.mli     \
+                \
 rtl.ml          \
 rtl.mli         \
 rtlUtil.ml      \
 rtlUtil.mli     \
+                \
 fgraph.ml       \
 fgraph.mli      \
 fgraphUtil.ml   \
-fgraphUtil.mli: ir.asdl
-                $ASDL --ocaml --pickler=sexp $prereq 
+fgraphUtil.mli: master.asdl                
+                $ASDL --ocaml --pickler=sexp $prereq
 
 # ------------------------------------------------------------------ 
 # binaries
