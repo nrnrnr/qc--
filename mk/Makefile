@@ -3,14 +3,15 @@
 #  Edit the variables below if neccessary and call "make".
 # 
 
-# 1.0 released on 5  March 2002
+# 1.0 released on  5 March 2002
 # 1.1 released on 11 March 2002
 # 1.2 released on 15 May   2002
+# 1.3 releades on  5 June  2002
 
 # VERSION is incremented AFTER a release. After the release of 1.1 we are 
 # thus working for a while on 1.2.
 
-VERSION = 1.3
+VERSION = 1.4
 
 PREFIX  = /usr/local
 BINDIR  = $(PREFIX)/bin
@@ -50,23 +51,24 @@ www:		$(FILE).tar.gz
 
 $(FILE).tar.gz:	Makefile    
 		ln -s . $(FILE)
-		tar czvhf $(FILE).tar.gz	\
-		`find .                         \
-			\( -name 'CVS' -type d	\
-			\) -prune		\
-			-o			\
-			\( -type d              \
-			-o -type l              \
-			\) -true                \
-			-o			\
-			\( -name '.*.swp'	\
-			-o -name '*.tar.gz'	\
-			-o -name 'mk'		\
-			-o -name '*.a'          \
-			-o -name '*.o'          \
-			\) -prune               \
-			-o -print               \
+		tar czvhf $(FILE).tar.gz           \
+		`find .                            \
+			\( -name 'CVS' -type d     \
+			-o -name 'debian*' -type d \
+			\) -prune                  \
+			-o                         \
+			\( -type d                 \
+			-o -type l                 \
+			\) -true                   \
+			-o                         \
+			\( -name '.*.swp'          \
+			-o -name '*.tar.gz'        \
+			-o -name 'mk'              \
+			-o -name '*.a'             \
+			-o -name '*.o'             \
+			\) -prune                  \
+			-o -print                  \
 			| sed "s|./|$(FILE)/|"`
-		rm -f $(FILE)		
+		rm -f $(FILE)
 
 
