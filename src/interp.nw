@@ -69,8 +69,20 @@ module Spaces = struct
                 ; Space.widths         = [8;16;32]
                 ; Space.classification = Space.Mem
                 }
+    let d   = Space.checked
+                { Space.space          = 'd'
+                ; Space.doc            = "FP rounding mode"
+                ; Space.cellwidth      = 2  
+                ; Space.indexwidth     = 1
+                ; Space.indexlimit     = Some 2
+                ; Space.aggregation    = Rtl.Identity
+                ; Space.widths         = [2]
+                ; Space.classification = Space.Reg
+                }
+                
 end
 @
+                
 
 Module [[Flow]]  provides us with {\rtl}s that encode control transfer.
 They are part of the [[target]] value that describes this target
@@ -92,6 +104,7 @@ let pc:Rtl.loc            = Rtl.reg ('c',0, wordsize)  (* pc pointer     *)
 let sp:Rtl.loc            = Rtl.reg ('c',1, wordsize)  (* stack pointer  *)
 let ap:Rtl.loc            = Rtl.reg ('c',2, wordsize)  (* arg pointer    *)
 let ra:Rtl.loc            = Rtl.reg ('c',3, wordsize)  (* return address *)
+
 @
 
 We are now defining instructions that model instructions in the
@@ -99,17 +112,17 @@ interpreter. First, we define some helper functions that allow to define
 these instructions more easily.
 
 <<module Flow>>=
-let fetch loc   = R.fetch loc wordsize        
-let store loc e = R.store loc e wordsize        
-let add         = RU.add  wordsize
-let addk        = RU.addk wordsize
-let sub         = R.opr "sub" [wordsize]
-let add1 loc    = addk (fetch loc) 1
-let sub1 loc    = R.app sub [ fetch loc
+let fetch loc     = R.fetch loc wordsize        
+let store loc e   = R.store loc e wordsize        
+let add           = RU.add  wordsize
+let addk          = RU.addk wordsize
+let sub           = R.opr "sub" [wordsize]
+let add1 loc      = addk (fetch loc) 1
+let sub1 loc      = R.app sub [ fetch loc
                             ; R.bits (Bits.S.of_int 1 wordsize) wordsize]
-let inc loc     = R.store loc (add1 loc) wordsize
-let dec loc     = R.store loc (sub1 loc) wordsize
-let error       = Impossible.impossible
+let inc loc       = R.store loc (add1 loc) wordsize
+let dec loc       = R.store loc (sub1 loc) wordsize
+let error         = Impossible.impossible
 @
 
 For most control-flow related {\rtl}s [[Target2.t]] demands we provide
@@ -175,13 +188,6 @@ description is quite inaccurate \emph{and need to be improved.}
 let argument x  = R.reg ('A', x, 1)
 let global   x  = R.reg ('G', x, 1)
 
-(* the following RTLs are not type correct *)
-(* x is an expression *)
-(*
-let store_arg i e = R.par [R.store (argument (fetch ap)) e (ewidth e); inc ap] 
-let fetch_arg i w = R.fetch (argument (fetch ap)) w
-*)
-
 let store_arg i e  = R.store (argument i) e (ewidth e)
 let fetch_arg i w  = R.fetch (argument i) w
 @
@@ -191,6 +197,8 @@ let fetch_arg i w  = R.fetch (argument i) w
 % ------------------------------------------------------------------ 
 
 <<interp.ml>>=
+let fp_mode               = Rtl.reg('d',0,2)           (* FP rounding mode *) 
+
 class argument_location (index:int): Automaton2.location =
 object
     method store expr width = Flow.store_arg index expr
@@ -203,13 +211,12 @@ object (this)
     val mutable _block  = Block.at base (*size*) 0 (*align*) 1  
     val mutable _frozen = false
 
-    (* *)
     val mutable _index  = -1
-    (* *)
     
     method freeze () =
         let _ = _frozen <- true in
-        { A.overflow = _block; A.sp_value = base } (* sp value meaningless to interp *)
+        { A.overflow = _block; A.sp_value = base } 
+        (* sp value meaningless to interp *)
     
     method allocate width hint = 
         let ()      = assert (_frozen = false) in          
@@ -218,6 +225,15 @@ object (this)
         | None   -> ( _index <- _index + 1
                     ; new argument_location _index
                     )
+end
+
+class loc (loc:Rtl.loc): Automaton2.location =
+object
+    val _loc   = loc
+    
+    method store expr width = Rtl.store _loc expr width 
+    method fetch width      = Rtl.fetch _loc width
+    method to_loc           = _loc
 end
 
 class global_location (index:int) (width:int): Automaton2.location =
@@ -230,6 +246,7 @@ in object
     method to_loc           = var
 end
 
+
 class globals (base:Rtl.exp): Automaton2.automaton =
 object (this)
     val mutable _block  = Block.at base (*size*) 0 (*align*) 1  
@@ -238,11 +255,13 @@ object (this)
     
     method freeze () =
         let _ = _frozen <- true in
-        { A.overflow = _block; A.sp_value = base } (* sp value meaningless to interp *)
+        { A.overflow = _block; A.sp_value = base } 
+        (* sp value meaningless to interp *)
     
     method allocate width hint = 
         let ()      = assert (_frozen = false) in          
         match hint with 
+        | Some "IEEE 754 rounding mode" -> new loc fp_mode
         | Some x -> Impossible.impossible ("unknown hardware register "^x) 
         | None   -> ( _index <- _index + 1
                     ; new global_location _index width
@@ -293,6 +312,7 @@ let target =
       ; T.float        = "ieee754"
       ; T.charset      = "latin1" 
       ; T.globals      = new globals
+      ; T.is_rounding_mode = (fun loc -> loc = fp_mode)
       ; T.spaces       = [ Spaces.m ; Spaces.c ;  Spaces.a ; Spaces.g ]
       ; T.data_section = "data"
       ; T.goto         = Flow.goto

@@ -171,7 +171,7 @@ let wordsize      = 32
 let pointersize   = 32
 let alignment     = 1
 let const n width = Rtl.bits (Bits.U.of_int n width) width
-let fpcond n      = Rtl.cell Rtl.none 'd' Rtl.Identity  2 (const n 2)
+let fpcond n      = Rtl.reg  ('d',n,2)
 let reg n         = Rtl.cell Rtl.none 'r' Rtl.Identity 32 (const n 5)
 let pc            = Rtl.cell Rtl.none 'c' Rtl.Identity 32 (const 0 1)
 let mem addr      = Rtl.cell Rtl.none 'm' Rtl.LittleEndian 32 addr
@@ -495,6 +495,7 @@ let target =
     ; T.float           = "ieee754"
     ; T.charset         = "latin1"
     ; T.globals         = new simple' Rtl.BigEndian
+    ; T.is_rounding_mode = (fun loc -> loc = fpcond 0)
     ; T.goto            = goto
     ; T.jump            = goto
     ; T.call            = goto
@@ -516,10 +517,13 @@ The target description of the Sparc is pretty similar to the one for the
 Dummy above. There are probably some mistakes here.
 
 
+
 <<SparcTarget>>=
 let memsize       = 8
 let wordsize      = 32
 let pointersize   = 32
+let const n width = Rtl.bits (Bits.U.of_int n width) width
+let fpcond n      = Rtl.reg  ('d',n,2)
 
 let spaces = 
     [     { S.space = 'r'
@@ -581,6 +585,16 @@ let spaces =
           ; S.doc         = "floating-point temporaries"
           }
 
+    ;     { S.space = 'd'
+          ; S.cellwidth   = 2
+          ; S.aggregation = Rtl.Identity
+          ; S.indexwidth  = 1
+          ; S.indexlimit  = Some 2
+          ; S.widths      = [2]
+          ; S.classification = S.Reg
+          ; S.doc         = "floating-point condition and mode registers"
+          } 
+
     ;     { S.space = 'i'
           ; S.cellwidth   = 32
           ; S.aggregation = Rtl.Identity
@@ -632,6 +646,7 @@ object (this)
         new loc (Rtl.cell Rtl.none 'm' byte_order w addr)
     
     method private hardware hint = match hint with 
+    | "IEEE 754 rounding mode"   -> new loc (fpcond 0)
     | r     -> Impossible.impossible ("unknown hardware register "^r) 
     
     method allocate width hint = 
@@ -742,6 +757,7 @@ let target =
     ; T.float           = "ieee754"
     ; T.charset         = "latin1"
     ; T.globals         = new simple' Rtl.BigEndian
+    ; T.is_rounding_mode = (fun loc -> loc = fpcond 0)
     ; T.goto            = goto
     ; T.jump            = jump
     ; T.call            = call
