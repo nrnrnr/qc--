@@ -60,6 +60,6 @@ POD2HTML =      pod2html
                            --center=$NAME                       \
                            --section=5 $prereq > $target
 %-man.html:     %.pod
-                $POD2HTML  --title=$(NAME) $prereq > $target
+                $POD2HTML  --title=$NAME $prereq > $target
 
 

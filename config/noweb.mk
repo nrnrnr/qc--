@@ -54,6 +54,7 @@ NOWEBBREAKCODE=no
 	\usepackage{noweb}
 	\usepackage{tabularx}
 	\usepackage{hyperref}
+	\usepackage{path}
 	\usepackage[dvips]{graphicx}
 	\pagestyle{noweb}
 	`if [ $NOWEBBREAKCODE = yes ]; then echo '\noweboptions{breakcode}'; fi`
@@ -75,8 +76,8 @@ NOWEBBREAKCODE=no
                 $NOWEAVE -delay -filter $OCAMLDEFS -index $prereq > $target
 
 %.html: %.nw
-        $NOWEAVE -delay -filter $OCAMLDEFS \
-            -index -html -filter l2h $prereq > $target
+        cat $TOP/config/macros.tex $prereq |\
+        $NOWEAVE -delay -filter $OCAMLDEFS -index -html -filter l2h - > $target
 
 %.bbl:  %.bib %.aux
         bibtex $stem 
