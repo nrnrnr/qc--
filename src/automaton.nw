@@ -634,9 +634,9 @@ let pad =
   let padcounter space ctr next =
     let (_, _, memsize) = space in
     let f nalloc ~width ~alignment ~hint =
-      let R.C al = Cell.to_count memsize alignment in
-      ( ctr := Aux.round_up_to ~multiple_of:al !ctr 
-      ; nalloc ~width ~alignment ~hint )
+      let al = Cell.to_width memsize (R.C alignment) in
+      ctr := Aux.round_up_to ~multiple_of:al !ctr;
+      nalloc ~width ~alignment ~hint
     in { next with allocate = f next.allocate }
   in wrap_counter padcounter
 @ 
