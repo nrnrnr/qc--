@@ -1487,8 +1487,6 @@ let splice_on_every_edge_between ~entry ~exit ~pred ~succ =
     let upd_array             = upd_array_gen upd_succ in
     let upd_contedge_array    =
       upd_array_gen (fun ce -> {ce with node = upd_succ ce.node}) in
-    let () = (Printf.fprintf stderr "pred:%d new:%d succ:%d\n" (num pred)
-                                                              (num entry) (num succ)) in
     match pred with
     | Cbr c ->
       ( c.cbr_true  <- upd_succ c.cbr_true
@@ -1510,9 +1508,7 @@ let splice_on_every_edge_between ~entry ~exit ~pred ~succ =
       ( upd_contedge_array c.cut_contedges 
       ; c.cut_lsucc <- upd_succ c.cut_lsucc
       )
-    | _     -> (Printf.eprintf "setting succ\n"; flush stderr;
-                set_succ pred ~succ:entry; Printf.eprintf "done setting succ\n";
-                flush stderr ) in
+    | _     -> set_succ pred ~succ:entry in
   (update_pred (); update_succ ())
 
 let splice_before ~entry ~exit node =
