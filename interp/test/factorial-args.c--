@@ -1,0 +1,41 @@
+// factorial-args.c--
+//
+// currently computes x!
+//
+
+target 
+       byteorder   little
+       memsize     8
+       wordsize    32
+       pointersize 32
+;
+
+export main;
+import bits32 cmmprint32;
+
+section "data" {
+  globals_backup: bits32[1];
+}
+
+section "text" {
+  print( bits32 v ) {
+    foreign "C" cmmprint32(v);
+    return;
+  }
+
+  factorial( bits32 n ) {
+    jump factorial_helper(1, n);
+  }
+
+  factorial_helper( bits32 accum, bits32 n ) {
+    if %leu(n, 1) { return( accum ); }
+    jump factorial_helper(accum * n, n - 1);
+  }
+
+  main( bits32 arg ) {
+    bits32 answer;
+    answer = factorial(arg);
+    print( answer );
+    return;
+  }
+}
