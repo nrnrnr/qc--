@@ -156,6 +156,7 @@ clobber:V:      dirs clean
                         \( -name 'CVS'                  \
                         -o -name '.cvsignore'           \
                         \) -prune -o -type f -exec rm '{}' \;
+                rm -f FILES
                 
                 
 # make sure appropriate empty directories exist
@@ -163,3 +164,38 @@ dirs:V:
                 for i in bin lib man man/man1; do
                     [ -d $i ] || mkdir $i
                 done
+
+# ------------------------------------------------------------------ 
+# build distribution
+# ------------------------------------------------------------------ 
+
+DIR =           $NAME$VERSION
+
+# find(1)'s job is it to exlcude unwanted files and directories.
+
+FILES:          clobber
+                find .  \( -path "*/CVS/*"        \
+                        -o -path "*/.*"            \
+                        -o -path "./lib/*"         \
+                        -o -path "./man/*"         \
+                        -o -path "./bin/*"         \
+                        -o -path "./test/*"        \
+                        -o -path "./aug99/*"       \
+                        -o -path "./ccl-suite/*"   \
+                        -o -path "./mwb/*"         \
+                        -o -path "./specialized/*" \
+                        -o -path "./tdpe/*"        \
+                        -o -path "./bin/*"         \
+                        -o -path "./man/*"         \
+                        -o -path "./lib/*"         \
+                        -o -name "*.tar*"          \
+                        \) -prune                  \
+                        -o -type f -print | sort | sed "s+^\./+$DIR/+" \
+                        > $target 
+
+tar:V:          FILES
+                ln -s . $DIR 
+                tar czvhf $DIR.tar.gz `cat FILES` 
+                rm -f $DIR
+                
+                
