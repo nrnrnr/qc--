@@ -86,7 +86,7 @@ typedef unsigned char u_int8;
 typedef unsigned int  u_int32;
 
 typedef struct {
-  Cmm_Cont *cont;
+  Cmm_Cont  cont;
 
   void     *stack_space;
   unsigned  stack_space_size;
@@ -126,8 +126,6 @@ Cmm_TCB *TCB_new(void) {
 <<utility functions>>=
 void TCB_free(Cmm_TCB *tcb) {
   free(tcb->stack_space);
-
-  /* FIX make sure that 'cont' is freed? */
   free(tcb);
 }
 @ 
@@ -253,7 +251,7 @@ program execution is terminated.
 
 <<function prototypes>>=
 void pop_exn_info(void **exn_tag, void **exn_arg);
-void dispatch_exn(void);
+void dispatch_exn(Cmm_Cont *k);
 @ 
 
 We define a few constants that must be similarly defined in {\PAL} code.
@@ -288,16 +286,16 @@ If we walk off the stack, then we are dealing with an uncaught exception; in
 this case, we print an error and abort.
 
 <<exception dispatching functions>>=
-void dispatch_exn(void) {
+void dispatch_exn(Cmm_Cont *k) {
   Cmm_Activation  a;
   void           *exn_tag, *exn_arg;
 
   pop_exn_info(&exn_tag, &exn_arg);
-  a = Cmm_YoungestActivation(curr_TCB->cont);  
+  a = Cmm_YoungestActivation(k);
 
   for (;;) {
     exn_descriptor *d;
-    d = (exn_descriptor *) Cmm_GetDescriptor(a, EXN_DESC);
+    d = (exn_descriptor *) Cmm_GetDescriptor(&a, EXN_DESC);
 
     if (d) {
       int i;
@@ -322,18 +320,20 @@ We then resume code execution at this continuation.
 \emph{Note that this currently works, but is not well-coded.  Ultimately, some code might need to be revised in [[interp.nw]] so we can instruct [[run_interp]] to resume at an arbitrary PC instead of dangerously calling [[RunThread]] again.}
 
 <<resume code execution at this exception handler>>=
-          curr_TCB->cont = 
-                  Cmm_GetUnwindCont(a, (Cmm_Word) d->handlers[i].cont_num);
+  {
+    Cmm_Cont new_k;
+    new_k = Cmm_GetUnwindCont(&a, (Cmm_Word) d->handlers[i].cont_num);
 
-          printf("-- caught and handled exception : %s\n", (char *) exn_tag);
+    printf("-- caught and handled exception : %s\n", (char *) exn_tag);
 
-          if (d->handlers[i].takes_arg) {
-            /* exn expects value */
-            assert(0);  /* we can't handle this now!!! */
-          } else {
-            Cmm_RunThread(curr_TCB->cont);
-            assert(0); /* FIX this */
-          }
+    if (d->handlers[i].takes_arg) {
+      /* exn expects value */
+      assert(0);  /* we can't handle this now!!! */
+    } else {
+      Cmm_RunThread(&new_k);
+      assert(0); /* FIX this */
+    }
+  }
 @
 
 % ------------------------------------------------------------------ 
@@ -344,7 +344,7 @@ To let {\PAL} code call the exception handler, we export C functions to {\PAL}
 using [[register_c_func]].
 
 <<register needed C functions with the interpreter>>=
-  register_c_func("dispatch_exn", (void *) dispatch_exn, "void:void");
+  register_c_func("dispatch_exn", (void *) dispatch_exn, "pointer:void");
 @
 
 % ------------------------------------------------------------------ 
@@ -434,7 +434,6 @@ Note that we pass a pointer to this global backup space to procedure [[main]]
 of the {\PAL} code, and handle de-allocation of this space from here within C.
 
 <<global variable definitions>>=
-static Cmm_TCB  *curr_TCB       = NULL;
 static void     *globals_backup = NULL;
 @ 
 
@@ -480,10 +479,7 @@ more than one {\PAL} thread.
                                    , tcb->stack_space_size
                                    , &(tcb->limit_cookie)
                                    );
-  curr_TCB       = tcb;
-
-  tcb->cont      = Cmm_RunThread(tcb->cont);
-  curr_TCB       = NULL;
+  tcb->cont      = Cmm_RunThread(&(tcb->cont));
 
   free(globals_backup);
   TCB_free(tcb);

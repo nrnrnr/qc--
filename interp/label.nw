@@ -33,17 +33,16 @@ memory location to be passed around at runtime.
 \subsection{Data Structures}
 % ----------------------------------------------------------------------------
 
-For the purpose of storing all labels in one namespace (both explicitly defined labels and the labels demarcating {\PAL} procedures and continuations), we create a new type.
+For the purpose of storing all labels in one namespace (both explicitly defined labels and the labels demarcating {\PAL} procedures), we create a new type.
 
 <<type definitions>>=
 typedef struct {
   enum {
-    CMM_LABEL, CMM_PROCEDURE, CMM_CONTINUATION, CMM_CFUNCTION
+    CMM_LABEL, CMM_PROCEDURE, CMM_CFUNCTION
   } ty;
   union {
     RAddr         raddr;
     procedure    *proc ;
-    continuation *cont ;
     unsigned int  cfunc_id;
   } lbl;
   assembly_unit *unit;
@@ -208,8 +207,6 @@ Macro [[CMM_label_defined]] simplifies testing whether or not a given
 #define CMM_label_defined(LBL)                            \
 (((LBL)->ty == CMM_PROCEDURE &&                           \
   block_defined((LBL)->lbl.proc->raddr->label->block)) || \
- ((LBL)->ty == CMM_CONTINUATION &&                        \
-  block_defined((LBL)->lbl.cont->raddr->label->block)) || \
  ((LBL)->ty == CMM_LABEL     &&                           \
   block_defined((LBL)->lbl.raddr->label->block))       || \
  ((LBL)->ty == CMM_CFUNCTION))
@@ -226,13 +223,11 @@ It is an unchecked runtime error (will likely lead to segfault) to get the
 <<macro definitions>>=
 #define CMM_label_raddr(LBL) \
 (  (LBL)->ty == CMM_PROCEDURE    ? (LBL)->lbl.proc->raddr  \
-: ((LBL)->ty == CMM_CONTINUATION ? (LBL)->lbl.cont->raddr  \
-:  (LBL)->lbl.raddr))
+:  (LBL)->lbl.raddr)
 
 #define CMM_label_location(LBL) \
 ((bytecodeptr) ((LBL)->ty == CMM_PROCEDURE ? location((LBL)->lbl.proc->raddr)\
-          : ((LBL)->ty == CMM_CONTINUATION ? location((LBL)->lbl.cont->raddr)\
-                                           : location((LBL)->lbl.raddr))))
+                                           : location((LBL)->lbl.raddr)))
 @ 
 
 % ----------------------------------------------------------------------------

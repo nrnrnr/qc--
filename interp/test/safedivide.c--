@@ -79,8 +79,7 @@ section "text" {
         bits32 result;
 
         result = x + y;
-        result = safe_divide(result, x - y) also unwinds to k1 
-                                            also aborts;
+        result = safe_divide(result, x - y) also unwinds to k1;
 
       finish:
         return(result);
@@ -129,6 +128,9 @@ section "text" {
   raise (bits32 tag, bits32 arg) {
     push_exn_info(tag, arg);
     SaveGlobals(bits32[globals_backup]);    
-    foreign "C" dispatch_exn();
+    foreign "C" dispatch_exn(k) also cuts to k;
+
+    continuation k():
+      return;
   }
 }

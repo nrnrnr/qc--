@@ -68,20 +68,28 @@ section "text" {
       bits32 new;
 
       SaveGlobals(bits32[globals_backup]);
-      new = foreign "C" alloc(ty);
+      new = foreign "C" alloc(ty, k) also cuts to k;
       RestoreGlobals(bits32[globals_backup]);
 
       return( new );
+
+      // we should never actually jump to this, but we need to capture
+      // the continuation
+      continuation k():
+        return(0);
     }
   }
 
   span GC GC_gc {
     gc() {
       SaveGlobals(bits32[globals_backup]);
-      foreign "C" gc_helper();
+      foreign "C" gc_helper(k) also cuts to k;
       RestoreGlobals(bits32[globals_backup]);
 
       return;
+
+      continuation k():
+        return;
     }
   }
 

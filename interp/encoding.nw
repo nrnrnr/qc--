@@ -194,7 +194,6 @@ F(end_section) \
 F(define_label) \
 F(procedure) \
 F(end_procedure) \
-F(continuation) \
 F(begin_span) \
 F(end_span) \
 \
@@ -415,61 +414,9 @@ int lua_CMM_procedure(lua_State *L) {
   proc->num_locals     = (unsigned int) lua_tonumber(L, -2);
   proc->stackdata_size = (unsigned int) lua_tonumber(L, -1);
 
-  proc->cont_list      = NULL;
-
   lbl->unit = unit;
   lbl->ty = CMM_PROCEDURE;
   lbl->lbl.proc = proc;
-@
-
-[[lua_CMM_continuation]] expects only one argument atop the Lua stack:
-a string name.
-This function finds a [[CMM_label]] for the continuation, adds the
-continuation to the [[cont_list]] of the current procedure ([[curr_proc]]),
-and returns 0 to indicate no values are being returned to Lua.
-
-<<bytecode generation>>=
-int lua_CMM_continuation(lua_State *L) {
-  const char   *name;
-  continuation *cont;
-  CMM_label    *lbl;
-
-  lua_assert_isstring(L, -1, "cannot define anonymous continuations in C--");
-
-  <<[[lbl]] $\leftarrow$ [[CMM_label]] for the continuation>>
-  lua_pop(L, 1);  /* pop off argument */
-
-  <<add [[cont]] to [[curr_proc]]>>
-
-  return 0;
-}
-@ 
-<<[[lbl]] $\leftarrow$ [[CMM_label]] for the continuation>>=
-  name = Atom_string(lua_tostring(L, -1));
-  cont = continuation_new();
-
-  lua_pushvalue(L, -1);       /* make copy of continuation name */
-  lbl  = get_label(L, name);
-
-  if (CMM_label_defined(lbl)) {
-    cmm_err("cannot define continuation [%s]; "
-            "a label by that name already exists", name);
-  }
-
-  cont->raddr    = lbl->lbl.raddr;
-  label_define(cont->raddr->label, 0);
-  cont->dest_act = NULL;
-
-  cont->u.thread = NULL;
-  cont->u.frame  = 0;
-
-  lbl->unit = unit;
-  lbl->ty = CMM_CONTINUATION;
-  lbl->lbl.cont  = cont;
-@
-<<add [[cont]] to [[curr_proc]]>>=
-  cont->next = curr_proc->cont_list;
-  curr_proc->cont_list = cont;
 @
 
 To define a label, we call on helper function [[get_label]] to take care of

@@ -75,19 +75,25 @@ single stack.
 
    |----------|<--- t->stack_base
    |          |
-   | locals_0 |
+   | actptr_0 |
+   |----------|
+   |          |
+   | stackd_0 |
    |__________|
    |          |     
-   | stackd_0 |
+   | locals_0 |
    |__________|
    |          |
    |  act_0   | frame # 0 (oldest frame)
 ___|__________|_____________
    |          |
-   | locals_1 | frame # 1 (youngest frame)
+   | actptr_1 |
+   |----------|
+   |          |
+   | stackd_1 | frame # 1 (youngest frame)
    |__________|
    |          |
-   | stackd_1 |
+   | locals_1 |
    |          |
 ---|----------|<--- t->stack_free
    |          |
@@ -104,7 +110,7 @@ drawing represents the oldest end of the stack; growth is drawn toward the
 bottom.  (In our implementation, growth is directed toward increasing
 addresses.)
   When creating space for a new frame on the stack, we first carve out space
-for locals, and then we allocate space for stackdata.  The activation record 
+for stackdata, and then we allocate space for locals.  The activation record 
 for a currently-running frame is not actually stored away on the stack until
 we must leave the frame for some reason (cut/call/etc.).  Until then, the
 activation record for the currently running frame is distributed across local C
@@ -114,12 +120,12 @@ control to the runtime system or to cut to another thread), we write the
 activation record for the thread's youngest frame at the stack's extremum--just
 beyond the this frame's stackdata space (at [[t->stack_free]]).
   If we left the frame to make a {\PAL} call, then we create space for the
-locals and stackdata of the callee's activation, and continue execution.
+stackdata and locals of the callee's activation, and continue execution.
 When we resume the execution of a suspended thread, we pop the activation
 record of the suspended frame off the stack and resume execution.
 
 Note that all activations are of fixed size ([[sizeof(activation)]]). 
-Locals and stackdata space vary in size, depending on a specific activation's 
+Stackdata and locals space vary in size, depending on a specific activation's 
 needs (and on the memory alignment requirements of the host's architecture).
 
 Finally, a few more words on suspended threads.
@@ -174,8 +180,8 @@ thread *find_thread(uid u);
 
 It takes a bit of work to initialize a new thread.
 
-Given sufficient space in memory, we set up a stack for storing locals,
-stackdata, and activations.
+Given sufficient space in memory, we set up a stack for storing stackdata,
+locals, and activations.
 See the section above on stack layout for more information on how exactly
 we allocate memory on the stack.
 
@@ -216,8 +222,8 @@ for it was not called by any other activation.
   assert(lbl->ty == CMM_PROCEDURE);
   assert(lbl->lbl.proc != NULL);
   {
-    /* locals, then stackdata (and then activation) */
-
+    /* actptr, stackdata, then locals (and then activation) */
+    actptr     *actptrptr;
     actptr      act;
     vptr        locals;
     vptr        locals_end;
@@ -230,7 +236,7 @@ for it was not called by any other activation.
     <<allocate local memory for activation of procedure [[start]]>>
 
     act                = (actptr) t->stack_free;
-    t->stack_free      = round_up((void *) (((actptr) (t->stack_free)) + 1));
+    t->stack_free      = round_up((void *) (((actptr)(t->stack_free)) + 1));
     assert(t->stack_free <= t->stack_limit);
 
     act->locals        = locals;
@@ -245,6 +251,9 @@ for it was not called by any other activation.
     act->kappa         = NULL;
     act->callee        = NULL;
     act->caller        = NULL;
+
+    /* set up actptrptr */
+    *actptrptr = act;
   }
 @ 
 
@@ -254,17 +263,19 @@ This memory is taken off the thread [[t]]'s stack, in accordance with our
 stack layout convention.
 
 <<allocate local memory for activation of procedure [[start]]>>=
-  /* we allocate locals-space and stackdata-space for the first activation */
-  locals             = t->stack_free;
-  t->stack_free      = (void *) (((vptr) (t->stack_free)) + 
-                                 start->num_locals);
-  locals_end         = t->stack_free;
+  /* we allocate stackdata-space and locals-space for the first activation */
+  actptrptr          = t->stack_free;
+  t->stack_free      = round_up((actptr *)(t->stack_free) + 1);
 
   stackdata          = t->stack_free;
   t->stack_free      = round_up((void *) (((dataptr) (t->stack_free)) +
 										  start->stackdata_size));
   stackdata_end      = t->stack_free;
-@
+
+  locals             = t->stack_free;
+  t->stack_free      = (vptr)(t->stack_free) + start->num_locals;
+  locals_end         = t->stack_free;
+@ 
 
 % ----------------------------------------------------------------------------
 \subsection{Helper Functions}

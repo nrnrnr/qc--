@@ -6,8 +6,18 @@
 CMM.exports({ "main" })
 CMM.imports({ "cmmprint32" })
 
-CMM.procedure("main", 0, 0)
+CMM.procedure("main", 0, 8)
+   -- set up continuations
+   CMM.fetch_sp()
+   CMM.push_literal("0x4",32)
+   CMM.apply_operator("add","bits32,bits32:bits32")
+   CMM.fetch_sp()
+   CMM.fetch_sp()
+   CMM.push_symbol("alt-return")
+   CMM.store(32,"NATIVE",0)
+   CMM.store(32,"NATIVE",0)
 
+   -- main body
    CMM.push_literal("0x5", 32)
    CMM.store_arg(0)
 
@@ -18,7 +28,7 @@ CMM.procedure("main", 0, 0)
    CMM.cmm_return(1, 1)
 
 -- the alternate return site prints the number 5 again
-   CMM.continuation("alt-return")
+   CMM.define_label("alt-return")
       CMM.c_call("cmmprint32")
       CMM.cmm_return(0, 0)
 

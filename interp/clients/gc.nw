@@ -83,7 +83,7 @@ We use this cookie to tell if we've gone off the end of a stack (perhaps by retu
 
 <<type definitions>>=
 typedef struct {
-  Cmm_Cont *cont;
+  Cmm_Cont  cont;
 
   void     *stack_space;
   unsigned  stack_space_size;
@@ -137,8 +137,6 @@ Cmm_TCB *TCB_new(void) {
 <<utility functions>>=
 void TCB_free(Cmm_TCB *tcb) {
   free(tcb->stack_space);
-
-  /* FIX make sure that 'cont' is freed? */
   free(tcb);
 }
 @ 
@@ -260,7 +258,7 @@ array should be true ([[1]]) if and only if an object of this type contains
 a pointer that starts at the $i$th byte of the object's representation.
 
 <<function prototypes>>=
-void *alloc(void *ty);
+void *alloc(void *ty, Cmm_Cont *k);
 @ 
 
 To allocate space on the heap, we check to see if there is enough free space
@@ -270,7 +268,7 @@ If we need more space, we call [[gc]] to garbage-collect; if that is still
 not enough, we grow the heap (using [[gc_growheap]]).
 
 <<garbage collection functions>>=
-void *alloc(void *ty) {
+void *alloc(void *ty, Cmm_Cont *k) {
   unsigned char *m;
   heap_tag      *htag;
 
@@ -284,13 +282,13 @@ void *alloc(void *ty) {
     if (gc_verbosity) {
       printf("Need more memory; starting up garbage collector\n");
     }
-    gc();
+    gc(k);
   }
 
   if (hp + size > heaplimit) {
     if (gc_verbosity)
       printf("GC didn't scrounge up enough; enlarging the heap\n\n");
-    gc_growheap(semispacesize + GROWTH_UNIT);
+    gc_growheap(semispacesize + GROWTH_UNIT, k);
   }
 
   assert(hp < heaplimit);
@@ -324,10 +322,9 @@ or not the object tagged contains forwarding pointers.
 % ------------------------------------------------------------------ 
 
 The garbage collector is contained in function [[gc]].
-It takes no arguments and returns none.
 
 <<function prototypes>>=
-void gc(void);
+void gc(Cmm_Cont *k);
 @ 
 
 We update statistics, perform a copy (using [[gc_copy]]), swap pointers
@@ -335,7 +332,7 @@ into semispaces, and output statistics if the verbosity level is set high
 enough.
 
 <<garbage collection functions>>=
-void gc(void) {
+void gc(Cmm_Cont *k) {
   void *temp;
 
   /* update stats */
@@ -343,7 +340,7 @@ void gc(void) {
   ncopied_this_time = 0;
 
   /* perform copy */
-  gc_copy();
+  gc_copy(k);
 
   /* swap pointers into semispaces */
   temp      = fromspace;
@@ -371,8 +368,8 @@ able to scrounge up enough free space).
 allows us to preserve pointers to heap objects during and after copying.
 
 <<function prototypes>>=
-void  gc_growheap       (unsigned new_semispacesize);
-void  gc_copy           (void);
+void  gc_growheap       (unsigned new_semispacesize, Cmm_Cont *k);
+void  gc_copy           (Cmm_Cont *k);
 void *gc_forward        (void *rootptr);
 @ 
 
@@ -381,7 +378,7 @@ It also uses [[copy]] to copy live data into the newly [[malloc]]'d space
 before [[free]]ing the old space.
 
 <<garbage collection functions>>=
-void gc_growheap(unsigned new_semispacesize) {
+void gc_growheap(unsigned new_semispacesize, Cmm_Cont *k) {
   void *newfromspace, *newtospace;
 
   free(tospace);
@@ -392,7 +389,7 @@ void gc_growheap(unsigned new_semispacesize) {
 
   /* copy data */
   tospace       = newfromspace;
-  gc_copy();
+  gc_copy(k);
 
   /* realign pointers */
   free(fromspace);
@@ -413,9 +410,9 @@ pointers we find in {\PAL} global registers, and then we scan objects
 found at [[*scanp]].
 
 <<garbage collection functions>>=
-void gc_copy(void) {
+void gc_copy(Cmm_Cont *k) {
   unsigned char  *scanp;
-  Cmm_Activation a = Cmm_YoungestActivation(curr_thread);
+  Cmm_Activation a = Cmm_YoungestActivation(k);
 
   scanp     = hp = tospace;
   heaplimit = tospace + semispacesize;
@@ -443,10 +440,10 @@ data's new location.
 <<scan roots in local activations>>=
 {
   do {
-    unsigned char *d = (unsigned char *) Cmm_GetDescriptor(a, GC);
+    unsigned char *d = (unsigned char *) Cmm_GetDescriptor(&a, GC);
 
     if (d != NULL) {
-      unsigned  var_count = Cmm_LocalVarCount(a);
+      unsigned  var_count = Cmm_LocalVarCount(&a);
 
       unsigned i;
       for (i = 0; i < var_count; i++) {
@@ -454,7 +451,7 @@ data's new location.
           /* we've found a root pointer... */
 
           /* var is ptr to the rootptr */
-          void **var = (void **) Cmm_FindLocalVar(a, i); 
+          void **var = (void **) Cmm_FindLocalVar(&a, i); 
 
           if (var != NULL) {
             if (gc_verbosity > 1) {
@@ -466,7 +463,7 @@ data's new location.
       }
     }
   } while (Cmm_ChangeActivation(&a));
-  assert(Cmm_isOldestActivation(a));
+  assert(Cmm_isOldestActivation(&a));
 }
 @ 
 
@@ -479,7 +476,7 @@ the {\PAL} code's globals.
 {
   unsigned       var_count = Cmm_GlobalCount();
   unsigned char *d         = (unsigned char *) 
-                                         Cmm_GetDescriptor(a, GC_GLOBALS);
+                                         Cmm_GetDescriptor(&a, GC_GLOBALS);
 
   unsigned i;
   for (i = 0; d && i < var_count; i++) {
@@ -608,8 +605,8 @@ To let {\PAL} code allocate space from the heap, we export [[alloc]] using
 For testing purposes, we also make [[gc]] explicitly callable from {\PAL}.
 
 <<register needed C functions with the interpreter>>=
-  register_c_func("alloc",     (void *) alloc, "pointer:pointer");
-  register_c_func("gc_helper", (void *) gc,    "void:void"      );
+  register_c_func("alloc",     (void *) alloc, "pointer,pointer:pointer");
+  register_c_func("gc_helper", (void *) gc,    "pointer:void"           );
 @
 
 % ------------------------------------------------------------------ 
@@ -708,7 +705,6 @@ static unsigned int gc_verbosity = 0;
 % ------------------------------------------------------------------ 
 
 <<global variable definitions>>=
-static Cmm_Cont *curr_thread = NULL;
 static void     *globals_backup = NULL;
 @ 
 
@@ -755,10 +751,8 @@ more than one {\PAL} thread.
                                     tcb->stack_space, 
                                     tcb->stack_space_size, 
                                     &(tcb->limit_cookie));
-  curr_thread    = tcb->cont;
 
-  tcb->cont      = Cmm_RunThread(tcb->cont);
-  curr_thread    = NULL;
+  tcb->cont      = Cmm_RunThread(&(tcb->cont));
 
   free(globals_backup);
   TCB_free(tcb);
@@ -769,7 +763,7 @@ more than one {\PAL} thread.
 
 <<pass [[globals_backup]] pointer off to {\PAL} code>>=
   {
-    Cmm_Dataptr d = Cmm_GetDescriptor(Cmm_YoungestActivation(curr_thread), 
+    Cmm_Dataptr d = Cmm_GetDescriptor(Cmm_YoungestActivation(&curr_thread), 
                                       GC_globals_backup);
     /* THIS DOESN'T WORK FOR NOW
        assert(d);

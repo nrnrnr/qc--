@@ -26,51 +26,54 @@ This document contains the interface and implementation of the C  representation
 @ 
 
 % ----------------------------------------------------------------------------
-\subsection{Procedures and Continuations}
+\subsection{Procedures}
 % ----------------------------------------------------------------------------
 
-The operational semantics for procedure-calling and continuation-calling instructions require more information about procedures and continuations than simply program counters.  
-We create types [[procedure]] and [[continuation]] to encapsulate the necessary information for representing procedures and continuations.  
+The operational semantics for procedure-calling instructions require more information about procedures than simply program counters.  
+We create the type [[procedure]] to encapsulate the necessary information for representing procedures.  
 Note that we use [[RAddr]]s to represent addresses in program memory, for these structures are used during the interpretation of the input Lua script before sections of program memory are permanently located at addresses.  
 An [[RAddr]] is a relocatable address and is defined by the NJ Machine-Code Toolkit.
-We must also make sure to store a copy of the uid of the continuation's
-activation; if a continuation is dead when we try to cut to it, we need to
-look at the continuation's [[u]] and not [[dest_act->u]], which may well have
-been overwritten by a live activation. 
-
-[[continuation]]s are chained together (through their [[next]] field) so all
-of a given procedure's continuations can be easily associated with it (see
-the [[cont_list]] field of the [[procedure]] type).
 
 <<type definitions>>=
-typedef struct continuation {
-  RAddr               raddr;
-  actptr              dest_act;   /* pointer to destination activation  */
-  uid                 u;          /* uid of continuation's activation   */
-
-  struct continuation *next;      /* for use in a procedure's cont_list */
-} continuation;
-
 typedef struct {
   RAddr         raddr;
   unsigned int  num_locals;
   unsigned int  stackdata_size;
-  continuation *cont_list;
 } procedure;
 @
+
+% ----------------------------------------------------------------------------
+\subsection{Continuations}
+% ----------------------------------------------------------------------------
+
+{\PAL} continuations are represented by a pair of values: a code
+pointer and a stack pointer.
+
+<<type definitions>>=
+typedef struct {
+  void *code;
+  void *sp;
+} continuation;
+@ 
+
+We provide a simple helper function to do minimal verification of
+a continuation (to see if its a valid continuation).
+
+<<function prototypes>>=
+void check_cont(const continuation *k);
+@ 
 
 % ----------------------------------------------------------------------------
 \subsection{Memory Management}
 % ----------------------------------------------------------------------------
 
 To abstract away from the details of memory management, this interface
-provides functions to create new [[procedure]]s, [[continuation]]s, and
+provides functions to create new [[procedure]]s and
 [[annotations]], as well as a function that frees \emph{all} such objects in 
 memory.
 
 <<function prototypes>>=
 procedure    *procedure_new(void);
-continuation *continuation_new(void);
 annotations  *annotations_new(void);
 
 void          controlflow_free_all(void);
@@ -116,7 +119,7 @@ procedure *curr_proc = NULL;
 We make use of Hanson's ``arenas'' (see \emph{C Interfaces and Implementations})
 to assist in allocating and de-allocating memory for control-flow related
 structures.
-We use one shared arena for [[procedure]]s, [[continuation]]s, and 
+We use one shared arena for [[procedure]]s and 
 [[annotations]] because they usually die all at once anyway.
 
 <<internal static variable definitions>>=
@@ -136,19 +139,6 @@ procedure *procedure_new(void) {
                                    __FILE__, __LINE__);
   mem_assert(proc);
   return(proc);
-}
-continuation *continuation_new(void) {
-  continuation *cont;
-
-  if (controlflow_arena == NULL) {
-    controlflow_arena = Arena_new();
-    mem_assert(controlflow_arena);
-  }
-
-  cont = (continuation *) Arena_alloc(controlflow_arena, sizeof(continuation),
-                                      __FILE__, __LINE__);
-  mem_assert(cont);
-  return(cont);
 }
 annotations *annotations_new(void) {
   annotations *ann;
@@ -176,3 +166,16 @@ void controlflow_free_all(void) {
   }
 }
 @ 
+
+% ----------------------------------------------------------------------------
+\subsection{Error Checking}
+% ----------------------------------------------------------------------------
+
+We do some simple [[NULL]] checks with continuations.
+
+<<function definitions>>=
+void check_cont(const continuation *k) {
+  cmm_assert(k != NULL && k->code != NULL && k->sp != NULL,
+             "illegal continuation passed to interpreter!");
+}
+@
