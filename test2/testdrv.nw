@@ -27,11 +27,11 @@ following test variables:
 
 <<example.tst>>=
 -- setup x86 backend with color-graph register allocator
-backend = Backend.x86
-backend.ralloc = Ralloc.color
+backend = backend or Backend.x86
+backend.ralloc = backend.ralloc or Ralloc.color
 
 -- compare results with files in x86
-Test.results = "x86"
+Test.results = Test.results or "x86"
 
 -- source files live in src directory
 Test.source  = "src"
@@ -126,7 +126,7 @@ end
 % ------------------------------------------------------------------
 <<testdrv.lua>>=
 $debug 1
-Test = Test and error("Test already defined") or {}
+Test = Test  or {}
 Test.errors = 0         -- number of failures found
 Test.verbose = nil      -- provide detailed failure info
 Test.skip_files = nil   -- skip input source files
@@ -534,6 +534,14 @@ end
 
 function CMD.whatfuns["-pp"]()
   error("-pp flag not supported by testing...")
+end
+@
+We also override the CMD.exit function.
+<<testdrv.lua>>=
+function CMD.exit(code)
+  print("\n  caught an exit from the compiler!")
+  print("  something very bad is happening.\n")
+  exit(code)
 end
 @ 
 % -------------------------------------------------------------------

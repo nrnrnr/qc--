@@ -1,7 +1,7 @@
 
 -- setup x86 backend with color-graph register allocator
-backend = Backend.x86
-backend.ralloc = Ralloc.color
+backend = backend or Backend.x86
+backend.ralloc = backend.ralloc or Ralloc.color
 
 -- tiger setup
 function CMD.compilertab[".tig"](file)
