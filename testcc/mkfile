@@ -146,16 +146,24 @@ x86.sh:Q:
   echo '
   # set -x
   rm -f x86.log
+  NFILES=`ls -1 x86*.s | wc -l`
+  I=0
   for f in x86-call-main-*.s x86-call-cmm-main-*.s; do
     (cc $f && ./a.out) | tee -a x86.log | grep -v success
+    I=$((I + 1))
+    echo -n -e Finished $I out of $NFILES tests: [ $((I * 100 / NFILES))% ]"\r"
   done
   for f in x86-call-x-main-*.s; do
     g=`echo $f | sed -e "s/main/callee/" -e "s/\.s/.c/"`
     (cc $f $g && ./a.out) | tee -a x86.log | grep -v success
+    I=$((I + 1))
+    echo -n -e Finished $I out of $NFILES tests: [ $((I * 100 / NFILES))% ]"\r"
   done    
   for f in x86-call-x-cspec-main-*.s; do
     g=`echo $f | sed -e "s/main/callee/" -e "s/\.s/.c/"`
     (cc $f $g && ./a.out) | tee -a x86.log | grep -v success
+    I=$((I + 1))
+    echo -n -e Finished $I out of $NFILES tests: [ $((I * 100 / NFILES))% ]"\r"
   done
   echo Completed testing x86 architecture.  Log file x86.log created.
   ' > $target  
@@ -165,15 +173,23 @@ alpha.sh:Q:
   echo '
   # set -x
   rm -f alpha.log
+  NFILES=`ls -1 alpha*.s | wc -l`
+  I=0
   # for f in alpha-call-cmm*-main-*.s; do
   #   (cc $f && ./a.out) | tee -a alpha.log | grep -v success
+  #   I=$((I + 1))
+  #   echo -n -e Finished $I out of $NFILES tests: [ $((I * 100 / NFILES))% ]"\r"
   # done    
   for f in alpha-call-main-*.s; do
     (cc $f && ./a.out) | tee -a alpha.log | grep -v success
+    I=$((I + 1))
+    echo -n -e Finished $I out of $NFILES tests: [ $((I * 100 / NFILES))% ]"\r"
   done
   for f in alpha-call-x-main-*.s; do
     g=`echo $f | sed -e 's/main/callee/' -e 's/\.s/.c/'`
     (cc $f $g && ./a.out) | tee -a alpha.log | grep -v success
+    I=$((I + 1))
+    echo -n -e Finished $I out of $NFILES tests: [ $((I * 100 / NFILES))% ]"\r"
   done   
   echo Completed testing Alpha architecture.  Log file alpha.log created.
   ' > $target
@@ -183,20 +199,27 @@ mips.sh:Q:
   echo '
   # set -x
   rm -f mips.log
+  NFILES=`ls -1 mips*.s | wc -l`
+  I=0
   for f in mips-call-main-*.s; do
     (cc -mno-abicalls -fno-pic -Wa,--no-warn $f && ./a.out) | \
       tee -a mips.log | grep -v success
-    # (as -fno-pic $f && ./a.out) | grep -v success
+    I=$((I + 1))
+    echo -n -e Finished $I out of $NFILES tests: [ $((I * 100 / NFILES))% ]"\r"
   done    
   for f in mips-call-x-main-*.s; do
     g=`echo $f | sed -e 's/main/callee/' -e 's/.s$/.c/'`
     (cc -Wa,--no-warn $f $g && ./a.out) | \
       tee -a mips.log | grep -v success
+    I=$((I + 1))
+    echo -n -e Finished $I out of $NFILES tests: [ $((I * 100 / NFILES))% ]"\r"
   done   
   # for f in mips-call-x-cspec-main-*.s; do
   #   g=`echo $f | sed -e 's/main/callee/' -e 's/.s$/.c/'`
   #   (cc -Wa,--no-warn $f $g && ./a.out)| \
   #     tee -a mips.log | grep -v success
+  #   I=$((I + 1))
+  #   echo -n -e Finished $I out of $NFILES tests: [ $((I * 100 / NFILES))% ]"\r"
   # done   
   echo Completed testing MIPS architecture.  Log file mips.log created.
   ' > $target
