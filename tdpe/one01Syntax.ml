@@ -42,6 +42,7 @@ fun x1  ->
                          print_close ")";())
       | Nop  -> (print_open 1 "(";ps "Nop";ps " ";print_open 1 "(";
                  print_close ")";print_close ")";())))
-let pprint = 
-let rec pc = fun x  -> Syntax.pprint (pallTypes pc) x in pc
+(*let pprint = 
+let rec pc = fun x  -> Syntax.pprint (pallTypes pc) x in pc*)
+let rec pprint = fun x -> Syntax.pprint (pallTypes pprint) x
 
