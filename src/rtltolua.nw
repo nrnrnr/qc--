@@ -45,16 +45,8 @@ let quoted        q = "\"" ^ q ^ "\""
 let parenthesized p = "("  ^ p ^ ")"
 let luafunc       f args = "CMM." ^ f ^ parenthesized args ^ "\n"
 
-let push   kind c = luafunc ("push_" ^ kind) (quoted c)
+let push   kind c = luafunc ("push_" ^ kind) c
 let nopush kind c = c
-
-(*
-let argstack op s =
-  match op with
-  |	"fetch" -> "pop" ^ s
-  |	"store" -> "push" ^ s
-  |	_       -> assert false
-*)
 
 let valstack   op s = op ^ s
 let argstack        = valstack
@@ -65,18 +57,20 @@ let tybits b =
   |	Types.Bool    -> "bool"
   |	Types.Bits(i) -> "bits" ^ string_of_int i
 
+let hexbits v      = quoted (Printf.sprintf "0x%Lx" (Bits.U.to_int64 v))
+
 let const f c =
 	match c with
-    | R.Bool(true)    -> f "literal" "1"
-    | R.Bool(false)   -> f "literal" "0"
-    | R.Bits b        -> f "literal" (string_of_int (Bits.U.to_int b))
+    | R.Bool(true)    -> f "literal" (quoted "0x1" ^ ",1")
+    | R.Bool(false)   -> f "literal" (quoted "0x0" ^ ",1")
+    | R.Bits b        -> f "literal" (hexbits b ^ "," ^ 
+                                      string_of_int (Bits.width b))
 
-    | R.Link(sym, w)  -> f "symbol" sym#text
-    | R.Late(name, w) -> f "symbol" name
+    | R.Link(sym, w)  -> f "symbol" (quoted sym#text)
+    | R.Late(name, w) -> f "symbol" (quoted name)
 @ 
 
 <<ToLua>>=
-(* but what about the operator's return type? *)
 let opr op w = 
   let opty, result = Rtlop.Types.mono (Rtl.opr op w) in
   luafunc "apply_operator"  ((quoted op) ^ "," ^
@@ -85,13 +79,14 @@ let opr op w =
 								 ":" ^ (tybits result))))
 
 let byteorder = function
-  |	Rtl.BigEndian    -> quoted "BIG"
-  |	Rtl.LittleEndian -> quoted "LITTLE"
-  |	Rtl.Identity     -> quoted "NotImplemented"
+  |	Rtl.BigEndian    -> quoted "NATIVE"
+  |	Rtl.LittleEndian -> quoted "NATIVE"
+  |	Rtl.Identity     -> Impossible.impossible "rtltolua cannot handle Identity"
 
 (* what is identity? *)
 
-let alignment = string_of_int
+let alignment _ = "0"
+ (* string_of_int *)
 
 let rec expr' f e =
 	match e with

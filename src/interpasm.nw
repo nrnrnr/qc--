@@ -70,7 +70,7 @@ let initdata sz d  = luafunc "data" (string_of_int sz ^ "," ^
                                      (braced (String.concat "," 
                                                  (List.map quoted d))))
  
-let hexbits v      = Printf.sprintf "%Lx" (Bits.U.to_int64 v)
+let hexbits v      = Printf.sprintf "0x%Lx" (Bits.U.to_int64 v)
 
 exception Unsupported of string
 let unsupported msg = raise (Unsupported msg)
@@ -88,7 +88,7 @@ we prefix every symbol with [[sym]].
 
 <<Make>>=
 let spec =
-    let reserved = [] (* add reserved words here *)
+    let reserved = [] (* add any reserved words here *)
     in
     let id = function
         | 'a'..'z'
@@ -268,8 +268,8 @@ object (this)
     method private personality =
           luafunc "memsize"   (string_of_int P.target.T.memsize)
         ^ luafunc "byteorder" ( match P.target.T.byteorder with
-		                        | Rtl.BigEndian    -> quoted "BIG"
-							    | Rtl.LittleEndian -> quoted "LITTLE"
+		                        | Rtl.BigEndian    -> quoted "NATIVE"
+							    | Rtl.LittleEndian -> quoted "NATIVE"
 							    | _                -> assert false
                               )
         ^ luafunc "ptrsize"   (string_of_int P.target.T.pointersize)
