@@ -1071,10 +1071,14 @@ let haveSpilledTemps cg _ =
 [[updateProgram]] removes coalesced moves from the \cfg. It may be desirable
 to call this stage even after graph coloring has succeeded in placing every
 temp.
-
 <<resetProgram>>=
 let updateProgram cg {Proc.cfg = cfg} =
-  let () = ilg_iter (fun n -> G.delete n.v) (!(cg.moveLG CoalescedMove)) in
+  let delete_move n =
+    let succ = G.succ n in
+    G.set_succ n ~succ:(G.illegal cfg);
+    G.set_succ (G.pred n) ~succ;
+    G.delete cfg n                      in
+  let () = ilg_iter (fun n -> delete_move n.v) (!(cg.moveLG CoalescedMove)) in
   true
 @
 
@@ -1234,19 +1238,23 @@ module type GRAPH = sig
   type node
   val instr    : node -> Rtl.rtl
   val num      : node -> int
+  val illegal  : cfg -> node
 	val print_node : node -> string
   val node_info_string : node -> string
   val defs : node -> Register.Set.t  (* includes kills!!! *)
   val uses : node -> Register.Set.t
   val upd_instr : node -> (Rtl.rtl -> Rtl.rtl) -> unit
   val is_call : node -> bool
+  val set_succ: node -> succ:node -> unit
   val gm_insert_assign_after:     node -> Rtl.rtl -> node (* after assign! *)
   val gm_insert_assign_before:    Rtl.rtl -> node -> node (* any node   *)
 
 	val preds : node -> node list
+	val pred  : node -> node
 	val succs : node -> node list
+	val succ  : node -> node
 
-  val delete     : node -> unit
+  val delete     : cfg -> node -> unit
   val fold_nodes : (node->'a -> 'a) -> 'a -> cfg -> 'a
   val iter_nodes : (node->unit) -> cfg -> unit
   val eq : node -> node -> bool
@@ -1269,8 +1277,11 @@ module NewG : GRAPH with type node = Rtl.rtl Cfgx.M.node
 
   let nop = Rtl.par []
   let instr n = Aux.Option.get nop (G.to_instr n)
+  let illegal = G.illegal
 	let preds = G.preds
+	let pred  = G.pred
 	let succs = G.succs
+	let succ  = G.succ
   let num n = G.num n
   let iter_nodes = G.iter_nodes
   let fold_nodes = G.fold_nodes
@@ -1299,6 +1310,7 @@ module NewG : GRAPH with type node = Rtl.rtl Cfgx.M.node
     splice ~entry:n' ~exit:n' node;
     n'
 
+  let set_succ = G.set_succ
   let gm_insert_assign_after = insert_assign G.splice_after
   let gm_insert_assign_before r n = insert_assign G.splice_before n r
   let delete = G.delete
