@@ -196,98 +196,11 @@ Here are tentative contexts for all the operators.
 Anything that has to do with rounding modes is surely wrong.
 <<x86 postexpander>>=
 let bcontext = ' ', fun _ -> false  (* should never be used *)
-let operators =
-[ "add", [icontext; icontext], icontext
-; "and", [icontext; icontext], icontext
-; "bit", [bcontext], icontext
-; "bitExtract", [icontext; icontext], icontext
-; "bitInsert", [icontext; icontext; icontext], icontext
-; "bitTransfer", [icontext; icontext; icontext; icontext; icontext], icontext
-; "bool", [icontext], bcontext
-; "borrow", [icontext; icontext; icontext], icontext
-<<x86 postexpander>>=
-; "carry", [icontext; icontext; icontext], icontext
-; "com", [icontext], icontext
-; "conjoin", [bcontext; bcontext], bcontext
-; "disjoin", [bcontext; bcontext], bcontext
-; "div", [icontext; icontext], icontext
-; "divu", [icontext; icontext], icontext
-; "eq", [icontext; icontext], bcontext
-<<x86 postexpander>>=
-; "feq", [fcontext; fcontext], bcontext
-; "fge", [fcontext; fcontext], bcontext
-; "fgt", [fcontext; fcontext], bcontext
-; "fle", [fcontext; fcontext], bcontext
-; "flt", [fcontext; fcontext], bcontext
-; "fne", [fcontext; fcontext], bcontext
-<<x86 postexpander>>=
-; "f2f", [fcontext; fcontext], fcontext
-; "f2i", [fcontext; fcontext], fcontext  (* conversion done in float unit?? *)
-; "fabs", [fcontext], fcontext
-; "fadd", [fcontext; fcontext; fcontext], fcontext  (* ROUNDING MODES *)
-; "fcmp", [fcontext; fcontext], fcontext
-; "fdiv", [fcontext; fcontext; fcontext], fcontext  (* ROUNDING MODES *)
-<<x86 postexpander>>=
-; "float_eq", [], fcontext
-; "float_gt", [], fcontext
-; "float_lt", [], fcontext
-<<x86 postexpander>>=
-; "fmul", [fcontext; fcontext; fcontext], fcontext  (* ROUNDING MODES *)
-; "fmulx", [fcontext; fcontext], fcontext
-; "fneg", [fcontext], fcontext
-; "fsqrt", [fcontext; fcontext], fcontext  (* ROUNDING MODES *)
-; "fsub", [fcontext; fcontext; fcontext], fcontext  (* ROUNDING MODES *)
-<<x86 postexpander>>=
-; "ge", [icontext; icontext], bcontext
-; "geu", [icontext; icontext], bcontext
-; "gt", [icontext; icontext], bcontext
-; "gtu", [icontext; icontext], bcontext
-<<x86 postexpander>>=
-; "i2f", [fcontext; fcontext], fcontext  (* conversion done in float unit? *)
-<<x86 postexpander>>=
-; "le", [icontext; icontext], bcontext
-; "leu", [icontext; icontext], bcontext
-; "lt", [icontext; icontext], bcontext
-; "ltu", [icontext; icontext], bcontext
-<<x86 postexpander>>=
-; "minf", [], fcontext
-; "mod", [icontext; icontext], icontext
-; "modu", [icontext; icontext], icontext
-; "mul", [icontext; icontext], icontext
-; "mulu", [icontext; icontext], icontext
-; "mzero", [], fcontext
-; "NaN", [fcontext], fcontext           (* ??? *)
-<<x86 postexpander>>=
-; "ne", [icontext; icontext], bcontext
-; "neg", [icontext], icontext
-; "not", [bcontext], bcontext
-<<x86 postexpander>>=
-; "or", [icontext; icontext], icontext
-; "pinf", [], fcontext
-; "popcnt", [icontext], icontext
-; "pzero", [], fcontext
-<<x86 postexpander>>=
-; "quot", [icontext; icontext], icontext
-; "rem", [icontext; icontext], icontext
-; "round_down", [], icontext      (* ROUNDING MODES *)
-; "round_nearest", [], icontext  (* ROUNDING MODES *)
-; "round_up", [], icontext  (* ROUNDING MODES *)
-; "round_zero", [], icontext  (* ROUNDING MODES *)
-<<x86 postexpander>>=
-; "shl", [icontext; icontext], icontext
-; "shra", [icontext; icontext], icontext
-; "shrl", [icontext; icontext], icontext
-<<x86 postexpander>>=
-; "sub", [icontext; icontext], icontext
-; "sx", [icontext], icontext
-; "unordered", [], fcontext
-; "xor", [icontext; icontext], icontext
-; "zx", [icontext], icontext
-] 
+let operators = Context.standard icontext fcontext acontext bcontext
 
 module SM = Strutil.Map
-let resmap = List.fold_left (fun m (n, a, r) -> SM.add n r m) SM.empty operators
-let argmap = List.fold_left (fun m (n, a, r) -> SM.add n a m) SM.empty operators
+let resmap = List.fold_left (fun m (n, a, r)-> SM.add n r m) SM.empty operators
+let argmap = List.fold_left (fun m (n, a, r)-> SM.add n a m) SM.empty operators
 
 let arg_contexts   (n, _) = SM.find n argmap
 let result_context (n, _) = SM.find n resmap

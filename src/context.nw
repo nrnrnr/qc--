@@ -1,0 +1,120 @@
+
+% ------------------------------------------------------------------ 
+\section{Operator Contexts}
+% ------------------------------------------------------------------ 
+
+A machine has serveral location spaces; like spaces for integers,
+adddresses, or floating point value, and their respective temporaries. A
+context is an abstraction that identifies a set of spaces where a value
+can live. For example, the \emph{integer} context could contain all
+integer registers plus their temporaries. 
+
+<<context.mli>>= 
+type t = Rtl.space * (Register.t -> bool) 
+@
+
+A context [[t]] is a pair of a space and a predicate. The space
+must be used to create a temporary in that context. The predicate is
+true, iff a register belongs to the context.
+
+An operator context describes for each operand of an operator and its
+result, in which context a value lives. For example, the [[add]]
+operator of a particular machine might expect both its operands to be
+living in integer contexts, and produce a value in the integer context.
+
+<<context.mli>>=
+type op = string * t list * t        (* op, arguments, result *)
+@
+
+On most machines operators can be described by four contexts: integer,
+floating point, address, and boolean. The [[standard]] function returns
+an association for all {\rtl} operators, that states standard operator
+contexts. 
+
+<<context.mli>>=
+val standard: int:t -> fp:t -> addr:t -> bool:t -> op list
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+<<context.ml>>=
+type t  = Rtl.space * (Register.t -> bool) 
+type op = string * t list * t                        (* arguments, result *)
+
+let standard ~(int:t) ~(fp:t) ~(addr:t) ~(bool:t) =
+    [ "add"           , [int; int], int
+    ; "and"           , [int; int], int
+    ; "bit"           , [bool], int
+    ; "bitExtract"    , [int; int], int
+    ; "bitInsert"     , [int; int; int], int
+    ; "bitTransfer"   , [int; int; int; int; int], int
+    ; "bool"          , [int], bool
+    ; "borrow"        , [int; int; int], int
+    ; "carry"         , [int; int; int], int
+    ; "com"           , [int], int
+    ; "conjoin"       , [bool; bool], bool
+    ; "disjoin"       , [bool; bool], bool
+    ; "div"           , [int; int], int
+    ; "divu"          , [int; int], int
+    ; "eq"            , [int; int], bool
+    ; "feq"           , [fp; fp], bool
+    ; "fge"           , [fp; fp], bool
+    ; "fgt"           , [fp; fp], bool
+    ; "fle"           , [fp; fp], bool
+    ; "flt"           , [fp; fp], bool
+    ; "fne"           , [fp; fp], bool
+    ; "f2f"           , [fp; fp], fp
+    ; "f2i"           , [fp; fp], fp  (* conversion done in float unit?? *)
+    ; "fabs"          , [fp], fp
+    ; "fadd"          , [fp; fp; fp], fp  (* ROUNDING MODES *)
+    ; "fcmp"          , [fp; fp], fp
+    ; "fdiv"          , [fp; fp; fp], fp  (* ROUNDING MODES *)
+    ; "float_eq"      , [], fp
+    ; "float_gt"      , [], fp
+    ; "float_lt"      , [], fp
+    ; "fmul"          , [fp; fp; fp], fp  (* ROUNDING MODES *)
+    ; "fmulx"         , [fp; fp], fp
+    ; "fneg"          , [fp], fp
+    ; "fsqrt"         , [fp; fp], fp  (* ROUNDING MODES *)
+    ; "fsub"          , [fp; fp; fp], fp  (* ROUNDING MODES *)
+    ; "ge"            , [int; int], bool
+    ; "geu"           , [int; int], bool
+    ; "gt"            , [int; int], bool
+    ; "gtu"           , [int; int], bool
+    ; "i2f"           , [fp; fp], fp  (* conversion done in float unit? *)
+    ; "le"            , [int; int], bool
+    ; "leu"           , [int; int], bool
+    ; "lt"            , [int; int], bool
+    ; "ltu"           , [int; int], bool
+    ; "minf"          , [], fp
+    ; "mod"           , [int; int], int
+    ; "modu"          , [int; int], int
+    ; "mul"           , [int; int], int
+    ; "mulu"          , [int; int], int
+    ; "mzero"         , [], fp
+    ; "NaN"           , [fp], fp           (* ??? *)
+    ; "ne"            , [int; int], bool
+    ; "neg"           , [int], int
+    ; "not"           , [bool], bool
+    ; "or"            , [int; int], int
+    ; "pinf"          , [], fp
+    ; "popcnt"        , [int], int
+    ; "pzero"         , [], fp
+    ; "quot"          , [int; int], int
+    ; "rem"           , [int; int], int
+    ; "round_down"    , [], int      (* ROUNDING MODES *)
+    ; "round_nearest" , [], int  (* ROUNDING MODES *)
+    ; "round_up"      , [], int  (* ROUNDING MODES *)
+    ; "round_zero"    , [], int  (* ROUNDING MODES *)
+    ; "shl"           , [int; int], int
+    ; "shra"          , [int; int], int
+    ; "shrl"          , [int; int], int
+    ; "sub"           , [int; int], int
+    ; "sx"            , [int], int
+    ; "unordered"     , [], fp
+    ; "xor"           , [int; int], int
+    ; "zx"            , [int], int
+    ]
+@    
