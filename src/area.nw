@@ -1,0 +1,40 @@
+The idea is to have some sort of ``area'' to use to compute the layout
+of the stack frame.  It's not yet clear what the interface should be,
+and especially, whether the data type should be functional or
+imperative.
+
+Here are some ideas (in imperative style)
+<<area.mli>>=
+type area
+
+(* primitive constructors *)
+
+val empty    : unit -> area
+
+(* from elsewhere:
+      val overflow : Automaton.t -> area 
+*)
+
+
+(* mutators *)
+
+  (* add an item to the end of an area; return its address *)
+  val append      : area -> size -> alignment -> Rtl.exp
+
+  (* bind together two areas in an address relationship, create combined area *)
+  val overlayHigh : area -> area -> area
+  val overlayLow  : area -> area -> area
+  val concat      : area -> area -> area
+
+  (* the following mutators bind an area to an address *)
+  val bindLow     : area -> Rtl.exp -> unit
+  val bindHigh    : area -> Rtl.exp -> unit
+
+  (* promise no more changes to the area *)
+  val freeze : area -> unit
+
+
+(* observers, good for frozen areas only *)
+
+val size      : area -> int
+val alignment : area -> int
