@@ -107,30 +107,45 @@ let alloc avail tmpmap node =
   in  alloc avail tmpmap node
 in alloc
 @ 
+If a temporary~$t$ is mapped to a register~$r$, and we encounter a
+node that (a) defines or kills~$r$ and (b) is not the last use of~$t$,
+then $t$ has to be spilled, and uses of~$t$ \emph{after} the current
+node (but \emph{not} in the current node!) must be preceded by a
+reload.
+
+This means liveness info for computing last uses and available
+registers must be kept for hardware registers as well as temporaries.
+
+
 <<abbreviations>>=
 module N = IRNode
 <<body of [[alloc]]>>=
 match node with
 | N.Assign (atts, rtl, next) -> (
-    let deads = tmps_used_last node in
-    let avail = Regset.union avail deads in
-    let defs  = tmps_defined rtl in
-      match askregs defs avail with
-      |	Some (avail, newmap) ->
-	  let tmpmap' = extend (drop_dom deads tmpmap) newmap (* map after node *) in
-	  let rtl = RtlFunctions.subst_defs_uses newmap tmpmap rtl in
-	  let next = alloc avail tmpmap' next in
-  	    N.Assign(atts, rtl, next)
-      | None ->
-          let spill_candidates = Regset.diff (dom tmpmap) (tmps_used rtl) in
-                 (* spill any mapped tmp except those needed in this node *)
-          let _ = assert (not (Regset.is_empty spill_candidates)) in
-	  let spillee = farthest_used spill_candidates next in
-          let spill = <<RTL to spill [[spillee]] to memory>> in
-          let node = insert_reloads spillee node in
-          let node = selection atts spill node in (* map spill to instructions *)
-          let node = add_last_use_info node in
-	    ralloc avail tmpmap node
+    let deads = regs_used_last node in
+    let avail = Regset.union avail (Regset.map (subst tmpmap) deads) in
+                  (* note --- this could add variable regs to avail *)
+    let { t = tmpdefs; f = regdefs }  = split is_tmp (tmps_defined rtl) in
+    let hwspills = <<hardware registers that must be spilled>> in
+      if not (Regset.is_empty hwspills) then
+        <<spill hardware regs and call [[alloc]] again>>
+      else
+        match askregs defs avail with
+        | Some (avail, newmap) ->
+            let tmpmap' = extend (drop_dom deads tmpmap) newmap (* map after node *) in
+            let rtl = RtlFunctions.subst_defs_uses newmap tmpmap rtl in
+            let next = alloc avail tmpmap' next in
+              N.Assign(atts, rtl, next)
+        | None ->
+            let spill_candidates = Regset.diff (dom tmpmap) (tmps_used rtl) in
+                   (* spill any mapped tmp except those needed in this node *)
+            let _ = assert (not (Regset.is_empty spill_candidates)) in
+            let spillee = farthest_used spill_candidates next in
+            let spill = <<RTL to spill [[spillee]] to memory>> in
+            let node = insert_reloads spillee node in
+            let node = selection atts spill node in (* map spill to instructions *)
+            let node = add_last_use_info node in
+              ralloc avail tmpmap node
     )
 | node -> 
     let new_exp = RtlFunctions.subst_exp tmpmap 
@@ -156,7 +171,7 @@ temporary map.
 
 <<RTL to spill [[spillee]] to memory>>=
 RTL.RTL [RTL.GUARD (RTL.CONST (RTL.BOOL true, None),
-	    RTL.STORE (mem, RTL.FETCH(spill, type_of spillee), type_of spillee))]
+            RTL.STORE (mem, RTL.FETCH(spill, type_of spillee), type_of spillee))]
 @ 
 To get a register, we ask [[hwreg_for]] what candidates there are,
 then attempt to choose from those available.  If the choice fails (by
@@ -165,7 +180,7 @@ raising [[Not_found]], we'll have to spill.
 let askreg (tmp:tmp) (avail, tmpmap) =
   let reg = Regset.choose (Regset.inter (hwregs_for tmp) avail) in
     (Regset.remove reg avail, Regmap.add tmp reg tmpmap)
-in	
+in      
 let askregs tmps avail = try Some (Regset.fold askreg tmps (avail, Regmap.empty))
                          with Not_found -> None
 in
