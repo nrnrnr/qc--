@@ -244,6 +244,8 @@ val regs_by_bits: counter -> Register.t list -> bool -> stage
 
 val argcounter  : counter -> stage
 val regs_by_args: counter -> Register.t list -> bool -> stage
+
+val pad         : memsize:int -> counter -> stage
 @ 
 And this is documented nowhere, not even in the paper.  It is used
 to post-process the results from a [[freeze]] request.  For example,
@@ -586,13 +588,17 @@ let counter of_width =
   in (fun ctr next -> { allocate = f ctr next.allocate; freeze = next.freeze })
 @ 
 
-We'll probably need to add an argument to [[reg_placer]] when we implement
-register aggregation because [[regs_by_bits]] and [[regs_by_args]] should
-handle it differently (see document with formal semantics of these functions).
+The [[allow_agg]] and [[reserve]] arguments to [[reg_placer]] control
+register allocation semantics.
+The first specifies whether location aggregation is allowed for values
+that don't fit within one register, and the second specifies whether
+we also need to reserve space in a later stage but throw it away.
 <<automaton.ml>>=
 type regstate = { mutable used  : Register.Set.t }
 
-let reg_placer of_width n regs reserve next =
+<<definition of [[combine_loc]]>>
+
+let reg_placer of_width allow_agg n regs reserve next =
   let state = { used = RS.empty } in
   let getreg = function
   |	[]      -> raise (Failure "get register")
@@ -609,56 +615,71 @@ let reg_placer of_width n regs reserve next =
          let allocated = of_loc (R.reg r) in
          ( if reserve then ignore (next.allocate width alignment hint)
          ; allocated )
-      else if w < width then unimp "register aggregation"
-      else    unimp "auto-widening for register requests"
+      else if w < width then 
+                                        (* FIX THIS BELOW! *)
+             if allow_agg then combine_loc Rtl.LittleEndian 
+                                   (of_loc (R.reg r), w)
+                                   (next.allocate width alignment hint)
+             else Unsupported.automaton_widen ~have:width ~want:w
+      else unimp "auto-widening for register requests"
     with Failure _ -> next.allocate width alignment hint in
   let freeze regs mems = next.freeze (RS.union state.used regs) mems in
   { freeze = freeze; allocate = alloc }
 
-let bitcounter                    = counter    (fun w -> w)
-let regs_by_bits                  = reg_placer (fun w -> w)
+let bitcounter   = counter (fun w -> w)
+let regs_by_bits = reg_placer (fun w -> w) true
 
 let useregs regs = wrap (fun next -> let c = ref 0 in
                            (bitcounter c) ((regs_by_bits c regs false) next))
 
-let bitcounter                    = wrap_counter bitcounter
+let bitcounter   = wrap_counter bitcounter
 let regs_by_bits label rs reserve =
     wrap_counter (fun ctr -> regs_by_bits ctr rs reserve) label
 
-let argcounter                    = wrap_counter (counter (fun w -> 1))
-let regs_by_args                  = reg_placer (fun w -> 1)
+let argcounter   = wrap_counter (counter (fun w -> 1))
+let regs_by_args = reg_placer (fun w -> 1) false
 let regs_by_args label rs reserve = 
     wrap_counter (fun ctr -> regs_by_args ctr rs reserve) label
+
+let pad ~memsize = 
+  let padcounter ctr next =
+    let f nalloc ~width ~alignment ~hint =
+      let al = alignment * memsize in
+      ( if !ctr mod al != 0 
+        then ctr := Aux.round_up_to ~multiple_of:al !ctr 
+      ; nalloc ~width ~alignment ~hint
+      )
+    in { next with allocate = f next.allocate }
+  in wrap_counter padcounter
 @ 
 
-The code below seems like a promising start to implementing split
-allocations but might be untested.  For now, it is {\em not included}
-in [[automaton.ml]].
-<<experimental code to split locations (currently unused)>>=
+And now we need to actually define the helper [[combine_loc]] that can
+combine multiple hardware resources into one abstract `location'.
+<<definition of [[combine_loc]]>>=
 <<shift and mask functions>>
-let splitloc bo locs = match locs with
-| [l, w] -> l
-| _ ->
-    let rec little = function
-      | []  -> imposs "split empty list of locations"
-      | [l, w] -> l
-      | (loc, w) :: rest ->
-          let loc' = little rest in
-          let w'   = List.fold_left (fun n (_, w) -> n + w) 0 rest in
-          { fetch  = (fun ww ->
-                        assert (ww = w + w');
-                        orb ww (zx w ww (fetch loc w))
-                               (shl ww (zx w' ww (fetch loc' w')) w))
-          ; store  = (fun v ww ->
-                        assert (ww = w + w');
-                        R.par [ store loc  (lobits ww  w v) w 
-                              ; store loc' (lobits ww w' (shrl ww v w)) w'])
-          ; simple = (fun () -> Impossible.impossible "tried to observe split location")
-          } in
-    match bo with
-    | Rtl.LittleEndian -> little locs
-    | Rtl.BigEndian    -> little (List.rev locs)
-    | Rtl.Identity     -> imposs "split without order"
+let combine_loc bo (l1,w1) l2 = 
+  let aux lsloc msloc =
+    { fetch  = (fun ww -> 
+                  let w2 = ww - w1 in
+                  let (lsb,lsw) = lsloc (l1,w1) (l2,w2) in
+                  let (msb,msw) = msloc (l1,w1) (l2,w2) in
+                  orb ww (zx lsw ww (fetch lsb lsw))
+                         (shl ww (zx msw ww (fetch msb msw)) lsw))
+    ; store  = (fun exp ww -> 
+                  let w2 = ww - w1 in
+                  let (lsb,lsw) = lsloc (l1,w1) (l2,w2) in
+                  let (msb,msw) = msloc (l1,w1) (l2,w2) in
+                  R.par [ store lsb (lobits ww lsw exp              ) lsw
+                        ; store msb (lobits ww msw (shrl ww exp lsw)) msw ])
+    ; simple = (fun () -> imposs "cannot observe a split Automaton.location")
+    } in
+
+  match bo with
+  | Rtl.Identity     -> imposs "split without byte-ordering"
+  | Rtl.LittleEndian -> aux (fun x1 _  -> x1) (fun _  x2 -> x2)
+  | Rtl.BigEndian    -> aux (fun _  x2 -> x2) (fun x1 _  -> x1)
+@ 
+
 <<shift and mask functions>>=
 let const w k = R.bits (Bits.U.of_int k w) w
 let zx n w v = R.app (R.opr "zx" [n; w]) [v]

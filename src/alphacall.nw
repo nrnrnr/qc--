@@ -148,7 +148,7 @@ COMPILATION UNIT HAS MULTIPLE CALL SITES THAT RETURN THE SAME HINT, WE
 SHOULD SEE A FAILURE HERE.
 <<Alpha calling convention automata in Lua>>=
 Alpha.cc["C"].results =
-  { A.widen(64)
+  { A.widen(64, "multiple")
   , A.choice { "float" , A.useregs { f(0), f(1) }
              , A.is_any, A.useregs { r(0) }
              }
@@ -198,13 +198,12 @@ independent of the stack growth.
         
 <<Alpha calling convention automata in Lua>>=
 Alpha.cc["C"].call =
-  { A.bitcounter("bits")
+  { A.widen(64, "multiple")
+  , A.bitcounter("bits")
   , A.choice { "float",  { A.widths { 64 }
                          , A.regs_by_bits("bits", f(16) .. f(21))
                          }
-             , A.is_any, { A.widen(64, "multiple")
-                         , A.regs_by_bits("bits", r(16) .. r(21))
-                         }
+             , A.is_any, A.regs_by_bits("bits", r(16) .. r(21))
              }
   , A.overflow { memsize = 8, byteorder = Alpha.byteorder, growth = "up"
                , max_alignment = Alpha.sp_align }

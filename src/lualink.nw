@@ -369,6 +369,10 @@ C.register_module "Automaton"
                           ~byteorder:    (field byteorder "byteorder")
                           ~growth:       (field growth    "growth")
                           ~max_alignment:(field V.int     "max_alignment"))
+  ; "pad"         , V.efunc (V.table **->> stage)
+                    (fun pad ->
+                        let field p f = p.V.project (V.Table.find pad (V.String f)) in
+                        A.pad ~memsize:(field V.int "memsize") (field V.string "ctr"))
   ; "regs_by_args", V.efunc
                     (counterty **-> V.list regty **-> V.default "normal" V.string **->> stage)
                     (regalloc A.regs_by_args)
