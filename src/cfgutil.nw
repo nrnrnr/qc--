@@ -23,6 +23,7 @@ val emit  :   'i Cfgx.M.t -> ('i -> unit) -> (string -> unit) -> unit
 val delete :  'i Cfgx.M.t -> 'i Cfgx.M.node -> unit
   (* unsplice and delete a node *)
 val print_cfg: Rtl.rtl Cfgx.M.t -> unit
+val find_join_node: 'i Cfgx.M.t -> string -> 'i Cfgx.M.node
 @
 WHAT DO [[cfg2ast]] AND [[emit]] DO? PLEASE EXPLAIN THE PARAMETERS. --CL
 
@@ -43,6 +44,9 @@ WHAT DO [[cfg2ast]] AND [[emit]] DO? PLEASE EXPLAIN THE PARAMETERS. --CL
 \item [[emit]]: Fold over {\cfg} in enumeration order and pass {\rtl}s
       and symbols to the provided functions. Enumerates the {\cfg} if it is
       not already enumerated.
+
+\item [[find_join_node]]: Find the join node with the given label, or return
+      the illegal node if no such node can be found.
 \end{itemize}
 
 % ------------------------------------------------------------------ 
@@ -162,4 +166,12 @@ let print_cfg cfg =
   let () = G.iter_nodes (fun n -> Printf.eprintf "%s\n" (G.print_node n)) cfg in
   let () = Printf.eprintf "END CFG\n" in
   flush stderr
+@
+<<cfgutil.ml>>=
+let rec find_join_node cfg lbl =
+  let f node res =
+    if G.is_join node && List.mem lbl (G.labels node)
+    then node else res
+  in
+  G.fold_heads f (G.illegal cfg) cfg
 @

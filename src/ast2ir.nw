@@ -769,7 +769,9 @@ The initialization of continuations is delayed to a third pass, so we
 create a label node [[initcont]] as a placeholder.
 The initialization code is inserted at [[initcont]] after the translation.
 <<definition of [[proc]], which translates one procedure>>=
-  let initcont = G.node_labeled g (Idgen.label "initialize continuations") in
+  let bodylbl  = (Idgen.label "proc body start") in
+  let procstrt = G.node_labeled g bodylbl
+  and initcont = G.node_labeled g (Idgen.label "initialize continuations") in
   let () = add oldblocks proc_cc.C.overflow_alloc.C.parameter_deallocator
                          proc_in'.C.overflow in
   let labelnode node ~succ = (G.set_succ node succ; node) in
@@ -781,6 +783,7 @@ The initialization code is inserted at [[initcont]] after the translation.
     G.instruction  g save_ra              **>
     G.instruction  g save_nvrs            **>
     labelnode initcont                    **>
+    labelnode procstrt                    **>
     stmts proc.N.spans proc.N.code (G.exit g)) in 
 @ And as promised, the third pass.
 We initialize continuations, finish compiling them, and accumulate
@@ -827,6 +830,7 @@ The main thing here is dealing with all the blocks.
     ; Proc.var_map        = Array.make nvars None
     ; Proc.global_map     = global_map
     ; Proc.spans          = !spans
+    ; Proc.bodylbl        = bodylbl
     } in
 @ 
 Before running the optimizer, we trim away any unreachable code,

@@ -437,7 +437,7 @@ let don't_touch_me =
   | [ RP.Store (pc', _, _)
     ; RP.Store (RP.Reg sp, RP.App (("add", [32]), [RP.Fetch (RP.Reg sp2, _);
                                                       RP.Const (RP.Bits b)]), _)] ->
-      pc' = lowpc & sp = esp_reg & sp2 = esp_reg & Bits.S.to_int b = 4
+      pc' = lowpc && sp = esp_reg && sp2 = esp_reg && Bits.S.to_int b = 4
   | _ -> false
 @
 To implement the comparisons, we define new operators that are private
@@ -780,13 +780,24 @@ let push e = (* effect of pushing e *)
 We now build the standard control flow.
 <<x86.ml>>=
 module T = Target
-module F = Mflow.MakeStandard (
+module FS = Mflow.MakeStandard (
   struct
      let pc_lhs = PX.pc_lhs
      let pc_rhs = PX.pc_rhs
      let ra_reg    = PX.temploc ('?', 99, 32) (* not used *)
      let ra_offset = 33                       (* not used *)
   end)
+module F = struct
+  include FS
+  let call =
+    { T.embed = (fun e -> R.par [FS.goto.T.embed e; push (fetch pc)])
+    ; T.project = FS.call.T.project (* should be OK *)
+    }
+  let return = 
+    { T.embed = (fun () -> pop_with (fun ra -> store pc ra))
+    ; T.project = (fun r  -> Impossible.unimp "projected return")
+    }
+end
 @      
 There's no science here---just a lot of goo.
 The [[Target.t]] abstraction could use some thought.
@@ -842,9 +853,8 @@ let target =
   ; T.bnegate = F.bnegate eflags
   ; T.goto    = F.goto
   ; T.jump    = F.jump
-  ; T.call    = { T.embed = (fun e -> R.par [F.goto.T.embed e; push (fetch pc)])
-                ; T.project = F.call.T.project (* should be OK *)
-                } 
+  ; T.call    = F.call
+  ; T.return  = F.return
   ; T.branch  = F.branch
 
   ; T.cc_specs         = A.init_cc

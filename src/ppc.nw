@@ -329,6 +329,7 @@ which is a return from procedure call.
 let don't_touch_me = function
     [ RP.Store(l, RP.Fetch(r, _), _) ]
     when l = Down.loc pc_lhs && r = Down.loc lr -> true
+  | [ RP.Store (_, RP.App (("add", _), [ _ ; RP.Const (RP.Diff _)]),_)] -> true
   | _ -> false
 @ 
 Stack operations...
@@ -369,7 +370,7 @@ let sp     = R.reg sp_reg
 let vfp    = Vfp.mk 32
 
 let regset s w l = RS.of_list (List.map (fun r-> (s,r,w)) l)
-let vregs  = regset 'r' 32 [3;4;5;6;7;8;9;10;11;12]
+let vregs  = regset 'r' 32 [2;3;4;5;6;7;8;9;10;11;12]
 let nvregs = regset 'r' 32 [13;14;15;16;17;18;19;20;21;
                             22;23;24;25;26;27;28;29;30;31]
 let fvregs  = regset 'f' 64 [0;1;2;3;4;5;6;7;8;9;10;11;12;13]
@@ -610,6 +611,7 @@ let target =
   ; T.goto    = F.goto
   ; T.jump    = F.jump
   ; T.call    = F.call
+  ; T.return  = F.return
   ; T.branch  = F.branch
 
   ; T.cc_specs         = []      (* added by lua code *)

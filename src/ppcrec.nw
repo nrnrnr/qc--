@@ -277,10 +277,12 @@ inst:  Store(lrl, reg, w:int) {: "mtlr " ^ reg  :}
 @ 
 Position-independent code. The integer register r2 is used for
 position-independent code.
-
 <<rules>>=
+inst:  Store(regl, Add(reg,pic), 32)
+       {: "addis " ^ regl ^ ","^ reg ^",ha16(" ^ pic ^ ")\n\tla " ^ regl ^
+          ",lo16(" ^ pic ^ ")(" ^ regl ^ ")" :}
 inst:  Store(regl, pic, 32)
-       {: "addis " ^ regl ^ ",r2,ha16(" ^ pic ^ ")\n\tla " ^ regl ^
+       {: "li " ^ regl ^ ",ha16(" ^ pic ^ ")\n\tla " ^ regl ^
           ",lo16(" ^ pic ^ ")(" ^ regl ^ ")" :}
 @
 \paragraph{Control Flow}

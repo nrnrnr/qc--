@@ -185,6 +185,14 @@ let call =
                   )
     }              
 
+let return = 
+    { T.embed   = (fun () -> store pc (fetch ra))
+    ; T.project = (fun r -> match D.rtl r with
+                  | RP.Rtl [(_,RP.Store(_,e,_))] -> ()
+                  | _ -> error "projected non-return"
+                  )
+    }              
+
 let branch =
     { T.embed   = (fun (c, l) -> R.guard c (goto.T.embed l))
     ; T.project = (fun r      -> match D.rtl r with
@@ -195,7 +203,7 @@ let branch =
 
 let jump   = goto                   (* must be different from goto!  *)
 let cutto  = cutto
-let return = store pc (fetch ra)    (* no embed/project needed *)
+(* let return = store pc (fetch ra)    (* no embed/project needed *)*)
 @
 
 We use helper functions [[store_space]] and [[fetch_space]] to store or
@@ -308,7 +316,7 @@ let cc' = (* new style *)
     ; C.volregs          = Register.Set.empty
     ; C.saved_nvr        = (fun _ _ -> Impossible.impossible "saved regs")
     ; C.cutto            = Flow.cutto
-    ; C.return           = (fun k n ~ra -> Flow.return)
+    ; C.return           = (fun k n ~ra -> Flow.return.T.embed ())
     ; C.ra_on_entry      = (fun _     -> R.fetch ra wordsize)
     ; C.where_to_save_ra = (fun _ t   -> ra)
     ; C.ra_on_exit       = (fun t b _ -> ra)
@@ -354,6 +362,7 @@ let target' = (* new style *)
       ; T.goto              = Flow.goto
       ; T.jump              = Flow.jump
       ; T.call              = Flow.call 
+      ; T.return            = Flow.return
       ; T.branch            = Flow.branch
       ; T.spill             = (fun _ -> assert false)
       ; T.reload            = (fun _ -> assert false)

@@ -639,13 +639,25 @@ C.register_module "Widen"
  ; "badwiden", V.efunc (V.value **-> Map.proc **->> V.int) badwiden
  ] g;
 <<register modules to [[g]] in alphabetical order>>=
-let pic _ proc =
-  G.iter_nodes (G.update_instr (Pic.pic proc.Proc.symbol)) proc.Proc.cfg;
-  1 in
-let const n _ proc = G.iter_nodes (G.update_instr (Widen.store_const n)) proc.Proc.cfg;
-  1 in
-C.register_module "Pic" 
- [ "ppc_pic", V.efunc (V.value **-> Map.proc **->> V.int) pic
+let pic load_wkr use_return proc =
+  let import _ = Error.error "imports not supported in PIC code" in
+  Pic.transform ~import ~load_wkr ~use_return proc;
+  1
+in
+let pic_ppc _ proc = 
+  let load_wkr l = Rtl.store l (Rtl.fetch (Rtl.reg ('c',5,32)) 32) 32 in
+  pic load_wkr false proc
+in
+let pic_x86 _ proc =
+  let amem       = Rtl.mem (Rtl.aligned 4) 'm' Rtl.LittleEndian 32 in
+  let esp        = Rtl.reg ('r',4,32) in
+  let espval     = Rtl.fetch esp 32 in
+  let load_wkr l = Rtl.store l (Rtl.fetch (amem espval) 32) 32 in
+  pic load_wkr true proc
+in
+C.register_module "Pic"
+ [ "ppc", V.efunc (V.value **-> Map.proc **->> V.int) pic_ppc
+ ; "x86", V.efunc (V.value **-> Map.proc **->> V.int) pic_x86
  ] g;
 
   let namestring = function

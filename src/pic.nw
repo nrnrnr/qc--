@@ -2,89 +2,272 @@
 
 \section{Position-independent code (PIC)}
 
+Object code is ``position-independent'' if it can be loaded into a
+running process image with very few relocations---ideally zero.
+Relocation is required when an instruction (RTL) mentions a label, so
+we eliminate labels by the following transformation:
+\begin{enumerate}
+\item
+Establish as a dynamic invariant that a well-known register [[wkr]] is
+equal to a well-known label [[wkl]].
+
+This invariant may be established by the caller, according to the
+calling convention, in which case the choice of [[wkr]] and [[wkl]] is
+fixed by convention---as on the SGI IRIX system.
+Or the invariant may be established internally to the procedure, in
+which case [[wkr]] and [[wkl]] may be chosen freely.
+\item
+We transform the code as follows:
+for every occurrence of a label~$L$, we replace~$L$ 
+by $\mathtt{wkr}+(L-\mathtt{wkl})$.
+The key is that although $L$~is a \emph{link-time} constant,
+$(L-\mathtt{wkl})$ is an \emph{assembly-time} constant---and thus
+requires no relocation.
+
+We use the special representation [[RP.Diff]] to make it easy for the
+back end to recognize $(L-\mathtt{wkl})$ as an {assembly-time}
+constant.
+\item
+\textbf{BUT} we don't want to perform this transformation on a code
+label, since with high probability a code label appears only in a
+branch instruction, branch instructions are already relative, and thus
+they require no relocation.
+So we would be replacing a perfectly lovely relative branch with an
+add and an indirect branch through a register, which would be Very Bad.
+\end{enumerate}
+
+
+
+If [[wkr]] is not required to be set by the calling convention, we
+have to initialize it. 
+If the initialization instruction just looks like
+[[wkr := wkl]], it will probably require relocation.
+But if we are clever, we can emit a branch-and-link to the successor
+instruction, requiring no relocation, e.g.,
+\begin{verbatim}
+  PC := wkl | wkr := next PC     // branch and link
+wkl:
+  ...
+\end{verbatim}
+Achieving this may require some cleverness either in our front end or
+in the assembler. 
+In any case, it's likely to be machine-dependent.
+
+
+A couple of motivating examples:
+\begin{itemize}
+\item
+If we do no transformations, a typical [[goto]] becomes a relative
+branch:
+\begin{verbatim}
+  goto L              // C-- source
+
+  PC := L             // RTL
+
+  b L                 // assembly code
+
+  PC := PC + k        // machine code (k computed by assembler)
+\end{verbatim}
+If we mistakenly do the PIC transformation, we wind up with an extra
+instruction and an indirect branch instead of a direct branch:
+\begin{verbatim}
+  goto L                   // C-- source
+
+  PC := L                  // RTL
+
+  PC := wkr + (L - wkl)    // transformed RTL
+
+  t := wkr + (L - wkl)     // expanded RTL
+  PC := t
+
+  add t,wkr,(L-wkl)        // assembly code
+  br t
+
+  t := wkr + k     // machine code (k computed by assembler)
+  PC := t          // indirect branch -- bad
+\end{verbatim}
+\item
+But notice if we have a computed [[goto]], we \emph{must} do the
+transformation:
+\begin{verbatim}
+  goto bits32[L]            // C-- source
+
+  ld t,(L-wkl)wkr        // assembly code
+  br t
+\end{verbatim}
+And this is no worse than we would expect.
+\end{itemize}
+
+Also note there's no way we can do the transformation on an imported
+label~$I$, because $(I-\mathtt{wkl})$ can't be computed by the
+assembler.
+Because dynamic linkers are so lazy, the only really safe place for an
+imported label is in initialized data.
+(Exactly how is probably machine-dependent.)
+Thus, we stipulate a function [[import]], which takes an imported
+label~$I$ and returns a reference to a memory location
+that contains the value of~$I$.
+This reference almost certainly mentions a local data label.
+The [[import]] function is probably machine-dependent.
+@
+It thus appears that we need the following transformation on a flow
+graph:
+\begin{enumerate}
+\item
+Given a \emph{locally defined data label}, apply the PIC
+transformation.
+\item
+Given a \emph{locally defined code label}, treatment depends on
+context:
+\begin{enumerate}
+\item
+If \emph{in a control-transfer instruction}, leave it alone.
+This includes all branch and call nodes.
+\item
+\emph{Elsewhere}, apply the PIC transformation.
+
+(This case is needed for initialization of continuations and for other
+applications of ``first-class labels.'')
+\end{enumerate}
+\item
+Given an \emph{imported label~$I$}, replace~$I$ with 
+$\mathtt{Rtlutil.fetch(import}~I\mathtt{)}$ and recursively run the
+transformation on this expression.
+\end{enumerate}
 
 <<pic.mli>>=
-val pic    : Symbol.t -> Rtl.rtl -> Rtl.rtl
-val is_pic : Rtl.rtl -> bool
-@ 
+val transform : import:(Symbol.t -> Rtl.loc) ->
+                load_wkr:(Rtl.loc -> Rtl.rtl) ->
+                use_return:bool ->
+                Oast2ir.proc -> unit
 <<pic.ml>>=
-module R = Rtl
-module RP = Rtl.Private
+module R    = Rtl
+module RP   = Rtl.Private
 module Down = Rtl.Dn
 module Up   = Rtl.Up
-
+module G    = Cfgx.M
+module T    = Target
+<<RTL transformations>>
+<<CFG transform>>
 @ 
-We scan a given rtl to determine whether it is PIC before and after
-transformation. Parameter [[const_ftn]] explains how to determine
-whether a given [[RP.const]] is PIC.
-When an effect [[RP.Store]] is an assignment to a control register,
-the value to be assigned is not a data but a function.
-<<pic.ml>>=
-let scan const_ftn r =
-  let rec rtl (RP.Rtl gs) = List.exists guarded gs
-  and guarded (e, eff) = exp e || effect eff
-  and effect eff = match eff with
-    | RP.Store(RP.Reg('c',_,_), _, _) -> false
-    | RP.Store(l, e, _) -> loc l || exp e
-    | _ -> false
-  and loc l = match l with
-    | RP.Mem(_,_,_,e,_) -> exp e
-    | RP.Slice(_,_,l')  -> loc l'
-    | _ -> false
-  and exp e = match e with
-    | RP.Const c     -> const c
-    | RP.Fetch(l, _) -> loc l
-    | RP.App(_, es)  -> List.exists exp es
-  and const c = const_ftn c in
-  rtl (R.Dn.rtl r)
-
-let is_pic = scan (fun c -> match c with | RP.Diff _ -> true | _ -> false)
-
-let pic name =
-  <<position-independent code>>
-  rtl
+The transform function takes a [[Proc.t]] and transforms the
+associated CFG. The [[load_wkr]] function fetches the machine word at
+the location where a return instruction would look for it. This
+function might be moved into the [[Target.t]] at some point.
+<<CFG transform>>=
+let transform ~import ~load_wkr ~use_return proc =
+  let cfg  = proc.Proc.cfg
+  and wkr  = Talloc.Multiple.reg 't' proc.Proc.temps 32
+  and wkl  = proc.Proc.mk_symbol (Idgen.label "pic")
+  and cals = proc.Proc.mk_symbol (Idgen.label "pic fun")
+  and ends = proc.Proc.mk_symbol (Idgen.label "pic end") in
+  <<translate RTLs in CFG nodes>>
+  <<insert PC load and well-known label into CFG>>
 @ 
-PIC is a code where a memory reference to a data ([[Link]]) exists.
-Since generated names by [[Idgen]] are also represented by [[Link]],
-we need to skip them. Their names includes a colon ``[[:]]'' character
-to avoid name chashes with existing names.
-<<position-independent code>>=
-let exists_pic = scan (fun c -> match c with
-  | RP.Link (l, RP.Data, _) -> true  (* oversimplification *)
-  | _ -> false) in
-<<position-independent code>>=
-let wkl s w =
-  RP.Link (Symbol.unmangled (Printf.sprintf "L%s" name#original_text), RP.Code, w) in
-let const c = match c with
-  | RP.Link (s, RP.Data, w) -> RP.Diff(c, wkl s w)
-  | _ -> c in
-let rec loc l = match l with
+As described above, we apply two different transformation depending on
+the type of the CFG node. For control-transfer nodes, we use the
+[[cti]] transform. For other nodes, we use the [[non_cti]] transform.
+<<translate RTLs in CFG nodes>>=
+  let update_node node =
+    let txn = if G.is_cti node then cti else non_cti in
+    G.update_instr (txn ~import wkr wkl) node in
+  G.iter_nodes update_node cfg;
+@ 
+In addition to applying the PIC transformation, we also need to add
+nodes to the CFG for initializing the well-known register and label.
+Currently, we have two examples of how to do this -- the PPC and the
+x86. On the PPC we can do this by adding three CFG nodes: one to load
+the address of the well-know label into the link register via a
+branch, the well-know label itself, and a node to load the link
+register into a temporary.
+\begin{verbatim}
+     bl wkl
+wkl: mflr r
+\end{verbatim}
+For the x86, things are more complex. We might try something very
+similar:
+\begin{verbatim}
+     call wkl
+wkl: pop r
+\end{verbatim}
+However, this may confuse the processor since the call/ret are not
+matched. The PPC has a branch and link instruction that can tell the
+processor that we do not expect a return -- the x86 has no such
+instruction among the many hundreds. Perhaps better code is:
+\begin{verbatim}
+       call getpc
+wkl:   jmp  end
+getpc: movl (%esp),%reg
+       ret
+end:
+\end{verbatim}
+For now, we have a boolean flag, [[use_return]], that chooses between
+these two alternatives. In the future, the [[getpc]] function could be
+moved out of line and the extra [[jmp]] eliminated.
+
+The RTL for loading the machine return address into a register is
+machine dependent and not currently in the [[Target.t]]. The
+[[load_wkr]] parameter provides us with a function to generate this
+RTL.
+<<insert PC load and well-known label into CFG>>=
+  let rtl  = load_wkr (Rtl.reg wkr)
+  and clfn = proc.Proc.target.T.call.T.embed
+  and brfn = proc.Proc.target.T.goto.T.embed
+  and reti = proc.Proc.target.T.return.T.embed ()
+  and wkln = G.node_labeled cfg wkl#original_text
+  and caln = G.node_labeled cfg cals#original_text
+  and endn = G.node_labeled cfg ends#original_text
+  and rset = Register.Set.of_list [] in
+  let ill  = G.illegal cfg in
+  let br   = G.instruction cfg (brfn (R.codesym ends 32)) ~succ:ill in
+  let call = G.call cfg (clfn (R.codesym cals 32)) ~succ:wkln
+      ~altrets:[] ~unwinds_to:[] ~cuts_to:[]
+      ~aborts:false ~uses:rset ~defs:rset ~kills:rset in
+  let ret = G.return cfg reti ~uses:rset in
+  let ld = G.instruction cfg rtl ~succ:ill in
+  let insert_pt = Cfgutil.find_join_node cfg proc.Proc.bodylbl in
+  let ( => ) a b = (G.set_succ a b; b) in
+  if use_return then ignore(wkln => br => caln => ld => ret => endn)
+                else ignore(wkln =>       caln => ld        => endn);
+  G.splice_after call endn insert_pt
+@
+We need to transform the [[Link]] RTLs according to the criteria
+outlined above. The [[rtl]] function takes a predicate function and
+transforms all of the [[Link]] constants in an RTL depending on the
+value of the predicate.
+<<RTL transformations>>=
+let rtl trns_sym ~import wkr wkl rtl =
+  let regwidth (_, _, w) = w in
+  let const c = match c with
+  | RP.Link (s, k, w) when trns_sym s k ->
+      RP.App (("add", [w]), [ RP.Fetch (RP.Reg wkr, regwidth wkr)
+                            ; RP.Const (RP.Diff(c, RP.Link (wkl, k, w)))])
+  | _ -> RP.Const c in
+  let rec loc l = match l with
   | RP.Mem  (s, a, w, e, a') -> RP.Mem  (s, a, w, exp e, a')
   | RP.Slice(w, i, l')       -> RP.Slice(w, i, loc l')
   | _ -> l
-and exp e = match e with
-  | RP.Const c       -> RP.Const (const c)
+  and exp e = match e with
+  | RP.Const c       -> const c
   | RP.Fetch (l,  w) -> RP.Fetch (loc l, w)
   | RP.App   (o, es) -> RP.App   (o, List.map exp es) in
-let effect eff = match eff with
+  let effect eff = match eff with
   | RP.Store(RP.Reg('c',_,_), _, _) -> eff
   | RP.Store(l, e, w)               -> RP.Store(loc l, exp e, w)
   | _ -> eff in
-let guarded (g, eff) = (exp g, effect eff) in
+  let guarded (g, eff) = (exp g, effect eff) in
+  let RP.Rtl es = Down.rtl rtl in
+  Up.rtl (RP.Rtl (List.map guarded es))
 @ 
-In the common case where we have no position-independent code, we 
-avoid rewriting the RTL, thereby reducing the load on the major heap.
+We need two transformations: one for control-transfer instructions and
+another for non-control-transfer instructions. Each function takes
+[[wkr]] and [[wkl]] and returns a transformation on RTLs.
+<<RTL transformations>>=
+let cti =
+  let trns_lbl s k = k != RP.Code in
+  rtl trns_lbl
 
-<<position-independent code>>=
-let rtl r = 
-(*  Printf.eprintf "rtl= %s...\n" (Rtlutil.ToString.rtl r); *)
-  if exists_pic r then
-    let rtl = Rtlutil.ToReadableString.rtl in
-    let _ = Verbose.eprintf 6 "Changing PIC %s...\r" (rtl r) in
-    let r' =
-      let RP.Rtl es = Down.rtl r in Up.rtl (RP.Rtl (List.map guarded es)) in
-    Verbose.eprintf 5 "Changed %s into PIC\n  %s\n" (rtl r) (rtl r');
-    r'
-  else
-    r in
+let non_cti =
+  let trns_lbl s k = true in
+  rtl trns_lbl
 @ 
