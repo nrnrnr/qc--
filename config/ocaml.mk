@@ -19,7 +19,7 @@ INSTRUMENT =    "ocamlprof -instrument -m a"
 # PCHECK should end up being empty, or the user will get an error
 # from the rules in depend.mk
 # 
-# FOr profiling, call as "mk P=count" or "mk P=gprof"
+# For profiling, call as "mk P=count" or "mk P=gprof"
 
 P=
 PCHECK = ${P:count=""}
@@ -39,10 +39,19 @@ GPROF = ${GPROF:count=""}
 PROFCMO = ${P:count="profiling.cmo"}
 PROFCMO = ${PROFCMO:gprof=""}
 
-# provide these two where you have included this file
 #
-# OCAMLC_FLAGS=-I $LIBDIR
-# OCAMLO_FLAGS=-I $LIBDIR
+# Compiler flags for optimization, debugging, but not for profiling.
+# Debugging is handled above.
+#
+# -g: we want stack traces for debuging bytecode files
+
+OCAMLC_FLAGS=-g
+OCAMLO_FLAGS=
+
+# *extend* these where you have included this file:
+#
+# OCAMLC_FLAGS=$OCAMLC_FLAGS -I $LIBDIR
+# OCAMLO_FLAGS=$OCAMLO_FLAGS -I $LIBDIR
 
 # ------------------------------------------------------------------ 
 # rules

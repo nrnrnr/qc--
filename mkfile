@@ -122,14 +122,16 @@ test:V:         all
 
 coverage: test2/ocamlprof.dump	
 	rm -f $target
-	for f in */*.ml; do 
+	for f in src/*.ml lua/*.ml cclib/*.ml rtl/*.ml gen/*.ml; do 
 	    ocamlprof -f test2/ocamlprof.dump -F @@@ $f | ./tools/coverage $f 
 	done | sort -k 2 -n -r > $target
 
 test2/ocamlprof.dump:Q:
 	echo "==========================================================="
-	echo "No profile information found. Run 'mk P=count test' first"
+	echo "== No profile information found. Run first:"
+        echo "== mk P=count test"
 	echo "==========================================================="
+        exit 1
 
 # ------------------------------------------------------------------
 # line counting
