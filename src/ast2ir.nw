@@ -606,6 +606,7 @@ OF THE STACK POINTER.
 LET'S JUST ADMIT IT: THIS FEATURE IS NOT YET IMPLEMENTED.
 <<functions that translate statements, including [[bodies]]>>=
 and generate_unwind_to_entry k = 
+  Impossible.unimp "unwind to continuation";
   let assign_unspecified_to args = R.par [] in (* BOGUS *)
   G.set_succ (G.node_labeled g k.K.unwind_pc) (
   G.assertion g (assign_unspecified_to formals) **>  (* in lieu of dataflow *)
@@ -1072,6 +1073,11 @@ The main thing here is dealing with all the blocks.
     ; Proc.varMap         = Array.make nvars None
     ; Proc.spans          = !spans
     } in
+@ 
+Before running the optimizer, we trim away any unreachable code,
+as well as spans associated with unreachable code.
+<<definition of [[proc]], which translates one procedure>>=
+  let _ = Optimize.trim_unreachable_code () i in
   optimizer i (* runs optimizer, freezes, and assembles proc *)
 @ 
 We define an automaton to allocate suitably aligned locations. 
