@@ -746,25 +746,23 @@ let block_copy ~dst dassn ~src sassn w =
   | 64 ->
       store_pop_cvt f2i_80_64 64 dst dassn @ push_cvt i2f_64_80 64 src sassn
   | n ->
-      let bytes = n / 8 in
-      let const n = R.bits (Bits.S.of_int n 32) 32 in
-      let sub r c = R.app (R.opr "sub" [32]) [R.fetch r 32; c] in
-      let repmovs =
-        R.par [ R.store ecx (const 0) 32
+      let bytes     = n / 8
+      and const n   = R.bits (Bits.S.of_int n 32) 32
+      and sub r c   = R.app (R.opr "sub" [32]) [R.fetch r 32; c]
+      and byte_at r = R.mem R.none 'm' byte_order 8 (R.fetch r 32) in
+      let repmovsb =
+        R.par [ R.store ecx (sub ecx (const 1)) 32
               ; R.store esi (sub esi (const bytes)) 32
               ; R.store edi (sub edi (const bytes)) 32
-              ; R.store ecx (R.app (R.opr "x86_repmovs" [32])
-                               [ R.fetch esi 32
-                               ; R.fetch edi 32
-                               ; R.fetch ecx 32
-                               ]) 32
+              ; R.store (byte_at esi) (R.fetch (byte_at edi) 8) 8
+              ; R.guard (R.fetch ecx 32) (R.store pc (R.fetch pc 32) 32)
               ]
       in
       List.rev
         [ R.store esi src 32
         ; R.store edi dst 32
         ; R.store ecx (const bytes) 32
-        ; repmovs
+        ; repmovsb
         ]
 @
 \subsection{Building the target}

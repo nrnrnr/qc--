@@ -295,12 +295,13 @@ inst : Store(dst:regl, Lobits(src:mem, sw:w), nw:w)
   {: cat ["mov"; suffix nw; " "; src; ","; dst] :}
 
 -- block copy
-inst : Par(Store(ecx1:ecx, n0:const, w1:w),
-           Par(Llr(esi1:esi, "sub", n1:const, w2:w),
-           Par(Llr(edi1:edi, "sub", n2:const, w3:w),
-           Store(ecx2:ecx,
-                 Repmovs(Fetch(esi,w4:w), Fetch(edi,w5:w), Fetch(ecx,w6:w)),
-                 w7:w))))
+inst : Par(Llr(ecx1:ecx, "sub", n0:const, w1:w),
+       Par(Llr(esi1:esi, "sub", n1:const, w2:w),
+       Par(Llr(edi1:edi, "sub", n2:const, w3:w),
+       Par(Store(Mem(Fetch(esi2:esi, w4:w), w11:w),
+                 Fetch(Mem(Fetch(edi2:edi, w5:w), w6:w),w7:w),w8:w),
+           Guarded(Fetch(ecx2:ecx,w9:w),Goto(Fetch(eip, w10:w)))
+          ))))
   {: "rep movsb" :}
 
 @ 
