@@ -95,9 +95,14 @@ let width = string_of_int
 To load immediate 64-bit integers we split them into an upper and a
 lower half of 32-bit each, using [[lo]] and [[hi]].
 
-<<head unfinished>>=
+<<head>>=
 let lo b =
     assert (Bits.width b = 64);
+    Bitops.bitExtract 0 b 32
+
+let hi b =
+    assert (Bits.width b = 64);
+    Bitops.bitExtract 32 b 32
 @    
 
 
@@ -126,7 +131,7 @@ bits n x w
 @
 
 <<rules>>=
-const64:    Bits(bits) [{: guard (Bits.width bits = 64)  :}]{: const64 bits :}
+const64:    Bits(bits) [{: guard (Bits.width bits = 64)  :}]{:         bits :}
 const:      Bits(bits) [{: guard (Bits.width bits = 32)  :}]{: const32 bits :}
 symbol:     Link(x, w:int)      {: x#mangled_text :}
 @
@@ -134,8 +139,11 @@ symbol:     Link(x, w:int)      {: x#mangled_text :}
 \paragraph{Registers}
 
 <<rules>>=
-regl:       Reg('r', n:int, w:int)  {: reg  n :}
-fregl:      Reg('f', n:int, w:int)  {: freg n :}
+f:          Reg('f', n:int, w:int)  {: n :}
+r:          Reg('r', n:int, w:int)  {: n :}
+
+regl:       r   {: reg r  :}
+fregl:      f   {: freg f :}
 
 pcl:        Reg('c',  0, w:int) {: () :}
 spl:        Reg('r', 29, w:int) {: () :}
@@ -180,18 +188,13 @@ zero
 \emph{What is the difference between [[li]] and [[la]]? Maybe the
 [[imm]] nonterminal is ill-defined. --CL}
 
+
 <<rules>>=
 inst:       Store(regl,imm,32)
             {: cat ["la"; " "; regl; ","; imm] :}
 
 inst:       Store(regl,const,32)
             {: cat ["li"; " "; regl; ","; const] :}
-
-inst:       Store(fregl,const,32)
-            {: cat ["li.s"; " "; fregl; ","; const] :}
-
-inst:       Store(fregl,const,64)
-            {: cat ["li.d"; " "; fregl; ","; const] :}
 
 inst:       Store(regl,mem,32)
             {: cat ["l"; suffix 32; " "; regl; ","; mem] :}
@@ -203,7 +206,38 @@ inst:       Store(regl, Zx(Fetch(mem,x:int)), w:int)
             {: cat ["l"; suffix w; zx; " "; regl; ","; mem] :}
 @
 
+The following two rules load constants into floating-point registers.
+However, the assembler expect the constant in floating-point syntax
+which we cannot produce easily.
 
+<<rules we don't use>>=
+inst:       Store(fregl,const,32)
+            {: cat ["li.s"; " "; fregl; ","; const] :}
+
+inst:       Store(fregl,const,64)
+            {: cat ["li.d"; " "; fregl; ","; const] :}
+@
+
+A [[li]] instruction is translated by the assembler into a [[lui]] and
+an [[ori]] instruction that does \emph{not} use register 1 that is
+reserved for the assembler. Therefore, we can use register 1 when we
+move a 64-bit constant into a floating-point register.
+
+<<rules>>=
+inst:       Store(fregl,const,32)
+            {: sprintf "li $1, %s; mtc1 $1, %s" const fregl :} 
+@
+
+To construct the proper rigister names we cannot use the string
+provided by [[fregl]] but must use the integer provided by [[f]].
+Analogously we need the bit vector and not its string representation.
+
+<<rules>>=
+inst:       Store(f,b:const64,64)
+            {: sprintf "li $1, %s; mtc1 $1, %s; li $1 %s; mtc1 $1, %s"
+                       (const64 (lo b)) (freg f) (const64 (hi b)) (freg (f+1))
+            :}           
+@
 
 Store register to memory. No extension here; the 8, 16, or 32 bits are
 simply written to memory.
