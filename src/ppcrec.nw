@@ -200,6 +200,7 @@ pcl:  Reg('c', 0, w:int) {: () :}
 cial: Reg('c', 1, w:int) {: () :}
 crl:  Reg('c', 2, w:int) {: () :}
 lrl:  Reg('c', 5, w:int) {: () :}
+spl:  Reg('r', 14, w:int) {: () :}
 
 reg:                  Fetch(regl, w:int)         {: regl :}
 reg:  BitExtract(any, Fetch(regl, w:int), n:int) {: regl :}
@@ -208,8 +209,8 @@ pc:   Fetch(pcl,  32) {: () :}
 cia:  Fetch(cial, 32) {: () :}
 cr:   Fetch(crl,  32) {: () :}
 lr:   Fetch(lrl,  32) {: () :}
+sp:   Fetch(spl,  32) {: () :}
 @
-
 \paragraph{Addresses}
 <<rules>>=
 meml: Mem(addr, w:int)       {: addr :}
@@ -226,31 +227,24 @@ addr: Add(reg1:reg, reg2:reg) {: ("x", reg1 ^ "," ^ reg2) :}
 i_r: imm {: imm :}
 i_r: reg {: reg :}
 @
-
 \paragraph{Constant Expressions}
 <<rules>>=
 imm:   const   {: const :}
 @
-
 \paragraph{Data Movement}
-
 Load register from memory. A load of a value smaller than 32 bits
 implies a zero or sign extension.
-
 <<rules>>=
 inst:  Store(regl, mem, 32) {: int_load "l%s%s%s %s,%s" mem regl :}
 inst:  Par(Store(regl1:regl, mem, 32), Llr(regl2:regl, "add", i_r, 32))
        {: int_loadu "l%s%su%s %s,%s" mem regl1 regl2 i_r :}
 @
-
 Load immediate.
 <<rules>>=
 inst:  Store(regl, imm, 32) {: li regl imm :}
 @ 
-
 Store register to memory. No extension here; the 8, 16, or 32 bits are
 simply written to memory.
-  
 <<rules>>=
 inst:  Store(meml, reg, w:int)
        {: int_store  "st%s%s %s,%s"  (suffix w) meml reg :}
@@ -268,7 +262,6 @@ Special purpose registers have special instructions.
 inst:  Store(regl, lr, w:int) {: "mflr " ^ regl :}
 inst:  Store(lrl, reg, w:int) {: "mtlr " ^ reg  :}
 @ 
-
 Moves between between registers.
 <<rules>>=
 inst:  Store(regl, cr, w:int) {: "mfcr " ^ regl :}
@@ -288,9 +281,14 @@ inst:  Store(regl, pic, 32)
 \paragraph{Control Flow}
 <<rules>>=
 inst:  Goto(lconst)        {: "b " ^ ind_addr lconst :}
-inst:  Goto(Fetch(lrl,32)) {: "blr"                  :}
+inst:  Goto(lr) {: "blr"                  :}
 @
-
+@ 
+The [[cut to]] is supposed to look atomic, but it is a sequence of two
+instructions. 
+<<rules>>=
+inst : Par(Goto(lr),Store(regl,reg,w:int)) {: sprintf "mr %s, %s; blr" regl reg :}
+@
 The [[next]] pattern covers the expression $PC + 4$ which denotes the
 instruction following the branch instruction.
 
@@ -348,7 +346,6 @@ inst: Store(regl, Shl(x:reg, y:reg), w:int)
 Appendix F.9 of the architecture manual describes some of the most
 commonly-used operations (such as no-op, load immediate, load address, move
 register, and complement register).
-
 <<rules>>=
 inst:  Store(regl, Mr(reg), w:int) {: "mr " ^ regl ^ "," ^ reg :}
 inst:  Store(regl, reg, w:int)     {: "mr " ^ regl ^ "," ^ reg :}

@@ -22,14 +22,14 @@ val target : Ast2ir.tgt
 val placevars : Ast2ir.proc -> Automaton.t
 @ 
 <<ppc.ml>>=
-module R    = Rtl
-module RP   = Rtl.Private
-module Up   = Rtl.Up
-module Down = Rtl.Dn
-module RU   = Rtlutil
-module PX   = Postexpander
-module T    = Target
-module A    = Automaton
+module R  = Rtl
+module RP = Rtl.Private
+module Up = Rtl.Up
+module Dn = Rtl.Dn
+module RU = Rtlutil
+module PX = Postexpander
+module T  = Target
+module A  = Automaton
 <<spaces>>
 module Post = struct
   <<ppc postexpander>>
@@ -275,7 +275,8 @@ let block_copy ~dst assn1 ~src assn2 width = ui "block_copy"
 @ 
 Branch and call rtls.
 <<ppc postexpander>>=
-let br ~tgt = [R.store pc_lhs (tval tgt) wordsize]
+let br ~tgt = [R.store pc_lhs (R.fetch lr wordsize) wordsize;
+               R.store lr (tval tgt) wordsize]
 let b ~tgt  = [R.store pc_lhs (Up.const tgt) wordsize]
 @ 
 Conditional branches are encoded as a comparison against the
@@ -311,9 +312,9 @@ let negate = function
   | _               -> Impossible.impossible 
                         "bad comparison in expanded MIPS conditional branch"
 
-let bnegate r = match Down.rtl r with
+let bnegate r = match Dn.rtl r with
     |           RP.Rtl [RP.App( (op,       [32]),[x;y]), RP.Store (pc,tgt,32)]
-      when pc = Down.loc pc_lhs ->
+      when pc = Dn.loc pc_lhs ->
         Up.rtl (RP.Rtl [RP.App( (negate op,[32]),[x;y]), RP.Store (pc,tgt,32)])
     | _ -> Impossible.impossible "ill-formed MIPS conditional branch"
 @ 
@@ -322,14 +323,18 @@ Call instructions are the same as branches with some additional effects.
 let call  ~tgt ~others = [R.par (List.hd (b  tgt) :: List.map Up.effect others)]
 let callr ~tgt ~others = [R.par (List.hd (br tgt) :: List.map Up.effect others)]
 
-let cut_to effects = [R.par (List.map Up.effect effects)]
+let cut_to = function
+  | [RP.Store(pc, tgt, w); restore_stack] ->
+      let effects = [RP.Store(pc, RP.Fetch(Dn.loc lr, w), w); restore_stack] in
+      [R.par (List.map Up.effect effects); R.store lr (Up.exp tgt) w]
+  | effects -> [R.par (List.map Up.effect effects)]
 @ 
 We want to prevent the expander from messing with the rtl [[pc := lr]]
 which is a return from procedure call.
 <<ppc postexpander>>=
 let don't_touch_me = function
     [ RP.Store(l, RP.Fetch(r, _), _) ]
-    when l = Down.loc pc_lhs && r = Down.loc lr -> true
+    when l = Dn.loc pc_lhs && r = Dn.loc lr -> true
   | [ RP.Store (_, RP.App (("add", _), [ _ ; RP.Const (RP.Diff _)]),_)] -> true
   | _ -> false
 @ 
@@ -545,7 +550,11 @@ It might be nice, at some time in the future, to scrutinize the
 [[ccname]] and reserve the varargs area only when needed.
 <<PPC stack layout in Lua>>=
 function PPC.layout.fn(dummy,proc) --- dispatch on cc name
-  return PPC.layout[Stack.ccname(proc)](dummy, proc, 'varargs')
+  local layout = PPC.layout[Stack.ccname(proc)]
+  if not layout then
+    error('Convention "' .. Stack.ccname(proc) .. '" does not have a frame layout')
+  end
+  return layout(dummy, proc, 'varargs')
     -- might one day optimize and not always pass 'varargs'
 end
 
@@ -600,6 +609,7 @@ function PPC.layout["C"](dummy, proc, varargs)
   Stack.freeze(proc, block)
   return 1
 end
+PPC.layout["C--"] = PPC.layout["C"] -- flagrant waste
 @ 
 
 % ---------------------------------------------------------------------------
