@@ -172,12 +172,12 @@ X86.cc["C"].call =
                }
   }
 @ 
-When passing cut-to parameters, we use all the registers---there's no
-reason not to.
+When passing cut-to parameters, we leave two registers open -- we must
+so that we can use some registers for the cut instruction.
 <<x86 calling convention automata in Lua>>=
 X86.cc["C"].cutto =
   { A.widen(32)
-  , A.useregs(X86.all_regs)
+  , A.useregs({X86.edx, X86.ebx, X86.esi, X86.edi, X86.ebp})
   , A.overflow { memsize = 8, byteorder = X86.byteorder, growth = "up"
                , max_alignment = X86.sp_align
                }
@@ -290,8 +290,9 @@ let also_cuts_to =
     ~postsp:(fun _ _ -> std_sp_location)
       ~insp:(fun a _ _ -> autosp a) in
 
-let cut_actuals base  =
-  C.outgoing ~growth ~sp ~mkauto:(fun () -> A.at base specs.A.cutto)
+let cut_actuals cont  =
+  C.outgoing ~growth ~sp
+     ~mkauto:(fun () -> A.at (Contn.ovblock_exp cont 8 32 sp_align) specs.A.cutto)
      ~autosp:(fun r -> spval)  (* should this be std_sp_location? *)
      ~postsp:(fun _ _ -> spval) in
 @ 

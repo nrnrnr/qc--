@@ -55,13 +55,17 @@ The [[cutto]] function takes a pointer to the continuation ([[contn]])
 on the stack and returns an Rtl to make the cut.
 The function argument to [[cutto]] takes newpc * newsp and returns the Rtl
 for a cut.
+The [[ovblock_exp]] function takes an expression that points to a continuation
+value, the memsize and pointersize of the machine, and the alignment of the overflow
+block. It returns the base address of the overflow block.
 The [[get_contn]] function takes pointers to a pc * sp pair
 from a continuation and returns a pointer to the continuation.
 
 <<contn.mli>>=
-val cutto : ('a, 'b) Target.t -> (Mflow.cut_args -> Rtl.rtl)
-                      -> contn:Rtl.exp -> Rtl.rtl
-val get_contn : Rtl.exp * Rtl.exp -> Rtl.exp
+val cutto       : ('a, 'b) Target.t -> (Mflow.cut_args -> Rtl.rtl)
+                     -> contn:Rtl.exp -> Rtl.rtl
+val ovblock_exp : Rtl.exp -> int -> int -> int -> Rtl.exp
+val get_contn   : Rtl.exp * Rtl.exp -> Rtl.exp
 @
 
 % ------------------------------------------------------------------ 
@@ -91,9 +95,13 @@ let offset base n w  = Rtlutil.addk w base n
 let pc_sp base t =
   let ptrcells = t.T.pointersize / t.T.memsize in
   let mem addr = Rtl.mem Rtl.none 'm' t.T.byteorder t.T.pointersize  addr in
-  let pc = mem (offset base 0        t.T.pointersize) in
-  let sp = mem (offset base ptrcells t.T.pointersize) in
+  let pc       = mem (offset base 0        t.T.pointersize) in
+  let sp       = mem (offset base ptrcells t.T.pointersize) in
   pc, sp
+
+let ovblock_exp e memsize ptrsize alignment = 
+  let ptrcells = ptrsize / memsize in
+	offset e (Block.align (2 * ptrcells) alignment) ptrsize
 
 let with_overflow t ~overflow =
   let size = t.T.pointersize / t.T.memsize in

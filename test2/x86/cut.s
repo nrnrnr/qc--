@@ -97,7 +97,7 @@ join_l18:
 	ret
 k_C8:
 	nop
-	movl %eax,24(%esp)
+	movl %edx,24(%esp)
 	nop
 	nop
 	movl $3,%ecx
@@ -205,15 +205,14 @@ join_l47:
 .section .text
 h:
 	nop
-	movl %eax,%ecx
 	nop
-	movl %esp,%eax
-	movl (%eax),%eax
-initialize_continuations_l58:
-	movl $99,%eax
-	movl $4,%ebx
-	movl %ecx,%edx
-	addl %ebx,%edx
-	movl (%edx),%edx
+	movl %esp,%ecx
 	movl (%ecx),%ecx
-	movl %edx, %esp; jmp *%ecx
+initialize_continuations_l58:
+	movl $99,%edx
+	movl $4,%ebx
+	movl %eax,%ecx
+	addl %ebx,%ecx
+	movl (%ecx),%ecx
+	movl (%eax),%eax
+	movl %ecx, %esp; jmp *%eax
