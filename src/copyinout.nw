@@ -1,0 +1,271 @@
+
+\input{macros.tex}
+
+% l2h substitution cfg CFG
+% l2h substitution dots ...
+% l2h substitution AST AST
+% l2h substitution ast AST
+% l2h substitution rtl RTL
+% l2h substitution ir IR
+% l2h substitution noweb NOWEB
+% l2h substitution qcc QC--
+% l2h substitution C C--
+% l2h substitution PAL C--
+% l2h substitution pal C--
+% l2h substitution asdl ASDL
+% l2h substitution ocaml OCaml
+% l2h substitution forall forall
+% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
+
+% ------------------------------------------------------------------ 
+\section{Parameter Passing}
+% ------------------------------------------------------------------ 
+
+Procedures and continuations receive and return values, as explained
+in the \module{stack} section.  In the principle stack layout for
+procedures values are stored in areas (c.f.~\module{area}) such that
+they are accessible by a caller and a callee.  The mutual
+understanding between a caller and a callee about the inner structure
+of areas used for parameter passing is hidden behind the
+\emph{copy-in} and \emph{copy-out} abstraction.  These can be thought
+of as virtual nodes in the control flow-graph (\cfg)
+(c.f.~\module{cfg3}) that receive values from a caller and pass values
+to a callee.  This module implements this abstraction and exports to
+the the \module{ast3ir} module that translates a program in {\AST}
+form to an intermediate representation based on control-flow graphs.
+
+% ------------------------------------------------------------------ 
+\subsection{Copy-In}
+% ------------------------------------------------------------------ 
+
+Parameters that are passed to a procedure are stored in registers and,
+if there are not enough registers, in an \emph{overflow} memory area
+(c.f.~\module{area}). This area is part the procedure's \emph{incoming}
+area (c.f.~\module{stack.nw}) as shown in figure
+\ref{fig:copyinout:stacklayout}.  The code in the body of a
+procedure knows nothing about these details and accesses parameters by
+their (formal) names.  These define {\PAL} variables which means
+they correspond to hardware-registers or locations inside the
+procedure's \emph{private} area on the stack.  A \emph{copy-in} node
+in the control-flow graph copies the values from registers and the
+\emph{incoming} area into the named variables and thus makes them
+accessible in the body of the procedure.  The \emph{copy-in} node is a
+single node only on the conceptual level.  In reality, it is a
+sequence of assignments flow nodes that perform the task in smaller
+steps.  Since the sequence has a single entry and a single exit node
+it still can be thought of as a virtual node.
+
+\begin{figure}[h]
+\centerline{\includegraphics{stack-0}}
+\caption{\label{fig:copyinout:stacklayout} 
+         Stack layout for a procedure
+         activation of \texttt{f}}
+\end{figure}
+
+The code that transfers values from the registers and the incoming
+area to variables must agree with the caller about where to find them. 
+When the {\cfg} is constructed this knowledge comes in two parts:  the
+list of formal parameters of the active procedure, and an automaton
+(c.f.~\module{automaton}) that captures the essence of a calling
+convention.  Both are used at the translation of the caller and the
+callee to determine the location for the values being passed.
+
+<<copyinout.mli>>=
+module Make (G: Cfg3.S): sig
+    <<Make sig>>
+end
+
+<<type formal>>=
+type repr       = Local  of  string * int     (* name, index *)
+                | Global of  Automaton.loc    (* for cont *)
+                
+type formal =   { width:    Rtl.width
+                ; hint:     string option
+                ; repr:     repr              (* representation *)
+                }
+                
+<<Make sig>>=
+<<type formal>>
+val copyin: G.t -> formal list -> Automaton.spec 
+                -> addr:Rtl.exp -> succ:G.node 
+                -> G.node * Area.t * Register.Set.t (* uses *)
+@             
+
+The [[copyin]] function creates a linear sequence of assign-nodes for
+the {\cfg} and returns a triple: the top-node of the sequence, the
+area used for incoming overflow parameters and (calling-convention)
+locations used by the sequence.  The [[Area.t]] value is used to
+reserve memory in the incoming area, the usages for data-flow
+annotations in the control-flow graph.  The function receives the
+following parameters:
+
+\begin{itemize}
+\item The {\cfg} the node-sequence becomes part of.
+\item The list of formal parameters of the (receiving) procedure at hand.
+\item An [[Automaton.spec]] value, describing the calling convention
+      to use.
+\item The base-address for the area that holds overflowing incoming
+      parameters. This is a run-time expression in the incoming area
+      of the procedure.
+\item The node [[succ]] that succeeds the sequence of assign-nodes. The
+      last node of the sequence becomes the predecessor of [[succ]].
+\end{itemize}
+
+An [[Automaton.t]] value derived from an [[Automaton.spec]] value
+provides a location for every formal parameter that it is given.  By
+pushing the formal parameters of the procedure through the automaton
+the implementation learns where the incoming parameters are and can
+create assignments that transfer them to the registers associated with
+the formal parameters.  Since the same [[Automaton.spec]] is used at a
+call site, together with the matching list of actual parameters,
+caller and callee agree on the locations for parameters.
+
+So far the virtual copy-in node in a {\cfg} has been only explained in
+the context of a procedure that receives parameters.  But is also used
+at the call-site to receive values that are returned by the callee. 
+The mechanism are exactly the same:  values are passed in locations
+private to a calling conventions and must be transferred to the
+receiving variables before they can be used.  Thus the translation of
+a call statement call [[copyin]] to create assignment nodes that
+implement the transfer.  The r\^ole of the formal parameters is
+replaced by the list of variables on the left hand side of a call
+statement that receive the returned values.
+
+% ------------------------------------------------------------------ 
+\subsection{Copy-Out}
+% ------------------------------------------------------------------ 
+
+Passing values to a procedure is dual to receiving them as the callee. 
+The values must be transferred to locations determined by the calling
+convention, before the call itself can be executed.  The translation
+of the call therefore inserts a virtual copy-out node before a
+call-node that takes care of all the details.  A copy-out node is
+really a sequence of assign-node that implements the transfer and is
+implemented by the [[copyout]] function. It receives expression that
+denote the values to pass but otherwise is similar to [[copyin]]:
+
+<<type actual>>=
+type actual     = Rtl.exp               (* value to pass      *)
+                * Rtl.width             (* its width          *)
+                * string option         (* calling conv. hint *)
+@
+
+<<Make sig>>=
+<<type actual>>
+val copyout: G.t -> actual list -> Automaton.spec 
+                 -> addr:Rtl.exp -> succ:G.node 
+                 -> G.node * Area.t * Register.Set.t (* defs *)
+@
+
+The head node of the sequence is returned together with the area for
+overflowing parameter and the locations defined by the sequence. 
+
+\begin{itemize}
+\item The {\cfg}.
+\item The list of actual parameters, i.e.~expressions.
+\item The automaton for the calling convention.
+\item The base address for the overflow area.
+\item The node succeeding the sequence.
+\end{itemize}
+
+Like the virtual copy-in is used to receive parameters returned by a
+callee, copy-out not only passes values to procedures (or
+continuations) but also returns values.  Note that in the case of
+continuations and tail-calls \emph{outgoing} overflow parameters are
+passed in the \emph{incoming} area of an activations.  Refer to
+section \module{stack} for an overview.
+
+The nodes of a {\cfg} are subject to liveness analysis to find the
+lifespan of variables (c.f.~\module{life}).  The liveness analysis
+usually determines from the {\rtl}s inside {\cfg} node which variables
+are read and written and deduces their liveness.  This creates a
+problem in the case of copy-in and -out nodes, as in the typical
+example of a call-statement.  It is translated into a copy-out node
+that transfers value into locations determined by a calling convention
+and a subsequent call-node.  The {\rtl} as part of the call node does
+not reveal that it uses registers defined by [[copyout]] for parameter
+passing.  The liveness analysis would therefore falsely conclude that
+these registers are dead.  To prevent this a dataflow-node must be
+inserted to inform the liveness analysis that the definitions are
+indeed used.  Figure \ref{fig:copyinout:call} show the principle
+translation of a call:  copy-out node, followed by the call node,
+followed by a copy-in node.  A data-flow node is inserted between the
+call and the copy-in node to annotate facts about the data-flow that
+can not be deduced from the nodes.  It \emph{uses} the locations
+defined by the copy-out node and \emph{defines} the locations used by
+copy-in node. 
+
+
+\begin{figure}
+\begin{quote}\small
+\begin{verbatim}
+
+            /   |
+            |   o  r0 = x  
+ copy-out:  |   |                      
+ defs r0,r1 |   o  r1 = y 
+            \   |
+             ------
+            | call | x = f(x,y) call: kills y, ... 
+           ///-----
+          ///   |
+         ///    o               data-flow: uses r0, r1; defs x 
+ continuations  |
+                o  x = r0       copy-in:   uses r0
+                |
+                        
+\end{verbatim}
+\end{quote}
+\caption{\label{fig:copyinout:call} Principle translation of a call
+statement. A data-flow node expresses inter-procedural data-flow.}
+\end{figure}
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+<<copyinout.ml>>=
+module Make (G: Cfg3.S) = struct
+    <<type formal>>
+    <<type actual>>
+    <<copyin>>
+    <<copyout>>
+end
+@
+
+The [[copyin]] function creates an assign-node for every formal
+parameter in the [[assign]] function and chains them together.  The
+top of this chain is returned together with the area required to hold
+incoming overflow parameters.
+
+<<copyin>>=
+let copyin cfg formals spec ~addr ~succ =
+    let a       = Automaton.mk spec addr in  (* a is mutable *)
+    let assign (succ,uses) formal = 
+        let w   = formal.width in
+        let src = Automaton.ty a formal.width formal.hint in
+        let exp = Automaton.fetch src w in
+        let rtl = match formal.repr with
+                  | Local (name,index)-> Rtl.store (Rtl.var name index w) exp w 
+                  | Global loc        -> Automaton.store loc exp w in
+        let node = G.gm_assign cfg rtl succ in
+        let uses = Register.Set.union uses (G.uses node) in
+            (node,uses) in
+    let top,uses = List.fold_left assign (succ, Register.Set.empty) formals in
+    let area     = Automaton.freeze a in
+        (top, area, uses)
+@             
+
+<<copyout>>=
+let copyout cfg actuals spec ~addr ~succ = 
+    let a       = Automaton.mk spec addr in (* a is mutable *)
+    let assign (succ,defs) (exp,width,hint) =
+        let dst  = Automaton.ty a width hint in
+        let rtl  = Automaton.store dst exp width in
+        let node = G.gm_assign cfg rtl succ in
+        let defs = Register.Set.union defs (G.defs node) in
+            (node,defs) in
+    let top,defs = List.fold_left assign (succ, Register.Set.empty) actuals in
+    let area    = Automaton.freeze a in
+        (top, area, defs)
+@

@@ -37,6 +37,8 @@ module Make
     (Asm:   Asm2.S with type instruction = G.t
                    with type init        = unit) = 
 struct
+    module IO = Copyinout.Make(G)
+
     <<Make expressions>>
     <<Make constant evaluation>>
     <<Make auxilliaries>>
@@ -156,12 +158,16 @@ and variable env target hint x =
     | F.Label(F.Data  ) -> Rtl.link x (width t)
     | F.Import(None)    -> Rtl.link x (width t)
     | F.Import(Some n)  -> Rtl.link n (width t)
-    | F.Continuation    -> Impossible.impossible "Ast3ir.Make.variable cont"
-    | F.Label(F.Stack(Some loc)) -> Rtl.fetch loc (width t)
+    | F.Continuation          -> Impossible.impossible "Ast3ir.Make.variable cont"
     | F.Label(F.Stack(None))  -> Impossible.impossible "Ast3ir.Make.variable"
+    | F.Label(F.Stack(Some loc)) ->
+        let w    = width t                                   in 
+        let agg  = target.Target.byteorder                   in
+        let cell = Rtl.cell Rtl.none default_space agg w loc in
+            Rtl.fetch cell (width t)
 
     
-    | F.Register({F.loc=Some l}) -> Alloc.Reg.fetch l (width t)
+    | F.Register({F.loc=Some l}) -> Automaton.fetch l (width t)
     | F.Register({F.index=i;F.loc=None}) ->
         (* local register in memory, ignoring hint *)
         if F.is_localv x env then
@@ -263,7 +269,7 @@ let rec assign env target lhs exp = match lhs with
         let (_,(denot,t)) = F.findv x env in
         let w = width t                   in
             ( match denot with
-            | F.Register({F.loc=Some l}) -> Alloc.Reg.store l exp w
+            | F.Register({F.loc=Some l}) -> Automaton.store l exp w
             | F.Register({F.index=i;F.loc=None}) ->
                 if F.is_localv x env then
                     Rtl.store (Rtl.var x i w) exp w
@@ -301,27 +307,31 @@ let actual env target (hint, e) =
     passing. --CL
 \end{quote} 
 
-<<Make formals and actuals (disabled)>>=
+<<Make formals and actuals>>=
 let formal env (khint, n) = (* for continuations *)
     ( match snd (F.findv n env) with 
     | (F.Register {F.index=i;F.loc=None},ty) when F.is_localv n env  -> 
-        { G.repr  = G.Local (n)
-        ; G.width = width ty
-        ; G.hint  = khint  
+        { IO.repr  = IO.Local (n,i)
+        ; IO.width = width ty
+        ; IO.hint  = khint  
         } 
     | (F.Register {F.loc=Some l},ty) -> 
-        { G.repr  = G.Global (l)
-        ; G.width = width ty
-        ; G.hint  = khint  
+        { IO.repr  = IO.Global (l)
+        ; IO.width = width ty
+        ; IO.hint  = khint  
         } 
     | _ -> assert false
     )
 
-let procformal env (hint, inv, ty, name) = (* where goes the invariant??*)
-    { G.repr  = G.Local(name)
-    ; G.width = astwidth env ty
-    ; G.hint  = hint
-    }  
+let procformal env (hint, inv, ty, name) = 
+    ( match snd (F.findv name env) with 
+    | (F.Register {F.index=i;F.loc=None},ty) -> 
+        { IO.repr  = IO.Local (name,i)
+        ; IO.width = width ty
+        ; IO.hint  = hint  
+        } 
+    | _ -> assert false
+    )
 @
     
 
@@ -331,7 +341,7 @@ let procformal env (hint, inv, ty, name) = (* where goes the invariant??*)
 
 The global registers of a {\PAL} program are assigned to hardware
 register or memory locations using a target specific automaton.  Each
-assignment results in an abstract [[Alloc.Reg.loc]] value that is
+assignment results in an abstract [[Automaton.loc]] value that is
 entered under the name of the register to a map.
  
 The [[globals]] function pushes all global registers through a target
@@ -341,7 +351,7 @@ environment plus the area of memory that hold global registers.
 
 <<Make global registers>>=
 let globals env target (base:Rtl.exp) names =
-    let t = Alloc.Reg.mk target.Target.globals base in
+    let t = Automaton.mk target.Target.globals base in
     let hint = function
         | F.RReg x -> Some x
         | _        -> None
@@ -350,7 +360,7 @@ let globals env target (base:Rtl.exp) names =
         try 
             ( match F.findv n env with
             | (rgn,(F.Register(reg),ty)) ->
-                let loc   = Alloc.Reg.ty t (width ty) (hint reg.F.rhint) in
+                let loc   = Automaton.ty t (width ty) (hint reg.F.rhint) in
                 let entry = ( rgn
                             , (F.Register({reg with F.loc = Some loc}),ty)
                             ) in F.rebindv n entry env
@@ -359,7 +369,7 @@ let globals env target (base:Rtl.exp) names =
         with Error.ErrorExn msg -> Impossible.impossible msg
     in
     let env = List.fold_left assign env names in
-        env, Alloc.Reg.freeze t    
+        env, Automaton.freeze t    
 @
 
 
@@ -375,9 +385,9 @@ type state =
     ; node:         G.node
     ; outbase:      Rtl.exp
     ; inbase:       Rtl.exp
-    ; stackdata:    Alloc.area
-    ; outgoing:     Alloc.area list
-    ; incoming:     Alloc.area list
+    ; priv:         Area.builder
+    ; outgoing:     Area.t list
+    ; incoming:     Area.t list
     }
 
 let rec stmt s state = match s with
@@ -412,7 +422,8 @@ and ifStmt state (e,ifso,ifnot) =
     let left  = foldr body ifso  state  in
     let right = foldr body ifnot left  in
     let exp   = expr state.env state.target e in
-    let rtl   = state.target.Target.mkBranch exp in
+    let label = Rtl.link "label" state.target.Target.pointersize in
+    let rtl   = state.target.Target.branch.Target.embed (exp,label)  in
         { right with node = 
           G.gm_branch state.cfg rtl left.node right.node
         }
@@ -432,71 +443,97 @@ and assignStmt state (lhs,rhs) =
              
 and gotoStmt state (e,labels) =
     let exp   = expr state.env state.target e  in
-    let rtl   = state.target.Target.mkGoto exp               in
+    let rtl   = state.target.Target.goto.Target.embed exp    in
     let nodes = List.map (G.lookup state.cfg) labels         in
         {state with node = G.gm_goto state.cfg rtl nodes}
+@
+        
+The overflowing outgoing parameters passed by a tail-call go into the
+\emph{incoming} area of the current activation, but the \emph{copyout}
+mechanism is used. 
 
-and jumpStmt state (cconv,e,args,labels) = assert false
-(*
+<<Make statements>>=
+and jumpStmt state (cconv,e,args,labels) = 
     let exp     = expr state.env state.target e    in
     let cc      = state.target.Target.cc (Aux.Option.get default_cc cconv) in
-    let atm     = Alloc.Reg.mk cc.Target.proc state.outbase     in
-    let rtl     = state.target.Target.mkJump exp                 in
-    let args    = List.map 
-                        (actual state.env state.target) args in
+    let args    = List.map (actual state.env state.target) args in
     let nodes   = List.map (G.lookup state.cfg) labels           in
-    let rtl     = state.target.Target.mkJump exp                 in
+    let rtl     = state.target.Target.jump.Target.embed exp      in
     let jmp     = G.gm_jump state.cfg rtl nodes                  in
         if args = [] then (* no copyout nodes *)
             { state with node = jmp }
         else
-            let node, atm =  G.gm_copyo state.cfg args atm jmp in
+            let node,area,defs = IO.copyout state.cfg args cc.Target.proc 
+                                       state.inbase jmp in
             { state with
                 node     = node
-            ;   outgoing = Alloc.Reg.freeze atm :: state.outgoing
+            ;   outgoing = area :: state.incoming
             }  
-*)
 @
 
-The copy-out code must honor the hints attached to the actual
-parameters, the copy-in code the hints on the l-lvalues.  The
-[[formal]] function translate these into a format suitable for the
-automaton that guides the parameter passing.
+\begin{figure}
+\begin{quote}\small
+\begin{verbatim}
+
+            /   |
+            |   o  r0 = x  
+ copy-out:  |   |                      
+ defs r0,r1 |   o  r1 = y 
+            \   |
+             ------
+            | call | x = f(x,y) call: kills y, ... 
+           ///-----
+          ///   |
+         ///    o               data-flow: uses r0, r1; defs x 
+ continuations  |
+                o  x = r0       copy-in:   uses r0
+                |
+                        
+\end{verbatim}
+\end{quote}
+\caption{\label{fig:ast3ir:call} Principle translation of a call
+statement. A data-flow node expresses inter-procedural data-flow.}
+\end{figure}
 
 <<Make statements>>=
-and callStmt state (lhs,cconv, e, args, targets, conts) = assert false
-(*
+and callStmt state (lhs,cconv, e, args, targets, conts) = 
     let rec lvalue = function
         | A.LValueAt(x,_) -> lvalue x
         | A.Var x         -> formal state.env x 
         | A.Mem _         -> assert false                        in
     let exp     = expr state.env state.target e    in
     let cc      = state.target.Target.cc (Aux.Option.get default_cc cconv) in
-    let atmo    = Alloc.Reg.mk cc.Target.proc state.outbase   in
-    let atmi    = Alloc.Reg.mk cc.Target.ret  state.outbase   in
-    let rtl     = state.target.Target.mkCall exp                 in
-    let args    = List.map 
-                  (actual state.env state.target) args in
+    let rtl     = state.target.Target.call.Target.embed exp   in
+    let args    = List.map (actual state.env state.target) args  in
     let nodes   = List.map (G.lookup state.cfg) targets          in
     let conts   = continuations conts state.cfg                  in
-    let rtl     = state.target.Target.mkCall exp                 in
+    let rtl     = state.target.Target.call.Target.embed exp      in
     (* linking nodes from back to front: copyin<-call<-copyout *) 
-    let copyi,atmi = G.gm_copyi state.cfg 
-                        (List.map lvalue lhs) atmi state.node    in
-    let call       = G.gm_call state.cfg rtl conts copyi in
-    let copyo,atmo = G.gm_copyo state.cfg args atmo call in
+    let copyi,areai,uses = IO.copyin state.cfg (List.map lvalue lhs) 
+                      cc.Target.ret state.outbase  state.node  in
+    let call        = G.gm_call  state.cfg rtl conts copyi in
+    let copyo,areao,defs = IO.copyout state.cfg args 
+                      cc.Target.proc state.outbase call in
         { state with
             node     = copyo
-        ;   outgoing = Alloc.Reg.freeze atmo :: state.outgoing
-        ;   incoming = Alloc.Reg.freeze atmi :: state.incoming
+        ;   outgoing = areao :: state.outgoing
+        ;   incoming = areai :: state.incoming
         }  
-*)
+@
 
-and returnStmt state (cconv, kont, args) = assert false
-(*
+A procedure returns value in the \emph{incoming} area of its
+activation but uses the \emph{copy-out} method.  Don't get confused
+and refer to the big picture in \module{stack}. 
+
+\begin{quote}\it
+    Does the {\rtl} used for the return depend on $(x,y)$. I believe
+    so and this means the [[Target]] interface should be changed. --CL
+\end{quote}
+
+<<Make statements>>=
+and returnStmt state (cconv, kont, args) = 
     let const e   = Bits.to_int (compile_const state.env state.target e)     in
     let cc        = state.target.Target.cc (Aux.Option.get default_cc cconv) in
-    let atm       = Alloc.Reg.mk cc.Target.ret state.inbase                 in
     let (x,y)     = match kont with
                     | None       -> (0,0) (* default *)
                     | Some (x,y) -> (const x, const y) in
@@ -504,42 +541,56 @@ and returnStmt state (cconv, kont, args) = assert false
     let args      = List.map
                     (actual state.env state.target) args       in
     let ret       = G.gm_return state.cfg rtl (x, y)   in
-    let copyo,atm = G.gm_copyo state.cfg args atm ret                        in
+    let copy,area,defs = IO.copyout 
+                    state.cfg args cc.Target.ret state.inbase ret in
         { state with
             node     = ret
-        ;   outgoing = Alloc.Reg.freeze atm :: state.outgoing
+        ;   incoming = area :: state.incoming
         }
-*)
+@
 
-and contStmt state (label,args)  = assert false
-(*
-    let cc        = state.target.Target.cc default_cc               in
+A continuation receives its parameters in the \emph{incoming} area of
+its activation.
+
+<<Make statements>>=
+and contStmt state (label,args)  = 
+    let cc        = state.target.Target.cc default_cc              in
     let args      = List.map (formal state.env) args in
-    let atm       = Alloc.Reg.mk cc.Target.cont state.inbase       in
-    let copyi,atm = G.gm_copyi state.cfg args atm state.node        in
-    let _         = G.set_label state.cfg label copyi               in
+    let atm       = Automaton.mk cc.Target.cont state.inbase       in
+    let copy,area,uses = IO.copyin state.cfg args 
+                    cc.Target.cont state.inbase state.node in
+    let _         = G.set_label state.cfg label copy               in
         { state with
-            node     = copyi
-        ;   incoming = Alloc.Reg.freeze atm :: state.incoming
+            node     = copy
+        ;   incoming = area :: state.incoming
         }
-*)
+@
 
-and cutStmt state (e, args, conts) = assert false
-(*
+\begin{quote}\it
+    The implementation of cutto currently lacks all details to find the
+    activation for the continuation and thus the \emph{incoming} area
+    in that activations. This is where the [[cut to]] statement puts
+    the \emph{outgoing} overflow parameters. Some abstraction for a
+    continuation's runt-time representation, similar to
+    [[Automaton.loc]] might be appropriate. --CL
+\end{quote}
+
+<<Make statements>>=
+and cutStmt state (e, args, conts) = 
     let cc        = state.target.Target.cc default_cc                  in
     let args      = List.map 
                     (actual state.env state.target) args in
-    let atm       = Alloc.Reg.mk cc.Target.cont state.outbase         in
     let exp       = expr state.env state.target e        in
-    let rtl       = state.target.Target.mkCutto exp                    in
+    let rtl       = state.target.Target.cutto.Target.embed exp (*XXX*) in
     let conts     = continuations conts state.cfg                      in
     let cut       = G.gm_cutto state.cfg rtl conts                     in
-    let copyo,atm = G.gm_copyo state.cfg args atm cut                  in
+    let inbase    = Rtl.link "inbase for cont" 
+                    state.target.Target.pointersize (*XXX*) in
+    let copy,area,defs = IO.copyout state.cfg args cc.Target.cont inbase cut  in
         { state with
             node     = cut
-        ;   incoming = Alloc.Reg.freeze atm :: state.outgoing
+        ;   incoming = area :: state.outgoing
         }
-*)
 
 and primStmt      state x  = Impossible.unimp "primitive"
 and spanStmt      state x  = Impossible.unimp "span"
@@ -550,44 +601,43 @@ and switchStmt    state x  = Impossible.unimp "switch"
 \subsection{Procedure Translation}
 % ------------------------------------------------------------------ 
 
-(* where to invoke 
-        - code expansion 
-        - liveness analysis 
-        - register allocation ?
-*)
+\begin{quote}\it
+    Todo: callee saved registers, data-flow-nodes. --CL
+\end{quote}
 
 <<Make procedure>>=
-let proc env target (*props*) asm (cconv,name,args,bdy) = assert false
-(*
-    let cfg            = G.mk ()   in 
-    let sdbase         = Rtl.link "stack data" target.Target.pointersize in
-    let env, stackdata = StackData.proc env target sdbase bdy in
+let proc env target (*props*) asm (cconv,name,args,bdy) = 
+    let cfg         = G.mk ()   in 
+    let priv        = Area.mk (Rtl.link "private" target.Target.pointersize) in
+    let env, priv   = StackData.proc env target priv bdy in
     let state = 
-        { env       = env
-        ; target    = target
-        ; cfg       = cfg
-        ; node      = G.exit cfg
-        ; stackdata = stackdata
-        ; incoming  = []    
-        ; outgoing  = []
+        { env       = env        (* fat environment *)
+        ; target    = target     (* current target  *)
+        ; cfg       = cfg        (* cfg we are building *)
+        ; node      = G.exit cfg (* what follows current element in cfg *)
+        ; priv      = priv       (* private memory area (builder)       *)
+        ; incoming  = []         (* overlapping areas in incoming area *)
+        ; outgoing  = []         (* overlapping areas in outgoing area *)
         ; inbase    = Rtl.link "inbase" target.Target.pointersize (*XXX*)
         ; outbase   = Rtl.link "outbase" target.Target.pointersize (*XXX*)
         } in  
     let state = foldr body bdy state in
     let cc    = state.target.Target.cc (Aux.Option.get default_cc cconv) in
-    let atmi  = Alloc.Reg.mk cc.Target.proc  state.outbase   in
+    let atmi  = Automaton.mk cc.Target.proc  state.outbase   in
     let args  = List.map (procformal state.env) args in
-    let copyi,atmi = G.gm_copyi state.cfg args atmi state.node    in
+    let copy,area,uses = IO.copyin state.cfg args 
+                    cc.Target.proc state.inbase state.node    in
     let state = 
         { state with    
-          node     = copyi
-        ; incoming = Alloc.Reg.freeze atmi :: state.incoming
+          node     = copy
+        ; incoming = area :: state.incoming
         } in
     let _     = G.gm_redirect_all (G.entry cfg) (G.exit cfg) state.node in
     (* what to do with all the areas for stack data, parameter passing?
-    *)
+     * These will be attached to the instruction but the interface 
+     * for Asm has to change first.
+     *)
         asm ++ Asm.instr cfg
-*)
 @
         
    
@@ -671,13 +721,13 @@ module StackData = struct
 
     type state = 
         { env:    F.env
-        ; mem:    Alloc.Mem.t
+        ; mem:    Area.builder
         ; target: Target.t
         }
 
     let stackdatum state = function
         | A.Label(l) -> 
-            let loc = Alloc.Mem.location state.mem in
+            let loc = Area.location state.mem in
                 ( match F.findv l state.env with
                 | (r,(F.Label(F.Stack(None)),t)) ->
                     { state with env = 
@@ -686,7 +736,7 @@ module StackData = struct
                     }
                 | _ -> assert false
                 )
-        | A.Align n -> { state with mem = Alloc.Mem.align n state.mem} 
+        | A.Align n -> { state with mem = Area.align state.mem n} 
         | A.MemDecl(ty,size,None) ->
             let w = astwidth state.env ty in
             let s = ( match size with 
@@ -696,7 +746,7 @@ module StackData = struct
                         Bits.to_int (compile_const state.env state.target e)
                     ) in
             let n = s * w / state.target.Target.memsize in
-                { state with mem = Alloc.Mem.alloc n state.mem} 
+                { state with mem = Area.alloc state.mem n} 
                     
         | _ -> assert false (* illegal memory initializer *)
 
@@ -721,14 +771,14 @@ module StackData = struct
     and spanStmt      state x  = Impossible.unimp "span"
     and switchStmt    state x  = Impossible.unimp "switch"
 
-    let proc env target base bb =
+    let proc env target priv bb =
         let state = 
             { env    = env
             ; target = target
-            ; mem    = Alloc.Mem.mk base
+            ; mem    = priv
             } in
         let state' = foldl body state bb in 
-                (state.env, Alloc.Mem.freeze state.mem)
+                (state.env, state.mem)
 
 end (* of module StackData *)
 @

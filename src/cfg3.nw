@@ -145,6 +145,7 @@ val exit:       cfg -> node
 val fold_fwd:   cfg -> (node -> 'a -> 'a) -> 'a -> 'a (* must not use gm_xxx *)
 val fold_bwd:   cfg -> (node -> 'a -> 'a) -> 'a -> 'a (* must not use gm_xxx *)
 
+(* switch to open intervall semantics? first:int -> limit:int *)
 (* cfg traversal in linear order, requires (enumerated cfg)  *)
 val first:      cfg -> node (* wrt numbering *)
 val last:       cfg -> node (* wrt numbering *)
@@ -280,11 +281,14 @@ The last node with respect to numbering.
 Applies a function [[f]] to the range of nodes from [[first]] to
 [[last]] and passes an intermediate result.  The nodes are visited in
 increasing order with respect to the numbering.  It is an
-\emph{unchecked} run-time error if [[f]] calls a graph mutator.
+\emph{unchecked} run-time error if [[f]] calls a graph mutator; in
+order for [[f]] being applied to nodes [[first]]] $\leq$ [[last]] must
+hold, otherwise the intermediate result [['a]] is returned.
 
 \item [[scan_bwd: cfg -> first:int -> last:int -> (node -> 'a -> 'a) -> 'a -> 'a]]:
 Dual function to [[scan_fwd]] in the sense that nodes are visited in
-decreasing order, starting with the node numbered [[last]].
+decreasing order, starting with the node numbered [[last]].  Note,
+that [[first]] $\leq$ [[last]] still must hold.
 
 \item [[next: node -> node option]]:
 The node following the argument [[node]] with respect to an

@@ -29,11 +29,11 @@ instructions, the temporary registers must be replaced by hardware
 registers.  The register allocation process re-writes a control flow
 graph such that nodes only use hardware registers.
 
-Liveness analysis provides the accurate lifetime of each registers. 
-The register allocator tries to map temporary registers to hardware
-registers such that their lifetimes do not interfere.  If the number
-of available hardware registers is too small to map temporary
-registers, the register allocator runs out registers.  The solution is
+Liveness analysis provides the accurate lifetime of each register. 
+The register allocator then tries to map temporary registers to
+hardware registers such that their lifetimes do not interfere.  If the
+number of available hardware registers is too small to map temporary
+registers, the register allocator runs out of registers.  The solution is
 to store some temporaries in memory and re-load them to a hardware
 register only when they are needed; this is called \emph{spilling}.
 
@@ -69,7 +69,10 @@ module type Args = sig
         (* create a new tmp for a value currently held by loc *)
     val assign_loc: dst:Rtl.loc    -> src:Register.t -> Rtl.rtl 
     val assign_reg: dst:Register.t -> src:Rtl.loc    -> Rtl.rtl 
-        (* create an assignment rtl that transfers a value from src to dst *)
+        (* create an assignment rtl that transfers a value from src to dst.
+         * The result types must become Rtl.rtl list because they have to
+         * respect the machine invariant.
+        *)
     val mkMem:      Register.t -> Rtl.loc
         (* create a new spill slot for a register. Incomplete - will 
            use Area.builder that maintains stack slots *)
@@ -111,7 +114,7 @@ graph and recognize the opening and closing of intervals where a
 particular variable is live.  Liveness intervals are then joined to
 form \emph{lifetime} values.
 
-Node in a {\cfg} are numbered with integers, called \emph{points}
+Nodes in a {\cfg} are numbered with integers, called \emph{points}
 here.  Points mark the opening and closing of liveness intervals. 
 
 <<linscan.ml>>=
@@ -264,6 +267,12 @@ temporaries.  The [[alloc]] function receives two continuations,
 can be found for a temporary.  Because spilling mutates the structure
 of a {\cfg}, register allocation starts over after spilling.
 
+\begin{quote}\it
+    The [[lifetimes]] function must be supplied with a map that
+    contains all hardware registers that are available for register
+    allocation, not the [[empty]] set. --CL
+\end{quote}
+
 <<linscan>>=
 let rec linscan cfg =
     let _          = LI.liveness cfg     in
@@ -302,7 +311,7 @@ The real work is done in [[replace_tmp]].  For a given temporary
 succeeds, the lifetime of [[tmp]] is joined with the register's
 livetime, and all occurrences of [[tmp]] substituted by [[r]] in the
 entire {\cfg}. However, if no [[r]] can be found, we must spill:
-[[find_spillee] finds a candidate to spill and passes it to the
+[[find_spillee]] finds a candidate to spill and passes it to the
 [[spill]] continuation.
 
 <<replace>>=

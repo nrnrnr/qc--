@@ -209,123 +209,12 @@ let cmangle =
         }
 @
 
-An assembler if functorized over a personality that determines its
-target characteristics and provides a name mangler. The interaction
-between the various module types in the following code is subtle:
-
-\begin{itemize}
-\item [[Graph0]] implements [[Agraph.S]], the abstract flow graph
-      interface, plus some extra functions [[ginit]] and [[stmts]] to
-      obtain informations from a constructed flow graph.
-
-\item [[Graph1]] implements [[Agraph.S]] by using another [[Agraph.S]]
-      implementation.  Essentially, all data structures of [[Graph1]]
-      are the ones provided by [[Graph0]].  The difference between
-      [[Graph0]] and [[Graph1]] are dynamic:  a graph built by
-      [[Graph1]] does not include [[CopyIn/Out]] nodes.
-
-\item The interface of [[Graph1]] reveals, that [[Graph0]] and
-      [[Graph1]] share the same data structures.  This makes it
-      possible to call [[Graph0.stmts]] with a graph built by
-      [[Graph1]], to access the extra functionality ([[stmts]],
-      [[ginit]]) provided by [[Graph0]].
-
-\end{itemize}
-
-<<driver.ml>>=
-module DummyTarget = struct
-    let t = Target.dummy
-end
-
-module Graph0   = Cfg.Make(DummyTarget)
-module Graph1   = Lowercopy.Make(Graph0)
-@
-
-The [[Personality]] structure determines the calling convention,
-byteorder and many other aspects of the target architecture.  It also
-defines what is an instruction in our assembler.  An instruction is en
-entire procedure and is represented by an asbtract flow graph. 
-
-<<driver.ml>>=
-module Personality = struct
-    module F = Fenv.Clean
-    module A = Ast
-
-    <<module Personality>>
-end
-
-<<module Personality>>=
-let target          = Target.dummy
-type instr          = Graph1.cfg (* = Graph0.cfg *)
-
-let map             = Mangle.StrMap.empty
-let mangle          = Mangle.make cmangle map
-@
-
-Our assembler creates {\PAL} abstract syntax.  Consequently,
-instructions must be translated to an {\AST}, too.  This is done by
-the [[ext]] function, that translates an instruction to an
-[[Ast.proc]] value.
-
-The body of the procedure can be obtained from the [[Graph0.stmts]]
-function,  that returns a list of (assign-) statements. These
-statements use local variables that need to be declared. Declarations
-are (re-) constructed by scanning the [[scope]] of the procedure for
-register declarations. 
-
-<<module Personality>>=
-let rdecl mangle name ventry dd = match ventry with
-    | (_, (F.Register _ , Types.Bits n)) -> 
-        let r = (A.Variant, None, A.BitsTy n ,mangle name, None)
-        in r::dd
-    | _ -> dd
-@
-
-A procedure can hold data on the local run-time stack.  The usage of
-such [[stackdata]] must be declared.  No!  Even in our translation to
-{\PAL} the stack data lies on the run-time stack and is not represented
-as [[stackdata]].
-
-<<unused>>=
-let sdecl name proc =
-    [ A.Align (proc.F.salign)
-    ; A.Label(mangle (Idgen.id' name))
-    ; A.MemDecl ( A.BitsTy target.Target.memsize
-                , A.FixSize(A.Int(Bits.of_int proc.F.sdata 32, None ))
-                , None
-                )
-    ]
-    
-<<module Personality>>=
-let ext i           = 
-    let (name,proc) = Graph0.init i                           in
-    let scope       = proc.F.scope                            in  
-    let name        = mangle name                             in 
-    let stmts       = Graph0.stmts i mangle                   in
-    let stmts       = List.map (fun s -> A.StmtBody s) stmts  in 
-    let decls       = F.foldv (rdecl mangle) scope []         in
-        ( None
-        , name
-        , []
-        ,     A.DeclBody(A.Registers(decls)) 
-           :: stmts
-        )
-@
-
-<<driver.ml>>=
-module Asm      = Asm2ast.Make(Personality)
-module Ast2IR   = Ast2ir.Make (Graph1) (Asm)
-@
-
-
-
-
 The [[compile]] compiles a source file from {\PAL} to {\PAL}.  The
 [[target]] provided from the command line is currently ignored.  Code
 generation is only performed when the check of the static semantics is
 passed. 
     
-<<driver.ml>>=
+<<driver.ml unused>>=
 let compile target file =
     let ast, map = ast_of file                       in
     let env      = Fenv.Dirty.empty map              in
@@ -391,7 +280,7 @@ let dispatch cmd =
         | Cmdline.Asdl(file)            -> asdl file      ; 0
         | Cmdline.PP(file,width)        -> pp file width  ; 0
         | Cmdline.Check(file)           -> check file
-        | Cmdline.Compile(target,file)  -> compile target file
+    (*  | Cmdline.Compile(target,file)  -> compile target file *)
         )
     with
         | E.ErrorExn(msg)               -> E.errorPrt msg; 1

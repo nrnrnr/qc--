@@ -20,55 +20,47 @@
 % l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
 
 % ------------------------------------------------------------------ 
-\section{Variable Lifetimes}
+\section{Intervals and Sets of Intervals}
 % ------------------------------------------------------------------ 
 
-Liveness analysis determines for every node in a control-flow graph
-the set of life registers.  Register allocation needs a global
-perspective on the liveness of variables in a procedure.  This module
-provides intervals over ordered points to model a region where a
-particular variable is live, and defines the lifetime of a variable to
-be a \emph{disjoint} set of intervals.
+This module implements intervals over abstract points and sets of
+disjoint intervals.  They are used to represent lifetimes of registers
+in the \ref{sec:lifetimes} section.
 
 
 % ------------------------------------------------------------------ 
 \subsection{Intervals}
 % ------------------------------------------------------------------ 
 
-An interval $[x,y)$ over ordered points represents a set of points $\{
-p \mid x \leq p < y \}$.  Non-empty intervals can precede or overlap
-each other; an empty interval never overlaps or precedes any other. 
-The implementation of [[mk]] $x$ $y$ returns an [[empty]] value in any
-of the following cases:
+An interval $[x,y)$ over ordered points represents a half-open
+interval of points:  $\{ p \mid x \leq p < y \}$.  Half-open intervals
+have the nice property $[x,y) \cup [y,z) = [x,z)$.  Non-empty
+intervals can precede or overlap each other; an empty interval never
+overlaps or precedes any other.  The set of ordered elements contains
+a unique element \mathit{zero}; using it in any interval is an
+\emph{unchecked} run-time error.
 
-\begin{enumerate}
-\item $x > y$
-\item $x \leq \mathit{zero}$
-\item $y \leq \mathit{zero}$
-\end{enumerate}
-@
+An interval $[x,y)$ is created by the constructor function [[mk]] $x$
+$y$; the interval is empty, if $x > y$.  If one interval precedes
+another, it clearly starts and ends before the other.  However, if two
+intervals overlap, this does not mean that they have the same starting
+and end point.  The [[starts_before]] and [[ends_after]] function
+provide another way of comparing two intervals:  an interval
+[[starts_before]] of another, if its starting point is smaller.  An
+interval [[end_after]] another, if its ending point is greater than
+the one of the other.  This is formalized in the algebraic laws below. 
+Unlike in the implementation, [[mk]] never creates an [[empty]] value.
 
-If one interval precedes another, it clearly starts and ends before
-the other.  However, if two intervals overlap, this does not mean that
-they have the same starting and end point.  The [[ahead]] and [[behind]]
-function provide another way of comparing two intervals:  an interval
-is [[ahead]] of another, if its starting point is smaller. An interval
-is [[behind]] another, if its ending point is greater than the one of
-the other.
+%
+%   Is a half-open interval the right design? If the highest number of
+%   a node in a {\cfg} is $n$, an interval covering it must include
+%   $n+1$. When the point type is abstract, there is no easy way to
+%   obtain such a point. Closed intervals would only rely on points
+%   actually used in a {\cfg}. --CL
+%
+%   NR things this is the RightThing. --CL
+%
 
-\begin{quote}\it
-    Is a half-open interval the right design? If the highest number of
-    a node in a {\cfg} is $n$, an interval covering it must include
-    $n+1$. When the point type is abstract, there is no easy way to
-    obtain such a point. Closed intervals would only rely on points
-    actually used in a {\acfg}. --CL
-
-    NR things this is the RightThing. --CL
-\end{quote}
-
-The following algebraic laws explain the interaction between the
-different functions. Unlike in the implementation, [[mk]] never
-creates an [[empty]] value.
 
 \begin{quote}\obeylines\obeyspaces\tt 
 precedes empty \_ = false
@@ -82,15 +74,15 @@ overlaps (mk x y) (mk v w) = $\neg$ (precedes (mk x y) (mk v w)
                              $\vee$ precedes (mk v w) (mk x y))
 
 member \_ empty    = false
-member p  (mk x y) = x <= p && p < y 
+member p  (mk x y) = x $\leq$ p < y 
 
 ahead empty  \_                 = false
 behind empty \_                 = false
 ahead (mk x y) empty            = true
 behind (mk x y) empty           = true
 
-ahead  (mk x1 y1) (mk x2 y2)    = x1 < x2 
-behind (mk x1 y1) (mk x2 y2)    = y1 > y2
+starts_before (mk x1 y1) (mk x2 y2)    = x1 < x2 
+ends_after    (mk x1 y1) (mk x2 y2)    = y1 > y2
 \end{quote}
 
 The implementation is a functor [[Make]] that takes the a [[Point]]
@@ -107,24 +99,22 @@ module type S = sig
     (* constructors *)
     val union : t -> t -> t
     (* observers *)
-    val left     : t -> Point.t
-    val right    : t -> Point.t
-    val member   : Point.t -> t -> bool
-    val isempty  : t -> bool
-    val overlaps : t -> t -> bool
-    val precedes : t -> t -> bool
-    val ahead    : t -> t -> bool
-    val behind   : t -> t -> bool
+    val left          : t -> Point.t
+    val right         : t -> Point.t
+    val member        : Point.t -> t -> bool
+    val isempty       : t -> bool
+    val overlaps      : t -> t -> bool
+    val precedes      : t -> t -> bool
+    val starts_before : t -> t -> bool
+    val ends_after    : t -> t -> bool
     module Set : Set.S with type elt = t
-      (* Elements with different left-hand sides are ordered by that
-         left-hand side.  Note the ordering here is *not* the same as
-         the partial order defined by [[precedes]].  *)
+      (* Set implements a total order on intervals that respects
+      start_before but it *not* the same as the partial order defined
+      by precedes *)
 end
 @
 
-
-
-Points must be ordered and in addition provide a single point
+Points must be ordered and in addition provide a unique point
 [[zero]].  This is used to define an empty interval.  This module type
 too is in a named code chunk such that it can be referred to in the
 implementation. 
@@ -137,76 +127,10 @@ module type POINT = sig
 end
 @
 
-% ------------------------------------------------------------------ 
-\subsection{Lifetimes}
-% ------------------------------------------------------------------ 
-
-The lifetime of a variable in a procedure is not continuous, but has
-holes in it. Therefore, the lifetime of a variable is modeled as a set
-of non overlapping (i.e. disjoint) intervals. 
-
-A lieftime is either empty, or created from an interval. The boundig
-box [[bbox]] provides an approcimation of a lifetime by returning the
-smallest interval a lifetime fits in completely. Two lifetimes $x$
-and $y$ can be joined into a new one [[union x y]], if the following
-condition is met: 
-        
-$$[[overlaps (bbox x) y = false]]$$
-
-This guarantees that [[y]] contains a whole big enough to hold the
-entire lifetime of [[x]].  Trying to join overlapping lifetimes leads
-to an checked run-time error. 
-
-\begin{quote}\it
-    I believe that it is sufficient for two lifetimes not to overlap
-    in order to form a meaningful union. This would lead to a
-    symmetrical [[union]] operation. --CL
-\end{quote}
-
-<<module type S of Lifetime>>=
-module type S = sig
-    module Interval : Interval.S
-    type t
-    (* primitives *)
-    val empty: t
-    val mk: Interval.t -> t     (* mk Interval.empty = empty *)
-    (* constructors *)
-    val union: t -> t -> t      (* see text for assertion *)
-    (* observers *)
-    val overlaps: Interval.t -> t -> bool
-    val bbox: t -> Interval.t
-end
-@
-
-The following rules apply; the algebra below assumes that [[mk]] does
-not create an empty lifetime (which is not true for the
-implementation).
-
-\begin{quote}\obeylines\obeyspaces\tt 
-union empty x     = x
-union x empty     = x
-mk (bbox empty)   = empty
-overlaps \_ empty = false
-overlaps i (union x y) = (overlaps i x) $\vee$ (overlaps i y)
-overlaps i (mk j) = Interval.overlaps i j
-bbox (union x y)  = smallest interval containing (bbox x) 
-                    and (bbox y)
-bbox (mk i)       = i
-bbox (empty)      = Interval.empty
-\end{quote}
-
-% ------------------------------------------------------------------ 
-\subsection{Putting Interfaces together}
-% ------------------------------------------------------------------ 
-
 <<interval.mli>>=
 <<module type POINT>>
 <<module type S of Interval>>
 module Make (Point: POINT): (S with module Point = Point)
-
-<<lifetime.mli>>=
-<<module type S of Lifetime>>
-module Make (Interval : Interval.S): (S with module Interval = Interval)
 @
 
 % ------------------------------------------------------------------ 
@@ -259,7 +183,7 @@ let empty     = (Point.zero,Point.zero)
 let isempty t = t = empty  
     
 let mk x y = match x, y with
-    | x, y when Order.gt x y          -> empty
+    | x, y when Order.ge x y          -> empty
     | x, y when Order.le x Point.zero -> empty
     | x, y when Order.le y Point.zero -> empty
     | _                               -> (x,y)
@@ -303,11 +227,11 @@ let union i1 i2 = match i1, i2 with
 @
 
 <<module Interval struct>>=
-let ahead i j = match i, j with
+let starts_before i j = match i, j with
     | i           , j when isempty i -> false
     | i           , j when isempty j -> false
     | (x1,y1 as i), (x2,y2 as j)     -> Order.lt x1 x2 
-let behind i j = match i, j with
+let ends_after i j = match i, j with
     | i           , j when isempty i -> true
     | i           , j when isempty j -> true
     | (x1,y1 as i), (x2,y2 as j)     -> Order.gt y1 y2
@@ -326,6 +250,77 @@ module Set = Set.Make (struct
 end)
 @
 
+
+% ------------------------------------------------------------------ 
+\section{Lifetimes}\label{sec:lifetimes}
+% ------------------------------------------------------------------ 
+
+A lifetime is a set of disjoint intervals.  In the context of the
+{\qcc} compiler a lifetime represents the parts in a linear program
+representation a variable is live.  The fact that a lifetime is a set
+of disjoint intervals means, that a variable can be live in different
+parts of a (linearized) program that are not adjacent to each other.
+
+A lifetime is either empty, or created from an interval.  The bounding
+box [[bbox]] provides an approximation of a lifetime by returning the
+smallest interval a lifetime fits in completely.  Two lifetimes $x$
+and $y$ can be joined into a new one [[union x y]], if the following
+condition is met: 
+        
+$$[[overlaps (bbox x) y = false]]$$
+
+\begin{quote}
+    This condition is currently checked by the [[union]]
+    implementation. However, the underlying implementation only
+    requires [[x]] and [[y]]] to be disjoint. --CL
+\end{quote}
+
+This guarantees that [[y]] contains a whole big enough to hold the
+entire lifetime of [[x]].  Trying to join overlapping lifetimes leads
+to an checked run-time error. 
+
+\begin{quote}\it
+    I believe that it is sufficient for two lifetimes not to overlap
+    in order to form a meaningful union. This would lead to a
+    symmetrical [[union]] operation. --CL
+\end{quote}
+
+<<module type S of Lifetime>>=
+module type S = sig
+    module Interval : Interval.S
+    type t
+    (* primitives *)
+    val empty: t
+    val mk: Interval.t -> t     (* mk Interval.empty = empty *)
+    (* constructors *)
+    val union: t -> t -> t      (* see text for assertion *)
+    (* observers *)
+    val overlaps: Interval.t -> t -> bool
+    val bbox: t -> Interval.t
+end
+@
+
+The following rules apply; the algebra below assumes that [[mk]] does
+not create an empty lifetime (which is not true for the
+implementation).
+
+\begin{quote}\obeylines\obeyspaces\tt 
+union empty x     = x
+union x empty     = x
+mk (bbox empty)   = empty
+overlaps \_ empty = false
+overlaps i (union x y) = (overlaps i x) $\vee$ (overlaps i y)
+overlaps i (mk j) = Interval.overlaps i j
+bbox (union x y)  = smallest interval containing (bbox x) 
+                    and (bbox y)
+bbox (mk i)       = i
+bbox (empty)      = Interval.empty
+\end{quote}
+
+<<lifetime.mli>>=
+<<module type S of Lifetime>>
+module Make (Interval : Interval.S): (S with module Interval = Interval)
+@
 
 % ------------------------------------------------------------------ 
 \subsection{Implementation of Lifetimes}
