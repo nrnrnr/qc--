@@ -125,6 +125,15 @@ function Debug.showblocks(blocks, keys, prefix)
 end
 @ 
 
+<<Lua compiler configuration>>=
+function Debug.showframesize(frame,proc)
+    write(format('function %17s convention %10s framesize %d\n'
+                , Stack.procname(proc)
+                , Stack.ccname(proc)
+                , Block.size(frame)
+                ))
+end
+@
 
 % ------------------------------------------------------------------ 
 \paragraph{Stack Layout for the Dummy Target} 
@@ -434,6 +443,8 @@ function X86.layout["C"](dummy,proc) --- really for a C convention only
     if Debug.stack then
       Debug.showblocks({frame=block}, {'frame'})
     end
+    if Debug.framesize then Debug.showframesize(block,proc) end
+        
     Stack.freeze(proc,block)
     return 1
 end    
@@ -491,6 +502,7 @@ function X86.layout["C--"](dummy,proc)
                                  'youngblocks', 'sp'})
     end
     local block = Block.cat(32, layout)
+    if Debug.framesize then Debug.showframesize(block,proc) end
     Stack.freeze(proc,block)
     return 1
 end    

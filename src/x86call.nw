@@ -78,7 +78,7 @@ Flags are also volatile, except that the direction flag must be set to
 <<x86call.ml>>=
 let volregs = RS.of_list [eax; ecx; edx]
 let nvregs  = RS.of_list [ebx; esi; edi; ebp]
-let allregs = RS.elements (RS.union volregs nvregs)
+let allregs = RS.union volregs nvregs
 @  N.B. We omit all floating-point registers.
 These are all volatile and available for allocation, although
 [[%st(0)]] can used to return a floating-point result.
@@ -208,15 +208,15 @@ X86.cc["C--"].call =
 X86.cc["C--"].cutto = X86.cc["C"].cutto
 @
 
-\paragraph{Automato for calling a garbage collection---\texttt{gc}~convention}
-We want to make the call for the caller as cheap as possible because a
-garbage collection will dominate all efforts by the callee. This means:
-we are not using any register such that the caller is free to use them
-as temporaries.
-
+\paragraph{Automata for calling a garbage
+collection---\texttt{gc}~convention} We want to make the call for the
+caller as cheap as possible because a garbage collection will dominate
+all efforts by the callee. This means: we are not using any register
+such that the caller is free to use them as temporaries. There is one
+exception: we use [[eax]] for return values because the GC routine
+returns a pointer.
 
 <<x86 calling convention automata in Lua>>=
--- CURRENTLY NOT IN EFFECT BECAUSE OVERRIDDEN LATER IN THIS FILE.
 X86.cc["gc"].results = 
   { A.choice { "float" , { A.widen(80)
                          , A.useregs { X86.stack_top_proxy_reg }
@@ -239,6 +239,13 @@ X86.cc["gc"].cutto =
   }
 
 X86.layout["gc"] = X86.layout["C"]
+@
+The code below can be used to override the above defintions when [[gc]]
+is really a synonym for an existing convention.
+<<x86 calling convention automata in Lua>>=
+-- uncomment the next two lines to make "gc" a synonym for "C--"
+-- X86.cc["gc"]                = X86.cc["C"]
+-- X86.layout["gc"]            = X86.layout["C"]
 @
 
 \paragraph{Managing the stack pointer and return address}
@@ -324,16 +331,14 @@ let rtn return_to k n ~ra =
   if k > n then impossf "Return <k/n> has k:%d > n:%d\n" k n
   else return_to ra
 
-let conv ~calleesaves ~jump ~altret name specs ~return_to cut =
+let conv ~preserved ~jump ~altret name specs ~return_to cut =
   <<functions to transform automata>>
   let return k n ~ra =
     if altret then rtn return_to k n ~ra
     else if k = 0 & n = 0 then return_to ra
     else impossf "alternate return not allowed in %s calling convention" name in
-  let nvregs, volregs =
-    if calleesaves then nvregs, volregs
-    else RS.empty, RS.union nvregs volregs in
-
+  let nvregs  = preserved in
+  let volregs = RS.diff allregs preserved in
   { C.name       = name
   ; C.overflow_alloc  = 
       { C.parameter_deallocator = if jump then C.Callee else C.Caller
@@ -374,9 +379,6 @@ convention.
 X86.cc["paranoid C"]        = X86.cc["C"]
 X86.layout["paranoid C"]    = X86.layout["C"]
 
--- uncomment the next two lines to make "gc" a synonym for "C--"
-X86.cc["gc"]                = X86.cc["C--"]
-X86.layout["gc"]            = X86.layout["C--"]
 
 -- layout for "notail" is defined in luacompile.nw (uses the "C" layout)
 X86.cc["notail"]            = X86.cc["C--"]
@@ -389,17 +391,20 @@ A.register_cc(Backend.x86.target,"notail",    X86.cc["notail"])
 A.register_cc(Backend.x86.target,"gc",        X86.cc["gc"])
 @ 
 
-And finally, our lookup function.
+And finally, our lookup function; parameter [[preserved]] takes the list
+of registers preserved accross calls, i.e. non-volatile or callee-saved
+registers.
 <<x86call.ml>>=
 let cconv ~return_to cut ccname stage =
   let f =
     match ccname with
-    | "C--"         -> conv ~jump:true  ~altret:true ~calleesaves:true
-    | "gc"          -> conv ~jump:true  ~altret:true ~calleesaves:true
-    | "lightweight" -> conv ~jump:true  ~altret:true ~calleesaves:true
-    | "notail"      -> conv ~jump:false ~altret:true ~calleesaves:true
-    | "paranoid C"  -> conv ~jump:false ~altret:false ~calleesaves:false
-    | "C"           -> conv ~jump:false ~altret:false ~calleesaves:true
+    | "C--"         -> conv ~jump:true  ~altret:true  ~preserved:nvregs
+    | "lightweight" -> conv ~jump:true  ~altret:true  ~preserved:nvregs
+    | "notail"      -> conv ~jump:false ~altret:true  ~preserved:nvregs
+    | "paranoid C"  -> conv ~jump:false ~altret:false ~preserved:RS.empty
+    | "C"           -> conv ~jump:false ~altret:false ~preserved:nvregs
+    | "gc"          -> conv ~jump:false ~altret:false 
+                            ~preserved:(RS.of_list [ecx;edx;ebx;esi;edi;ebp])
     | _ -> Unsupported.calling_convention ccname
   in f ccname stage ~return_to cut
 @
