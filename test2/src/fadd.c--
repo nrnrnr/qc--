@@ -1,0 +1,22 @@
+target byteorder little;
+bits2 rm "IEEE 754 rounding mode";
+import bits32 printf;
+export main;
+
+section "data" {
+  align 4;
+  x: bits32 {0x40400000}; // 3.0 
+  y: bits32 {0x3e10fcf8}; // 0.14159
+  z: bits32;
+  fmt: bits8[] "%f + %f = %f\n\0";
+}
+  
+
+foreign "C" main () {
+  bits32[z] = %fadd(bits32[x], bits32[y], rm);
+  foreign "C" printf("address" fmt,
+                     "float" %f2f64(bits32[x], rm),
+                     "float" %f2f64(bits32[y], rm),
+                     "float" %f2f64(bits32[z], rm));
+  return ();
+}
