@@ -174,32 +174,11 @@ module type Args = sig
     (* 
      * for spilling
      *)
-    val mkTmp:      Rtl.loc -> Register.t
-        (* create a new tmp for a value currently held by loc *)
-    val spill:      dst:Rtl.loc    -> src:Register.t -> Rtl.rtl list
-    val reload:     dst:Register.t -> src:Rtl.loc    -> Rtl.rtl list
-        (* create an assignment rtl that transfers a value from src to dst.
-         * The result types must become Rtl.rtl list because they have to
-         * respect the machine invariant.
-        *)
     val mkMem:      Register.t -> Rtl.loc
         (* create a new spill slot for a register. Incomplete - will 
-           use Area.builder that maintains stack slots *)
+           use Automaton.t that maintains stack slots *)
 end
 @
-
-\begin{quote}\it
-Below I list some changes in other modules that affect this one.
-However, because JD is working on the project I don't do any changes
-here. --CL
-
-\begin{enumerate}
-\item A [[Target.t]] contains a function to create temporaries.
-\end{enumerate}
-
-\end{quote}
-
-
 
 % ------------------------------------------------------------------ 
 \subsection{Construction of Register Lifetimes}
@@ -629,7 +608,8 @@ When the spillee is used, it is re-loaded into a temporary.
 and spill target cfg spillee mem interval = 
     let first = I.left  interval in
     let last  = I.right interval in 
-        ( G.scan_fwd cfg first last (fun n () -> update interval spillee mem n) ()
+        ( G.scan_fwd cfg first last 
+                (fun n () -> update target interval spillee mem n) ()
         ; linscan cfg target (* start over *)
         )
 @
@@ -663,14 +643,14 @@ spill the [[spillee]] to [[mem]], outgoing edges reload [[mem]] to
 edges for [[node]]. 
 
 <<update>>=
-and upd_incoming interval spillee mem node =
+and upd_incoming target interval spillee mem node =
     let pred  = extern interval (G.pred node) in
-    let spill = A.spill mem spillee          in
+    let spill = target.T.spill target.T.space spillee mem in
         List.iter (fun n -> G.gm_insert_assign_between spill n node) pred
 
-and upd_outgoing interval spillee mem node = 
+and upd_outgoing target interval spillee mem node = 
     let succ    = extern interval (G.succ node) in
-    let reload  = A.reload spillee mem          in
+    let reload  = target.T.reload target.T.space spillee mem          in
         List.iter (fun n -> G.gm_insert_assign_between reload node n) succ
 @
 
@@ -684,20 +664,22 @@ interval must be also updated such that the spillee's value is written
 to and read from [[mem]]. 
     
 <<update>>=
-and update interval spillee mem node = 
-    upd_incoming interval spillee mem node ;    
+and update target interval spillee mem node = 
+    upd_incoming target interval spillee mem node ;    
     let reads, writes = reads_writes (G.rtl node) spillee in
         if reads || writes then 
-            ( let tmp   = A.mkTmp mem in
+            ( let tmp   = target.T.mk_tmp spillee in
               let subst = fun x -> if x = spillee then tmp else x in 
               ( if reads  then 
-                    (G.gm_insert_assign_before (A.reload tmp mem) node)
+                    (G.gm_insert_assign_before 
+                        (target.T.reload target.T.space tmp mem) node)
               ; if writes then 
-                    (G.gm_insert_assign_after  (A.spill  mem tmp) node)
+                    (G.gm_insert_assign_after  
+                        (target.T.spill  target.T.space tmp mem) node)
               ; G.set_rtl node (Rtlutil.Subst.reg subst)
               )
             );
-    upd_outgoing interval spillee mem node       
+    upd_outgoing target interval spillee mem node       
 @
 
 \begin{quote}\it
