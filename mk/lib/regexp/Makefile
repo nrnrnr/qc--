@@ -16,7 +16,7 @@ $(TARG): $(OFILES)
 	$(AR) $(TARG) $(OFILES)
 	$(RANLIB) $(TARG)
 
-$(OFILES): ../../include/regexp.h ../../include/lib9.h
+$(OFILES): ../../include/regexp.h ../../include/lib9.h regcomp.h
 
 clean:
 	rm -f *~
