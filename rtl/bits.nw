@@ -92,15 +92,31 @@ the assumption that the current value fits into that size. Thus,
 \emph{NR finds this definition insufficiently precise.
 It's only used in one place---\module{elab}.  Perhaps we can find a
 better way to express this?}
+
+\begin{quote}\it
+    The name is misleading and [[cast]] might be a better name. The
+    function returns a new [[bits]] value of size [[width]] and raises
+    [[Overflow]] if the given value does not fit in. The problem is,
+    what is the definition of [[fit]] if we consider signed values? This
+    seems to be ill-defined. -- CL
+\end{quote}
+
 <<interface>>=
 val setSize     : bits -> width -> bits
+@
+
+Function [[cast n b]] returns the [[n]] least significant bits of [[b]]
+as a value of width [[n]].
+
+<<interface>>=
+val cast        : int -> bits -> bits
 @
 
 % ------------------------------------------------------------------ 
 \subsubsection{Creation of \texttt{bits} values}
 % ------------------------------------------------------------------ 
 
-A [[bits]] value is usuallu created from a string representation as
+A [[bits]] value is usually created from a string representation as
 part of a {\PAL} source program. The string representation include
 integer, floating point, and character representations:
 
@@ -283,8 +299,10 @@ let check width uint64 =
 	then raise Overflow
     else () (* ok *)
 @
+
 [[setSize]] sets the size of a [[bits]] value and raises [[Overflow]]
 in case the size is too small.
+
 <<bits.ml ((evaluating))>>=
 let setSize (b,w as bits) width =
     if not (fits bits width)
@@ -292,6 +310,16 @@ let setSize (b,w as bits) width =
     else (b,width)
 @
 
+[[cast]] returns the least [[n]] significant bits by simply using [[n]]
+as the width of the returned value. To be really safe we could use a
+mask to zero out the insignificant bits.
+
+<<bits.ml ((evaluating))>>=
+let cast n (b,w) =
+    assert (n <= w && n >= 0);
+    (b, n)
+@    
+    
 % ------------------------------------------------------------------ 
 \subsubsection{Creation of \texttt{bits} values}
 % ------------------------------------------------------------------ 
