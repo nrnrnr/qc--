@@ -4,11 +4,13 @@
 // backups of globals; pointer to this memory should be stored at label
 // "globals_backup"
 // 
-// the runtime system can find the label's address by looking for the value 
-// associated with the span tagged "GC_globals_backup" that encompasses the 
-// "main" procedure
+// the runtime system, for now, should pass into procedure "main" a pointer
+// to a chunk of malloc'd space that is large enough to hold a backup copy
+// of the globals; this pointer is stored at label "globals_backup" internally
+// in the C-- code and is passed to SaveGlobals and RestoreGlobals when
+// appropriate
 //
-/// ../../bin/qc-- -e 'backend=Backend.interp' -c $SELF | ../clients/gc_client - -v > $BASE.cmm.1
+/// ./regr "./qrun-gc $SELF" $REGRFLAGS -out $BASE.cmm.1 -err $BASE.cmm.2
 
 target 
        byteorder   little
@@ -18,7 +20,7 @@ target
 ;
 
 export main;
-import bits32 cmmprint, alloc, gc_helper;
+import bits32 cmmprint32, alloc, gc_helper;
 
 import bits32 SaveGlobals, RestoreGlobals;
 
@@ -65,9 +67,9 @@ section "text" {
     allocate( bits32 ty ) {
       bits32 new;
 
-      // SaveGlobals(bits32[globals_backup]);
+      SaveGlobals(bits32[globals_backup]);
       new = foreign "C" alloc(ty);
-      // RestoreGlobals(bits32[globals_backup]);
+      RestoreGlobals(bits32[globals_backup]);
 
       return( new );
     }
@@ -75,9 +77,9 @@ section "text" {
 
   span GC GC_gc {
     gc() {
-      // SaveGlobals(bits32[globals_backup]);
+      SaveGlobals(bits32[globals_backup]);
       foreign "C" gc_helper();
-      // RestoreGlobals(bits32[globals_backup]);
+      RestoreGlobals(bits32[globals_backup]);
 
       return;
     }
@@ -143,9 +145,9 @@ section "text" {
       bits32 v;
       v = bits32[s];
 
-      // SaveGlobals(bits32[globals_backup]);
-      foreign "C" cmmprint(v);
-      // RestoreGlobals(bits32[globals_backup]);
+      SaveGlobals(bits32[globals_backup]);
+      foreign "C" cmmprint32(v);
+      RestoreGlobals(bits32[globals_backup]);
 
       return;
     }
@@ -173,6 +175,9 @@ section "text" {
     span GC GC_main {
       main(bits32 glob_back) {
         bits32 list1, list2;
+
+        // store globals_backup ptr away
+        bits32[globals_backup] = glob_back;
 
         // BEGIN BODY OF TEST PROGRAM
 

@@ -24,7 +24,10 @@ INTERP   = evaluating
 DEPEND   = $CC -MM $INCLUDES
 
 all:V:     $NAME
-update:V:  $BINDIR/$NAME
+all.opt:V: all
+
+update:V:     $BINDIR/$NAME
+update.opt:V: update
 
 depend:V:  $DEPEND
 
@@ -35,6 +38,8 @@ test:VQ:
 
 clean:V:
            rm -f *.o clients/*.o
+
+clean.opt:V: clean
 
 clobber:V: clean
 	       rm -f *.blg *.log *.dvi *.inc *.toc *.aux 
@@ -150,10 +155,10 @@ clients/gc_client: $COREOBJS clients/gc.o
 ###
 ### alternately built binaries (for sparc, lcc, etc.)
 
-lcc-interp:V: clean
+lcc-interp:V: clobber
     mk code $MKFLAGS
-    mk $NAME CC=lcc CFLAGS='-g -A -A -b' $MKFLAGS
-    mk clients/gc_client CC=lcc CFLAGS='-g -A -A -b' $MKFLAGS
+    mk $NAME CC=lcc CFLAGS='-g -A -A -b $INCLUDES' $MKFLAGS
+    mk clients/gc_client CC=lcc CFLAGS='-g -A -A -b $INCLUDES' $MKFLAGS
 
 sparc-interp:V:
     mk $NAME $MKFLAGS MACHINE=sparc TOOLS=/home/lair/olinsky/bin/sparc/tools

@@ -1,7 +1,7 @@
 -- [cut.lua] Proc. [main] should print out the numbers 0-10 and then 0
 -- Tests: procedure calls, cutting to a continuation
 --
---- ./regr "../interp $SELF" $REGRFLAGS -out $BASE.1 -err $BASE.2
+--- ./regr "../../bin/qc--interp $SELF" $REGRFLAGS -out $BASE.1 -err $BASE.2
 
 CMM.exports({ "main" })
 CMM.imports({ "cmmprint16" })

@@ -100,12 +100,14 @@ Its implementation is split across files [[client.h]] and [[client.c]].
 #define _CLIENT_H
 
 #include <stdarg.h>
+#include <stdio.h>
 #include "runtime.h"
 #include "types.h"
 
 <<constant definitions>>
 <<type definitions>>
 
+<<function prototypes>>
 #endif /* _CLIENT_H */
 @ 
 
@@ -114,6 +116,7 @@ Its implementation is split across files [[client.h]] and [[client.c]].
 
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include "disasm.h"
 #include "ccall.h"
 
@@ -122,6 +125,8 @@ Its implementation is split across files [[client.h]] and [[client.c]].
 <<interpreter interaction functions>>
 <<utility functions>>
 <<application driver>>
+
+<<linker>>
 @
 
 % ----------------------------------------------------------------------------
@@ -318,7 +323,8 @@ Note that if any source files are read in using command line arguments, the inte
 
 <<process command line arguments>>=
   {
-    int i, files_loaded = 0;
+    int   i, files_loaded = 0;
+    char *link = NULL;
     for (i = 1; i < argc; i++) {
       if        (strcmp(argv[i], "--help") == 0) {
         printf("Usage: %s {[--help] | [-] | [<filename>]*}\n", argv[0]);
@@ -326,19 +332,40 @@ Note that if any source files are read in using command line arguments, the inte
         printf("Enters interactive mode unless command line arguments are "
                "given.\n\n");
 
-        printf("  --help       Display this help screen\n");
-        printf("  -            Read source file from stdin\n");
-        printf("  -v           Turns verbosity ON\n");
-        printf("  <filename>*  Read in source files named\n");
+        printf("  --help        Display this help screen\n");
+        printf("  -             Read source file from stdin\n");
+        printf("  -l <filename> Link specified files into <filename>\n");
+        printf("  -v            Turns verbosity ON\n");
+        printf("  <filename>*   Read in source files named\n");
 
         break;
+      } else if (strcmp(argv[i], "-l") == 0) {
+        if (files_loaded) {
+          fprintf(stderr, "error: -l must be used as first argument\n");
+          exit(1);
+        } else if (i + 1 >= argc) {
+          fprintf(stderr, "error: must specify output linked file\n");
+          exit(1);
+        }
+        link = argv[i + 1];
       } else if (strcmp(argv[i], "-v") == 0) {
         verbosity = 1;
       } else if (strcmp(argv[i], "-") == 0) {
-        files_loaded = !load_assembly_unit(NULL, SRC_STDIN) || files_loaded;
+        if (link == NULL) {
+          files_loaded = !load_assembly_unit(NULL, SRC_STDIN) || files_loaded;
+        } else {
+          fprintf(stderr, "error: linking from stdin not supported\n");
+          exit(1);
+        }
       } else {
-        /* assume we're given a filename */
-        files_loaded = !load_assembly_unit(argv[i], SRC_FILE) || files_loaded;
+        if (link == NULL) {
+          /* assume we're given a filename */
+          files_loaded = !load_assembly_unit(argv[i],SRC_FILE) || files_loaded;
+		} else {
+          /* link the files */
+          assert(argv[i] != NULL);
+          add_linked_file(link, argv[i]);
+        }
       }
     }
 
@@ -351,6 +378,9 @@ Note that if any source files are read in using command line arguments, the inte
         int *arg_int_p = NULL;
         <<run code at address [[loc]] with possible arg [[arg_int_p]]>>
       }
+    } else {
+      /* close off output */
+      add_linked_file(link, NULL);
     }
   }
 @ 
@@ -504,3 +534,61 @@ Creating and running a {\PAL} thread with a continuation to execute the code at 
 <<run continuation in [[tcb]]>>=
   tcb->cont = Cmm_RunThread(tcb->cont);
 @
+
+% ----------------------------------------------------------------------------
+\subsection{Linking}
+% ----------------------------------------------------------------------------
+
+Linking multiple Lua files is not too difficult.  Perhaps it shouldn't take 
+place here in [[client.nw]], but here it is for now.
+
+<<function prototypes>>=
+void add_linked_file(char *out_file, char *in_file);
+@ 
+
+<<linker>>=
+void add_linked_file(char *out_file, char *in_file) {
+  static FILE *output_stream = NULL;
+  
+  FILE *input_stream;
+  char  c;
+
+  /* close off I/O */
+  if (in_file == NULL) {
+    if (output_stream == NULL) return;
+    fflush(output_stream);
+    fclose(output_stream);
+
+    { int rc = chmod(out_file, S_IXUSR | S_IRUSR | S_IWUSR |
+                               S_IXGRP | S_IRGRP |
+                               S_IXOTH | S_IROTH            );
+      if (rc != 0) {
+        fprintf(stderr, "error: output file error\n");
+        exit(1);
+      }
+    }
+    return;
+  }
+
+  /* initialize output FILE descriptor */
+  if (output_stream == NULL) {
+    output_stream = fopen(out_file, "w");
+
+    fprintf(output_stream, "#!/usr/bin/env qc--interp");
+    fprintf(output_stream, "\n");
+  }
+
+  /* open input file */
+  input_stream = fopen(in_file, "r");
+  for (;;) {
+    c = getc(input_stream);
+    if (c == EOF) break;
+    putc(c, output_stream);
+  }
+  fclose(input_stream);
+
+  fprintf(output_stream, "\n");
+  fprintf(output_stream, "CMM.new_assembly_unit()");
+  fprintf(output_stream, "\n");
+}
+@ 

@@ -284,6 +284,14 @@ emit Lua code, and runs the Lua code through the interpreter.
 
 <<qrun>>=
 #!/bin/sh
-../../bin/qc-- -e 'backend=Backend.interp' -c $@ | ../interp -
+rm -f .temp.lua.s
+../../bin/qc-- backend=Backend.interp -o .temp.lua.s -S $@
+(cat .temp.lua.s | ../../bin/qc--interp - ; rm -f .temp.lua.s)
 @ 
 
+<<qrun-gc>>=
+#!/bin/sh
+rm -f .temp.lua.s
+../../bin/qc-- backend=Backend.interp -o .temp.lua.s -S $@
+(cat .temp.lua.s | ../clients/gc_client - -v ; rm -f .temp.lua.s)
+@ 

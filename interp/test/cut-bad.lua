@@ -2,7 +2,7 @@
 --               cut to a dead continuation.
 -- Tests: procedure calls, cutting to a continuation
 --
---- ./regr "../interp $SELF" $REGRFLAGS -out $BASE.1 -err $BASE.2
+--- ./regr "../../bin/qc--interp $SELF" $REGRFLAGS -out $BASE.1 -err $BASE.2
 
 CMM.exports({ "main" })
 CMM.imports({ "cmmprint16" })

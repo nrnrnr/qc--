@@ -1,7 +1,7 @@
 -- [factorial-tail.lua] Proc. [main] should print out 7 then 7! = 5040
 -- Tests: recursive procedure tail-calls & default returns, some operators
 --
---- ./regr "../interp $SELF" $REGRFLAGS -out $BASE.1 -err $BASE.2
+--- ./regr "../../bin/qc--interp $SELF" $REGRFLAGS -out $BASE.1 -err $BASE.2
 
 CMM.exports({ "main" })
 CMM.imports({ "cmmprint16" })

@@ -20,25 +20,30 @@ TOP    =    ../..
 # high level targets
 # ------------------------------------------------------------------  
 
-LUASRC    = `echo *.lua`
-CMMSRC    = `echo *.c--`
-LUATEST   = ${LUASRC:%.lua=%.luatest}
-CMMTEST   = ${CMMSRC:%.c--=%.cmmtest}
-LUARECORD = ${LUASRC:%.lua=%.luarecord}
-CMMRECORD = ${CMMSRC:%.c--=%.cmmrecord}
-VERBOSE   =
+LUASRC       = `echo *.lua`
+CMMSRC       = `echo *.c--`
+SCRIPTSRC    = `echo *.script`
+LUATEST      = ${LUASRC:%.lua=%.luatest}
+CMMTEST      = ${CMMSRC:%.c--=%.cmmtest}
+SCRIPTTEST   = ${SCRIPTSRC:%.script=%.scripttest}
+LUARECORD    = ${LUASRC:%.lua=%.luarecord}
+CMMRECORD    = ${CMMSRC:%.c--=%.cmmrecord}
+SCRIPTRECORD = ${SCRIPTSRC:%.script=%.scriptrecord}
+VERBOSE      =
 
-test:VQ:        $LUATEST $CMMTEST
+test:VQ:        $LUATEST $CMMTEST $SCRIPTTEST
 luatest:VQ:     $LUATEST
 cmmtest:VQ:     $CMMTEST
-vtest:VQ:	mk $MKFLAGS VERBOSE=-v test
-record:VQ:      $LUARECORD $CMMRECORD
+scripttest:VQ:  $SCRIPTTEST
+vtest:VQ:	    
+                mk $MKFLAGS VERBOSE=-v test
+record:VQ:      $LUARECORD $CMMRECORD $SCRIPTRECORD
 
 # ------------------------------------------------------------------ 
 # useful targets to create test results
 # ------------------------------------------------------------------ 
 
-%.luatest:VQ:       %.lua ../interp regr
+%.luatest:VQ:       %.lua ../../bin/qc--interp regr
 		SELF=$stem.lua
 		BASE=$stem
 		MKTARGET=$target
@@ -47,7 +52,7 @@ record:VQ:      $LUARECORD $CMMRECORD
                 sed -n 's!^---!!p' $SELF | sh $SHX || true
 		case "$VERBOSE$stem" in -v*) ;; *0) echo "# tested $stem" ;; esac
 
-%.cmmtest:VQ:       %.c-- ../interp ../../src/qc-- regr qrun
+%.cmmtest:VQ:       %.c-- ../../bin/qc--interp ../clients/gc_client ../../bin/qc-- regr qrun qrun-gc
 		SELF=$stem.c--
 		BASE=$stem
 		MKTARGET=$target
@@ -56,11 +61,21 @@ record:VQ:      $LUARECORD $CMMRECORD
                 sed -n 's!^///!!p' $SELF | sh $SHX || true
 		case "$VERBOSE$stem" in -v*) ;; *0) echo "# tested $stem" ;; esac
 
+%.scripttest:VQ:       %.script ../../bin/qc--interp ../clients/gc_client ../../bin/qc-- regr qrun qrun-gc
+		SELF=$stem.script
+		BASE=$stem
+		MKTARGET=$target
+		case $VERBOSE in -v) SHX=-x ;; *) SHX= ;; esac
+		export SELF BASE MKTARGET
+                sed -n 's!^###!!p' $SELF | sh $SHX || true
+		case "$VERBOSE$stem" in -v*) ;; *0) echo "# tested $stem" ;; esac
+
+
 # The update rule updates the expected output of a test.  Use
 # only after you have verified that the factual output is indeed the
 # expected output!
 
-%.luarecord:VQ:     %.lua ../interp regr       
+%.luarecord:VQ:     %.lua ../../bin/qc--interp regr       
 		SELF=$stem.lua
 		BASE=$stem
                 REGRFLAGS="-r"
@@ -68,7 +83,7 @@ record:VQ:      $LUARECORD $CMMRECORD
                 sed -n 's!^---!!p' $SELF | sh -x || true
 		# why is there || true on the preceding line??
 
-%.cmmrecord:VQ:     %.c-- ../interp ../../src/qc-- regr qrun
+%.cmmrecord:VQ:     %.c-- ../../bin/qc--interp ../clients/gc_client ../../bin/qc-- regr qrun qrun-gc
 		SELF=$stem.c--
 		BASE=$stem
                 REGRFLAGS="-r"
@@ -76,9 +91,22 @@ record:VQ:      $LUARECORD $CMMRECORD
                 sed -n 's!^///!!p' $SELF | sh -x || true
 		# why is there || true on the preceding line??
 
-../interp:
+%.scriptrecord:VQ:  %.script ../../bin/qc--interp ../clients/gc_client ../../bin/qc-- regr qrun qrun-gc
+		SELF=$stem.script
+		BASE=$stem
+                REGRFLAGS="-r"
+		export SELF BASE REGRFLAGS
+                sed -n 's!^###!!p' $SELF | sh -x || true
+		# why is there || true on the preceding line??
+
+../../bin/qc--interp:Q:
         cd ..
-        mk interp
+        mk update
+        cd test
+
+../clients/gc_client:Q:
+        cd ..
+        mk gc
         cd test
 
 # ------------------------------------------------------------------  
@@ -93,5 +121,8 @@ qrun:           test.nw
                 $NOTANGLE -R$target $prereq > $target
                 chmod +x $target
 
-html:V:         test.html
+qrun-gc:        test.nw
+                $NOTANGLE -R$target $prereq > $target
+                chmod +x $target
 
+html:V:         test.html
