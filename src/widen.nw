@@ -489,7 +489,9 @@ function implements \rul{Natural} as follows:
 let natural_rule _ soln =
   let create fill' = {soln with fill = fill'; n = soln.w} in    
   if width soln = index soln && fill soln =*= G then
-    [create Z; create S; {soln with fill = H; n = 0}]
+    [create Z; create S;
+     (* {soln with fill = H; n = 0} *)
+    ]
 @ However, we also need to take into account the possiblility that
 \rul{Natural} is combined with the \rul{Subsume-Index} rule, which
 says that we can increase the fill index under certain
@@ -980,9 +982,9 @@ let var_name = function
 let ast_combine m solns = function
   | RP.Const(RP.Bool b) as e -> mksolutions_lit_bool e
   | RP.Const(RP.Bits b) as e ->
-      (mksolutions_lit_bits m.literals Z e) @
-      (mksolutions_lit_bits m.literals S e) @
-      (mksolutions_lit_bits m.literals H e)
+      (mksolutions_lit_bits m.literals Z e)
+      @ (mksolutions_lit_bits m.literals S e)
+      (* @ (mksolutions_lit_bits m.literals H e) *)
   | (RP.Fetch(RP.Mem(_, _, mcell as ms,c,addr,a),_)) as e ->
       let all  = match solns with [s] -> s | _ -> impossf "mem arity" in
       let best = List.filter (fun s -> fill s =*= Z && s.w = m.pointer) all in
