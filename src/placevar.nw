@@ -10,10 +10,13 @@
 \section{Placing variables into suitable temporary locations}
 <<placevar.mli>>=
 val fortran'  : 'a -> Ast2ir.proc -> bool
-val context   : 'a -> Ast2ir.proc -> bool
+val context   : (Ast2ir.proc -> Automaton.t) -> 'e -> Ast2ir.proc -> bool
 @ 
 Boilerplate for linking to Lua.
 <<placevar.ml>>=
+module R  = Rtl
+module RU = Rtlutil
+module A  = Automaton
 module RP = Rtl.Private
 module TM = Proc.VarMap
 
@@ -31,8 +34,8 @@ let fortran' _ ({Proc.cfg = g; Proc.target = target; Proc.temps = temps} as proc
   let updateNode node tMap =
     match G.to_instr node with
     | None     -> tMap
-    | Some rtl -> let newRtl, tMap' = replace_var place_var rtl tMap in
-                  G.update_instr (fun _ -> newRtl) node;
+    | Some rtl -> let rtl', tMap' = replace_var place_var rtl tMap in
+                  G.update_instr (fun _ -> rtl') node;
                   tMap' in
   let tMap = G.fold_nodes updateNode TM.empty g in
   let is_not_empty = TM.fold (fun _ _ _ -> true) tMap false in (* ugh *)
@@ -93,6 +96,7 @@ let replace_var freplace r tMap =
 A standard recursive tree walk.
 The interesting case is [[RP.Var]] in [[walkLoc]]; we apply the function.
 <<walk RTL>>=
+(* THIS IS A BOGUS CHEAT *)
 let rec walkLoc loc tMap = match loc with
   | RP.Mem (sp, ag, w, e, ass) -> let e', tMap' = walkExp e tMap in
                                   RP.Mem (sp, ag, w, e', ass), tMap'
@@ -143,143 +147,156 @@ We weight each context of a variable by the number of times the instruction is
 executed.
 We place the variable in the context in which it is used most often in the procedure.
 <<placevar.ml>>=
-let context _ ({Proc.cfg = g; Proc.target = target; Proc.temps = temps} as proc) =
-  let module G = Cfgx.M in
-  let module IntMod  = struct type t = int            let compare = compare end in
-  let module NodeMod = struct type t = Rtl.rtl G.node let compare = compare end in
-  let module IM = Map.Make (IntMod)  in
-  let module NM = Map.Make (NodeMod) in
-  let module SM = Strutil.Map        in
+module G = Cfgx.M
+module IntMod  = struct type t = int            let compare = compare end
+module NodeMod = struct type t = Rtl.rtl G.node
+                        let compare = (fun n1 n2 -> compare (G.num n1) (G.num n2))
+                 end
+module IM = Map.Make (IntMod)
+module NM = Map.Make (NodeMod)
+module SM = Strutil.Map
+<<define context count structures>>
+let context autmtn _ ({Proc.cfg = g; Proc.target = target} as proc) =
+  let autmtn = autmtn proc in
+  <<initialize context count structures>>
   <<get operator contexts>>
   <<estimate exec\_counts for graph nodes>>
-  <<estimate variable uses in each context>>
+  <<count uses in each context>>
   <<choose a context for each variable>>
   <<replace variables with temps>>
+  <<use verbose 4 to print varmap>>
   proc.Proc.varMap <- tMap;
   TM.fold (fun _ _ _ -> true) tMap false (* ugh *)
+@
+For each variable, we keep track of how many times it is used in each context.
+We use mutable state to store the counts for each variable, and we keep the records
+in an array indexed by the variable number.
+<<define context count structures>>=
+type counts = { mutable intc   : float
+              ; mutable floatc : float
+              ; mutable addrc  : float
+              ; mutable boolc  : float
+              }
+@
+<<initialize context count structures>>=
+let new_count _ = { intc = 0.0; floatc = 0.0; addrc = 0.0; boolc = 0.0}  in
+let var_counts = Array.init proc.Proc.vars new_count                     in
+let inc_int   i f = let record = var_counts.(i)                          in
+                    record.intc <- record.intc +. f                      in
+let inc_float i f = let record = var_counts.(i)                          in
+                    record.floatc <- record.floatc +. f                  in
+let inc_addr  i f = let record = var_counts.(i)                          in
+                    record.addrc <- record.addrc +. f                    in
+let inc_bool  i f = Error.warningPrt "variable found in boolean context" in
 @
 A call to [[Context.standard]] returns a list of (operator, parameter list, result)
 triples, where the argument list and result tell us in what context the arguments and 
 results are expected by the operator.
 To speed lookup, we use a map to hold this information.
 <<get operator contexts>>=
-let ops = List.fold_left (fun map (op, parms, res) -> SM.add op (parms, res) map)
-                         SM.empty (Context.standard "int" "float" "addr" "bool") in
+let ops =
+  List.fold_left (fun map (op, parms, res) -> SM.add op (parms, res) map)
+                 SM.empty (Context.standard inc_int inc_float inc_addr inc_bool) in
 let ctxt_parms  op = try Some (fst (SM.find op ops)) with Not_found -> None in
 let ctxt_result op = try Some (snd (SM.find op ops)) with Not_found -> None in
 @
 For now, we don't estimate execution counts; we assume each node is executed once.
 <<estimate exec\_counts for graph nodes>>=
-let exec_counts = G.fold_nodes (fun n map -> NM.add n 1 map) NM.empty g in
+let exec_counts      = G.fold_nodes (fun n map -> NM.add n 1.0 map) NM.empty g  in
+let get_exec_count n = try NM.find n exec_counts
+                       with Not_found -> Impossible.impossible "node not counted" in 
 @
 We use the execution counts and the table of operator contexts to estimate how many
 times each variable is used in each context.
-The function [[count_rtl]] is responsible for walking the rtl's and counting uses.
-We do not count copy instructions, since they may be used to move a variable from one
-context to another.
-<<estimate variable uses in each context>>=
-let count node map =
+The function [[count]] calls [[count_rtl]] to walk the rtl's and count uses.
+<<count uses in each context>>=
+let count node =
   <<define counting functions>>
   match G.to_instr node with
-  | None   -> map
-  | Some i ->
-    (match Rtlutil.RTLType.singleAssignment i with 
-     | Some _ -> map
-     | None   -> count_rtl i map) in
-let count_map = G.fold_nodes count IM.empty g in
+  | None   -> ()
+  | Some i -> count_rtl i in
+let () = G.iter_nodes count g in
 @
-The function [[count_rtl]] walks an rtl, looking for the use of an operator.
+The function [[count_rtl]] walks an rtl in a top-down fashion, looking for the use of
+an operator.
 If an operator is found and its argument or result is a variable, we increment the
 number of times the variable has been used in its current context (as determined by the
 operator).
+Counting arguments to an operator is easy (see [[count_exp]]), but counting the result
+of the operator requires a special case in [[count_effect]].
 <<define counting functions>>=
-let rec count_loc (loc, ctxt) map = match loc with
-  | RP.Mem   (_, _, _, e, _) -> count_exp (e, None) map
-  | RP.Slice (_, _, l)       -> count_loc (l, None) map
-  | RP.Reg    _              -> map
+let rec count_loc loc ctxt = match loc with
+  | RP.Mem   (_, _, _, e, _) -> count_exp e (Some inc_addr)
+  | RP.Slice (_, _, l)       -> count_loc l ctxt
+  | RP.Reg    _              -> ()
   | RP.Var   (_, i, _)       ->
     (match ctxt with
-     | None   -> map
-     | Some c ->
-       let node_cnt  = try NM.find node exec_counts
-                       with Not_found -> Impossible.impossible "node not counted" in 
-       let ctxt_map  = (try IM.find i map with Not_found -> SM.empty) in
-       let ctxt_map' =
-         SM.add c (try node_cnt + SM.find c ctxt_map with Not_found -> node_cnt)
-                ctxt_map in
-       IM.add i ctxt_map' map)
+     | None   -> ()
+     | Some c -> c i (get_exec_count node))
 
-and count_exp (exp, ctxt) map = match exp with
-  | RP.Const _        -> map
-  | RP.Fetch (l, _)   -> count_loc (l, ctxt) map
+and count_exp exp ctxt = match exp with
+  | RP.Const _        -> ()
+  | RP.Fetch (l, _)   -> count_loc l ctxt
   | RP.App ((op, _), exps) ->
-    let exps' = match ctxt_parms op with
-                | None    -> List.combine exps (List.map (fun s -> None) exps)
-                | Some cs -> List.combine exps (List.map (fun c -> Some c) cs) in
-    List.fold_right count_exp exps' map in
+    let ctxts = match ctxt_parms op with
+                | None    -> List.map (fun s -> None)   exps
+                | Some cs -> List.map (fun c -> Some c) cs   in
+    List.iter2 count_exp exps ctxts in
 
-let count_effect effect map = match effect with
+let count_effect effect = match effect with
   | RP.Store (l, (RP.App ((op, _), _) as e), _) ->
-      count_exp (e, None) (count_loc (l, ctxt_result op) map)
-  | RP.Store (l, e, _) -> count_exp (e, None) (count_loc (l, None) map)
-  | RP.Kill   l        -> count_loc (l, None) map in
+      (count_exp e None ; count_loc l (ctxt_result op))
+  | RP.Store (l, e, _) -> (count_exp e None ; count_loc l None)
+  | RP.Kill   l        -> count_loc l None in
 
-let count_guard (exp, effect) map = count_effect effect (count_exp (exp, None) map) in
+let count_guard (exp, effect) = (count_effect effect ; count_exp exp None) in
 
-let rec count_rtl r map = match Rtl.Dn.rtl r with
-  | RP.Rtl gs -> List.fold_right count_guard gs map in
+let rec count_rtl r = match Rtl.Dn.rtl r with
+  | RP.Rtl gs -> List.iter count_guard gs in
 @
 For each variable, we choose the context with the most votes.
-Ties are broken arbitrarily.
+The default context is "int".
 <<choose a context for each variable>>=
 let ctxt_map =
-  let elect i i_ctxts ctxt_map =
-    match List.sort (fun (n1,_) (n2,_) -> compare n2 n1)
-                    (SM.fold (fun ctxt cnt rst -> (cnt, ctxt) :: rst) i_ctxts []) with
-    | (_, ctxt) :: _ -> IM.add i ctxt ctxt_map
-    | [] -> Impossible.impossible "Variable in map has no contexts???" in
-  IM.fold elect count_map IM.empty in
+  let elect i =
+    let cnts = var_counts.(i) in
+    let icnt = cnts.intc      in
+    let fcnt = cnts.floatc    in
+    let acnt = cnts.addrc     in
+    let (cnt,ctxt) = if icnt >= fcnt then (icnt,"int") else (fcnt, "float") in
+    if cnt >= acnt then ctxt else "addr" in
+  Array.init proc.Proc.vars elect in
 @
-To find the context of a variable, we check the [[ctxt_map]].
-If we find a context for the variable, we call the target's temp allocator.
-Otherwise, we have to choose a default context.
-If the instruction is a copy node, we choose the context of the other temp; otherwise,
-we choose a default context.
-<<choose a context for each variable>>=
-let ctxt_of rtl i =
-  let find i = IM.find i ctxt_map in
-  try find i
-  with Not_found ->
-    (match Rtlutil.RTLType.singleAssignment rtl with
-     | Some ((_, r1, _), (_, r2, _)) when r1 = i ->
-       (try find r2 with Not_found -> "int")
-     | Some ((_, r1, _), (_, r2, _)) when r2 = i ->
-       (try find r1 with Not_found -> "int")
-     | _                                         -> "int") in (* default context *)
-@
-We define the functions that replace variables within [[updateNode]] so they will have
-access to the entire rtl.
+To replace a variable, we use the automaton to allocate a new fetch of the variable,
+and we extract the location.
 <<context replace var>>=
 let place_var (s, i, w) tMap =
   try TM.find i tMap, tMap
   with Not_found ->
-    let tspace = (target.Target.tspace_of_ctxt (ctxt_of rtl i)).Space.space in
-    let t = RP.Reg (Talloc.Multiple.reg temps tspace w) in
-    (t, TM.add i t tMap) in
+    match Rtl.Dn.exp ((A.allocate autmtn w ctxt_map.(i)).A.fetch w) with
+		| RP.Fetch (l,_) -> (l, TM.add i l tMap)
+		| _              -> Impossible.impossible "Fetch returned non-fetch rtl" in
 @
+We fold over the nodes, replacing variables with each variable with a temp for the
+proper context.
+We include the functions that replace variables as nested functions in [[updateNode]] so
+they will have access to the entire rtl.
 <<replace variables with temps>>=
 let updateNode node tMap =
   match G.to_instr node with
   | None     -> tMap
   | Some rtl ->
     <<context replace var>>
-    let newRtl, tMap' = replace_var place_var rtl tMap in
-    G.update_instr (fun _ -> newRtl) node;
+    let rtl', tMap' = replace_var place_var rtl tMap in
+    G.update_instr (fun _ -> rtl') node;
     tMap' in
 let tMap = G.fold_nodes updateNode TM.empty g in
 @
-STILL TO DO:
-\begin{enumerate}
-\item HINTS
-\item WHAT IF WE FIND A VAR WITH NO CONTEXT COUNTS? MY DEFAULTS ARE AMUSING?
-\end{enumerate}
+We may want to print the variable map.
+<<use verbose 4 to print varmap>>=
+let () =
+  let map = TM.fold (fun i l rst -> Printf.sprintf "  %d -> %s"
+                                      i (RU.ToReadableString.loc (R.Up.loc l)) :: rst)
+                    tMap [] in
+  Verbose.say 4 (["Varmap: Var i -> Loc\n"] @ map) in
+@

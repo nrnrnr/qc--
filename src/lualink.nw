@@ -186,6 +186,7 @@ struct
     struct
       module V = C.V
       let ( **-> ) = V.( **-> )
+      let ( --> )  = V.( --> )
       let ( **->> ) x y = x **-> V.result y 
       <<export goodies to Lua>>
     end (*M*)
@@ -372,7 +373,8 @@ C.register_module "Liveness"
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Placevar"
   [ "fortran", V.efunc (V.value **-> Map.proc **->> V.bool) Placevar.fortran'
-  ; "context", V.efunc (V.value **-> Map.proc **->> V.bool) Placevar.context
+  ; "context", V.efunc ((Map.proc --> Map.automaton) **->>  (* currying *)
+                        V.func (V.value **-> Map.proc **->> V.bool)) Placevar.context
   ; "x86",     V.efunc (Map.proc **->> Map.automaton)       X86.placevars
   ] g;
 <<register modules to [[g]] in alphabetical order>>=

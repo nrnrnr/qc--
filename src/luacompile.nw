@@ -79,7 +79,10 @@ Stages.make_stage( Placevar
 
 Stages.make_stage( Placevar
                  , 'context'
-                 , {name="context-based variable placer",creates='no vars'}
+                 , {name="context-based variable placer"
+                   , fn=Placevar.context(Placevar.x86)
+                   , creates='no vars'
+                   }
                  , NewBackplane)
 
 <<add every key-value pair in [[long]] to [[stage]]>>=
@@ -177,11 +180,11 @@ Mips.layout = { creates='no late consts' } -- what is this for? -CL
 function Mips.layout["C"](dummy, proc)
     local blocks       = Stack.blocks(proc)
     blocks.oldblocks.callee   = Block.overlap(32,"low",blocks.oldblocks.callee)
-	blocks.oldblocks.caller   = Block.overlap(32,"low",blocks.oldblocks.caller)
+  blocks.oldblocks.caller   = Block.overlap(32,"low",blocks.oldblocks.caller)
     blocks.youngblocks.callee = Block.overlap(32,"low",blocks.youngblocks.callee)
-	blocks.youngblocks.caller = Block.overlap(32,"low",blocks.youngblocks.caller)
+  blocks.youngblocks.caller = Block.overlap(32,"low",blocks.youngblocks.caller)
 
-	-- Are oldparams and newparams necessary?  Everything seems to work fine
+  -- Are oldparams and newparams necessary?  Everything seems to work fine
     -- with them commented out... -RO
 
     -- blocks.oldparams   = Block.relative(blocks.vfp, "old parameters", 16, 4)
@@ -197,7 +200,7 @@ function Mips.layout["C"](dummy, proc)
         , blocks.youngblocks.caller
         -- , blocks.newparams     
         , blocks.sp
-		, blocks.youngblocks.callee
+    , blocks.youngblocks.callee
         }
     if Debug.stack then
         write('****** cc name = ', Stack.ccname(proc), '\n')
@@ -285,14 +288,14 @@ function Alpha.layout["C"](dummy, proc)
     blocks.youngblocks.caller = Block.overlap(64,"low",blocks.youngblocks.caller)
     local layout =
         { blocks.oldblocks.caller
-		, blocks.oldblocks.callee
+    , blocks.oldblocks.callee
         , blocks.vfp
         , blocks.spills
         , blocks.continuations
         , blocks.stackdata
         , blocks.youngblocks.caller
         , blocks.sp
-		, blocks.youngblocks.callee
+    , blocks.youngblocks.callee
         }
     if Debug.stack then
         write('****** cc name = ', Stack.ccname(proc), '\n')
@@ -447,14 +450,14 @@ function X86.layout["C--"](dummy,proc)
     blocks.youngblocks.callee  = Block.overlap(32, "high", blocks.youngblocks.callee)
     local layout = 
                 { blocks.oldblocks.caller       -- <-- high addresses
-								-- On return, the ra must end up here, immediately followed by the sp
-								, blocks.oldblocks.callee
+                -- On return, the ra must end up here, immediately followed by the sp
+                , blocks.oldblocks.callee
                 -- , blocks.ra  -- joined to incoming block
                 -- , blocks.vfp
                 , blocks.stackdata
                 , blocks.continuations
                 , blocks.spills
-								, blocks.youngblocks.caller
+                , blocks.youngblocks.caller
                 , blocks.sp                     -- <-- low addresses 
                 , blocks.youngblocks.callee
                 }
