@@ -2,7 +2,7 @@
 # $Id$ 
 # ------------------------------------------------------------------ 
 
-NAME =      cllib
+NAME =      ocamlerror
 
 # ------------------------------------------------------------------ 
 # paths
@@ -16,6 +16,8 @@ LIBDIR =    ../lib
 BINDIR =    ../bin
 MANDIR =    ../man
 
+prefix =    /usr/local
+
 # ------------------------------------------------------------------ 
 # (high level) virtual targets
 # ------------------------------------------------------------------ 
@@ -23,13 +25,15 @@ MANDIR =    ../man
 HTML =          `echo *.nw       | sed 's/\.nw/.html/g;'`
 INC  =          `echo *.nw       | sed 's/\.nw/.inc/g;'`
 
-all:V:          ocamlerror
-all.opt:V:      ocamlerror.opt
+all:V:          ocamlerror      man
+all.opt:V:      ocamlerror.opt  man
 update:V:       
 update.opt:V:   
 
 dvi:V:          $INC
 html:V:         $HTML
+
+man:V:          ocamlerror.1
 
 test:VQ:
                 echo "nothing to be done"
@@ -43,6 +47,12 @@ clean:V:
 clobber:V:      clean
                 rm -rf *.ml *.mll DEPEND 
                 rm -rf ocamlerror ocamlerror.opt
+                rm -rf ocamlerror.pod ocamlerror.1
+                rm -rf *.aux *.log *.dvi *.tex *.inc *.toc
+
+install:V:      all.opt
+                install -s ocamlerror.opt $prefix/bin/ocamlerror
+                install    ocamlerror.1   $prefix/man/man1  
 
 
 # ------------------------------------------------------------------ 
@@ -55,7 +65,7 @@ clobber:V:      clean
 # compiler flags used by the rules just included
 
 OCAMLC_FLAGS =  -g -I $LIBDIR
-OCAMLO_FLAGS =  -g -I $LIBDIR
+OCAMLO_FLAGS =     -I $LIBDIR
 
 # ------------------------------------------------------------------ 
 # important file sets
@@ -85,7 +95,7 @@ ocamlerror:     ocamlscan.cmo ocamlerror.cmo
                 
 
 ocamlerror.opt: ocamlscan.cmx ocamlerror.cmx 
-		$OCAMLO $OCAMLO_FLAGS -custom -o $target $CMXLIBS $prereq
+		$OCAMLO $OCAMLO_FLAGS         -o $target $CMXLIBS $prereq
 
 # ------------------------------------------------------------------ 
 # extra rules for cases not covered by noweb.mk
@@ -93,6 +103,10 @@ ocamlerror.opt: ocamlscan.cmx ocamlerror.cmx
 
 ocamlscan.mll:  ocamlerror.nw
                 $NOTANGLE -R$target $prereq > $target
+
+ocamlerror.pod: ocamlerror.nw
+                $NOTANGLE -R$target $prereq > $target
+                
 
 # ------------------------------------------------------------------ 
 # recalculate dependencies

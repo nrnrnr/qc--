@@ -1,22 +1,86 @@
 
 % ------------------------------------------------------------------ 
-\section{Character Offset in OCaml-Source Files}
+\section{OCamlerror makes stack traces readable}
 % ------------------------------------------------------------------ 
 
-An assertion failure in an {\ocaml} program reports source code
-locations as a character offset in a source file. Looking up that
-position with an editor is quite tedious when the source file is
-preprocessed in any way. We provide a tool that honors the [[#line]]
-pragmas in an {\ocaml} source file and translates a character offset
-into a triple of file-name, line, and column. Given that, it is easy to
-jump to the failed assertion in an editor.
+When an {\ocaml} byte code program fails an assertion it writes out a
+stack trace that includes source code positions. Each position is an
+integer byte-offset from the start of a source file. Visiting these
+positions in an editor is tedious because navigation in files best
+supported by line numbers. When the source file is the result of a
+preprocessing step the relation between the original source and the
+positions in the stack trace are even more complicated. The
+[[ocamlerror]] program reads a stack trace from standard input,
+translates source code positions into file, line, and column positions,
+and writes an annotated stack trace to standard out. 
 
+\begin{quote}\small
+\begin{verbatim}
+$ ./ocamlerror ../src ../lua < trace.txt 
+Fatal error: uncaught exception Assert_failure("cfg3.ml", 17778, 17790)
+    (cfg3.nw: 1467, column 15)
+Raised at unknown location
+Called from module Set, character 8365
+Called from module Set, character 8360
+Called from module Set, character 8360
+Called from module Set, character 8360
+Called from module Cfg3, character 31510 (cfg3.nw: 785, column 40)
+Called from module Astasm, character 4745 (astasm.nw: 238, column 39)
+Called from module List, character 1783
+Called from module List, character 1783
+Called from module Ast3ir, character 30374 (ast3ir.nw: 1168, column 48)
+Called from module Luavalue, character 10485 (luavalue.nw: 389, column 35)
+Called from module Luainterp, character 3637 (luainterp.nw: 185, column 23)
+Called from module Luainterp, character 13688 (luainterp.nw: 466, column 22)
+Called from module Luainterp, character 14603 (luainterp.nw: 495, column 23)
+Re-raised at module Luainterp, character 14629 (luainterp.nw: 495, column 49)
+Called from module Luainterp, character 3637 (luainterp.nw: 185, column 23)
+Called from module Luabaselib, character 683 (luabaselib.nw: 83, column 16)
+Called from module Luainterp, character 14603 (luainterp.nw: 495, column 23)
+Re-raised at module Luainterp, character 14629 (luainterp.nw: 495, column 49)
+Called from module Main2, character 3219 (main2.nw: 156, column 49)
+Called from module List, character 1783
+Called from module Main2, character 4056 (main2.nw: 175, column 31)
+Called from module Main2, character 4324 (main2.nw: 190, column 16)
+\end{verbatim}
+\end{quote}
+
+For the translation of the stack trace [[ocamlerror]] tries to find the
+source file of the module, scans it, and translates the character
+position into the file, line, column triple. While scanning the file
+[[ocamlerror]] honors the C style [[#line]] directives inserted by
+preprocessors and thus giving meaningful results for preprocessed source
+files. If [[ocamlerror]] cannot find the source file of a module, it
+emits the line from the stack trace as is. On the command line
+[[ocamlerror]] takes a list of directories that it searches for source
+files. If, for example, [[/usr/local/lib/ocaml]] had been added in the
+example above, [[ocamlerror]] would have found the source files for the
+modules from the standard library and translated positions within as
+well.
+
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+The implementation relies on the [[Srcmap]] module that provides a
+mapping between character offsets and file, line, column triples for a
+file. For each source file such a map is built while it is scanned and
+the map is stored in a cache. The map is then used to translate the
+character position from the stack track trace into the file, line,
+column triple.
 
 <<ocamlerror.ml>>=
 exception Error of string
 let error msg = raise (Error msg)
-  
-let find path file =
+@  
+
+We try to find a source file along a path of directories. The file is
+considered found when it exists and [[find]] will return its full path.
+Otherwise [[find]] returns [[None]].
+
+<<ocamlerror.ml>>=
+let find (path: string list) (file:string) =
     let rec loop = function
         | [] -> None
         | dir::dirs ->
@@ -27,9 +91,15 @@ let find path file =
                 loop dirs
     in            
         loop path
-                
+@                
+ 
+To translate a character offset into a file, line, column triple we build
+a map for each file that can translate any character position in that
+file into the triple. The [[map_of]] function scans a named file and
+returns the file's map of type [[Srcmap.map]].
         
-let map_of file =
+<<ocamlerror.ml>>=
+let map_of (file:string) =
     let fd          = try open_in file with Sys_error(msg) -> error msg in
     let finally ()  = close_in fd                           in
     let lexbuf      = Lexing.from_channel fd                in
@@ -38,29 +108,55 @@ let map_of file =
         ( Srcmap.sync map 0 (file,1,1)
         ; let map = Ocamlscan.token lexbuf map in (finally () ; map)
         )
+@
+
+Lines in a stack trace either refer to a module, or a file. We have
+to know the difference to construct the file name of the source file we
+are looking for. The [[trace]] function tries to identify a line from a
+stack trace and returns a pair of module/file name and a character
+offset within that module/file, or [[None]].
         
+
+<<ocamlerror.ml>>=
+type trace = Module of string
+           | File   of string
+           
 let rx1 = Str.regexp "Called from module \(.*\\), character \([0-9]+\).*"  
 let rx2 = Str.regexp "Re-raised at module \(.*\\), character \([0-9]+\).*" 
 let rx3 = Str.regexp ".*Assert_failure(\"\(.*\)\", \([0-9]+\),.*"            
 
-type trace = 
-           | Module of string
-           | File   of string
-           
-let trace line =
+let trace (line:string) =
     let matched n l = Str.matched_group n l in  
     if Str.string_match rx1 line 0 then
-        line, Some (Module(matched 1 line), int_of_string (matched 2 line))
+        Some (Module(matched 1 line), int_of_string (matched 2 line))
     else if Str.string_match rx2 line 0 then
-        line, Some (Module(matched 1 line), int_of_string (matched 2 line))
+        Some (Module(matched 1 line), int_of_string (matched 2 line))
     else if Str.string_match rx3 line 0 then
-        line, Some (File(matched 1 line), int_of_string (matched 2 line))
+        Some (File(matched 1 line), int_of_string (matched 2 line))
     else    
-        line, None 
+        None 
+@
 
+A stack trace typically refers to the same file multiple times. To avoid
+searching and scanning the same file each time we cache the map for a
+each file we have read.
+
+<<ocamlerror.ml>>=
 module Cache = Map.Make(struct type t=trace let compare=compare end)
-        
-let input path =
+@        
+
+All real work is done in the [[input]] function. We read [[stdin]] line
+by line and try to discover references to modules. If no reference can
+be found, the line is written to [[stdout]]. If a reference is found, we
+first check the cache to find its map to translate the character
+position. If the module is not in the cache we have to search its source
+file along the [[path]], scan it, cache its map, and translate the
+position.
+
+The [[input]] function does all the real work. It r
+ 
+<<ocamlerror.ml>>=
+let input (path: string list) =
     let filename m = String.uncapitalize m ^ ".ml" in
     let filepath = function
         | Module x -> find path (filename x)
@@ -70,8 +166,8 @@ let input path =
     try 
         let rec loop cache line = 
             ( match trace line with
-            | line, None        -> print_endline line; loop cache (read_line ())
-            | line, Some(m,pos) -> 
+            | None        -> print_endline line; loop cache (read_line ())
+            | Some(m,pos) -> 
                 try
                     let map         = Cache.find m cache      in
                     let (file, l,c) = Srcmap.location map pos in 
@@ -93,27 +189,38 @@ let input path =
         in loop Cache.empty (read_line ())    
     with        
         End_of_file -> ()
-           
+@           
 
-        
+The [[main]] function takes the search path from the command line and
+calls [[input]]. The actual directory ``[[.]]'' is always part of the
+search path. However, it is the last element such that the user can
+override it easily.
+           
+<<ocamlerror.ml>>=
 let main () =
     let argv     = Array.to_list Sys.argv in
     let this     = Filename.basename (List.hd argv) in
     let args     = List.tl argv in
-        input ("."::args); exit 0
+        input (args@["."]); exit 0
         
 let _ = try main () with e -> 
         ( Printf.eprintf "%s\n" (Printexc.to_string e)
-        ; Printf.eprintf "Exit with exit code 2\n"
-        ; exit 2
+        ; Printf.eprintf "Exit with exit code 1\n"
+        ; exit 1
         )
-
-let _ = main ()
 @
         
 % ------------------------------------------------------------------ 
-\section{Scanner}
+\section{Scanning Source Files}
 % ------------------------------------------------------------------ 
+
+To translate a character position into a file into a meaningful triple
+of filename, line number, and column we build a map for each file, that
+associates character offsets with these triples. The scanner recognizes
+any non-linearity in the source file, like preprocessor-directives and
+newlines and puts synchronization points into the map. Later the map can
+be used to ask for the triple of any character position in the file.
+
 
 <<ocamlscan.mll>>=
 {
@@ -129,7 +236,6 @@ let _ = main ()
         Srcmap.location map (Lexing.lexeme_start lexbuf)
              let pos_start   = Lexing.lexeme_start
 
-    let pos_end     = Lexing.lexeme_end
 
     let get         = Lexing.lexeme
     let getchar     = Lexing.lexeme_char
@@ -144,8 +250,16 @@ let misc        = ['.' '_' '$' '@']
 let id          = (alpha | misc) (alpha | misc | digit)*
 let ws          = [' ' '\012' '\r' '\t']  (* SP FF CR TAB *)
 let nl          = '\n'          
+@
 
+The [[token]] function scans an entire file and returns its map. At
+every newline we call [[nl]] to put a synchronization point into the map.
+We consider lines starting with [[#]] [[#line]] directives and call the
+[[line]] sub-scanner. All other characters are just skipped. A Tab
+characters is treated like a space because there is no universal
+Tab width---they are best avoided in source code anyway. 
 
+<<ocamlscan.mll>>=
 rule token = parse
     eof                 { fun map -> map            }
   | nl                  { fun map -> nl lexbuf map ; token lexbuf map }
@@ -219,10 +333,70 @@ and string = parse
                           ; string lexbuf map buf
                           )
                         }
- | _                   { fun map buf ->
+ | _                    { fun map buf ->
                           error "illegal character in string"
                         }
 
 { (* epilog *) }                        
+@
+
+% ------------------------------------------------------------------ 
+\section{Manual Page}
+% ------------------------------------------------------------------ 
+
+The manual is written in Perl's {\small POD} format from where it is
+translated into Troff.
+
+<<ocamlerror.pod>>=
+=head1 NAME
+
+ocamlerror - annotate OCaml stack traces with source code positions
+
+=head1 SYNOPSIS
+
+B<ocamlerror> [I<directory>] ...
+
+=head1 DESCRIPTION
+
+B<ocamlerror> reads a stack trace produced by an OCaml byte code binary
+from stdin, annotates it with source code positions, and writes it to
+stdout. The source code positions in parentheses are calculated from the
+character offsets that are part of the stack trace:  
+
+    Called from module Set, character 8360
+    Called from module Cfg3, character 31510 (cfg3.nw: 785, column 40)
+    Called from module Astasm, character 4745 (astasm.nw: 238, column 39)
+    Called from module List, character 1783
+    Called from module List, character 1783
+    Called from module Ast3ir, character 30374 (ast3ir.nw: 1168, column 48)
+
+To calculate a source code positions from a character positions
+B<ocamlerror> must read a modules' source file. It searches for the file
+in the directories given on the command line. If B<ocamlerror> cannot
+find the source file for a module from the stack trace it emits the line
+from the stack trace unaltered.
+
+=head1 OPTIONS
+
+No options. Directores B<ocamlerror> searches for source file are passed
+on the command line. The current directory is implicitly the last
+element of the search path.
+
+=head1 VERSION
+
+B<ocamlerror> works with OCaml versions 3.01 and 3.02. Stack traces were
+introduced in OCaml 3.01.
+
+=head1 EXIT CODE
+
+In case of an error B<ocamlerror> exits with code 1, and 0 otherwise.
+
+=head1 SEE ALSO
+
+ocaml(1), http://www.ocaml.org/
+
+=head1 AUTHOR
+
+Christian Lindig <lindig@eecs.harvard.edu>
 @
 
