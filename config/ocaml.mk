@@ -7,8 +7,8 @@
 # ------------------------------------------------------------------ 
 
 OCAML =         ocaml
-OCAMLC =        ocamlc 
-OCAMLO =        ocamlopt 
+OCAMLC =        ocamlc
+OCAMLO =        ocamlopt
 OCAMLTOP =      ocamlmktop
 OCAMLDEP =      ocamldep
 OCAMLYACC =     ocamlyacc
