@@ -1,17 +1,40 @@
 %start stmt
 %type <string> disp rc stmt
 %type <int> reg
-%term IDENT CON
+%term int
+%head {:
+  type regnum = int
+  type rtl = string list
+  type state = rtl list * regnum
+  let addrtl rtl (rtls, regnum) = (rtl::rtls, regnum)
+  type 'a monad = state -> 'a * state
+  let unit x = fun s -> (x, s)
+  let (>>=) m k = fun s0 -> let (x, s1) = m s0 in k x s1
+  let exec rtl = fun s -> ((), addrtl rtl s)
+  let getreg = fun (rtls, r) -> (r, (rtls, r+1))
+  let getreg = (getreg:int monad)
+  let pair x y = x >>= fun x -> y >>= fun y -> unit (x, y)
+  let mmap f m = m >>= (fun x -> unit (f x))
+  let regstring r = "r" ^ string_of_int r
+:}
 
 %%
-stmt : ASGNI (disp, reg) [1]     {: pair disp reg >>= fun d, r ->
-                                    exec [d, " := ", regstring r] :}
+stmt : ASGNI (disp, reg) [1]     {: pair disp reg >>= fun (d, r) ->
+                                    exec [d;  " := ";  regstring r] :}
 stmt : reg                       {: mmap ignore reg :}
-reg  : ADDI (reg, rc)    [1]     {: getreg >>= fun r ->
-                                    pair reg rc >>= fun reg, rc ->
-	                            exec [regstring r, ":= ", regstring reg, " + ", rc]
-                                    >>= fun () -> unit r :}
-reg  : 	CVCI(INDIRC(disp)) [1]   {: getreg >>= fun r ->
+reg  : ADDI (reg, rc)    [1]     {: ((getreg: int monad) >>= (fun r ->
+                                    pair reg rc >>= fun (reg, rc) ->
+	                            exec [regstring r;  ":= ";  regstring reg;  " + ";  rc]
+                                    >>= fun () -> unit r)) : int monad :}
+reg  : 	CVCI(INDIRC(disp)) [1]   {: (getreg >>= fun r ->
                                     disp >>= fun disp ->
-                                    exec [regstring r, " := sx (", disp, ")"] >>=
+                                    exec [regstring r;  " := sx (";  disp;  ")"] >>=
+                                    fun () -> unit r : int monad) :}
+reg  : CNSTI (0)                 {: unit 0 :}
+reg  : disp                [1]   {: getreg >>= fun r ->
+                                    exec [regstring r;  ":=";  disp] >>=
                                     fun () -> unit r :}
+disp : ADDI(reg, con)            {: pair reg con >>= fun (r, c) ->
+                                      unit (regstring r ^ " + " ^ string_of_int c) :}
+con  : CNSTI (n:int)             {: unit n :}
+

@@ -1,6 +1,7 @@
 % -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 
-@ 
+\section{Core of BURG generation}
+
 <<burg.mli>>=
 type name = string
 type argument =
@@ -20,8 +21,15 @@ type flags = { trace : bool; coverage : bool }
 let flip f x y = f y x
 
 @
+Bunch of utility stuff.
 <<burg.ml>>=
 module S = Spec
+module C = Code
+
+let const = function
+  | Spec.Int n -> C.Int n
+  | Spec.String s -> C.String s
+
 type name = string
 type argument =
   | Nonterm of name * Spec.nonterm
@@ -79,11 +87,6 @@ We use [[Camlburg.matches c arg]] to represent that cost.
 \end{itemize}
 
 <<burg.ml>>=
-module C = Code
-let const = function
-  | Spec.Int n -> C.Int n
-  | Spec.String s -> C.String s
-
 let argstring k = "arg" ^ string_of_int k
 let burgmatches c k =
   C.Apply (C.Apply (C.Qualid ["Camlburg"; "matches"], const c), C.Qualid [argstring k])
@@ -91,12 +94,12 @@ let ntcost   nt k = C.Qualid [argstring k; nt; "Camlburg"; "cost"]
 let ntaction nt k = C.Qualid [argstring k; nt; "Camlburg"; "action"]
 
 let choice (args, cost, code) =
+  <<old code, which forces orders on let bindings>>
   let rec addcost prev args k = match args with
       | []   -> prev
       | Nonterm (name, nt) :: t -> addcost (C.plus prev (ntcost nt k)) t (k+1)
       | Term (name, nt)    :: t -> addcost prev t (k+1)
       | Const c            :: t -> addcost (C.plus prev (burgmatches c k)) t (k+1)   in
-  let let' bs e = match bs with [] -> e | _ -> C.Let (bs, e) in
   let rec letbs args k = match args with
       | [] -> []
       | Nonterm (name, nt) :: t ->
@@ -104,27 +107,32 @@ let choice (args, cost, code) =
       | Term (name, ty) :: t ->
           (C.Var name, C.Qualid[argstring k])              :: letbs t (k+1)
       | Const _ :: t -> letbs t (k+1)    in
-  (* old code, which forces orders on let binding *)
-  let rec addlet args k = match args with
-      | [] -> code
-      | Nonterm (name, nt) :: t ->
-          C.Let ([C.Var name, C.Apply (ntaction nt k, C.Tuple[])], addlet t (k+1))
-      | Term (name, ty) :: t ->
-          C.Let ([C.Var name, C.Qualid[argstring k]], addlet t (k+1))
-      | Const _ :: t -> addlet t (k+1)    in
-  C.Tuple [addcost cost args 1; C.Fun (["xxx"], (*addlet args 1*) let' (letbs args 1) code)]
+  let let' bs e = match bs with [] -> e | _ -> C.Let (bs, e) in
+  addcost cost args 1, C.Fun (["xxx"], (*addlet args 1*) let' (letbs args 1) code)
   
-let choices l =
-  C.Apply (C.Qualid ["Camlburg"; "choice"], C.List (List.map choice l))
-
+let choices l = match List.map choice l with
+  | [c, a] -> C.Record ["Camlburg.cost", c; "Camlburg.action", a]
+  | [] -> C.Qualid ["Camlburg"; "infinity"]
+  | l  -> C.Apply (C.Qualid ["Camlburg"; "choice"],
+                   C.List (List.map (fun (c, a) -> C.Tuple [c; a]) l))
+@ 
+<<old code, which forces orders on let bindings>>=
+let rec addlet args k = match args with
+    | [] -> code
+    | Nonterm (name, nt) :: t ->
+        C.Let ([C.Var name, C.Apply (ntaction nt k, C.Tuple[])], addlet t (k+1))
+    | Term (name, ty) :: t ->
+        C.Let ([C.Var name, C.Qualid[argstring k]], addlet t (k+1))
+    | Const _ :: t -> addlet t (k+1)    in
+@
+Here we actually get the arguments and do the stuff.
+<<burg.ml>>=
 let funwrap arity e =
   let rec arglist k tail = match k with
   | 0 -> tail
   | k -> arglist (k-1) (("arg"^string_of_int k) :: tail)
   in if arity = 0 then e else C.Fun (arglist arity [], e)
 
-
-<<burg.ml>>=
 let labeller_pair arity nts (c, (lfun : labeller)) =
   let ntrec = C.Record (List.map (fun (nt, ty) -> nt, choices (lfun nt)) nts) in
   (String.lowercase c, funwrap (arity c) ntrec)
@@ -173,7 +181,7 @@ let typeof tys nt =
 
 let flip f x y = f y x
 
-let cvt ({Parse.start=s; Parse.types=tys; Parse.terms=terms}, rules) = 
+let cvt ({Parse.start=s; Parse.types=tys; Parse.terms=terms; Parse.head=h}, rules) = 
   let rules = Norm.normalize rules (* must do now to see new nt's *)           in
   let terms = List.fold_left (flip StringSet.add) StringSet.empty terms        in
   let nts = List.fold_left (Spec.fold_rule_types (flip StringSet.add))
@@ -198,6 +206,7 @@ let cvt ({Parse.start=s; Parse.types=tys; Parse.terms=terms}, rules) =
   ; Spec.nonterminals = nts
   ; Spec.start = start
   ; Spec.rules = rules
+  ; Spec.head  = h
   ; Spec.signatures = sigs
   }
 
@@ -209,6 +218,8 @@ let write spec =
   let _ = Format.print_newline() in
   let _ = emit_nts_type spec.Spec.nonterminals in
   let _ = Format.print_newline() in
+  let print_head c = (Format.print_string c; Format.print_newline()) in
+  let _ = List.iter print_head spec.Spec.head in
   let ls = Burg.labellers spec in
   let arity c = try List.length (StringMap.find c spec.Spec.signatures)
                 with Not_found -> error ["Unknown arity for constructor "; c]   in
