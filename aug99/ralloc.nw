@@ -116,9 +116,8 @@ match node with
     let avail = Regset.union avail deads in
     let defs  = tmps_defined rtl in
       match askregs defs avail with
-      |	Some newmap ->
+      |	Some (avail, newmap) ->
 	  let tmpmap' = extend (drop_dom deads tmpmap) newmap (* map after node *) in
-	  let avail = Regset.diff avail (dom newmap) in
 	  let rtl = RtlFunctions.subst_defs_uses newmap tmpmap rtl in
 	  let next = alloc avail tmpmap' next in
   	    N.Assign(atts, rtl, next)
@@ -158,3 +157,15 @@ temporary map.
 <<RTL to spill [[spillee]] to memory>>=
 RTL.RTL [RTL.GUARD (RTL.CONST (RTL.BOOL true, None),
 	    RTL.STORE (mem, RTL.FETCH(spill, type_of spillee), type_of spillee))]
+@ 
+To get a register, we ask [[hwreg_for]] what candidates there are,
+then attempt to choose from those available.  If the choice fails (by
+raising [[Not_found]], we'll have to spill.
+<<let-bound utility functions>>=
+let askreg (tmp:tmp) (avail, tmpmap) =
+  let reg = Regset.choose (Regset.inter (hwregs_for tmp) avail) in
+    (Regset.remove reg avail, Regmap.add tmp reg tmpmap)
+in	
+let askregs tmps avail = try Some (Regset.fold askreg tmps (avail, Regmap.empty))
+                         with Not_found -> None
+in
