@@ -131,10 +131,18 @@ count:V:
 # delegate to subdirs
 # ------------------------------------------------------------------ 
 
-install:QV: all all.opt
-	for d in camlburg tools doc src interp
+INST_DIRS=camlburg tools doc src interp
+
+install:QV: all
+	for d in $INST_DIRS
 	do
 	  (echo "# cd $d" && cd $d && mk $MKFLAGS install) || exit 1
+	done
+
+install.opt:QV: install all.opt
+	for d in $INST_DIRS
+	do
+	  (echo "# cd $d" && cd $d && mk $MKFLAGS install.opt) || exit 1
 	done
 
 # ------------------------------------------------------------------ 
