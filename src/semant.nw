@@ -306,19 +306,17 @@ which are never used.
 
 Constant definitions can use primitive operations which, of course,
 are evaluated at compile-time.  The available primitive operations and
-their types are hold in a table [[primOps]].  Construction functions
+their types are hold in a table [[constOps]].  Construction functions
 help to build the type-schemes describing their types.  Infix and
 binary operators are as abbreviations to primitive operations.  For
 example, [[+]] and [[%add]] share the same type and implementation
 [[add]]. 
 
-<<phase2 module>>=
-module Phase2 = struct
+<<primitives module>>=
+module Prim = struct
     <<primitives>>
-    <<eval>>
-    <<driver>>
 end
-
+    
 <<primitives>>=
 let bitsc x         = Types.Bits(Types.Const(x))
 let bitsv x         = Types.Bits(Types.Var(x))
@@ -340,7 +338,7 @@ let eq    = function
     | [IntConst(x);IntConst(y)] -> BoolConst(x=y)
     | _                         -> assert false
 
-let primOps = Symbol.enterList
+let constOps = Symbol.enterList
     [  "add"    , (add  , proc [bitsv 1; bitsv 1] (bitsv 1))
     ;  "+"      , (add  , proc [bitsv 1; bitsv 1] (bitsv 1))
     ;  "mult"   , (mult , proc [bitsv 1; bitsv 1] (bitsv 1))
@@ -348,6 +346,16 @@ let primOps = Symbol.enterList
     ;  "eq"     , (eq   , proc [bitsv 1; bitsv 1] bool)
     ;  "=="     , (eq   , proc [bitsv 1; bitsv 1] bool)
     ] Symbol.empty
+
+let primOps = Symbol.enterList
+    [  "add"    ,  proc [bitsv 1; bitsv 1] (bitsv 1)
+    ;  "+"      ,  proc [bitsv 1; bitsv 1] (bitsv 1)
+    ;  "mult"   ,  proc [bitsv 1; bitsv 1] (bitsv 1)
+    ;  "*"      ,  proc [bitsv 1; bitsv 1] (bitsv 1)
+    ;  "eq"     ,  proc [bitsv 1; bitsv 1] bool
+    ;  "=="     ,  proc [bitsv 1; bitsv 1] bool
+    ] Symbol.empty
+
 @
 
 The evaluation of the constants in the symbol table starts by
@@ -356,6 +364,14 @@ constants and then passing them to [[evalConst]] one by one. Once a
 constant is evaluatated and type checked its entry in the symbol is
 replaced by the correct type and value. When the evaluation of a
 constant fails its definition is replaced by [[Error]].
+
+<<phase2 module>>=
+module Phase2 = struct
+    open Prim
+
+    <<eval>>
+    <<driver>>
+end
 
 <<driver>>=
 let eval env =
@@ -411,7 +427,7 @@ the result is returned together with its type [[rt]].
 <<>>=
 
 and evalPrimOp' set op (env',args) =
-    let f, t     = lookup op primOps       in 
+    let f, t     = lookup op constOps      in 
     let xt       = List.map fst args       in
     let xv       = List.map snd args       in
     let unused   = bool                    in
@@ -480,12 +496,29 @@ entire compilation unit can be checked.
 
 <<phase3 module>>=
 module Phase3 = struct
+    open Prim
+
     <<phase3>>
 end
 
 <<phase3>>=
 
 let foldl = List.fold_left
+
+let rec is2power = function
+    | 1 -> true
+    | x -> x > 0 && (x mod 2) = 0 && is2power (x/2)
+    
+let strip = function
+    | Ok(x) -> x
+    | Error -> error "Error found - aborting"
+
+let constExpr env e =
+    let set      = IDSet.empty in
+        ( match Phase2.evalExpr set env e with
+        | Error        -> Error
+        | Ok(ty, x, _) -> Ok(ty, x)
+        )
 
 let rec ty = function
     | TyAt(x,_)       -> ty x
@@ -516,23 +549,86 @@ and expr env = function
     | UnOp(op,e)              -> Ok () 
     | PrimOp(n,xs)            -> Ok () 
 
-let memsize env = function
-    | NoSize        -> Ok () 
-    | DynSize       -> Ok () 
-    | FixSize(e)    -> Ok () 
+let rec tyFetch env = function
+    | LValueAt(v,_) -> tyFetch env v
+    | Var(id)       -> let t, kind = strip (lookup id env) in t
+    | Mem (t,e,a)   -> 
+        let tye   = tyExpr env e in
+        let align = match a with
+                    | None   -> 1
+                    | Some a when is2power a -> a 
+                    | Some a -> error "alignment not a power of 2"  
+        in match tye with
+           | t when t = pointer -> t
+           | otherwise          -> error "expression is not of pointer type"
+
+and tyPrimOp env op args =
+    let at    = List.map (tyExpr env) args in
+    let ot    = lookup op primOps  in
+    let sigma = ( try Types.unify ot (proc at bool) (Types.empty) with
+                | Types.UnifyExn -> error "type error in application"
+                ) in
+        ( match Types.subst sigma ot with
+        | Types.Procedure(_,r) -> r
+        | _                    -> assert false
+        ) 
+
+and tyExpr env = function
+    | ExprAt(x,_)           -> tyExpr env x
+    | Int( i, None)         -> word
+    | Int( i, Some size)    -> bits size 
+    | Float( f, None)       -> word
+    | Float( f, Some size)  -> bits size 
+    | Char( c, None)        -> char
+    | Char( c, Some size)   -> bits size 
+    | Fetch(v)              -> tyFetch env v
+    | BinOp(l,op,r)         -> tyPrimOp env op [l;r]
+    | UnOp(op,e)            -> tyPrimOp env op [e]
+    | PrimOp(op,xs)         -> tyPrimOp env op (List.map snd xs)
+    
 
 let rec init env = function
-    | InitAt(x,_)   -> Ok ()
-    | InitExprs(es) -> Ok ()
-    | InitStr(s)    -> Ok ()
-    | InitUStr(s)   -> Ok ()
+    | InitAt(x,_)   -> init env x
+    | InitExprs(es) -> List.map (tyExpr env) es
+    | InitStr(s)    -> [char]
+    | InitUStr(s)   -> [bits 16]
+
+let memsize env = function
+    | NoSize    -> Some 1
+    | DynSize   -> None
+    | FixSize e -> 
+        ( match strip (constExpr env e) with
+        | Types.Bits(x), IntConst(size) when size > 0 -> Some size
+        | Types.Bits(x), _  -> error "not a positive size"
+        | otherwise         -> error "not a proper size constant"
+        )
+
+         
+let memdecl env ty size = function
+    | None   -> ( ignore (memsize env size) 
+                ; ()
+                )
+    | Some (i) -> 
+        let tys        = init env i in
+        let n          = List.length tys in
+        let consistent = foldl (fun res t -> res && ty = t) true tys
+        in
+            if not consistent then
+                error "initial values have types different from declared type" 
+            else if n < 1 then
+                error "too few initial values"
+            else match memsize env size with
+                | Some m when n > m ->  error "too many initial values"
+                | Some m            ->  ()
+                | None              ->  ()
+    
 
 let rec datum env = function
-    | DatumAt(x,_)        -> datum env x
-    | Label(n)            -> Ok ()
-    | Align(a)            -> Ok ()
-    | MemDecl(t,m,Some i) -> Ok ()
-    | MemDecl(t,m,None)   -> Ok ()
+    | DatumAt(x,_)   -> datum env x
+    | Label(n)       -> ()
+    | Align(a)       -> if is2power a then () 
+                        else error ("illegal alignment: " ^ string_of_int a)
+    | MemDecl(t,m,i) -> memdecl env (ty t) m i
 
 let formal env ( h, v, t, n) = Ok ()
 let formals env xs = Ok()
@@ -583,44 +679,41 @@ let stmts env ss = foldl stmt env ss
 
 let constant env (name,expr) = Ok ()
 
-let procedure cc fs ds ss = Ok ()
-    
-let rec section env = function
-    | SectionAt(x,_)             -> section env x
-    | SSpan( e1, e2, ss)         -> foldl section env ss
-    | Datum( d)                  -> Ok () (* datum env d *)
-    | SExport (t, ns)            -> Ok ()
-    | Procedure(cc,n,fs, ds, ss) -> procedure cc fs ds ss
+let procedure cc fs ds ss = ()
+ 
 
      
-let export' env t n (t',kind) =
+let export_ env t n (t',kind) =
     ( match t, t', kind with
-    | Some t , t', Memory when ty t = t'    -> ()
-    | None   , t', Memory                   -> ()
-    | Some t , t', Memory                   -> 
-        error "declared type does not match actual type"
-    | otherwise                         ->      
-        error ("value "^n^" can't be exported")
+    | Some t , t', Memory when ty t = t' -> ()
+    | None   , t', Memory                -> ()
+    | Some t , t', Memory  -> error "declared type does not match actual type"
+    | otherwise            -> error ("value "^n^" can't be exported")
     )
-
-let export env ty n = emap (export' env ty n) (lookup n env) 
     
-
+let export env ty n = 
+    export_ env ty n (strip (lookup n env))
+    
+   
+let rec section env = function
+    | SectionAt(x,_)             -> section env x
+    | SSpan( e1, e2, ss)         -> List.iter (section env) ss
+    | Datum( d)                  -> datum env d
+    | SExport (t, ns)            -> List.iter (export env t) ns
+    | Procedure(cc,n,fs, ds, ss) -> procedure cc fs ds ss
+    
 let rec topdecl env = function
-    | TopDeclAt(x,r)  -> catch (errorRegPrt r) (topdecl env) x
-    | Import( t, ns)  -> Ok ()
-    | Export( t, ns)  -> ignore (List.map (export env t) ns) ; Ok ()
-    | Const ( cs)     -> Ok ()
-    | Section( n, ss) -> Ok ()
-    | Registers( rs)  -> Ok () (* already checked in phase 1 *)
-    | Pragma          -> Ok () (* nothing to do *)
-    | TopProcedure(n,cc,fs,ds,ss) -> Ok()
-
-let program' env ds srcmap = 
-    List.map (topdecl env) ds  
+    | TopDeclAt(x,r)  -> topdecl env x
+    | Import( t, ns)  -> ()
+    | Export( t, ns)  -> List.iter (export env t) ns
+    | Const ( cs)     -> () 
+    | Section( n, ss) -> List.iter (section env) ss
+    | Registers( rs)  -> ()
+    | Pragma          -> ()
+    | TopProcedure(n,cc,fs,ds,ss) -> ()
                                             
 let program env ds srcmap =
-    Raise.list (program' env ds srcmap)            
+    ignore (List.map (topdecl env) ds) ; Ok ()  
 @
 
 % ------------------------------------------------------------------  
@@ -687,6 +780,7 @@ open Error
 <<symtab>>
 
 <<print module>>
+<<primitives module>>
 <<phase1 module>>
 <<phase2 module>>
 <<phase3 module>>
