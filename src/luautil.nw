@@ -40,7 +40,8 @@ module MakeLib (C: Lua.Lib.CORE) = struct
     <<dofile>>
     
     let builtins =
-    [ "dosearchfile" , func (V.string **-> V.value **-> V.runit) dosearchfile
+    [ "dosearchfile" , 
+      func (V.string **-> V.value **-> V.result (V.list V.value)) dosearchfile
     ]
     let init = C.register_module "Util" builtins
 end
@@ -92,7 +93,7 @@ let dostring g str   = C.apply (lookup g "dostring") g  [str]
 
 let defaultdir       = "/usr/local/lib/qc--"    (*XXX fix XXX*)
 let luapath          = "QC--LUAPATH"
-let defaultpath      = ":*"
+let defaultpath      = ":*:."                   (*XXX fix XXX*)
 
 let dosearchfile g file value =
     let path = try Sys.getenv luapath with Not_found -> defaultpath in
@@ -105,7 +106,7 @@ let dosearchfile g file value =
               | V.Nil      -> search rem
               | V.Table(t) -> 
                  (try let script = Luahash.find t (V.String file) in
-                     dofile g script
+                     dostring g script
                  with Not_found -> search rem)
               | _  -> 
                 error g "dosearchfile: expected nil or table as second argument"
@@ -118,7 +119,7 @@ let dosearchfile g file value =
                 else search rem
     in
         if Filename.is_relative file then
-            ignore (search dirs)
+            search dirs
         else
-            ignore (dofile g (V.String file))
+            dofile g (V.String file)
 @    

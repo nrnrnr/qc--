@@ -423,10 +423,15 @@ ${NAME}grammar.pod:      main2.nw parse.output
 # include version and name information
 ################################################################
 
-this.ml:        this.in mkfile
-                sed     -e "s/@this@/$NAME-$VERSION/"\
-                        -e "s/@arch@/$ARCH/"\
-                        this.in > $target
+this.ml:        this.in qc--.lua
+                sed     -e "s/@this@/$NAME-$VERSION/"   \
+                        -e "s/@arch@/$ARCH/"            \
+                        this.in                         > $target
+                echo 'let boot = "'                     >> $target
+                sed     -e 's/"/\\"/g'                  \
+                        -e 's/\\/\\/g'                  \
+                        qc--.lua                        >> $target    
+                echo '"'                                >> $target        
 
 ################################################################
 # recalculate dependencies

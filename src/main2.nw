@@ -130,12 +130,13 @@ let rec expand_args = function
 \end{itemize}
 
 We export some command line arguments to the Lua value [[Sys.argv]]. The
-[[Sys]] table is created, if it does not exist.
+[[Sys]] table is created, if it does not exist. 
 
 <<main2.ml>>=
 let export_argv g strings =
     let list = V.list V.string in
-    I.register_module "Sys" ["argv", list.V.embed strings] g
+    ( I.register_module "Sys" ["argv", list.V.embed strings] g
+    )
 @
 
 At start-up, we load the file [[qc--.lua]] into the interpreter. It
@@ -152,6 +153,9 @@ let main () =
     let usage       = "usage: " ^ this ^ " -e 'arg' [arg arg ..]" in
     let state       = I.state () in (* fresh Lua state *)       
     let evaluate e  = ignore (I.dostring state e) in
+    let ()          = I.register_module "Boot"  (* build Boot table *)
+                        ["qc--.lua" , V.String This.boot] state in
+    let bootscript  = "Util.dosearchfile('qc--.lua', Boot)" in
         try 
             let rec loop todo = function
                 | ("-e"::code::args) -> loop (code::todo) args
@@ -166,8 +170,8 @@ let main () =
                     ; List.iter evaluate (List.rev todo)
                     )
             in
-                ( ignore(I.dofile state "qc--.lua")     (* startup *)
-                ; loop [] args                          (* cmdline *)
+                ( evaluate bootscript       (* boot interpreter *)
+                ; loop [] args              (* cmdline *)
                 )
         with
             E.ErrorExn(msg) -> 
@@ -627,21 +631,39 @@ Jonathan D. Eddy <eddy@fas.harvard.edu>
 \section{This}
 % ------------------------------------------------------------------  
 
-To include some version information into the main binary we provide
-the [[This]] module.  Its source code [[this.ml]] is created during
-the build process from [[this.in]].  Currently only the version
-information stays here but it is a useful place for other informations
-that change frequently.  Note, that this code should \emph{not} be
-used to control the behavior of the program.  We therefore write all
-these informations to a stream to emphasize this.
+To include some version information into the main binary we provide the
+[[This]] module.  Its source code [[this.ml]] is created during the
+build process from [[this.in]].  Currently only the version information
+stays here but it is a useful place for other informations that change
+frequently.  Note, that version informations  should \emph{not} be used
+to control the behavior of the program.  We therefore write all these
+informations to a stream to emphasize this.
+
+At startup the compiler executes a file [[qc--.lua]] in the Lua
+interpreter. One version of this file is compiled into the binary as
+[[This.boot]].
+
+<<this.mli>>=
+val name    : out_channel -> unit
+val version : out_channel -> unit 
+val boot    : string (* contents of "qc--.lua" *)
+@
+
+Here is the implementation. The golory details are also in the [[mk]]
+file in this directory.
 
 <<this.in>>=
-(* do not edit - this file is created from this.in through make(1) *)
+(* Do not edit - this file is created from this.in through mk(1) 
+ * If this file does not compile, check the following files:
+ * (1) main2.nw - this.in is defined here
+ * (2) mkfile target this.ml - constructs the boot string
+ *)
 
 let system          = "@this@"
+@
 
-@ The functions [[name]] and [[version]] decompose the [[system]]
-string to get the name and version of the system. 
+The functions [[name]] and [[version]] decompose the [[system]]
+string to get its name and version. 
 
 <<this.in>>=
 let name channel = 
@@ -660,12 +682,4 @@ let version channel =
         output_string channel s
 @
 
-% ------------------------------------------------------------------ 
-\subsection{Interface}
-% ------------------------------------------------------------------ 
-
-<<this.mli>>=
-val name    : out_channel -> unit
-val version : out_channel -> unit 
-@
 
