@@ -28,7 +28,7 @@ LUARECORD = ${LUASRC:%.lua=%.luarecord}
 CMMRECORD = ${CMMSRC:%.c--=%.cmmrecord}
 VERBOSE   =
 
-test:VQ:        $LUATEST 
+test:VQ:        $LUATEST $CMMTEST
 luatest:VQ:     $LUATEST
 cmmtest:VQ:     $CMMTEST
 vtest:VQ:	mk $MKFLAGS VERBOSE=-v test
@@ -47,7 +47,7 @@ record:VQ:      $LUARECORD $CMMRECORD
                 sed -n 's!^---!!p' $SELF | sh $SHX || true
 		case "$VERBOSE$stem" in -v*) ;; *0) echo "# tested $stem" ;; esac
 
-%.cmmtest:VQ:       %.c-- ../interp ../../src/qc-- regr
+%.cmmtest:VQ:       %.c-- ../interp ../../src/qc-- regr qrun
 		SELF=$stem.c--
 		BASE=$stem
 		MKTARGET=$target
@@ -68,7 +68,7 @@ record:VQ:      $LUARECORD $CMMRECORD
                 sed -n 's!^---!!p' $SELF | sh -x || true
 		# why is there || true on the preceding line??
 
-%.cmmrecord:VQ:     %.c-- ../interp ../../src/qc-- regr       
+%.cmmrecord:VQ:     %.c-- ../interp ../../src/qc-- regr qrun
 		SELF=$stem.c--
 		BASE=$stem
                 REGRFLAGS="-r"
@@ -81,6 +81,10 @@ record:VQ:      $LUARECORD $CMMRECORD
 # ------------------------------------------------------------------  
 
 regr:           test.nw
+                $NOTANGLE -R$target $prereq > $target
+                chmod +x $target
+
+qrun:           test.nw
                 $NOTANGLE -R$target $prereq > $target
                 chmod +x $target
 
