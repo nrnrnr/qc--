@@ -50,7 +50,6 @@ LCC_SRCDIR     = /home/lair/nr/lcc/lcc-4.2
 # ------------------------------------------------------------------
 
 INTERP    = evaluating
-DEPEND    = -MM
 
 all:V:      $NAME $LIBNAME libinclude gc exn
 all.opt:V:  all
@@ -72,7 +71,7 @@ test:VQ:
 	(cd test; mk $MKFLAGS test)
 
 clean:V:
-	rm -f *.o *.cmm.c-- *.cmm.qs $NAME
+	rm -f *.o *.cmm.c-- *.cmm.qs $NAME DEPEND
 	(cd clients; mk clean)
 
 clean.opt:V: clean
@@ -314,12 +313,14 @@ booted-interp:D: $QCC $BOOTEDBC_COREOBJS $BOOTED_CLIENTSRCS
 # dependency recalculation
 # ------------------------------------------------------------------
 
-depend:V:   $SRCS $HDRS
-	cp mkfile mkfile.bak
-	sed '/^# DO NOT DELETE/q' mkfile.bak > mkfile
-	$CC $DEPEND $INCLUDES $SRCS |
-	  sed 's/gc\.o:/clients\/gc\.o:/'   |
-	  sed 's/exn\.o:/clients\/exn\.o:/' >> mkfile
+DEPEND    = -MM
+depend:V: DEPEND
+	(cd clients; mk depend)
+
+DEPEND:D:  DEPEND.raw
+	sed 's@gc\.o:@clients/gc.o:@;s@exn\.o:@clients/exn.o:@' $prereq > $target
+DEPEND.raw:D:  $SRCS $HDRS
+	$CC $DEPEND $INCLUDES $SRCS > $target
 
 
 # ------------------------------------------------------------------
@@ -445,112 +446,5 @@ optest:V: opgen
 
 #
 # [dependencies]
-#
-# DO NOT DELETE THIS LINE -- mk depend depends on it
-arena.o: arena.c include/cii/assert.h include/cii/except.h \
-  include/cii/arena.h
-assert.o: assert.c include/cii/assert.h include/cii/except.h
-atom.o: atom.c include/cii/atom.h include/cii/assert.h \
-  include/cii/except.h include/cii/mem.h
-except.o: except.c include/cii/assert.h include/cii/except.h
-fmt.o: fmt.c include/cii/assert.h include/cii/except.h include/cii/fmt.h \
-  include/cii/mem.h
-mclib.o: mclib.c include/mclib.h include/cii/assert.h \
-  include/cii/except.h
-mem.o: mem.c include/cii/assert.h include/cii/except.h include/cii/mem.h
-mp.o: mp.c include/cii/assert.h include/cii/except.h include/cii/fmt.h \
-  include/cii/mem.h include/cii/xp.h include/cii/mp.h
-xp.o: xp.c include/cii/assert.h include/cii/except.h include/cii/xp.h
-activation.o: activation.c activation.h table.h include/cii/assert.h \
-  include/cii/except.h include/lua.h types.h machine.h uid.h stack.h \
-  value.h include/cii/mp.h
-assemblyunit.o: assemblyunit.c assemblyunit.h include/cii/assert.h \
-  include/cii/except.h include/mclib.h include/lua.h controlflow.h \
-  activation.h table.h types.h machine.h uid.h stack.h value.h \
-  include/cii/mp.h include/cii/arena.h lualink.h include/luadebug.h \
-  encoding.h interp.h intervals.h label.h thread.h c-features.h
-c-features.o: c-features.c c-features.h
-ccall.o: ccall.c ccall.h table.h include/cii/assert.h \
-  include/cii/except.h include/lua.h stack.h value.h types.h machine.h \
-  include/cii/mp.h label.h include/mclib.h assemblyunit.h controlflow.h \
-  activation.h uid.h include/cii/arena.h lualink.h include/luadebug.h \
-  interp.h intervals.h thread.h c-features.h
-controlflow.o: controlflow.c controlflow.h include/mclib.h \
-  include/cii/assert.h include/cii/except.h activation.h table.h \
-  include/lua.h types.h machine.h uid.h stack.h value.h include/cii/mp.h \
-  interp.h assemblyunit.h include/cii/arena.h intervals.h label.h \
-  thread.h c-features.h
-encoding.o: encoding.c encoding.h include/lua.h table.h \
-  include/cii/assert.h include/cii/except.h include/mclib.h \
-  assemblyunit.h controlflow.h activation.h types.h machine.h uid.h \
-  stack.h value.h include/cii/mp.h include/cii/arena.h encode.h label.h \
-  lualink.h include/luadebug.h operator.h interp.h intervals.h thread.h \
-  c-features.h span.h include/cii/atom.h
-intervals.o: intervals.c intervals.h include/cii/assert.h \
-  include/cii/except.h
-label.o: label.c label.h include/lua.h include/mclib.h \
-  include/cii/assert.h include/cii/except.h assemblyunit.h controlflow.h \
-  activation.h table.h types.h machine.h uid.h stack.h value.h \
-  include/cii/mp.h include/cii/arena.h lualink.h include/luadebug.h \
-  interp.h intervals.h thread.h c-features.h
-lualink.o: lualink.c lualink.h include/lua.h include/luadebug.h table.h \
-  include/cii/assert.h include/cii/except.h include/lualib.h interp.h \
-  include/mclib.h activation.h types.h machine.h uid.h stack.h value.h \
-  include/cii/mp.h assemblyunit.h controlflow.h include/cii/arena.h \
-  intervals.h label.h thread.h c-features.h encoding.h operator.h span.h \
-  inspect.clua
-operator.o: operator.c operator.h table.h include/cii/assert.h \
-  include/cii/except.h include/lua.h stack.h value.h types.h machine.h \
-  include/cii/mp.h c-features.h float-features.h lualink.h \
-  include/luadebug.h interp.h include/mclib.h activation.h uid.h \
-  assemblyunit.h controlflow.h include/cii/arena.h intervals.h label.h \
-  thread.h include/cii/atom.h
-runtime.o: runtime.c runtime.h label.h include/lua.h include/mclib.h \
-  include/cii/assert.h include/cii/except.h assemblyunit.h controlflow.h \
-  activation.h table.h types.h machine.h uid.h stack.h value.h \
-  include/cii/mp.h include/cii/arena.h interp.h intervals.h thread.h \
-  c-features.h lualink.h include/luadebug.h ccall.h span.h
-span.o: span.c span.h include/mclib.h include/cii/assert.h \
-  include/cii/except.h table.h include/lua.h label.h assemblyunit.h \
-  controlflow.h activation.h types.h machine.h uid.h stack.h value.h \
-  include/cii/mp.h include/cii/arena.h interp.h intervals.h thread.h \
-  c-features.h lualink.h include/luadebug.h
-stack.o: stack.c stack.h value.h types.h machine.h include/cii/mp.h \
-  include/cii/except.h interp.h include/lua.h include/mclib.h \
-  include/cii/assert.h activation.h table.h uid.h assemblyunit.h \
-  controlflow.h include/cii/arena.h intervals.h label.h thread.h \
-  c-features.h
-table.o: table.c table.h include/cii/assert.h include/cii/except.h \
-  include/lua.h
-thread.o: thread.c thread.h intervals.h label.h include/lua.h \
-  include/mclib.h include/cii/assert.h include/cii/except.h \
-  assemblyunit.h controlflow.h activation.h table.h types.h machine.h \
-  uid.h stack.h value.h include/cii/mp.h include/cii/arena.h interp.h \
-  c-features.h
-uid.o: uid.c uid.h include/cii/assert.h include/cii/except.h intervals.h \
-  thread.h label.h include/lua.h include/mclib.h assemblyunit.h \
-  controlflow.h activation.h table.h types.h machine.h stack.h value.h \
-  include/cii/mp.h include/cii/arena.h
-value.o: value.c value.h types.h machine.h include/cii/mp.h \
-  include/cii/except.h include/cii/assert.h interp.h include/lua.h \
-  include/mclib.h activation.h table.h uid.h stack.h assemblyunit.h \
-  controlflow.h include/cii/arena.h intervals.h label.h thread.h \
-  c-features.h
-interp-dec.o: interp-dec.c include/cii/assert.h include/cii/except.h \
-  interp.h include/lua.h include/mclib.h activation.h table.h types.h \
-  machine.h uid.h stack.h value.h include/cii/mp.h assemblyunit.h \
-  controlflow.h include/cii/arena.h intervals.h label.h thread.h \
-  c-features.h float-features.h lualink.h include/luadebug.h encode.h \
-  ccall.h operator.h encoding.h span.h
-disasm-dec.o: disasm-dec.c include/cii/assert.h include/cii/except.h \
-  disasm.h label.h include/lua.h include/mclib.h assemblyunit.h \
-  controlflow.h activation.h table.h types.h machine.h uid.h stack.h \
-  value.h include/cii/mp.h include/cii/arena.h operator.h interp.h \
-  intervals.h thread.h c-features.h
-encode.o: encode.c include/mclib.h include/cii/assert.h \
-  include/cii/except.h encode.h
-client.o: client.c client.h include/lua.h runtime.h label.h \
-  include/mclib.h include/cii/assert.h include/cii/except.h \
-  assemblyunit.h controlflow.h activation.h table.h types.h machine.h \
-  uid.h stack.h value.h include/cii/mp.h include/cii/arena.h interp.h \
-  intervals.h thread.h c-features.h disasm.h ccall.h
+
+<DEPEND

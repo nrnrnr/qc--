@@ -276,33 +276,11 @@ function Util.concat_fallback (x, y)
   if     (type(x) == "table" and type(y) == "nil"  ) then return x
   elseif (type(x) == "nil"   and type(y) == "table") then return y
   elseif (type(x) == "table" and type(y) == "table") then
-    k, v = next(x, nil)
-
-    while k do
-      if not (y[k]) then return Util.tconcat(x, y) end
-
-      if (type(v) == "number" and type(y[k]) == "number") then
-        local new_t  = {}
-        local finish = y[k]
-        local i      = v
-        local n      = 0
-
-        while i <= finish do
-          n = n + 1
-          new_t[n] = Util.tcopy(x)
-          new_t[n][k] = i
-
-          i = i + 1
-        end
-
-        return new_t
-      else
-        if not (v == y[k]) then return Util.tconcat(x, y) end
-      end
-      k, v = next(x, k)
+    if Register.is(x) and Register.is(y) then
+      return Register.range(x, y)
+    else
+      return Util.tconcat(x, y)
     end
-
-    return Util.tconcat(x, y)
   else return Util.old_concat_fallback(x, y)
   end
 end

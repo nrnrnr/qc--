@@ -71,54 +71,30 @@ config:QV:
 	exit 1
 	fi
 
+QCSRC=src runtime
 qc--:VQ:         tools lib dirs
-	for i in src runtime; do 
-	  (echo "# cd $i" && cd $i && mk $MKFLAGS depend && mk $MKFLAGS update) ||
-	  exit 1
-	done
-
+	./mkdirs $QCSRC
 qc--.opt:VQ:     tools.opt lib.opt dirs
-	for i in src runtime; do 
-	  (echo "# cd $i" && cd $i && mk $MKFLAGS depend && mk $MKFLAGS update.opt) ||
-	  exit 1
-	done
+	./mkdirs -opt $QCSRC
 
-lib:VQ:          dirs
-	for i in cllib asdl gen lua rtl; do 
-	  (echo "# cd $i" && cd $i && mk $MKFLAGS depend && mk $MKFLAGS update) ||
-	  exit 1
-	done
-
+LIBSRC=cllib asdl gen lua rtl
+lib:VQ: dirs
+	./mkdirs $LIBSRC
 lib.opt:QV:      dirs
-	for i in cllib asdl gen lua rtl
-	do 
-	  (echo "# cd $i" && cd $i && mk $MKFLAGS depend && mk $MKFLAGS update.opt) ||
-	  exit 1
-	done
+	./mkdirs -opt $LIBSRC
 
+TOOLSSRC=tools camlburg
 tools:V:        lib dirs
-	for i in tools camlburg
-	do 
-	  (echo "# cd $i" && cd $i && mk $MKFLAGS depend && mk $MKFLAGS update) ||
-	  exit 1
-	done
-
+	./mkdirs $TOOLSSRC
 tools.opt:V:    lib dirs
-	for i in tools camlburg
-	do 
-	  (echo "# cd $i" && cd $i && mk $MKFLAGS depend && mk $MKFLAGS update.opt) ||
-	  exit 1
-	done
+	./mkdirs -opt $TOOLSSRC
 
-interp:V:       dirs
-	(echo "# cd interp" && cd interp && mk $MKFLAGS update)
-
-doc:V:          dirs
-	(echo "# cd doc" && cd doc && mk $MKFLAGS update)
-
+interp:V:       dirs 
+	./mkdirs interp
+doc:V:          dirs 
+	./mkdirs doc
 test:V:         all
 	cd test2 && mk $MKFLAGS all
-
 
 coverage: test2/ocamlprof.dump	
 	rm -f $target
@@ -295,7 +271,7 @@ FILES:D:          clobber
 	  -o -type f -print | sort   > $target 
 
 timestamps:V:   
-	cd interp; mk -t -a disasm-dec.c interp-dec.c encode.[ch]
+	cd interp; mk depend; mk -t -a disasm-dec.c interp-dec.c encode.[ch]
 
 tar:V:          $DIR.tar.gz
 

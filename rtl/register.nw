@@ -209,11 +209,11 @@ module RT (C : Lua.Lib.CORE) = struct
     let projectRegister reg = match reg with
       | V.Table reg ->
           let field f = V.Table.find reg (V.String f) in
-          let s = String.get (V.string.V.project (field "space")) 0 in
+          let s    = String.get (V.string.V.project (field "space")) 0 in
           let cell = Cell.of_size (V.int.V.project (field "cellsize")) in
-          let i = V.int.V.project (field "index") in
-          let a = agg.V.project (field "agg") in
-          let c = match field "count" with
+          let i    = V.int.V.project (field "index") in
+          let a    = agg.V.project (field "agg") in
+          let c    = match field "count" with
           | V.Nil -> let w = V.int.V.project (field "width") in
                      Cell.to_count cell w
           | cf    -> C (V.int.V.project cf) in
@@ -224,6 +224,40 @@ module RT (C : Lua.Lib.CORE) = struct
       V.embed = embedRegister ; V.project = projectRegister;
       V.is = (fun r -> try ignore (projectRegister r); true
                        with V.Projection (_, _) -> false); }
+end
+@ 
+<<Lua code for registers>>=
+Register = { }
+
+function Register.create(t)
+  if not t.width and not t.count then t.count = 1 end     
+  assert(t.space and t.cellsize and t.index)
+  assert(t.count > 0)
+  t["I am a register"] = 1
+  return t
+end
+
+function Register.is(r)
+  return r["I am a register"]
+end
+
+function Register.range(r1, r2)
+  assert(Register.is(r1) and Register.is(r2))
+  assert(r1.space == r1.space and r1.agg == r2.agg and r1.cellsize == r2.cellsize
+        and r1.count == r2.count)
+  assert(r1.index <= r2.index)
+  local l = { }
+  local next = 1
+  local i = r1.index
+  local space, cellsize, agg, count = r1.space, r1.cellsize, r1.agg, r1.count
+  while i <= r2.index do
+    l[next] =
+      Register.create { space = space, cellsize = cellsize, agg = agg, count = count,
+                        index = i }
+    i = i + count
+    next = next + 1
+  end
+  return l
 end
 @ 
 <<register.ml>>=

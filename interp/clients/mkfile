@@ -27,8 +27,6 @@ INCDIR    = $TOP/interp/libinclude
 # main targets
 # ------------------------------------------------------------------
 
-DEPEND    = -MM
-
 all:V:      $NAMES
 all.opt:V:  all
 
@@ -36,7 +34,7 @@ update:V:     ${NAMES:%=$BINDIR/%}
 update.opt:V: update
 
 clean:V:
-	rm -f *.o
+	rm -f *.o DEPEND
 
 clean.opt:V: clean
 
@@ -110,10 +108,11 @@ gc_client:  ${B}gc.o
 # dependency recalculation
 # ------------------------------------------------------------------
 
-depend:V:   $SOURCES $HEADERS
-	cp mkfile mkfile.bak
-	sed '/^# DO NOT DELETE/q' mkfile.bak > mkfile
-	$CC $DEPEND $INCLUDES $SOURCES >> mkfile
+depend:V:   DEPEND
+
+DEPEND = -MM
+DEPEND:D: $SOURCES $HEADERS
+	$CC $DEPEND $INCLUDES $SOURCES > $target
 
 # ------------------------------------------------------------------
 # documentation-related files
@@ -144,11 +143,5 @@ $B'(([^/]*/)*)(.*)\.h$':RD:       '\1\3.nw'
 
 #
 # [dependencies]
-#
-# DO NOT DELETE THIS LINE -- mk depend depends on it
-exn.o: /tmp/newpx/clients/exn.c /tmp/newpx/clients/exn.h \
-  ../../interp/libinclude/qc--interp.h \
-  ../../interp/libinclude/qc--runtime.h
-gc.o: /tmp/newpx/clients/gc.c /tmp/newpx/clients/gc.h \
-  ../../interp/libinclude/qc--interp.h \
-  ../../interp/libinclude/qc--runtime.h
+
+<DEPEND
