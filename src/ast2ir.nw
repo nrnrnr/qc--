@@ -30,7 +30,7 @@ semantics have been found correct it is translated into abstract
 
 <<ast2ir.mli>>=
 module Make 
-    (G      : Agraph.S with type ginit       = string * Fenv.Clean.scope) 
+    (G      : Agraph.S with type ginit       = string * Fenv.Clean.proc) 
     (Asm    : Asm2.S   with type instruction = G.graph
                        with type init        = unit) :
 sig
@@ -69,7 +69,7 @@ end
 
 
 module Make
-  (G         : Agraph.S with type ginit = string * Fenv.Clean.scope)
+  (G         : Agraph.S with type ginit = string * Fenv.Clean.proc)
   (Asm       : Asm2.S   with type instruction  = G.graph
                         with type init = unit) =
 struct
@@ -258,7 +258,9 @@ and variable (env: F.env) (target: Target.info) globals = function
                               )
                     in Rtl.Fetch(loc,width)
                 )                  
-            | F.Label(F.Stack x) -> assert false (* impossible *)
+            | F.Label(F.Stack (offset,label)) -> 
+                E.error "access to stack data not implemented"
+                
             | F.Continuation     -> assert false (* impossible *)
             )
     | A.Mem (t,e,a)            -> let width = ty env t      in
@@ -567,11 +569,11 @@ for a procedure is found in its entry in the fat environment.
 <<module Make>>=
 and proc env (target: Target.info) globals props (asm: Asm.asm) (cc,n,fs,bb) =  
     let decorate n = G.bind props n                                    in
-    let scope      = match F.findv n env with
-                     | _,(F.Label(F.Proc {F.scope = s}),_) -> s
+    let p          = match F.findv n env with
+                     | _,(F.Label(F.Proc p),_) -> p 
                      | _  -> assert false                              in
-    let env        = F.push env scope                                  in
-    let ginit      = (n, scope)                                        in
+    let env        = F.push env p.F.scope                              in
+    let ginit      = (n, p)                                            in
     let graph      = GM.graph ginit  (* fresh graph for this proc *)   in
     let cc         = find_cc (Aux.Option.get default_convention cc) target in
     let entry a    = decorate (GM.entry a)                             in

@@ -224,6 +224,7 @@ type proc =
     { scope:      scope partial
     ; sdata:      int partial       (* amount of stackdata  *)
     ; salign:     int partial       (* max align constraint *)
+    ; slabel:     string partial    (* link-time const for stack data offset*)
     }
 
 and  reghint        = RReg  of string   (* hardare reg *)
@@ -236,7 +237,9 @@ and  register       = { index:      int           (* for run-time API *)
 and  kind           = Proc          of proc
                     | Code
                     | Data
-                    | Stack         of int partial (* stack offset *)    
+                    | Stack         of ( int     (* offset within s/d *)
+                                       * string  (* r/t const for s/d *)
+                                       ) partial 
 
 and  denotation     = Constant      of Bits.bits
                     | Label         of kind
@@ -406,15 +409,20 @@ because the [[offset]] must be maintained over many functions and
 becomes a non-local property.
 
 <<>>=
-val resetOffset     : env -> env
+val resetOffset     : string -> env -> env
 val incrOffset      : int -> env -> env
 val alignOffset     : int -> env -> env
 val maxOffsetAlign  : env -> int
 val offset          : env -> int
+val offsetName      : env -> string
 @
 
-Each procedure sets the offset to zero by calling [[resetOffset]].  A
-data declaration increments the offset by its size using
+Each procedure sets the offset to zero by calling [[resetOffset]] by
+passing a unique name as the first argument.  The name is later bound
+to the offset from the beginning of the procedures run-time stack. 
+The (current) name can be obtained from [[offsetName]].
+
+A data declaration increments the offset by its size using
 [[incrOffset]].  The [[alignOffset n]] function advances the
 [[offset]] to the next multiple of [[n]] unless [[offset]] is already
 a multiple of [[n]].  The maximal alignment constraint is also
@@ -422,8 +430,9 @@ remembered and returned by [[maxOffsetAlign]].  For labels and the
 total amount of [[stackdata]] [[offset]] reports the current value of
 the offset counter.
 
-Beware:  the value of [[offset]] is only meaningful in the context of
-a procedure and not a global program property.
+Beware:  the values of [[offset]] and [[offsetName]] are only
+meaningful in the context of a procedure and not a global program
+property.
 
 % ------------------------------------------------------------------ 
 \subsection{Imports and Exports}
@@ -619,17 +628,22 @@ in the implementation as well.
 
 <<>>=
 <<types>>
-and env            =  { scopes   :      scope list (* top = hd scopes *)
-                      ; srcmap   :      Srcmap.map
-                      ; error    :      bool
-                      ; target   :      target
-                      ; asm      :      asm
-                      ; rindex   :      int   (* register index *)
-                      ; offset   :      int   (* stack data offset *)
-                      ; maxalign :      int   (* stack offset align constraint*)
-                      ; regdecls :      regdecl list  (* hardware registers *)
+and env            =  { scopes     :    scope list (* top = hd scopes *)
+                      ; srcmap     :    Srcmap.map
+                      ; error      :    bool
+                      ; target     :    target
+                      ; asm        :    asm
+                      ; rindex     :    int   (* register index *)
+                      ; regdecls   :    regdecl list  (* hardware registers *)
+                      ; stackdata  :    stackdata
+                      }
+
+and stackdata =       { soffset    :    int    (* current offset *)
+                      ; smaxalign  :    int    (* max stackdata align constr*)
+                      ; sname      :    string (* label for offset *)
                       }
 @
+                       
 
 The [[target]] type captures target specific informations, like the
 byteorder, or sizes words and pointers.
@@ -690,25 +704,28 @@ should never be used because a clean environment is obtained by
 cleaning a dirty one. 
 
 <<>>=
-let empty  map =  { scopes   = []
-                  ; srcmap   = map
-                  ; error    = false
-                  ; rindex   = 0
-                  ; offset   = 0 
-                  ; maxalign = 1
-                  ; regdecls = []
-                  ; target = { memsize    = Arg.default 8
-                             ; endianness = Arg.default Little
-                             ; word       = Arg.default 32
-                             ; pointer    = Arg.default 32
-                             ; float      = Arg.default "ieee754"
-                             ; charset    = Arg.default "latin1"
-                             }
-                  ; asm    = { imported   = StrSet.empty
-                             ; exported   = StrSet.empty
-                             ; nam2sym    = StrMap.empty
-                             }
-                  } 
+let empty  map =  
+    { scopes    = []
+    ; srcmap    = map
+    ; error     = false
+    ; rindex    = 0
+    ; regdecls  = []
+    ; stackdata = { smaxalign  = 1
+                  ; soffset    = 0
+                  ; sname      = "can't happen"
+                  }
+    ; target    = { memsize    = Arg.default 8
+                  ; endianness = Arg.default Little
+                  ; word       = Arg.default 32
+                  ; pointer    = Arg.default 32
+                  ; float      = Arg.default "ieee754"
+                  ; charset    = Arg.default "latin1"
+                  }
+    ; asm       = { imported   = StrSet.empty
+                  ; exported   = StrSet.empty
+                  ; nam2sym    = StrMap.empty
+                  }
+    } 
 @
 
 The implementation of the [[scope]] stack provides no surprises.
@@ -1001,25 +1018,36 @@ The implementation of the [[offset]] functions for stack data are
 straight forward:
 
 <<>>=
-let resetOffset env     = { env with offset = 0 }
-let incrOffset n env    = { env with offset = env.offset + n }
-let offset env          = env.offset
-let maxOffsetAlign env  = env.maxalign
+let resetOffset n env     = let sd = { smaxalign = 1
+                                     ; soffset   = 0
+                                     ; sname     = n
+                                     }
+                            in  { env with stackdata = sd }
+let incrOffset n env      = { env with 
+                              stackdata = { env.stackdata with 
+                                            soffset = env.stackdata.soffset + n 
+                                          }
+                            }
+let offset env            = env.stackdata.soffset
+let maxOffsetAlign env    = env.stackdata.smaxalign
+let offsetName env        = env.stackdata.sname
 @
 
-The [[alignOffset]] function aligns the [[offset]] counter and also
+The [[alignOffset]] function aligns the [[soffset]] counter and also
 remembers the maximal alignment constraint.
 
 <<>>=
 let alignOffset n env = 
-    let m = max n env.maxalign in
-    let o = if   env.offset mod n = 0 
-            then env.offset 
-            else let q = env.offset / n in (q+1) * n
+    let m = max n env.stackdata.smaxalign in
+    let o = if   env.stackdata.soffset mod n = 0 
+            then env.stackdata.soffset 
+            else let q = env.stackdata.soffset / n in (q+1) * n
     in
-        { env with
-            offset   = o
-        ;   maxalign = m
+        { env with stackdata = 
+            { env.stackdata with
+                soffset   = o
+            ;   smaxalign = m
+            }
         }
 @
 
@@ -1124,27 +1152,34 @@ and clean_proc x = match x with
     |   { Dirty.scope     = Some s
         ; Dirty.sdata     = Some n 
         ; Dirty.salign    = Some m 
+        ; Dirty.slabel    = Some l
         } ->
         { Clean.scope     = clean_scope s
         ; Clean.sdata     = n
         ; Clean.salign    = m
+        ; Clean.slabel    = l
         }
     |   _ -> assert false 
 
 and clean_regdecls regs =
     List.map (fun (name, hint, ty) -> (name, clean_rhint hint, ty)) regs
 
+and clean_stackdata sd =
+    { Clean.sname     = sd.Dirty.sname
+    ; Clean.soffset   = sd.Dirty.soffset
+    ; Clean.smaxalign = sd.Dirty.smaxalign
+    } 
+
 <<>>=     
 and clean env =
-    { Clean.scopes   = List.map clean_scope env.Dirty.scopes
-    ; Clean.srcmap   = env.Dirty.srcmap 
-    ; Clean.error    = env.Dirty.error
-    ; Clean.target   = clean_target env.Dirty.target
-    ; Clean.rindex   = env.Dirty.rindex
-    ; Clean.offset   = env.Dirty.offset
-    ; Clean.maxalign = env.Dirty.maxalign
-    ; Clean.regdecls = clean_regdecls env.Dirty.regdecls
-    ; Clean.asm      = clean_asm env.Dirty.asm
+    { Clean.scopes    = List.map clean_scope env.Dirty.scopes
+    ; Clean.srcmap    = env.Dirty.srcmap 
+    ; Clean.error     = env.Dirty.error
+    ; Clean.target    = clean_target env.Dirty.target
+    ; Clean.rindex    = env.Dirty.rindex
+    ; Clean.stackdata = clean_stackdata env.Dirty.stackdata
+    ; Clean.regdecls  = clean_regdecls env.Dirty.regdecls
+    ; Clean.asm       = clean_asm env.Dirty.asm
     }
 @
 

@@ -263,7 +263,7 @@ between the various module types in the following code is subtle:
 
 \begin{itemize}
 \item [[Graph0]] implements [[Agraph.S]], the abstract flow graph
-      interface, plus some extra functions [[name]] and [[stmts]] to
+      interface, plus some extra functions [[ginit]] and [[stmts]] to
       obtain informations from a constructed flow graph.
 
 \item [[Graph1]] implements [[Agraph.S]] by using another [[Agraph.S]]
@@ -276,10 +276,9 @@ between the various module types in the following code is subtle:
       [[Graph1]] share the same data structures.  This makes it
       possible to call [[Graph0.stmts]] with a graph built by
       [[Graph1]], to access the extra functionality ([[stmts]],
-      [[name]]) provided by [[Graph0]].
+      [[ginit]]) provided by [[Graph0]].
 
 \end{itemize}
-
 
 <<>>=
 module Graph0   = Agraph2ast.Graph
@@ -316,24 +315,45 @@ The body of the procedure can be obtained from the [[Graph0.stmts]]
 function,  that returns a list of (assign-) statements. These
 statements use local variables that need to be declared. Declarations
 are (re-) constructed by scanning the [[scope]] of the procedure for
-register declarations.
+register declarations. 
 
 <<>>=
-let decl mangle name ventry dd = match ventry with
+let rdecl mangle name ventry dd = match ventry with
     | (_, (F.Register _ , Types.Bits n)) -> 
         let r = (A.Variant, None, A.BitsTy n ,mangle name, None)
-        in
-            A.DeclBody(A.Registers([r]))::dd
+        in r::dd
     | _ -> dd
+@
 
-<<>>=
+A procedure can hold data on the local run-time stack.  The usage of
+such [[stackdata]] must be declared.  No!  Even in our translation to
+{\PAL} the stack data lies on the run-time stack and is nor represented
+as [[stackdata]].
+
+<<unused>>=
+let sdecl name proc =
+    [ A.Align (proc.F.salign)
+    ; A.Label(mangle (Idgen.id' name))
+    ; A.MemDecl ( A.BitsTy target.Target.memsize
+                , A.FixSize(A.Int(Bits.of_int proc.F.sdata 32, None ))
+                , None
+                )
+    ]
+    
+<<module Personality>>=
 let ext i           = 
-    let (name,scope)= Graph0.ginit i                    in
-    let name  = mangle name                             in 
-    let stmts = Graph0.stmts i mangle                   in
-    let stmts = List.map (fun s -> A.StmtBody s) stmts  in 
-    let decls = F.foldv (decl mangle) scope []          in
-        (None, name, [], decls @ stmts)
+    let (name,proc) = Graph0.ginit i                          in
+    let scope       = proc.F.scope                            in  
+    let name        = mangle name                             in 
+    let stmts       = Graph0.stmts i mangle                   in
+    let stmts       = List.map (fun s -> A.StmtBody s) stmts  in 
+    let decls       = F.foldv (rdecl mangle) scope []         in
+        ( None
+        , name
+        , []
+        ,     A.DeclBody(A.Registers(decls)) 
+           :: stmts
+        )
 @
 
 <<driver.ml>>=
