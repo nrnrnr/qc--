@@ -2,10 +2,10 @@
 % vim: ts=8 et sw=4:
 
 % ------------------------------------------------------------------ 
-\section{The Lua Code}
+\section{The compiler driver (in Lua)}
 % ------------------------------------------------------------------ 
 
-The compiler is almost completely driven by a Lua script [[qc--.lua]]
+The compiler is driven by a Lua script [[qc--.lua]]
 that the built-in Lua interpreter executes at startup.  The script is
 searched along a search path by an {\ocaml} function in module
 \module{main.nw}. As a default, the script presented here is compiled
@@ -44,6 +44,9 @@ CMD.remove_derived_files()
 To keep the Lua name space clean, related functionality is grouped into
 tables which are used like modules. By convention, the names of tables
 are capitalized.
+Here is some documentation.
+
+\smallskip
 
 \noindent
 \begin{tabularx}{\linewidth}{|lX|}
@@ -65,9 +68,24 @@ actually do the job of the driver.\\
   List of derived files.\\
 [[CMD.qslist]]&
   List of [[.qs]] files to be linked if using the interpreter.\\
-[[CMD.dispatch]]&
-  Normally [[nil]], but can be set to a function that will
-  be called on each file to be compiled.\\
+[[CMD.translate]]&
+  A function that translates a file by dispatching on the canonical
+  extension in [[CMD.txtab]].
+  It is called on each file to be compiled.\\
+[[CMD.txtab]]&
+  A table mapping each canonical extension to a function that
+  translates that extension, then returns any derived files that should
+  be translated.
+  Normally initialized either to [[CMD.compilertab]] or [[CMD.interptab]].\\
+[[CMD.extensiontab]]&
+  A table giving the ``canonical'' form of each alternative extension.
+  For example, \texttt{.a} and \texttt{.so} are alternatives for the
+  canonical form~\texttt{.o}, and \texttt{.cmm} is an alternative for
+  the canonical form~\texttt{.c--}.\\
+[[CMD.canonical_extension]]&
+  A function that takes a file name and returns its ``canonical''
+  extension.
+  Uses [[CMD.extensiontab]].\\
 \hline
 [[Options.stop]]&
   Set of extensions with which translation should stop.\\
@@ -82,7 +100,7 @@ actually do the job of the driver.\\
   keep all.
   Any derived file with extension in [[Options.stop]] is also kept.\\
 \hline
-\end{tabularx}
+\end{tabularx}\\
 It would probably be useful to have an [[optfuns]] as the counterpart
 of [[whatfuns]], so that other compilers could add new options.
 @
@@ -243,6 +261,8 @@ Files to be compiled are accumulated in the variable [[Options.argv]], using
 [[Options.argc]] as an index to the last argument. The files in [[argv]]
 are compiled and linked in this order. Since linking is sensitive to
 order, we treat options like [[-L]] and [[-l]] as files.
+
+I WOULD LIKE TO RETIRE [[-c]] AND [[-S]] IN FAVOR OF [[-stop]].
 <<Lua command-line driver>>=
 function CMD.parse (args)
   local O = Options
@@ -255,7 +275,7 @@ function CMD.parse (args)
                      ' are mutually incompatible')
       end
     elseif v == "-c"       then O.stop_at(".o")
-    elseif v == "-S"       then O.stop_at(".s") -- also does duty for .qs
+    elseif v == "-S"       then O.stop_at(".s"); O.stop['.qs'] = 1; O.keep['.qs'] = 1
     elseif v == "-v"       then O.verbose = O.verbose + 1
     elseif v == "-vv"      then O.verbose = O.verbose + 2
     elseif strfind(v, "=") then local _ = dostring(v) or exit(2)
@@ -362,11 +382,65 @@ end
 
 The compiler and interpreter have this in common: they loop over files
 and dispatch on the extensions.
+But for each file, the compiler uses one translation function and the
+interpreter uses another.
+This function is [[CMD.translate]], or by default, the function passed
+to [[translate_files]].
+
+When a file is translated, it may return additional files to be
+translated, and so on until completion.
+<<Lua command-line driver>>=
+function CMD.translate_files(files, txtab)
+  if Options.argc == 0 then CMD.whatfuns["-help"](); exit(1) end
+  if txtab then CMD.txtab = CMD.txtab or txtab end --- set translator's table
+  if files then
+    if type(files) == 'string' then
+      local ext = CMD.canonical_extension(files)
+      if not Options.stop[ext] then
+        CMD.translate_files(CMD.translate(files))
+      end
+    else
+      local i = 1
+      while files[i] do
+        CMD.translate_files(files[i])
+        i = i+1
+      end
+    end
+  end
+end
+@ 
+Translating a single file dispatches on its canonical extension in [[CMD.txtab]].
+<<Lua command-line driver>>=
+function CMD.translate(file)
+  if CMD.txtab[CMD.canonical_extension(file)] then
+    return CMD.txtab[CMD.canonical_extension(file)](file)
+  else
+    CMD.error('qc-- does not recognize extension of file ' .. file)
+  end
+end
+@ 
+The ``canonical extension'' business treats [[-l]] or [[-L]] options
+as object files, plus it keeps a table of synonyms.
+<<Lua command-line driver>>=
+CMD.extensiontab = { }
+CMD.extensiontab['.cmm'] = '.c--'
+CMD.extensiontab['.a']   = '.o'
+CMD.extensiontab['.so']  = '.o'
+
+function CMD.canonical_extension(file) 
+  if strfind(file, '^-[lL]') then
+    return '.o'
+  else
+    local ext = Caml.Filename.extension(file)
+    return CMD.extensiontab[ext] or ext
+  end
+end
+@ 
 But they use different tables and different linking commands.
 <<Lua command-line driver>>=
 function CMD.whatfuns["-compile"]()
   backend = backend or Backend.x86
-  CMD.dispatch_files(CMD.dispatch or CMD.compile_dispatch)
+  CMD.translate_files(Options.argv, CMD.compilertab)
   if Options.stop_count == 0 then
     CMD.exec(Ld.cmd(Options.output or 'a.out'))
   elseif Options.verbose > 0 then
@@ -376,22 +450,12 @@ end
 
 function CMD.whatfuns["-interp"]()
   backend = backend or Backend.interp
-  CMD.dispatch_files(CMD.dispatch or CMD.interp_dispatch)
+  CMD.translate_files(Options.argv, CMD.interptab)
   if Options.stop_count == 0 then
     CMD.qs2exe(CMD.qslist, Options.output) 
   elseif Options.verbose > 0 then
     write('Stopping at ', Options.the_stop(), '\n')
   end    
-end
-
-function CMD.dispatch_files(dispatch)
-  local O = Options
-  if O.argc == 0 then CMD.whatfuns["-help"](); exit(1) end
-  local i = 1
-  while i <= O.argc do
-    dispatch(O.argv[i],O.output)
-    i = i+1
-  end
 end
 @ 
 The prettyprinter is an odd sort of ``compiler.''
@@ -403,7 +467,7 @@ function CMD.whatfuns["-pp"]()
     CMD.error("Cannot specify -o and -pp with multiple inputs")
   end
   O.stop_at('.pp')
-  CMD.dispatch_files(CMD.dispatch or CMD.pretty_dispatch)
+  CMD.translate_files(Options.argv, CMD.prettytab)
 end
 @
 \paragraph{Deriving files}
@@ -417,98 +481,72 @@ Otherwise, we create a derived file.
 of the derived file; for example, when we derive a [[.qs]] we check
 for [[.s]].)
 <<Lua command-line driver>>=
-function CMD.outfilename(file, out, ext, extcheck)
-  if Options.stop[extcheck or ext] and out then 
-    return out
+function CMD.outfilename(file, ext, extcheck)
+  if Options.stop[extcheck or ext] and Options.output then 
+    return Options.output
   else
     local tmp = Caml.Filename.chop_extension(file) .. ext
     tinsert(CMD.derived, tmp)
     return tmp
   end
 end
-@ 
+@ \emph{In a just world, we would invent unique names for derived files
+that won't survive, and we would place them in a temporary directory.
+To do so, we would have to track the ``base'' file name, e.g.,
+so from \texttt{foo.c--} we could create \texttt{/tmp/asdf239874.s}
+but then \texttt{foo.o}.
+For now, this is too much trouble---but it will return to bite us is
+people compile from a directory that is not writable.}
+@
 \paragraph{Compiler's actions for known file types}
 
-QUESTION: IS THIS [[out]] PARAMETER ALWAYS EQUAL TO
-[[Options.output]]?
-IF SO, WHY NOT GET RID OF IT???
-
-The compiler treats [[-l]] or [[-L]] like an object file.
-Otherwise, it looks up the extension in [[CMD.compilertab]],
+The compiler  looks up the canonical extension in [[CMD.compilertab]],
 and if there is no corresponding function, we give up.
 <<Lua command-line driver>>=
 CMD.compilertab = { }
-function CMD.compile_dispatch(file,out)
-    if strfind(file, '^-[lL]') then
-       return CMD.compilertab[".o"](file, out) -- passed to linker as if a file
-    elseif CMD.compilertab[Caml.Filename.extension(file)] then
-       return CMD.compilertab[Caml.Filename.extension(file)](file, out)
-    else
-       CMD.error('qc-- compiler does not recognize extension of file ' .. file)
-    end
-end
 @ 
 A Lua file is interpreted for side effect.
 If an error occurs, we exit.
 <<Lua command-line driver>>=
-function CMD.compilertab[".lua"](file, out) 
+function CMD.compilertab[".lua"](file) 
   local _ = dofile(file) or exit(2) -- fails on error
 end
 @ 
 {\PAL} source is translated to assembly code.
 We recognize extension [[.cmm]] as well as [[.c--]].
 <<Lua command-line driver>>=
-function CMD.compilertab[".c--"](file, out) 
-  if not Options.stop[".c--"] then
-    local asm = CMD.outfilename(file, out, '.s')
-    if Options.verbose > 0 then write('Compiling ', file, ' to ', asm, '\n') end
-    backend.compile(backend, file, asm)
-    CMD.compilertab[".s"](asm, out)
-  end
+function CMD.compilertab[".c--"](file) 
+  local asm = CMD.outfilename(file, '.s')
+  if Options.verbose > 0 then write('Translating ', file, ' to ', asm, '\n') end
+  if Options.verbose < 2 then backend.compile(backend, file, asm)          end
+  return asm
 end
-CMD.compilertab[".cmm"] = CMD.compilertab[".c--"]
 @ 
 We get from assembly to object file by calling the assembler.
 <<Lua command-line driver>>=
-function CMD.compilertab[".s"](file, out) 
-  if not Options.stop[".s"] then
-    local obj = CMD.outfilename(file, out, '.o')
-    CMD.exec(As.cmd(obj, file))
-    CMD.compilertab[".o"](obj, out)
-  end
+function CMD.compilertab[".s"](file) 
+  local obj = CMD.outfilename(file, '.o')
+  CMD.exec(As.cmd(obj, file))
+  return obj
 end
 @ 
 An object file is salted away in [[Ld.objects]].
 I'm slightly embarrassed to use strings here.
 <<Lua command-line driver>>=
-function CMD.compilertab[".o"](file, out) 
-  if not Options.stop[".o"] then
-    Ld.objects = Ld.objects .. " " .. file
-  end
+function CMD.compilertab[".o"](file) 
+  Ld.objects = Ld.objects .. " " .. file
 end
-
- -- .a and .so are also treated as object files
-CMD.compilertab[".a"]  = CMD.compilertab[".o"]
-CMD.compilertab[".so"] = CMD.compilertab[".o"]
 @ 
 The compiler barfs if given interpreter's assembly code.
 <<Lua command-line driver>>=
-function CMD.compilertab[".qs"](file, out)
+function CMD.compilertab[".qs"](file)
   CMD.error('file ' .. file .. ' is for the Quick C-- interpreter, not native code')
 end
 @ 
 
 \paragraph{Interpreter's actions for known file types}
-Dispatch is simpler, because there's no magic for [[-l]] or [[-L]].
 <<Lua command-line driver>>=
 CMD.interptab = { }
-function CMD.interp_dispatch(file,out)
-  if CMD.interptab[Caml.Filename.extension(file)] then
-     return CMD.interptab[Caml.Filename.extension(file)](file, out)
-  else
-     error('qc-- interpreter does not recognize extension of file ' .. file)
-  end
-end
 @ 
 Just as in the compiler, a Lua file is interpreted for side effect.
 We reuse the code.
@@ -517,25 +555,22 @@ CMD.interptab[".lua"] = CMD.compilertab[".lua"]
 @
 {\PAL} source is translated to the interpreter's special assembly code.
 <<Lua command-line driver>>=
-function CMD.interptab[".c--"](file, out) 
-  if not Options.stop[".c--"] then
-    local asm = CMD.outfilename(file, out, '.qs', '.s')
-    if Options.verbose > 0 then write('Compiling ', file, ' to ', asm, '\n') end
-    backend.compile(backend, file, asm)
-    CMD.interptab[".qs"](asm, out)
-  end
+function CMD.interptab[".c--"](file) 
+  local asm = CMD.outfilename(file, '.qs', '.s')
+  if Options.verbose > 0 then write('Translating ', file, ' to ', asm, '\n') end
+  if Options.verbose < 2 then backend.compile(backend, file, asm)          end
+  return asm
 end
-CMD.interptab[".cmm"] = CMD.interptab[".c--"]
 @ 
 Assembly code is salted away in [[CMD.qslist]] to be linked.
 <<Lua command-line driver>>=
-function CMD.interptab[".qs"](file, out)
+function CMD.interptab[".qs"](file)
   tinsert(CMD.qslist, file)
 end
 @ 
 The interpreter barfs if given native assembly code.
 <<Lua command-line driver>>=
-function CMD.interptab[".s"](file, out)
+function CMD.interptab[".s"](file)
   CMD.error('file ' .. file .. ' is for native code, not the Quick C-- interpreter')
 end
 @ 
@@ -550,8 +585,8 @@ executable.
 Interp = Interp or {}
 Interp.hashbang = "#! /usr/bin/env qc--interp"
 
-function CMD.qs2exe(objs, out)    
-    local exe = out or "a.out"
+function CMD.qs2exe(objs)    
+    local exe = Options.output or "a.out"
     if writeto(exe) == nil then CMD.error ("cannot open file " .. exe) end
     write(Interp.hashbang .. "\n")
     local i = 1
@@ -579,15 +614,20 @@ function CMD.qs2exe(objs, out)
 end    
 @
 \subsection{Stuff for the prettyprinter}
-This code is old and could almost certainly be improved.
+Prettyprinting never continues.
 <<Lua command-line driver>>=
--- needs to be tidied up later
-function CMD.pretty_dispatch(file,out)
-    local base = Caml.Filename.chop_extension(file)
-    local pp   = out or base .. ".pp"
-    Debug.prettyprint(file,pp)
-    return pp
+CMD.prettytab = { }
+function CMD.prettytab['.c--'](file)
+  local pp = CMD.outfilename(file, '.pp')
+  if Options.verbose > 0 then write('Prettyprinting ', file, ' to ', pp, '\n') end
+  if Options.verbose < 2 then Debug.prettyprint(file,pp)                       end
 end
+CMD.prettytab[".lua"] = CMD.compilertab[".lua"]
+function CMD.prettytab['.s'](file)
+  CMD.error('qc-- cannot prettyprint ' .. file)
+end
+CMD.prettytab['.qs'] = CMD.prettytab['.s']
+CMD.prettytab['.o']  = CMD.prettytab['.s']
 @
 % ------------------------------------------------------------------ 
 \subsection{Introspection (to support debugging)}
