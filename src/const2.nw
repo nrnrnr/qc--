@@ -17,13 +17,13 @@ exception Can'tSolve
 type t              (* equation *)
 type solution =
     { known:        (string * Rtl.exp) list
-    ; depedent:     (string * Rtl.exp) list
+    ; dependent:    (string * Rtl.exp) list
     }
 
 val equate:     Rtl.exp -> Rtl.exp -> t                     (* e1   == e2   *)
 val equate':    x:int -> Rtl.exp -> y:int -> Rtl.exp -> t   (* x+e1 == y+e2 *) 
 
-val solve: width:int -> t list ->-> solution   (* Can'tSolve *)
+val solve: width:int -> t list -> solution   (* Can'tSolve *)
 @
 
 The functions [[equate]] and [[equate']] create an equation of type
@@ -60,7 +60,7 @@ module RP = Rtl.Private
 exception Can'tSolve
 type solution =
     { known:        (string * Rtl.exp) list
-    ; depedent:     (string * Rtl.exp) list
+    ; dependent:    (string * Rtl.exp) list
     }
 @
 
@@ -113,7 +113,7 @@ zero.
 
 <<const2.ml>>=
 let equate     e1    e2 = sub (exp e1) (exp e2)
-let eqaute' ~x e1 ~y e2 = sub (add (int x) (exp e1)) (add (int x) (exp e2))
+let equate' ~x e1 ~y e2 = sub (add (int x) (exp e1)) (add (int x) (exp e2))
 @
 
 The linear equation solver needs to know about terms. We provide the
@@ -168,7 +168,7 @@ Here we solve the equation system. We have a list of sums that we feed
 into the linear equation solver. Once we obtain the result, we translate
 it back to {\rtl}s. 
 
-<const2.ml>>=
+<<const2.ml>>=
 let solve ~width sums =
     try
         let eqns   = List.fold_right Solver.make_zero sums Solver.empty in
@@ -178,6 +178,6 @@ let solve ~width sums =
                 ; dependent = List.map to_rtl result.Solver.dependent
                 }
     with
-        Solver.Can'tSolve -> raise Can'tSolve
+        Solver.Can'tSolve _ -> raise Can'tSolve
 @
 
