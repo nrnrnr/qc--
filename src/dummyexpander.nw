@@ -100,7 +100,7 @@ Systems 1, 3 (Sep 1992), 213-226.
 \subsection{Utilities for {\burg} actions}
 % ------------------------------------------------------------------ 
 
-To keep the semantic actions of {\brug} rules as simple as possible, we
+To keep the semantic actions of {\burg} rules as simple as possible, we
 provide some basic functions in the head of the specification and
 abbreviate commonly used modules.
 
@@ -187,35 +187,6 @@ location. The [[fetch]] function makes this easy.
 
 <<utilities>>=
 let fetch t = R.fetch t (W.loc t)
-@
-
-% ------------------------------------------------------------------ 
-\subsection{Left Over Utilities}
-% ------------------------------------------------------------------ 
-
-<<utilities>>=
-let is_bool_op  opr    = match Rtlop.Types.mono opr with
-   | (_, Types.Bool) -> true
-   | _               -> false
-
-let rec space_of = function
-    | RP.Cell(s,_,_,_,_) -> s
-    | RP.Slice(_,_,l)    -> space_of l
-    | RP.Var _           -> assert false
-
-
-let is_cell = function
-    | RP.Cell _ -> true
-    | _         -> false
-
-let is_mem   loc = space_of loc = 'm'
-let is_float loc = let s = space_of loc in s='f' || s='u' 
-let is_tmp   loc = let s = space_of loc in is_cell loc && (s='t' || s='u')
-
-let is_float_exp = function (* does exp denote a float value? *)   
-    | RP.Const _            -> false
-    | RP.Fetch (loc, _)     -> is_float loc
-    | RP.App(opr, args)     -> is_float_op opr
 @
 
 % ------------------------------------------------------------------ 
@@ -383,7 +354,7 @@ error:      Cell(x:string, agg, width, addr, ass)
             :}    
 @
 
-Operators are classified to integer of floating-point operators.
+Operators are classified to integer or floating-point operators.
 
 <<rules>>=
 fop:        Op(opr) [{: if is_float_op opr then 0 else C.inf_cost :}] 
@@ -575,7 +546,7 @@ let expand tmps (r: R.rtl) =
 @                        
 
 % ------------------------------------------------------------------ 
-\subsection{Expanding an entire {\CFG}}
+\subsection{Expanding an entire {\cfg}}
 % ------------------------------------------------------------------ 
 
 {\rtl}s do not live in isolation but belong to a procedure's {\cfg}.
