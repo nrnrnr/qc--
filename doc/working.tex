@@ -4,8 +4,9 @@
 \documentclass[11pt]{article}
 \usepackage{path}
 
-\author{Christian Lindig}
+\author{Christian Lindig\\ Norman Ramsey}
 \title{Roadmap to a Working Quick C-{}- Compiler}
+\date{Early June, 2002}
 
 \newcommand\PAL{{\small C-{}-}}
 \newcommand\AST{{\small AST}}
@@ -16,6 +17,12 @@
 \newcommand\cfg{{\small CFG}}
 \newcommand\ocaml{{\small OCAML}}
 
+\newdimen\whoskip
+\whoskip=2.5em
+\newcommand\who[1]{{\unskip\nobreak\hfil\penalty50
+    \hskip\whoskip\hbox{}\nobreak\hfil\textsl{#1}\parfillskip=0pt
+    \finalhyphendemerits=0 \par}}
+
 \parindent0pt
 \parskip1.5ex
 
@@ -25,150 +32,113 @@
 
 \maketitle
 
-As pointed out in \textit{Roadmap to a Better Quick C-{}- Compiler}, the
-Quick C-{}- compiler suffers from some design flaws. Aside from that, it
-has holes that prevent the compiler compile all legal {\PAL} programs.
-Below is a list of holes in need of a fix, from higher to lower
-priorities.  
+The purpose of this document is to explain what needs to be done by
+whom to lead to a working Quick~{\PAL} compiler.
+This document emphasize pieces that are missing, broken, or
+incomplete.
+Pieces that need refactoring are covered in the 
+\textit{Roadmap to a Better Quick C-{}- Compiler}.
 
-The main overall problem is complexity. The development of the compiler
-will benefit from trying to cut down the number of modules,
-abstractions, and moving parts in general. 
 
-Telling from the time it took to get certain parts working at all, the
-following points are notorious for trouble and should be considered for
-a re-design. 
-
-\begin{itemize}
-
-\item The control-flow graph. Details are outlined in \textit{Roadmap to
+\begin{enumerate}
+\item
+The control-flow graph should be refactored, as  outlined in \textit{Roadmap to
 a Better Quick C-{}- Compiler}.
-
-\item Integration of machine generated code. Basically it does not work
-because machine generated code is not flexible enough to handle
-temporaries and late compile-time constants. Adjusting the machine
-generated code manually is time-consuming and error prone. Machine
-generated code provides {\rtl} constructors for machine instructions, a
-recognizer for machine instructions in {\rtl} form, and an emitter of
-assembly code.
-
-\item Relocatable addresses have undergone several changes in their
-representation.  There are still two slightly different representations
-used in the compiler that wait to be unified: \path|Reloc| and one in
-\path|Sledlib|.  
-
-\item The semantics of the assembler interface needs to be defined
-clearly. The problem stems for an anticipated use for both textual
-assemblers and binary emitters. Especially the role of symbols is not
-clear and should be explained with respect to the better known textual
-assemblers. 
-
-\end{itemize}
-
-There is some confusion in the way {\PAL} primitive operators are
-translated to {\rtl} operators. {\PAL} operators are monomorphic in
-their result type, whereas {\rtl} operators are not. A polymorphic
-{\rtl} operator takes an additional argument compared to its monomorphic
-{\PAL} counter part. This argument should be supplied first to take
-advantage of currying: the a polymorphic {\rtl} operator supplied with
-its first argument implements the monomorphic {\PAL} operator. Currently
-the additional argument is the last argument. \textit{I hope this
-problem is solved in \path|Rtlop|. The above explanation of operator
-specialization is not entirely correct. The specializing parameter is
-not a formal argument of a primitive, but part of its \emph{width list}.
---CL}
-
-The function \path|proc| that controlls the translation of a procedure
-in module \path|Ast3ir| must be broken up and cleaned up. 
-
-According to the {\PAL} manual, integer multiplication \path|%mul| is
-quasi-polymorphic in its result and thus must be used as in \path|%mul32|.
-This poses a problem for the translation of the infix operator
-``\path|*|''.  What should \path|*| stand for?  Currently, \path|\%mul|
-is treated as monomorphic in its result size. \textit{Norman has
-clarified this: \path|*| stands for a monomorphic multiplications, the
-general multiplication is still quasi-polymorphic. Internally this is
-now implemented with two operators: \path|\%mul| and \path|\%mul@|. Any
-better idea? --CL (Tue Apr 30 13:15:48 EDT 2002)}
-
-The algorithm that linearizes the control-flow graph does not work
-properly. It fails to detect the difference between nodes that fall into
-a label and those that jump to a label. A probable fix to the problem is
-always to jump to a label and never to fall into it. When the design of
-the {\cfg} is reconsidered, this problem should be addressed, too.
-\textit{I have worked around the problem by never falling into a label,
-but using an explicit \path|goto|. This revealed some more problems with
-the {\cfg} design: it is neccessary to create new nodes inside the
-{\cfg} and thus no target-specific knowledge should be needed. I had to
-give up the polymorphism of the {\cfg} which wasn't working anyway. --CL
-(Tue May  7 16:44:58 EDT 2002)}.
-
-Targets provide code that spills and reloads registers. This code must
-respect the machine invariant, but currently does not. Machine specific
-spilling and reloading code must be defined. This code might be tied to
-the question how small values of 8 or 16 bit widths are handled. Are
-these values ever spilled?
-
-The compiler lacks a comprehensive plan how to deal with values of
-smaller than the size of a register. 
-
-A calling conventions needs to be defined and implemented. The currently
-implemented calling convention is a toy and not useful for real calls.
-
-After an {\rtl} has left the register allocator, it may still contain
-late compile-time constants. After these are substituted by bit vectors,
-the {\rtl} must undergo a constant folding process to make sure it
-respects the machine invariant. Such a constant folding routine
-currently does not exist.  Since the front end also needs to evaluate
-compile-time and link-time {\rtl} expression, one general {\rtl}
-evaluation mechanism would be appropriate. The current module
-\path|rtleval| can only handle compile-time and link-time {\rtl}s. 
-\textit{I hope this problem is solved in \path|Rtleval2|. --CL}
-
-{\rtl} operators describe compile-time, link-time, and run-time
-operations. The list of operators available at compile-time is extremely
-limited. Some implementation are just dummies that return constant
-results. 
-
+This is a major item to be covered by the ``control-flow graph working
+group,'' to consist of \emph{Christian, Glenn, John, Kevin, and Norman.}
+\item
+\emph{Identify suitable technology for writing machine-dependent
+components}.  
+ Generating everything from a machine is a research
+problem, and the solutions are not ready for use in the compiler.
+The problem is to identify techniques that lead to solid code, which
+we expect to be primarily hand-written code.
+\who{Norman.}
+\item
+Build a \emph{back end for a new target}, developing detailed porting
+instructions on the way.
+This process will include solutions to the following problems:
+\begin{enumerate}
+\item 
 A target description provides {\rtl}s for instructions that change the
 control flow, like \path|jump|, \path|branch|, or \path|return|.  These
 {\rtl}s have the strange property that they are target specific on one
 hand, but are not representable as a single machine instruction on the
 other. The reason is, that they include complex expressions. The
 invariant of these {\rtl}s should be clearly defined.
-
-The floating-point comparison \path|fcmp| returns two bits to indicate
-the result. The semantics of the four possible values need to be
-defined. (While NR believes that the IEEE 754 standard defines them, CL
-doubts it.)
-
+\item
+Figure out how to \emph{reserve a stack slot in the code expander}.
 The {\small SPARC} cannot move a value from an integer register to a
 floating-point register. The Code expander that wants to implement such
 moves needs a memory cell as temporary storage. What is the address of
-such a cell. In principle, every thread only needs one such cell. Should
-the address be on the stack, expressed using  a late compile-time
-constant? How do we reserve such a slot \emph{in the code expander}?
-
+such a cell. In principle, we need only one such cell.  (Or one per
+thread, if scheduling is pre-emptive.)
+We should probably allocate one per activation, in the stack slot of
+the current frame.
+\item
+\emph{Stack-frame layout} should be part of the target specification.
 Currently the overall stack layout is hardcoded into the \path|freeze|
-function in the \path|Ast3IR| module. This seems a bad idea, because
-this module is supposed to be target independent and thus defines the
-frame layout for all targets. A more flexible architecture is needed.
-
-Support for floating-point numbers is basically absent. The main reason
-is that floating-point numbers and integers have the same (bit vector)
-type in {\PAL}, but different types in {\ocaml}. We lack support to read
-a floating point number from a string into bit vector and compile-time
-floating point operations on bit vectors. In the \path|rtl/| directory
-the C~code \path|unit64p.c| provides casting of 64 bit floating point
-values to 64 bit integer values. However, this code is platform
-sensitive and maybe the wrong way.
-
-Continuation are poorly supported. In particular, the control-flow graph
-lacks proper edges to indicate the data flow in the presence of
-continuations. Some continuations cannot escape a given procedure and
-thus do not require a run-time representation on the stack. An escape
-analysis is missing to find non-escaping continuations.
-
+function in the \path|Ast3IR| module. 
+\end{enumerate}
+  \who{Norman.}
+\item
+Write \emph{variable placers} by hand.  \who{Kevin.}
+\item
+Develop either hand-written or machine-generated
+\emph{operator context charts} to guide selection of temporaries.
+For use both in variable placement and in code expansion.
+\who{Kevin.}
+\item
+{\rtl} operators describe compile-time, link-time, and run-time
+operations. The list of \emph{operators available at compile time} is extremely
+limited.
+Someone should analyze the situation and produce:
+\begin{itemize}
+\item
+Precise documentation (perhaps even formal, via Lua?) of what
+ operators are supported at compile time
+\item
+Implementations of those operators
+\end{itemize}
+ Some current implementations are dummies that return constant
+results; these implementations must be removed.
+\who{Kevin.}
+\item
+Partial \emph{map of variables and callee-saves registers to locations} at
+each call site.
+\who{John or Kevin.}
+\item
+Implement \texttt{span}, with support for lookup at each call site.
+\who{John or Kevin.}
+\item
+Specify and implement \emph{calling conventions.}
+\who{John or Christian.}
+\item
+Develop and successfully compile a small \emph{test suite} for SPARC,
+including some C~programs.
+\who{Christian.}
+\item
+Implement \emph{small arithmetic}. 
+The compiler currently lacks a comprehensive plan how to deal with values of
+smaller than the size of a register. 
+\who{Kevin.}
+\item 
+Support \emph{complete set of RTL operators}, probably with new
+representation.
+\who{Kevin.}
+\item
+Identify, allocate, and initialize escaping \emph{continuations}.
+This entails repairing the following problems:
+\begin{enumerate} 
+\item
+Document the representation of a continuation, including space set
+aside for incoming overflow parameters.
+Some internal abstraction for a
+continuation's run-time representation, similar to \path|Automaton.loc|
+might be appropriate.
+\item
+Identify which continuations escape.
+\item
 The translation of continuations in \path|Ast3ir| is bogus. A
 continuation \emph{value} is a pointer into the stack where two values
 are stored: a pointer to the code of the continuation, and a stack
@@ -180,38 +150,124 @@ currently active calling convention. \emph{I have introduced a new
 abstraction \path|Contn| that addresses some of the problems. However,
 most things are not yet integrated and the translation of expressions
 with included continuation values is still wrong. -- CL}
-
+\end{enumerate}
+\who{Christian.}
+\item
+Solve the following problem, which NR does not understand: \emph{The
+control-flow graph 
+lacks proper edges to indicate the data flow in the presence of
+continuations.}
+\who{????}
+\item
+Implement \texttt{cut to}.
 The implementation of \path|cutto| currently lacks all details to find
 the activation for the continuation and thus the \emph{incoming} area in
 that activations. This is where the \path|cut to| statement puts the
-\emph{outgoing} overflow parameters. Some abstraction for a
-continuation's run-time representation, similar to \path|Automaton.loc|
-might be appropriate.
+\emph{outgoing} overflow parameters. 
+\item
+Add a target-specific map for hardware registers, and ensure that the
+front end rejects named hardware registers that do not appear in the
+map.
+Might require changes in structure of front end to make it aware of
+target, or the front end might accumulate a set of such registers and
+have the checking done as an intermediate step.
+\who{Christian.}
+\item
+Ensure that the front end rejects a named calling convention that is
+not known to the back end.
+\who{Christian.}
+\item
+Targets provide code that spills and reloads registers. This code must
+respect the machine invariant, but currently does not. Machine specific
+spilling and reloading code must be defined. 
+\who{John or Norman.}
 
-Neither the front end, nor the back end can handle literal strings. The
-feature was delayed over a discussion how to handle Unicode characters.
-The changes proposed by NR to the {\PAL} language definition might be
-relevant here.
+(This code might be tied to
+the question how small values of 8 or 16 bit widths are handled. Are
+these values ever spilled?)
+\item
+Support \texttt{also cuts to k} on \texttt{cut to}. \who{Christian}
+\item
+The \emph{semantics of the assembler interface} needs to be defined
+clearly. The problem stems for an anticipated use for both textual
+assemblers and binary emitters. Especially the role of symbols is not
+clear and should be explained with respect to the better known textual
+assemblers. 
+\who{Norman.}
+\item
+The semantics of \texttt{fcmp} should be specified precisely.
+In particular, it is not known how the results map to two-bit values.
+If the answer is target-specific, then the \texttt{Target} module should be
+adapted accordingly.
+\who{?????}
+\item
+The function \path|proc| that controls the translation of a procedure
+in module \path|Ast3ir| must be broken up and cleaned up. 
+\who{Christian?}
+\item
+The treatment of the \texttt{*} operator in {\PAL} source code must be
+corrected.
+For purposes of type checking, 
+this operator can be treated as a single polymorphic operator of that takes
+two operands of width~$n$ and returns a result also of width~$n$.
+For purposes of translation, however, the front end must generate a
+composition of operators: first apply \path|mul| to produce a result
+of size~$2n$, then apply \path|lobits|$n$ to the result.
+\who{Christian.}
+\item
+The algorithm that linearizes the control-flow graph does not work
+properly. It fails to detect the difference between nodes that fall into
+a label and those that jump to a label. A probable fix to the problem is
+always to jump to a label and never to fall into it. When the design of
+the {\cfg} is reconsidered, this problem should be addressed, too.
+\textit{I have worked around the problem by never falling into a label,
+but using an explicit \path|goto|. This revealed some more problems with
+the {\cfg} design: it is neccessary to create new nodes inside the
+{\cfg} and thus no target-specific knowledge should be needed. I had to
+give up the polymorphism of the {\cfg} which wasn't working anyway. --CL
+(Tue May  7 16:44:58 EDT 2002)}.
+\item
+We need support for IEEE 754 floating-point literals, preferably using
+David Gay's C~code or other reliable reader for floating-point
+literals.
+\who{Christian.}
+\item
+We need a policy decision about whether to support floating-point
+operations at compile time.
+Someone will have to investigate to see if there is suitable ``soft
+floating-point'' code available.
 
-The front end is in general unaware of a chosen back end. This precludes
-it from rejecting certain {\PAL} programs that do type check, but that
-the back end cannot compile. Things to front end does not know:
-supported with of registers, supported width of operators, names of
-calling conventions, and hardware registers. 
+In the process, we should remove the suspect code from  \path|rtl/unit64p.c|.
+This code provides casting of 64 bit floating point
+values to 64 bit integer values, but it is platform
+sensitive and maybe the wrong way.
+\who{Christian.}
+\item
+Implement support for string literals (low priority).
+In order to support Unicode, we might need changes to the {\PAL}
+language definition.
+\item
+Identify a principled way to reject programs that a particular back
+end cannot successfully compile.
+Reasons for rejection might include use of {\PAL} variables or
+operators at unsupported widths.
+\item
+Ensure that \emph{global-variable declarations are consistent} across
+modules. 
+When multiple compilation units share their global variables one of them
+must define them, while the other import them on an assembler level. No
+mechanism exists to mark the ``main'' compilation unit that defines all
+global variables.
+\item
+Implement \texttt{switch}.
+\item
+Export substitution of late compile-time constants and constant folding
+as finalizing step of a procedure translation to Lua. Currently these
+steps are hard-coded into the \path|freeze| function in module
+\path|Ast3IR|.
+\end{enumerate}
 
-The semantics of assembler symbols have leaked into the front end, the
-fat environment, and the {\cfg}. Symbols are handed out by an assembler
-which means, a reference to the current assembler must be available to
-create new symbols. Because the {\cfg} does not include such a
-reference, it is difficult to create \path|goto| nodes (during {\cfg}
-manipulation) outside the \path|Ast3IR| module.  This is related both to
-the point above, and the unclear semantics of the assembler interface,
-and symbols in particular.  I would like to avoid dealing with target
-specific symbols as much as possible and would like to delegate their
-creation into the last phases of compilation. Upon further reflection I
-now believe that the \emph{construction} of a {\cfg} should not require
-any machine-specific knowledge to allow for the easy implementation of
-{\cfg} transformations.
+
 
 
 At least one operation in the current implementation of the {\cfg}
@@ -226,21 +282,12 @@ the translation of statements like \path|if|, and global labels that are
 define in a {\PAL} source file. At least local branches should not
 depend on symbols.
 
-he {\PAL} language construct \path|span| is unsupported.
-
-The {\PAL} language construct \path|switch| is unsupported.
-
-When multiple compilation units share their global variables one of them
-must define them, while the other import them on an assembler level. No
-mechanism exists to mark the ``main'' compilation unit that defines all
-global variables.
 
 Expression evaluation needs to be unified. The correct way is to
 translate an expression into an {\rtl} expressions and then to evaluate
 it. Currently the constant evaluation phase of the \path|Elab| module
 evaluates constant expressions directly. See also the reasons for this
 in module \path|Elab.Const.Eval|:
-
 \begin{quote}\it
     Several reasons: We would need a translation from {\AST} to
     \path|Rtl.env|. The existing one in \path|ast3ir| is written against
@@ -252,10 +299,83 @@ in module \path|Elab.Const.Eval|:
     generate with the existing approach. 
 \end{quote}
 
-Export substitution of late compile-time constants and constant folding
-as finalizing step of a procedure translation to Lua. Currently these
-steps are hard-coded into the \path|freeze| function in module
-\path|Ast3IR|.
+
+
+
+\paragraph{Old problems that have been solved}
+After an {\rtl} has left the register allocator, it may still contain
+late compile-time constants. After these are substituted by bit vectors,
+the {\rtl} must undergo a constant folding process to make sure it
+respects the machine invariant. Such a constant folding routine
+currently does not exist.  Since the front end also needs to evaluate
+compile-time and link-time {\rtl} expression, one general {\rtl}
+evaluation mechanism would be appropriate. The current module
+\path|rtleval| can only handle compile-time and link-time {\rtl}s. 
+\textit{I hope this problem is solved in \path|Rtleval2|. --CL}
+
+
+
+\paragraph{Items whose status is unclear}
+It is not clear whether this is a problem that needs immediate
+attention or a suggestion for refactoring.
+\begin{itemize} 
+\item Relocatable addresses have undergone several changes in their
+representation.  There are still two slightly different representations
+used in the compiler that wait to be unified: \path|Reloc| and one in
+\path|Sledlib|.  
+\end{itemize}
+
+
+\paragraph{Obsolete items}
+\begin{itemize}
+\item Integration of machine generated code. Basically it does not work
+because machine generated code is not flexible enough to handle
+temporaries and late compile-time constants. Adjusting the machine
+generated code manually is time-consuming and error prone. Machine
+generated code provides {\rtl} constructors for machine instructions, a
+recognizer for machine instructions in {\rtl} form, and an emitter of
+assembly code.
+\emph{This item will be delayed until after we have a working
+compiler.}
+\end{itemize}
+
+
+
+\paragraph{Suggestions for refactoring}
+
+The main overall problem is complexity. The development of the compiler
+will benefit from trying to cut down the number of modules,
+abstractions, and moving parts in general. 
+\begin{itemize}
+\item
+There is some confusion in the way {\PAL} primitive operators are
+translated to {\rtl} operators. {\PAL} operators are monomorphic in
+their result type, whereas {\rtl} operators are not. A polymorphic
+{\rtl} operator takes an additional argument compared to its monomorphic
+{\PAL} counter part. This argument should be supplied first to take
+advantage of currying: the a polymorphic {\rtl} operator supplied with
+its first argument implements the monomorphic {\PAL} operator. Currently
+the additional argument is the last argument. \textit{I hope this
+problem is solved in \path|Rtlop|. The above explanation of operator
+specialization is not entirely correct. The specializing parameter is
+not a formal argument of a primitive, but part of its \emph{width list}.
+--CL}
+\item
+The semantics of assembler symbols have leaked into the front end, the
+fat environment, and the {\cfg}. Symbols are handed out by an assembler
+which means, a reference to the current assembler must be available to
+create new symbols. Because the {\cfg} does not include such a
+reference, it is difficult to create \path|goto| nodes (during {\cfg}
+manipulation) outside the \path|Ast3IR| module.  This is related both to
+the point above, and the unclear semantics of the assembler interface,
+and symbols in particular.  I would like to avoid dealing with target
+specific symbols as much as possible and would like to delegate their
+creation into the last phases of compilation. Upon further reflection I
+now believe that the \emph{construction} of a {\cfg} should not require
+any machine-specific knowledge to allow for the easy implementation of
+{\cfg} transformations.
+\end{itemize}
+
 
 
 % ------------------------------------------------------------------ 
