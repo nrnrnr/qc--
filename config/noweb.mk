@@ -12,7 +12,8 @@
 NOWEAVE =       noweave
 NOTANGLE =      nofake
 NOTANGLE =      notangle
-CPIF =          cpif
+CPIF = cpif
+# at need, mk CPIF='cp /dev/stdin'
 LINE =          '# %L "%F"%N'
 
 NOCOND =        $TOP/config/nocond $INTERP
@@ -27,7 +28,7 @@ OCAMLDEFS =     $TOP/config/autodefs.ocaml
 	$NOTANGLE -L"$LINE" -filter "$NOCOND" -R$stem3.ml $prereq > $target
 
 '(([^/]*/)*)(.*)\.mli$':RD:        '\1\3'.nw
-	$NOTANGLE -L"$LINE" -filter "$NOCOND" -R$stem3.mli $prereq | cpif $target
+	$NOTANGLE -L"$LINE" -filter "$NOCOND" -R$stem3.mli $prereq | $CPIF $target
 
 '(([^/]*/)*)(.*)\.c$':RD:       '\1\3.nw'
 	$NOTANGLE -L"$LINE" -R$stem3.c $prereq > $target

@@ -132,8 +132,110 @@ assignment can be optimized away.
 \end{itemize}
 <<vfp.mli>>=
 val mk : Rtl.width -> Rtl.exp
+type x
+val mkx : unit -> x
+module Make (G : Cfg.S with type X.jx = x) : sig
+  val replace_with : sp:Rtl.loc -> Rtl.rtl G.cfg -> unit
+    (* useful to partially apply *)
+end
 @ 
 <<vfp.ml>>=
+module RP = Rtl.Private
 let mk w = Rtl.fetch (Rtl.reg ('V', 0, w)) w
+let is_vfp = function
+  | RP.Reg ('V', 0, _) -> true
+  | _ -> false
 @ 
-
+<<vfp.ml>>=
+type x = { mutable vfp_minus_sp : int } (* max_int represents unknown *)
+let mkx () = { vfp_minus_sp = max_int }
+@ 
+We replace $\vfp$ by $\sp+k$ using the identity
+$\vfp = \sp + (\vfp - \sp)$.
+<<vfp.ml>>=
+module R  = Rtl
+module RU = Rtlutil
+module Down = Rtl.Dn
+module Make (G : Cfg.S with type X.jx = x) = struct
+  module D  = Dataflow.Make (G)
+  let replace_with ~sp =
+    let w = RU.Width.loc sp in
+    let vfp = mk w in
+    let spval = R.fetch sp w in
+    let sp = Down.loc sp in
+    let sp_plus = RU.addk w spval in
+    let sp_plus k = Down.exp (sp_plus k) in
+    <<supporting functions>> in
+    let info node =
+      let k = (G.jx node).vfp_minus_sp in
+      sp_plus k, k in
+    let merge node (vfp, k) =
+      let x = G.jx node in
+      if x.vfp_minus_sp = k then false
+      else if x.vfp_minus_sp = max_int then (x.vfp_minus_sp <- k; true)
+      else Impossible.impossible "inconsistent stack-pointer location" in
+    let init = Down.exp spval, 0 in
+    let propagate node (vfp, k) =
+      match G.to_instr node with
+      | None -> (vfp, k)
+      | Some i ->
+          let rtl = Down.rtl i in
+          if RU.HasLoc.rtl is_vfp rtl then
+            G.update_instr (fun rtl -> Rtleval2.rtl (replace_vfp vfp rtl)) node;
+          let vfp, k = note_sp_changes rtl vfp k in
+          vfp, k in
+    let fwd = D.fwd_iteration { D.split_info = info; D.merge_split_info = merge
+                              ; D.init_info = init; D.propagate = propagate } in
+    fun g -> ignore (fwd g)
+end
+@ 
+<<supporting functions>>=
+let replace_vfp value =
+  let is_vfp = function
+    | RP.Fetch (RP.Reg ('V', 0, _), _) -> true
+    | _ -> false in
+  RU.Subst2.exp ~guard:is_vfp ~map:(fun _ -> value) in
+@ 
+All we ever have to cope with is $\sp \gets \sp \pm k'$.
+We have
+{\newcommand\post[1]{\bar{#1}}%
+\begin{eqnarray}
+\vfp &=& \sp + k\\
+\post\sp &=& \sp + k'\\
+\vfp &=& \post\sp + \post k\\
+\end{eqnarray}
+We solve for $\post k = k - k'$.
+<<supporting functions>>=
+let rec note_sp_changes rtl vfp k =
+  if RU.HasLoc.rtl ((==) sp) rtl then
+    let k' = find_k'_added_to_sp rtl in
+    let post_k = k - k' in
+    sp_plus post_k, post_k
+  else
+    vfp, k
+and find_k'_added_to_sp (RP.Rtl ges) =
+  let rec find found k' = function
+    | [] -> k' (* could be zero if only assignment is guarded *)
+    | (RP.Const (RP.Bool b), RP.Store (sp', e, w)) :: ges when sp = sp' ->
+        if not b then
+          find found k' ges
+        else if found then
+          Impossible.impossible "multiple assignments to stack pointer"
+        else
+          (match e with
+          | RP.App (("add", [_]), [RP.Fetch(sp', _); RP.Const (RP.Bits k')])
+            when sp' = sp -> find true (Bits.S.to_int k') ges
+          | RP.App (("add", [_]), [RP.Const (RP.Bits k'); RP.Fetch(sp', _)])
+            when sp' = sp -> find true (Bits.S.to_int k') ges
+          | RP.App (("sub", [_]), [RP.Fetch(sp', _); RP.Const (RP.Bits k')])
+            when sp' = sp -> find true (- (Bits.S.to_int k')) ges
+          | RP.Fetch (sp', _)
+            when sp' = sp -> find true 0 ges
+          | _ -> Impossible.impossible "sp assigned other than sp + k")
+    | (g, RP.Store (sp', e, w)) :: ges when sp = sp' ->
+        Impossible.impossible "assigned sp with nontrivial guard"
+    | (g, RP.Kill sp') :: ges when sp = sp' -> 
+        Impossible.impossible "killed sp"
+    | _ :: ges -> find found k' ges in
+  find false 0 ges
+@ 

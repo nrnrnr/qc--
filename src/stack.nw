@@ -1,3 +1,4 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 % vim: ts=8 sw=4 et:
 
 % ------------------------------------------------------------------ 
@@ -32,16 +33,18 @@ module AT     = Automaton2
 procedure.  This table will be passed to the Lua function that actually
 assembles the blocks into one that becomes the stack frame. 
 
-Some blocks blocks are special: the block named [[sp]] is empty, but is
-still useful because its address is the stack pointer. It can be
+Some blocks are special: the blocks named [[sp]] and [[vfp]] are
+empty, but they are useful because their addresses are the
+``standard'' stack
+pointer and the virtual frame pointer respectively. It can be
 therefore used by the frame-assembling Lua function to define where the
-stack pointer points into the frame. We probably have to remove the
-[[sp]] and replace it with a block for the virtual frame pointer [[vfp]].
+stack pointer points into the frame. 
 <<stack.ml>>=
 let blocks (p:Proc.t) =
-    let cc       = p.Proc.cc                        in
-    let ptr      = p.Proc.target.Target.pointersize in
-        [ "sp"              , Block.at (Rtl.fetch cc.Target.sp ptr) 0 4 
+    let cc  = p.Proc.cc                        in
+    let vfp = p.Proc.target.Target.vfp         in
+        [ "sp"              , p.Proc.sp
+        ; "vfp"             , Block.at vfp 0 (Block.alignment p.Proc.sp)
         ; "incoming"        , p.Proc.incoming
         ; "stackdata"       , p.Proc.stackd            
         ; "continuations"   , p.Proc.conts

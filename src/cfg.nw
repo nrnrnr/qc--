@@ -540,8 +540,8 @@ Perhaps ultimately we will use an analog of the embedding/projection
 pairs specified in the [[Target]] module.
 <<graph and node constructors>>=
 type       label_supply        = string -> string
-type 'i instruction_info = { goto   : (label, 'i) Target2.map'
-                           ; branch : (Rtl.exp * label, 'i) Target2.map'
+type 'i instruction_info = { goto   : (label, 'i) Ep.map
+                           ; branch : (Rtl.exp * label, 'i) Ep.map
                            }
 val mk   : 'i instruction_info -> label_supply -> 'i cfg
 @ 
@@ -605,14 +605,13 @@ val illegal      : 'i cfg -> 'i node  (* a node that must never be reached *)
 module Make (X:X) : S with module X = X = struct
   module RS = Register.Set
   module SM = Strutil.Map
-  module T  = Target2
   module X  = X
 
   type regs = Register.Set.t (* sets of regs for dataflow *)
   type label = string
   type label_supply = string -> label
-  type 'i instruction_info = { goto   : (label, 'i) Target2.map'
-                             ; branch : (Rtl.exp * label, 'i) Target2.map'}
+  type 'i instruction_info = { goto   : (label, 'i) Ep.map
+                             ; branch : (Rtl.exp * label, 'i) Ep.map}
 
   type kind = (* all the kinds of nodes *)
     | Boot' | Join | Instruction | Branch | Cbranch | Mbranch
@@ -1055,14 +1054,14 @@ and set_succ_n node n ~succ =
   | Cut c, n -> mult c.cut_succ n succ
   | Bra b, n ->
     let succ = verify_join succ in
-    ( b.bra_i <- (get_cfg node).inst_info.goto.T.embed (label succ)
+    ( b.bra_i <- (get_cfg node).inst_info.goto.Ep.embed (label succ)
     ; b.bra_succ <- single n succ
     )
   | Cbr c, 0 ->
     let succ = verify_join succ in
     let cfg = get_cfg node in
-    let (cond, _) = cfg.inst_info.branch.T.project c.cbr_i in
-    ( c.cbr_i <- cfg.inst_info.branch.T.embed (cond, (label succ))
+    let (cond, _) = cfg.inst_info.branch.Ep.project c.cbr_i in
+    ( c.cbr_i <- cfg.inst_info.branch.Ep.embed (cond, (label succ))
     ; c.cbr_true <- setup_succ node succ
     )
   | Cbr c, 1 ->
@@ -1099,7 +1098,7 @@ match node with
 | Cut c -> ignore (mult c.cut_succ (fun _ -> succ))
 | Bra b ->
   let succ = verify_join succ in
-  ( b.bra_i <- (get_cfg node).inst_info.goto.T.embed (label succ)
+  ( b.bra_i <- (get_cfg node).inst_info.goto.Ep.embed (label succ)
   ; b.bra_succ <- single succ
   )
 | Cbr c -> 
@@ -1110,8 +1109,8 @@ match node with
    else
      c.cbr_false <- succ
   );
-  let (cond, _) = cfg.inst_info.branch.T.project c.cbr_i in
-  c.cbr_i <- cfg.inst_info.branch.T.embed (cond, label c.cbr_true)
+  let (cond, _) = cfg.inst_info.branch.Ep.project c.cbr_i in
+  c.cbr_i <- cfg.inst_info.branch.Ep.embed (cond, label c.cbr_true)
 
 | Exi _ -> undef "set_succ" "exit"
 | Ill _ -> undef "set_succ" "illegal"
@@ -1414,7 +1413,7 @@ let assertion cfg i ~succ =
 
 let branch cfg ~target =
   let succ = verify_join ~succ:target in
-  let bra = Bra { bra_i     = cfg.inst_info.goto.T.embed (label succ)
+  let bra = Bra { bra_i     = cfg.inst_info.goto.Ep.embed (label succ)
                 ; bra_pred  = ill cfg
                 ; bra_succ  = succ
                 ; bra_lsucc = succ
@@ -1437,7 +1436,7 @@ let jump cfg i ~uses ~targets =
 let cbranch cfg cond ~ifso ~ifnot =
   let so_succ  = verify_join ~succ:ifso in
   let not_succ = verify_join ~succ:ifnot in
-  let cbr = Cbr { cbr_i     = cfg.inst_info.branch.T.embed (cond, (label so_succ))
+  let cbr = Cbr { cbr_i     = cfg.inst_info.branch.Ep.embed (cond, (label so_succ))
                 ; cbr_pred  = ill cfg
                 ; cbr_true  = so_succ
                 ; cbr_false = not_succ

@@ -605,7 +605,7 @@ and callStmt (lhs,cconv, e, args, targets (*unused*), conts) succ =
   G.call        g calli ~uses:out.C.regs ~defs:in'.C.regs ~kills:cc.C.volregs
                         ~altrets:conts.returns ~unwinds_to:conts.unwinds
                         ~cuts_to:conts.cuts ~aborts:conts.aborts ~spans:props  **>
-  G.assertion   g (R.store cc.C.sp in'.C.sploc pointersize)                    **>
+  G.assertion   g in'.C.insp              **>
   G.instruction g in'.C.pre_sp            **>  (* DOUBTS ABOUT THIS *)
   G.instruction g in'.C.shuffle           **>
   G.instruction g in'.C.post_sp           **>
@@ -730,12 +730,14 @@ provides nodes that do the initialization.
 let insert_init_cont_nodes contmap init_node =
   let one_node cname k succ = 
     if k.K.escapes then
-      let pc    = exp_of_label k.K.cut_pc in
-      let sp    = Rtl.fetch proc_cc.C.sp (Rtlutil.Width.loc proc_cc.C.sp) in
-      (G.instruction g) (Contn.init_code k.K.rep sp pc) succ
+      let pc = exp_of_label k.K.cut_pc in
+      let sp = Block.base spblock in
+      G.instruction g (Contn.init_code k.K.rep sp pc) succ
     else
-      succ
-  in G.set_succ init_node (Strutil.Map.fold one_node contmap (G.succ init_node))
+      succ in
+  let next = G.succ init_node in
+  G.set_succ init_node (G.illegal g);  (* avoid extra join before next *)
+  G.set_succ init_node (Strutil.Map.fold one_node contmap next)
 @ 
 <<definition of [[proc]], which translates one procedure>>=
 let proc containing_spans (cconv,procname,args,procbody) = 
@@ -763,20 +765,22 @@ let proc containing_spans (cconv,procname,args,procbody) =
                } in
     let g = G.mk info Idgen.label in (* empty control-flow graph *)
 
-    let sp = Rtl.fetch (proc_cc.C.sp) pointersize in (* stack pointer *)
+    let vfp = target.T.vfp in (* virtual frame pointer *)
+    let spblock =
+      Block.relative ~anchor:vfp ~dbg:"sp" ~size:0 ~alignment:proc_cc.C.sp_align in
 
     (* calculate amount of user stack data - rebinds env! *)
     <<definition of [[stackdata]]>> in
     let env, stackd, contenv =
-      stackdata target (F.push env scope) (Memalloc.relative sp "stackdata") procbody
+      stackdata target (F.push env scope) (Memalloc.relative vfp "stackdata") procbody
     in
 
     (* define all the mutable state here *)
-    let youngblocks = ref [] in
-    let oldblocks  = ref [] in
-    let add_youngblock b = (youngblocks := b :: !youngblocks) in
-    let add_oldblock   b = (oldblocks  := b :: !oldblocks ) in
-    let constraints = ref [] in
+    let youngblocks       = ref [] in
+    let oldblocks         = ref [] in
+    let add_youngblock b  = (youngblocks := b :: !youngblocks) in
+    let add_oldblock   b  = (oldblocks   := b :: !oldblocks  ) in
+    let constraints       = ref [] in
     let add_constraints c = (constraints := c :: !constraints) in
 
 
@@ -784,7 +788,7 @@ let proc containing_spans (cconv,procname,args,procbody) =
       try Strutil.Map.find l contenv with _ -> impossible "lost cont" in
     let cont_rvalue cname coffset w =
       (continuation cname).K.escapes <- true;
-      add sp (Rtl.late coffset w) in
+      add vfp (Rtl.late coffset w) in
 
     let expr, exprtype, lvalue = exprfuns env contenv cont_rvalue in
 
@@ -846,7 +850,8 @@ let proc containing_spans (cconv,procname,args,procbody) =
         ; Proc.outgoing = outgoing   (* outgoing   block *)   
         ; Proc.stackd   = stackd     (* stack data block *)
         ; Proc.priv     = AM.relative (amtarget target) ~up:true ~aligned:true
-                                      ~anchor:sp ~dbg:"private"
+                                      ~anchor:vfp ~dbg:"private"
+        ; Proc.sp       = spblock
         ; Proc.eqns     = List.concat (!constraints)
         ; Proc.conts    = contblocks
         ; Proc.vars     = vars       (* number of variables *)

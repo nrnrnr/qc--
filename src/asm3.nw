@@ -51,7 +51,6 @@ We want an assembler to be our single access point to the back end.
 Therefore the assembler contains some methods that are not strictly
 related to an assembler per se. We group these functions under [[etc]]
 below.
-
 <<assembler methods>>=
 (* declarations *)
 method import : string -> Symbol.t        (* any name is legal *)
@@ -74,9 +73,9 @@ method addloc  : int -> unit            (* increment location counter *)
 method cfg_instr   : Proc.t -> unit
 
 (* emit data *)
-method zeroes : int -> unit
-method value  : Bits.bits -> unit       (* when to use which? *)
+method value  : Bits.bits -> unit
 method addr   : Bits.bits Reloc.Simple.relocatable -> unit  
+method zeroes : int -> unit             (* n bytes of zeroes *)
 
 (* comment *)
 method comment: string -> unit 
@@ -123,9 +122,18 @@ The location counter of the current section can be manipulated: [[align
 n]] aligns to the next multiple of [[n]], [[addloc n]] increments it,
 and [[org n]] sets it to [[n]]. In all cases [[n]] must be positive.
 
-The main task of an assembler is to emit data and instructions. This
-is done by [[instr]], [[zeroes]] et al. The instruction or datum goes
-into the current section.
+The main task of an assembler is to emit data and instructions. 
+To emit data into the current section, use [[value]] to emit an
+arbitrary value, [[addr]] to 
+emit a relocatable address, or [[zeroes]] to emit a string of zeroes.
+While [[value]] could be subsumed by [[addr]] and is therefore not
+strictly necessary, it is a convenient special case.
+Clients should use it when possible and should expect to realize a
+small gain in efficiency.
+
+The method [[cfg_instr]] emits all the instructions and labels for a
+procedure; the bytes go into the current section.
+
 
 Comments are emitted using [[comment]]. It is an unchecked run-time
 error if the string argument contains a newline. 

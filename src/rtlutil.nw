@@ -103,6 +103,7 @@ end
 <<rtlutil.mli>>=
 module HasLoc : sig
   val exp : (Rtl.Private.loc -> bool) -> Rtl.Private.exp -> bool
+  val rtl : (Rtl.Private.loc -> bool) -> Rtl.Private.rtl -> bool
 end
 @ 
 % ------------------------------------------------------------------ 
@@ -138,7 +139,6 @@ registers inside. The translation of a procedure creates expressions
 that contain [[Rtl.link]] values that later must be substituted for
 compile-time constants. Substitutions for locations, registers. and
 expressions are provided by the [[Subst2]] sub-module:
-
 <<rtlutil.mli>>=
 module Subst2: sig
     val loc:    guard:(Rtl.Private.loc -> bool)               
@@ -384,7 +384,6 @@ let sets (rtl:Rtl.rtl) =
 
 The [[DownUp]] module allows to apply functions that work on the private
 representation of {\rtl}s to their abstract public representation.
-
 <<Subst2>>=
 module DownUp = struct
     let rtl f r = Rtl.Up.rtl (f (Rtl.Dn.rtl r))
@@ -833,6 +832,13 @@ end
 <<rtlutil.ml>>=
 module HasLoc = struct
   let exp = MayAlias.has_loc
+  let rtl p =
+    let exp = exp p in
+    let effect = function
+      | RP.Store (l, r, w) -> exp r || exp (RP.Fetch (l, w))
+      | RP.Kill l          -> exp (RP.Fetch (l, 0)) in (* width cheat is OK *)
+    let ge (guard, eff) = exp guard || effect eff in
+    fun (RP.Rtl ges) -> List.exists ge ges
 end
 @ 
 \section{Reassociating arithemtic}

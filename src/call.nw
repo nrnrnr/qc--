@@ -141,7 +141,9 @@ end
     { 
 (* locs     : Automaton2.loc list *)  (* where passed values reside *)
       overflow : Block.t              (* includes all locs for values passed in mem *)
-    ; sploc    : Rtl.exp              (* where sp is required when values are passed *)
+(*    ; sploc    : Rtl.exp              (* where sp is required when values are passed *) *)
+    ; insp     : Rtl.rtl              (* assign sp := conventional location;
+                                         used in assertions entries from calls, cuts *)
     ; regs     : Register.Set.t       (* set of locations defined (used) by partner *)
     ; pre_sp   : Rtl.rtl              (* conditional SP adjustment pre-shuffle *)
     ; shuffle  : Rtl.rtl              (* shuffle parms where they go *)
@@ -164,7 +166,8 @@ end
     ; return_actuals  : outgoing
     ; also_returns_to : incoming
 
-    ; sp : Rtl.loc                      (* stack pointer *)
+(*    ; sp : Rtl.loc                      (* stack pointer *)  *)
+    ; sp_align        : int             (* alignment of stack pointer at call/cut *)
     ; ra : Rtl.loc                      (* where return address is on entry *)
     ; nvregs : Register.Set.t           (* registers preserved across calls *)
     ; volregs: Register.Set.t           (* registers not preserved across calls *)
@@ -227,7 +230,7 @@ let outgoing ~growth ~sp ~spec ~postsp ~base types actuals =
     let setsp  = RU.store sp postsp in
     let no r s = s in
     { overflow = a.A.overflow
-    ; sploc    = a.A.sp_value 
+    ; insp     = RU.store sp a.A.sp_value
     ; regs     = RU.ReadWriteKill.fold ~read:RS.add ~write:no ~kill:no shuffle RS.empty
     ; shuffle  = shuffle
     ; post_sp  = setsp
@@ -245,7 +248,7 @@ let incoming ~growth ~sp ~spec ~postsp ~base types formals =
     let setsp  = RU.store sp postsp in
     let no r s = s in
     { overflow = a.A.overflow
-    ; sploc    = a.A.sp_value
+    ; insp     = RU.store sp a.A.sp_value
     ; regs     = RU.ReadWriteKill.fold ~write:RS.add ~read:no ~kill:no shuffle RS.empty
     ; shuffle  = shuffle
     ; post_sp  = setsp
