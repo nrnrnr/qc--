@@ -24,6 +24,8 @@
 
 This module provides functions to observe and transform {\rtl}s. 
 
+\subsubsection{Width}
+
 Locations and non-boolean expressions have a \emph{width} that can be
 observed.  It is a checked run-time error to pass a boolean expression
 to [[exp]].
@@ -34,6 +36,11 @@ module Width: sig
     val exp:    Rtl.exp -> int
 end 
 @
+
+% ------------------------------------------------------------------ 
+\subsubsection{Read-Write Sets}
+% ------------------------------------------------------------------ 
+
 
 A \emph{register} is an {\rtl} location that is addressed by a known
 (integer) value (c.f.~module \module{register}). Registers are of
@@ -59,6 +66,10 @@ module ReadWrite: sig
 end
 @    
 
+% ------------------------------------------------------------------ 
+\subsubsection{Substitution}
+% ------------------------------------------------------------------ 
+
 Register allocation requires to re-write an {\rtl} by substituting
 registers inside. The translation of a procedure creates expressions
 that contain [[Rtl.link]] values that later must be substituted for
@@ -66,12 +77,50 @@ compile-time constants. Substitutions for locations, registers. and
 expressions are provided by the [[Subst]] sub-module:
 
 <<rtlutil.mli>>=
-module Subst: sig
+module Subst: sig       (* DEPRECATED *)
     val loc:    (Rtl.loc    -> Rtl.loc)    -> Rtl.rtl -> Rtl.rtl
     val reg:    (Register.t -> Register.t) -> Rtl.rtl -> Rtl.rtl
     val exp:    (Rtl.exp    -> Rtl.exp)    -> Rtl.rtl -> Rtl.rtl
 end
 @
+
+The substitution module [[Subst2]] is a replacement for [[Subst]] and
+is hopefully easier to use. 
+
+<<rtlutil.mli>>=
+module Subst2: sig
+    val loc:    (guard:Rtl.Private.loc -> bool)               
+                -> (map:Rtl.Private.loc -> Rtl.Private.loc) 
+                -> Rtl.rtl -> Rtl.rtl
+    
+    val exp:    (guard:Rtl.Private.exp -> bool)
+                -> (map:Rtl.Private.exp -> Rtl.Private.exp) 
+                -> Rtl.rtl -> Rtl.rtl
+    
+    val reg:    (lookup:Rtl.space -> Space.t) 
+                -> (map:Register.t -> Register.t)
+                -> Rtl.rtl -> Rtl.rtl
+end
+@
+
+Function [[loc]] substitutes locations in an {\rtl}. We pass each
+location that passes the [[guard]] predicate to [[map]] to obtain the
+new location. The location returned by [[map]] is taken literally and
+not further traversed by [[loc]]. If a location fails to pass the
+[[guard]] it is recursively traversed to substitute locations within.
+
+
+Function [[exp]] works like [[loc]], except that it substitutes
+expressions.
+
+
+Function [[reg]] substitutes registers in an {\rtl}. It takes a
+[[lookup]] function for [[Rtl.spaces]] and a [[map]] function that
+describes the substitution. 
+
+% ------------------------------------------------------------------ 
+\subsubsection{Classification}
+% ------------------------------------------------------------------ 
 
 Register allocation may benefit from knowing whether an {\rtl} represents a
 move instruction. [[singleAssignment]] returns a source and destination
@@ -105,11 +154,22 @@ module Subst = struct
     <<Subst>>
 end    
 
+module Subst2 = struct
+    <<Subst2>>
+end
+@
+
+Register allocation may benefit from knowing whether an {\rtl} represents a
+move instruction. [[singleAssignment]] returns a source and destination
+register pair if the input {\rtl} consists of a single, unconditional
+assignment with any number of unconditional kills. If the {\rtl} has a
+different form, [[singleAssignment]] returns [[None]].
+
+<<rtlutil.ml>>=
 module RTLType = struct
     <<RTLType>>
 end
 @
-
 
 % ------------------------------------------------------------------ 
 \subsubsection{Width of Locations and Expressions}
@@ -275,6 +335,129 @@ let exp map rtl =
         Rtl.Revert.rtl (subst (Rtl.Convert.rtl rtl))
 @
 
+
+<<RTLType>>=
+let singleAssignment rtl =
+    let rec firstAssignment rtls = match rtls with
+    | [] -> (None, [])
+    | (RP.Const(RP.Bool true), RP.Store(loc1, RP.Fetch(loc2, _), _))::rst ->
+        (try (Some (Register.of_loc (Rtl.Revert.loc loc1),
+                    Register.of_loc (Rtl.Revert.loc loc2)),
+              rst)
+        with Invalid_argument _ -> (None, []))
+    | _::rst -> firstAssignment rst in
+    let getFirstAssignment (RP.Rtl guardeds) = firstAssignment guardeds in
+
+    let isKill rtl = match rtl with
+    | (RP.Const(RP.Bool true), RP.Kill _) -> true
+    | _ -> false in
+    let rec allKills rtls = List.for_all isKill rtls in
+
+    let (assign, rst) = getFirstAssignment (Rtl.Convert.rtl rtl) in
+        match assign with
+        | Some _ when allKills rst -> assign
+        | _ -> None
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Substitutions inside RTLs (Second Try)}
+% ------------------------------------------------------------------ 
+
+The [[DownUp]] module allows to apply functions that work on the private
+representation of {\rtl}s to their abstract public representation.
+
+<<Subst2>>=
+module DownUp = struct
+    let rtl f r = Rtl.Revert.rtl (f (Rtl.Convert.rtl r))
+    let loc f l = Rtl.Revert.loc (f (Rtl.Convert.loc l))
+    let exp f e = Rtl.Revert.exp (f (Rtl.Convert.exp e))
+end
+
+let loc' guard map rtl = 
+    let rec exp = function
+        | RP.Fetch (l, width)      -> RP.Fetch(loc l, width)
+        | RP.App(opr, exprs)       -> RP.App(opr, List.map exp exprs)
+        | x                        -> x
+    and loc l = if guard l then map l else match l with
+        | RP.Cell (ap,agg,w,e,ass) -> RP.Cell(ap, agg, w, exp e, ass)
+        | RP.Slice (w,i,l)         -> RP.Slice(w,i,loc l)
+        | x                        -> x
+    and effect = function
+        | RP.Store (l,e,width)     -> RP.Store(loc l, exp e, width)
+        | RP.Kill  (l)             -> RP.Kill (loc l)
+    and guarded (e,eff)            = (exp e, effect eff)
+    and subst (RP.Rtl rtl)         = RP.Rtl (List.map guarded rtl)
+    in    
+        subst rtl
+
+let exp' guard map rtl =
+    let rec exp e = if guard e then map e else match e with
+        | RP.Fetch (l, width)      -> RP.Fetch(loc l, width)
+        | RP.App(opr, exprs)       -> RP.App(opr, List.map exp exprs)
+        | x                        -> x
+    and loc = function
+        | RP.Cell (ap,agg,w,e,ass) -> RP.Cell(ap, agg, w, exp e, ass)
+        | RP.Slice (w,i,l)         -> RP.Slice(w,i,loc l)
+        | x                        -> x
+    and effect = function
+        | RP.Store (l,e,width)     -> RP.Store(loc l, exp e, width)
+        | RP.Kill  (l)             -> RP.Kill (loc l)
+    and guarded (e,eff)            = (exp e, effect eff)
+    and subst (RP.Rtl rtl)         = RP.Rtl (List.map guarded rtl)
+    in  
+        subst rtl
+@
+
+A location is a register if its has a constant index that fits into an
+integer.
+
+<<Subst2>>=
+let is_register = function
+    | RP.Cell (_,_,_,RP.Const(RP.Bits b),_) ->
+        ( try  let _ = Bits.to_int b in true with 
+        | Bits.Overflow -> false
+        )
+    | _                 -> false
+@
+
+A location can be represented as a register, by taking its space, index,
+and width.
+
+<<Subst2>>=
+let loc2reg = function
+    | RP.Cell (sp,_,w,RP.Const(RP.Bits b),_) -> (sp,Bits.to_int b,w)
+    | _                                      -> assert false
+@
+
+To transform a register into a location we need informations about the
+space the register belongs to. In particular, the width of the index
+expression is a space property.
+
+<<Subst2>>=
+let reg2loc lookup (sp,index,w) =
+    let space      = lookup sp in
+    let ()         = assert (w = space.Space.cellwidth) in
+    let indexwidth = space.Space.indexwidth in 
+        RP.Cell ( sp
+                , space.Space.aggregation
+                , w
+                , RP.Const(RP.Bits(Bits.of_int index indexwidth))
+                , 1 (* not provided by Space *)
+                )
+
+let reg' lookup map rtl = 
+    let map' = fun loc -> reg2loc lookup (map (loc2reg loc)) in
+        loc' is_register map' rtl
+
+let exp guard  map rtl = DownUp.rtl (exp' guard  map) rtl
+let loc guard  map rtl = DownUp.rtl (loc' guard  map) rtl 
+let reg lookup map rtl = DownUp.rtl (reg' lookup map) rtl 
+@
+
+
+% ------------------------------------------------------------------ 
+\subsection{RTL Classification}
+% ------------------------------------------------------------------ 
 
 <<RTLType>>=
 let singleAssignment rtl =
