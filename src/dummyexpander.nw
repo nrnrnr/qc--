@@ -320,10 +320,12 @@ Applications.
 <<rules>>=
 ireg:       App1("com",  x, r1:ireg)          {: app1 itmp "com"  x r1 :}
 ireg:       App1("lobits", x, r1:ireg)        {: app1 itmp "lobits" x r1 :}
+ireg:       App1("neg",  x, r1:ireg)          {: app1 itmp "neg"  x r1 :}
 ireg:       App1("sx",  x, r1:ireg)           {: app1 itmp "sx"  x r1 :}
 ireg:       App1("zx",  x, r1:ireg)           {: app1 itmp "zx"  x r1 :}
 
 <<rules>>=
+ireg:       App2("and", x, r1:ireg, r2:ireg)  {: app2 itmp "and" x r1 r2 :}
 ireg:       App2("add",  x, r1:ireg, r2:ireg) {: app2 itmp "add"  x r1 r2 :}
 ireg:       App2("div",  x, r1:ireg, r2:ireg) {: app2 itmp "div"  x r1 r2 :}
 ireg:       App2("divu", x, r1:ireg, r2:ireg) {: app2 itmp "divu" x r1 r2 :}
@@ -331,6 +333,7 @@ ireg:       App2("mod",  x, r1:ireg, r2:ireg) {: app2 itmp "mod"  x r1 r2 :}
 ireg:       App2("modu", x, r1:ireg, r2:ireg) {: app2 itmp "modu" x r1 r2 :}
 ireg:       App2("mul",  x, r1:ireg, r2:ireg) {: app2 itmp "mul"  x r1 r2 :}
 ireg:       App2("mulu", x, r1:ireg, r2:ireg) {: app2 itmp "mulu" x r1 r2 :}
+ireg:       App2("or", x, r1:ireg, r2:ireg)   {: app2 itmp "or" x r1 r2 :}
 ireg:       App2("quot", x, r1:ireg, r2:ireg) {: app2 itmp "quot" x r1 r2 :}
 ireg:       App2("rem",  x, r1:ireg, r2:ireg) {: app2 itmp "rem"  x r1 r2 :}
 ireg:       App2("rotl", x, r1:ireg, r2:ireg) {: app2 itmp "rotl" x r1 r2 :}
@@ -339,14 +342,15 @@ ireg:       App2("shl",  x, r1:ireg, r2:ireg) {: app2 itmp "shl"  x r1 r2 :}
 ireg:       App2("shra", x, r1:ireg, r2:ireg) {: app2 itmp "shra" x r1 r2 :}
 ireg:       App2("shrl", x, r1:ireg, r2:ireg) {: app2 itmp "shrl" x r1 r2 :}
 ireg:       App2("sub",  x, r1:ireg, r2:ireg) {: app2 itmp "sub"  x r1 r2 :}
+ireg:       App2("xor",  x, r1:ireg, r2:ireg) {: app2 itmp "xor"  x r1 r2 :}
 
 freg:       App1("fneg", x, r1:freg)          {: app1 ftmp "fneg" x r1 :}
 
 freg:       App2("f2i",  x, r1:freg, r2:ireg) {: app2 ftmp "f2i"  x r1 r2 :}
-freg:       App2("fadd", x, r1:freg, r2:freg) {: app2 ftmp "fadd" x r1 r2 :}
-freg:       App2("fdiv", x, r1:freg, r2:freg) {: app2 ftmp "fdiv" x r1 r2 :}
-freg:       App2("fmul", x, r1:freg, r2:freg) {: app2 ftmp "fmul" x r1 r2 :}
 freg:       App2("fsub", x, r1:freg, r2:freg) {: app2 ftmp "fsub" x r1 r2 :}
+
+freg:       App3("fdiv", x, r1:freg, r2:freg, c:const) {: app3 ftmp "fdiv" x r1 r2 c :}
+freg:       App3("fmul", x, r1:freg, r2:freg, c:const) {: app3 ftmp "fmul" x r1 r2 c :}
 
 <<rules>>=
 freg:       App2("i2f",  x, r1:ireg, r2:dreg) {: app2 ftmp "i2f"  x r1 r2 :}
@@ -650,7 +654,7 @@ let rec exp = function
     | RP.Fetch(l,w)             -> conFetch (loc l) w
     | RP.App((o,x),[e1])        -> conApp1 o x (exp e1)
     | RP.App((o,x),[e1;e2])     -> conApp2 o x (exp e1) (exp e2)
-   (*
+    (*
     | RP.App((o,x),[e1;e2;e3])  -> conApp3 o x (exp e1) (exp e2) (exp e3)
     *)
     | _                         -> error "application with too many args"
