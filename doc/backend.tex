@@ -1,59 +1,77 @@
 \documentclass[12pt]{article}
 
 \usepackage{array,tabularx}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
 
 \newcommand\PAL{\texttt{C-{}-}}
 \newcommand\lrtl{\mbox{$\lambda$-RTL}}
 
-\title{Building a Back End for Quick~{\PAL}}
+\catcode`\$=10
+\catcode`\:=10
+\markboth{$Revision$}
+         {$Revision$}
+\newcommand\addtherevision{\\( CVS {$Revision$})}
+\catcode`\:=12
+\catcode`\$=3 % dollar sign is math shift
+
+
+\title{Building a Back End for Quick~{\PAL} \addtherevision}
 \author{Norman Ramsey}
 
 \begin{document}
 
 \maketitle
+\tableofcontents
 
 This document describes what needs to be done to add a new back end to
 the Quick~{\PAL} compiler.
 Until we actually have working back ends, it's a work in progress.
 
-\begin{enumerate}
-\item
+\section{Name the architecture}
+
 Choose a name for your target architecture.
 Ideally, you should use the name that the GNU project uses, assuming
 you can figure out how to learn it.
 In this document, we use the example name \texttt{arch}.
-\item
+
+\section{Decide on storage spaces}
+
+\newcommand\inspace[2]{\ensuremath{\$\mathtt{#1}[#2]}}
+
 Decide what storage spaces you will need to represent registers and
 memory on the target machines.
 We recommend these conventions:\\[3pt]
-\begin{tabularx}{\linewidth}{@{\hskip1.5em}cc>{\raggedright\arraybackslash}X@{}}
+\begin{tabularx}{\linewidth}{@{\hskip1.5em}ccY@{}}
 \emph{H/W}& \emph{Tmp}& \emph{Description}\\
 \texttt m& --- & Memory (or data memory)\\
-\texttt i& --- & Instructions (on a Harvard architecture only)\\
+\texttt i& --- & Instruction memory (on a Harvard architecture only)\\
 \texttt r& \texttt t& General-purpose or integer registers\\
 \texttt f& \texttt u& Floating-point registers\\
 \texttt a& \texttt v& Address registers, if any\\
 \texttt p& \texttt w& Predicate registers, if any\\
 \texttt c& ---      & Control registers and status words (program
 counter, etc.).  
-If applicable, put PC in $c[0]$, nPC in $c[1]$, and condition
-codes in $c[2]$\\
+If applicable, put PC in \inspace c 0, nPC in \inspace c 1, and condition
+codes in \inspace c 2.
+We may tentatively consider putting IEEE floating-point rounding modes
+in \inspace c 3.
+\\
 \end{tabularx}\\[3pt]
-Note that only a register-like space has an associated temporary
+Only a register-like space has an associated temporary
 space.
-We don't yet have a recommended scheme for managing the condition
-codes using temporaries. 
-When we implement it, we'll document it here.
-
-N.B. \emph{We should consider a standard space for IEEE floating-point
-rounding modes.}
-
+By convention, spaces \texttt{a}~through~\texttt{s} are ordinary
+spaces and \texttt{t}~through~\texttt{z} are for temporary spaces.
+If you need more temporary spaces, use \texttt{0}~through~\texttt{9}.
 
 You'll need to document the behavior of these spaces by producing a
 \texttt{Space.t list}, which in turn is used to configure the
 allocator for temporary variables.
-The \texttt{Space} module provides support in \texttt{Space.Standard}.
-\item
+The \texttt{Space} module provides support in \texttt{Space.Standard32}.
+If you target a 64-bit machine, please write \texttt{Space.Standard64}.
+
+
+\section{Lies, damn lies, and abstraction}
+
 Consider what lies you may want to tell the compiler about the
 machine.
 Such lies involve concealing from the compiler things it need not
@@ -63,10 +81,12 @@ know.
 You might wish to hide the details of some computation by introducing
 a new RTL operator with unspecified semantics.
 The name of such an operator should begin with the name of your
-architecture, followed by a dot.
+architecture, followed by an underscore.\footnote
+{Perhaps it would be better to use a dot?}
 For example, if I want to conceal just how the condition codes are
 updated after an integer comparison, I might define the operator
-\texttt{arch.icmp} and use it in instructions that set condition codes.
+\texttt{arch\_icmp} and use it in instructions that set condition codes.
+For real-life examples, see the \texttt{x86} code expander.
 \item
 One might wish to conceal the exact representation of some part of the
 machine state.
@@ -77,9 +97,13 @@ The purpose of telling such lies is to simplify the code expander and
 recognizer.
 Without some abstraction, it can be hard to write these components by
 hand.
-\item
-Decide on suitable technology for building the major machine-dependent
-parts of the back end:
+
+\section{Back-end overview}
+
+The major machine-dependent components of the back end are
+these:\footnote
+{This list deliberately omits components related to calling
+conventions, as we don't yet know what we're doing there.}
 \begin{itemize}
 \item
 Variable placer
@@ -90,96 +114,211 @@ Recognizer
 \item
 Assembler
 \end{itemize}
-We hope to generate all these components from a \lrtl\ description,
+With luck, you will use a generic variable placer, but the rest of the
+components will require significant effort on your part.
+
+In the long run,
+we hope to generate all these components from a \lrtl\ description,
 but this technology is still in the research stages.
-We therefore review other possible technology.
-\begin{enumerate}
-\item
+
+\section{Representation of instructions}
+
+Choose a representation for instructions to be shared by your
+assembler and your recognizer.
+In an ideal world, 
+we would recommend using the representation generated by the New Jersey
+Machine-Code Toolkit. 
+Unfortunately, the Toolkit's support for Objective Caml is such that
+this representation is usable only if the SLED machine description
+scrupulously avoids upper-case letters.
+If such is not the case, the assembly-language string itself is a
+reasonable stopgap representation.
+
+\section{Ladies and gentlemen, place your variables} 
+
+
 We hope it will be unnecessary to write a custom variable placer for
 each target.
 We hope instead to provide a selection of pre-written placers to
 choose from:
 \begin{itemize}
 \item
-A generic ``integer/float'' placer, which Kevin Redwine is working on.
+A generic ``integer/float'' placer, which should produce useful
+results on a wide variety of machines that have only integer and
+floating-point registers.
 \item
 A stack placer, which puts each variable on the stack.
 \item
-A generic ``integer/float/address'' placer, which Kevin Redwine is working on.
+A generic ``integer/float/address'' placer, which should produce useful
+results on a those machines that have data, address, and 
+floating-point registers, which is to say, on the 68000.
 \item
 The FORTRAN placer, which places a variable according to the first
 letter of its name.
 \end{itemize}
 As of June 14, 2002, only the FORTRAN placer is implemented.
-\item
-We have the most questions about code expansion.
-\begin{itemize}
-\item
-There is a Camlburg engine for writing code expanders, but its
-performance and ease of use have not yet been evaluated.
-\item
-There is a ``toy'' code expander, which expands each RTL into a
-relatively simple normal form.
-It is based on Jack Davidson's ideas, and it would generate good code
-only with the assistance of a peephole optimizer.
-But it might conceivably be altered or parameterized to do a somewhat
-better job based on knowledge of addressing modes of the target
-machine, and so on.
-The idea would be to start with the output of this code expander, then
-postprocess it to establish the machine invariant.
-\item
-It might be reasonable to write a code expander by hand, using
+It's available from Lua as \texttt{Placevar.fortran}.
+
+\section{Writing your code expander}
+
+Your code expander must not only establish the machine invariant, but
+must also cooperate with your recognizer.
+The expander and recognizer need not agree exactly;
+it suffices that anything the expander produces, the recognize can
+successfully convert to assembly language.
+It is in the expander and recognizer that you are most likely to
+exploit any lies (abstractions) you may be telling about the machine.
+
+The two alternatives for an expander are to use Camlburg or the
+generic code expander.
+An expander written using Camlburg can find and exploit the
+addressing modes of the target machine, but writing such an expander
+may involve more effort, and more duplication of effort, than writing
+an expander that produces only very simple code.
+Because we recommend Camlburg for writing a recognizer, further
+discussion of Camlburg may be found in Section~\ref{sec:camlburg-rec}.
+
+The generic code expander requires you to implement only very simple
+operations: loads and stores, branches, computation on temporaries, and
+conditional branches based on comparisons of temporaries.
+You implement these operations as part of a \emph{postexpander}, which
+is then passed to the generic expander as a module parameter.
+The details of the interface are in \texttt{Postexpander.S} as
+defined in \texttt{src/expander.nw}.
+You can see a simple example in \texttt{src/x86.nw}.
+
+It might also be reasonable to write a code expander by hand, using
 the ``maximal munch'' style of ML~pattern matching expounded in Andrew
 Appel's compiler text.
-\end{itemize}
-\item
-Choices for
-the recognizer are also vexing.
-\begin{itemize} 
-\item 
-A recognizer 
- could be written by hand using ML pattern
-matching.
-This exercise would be tedious because the ML representation of RTLs
-is designed for simplicity and generality, not ease of pattern matching.
-\item
-A recognizer might be generated from a \lrtl\ description.
-But
-as of June, 2002, a recognizer generated from \lrtl\ is incapable of
-dealing with temporaries or link-time constants.
-It's not clear to me how much of a handicap this restriction is or
-whether it is easy to fix.
-\end{itemize}
-\end{enumerate}
-\item
-Choose a representation for instructions to be shared by your
-assembler and your recognizer.
-We recommend using the representation generated by the New Jersey
-Machine-Code Toolkit. 
-\item
-Customize the ``arithmetic widener'' for the instructions available on
-your target.
-\item
-Decide on a stack-frame layout.
+
+\section{Writing your recognizer}
+
+Our research group has invested substantial effort in hand-writing and
+automatically generating top-down recognizers.
+These recognizers operate on the same principles as automata for
+ML~pattern matching.
+We have learned that top-down matching is poorly suited to the
+problem.
+Accordingly, we now recommend bottom-up tools.
+
+\label{sec:camlburg-rec}
+
+In the long run, we hope that a special-purpose bottom-up matching
+tool can provide special support for commutative operators, possibly
+also for
+associative-commutative operators, and for
+temporaries and kills.
+In the short run, we recommend writing a recognizer by hand using
+Camlburg.
+We suggest that you
 \begin{itemize}
 \item
-What are the required blocks in the stack frame?
+Ignore temporaries
 \item
-What is the technology and where does it go?
+Ignore kills except as required by your code expander
 \item
-Does the stack frame stay a fixed size or can it change size during
-the lifetime of an activation? 
-(I~believe our compiler supports only a frame of fixed size.)
+Ignore commutativity except perhaps for commutativity of addition in
+address arithmetic
+\item
+Ignore associative-commutative operators
 \end{itemize}
-Your stack-frame layout may be connected to your calling convention.
-\item
-Develop an automaton for assigning locations to global registers.
-This automaton should be designed in concert with the calling
-conventions.\footnote
-{It would be good to have some technology to ensure consistency with
-calling conventions, or at least to detect any inconsistency at
-compile time.}
-\item
+
+\paragraph{Connecting RTLs with BURG constructors}
+
+We recommend that you drive Camlburg with ML~code that changes
+the representation of RTL operators.
+The main compiler uses a generic representation with a single form of
+apply node.
+This is a good representation for analysis (e.g., live-variable
+analysis) but a poor one for matching.
+Since Camlburg requires that you define your own constructors, we
+recommend you choose one that gives every RTL operator its own, unique
+constructor.\footnote
+{One benefit of this representation is that while every BURG
+nonterminal has a significant dynamic cost, a BURG constructor has no
+dynamic cost.}
+For example, to add $e_1$ and $e_2$ using the generic RTL
+representation, you would write
+$$\texttt{App}((\texttt{"add"}, [w]), [e_1; e_2]).$$
+This code could be transformed into the following BURG application:
+$$\texttt{Add}(w, e_1, e_2).$$
+Alternatively, you could throw away the width and use only 
+$\texttt{Add}(e_1, e_2)$.
+Whether the width is useful probably depends on the assembly language
+of your target machine.
+If you use SLED on a machine with multiple widths, the width is
+probably useful.
+
+Here is a Caml pattern match that performs this transformation:
+\begin{verbatim}
+| RP.App(("add", [w]), [x; y]) -> conAdd (exp x) (exp y)
+| RP.App(("sub", [w]), [x; y]) -> conSub (exp x) (exp y)
+| RP.App(("sx", [n;w]), [x])   -> conSx  (exp x)
+| RP.App(("zx", [n;w]), [x])   -> conZx  (exp x)
+\end{verbatim}
+Further examples can be found in the $x$86 recognizer (\texttt{src/x86rec.nw}).
+
+
+\paragraph{Defining BURG nonterminals}
+
+In any program, the values of some expressions are determined at link
+time.
+The expression ``\texttt{printf}'' is such an expression, but so is
+``\texttt{printf+4}.'' 
+On the other hand, an expression such as ``\texttt{printf*main}'' is
+almost certainly \emph{not} computable at link time.
+An expression computable at link time is called \emph{relocatable}.
+Which expressions are relocatable depends on the capabilities of your
+assembler and linker.
+Most assemblers and linkers can deal with sums and differences of
+symbols and integer literals.
+Assemblers generated from SLED descriptions may be less capable; the
+standard such assembler can deal only with expressions of the form
+symbol plus constant.
+Keeping in mind
+your chosen assembler, you should define a BURG nonterminal
+\texttt{reloc} for
+``relocatable expression.''
+
+You probably will also want to define a BURG nonterminal for each
+significant register class (what Lee Feigenbaum calls a \emph{location
+set}). 
+
+\section{Write your assembler}
+
+Generate or write a function that emits textual assembly language for
+your instructions.
+If you use strings to represent instructions, the emitter is trivial.
+The Toolkit can generate an emitter for its representation.
+
+Write your assembler.
+It is an implementation of the assembly-language interface defined by
+the Objective Caml class type 
+\texttt{Asm.assembler} (currently lurking in \texttt{Asm3.assembler}).
+
+Ideally we should create some sort of template or functor to help you
+with emission of initialized data.
+
+
+\section{Sanitize your arithmetic}
+
+If you want to support arithmetic at multiple widths in source
+program, you should customize the ``arithmetic widener'' for the
+instructions available on 
+your target.
+Kevin Redwine is working on the widener.
+In the fullness of time, he will provide instructions and
+examples.
+
+The compiler currently provides no support for splitting arithmetic
+(i.e., simulating large arithmetic on a machine with a small word size).
+
+\section{Calling conventions}
+
+You will want to implement the C~calling conventions, and possibly one
+or more specialized {\PAL} calling conventions.
+We don't know how to do this yet.
+
 Choose a default calling convention.
 We're not yet entirely clear on everything that this choice must
 encompass, but at minimum we need the following:
@@ -197,66 +336,100 @@ What is the contract with the operating system regarding dynamic
 \end{enumerate}
 Just as we have not yet uncovered the whole story about the calling
 convention, we have not yet identified the appropriate technology.
+
+
+\subsection{Stack-frame layout}
+
+Decide on a stack-frame layout.
+Your calling convention may influence your stack-frame layout.
+These questions aren't yet resolved.
+\begin{itemize}
 \item
+What are the required blocks in the stack frame?
+\item
+What is the technology and where does it go?
+\item
+Does the stack frame stay a fixed size or can it change size during
+the lifetime of an activation? 
+(I~believe our compiler supports only a frame of fixed size.)
+\end{itemize}
+
+
+\subsection{I~C, You~C}
+
 Implement the local C calling convention, or possibly a subset.
-\item
-Select and configure a register allocator (how?)
-\item
-Export all the back-end blocks into Lua.
-Place the back-end blocks into which kinds of slots to enable a
-simple, standard back end?
-(Need \texttt{widener}, \texttt{placer}, \texttt{expander},
-\texttt{allocator}, \texttt{recognizer}.)
-\item
-Generate or write a function that emits textual assembly language for
-your instructions.
-If you use strings to represent instructions, the emitter is trivial.
-The Toolkit can generate an emitter for its representation.
-\item
-Write your assembler.
-There should be a template for emission of initialized data---possibly
-we can define a functor to help with this part of the problem.
-\item
-Write Lua code to expose all parts of your back end and to stitch it
-together into a real target, using conventions to be developed.
-\end{enumerate}
 
+
+\section{Global register variables}
+
+Develop an automaton for assigning locations to global registers.
+This automaton should probably be designed in concert with the calling
+conventions.\footnote
+{It would be good to have some technology to ensure consistency with
+calling conventions, or at least to detect any inconsistency at
+compile time.}
+
+
+\section{Register allocation}
+
+Select and configure a register allocator.
+John Dias will provide instructions and examples for configuring his
+graph-coloring register allocator.
+
+\section{Compiler configuration}
+
+If you have written components in Caml, export them into Lua.
+For example, the $x$86 back end exports these values:\\
+\begin{tabularx}{\linewidth}{@{\hskip1.5em}>{\ttfamily}lY@{}}
+Asm.x86& The assembler\\
+Expander.x86f&  The expander function\\
+Expander.x86&  The expander as a full backplane stage\\
+Targets.x86&  The $x86$ target\\
+\end{tabularx}
+The export code goes into \texttt{src/lualink.nw}.
+
+Now you can write Lua code to construct a back end for your target.
+This code goes into \texttt{src/main2.nw}.
+Here is an example from the very early days.
+Parts are missing.
+\begin{verbatim}
+Backend.x86 =
+  { target    = Targets.x86
+  , widen     = Stages.null
+  , placevars = Placevar.fortran
+  , expand    = Expander.x86
+  , liveness  = Stages.null
+  , ralloc    = Ralloc.color
+  , freeze    = Stack.layout
+  , asm       = Asm.x86
+  , emit      = Driver.assemble
+  }   
+\end{verbatim}
+
+
+Your back end will also need a stack layout.  
+Support for stack layout is still experimental (as of 16 July 2002), and
+the example above uses
+the one and only stack layout.
+\begin{verbatim}
+function Stack.layout(dummy,proc)
+  blocks = Stack.blocks(proc)
+  local layout = 
+     { blocks.incoming               -- <-- high addresses
+     , blocks.stackdata
+     , blocks.continuations
+     , Block.mk(blocks.sp, 24, 16)   -- size/alignment=24/16
+     , blocks.spills
+     , blocks.outgoing
+     , blocks.sp                     -- <-- low addresses 
+     }
+  local block = Block.cat(layout)
+  Stack.freeze(proc,block)
+
+  return 1    -- Backplane protocol
+end
+\end{verbatim}
+
+You should be ready to start generating assembly code.
 \end{document}
 
-
-
-When you want to add support for a new target architecture to the {\qcc}
-compiler, here is what you have to do.
-
-\begin{enumerate}
-\item Add a new target description to \path|Targets|. All targets are
-      exported from here to the Lua interpreter.
-
-\item Generate am emitter for assembly instructions in directory
-      \path|gen/|.
-
-\item Implement the assembler interface \path|Asm3.assembler| for the
-      new target. The \path|Mspacasm| module might work as a template.
-      There is another module \path|Sparcasm| which is currently not
-      used because I don't understand it. The assembler is exported to
-      the Lua interpreter in the \path|Driver2| module.
-
-\item Implement an {\rtl} encoder for instructions and a matching
-      decoder. See modules \path|Msparcenc| and \path|Msparcdec| for
-      examples (source file \path|minisparc.nw|). The decoder is used by
-      the assembler to decode and emit assembly code. The decoder itself
-      uses the generated emitter to emit the recognized machine
-      instruction.
-
-\item Implement a code expander and export it to Lua. Module
-      \path|Sparcexpander| could serve as a guide. The code expander
-      uses the encoder to generate instructions.      
-      
-\item Extend the driver code written in Lua in file \path|main2.nw| with
-      an optimizer (table \path|Opt|) and target (table \path|Targets|) for
-      the new architecture.
-\end{enumerate}
-
-% ------------------------------------------------------------------ 
-\end{document}
-% ------------------------------------------------------------------ 
