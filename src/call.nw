@@ -301,12 +301,12 @@ val get_cc : ('a, 'cc) Target.t -> string -> 'cc
 
 We provide a general mechanism for analyzing calling convention automata.
 <<call.mli>>=
-val dump_proc    : tgt -> string -> int list -> string list -> unit
-val dump_return  : tgt -> string -> int list -> string list -> unit
-val dump_cutto   : tgt -> string -> int list -> string list -> unit
-val paths_proc   : tgt -> string -> int list -> string list -> unit
-val paths_return : tgt -> string -> int list -> string list -> unit
-val paths_cutto  : tgt -> string -> int list -> string list -> unit
+val dump_proc    : tgt -> string -> (int * string) list -> unit
+val dump_return  : tgt -> string -> (int * string) list -> unit
+val dump_cutto   : tgt -> string -> (int * string) list -> unit
+val paths_proc   : tgt -> string -> (int * string) list -> unit
+val paths_return : tgt -> string -> (int * string) list -> unit
+val paths_cutto  : tgt -> string -> (int * string) list -> unit
 @ 
 
 \subsection{Implementation}
@@ -398,12 +398,11 @@ let get_ccspec tgt name =
 let get_cc tgt name =
   tgt.Target.cc_spec_to_auto name (get_ccspec tgt name)
 
-let dump what autofun target ccname widths hints =
+let dump what autofun target ccname =
   let wordsize  = target.Target.wordsize in
   let automaton = autofun (get_ccspec target ccname) in
    what ~mk:(fun () -> A.at (Rtl.bits (Bits.zero wordsize) wordsize) automaton)
-        ~widths ~hints
-
+        
 let dump_proc    = dump Automatongraph.print (fun s -> s.A.call)
 let dump_return  = dump Automatongraph.print (fun s -> s.A.results)
 let dump_cutto   = dump Automatongraph.print (fun s -> s.A.cutto)

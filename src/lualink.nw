@@ -458,27 +458,23 @@ C.register_module "Driver"
   ; "reinit"    , V.efunc (V.unit  **-> V.runit)  Driver.reinit
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
-let dump = V.efunc (Map.new_target **-> V.string **-> (V.list V.int) **->
-                    (V.list V.string) **->> V.unit) in
+let dump f =
+  let mktuplelist t = 
+    let field f = V.Table.find t (V.String f) in
+    let ty      = V.string.V.project (field "type") in
+    let widths  = (V.list V.int).V.project (field "widths") in
+    List.map (fun w -> (w, ty)) widths in
+  let luafun target ccname types = f target ccname 
+                                    (List.flatten (List.map mktuplelist types))
+  in
+  V.efunc (Map.new_target **-> V.string **-> (V.list V.table) **->> V.unit)
+    luafun
+in
 
 C.register_module "Debug"
-  [ "proc"  , dump Call.dump_proc
-  ; "return", dump Call.dump_return
-  ; "cutto" , dump Call.dump_cutto
-
-  ; "paths_proc"  , dump Call.paths_proc
+  [ "paths_proc"  , dump Call.paths_proc
   ; "paths_return", dump Call.paths_return
   ; "paths_cutto" , dump Call.paths_cutto
-
-  ;"Mips" , V.Table (V.Table.of_list 
-      (* need to keep Debug.Mips.proc_all and Debug.Mips.proc_all_paths *)
-      [ "proc_all",       V.efunc (V.unit **-> V.runit) 
-                          (fun () -> Mipscall.dump_proc'
-                          [32,"int";32,"float";64,"float"])
-      ; "proc_all_paths", V.efunc (V.unit **-> V.runit) 
-                          (fun () -> Mipscall.paths_proc'
-                          [32,"int";32,"float";64,"float"])
-      ])
   ] g;
 @
 <<register modules to [[g]] in alphabetical order>>=

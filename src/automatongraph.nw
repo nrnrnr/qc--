@@ -31,17 +31,11 @@ Together, all argument lists cover every pair of an incoming and
 outgoing edge at a node.
 
 <<automatongraph.mli>>=
-val print:  mk:(unit -> Automaton.t) 
-                     -> widths:int list -> hints:string list 
-                     -> unit
-val print': mk:(unit -> Automaton.t) 
+val print: mk:(unit -> Automaton.t) 
                      -> (int * string) list (* width * hint *)
                      -> unit
 
-val paths:  mk:(unit -> Automaton.t) 
-                     -> widths:int list -> hints:string list 
-                     -> unit
-val paths': mk:(unit -> Automaton.t) 
+val paths: mk:(unit -> Automaton.t) 
                      -> (int * string) list (* width * hint *)
                      -> unit
 @
@@ -292,14 +286,13 @@ contains the node corresponding to the initial state and is otherwise
 empty.
   
 <<automatongraph.ml>>=
-let print' ~mk dirs =
+let print ~mk dirs =
     let dump g  = print_endline (ToString.graph g) in
     let init    = {regs=[]; align=0}   in
     let g       = graph init           in
     let g       = dfs mk dirs g [] {regs=[]; align=0} in
         ( ToDot.graph g
         )
-let print ~mk ~widths ~hints = print' ~mk (combine widths hints)
 @
 
 % ------------------------------------------------------------------ 
@@ -399,14 +392,11 @@ let interesting_paths graph =
     let (paths,_) = explore graph ES.empty [] [] graph.start in
         List.map List.rev (List.concat paths)
 
-let paths' ~mk dirs =
+let paths ~mk dirs =
     let dump g  = print_endline (ToString.graph g) in
     let init    = {regs=[]; align=0}   in
     let g       = graph init           in
     let g       = dfs mk dirs g [] {regs=[]; align=0} in
         ToDot.paths (interesting_paths g)
-
-let paths ~mk ~widths ~hints = 
-    paths' ~mk (combine widths hints)
 
             

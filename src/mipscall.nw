@@ -51,15 +51,6 @@ each a multiple of 4 bytes. This is crucial, because the last line
 chooses a register not by the argument index, but by the total size of
 preceding arguments.
 
-\paragraph{Debugging} For debugging we provide functions that dump 
-automata that are part of the calling convention to [[stdout]]. The two
-arguments are the width and hints to try in every state of an automaton.
-
-<<mipscall.mli>>=
-val dump_proc':     (int * string) list -> unit    (* dump these types *)
-val paths_proc':     (int * string) list -> unit    (* dump these types *)
-@
-
 % ------------------------------------------------------------------ 
 \subsection{Implementation of {\mips} calling conventions}
 % ------------------------------------------------------------------ 
@@ -383,27 +374,6 @@ A.register_cc(Backend.mips.target, "C" , Mips.cc["C"])
 A.register_cc(Backend.mips.target, "C'", Mips.cc["C"])
 A.register_cc(Backend.mips.target, "C--", Mips.cc["C"])
 @ 
-
-\paragraph{Support for Debugging} 
-
-The [[Automatongraph.print]] function generates either too many or too
-few types that are tested. As a quick fix, here are all the types we
-care about.
-
-This code should ultimately be deleted.
-
-<<mipscall.ml>>=
-let dump_proc' types = 
-    Automatongraph.print' 
-        ~mk:(fun () -> A.at (Rtl.bits (Bits.zero 32) 32) (arguments ()))
-        types
-
-
-let paths_proc' types =
-    Automatongraph.paths' 
-        ~mk:(fun () -> A.at (Rtl.bits (Bits.zero 32) 32) (arguments ()))
-        types
-@
 
 % ------------------------------------------------------------------ 
 \subsection{Implementation using [[Callspec]]}
