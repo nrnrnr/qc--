@@ -238,7 +238,7 @@ and variable (env: F.env) (target: Target.t) globals = function
             | F.Constant(b)    -> Rtl.bits b (bits t)
             | F.Label(F.Proc _)-> Rtl.link x (bits t)
             | F.Label(F.Code)  -> Rtl.link x (bits t)
-            | F.Label(F.Data)  -> Rtl.link x (bits t)
+            | F.Label(F.Data  )-> Rtl.link x (bits t)
             | F.Import(None)   -> Rtl.link x (bits t)
             | F.Import(Some n) -> Rtl.link n (bits t)
             | F.Register(r)    -> 
@@ -759,29 +759,10 @@ let reg2loc loc =
     , Rtl.fetch loc width               (* value fetched from loc *)
     )
 
-let globals (target:Target.t) decls =
-    let unknown reg  = raise (E.ErrorExn ("unknown h/w reg: "^reg)) in
-    let rec loop map dfa = function
-        | []                          -> map
-        | (name, F.RNone  , ty) :: rr -> (* no hint, no h/w register *)
-            let (loc,dfa) = Automaton.Run.next dfa (ty,None) in
-            let map       = StrMap.add name loc map in
-                loop map dfa rr
-            
-        | (name, F.RHint h, ty) :: rr -> (* hint, no h/w register *)
-            let (loc,dfa) = Automaton.Run.next dfa (ty, Some h) in
-            let map       = StrMap.add name loc map in
-                loop map dfa rr
-        
-        | (name, F.RReg  h, ty) :: rr -> (* hardware register! *)
-            let reg = try Target.StrMap.find h target#registers
-                      with Not_found -> unknown name in
-            let map = StrMap.add name (reg2loc reg) map in
-                loop map dfa rr in
-    let dfa = target#globals in
-    let map = StrMap.empty in
-        loop map dfa decls
+let globals (target:Target.t) decls = 
+    Impossible.unimp "global register allocation"
 @
+
 
 The assembler maintains a current section. To guarantee that
 everything goes into a meaningful section, the first action is to
@@ -804,7 +785,7 @@ and should be provided by [[target]].
 type program = Automaton.location StrMap.t * Asm.asm
 
 let translate env target prog =
-    let regs   = globals target (F.regdecls env) in
+    let regs   = globals target (F.globals env) in
     let asm    = Asm.init () in
         ( regs                         (* global register map *)
         , program env target regs asm prog  (* asm                 *)

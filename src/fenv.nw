@@ -80,8 +80,8 @@ in the the signature.
       dirty environment, but always an [['a]] value in a clean
       environment.
 
-\item The [[bad]] function creates a erroneous value of the [['a
-      info]] type.  Using this function in a clean environment causes
+\item The [[bad]] function creates a erroneous value of the 
+      [['a info]] type.  Using this function in a clean environment causes
       is a checked compile-time error.
 \end{itemize}      
 
@@ -227,14 +227,16 @@ type proc =
 and  reghint        = RReg  of string   (* hardware reg *)
                     | RHint of string   (* calling convention hint *)
                     | RNone             (* none of above *)
-
-and  register       = { index:      int           (* for run-time API *)
-                      ; rhint:      reghint       
-                      }
+                      
+and  register =     { index:        int
+                    ; rhint:        reghint
+                    ; loc:          Alloc.Reg.loc option
+                    }
+                      
 and  kind           = Proc          of proc
                     | Code
-                    | Data
-                    | Stack         of Alloc.Mem.t partial
+                    | Data          
+                    | Stack         of Rtl.loc option
 
 and  denotation     = Constant      of Bits.bits
                     | Label         of kind
@@ -420,21 +422,16 @@ val nam2sym:  env -> string StrMap.t
 @
 
 % ------------------------------------------------------------------ 
-\subsection{Hardware Registers}
+\subsection{Global Registers}
 % ------------------------------------------------------------------
 
-A {\PAL} program can declare global registers to use a specific target
-hardware register.  The abstract \emph{sequence} of these declarations
-is returned by [[regdecls]].  The sequence is automatically built by
-the [[bindv]] function.
+The declaration of a global register can include a hardware register
+to use.  Since the sequence of these declarations is important to
+determine the assignment of register to hardware register or memory,
+[[globals]] returns the (unique) names of global registers.
 
-<<types>>=
-and  regdecl        = ( string          (* register name        *)
-                      * reghint         (* hint on register     *)        
-                      * Types.ty        (* C-- type of register *)
-                      ) 
 <<signature Env>>=
-val regdecls: env -> regdecl list
+val globals : env -> string list
 @
 
 
@@ -588,7 +585,7 @@ and env            =  { scopes     :    scope list (* top = hd scopes *)
                       ; target     :    target
                       ; asm        :    asm
                       ; rindex     :    int   (* register index *)
-                      ; regdecls   :    regdecl list  (* hardware registers *)
+                      ; globals    :    string  list  (* global   registers *)
                       ; stackdata  :    stackdata
                       }
 
@@ -663,7 +660,7 @@ let empty  map =
     ; srcmap    = map
     ; error     = false
     ; rindex    = 0
-    ; regdecls  = []
+    ; globals   = []
     ; stackdata = { smaxalign  = 1
                   ; soffset    = 0
                   ; sname      = "can't happen"
@@ -708,11 +705,13 @@ let foldv f {venv=v} z = StrMap.fold f v z
 \subsection{Binding and Finding Names and Values}
 % ------------------------------------------------------------------ 
     
-New Bindings are recorded in the top scope; it is an assertion
-failures, if the scope stack is empty.  It is illegal to re-bind
-names:  if the name to be bound is found in the top scope, an error
-is issued, the error flag is set, and the existing binding is re-bound
-to a bad value.  Register values that use a hardware register are
+New Bindings are recorded in the top scope; it is a checked run-time
+error if the scope stack is empty.  It is illegal in {\PAL} to re-bind
+names:  if the name to be bound is found in the top scope, an error is
+issued, the error flag is set, and the existing binding is re-bound to
+a bad value.  
+
+Register values that use a hardware register are
 additionally recorded in the [[regdecls]] component.
 
 <<module Env>>=
@@ -736,8 +735,9 @@ let bindv name (rgn,x as ventry) env =
         let scope = { scope with venv = StrMap.add name ventry scope.venv} in
         let env   = { env with scopes = scope :: List.tl env.scopes } in
             ( match Arg.asgood x with
-            | Some(Register({rhint=h} as reg),t) ->
-                  { env with regdecls = (name,h,t) :: env.regdecls }
+            | Some(Register _,_) when List.length env.scopes = 1 ->
+                  (* this is a global register declaration *)
+                  { env with globals = name :: env.globals }
             | _ -> env
             ) 
 
@@ -968,12 +968,11 @@ let getIndex   env   = env.rindex
 \subsubsection{Hardware Registers}
 % ------------------------------------------------------------------ 
 
-The list of register declarations that use hardware registers is build
-in reverse order by [[bindv]].  So we have to reverse it when we
-return it.
+The list of global register declarations is built in reverse order by
+[[bindv]].  So we have to reverse it when we return it.
 
 <<module Env>>=
-let regdecls env = List.rev env.regdecls
+let globals env = List.rev env.globals
 @
 
 % ------------------------------------------------------------------ 
@@ -995,6 +994,7 @@ let clean_rhint = function
 let clean_reg r =
     { Clean.index = r.Dirty.index
     ; Clean.rhint = clean_rhint r.Dirty.rhint
+    ; Clean.loc   = r.Dirty.loc
     }
 
 let rec clean_venv map  =
@@ -1004,12 +1004,11 @@ let rec clean_venv map  =
                 | Dirty.Constant(v)               -> Clean.Constant(v)
                 | Dirty.Label(Dirty.Proc(p))      -> Clean.Label(Clean.Proc(clean_proc p))
                 | Dirty.Label(Dirty.Code)         -> Clean.Label(Clean.Code)
-                | Dirty.Label(Dirty.Data)         -> Clean.Label(Clean.Data)
-                | Dirty.Label(Dirty.Stack(Some n))-> Clean.Label(Clean.Stack n)
+                | Dirty.Label(Dirty.Data  )       -> Clean.Label(Clean.Data  )
+                | Dirty.Label(Dirty.Stack x)      -> Clean.Label(Clean.Stack x)
                 | Dirty.Import(n)                 -> Clean.Import(n)
                 | Dirty.Register(n)               -> Clean.Register(clean_reg n)
                 | Dirty.Continuation              -> Clean.Continuation
-                | _                               -> assert false
             in
                  StrMap.add key (pos,(denot',ty)) map
         |  _  -> assert false
@@ -1064,9 +1063,6 @@ and clean_proc x = match x with
         }
     |   _ -> assert false 
 
-and clean_regdecls regs =
-    List.map (fun (name, hint, ty) -> (name, clean_rhint hint, ty)) regs
-
 and clean_stackdata sd =
     { Clean.sname     = sd.Dirty.sname
     ; Clean.soffset   = sd.Dirty.soffset
@@ -1081,7 +1077,7 @@ and clean env =
     ; Clean.target    = clean_target env.Dirty.target
     ; Clean.rindex    = env.Dirty.rindex
     ; Clean.stackdata = clean_stackdata env.Dirty.stackdata
-    ; Clean.regdecls  = clean_regdecls env.Dirty.regdecls
+    ; Clean.globals   = env.Dirty.globals
     ; Clean.asm       = clean_asm env.Dirty.asm
     }
 @

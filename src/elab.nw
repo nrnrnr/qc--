@@ -1105,6 +1105,7 @@ let register r scope env = function
                                               | None  , Some r -> F.RReg r
                                               | _ -> assert false
                                               ) 
+                                  ; F.loc   = None
                                   }
                         in
                             bindv name (r) (E.ematch (ty r env t)
@@ -1228,6 +1229,7 @@ let formal r env (hint, inv, ty, name) =
                                      | Some h -> F.RHint h
                                      | None   -> F.RNone
                                      ) 
+                         ; F.loc   = None
                          }
                      in
                          F.bindv name (r,(E.Ok(F.Register(i),t))) 
@@ -1536,7 +1538,7 @@ let export' env = function
         ( function
         | F.Label(F.Proc(_)), _ -> env
         | F.Label(F.Code),    _ -> env
-        | F.Label(F.Data),    _ -> env
+        | F.Label(F.Data  ),  _ -> env
         | _                     -> E.error (name^" can't be exported")
         )
     | Some t, name -> 

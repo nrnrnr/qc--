@@ -80,7 +80,6 @@ let astwidth env = width @<< (astty env)
 
 let foldl = List.fold_left
 let foldr = List.fold_right
-@
 
 % ------------------------------------------------------------------ 
 \subsection{Expression Types}
@@ -159,9 +158,9 @@ Lookup for operations is a hack; we need a module for primitive
 operators.
 
 <<Make expressions>>=
-let rec fetch env target globals = function
-    | A.LValueAt(x,_) -> fetch env target globals x
-    | A.Var(hint,x)   -> variable env target globals hint x
+let rec fetch env target = function
+    | A.LValueAt(x,_) -> fetch env target x
+    | A.Var(hint,x)   -> variable env target hint x
     | A.Mem(t,e,a)    -> 
         let width = astwidth env t in
         let cell  = 
@@ -170,55 +169,56 @@ let rec fetch env target globals = function
                 default_space  (* m *) 
                 target.Target.byteorder
                 width
-                (expr env target globals e)
+                (expr env target e)
         in
             Rtl.fetch cell width     
 
 (* XXX stack data labels don't work *)
             
-and variable env target globals hint x =
+and variable env target hint x =
     let (_,(denot,t)) = F.findv x env in
     ( match denot with
     | F.Constant(bits)  -> Rtl.bits bits (width t)
     | F.Label(F.Proc _) -> Rtl.link x (width t)
     | F.Label(F.Code)   -> Rtl.link x (width t)
-    | F.Label(F.Data)   -> Rtl.link x (width t)
+    | F.Label(F.Data  ) -> Rtl.link x (width t)
     | F.Import(None)    -> Rtl.link x (width t)
     | F.Import(Some n)  -> Rtl.link n (width t)
     | F.Continuation    -> Impossible.impossible "Ast3ir.Make.variable cont"
-    | F.Label(F.Stack(o,l)) -> Impossible.unimp "Ast3ir.Make.variable stack"
-    | F.Register({F.index=i;F.rhint=F.RReg(hw)}) ->
-        (* global h/w register *)
-        Rtl.fetch (target.Target.register hw) (width t) 
-    | F.Register({F.index=i;F.rhint=_}) ->
-        (* global or local register in memory, ignoring hint *)
+    | F.Label(F.Stack(Some loc)) -> Rtl.fetch loc (width t)
+    | F.Label(F.Stack(None))  -> Impossible.impossible "Ast3ir.Make.variable"
+
+    
+    | F.Register({F.loc=Some l}) -> Alloc.Reg.fetch l (width t)
+    | F.Register({F.index=i;F.loc=None}) ->
+        (* local register in memory, ignoring hint *)
         if F.is_localv x env then
             let w = width t in
             Rtl.fetch (Rtl.var x i w) w
-        else (* global register in memory *)
-            Automaton2.fetch (globals x) (width t)
+        else (* global register without location *)
+            Impossible.impossible "Ast3ir.Make.variable"
     )
     
-and prim env target globals op args =
+and prim env target op args =
     let argtys  = List.map (ExprTypes.expr env target) args in
     let opty    = snd (Value.Ops.lookup op Value.ops)      in (*XXX*)
     let widths  = Types.widthlist opty argtys               in
-        Rtl.app (Rtl.opr op widths) (List.map (expr env target globals) args)
+        Rtl.app (Rtl.opr op widths) (List.map (expr env target) args)
 
-and expr env target globals exp = 
+and expr env target exp = 
     let word = target.Target.wordsize in
     let const default_width = function
         | Some ty -> astwidth env ty
         | None    -> default_width
     in match exp with
-        | A.ExprAt(x,_)     -> expr env target globals x
+        | A.ExprAt(x,_)     -> expr env target x
         | A.Int(bits,t)     -> Rtl.bits bits (const word t)
         | A.Float(bits,t)   -> Rtl.bits bits (const word t)
         | A.Char(bits,t)    -> Rtl.bits bits (const word t)
         | A.Fetch(v)        -> assert false
-        | A.BinOp (l,op,r)  -> prim env target globals op [l;r]
-        | A.UnOp  (op,e)    -> prim env target globals op [e]
-        | A.PrimOp(op,args) -> prim env target globals op (List.map snd args)
+        | A.BinOp (l,op,r)  -> prim env target op [l;r]
+        | A.UnOp  (op,e)    -> prim env target op [e]
+        | A.PrimOp(op,args) -> prim env target op (List.map snd args)
 @
 
 % ------------------------------------------------------------------ 
@@ -227,14 +227,13 @@ and expr env target globals exp =
 
 <<Make constant evaluation>>=
 let compile_const env target exp =
-    let lookup n = raise Consteval.Not_constant in   
-        try 
-            Consteval.compile (expr env target lookup exp)
-        with 
-            Consteval.Not_constant -> assert false (* we need a better way!*)
+    try 
+        Consteval.compile (expr env target exp)
+    with 
+        Consteval.Not_constant -> assert false (* we need a better way!*)
         
-let link_const env target globals exp =
-    Consteval.link (expr env target globals exp)
+let link_const env target exp =
+    Consteval.link (expr env target exp)
 @
 
 
@@ -269,21 +268,18 @@ let continuations ast cfg =
 % ------------------------------------------------------------------ 
 
 <<Make assignment>>=
-let rec assign env target globals lhs exp = match lhs with
-    | A.LValueAt(lhs,_) -> assign env target globals lhs exp
+let rec assign env target lhs exp = match lhs with
+    | A.LValueAt(lhs,_) -> assign env target lhs exp
     | A.Var(hint,x) ->
         let (_,(denot,t)) = F.findv x env in
         let w = width t                   in
             ( match denot with
-            | F.Register({F.index=i;F.rhint=F.RReg(hw)}) ->
-                (* global h/w register *)
-                Rtl.store (target.Target.register hw) exp w
-            | F.Register({F.index=i;F.rhint=_}) ->
-                (* global or local register in memory, ignoring hint *)
+            | F.Register({F.loc=Some l}) -> Alloc.Reg.store l exp w
+            | F.Register({F.index=i;F.loc=None}) ->
                 if F.is_localv x env then
                     Rtl.store (Rtl.var x i w) exp w
-                else (* global register in memory *)
-                        Automaton2.store (globals x) exp w
+                else 
+                    Impossible.impossible "Ast3ir.Make.assign"
             | _ -> assert false (* impossible *)
             )
     | A.Mem(t,addr,align) ->
@@ -294,7 +290,7 @@ let rec assign env target globals lhs exp = match lhs with
                 default_space  (* m *) 
                 target.Target.byteorder
                 w
-                (expr env target globals addr)                        
+                (expr env target addr)                        
         in
             Rtl.store cell exp w
 @
@@ -304,9 +300,9 @@ let rec assign env target globals lhs exp = match lhs with
 % ------------------------------------------------------------------ 
 
 <<Make formals and actuals>>=
-let actual env target globals (hint, e) =
+let actual env target (hint, e) =
     let w   = width (ExprTypes.expr env target e) in
-    let exp = expr env target globals e           in
+    let exp = expr env target e           in
         (exp, w, hint) 
 @
 
@@ -317,15 +313,15 @@ let actual env target globals (hint, e) =
 \end{quote} 
 
 <<Make formals and actuals>>=
-let formal env globals (khint, n) = 
+let formal env (khint, n) = 
     ( match snd (F.findv n env) with 
-    | (F.Register {F.index=i},ty) when F.is_localv n env  -> 
+    | (F.Register {F.index=i;F.loc=None},ty) when F.is_localv n env  -> 
         { G.repr  = G.Local (n,i)
         ; G.width = width ty
         ; G.hint  = khint  
         } 
-    | (F.Register {F.index=i; F.rhint=h},ty) -> 
-        { G.repr  = G.Global (globals n)
+    | (F.Register {F.loc=Some l},ty) -> 
+        { G.repr  = G.Global (l)
         ; G.width = width ty
         ; G.hint  = khint  
         } 
@@ -340,37 +336,35 @@ let formal env globals (khint, n) =
 
 The global registers of a {\PAL} program are assigned to hardware
 register or memory locations using a target specific automaton.  Each
-assignment results in an abstract [[Automaton2.loc]] value that is
-entered under the name of the register to a map.  If a global register
-declaration specifies a hardware register the register \emph{is not}
-entered into said map.  Since the hardware register is part of the
-declaration the [[Rtl.loc]] corresponding to the register can be
-looked where it is used.
+assignment results in an abstract [[Alloc.Reg.loc]] value that is
+entered under the name of the register to a map.
  
-The [[globals]] function returns a map from registers to abstract
-locations and the overflow area used to represent global registers.
+The [[globals]] function pushes all global registers through a target
+specific automaton to obtain locations for each of them.  A location
+is added to a register's denoation in the environment.  The updated
+environment plus the area of memory that hold global registers.
 
 <<Make global registers>>=
-let globals target (base:Rtl.exp) decls =
-    let atm = Automaton2.mk target.Target.globals base in
-    let rec loop map = function
-        | [] -> map
-        | (name, F.RNone, t) :: rr -> (* no hint, no h/w register *)
-            let loc = Automaton2.ty atm (width t) None  in
-            let map = StrMap.add name loc map           in  
-                loop map rr
-        | (name, F.RHint h, t) :: rr -> (* hint, no h/w register *)
-            let loc = Automaton2.ty atm (width t) (Some h)  in
-            let map = StrMap.add name loc map               in
-                loop map rr
-        | (name, F.RReg _, t) :: rr -> (* hardware register - ignore *)
-                loop map rr
+let globals env target (base:Rtl.exp) names =
+    let t = Alloc.Reg.mk target.Target.globals base in
+    let hint = function
+        | F.RReg x -> Some x
+        | _        -> None
+    in 
+    let rec assign env n =
+        try 
+            ( match F.findv n env with
+            | (rgn,(F.Register(reg),ty)) ->
+                let loc   = Alloc.Reg.ty t (width ty) (hint reg.F.rhint) in
+                let entry = ( rgn
+                            , (F.Register({reg with F.loc = Some loc}),ty)
+                            ) in F.rebindv n entry env
+            | _ -> Impossible.impossible "Ast3ir.Make.globals"
+            )
+        with Error.ErrorExn msg -> Impossible.impossible msg
     in
-        loop StrMap.empty decls, Automaton2.freeze atm  
-
-let lookup_global map x = 
-    try StrMap.find x map
-    with Not_found -> Impossible.impossible ("lookup_global "^x)
+    let env = List.fold_left assign env names in
+        env, Alloc.Reg.freeze t    
 @
 
 
@@ -382,13 +376,12 @@ let lookup_global map x =
 type state =
     { env:      F.env
     ; target:   Target.t
-    ; globals:  string -> Automaton2.loc
     ; cfg:      G.t
     ; node:     G.node
     ; outbase:  Rtl.exp
     ; inbase:   Rtl.exp
-    ; outgoing: Automaton2.area list
-    ; incoming: Automaton2.area list
+    ; outgoing: Alloc.area list
+    ; incoming: Alloc.area list
     }
 
 let rec stmt s state = match s with
@@ -422,7 +415,7 @@ and labelStmt state x =
 and ifStmt state (e,ifso,ifnot) =
     let left  = foldr body ifso  state  in
     let right = foldr body ifnot left  in
-    let exp   = expr state.env state.target state.globals e in
+    let exp   = expr state.env state.target e in
     let rtl   = state.target.Target.mkBranch exp in
         { right with node = 
           G.gm_branch state.cfg rtl left.node right.node
@@ -430,30 +423,30 @@ and ifStmt state (e,ifso,ifnot) =
 
 and assignStmt state (lhs,rhs) =
     let effect lhs (guard,rhs) =
-        let exp = expr   state.env state.target state.globals rhs     in
-        let rtl = assign state.env state.target state.globals lhs exp in 
+        let exp = expr   state.env state.target rhs     in
+        let rtl = assign state.env state.target lhs exp in 
             ( match guard with
             | None   -> rtl
             | Some g -> Rtl.guard 
-                            (expr state.env state.target state.globals g) rtl
+                            (expr state.env state.target g) rtl
             ) 
     in
     let rtl = Rtl.par (List.map2 effect lhs rhs) in
         { state with node = G.gm_assign state.cfg rtl state.node }
              
 and gotoStmt state (e,labels) =
-    let exp   = expr state.env state.target state.globals e  in
+    let exp   = expr state.env state.target e  in
     let rtl   = state.target.Target.mkGoto exp               in
     let nodes = List.map (G.lookup state.cfg) labels         in
         {state with node = G.gm_goto state.cfg rtl nodes}
 
 and jumpStmt state (cconv,e,args,labels) =
-    let exp     = expr state.env state.target state.globals e    in
+    let exp     = expr state.env state.target e    in
     let cc      = state.target.Target.cc (Aux.Option.get default_cc cconv) in
-    let atm     = Automaton2.mk cc.Target.proc state.outbase     in
+    let atm     = Alloc.Reg.mk cc.Target.proc state.outbase     in
     let rtl     = state.target.Target.mkJump exp                 in
     let args    = List.map 
-                        (actual state.env state.target state.globals) args in
+                        (actual state.env state.target) args in
     let nodes   = List.map (G.lookup state.cfg) labels           in
     let rtl     = state.target.Target.mkJump exp                 in
     let jmp     = G.gm_jump state.cfg rtl nodes                  in
@@ -463,7 +456,7 @@ and jumpStmt state (cconv,e,args,labels) =
             let node, atm =  G.gm_copyo state.cfg args atm jmp in
             { state with
                 node     = node
-            ;   outgoing = Automaton2.freeze atm :: state.outgoing
+            ;   outgoing = Alloc.Reg.freeze atm :: state.outgoing
             }  
 @
 
@@ -476,15 +469,15 @@ automaton that guides the parameter passing.
 and callStmt state (lhs,cconv, e, args, targets, conts) = 
     let rec lvalue = function
         | A.LValueAt(x,_) -> lvalue x
-        | A.Var x         -> formal state.env state.globals x 
+        | A.Var x         -> formal state.env x 
         | A.Mem _         -> assert false                        in
-    let exp     = expr state.env state.target state.globals e    in
+    let exp     = expr state.env state.target e    in
     let cc      = state.target.Target.cc (Aux.Option.get default_cc cconv) in
-    let atmo    = Automaton2.mk cc.Target.proc state.outbase   in
-    let atmi    = Automaton2.mk cc.Target.ret  state.outbase   in
+    let atmo    = Alloc.Reg.mk cc.Target.proc state.outbase   in
+    let atmi    = Alloc.Reg.mk cc.Target.ret  state.outbase   in
     let rtl     = state.target.Target.mkCall exp                 in
     let args    = List.map 
-                  (actual state.env state.target state.globals) args in
+                  (actual state.env state.target) args in
     let nodes   = List.map (G.lookup state.cfg) targets          in
     let conts   = continuations conts state.cfg                  in
     let rtl     = state.target.Target.mkCall exp                 in
@@ -495,25 +488,25 @@ and callStmt state (lhs,cconv, e, args, targets, conts) =
     let copyo,atmo = G.gm_copyo state.cfg args atmo call in
         { state with
             node     = copyo
-        ;   outgoing = Automaton2.freeze atmo :: state.outgoing
-        ;   incoming = Automaton2.freeze atmi :: state.incoming
+        ;   outgoing = Alloc.Reg.freeze atmo :: state.outgoing
+        ;   incoming = Alloc.Reg.freeze atmi :: state.incoming
         }  
 
 and returnStmt state (cconv, kont, args) =
     let const e   = Bits.to_int (compile_const state.env state.target e)     in
     let cc        = state.target.Target.cc (Aux.Option.get default_cc cconv) in
-    let atm       = Automaton2.mk cc.Target.ret state.inbase                 in
+    let atm       = Alloc.Reg.mk cc.Target.ret state.inbase                 in
     let (x,y)     = match kont with
                     | None       -> (0,0) (* default *)
                     | Some (x,y) -> (const x, const y) in
     let rtl       = cc.Target.return                                         in
     let args      = List.map
-                    (actual state.env state.target state.globals) args       in
+                    (actual state.env state.target) args       in
     let ret       = G.gm_return state.cfg rtl (x, y)   in
     let copyo,atm = G.gm_copyo state.cfg args atm ret                        in
         { state with
             node     = ret
-        ;   outgoing = Automaton2.freeze atm :: state.outgoing
+        ;   outgoing = Alloc.Reg.freeze atm :: state.outgoing
         }
 
 (*
@@ -526,28 +519,28 @@ and returnStmt state (cconv, kont, args) =
 
 and contStmt state (label,args)  =
     let cc        = state.target.Target.cc default_cc               in
-    let args      = List.map (formal state.env state.globals) args in
-    let atm       = Automaton2.mk cc.Target.cont state.inbase       in
+    let args      = List.map (formal state.env) args in
+    let atm       = Alloc.Reg.mk cc.Target.cont state.inbase       in
     let copyi,atm = G.gm_copyi state.cfg args atm state.node        in
     let _         = G.set_label state.cfg label copyi               in
         { state with
             node     = copyi
-        ;   incoming = Automaton2.freeze atm :: state.incoming
+        ;   incoming = Alloc.Reg.freeze atm :: state.incoming
         }
 
 and cutStmt state (e, args, conts) = 
     let cc        = state.target.Target.cc default_cc                  in
     let args      = List.map 
-                    (actual state.env state.target state.globals) args in
-    let atm       = Automaton2.mk cc.Target.cont state.outbase         in
-    let exp       = expr state.env state.target state.globals e        in
+                    (actual state.env state.target) args in
+    let atm       = Alloc.Reg.mk cc.Target.cont state.outbase         in
+    let exp       = expr state.env state.target e        in
     let rtl       = state.target.Target.mkCutto exp                    in
     let conts     = continuations conts state.cfg                      in
     let cut       = G.gm_cutto state.cfg rtl conts                     in
     let copyo,atm = G.gm_copyo state.cfg args atm cut                  in
         { state with
             node     = cut
-        ;   incoming = Automaton2.freeze atm :: state.outgoing
+        ;   incoming = Alloc.Reg.freeze atm :: state.outgoing
         }
 
 and primStmt      state x  = Impossible.unimp "primitive"
@@ -560,7 +553,7 @@ and switchStmt    state x  = Impossible.unimp "switch"
 % ------------------------------------------------------------------ 
 
 <<Make procedure>>=
-let proc env target globals (*props*) asm (cconv,name,args,bdy) = 
+let proc env target (*props*) asm (cconv,name,args,bdy) = 
 assert false
 @
    
@@ -652,19 +645,19 @@ accordingly.  The next time we come across a procedure, the properties
 including the span will be used.
 
 <<Make toplevel>>=
-let rec sspan env target globals asm (e1,e2,ss) =    
+let rec sspan env target asm (e1,e2,ss) =    
     let key   = compile_const env target e1 in
-    let value = link_const    env target globals e2 in
+    let value = link_const    env target e2 in
     (* construct props value, pass it to section. not implemented *)
-        foldl (section env target globals) asm ss 
+        foldl (section env target) asm ss 
 
 <<Make toplevel>>=
-and section env target globals (asm: Asm.asm) = function
-    | A.SectionAt(x,_)     -> section env target globals asm x
+and section env target (asm: Asm.asm) = function
+    | A.SectionAt(x,_)     -> section env target asm x
     | A.Decl(d)            -> asm
-    | A.Datum( d)          -> datum   env target         asm d
-    | A.Procedure(p)       -> proc    env target globals asm p
-    | A.SSpan ss           -> sspan   env target globals asm ss
+    | A.Datum( d)          -> datum   env target asm d
+    | A.Procedure(p)       -> proc    env target asm p
+    | A.SSpan ss           -> sspan   env target asm ss
 @            
 
 What to do with top-level procedures? They should go into some section
@@ -672,14 +665,14 @@ because otherwise they will end up in whatever section is currently
 active which just seems wrong.
 
 <<Make toplevel>>=
-let rec toplevel env target globals asm = function
-    | A.ToplevelAt(x, _)  -> toplevel env target globals asm x
+let rec toplevel env target asm = function
+    | A.ToplevelAt(x, _)  -> toplevel env target asm x
     | A.Section(name, ss) -> 
         let asm = asm ++ Asm.section name in  
-            foldl (section env target globals (*props*)) asm ss
+            foldl (section env target (*props*)) asm ss
     | A.TopDecl(d)        -> asm (* nothing to do here *)
     | A.TopProcedure(p)   -> let asm = asm ++ Asm.section default_section  
-                             in proc env target globals (*props*) asm p
+                             in proc env target (*props*) asm p
 @
 
 
@@ -708,18 +701,16 @@ start the [[text]] section.
 
 
 <<Make translate program>>=
-let program env target globals asm tt = 
+let program env target asm tt = 
     let asm = asm ++ Asm.section "text"           in
     let asm = exports env asm                     in
     let asm = imports env asm                     in
-        foldl (toplevel env target globals) asm tt
+        foldl (toplevel env target) asm tt
 
 let translate env target prog =
     let base     = Rtl.link "global_base" target.Target.pointersize in (*XXX*)
-    let map,area = globals target base (F.regdecls env) in
-    let lookup   = lookup_global map in
+    let env,area = globals env target base (F.globals env) in
+                   (*XXX where does area go?*)
     let asm      = Asm.init () in
-        ( lookup
-        , program env target lookup asm prog  (* asm *)
-        )
+        program env target asm prog  (* asm *)
 @    
