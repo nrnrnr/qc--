@@ -818,11 +818,15 @@ let proc env target (mangle:string->string)  asm (cconv,name,args,bdy) =
      * These will be attached to the instruction but the interface 
      * for Asm has to change first.
      *)
-     let i =    { Proc.name   = name
-                ; Proc.cfg    = cfg
-                ; Proc.mangle = mangle
-                } in
-                
+    let i =    
+        { Proc.name     = name
+        ; Proc.cfg      = cfg
+        ; Proc.mangle   = mangle
+        ; Proc.incoming = Area.overlap Area.EqualLowEnds state.incoming
+        ; Proc.outgoing = Area.overlap Area.EqualLowEnds state.outgoing
+        ; Proc.priv     = state.priv
+        } 
+    in
         asm ++ Asm.instr i
 @
         

@@ -183,7 +183,7 @@ The [[compile]] compiles a source file from {\PAL} to {\PAL}.  The
 [[target]] provided from the command line is currently ignored.  Code
 generation is only performed when the check of the static semantics is
 passed. 
-    
+
 <<driver.ml>>=
 module Personality = struct
     let target                             = Target2.dummy
@@ -191,9 +191,17 @@ module Personality = struct
     let ext p target init  
         = Cfg3.ast p.Proc.cfg p.Proc.name p.Proc.mangle target
 end    
+@
 
-    
-module Asm = Asm2ast.Make(Personality)
+We create an assembler that has [[Proc.t]] values as instructions. Our
+first translation step (module \module{ast3ir}) translates to this
+assembler. The assembler requires a function [[ext]] to emit procedures;
+it is provided by the [[Personality]] module. Since the assembler emits
+{\PAL} abtract syntax (\AST), the emitter [[ext]] for a procedure also
+translates to {\AST}.
+
+<<driver.ml>>=    
+module Asm = Asm2ast.Make(Personality) 
 module IR  = Ast3ir.Make (Asm)
 
 let compile target file =
@@ -212,7 +220,7 @@ let compile target file =
             let width  = 72                              in
             let asm    = IR.translate env target ast in
                 ( Astpp.ppToFile stdout width (Asm.ast asm)
-                ; 0
+                ; 0 (* ok *)
                 )
 @
 
