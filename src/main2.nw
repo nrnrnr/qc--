@@ -57,34 +57,47 @@ module T    = Lua.Lib.Combine.T9                    (* types *)
                 (Backplane.T)               (* T8 *)
                 (Colorgraph.GCT)            (* T9 *)
 
-module IO   = Lua.Lib.Extend (T.T7)
+module AsmT        = T.T1
+module AstT        = T.T2
+module EnvT        = T.T3
+module ProcT       = T.T4
+module TargetT     = T.T5
+module DocT        = T.T6
+module LuaioT      = T.T7
+module BackplaneT  = T.T8
+module ColorgraphT = T.T9
 
-module L1   = Lua.Lib.Combine.L10                   (* up to 10 libraries *)
-                (Luaiolib.Make (T.T7))
-                (IO (Luastrlib.M))
-                (IO (Luamathlib.M))
-                (Driver2.Export.MakeLib (T.T1) (T.T2) (T.T3) (T.T4) 
-                                        (T.T5) (T.T6) (T.T7))
-                (Backplane.Make  (T.T8) (T.T4))
-                (Colorgraph.Make (T.T8) (T.T9) (T.T4))
-                (Targets.MakeLib (T.T5))
-                (Placevar.Make (T.T8) (T.T4))
-                (Linscan.Make (T.T4))
-                (IO (Luautil.MakeLib))
+module IO = Lua.Lib.Extend (LuaioT)
+
+module L1 = 
+  Lua.Lib.Combine.L10                   (* up to 10 libraries *)
+    (Luaiolib.Make (LuaioT))
+    (IO (Luastrlib.M))
+    (IO (Luamathlib.M))
+    (Driver2.Export.MakeLib (AsmT) (AstT) (EnvT) (ProcT) (TargetT) (DocT) (LuaioT))
+    (Backplane.Make  (BackplaneT) (ProcT))
+    (Colorgraph.Make (BackplaneT) (ColorgraphT) (ProcT))
+    (Targets.MakeLib (TargetT))
+    (Placevar.Make (BackplaneT) (ProcT))
+    (Linscan.Make (ProcT))
+    (IO (Luautil.MakeLib))
                 
 
-module L2   = Lua.Lib.Combine.L5                    (* add up to 9 more libs *)
-                (L1)
-                (Dummyexpander.Make (T.T4))
-                (Placevar2.Make (T.T8) (T.T4))
-                (MSparcRtlExpander.Lua (T.T4))
-                (IO (Rtleval2.Lua)) 
+module L2 = 
+  Lua.Lib.Combine.L6                    (* up to 9 more libs *)
+    (L1)
+    (Dummyexpander.Make          (ProcT))
+    (Placevar2.Make (BackplaneT) (ProcT))
+    (MSparcRtlExpander.Lua       (ProcT))
+    (Expander.Lua                (ProcT))
+    (IO (Rtleval2.Lua)) 
 
-module I    = Lua.MakeInterp                            (* our interpreter *)
-                (Lua.Parser.MakeStandard)
-                (Lua.MakeCore (T) (L2))
+module I = 
+  Lua.MakeInterp                            (* our interpreter *)
+    (Lua.Parser.MakeStandard)
+    (Lua.MakeCore (T) (L2))
 
-module V    = I.Value
+module V = I.Value
 @
 
 % ------------------------------------------------------------------ 
@@ -129,8 +142,9 @@ them.  Command line arguments are evaluated as follows:
 
 \begin{itemize}
 \item From left to right, all arguments of the form [[-]]$a$, where
-$a$~is not [[e]] or [[i]], are converted to [[-e Main.]]$a$[[()]].
-
+$a$~is not [[e]] or [[i]], are converted to [[-e CommandLineOption.]]$a$[[()]].
+\item
+Any argument $a$ containing an [[=]] sign is converted to [[-e]]~$a$.
 <<main2.ml>>=
 let expandable_regexp = Str.regexp "-[a-zA-Z][a-zA-Z0-9_]*$"
 let is_expandable opt = Str.string_match expandable_regexp opt 0
@@ -138,14 +152,15 @@ let rec expand_args = function
   | "-e" :: a :: args -> "-e" :: a :: expand_args args
   | "-i" :: args      -> "-i" :: expand_args args
   | opt  :: args when is_expandable opt ->
-        "-e" :: ("Main." ^ String.sub opt 1 (String.length opt - 1) ^ "()") 
+        "-e" :: ("CommandLineOption." ^ String.sub opt 1 (String.length opt - 1) ^ "()") 
              :: expand_args args
   | opt  :: _   when String.get opt 0 = '-' -> 
         E.error ("Unrecognized option " ^ opt)
+  | a    :: args when String.contains a '=' ->
+        "-e" :: a :: expand_args args
   | a    :: args      -> a :: expand_args args
   | []                -> []
 @                
-                                       
 \item From left to right, all arguments to [[-e]] are collected.
 \item When the next command line argument is [[-i]]:
     \begin{itemize}
@@ -162,7 +177,6 @@ let rec expand_args = function
 
 We export some command line arguments to the Lua value [[Sys.argv]]. The
 [[Sys]] table is created, if it does not exist. 
-
 <<main2.ml>>=
 let export_argv g strings =
     let list = V.list V.string in
@@ -174,7 +188,6 @@ At start-up, we load the file [[qc--.lua]] into the interpreter. It
 defines commonly used functions. Later we will compile the corresponding
 string into the compiler such that it is always available. During
 development it is easier to have an external file.
-
 <<main2.ml>>=
 let main () =
     let argv        = Array.to_list Sys.argv in
@@ -242,8 +255,8 @@ the actual directory.
 
 THIS SCRIPT SHOULD BE BROKEN UP INTO PIECES, AND MANY OF THE PIECES
 SHOULD BE FARMED OUT TO OTHER MODULES.  FOR EXAMPLE, THE
-REGISTER-ALLOCATION PIECES SHOULD WIND UP IN colograph.lua.
-
+REGISTER-ALLOCATION PIECES SHOULD WIND UP IN colograph.lua.\footnote
+{Note to self: ``It's time to break up \texttt{stan.c}, Stan.''}
 <<qc--.lua>>= 
 $debug 1
 -- 
@@ -297,9 +310,42 @@ end
 function Dump.script ()
     write(Boot["qc--.lua"])
 end    
-
-
-
+@ 
+<<qc--.lua>>= 
+Util = Util or { }
+function Util.funname(x)
+  local i, v, ii, vv
+  -- search global tables for x
+  i, v = nextvar(nil)
+  while i ~= nil do
+    if type(v) == "table" then
+      ii, vv = next(v, nil)
+      while ii ~= nil do
+        if vv == x then
+          return i .. "." .. ii
+        else
+          ii, vv = next(v, ii)
+        end
+      end
+    end
+    i, v = nextvar(i)
+  end
+  -- search globals for x
+  i, v = nextvar(nil)
+  while i ~= nil do
+    if v == x then
+      return i
+    else
+      i, v = nextvar(i)
+    end
+  end
+  return nil
+end
+@ 
+Most of the backplane code is imported directly from OCaml.
+The only bit that's easy and useful to put here is the bit that finds
+the name of a Lua function.
+<<qc--.lua>>= 
 ------------------------------------------------------------------ 
 -- Backplane
 -- The back end of the compiler is controlled by so-called stages.
@@ -318,7 +364,13 @@ B = Backplane
 function B.mk (n, f) 
     return { name = n, fn = f }
 end
-
+@ 
+Because only a real hero is going to mess with the internals of the
+register allocator, 
+this code has no business here.
+It should be living with the other
+register-allocator source.
+<<qc--.lua>>= 
 ------------------------------------------------------------------ 
 -- Graph-Coloring Register Allocator
 ------------------------------------------------------------------ 
@@ -390,14 +442,23 @@ CG.color =
             
         }        
     )       
-
+<<qc--.lua>>= 
 ------------------------------------------------------------------ 
 -- Linear-Scan Register Allocator
 ------------------------------------------------------------------ 
 
 Linscan = Linscan or {}
 Linscan.scan = B.single(B.mk("linscan", Linscan.allocate))    
+@ 
+The organization of the following code seems confused.
+One reasonable principle would be to organize code by target.
+This would be fine if all machine-generated, but perhaps not so useful
+if different targets share (parameterizations of) passes.
 
+Another reasonable organization would be by pass.
+This is mostly what we have here, but for some reason variable placers
+and code expanders are mixed together.
+<<qc--.lua>>= 
 ------------------------------------------------------------------ 
 -- Code Expander
 ------------------------------------------------------------------ 
@@ -409,8 +470,15 @@ Expand.stages =
     , generic   = B.mk("PV.expander" ,        PV.expander)
     , dummy     = B.mk("Dummyexpand.expand" , Dummyexpand.expand)
     , sparc     = B.mk("Sparcexpand.expand" , Sparcexpand.expand)
+    , toy       = B.mk("Expander.toy",        Expander.toy)
     }
-
+@ 
+Substantial additional thought needs to be given to how [[Default]]
+should work.
+This is important because it would be pleasant if a great many simple
+reconfigurations could be done simply by assigning to an element of
+the [[Default]] table.
+<<qc--.lua>>= 
 ------------------------------------------------------------------ 
 -- Defaults (independent of target)
 ------------------------------------------------------------------ 
@@ -420,7 +488,9 @@ Default = Default or {}
 Default.linewidth = 72          -- for text assembler
 Default.solaris   = not nil     -- for sparc
 Default.allocator = CG.color 
-
+@ 
+I find too much duplicated structure below.
+<<qc--.lua>>= 
 ------------------------------------------------------------------ 
 -- Optimizers (target specific)
 ------------------------------------------------------------------ 
@@ -458,7 +528,16 @@ function Opt.sparc_dbg (proc)
         }
     B.run(action, proc, {})
 end
+@ 
+Again, I find too much repeated structure here.
+I'm also concerned by the two levels of nesting ([[Opt]] instead
+[[Targets.]]$n$, and additional structure inside [[Opt]]).
+If people are to reconfigure easily by command line, we want a flat
+structure, because people aren't good at nested structure.
 
+As above, I observe a problem that the same sort of code is repeated
+again and again.  
+<<qc--.lua>>= 
 ------------------------------------------------------------------ 
 -- Our Targets. Each target holds an assembler back end, an optimizer
 -- and a primitive value that describes details like byte order and
@@ -473,11 +552,36 @@ function Targets.sparc_asm(io) -- helper, Lua 2.5 has no lambda functions
     return Driver.sparcasm(Default.solaris,io)
 end    
 
+
 Targets.Dummy =
     { asm       = Driver.cmmasm     -- function io -> asm
     , opt       = Opt.dummy
     , id        = Targets.dummy
     }
+
+-- shouldn't need a special target to exercise the toy code expander...
+-- should be possible with a simple command-line assignment
+Targets.Toy =
+    { asm       = Driver.cmmasm     -- function io -> asm
+    , opt       = { placer    = B.single (Expand.stages.placeVars)
+                  , expander  = B.single (Expand.stages.toy)
+                  , ralloc    = Default.allocator
+                  } 
+    , id        = Targets.dummy
+    }
+
+function Targets.Toy.opt.apply(self, proc)
+    local action = B.seq
+        { self.placer
+        , self.expander
+        , self.ralloc
+        }
+    B.run(action, proc, {})
+end
+
+-- more and more repeated structure.
+-- these ends should be achieved by single assignments on command line,
+-- not by permitting named `targets' to proliferate...
 
 Targets.Sparc =
     { asm       = Targets.sparc_asm
@@ -504,7 +608,7 @@ Targets.Asdl =
     }
 
 Targets.Default  = Targets.Dummy
-
+<<qc--.lua>>=
 ------------------------------------------------------------------ 
 -- Main
 -- High-level functions invoked from the command line
@@ -512,9 +616,7 @@ Targets.Default  = Targets.Dummy
 
 Main = Main or {}
 
-Main.Util = {} -- keep Main clean for command line options
-
-function Main.Util.getfile ()
+function Main.getfile ()
     if Sys.argv[1] == nil then
         error ("expected file on command is line missing")
     elseif Sys.argv[1] ~= nil and Sys.argv[2] ~= nil then
@@ -524,37 +626,40 @@ function Main.Util.getfile ()
     end
 end    
 
-function Main.Util.cc (target,file) -- compile file
+function Main.cc (target,file) -- compile file
     local ast = Driver.parse(file) 
     local asm = target.asm(Driver.stdout) 
     local env = Driver.check(ast,asm) -- asm is stored in env
-    local asm = Driver.compile(target.opt, ast, target.id, env)
+    local asm = Driver.compilec(target.opt, ast, target.id, env)
     Driver.assemble(asm)
 end    
 
-function Main.Util.pp (file) -- pretty print AST
+function Main.pp (file) -- pretty print AST
     local ast = Driver.parse(file)
     local doc = Driver.pretty(ast)
     Driver.print(doc,Default.linewidth)
 end  
 
-function Main.Util.check (target,file) 
+function Main.check (target,file) 
     local ast = Driver.parse(file)
     local asm = target.asm (Driver.stdout)
     Driver.check(ast,asm)
 end
 
 -- The functions below define the command line options. The command line
--- -x option calls Main.x, hence -dot calls Main.dot and so forth.
+-- option -x calls CommandLineOption.x, hence option -dot calls
+-- CommandLineOption.dot and so forth.
 
-function Main.c       () Main.Util.cc(Targets.Default, Main.Util.getfile()) end
-function Main.dot     () Main.Util.cc(Targets.Dot,     Main.Util.getfile()) end
-function Main.asdl    () Main.Util.cc(Targets.Asdl,    Main.Util.getfile()) end
-function Main.pp      () Main.Util.pp(Main.Util.getfile()) end
-function Main.check   () Main.Util.check(Targets.Dummy, Main.Util.getfile()) end
-function Main.sparc   () Targets.Default = Targets.Sparc end
-Main.dump             =  Dump.vars
-Main.script           =  Dump.script
+CommandLineOption = CommandLineOption or { }
+
+function CommandLineOption.c     ()  Main.cc(Targets.Default,  Main.getfile()) end
+function CommandLineOption.dot   ()  Main.cc(Targets.Dot,      Main.getfile()) end
+function CommandLineOption.asdl  ()  Main.cc(Targets.Asdl,     Main.getfile()) end
+function CommandLineOption.pp    ()  Main.pp(Main.getfile())                   end
+function CommandLineOption.check ()  Main.check(Targets.Dummy, Main.getfile()) end
+function CommandLineOption.sparc ()  Targets.Default = Targets.Sparc end
+CommandLineOption.dump             =  Dump.vars
+CommandLineOption.script           =  Dump.script
 @
 
 % ------------------------------------------------------------------  
@@ -577,34 +682,57 @@ which makes it a very versatile format.
 <<qc--.pod>>=
 =head1 NAME
 
-qc-- - the quick c-- compiler
+qc-- - the Quick C-- compiler
 
 =head1 SYNOPSIS
 
-B<qc--> [B<-e> I<command>] [B<-e> I<command>] [I<arg> I<arg> ...] 
+B<qc--> [[B<-e>] I<command>] [[B<-e>] I<command>] [I<arg> I<arg> ...] 
 
-B<qc--> [B<-e> I<command>] [B<-e> I<command>] B<-i> [I<arg> I<arg> ...] 
+B<qc--> [[B<-e>] I<command>] [[B<-e>] I<command>] B<-i> [I<arg> I<arg> ...] 
 
 =head1 DESCRIPTION
 
-B<qc--> compiles C-- code. The compiler is still under development and
-currently does not produce executable code.  However, it checks the
-syntax and static semantics of a C-- program.  The grammar currently
-accepted by B<qc--> is described in L<"GRAMMAR">. 
+B<qc--> compiles C-- code. The compiler 
+does not yet produce executable code, but it checks 
+syntax and static semantics.  The grammar is described in L<"GRAMMAR">. 
+
+B<qc--> is controlled by a built-in Lua interpreter (Version 2.5). 
+Many compiler phases are available as Lua primitives,
+and the compiler can be reconfigured dynamically by Lua commands on the command line. 
+Most command-line options are executed by the Lua interpreter, not by the
+directly.
+
+On startup, B<qc--> proceeds as follows:
+
+=over
+
+=item 1.
+
+Divide the command line into I<command>s and I<arg>s.
+Loosely speaking, a I<command> is identified because it begins with a minus sign,
+it is preceded by B<-e>, or it contains an B<=> sign.
+An I<arg> is anything else.
+
+=item 2.
+
+Place the I<arg>s in the vector B<Sys.argv> in the Lua interpreter.
+
+=item 3.
+
+Search for the file F<qc--.lua> as described below (B<LUA STARTUP>)
+and execute it.
+
+=item 4.
+
+Execute the I<command>s one by one in order of appearance.
+Most likely one I<command> does something useful with the contents of B<Sys.argv>. 
+
+=back
 
 =head1 OPTIONS
 
-B<qc--> is controlled but by a built-in Lua 2.5 interpreter.  Compiler
-phases are available as Lua primitives such that the user can write a
-Lua script to control B<qc-->. The few existing command line switches
-therefore control the Lua interpreter, rather than the compiler
-directly.
-
-Upon start-up, B<qc--> searched for the file F<qc--.lua>, executes it,
-and then processes command line options in the following order: first
-all generic I<arg> arguments are passed in B<Sys.argv> to the Lua
-interpreter, then B<-e> arguments are evaluated from left to right. If
-the interactive option B<-i> is present, it is honored last.  
+Except for B<-e> and B<-i>, which can be thought of as ``meta-options,'' 
+every option is executed by the Lua interpreter.
 
 =over
 
@@ -613,25 +741,34 @@ the interactive option B<-i> is present, it is honored last.
 The I<command> is passed to the Lua interpreter and I<evaluated>. This
 option can be repeated.
 
+=item I<command>
+
+The I<command> must contain an B<=> sign to be identifiable 
+as a I<command> and not an I<arg>.
+The I<command> is passed to the Lua interpreter and I<evaluated>. 
+
 =item B<-i> 
 
 Starts an I<interactive> session with the interpreter that reads from
-stdin. All command line arguments to the right of B<-i> are considered
+stdin. All command-line arguments to the right of B<-i> are considered
 as generic I<arg> arguments that are passed to the Lua interpreter in
-thae B<Sys.argv> table.  Therefore, B<-i -e> I<arg> does not evaluate
+the B<Sys.argv> table.  Therefore, B<-i -e> I<arg> does not evaluate
 I<arg> but passes B<-e> and I<arg> in the table B<Sys.argv>.
 
 =item B<->I<x>
 
-The option is equivalent to B<-e 'Main.>I<x>B<()'> and thus executes the
-function B<Main.>I<x>. This allows to implement traditional command line
-options easily.
+The option is equivalent to B<-e 'CommandLineOption.>I<x>B<()'> and thus executes the
+function B<CommandLineOption.>I<x>. 
+N.B. I<x> may be any string except B<e> or B<i>.
+The Lua code defines some standard options, which will be documented here one day.
+Meanwhile there are examples below.
 
 =item I<arg> ...
 
-The first argument that is not any of the above options starts the
-sequence of generic arguments. They are passed literally in the
-B<Sys.argv> table to the Lua interpreter.
+The first argument that does not begin with B<-> and does not contain B<=>
+starts the
+sequence of arguments. They are placed in the
+B<Sys.argv> table for the Lua interpreter.
 
 =back
 
@@ -639,22 +776,22 @@ B<Sys.argv> table to the Lua interpreter.
 
 =over 
 
-=item B<qc-->  B<-e> B<'Main.c()'> I<file.c-->
+=item B<qc-->  B<-e> B<'CommandLineOption.c()'> I<file.c-->
 
 Compile I<file.c--> for the B<Default.target>.
 
 =item B<qc--> B<-c> I<file.c-->
 
-Same as before, because C<-c> is equivalent to C<-e 'Main.c()'>.
+Same as before, because C<-c> is equivalent to C<-e 'CommandLineOption.c()'>.
 
-=item B<qc--> B<-e> B<'Main.check()'> I<file.c-->
+=item B<qc--> B<-e> B<'CommandLineOption.check()'> I<file.c-->
 
 Check the static semantic of I<file.c-->. Could be also called as
 C<-check> I<file.c-->.
 
 =back
 
-=head1 HIGH LEVEL LUA FUNCTIONS
+=head1 HIGH-LEVEL LUA FUNCTIONS
 
 The following functions are intended to be called from the B<qc-->
 command line. For most of them a one-letter alias I<x> exists such that
@@ -663,33 +800,34 @@ L<OPTIONS>.
 
 =over
 
-=item B<Main.check()>
+=item B<CommandLineOption.check()>
 
 Check static semantic of file named as first command line argument. Does
 a type check, but generates no code.
 
-=item <Main.c()>
+=item B<CommandLineOption.c()>
 
 Compiles the file named as the first command line argument. Uses Lua
 defaults for the targets, optimizer, and assembler. Emits to stdout.
 
-=item B<Main.dot()>
+=item B<CommandLineOption.dot()>
 
 Compiles the file named as the first command line argument and emits the
 control flow graph of each procedure as a B<dot> diagram to stdout.
 Uses Lua defaults for the targets, optimizer, and assembler. 
 
-=item B<Main.asdl()>
+=item B<CommandLineOption.asdl()>
 
 Compiles the file named as the first command line argument and each
 procedure in ASDL format to stdout.  Uses Lua defaults for the targets,
 optimizer, and assembler. 
 
-=item B<Main.sparc()>
+=item B<CommandLineOption.sparc()>
 
 Compiles the file named as the first command line argument to I<SPARC>
 assembly code and emits it to stdout.  Uses Lua defaults for the
 targets, optimizer, and assembler. 
+Will certainly change in the future.
 
 =back
 
@@ -697,13 +835,14 @@ targets, optimizer, and assembler.
 =head1 LUA STARTUP
 
 To find the Lua startup file F<qc--.lua>, B<qc--> takes the following
-steps: It reads the contents of the environment variable B<QC--LUAPATH>
+steps: It reads the contents of the environment variable B<QCMMLUAPATH>
 as a search path. If the environment variable is undefined, the default
 is "B<:.:*>". A search path contains a list of colon separated
 directories. Two directory names are special: the empty directory refers
-to an implementation dependent system-wide directory, like
-B</usr/local/lib/qc-->. The star B<*> refers to a directory that is part
-of the B<qc--> executable. With the default search path, B<qc-->
+to an implementation-dependent system-wide directory, like
+B</usr/local/lib/qc-->. The star B<*> refers to a ``directory'' that is 
+actually compiled into the B<qc--> executable. 
+With the default search path, B<qc-->
 therefore looks first in the system-wide directory for F<qc--.lua>, then
 in the current directory, and then takes the built-in F<qc--.lua>. 
 
@@ -711,21 +850,21 @@ in the current directory, and then takes the built-in F<qc--.lua>.
 
 The Lua startup code that is embedded into the compiler is accessible
 from the Lua interpreter itself. The table B<Boot> is treated as as
-the directory B<*> in the B<QC--LUAPATH> as explained above and
+the directory B<*> in the B<QCMMLUAPATH> as explained above and
 therefore B<Boot["qc--.lua"]> contains the embedded Lua code. You can
 dump it to stdout using the following command line. This is also a good
 way to check what command line options are available in case this manual
 page is not up to date.
 
     qc-- -script > qc--.lua  
-    
-When you alter the file F<qc--.lua> and use the default B<QC--LUAPATH>
+
+When you alter the file F<qc--.lua> and use the default B<QCMMLUAPATH>
 environment variable, B<qc--> will read it at startup and execute it
 instead of the builtin script from B<Boot>. This is a good way to play
 with customized Lua code.
 
-To get an idea what functions and variables are defined the entire name
-space of the Lua interpreter can be dumped with the following command
+To get an idea what functions and variables are defined, dump the name
+space of the Lua interpreter using the following command
 line:
 
     qc-- -dump  | sort 
@@ -737,27 +876,48 @@ In addition to the six Lua core-types the Lua interpreter in the
 B<qc--> compiler offers the following types that represent internal
 compiler data structures:
 
-=over
+=over 12
 
-=item I<asm> Assembler.
+=item I<asm>
 
-=item I<ast> C-- abstract syntax.
+Assembler
 
-=item I<env> Symbol table.
+=item I<ast>
 
-=item I<proc> Back-end representation of a procedure.
+C-- abstract syntax
 
-=item I<doc> Printable output.
+=item I<env>
 
-=item I<target> Target architecture.
+Symbol table
 
-=item I<optimize> Code optimizer.
+=item I<proc>
 
-=item I<io> File handle for input or output.
+Back-end representation of a procedure
 
-=item I<inchan> Input channel.
+=item I<doc>
 
-=item I<outchan> Output channel.
+Printable output
+
+=item I<target>
+
+Target architecture
+
+=item I<optimize>
+
+Code optimizer
+
+=item I<io>
+
+File handle for input or output
+
+=item I<inchan>
+
+Input channel
+
+=item I<outchan>
+
+Output channel
+
 =back
 
 =head1 LUA TARGETS
@@ -774,10 +934,11 @@ The B<qc--> compiler is controlled by functions that consume and produce
 the above types. However, these functions are usually not called
 directly. Instead, higher-level Lua functions as part of the Lua startup
 script are invoked from the command line.
+In other words, B<this section is for compiler hackers only>.
 
 =over
 
-=item B<Driver.version>(I<nil>). Prints version information and
+=item B<Driver.version>(). Prints version information and
 copyright to stdout.
 
 
@@ -797,10 +958,12 @@ its static semantics. Returns a symbol table I<env> upon success.
 =item B<Driver.pretty>(I<ast>). Returns a printable I<doc> value of an
 I<ast>. 
 
-=item B<Driver.compile>(I<optimize>, I<ast>, I<target>, I<env>).
+=item B<Driver.compilec>(I<optimize>, I<ast>, I<target>, I<env>).
 Compiles an I<ast> for a I<target>, using symbol table I<env>. Returns
-an assembly program I<asm>. The function B<compile> passes every C--
+an assembly program I<asm>. The function B<compilec> passes every C--
 procedure to B<optimize>.
+(Replaces the obsolete function B<Driver.compile>.  Both should be renamed 
+once experiments are finished and revision is complete.)
 
 =item B<Driver.assemble>(I<asm>). Emits an assembler program.
 
@@ -809,18 +972,18 @@ of I<number> characters and prints it to stdout.
 
 =item B<Driver.cmmasm>(I<io>). Creates an assembler that emits C-- code.
 
-=item B<Driver.dotasm>(I<io>). Creates an assembler that emits output
+=item B<Driver.dotasm>(I<io>). Creates an assembler that emits B<dot> output.
 
 =item B<Driver.sparcasm>(I<bool>,I<io>). Creates an assembler that emits output
 for the I<SPARC> assembler. The boolean flag is false (zero) on SunOS
-systems.
+systems.  I<(Is falsehood zero or nil???)>
 
 =back
 
 =head1 ENVIRONMENT
 
-B<QC--LUAPATH>: search path for Lua scripts loaded by B<qc-->; default
-B<:.*>. 
+B<QCMMLUAPATH>: search path for Lua scripts loaded by B<qc-->; default
+B<:.:*>. 
 
 =head1 EXIT CODE
 
@@ -830,7 +993,7 @@ exit code 1.  Any internal compiler error leads to exit code 2.
 
 =head1 SEE ALSO
 
-L<dot>.
+I<dot(1)>.
 
 http://www.cminusminus.org/, 
 http://www.lua.org/,

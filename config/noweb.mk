@@ -52,7 +52,7 @@ NOWEBBREAKCODE=no
 	(tr '\n' ' ' <<EOF
 	\documentclass{article}
 	\usepackage{noweb}
-	\usepackage{tabularx}
+	\usepackage{tabularx,array}
 	\usepackage{hyperref}
 	\usepackage{path}
 	\usepackage[dvips]{graphicx}

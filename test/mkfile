@@ -22,17 +22,18 @@ MANDIR =    ../man
 # high level targets
 # ------------------------------------------------------------------  
 
-test:VQ:        ../bin/qc-- fp regr
-                for f in *.c--; do mk "`basename $f .c--`.test"; done
+SRC    = `echo *.c--`
+TEST   = ${SRC:%.c--=%.test}
+RECORD = ${SRC:%.c--=%.record}
 
-record:VQ:      ../bin/qc-- fp regr
-                for f in *.c--; do mk "`basename $f .c--`.record"; done
+test:VQ:        $TEST
+record:VQ:      $RECORD
 
 # ------------------------------------------------------------------ 
 # useful targets to create test results
 # ------------------------------------------------------------------ 
 
-%.test:V:       %.c--         
+%.test:V:       %.c-- ../bin/qc-- fp regr
 		SELF=$stem.c--
 		BASE=$stem
 		export SELF BASE
@@ -42,7 +43,7 @@ record:VQ:      ../bin/qc-- fp regr
 # only after you have verified that the factual output is indeed the
 # expected output!
 
-%.record:V:     %.c--         
+%.record:V:     %.c-- ../bin/qc-- fp regr       
 		SELF=$stem.c--
 		BASE=$stem
                 REGRFLAGS="-r"

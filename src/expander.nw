@@ -23,14 +23,35 @@ $\oplus$& any RTL operator\\
 Our goal is to reduce RTLs to the following forms:
 
 {\def\gets{\mathrel{:=}}%
-$$\begin{array}{rcl}
-m[t_l] & \gets & t\\
-t      & \gets & m[t_l]\\
-t_1    & \gets & t_2\\
-t      & \gets & k\\
-t      & \gets & \oplus(t_1, \ldots, t_n)
+$$\begin{array}{rcl@{\mskip10mu}l}
+m[t_l] & \gets & t     &\mbox{store}\\
+t      & \gets & m[t_l]&\mbox{load} \\
+t_1    & \gets & t_2   &\mbox{move} \\
+t      & \gets & k     &\mbox{constant}\\
+t      & \gets & \oplus(t_1, \ldots, t_n) & \mbox{ALU}\\
+\multicolumn4{@{}l@{}}{\mbox{\parbox{\linewidth}{\noindent
+  And it should be extended to include the following variations:}}}\\
+m[t_l] & \gets & \mathtt{lobits}_n(t)     &\mbox{store byte/halfword}\\
+t      & \gets & \mathtt{sx} m[t_l]       &\mbox{load signed b/h} \\
+t      & \gets & \mathtt{zx} m[t_l]       &\mbox{load unsigned b/h} \\
 \end{array}
 $$}
+@
+I'm contemplating how we might create a hand-written expander that can
+easily be specialized to establish ``most of'' the machine invariant
+for many different targets, without relying so heavily on peephole
+optimization \emph{post facto}.
+For example, it's legitimate to think of $\mathtt{\$m}[\cdot]$ as an
+``address context.''
+Any machine should be able to deal with $t$~in an address context, but
+many machines will also be able to deal with $t+t$ and $t+k$ (though
+on some machines $k$~may not be too large).
+Some machines can even deal with $t+4\times t$!
+One possibility, then, would be to make an ``address context''
+function dynamic through Lua.
+Care would have to be taken to avoid paying for an expensive identity
+function (embedding/projection) at every application of such a function.
+@
 
 This is not quite what a real code expander does, but it should
 suffice for experiments.
@@ -198,6 +219,7 @@ $t[30::bits32]     = 0::bits32;
 \end{verbatim}
 \end{quote}
 
+
 @
 Contexts.  This is jury-rigged, since in real life the expander knows
 all about the machine and doesn't need a context.
@@ -275,3 +297,31 @@ let cfg _ proc =
     | [] -> assert false in
   List.iter exp nodes;
   !modified
+
+@ 
+% ------------------------------------------------------------------ 
+\subsection{Exporting the Expander to Lua}
+% ------------------------------------------------------------------ 
+
+Code expansion is part of {\qcc}'s backend that is controlled by a Lua
+interpreter. To make the expander accessible for Lua code, it is
+exported as a Lua primitive [[Expander.toy]].
+<<expander.mli>>=
+module Lua (ProcT: Lua.Lib.TYPEVIEW with type 'a t = Proc.t): 
+    Lua.Lib.TYPEFUL with type 'a combined = 'a ProcT.combined
+<<expander.ml>>=
+module Lua (ProcT: Lua.Lib.TYPEVIEW with type 'a t = Proc.t): 
+    Lua.Lib.TYPEFUL with type 'a combined = 'a ProcT.combined =
+struct
+    type 'a combined = 'a ProcT.combined
+    module M (C : Lua.Lib.CORE with type 'a V.userdata' = 'a combined) =
+    struct
+      module V = C.V
+      let ( **-> ) = V.( **-> )
+      let proc     = ProcT.makemap V.userdata V.projection
+      let pf t     = (V.pfunc t).V.embed    (* pure Lua function *)
+      let init = C.register_module "Expander" 
+          [ "toy" , pf (V.value **-> proc **-> V.result V.bool) cfg
+          ]
+    end (*M*)    
+end (*Lua*)            

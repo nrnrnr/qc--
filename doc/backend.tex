@@ -1,0 +1,256 @@
+\documentclass[12pt]{article}
+
+\usepackage{array,tabularx}
+
+\newcommand\PAL{\texttt{C-{}-}}
+\newcommand\lrtl{\mbox{$\lambda$-RTL}}
+
+\title{Building a Back End for Quick~{\PAL}}
+\author{Norman Ramsey}
+
+\begin{document}
+
+\maketitle
+
+This document describes what needs to be done to add a new back end to
+the Quick~{\PAL} compiler.
+Until we actually have working back ends, it's a work in progress.
+
+\begin{enumerate}
+\item
+Choose a name for your target architecture.
+Ideally, you should use the name that the GNU project uses, assuming
+you can figure out how to learn it.
+In this document, we use the example name \texttt{arch}.
+\item
+Decide what storage spaces you will need to represent registers and
+memory on the target machines.
+We recommend these conventions:\\[3pt]
+\begin{tabularx}{\linewidth}{@{\hskip1.5em}cc>{\raggedright\arraybackslash}X@{}}
+\emph{H/W}& \emph{Tmp}& \emph{Description}\\
+\texttt m& --- & Memory (or data memory)\\
+\texttt i& --- & Instructions (on a Harvard architecture only)\\
+\texttt r& \texttt t& General-purpose or integer registers\\
+\texttt f& \texttt u& Floating-point registers\\
+\texttt a& \texttt v& Address registers, if any\\
+\texttt p& \texttt w& Predicate registers, if any\\
+\texttt c& ---      & Control registers and status words (program
+counter, etc.)\\
+\end{tabularx}\\[3pt]
+Note that only a register-like space has an associated temporary
+space.
+We don't yet have a recommended scheme for managing the condition
+codes using temporaries. 
+When we implement it, we'll document it here.
+
+You'll need to document the behavior of these spaces by producing a
+\texttt{Space.t list}, which in turn is used to configure the
+allocator for temporary variables.
+The \texttt{Space} module provides support in \texttt{Space.Standard}.
+\item
+Consider what lies you may want to tell the compiler about the
+machine.
+Such lies involve concealing from the compiler things it need not
+know.
+\begin{itemize}
+\item
+You might wish to hide the details of some computation by introducing
+a new RTL operator with unspecified semantics.
+The name of such an operator should begin with the name of your
+architecture, followed by a dot.
+For example, if I want to conceal just how the condition codes are
+updated after an integer comparison, I might define the operator
+\texttt{arch.icmp} and use it in instructions that set condition codes.
+\item
+One might wish to conceal the exact representation of some part of the
+machine state.
+For example, I might wish to pretend that the condition codes occupy a
+full 32-bit register.
+\end{itemize}
+The purpose of telling such lies is to simplify the code expander and
+recognizer.
+Without some abstraction, it can be hard to write these components by
+hand.
+\item
+Decide on suitable technology for building the major machine-dependent
+parts of the back end:
+\begin{itemize}
+\item
+Variable placer
+\item
+Code expander
+\item
+Recognizer
+\item
+Assembler
+\end{itemize}
+We hope to generate all these components from a \lrtl\ description,
+but this technology is still in the research stages.
+We therefore review other possible technology.
+\begin{enumerate}
+\item
+We hope it will be unnecessary to write a custom variable placer for
+each target.
+We hope instead to provide a selection of pre-written placers to
+choose from:
+\begin{itemize}
+\item
+A generic ``integer/float'' placer, which Kevin Redwine is working on.
+\item
+A stack placer, which puts each variable on the stack.
+\item
+A generic ``integer/float/address'' placer, which Kevin Redwine is working on.
+\item
+The FORTRAN placer, which places a variable according to the first
+letter of its name.
+\end{itemize}
+As of June 14, 2002, only the FORTRAN placer is implemented.
+\item
+We have the most questions about code expansion.
+\begin{itemize}
+\item
+There is a Camlburg engine for writing code expanders, but its
+performance and ease of use have not yet been evaluated.
+\item
+There is a ``toy'' code expander, which expands each RTL into a
+relatively simple normal form.
+It is based on Jack Davidson's ideas, and it would generate good code
+only with the assistance of a peephole optimizer.
+But it might conceivably be altered or parameterized to do a somewhat
+better job based on knowledge of addressing modes of the target
+machine, and so on.
+The idea would be to start with the output of this code expander, then
+postprocess it to establish the machine invariant.
+\item
+It might be reasonable to write a code expander by hand, using
+the ``maximal munch'' style of ML~pattern matching expounded in Andrew
+Appel's compiler text.
+\end{itemize}
+\item
+Choices for
+the recognizer are also vexing.
+\begin{itemize} 
+\item 
+A recognizer 
+ could be written by hand using ML pattern
+matching.
+This exercise would be tedious because the ML representation of RTLs
+is designed for simplicity and generality, not ease of pattern matching.
+\item
+A recognizer might be generated from a \lrtl\ description.
+But
+as of June, 2002, a recognizer generated from \lrtl\ is incapable of
+dealing with temporaries or link-time constants.
+It's not clear to me how much of a handicap this restriction is or
+whether it is easy to fix.
+\end{itemize}
+\end{enumerate}
+\item
+Choose a representation for instructions to be shared by your
+assembler and your recognizer.
+We recommend using the representation generated by the New Jersey
+Machine-Code Toolkit. 
+\item
+Customize the ``arithmetic widener'' for the instructions available on
+your target.
+\item
+Decide on a stack-frame layout.
+\begin{itemize}
+\item
+What are the required blocks in the stack frame?
+\item
+What is the technology and where does it go?
+\item
+Does the stack frame stay a fixed size or can it change size during
+the lifetime of an activation? 
+(I~believe our compiler supports only a frame of fixed size.)
+\end{itemize}
+Your stack-frame layout may be connected to your calling convention.
+\item
+Develop an automaton for assigning locations to global registers.
+This automaton should be designed in concert with the calling
+conventions.\footnote
+{It would be good to have some technology to ensure consistency with
+calling conventions, or at least to detect any inconsistency at
+compile time.}
+\item
+Choose a default calling convention.
+We're not yet entirely clear on everything that this choice must
+encompass, but at minimum we need the following:
+\begin{enumerate}
+\item
+Provide automata for passing parameters, results, and continuation parameters.
+\item
+Which register holds the stack pointer?
+\item
+What is the invariant governing the alignment of the stack pointer at
+calls?
+\item
+What is the contract with the operating system regarding dynamic
+``borrowing'' of locations just below the stack pointer?
+\end{enumerate}
+Just as we have not yet uncovered the whole story about the calling
+convention, we have not yet identified the appropriate technology.
+\item
+Implement the local C calling convention, or possibly a subset.
+\item
+Select and configure a register allocator (how?)
+\item
+Export all the back-end blocks into Lua.
+Place the back-end blocks into which kinds of slots to enable a
+simple, standard back end?
+(Need \texttt{widener}, \texttt{placer}, \texttt{expander},
+\texttt{allocator}, \texttt{recognizer}.)
+\item
+Generate or write a function that emits textual assembly language for
+your instructions.
+If you use strings to represent instructions, the emitter is trivial.
+The Toolkit can generate an emitter for its representation.
+\item
+Write your assembler.
+There should be a template for emission of initialized data---possibly
+we can define a functor to help with this part of the problem.
+\item
+Write Lua code to expose all parts of your back end and to stitch it
+together into a real target, using conventions to be developed.
+\end{enumerate}
+
+\end{document}
+
+
+
+When you want to add support for a new target architecture to the {\qcc}
+compiler, here is what you have to do.
+
+\begin{enumerate}
+\item Add a new target description to \path|Targets|. All targets are
+      exported from here to the Lua interpreter.
+
+\item Generate am emitter for assembly instructions in directory
+      \path|gen/|.
+
+\item Implement the assembler interface \path|Asm3.assembler| for the
+      new target. The \path|Mspacasm| module might work as a template.
+      There is another module \path|Sparcasm| which is currently not
+      used because I don't understand it. The assembler is exported to
+      the Lua interpreter in the \path|Driver2| module.
+
+\item Implement an {\rtl} encoder for instructions and a matching
+      decoder. See modules \path|Msparcenc| and \path|Msparcdec| for
+      examples (source file \path|minisparc.nw|). The decoder is used by
+      the assembler to decode and emit assembly code. The decoder itself
+      uses the generated emitter to emit the recognized machine
+      instruction.
+
+\item Implement a code expander and export it to Lua. Module
+      \path|Sparcexpander| could serve as a guide. The code expander
+      uses the encoder to generate instructions.      
+      
+\item Extend the driver code written in Lua in file \path|main2.nw| with
+      an optimizer (table \path|Opt|) and target (table \path|Targets|) for
+      the new architecture.
+\end{enumerate}
+
+% ------------------------------------------------------------------ 
+\end{document}
+% ------------------------------------------------------------------ 

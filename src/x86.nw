@@ -1,0 +1,67 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode; comment-column: 32 -*-
+
+% vim: ts=4 et:
+% Grades     ::=    "%%Grades:" Quality Importance Urgency
+% Quality    ::=    A|B|C|D|E
+% Importance ::=    Central|Subsystem|Peripheral
+% Urgency    ::=    Immediate|Soon|Later
+%
+% Please add grades for this module below. The line must start with % "%%".
+% 
+
+%%Grades: I Peripheral Immediate
+
+\section{Back end for an Intel x86 subset}
+
+This exploratory back end is designed both to help us develop good
+procedures for writing back ends and to serve as an example.
+The names of spaces are standard.
+<<x86.mli>>=
+val arch : string                       (* name of machine*)
+module Spaces : sig
+  val m : Space.t
+  val r : Space.t
+  val t : Space.t
+  val f : Space.t
+  val u : Space.t
+  val c : Space.t   (* PC at 0 and condition codes at 1 *)
+end
+@ 
+
+\paragraph{Name}
+<<x86.ml>>=
+let arch = "x86"                (* architecture name *)
+@ 
+We use the standard storage spaces, with the PC as [[$c[0]]] and the
+condition codes as [[$c[1]]].
+We pretend that the machine is a 32-bit machine, which simplifies a lot.
+<<x86.ml>>=
+module Spaces = struct
+  module S = Space
+  let bo = Rtl.LittleEndian
+  let id = Rtl.Identity
+  let m = Space.Standard32.m bo [8; 16; 32]
+  let r = Space.Standard32.r 8 id [32]
+  let t = Space.Standard32.t   id [32]
+  let f = S.checked { S.space = 'f'; S.doc = "floating-point registers"
+                    ; S.cellwidth = 80
+                    ; S.indexwidth = 3; S.indexlimit = Some 8
+                    ; S.aggregation = id; S.widths = [80]
+                    ; S.classification = S.Reg
+                    } 
+  let all_floats = { S.stands_for = 'f'; S.index_ok = (fun _ -> true)
+                   ; S.set_doc = "all floating-point registers"
+                   } 
+  let u = S.checked { S.space = 'u'; S.doc = "floating-point temporaries"
+                    ; S.cellwidth = 80
+                    ; S.indexwidth = 31; S.indexlimit = None
+                    ; S.aggregation = id; S.widths = [80]
+                    ; S.classification = S.Temp all_floats
+                    } 
+  let c = S.checked { S.space = 'c'; S.doc = "PC and condition codes"
+                    ; S.cellwidth = 32
+                    ; S.indexwidth = 31; S.indexlimit = Some 2
+                    ; S.aggregation = id; S.widths = [32]
+                    ; S.classification = S.Fixed
+                    } 
+end

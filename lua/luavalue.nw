@@ -136,6 +136,7 @@ arguments by using the embedding/projection pair produced by
   val values   : value list mapf                   (* functions returning value lists*)
   val pfunc    : 'a mapf -> 'a map                 (* pure functions *)
   val func     : 'a mapf -> (state -> 'a) map      (* impure functions *)
+  val closure  : 'a mapf -> (state -> 'a) map      (* function or table w/apply method *)
 end
 @ Here's an example: we embed the [[String.sub]] function, then apply
 it to some arguments.
@@ -425,6 +426,23 @@ let func (arrow : 'a mapf) : ((state -> 'a) map) =
   ; project = (function Function (_, f) -> (fun s -> arrow.project (f s) : state -> 'a)
                       | v -> raise (Projection (v, "function")))
   } 
+
+let closure (arrow : 'a mapf) : ((state -> 'a) map) =
+  { embed   = (fun (f : state -> 'a) -> caml_func (fun s -> arrow.embed (f s)))
+  ; project = (function Function (_, f) -> (fun s -> arrow.project (f s) : state -> 'a)
+                      | Table t as v -> (<<project table [[t]] into a function>>)
+                      | v -> raise (Projection (v, "function")))
+  } 
+@
+A table is a function if it has an apply method that is a function.
+<<project table [[t]] into a function>>=
+let f = try Table.find t (String "apply")
+        with Not_found -> raise (Projection (v, "function"))  in
+match f with
+| Function (_, f) ->
+    let f' s vs = f s (v :: vs) in
+    (fun s -> arrow.project (f' s) : state -> 'a)
+| v -> raise (Projection (v, "'apply' element of table as function"))
 @ 
 Lua tables are very nearly Caml hash tables, except they never have
 multiple elements.

@@ -25,12 +25,33 @@ provides a type to describe an {\rtl} space.
     defined somewhere else. NR suggested to have this separate module.
     --CL
 \end{quote}
-
-
+The function [[checked]] asserts that its argument satisfies a few
+simple invariants, then returns that argument.
 <<space.mli>>=
 <<type location set>>
 <<type classification>>
 <<type t>>
+val checked : t -> t
+@
+The module [[Standard]] provides support for common spaces with
+standard names.  Memory uses 8-bit cells, and other units use 32-bit
+cells.  
+Byte order and available aggregate widths must be specified by the
+client. 
+<<space.mli>>=
+module Standard32 : sig
+  type generator = Rtl.aggregation -> Rtl.width list -> t
+  val m :               generator          (* standard 8-bit memory *)
+  val r :  count:int -> generator          (* registers *)
+  val t :               generator          (* register temps *)
+  val f :  count:int -> generator          (* floats *)
+  val u :               generator          (* float temps *)
+  val a :  count:int -> generator          (* address registers *)
+  val v :               generator          (* address temps *)
+  val p :  count:int -> generator          (* predicate registers *)
+  val w :               generator          (* predicate temps *)
+  val c :  count:int -> generator          (* control and special registers *)
+end
 @
 
 A [[Rtl.space]] denotes a memory space, the details of a particular
@@ -44,7 +65,7 @@ type t  =
     ; indexwidth:       int             (* bits *)
     ; indexlimit:       int option      (* None = 2^indexwidth *)
     ; aggregation:      Rtl.aggregation      
-    ; aggsize:          int list        (* supported aggregates *)
+    ; widths:           int list        (* widths of supported aggregates *)
     ; classification:   classification  
     }
 @
@@ -59,9 +80,9 @@ type t  =
 \item [[indexlimit]]:   Upper bound for an address in this space: $0,
                         \dots, [[indexlimit]]$. 
 \item [[aggregation]]:  Supported aggregation.
-\item [[aggsize]]:      List of supported aggregat-sizes. For example, 
-                        is a 8 bit wide memory space supports 8, 16, and
-                        32 bit words, [[aggsize]] would be [1, 2, 4].
+\item [[widths]]:       Widths of supported aggregates. For example, 
+                        if an  memory space 8~bits wide supports 8-, 16-, and
+                        32-bit words, [[widths]] would be [[[1; 2; 4]]].
 \item [[classification]]: Classification of a space, see below.
 
 \end{itemize}
@@ -111,4 +132,122 @@ type location_set =
 <<type classification>>
 <<type t>>
 @
+
+<<space.ml>>=
+let indexwidth n =
+  let rec wid = function
+    | 0 -> 0
+    | n -> 1 + wid (n lsr 1)  in
+  wid (n-1)
+let checked s =
+  begin
+    assert (match s.widths with [] -> false | _ :: _ -> true);
+    List.iter (fun w -> assert (w mod s.cellwidth = 0)) s.widths;
+    (match s.aggregation with
+    | Rtl.Identity -> assert(s.widths = [s.cellwidth])
+    | _ -> ());
+    (match s.indexlimit with
+    | Some n -> assert (indexwidth n <= s.indexwidth)
+    | _ -> ());
+    s
+  end
+<<space.ml>>=
+module Standard32 = struct
+  type generator = Rtl.aggregation -> Rtl.width list -> t
+  let m agg ws = checked { space = 'm'; doc = "memory"; cellwidth = 8
+                         ; indexwidth = 32 ; indexlimit = None
+                         ; aggregation = agg; widths = ws
+                         ; classification = Mem
+                         } 
+
+  let r ~count agg ws = checked { space = 'r'; doc = "general-purpose registers"
+                           ; cellwidth = 32
+                           ; indexwidth = indexwidth count; indexlimit = Some count
+                           ; aggregation = agg; widths = ws
+                           ; classification = Reg
+                           } 
+  let t agg ws   = checked { space = 't'; doc = "general-purpose temporaries"
+                           ; cellwidth = 32
+                           ; indexwidth = 32; indexlimit = None
+                           ; aggregation = agg; widths = ws
+                           ; classification =
+                               Temp  { stands_for = 'r'
+                                     ; index_ok   = (fun _ -> true) (* lies *)
+                                     ; set_doc    = "general-purpose temporaries"
+                                     } 
+                           } 
+
+  let f ~count agg ws = checked { space = 'f'; doc = "floating-point registers"
+                           ; cellwidth = 32
+                           ; indexwidth = indexwidth count; indexlimit = Some count
+                           ; aggregation = agg; widths = ws
+                           ; classification = Reg
+                           } 
+  let u agg ws   = checked { space = 'u'; doc = "floating-point temporaries"
+                           ; cellwidth = 32
+                           ; indexwidth = 32; indexlimit = None
+                           ; aggregation = agg; widths = ws
+                           ; classification =
+                               Temp { stands_for = 'f'
+                                    ; index_ok   = (fun _ -> true) (* lies *)
+                                    ; set_doc    = "floating-point temporaries"
+                                    } 
+                           } 
+
+  let a ~count agg ws = checked { space = 'a'; doc = "address registers"
+                           ; cellwidth = 32
+                           ; indexwidth = indexwidth count; indexlimit = Some count
+                           ; aggregation = agg; widths = ws
+                           ; classification = Reg
+                           } 
+  let v agg ws   = checked { space = 'v'; doc = "address temporaries"
+                           ; cellwidth = 32
+                           ; indexwidth = 32; indexlimit = None
+                           ; aggregation = agg; widths = ws
+                           ; classification =
+                               Temp { stands_for = 'a'
+                                    ; index_ok   = (fun _ -> true) (* lies *)
+                                    ; set_doc    = "address temporaries"
+                                    } 
+                           } 
+
+  let p ~count agg ws = checked { space = 'p'; doc = "predicate registers"
+                           ; cellwidth = 32
+                           ; indexwidth = indexwidth count; indexlimit = Some count
+                           ; aggregation = agg; widths = ws
+                           ; classification = Reg
+                           } 
+  let w agg ws   = checked { space = 'w'; doc = "predicate temporaries"
+                           ; cellwidth = 32
+                           ; indexwidth = 32; indexlimit = None
+                           ; aggregation = agg; widths = ws
+                           ; classification =
+                               Temp { stands_for = 'p'
+                                    ; index_ok   = (fun _ -> true) (* lies *)
+                                    ; set_doc    = "predicate temporaries"
+                                    } 
+                           } 
+
+  let c ~count agg ws = checked { space = 'c'; doc = "control and special"
+                           ; cellwidth = 32
+                           ; indexwidth = indexwidth count; indexlimit = Some count
+                           ; aggregation = agg; widths = ws
+                           ; classification = Reg
+                           } 
+end
+@
+
+A [[Rtl.space]] denotes a memory space, the details of a particular
+space are covered by a space descriptor [[t]]:  
+
+type t  =
+    { space:            Rtl.space       (* space being described *)
+    ; doc:              string          (* informal doc string *)       
+    ; cellwidth:        int             (* bits *)
+    ; indexwidth:       int             (* bits *)
+    ; indexlimit:       int option      (* None = 2^indexwidth *)
+    ; aggregation:      Rtl.aggregation      
+    ; widths:           int list        (* widths of supported aggregates *)
+    ; classification:   classification  
+    }
 

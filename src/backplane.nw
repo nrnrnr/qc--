@@ -29,6 +29,35 @@ the stage. If it is possible to reach a stage without satisfying the expected
 properties of the stage, then the control flow is invalid. Validity of the
 control flow is verified in a static checking phase.
 
+The properties used in Quick~{\PAL} are as follows:
+\begin{tabularx}{linewidth}{@{\hskip1.5em}>{\ttfamily}X@{}}
+proper widths&
+  Every variable and operator is specialzed at widths that are
+  appropriate to the target machine.  For example, on a 32-bit machine
+  that supports no smaller arithmetic, all variables and operators
+  would be used at 32~bits.\\
+no vars& 
+  No {\PAL} variable appears in any RTL.\\
+no compile-time constants&
+  No compile-time constant appears in any RTL.\\
+varmap& 
+  The [[varmap]] field in the [[Proc.t]] is initialized\\
+no temps& 
+  No temporary register appears in any RTL.\\
+machine invariant& 
+  Each RTL, under an appropriate substitution, is
+  representable as a single instruction on the target machine.\\
+live sets&
+  The live set at each control-flow node (along each control-flow
+  edge?) is accurate.\\
+simple RHS&
+  At most one operator appears on the right-hand side of any RTL,
+  except possibly for an RTL that is representable as a single
+  instruction on the target machine.  This invariant might be further
+  elaborated; see one of the generic code expanders.\\
+\end{tabularx}
+
+
 
 <<backplane.mli>>=
 module SS : Set.S with type elt = string
@@ -63,20 +92,18 @@ states may be created or destroyed during the execution of the function.
 The state fields are represented by sets instead of lists to facilitate set
 operations such as union and intersection, which will be useful during
 the semantic checking phase.
-
 <<stage type>>=
 type 'a stage = { name : string
-                ; fn : 'a camlFunction
-                ; paramExpected : string option
-                ; stateCreated : outputs
+                ; fn   : 'a camlFunction
+                ; paramExpected  : string option
+                ; stateCreated   : outputs
                 ; stateDestroyed : outputs
-                ; stateUsed : inputs
+                ; stateUsed      : inputs
                 }
 @
 
-The [[action]]'s determines the control flow when a program is
+The [[action]] determines the control flow when a program is
 executed.
-
 <<action type>>=
 type 'a action = Seq       of 'a action list
                | When_Do   of 'a action * 'a action

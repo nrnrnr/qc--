@@ -89,7 +89,7 @@ clobber:V:      dirs
                 
                 
 test:V:         all
-                cd test && mk $target
+                cd test && mk $MKFLAGS $target
 
 # make sure appropriate empty directories exist
 dirs:V:
