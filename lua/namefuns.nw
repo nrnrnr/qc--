@@ -1,0 +1,56 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+% Grades     ::=    "%%Grades:" Quality Importance Urgency
+% Quality    ::=    A|B|C|D|E
+% Importance ::=    Central|Subsystem|Peripheral
+% Urgency    ::=    Immediate|Soon|Later
+%
+%%%Grades: 
+
+\section{Anonymous Function Namer Using Camlp4}
+This program is used to convert code in the form: [[fun <args> -> <body>]] to
+the form: [[let lua_genfun<uid> <args> = <body> in lua_genfun<uid>]], where
+[[uid]] is a unique identifier. 
+<<anonymous namer>>=
+#load "q_MLast.cmo";;
+#load "pa_extend.cmo";;
+(* #load "camlp4o.cma";; *)
+
+(* You should never use open, but here it's ok because there is no overlap with
+ other modules or p4 code. *)
+open Pcaml
+@
+The namefun function concatinates a give prefix with the suffix genfun, so that
+functions which where anonymous and now are not can be easily spotted.
+Additionally, namefun creates the unique number, or the [[uid]] number.
+<<anonymous namer>>=
+let namefun = 
+  let cnt = ref 0 in
+    fun var -> let x = incr cnt ; !cnt in
+    var ^ "_genfun" ^ string_of_int x
+
+@
+[[givnames]] does the actual conversion from [[fun]] to [[let]]. We create a new
+let expression by putting the arguments into curried form and then adding the
+syntax wrapping. 
+<<anonymous namer>>=
+let givenames loc vars e =
+  let name = namefun "lua" in
+  let e =
+    List.fold_right (fun p e -> <:expr< fun $p$ -> $e$ >>) vars e
+  in
+    <:expr<
+      let $lid:name$ = $e$
+      in $lid:name$ >>
+@
+In order to correctly parse the code we need a rule for the parser to follow.
+The rule below says that when a [[fun]] is found in the form: 
+[[fun <args> -> <body>]], pull out the [[args]] and [[body]] and send them to
+givenames to be put into a [[let]] binding. 
+<<anonymous namer>>=
+EXTEND
+ expr: 
+   [[ "fun" ; vars = LIST1 (patt LEVEL "simple") ; "->" ; e = expr ->
+         givenames loc vars e ]] ; 
+END;;
+
