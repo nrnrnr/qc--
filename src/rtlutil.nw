@@ -66,7 +66,7 @@ write positions as sets.
 
 <<rtlutil.mli>>=
 module ReadWrite: sig
-    type 'a observer = Rtl.space -> Base.std_int -> Rtl.width -> 'a -> 'a
+    type 'a observer = Register.t -> 'a -> 'a
     val fold: read: 'a observer -> write: 'a observer -> Rtl.rtl -> 'a -> 'a
     val sets: Rtl.rtl -> (Register.Set.t * Register.Set.t)
 end
@@ -261,7 +261,7 @@ let exp e = match Rtl.Convert.exp e with
 % ------------------------------------------------------------------ 
 
 <<ReadWrite>>=
-type 'a observer = Rtl.space -> (*index*) Base.std_int -> Rtl.width -> 'a -> 'a
+type 'a observer = Register.t -> 'a -> 'a
 
 let fold ~(read:'a observer) ~(write:'a observer) r z = 
   let rec rtl (z:'a) (RP.Rtl gs)  = List.fold_left guarded z gs
@@ -271,7 +271,7 @@ let fold ~(read:'a observer) ~(write:'a observer) r z =
         | RP.Kill lhs                    -> loc write z lhs
       and loc which z l = match l with
         | RP.Mem (space, _, w, addr, _)  -> exp z addr
-        | RP.Reg (space, i, w)           -> which space i w z
+        | RP.Reg r                       -> which r z
         | RP.Slice (_, _, l)             -> loc which z l
         | RP.Var _                       -> z
       and exp z e = match e with
@@ -282,11 +282,10 @@ let fold ~(read:'a observer) ~(write:'a observer) r z =
      rtl z (Rtl.Dn.rtl r)
 
 let sets (rtl:Rtl.rtl) = 
-    let reg space index width = (space,index,width) in
-    let add_left  space index width (left,right) = 
-        (Register.Set.add (reg space index width) left, right) in
-    let add_right  space index width (left,right) = 
-        (left, Register.Set.add (reg space index width) right) in
+    let add_left  r (left,right) = 
+        (Register.Set.add r left, right) in
+    let add_right r (left,right) = 
+        (left, Register.Set.add r right) in
     let empty = (Register.Set.empty, Register.Set.empty) in
         fold ~read:add_left ~write:add_right rtl empty
 @

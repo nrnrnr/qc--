@@ -457,9 +457,8 @@ explicitly.
 
 <<find tmp>>=
 let find_tmp proc node = 
-    let uses space index width = function
-        | None when T.is_tmp proc.Proc.target space -> 
-            Some (space, index, width)
+    let uses (space,index, width as r) = function
+        | None when T.is_tmp proc.Proc.target space -> Some r
         | x -> x 
     in
         Rtlutil.ReadWrite.fold ~read:uses ~write:uses (G.instr node) None    
@@ -670,8 +669,8 @@ otherwise.
 
 <<update>>=
 and reads_writes rtl loc =
-    let read  sp index width (r,w) = (r || loc = (sp,index,width), w) in
-    let write sp index width (r,w) = (r, w || loc = (sp,index,width)) in
+    let read  reg (r,w) = (r || loc = reg, w) in
+    let write reg (r,w) = (r, w || loc = reg) in
         Rtlutil.ReadWrite.fold ~read ~write rtl (false,false)
 @
 
