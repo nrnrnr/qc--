@@ -646,12 +646,12 @@ Bob Flandrena,
 ``Plan 9 Mkfiles''.
 .SH BUGS
 Identical recipes for regular expression meta-rules only have one target.
-.br
+.PP
 Seemingly appropriate input like
 .B CFLAGS=-DHZ=60
 is parsed as an erroneous attribute; correct it by inserting
 a space after the first equal sign.
-.br
+.PP
 The recipes printed by
 .I mk
 before being passed to
@@ -661,5 +661,21 @@ for printing.  Don't trust what's printed; rely
 on what
 .I sh
 does.
-.br
-Whitespace on an otherwise empty line is considered a syntax error.
+.PP
+Whitespace on an otherwise empty line is considered a syntax error;
+the parser will announce 
+.BR "expected one of :<=" .
+.PP
+If a line following a rule begins with 
+.BR # ,
+.I mk
+mistakenly treats it as a line of recipe instead of a 
+.I mk
+comment.
+This bug can have far-reaching consequences if the intent of the rule
+is to add a dependency for a target whose recipe is elsewhere or
+in a metarule: 
+the effect of the original rule or metarule is overridden with the
+empty ``recipe.''
+
+
