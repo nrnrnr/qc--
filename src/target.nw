@@ -140,13 +140,11 @@ No space appears more than once on the list.
 <<components of [[t]]>>=
 spaces:          Space.t list;
 @
-
-Variable placers may or may not need to distinguish between integer and address spaces,
-depending on this flag.
+Variable placers may or may not need to distinguish between integer
+and address spaces, depending on this flag.
 <<components of [[t]]>>=
 distinct_addr_sp:  bool;
 @
-
 <<components of [[t]]>>=
 data_section:   string;          (* ASM section for global regs *)
 @
@@ -194,14 +192,26 @@ branch:         (Rtl.exp * Rtl.exp) map; (* condition, target *)
 \subsection{Identify Special Locations}
 % ------------------------------------------------------------------ 
 
-Every target has a global register for the current floating point
-rounding mode. The register is handed out by the [[globals]] automaton.
-We also provide here, where it can be used to synthesize
-floating-point expressions and to identify the rounding modes:
-it must always be save to compare [[rounding_mode]] for equality.
+We wish every target had a global register for the current
+floating-point rounding mode.
+The register is needed in the generic expander to deal with the
+so-called ``implicit rounding mode'' floating-point conversions.
+It must always be safe to compare [[rounding_mode]] for equality.
+
+The register may be available as a named hardware register.
 <<components of [[t]]>>=
 rounding_mode : Rtl.loc;
+@ On a machine without floating point, this register has to be defined
+to some bogus value, which probably would make things go horribly
+wrong.
+One possibility would be to make this value have 
+type [[Rtl.loc option]], but this might complicate the generic
+expander.
+Still, it's probably a good idea to do this, especially since the
+front end could then detect and complain about use of floating-point
+operators. 
 @
+
 
 % ------------------------------------------------------------------ 
 \subsection{Named Hardware Registers}
