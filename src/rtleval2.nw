@@ -203,9 +203,12 @@ let is_bits = function
     | RP.Const(RP.Bits(_)) -> true
     | _                    -> false
 
-let add w args = match (w,args) with
+let addbits k k' = to_bits (Int64.add (int64 k) (int64 k'))
+let rec add w args = match (w,args) with
+    | [w],[RP.App(("add", [w']), [x; k]); k'] when w = w' && is_bits k && is_bits k'
+                -> add [w] [x; addbits k k' w]
     | [w],[x;y] when is_bits x && is_bits y 
-                -> to_bits (Int64.add (int64 x) (int64 y)) w
+                -> addbits x y w
     | _         -> default "add" w args
     
 
