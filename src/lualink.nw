@@ -321,29 +321,23 @@ let byteorder = stringtab "byteorder"
 let growth    = stringtab "memory growth"
   ["up", Memalloc.Up; "down", Memalloc.Down] in
 @ 
-
+A stage can be a list of stages, up to nesting depth five.
 <<embedding/projection pairs for calling conventions>>=
-let combine_preds l ce w h =
-  List.fold_right (fun p acc -> acc && p ce w h) l true in
-
-let choicepredty =
-  V.func (Map.counterenv **-> V.string **-> V.int **->> V.bool) in
-
-let overload_choice =
-  (V.string             <@ A.is_hint    ) <|>
-  (V.int                <@ A.is_width   ) <|>
-  choicepredty in
-
-let choice_pred =
-  (V.string               <@ A.is_hint    ) <|>
-  (V.int                  <@ A.is_width   ) <|>
-  (V.list overload_choice <@ combine_preds) <|>
-  choicepredty in
-
 let stage stages =
-  (V.list stages <@ (fun l -> List.fold_right A.( *> ) l A.unit)) <|>
-  Map.ccstage in
+  (V.list stages <@ (fun l -> List.fold_right A.( *> ) l A.unit)) <|> stages in
 let stage = stage (stage (stage (stage (stage (stage Map.ccstage))))) in
+@
+And a choice predicate can be a list of choice predicates, to slightly
+less depth. 
+<<embedding/projection pairs for calling conventions>>=
+let choicep =
+  (V.string <@ A.is_hint ) <|>
+  (V.int    <@ A.is_width) <|>
+  (V.func (V.string **-> V.int **-> Map.counterenv **->> V.bool)) in
+
+let all_preds l w h ce = List.for_all (fun p -> p w h ce) l in
+let choice_pred preds = (V.list preds <@ all_preds) <|> preds in
+let choice_pred = choice_pred (choice_pred (choice_pred (choice_pred choicep))) in
 @
 For information on how we represent registers in Lua, see \module{register.nw}.
 <<register modules to [[g]] in alphabetical order>>=
@@ -372,6 +366,8 @@ let regalloc stage ctr regs reserve =
 
 let regty = RL.map in
 let counterty = V.string in
+let counterpred = (V.int <@ (=)) <|> (V.func (V.int **->> V.bool)) in
+let reserve = V.default "normal" V.string in
 
 C.register_module "Automaton"
   [ (* first the stage constructors ... *)
@@ -388,10 +384,10 @@ C.register_module "Automaton"
                           ~max_alignment:(field V.int     "max_alignment"))
   ; "pad"         , V.efunc (counterty **->> stage) A.pad
   ; "regs_by_args", V.efunc
-                    (counterty **-> V.list regty **-> V.default "normal" V.string **->> stage)
+                    (counterty **-> V.list regty **-> reserve **->> stage)
                     (regalloc A.regs_by_args)
   ; "regs_by_bits", V.efunc
-                    (counterty **-> V.list regty **-> V.default "normal" V.string **->> stage)
+                    (counterty **-> V.list regty **-> reserve **->> stage)
                     (regalloc A.regs_by_bits)
   ; "unit"        , stage.V.embed                                     A.unit
   ; "useregs"     , V.efunc (V.list regty                **->> stage) A.useregs
@@ -402,10 +398,8 @@ C.register_module "Automaton"
   ; "widths"      , V.efunc (V.list V.int **->> stage) A.widths
 
     (* the prewritten utils ... *)
-  ; "is_any"      , V.efunc (Map.counterenv **-> V.string **-> V.int **->> V.bool) A.is_any
-  ; "counter_is"  , V.efunc (counterty **-> (V.func (V.int **->> V.bool)) **->>
-                             (V.func (Map.counterenv **-> V.string **-> V.int **->> V.bool)))
-                      A.counter_is
+  ; "is_any"      , choicep.V.embed A.is_any
+  ; "counter_is"  , V.efunc (counterty **-> counterpred **->> choicep) A.counter_is
                             
     (* registration, although it shouldn't necessarily be in here *)
   ; "register_cc" , V.efunc (Map.new_target **-> V.string **-> V.table **->> V.unit)

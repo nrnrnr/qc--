@@ -881,9 +881,9 @@ SOMEHOW.
 <<x86.ml>>=
 let warning s = Printf.eprintf "backend warning: %s\n" s
 let placevars = 
-  let is_float      hint w = w = 80 || (hint="float" && (w = 32 || w = 64)) in
-  let strange_float hint w = w = 80 && hint <> "float" in
-  let strange_int   hint w = hint = "float" && not (is_float hint w) in
+  let is_float      hint w _ = w = 80 || (hint="float" && (w = 32 || w = 64)) in
+  let strange_float hint w   = w = 80 && hint <> "float" in
+  let strange_int   hint w   = hint = "float" && not (is_float hint w ()) in
   let warn ~width:w ~alignment:a ~hint:h =
       if strange_float h w then
         warning "80-bit variable not hinted float but will go as float anyway"
@@ -892,8 +892,8 @@ let placevars =
           (Printf.sprintf "%d-bit variable hinted float but will go as integer" w) in
   let mk_stage ~temps =
     A.choice
-      [ (fun _ -> is_float),    A.widen (Aux.round_up_to ~multiple_of: 64); 
-        (fun _ h w -> w <= 32), A.widen (fun _ -> 32) *> temps 't';
+      [ is_float,               A.widen (Aux.round_up_to ~multiple_of: 64); 
+        (fun h w _ -> w <= 32), A.widen (fun _ -> 32) *> temps 't';
         A.is_any,               A.widen (Aux.round_up_to ~multiple_of: 8);
       ] in
   Placevar.mk_automaton ~warn ~vfp:target.T.vfp ~memsize:PX.memsize 
@@ -918,7 +918,7 @@ function X86.CC.results(rs)
                             , CC.widths(80, "x86 FP too wide")
                             , CC.useregs(X86.Regs.f[0], "internal error")
                             }
-                , nil,      { CC.widen(CC.multiple_of(32))
+                , {},       { CC.widen(CC.multiple_of(32))
                             , CC.widths(32, "x86 return too wide")
                             , CC.useregs(rs, "internal error")
                             }

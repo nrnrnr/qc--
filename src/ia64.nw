@@ -403,9 +403,9 @@ to classify them.
 <<ia64.ml>>=
 let warning s = Printf.eprintf "backend warning: %s\n" s
 let placevars = 
-  let is_float      hint w = w = 82 || (hint = "float" && (w = 32 || w = 64)) in
-  let strange_float hint w = w = 82 && hint <> "float" in
-  let strange_int   hint w = hint = "float" && not (is_float hint w) in
+  let is_float      hint w _ = w = 82 || (hint = "float" && (w = 32 || w = 64)) in
+  let strange_float hint w   = w = 82 && hint <> "float" in
+  let strange_int   hint w   = hint = "float" && not (is_float hint w ()) in
   let warn ~width:w ~alignment:a ~hint:h =
       if strange_float h w then
         warning "82-bit variable not hinted float but will go as float anyway"
@@ -414,9 +414,8 @@ let placevars =
           (Printf.sprintf "%d-bit variable hinted float but will go as integer" w) in
   let mk_stage ~temps =
     A.choice
-      [ (fun _ -> is_float),    A.widen (Aux.round_up_to ~multiple_of: 64) *>
-                                  temps 'u'; 
-        (fun _ h w -> w <= 64), A.widen (fun _ -> 64) *> temps 't';
+      [ is_float,               A.widen (Aux.round_up_to ~multiple_of:64) *> temps 'u';
+        (fun h w _ -> w <= 64), A.widen (fun _ -> 64) *> temps 't';
         A.is_any,               A.widen (Aux.round_up_to ~multiple_of: 8);
       ] in
   Placevar.mk_automaton
