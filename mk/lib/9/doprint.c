@@ -315,10 +315,10 @@ numbconv(va_list *arg, Fconv *fp)
 	}
 	s[IDIGIT-1] = 0;
 	for(i = IDIGIT-2;; i--) {
-		LONGLONGSTMT(if(fp->f3 & FVLONG)
-			n = (uvlong)vl % b;
+		if(fp->f3 & FVLONG)
+                        LONGLONGSTMT(n = (uvlong)vl % b;)
 		else
-			n = (ulong)v % b;)
+			n = (ulong)v % b;
 		n += '0';
 		if(n > '9') {
 			n += 'a' - ('9'+1);
