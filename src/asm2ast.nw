@@ -115,7 +115,7 @@ This assembler creates {\PAL} output and therefore must respect the
 name mangler that respect the {\PAL} rules for names. 
 
 <<module make>>=
-let mangle =
+let symbol = 
     let reserved =
         [ "aborts"; "align"; "aligned"; "also"; "as"; "big"; "byteorder";
         "case"; "const"; "continuation"; "cut"; "cuts"; "else"; "equal";
@@ -124,6 +124,7 @@ let mangle =
         "section"; "semi"; "span"; "stackdata"; "switch"; "target"; "targets";
         "to"; "typedef"; "unicode"; "unwinds"; "float"; "charset";
         "pointersize"; "wordsize"]
+    
     in
     let id = function
         | 'a'..'z'
@@ -144,6 +145,10 @@ let mangle =
         ; Mangle.avoid      = (fun x -> x ^ "$")
         }
 @
+
+<<module make>>=
+let mangle = Mangle.mk symbol   
+@
     
 The assembler maintains a current section. To guarantee that
 everything goes into a meaningful section, the first action is to
@@ -156,8 +161,6 @@ let program env target asm tt =
     let asm = imports env asm                     in
         foldl (toplevel env target) asm tt
 
-
-@
 
 An assembler is not independent from the personality of the underlying
 architecture. The personality module [[P]] provides us with the

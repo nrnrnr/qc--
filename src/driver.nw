@@ -36,16 +36,14 @@ task specific modules.
 % ------------------------------------------------------------------ 
 
 The [[dispatch]] function takes an abstract command line and performs
-the requested action.  It returns an [[int]] return code to be used by
-the \module{main} module for the [[exit]] function.  A returned value
-of [[0]] indicates success, [[1]] an error in a source file, and [[2]]
-an internal compiler error.
+the requested action.  In case of an error it raises [[Error.ErrorExn]]
+with a message.
 
 The [[Cmdline.cmd]] values [[Help]] and [[Version]] are covered by the
 \module{main} module and must be not passed to [[dispatch]].
 
 <<driver.mli>>=
-val dispatch : Cmdline.cmd -> int
+val dispatch : Cmdline.cmd -> unit (* Error.ErrorExn *)
 @
 
 % ------------------------------------------------------------------ 
@@ -167,9 +165,8 @@ let check file =
     let env      = Elab.Env.global   env ast         in
     let env      = Elab.Check.global env ast         in
     let env      = Elab.Env.setDefaults env          in
-        match Fenv.Dirty.errorFlag env with
-            | true  -> 1        (* error occurred *)
-            | false -> 0        (* ok *)        
+        if Fenv.Dirty.errorFlag env then 
+            Error.error "check of static semantics failed."
 @
 
 % ------------------------------------------------------------------ 
@@ -211,17 +208,14 @@ let compile target file =
     let env      = Elab.Env.global   env ast         in
     let env      = Elab.Check.global env ast         in
     let env      = Elab.Env.setDefaults env          in
-        if Fenv.Dirty.errorFlag env = true then 1 else
-        let env    = Fenv.clean env                  in
-        let target = Target2.dummy                   in
-        match Target2.check target env with
-        | Some msg -> Error.errorPrt msg; 1 (* error *)
-        | None     -> (* ok *)
-            let width  = 72                              in
-            let asm    = IR.translate env target ast in
-                ( Astpp.ppToFile stdout width (Asm.ast asm)
-                ; 0 (* ok *)
-                )
+    let ()       = if Fenv.Dirty.errorFlag env then 
+                      Error.error "compilation aborted because of errors." in
+    let env    = Fenv.clean env                  in
+    let target = Target2.dummy                   in
+    let ()     = Target2.check target env        in   
+    let width  = 72                              in
+    let asm    = IR.translate env target ast in
+        Astpp.ppToFile stdout width (Asm.ast asm)
 @
 
 % ------------------------------------------------------------------ 
@@ -267,18 +261,13 @@ that implements a command. The cases [[Help]] and [[Version]] are
 expexted to be handled by the \module{main} module. 
             
 <<driver.ml>>=
-let dispatch cmd = 
-    try 
-        ( match cmd with 
-        | Cmdline.Help                  -> usage "qc--"   ; 0
-        | Cmdline.Version               -> version ()     ; 0
-        | Cmdline.Lex(file)             -> lex  file      ; 0
-        | Cmdline.Asdl(file)            -> asdl file      ; 0
-        | Cmdline.PP(file,width)        -> pp file width  ; 0
-        | Cmdline.Check(file)           -> check file
-        | Cmdline.Compile(target,file)  -> compile target file   
-        )
-    with
-        | E.ErrorExn(msg)               -> E.errorPrt msg; 1
+let dispatch = function
+    | Cmdline.Help                  -> usage "qc--"   
+    | Cmdline.Version               -> version ()     
+    | Cmdline.Lex(file)             -> lex  file      
+    | Cmdline.Asdl(file)            -> asdl file      
+    | Cmdline.PP(file,width)        -> pp file width  
+    | Cmdline.Check(file)           -> check file
+    | Cmdline.Compile(target,file)  -> compile target file 
 @
 

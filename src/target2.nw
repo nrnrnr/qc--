@@ -215,12 +215,11 @@ reload: (Rtl.space -> Rtl.spacedescr) -> Register.t -> Rtl.loc ->Rtl.rtl list;
 A {\PAL} source code advertises some target properties that of course
 must match the actual target. The expected properties are recorded in
 the fat environment (\module{fenv}). The [[check]] function compares an
-actual target with the expectations in an environment and returns
-[[None]] if expectations match, and [[Some msg]] if there are
-discrepancies.
+actual target with the expectations in an environment and 
+raises an error exception in case of inconsistencies.
 
 <<target2.mli>>=
-val check: t -> Fenv.Clean.env -> string option (*XXX better interface?  *)
+val check: t -> Fenv.Clean.env -> unit  (* Error.ErrorExn *)
 @
 
 % ------------------------------------------------------------------ 
@@ -268,7 +267,7 @@ an fat environment with an actual target.
 let check (t:t) (env:F.env) =
     let itoa i = string_of_int i in
     let msg property source target = 
-        Some ( "missmatch of "^property
+        Error.error ( "missmatch of "^property
              ^ " in source (" ^source
              ^ ") and target ("^target^")") in
     match F.findEndianness env, t.byteorder with
@@ -285,7 +284,7 @@ let check (t:t) (env:F.env) =
     else if F.findCharset env <> t.charset then
         msg "charset" (F.findCharset env) t.charset
     else
-        None
+        ()
 @
     
 

@@ -135,14 +135,6 @@ translated to {\AST}.
 \subsection{Signature}\label{sec:cfg3:signature}
 % ------------------------------------------------------------------ 
 
-\begin{quote}\it
-    Currently we have two ways to traverse the {\cfg}: [[scan]] and
-    [[fold]]. Since I have no idea it what way they both could differ I
-    believe a traversal based on a linear order is enough. I would like
-    to remove [[fold_fwd]] and [[fold_bwd]] from the interface or at
-    least state that they depend on the linear order. --CL
-\end{quote}
-
 <<types and ops>>=
 type cfg        
 type t = cfg                    (* Cfg.t looks JustBetter *)
@@ -158,11 +150,9 @@ val mk:         unit -> cfg
 val set_label:  cfg -> string -> node -> node
 val lookup:     cfg -> string -> node           (* always succeeds! *)
 
-(* cfg observation, fold order unspecified *)
+(* cfg observation *)
 val entry:      cfg -> node 
 val exit:       cfg -> node 
-val fold_fwd:   cfg -> (node -> 'a -> 'a) -> 'a -> 'a (* must not use gm_xxx *)
-val fold_bwd:   cfg -> (node -> 'a -> 'a) -> 'a -> 'a (* must not use gm_xxx *)
 
 (* cfg traversal in linear order, requires (enumerated cfg)  *)
 val first:      cfg -> node (* wrt numbering *)
@@ -271,30 +261,6 @@ The {\cfg}'s unique exit node.
 \subsubsection{Graph Traversal}
 % ------------------------------------------------------------------ 
 
-\begin{quote}\it
-    Do we really need two different methods for traversal? Currently 
-    [[fold_fwd]] is implemented as [[scan_fwd]]. I'd like to get rid of
-    the [[fold_*]] methods. --CL
-\end{quote}
-
-\begin{itemize}
-
-\item 
-\begin{verbatim}
-fold_fwd: cfg -> (node -> 'a -> 'a) -> 'a -> 'a
-fold_bwd: cfg -> (node -> 'a -> 'a) -> 'a -> 'a
-\end{verbatim}
-
-Traverses the graph in \emph{unspecified} order and passes each
-[[node]] and an intermediate result [['a]] to the function [[f]] that
-is supplied as the second argument.  It is an \emph{unchecked}
-run-time error if [[f]] calls a graph mutator.  The forward-folding
-function [[fold_fwd]] traverses the graph such that the majority of
-edges are followd in control-flow direction, the backward-folding
-function [[fold_bwd]] such that most edges are followed in reverse
-control-flow direction.
-\end{itemize}
-
 All traversal functions below rely on and respect a numbering that
 must be established by [[gm_enumerate]] before these functions can be
 used.  Using any of the traversal functions without an established
@@ -331,6 +297,11 @@ established node numbering or [[None]] if there is no such node.
 Dual to [[next]]:  the node prior to the argument with respect to a
 node numbering, or [[None]] if no such node exists.
 \end{itemize}
+
+Note: our original design had to more functions [[fold_fwd]] and
+[[fold_bwd]] which would traverse a {\cfg} in unspecified order and did
+not rely on an established ordering. These could be re-introduced in
+case establishing a linear oder becomes a costly operation.
 
 % ------------------------------------------------------------------ 
 \subsubsection{Node Creation}
@@ -493,6 +464,26 @@ Construct a continuation bundle from the arguments.
 
 \end{itemize}
 
+% ------------------------------------------------------------------ 
+\subsection{Extras}
+% ------------------------------------------------------------------ 
+
+Below are functions listed that are outside of the module type [[S]]
+that this module implements. This indicates that they may change in the
+future. 
+
+\begin{node}
+    How to deal with node properties? The properties module could be
+    supplied as a functor argument. For the moment being I would like to
+    keep thing simple. There is not second {\cfg} or properties
+    implementation and therefore everything is kept together. This needs
+    a review. --CL
+\end{node}
+
+<<extras>>=
+val get_live: node -> locs
+val set_live: node -> locs -> unit
+@
 
 % ------------------------------------------------------------------ 
 \subsection{Putting the Interface together}
@@ -506,6 +497,7 @@ module type S = sig
     <<types and ops>>
 end
 <<types and ops>>
+<<extras>>      (* outside of module type S *)
 @
 
 % ------------------------------------------------------------------ 
@@ -523,33 +515,54 @@ multiple implementations, each for every kind.  Because the
 object-oriented style also integrates with the imperative nature of
 the interface we chose to use it to implement the control-flow graph.
 To avoid name-clashes for useful names like [[cfg]] and [[node]], the
-oo-implementation lives in its own sub-module [[X]]. 
+oo-implementation lives in its own sub-module [[X]].
+
+
 
 <<cfg3.ml>>=
 module type S = sig
     <<types and ops>>
 end
 
-type locs       = Register.Set.t    (* defs/uses/kills *)
-type property   = unit              (* functorize over property? *)  
+module Property = struct
+    <<Property struct>>
+end    
 
-module X = struct
+type locs       = Register.Set.t    (* defs/uses/kills *)
+type property   = Property.t        (* functorize over property? *)  
+
+module X = struct                   (* the OO implementation *)
     module A   = Ast
     module R2A = Rtl2ast
     module T   = Target2
-    <<module X>>                    (* the OO implementation *)
+    <<module X>>                    
 end
 
-type cfg        = X.cfg           (* class type cfg  *)
-type node       = X.node          (* class type node *)
-type t          = X.cfg           (* alias           *)
+<<implementation>>                  (* implements interface *)
+@
+
+
+% ------------------------------------------------------------------ 
+\subsection{Implementing the Interface}
+% ------------------------------------------------------------------ 
+
+The implementation of the {\cfg} is layered: the top-layer that
+implements the interface is presented here. It relied heavily on the
+object-oriented implementation of nodes in module [[x]], which
+represents the lower layer.
+
+<<implementation>>=
+
+type cfg        = X.cfg             (* class type cfg  *)
+type node       = X.node            (* class type node *)
+type t          = X.cfg             (* alias           *)
 type conts      = X.conts
 @
 
 The implementation of most functions refer to methods of the involved
 objects and therefore quite short.
 
-<<cfg3.ml>>=
+<<implementation>>=
 let conts ~cuts ~unwinds ~returns ~aborts =
     { X.cuts    = cuts
     ; X.unwinds = unwinds
@@ -559,14 +572,14 @@ let conts ~cuts ~unwinds ~returns ~aborts =
 
 let mk () = new X.graph
 
-<<cfg3.ml>>=
+<<implementation>>=
 let set_label cfg (label:string) (node:node) =
     cfg#set_label label node
 
 let lookup cfg (label:string) =
     cfg#lookup label
 
-<<cfg3.ml>>=
+<<implementation>>=
 let entry cfg =
     cfg#entry
 
@@ -592,7 +605,7 @@ The indices [[first]] and [[limit]] are one-based, the array of nodes is
 zero-based. The [[loop]] index [[n]] is also one-based and therefore
 [[f]] is passed node [[n-1]] from the array.
 
-<<cfg3.ml>>=
+<<implementation>>=
 let scan_fwd (cfg:cfg) ~(first:int) ~(limit:int) f zero = 
     assert (cfg#enumerated);
     assert (first >= 1);
@@ -607,7 +620,7 @@ let scan_fwd (cfg:cfg) ~(first:int) ~(limit:int) f zero =
         loop first zero
 
 
-<<cfg3.ml>>=
+<<implementation>>=
 let scan_bwd (cfg:cfg) ~(first:int) ~(limit:int) f zero = 
     assert (cfg#enumerated);
     assert (first >= 1);
@@ -622,26 +635,10 @@ let scan_bwd (cfg:cfg) ~(first:int) ~(limit:int) f zero =
         loop (limit-1) zero
 @
 
-See comments in section \ref{sec:cfg3:signature} about these functions.
-
-
-<<cfg3.ml>>=
-let fold_fwd cfg f zero = 
-    assert (cfg#enumerated);
-    let enum = cfg#enumeration in
-        scan_fwd cfg 1 (Array.length enum) f zero
-    
-<<cfg3.ml>>=
-let fold_bwd cfg f zero = 
-    assert (cfg#enumerated);
-    let enum = cfg#enumeration in
-        scan_bwd cfg 1 (Array.length enum) f zero
-@
-
 The node numbered [[n]] is at the array position [[n-1]]. Consequently
 is the next node at [[n]] and the previous one at position [[n-2]]. 
 
-<<cfg3.ml>>=
+<<implementation>>=
 let next (node:node) = 
     assert (node#cfg#enumerated);
     let n    = node#number     in   (* 1 ... |G|   *)
@@ -661,8 +658,12 @@ let prev (node:node) =
             Some enum.(n-2)
         else
             None
+@
 
-<<cfg3.ml>>=
+Each node is an object and the function that creates it is simply its
+constructor.
+
+<<implementation>>=
 let gm_assign = new X.assign
 let gm_return = new X.return
 let gm_goto   = new X.goto
@@ -672,7 +673,7 @@ let gm_call   = new X.call
 let gm_branch = new X.branch
 @
 
-<<cfg3.ml>>=
+<<implementation>>=
 let gm_redirect_all ~src ~olddst ~newdst =
     src#upd_succ (fun n -> if n = olddst then newdst else n)
 
@@ -700,10 +701,12 @@ let gm_insert_dataflow_between ~defs ~uses ~kills ~src ~dst =
         ; node#upd_succ (fun n -> dst)
         )
 
-let gm_enumerate (cfg:cfg) = assert false
+let gm_enumerate (cfg:cfg) = cfg#enumerate
+@    
+ 
+Many node observations simply invoke a node's method. 
     
-    
-<<cfg3.ml>>=
+<<implementation>>=
 let cfg         (node:node) = node#cfg
 let rtl         (node:node) = node#rtl
 let succ        (node:node) = node#succ
@@ -715,14 +718,17 @@ let uses        (node:node) = node#uses
 let kills       (node:node) = node#kills
 @
 
-<<cfg3.ml>>=
+<<implementation>>=
 let set_rtl     (node:node) (map:Rtl.rtl -> Rtl.rtl) =
     node#set_rtl (map node#rtl)
 
 let set_property (node:node) (p:property) = node#set_property p
+@
 
+The [[ast]] method returns an [[Ast.proc]] value. All names in the
+resulting {\AST} must be mangled using [[mangle]]. 
 
-<<cfg3.ml>>=
+<<implementation>>=
 let ast (cfg:cfg) (name:string) (mangle:string->string) (target:Target2.t) = 
     cfg#test;   (* check integrity *)    
     ( None
@@ -731,7 +737,47 @@ let ast (cfg:cfg) (name:string) (mangle:string->string) (target:Target2.t) =
     , cfg#ast mangle target
     )
 @
-    
+
+<<implementation>>=
+let set_live node locs =
+    let p = node#property in
+        Property.set_live p locs
+
+let get_live node =
+    let p = node#property in
+        Property.get_live p
+@        
+
+% ------------------------------------------------------------------ 
+\subsection{Node Properties}
+% ------------------------------------------------------------------ 
+
+Nodes have properties that imperatively can be updated. This sub-module
+provides the implementation. The most notable missing node-property are
+currently spans.
+
+<<Property struct>>=
+type t =    { mutable live:     Register.Set.t  (* locs *)
+            }
+@
+
+\begin{itemize}
+\item [[live]]: set of registers live \emph{before} a node.
+\end{itemize}
+
+<<Property struct>>=
+let empty = { live = Register.Set.empty
+            }
+
+let set_live t set = t.live <- set
+let get_live t     = t.live
+@
+
+\begin{itemize}
+\item [[empty]]: Value of type [[t]] to initialize a new node with.
+\item [[set_live]]: destructively update the live register set.
+\item [[get_live]]: returns the live-set.
+\end{itemize}
 
 % ------------------------------------------------------------------ 
 \subsection{Object-Oriented Implementation}
@@ -847,7 +893,7 @@ and node = object
                         -> Target2.t
                         -> Ast.body list
     method linorder:    node option * node list (* immediate/delayed succs *)
-    
+
     (* for debugging only *)
     method test:        unit            (* test integrity of this *)
 end
@@ -983,6 +1029,14 @@ let nodes = loop 0 [] NodeSet.empty [entry] in
 let nodes = List.rev nodes in
      _enumeration <- Some (Array.of_list nodes)
 @
+
+\begin{quote}\it
+    Currently artifical data-flow edges are advertised by nodes'
+    [[linorder]] method. They could be dropped without harm to get a
+    slighly nicer output. This, however, would make the [[exit]] node
+    unreachable from the [[entry]] node and thus it would not get
+    unumerated.
+\end{quote}
 
 % ------------------------------------------------------------------ 
 \subsection{Auxiliaries}
@@ -1177,7 +1231,7 @@ object(this)
     val         _cfg    = cfg
     val mutable _id     = (cfg#get_id ())
     val mutable _num    = -1 
-    val mutable _prop   = ()
+    val mutable _prop   = Property.empty        (* default properties *)
     val mutable _labels = ([]: string list)
     
     initializer
@@ -1447,7 +1501,7 @@ object (this)
         let s      = A.ReturnStmt(None,None,[]) in
             labels@[stmt s]
         
-    method linorder = (None, [])
+    method linorder = (None, [_exit])
 
 end
 
@@ -1498,7 +1552,7 @@ object (this)
 
     method succ = [_exit]   
     
-    method linorder = (None, [])
+    method linorder = (None, [_exit])
     
     method ast mangle target =
         let labels = super#ast mangle target      in
@@ -1558,7 +1612,7 @@ class cutto cfg rtl conts : node =
 object (this)
     inherit vcut cfg rtl conts as super
 
-    val mutable _exit = cfg#exit        (* artifical edge to exit *)
+    val mutable _exit = (cfg#exit: node)       (* artifical edge to exit *)
 
     initializer
         _exit # link_pred (this :> node)
@@ -1585,7 +1639,7 @@ object (this)
     
     method linorder = 
         ( None
-        , uniq(List.concat[_cuts;_unwinds;_returns])
+        , uniq(List.concat[_cuts;_unwinds;_returns;[_exit]])
         )
 end
 
