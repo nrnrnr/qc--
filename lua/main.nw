@@ -9,25 +9,25 @@
 \section{Main program for testing a standalone interpreter}
 
 <<main.ml>>=
-module T = Lua.Lib.Combine.T1 (Luaiolib.T)
-module X = Lua.Lib.Extend (T.T1)
-module L = Lua.Lib.Combine.L3 (Luaiolib.Make (T.T1)) 
-                              (X(Luastrlib.M)) (X(Luamathlib.M))
+module T  = Lua.Lib.Combine.T1 (Luaiolib.T)
+module WT = Lua.Lib.WithType (T)
+module C  = Lua.Lib.Combine.C3 (Luaiolib.Make (T.TV1)) 
+                               (WT(Luastrlib.M)) (WT(Luamathlib.M))
 (*
-module I = Lua.MakeInterp (Lua.Parser.MakeStandard) (Oldinterp.Make3 (T) (L))
+module I = Lua.MakeInterp (Lua.Parser.MakeStandard) (Oldinterp.Make3 (T) (C))
 *)
 
-module T2 = Lua.Lib.Combine.T1 (T)
-module T' = Lualib.Lift (T) (T2.T1)
-module X' = Lua.Lib.Extend (T2.T1)
-module L' = Lua.Lib.Combine.L3 (Luaiolib.Make (T'.T1)) 
-                              (X'(Luastrlib.M)) (X'(Luamathlib.M))
+module T2  = Lua.Lib.Combine.T1 (T)
+module T'  = Lualib.Lift (T) (T2.TV1)
+module WT' = Lua.Lib.WithType (T2)
+module C'  = Lua.Lib.Combine.C3 (Luaiolib.Make (T'.TV1)) 
+                               (WT'(Luastrlib.M)) (WT'(Luamathlib.M))
 (*
-module I' = Lua.MakeInterp (Lua.Parser.MakeStandard) (Oldinterp.Make3 (T2) (L'))
+module I' = Lua.MakeInterp (Lua.Parser.MakeStandard) (Oldinterp.Make3 (T2) (C'))
 *)
 
 
-module I'' = Lua.MakeInterp (Lua.Parser.MakeStandard) (Lua.MakeCore (T) (L))
+module I'' = Lua.MakeInterp (Lua.Parser.MakeStandard) (Lua.MakeEval (T) (C))
 
 
 

@@ -81,7 +81,7 @@ module type STATEVIEW = sig
 end 
 @ 
 In principle, there could be four kinds of libraries:
-a [[BARE]] library uses only existing types and state;
+a [[BARECODE]] library uses only existing types and state;
 a [[FULL]] library adds both a new type and new state;
 a \emph{stateful} library could add only a new state; and
 a \emph{typeful} library could add only a new type.
@@ -94,7 +94,7 @@ module Client : sig
   <<client signatures>>
 end
 <<client signatures>>=
-  module type BARE = functor (Interp : INTERP) -> INIT with type state = Interp.V.state
+  module type BARECODE = functor (Interp : INTERP) -> INIT with type state = Interp.V.state
   module type T = sig
    module T : USERTYPE
    module Make (Interp : INTERP) 
@@ -134,7 +134,7 @@ shouldn't be an onerous restriction.
 module Combine : sig
   module TS_TS (L1 : Client.TS) (L2 : Client.TS) : Client.TS
   module T_T   (L1 : Client.T)  (L2 : Client.T)  : Client.T
-  module TS_B  (L1 : Client.TS) (L2 : Client.BARE) :
+  module TS_B  (L1 : Client.TS) (L2 : Client.BARECODE) :
                    Client.TS with module T = L1.T and module S = L1.S
   module T_S (L1 : Client.T) (L2 : Client.S) 
              : Client.TS with module T = L1.T and module S = L2.S
@@ -221,7 +221,7 @@ end
 
 
 <<combining modules>>=
-module TS_B (L1 : Client.TS) (L2 : Client.BARE) 
+module TS_B (L1 : Client.TS) (L2 : Client.BARECODE) 
   : Client.TS with module T = L1.T and module S = L1.S =
 struct
   module T = L1.T

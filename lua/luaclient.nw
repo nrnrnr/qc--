@@ -1,3 +1,4 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 
 \documentclass[11pt]{article}
 \usepackage{noweb}
@@ -112,7 +113,7 @@ the main task is to construct new types and code that uses them.
 module I =			    (* interpreter *)  
     Lua.MakeInterp
 	(Lua.Parser.MakeStandard)
-	(Lua.MakeCore (T) (L))
+	(Lua.MakeEval (T) (C))
 @
 
 Each user-supplied Lua type is implemented in a module of its own. We link
@@ -142,9 +143,9 @@ all we can get and link [[L]] together like here:
 
 <<library module [[L]]>>=
 <<new primitives>>
-module X = Lua.Lib.Extend (PairT)   (* any of LuaCharT, PairT, LuaioT *)
-module L  =
-    Lua.Lib.Combine.L4  (* L4 == combine 4 libraries *)
+module X = Lua.Lib.Extend (T)
+module C  =
+    Lua.Lib.Combine.C4  (* C4 == combine 4 code modules *)
 	(Luaiolib.Make(LuaioT))
 	(X (Luastrlib.M))
 	(X (Luamathlib.M))
@@ -220,10 +221,10 @@ module MakeLib
     (CharV: Lua.Lib.TYPEVIEW with type 'a t        = 'a LuaChar.t)
     (PairV: Lua.Lib.TYPEVIEW with type 'a t        = 'a Pair.t
                              and  type 'a combined = 'a CharV.combined)
-	: Lua.Lib.TYPEFUL with type 'a combined = 'a CharV.combined = struct
+	: Lua.Lib.USERCODE with type 'a userdata' = 'a CharV.combined = struct
 	
-    type 'a combined = 'a PairV.combined
-    module M (C: Lua.Lib.CORE with type 'a V.userdata' = 'a combined) = struct
+    type 'a userdata' = 'a PairV.combined
+    module M (C: Lua.Lib.CORE with type 'a V.userdata' = 'a userdata') = struct
 	module V = C.V
 	let ( **-> ) = V.( **-> )
         <<register new functions in interpreter>>

@@ -21,12 +21,12 @@ pairs so that Caml values can be mapped to Lua values and back again.
 <<lua.mli>>=
 module type VALUE = sig
   type 'a userdata'
-  type info
-  type value
-    = Nil
+  type srcloc
+  type value =
+    | Nil
     | Number   of float
     | String   of string
-    | Function of info * func
+    | Function of srcloc * func
     | Userdata of userdata
     | Table    of table
   and func  = value list -> value list
@@ -37,11 +37,11 @@ module type VALUE = sig
               ; mutable callstack : activation list
               ; mutable currentloc : Srcmap.location option (* supersedes top of stack *)
               }
-  and activation = info * Srcmap.location option
+  and activation = srcloc * Srcmap.location option
 
   val caml_func : func -> value (* each result unique *)
   val lua_func  : file:string -> linedefined:int -> func -> value
-  val info      : file:string -> linedefined:int -> info (* must NOT be reused *)
+  val srcloc    : file:string -> linedefined:int -> srcloc (* must NOT be reused *)
   val eq        : value -> value -> bool
   val to_string : value -> string
   val activation_strings : state -> activation -> string list
@@ -260,16 +260,16 @@ This code would be a lot cleaner with a better calculus of signatures.
 module type COMBINED_CORE = sig
   type 'a also_t
   module type VIEW = TYPEVIEW with type 'a combined = 'a also_t
-  module T1  : VIEW
-  module T2  : VIEW
-  module T3  : VIEW
-  module T4  : VIEW
-  module T5  : VIEW
-  module T6  : VIEW
-  module T7  : VIEW
-  module T8  : VIEW
-  module T9  : VIEW
-  module T10 : VIEW
+  module TV1  : VIEW
+  module TV2  : VIEW
+  module TV3  : VIEW
+  module TV4  : VIEW
+  module TV5  : VIEW
+  module TV6  : VIEW
+  module TV7  : VIEW
+  module TV8  : VIEW
+  module TV9  : VIEW
+  module TV10 : VIEW
 end
 module type COMBINED_VIEWS = sig
   type 'a t
@@ -326,7 +326,7 @@ A \emph{bare} library does not use any user types---only the basic
 ones built into every Lua interpreter.  That means it works with any
 core at all.
 <<library support>>=
-module type BARE = 
+module type BARECODE = 
   functor (C : CORE) -> sig
     val init : C.V.state -> StringList.t
   end
@@ -336,9 +336,9 @@ with particular cores.  In practice, it will work for cores in which
 the userdata type is the [[combined]] type of the view on which the
 typeful library depends.
 <<library support>>=
-module type TYPEFUL = sig
-  type 'a combined  (* the combined type of all the views on which lib depends *)
-  module M : functor (C : CORE with type 'a V.userdata' = 'a combined) -> sig
+module type USERCODE = sig
+  type 'a userdata'  (* the userdata' tycon of the core on which lib depends *)
+  module M : functor (C : CORE with type 'a V.userdata' = 'a userdata') -> sig
     val init : C.V.state -> StringList.t
   end
 end
@@ -348,7 +348,8 @@ This means we occasionally need to extend a bare library to make it typeful.
 We put the type first, not the library, because the partial
 application is useful.
 <<library support>>=
-module Extend (T : TYPEVIEW) (L : BARE) : TYPEFUL with type 'a combined = 'a T.combined
+module WithType
+  (T : USERTYPE) (L : BARECODE) : USERCODE with type 'a userdata' = 'a T.t
 @ 
 Herewith the module [[Combine]], which contains members for combining
 up to 10 types and up to 10 libraries.
@@ -357,24 +358,24 @@ module Combine : sig
   module T10 (T1 : USERTYPE) (T2 : USERTYPE) (T3 : USERTYPE) (T4 : USERTYPE)
              (T5 : USERTYPE) (T6 : USERTYPE) (T7 : USERTYPE) (T8 : USERTYPE)
              (T9 : USERTYPE) (T10 : USERTYPE)
-   : COMBINED_TYPE with type 'a T1.t = 'a T1.t and type 'a T2.t = 'a T2.t
-                    and type 'a T3.t = 'a T3.t and type 'a T4.t = 'a T4.t
-                    and type 'a T5.t = 'a T5.t and type 'a T6.t = 'a T6.t
-                    and type 'a T7.t = 'a T7.t and type 'a T8.t = 'a T8.t
-                    and type 'a T9.t = 'a T9.t and type 'a T10.t = 'a T10.t
+   : COMBINED_TYPE with type 'a TV1.t = 'a T1.t with type 'a TV2.t = 'a T2.t
+                   with type 'a TV3.t = 'a T3.t with type 'a TV4.t = 'a T4.t
+                   with type 'a TV5.t = 'a T5.t with type 'a TV6.t = 'a T6.t
+                   with type 'a TV7.t = 'a T7.t with type 'a TV8.t = 'a T8.t
+                   with type 'a TV9.t = 'a T9.t with type 'a TV10.t = 'a T10.t
   <<similar specifications for [[T1]] to [[T9]]>>
-  module L10 (L1 : TYPEFUL)
-    (L2 : TYPEFUL with type 'a combined = 'a L1.combined)
-    (L3 : TYPEFUL with type 'a combined = 'a L1.combined)
-    (L4 : TYPEFUL with type 'a combined = 'a L1.combined)
-    (L5 : TYPEFUL with type 'a combined = 'a L1.combined)
-    (L6 : TYPEFUL with type 'a combined = 'a L1.combined)
-    (L7 : TYPEFUL with type 'a combined = 'a L1.combined)
-    (L8 : TYPEFUL with type 'a combined = 'a L1.combined)
-    (L9 : TYPEFUL with type 'a combined = 'a L1.combined)
-    (L10 : TYPEFUL with type 'a combined = 'a L1.combined) :
-    TYPEFUL with type 'a combined = 'a L1.combined
-  <<similar specifications for [[L1]] to [[L9]]>>
+  module C10 (C1 : USERCODE)
+    (C2 : USERCODE with type 'a userdata' = 'a C1.userdata')
+    (C3 : USERCODE with type 'a userdata' = 'a C1.userdata')
+    (C4 : USERCODE with type 'a userdata' = 'a C1.userdata')
+    (C5 : USERCODE with type 'a userdata' = 'a C1.userdata')
+    (C6 : USERCODE with type 'a userdata' = 'a C1.userdata')
+    (C7 : USERCODE with type 'a userdata' = 'a C1.userdata')
+    (C8 : USERCODE with type 'a userdata' = 'a C1.userdata')
+    (C9 : USERCODE with type 'a userdata' = 'a C1.userdata')
+    (C10 : USERCODE with type 'a userdata' = 'a C1.userdata') :
+    USERCODE with type 'a userdata' = 'a C1.userdata'
+  <<similar specifications for [[C1]] to [[C9]]>>
 end
 @ 
 If a user needs more than 10~types, it's necessary to lift a nested
@@ -382,16 +383,16 @@ view.  See [[main.nw]] in the source distribution for an example of lifting.
 <<library support>>=
 module Lift (T : COMBINED_TYPE) (View : TYPEVIEW with type 'a t = 'a T.t) :
   COMBINED_VIEWS with type 'a t = 'a View.combined
-     and type 'a T1.t = 'a T.T1.t
-     and type 'a T2.t = 'a T.T2.t
-     and type 'a T3.t = 'a T.T3.t
-     and type 'a T4.t = 'a T.T4.t
-     and type 'a T5.t = 'a T.T5.t
-     and type 'a T6.t = 'a T.T6.t
-     and type 'a T7.t = 'a T.T7.t
-     and type 'a T8.t = 'a T.T8.t
-     and type 'a T9.t = 'a T.T9.t
-     and type 'a T10.t = 'a T.T10.t
+     with type 'a TV1.t = 'a T.TV1.t
+     with type 'a TV2.t = 'a T.TV2.t
+     with type 'a TV3.t = 'a T.TV3.t
+     with type 'a TV4.t = 'a T.TV4.t
+     with type 'a TV5.t = 'a T.TV5.t
+     with type 'a TV6.t = 'a T.TV6.t
+     with type 'a TV7.t = 'a T.TV7.t
+     with type 'a TV8.t = 'a T.TV8.t
+     with type 'a TV9.t = 'a T.TV9.t
+     with type 'a TV10.t = 'a T.TV10.t
 @
 
 @
@@ -408,7 +409,7 @@ The function [[mk]] provides both an initial state and the startup
 code from libraries.  The startup code is intended to be passed
 [[dostring]].   
 <<lua.mli>>=
-module type INTERP_CORE = sig
+module type EVALUATOR = sig
   module Value : VALUE
   module Ast   : AST with module Value = Value
   type state = Value.state
@@ -424,8 +425,8 @@ module type INTERP_CORE = sig
     (* get the named global variable *)
   val fallback : string -> state -> value list -> value list
     (* invoke named fallback on given state and arguments *)
-  val with_stack  : Value.info -> state -> ('a -> 'b) -> 'a -> 'b
-    (* evaluate function with given info on activation stack *)
+  val with_stack  : Value.srcloc -> state -> ('a -> 'b) -> 'a -> 'b
+    (* evaluate function with given srcloc on activation stack *)
 
   val setfallback : state -> string -> value -> value
     (* sets fallback, returns previous one *)
@@ -436,23 +437,23 @@ module type INTERP_CORE = sig
        creating t if needed *)
 end
 
-module MakeCore
-    (T : Lib.COMBINED_TYPE)
-    (L : Lib.TYPEFUL with type 'a combined = 'a T.t)
-    : INTERP_CORE with type 'a Value.userdata' = 'a T.t
+module MakeEval
+    (T : Lib.USERTYPE)
+    (L : Lib.USERCODE with type 'a userdata' = 'a T.t)
+    : EVALUATOR with type 'a Value.userdata' = 'a T.t
 @ 
 Because building an interpreter requires a library and a type, and because not
 every client will want to create a special library, we provide empty
 libraries and types.
 <<lua.mli>>=
 module Empty : sig
-  module Type : Lib.COMBINED_TYPE
-  module Library : Lib.TYPEFUL
+  module Type : Lib.USERTYPE
+  module Library : Lib.USERCODE
 end
 @ 
 We also provide three standard libraries:
-[[Luastrlib : Lib.BARE]],
-[[Luamathlib : Lib.BARE]],
+[[Luastrlib : Lib.BARECODE]],
+[[Luamathlib : Lib.BARECODE]],
 and
 [[Luaiolib : Lib.FULL]].
 We don't mention these here because we want you to be able to leave
@@ -465,14 +466,14 @@ With the basic library in place, you get the function [[mk]], which
 makes a fresh state, including running any startup code.
 <<lua.mli>>=
 module type INTERP = sig
-  include INTERP_CORE
+  include EVALUATOR
   module Parser : Luaparser.S with type chunk = Ast.chunk
   val do_lexbuf : sourcename:string -> state -> Lexing.lexbuf -> value list
   val dostring  : state -> string -> value list
   val dofile    : state -> string -> value list
   val mk        : unit -> state
 end
-module MakeInterp (MakeParser : Parser.MAKER) (I : INTERP_CORE)
+module MakeInterp (MakeParser : Parser.MAKER) (I : EVALUATOR)
     : INTERP with module Value = I.Value
 @ 
 Once we've made an interpreter, if we like, we can run it using the
@@ -485,10 +486,10 @@ Here is an example of how to build an interpreter that uses the three
 standard libraries:
 \begin{verbatim}
   module T = Lua.Lib.Combine.T1 (Luaiolib.T)
-  module X = Lua.Lib.Extend (T.T1)
-  module L = Lua.Lib.Combine.L3 (Luaiolib.Make (T.T1)) 
+  module X = Lua.Lib.WithType (T)
+  module L = Lua.Lib.Combine.C3 (Luaiolib.Make (T.T1)) 
                                 (X(Luastrlib.M)) (X(Luamathlib.M))
-  module I = Lua.MakeInterp (Lua.Parser.MakeStandard) (Lua.MakeCore (T) (L))
+  module I = Lua.MakeInterp (Lua.Parser.MakeStandard) (Lua.MakeEval (T) (L))
   module Go = Lua.Run(I)
 \end{verbatim}
 Here is another example, this time of an interpreter that uses the I/O
@@ -498,14 +499,14 @@ The [[Luacolorgraph]] library shares the backplane and graph-coloring
 types. 
 \begin{verbatim}
   module T = Lua.Lib.Combine.T3 (Luaiolib.T) (Luabackplane.T) (Luacolorgraph.T)
-  module X = Lua.Lib.Extend (T.T1)
-  module L = Lua.Lib.Combine.L5
-               (Luaiolib.Make (T.T1))
+  module X = Lua.Lib.WithType (T)
+  module L = Lua.Lib.Combine.C5
+               (Luaiolib.Make (T.TV1))
                (X(Luastrlib.M)) 
                (X(Luamathlib.M))
-               (Luabackplane.Make(T.T2))
-               (Luacolorgraph.Make(T.T2)(T.T3))
-  module I = Lua.MakeInterp (Lua.Parser.MakeStandard) (Lua.MakeCore (T) (L))
+               (Luabackplane.Make(T.TV2))
+               (Luacolorgraph.Make(T.TV2)(T.TV3))
+  module I = Lua.MakeInterp (Lua.Parser.MakeStandard) (Lua.MakeEval (T) (L))
   module Go = Lua.Run(I)
 \end{verbatim}
 @
@@ -520,9 +521,9 @@ module Lib = Lualib
 module Parser = Luaparser
 module type AST = Luaast.S
 
-module type INTERP_CORE = Luainterp.S
+module type EVALUATOR = Luainterp.S
 module type INTERP = sig
-  include INTERP_CORE
+  include EVALUATOR
   module Parser : Luaparser.S with type chunk = Ast.chunk
   val do_lexbuf : sourcename:string -> state -> Lexing.lexbuf -> value list
   val dostring  : state -> string -> value list
@@ -530,85 +531,84 @@ module type INTERP = sig
   val mk        : unit -> state
 end
 module Run (I : INTERP) = Luarun.Make (I)
-module MakeCore = Luainterp.Make
+module MakeEval = Luainterp.Make
 module MakeInterp = Luabaselib.Add
 
 module Empty = Lualib.Empty
 
 let scanner map buf = Luascanner.token buf map
 @ 
-<<similar specifications for [[L1]] to [[L9]]>>=
-  module L1 (L1 : TYPEFUL)
-  : TYPEFUL with type 'a combined = 'a L1.combined
-  module L2 (L1 : TYPEFUL)
-    (L2 : TYPEFUL with type 'a combined = 'a L1.combined)
-  : TYPEFUL with type 'a combined = 'a L1.combined
-  module L3 (L1 : TYPEFUL)
-    (L2 : TYPEFUL with type 'a combined = 'a L1.combined)
-    (L3 : TYPEFUL with type 'a combined = 'a L1.combined)
-  : TYPEFUL with type 'a combined = 'a L1.combined
-  module L4 (L1 : TYPEFUL)
-    (L2 : TYPEFUL with type 'a combined = 'a L1.combined)
-    (L3 : TYPEFUL with type 'a combined = 'a L1.combined)
-    (L4 : TYPEFUL with type 'a combined = 'a L1.combined)
-  : TYPEFUL with type 'a combined = 'a L1.combined
-  module L5 (L1 : TYPEFUL)
-    (L2 : TYPEFUL with type 'a combined = 'a L1.combined)
-    (L3 : TYPEFUL with type 'a combined = 'a L1.combined)
-    (L4 : TYPEFUL with type 'a combined = 'a L1.combined)
-    (L5 : TYPEFUL with type 'a combined = 'a L1.combined)
-  : TYPEFUL with type 'a combined = 'a L1.combined
-  module L6 (L1 : TYPEFUL)
-    (L2 : TYPEFUL with type 'a combined = 'a L1.combined)
-    (L3 : TYPEFUL with type 'a combined = 'a L1.combined)
-    (L4 : TYPEFUL with type 'a combined = 'a L1.combined)
-    (L5 : TYPEFUL with type 'a combined = 'a L1.combined)
-    (L6 : TYPEFUL with type 'a combined = 'a L1.combined)
-  : TYPEFUL with type 'a combined = 'a L1.combined
-  module L7 (L1 : TYPEFUL)
-    (L2 : TYPEFUL with type 'a combined = 'a L1.combined)
-    (L3 : TYPEFUL with type 'a combined = 'a L1.combined)
-    (L4 : TYPEFUL with type 'a combined = 'a L1.combined)
-    (L5 : TYPEFUL with type 'a combined = 'a L1.combined)
-    (L6 : TYPEFUL with type 'a combined = 'a L1.combined)
-    (L7 : TYPEFUL with type 'a combined = 'a L1.combined)
-  : TYPEFUL with type 'a combined = 'a L1.combined
-  module L8 (L1 : TYPEFUL)
-    (L2 : TYPEFUL with type 'a combined = 'a L1.combined)
-    (L3 : TYPEFUL with type 'a combined = 'a L1.combined)
-    (L4 : TYPEFUL with type 'a combined = 'a L1.combined)
-    (L5 : TYPEFUL with type 'a combined = 'a L1.combined)
-    (L6 : TYPEFUL with type 'a combined = 'a L1.combined)
-    (L7 : TYPEFUL with type 'a combined = 'a L1.combined)
-    (L8 : TYPEFUL with type 'a combined = 'a L1.combined)
-  : TYPEFUL with type 'a combined = 'a L1.combined
-  module L9 (L1 : TYPEFUL)
-    (L2 : TYPEFUL with type 'a combined = 'a L1.combined)
-    (L3 : TYPEFUL with type 'a combined = 'a L1.combined)
-    (L4 : TYPEFUL with type 'a combined = 'a L1.combined)
-    (L5 : TYPEFUL with type 'a combined = 'a L1.combined)
-    (L6 : TYPEFUL with type 'a combined = 'a L1.combined)
-    (L7 : TYPEFUL with type 'a combined = 'a L1.combined)
-    (L8 : TYPEFUL with type 'a combined = 'a L1.combined)
-    (L9 : TYPEFUL with type 'a combined = 'a L1.combined)
-  : TYPEFUL with type 'a combined = 'a L1.combined
+<<similar specifications for [[C1]] to [[C9]]>>=
+  module C1 (C1 : USERCODE)
+  : USERCODE with type 'a userdata' = 'a C1.userdata'
+  module C2 (C1 : USERCODE)
+    (C2 : USERCODE with type 'a userdata' = 'a C1.userdata')
+  : USERCODE with type 'a userdata' = 'a C1.userdata'
+  module C3 (C1 : USERCODE)
+    (C2 : USERCODE with type 'a userdata' = 'a C1.userdata')
+    (C3 : USERCODE with type 'a userdata' = 'a C1.userdata')
+  : USERCODE with type 'a userdata' = 'a C1.userdata'
+  module C4 (C1 : USERCODE)
+    (C2 : USERCODE with type 'a userdata' = 'a C1.userdata')
+    (C3 : USERCODE with type 'a userdata' = 'a C1.userdata')
+    (C4 : USERCODE with type 'a userdata' = 'a C1.userdata')
+  : USERCODE with type 'a userdata' = 'a C1.userdata'
+  module C5 (C1 : USERCODE)
+    (C2 : USERCODE with type 'a userdata' = 'a C1.userdata')
+    (C3 : USERCODE with type 'a userdata' = 'a C1.userdata')
+    (C4 : USERCODE with type 'a userdata' = 'a C1.userdata')
+    (C5 : USERCODE with type 'a userdata' = 'a C1.userdata')
+  : USERCODE with type 'a userdata' = 'a C1.userdata'
+  module C6 (C1 : USERCODE)
+    (C2 : USERCODE with type 'a userdata' = 'a C1.userdata')
+    (C3 : USERCODE with type 'a userdata' = 'a C1.userdata')
+    (C4 : USERCODE with type 'a userdata' = 'a C1.userdata')
+    (C5 : USERCODE with type 'a userdata' = 'a C1.userdata')
+    (C6 : USERCODE with type 'a userdata' = 'a C1.userdata')
+  : USERCODE with type 'a userdata' = 'a C1.userdata'
+  module C7 (C1 : USERCODE)
+    (C2 : USERCODE with type 'a userdata' = 'a C1.userdata')
+    (C3 : USERCODE with type 'a userdata' = 'a C1.userdata')
+    (C4 : USERCODE with type 'a userdata' = 'a C1.userdata')
+    (C5 : USERCODE with type 'a userdata' = 'a C1.userdata')
+    (C6 : USERCODE with type 'a userdata' = 'a C1.userdata')
+    (C7 : USERCODE with type 'a userdata' = 'a C1.userdata')
+  : USERCODE with type 'a userdata' = 'a C1.userdata'
+  module C8 (C1 : USERCODE)
+    (C2 : USERCODE with type 'a userdata' = 'a C1.userdata')
+    (C3 : USERCODE with type 'a userdata' = 'a C1.userdata')
+    (C4 : USERCODE with type 'a userdata' = 'a C1.userdata')
+    (C5 : USERCODE with type 'a userdata' = 'a C1.userdata')
+    (C6 : USERCODE with type 'a userdata' = 'a C1.userdata')
+    (C7 : USERCODE with type 'a userdata' = 'a C1.userdata')
+    (C8 : USERCODE with type 'a userdata' = 'a C1.userdata')
+  : USERCODE with type 'a userdata' = 'a C1.userdata'
+  module C9 (C1 : USERCODE)
+    (C2 : USERCODE with type 'a userdata' = 'a C1.userdata')
+    (C3 : USERCODE with type 'a userdata' = 'a C1.userdata')
+    (C4 : USERCODE with type 'a userdata' = 'a C1.userdata')
+    (C5 : USERCODE with type 'a userdata' = 'a C1.userdata')
+    (C6 : USERCODE with type 'a userdata' = 'a C1.userdata')
+    (C7 : USERCODE with type 'a userdata' = 'a C1.userdata')
+    (C8 : USERCODE with type 'a userdata' = 'a C1.userdata')
+    (C9 : USERCODE with type 'a userdata' = 'a C1.userdata')
+  : USERCODE with type 'a userdata' = 'a C1.userdata'
 <<similar specifications for [[T1]] to [[T9]]>>=
 module T1 (T1 : USERTYPE)  : COMBINED_TYPE
- with type 'a T1.t = 'a T1.t
+ with type 'a TV1.t = 'a T1.t
 module T2 (T1 : USERTYPE) (T2 : USERTYPE)  : COMBINED_TYPE
- with type 'a T1.t = 'a T1.t with type 'a T2.t = 'a T2.t
+ with type 'a TV1.t = 'a T1.t with type 'a TV2.t = 'a T2.t
 module T3 (T1 : USERTYPE) (T2 : USERTYPE) (T3 : USERTYPE)  : COMBINED_TYPE
- with type 'a T1.t = 'a T1.t with type 'a T2.t = 'a T2.t with type 'a T3.t = 'a T3.t
+ with type 'a TV1.t = 'a T1.t with type 'a TV2.t = 'a T2.t with type 'a TV3.t = 'a T3.t
 module T4 (T1 : USERTYPE) (T2 : USERTYPE) (T3 : USERTYPE) (T4 : USERTYPE)  : COMBINED_TYPE
- with type 'a T1.t = 'a T1.t with type 'a T2.t = 'a T2.t with type 'a T3.t = 'a T3.t with type 'a T4.t = 'a T4.t
+ with type 'a TV1.t = 'a T1.t with type 'a TV2.t = 'a T2.t with type 'a TV3.t = 'a T3.t with type 'a TV4.t = 'a T4.t
 module T5 (T1 : USERTYPE) (T2 : USERTYPE) (T3 : USERTYPE) (T4 : USERTYPE) (T5 : USERTYPE)  : COMBINED_TYPE
- with type 'a T1.t = 'a T1.t with type 'a T2.t = 'a T2.t with type 'a T3.t = 'a T3.t with type 'a T4.t = 'a T4.t with type 'a T5.t = 'a T5.t
+ with type 'a TV1.t = 'a T1.t with type 'a TV2.t = 'a T2.t with type 'a TV3.t = 'a T3.t with type 'a TV4.t = 'a T4.t with type 'a TV5.t = 'a T5.t
 module T6 (T1 : USERTYPE) (T2 : USERTYPE) (T3 : USERTYPE) (T4 : USERTYPE) (T5 : USERTYPE) (T6 : USERTYPE)  : COMBINED_TYPE
- with type 'a T1.t = 'a T1.t with type 'a T2.t = 'a T2.t with type 'a T3.t = 'a T3.t with type 'a T4.t = 'a T4.t with type 'a T5.t = 'a T5.t with type 'a T6.t = 'a T6.t
+ with type 'a TV1.t = 'a T1.t with type 'a TV2.t = 'a T2.t with type 'a TV3.t = 'a T3.t with type 'a TV4.t = 'a T4.t with type 'a TV5.t = 'a T5.t with type 'a TV6.t = 'a T6.t
 module T7 (T1 : USERTYPE) (T2 : USERTYPE) (T3 : USERTYPE) (T4 : USERTYPE) (T5 : USERTYPE) (T6 : USERTYPE) (T7 : USERTYPE)  : COMBINED_TYPE
- with type 'a T1.t = 'a T1.t with type 'a T2.t = 'a T2.t with type 'a T3.t = 'a T3.t with type 'a T4.t = 'a T4.t with type 'a T5.t = 'a T5.t with type 'a T6.t = 'a T6.t with type 'a T7.t = 'a T7.t
+ with type 'a TV1.t = 'a T1.t with type 'a TV2.t = 'a T2.t with type 'a TV3.t = 'a T3.t with type 'a TV4.t = 'a T4.t with type 'a TV5.t = 'a T5.t with type 'a TV6.t = 'a T6.t with type 'a TV7.t = 'a T7.t
 module T8 (T1 : USERTYPE) (T2 : USERTYPE) (T3 : USERTYPE) (T4 : USERTYPE) (T5 : USERTYPE) (T6 : USERTYPE) (T7 : USERTYPE) (T8 : USERTYPE)  : COMBINED_TYPE
- with type 'a T1.t = 'a T1.t with type 'a T2.t = 'a T2.t with type 'a T3.t = 'a T3.t with type 'a T4.t = 'a T4.t with type 'a T5.t = 'a T5.t with type 'a T6.t = 'a T6.t with type 'a T7.t = 'a T7.t with type 'a T8.t = 'a T8.t
+ with type 'a TV1.t = 'a T1.t with type 'a TV2.t = 'a T2.t with type 'a TV3.t = 'a T3.t with type 'a TV4.t = 'a T4.t with type 'a TV5.t = 'a T5.t with type 'a TV6.t = 'a T6.t with type 'a TV7.t = 'a T7.t with type 'a TV8.t = 'a T8.t
 module T9 (T1 : USERTYPE) (T2 : USERTYPE) (T3 : USERTYPE) (T4 : USERTYPE) (T5 : USERTYPE) (T6 : USERTYPE) (T7 : USERTYPE) (T8 : USERTYPE) (T9 : USERTYPE)  : COMBINED_TYPE
- with type 'a T1.t = 'a T1.t with type 'a T2.t = 'a T2.t with type 'a T3.t = 'a T3.t with type 'a T4.t = 'a T4.t with type 'a T5.t = 'a T5.t with type 'a T6.t = 'a T6.t with type 'a T7.t = 'a T7.t with type 'a T8.t = 'a T8.t with type 'a T9.t = 'a T9.t
-
+ with type 'a TV1.t = 'a T1.t with type 'a TV2.t = 'a T2.t with type 'a TV3.t = 'a T3.t with type 'a TV4.t = 'a T4.t with type 'a TV5.t = 'a T5.t with type 'a TV6.t = 'a T6.t with type 'a TV7.t = 'a T7.t with type 'a TV8.t = 'a T8.t with type 'a TV9.t = 'a T9.t

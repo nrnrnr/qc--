@@ -35,8 +35,8 @@ module type S = sig
     (* get the named global variable *)
   val fallback  : string -> state -> value list -> value list
     (* invoke named fallback on given state and arguments *)
-  val with_stack  : Value.info -> state -> ('a -> 'b) -> 'a -> 'b
-    (* evaluates function with given info on activation stack *)
+  val with_stack  : Value.srcloc -> state -> ('a -> 'b) -> 'a -> 'b
+    (* evaluates function with given srcloc on activation stack *)
 
   val setfallback : state -> string -> value -> value
     (* sets fallback, returns previous one *)
@@ -51,8 +51,8 @@ To build an interpreter, one supplies module~[[T]], which gives the
 type of userdata, and module~[[L]], which gives a (combined) library.
 <<luainterp.mli>>=
 <<signatures>>
-module Make (T : Lualib.COMBINED_TYPE)
-            (L : Lualib.TYPEFUL with type 'a combined = 'a T.t) :
+module Make (T : Luavalue.USERDATA)
+            (L : Lualib.USERCODE with type 'a userdata' = 'a T.t) :
     S with type 'a Value.userdata'  = 'a T.t
 @ 
 \subsection{Caveats}
@@ -76,8 +76,8 @@ library.
 <<luainterp.ml>>=
 <<signatures>>
 type answer = unit * string * bool
-module Make  (T : Lualib.COMBINED_TYPE)
-             (L : Lualib.TYPEFUL with type 'a combined = 'a T.t) :
+module Make  (T : Luavalue.USERDATA)
+             (L : Lualib.USERCODE with type 'a userdata' = 'a T.t) :
     S with type 'a Value.userdata'  = 'a T.t = struct
   module Value = Luavalue.Make(T)
   module Ast   = Luaast.Make (Value)
@@ -793,7 +793,7 @@ initializes the array with the values of the actual parameters,
 then applies body continuation to the state to get the answer.
 There is extra bookkeeping using [[info]] and [[with_stack]] to
 maintain the stack.  
-\nwaddbox{lambda : Srcmap.map * bool -> Srcmap.location -> string list -> bool -> A.block -> V.info * V.func}
+\nwaddbox{lambda : Srcmap.map * bool -> Srcmap.location -> string list -> bool -> A.block -> V.srcloc * V.func}
 \deeperbox{14pt}
 <<compiler ((std))>>=
 let value_list = V.list V.value
@@ -802,8 +802,8 @@ let lambda (src, debug) (file, line, col) args varargs body state =
   let block, count = block_compiler src state in
   let body = block ~debug rho body (fun l -> []) (fun results -> results) in
   let n = count() in
-  let info = V.info file line in
-  info, 
+  let srcloc = V.srcloc file line in
+  srcloc, 
   fun argv ->
     let locals = Array.make n V.Nil in
     let rec walk n formals actuals = match formals with
@@ -812,9 +812,9 @@ let lambda (src, debug) (file, line, col) args varargs body state =
           let a, a's = match actuals with [] -> V.Nil, [] | h :: t -> h, t in
           (Array.set locals n a; walk (n+1) fs a's)  in
     let _ = walk 0 args argv in
-    with_stack info state body locals
+    with_stack srcloc state body locals
 
-let (_ : Srcmap.map * bool -> Srcmap.location -> string list -> bool -> A.block -> V.state -> V.info * V.func) = lambda
+let (_ : Srcmap.map * bool -> Srcmap.location -> string list -> bool -> A.block -> V.state -> V.srcloc * V.func) = lambda
 @ 
 Chunk compilation is not too exciting.
 We have a statement or a function.

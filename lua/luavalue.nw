@@ -28,12 +28,12 @@ type ('a, 'b) synonym_for_ep = ('a, 'b) ep = { embed : 'a -> 'b; project : 'b ->
 <<signatures>>=
 module type S = sig
   type 'a userdata'
-  type info
+  type srcloc
   type value
     = Nil
     | Number   of float
     | String   of string
-    | Function of info * func
+    | Function of srcloc * func
     | Userdata of userdata
     | Table    of table
   and func  = value list -> value list (* can also side-effect state *)
@@ -44,11 +44,11 @@ module type S = sig
               ; mutable callstack : activation list
               ; mutable currentloc : Srcmap.location option (* supersedes top of stack *)
               }
-  and activation = info * Srcmap.location option
+  and activation = srcloc * Srcmap.location option
 
   val caml_func : func -> value (* each result unique *)
   val lua_func  : file:string -> linedefined:int -> func -> value
-  val info      : file:string -> linedefined:int -> info (* must NOT be reused *)
+  val srcloc    : file:string -> linedefined:int -> srcloc (* must NOT be reused *)
   val eq        : value -> value -> bool
   val to_string : value -> string
   val activation_strings : state -> activation -> string list
@@ -114,7 +114,7 @@ This way, users are free to include [[n]] or not as they choose.
 <<signatures>>=
   val list    : 'a map -> 'a list map   (* does not project nil *)
   val optlist : 'a map -> 'a list map   (* projects nil to empty list *)
-@ N.B. [[optlist t = default [] list t]].
+@ N.B. [[optlist t = default [] (list t)]].
 @
 If for some reason a Caml function operates on Lua values, we need an
 identity pair.  We also enable functions that expect tables.
@@ -192,12 +192,12 @@ end
 I have to repeat the datatype definition.
 <<value toplevel>>=
 type 'a userdata'  = 'a U.t
-type info = int * string * int (* unique id, filename, linedefined *)
+type srcloc = int * string * int (* unique id, filename, linedefined *)
 type value
   = Nil
   | Number   of float
   | String   of string
-  | Function of info * func
+  | Function of srcloc * func
   | Userdata of userdata
   | Table    of table
 and func  = value list -> value list
@@ -208,7 +208,7 @@ and state = { globals : table
             ; mutable callstack : activation list
             ; mutable currentloc : Srcmap.location option (* supersedes top of stack *)
             }
-and activation = info * Srcmap.location option
+and activation = srcloc * Srcmap.location option
 @ 
 We need suitable equality.
 <<value toplevel>>=
@@ -228,10 +228,10 @@ Once we have equality, we can make tables.
 @ 
 To make this work, every function gets a unique id.  No exceptions.
 <<value toplevel>>=
-let info =
+let srcloc =
   let n = ref 0 in
   fun ~file ~linedefined:line -> (n := !n + 1; (!n, file, line))
-let lua_func ~file ~linedefined:line f = Function (info file line, f)
+let lua_func ~file ~linedefined:line f = Function (srcloc file line, f)
 let caml_func = lua_func ~file:"(OCaml)" ~linedefined:(-1)
 @ 
 <<value toplevel>>=
@@ -267,8 +267,8 @@ let objname g v =
           | Some _ -> ()) g.globals;
         !r
 <<value toplevel>>=
-let activation_strings g ((uid, file, line) as info, current) =
-  let first tail = match objname g (Function (info, fun _ -> assert false)) with
+let activation_strings g ((uid, file, line) as srcloc, current) =
+  let first tail = match objname g (Function (srcloc, fun _ -> assert false)) with
   | Some (Fallback n) -> "`" :: n :: "' fallback" :: tail
   | Some (Global n)   -> "function " :: n :: tail
   | Some (Element (t, String n)) -> "function " :: t :: "." :: n :: tail
@@ -354,7 +354,7 @@ let default d t =
   }
 @ 
 <<value toplevel>>=
-let list' nil_ok (ty : 'a map) = 
+let list (ty : 'a map) = 
   let table l =
     let n = List.length l in
     let t = Table.create n in
@@ -373,11 +373,8 @@ let list' nil_ok (ty : 'a map) =
       else ty.project (Table.find t (Number (pervasive_float i))) :: elems (i + 1) in
     elems 1
   in { embed = table; project = (function Table t -> untable t
-                                        | Nil when nil_ok -> []
                                         | v -> raise (Projection (v, "list"))) }
-let list    ty = list' false ty
-let optlist ty = list' true  ty
-
+let optlist ty = default [] (list ty)
 @
 <<value toplevel>>=
 let value = { embed = (fun x -> x); project = (fun x -> x) }

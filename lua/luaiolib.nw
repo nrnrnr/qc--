@@ -20,8 +20,8 @@ val in' :
     (in_channel, 'b) Luavalue.ep
 
 module T : Lua.Lib.USERTYPE  with type 'a t = 'a t
-module Make (T : Lua.Lib.TYPEVIEW with type 'a t = 'a t)
-    : Lua.Lib.TYPEFUL with type 'a combined = 'a T.combined
+module Make (TV : Lua.Lib.TYPEVIEW with type 'a t = 'a t)
+    : Lua.Lib.USERCODE with type 'a userdata' = 'a TV.combined
 @ 
 <<luaiolib.ml>>=
 type 'a t = In of in_channel | Out of out_channel
@@ -122,6 +122,8 @@ let io_builtins g =
   [ "readfrom",  V.caml_func (readfrom g)
   ; "open_out",  V.efunc (V.string **-> V.result outfile) (open_out_string false)
   ; "close_out", V.efunc (outfile **-> V.runit)  close_out
+  ; "open_in",  V.efunc (V.string **-> V.result infile) open_in
+  ; "close_in", V.efunc (infile **-> V.runit)  close_in
   ; "writeto",   V.caml_func (writeto' false g)
   ; "appendto",  V.caml_func (writeto' true g)
   ; "remove",    V.efunc (V.string **-> V.values)
@@ -155,10 +157,10 @@ module T = struct
 end
 <<luaiolib.ml>>=
 module Make (T : Lua.Lib.TYPEVIEW with type 'a t = 'a t)
-    : Lua.Lib.TYPEFUL with type 'a combined = 'a T.combined =
+    : Lua.Lib.USERCODE with type 'a userdata' = 'a T.combined =
   struct
-    type 'a combined = 'a T.combined
-    module M (C : Lua.Lib.CORE with type 'a V.userdata' = 'a combined) =
+    type 'a userdata' = 'a T.combined
+    module M (C : Lua.Lib.CORE with type 'a V.userdata' = 'a userdata') =
      struct
        module V = C.V
        let ( **-> ) = V.( **-> )
