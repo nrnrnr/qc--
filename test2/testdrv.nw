@@ -66,6 +66,41 @@ x86/hello.s2    has not changed
 x86/hello.1     has not changed
 x86/hello.2     has not changed
 @ 
+Additional information can be supplied along with the name of the
+source file in the form of a table. This table can contain the
+following values.
+\begin{itemize}
+\item [[name]] a name for this test case.
+\item [[source]] (required) source file as above.
+\item [[stdin]] standard input file.
+\item [[stdout]] expected standard output file.
+\item [[stderr]] expected standard error file.
+\item [[asm]] assembly output file.
+\item [[asmout]] expected compiler standard output file.
+\item [[asmerr]] expected compiler standard error file.
+\item [[other]] additional sources to link with.
+\end{itemize}
+All of the table entries are optional except for [[source]]. If a
+filename contains a ``/'' then it is considered to be a relative path.
+Otherwise, the file is assumed to be in the [[Test.results]]
+directory.
+<<extended example>>=
+Test.files = { "add.c--"
+             , { source = "fadd.c--"
+               , stdin  = "fadd.0"
+               , stdout = "fadd.1"
+               , stderr = "fadd.2"
+               , asm    = "fadd.s"
+               , asmout = "fadd.s1"
+               , asmerr = "fadd.s2"
+               , other  = "test.c test2.c"
+               }
+             , { source = "hello.c--"
+               , asm    = "add.s"
+               , name   = "messed-up"
+               }
+             }
+@ 
 % ------------------------------------------------------------------ 
 \subsubsection{Error Handling}
 % ------------------------------------------------------------------ 
@@ -100,7 +135,6 @@ Test.trust_exe = nil    -- trust exe output for test status
 Test.on_error = {}      -- error handlers
 Test.files = {}         -- input source files
 Test.tst_file = ""      -- name of config file
-Test.diffs = ""         -- mis-matched files during run of test case
 
 function Test.list_len(l)
   local i = 1
@@ -169,7 +203,6 @@ function Test.error(file, expected, actual)
   Test.errors = Test.errors + 1
   local basename = Caml.Filename.basename(expected)
   local ext = Caml.Filename.extension(expected)
-  Test.diffs = Test.diffs .. " " .. ext
   if Test.verbose then
     if Test.on_error[basename] then
       Test.on_error[basename](expected, actual)
@@ -217,31 +250,26 @@ function Test.compile_file(file)
   return { s_file, so, se }
 end
 
-function Test.build_exe(s_file)
+-- XXX fix me XXX
+function Test.build_exe(inputs, s_file)
   local exe_file = Test.temp_name(".exe")
-  local obj_file = Test.temp_name(".o")
-  local as_cmd = As.cmd(obj_file, s_file)
 
-  Ld.objects = obj_file
-  local ld_cmd = Ld.cmd(exe_file .. " ")
-  Ld.objects = ""
+  local other = ""
+  if inputs["other"] then other = inputs["other"] end
+  local cmd = format("cc -o %s %s %s", exe_file, s_file, other)
 
-  Test.log(as_cmd)
-  if execute(as_cmd) ~= 0 then return nil end
-
-  Test.log(ld_cmd)
-  local rv = execute(ld_cmd)
-  remove(obj_file)
-
-  if rv ~= 0 then return nil end
+  Test.log(cmd)
+  if execute(cmd) ~= 0 then
+    return nil
+  end
   return exe_file
 end
 
-function Test.run_exe(exe_file)
+function Test.run_exe(exe_file, stdin)
   local so = exe_file .. ".1"
   local se = exe_file .. ".2"
 
-  local cmd = format("%s > %s 2> %s", exe_file, so, se)
+  local cmd = format("%s < %s > %s 2> %s", exe_file, stdin, so, se)
   Test.log(cmd)
   execute(cmd)
 
@@ -266,11 +294,14 @@ function Test.copy_file(src, dest)
   return 1
 end
 
-function Test.check_update_file(source, file, update)
-  local ext = Caml.Filename.extension(file)
-  local bn = Caml.Filename.basename(source)
-  local cn = Caml.Filename.chop_extension(bn)
-  local exp = Caml.Filename.concat(Test.results, cn .. ext)
+function Test.check_update_file(inputs, file, update)
+  local  ext = Caml.Filename.extension(file)
+  if     ext == ".s"  then exp = inputs["asm"]
+  elseif ext == ".s1" then exp = inputs["asmout"]
+  elseif ext == ".s2" then exp = inputs["asmerr"]
+  elseif ext == ".1"  then exp = inputs["stdout"]
+  elseif ext == ".2"  then exp = inputs["stderr"] end
+    
   local status = Util.catch(Util.compare_files, exp, file)
   if not status then
     if update then
@@ -280,7 +311,8 @@ function Test.check_update_file(source, file, update)
       end
     else
       Test.log("%s does not match output", exp)
-      Test.error(source, exp, file)
+      Test.error(inputs["source"], exp, file)
+      inputs["diffs"] = inputs["diffs"] .. " " .. ext
     end
     return 1
   else
@@ -293,28 +325,30 @@ function Test.check_update_file(source, file, update)
   return 0
 end
 
-function Test.run_test_case(file, update)
+function Test.run_test_case(inputs, update)
+  local file = inputs["source"]
   local files = Test.compile_file(file)
   if not files then return end
+
+  inputs["diffs"] = ""
 
   local s_file = files[1]
   local so = files[2]
   local se = files[3]
 
-  Test.diffs = ""
-  local status = Test.check_update_file(file, s_file, update)
-               + Test.check_update_file(file, so, update)
-               + Test.check_update_file(file, se, update)
+  local status = Test.check_update_file(inputs, s_file, update)
+               + Test.check_update_file(inputs, so, update)
+               + Test.check_update_file(inputs, se, update)
   if update or (status > 0 and
                (Test.trust_exe or Test.verbose))
   then
-    local exe_file = Test.build_exe(s_file)
+    local exe_file = Test.build_exe(inputs, s_file)
     if exe_file then
-      files = Test.run_exe(exe_file)
+      files = Test.run_exe(exe_file, inputs["stdin"])
       local pso = files[1]
       local pse = files[2]
-      local s = Test.check_update_file(file, pso, update)
-              + Test.check_update_file(file, pse, update)
+      local s = Test.check_update_file(inputs, pso, update)
+              + Test.check_update_file(inputs, pse, update)
       if s == 0  and Test.trust_exe then
         status = 0
       end
@@ -327,38 +361,108 @@ function Test.run_test_case(file, update)
   remove(so)
   remove(se)
 
-  if Test.diffs ~= "" then
-    local msg = format("{%s } differ", Test.diffs)
+  if inputs["diffs"] ~= "" then
+    local msg = format("{%s } differ", inputs["diffs"])
     local stat = "FAILED"
     if status == 0 then stat = "PASSED" end
     if Test.verbose then
       print(format("\n## To update these files {%s } run:",
-                   Test.diffs))
+                   inputs["diffs"]))
       print(format("# ../bin/qc-- testdrv.lua %s %s.record",
-                   Test.tst_file, file))
+                   Test.tst_file, inputs["name"]))
     else
       print(format("../bin/qc-- -v testdrv.lua %s %s.test \t# %s %s",
-                   Test.tst_file, file, stat, msg))
+                   Test.tst_file, inputs["name"], stat, msg))
     end
   end
+end
+
+function Test.compute_filename(files, entry, dir, name)
+  if not files[entry] then
+    files[entry] = Caml.Filename.concat(dir, name)
+  else
+    if not strfind(files[entry], "/") then
+      files[entry] = Caml.Filename.concat(dir, files[entry])
+    end
+  end
+end
+
+function Test.process_file(files, update)
+  if type(files) == "string" then
+    files = { source = files }
+  end
+
+  if type(files) ~= "table" or not files["source"] then
+    error("invalid file entry")
+  end
+
+  local bn = Caml.Filename.basename(files["source"])
+  if bn == files["source"] then
+    files["source"] = Caml.Filename.concat(Test.source, files["source"])
+  end
+
+  local name = Caml.Filename.chop_extension(bn)
+  local exp = Caml.Filename.concat(Test.results, name)
+  local inp = Caml.Filename.chop_extension(files["source"])
+
+  if not files["name"] then files["name"] = name end
+
+  Test.compute_filename(files, "stdin",  Test.source,  name .. ".0")
+  Test.compute_filename(files, "stdout", Test.results, name .. ".1")
+  Test.compute_filename(files, "stderr", Test.results, name .. ".2")
+
+  Test.compute_filename(files, "asm",    Test.results, name .. ".s")
+  Test.compute_filename(files, "asmout", Test.results, name .. ".s1")
+  Test.compute_filename(files, "asmerr", Test.results, name .. ".s2")
+
+  Test.run_test_case(files, update)
 end
 @ 
 % -------------------------------------------------------------------
 \subsubection{Compiler Table Entries}
 % -------------------------------------------------------------------
 <<testdrv.lua>>=
+function Test.find_entry(name)
+  local i = 1
+  while Test.files[i] do
+    local f = Test.files[i]
+    if type(f) == "string" and f == name then
+      return f
+    end
+    if type(f) == "table" then
+      if f["name"] and f["name"] == name then
+        return f
+      elseif f["source"] and f["source"] == name then
+        return f
+      end
+    end
+    i = i + 1
+  end
+  return nil
+end
+
 if CMD.compilertab[".record"] then
   error("CMD.compilertab[.record] already defined")
 end
 function CMD.compilertab[".record"](file)
-  Test.run_test_case(Caml.Filename.chop_extension(file), 1)
+  file = Caml.Filename.chop_extension(file)
+  local entry = Test.find_entry(file)
+  if not entry then
+    error("Could not find test case")
+  end
+  Test.process_file(entry, 1)
 end
 
 if CMD.compilertab[".test"] then
   error("CMD.compilertab[.test] already defined")
 end
 function CMD.compilertab[".test"](file)
-  Test.run_test_case(Caml.Filename.chop_extension(file))
+  file = Caml.Filename.chop_extension(file)
+  local entry = Test.find_entry(file)
+  if not entry then
+    error("Could not find test case")
+  end
+  Test.process_file(entry)
 end
 
 if CMD.compilertab[".tst"] then
@@ -374,8 +478,8 @@ function CMD.compilertab[".tst"](file)
     Test.status_line(format("Processing test %d of %d", i, len),
                      format("[ %0.2f %% ]", 100 * (i-1) / len))
 
-    local filename = Caml.Filename.concat(Test.source, Test.files[i])
-    Test.run_test_case(filename)
+    --local filename = Caml.Filename.concat(Test.source, Test.files[i])
+    Test.process_file(Test.files[i])
 
     i = i + 1
   end
