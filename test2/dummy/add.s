@@ -79,18 +79,19 @@ section "text"
         $t1 = $r30;
         ;
         initialize continuations:l4:
-        $c0 when %gt[32](iargc, 1) = sym@join@l9;
-        join:l10:
+        $c0 when %gt[32](iargc, 1) = sym@join@l10;
+        join:l11:
         iptr = sym@hello;
-        $c0 = sym@join@l8;
-        join:l9:
+        $c0 = sym@join@l9;
+        join:l10:
         iptr = sym@bye;
-        $c0 = sym@join@l8;
-        join:l8:
+        $c0 = sym@join@l9;
+        join:l9:
         ;
         $r0 = iptr;
         ;
         $c0, $r30 = sym@printf, ($c0+4);
+        join:l8:
         $r31 = $r31;
         // the preceding node is merely asserted
         ;

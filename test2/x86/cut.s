@@ -67,6 +67,7 @@ initialize_continuations_l10:
 	addl %ecx,%eax
 	nop
 	call f
+join_l21:
 	nop
 	nop
 	nop
@@ -83,6 +84,7 @@ initialize_continuations_l10:
 	movl %ecx,(%eax)
 	nop
 	call printf
+join_l18:
 	nop
 	nop
 	nop
@@ -119,6 +121,7 @@ k_C8:
 	movl %ecx,(%eax)
 	nop
 	call printf
+join_l14:
 	nop
 	nop
 	nop
@@ -143,7 +146,7 @@ f:
 	leal 4(%esp), %ecx
 	movl (%ecx),%ecx
 	movl %ecx,(%esp)
-initialize_continuations_l23:
+initialize_continuations_l26:
 	leal -4(%esp), %esp
 	movl $-8,%ecx
 	leal 8(%esp), %edx
@@ -151,6 +154,7 @@ initialize_continuations_l23:
 	movl %eax,(%edx)
 	nop
 	call g
+join_l33:
 	nop
 	nop
 	nop
@@ -162,6 +166,7 @@ initialize_continuations_l23:
 	movl %eax,(%edx)
 	nop
 	call printf
+join_l30:
 	nop
 	nop
 	nop
@@ -186,10 +191,11 @@ g:
 	movl (%ecx),%edx
 	leal 4(%esp), %ecx
 	movl %edx,(%ecx)
-initialize_continuations_l34:
+initialize_continuations_l39:
 	nop
 	nop
 	call h
+join_l46:
 	nop
 	nop
 	nop
@@ -201,6 +207,7 @@ initialize_continuations_l34:
 	movl %eax,(%edx)
 	nop
 	call printf
+join_l43:
 	nop
 	nop
 	nop
@@ -221,7 +228,7 @@ h:
 	nop
 	movl %esp,%eax
 	movl (%eax),%eax
-initialize_continuations_l45:
+initialize_continuations_l52:
 	movl $99,%eax
 	movl $4,%ebx
 	movl %ecx,%edx

@@ -47,21 +47,22 @@ main:
 initialize_continuations_l3:
 	movl $1,%ecx
 	cmpl %ecx,%eax
-	jg join_l8
+	jg join_l9
+join_l10:
+	leal hello,%eax
+	jmp join_l8
 join_l9:
-	leal hello,%ecx
-	jmp join_l7
+	leal bye,%eax
+	jmp join_l8
 join_l8:
-	leal bye,%ecx
-	jmp join_l7
-join_l7:
 	nop
-	movl $-4,%eax
+	movl $-4,%ecx
 	leal 4(%esp), %edx
-	addl %eax,%edx
-	movl %ecx,(%edx)
+	addl %ecx,%edx
+	movl %eax,(%edx)
 	nop
 	call printf
+join_l7:
 	nop
 	nop
 	nop

@@ -5,12 +5,12 @@ Cmm_private_global_area:
 _212_029_140_217_143_000_178_004_233_128_t_152_236_248B_:
 .text
 p:
-	leal -32(%esp), %esp
+	leal -36(%esp), %esp
 	nop
 	nop
-	leal 32(%esp), %eax
+	leal 36(%esp), %eax
 	movl (%eax),%eax
-	movl %eax,28(%esp)
+	movl %eax,32(%esp)
 initialize_continuations_l3:
 	movl $1,%eax
 	movl %eax,24(%esp)
@@ -47,13 +47,15 @@ initialize_continuations_l3:
 	addl %ecx,%eax
 	nop
 	movl $0,%ecx
-	leal 32(%esp), %edx
-	movl %edx,20(%esp)
-	movl 20(%esp),%edx
-	addl %ecx,%edx
-	movl %edx,20(%esp)
+	movl %ecx,28(%esp)
+	leal 36(%esp), %ecx
+	movl %ecx,20(%esp)
 	movl 20(%esp),%ecx
 	movl 28(%esp),%edx
+	addl %edx,%ecx
+	movl %ecx,20(%esp)
+	movl 20(%esp),%ecx
+	movl 32(%esp),%edx
 	movl %edx,(%ecx)
-	leal 32(%esp), %esp
+	leal 36(%esp), %esp
 	ret

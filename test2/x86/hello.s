@@ -47,6 +47,7 @@ initialize_continuations_l3:
 	movl %eax,(%edx)
 	nop
 	call printf
+join_l7:
 	nop
 	nop
 	nop

@@ -5,12 +5,12 @@ Cmm_private_global_area:
 _212_029_140_217_143_000_178_004_233_128_t_152_236_248B_:
 .text
 p:
-	leal -44(%esp), %esp
+	leal -48(%esp), %esp
 	nop
 	nop
-	leal 44(%esp), %eax
+	leal 48(%esp), %eax
 	movl (%eax),%eax
-	movl %eax,40(%esp)
+	movl %eax,44(%esp)
 initialize_continuations_l3:
 	movl $1,%eax
 	movl %eax,36(%esp)
@@ -52,13 +52,15 @@ join_l6:
 	addl %ecx,%eax
 	nop
 	movl $0,%ecx
-	leal 44(%esp), %edx
-	movl %edx,32(%esp)
-	movl 32(%esp),%edx
-	addl %ecx,%edx
-	movl %edx,32(%esp)
+	movl %ecx,40(%esp)
+	leal 48(%esp), %ecx
+	movl %ecx,32(%esp)
 	movl 32(%esp),%ecx
 	movl 40(%esp),%edx
+	addl %edx,%ecx
+	movl %ecx,32(%esp)
+	movl 32(%esp),%ecx
+	movl 44(%esp),%edx
 	movl %edx,(%ecx)
-	leal 44(%esp), %esp
+	leal 48(%esp), %esp
 	ret

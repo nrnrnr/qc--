@@ -70,6 +70,7 @@ section "text"
         $r0 = sym@my_data;
         ;
         $c0, $r30 = sym@printf, ($c0+4);
+        join:l8:
         $r31 = $r31;
         // the preceding node is merely asserted
         ;

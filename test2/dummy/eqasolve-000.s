@@ -564,6 +564,7 @@ section "text"
         $r0 = bits32[sym@@i_18];
         ;
         $c0, $r30 = bits32[sym@_osinit], ($c0+4);
+        join:l93:
         $r31 = $r31;
         // the preceding node is merely asserted
         ;
@@ -573,6 +574,7 @@ section "text"
         $r0, $r1, $r2 = bits32[($r31+28)], 72, 1;
         ;
         $c0, $r30 = bits32[sym@_xlbegin], ($c0+4);
+        join:l90:
         $r31 = $r31;
         // the preceding node is merely asserted
         ;
@@ -582,17 +584,19 @@ section "text"
         $r0 = bits32[($r31+36)];
         ;
         $c0, $r30 = bits32[sym@__setjmp], ($c0+4);
+        join:l87:
         $r31 = $r31;
         // the preceding node is merely asserted
         ;
         @i_1 = $r0;
         ;
-        $c0 when %eq[32](@i_1, 0) = sym@join@l62;
-        join:l63:
+        $c0 when %eq[32](@i_1, 0) = sym@join@l83;
+        join:l84:
         ;
         $r0 = bits32[sym@@i_22];
         ;
         $c0, $r30 = bits32[sym@_printf], ($c0+4);
+        join:l82:
         $r31 = $r31;
         // the preceding node is merely asserted
         ;
@@ -602,6 +606,7 @@ section "text"
         ;
         ;
         $c0, $r30 = bits32[sym@_osfinish], ($c0+4);
+        join:l79:
         $r31 = $r31;
         // the preceding node is merely asserted
         ;
@@ -611,14 +616,93 @@ section "text"
         $r0 = 1;
         ;
         $c0, $r30 = bits32[sym@_exit], ($c0+4);
+        join:l76:
         $r31 = $r31;
         // the preceding node is merely asserted
         ;
         ;
         ;
         @i_19:
+        ;
+        ;
+        ;
+        $c0, $r30 = bits32[sym@_xlinit], ($c0+4);
+        join:l73:
+        $r31 = $r31;
+        // the preceding node is merely asserted
+        ;
+        ;
+        ;
+        ;
+        $r0 = bits32[($r31+28)];
+        ;
+        $c0, $r30 = bits32[sym@_xlend], ($c0+4);
+        join:l70:
+        $r31 = $r31;
+        // the preceding node is merely asserted
+        ;
+        ;
+        ;
+        ;
+        $r0, $r1, $r2
+            = bits32[($r31+28)], 72, bits32[bits32[sym@_true]];
+        ;
+        $c0, $r30 = bits32[sym@_xlbegin], ($c0+4);
+        join:l67:
+        $r31 = $r31;
+        // the preceding node is merely asserted
+        ;
+        ;
+        ;
+        ;
+        $r0 = bits32[($r31+36)];
+        ;
+        $c0, $r30 = bits32[sym@__setjmp], ($c0+4);
+        join:l64:
+        $r31 = $r31;
+        // the preceding node is merely asserted
+        ;
+        @i_2 = $r0;
+        ;
+        $c0 when %ne[32](@i_2, 0) = sym@join@l60;
+        join:l61:
+        @i_3 = 0;
+        ;
+        $r0, $r1, $r2 = bits32[sym@@i_26], @i_3, @i_3;
+        ;
+        $c0, $r30 = bits32[sym@_xlload], ($c0+4);
+        join:l59:
+        $r31 = $r31;
+        // the preceding node is merely asserted
+        ;
+        ;
+        ;
+        @i_23:
+        ;
+        $r0 = bits32[($r31+36)];
+        ;
+        $c0, $r30 = bits32[sym@__setjmp], ($c0+4);
+        join:l56:
+        $r31 = $r31;
+        // the preceding node is merely asserted
+        ;
+        @i_4 = $r0;
+        ;
+        $c0 when %ne[32](@i_4, 0) = sym@join@l52;
+        join:l53:
+        @i_i = 1;
+        $c0 = sym@sym@@i_33;
+        sym@@i_33:
         // dangling pointer in flow graph
-        join:l62:
+        join:l52:
+        $c0 = sym@sym@@i_27;
+        sym@@i_27:
+        // dangling pointer in flow graph
+        join:l60:
+        $c0 = sym@sym@@i_23;
+        sym@@i_23:
+        // dangling pointer in flow graph
+        join:l83:
         $c0 = sym@sym@@i_19;
         sym@@i_19:
         // dangling pointer in flow graph
@@ -634,12 +718,13 @@ section "text"
         ;
         $t1 = $r30;
         ;
-        initialize continuations:l76:
+        initialize continuations:l100:
         ;
         $r0, $r1, $r2
             = bits32[(bits32[bits32[sym@_s_stdout]]+8)], @i_expr, 1;
         ;
         $c0, $r30 = bits32[sym@_xlprint], ($c0+4);
+        join:l107:
         $r31 = $r31;
         // the preceding node is merely asserted
         ;
@@ -649,13 +734,19 @@ section "text"
         $r0 = bits32[(bits32[bits32[sym@_s_stdout]]+8)];
         ;
         $c0, $r30 = bits32[sym@_xlterpri], ($c0+4);
+        join:l104:
         $r31 = $r31;
         // the preceding node is merely asserted
         ;
         ;
         ;
         @i_48:
-        // dangling pointer in flow graph
+        ;
+        ;
+        ;
+        $t1 = $t1;
+        $r31 = ($r31+24);
+        $c0 = $t1;
     }
 }
 
@@ -668,18 +759,24 @@ section "text"
         ;
         $t1 = $r30;
         ;
-        initialize continuations:l88:
+        initialize continuations:l114:
         ;
         $r0, $r1 = bits32[(bits32[bits32[sym@_s_stdout]]+8)], @i_str;
         ;
         $c0, $r30 = bits32[sym@_xlputstr], ($c0+4);
+        join:l118:
         $r31 = $r31;
         // the preceding node is merely asserted
         ;
         ;
         ;
         @i_49:
-        // dangling pointer in flow graph
+        ;
+        ;
+        ;
+        $t1 = $t1;
+        $r31 = ($r31+24);
+        $c0 = $t1;
     }
 }
 
