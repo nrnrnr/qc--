@@ -26,6 +26,7 @@ module Spaces : sig
   val u : Space.t
   val c : Space.t   (* PC at 0 and condition codes at 1 *)
 end
+module Expander : Postexpander.S
 @ 
 
 \paragraph{Name}
@@ -65,3 +66,196 @@ module Spaces = struct
                     ; S.classification = S.Fixed
                     } 
 end
+
+<<x86.ml>>=
+module R = Rtl
+module RP = Rtl.Private
+module Expander = struct
+  <<x86 expander>>
+end
+@ 
+<<x86 expander>>=
+let byte_order = Rtl.LittleEndian
+let wordsize = 32
+@ 
+These copies are a nuisance.
+<<x86 expander>>=
+type temp = Register.t
+type rtl = Rtl.rtl
+type width = Rtl.width
+type assertion = Rtl.assertion
+type operator = Rtl.Private.opr
+@ 
+Here are the spaces.
+<<x86 expander>>=
+type context = (width -> temp) * (Register.t -> bool)
+let icontext = Talloc.Single.reg (Talloc.Single.for_space Spaces.t),
+               fun (c, _, _) -> c = 'r' || c = 't'
+let fcontext = Talloc.Single.reg (Talloc.Single.for_space Spaces.u),
+               fun (c, _, _) -> c = 'f' || c = 'u'
+let acontext = icontext
+@ 
+<<x86 expander>>=
+module Address = struct
+  type t = Rtl.exp
+  let rindex n = R.bits (Bits.U.of_int n wordsize) wordsize
+  let reg (space, n, w) = 
+    R.fetch (R.cell R.none space byte_order w (rindex n)) w
+end
+@ 
+We need to record the various side effects.
+<<x86 expander>>=
+let rindex = Address.rindex
+let eflags = R.cell R.none 'c' byte_order 32 (rindex 0)  (* condition codes *)
+let pc     = R.cell R.none 'c' byte_order 32 (rindex 1)  (* program counter *)
+let lflags result = R.store eflags (R.app (R.opr "IA32.lflags" []) [result]) 32
+let aflags result = R.store eflags (R.app (R.opr "IA32.aflags" []) [result]) 32
+
+let temploc (space, n, w) = Rtl.cell Rtl.none space byte_order w (rindex n)
+let tempval ((space, n, w) as t) = R.fetch (temploc t) w
+let mem addr = R.cell R.none
+@ 
+It's not clear whether the MOV instruction sets the flags or not.
+For the moment, I assume not.
+<<x86 expander>>=
+let as_mov rtl = rtl
+
+let load ~dst:((_, _, w) as dst) ~addr assn =
+  assert (w = 32);
+  [as_mov (R.store (temploc dst) (R.fetch (R.cell assn 'm' byte_order 32 addr) 32) 32)]
+let store ~addr ~src:((_, _, w) as src) assn =
+  assert (w = 32);
+  [as_mov (R.store (R.cell assn 'm' byte_order 32 addr) (tempval src) 32)]
+@ 
+I assume the sign-extending loads and stores are there.
+<<x86 expander>>=
+let extend opname n e = R.app (R.opr opname   [n; 32]) [e]
+let lobits        n e = R.app (R.opr "lobits" [32; n]) [e]
+let sxload ~dst:((_, _, w) as dst) ~addr n assn =
+  assert (w = 32);
+  [as_mov (R.store (temploc dst)
+             (extend "sx" n (R.fetch (R.cell assn 'm' byte_order n addr) n)) 32)]
+let zxload ~dst:((_, _, w) as dst) ~addr n assn =
+  assert (w = 32);
+  [as_mov (R.store (temploc dst)
+             (extend "zx" n (R.fetch (R.cell assn 'm' byte_order n addr) n)) 32)]
+let lostore ~addr ~src:((_, _, w) as src) n assn =
+  assert (w = 32);
+  [as_mov (R.store (R.cell assn 'm' byte_order n addr) (lobits n (tempval src)) n)]
+@ 
+Who knows if the move instruction goes freely from int to float?
+Who knows if the flags are affected?
+It has to be looked up!
+<<x86 expander>>=
+let width (_, _, w) = w
+let move_rtl dst src = as_mov (R.store (temploc dst) (tempval src) (width src))
+let move ~dst ~src = [move_rtl dst src]
+@ 
+Load immediate should also be a simple move.
+<<x86 expander>>=
+let upconst c = R.Revert.exp (RP.Const c)
+let li ~dst const =
+  [as_mov (R.store (temploc dst) (upconst const) (width dst))]
+@ 
+Here are tentative contexts for all the operators.
+Anything that has to do with [[bool]] or with rounding modes is surely wrong.
+<<x86 expander>>=
+let upop = R.Revert.opr
+let operators =
+[ "add", [icontext; icontext], icontext
+; "and", [icontext; icontext], icontext
+; "bit", [icontext], icontext  (* BOGUS *)
+; "bitExtract", [icontext; icontext], icontext
+; "bitInsert", [icontext; icontext; icontext], icontext
+; "bitTransfer", [icontext; icontext; icontext; icontext; icontext], icontext
+; "bool", [icontext], icontext   (* BOGUS *)
+; "borrow", [icontext; icontext; icontext], icontext
+; "carry", [icontext; icontext; icontext], icontext
+; "com", [icontext], icontext
+; "conjoin", [icontext; icontext], icontext    (* BOGUS *)
+; "disjoin", [icontext; icontext], icontext   (* BOGUS *)
+; "div", [icontext; icontext], icontext
+; "divu", [icontext; icontext], icontext
+; "eq", [icontext; icontext], icontext
+; "f2f", [fcontext; fcontext], fcontext
+; "f2i", [fcontext; fcontext], fcontext  (* conversion done in float unit?? *)
+; "fabs", [fcontext], fcontext
+; "fadd", [fcontext; fcontext; fcontext], fcontext  (* ROUNDING MODES *)
+; "fcmp", [fcontext; fcontext], fcontext
+; "fdiv", [fcontext; fcontext; fcontext], fcontext  (* ROUNDING MODES *)
+; "float_eq", [], fcontext
+; "float_gt", [], fcontext
+; "float_lt", [], fcontext
+; "fmul", [fcontext; fcontext; fcontext], fcontext  (* ROUNDING MODES *)
+; "fmulx", [fcontext; fcontext], fcontext
+; "fneg", [fcontext], fcontext
+; "fsqrt", [fcontext; fcontext], fcontext  (* ROUNDING MODES *)
+; "fsub", [fcontext; fcontext; fcontext], fcontext  (* ROUNDING MODES *)
+; "ge", [icontext; icontext], icontext
+; "geu", [icontext; icontext], icontext
+; "gt", [icontext; icontext], icontext
+; "gtu", [icontext; icontext], icontext
+; "i2f", [fcontext; fcontext], fcontext  (* conversion done in float unit? *)
+; "le", [icontext; icontext], icontext
+; "leu", [icontext; icontext], icontext
+; "lt", [icontext; icontext], icontext
+; "ltu", [icontext; icontext], icontext
+; "minf", [], fcontext
+; "mod", [icontext; icontext], icontext
+; "modu", [icontext; icontext], icontext
+; "mul", [icontext; icontext], icontext
+; "mulu", [icontext; icontext], icontext
+; "mzero", [], fcontext
+; "NaN", [fcontext], fcontext           (* ??? *)
+; "ne", [icontext; icontext], icontext
+; "neg", [icontext], icontext
+; "not", [icontext], icontext
+; "or", [icontext; icontext], icontext
+; "pinf", [], fcontext
+; "popcnt", [icontext], icontext
+; "pzero", [], fcontext
+; "quot", [icontext; icontext], icontext
+; "rem", [icontext; icontext], icontext
+; "round_down", [], icontext      (* ROUNDING MODES *)
+; "round_nearest", [], icontext  (* ROUNDING MODES *)
+; "round_up", [], icontext  (* ROUNDING MODES *)
+; "round_zero", [], icontext  (* ROUNDING MODES *)
+; "shl", [icontext; icontext], icontext
+; "shra", [icontext; icontext], icontext
+; "shrl", [icontext; icontext], icontext
+; "sub", [icontext; icontext], icontext
+; "sx", [icontext], icontext
+; "unordered", [], fcontext
+; "xor", [icontext; icontext], icontext
+; "zx", [icontext], icontext
+] 
+
+module SM = Strutil.Map
+let resmap = List.fold_left (fun m (n, a, r) -> SM.add n r m) SM.empty operators
+let argmap = List.fold_left (fun m (n, a, r) -> SM.add n a m) SM.empty operators
+
+let arg_contexts   (n, _) = SM.find n argmap
+let result_context (n, _) = SM.find n resmap
+@ 
+Operator hell (or heaven).
+We start with binary operators in $L \mathrel{:=} L \oplus R$ form.
+<<x86 expander>>=
+let with_flags setflags dst exp =
+  R.par [setflags exp; R.store (temploc dst) exp (width dst)]
+
+let llr op x y move = match op with
+| "add", [32] -> [with_flags aflags x (R.app (upop op) [tempval x; tempval y])]
+| "add", [n]  -> Impossible.unimp (string_of_int n ^ "-bit add")
+| "add", _    -> Impossible.impossible "ill-formed add"
+| _           ->
+    [R.store (temploc x) (R.app (upop op) [tempval x; tempval y]) (width x)]
+
+let binop ~dst op x y = llr op dst x (move_rtl dst x)
+@ 
+Other operators are surely wrong.
+<<x86 expander>>=
+let unop ~dst op x =
+  [R.store (temploc dst) (R.app (upop op) [tempval x])             (width dst)]
+
+let rtlop ~dst op args =
+  [R.store (temploc dst) (R.app (upop op) (List.map tempval args)) (width dst)]

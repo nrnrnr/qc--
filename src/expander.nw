@@ -54,19 +54,19 @@ function (embedding/projection) at every application of such a function.
 @
 Here is a tentative signature for a postpass for an integer/float
 machine.
-<<postpass>>=
-module type POST = sig
-  val itemps : Space.t  (* spaces for temporaries *)
-  val ftemps : Space.t
-
+<<postexpander.mli>>=
+<<postexpander>>
+<<postexpander.ml>>=
+<<postexpander>>
+<<postexpander>>=
+module type S = sig
   val byte_order : Rtl.aggregation (* used on all access to memory *)
   val wordsize   : int             (* used as width of register number! *)
 
   type temp = Register.t
-  type exp = Rtl.Private.exp
   type rtl = Rtl.rtl
   type width = Rtl.width
-  type assertion = Rtl.Private.assertion
+  type assertion = Rtl.assertion
   type operator = Rtl.Private.opr
 
   <<generic expansion operations>>
@@ -109,7 +109,7 @@ The arguments to these functions must satisfy the invariants that the
 temporaries are in the spaces the expander expects.
 It announces these spaces through argument and result contexts.
 <<generic expansion operations>>=
-type context = (width -> temp) * (Rtl.space -> bool)
+type context = (width -> temp) * (Register.t -> bool)
 val icontext : context (* for ints *)
 val fcontext : context (* for floats *)
 val acontext : context (* for addresses *)
@@ -144,9 +144,10 @@ val context : Target2.t -> context
 val expand : Talloc.Multiple.t -> context -> Rtl.rtl -> Rtl.rtl list
   (* returns *last* instruction at *head* of list (reverse execution order) *)
 val cfg : 'a -> Proc.t -> bool
-<<postpass>>
-module IntFloatAddr (Post : POST) : sig
+module IntFloatAddr (Post : Postexpander.S) : sig
   val expand : Rtl.rtl -> Rtl.rtl list
+   (* THERE IS A BUG IN THIS CODE.  IT DOES NOT SHARE THE TEMP SUPPLY CORRECTLY *)
+  val cfg    : 'a -> Proc.t -> bool
 end 
 @ 
 Here are some abbreviations and utilities.
@@ -161,6 +162,8 @@ let up   = Rtl.Revert.exp
 let down = Rtl.Convert.exp
 let uploc= Rtl.Revert.loc
 let downloc= Rtl.Convert.loc
+
+let upassn = Rtl.Revert.assertion
 
 let fetch l = RP.Fetch (downloc l, RU.Width.loc l)
 
@@ -240,13 +243,13 @@ and loc l =
 % ----------------------------------------------------------------
 \subsection{A generic expander}
 % ----------------------------------------------------------------
-<<expander.ml>>=
-<<postpass>>
-module IntFloatAddr (Post : POST) = struct
-  let itemp = Talloc.Single.reg (Talloc.Single.for_space Post.itemps)
-  let ftemp = Talloc.Single.reg (Talloc.Single.for_space Post.ftemps)
 
+THE KEY ISSUE HERE IS WHAT TO DO ABOUT BOOLEAN OPERATORS AND GUARDS.
+
+<<expander.ml>>=
+module IntFloatAddr (Post : Postexpander.S) = struct
   <<generic expander>>
+  <<generic flow-graph expander>>
 end
 @ 
 The core of the expander is a function [[to_temp]], which takes an
@@ -259,10 +262,10 @@ temporary is OK.
 Function [[temp_in_context]] inserts a move if needed.
 <<generic expander>>=
 let alloc (allocate, check) w = allocate w
-let ok    (allocate, check) space = check space
+let ok    (allocate, check) reg = check reg
 
 let temp_in_context ((space, n, w) as t) context instructions =
-  if ok context space then
+  if ok context t then
     t, instructions
   else
     let t' = alloc context w in
@@ -288,7 +291,7 @@ let expand =
         let a, is = address addr in
         assert (agg = Post.byte_order);
         assert (w = w');
-        t, to_hughes (Post.load t a assn) @@ is
+        t, to_hughes (Post.load t a (upassn assn)) @@ is
     | RP.Fetch (RP.Cell (space, agg, w, RP.Const (RP.Bits b), assn), w') ->
         assert (w = w');
         temp_in_context (space, Bits.U.to_int b, w) context empty
@@ -302,7 +305,7 @@ let expand =
         let w = width e in
         let t = alloc (Post.result_context op) w in
         let compute = match temps with
-        | [x; y] -> Post.binop t op x y
+        | [x; y] -> Post.binop t op x y  (* see note on binary operators below *)
         | [x]    -> Post.unop  t op x
         | _      -> Post.rtlop t op temps
         in
@@ -313,22 +316,27 @@ let expand =
       guarded g left right w
   | _ -> unit r (* no expansion takes place *)
   in fun r -> rtl r []
-@ 
+@ The note on binary operators is that eventually the generic expander
+should be extended so it can deal with a two-address target machine.
+The generic expander should (somehow) divine whether the operation is 
+in $L \mathrel{:=} L \oplus R$ form or in $R \mathrel{:=} L \oplus R$ form,
+and it should call appropriate supporting functions in the target.
+@
 Sign-extending and zero-extending loads are done into integer registers only.
-This fact should be documented in the [[POST]] interface.
+This fact is documented in the [[POST]] interface.
 <<cases for sign-extending and zero-extending loads>>=
 | RP.App (("sx", [n; w]), [RP.Fetch (RP.Cell ('m', agg, n', addr, assn), n'')]) ->
     assert (n == n' && n' == n'');
     let t = alloc Post.icontext w in
     let a, is = address addr in
     assert (agg = Post.byte_order);
-    temp_in_context t context (to_hughes (Post.sxload t a n assn) @@ is)
+    temp_in_context t context (to_hughes (Post.sxload t a n (upassn assn)) @@ is)
 | RP.App (("zx", [n; w]), [RP.Fetch (RP.Cell ('m', agg, n', addr, assn), n'')]) ->
     assert (n == n' && n' == n'');
     let t = alloc Post.icontext w in
     let a, is = address addr in
     assert (agg = Post.byte_order);
-    temp_in_context t context (to_hughes (Post.zxload t a n assn) @@ is)
+    temp_in_context t context (to_hughes (Post.zxload t a n (upassn assn)) @@ is)
 @
 We might one day support multiple addressing modes, but for now, just registers. 
 <<other generic expander functions>>=
@@ -360,7 +368,7 @@ and assign left right w =
       | <<\emph{pattern [[->]] action} for low-bit store>>
       | _ ->
           let r, is = to_temp (guess_context right) right in
-          to_hughes (Post.store a r assn) @@ is' @@ is)
+          to_hughes (Post.store a r (upassn assn)) @@ is' @@ is)
   | RP.Cell (space, agg, w, RP.Const (RP.Bits b), assn) ->
       let r, is = to_temp (guess_context right) right in
       to_hughes (Post.move ~dst:(space, (Bits.U.to_int b), w) ~src:r) @@ is
@@ -369,7 +377,7 @@ and assign left right w =
 <<\emph{pattern [[->]] action} for low-bit store>>=
 RP.App (("lobits", [w; n]), [rhs]) ->
   let r, is = to_temp Post.icontext rhs in
-  to_hughes (Post.lostore a r n assn) @@ is' @@ is
+  to_hughes (Post.lostore a r n (upassn assn)) @@ is' @@ is
 @   
 <<other generic expander functions>>=
 and loc l =
@@ -390,6 +398,29 @@ let guess_context = function
   | RP.Fetch _ -> Post.icontext
   | RP.App (op, args) -> Post.result_context op
 @ 
+We can see a problem here.  The [[Proc.t]] contains a supply of
+temporaries, and there's a different supply hidden inside the generic
+expander (in the [[Post]] functor argument).
+It's not clear how to link things together correctly.
+<<generic flow-graph expander>>=
+module G  = Cfg4
+module GU = Cfgutil
+let cfg _ proc =
+  let g = proc.Proc.cfg in
+  let t = proc.Proc.target in
+  let _ = G.gm_enumerate g in
+  let nodes = GU.fold_bwd g (fun x y -> x::y) [] in
+  let modified = ref false in
+  let exp n =
+    match expand (G.instr n) with
+    | last :: preds ->
+        ignore (List.fold_left (fun n i -> G.gm_insert_assign_before i n) n preds);
+        G.upd_instr n (fun _ -> last);
+        (match preds with [] -> () | _ :: _ -> modified := true)
+    | [] -> assert false in
+  List.iter exp nodes;
+  !modified
+@
 
 % ------------------------------------------------------------------ 
 \subsection{Test Code}
@@ -518,7 +549,6 @@ let cfg _ proc =
     | [] -> assert false in
   List.iter exp nodes;
   !modified
-
 @ 
 % ------------------------------------------------------------------ 
 \subsection{Exporting the Expander to Lua}
@@ -531,6 +561,8 @@ exported as a Lua primitive [[Expander.toy]].
 module Lua (ProcT: Lua.Lib.TYPEVIEW with type 'a t = Proc.t): 
     Lua.Lib.TYPEFUL with type 'a combined = 'a ProcT.combined
 <<expander.ml>>=
+module Intel = IntFloatAddr(X86.Expander)
+
 module Lua (ProcT: Lua.Lib.TYPEVIEW with type 'a t = Proc.t): 
     Lua.Lib.TYPEFUL with type 'a combined = 'a ProcT.combined =
 struct
@@ -543,6 +575,7 @@ struct
       let pf t     = (V.pfunc t).V.embed    (* pure Lua function *)
       let init g = C.register_module "Expander" 
           [ "toyf" , pf (V.value **-> proc **-> V.result V.bool) cfg
+          ; "x86f" , pf (V.value **-> proc **-> V.result V.bool) Intel.cfg
           ] g;
           Lua.Lib.StringList.of_list [ <<lua initialization>> ]
           
@@ -552,5 +585,9 @@ end (*Lua*)
 <<lua initialization>>=
 "Expander.toy = { fn = Expander.toyf, uses = { 'proper widths', 'no vars' }, \
                   name = 'Expander.toy', creates = { 'simple RHS' }, \
-                  doc = 'A toy code expander' }"
+                  doc = 'A toy code expander' }";
+"Expander.x86 = { fn = Expander.x86f, uses = { 'proper widths', 'no vars' }, \
+                  name = 'Expander.x86', creates = { 'x86 invariant' }, \
+                  doc = 'A prototype code expander for the x86' }";
+""
 @ 
