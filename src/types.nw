@@ -160,7 +160,7 @@ code pointer type [[code]], and the native data pointer type.  We
 define types for them here, but only for the moment. 
 
 <<abbrevs>>=
-type key = int
+type key = int  (* positive *)
 val fixbits : int -> size t              (* fixed/constant size       *)
 val var     : key -> size t              (* variable size             *)
 val double  : key -> size t              (* doubled width - see above *)
@@ -168,6 +168,9 @@ val half    : key -> size t              (* halfed width  - see above *)
 val bool    : 'a t                       (* bool                      *)
 val bits    : 'a -> 'a t
 val proc    : size t list -> size t -> tyscheme   (* build proc type  *)
+  (* keys used in sizes must be dense, or an unchecked RTE [SHOULD BE CHECKED] *)
+val largest_key : tyscheme -> key
+  (* return the largest key in the type scheme, or 0 if no keys *)
 @
 
 
@@ -351,12 +354,20 @@ let instantiate ((args,ret):tyscheme) ~widths  =
 @        
 The implementation of the abbreviations is trivial:
 <<types.ml>>=
-let fixbits x        = Bits(Const x)
-let var    x         = Bits(Var x)
-let double x         = Bits(Double x)
-let half   x         = Bits(Half x)
+let fixbits x        = assert (x > 0); Bits(Const x)
+let var    x         = assert (x > 0); Bits(Var x)
+let double x         = assert (x > 0); Bits(Double x)
+let half   x         = assert (x > 0); Bits(Half x)
 let bool             = Bool
 let bits x           = Bits x
 let proc args res    = (args,res)
 @
+<<types.ml>>=
+let largest_key (args, res) =
+  let rec count k = function
+    | [] -> k
+    | (Bool | Bits (Const _)) :: ws -> count k ws
+    | (Bits (Var n) | Bits (Double n) | Bits (Half n)) :: ws -> count (max k n) ws in
+  count 0 (res :: args)
+    
 

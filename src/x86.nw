@@ -430,7 +430,12 @@ let bc_x86 x86opname ~ifso ~ifnot = (bc_x86_cond x86opname, ifso, ifnot)
 
 let bc x (opr, ws) y ~ifso ~ifnot =
   assert (ws =*= [32]);
-  PX.Test (cmpfun opr x y, bc_x86 (cmpopr opr) ifso ifnot)
+  match opr with
+  | "div_overflows" ->
+      let ov = Rewrite.div_overflows 32 (tempval x) (tempval y) in
+      PX.Expand.cbranch (PX.Test (PX.Nop, (ov, ifso, ifnot)))
+  | _ ->
+      PX.Test (cmpfun opr x y, bc_x86 (cmpopr opr) ifso ifnot)
 
 let bnegate r = match Down.rtl r with
 | RP.Rtl [RP.App((cop, [32]), [RP.Fetch (flags, 32)]), RP.Store (pc, tgt, 32)]

@@ -46,6 +46,14 @@ module Types: sig
 end
 @
 
+\subsection{Useful functions}
+
+Emit code that might be useful in the compiler.
+<<rtlop.mli>>=
+module Emit : sig
+  val creators : unit -> unit
+end
+@ 
 % ------------------------------------------------------------------ 
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
@@ -270,3 +278,37 @@ let unary op =
   with Not_found -> Impossible.impossible ("unknown unary symbolic operator "^op)
 @        
 
+<<rtlop.ml>>=
+let ws = ["w"; "w'"; "w3"; "w4"; "w5"]
+let args = ["x"; "y"; "z"; "u"; "v"]
+
+let width n = try List.nth ws   n with _ -> Impossible.impossible "too many widths"
+let arg   n = try List.nth args n with _ -> Impossible.impossible "too many args"
+
+
+module Emit = struct
+  let pf = Printf.printf
+  let mangle = function
+    | "and" -> "_and"
+    | "NaN" -> "_Nan"
+    | "mod" -> "_mod"
+    | "or" -> "_or"
+    | n -> n
+          
+  let emitop (name, _, (parms, _ as tyscheme)) =
+    let nargs   = List.length parms in
+    let nwidths = T.largest_key tyscheme in
+    begin
+      pf "let %s" (mangle name);
+      for i = 0 to nwidths - 1 do pf " %s"  (width i) done;
+      for i = 0 to nargs   - 1 do pf " %s"  (arg   i) done;
+      pf " = Rtl.app (Rtl.opr \"%s\" [" name;
+      for i = 0 to nwidths - 1 do pf "%s;"  (width i) done;
+      pf "]) [";
+      for i = 0 to nargs   - 1 do pf "%s; " (arg   i) done;
+      pf "]\n";
+    end
+  let creators () =
+    pf "(* This code generated automatically by Rtlop.Emit.creators *)\n";
+    List.iter emitop Types.optable    
+end    
