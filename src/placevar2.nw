@@ -36,7 +36,6 @@ module RP = Rtl.Private
 module TM = Map.Make(struct type t = int let compare = compare end)
 
 let placeVars _ {Proc.cfg = cfg; Proc.target = target; Proc.temps = temps} =
-  let change = ref false in
   <<walk RTL>>
   let updateNode node tMap =
     let (newRtl, tMap2) = walkRtl tMap (Rtl.Convert.rtl (G.instr node)) in
@@ -81,12 +80,6 @@ let new_tmp name w =
     |  _       -> Impossible.impossible 
                     (Printf.sprintf "asked for temporay %s (%d wide)" name w)
 in
-@
-All walk RTL functions assume that they are being defined in a
-context with a value [[change : ref bool]] available.  Any function
-which creates a new variable to location binding is responsible
-for setting the value of [[change]] to true.
-<<walk RTL>>=
 let rec walkLoc tMap = function
     (* space, aggregation, width, exp, assertion *)
     RP.Cell(sp, ag, w, e, a) -> 
@@ -98,7 +91,7 @@ let rec walkLoc tMap = function
       (try (TM.find index tMap, tMap)
        with Not_found ->
          let tmp = Rtl.Convert.loc (new_tmp name wid) in
-           (change := true; (tmp, TM.add index tmp tMap)))
+           (tmp, TM.add index tmp tMap))
 
     (* width, int index of least significant bit, loc *)
   | RP.Slice(loc_width, index, slice_loc) -> 
