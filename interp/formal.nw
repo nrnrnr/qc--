@@ -1,0 +1,138 @@
+% inc: \usepackage{amsmath}
+
+\begingroup
+\input{op-sem}
+
+% ----------------------------------------------------------------------------
+\section{Formal Interpreter Specification}
+% ----------------------------------------------------------------------------
+
+% ----------------------------------------------------------------------------
+\subsection{Abstract Machine State}
+% ----------------------------------------------------------------------------
+
+In this section, we formally represent the internal state of the Quick~{\PAL} interpreter and present the operational semantics of the instructions available in the interpreter.
+The state of our interpreter's abstract machine will be given by a tuple of the form: $\dstate$, where:\\
+\\
+\begin{tabularx}{\linewidth}{@{\hskip2em}rX@{}}
+$\pc$    & is the current program counter\\
+$V$      & is a value stack\\
+$\rho$   & is the current local environment\\
+$\spt$   & points to the stack used for local stack-data\\
+$g$      & is the global environment\\
+$\sigma$ & is the store ({\PAL} memory and {\PAL} hardware registers)\\
+$A$      & is the argument-passing stack\\
+$u$      & is the current activation's unique identifier ($\uid$)\\
+$s$      & is the activation stack
+\end{tabularx}\\
+\\
+The unique identifiers present in our representation of state will let the {\PAL} interpreter prevent cuts to dead continuations.  
+To prepare the {\PAL} abstract machine for the future possibility of multi-threaded computation we may consider the option of including within our machine multiple activation stacks, each of which represents a separate thread.  
+Cuts, for example, may occur from an activation on one stack to a continuation on another stack.  
+To properly ensure cuts may not be taken to dead continuations in a multi-threaded environment, our unique identifier could be implemented with two words: one word to uniquely identify the stack (thread) in which the activation sits, and a second word to uniquely identify where it sits on this stack.
+
+There is an instruction array present in our state (the program space), but we will not explicitly include it in our tuple because no rules require its modification.
+
+Finally, it should be emphasized that the current activation frame is represented by elements in the top-level of the above tuple (i.e., $\pc$, $\rho$, $\spt$, and $u$). $s$ is a stack storing only previous (caller) activation frames, each of which may be represented by a tuple $x$ of the form $\dact$, where: \\
+\\
+\begin{tabularx}{\linewidth}{@{\hskip2em}rX@{}}
+$\pc$    & is the program counter pointing to the next instruction to be interpreted in activation $x$\\
+$\rho$   & is activation $x$'s local environment\\
+$\spt$   & points to the stack containing $x$'s stack-data\\
+$\kappa$ & is a ``continuation bundle'' for the $x$'s currently pending procedure call\\
+\end{tabularx}
+\\
+A continuation bundle $\kappa$ is a set of call-site annotations represented by a tuple of the form $\kappa = \bundle$, where:\\
+\\
+\begin{tabularx}{\linewidth}{@{\hskip2em}lX@{}}
+$\kappa_{c}$ & is a list of continuations available through cuts\\
+$\kappa_{u}$ & is a list of continuations available through run-time activation unwinding\\
+$\kappa_{r}$ & is a list of continuations available through alternate returns\\
+$abort$      & is a boolean indicating whether or not this activation may be aborted\\
+\end{tabularx}\\
+\\
+Additional implicit elements of state include: the array of instructions to interpret, a $\uid$ liveness table, and tables to manage labels and symbols.  We choose to leave these elements abstract in our formalization, for their internal implementations are of little consequence to the semantics of the interpreter's instructions.
+
+\subsection{Starting Configuration}
+The initial configuration of the interpreter's abstract machine is given by the tuple ${\state {\pc_i} \emptystack {\{\}} {\spt_i} {\{\}} {\sigma_i} {\{\}} u \emptystack}$, where: $\pc_i$ is the initial program counter; $\spt_i$ is a pointer to a fresh memory stack; $\sigma_i$ is the initial state of the store after having loaded a {\PAL} program and initial data blocks into memory; and $u$ is a fresh \texttt{uid}.
+
+\subsection{Operational Semantics}
+In the rules below, we use the notation $\newpc$ to indicate the address of the instruction that immediately follows instruction $\pc$ in our program memory.
+
+Additionally, we make use of a number of abstract ``helper functions'' that are defined as follows:\\
+\\
+\begin{tabularx}{\linewidth}{@{\hskip2em}lX@{}}
+\texttt{lookup\_symbol}(\emph{name})& lookup the value of symbol \emph{symbol}\\
+\texttt{aggregate}(\emph{store, location, size, byte-order})& fetch the (\emph{size} div MEMSIZE) bytes found at \emph{location} in \emph{store} and aggregate them into one value, according to the given byte-order \\
+\texttt{store}(\emph{store, location, value, size, byte-order})& split \emph{value} up into multiple pieces of size MEMSIZE and store pieces according to the given byte-order at \emph{location} in \emph{store}\\
+\texttt{arity}(\emph{operator-name})& return the arity of operator \emph{operator-name}\\
+\texttt{popn}(\emph{stack, n})& pops \emph{n} values off \emph{stack} and returns (list of popped values, stack of remaining values)\\
+\texttt{lookup\_label}(\emph{name})& lookup the value (address) of label \emph{label}\\
+\texttt{new\_env}(\emph{n})& creates a fresh, empty environment with space for \emph{n} values\\
+\texttt{c\_call}(\emph{address, args-stack, store, signature})& calls native C function at \emph{address} and with type signature \emph{signature} with access to arguments and the store; returns modified argument stack and store\\
+\texttt{is\_live}(\emph{uid})& returns \emph{true} if and only if the activation uniquely identified by \emph{uid} is still live
+\end{tabularx}\\
+\\
+And now for the rules: \\
+
+\useops{Literal}
+\\
+\useops{PushSymbol}
+\\
+\useops{Fetch}
+\\
+\useops{Store}
+\\
+\useops{Fetch-Local}
+\\
+\useops{Store-Local}
+\\
+\useops{Fetch-Global}
+\\
+\useops{Store-Global}
+\\
+\useops{Guarded-Store-True}
+\\
+\useops{Guarded-Store-False}
+\\
+\useops{Guarded-Store-Local-True}
+\\
+\useops{Guarded-Store-Local-False}
+\\
+\useops{Guarded-Store-Global-True}
+\\
+\useops{Guarded-Store-Global-False}
+\\
+\useops{Push-Arg}
+\\
+\useops{Pop-Arg}
+\\
+\useops{ApplyOp}
+\\
+\useops{Goto}
+\\
+\useops{CBranchT-True}
+\\
+\useops{CBranchT-False}
+\\
+\useops{CBranchF-True}
+\\
+\useops{CBranchF-False}
+\\
+\useops{BranchTF-True}
+\\
+\useops{BranchTF-False}
+\\
+\useops{CMMCall}
+\\
+\useops{CMMTailCall}
+\\
+\useops{CCall}
+\\
+\useops{ReturnDefault}
+\\
+\useops{ReturnAlt}
+\\
+\useops{Cut}
+\\
+\endgroup
