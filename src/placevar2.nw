@@ -1,0 +1,155 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% Grades     ::=    "%%Grades:" Quality Importance Urgency
+% Quality    ::=    A|B|C|D|E
+% Importance ::=    Central|Subsystem|Peripheral
+% Urgency    ::=    Immediate|Soon|Later
+%
+%%Grades: D Peripheral Later
+
+\section{Placing variables into suitable temporary locations}
+<<placevar2.mli>>=
+module Make (BackplaneT : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.t')
+            (ProcT : Lua.Lib.TYPEVIEW with type 'a t = Proc.t and type 'a
+                                             combined = 'a BackplaneT.combined)
+    : Lua.Lib.TYPEFUL with type 'a combined = 'a BackplaneT.combined
+
+@
+Boilerplate for linking to Lua.
+<<placevar2.ml>>=
+module Make (BackplaneT : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.t')
+    (ProcT : Lua.Lib.TYPEVIEW with type 'a t = Proc.t and type 'a
+          combined = 'a BackplaneT.combined)
+    : Lua.Lib.TYPEFUL with type 'a combined = 'a BackplaneT.combined =
+  struct
+    type 'a combined = 'a BackplaneT.combined
+    module M (Interp : Lua.Lib.CORE with type 'a V.userdata' = 'a BackplaneT.combined) = struct
+      module V = Interp.V
+      module G = Cfg4
+      <<builtins>>
+      let init g =
+        Interp.register_module "PV2" placevar_module g
+    end
+  end
+@
+<<builtins>>=
+module RP = Rtl.Private
+module TM = Map.Make(struct type t = int let compare = compare end)
+
+let placeVars _ {Proc.cfg = cfg; Proc.target = target; Proc.temps = temps} =
+  let change = ref false in
+  <<walk RTL>>
+  let updateNode node tMap =
+    let (newRtl, tMap2) = walkRtl tMap (Rtl.Convert.rtl (G.instr node)) in
+      (G.upd_instr node (fun _ -> newRtl);
+       tMap2)
+  in
+  let tMap = Cfgutil.fold_fwd cfg updateNode TM.empty in
+  let changed = tMap = TM.empty in
+    (Printf.eprintf "debug placevar2: change = %s\n" (string_of_bool changed);
+     tMap)
+@ Presumably the return value of placeVars indicates whether anything
+was changed (as per the optimization backplane).  Shouldn't always
+need to return true - only if something changed, not after the first time.
+@
+<<builtins>>=
+let proc = ProcT.makemap V.userdata V.projection
+let ( **-> ) = V.( **-> )
+let stageFn = (V.pfunc (V.value **-> proc **-> V.result V.bool)).V.embed
+
+let placevar_module = ["placeVars", stageFn placeVars;
+                       "expander", stageFn Expander.cfg]
+@
+We use the Fortran convention for placing variables: anything named
+with I~through~N is an INteger, and anything else is floating point.
+Anything other than 32~bits is shoved into a 32-bit temporary.
+This makes no sense to me, and I don't see how it can possibly do
+anything useful.
+<<walk RTL>>=
+(* NOTE: using space 't' is hopeful, but ultimately bogus. *)
+let new_tmp name w =
+    match name, w with
+    |   n, 32 when (compare name "i" >= 0) && (compare name "n" <= 0)
+               -> Talloc.Multiple.loc temps 't' w
+    |   n, 32  -> Talloc.Multiple.loc temps 'u' w 
+    |   n, 64 when (compare name "i" >= 0) && (compare name "n" <= 0)
+               -> Talloc.Multiple.loc temps 't' 32
+    |   n, 64  -> Talloc.Multiple.loc temps 'u' 32
+    |   n, 16  -> Talloc.Multiple.loc temps 't' 32
+    |   n, 8   -> Talloc.Multiple.loc temps 't' 32
+	(*
+    |   n, 8   -> Talloc.Multiple.loc temps 'v' w
+	*)
+    |  _       -> Impossible.impossible 
+                    (Printf.sprintf "asked for temporay %s (%d wide)" name w)
+in
+@
+All walk RTL functions assume that they are being defined in a
+context with a value [[change : ref bool]] available.  Any function
+which creates a new variable to location binding is responsible
+for setting the value of [[change]] to true.
+<<walk RTL>>=
+let rec walkLoc tMap = function
+    (* space, aggregation, width, exp, assertion *)
+    RP.Cell(sp, ag, w, e, a) -> 
+      let (e2, tMap2) = walkExp tMap e in
+        (RP.Cell(sp, ag, w, e2, a), tMap2)
+
+    (* string, int, width *)
+  | RP.Var(name, index, wid) ->
+      (try (TM.find index tMap, tMap)
+       with Not_found ->
+         let tmp = Rtl.Convert.loc (new_tmp name wid) in
+           (change := true; (tmp, TM.add index tmp tMap)))
+
+    (* width, int index of least significant bit, loc *)
+  | RP.Slice(loc_width, index, slice_loc) -> 
+      let (loc2, tMap2) = walkLoc tMap slice_loc in
+        (RP.Slice(loc_width, index, loc2), tMap2)
+
+and walkExp tMap = function
+    (RP.Const _) as exp -> (exp, tMap)
+
+    (* loc, width *)
+  | RP.Fetch(loc1, wid) ->
+      let (loc2, tMap2) = walkLoc tMap loc1 in
+        (RP.Fetch(loc2, wid), tMap2)
+
+    (* opr, exp list *)
+  | RP.App(op, exps) ->
+      let f ex (accum, f_tMap) =
+        let (ex2, f_tMap2) = walkExp f_tMap ex in
+          ((ex2 :: accum), f_tMap2)
+      in
+      let (exps2, tMap2) = List.fold_right f exps ([], tMap) in
+        (RP.App(op, exps2), tMap2)
+
+and walkEffect tMap = function
+    (* loc, exp, width *)
+    RP.Store(sloc, ex, wid) ->
+      let (loc2, tMap2) = walkLoc tMap sloc in
+      let (exp2, tMap3) = walkExp tMap2 ex in
+        (RP.Store(loc2, exp2, wid), tMap3)
+
+  | RP.Kill(kloc) ->
+      let (loc2, tMap2) = walkLoc tMap kloc in
+        (RP.Kill(loc2), tMap2)
+in
+
+let walkGuard tMap (exp, effect) =
+  let (exp2, tMap2) = walkExp tMap exp in
+  let (effect2, tMap3) = walkEffect tMap2 effect in
+    ((exp2, effect2), tMap3)
+in
+
+let walkRtl tMap (RP.Rtl guardeds) =
+  let f guard (accum, f_tMap) =
+    let (guard2, f_tMap2) = walkGuard f_tMap guard in
+      ((guard2 :: accum), f_tMap2)
+  in
+  let (guardeds2, tMap2) = List.fold_right f guardeds ([], tMap) in
+    (Rtl.Revert.rtl (RP.Rtl guardeds2), tMap2)
+
+  (* Revert is just the identity function which converts between the
+     two RTL types (sharing the same internal representation).
+     I think Revert is private to public? *)
+in
