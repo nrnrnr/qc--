@@ -267,6 +267,8 @@ inst : Store(dst:regl, disp, w) [{:guard (w = 32):}]
 inst : Llr(dst:regl, "add", const, w) [{:guard (w=32):}]
   {: cat ["leal "; const; "("; dst; ")"; ", "; dst] :}
 
+inst : Llr(dst:regl, "mul_trunc", reg, w) [{:guard (w=32):}]
+  {: cat ["imul "; reg; ", "; dst] :}
 
 inst : Withaflags(dst:eaddrl, "add", src:reg, w, "x86_addflags")
   {: cat ["add"; suffix w; " "; src; ","; dst] :}
@@ -352,6 +354,7 @@ any : Bits(bits)     {: "Bits(b)" :}
 any : Fetch (any, w) {: "Fetch(" ^ any ^ "," ^ string_of_int w ^ ")" :}
 
 any : Add(x:any, y:any) {: "Add(" ^ x ^ ", " ^ y ^ ")" :}
+any : Mul_trunc(x:any, y:any) {: "Mul_trunc(" ^ x ^ ", " ^ y ^ ")" :}
 any : Sx(any) {: "Sx(" ^ any ^ ")" :}
 any : Zx(any) {: "Zx(" ^ any ^ ")" :}
 any : Lobits(any) {: "Lobits(" ^ any ^ ")" :}
@@ -398,11 +401,12 @@ constructor for each operator.
 <<special cases for particular operators>>=
 | RP.App(("add", [w]), [x; y]) -> conAdd (exp x) (exp y)
 | RP.App(("sub", [w]), [x; y]) -> conSub (exp x) (exp y)
+| RP.App(("mul_trunc", [w]), [x; y]) -> conMul_trunc (exp x) (exp y)
 | RP.App(("sx", [n;w]), [x])   -> conSx  (exp x)
 | RP.App(("zx", [n;w]), [x])   -> conZx  (exp x)
 | RP.App(("lobits", [w;n]), [x])   -> conLobits (exp x)
 | RP.App(("x86_subflags", [w]), [x; y]) -> conX86_subflags (exp x) (exp y)
-| RP.App((("add"|"sub"|"sx"|"zx"|"lobits"|"x86_subflags") as op, _), _) ->
+| RP.App((("add"|"sub"|"mul_trunc"|"sx"|"zx"|"lobits"|"x86_subflags") as op, _), _) ->
     Impossible.impossible ("ill-formed " ^ op)
 @ 
 Here is the rest of the mapping.  
