@@ -218,7 +218,30 @@ let arguments () =
       ] **>
   A.overflow ~memsize:8 ~byteorder ~growth:Memalloc.Up ~max_alignment:sp_align
 @
+
+Here is an alternative implementation of the parameter automaton. Rather
+than using an exclusion relation, it uses the \emph{position} of a
+parameter to determine the register it is passed in. The [[counter]]
+stage counts the number of bits requested for allocation; the
+[[offsetregs]] stages looks at its list of registers, ignores as many
+registers as are needed to account for bits already allocated and then
+uses any remaining register to satisfy the request.
         
+<<alphacall.ml>>=        
+let arguments' () = 
+    let ctr = ref 0 in
+    (A.counter ctr *>
+    A.choice
+        [ A.is_hint "float",
+          A.widths [64] ~errormsg:(badwidth "Alpha FP call") *> 
+          A.offsetregs ctr [f 16; f 17; f 18; f 19; f 20; f 21]
+        ; A.is_any,
+          A.widen (Aux.round_up_to ~multiple_of:64) *>
+          A.offsetregs ctr [r 16; r 17; r 18; r 19; r 20; r 21]
+        ]) **>  
+  A.overflow ~memsize:8 ~byteorder ~growth:Memalloc.Up ~max_alignment:sp_align
+@          
+
 \paragraph{C~cut-to parameters}
 
 Since this is strictly internal calling convention, we can use whatever
@@ -255,7 +278,7 @@ hope the code below reflects this.
 <<transformations>>=
 let prolog  =
   C.incoming ~growth ~sp
-    ~mkauto:(fun () -> Block.srelative vfp "in call parms" A.at (arguments ()))
+    ~mkauto:(fun () -> Block.srelative vfp "in call parms" A.at (arguments' ()))
     ~autosp:(fun _ -> vfp)
     ~postsp:(fun _ _ -> std_sp_location) in
 
@@ -267,7 +290,7 @@ let epilog  =
 
 let call_actuals  =
   C.outgoing ~growth ~sp
-    ~mkauto:(fun () -> Block.srelative vfp "out call parms" A.at (arguments ()))
+    ~mkauto:(fun () -> Block.srelative vfp "out call parms" A.at (arguments' ()))
     ~autosp:(fun r  -> std_sp_location)
     ~postsp:(fun _ sp -> sp) in  
 
@@ -330,10 +353,10 @@ let dump what automaton widths hints =
                             (automaton ()))
         ~widths ~hints
         
-let dump_proc     = dump Automatongraph.print arguments
+let dump_proc     = dump Automatongraph.print arguments'
 let dump_return   = dump Automatongraph.print (fun () -> results)
 let dump_cutto    = dump Automatongraph.print (fun () -> cut_args)
-let paths_proc     = dump Automatongraph.paths arguments
+let paths_proc     = dump Automatongraph.paths arguments'
 let paths_return   = dump Automatongraph.paths (fun () -> results)
 let paths_cutto    = dump Automatongraph.paths (fun () -> cut_args)
 @
@@ -354,7 +377,7 @@ let overflow x y = { CS.parameter_deallocator = x
 let template = (* conservative spec *)
         { CS.name           = "cmm"
         ; CS.wordsize       = 64
-        ; CS.call           = arguments
+        ; CS.call           = arguments'
         ; CS.results        = (fun () -> results)   
         ; CS.cutto          = (fun () -> cut_args)
         ; CS.stack_growth   = Memalloc.Down
