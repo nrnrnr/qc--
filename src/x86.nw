@@ -250,7 +250,9 @@ let zxload ~dst:((_, _, w) as dst) ~addr n assn =
              (extend "zx" n (R.fetch (R.mem assn 'm' byte_order n addr) n)) 32]
 let lostore ~addr ~src:((_, _, w) as src) n assn =
   assert (w = 32);
-  [R.store (R.mem assn 'm' byte_order n addr) (lobits n (tempval src)) n]
+  [ R.store (R.mem assn 'm' byte_order n addr) (lobits n (R.fetch eax n)) n
+  ; R.store eax (tempval src) 32
+  ]
 @ 
 This code hasn't yet been checked for compatility with floating point.
 <<x86 postexpander>>=

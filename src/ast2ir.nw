@@ -694,12 +694,16 @@ and callStmt (lhs,cconv, e, args, targets (*unused*), conts) succ =
                                         (* outgoing overflow parms *)
   let () = add youngblocks cc.C.overflow_alloc.C.result_allocator in'.C.overflow in
                                         (* incoming overflow results *)
+  let call_node =
+    let c    = G.call g calli ~uses:out.C.regs ~defs:in'.C.regs ~kills:cc.C.volregs
+                              ~altrets:conts.returns ~unwinds_to:conts.unwinds
+                              ~cuts_to:conts.cuts ~aborts:conts.aborts ~spans:props in
+    add_call_site {Runtimedata.node = ()};
+    c in
   G.stack_adjust g out.C.pre_sp                **>
   G.instruction  g out.C.shuffle               **>
   G.stack_adjust g out.C.post_sp               **>
-  G.call         g calli ~uses:out.C.regs ~defs:in'.C.regs ~kills:cc.C.volregs
-                         ~altrets:conts.returns ~unwinds_to:conts.unwinds
-                         ~cuts_to:conts.cuts ~aborts:conts.aborts ~spans:props  **>
+  call_node                                    **>
   G.assertion    g (in'.C.insp out.C.overflow)              **>
   G.stack_adjust g in'.C.pre_sp            **>  (* DOUBTS ABOUT THIS *)
   G.instruction  g in'.C.shuffle           **>
@@ -809,7 +813,7 @@ reader).
                } in
     G.mk info Idgen.label in (* empty control-flow graph *)
 @ 
-\paragraph{Managing mutable state: blocks and constraints}
+\paragraph{Managing mutable state: blocks, constraints, and call site information}
 The important state here is [[youngblocks]], [[oldblocks]], and
 [[constraints]]. 
 TRY TO REFACTOR THIS CODE SO THAT [[add]] CAN TAKE CALLER/CALLEE AS
@@ -823,7 +827,10 @@ type 'a blocklists = { mutable caller : 'a list; mutable callee : 'a list }
   | C.Caller -> blocks.caller <- b :: blocks.caller
   | C.Callee -> blocks.callee <- b :: blocks.callee in
   let constraints        = ref [] in
-  let add_constraints c  = (constraints := c :: !constraints) in
+  let call_site_info     = ref [] in
+  let add_to_list lst    = fun c -> lst := c :: !lst in
+  let add_constraints    = add_to_list constraints in
+  let add_call_site      = add_to_list call_site_info in
 @   
 \paragraph{Setting up the environment and functions that use it (stack
 data, continuations, expressions, parameters)}
@@ -984,14 +991,15 @@ The main thing here is dealing with all the blocks.
     ; Proc.youngblocks = (* order doesn't matter *)
         { C.callee = youngblocks.callee; 
           C.caller = youngblocks.caller; }
-    ; Proc.stackd      = stackd     (* stack data block *)
-    ; Proc.priv        = Block.relative vfp "private"
-                         (aligned_mem ~align:proc_cc.C.sp_align) target 
-    ; Proc.sp          = Block.at proc_cc.C.stable_sp_loc 0 proc_cc.C.sp_align 
-    ; Proc.eqns        = List.concat (!constraints)
-    ; Proc.conts       = contblocks
-    ; Proc.vars        = nvars       (* number of variables *)
-    ; Proc.varMap      = Array.make nvars None
+    ; Proc.stackd         = stackd     (* stack data block *)
+    ; Proc.priv           = Block.relative vfp "private"
+                            (aligned_mem ~align:proc_cc.C.sp_align) target 
+    ; Proc.sp             = Block.at proc_cc.C.stable_sp_loc 0 proc_cc.C.sp_align 
+    ; Proc.eqns           = List.concat (!constraints)
+    ; Proc.conts          = contblocks
+    ; Proc.vars           = nvars       (* number of variables *)
+    ; Proc.varMap         = Array.make nvars None
+    ; Proc.call_site_info = !call_site_info
     } in
   optimizer i (* runs optimizer, freezes, and assembles proc *)
 @ 

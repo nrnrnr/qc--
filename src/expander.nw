@@ -1346,9 +1346,10 @@ let cfg _ ({Proc.cfg = cfg} as proc) =
         | G.Cbranch ->
           let pred = G.pred    n   in
           let ill  = G.illegal cfg in
-          ( G.set_succ pred ill
+          let pred_set_succ n = if G.kind pred <> G.Illegal then G.set_succ pred n in
+          ( pred_set_succ ill
           ; G.delete    cfg n
-          ; G.set_succ  pred (expand_cbranch i (G.tsucc n) (G.fsucc n))
+          ; pred_set_succ (expand_cbranch i (G.tsucc n) (G.fsucc n))
           ; modified := true
           )
         | _ -> modified := replace_node n (expand_rtl i) in

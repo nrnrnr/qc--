@@ -547,14 +547,11 @@ Such a subgraph is represented by its [[entry]], which must have
 exactly one predecessor, and its [[exit]], which must have exactly one
 successor.
 It is permissible that the [[entry]] and [[exit]] be the same node.
-The reason there's no general [[splice_between]] is that it's not well
-specified in general on *which* edge between the two nodes the new
-material is inserted.
 In [[splice_on_every_edge_between]], the exit node must have only a single possible
-successor (i.e. multiway branches and conditional branches may not be the exit node).
+successor (i.e. the exit node may not be a multiway branch or a conditional branch).
 <<graph and node mutators>>=
 val splice_on_every_edge_between : entry:'i node -> exit:'i node ->
-                                   pred:'i node  -> succ:'i node -> unit
+                                   pred:'i node  -> succ:'i node -> unit (* node is not multiway branch, call, or cutto *)
 val splice_before : entry:'i node -> exit:'i node -> 'i node -> unit (* node is not join *)
 val splice_after  : entry:'i node -> exit:'i node -> 'i node -> unit (* node is not fork *)
 @
@@ -1185,19 +1182,32 @@ We have several functions to iterate or fold over the nodes of the graph.
 <<graph and node observers implementation>>=
 let fold_heads f zero cfg = List.fold_right f (heads cfg) zero
 @ 
-The trick in [[fold_nodes]] is to visit every node \emph{without}
-taking the successor of the exit node.
-Note that we are careful to take the successors before applying the function to a node;
-this way, we allow deletion of a node during the folding.
+In [[fold_nodes]], we are careful to make sure we visit every single node in the graph,
+regardless of whether it is accessible from the entry or exit nodes, via predecessors
+or successors.
+We first gather all the nodes in a set.
+Although it is redundant, we have to use a set to efficiently keep track of which nodes
+we have already visited, and keep track of the list of nodes separately.
+We cannot use the standard OCaml [[Set]] module because it would require specializing
+the type of the node.
+Gathering the set guarantees that we visit each node in the cfg without allowing the
+function [[cons]] to affect the traversal.
 <<graph and node observers implementation>>=
-let fold_nodes f zero cfg =
-  let fold_over_nonjoin_succs f n nsuccs zero =
-    List.fold_right (fun n z -> if is_join n then z else f n z) nsuccs zero in
-  let rec fold_bb node zero =
-    let nsuccs = succs node
-    in  fold_over_nonjoin_succs fold_bb node nsuccs (f node zero) in
-  fold_heads fold_bb (f cfg.exit zero) cfg
-
+<<join node set operations>>
+let fold_nodes cons nil g =
+  let rec vchildren children k set lst = 
+    match children with
+    | c::rst -> vnode c (vchildren rst k) set lst
+    | []     -> k set lst
+  and vnode n k set lst =
+    if IS.mem (num n) set then
+      k set lst
+    else
+      let preds = preds n in
+      let succs = succs n in
+      vchildren succs (vchildren preds k) (IS.add (num n) set) (n::lst) in
+  vnode (entry g) (fun _ lst -> List.fold_right cons lst nil)
+        IS.empty []
 let iter_nodes f = fold_nodes (fun n () -> f n) ()
 let iter_heads f = fold_heads (fun n () -> f n) ()
 @
@@ -1212,8 +1222,7 @@ MAY BE WORTH CONSIDERING A PREORDER DFS FROM THE EXIT NODE. POSTORDER DFS FROM
 THE ENTRY SEEMS GOOD FOR MAKING DECISIONS AT FORK NODES, WHEREAS PREORDER DFS
 FROM EXIT SEEMS GOOD FOR MAKING DECISIONS AT JOIN POINTS.
 <<graph and node observers implementation>>=
-<<join node set operations>>
-let cps_postorder_dfs get_start get_children g cons nil cont =
+let cps_postorder_dfs heads get_children g cons nil cont =
   let rec vnode node cont acc visited =
     if member node visited then
       cont acc visited
@@ -1224,10 +1233,19 @@ let cps_postorder_dfs get_start get_children g cons nil cont =
       | [] -> cont (cons node acc) visited
       | n::rst -> vnode n (next rst) acc visited in
     next children acc visited in
-  vnode (get_start g) cont nil emptyset
-
-let postorder_dfs cons nil g = cps_postorder_dfs entry succs g cons nil (fun x _ -> x)
-let reverse_podfs cons nil g = cps_postorder_dfs exit  preds g cons nil (fun x _ -> x)
+  let rec fold_heads heads cont acc visited =
+    match heads with
+    | h::rst -> vnode h (fold_heads rst cont) acc visited
+    | []     -> cont acc visited in
+  fold_heads heads cont nil emptyset
+@
+Note that by only taking successors or predecessors, each of these traversals may miss
+some nodes in the cfg.
+<<graph and node observers implementation>>=
+let postorder_dfs cons nil g =
+  cps_postorder_dfs [entry g] succs g cons nil (fun x _ -> x)
+let reverse_podfs cons nil g =
+  cps_postorder_dfs [exit  g] preds g cons nil (fun x _ -> x)
 @
 Edges may have control flow.
 We need to be able to examine uses on inedges and defs/kills on outedges.
@@ -1330,13 +1348,19 @@ This function can be useful for maintaining the golden invariant.
 <<set node successors>>=
 let rec join_leading_to ~succ =
   if is_join succ then succ
-  else let p = pred succ in (* p must not be a fork b/c succ is not a join *)
-       if is_join p then p
-       else let cfg  = get_cfg succ in
-            let join = node_labeled cfg (cfg.mk_label "join") in
-            let () = if not (is_ill p) then set_succ p ~succ:join in
-            let () = set_succ join ~succ:succ in
-            join
+  else
+    let cfg = get_cfg succ in
+    if is_ill succ then 
+      let join = node_labeled cfg (cfg.mk_label "join") in
+      let () = set_succ join ~succ:succ in
+      join
+    else
+      let p = pred succ in (* p must not be a fork b/c succ is not a join *)
+      if is_join p then p
+      else let join = node_labeled cfg (cfg.mk_label "join") in
+           let () = if not (is_ill p) then set_succ p ~succ:join in
+           let () = set_succ join ~succ:succ in
+           join
 @
 [[set_succ']] takes four steps to set the successor of [[node]] to [[succ]]
 (where [[old_succ]] is [[node]]'s successor when this function is called):
@@ -1366,8 +1390,8 @@ and set_succ' ~single ~ce_mult ~mult ~cbr ~node ~old_succ ~succ =
   else
     begin
       ( (<<modify the $n$th successor of [[node]] because [[node]] is no longer a predecessor>>)
-      ; (<<update [[node]]'s $n$th successor field to point to [[succ]]>>)
-      ; (if not (is_ill succ)
+      ; let succ = (<<update [[node]]'s $n$th successor field to point to [[succ]]>>) in
+        (if not (is_ill succ)
          then <<modify [[succ]] because [[node]] has become a predecessor>>
         )
       )
@@ -1376,20 +1400,21 @@ and set_succ' ~single ~ce_mult ~mult ~cbr ~node ~old_succ ~succ =
 Call the appropriate continuation to update [[node]]'s successor.
 <<update [[node]]'s $n$th successor field to point to [[succ]]>>=
 match node with
-| Joi j -> j.joi_succ <- single succ
-| Ins i -> i.ins_succ <- single succ
-| Sta i -> i.sta_succ <- single succ
-| Ass a -> a.ass_succ <- single succ
-| Jum j -> j.jum_succ <- single succ
-| Ret r -> r.ret_succ <- single succ
-| Ent e -> e.ent_succ <- single succ
-| Mbr m -> ignore (mult m.mbr_succs        (fun _ -> succ))
-| Cal c -> ignore (ce_mult c.cal_contedges (fun s -> {s with node = succ}))
-| Cut c -> ignore (ce_mult c.cut_contedges (fun s -> {s with node = succ}))
+| Joi j -> j.joi_succ <- single succ; succ
+| Ins i -> i.ins_succ <- single succ; succ
+| Sta i -> i.sta_succ <- single succ; succ
+| Ass a -> a.ass_succ <- single succ; succ
+| Jum j -> j.jum_succ <- single succ; succ
+| Ret r -> r.ret_succ <- single succ; succ
+| Ent e -> e.ent_succ <- single succ; succ
+| Mbr m -> ignore (mult m.mbr_succs        (fun _ -> succ)); succ
+| Cal c -> ignore (ce_mult c.cal_contedges (fun s -> {s with node = succ})); succ
+| Cut c -> ignore (ce_mult c.cut_contedges (fun s -> {s with node = succ})); succ
 | Bra b ->
   let succ = join_leading_to succ in
   ( b.bra_i <- (get_cfg node).inst_info.goto.Ep.embed (label succ)
   ; b.bra_succ <- single succ
+  ; succ
   )
 | Cbr c -> 
   let succ = join_leading_to succ in
@@ -1400,12 +1425,14 @@ match node with
      c.cbr_false <- succ
   );
   let (cond, _) = cfg.inst_info.branch.Ep.project c.cbr_i in
-  c.cbr_i <- cfg.inst_info.branch.Ep.embed (cond, label c.cbr_true)
+  c.cbr_i <- cfg.inst_info.branch.Ep.embed (cond, label c.cbr_true);
+  succ
 | Imp i ->
   let succ = join_leading_to succ in
   if cbr () then i.imp_succ <- succ
   else if is_exi succ then i.imp_exit_succ <- succ
-  else imposs "exit_succ must be an exit node"
+  else imposs "exit_succ must be an exit node";
+  succ
 | Exi _ -> undef "set_succ" "exit"
 | Ill _ -> undef "set_succ" "illegal"
 | Boot  -> undef "set_succ" "boot"
@@ -1503,41 +1530,26 @@ let splice_on_every_edge_between ~entry ~exit ~pred ~succ =
     then imposs "splice_on_every_edge_between: succ is not a successor of pred" in
   let update_succ () = set_succ exit ~succ in
   let update_pred () =
-    let upd_succ      n       entry = if eq n succ then entry else n    in
-    let upd_array_gen upd arr entry =
-      Array.iteri (fun i n -> Array.set arr i (upd n entry)) arr        in
-    let upd_array             entry = upd_array_gen upd_succ entry      in
-    let upd_contedge_array    entry =
-      upd_array_gen (fun ce e -> {ce with node = upd_succ ce.node e}) entry in
     match pred with
     | Cbr c ->
       let entry = join_leading_to entry in
       if eq succ c.cbr_true  then set_tsucc pred entry; 
       if eq succ c.cbr_false then set_fsucc pred entry
     | Imp i ->
+      let upd_succ n entry = if eq n succ then entry else n in
       ( i.imp_succ      <- upd_succ i.imp_succ      entry
       ; i.imp_exit_succ <- upd_succ i.imp_exit_succ entry
       )
-    | Mbr m ->
-      let entry = join_leading_to entry in
-      ( upd_array m.mbr_succs entry
-      ; m.mbr_lsucc <- upd_succ m.mbr_lsucc entry
-      )
-    | Cal c ->
-      let entry = join_leading_to entry in
-      ( upd_contedge_array c.cal_contedges  entry
-      ; c.cal_lsucc <- upd_succ c.cal_lsucc entry
-      )
-    | Cut c ->
-      let entry = join_leading_to entry in
-      ( upd_contedge_array c.cut_contedges  entry
-      ; c.cut_lsucc <- upd_succ c.cut_lsucc entry
-      )
+    | Mbr m -> undef "splice_on_every_edge_between" "mbranch"
+    | Cal c -> undef "splice_on_every_edge_between" "call"
+    | Cut c -> undef "splice_on_every_edge_between" "cut-to"
     | _     -> set_succ pred ~succ:entry in
   (update_pred (); update_succ ())
 
 let splice_before ~entry ~exit node =
-  (set_succ (pred node) ~succ:entry ; set_succ exit ~succ:node)
+  let p = pred node in
+  if kind p <> Illegal then set_succ p ~succ:entry;
+  set_succ exit ~succ:node
 
 let splice_after ~entry ~exit node =
   let succ = succ node in
@@ -1606,7 +1618,7 @@ let fold_layout f zero cfg =
     | Mbr _ | Bra _ | Cut _ | Jum _ | Exi _ | Ill _ | Boot-> () in
   let () = iter_nodes ins_branch cfg in
   let snoc node build = fun tail -> build (f node tail) in
-  cps_postorder_dfs entry succs cfg snoc (fun x -> x) (fun build _ -> build zero)
+  cps_postorder_dfs [entry cfg] succs cfg snoc (fun x -> x) (fun build _ -> build zero)
 @
 When we make exit nodes, we are careful to add the labels to the cfg's label
 map.
