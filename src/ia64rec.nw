@@ -110,12 +110,15 @@ inst : Store(dst:eregl, src:reg, w)
 
 -- register move: gp -> fp
 -- AM NOT SURE OF THIS ONE OR THE ONE BELOW IT
+
+-- Okay, I'm changing this from setf/getf.d into setf/getf.sig
+-- KR
 inst : Store(dst:fregl, src:reg, w)
-  {: cat ["setf.d "; dst; " = "; src] :}
+  {: cat ["setf.sig "; dst; " = "; src] :}
 
 -- register move: fp -> gp
 inst : Store(dst:regl, src:freg, w)
-  {: cat ["getf.d "; dst; " = "; src] :}
+  {: cat ["getf.sig "; dst; " = "; src] :}
 
 -- HACK! rename out -> in register
 inst : Store(dst:eregl, Fetch(Reg('o', n, wr:w), wf:w), w)
@@ -147,6 +150,13 @@ inst : Store(dst:regl, Add(x:reg_or_const, y:reg), w)
 inst : Store(dst:regl, Add(x:reg, y:reg_or_const), w)
   {: cat ["add "; dst; " = "; y; ", "; x] :}
 
+-- fmul
+inst : Store(dst:fregl, Fmul(x:freg, y:freg, rm:freg), w)
+  {: cat ["xma.l "; x; " = "; y; ", "; x; ", "; rm] :}
+
+inst : Store(dst:regl, Mult(x:reg, y:reg_or_const), w)
+    {: cat [""] :}
+
 -- subtraction
 inst : Store(dst:regl, Sub(x:reg_or_const, y:reg), w)
   {: cat ["sub "; dst; " = "; x; ", "; y] :}
@@ -154,6 +164,22 @@ inst : Store(dst:regl, Sub(x:reg_or_const, y:reg), w)
 -- ne
 inst : Store(dst:regl, Ne(x:reg, y:reg), w)
   {: cat ["cmp.ne "; dst; ",p0 = "; x; ", "; y] :} 
+
+-- shl
+inst : Store(dst:regl, Shl(x:reg, y:reg_or_const), w)
+  {: cat ["shl "; dst; " = "; x; ", "; y] :}
+
+-- shrl
+inst : Store(dst:regl, Shrl(x:reg, y:reg_or_const), w)
+  {: cat ["shr.u "; dst; " = "; x; ", "; y] :}
+
+-- shra
+inst : Store(dst:regl, Shra(x:reg, y:reg_or_const), w)
+  {: cat ["shr "; dst; " = "; x; ", "; y] :}
+
+-- popcnt
+inst : Store(dst:regl, Popcnt(x:reg), w)
+  {: cat ["popcnt "; dst; " = "; x] :}
 @ 
 
 \paragraph{Control Flow}
@@ -195,9 +221,15 @@ inst : Nop() {: "// " :}
 | RP.App(("com", [w]), [x])    -> conCom (exp x)
 *)
 
-| RP.App(("sub", [w]), [x; y]) -> conSub (exp x) (exp y)
-| RP.App(("add", [w]), [x; y]) -> conAdd (exp x) (exp y)
-| RP.App(("ne" , [w]), [x; y]) -> conNe  (exp x) (exp y)
+| RP.App(("sub",       [w]), [x; y]) -> conSub    (exp x) (exp y)
+| RP.App(("add",       [w]), [x; y]) -> conAdd    (exp x) (exp y)
+| RP.App(("ne" ,       [w]), [x; y]) -> conNe     (exp x) (exp y)
+| RP.App(("shl",       [w]), [x; y]) -> conShl    (exp x) (exp y)
+| RP.App(("shrl",      [w]), [x; y]) -> conShrl   (exp x) (exp y)
+| RP.App(("shra",      [w]), [x; y]) -> conShra   (exp x) (exp y)
+| RP.App(("mul_trunc", [w]), [x; y]) -> conMult   (exp x) (exp y)
+| RP.App(("popcnt",    [w]), [x   ]) -> conPopcnt (exp x)
+| RP.App(("fmul",      [w]), [x; y; rm]) -> conFmul (exp x) (exp y) (exp rm)
 
 (*| RP.App(("neg", [w]), [x])    -> conNeg (exp x)*)
 

@@ -205,7 +205,16 @@ let constant_context w = icontext
 let rtlop ~dst op tmpl = [tempstore dst 
 	                      (R.app (Up.opr op) (List.map tempval tmpl))]
 
-let binop ~dst op tmp1 tmp2 = rtlop dst op [tmp1;tmp2]
+let binop ~dst op tmp1 tmp2 = match op with
+| ("mul_trunc", ws) ->
+    let f1 = talloc 'u' 64 in
+    let f2 = talloc 'u' 64 in
+    let ops = [move_rtl f1 tmp1; move_rtl f2 tmp2]
+      @ (rtlop f1 ("fmul", ws) [f1; f2; ('f',0,64)])
+      @ move dst f1
+    in List.rev ops
+| _ -> rtlop dst op [tmp1;tmp2]
+
 let unop  ~dst op tmp       = rtlop dst op [tmp]
 
 let block_copy ~dst assn1 ~src assn2 width = ui "block_copy"

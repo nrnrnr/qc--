@@ -718,6 +718,28 @@ Backend.debug_interp    = Backend.make  { target = Targets.interp
                                         }
 
 --
+-- Kevin's ia64 backend to test widening
+--
+
+Backend.wia64 =
+  { target    = Targets.ia64
+  , placevars = Placevar.context(Placevar.ia64, "ia64")
+  , widen     = NewBackplane.seq
+                   { Widen.dpwiden,
+                     Stages.assert('proper widths') }
+  , preopt    = Optimize.remove_nops
+  , expand    = Expander.ia64
+  , liveness  = Liveness.liveness
+  , ralloc    = Ralloc.dls
+  , freeze    = Ia64.layout
+  , rmvfp     = NewBackplane.seq
+                   { Stages.replace_vfp,
+                     Optimize.remove_nops }
+  , asm       = Asm.ia64
+  , compile   = Compile.file
+  }
+
+--
 -- Kevin's x86 backend for testing widening
 --
 
@@ -853,7 +875,7 @@ Backend.ppc =
 -- Ia64 Backend (64 bit, little-endian)
 --
 Backend.ia64 =
-  { target = Targets.ia64
+  { target    = Targets.ia64
   , placevars = Placevar.context(Placevar.ia64, "ia64")
   , widen     = Stages.assert('proper widths')
   , preopt    = Optimize.remove_nops

@@ -654,7 +654,7 @@ let op_fill_types =
   ; "not",    [[Z],Z]
   ]
 
-let m : machine_env =
+let test_m : machine_env =
   [ "sx",     [32;64]
   ; "sx",     [16;64]
   ; "sx",     [ 8;64]
@@ -703,6 +703,48 @@ let m : machine_env =
   ; "not",    [1]
   ]
 
+let ia64 : machine_env =
+  [ "sx",     [32;64]
+  ; "zx",     [32;64]
+  ; "lobits", [64;32]
+  ; "sxlo",   [64;64]
+  ; "zxlo",   [64;64]
+  ; "add",    [64]
+  ; "and",    [64]
+  ; "com",    [64]
+  ; "div",    [64]
+  ; "divu",   [64]
+  ; "mod",    [64]
+  ; "modu",   [64]
+  ; "mul",    [64;64]
+  ; "mulu",   [64;64]
+  ; "mul_trunc", [64]
+  ; "neg",    [64]
+  ; "or",     [64]
+  ; "quot",   [64]
+  ; "rem",    [64]
+  ; "shl",    [64]
+  ; "shra",   [64]
+  ; "shrl",   [64]
+  ; "sub",    [64]
+  ; "xor",    [64]
+  ; "literal",[64]
+
+  ; "eq",     [64;1]
+  ; "ge",     [64;1]
+  ; "geu",    [64;1]
+  ; "gt",     [64;1]
+  ; "gtu",    [64;1]
+  ; "le",     [64;1]
+  ; "leu",    [64;1]
+  ; "lt",     [64;1]
+  ; "ltu",    [64;1]
+  ; "ne",     [64;1]
+  ; "not",    [1]
+  ]
+
+let m = test_m
+
 let machine_has menv opname ws = List.mem (opname,ws) menv
 
 let machine_widths menv opname =
@@ -745,7 +787,9 @@ let dpwiden r =
     let RP.Rtl es = Down.rtl r in
     Up.rtl (RP.Rtl (List.map widen_guard es))
   in
-  let () = Printf.printf "Widened to %s\n" (rtl r') in
+  let () = 
+    if (rtl r') <> (rtl r) then Printf.printf "\\->      %s\n" (rtl r')
+  in
   r'
 @ 
 
