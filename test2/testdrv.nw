@@ -1,0 +1,171 @@
+
+% ------------------------------------------------------------------ 
+\section{Lua Test Driver}
+% ------------------------------------------------------------------ 
+
+This is a lua driver for running the [[qc--]] regression tests. The
+test driver can be used with or without a configuration file. A test
+driver configuration file can specify the compiler configuration to
+use, the source and results directories, and which cases to run. Any
+of the configuration file options can be overridden on the command
+line.
+
+% ------------------------------------------------------------------ 
+\subsection{Usage}
+% ------------------------------------------------------------------ 
+
+The test driver can be used by specifying a set of source files, and
+a results direcotory on the command line.
+
+<<run output>>=
+# qc-- testdrv.lua test.results=\"x86\" src/*.c--
+Running Regression Tests.
+src/x86-001.c--
+  PASSED
+... more output ...
+
+@ A configuration file can also be used. The configuration files are
+lua source files with the extension [[tst]]. As such, the
+configuration files must have valid lua syntax. In addition to the
+compiler settings, the test files may set the following test
+variables:
+
+\begin{itemize}
+\item [[test.results]] the directory containing results files.
+\item [[test.source]] the directory containing source files.
+\item [[test.files]] a table of filenames to test without extensions.
+\end{itemize}
+
+<<example.tst>>=
+-- setup x86 backend with color-graph register allocator
+backend = Backend.x86
+backend.ralloc = Ralloc.color
+
+-- compare results with files in x86
+test.results = "x86"
+
+-- test cases live in src directory
+test.source  = "src"
+test.files = { "add"
+             , "bits-bug"
+             , "cut"
+             , "hello"
+             , "ralloc-000"
+             , "rnd2"
+             , "x86-000"
+             , "x86-001"
+             }
+
+@ To use this test configuration file, execute [[qc--]] with the test
+driver.
+<<run output>>=
+# qc-- testdrv.lua example.tst
+Running Regression Tests.
+src/x86-001.c--
+  PASSED
+src/rnd2.c--
+  PASSED
+src/hello.c--
+  PASSED
+src/cut.c--
+  PASSED
+src/bits-bug.c--
+  PASSED
+src/x86-000.c--
+  PASSED
+src/ralloc-000.c--
+  PASSED
+src/add.c--
+  PASSED
+
+@ The test cases can be changed on the command line by specifying whice
+source files to use.
+<<run output>>=
+# qc-- testdrv.lua example.tst src/add.c--
+Running Regression Tests.
+src/add.c--
+  PASSED
+
+@ 
+% ------------------------------------------------------------------
+\section{Driver Implementation}
+% ------------------------------------------------------------------
+The driver supports two basic mode of operation. The first mode reads
+in a [[.tst]] file and calls [[translate_files]] for each of the test
+cases in the file. The second mode takes the test cases from the
+command line.
+
+In order to determine which mode we are in, we search the list of
+input files for non-lua and non-tst files.
+
+<<testdrv.lua>>=
+test = {}
+function test.files_specified()
+  local i = 1
+  while i <= Options.argc
+  do
+    local ext = CMD.canonical_extension(Options.argv[i])
+    if ext ~= ".tst" then
+     if ext ~= ".lua" then return 1 end
+    end
+    i = i + 1
+  end
+  return nil
+end
+
+@ A new [[compilertab]] entry handles the [[.tst]] files given on the
+command line. The [[.tst]] file is loaded into the environment with
+[[dofile]] before and processing.
+
+<<testdrv.lua>>=
+function CMD.compilertab[".tst"](file)
+  dofile(file)
+  if test.files_specified() then return end
+  if not test.files then return end
+
+--  if not test.source then test.source="src" end
+  index, val = next(test.files, nil)
+  while index do
+    local filename = Caml.Filename.concat(test.source, val .. ".c--")
+    CMD.translate_files(filename, CMD.compilertab)
+    index, val = next(test.files, index)
+  end
+end
+
+@ Figure out where the expected results file is based on the input
+filename.
+
+<<testdrv.lua>>=
+function test.expected(file)
+  local bn = Caml.Filename.basename(file)
+  local cn = Caml.Filename.chop_extension(bn) .. ".s"
+  return Caml.Filename.concat(test.results, cn)
+end
+
+@ In order to support both modes of operation, we must override the
+[[.c--]] compile function. Is there a way to save the old function
+and call it from within the new one?
+
+<<testdrv.lua>>=
+function CMD.compilertab[".c--"](file)
+  Driver.reinit()
+  local tmp = tmpname()
+  print(file)
+--fh = writeto("output.txt")
+  backend.compile(backend, file, tmp)
+--writeto()
+
+  -- compare results
+  local expect = test.expected(file)
+  local status = execute(format("cmp -s %s %s", tmp, expect))
+  if status > 0 then
+     print("  FAILED")
+     -- XXX compile and test program output
+  else
+     print("  PASSED")
+  end
+  remove(tmp)
+end
+
+print("Running Regression Tests.")
+Options.stop_at(".s")

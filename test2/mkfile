@@ -55,11 +55,14 @@ record:V:           dummy.record x86.record
 dummy.record:V:     ${TESTS:src/%.c--=dummy/%.s} 
 x86.record:V:       ${TESTS:src/%.c--=x86/%.s} 
 
+test-lua:V:         testdrv.lua example.tst
+                    qc-- testdrv.lua example.tst
+
 clean:V:            
                     rm -f *.dvi *.log *.aux *.inc *.tex *.toc
 
 clobber:V:          clean
-                    rm -f testqc
+                    rm -f testqc testdrv.lua *.tst
 
 # ------------------------------------------------------------------ 
 # Rules for individual test cases
@@ -76,6 +79,9 @@ clobber:V:          clean
                 for t in $TARGETS; do
                     mk $MKFLAGS $t/`basename $stem`.s
                 done    
+
+%.tst:D:        testdrv.nw
+                $NOTANGLE -L -R$target $prereq > $target
 
 # ------------------------------------------------------------------ 
 # Tests for the different targets 
@@ -109,6 +115,8 @@ testqc:D:       testqc.nw
                 $NOTANGLE -L -R$target testqc.nw >> $target
                 chmod +x $target
 
+testdrv.lua:D:  testdrv.nw
+   $NOTANGLE -L'$file "%F"%N$line %L%N' -R$target $prereq > $target
 
 # ------------------------------------------------------------------ 
 # record output
