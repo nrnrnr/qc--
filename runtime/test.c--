@@ -2,16 +2,17 @@ target byteorder little;
 
 import bits32 printf;
 import bits32 rt_stack_trace;
+import bits32 rt_check;
 import bits32 c_b;
 import bits32 show_map;
 export main;
 export f,g,h;
 
 section "data" {
-   s_lbl: bits8[] "stack_trace\000";
-   f_lbl: bits8[] "f\000";
+   s_lbl: bits8[] "stack_trace: sd=13,14,15  x=7, y=4\000";
+   f_lbl: bits8[] "f sd=1,2,3 x=5\000";
    g_lbl: bits8[] "g\000";
-   h_lbl: bits8[] "h\000";
+   h_lbl: bits8[] "h sd=23,24,25\000";
    m_lbl: bits8[] "main\000";
 
    fmt: bits8[] "%s : %X\n\000";
@@ -21,26 +22,58 @@ section "data" {
 section "text" {
 span 1 s_lbl {
 stack_trace() {
+  stackdata {
+    align 32;
+    data1: bits32;
+    data2: bits32;
+    data3: bits32;
+  }
+  bits32 x;
+  bits32 y;
+  x = 7;
+  y = 4;
+  bits32[data1] = 13;
+  bits32[data2] = 14;
+  bits32[data3] = 15;
   foreign "C" printf(msg);
+  foreign "C" rt_check(j) also cuts to j;
   foreign "C" rt_stack_trace(j) also cuts to j;
+  x = x + y;
   return();
 
   continuation j():
+  x = x + y;
   return();
 }}
 
 span 1 h_lbl {
 foreign "C"
-h() { stack_trace(); foreign "C" return(); }
-}
+h() {
+ stackdata { align 32; data: bits32[3]; }
+  bits32[data] = 23;
+  bits32[data+4] = 24;
+  bits32[data+8] = 25;
+ stack_trace(); foreign "C" return();
+}}
 
 span 1 g_lbl {
 foreign "C"
-g() { foreign "C" c_b();       foreign "C"  return(); }}
+g() {
+ stackdata { align 32; data: bits32; }
+ foreign "C" c_b();       foreign "C"  return();
+}}
 
-span 1 f_lbl { f() {
- foreign "C" g();                       return();
- }}
+span 1 f_lbl {
+f() {
+ stackdata { align 32; data: bits32[3]; }
+ bits32 x;
+ x = 5;
+ bits32[data]   = 1;
+ bits32[data+4] = 2;
+ bits32[data+8] = 3;
+ foreign "C" g();
+ return();
+}}
 
 span 1 m_lbl {
 foreign "C" main() {
