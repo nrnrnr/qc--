@@ -31,124 +31,159 @@ name        = (string)
 conv        = (string)  -- names for calling conventions
 hint        = (string)  -- hints for register allocation
 reg         = (string)  -- names for global registers
-target      = (string)  -- labels
-size        = (int)     -- power of 2 (bits8, float16, ..)
+target      = (string)
+size        = (int)     
 align       = (int)     -- power of 2
 aligned     = (int)     -- power of 2
 op          = (string)
-@ Every important node is wrapped by a node that includes a source
+@ 
+
+Every important node is wrapped by a node that includes a source
 code position [[region]].  This is the character span in the input
 character stream that covers the node.  The first character in the
 stream has index 0.  The first number in a [[region]] denotes the
 first character covered by the node, the second number the first
 character \textit{after} the node.
-<<ast declaration>>=
+
+<<>>=
 region      = (int,int) -- (* Srcmap.reg *)
 
-program     = (topdecl*)
+program     = (toplevel*)
 
-topdecl     = TopDeclAt     (topdecl, region)
-            | Import        (ty, name*)
-            | Export        (ty?,name*)
-            | Const         (const*)
+toplevel    = ToplevelAt    (toplevel, region)
             | Section       (name, section*)
-            | Registers     (register*)
+            | TopDecl       (decl)
             | TopProcedure  (proc)
-            -- pragmas
-            | Pragma                          -- just for testing
-@ Extensions to the language are syntactically covered by [[pragma]]s. 
-Extensions that are recognized by this implementation cover them in
-the abstract syntax.  For testing purposes currently a meaningless
-[[Pragma]] constructor is returned by the parser for recognized
-pragmas. 
-<<ast declaration>>=
-const       = (name, expr)
+@ 
 
+<<>>=
+section     = SectionAt     (section, region)
+            | Decl          (decl)
+            | Procedure     (proc)
+            | Datum         (datum)
+            | SSpan         (expr key, expr value, section*)
+@
+            
+Extensions to the language are syntactically covered by [[pragma]]s.
+Unknown extensions are represented by the [[Pragma]] value.
+
+<<>>=
+decl        = DeclAt        (decl, region)
+            | Import        (ty, import*)
+            | Export        (ty?,export*)
+            | Const         (ty?,name,expr)
+            | Typedef       (ty,name*)
+            | Registers     (register*)
+            | Pragma                          
+            | Target        (arch*)
+@
+
+<<>>=
+arch        = Memsize       (int)
+            | ByteorderBig
+            | ByteorderLittle
+
+import      = (string?,name)
+export      = (name, string?)
+
+@
+       
+<<>>=
 register    = (invariant, ty, name, reg?)
+proc        = (conv?, name, formal*, body*)
 
-proc        = (conv?, name, formal*, decl*, stmt*)
-
-section     = SectionAt(section, region)
-            | SSpan (expr key, expr value, section*)
-            | Datum (datum)
-            | SExport (ty?, name*)            
-            | Procedure (proc)
+body        = BodyAt        (body, region)
+            | DeclBody      (decl)
+            | StmtBody      (stmt)
+            | DataBody      (datum*)
+            
 memsize     = NoSize
             | DynSize
-            | FixSize (expr)
+            | FixSize       (expr)
                        
-datum       = DatumAt (datum, region)
-            | Label (name)
-            | Align (align)
-            | MemDecl (ty, memsize, init?)
+datum       = DatumAt       (datum, region)
+            | Label         (name)
+            | Align         (align)
+            | MemDecl       (ty, memsize, init?)
 
 @ Escape sequence in the concrete syntax of strings and character
 literals are removed during the translation to the abstract syntax. 
 So [[InitStr]] and [[InitUStr]] do not contain escaped characters.
-<<ast declaration>>=
-init        = InitAt (init, region)
-            | InitExprs (expr*)
-            | InitStr   (string)
-            | InitUStr  (string)
 
-ty          = TyAt (ty, region)
-            | BitsTy  (size)
-            | FloatTy (size)
-@ To encode the [[invariant]] keyword a boolean value would suffice.
+<<>>=
+init        = InitAt        (init, region)
+            | InitExprs     (expr*)
+            | InitStr       (string)
+            | InitUStr      (string)
+
+<<>>=
+ty          = TyAt          (ty, region)
+            | BitsTy        (size)
+            | AliasTy       (name)
+@ 
+
+To encode the [[invariant]] keyword a boolean value would suffice.
 But this type is not provided by \asdl.
-<<ast declaration>>=
+
+<<>>=
 invariant   = Invariant
             | Variant
 
 formal      = (hint?, invariant, ty, name)
 actual      = (hint?, expr)
 
-decl        = DeclAt (decl, region)
-            | LRegisters  (register*)
-            | Stackdata (datum*)
-           
-flow        = FlowAt (flow, region)
-            | CutsTo    (name*)
-            | UnwindsTo (name*)
-            | ReturnsTo (name*)
+<<>>=           
+flow        = FlowAt        (flow, region)
+            | CutsTo        (name*)
+            | UnwindsTo     (name*)
+            | ReturnsTo     (name*)
             | Aborts    
 
-lvalue      = LValueAt (lvalue, region)
-            | Var (name)
-            | Mem (ty, expr, aligned?)
-
-assign      = (lvalue,expr)
+lvalue      = LValueAt      (lvalue, region)
+            | Var           (name)
+            | Mem           (ty, expr, aligned?)
+<<>>=
 altcont     = (expr, expr)
+
+range       = Point         (expr)
+            | Range         (expr,expr)
+
+arm         = ArmAt         (arm, region)
+            | Case          (range*,stmt*)
+             
 @ 
+
 The abstract syntax does not distinguish an empty list
 of statements from an absent optional list of statements. An [[if]]
 statement without an [[else]] block looks on this level like an [[if]]
 with an empty [[else]] block.
-<<ast declaration>>=
-stmt        = StmtAt (stmt, region)
-            | IfStmt     (expr, stmt*, stmt*)
-            | LabelStmt  (name)
-            | ContStmt   (name, name*)
-            | SpanStmt   (expr key, expr value, stmt*)
-            | AssignStmt (assign*)
-            | CallStmt   (lvalue*, conv?, expr, actual*, target*, flow*)
-            | PrimStmt   (lvalue*, conv?, name, actual*, flow*)
-            | GotoStmt   (expr, target*)
-            | JumpStmt   (conv?, expr, actual*, target*)
-            | CutStmt    (name, actual*, flow*)
-            | ReturnStmt (conv?, altcont?, actual*)
+<<>>=
+stmt        = StmtAt        (stmt, region)
+            | IfStmt        (expr, stmt*, stmt*)
+            | SwitchStmt    (range?, expr, arm*)
+            | LabelStmt     (name)
+            | ContStmt      (name, name*)
+            | SpanStmt      (expr key, expr value, body*)
+            | AssignStmt    (lvalue*, expr*)
+            | CallStmt      (lvalue*, conv?, expr, actual*, target*, flow*)
+            | PrimStmt      (lvalue*, conv?, name, actual*, flow*)
+            | GotoStmt      (expr, target*)
+            | JumpStmt      (conv?, expr, actual*, target*)
+            | CutStmt       (expr, actual*, flow*)
+            | ReturnStmt    (conv?, altcont?, actual*)
             | EmptyStmt  
+<<>>=
+expr        = ExprAt        (expr, region)
+            | Int           (string,size?)
+            | Float         (string,size?)
+            | Char          (string,size?)
+            | Fetch         (lvalue)
+            | BinOp         (expr, op, expr)
+            | UnOp          (op, expr)
+            | PrimOp        (name, actual*)
+@
 
-expr        = ExprAt (expr, region)
-            | Int    (string,size?)
-            | Float  (string,size?)
-            | Char   (string,size?)
-            | Fetch  (lvalue)
-            | BinOp  (expr, op, expr)
-            | UnOp   (op, expr)
-            | PrimOp (name, actual*)
-
-@ Infix operators are abbreviations for primitive operations. The
+Infix operators are abbreviations for primitive operations. The
 parser could perform this translation right away. But we want to
 unparse the abstract syntax back to concrete syntax and thus we keep
 them. 
@@ -172,7 +207,7 @@ abstract syntax to an open file.  The second parameter controls the
 line width the output is formatted for.
 
 <<astpp.mli>>=
-val ppToFile : out_channel -> int -> Ast.program -> unit
+val ppToFile   : out_channel -> int -> Ast.program -> unit
 
 @ For error reporting it is useful to obtain pretty printed fragments
 of a program.  The following list of functions provides pretty
@@ -180,24 +215,9 @@ printing for important non terminals in a program.  Each function
 returns a [[Pp.doc]] value that can be turned into a [[string]] with
 the help of the [[Pp]] module.
 
-<<astpp.mli>>=
-val ty : Ast.ty -> Pp.doc
-val lvalue : Ast.lvalue -> Pp.doc
-val actual : Ast.actual -> Pp.doc
-val actuals : Ast.actual list -> Pp.doc
-val expr : Ast.expr -> Pp.doc
-val constant : string * Ast.expr -> Pp.doc
-val memsize : Ast.memsize -> Pp.doc
-val init : Ast.init -> Pp.doc
-val datum : Ast.datum -> Pp.doc
-val decl : Ast.decl -> Pp.doc
-val flow : Ast.flow -> Pp.doc
-val flows : Ast.flow list -> Pp.doc
-val stmt : Ast.stmt -> Pp.doc
-val section : Ast.section -> Pp.doc
-val register : Ast.invariant * Ast.ty * string * string option -> Pp.doc
-val topdecl : Ast.topdecl -> Pp.doc
-val program : Ast.topdecl list -> Pp.doc
+<<>>=
+val decl       : bool -> Ast.decl  -> Pp.doc
+val program    : Ast.toplevel list -> Pp.doc
 @
 
 
@@ -209,39 +229,47 @@ The implementation builds an abstract representation of the pretty
 printed concrete syntax in a purely functional way. The abstract
 representation is than written to an open file.
 
-
 <<astpp.ml>>=
+module A = Ast
+module P = Pp
 
-open Pp     (* pretty printer from cllib *)
-open Ast    (* abstract syntax *)
+let (^^)   = P.(^^)
+let (^/)   = P.(^/)
+let (~~) x = x
+@ 
 
-
-@ The module [[Pp]] provides the pretty printing primitives.  The
+The module [[Pp]] provides the pretty printing primitives.  The
 concatenation of two abstract pretty printed objects is denoted by the
-infix operator [[^^]].  We define two more; the first is only to
-achieve a more consistent source code layout.  The second joins two
-objects with a [[break]].  A [[break]] is either represented as a
-space, or as a line break followed by a number of spaces for
-indentation.  The exact outcome is determined by the pretty printer. 
-It is easiest to think of [[break]]s as spaces that might be turned
-into line breaks.
+infix operator [[^^]].  We define two more:  [[~~]] and [[~/]]; the
+first is a prefix operator that does nothing; its only purpose is to
+achieve a more consistent source code layout. In the following example
+all nested code is also nested in the source code.
 
-@ To achieve a consistent nesting we re-define here the nesting operator.
+<<example>>=
+let f (x,y,z) = 
+    nest begin
+    ~~ x
+    ^/ y
+    ^/ z
+    end
+@
+
+The second operator [[^/]] joins two objects with a [[break]].  A
+[[break]] is either represented as a space, or as a line break
+followed by a number of spaces for indentation.  The exact outcome is
+determined by the pretty printer.  It is easiest to think of
+[[break]]s as spaces that might be turned into line breaks.
 
 <<astpp.ml>>=
+let nest       = P.nest 4 
 
-let (~~) x     = x
-let nestn      = nest      (* save old definition *)
-let nest       = nest 4    (* define new nest with standard indentation *)
+@ The [[commablock]] is just a handy special case of the [[block]]
+defined in [[Pp]]. 
 
-@ The [[commablock]] is just a handy special case of the [[block]] defined
-in [[Pp]]. 
-
-<<astpp.ml>>=
-
+<<>>=
 let commablock f xs =
     nest begin
-    ~~ list (text "," ^^ break) f xs
+    ~~ P.list (P.text "," ^^ P.break) f xs
     end
 
 @ To indent a group we provide [[angrp]] and [[fngrp]]; [[fngrp]] is a
@@ -250,445 +278,503 @@ into spaces or newlines, each break inside a [[fgrp]] is considered
 separately. Only breaks at the end of a line is turned into a newline
 to make new room -- as many as possible breaks are printed as spaces.
     
-<<astpp.ml>>=
-
+<<>>=
 let angrp x =
-    agrp begin 
+    P.agrp begin 
     ~~ nest begin
        ~~ x
        end
-    (* *)
     end
 
 let fngrp x =
-    fgrp begin 
+    P.fgrp begin 
     ~~ nest begin
        ~~ x
        end
-    (* *)
     end
+@
 
-@ Most of the names used below refer directly to the grammar or
-abstract syntax.  Since the overall purpose of this is clear we don't
-comment the code much.
+Most of the names used below refer directly to the grammar or abstract
+syntax.  Since the overall purpose of this is clear we don't comment
+the code much.
 
-Why does the \ocaml~[[List]] module does not provide [[zip]] and
-[[unzip]]? 
-
-<<astpp.ml>>=
-
-let unzip pairs =
-    let rec loop ((left,right) as result) = function
-        | []            -> result
-        | (l,r)::rest   -> loop (l::left, r::right) rest
-    in
-        loop ([],[]) pairs
+<<>>=
+let unzip = List.split
+let zip   = List.combine
 
 
-let id i        = text i
-let int n       = text (string_of_int n)
-let intlit n    = text n
-let float f     = text f
-let semi        = text ";"
+let id i        = P.text i
+let int n       = P.text (string_of_int n)
+let intlit n    = P.text n
+let float f     = P.text f
+let semi        = P.text ";"
+@ 
 
-let comment x   = text "/* " ^^ text x ^^ text " */"
+Comments are not part of the abstract syntax and thus they are
+only created for informational purposes in this module.  The argument
+passed to [[comment]] must not contain only matching [[/*]] and [[*/]]
 
-@ The escape functions provided by \ocaml~do not exactly match the
-escape rules of \C. We must replace them with our own.
+<<>>=
+let comment x   = P.text "/* " ^^ P.text x ^^ P.text " */"
+@ 
 
-<<astpp.ml>>=
+Todo:  write functions that escape unprintable characters in literals.
 
-let str s       = text ("\"" ^ String.escaped s ^ "\"")
-let char c      = text ("'"  ^ String.escaped c   ^ "'" )
+<<>>=
+let str s       = P.text ("\"" ^ String.escaped s ^ "\"")
+let char c      = P.text ("'"  ^ String.escaped c   ^ "'" )
 
+<<>>=
 let rec ty = function
-    | TyAt(x,_)       -> ty x
-    | BitsTy(n)       -> text "bits"  ^^ int n
-    | FloatTy(n)      -> text "float" ^^ int n
-    
+    | A.TyAt(x,_)       -> ty x
+    | A.BitsTy(n)       -> P.text "bits"  ^^ int n
+    | A.AliasTy(name)   -> P.text name
+<<>>=        
 let rec lvalue = function
-    | LValueAt(x,_)   -> lvalue x
-    | Var(x)          -> id x
-    | Mem(t,e,a)      -> 
+    | A.LValueAt(x,_)   -> lvalue x
+    | A.Var(x)          -> id x
+    | A.Mem(t,e,a)      -> 
         ~~ ty t 
-        ^^ text "["
+        ^^ P.text "["
         ^^ expr e 
         ^^ begin match a with 
-                | Some i -> break ^^ text "aligned" ^/ int i 
-                | None   -> empty
+                | Some i -> P.break ^^ P.text "aligned" ^/ int i 
+                | None   -> P.empty
            end 
-        ^^ text "]"
+        ^^ P.text "]"
                         
 and actual = function
-    | ( Some hint, e) -> agrp (str hint ^/ expr e)
+    | ( Some hint, e) -> P.agrp (str hint ^/ expr e)
     | ( None     , e) -> expr e
 
-and actuals xs = agrp (text "(" ^^ commalist actual xs ^^ text ")")
-    
+and actuals xs = P.agrp (P.text "(" ^^ P.commalist actual xs ^^ P.text ")")
+
+<<>>=    
 and expr = function
-    | ExprAt(x,_)             -> expr x
-    | Int( i, None)           -> intlit i
-    | Int( i, Some size)      -> intlit i ^^ text ":" ^^ int size
-    | Float( f, None)         -> float f
-    | Float( f, Some size)    -> float f ^^ text ":" ^^ int size
-    | Char( c, None)          -> char c 
-    | Char( c, Some size)     -> char c ^^ text ":" ^^ int size
-    | Fetch(v)                -> lvalue v
-    | BinOp(l,op,r)           -> agrp begin
-                                 ~~ text "(" ^^ expr l
+    | A.ExprAt(x,_)             -> expr x
+    | A.Int( i, None)           -> intlit i
+    | A.Int( i, Some size)      -> intlit i ^^ P.text ":" ^^ int size
+    | A.Float( f, None)         -> float f
+    | A.Float( f, Some size)    -> float f ^^ P.text ":" ^^ int size
+    | A.Char( c, None)          -> char c 
+    | A.Char( c, Some size)     -> char c ^^ P.text ":" ^^ int size
+    | A.Fetch(v)                -> lvalue v
+    | A.BinOp(l,op,r)           -> P.agrp begin
+                                 ~~ P.text "(" ^^ expr l
                                  ^^ nest begin
-                                    ~~ text op
-                                    ^^ breakWith ""
+                                    ~~ P.text op
+                                    ^^ (if op = "%" then P.break else P.empty)
+                                    ^^ P.breakWith ""
                                     ^^ expr r
                                     end
-                                 ^^ text ")"
+                                 ^^ P.text ")"
                                  end
 
-    | UnOp(op,e)              -> agrp (text op ^^ expr e)
-    | PrimOp(n,xs)            -> agrp (text "%" ^^ id n ^^ actuals xs)
+    | A.UnOp(op,e)              -> P.agrp (P.text op ^^ expr e)
+    | A.PrimOp(n,xs)            -> P.agrp (P.text "%" ^^ id n ^^ actuals xs)
 
-let constant (name,e) =       agrp begin 
-                              ~~ id name 
-                              ^/ text "="
-                              ^/ nest begin
-                                 ~~ expr e
-                                 ^^ semi
-                                 end
-                              end
 
+<<>>=
 let memsize = function
-    | NoSize        -> empty
-    | DynSize       -> text "[]"
-    | FixSize(e)    -> text "[" ^^ expr e ^^ text "]"
+    | A.NoSize        -> P.empty
+    | A.DynSize       -> P.text "[]"
+    | A.FixSize(e)    -> P.text "[" ^^ expr e ^^ P.text "]"
 
 let rec init = function
-    | InitAt(x,_) -> init x
-    | InitExprs(es) -> 
-            fgrp begin
-            ~~ text "{"
+    | A.InitAt(x,_) -> init x
+    | A.InitExprs(es) -> 
+            P.fgrp begin
+            ~~ P.text "{"
             ^/ nest begin
-               ~~ commalist expr es
+               ~~ P.commalist expr es
                end
-            ^/ text "}"
+            ^/ P.text "}"
             end
-    | InitStr(s) -> str s
-    | InitUStr(s) -> 
-            agrp begin
-            ~~ text "unicode"
-            ^/ text "("
+    | A.InitStr(s) -> str s
+    | A.InitUStr(s) -> 
+            P.agrp begin
+            ~~ P.text "unicode"
+            ^/ P.text "("
             ^/ nest begin
                ~~ str s
                end
-            ^/ text ")"
+            ^/ P.text ")"
             end
 
 let rec datum = function
-    | DatumAt(x,_)        -> datum x
-    | Label(n)            -> id n ^^ text ":"
-    | Align(a)            -> agrp (text "align" ^/ int a ^^ semi)
-    | MemDecl(t,m,Some i) -> agrp (ty t ^^ memsize m ^/ init i ^^ semi)
-    | MemDecl(t,m,None)   -> agrp (ty t ^^ memsize m ^^ semi) 
+    | A.DatumAt(x,_)        -> datum x
+    | A.Label(n)            -> id n ^^ P.text ":"
+    | A.Align(a)            -> P.agrp (P.text "align" ^/ int a ^^ semi)
+    | A.MemDecl(t,m,Some i) -> P.agrp (ty t ^^ memsize m ^/ init i ^^ semi)
+    | A.MemDecl(t,m,None)   -> P.agrp (ty t ^^ memsize m ^^ semi) 
 
-let formal ( h, v, t, n) =
-        agrp begin
-        ~~ (match h with Some hint -> str hint ^^ break | None -> empty)
-        ^^ (if v = Invariant then text "invariant" ^^ break else empty)
+<<>>=
+let formal (h, v, t, n) =
+        P.agrp begin
+        ~~ (match h with Some hint -> str hint ^^ P.break | None -> P.empty)
+        ^^ (if v = A.Invariant then P.text "invariant" ^^ P.break else P.empty)
         ^^ ty t
         ^/ id n
         end
 
-let formals xs = agrp (text "(" ^^ commalist formal xs ^^ text ")")
+let formals xs = P.agrp (P.text "(" ^^ P.commalist formal xs ^^ P.text ")")
 
-                 
-let register ( v , t, n, reg) = 
+<<>>=                 
+let register is_global (v , t, n, reg) = 
     angrp begin 
-    ~~ (if v = Invariant then text "invariant" ^^ break else empty)
-    ^^ text "register"
-    ^/ ty t
+    ~~ (if v = A.Invariant then P.text "invariant" ^^ P.break else P.empty)
+    ^^ (if is_global       then P.text "register"  ^^ P.break else P.empty)
+    ^^ ty t
     ^/ id n
-    ^^ (match reg with Some r -> break ^^ str r | None -> empty)
+    ^^ (match reg with Some r -> P.break ^^ str r | None -> P.empty)
     ^^ semi
     end 
 
-let rec decl = function
-    | DeclAt(x,_)   -> decl x
-    | LRegisters(rs) ->
-            vgrp begin
-            ~~ list break register rs
-            end
-
-    | Stackdata( dd) ->                
-            agrp begin
-            ~~ text "stackdata"
-            ^/ block datum dd
-            end
-
-
+<<>>=
 let altcont (e1,e2) =   
-            agrp begin 
-            ~~ text "<" 
+            P.agrp begin 
+            ~~ P.text "<" 
             ^^ expr e1 
-            ^^ text "/" 
+            ^^ P.text "/" 
             ^/ expr e2
-            ^^ text ">"
+            ^^ P.text ">"
             end
 
 let targets = function
-    | []    -> empty
-    | ts    -> agrp (text "targets" ^/ nest (commalist id ts))
+    | []    -> P.empty
+    | ts    -> P.agrp (P.text "targets" ^/ nest (P.commalist id ts))
     
 let rec flow f =
-    let also s ns = agrp (text "also" ^/ text s ^/ text "to" 
-                         ^/ nest (commalist id ns))
+    let also s ns = P.agrp (P.text "also" ^/ P.text s ^/ P.text "to" 
+                         ^/ nest (P.commalist id ns))
     in match f with
-    | FlowAt(x,_)     -> flow x
-    | CutsTo(ns)      -> also "cuts"    ns
-    | UnwindsTo(ns)   -> also "unwinds" ns
-    | ReturnsTo(ns)   -> also "returns" ns
-    | Aborts          -> text "also aborts"
+    | A.FlowAt(x,_)     -> flow x
+    | A.CutsTo(ns)      -> also "cuts"    ns
+    | A.UnwindsTo(ns)   -> also "unwinds" ns
+    | A.ReturnsTo(ns)   -> also "returns" ns
+    | A.Aborts          -> P.text "also aborts"
 
 let flows = function
-    | []    -> empty
-    | xs    -> nest (agrp (list break flow xs))
-
+    | []    -> P.empty
+    | xs    -> nest (P.agrp (P.list P.break flow xs))
 
 let conv = function
-    | Some cc       -> agrp (text "foreign" ^/ str cc)
-    | None          -> empty 
+    | Some cc       -> P.agrp (P.text "foreign" ^/ str cc)
+    | None          -> P.empty 
 
-let dummy = text "<stmt>;"
+    
+<<>>=
+let export t ns =
+    let export' = function
+        | (x, Some y) -> P.agrp (id x ^/ P.text "as" ^/ str y)
+        | (x, None  ) -> id x
+    in
+        P.agrp begin
+        ~~ P.agrp begin 
+           ~~ P.text "export" 
+           ^^ ( match t with 
+              | Some t -> P.break ^^ ty t
+              | None   -> P.empty
+              )
+           end
+           ^/ commablock export' ns
+           ^^ semi
+        end
 
+
+let architecture = function
+    | A.Memsize(i)      -> P.agrp (P.text "memsize" ^/ int i)
+    | A.ByteorderBig    -> P.agrp (P.text "byteorder" ^/ P.text "big")
+    | A.ByteorderLittle -> P.agrp (P.text "byteorder" ^/ P.text "small")
+
+
+let range = function
+    | A.Point(e)        -> expr e
+    | A.Range(e1,e2)    -> P.agrp(expr e1 ^/ P.text ".." ^/ expr e2)
+
+<<>>=
 let rec stmt = function
-        
-    | StmtAt(x,_)   -> stmt x
-    | IfStmt ( e, ss1, ss2)    -> 
-        agrp begin
-        ~~ agrp (text "if" ^/ expr e)
-        ^/ block stmt ss1
+    | A.StmtAt(x,_)   -> stmt x
+    
+    | A.IfStmt ( e, ss1, ss2)    ->
+        P.agrp begin
+        ~~ P.agrp (P.text "if" ^/ expr e)
+        ^/ P.block stmt ss1
         ^^ begin match ss2 with
-           | []     -> empty
-           | ss     -> break ^^ text "else" ^/ block stmt ss
+           | []     -> P.empty
+           | ss     -> P.break ^^ P.text "else" ^/ P.block stmt ss
            end
         end
-    | LabelStmt(n)            -> 
-        agrp begin
-        ~~ id n ^^ text ":"
+    | A.LabelStmt(n)            -> 
+        P.agrp begin
+        ~~ id n ^^ P.text ":"
         end
         
-    | ContStmt(n,ns)          ->
-        agrp begin
-        ~~ text "continuation"
+    | A.ContStmt(n,ns)          ->
+        P.agrp begin
+        ~~ P.text "continuation"
         ^^ angrp begin
-           ~~ break
+           ~~ P.break
            ^^ id n
-           ^^ fngrp (break ^^ text "(" ^^ commalist id ns ^^ text ")")
-           ^^ text ":"
+           ^^ fngrp (P.break ^^ P.text "(" ^^ P.commalist id ns ^^ P.text ")")
+           ^^ P.text ":"
            end
         end
 
-    | SpanStmt(e1,e2,ss)      -> 
-        agrp begin
-        ~~ agrp (text "span" ^/ expr e1 ^/ expr e2)
-        ^/ block stmt ss
+    | A.SpanStmt(e1,e2,ss)      -> 
+        P.agrp begin
+        ~~ P.agrp (P.text "span" ^/ expr e1 ^/ expr e2)
+        ^/ P.block (body false) ss
         end
     
-    | AssignStmt(xs)          -> 
-        let lhs,rhs = unzip xs in
-            agrp begin
-            ~~ fngrp begin 
-               ~~ commalist lvalue lhs 
-               ^/ text "="
-               end
-            ^^ fngrp begin
-               ~~ break
-               ^^ commalist expr rhs
-               ^^ semi
-               end
-            end
-    
-    | CallStmt( lhs, cc, e, args, ts, fs) -> 
+    | A.AssignStmt(lhs,rhs)          -> 
+        P.agrp begin
+        ~~ fngrp begin 
+           ~~ P.commalist lvalue lhs 
+           ^/ P.text "="
+           end
+        ^^ fngrp begin
+           ~~ P.break
+           ^^ P.commalist expr rhs
+           ^^ semi
+           end
+        end
+<<>>=    
+    | A.CallStmt(lhs, cc, e, args, ts, fs) -> 
         angrp begin
         ~~ ( if lhs <> [] 
              then fngrp begin 
-                  ~~ commalist lvalue lhs 
-                  ^/ text "="
-                  ^^ break
+                  ~~ P.commalist lvalue lhs 
+                  ^/ P.text "="
+                  ^^ P.break
                  end
-             else empty
+             else P.empty
            )
         ^^ ( match cc with 
-           | Some c -> agrp (text "foreign" ^/ str c ^^ break)
-           | None   -> empty
+           | Some c -> P.agrp (P.text "foreign" ^/ str c ^^ P.break)
+           | None   -> P.empty
            ) 
         ^^ angrp begin 
            ~~ expr e
            ^^ fngrp begin 
-              ~~ break 
-              ^^ text "(" 
-              ^^ commalist actual args 
-              ^^ text ")"
+              ~~ P.break 
+              ^^ P.text "(" 
+              ^^ P.commalist actual args 
+              ^^ P.text ")"
               end
            end
-        ^^ (if ts <> [] then break ^^ targets ts else empty)
-        ^^ (if fs <> [] then break ^^ flows fs else empty)
+        ^^ (if ts <> [] then P.break ^^ targets ts else P.empty)
+        ^^ (if fs <> [] then P.break ^^ flows fs else P.empty)
         ^^ semi
         end
-        
-    | PrimStmt( lhs, cc, n, args, fs)     -> 
+<<>>=        
+    | A.PrimStmt(lhs, cc, n, args, fs)     -> 
         angrp begin
         ~~ ( if lhs <> [] then 
-                  ~~ commalist lvalue lhs 
-                  ^/ text "="
-                  ^^ break
-             else empty
+                  ~~ P.commalist lvalue lhs 
+                  ^/ P.text "="
+                  ^^ P.break
+             else P.empty
            )
         ^^ ( match cc with 
-           | Some c -> agrp (text "foreign" ^/ str c ^^ break)
-           | None   -> empty
+           | Some c -> P.agrp (P.text "foreign" ^/ str c ^^ P.break)
+           | None   -> P.empty
            ) 
         ^^ fngrp begin 
-           ~~ text "%%" 
+           ~~ P.text "%%" 
            ^^ id n
-           ^^ break 
-           ^^ text "(" 
-           ^^ commalist actual args 
-           ^^ text ")"
+           ^^ P.break 
+           ^^ P.text "(" 
+           ^^ P.commalist actual args 
+           ^^ P.text ")"
            end
-        ^^ (if fs <> [] then break ^^ flows fs else empty)
+        ^^ (if fs <> [] then P.break ^^ flows fs else P.empty)
         ^^ semi
         end
-    | GotoStmt(e,ts)                      -> 
+    
+    | A.GotoStmt(e,ts)                      -> 
         angrp begin
-        ~~ text "goto"
+        ~~ P.text "goto"
         ^/ expr e
-        ^^ (if ts <> [] then break ^^ targets ts else empty)
+        ^^ (if ts <> [] then P.break ^^ targets ts else P.empty)
         ^^ semi
         end
-    | CutStmt(n, args, fs)                -> 
+    | A.CutStmt(e, args, fs)                -> 
         angrp begin
-        ~~ text "cut to"
-        ^/ id n
-        ^^ fngrp (break ^^ text "(" ^^ commalist actual args ^^ text ")")
-        ^^ (if fs <> [] then break ^^ flows fs else empty)
+        ~~ P.text "cut to"
+        ^/ expr e 
+        ^^ fngrp begin 
+           ~~ P.break 
+           ^^ P.text "(" 
+           ^^ P.commalist actual args 
+           ^^ P.text ")"
+           end
+        ^^ (if fs <> [] then P.break ^^ flows fs else P.empty)
         ^^ semi
         end
-    | ReturnStmt(cc, alt, args)           -> 
+    | A.ReturnStmt(cc, alt, args)           -> 
         angrp begin
         ~~ ( match cc with 
-           | Some c -> text "foreign" ^/ str c ^^ break
-           | None   -> empty
+           | Some c -> P.text "foreign" ^/ str c ^^ P.break
+           | None   -> P.empty
            )
-        ^^ text "return"
+        ^^ P.text "return"
         ^^ ( match alt with
-           | Some a -> break ^^ altcont a ^^ break
-           | None   -> empty
+           | Some a -> P.break ^^ altcont a ^^ P.break
+           | None   -> P.empty
            )
-        ^^ fngrp (break ^^ text "(" ^^ commalist actual args ^^ text ")") 
+        ^^ fngrp (P.break ^^ P.text "(" ^^ P.commalist actual args ^^ P.text ")") 
         ^^ semi 
         end
-    | JumpStmt(cc,e,args,ts)              -> 
+    | A.JumpStmt(cc,e,args,ts)              -> 
         angrp begin
         ~~ ( match cc with 
-           | Some c -> agrp (text "foreign" ^/ str c) ^^ break
-           | None   -> empty
+           | Some c -> P.agrp (P.text "foreign" ^/ str c) ^^ P.break
+           | None   -> P.empty
            )
         ^^ fngrp begin 
-           ~~ (text "jump" ^/ expr e)
+           ~~ (P.text "jump" ^/ expr e)
            ^^ ( if args <> [] then 
-                    ~~ break 
-                    ^^ text "(" 
-                    ^^ commalist actual args 
-                    ^^ text ")"
+                    ~~ P.break 
+                    ^^ P.text "(" 
+                    ^^ P.commalist actual args 
+                    ^^ P.text ")"
                  else 
-                    empty
+                    P.empty
               )
-           ^^ (if ts <> [] then break ^^ targets ts else empty)
+           ^^ (if ts <> [] then P.break ^^ targets ts else P.empty)
            end
         ^^ semi
         end
-    | EmptyStmt -> semi
-
-let export t ns =
-    agrp begin
-    ~~ agrp begin 
-       ~~ text "export" 
-       ^^ ( match t with 
-          | Some t -> break ^^ ty t
-          | None   -> empty
-          )
-       end
-       ^/ commablock id ns
-       ^^ semi
-    end
-
-let proc (cc,n,fs, ds, ss) =  
-    agrp begin 
-    ~~ agrp begin
+    | A.EmptyStmt -> semi
+    | A.SwitchStmt (r,e,arms) -> 
+        P.agrp begin
+        ~~ P.agrp begin 
+           ~~ P.text "switch"
+           ^^ ( match r with
+              | Some r -> P.agrp begin 
+                ~~ P.break 
+                ^^ P.text "[" 
+                ^^ range r 
+                ^^ P.text "]"
+                end
+              | None   -> P.empty
+              )
+           ^/ expr e
+           end
+        ^/ P.agrp (P.block arm arms)
+        end
+        
+and body is_global = function
+    | A.BodyAt(x, _)    -> body is_global x
+    | A.DeclBody(d)     -> decl is_global d
+    | A.StmtBody(s)     -> stmt s
+    | A.DataBody(dd)    -> 
+            P.agrp begin
+            ~~ P.text "stackdata"
+            ^/ P.block datum dd
+            end
+    
+and proc (cc,n,fs,ss) =  
+    P.agrp begin 
+    ~~ P.agrp begin
        ~~ begin match cc with 
-          | Some c -> text "foreign" ^/ str c ^^ break
-          | None   -> empty
+          | Some c -> P.text "foreign" ^/ str c ^^ P.break
+          | None   -> P.empty
           end
        ^^ id n
        ^^ formals fs
        end
-    ^/ text "{"
+    ^/ P.text "{"
     ^^ nest begin
-       ~~ break
-       ^^ list break decl ds
-       ^^ break ^^ break
-       ^^ list break stmt ss
+       ~~ P.break
+       ^^ P.list P.break (body false) ss
        end 
-    ^/ text "}" 
+    ^/ P.text "}" 
     end
 
-let rec section = function
-    | SectionAt(x,_) -> section x
-    | SSpan( e1, e2, ss) ->  
-        agrp begin
-        ~~ agrp (text "span" ^/ expr e1 ^/ expr e2)
-        ^/ block section ss
+<<>>=
+and decl is_global = function
+    | A.DeclAt(x,_) -> decl is_global x
+    | A.Import( t, ns) -> 
+        let import' = function
+        | (Some x, y) -> P.agrp (str x ^/ P.text "as" ^/ str y)
+        | (None  , y) -> id y
+        in
+            P.agrp begin
+            ~~ P.agrp (P.text "import" ^/ ty t)
+            ^/ commablock import' ns
+            ^^ semi
+            end
+    | A.Export( t, ns) -> export t ns
+    | A.Const (t,n,e) ->
+            P.agrp begin 
+            ~~ P.text "const"
+            ^^ ( match t with
+               | Some t -> P.break ^^ ty t
+               | None   -> P.empty
+               )
+            ^/ id n
+            ^/ P.text "="
+            ^/ expr e
+            ^^ semi
+            end
+    | A.Registers( rs) ->
+            P.vgrp begin
+            ~~ P.list P.break (register is_global) rs
+            end
+    | A.Typedef (t,nn)  -> 
+        angrp begin
+        ~~ P.text "typedef"
+        ^/ ty t
+        ^/ P.text "="
+        ^/ commablock id nn
+        ^^ semi
+        end 
+    
+    | A.Target (arch) -> 
+            angrp begin
+            ~~ P.text "target"
+            ^/ P.list P.break architecture arch
+            ^^ semi
+            end
+    | A.Pragma        -> comment "pragma"
+
+<<>>=
+and section = function
+    | A.SectionAt(x,_)  -> section x
+    | A.Decl(d)         -> decl true d
+    | A.Datum( d)       -> datum d
+    | A.Procedure(p)    -> proc p
+    | A.SSpan( e1, e2, ss) ->  
+        P.agrp begin
+        ~~ P.agrp (P.text "span" ^/ expr e1 ^/ expr e2)
+        ^/ P.block section ss
         end
-    | Datum( d) ->  
-        datum d
-    | SExport (t, ns) -> export t ns
-    | Procedure(p)  -> proc p
-
-let rec topdecl = function
-    | TopDeclAt(x,_) -> topdecl x
-    | Import( t, ns) -> 
-            agrp begin
-            ~~ agrp (text "import" ^/ ty t)
-               ^/ commablock id ns
-               ^^ semi
-            end
-
-    | Export( t, ns) -> export t ns
-    | Const ( cs) ->
-            agrp begin 
-            ~~ text "const"
-            ^/ block constant cs
-            end
-    | Section( n, ss) ->
-            agrp begin 
-            ~~ agrp (text "section" ^/ str n)
-            ^/ block section ss
-            end
-                   
-    | Registers( rs) ->
-            vgrp begin
-            ~~ list break register rs
-            end
-    | TopProcedure (p) -> proc p
             
-    | Pragma ->
-            comment "<pragma>"
+and arm = function
+    | A.ArmAt(x,_)          -> arm x
+    | A.Case(ranges, stmts) ->
+        P.agrp begin
+        ~~ P.agrp (P.list (P.text "," ^^ P.break) range ranges)
+        ^^ P.text ":"
+        ^/ P.block stmt stmts
+        end 
+<<>>=
+let rec toplevel = function
+    | A.ToplevelAt(x, _)  -> toplevel x
+    | A.Section(name, ss) -> 
+            P.agrp begin 
+            ~~ P.agrp (P.text "section" ^/ str name)
+            ^/ P.block section ss
+            end
+    | A.TopDecl(d)        -> decl true d
+    | A.TopProcedure(p)   -> proc p
 
-let program ds = vgrp begin
-                  ~~ list (break ^^ break) topdecl ds
-                  ^^ break
+let program ds = P.vgrp begin
+                  ~~ P.list (P.break ^^ P.break) toplevel ds
+                  ^^ P.break
                   end
-            
                                             
 let ppToFile fd width prog = Pp.ppToFile fd width (program prog)
-                        
 @

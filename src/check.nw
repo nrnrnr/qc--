@@ -1,0 +1,217 @@
+
+% ------------------------------------------------------------------ 
+\section{Checking Static Semantics}
+% ------------------------------------------------------------------ 
+
+Checking the static semantics of a {\PAL} program is a multi-step
+approach:  a program declares symbols in the global scope (made up by
+the toplevel and its sections) and in local scopes made up by
+individual procedures.  Because symbols in {\PAL} are visible inside
+their scope before there declaration, checking a scope requires the
+following steps:
+
+\begin{enumerate}
+\item All type declarations of the current scope are collected. They
+      are topologically sorted with respect to the use of each other and
+      entered into the type environment.
+
+\item All constant declarations are collected, topologically sorted
+      and processed. Processing includes inferring their types and
+      evaluating them. The values and types found are then entered into
+      the value environment.
+
+\item Now the environment in complete to check the static semantics of
+      the current section or procedure. This involves checking the types
+      and all the orher constraints defined by the static semantics.
+\end{enumerate}
+
+% ------------------------------------------------------------------ 
+\section{Building the type environment}
+% ------------------------------------------------------------------ 
+
+<<check.ml>>=
+module E = Error
+module A = Ast
+module F = Fatenv
+
+(* f:('a -> 'b -> 'a) -> init:'a -> 'b list -> 'a *)
+let foldl = List.fold_left
+
+<<>>=
+module TypeEnv = struct
+    module T = struct
+        <<module T>>
+    end
+    module TSort = Topsort.Make(T)
+    
+    <<build type env>>
+end
+
+<<check file>>
+@
+
+The [[TSort.sort]] function knows very few things about (type)
+declarations: it can ask for the names a declaration [[defines]], and
+the declared names it [[uses]]. For error reporting declarations are
+enriched with optional source coude positions.
+
+<<module T>>=
+type decl = A.decl * A.region option
+
+let rec defines = function
+    | A.DeclAt(d,r)      , _   -> defines (d,Some r)
+    | A.Typedef(t,names) , _   -> names
+    | _                  , _   -> []
+<<>>=
+let rec uses = function     
+    | A.DeclAt(d,r)                 , _   -> uses (d,Some r)
+    | A.Typedef(A.BitsTy(_),names)  , _   -> []
+    | A.Typedef(A.AliasTy(x),names) , _   -> [x]
+    | _                             , _   -> []
+@
+
+To build the global type environment global type declarations must be
+collected. Type declarations ([[typedef]]) on the top-level and the
+section-level are global; [[foldGlobalTypeDecls]] collects them from
+the abstract syntax.
+        
+<<build type env>>=
+let rec decl r dd = function
+    | A.DeclAt(x,r)     -> decl (Some r) dd x
+    | A.Typedef(_) as d -> (d,r)::dd
+    | _                 -> dd
+<<>>=
+let rec section r dd = function
+    | A.SectionAt(x,r)         -> section (Some r) dd x 
+    | A.Decl(d)                -> decl r dd d 
+    | A.SSpan( e1, e2, ss)     -> foldl (section r) dd ss
+    | A.Datum( d)              -> dd
+    | A.Procedure(p)           -> dd 
+<<>>=    
+let rec toplevel r dd = function
+    | A.ToplevelAt(x,r)   -> toplevel (Some r) dd x
+    | A.Section(_, ss)    -> foldl (section r) dd ss
+    | A.TopDecl (d)       -> decl r dd d
+    | _                   -> dd
+<<>>=
+let foldGlobalTypeDecls program = 
+    foldl (toplevel None) [] program
+@
+
+After the global type declarations have been collected they are sorted
+topologically to get the right order to process them.  Sorting can
+fail when declarations happen to be circular; this is reported by an
+exceptions.  In that case offending declarations are taken out and the
+sorting is repeated. We end up with a fat environment in that binds
+all global names for types.
+
+Names defined by declarations found in cycles are bound to [[E.Error]]
+in the (fat) environment.
+<<>>=
+let bindError scope env decls = 
+    let names = List.concat (List.map T.defines decls) in 
+        foldl (fun env name -> F.bindtError name scope env) env names
+@
+
+The remove offending declarations from a list we use [[exclude]]: 
+[[exclude xx yy]] returns [[xx]] without elements found in [[yy]]. 
+Since we expect [[yy]] to be very short (1 to 3 elements) we have
+chosen a naive approach for implementation.
+ 
+<<>>=
+let exclude xx yy = 
+    let _, xx' = List.partition (fun x  -> List.mem x yy) xx  in
+    xx'
+
+<<>>=
+let bindt names ty scope env =
+    foldl (fun env n -> F.bindt n (scope,ty) env) env names
+
+<<>>=
+let rec eval env = function
+    | A.TyAt(x,r)    -> E.catch (E.errorRegPrt r) (eval env) x
+    | A.BitsTy(size) -> E.Ok(Types.Bits size)
+    | A.AliasTy(n)   -> snd (F.findt n env)
+<<>>=
+let rec doTypeDecl env = function
+    | A.DeclAt(x,r)      -> E.catch' env (E.errorRegPrt r) (doTypeDecl env) x
+    | A.Typedef(t,names) -> bindt names (eval env t) F.Global env
+    | _                  -> env
+
+<<>>=
+let doTypeDecls env decls = foldl doTypeDecl env decls
+@
+
+When cycles are found in the list of declarations they are reported.
+Their source code positions were attached to them during their
+collection. 
+
+<<>>=
+let reportCycle decls = 
+    let report = function
+        | A.Typedef(t,n::nn), Some r -> 
+            E.errorRegPrt r ("typdef for "^n^" is cyclic")
+        | A.Typedef(t,n::nn), None   -> 
+            E.errorPrt      ("typdef for "^n^" is cyclic")
+        | _                     -> assert false
+    in
+        List.iter report decls      
+
+<<>>=
+let doGlobalTypes env program =
+    let dd             = foldGlobalTypeDecls program    in
+    let decls          = List.map fst                   in 
+    let rec bindAll dd =
+        try
+            let dd' = TSort.sort dd                     in
+            doTypeDecls env (decls dd')
+        with TSort.Cycle(offending) ->
+            let dd'  = exclude dd offending             in
+            let env' = bindError F.Global env offending in
+                ( reportCycle offending
+                ; bindAll dd'
+                )
+                                                        in
+        bindAll dd
+@
+
+% ------------------------------------------------------------------  
+\subsection{Checking a File}
+% ------------------------------------------------------------------ 
+
+To actually scan, parse, and check a file we provide a function
+[[check]] to be called with a file name.  It calls the parser to
+create the abstract syntax and calls the different phases of checking.
+
+<<check file>>=
+let check file =
+    let fd          = try open_in file 
+                      with Sys_error(msg) -> E.error msg     in
+    let finally ()  = close_in fd                            in
+    let lexbuf      = Lexing.from_channel fd                 in
+    let map         = Srcmap.empty                           in
+    let scanner     = Scan.scan map                          in
+        try
+            ( Srcmap.sync map 0 (file,1,1)
+            ; let ast        = Parse.program scanner lexbuf  in
+              let env        = F.empty                       in
+              let env'       = TypeEnv.doGlobalTypes env ast in
+                 ( E.Ok ()
+                 )
+            )
+        with
+            | Parsing.Parse_error -> 
+              ( finally()
+              ; E.errorPointPrt (map, Lexing.lexeme_start lexbuf) "parse error"
+              ; E.Error
+              )
+            | E.ErrorExn msg ->
+              ( finally()
+              ; E.errorPointPrt (map, Lexing.lexeme_start lexbuf) msg
+              ; E.Error
+              )
+            | e ->  
+              ( finally()
+              ; raise e
+              )
+@

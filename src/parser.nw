@@ -27,8 +27,7 @@ sync point for the following character into the source map.
 
 <<scan.mll>>=
 {
-    open Parse      (* tokens are defined here *)
-
+    module P = Parse    (* tokens are defined here *)
 
     let nl lexbuf map =
         let next = (Lexing.lexeme_start lexbuf) + 1     in
@@ -41,8 +40,10 @@ on the column $c$ of the tab:
             $$x = 7 - (c~\textrm{mod}~8)$$ 
 
 Whenever the scanner encounters a tab character it calls the [[tab]]
-function to place a sync point into the source map. We currently
-ignore tabs by not placing a sync point.
+function to place a sync point into the source map.  We currently
+ignore tabs by not placing a sync point in the [[map]].  Sync points
+are explained in section \ref{srcmap} about source code position
+tracking.
 
 <<scan.mll>>=
     let tab lexbuf map = ()
@@ -67,7 +68,7 @@ quite intuitive when called as [[get lexbuf]].
     let pos_start   = Lexing.lexeme_start
     let pos_end     = Lexing.lexeme_end
 
-@ Some lexems contain data that we like to extract.  Here is a
+@ Some lexemes contain data that we like to extract.  Here is a
 substring extraction function (inspired by Python's [[slice]]) that
 makes this easy.  The parameters [[start]] and [[stop]] denote which
 part of [[str]] should be extracted; negative numbers can be used to
@@ -92,66 +93,82 @@ clear:
         let start = if start <  0 then String.length str + start else start in
         let stop  = if stop  <= 0 then String.length str + stop  else stop  in
             String.sub str start (stop - start)
+@
 
-@ Strings and character literals may contain escaped characters like in
-[["this \n"]] example; [[escape]] decodes them.
-
-
-<<scan.mll>>=
-    let escape = function
-        | 't'   -> '\t'
-        | 'n'   -> '\n'
-        | 'b'   -> '\b'
-        | 'r'   -> '\r'
-        |  x    ->  x  (* default *)
-
-@ All keywords are stored in a hash table that maps them to tokens;
+All keywords are stored in a hash table that maps them to tokens;
 [[keyword s]] tries to lookup [[s]] in the table of keywords and
-returns the matching token or raises [[Not_found]]. 
+returns the matching token or raises [[Not_found]].  Keywords are not
+directly encoded into the automaton of the scanner because this is
+notorious for overflowing the tables of the automaton's
+implementation.
 
 <<scan.mll>>=
     let keywords    = Hashtbl.create 127
     let keyword s   = Hashtbl.find keywords s
 
     let _ = Array.iter (fun (str,tok) -> Hashtbl.add keywords str tok)
-        [|("aborts"         , ABORTS)
-        ; ("align"          , ALIGN)
-        ; ("aligned"        , ALIGNED)
-        ; ("also"           , ALSO)
-        ; ("const"          , CONST)
-        ; ("continuation"   , CONTINUATION)
-        ; ("cut"            , CUT)
-        ; ("cuts"           , CUTS)
-        ; ("else"           , ELSE)
-        ; ("equal"          , EQUAL)
-        ; ("export"         , EXPORT)
-        ; ("foreign"        , FOREIGN)
-        ; ("goto"           , GOTO)
-        ; ("if"             , IF)
-        ; ("import"         , IMPORT)
-        ; ("invariant"      , INVARIANT)
-        ; ("jump"           , JUMP)
-        ; ("pragma"         , PRAGMA)
-        ; ("register"       , REGISTER)
-        ; ("return"         , RETURN)
-        ; ("returns"        , RETURNS)
-        ; ("section"        , SECTION)
-        ; ("semi"           , SEMI)
-        ; ("span"           , SPAN)
-        ; ("stackdata"      , STACKDATA)
-        ; ("targets"        , TARGETS)
-        ; ("to"             , TO)
-        ; ("unicode"        , UNICODE)
-        ; ("unwinds"        , UNWINDS)
+        [|("aborts"         , P.ABORTS)
+        ; ("align"          , P.ALIGN)
+        ; ("aligned"        , P.ALIGNED)
+        ; ("also"           , P.ALSO)
+        ; ("as"             , P.AS)
+        ; ("big"            , P.BIG)
+        ; ("byteorder"      , P.BYTEORDER)
+        ; ("case"           , P.CASE)
+        ; ("const"          , P.CONST)
+        ; ("continuation"   , P.CONTINUATION)
+        ; ("cut"            , P.CUT)
+        ; ("cuts"           , P.CUTS)
+        ; ("default"        , P.DEFAULT)
+        ; ("else"           , P.ELSE)
+        ; ("equal"          , P.EQUAL)
+        ; ("export"         , P.EXPORT)
+        ; ("foreign"        , P.FOREIGN)
+        ; ("goto"           , P.GOTO)
+        ; ("if"             , P.IF)
+        ; ("import"         , P.IMPORT)
+        ; ("invariant"      , P.INVARIANT)
+        ; ("jump"           , P.JUMP)
+        ; ("little"         , P.LITTLE)
+        ; ("memsize"        , P.MEMSIZE)
+        ; ("pragma"         , P.PRAGMA)
+        ; ("register"       , P.REGISTER)
+        ; ("return"         , P.RETURN)
+        ; ("returns"        , P.RETURNS)
+        ; ("section"        , P.SECTION)
+        ; ("semi"           , P.SEMI)
+        ; ("span"           , P.SPAN)
+        ; ("stackdata"      , P.STACKDATA)
+        ; ("switch"         , P.SWITCH)
+        ; ("target"         , P.TARGET)
+        ; ("targets"        , P.TARGETS)
+        ; ("to"             , P.TO)
+        ; ("typedef"        , P.TYPEDEF)
+        ; ("unicode"        , P.UNICODE)
+        ; ("unwinds"        , P.UNWINDS)
 
-        (* pragmas *)
-
-        ; ("line"           , LINE_)
         |]
+@
+
+Floating point, integer, and character literals can specify an
+optional number of bits to hold the value.  To support arbitray
+precision in the AST the actual value is stored as a string but the
+number of bits as an integer.  The following functions deconstruct
+strings of matched literals.
+ 
+<<>>=
+let splitAtColon s =
+    let len   = String.length s                      in
+    let colon = String.rindex s ':'                  in
+    let left  = String.sub s 0 colon                 in
+    let right = String.sub s (colon+1) (len-colon+1) in 
+        try 
+            (left, Some (int_of_string right))
+        with Failure _ -> assert false
 
 } (* end of prolog *)
-
 @
+
 % ------------------------------------------------------------------  
 \subsection{Declarations for Regular Expressions}
 % ------------------------------------------------------------------  
@@ -159,26 +176,27 @@ returns the matching token or raises [[Not_found]].
 
 let digit       = ['0'-'9']
 let octal       = ['0'-'7']
-let decchar     = digit digit digit
+let hex         = ['0'-'9' 'A'-'F' 'a'-'f']
 
 let printable   = [' '-'~']     (* add 8bit chars *)
-let alpha       = ['a'-'z' 'A'-'Z' '_']
+let alpha       = ['a'-'z' 'A'-'Z']
+let misc        = ['.' '_' '$' '@']
 
-let escape      = ['\\' '\'' '"' 'n' 't' 'b' 'r']
+let escape      = ['\\' '\'' '"' 'a' 'b' 'f' 'n' 'r' 't' '?' ]
 
 let sign        = ['+' '-']
 let nat         = digit+
-let frac        = nat? '.' nat
+let frac        = nat '.' nat
 let exp         = ['e''E'] sign? nat
 let float       = frac exp? 
                 | nat exp
 
-
-let id          = alpha (alpha | digit | '.')*
-let ws          = [' ' '\b']
-let nl          = '\n'
+let size        = ':' nat
+                
+let id          = (alpha | misc) (alpha | misc | digit)*
+let ws          = [' ' '\012' '\r']  (* SP FF CR *)
+let nl          = '\n'          
 let tab         = '\t'
-let flag        = '{' alpha+ '}' 
 
 @
 % ------------------------------------------------------------------  
@@ -192,15 +210,16 @@ function suitable for a parser generated by \textsc{ocamllex}.
 <<scanner entry point>>=
 let scan map lexbuf =
     token lexbuf map
+@
 
-@ When the lexer is called is enters the [[token]] context where it
-recognizes all keywords and simple tokens. For complex tokens like
+When the lexer is called is enters the [[token]] context where it
+recognizes all keywords and simple tokens.  For complex tokens like
 strings or comments it branches into special contexts.
 
 \ifbugs
 Originally the [[#]] character for the CPP line pragma was recognized only
 after a newline. This broke the scanner when the very first line of a
-file contained a line pragme. This fix is the recognize the [[#]]
+file contained a line pragma. This fix is the recognize the [[#]]
 everywhere but only when it is the first character scanned it
 indicates a line directive.
 
@@ -211,7 +230,7 @@ indicates a line directive.
 
 <<scan.mll>>=
 rule token = parse
-    eof         { fun map -> EOF          }
+    eof         { fun map -> P.EOF          }
   | ws+         { fun map -> token lexbuf map }
   | tab         { fun map -> tab lexbuf map; token lexbuf map }
   | nl          { fun map -> nl lexbuf map ; token lexbuf map }
@@ -225,93 +244,129 @@ rule token = parse
                         error lexbuf map "illegal character" 
                 }
 
-  | ";"         { fun map -> SEMI         }
-  | ":"         { fun map -> COLON        }
-  | ","         { fun map -> COMMA        }
+  | ";"         { fun map -> P.SEMI         }
+  | ":"         { fun map -> P.COLON        }
+  | ","         { fun map -> P.COMMA        }
+  | ".."        { fun map -> P.DOTDOT       }
+  
+  | "("         { fun map -> P.LPAREN       }
+  | ")"         { fun map -> P.RPAREN       }
+  | "{"         { fun map -> P.LBRACE       }
+  | "}"         { fun map -> P.RBRACE       }
+  | "["         { fun map -> P.LBRACKET     }
+  | "]"         { fun map -> P.RBRACKET     }
+  | "%%"        { fun map -> P.PPERCENT     }
 
-  | "("         { fun map -> LPAREN       }
-  | ")"         { fun map -> RPAREN       }
-  | "{"         { fun map -> LBRACE       }
-  | "}"         { fun map -> RBRACE       }
-  | "["         { fun map -> LBRACKET     }
-  | "]"         { fun map -> RBRACKET     }
-  | "%%"        { fun map -> PPERCENT     }
-
-  | "="         { fun map -> EQUAL        }
+  
+  | "="         { fun map -> P.EQUAL        }
   
 
   (* infix/prefix operators *)
   
-  | "+"         { fun map -> PLUS(get lexbuf)      }
-  | "-"         { fun map -> MINUS(get lexbuf)     }
-  | "*"         { fun map -> STAR(get lexbuf)      }
-  | "/"         { fun map -> SLASH(get lexbuf)     }
-  | "%"         { fun map -> PERCENT(get lexbuf)   }
-  | ">>"        { fun map -> GGREATER(get lexbuf)  }
-  | "<<"        { fun map -> LLESS(get lexbuf)     }
-  | "&"         { fun map -> AMPERSAND(get lexbuf) }
-  | "|"         { fun map -> BAR(get lexbuf)       }
-  | "^"         { fun map -> CARET(get lexbuf)     }
-  | "~"         { fun map -> TILDE(get lexbuf)     }
-  | "=="        { fun map -> EEQ(get lexbuf)       }
-  | "!="        { fun map -> NEQ(get lexbuf)       }
-  | "<"         { fun map -> LT(get lexbuf)        }
-  | "<="        { fun map -> LEQ(get lexbuf)       }
-  | ">"         { fun map -> GT(get lexbuf)        }
-  | ">="        { fun map -> GEQ(get lexbuf)       }
+  | "+"         { fun map -> P.PLUS(get lexbuf)      }
+  | "-"         { fun map -> P.MINUS(get lexbuf)     }
+  | "*"         { fun map -> P.STAR(get lexbuf)      }
+  | "/"         { fun map -> P.SLASH(get lexbuf)     }
+  | "%"         { fun map -> P.PERCENT(get lexbuf)   }
+  | ">>"        { fun map -> P.GGREATER(get lexbuf)  }
+  | "<<"        { fun map -> P.LLESS(get lexbuf)     }
+  | "&"         { fun map -> P.AMPERSAND(get lexbuf) }
+  | "|"         { fun map -> P.BAR(get lexbuf)       }
+  | "^"         { fun map -> P.CARET(get lexbuf)     }
+  | "~"         { fun map -> P.TILDE(get lexbuf)     }
+  | "=="        { fun map -> P.EEQ(get lexbuf)       }
+  | "!="        { fun map -> P.NEQ(get lexbuf)       }
+  | "<"         { fun map -> P.LT(get lexbuf)        }
+  | "<="        { fun map -> P.LEQ(get lexbuf)       }
+  | ">"         { fun map -> P.GT(get lexbuf)        }
+  | ">="        { fun map -> P.GEQ(get lexbuf)       }
 
+  | "`" id "`"  { fun map -> P.INFIXOP(substr 1 (-1) (get lexbuf)) }
               
   | "bits" nat  { fun map -> 
                   let s = substr 4 0 (get lexbuf) in
-                  BITSn (int_of_string s)
+                  P.BITSn (int_of_string s)
                 }
-  | "float" nat { fun map -> 
-                  let s = substr 5 0 (get lexbuf) in
-                  FLOATn (int_of_string s)
-                }
+@
 
-@ An identifier is an [[ID]] unless it is a reserved word.  When it is
+An identifier is an [[ID]] unless it is a reserved word.  When it is
 the reserved word [[pragma]] the [[PRAGMA]] token is returned by
 [[keyword]] and we switch to the special [[pragma1]] context. 
 
 <<scan.mll>>=
   | id          { fun map ->  
                   let s  = get lexbuf in 
-                  let k  = try keyword s with Not_found -> ID s in
-                    if k = PRAGMA then pragma1 lexbuf map else k  
+                  let k  = try keyword s with Not_found -> P.ID s in
+                    if k = P.PRAGMA then pragma1 lexbuf map else k  
                 } 
-  | float       { fun map -> FLT (get lexbuf) }
-  | nat         { fun map -> INT (get lexbuf) }
-
+  | '%' id      { fun map ->
+                  let s = substr 1 0 (get lexbuf)
+                  in P.PRIMOP(s)
+                }
+  | float       { fun map -> P.FLT (get lexbuf, None) }
+  | nat         { fun map -> P.INT (get lexbuf, None) }
+  | float size  { fun map -> P.FLT (splitAtColon (get lexbuf))}
+  | nat   size  { fun map -> P.INT (splitAtColon (get lexbuf))}
   
   | "/*"        { fun map -> comment lexbuf map 0 }
   | "\""        { fun map -> string  lexbuf map (Buffer.create 80) }
   | "'"         { fun map -> character lexbuf map } 
  
   | _           { fun map -> error lexbuf map "illegal character" }
-
 @
+
 % ------------------------------------------------------------------  
 \subsection{Character Literals}
 % ------------------------------------------------------------------  
-<<scan.mll>>=
 
+The interpretation functions for escaped characters are not yet
+written. 
+
+<<>>=
 and character = parse
-    printable      "'"          { fun map -> CHAR (get lexbuf) }
+    printable      "'"          { fun map -> 
+                                  let s = substr 1 (-1) (get lexbuf) in
+                                  P.CHAR  (s,None) 
+                                }
+  | printable      "'"  size    { fun map -> 
+                                  let lexem     = get lexbuf         in
+                                  let left,size = splitAtColon lexem in
+                                  P.CHAR (substr 0 (-1) left, size)
+                                }
+  
   | '\\' escape    "'"          { fun map -> 
-                                  let c = (getchar lexbuf 2) in
-                                  CHAR (String.make 1 (escape c))
+                                  let s = substr 1 (-1) (get lexbuf) in
+                                  P.CHAR  (s,None)
                                 }
-  | '\\' decchar   "'"          { fun map -> 
+
+  | '\\' escape    "'" size     { fun map -> 
+                                  let lexem     = get lexbuf         in
+                                  let left,size = splitAtColon lexem in
+                                  P.CHAR (substr 1 (-1) left, size)
+                                }
+  | '\\' octal+   "'"           { fun map -> 
+                                  let s = substr 1 (-1) (get lexbuf) in
+                                  P.CHAR  (s,None) (* XXX *)
+                                }
+  | '\\' octal+   "'" size      { fun map -> 
+                                  let lexem     = get lexbuf         in
+                                  let left,size = splitAtColon lexem in
+                                  P.CHAR (substr 1 (-1) left, size)
+                                }
+  
+  | '\\' ['x' 'X'] hex+ "'"     { fun map -> 
                                   let s = substr 2 (-1) (get lexbuf) in
-                                  let c = Char.chr (int_of_string s) in
-                                  CHAR  (String.make 1 c)
+                                  P.CHAR  (s,None) (* XXX *)
                                 }
-  | '\\' _                      { fun map -> 
-                                  error lexbuf map "illegal character escape" 
+  | '\\' ['x' 'X'] hex+ "'" size    
+                                { fun map -> 
+                                  let lexem     = get lexbuf         in
+                                  let left,size = splitAtColon lexem in
+                                  P.CHAR (substr 2 (-1) left, size)
                                 }
+                                  
   | _                           { fun map ->
-                                  error lexbuf map "illegal character constant" 
+                                  error lexbuf map "illegal character literal" 
                                 }
 
 @
@@ -366,12 +421,18 @@ and comment = parse
 \subsection{Strings}
 % ------------------------------------------------------------------  
 
+Escapes do not yet work; calls to the decoding function must be added 
+where [[XXX]] marked.
+
 <<scan.mll>>=
 and string = parse
     eof                         { fun map buf -> 
                                   error lexbuf map "unterminated string" 
                                 }
-  | "\""                        { fun map buf -> STR (Buffer.contents buf) }
+  | "\""                        { fun map buf -> P.STR (Buffer.contents buf) 
+                                  (* we are done *)
+                                }
+
   | [^ '\000'-'\031'
        '\128'-'\255'
        '"' '\\' ]+              { fun map buf ->
@@ -380,18 +441,21 @@ and string = parse
                                   ; string lexbuf map buf
                                   )
                                 }
-  | '\\' escape                 { fun map buf ->
-                                  let c    = getchar lexbuf 1       in
-                                  let c'   = escape c               in
-                                  ( Buffer.add_char buf c'
+  | '\\' octal+                 { fun map buf -> 
+                                  let s = substr 1 0 (get lexbuf) in
+                                  ( Buffer.add_string buf s (* XXX *)
                                   ; string lexbuf map buf
                                   )
                                 }
-  
-  | '\\' decchar                { fun map buf ->
-                                  let s    = substr 1 0 (get lexbuf    ) in
-                                  let c    = Char.chr (int_of_string s ) in
-                                  ( Buffer.add_char buf c
+  | '\\' ['x' 'X'] hex+         { fun map buf -> 
+                                  let s = substr 2 0 (get lexbuf) in
+                                  ( Buffer.add_string buf s (* XXX *)
+                                  ; string lexbuf map buf
+                                  )
+                                }  
+  | '\\' escape                 { fun map buf ->
+                                  let c    = getchar lexbuf 1       in
+                                  ( Buffer.add_char buf c   (* XXX *)
                                   ; string lexbuf map buf
                                   )
                                 }
@@ -435,14 +499,13 @@ the opening bracket takes place in the [[pragma2]] scanner context.
 <<scan.mll>>=
  
 and pragma1 = parse
-    eof                 { fun map -> EOF }
+    eof                 { fun map -> P.EOF }
   | ws+                 { fun map -> pragma1 lexbuf map }
   | tab                 { fun map -> tab lexbuf map; pragma1 lexbuf map }
   | nl                  { fun map -> nl lexbuf map;  pragma1 lexbuf map } 
   | id                  { fun map -> 
                           let s  = get lexbuf in 
                           try ( match keyword s with 
-                              | LINE_ -> LINE(map)
                               | _     -> pragma2 lexbuf map
                               )
                           with Not_found -> pragma2 lexbuf map 
@@ -479,7 +542,7 @@ for the details but must consider only the following cases:
 \end{itemize}
 
 
-<<scan.mll>>=
+<<>>=
 
 and pragma3 = parse
     eof                         { fun map level ->
@@ -587,10 +650,8 @@ and line = parse
 
 <<>>=                                
 
-{ (* start of epilog *)
-                               
-<<scanner entry point>>
-                                
+{   (* start of epilog *)
+    <<scanner entry point>>
 @
 
 % ------------------------------------------------------------------  
@@ -603,81 +664,92 @@ token (as defined in [[parse.mli]]) into a string.  This is used in
 the [[Main]] module to define a function that reports the stream of
 all tokens for a file together with their positions.
 
-<<scan.mll>>=
-
+<<>>=
     let tok2str = function
 
-    | ABORTS            -> "ABORTS"
-    | ALIGN             -> "ALIGN"
-    | ALIGNED           -> "ALIGNED"
-    | ALSO              -> "ALSO"
-    | COLON             -> "COLON"
-    | COMMA             -> "COMMA"
-    | CONST             -> "CONST"
-    | CONTINUATION      -> "CONTINUATION"
-    | CPP               -> "CPP"
-    | CUT               -> "CUT"
-    | CUTS              -> "CUTS"
-    | ELSE              -> "ELSE"
-    | EOF               -> "EOF"
-    | EQUAL             -> "EQUAL"
-    | EXPORT            -> "EXPORT"
-    | FOREIGN           -> "FOREIGN"
-    | GOTO              -> "GOTO"
-    | IF                -> "IF"
-    | IMPORT            -> "IMPORT"
-    | INVARIANT         -> "INVARIANT"
-    | JUMP              -> "JUMP"
-    | LBRACE            -> "LBRACE"
-    | LBRACKET          -> "LBRACKET"
-    | LPAREN            -> "LPAREN"
-    | PPERCENT          -> "PPERCENT"
-    | PRAGMA            -> "PRAGMA"
-    | RBRACE            -> "RBRACE"
-    | RBRACKET          -> "RBRACKET"
-    | REGISTER          -> "REGISTER"
-    | RETURN            -> "RETURN"
-    | RETURNS           -> "RETURNS"
-    | RPAREN            -> "RPAREN"
-    | SECTION           -> "SECTION"
-    | SEMI              -> "SEMI"
-    | SPAN              -> "SPAN"
-    | STACKDATA         -> "STACKDATA"
-    | TARGETS           -> "TARGETS"
-    | TO                -> "TO"
-    | UNICODE           -> "UNICODE"
-    | UNWINDS           -> "UNWINDS"
+    | P.ABORTS            -> "ABORTS"
+    | P.ALIGN             -> "ALIGN"
+    | P.ALIGNED           -> "ALIGNED"
+    | P.ALSO              -> "ALSO"
+    | P.AS                -> "AS"
+    | P.COLON             -> "COLON"
+    | P.COMMA             -> "COMMA"
+    | P.CONST             -> "CONST"
+    | P.CONTINUATION      -> "CONTINUATION"
+    | P.CUT               -> "CUT"
+    | P.CUTS              -> "CUTS"
+    | P.ELSE              -> "ELSE"
+    | P.EOF               -> "EOF"
+    | P.EQUAL             -> "EQUAL"
+    | P.EXPORT            -> "EXPORT"
+    | P.FOREIGN           -> "FOREIGN"
+    | P.GOTO              -> "GOTO"
+    | P.IF                -> "IF"
+    | P.IMPORT            -> "IMPORT"
+    | P.INVARIANT         -> "INVARIANT"
+    | P.JUMP              -> "JUMP"
+    | P.LBRACE            -> "LBRACE"
+    | P.LBRACKET          -> "LBRACKET"
+    | P.LPAREN            -> "LPAREN"
+    | P.PPERCENT          -> "PPERCENT"
+    | P.PRAGMA            -> "PRAGMA"
+    | P.RBRACE            -> "RBRACE"
+    | P.RBRACKET          -> "RBRACKET"
+    | P.REGISTER          -> "REGISTER"
+    | P.RETURN            -> "RETURN"
+    | P.RETURNS           -> "RETURNS"
+    | P.RPAREN            -> "RPAREN"
+    | P.SECTION           -> "SECTION"
+    | P.SEMI              -> "SEMI"
+    | P.SPAN              -> "SPAN"
+    | P.STACKDATA         -> "STACKDATA"
+    | P.TARGETS           -> "TARGETS"
+    | P.TO                -> "TO"
+    | P.UNICODE           -> "UNICODE"
+    | P.UNWINDS           -> "UNWINDS"
 
-    (* pragmas *)
+    | P.TYPEDEF           -> "TYPEDEF" 
+    | P.MEMSIZE           -> "MEMSIZE"
+    | P.BYTEORDER         -> "BYTEORDER"
+    | P.LITTLE            -> "LITTLE"
+    | P.BIG               -> "BIG"
+    | P.CASE              -> "CASE"
+    | P.DEFAULT           -> "DEFAULT"
+    | P.TARGET            -> "TARGET"
+    | P.DOTDOT            -> "DOTDOT"
+    | P.SWITCH            -> "SWITCH"
 
-    | LINE(_)           -> "LINE" 
-    | LINE_             -> "LINE" 
 
-    | AMPERSAND(s)      -> "AMPERSAND(" ^ s ^ ")"
-    | BAR(s)            -> "BAR(" ^       s ^ ")"
-    | CARET(s)          -> "CARET(" ^     s ^ ")"
-    | EEQ(s)            -> "EEQ(" ^       s ^ ")"
-    | GEQ(s)            -> "GEQ(" ^       s ^ ")"
-    | GGREATER(s)       -> "GGREATER(" ^  s ^ ")"
-    | GT(s)             -> "GT(" ^        s ^ ")"
-    | LEQ(s)            -> "LEQ(" ^       s ^ ")"
-    | LLESS(s)          -> "LLESS(" ^     s ^ ")"
-    | LT(s)             -> "LT(" ^        s ^ ")"
-    | MINUS(s)          -> "MINUS(" ^     s ^ ")"
-    | NEQ(s)            -> "NEQ(" ^       s ^ ")"
-    | PERCENT(s)        -> "PERCENT(" ^   s ^ ")"
-    | PLUS(s)           -> "PLUS(" ^      s ^ ")"
-    | SLASH(s)          -> "SLASH(" ^     s ^ ")"
-    | STAR(s)           -> "STAR(" ^      s ^ ")"
-    | TILDE(s)          -> "TILDE(" ^     s ^ ")"
+    | P.AMPERSAND(s)      -> "AMPERSAND(" ^ s ^ ")"
+    | P.BAR(s)            -> "BAR(" ^       s ^ ")"
+    | P.CARET(s)          -> "CARET(" ^     s ^ ")"
+    | P.EEQ(s)            -> "EEQ(" ^       s ^ ")"
+    | P.GEQ(s)            -> "GEQ(" ^       s ^ ")"
+    | P.GGREATER(s)       -> "GGREATER(" ^  s ^ ")"
+    | P.GT(s)             -> "GT(" ^        s ^ ")"
+    | P.LEQ(s)            -> "LEQ(" ^       s ^ ")"
+    | P.LLESS(s)          -> "LLESS(" ^     s ^ ")"
+    | P.LT(s)             -> "LT(" ^        s ^ ")"
+    | P.MINUS(s)          -> "MINUS(" ^     s ^ ")"
+    | P.NEQ(s)            -> "NEQ(" ^       s ^ ")"
+    | P.PERCENT(s)        -> "PERCENT(" ^   s ^ ")"
+    | P.PLUS(s)           -> "PLUS(" ^      s ^ ")"
+    | P.SLASH(s)          -> "SLASH(" ^     s ^ ")"
+    | P.STAR(s)           -> "STAR(" ^      s ^ ")"
+    | P.TILDE(s)          -> "TILDE(" ^     s ^ ")"
+    | P.UMINUS(s)         -> "UMINUS" ^     s ^ ")"
     
-    | ID(s)             -> "ID(" ^ s                     ^ ")"
-    | STR(s)            -> "STR(" ^ s                    ^ ")"
-    | INT(i)            -> "INT(" ^ i                    ^ ")"
-    | FLT(f)            -> "FLT(" ^ f                    ^ ")"
-    | BITSn(i)          -> "BITSn(" ^ string_of_int i    ^ ")"
-    | FLOATn(i)         -> "FLOATSn(" ^ string_of_int i  ^ ")"
-    | CHAR(c)           -> "CHAR(" ^ c                   ^ ")"
+    | P.ID(s)             -> "ID(" ^ s                     ^ ")"
+    | P.STR(s)            -> "STR(" ^ s                    ^ ")"
+    | P.INFIXOP(s)        -> "INFIXOP(" ^ s                ^ ")"
+    | P.PRIMOP(s)         -> "PRIMOP(" ^ s                 ^ ")"
+    | P.INT(i,None)       -> "INT(" ^ i                    ^ ")"
+    | P.FLT(f,None)       -> "FLT(" ^ f                    ^ ")"    
+    | P.CHAR(c,None)      -> "CHAR(" ^ c                   ^ ")"    
+    | P.INT(i,Some bits)  -> "INT(" ^ i  ^":"^ string_of_int bits ^ ")"
+    | P.FLT(f,Some bits)  -> "FLT(" ^ f  ^":"^ string_of_int bits ^ ")"    
+    | P.CHAR(c,Some bits) -> "CHAR(" ^ c ^":"^ string_of_int bits ^ ")"    
+    | P.BITSn(i)          -> "BITSn(" ^        string_of_int i    ^ ")"
     
 }
 
@@ -693,109 +765,63 @@ The parser reads a token stream created by the scanner (module
 module [[Ast]]. 
 
 <<parse.mly>>=
-/* Do not edit; edit $RCSfile$ insted.  */
-
 %{
+    module A = Ast
 
-open Ast
-open List
+    <<helper functions>>            
+%}
+@     
 
-let error pos msg = Error.error msg
-
-let mkRegs v (ty,regs) =
-    let r (id,hint) = (v, ty, id, hint) 
-    in
-        map r regs
-
-@ Multiple assignments are defined as a list of pairs in the abstract syntax
-but two lists in the concrete syntax. The [[assign]] function implements
-the classic [[zip]] function to join them into a list of pairs.
-
-<<parse.mly>>= 
-
-let assign pos left right = 
-    let rec loop = function 
-        | [], []            -> []
-        | [], rr            -> error pos "too few lvalues in assignment"
-        | ll, []            -> error pos "too many lvalues in assignment"
-        | (l::ll),(r::rr)   -> (l,r)::loop (ll,rr) 
-    in
-        loop (left,right)
-     
-@ [[p]] returns the region for the left hand symbol in the current
+[[p]] returns the region for the left hand symbol in the current
 production.  A region (of type [[int * int]] contains the position of
 the first character character of the symbol in input stream, and the
-position of the first character after the symbol. These regions are
-attached to important nodes in the abstract syntax. The function
+position of the first character after the symbol.  These regions are
+attached to important nodes in the abstract syntax.  The function
 [[pn]] returns the region for symbol [[n]] on the right hand side,
 where the leftmost symbol has index 1.
 
-<<parse.mly>>=
+<<helper functions>>=
 
 let p  ()  = (Parsing.symbol_start (), Parsing.symbol_end())
 let pn n   = (Parsing.rhs_start n, Parsing.rhs_end n)
 let px ()  = (Parsing.symbol_start ())
-let atoi x = try int_of_string x
-             with Failure _ -> assert false
-            
-%}
+@
 
-/* keywords, symbols, flags */
+Integer literals are returned by the scanner as a [[string*int option]]
+pair. The first component hold the value, the second an optional
+number of bits. The ``ascii to integer'' function [[atoi]] returns the
+value by applying [[int_of_string]]].
+ 
+<<>>=
+let atoi (x,_) = try int_of_string x
+                 with Failure _ -> assert false
+@
 
-%token ABORTS
-%token ALIGN
-%token ALIGNED
-%token ALSO
-%token AMPERSAND
-%token COLON
-%token COMMA
-%token CONST
-%token CONTINUATION
-%token CUT
-%token CUTS
-%token ELSE
-%token EOF
-%token EQUAL
-%token EXPORT
-%token FOREIGN
-%token GOTO
-%token IF
-%token IMPORT
-%token INVARIANT
-%token JUMP
-%token LBRACE
-%token LBRACKET
-%token LPAREN
-%token PPERCENT
-%token RBRACE
-%token RBRACKET
-%token REGISTER
-%token RETURN
-%token RETURNS
-%token RPAREN
-%token SECTION
-%token SEMI
-%token SPAN
-%token STACKDATA
-%token TARGETS
-%token TO
-%token UNICODE
-%token UNWINDS
+<<>>=
+let rev    = List.rev
+
+let mkRegs v (ty,regs) =
+    let r (id,hint) = (v, ty, id, hint) 
+    in
+        List.map r regs
+<<>>=
+let mkTypedefs ty names =
+    List.map (fun n -> A.Typedef(n,ty)) names
+@            
+
+<<parse.mly>>=
+%token ABORTS ALIGN ALIGNED ALSO AS AMPERSAND BIG BYTEORDER CASE COLON
+%token COMMA CONST CONTINUATION CUT CUTS DEFAULT DOTDOT ELSE EOF EQUAL
+%token EXPORT FOREIGN GOTO IF IMPORT INFIXOP INVARIANT JUMP LBRACE
+%token LBRACKET LITTLE LPAREN MEMSIZE PPERCENT RBRACE RBRACKET REGISTER
+%token RETURN RETURNS RPAREN SECTION SEMI SPAN STACKDATA SWITCH TARGET
+%token TARGETS TO TYPEDEF UNICODE UNWINDS
 
 /* pragmas */
 
-%token CPP
 %token PRAGMA
 
-@ We need two tokens for [[pragma line]]:  [[LINE_]] is only used
-inside the scanner while detecting that the [[line]] pragma is known. 
-Then [[LINE]] is returned with the current source location map
-attached.
-
-<<parse.mly>>= 
-%token <Srcmap.map> LINE
-%token LINE_
-
+<<>>=
 /* infix and prefix operators */
 
 %token <string> EEQ NEQ LT LEQ GT GEQ
@@ -805,25 +831,26 @@ attached.
 %token <string> LLESS GGREATER           
 %token <string> PLUS MINUS               
 %token <string> PERCENT STAR SLASH       
-%token <string> TILDE                    
+%token <string> TILDE UMINUS                    
+%token <string> INFIXOP
+%token <string> PRIMOP 
 
+%token <string>            ID
+%token <string>            STR
+%token <int>               BITSn
+%token <string*int option> INT
+%token <string*int option> FLT
+%token <string*int option> CHAR
+@
 
-@ The abstract syntax is defined by an \asdl~specification which does not
-provide data types for characters and floating point numbers. For this
-reason strings are used to capture the values of the respective literals.
+The precedence of tokens from lowest to highest precedence.
 
-<<parse.mly>>=
+<<>>=
+/* lvalue conflict resolution */
+%right      ID
+%right      LBRACKET
 
-%token <string> ID
-%token <string> INT
-%token <string> FLT
-%token <string> CHAR
-%token <string> STR
-%token <int>    BITSn
-%token <int>    FLOATn
-
-/* precedence - from lowest to highest precedence */
-
+%nonassoc   INFIXOP
 %nonassoc   EEQ NEQ LT LEQ GT GEQ
 %left       BAR                      
 %left       CARET                    
@@ -831,263 +858,302 @@ reason strings are used to capture the values of the respective literals.
 %left       LLESS GGREATER           
 %left       PLUS MINUS               
 %left       PERCENT STAR SLASH       
-%right      TILDE                    
+%right      TILDE UMINUS
 
 %start program
 %type <Ast.program>program
 
 %%
 
-program     :   toplevels                         { rev $1 }
+program     :   toplevels                      { rev $1}
 
-toplevels   :   toplevels toplevelAt              { $2::$1 }
-            |   /**/                              { []     }
+toplevels   :   toplevels toplevelAt           { $2::$1 }
+            |   /**/                           { []     }
+<<>>=
+toplevelAt  :   toplevel                       { A.ToplevelAt($1,p())       }
+toplevel    :   SECTION STR LBRACE sections RBRACE  { A.Section($2, rev $4) }
+            |   procedure                      { A.TopProcedure($1)         }
+            |   declAt                         { A.TopDecl($1)              }
+<<>>=
+sections    :   sections sectionAt             { $2 :: $1 }
+            |   /**/                           { []       }
 
-pragma      :   PRAGMA LBRACE RBRACE              { Pragma } 
-            |   line                              { Pragma }
+sectionAt   :   section                        { A.SectionAt($1,p()) }
+section     :   procedure                      { A.Procedure($1)     }
+            |   datum                          { A.Datum($1)         }
+            |   span                           { A.SSpan($1)         }
+            |   declAt                         { A.Decl($1)          }
 
-line        :   LINE LBRACE STR INT RBRACE        
-                    { let pos = Parsing.rhs_start 1 in
-                      let map = $1 in
-                        Srcmap.sync map pos ($3,atoi $4,1) 
-                    }  
-                     
-            |   LINE LBRACE STR INT INT RBRACE
-                    { let pos = Parsing.rhs_start 1 in
-                      let map = $1 in
-                        Srcmap.sync map  pos ($3,atoi $4,atoi $5) 
-                    }
-            
-toplevelAt  :   toplevel                          { TopDeclAt($1,p())        }
-toplevel    :   IMPORT ty names  SEMI             { Import($2,rev $3)        }
-            |   EXPORT    names  SEMI             { Export (None   , rev $2) }
-            |   EXPORT ty names  SEMI             { Export (Some $2, rev $3) }
-            |   CONST LBRACE constants RBRACE     { Const(rev $3)            }
-            |   INVARIANT REGISTER registers SEMI
-                    { Registers (mkRegs Invariant $3)                        }
-            |   /*-----*/ REGISTER registers SEMI
-                    { Registers (mkRegs Variant   $2)                        }
-            |   SECTION STR LBRACE sections RBRACE { Section($2,rev $4)      }
-            |   pragma                            { $1                       }
-            |   procedure                         { TopProcedure($1)         }
-
-
-sections    :   sections sectionAt                { $2 :: $1 }
-            |   /**/                              { []       }
-
-sectionAt   :   section                           { SectionAt($1,p())         }
-section     :   procedure                         { Procedure($1)             }
-            |   datum                             { Datum($1)                 }
-            |   span                              { $1                        }
-            |   EXPORT    names  SEMI             { SExport (None   , rev $2) }
-            |   EXPORT ty names  SEMI             { SExport (Some $2, rev $3) }
-
-span        :   SPAN exprAt expr 
-                LBRACE sections RBRACE            { SSpan($2,$3,rev $5) }
-
-constants   :   constants ID EQUAL exprAt SEMI    { ($2,$4)::$1 }
-            |   /**/                              { []          }
-
-decls       :   decls declAt                      { $2 :: $1  }
-            |   /**/                              { []        }
-
-declAt      :   decl                              
-                    { DeclAt($1,p())                   }
+<<>>=
+declAt      :   decl                           { A.DeclAt($1,p()) }   
 decl        :   INVARIANT REGISTER registers SEMI
-                    { LRegisters (mkRegs Invariant $3) }
+                    { A.Registers(mkRegs A.Invariant $3) }
             |   INVARIANT /*----*/ registers SEMI
-                    { LRegisters (mkRegs Invariant $2) }
+                    { A.Registers(mkRegs A.Invariant $2) }
             |   /*-----*/ REGISTER registers SEMI
-                    { LRegisters (mkRegs Variant   $2) }
+                    { A.Registers(mkRegs A.Variant $2)   }
             |   /*-----*/ /*----*/ registers SEMI
-                    { LRegisters (mkRegs Variant   $1) }
-            |   STACKDATA LBRACE data RBRACE
-                    { Stackdata(rev $3)                }
+                    { A.Registers(mkRegs A.Variant $1)   }
 
+            |   EXPORT    exports  SEMI        { A.Export(None, $2)    }
+            |   EXPORT ty exports  SEMI        { A.Export(Some $2, $3) }
+            |   IMPORT ty imports  SEMI        { A.Import($2,$3)           }
+            |   CONST     ID EQUAL exprAt SEMI { A.Const(None,$2,$4)       }
+            |   CONST  ty ID EQUAL exprAt SEMI { A.Const(Some $2,$3,$5)    }
+            |   TYPEDEF ty names SEMI          { A.Typedef($2,rev $3)      }
+            |   TARGET properties SEMI         { A.Target(rev $2)          }
+<<>>=
+property    :   MEMSIZE INT                    { A.Memsize(atoi $2) }
+            |   BYTEORDER BIG                  { A.ByteorderBig     }
+            |   BYTEORDER LITTLE               { A.ByteorderLittle  }
+<<>>=
+properties  :   properties property            { $2 :: $1 }
+            |   /**/                           { []       }
+<<>>=
+span        :   SPAN exprAt expr
+                LBRACE sections RBRACE         { $2, $3, rev $5 }
+<<>>=
+datumAt     :   datum                          { A.DatumAt($1,p()) }
+datum       :   ID COLON                       { A.Label $1 }
+            |   ALIGN INT SEMI                 { A.Align (atoi $2) }
+            |   tyAt size initAt SEMI          { A.MemDecl($1,$2,Some $3)}
+            |   tyAt size        SEMI          { A.MemDecl($1,$2,None)}
+            |   tyAt      initAt SEMI          { A.MemDecl($1,A.NoSize,Some $2)}
+            |   tyAt             SEMI          { A.MemDecl($1,A.NoSize,None)}
+<<>>=
+initAt      :   init                           { A.InitAt($1,p()) }
+init        :   LBRACE   exprs RBRACE          { A.InitExprs($2)  }
+            |   string                         { A.InitStr($1)    }
+            |   string16                       { A.InitUStr($1)   }
+<<>>=
+registers   :   tyAt regs                      { $1, rev $2 }
+            |   tyAt regs COMMA                { $1, rev $2 }
 
-registers   :   tyAt regs                   { $1, rev $2 }
+regs        :   regs COMMA ID STR              { ($3, Some $4)::$1 }
+            |   regs COMMA ID                  { ($3, None   )::$1 }
+            |   ID STR                         { [($1,Some $2)]    }
+            |   ID                             { [($1,None   )]    }
 
-regs        :   regs COMMA ID STR           { ($3,Some $4)::$1              }
-            |   regs COMMA ID               { ($3,None   )::$1              }
-            |   ID STR                      { [($1,Some $2)]                }
-            |   ID                          { [($1,None   )]                }
+<<>>=
+size        :   LBRACKET exprAt RBRACKET       { A.FixSize($2) }
+            |   LBRACKET       RBRACKET        { A.DynSize     }
 
-datumAt     :   datum                       { DatumAt($1, p())              }
-datum       :   ID COLON                    { Label($1)                     }
-            |   ALIGN INT SEMI              { Align(atoi $2)                }
-            |   tyAt size initAt SEMI       { MemDecl($1, $2     , Some $3) }
-            |   tyAt size        SEMI       { MemDecl($1, $2     , None)    }
-            |   tyAt      initAt SEMI       { MemDecl($1, NoSize , Some $2) }
-            |   tyAt             SEMI       { MemDecl($1, NoSize , None)    }
-                                            
+procedure   :   conv ID frmls body             {  $1, $2, $3, $4 }
+            |        ID frmls body             {None, $1, $2, $3 }
 
-data        :   data  datumAt               { $2 :: $1        }
-            |   /**/                        { []              }
+body        :   LBRACE body0 RBRACE            { rev $2 }
 
+body0       :   body0 bodyAt                   { $2 :: $1 }
+            |   /**/                           { []       }
 
-initAt      :   init                        { InitAt($1, p())   }
-init        :   LBRACE   exprs RBRACE       { InitExprs(rev $2) }
-            |   string                      { InitStr($1)       }
-            |   string16                    { InitUStr($1)      }
+bodyAt      :   body1                          { A.BodyAt($1,p()) }
+body1       :   declAt                         { A.DeclBody $1    }
+            |   stackdecl                      { A.DataBody $1    }
+            |   stmtAt                         { A.StmtBody $1    }
 
-size        :   LBRACKET exprAt RBRACKET    { FixSize $2      }
-            |   LBRACKET       RBRACKET     { DynSize         }
+frmls       :   LPAREN  formals RPAREN         { $2 }
+            |   LPAREN          RPAREN         { [] }
+actls       :   LPAREN  actuals RPAREN         { $2 }
+            |   LPAREN          RPAREN         { [] }
 
-conv        :   FOREIGN STR                 { Some $2         }
+formals     :   formals_ optcomma              { rev $1   }
+formals_    :   formals_ COMMA formal          { $3 :: $1 }
+            |   formal                         { [$1]     }
 
-aligned     :   ALIGNED INT                 { Some(atoi $2)   }
+actuals     :   actuals_ optcomma              { rev $1   }
+actuals_    :   actuals_ COMMA actual          { $3 :: $1 }
+            |   actual                         { [$1]     }
 
-procedure   :   conv ID frmls body      { let (dec,stmt) = $4 in
-                                          ($1  ,$2,$3,dec,stmt) 
-                                        }
-            |        ID frmls body      { let (dec,stmt) = $3 in
-                                          (None,$1,$2,dec,stmt) 
-                                        }
+formal      :   STR INVARIANT REGISTER tyAt ID { Some $1, A.Invariant, $4, $5}
+            |   STR           REGISTER tyAt ID { Some $1, A.Variant  , $3, $4}
+            |       INVARIANT REGISTER tyAt ID { None   , A.Invariant, $3, $4}
+            |                 REGISTER tyAt ID { None   , A.Variant  , $2, $3}
+            |   STR INVARIANT          tyAt ID { Some $1, A.Invariant, $3, $4}
+            |   STR                    tyAt ID { Some $1, A.Variant  , $2, $3}
+            |       INVARIANT          tyAt ID { None   , A.Invariant, $2, $3}
+            |                          tyAt ID { None   , A.Variant  , $1, $2}
 
+actual      :   STR exprAt                     { Some $1, $2 }
+            |       exprAt                     { None   , $1 }
 
-frmls       :   LPAREN  formals RPAREN            { rev $2 }
-            |   LPAREN          RPAREN            { []     }
-actls       :   LPAREN  actuals RPAREN            { rev $2 }
-            |   LPAREN          RPAREN            { []     }
+<<>>=
+stackdecl   :   STACKDATA LBRACE data RBRACE   { rev $3 }
 
-formals     :   formals COMMA formal              { $3 :: $1 }
-            |   formal                            { [$1]     }
-actuals     :   actuals COMMA actual              { $3 :: $1 }
-            |   actual                            { [$1]     }
+data        :   data  datumAt                  { $2 :: $1 }
+            |   /**/                           { []       }
 
-formal      :   STR INVARIANT tyAt ID     { Some $1, Invariant, $3, $4 }
-            |   STR           tyAt ID     { Some $1,   Variant, $2, $3 }
-            |       INVARIANT tyAt ID     { None   , Invariant, $2, $3 }
-            |                 tyAt ID     { None   ,   Variant, $1, $2 }
+conv        :   FOREIGN STR                    { Some $2 }
 
-actual      :   STR exprAt                        { Some $1, $2 }
-            |       exprAt                        { None   , $1 }
+aligned     :   ALIGNED INT                    { Some (atoi $2) }
 
+flowAt      :   flow                           { A.FlowAt($1,p()) }
+flow        :   ALSO CUTS     TO names         { A.CutsTo($4)     }
+            |   ALSO UNWINDS  TO names         { A.UnwindsTo($4)  }
+            |   ALSO RETURNS  TO names         { A.ReturnsTo($4)  }
+            |   ALSO ABORTS                    { A.Aborts         }
 
-flowAt      :   flow                              { FlowAt($1,p())    }
-flow        :   ALSO CUTS     TO names            { CutsTo(rev $4)    }
-            |   ALSO UNWINDS  TO names            { UnwindsTo(rev $4) }
-            |   ALSO RETURNS  TO names            { ReturnsTo(rev $4) }
-            |   ALSO ABORTS                       { Aborts            }
+flows       :   flows flowAt                   { $2 :: $1 }
+            |   /**/                           { []       }
 
-flows       :   flows flowAt                      { $2 :: $1 }
-            |   /**/                              { []       }
+targets     :   TARGETS names                  { $2 }
+            |   /**/                           { [] }
+<<>>=
+lvalueAt    :   lvalue                                 { A.LValueAt($1,p()) }
+lvalue      :   ID                                     { A.Var($1)          }
+            |   sty   LBRACKET exprAt aligned RBRACKET { A.Mem($1,$3,$4)    }
+            |   sty   LBRACKET exprAt         RBRACKET { A.Mem($1,$3,None)  }
+            |   ID    LBRACKET exprAt aligned RBRACKET
+                        { A.Mem(A.AliasTy($1),$3,$4)                        }
+            |   ID    LBRACKET exprAt         RBRACKET
+                        { A.Mem(A.AliasTy($1),$3,None)                      }
 
-targets     :   TARGETS names                     { rev $2 }
-            |   /**/                              { []     }
+lvalues     :   lvalues_ optcomma              { rev $1   }
+lvalues_    :   lvalues_ COMMA lvalueAt        { $3 :: $1 }
+            |   lvalueAt                       { [$1]     }
 
-lvalueAt    :   lvalue                            { LValueAt($1, p())   }
-lvalue      :   ID                                { Var($1)             }
-            |   tyAt LBRACKET exprAt aligned RBRACKET { Mem($1,$3,$4)   }
-            |   tyAt LBRACKET exprAt         RBRACKET { Mem($1,$3,None) }
+tyAt        :   ty                             { A.TyAt($1,p()) }
+ty          :   sty                            { $1             }
+            |   ID                             { A.AliasTy($1)  }
 
-lvalues     :   lvalues COMMA lvalueAt            { $3 :: $1 }
-            |   lvalueAt                          { [$1]     }
+sty         :   BITSn                          { A.BitsTy($1)     }
 
-tyAt        :   ty                                { TyAt($1,p()) }
-ty          :   BITSn                             { BitsTy($1)   }
-            |   FLOATn                            { FloatTy($1)  }
+block       :   LBRACE stmts RBRACE            { rev $2 }
 
-body        :   LBRACE decls stmts RBRACE    { rev $2, rev $3 }
-block       :   LBRACE       stmts RBRACE    {         rev $2 }
-
-returnto    :   LT sexprAt SLASH sexprAt GT  { Some ($2,$4) }
-            |   /**/                         { None         }
-
-stmtAt      :   stmt                         { StmtAt($1,p())           }
-stmt        :   SEMI                         { EmptyStmt                }
-            |   ID COLON                     { LabelStmt($1)            }
-            |   SPAN exprAt exprAt block         { SpanStmt($2,$3,$4)   }
-            |   lvalues EQUAL exprs SEMI     { AssignStmt(assign (px()) $1 $3) }
+returnto    :   LT sexprAt SLASH sexprAt GT    { Some($2,$4) }
+            |   /**/                           { None        }
+<<>>=
+stmtAt      :   stmt                           { A.StmtAt($1,p())     }
+stmt        :   SEMI                           { A.EmptyStmt          }
+            |   ID COLON                       { A.LabelStmt $1       }
+            |   SPAN exprAt exprAt body        { A.SpanStmt($2,$3,$4) }
+            |   lvalues EQUAL exprs SEMI       { A.AssignStmt($1,$3)  }
 
             |   lvalues EQUAL conv PPERCENT ID actls flows SEMI
-                        { PrimStmt(          rev $1, $3, $5, $6, rev $7)      }
-            |                 conv PPERCENT ID actls flows SEMI
-                        { PrimStmt( []        , $1, $3, $4, rev $5)           }
-            |   lvalues EQUAL conv expr actls targets flows SEMI
-                        { CallStmt(          rev $1, $3, $4, $5, $6, rev $7)  }
-            |                 conv expr actls targets flows SEMI
-                        { CallStmt( []        , $1, $2, $3, $4, rev $5)       }
-            |   lvalues EQUAL      PPERCENT ID actls flows SEMI
-                        { PrimStmt(          rev $1, None, $4, $5, rev $6)    }
-            |                      PPERCENT ID actls flows SEMI
-                        { PrimStmt( []        , None, $2, $3, rev $4)         }
-            |   lvalues EQUAL      expr actls targets flows SEMI
-                        { CallStmt(          rev $1, None, $3, $4, $5, rev $6)}
-            |                      expr actls targets flows SEMI
-                        { CallStmt( []        , None, $1, $2, $3, rev $4)     }
-            |   IF exprAt block                     { IfStmt($2,$3,[])        }
-            |   IF exprAt block ELSE block          { IfStmt($2,$3,$5)        }
-            |   GOTO exprAt targets SEMI            { GotoStmt($2,$3)         }
-            |   CONTINUATION ID LPAREN names0 RPAREN COLON
-                                                  { ContStmt($2,rev $4)       }
-            |   CUT TO ID actls flows SEMI        { CutStmt($3,$4, rev $5)    }
-            |   conv JUMP exprAt       targets SEMI { JumpStmt($1  ,$3,[],$4) }
-            |        JUMP exprAt       targets SEMI { JumpStmt(None,$2,[],$3) }
-            |   conv JUMP exprAt actls targets SEMI { JumpStmt($1  ,$3,$4,$5) }
-            |        JUMP exprAt actls targets SEMI { JumpStmt(None,$2,$3,$4) }
-            |   conv RETURN returnto       SEMI   { ReturnStmt($1  ,$3,[])    }
-            |        RETURN returnto       SEMI   { ReturnStmt(None,$2,[])    }
-            |   conv RETURN returnto actls SEMI   { ReturnStmt($1  ,$3,$4)    }
-            |        RETURN returnto actls SEMI   { ReturnStmt(None,$2,$3)    }
-
-stmts       :   stmts stmtAt                     { $2 :: $1 }
-            |   /**/                             { []       }
-
-@ Simple expressions [[sexpr]] are a subset of full expressions
-[[expr]].  We use them only in the parser but not in the abstract
-syntax.  Their only purpose is to provide an [[expr]] subset that does
-not include a slash [[/]].  The slash is used by the [[return]]
-statement and is bracketed by two expressions which make the whole
-thing look like a division expression.  When the expressions are
-restricted to [[sexpr]] this ambiguity is gone.
-
-<<parse.mly>>= 
-
-sexprAt     :   sexpr                            { ExprAt($1, p())           }
-sexpr       :   INT                              { Int($1, None)             }
-            |   INT COLON INT                    { Int($1, Some (atoi $3))   }
-            |   FLT                              { Float($1, None)           }
-            |   FLT COLON INT                    { Float($1, Some (atoi $3)) }
-            |   CHAR                             { Char($1,None)             }
-            |   CHAR COLON INT                   { Char($1, Some (atoi $3))  }
-            |   lvalueAt                         { Fetch($1)                 }
-            |   PERCENT ID actls                 { PrimOp($2, $3)            }
-
-exprAt      :   expr                             { ExprAt($1, p())    }
-expr:       |   sexpr                            { $1 }
-            |   LPAREN exprAt RPAREN             { $2                 }
-
-            |   exprAt PLUS       exprAt         { BinOp($1,$2,$3)    }
-            |   exprAt MINUS      exprAt         { BinOp($1,$2,$3)    }
-            |   exprAt PERCENT    exprAt         { BinOp($1,$2,$3)    }
-            |   exprAt STAR       exprAt         { BinOp($1,$2,$3)    }
-            |   exprAt SLASH      exprAt         { BinOp($1,$2,$3)    }
-            |   exprAt LLESS      exprAt         { BinOp($1,$2,$3)    }
-            |   exprAt GGREATER   exprAt         { BinOp($1,$2,$3)    }
-            |   exprAt CARET      exprAt         { BinOp($1,$2,$3)    }
-            |   exprAt BAR        exprAt         { BinOp($1,$2,$3)    }
-            |   exprAt AMPERSAND  exprAt         { BinOp($1,$2,$3)    }
-            |   exprAt EEQ        exprAt         { BinOp($1,$2,$3)    }
-            |   exprAt NEQ        exprAt         { BinOp($1,$2,$3)    }
-            |   exprAt LT         exprAt         { BinOp($1,$2,$3)    }
-            |   exprAt LEQ        exprAt         { BinOp($1,$2,$3)    }
-            |   exprAt GEQ        exprAt         { BinOp($1,$2,$3)    }
-            |   exprAt GT         exprAt         { BinOp($1,$2,$3)    }
+                { A.PrimStmt($1, $3, $5, $6, rev $7) }      
             
-            |   TILDE      exprAt  %prec TILDE   { UnOp($1,$2)        }
+            |                 conv PPERCENT ID actls flows SEMI
+                { A.PrimStmt([], $1, $3, $4, rev $5) }      
+            
+            |   lvalues EQUAL conv expr actls targets flows SEMI
+                { A.CallStmt($1, $3, $4, $5, $6, rev $7)  }
+            
+            |                 conv expr actls targets flows SEMI
+                { A.CallStmt([], $1, $2, $3, $4, rev $5)  }
+                                          
+            |   lvalues EQUAL      PPERCENT ID actls flows SEMI
+                { A.PrimStmt($1, None, $4, $5, rev $6)    }
+            
+            |                      PPERCENT ID actls flows SEMI
+                { A.PrimStmt( [], None, $2, $3, rev $4)}
+            
+            |   lvalues EQUAL      expr actls targets flows SEMI
+                { A.CallStmt($1, None, $3, $4, $5, rev $6)}
 
-exprs       :   exprs COMMA exprAt               { $3 :: $1 }
-            |   exprAt                           { [$1]     }
+            |                      expr actls targets flows SEMI
+                { A.CallStmt([], None, $1, $2, $3, rev $4)}
+ 
+            |   IF exprAt block                     {A.IfStmt($2,$3,[])}
+            |   IF exprAt block ELSE block          {A.IfStmt($2,$3,$5)}
+            |   GOTO exprAt targets SEMI            {A.GotoStmt($2,$3)}
+            |   CONTINUATION ID LPAREN names0 RPAREN COLON
+                                                    {A.ContStmt($2,$4)}
+            |   CUT TO expr actls flows SEMI        {A.CutStmt($3,$4, rev $5)  }
+            |   conv JUMP exprAt       targets SEMI {A.JumpStmt($1  ,$3,[],$4) }
+            |        JUMP exprAt       targets SEMI {A.JumpStmt(None,$2,[],$3) }
+            |   conv JUMP exprAt actls targets SEMI {A.JumpStmt($1  ,$3,$4,$5) }
+            |        JUMP exprAt actls targets SEMI {A.JumpStmt(None,$2,$3,$4) }
+            |   conv RETURN returnto       SEMI     {A.ReturnStmt($1  ,$3,[])  }
+            |        RETURN returnto       SEMI     {A.ReturnStmt(None,$2,[])  }
+            |   conv RETURN returnto actls SEMI     {A.ReturnStmt($1  ,$3,$4)  }
+            |        RETURN returnto actls SEMI     {A.ReturnStmt(None,$2,$3)  }
+            |   SWITCH srange expr LBRACE arms RBRACE  {A.SwitchStmt($2,$3,$5)}
 
-names       :   names COMMA ID                   { $3 :: $1 }
-            |   ID                               { [$1]     }
+<<>>=
+srange      :   LBRACKET range RBRACKET        {Some $2}
+            |   /**/                           {None}
 
-names0      :   names                            { $1 }
-            |   /**/                             { [] }
+range       :   expr                           {A.Point $1     }
+            |   expr DOTDOT expr               {A.Range ($1,$3)}
 
-string      :   STR                              { $1 }
-string16    :   UNICODE LPAREN STR RPAREN        { $3 }
+ranges      :   ranges_                        { rev $1 }
+            |   ranges_ COMMA                  { rev $1 }
+            |   /**/                           { [] } 
+
+ranges_     :   ranges_ COMMA range            { $3 :: $1 } 
+            |   range                          { [$1]     } 
+
+arms        :   arms armAt                     { $2 :: $1  }
+            |   /**/                           { []        }
+
+armAt       :   arm                            { A.ArmAt($1,p()) }
+arm         :   CASE ranges COLON block        { A.Case($2,$4)   } 
+
+stmts       :   stmts stmtAt                   { $2 :: $1 }
+            |   /**/                           { []       }
+
+<<>>=
+sexprAt     :   sexpr                          { A.ExprAt($1, p()) }
+sexpr       :   INT                            { A.Int   $1        }
+            |   FLT                            { A.Float $1        }
+            |   CHAR                           { A.Char  $1        }
+            |   lvalueAt                       { A.Fetch $1        }
+            |   PRIMOP actls                   { A.PrimOp($1,$2)   }
+<<>>=
+exprAt      :   expr                           { A.ExprAt($1, p()) }
+expr:       |   sexpr                          { $1                }
+            |   LPAREN exprAt RPAREN           { $2                }
+
+            |   exprAt PLUS       exprAt       { A.BinOp($1,$2,$3) }
+            |   exprAt MINUS      exprAt       { A.BinOp($1,$2,$3) }
+            |   exprAt PERCENT    exprAt       { A.BinOp($1,$2,$3) }
+            |   exprAt STAR       exprAt       { A.BinOp($1,$2,$3) }
+            |   exprAt SLASH      exprAt       { A.BinOp($1,$2,$3) }
+            |   exprAt LLESS      exprAt       { A.BinOp($1,$2,$3) }
+            |   exprAt GGREATER   exprAt       { A.BinOp($1,$2,$3) }
+            |   exprAt CARET      exprAt       { A.BinOp($1,$2,$3) }
+            |   exprAt BAR        exprAt       { A.BinOp($1,$2,$3) }
+            |   exprAt AMPERSAND  exprAt       { A.BinOp($1,$2,$3) }
+            |   exprAt EEQ        exprAt       { A.BinOp($1,$2,$3) }
+            |   exprAt NEQ        exprAt       { A.BinOp($1,$2,$3) }
+            |   exprAt LT         exprAt       { A.BinOp($1,$2,$3) }
+            |   exprAt LEQ        exprAt       { A.BinOp($1,$2,$3) }
+            |   exprAt GEQ        exprAt       { A.BinOp($1,$2,$3) }
+            |   exprAt GT         exprAt       { A.BinOp($1,$2,$3) }
+            |   exprAt INFIXOP    exprAt       { A.BinOp($1,$2,$3) }
+            |   TILDE  exprAt  %prec TILDE     { A.UnOp($1,$2)     }
+           /*
+            |   MINUS exprAt %prec UMINUS      { A.UnOp($1,$2)     }
+            */
+
+exprs       :   exprs_ optcomma                { rev $1   }
+exprs_      :   exprs_ COMMA exprAt            { $3 :: $1 }
+            |   exprAt                         { [$1]     }
+<<>>=
+imports     :   imports_ optcomma              { rev $1           }
+imports_    :   imports_ COMMA STR AS ID       { (Some $3,$5)::$1 }
+            |   imports_ COMMA        ID       { (None   ,$3)::$1 } 
+            |   STR AS ID                      { [Some $1,$3]     }
+            |   ID                             { [None   ,$1]     }
+
+exports     :   exports_ optcomma              { rev $1           }
+exports_    :   exports_ COMMA ID AS STR       { ($3,Some $5)::$1 }
+            |   exports_ COMMA ID              { ($3,None)::$1    }
+            |   ID AS STR                      { [$1,Some $3]     }
+            |   ID                             { [$1,None]        }
+
+names       :   names_ optcomma                { rev $1 }
+names_      :   names_ COMMA ID                { $3:: $1}
+            |   ID                             { [$1]   }
+
+names0      :   names                          { $1 }
+            |   /**/                           { [] }
+
+optcomma    :   COMMA                          {}
+            |   /**/                           {}
+
+string      :   STR                            { $1 }
+string16    :   UNICODE LPAREN STR RPAREN      { $3 }
+
 @
 
 

@@ -1,0 +1,187 @@
+
+% ------------------------------------------------------------------ 
+\section{The Fat Environment}
+% ------------------------------------------------------------------ 
+
+The meaning, or denotation, of names in a {\PAL} program are recorded
+in one environment.  Because only one environment is used for all
+different kinds of names it is called fat.  In particular the fat
+environment holds informations about:
+
+\begin{itemize}
+\item Values, like constants, labels for goto and data, procedures.
+\item Types, as they are declared by the [[typedef]] directive.
+\item Target architecture, as declared by the [[target]] directive.
+\end{itemize}
+  
+% ------------------------------------------------------------------ 
+\subsection{Interface}
+% ------------------------------------------------------------------ 
+
+<<fatenv.mli>>=
+type env
+
+<<type declarations>>
+<<function signatures>>
+@
+
+<<type declarations>>=
+type scope      = Global | Local
+
+type kind       = Proc
+                | Code
+                | Data
+                | Stack
+                    
+type ty         = Types.ty
+type value      = Const.value
+type endianness = Big | Little
+
+type denotation = Constant of value
+                | Label    of kind
+                | Register
+                | Continuation
+
+type ventry     = scope * (denotation * ty) Error.error
+type tentry     = scope * ty                Error.error
+
+<<function signatures>>=                
+val empty           : env
+
+val bindv           : string -> ventry  -> env -> env
+val bindt           : string -> tentry  -> env -> env
+val bindvError      : string -> scope   -> env -> env
+val bindtError      : string -> scope   -> env -> env
+val findv           : string -> env     -> ventry
+val findt           : string -> env     -> tentry
+
+@
+
+<<>>=
+val bindMemsize     : int        -> env -> env
+val bindendianness  : endianness -> env -> env 
+val findMemsize     : env -> int option
+val findendianness  : env -> endianness option   
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+<<fatenv.ml>>=
+module E = Error
+
+module Comparable   = struct type t=string let compare=compare end
+module StrMap       = Map.Make(Comparable)
+
+<<type declarations>>
+
+type tenv           = tentry StrMap.t
+type venv           = ventry StrMap.t
+type arch           = { memsize:      int option
+                      ; endianness:   endianness option
+                      }
+<<>>=
+type env            = { tenv :      tenv
+                      ; venv :      venv
+                      ; arch :      arch
+                      }    
+
+let empty = { tenv = StrMap.empty
+            ; venv = StrMap.empty
+            ; arch = { memsize    = None
+                     ; endianness = None
+                     }
+            }
+@
+
+ 
+
+In a {\PAL} program a declared name is visible in its entire scope,
+even before the place of its declaration.  The re-declaration of
+values and type is therefore not allowed.  The implementations of
+[[bindv]] and [[bindt]] maintain this by comparing the scope on an new
+name and a possibly existing name in the environment.  No name can be
+added into the same scope where already a name is declared.
+
+<<>>=
+let bindv name (scope, _ as x) env =
+    let add name x = {env with venv = StrMap.add name x env.venv} in
+    try 
+        let (scope',_) = StrMap.find name env.venv in
+        if scope' = scope then
+            E.error ("value already declared: "^name)
+        else
+            add name x
+    with
+        Not_found -> add name x
+@
+
+<<>>=
+let bindt name (scope, _ as x) env =
+    let add name x = {env with tenv = StrMap.add name x env.tenv} in
+    try 
+        let (scope',_) = StrMap.find name env.tenv in
+        if scope' = scope then
+            E.error ("type already declared: "^name)
+        else
+            add name x
+    with
+        Not_found -> add name x
+
+<<>>=
+let bindvError name scope env = bindv name (scope, E.Error) env
+let bindtError name scope env = bindt name (scope, E.Error) env
+
+@
+The functions to lookup a value [[findv]] and a type [[findt]] raise
+an [[E.Error]] exception in case the name can not be found.
+
+<<>>=
+let findv name env =
+    try
+        StrMap.find name env.venv
+    with 
+        Not_found -> E.error ("unknown value: "^name)
+
+<<>>=
+let findt name env =
+    try
+        StrMap.find name env.tenv
+    with
+        Not_found -> E.error ("unknown type: "^name)
+@        
+
+The [[target]] directive in {\PAL} describes the target architecture
+an program is intended for. The information can be distributed over
+the program and can declare the same fact several times.  However, the
+informations about the target architecture must be consistent. 
+
+The implementation maintains a record of type [[arch]] for the target
+informations where each information is captured by an [[option]] type. 
+Once an information has been supplied the [[bind]] functions enforce
+that only the same fact can be entered again.  They raise an
+[[E.Error]] in case this is attempted because this would violate the
+consistency constraint.
+ 
+<<>>=
+let bindMemsize n env =
+    match env.arch.memsize with
+    | Some n' when n' <> n -> E.error "Inconsistent memsize specification"
+    | Some n' -> env
+    | None -> { env with arch = { env.arch with memsize = Some n} }
+@
+
+<<>>=
+let bindendianness e env =
+    match env.arch.endianness with
+    | Some e' when e' <> e -> E.error "Inconsistent endianness specification"
+    | Some e' -> env
+    | None -> { env with arch = { env.arch with endianness = Some e} }
+@
+
+<<>>=
+let findMemsize    env = env.arch.memsize
+let findendianness env = env.arch.endianness
+@   
+    

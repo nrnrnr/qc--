@@ -34,6 +34,7 @@ type key        = int
 type 'a t       = Bool
                 | Bits of 'a 
                 | Procedure of 'a t list * 'a t
+                | Undefined
 
 type size       = Const of int
                 | Var   of key
@@ -143,6 +144,7 @@ and unify' xs ys sigma = match xs, ys with
     | x::xs         , y::ys     -> unify' xs ys (unify x y sigma)
 
 let rec subst sigma = function
+    | Undefined         -> Undefined
     | Bool              -> Bool
     | Bits(Const(x))    -> Bits(x)
     | Procedure(xs,x)   -> Procedure (List.map (subst sigma) xs, subst sigma x)
@@ -178,11 +180,13 @@ let rec ppProcTy f args return =
     end
 
 let rec ppTy = function
+    | Undefined                 -> text "undefined"
     | Bool                      -> text "bool"
     | Bits(i)                   -> text "bits" ^^ int i
     | Procedure(args,return)    -> ppProcTy ppTy args return
 
 and ppTy' = function
+    | Undefined                 -> text "undefined"
     | Bool                      -> text "bool"
     | Bits(Const(i))            -> text "bits"  ^^ int i
     | Bits(Var(i))              -> text "bits#" ^^ int i
