@@ -49,6 +49,7 @@ Test.files = { "add.c--"
 	     , { name='tadd22', source='tadd.c--', argv='2 2' }
 	     , { name='tadd100-', source='tadd.c--', argv='100 -1' }
 	     , { name='tadd11', source='tadd.c--', argv='-1 -1' }
+	     , { name='taddov', source='tadd.c--', argv='536870912 536870912' }
 	     , "tail.c--"
              , "tail_from_c.c--"
              , { source = {'tail2.c--', 'call3.c--'} }
