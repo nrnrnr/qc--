@@ -33,12 +33,12 @@ module Add (MakeParser : Luaparser.MAKER) (I : Luainterp.S) = struct
     in [k; v]
 
   let luabaselib g =
-    [ "dofile",      V.efunc (V.string **-> V.values) (dofile g)
-    ; "dostring",    V.efunc (V.string **-> V.values) (dostring g)
+    [ "dofile",      V.efunc (V.string **-> V.results) (dofile g)
+    ; "dostring",    V.efunc (V.string **-> V.results) (dostring g)
         (* should catch Sys_error and turn into an error fallback... *)
     ; "size",        V.efunc (V.table **->> V.int) Luahash.population
-    ; "next",        V.efunc (V.table **->  V.value **-> V.values) next
-    ; "nextvar",     V.efunc (V.value **->  V.values) (fun x -> next g.V.globals x)
+    ; "next",        V.efunc (V.table **->  V.value **-> V.results) next
+    ; "nextvar",     V.efunc (V.value **->  V.results) (fun x -> next g.V.globals x)
     ; "tostring",    V.efunc (V.value **->> V.string) V.to_string
     ; "print",       V.caml_func 
                         (fun args ->

@@ -63,7 +63,7 @@ let readfrom =
   [ V.alt (V.string **->> infile)   from_string
   ; V.alt (V.unit   **->> infile)   (fun () -> (close_in io.currentin; setinput stdin))
   ; V.alt (infile   **->> infile)   setinput
-  ; V.alt (V.value  **->  V.values) from_other
+  ; V.alt (V.value  **->  V.results) from_other
   ]  in
 
 let open_out_append s =
@@ -119,13 +119,13 @@ let io_builtins =
   ; "remove",    errfunc (V.string **->> V.string) (succeed Sys.remove)
   ; "rename",    errfunc (V.string **-> V.string **->> V.string) (succeed2 Sys.rename)
   ; "tmpname",   V.efunc (V.unit **->> V.string) tmpname
-  ; "read",      V.efunc (V.option V.string **-> V.values) read
+  ; "read",      V.efunc (V.option V.string **-> V.results) read
   ; "write",     errchoose 
                  [ V.alt (V.string *****->> V.int)   (* eta-expand to delay eval *)
                                                (fun l -> write_strings io.currentout l)
                  ; V.alt (outfile **-> V.string *****->> V.int) write_strings
                  ]                          
-  ; "date",      V.efunc (V.option V.string **-> V.values) date 
+  ; "date",      V.efunc (V.option V.string **-> V.results) date 
   ; "exit",      V.efunc (V.option V.int **-> V.runit) (fun n -> exit (getopt n 0))
   ; "getenv",    V.efunc (V.string **->> V.option V.string)
                  (fun s -> try Some (Sys.getenv s) with Not_found -> None)
