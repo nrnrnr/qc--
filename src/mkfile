@@ -139,7 +139,7 @@ ML =            topsort.ml       \
                 target2.ml       \
                 interp.ml        \
                 contn.ml         \
-                targets.ml       \
+                # targets.ml       \
                 dummy.ml         \
                 cfgprop.ml       \
                 rtldebug.ml      \
@@ -153,10 +153,10 @@ ML =            topsort.ml       \
 		x86.ml		 \
                 x86rec.ml	 \
 		x86asm.ml	 \
-                dummyexpander.ml \
-                msparcenc.ml     \
-                msparcdec.ml     \
-                sparcexpander.ml \
+                # dummyexpander.ml \
+                # msparcenc.ml     \
+                # msparcdec.ml     \
+                # sparcexpander.ml \
                 backplane.ml     \
                 proc.ml          \
                 asm3.ml          \
@@ -165,7 +165,7 @@ ML =            topsort.ml       \
                 typecheck.ml     \
                 interpasm.ml     \
                 astasm.ml        \
-                msparcasm.ml     \
+                # msparcasm.ml     \
                 dotasm.ml        \
                 asdlasm.ml       \
                 placevar.ml      \
@@ -198,7 +198,7 @@ MLI =           asm3.mli          \
                 block.mli         \
 		call.mli	  \
                 cfg.mli           \
-                cfgx.mli           \
+                cfgx.mli          \
                 cfg4.mli          \
                 cfgprop.mli       \
                 cfgutil.mli       \
@@ -231,16 +231,13 @@ MLI =           asm3.mli          \
                 main2.mli         \
                 memalloc.mli      \
 		mflow.mli         \
-                msparcasm.mli     \
-                msparcenc.mli     \
-                msparcdec.mli     \
+                # msparcasm.mli     \
+                # msparcenc.mli     \
+                # msparcdec.mli     \
                 parse.mli         \
                 placevar.mli      \
 		postexpander.mli  \
                 proc.mli          \
-                # moved to ../rtl/register.mli      \
-                # rtlasdl.mli     \
-                # rtlasdlUtil.mli \
                 rtldebug.mli      \
                 rtleval2.mli      \
                 rtlop.mli         \
@@ -253,7 +250,7 @@ MLI =           asm3.mli          \
                 strutil.mli       \
                 talloc.mli        \
                 target2.mli       \
-                targets.mli       \
+                # targets.mli       \
                 this.mli          \
                 topsort.mli       \
                 types.mli         \
@@ -436,8 +433,9 @@ msparcdec.ml:D:     minisparc.nw
 # ------------------------------------------------------------------
 # include version and name information
 # ------------------------------------------------------------------
+# The ../doc/qc--.man dependency is cross directory; best avoided.
 
-this.ml:D:      this.in qc--.lua
+this.ml:D:      this.in qc--.lua ../doc/qc--.man
                 sed     -e "s/@this@/$NAME-$VERSION/"   \
                         -e "s/@arch@/$ARCH/"            \
                         this.in                         > $target
@@ -445,6 +443,11 @@ this.ml:D:      this.in qc--.lua
                 sed     -e 's/\\/\\\\/g'                \
                         -e 's/"/\\"/g'                  \
                         qc--.lua                        >> $target    
+                echo '"'                                >> $target        
+                echo 'let manual ="'                    >> $target
+                sed     -e 's/\\/\\\\/g'                \
+                        -e 's/"/\\"/g'                  \
+                        ../doc/qc--.man                 >> $target    
                 echo '"'                                >> $target        
 
 # ------------------------------------------------------------------

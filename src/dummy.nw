@@ -4,18 +4,34 @@
 \section{The Dummy Target}
 % ------------------------------------------------------------------ 
 
-\emph{This is work in progress to replace the defintion for the Dummy
-      target in module \module{targets.nw}. Before it can be deployed
-      the code expander in \module{dummyexpander.nw} must be adapted to
-      recognize the {\rtl}s control-flow transfer (jump, branch, and so
-      on). During the transition from Targets.dummy to this dummy, I
-      make it available as a another target [[dummy2]].}
+This target describes a purely fictional target. We use it for
+debugging. The target is functorized, such that we can invent new
+targets easily. 
 
-This target describes a purely fuctional target. We use it for
-debugging. 
+\emph{The Implementation uses the [[Space.Standard32]] module to define
+control-flow {\rtl}s. We therefore assume therefore pointer and words
+are 32 bit wide. Is it safe to pass in other values? --CL}
+
 
 <<dummy.mli>>=
-val target: Target2.t
+module type ARCH = sig
+    val arch:           string (* name of this architecture *)
+    val byte_order:     Rtl.aggregation
+    val wordsize:       int
+    val pointersize:    int
+    val memsize:        int
+end
+
+module Make(A: ARCH): sig
+    val target: Target2.t
+end    
+@
+
+We provide ready-made 32 bit targets.
+
+<<dummy.mli>>=
+val dummy32l:   Target2.t       (* 32 bit, little endian *)
+val dummy32b:   Target2.t       (* 32 bit, big endian    *)
 @
 
 
@@ -24,7 +40,7 @@ val target: Target2.t
 % ------------------------------------------------------------------ 
 
 <<dummy.ml>>=
-module A        = Automaton2
+module AT       = Automaton2
 module R        = Rtl
 module RP       = Rtl.Private
 module RU       = Rtlutil
@@ -33,61 +49,105 @@ module Dn       = Rtl.Dn
 module SS32     = Space.Standard32
 module T        = Target2
 
-let arch        = "dummy"
-let byte_order  = Rtl.BigEndian
-let wordsize    = 32
-let pointersize = 32
-let memsize     = 8
-let id          = Rtl.Identity
+module type ARCH = sig
+    val arch:           string (* name of this architecture *)
+    val byte_order:     Rtl.aggregation
+    val wordsize:       int
+    val pointersize:    int
+    val memsize:        int
+end
+
+module Make(A: ARCH) = struct
+    let id = Rtl.Identity
+    let wordsize    = 32
+    let pointersize = 32
+
+    <<module Spaces>>
+
+    let locations   = SS32.locations Spaces.c
+    let pc          = locations.SS32.pc
+    let cc          = locations.SS32.cc
+    let npc         = locations.SS32.npc
+    let fp_mode     = locations.SS32.fp_mode
+    let fp_fcmp     = locations.SS32.fp_fcmp
+    
+    let t = (* for generic automata, will go away *)
+        { Automaton2.Sample.byteorder = A.byte_order
+        ; Automaton2.Sample.pointersize = A.pointersize
+        ; Automaton2.Sample.wordsize = A.wordsize
+        ; Automaton2.Sample.memsize = A.memsize
+        ; Automaton2.Sample.registers =
+            [ "IEEE 754 rounding mode", fp_mode
+            ; "IEEE 754 comparison results", fp_fcmp
+            ]
+        }
+ 
+    <<module Flow>>
+    <<module Spill>>
+    <<calling conventions>>
+
+    let target =
+        { T.name = A.arch
+          ; T.cc           = (fun _ -> cc)  
+          ; T.byteorder    = A.byte_order
+          ; T.wordsize     = A.wordsize
+          ; T.pointersize  = A.pointersize
+          ; T.vfp          = Vfp.mk A.wordsize
+          ; T.alignment    = 1
+          ; T.memsize      = 8
+          ; T.float        = "ieee754"
+          ; T.charset      = "latin1" 
+          ; T.globals      = Automaton2.Sample.global t
+          ; T.is_rounding_mode = (fun loc -> loc = fp_mode)
+          ; T.spaces       = [ Spaces.m 
+                             ; Spaces.c 
+                             ; Spaces.r 
+                             ; Spaces.f
+                             ; Spaces.t
+                             ; Spaces.u
+                             ]
+          ; T.data_section = "data"
+          ; T.goto         = Flow.goto
+          ; T.jump         = Flow.jump
+          ; T.call         = Flow.call 
+          ; T.branch       = Flow.branch
+          ; T.spill        = Spill.spill
+          ; T.reload       = Spill.reload
+      }
+end
+
+module Dummy32l = Make(struct
+    let arch        = "dummy32l"
+    let byte_order  = Rtl.LittleEndian
+    let wordsize    = 32
+    let pointersize = 32
+    let memsize     = 8
+end)
+
+module Dummy32b = Make(struct
+    let arch        = "dummy32b"
+    let byte_order  = Rtl.BigEndian
+    let wordsize    = 32
+    let pointersize = 32
+    let memsize     = 8
+end)
+
+let dummy32l = Dummy32l.target
+let dummy32b = Dummy32b.target
 @
 
 % ------------------------------------------------------------------ 
 \subsection{Spaces}
 % ------------------------------------------------------------------ 
 
-<<dummy.ml>>=
+<<module Spaces>>=
 module Spaces = struct
-    let m   = SS32.m byte_order [8; 16; 32]
+    let m   = SS32.m A.byte_order [8; 16; 32]
     let c   = SS32.c 2  id [32]
     let r   = SS32.r 32 id [32]
     let f   = SS32.f 32 id [32]
     let t   = SS32.t    id [32]
     let u   = SS32.u    id [32]
-
-    let d   = Space.checked
-                { Space.space          = 'd'
-                ; Space.doc            = "FP rounding mode"
-                ; Space.cellwidth      = 2  
-                ; Space.indexwidth     = 1
-                ; Space.indexlimit     = Some 2
-                ; Space.aggregation    = Rtl.Identity
-                ; Space.widths         = [2]
-                ; Space.classification = Space.Reg
-                }
-    let g   = Space.checked
-                { Space.space          = 'g'   (* SHOULD BE CHANGED -CL*) 
-                ; Space.doc            = "8-bit general purpose registers"
-                ; Space.cellwidth      = 8
-                ; Space.indexwidth     = 5
-                ; Space.indexlimit     = None
-                ; Space.aggregation    = Rtl.Identity
-                ; Space.widths         = [8]
-                ; Space.classification = Space.Reg
-                }
-    let v   = Space.checked
-                { Space.space          = 'v'    (* SHOULD BE CHANGED -CL*)
-                ; Space.doc            = "8 bit temporaries"
-                ; Space.cellwidth      = 8  
-                ; Space.indexwidth     = 16
-                ; Space.indexlimit     = None
-                ; Space.aggregation    = Rtl.Identity
-                ; Space.widths         = [8]
-                ; Space.classification = Space.Temp
-                    { Space.stands_for = 'g'
-                    ; Space.index_ok   = (fun _ -> true)
-                    ; Space.set_doc    = "any register"
-                    }
-                }
 end                 
 @
 
@@ -95,19 +155,14 @@ end
 \subsection{Control Flow}
 % ------------------------------------------------------------------ 
 
-<<dummy.ml>>=
-let locations   = SS32.locations Spaces.c
-let pc          = locations.SS32.pc
-let cc          = locations.SS32.cc
-let npc         = locations.SS32.npc
-let fp_mode     = R.reg ('d',0,2)           (* FP rounding mode *)
-let fp_result   = R.reg ('d',1,2)           (* FP fcmp result   *)
-let reg n       = R.reg ('r',n,wordsize)
+<<module Flow>>=
+
+let reg n       = R.reg ('r',n,A.wordsize)
 let sp          = reg 32                    (* stack pointer  *)
 let ra          = reg 30                    (* return address *)
 
-let fetch l     = R.fetch l   wordsize
-let store l e   = R.store l e wordsize
+let fetch l     = R.fetch l   A.wordsize
+let store l e   = R.store l e A.wordsize
 let assign      = store
 let return      = store pc (fetch ra)
 
@@ -115,7 +170,7 @@ module Flow = Mflow.MakeStandard
     (struct
         let pc_lhs      = pc
         let pc_rhs      = pc
-        let ra_reg      = R.reg ('r', 30, wordsize)
+        let ra_reg      = R.reg ('r', 30, A.wordsize)
         let ra_offset   = 4 (* just guessing *)
     end)
 
@@ -141,7 +196,7 @@ let cutto =
 
 \emph{What is the [[lookup]] parameter for? We should expunge it.}
 
-<<dummy.ml>>=
+<<module Spill>>=
 module Spill = struct
     let assign lookup ~src:(src_sp,_,src_w as src) 
                       ~dst:(dst_sp,_,dst_w as dst) =
@@ -167,139 +222,22 @@ end
 \subsection{Calling Conventions}
 % ------------------------------------------------------------------ 
 
-<<dummy.ml>>=
-class loc (loc:Rtl.loc): Automaton2.location =
-object
-    val _loc   = loc
-    
-    method store expr width = Rtl.store _loc expr width 
-    method fetch width      = Rtl.fetch _loc width
-    method to_loc           = _loc
-end
-
-class memory (byte_order) (base:Rtl.exp): Automaton2.automaton =
-object (this)
-    val mutable _block  = Block.at base (*size*) 0 (*align*) 8  (* block *)
-    val mutable _frozen = false
-    
-    method freeze () =
-        let _ = _frozen <- true in
-        { A.overflow = _block; A.sp_value = base } (* return block *)
-    
-    method private memloc addr w = 
-        new loc (Rtl.mem Rtl.none 'm' byte_order w addr)
-    
-    method private hardware hint = match hint with 
-    | r     -> Impossible.impossible ("unknown hardware register "^r) 
-    
-    method allocate width hint = 
-        assert (_frozen = false);          
-        match hint with 
-        | Some x -> this#hardware x
-        | None ->
-            let ()      = assert (width mod memsize = 0) in
-            let slot    = Block.relative base "slots" 
-                          Block.at ~size:(width/memsize) ~alignment:pointersize
-            in            
-            ( _block <- Block.cathl slot _block 
-            ; this#memloc (Block.base slot) width
-            )
-end
-@
-
-The automaton below is used only for placing global registers.
-
-<<dummy.ml>>=
-class globals (byte_order) (base:Rtl.exp): Automaton2.automaton =
-object (this)
-    val mutable _block  = Block.at base (*size*) 0 (*align*) 8  (* block *)
-    val mutable _frozen = false
-    
-    method freeze () =
-        let _ = _frozen <- true in
-            { A.overflow = _block
-            ; A.sp_value = base 
-            }
-    
-    method private memloc addr w = 
-        new loc (Rtl.mem Rtl.none 'm' byte_order w addr)
-    
-    method private hardware hint = match hint with 
-        | "IEEE 754 rounding mode"          -> new loc fp_mode
-        | "IEEE 754 comparision results"    -> new loc fp_result
-        | r     -> Impossible.impossible ("unknown hardware register "^r) 
-
-    method allocate width hint = 
-        assert (_frozen = false);          
-        match hint with 
-        | Some x -> this#hardware x
-        | None ->
-            let ()      = assert (width mod memsize = 0) in
-            let slot    = Block.at base (width / memsize) pointersize in
-            ( _block <- Block.cathl slot _block 
-            ; this#memloc (Block.base slot) width
-            )
-end
-
-
+<<calling conventions>>=
 let cc =
     { T.sp              = sp
     ; T.return          = return
-    ; T.proc            = new memory byte_order
-    ; T.cont            = new memory byte_order
-    ; T.ret             = new memory byte_order
-    ; T.stack_slots     = new memory byte_order
+    ; T.proc            = Automaton2.Sample.stack t
+    ; T.cont            = Automaton2.Sample.stack t
+    ; T.ret             = Automaton2.Sample.stack t
+    ; T.stack_slots     = Automaton2.Sample.stack t 
     ; T.cutto           = cutto
     ; T.allocatable = List.concat 
-          [ List.map (fun n -> ('r', n, wordsize))
+          [ List.map (fun n -> ('r', n, A.wordsize))
             [0;1;2;3;4;5;6;7;8;9;10;11;12;13;14;15;16;17;18;19;20;21;22;23]
-          ; List.map (fun n -> ('r', n, wordsize))
+          ; List.map (fun n -> ('r', n, A.wordsize))
             [0;1;2;3;4;5;6;7;8;9;10;11;12;13;14;15;16;17;18;19;20;21;22;23]
           ]  
                        
     }
  
 @
-
-% ------------------------------------------------------------------ 
-\subsection{Target Value}
-% ------------------------------------------------------------------ 
-
-<<dummy.ml>>=
-let target =
-    { T.name = arch
-      ; T.cc           = (fun _ -> cc)  
-      ; T.byteorder    = byte_order
-      ; T.wordsize     = wordsize
-      ; T.pointersize  = wordsize
-      ; T.vfp          = Vfp.mk wordsize
-      ; T.alignment    = 1
-      ; T.memsize      = 8
-      ; T.float        = "ieee754"
-      ; T.charset      = "latin1" 
-      ; T.globals      = new globals byte_order
-      ; T.is_rounding_mode = (fun loc -> loc = fp_mode)
-      ; T.spaces       = [ Spaces.m 
-                         ; Spaces.c 
-                         ; Spaces.r 
-                         ; Spaces.f
-                         ; Spaces.t
-                         ; Spaces.u
-                         ; Spaces.g
-                         ; Spaces.v
-                         ; Spaces.d
-                         ]
-      ; T.data_section = "data"
-      ; T.goto         = Flow.goto
-      ; T.jump         = Flow.jump
-      ; T.call         = Flow.call 
-      ; T.branch       = Flow.branch
-      ; T.spill        = Spill.spill
-      ; T.reload       = Spill.reload
-      }
-@
-
-
-
-
-    

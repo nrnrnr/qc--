@@ -532,6 +532,16 @@ let upexp   = Up.exp
 
 let fpcond n      = Rtl.reg  ('d',n,2)  (* FP modes *)
 
+let t = (* for generic automata, will go away *)
+    { Automaton2.Sample.byteorder = PX.byte_order
+    ; Automaton2.Sample.wordsize  = PX.wordsize
+    ; Automaton2.Sample.memsize   = 8
+    ; Automaton2.Sample.pointersize = PX.wordsize
+    ; Automaton2.Sample.registers =
+            [ "IEEE 754 rounding mode", (fpcond 0)
+            ]
+    }
+
 let target =
   { T.name = "x86"
 
@@ -563,16 +573,17 @@ let target =
   ; T.cc = (fun _ -> 
            { T.sp = PX.esp                                   (* ok *)
            ; T.return = pop_with (fun ra -> store pc ra)     (* ok *)
-           ; T.proc = Targets.dummy_automaton PX.byte_order  (* bogus from here down *)
-           ; T.cont = Targets.dummy_automaton PX.byte_order
-           ; T.ret  = Targets.dummy_automaton PX.byte_order
+           (* bogus from here down *) 
+           ; T.proc = Automaton2.Sample.stack t
+           ; T.cont = Automaton2.Sample.stack t
+           ; T.ret  = Automaton2.Sample.stack t
            ; T.allocatable = List.map (fun n -> ('r', n, 32)) [0; 1; 2; 3]
-           ; T.stack_slots = Targets.dummy_automaton PX.byte_order
+           ; T.stack_slots = Automaton2.Sample.stack t
            ; T.cutto = F.cutto PX.esp
            })
 
   (* bogosity *)
-  ; T.globals  = Targets.dummy_globals PX.byte_order
+  ; T.globals  = Automaton2.Sample.global t
   ; T.is_rounding_mode = (fun loc -> loc = fpcond 0) (* see globals value *)
   ; T.data_section = "data" (* NOT REALLY A PROPERTY OF THE TARGET MACHINE... *)
   ; T.charset = "latin1" (* THIS IS NONSENSE!! NOT A PROPERTY OF THE MACHINE?? *)

@@ -9,8 +9,9 @@
 % Example (at beginning of line): %%Grades: B Central Soon
 % $Id$
 %
-% Automaton.nw will be replaced by this module. The major difference is
-% that this modules relies on the simple Block abstraction.
+
+\emph{This module will be replaced by the new automaton model in module 
+\module{automaton.nw}.}
 
 % ------------------------------------------------------------------ 
 \section{Automaton-Based Slot Allocation}
@@ -67,7 +68,9 @@ class type location = object
     method to_loc:  Rtl.loc
 end
 
-type result = { overflow : Block.t; sp_value : Rtl.exp }
+type result = { overflow : Block.t
+              ; sp_value : Rtl.exp 
+              }
 
 class type automaton = object
     method allocate:    (*width*) int -> (*hint*) (string option) -> location
@@ -78,28 +81,6 @@ type spec = Rtl.exp -> automaton    (* specification should be abstract *)
 type loc  = location                (* location      should be abstract *)
 type t    = automaton               (* automaton     should be abstract *)
 @
-Here's an alternative:
-<<types>>=
-  type parts = { allocate : int -> string option -> loc
-               ; freeze   : unit -> result
-               } 
-
-module type S = sig
-  type t
-  type loc
-  type parts = { allocate : int -> string option -> loc
-               ; freeze   : unit -> result
-               } 
-  val mk : parts -> t
-  type pre_t = next:t -> parts
-  type with_overflow = next:t -> overflow:t -> parts
-  val alloc  : t -> int -> string option -> loc
-  val freeze : t -> result
-  type width = int
-  val fetch  : loc -> width -> Rtl.exp
-  val store  : loc -> Rtl.exp -> width -> Rtl.rtl
-end
-@          
 
 <<automaton2.mli>>=
 <<types>>
@@ -117,7 +98,6 @@ slot in \emph{bits} and an optional hint.  It returns a location
 [[[loc]] and changes the automaton's internal state.  
 
 <<automaton2.mli>>=
-val ty:       t -> width:int -> hint:(string option) -> loc  (* deprecated *)  
 val allocate: t -> width:int -> hint:(string option) -> loc  (* alias for ty *)
 @
 
@@ -154,39 +134,67 @@ val freeze' : t -> result
 @
 
 % ------------------------------------------------------------------ 
-\subsection{Memory-based Automata}
+\subsection{Discussion}
 % ------------------------------------------------------------------ 
 
-Here we provide a generic automaton that allocates slots in memory. The
-behavior of the automaton is controlled by two sets of parameters:
-target-specific parameters and policy-specific parameters.
+Here's an alternative:
+<<types>>=
+  type parts = { allocate : int -> string option -> loc
+               ; freeze   : unit -> result
+               } 
 
-\emph{Unfortuntately, we cannot use the [[Target2.t]] here because it
-would introduce a circular dependency.}
+module type S = sig
+  type t
+  type loc
+  type parts = { allocate : int -> string option -> loc
+               ; freeze   : unit -> result
+               } 
+  val mk : parts -> t
+  type pre_t = next:t -> parts
+  type with_overflow = next:t -> overflow:t -> parts
+  val alloc  : t -> int -> string option -> loc
+  val freeze : t -> result
+  type width = int
+  val fetch  : loc -> width -> Rtl.exp
+  val store  : loc -> Rtl.exp -> width -> Rtl.rtl
+end
+@          
 
-The ``policy'' argument control the automaton's behavior: when [[up]]
-is true, slots are allocated from low to high memory. 
-When [[alignment]] is true, every slot is aligned on its size. 
-When false, no slot is aligned. 
-The alignment of the resulting block is the maxmimum alignment of any slot.
 
-Upon freezing, the stack pointer points at the young (most recently
-allocated) end of the block.
-The block will be addressed at an unknown offset relative to the
-[[anchor]] expression. 
+% ------------------------------------------------------------------ 
+\subsection{Sample Automata}
+% ------------------------------------------------------------------ 
+
+All automata are parameterized over a [[target]] value. We only use them
+until we come up with something better.
+
 <<automaton2.mli>>=
-module Memory: sig
+module Sample: sig
     type target = 
         { byteorder:        Rtl.aggregation
         ; wordsize:         int                 (* in bits *)
         ; pointersize:      int                 (* in bits *)
         ; memsize:          int                 (* in bits *)
+        ; registers:        (string * Rtl.loc) list
         }
+    
+    val relative: target -> up:bool -> aligned:bool 
+                         -> anchor:Rtl.exp -> dbg:string -> automaton
 
-    val relative:
-        target -> up:bool -> aligned:bool -> anchor:Rtl.exp -> dbg:string -> automaton
+    val stack:  target -> Rtl.exp -> automaton
+    val global: target -> Rtl.exp -> automaton
 end
 @
+
+The ``policy'' argument control the automaton's behavior: when [[up]] is
+true, slots are allocated from low to high memory.  When [[alignment]]
+is true, every slot is aligned on its size.  When false, no slot is
+aligned.  The alignment of the resulting block is the maxmimum alignment
+of any slot.
+
+Upon freezing, the stack pointer points at the young (most recently
+allocated) end of the block.  The block will be addressed at an unknown
+offset relative to the [[anchor]] expression. 
 
 % ------------------------------------------------------------------ 
 \subsection{Implementation}
@@ -213,11 +221,11 @@ implementations for [[mk]], [[ty]] and so forth just pass their
 arguments to the objects at hand.
 
 <<automaton2.ml>>=
-let mk spec ~address     = spec address
-let ty t ~width ~hint    = t#allocate width hint
-let allocate             = ty
-let freeze' t            = t#freeze ()
-let freeze t             = (t#freeze ()).overflow
+let mk spec ~address      = spec address
+let ty t ~width ~hint     = t#allocate width hint
+let allocate              = ty
+let freeze' t             = t#freeze ()
+let freeze t              = (t#freeze ()).overflow
 
 let fetch loc ~width      = loc#fetch width
 let store loc expr ~width = loc#store expr width
@@ -228,22 +236,29 @@ let of_loc loc            = Impossible.unimp "Automaton.of_rtl_loc"
 
 
 % ------------------------------------------------------------------ 
-\subsection{Implementation of Memory-Based Automata}
+\subsection{Implementation of Sample Automata}
 % ------------------------------------------------------------------ 
 
 <<automaton2.ml>>=
-module Memory = struct
+module Sample = struct
     type target = 
         { byteorder:        Rtl.aggregation
         ; wordsize:         int                 (* in bits *)
         ; pointersize:      int                 (* in bits *)
         ; memsize:          int                 (* in bits *)
+        ; registers:        (string * Rtl.loc) list
         }
-        
-    <<class loc>>
-    <<class [[Memory.t]]>>
     
-    let relative target ~up ~aligned ~anchor ~dbg = new t target up aligned anchor dbg
+    <<class loc>>
+    <<class memory>>
+    <<class stack>>
+    <<class global>>
+    
+    let relative target ~up ~aligned ~anchor ~dbg = 
+        new memory target up aligned anchor dbg
+
+    let stack   target = new stack   target
+    let global  target = new global  target
 end    
 @
 
@@ -263,13 +278,13 @@ object
 end
 @
 
-The automaton [[t]] maintains a block [[_block]] of memory allocated so
-far. For every new slot it allocates a small block and concatenates it
-with [[_block]]. Depending on [[T.up]] the [[_block]] grows on its high
-or low end.
+The automaton [[memory]] maintains a block [[_block]] of memory
+allocated so far. For every new slot it allocates a small block and
+concatenates it with [[_block]]. Depending on [[up]] the [[_block]]
+grows on its high or low end.
 
-<<class [[Memory.t]]>>=
-class t (target:target) up aligned anchor dbg : automaton =
+<<class memory>>=
+class memory (target:target) up aligned anchor dbg : automaton =
 object (this)
     val mutable _block  = (B.relative anchor dbg B.at) 0 1  (* initial block *)
     val mutable _frozen = false
@@ -307,4 +322,71 @@ object (this)
                 ; new loc (Rtl.mem assn 'm' target.byteorder width (B.base slot))
                 )                
 end
+
+<<class stack>>=
+class stack (target:target) (base:Rtl.exp): automaton =
+object (this)
+    val mutable _block  = Block.at base (*size*) 0 (*align*) 8  (* block *)
+    val mutable _frozen = false
+    
+    method freeze () =
+        let _ = _frozen <- true in
+            { overflow = _block
+            ; sp_value = base 
+            } 
+    
+    method private memloc addr w = 
+        new loc (Rtl.cell Rtl.none 'm' target.byteorder w addr)
+    
+    method private hardware hint = match hint with 
+    | r     -> Impossible.impossible ("unknown hardware register "^r) 
+    
+    method allocate width hint = 
+        let ()      = assert (_frozen = false) in          
+        match hint with 
+        | Some x -> this#hardware x
+        | None ->
+            let ()      = assert (width mod target.memsize = 0) in
+            let slot    = Block.relative base "slots"
+                          Block.at ~size:(width/target.memsize) 
+                            ~alignment:target.pointersize in
+            ( _block <- Block.cathl slot _block 
+            ; this#memloc (Block.base slot) width
+            )
+end
+
+<<class global>>=
+class global (target:target) (base:Rtl.exp): automaton =
+object (this)
+    val mutable _block  = Block.at base (*size*) 0 (*align*) 8  (* block *)
+    val mutable _frozen = false
+    
+    method freeze () =
+        let _ = _frozen <- true in
+            { overflow = _block
+            ; sp_value = base 
+            } 
+    
+    method private memloc addr w = 
+        new loc (Rtl.cell Rtl.none 'm' target.byteorder w addr)
+    
+    method private hardware hint = 
+        try new loc (List.assoc hint target.registers) with 
+        Not_found -> Impossible.impossible ("unknown hardware register "^hint) 
+    
+    method allocate width hint = 
+        let ()      = assert (_frozen = false) in          
+        match hint with 
+        | Some x -> this#hardware x
+        | None ->
+            let ()      = assert (width mod target.memsize = 0) in
+            let slot    = Block.at base (width/target.memsize) 
+                            target.pointersize in
+            ( _block <- Block.cathl slot _block 
+            ; this#memloc (Block.base slot) width
+            )
+end
 @
+
+
+class gloal

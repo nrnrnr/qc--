@@ -19,7 +19,7 @@ PS =            cfg.ps better.ps working.ps newtarget.ps modules.ps \
 
 all:V:          man $PS
 
-man:V:          qc--.1 qc--internals.1 qc--interp.1
+man:V:          qc--.1 qc--internals.1 qc--interp.1 qc--.man
 
 update:V:       man 
                 cp qc--.1           $TOP/man/man1
@@ -35,6 +35,7 @@ clean:V:
 		rm -f refactor.tex refactor.inc
                 rm -f qc--.1 qc--internals.1 qc--interp.1
                 rm -f qc--.pdf
+                rm -f qc--.man
 
 
 
@@ -67,3 +68,9 @@ qc--internals.ps:   qc--internals.1
 
 qc--interp.ps:  qc--interp.1
                 groff -man -Tps qc--interp.1 > $target
+
+# The qc--.man file is included as a string into the qc-- binary
+# and accessible from Lua as This.manual.
+
+qc--.man:D:     qc--.1
+                nroff -man qc--.1 | ul -t dump > $target                

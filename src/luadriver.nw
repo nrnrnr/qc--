@@ -33,6 +33,8 @@ in \module{luautil.nw}.
 -- CMD.interact()
 -- Inspect.globals()
 
+backend = Backend.dummy32b
+
 CMD.cmdline(Sys.argv)
 return CMD.run()
 @
@@ -212,9 +214,10 @@ end
 
 Stages.make_stage(Placevar,  'fortran', "fortran variable placer")
 Stages.make_stage(Placevar,  'new_fortran', "new fortran variable placer", NewBackplane)
-Stages.make_stage(Expander,  'dummy',   'dummy expander')
-Stages.make_stage(Expander,  'sparc',   'sparc expander')
 Stages.make_stage(Typecheck, 'proc',    'type check RTLs')
+-- non longer compiled in:
+-- Stages.make_stage(Expander,  'dummy',   'dummy expander')
+-- Stages.make_stage(Expander,  'sparc',   'sparc expander')
 @
 
 
@@ -380,42 +383,31 @@ a backend are primitives, and thus cannot be simply constructed in Lua.
 <<Lua Boot Script>>=
 Backend = Backend and error('Backend not empty') or {}
 
-Backend.debug = --- debugging back end
-  { target    = Targets.dummy
+Backend.dummy32l = 
+  { target    = Targets.dummy32l
   , widen     = Stages.null
-  , placevars = Placevar.fortran
-  , expand    = Expander.dummy
+  , placevars = Stages.null
+  , expand    = Stages.null
   , liveness  = Stages.null
-  , ralloc    = Ralloc.color
-  , freeze    = Stack.layout
-  , asm       = Asm.cmm
-  , emit      = Driver.assemble
-  }   
-Backend.dummy = Backend.debug  -- alias
-
-Backend.dummy2 = --- new dummy target under construction (Dummy.nw)
-  { target    = Targets.dummy
-  , widen     = Stages.null
-  , placevars = Placevar.fortran
-  , expand    = Expander.dummy
-  , liveness  = Stages.null
-  , ralloc    = Ralloc.color
+  , ralloc    = Stages.null
   , freeze    = Stack.layout
   , asm       = Asm.cmm
   , emit      = Driver.assemble
   }   
 
-Backend.check = --- debugging back end
-  { target    = Targets.dummy
+Backend.dummy32b = 
+  { target    = Targets.dummy32b
   , widen     = Stages.null
-  , placevars = Placevar.fortran
-  , expand    = Expander.dummy
+  , placevars = Stages.null
+  , expand    = Stages.null
   , liveness  = Stages.null
-  , ralloc    = Ralloc.color
+  , ralloc    = Stages.null
   , freeze    = Stack.layout
   , asm       = Asm.cmm
-  , emit      = nil
+  , emit      = Driver.assemble
   }   
+
+Backend.dummy = Backend.dummy32b -- alias
 
 Backend.x86 =     
   { target    = Targets.x86
@@ -442,8 +434,6 @@ Backend.interp =
   }   
 
 
--- initialization
-backend = Backend.debug
 
 @
 
@@ -605,190 +595,12 @@ var=value   Assign the variable var in qc--'s Lua interpreter the
 
 See also: qc--(1), qc--internals(1), http://www.cminusminus.org/.            
 ]]
-@ 
-SHOULDN'T THE ASSIGNMENT TO [[CMD.manpage]] BE GENERATED AUTOMATICALLY
-SO IT CAN TRACK CHANGES IN THE MAN PAGE?
-<<Lua Boot Script>>=
-CMD.manpage = [[
-NAME
-       qc-- - The Quick C-- Compiler
 
-SYNOPSIS
-       qc-- [option | file] ...
+-- The manual page is automatically included into the qc-- binary and 
+-- available as Boot.manual from within Lua.
 
-DESCRIPTION
-           I have to find a way to typeset "qc--" correctly. Postponed for the
-           moment. -- CL
+CMD.manpage = Boot.manual
 
-       qc-- is a compiler for the C-- language. It takes file
-       names as arguments and compiles, assembles, and links the
-       file arguments into an executable file (by default named
-       "a.out"). An option has the form "-"name or name"="value,
-       hence any argument with an equal sign is treated as an
-       option.  Any other argument qc-- regards as a file.
-
-       The qc-- compiler is controlled by a built-in Lua inter-
-       preter that runs a compiled-in Lua program. By modifying
-       the state of the compiler or modifying the Lua program, a
-       user can customize the compiler. In fact, any option of
-       the form name"="value updates a variable in the Lua inter-
-       preter.  These aspects are documented in the separate man-
-       ual page qc--internals(1).
-
-       The treatment of a file depends on its suffix. The objec-
-       tive is to compile each file such that in can be linked
-       with all others into a final executable.  If the suffix of
-       a file is unrecognized, the file is passed to the linker.
-
-       Usually qc-- generates machine code but it can also gener-
-       ate code for the Quick C-- interpreter qc--interp(1); see
-       the -interp option below.
-
-       ".c--" or ".cmm"
-                   C-- source file: compile, assemble, link.  A
-                   file "file.c--" is taken as a C-- source file.
-                   Unless options specify otherwise, a C-- source
-                   file is compiled to assembly code "file.s" and
-                   assembled to an object file "file.o" that is
-                   linked with the object files derived from the
-                   other file arguments.
-
-       ".o"        Object code file: link.  A file "file.o" is
-                   considered an object file.  qc-- does not
-                   touch this file but passes it to the linker
-                   such that it is linked with the other files
-                   from the command line.
-
-       ".a" or ".so"
-                   Archive file: link.  A file "file.a" or
-                   "file.so" is considered an archive file that
-                   is passed untouched to the linker.
-
-       ".s"        Assembler source: assemble, link. A file
-                   "file.s" is taken as an assembly source file.
-                   It is assembled to an object file "file.o"
-                   that is linked with the other files from the
-                   command line.
-
-       ".qs"       Interpreter source: link. A "file.qs" is
-                   source code understood by the qc--interp(1)
-                   interpreter. It is linked with other files
-                   into an executable.
-
-       ".lua"      Lua source file: interpret. A file "file.lua"
-                   is taken as a Lua source code file for the Lua
-                   interpreter built into the qc-- compiler. Such
-                   a file is executed by the interpreter. See
-                   qc--internals(1) for details.
-
-       If invoked with no arguments, qc-- summarizes its options
-       on the standard error and exits with exit code 1.
-
-       qc-- removes intermediate files, like assembly files,
-       unless options specify otherwise. Linking is always the
-       last stage, unless the -c or -S flag suppresses it.
-
-OPTIONS
-       qc-- processes options from left to right, and then all
-       file name arguments from left to right.
-
-       -c  Compile to object code, do not link. Each C-- source
-           ("file.c--") and assembly file ("file.s") is compiled
-           and assembled to an object file ("file.o"), but not
-           linked. This option is incompatible with option -S.
-
-       -S  Compile to assembly code, do not assemble or link.
-           Each C-- source "file.c--" file is compiled to a cor-
-           responding "file.s" assembly file. No assembling or
-           linking. This option is incompatible with option -c.
-
-       -o output
-           Name the output file output.  If -c or -S is specified
-           and there is exactly  one  source  file,  this option
-           names  the object or assembly file, respectively.
-           Otherwise, this  option  names  the  final executable
-           file generated  by  the  loader. If -o is not used,
-           the output file defaults to "a.out".
-
-       -Ldir
-           Add dir to the library search path. This option can be
-           repeated and is passed to the linker.
-
-       -lname
-           Add library name to the list of libraries to be
-           searched. This option can be repeated is passed to the
-           linker.
-
-       -interp
-           Emit code for the Quick C-- interpreter qc--interp(1).
-           When this option is used, the options -c and -S have
-           the same effect because interpreter code makes no dis-
-           tinction between assembly code and object code.  The
-           only intermediate file format file".qs".
-
-       -v  Print commands as they are executed. Commands include
-           calls to all external programs, like the assembler or
-           linker.
-       -version
-           Print version to stdout and stop with exit code 0.
-           This option is incompatible with any other option.
-
-       -help
-           Summarize options to stdout and stop with exit code 0.
-           This option is incompatible with any other option.
-
-       var=value
-           Assign the variable var in qc--'s Lua interpreter the
-           new value value. Refer to qc--internals(1) for
-           details.
-
-ENVIRONMENT
-       TMP, TEMP, TMPDIR
-           The environment variables "TMP", "TEMP", and "TMPDIR"
-           are checked in this order. The first one found to
-           define a non-empty string defines the path to the
-           directory where temporary files are stored. Otherwise
-           a platform specific-default directory is used.
-
-EXIT CODE
-       Upon successful executions, qc-- exists with exit code 0.
-       If qc-- finds an error in a source file or while process-
-       ing command line options, it exists with 1. Internal
-       errors in the compiler lead to an exit code of 2.
-
-FILES
-       file".c--", file".cmm"
-                           C-- source file.
-
-       file".o"            Object file.
-
-       file".s"            Assembly source file.
-
-       file".a"            Archive file (static library).
-
-       file".so"           Archive file (dynamic library).
-
-       file".qs"           Interpreter source file.
-
-       file".lua"          Lua source code.
-
-       "qc--.lua"          Startup file for Lua interpreter.
-
-       "a.out"             Default file name for output file.
-
-       "/tmp"              Default directory for temporary files.
-
-SEE ALSO
-       http://www.cminusminus.org/, http://www.lua.org/.
-
-       lua(1), ld(1), as(1), qc--internals(1), qc--interp(1).
-
-BUGS
-       Report bugs to "bugs@cminusminus.org". Include a small
-       example that allows us to reproduce the bug. The bug
-       tracking system can be found at http://www.cminusmi-
-       nus.org/qc--bugs/.
-]]
 
 -- Boot.version writes to a channel such that you cannot use the version
 -- to control program behavior. 

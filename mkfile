@@ -19,7 +19,7 @@ man1dir =       $prefix/man/man1
 # SUBDIRS are made from left to right - order matters
 # ------------------------------------------------------------------ 
 
-SUBDIRS =       cllib lua asdl rtl gen camlburg tools src interp doc
+SUBDIRS =       cllib lua asdl rtl gen camlburg tools doc src interp 
 
 # A note on profiling.  Profiling is controlled in subdirectories by a
 # PROFILE variable in each mkfile.  Profiling is turned on by default,
@@ -174,6 +174,7 @@ clean.opt:V:    dirs
                         -o -name '*.a'                  \
                         -o -name '*.cmxa'               \
                         \) -exec rm '{}' \;             
+                rm -f *.tar.gz        
 
 clobber:V:      dirs clean
                 for i in $SUBDIRS; 
