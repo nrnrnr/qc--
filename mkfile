@@ -21,7 +21,7 @@ update all:V:   dirs
 
 clean:V:
                 for i in $SUBDIRS; do (cd $i && mk $target); done
-                rm -f bin/* lib/* man/man*/*
+                find bin lib man -name 'CVS' -prune -o -type f -exec rm '{}' \;
 
 # make sure appropriate empty directories exist
 dirs:V:
