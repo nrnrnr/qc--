@@ -21,18 +21,19 @@ let rtl_to_string rtl =
 
 <<rtldebug.ml>>=
 module RP = Rtl.Private
-exception TypeCheck
+exception TypeCheck of string
+let fail rtl = raise (TypeCheck (rtl_to_string rtl))
 
 let typecheck (r:Rtl.rtl) =
     let width n ty = match ty with
         | Types.Bits k when n = k  -> ty
-        | _                        -> raise TypeCheck in
+        | _                        -> fail r in
     let bits = function
         | Types.Bits n             -> n
-        | _                        -> raise TypeCheck in
+        | _                        -> fail r in
     let bool = function
         | Types.Bool               -> ()
-        | _                        -> raise TypeCheck in
+        | _                        -> fail r in 
         
     let rec exp = function
         | RP.Fetch (l, w)          -> width w (loc l)
@@ -41,7 +42,7 @@ let typecheck (r:Rtl.rtl) =
             let argtys       = List.map exp args in
             let opty, result = Rtlop.Types.mono (Rtl.Revert.opr opr) in
                 if opty <> argtys then  (* comparing lists of types! *)
-                    raise TypeCheck
+                    fail r
                 else
                     result
             
@@ -67,11 +68,7 @@ let typecheck (r:Rtl.rtl) =
                                       ; effect eff
                                       )
     and rtl (RP.Rtl rtl)           = (List.iter guarded rtl)
-    in try rtl (Rtl.Convert.rtl r) with TypeCheck -> 
-            ( prerr_endline "Type check error in RTL:"
-            ; prerr_endline (rtl_to_string r)
-            ; flush stderr
-            ; assert false
-            )
+    in 
+        rtl (Rtl.Convert.rtl r)
+        
 @
-
