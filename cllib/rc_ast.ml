@@ -1,8 +1,4 @@
-(*
-   $Id$
-*)
-
-
+# 164 "rc.nw"
 type id         =       string
 
 type rc         =
@@ -31,4 +27,3 @@ let add                 = IdMap.add
 let asList dict =
     let insert id rc list = (id,rc)::list       in
         IdMap.fold insert dict []
-
