@@ -26,41 +26,45 @@ This modules allows to evaluate compile- and link-time
 \rtl-locations but may contain variables.  The meaning of these
 variables is provided by a [[lookup]] function that is passed into the
 evaluator.  A lookup on a variable must return a {\rtl}
-\emph{constant}.  Only a minimal number of checks is performed because
-it is assumed that expression have been type-checked before.  In
-particular, any of the following conditions lead to checked run-time
-error:
+\emph{constant} expression.  Only a minimal number of checks is
+performed because it is assumed that expression have been type-checked
+before.  In particular, any of the following conditions lead to
+checked run-time error:
 
 \begin{itemize}
 \item Typing error
 \item Use of an unknown primitive
-\item Use of a link-time value in a compile-time expression.
+\item Use of a link-time value in a compile-time expression
+\item Use of an undefined variable.
+\item Circular variable definitions.
 \end{itemize}
 
 Errors are reported by raising the [[Not_constant]] exception.
  
-<<rtleval.mli>>=
+<<types and exceptions>>=
 exception Not_constant
 @
 
 The functions [[compile]] and [[link]] evaluate compile-time and
 link-time expressions respectively.  The variants [[compile]] and
-[[compile']] differ in the aspect that [[compile]] is intended for
-expressions that evaluate to a [[Bits.bits]] value, where [[compile']]
-evaluates expressions that also can have a boolean value. 
+[[compile']] differ in that [[compile]] is intended for expressions
+that evaluate to a [[Bits.bits]] value, where [[compile']] evaluates
+expressions that also can have a boolean value. 
 
-These are
-represented by {\rtl} constant values which do not have a separate
-type such that 
-
-
-
-<<rtleval.mli>>=
+<<types and exceptions>>=
 type 'a lookup = string -> 'a Error.error       (* look up constant(!) *)
 
+type relexp  
+  (* a relocatable expression, suitable for using as a link-time
+     constant in an assembler---needs to be connected with Asm2.S *)
+  = Rtl.exp (* a temporary expedient *)
+
+<<rtleval.mli>>=
+<<types and exceptions>>  
+val empty   : Rtl.exp lookup (* empty lookup table *)
 val compile : Rtl.exp lookup -> Rtl.exp -> Bits.bits (* Not_constant *)
 val compile': Rtl.exp lookup -> Rtl.exp -> Rtl.exp   (* Not_constant *)
-val link    : Rtl.exp lookup -> Rtl.exp -> Rtl.exp   (* Not_constant *)
+val link    : Rtl.exp lookup -> Rtl.exp -> relexp    (* Not_constant *)
 @
 
 % ------------------------------------------------------------------ 
@@ -72,10 +76,7 @@ module E  = Error
 module R  = Rtl
 module RP = Rtl.Private
 
-exception Not_constant
-exception Bool_expression
-
-type 'a lookup = string -> 'a E.error
+<<types and exceptions>> (* from interface *)
 
 module CompileTime = struct
     <<CompileTime>>
@@ -85,6 +86,7 @@ module LinkTime = struct
     <<LinkTime>>
 end
 
+let empty    = fun _ -> E.Error
 let compile  = CompileTime.eval
 let compile' = CompileTime.eval'
 let link     = LinkTime.eval
@@ -97,11 +99,12 @@ let link     = LinkTime.eval
 <<CompileTime>>=
 module StrMap = Map.Make(struct type t=string let compare=compare end)
 
-let zero = function
+
+let zero = function (* damn lies *)
     | [RP.Bits(x);RP.Bits(y)] -> E.Ok(RP.Bits(Bits.zero (Bits.width x)))
     | _                       -> E.Error
 
-let true' = function
+let true' = function (* more damn lies *)
     | [RP.Bits(_);RP.Bits(_)] -> E.Ok(RP.Bool(true))
     | _                       -> E.Error
 
@@ -136,13 +139,17 @@ let rec app lookup (op,wl) exps =
     let f    = try E.Ok(StrMap.find op ops) with Not_found -> E.Error in
     let args = Error.Raise.list (List.map (exp lookup) exps)          in    
         Error.seqPair (f,args) (fun (f,args) -> f args)
+@
+
+The [[lookup x]] function is allowed to return an expression which
+must be evaluated.  In order to detect circular bindings a new
+[[lookup']] function is created that excludes a binding for [[x]].
         
+<<CompileTime>>=
 and fetch lookup = function
-    | RP.Var(x,index,w)   -> E.sequence (lookup x) (fun x ->
-                             ( match Rtl.Convert.exp x with
-                             | RP.Const(c) -> E.Ok(c)
-                             | _           -> E.Error
-                             )) 
+    | RP.Var(x,index,w)   -> 
+        let lookup' x' = if x = x' then E.Error else lookup x' in
+        E.sequence (lookup x) (fun x -> exp lookup' (Rtl.Convert.exp x))
     | RP.Cell _           -> E.Error
     | RP.Slice _          -> E.Error
 
@@ -171,5 +178,5 @@ let eval  lookup e =
 % ------------------------------------------------------------------ 
 
 <<LinkTime>>=
-let eval lookup exp = assert false
+let eval lookup exp = exp (* damn lie *)
 @
