@@ -17,31 +17,39 @@ my_data:
 .byte 0
 .section .text
 foo:
-	leal -12(%esp), %esp
-	leal 12(%esp), %ecx
+	leal -28(%esp), %esp
+	leal 28(%esp), %ecx
 	movl $4,%edx
 	addl %edx,%ecx
 	movl (%ecx),%eax
+	leal 28(%esp), %ecx
+	movl (%ecx),%ecx
 Linitialize_continuations_l5:
 Lproc_body_start_l4:
-	leal my_data,%ecx
-	leal 12(%esp), %edx
+	leal my_data,%edx
 	movl %edi,4(%esp)
-	movl $-12,%edi
-	addl %edi,%edx
-	movl %ecx,(%edx)
-	movl %eax,8(%esp)
+	leal 28(%esp), %edi
+	movl %edi,8(%esp)
+	movl $-28,%edi
+	movl %edi,12(%esp)
+	movl 8(%esp),%edi
+	movl %esi,16(%esp)
+	movl 12(%esp),%esi
+	addl %esi,%edi
+	movl %edx,(%edi)
+	movl %ecx,24(%esp)
+	movl %eax,20(%esp)
 	call *%eax
 Ljoin_l9:
-	movl 8(%esp),%eax
-	leal 12(%esp), %edx
-	leal 12(%esp), %ecx
-	movl $0,%edi
-	addl %edi,%ecx
-	movl (%edx),%edx
-	movl %edx,(%ecx)
+	movl 20(%esp),%eax
+	leal 28(%esp), %edx
+	movl $0,%ecx
+	addl %ecx,%edx
+	movl 24(%esp),%ecx
+	movl %ecx,(%edx)
+	movl 16(%esp),%esi
 	movl 4(%esp),%edi
-	leal 12(%esp), %esp
+	leal 28(%esp), %esp
 	ret
 .section .pcmap_data
 Lstackdata_l16:
@@ -51,9 +59,9 @@ Lstackdata_l16:
 .long Lframe_l17
 .section .pcmap_data
 Lframe_l17:
-.long 0xfffffff4
 .long 0x80000004
-.long 0x80000000
+.long 0xffffffe4
+.long 0xfffffffc
 .long Lstackdata_l16
 .long 8
 .long 1
@@ -64,42 +72,44 @@ Lframe_l17:
 .long 0x40000009
 .long 0x40000009
 .long 0x4000000a
-.long 0x4000000a
+.long 0xfffffff4
 .long 0x4000000b
+.long 0xffffffe8
 .long 0xfffffff8
-.long 0xfffffffc
 .long 0
 .section .text
 .section .text
 main:
-	leal -8(%esp), %esp
-	leal 8(%esp), %eax
+	leal -12(%esp), %esp
+	leal 12(%esp), %eax
 	movl $4,%ecx
 	addl %ecx,%eax
 	movl (%eax),%eax
-	leal 8(%esp), %eax
+	leal 12(%esp), %eax
 	movl $8,%ecx
 	addl %ecx,%eax
 	movl (%eax),%eax
+	leal 12(%esp), %eax
+	movl (%eax),%eax
 Linitialize_continuations_l20:
 Lproc_body_start_l19:
-	leal printf,%eax
-	leal 8(%esp), %ecx
-	movl $-8,%edx
-	addl %edx,%ecx
-	movl %eax,(%ecx)
+	leal printf,%ecx
+	leal 12(%esp), %edx
+	movl %edi,4(%esp)
+	movl $-12,%edi
+	addl %edi,%edx
+	movl %ecx,(%edx)
+	movl %eax,8(%esp)
 	call foo
 Ljoin_l24:
 	movl $0,%eax
-	leal 8(%esp), %edx
-	leal 8(%esp), %ecx
-	movl %edx,4(%esp)
-	movl $0,%edx
-	addl %edx,%ecx
-	movl 4(%esp),%edx
-	movl (%edx),%edx
-	movl %edx,(%ecx)
-	leal 8(%esp), %esp
+	leal 12(%esp), %edx
+	movl $0,%ecx
+	addl %ecx,%edx
+	movl 8(%esp),%ecx
+	movl %ecx,(%edx)
+	movl 4(%esp),%edi
+	leal 12(%esp), %esp
 	ret
 .section .pcmap_data
 Lstackdata_l31:
@@ -109,9 +119,9 @@ Lstackdata_l31:
 .long Lframe_l32
 .section .pcmap_data
 Lframe_l32:
-.long 0xfffffff8
 .long 0x80000004
-.long 0x80000000
+.long 0xfffffff4
+.long 0xfffffffc
 .long Lstackdata_l31
 .long 8
 .long 3
@@ -124,7 +134,7 @@ Lframe_l32:
 .long 0x4000000a
 .long 0x4000000a
 .long 0x4000000b
-.long 0x4000000b
+.long 0xfffffff8
 .long 0
 .long 0
 .long 0

@@ -7,58 +7,60 @@ Cmm.globalsig.LPcHEVFbOZHbAHHMQTLHQeIQVI:
 Cmm.global_area:
 .section .text
 main:
-	leal -12(%esp), %esp
-	leal 12(%esp), %eax
+	leal -16(%esp), %esp
+	leal 16(%esp), %eax
 	movl $4,%ecx
 	addl %ecx,%eax
 	movl (%eax),%eax
-	leal 12(%esp), %eax
+	leal 16(%esp), %eax
 	movl $8,%ecx
 	addl %ecx,%eax
 	movl (%eax),%eax
+	leal 16(%esp), %eax
+	movl (%eax),%eax
 Linitialize_continuations_l4:
 Lproc_body_start_l3:
-	movl $1,%eax
-	movl $-1067450368,%eax
-	leal 12(%esp), %ecx
-	movl $-8,%edx
-	addl %edx,%ecx
-	movl %eax,(%ecx)
-	leal 12(%esp), %eax
-	movl $-8,%ecx
-	addl %ecx,%eax
-	flds (%eax)
-	leal 12(%esp), %eax
-	movl $-8,%ecx
-	addl %ecx,%eax
-	fistpl (%eax)
-	leal 12(%esp), %eax
-	movl $-8,%ecx
-	addl %ecx,%eax
-	movl (%eax),%eax
 	movl $1,%ecx
-	cmpl %ecx,%eax
+	movl $-1067450368,%ecx
+	leal 16(%esp), %edx
+	movl %edi,8(%esp)
+	movl $-12,%edi
+	addl %edi,%edx
+	movl %ecx,(%edx)
+	leal 16(%esp), %edi
+	movl $-12,%ecx
+	addl %ecx,%edi
+	flds (%edi)
+	leal 16(%esp), %edi
+	movl $-12,%ecx
+	addl %ecx,%edi
+	fistpl (%edi)
+	leal 16(%esp), %edi
+	movl $-12,%ecx
+	addl %ecx,%edi
+	movl (%edi),%edi
+	movl $1,%ecx
+	cmpl %ecx,%edi
 	je Ljoin_l9
 Ljoin_l16:
 	jmp Ljoin_l9
 Ljoin_l9:
-	leal fmt,%eax
-	leal 12(%esp), %ecx
-	movl $-12,%edx
+	leal fmt,%edi
+	leal 16(%esp), %ecx
+	movl $-16,%edx
 	addl %edx,%ecx
-	movl %eax,(%ecx)
+	movl %edi,(%ecx)
+	movl %eax,12(%esp)
 	call printf
 Ljoin_l8:
 	movl $0,%eax
-	leal 12(%esp), %edx
-	leal 12(%esp), %ecx
-	movl %edx,8(%esp)
-	movl $0,%edx
-	addl %edx,%ecx
-	movl 8(%esp),%edx
-	movl (%edx),%edx
-	movl %edx,(%ecx)
-	leal 12(%esp), %esp
+	leal 16(%esp), %edx
+	movl $0,%ecx
+	addl %ecx,%edx
+	movl 12(%esp),%ecx
+	movl %ecx,(%edx)
+	movl 8(%esp),%edi
+	leal 16(%esp), %esp
 	ret
 .section .pcmap_data
 Lstackdata_l17:
@@ -68,9 +70,9 @@ Lstackdata_l17:
 .long Lframe_l18
 .section .pcmap_data
 Lframe_l18:
-.long 0xfffffff4
 .long 0x80000004
-.long 0x80000000
+.long 0xfffffff0
+.long 0xfffffffc
 .long Lstackdata_l17
 .long 8
 .long 3
@@ -83,7 +85,7 @@ Lframe_l18:
 .long 0x4000000a
 .long 0x4000000a
 .long 0x4000000b
-.long 0x4000000b
+.long 0xfffffff8
 .long 0
 .long 0
 .long 0

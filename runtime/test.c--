@@ -10,13 +10,17 @@ export f,g,h;
 
 section "data" {
    s_lbl: bits8[] "stack_trace: sd=13,14,15  x=7, y=4\000";
-   f_lbl: bits8[] "f sd=1,2,3 x=5\000";
-   g_lbl: bits8[] "g sd='added dead face'\000";
+   f_lbl: bits8[] "f args=10..30 sd=1,2,3 x=5\000";
+   g_lbl: bits8[] "g args=10..40 sd='added dead face'\000";
+  gt_lbl: bits8[] "gt args=10..50 sd='added dead face'\000";
+  gp_lbl: bits8[] "gp args=10..50 sd='bad beef baaed'\000";
    h_lbl: bits8[] "h sd=23,24,25\000";
    m_lbl: bits8[] "main sd='effaced bad facade', n=DEAD\000";
 
    fmt: bits8[] "%s : %X\n\000";
    msg: bits8[] "calling runtime system...\n\000";
+
+   f_fmt: bits8[] "counting stackdata: %d %d %d\n\0";
 }
 
 section "text" {
@@ -58,34 +62,55 @@ h() {
 
 span 1 g_lbl {
 foreign "C"
-g() {
+g(bits32 a, bits32 b, bits32 c, bits32 d) {
  stackdata { align 32; data: bits32[3]; }
  bits32[data]   = 0xadded;
  bits32[data+4] = 0xdead;
  bits32[data+8] = 0xface;
- foreign "paranoid C" c_b();       foreign "C"  return();
+  jump gt(a, b, c, d, d+10); 
+}}
+
+span 1 gt_lbl {
+gt(bits32 a, bits32 b, bits32 c, bits32 d, bits32 e) {
+ stackdata { align 32; data: bits32[3]; }
+ bits32[data]   = 0xadded;
+ bits32[data+4] = 0xdead;
+ bits32[data+8] = 0xface;
+ a = gp(a, b, c, d, e);
+ foreign "C"  return(a);
+}}
+
+span 1 gp_lbl {
+gp(bits32 a, bits32 b, bits32 c, bits32 d, bits32 e) {
+ stackdata { align 32; data: bits32[3]; }
+ bits32[data]   = 0xbad;
+ bits32[data+4] = 0xbeef;
+ bits32[data+8] = 0xbaaed;
+ foreign "paranoid C" c_b();
+ return (a + b + c + d + e);
 }}
 
 span 1 f_lbl {
-f() {
+f(bits32 a, bits32 b, bits32 c) {
  stackdata { align 32; data: bits32[3]; }
  bits32 x;
  x = 5;
  bits32[data]   = 1;
  bits32[data+4] = 2;
  bits32[data+8] = 3;
- foreign "C" g();
+ a = foreign "C" g(a, b, c, c+10);
+ b = foreign "C" printf("address" f_fmt, bits32[data], bits32[data+4], bits32[data+8]);
  return(x);
 }}
 
 span 1 m_lbl {
-foreign "C" main() {
+foreign "C" main(bits32 argc, "address" bits32 argv) {
   stackdata { align 32; data: bits32[3]; }
   bits32[data] = 0xeffaced;
   bits32[data+4] = 0xbad;
   bits32[data+8] = 0xfacade;
   // foreign "C" Cmm_show_map();
-  n = f();
+  n = f(10, 20, 30);
   bits32 n;
   foreign "C" return(n - 5);
 }}

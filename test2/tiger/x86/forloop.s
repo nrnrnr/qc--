@@ -140,8 +140,8 @@ Lstackdata_l22:
 .long Lframe_l23
 .section .pcmap_data
 Lframe_l23:
-.long 0xffffffe4
 .long 0x80000004
+.long 0xffffffe4
 .long 0xfffffff0
 .long Lstackdata_l22
 .long 8
@@ -171,8 +171,8 @@ Lframe_l23:
 .long Lframe_l24
 .section .pcmap_data
 Lframe_l24:
-.long 0xffffffe4
 .long 0x80000004
+.long 0xffffffe4
 .long 0xfffffff0
 .long Lstackdata_l22
 .long 8
@@ -202,8 +202,8 @@ Lframe_l24:
 .long Lframe_l25
 .section .pcmap_data
 Lframe_l25:
-.long 0xffffffe4
 .long 0x80000004
+.long 0xffffffe4
 .long 0xfffffff0
 .long Lstackdata_l22
 .long 8

@@ -12,27 +12,34 @@ comeback:
 .skip 4, 0
 .section .text
 run_thread:
-	leal -28(%esp), %esp
-	leal 28(%esp), %eax
+	leal -40(%esp), %esp
+	leal 40(%esp), %eax
 	movl $4,%ecx
 	addl %ecx,%eax
 	movl (%eax),%eax
+	leal 40(%esp), %ecx
+	movl (%ecx),%ecx
 Linitialize_continuations_l11:
-	leal cutback_C8,%ecx
-	leal 28(%esp), %edx
+	leal cutback_C8,%edx
 	movl %eax,(%esp)
+	leal 40(%esp), %eax
+	movl %eax,4(%esp)
 	movl $-8,%eax
-	addl %eax,%edx
-	movl %ecx,(%edx)
-	leal 28(%esp), %eax
-	movl $-28,%ecx
+	movl %eax,8(%esp)
+	movl 4(%esp),%eax
+	movl %ecx,12(%esp)
+	movl 8(%esp),%ecx
 	addl %ecx,%eax
-	leal 28(%esp), %ecx
+	movl %edx,(%eax)
+	leal 40(%esp), %eax
+	movl $-40,%ecx
+	addl %ecx,%eax
+	leal 40(%esp), %ecx
 	movl $-4,%edx
 	addl %edx,%ecx
 	movl %eax,(%ecx)
 Lproc_body_start_l10:
-	leal 28(%esp), %eax
+	leal 40(%esp), %eax
 	movl $-8,%ecx
 	addl %ecx,%eax
 	leal comeback,%ecx
@@ -43,24 +50,23 @@ Lproc_body_start_l10:
 	addl %eax,%edx
 	movl (%edx),%eax
 	movl (%ecx),%ecx
-	movl %edi,16(%esp)
-	movl %esi,12(%esp)
-	movl %ebp,8(%esp)
-	movl %ebx,4(%esp)
+	movl %edi,28(%esp)
+	movl %esi,24(%esp)
+	movl %ebp,20(%esp)
+	movl %ebx,16(%esp)
 	movl %eax, %esp; jmp *%ecx
 cutback_C8:
 	movl %edx,%eax
-	leal 28(%esp), %edx
-	leal 28(%esp), %ecx
-	movl $0,%edi
-	addl %edi,%ecx
-	movl (%edx),%edx
-	movl %edx,(%ecx)
-	movl 4(%esp),%ebx
-	movl 8(%esp),%ebp
-	movl 12(%esp),%esi
-	movl 16(%esp),%edi
-	leal 28(%esp), %esp
+	leal 40(%esp), %edx
+	movl $0,%ecx
+	addl %ecx,%edx
+	movl 12(%esp),%ecx
+	movl %ecx,(%edx)
+	movl 16(%esp),%ebx
+	movl 20(%esp),%ebp
+	movl 24(%esp),%esi
+	movl 28(%esp),%edi
+	leal 40(%esp), %esp
 	ret
 .section .pcmap_data
 Lstackdata_l19:
@@ -70,9 +76,9 @@ Lstackdata_l19:
 .long Lframe_l20
 .section .pcmap_data
 Lframe_l20:
-.long 0xffffffe4
 .long 0x80000004
-.long 0x80000000
+.long 0xffffffd8
+.long 0xffffffe4
 .long Lstackdata_l19
 .long 8
 .long 2
@@ -127,8 +133,8 @@ Lstackdata_l33:
 .long Lframe_l34
 .section .pcmap_data
 Lframe_l34:
-.long 0xfffffff4
 .long 0x80000004
+.long 0xfffffff4
 .long 0xfffffffc
 .long Lstackdata_l33
 .long 8

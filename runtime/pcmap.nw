@@ -61,9 +61,9 @@ typedef struct {
 
 typedef struct cmm_pc_map_entry pc_map_entry;
 struct cmm_pc_map_entry {
-  location   frame_size;       /* always an offset */
-  location   overflow_size;    /* always an offset */
-  location   return_addressp;  /* always an offset */
+  location   inalloc;          /* incoming dealloc point on stack (always offset) */
+  location   outalloc;         /* outgoing dealloc point on stack (always offset) */
+  location   return_addressp;  /* always an offset??? */
   struct sd *stackdata_table;
   Cmm_Word   num_registers;
   Cmm_Word   num_locals;
@@ -283,19 +283,22 @@ void Cmm_show_map_entry(pc_map_entry *entry, int index, Cmm_Codeptr ra) {
     printf("%sentry%3d @ %p (ra = %p):\n", indent, index, (void *)entry, (void *) ra);
   else
     printf("%sentry @ %p (ra = %p):\n", indent, (void *)entry, (void *) ra);
-  printf("%s  frame_size = %d (coded %X), overflow = %d (coded %X)\n"
+  printf("%s  inalloc = %d (coded %X), outalloc = %d (coded %X)\n"
          "%s  num_regs = %d, num_locals = %d, num_spans = %d,"
          " size of cont block = %d\n",
          indent,
-         Cmm_as_offset(entry->frame_size),
-         entry->frame_size.l,
-         Cmm_as_offset(entry->overflow_size),
-         entry->overflow_size.l,
+         Cmm_as_offset(entry->inalloc),
+         entry->inalloc.l,
+         Cmm_as_offset(entry->outalloc),
+         entry->outalloc.l,
          indent,
          entry->num_registers,
          entry->num_locals,
          entry->num_spans,
          entry->cont_block_size);
+  printf("%s  return address at ", indent);
+  printloc(entry->return_addressp);
+  printf("\n");
   sdt = entry->stackdata_table;
   <<show locals>>
   <<show registers>>

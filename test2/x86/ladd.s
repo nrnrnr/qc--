@@ -7,104 +7,106 @@ Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY:
 Cmm.global_area:
 .section .text
 main:
-	leal -56(%esp), %esp
-	leal 56(%esp), %eax
+	leal -60(%esp), %esp
+	leal 60(%esp), %eax
 	movl $4,%ecx
 	addl %ecx,%eax
 	movl (%eax),%eax
-	leal 56(%esp), %eax
+	leal 60(%esp), %eax
 	movl $8,%ecx
 	addl %ecx,%eax
 	movl (%eax),%eax
+	leal 60(%esp), %eax
+	movl (%eax),%eax
 Linitialize_continuations_l4:
 Lproc_body_start_l3:
-	movl $-2147483648,%eax
-	leal 56(%esp), %ecx
+	movl $-2147483648,%ecx
+	leal 60(%esp), %edx
+	movl %edi,52(%esp)
+	movl $-32,%edi
+	addl %edi,%edx
+	movl %ecx,(%edx)
+	movl $0,%edi
+	leal 60(%esp), %ecx
 	movl $-28,%edx
 	addl %edx,%ecx
-	movl %eax,(%ecx)
-	movl $0,%eax
-	leal 56(%esp), %ecx
+	movl %edi,(%ecx)
+	movl $-2147483648,%edi
+	leal 60(%esp), %ecx
 	movl $-24,%edx
 	addl %edx,%ecx
-	movl %eax,(%ecx)
-	movl $-2147483648,%eax
-	leal 56(%esp), %ecx
+	movl %edi,(%ecx)
+	movl $0,%edi
+	leal 60(%esp), %ecx
 	movl $-20,%edx
 	addl %edx,%ecx
-	movl %eax,(%ecx)
-	movl $0,%eax
-	leal 56(%esp), %ecx
-	movl $-16,%edx
+	movl %edi,(%ecx)
+	leal 60(%esp), %edi
+	movl $-32,%ecx
+	addl %ecx,%edi
+	leal 60(%esp), %ecx
+	movl $-60,%edx
 	addl %edx,%ecx
-	movl %eax,(%ecx)
-	leal 56(%esp), %eax
-	movl $-28,%ecx
-	addl %ecx,%eax
-	leal 56(%esp), %ecx
-	movl $-56,%edx
-	addl %edx,%ecx
-	fildq (%eax)
+	fildq (%edi)
 	fistpq (%ecx)
-	leal 56(%esp), %eax
-	movl $-20,%ecx
-	addl %ecx,%eax
-	leal 56(%esp), %ecx
-	movl $-48,%edx
+	leal 60(%esp), %edi
+	movl $-24,%ecx
+	addl %ecx,%edi
+	leal 60(%esp), %ecx
+	movl $-52,%edx
 	addl %edx,%ecx
-	fildq (%eax)
+	fildq (%edi)
 	fistpq (%ecx)
+	movl %eax,56(%esp)
 	call ladd
 Ljoin_l11:
-	leal 56(%esp), %ecx
-	movl %edi,52(%esp)
-	movl $-12,%edi
-	addl %edi,%ecx
-	movl %eax,(%ecx)
-	leal 56(%esp), %edi
-	movl $-8,%eax
+	leal 60(%esp), %edi
+	movl $-16,%ecx
+	addl %ecx,%edi
+	movl %eax,(%edi)
+	leal 60(%esp), %edi
+	movl $-12,%eax
 	addl %eax,%edi
 	movl %edx,(%edi)
 	leal format,%edi
-	leal 56(%esp), %eax
-	movl $-56,%ecx
+	leal 60(%esp), %eax
+	movl $-60,%ecx
 	addl %ecx,%eax
 	movl %edi,(%eax)
-	leal 56(%esp), %edi
-	movl $-28,%eax
+	leal 60(%esp), %edi
+	movl $-32,%eax
 	addl %eax,%edi
-	leal 56(%esp), %eax
-	movl $-52,%ecx
+	leal 60(%esp), %eax
+	movl $-56,%ecx
 	addl %ecx,%eax
 	fildq (%edi)
 	fistpq (%eax)
-	leal 56(%esp), %edi
-	movl $-20,%eax
+	leal 60(%esp), %edi
+	movl $-24,%eax
 	addl %eax,%edi
-	leal 56(%esp), %eax
-	movl $-44,%ecx
+	leal 60(%esp), %eax
+	movl $-48,%ecx
 	addl %ecx,%eax
 	fildq (%edi)
 	fistpq (%eax)
-	leal 56(%esp), %edi
-	movl $-12,%eax
+	leal 60(%esp), %edi
+	movl $-16,%eax
 	addl %eax,%edi
-	leal 56(%esp), %eax
-	movl $-36,%ecx
+	leal 60(%esp), %eax
+	movl $-40,%ecx
 	addl %ecx,%eax
 	fildq (%edi)
 	fistpq (%eax)
 	call printf
 Ljoin_l8:
 	movl $0,%eax
-	leal 56(%esp), %edx
-	leal 56(%esp), %ecx
-	movl $0,%edi
-	addl %edi,%ecx
-	movl (%edx),%edx
-	movl %edx,(%ecx)
+	leal 60(%esp), %edx
+	movl $0,%ecx
+	addl %ecx,%edx
+	movl 56(%esp),%ecx
+	movl %ecx,(%edx)
 	movl 52(%esp),%edi
-	leal 56(%esp), %esp
+	leal 60(%esp), %esp
 	ret
 .section .pcmap_data
 Lstackdata_l18:
@@ -114,9 +116,9 @@ Lstackdata_l18:
 .long Lframe_l19
 .section .pcmap_data
 Lframe_l19:
-.long 0xffffffc8
 .long 0x80000004
-.long 0x80000000
+.long 0xffffffc4
+.long 0xfffffffc
 .long Lstackdata_l18
 .long 8
 .long 5
@@ -129,21 +131,21 @@ Lframe_l19:
 .long 0x4000000a
 .long 0x4000000a
 .long 0x4000000b
-.long 0x4000000b
+.long 0xfffffff8
 .long 0
 .long 0
-.long 0xffffffe4
-.long 0xffffffec
-.long 0xfffffff4
+.long 0xffffffe0
+.long 0xffffffe8
+.long 0xfffffff0
 .long 0
 .section .pcmap
 .long Ljoin_l8
 .long Lframe_l20
 .section .pcmap_data
 Lframe_l20:
-.long 0xffffffc8
 .long 0x80000004
-.long 0x80000000
+.long 0xffffffc4
+.long 0xfffffffc
 .long Lstackdata_l18
 .long 8
 .long 5
@@ -156,12 +158,12 @@ Lframe_l20:
 .long 0x4000000a
 .long 0x4000000a
 .long 0x4000000b
-.long 0xfffffffc
+.long 0xfffffff8
 .long 0
 .long 0
-.long 0xffffffe4
-.long 0xffffffec
-.long 0xfffffff4
+.long 0xffffffe0
+.long 0xffffffe8
+.long 0xfffffff0
 .long 0
 .section .text
 .section .data

@@ -16,9 +16,12 @@ main:
 	movl $8,%edx
 	addl %edx,%ecx
 	movl (%ecx),%ecx
+	leal 4(%esp), %ecx
+	movl (%ecx),%ecx
 Linitialize_continuations_l5:
 Lproc_body_start_l4:
 	movl $1,%eax
+	movl %ecx,(%esp)
 	call sw
 Ljoin_l24:
 	movl $2,%eax
@@ -38,13 +41,10 @@ Ljoin_l12:
 Ljoin_l9:
 	movl $0,%eax
 	leal 4(%esp), %edx
-	leal 4(%esp), %ecx
-	movl %edx,(%esp)
-	movl $0,%edx
-	addl %edx,%ecx
-	movl (%esp),%edx
-	movl (%edx),%edx
-	movl %edx,(%ecx)
+	movl $0,%ecx
+	addl %ecx,%edx
+	movl (%esp),%ecx
+	movl %ecx,(%edx)
 	leal 4(%esp), %esp
 	ret
 .section .pcmap_data
@@ -55,9 +55,9 @@ Lstackdata_l30:
 .long Lframe_l31
 .section .pcmap_data
 Lframe_l31:
-.long 0xfffffffc
 .long 0x80000004
-.long 0x80000000
+.long 0xfffffffc
+.long 0xfffffffc
 .long Lstackdata_l30
 .long 8
 .long 2
@@ -79,9 +79,9 @@ Lframe_l31:
 .long Lframe_l32
 .section .pcmap_data
 Lframe_l32:
-.long 0xfffffffc
 .long 0x80000004
-.long 0x80000000
+.long 0xfffffffc
+.long 0xfffffffc
 .long Lstackdata_l30
 .long 8
 .long 2
@@ -103,9 +103,9 @@ Lframe_l32:
 .long Lframe_l33
 .section .pcmap_data
 Lframe_l33:
-.long 0xfffffffc
 .long 0x80000004
-.long 0x80000000
+.long 0xfffffffc
+.long 0xfffffffc
 .long Lstackdata_l30
 .long 8
 .long 2
@@ -127,9 +127,9 @@ Lframe_l33:
 .long Lframe_l34
 .section .pcmap_data
 Lframe_l34:
-.long 0xfffffffc
 .long 0x80000004
-.long 0x80000000
+.long 0xfffffffc
+.long 0xfffffffc
 .long Lstackdata_l30
 .long 8
 .long 2
@@ -151,9 +151,9 @@ Lframe_l34:
 .long Lframe_l35
 .section .pcmap_data
 Lframe_l35:
-.long 0xfffffffc
 .long 0x80000004
-.long 0x80000000
+.long 0xfffffffc
+.long 0xfffffffc
 .long Lstackdata_l30
 .long 8
 .long 2
@@ -175,9 +175,9 @@ Lframe_l35:
 .long Lframe_l36
 .section .pcmap_data
 Lframe_l36:
-.long 0xfffffffc
 .long 0x80000004
-.long 0x80000000
+.long 0xfffffffc
+.long 0xfffffffc
 .long Lstackdata_l30
 .long 8
 .long 2
@@ -364,8 +364,8 @@ Lstackdata_l81:
 .long Lframe_l82
 .section .pcmap_data
 Lframe_l82:
-.long 0xffffffcc
 .long 0x80000004
+.long 0xffffffcc
 .long 0xffffffe4
 .long Lstackdata_l81
 .long 8
@@ -387,8 +387,8 @@ Lframe_l82:
 .long Lframe_l83
 .section .pcmap_data
 Lframe_l83:
-.long 0xffffffcc
 .long 0x80000004
+.long 0xffffffcc
 .long 0xffffffe4
 .long Lstackdata_l81
 .long 8
@@ -410,8 +410,8 @@ Lframe_l83:
 .long Lframe_l84
 .section .pcmap_data
 Lframe_l84:
-.long 0xffffffcc
 .long 0x80000004
+.long 0xffffffcc
 .long 0xffffffe4
 .long Lstackdata_l81
 .long 8
@@ -433,8 +433,8 @@ Lframe_l84:
 .long Lframe_l85
 .section .pcmap_data
 Lframe_l85:
-.long 0xffffffcc
 .long 0x80000004
+.long 0xffffffcc
 .long 0xffffffe4
 .long Lstackdata_l81
 .long 8

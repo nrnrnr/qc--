@@ -49,79 +49,87 @@ Ljoin_l9:
 .section .text
 .section .text
 main:
-	leal -28(%esp), %esp
-	leal 28(%esp), %ecx
+	leal -44(%esp), %esp
+	leal 44(%esp), %ecx
 	movl $4,%edx
 	addl %edx,%ecx
 	movl (%ecx),%ecx
-	leal 28(%esp), %ecx
+	leal 44(%esp), %ecx
 	movl $8,%edx
 	addl %edx,%ecx
+	movl (%ecx),%ecx
+	leal 44(%esp), %ecx
 	movl (%ecx),%ecx
 Linitialize_continuations_l19:
 Lproc_body_start_l18:
 	leal -4(%esp), %esp
 	movl $987,%eax
-	movl $33,%ecx
-	leal 32(%esp), %edx
+	movl $33,%edx
 	movl %edi,20(%esp)
-	movl $-32,%edi
-	addl %edi,%edx
-	movl %ecx,(%edx)
+	leal 48(%esp), %edi
+	movl %edi,24(%esp)
+	movl $-48,%edi
+	movl %edi,28(%esp)
+	movl 24(%esp),%edi
+	movl %esi,32(%esp)
+	movl 28(%esp),%esi
+	addl %esi,%edi
+	movl %edx,(%edi)
+	movl %ecx,36(%esp)
 	call ge
 Ljoin_l32:
 	leal -4(%esp), %esp
 	movl $33,%edi
-	movl %eax,24(%esp)
+	movl %eax,40(%esp)
 	movl %edi,%eax
 	movl $987,%edi
-	leal 32(%esp), %ecx
-	movl $-32,%edx
-	addl %edx,%ecx
-	movl %edi,(%ecx)
+	leal 48(%esp), %esi
+	movl $-48,%ecx
+	addl %ecx,%esi
+	movl %edi,(%esi)
 	call ge
 Ljoin_l29:
 	leal -4(%esp), %esp
 	movl $987,%edi
-	movl %eax,28(%esp)
+	movl %eax,44(%esp)
 	movl %edi,%eax
 	movl $987,%edi
-	leal 32(%esp), %ecx
-	movl $-32,%edx
-	addl %edx,%ecx
-	movl %edi,(%ecx)
+	leal 48(%esp), %esi
+	movl $-48,%ecx
+	addl %ecx,%esi
+	movl %edi,(%esi)
 	call ge
 Ljoin_l26:
 	leal answer,%edi
-	leal 28(%esp), %ecx
-	movl $-28,%edx
-	addl %edx,%ecx
-	movl %edi,(%ecx)
-	leal 28(%esp), %edi
-	movl $-24,%ecx
-	addl %ecx,%edi
-	movl 20(%esp),%ecx
-	movl %ecx,(%edi)
-	leal 28(%esp), %edi
-	movl $-20,%ecx
-	addl %ecx,%edi
-	movl 24(%esp),%ecx
-	movl %ecx,(%edi)
-	leal 28(%esp), %edi
-	movl $-16,%ecx
-	addl %ecx,%edi
+	leal 44(%esp), %esi
+	movl $-44,%ecx
+	addl %ecx,%esi
+	movl %edi,(%esi)
+	leal 44(%esp), %edi
+	movl $-40,%esi
+	addl %esi,%edi
+	movl 36(%esp),%esi
+	movl %esi,(%edi)
+	leal 44(%esp), %edi
+	movl $-36,%esi
+	addl %esi,%edi
+	movl 40(%esp),%esi
+	movl %esi,(%edi)
+	leal 44(%esp), %edi
+	movl $-32,%esi
+	addl %esi,%edi
 	movl %eax,(%edi)
 	call printf
 Ljoin_l23:
 	movl $0,%eax
-	leal 28(%esp), %edx
-	leal 28(%esp), %ecx
-	movl $0,%edi
-	addl %edi,%ecx
-	movl (%edx),%edx
-	movl %edx,(%ecx)
+	leal 44(%esp), %edx
+	movl $0,%ecx
+	addl %ecx,%edx
+	movl 32(%esp),%ecx
+	movl %ecx,(%edx)
+	movl 28(%esp),%esi
 	movl 16(%esp),%edi
-	leal 28(%esp), %esp
+	leal 44(%esp), %esp
 	ret
 .section .pcmap_data
 Lstackdata_l38:
@@ -131,9 +139,9 @@ Lstackdata_l38:
 .long Lframe_l39
 .section .pcmap_data
 Lframe_l39:
-.long 0xffffffe4
 .long 0x80000004
-.long 0x80000000
+.long 0xffffffd4
+.long 0xfffffff4
 .long Lstackdata_l38
 .long 8
 .long 5
@@ -144,9 +152,9 @@ Lframe_l39:
 .long 0x40000009
 .long 0x40000009
 .long 0x4000000a
-.long 0x4000000a
+.long 0xfffffff0
 .long 0x4000000b
-.long 0xfffffff4
+.long 0xffffffe4
 .long 0
 .long 0
 .long 0
@@ -158,9 +166,9 @@ Lframe_l39:
 .long Lframe_l40
 .section .pcmap_data
 Lframe_l40:
-.long 0xffffffe4
 .long 0x80000004
-.long 0x80000000
+.long 0xffffffd4
+.long 0xfffffff4
 .long Lstackdata_l38
 .long 8
 .long 5
@@ -171,9 +179,9 @@ Lframe_l40:
 .long 0x40000009
 .long 0x40000009
 .long 0x4000000a
-.long 0x4000000a
+.long 0xfffffff0
 .long 0x4000000b
-.long 0xfffffff4
+.long 0xffffffe4
 .long 0
 .long 0
 .long 0xfffffff8
@@ -185,9 +193,9 @@ Lframe_l40:
 .long Lframe_l41
 .section .pcmap_data
 Lframe_l41:
-.long 0xffffffe4
 .long 0x80000004
-.long 0x80000000
+.long 0xffffffd4
+.long 0xfffffff4
 .long Lstackdata_l38
 .long 8
 .long 5
@@ -198,9 +206,9 @@ Lframe_l41:
 .long 0x40000009
 .long 0x40000009
 .long 0x4000000a
-.long 0x4000000a
+.long 0xfffffff0
 .long 0x4000000b
-.long 0xfffffff4
+.long 0xffffffe4
 .long 0
 .long 0
 .long 0xfffffff8
@@ -212,9 +220,9 @@ Lframe_l41:
 .long Lframe_l42
 .section .pcmap_data
 Lframe_l42:
-.long 0xffffffe4
 .long 0x80000004
-.long 0x80000000
+.long 0xffffffd4
+.long 0xfffffff4
 .long Lstackdata_l38
 .long 8
 .long 5
@@ -225,9 +233,9 @@ Lframe_l42:
 .long 0x40000009
 .long 0x40000009
 .long 0x4000000a
-.long 0x4000000a
+.long 0xfffffff0
 .long 0x4000000b
-.long 0xfffffff4
+.long 0xffffffe4
 .long 0
 .long 0
 .long 0

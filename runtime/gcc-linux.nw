@@ -48,6 +48,9 @@ walk_foreign_frames(Cmm_Word* fp, Cmm_Word* regs)
   return fp+1;
 }
 @
+On initialization, the [[young_in_overflow]] pointer is the callee's
+deallocation point.    Because the x86 uses a frame pointer, we don't
+actually need this information.
 <<gcc-linux.c>>=
 void Cmm_init_c_frame(Cmm_Activation *a, char *young_in_overflow) {
   Cmm_Word ebp;
@@ -59,6 +62,8 @@ void Cmm_init_c_frame(Cmm_Activation *a, char *young_in_overflow) {
 
 extern struct cmm_activation_methods *Cmm_cmm_frame_methods;
 
+
+#define NOISY 0
 
 int Cmm_c_change_activation(Cmm_Activation *a) {
   Cmm_Word callerebp;
@@ -85,7 +90,7 @@ int Cmm_c_change_activation(Cmm_Activation *a) {
   fprintf(stderr, "walked to caller %%ebp == 0x%08x\n", callerebp);
 #endif
   if (callerebp == 0 || !reasonable((void*)callerebp) || a->u.cwalk.tries++ > 20) {
-#if 0
+#if NOISY
     fprintf(stderr, "finished C walk with callerebp = 0x%08x, tries = %d\n",
             (unsigned)callerebp, a->u.cwalk.tries);
 #endif
@@ -96,8 +101,11 @@ int Cmm_c_change_activation(Cmm_Activation *a) {
   if (entry) {
     a->rtdatax = entry;
     a->pc = ra;  /* probably irrelevant */
-    a->vfpx +=
-      4 + Cmm_as_offset(entry->overflow_size) - Cmm_as_offset(entry->frame_size);
+    /* deallocation point = vfp + 8
+       deallocation point = callervfp + entry->outalloc
+
+       so  callervfp = vfp + 8 - entry-outalloc  */
+    a->vfpx += 8 - Cmm_as_offset(entry->outalloc);
     a->methods = Cmm_cmm_frame_methods;
   } else {
     a->vfpx = (char *)callerebp;

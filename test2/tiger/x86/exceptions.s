@@ -178,8 +178,8 @@ Lstackdata_l19:
 .long Lframe_l20
 .section .pcmap_data
 Lframe_l20:
-.long 0xffffffe8
 .long 0x80000008
+.long 0xffffffe8
 .long 0xfffffff4
 .long Lstackdata_l19
 .long 8
@@ -275,8 +275,8 @@ Lstackdata_l32:
 .long Lframe_l33
 .section .pcmap_data
 Lframe_l33:
-.long 0xffffffe4
 .long 0x80000008
+.long 0xffffffe4
 .long 0xfffffff4
 .long Lstackdata_l32
 .long 8
@@ -536,8 +536,8 @@ Lstackdata_l95:
 .long Lframe_l96
 .section .pcmap_data
 Lframe_l96:
-.long 0xffffffc8
 .long 0x80000004
+.long 0xffffffc8
 .long 0xfffffff0
 .long Lstackdata_l95
 .long 8
@@ -589,8 +589,8 @@ Lframe_l96:
 .long Lframe_l97
 .section .pcmap_data
 Lframe_l97:
-.long 0xffffffc8
 .long 0x80000004
+.long 0xffffffc8
 .long 0xfffffff0
 .long Lstackdata_l95
 .long 8
@@ -642,8 +642,8 @@ Lframe_l97:
 .long Lframe_l98
 .section .pcmap_data
 Lframe_l98:
-.long 0xffffffc8
 .long 0x80000004
+.long 0xffffffc8
 .long 0xfffffff0
 .long Lstackdata_l95
 .long 8
@@ -695,8 +695,8 @@ Lframe_l98:
 .long Lframe_l99
 .section .pcmap_data
 Lframe_l99:
-.long 0xffffffc8
 .long 0x80000004
+.long 0xffffffc8
 .long 0xfffffff0
 .long Lstackdata_l95
 .long 8
@@ -741,8 +741,8 @@ Lframe_l99:
 .long Lframe_l100
 .section .pcmap_data
 Lframe_l100:
-.long 0xffffffc8
 .long 0x80000004
+.long 0xffffffc8
 .long 0xfffffff0
 .long Lstackdata_l95
 .long 8
@@ -787,8 +787,8 @@ Lframe_l100:
 .long Lframe_l101
 .section .pcmap_data
 Lframe_l101:
-.long 0xffffffc8
 .long 0x80000004
+.long 0xffffffc8
 .long 0xfffffff0
 .long Lstackdata_l95
 .long 8
@@ -833,8 +833,8 @@ Lframe_l101:
 .long Lframe_l102
 .section .pcmap_data
 Lframe_l102:
-.long 0xffffffc8
 .long 0x80000004
+.long 0xffffffc8
 .long 0xfffffff0
 .long Lstackdata_l95
 .long 8
@@ -886,8 +886,8 @@ Lframe_l102:
 .long Lframe_l103
 .section .pcmap_data
 Lframe_l103:
-.long 0xffffffc8
 .long 0x80000004
+.long 0xffffffc8
 .long 0xfffffff0
 .long Lstackdata_l95
 .long 8
@@ -932,8 +932,8 @@ Lframe_l103:
 .long Lframe_l104
 .section .pcmap_data
 Lframe_l104:
-.long 0xffffffc8
 .long 0x80000004
+.long 0xffffffc8
 .long 0xfffffff0
 .long Lstackdata_l95
 .long 8
@@ -978,8 +978,8 @@ Lframe_l104:
 .long Lframe_l105
 .section .pcmap_data
 Lframe_l105:
-.long 0xffffffc8
 .long 0x80000004
+.long 0xffffffc8
 .long 0xfffffff0
 .long Lstackdata_l95
 .long 8
@@ -1024,8 +1024,8 @@ Lframe_l105:
 .long Lframe_l106
 .section .pcmap_data
 Lframe_l106:
-.long 0xffffffc8
 .long 0x80000004
+.long 0xffffffc8
 .long 0xfffffff0
 .long Lstackdata_l95
 .long 8

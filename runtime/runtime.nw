@@ -160,7 +160,7 @@ Cmm_YoungestActivation(const Cmm_Cont* t) {
   assert(entry);
 
   a.methods = &cmm_methods;
-  a.vfpx     = (char *)t->sp - Cmm_as_offset(entry->frame_size);
+  a.vfpx    = (char *)t->sp - Cmm_as_offset(entry->outalloc);
   a.pc      = t->pc;
   a.rtdatax = entry;
   for(i = 0; i < NUM_REGS; i++) {
@@ -188,7 +188,8 @@ static int normal_change(Cmm_Activation *a) {
   assert(a && a->vfpx);
   vfp = a->vfpx;
   update_saved_regs(a, a);
-#if 0
+#define NOISY 0
+#if NOISY
   fprintf(stderr, "leaving C-- activation; caller's EBP == 0x%08x\n",
           a->regs[9] ? (unsigned)*a->regs[9] : 0xdeadbeef);
 #endif
@@ -201,13 +202,17 @@ static int normal_change(Cmm_Activation *a) {
   a->pc = (Cmm_Codeptr)*raptr;
   a->rtdatax = callerdata;
   if (callerdata) {
-    /* NEXT LINE WANTS SOME DOCO */
-    a->vfpx = (vfp - Cmm_as_offset(callerdata->frame_size)
-                  + Cmm_as_offset(calleedata->overflow_size));
+    /* deallocpt = vfp + calleedata->inalloc
+       deallocpt = callervfp + callerdata->outalloc
+
+       therefore callerfvp = vfp + calleedata->inalloc - callerdata->outalloc 
+    */
+    a->vfpx = vfp + Cmm_as_offset(calleedata->inalloc)
+                  - Cmm_as_offset(callerdata->outalloc);
   } else {
     a->methods = &c_methods;
     a->rtdatax = Cmm_empty_pcmap_entry;
-    Cmm_init_c_frame(a, vfp + Cmm_as_offset(calleedata->overflow_size));
+    Cmm_init_c_frame(a, vfp + Cmm_as_offset(calleedata->inalloc));
   }
   return 1;
 }
@@ -242,9 +247,10 @@ old_Cmm_NextActivation(const Cmm_Activation *a) {
 
   if (entry) {
     old_entry = a->rtdatax;
+#if defined(OLD_PCMAP_FIELDS)
     na.vfpx = (char*)((int)fp - Cmm_as_offset(entry->frame_size)
                                  + Cmm_as_offset(old_entry->overflow_size));
-
+#endif
     na.pc = (Cmm_Codeptr)*caller;
     na.rtdatax = entry;
     /* The registers were already updated above, but after a foreign walk,

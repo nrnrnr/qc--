@@ -362,7 +362,7 @@ let insert_init_cont_nodes contmap init_node =
     if k.K.escapes then
       let pc    = exp_of_code_label k.K.cut_pc in
       let sp    = proc_cc.C.stable_sp_loc      in
-      let spans = SP.to_spans ~sp:(to_mloc sp) ~prev_sp:prev_sp_loc ~ra:saved_ra
+      let spans = SP.to_spans ~inalloc ~outalloc:(to_mloc sp) ~ra:saved_ra
                               ~users:k.K.spans ~csregs:nvr_temps ~conts:[]
                               ~sds:sd_locs ~vars:(var_array ()) in
       let n  = G.non_local_join_labeled g k.K.cut_pc in
@@ -560,13 +560,10 @@ and call lhs cconv e args targets(*unused*) conts alias succ =
                                         (* outgoing overflow parms *)
   add youngblocks cc.C.overflow_alloc.C.result_allocator      in'.C.overflow;
                                         (* incoming overflow results *)
-  let sp_loc = 
-    let base = Block.base out.C.overflow in
-    match cc.C.overflow_alloc.C.parameter_deallocator with
-    | C.Caller -> to_mloc base
-    | C.Callee ->
-        to_mloc (Rtlutil.addk (W.exp base) base (Block.size out.C.overflow)) in
-  let spans = SP.to_spans ~sp:sp_loc ~prev_sp:prev_sp_loc ~ra:saved_ra
+  let outalloc = match cc.C.overflow_alloc.C.parameter_deallocator with
+    | C.Caller -> to_mloc (young_end cc out.C.overflow)
+    | C.Callee -> to_mloc (old_end   cc out.C.overflow) in
+  let spans = SP.to_spans ~inalloc ~outalloc ~ra:saved_ra
                           ~users:props ~csregs:nvr_temps ~conts:unwind_conts
                           ~sds:sd_locs ~vars:(var_array ()) in
   G.stack_adjust g out.C.pre_sp                                        **>
@@ -713,6 +710,18 @@ type 'a blocklists = { mutable caller : 'a list; mutable callee : 'a list }
     let _, _, c = target.T.memspace in Cell.to_count c target.T.pointersize in
   let to_mloc exp =
     R.mem (R.aligned target.T.alignment) target.T.memspace ptrcount exp in
+@ 
+<<definition of [[proc]], which translates one procedure>>=
+  let low_end  block = Block.base block in
+  let high_end block =
+    let base = Block.base block in
+    Rtlutil.addk (W.exp base) base (Block.size block) in
+  let young_end cc = match cc.C.stack_growth with
+  | Memalloc.Down -> low_end
+  | Memalloc.Up   -> high_end in
+  let old_end cc = match cc.C.stack_growth with
+  | Memalloc.Down -> high_end
+  | Memalloc.Up   -> low_end in
 @   
 \paragraph{Setting up the environment and functions that use it (stack
 data, continuations, expressions, parameters)}
@@ -787,15 +796,14 @@ type 'a nvr = { reg : 'a; tmp : 'a }   (* for callee-saves info *)
     let loc   = proc_cc.C.where_to_save_ra ra_in temps in
     R.store loc ra_in pointersize, loc in
 @
-For each procedure, we create a span that represents the incoming stack
+For each procedure, we create a span that represents the location of
+the point in the stack that marks the
 space that must be deallocated by the procedure.
 <<definition of [[proc]], which translates one procedure>>=
-  let prev_sp_loc =
-    let ovfl = proc_in'.C.overflow in
-    let base = Block.base ovfl in
+  let inalloc =
     match proc_cc.C.overflow_alloc.C.parameter_deallocator with
-    | C.Callee -> to_mloc (Rtlutil.addk (W.exp base) base (Block.size ovfl))
-    | C.Caller -> to_mloc base in
+    | C.Callee -> to_mloc (old_end   proc_cc proc_in'.C.overflow)
+    | C.Caller -> to_mloc (young_end proc_cc proc_in'.C.overflow) in
 @ 
 We also generate an array of variable locations.
 The current method is totally bogus: I'm only using the variable numbers.

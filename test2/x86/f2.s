@@ -7,68 +7,76 @@ Cmm.globalsig.LPcHEVFbOZHbAHHMQTLHQeIQVI:
 Cmm.global_area:
 .section .text
 main:
-	leal -24(%esp), %esp
-	leal 24(%esp), %eax
+	leal -40(%esp), %esp
+	leal 40(%esp), %eax
 	movl $4,%edx
 	addl %edx,%eax
 	movl (%eax),%eax
-	leal 24(%esp), %eax
+	leal 40(%esp), %eax
 	movl $8,%edx
 	addl %edx,%eax
 	movl (%eax),%eax
-	leal 24(%esp), %eax
+	leal 40(%esp), %eax
 	movl $12,%edx
 	addl %edx,%eax
 	movl (%eax),%eax
+	leal 40(%esp), %eax
+	movl (%eax),%eax
 Linitialize_continuations_l4:
 Lproc_body_start_l3:
-	movl $1,%eax
-	movl $-1067450368,%edx
-	leal 24(%esp), %ecx
+	movl $1,%edx
+	movl $-1067450368,%ecx
 	movl %edi,20(%esp)
-	movl $-8,%edi
-	addl %edi,%ecx
-	movl %edx,(%ecx)
-	leal 24(%esp), %edi
-	movl $-8,%edx
-	addl %edx,%edi
+	leal 40(%esp), %edi
+	movl %edi,24(%esp)
+	movl $-24,%edi
+	movl %edi,28(%esp)
+	movl 24(%esp),%edi
+	movl %esi,32(%esp)
+	movl 28(%esp),%esi
+	addl %esi,%edi
+	movl %ecx,(%edi)
+	leal 40(%esp), %edi
+	movl $-24,%esi
+	addl %esi,%edi
 	flds (%edi)
-	leal 24(%esp), %edi
-	movl $-12,%edx
-	addl %edx,%edi
+	leal 40(%esp), %edi
+	movl $-28,%esi
+	addl %esi,%edi
 	fistpl (%edi)
 	leal fmt,%edi
-	leal 24(%esp), %edx
-	movl $-24,%ecx
-	addl %ecx,%edx
-	movl %edi,(%edx)
+	leal 40(%esp), %esi
+	movl $-40,%ecx
+	addl %ecx,%esi
+	movl %edi,(%esi)
 	movl $24,%ecx
-	shll %cl, %eax
+	shll %cl, %edx
 	movl $24,%ecx
-	shrl %cl, %eax
-	leal 24(%esp), %edi
-	movl $-20,%ecx
-	addl %ecx,%edi
-	movl %eax,(%edi)
-	leal 24(%esp), %edi
-	movl $-12,%eax
-	addl %eax,%edi
-	leal 24(%esp), %eax
-	movl $-16,%ecx
-	addl %ecx,%eax
+	shrl %cl, %edx
+	leal 40(%esp), %edi
+	movl $-36,%esi
+	addl %esi,%edi
+	movl %edx,(%edi)
+	leal 40(%esp), %edi
+	movl $-28,%esi
+	addl %esi,%edi
+	leal 40(%esp), %esi
+	movl $-32,%ecx
+	addl %ecx,%esi
 	movl (%edi),%edi
-	movl %edi,(%eax)
+	movl %edi,(%esi)
+	movl %eax,36(%esp)
 	call printf
 Ljoin_l8:
 	movl $0,%eax
-	leal 24(%esp), %edx
-	leal 24(%esp), %ecx
-	movl $0,%edi
-	addl %edi,%ecx
-	movl (%edx),%edx
-	movl %edx,(%ecx)
+	leal 40(%esp), %edx
+	movl $0,%ecx
+	addl %ecx,%edx
+	movl 36(%esp),%ecx
+	movl %ecx,(%edx)
+	movl 32(%esp),%esi
 	movl 20(%esp),%edi
-	leal 24(%esp), %esp
+	leal 40(%esp), %esp
 	ret
 .section .pcmap_data
 Lstackdata_l15:
@@ -78,9 +86,9 @@ Lstackdata_l15:
 .long Lframe_l16
 .section .pcmap_data
 Lframe_l16:
-.long 0xffffffe8
 .long 0x80000004
-.long 0x80000000
+.long 0xffffffd8
+.long 0xfffffffc
 .long Lstackdata_l15
 .long 8
 .long 5
@@ -91,14 +99,14 @@ Lframe_l16:
 .long 0x40000009
 .long 0x40000009
 .long 0x4000000a
-.long 0x4000000a
+.long 0xfffffff8
 .long 0x4000000b
-.long 0xfffffffc
+.long 0xffffffec
 .long 0
 .long 0
 .long 0
 .long 0
-.long 0xfffffff4
+.long 0xffffffe4
 .long 0
 .section .text
 .section .data

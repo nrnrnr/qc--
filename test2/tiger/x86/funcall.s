@@ -123,8 +123,8 @@ Lstackdata_l19:
 .long Lframe_l20
 .section .pcmap_data
 Lframe_l20:
-.long 0xffffffd8
 .long 0x8000000c
+.long 0xffffffd8
 .long 0xfffffff0
 .long Lstackdata_l19
 .long 8
@@ -153,8 +153,8 @@ Lframe_l20:
 .long Lframe_l21
 .section .pcmap_data
 Lframe_l21:
-.long 0xffffffd8
 .long 0x8000000c
+.long 0xffffffd8
 .long 0xfffffff0
 .long Lstackdata_l19
 .long 8
@@ -305,8 +305,8 @@ Lstackdata_l35:
 .long Lframe_l36
 .section .pcmap_data
 Lframe_l36:
-.long 0xffffffd0
 .long 0x8000000c
+.long 0xffffffd0
 .long 0xffffffe0
 .long Lstackdata_l35
 .long 8
@@ -410,8 +410,8 @@ Lstackdata_l48:
 .long Lframe_l49
 .section .pcmap_data
 Lframe_l49:
-.long 0xffffffe4
 .long 0x80000008
+.long 0xffffffe4
 .long 0xfffffff4
 .long Lstackdata_l48
 .long 8
@@ -514,8 +514,8 @@ Lstackdata_l67:
 .long Lframe_l68
 .section .pcmap_data
 Lframe_l68:
-.long 0xffffffe8
 .long 0x80000004
+.long 0xffffffe8
 .long 0xfffffff8
 .long Lstackdata_l67
 .long 8
@@ -542,8 +542,8 @@ Lframe_l68:
 .long Lframe_l69
 .section .pcmap_data
 Lframe_l69:
-.long 0xffffffe8
 .long 0x80000004
+.long 0xffffffe8
 .long 0xfffffff8
 .long Lstackdata_l67
 .long 8
@@ -570,8 +570,8 @@ Lframe_l69:
 .long Lframe_l70
 .section .pcmap_data
 Lframe_l70:
-.long 0xffffffe8
 .long 0x80000004
+.long 0xffffffe8
 .long 0xfffffff8
 .long Lstackdata_l67
 .long 8

@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#define NOISY 0
+
 extern void h(void);
 
 int compare(const void* a, const void* b) {
@@ -28,7 +30,7 @@ void rt_stack_trace(Cmm_Cont* t) {
   printf("RTS: %X\n", (unsigned)t);
   a = Cmm_YoungestActivation(t);
   do {
-#if 0
+#if NOISY
     Cmm_show_activation(&a);
 #endif
     fflush(stdout);
@@ -43,14 +45,15 @@ void rt_check(Cmm_Cont* t) {
   Cmm_Activation a;
   int i;
 
-  printf("Check starts with continuation: %X\n", (unsigned)t);
+  printf("Check starts with continuation @ %X: (pc=%p, sp=%p)\n", (unsigned)t,
+         (void*)t->pc, (void*)t->sp);
   a = Cmm_YoungestActivation(t);
   do {
     void* rootp;
     char* desc;
     int var_count;
     int* sd;
-#if 0
+#if NOISY
     Cmm_show_activation(&a);
 #endif
     fflush(stdout);
@@ -62,7 +65,8 @@ void rt_check(Cmm_Cont* t) {
       for (i = 0; i < var_count; i++) {
         rootp = (void *) Cmm_FindLocalVar(&a, i);
         if (rootp)
-          printf("\tlocal %d: %X = %X\n", i, (unsigned)rootp, *(int*)rootp);
+          printf("\tlocal %d: %X = %d (%x)\n", i, (unsigned)rootp, *(int*)rootp,
+                 *(int*)rootp);
         else
           printf("\tlocal %d: <DEAD>\n", i);
       }

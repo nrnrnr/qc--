@@ -7,112 +7,119 @@ Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY:
 Cmm.global_area:
 .section .text
 main:
-	leal -32(%esp), %esp
-	leal 32(%esp), %ecx
+	leal -48(%esp), %esp
+	leal 48(%esp), %ecx
 	movl $4,%edx
 	addl %edx,%ecx
 	movl (%ecx),%ecx
-	leal 32(%esp), %ecx
+	leal 48(%esp), %ecx
 	movl $8,%edx
 	addl %edx,%ecx
+	movl (%ecx),%ecx
+	leal 48(%esp), %ecx
 	movl (%ecx),%ecx
 Linitialize_continuations_l5:
 Lproc_body_start_l4:
 	leal -8(%esp), %esp
-	leal 40(%esp), %eax
-	movl $-4,%ecx
-	addl %ecx,%eax
-	movl $1,%ecx
-	leal 40(%esp), %edx
+	leal 56(%esp), %eax
+	movl $-4,%edx
+	addl %edx,%eax
+	movl $1,%edx
 	movl %edi,28(%esp)
-	movl $-40,%edi
-	addl %edi,%edx
-	movl %ecx,(%edx)
+	leal 56(%esp), %edi
+	movl %edi,32(%esp)
+	movl $-56,%edi
+	movl %edi,36(%esp)
+	movl 32(%esp),%edi
+	movl %esi,40(%esp)
+	movl 36(%esp),%esi
+	addl %esi,%edi
+	movl %edx,(%edi)
 	movl $10,%edi
-	leal 40(%esp), %ecx
-	movl $-36,%edx
-	addl %edx,%ecx
-	movl %edi,(%ecx)
+	leal 56(%esp), %esi
+	movl $-52,%edx
+	addl %edx,%esi
+	movl %edi,(%esi)
+	movl %ecx,44(%esp)
 	call down
 Ljoin_l21:
 	leal -8(%esp), %esp
-	leal 40(%esp), %edi
-	movl $-4,%ecx
-	addl %ecx,%edi
-	movl %eax,32(%esp)
+	leal 56(%esp), %edi
+	movl $-4,%esi
+	addl %esi,%edi
+	movl %eax,48(%esp)
 	movl %edi,%eax
 	movl $1,%edi
-	leal 40(%esp), %ecx
-	movl $-40,%edx
-	addl %edx,%ecx
-	movl %edi,(%ecx)
+	leal 56(%esp), %esi
+	movl $-56,%ecx
+	addl %ecx,%esi
+	movl %edi,(%esi)
 	movl $100,%edi
-	leal 40(%esp), %ecx
-	movl $-36,%edx
-	addl %edx,%ecx
-	movl %edi,(%ecx)
+	leal 56(%esp), %esi
+	movl $-52,%ecx
+	addl %ecx,%esi
+	movl %edi,(%esi)
 	call down
 Ljoin_l18:
-	movl 24(%esp),%edi
+	movl 40(%esp),%edi
 	cmpl %eax,%edi
 	je Ljoin_l14
 Ljoin_l15:
-	leal pbad,%ecx
-	leal 32(%esp), %edx
-	movl $-32,%edi
-	addl %edi,%edx
-	movl %ecx,(%edx)
-	movl $10,%edi
-	leal 32(%esp), %ecx
-	movl $-28,%edx
+	leal pbad,%esi
+	leal 48(%esp), %ecx
+	movl $-48,%edx
 	addl %edx,%ecx
-	movl %edi,(%ecx)
-	leal 32(%esp), %edi
-	movl $-24,%ecx
-	addl %ecx,%edi
-	movl 24(%esp),%ecx
-	movl %ecx,(%edi)
+	movl %esi,(%ecx)
+	movl $10,%esi
+	leal 48(%esp), %ecx
+	movl $-44,%edx
+	addl %edx,%ecx
+	movl %esi,(%ecx)
+	leal 48(%esp), %esi
+	movl $-40,%ecx
+	addl %ecx,%esi
+	movl %edi,(%esi)
 	movl $100,%edi
-	leal 32(%esp), %ecx
-	movl $-20,%edx
-	addl %edx,%ecx
-	movl %edi,(%ecx)
-	leal 32(%esp), %edi
-	movl $-16,%ecx
-	addl %ecx,%edi
+	leal 48(%esp), %esi
+	movl $-36,%ecx
+	addl %ecx,%esi
+	movl %edi,(%esi)
+	leal 48(%esp), %edi
+	movl $-32,%esi
+	addl %esi,%edi
 	movl %eax,(%edi)
 	call printf
 Ljoin_l9:
 	jmp Ljoin_l12
 Ljoin_l14:
 	leal pgood,%edi
-	leal 32(%esp), %eax
-	movl $-32,%ecx
-	addl %ecx,%eax
-	movl %edi,(%eax)
+	leal 48(%esp), %esi
+	movl $-48,%eax
+	addl %eax,%esi
+	movl %edi,(%esi)
 	movl $10,%edi
-	leal 32(%esp), %eax
-	movl $-28,%ecx
-	addl %ecx,%eax
-	movl %edi,(%eax)
+	leal 48(%esp), %esi
+	movl $-44,%eax
+	addl %eax,%esi
+	movl %edi,(%esi)
 	movl $100,%edi
-	leal 32(%esp), %eax
-	movl $-24,%ecx
-	addl %ecx,%eax
-	movl %edi,(%eax)
+	leal 48(%esp), %esi
+	movl $-40,%eax
+	addl %eax,%esi
+	movl %edi,(%esi)
 	call printf
 Ljoin_l13:
 	jmp Ljoin_l12
 Ljoin_l12:
 	movl $0,%eax
-	leal 32(%esp), %edx
-	leal 32(%esp), %ecx
-	movl $0,%edi
-	addl %edi,%ecx
-	movl (%edx),%edx
-	movl %edx,(%ecx)
+	leal 48(%esp), %edx
+	movl $0,%ecx
+	addl %ecx,%edx
+	movl 36(%esp),%ecx
+	movl %ecx,(%edx)
+	movl 32(%esp),%esi
 	movl 20(%esp),%edi
-	leal 32(%esp), %esp
+	leal 48(%esp), %esp
 	ret
 .section .pcmap_data
 Lstackdata_l27:
@@ -123,9 +130,9 @@ Lstackdata_l27:
 .long Lframe_l28
 .section .pcmap_data
 Lframe_l28:
-.long 0xffffffe0
 .long 0x80000004
-.long 0x80000000
+.long 0xffffffd0
+.long 0xfffffff4
 .long Lstackdata_l27
 .long 8
 .long 4
@@ -136,9 +143,9 @@ Lframe_l28:
 .long 0x40000009
 .long 0x40000009
 .long 0x4000000a
-.long 0x4000000a
+.long 0xfffffff0
 .long 0x4000000b
-.long 0xfffffff4
+.long 0xffffffe4
 .long 0
 .long 0
 .long 0
@@ -149,9 +156,9 @@ Lframe_l28:
 .long Lframe_l29
 .section .pcmap_data
 Lframe_l29:
-.long 0xffffffe0
 .long 0x80000004
-.long 0x80000000
+.long 0xffffffd0
+.long 0xfffffff4
 .long Lstackdata_l27
 .long 8
 .long 4
@@ -162,9 +169,9 @@ Lframe_l29:
 .long 0x40000009
 .long 0x40000009
 .long 0x4000000a
-.long 0x4000000a
+.long 0xfffffff0
 .long 0x4000000b
-.long 0xfffffff4
+.long 0xffffffe4
 .long 0
 .long 0
 .long 0xfffffff8
@@ -175,9 +182,9 @@ Lframe_l29:
 .long Lframe_l30
 .section .pcmap_data
 Lframe_l30:
-.long 0xffffffe0
 .long 0x80000004
-.long 0x80000000
+.long 0xffffffd0
+.long 0xfffffff4
 .long Lstackdata_l27
 .long 8
 .long 4
@@ -188,9 +195,9 @@ Lframe_l30:
 .long 0x40000009
 .long 0x40000009
 .long 0x4000000a
-.long 0x4000000a
+.long 0xfffffff0
 .long 0x4000000b
-.long 0xfffffff4
+.long 0xffffffe4
 .long 0
 .long 0
 .long 0
@@ -201,9 +208,9 @@ Lframe_l30:
 .long Lframe_l31
 .section .pcmap_data
 Lframe_l31:
-.long 0xffffffe0
 .long 0x80000004
-.long 0x80000000
+.long 0xffffffd0
+.long 0xfffffff4
 .long Lstackdata_l27
 .long 8
 .long 4
@@ -214,9 +221,9 @@ Lframe_l31:
 .long 0x40000009
 .long 0x40000009
 .long 0x4000000a
-.long 0x4000000a
+.long 0xfffffff0
 .long 0x4000000b
-.long 0xfffffff4
+.long 0xffffffe4
 .long 0
 .long 0
 .long 0

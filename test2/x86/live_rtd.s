@@ -28,8 +28,8 @@ Lstackdata_l14:
 .long Lframe_l15
 .section .pcmap_data
 Lframe_l15:
-.long 0xfffffff8
 .long 0x80000004
+.long 0xfffffff8
 .long 0xfffffffc
 .long Lstackdata_l14
 .long 8

@@ -7,34 +7,31 @@ Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY:
 Cmm.global_area:
 .section .text
 unwind_test:
-	leal -12(%esp), %esp
+	leal -8(%esp), %esp
+	leal 8(%esp), %ecx
+	movl (%ecx),%ecx
 Linitialize_continuations_l12:
 Lproc_body_start_l11:
+	movl %ecx,4(%esp)
 	movl %eax,(%esp)
 	call g
 Ljoin_l17:
 	movl $0,%eax
-	leal 12(%esp), %edx
-	leal 12(%esp), %ecx
-	movl %edx,8(%esp)
-	movl $0,%edx
-	addl %edx,%ecx
-	movl 8(%esp),%edx
-	movl (%edx),%edx
-	movl %edx,(%ecx)
-	leal 12(%esp), %esp
+	leal 8(%esp), %edx
+	movl $0,%ecx
+	addl %ecx,%edx
+	movl 4(%esp),%ecx
+	movl %ecx,(%edx)
+	leal 8(%esp), %esp
 	ret
 k1_U10:
 	movl (%esp),%eax
-	leal 12(%esp), %edx
-	leal 12(%esp), %ecx
-	movl %edx,4(%esp)
-	movl $0,%edx
-	addl %edx,%ecx
-	movl 4(%esp),%edx
-	movl (%edx),%edx
-	movl %edx,(%ecx)
-	leal 12(%esp), %esp
+	leal 8(%esp), %edx
+	movl $0,%ecx
+	addl %ecx,%edx
+	movl 4(%esp),%ecx
+	movl %ecx,(%edx)
+	leal 8(%esp), %esp
 	ret
 .section .pcmap_data
 Lstackdata_l23:
@@ -44,9 +41,9 @@ Lstackdata_l23:
 .long Lframe_l24
 .section .pcmap_data
 Lframe_l24:
-.long 0xfffffff4
 .long 0x80000004
-.long 0x80000000
+.long 0xfffffff8
+.long 0xfffffffc
 .long Lstackdata_l23
 .long 8
 .long 1
@@ -60,12 +57,12 @@ Lframe_l24:
 .long 0x4000000a
 .long 0x4000000b
 .long 0x4000000b
-.long 0xfffffff4
+.long 0xfffffff8
 .long 1
 .long 2
 .long 1
 .long k1_U10
-.long 0xfffffff4
+.long 0xfffffff8
 .long 0
 .long 3
 .section .text
@@ -123,8 +120,8 @@ Lstackdata_l41:
 .long Lframe_l42
 .section .pcmap_data
 Lframe_l42:
-.long 0xffffffe0
 .long 0x80000004
+.long 0xffffffe0
 .long 0xffffffe4
 .long Lstackdata_l41
 .long 8
@@ -145,8 +142,8 @@ Lframe_l42:
 .long Lframe_l43
 .section .pcmap_data
 Lframe_l43:
-.long 0xffffffe0
 .long 0x80000004
+.long 0xffffffe0
 .long 0xffffffe4
 .long Lstackdata_l41
 .long 8

@@ -10,7 +10,8 @@ B=""
 LIBA   = ${B}$NAME.a
 DEPEND = ${B}DEPEND
 
-QCMM=`if [ -x $TOP/bin/qc--.opt ]; then echo $TOP/bin/qc--.opt; else echo $TOP/bin/qc--; fi`
+QC=`if [ -x $TOP/bin/qc--.opt ]; then echo $TOP/bin/qc--.opt; else echo $TOP/bin/qc--; fi`
+QCFLAGS=
 
 # ------------------------------------------------------------------ 
 # (high level) virtual targets
@@ -99,11 +100,11 @@ test.exe: test.o trace.o $LIBA pcmap.ld
 pcmap.ld:D: pcmap.nw
 	$NOTANGLE $prereq -R$target > $target
 
-&.o: &.s
-	as -o $target $stem.s
+'^'(cut|thread).o'$':RD: '\1'.s
+	as -o $target $stem1.s
 
-'^'(runtime|pcmap|gcc-linux|trace).s'$':RD: '\1'.c
-	gcc -ansi -pedantic -Wall -Wno-long-long -S -I. -g $stem1.c
+'^'(runtime|pcmap|gcc-linux|trace).o'$':RD: '\1'.c
+	gcc -ansi -pedantic -Wall -Wno-long-long -c -I. -g $stem1.c
 
 # ------------------------------------------------------------------ 
 # machine-dependent code
@@ -140,13 +141,13 @@ ${B}cut.c--:D: runtime.nw
 ${B}thread.c--:D: runtime.nw
 	$NOTANGLE -L $prereq -R$target > $target
 
-'^'${B}(cut|thread).s'$':DR: ${B}'\1'.c-- $QCMM
+'^'${B}(cut|thread).s'$':DR: ${B}'\1'.c-- $QC
 	tmp=/tmp/$stem1$$
-	$QCMM $config_swapopt -S -o $tmp ${B}$stem1.c--
+	$QC $QCFLAGS $config_swapopt -S -o $tmp ${B}$stem1.c--
 	sed '/globalsig/d;/ref_to_global_area/d' $tmp > $target
 	rm -f $tmp
 
-'^'${B}(test).s'$':DR: ${B}'\1'.c-- $QCMM
-	$QCMM $config_swapopt -S -globals ${B}$stem1.c--
+'^'${B}(test).o'$':DR: ${B}'\1'.c-- $QC
+	$QC $QCFLAGS $config_swapopt -c -globals ${B}$stem1.c--
 
 <      $TOP/config/install.mk
