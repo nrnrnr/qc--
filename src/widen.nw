@@ -27,6 +27,7 @@ floating-point operations in an RTL to be using one of the widths in
 let float ~rm goodwidths =
   let rm = Down.exp rm in
   let goodwidths = List.sort compare goodwidths in
+  let isgood w = List.exists (fun w' -> w' = w) goodwidths in
   let bestwidth w =
     try List.find (fun w' -> w' >= w) goodwidths
     with Not_found -> Unsupported.widen_float w in
@@ -35,6 +36,7 @@ let float ~rm goodwidths =
 @ 
 I'm a little shaky what is the postcondition regarding float-to-float
 conversions.
+It's embarrassing!!
 For example, suppose the source program tries to narrow a
 floating-point value to single precision.
 We owe it to ourselve to arrange to store and reload it at that
@@ -45,18 +47,24 @@ Anyway [[f2f']] implements a float-to-float conversion, which may or
 may not combine with a conversion underneath it.
 <<floating-point widening>>=
 let f2f' combine srcw dstw e =
+  let rec make_f2f s d e rm =
+    if isgood s || isgood d then
+      RP.App(("f2f", [s; d]), [e; rm])
+    else
+      let w = bestwidth (max s d) in
+      make_f2f w d (make_f2f s w e rm) rm in
   if srcw = dstw then
     e
   else
     match e with 
     | RP.App(("f2f", [from; to']), [e; rm]) when combine ->
         assert (to' = srcw);
-        RP.App(("f2f", [from; dstw]), [e; rm])
-    | RP.App(("f2f_bogus", [from; to']), [e]) when combine ->
+        make_f2f from dstw e rm
+    | RP.App(("f2f_implicit_round", [from; to']), [e]) when combine ->
         assert (to' = srcw);
-        RP.App(("f2f", [from; dstw]), [e; rm])
+        make_f2f from dstw e rm
     | e -> 
-        RP.App(("f2f", [srcw; dstw]), [e; rm]) in
+        make_f2f srcw dstw e rm in
 let f2f = f2f' true in
 let force_f2f = f2f' false in
 @ 
@@ -73,7 +81,7 @@ let rec convert ~(from:int) ~(to':int) e =
       f2f from to' (RP.Fetch(loc l, w))
   | RP.App (("f2f" , [f; t]), [x; rm]) ->
       convert ~from:f ~to' x
-  | RP.App (("f2f_bogus" , [f; t]), [x]) ->
+  | RP.App (("f2f_implicit_round" , [f; t]), [x]) ->
       convert ~from:f ~to' x
   | RP.App (("i2f", [f; t]), [x; rm]) ->
       RP.App (("i2f", [f; to']), [rewrite x; rm])
@@ -142,8 +150,11 @@ let rtl r =
     | "fcmp"|"flt"|"fle"|"fgt"|"fge"|"feq"|"fne"|"fordered"|"funordered"|"f2i" -> true
     | _ -> false in
   if Rtlutil.ExistsOpr.rtl needs_conversion r then
-    match Down.rtl r with
-    | RP.Rtl es -> Up.rtl (RP.Rtl (List.map guarded es))
+    let r' =
+      let RP.Rtl es = Down.rtl r in Up.rtl (RP.Rtl (List.map guarded es)) in
+    let rtl r = Rtlutil.ToReadableString.rtl r in
+    Verbose.say 5 ["Widened "; rtl r; " into\n  "; rtl r'; "\n"];
+    r'
   else
     r in
 @ 
