@@ -31,10 +31,11 @@ semantics have been found correct it is translated into abstract
 Currently empty.
 
 <<ast2ir.mli>>=
+(* empty *)
 @
 
 % ------------------------------------------------------------------ 
-\subsection{Implementation}
+\subsection{Implementation Overview}
 % ------------------------------------------------------------------ 
 
 The generator for the intermediate representation is parameterized
@@ -70,12 +71,12 @@ end
  
 
 % ------------------------------------------------------------------ 
-\subsubsection{Auxiliaries}
+\subsection{Auxiliaries}
 % ------------------------------------------------------------------ 
 
 Some auxiliary bindings.  The \module{ir} module defines a [[char]]
 view for [[Rtl.space]].  However, the [[char]] type is only used in
-{\asdl} \emph{data types that use} the [[space]] type, but
+{\asdl} data types that \emph{use} the [[space]] type, but
 [[Rtl.space]] itself is still [[int]].  So we can not use this type to
 annotate the [[default_memory]] definition. 
 
@@ -143,14 +144,14 @@ let foldr = List.fold_right
 
 
 % ------------------------------------------------------------------ 
-\subsubsection{Module \texttt{Make}}
+\subsection{Module \texttt{Make}}
 % ------------------------------------------------------------------ 
 
 The implementation [[Make]] is a functor that receives two modules as
-arguments: an abstract assembler interface [[Asm]] and an abstract
-flow graph interface [[Agraph]]. The functions in [[Make]] create
+arguments:  an abstract assembler interface [[Asm]] and an abstract
+flow graph interface [[Agraph]].  The functions in [[Make]] create
 (abstract) assembly code where an instruction in the assembly code is
-a flow graph. The flow graph will in later steps replaced by real
+a flow graph.  The flow graph will in later steps replaced by real
 machine instructions.
 
 <<module Make>>=
@@ -195,7 +196,7 @@ let rec actual env (hint, e) =
  
 
 % ------------------------------------------------------------------ 
-\paragraph{Expressions}
+\subsubsection{Expressions}
 % ------------------------------------------------------------------ 
 
 [[expr]] translates an {\small AST} expression into an [[Rtl.expr]].  
@@ -247,7 +248,7 @@ and variable env = function
             | F.Label(F.Proc _)-> Rtl.Const(Rtl.Link(x, bits t))
             | F.Label(F.Code)  -> Rtl.Const(Rtl.Link(x, bits t))
             | F.Label(F.Data)  -> Rtl.Const(Rtl.Link(x, bits t))
-            | F.Label(F.Stack) -> assert false (* don't know how *)
+            | F.Label(F.Stack _)-> assert false (* don't know how *)
             | F.Import(None)   -> Rtl.Const(Rtl.Link(x, bits t))
             | F.Import(Some n) -> Rtl.Const(Rtl.Link(n, bits t))
             | F.Register(r)    -> let width = bits t in 
@@ -293,7 +294,7 @@ and expr env = function
 @    
    
 % ------------------------------------------------------------------ 
-\paragraph{Memory declarations}
+\subsubsection{Memory declarations}
 % ------------------------------------------------------------------ 
 
 
@@ -326,7 +327,7 @@ let register env ir (v , t, n, reg)  = true
 @
 
 % ------------------------------------------------------------------ 
-\paragraph{Flow Annotations}
+\subsubsection{Flow Annotations}
 % ------------------------------------------------------------------     
 
 Flow annotations are translated to continuation bundles of type
@@ -344,16 +345,14 @@ let rec flows cont = function
 @
 
 % ------------------------------------------------------------------ 
-\paragraph{Procedure Body} 
+\subsubsection{Procedure Body} 
 % ------------------------------------------------------------------ 
 
 A procedure's body includes statements, declarations, and stack data. 
-
 A statement is part of a [[body]]; the [[body]] function receives
 arguments that we need for all statements:  [[env]] is the clean
 environment, which doesn't change.  [[s]] is the statement being
-translated.  We return a new flow-graph node.  [[ic]] is a
-representation of the node and assembly code following this statement. 
+translated.  We return a new flow-graph node. 
 
 <<>>=
 let rec body env props graph after bb =
@@ -363,7 +362,7 @@ let rec body env props graph after bb =
         <<cases for translating statements>>        in
     let rec body b after = match b with
         | A.BodyAt(x, _)    -> body x after
-        | A.DeclBody(d)     -> assert false  (* to do *)
+        | A.DeclBody(d)     -> ldecl d after
         | A.StmtBody(s)     -> stmt s after
         | A.DataBody(dd)    -> assert false  (* to do *)
     in
@@ -513,7 +512,7 @@ and arm env ir = function
 @
 
 % ------------------------------------------------------------------ 
-\paragraph{Procedures}
+\subsubsection{Procedures}
 % ------------------------------------------------------------------ 
 
 Each procedure is translated into a control flow graph that shares no
@@ -532,7 +531,7 @@ for a procedure is found in its entry in the fat environment.
 and proc env props (asm: Asm.asm) (cc,n,fs,bb) =  
     let decorate n = G.bind props n                              in
     let env        = match F.findv n env with
-                     | _,(F.Label(F.Proc e),_) -> e
+                     | _,(F.Label(F.Proc {F.env = e}),_) -> e
                      | _  -> assert false                        in
     let graph      = GM.graph () (* fresh graph for this proc *) in
     let cc         = Aux.Option.get default_convention cc        in
@@ -548,9 +547,18 @@ and proc env props (asm: Asm.asm) (cc,n,fs,bb) =
         
 @
 
+Local declarations are ignored for the moment. 
+ 
 <<>>=    
-and ldecl env x (asm: Asm.asm) = asm
+and ldecl env after = after
 @
+
+All global declarations have been processed at this stage and thus can
+be ignored.  The only exception are (global) register declarations. 
+Global registers can name a hardware register they are placed in.  We
+need so way to record such an assignment.  All other locations for
+global registers are determined by an automaton, see module
+\module{callconv}. 
 
 <<>>=
 and gdecl env (asm: Asm.asm) = function
@@ -575,7 +583,7 @@ let rec section env props (asm: Asm.asm) = function
     
     
 % ------------------------------------------------------------------ 
-\paragraph{Toplevel}
+\subsubsection{Toplevel}
 % ------------------------------------------------------------------ 
 
 What to do with top-level procedures? They should go into some section
@@ -594,15 +602,30 @@ let rec toplevel env asm = function
 
 
 % ------------------------------------------------------------------ 
-\paragraph{Program}
+\subsubsection{Program}
 % ------------------------------------------------------------------ 
 
+Imports and exports of assembly symbols are announced once at the top
+of the assembly program.  The sets of imported and exported symbols
+are registered in the fat environment.  For details, see modules
+\module{mangle}, and \module{elab}. 
+
 <<>>=
-let program env tt asm = foldl (toplevel env) asm 
+let exports env asm = 
+    Fenv.StrSet.fold (fun s asm -> asm ++ Asm.export s) (F.exported env) asm
+
+let imports env asm =
+    Fenv.StrSet.fold (fun s asm -> asm ++ Asm.import s) (F.imported env) asm
+
+<<>>=
+let program env tt asm = 
+    let asm = exports env asm in
+    let asm = imports env asm in
+        foldl (toplevel env) asm 
 @
 
 % ------------------------------------------------------------------ 
-\subsubsection{{\rtl} Auxiliaries}
+\subsection{{\rtl} Auxiliaries}
 % ------------------------------------------------------------------ 
 
 Module [[R]] contains auxiliary functions for {\rtl}s.  We like to
@@ -619,7 +642,7 @@ own module.
 @
  
 % ------------------------------------------------------------------ 
-\subsubsection{Expression Evaluation}
+\subsection{Expression Evaluation}
 % ------------------------------------------------------------------ 
 
 The translation of {\PAL} expressions to {\rtl} expressions requires

@@ -140,10 +140,14 @@ type register       = { index:      int           (* for run-time API *)
                       ; hwreg:      string option (* hardware register *)
                       }
 
-type kind           = Proc          of env partial
+type proc           = { env:        env partial
+                      ; stackdata:  int partial
+                      }
+
+type kind           = Proc          of proc
                     | Code
                     | Data
-                    | Stack
+                    | Stack         of int partial (* stack offset *)    
 
 type denotation     = Constant      of Bits.bits
                     | Label         of kind
@@ -207,15 +211,14 @@ val srcmap          : env -> Srcmap.map
       \end{tabular}
 \end{itemize}
 
-During the first phases of the static analysis the local environment
-of a procedure is unknown.  Once it is known we like to bind it to the
-procedures name.  This requires a re-binding of the existing name
-which is not possible when [[bindv]] is used.  We therefore have
-[[rebindProc]] which can \emph{only} be used to re-bind a procedure
-entry to a new ventry.
+During the early phases pf static analysis some denotaional aspects of
+names are unknown which must be added later.  This is done using
+[[rebindv]].  Sine [[bindv]] checks for re-definitons of names it can
+not be used for this purpose.  The attributes (like source location,
+scope) associated with a name from its first binding stay the same.
 
 <<>>=
-val rebindProc      : string -> ventry -> env -> env
+val rebindv     : string -> ventry -> env -> env
 @
 
 % ------------------------------------------------------------------ 
@@ -302,6 +305,33 @@ val setIndex        : env -> int -> env
 val getIndex        : env -> int
 val incrIndex       : env -> env         
 @
+
+% ------------------------------------------------------------------ 
+\subsubsection{Stackdata Offset}
+% ------------------------------------------------------------------ 
+
+Inside of a procedure uninitialized data can be declared on the stack. 
+For each procedure an [[offset]] is maintained that counts the amount
+of memory declared on the stack and whose value is bound to label
+inside of stack data declarations.  Since procedures do not nest in
+{\PAL}, a single counter in the [[env]] is sufficient.  We have
+decided to maintain the [[offset]] counter inside the fat environemt
+because the [[offset]] must be maintained over many functions and
+becomes a non-local property.
+
+<<>>=
+val resetOffset     : env -> env
+val incrOffset      : int -> env -> env
+val alignOffset     : int -> env -> env
+val offset          : env -> int
+@
+
+Each procedure sets the offset to zero by calling [[resetOffset]].  A
+data declaration increments the offset by its size using
+[[incrOffset]].  The [[alignOffset n]] fuction advanves the [[offset]]
+to the next multiple of [[n]] unless [[offset]] is already a multiple
+of [[n]].  For labels and the total amount of [[stackdata]] [[offset]]
+reports the current value of the offset counter.
 
 % ------------------------------------------------------------------ 
 \subsubsection{Imports and Exports}
@@ -481,11 +511,15 @@ type endianness     = Big | Little
 type register       = { index:      int           (* for run-time API *)
                       ; hwreg:      string option (* hardware register *)
                       }
+
+type proc           = { env:        env partial
+                      ; stackdata:  int partial
+                      }
                       
-type kind           = Proc          of env Arg.partial
+and  kind           = Proc          of proc
                     | Code
                     | Data
-                    | Stack
+                    | Stack         of int partial (* stack offset *)
 
 and  denotation     = Constant      of Bits.bits
                     | Label         of kind
@@ -542,7 +576,9 @@ and   env           =
                       ; target :      target
                       ; asm    :      asm
                       ; rindex :      int       (* register index *)
-                      }    
+                      ; offset :      int       (* stack data offset *)
+                      }
+                      
 @
 
 % ------------------------------------------------------------------ 
@@ -559,6 +595,7 @@ let empty  map      = { tenv   = StrMap.empty
                       ; srcmap = map
                       ; error  = false
                       ; rindex = 0
+                      ; offset = 0 
                       ; target = { memsize    = Arg.default 8
                                  ; endianness = Arg.default Little
                                  ; word       = Arg.default 32
@@ -627,7 +664,7 @@ scope and source code location of the existing binding is re-used for
 the new binding.
 
 <<>>=
-let rebindProc name x env = 
+let rebindv name x env = 
     try 
         let attr,_ = StrMap.find name env.venv in
             { env with venv = StrMap.add name (attr,x) env.venv }
@@ -788,6 +825,23 @@ let incrIndex  env   = { env with rindex = env.rindex + 1}
 @
 
 % ------------------------------------------------------------------ 
+\subsubsection{Stackdata Offset}
+% ------------------------------------------------------------------ 
+
+The implementation of the [[offset]] functions for stack data are
+straight forward:
+
+<<>>=
+let resetOffset env   = { env with offset = 0 }
+let incrOffset n env  = { env with offset = env.offset + n }
+let offset env        = env.offset
+let alignOffset n env = if   env.offset mod n= 0
+                        then env
+                        else let q = env.offset / n in 
+                             { env with offset = (q+1) * n }
+@
+
+% ------------------------------------------------------------------ 
 \subsubsection{Cleaning a fat environment}
 % ------------------------------------------------------------------ 
 
@@ -807,10 +861,10 @@ let rec clean_venv map  =
         |  (pos,scope),E.Ok(denot,ty) ->
             let denot' = match denot with
                 | Dirty.Constant(v)               -> Clean.Constant(v)
-                | Dirty.Label(Dirty.Proc(Some e)) -> Clean.Label(Clean.Proc(clean e))
+                | Dirty.Label(Dirty.Proc(p))      -> Clean.Label(Clean.Proc(clean_proc p))
                 | Dirty.Label(Dirty.Code)         -> Clean.Label(Clean.Code)
                 | Dirty.Label(Dirty.Data)         -> Clean.Label(Clean.Data)
-                | Dirty.Label(Dirty.Stack)        -> Clean.Label(Clean.Stack)
+                | Dirty.Label(Dirty.Stack(Some n))-> Clean.Label(Clean.Stack n)
                 | Dirty.Import(n)                 -> Clean.Import(n)
                 | Dirty.Register(n)     -> Clean.Register(
                                          { Clean.index  = n.Dirty.index
@@ -830,7 +884,7 @@ and clean_tenv map =
         | _             -> assert false
     in
         StrMap.fold copy map StrMap.empty
-
+<<>>=
 and clean_target = function
     |   { Dirty.memsize    = E.Ok(Some n)
         ; Dirty.endianness = E.Ok(Some e)
@@ -851,13 +905,24 @@ and clean_target = function
         }
     |   _ -> assert false 
 
+<<>>=
 and clean_asm asm =
     { Clean.imported = asm.Dirty.imported
     ; Clean.exported = asm.Dirty.exported
     ; Clean.nam2sym  = asm.Dirty.nam2sym
     }
-     
 
+<<>>=
+and clean_proc = function
+    |   { Dirty.env       = Some env
+        ; Dirty.stackdata = Some n 
+        } ->
+        { Clean.env       = clean env
+        ; Clean.stackdata = n
+        }
+    |   _ -> assert false 
+
+<<>>=     
 and clean env =
     { Clean.tenv   = clean_tenv env.Dirty.tenv
     ; Clean.venv   = clean_venv env.Dirty.venv
@@ -865,6 +930,7 @@ and clean env =
     ; Clean.error  = env.Dirty.error
     ; Clean.target = clean_target env.Dirty.target
     ; Clean.rindex = env.Dirty.rindex
+    ; Clean.offset = env.Dirty.offset
     ; Clean.asm    = clean_asm env.Dirty.asm
     }
 @

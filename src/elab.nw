@@ -1,10 +1,19 @@
+
+\input{macros.tex}
+
+% l2h substitution dots ...
+% l2h substitution ast AST
+% l2h substitution rtl RTL
+% l2h substitution ir IR
+% l2h substitution noweb NOWEB
+% l2h substitution qcc QC--
 % l2h substitution C C--
 % l2h substitution PAL C--
+% l2h substitution pal C--
 % l2h substitution asdl ASDL
 % l2h substitution ocaml OCaml
 % l2h substitution forall forall
-
-\input{macros.tex}
+% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
 
 % ------------------------------------------------------------------ 
 \section{Checking Static Semantics}
@@ -211,7 +220,7 @@ module Targets = struct
 end
 @
 
-\paragraph{Typedef} As explained earlier declaration can refer to
+\paragraph{Typedef} As explained earlier, declaration can refer to
 each other.  Because of these dependencies among each other, they must
 be first collected, than sorted, and finally processed in the right
 order.
@@ -423,7 +432,7 @@ let pointerTy env = E.seq (F.findPointersize env)
 @
 
 % ------------------------------------------------------------------ 
-\subsection{Processing \texttt{target},\texttt{im}-, and \textt{export} declarations}
+\subsection{Processing \texttt{target},\texttt{im}-, and \texttt{export} declarations}
 % ------------------------------------------------------------------ 
 
 <<module Targets>>=
@@ -1062,8 +1071,9 @@ let register r scope env = function
                             (fun t -> F.Register(i),t)) (F.incrIndex env)
 @
 
-The [[datum]] function binds global data-labels and local
-[[stackdata]] labels when called from [[body]].
+A [[datum]] label is a [[F.Label(F.Data)]] when the datum belongs to a
+top-level datum, and a [[F.Label(F.Stack)]] when the datum belongs to
+a [[stackdatum]]. We thus have two functions: [[datum]] and [[stackdatum]].
 
 <<>>=
 let rec datum r scope env = function
@@ -1071,6 +1081,20 @@ let rec datum r scope env = function
     | A.Label(n)     -> bindv n (r,scope) 
                                 (E.ematch (pointerTy env) 
                                     (fun p ->  F.Label(F.Data),p)) 
+                                env
+    | _              -> env
+@
+
+The denotation of a [[stackdatum]] label includes it [[offset]] in its
+procedure's stack data. This offset is not yet know and will be added
+in a later phase.
+
+<<>>=
+let rec stackdatum r scope env = function
+    | A.DatumAt(x,r) -> E.catch' env (error r env) (datum r scope env) x
+    | A.Label(n)     -> bindv n (r,scope) 
+                                (E.ematch (pointerTy env) 
+                                    (fun p ->  F.Label(F.Stack(None)),p)) 
                                 env
     | _              -> env
 @
@@ -1112,13 +1136,15 @@ and decl r scope env = function
 @
 
 A \textit{body} is always local to procedure and therefore its
-declarations are only processed when local values are bound. 
+declarations are only processed when local values are bound. However,
+a body also contains names of global scope and thus must be traversed
+to bind them.
 
 <<>>=
 and body r scope env = function
     | A.BodyAt(x, r) -> E.catch' env (error r env) (body r scope env) x
     | A.DeclBody(d)  -> if scope=F.Local then decl r scope env d else env 
-    | A.DataBody(dd) -> if scope=F.Local then foldl (datum r scope) env dd 
+    | A.DataBody(dd) -> if scope=F.Local then foldl (stackdatum r scope) env dd 
                         else env
     | A.StmtBody(s)  -> stmt r scope env s
 @
@@ -1142,7 +1168,8 @@ let formal r env (hint, inv, ty, name) =
 
 <<>>=
 let proc r env (_,name,ff,bb as p) =
-    let t    = E.ematch (pointerTy env) (fun p -> F.Label(F.Proc(None)),p) in
+    let x    = { F.env = None; F.stackdata = None } in
+    let t    = E.ematch (pointerTy env) (fun p -> F.Label(F.Proc(x)),p) in
     let env  = foldl (body r F.Global) env bb     in 
     let env  = F.bindv name ((r,F.Global),t) env    in
         env
@@ -1265,6 +1292,16 @@ returns an environment.
 To evaluate constant expressions we use the code from [[Const.Eval]];
 the returned value has type [[(Types.ty * F.value) E.error]]
 
+For procedures we have to know how much [[stackdata]] is allocated
+inside of them.  Each label inside of [[stackdata]] area is an offset
+that depends on the amount of stackdata allocated before it.  In order
+to calculate the total amount of stackdata and the offsets for labels
+within, we have to maintain an [[offset]] counter per procedure. 
+Since [[stackdata]] can be part of a [[span]] which in turn is a
+statement, we have to pass the [[offset]] counter to many functions. 
+Therefore, the [[offset]] is maintained in the fat environment; see
+module \module{fenv}.
+
 <<check>>=
 let constExpr env e = Consts.Eval.evalExpr env e
 @    
@@ -1379,18 +1416,37 @@ let memdecl env ty size init_exprs =
         )
 @
 
-A [[stackdatum]] must not specify an expression to initialize memory. 
-Alignments must be a power of two.
+A [[stackdatum]] declaration must respect some constraints:  (1) no
+expressions to initialize memory, (2) no [[[]]] used as a size, (3) an
+alignment must be a power of two.  Additionally, it affects the
+[[offset]] pointer maintained by the fat environment.  An memory
+declaration advances the pointer by the size of the declared memory,
+an [[align]] declaration aligns the [[offset]], and a label is bound
+to the current offset.
 
 <<>>=
 let rec stackdatum env = function
-    | A.DatumAt(x,r)      -> E.catch' (F.flagError env) (error r env) 
+    | A.DatumAt(x,r)            -> E.catch' (F.flagError env) (error r env) 
                                       (stackdatum env) x
-    | A.Label(n)          -> env
-    | A.Align(a)          -> if is2power a then env else 
-                             E.error ("illegal alignment: " ^ string_of_int a)
-    | A.MemDecl(t,m,None) -> memdecl env t m None 
-    | A.MemDecl(t,m,_   ) -> E.error "no initial values allowed for stackdata"
+    | A.Label(n) -> 
+        let offset = F.offset env                 in
+        let denot  = F.Label(F.Stack(Some offset)) in
+            E.seq' (F.flagError env) (snd (F.findv n env)) (fun (_,ty) -> 
+                F.rebindv n (E.Ok(denot,ty)) env)
+    
+    | A.Align(a) when not (is2power a) ->
+        E.error ("illegal alignment: " ^ string_of_int a)
+    | A.Align(a)                -> F.alignOffset a env
+    | A.MemDecl(t,A.DynSize,_)  -> E.error ("illegal size for stack data")
+    | A.MemDecl(t,n,None)       -> 
+        let env = memdecl env t n None in
+            E.seq' env (memsize env n)
+            ( function 
+            | Some n -> F.incrOffset n env
+            | None   -> assert false        (* impossible *)
+            )
+    | A.MemDecl(t,n,_   )       -> 
+        E.error "no initial values allowed for stackdata"
 @
 
 Labels as part of memory data must not be processed because they have been
@@ -1861,18 +1917,26 @@ such that the global counter for indexing registers is maintained
 across procedures.
 
 The local environment for the procedure is bound in the fat
-environment such that it can be re-used later.
+environment such that it can be re-used later.  This updates the
+existing entry for the procedure in the fat environment and thus
+[[rebindv]] must be used.  After the [[body]] of a procedure is
+traversed the [[offset]] equals the amount of stack data that was
+allocated there.  This number goes also into the denotation of the
+procedure.
 
 <<>>=
 and proc r env (_,name,_,bb as p) =
-    let i    = F.getIndex env  (* save old value *)      in
-    let env' = F.setIndex env 0                          in
-    let env' = Env.local env p                           in
-    let env' = foldl body env' bb                        in
+    let i    = F.getIndex env  (* save old value *)        in
+    let env' = F.setIndex env 0   (* register numbering *) in
+    let env' = F.resetOffset env' (* stackdata offset *)   in
+    let env' = Env.local env p                             in
+    let env' = foldl body env' bb                          in
+    let sd   = F.offset env (* amount of stackdata *)      in
+    let p    = { F.env = Some env'; F.stackdata = Some sd} in
     let t    = E.ematch (pointerTy env)
-               (fun p -> (F.Label(F.Proc(Some env')),p)) in
-    let env  = F.rebindProc name t env                   in
-    let env  = F.setIndex env i (* set old value *)      in
+               (fun t -> (F.Label(F.Proc(p)),t))           in
+    let env  = F.rebindv name t env                        in
+    let env  = F.setIndex env i (* set old value *)        in
         if   F.errorFlag env'
         then F.flagError env
         else env
