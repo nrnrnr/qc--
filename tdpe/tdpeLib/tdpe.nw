@@ -9,19 +9,19 @@
 This module implements TDPE for the [[ocaml]] language.
 
 The module is dependent on a \module{MachineSyntax} module which defines
-the complete syntax of the residual language. Because of the control
-operators.
+the complete syntax of the residual language. The complete syntax of the
+residual language needs to be defined to make sense of this module
+(mostly because of the control operators).
 
 \section{Type declarations}
 
 The type of reify/reflect pairs
 <<type declarations>>=
+type dynamic = MachineSyntax.exp
+type 'a rr = RR of ('a -> dynamic) * (dynamic -> 'a)
+@
 
-type tExp = MachineSyntax.exp
-type 'a rr = RR of ('a -> tExp) * (tExp -> 'a)
-
-
-@ \subsection{Interface}
+\subsection{Interface}
 \label{sec:tdpe_interface}
 
 <<tdpe.mli>>=
@@ -29,7 +29,7 @@ type 'a rr = RR of ('a -> tExp) * (tExp -> 'a)
 
 @ We need to make public the conrol operators as well
 <<tdpe.mli>>=
-  module Ctrl : CtrlPlus.CONTROL with type ans = tExp
+  module Ctrl : CtrlPlus.CONTROL with type ans = dynamic
 
 @ We define the combinators for the standard type constructors.  [[a']]
 is a the RR pair for a dynamic base type. The [[arrow]] pair is
@@ -39,7 +39,7 @@ constructor. [[option]] is the RR pair for the [[option]] type
 constructor.
 
 <<tdpe.mli>>=
-val a' : tExp rr
+val a' : dynamic rr
 val int : int rr
 val char : char rr
 val arrow : 'a rr * 'b rr -> ('a -> 'b) rr
@@ -57,11 +57,17 @@ val pair : 'a rr * 'b rr -> ('a * 'b) rr
 val triple : 'a rr * 'b rr * 'c rr -> ('a * 'b * 'c) rr
 val option : 'a rr -> 'a option rr
 
+@ Some useful combinations. [[pairA']] is a pair of dynamic
+expressions. [[arraa']] is a function from dynamic to dynamic.
+<<tdpe.mli>>=
+val paira' : (dynamic * dynamic) rr
+val arra' : (dynamic -> dynamic) rr
+
 @ The  [[nbe]] and [[nbe']] functions are the reify/reflect pair.
 
 <<tdpe.mli>>=
-val nbe : 'a rr -> 'a -> tExp
-val nbe' : 'a rr -> tExp -> 'a
+val nbe : 'a rr -> 'a -> dynamic
+val nbe' : 'a rr -> dynamic -> 'a
 
 @ \subsection{Implementation}
 \label{sec:tdpe_implementation}
@@ -72,7 +78,7 @@ val nbe' : 'a rr -> tExp -> 'a
 @ Typical implementation of Tdpe
 
 <<tdpe.ml>>=
-module Ctrl = CtrlPlus.Control(struct type ans = tExp end)
+module Ctrl = CtrlPlus.Control(struct type ans = dynamic end)
 
 module S = Syntax
 
@@ -165,10 +171,10 @@ let arrowPair ((RR (reify1, reflect1), RR (reify2, reflect2)),RR (reify3, reflec
       let x1 = Tools.gensym "x" in
       let x2 = Tools.gensym "x" in
       S.LAM (S.TUPLE [S.ID x1;S.ID x2],
-	     Ctrl.reset
+             Ctrl.reset
                (fun () -> reify3 (f (reflect1 (S.VAR x1),
-				     reflect2 (S.VAR x2))
-				 )))),
+                                     reflect2 (S.VAR x2))
+                                 )))),
           (fun e ->
             fun (v1,v2) ->
               let r1 = Tools.gensym "r" in
@@ -177,20 +183,20 @@ let arrowPair ((RR (reify1, reflect1), RR (reify2, reflect2)),RR (reify3, reflec
                 S.LET (S.TUPLE [S.ID r1;S.ID r2],
                        S.APP (e, S.PAIR(reify1 v1,reify2 v2)),
                        Ctrl.reset
-			 (fun () -> k (reflect3 (S.PAIR(S.VAR r1,S.VAR r2)))
-			 )))))
+                         (fun () -> k (reflect3 (S.PAIR(S.VAR r1,S.VAR r2)))
+                         )))))
 
 let arrowPairStub ((stub1,stub2),
-		   (RR (reify1, reflect1), RR (reify2, reflect2)),
-		   RR (reify3, reflect3))
+                   (RR (reify1, reflect1), RR (reify2, reflect2)),
+                   RR (reify3, reflect3))
     = RR ((fun f ->
       let x1 = Tools.gensym stub1 in
       let x2 = Tools.gensym stub2 in
       S.LAM (S.TUPLE [S.ID x1;S.ID x2],
-	     Ctrl.reset
+             Ctrl.reset
                (fun () -> reify3 (f (reflect1 (S.VAR x1),
-				     reflect2 (S.VAR x2))
-				 )))),
+                                     reflect2 (S.VAR x2))
+                                 )))),
           (fun e ->
             fun (v1,v2) ->
               let r1 = Tools.gensym stub1 in
@@ -199,8 +205,8 @@ let arrowPairStub ((stub1,stub2),
                 S.LET (S.TUPLE [S.ID r1;S.ID r2],
                        S.APP (e, S.PAIR(reify1 v1,reify2 v2)),
                        Ctrl.reset
-			 (fun () -> k (reflect3 (S.PAIR(S.VAR r1,S.VAR r2)))
-			 )))))
+                         (fun () -> k (reflect3 (S.PAIR(S.VAR r1,S.VAR r2)))
+                         )))))
 
     
 let pair (RR (reify1, reflect1), RR (reify2, reflect2))
@@ -212,7 +218,7 @@ let pair (RR (reify1, reflect1), RR (reify2, reflect2))
 let triple (RR (reify1, reflect1), RR (reify2, reflect2), RR (reify3, reflect3))
     = RR ((fun (v1, v2, v3) -> S.TRIPLE (reify1 v1,
                                      reify2 v2,
-				     reify3 v3)),
+                                     reify3 v3)),
           (fun e -> (reflect1 (S.FST3 e),
                      reflect2 (S.SND3 e),
                      reflect3 (S.TRD3 e))))
@@ -233,6 +239,12 @@ let option (RR(reifySome,reflectSome))
                   Ctrl.reset
                     (fun () -> k None)))))
 
+@ The useful combinations
+<<tdpe.ml>>=
+let paira' = pair(a',a')
+let arra' = arrowN(a',a')
+@ The up/down arrows.
+<<tdpe.ml>>=
 let nbe (RR (reify, reflect)) v
     = (Tools.resetGen(); reify v)
 let nbe' (RR (reify, reflect)) e

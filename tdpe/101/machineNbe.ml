@@ -1,38 +1,37 @@
 open MachineSyntax
-open Base
 open Syntax
-open Tdpe
 
-module C = Constructors
-
+module M = Machine
+module T = Tdpe
+module C = T.Ctrl
 
 let amode_C = 
-fun ()  -> (RR
+fun ()  -> (T.RR
   ((fun t  ->
       (match t with
-        | C.Short  -> (XTRA (T__amode Short))
-        | C.Hword  -> (XTRA (T__amode Hword))
-        | C.Word  -> (XTRA (T__amode Word))
-        | C.Dword  -> (XTRA (T__amode Dword)))),
-   (fun e  -> Ctrl.shift
+        | M.Short  -> (XTRA (T__amode Short))
+        | M.Hword  -> (XTRA (T__amode Hword))
+        | M.Word  -> (XTRA (T__amode Word))
+        | M.Dword  -> (XTRA (T__amode Dword)))),
+   (fun e  -> C.shift
       (fun k  -> filterNones e
-         [("Short", [], Ctrl.reset (fun ()  -> k C.Short));
-          ("Hword", [], Ctrl.reset (fun ()  -> k C.Hword));
-          ("Word", [], Ctrl.reset (fun ()  -> k C.Word));
-          ("Dword", [], Ctrl.reset (fun ()  -> k C.Dword))]))))
+         [("Short", [], C.reset (fun ()  -> k M.Short));
+          ("Hword", [], C.reset (fun ()  -> k M.Hword));
+          ("Word", [], C.reset (fun ()  -> k M.Word));
+          ("Dword", [], C.reset (fun ()  -> k M.Dword))]))))
 let instruction_C = 
-fun ((RR (reify1, reflect1)), (RR (reify2, reflect2)), (RR (reify3,
-  reflect3)), (RR (reify4, reflect4)), (RR (reify5, reflect5)),
-  (RR (reify6, reflect6)), (RR (reify7, reflect7)))  -> (RR
+fun ((T.RR (reify1, reflect1)), (T.RR (reify2, reflect2)), (T.RR (reify3,
+  reflect3)), (T.RR (reify4, reflect4)), (T.RR (reify5, reflect5)),
+  (T.RR (reify6, reflect6)), (T.RR (reify7, reflect7)))  -> (T.RR
   ((fun t  ->
       (match t with
-        | C.Add (x1, x2, x3) -> (XTRA (T__instruction (Add
+        | M.Add (x1, x2, x3) -> (XTRA (T__instruction (Add
           (reify1 x1, reify2 x2, reify3 x3))))
-        | C.Ld (x4, x5) -> (XTRA (T__instruction (Ld
+        | M.Ld (x4, x5) -> (XTRA (T__instruction (Ld
           (reify4 x4, reify5 x5))))
-        | C.St (x6, x7) -> (XTRA (T__instruction (St
+        | M.St (x6, x7) -> (XTRA (T__instruction (St
           (reify6 x6, reify7 x7))))
-        | C.Nop  -> (XTRA (T__instruction Nop)))),
+        | M.Nop  -> (XTRA (T__instruction Nop)))),
    (fun e  ->
       let id1 = Tools.gensym "id" in
       let id2 = Tools.gensym "id" in
@@ -40,48 +39,47 @@ fun ((RR (reify1, reflect1)), (RR (reify2, reflect2)), (RR (reify3,
       let id4 = Tools.gensym "id" in
       let id5 = Tools.gensym "id" in
       let id6 = Tools.gensym "id" in
-      let id7 = Tools.gensym "id" in Ctrl.shift
+      let id7 = Tools.gensym "id" in C.shift
       (fun k  -> filterNones e
-         [("Add", [id1;id2;id3], Ctrl.reset
-           (fun ()  -> k (C.Add
+         [("Add", [id1;id2;id3], C.reset
+           (fun ()  -> k (M.Add
               (reflect1 (VAR id1), reflect2 (VAR id2), reflect3 (VAR
                id3)))));
-          ("Ld", [id4;id5], Ctrl.reset
-           (fun ()  -> k (C.Ld (reflect4 (VAR id4), reflect5 (VAR id5)))));
-          ("St", [id6;id7], Ctrl.reset
-           (fun ()  -> k (C.St (reflect6 (VAR id6), reflect7 (VAR id7)))));
-          ("Nop", [], Ctrl.reset (fun ()  -> k C.Nop))]))))
+          ("Ld", [id4;id5], C.reset
+           (fun ()  -> k (M.Ld (reflect4 (VAR id4), reflect5 (VAR id5)))));
+          ("St", [id6;id7], C.reset
+           (fun ()  -> k (M.St (reflect6 (VAR id6), reflect7 (VAR id7)))));
+          ("Nop", [], C.reset (fun ()  -> k M.Nop))]))))
 let amode =  amode_C ()
-let instruction =  instruction_C
-(nativeint, nativeint, Tdpe.a', nativeint, nativeint, nativeint,
- nativeint)
+let instruction =  instruction_C (T.a', T.a', T.a', T.a', T.a', T.a',T.a')
+
 let amode_C_None = 
-fun  () -> (RR
+fun  () -> (T.RR
   ((fun t  ->
       (match t with
-        | C.Short  -> (XTRA (T__amode Short))
-        | C.Hword  -> (XTRA (T__amode Hword))
-        | C.Word  -> (XTRA (T__amode Word))
-        | C.Dword  -> (XTRA (T__amode Dword)))),
-   (fun e  -> Ctrl.shift
+        | M.Short  -> (XTRA (T__amode Short))
+        | M.Hword  -> (XTRA (T__amode Hword))
+        | M.Word  -> (XTRA (T__amode Word))
+        | M.Dword  -> (XTRA (T__amode Dword)))),
+   (fun e  -> C.shift
       (fun k  -> filterNones e
-         [("Short", [], Ctrl.reset (fun ()  -> k C.Short));
-          ("Hword", [], Ctrl.reset (fun ()  -> k C.Hword));
-          ("Word", [], Ctrl.reset (fun ()  -> k C.Word));
-          ("Dword", [], Ctrl.reset (fun ()  -> k C.Dword))]))))
+         [("Short", [], C.reset (fun ()  -> k M.Short));
+          ("Hword", [], C.reset (fun ()  -> k M.Hword));
+          ("Word", [], C.reset (fun ()  -> k M.Word));
+          ("Dword", [], C.reset (fun ()  -> k M.Dword))]))))
 let instruction_C_None = 
-fun ((RR (reify1, reflect1)), (RR (reify2, reflect2)), (RR (reify3,
-  reflect3)), (RR (reify4, reflect4)), (RR (reify5, reflect5)),
-  (RR (reify6, reflect6)), (RR (reify7, reflect7)))  -> (RR
+fun ((T.RR (reify1, reflect1)), (T.RR (reify2, reflect2)), (T.RR (reify3,
+  reflect3)), (T.RR (reify4, reflect4)), (T.RR (reify5, reflect5)),
+  (T.RR (reify6, reflect6)), (T.RR (reify7, reflect7)))  -> (T.RR
   ((fun t  ->
       (match t with
-        | C.Add (x1, x2, x3) -> (XTRA (T__instruction (Add
+        | M.Add (x1, x2, x3) -> (XTRA (T__instruction (Add
           (reify1 x1, reify2 x2, reify3 x3))))
-        | C.Ld (x4, x5) -> (XTRA (T__instruction (Ld
+        | M.Ld (x4, x5) -> (XTRA (T__instruction (Ld
           (reify4 x4, reify5 x5))))
-        | C.St (x6, x7) -> (XTRA (T__instruction (St
+        | M.St (x6, x7) -> (XTRA (T__instruction (St
           (reify6 x6, reify7 x7))))
-        | C.Nop  -> (XTRA (T__instruction Nop)))),
+        | M.Nop  -> (XTRA (T__instruction Nop)))),
    (fun e  ->
       let id1 = Tools.gensym "id" in
       let id2 = Tools.gensym "id" in
@@ -89,21 +87,20 @@ fun ((RR (reify1, reflect1)), (RR (reify2, reflect2)), (RR (reify3,
       let id4 = Tools.gensym "id" in
       let id5 = Tools.gensym "id" in
       let id6 = Tools.gensym "id" in
-      let id7 = Tools.gensym "id" in Ctrl.shift
+      let id7 = Tools.gensym "id" in C.shift
       (fun k  -> filterNones e
-         [("Add", [id1;id2;id3], Ctrl.reset
-           (fun ()  -> k (C.Add
+         [("Add", [id1;id2;id3], C.reset
+           (fun ()  -> k (M.Add
               (reflect1 (VAR id1), reflect2 (VAR id2), reflect3 (VAR
                id3)))));
-          ("Ld", [id4;id5], Ctrl.reset
-           (fun ()  -> k (C.Ld (reflect4 (VAR id4), reflect5 (VAR id5)))));
-          ("St", [id6;id7], Ctrl.reset
-           (fun ()  -> k (C.St (reflect6 (VAR id6), reflect7 (VAR id7)))));
-          ("Nop", [], Ctrl.reset (fun ()  -> k C.Nop))]))))
+          ("Ld", [id4;id5], C.reset
+           (fun ()  -> k (M.Ld (reflect4 (VAR id4), reflect5 (VAR id5)))));
+          ("St", [id6;id7], C.reset
+           (fun ()  -> k (M.St (reflect6 (VAR id6), reflect7 (VAR id7)))));
+          ("Nop", [], C.reset (fun ()  -> k M.Nop))]))))
 let amode_None =  amode_C_None ()
 let instruction_None =  instruction_C_None
-(nativeint, nativeint, Tdpe.a', nativeint, nativeint, nativeint,
- nativeint)
+(T.a', T.a', T.a', T.a', T.a', T.a',T.a')
 
 
 let reify_amode e = Tdpe.nbe amode_None e

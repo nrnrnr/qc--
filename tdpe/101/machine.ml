@@ -1,8 +1,13 @@
-open Base
-
-type exp = Tdpe.tExp
+type exp = Tdpe.dynamic
   
-type amode = Constructors.amode_C
+type amode = 
+      Short
+    | Hword
+    | Word
+    | Dword
 
-type instruction = (exp,exp,exp,exp,exp,exp,exp) Constructors.instruction_C
-
+type instruction =
+      Add of exp * exp * exp
+    | Ld of exp * exp
+    | St of exp * exp
+    | Nop

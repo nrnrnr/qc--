@@ -63,7 +63,7 @@ module Make (Instruction : MachineInstance.S) = struct
   end
 
 
-module Recon = Make(MachineRep.MkRep)
+module Recon = Make(MachineRep.MkRepNoCheck)
 
 let recognizeInstruction rtl =
   try Some 
