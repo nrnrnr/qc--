@@ -1,0 +1,273 @@
+% vim: ts=8 sw=4 et:
+
+% ------------------------------------------------------------------ 
+\section{The Interpreter Target}
+% ------------------------------------------------------------------ 
+
+This module defines a back end for the {\PAL} interpreter in directory
+[[../interp]]. 
+
+<<interp.mli>>=
+val target: Target2.t
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+<<interp.ml>>=
+let arch        = "interp"
+let byte_order  = Rtl.LittleEndian       (* byte order *)
+let wordsize    = 32
+@
+
+The interpreter at the moment knows only the memory space [[m]].  We use
+in {\rtl}s the [[C]] space to encode jumps, gotos, and the like.
+However, these {\rtl}s never reach the interpreter but are recognized
+and translated to control-flow instructions the interpreter knows.
+
+<<interp.ml>>=
+module SS32   = Space.Standard32
+module T      = Target2
+module D      = Rtl.Convert (* Down *)
+module U      = Rtl.Revert  (* Up   *)
+module R      = Rtl
+module RP     = Rtl.Private
+module RU     = Rtlutil
+
+module Spaces = struct
+    let m   = SS32.m   byte_order    [8; 16; 32]
+    let c   = Space.checked
+                { Space.space          = 'c'
+                ; Space.doc            = "control registers"
+                ; Space.cellwidth      = wordsize
+                ; Space.indexwidth     = 2 
+                ; Space.indexlimit     = Some 4 (* pc, sp, ap, ra *)
+                ; Space.aggregation    = Rtl.Identity
+                ; Space.widths         = [32]
+                ; Space.classification = Space.Reg
+                } 
+    let a   = Space.checked
+                { Space.space          = 'A'
+                ; Space.doc            = "argument passing area"
+                ; Space.cellwidth      = 1  (* hack *)
+                ; Space.indexwidth     = wordsize
+                ; Space.indexlimit     = None
+                ; Space.aggregation    = byte_order
+                ; Space.widths         = [8;16;32]
+                ; Space.classification = Space.Mem
+                }
+    let g   = Space.checked
+                { Space.space          = 'G'
+                ; Space.doc            = "global register variables"
+                ; Space.cellwidth      = 1  (* hack *)
+                ; Space.indexwidth     = wordsize
+                ; Space.indexlimit     = None
+                ; Space.aggregation    = byte_order
+                ; Space.widths         = [8;16;32]
+                ; Space.classification = Space.Mem
+                }
+end
+@
+
+Module [[Flow]]  provides us with {\rtl}s that encode control transfer.
+They are part of the [[target]] value that describes this target
+completely. \emph{The encoding of control transfers and other special
+instructions is shared with the recognizer.}
+
+<<interp.ml>>=
+module Flow = struct
+    <<module Flow>>
+end
+
+<<module Flow>>=
+let ewidth                = RU.Width.exp 
+let lwidth                = RU.Width.loc 
+let rindex n              = Rtl.bits (Bits.U.of_int n wordsize) wordsize
+let regloc (space, n, w)  = Rtl.cell Rtl.none space byte_order w (rindex n)
+
+let pc:Rtl.loc            = regloc ('c',0, wordsize)  (* pc pointer     *)
+let sp:Rtl.loc            = regloc ('c',1, wordsize)  (* stack pointer  *)
+let ap:Rtl.loc            = regloc ('c',2, wordsize)  (* arg pointer    *)
+let ra:Rtl.loc            = regloc ('c',3, wordsize)  (* return address *)
+@
+
+We are now defining instructions that model instructions in the
+interpreter. First, we define some helper functions that allow to define
+these instructions more easily.
+
+<<module Flow>>=
+let fetch loc   = R.fetch loc wordsize        
+let store loc e = R.store loc e wordsize        
+let add         = R.opr "add" [wordsize]
+let sub         = R.opr "sub" [wordsize]
+let add1 loc    = R.app add [ fetch loc 
+                            ; R.bits (Bits.S.of_int 1 wordsize) wordsize]
+let sub1 loc    = R.app sub [ fetch loc
+                            ; R.bits (Bits.S.of_int 1 wordsize) wordsize]
+let inc loc     = R.store loc (add1 loc)  wordsize
+let dec loc     = R.store loc (sub1 loc) wordsize
+let error       = Impossible.impossible
+@
+
+For most control-flow related {\rtl}s [[Target2.t]] demands we provide
+embedding and projection functions. \emph{As far as I can tell the
+projections are never used and we could simplify [[Target2.t]].}
+
+<<module Flow>>=
+let goto = 
+    { T.embed   = (fun e -> store pc e)
+    ; T.project = (fun r -> match D.rtl r with
+                  | RP.Rtl [(_, RP.Store(_, e, _))] -> U.exp e
+                  | _ -> error "projected non-goto"
+                  )
+    }
+    
+let call = 
+    { T.embed   = (fun e -> R.par [store ra (fetch pc); store pc e])
+    ; T.project = (fun r -> match D.rtl r with
+                  | RP.Rtl [_;(_,RP.Store(_,e,_))] -> U.exp e
+                  | _ -> error "projected non-call"
+                  )
+    }              
+
+let branch =
+    { T.embed   = (fun (c, l) -> R.guard c (goto.T.embed l))
+    ; T.project = (fun r      -> match D.rtl r with
+                  | RP.Rtl [(c, (RP.Store(_,e,_)))] -> (U.exp c, U.exp e)
+                  | _ -> error "projected non-branch"
+                  )
+    }              
+
+let jump   = goto                   (* must be different from goto!  *)
+let cutto  = goto                   (* must be different from cutto! *)
+let return = store pc (fetch ra)    (* no embed/project needed *)
+@
+
+We are defining two instructions [[push_arg]] and [[pop_arg]] to
+describe the corresponding instructions in the interpreter. The
+description is quite inaccurate \emph{and need to be improved.}
+
+\begin{itemize}
+\item The instructions in the interpreter take arguments of any width.
+      This is not properly reflected in the {\rtl}s defined here. Maybe
+      we should use operators.
+\item The [[pop_arg]] instruction is not an effect but just an
+      expression. The reason is, that the [[Automaton2.location#fetch]]
+      method requires to return an expression.
+\end{itemize}
+
+<<module Flow>>=
+let fetch r     = R.fetch r wordsize
+let add         = R.opr "add" [wordsize]
+let sub         = R.opr "sub" [wordsize]
+let plus1 r     = R.app add [fetch r 
+                            ; R.bits (Bits.S.of_int 1 wordsize) wordsize]
+let minus1 r    = R.app sub [fetch r
+                            ; R.bits (Bits.S.of_int 1 wordsize) wordsize]
+let inc r       = R.store r (plus1 r)  wordsize
+let dec r       = R.store r (minus1 r) wordsize
+
+let argument x  = R.cell R.none 'A' R.Identity 1 x     
+let global   x  = R.cell R.none 'G' R.Identity 1 x 
+
+(* the following RTLs are not type correct *)
+let push_arg e  = R.par [R.store (argument (fetch ap)) e (ewidth e); inc ap] 
+let pop_arg w   = R.fetch (argument (fetch ap)) w
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Automata}
+% ------------------------------------------------------------------ 
+
+<<interp.ml>>=
+class argument_location: Automaton2.location =
+object
+    method store expr width = Flow.push_arg expr
+    method fetch width      = Flow.pop_arg width
+    method to_loc           = assert false
+end
+
+class arguments (base:Rtl.exp): Automaton2.automaton =
+object (this)
+    val mutable _block  = Block.mk base (*size*) 0 (*align*) 1  
+    val mutable _frozen = false
+    
+    method freeze () =
+        let _ = _frozen <- true in _block  (* return block *)
+    
+    method allocate width hint = 
+        let ()      = assert (_frozen = false) in          
+        match hint with 
+        | Some x -> Impossible.impossible ("unknown hardware register "^x) 
+        | None   -> new argument_location 
+end
+
+class global_location (index:int) (width:int): Automaton2.location =
+    let var = 
+        let s = Printf.sprintf "global_%d" index in 
+        R.var s index width
+in object
+    method store expr width = R.store var expr width
+    method fetch width      = R.fetch var width
+    method to_loc           = var
+end
+
+class globals (base:Rtl.exp): Automaton2.automaton =
+object (this)
+    val mutable _block  = Block.mk base (*size*) 0 (*align*) 1  
+    val mutable _frozen = false
+    val mutable _index  = 0
+    
+    method freeze () =
+        let _ = _frozen <- true in _block  (* return block *)
+    
+    method allocate width hint = 
+        let ()      = assert (_frozen = false) in          
+        match hint with 
+        | Some x -> Impossible.impossible ("unknown hardware register "^x) 
+        | None   -> ( _index <- _index + 1
+                    ; new global_location _index width
+                    )
+end
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Target Value}
+% ------------------------------------------------------------------ 
+
+The [[target]] value is the essential information for the rest of the
+compiler.
+
+<<interp.ml>>=
+let target =
+    { T.name = arch
+      ; T.cc = (fun _ -> 
+               { T.sp     = Flow.sp
+               ; T.return = Flow.return
+               ; T.proc   = new arguments
+               ; T.cont   = new arguments
+               ; T.ret    = new arguments
+               ; T.allocatable = []
+               }) 
+      ; T.byteorder    = byte_order
+      ; T.wordsize     = wordsize
+      ; T.pointersize  = wordsize
+      ; T.alignment    = 1
+      ; T.memsize      = 8
+      ; T.float        = "ieee754"
+      ; T.charset      = "latin1" 
+      ; T.globals      = new globals
+      ; T.spaces       = [ Spaces.m ; Spaces.c ;  Spaces.a ; Spaces.g ]
+      ; T.data_section = "data"
+      ; T.goto         = Flow.goto
+      ; T.jump         = Flow.jump
+      ; T.cutto        = Flow.cutto 
+      ; T.call         = Flow.call 
+      ; T.branch       = Flow.branch
+      ; T.spill        = (fun _ -> assert false)
+      ; T.reload       = (fun _ -> assert false)
+      ; T.stack_slots  = new globals (* bogus *)
+      }
+@
+
