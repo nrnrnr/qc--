@@ -23,8 +23,8 @@ prefix =    /usr/local
 HTML =          `echo *.nw       | sed 's/\.nw/.html/g;'`
 INC  =          `echo *.nw       | sed 's/\.nw/.inc/g;'`
 
-all:V:          ocamlerror      nofake grades man 
-all.opt:V:      ocamlerror.opt  nofake grades man
+all:V:          ocamlerror      nofake grades newer man 
+all.opt:V:      ocamlerror.opt  nofake grades newer man
 
 update:V:       all 
                 cp ocamlerror     $BINDIR
@@ -33,6 +33,7 @@ update:V:       all
                 cp nofake.1       $MANDIR/man1
                 cp grades         $BINDIR
                 cp grades.1       $MANDIR/man1  
+                cp newer          $BINDIR  
                 
 update.opt:V:   all.opt
                 cp ocamlerror.opt $BINDIR
@@ -41,6 +42,7 @@ update.opt:V:   all.opt
                 cp nofake.1       $MANDIR/man1
                 cp grades         $BINDIR
                 cp grades.1       $MANDIR/man1  
+                cp newer          $BINDIR  
 
 dvi:V:          $INC
 html:V:         $HTML
@@ -59,6 +61,7 @@ clean:V:
                 rm -f *.aux *.log *.dvi *.tex *.inc *.toc
                 rm -f *.html
                 rm -f *.pod
+                rm -f *.c *.h
                 rm -f pod2htm*
                 rm -f *.tar.gz
                 
@@ -67,6 +70,7 @@ clobber:V:      clean
                 rm -f ocamlerror.pod ocamlerror.1
                 rm -f nofake nofake.1
                 rm -f grades grades.1
+                rm -f newer
 
 install:V:      all.opt
                 install -s ocamlerror.opt $prefix/bin/ocamlerror
@@ -81,6 +85,7 @@ install:V:      all.opt
 
 <../config/ocaml.mk
 <../config/noweb.mk
+<../config/c.mk
 
 # compiler flags used by the rules just included
 
@@ -145,6 +150,14 @@ nofake.1:       nofake
 
 nofake-man.html:    nofake
                 $POD2HTML nofake > $target
+
+newer.inc:      newer.nw
+                $NOWEAVE -delay -autodefs c -index $prereq > $target
+
+# we compile and link in one go. CC and CFLAGS are defined in config/c.mk
+
+newer:          newer.c
+                $CC $CFLAGS -o $target $prereq
 
 # ------------------------------------------------------------------ 
 # rules to build a distribution for the outside world
