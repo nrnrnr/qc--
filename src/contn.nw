@@ -10,8 +10,6 @@
 \section{Continuations}
 % ------------------------------------------------------------------ 
 
-\emph{Would an object-oriented representation be better? --CL}
-
 A continuation is a pointer-sized {\PAL} \emph{value}. As such, it can
 be passed around and stored in registers. However, not all data
 necessary to represent a continuation fit into a pointer and therefore
@@ -22,48 +20,48 @@ stored in the activation record of a procedure and is initialized when
 the procedure becomes active.
 
 To deal with the different aspects of a continuation, this module
-provides an abstraction.
-
-<<contn.mli>>=
-type t
-(****
-    (* WHY IS THIS REPRESENTATION EXPOSED? *)
-    { block:      Block.t     (* memory block for pair *)
-    ; sp:         Rtl.loc     (* location inside block for sp *)
-    ; pc:         Rtl.loc     (* location in block for code ptr *)
-    ; overflow:   Rtl.exp     (* base in block of overflow area *)
-    }
-***)
-
-(* observers *)
-val value:   t -> Rtl.exp            (* the value (pointer to pair) *)
-val ov_base: t -> Rtl.exp
-
-val pc_exp:       int -> int -> Rtl.exp -> Rtl.exp
-val sp_exp:       int -> int -> Rtl.exp -> Rtl.exp
-val init_code:     t -> sp:Rtl.loc -> pc:Rtl.exp -> Rtl.rtl list    
-val with_overflow: Target2.t -> Rtl.exp -> Block.t -> t
-  (* EXPLANATION OF ARGUMENTS CONSIDERED HELPFUL *)
-  (* IN PARTICULAR, I'D LIKE TO SEE THE FOLLOWING:
-      type t (* no exposure *)
-      val with_overflow_at : Target2.t -> sp:Rtl.loc -> Block.t -> address:Rtl.exp -> t
-      val rep           : t -> Block.t  (* entire cont in memory *)
-      val init_code     : t -> Rtl.rtl
-      val cut_to_code   : t -> Rtl.rtl
-   *)
-val rep : t -> Block.t        
-@
-
+provides an abstraction that is carefully balanced with the target and
+calling convention.
+Each is responsible for different types of information:
+\begin{itemize}
+\item contn: the continuation's layout in memory 
+\item target: sizes
+\item cc: which reg is the sp; how to set the pc and sp
+\end{itemize}
 
 A continuation is a block of memory with two locations: one for a stack
-pointer, and another for a code pointer. A target provides a function to
-create a continuation.
+pointer, and another for a code pointer.
+[[with_overflow]] creates a stack block for a continuation; the
+[[overflow]] input is a block for overflow parameters and [[base]] is the
+base address of the block.
+[[rep]] can be used to get the stack block for the continuation.
 
-A continuation [[value]] is a pointer to the block. The block resides in
+A continuation value is a pointer to the block. The block resides in
 the stack frame of a procedure. It initializes the block by passing the
 stack pointer location and the address of the continuation code to
 [[init_code]]. The call returns a list of instructions that perform the
 initialization of the block.
+
+<<contn.mli>>=
+type t
+
+val init_code:     t -> k_sp:Rtl.exp -> k_pc:Rtl.exp -> Rtl.rtl
+val rep : t -> Block.t               (* entire cont in memory *)
+val with_overflow: Target2.t -> base:Rtl.exp -> overflow:Block.t -> t
+@
+
+The [[cutto]] function takes a pointer to the continuation ([[contn]])
+on the stack and returns an Rtl to make the cut.
+The function argument to [[cutto]] takes newpc * newsp and returns the Rtl
+for a cut.
+The [[get_contn]] function takes pointers to a pc * sp pair
+from a continuation and returns a pointer to the continuation.
+
+<<contn.mli>>=
+val cutto : Target2.t -> (Rtl.exp * Rtl.exp -> Rtl.rtl)
+                      -> contn:Rtl.exp -> Rtl.rtl
+val get_contn : Rtl.exp * Rtl.exp -> Rtl.exp
+@
 
 % ------------------------------------------------------------------ 
 \subsection{Implementation}
@@ -79,35 +77,32 @@ type t =
     ; overflow:   Rtl.exp     (* base in block of overflow area *)
     }
 
+let init_code t ~k_sp ~k_pc =
+    Rtl.par [ Rtl.store t.pc k_pc (Rtlutil.Width.loc t.pc)
+            ; Rtl.store t.sp k_sp (Rtlutil.Width.loc t.sp)
+            ]
+
 let rep t = t.block
 
-let value t = Block.base t.block        (* pointer to block *)
-
-let ov_base t = t.overflow        (* pointer to block *)
-
-let pc_exp ptrsize memsize contn = contn
-
-let sp_exp ptrsize memsize contn =
-	Rtl.app (Rtl.opr "add" [ptrsize])
-        [ contn ; Rtl.bits (Bits.S.of_int (ptrsize/memsize) ptrsize) ptrsize ]
-
-let init_code t ~(sp:Rtl.loc) ~(pc:Rtl.exp) =
-    let width = Rtlutil.Width.loc t.sp in
-    [ Rtl.store t.pc pc width
-    ; Rtl.store t.sp (Rtl.fetch sp width) width
-    ]
-
-let with_overflow t base overflow =
+let with_overflow t ~base ~overflow =
     let add       = Rtl.opr "add" [t.T.pointersize] in
     let offset n  =
-		Rtl.app add [base; Rtl.bits (Bits.S.of_int n t.T.pointersize) t.T.pointersize] in
+        Rtl.app add [base; Rtl.bits (Bits.S.of_int n t.T.pointersize) t.T.pointersize] in
     let cell addr = Rtl.cell Rtl.none 'm' t.T.byteorder t.T.pointersize  addr in
-	let size = t.T.pointersize / t.T.memsize in
+    let size = t.T.pointersize / t.T.memsize in
         { block = Block.cathl overflow (Block.mk ~base ~size:(2 * size)
-				                               ~alignment:t.T.alignment)
+                                               ~alignment:t.T.alignment)
         ; sp    = cell (offset size)
         ; pc    = cell (offset 0)
         ; overflow = Block.base overflow
         }
-@
 
+let cutto t to_rtl ~contn =
+    to_rtl (contn, (Rtl.app (Rtl.opr "add" [t.T.pointersize])
+                [ contn
+                ; Rtl.bits (Bits.S.of_int (t.T.pointersize/t.T.memsize)
+                                          t.T.pointersize) t.T.pointersize
+                ]))
+
+let get_contn (newpc, newsp) = newpc
+@

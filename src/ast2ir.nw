@@ -657,7 +657,7 @@ and cutStmt (e, args, conts) =
      AND FOR CONTINUATION? *)
   let cc = ccs default_cc in
   let out, actuals = actuals cc.C.cut_to_actuals args in
-  let cuti  = (*target.T.cutto.T.embed*) (assert false) (expr e) in
+  let cuti  = Contn.cutto target cc.C.cutto.Target2.embed ~contn:(expr e) in
   let ()    = add_constraints (Block.constraints out.C.overflow) in
   let conts = continuations cc conts in
   G.instruction g (out.C.shuffle actuals) **>
@@ -728,7 +728,8 @@ let insert_init_cont_nodes contmap init_node =
   let one_node cname k succ = 
     if k.K.escapes then
       let pc    = exp_of_label k.K.cut_pc in
-      succfold (G.instruction g) (Contn.init_code k.K.rep proc_cc.C.sp pc) succ
+      let sp    = Rtl.fetch proc_cc.C.sp (Rtlutil.Width.loc proc_cc.C.sp) in
+      (G.instruction g) (Contn.init_code k.K.rep sp pc) succ
     else
       succ
   in G.set_succ init_node (Strutil.Map.fold one_node contmap (G.succ init_node))

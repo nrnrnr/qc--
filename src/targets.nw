@@ -297,18 +297,6 @@ let goto =
     ; T.project = goto_project
     }
 
-let cutto =
-    { T.embed   = (fun (sp,newsp,newpc) -> 
-                       let assign loc e  =
-                           Rtl.store loc e (Rtlutil.Width.exp e) in
-                       Rtl.par [assign sp newsp; assign pc newpc])
-    ; T.project = (fun r -> match D.rtl r with
-                  | RP.Rtl [ (_, RP.Store(sp, nsp, _))
-                           ; (_, RP.Store(_ , npc, _))] ->
-                       (U.loc sp, U.exp nsp, U.exp npc)
-                  | _ -> Impossible.impossible "projected non-cutto")
-    }
-
 let branch_embed (e,addr) = R.guard e (assign pc addr)
 let branch_project rtl  = match R.Convert.rtl rtl with
     | RP.Rtl([(e,RP.Store(loc,addr,width))]) -> ( R.Revert.exp e
@@ -459,7 +447,6 @@ let target =
     ; T.globals         = new simple' Rtl.BigEndian
     ; T.goto            = goto
     ; T.jump            = goto
-    ; T.cutto           = cutto
     ; T.call            = goto
     ; T.branch          = branch
     ; T.cc              = StrUtil.lookup (StrUtil.list2map [("C--",cc)])
@@ -649,16 +636,6 @@ let jump =
     ; T.project = snd >> project
     }
 
-(* XXXXXXXXXXXX *)
-let cutto = (* XXXXXXXXXXXX *)
-    let const n width = Rtl.bits (Bits.U.of_int n width) width in
-    let cell          = R.cell R.none 'T' R.Identity 32 (const 0 32) in
-    { T.embed   =
-        (fun (a,b,c) -> R.guard false' (R.store cell c 32))
-    ; T.project =
-        (fun _ -> (cell,const 0 32,const 0 32))
-    }
-
 let call =
     { T.embed   = special 'S' false' 
     ; T.project = snd >> project
@@ -704,7 +681,6 @@ let target =
     ; T.globals         = new simple' Rtl.BigEndian
     ; T.goto            = goto
     ; T.jump            = jump
-    ; T.cutto           = cutto
     ; T.call            = call
     ; T.branch          = branch
     ; T.cc              = StrUtil.lookup (StrUtil.list2map [("C--",cc)])

@@ -971,8 +971,8 @@ and cutStmt state (e, args, conts) =
     let sp        = cc.Target2.sp                                      in
     let args      = List.map (actual state.env state.target) args      in
     let contn     = expr state.env state.target e                      in
-    let rtl       = state.target.Target.cutto.Target.embed
-          (sp, Contn.sp_exp ptr mem contn, Contn.pc_exp ptr mem contn) in
+    let rtl       = Impossible.unimp "embedding - old ast3ir" (*state.target.Target.cutto.Target.embed
+          (sp, Contn.sp_exp ptr mem contn, Contn.pc_exp ptr mem contn) *) in
     let conts     = continuations conts state.cfg                      in
     let cut       = G.gm_cutto state.cfg rtl conts                     in
 
@@ -1034,13 +1034,12 @@ inserts this code into the procedure.
 <<Make procedure>>=
 let init_cont env (cfg:G.cfg) (target:Target.t) (cc:Target.cc) label (c:Contn.t) = 
     let ptr  = target.Target.pointersize in
-    let sp   = cc.Target.sp in
+    let sp    = Rtl.fetch cc.Target.sp (Rtlutil.Width.loc cc.Target.sp) in
     let sym  = match F.findv label env with
          | (_, (F.Continuation(r,s),_)) -> s
          | _                            -> assert false in
     let pc   = Rtl.link sym ptr in
-    let rtls = Contn.init_code c sp pc in
-        ignore (List.fold_left G.gm_insert_assign_after (G.entry cfg) rtls)
+        ignore (G.gm_insert_assign_after (G.entry cfg) (Contn.init_code c sp pc))
     
 @
 <<Make procedure>>=
