@@ -32,36 +32,31 @@ Sparc.cc["C"     ] = Sparc.cc["C"     ] or {}
 Cheats, cheats, and more cheats...
 <<sparccall.ml>>=
 let rspace = ('r', Rtl.Identity, Cell.of_size 32)
-let sspace = ('s', Rtl.Identity, Cell.of_size 64)
 let fspace = ('f', Rtl.Identity, Cell.of_size 32)
 let xspace = ('x', Rtl.Identity, Cell.of_size 64)
 let dspace = ('d', Rtl.Identity, Cell.of_size 2)  (* rounding modes *)
 
 let r i = (rspace, i, R.C 1)
-let s i = (sspace, i, R.C 1)
 let f i = (fspace, i, R.C 1)
 let x i = (xspace, i, R.C 1)
 
-let vol_regs    = RS.of_list (List.map r ([1;4]@(Aux.from 20 ~upto:23)))
-let vol_regs2   = RS.of_list (List.map s [0;1;2])
-(* let vol_regs    = RS.of_list (List.map r ([1; 2; 3; 4]@(Aux.from 16 ~upto:23))) *)
+let vol_regs    = RS.of_list (List.map r ([1;2;3;4] @ Aux.from 16 ~upto:23))
 let nv_regs     = RS.of_list (List.map r [])
 let vol_fp      = 
-   RS.of_list (List.map f (Aux.from 0 ~upto:7)
-               @ List.map x (Aux.from 0 ~upto:7)
+   RS.of_list ( List.map f (Aux.from 0 ~upto:7)
+              @ List.map x (Aux.from 0 ~upto:7)
               )
 let all_regs    = List.fold_left (fun acc e -> RS.union acc e) RS.empty
-                    [ vol_regs; vol_regs2; nv_regs; vol_fp ]
+                    [ vol_regs; nv_regs; vol_fp ]
 
 let saved_nvr temps = 
     let t = Talloc.Multiple.loc temps 't' in
-    let j = Talloc.Multiple.loc temps 'j' in
     let u = Talloc.Multiple.loc temps 'u' in
     let q = Talloc.Multiple.loc temps 'q' in
     fun (((sp, _, _), i, _) as reg) ->
       let bad () = impossf "cannot save $%c%d" sp i in
       let w = Register.width reg in
-      (match sp with 'r' -> t | 's' -> j | 'f' -> u | 'x' -> q | _ -> bad()) w
+      (match sp with 'r' -> t | 'f' -> u | 'x' -> q | _ -> bad()) w
 @ 
 
 Stack pointer is doubleword-aligned (which we actually force to be
@@ -99,42 +94,30 @@ let bo       = R.BigEndian
 <<SPARC calling convention automata in Lua>>=
 Sparc.cc["C"].results =
   A.choice { "float",
-               A.useregs { f(0), f(1), f(2), f(3), f(4), f(5), f(6), f(7)},
+               A.useregs { f(0)..f(7)},
              A.is_any, { A.widen(32, "multiple")
                        , A.widths {32}
-                       , A.useregs { i(0), i(1), i(2), i(3), i(4), i(5) }
+                       , A.useregs { i(0)..i(5) }
                        } 
            } 
 
 Sparc.cc["C"].call =
   { A.widen(32, "multiple")
-  , A.useregs {o(0), o(1), o(2), o(3), o(4), o(5)}
+  , A.useregs { o(0)..o(5) }
   , A.overflow { growth = "up", max_alignment = Sparc.sp_align }
   }	
-@ 
-Wrong ..
-Sparc.cc["C"].call =
-  { A.widen(32, "multiple")
-  , A.bitcounter("bits")
-  , A.regs_by_bits("bits", o(0) .. o(5))
-  , A.overflow { growth = "up", max_alignment = Sparc.sp_align }
-  }	
-
 <<SPARC calling convention automata in Lua>>=
 Sparc.cc["C"].cutto =
   { A.widen(32)
-  , A.useregs {o(0), o(1), o(2), o(3), o(4), o(5)}
+  , A.useregs {o(0)..o(5)}
   , A.overflow { growth = "up", max_alignment = Sparc.sp_align }
   }
 @ 
-
 Finally we register the calling conventions.
 <<SPARC calling convention automata in Lua>>=
 A.register_cc(Backend.sparc.target, "C", Sparc.cc["C"])
 @ 
-
 \subsection{Implementation based on [[Callspec]]}
-
 <<sparccall.ml>>=
 let wordsize  = 32
 let memsize   = 8

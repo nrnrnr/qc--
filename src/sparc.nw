@@ -50,16 +50,6 @@ windows.  Nyarggg.  We pretend that it's actually split between 32 and
 64 bit registers.
 <<SPARC spaces>>=
   let r = SS.r 32 id [32]
-
-  let s = S.checked { S.space          = ('s', Rtl.Identity, Cell.of_size 64)
-                    ; S.doc            = "64-bit integer registers"
-                    ; S.cellwidth      = 64
-                    ; S.indexwidth     = 32
-                    ; S.indexlimit     = Some 3
-                    ; S.aggregation    = Rtl.Identity
-                    ; S.widths         = [64]
-                    ; S.classification = S.Reg
-                    }
 @ [[f]] is the general purpose floating-point register file with 32
 32-bit registers.  Unlike the [[r]] space, these are all globals.
 (We have lies and more lies!!!)
@@ -90,22 +80,6 @@ windows.  Nyarggg.  We pretend that it's actually split between 32 and
 @ [[t]] is the temporary space for the [[r]] space.
 <<SPARC spaces>>=
   let t = SS.t    id [32]
-
-  let j = S.checked { S.space          = ('j', Rtl.Identity, (* Rtl.BigEndian, *)
-                                           Cell.of_size 64)
-                    ; S.doc            = "64-bit integer temporaries"
-                    ; S.cellwidth      = 64
-                    ; S.indexwidth     = 32
-                    ; S.indexlimit     = None
-                    (* ; S.aggregation    = Rtl.BigEndian *)
-                    ; S.aggregation    = Rtl.Identity
-                    ; S.widths         = [64]
-                    ; S.classification =
-                        S.Temp { S.stands_for = s.S.space
-                               ; S.index_ok   = (fun _ -> true) (* lies *)
-                               ; S.set_doc    = "64-bit integer temporaries"
-                               }
-                    }
 @ [[u]] is the temporary space for the [[f]] space.
 <<SPARC spaces>>=
   let u = S.checked { S.space          = ('u', 
@@ -179,7 +153,6 @@ let vfp     = Vfp.mk wordsize
 let mcell = Cell.of_size 8
 let mspace = ('m', Rtl.BigEndian, mcell)
 let rspace = ('r', Rtl.BigEndian, Cell.of_size 32)
-let sspace = ('s', Rtl.Identity, Cell.of_size 64)
 let fspace = ('f', Rtl.Identity, Cell.of_size 32)
 let xspace = ('x', Rtl.Identity, Cell.of_size 64)
 let dspace = ('d', Rtl.Identity, Cell.of_size 2)  (* rounding modes *)
@@ -252,14 +225,14 @@ Our allocators.
 let talloc = Postexpander.Alloc.temp
 let salloc = Postexpander.Alloc.slot
 @ 
+There is some nasty cheating going on regarding the [['o']] registers.
+(And what about [['l']], [['i']], \ldots?)
 <<SPARC postexpander>>=
 type context = (Talloc.Multiple.t -> int -> Register.t) * (Register.t -> bool)
 
-let icontext = (* Talloc.Multiple.reg 't', fun (c, _, _) -> c =<= 'r' || c =<= 't' *)
-  (fun t w ->
-    if w = 32 then Talloc.Multiple.reg 't' t 32
-    else Talloc.Multiple.reg 'j' t 64),
-  fun ((c,_,_), _, _) -> c =<= 'r' || c =<= 't' || c =<= 'j' || c =<= 's'
+let icontext =
+  Talloc.Multiple.reg 't',
+  fun ((c,_,_), _, _) -> c =<= 'r' || c =<= 't' || c =<= 'o'
 
 let fcontext = (* Talloc.Multiple.reg 'u', fun (c, _, _) -> c =<= 'f' || c =<= 'u' *)
   (fun t w ->
@@ -317,33 +290,22 @@ let block_copy ~dst dassn ~src sassn w =
       rstore (mem w dst) (rfetch q) w
   | _  -> unimpf "general block copies on SPARC"
 @ 
+We write very strange code in [[if]] in case of the possibility that a
+temporary is \emph{neither} a float nor an integer.
 <<SPARC postexpander>>=
+let is_int   = snd icontext
+let is_float = snd fcontext
 let move ~dst ~src =
   let w = reg_width src in
   assert (w = reg_width dst);
-  match src, dst with
-  | (('u', _, _), _, R.C 1), (('t', _, _), _, R.C 1)
-  | (('t', _, _), _, R.C 1), (('u', _, _), _, R.C 1) ->
-      let slot = salloc w in
-      rtl (A.store slot (rfetch src) w) <:> rtl (R.store (R.reg dst) (A.fetch slot w)w)
-(*
-      let offset = R.bits (Bits.S.of_int (23*4) 32) 32 in
-      let addr   = R.app (R.opr "add" [32]) [rfetch sp; offset] in
-      [ R.store (R.reg dst)   (R.fetch (mem w addr) w) w
-      ; R.store (mem w addr) (rfetch src) w ]
-*)
-  | (('j', _, _), _, R.C 1), (('q', _, _), _, R.C 1)
-  | (('q', _, _), _, R.C 1), (('j', _, _), _, R.C 1) ->
-      let slot = salloc w in
-      rtl (A.store slot (rfetch src) w) <:> rtl (R.store (R.reg dst) (A.fetch slot w)w)
-(*
-      let offset = R.bits (Bits.S.of_int (24*4) 32) 32 in
-      let addr   = R.app (R.opr "add" [32]) [rfetch sp; offset] in
-      [ R.store (R.reg dst)   (R.fetch (mem w addr) w) w
-      ; R.store (mem w addr) (rfetch src) w ]
-*)
-  | _, _ -> if Register.eq src dst then PX.Nop
-            else rtl (R.store (R.reg dst) (rfetch src) w)
+  if (if is_int src then is_float dst else is_float src && is_int dst) then
+    (* move through stack *)
+    let slot = salloc w in
+    rtl (A.store slot (rfetch src) w) <:> rtl (R.store (R.reg dst) (A.fetch slot w) w)
+  else if Register.eq src dst then
+    PX.Nop
+  else
+    rtl (R.store (R.reg dst) (rfetch src) w)
 @ 
 <<SPARC postexpander>>=
 let li  ~dst const =
@@ -380,15 +342,6 @@ let li  ~dst const =
       rstore (R.reg dst)    (R.fetch (mem 64 addr1) 64) 64 
   | (('t', _, _), _, R.C 1), _ ->
       rstore (R.reg dst) (Up.const const) 32
-  | (('j', _, _), _, R.C 1), RP.Bits b ->
-      let t1 = talloc 't' 32 in
-      let t2 = talloc 't' 32 in
-      (* now split the 64-bit literal into high and low 32 bits *)
-      let hi = Bits.Ops.lobits 32 (Bits.Ops.shrl b (Bits.U.of_int 32 32)) in
-      let lo = Bits.Ops.lobits 32 b in
-      rstore (R.reg t1)      (Up.const (RP.Bits hi))     32 <:>
-      rstore (R.reg t2)      (Up.const (RP.Bits lo))     32 <:>
-      rstore (R.reg dst)     (R.app (R.opr "sparc_mkj" []) [rfetch t1; rfetch t2]) 64 
   | ((s, _, _), _, _) as r, RP.Bits b ->
       unimpf "loading immediate %s to a %d-bit register in space %%%c"
         (Bits.to_string b) (Register.width r) s
@@ -415,7 +368,10 @@ let constant_context w = icontext
 @ 
 <<SPARC postexpander>>=
 let unop ~dst op x =
-  rstore (R.reg dst) (R.app (Up.opr op) [rfetch x]) (reg_width dst)
+  match op with
+  | ("zx", _) | ("sx", _) | ("lobits", _) ->
+      impossf "%%%s%d reached sparc postexpander" (fst op) (List.nth (snd op) 1)
+  | _ -> rstore (R.reg dst) (R.app (Up.opr op) [rfetch x]) (reg_width dst)
 
 let binop ~dst op x y =
   let dstw = reg_width dst in
@@ -441,39 +397,6 @@ let binop ~dst op x y =
       rstore (R.reg dst) (R.app (R.opr "quot" ws) [rfetch x; rfetch y])   dstw <:>
       rstore (R.reg dst) (R.app (R.opr "mul"  ws) [rfetch y; rfetch dst]) dstw <:>
       rstore (R.reg dst) (R.app (R.opr "sub"  ws) [rfetch x; rfetch dst]) dstw
-  | "shrl", [64] -> (* TOTALLY WRONG *)
-      rstore (R.reg dst) (R.app (R.opr "sparc_hi2lo" [64]) [rfetch x; rfetch y]) 64
-  | "shl", [64] -> (* TOTALLY WRONG *)
-      rstore (R.reg dst) (R.app (R.opr "sparc_lo2hi" [64]) [rfetch x; rfetch y]) 64
-(*
-      [ R.store (R.reg dst) (R.app (R.opr "sparc_shrl64" [])
-          [x; y; talloc 't' 32]) 32 ]
-*)
-      (* OK, we'll just do a shrl by yl or 32, whichever is smaller *)
-      (*       (shra((y >> 5) - 1, 27) && x) >> y *)
-(*
-      let (xh, xl) = (talloc 't' 32, talloc 't' 32) in
-      let yl       = talloc 't' 32 in
-      
-      R.store (R.reg xl) (lobits _ 32 (rfetch x)) 32
-      R.store (R.reg xh) (R.app (R.opr "sparc_hibits" [64;32]) (rfetch x)) 32
-      R.store (R.reg yl) (lobits _ 32 (rfetch y)) 32
-*)
-      (*
-       dh = xh >> yl
-       dl = xl >> yl
-       dl = dl | xh << (32 - yl)
-          -->> yl = -yl 
-               yl = yl + 32
-               xh = xh << yl
-               dst = dl | xh
-      *)
-      (* minimum can be calculated as
-          x+(((y-x) sra (WORDBITS-1))&(y-x))
-         We want minimum of the shift value with 31 since
-         the operand to the SPARC srl is considered a 5-bit value.
-          x+(((31-x) sra 31) & (31-x))
-       *)
   | _ ->
       rstore (R.reg dst) (R.app (Up.opr op) [rfetch x; rfetch y]) dstw
 
@@ -573,11 +496,9 @@ let globals base =
 let target =
     let spaces = [ Spaces.m
                  ; Spaces.r
-                 ; Spaces.s
                  ; Spaces.f
                  ; Spaces.x
                  ; Spaces.t
-                 ; Spaces.j
                  ; Spaces.u
                  ; Spaces.q
                  ; Spaces.c
@@ -622,28 +543,19 @@ let target =
     }    
 @ 
 \subsection{Variable Placement}
+
+If we get a 64-bit variable that is not hinted float, we could put it
+in a floating-point temporary, but we're not that aggressive.
 <<sparc.ml>>=
 let warning s = Printf.eprintf "backend warning: %s\n" s
 let placevars = 
-  let is_float      w hint _ = hint =$= "float" in
-  let strange_float w hint   = w = 64 && not (hint =$= "float") in
-  let strange_int   w hint   = hint =$= "float" && not (is_float w hint ()) in
-  let warn ~width:w ~alignment:a ~hint:h =
-      if strange_float w h then
-        warning "64-bit variable not hinted float but will go as float anyway"
-      else if strange_int w h then
-        warning
-          (Printf.sprintf "%d-bit variable hinted float but will go as integer" w) in
+  let is_float w hint _ = hint =$= "float" in
+  let warn ~width ~alignment ~hint = () in
   let mk_stage ~temps =
     A.choice
-      [ is_float,
-           A.widen (Aux.round_up_to ~multiple_of: 32)
-      ; (fun w h _ -> w <= 32),
-           A.widen (fun _ -> 32) *> temps 't'
-      ; (fun w h _ -> w <= 64),
-           A.widen (fun _ -> 64) *> temps 'j'
-      ; A.is_any,
-           A.widen (Aux.round_up_to ~multiple_of: 8)
+      [ is_float,                 A.widen (Aux.round_up_to ~multiple_of: 32)
+      ; (fun w h _ -> w <= 32),   A.widen (fun _ -> 32) *> temps 't'
+      ; A.is_any,                 A.widen (Aux.round_up_to ~multiple_of: 8)
       ] in
   Placevar.mk_automaton ~warn ~vfp:target.T.vfp ~memspace:mspace mk_stage
 @ 

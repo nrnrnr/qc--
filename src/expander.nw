@@ -1191,6 +1191,7 @@ The expander writes debugging information as it goes;
 to activate it, try \texttt{VERBOSITY=5~qc--}.
 <<expander.ml>>=
 module D = struct (* debugging *)
+  let () = Debug.register "expander" "code expander"
   let strings =
     if Debug.on "expander" then
       (fun ss -> Printf.eprintf "%s" (String.concat "" ss))
@@ -1957,6 +1958,8 @@ We split an assignment into a least significant word [[lsw]] of
 width~[[lw]] and a most significant word [[msw]] of width~[[mw]].
 <<definition of [[split_assignment]]>>=
 let split_assignment ~lsw ~lw ~msw ~mw =
+  if Debug.on "expander" then
+    Printf.eprintf "Splitting msw %s; lsw = %s\n" (D.exp msw) (D.exp lsw);
   let lc, mc = Cell.to_count memsize lw, Cell.to_count memsize mw in
   assert (Cell.divides memsize lw && w = lw + mw);
   let addr = Up.exp addr in
