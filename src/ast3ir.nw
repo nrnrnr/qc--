@@ -588,9 +588,8 @@ and jumpStmt state (cconv,e,args,labels) =
     let exp     = expr state.env state.target e    in
     let cc      = state.target.Target.cc (Aux.Option.get default_cc cconv) in
     let args    = List.map (actual state.env state.target) args in
-    let nodes   = List.map (G.lookup state.cfg) labels           in
     let rtl     = state.target.Target.jump.Target.embed exp      in
-    let jmp     = G.gm_jump state.cfg rtl nodes                  in
+    let jmp     = G.gm_jump state.cfg rtl labels                 in
         if args = [] then (* no copyout nodes *)
             { state with node = jmp }
         else
@@ -638,7 +637,7 @@ statement. A data-flow node expresses inter-procedural data-flow.}
 \end{quote}
 
 <<Make statements>>=
-and callStmt state (lhs,cconv, e, args, targets, conts) = 
+and callStmt state (lhs,cconv, e, args, targets (*unused*), conts) = 
     let rec lvalue = function
         | A.LValueAt(x,_) -> lvalue x
         | A.Var x         -> formal state.env x 
@@ -647,7 +646,6 @@ and callStmt state (lhs,cconv, e, args, targets, conts) =
     let cc      = state.target.Target.cc (Aux.Option.get default_cc cconv) in
     let rtl     = state.target.Target.call.Target.embed exp   in
     let args    = List.map (actual state.env state.target) args  in
-    let nodes   = List.map (G.lookup state.cfg) targets          in
     let conts   = continuations conts state.cfg                  in
     let rtl     = state.target.Target.call.Target.embed exp      in
     (* linking nodes from back to front: copyin<-call<-copyout *) 
@@ -664,7 +662,7 @@ and callStmt state (lhs,cconv, e, args, targets, conts) =
     (* fix data-flow *)
     let () = G.gm_insert_dataflow_between 
             ~defs:uses ~uses:defs ~kills:Register.Set.empty
-            ~src:call ~dst:copyo in
+            ~src:call ~dst:copyi in 
         result        
 @
 

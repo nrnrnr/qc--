@@ -37,7 +37,7 @@ Nodes of a {\cfg} can take part in two relations simultaneously:
 \begin{enumerate}
 \item Control-flow relation. These are represented by the edges
       between nodes and model possible flow of control ar run-time. 
-\item Order relation. For the node of a {\cfg} a linear-order can be
+\item Order relation. For the nodes of a {\cfg} a linear order can be
       established. This order is used for code-layout and during
       analysis phases. 
 \end{enumerate}
@@ -166,7 +166,7 @@ val prev:       node -> node option
 val gm_assign:  cfg -> Rtl.rtl -> succ:node -> node
 val gm_return:  cfg -> Rtl.rtl -> int * int -> node
 val gm_goto:    cfg -> Rtl.rtl -> node list -> node
-val gm_jump:    cfg -> Rtl.rtl -> node list -> node
+val gm_jump:    cfg -> Rtl.rtl -> string list -> node
 val gm_cutto:   cfg -> Rtl.rtl -> conts     -> node
 val gm_call:    cfg -> Rtl.rtl -> conts -> succ:node -> node
 val gm_branch:  cfg -> Rtl.rtl -> ifso:node -> ifnot:node -> node
@@ -261,6 +261,12 @@ The {\cfg}'s unique exit node.
 \subsubsection{Graph Traversal}
 % ------------------------------------------------------------------ 
 
+\begin{quote}\it
+    Do we really need two different methods for traversal? Currently 
+    [[fold_fwd]] is implemented as [[scan_fwd]]. I'd like to get rid of
+    the [[fold_*]] methods. --CL
+\end{quote}
+
 \begin{itemize}
 
 \item 
@@ -335,7 +341,7 @@ causes a node numbering to become \emph{absent}.
 gm_assign:  cfg -> Rtl.rtl -> succ:node -> node
 gm_return:  cfg -> Rtl.rtl -> int * int -> node
 gm_goto:    cfg -> Rtl.rtl -> node list -> node
-gm_jump:    cfg -> Rtl.rtl -> node list -> node 
+gm_jump:    cfg -> Rtl.rtl -> string list -> node 
 gm_cutto:   cfg -> Rtl.rtl -> conts     -> node
 gm_call:    cfg -> Rtl.rtl -> conts -> succ:node -> node
 gm_branch:  cfg -> Rtl.rtl -> ifso:node -> ifnot:node -> node
@@ -407,17 +413,17 @@ mutator is called the numbering is \emph{present}.
 \item [[rtl: node -> Rtl.rtl]]: The {\rtl} that is part of [[node]].
 
 \item [[succ: node -> node list]]: The list of control-flow successors
-of [[node]].
+      of [[node]].
 
 \item [[pred: node -> node list]]: The list of control-flow
-predecessors of [[node]].
+      predecessors of [[node]].
 
 \item [[val property: node -> property]]:
-The property associated with this node.
+      The property associated with this node.
 
 \item [[number:  node -> int]]:  Reports the number of a node.  It is
-a checked run-time error to invoke this function if node numbering is
-absent.
+      a checked run-time error to invoke this function if node numbering is
+      absent.
 
 \item 
 \begin{verbatim}
@@ -503,7 +509,7 @@ enforce a representation that supports all kinds at once and
 observation functions that distinguish between the kinds.  Existential
 types as provided by the object-oriented sub-language of {\ocaml}
 provide a better solution:  a single type like [[node]] can have
-mutiple implementations, each for every kind.  Because the
+multiple implementations, each for every kind.  Because the
 object-oriented style also integrates with the imperative nature of
 the interface we chose to use it to implement the control-flow graph.
 To avoid name-clashes for useful names like [[cfg]] and [[node]], the
@@ -673,6 +679,10 @@ let gm_insert_assign_after (rtls:Rtl.rtl list) (node:node) =
 let gm_insert_dataflow_between ~defs ~uses ~kills ~src ~dst =
     let cfg  = src#cfg          in
     let exit = cfg#exit         in
+    let _    =
+        ( Printf.printf "src: %d %s\n" src#id src#comment
+        ; Printf.printf "dst: %d %s\n" dst#id dst#comment
+        ) in
     let node = new X.dataflow cfg exit defs uses kills in
         ( src#upd_succ (fun n -> if n = dst then node else n)
         ; node#upd_succ (fun n -> dst)
@@ -702,6 +712,7 @@ let set_property (node:node) (p:property) = node#set_property p
 
 <<cfg3.ml>>=
 let ast (cfg:cfg) (name:string) (mangle:string->string) (target:Target2.t) = 
+    cfg#test;   (* check integrity *)    
     ( None
     , mangle name
     , []
@@ -788,7 +799,7 @@ end
       precisely, it returns the abstract syntax of a procedure's body
       that represents [[this]] {\cfg}. The [[ast]] method receives a
       \emph{mangler} function that is used to transform labels and
-      symbolic constants withing [[this]] to {\PAL} syntax. See module
+      symbolic constants within  [[this]] to {\PAL} syntax. See module
       \module{mangle} for details.
 
 \end{itemize}
@@ -861,7 +872,7 @@ end
       [[this]] becomes the successor of the new node, which in turn
       becomes the new successor of [[this]].
 
-\item [[linorder]] provides contraints for the linear order of node. See
+\item [[linorder]] provides constraints for the linear order of node. See
       section \ref{sect:cfg3:linorder} for details.
 
 \item [[comment]] provides a note about [[this]] node that is
@@ -998,7 +1009,7 @@ let uniq nodes = nodup compare (List.sort compare nodes)
 Edges in a {\cfg} can not be simply added or removed but only
 redirected. This ensures that no edge gets lost. Redirection of edges is
 specified by a client supplied function that maps the end of an edge to
-a new node: [[node -> node]]. Whenever an edge is remapped it must be
+a new node: [[node -> node]]. Whenever an edge is re-mapped it must be
 unlinked from the old destination and linked with the new destination.
 We create a such a function from the client supplied [[map]]:
 
@@ -1231,7 +1242,7 @@ object(this)
         let labels  = List.map label _labels in
         let msg     = (string_of_int _id) ^ " " ^ (this#comment) in
         let id      = stmt (A.CommentStmt msg) in 
-            (* id:: *) labels
+             id::labels
 
     method virtual linorder: node option * node list
 
@@ -1245,9 +1256,23 @@ object(this)
         let this = (this :> node) in
         let succ = this#succ in
         let pred = this#pred in
-            ( assert (List.fold_left 
-                (fun r n -> r && (List.mem this n#pred)) true succ)
+            ( assert (* check link structure *)
+                (List.fold_left (fun r n -> r && (List.mem this n#pred)) 
+                                true 
+                                succ)
             ; assert ((List.length pred <= 1) || (_labels <> [])) 
+            
+            (** this code was used to debug some problem 
+            ; if not ((List.length pred <= 1) || (_labels <> [])) then
+                ( Printf.printf "node %d\n" _id
+                ; List.iter (fun n -> Printf.printf "pred %d (%s)" 
+                                n#id n#comment) pred
+                ; Printf.printf "\n"
+                ; List.iter (fun n -> Printf.printf "succ %d (%s)" 
+                                n#id n#comment) succ
+                ; Printf.printf "\n"
+                )
+            **)    
             )
     
 end (* of vnode class *)
@@ -1447,17 +1472,17 @@ end
    inside the actual procedure *)
 
 <<module X>>=
-class jump cfg rtl targets : node =
+class jump cfg rtl (targets:string list) : node =
 object (this)
     inherit vnode cfg rtl as super
 
-    val mutable _targets = targets      (*XXX*)
+    val mutable _targets = targets      
     val mutable _exit    = cfg#exit     (* artifical edge to exit *)
     
     initializer
-        List.iter (fun n -> n#link_pred (this :> node)) (_exit::_targets)
+        _exit#link_pred (this :> node)
 
-    method succ = [_exit]   (*XXX*)
+    method succ = [_exit]   
     
     method linorder = (None, [])
     
@@ -1471,9 +1496,7 @@ object (this)
     method comment = "jump"    
     method upd_succ map =
         let map = upd (this :> node) map in
-        ( _targets <- List.map map _targets
-        ; _exit    <- map _exit
-        )
+            _exit    <- map _exit
 end
 
 (* ------------------------------------------------------------------ *) 
@@ -1624,7 +1647,6 @@ object (this)
 
     method ast mangle target =
         let labels       = super#ast mangle target           in
-        let guard,label  = target.T.branch.T.project _rtl     in
         let s            = A.CommentStmt("dataflow node")    in
             labels@[stmt s]
 
