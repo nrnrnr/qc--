@@ -29,8 +29,7 @@ Test.files = { "add.c--"
              , "hello.c--"
 	     , norun("hex.c--")
 	     , { source='ladd.c--', other='src/ops64.c' }
-             , norun("non-local-cut.c--")
-             , norun("not.c--")
+             , "not.c--"
              , "ovrflow.c--"
              , norun("ralloc-000.c--")
              , norun("rnd2.c--")
