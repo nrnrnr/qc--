@@ -141,8 +141,9 @@ results as two lists that associate each variable with its term: the
 known and the dependent variables. If too few equations are given to
 eliminate all variables terms found for dependent variables still
 contain variables, in contrast to the terms of known variables. If the
-solver fails to find a solution, [[Can'tSolve]] is raised with a message
-that hints at the problem.
+solver fails to find a solution, [[Can'tSolve]] is raised. This
+indicates an internal compiler error. Since [[t]] is abstract the value
+returned by the [[Can'tSolve]] exception is not useful for a client.
 
 <<S>>=
 module type S = sig
@@ -410,7 +411,8 @@ let solve t =
     (* let ()      = dump t in 
      *)
     let t          = try solver t with Can'tSolve x -> (dump x; error x)in
-    let ()         = dump t in
+    (* let ()      = dump t in
+     *)
     let known  sum = List.for_all (fun (_,e) -> E.variable e = None) sum in 
     let k,d        = List.partition (fun (_,sum) -> known sum) t.env in
         { known     = k
