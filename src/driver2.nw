@@ -299,26 +299,15 @@ struct
       module V = C.V
       let ( **-> ) = V.( **-> )
       <<bind exports to tables: builtins, targets>> 
-      <<definition of [[bind_table]]>>
       let init g = 
-         ( bind_table g "Driver"  builtins
-         ; bind_table g "Targets" targets
+         ( C.register_module "Driver"  builtins g
+         ; C.register_module "Targets" targets  g
          )
     end (*M*)
 end (*MakeLib*)
 @ 
 
 All exported functions go into the Lua namespace [[Driver]].
-
-<<definition of [[bind_table]]>>=
-let bind_table g tabname members =
-  let t = C.getglobal g (V.String tabname) in
-  let t = match t with
-  | V.Nil       -> V.Table.create (List.length members)
-  | V.Table t   -> t
-  | _           -> C.error g ("Global value " ^ tabname ^ " is not a table") in
-  let _ = V.Table.bind g.V.globals (V.String tabname) (V.Table t) in
-      List.iter (fun (k, v) -> V.Table.bind t (V.String k) v) members
 @ 
 
 
