@@ -1,4 +1,4 @@
-backend = backend or Backend.dummy
+backend = Backend.dummy
 
 -- compare results with files in dummy
 Test.results = Test.results or "dummy"

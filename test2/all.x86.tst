@@ -1,4 +1,4 @@
-backend = backend or Backend.x86
+backend = Backend.x86
 backend.ralloc = backend.ralloc or Ralloc.color
 
 -- compare results with files in x86

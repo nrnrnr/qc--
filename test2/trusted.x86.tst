@@ -1,6 +1,5 @@
-
 -- setup x86 backend with color-graph register allocator
-backend = backend or Backend.x86
+backend = Backend.x86
 backend.ralloc = backend.ralloc or Ralloc.color
 
 -- These programs have output
