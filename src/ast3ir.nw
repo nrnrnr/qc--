@@ -237,7 +237,12 @@ and variable env target hint x =
     | F.Label(F.Code s)         -> Rtl.link s (width t)
     | F.Label(F.Data s)         -> Rtl.link s (width t)
     | F.Import(_,s)             -> Rtl.link s (width t)
-    | F.Continuation(_,s)       -> Rtl.link s (width t) (*XXX wrong XXX*)
+    | F.Continuation(st,s)       ->
+        let cc     = target.Target.cc default_cc                  in
+        let offset = Rtl.late st (width t)                in
+        let sp     = cc.Target2.sp                        in
+        Rtl.app (Rtl.opr "add" [target.Target.pointersize])
+                [Rtl.fetch sp (Rtlutil.Width.loc sp);offset]
     | F.Label(F.Stack(None))  -> Impossible.impossible "Ast3ir.Make.variable"
     | F.Label(F.Stack(Some loc)) ->
         let w    = width t                                   in 
@@ -897,54 +902,90 @@ and returnStmt state (cconv, kont, args) =
 	
 @
 
-A continuation receives its parameters in the \emph{incoming} area of
-its activation. For the moment we assume that all continuations escape
+Each continuation receives its parameters in its own area.
+For the moment we assume that all continuations escape
 and collect them in [[state.conts]]. Therefore we simply add the
 [[label]] of this continuation to the list.
 
 <<Make statements>>=
 and contStmt state (label,args)  = 
     let ptr     = state.target.Target.pointersize in
-    let cc      = state.target.Target.cc default_cc              in
+    let cc      = state.target.Target.cc default_cc      in
+    let sp      = Rtl.fetch cc.Target.sp  ptr in
     let args    = List.map (formal state.env) args in
+
+    let contID =
+        match F.findv label state.env with
+        | (_,(F.Continuation (n,_),_)) -> n
+        | _                          -> Idgen.cont label in
+    let variable  = Rtl.late contID ptr in
+    let add       = Rtl.opr "add" [ptr] in
+    let offset    = Rtl.app add [sp; variable] in
+    let newBase   = Rtl.late (Idgen.block "contParams") ptr   in
     let copy,area,uses = IO.copyin state.cfg args 
-                  cc.Target.cont state.inbase state.node in
+                  cc.Target.cont newBase state.node in
+    let cont      = Contn.with_overflow state.target offset area in
+
     let symbol  = match F.findv label state.env with
                   | _,(F.Continuation(_,s),_) -> s
                   | _ -> assert false                            in
     let copy    = G.gm_label state.cfg label symbol copy         in
-    let result  = { state with
-                    node     = copy
-                  ; incoming = area :: state.incoming
+    let result  = { state with node     = copy
+                  ;            conts    = Strutil.Map.add label cont state.conts
                   } in
         result
 @
 
-\begin{quote}\it
-    The implementation of cutto currently lacks all details to find the
-    activation for the continuation and thus the \emph{incoming} area
-    in that activations. This is where the [[cut to]] statement puts
-    the \emph{outgoing} overflow parameters. Some abstraction for a
-    continuation's runt-time representation, similar to
-    [[AT.loc]] might be appropriate. --CL
-\end{quote}
+A [[cut to]] instruction passes arguments according to a calling convention.
+Each continuation has its own overflow area. The [[copyout]] routine returns
+an [[area]] that corresponds to the overflow area. Since this area may
+not belong on this stack, we will discard it. Because we discard
+the area, late compile-time constants indexed into this area must be replaced
+immediately.
+We solve the constraints on the area and use the resulting substitution
+to replace the late compile-time constants in the rtl's returned from
+[[copyout]].
 
 <<Make statements>>=
 and cutStmt state (e, args, conts) = 
     let cc        = state.target.Target.cc default_cc                  in
-    let args      = List.map 
-                    (actual state.env state.target) args in
-    let exp       = expr state.env state.target e        in
-    let rtl       = state.target.Target.cutto.Target.embed exp (*XXX*) in
+    let args      = List.map (actual state.env state.target) args      in
+    let exp       = expr state.env state.target e                      in
+    let rtl       = state.target.Target.cutto.Target.embed exp         in
     let conts     = continuations conts state.cfg                      in
     let cut       = G.gm_cutto state.cfg rtl conts                     in
-    let copy,area,defs = IO.copyout (* XXX *)
-                        state.cfg args cc.Target.cont state.inbase cut  in
-    let result    =    { state with node     = cut
-                       ;            incoming = area :: state.incoming
-                       } in
+
+    let ptr       = state.target.Target.pointersize                    in
+    let size      = ptr / state.target.Target.memsize                  in
+    let oflow     = Rtl.app (Rtl.opr "add" [ptr])
+                            [exp; Rtl.bits (Bits.S.of_int (2 * size) ptr) ptr] in
+    let copy,area,uses = IO.copyout state.cfg args cc.Target.cont oflow cut    in
+
+    (* solve the equations *)
+    let solution =
+        try Const2.solve ptr (Block.constraints area)
+        with Const2.Can'tSolve -> Impossible.impossible 
+                ("can't solve equations in "^ state.proc)              in            
+    let ()       = assert (solution.Const2.dependent = [])             in
+    let ()       = assert (solution.Const2.known <>    [])             in
+
+    (* substitute for the compile-time constants *)
+    let map      = Strutil.assoc2map solution.Const2.known             in
+    let guard    = function
+        | RP.Const(RP.Late(_)) -> true
+        | _                    -> false in
+    let rec subst (e:RP.exp) = match e with              
+        | RP.Const(RP.Late(x,_)) -> 
+            ( try Rtl.Convert.exp (Strutil.Map.find x map) with 
+            | Not_found -> e   (* we don't know all the constants yet *)
+            )  
+        | x -> x in
+    let () = G.upd_instr copy (Rtlutil.Subst2.exp ~guard ~map:subst) in
+    let () = G.upd_instr copy Rtleval2.rtl in
+
+    let result    =    { state with node     = copy } in
     let ()      = G.gm_insert_dataflow_between
-		  ~defs:Register.Set.empty ~uses:defs ~kills:Register.Set.empty
+		  ~defs:Register.Set.empty ~uses ~kills:Register.Set.empty
 		  ~src:cut ~dst:(G.exit(state.cfg)) in
         result
 
@@ -975,7 +1016,7 @@ let init_cont env (cfg:G.cfg) (target:Target.t) (cc:Target.cc)
          | (_, (F.Continuation(r,s),_)) -> s
          | _                            -> assert false in
     let pc   = Rtl.link sym ptr in
-    let rtls = Contn.init c sp pc in
+    let rtls = Contn.init_code c sp pc in
         ignore (List.fold_left G.gm_insert_assign_after (G.entry cfg) rtls)
     
 @
@@ -1087,15 +1128,6 @@ module StackData = struct
         ; conts:  Contn.t Strutil.Map.t
         }
 
-    let contn state name =
-        let ptr       = state.target.Target.pointersize in
-        let wrd       = state.target.Target.wordsize    in
-        let sp        = Rtl.fetch state.cc.Target.sp  ptr in
-        let add       = Rtl.opr "add" [ptr] in
-        let variable  = Rtl.late (Idgen.cont name) ptr in
-        let offset    = Rtl.app add [sp; variable] in
-            state.target.Target.contn offset
-    
     let rec stackdatum state = function
         | A.DatumAt(x,_) -> stackdatum state x
         | A.Label(l) -> 
@@ -1128,9 +1160,7 @@ module StackData = struct
         | A.SpanStmt    x      -> spanStmt      state x
         | A.IfStmt      x      -> ifStmt        state x
         | A.SwitchStmt  x      -> switchStmt    state x
-        | A.ContStmt(n,_)      -> 
-           let c = contn state n in
-            { state with conts = Strutil.Map.add n c state.conts } 
+        | A.ContStmt(n,args)   -> state
         | _                    -> state
 
     and body state = function 
