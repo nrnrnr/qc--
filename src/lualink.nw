@@ -648,6 +648,10 @@ in
 let dpwiden _ proc =
   let upd g r = if Widen.needs_widening r then g r
               else raise Widen.Doesn't_need_widening in
+  (* better alternative *)
+  let widen node = match G.to_executable node with
+  | Some r when Widen.needs_widening r -> G.update_instr Widen.dpwiden node
+  | _ -> () in
   let f g x =
     try 
       G.update_instr (upd g) x
