@@ -166,11 +166,10 @@ type t = (* part of a calling convention *)
 
   ; stack_growth  : Memalloc.growth
   ; sp_align      : int             (* alignment of stack pointer at call/cut *)
-  ; ra            : Rtl.loc                      (* where return address is on entry *)
+  <<fields to support the return address>>
   ; pre_nvregs    : Register.Set.t           (* registers preserved across calls *)
   ; volregs       : Register.Set.t           (* registers not preserved across calls *)
   ; saved_nvr     : Talloc.Multiple.t -> Register.t -> Rtl.loc (* where to save NVR *)
-  ; saved_ra      : Talloc.Multiple.t -> Rtl.loc (* where to save the return address *)
   ; return        : int -> int -> ra:Rtl.exp -> Rtl.rtl    (* alternate return *)
 (*  ; alt_return_table : node list -> node *)
   (* these next two encapsulate knowledge of which reg. is sp *)
@@ -181,9 +180,25 @@ type t = (* part of a calling convention *)
 The actual nonvolatile registers are those [[pre_nvregs]] that are not
 used for parameters.
 @
+The return address has to be supported throughout its life cycle.
+To know where to find it on entry, we might have to supply an overflow
+block.
+<<fields to support the return address>>=
+; ra_on_entry     : Block.t -> Rtl.exp
+@ Next, we have to decide where to save it.
+For that, we say where we found it and we provide a supply of temps.
+<<fields to support the return address>>=
+; where_to_save_ra : Rtl.exp -> Talloc.Multiple.t -> Rtl.loc
+@ Finally we need to say where to put it on exit.  This probably means
+leaving it where it is or putting it near an overflow block.
+<<fields to support the return address>>=
+; ra_on_exit      : Rtl.loc -> Block.t -> Rtl.loc
+@
 We have the beginnings of an implementation that computes incoming and
 outgoing stuff.  The [[relative_to]] parameter is pure hell and not obvious
 to the amateur.  The [[postsp]] parameter is a bit tricky too.
+PROBLEM: [[autosp]] SEEMS TO BE RELEVANT ONLY FOR INCOMING CASE??
+NOT CLEAR.
 <<call.mli>>=
 val outgoing :
      growth:Memalloc.growth -> sp:Rtl.loc -> mkauto:valpass ->

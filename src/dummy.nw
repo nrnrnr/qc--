@@ -480,13 +480,14 @@ let conv name jump specs =
   ; C.stable_sp_loc   = std_sp_location
   ; C.replace_vfp     = Cfgx.Vfp.replace_with ~sp
   ; C.sp_align        = sp_align    (* alignment of stack pointer at call/cut *)
-  ; C.ra              = ra          (* where return address is on entry *)
   ; C.pre_nvregs      = nvolregs    (* registers preserved across calls *)
   ; C.volregs         = volregs     (* registers not preserved across calls *)
   ; C.saved_nvr       = save_regs
   ; C.cutto           = cutto
-  ; C.saved_ra        = (fun _ -> ra)
   ; C.return          = return
+  ; C.ra_on_entry      = (fun _ -> R.fetch ra A.wordsize)
+  ; C.where_to_save_ra = (fun _ t -> Talloc.Multiple.loc t 't' A.wordsize)
+  ; C.ra_on_exit       = (fun t b -> t)
   } 
 @ 
 

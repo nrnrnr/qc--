@@ -165,7 +165,9 @@ let cmm_arguments =
 On entry, the stack pointer points to the return address.
 This needs some aliasing info?
 <<x86call.ml>>=
-let ra = R.mem R.none 'm' bo 32 vfp
+let amem = R.mem (R.aligned 4) 'm' bo 32 
+let ra = amem vfp
+let const x _ = x
 @ 
 The ``normal'' location for the stack pointer is at the bottom of the
 frame. 
@@ -207,7 +209,7 @@ let epilog  =
   C.outgoing ~growth ~sp
     ~mkauto:(fun () -> Block.srelative vfp "out ovfl results" A.at specs.results)
     ~autosp:(fun r -> Block.base r.A.overflow)
-    ~postsp:(fun _ -> vfp)  (* irrelevant *) in
+    ~postsp:(fun r -> addk r (-4))  (* irrelevant *) in
 @ 
 We need an assertion here!
 <<functions to transform automata>>=
@@ -236,17 +238,20 @@ let conv name jump specs ~return_to cut =
   ; C.cut_parms  = { C.in' = also_cuts_to; C.out = cut_actuals}
   ; C.results    = { C.in' = call_results; C.out = epilog}
 
-  ; C.stack_growth    = Memalloc.Down
-  ; C.stable_sp_loc   = std_sp_location
-  ; C.replace_vfp     = Cfgx.Vfp.replace_with ~sp
-  ; C.sp_align        = 4               (* alignment of stack pointer at call/cut *)
-  ; C.ra              = ra              (* where return address is on entry *)
-  ; C.pre_nvregs      = nvregs          (* registers preserved across calls *)
-  ; C.volregs         = volregs         (* registers not preserved across calls *)
-  ; C.saved_nvr       = saved_nvr
-  ; C.cutto           = cut
-  ; C.saved_ra        = (fun _ -> ra)
-  ; C.return          = return
+  ; C.stack_growth     = Memalloc.Down
+  ; C.stable_sp_loc    = std_sp_location
+  ; C.replace_vfp      = Cfgx.Vfp.replace_with ~sp
+  ; C.sp_align         = 4               (* alignment of stack pointer at call/cut *)
+  ; C.ra_on_entry      = const (R.fetch ra 32)   (* where return address is on entry *)
+  ; C.where_to_save_ra = if jump then (fun _ t -> Talloc.Multiple.loc t 't' 32)
+                         else         (fun _ _ -> ra)
+  ; C.ra_on_exit       = if jump then (fun _ b -> amem (addk (Block.base b) (-4)))
+                         else         (fun _ _ -> ra)
+  ; C.pre_nvregs       = nvregs          (* registers preserved across calls *)
+  ; C.volregs          = volregs         (* registers not preserved across calls *)
+  ; C.saved_nvr        = saved_nvr
+  ; C.cutto            = cut
+  ; C.return           = return
   } 
 
 let c   = conv "C"   false { call = c_arguments;   results=c_results;   cutto=cut_args}

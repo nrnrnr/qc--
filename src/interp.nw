@@ -386,13 +386,14 @@ let cc' = (* new style *)
     ; C.stable_sp_loc   = std_sp_location
     ; C.replace_vfp     = (fun _ -> ())
     ; C.sp_align        = 1             
-    ; C.ra              = ra            
     ; C.pre_nvregs      = Register.Set.empty
     ; C.volregs         = Register.Set.empty
     ; C.saved_nvr       = (fun _ _ -> Impossible.impossible "saved regs")
     ; C.cutto           = Flow.cutto
-    ; C.saved_ra        = (fun _ -> ra)
     ; C.return          = (fun k n ~ra -> Flow.return)
+    ; C.ra_on_entry      = (fun _ -> R.fetch ra wordsize)
+    ; C.where_to_save_ra = (fun _ t -> Talloc.Multiple.loc t 't' wordsize)
+    ; C.ra_on_exit       = (fun t b -> t)
     }
 @
 
