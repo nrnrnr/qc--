@@ -38,7 +38,7 @@ test:V:         update
 # make sure appropriate empty directories exist
 dirs:V:
                 for i in bin lib man man/man1; do
-                  [ -d $i ] || mkdir $i
+                    [ -d $i ] || mkdir $i
                 done
 
 # ------------------------------------------------------------------ 
