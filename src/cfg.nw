@@ -29,7 +29,7 @@ different implementations.
 The interface is divided into two parts:  the first defines types that
 are used in the interface and also shared among all implementations. 
 The second part defines a module type [[S]] that describes the
-interface to functions for building a flow graph. 
+interface for building a flow graph. 
 
 <<acfg.mli>>=
 <<shared types>>
@@ -53,8 +53,9 @@ end
 The abstract interface defines some types that are used in the
 interface and that are shared among all implementations of the
 interface.  The goal is to have no generative type declarations in the
-main signature [[S]] in order to allow the stack implementations onto
-each other.
+main signature [[S]] to facilitate stacked implementations. In a
+stacked implementation, a control flow graph is defined in terms of a
+another, possibly lower-level, implementation.
 
 A control flow graph contains shared nodes.  To express this sharing
 at the level of the interface, some nodes are referred to by name.  A
@@ -62,14 +63,14 @@ name can be used as a reference even \emph{before} the node labeled
 with that name is defined.  The interface demands nodes to be labeled
 that are likely to be labeled in the {\PAL} source code as well.
 
-Usually a control flow graph contains no labels:  edges between nodes
+A classical flow graph contains no labels:  edges between nodes
 express the connection between nodes and there is no need to use names
 for this.  In this particular case however, labels are represented as
 nodes with one successor.  The purpose of these nodes is to store
 names for labels in the [[cfg]] which can be used when the [[cfg]] is
 transformed or visualized.  Since a label $l$ and its successor $x$
 are two different nodes, $x$ can be reached directly in the graph and
-not only by paths via $l$.  This is completely legal. 
+not only by paths via $l$---this is completely legal. 
 
 Continuations can be used to model exception handling. Nodes that can
 transfer control to a continuation are annotated with a [[cuts]] value
@@ -84,9 +85,9 @@ type cuts =     { cuts    : label list
                 }
 @
 
-When arguments and results to and from procedure are passed around
-with [[copy]] nodes a [[context]] value identifies the exact purpose of
-a copy.  This information is necessary to find the right calling
+When arguments and results to and from procedures are passed around
+with [[copy]] nodes, a [[context]] value identifies the exact purpose
+of a copy.  This information is necessary to find the right calling
 convention to implement the copying. 
                            
 <<>>=
@@ -192,11 +193,11 @@ val return:     cfg -> int -> int             -> unode
 
 The following nodes are lying on a control flow path and thus have a
 single successor.  For calls the normal point of return is given as a
-[[node]], all exceptional points of return by name inside a [[cuts]]
+[[node]], all exceptional points of return by name by a [[cuts]]
 value. 
 
 Copy-in and copy-out nodes carry informations about formal and actual
-parameters, the calling convention to be used and their context. 
+parameters, the calling convention to be used, and their [[context]]. 
 
 <<>>=
 (* 1 successor node *)
@@ -248,18 +249,13 @@ module Make (T: TARGET): sig
     include Acfg.S
 
     (* extras *)
-
     module Map:     Map.S with type key = node
     val init:       cfg -> init
     val stmts:      cfg -> (string -> string) -> Ast.stmt list
     
 end with
     type init = string * Fenv.Clean.proc
-    
 @
-
-
-
 
 % ------------------------------------------------------------------ 
 \subsection{Implementation - Building the CFG}
@@ -305,10 +301,11 @@ and unode =     Props.t -> node
 @
 
 The [[kind]] field of a [[node]] details the node's purpose.  A
-special kind [[Deferred]] is uses for nodes which are referenced by
-name, but haven't yet defined.  They are entered into the [[by_label]]
-table of the [[cfg]] and given the [[Deferred]] kind.  When the
-corresponding node is defined, all missing informations will be added.
+special kind [[Deferred]] is uses for [[Label]] nodes which are
+referenced by name, but haven't been defined yet.  These are entered
+into the [[by_label]] table of the [[cfg]] and given the [[Deferred]]
+kind.  When the corresponding node is defined, all missing
+informations will be added.
 
 <<>>=
 and  kind       = Deferred
@@ -327,7 +324,7 @@ and  kind       = Deferred
                 | Branch            of Rtl.expr * node * node
 @
 
-Continuations that a [[call] or [[cutto]] node may reach are
+Continuations, that a [[call] or [[cutto]] node may reach, are
 represented as nodes and no longer as labels as they are in the
 interface.
 
@@ -337,15 +334,21 @@ and cuts =      { cuts:             node list
                 ; returns:          node list
                 ; aborts:           bool
                 }
+@
 
+Nodes can be ordered based on their unique [[id]]. We provide a
+[[Compare]] module to be used with functors that create (ordered) maps
+and sets of nodes.
+               
+<<>>=
 module Compare = struct
     type t = node
     let compare x y = compare x.id y.id
 end
 @
 
-Properties are modeled as functional records. A [[node]] can have any
-number of comments are be part of any number of spans.
+Properties are modeled as functional records.  A [[node]] can have any
+number of comments and can be part of any number of spans.
 
 <<module Props>>=
 type t =        { comments:         string list
@@ -359,7 +362,7 @@ let add_span x y  t = { t with spans    = (x,y)::t.spans }
 
 A [[unode]], as returned by all construction functions, is a function
 taking a [[Props.t]] value and returning a [[node]] value.  Binding
-thus is a simple application of the function to the [[Props.t]] value.
+is thus a simple application of the function to the [[Props.t]] value.
  
 <<module Make>>=
 let bind props unode = unode props
@@ -368,7 +371,7 @@ let bind props unode = unode props
 The [[unode]] construction functions below benefit from some helper
 functions defined here.  All nodes are constructed by [[newNode]];
 this function assigns a fresh [[id]] to the new node and initializes
-the list of predecessors to be empty.
+the list of predecessors to the empty list.
 
 <<>>=
 let newNode cfg kind props =
@@ -383,7 +386,8 @@ let newNode cfg kind props =
 
 When a node is referenced by name, it must be looked up.  In case the
 node is not yet defined, a new [[Deferred]] node is created.  When
-later a node of that name is defined, the [[kind]] field is updated.
+later a node of that name is defined, the [[kind]] field is updated;
+see the [[labelStmt]] function for the details of this.
 
 <<>>=        
 let lookup cfg label =
@@ -540,9 +544,13 @@ let label l node props =
         try let n = Hashtbl.find g.by_label l in
             ( match n.kind with
             | Deferred -> 
-                ( n.kind    <- Label(l,node)
-                ; node.pred <- n :: node.pred 
-                (* add props -  todo *)
+                ( n.kind         <- Label(l,node)
+                ; node.pred      <- n :: node.pred 
+                ; n.props        <- 
+                    { n.props with
+                      Props.comments = n.props.Props.comments @ props.Props.comments
+                    ; Props.spans    = n.props.Props.spans    @ props.Props.spans
+                    }
                 ; n
                 )
             | _ -> assert false (* defined twice *)
@@ -560,7 +568,7 @@ let label l node props =
 
 For debugging we would like to visualize the control flow graph. One
 way of doing this is to translate a [[cfg]] back into {\PAL} syntax.
-Technically is a [[cfg]] translated to {\PAL} abstract syntax (defined
+Technically a [[cfg]] is translated to {\PAL} abstract syntax (defined
 in module \module{ast}).
 
 The translation functions are grouped together in an internal module
@@ -784,7 +792,8 @@ handled by the [[stmt]] function.
       is not entered a second time on the [[todo]] stack, but a
       [[goto]] to it is generated instead.  Consequently, the node at
       hand never gets pushed a second time on the [[todo]] stack.
-      
+
+\item Please see the comments above about [[branch]] nodes.
 \end{itemize} 
         
 <<>>=
