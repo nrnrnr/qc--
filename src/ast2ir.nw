@@ -491,9 +491,8 @@ and arm env ir = function
 Each procedure is translated into a control flow graph that shares no
 nodes with any other control flow graph.  A procedure's control flow
 graph is anchored with a label in an [[Agraph.graph]] data structure
-with the name of the procedure. 
-
-\emph{Is this true? What about the [[entry]] node?}
+with the name of the procedure. The next node is the entry node of the
+flow graph.
 
 A procedure starts with a [[CopyIn]] node that assigns the incoming
 parameters to the named registers and ends with an [[Exit]] node.  The
@@ -510,11 +509,12 @@ and proc env env props graph (cc,n,fs,bb) =
     let cc         = Aux.Option.get default_convention cc in
     let frml       = fun (h,i,t,n) -> (n,ty env t,h)      in
     let label a    = decorate (GM.label n a)              in
+    let entry a    = decorate (GM.entry a)                in
     let copy  a    = decorate (GM.copy_in (List.map frml fs)
                      G.ProcParameters cc a)               in
     let bdy   a    = body env props graph a bb            in
     let exit       = decorate (GM.exit graph)             in
-        (label << copy << bdy) exit
+        (label << entry << copy << bdy) exit
 @
     
     
