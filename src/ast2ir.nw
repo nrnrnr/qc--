@@ -29,7 +29,13 @@ semantics have been found correct it is translated into abstract
 % ------------------------------------------------------------------ 
 
 <<ast2ir.mli>>=
-(* empty *)
+module Make 
+    (G      : Agraph.S) 
+    (Asm    : Asm2.S with type instruction = G.graph) :
+sig
+    type program = Automaton.location Target.StrMap.t * Asm.asm
+    val translate: Fenv.Clean.env -> Target.info -> Ast.program -> program  
+end
 @
 
 % ------------------------------------------------------------------ 
@@ -60,10 +66,11 @@ end
 
 
 module Make
-  (G   : Agraph.S with type Make.ginit   = unit )      
-  (Asm : Asm2.S   with type instruction  = G.graph) =
+  (G         : Agraph.S)
+  (Asm       : Asm2.S   with type instruction  = G.graph) =
 struct
     module GM = G.Make
+    module AG = Agraph
     <<module Make>> 
 end
 @
@@ -121,6 +128,16 @@ let foldl = List.fold_left
 let foldr = List.fold_right
 @
 
+Calling conventions are accessed by name in the [[Target.info]] data
+structure. Currently the \module{elab} module dos not check that a
+given calling convention is known. Until this is fixed we will raise
+an exception.
+
+<<>>=
+let find_cc cc target =
+    try Target.StrMap.find cc target.Target.conv
+    with Not_found -> raise (E.ErrorExn ("unknown calling convention "^cc))
+@
 
 % ------------------------------------------------------------------ 
 \subsection{Module \texttt{Make}}
@@ -164,6 +181,27 @@ let scope = function
     | F.Local  -> Rtl.Local
 @
                              
+
+[[formal]] builds the [[Agraph.formal]] record for a variable that is
+a formal parameter. 
+
+<<>>=
+let formal env n =
+    ( match F.findv n env with 
+    | attr, (F.Register {F.index=i; F.rhint=h},ty) -> 
+        { AG.name  = n
+        ; AG.width = bits ty
+        ; AG.hint  = ( match h with
+                     | F.RReg _  -> assert false (* impossible *)
+                     | F.RHint s -> Some s
+                     | F.RNone   -> None
+                     )
+        ; AG.index = i
+        } 
+    | _ -> assert false
+    )
+@
+ 
 The following function translates an [[Ast.actual]] parameter into a
 [[Fgraph.actual]].
 
@@ -173,7 +211,6 @@ let rec actual env (target: Target.info) (hint, e) =
     let e     = expr env target e               in
         (e, width, hint)
 @
- 
 
 % ------------------------------------------------------------------ 
 \subsubsection{Expressions}
@@ -294,17 +331,27 @@ and expr env (target: Target.info) = function
 
 Flow annotations are translated to continuation bundles of type
 [[Fgraph.cont]].  The [[flows]] function takes a list of flow
-annotations and adds them to a provided [[Fgraph.cont]] value.
+annotations and adds them to a provided [[Fgraph.cuts]] value.
 
 <<module Make>>=
-let rec flows cont = function 
-| (A.FlowAt (x,_)):: xx -> flows cont (x::xx)
-| (A.CutsTo n)    :: xx -> flows {cont with GM.cuts    = n@cont.GM.cuts } xx
-| (A.UnwindsTo n) :: xx -> flows {cont with GM.unwinds = n@cont.GM.unwinds} xx 
-| (A.ReturnsTo n) :: xx -> flows {cont with GM.returns = n@cont.GM.unwinds} xx 
-| (A.Aborts)      :: xx -> flows {cont with GM.aborts  = true } xx
-| []                    -> cont     
+let flows ast =
+    let rec loop c = function 
+        | (A.FlowAt (x,_)):: xx -> loop c (x::xx)
+        | (A.CutsTo n)    :: xx -> loop {c with AG.cuts    = n@c.AG.cuts } xx
+        | (A.UnwindsTo n) :: xx -> loop {c with AG.unwinds = n@c.AG.unwinds} xx 
+        | (A.ReturnsTo n) :: xx -> loop {c with AG.returns = n@c.AG.unwinds} xx 
+        | (A.Aborts)      :: xx -> loop {c with AG.aborts  = true } xx
+        | []                    -> c     
+    in
+    let empty = { AG.cuts    = []
+                ; AG.unwinds = []
+                ; AG.returns = []
+                ; AG.aborts  = false
+                }
+    in
+        loop empty ast 
 @
+
 
 % ------------------------------------------------------------------ 
 \subsubsection{Procedure Body} 
@@ -349,13 +396,13 @@ let rec body env target props graph after bb =
 
 <<cases for translating statements>>=
 | A.ReturnStmt(cc, alt, args) ->
-    let const n         = A.Int (Bits.of_int n Bits.maxwidth, None)        in
-    let (cont, count)   = Aux.Option.get (const 0, const 0) alt            in
-    let cc              = Aux.Option.get default_convention cc             in
-    let actuals         = List.map (actual env target) args                in
-    let cout a          = decorate (GM.copy_out actuals G.ProcResults cc a)in
-    let ret  a          = decorate (GM.return graph
-                                    (un_const cont) (un_const count))      in
+    let const n      = A.Int (Bits.of_int n Bits.maxwidth, None)             in
+    let (cont,count) = Aux.Option.get (const 0, const 0) alt                 in
+    let cc           = find_cc (Aux.Option.get default_convention cc) target in
+    let actuals      = List.map (actual env target) args                     in
+    let cout a       = decorate (GM.copy_out actuals AG.ProcResults cc a)     in
+    let ret  a       = decorate (GM.return graph
+                                 (un_const cont) (un_const count))           in
         (cout << ret) after
 
 <<cases for translating statements>>=
@@ -380,20 +427,20 @@ node.
 <<cases for translating statements>>=
 | A.CallStmt(lhs, cc, e, args, ts, fs) ->
     let rec lvalue = function
-                     | A.LValueAt(x,_) -> lvalue x
-                     | A.Var(hint,n)   -> (n,idTy n env ,hint)
-                     | A.Mem _         -> assert false            in
-    let cc         = Aux.Option.get default_convention cc         in
+         | A.LValueAt(x,_) -> lvalue x
+         | A.Var(hint,n)   -> formal env n
+         | A.Mem _         -> assert false            in
+    let cc         = find_cc (Aux.Option.get default_convention cc) target in
     let cout after = if args <> []
                      then decorate (GM.copy_out 
                                    (List.map (actual env target) args)
-                                    G.ProcParameters cc after)
+                                    AG.ProcParameters cc after)
                      else after                                   in
-    let cont after = flows (GM.empty_cont after) fs               in
+    let cont after = GM.make_cont after (flows fs)                in
     let call after = decorate (GM.call (expr env target e) (cont after)) in
     let cin  after = if lhs <> []
                      then decorate (GM.copy_in (List.map lvalue lhs)
-                                       G.ProcResults cc after)
+                                       AG.ProcResults cc after)
                      else after                                   in
         (cout << call << cin) after
 @
@@ -403,12 +450,12 @@ A continuation is represented by a labeled node.  This node is a
         
 <<cases for translating statements>>=
 | A.ContStmt(n,ns) -> 
-    let cc        = default_convention                                  in
-    let args      = List.map (fun (hint,n) -> (n, idTy n env, hint)) ns in
+    let cc        = find_cc default_convention target in
+    let args      = List.map (fun (_,n) -> formal env n) ns          in
     let cin after = if ns <> []
-                    then decorate (GM.copy_in args G.ContParameters cc after)
-                    else after                                          in
-    let lbl after = decorate (GM.label n after)                         in
+                    then decorate (GM.copy_in args AG.ContParameters cc after)
+                    else after                        in
+    let lbl after = decorate (GM.label n after)       in
         (lbl << cin) after
 
 <<cases for translating statements>>=
@@ -424,10 +471,10 @@ sequence of statements.
 
 <<cases for translating statements>>=
 | A.JumpStmt(cc,e,args,ts) ->
-    let cc         = Aux.Option.get default_convention cc     in
+    let cc         = find_cc (Aux.Option.get default_convention cc) target in
     let args       = List.map (actual env target) args               in
     let cout after = if args <> [] then 
-                        decorate (GM.copy_out args G.ProcParameters cc after)
+                        decorate (GM.copy_out args AG.ProcParameters cc after)
                      else after                               in
     let jump after = decorate (GM.jump graph (expr env target e) ts) in
         (cout << jump) after 
@@ -494,19 +541,19 @@ for a procedure is found in its entry in the fat environment.
 
 <<module Make>>=
 and proc env (target: Target.info) props (asm: Asm.asm) (cc,n,fs,bb) =  
-    let decorate n = G.bind props n                              in
+    let decorate n = G.bind props n                                        in
     let env        = match F.findv n env with
                      | _,(F.Label(F.Proc {F.env = e}),_) -> e
-                     | _  -> assert false                        in
-    let graph      = GM.graph () (* fresh graph for this proc *) in
-    let cc         = Aux.Option.get default_convention cc        in
-    let frml       = fun (h,i,t,n) -> (n,ty env t,h)             in
-    let entry a    = decorate (GM.entry a)                       in
-    let copy  a    = decorate (GM.copy_in (List.map frml fs)
-                                          G.ProcParameters cc a) in
-    let bdy   a    = body env target props graph a  bb           in
-    let exit       = decorate (GM.exit graph)                    in
-    let node       = (entry << copy << bdy) exit                 in
+                     | _  -> assert false                                  in
+    let graph      = GM.graph () (* fresh graph for this proc *)           in
+    let cc         = find_cc (Aux.Option.get default_convention cc) target in
+    let entry a    = decorate (GM.entry a)                                 in
+    let copy  a    = decorate (GM.copy_in                                  
+                        (List.map (fun (_,_,_,n) -> formal env n) fs)
+                        AG.ProcParameters cc a)                            in
+    let bdy   a    = body env target props graph a  bb                     in
+    let exit       = decorate (GM.exit graph)                              in
+    let node       = (entry << copy << bdy) exit                           in
          asm ++ Asm.instr (GM.graph_of node)
          (* what about defining a symbol here, etc?? *)
         
@@ -660,26 +707,69 @@ let imports env asm =
 @
 
 The global registers of a {\PAL} program are assigned to registers and
-memory locations. The assignment is performed by an automaton provided
-by the [[target]] value. The sequence of all global register
-declarations can be obtained from the fat environment.
+memory locations.  The assignment is performed by an automaton
+provided by the [[target]] value.  The sequence of all global register
+declarations can be obtained from the fat environment.  The result of
+the assignment is a map, that associates the name of a global register
+with an [[Automaton.location]].  Such a value consists of a function
+to write a value to a register, and an expression to read a register's
+value.
 
-(* assign global registers *)
+Hardware registers are known as [[Rtl.locations]], which differ from
+an [[Automaton.location]]. The function [[reg2loc]] constructs an
+[[Automaton.location]] for a hardware register.
+
+<<>>=
+let reg2loc = function
+    | Rtl.Cell(spc,agg,width,e,asrt) as loc -> 
+        ( (fun e -> Rtl.Store(loc,e,width))  (* store e to loc         *)
+        , Rtl.Fetch(loc,width)               (* value fetched from loc *)
+        )
+    | _                                     -> assert false
+
+let globals target decls =
+    let unknown reg  = raise (E.ErrorExn ("unknown h/w reg: "^reg)) in
+    let rec loop map dfa = function
+        | []                          -> map
+        | (name, F.RNone  , ty) :: rr -> (* no hint, no h/w register *)
+            let (loc,dfa) = Automaton.Run.next dfa (ty,None) in
+            let map       = Target.StrMap.add name loc map in
+                loop map dfa rr
+            
+        | (name, F.RHint h, ty) :: rr -> (* hint, no h/w register *)
+            let (loc,dfa) = Automaton.Run.next dfa (ty, Some h) in
+            let map       = Target.StrMap.add name loc map in
+                loop map dfa rr
+        
+        | (name, F.RReg  h, ty) :: rr -> (* hardware register! *)
+            let reg = try Target.StrMap.find name target.Target.regmap
+                      with Not_found -> unknown name in
+            let map = Target.StrMap.add name (reg2loc reg) map in
+                loop map dfa rr in
+    let dfa = target.Target.globals in
+    let map = Target.StrMap.empty in
+        loop map dfa decls
+
 
 <<>>=
 let program env target asm tt = 
-    let asm = exports env asm in
-    let asm = imports env asm in
-        foldl (toplevel env target) asm 
+    let asm = exports env asm                     in
+    let asm = imports env asm                     in
+        foldl (toplevel env target) asm tt
 @
 
 An assembly program is initialized with a list of strings.  These are
 probably target dependent and should be provided by [[target]].
 
 <<>>=
+type program = Automaton.location Target.StrMap.t * Asm.asm
+
 let translate env target prog =
-    let asm = Asm.init [] in
-        program env target asm prog
+    let regs   = globals target (F.regdecls env) in
+    let asm    = Asm.init [] in
+        ( regs                         (* global register map *)
+        , program env target asm prog  (* asm                 *)
+        )
 @    
 
 % ------------------------------------------------------------------ 

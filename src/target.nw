@@ -43,6 +43,8 @@ properties. These are:
 \item A map [[conv]] of calling conventions.
 \item An automaton that determines the allocation of hardware registers
       for global registers.  
+\item A map that provides a [[Rtl.location]] for the name of a
+      hardware register.
 \end{itemize}
 
 <<target.mli>>=
@@ -67,6 +69,7 @@ type info =     { name          : string (* name of this target *)
                 ; charset       : string (* like "latin1" - belongs here? *) 
                 ; conv          : conv StrMap.t
                 ; globals       : Automaton.t (* global reg allocation *)
+                ; regmap        : Rtl.location StrMap.t
                 }
 @
 
@@ -76,15 +79,15 @@ convention [[conv]] includes:
 \begin{itemize}
 \item A location [[sp]] for the stack pointer.
 \item Automata that determine register for parameters passed to a
-      procedure ([[procin]]), returned by a procedure ([[procout]]),
-      or passed to a continuation ([[contin]]).
+      procedure ([[proc_param]]), returned by a procedure
+      ([[proc_result]]), or passed to a continuation ([[cont_param]]).
 \end{itemize}      
 
 <<type conv>>=
 type conv =     { sp            : Rtl.location (* stack pointer *)
-                ; procin        : Automaton.t
-                ; procout       : Automaton.t
-                ; contin        : Automaton.t
+                ; proc_param    : Automaton.t
+                ; proc_result   : Automaton.t
+                ; cont_param    : Automaton.t
                 }
 @
 
@@ -168,5 +171,6 @@ let dummy = { name              = "dummy"
             ; charset           = "latin1"
             ; conv              = assert false
             ; globals           = assert false
+            ; regmap            = assert false
             }
 

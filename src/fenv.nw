@@ -184,10 +184,10 @@ their declarations matters and thus the fat environment provides their
 asbtract sequence:
 
 <<>>=
-type hwregs         = ( string          (* register name        *)
+type regdecl        = ( string          (* register name        *)
                       * reghint         (* hint on register     *)        
                       * Types.ty        (* C-- type of register *)
-                      ) list
+                      ) 
 @
  
 % ------------------------------------------------------------------ 
@@ -397,10 +397,10 @@ val nam2sym:  env -> string StrMap.t
 
 A {\PAL} program can declare global registers to use a specific target
 hardware register.  The abstract \emph{sequence} of these declarations
-is returned by [[hwreg_decls]]:
+is returned by [[regdecls]]:
 
 <<>>=
-val hwreg_decls: env -> hwregs
+val regdecls: env -> regdecl list
 @
 
 % ------------------------------------------------------------------ 
@@ -593,10 +593,10 @@ and  ventry         = (denotation * Types.ty) Arg.info
 and  tentry         = Types.ty                Arg.info
 
 <<>>=
-and  hwregs         = ( string          (* register name        *)
+and  regdecl        = ( string          (* register name        *)
                       * reghint         (* hint on register     *)        
                       * Types.ty        (* C-- type of register *)
-                      ) list
+                      ) 
 @
 
 Bindings for value and types are stored in a string-map [[StrMap]]. 
@@ -637,16 +637,16 @@ are not uniform.
 
 <<>>=
 and   env           = 
-                      { tenv    :      tenv
-                      ; venv    :      venv
-                      ; srcmap  :      Srcmap.map
-                      ; error   :      bool
-                      ; target  :      target
-                      ; asm     :      asm
-                      ; rindex  :      int       (* register index *)
-                      ; offset  :      int       (* stack data offset *)
-                      ; maxalign:      int       (* offset align constraint*)
-                      ; hwregs  :      hwregs    (* hardware registers *)
+                      { tenv     :      tenv
+                      ; venv     :      venv
+                      ; srcmap   :      Srcmap.map
+                      ; error    :      bool
+                      ; target   :      target
+                      ; asm      :      asm
+                      ; rindex   :      int       (* register index *)
+                      ; offset   :      int       (* stack data offset *)
+                      ; maxalign :      int       (* offset align constraint*)
+                      ; regdecls :      regdecl list  (* hardware registers *)
                       }
                       
 @
@@ -660,14 +660,14 @@ compiled. It is required to translate the annotations in the abstract
 syntax into meaningful file, line, column notation.
 
 <<>>=
-let empty  map      = { tenv   = StrMap.empty
-                      ; venv   = StrMap.empty
-                      ; srcmap = map
-                      ; error  = false
-                      ; rindex = 0
-                      ; offset = 0 
+let empty  map      = { tenv     = StrMap.empty
+                      ; venv     = StrMap.empty
+                      ; srcmap   = map
+                      ; error    = false
+                      ; rindex   = 0
+                      ; offset   = 0 
                       ; maxalign = 1
-                      ; hwregs = []
+                      ; regdecls = []
                       ; target = { memsize    = Arg.default 8
                                  ; endianness = Arg.default Little
                                  ; word       = Arg.default 32
@@ -710,8 +710,8 @@ let bindv name ((reg,scope as attr),x) env =
             )
         else match Arg.asgood x with 
         | Some (Register({rhint=h} as reg),t) ->
-               { env with venv   = StrMap.add name (attr,x) env.venv
-               ;          hwregs = (name,h,t) :: env.hwregs  
+               { env with venv     = StrMap.add name (attr,x) env.venv
+               ;          regdecls = (name,h,t) :: env.regdecls  
                }          
         | _ -> { env with venv = StrMap.add name (attr,x) env.venv }
     with
@@ -939,7 +939,7 @@ in reverse order by [[bindv]].  So we have to reverse it when we
 return it.
 
 <<>>=
-let hwreg_decls env = List.rev env.hwregs
+let regdecls env = List.rev env.regdecls
 @
 
 % ------------------------------------------------------------------ 
@@ -1033,21 +1033,21 @@ and clean_proc = function
         }
     |   _ -> assert false 
 
-and clean_hwregs regs =
+and clean_regdecls regs =
     List.map (fun (name, hint, ty) -> (name, clean_rhint hint, ty)) regs
 
 <<>>=     
 and clean env =
-    { Clean.tenv   = clean_tenv env.Dirty.tenv
-    ; Clean.venv   = clean_venv env.Dirty.venv
-    ; Clean.srcmap = env.Dirty.srcmap 
-    ; Clean.error  = env.Dirty.error
-    ; Clean.target = clean_target env.Dirty.target
-    ; Clean.rindex = env.Dirty.rindex
-    ; Clean.offset = env.Dirty.offset
+    { Clean.tenv     = clean_tenv env.Dirty.tenv
+    ; Clean.venv     = clean_venv env.Dirty.venv
+    ; Clean.srcmap   = env.Dirty.srcmap 
+    ; Clean.error    = env.Dirty.error
+    ; Clean.target   = clean_target env.Dirty.target
+    ; Clean.rindex   = env.Dirty.rindex
+    ; Clean.offset   = env.Dirty.offset
     ; Clean.maxalign = env.Dirty.maxalign
-    ; Clean.hwregs = clean_hwregs env.Dirty.hwregs
-    ; Clean.asm    = clean_asm env.Dirty.asm
+    ; Clean.regdecls = clean_regdecls env.Dirty.regdecls
+    ; Clean.asm      = clean_asm env.Dirty.asm
     }
 @
 

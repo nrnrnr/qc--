@@ -73,8 +73,8 @@ location for a value to be stored, and an expression that yields the
 value of a parameter.
 
 <<>>=
-type location = Rtl.expr -> Rtl.location        (* pass parameter *)
-              * Rtl.expr                        (* get  parameter *)
+type location = (Rtl.expr -> Rtl.effect)          (* write value *)
+              * Rtl.expr                          (* read  parameter *)
 @
 
 Of course, there is the automaton itself.  An automaton maintains
@@ -92,13 +92,6 @@ This sub-module defines everything an automaton's client needs to
 know.  Especially all details about a calling convention is left
 abstract.
 
-Use [[reset]], to put an automaton into its initial state. The initial
-state of an automaton is defined when it is constructed and thus fixed.
-
-<<signature run>>=
-val reset: t -> t
-@
-
 Running an automaton means to ask for the [[location]] of a [[ty]]. 
 This advances an automaton to its [[next]] state.  The answers to the
 question includes the desired [[location]] and the automaton in its
@@ -111,7 +104,7 @@ register. Such a hardware register must have been announced to the
 automaton when it was [[reset]]. The location in respond to the [[ty]]
 value will be the hardware register that was previously announced.
 
-<<>>=
+<<signature run>>=
 val next: t -> ty -> location * t (* Error.ErrorExn *)
 @
 
@@ -187,4 +180,30 @@ val add: t -> state -> ty -> (info -> location) -> state -> t
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
 
-An implementation is postponed.
+<<automaton.ml>>=
+type ty       = Types.ty * string option
+type location = (Rtl.expr -> Rtl.effect)
+              * Rtl.expr
+
+type t        = unit
+
+module Run = struct
+    let next () t = assert false
+    
+    type overflow = { size:  int
+                    ; align: int
+                    }
+
+    let overflow () = assert false
+end
+
+module Build = struct
+    type state = int
+    type info  = unit
+
+    let info () = assert false
+    let make n  = assert false
+    let add () s1 t f s2 = assert false
+end
+@
+    

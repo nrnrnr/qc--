@@ -3,11 +3,15 @@
 \input{macros.tex}
 
 
+% l2h substitution dots ...
+% l2h substitution ast AST
+% l2h substitution AST AST
+% l2h substitution rtl RTL
+% l2h substitution ir IR
 % l2h substitution noweb NOWEB
 % l2h substitution qcc QC--
 % l2h substitution C C--
 % l2h substitution PAL C--
-% l2h substitution AST AST
 % l2h substitution pal C--
 % l2h substitution asdl ASDL
 % l2h substitution ocaml OCaml
@@ -27,33 +31,47 @@ graph for the graph layout-language {\small DOT} for visualization.
 For the compile process a flow-graph implementation will use the
 low-level details defined in the \module{ir} module.
 
-\begin{quote}\it
-    At the assembly interface level (\module{asm}) a procedure is
-    represented by a \emph{node}.  Is the distinction between
-    [[graph]] and [[node]] at the abstract level right?  Is not every
-    node a graph, especially since all nodes of a procedure are
-    reachable from its entry node? 
-\end{quote}
+We also intent to stack flow graph implementations on top of each
+other: 
+
+<<stack>>=
+module type G = Agraph.S
+module Level0: G                                (* lowest level *)
+module Level1 = Level1Make(Level0): G
+module Level2 = Level2Make(Level1): G
+...
+@
+
+Implementations of an abstract flow graph interface use lower-level
+implementations to define a higher-level implementations. This scheme
+requires, that the implementations are functors that take a flow-graph
+implementation and implement one.
+
 
 % ------------------------------------------------------------------ 
 \subsection{Interface Overview}
 % ------------------------------------------------------------------ 
 
-The interface is captured in a signature [[S]] which is used to
-describe the result of a functor that implements it.
+The interface of an abstract is captured in a signature [[S]] which is
+used to describe the result of a functor that implements it. To avoid
+problems with type definitions when stacking implementations, [[S]]
+does not define the representation of types. Types shared by all
+implementation are defined outside of [[S]].
+declarations 
+to 
 
 <<agraph.mli>>=
+<<shared types>>
 <<signature S>>
 @
 
 <<signature S>>=
 module type S = sig
     type graph
-    type node           (* node with properties               *)
-    type unode          (* node w/o  properties               *)
+    type node           (* node with properties *)
+    type unode          (* node w/o  properties *)
+    type cont           (* continuation bundle  *)
 
-    <<types>>
-    
     <<module Props>>
     val bind : Props.properties -> unode -> node
     
@@ -87,27 +105,42 @@ Certain concepts from the {\PAL} are just represented as strings:
 \item Calling Conventions.
 \end{itemize}
 
-<<types>>=
+<<shared types>>=
 type label      = string (* C-- label    *)
 type variable   = string (* C-- variable *)
 type hint       = string option
-type convention = string
 @
 
 Parameters are passed into a procdure, into a continuation, or out of
 a procedure. The three different places are covered by a [[context]].
 
-<<>>=
+<<shared types>>=
 type context     = ProcParameters
                  | ProcResults
                  | ContParameters
 @
 
+Alternate return continuations are represented by a type [[cuts]],
+that list the different continuations by name. If a call can cut to a
+non-local continuation, [[aborts]] is true.
+
+<<shared types>>=
+type cuts      = { cuts    : string list
+                 ; unwinds : string list
+                 ; returns : string list
+                 ; aborts  : bool
+                 }
+@
+
 A formal parameter is a variable, an actual parameter an expression. Both
 can have optional hints, and have a [[width]], i.e.~a type. 
 
-<<>>=
-type formal      = variable * Rtl.width * hint  (* use a record? *)
+<<shared types>>=
+type formal      = { name:      string 
+                   ; width:     Rtl.width       (* bits *)
+                   ; hint:      string option   (* C-- hint *)
+                   ; index:     int             (* run-time API *)
+                   } 
 type actual      = Rtl.expr * Rtl.width * hint 
 @
 
@@ -156,9 +189,7 @@ We make new graphs, representing a single procedure, with
 type [[ginit]].
 
 <<constructor functions>>=
-type ginit
-val  graph : ginit -> graph (* build a new flow graph *)
-val  info  : graph -> ginit
+val  graph : unit -> graph (* build a new flow graph *)
 @ 
 
 Every node belongs to exactly one graph.  The graph might have to be
@@ -196,38 +227,33 @@ following functions just hide the fact that nodes in the flow graph
 nodes.  Otherwise each of the following functions does the obvious: 
 in creates a [[Branch]], [[Assign]], or [[Copy*]] node and returns it.
 
+The [[copy_in]] and [[copy_out]] functions need the calling convention
+they should implement for parameter passing. 
+
 <<constructor functions>>=
 val branch  : Rtl.expr -> node -> node -> unode
 val assign  : Rtl.rtl  -> node -> unode
-val copy_in  : formal list -> context -> convention -> node -> unode
-val copy_out : actual list -> context -> convention -> node -> unode
+val copy_in  : formal list -> context -> Target.conv -> node -> unode
+val copy_out : actual list -> context -> Target.conv -> node -> unode
 @ 
 
 To return from a {\PAL} procedure, you have to say which return
-continuation you want and what the total is.
+continuation you want and what the total is; the first [[int]]
+parameter describes the continuation, the second the total number of
+return continuations available for return.
 
 <<constructor functions>>=
-type continuation = int
-type count        = int
-val return : graph -> continuation -> count -> unode
+val return : graph -> int -> int -> unode
 @ 
 
-An abstract continuation bundle contains a node for the normal
-continuation and the names for all other. The type declaration is put
-into a {\noweb} chunk so it can be re-used in the implementation.
-
-<<cont type>>=
-type cont = { normal  : node
-            ; cuts    : string list
-            ; unwinds : string list
-            ; returns : string list
-            ; aborts  : bool
-            }
-@
+When a call returns, it can do a normal or abnormal return.  All the
+points a call can returned to are represented by an abstract
+continuation bundle [[cont]].  A continuation bundle is created by
+[[make_cont]] from the normal return point (in the flow graph) and all
+alternate return points.
 
 <<constructor functions>>=
-<<cont type>>
-val empty_cont : node -> cont
+val make_cont: node -> cuts -> cont
 @
 
 A call receives a [[cont]] that includes the continuation for normal
@@ -256,254 +282,6 @@ We feel that the abstract flow-graph interface is too unstable to
 provide an implementation. So this is not The Real Thing.
 
 <<agraph.ml>>=
+<<shared types>>
 <<signature S>>
 @
-
-% ------------------------------------------------------------------ 
-\subsection{Unused Implementation}
-% ------------------------------------------------------------------ 
-
-Here is an unused implementation that once worked.  Don't take it too
-seriously.
-
-A [[graph]] is an updatable data structure. 
-
-<<unused>>=
-type graph = Fgraph.graph (* = Hashtbl.t *)
-@
-
-There are two kinds of nodes:  [[node]s with properties, and unmarked
-[[unode]]s without.  The representation of [[node]] and [[unode]] is
-the same; the distinction in the type system still allows to express
-some useful properties. 
-
-<<>>=
-module Props = struct
-    <<module Props implementation>>
-end
-
-type node  = { graph: graph
-             ; props: Props.properties
-             ; node : Fgraph.node
-             } 
-type unode = node 
-@
-
-% ------------------------------------------------------------------ 
-\subsubsection{Constructor functions}
-% ------------------------------------------------------------------ 
-
-The constructor functions for a graph are grouped together in a
-sub-module [[Make]]:
-
-<<>>=
-module Make = struct
-    <<module Make implementation>>
-end
-@
-
-Labels come in two flavors: those found in the source code, like
-goto-labels and procedure names, and those created by the compiler.
-For labels found in the source code we like to use [[Fgraph.Name]]
-values, and [[Fgraph.Number]] for the other. The function
-[[new_label]] returns a fresh label on every invocation. Thanks to the
-imperative features of {\ocaml}, an implementation is trivial.
-
-<<module Make implementation>>=
-let label_counter = ref 0
-let new_label ()  = (incr label_counter; F.Number !label_counter)
-@
-
-A list of targets at the abstract syntax level is a list of names. 
-These names become [[F.Name]] values at the [[Fgraph]] lavel.  The
-[[targets]] function just does this for a list of names.  
-
-<<>>=
-let targets = List.map (fun n -> F.Name n)
-@
-
-A continuation bundle (or record) includes the normal return point as
-a node and all others as labels.  The [[cont]] function translates an
-abstract [[cont]] value to a [[Fgraph.cont]] value.
-
-<<>>=
-<<cont type>>
-let empty_cont node =
-    { normal  = node
-    ; cuts    = []
-    ; unwinds = []
-    ; returns = []
-    ; aborts  = false (* ??? *)
-    } 
-
-let cont c =
-    ( c.normal.node
-    , targets c.cuts
-    , targets c.unwinds
-    , targets c.returns
-    , c.aborts
-    )
-@
-
-An initially empty graph is created by [[graph]].  The hash table
-implementation likes a suggested initial size but grows as needed. 
-
-<<>>=
-let graph () = 
-    let initial_size = 1000 
-    in
-        G.create initial_size
-@
-
-<<>>=
-let exit graph = 
-    { graph = graph
-    ; props = Props.empty
-    ; node  = F.Exit
-    }
-@
-
-<<>>=
-let goto graph expr labels =
-    { graph = graph
-    ; props = Props.empty
-    ; node  = F.Goto(expr, targets labels)
-    }
-@
-
-The [[unode]] function creates a dummy node which we use for cheating
-in case our implementation is not ready yet.
-
-<<>>=
-let unode () =
-    { graph  = graph ()
-    ; props  = Props.empty
-    ; node   = F.Exit
-    }
-@
-
-At the level of [[Fgraph]] the two nodes of a branch are labels of
-nodes rather than nodes.  So we have to create a label for each node,
-add each under its label to the graph and return the node containing
-the labels to them.
-
-<<>>=    
-let branch expr n1 n2 = 
-    let graph  = n1.graph                  in
-    let l1,l2  = new_label (), new_label() in
-        ( G.add graph l1 n1.node
-        ; G.add graph l2 n2.node
-        ; { graph = graph
-          ; props = Props.empty
-          ; node  = F.Branch(expr,l1,l2)
-          }
-        )
-@
-    
-The abstract view of [[Agraph]] and the concrete view of [[Fgraph]]
-are more or less the same for a number of nodes. The implementation of
-the creation functions is thus simple for the following nodes:
-
-\begin{itemize}
-\item [[assign]]
-\item [[jump]]
-\item [[call]]
-\end{itemize}
-    
-<<>>=
-let assign rtl node =                   
-    { graph = node.graph
-    ; props = Props.empty
-    ; node  = node.node
-    }
-
-<<>>=
-let jump graph expr labels =
-    { graph = graph
-    ; props = Props.empty
-    ; node  = F.Jump(expr,targets labels)
-    }    
-
-<<>>=
-let call expr ctn =
-    { graph = ctn.normal.graph
-    ; props = Props.empty
-    ; node  = F.Call(expr,cont ctn)
-    }
-
-<<>>=
-let copy_in formals context cc node =
-    { graph = node.graph
-    ; props = Props.empty
-    ; node  = F.CopyIn
-              ( formals
-              , context
-              , cc
-              , node.node
-              )
-    }
-
-<<>>=    
-let copy_out actuals context cc node =
-    { graph = node.graph
-    ; props = Props.empty
-    ; node  = F.CopyOut
-              ( actuals
-              , context
-              , cc
-              , node.node
-              )
-    }
-@
-
-A labeled node must be recorded in the graph. Aside from that, the
-same node is returned with its properties striped off.
-
-<<>>=
-let label l node =
-    let graph = node.graph              in
-    let l     = F.Name l                in
-    let _     = G.add graph l node.node in (* side effect *)
-        { node with props = Props.empty }
-@
-
-
-How is a [[return]] statement represented? How is the return
-continuation communicated?
-    
-<<>>=
-let return   graph cont count           = unode ()
-@
-    
-     
-
-% ------------------------------------------------------------------ 
-\subsubsection{Properties}
-% ------------------------------------------------------------------ 
-
-A node may have properties; properties are independent of each other
-and may be absent.
-
-\begin{itemize}
-\item The [[span]] property consists of the span's key (or token) 
-      and its value, which is a link-time constant.
-\end{itemize}
-
-<<module Props implementation>>=
-type properties = { span: (Bits.bits * Rtl.const) option }
-@
-              
-The [[empty]] property simply provides no [[span]] information.
-
-<<>>=  
-let empty     = { span = None }
-@
-
-To add a span, the span information is updated. Should we signal when
-there is already a span information?
-
-<<>>=
-let add_span key value p = { p with span = Some(key,value) } 
-@
-
-
