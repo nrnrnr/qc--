@@ -626,8 +626,9 @@ We provide embedding/projection pairs for each of the backplane types.
 let {V.embed = embed; V.project = project} = T1.makemap V.userdata V.projection
 
 let ( **-> ) = V.( **-> )
+let ( **->> ) x y = x **-> V.result y 
 let proc    = T2.makemap V.userdata V.projection
-let stageFn = V.func (V.value **-> proc **-> V.result V.bool)
+let stageFn = V.func (V.value **-> proc **->> V.bool)
 
 <<stage map>>
 
@@ -645,31 +646,25 @@ N.B. that the ``[[stage]]'' builtin is not necessary except as a way
 of eagerly projecting a function or table into an action.
 <<Lua initialization>>=
 <<run>>
-let ( **-> ) = V.( **-> )
-
 let id x = x
 let init g =
   let action = { V.embed   = embed ; V.project = projectAction g } in
   Interp.register_module Arg.lua_module_name
-  [ "seq",       (V.func ((V.list action)     **-> V.result action)).V.embed seq
-  ; "when_do",   (V.func (action  **-> action **-> V.result action)).V.embed when_do
-  ; "unless_do", (V.func (action  **-> action **-> V.result action)).V.embed unless_do
-  ; "fix",       (V.func (action  **->             V.result action)).V.embed fix
-  ; "share",     (V.func (V.value **-> V.string **-> action **->
-                                                    V.result action)).V.embed share
-  ; "ignore",    (V.func (action  **->             V.result action)).V.embed ignore
-  ; "stage",     (V.func (action  **->             V.result action)).V.embed id
-  ; "run",       (V.func (action **-> proc **->    V.result V.bool)).V.embed run
-  ; "verbosity", (V.func (V.bool **->              V.result V.bool)).V.embed verbosity
+  [ "seq",       V.efunc (V.list action       **->> action) seq
+  ; "when_do",   V.efunc (action  **-> action **->> action) when_do
+  ; "unless_do", V.efunc (action  **-> action **->> action) unless_do
+  ; "fix",       V.efunc (action  **->>             action) fix
+  ; "share",     V.efunc (V.value **-> V.string **-> action **->> action) share
+  ; "ignore",    V.efunc (action  **->>             action) ignore
+  ; "stage",     V.efunc (action  **->>             action) id
+  ; "run",       V.efunc (action  **-> proc **->>   V.bool) run
+  ; "verbosity", V.efunc (V.bool  **->>             V.bool) verbosity
   ] g
 ; Lua.Lib.StringList.empty
 @
-
-
 In order to use the Lua interpreter to control the backplane, we must
 provide the embedding/projection pair for a stage. When we project a stage into
 Caml, we provide sensible defaults for unspecified members of the stage record.
-
 <<stage map>>=
 let embedString   = V.string.V.embed
 let projectString = V.string.V.project

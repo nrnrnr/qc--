@@ -172,6 +172,7 @@ struct
     struct
       module V = C.V
       let ( **-> ) = V.( **-> )
+      let ( **->> ) x y = x **-> V.result y 
       <<export goodies to Lua>>
     end (*M*)
 end (*MakeLib*)
@@ -208,7 +209,7 @@ module Map = struct
     let channel   = InOutV.makemap  V.userdata V.projection
     let inchan    = Luaiolib.in'    channel    V.projection
     let outchan   = Luaiolib.out    channel    V.projection
-    let stage proc = V.func (V.value **-> proc **-> V.result V.bool)
+    let stage proc = V.func (V.value **-> proc **->> V.bool)
     let block     = BlockV.makemap  V.userdata V.projection
 end
 @ 
@@ -222,37 +223,30 @@ let init g =
 
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Asm"
-  [ "cmm" , V.efunc (Map.outchan **-> V.result Map.asm) NewAstAsm.asm     
-  ; "dot" , V.efunc (Map.outchan **-> V.result Map.asm) 
-                            (Dotasm.asm ~compress:true ~live:false)
-  ; "big_dot" , V.efunc (Map.outchan **-> V.result Map.asm) 
+  [ "cmm" , V.efunc (Map.outchan **->> Map.asm) NewAstAsm.asm     
+  ; "dot" , V.efunc (Map.outchan **->> Map.asm) (Dotasm.asm ~compress:true ~live:false)
+  ; "big_dot" , V.efunc (Map.outchan **->> Map.asm) 
                             (Dotasm.asm ~compress:false ~live:true)
-  ; "x86" , V.efunc (Map.outchan **-> V.result Map.asm) 
-                            (X86asm.make Cfgutil.emit)
-  ; "mips", V.efunc (Map.outchan **-> V.result Map.asm) 
-                            (Mipsasm.make Cfgutil.emit)
-  ; "alpha", V.efunc (Map.outchan **-> V.result Map.asm) 
-                            (Alphaasm.make Cfgutil.emit)
-  ; "interp32l" , V.efunc (Map.outchan **-> V.result Map.asm) 
+  ; "x86" ,  V.efunc (Map.outchan **->> Map.asm) (X86asm.make Cfgutil.emit)
+  ; "mips",  V.efunc (Map.outchan **->> Map.asm) (Mipsasm.make Cfgutil.emit)
+  ; "alpha", V.efunc (Map.outchan **->> Map.asm) (Alphaasm.make Cfgutil.emit)
+  ; "interp32l" , V.efunc (Map.outchan **->> Map.asm) 
             (Interpasm.asm' ~byteorder:Rtl.LittleEndian ~memsize:8 ~ptrsize:32)
-  ; "interp32b" , V.efunc (Map.outchan **-> V.result Map.asm) 
+  ; "interp32b" , V.efunc (Map.outchan **->> Map.asm) 
             (Interpasm.asm' ~byteorder:Rtl.BigEndian ~memsize:8 ~ptrsize:32)
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Block" 
-  [ "size",       V.efunc (Map.block **-> V.result V.int)  Block.Lua.size
-  ; "alignment",  V.efunc (Map.block **-> V.result V.int)  Block.Lua.alignment
-  ; "adjust",     V.efunc (Map.block **-> V.result Map.block) Block.Lua.adjust
-  ; "cat",        V.efunc (V.int **-> V.list Map.block **-> V.result Map.block) 
-                      Block.Lua.cat
-  ; "overlap",    V.efunc (V.int **-> V.string **-> V.list Map.block
-                                 **-> V.result Map.block)
+  [ "size",       V.efunc (Map.block **->> V.int)     Block.Lua.size
+  ; "alignment",  V.efunc (Map.block **->> V.int)     Block.Lua.alignment
+  ; "adjust",     V.efunc (Map.block **->> Map.block) Block.Lua.adjust
+  ; "cat",        V.efunc (V.int **-> V.list Map.block **->> Map.block) Block.Lua.cat
+  ; "overlap",    V.efunc (V.int **-> V.string **-> V.list Map.block **->> Map.block)
                           (Block.Lua.overlap (C.error g))
   ; "relative",   V.efunc (Map.block **-> V.string **-> V.int **-> V.int 
-                                     **-> V.result Map.block) Block.Lua.relative
-  ; "base",       V.efunc (Map.block **-> V.result V.string) Block.Lua.base
-  ; "constraints",V.efunc (Map.block **-> V.result (V.list V.string)) 
-                            Block.Lua.constraints
+                                     **->> Map.block) Block.Lua.relative
+  ; "base",       V.efunc (Map.block **->> V.string) Block.Lua.base
+  ; "constraints",V.efunc (Map.block **->> (V.list V.string)) Block.Lua.constraints
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Boot" 
@@ -279,10 +273,10 @@ let extension s =
 let chop s = try Filename.chop_extension s with Invalid_argument _ -> s in
 C.register_module "Caml"
     ["Filename" , V.Table (V.Table.of_list 
-        [ "check_suffix", V.efunc (V.string **-> V.string **-> V.result V.bool)
-                         Filename.check_suffix
-        ; "chop_extension",  V.efunc (V.string **-> V.result V.string) chop
-        ; "extension",   V.efunc (V.string **-> V.result V.string) extension
+        [ "check_suffix",    V.efunc (V.string **-> V.string **->> V.bool)
+                                Filename.check_suffix
+        ; "chop_extension",  V.efunc (V.string **->> V.string) chop
+        ; "extension",       V.efunc (V.string **->> V.string) extension
         ])
     ] g;
 @
@@ -294,23 +288,20 @@ C.register_module "Dataflow"
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Driver" 
   [ "assemble"  , V.efunc (Map.vasm **-> V.runit)   (fun asm -> asm#emit)
-  ; "proc_assembler", V.efunc (Map.vasm **-> V.result (Map.stage V.value)) 
+  ; "proc_assembler", V.efunc (Map.vasm **->> (Map.stage V.value)) 
                     (fun asm v p -> asm#cfg_instr p ; true)
-  ; "check"     , V.efunc (Map.ast **-> Map.asm 
-                                   **-> V.result Map.env)   Driver.check
-  ; "emit_asdl" , V.efunc (Map.ast **-> V.runit)            Driver.emit_asdl
-  ; "parse"     , V.efunc (V.string**-> V.result Map.ast)   Driver.parse
-  ; "print"     , V.efunc (Map.doc **-> V.int 
-                                   **-> Map.outchan
-                                   **-> V.runit)            Driver.print
-  ; "pretty"    , V.efunc (Map.ast **-> V.result Map.doc)   Driver.pretty
-  ; "scan"      , V.efunc (V.string**-> V.runit)            Driver.scan
-  ; "version"   , V.efunc (V.unit  **-> V.runit)            Driver.version
-  ; "stdin"     , Map.inchan.V.embed                        stdin (* hack *)
-  ; "stdout"    , Map.outchan.V.embed                       stdout(* hack *)
-  ; "compile"   , V.efunc (Map.optimize Map.proc
-                          **-> Map.ast      **-> Map.new_target 
-                          **-> Map.env  **-> V.result Map.asm) 
+  ; "check"     , V.efunc (Map.ast **-> Map.asm **->> Map.env) Driver.check
+  ; "emit_asdl" , V.efunc (Map.ast **-> V.runit)               Driver.emit_asdl
+  ; "parse"     , V.efunc (V.string**->> Map.ast)              Driver.parse
+  ; "print"     , V.efunc (Map.doc **-> V.int **-> Map.outchan **-> V.runit)
+                    Driver.print
+  ; "pretty"    , V.efunc (Map.ast **->> Map.doc) Driver.pretty
+  ; "scan"      , V.efunc (V.string**-> V.runit)  Driver.scan
+  ; "version"   , V.efunc (V.unit  **-> V.runit)  Driver.version
+  ; "stdin"     , Map.inchan.V.embed              stdin (* hack *)
+  ; "stdout"    , Map.outchan.V.embed             stdout(* hack *)
+  ; "compile"   , V.efunc (Map.optimize Map.proc **-> Map.ast **-> Map.new_target 
+                          **-> Map.env **->> Map.asm) 
                           Driver.compile
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
@@ -347,19 +338,18 @@ in C.register_module "Debug"
 @
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Expander"
-  [ "x86f" , V.efunc (V.value **-> Map.proc **-> V.result V.bool) X86.X.cfg
-  ; "mips" , V.efunc (V.value **-> Map.proc **-> V.result V.bool) Mips.X.cfg
-  ; "alpha", V.efunc (V.value **-> Map.proc **-> V.result V.bool) Alpha.X.cfg
+  [ "x86f" , V.efunc (V.value **-> Map.proc **->> V.bool) X86.X.cfg
+  ; "mips" , V.efunc (V.value **-> Map.proc **->> V.bool) Mips.X.cfg
+  ; "alpha", V.efunc (V.value **-> Map.proc **->> V.bool) Alpha.X.cfg
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Liveness"
-  [ "liveness", V.efunc (V.value **-> Map.proc **-> V.result V.bool) 
+  [ "liveness", V.efunc (V.value **-> Map.proc **->> V.bool) 
        (fun _ p -> Cfgx.Live.set_live p.Proc.cfg; true)
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Placevar"
-  [ "fortran", V.efunc (V.value **-> Map.proc **-> V.result V.bool) 
-                            Placevar.fortran'
+  [ "fortran", V.efunc (V.value **-> Map.proc **->> V.bool) Placevar.fortran'
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Simplify"
@@ -368,26 +358,24 @@ C.register_module "Simplify"
 
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Stack"
-  [ "freeze", V.efunc (Map.proc **-> Map.block **-> V.runit) 
-                  Stack.freeze
-  ; "blocks", V.efunc (Map.proc **-> V.result (V.record V.value))
-                  (Stack.blocks Map.block.V.embed (V.list V.value).V.embed)
-  ; "ccname",     V.efunc (Map.proc **-> V.result (V.string))
-                  (fun p -> p.Proc.cc.Call.name)
-  ; "procname",   V.efunc (Map.proc **-> V.result (V.string))
-                  (fun p -> p.Proc.symbol#original_text)
+  [ "freeze",  V.efunc (Map.proc **-> Map.block **-> V.runit)   Stack.freeze
+  ; "blocks",  V.efunc (Map.proc **->> (V.record V.value))
+                       (Stack.blocks Map.block.V.embed (V.list V.value).V.embed)
+  ; "ccname",  V.efunc (Map.proc **->> V.string) (fun p -> p.Proc.cc.Call.name)
+  ; "procname",V.efunc (Map.proc **->> V.string) (fun p -> p.Proc.symbol#original_text)
   ] g;                    
 @ 
 PERHAPS THIS CODE SHOULD REPLACE THE SOMEWHAT HEAVYWEIGHT [[Asm.dot]]???
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Stages"
-  [ "writedot", V.efunc (V.value **-> Map.proc **-> V.result V.bool)
+  [ "writedot", V.efunc (V.value **-> Map.proc **->> V.bool)
       (fun _ proc -> 
         prerr_string
-          (Cfgutil.cfg2dot ~compress:true ~live:true ~name:proc.Proc.symbol#mangled_text proc.Proc.cfg);
+          (Cfgutil.cfg2dot ~compress:true ~live:true
+             ~name:proc.Proc.symbol#mangled_text proc.Proc.cfg);
         flush stderr;
         true)
-  ; "replace_vfp", V.efunc (V.value **-> Map.proc **-> V.result V.bool)
+  ; "replace_vfp", V.efunc (V.value **-> Map.proc **->> V.bool)
       (fun _ proc -> proc.Proc.cc.Call.replace_vfp proc.Proc.cfg; true)
   ]  g;
 <<register modules to [[g]] in alphabetical order>>=
@@ -401,7 +389,7 @@ C.register_module "Targets"
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Typecheck" 
- [ "proc",       V.efunc (V.value **-> Map.proc **-> V.result V.int)
+ [ "proc",       V.efunc (V.value **-> Map.proc **->> V.int)
                          (fun _ proc -> Typecheck.proc proc; 1)
  ] g;
  
