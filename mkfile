@@ -140,8 +140,8 @@ install-dirs:VQ:
                 for dir in $prefix $bindir $libdir $incdir $man1dir
                 do
                    if [ ! -d $dir ]; then
-                     echo "  mkdir -p -m 755 $dir"
-                     mkdir -p -m 755 $dir
+                     echo "  mkdir -p $dir"
+                     mkdir -p $dir
                    fi
                 done
 
@@ -154,6 +154,10 @@ install:V:      $INSTALL install-dirs
                 cp man/man1/qc--interp.1                $man1dir
                 cp lib/libqc--interp.a                  $libdir
                 # XXX copy header files to $incdir
+                for d in camlburg tools
+                do 
+                  (echo "# cd $d" && cd $d && mk $MKFLAGS install) || exit 1
+                done
 
 # ------------------------------------------------------------------ 
 # print dependency graph
