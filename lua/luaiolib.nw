@@ -1,0 +1,161 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+\section{Lua I/O library}
+
+<<io.mli>>=
+module Builtins : Lua.MIXIN
+@ 
+@ 
+<<io.ml>>=
+module Builtins (L : Lua.TIER) : Lua.TIER = struct
+  module U = struct
+    type t = In of in_channel | Out of out_channel | Other of L.U.t
+    let tname = "I/O channel or " ^ L.U.tname
+    let eq x y = match x, y with
+    | In x,    In y    -> x = y
+    | Out x,   Out y   -> x = y
+    | Other x, Other y -> L.U.eq x y
+    | _, _ -> false
+    let to_string = function
+      | In _ -> "<input>"
+      | Out _ -> "<output>"
+      | Other x -> L.U.to_string x
+    type state = { mutable currentin  : in_channel
+                 ; mutable currentout : out_channel
+                 ; other : L.U.state
+                 } 
+    let state () = { currentin = stdin; currentout = stdout; other = L.U.state () }
+  end
+  module M (FB : Lua.TOWER with type t = U.t with type state = U.state) = struct
+    module V = FB.V
+    let ( **-> ) = V.( **-> )
+    module FB' = struct
+      module V = V
+      let fallback = FB.fallback
+      type t = L.U.t
+      let map = { V.embed   = (fun x -> FB.map.V.embed (U.Other x))
+                ; V.project = (fun v -> match FB.map.V.project v with
+                                        | U.Other x -> x
+                                        | _ -> raise (V.Projection (v, U.tname)))
+                }
+      type state = L.U.state
+      let project_state s = (FB.project_state s).U.other
+    end
+    module L' = L.M (FB')
+    <<i/o builtins>>
+    let init g = 
+      L'.init g;
+      List.iter (fun (k, v) -> V.Table.bind g.V.globals (V.String k) v) io_builtins
+  end
+end
+@ 
+
+@ 
+<<i/o builtins>>=
+let embed   = FB.map.V.embed
+let project = FB.map.V.project
+let infile = { V.embed = (fun f -> embed (U.In f))
+             ; V.project = (fun v -> match project v with
+                                     | U.In f -> f
+                                     | _ -> raise (V.Projection (v, "input file")))}
+let outfile = { V.embed = (fun f -> embed (U.Out f))
+              ; V.project = (fun v -> match project v with
+                                      | U.Out f -> f
+                                      | _ -> raise (V.Projection (v, "output file")))}
+
+let iostate g = FB.project_state g
+
+let wrap_err f = try f () with Sys_error s -> [V.Nil; V.String s]
+
+let readfrom g = function
+  | [V.String s] ->
+      (match String.get s 0 with
+       | '|' ->
+           wrap_err (fun () ->
+             [infile.V.embed
+                   (Unix.open_process_in (String.sub s 1 (String.length s - 1)))])
+       | _   -> wrap_err (fun () -> [infile.V.embed (open_in s)]))
+  | [] ->
+      let io = iostate g in
+      ( close_in io.U.currentin; io.U.currentin <- stdin; [])
+  | [v] -> ((iostate g).U.currentin <- infile.V.project v; [])
+  | _ -> FB.fallback "error" g [V.String "bad args to readfrom"]
+              
+let open_out_append s =
+  open_out_gen [Open_wronly; Open_creat; Open_trunc; Open_text] 0o666 s
+let writeto' append g = function
+  | [V.String s] ->
+      (match String.get s 0 with
+       | '|' ->
+           wrap_err (fun () ->
+            if append then raise (Sys_error "tried to appendto() a pipe")
+            else [outfile.V.embed
+                    (Unix.open_process_out (String.sub s 1 (String.length s - 1)))])
+       | _   ->
+           wrap_err (fun () ->
+             [outfile.V.embed (if append then open_out_append s else open_out s)]))
+  | [] ->
+      let io = iostate g in
+      ( close_out io.U.currentout; io.U.currentout <- stdout; [])
+  | [v] -> ((iostate g).U.currentout <- outfile.V.project v; [])
+  | _ -> FB.fallback "error" g [V.String "bad args to writeto"]
+              
+let pf t = (V.pfunc t).V.embed
+let func t = (V.func t).V.embed
+let success = [V.String "OK"]
+
+let unimp s =
+  V.caml_func (fun g _ ->
+    FB.fallback "error" g [V.String ("string library does not implement `" ^ s ^ "'")])
+
+let read g = function
+  | None -> [V.String (input_line (iostate g).U.currentin)]
+  | Some _ -> FB.fallback "error" g
+              [V.String ("string library does not implement read patterns")]
+
+let write_string g v =
+  output_string (iostate g).U.currentout (V.string.V.project v)
+
+let getopt x d = match x with Some v -> v | None -> d
+
+let date g = function
+  | Some _ -> FB.fallback "error" g
+              [V.String ("string library does not implement read patterns")]
+  | None ->
+      let t = Unix.localtime (Unix.time ()) in
+      let s = string_of_int in
+      let mm = t.Unix.tm_mon + 1 in
+      let yyyy = t.Unix.tm_year + 1900 in
+      let dd = t.Unix.tm_mday in
+      [V.String (s mm ^ "/" ^ s dd ^ "/" ^ s yyyy)]
+
+let tmpname _ _ =
+  let rec tmp here n =
+    let s = "luatmp" ^ string_of_int n in
+    let s = if here then s else "/tmp/" ^ s in
+    if Sys.file_exists s then
+      tmp (not here) (n+1)
+    else
+      [V.String s]
+  in tmp false 238
+
+let io_builtins =
+  [ "readfrom", V.caml_func readfrom
+  ; "writeto",  V.caml_func (writeto' false)
+  ; "appendto", V.caml_func (writeto' true)
+  ; "remove",   pf (V.string **-> V.values)
+                (fun s -> wrap_err (fun () -> Sys.remove s; success))
+  ; "rename",   pf (V.string **-> V.string **-> V.values)
+                (fun s1 s2 -> wrap_err (fun () -> Sys.rename s1 s2; success))
+  ; "tmpname",  V.caml_func tmpname
+  ; "read",     func (V.option V.string **-> V.values) read
+  ; "write",    V.caml_func (fun g l -> wrap_err (fun () ->
+                               List.iter (write_string g) l;
+                               flush (iostate g).U.currentout;
+                               []))
+  ; "date",     func (V.option V.string **-> V.values) date
+  ; "exit",     pf (V.option V.int **-> V.runit) (fun n -> exit (getopt n 0))
+  ; "getenv",   pf (V.string **-> V.values)
+                (fun s -> try [V.String (Sys.getenv s)] with Not_found -> [V.Nil])
+  ; "execute",  pf (V.string **-> V.result V.int) Sys.command
+  ] 
