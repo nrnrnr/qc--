@@ -256,3 +256,21 @@ let divideby = function
   | 64 -> fun n -> n / 64
   | m  -> fun n -> n / m  in
   
+@ 
+<<expander.ml>>=
+module G = Cfg3
+let cfg _ proc =
+  let g = proc.Proc.cfg in
+  let t = proc.Proc.target in
+  let _ = G.gm_enumerate g in
+  let nodes = G.fold_bwd g (fun x y -> x::y) [] in
+  let expand = expand (context t) in
+  let modified = ref false in
+  let exp n =
+    match expand (G.rtl n) with
+    | last :: preds ->
+        ignore (List.fold_left (fun n i -> G.gm_insert_assign_before i n) n preds);
+        (match preds with [] -> () | _ :: _ -> modified := true)
+    | [] -> assert false in
+  List.iter exp nodes;
+  !modified
