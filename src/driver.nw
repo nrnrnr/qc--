@@ -171,14 +171,34 @@ let check file =
 \subsubsection{A dummy target}
 % ------------------------------------------------------------------ 
 
+Our [[dummy]] target architecture features 8 32-bit registers ``r0 ''
+\dots ``r7 ''.  The spaces in these names are intentional:  they
+ensure that when mangled to {\PAL} names they can not clash with any
+name in a user's program or any other generated name by the compiler. 
+Registers are addressed by 3-bit numbers 0\dots7.
+
 <<>>=
 let dummy =     
-    let sp = Rtl.Cell( 'm'
-                    , Rtl.BigEndian
-                    , 32
-                    , Rtl.Const(Rtl.Link("sp ",32))
-                    , -1
-                    ) in
+    let reg n = Rtl.Cell( 'r'
+                        , Rtl.BigEndian
+                        , 32
+                        , Rtl.Const(Rtl.Bits(Bits.of_int n 3,3))
+                        , -1
+                        ) in
+    let regs = 
+        let name n = Printf.sprintf "r%d" n in
+        let rec loop map = function
+            | -1  -> map
+            | n   -> loop (Target.StrMap.add (name n) (reg n) map) (n-1)
+        in
+            loop Target.StrMap.empty 7
+    in        
+    let sp    = Rtl.Cell( 'm'
+                        , Rtl.BigEndian
+                        , 32
+                        , Rtl.Const(Rtl.Link("sp ",32))
+                        , -1
+                        ) in
     let conv = 
         { Target.sp             = sp
         ; Target.proc_param     = Automaton.Build.cc 
@@ -196,7 +216,7 @@ let dummy =
         ; Target.charset        = "latin1"
         ; Target.conv           = convmap
         ; Target.globals        = Automaton.Build.globals
-        ; Target.regmap         = Target.StrMap.empty
+        ; Target.regmap         = regs
         }
 @
 
@@ -304,7 +324,6 @@ let decl mangle name ventry dd = match ventry with
         let r = (A.Variant, None, A.BitsTy n ,mangle name, None)
         in
             A.DeclBody(A.Registers([r]))::dd
-            
     | _ -> dd
 
 <<>>=
