@@ -430,11 +430,18 @@ let rec sx w args   = match (w,args) with
 | [i;j], [x] when i = j -> x
 | _         -> default "sx" w args
 @ 
+\paragraph{Rewriting references to fragments of large aggregates}
+
 Here we do some fast and loose playing with assertions, as well as
 assume that the memsize is~8.
 <<RTL operator implementations>>=
 let rec lobits ws args   = match (ws,args) with
 | [i;j],[RP.Const(RP.Bits x)] -> const (Bits.Ops.lobits j x)
+<<cases for rewriting aggregates in big-endian or little-endian memory>>
+<<cases for rewriting aggregates in big-endian or little-endian registers>>
+| [i;j], [x] when i = j -> x
+| _         -> default "lobits" ws args
+<<cases for rewriting aggregates in big-endian or little-endian memory>>=
 | [w;n],[<<little-endian memory fetch>>] when Cell.divides mcell n ->
     RP.Fetch (RP.Mem (mspace, Cell.to_count mcell n, addr, assn), n)
 | [w;n],[<<big-endian memory fetch>>] when Cell.divides mcell (w - n) ->
@@ -458,12 +465,38 @@ let rec lobits ws args   = match (ws,args) with
         [RP.Fetch (RP.Mem (mspace, Cell.to_count mcell (w-shamt), addr, assn),w-shamt)]
     else
       default "lobits" ws args
-| [i;j], [x] when i = j -> x
-| _         -> default "lobits" ws args
 <<little-endian memory fetch>>=
 RP.Fetch(RP.Mem ((sp, Rtl.LittleEndian, mcell) as mspace, w', addr, assn), w'')
 <<big-endian memory fetch>>=
 RP.Fetch(RP.Mem ((sp, Rtl.BigEndian, mcell) as mspace, w', addr, assn), w'')
+<<cases for rewriting aggregates in big-endian or little-endian registers>>=
+| [w;n],[<<little-endian register fetch>>] when Cell.divides rcell n ->
+    RP.Fetch (RP.Reg (rspace, index, Cell.to_count rcell n), n)
+| [w;n],[<<big-endian register fetch>>] when Cell.divides rcell (w - n) ->
+    let R.C offset = Cell.to_count rcell (w - n) in
+    let index      = index + offset in
+    RP.Fetch (RP.Reg (rspace, index, Cell.to_count rcell n), n)
+| [w;n],[RP.App(("shrl", [_]),
+                [<<little-endian register fetch>>; RP.Const(RP.Bits b)])] ->
+    let shamt = Bits.U.to_int b in
+    if Cell.divides rcell shamt then
+      let R.C offset = Cell.to_count rcell shamt in
+      let index      = index + offset in
+      lobits [w-shamt; n]
+        [RP.Fetch (RP.Reg (rspace, index, Cell.to_count rcell (w-shamt)), w-shamt)]
+    else
+      default "lobits" ws args
+| [w;n],[RP.App(("shrl", [_]), [<<big-endian register fetch>>; RP.Const(RP.Bits b)])] ->
+    let shamt = Bits.U.to_int b in
+    if Cell.divides rcell shamt then
+      lobits [w-shamt; n]
+        [RP.Fetch (RP.Reg (rspace, index, Cell.to_count rcell (w-shamt)), w-shamt)]
+    else
+      default "lobits" ws args
+<<little-endian register fetch>>=
+RP.Fetch(RP.Reg ((sp, Rtl.LittleEndian, rcell) as rspace, index, count), w'')
+<<big-endian register fetch>>=
+RP.Fetch(RP.Reg ((sp, Rtl.BigEndian,    rcell) as rspace, index, count), w'')
 @ 
 <<RTL operator implementations>>=
 let unsigned n w = RP.Const (RP.Bits (Bits.U.of_int n w))
