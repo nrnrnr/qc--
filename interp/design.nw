@@ -1,0 +1,182 @@
+\documentclass{article}
+\usepackage{array,tabularx}
+
+\newcommand\PAL{\mbox{C{\texttt{-{}-}}}}
+\title{Design Sketch for a {\PAL} Interpreter}
+\author{Norman Ramsey}
+
+
+\begin{document}
+\maketitle
+
+
+This document sketches a design for an interpeter for {\PAL}.
+Such an interpreter would be useful for these reasons:
+\begin{itemize}
+\item
+It would provide an independent check on the correctness of a
+compiler.
+\item
+It would make it possible to start playing with run-time clients
+before the compiler and its run-time system are finished.
+\end{itemize}
+The interpreter would be part of a system for which the front end
+would be our Quick {\PAL} compiler.
+
+From the outside, the interpreter would look like a ``load-and-go
+assembler.''
+Such assemblers have been uncommon for many a long year, but the
+general idea is to read in one or more assembly-language files, 
+produce code in memory, and execute the code immediately.
+For our purposes, the interpreter should work as follows:
+\begin{itemize}
+\item
+It should export the {\PAL} run-time interface.
+\item
+It should support a small additional interface that makes it possible
+to load in a Quick~{\PAL} assembly file and to look up an external
+{\PAL} name.
+\end{itemize}
+It is easiest if the interpreter is written in~C.
+%
+The interpreter could be accompanied by a simple client that loads in
+files named on the command line, looks up \texttt{Cmm\_main}, and branches
+to it.
+
+Here are the problems that have to be solved:
+\begin{itemize}
+\item
+Design an in-memory format for the {\PAL} abstract machine.
+This design can be expressed in terms of C~data structures.
+\item
+Design an assembly-language format so that the Quick~{\PAL} compiler
+can transmit a program to the interpreter.
+\item
+Implement the interpreter.
+\end{itemize}
+
+\paragraph{The {\PAL} abstract machine}
+Some details about the {\PAL} abstract machine can be taken right out
+of the PLDI~2000 paper.
+\begin{itemize}
+\item
+There is a stack of activations.
+\item
+There is an argument-passing area.
+\item
+There is {\PAL} memory.
+\item
+There may be {\PAL} hardware registers.
+\end{itemize}
+Each activation has the following state:
+\begin{itemize}
+\item
+A stack-data area managed by the front end.
+\item
+A set of local variables, which the interpreter can represent as an
+array.
+\item
+A memory area that holds continuations.
+\end{itemize}
+
+\paragraph{The Quick~{\PAL} assembly language}
+The assembly language will have these instructions:
+\begin{itemize}
+\item
+Evaluate an RTL.
+\item
+Make a procedure call (to include both {\PAL} calls and foreign~C
+calls).
+\item
+Return.
+\item
+Cut to a continuation.
+\item
+Local control flow: conditional branch, static branch, dynamic branch.
+\item
+Emit target-specific info, including default widths of literals and
+various spaces, default endianness, and so on.
+\end{itemize}
+
+\paragraph{RTL representation and evaluation}
+I think a good way to represent and RTL in the assembly language is
+with a small postfix language.
+The postfix language should expect an abstract machine with a value
+stack and a location stack.
+There can be a reasonably readable ASCII representation in the
+assembly language, and internally, the interpreter can use a bytecode.
+The interpreter will probably want to keep a cache or table of RTL
+operators to keep the bytecode compact.
+
+Here's an example that adds~1 to register~4:
+\begin{verbatim}
+  4 $r 4 $r fetch-32 1 add-32 store-32
+\end{verbatim}
+We can deconstruct this example as follows:
+\begin{enumerate}
+\item
+Push 4 on the value stack (default width 32 bits one assumes).
+\item
+Pop the value stack and push (onto the location stack) the location in
+the \texttt r space 
+that is indexed by that value (here, register~4).
+\item
+Do it again.  Now the location stack has register~4 twice.
+\item
+Pop the location stack, load a 32-bit value from that location, and
+push the resulting value on the value stack.
+\item
+Push a 32-bit 1 on the value stack.
+\item
+Add the top two items on the value stack and push the result.
+\item
+Take the value on top of the value stack and store it in the location
+on top of the location stack.
+Pop both stacks.
+\end{enumerate}
+
+\paragraph{Serial RTL language}
+Here are all the instructions I can think of:\\
+\begin{tabularx}{\linewidth}{@{\hskip2em}lX@{}}
+\texttt{\#t}& Push true\\
+\texttt{\#f}& Push false\\
+{\emph{digits}[\texttt:\emph{digits}]}& Push bits\\
+\texttt{.}\emph{name}& Push value of external symbol\\
+\texttt{fetch-}\emph{size}& Pop location, fetch, push value\\
+\texttt{store-}\emph{size}& Pop location, pop value, store\\
+\texttt{fetch-local-}\emph{index}& Push value of local variable\\
+\texttt{store-local-}\emph{index}& Pop value and store in local variable\\
+\emph{operator-name}\{\texttt-\emph{size}\}&
+  Apply RTL operator to values on stack\\
+\texttt{\$}\emph{space}[\texttt{-}\emph{size}]&
+  Push location on stack (index taken from value stack).\\
+\end{tabularx}\\
+Notice that, true to the semantics of {\PAL}, a local variable has no
+location.
+We'll have to exercise a little care to be sure that the right thing
+happens when a run-time client asks for the location of a local variable.
+
+
+  
+
+\paragraph{Interpreter internals}
+The interpreter can probably use a simple bytecode representation of
+the language above.
+As it initializes itself,
+the interpreter will probably want to build a table of all the
+operators it knows about.
+Internally, it can represent an operator as an index into this table
+or using some other technique.
+
+If  a value is on the value stack, in the
+argument-passing area, or in a local variable, it can be represented
+as a large untagged union---the operators 
+should know what alternatives they want.
+Care will be needed when passing a pointer to a local variable through
+the run-time interface. 
+Someone will need to check a C~manual and see if the address of a
+union is the same as the address of each member. 
+If so, no problem.
+
+
+\end{document}
