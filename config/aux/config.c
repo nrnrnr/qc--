@@ -9,20 +9,20 @@ static union
 
 main(int argc, char **argv)
 {
-    printf("$lua_version='%s';\n", LUA_VERSION);
+    printf("$x{lua_version}='%s';\n", LUA_VERSION);
     switch(endian.c[0]) {
-        case 0xaa:  printf("$endian='big';\n"); break;
-        case 0xdd:  printf("$endian='little';\n"); break;
-        default:    printf("$endian=undef;"); 
+        case 0xaa:  printf("$x{endian}='big';\n"); break;
+        case 0xdd:  printf("$x{endian}='little';\n"); break;
+        default:    printf("$x{endian}='unknown';"); 
     }    
-    printf("$sizeof_int=%d;\n", sizeof(int));
-    printf("$sizeof_ptr=%d;\n", sizeof(int*));
-    printf("$sizeof_char=%d;\n", sizeof(char));
+    printf("$x{sizeof_int}=%d;\n", sizeof(int));
+    printf("$x{sizeof_ptr}=%d;\n", sizeof(int*));
+    printf("$x{sizeof_char}=%d;\n", sizeof(char));
 
 #if defined(__STDC_VERSION__)
-    printf("$stdc_version=%d;\n", __STDC_VERSION__);
+    printf("$x{stdc_version}=%d;\n", __STDC_VERSION__);
 #else
-    printf("$stdc_version=undef;\n");
+    printf("$x{stdc_version}='';\n");
 #endif    
 
     fflush(stdout);
