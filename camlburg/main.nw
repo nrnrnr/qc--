@@ -39,9 +39,9 @@ let read (file:string) =
     let lexer lb  = Lex.token lb map in
     let here lb   = Srcmap.Str.point (map, Lexing.lexeme_start lb) in
         try 
-            ( Srcmap.sync map 0 (file,1,1)
-            ; Parse.spec lexer lexbuf      (* the result *)
-            )
+            let () = Srcmap.sync map 0 (file,1,1)
+            and t  = Parse.spec lexer lexbuf 
+                in finally ();t     (* the result *)
         with
             | Parseerror.Error(msg) ->
                 ( finally ()
@@ -236,9 +236,9 @@ a C<str> nonterminal value at cost one by the first rule. The two rules
 are recursive but the associated costs of one prevent that they are
 applied indefinitely.
 
-Rules have an associated costs non-negative cost.  The cost of a rule is
+Rules have an associated non-negative cost.  The cost of a rule is
 the sum of cost of its arguments and its own cost, which defaults to
-zero.  The cost of arguments are computed at run-time, the rule's own
+zero.  The cost of arguments are computed at run-time. The rule's own
 cost is either static, or dynamic. In the dynamic case the user provides
 a cost expression that is evaluated at run-time. The values of terminal
 variables in the pattern are available for the cost expression.
@@ -297,7 +297,7 @@ cover for the subject tree.
 
 Typically, the root node of a subject tree is covered only by a single
 nonterminal, for example the C<number> nonterminal. When the C<action>
-for this nonterminal is triggered, the user action from the rules for
+for this nonterminal is triggered, the user actions from the rules for
 the cheapest cover are computed:
 
     ...
@@ -331,4 +331,6 @@ compiler.
 
 Norman Ramsey <nr@eecs.harvard.edu>, Christian Lindig
 <lindig@eecs.harvard.edu>
+@
+
 
