@@ -106,7 +106,8 @@ let elab_functions r env =
     let rec stmt s = match s with
     | N.StmtAt (s, r) -> E.catch (eprint r) (full_stmt r reachable) s
     | N.If (c, t, f) -> 
-        E.ematch3 (exp c) (stmts r true t) (stmts r true f) (fun (c, cty) t f ->
+        let c = exp c in let t = stmts r true t in let f = stmts r true f in (*order*)
+        E.ematch3 c t f (fun (c, cty) t f ->
           match cty with
           | Types.Bool -> If (c, t, f)
           | Types.Bits n -> E.error "condition in `if' is not a Boolean")
@@ -191,7 +192,7 @@ ranges of the arms.  An empty switch-statement is an error because no
 arm can match the value of the switch-expression at run-time.
 <<definitions of elaboration functions>>=
 let switch rg e arms =
-  let rg = E.Raise.option (Aux.Option.map range rg) in
+  let rg = E.Raise.option (Aux.Option.map range rg) in (* order matters *)
   let arms = E.Raise.list (List.map arm arms) in
   E.ematch3 (exp e) rg arms (fun (e, et) rg arms ->
     match et with
@@ -205,7 +206,9 @@ let switch rg e arms =
 A range has two constant expressions of the same width.
 <<elaboration utilities>>=
 let range = function
-  | A.Range (l, h) -> E.ematch2 (con l) (con h) (fun (l, lw) (h, hw) ->
+  | A.Range (l, h) ->
+      let l = con l in let h = con h in (* order matters *)
+      E.ematch2 l h (fun (l, lw) (h, hw) ->
       if lw = hw then (l, h), lw
       else E.errorf "constants in range %s..%s have different types bits%d and bits%d"
           (Bits.to_string l) (Bits.to_string h) lw hw)
@@ -214,7 +217,8 @@ let range = function
 An arm is guarded by a nonempty list of ranges, each of the same width.
 <<elaboration utilities>>=
 let arm (rgs, ss) =
-  E.ematch2 (E.Raise.list (List.map range rgs)) (stmts r true ss) (fun rgs ss ->
+  let rgs = E.Raise.list (List.map range rgs) in (* order matters *)
+  E.ematch2 rgs (stmts r true ss) (fun rgs ss ->
     match rgs with
     | [] -> E.error "case arm has an empty range list"
     | (rg, w) :: rgs ->
@@ -246,7 +250,8 @@ pointer.  Of course, all statement inside the span must be checked as
 well. Currently we don't check the link-time property of [[e2]].
 <<definitions of elaboration functions>>=
 let span k v ss =
-  E.ematch3 (con k) (Elabexp.elab_link env v) ss (fun (k, kw) (v, vw) ss ->
+  let k = con k in  (* order matters *)
+  E.ematch3 k (Elabexp.elab_link env v) ss (fun (k, kw) (v, vw) ss ->
     if kw <> metrics.M.wordsize then
       E.error "span token (key) must be a bit vector of native word size";
     insist_pointer "span value" (Types.Bits vw);
@@ -293,7 +298,7 @@ its code pointer expression [[e]].  Targets may be omitted only if the
 expression is a statically known target, i.e.~a local code label. 
 <<definitions of elaboration functions>>=
 let goto tgt tgts =
-  let tgts = E.Raise.list (List.map (goto_target r) tgts) in
+  let tgts = E.Raise.list (List.map (goto_target r) tgts) in (* order matters *)
   E.ematch2 (exp tgt) tgts (fun (te, t) tgts ->
     insist_pointer "target of goto" t;
     if null tgts && not (exp_is_local_code_label r tgt) then
@@ -431,7 +436,8 @@ let flow r default_aborts default_returns =
     | A.NeverReturns :: fs -> flow r c' u' r' aborts false fs 
   and finish_flow c' u' r' aborts returns =
     let list ns = E.Raise.list (List.rev ns) in
-    E.ematch3 (list c') (list u') (list r') (fun c u r ->
+    let c = list c' in let u = list u' in let r = list r' in (* order matters *)
+    E.ematch3 c u r (fun c u r ->
       { cuts = c; unwinds = u; areturns = r; aborts = aborts; returns = returns }) in
   flow r [] [] [] default_aborts default_returns in
 @ 
