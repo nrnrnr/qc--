@@ -49,12 +49,11 @@ assembler is requested to take.  The assembler is also passed a list
 of strings it can use to intialize itself.
 
 <<asm.asdl>>=
-module Asm {
+module asm {
   program = (string* initialization_args, action*)
   action = <<constructors for actions>>
   <<assembly interface types>>
 }
-<<view for making opaque types truly opaque>>
 @
 
 
@@ -512,41 +511,52 @@ deprecated.
 | Asmtext (string)
 @
 
-<<view for making opaque types truly opaque>>=
-view OCaml {
-  module Asm <= interface_prologue
-%%
-    module type Instruction = sig
-      type instruction
-    end
+% ------------------------------------------------------------------ 
+\subsection{View}
+% ------------------------------------------------------------------ 
 
-    module type S = sig
-      type instruction
+We need some {\asdl} view trickery to get an abstract [[instruction]]
+type. The code chunk [[view ocaml]] is automatically extracted to
+implement the view.
+ 
+<<asm.view>>=
+module asm <= interface_prologue
 %%
-  module Asm <= interface_epilogue
-%%
-    end (* module type S *) 
-%%
-  module Asm <= implementation_prologue
+module type Instruction = sig
+    type instruction
+end
+
+module type S = sig
+    type instruction
 %%
 
-  <<automatically generated asm.mli>>
 
-  module Make (I : Instruction) : S = struct
+module asm <= interface_epilogue
+%%
+end (* module type S *) 
+%%
 
-  type instruction = I.instruction
-  let wrap_instruction i = assert false
-  let unwrap_instruction i = assert false
+
+module asm <= implementation_prologue
 %%
-  module Asm <= implementation_epilogue
+    <<automatically generated asm.mli>>
+
+module Make (I : Instruction) : S = struct
+    type instruction = I.instruction
+    let wrap_instruction i = assert false
+    let unwrap_instruction i = assert false
 %%
-  end (* module Make *)
+
+
+module asm <= implementation_epilogue
 %%
-  Asm.concrete_instruction <= {
+end (* module Make *)
+%%
+
+asm.concrete_instruction <= {
     natural_type:   instruction
     wrapper:        wrap_instruction
     unwrapper:      unwrap_instruction
-  }
 }
 @
 
@@ -560,7 +570,7 @@ view OCaml {
  --pickler=sexp
  --view=OCaml
  *)
-(* module type Asm*)
+(* module type asm*)
   
     module type Instruction = sig
       type instruction

@@ -35,10 +35,6 @@ primitive types and and internal user-defined representation.
 module ast {
     <<ast declaration>>
 }
-
-view OCaml {
-<<view ocaml>>
-}
 @
 
 % ------------------------------------------------------------------ 
@@ -217,31 +213,7 @@ ibits       = (string)      -- view of Bits.bits
 fbits       = (string)      -- view of Bits.bits
 cbits       = (string)      -- view of Bits.bits
 
-expr        = ExprAt        (expr, region)
-            | Int           (ibits,ty?)
-            | Float         (fbits,ty?)
-            | Char          (cbits,ty?)
-            | Fetch         (lvalue)
-            | BinOp         (expr, op, expr)
-            | UnOp          (op, expr)
-            | PrimOp        (name, actual*)
-@
-
-Infix operators are abbreviations for primitive operations. The
-parser could perform this translation right away. But we want to
-unparse the abstract syntax back to concrete syntax and thus we keep
-them. 
-
-% ------------------------------------------------------------------ 
-\subsection{Views}
-% ------------------------------------------------------------------ 
-
-{\asdl} does not provide every type we need. Views allow to express
-new types in term of supported types. So we define some mappings
-between data types here.
-
-
-<<view ocaml>>=
+<<ast.view>>=
 ast.ibits <= {
     natural_type:   Bits.bits
     wrapper:        to_ibits 
@@ -260,7 +232,6 @@ ast.cbits <= {
     unwrapper:      of_bits
 }
 
-<<>>=
 module ast <= implementation_prologue
 %%
 let of_bits  bits  = Bits.to_string None bits
@@ -270,6 +241,23 @@ let to_fbits str   = Bits.of_stringf str Bits.maxwidth
 let to_cbits str   = Bits.of_stringc str Bits.maxwidth
 %%
 @
+
+<<ast declaration>>=
+expr        = ExprAt        (expr, region)
+            | Int           (ibits,ty?)
+            | Float         (fbits,ty?)
+            | Char          (cbits,ty?)
+            | Fetch         (lvalue)
+            | BinOp         (expr, op, expr)
+            | UnOp          (op, expr)
+            | PrimOp        (name, actual*)
+@
+
+Infix operators are abbreviations for primitive operations. The
+parser could perform this translation right away. But we want to
+unparse the abstract syntax back to concrete syntax and thus we keep
+them. 
+
 
 % ------------------------------------------------------------------  
 \section{Pretty Printer}\label{sec:astpp}
