@@ -124,21 +124,23 @@ MORE TO COME.
 @
 \subsection{Interface}
 <<call.mli>>=
-<<exported signatures>>
-@ 
-<<exported signatures>>=
 module type S = sig
+  <<type definitions for module type S>>
+end  
+@ 
+<<type definitions for module type S>>=
   type hint  = string option
   type width = int
-  type parms = (hint * width) list
+  type types = (hint * width) list
 
   type growth_by = Increment | Decrement
 
   type node (* CFG node for alternate return table *)
 
   type answer =
-    { locs     : Automaton2.loc list  (* where passed values reside *)
-    ; overflow : Block.t              (* includes all locs for values passed in mem *)
+    { 
+(* locs     : Automaton2.loc list *)  (* where passed values reside *)
+      overflow : Block.t              (* includes all locs for values passed in mem *)
     ; sploc    : Rtl.exp              (* where sp is required when values are passed *)
     ; regs     : Register.Set.t       (* set of locations defined (used) by partner *)
     ; pre_sp   : Rtl.rtl              (* conditional SP adjustment pre-shuffle *)
@@ -147,8 +149,8 @@ module type S = sig
     }
 
   type 'a answer' = 'a list -> answer
-  type outgoing = parms -> Rtl.exp        answer'
-  type incoming = parms -> Automaton2.loc answer'
+  type outgoing = types -> Rtl.exp        answer'
+  type incoming = types -> Automaton2.loc answer'
 
   type t = (* part of a calling convention *)
     { prolog          : incoming   (* arg = procedure formals *)
@@ -171,10 +173,85 @@ module type S = sig
     ; alt_return_table : node list -> node
     ; stack_layout : unit
     } 
+
+  type growth = Up | Down
+@ 
+We have the beginnings of an implementation that computes incoming and
+outgoing stuff.  The [[base]] parameter is pure hell and not obvious
+to the amateur.  The [[postsp]] parameter is a bit tricky too.
+<<call.mli>>=
+module M : sig
+  include S
+  val outgoing : growth:growth -> sp:Rtl.loc -> spec:Automaton2.spec ->
+     postsp:(Rtl.exp -> Rtl.exp) -> base:Rtl.exp -> outgoing
+  val incoming : growth:growth -> sp:Rtl.loc -> spec:Automaton2.spec ->
+     postsp:(Rtl.exp -> Rtl.exp) -> base:Rtl.exp -> incoming
 end
 @ 
 \subsection{Implementation}
 
 A consummation most devoutly to be wished.
 <<call.ml>>=
-<<exported signatures>>
+module A  = Automaton2
+module R  = Rtl
+module RS = Register.Set
+module RU = Rtlutil
+module type S = sig
+  <<type definitions for module type S>>
+end
+@ 
+<<call.ml>>=
+module M = struct
+<<type definitions for module type S>>
+
+let ignore r s = s
+
+let too_small growth sp target =
+  let w = RU.Width.loc sp in
+  let ( >* ) x y = R.app (R.opr "gt" [w]) [x; y] in
+  let ( <* ) x y = R.app (R.opr "lt" [w]) [x; y] in
+  match growth with
+  | Down -> RU.fetch sp >* target
+  | Up   -> RU.fetch sp <* target
+
+let outgoing ~growth ~sp ~spec ~postsp ~base types actuals =
+    let a = A.mk spec base in
+    let crank effects' (h, w) actual =
+      let l = A.allocate a w h in
+      A.store l actual w :: effects' in
+    let shuffle = R.par (List.rev (List.fold_left2 crank [] types actuals)) in
+    let a = A.freeze' a in
+    let postsp = postsp a.A.sp_value in
+    let setsp  = RU.store sp postsp in
+    let no r s = s in
+    { overflow = a.A.overflow
+    ; sploc    = a.A.sp_value
+    ; regs     = RU.ReadWriteKill.fold ~read:RS.add ~write:no ~kill:no shuffle RS.empty
+    ; shuffle  = shuffle
+    ; post_sp  = setsp
+    ; pre_sp   = R.guard (too_small growth sp postsp) setsp
+    }
+
+let incoming ~growth ~sp ~spec ~postsp ~base types formals =
+    let a = A.mk spec base in
+    let crank effects' (h, w) formal =
+      let l = A.allocate a w h in
+      A.store formal (A.fetch l w) w :: effects' in
+    let shuffle = R.par (List.rev (List.fold_left2 crank [] types formals)) in
+    let a = A.freeze' a in
+    let postsp = postsp a.A.sp_value in
+    let setsp  = RU.store sp postsp in
+    let no r s = s in
+    { overflow = a.A.overflow
+    ; sploc    = a.A.sp_value
+    ; regs     = RU.ReadWriteKill.fold ~write:RS.add ~read:no ~kill:no shuffle RS.empty
+    ; shuffle  = shuffle
+    ; post_sp  = setsp
+    ; pre_sp   = R.guard (too_small growth sp postsp) setsp
+    }
+
+
+
+end
+@ 
+

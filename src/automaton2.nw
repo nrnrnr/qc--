@@ -36,6 +36,22 @@ from a specification and a base address. The base address designates a
 memory area that the automaton can use for locations. When the automaton
 is frozen, it returns a memory block that exactly describes the memory
 requirements for the locations it handed out.
+\begin{quote}
+\emph{
+In a just world, it would be possible to restructure the block interface such
+that it would be unnecessary to supply a specific address---so the
+address could be bound later.  
+The continual supplying of the
+address is awkward and antithetical to the spirit of giving the client
+choice of binding time.
+Unfortunately, the automaton must hand out locations, and it seems
+impossible to hand out a location in a block without knowing something
+about the block's address.
+Supplying the address lazily seems appealing in principle, but in
+practice the laziness would leak into the [[Automaton.loc]], which
+seems of dubious value. ---NR}
+\end{quote}
+
 
 We have not yet developed a sense what might be good constructor
 functions for an automaton specification. To avoid that we can specify
@@ -51,10 +67,11 @@ class type location = object
     method to_loc:  Rtl.loc
 end
 
+type result = { overflow : Block.t; sp_value : Rtl.exp }
 
 class type automaton = object
     method allocate:    (*width*) int -> (*hint*) (string option) -> location
-    method freeze:      unit -> Block.t
+    method freeze:      unit -> result  (* clients must never call this *)
 end
 
 type spec = Rtl.exp -> automaton    (* specification should be abstract *)
@@ -110,7 +127,8 @@ When an automaton [[t]] is frozen, it responds with the memory
 [[Block.t]] that it used for locations it handed out.
 
 <<automaton2.mli>>=
-val freeze : t -> Block.t
+val freeze  : t -> Block.t
+val freeze' : t -> result
 @
 
 % ------------------------------------------------------------------ 
@@ -129,6 +147,9 @@ is true, slots are allocated from low to high memory.
 When [[alignment]] is true, every slot is aligned on its size. 
 When false, no slot is aligned. 
 The alignment of the resulting block is the maxmimum alignment of any slot.
+
+Upon freezing, the stack pointer points at the young (most recently
+allocated) end of the block.
 <<automaton2.mli>>=
 module Memory: sig
     type target = 
@@ -168,7 +189,8 @@ arguments to the objects at hand.
 let mk spec ~address     = spec address
 let ty t ~width ~hint    = t#allocate width hint
 let allocate             = ty
-let freeze t             = t#freeze ()
+let freeze' t            = t#freeze ()
+let freeze t             = (t#freeze ()).overflow
 
 let fetch loc ~width      = loc#fetch width
 let store loc expr ~width = loc#store expr width
@@ -192,7 +214,7 @@ module Memory = struct
         }
         
     <<class loc>>
-    <<class t>>
+    <<class [[Memory.t]]>>
     
     let mk target ~up ~aligned base = new t target up aligned base
 end    
@@ -219,7 +241,7 @@ far. For every new slot it allocates a small block and concatenates it
 with [[_block]]. Depending on [[T.up]] the [[_block]] grows on its high
 or low end.
 
-<<class t>>=
+<<class [[Memory.t]]>>=
 class t (target:target) up aligned (base:Rtl.exp): automaton =
 object (this)
     val mutable _block  = Block.mk base 0 1  (* initial block *)
@@ -230,7 +252,11 @@ object (this)
     method freeze () =
         ( _block  <- Block.adjust (Block.cathl _block (Block.mk base 0 _maxalign))
         ; _frozen <- true 
-        ; _block  (* return block *)
+        ; { overflow = _block
+          ; sp_value =
+              if up then Rtlutil.addk (Rtlutil.Width.exp base) base (Block.size _block)
+              else base
+          }
         )
 
     method private memloc addr w = 

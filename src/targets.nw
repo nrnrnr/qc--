@@ -47,6 +47,8 @@ output and must be visible in {\ocaml}.
 % ------------------------------------------------------------------ 
 
 <<targets.ml>>=
+module A  = Automaton2
+module AM = Automaton2.Memory
 module R  = Rtl
 module D  = Rtl.Convert (* Down *)
 module U  = Rtl.Revert  (* Up *)
@@ -353,14 +355,52 @@ is mutable because it keeps track of the resources it has handed out.  A
 [[new simple' byteorder]] is an [[Automaton2.spec]] value which is
 immutable and can be shared. --CL
 
+I HAD EXPECTED AN AUTOMATON.SPEC TO BE IMMUTABLE AND SHARABLE AMONG
+MULTIPLE CLIENTS.  I ESPECIALLY OBJECT TO THE SUBSTANTIAL DUPLICATION
+OF CODE AMONG DUMMY AND SPARC TARGETS AND [[Automaton2.Memory]].  I
+HAVE TAKEN PRELIMINARY STEPS TO CORRECT THE PROBLEM BUT THE RESULTS OF
+CLASS [[new_simple']] DON'T PASS THE TESTS. SEE ALSO THE FOLLOWING:
+\begin{quote}
+\em
+The idea of automaton needs to be extended so that automata can be
+compositional.
+The extension is that we need the idea that an automaton can
+possibly fail to provide a location.
+Then, 
+the composition operation (let's call it [[||]]) should arrange that
+if the first automaton fails, it calls the second.
+Thus, if the failure is signalled by an exception, the code in
+[[Automaton]] might look like this:
+<<sample>>=
+let allocate (a1 || a2) w h =
+  try allocate a1 w h
+  with Locations_exhausted -> allocate a2 w h
+@ With such an extension in place, the code below could be rewritten
+to be composable with an
+automaton created by [[Automaton2.Memory.mk]].  
+\end{quote}
 <<DummyTarget>>=
+class new_simple' (byte_order) (base:Rtl.exp): Automaton2.automaton =
+object (this)
+    val _mem = AM.mk { AM.byteorder = byte_order; AM.wordsize = 32;
+                       AM.pointersize = 32; AM.memsize = 8 } true true base
+    method freeze () = _mem#freeze ()
+    method allocate width hint = match hint with
+    | None ->   _mem#allocate width hint
+    | Some "IEEE 754 rounding modes"         -> new loc (fpcond 0)
+    | Some "IEEE 754 rounding mode"          -> new loc (fpcond 0)
+    | Some "IEEE 754 comparison results"     -> new loc (fpcond 1)
+    | Some r     -> Impossible.impossible ("unknown hardware register "^r) 
+end
+
 class simple' (byte_order) (base:Rtl.exp): Automaton2.automaton =
 object (this)
     val mutable _block  = Block.mk base (*size*) 0 (*align*) 8  (* block *)
     val mutable _frozen = false
     
     method freeze () =
-        let _ = _frozen <- true in _block  (* return block *)
+        let _ = _frozen <- true in
+        { A.overflow = _block; A.sp_value = base } (* return block *)
     
     method private memloc addr w = 
         new loc (Rtl.cell Rtl.none 'm' byte_order w addr)
@@ -583,13 +623,24 @@ The automaton that works with our new Automaton and Block modules. This
 will replace the automaton above.
 
 <<SparcTarget>>=
+class new_simple' (byte_order) (base:Rtl.exp): Automaton2.automaton =
+object (this)
+    val _mem = AM.mk { AM.byteorder = byte_order; AM.wordsize = 32;
+                       AM.pointersize = 32; AM.memsize = 8 } true true base
+    method freeze () = _mem#freeze ()
+    method allocate width hint = match hint with
+    | None   -> _mem#allocate width hint
+    | Some r -> Impossible.impossible ("unknown hardware register "^r) 
+end
+
 class simple' (byte_order) (base:Rtl.exp): Automaton2.automaton =
 object (this)
     val mutable _block  = Block.mk base (*size*) 0 (*align*) 8  (* block *)
     val mutable _frozen = false
     
     method freeze () =
-        let _ = _frozen <- true in _block  (* return block *)
+        let _ = _frozen <- true in
+        { A.overflow = _block; A.sp_value = base } (* return block *)
     
     method private memloc addr w = 
         new loc (Rtl.cell Rtl.none 'm' byte_order w addr)

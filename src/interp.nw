@@ -28,6 +28,7 @@ However, these {\rtl}s never reach the interpreter but are recognized
 and translated to control-flow instructions the interpreter knows.
 
 <<interp.ml>>=
+module A      = Automaton2
 module SS32   = Space.Standard32
 module T      = Target2
 module D      = Rtl.Convert (* Down *)
@@ -207,7 +208,8 @@ object (this)
     (* *)
     
     method freeze () =
-        let _ = _frozen <- true in _block  (* return block *)
+        let _ = _frozen <- true in
+        { A.overflow = _block; A.sp_value = base } (* sp value meaningless to interp *)
     
     method allocate width hint = 
         let ()      = assert (_frozen = false) in          
@@ -235,7 +237,8 @@ object (this)
     val mutable _index  = 0
     
     method freeze () =
-        let _ = _frozen <- true in _block  (* return block *)
+        let _ = _frozen <- true in
+        { A.overflow = _block; A.sp_value = base } (* sp value meaningless to interp *)
     
     method allocate width hint = 
         let ()      = assert (_frozen = false) in          

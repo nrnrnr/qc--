@@ -90,6 +90,9 @@ end
 @ 
 <<rtlutil.mli>>=
 module ReadWriteKill: sig
+    type 'a observer = Register.t -> 'a -> 'a
+    val fold: read: 'a observer -> write: 'a observer -> kill: 'a observer ->
+                    Rtl.rtl -> 'a -> 'a
     val sets: Rtl.rtl -> Register.Set.t * Register.Set.t * Register.Set.t
 end
 @    
@@ -348,6 +351,7 @@ let sets (rtl:Rtl.rtl) =
 % ------------------------------------------------------------------ 
 
 <<ReadWriteKill>>=
+type 'a observer = Register.t -> 'a -> 'a
 let fold ~read ~write ~kill r z = 
   let rec rtl z (RP.Rtl gs) = List.fold_left guarded z gs
       and guarded z (g, eff) = exp (effect z eff) g
