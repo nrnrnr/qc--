@@ -43,7 +43,7 @@ Replace the node at the focus, plugging in a new graph in its place.
 \end{itemize}
 Here are some basic types and operations:
 <<zipcfg.mli>>=
-type uid
+type uid = Unique.uid
 type label = uid * string
 
 type regs  = Register.Set.t  (* sets of regs for dataflow *)
@@ -214,6 +214,7 @@ type block = first * tail
 We expose some utility functions:
 <<declarations of [[Rep]]'s public functions>>=
 val id : block -> uid
+val entry_uid : uid
 
 val zip   : zblock -> block
 val unzip : block  -> zblock
@@ -262,7 +263,6 @@ type machine = { goto    : label -> Rtl.rtl;
                }
 
 let uid = U.uid
-let entry_uid = U.distinguished_uid
 @ 
 \paragraph{Nodes and basic blocks}
 It is OK to open [[Rep]] because the definition is sitting right
@@ -274,6 +274,7 @@ type xregs = Register.SetX.t (* sets of regs for dataflow *)
 type contedge = { kills:regs; defs:regs; node:label }
 
 module Rep = struct
+  let entry_uid = U.distinguished_uid
   <<exposed types for [[Rep]] module>>
   <<definitions of [[Rep]]'s public functions>>
 end

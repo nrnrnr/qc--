@@ -39,53 +39,135 @@ It can be repeated until it reaches a fixed point.
 \section{Implementation}
 
 <<dataflow.mli>>=
-module Make (G : Cfg.S) : sig
-  type ('i, 'a) problem =
-    { split_info       : 'i G.node -> 'a
-    ; merge_split_info : 'i G.node -> 'a -> bool  (* did anything change? *)
-    ; init_info       : 'a
-    ; propagate       : 'i G.node -> 'a -> 'a
-    } 
-  val fwd_iteration : ('i, 'a) problem -> 'i G.cfg -> bool
-(*val bwd_iteration : ('i, 'a) problem -> 'i G.cfg -> bool*)
-end
+<<exported types>>
+<<exported types>>=
+type uid = Zipcfg.uid
+type 'a answer = 'a
+  (* might one day be Dataflow of 'a | Rewrite of Zipcfg.graph *)
+
+type ('input, 'output) analysis =
+ { name      : string;
+   add_info  : 'output -> 'output -> 'output;
+   changed   : old:'output -> new':'output -> bool;  (* is new one bigger? *)
+   init_info : 'output;
+   last_in   : (uid -> 'input) -> Zipcfg.Rep.last -> 'output answer;
+   middle_in : 'input -> Zipcfg.Rep.middle -> 'output answer;
+   first_in  : 'input -> Zipcfg.Rep.first -> 'output answer;
+ } 
+<<dataflow.mli>>=
+val backward : ('a, 'a) analysis -> Zipcfg.graph -> (uid -> 'a)
 <<dataflow.ml>>=
-module Make (G : Cfg.S) = struct
-  type ('i, 'a) problem =
-    { split_info       : 'i G.node -> 'a
-    ; merge_split_info : 'i G.node -> 'a -> bool  (* did anything change? *)
-    ; init_info       : 'a
-    ; propagate       : 'i G.node -> 'a -> 'a
-    } 
-  <<iteration functions>>
-end
+module G  = Zipcfg
+module GR = Zipcfg.Rep
+module UA = Unique.Array
+let impossf fmt = Printf.kprintf Impossible.impossible fmt
+let unimpf  fmt = Printf.kprintf Impossible.unimp      fmt
+
+<<exported types>>
 @ 
 Revised to use the new flow-graph traversal.
 We go from each head to the next join.
-<<iteration functions>>=
-let fwd_iteration {split_info=join_info; merge_split_info= merge_join_info;
-                   init_info= init_info; propagate= propagate} g =
+<<dataflow.ml>>=
+let backward anal graph =
+  let blocks = List.rev (G.postorder_dfs graph) in
+  let map = UA.make (List.map GR.id blocks) anal.init_info in
+  let find = UA.get map in
   let changed = ref false in
-  let merge_join_info n i = if merge_join_info n i then changed := true in
-  let heads = G.postorder_dfs (fun n hs -> if G.is_head n then n :: hs else hs) [] g in
-  <<forward solver functions>> in
-  List.iter follow heads;
-  !changed
+  let block b =
+    let h, l = GR.goto_end (GR.unzip b) in
+    let out = anal.last_in find l in
+    let rec prev h out = match h with
+      | GR.Head (h, m) -> prev h (anal.middle_in out m)
+      | GR.First f -> anal.first_in out f in
+    let in' = prev h out in
+    let u = GR.id b in
+    let old_in = find u in
+    if anal.changed ~old:old_in ~new':in' then
+      begin
+        UA.set map u in';
+        changed := true
+      end in
+  let rec iterate n =
+    let () = changed := false in
+    let () = List.iter block blocks in
+    if !changed then
+      if n < 1000 then iterate (n + 1)
+      else impossf "%s didn't converge in %n iterations" anal.name n
+    else
+      ( Debug.eprintf anal.name "%s converted in %d iterations\n" anal.name n ;
+        find ) in
+  iterate 1
+@ 
+<<dataflow.ml>>=
+type 'a answer' = Dataflow of 'a | Rewrite of Zipcfg.graph
 
-<<forward solver functions>>=
-let rec follow head =
-  let info = if G.is_join head then join_info head else init_info in
-  continue info (G.succ head)
-and continue info node =
-  if G.is_join node then
-    merge_join_info node info
-  else
-    let info = propagate node info in
-    List.iter (continue info) (G.succs node) 
+
+type ('input, 'output) analysis' =
+ { name'      : string;
+   add_info'  : 'output -> 'output -> 'output;
+   changed'   : old:'output -> new':'output -> bool;  (* is new one bigger? *)
+   init_info' : 'output;
+   last_in'   : (uid -> 'input) -> Zipcfg.Rep.last -> 'output answer';
+   middle_in' : 'input -> Zipcfg.Rep.middle -> 'output answer';
+   first_in'  : 'input -> Zipcfg.Rep.first -> 'output answer';
+ } 
+@ 
+<<dataflow.ml>>=
+let rec backward' anal graph =
+  let blocks = List.rev (G.postorder_dfs graph) in
+  let map = UA.make (List.map GR.id blocks) anal.init_info' in
+  let find = UA.get map in
+  <<definition of [[answer]]>>
+  let changed = ref false in
+  let block b =
+    let h, l = GR.goto_end (GR.unzip b) in
+    let out = answerl l in
+    let rec prev h out = match h with
+      | GR.Head (h, m) -> answerm out m (fun a -> prev h a)
+      | GR.First f -> answerf out f in
+    let in' = prev h out in
+    let u = GR.id b in
+    let old_in = find u in
+    if anal.changed' ~old:old_in ~new':in' then
+      begin
+        UA.set map u in';
+        changed := true
+      end in
+  let rec iterate n =
+    let () = changed := false in
+    let () = List.iter block blocks in
+    if !changed then
+      if n < 1000 then iterate (n + 1)
+      else impossf "%s didn't converge in %n iterations" anal.name' n
+    else
+      ( Debug.eprintf anal.name' "%s converted in %d iterations\n" anal.name' n ;
+        find ) in
+  iterate 1
+<<definition of [[answer]]>>=
+let solve_graph_with_map anal map g = unimpf "UW framework" in
+
+let solve_graph anal g out =
+  let last' map l = match l with
+  | GR.Exit 0 -> Dataflow out
+  | _ -> anal.last_in' map l in
+  let anal' = { anal with last_in' = last' } in
+  backward' anal' g GR.entry_uid in
+  
+let answerf out f = match anal.first_in' out f with
+| Dataflow a -> a
+| Rewrite g -> solve_graph anal g out in
+
+let answerm out m k = match anal.middle_in' out m with
+| Dataflow a -> k a
+| Rewrite g -> solve_graph anal g out in
+
+let answerl l = match anal.last_in' find l with
+| Dataflow a -> a
+| Rewrite g -> solve_graph_with_map anal map g in
 @
 We're playing fast and loose with polymorphic equality---cyclic
 comparisons might not terminate.  
-<<dataflow.ml>>=
+<<odataflow.ml>>=
 module Test = struct
   module G = struct
     type  'i cfg  = G of ('i node * 'i node list) list
@@ -136,7 +218,7 @@ module Test = struct
 *)
       ] 
 end
-<<dataflow.mli>>=
+<<odataflow.mli>>=
 module Test : sig
   val emit_dot : unit -> unit
 end

@@ -20,6 +20,7 @@ val distinguished_uid : uid    (* distinct from any other *)
 <<exposed types>>
 module Map : MAP
 module Set : SET
+module Array : ARRAY
 @ 
 <<exposed types>>=
 module type MAP = sig
@@ -34,12 +35,19 @@ module type MAP = sig
   val union : 'a t -> 'a t -> 'a t
   val fold   : (uid -> 'a -> 'b -> 'b) -> 'a t -> 'b -> 'b
 end
-
+<<exposed types>>=
 module type SET = sig
   type t
   val empty : t
   val mem : uid -> t -> bool
   val add : uid -> t -> t
+end
+<<exposed types>>=
+module type ARRAY = sig
+  type 'a t
+  val make : uid list -> 'a -> 'a t
+  val get  : 'a t -> uid -> 'a
+  val set  : 'a t -> uid -> 'a -> unit
 end
 @ 
 \subsection{Implementation}
@@ -72,4 +80,12 @@ module Map : MAP = struct
       else
         add u v m in
     fold add m m'
+end
+
+let unimpf  fmt = Printf.kprintf Impossible.unimp      fmt
+module Array : ARRAY = struct
+  type 'a t = int Map.t * 'a array
+  let make _ = unimpf "array"
+  let get _ = unimpf "array"
+  let set _ = unimpf "array"
 end
