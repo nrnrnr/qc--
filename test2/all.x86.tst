@@ -45,6 +45,7 @@ Test.files = { "add.c--"
              , "rnd2.c--"
              , "round.c--"
              , "round2.c--"
+	     , 'sparcerr.c--'
 	     , { source="spdemo.c--", argv="4" }
              , "sub.c--"
 	     , "switch.c--"

@@ -1,0 +1,20 @@
+// this program is in the test suite because it once triggered a compiler bug
+target byteorder little;
+
+import bits32 printf;
+export main, my_data;
+
+section "data" {
+  my_data: bits8 [] "hello\x0a\x00";
+}
+
+foreign "C" foo("address" bits32 f) {
+  foreign "C" f(my_data);
+  foreign "C" return(f);
+}
+
+foreign "C" main("unsigned" bits32 iargc, "address" bits32 iargv) {
+  bits32 q;
+  q = foreign "C" foo(printf);
+  foreign "C" return(0);
+}
