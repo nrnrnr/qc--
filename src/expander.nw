@@ -523,6 +523,14 @@ also moves from space to space (e.g., move a value from an integer register into
 floating-point register).
 <<generic expansion operations for register machines>>=
 val move : dst:temp -> src:temp -> block
+@ We also must handle a move into a hardware register that is narrower
+than a single temporary.
+Such a move can occur only as a result of a back end advertising a
+narrow hardware register by name, but it is necessary to provide
+access to the floating-point rounding mode.
+<<generic expansion operations for register machines>>=
+val hwset : dst:Register.x -> src:warg       -> block
+val hwget : dst:wtemp      -> src:Register.x -> block
 @ 
 Load immediate can take any constant except a Boolean.
 <<generic expansion operations for register machines>>=
@@ -1165,6 +1173,7 @@ module D = struct (* debugging *)
   let cbranch  = if Debug.on "expander" then cbranch       else fun _ -> "<cbranch>"
   let pr_block = if Debug.on "expander" then pr_block "  " else fun _ -> ()
   let exp e = Rtlutil.ToString.exp (Up.exp e)
+  let loc l = Rtlutil.ToString.loc (Up.loc l)
 end
 @ 
 Printing conditional branches:
@@ -1394,7 +1403,7 @@ let rec to_temp' room context e =
   <<cases for converting a bare [[Fetch]] to a temporary>>
   <<cases for sign extending or zero extending a temporary>>
   <<cases for sign-extending and zero-extending loads>>
-  <<cases for extending a narrow register (such as rounding mode)>>
+  <<cases for sign extending or zero extending a narrow hardware register>>
   <<cases for narrow weird value operators>>
   <<cases for converting a Boolean to a value>>
   | RP.App ((_, [stackw; tempw]) as cvt, _) as e
@@ -1486,6 +1495,24 @@ This fact is documented in the postexpander interface.
 | RP.App (("zx", [n; w]), [RP.App(("lobits", [w'; n']), [x])]) when w = w' ->
     if n <> n' then Impossible.impossible "ill-typed %zx(%lobits(...))";
     to_temp' room context (Dn.exp (Rewrite.zxlo n w (Up.exp x)))
+<<cases for sign extending or zero extending a narrow hardware register>>=
+| RP.App ((("sx"|"zx" as o), [n; w]), [RP.Fetch(r, _) as e]) when is_hardware r ->
+    let r = to_hardware r in
+    let t = alloc icontext w in
+    let fill = if o == "sx" then PX.HighS else PX.HighZ in
+    t, Post.hwget ~dst:(fill,t) ~src:r 
+<<internal utilities for the generic expander>>=
+let rec is_hardware = function
+  | RP.Reg r -> true
+  | RP.Slice (w, lsb, r) -> is_hardware r
+  | _ -> false
+let rec to_hardware = function
+  | RP.Reg r -> Rg.Reg r
+  | RP.Slice (w, lsb, r) ->
+      (match to_hardware r with
+      | Rg.Reg r -> Rg.Slice (w, lsb, r)
+      | Rg.Slice (w', lsb', r) -> Rg.Slice(w', lsb+lsb', r))
+  | l -> impossf "to_hardware given non-harware location %s" (D.loc l)
 @ 
 To get a result of normal width, 
 we can see a weird value operator in two contexts: a weird result is
@@ -1535,8 +1562,6 @@ and to_warg room context e = match e with
     (PX.WTemp (Rg.Slice (w, lsb, r)), PX.Nop)
 | RP.Fetch _ -> Impossible.unimp "narrow argument from memory"
 | e -> impossf "trying to put %s into a weird temporary" (RU.ToString.exp (Up.exp e))
-@ 
-<<cases for extending a narrow register (such as rounding mode)>>=
 @ 
 Eventually, [[with_rounding_mode rm f]] should
 \begin{enumerate}
@@ -1882,7 +1907,11 @@ and assign_room room left right w =
                    is <:> Post.move ~dst ~src:r
             )
             (* ROUNDING --- narrow register *)
-        | RP.Slice (_,_,_) -> Impossible.unimp "slice"
+        | RP.Slice (w, lsb, RP.Reg r) ->
+            let t, is = to_warg room icontext right in
+            is <:> Post.hwset (Rg.Slice (w, lsb, r)) t
+        | RP.Slice (w, lsb, _) ->
+            impossf "back end advertises slice of non-HW in %s" (D.loc left)
         | RP.Var (_,_,_) | RP.Global(_,_,_) ->
             impossf "variable passed to code expander"
 <<\emph{pattern [[->]] action} for low-bit store>>=

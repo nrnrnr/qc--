@@ -35,6 +35,7 @@ val placevars : Ast2ir.proc -> Automaton.t
 
 Here are some abbreviations.
 <<x86.ml>>=
+module A  = Automaton
 module PX = Postexpander
 module R  = Rtl
 module RP = Rtl.Private
@@ -90,6 +91,8 @@ represent the rounding mode.
 let {SS.pc = pc; SS.cc = eflags} = SS.locations Spaces.c
 let rounding_model = R.slice 2 ~lsb:10 Rg.fpuctl
 let rounding_mode  = R.fetch rounding_model 2
+let fpuctl_reg = match Dn.loc Rg.fpuctl with
+  | RP.Reg r -> r | _ -> impossf "unexpected rep of FPU control register"
 
 module Post = struct
   <<x86 postexpander>>
@@ -276,8 +279,6 @@ let with_flags setflags dst op x y w =
   exp_with_flags setflags dst exp x y w
 
 let with_lflags dst op x y w =
-  let x = tempval x in
-  let y = tempval y in
   let exp = R.app op [x; y] in
   rtl (R.par [R.store (temploc dst) exp w; logicflags exp w])
 @ 
@@ -356,7 +357,7 @@ eliminating all those dead saves and restores.  So we live dangerously.
               (tempval x) cl 32 in
     move_rtl Rg.ecx y <:> sh
 <<x86 postexpander>>=
-| ("and"|"or"|"xor") -> with_lflags x (Up.opr op) x y 32 
+| ("and"|"or"|"xor") -> with_lflags x (Up.opr op) (tempval x) (tempval y) 32 
 | _  ->
     rtl (R.store (temploc x) (R.app (Up.opr op) [tempval x; tempval y]) (tempwidth x))
 @ 
@@ -438,6 +439,58 @@ let wrdrop  ~dst:(fill, dt) op x y z =
       PX.Expand.block (rtl (R.store (temploc dt) (Rewrite.zxlo 1 32 (tempval dt)) 32))
   | PX.HighS ->
       PX.Expand.block (rtl (R.store (temploc dt) (Rewrite.sxlo 1 32 (tempval dt)) 32))
+@ 
+Setting the rounding mode is an experience.
+History:
+\begin{verbatim}
+  ar x /usr/lib/libm.a fesetround.o
+  objdump -d fesetround.o
+\end{verbatim}
+Then connect the dots.
+(Unlike the GNU code, we do \emph{not} set the rounding mode in the
+MMX unit.)
+@ 
+<<x86 postexpander>>=
+let rmask_clear = R.bits (Bits.Ops.com (Bits.U.of_int 0xc00 32)) 32  (* 0xfffff3ff *)
+let rmask_set   = R.bits (Bits.U.of_int 0xc00 32)  32
+let and32 = R.opr "and" [32]
+let or32  = R.opr "or"  [32]
+let ten = RO.unsigned 32 10 
+
+let hwset ~dst ~src =
+  match dst with
+  | Register.Slice (2, 10, r) when r =$ fpuctl_reg ->
+      let slot      = PX.Alloc.slot 16 in
+      let t         = PX.Alloc.temp 't' 32 in
+      let t2, ldsrc = weird_tmp (PX.Alloc.temp 't' 32) src in
+      rtl (slot.A.store (R.fetch Rg.fpuctl 16) 16) <:>                  (* fnstcw *)
+      rtl (R.store (temploc t) (RO.zx 16 32 (slot.A.fetch 16)) 32) <:>  (* movzwl *)
+      with_lflags t and32 (tempval t) rmask_clear 32 <:>      (* mask out round bits *)
+      ldsrc <:>
+      rtl (R.store (temploc t2) (RO.shl 32 (tempval t2) ten) 32) <:>
+      with_lflags t or32 (tempval t) (tempval t2) 32 <:>
+      rtl (slot.A.store (RO.lobits 32 16 (tempval t)) 16) <:>      
+      rtl (R.store Rg.fpuctl (slot.A.fetch 16) 16)                   (* fldcw *)
+  | _ -> impossf "setting unexposed hardware register"
+
+let hwget ~dst:(fill,dt) ~src =
+  match src with
+  | Register.Slice (2, 10, r) when r =$ fpuctl_reg ->
+      let slot      = PX.Alloc.slot 16 in
+      let clear_others = with_lflags dt and32 (tempval dt) rmask_set 32 in
+      let shift op n =
+        rtl (R.store (temploc dt) (op 32 (tempval dt) (RO.unsigned 32 n)) 32) in
+      rtl (slot.A.store (R.fetch Rg.fpuctl 16) 16) <:>                   (* fnstcw *)
+      rtl (R.store (temploc dt) (RO.zx 16 32 (slot.A.fetch 16)) 32) <:>  (* movzwl *)
+      (match fill with
+      | PX.HighAny ->
+          shift RO.shrl 10
+      | PX.HighZ ->
+          clear_others <:> shift RO.shrl 10
+      | PX.HighS ->
+          clear_others <:> shift RO.shl 20 <:> shift RO.shra 30
+      )
+  | _ -> impossf "getting unexposed hardware register"
 @ 
 \subsubsection{Control flow}
 
@@ -651,8 +704,6 @@ let wargval = function
   | PX.WTemp (Register.Slice (w, lsb, t)) -> R.fetch (R.slice w ~lsb (R.reg t)) w
   | PX.WBits b -> R.bits b (Bits.width b)
 
-let fpuctl_reg = match Dn.loc Rg.fpuctl with
-  | RP.Reg r -> r | _ -> impossf "unexpected rep of FPU control register"
 let with_rm rm block = 
   match rm with
   | PX.WTemp (Register.Slice (2, 10, r)) when r =$ fpuctl_reg ->
@@ -890,7 +941,6 @@ let downrtl = Dn.rtl
 let uploc   = Up.loc
 let upexp   = Up.exp
 
-module A = Automaton
 let ( *> ) = A.( *> )
 let globals base = 
   let width w = if w <= 8 then 8 else if w <= 16 then 16 else Aux.round_up_to 32 w in

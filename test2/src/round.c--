@@ -1,0 +1,56 @@
+// rounding.c--
+//
+// this program tests rounding mode manipulation and some basic floating-pt
+// arithmetic with rounding
+//
+/// ./regr "./qrun $SELF" $REGRFLAGS -out $BASE.cmm.1 -err $BASE.cmm.2
+
+target byteorder little;
+
+export main;
+import bits32 cmmprint16;
+import bits32 printf;
+
+bits2 rm = "IEEE 754 rounding mode";
+
+section "data" {
+  fmt : bits8[] "%f rounded %s is %d\n\0";
+  up : bits8[] "up\0";
+  down : bits8[] "down\0";
+  nearest : bits8[] "nearest\0";
+  zero : bits8[] "zero\0";
+}
+
+section "text" {
+  test(bits32 n, bits32 m) {
+    bits32 f, r;
+
+    // f = 1.5
+    f  = %fdiv(%i2f32(n, rm), %i2f32(m, rm), rm);
+
+    // print 1
+    r  = %f2i32(f, %round_down());
+    foreign "C" printf("address" fmt, "float" %f2f64(f, rm), "address" down, r);
+
+    // print 2
+    r  = %f2i32(f, %round_up());
+    foreign "C" printf("address" fmt, "float" %f2f64(f, rm), "address" up, r);
+
+    // print 2
+    r  = %f2i32(f, %round_nearest());
+    foreign "C" printf("address" fmt, "float" %f2f64(f, rm), "address" nearest, r);
+
+    // print 1
+    r  = %f2i32(f, %round_zero());
+    foreign "C" printf("address" fmt, "float" %f2f64(f, rm), "address" zero, r);
+
+    n = (n + m) * (n - m); // change inferred hint
+    return;
+  }
+  foreign "C" main(bits32 argc, "address" bits32 argv) {
+    test(3, 2);
+    test(4, 3);
+    test(-7, 3);
+    foreign "C" return (0);
+  }
+}

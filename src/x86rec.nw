@@ -84,6 +84,8 @@ end
 %type fpstacknextl {: unit :}
 %type fpstacktop {: unit :}
 %type fpstacktopl {: unit :}
+%type fpuctl  {: unit :}
+%type fpuctll {: unit :}
 %type fpustatus {: unit :}
 %type fpustatusl {: unit :}
 %type immed {: string :}
@@ -106,6 +108,8 @@ end
 %type regpair {: string :}
 %type regpairl {: string :}
 %type shamt {: int :}
+%type slot {: string :}
+%type slotaddr {: string :}
 %type stacknext {: unit :}
 %type stacktop {: unit :}
 %type target {: string :}
@@ -203,8 +207,9 @@ let hregname r = sprintf "%%%ch" r.[2]  (* pass %eax, get back %ah *)
 @ 
 \subsection{Other machine info}
 <<code to precede the labeler>>=
-let fpcc = Dn.loc Rg.fpcc
+let fpcc      = Dn.loc Rg.fpcc
 let fpustatus = Dn.loc Rg.fpustatus
+let fpuctl    = Dn.loc Rg.fpuctl
 @     
 
 
@@ -359,6 +364,11 @@ const: Add(l:const, r:const) {: sprintf "%s+%s" l r :}
 inst: Guarded(Cmp(string, esp, slotaddr), Store(espl, s2:slotaddr, w)) 
          {: "adjust %esp" :}
 inst: Store(dst:regl, slotaddr, w) {: sprintf "%s := %s" dst slotaddr :}
+
+slot : Mem(slotaddr, c) {: slotaddr :}
+
+inst: Store(slot, Lobits(reg, lw:w), nw:w)
+  {: s "bits%d[%s] := %%lobits%d(%s)" nw slot nw reg :}
 
 -- inst: Store(dst:eaddrl, lateconst, w) {: sprintf "%s := %s" dst lateconst :}
 
@@ -657,12 +667,17 @@ inst : Store(fpstacktopl, fiadd, w)
 fpccl : Fpccl() {: () :}
 fpustatusl : Fpustatusl() {: () :}
 fpustatus : Fetch(fpustatusl, w) {: () :}
+fpuctll : Fpuctll() {: () :}
+fpuctl : Fetch(fpuctll, w) {: () :}
 inst : Store(fpccl, Fcmp(fpstacktop, fpstack1), w)
   {: "fcom" :}
 inst : Par(Store(fpccl, Fcmp(fpstacktop, fpstack1), w), fppop)
   {: "fcomp" :}
 inst : Par(Store(fpccl, Fcmp(fpstacktop, fpstack1), w), fppop2)
   {: "fcompp" :}
+
+inst : Store(meml, fpuctl, w)    {: s "fnstcw %s" meml :}
+inst : Store(fpuctll, mem, w)    {: s "fldcw %s"  mem  :}
 @ 
 <<rules>>=
 eax : Reg('r', n) [{: guard (n = 0):}]  {: () :}
@@ -721,6 +736,7 @@ any : Fabs(any) {: sprintf "Fabs(%s)" any :}
 
 any : Fpccl() {: "Fpcc()" :}
 any : Fpustatusl() {: "Fpustatus()" :}
+any : Fpuctll() {: "Fpuctl()" :}
 any : BitInsert(x:any, y:any, z:any) {: sprintf "BitInsert(%s, %s, %s)" x y z :}
 any : BitExtract(lsb:any, y:any, n:w) {: sprintf "BitExtract(%s, %s, %d)" lsb y n :}
 any : Slice(n:w, lsb:n, y:any) {: sprintf "Slice(%d, %d, %s)" n lsb y :}
@@ -857,6 +873,7 @@ and loc l = match l with
   | RP.Mem(('f',_,_), c, e, ass) -> conFpreg (exp e)
   | (RP.Reg(_, _, _) | RP.Slice(_, _, _)) when RU.Eq.loc l fpcc -> conFpccl ()
   | RP.Reg(sp, i, w) when RU.Eq.loc l fpustatus -> conFpustatusl()
+  | RP.Reg(sp, i, w) when RU.Eq.loc l fpuctl    -> conFpuctll()
   | RP.Reg((sp,_,_), i, _) -> conReg sp i
   | RP.Mem(_, _, _, _)     -> error "non-mem, non-reg cell"
   | RP.Var _ | RP.Global _ -> error "var found"

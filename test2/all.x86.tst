@@ -40,6 +40,7 @@ Test.files = { "add.c--"
              , "ralloc-000.c--"
 	     , { source='r64.c--', other='src/r64main.c' }
              , "rnd2.c--"
+             , "round.c--"
 	     , { source="spdemo.c--", argv="4" }
              , "sub.c--"
 	     , "switch.c--"
