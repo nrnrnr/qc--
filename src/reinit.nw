@@ -13,8 +13,17 @@ Any function registered with [[at]] is called by [[reset]].
 val at : (unit -> unit) -> unit
 val reset : unit -> unit
 @ 
+The common case is to create a ref cell that is automatically
+reinitialized when [[reset]] is called.
+<<reinit.mli>>=
+val ref : 'a -> 'a ref
+@ 
 <<reinit.ml>>=
 let tasks = ref ([] : (unit -> unit) list)
 let at f = tasks := f :: !tasks
 let reset () = List.iter (fun f -> f ()) (!tasks)
+let ref x =
+  let r = ref x in
+  at (fun () -> r := x);
+  r
 @ 
