@@ -45,7 +45,8 @@ type 'a analysis = ('a, 'a, 'a) pass'
 type 'a transformation = ('a, unit, Zipcfg.graph option) pass'
 type 'a pass = ('a, 'a, 'a answer) pass'
 <<dataflow.mli>>=
-val backward : 'a analysis -> Zipcfg.graph -> (uid -> 'a)
+val backward_anal : 'a analysis -> Zipcfg.graph -> (uid -> 'a)
+val backward_pass : 'a pass -> Zipcfg.graph -> (uid -> 'a)
 @
 \section{Implementation}
 
@@ -90,12 +91,21 @@ let backward anal graph =
       ( Debug.eprintf anal.name "%s converted in %d iterations\n" anal.name n ;
         find ) in
   iterate 1
+let backward_anal = backward
 @ 
+In the general case we solve a graph in the context of a larger subgraph.
 <<dataflow.ml>>=
-let rec backward' anal graph =
+let rec solve_graph anal outer graph exit_fact =
+  let last' map l = match l with
+  | GR.Exit 0 -> Dataflow exit_fact
+  | _ -> anal.last_in map l in
+  let anal' = { anal with last_in = last' } in
+  general_backward anal' outer graph GR.entry_uid 
+and general_backward anal outer graph =
   let blocks = List.rev (G.postorder_dfs graph) in
   let map = UA.make (List.map GR.id blocks) anal.init_info in
-  let find = UA.get map in
+  let find u = try UA.get map u with Not_found -> outer u in
+  let solve_graph = solve_graph anal find in
   <<definition of [[answer]]>>
   let changed = ref false in
   let block b =
@@ -122,28 +132,23 @@ let rec backward' anal graph =
       ( Debug.eprintf anal.name "%s converted in %d iterations\n" anal.name n ;
         find ) in
   iterate 1
-<<definition of [[answer]]>>=
-let solve_graph_with_map anal map g = unimpf "UW framework" in
+let backward_pass anal graph =
+  general_backward anal (fun _ -> raise Not_found) graph
 
-let solve_graph anal g out =
-  let last' map l = match l with
-  | GR.Exit 0 -> Dataflow out
-  | _ -> anal.last_in map l in
-  let anal' = { anal with last_in = last' } in
-  backward' anal' g GR.entry_uid in
-  
+<<definition of [[answer]]>>=
 let answerf out f = match anal.first_in out f with
 | Dataflow a -> a
-| Rewrite g -> solve_graph anal g out in
+| Rewrite g -> solve_graph g out in
 
 let answerm out m k = match anal.middle_in out m with
 | Dataflow a -> k a
-| Rewrite g -> solve_graph anal g out in
+| Rewrite g -> solve_graph g out in
 
 let answerl l = match anal.last_in find l with
 | Dataflow a -> a
-| Rewrite g -> solve_graph_with_map anal map g in
+| Rewrite g -> solve_graph g anal.init_info in
 @
+\clearpage
 We're playing fast and loose with polymorphic equality---cyclic
 comparisons might not terminate.  
 <<odataflow.ml>>=
