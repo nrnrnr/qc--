@@ -1,0 +1,30 @@
+ /*# execute the commands below to use this file as a test case
+./fp test-043.c--
+./regr "../bin/qc-- -check test-044.c--"  -err test-044.2 -x 1
+ #*/
+
+section "data" {
+    const proc = 3;
+    
+    bits32[] {proc, p_end-p};
+    p (bits32 i) {
+        loop:
+                i = i-1;
+                if (i >= 0) { goto loop targets loop; }
+                return; 
+    }
+    p_end:
+}
+
+foo () {
+    bits32 x,y;
+    import bits32 f;
+    
+    switch  x + 23 {
+      case 1,2,3   : { y = y + 1;} 
+      case 5       : { y = x + 1; x = y;} 
+      case 6,7     : { y = f();
+                       if y == 0 { x = 1;}
+                     }   
+    }
+}
