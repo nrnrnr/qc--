@@ -160,10 +160,9 @@ val first:      cfg -> node (* wrt numbering *)
 val last:       cfg -> node (* wrt numbering *)
 val scan_fwd:   cfg -> first:int -> limit:int -> (node -> 'a -> 'a) -> 'a -> 'a 
 val scan_bwd:   cfg -> first:int -> limit:int -> (node -> 'a -> 'a) -> 'a -> 'a
-val fold_fwd:   cfg -> (node -> 'a -> 'a) -> 'a -> 'a 
-val fold_bwd:   cfg -> (node -> 'a -> 'a) -> 'a -> 'a
 val next:       node -> node option
 val prev:       node -> node option
+  (* see module Cfgutil for convenience functions: fold_fwd, fold_bwd, first, limit *)
 
 (* add node to cfg, ensures: not (enumerated cfg) *)
 val gm_assign:  cfg -> Rtl.rtl -> succ:node -> node
@@ -297,12 +296,6 @@ Dual function to [[scan_fwd]] in the sense that nodes are visited in
 decreasing order, starting with the node before [[limit]].  Note, that
 [[first]] $<$ [[limit]] still must hold. 
 
-\item [[fold_fwd: cfg -> (node -> 'a -> 'a) -> 'a -> 'a]]: 
-Like [[scan_fwd]] but traverses the entire graph.
-
-\item [[fold_fwd: cfg -> (node -> 'a -> 'a) -> 'a -> 'a]]: 
-Like [[scan_bwd]] but traverses the entire graph.
-
 \item [[next: node -> node option]]:
 The node following the argument [[node]] with respect to an
 established node numbering or [[None]] if there is no such node.
@@ -312,7 +305,7 @@ Dual to [[next]]:  the node prior to the argument with respect to a
 node numbering, or [[None]] if no such node exists.
 \end{itemize}
 
-Note: our original design had to more functions [[fold_fwd]] and
+Note: our original design had two more functions [[fold_fwd]] and
 [[fold_bwd]] which would traverse a {\cfg} in unspecified order and did
 not rely on an established ordering. These could be re-introduced in
 case establishing a linear oder becomes a costly operation.
@@ -637,18 +630,6 @@ let scan_bwd (cfg:cfg) ~(first:int) ~(limit:int) f zero =
             loop (n-1) (f enum.(n-1) result)
     in
         loop (limit-1) zero
-@
-
-<<implementation>>=
-let fold_fwd (cfg:cfg) f zero =
-    assert (cfg#enumerated);
-    let limit = Array.length (cfg#enumeration) + 1 in
-        scan_fwd cfg 1 limit f zero
-
-let fold_bwd (cfg:cfg) f zero =
-    assert (cfg#enumerated);
-    let limit = Array.length (cfg#enumeration) + 1 in
-        scan_bwd cfg 1 limit f zero
 @
 
 

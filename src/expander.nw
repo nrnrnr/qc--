@@ -211,15 +211,15 @@ let context t =
       t.T.spaces (fun _ -> false) in
   <<division>>
   let allocator space =
-    let next = ref 0 in
+    let next = ref 22000 in
     let divide = divideby space.S.cellwidth in (* premature optimization *)
     fun width ->
       let n = divide width in
       (* could check to see if width is supported ... *)
       let k = !next in
       let _ = next := k + n in
-      let n = Bits.of_int n space.S.indexwidth in
-      let index = (Rtl.bits n space.S.indexwidth) in
+      let k = Bits.of_int k space.S.indexwidth in
+      let index = (Rtl.bits k space.S.indexwidth) in
       Rtl.cell Rtl.none space.S.space space.S.aggregation width index in
 
   let fail c =
@@ -261,18 +261,20 @@ let divideby = function
   
 @ 
 <<expander.ml>>=
-module G = Cfg3
+module G  = Cfg3
+module GU = Cfgutil
 let cfg _ proc =
   let g = proc.Proc.cfg in
   let t = proc.Proc.target in
   let _ = G.gm_enumerate g in
-  let nodes = G.fold_bwd g (fun x y -> x::y) [] in
+  let nodes = GU.fold_bwd g (fun x y -> x::y) [] in
   let expand = expand (context t) in
   let modified = ref false in
   let exp n =
     match expand (G.rtl n) with
     | last :: preds ->
         ignore (List.fold_left (fun n i -> G.gm_insert_assign_before i n) n preds);
+        G.set_rtl n (fun _ -> last);
         (match preds with [] -> () | _ :: _ -> modified := true)
     | [] -> assert false in
   List.iter exp nodes;

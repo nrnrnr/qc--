@@ -1,3 +1,4 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 
 
 % ------------------------------------------------------------------ 
@@ -19,8 +20,10 @@ knowledge of the internal details of \module{cfg3}.
 type cfg  = Cfg3.cfg
 type node = Cfg3.node
 
-val fold_fwd:   cfg -> (node -> 'a -> 'a) -> 'a -> 'a (* req: enumerated cfg *) 
-val fold_bwd:   cfg -> (node -> 'a -> 'a) -> 'a -> 'a (* req: enumerated cfg *)
+val first   :   cfg -> int              (* number of first node -- req enumerated *)
+val limit   :   cfg -> int              (* limiting number      -- req enumerated *)
+val fold_fwd:   cfg -> (node -> 'a -> 'a) -> 'a -> 'a
+val fold_bwd:   cfg -> (node -> 'a -> 'a) -> 'a -> 'a
 val subst:      cfg -> (Rtl.rtl -> Rtl.rtl) -> unit
 @
 
@@ -51,8 +54,13 @@ over.
 let first cfg = G.number (G.first cfg)     (* smallest number *)
 let limit cfg = G.number (G.last  cfg) + 1 (* highest number + 1 *)
 
-let fold_fwd cfg f zero = G.scan_fwd cfg (first cfg) (limit cfg) f zero
-let fold_bwd cfg f zero = G.scan_bwd cfg (first cfg) (limit cfg) f zero
+let fold_fwd cfg f zero =
+  G.gm_enumerate cfg;
+  G.scan_fwd cfg (first cfg) (limit cfg) f zero
+
+let fold_bwd cfg f zero =
+  G.gm_enumerate cfg;
+  G.scan_bwd cfg (first cfg) (limit cfg) f zero
 
 let subst cfg (f: Rtl.rtl -> Rtl.rtl) = 
     fold_fwd cfg (fun node () -> G.set_rtl node f) () 
