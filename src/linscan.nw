@@ -152,7 +152,7 @@ is processed, all still open intervals must be closed.
 let lifetimes cfg lt =
     let initial = (Register.Map.empty, lt) in
     let point   = 1 in
-    let domain map = 
+    let domain map = (* all registers in a Register.Map.t *)
         let f k v list = k::list in
         Register.Map.fold f map [] in
     let scan node (oldset, point, state) =
@@ -299,6 +299,10 @@ without having to provide an implementation.
         val apply: (Rtl.rtl -> Rtl.rtl) -> t -> unit
     end
     \end{verbatim}
+
+    We also need a better connection between the control-flow graph
+    and the idea of points describing nodes in a sequence. For
+    example, what are the first and the last point in a graph?
 \end{quote}
 
 <<exported module types>>=
@@ -315,7 +319,6 @@ module type Args = sig
 
   (* fits s r = true, iff r can hold any value from space s *) 
   val fits : Rtl.space -> Register.t -> bool
-  val find_spillee : Lifetime.t LT.t -> loc -> loc * Lifetime.Interval.t
 end
 @ 
 
@@ -369,6 +372,7 @@ fun node -> assert false
 
 One step in general-purpose allocation: choose a node containing
 temporaries, and replace a temporary in that node.
+
 <<linscan2.ml>>=
 module L = Lifetime
 
@@ -402,6 +406,20 @@ let first_fit lifetimes t =
         LT.fold check lifetimes None
 
 let find_reg = first_fit
+@
+
+When no register can be found to hold regsiter [[t]], we have to spill
+a register which can be either a hardware register, or a temporary. 
+The [[find_spillee]] function receives the [[lifetimes]] map and the
+register [[t]] that we could not find a register for.  The function
+returns a register to spill and a region, where to spill it.
+
+<<linscan2.ml>>=
+(*
+val find_spillee : Lifetime.t LT.t -> loc -> loc * Lifetime.Interval.t
+*)
+
+let find_spillee lifetimes t = assert false
 @
 
 
