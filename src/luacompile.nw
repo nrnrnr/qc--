@@ -93,27 +93,6 @@ end
 A stack layout function must respect the backplane protocol: such a
 function receives two values, where the second is a [[Proc.t]] value,
 and returns boolean value.
-<<Lua compiler configuration>>=
-Stack = Stack or error('Stack primitives missing')
-
-function Stack.layout(dummy,proc)
-   -- works only with *old* back end
-    local blocks = Stack.blocks(proc)
-    local layout = 
-                { blocks.oldblocks[1]               -- <-- high addresses
-                , blocks.stackdata
-                , blocks.continuations
-                -- size/alignment=24/16
-                , Block.relative(blocks.sp, 'six words', 24, 16)   
-                , blocks.spills
-                , blocks.youngblocks[1]
-                , blocks.sp                     -- <-- low addresses 
-                }
-    local block = Block.cat(999, layout)
-    Stack.freeze(proc,block)
-    return 1
-end    
-@ 
 
 The new layout supports the virtual frame pointer.
 <<Lua compiler configuration>>=
