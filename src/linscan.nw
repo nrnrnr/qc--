@@ -70,6 +70,9 @@ module type Args = sig
     val assign_loc: dst:Rtl.loc    -> src:Register.t -> Rtl.rtl 
     val assign_reg: dst:Register.t -> src:Rtl.loc    -> Rtl.rtl 
         (* create an assignment rtl that transfers a value from src to dst *)
+    val mkMem:      Register.t -> Rtl.loc
+        (* create a new spill slot for a register. Incomplete - will 
+           use Automaton.t *)
 end
 @
 
@@ -227,8 +230,9 @@ with code to
 \item find a temporary in a node that need to be placed into a register,
 \item find a hardware register to accommodate a temporary,
 \item find a register to spill (if we are stuck),
-\item and the linear-scan register allocator, making use of the above
-      building blocks.
+\item allocate registers for an entire {\cfg}, using the building
+      blocks from above,
+\item and to spill a register in a part of a {\cfg}.
 \end{enumerate}
 
 <<linscan.ml>>=
@@ -245,7 +249,6 @@ module Make (A : Args) : S = struct
     <<replace>> 
     <<alloc>> 
     <<linscan>>
-    <<spiller>>
 end
 @
 
@@ -266,10 +269,13 @@ let rec linscan cfg =
     in
         loop (lifetimes cfg RM.empty) (Some (G.first cfg)) 
 
-and spill cfg loc interval = (* spill here and start over .. *)
-    ( ignore (assert false) 
-    ; linscan cfg 
-    )
+<<update>>        
+and spill cfg spillee mem interval = 
+    let first = I.left  interval     in
+    let last  = I.right interval - 1 in (* open interval semantics strikes *)
+        ( G.scan_fwd cfg first last (fun n () -> update interval spillee mem n) ()
+        ; linscan cfg (* start over *)
+        )
 @
 
 The [[alloc]] function loops over all temporaries of a given node and
@@ -309,7 +315,8 @@ let replace_tmp node tmp lifetimes success spill =
           success lifetimes
   | None ->
       let spillee, interval = find_spillee lifetimes tmp node in 
-          spill cfg spillee interval
+      let mem               = A.mkMem spillee                 in
+          spill cfg spillee mem interval
 @
 
 % ------------------------------------------------------------------ 
@@ -489,8 +496,8 @@ values.  The first component $r$ is true, iff [[loc]] is read by
 [[rtl]], the second $w$, iff [[loc]] is written by [[rtl]], and false
 otherwise.
 
-<<spiller>>=
-let reads_writes rtl loc =
+<<update>>=
+and reads_writes rtl loc =
     let f sp index width (r,w) = 
         let eq = (sp,index,width) = loc in (r || eq, w || eq) 
     in
@@ -501,8 +508,8 @@ The [[extern]] function returns all nodes from a list of nodes that do
 not belong to an [[interval]]. Edges from such nodes to nodes inside
 the interval must be augmented with assignments; this is done by 
 
-<<spiller>>=
-let extern interval = 
+<<update>>=
+and extern interval = 
     List.filter (fun n -> not (I.member (G.number n) interval)) 
 @
 
@@ -513,19 +520,29 @@ write the [[spillee]] to [[mem]], outgoing edges [[mem]] to
 [[spillee]].  The following two functions [[upd_*]] functions update
 edges for [[node]]. 
 
-<<spiller>>=
-let upd_incoming interval spillee mem node =
+<<update>>=
+and upd_incoming interval spillee mem node =
     let pred  = extern interval (G.pred node) in
     let write = A.assign_loc mem spillee          in
         List.iter (fun n -> G.gm_insert_assign_between write n node) pred
 
-let upd_outgoing interval spillee mem node = 
+and upd_outgoing interval spillee mem node = 
     let succ  = extern interval (G.succ node) in
     let read  = A.assign_reg spillee mem          in
         List.iter (fun n -> G.gm_insert_assign_between read node n) succ
+@
 
+The heart of the spiller is [[update]] that is applied to every
+[[node]] in an interval that undergoes spilling.  If [[node]] reads or
+writes the [[spillee]], it must be updated such that it uses a new
+temporary [[tmp]] instead.  Before and after the node [[tmp]] must be
+read from or written to memory [[mem]] where the value of the spillee
+is held inside the [[interval]].  Edges entering or leaving the
+interval must be also updated such that the spillee's value is written
+to and read from [[mem]]. 
     
-let update interval spillee mem node = 
+<<update>>=
+and update interval spillee mem node = 
     let _ = upd_incoming interval spillee mem node       in
     let _ = upd_outgoing interval spillee mem node       in
     let reads, writes = reads_writes (G.rtl node) spillee in
@@ -541,9 +558,4 @@ let update interval spillee mem node =
             )
         else
             () (* done *)
-         
-let spiller cfg spillee mem interval =
-    let first = I.left interval      in
-    let last  = I.right interval - 1 in (* open interval semantics strikes *)
-        G.scan_fwd cfg first last (fun n () -> update interval spillee mem n) ()
 @
