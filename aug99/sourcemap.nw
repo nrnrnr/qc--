@@ -90,7 +90,7 @@ module Map : sig
   val null : map
   val create : charpos -> sourceloc -> map
   val last_change : map -> charpos
-  val compare : map * map -> int  (* cheaper than the standard compare *)
+  val compare : map -> map -> int  (* cheaper than the standard compare *)
   module Announce : sig (* mutations are here *)
     type resynch_directive = {fileName:string option; line:int; column:int option}
     val newline : map -> charpos -> unit (* mutates *)
@@ -113,8 +113,7 @@ module Point : sig
 end
 
 module Sourceloc : sig
-  val where_found : map -> sourceloc -> charpos list
-  val sourcelocsString : (sourceloc * sourceloc) list -> string
+  val sourcelocs_string : (sourceloc * sourceloc) list -> string
 end
 @
 The [[nullRegion]] refers to no region in particular; it is a left and
@@ -136,18 +135,17 @@ It might help to think of Icon-style positions, which fall between
 characters.
 <<implementation>>=
 type charpos = int
-type 'a pair = 'a * 'a
-type region = charpos pair
-let nullRegion : region = (0,0)
-type sourceloc = {fileName:string; line:int; column:int}
+type region = charpos * charpos
+module Region = struct
+  let null : region = (0,0)
+  let span ((l1, h1) as left) ((l2, h2) as right) = 
+         if left = null then right
+         else if right = null then left
+         else if l1 < h2 then (l1, h2) else (l2, h1)
+end
 @ The empty region is conventional.
-<<implementation>>=
-let span = function
-    ((0,0), r) -> r
-  | (r, (0,0)) -> r
-  | ((l1, h1), (l2, h2)) -> if l1 < h2 then (l1, h2) else (l2, h1)
 @
-The representation is a pair of lists.
+The representation of a source map is a pair of lists.
 [[linePos]] records line numbers for newlines \emph{and}
 resynchronization.
 [[resynchPos]] records file name and column for resynchronization.
@@ -171,9 +169,13 @@ type map = { mutable resynchPos: (charpos * string * int) list
            ; mutable linePos:    (charpos * int)          list
            ; uid : int  (* for comparison *)
            }
-let compare = fun {uid=u1} {uid=u2} -> compare u1 u2
-
+@ In addition to the lists, we use a unique id for speedier
+comparison.
+<<implementation>>=
+type sourceloc = {fileName:string; line:int; column:int}
+<<utilities>>
 module Map = struct
+  let compare = fun {uid=u1} {uid=u2} -> compare u1 u2
   <<map exports>>
 end
 @ 
@@ -183,219 +185,161 @@ end
   let uid() = (incr n; !n)
 
 (* exported *)
-  let create pos {fileName=f; line=l; column=c} : map =
+  let create pos {fileName=f; line=l; column=c} =
     {resynchPos=[(pos, f, c)]; linePos=[(pos, l)]; uid=uid()}
   let null : map =
     {resynchPos=[(0, "not a real source map", 0)]; linePos=[(0, 0)]; uid= -. 99}
 @ 
+Since important lists are never empty, I define this function:
+<<utilities>>=
+let hd x = try List.hd x with Failure "hd" -> assert false
 <<map exports>>=
 module Announce = struct
   type resynch_directive = {fileName:string option; line:int; column:int option}
 
   let resynch map pos {fileName=f; line=l; column=c}
     =  let file_of (_, f, _) = f
-    in let curFile = file_of (List.hd (map.resynchPos))
+    in let curFile = file_of (hd (map.resynchPos))
     in let thefile = function
-           Some file -> if file = curFile then curFile else file
+         | Some file -> if file = curFile then curFile else file
                                      (* pathetic attempt at hash-consing *)
-         | None      -> file_of (List.hd (map.resynchPos))    
+         | None      -> file_of (hd (map.resynchPos))    
     in  ( map.resynchPos <- (pos, thefile f, Option.get c 1) :: map.resynchPos
         ; map.linePos    <- (pos, l) :: map.linePos
         )
+  <<map announce exports>>
 end
 @ 
 Since [[pos]] is the position of the newline, the next line doesn't
 start until the succeeding position.
-<<old implementation>>=
-fun newline ({resynchPos, linePos, uid}: sourcemap) pos =
-  let val (_, line) = List.hd (!linePos)
-  in  linePos := (pos+1, line+1) :: !linePos
-  end
-
-fun lastChange({linePos, ...}: sourcemap) = #1 (hd (!linePos))
+<<map announce exports>>=
+let newline map pos =
+  let line = snd (hd map.linePos)
+  in  map.linePos <- (pos+1, line+1) :: map.linePos
+<<map exports>>=
+let last_change map = fst (hd map.linePos)
 @ 
 A generally useful thing to do is to remove from the lists the initial
 sequences of tuples
 whose positions satisfy some predicate:
-<<old implementation>>=
-fun remove p ({resynchPos,linePos, uid}: sourcemap) =
-  let fun strip (l as (pos, _   )::rest) = if p pos then strip  rest else l
-        | strip [] = []
-      fun strip'(l as (pos, _, _)::rest) = if p pos then strip' rest else l
-        | strip'[] = []
-  in  (strip'(!resynchPos), strip (!linePos))
-  end
+<<utilities>>=
+let remove p map = 
+  let rec strip  = function
+        | ((pos, _   )::rest) as l -> if p pos then strip  rest else l
+        | [] -> []
+  and strip' = function
+        | ((pos, _, _)::rest) as l -> if p pos then strip' rest else l
+        | [] -> []
+  in  (strip' map.resynchPos, strip map.linePos)
 @ 
 We find file and line number by linear search.
 The first position less than [[p]] is what we want.
 The initial column depends on whether we resynchronized.
-<<old implementation>>=
-fun column ((pos, file, col), (pos', line), p) =
+<<utilities>>=
+let column (pos, file, col) (pos', line) p =
   if pos = pos' then p - pos + col else p - pos' + 1
-
-fun filepos smap p : sourceloc =
-    let val (files, lines) = remove (fn pos : int => pos > p) smap
-        val xx as (_, file, _) = hd files
-        val yy as (_, line)    = hd lines
-    in  {fileName = file, line = line, column = column(xx, yy, p)}
-    end handle List.Empty => let exception Impossible in raise Impossible end
+@ 
+<<implementation>>=
+type point = map * charpos
+module Point = struct
+  let sourceloc (smap, p) : sourceloc = 
+       let (files, lines) = remove (function pos -> pos > p) smap
+    in let (_, file, _) as xx = hd files
+    in let (_, line   ) as yy = hd lines
+    in {fileName = file; line = line; column = column xx yy p}
+end
 @ Searching regions is a bit trickier, since we track file and line
 simultaneously.  We exploit the invariant that every file entry has a
 corresponding line entry.
 We also exploit that only file entries correspond to new regions.
-<<old implementation>>=
-fun Location.sourcelocs smap (lo, hi) =
-  if (lo,hi) = nullRegion then [] else
-  let exception Impossible
-      fun gather((p, file, col)::files, (p', line)::lines, region_end, answers) =
-        if p' <= lo then (* last item *)
-          ({fileName=file, line=line, column=column((p, file, col), (p', line), lo)}, 
-           region_end) :: answers
-        else
-          if p < p' then
-            gather((p, file, col)::files, lines, region_end, answers)
-          else (* p = p'; new region *)
-            (gather(files, lines, end_of (p, hd files, hd lines), 
-                 ({fileName = file, line = line, column = col}, region_end) :: answers)
-             handle List.Empty => raise Impossible)
-        | gather _ = raise Impossible
-      and end_of(lastpos, xx as (p, file, col), yy as (p', line)) = 
-             {fileName=file, line=line, column=column(xx, yy, lastpos)}
-      val (files, lines) = remove (fn pos : int => pos >= hi andalso pos > lo) smap
-      val _ = if null files orelse null lines then raise Impossible else ()
-      val answer = gather(files, lines, end_of(hi, hd files, hd lines), [])
-                   handle List.Empty => raise Impossible
-      fun validate(({fileName=f,  line=l,  column=c}, 
-                    {fileName=f', line=l', column=c'}) :: rest) = 
-            if f = f' andalso (l' > l orelse (l' = l andalso c' >= c)) then
-              validate rest 
-            else 
-              raise Impossible
-        | validate [] = ()
+<<implementation>>=
+type location = map * region
+module Location = struct
+  <<location exports>>
+end
+<<location exports>>=
+let sourcelocs (map, (lo, hi)) =
+  if (lo,hi) = Region.null then [] else
+      let rec gather = function
+           | ((p, file, col)::files, (p', line)::lines, region_end, answers) ->
+               if p' <= lo then (* last item *)
+                 ( {fileName=file; line=line;
+                    column=column (p, file, col) (p', line) lo}
+                 , region_end
+                 ) :: answers
+               else
+                 if p < p' then
+                   gather((p, file, col)::files, lines, region_end, answers)
+                 else (* p = p'; new region *)
+                   gather(files, lines, end_of p (hd files) (hd lines), 
+                          ({fileName = file; line = line; column = col}, region_end)
+                          :: answers)
+           | _ -> assert false
+      and end_of lastpos ((p, file, col) as xx) ((p', line) as yy) = 
+             {fileName=file; line=line; column=column xx yy lastpos}
+   in let (files, lines) = remove (function pos -> pos >= hi && pos > lo) map
+   in let null = function [] -> true | _ :: _ -> false
+   in assert (not (null files) && not (null lines));
+      let answer = gather(files, lines, end_of hi (hd files) (hd lines), [])
+   in let rec validate = function
+        | ({fileName=f;  line=l;  column=c}, 
+           {fileName=f'; line=l'; column=c'}) :: rest ->
+              if f = f' && (l' > l || (l' = l && c' >= c)) then
+                validate rest 
+              else 
+                assert false
+        | [] -> ()
   in  validate answer; answer
-  end
 @ [[validate]] checks the invariant that single regions occupy a
 single source file and that coordinates are nondecreasing.
 @
-<<old implementation>>=
-fun positions({resynchPos,linePos,uid}: sourcemap) (src:sourceloc) =
-  let exception Unimplemented
-  in  raise Unimplemented
-  end
-@
 When discarding old positions, we have to be careful to maintain the
 last part of the invariant.
-<<old implementation>>=
-fun forgetOldPositions ({resynchPos, linePos,uid} : sourcemap) =
-  let val r as (p,  file, col) = hd (!resynchPos)
-      val l as (p', line)      = hd (!linePos)
-  in  linePos := [l];
-      resynchPos := [if p = p' then r else (p', file, 1)]
-  end handle List.Empty => let exception Impossible in raise Impossible end
+<<map announce exports>>=
+let forgetOldPositions map
+  =  let (p,  file, col) as r = hd (map.resynchPos)
+  in let (p', line)      as l = hd (map.linePos)
+  in map.linePos <- [l];
+     map.resynchPos <- [if p = p' then r else (p', file, 1)]
 @ 
-<<old implementation>>= 
-fun newlineCount smap (lo, hi) =
-  let val (hifiles, hilines) = remove (fn pos : int => pos >= hi andalso pos > lo) smap
-      val (lofiles, lolines) = remove (fn pos : int =>                   pos > lo) smap
-  in  length hilines - length hifiles - (length lolines - length lofiles)
-  end
-@ 
-<<old implementation>>=
-  fun locationString' single pairs =
-      let fun shortpoint ({line, column,...}:sourceloc, l) = 
-             Int.toString line :: "." :: Int.toString column :: l
-          fun showpoint (p as {fileName,...}:sourceloc, l) = 
-             fileName :: ":" :: shortpoint (p, l)
-          fun allfiles(f, (src:sourceloc, _)::l) = 
-                f = #fileName src andalso allfiles(f, l)
-            | allfiles(f, []) = true
-          fun lastpos [(_, hi)] = hi
-            | lastpos (h::t) = lastpos t
-            | lastpos [] = let exception Impossible in raise Impossible end
-      in  String.concat (
-            case pairs
-              of [(lo, hi)] =>  (* should really test original positions here *)
-                    if single then showpoint (lo, [])
-                    else showpoint(lo, "-" :: shortpoint(hi, []))
-               | (lo, _) :: rest =>
-                    if allfiles(#fileName lo, rest) then
-                      showpoint(lo, "..." :: shortpoint(lastpos rest, []))
+<<location exports>>=
+let newline_count (map, (lo, hi)) =
+        let (hifiles, hilines) = remove (function pos -> pos >= hi && pos > lo) map
+     in let (lofiles, lolines) = remove (function pos ->              pos > lo) map
+     in let length = List.length
+     in length hilines - length hifiles - (length lolines - length lofiles)
+<<location exports>>=
+let locationString' single pairs =
+        let shortpoint loc l =
+              string_of_int loc.line :: "." :: string_of_int loc.column :: l
+     in let showpoint p l = p.fileName :: ":" :: shortpoint p l
+     in let allfiles f = Listutil.forall (function (src, _) -> src.fileName = f)
+     in let rec lastpos = function
+              | [(_, hi)] -> hi
+              | (h::t) -> lastpos t
+              | [] -> assert false
+     in  String.concat ""
+            (match pairs with
+             | [(lo, hi)] ->  (* should really test original positions here *)
+                    if single then showpoint lo []
+                    else showpoint lo ("-" :: shortpoint hi [])
+             | (lo, _) :: rest ->
+                    if allfiles lo.fileName rest then
+                      showpoint lo ("..." :: shortpoint (lastpos rest) [])
                     else
-                      showpoint(lo, "..." :: showpoint (lastpos rest, []))
-               | [] => ["<nullRegion>"]
-          )
-      end
+                      showpoint lo ("..." :: showpoint  (lastpos rest) [])
+             | [] -> ["<nullRegion>"]
+            )
 
-  fun locationString smap (p1, p2) =
-     locationString' (p1+1 >= p2) (Location.sourcelocs smap (p1, p2))
-  fun sourcelocsString [] = locationString' false []
-    | sourcelocsString (pairs as (lo, hi)::t) =
-        let fun next {fileName=f, line=l, column=c} = {fileName=f, line=l, column=c+1}
-        in  locationString' (lo=hi orelse next lo=hi) pairs
-        end
-
+let string ((map, (p1, p2)) as loc) = locationString' (p1+1 >= p2) (sourcelocs loc)
+<<implementation>>=
+module Sourceloc = struct
+  let sourcelocs_string = function
+      | [] -> Location.locationString' false []
+      | (lo, hi)::t as pairs ->
+          let next {fileName=f; line=l; column=c} = {fileName=f; line=l; column=c+1}
+          in  Location.locationString' (lo=hi || next lo=hi) pairs
+  <<sourceloc exports>>
+end
+<<sourceloc exports>>=
 @ 
-<<sig RCS log>>=
-(* $Log$
- * Revision 1.10  1998/11/11 21:59:24  nr
- * get rcs ids fixed
- *
- * Revision 1.1  1998/09/17 06:08:58  nr
- * before instance change
- *
- * Revision 1.9  1997/10/05 01:14:48  nr
- * introduced SourceMap.nullMap
- *
- * Revision 1.8  1997/08/06 14:10:48  nr
- * add RCS ids
- *
- * Revision 1.7  1997/08/05 21:38:39  nr
- * leave a clearer trail when lists are unexpectedly empty
- *
- * Revision 1.6  1997/06/29 03:05:59  nr
- * tinkering to get it right
- *
- * Revision 1.5  1997/06/29 02:56:30  nr
- * moved locationString from ErrorMsg to SourceMap
- *
- * Revision 1.4  1997/06/23 00:22:07  nr
- * enable comparisons
- *
- * Revision 1.3  1997/02/09 04:23:32  nr
- * initial compile with new datatype representation of exp
- *
- * Revision 1.2  1996/08/17 01:22:48  nr
- * ???
- * *)
-<<RCS log>>=
-(* $Log$
- * Revision 1.10  1998/11/11 21:59:24  nr
- * get rcs ids fixed
- *
- * Revision 1.1  1998/09/17 06:08:58  nr
- * before instance change
- *
- * Revision 1.9  1997/10/05 01:14:48  nr
- * introduced SourceMap.nullMap
- *
- * Revision 1.8  1997/08/06 14:10:48  nr
- * add RCS ids
- *
- * Revision 1.7  1997/08/05 21:38:39  nr
- * leave a clearer trail when lists are unexpectedly empty
- *
- * Revision 1.6  1997/06/29 03:05:59  nr
- * tinkering to get it right
- *
- * Revision 1.5  1997/06/29 02:56:30  nr
- * moved locationString from ErrorMsg to SourceMap
- *
- * Revision 1.4  1997/06/23 00:22:07  nr
- * enable comparisons
- *
- * Revision 1.3  1997/02/09 04:23:32  nr
- * initial compile with new datatype representation of exp
- *
- * Revision 1.2  1996/08/17 01:22:48  nr
- * ???
- * *)
