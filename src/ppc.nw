@@ -505,6 +505,60 @@ A.register_cc(Backend.ppc.target,"C'"    ,PPC.cc["C"  ])
 A.register_cc(Backend.ppc.target,"C--"   ,PPC.cc["C--"])
 A.register_cc(Backend.ppc.target,"notail",PPC.cc["C--"])
 @ 
+<<PPC calling convention automata in Lua>>=
+PPC.layout = { creates='no late consts' }
+
+function PPC.layout["C"](dummy, proc)
+    local blocks       = Stack.blocks(proc)
+    blocks.oldblocks.callee   = Block.overlap_low(32,blocks.oldblocks.callee)
+    blocks.oldblocks.caller   = Block.overlap_low(32,blocks.oldblocks.caller)
+    blocks.youngblocks.callee = Block.overlap_low(32,blocks.youngblocks.callee)
+    blocks.youngblocks.caller = Block.overlap_low(32,blocks.youngblocks.caller)
+
+    local linkage =
+      { caller = Block.relative(blocks.vfp, "caller's linkage area", 24, 16)
+      , callee = Block.relative(blocks.vfp, "our linkage area", 24, 16)
+      }      -- Mach-O Runtime Conventions for PowerPC, pp47--48
+
+    -- assert that blocks.oldblocks.callee is empty
+    -- assert that blocks.youngblocks.callee is empty
+
+    local layout =
+        { blocks.oldblocks.caller  -- caller's parameter area
+        , linkage.caller
+        , blocks.vfp
+        , blocks.spills
+        , blocks.continuations
+        , blocks.stackdata
+        , blocks.youngblocks.caller -- callee's parameter area
+        , linkage.callee
+        , blocks.sp
+        }
+
+    if Debug.stack then
+        blocks.caller_linkage = linkage.caller
+        blocks.callee_linkage = linkage.callee
+        write('****** cc name = ', Stack.ccname(proc), '\n')
+        Debug.showblocks (blocks, { 'oldblocks'
+                                  , 'caller_linkage'
+                                  , 'vfp'
+                                  , 'continuations'
+                                  , 'spills'
+                                  , 'stackdata'
+                                  , 'youngblocks'
+                                  , 'callee_linkage'
+                                  , 'sp'
+                                  })
+    end
+    local block = Block.cat(32, layout)
+    block = Block.adjust(block)
+    Stack.freeze(proc, block)
+    return 1
+end
+
+
+
+@ 
 % ---------------------------------------------------------------------------
 \section{Target Specification}
 % ---------------------------------------------------------------------------
