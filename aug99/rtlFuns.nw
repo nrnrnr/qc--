@@ -1,0 +1,201 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+\section{Functions on RTLs}
+
+<<interface>>=
+module Location : sig
+  val must_alias : RTL.location -> RTL.location -> RTL.exp
+  val must_use   : RTL.location -> RTL.location -> RTL.exp
+    (* does location on right use location on left?  --- need better names I*)
+  val may_alias : RTL.location -> RTL.location -> RTL.exp
+  val may_use   : RTL.location -> RTL.location -> RTL.exp
+    (* does location on right use location on left?  --- need better names I*)
+  type reg_like = { space : RTL.space; address : int; width : int }
+  val reg_like    : RTL.location -> reg_like option
+  val is_reg_like : RTL.location -> bool
+end
+
+module Exp : sig
+  val must_use : RTL.location -> RTL.exp -> RTL.exp
+  (* condition under which location aliases to something rtl uses *)
+  val may_use : RTL.location -> RTL.exp -> RTL.exp
+  val const_bool : RTL.exp -> bool option (* true or false? or neither? *)
+  val always_true  : RTL.exp -> bool  (* is this a tautology? *)
+  val always_false : RTL.exp -> bool  (* is this a falsehood? *)
+  val ever_true  : RTL.exp -> bool  (* is this satisfiable? *)
+  val ever_false : RTL.exp -> bool  (* is there a counterexample? *)
+  val fold_locs_used : (RTL.location -> 'a -> 'a) -> RTL.exp -> 'a -> 'a
+end
+
+module Rtl : sig
+  val must_use : RTL.location -> RTL.rtl -> RTL.exp
+  (* condition under which location aliases to something rtl uses *)
+  val may_use : RTL.location -> RTL.rtl -> RTL.exp
+  (* condition under which location aliases to something rtl uses *)
+  val must_define : RTL.location -> RTL.rtl -> RTL.exp
+  val fold_locs_used : (RTL.location -> 'a -> 'a) -> RTL.rtl -> 'a -> 'a
+  val fold_locs_defined : (RTL.location -> 'a -> 'a) -> RTL.rtl -> 'a -> 'a
+end
+@ 
+For [[must_alias]] (exact overlapping, substution necessary), we have
+to have the same aggregation of cells at the same address in the same space.
+The first two are compile-time conditions; the last is run-time.
+<<implementation>>=
+let loc_must_alias l l' =
+  match l, l' with
+  | RTL.AGG (agg, RTL.CELL(space, addr)), RTL.AGG (agg', RTL.CELL(space', addr')) ->
+      if space <> space' || agg <> agg' then Mkrtl.falsehood
+      else Primops.eq 999 addr addr'
+  | RTL.VAR (v, w), RTL.VAR(v', w') -> RTL.CONST (RTL.BOOL (v = v' && w = w'))
+  | _, _ -> Mkrtl.falsehood
+@ 
+For [[may_alias]] (potential overlapping), we have
+to have the aggregation of cells in the same space, whose bounds might overlap.
+<<implementation>>=
+type cell_interval = { lo : RTL.exp; width : int }
+let intervals_may_overlap addrwidth { lo=l; width=w } { lo=l'; width=w' } =
+  let (+!), (<=!), (||!) = Primops.add addrwidth, Primops.le addrwidth, Primops.orelse
+  in let w, w' = Mkrtl.int addrwidth w, Mkrtl.int addrwidth w' in
+    Primops.not ( (l +! w <=! l') ||! (l' +! w' <=! l))
+
+let interval_covered (_, narrow, wide) addr = {lo = addr; width = wide / narrow}
+
+let loc_may_alias l l' =
+  match l, l' with
+  | RTL.AGG (agg, RTL.CELL(space, addr)), RTL.AGG (agg', RTL.CELL(space', addr')) ->
+      if space <> space' then Mkrtl.falsehood
+      else
+        intervals_may_overlap 999 (interval_covered agg addr) (interval_covered agg' addr')
+  | RTL.VAR (v, w), RTL.VAR(v', w') -> RTL.CONST (RTL.BOOL (v = v' && w = w'))
+  | _, _ -> Mkrtl.falsehood
+@ 
+<<implementation>>=
+module Exp = struct
+  let rec must_use l e = match e with
+      | RTL.CONST _ -> Mkrtl.falsehood
+      | RTL.FETCH (l', _) ->
+          Primops.orelse (loc_must_alias l l') (loc_must_use l l')
+      | RTL.APP (_, es) ->
+          List.fold_left Primops.orelse Mkrtl.falsehood (List.map (must_use l) es)
+  and loc_must_use l = function
+      | RTL.AGG (_, RTL.CELL(_, addr)) -> must_use l addr
+      | RTL.VAR _ as l' -> RTL.CONST (RTL.BOOL (l = l'))
+  let rec may_use l e = match e with
+      | RTL.CONST _ -> Mkrtl.falsehood
+      | RTL.FETCH (l', _) ->
+          Primops.orelse (loc_may_alias l l') (loc_may_use l l')
+      | RTL.APP (_, es) ->
+          List.fold_left Primops.orelse Mkrtl.falsehood (List.map (may_use l) es)
+  and loc_may_use l = function
+      | RTL.AGG (_, RTL.CELL(_, addr)) -> may_use l addr
+      | RTL.VAR _ as l' -> RTL.CONST (RTL.BOOL (l = l'))
+  <<boolean goo>>
+  <<expression walking>>
+end
+<<implementation>>=
+module Location = struct
+  let must_use = Exp.loc_must_use
+  let may_use = Exp.loc_may_use
+  let may_alias = loc_may_alias
+  let must_alias = loc_must_alias
+  type reg_like = { space : RTL.space; address : int; width : int }
+  let reg_like = function
+    | RTL.AGG ((_, _, width), RTL.CELL(space, RTL.CONST (RTL.INT (addr, _)))) ->
+        Some { space = space; width = width; address = addr }
+    | _ -> None
+  let is_reg_like = function
+    | RTL.AGG ((_, _, width), RTL.CELL(space, RTL.CONST (RTL.INT (addr, _)))) -> true
+    | _ -> false
+end
+<<implementation>>=
+module MustUse = struct
+  let effect l = function
+    | RTL.STORE (loc, e, _) ->
+        Primops.orelse (Exp.loc_must_use l loc) (Exp.must_use l e)
+    | RTL.KILL _ -> Mkrtl.falsehood
+    | RTL.KILLALL _ -> Mkrtl.falsehood
+  
+  let guarded l (RTL.GUARDED (p, eff)) =
+    Primops.orelse (Exp.must_use l p) (Primops.andalso p (effect l eff))
+  
+  let rtl l (RTL.RTL effs) =   
+    List.fold_left Primops.orelse Mkrtl.falsehood (List.map (guarded l) effs)
+end
+
+module MayUse = struct
+  let effect l = function
+    | RTL.STORE (loc, e, _) -> Primops.orelse (Exp.loc_may_use l loc) (Exp.may_use l e)
+    | RTL.KILL _ -> Mkrtl.falsehood
+    | RTL.KILLALL _ -> Mkrtl.falsehood
+  
+  let guarded l (RTL.GUARDED (p, eff)) =
+    Primops.orelse (Exp.may_use l p) (Primops.andalso p (effect l eff))
+  
+  let rtl l (RTL.RTL effs) =   
+    List.fold_left Primops.orelse Mkrtl.falsehood (List.map (guarded l) effs)
+end
+<<implementation>>=
+module MustDefine = struct
+  let effect l = function
+    | RTL.STORE (loc, e, _) -> Location.must_alias l loc
+    | RTL.KILL loc -> Location.must_alias l loc
+    | RTL.KILLALL s -> 
+        match l with
+        | RTL.AGG (_, RTL.CELL(s', _)) -> RTL.CONST (RTL.BOOL (s = s'))
+        | RTL.VAR _ -> Mkrtl.falsehood
+  
+  let guarded l (RTL.GUARDED (p, eff)) = Primops.andalso p (effect l eff)
+  
+  let rtl l (RTL.RTL effs) =   
+    List.fold_left Primops.orelse Mkrtl.falsehood (List.map (guarded l) effs)
+end
+<<implementation>>=
+module Rtl = struct
+  let must_use = MustUse.rtl
+  let may_use = MayUse.rtl
+  let must_define = MustDefine.rtl
+  <<rtl walking>>
+end
+@ 
+<<boolean goo>>=
+let const_bool = function (RTL.CONST (RTL.BOOL b)) -> Some b | _ -> None
+let always_true  = function (RTL.CONST (RTL.BOOL true )) -> true | _ -> false
+let always_false = function (RTL.CONST (RTL.BOOL false)) -> true | _ -> false
+let ever_true  = function (RTL.CONST (RTL.BOOL false )) -> false | _ -> true
+let ever_false = function (RTL.CONST (RTL.BOOL true  )) -> false | _ -> true
+     
+<<expression walking>>=
+let rec fold_locs_used f e zero = match e with
+  | RTL.CONST _ -> zero
+  | RTL.FETCH (l, n) -> f l (loc_fold_locs_used f l zero)
+  | RTL.APP(_, es) -> List.fold_left (fun zero e -> fold_locs_used f e zero) zero es
+and loc_fold_locs_used f l zero = match l with
+  | RTL.VAR _ -> zero
+  | RTL.AGG(_, RTL.CELL(_, addr)) -> fold_locs_used f addr zero
+<<rtl walking>>=
+module FoldLocsUsed = struct
+  let effect f eff zero = match eff with
+    | RTL.STORE (l, e, _) -> Exp.fold_locs_used f e (Exp.loc_fold_locs_used f l zero)
+    | RTL.KILL _ -> zero
+    | RTL.KILLALL _ -> zero
+  
+  let guarded f (RTL.GUARDED (p, eff)) zero =
+    Exp.fold_locs_used f p (effect f eff zero)
+  
+  let rtl f (RTL.RTL effs) zero =   
+    List.fold_left (fun zero g -> guarded f g zero) zero effs
+end
+let fold_locs_used = FoldLocsUsed.rtl
+<<rtl walking>>=
+module FoldLocsDefined = struct
+  let effect f eff zero = match eff with
+    | RTL.STORE (l, e, _) -> f l zero
+    | RTL.KILL l -> f l zero
+    | RTL.KILLALL _ -> assert false
+  
+  let guarded f (RTL.GUARDED (p, eff)) zero = (effect f eff zero)
+  
+  let rtl f (RTL.RTL effs) zero =   
+    List.fold_left (fun zero g -> guarded f g zero) zero effs
+end
+let fold_locs_defined = FoldLocsDefined.rtl

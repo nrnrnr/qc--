@@ -1,0 +1,78 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+\section{Primitive operations}
+
+Should be generated automatically.
+<<interface>>=
+type bits_exp = RTL.exp
+type bool_exp = RTL.exp
+val eq  : int -> bits_exp -> bits_exp -> bool_exp
+val le  : int -> bits_exp -> bits_exp -> bool_exp
+val add : int -> bits_exp -> bits_exp -> bits_exp
+val orelse  : bool_exp -> bool_exp -> bool_exp
+val andalso : bool_exp -> bool_exp -> bool_exp
+val not : bool_exp -> bool_exp
+@ 
+<<implementation>>=
+type bits_exp = RTL.exp
+type bool_exp = RTL.exp
+
+module R = RTL
+let simeq n e e' = RTL.APP(("eq", [n]), [e; e'])
+let eq n e e' =
+  match e, e' with
+  | R.CONST c, R.CONST c' ->
+      (match c, c' with
+      | R.INT (k, nn), R.INT (k', nn') ->
+          assert (n = nn && n = nn'); R.CONST (R.BOOL (k = k'))
+      | R.LINK_CONST(s, nn), R.LINK_CONST(s', nn') ->
+          assert (n = nn && n = nn');
+          if s = s' then R.CONST (R.BOOL true)
+          else simeq n e e'
+      | _, _ -> simeq n e e')
+  | _, _ -> if e = e' then R.CONST(R.BOOL true) else simeq n e e'
+
+@ 
+I attempt a somewhat ``smart'' version of [[andalso]].
+<<implementation>>=
+let andalso p q = 
+  match p with
+  | RTL.CONST (RTL.BOOL true)  -> q
+  | RTL.CONST (RTL.BOOL false) -> p
+  | _ -> match q with
+         | RTL.CONST (RTL.BOOL true)  -> p
+         | RTL.CONST (RTL.BOOL false) -> q
+         | _ -> RTL.APP (("andalso", []), [p; q])
+@ 
+Ditto [[orelse]].
+<<implementation>>=
+let orelse p q = 
+  match p with
+  | RTL.CONST (RTL.BOOL true)  -> p
+  | RTL.CONST (RTL.BOOL false) -> q
+  | _ -> match q with
+         | RTL.CONST (RTL.BOOL true)  -> q
+         | RTL.CONST (RTL.BOOL false) -> p
+         | _ -> RTL.APP(("orelse", []), [p; q])
+@ 
+<<implementation>>=
+let not p = 
+  match p with
+  | RTL.CONST (RTL.BOOL p)  -> RTL.CONST (RTL.BOOL (not p))
+  | RTL.APP (("not", []), [p]) -> p
+  | p -> RTL.APP (("not", []), [p])
+@ 
+<<implementation>>=
+let add n x y =
+  match x, y with 
+  | RTL.CONST (RTL.INT (x, _)), RTL.CONST (RTL.INT (y, _)) ->
+      RTL.CONST(RTL.INT (x+y, n))
+  | RTL.CONST (RTL.INT (0, _)), y -> y
+  | x, RTL.CONST (RTL.INT (0, _)) -> x
+  | x, y -> RTL.APP (("add", [n]), [x; y])
+<<implementation>>=
+let le n x y =
+  match x, y with 
+  | RTL.CONST (RTL.INT (x, _)), RTL.CONST (RTL.INT (y, _)) ->
+      RTL.CONST(RTL.BOOL (x <= y))
+  | x, y -> RTL.APP (("le", [n]), [x; y])

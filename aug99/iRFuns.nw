@@ -1,0 +1,89 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+\section{Analysis functions on IR, probably incomplete}
+
+The [[successors]] function returns \emph{inline successors} only ---
+never nodes referred to indirectly by labels.
+
+\emph{The use/def code is incorrect!}  It does not account properly
+for the uses and defs of calls, jumps, cuts, or exits.
+The problem arises because these nodes need to be tagged with
+information available only from their associated copy nodes.
+A quandary.
+<<interface>>=
+val successors : IRNode.node -> IRNode.node list
+val must_use : RTL.location -> IRNode.node -> RTL.exp
+val may_use : RTL.location -> IRNode.node -> RTL.exp
+val fold_locs_used    : (RTL.location -> 'a -> 'a) -> IRNode.node -> 'a -> 'a
+val fold_locs_defined : (RTL.location -> 'a -> 'a) -> IRNode.node -> 'a -> 'a
+@ 
+<<implementation>>=
+module N = IRNode
+let successors = function
+| N.Entry (_, _, next) -> [next]
+| N.Exit  _ -> []
+| N.CopyIn  (_, _, _, _, next) -> [next]
+| N.CopyOut (_, _, _, _, next) -> [next]
+| N.CalleeSaves (_, _, next)   -> [next]
+| N.Assign (_, _, next)        -> [next]
+| N.Branch (_, _, t, f) -> [t; f]
+| N.Goto _ -> []
+| N.Call  (_, _, (next, _, _, _, _)) -> [next]
+| N.Yield (_, _, (next, _, _, _, _)) -> [next]
+| N.Jump _ -> []
+| N.CutTo _ -> []
+<<implementation>>=
+let false' = Mkrtl.falsehood
+let uses rtl (exp : RTL.location -> RTL.exp -> RTL.exp) l = function
+| N.Entry (_, _, _) -> false'
+| N.Exit  _ -> false'
+| N.CopyIn  (_, _, _, _, _) -> false'
+| N.CopyOut (_, actuals, _, _, _) -> 
+     List.fold_left Primops.orelse false' (List.map (fun (e, _, _) -> exp l e) actuals)
+| N.CalleeSaves (_, _, _)   -> false'
+| N.Assign (_, r, _)      -> rtl l r
+| N.Branch (_, p, _, _) -> exp l p
+| N.Goto (_, target, _) -> exp l target
+| N.Call  (_, target, (_, _, _, _, _)) -> exp l target
+| N.Yield (_, e, (_, _, _, _, _)) -> exp l e
+| N.Jump (_, target) -> exp l target
+| N.CutTo (_, target) -> exp l target
+let must_use = uses RtlFuns.Rtl.must_use RtlFuns.Exp.must_use
+let may_use = uses RtlFuns.Rtl.may_use RtlFuns.Exp.may_use
+@ 
+<<implementation>>=
+let fold_locs_used f n zero = 
+  let exp = RtlFuns.Exp.fold_locs_used in
+  let rtl = RtlFuns.Rtl.fold_locs_used in
+  match n with
+  | N.Entry (_, _, _) -> zero
+  | N.Exit  _ -> zero
+  | N.CopyIn  (_, _, _, _, _) -> zero
+  | N.CopyOut (_, actuals, _, _, _) -> 
+      List.fold_left (fun zero (e, w, h) -> exp f e zero) zero actuals
+  | N.CalleeSaves (_, _, _)   -> zero
+  | N.Assign (_, r, _)      -> rtl f r zero
+  | N.Branch (_, p, _, _) -> exp f p zero
+  | N.Goto (_, target, _) -> exp f target zero
+  | N.Call  (_, target, (_, _, _, _, _)) -> exp f target zero
+  | N.Yield (_, e, (_, _, _, _, _)) -> exp f e zero
+  | N.Jump (_, target) -> exp f target zero
+  | N.CutTo (_, target) -> exp f target zero
+@ 
+<<implementation>>=
+let fold_locs_defined f n zero = 
+  let rtl = RtlFuns.Rtl.fold_locs_defined in
+  match n with
+  | N.Entry (_, _, _) -> zero
+  | N.Exit  _ -> zero
+  | N.CopyIn  (_, formals, _, _, _) ->
+      List.fold_left (fun zero (l, w, h) -> f l zero) zero formals
+  | N.CopyOut (_, actuals, _, _, _) -> zero
+  | N.CalleeSaves (_, _, _)   -> zero
+  | N.Assign (_, r, _)      -> rtl f r zero
+  | N.Branch (_, p, _, _) -> zero
+  | N.Goto (_, target, _) -> zero
+  | N.Call  (_, target, (_, _, _, _, _)) -> zero
+  | N.Yield (_, e, (_, _, _, _, _)) -> zero
+  | N.Jump (_, target) -> zero
+  | N.CutTo (_, target) -> zero

@@ -5,7 +5,7 @@ ASDLGEN=camlGen
 NOWEAVE=`echo ${NOWEAVE-noweave}`
 
 ASDLSRC=asm cmmir ast rtl
-OCAMLSRC=sourcemap util atomize ralloc error
+OCAMLSRC=sourcemap util atomize ralloc error mkrtl iRFuns rtlFuns primops reglike
 
 
 ASDLSRCDOTDEFS=`echo $ASDLSRC | sed 's/ /.defs /g;s/$/.defs/'`
@@ -45,6 +45,8 @@ OCAMLSRCDOTHTML=`echo $OCAMLSRC | sed "s@^@$HTMLDIR@;s@ @.html $HTMLDIR@g;s/\$/.
 
 
 all:V: caml
+
+docs:V: doc.ps rti.ps
 
 clean:V: 
 	rm -f *.html *~ *.t cm.dot cm.ps cm.eps 
@@ -116,8 +118,11 @@ all.defs: $ASDLSRCDOTDEFS
 ^($OCAMLSRCREGEXP)'\.'tex:R: '\1'.nw
 	$NOWEAVE -x -n $stem1.nw >$target
 
+rti.tex: rti.nw
+	$NOWEAVE -autodefs c -index -n $prereq > $target
 
-DOCINPUTS="doc.tex $ASDLSRCDOTTEX $OCAMLSRCDOTTEX"
+
+DOCINPUTS="doc.tex $ASDLSRCDOTTEX $OCAMLSRCDOTTEX rti.tex index.tex calling.tex"
 
 docin:V: $DOCINPUTS
 
@@ -136,7 +141,9 @@ doc-check:V: doc.tex
 	noindex $prereq
 
 index.tex: index.nw
-	$NOWEAVE $prereq > $target
+	$NOWEAVE -n $prereq > $target
+calling.tex: calling.nw
+	$NOWEAVE -n $prereq > $target
 
 
 ###################
@@ -185,21 +192,13 @@ ir.asdl: cmmir.nw
 %.ml: %.nw
 	notangle -Rimplementation -L'# %L "%F"%N' $prereq > $target
 %.mli: %.nw
-	notangle -Rinterface -L'# %L "%F"%N' $prereq > $target
+	notangle -Rinterface -L'# %L "%F"%N' $prereq | cpif $target
 
 %.cmi: %.mli
 	ocamlc $CAMLOPTS -c $stem.mli
 %.cmo: %.ml
 	ocamlc $CAMLOPTS -c $stem.ml
 
-iRNode.cmi: rTL.cmi
-iRNode.cmo: rTL.cmi
-iR.cmi: iRNode.cmi
-iR.cmo: iRNode.cmi
-sourcemap.cmo: option.cmi sourcemap.cmi
-ralloc.cmo: regset.cmi
-atomize.cmo: atomize.cmi rTL.cmi iRNode.cmi
-error.cmo: sourcemap.cmi error.cmi
 
 ################################################################
 #
@@ -216,7 +215,7 @@ rti:V: cmmrti.h
 
 DEPENDMARK="#### dependencies follow --- write nothing after this line"
 
-depend:V: $ALLCAMLSRC
+depend:VQ: $ALLCAMLSRC
 	ocamldep $prereq > /dev/null || exit 1
 	rm -f mkfile.new
 	(sed "/^$DEPENDMARK/,"'$d' mkfile; echo $DEPENDMARK; ocamldep $prereq) > mkfile.new
@@ -225,14 +224,34 @@ depend:V: $ALLCAMLSRC
 	
 #### dependencies follow --- write nothing after this line
 atomize.cmi: iRNode.cmi rTL.cmi 
+error.cmi: sourcemap.cmi 
+mkrtl.cmi: rTL.cmi 
+iRFuns.cmi: iRNode.cmi rTL.cmi 
+rtlFuns.cmi: rTL.cmi 
+primops.cmi: rTL.cmi 
+reglike.cmi: rTL.cmi 
 sourcemap.cmo: option.cmi sourcemap.cmi 
 sourcemap.cmx: option.cmx sourcemap.cmi 
 util.cmo: util.cmi 
 util.cmx: util.cmi 
 atomize.cmo: iRNode.cmi rTL.cmi atomize.cmi 
 atomize.cmx: iRNode.cmx rTL.cmx atomize.cmi 
-ralloc.cmo: iRNode.cmi rTL.cmi regset.cmi ralloc.cmi 
-ralloc.cmx: iRNode.cmx rTL.cmx regset.cmi ralloc.cmi 
+ralloc.cmo: iRFuns.cmi iRNode.cmi mkrtl.cmi rTL.cmi reglike.cmi rtlFuns.cmi \
+    ralloc.cmi 
+ralloc.cmx: iRFuns.cmx iRNode.cmx mkrtl.cmx rTL.cmx reglike.cmx rtlFuns.cmx \
+    ralloc.cmi 
+error.cmo: sourcemap.cmi error.cmi 
+error.cmx: sourcemap.cmx error.cmi 
+mkrtl.cmo: primops.cmi rTL.cmi mkrtl.cmi 
+mkrtl.cmx: primops.cmx rTL.cmx mkrtl.cmi 
+iRFuns.cmo: iRNode.cmi mkrtl.cmi primops.cmi rTL.cmi rtlFuns.cmi iRFuns.cmi 
+iRFuns.cmx: iRNode.cmx mkrtl.cmx primops.cmx rTL.cmx rtlFuns.cmx iRFuns.cmi 
+rtlFuns.cmo: mkrtl.cmi primops.cmi rTL.cmi rtlFuns.cmi 
+rtlFuns.cmx: mkrtl.cmx primops.cmx rTL.cmx rtlFuns.cmi 
+primops.cmo: rTL.cmi primops.cmi 
+primops.cmx: rTL.cmx primops.cmi 
+reglike.cmo: rTL.cmi rtlFuns.cmi reglike.cmi 
+reglike.cmx: rTL.cmx rtlFuns.cmx reglike.cmi 
 option.cmo: option.cmi 
 option.cmx: option.cmi 
 asm.cmo: asm.cmi 

@@ -1,0 +1,27 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+\section{Container types for register-like locations}
+
+Might do even better with a representation specialised to sets of
+integers, but that can come later.
+<<interface>>=
+module Set : Set.S with type elt = RTL.location
+module Map : Map.S with type key = RTL.location
+<<implementation>>=
+module Elt = struct
+  type t = RTL.location
+  type reg_like = RtlFuns.Location.reg_like
+     = { space : RTL.space; address : int; width : int }
+
+  let compare l l' =
+    match RtlFuns.Location.reg_like l, RtlFuns.Location.reg_like l' with
+    | Some {space=s; address=a; width=w}, Some {space=s'; address=a'; width=w'} ->
+        (match compare s s' with
+        | 0 -> (match compare a a' with
+               | 0 -> compare w w'
+               | c -> c)
+        | c -> c)
+    | _, _ -> raise (Failure "non register-like location passed to Regset")
+end
+module Set = Set.Make(Elt)
+module Map = Map.Make(Elt)

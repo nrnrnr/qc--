@@ -48,7 +48,7 @@ let (<<) f g x = f (g x)     (* function composition *)
 @ Looks to me like a monad.
 We define a whole set of combinators for this.
 <<implementation>>=
-type allocator = RTL.ty -> RTL.location (* give me a temporary *)
+type allocator = RTL.width -> RTL.location (* give me a temporary *)
 module New = struct
   <<monad operations>>
   let app operator args =
@@ -60,7 +60,7 @@ module New = struct
   let const k = (RTL.CONST k, fun x -> x)
   let var v ty = (RTL.VAR (v, ty), fun x -> x)
   let store (loc, pre1) (src, pre2) ty = (RTL.STORE(loc, src, ty), pre2 << pre1)
-  let guard (g, pre1) (e, pre2) = (RTL.GUARD (g, e), pre2 << pre1)
+  let guard (g, pre1) (e, pre2) = (RTL.GUARDED (g, e), pre2 << pre1)
   let rtl gs = let (gs, pre) = Lift.list gs in (RTL.RTL gs, pre)
 end
 @ 
@@ -77,7 +77,7 @@ end
 @ 
 <<implementation>>=
 module Temp = struct
-  type temp = RTL.location * RTL.ty
+  type temp = RTL.location * RTL.width
   let rvalue (t, ty) = RTL.FETCH(t, ty)
   let store (t, ty) e = RTL.STORE (t, e, ty)
 end
@@ -91,7 +91,7 @@ let prepend_rtls alloc attributes =
       and effect = function
             | RTL.STORE (l, src, ty) -> New.store (loc l) (exp src) ty
             | eff -> New.unit eff
-      and guarded (RTL.GUARD (g, e)) = New.guard (guard g) (effect e)
+      and guarded (RTL.GUARDED (g, e)) = New.guard (guard g) (effect e)
       and guard = <<function to atomize guard>>
       and loc = function RTL.VAR _ as v -> New.unit v
                        | RTL.AGG (a, c) -> New.agg a (cell c)
@@ -103,13 +103,13 @@ let atomize (alloc : allocator) attributes successor rtl =
   prepend_rtls alloc attributes rtl successor
 @ 
 <<function to atomize expression>>=
-   let truth = RTL.CONST (RTL.BOOL true, None)
+   let truth = RTL.CONST (RTL.BOOL true)
 in let alloc ty = (alloc ty, ty)
-in let always eff : RTL.rtl = RTL.RTL [RTL.GUARD (truth, eff)]
+in let always eff : RTL.rtl = RTL.RTL [RTL.GUARDED (truth, eff)]
 in let put rtl succ = IRNode.Assign(attributes, rtl, succ)
 in function 
    | RTL.CONST k as e -> 
-       let t = alloc (const_ty k)
+       let t = alloc (const_width k)
        in  (Temp.rvalue t, put (always (Temp.store t e)))
    | RTL.FETCH (l, ty) ->
        let t = alloc ty in
@@ -128,11 +128,10 @@ function
 @ 
 
 <<type utilities>>=
-let const_ty = function
-    | (_, Some t) -> t
-    | (RTL.INT        (_, t), _) -> t
-    | (RTL.LINK_CONST (_, t), _) -> t
-    | (RTL.BOOL _, _) -> assert false
+let const_width = function
+    | RTL.INT        (_, t) -> t
+    | RTL.LINK_CONST (_, t) -> t
+    | RTL.BOOL _ -> assert false
 @ 
 <<type utilities>>=
 let result_ty rator = 32 (* bogus *)

@@ -1,4 +1,4 @@
-% -*- mode: Noweb; noweb-code-mode: sml-mode -*-
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 \chapter{Error information and its propagation}
 The idea is that we use type [['a error]] to propagate possibly
 erroneous [['a]]'s without cascading error messages.
@@ -8,9 +8,9 @@ See the paper
 \nwanchorto{http://www.eecs.harvard.edu/~nr/pubs/error-abstract.html}{\emph{Eliminating
 Spurious Error Messages\ldots}} for a detailed explanation.
 <<interface>>=
-datatype 'a error = Error | Ok of 'a
-type pretty = string (* something that can be printed nicely *)
-exception ErrorExn of Sourcemap.location * pretty list
+type 'a error = Error | Ok of 'a
+type pretty = string list (* something that can be printed nicely *)
+exception ErrorExn of Sourcemap.location * pretty
 
 (* combinators *)
 val combine  : 'a error error -> 'a error
@@ -39,15 +39,15 @@ end
 
 
 val warning  : Sourcemap.location -> string list -> unit
-val warningp : SourceMap.location -> pretty list -> unit
+val warningp : Sourcemap.location -> pretty      -> unit
 
 (* functions that raise Error *)
 val error  : Sourcemap.location -> string list -> 'a
-val errorp : Sourcemap.location -> pretty list -> 'a
+val errorp : Sourcemap.location -> pretty      -> 'a
 
 (* functions that issue messages but do not raise Error *)
 val errormsg  : Sourcemap.location -> string list -> unit
-val errormsgp : Sourcemap.location -> pretty list -> unit
+val errormsgp : Sourcemap.location -> pretty      -> unit
 val ppErr : pretty -> unit
 
 val catch  :       (pretty -> unit) -> ('a -> 'b error) -> 'a -> 'b error
@@ -56,8 +56,8 @@ val catchDelayed :
    (unit -> 'a) -> (pretty -> unit) -> ('b -> 'a)       -> 'b -> 'a
 <<implementation>>=
 type 'a error = Error | Ok of 'a
-type pretty = string
-exception ErrorExn of Sourcemap.location * pretty list
+type pretty = string list
+exception ErrorExn of Sourcemap.location * pretty
 @ 
 The raising combinators move [[error]] to be a top-level type
 constructor.
@@ -127,6 +127,7 @@ In case we wind up with [['a error error]], we can combine the two
 [[combine o map]] is useful.
 <<implementation>>=
 let combine = function Error -> Error | (Ok x) -> x
+let sequence f x = combine (map f x)
 @ 
 Now we can do something a little more tricky.  Suppose we have a
 function on a clean environment, and we want to pass it an environment

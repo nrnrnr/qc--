@@ -1,0 +1,76 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+\section{Convenient constructor functions for RTLs}
+
+For documentation of this interface, see the VPO code-generation interfaces.
+<<interface>>=
+type exp      = RTL.exp
+type location = RTL.location
+type rtl      = RTL.rtl
+type space    = RTL.space
+type width    = RTL.width
+type operator = RTL.operator
+type space_widths = {cell : width; address : width}
+@ 
+<<interface>>=
+val default_aggregation : RTL.agg_type ref
+val space_widths : (space -> space_widths) ref
+
+val loc_width : location -> width
+
+val int : width -> int -> exp
+(* val number : bignum -> exp *)
+val symbol : width -> string -> exp
+val fetch : location -> exp 
+val apply : operator -> exp list -> exp
+
+val loc : space -> width -> exp -> location
+val reg : space -> width -> int -> location
+
+val truth : exp
+val falsehood : exp
+
+val gets  : location -> exp -> rtl
+val guard : exp -> rtl -> rtl
+
+val par : rtl list -> rtl   (* simultaneous composition *)
+@ 
+<<implementation>>=
+type exp      = RTL.exp
+type location = RTL.location
+type rtl      = RTL.rtl
+type space    = RTL.space
+type width    = RTL.width
+type operator = RTL.operator
+<<implementation>>=
+type space_widths = {cell : width; address : width}
+let default_aggregation = ref (RTL.IDENTITY)
+let space_widths : (space -> space_widths) ref = ref (fun _ -> {cell=0; address=0})
+let space_width x = (!space_widths x).cell
+let address_width x = (!space_widths x).address
+<<implementation>>=
+let loc_width = function
+  | RTL.AGG ((_, _, w), _) -> w
+  | RTL.VAR (_, w) -> w
+<<implementation>>=
+let int width n = RTL.CONST (RTL.INT (n, width))
+(* val number : bignum -> exp *)
+let symbol w s = RTL.CONST (RTL.LINK_CONST (s, w))
+let fetch l = RTL.FETCH (l, loc_width l)
+let apply rator l = RTL.APP (rator, l)
+
+let loc s w addr = RTL.AGG((!default_aggregation, space_width s, w) , RTL.CELL(s, addr))
+let reg s w n = loc s w (RTL.CONST (RTL.INT (n, address_width s)))
+
+let truth = RTL.CONST (RTL.BOOL true)
+let falsehood = RTL.CONST (RTL.BOOL false)
+let gets l r = RTL.RTL [RTL.GUARDED(truth, RTL.STORE (l, r, loc_width l))]
+
+let guard p (RTL.RTL rtl) =
+  let andp (RTL.GUARDED(p', eff)) = RTL.GUARDED(Primops.andalso p' p, eff) 
+  in  RTL.RTL (List.map andp rtl)
+
+let par l = let strip (RTL.RTL r) = r in RTL.RTL (List.concat (List.map strip l))
+@ 
+
+
