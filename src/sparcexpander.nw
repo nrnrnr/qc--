@@ -429,7 +429,9 @@ rtl:        Branch(guard, reloc) [1]
                 exec (I.nop)    (* delay slot *)
             :}
 
-rtl:        Goto(reloc) [1]     {: exec (I.ba reloc) :}
+rtl:        Goto(reloc) [1]     {: exec (I.ba reloc) >>= fun () ->
+                                   exec (I.nop) (* delay slot *)
+                                :}
 rtl:        Return()            {: exec (ret) (* jmpl %r31+8, %g0 *) :}
 rtl:        Simple(stmt) [1]    {: stmt >>= fun s -> return ()   :}    
 rtl:        Nop() [1]           {: exec I.nop  :}
