@@ -160,7 +160,7 @@ module type S = sig
       (T1 : Lua.Lib.TYPEVIEW with type 'a t = 'a action)
       (T2 : Lua.Lib.TYPEVIEW with type 'a t = proc
                              with type 'a combined = 'a T1.combined)
-    : Lua.Lib.TYPEFUL with type 'a combined = 'a T1.combined
+    : Lua.Lib.USERCODE with type 'a userdata' = 'a T1.combined
 end
 @
 
@@ -607,11 +607,10 @@ end
 module MakeLua (T1 : Lua.Lib.TYPEVIEW with type 'a t = 'a action)
                (T2 : Lua.Lib.TYPEVIEW with type 'a t = proc with type 'a combined
 = 'a T1.combined)
-    : Lua.Lib.TYPEFUL with type 'a combined = 'a T1.combined =
+    : Lua.Lib.USERCODE with type 'a userdata' = 'a T1.combined =
   struct
-    type 'a combined = 'a T1.combined
-    module M (Interp : Lua.Lib.CORE with type 'a V.userdata' = 'a
-combined) =
+    type 'a userdata' = 'a T1.combined
+    module M (Interp : Lua.Lib.CORE with type 'a V.userdata' = 'a userdata') =
       struct
         module V = Interp.V
         <<state checking>>

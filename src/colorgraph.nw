@@ -1187,7 +1187,7 @@ module Make (BackplaneT : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.M.actio
                                   and type 'a combined = 'a BackplaneT.combined)
             (ProcT : Lua.Lib.TYPEVIEW with type 'a t = Proc.t
                                   and type 'a combined = 'a BackplaneT.combined)
-       : Lua.Lib.TYPEFUL with type 'a combined = 'a BackplaneT.combined
+       : Lua.Lib.USERCODE with type 'a userdata' = 'a BackplaneT.combined
 
 <<colorgraph.mli>>=
 module NewGCT : Lua.Lib.USERTYPE
@@ -1196,7 +1196,7 @@ module NewMake (BackplaneT : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.M'.a
                                   and type 'a combined = 'a BackplaneT.combined)
             (ProcT : Lua.Lib.TYPEVIEW with type 'a t = Ast2ir.proc
                                   and type 'a combined = 'a BackplaneT.combined)
-       : Lua.Lib.TYPEFUL with type 'a combined = 'a BackplaneT.combined
+       : Lua.Lib.USERCODE with type 'a userdata' = 'a BackplaneT.combined
 @
 
 A few convenience functions for handling lists. Perhaps the lists that use
@@ -1329,9 +1329,9 @@ module PreMake (G : GRAPH) (LI : LIVENESS with type node = G.node)
                                     and type 'a combined = 'a BackplaneT.combined)
               (ProcT : Lua.Lib.TYPEVIEW with type 'a t = P.t
                                     and type 'a combined = 'a BackplaneT.combined)
-         : Lua.Lib.TYPEFUL with type 'a combined = 'a BackplaneT.combined =
+         : Lua.Lib.USERCODE with type 'a userdata' = 'a BackplaneT.combined =
     struct
-      type 'a combined = 'a BackplaneT.combined
+      type 'a userdata' = 'a BackplaneT.combined
       module M (Interp : Lua.Lib.CORE
                   with type 'a V.userdata' = 'a BackplaneT.combined) = struct
           module V = Interp.V
@@ -1481,8 +1481,8 @@ function ColorGraph_init (CG, B) -- carefully don't define table
               ( B.seq 
                   { B.ignore (B.seq
                       { CG.pcg
-											, CG.makeGraph
-											, CG.pcg
+									, CG.makeGraph
+									, CG.pcg
                       , CG.orderVars
                       , CG.assignColors
                       })
