@@ -39,15 +39,19 @@ A [[bits]] value has an observable fixed [[width]] that is the number of
 bits it can hold. The simplest [[bits]] value is [[zero]], a [[width]]
 long bit vector of zeros. 
 <<bits.mli ((evaluating))>>=
-type width      = int
+type width = int
 
 type bits      
-type t          = bits 
+type t = bits 
 
-val width       : bits -> width         (* observer *)
-val zero        : width -> t            (* constructor *)
+val width : t -> width         (* observer *)
+val zero  : width -> t         (* constructor *)
 @ 
-
+Comparison is safe even on bit vectors of different widths.
+<<bits.mli ((evaluating))>>=
+val compare : t -> t -> int
+val eq      : t -> t -> bool
+@ 
 If a conversion fails, it raises an exception. The [[Overflow]]
 exception indicates that the target range is too small for a given
 conversion; the [[Syntax]] exception indicates a syntax violation when a
@@ -322,13 +326,18 @@ exception Overflow
 exception Syntax of string
 
 let syntax msg  = raise (Syntax msg)
+@ 
+Here, we want our polymorphism.
+<<bits.ml ((evaluating))>>=
+let (<=) = Pervasives.(<=)
+let (>=) = Pervasives.(>=)
+let (<)  = Pervasives.(<)
+let (>)  = Pervasives.(>)
 @
-
 Values of type [[bits]] are represented as pairs of width and [[bits64]]
 value. Whenever for the width $k < 64$ holds, we maintain the
 following invariant: the $64-k$ most significant bits equal the sign
 bit $k-1$ of $b$.
-
 <<bits.ml ((evaluating))>>=
 type width      = int
 type bits       = int64 * width
@@ -376,6 +385,11 @@ let zx64 i w =
 module Ops = struct
   <<bitwise operators>>
 end
+let eq (b, w) (b', w') = (w = w') && (sx64 b w) =*= (sx64 b' w)
+let compare (b, w) (b', w') =
+  match compare w w' with
+  | 0 -> Pervasives.compare (sx64 b w) (sx64 b' w)
+  | diff -> diff
 <<bitwise operators>>=
 let add (b, w) (b', w') =
   assert (w = w');
@@ -383,13 +397,13 @@ let add (b, w) (b', w') =
 
 let eq (b, w) (b', w') =
   assert (w = w');
-  (sx64 b w) = (sx64 b' w)
+  (sx64 b w) =*= (sx64 b' w)
 
 let lt (b, w) (b', w') =
   assert (w = w');
   let n  = sx64 b  w  in
   let n' = sx64 b' w' in
-  n < n'
+  Pervasives.(<) n n'
 let gt x y = lt y x
 
 let ltu (b, w) (b', w') =
@@ -424,7 +438,7 @@ let eq (b,w) (b',w') =
     assert (w = w');
     let n  = zx64 b w  in
     let n' = zx64 b' w' in
-        n = n'
+        n =*= n'
 
 let ne x y = not (eq x y)
 
@@ -491,7 +505,7 @@ otherwise. We check that the $64-w$ msb equal the sign bit.
 <<implementation S>>=
 let fits_signed i w =
     w = 64 or
-    let i' = I.shift_right i (w-1) in i' = I.zero || i' = I.minus_one
+    let i' = I.shift_right i (w-1) in i' =*= I.zero || i' =*= I.minus_one
 
 let of_int i w =
     check w;
@@ -551,7 +565,7 @@ $64-w$ most significant bits are zero.
 <<implementation U>>=
 let fits_unsigned i w =
     assert (w = 64 || i >= I.zero);
-    w = 64 or (I.shift_right_logical i w) = I.zero
+    w = 64 or (I.shift_right_logical i w) =*= I.zero
 
 let of_int i w =
     check w;
@@ -626,11 +640,11 @@ or an [[E]], everything else must be an integer.
 
 let string (s:string) (w:int) =
     assert (String.length s > 0);
-    if s.[0] = '\'' then
+    if s.[0] =<= '\'' then
         char s w 
     else if (  String.length s >= 2 
-            && s.[0] = '0' 
-            && (s.[1] = 'x' || s.[1] = 'X')
+            && s.[0] =<= '0' 
+            && (s.[1] =<= 'x' || s.[1] =<= 'X')
             ) then
         int s w        
     else if (String.contains s '.' || String.contains s 'e' ||
@@ -646,10 +660,10 @@ However, hexadecimal representations can use all 64 bits.
 let int str w =
     let len    = String.length str in
         try  
-            if len > 2 && str.[0] = '0' && (str.[1] = 'x' || str.[1] = 'X') 
+            if len > 2 && str.[0] =<= '0' && (str.[1] =<= 'x' || str.[1] =<= 'X') 
             then 
                 I.of_string str
-            else if len > 2 && str.[0] = '0' then
+            else if len > 2 && str.[0] =<= '0' then
                 I.of_string ("0o"^str)
             else
                 I.of_string str
@@ -675,7 +689,7 @@ let char str w =
         try
             if   len = 0 
             then assert false
-            else if str.[0] = '\\' && len > 1 
+            else if str.[0] =<= '\\' && len > 1 
             then match str.[1] with
             | 'a'  when len = 2 -> I.of_int 7
             | 'b'  when len = 2 -> I.of_int 8
@@ -860,7 +874,7 @@ let of_stringc str width =
             try
                 if   len = 0 
                 then assert false
-                else if str.[0] = '\\' && len > 1 
+                else if str.[0] =<= '\\' && len > 1 
                 then match str.[1] with
                 | 'a'  when len = 2 -> U.of_int 7
                 | 'b'  when len = 2 -> U.of_int 8

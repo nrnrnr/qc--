@@ -35,15 +35,16 @@ need an additional spaces for 64-bit floating point values and
 temporaries.
 
 <<mips.ml>>=
-module SS   = Space.Standard32
-module S    = Space
-module A    = Automaton
-module R    = Rtl
-module RP   = Rtl.Private
-module Up   = Rtl.Up
-module Dn   = Rtl.Dn
-module SM   = Strutil.Map
-module T    = Target
+module SS = Space.Standard32
+module S  = Space
+module A  = Automaton
+module R  = Rtl
+module RP = Rtl.Private
+module RU = Rtlutil
+module Up = Rtl.Up
+module Dn = Rtl.Dn
+module SM = Strutil.Map
+module T  = Target
 
 module Spaces = struct
     let id = Rtl.Identity
@@ -183,10 +184,10 @@ There is no distinction between an integer and an address.
 @
 <<MIPS postexpander>>=
 type context = (Talloc.Multiple.t -> int -> Register.t) * (Register.t -> bool)
-let icontext = Talloc.Multiple.reg 't', fun ((c,_,_), _, _) -> c = 'r' || c = 't'
-let fcontext = Talloc.Multiple.reg 'u', fun ((c,_,_), _, _) -> c = 'f' || c = 'u'
+let icontext = Talloc.Multiple.reg 't', fun ((c,_,_), _, _) -> c =<= 'r' || c =<= 't'
+let fcontext = Talloc.Multiple.reg 'u', fun ((c,_,_), _, _) -> c =<= 'f' || c =<= 'u'
 let acontext = icontext
-let rcontext = (fun x y -> unimp "unsupported soft rounding mode"), fun r -> r = rm_reg
+let rcontext = (fun x y -> unimp "unsupported soft rounding mode"), Register.eq rm_reg
 let itempwidth = 32
 @
 \paragraph{Addressing modes}
@@ -256,7 +257,7 @@ width. Load immediate loads a constant into a temorary.
 <<MIPS postexpander>>=
 let move ~dst ~src =
     assert (Register.width src = Register.width dst);
-    if src = dst then [] else [R.store (tloc dst) (tval src) (twidth src)]
+    if Register.eq src dst then [] else [R.store (tloc dst) (tval src) (twidth src)]
 @
 
 Immediate load, and extended immediate load. An extended load-immediate
@@ -359,7 +360,7 @@ let negate = function
 A conditional branch is presented by a guarded assignment to the PC.
 <<MIPS postexpander>>=
 let bc x (opr, ws as op) y ~tgt =
-    assert (ws = [wordsize]);
+    assert (ws =*= [wordsize]);
     [ R.guard (R.app (Up.opr op) [tval x; tval y]) 
               (R.store pc_lhs (Up.const tgt) wordsize)  (* effect *)
     ]
@@ -368,7 +369,7 @@ let bc x (opr, ws as op) y ~tgt =
 <<MIPS postexpander>>=
 let bnegate r = match Dn.rtl r with
     |           RP.Rtl [ RP.App( (op,       [32]), [x; y]), RP.Store (pc, tgt, 32)]
-      when pc = Dn.loc pc_lhs ->
+      when RU.Eq.loc pc (Dn.loc pc_lhs) ->
         Up.rtl (RP.Rtl [ RP.App( (negate op,[32]), [x; y]), RP.Store (pc, tgt, 32)])
     | _ -> impossible "ill-formed MIPS conditional branch"
 @
@@ -443,7 +444,7 @@ let globals base =
 This variable placer is a simplified version of the x86 placer.
 <<mips.ml>>=
 let placevars = 
-  let is_float    w hint _ = w <= 32 && hint = "float" in
+  let is_float    w hint _ = w <= 32 && hint =$= "float" in
   let warn ~width:w ~alignment:a ~hint:h =
     if w > 32 then unimp (Printf.sprintf "%d-bit values not supported"  w) in
   let mk_stage ~temps =

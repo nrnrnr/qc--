@@ -85,6 +85,8 @@ module MakeStandard (Pc : PC) : S
 module RU = Rtlutil
 module R  = Rtl
 module RP = Rtl.Private
+let ( =/  ) = RU.Eq.loc
+let ( =// ) = RU.Eq.exp
 
 module MakeStandard (P : PC) = struct
   type 'a map = ('a, Rtl.rtl) Ep.map
@@ -130,7 +132,7 @@ let cmpneg w ~cop ~fetch =
   | _      -> RP.App (("not", [w]), fetch)
 let bnegate bool_flags r = match Down.rtl r with
   | RP.Rtl [RP.App((cop, [w1]), [RP.Fetch (flags, w2)]), RP.Store (pc, tgt, w3)]
-    when pc = Down.loc P.pc_lhs && flags = Down.loc bool_flags
+    when pc =/ Down.loc P.pc_lhs && flags =/ Down.loc bool_flags
       && w1 = w && w2 = w && w3 = w ->
       Up.rtl (RP.Rtl [cmpneg w ~cop ~fetch:[RP.Fetch (flags, w)],
                                RP.Store (pc, tgt, w)])

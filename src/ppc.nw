@@ -186,8 +186,8 @@ let sstore aloc exp w = A.store aloc exp w
 Contexts.
 <<ppc postexpander>>=
 type context = (Talloc.Multiple.t -> int -> Register.t) * (Register.t -> bool)
-let icontext = Talloc.Multiple.reg 't', fun ((c,_,_), _, _) -> c = 'r' || c = 't'
-let fcontext = Talloc.Multiple.reg 'u', fun ((c,_,_), _, _) -> c = 'f' || c = 'u'
+let icontext = Talloc.Multiple.reg 't', fun ((c,_,_), _, _) -> c =<= 'r' || c =<= 't'
+let fcontext = Talloc.Multiple.reg 'u', fun ((c,_,_), _, _) -> c =<= 'f' || c =<= 'u'
 let acontext = icontext
 let rcontext = (fun x y -> Impossible.unimp "Unsupported soft rounding mode")
                ,(function (('d',_,_), 0, R.C 1) -> true | _ -> false)
@@ -321,7 +321,7 @@ let bc_setup opr x y = match opr with
 
 
 let bc x ((opr, ws) as op) y ~tgt =
-  assert (ws = [wordsize]);
+  assert (ws =*= [wordsize]);
   match xer_condition opr with
   | None -> 
       [R.guard (R.app (Up.opr op) [tval x; tval y]) 
@@ -355,7 +355,7 @@ let negate = function
 
 let bnegate r = match Dn.rtl r with
     |           RP.Rtl [RP.App( (op,       [32]),[x;y]), RP.Store (pc,tgt,32)]
-      when pc = Dn.loc pc_lhs ->
+      when RU.Eq.loc pc (Dn.loc pc_lhs) ->
         Up.rtl (RP.Rtl [RP.App( (negate op,[32]),[x;y]), RP.Store (pc,tgt,32)])
     | _ -> Impossible.impossible "ill-formed MIPS conditional branch"
 @ 
@@ -375,7 +375,7 @@ which is a return from procedure call.
 <<ppc postexpander>>=
 let don't_touch_me = function
     [ RP.Store(l, RP.Fetch(r, _), _) ]
-    when l = Dn.loc pc_lhs && r = Dn.loc lr -> true
+    when RU.Eq.loc l (Dn.loc pc_lhs) && RU.Eq.loc r (Dn.loc lr) -> true
   | [ RP.Store (_, RP.App (("add", _), [ _ ; RP.Const (RP.Diff _)]),_)] -> true
   | _ -> false
 @ 
@@ -735,7 +735,7 @@ let unimp               = Impossible.unimp
 let impossible          = Impossible.impossible
 
 let placevars = 
-  let is_float w hint _ = w <= 32 && hint = "float" in
+  let is_float w hint _ = w <= 32 && hint =$= "float" in
   let warn ~width:w ~alignment:a ~hint:h =
     if w > 32 then unimp (Printf.sprintf "%d-bit values not supported"  w) in
   let mk_stage ~temps =

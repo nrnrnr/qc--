@@ -216,8 +216,8 @@ let ctxt_map =
     let icnt = cnts.intc      in
     let fcnt = cnts.floatc    in
     let acnt = cnts.addrc     in
-    let (cnt,ctxt) = if icnt >= fcnt then (icnt,"int") else (fcnt, "float") in
-    if cnt >= acnt then ctxt else "address" in
+    let (cnt,ctxt) = if icnt >=. fcnt then (icnt,"int") else (fcnt, "float") in
+    if cnt >=. acnt then ctxt else "address" in
   Array.init proc.Proc.vars elect in
 @
 To replace a variable, we use the automaton to allocate a new fetch of the variable,
@@ -235,14 +235,14 @@ let choose_hint i elected_hint =
   let space_name = function "signed" | "unsigned" | "" -> "int"
                           | n                          -> n     in
   match formal_arr.(i) with
-  | Some (Some ("address" as h), _, _, n) when elected_hint = "int" ->
+  | Some (Some ("address" as h), _, _, n) when elected_hint =$= "int" ->
     if tgt.Target.distinct_addr_sp then
       Impossible.unimp "Var placer does not distinguish addr and int spaces"
     else h
-  | Some (Some h, _, _, n) when space_name h <> elected_hint ->
+  | Some (Some h, _, _, n) when Pervasives.(<>) (space_name h) elected_hint ->
     let votes = var_counts.(i) in
     begin
-      (if elected_hint <> default_hint || votes.intc <> 0.0 then
+      (if not (elected_hint =$= default_hint) || votes.intc <>. 0.0 then
         let error_str =
           ( Printf.sprintf 
               "Hint \"%s\" on formal parameter %s differs from inferred hint \"%s\":\n"

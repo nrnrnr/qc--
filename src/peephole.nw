@@ -102,7 +102,7 @@ let propagate node avail =
   let () = 
     match G.to_executable node with
     | Some rtl ->
-        if G.kind node <> G.StackAdjust then
+        if Pervasives.(<>) (G.kind node) G.StackAdjust then
           Debug.eprintf "peephole" "=> Considering %s\n" (ToString.rtl rtl);
           let try_pair l l' resume =
             let rtl' = subst2 l l' rtl in
@@ -144,8 +144,9 @@ let subst1 (loc, e) rtl =
   Simplify.rtl (RU.Subst.Fetch.rtl ~guard:(RU.Eq.loc loc) ~fetch:(fun _ _ -> e) rtl) in
 
 let subst2 (loc,e) (loc',e') rtl =
-  Simplify.rtl (RU.Subst.Fetch.rtl ~guard:(fun l -> l = loc || l = loc')
-                                   ~fetch:(fun l _ -> if l = loc then e else e') rtl)in
+  Simplify.rtl (RU.Subst.Fetch.rtl ~guard:(fun l -> RU.Eq.loc l loc || RU.Eq.loc l loc')
+                                   ~fetch:(fun l _ -> if RU.Eq.loc l loc then e else e')
+                rtl) in
 @ 
 <<utilities>>=
 let is_copy rtl = match Dn.rtl rtl with

@@ -148,20 +148,23 @@ module T = Target
 <<graph coloring types>>=
 module CompareSpace = struct
     type t = Rtl.space
-    let compare = compare
+    let compare = Rtlutil.Compare.space
 end
 module SpaceMap = Map.Make(CompareSpace)
 
 module CompareEdge = struct
     type t = Register.t * Register.t
-    let compare = compare
+    let compare (x, y) (x', y') =
+      match Register.compare x x' with
+      | 0 -> Register.compare y y'
+      | d -> d
 end
 module EdgeSet = Set.Make(CompareEdge)
 
 type move = Rtl.rtl Cfgx.M.node
 module CompareMoves = struct
     type t = move
-    let compare = compare
+    let compare = Pervasives.compare  (* hoping for the best here *)
 end
 module MS = Set.Make(CompareMoves)
 
@@ -194,6 +197,15 @@ type ('a,'b) impListItem = { v : 'b
 
 type ('a,'b) impListGroup = 'a -> ('a,'b) impListItem option ref
 @
+<<imperative lists>>=
+let rec eq_item a b i i' =
+  let opt o o' = match o, o' with
+  | None, None -> true
+  | Some i, Some i' -> eq_item a b i i'
+  | None, Some _ -> false
+  | Some _, None -> false in
+  a i.list i'.list &&  b i.v i'.v && opt i.next i'.next && opt i.prev i'.prev
+@ 
 [[ilg_add]] makes a new item and adds it to the front of the given [[list]]. 
 The new list item is returned.
 [[ilg_switch]] removes a list item from its current list and placed it on
@@ -523,14 +535,13 @@ Instead, we set $degree[t] = K - R$, where $K$ is the total number of registers 
 $R$ is the number of registers in temp $t$'s register space.
 
 The predicate [[interfere]] determines whether two registers interfere.
-
 <<build>>=
 let resetDegree target cg temp =
     cg.degreeMap <-
         RM.add temp (cg.k - (regs_in_space target cg temp)) cg.degreeMap
 
 let interfere (s1,_,_ as t1) (s2,_,_ as t2) target cg =
-    s1 = s2 ||
+    RU.Eq.space s1 s2 ||
         let s1 = possibleColors target cg t1 in    
         let s2 = possibleColors target cg t2 in
             not (RS.is_empty (RS.inter s1 s2))
@@ -542,7 +553,7 @@ spaces). Also, we don't need to keep track of the neighbors of precolored temps.
 
 <<build>>=
 let addEdge target cg u v =
-    if (not ((EdgeSet.mem (u, v) cg.adjSet) || (u = v))) &&
+    if (not ((EdgeSet.mem (u, v) cg.adjSet) || (Register.eq u v))) &&
        interfere u v target cg
     then begin
         let () = cg.adjSet <- List.fold_right EdgeSet.add [(u, v); (v, u)] cg.adjSet in
@@ -567,7 +578,7 @@ We also build a map ([[regToItem]]) from a register to a listgroup item.
 
 <<build>>=
 let build cg {Proc.cfg = cfg; Proc.target = target} =
-    let () = if not (!(cg.tempLG Initial) = None) then
+    let () = if Aux.Option.is_some (!(cg.tempLG Initial)) then
                Impossible.impossible "Temps on initial list prematurely" in
     let regs =
       G.fold_nodes (fun node allregs -> G.defs node ++ G.uses node ++ allregs)
@@ -644,11 +655,12 @@ involved, or whether [[temp]] is move-related.
 
 <<temp observers>>=
 let adjacent temp cg =
-    List.filter (fun t -> t.list <> SelectStack && t.list <> Coalesced)
-                (listMapFind temp cg.adjListMap)
+  let (<>) = Pervasives.(<>) in
+  List.filter (fun t -> t.list <> SelectStack && t.list <> Coalesced)
+              (listMapFind temp cg.adjListMap)
 
 let nodeMoves temp cg =
-    List.filter (fun t -> t.list = ActiveMove || t.list = WorklistMove)
+    List.filter (fun t -> t.list =*= ActiveMove || t.list =*= WorklistMove)
                 (listMapFind temp.v cg.moveListMap)
 
 let moveRelated temp cg =
@@ -682,11 +694,10 @@ moves to be reconsidered in the next coalescing phase.
 
 <<remove temp>>=
 let enableMoves temps cg =
-    let enableMove move =
-        if move.list = ActiveMove
-        then ilg_switch cg.moveLG WorklistMove move
-    in
-        List.iter (fun temp -> List.iter enableMove (nodeMoves temp cg)) temps
+  let enableMove move =
+    if move.list =*= ActiveMove then
+      ilg_switch cg.moveLG WorklistMove move in
+  List.iter (fun temp -> List.iter enableMove (nodeMoves temp cg)) temps
 @
 
 When the degree of a temp is decremented, we also check whether the temp is
@@ -728,14 +739,7 @@ There are four possible cases for moves on the [[worklistMoves]] list:
 \end{itemize}
 
 <<coalesce>>=
-let rec nodup cmp = function
-    | x::(y::_ as tail) -> if cmp x y = 0
-                           then nodup cmp tail
-                           else x :: nodup cmp tail
-    | x                 -> x
-
-let uniq nodes = nodup compare (List.sort compare nodes)
-
+<<definition of [[uniq]]>>
 <<coalesce move>>
 
 let coalesce cg ({Proc.target = target} as proc) =
@@ -744,21 +748,21 @@ let coalesce cg ({Proc.target = target} as proc) =
         let get m = RM.find (getAlias (RM.find m cg.regToItem) cg) cg.regToItem in
         let x = get (source move.v) in
         let y = get (dest   move.v) in
-        let (u, v) = if y.list = Precolored then (y, x) else (x, y) in
+        let (u, v) = if y.list =*= Precolored then (y, x) else (x, y) in
         let () =
-            if u = v
+            if eq_item (=*=) Register.eq u v
             then begin
                  ilg_switch cg.moveLG CoalescedMove move
                ; addWorklist u cg
-            end else if (v.list = Precolored) || (EdgeSet.mem (u.v, v.v) cg.adjSet)
+            end else if (v.list =*= Precolored) || (EdgeSet.mem (u.v, v.v) cg.adjSet)
                 then begin
                      ilg_switch cg.moveLG ConstrainedMove move
                    ; addWorklist u cg
                    ; addWorklist v cg
-            end else if ((u.list = Precolored) &&
+            end else if ((u.list =*= Precolored) &&
                      (List.fold_left (fun rst t -> (ok t u cg) && rst)
                                      true (adjacent v.v cg))
-                    || ((not (u.list = Precolored)) &&
+                    || ((not (u.list=*= Precolored)) &&
                         (conservative (uniq ((adjacent u.v cg) @ (adjacent v.v cg)))
                                       cg)))
                 then begin
@@ -778,7 +782,7 @@ the [[simplifyWorklist]].
 
 <<coalesce move>>=
 let addWorklist temp cg =
-    if not ((temp.list = Precolored) || (temp.list = Coalesced) ||
+    if not ((temp.list =*= Precolored) || (temp.list =*= Coalesced) ||
             (moveRelated temp cg) || (RM.find temp.v cg.degreeMap >= cg.k))
     then ilg_switch cg.tempLG SimplifyWorklist temp
 @
@@ -790,7 +794,7 @@ trying to coalesce $tempv$ with [[tempr]], and $tempv$ is not pre-colored.
 <<coalesce move>>=
 let ok tempt tempr cg =
        (RM.find tempt.v cg.degreeMap < cg.k)
-    || (tempt.list = Precolored)
+    || (tempt.list =*= Precolored)
     || (EdgeSet.mem (tempt.v, tempr.v) cg.adjSet)
 @
 
@@ -811,7 +815,7 @@ let conservative neighbors cg =
 <<coalesce move>>=
 let rec getAlias node cg =
   try
-    if node.list = Coalesced
+    if node.list =*= Coalesced
     then getAlias (RM.find (RM.find node.v cg.aliasMap) cg.regToItem) cg
     else node.v
   with Not_found -> Impossible.impossible "Not_found in Colorgraph.getAlias"
@@ -830,7 +834,7 @@ let combine target u v cg =
     let () = List.iter (fun temp -> addEdge target cg temp.v u.v
                                   ; decrementDegree cg target temp)
                        (adjacent v.v cg) in
-  if (RM.find u.v cg.degreeMap >= cg.k) && (u.list = FreezeWorklist)
+  if (RM.find u.v cg.degreeMap >= cg.k) && (u.list =*= FreezeWorklist)
   then ilg_switch cg.tempLG SpillWorklist u
 @
 
@@ -858,21 +862,19 @@ let freeze cg _ =
             ; true)
         | None -> false)
 @
-
 When a move is frozen, it must be removed from the [[activeMoves]] list.  Also,
 if a low-degree temp becomes non-move-related when a move is frozen, this
 temp can be simplified from the interference graph.
-
 <<freeze move>>=
 let freezeMoves temp cg =
     let freezeMove move =
         let x = RM.find (source move.v) cg.regToItem in
         let y = RM.find (dest move.v) cg.regToItem in
-        let v = if (getAlias y cg) = (getAlias temp cg)
+        let v = if Register.eq (getAlias y cg) (getAlias temp cg)
                 then RM.find (getAlias x cg) cg.regToItem
                 else RM.find (getAlias y cg) cg.regToItem in
         let () = ilg_switch cg.moveLG FrozenMove move in
-    if (v.list <> Precolored && empty (nodeMoves v cg)) &&
+    if (Pervasives.(<>) v.list Precolored && empty (nodeMoves v cg)) &&
        (RM.find v.v cg.degreeMap < cg.k)
     then ilg_switch cg.tempLG SimplifyWorklist v
     in List.iter freezeMove (nodeMoves temp cg)
@@ -897,7 +899,7 @@ let selectSpill cg {Proc.cfg = cfg} =
       let () = freezeMoves t cg in
       true
     | Some t -> findSpill t.next
-    | None when !(cg.tempLG SpillWorklist) = None -> false
+    | None when Aux.Option.is_none (!(cg.tempLG SpillWorklist)) -> false
     | None ->    (* only spill temps on spillworklist -> bug!!! *)
       ( print_cfg    cfg
       ; print_cgInfo cg
@@ -924,7 +926,7 @@ let assignColors cg {Proc.target = target; Proc.cfg = cfg} =
     <<colorTemp>>
     let colorSelectStack () =
         let () = ilg_iter colorTemp (!(cg.tempLG SelectStack)) in
-    if not (!(cg.tempLG SelectStack) = None)
+    if Aux.Option.is_some (!(cg.tempLG SelectStack))
        then Impossible.impossible "Failed to color a temp?"   in
     let colorCoalescedTemps () =
         let setColor temp = 
@@ -956,7 +958,7 @@ let colorLookup temp cmap =
 let colorTemp temp =
   let removeUsedColor colors adjTemp =
     let t = RM.find (getAlias adjTemp cg) cg.regToItem in
-    if t.list = Colored || t.list = Precolored
+    if t.list=*= Colored || t.list=*= Precolored
     then RS.remove (colorLookup t.v cg.colorMap) colors
     else colors in
   let possColors = possibleColors target cg temp.v in
@@ -989,7 +991,8 @@ are assigned. If a temp has not been assigned a color yet, the impossible
 exception will be raised.
 This exception indicates an error in the graph-coloring implementation.
 <<applyColors>>=
-module CallVarMap = Map.Make (struct type t = G.node let compare = compare end)
+module CallVarMap = 
+  Map.Make (struct type t = G.node let compare = Pervasives.compare end)
 
 let applyColors cg
                 ({Proc.cfg = cfg; Proc.target = target; Proc.var_map = vMap} as proc) =
@@ -1041,7 +1044,7 @@ the \cfg and resets the [[cg]] structure for another round of graph coloring.
 let resetProgram cg proc =
     (* handle addition of new temps to the cfg (those in spilledTemps) *)
     let (newSpillMap, newTemps) = rewrite proc (!(cg.tempLG Spilled)) in
-    let () = if not (!(cg.tempLG Initial) = None)
+    let () = if Aux.Option.is_some (!(cg.tempLG Initial))
              then Impossible.impossible "temps still on initial list" in
 
     let () = List.iter (fun t -> cg.spills <- RS.add t cg.spills) newTemps in
@@ -1072,15 +1075,11 @@ let resetProgram cg proc =
     let () = cg.colorMap <- RM.empty in
         true
 @
-
 The simple predicate [[haveSpilledTemps]] may be used to determine whether
-the graph coloring algorithm has terminated.
-
+the graph-coloring algorithm has terminated.
 <<resetProgram>>=
-let haveSpilledTemps cg _ =
-    not (!(cg.tempLG Spilled) = None)
+let haveSpilledTemps cg _ = Aux.Option.is_some (!(cg.tempLG Spilled))
 @
-
 [[updateProgram]] removes coalesced moves from the \cfg. It may be desirable
 to call this stage even after graph coloring has succeeded in placing every
 temp.
@@ -1089,9 +1088,7 @@ let updateProgram cg {Proc.cfg = cfg} =
   ilg_iter (fun n -> Cfgutil.delete cfg n.v) (!(cg.moveLG CoalescedMove));
   true
 @
-
 A pair of convenience functions for adding lists of \cfg nodes:
-
 <<insert spills>>=
 let cfg_ins_lst_before lst node =
   ignore (List.fold_right G.gm_insert_assign_before lst node)
@@ -1104,8 +1101,8 @@ values.  The first component $r$ is true iff [[loc]] is read by
 [[rtl]], the second $w$ iff [[loc]] is written by [[rtl]].
 <<insert spills>>=
 let reads_writes rtl loc =
-  let read  reg (r,w) = (r || loc = reg, w) in
-  let write reg (r,w) = (r, w || loc = reg) in
+  let read  reg (r,w) = (r || Register.eq loc reg, w) in
+  let write reg (r,w) = (r, w || Register.eq loc reg) in
   Rtlutil.ReadWrite.fold_promote ~read ~write rtl (false,false)
 @
 The heart of the spiller is [[update]] that is applied to every
@@ -1121,7 +1118,7 @@ let update proc spillee (map, newtemps as accum) node =
   let (mem, spill_regs) = RM.find spillee map in
   if reads || writes then
     let tmp   = Talloc.Multiple.reg_like proc.Proc.temps spillee in
-    let subst = fun x -> if x = spillee then tmp else x in 
+    let subst = fun x -> if Register.eq x spillee then tmp else x in 
     ( if reads then 
         (cfg_ins_lst_before (target.T.reload lookup tmp mem) node)
     ; if writes then 
@@ -1177,13 +1174,29 @@ let dest inst =
 let isMoveInstruction t inst =
   (* WE NEED TO DISCUSS HOW TO HANDLE THIS PROPERLY: V IS NOT A SPACE
      IN THE TARGET, WHICH MEANS THE FUNCTIONS IN TARGET2.NW DON'T WORK *)
-  let isVFP ((s,_,_),_,_) = s = 'V' in
+  let isVFP ((s,_,_),_,_) = s =<= 'V' in
   match Rtlutil.RTLType.singleAssignment (G.instr inst) with
   | Some (((s1,_,_) as r1), ((s2,_,_) as r2)) ->
     (not (isVFP r1 || isVFP r2)) &&
-       (s1 = s2 || (is_tmp t r1 && Target.fits t s1 r2)
-               || (is_tmp t r2 && Target.fits t s2 r1))
+       (RU.Eq.space s1 s2 || (is_tmp t r1 && Target.fits t s1 r2)
+                          || (is_tmp t r2 && Target.fits t s2 r1))
   | _ -> false
+@
+We'd like to sort before checking uniqueness, but there's no safe,
+easy way to compare nodes in an imperative list. 
+So this algorithm is quadratic.
+There's probably a better way (maybe hashing?).
+<<definition of [[uniq]]>>=
+let rec uniq nodes =
+  let eq = eq_item (=*=) Register.eq in
+  match nodes with
+  | [] -> []
+  | x :: xs -> x :: uniq (List.filter (fun y -> not (eq x y)) xs) 
+let uniq nodes = 
+  if List.length nodes > 20 then
+    Printf.eprintf "colorgraph.nw: scary quadratic algorithm with N = %d\n"
+      (List.length nodes);
+  uniq nodes
 @
 The interface provides the modules to embed the graph coloring functions in the
 Lua interpreter.
@@ -1221,6 +1234,7 @@ module Dn  = Rtl.Dn
 module RM  = R.Map
 module RS  = R.Set
 module RSX = R.SetX
+module RU  = Rtlutil
 let ( ++ ) = RS.union 
 let imposs = Impossible.impossible
 <<imperative lists>>
@@ -1299,7 +1313,7 @@ module G : GRAPH with type node = Rtl.rtl Cfgx.M.node
     R.promote_rxset (G.add_inedge_uses node (R.rset_to_rxset uses))
     
   let upd_instr n f = G.update_instr f n
-  let is_call n = G.kind n = G.Call
+  let is_call n = G.kind n =*= G.Call
 
   let insert_assign splice node rtl =
     let g = G.of_node node in
@@ -1343,7 +1357,7 @@ module PreMake (G : GRAPH with type node = Rtl.rtl Cfgx.M.node
   module GCT : Lua.Lib.USERTYPE with type 'a t = 'a colorGraph = struct
       type 'a t = 'a colorGraph
       let tname = "Graph Coloring"
-      let eq _ x y = x = y
+      let eq _ x y = x =*= y  (* may be dangerous *)
       let to_string vs _ = "<cgInfo>"
   end
   module Make (BackplaneT : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.M.action)

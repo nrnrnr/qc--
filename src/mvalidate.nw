@@ -36,7 +36,7 @@ let rtl t r =
   let spaces = Vfp.mk_space w :: t.Target.spaces in
   let name   = t.Target.name in
   let machine_widths opname =
-    let all = List.find_all (fun (opname',_) -> opname = opname') m in
+    let all = List.find_all (fun (opname',_) -> opname =$= opname') m in
     List.map (fun (opname, ws) -> ws) all in
   let xy_or_z tostr xyz =
     match List.rev xyz with
@@ -51,7 +51,7 @@ let rtl t r =
   let spacename (s, _, _) = s in
   let reg s n p1 p2 =
     let space =
-      try List.find (fun x -> spacename x.Space.space = s) spaces
+      try List.find (fun x -> spacename x.Space.space =<= s) spaces
       with Not_found -> reject "%s" (p1 s name) in
     List.mem n space.Space.widths
     || reject "%s" (p2 s (xy_or_z string_of_int space.Space.widths) n) in
@@ -65,7 +65,7 @@ let rtl t r =
       || reject 
           "variable %s of type bits%d should either be at most %d bits wide or else have a width a multiple of %d bits" x n w t.Target.memsize
     | RP.Global(s,_,n) ->
-        if s = "System.rounding_mode" || s = "rm" then
+        if s =$= "System.rounding_mode" || s =$= "rm" then
           n = 2 || reject "System.rounding_mode must be 2 bits, not %d" n
         else
           reg 'r' n (fun c s -> imposs "Space 'r' must be available")
@@ -82,7 +82,7 @@ let rtl t r =
         in
         (* like the widener, we give up on operations not in M *)
         let wss' = machine_widths opname in
-        let trivial_possible = wss' = [] in
+        let trivial_possible = match wss' with [] -> true | _ :: _ -> false in
         let op_possible = List.exists (List.for_all2 (fun w w' -> w <= w') ws) wss' in
         if Debug.on "mvalidate" then
           (Printf.eprintf "Validating %%%s::%s..." opname (str_of_opty (opname, ws));

@@ -491,7 +491,7 @@ illegal node.
 let emptyseg = let ill = G.illegal cfg in (ill,ill) in
 @
 <<expander.ml>>=
-let is_empty (xi,xf) = G.kind xi = G.Illegal && G.kind xf = G.Illegal
+let is_empty (xi,xf) = G.kind xi =*= G.Illegal && G.kind xf =*= G.Illegal
 @ To concatenate segments, we must recognize (and ignore) the empty segment.
 <<flow-graph manipulation utilities>>=
 let (@@) ((xi,xf) as x) ((yi,yf) as y) =
@@ -534,7 +534,7 @@ obviously, the list loses the structure of the segment.
 <<expander.ml>>=
 let seg_to_list (xi,xf)  =
   let rec to_list' n =
-    if G.kind n = G.Illegal then []
+    if G.kind n =*= G.Illegal then []
     else let rst = if G.eq n xf then [] else
                    List.concat (List.map to_list' (G.succs n))
          in  match G.to_instr n with
@@ -681,7 +681,7 @@ This code probably should be replaced with a call to
 [[Post.arg_contexts]].
 <<context guessing>>=
 let cmp_context (oprname, ws) =
-  if oprname.[0] = 'f' then fcontext else icontext in
+  if oprname.[0] =<= 'f' then fcontext else icontext in
 @
 In other situations, we may have to guess a context based on a
 right-hand side. 
@@ -747,7 +747,7 @@ let rec to_temp' room context e =
   | RP.Fetch (RP.Mem (('m', agg, ms), c, addr, assn), w) ->
       let t = alloc context w in
       let a, is = address room addr in
-      assert (agg = Post.byte_order);
+      assert (agg =*= Post.byte_order);
       assert (w = Cell.to_width ms c);
       t, is @@ to_segment (Post.load t a (upassn assn))
   | RP.Fetch (RP.Reg r, w) ->
@@ -809,13 +809,13 @@ This fact is documented in the postexpander interface.
     assert (n = n' && n' = Cell.to_width ms c);
     let t = alloc icontext w in
     let a, is = address room addr in
-    assert (agg = Post.byte_order);
+    assert (agg =*= Post.byte_order);
     temp_in_context t context (is @@ to_segment (Post.sxload t a n (upassn assn)))
 | RP.App (("zx", [n;w]), [RP.Fetch (RP.Mem (('m',agg,ms), c, addr, assn), n')]) ->
     assert (n = n' && n' = Cell.to_width ms c);
     let t = alloc icontext w in
     let a, is = address room addr in
-    assert (agg = Post.byte_order);
+    assert (agg =*= Post.byte_order);
     temp_in_context t context (is @@ to_segment (Post.zxload t a n (upassn assn)))
 @
 <<cases for sign extending or zero extending a temporary>>=
@@ -900,7 +900,7 @@ and to_stack' room e =
       emptyseg
   | RP.Fetch (RP.Mem (('m', agg, ms), c, addr, assn), w) ->
       let a, is = address room addr in
-      assert (agg = Post.byte_order);
+      assert (agg =*= Post.byte_order);
       assert (w = Cell.to_width ms c);
       is @@ to_segment (Post.push a (upassn assn))
   | RP.Fetch (RP.Reg (space, i, c), w) ->
@@ -961,13 +961,13 @@ and restore_stack number_to_keep number_to_restore =
 | RP.App ((("sx"|"zx"), [n; w]) as op,
           [RP.Fetch (RP.Mem (('m',agg,ms), c, addr, assn), n')]) ->
     assert (n = n' && n' = Cell.to_width ms c);
-    assert (agg = Post.byte_order);
+    assert (agg =*= Post.byte_order);
     let a, is = address room addr in
     is @@ to_segment (Post.push_cvt op n a (upassn assn))
 | RP.App ((("f2f"|"f2i"|"i2f"), [n; w]) as op,
           [RP.Fetch (RP.Mem (('m',agg,ms), c, addr, assn), n'); roundingmode]) ->
     assert (n = n' && n' = Cell.to_width ms c);
-    assert (agg = Post.byte_order);
+    assert (agg =*= Post.byte_order);
     let a, is = address room addr in
     is @@ to_segment (Post.push_cvt op n a (upassn assn))
 @ 
@@ -1043,15 +1043,15 @@ a sequence that ends in a conditional branch.
 To compile a comparison, we rely on the postexpander.
 <<other generic expander functions>>=
 and expand_cbranch_rtl g left right w ktrue kfalse =
-  assert (G.kind ktrue  = G.Join);
-  assert (G.kind kfalse = G.Join);
+  assert (G.kind ktrue  =*= G.Join);
+  assert (G.kind kfalse =*= G.Join);
   let room = Post.stack_depth in
   let rewrite_bc bc ktrue kfalse =
     let new_cb = G.cbranch cfg (R.bool true) ktrue kfalse in
     ( G.update_instr (fun _ -> inst bc) new_cb
     ; G.set_tsucc new_cb ktrue
     ; G.set_fsucc new_cb kfalse
-    ; if G.kind (G.pred bc) <> G.Illegal then
+    ; if Pervasives.(<>) (G.kind (G.pred bc)) G.Illegal then
         G.set_succ (G.pred bc) new_cb
     ; new_cb
     ) in
@@ -1157,7 +1157,7 @@ and assign_room room left right w =
         match left with
         | RP.Mem (('m',agg,memsize) as mspace, c, addr, assn) ->  (* a store *)
             let w = Cell.to_width memsize c in
-            assert (agg = Post.byte_order || agg = Rtl.Identity);
+            assert (agg =*= Post.byte_order || agg =*= Rtl.Identity);
             <<definition of [[split_assignment]]>>
             let a, is' = address room addr in
             (match right with
@@ -1223,9 +1223,9 @@ ALIGNMENT IS CONCERNED.
                                   [RP.App (("zx", [dd;ww''']), [msw]);
                                    RP.Const (RP.Bits nnb)]);
                           RP.App (("zx", [nn;ww']), [lsw])])
-) when w > Post.itempwidth && agg <> Rtl.Identity && ww = ww' && ww = ww'' &&
-  ww = ww''' && dd = ww - nn && BO.eq nnb (Bits.U.of_int nn ww) ->
-    split_assignment ~lsw ~lw:nn ~msw ~mw:dd
+) when w > Post.itempwidth && Pervasives.(<>) agg Rtl.Identity && ww = ww' && ww = ww''
+    && ww = ww''' && dd = ww - nn && BO.eq nnb (Bits.U.of_int nn ww) ->
+      split_assignment ~lsw ~lw:nn ~msw ~mw:dd
 | RP.Const (RP.Bits b) when w > Post.itempwidth ->
   let lw = Post.itempwidth in
   let mw = w - lw in
@@ -1437,7 +1437,8 @@ let cfg _ ({Proc.cfg = cfg} as proc) =
         | G.Cbranch ->
           let pred = G.pred    n   in
           let ill  = G.illegal cfg in
-          let pred_set_succ n = if G.kind pred <> G.Illegal then G.set_succ pred n in
+          let pred_set_succ n =
+            if Pervasives.(<>) (G.kind pred) G.Illegal then G.set_succ pred n in
           ( pred_set_succ ill
           ; G.delete    cfg n
           ; pred_set_succ (expand_cbranch i (G.tsucc n) (G.fsucc n))

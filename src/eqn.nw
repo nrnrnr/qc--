@@ -314,8 +314,8 @@ let split (v:string) (sum:sum) =
         | []             -> (0, sum)
         | (c,t as ct)::s -> 
             ( match E.variable t with
-            | Some v' when v = v' -> (c, List.rev a @ s)
-            | _                   -> loop (ct::a) s
+            | Some v' when v =$= v' -> (c, List.rev a @ s)
+            | _                     -> loop (ct::a) s
             )
     in 
         loop [] sum
@@ -339,8 +339,8 @@ $v=\mathit{vsum}$, and the pair $(v, \mathit{vsum})$ is returned.
 
 <<Make>>=
 let candidate (eqns: sum list) =
-    let negate        = List.map (fun (c,t) -> (-c,t))            in
-    let unitvar (c,t) = E.variable t <> None && (c = 1 || c = -1) in
+    let negate        = List.map (fun (c,t) -> (-c,t))                         in
+    let unitvar (c,t) = Aux.Option.is_some (E.variable t) && (c = 1 || c = -1) in
     let rec loop = function
        | []        -> None (* all eqns scanned *)
        | sum::sums -> 
@@ -390,9 +390,8 @@ variable for elimination.
 
 <<Make>>=
 let rec solver t =
-    if t.set = [] then
-        t       (* done *)
-    else
+    match t.set with [] -> t
+    | _ :: _ -> 
         match candidate t.set with
         | None          -> error t
         | Some (v,vsum) -> solver (eliminate v vsum t) 
@@ -408,14 +407,14 @@ second all other, i.e. those that still depend on variables.
 
 <<Make>>=
 let solve t =
-    (* let ()      = dump t in *)
-    let t          = try solver t with Can'tSolve x -> (dump x; error x)in
-    (* let ()      = dump t in *)
-    let known  sum = List.for_all (fun (_,e) -> E.variable e = None) sum in 
-    let k,d        = List.partition (fun (_,sum) -> known sum) t.env in
-        { known     = k
-        ; dependent = d
-        }
+  (* let ()     = dump t in *)
+  let t         = try solver t with Can'tSolve x -> (dump x; error x)in
+  (* let ()     = dump t in *)
+  let known sum = List.for_all (fun (_,e) -> Aux.Option.is_none (E.variable e)) sum in
+  let k,d       = List.partition (fun (_,sum) -> known sum) t.env in
+      { known     = k
+      ; dependent = d
+      }
 @        
    
 The [[make_zero]] function establishes the invariants for equations:
@@ -437,11 +436,11 @@ let rec merge sum =  match sum with
 
 
 let make_zero (sum:sum) (t:t) =
-    let cmp (_,tx) (_,ty) = E.compare tx ty in 
-    let eqn = normalize (merge (List.sort cmp sum)) in
-    let r   = { t with set = eqn::t.set } in
-        (* dump t; *)
-        if eqn = [] then t else r
+  let cmp (_,tx) (_,ty) = E.compare tx ty in 
+  let eqn = normalize (merge (List.sort cmp sum)) in
+  let r   = { t with set = eqn::t.set } in
+  (* dump t; *)
+  match eqn with [] -> t | _ :: _ -> r
         
 @
 
@@ -459,7 +458,7 @@ module E = struct
         | Var s  -> Some s 
         | _      -> None
         
-    let compare = compare
+    let compare : t -> t -> int = Pervasives.compare
 
     let print = function
         | Var(s) -> s

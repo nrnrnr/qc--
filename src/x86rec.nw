@@ -780,7 +780,7 @@ let rec exp = function
   | RP.Const(k)               -> const (k)
   | RP.Fetch(l,w)             -> conFetch (loc l) w
   <<special cases for particular operators>>
-  | RP.App((o,_),_) when String.length o > 4 && String.sub o 0 4 = "x86_" ->
+  | RP.App((o,_),_) when String.length o > 4 && String.sub o 0 4 =$= "x86_" ->
       conX86op(o)
   | RP.App((o,_),_)           -> error ("unknown operator " ^ o)
 <<code to follow the labeler>>=  
@@ -847,7 +847,8 @@ and guarded g eff = match g with
       | _ -> error "guard on x86 non-branch")
 | _ -> conGuarded (exp g) (effect eff)
 and begins_x86_ s =
-  String.length s >= 4 && s.[0] = 'x' && s.[1] = '8' && s.[2] = '6' && s.[3] = '_'
+  String.length s >= 4 &&
+  s.[0] =<= 'x' && s.[1] =<= '8' && s.[2] =<= '6' && s.[3] =<= '_'
 @
 Oh, the joy of the flags\ldots
 <<truepat>>=
@@ -872,8 +873,9 @@ RP.Const(RP.Bool true)
       conWithaflags (loc l) o (exp r) w fo
 | [ (<<truepat>>, <<pattern for [[l]] := [[l']] at [[w]]>>)
   ; (<<truepat>>, <<pattern for flags := [[fo]] ([[l'']], [[Const b]])>>)
-  ] when l =/ l' && l =/ l'' && b = Bits.zero w && flag_index = SS.indices.SS.cc ->
-      conWithaflags (loc l) "add" (exp (RP.Const (RP.Bits b))) w fo
+  ] when l =/ l' && l =/ l'' && Bits.eq b (Bits.zero w)
+      && flag_index = SS.indices.SS.cc ->
+        conWithaflags (loc l) "add" (exp (RP.Const (RP.Bits b))) w fo
 | [ (<<truepat>>, <<pattern for [[l]] := [[o]] [[l']] at [[w]]>>)
   ; (<<truepat>>, <<pattern for flags := [[fo]] [[l'']])>>)
   ] when l =/ l' && l =/ l'' && flag_index = SS.indices.SS.cc ->
@@ -889,7 +891,7 @@ RP.Const(RP.Bool true)
       conWithundefflags (regpair rp) o o' (exp r) w
 | [ (<<truepat>>, <<pattern for [[l]] := [[l']] [[o]] [[r]] at [[w]]>>)
   ; (<<truepat>>, <<pattern for flags := [[fo]] ([[l'']] [[o']] [[r']])>>)
-  ] when l =/ l' && l =/ l'' && r =// r' && o = o'
+  ] when l =/ l' && l =/ l'' && r =// r' && o =$= o'
     && flag_index = SS.indices.SS.cc ->
       conWithlflags (loc l) o (exp r) w fo
 | [ (<<truepat>>, <<pattern for [[l]] := [[l']] [[o]] [[r]] at [[w]] at H register>>)

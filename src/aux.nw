@@ -32,7 +32,11 @@ val last : 'a list -> 'a (* raises Invalid_argument on empty list *)
 val from: int -> upto:int -> int list
   (* from x ~upto:y is the list of integers x, .., y *)
 
+val compare_list : ('a -> 'a -> int) -> 'a list -> 'a list -> int
+
 module Option : sig 
+    val is_some : 'a option -> bool
+    val is_none : 'a option -> bool
     val get: 'a -> 'a option -> 'a
     val map : ('a -> 'b) -> ('a option -> 'b option)
 end
@@ -75,6 +79,8 @@ val substr: int -> int -> string -> string
 
 <<aux.ml>>=
 module Option = struct
+    let is_some = function Some _ -> true  | None -> false 
+    let is_none = function Some _ -> false | None -> true
     let get x = function
         | Some y -> y
         | None   -> x
@@ -122,3 +128,12 @@ let rec map_partial f = function
       | None -> map_partial f xs
 
       
+<<aux.ml>>=
+let rec compare_list cmp x y = match x, y with
+| [], [] -> 0
+| [], _ :: _ -> -1
+| _ :: _, [] ->  1
+| x :: xs, y :: ys ->
+    match cmp x y with
+    | 0 -> compare_list cmp xs ys
+    | diff -> diff

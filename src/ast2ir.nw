@@ -582,8 +582,10 @@ and call lhs cconv e args targets(*unused*) conts alias succ =
                                         (* incoming overflow results *)
   let sp_loc = 
     let base = Block.base out.C.overflow in
-    if cc.C.overflow_alloc.C.parameter_deallocator = C.Caller then to_mloc base
-    else to_mloc (Rtlutil.addk (W.exp base) base (Block.size out.C.overflow)) in
+    match cc.C.overflow_alloc.C.parameter_deallocator with
+    | C.Caller -> to_mloc base
+    | C.Callee ->
+        to_mloc (Rtlutil.addk (W.exp base) base (Block.size out.C.overflow)) in
   let spans = RT.to_spans ~sp:sp_loc ~prev_sp:prev_sp_loc ~ra:saved_ra
                           ~users:props ~csregs:nvr_temps ~conts:unwind_conts
                           ~sds:sd_locs ~vars:(var_array ()) in
@@ -819,10 +821,11 @@ For each procedure, we create a span that represents the incoming stack
 space that must be deallocated by the procedure.
 <<definition of [[proc]], which translates one procedure>>=
   let prev_sp_loc =
-    let base = Block.base proc_in'.C.overflow in
-    if proc_cc.C.overflow_alloc.C.parameter_deallocator = C.Callee then
-         to_mloc (Rtlutil.addk (W.exp base) base (Block.size proc_in'.C.overflow))
-    else to_mloc base in
+    let ovfl = proc_in'.C.overflow in
+    let base = Block.base ovfl in
+    match proc_cc.C.overflow_alloc.C.parameter_deallocator with
+    | C.Callee -> to_mloc (Rtlutil.addk (W.exp base) base (Block.size ovfl))
+    | C.Caller -> to_mloc base in
 @ 
 We also generate an array of variable locations.
 The current method is totally bogus: I'm only using the variable numbers.

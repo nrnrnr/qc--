@@ -60,9 +60,9 @@ module G = Cfgx.M
 module L = Cfgx.Live 
 
 let emit cfg call_emit rtl_emit sym_emit =
-  let labels n = if G.kind n = G.Join then G.labels n else [] in
+  let labels n = if G.kind n =*= G.Join then G.labels n else [] in
   let visit node =
-    if G.kind node = G.Call then call_emit node
+    if G.kind node =*= G.Call then call_emit node
     else (List.iter sym_emit (labels node)
          ; match G.to_executable node with
            | None   -> ()
@@ -134,7 +134,7 @@ let cfg2ast instr g ~name =
   let node n tail = match G.to_instr n with
   | Some i ->
       let is = instr i :: tail in
-      if G.kind n = G.Assertion then
+      if G.kind n =*= G.Assertion then
         A.CommentStmt "the preceding node is merely asserted" :: is
       else
         is 

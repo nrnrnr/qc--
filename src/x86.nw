@@ -115,8 +115,8 @@ let remember_slot_allocator _ = ()
 Addresses go in the integer registers, so we use these contexts:
 <<x86 postexpander>>=
 type context = (Talloc.Multiple.t -> int -> Register.t) * (Register.t -> bool)
-let icontext = Talloc.Multiple.reg 't', fun ((c, _, _), _, _) -> c = 'r' || c = 't'
-let fcontext = Talloc.Multiple.reg 'u', fun ((c, _, _), _, _) -> c = 'f' || c = 'u'
+let icontext = Talloc.Multiple.reg 't', fun ((c, _, _), _, _) -> c =<= 'r' || c =<= 't'
+let fcontext = Talloc.Multiple.reg 'u', fun ((c, _, _), _, _) -> c =<= 'f' || c =<= 'u'
 let fcontext = icontext  (* should be better with the stack?? *)
 let acontext = icontext
 let rcontext = (fun x y -> Impossible.unimp "Unsupported soft rounding mode")
@@ -284,7 +284,7 @@ until we try it with other versions of the x86 divide instruction.
 <<x86 postexpander>>=
 | ("div" | "mod") -> Unsupported.div_and_mod()
 | ("divu" | "quot" | "modu" | "rem") as opname ->
-    let unsigned = opname = "divu" || opname = "modu" in
+    let unsigned = opname =$= "divu" || opname =$= "modu" in
     let regpairv w hreg lreg =
       let rval  r = R.fetch (temploc r) w in
       let sh op l r = R.app (R.opr op [w]) [l; R.bits (Bits.U.of_int r w) w] in
@@ -307,7 +307,7 @@ until we try it with other versions of the x86 divide instruction.
     let div = R.par [R.store eax (R.app (R.opr q [64;32]) [regpair; tempval y]) 32;
                      R.store edx (R.app (R.opr r [64;32]) [regpair; tempval y]) 32;
                      undefflags] in
-    let answer = if opname = "rem" || opname = "modu" then Rg.edx else Rg.eax in
+    let answer = if opname =$= "rem" || opname =$= "modu" then Rg.edx else Rg.eax in
     move_rtl x answer :: div :: is @ move_rtl Rg.eax x :: move
 @ 
 Unsigned, extended multiplication is also painful---especially as we
@@ -453,12 +453,12 @@ let bc_x86 x86opname tgt =
     (R.store pc_lhs (Up.const tgt) 32)
 
 let bc x (opr, ws) y ~tgt =
-  assert (ws = [32]);
+  assert (ws =*= [32]);
   bc_x86 (cmpopr opr) tgt :: (cmpfun tgt opr) x y
 
 let bnegate r = match Down.rtl r with
 | RP.Rtl [RP.App((cop, [32]), [RP.Fetch (flags, 32)]), RP.Store (pc, tgt, 32)]
-  when pc = Down.loc pc_lhs && flags = Down.loc eflags ->
+  when RU.Eq.loc pc (Down.loc pc_lhs) && RU.Eq.loc flags (Down.loc eflags) ->
     Up.rtl (RP.Rtl [RP.App((cmpneg cop, [32]), [RP.Fetch (flags, 32)]),
                    RP.Store (pc, tgt, 32)])
 | _ -> Impossible.impossible "ill-formed x86 conditional branch"
@@ -552,7 +552,7 @@ let opclass (op, _) =
   | _ ->
       PX.Register
 
-let converts_stack_to_temp (op, _) = op = "f2i" || op = "f2f"
+let converts_stack_to_temp (op, _) = op =$= "f2i" || op =$= "f2f"
 
 <<x86 postexpander>>=
 let stspace = ('F', Rtl.Identity, Cell.of_size 3)
@@ -579,11 +579,9 @@ let stack_depth = 8
 let stack_width = 80
 let stack_top_proxy_reg = X86call.stack_top_proxy_reg
 let stack_top_proxy = R.reg stack_top_proxy_reg
-let is_stack_top_proxy = 
-  let ((sp, _, _), n, c) = stack_top_proxy_reg in
-  function
-    | RP.Reg ((sp', _, _), n', c') -> sp = sp' & n = n' & c = c'
-    | _ -> false
+let is_stack_top_proxy = function
+  | RP.Reg r -> Register.eq r stack_top_proxy_reg
+  | _ -> false
 <<x86 postexpander>>=
 let push ~addr assn = 
 (*
@@ -937,9 +935,9 @@ SOMEHOW.
 <<x86.ml>>=
 let warning s = Printf.eprintf "backend warning: %s\n" s
 let placevars = 
-  let is_float      w hint _ = w = 80 || (hint="float" && (w = 32 || w = 64)) in
-  let strange_float w hint   = w = 80 && hint <> "float" in
-  let strange_int   w hint   = hint = "float" && not (is_float w hint ()) in
+  let is_float      w hint _ = w = 80 || (hint=$="float" && (w = 32 || w = 64)) in
+  let strange_float w hint   = w = 80 && Pervasives.(<>) hint "float" in
+  let strange_int   w hint   = hint =$= "float" && not (is_float w hint ()) in
   let warn ~width:w ~alignment:a ~hint:h =
       if strange_float w h then
         warning "80-bit variable not hinted float but will go as float anyway"

@@ -12,6 +12,7 @@ let () =
   Debug.register "widen-pre"  "show RTL before widening";
   Debug.register "widen-vars" "show when a variable is widened";
   Debug.register "gamma"      "show how Gamma is constructed"
+let not_null = function [] -> false | _ :: _ -> true 
 @ 
 
 [[float]] is a simple widener for floating-point values.
@@ -78,8 +79,8 @@ module R = Rtl
 module RP = Rtl.Private
 module RU = Rtlutil
 
-module Down = Rtl.Dn
-module Up   = Rtl.Up
+module Dn = Rtl.Dn
+module Up = Rtl.Up
 
 let print_debug = false
 let imposs = Impossible.impossible
@@ -96,7 +97,7 @@ floating-point operations in an RTL to be using one of the widths in
 [[goodwidths]] that is at least as large as~[[w]].)
 <<widen.ml>>=
 let float ~rm goodwidths =
-  let rm = Down.exp rm in
+  let rm = Dn.exp rm in
   let goodwidths = List.sort compare goodwidths in
   let isgood w = List.exists (fun w' -> w' = w) goodwidths in
   let bestwidth w =
@@ -240,23 +241,23 @@ avoid rewriting the RTL, thereby reducing the load on the major heap.
 let rtl r = 
   let needs_conversion op =
     Rtlop.Types.has_floating_result op ||
-    match fst (Down.opr op) with
+    match fst (Dn.opr op) with
     | "fcmp"|"flt"|"fle"|"fgt"|"fge"|"feq"|"fne"|"fordered"|"funordered"|"f2i" -> true
     | _ -> false in
   if Rtlutil.Exists.Opr.rtl needs_conversion r then
     let rtl = Rtlutil.ToString.rtl in
     let _ = if Debug.on "widen-pre" then Printf.eprintf "Widening %s...\r" (rtl r) in
     let r' =
-      let RP.Rtl es = Down.rtl r in Up.rtl (RP.Rtl (List.map guarded es)) in
+      let RP.Rtl es = Dn.rtl r in Up.rtl (RP.Rtl (List.map guarded es)) in
     if Debug.on "widen" then Printf.eprintf "Widened %s into\n  %s\n" (rtl r) (rtl r');
     r'
   else
     r in
 <<widen.ml>>=
-let store_const goodwidth rtl = match Down.rtl rtl with
+let store_const goodwidth rtl = match Dn.rtl rtl with
   | RP.Rtl [(g, RP.Store(l, (RP.Const (RP.Bits b) as k), w))] when w < goodwidth ->
       let widek  = RP.App(("zx", [w; goodwidth]), [k]) in
-      let widek  = Down.exp (Simplify.exp (Up.exp widek)) in
+      let widek  = Dn.exp (Simplify.exp (Up.exp widek)) in
       let lobits = RP.App(("lobits", [goodwidth; w]), [widek]) in
       Up.rtl (RP.Rtl [(g, RP.Store(l, lobits, w))])
   | _ -> rtl
@@ -345,15 +346,15 @@ the union of the old frontier with the old known solutions as
 let rec find_reachable m known frontier =
   let frontier' = solutions_unique (List.concat (List.map (apply_rules m) frontier)) in
   let known     = solutions_union frontier known in
-  let frontier  = List.find_all (fun soln -> relevant_given soln known) frontier'
+  let frontier  = List.filter (fun soln -> relevant_given soln known) frontier'
   in
-  if frontier <> [] then find_reachable m known frontier else known
+  if not_null frontier then find_reachable m known frontier else known
 @ [[find_reachable]] relies on the ability to create a set of
 solutions from a list of solutions using the function
 [[solutions_unique]].
 <<solution set utilities>>=
 let solutions_union xs ys =
-  let xs' = List.find_all (fun soln -> relevant_given soln ys) xs in
+  let xs' = List.filter (fun soln -> relevant_given soln ys) xs in
   xs' @ ys
 @ [[find_reachable]] also needs to construct the union of two sets of
 solutions using the function [[solutions_union]].
@@ -424,7 +425,7 @@ so [[redundant_given1]] throws away solutions that are essentially the
 same as a known solutions but with higher cost.
 <<comparable>>=
 let comparable a b =
-  RU.Eq.exp (ast a) (ast b) && width a = width b && fill a = fill b && a.m = b.m
+  RU.Eq.exp (ast a) (ast b) && width a = width b && fill a =*= fill b && a.m = b.m
 @ 
 
 \subsubsection{Width-changing and subtyping rules}
@@ -461,7 +462,7 @@ solution.
 <<applying rules>>=
 let rec subsume_index soln n' =
   if is_tau soln then (soln.n < n' && soln.m <= soln.n) || soln.n = n'
-  else if fill soln = H then
+  else if fill soln =*= H then
     subsume_index {soln with fill = S; n = soln.w - soln.n} n'
   else imposs "subsume_index: not tau and not H"
 @ Again, the high-bits type is dealt with by pretending it has been
@@ -490,7 +491,7 @@ function implements \rul{Natural} as follows:
 <<applying rules>>=
 let natural_rule _ soln =
   let create fill' = {soln with fill = fill'; n = soln.w} in    
-  if width soln = index soln && fill soln = G then
+  if width soln = index soln && fill soln =*= G then
     [create Z; create S; {soln with fill = H; n = 0}]
 @ However, we also need to take into account the possiblility that
 \rul{Natural} is combined with the \rul{Subsume-Index} rule, which
@@ -498,9 +499,9 @@ says that we can increase the fill index under certain
 circumstances---the next branch of the conditional gives solutions for
 the combined rule case.
 <<applying rules>>=
-  else if fill soln = S || fill soln = Z then
-    List.filter (fun s -> subsume_index soln (index s)) [create Z; create S]
-  else []
+  else match fill soln with
+  | S | Z -> List.filter (fun s -> subsume_index soln (index s)) [create Z; create S]
+  | H | G -> []
 @ 
 
 \[\inferrule [Fill \sidecond{\uns(k_w)=n,n\leq w\leq w'}]
@@ -510,13 +511,13 @@ the combined rule case.
 \]
 <<applying rules>>=
 let fill_rule m soln =
-  if fill soln = G then
+  if fill soln =*= G then
     let w = width soln in
-    let lo_exists = find_exts_from m w "lobits" <> [] in
+    let lo_exists = not_null (find_exts_from m w "lobits") in
     if lo_exists then
       let n = index soln in
-      let zx_exists = find_exts_to m w "zx" <> [] in
-      let sx_exists = find_exts_to m w "sx" <> [] in
+      let zx_exists = not_null (find_exts_to m w "zx") in
+      let sx_exists = not_null (find_exts_to m w "sx") in
       let create fill' ext =
         { soln with
           cost = soln.cost + 2;
@@ -526,7 +527,7 @@ let fill_rule m soln =
       let zx_solns = if zx_exists then [create Z "zx"] else [] in
       let sx_solns = if sx_exists then [create S "sx"] else [] in
       let solns    = zx_solns @ sx_solns in
-      List.find_all (fun s -> s.n <= s.w) solns (* this is necessary *)
+      List.filter (fun s -> s.n <= s.w) solns (* this is necessary *)
     else []
   else []
 @ 
@@ -556,7 +557,7 @@ let widen_sigma m soln =
 \]
 <<applying rules>>=
 let widen_garbage m soln =
-  if fill soln = G then
+  if fill soln =*= G then
     let w         = width soln in
     let zx_widths = find_exts_from m w "zx" in
     let sx_widths = find_exts_from m w "sx" in
@@ -593,7 +594,7 @@ let narrow_rule m soln =
             w = w }
       | _ -> imposs "lobits operator should have some type bits#w->bits#n"
     in
-    List.find_all (fun s -> s.n <= s.w) (List.map create trunc_widths)
+    List.filter (fun s -> s.n <= s.w) (List.map create trunc_widths)
   else []
 @ 
 
@@ -606,7 +607,7 @@ let narrow_rule m soln =
 \]
 <<applying rules>>=
 let to_high_rule m soln =
-  if fill soln = G &&
+  if fill soln =*= G &&
     List.exists (function [w] -> w = soln.w | _ -> false) (machine_widths m "shl")
   then
     let w = soln.w in
@@ -628,7 +629,7 @@ let to_high_rule m soln =
 \]
 <<applying rules>>=
 let from_high_s_rule m soln =
-  if fill soln = H &&
+  if fill soln =*= H &&
     List.exists (function [w] -> w = soln.w | _ -> false) (machine_widths m "shra")
   then
     let w = soln.w in
@@ -650,7 +651,7 @@ let from_high_s_rule m soln =
 \]
 <<applying rules>>=
 let from_high_z_rule m soln =
-  if fill soln = H &&
+  if fill soln =*= H &&
     List.exists (function [w] -> w = soln.w | _ -> false) (machine_widths m "shrl")
   then 
     let w = soln.w in
@@ -714,7 +715,7 @@ let mksolutions_lit_bits litwidths tau e = match e with
   (match tau with
   | (S | Z) ->
       let f w' =
-        let ext = if tau = S then Bits.Ops.sx else Bits.Ops.zx in
+        let ext = if tau =*= S then Bits.Ops.sx else Bits.Ops.zx in
         {e = e; m = n; cost = 0; e' = RP.Const(RP.Bits (ext w' b)); fill = tau; n = n; w = w'} in
       List.map f litwidths
   | H ->
@@ -745,7 +746,7 @@ let lookup_gamma name w =
 
 let mksolutions_var name e w =
   let (fill, n) = lookup_gamma name w in
-  if fill = H then
+  if fill =*= H then
     [{e = e; m = n; cost = 0; e' = e; fill = H; n = w - n; w = w}]
   else 
     [{e = e; m = n; cost = 0; e' = e; fill = fill; n = n; w = w}]
@@ -799,7 +800,7 @@ let mksolutions_op m args_solns opname ws args =
 
   let taus = try List.assoc opname op_fill_types with _ -> [] in
   let has_taus (solns, _) (taus, _) =
-    List.for_all2 (fun s t -> s.fill = t) solns taus in
+    List.for_all2 (fun s t -> s.fill =*= t) solns taus in
   let solns_widths_and_taus = cross_pair_filter has_taus solns_and_widths taus in
   
   let mkopsoln ((solns, ((_,w'), ws')), (_,t)) =
@@ -840,7 +841,7 @@ let mksolutions_ext ext ws arg_solnss =
 
   (* find all solutions that have the appropriate sigma *)
   let sigma = fill_of_ext ext in
-  let arg_solns = List.find_all (fun s -> s.fill = sigma) arg_solns in
+  let arg_solns = List.filter (fun s -> s.fill =*= sigma) arg_solns in
 
   (* find all solutions with index equal to the input width of the extension *)
   let (n, n'') =
@@ -850,7 +851,7 @@ let mksolutions_ext ext ws arg_solnss =
   in
   (* assert that n <= n'' *)
 
-  let arg_solns = List.find_all (fun s -> subsume_index s n && n <= s.w) arg_solns in
+  let arg_solns = List.filter (fun s -> subsume_index s n && n <= s.w) arg_solns in
 
   let create1 arg_soln = { arg_soln with e = RP.App((ext,ws),[arg_soln.e]); 
                           m = n''; n = n} in
@@ -904,7 +905,7 @@ let mksolutions_trunc ws arg_solnss =
     let n' = s.n in
     n' <= n'' && (n <= n' || subsume_index s n)
   in
-  let arg_solns = List.find_all ok_soln arg_solns in
+  let arg_solns = List.filter ok_soln arg_solns in
   List.map drop_lo_copy arg_solns @ List.map drop_lo_ignore arg_solns
 @ 
 
@@ -933,7 +934,7 @@ let ast_combine m solns = function
       (mksolutions_lit_bits m.literals H e)
   | (RP.Fetch(RP.Mem(_, _, mcell as ms,c,addr,a),_)) as e ->
       let all  = List.concat solns in
-      let best = List.find_all (fun s -> fill s = Z && s.w = m.pointer) all in
+      let best = List.filter (fun s -> fill s =*= Z && s.w = m.pointer) all in
       let () = if null best then
                  imposs ("Couldn't widen "^(Rtlutil.ToString.exp (Up.exp e))) in
       let best = minimum_cost best in
@@ -989,7 +990,7 @@ let subst_fill s tau = {s with fill = tau}
 
 <<solution utilities>>=
 let apply_with x f = f x
-let map2_find_all prop xss ys = List.map2 (fun x -> List.find_all (prop x)) xss ys
+let map2_find_all prop xss ys = List.map2 (fun x -> List.filter (prop x)) xss ys
 let fork f g x = (f x, g x)
 let id x = x
 let compose f g x = f (g x)
@@ -1130,17 +1131,17 @@ let op_fill_types =
 let machine_has m opname ws = List.mem (opname,ws) m.ops
 
 let machine_widths m opname =
-  let all = List.find_all (fun (opname',_) -> opname = opname') m.ops in
-    List.map (fun (opname,ws) -> ws) all
+  let all = List.filter (fun (opname',_) -> opname =$= opname') m.ops in
+  List.map (fun (opname,ws) -> ws) all
 
 let find_exts_from m w extname =
   let ext_widths = machine_widths m extname in
-  List.find_all (function [w1;_] -> w1 = w
+  List.filter (function [w1;_] -> w1 = w
                         | _ -> imposs "ill formed machine env") ext_widths
 
 let find_exts_to m w extname =
   let ext_widths = machine_widths m extname in
-  List.find_all (function [_;w2] -> w2 = w
+  List.filter (function [_;w2] -> w2 = w
                         | _ -> imposs "ill formed machine env") ext_widths
 @ 
 <<widen.ml>>=
@@ -1183,7 +1184,7 @@ let needs_widening t r =
     in
     eff' || exp g
   in
-  let RP.Rtl es = Down.rtl r in
+  let RP.Rtl es = Dn.rtl r in
   List.fold_left (fun b e -> b || guard e) false es
 @ 
 
@@ -1203,7 +1204,7 @@ let dpwiden t r =
   let m = {ops=ops; literals=litwidths; pointer=ptrwidth; word=targetwidth} in
   let find_best_soln r tau w =
     let solns  = all_solutions m r in
-    let solns  = List.find_all (fun s -> width s = w && fill s = tau) solns in
+    let solns  = List.filter (fun s -> width s = w && fill s =*= tau) solns in
     let () = if null solns then
                imposs ("Couldn't widen "^Rtlutil.ToString.exp (Up.exp r)) in
     let soln   = minimum_cost solns in
@@ -1238,13 +1239,11 @@ let dpwiden t r =
   in
   let rtl = Rtlutil.ToString.rtl in
   let () = if Debug.on "widen-pre" then
-    (Printf.eprintf "Widening %s\n" (rtl r); flush stderr)
-  in
+    (Printf.eprintf "Widening %s\n" (rtl r); flush stderr) in
   let r' =
-    let RP.Rtl es = Down.rtl r in
-    Up.rtl (RP.Rtl (List.map widen_guard es))
-  in
-  if Debug.on "widen" && (rtl r') <> (rtl r) then
+    let RP.Rtl es = Dn.rtl r in
+    Up.rtl (RP.Rtl (List.map widen_guard es)) in
+  if Debug.on "widen" && not (rtl r' =$= rtl r) then
     (Printf.eprintf "`->      %s\n" (rtl r'); flush stderr);
   r'
 @ 
@@ -1294,16 +1293,13 @@ let widenlocs t r =
       | RP.Store(l, r, w) -> RP.Store(widen_loc l, widen_exp r, w)
       | RP.Kill l         -> RP.Kill (widen_loc l)
     in
-    (widen_exp g, eff')
-  in
+    (widen_exp g, eff') in
   let r' =
-    let RP.Rtl es = Down.rtl r in
-    Up.rtl (RP.Rtl (List.map widen_guarded es))
-  in
+    let RP.Rtl es = Dn.rtl r in
+    Up.rtl (RP.Rtl (List.map widen_guarded es)) in
   let () =
-    if Debug.on "widen-vars" && r' <> r then
-      (Printf.eprintf "rewritten to %s\n" (tostr r'); flush stderr)
-  in
+    if Debug.on "widen-vars" && not (RU.Eq.rtl (Dn.rtl r') (Dn.rtl r)) then
+      (Printf.eprintf "rewritten to %s\n" (tostr r'); flush stderr) in
   r'
 @ 
 
@@ -1344,7 +1340,7 @@ let update_gamma_counts t r =
     | RP.Kill l -> ());
     ignore(exp Z g)
   in
-  let RP.Rtl es = Down.rtl r in
+  let RP.Rtl es = Dn.rtl r in
   List.iter guard es;
   raise Don't_update
 @ 
@@ -1396,7 +1392,7 @@ let width_cost r =
   let rtl = Rtlutil.ToString.rtl in
   let _ = if print_debug then (Printf.eprintf "Counting %s\n" (rtl r); flush stderr) in
   let (sx, zx, lo) =
-    let RP.Rtl es = Down.rtl r in
+    let RP.Rtl es = Dn.rtl r in
     List.fold_left do_count_guard (0, 0, 0) es
   in
   Printf.eprintf "Counted %i sx, %i zx, %i lo\n" sx zx lo;
@@ -1429,7 +1425,7 @@ let app_count r =
   let rtl = Rtlutil.ToString.rtl in
   let _ = if print_debug then (Printf.eprintf "Counting %s\n" (rtl r); flush stderr) in
   let count =
-    let RP.Rtl es = Down.rtl r in
+    let RP.Rtl es = Dn.rtl r in
     List.fold_left do_count_guard 0 es
   in
   Printf.eprintf "Counted %i ops\n" count;

@@ -31,15 +31,24 @@ val fetch : Rtl.loc -> Rtl.exp
 val store : Rtl.loc -> Rtl.exp -> Rtl.rtl
 @ 
 % ------------------------------------------------------------------ 
-\subsection{Equality}
+\subsection{Equality and comparison}
 % ------------------------------------------------------------------ 
-Calling [[space_eq]] or [[loc_eq]] avoids a possibly awkward use of the polymorphic
-equality.  (Awkward because one could compare a function.)
+Calling these functions avoids polymorphic
+equality and comparison, which could fault at run time by comparing a function.
 <<rtlutil.mli>>=
 module Eq : sig
-  val space : Rtl.space       -> Rtl.space       -> bool
-  val loc   : Rtl.Private.loc -> Rtl.Private.loc -> bool
-  val exp   : Rtl.Private.exp -> Rtl.Private.exp -> bool
+  val space : Rtl.space         -> Rtl.space         -> bool
+  val const : Rtl.Private.const -> Rtl.Private.const -> bool
+  val loc   : Rtl.Private.loc   -> Rtl.Private.loc   -> bool
+  val exp   : Rtl.Private.exp   -> Rtl.Private.exp   -> bool
+  val rtl   : Rtl.Private.rtl   -> Rtl.Private.rtl   -> bool
+end
+module Compare : sig
+  val space : Rtl.space         -> Rtl.space         -> int
+  val const : Rtl.Private.const -> Rtl.Private.const -> int
+  val loc   : Rtl.Private.loc   -> Rtl.Private.loc   -> int
+  val exp   : Rtl.Private.exp   -> Rtl.Private.exp   -> int
+  val rtl   : Rtl.Private.rtl   -> Rtl.Private.rtl   -> int
 end
 @ 
 % ------------------------------------------------------------------ 
@@ -646,20 +655,17 @@ let singleAssignment rtl =
 
 <<RTLType>>=
 let singleAssignment rtl = 
-    let truth = RP.Const(RP.Bool true) in
+    let is_truth = function RP.Const(RP.Bool true) -> true | _ -> false in
     let is_move = function (* effect is an uncond. move *)
         | (g,RP.Store(RP.Reg(dst), RP.Fetch(RP.Reg(src),_),_)) 
-            when g=truth -> Some(dst,src)
-        | _              -> None in
+            when is_truth g -> Some(dst,src)
+        | _                 -> None in
     let is_kill = function (* effect is an uncond. kill *) 
-        | (g, RP.Kill _) -> g = truth
-        | _              -> false
-    in 
-        match Rtl.Dn.rtl rtl with
-        | RP.Rtl([])       -> None
-        | RP.Rtl(fst::rst) -> if List.for_all is_kill rst 
-                              then is_move fst
-                              else None
+        | (g, RP.Kill _) -> is_truth g
+        | _              -> false in 
+    match Rtl.Dn.rtl rtl with
+    | RP.Rtl([])       -> None
+    | RP.Rtl(fst::rst) -> if List.for_all is_kill rst then is_move fst else None
 @
 
 % ------------------------------------------------------------------ 
@@ -690,9 +696,9 @@ let rec const = function
     | R.Bool(true)   ->  A.PrimOp ("true", [])
     | R.Bool(false)  ->  A.PrimOp ("false", [])
     | R.Bits b       ->  A.Int( bitstring b
-                              , if !the_verbosity = High 
-                                then Some (bits (Bits.width b)) 
-                                else None
+                              , match !the_verbosity with
+                                | High -> Some (bits (Bits.width b))
+                                | Low  -> None
                               )
                      
     | R.Link(sym,_,w) -> A.Fetch(A.Name(None, sym#mangled_text))
@@ -711,8 +717,8 @@ let rec expr' = function
     | R.Fetch(loc,_)    -> rvalue loc
     | R.App((op,ww),ee) -> let actual e = (None, expr' e) in
                            match ee with
-                           | [l; r] when op = "add" || op = "sub" ->
-                                  let op = if op = "add" then "+" else "-" in
+                           | [l; r] when op =$= "add" || op =$= "sub" ->
+                                  let op = if op =$= "add" then "+" else "-" in
                                   A.BinOp(expr' l, op, expr' r)
                            | _ -> A.PrimOp(opr op ww, List.map actual ee)
 @
@@ -747,10 +753,10 @@ and location' = function
             let space   =  Printf.sprintf "$%c(%d%c)" sp width a in
             let aligned = if ass = 1 then None else Some ass in 
             A.Mem(A.TypeSynonym space,expr' e,aligned,
-                  if sp = 'm' then [] else ["'" ^ Char.escaped sp ^ "'"])
+                  if sp =<= 'm' then [] else ["'" ^ Char.escaped sp ^ "'"])
         | Low ->
             A.Mem(A.BitsTy width,expr' e, (if ass = 1 then None else Some ass),
-                  if sp = 'm' then [] else ["'" ^ Char.escaped sp ^ "'"]))
+                  if sp =<= 'm' then [] else ["'" ^ Char.escaped sp ^ "'"]))
     | R.Reg((sp,_,ms),i,c) -> 
         (match !the_verbosity with
         | High ->
@@ -826,19 +832,19 @@ let rec expr' = function
     | R.Const c         -> const c
     | R.Fetch(loc,_)    -> location' loc
     | R.App((op,ww),ee) -> match ee with
-                           | [l; r] when op = "add" || op = "sub" ->
-                                  let op = if op = "add" then " + " else " - " in
+                           | [l; r] when op =$= "add" || op =$= "sub" ->
+                                  let op = if op =$= "add" then " + " else " - " in
                                   brexpr' l ^ op ^ brexpr' r
                            | _ -> opr op ww ^ "(" ^ join ", " (List.map expr' ee) ^ ")"
 and brexpr' e = match e with (* bracketed expression *)
-    | R.App ((op,ww), _) when op = "add" || op = "sub" -> "(" ^ expr' e ^ ")"
+    | R.App ((op,ww), _) when op =$= "add" || op =$= "sub" -> "(" ^ expr' e ^ ")"
     | _ -> expr' e
 @
 
 <<ToString>>=
 and location' = function 
     | R.Mem ((sp,_,ms),c,e,ass) ->
-        let space = if sp = 'm' then "bits" ^ string_of_int (Cell.to_width ms c)
+        let space = if sp =<= 'm' then "bits" ^ string_of_int (Cell.to_width ms c)
                     else "$" ^ Char.escaped sp in
         space ^ "[" ^ expr' e ^ "]"
     | R.Reg r -> reg r
@@ -991,11 +997,11 @@ First code is not used but is to show how it should be done.
 module Down = Rtl.Dn
 module MayAlias = struct
   let regs ((s,_,_), i, R.C c) ((s',_,_), i', R.C c') =
-    s = s' && not (i + c <= i' || i' + c' <= i)
+    s =<= s' && not (i + c <= i' || i' + c' <= i)
 
   let () = Debug.register "may-alias" "check register may-alias function"
 
-  let regs' ((s,_,_), i, w) ((s',_,_), i', w') = s = s' && i = i'  (* WRONG!!! *)
+  let regs' ((s,_,_), i, w) ((s',_,_), i', w') = s =<= s' && i = i'  (* WRONG!!! *)
 
   let debug = Debug.on "may-alias"
 
@@ -1007,7 +1013,7 @@ module MayAlias = struct
         let bad  = regs' r r' in
         let good = regs  r r' in
         let what p = if p then "may" else "may not" in
-        if good <> bad then
+        if not (good =:= bad) then
           Printf.eprintf "Comparing $%c[%d:%d] and $%c[%d:%d]: old algorithm says %s alias; new says %s alias\n" s i c s' i' c' (what bad) (what good);
         good in
       regs
@@ -1051,7 +1057,7 @@ module MayAlias = struct
 
   let with_mem (s,_,_) (R.C c) e = function  (* different stack slots don't alias *)
     | RP.Mem ((s',_,_), R.C c', e', _) ->
-        s = s' &&
+        s =<= s' &&
         (match stack_slot e, stack_slot e' with
         | None,   Some _ -> not (is_initialized_data e)
         | Some _, None   -> not (is_initialized_data e')
@@ -1060,7 +1066,7 @@ module MayAlias = struct
 (*
 Printf.eprintf "--> comparing stack slots %s+%d and %s+%d\n" sym n sym' n';
 *)
-                sym = sym' && not (n + c <= n' || n' + c' <= n))
+                sym =$= sym' && not (n + c <= n' || n' + c' <= n))
     | _ -> false
 
   let unslice f l =
@@ -1232,21 +1238,145 @@ module Fold = struct
 end 
 @ 
 <<rtlutil.ml>>=
+<<comparisons>>
 module Eq = struct
-let space  ((s:char), _, _)  ((s':char), _, _) = s = s'
+  let space  ((s:char), _, _)  ((s':char), _, _) = s =<= s'
+  let const c c' = Compare.const c c' = 0
+  let loc   l l' = Compare.loc   l l' = 0
+  let exp   e e' = Compare.exp   e e' = 0
+  let rtl   r r' = Compare.rtl   r r' = 0
+end
+@ 
+<<comparisons>>=
+module Compare = struct
+  let less    = -1
+  let equal   = 0
+  let greater = 1
 
-let rec loc l l' = match l, l' with
-| RP.Mem (sp,c,e,ass), RP.Mem (sp',c',e',ass') ->
-    space sp sp' && c = c' && exp e e' && ass = ass'
-| RP.Reg r, RP.Reg r' -> Register.eq r r'
-| RP.Var (_,i,_), RP.Var (_,i',_) -> i = i'
-| RP.Global (_,i,_), RP.Global (_,i',_) -> i = i'
-| RP.Slice (w,i,l), RP.Slice (w',i',l') -> w = w' && i = i' && loc l l'
-| _, _ -> false
-and exp e e' = match e, e' with
-| RP.Const c, RP.Const c' -> c = c'
-| RP.Fetch(l,w), RP.Fetch(l',w') -> w = w' && loc l l'
-| RP.App(op,es), RP.App(op',es') -> op = op' && List.for_all2 exp es es'
-| _, _ -> false
+  let space (s, _, _) (s', _, _) = comparec s s'
 
+  let rec const c c' = match c, c' with
+  | (RP.Bool l, RP.Bool r) -> compareb l r
+  | (RP.Bits l, RP.Bits r) -> Bits.compare l r
+  | (RP.Link (l1, l2, l3), RP.Link (r1, r2, r3)) ->  
+    (match Pervasives.compare l1 r1 with
+    | 0 ->
+        (match Pervasives.compare l2 r2 with
+        | 0 -> compare l3 r3
+        | diff -> diff)
+    | diff -> diff)
+  | (RP.Diff (l1, l2), RP.Diff (r1, r2)) ->  
+      (match const l1 r1 with
+      | 0 -> const l2 r2
+      | diff    -> diff)
+  | (RP.Late (l1, l2), RP.Late (r1, r2)) ->  
+      (match compares l1 r1 with
+      | 0   -> comparei l2 r2
+      | diff    -> diff)
+  | (RP.Bool _, RP.Bits _) -> less
+  | (RP.Bool _, RP.Link _) -> less
+  | (RP.Bool _, RP.Diff _) -> less
+  | (RP.Bool _, RP.Late _) -> less
+  | (RP.Bits _, RP.Bool _) -> greater
+  | (RP.Bits _, RP.Link _) -> less
+  | (RP.Bits _, RP.Diff _) -> less
+  | (RP.Bits _, RP.Late _) -> less
+  | (RP.Link _, RP.Bool _) -> greater
+  | (RP.Link _, RP.Bits _) -> greater
+  | (RP.Link _, RP.Diff _) -> less
+  | (RP.Link _, RP.Late _) -> less
+  | (RP.Diff _, RP.Bool _) -> greater
+  | (RP.Diff _, RP.Bits _) -> greater
+  | (RP.Diff _, RP.Link _) -> greater
+  | (RP.Diff _, RP.Late _) -> less
+  | (RP.Late _, RP.Bool _) -> greater
+  | (RP.Late _, RP.Bits _) -> greater
+  | (RP.Late _, RP.Link _) -> greater
+  | (RP.Late _, RP.Diff _) -> greater
+  and symkind k k' = match k, k' with
+  | (RP.Code, RP.Code) -> equal
+  | (RP.Data, RP.Data) -> equal
+  | (RP.Imported, RP.Imported) -> equal
+  | (RP.Code, RP.Data) -> less
+  | (RP.Code, RP.Imported) -> less
+  | (RP.Data, RP.Code) -> greater
+  | (RP.Data, RP.Imported) -> less
+  | (RP.Imported, RP.Code) -> greater
+  | (RP.Imported, RP.Data) -> greater
+
+  let rec exp e e' = match e, e' with
+  | (RP.Const l, RP.Const r) -> const l r
+    | (RP.Fetch (l1, l2), RP.Fetch (r1, r2)) ->  
+        (match loc l1 r1 with
+          | 0   -> compare l2 r2
+          | diff    -> diff)
+    | (RP.App (l1, l2), RP.App (r1, r2)) ->  
+        (match Pervasives.compare l1 r1 with
+        | 0   -> Aux.compare_list exp l2 r2
+        | diff    -> diff)
+    | (RP.Const _, RP.Fetch _) -> less
+    | (RP.Const _, RP.App _) -> less
+    | (RP.Fetch _, RP.Const _) -> greater
+    | (RP.Fetch _, RP.App _) -> less
+    | (RP.App _, RP.Const _) -> greater
+    | (RP.App _, RP.Fetch _) -> greater
+  and count (RP.C l) (RP.C r) = compare l r
+  and loc l l' = match l, l' with
+  | (RP.Mem (l1, l2, l3, l4), RP.Mem (r1, r2, r3, r4)) ->
+        (match space l1 r1 with
+        | 0   ->  
+            (match count l2 r2 with
+            | 0   ->  
+                (match exp l3 r3 with
+                | 0   -> Pervasives.compare l4 r4
+                | diff    -> diff)
+            | diff    -> diff)
+        | diff    -> diff)
+    | (RP.Reg l, RP.Reg r) -> Register.compare l r
+    | (RP.Var (l1, l2, l3), RP.Var (r1, r2, r3)) -> comparei l2 r2
+    | (RP.Global (l1, l2, l3), RP.Global (r1, r2, r3)) ->  comparei l2 r2
+    | (RP.Slice (l1, l2, l3), RP.Slice (r1, r2, r3)) ->  
+        (match comparei l2 r2 with
+        | 0   ->  
+            (match comparei l1 r1 with
+            | 0   -> loc l3 r3
+            | diff    -> diff)
+           | diff    -> diff)
+    | (RP.Mem _, RP.Reg _) -> less
+    | (RP.Mem _, RP.Var _) -> less
+    | (RP.Mem _, RP.Global _) -> less
+    | (RP.Mem _, RP.Slice _) -> less
+    | (RP.Reg _, RP.Mem _) -> greater
+    | (RP.Reg _, RP.Var _) -> less
+    | (RP.Reg _, RP.Global _) -> less
+    | (RP.Reg _, RP.Slice _) -> less
+    | (RP.Var _, RP.Mem _) -> greater
+    | (RP.Var _, RP.Reg _) -> greater
+    | (RP.Var _, RP.Global _) -> less
+    | (RP.Var _, RP.Slice _) -> less
+    | (RP.Global _, RP.Mem _) -> greater
+    | (RP.Global _, RP.Reg _) -> greater
+    | (RP.Global _, RP.Var _) -> greater
+    | (RP.Global _, RP.Slice _) -> less
+    | (RP.Slice _, RP.Mem _) -> greater
+    | (RP.Slice _, RP.Reg _) -> greater
+    | (RP.Slice _, RP.Var _) -> greater
+    | (RP.Slice _, RP.Global _) -> greater
+
+  let effect e e' = match e, e' with
+  | (RP.Store (l1, l2, l3), RP.Store (r1, r2, r3)) ->  
+      (match loc l1 r1 with
+      | 0   ->  
+          (match exp l2 r2 with
+          | 0   -> compare l3 r3
+          | diff    -> diff)
+      | diff    -> diff)
+  | (RP.Kill l, RP.Kill r) -> loc l r
+  | (RP.Store _, RP.Kill _) -> -1
+  | (RP.Kill _, RP.Store _) -> 1
+  let guarded (l1, l2) (r1, r2) =
+      (match exp l1 r1 with
+      | 0   -> effect l2 r2
+      | diff    -> diff)
+  let rtl (RP.Rtl l) (RP.Rtl r) = Aux.compare_list guarded l r
 end

@@ -24,6 +24,7 @@ module A    = Automaton
 let ( *> )  = A.( *> ) 
 module R    = Rtl
 module RP   = Rtl.Private
+module RU   = Rtlutil
 module Up   = Rtl.Up
 module Dn   = Rtl.Dn
 module SM   = Strutil.Map
@@ -153,7 +154,7 @@ There is no distinction between an integer and an address.
 @
 <<ARM postexpander>>=
 type context = (Talloc.Multiple.t -> int -> Register.t) * (Register.t -> bool)
-let icontext = Talloc.Multiple.reg 't', fun ((c,_,_), _, _) -> c = 'r' || c = 't'
+let icontext = Talloc.Multiple.reg 't', fun ((c,_,_), _, _) -> c =<= 'r' || c =<= 't'
 let acontext = icontext
 let itempwidth = 32
 @
@@ -217,7 +218,7 @@ width. Load immediate loads a constant into a temorary.
 <<ARM postexpander>>=
 let move ~dst ~src =
     assert (Register.width src = Register.width dst);
-    if src = dst then [] else [R.store (tloc dst) (tval src) (twidth src)]
+    if Register.eq src dst then [] else [R.store (tloc dst) (tval src) (twidth src)]
 @
 Immediate load, and extended immediate load. An extended load-immediate
 can take sums and differences of compile-time constants (including late
@@ -299,7 +300,7 @@ let cmp x y = [subflags (tval x) (tval y) 32]
 let rec bc x (opr, ws as op) y ~tgt =
   let branch cond = R.guard (R.app (R.opr cond [32]) [R.fetch cc 32])
                             (R.store pc_lhs (Up.const tgt) 32) in
-  assert (ws = [wordsize]);
+  assert (ws =*= [wordsize]);
   match opr with
   | "eq" | "ne" | "lt" | "le" | "gt" | "ge" | "leu" | "gtu" ->
       branch (arm_cond opr) :: cmp x y
@@ -328,7 +329,7 @@ and arm_cond = function
 <<ARM postexpander>>=
 let rec bnegate r = match Dn.rtl r with
 | RP.Rtl [RP.App((cop, [32]), [RP.Fetch (bcodes, 32)]), RP.Store (pc, tgt, 32)]
-  when pc = Dn.loc pc_lhs && bcodes = Dn.loc cc ->
+  when RU.Eq.loc pc (Dn.loc pc_lhs) && RU.Eq.loc bcodes (Dn.loc cc) ->
     Up.rtl (RP.Rtl [RP.App((negate cop, [32]), [RP.Fetch (bcodes, 32)]),
                    RP.Store (pc, tgt, 32)])
 | _ -> Impossible.impossible "ill-formed ARM conditional branch"

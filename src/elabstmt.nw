@@ -289,7 +289,7 @@ let assign lhs rhs =
 let effect lhs (guard,rhs) =
   let guard = Aux.Option.map exp guard in
   E.seq2 (loc lhs) (exp rhs) (fun (loc, w) (e, ty) ->
-    if ty <> Types.Bits w then
+    if Pervasives.(<>) ty (Types.Bits w) then
       errorf (Elabexp.loc_region r lhs)
         "location of type bits%d cannot hold value of type %s" w (Types.to_string ty)
     else
@@ -297,8 +297,8 @@ let effect lhs (guard,rhs) =
       match guard with
       | None   -> E.Ok rtl
       | Some g -> E.seq g (fun (g, ty) ->
-          if ty = Types.Bool then E.Ok (Rtl.guard g rtl)
-          else errorf r "guard must have type bool, not %s" (Types.to_string ty))) in
+          match ty with Types.Bool -> E.Ok (Rtl.guard g rtl)
+          | _ -> errorf r "guard must have type bool, not %s" (Types.to_string ty))) in
 @ 
 <<complain about length mismatch in assignment>>=
 if List.length lhs < List.length rhs then
@@ -506,7 +506,7 @@ let prim lhs conv op args flows =
   let args = E.Raise.list (List.map (fun (h, e) -> E.Raise.right (h, exp e)) args) in
   let flow = prim_flow r flows in
   E.ematch3 lhs args flow (fun lhs args flow ->
-    let nonempty_hint (h, _) = h <> "" in
+    let nonempty_hint (h, _) = Pervasives.(<>) h "" in
     if List.exists nonempty_hint lhs || List.exists nonempty_hint args then
       E.error "calls to primitive operators may use only empty hints"
     else
@@ -515,7 +515,7 @@ let prim lhs conv op args flows =
           let argtys  = List.map (fun (_, (_, t)) -> t) args in
           let argexps = List.map (fun (_, (e, _)) -> e) args in
           let t, opr  = Rtlop.Translate.prefix op argtys in
-          if t <> Types.Bits w then
+          if Pervasives.(<>) t (Types.Bits w) then
             <<raise error exn on primop type mismatch>>
           else
             Assign (Rtl.store result (Rtl.app opr argexps) w)

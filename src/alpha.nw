@@ -140,10 +140,10 @@ There is no distinction between an integer and an address.
 @
 <<Alpha postexpander>>=
 type context = (Talloc.Multiple.t -> int -> Register.t) * (Register.t -> bool)
-let icontext = Talloc.Multiple.reg 't', fun ((c, _, _), _, _) -> c = 'r' || c = 't'
-let fcontext = Talloc.Multiple.reg 'u', fun ((c, _, _), _, _) -> c = 'f' || c = 'u'
+let icontext = Talloc.Multiple.reg 't', fun ((c, _, _), _, _) -> c =<= 'r' || c =<= 't'
+let fcontext = Talloc.Multiple.reg 'u', fun ((c, _, _), _, _) -> c =<= 'f' || c =<= 'u'
 let acontext = icontext
-let rcontext = (fun x y -> unimp "Unsupported soft rounding mode"), fun r -> r = rm_reg
+let rcontext = (fun x y -> unimp "Unsupported soft rounding mode"), Register.eq rm_reg
 let itempwidth = 64
 @
 \paragraph{Addressing modes}
@@ -213,7 +213,7 @@ width. Load immediate loads a constant into a temporary.
 <<Alpha postexpander>>=
 let move ~dst ~src =
     assert (reg_width src = reg_width dst);
-    if src = dst then [] else [R.store (tloc dst) (tval src) (twidth src)]
+    if Register.eq src dst then [] else [R.store (tloc dst) (tval src) (twidth src)]
 @
 Immediate load, and extended immediate load. An extended load-immediate
 can take sums and differences of compile-time constants (including late
@@ -342,7 +342,7 @@ let cbranch op x tgt =
             (R.store pc_lhs (Up.const tgt) wordsize)
 
 let bc x (opr, ws as op) y ~tgt =
-    assert (ws = [wordsize]);
+    assert (ws =*= [wordsize]);
     (cbranch "eq" x tgt) :: (cmp opr x y)  
 @
 [[bnegate]] inverts the condition in a conditional branch. Since we only
@@ -360,7 +360,7 @@ let bnegate r =
                      , [RP.Fetch(RP.Reg(x),64);RP.Const(RP.Bits(b))]
                      ) 
              , RP.Store (pc, tgt, 64)
-             ] when pc = Dn.loc pc_lhs && b = Bits.zero 64 ->
+             ] when RU.Eq.loc pc (Dn.loc pc_lhs) && Bits.eq b (Bits.zero 64) ->
                  R.guard (R.app (R.opr (negate op) [64]) [tval x; zero]) 
                 (R.store pc_lhs (Up.exp tgt) wordsize)
     | _ -> Impossible.impossible "ill-formed Alpha conditional branch"

@@ -370,7 +370,7 @@ module Const = struct
       | None -> E.Ok (b, Types.Bits w)
       | Some ty ->
           E.seq (Elabexp.elab_ty env ty) (fun t ->
-            if t = Types.Bits w then E.Ok (b, t)
+            if t =*= Types.Bits w then E.Ok (b, t)
             else errorf "constant %s declared with type %s has actual type bits%d"
                            name (Types.to_string t) w))
   let bind name (r, typed_exp) env = 
@@ -518,7 +518,7 @@ let bind_and_remember_import env (r, ty, imports) =
 <<convert optional importing [[ty]] as long as it is pointer size>>=
 match ty with None -> E.Ok pointerty
 | Some t -> E.seq (Elabexp.elab_ty env t) (fun t ->
-    if t = pointerty then E.Ok pointerty
+    if t =*= pointerty then E.Ok pointerty
     else errorf r "imported type %s is inconsistent with native pointer type %s"
         (Types.to_string t) (Types.to_string pointerty))
 @ 
@@ -578,10 +578,9 @@ let registers_from scope n rs env =
                   "hints permissible only on formal parameters or global variables") 
         | None,   None   -> den FE.RNone
         | None,   Some r ->
-            if scope = Local then
-              errorf rgn "local register can't be mapped to hardware"
-            else
-              den (FE.RReg r) in
+            (match scope with
+            | Local  -> errorf rgn "local register can't be mapped to hardware"
+            | Global -> den (FE.RReg r)) in
         E.Raise.left (den, ty)) in
       let named = E.Raise.right (name, entry) in
       regs_from (named::prev') (n+1) rs (F.bindv name (rgn, entry) env) in
@@ -698,7 +697,7 @@ let check_export env (r, ty, pairs) =
   let errorf fmt = Printf.kprintf (fun s -> eprint r s; F.flagError env) fmt in
   let check_pair env (name, foreign) =
     E.seq' env (snd (F.findv name env)) (fun (den, ty) ->
-      if ty <> pointerty then
+      if Pervasives.(<>) ty pointerty then
         errorf "exported value must have native pointer type"
       else
         match den with
@@ -708,7 +707,7 @@ let check_export env (r, ty, pairs) =
   let env = match ty with
   | Some t ->
       E.seq' env (Elabexp.elab_ty env t) (fun ty ->
-        if ty <> pointerty then
+        if Pervasives.(<>) ty pointerty then
           errorf "exported value must have native pointer type"
         else
           env)
@@ -815,19 +814,19 @@ and init r ty i =
   | A.InitAt (x,r) -> E.catch (error r env) (init r ty) x
   | A.InitExprs(es)  ->
       E.seq (E.Raise.list (List.map (Elabexp.elab_link env) es)) (fun tes ->
-        if List.for_all (fun (e, w) -> Types.Bits w = ty) tes then
+        if List.for_all (fun (e, w) -> Types.Bits w =*= ty) tes then
           E.Ok tes
         else
           errorf r "type of an initial value does not match declared type %s"
             (Types.to_string ty))
   | A.InitStr s ->
       let to_texpr c = Reloc.Simple.of_const (Bits.U.of_int (Char.code c) 8), 8 in
-      if ty = T.Bits 8 then
+      if ty =*= T.Bits 8 then
         E.Ok (Aux.String.foldr (fun c l -> to_texpr c :: l) s [])
       else
         errorf r "initialized string must specify type bits8"
   | A.InitUStr(s) ->
-      if ty = T.Bits 16 then
+      if ty =*= T.Bits 16 then
         Impossible.unimp "Unicode"
       else
         errorf r "initialized Unicode string must specify type bits16" in

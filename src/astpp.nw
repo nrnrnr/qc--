@@ -58,6 +58,7 @@ module E = Error
 let (^^)   = P.(^^)
 let (^/)   = P.(^/)
 let (~~) x = x
+let nonempty = function [] -> false | _ :: _ -> true
 @
 
 The module [[Pp]] provides the pretty printing primitives.  The
@@ -202,7 +203,7 @@ and expr = function
                                  ~~ P.text "(" ^^ expr l
                                  ^^ nest begin
                                     ~~ P.text op
-                                    ^^ (if op = "%" then P.break else P.empty)
+                                    ^^ (if op =$= "%" then P.break else P.empty)
                                     ^^ P.breakWith ""
                                     ^^ expr r
                                     end
@@ -251,7 +252,7 @@ let rec datum = function
 let formal (_, (h, v, t, n)) =
     P.agrp begin
     ~~ (match h with Some hint -> str hint ^^ P.break | None -> P.empty)
-    ^^ (if v = A.Invariant then P.text "invariant" ^^ P.break else P.empty)
+    ^^ (if v =*= A.Invariant then P.text "invariant" ^^ P.break else P.empty)
     ^^ ty t
     ^/ id n
     end
@@ -271,8 +272,8 @@ let cformals xs = P.agrp (P.text "(" ^^ P.commalist cformal xs ^^ P.text ")")
 <<astpp.ml>>=
 let register is_global (v , hint, t, n, reg) = 
     angrp begin 
-    ~~ (if v = A.Invariant then P.text "invariant" ^^ P.break else P.empty)
-    ^^ (if is_global       then P.text "register"  ^^ P.break else P.empty)
+    ~~ (if v =*= A.Invariant then P.text "invariant" ^^ P.break else P.empty)
+    ^^ (if is_global         then P.text "register"  ^^ P.break else P.empty)
     ^^ (match hint with Some h -> P.break ^^ str h | None -> P.empty)
     ^^ ty t
     ^/ id n
@@ -296,14 +297,14 @@ let targets = function
     
 let rec flow f =
     let also s ns = P.agrp (P.text "also" ^/ P.text s ^/ P.text "to" 
-                         ^/ nest (P.commalist id ns))
-    in match f with
+                         ^/ nest (P.commalist id ns)) in
+    match f with
     | A.FlowAt(x,_)     -> flow x
-    | A.CutsTo(ns)    when ns <> []     -> also "cuts"    ns
-    | A.UnwindsTo(ns) when ns <> []     -> also "unwinds" ns
-    | A.ReturnsTo(ns) when ns <> []     -> also "returns" ns
-    | A.Aborts                          -> P.text "also aborts"
-    | _                                 -> P.empty
+    | A.CutsTo(ns)    when nonempty ns -> also "cuts"    ns
+    | A.UnwindsTo(ns) when nonempty ns -> also "unwinds" ns
+    | A.ReturnsTo(ns) when nonempty ns -> also "returns" ns
+    | A.Aborts                         -> P.text "also aborts"
+    | _                                -> P.empty
 
 let rec alias f =
   let ann s ns = P.agrp (P.text s ^/ nest (P.commalist id ns)) in
@@ -430,7 +431,7 @@ before it is printed.
 <<astpp.ml>>=
     | A.CallStmt(lhs, cc, e, args, ts, fs) -> 
         angrp begin
-        ~~ ( if lhs <> [] 
+        ~~ ( if nonempty lhs
              then fngrp begin 
                   ~~ P.commalist lvalue lhs 
                   ^/ P.text "="
@@ -451,14 +452,14 @@ before it is printed.
               ^^ P.text ")"
               end
            end
-        ^^ (if ts <> [] then P.break ^^ targets ts else P.empty)
-        ^^ (if fs <> [] then P.break ^^ panns fs else P.empty)
+        ^^ (if nonempty ts then P.break ^^ targets ts else P.empty)
+        ^^ (if nonempty fs then P.break ^^ panns fs else P.empty)
         ^^ semi
         end
 <<astpp.ml>>=
     | A.PrimStmt(lhs, cc, n, args, fs)     -> 
         angrp begin
-        ~~ ( if lhs <> [] then 
+        ~~ ( if nonempty lhs then 
                   ~~ P.commalist lvalue lhs 
                   ^/ P.text "="
                   ^^ P.break
@@ -476,7 +477,7 @@ before it is printed.
            ^^ P.commalist actual args 
            ^^ P.text ")"
            end
-        ^^ (if fs <> [] then P.break ^^ flows fs else P.empty)
+        ^^ (if nonempty fs then P.break ^^ flows fs else P.empty)
         ^^ semi
         end
     
@@ -484,7 +485,7 @@ before it is printed.
         angrp begin
         ~~ P.text "goto"
         ^/ expr e
-        ^^ (if ts <> [] then P.break ^^ targets ts else P.empty)
+        ^^ (if nonempty ts then P.break ^^ targets ts else P.empty)
         ^^ semi
         end
     | A.CutStmt(e, args, fs)                -> 
@@ -497,7 +498,7 @@ before it is printed.
            ^^ P.commalist actual args 
            ^^ P.text ")"
            end
-        ^^ (if fs <> [] then P.break ^^ flows fs else P.empty)
+        ^^ (if nonempty fs then P.break ^^ flows fs else P.empty)
         ^^ semi
         end
     | A.ReturnStmt(cc, alt, args)           -> 
@@ -522,7 +523,7 @@ before it is printed.
            )
         ^^ fngrp begin 
            ~~ (P.text "jump" ^/ expr e)
-           ^^ ( if args <> [] then 
+           ^^ ( if nonempty args then 
                     ~~ P.break 
                     ^^ P.text "(" 
                     ^^ P.commalist actual args 
@@ -530,7 +531,7 @@ before it is printed.
                  else 
                     P.empty
               )
-           ^^ (if ts <> [] then P.break ^^ targets ts else P.empty)
+           ^^ (if nonempty ts then P.break ^^ targets ts else P.empty)
            end
         ^^ semi
         end

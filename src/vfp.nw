@@ -195,7 +195,7 @@ module Make (Arg : ARG) = struct
       if x.vfp_minus_sp = k then false
       else if x.vfp_minus_sp = unknown then (x.vfp_minus_sp <- k; true)
       (* accept inconsistency at exit and entry points to cut and unwind contn's *)
-      else if G.kind node = G.Exit || G.is_non_local_join node then false
+      else if G.kind node =*= G.Exit || G.is_non_local_join node then false
       else (Printf.eprintf "Node: %d\n" (G.num node); Impossible.impossible "inconsistent stack-pointer location") in
     let init = Down.exp spval, 0 in
     let propagate node (vfp, k) =
@@ -206,7 +206,7 @@ module Make (Arg : ARG) = struct
           let down = Down.rtl i in
           let rtl =
             if RU.Exists.Loc.rtl is_vfp down then
-              let simp = if G.kind node = G.StackAdjust then simp else Simplify.rtl in
+              let simp = if G.kind node =*= G.StackAdjust then simp else Simplify.rtl in
               simp (replace_vfp vfp i)
             else
               i in

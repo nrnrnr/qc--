@@ -20,6 +20,7 @@ val placevars : Ast2ir.proc -> Automaton.t
 module S  = Space
 module SS = S.Standard32
 module R  = Rtl
+module RU = Rtlutil
 module Up = R.Up
 module Dn = R.Dn
 module RP = R.Private
@@ -262,20 +263,20 @@ let remember_slot_allocator _ = ()
 <<SPARC postexpander>>=
 type context = (Talloc.Multiple.t -> int -> Register.t) * (Register.t -> bool)
 
-let icontext = (* Talloc.Multiple.reg 't', fun (c, _, _) -> c = 'r' || c = 't' *)
+let icontext = (* Talloc.Multiple.reg 't', fun (c, _, _) -> c =<= 'r' || c =<= 't' *)
   (fun t w ->
     if w = 32 then Talloc.Multiple.reg 't' t 32
     else Talloc.Multiple.reg 'j' t 64),
-  fun ((c,_,_), _, _) -> c = 'r' || c = 't' || c = 'j' || c = 's'
+  fun ((c,_,_), _, _) -> c =<= 'r' || c =<= 't' || c =<= 'j' || c =<= 's'
 
-let fcontext = (* Talloc.Multiple.reg 'u', fun (c, _, _) -> c = 'f' || c = 'u' *)
+let fcontext = (* Talloc.Multiple.reg 'u', fun (c, _, _) -> c =<= 'f' || c =<= 'u' *)
   (fun t w ->
     if w = 32 then Talloc.Multiple.reg 'u' t 32
     else Talloc.Multiple.reg 'q' t 64), 
-  fun ((c,_,_), _, _) -> c = 'f' || c = 'u' || c = 'x' || c = 'q'
+  fun ((c,_,_), _, _) -> c =<= 'f' || c =<= 'u' || c =<= 'x' || c =<= 'q'
 let acontext = icontext
 let rcontext = (fun x y -> unimpf "Unsupported soft rounding mode")
-               ,fun ((sp,_,_), i, _) -> sp = 'd' && i = 0
+               ,fun ((sp,_,_), i, _) -> sp =<= 'd' && i = 0
 let itempwidth = 32
 @ 
 <<SPARC postexpander>>=
@@ -489,7 +490,7 @@ Needs to be filled in
 <<SPARC postexpander>>=
 let bc x (opr, ws as op) y ~tgt =
   (* Might be a 64-bit float *)
-  assert (ws = [wordsize] || ws = [wordsize*2]);
+  assert (ws =*= [wordsize] || ws =*= [wordsize*2]);
   [ R.guard (R.app (R.opr ("sparc_"^opr) ws) [R.fetch cc 32])
             (R.store pc_lhs (Up.const tgt) 32)
   ; R.store cc (R.app (R.opr "sparc_subcc" ws) [rfetch x; rfetch y]) 32
@@ -516,7 +517,7 @@ let bnegate r =
                      , [RP.Fetch(RP.Reg(x),32); RP.Const(RP.Bits(b))]
                      ) 
              , RP.Store (pc, tgt, 32)
-             ] when pc = Dn.loc pc_lhs && b = Bits.zero 32 ->
+             ] when RU.Eq.loc pc (Dn.loc pc_lhs) && Bits.eq b (Bits.zero 32) ->
                  R.guard (R.app (R.opr (negate op) [32]) [rfetch x; zero]) 
                 (R.store pc_lhs (Up.exp tgt) wordsize)
     | _ -> imposs "ill-formed SPARC conditional branch"
@@ -632,12 +633,9 @@ let target =
 <<sparc.ml>>=
 let warning s = Printf.eprintf "backend warning: %s\n" s
 let placevars = 
-  let is_float      w hint _ = hint = "float" in
-(*
-  let is_float      w hint _ = w = 64 || (hint = "float" && (w = 32)) in
-*)
-  let strange_float w hint   = w = 64 && hint <> "float" in
-  let strange_int   w hint   = hint = "float" && not (is_float w hint ()) in
+  let is_float      w hint _ = hint =$= "float" in
+  let strange_float w hint   = w = 64 && not (hint =$= "float") in
+  let strange_int   w hint   = hint =$= "float" && not (is_float w hint ()) in
   let warn ~width:w ~alignment:a ~hint:h =
       if strange_float w h then
         warning "64-bit variable not hinted float but will go as float anyway"

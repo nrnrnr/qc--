@@ -117,11 +117,11 @@ clobber:V:  dep-clobber clean
 
 ML =            topsort.ml       \
                 context.ml       \
+                aux.ml           \
                 eqn.ml           \
                 this.ml          \
 		reinit.ml	 \
                 luautil.ml       \
-                aux.ml           \
                 idcode.ml	 \
                 strutil.ml       \
                 idgen.ml         \
@@ -478,38 +478,28 @@ ${B}scan.mli:D:     parser.nw
 # MLburg generated files
 # ------------------------------------------------------------------ 
 
-${B}x86rec.mlb:D:   x86rec.nw
-	$NOTANGLE -L"$LINE" -Rx86rec.mlb $prereq > $target
+${B}%.mlx:D:   %.nw
+	$NOTANGLE -L"$LINE" -R${stem}.mlb $prereq > $target
+
+${B}%.mlb:D:   ${B}%.mlx
+	( echo "%head {:"; cat $NOPOLY; echo ":}"; cat $prereq ) > $target
+
+# these must be enumerated since they override a metarule
 
 ${B}x86rec.ml:D:    ${B}x86rec.mlb $MLBURG
 	$MLBURG ${B}x86rec.mlb | $MLBURGFIX $target 
 
-${B}ppcrec.mlb:D:   ppcrec.nw
-	$NOTANGLE -L"$LINE" -Rppcrec.mlb $prereq > $target
-
 ${B}ppcrec.ml:D:    ${B}ppcrec.mlb $MLBURG
 	$MLBURG ${B}ppcrec.mlb | $MLBURGFIX $target 
-
-${B}ia64rec.mlb:D:  ia64rec.nw
-	$NOTANGLE -L"$LINE" -Ria64rec.mlb $prereq > $target
 
 ${B}ia64rec.ml:D:    ${B}ia64rec.mlb $MLBURG
 	$MLBURG ${B}ia64rec.mlb  | $MLBURGFIX $target 
 
-${B}mipsrec.mlb:D:  mipsrec.nw
-	$NOTANGLE -L"$LINE" -Rmipsrec.mlb $prereq > $target
-
 ${B}mipsrec.ml:D:   ${B}mipsrec.mlb $MLBURG
 	$MLBURG ${B}mipsrec.mlb | $MLBURGFIX $target
 
-${B}alpharec.mlb:D: alpharec.nw
-	$NOTANGLE -L"$LINE" -Ralpharec.mlb $prereq > $target
-
 ${B}alpharec.ml:D:  ${B}alpharec.mlb $MLBURG
 	$MLBURG ${B}alpharec.mlb | $MLBURGFIX $target
-
-${B}sparcrec.mlb:D: sparcrec.nw
-	$NOTANGLE -L"$LINE" -Rsparcrec.mlb $prereq > $target
 
 ${B}sparcrec.ml:D:  ${B}sparcrec.mlb $MLBURG
 	$MLBURG ${B}sparcrec.mlb | $MLBURGFIX $target

@@ -71,10 +71,12 @@ module type SETX = sig
 end
 @
 We can ask the width of a register.
+We also provide safe comparisons.
 <<register.mli>>=
 <<exported types>>
 val width : t -> int
-val eq    : t -> t -> bool
+val eq      : t -> t -> bool
+val compare : t -> t -> int
 @ 
 We have two kinds of sets.
 <<register.mli>>=
@@ -125,20 +127,21 @@ a monomorphic version improved compile time by over~10\%.
 module Compare = struct
     type t = reg 
     let compare (((xs,_,_),xi,C xc):t) (((ys,_,_),yi,C yc):t) =
-        let x = compare xs ys in
+        let x = Pervasives.compare xs ys in
         if x <> 0 then x
         else let i = compare xi yi in if i <> 0 then i 
         else compare xc yc
 end
+let compare = Compare.compare
 let eq r r' = Compare.compare r r' = 0
 module CompareX = struct
     type t = x
     let compare x y = match x, y with
     | Slice (w, lsb, r), Slice (w', lsb', r') ->
-        let x = compare w w' in
+        let x = comparei w w' in
         if x <> 0 then x
         else
-          let x = compare lsb lsb' in
+          let x = comparei lsb lsb' in
           if x <> 0 then x
           else Compare.compare r r'
     | Slice _, Reg _  ->  1
@@ -178,10 +181,9 @@ let promote_rxset set =
 Creating the integer map is rather simple.
 <<register.ml>>=
 let reg_int_map regs =
-  let order = List.sort (fun (s1,i1,_) (s2,i2,_) -> match compare s1 s2 with
-                                                    | 0 -> compare i1 i2
-                                                    | n -> n)
-                        regs in
+  let cmp ((s1,_,_),i1,_) ((s2,_,_),i2,_) =
+    match comparec s1 s2 with 0 -> comparei i1 i2 | n -> n in
+  let order = List.sort cmp regs in
   (List.fold_left (fun (i,map) r -> (i+1, Map.add r i map)) (0, Map.empty) order)
 @
 The [[RT]] module creates an embedding/projection pair for registers.
@@ -235,14 +237,14 @@ only if the slice is the whole register.
 <<register.ml>>=
 let contains ~outer ~inner = match outer, inner with
 | Reg ((s, _, _), i, C c), Reg ((s', _, _), i', C c') ->
-    s = s' && i' >= i && i' + c' <= i + c
+    s =<= s' && i' >= i && i' + c' <= i + c
 | Reg ((s, _, _), i, C c), Slice (w', lsb', ((s', _, _), i', C c')) ->
-    s = s' && i' >= i && i' + c' <= i + c
+    s =<= s' && i' >= i && i' + c' <= i + c
 | Slice (w, lsb, ((s, _, _), i, C c)), Reg ((s', _, cell), i', C c') ->
     if c <> 1 then
       Impossible.impossible "slice of register aggregate";
-    lsb = 0 && w = Cell.to_width cell (C c') && s = s' && i = i' && c = c'
+    lsb = 0 && w = Cell.to_width cell (C c') && s =<= s' && i = i' && c = c'
 | Slice (w, lsb, ((s, _, _), i, C c)), Slice (w', lsb', ((s', _, _), i', C c')) ->
     if c <> 1 || c' <> 1 then
       Impossible.impossible "slice of register aggregate";
-    s = s' && i = i' && lsb <= lsb' && lsb+w >= lsb'+w'
+    s =<= s' && i = i' && lsb <= lsb' && lsb+w >= lsb'+w'

@@ -124,25 +124,25 @@ let get_reg mem_str =
                                         (String.length mem_str - (middle+1))))
 
 let int_loadu str (suff, z_a, (x_, mem)) r r1 r2 =
-  if r=r1
+  if r=$=r1
   then Impossible.impossible "invalid integer load with update instruction"
   else match (String.get z_a 0, String.get suff 0) with
   | ('z',  _) | ('a','h') -> 
     (match get_reg mem with
-    | (r1',None    ) -> if r1=r1' then sprintf str suff z_a x_ r mem else "nop"
-    | (r1',Some r2') -> if r1=r1' && r2=r2'
+    | (r1',None    ) -> if r1=$=r1' then sprintf str suff z_a x_ r mem else "nop"
+    | (r1',Some r2') -> if r1=$=r1' && r2=$=r2'
                                   then sprintf str suff z_a x_ r mem else "nop")
   | _ -> Impossible.impossible "wrong integer load with update instruction"
 
 let int_store  str suff (x_, mem) r = sprintf str suff x_ r mem
 let int_storeu str suff (x_, mem) r r1 r2 =
   match get_reg mem with
-  | (r1',None    ) -> if r1=r1' then sprintf str suff x_ r mem else "nop"
-  | (r1',Some r2') -> if r1=r1' && r2=r2' 
+  | (r1',None    ) -> if r1=$=r1' then sprintf str suff x_ r mem else "nop"
+  | (r1',Some r2') -> if r1=$=r1' && r2=$=r2' 
                                 then sprintf str suff x_ r mem else "nop"
 
 let ind_addr name =
-  if List.exists ((=) name) (!imports) then "L" ^ name ^ "$stub" else name
+  if List.exists ((=$=) name) (!imports) then "L" ^ name ^ "$stub" else name
 
 let ppc_op = function
   | "ltu" -> ("l", "lt")
@@ -432,7 +432,7 @@ constructor for each operator.
 | RP.App(("neg",  ws), [x])    -> conNeg  (exp x)
 | RP.App(("and",  ws), [x; y]) -> conAnd  (exp x) (exp y)
 | RP.App(("or",   ws), [RP.Fetch(l,_) as x; RP.Fetch(l',_) as y]) ->
-  if l = l' then conMr (exp x) else conOr  (exp x) (exp y)
+  if RU.Eq.loc l l' then conMr (exp x) else conOr  (exp x) (exp y)
 | RP.App(("or",   ws), [x; y]) -> conOr   (exp x) (exp y)
 | RP.App(("xor",  ws), [x; y]) -> conXor  (exp x) (exp y)
 | RP.App(("shl",  ws), [x; y]) -> conShl  (exp x) (exp y)

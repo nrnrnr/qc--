@@ -1602,7 +1602,7 @@ let splice_on_every_edge_between ~entry ~exit ~pred ~succ =
 
 let splice_before ~entry ~exit node =
   let p = pred node in
-  if kind p <> Illegal then set_succ p ~succ:entry;
+  if Pervasives.(<>) (kind p) Illegal then set_succ p ~succ:entry;
   set_succ exit ~succ:node
 
 let splice_after ~entry ~exit node =
@@ -1610,9 +1610,9 @@ let splice_after ~entry ~exit node =
   (set_succ node ~succ:entry ; set_succ exit ~succ)
 
 let delete cfg node =
-  ( if   List.for_all (fun p -> kind p = Illegal)             (all_incoming node) 
+  ( if   List.for_all (fun p -> kind p =*= Illegal)           (all_incoming node) 
     then List.iter    (fun s -> remove_pred node ~old_succ:s) (all_outgoing node)
-  ; if kind node = Join
+  ; if kind node =*= Join
     then cfg.label_map <- List.fold_right SM.remove (labels node) cfg.label_map
   )
   
@@ -2126,7 +2126,7 @@ let merge_joins j1 j2 succ lpred = match j1, j2 with
 Graph heads are defined as the entry node and the join points.
 <<graph utilities>>=
 let heads cfg =
-  List.filter (fun n -> kind_util n <> Exit)
+  List.filter (fun n -> Pervasives.(<>) (kind_util n) Exit)
               (uniq (cfg.entry :: SM.fold (fun _ h rst -> h::rst) cfg.label_map []))
 @
 

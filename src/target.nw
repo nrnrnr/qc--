@@ -346,9 +346,9 @@ let mk_reg_ix_map spaces =
              (list_to (match space.S.indexlimit with
                        | Some l -> l
                        | None   -> 1 lsl space.S.indexwidth)) in
-  let regspaces = List.filter (fun s -> s.S.classification = S.Reg ||
-                                        s.S.classification = S.Fixed)
-                              spaces in
+  let regspaces =
+    let keep s = match s.S.classification with S.Reg | S.Fixed -> true | _ -> false in
+    List.filter keep spaces in
   Register.reg_int_map (List.concat (List.map space_to_regs regspaces))
 @
 <<target.ml>>=

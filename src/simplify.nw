@@ -344,7 +344,7 @@ let rec add ws args =
     let w = match ws with [w] -> w | _ -> Impossible.impossible "ill-typed add" in
     match args with
     | [ RP.App(("add", ws'), [x; RP.Const (RP.Bits k)]); RP.Const (RP.Bits k') ] ->  
-                assert (ws=ws');
+                assert (ws=*=ws');
                 add ws [x; RP.Const (RP.Bits (Bits.Ops.add k k'))]
     | [RP.Const (RP.Bits x); RP.Const (RP.Bits y)] ->  
                 RP.Const (RP.Bits (Bits.Ops.add x y))
@@ -467,35 +467,36 @@ RP.Fetch(RP.Mem ((sp, Rtl.BigEndian, mcell) as mspace, w', addr, assn), w'')
 @ 
 <<RTL operator implementations>>=
 let unsigned n w = RP.Const (RP.Bits (Bits.U.of_int n w))
+let null = function [] -> true | _ :: _ -> false
 
 let zero1 = Bits.U.of_int 0 1
 let one1  = Bits.U.of_int 1 1
-let bool w args = assert (w = []); match args with
+let bool w args = assert (null w); match args with
 | [RP.Const (RP.Bits x)] -> RP.Const (RP.Bool (Bits.Ops.ne x zero1))
 | [RP.App (("lobits", [w; 1]), [x])] ->
     RP.App (("ne", [w]), [RP.App (("and", [w]), [x; unsigned 1 w]); unsigned 0 w])
 | _ -> default "bool" w args
 
 
-let bit w args = assert (w = []); match args with
+let bit w args = assert (null w); match args with
 | [RP.Const (RP.Bool b)] -> RP.Const (RP.Bits (if b then one1 else zero1))
 | _ -> default "bit" w args
 @
 <<RTL operator implementations>>=
-let pzero w args = assert (args = []); match w with
+let pzero w args = assert (null args); match w with
 | [(32|64) as w] -> const (Bits.zero w)
 | _ -> default "pzero" w args
 
-let mzero w args = assert (args = []); match w with
+let mzero w args = assert (null args); match w with
 | [(32|64) as w] -> const (BO.shl (Bits.U.of_int 1 w) (Bits.U.of_int (w-1) w))
 | _ -> default "mzero" w args
 
-let pinf w args = assert (args = []); match w with
+let pinf w args = assert (null args); match w with
 | [32] -> const (BO.shl (Bits.U.of_int 0xff  32) (Bits.U.of_int 23 32))
 | [64] -> const (BO.shl (Bits.U.of_int 0x7ff 64) (Bits.U.of_int 52 64))
 | _ -> default "pinf" w args
 
-let minf w args = assert (args = []); match w with
+let minf w args = assert (null args); match w with
 | [32|64] -> or' w [pinf w args; mzero w args]
 | _ -> default "minf" w args
 

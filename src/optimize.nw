@@ -65,6 +65,8 @@ module RU = Rtlutil
 module Dn = Rtl.Dn
 module Up = Rtl.Up
 module SS = Strutil.Set
+
+let not_null = function [] -> false | _ :: _ -> true
 @
 We traverse the flow graph and simplify rtl's.
 <<optimize.ml>>=
@@ -100,11 +102,11 @@ let trim_unreachable_code _ ({Proc.cfg = cfg} as proc) =
   let nodes_from_exit  = G.reverse_podfs (fun n rst -> n :: rst) [] cfg in
   let to_delete = List.filter (fun n -> not (IS.mem (G.num n) nodes_from_entry))
                               nodes_from_exit in
-  let () = List.iter (fun n -> if G.kind n = G.Join then G.set_succ n (G.illegal cfg))
+  let () = List.iter (fun n -> if G.kind n =*= G.Join then G.set_succ n (G.illegal cfg))
                      to_delete in
   let hanging_nodes =
-    List.filter (fun n -> G.kind n <> G.Entry &&
-                          List.for_all (fun p -> G.kind p = G.Illegal) (G.preds n)) in
+    List.filter (fun n -> Pervasives.(<>) (G.kind n) G.Entry &&
+                          List.for_all (fun p -> G.kind p =*= G.Illegal) (G.preds n)) in
   let rec delete_nodes = function
     | [] -> ()
     | n :: rst -> 
@@ -114,14 +116,14 @@ let trim_unreachable_code _ ({Proc.cfg = cfg} as proc) =
   delete_nodes (hanging_nodes to_delete);
   proc.Proc.spans <- List.filter (fun (n,_) -> IS.mem (G.num n) nodes_from_entry)
                                  proc.Proc.spans;
-  to_delete <> []
+  not_null to_delete
 @
 We find each join point with one predecessor, and if the predecessor is a branch to the
 join point, we eliminate the branch and the join point.
 I THOUGHT A BRANCH CHAIN WAS A BRANCH TO A BRANCH?
 <<optimize.ml>>=
 let collapse_branch_chains _ {Proc.cfg = cfg} =
-  let brp node = G.kind node = G.Branch && G.kind (G.pred node) = G.Join in
+  let brp node = G.kind node =*= G.Branch && G.kind (G.pred node) =*= G.Join in
   let to_collapse =
     G.fold_nodes (fun n rst -> if brp n then n :: rst else rst) [] cfg in
   let collapse n =
@@ -135,10 +137,10 @@ let collapse_branch_chains _ {Proc.cfg = cfg} =
                         | G.Branch  -> G.set_succ p s
                         | _ -> ())
               (G.preds j);
-    if List.for_all (fun n -> G.kind n = G.Illegal) (G.preds j)
+    if List.for_all (fun n -> G.kind n =*= G.Illegal) (G.preds j)
     then (G.delete cfg j; G.delete cfg n) in
   List.iter collapse to_collapse;
-  to_collapse <> []
+  not_null to_collapse
 @
 <<optimize.ml>>=
 let remove_nops _ {Proc.cfg = cfg} =

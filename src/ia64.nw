@@ -29,6 +29,7 @@ val placevars : Ast2ir.proc -> Automaton.t
 <<ia64.ml>>=
 module SS = Space.Standard64
 module R  = Rtl
+module RU = Rtlutil
 
 let arch  = "ia64"  (* architecture name *)
 @ 
@@ -123,9 +124,9 @@ let ui s = Printf.eprintf "*** unimp %s" s; []
 Addresses go in the integer registers, so we use these contexts:
 <<ia64 postexpander>>=
 type context = (Talloc.Multiple.t -> int -> Register.t) * (Register.t -> bool)
-let icontext = Talloc.Multiple.reg 't', fun ((c, _, _), _, _) -> c = 'r' || c = 't'
-let fcontext = Talloc.Multiple.reg 'u', fun ((c, _, _), _, _) -> c = 'f' || c = 'u'
-let bcontext = Talloc.Multiple.reg 'w', fun ((c, _, _), _, _) -> c = 'p' || c = 'w'
+let icontext = Talloc.Multiple.reg 't', fun ((c, _, _), _, _) -> c =<= 'r' || c =<= 't'
+let fcontext = Talloc.Multiple.reg 'u', fun ((c, _, _), _, _) -> c =<= 'f' || c =<= 'u'
+let bcontext = Talloc.Multiple.reg 'w', fun ((c, _, _), _, _) -> c =<= 'p' || c =<= 'w'
 let acontext = icontext
 let itempwidth = 64
 
@@ -192,7 +193,7 @@ let lostore ~addr ~src n assn =
 This code comes from x86.nw, which is not sure of floating-point compatability:
 <<ia64 postexpander>>=
 let move_rtl dst src = R.store (temploc dst) (tempval src) (tempwidth src)
-let move ~dst ~src   = if dst = src then [] else [move_rtl dst src]
+let move ~dst ~src   = if Register.eq dst src then [] else [move_rtl dst src]
 
 let li  ~dst const = [R.store (temploc dst) (Up.const const) (tempwidth dst)]
 let lix ~dst e     = [R.store (temploc dst) e                (tempwidth dst)]
@@ -257,14 +258,14 @@ let cut_to effs = [R.par (effects effs)]
 
 let bc x (opr, ws) y ~tgt =
   let tempr = talloc 'w' 1 in
-  assert (ws = [64]);
+  assert (ws =*= [64]);
   [ R.guard (tempval tempr) (R.store pc_lhs (Up.const tgt) 64)
   ; R.store (temploc tempr) (R.app (R.opr opr ws) (List.map tempval [x;y])) 64
   ]
 
 (* RRO FIX bnegate *)
 let bnegate r = match Down.rtl r with
-| RP.Rtl [g, (RP.Store(pc, tgt, 64) as eff)] when pc = Down.loc pc_lhs ->
+| RP.Rtl [g, (RP.Store(pc, tgt, 64) as eff)] when RU.Eq.loc pc (Down.loc pc_lhs) ->
      Up.rtl (RP.Rtl [RP.App(("not", [64]), [g]), eff])
 | _ -> Impossible.impossible "ill-formed IA64 conditional branch"
 @
@@ -472,9 +473,9 @@ to classify them.
 <<ia64.ml>>=
 let warning s = Printf.eprintf "backend warning: %s\n" s
 let placevars = 
-  let is_float      w hint _ = w = 82 || (hint = "float" && (w = 32 || w = 64)) in
-  let strange_float w hint   = w = 82 && hint <> "float" in
-  let strange_int   w hint   = hint = "float" && not (is_float w hint ()) in
+  let is_float      w hint _ = w = 82 || (hint =$= "float" && (w = 32 || w = 64)) in
+  let strange_float w hint   = w = 82 && not (hint =$= "float") in
+  let strange_int   w hint   = hint =$= "float" && not (is_float w hint ()) in
   let warn ~width:w ~alignment:a ~hint:h =
       if strange_float w h then
         warning "82-bit variable not hinted float but will go as float anyway"

@@ -18,13 +18,15 @@ LINE =          '# %L "%F"%N'
 
 NOCOND =        $TOP/config/nocond $INTERP
 OCAMLDEFS =     $TOP/config/autodefs.ocaml
+NOPOLY = $TOP/src/nopoly.nw
 
 #
 # general rules to extract code from noweb files
 #
 
 $B&.ml:D: &.nw
-	$NOTANGLE -L"$LINE" -filter "$NOCOND" -R$stem.ml $prereq > $target
+	{ cat $NOPOLY; $NOTANGLE -L"$LINE" -filter "$NOCOND" -R$stem.ml $prereq; } \
+	  > $target
 
 $B&.mli:D: &.nw
 	$NOTANGLE -L"$LINE" -filter "$NOCOND" -R$stem.mli $prereq | $CPIF $target

@@ -64,11 +64,11 @@ module G = Cfgx.M
 module IntMod = struct type t = int let compare = compare end
 module IS = Set.Make (IntMod)
 module IM = Map.Make (IntMod)
-module NodeMod = struct type t = Rtl.rtl G.node let compare = compare end
+module NodeMod = struct type t = Rtl.rtl G.node let compare = Pervasives.compare end
 module NM = Map.Make (NodeMod)
 module RM = R.Map
 module RS = R.Set
-module SM = Map.Make (struct type t = Rtl.space let compare = compare end)
+module SM = Map.Make (struct type t = Rtl.space let compare = RU.Compare.space end)
 
 type reg  = R.t
 type temp = R.t
@@ -199,12 +199,12 @@ The constructors and observers are simple.
     match l with
     | Reg r ->
       let lm' = RM.remove r lm in
-      if (pair_map_find t vm).mem = None then
+      if Aux.Option.is_none (pair_map_find t vm).mem then
         (RM.remove t vm, lm')
       else
         (upd_pair_map def_reg t None vm, lm')
     | Mem m ->
-      if (pair_map_find t vm).reg = None then
+      if Aux.Option.is_none (pair_map_find t vm).reg then
         (RM.remove t vm, lm)
       else
         (upd_pair_map def_mem t None vm, lm)
@@ -249,7 +249,7 @@ Note: We fold over the outmap, with the inmap as the accumulating parameter.
     (RM.fold (fun temp loc_pair (im_vm',_ as inmap') ->
                 match loc_pair.mem with
                 | Some m ->
-                  if (pair_map_find temp im_vm').mem = None then
+                  if Aux.Option.is_none (pair_map_find temp im_vm').mem then
                     add temp (Mem m) inmap'
                   else
                     inmap'
@@ -526,7 +526,7 @@ let rpo_dfs (state, prefs) =
         visit (state, prefs) node delays k                                            in
       let alloc_curr_node (state, prefs, delays) =
         let state, prefs =
-          if G.kind node = G.Illegal then state, prefs
+          if G.kind node =*= G.Illegal then state, prefs
           else
             let state = alloc_node state prefs node in
             let prefs =
@@ -612,8 +612,8 @@ let alloc_node state prefs node =
   let free_unused_maps state n =
     let not_all_allocated lst = List.exists (fun p -> not (is_allocated state p)) lst in
     let k = G.kind n in
-    if G.is_call n || G.is_join n || G.is_fork n || k = G.Assertion || k = G.Branch ||
-       not_all_allocated  (G.preds n) ||
+    if G.is_call n || G.is_join n || G.is_fork n || k =*= G.Assertion ||
+       k =*= G.Branch || not_all_allocated  (G.preds n) ||
        not_all_allocated  (G.succs n)
     then
        state

@@ -83,6 +83,8 @@ and continue info node =
     let info = propagate node info in
     List.iter (continue info) (G.succs node) 
 @
+We're playing fast and loose with polymorphic equality---cyclic
+comparisons might not terminate.  
 <<dataflow.ml>>=
 module Test = struct
   module G = struct
@@ -90,7 +92,7 @@ module Test = struct
     and 'i node = string * 'i cfg ref
     let edges g = match g with G l -> l
     let label (lbl, g) = lbl
-    let succs ((_, g) as n) = snd (List.find (fun (h, ts) -> (h = n)) (edges (!g)))
+    let succs ((_, g) as n) = snd (List.find (fun (h, ts) -> (h =*= n)) (edges (!g)))
     let entry (g:'i cfg) = (fst (List.hd (edges g)) : 'i node)
     let is_join n = true
     let iter_nodes f g = List.iter (fun (n, _) -> f n) (edges g)

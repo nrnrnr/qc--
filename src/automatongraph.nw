@@ -88,12 +88,10 @@ paths.)
 type ty =       int * string                    (* width, hint     *)
 type path =     ty list                         (* leads to a node *)
 @
-
 A [[node]] is the observable state of an automaton. It comprises the set
 of allocated registers and the alignment of the next slot in the
 overflow memory block. The register set inside a node forces us to
 define a [[compare_nodes]] function since sets have no normal form.
-
 <<automatongraph.ml>>=
 type node    =  { regs:     Register.Set.t
                 ; align:    int
@@ -105,28 +103,24 @@ let compare_nodes (x:node) (y:node) =
     | x -> x
     )
 @
-
 An [[edge]] is a node where an edge originates and a label that
 identifies the outgoing edge.  The destination of the edge is uniquely
 defined in the [[graph]], but is not part of the [[edge]] type.
-
 <<automatongraph.ml>>=
 type edge =     node * ty
 
 let compare_edges (x:edge) (y:edge) =
-    ( match compare (snd x) (snd y) with
+    ( match Pervasives.compare (snd x) (snd y) with
     | 0 -> compare_nodes (fst x) (fst y)
     | x -> x
     )
 @
-
 A [[graph]] value records for every [[edge]] its endpoint in [[edges]],
 The map models a transition function $\mathit{node} \times \mathit{type}
 \to \mathit{node}$. An [[edge]] is therefore only meaningful in the
 context of a [[graph]] which provides the map. In addition, the
 [[graph]] maintains a set of all nodes, and a [[start]] node,
 corresponding to the start state of the automaton.
-
 <<automatongraph.ml>>=
 module NS = Set.Make (struct type t=node let compare=compare_nodes end)
 module ES = Set.Make (struct type t=edge let compare=compare_edges end)
@@ -363,7 +357,7 @@ let next graph edge = T.find edge graph.edges
 <<automatongraph.ml>>=
 let outgoing graph node =
     let add_label (src, label) dst labels =
-        if src = node then label :: labels else labels
+        if compare_nodes src node = 0 then label :: labels else labels
     in    
         T.fold add_label graph.edges []
 @

@@ -448,10 +448,10 @@ this traversal.
 <<state checking>>=
 let ( ++ ) = AP.union
 let ( -- ) set1 set2 =
-  AP.filter (fun ap1 -> not (AP.exists (fun ap2 -> ap1.prop = ap2.prop) set2)) set1
+  AP.filter (fun ap1 -> not (AP.exists (fun ap2 -> ap1.prop =$= ap2.prop) set2)) set1
 let ( ** ) live destroys =
   let check_error l_ap rst =
-    let d_aps = AP.filter (fun d_ap -> l_ap.prop = d_ap.prop) destroys in
+    let d_aps = AP.filter (fun d_ap -> l_ap.prop =$= d_ap.prop) destroys in
     if AP.cardinal d_aps = 0 then rst
     else (DestProp { dprop = l_ap.prop
                    ; dest_action = (AP.choose d_aps).action
@@ -550,14 +550,14 @@ Putting it all together:
 <<backplane.ml>>=
 module StringMod = struct
   type t = string
-  let compare = compare
+  let compare = compares
 end
 module SS = Set.Make(StringMod)
 
 type action_prop = { action : string ; prop : string }
 module ActionProp = struct
   type t = action_prop
-  let compare = compare
+  let compare = Pervasives.compare
 end
 module AP = Set.Make(ActionProp)
 
@@ -594,7 +594,7 @@ that stage.
 module T : Lua.Lib.USERTYPE with type 'a t = 'a action = struct
     type 'a t = 'a action
     let tname = Arg.lua_type_name
-    let eq veq x y = x = y
+    let eq veq x y = x =*= y  (* flagrantly wrong *)
     let to_string vs a = printAction (makeIndent 0) a
 end
 
