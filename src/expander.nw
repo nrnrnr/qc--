@@ -1,0 +1,96 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+\section{Toy code expander}
+
+The goal here is to create a toy code expander so that we can test
+register allocation and some other kinds of analyses and
+transformations.
+To explain what is happening, I use the following conventions:\\
+\begin{tabular}{@{\quad}ll}
+$t$& any temporary or register-like space\\
+$m$& any memory-like space\\
+$k$& any constant\\
+$\oplus$& any RTL operator\\
+\end{tabular}
+Our goal is to reduce RTLs to the following forms:
+{\def\gets{\mathrel{:=}}%
+$$\begin{array}{l}
+m[t_l] \gets t\\
+t \gets m[t_l]\\
+t_1 \gets t_2\\
+t \gets k\\
+t \gets \oplus(t_1, \ldots, t_n)
+$$
+This is not quite what a real code expander does, but it should
+suffice for experiments.
+}
+
+<<expander.mli>>=
+type context 
+  = (Rtl.Private.loc -> bool)           (* say if a location is memory-like *)
+  * (char -> int -> Rtl.loc)            (* get a temp for space and width *)
+val expand : context -> Rtl.rtl -> Rtl.rtl list
+@ 
+Here are some abbreviations and utilities.
+<<expander.ml>>=
+module R  = Rtl
+module RP = Rtl.Private
+module RU = Rtlutil
+let up   = Rtl.Revert.exp
+let down = Rtl.Convert.exp
+let uploc= Rtl.Revert.loc
+let downloc= Rtl.Convert.loc
+
+let fetch l = RP.Fetch (downloc l, RU.Width.loc l)
+
+let width e = RU.Width.exp (up e)
+
+let space_for _ = 't'  (* choose a space suitable for an expression *)
+@ 
+The core of the expander is a function [[to_temp]], which takes an
+expression and returns a pair containing a list of instructions and a
+temporary such that executing those instructions develops the
+expression into that temporary.
+<<expander.ml>>=
+type context = (RP.loc -> bool) * (char -> int -> R.loc)
+
+let expand ((mem_like : RP.loc -> bool), (temp_for : char -> int -> R.loc)) =
+  let rec to_temp e = match e with
+    | RP.Const k ->
+        let w = width e in
+        let t = temp_for (space_for e) w in
+        (t:R.loc), [R.store t (up e) w]
+    | RP.Fetch (l, w) ->
+        if mem_like l then
+          let t = temp_for (space_for e) w in
+          (t:R.loc), rtl (R.store t (up e) w)
+        else
+          uploc l, []
+    | RP.App (op, args) ->
+        let (temps, is) = List.split (List.map to_temp args) in
+        let w = width e in
+        let t = temp_for (space_for e) w in
+        t, (R.store t (up (RP.App (op, List.map fetch temps))) w :: List.concat is)
+  <<other expander functions>>
+  and rtl r = match Rtl.Convert.rtl r with
+  | RP.Rtl [(RP.Const (RP.Bool true), RP.Store (left, right, w))] ->
+      assign left right w
+  | _ -> [r] (* no actual conversion takes place *)
+  in rtl
+@ 
+<<other expander functions>>=
+and assign left right w =
+  let r, is  = to_temp right in
+  let l, is' = loc left in
+  R.store l (R.fetch r w) w :: is @ is'
+
+and loc l =
+  if mem_like l then
+    match l with
+    | RP.Cell (space, agg, w, addr, prop) ->
+        let addr, is = to_temp addr in
+        uploc (RP.Cell (space, agg, w, fetch addr, prop)), is
+    | _ -> assert false (* any mem-like location must be a cell *)
+  else
+    uploc l, []
+
