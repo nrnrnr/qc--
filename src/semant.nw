@@ -642,6 +642,27 @@ let conv env = function
     | Some cc       -> () 
     | None          -> ()
 
+let rec lvalue env = function
+    | LValueAt (lv, r)   -> lvalue env lv
+    | Var(name)          -> lookup name env
+    | Mem(t, e, a)      -> 
+        if tyExpr env e != pointer then 
+            error "expression is not a pointer type"
+        else 
+        ( match a with
+        | Some a when not (is2power a) -> error "alignment not a power of 2"
+        | Some _
+        | None                         -> Ok(ty t, Memory)
+        )
+
+let rec lhs env = function
+    | LValueAt (lv, r)   -> lhs env lv
+    | Var(name)          -> ( match strip (lookup name env) with
+                            | t, Register -> t
+                            | otherwise   -> error "lvalue must be a register"
+                            )
+    | Mem(t, e, a)       -> error "lvalue must be a register"
+    
 
 let rec collectCont env ss = 
     let rec loop env = function
@@ -726,13 +747,49 @@ and returnStmt env cc alt args =
             else
                 () 
 
+and assignStmt env pairs =
+    let pair (lhs,expr) =  
+        let tr    = tyExpr env expr        in
+        match strip (lvalue env lhs) with
+        | t, Register when t = tr -> ()
+        | t, Memory   when t = tr -> ()
+        | otherwise   -> error "type mismatch in assignment"
+    in
+        List.iter pair pairs
+
+and callStmt env (l,cc,e,args,ts,fs) =
+    let lt    = List.map (lhs env) l     in
+    let et    = tyExpr env e             in
+    let args' = List.map snd args        in
+    let _     = targets env ts           in
+    let _     = flows env fs             in
+    let at    = List.map (tyExpr env) args' in
+        if et != pointer then
+            error "call-expression is not a pointer"
+        else 
+            ()
+             
+and primStmt env (l,cc,op,args,fs) =
+    let lt    = List.map (lhs env) l     in
+    let ot    = lookup op primOps        in
+    let args' = List.map snd args        in
+    let _     = flows env fs             in
+    let at    = List.map (tyExpr env) args' in
+    let sigma = ( try Types.unify ot (proc at bool) (Types.empty) with
+                | Types.UnifyExn -> error "type error in application"
+                ) in
+        ( match Types.subst sigma ot with
+        | Types.Procedure(_,r) -> ()
+        | _                    -> assert false
+        ) 
+
 and stmt env = function
     | StmtAt(x,_)                         -> stmt env x
     | IfStmt ( e, ss1, ss2)               -> ifStmt env e ss1 ss2
     | SpanStmt(e1,e2,ss)                  -> spanStmt env e1 e2 ss
-    | AssignStmt(xs)                      -> ()
-    | CallStmt( lhs, cc, e, args, ts, fs) -> ()
-    | PrimStmt( lhs, cc, n, args, fs)     -> ()
+    | AssignStmt(xs)                      -> assignStmt env xs
+    | CallStmt call                       -> callStmt env call
+    | PrimStmt call                       -> primStmt env call
     | GotoStmt(e,ts)                      -> gotoStmt env e ts
     | CutStmt(n, args, fs)                -> cutStmt env n args fs
     | ReturnStmt(cc, alt, args)           -> returnStmt env cc alt args
