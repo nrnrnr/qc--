@@ -87,9 +87,11 @@ let version () =
 
 let usage this =
   let msg = 
-  [   "\t -help                      (this to stdout)";
-      "\t -version                   (version to stdout)";
-      "\t -l file                    (compile file)";
+  [   "\t -help                      (this to stdout)"
+  ;   "\t -version                   (version to stdout)"
+  ;   "\t -l file                    (scan file)"
+  ;   "\t -c file                    (parse/compile file)"
+  ;   "\t file                       (same as -c file)"
   ] in
     Printf.printf "%s version %s command line syntax\n" this This.version;
     List.iter print_endline msg
@@ -114,7 +116,10 @@ let lex file =
         ; finally ()
         ) 
         
-(* parse *)
+@ For testing the parser we let the \textsc{adsl} code write the abstract
+to stdout.
+
+<<main.ml>>= 
 
 let parse file =
     let fd          = try open_in file with Sys_error msg -> error msg  in
@@ -180,12 +185,17 @@ let _ = main ()
 % ------------------------------------------------------------------  
           
 Writing manual pages for the Troff formatter is a tedious job.  I have
-found the ihighly readable \textit{plain old document} (\textsc{pod})
+found the highly readable \textit{plain old document} (\textsc{pod})
 format used by the Perl community very helpful.  Every Perl
 installation comes with a tool \texttt{pod2man} which creates a man
 page from \textsc{pod} file.  Today we can assume that Perl is
 installed nearly everywhere such that the use of this tool does not
 spoils portability of our code.
+
+The format of \textsc{pod} files is documented in the \texttt{perlpod}
+manual page.  Besides the the \texttt{pod2man} filter there exist also
+filters to convert a \textsc{pod} file to \textsc{html} and \LaTeX,
+which makes it a very versatile format.
 
 <<qcc.pod>>=
 

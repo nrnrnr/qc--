@@ -222,20 +222,24 @@ rule token = parse
   
   | "/*"        { comment lexbuf 0 }
   | "\""        { string lexbuf (Buffer.create 80) }
- 
-  | "'" printable      "'"      { CHAR (get lexbuf) }
-  | "'" '\\' escape    "'"      { let c = (getchar lexbuf 2) in
-                                  CHAR (String.make 1 (escape c))
-                                }
-  | "'" '\\' decchar   "'"      { let s = substr 2 (-1) (get lexbuf) in
-                                  let c = Char.chr (int_of_string s) in
-                                  CHAR  (String.make 1 c)
-                                }
-  | "'" '\\' _                  { lexerror lexbuf "illegal character escape" }
-  | "'" _                       { lexerror lexbuf "illegal character constant" }
+  | "'"         { character lexbuf } 
  
   | _                           { lexerror lexbuf "illegal character" }
 
+
+(* character literals *)
+
+and character = parse
+    printable      "'"          { CHAR (get lexbuf) }
+  | '\\' escape    "'"          { let c = (getchar lexbuf 2) in
+                                  CHAR (String.make 1 (escape c))
+                                }
+  | '\\' decchar   "'"          { let s = substr 2 (-1) (get lexbuf) in
+                                  let c = Char.chr (int_of_string s) in
+                                  CHAR  (String.make 1 c)
+                                }
+  | '\\' _                      { lexerror lexbuf "illegal character escape" }
+  | _                           { lexerror lexbuf "illegal character constant" }
 
 (* level holds the comment nesting level *)
 
@@ -331,13 +335,14 @@ and pragma2 = parse
 
 (* skip an unknown pragma.  We must recognize strings, comments, and
    character literals because they might contain the terminating
-   character (to be done). *)
+   character. *)
 
 and pragma3 = parse
     eof                         { fun level ->
                                   lexerror lexbuf "unterminated pragma" 
                                 }
-  | [^ '{' '}' '\n' '\t']+      { fun level ->
+  | [^ '{' '}'  '\n' '\t' 
+       '/' '\'' '"']+           { fun level ->
                                   pragma3 lexbuf level
                                 }
   | nl                          { fun level ->
@@ -354,6 +359,19 @@ and pragma3 = parse
                                   then token lexbuf
                                   else pragma3 lexbuf (level-1)
                                 }
+  | "/*"                        { fun level -> 
+                                  ignore (comment lexbuf 0)
+                                ; pragma3 lexbuf level
+                                }
+  | "\""                        { fun level -> 
+                                  ignore (string lexbuf (Buffer.create 80))
+                                ; pragma3 lexbuf level
+                                }
+  | "'"                         { fun level -> 
+                                  ignore (character lexbuf)
+                                ; pragma3 lexbuf level
+                                }
+  
   | _                           { fun level ->
                                   pragma3 lexbuf level 
                                 }
