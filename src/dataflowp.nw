@@ -157,7 +157,7 @@ To do this, we need a locally modified computation that allows an
 <<utilities>>=
 let comp_with_exit comp exit_fact =
   let last_in l = match l with
-  | GR.Exit 0 -> Dataflow exit_fact
+  | GR.Exit -> Dataflow exit_fact
   | _ -> comp.last_in l in
   { comp with last_in = last_in } 
 @ 
@@ -293,9 +293,9 @@ let add_blocks map list =
   UM.fold add map list
 
 let splice_in_backward head graph tail oldblocks =
-  let gexit, gblocks = G.openz (G.exit 0 graph) in
+  let gexit, gblocks = G.openz (G.exit graph) in
   let gh, gl = GR.goto_end gexit in
-  (match gl with GR.Exit 0 -> () | _ -> impossf "exit is not exit?!");
+  (match gl with GR.Exit -> () | _ -> impossf "exit is not exit?!");
   let f, t = revapp gh tail in
   match f with
   | GR.Entry ->

@@ -119,7 +119,7 @@ let cfg2dot ~compress ~live ~name g =
     | F GR.Entry -> "Entry"
     | F (GR.Label ((_, l), _, _)) -> spr "N%d: %s" n l
     | M m -> instr (GR.mid_instr m)
-    | L (GR.Exit n) -> spr "Exit %d" n
+    | L GR.Exit -> "Exit" 
     | L l -> instr (GR.last_instr l) in
   let dotnode node = spr "N%d [label=%S]" (fst node) (number_and_rtl node) in
   let edge_fwd from to' =
@@ -159,8 +159,7 @@ let cfg2ast instr g ~name =
     | GR.Label (l,_,_) -> A.LabelStmt (snd l) :: prev'
     | GR.Entry -> prev' in
     let last n prev' = match n with
-    | GR.Exit 0 -> A.CommentStmt "exit node!" :: prev'
-    | GR.Exit n -> A.CommentStmt "nonzero exit number?!" :: prev'
+    | GR.Exit -> A.CommentStmt "exit node!" :: prev'
     | GR.Branch (_, lbl) when matches next lbl -> prev'
     | GR.Forbidden _ -> A.CommentStmt "forbidden to reach this point" :: prev'
     | _ -> instr (GR.last_instr n) :: prev' in
@@ -194,7 +193,7 @@ let print_block (first, tail) =
   let rec pr_tail = function
     | GR.Tail (m, tail) ->
         (pr "%s\n" (Rtlutil.ToString.rtl (GR.mid_instr m)); pr_tail tail)
-    | GR.Last (GR.Exit n) -> pr "<exit %d>\n" n
+    | GR.Last GR.Exit -> pr "<exit>\n"
     | GR.Last l -> pr "<last>: %s\n" (Rtlutil.ToString.rtl (GR.last_instr l)) in
   pr_tail tail
 

@@ -155,7 +155,7 @@ To do this, we need a locally modified computation that allows an
 <<utilities>>=
 let comp_with_exit comp exit_fact_ref =
   let last_outs in' l = match l with
-  | GR.Exit 0 -> Dataflow (fun set -> exit_fact_ref := in')
+  | GR.Exit -> Dataflow (fun set -> exit_fact_ref := in')
   | _ -> comp.last_outs in' l in
   { comp with last_outs = last_outs } 
 @ 
@@ -289,13 +289,13 @@ let splice_in_forward head graph tail oldblocks =
   (match gf with GR.Entry -> () | _ -> impossf "entry is not entry?!");
   let h, l = revapp head gt in
   match l with
-  | GR.Exit 0 ->
+  | GR.Exit ->
       must_be_empty gblocks;
       h, tail, oldblocks
   | _ ->
-      let gexit, gblocks = G.openz (G.exit 0 graph) in
+      let gexit, gblocks = G.openz (G.exit graph) in
       let gh, gl = GR.goto_end gexit in
-      (match gl with GR.Exit 0 -> () | _ -> impossf "exit is not exit?!");
+      (match gl with GR.Exit -> () | _ -> impossf "exit is not exit?!");
       let block = GR.zip (GR.End (h, l)) in
       gh, tail, (block :: add_blocks gblocks oldblocks)
 @ 

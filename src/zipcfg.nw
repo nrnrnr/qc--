@@ -24,13 +24,24 @@ Every graph has a single entry and zero or more exits.
 (For example, the graph for a procedure has no exits, the graph
 for an expanded instruction has one exit, and the graph for an
 expanded conditional branch has two exits.)
-Exits are numbered from~$0$.
 A~[[graph]] is a set of basic blocks, one of which is distinguished as the
 entry block.
 Every other block is tagged by a
 unique id, which may correspond to a string label.\footnote
 {Maintaining a mapping between strings and unique ids is not the
   responsibility of this module.}
+
+An exit is typically represented by explicit control flow to a unique id,
+which corresponds to a block in another graph.
+Exits also include special nodes that stop control flow, such as a
+``return'' node or a ``forbidden'' node.
+Finally, a graph may have at most one ``default exit,'' by which
+control flows out of the graph when not otherwise directed.
+A~default exit is useful only in a subgraph; because control may not
+fall off the end of a {\PAL} procedure, the graph for an entire
+procedure should not have a default exit.
+
+
 A~[[zgraph]] is a graph with the \emph{focus} on one particular node.
 This will support at least the following kinds of operations:
 \begin{itemize}
@@ -59,19 +70,19 @@ type zgraph
 
 val empty   : graph
 val entry   : graph -> zgraph           (* focus on entry node *)
-val exit    : int -> graph -> zgraph    (* focus on exit node *)
+val exit    : graph -> zgraph           (* focus on default exit node *)
 val focus   : uid -> graph -> zgraph    (* focus on node with uid *)
 val unfocus : zgraph -> graph           (* lose focus *)
 @ 
-Subgraph replacement:
-we replace the node at the focus with a graph.
-The number of exits in the replacement graph must be equal to the
-number of successors of the focus node; otherwise it is a checked run-time
-error. 
-After replacement, the focus looks at the successor of the replacement
-graph's entry node.
-<<zipcfg.mli>>=
-val replace_focus : zgraph -> graph -> zgraph
+%%  Subgraph replacement:
+%%  we replace the node at the focus with a graph.
+%%  The number of exits in the replacement graph must be equal to the
+%%  number of successors of the focus node; otherwise it is a checked run-time
+%%  error. 
+%%  After replacement, the focus looks at the successor of the replacement
+%%  graph's entry node.
+%%  <zipcfg.mli>=
+%%  val replace_focus : zgraph -> graph -> zgraph
 @ 
 We can insert a single-entry, single-exit subgraph either before or
 after the current focus.
@@ -81,11 +92,6 @@ The focus does not move.
 <<zipcfg.mli>>=
 val splice_before : zgraph -> graph -> zgraph
 val splice_after  : zgraph -> graph -> zgraph
-@ 
-Stitch two graphs together:
-<<zipcfg.mli>>=
-val followed_by : graph -> int -> graph -> graph
-  (* followed_by g n g' = connect Exit n of g to entry of g' *)
 @ 
 Sometimes we just want to add blocks to an existing graph~[[g]].
 We do it by creating a fresh graph~[[gz]]; the focus should be on the
@@ -181,7 +187,7 @@ type middle
   | Assertion    of Rtl.rtl
 
 type last
-  = Exit    of exit_num  
+  = Exit
   | Branch  of Rtl.rtl * label
   | Cbranch of Rtl.rtl * label * label    (* true, false *)
   | Mbranch of Rtl.rtl * label edgelist (* possible successors *)
@@ -194,7 +200,6 @@ type last
 and exit_num = int
 @ In a complete graph for a procedure, the [[Exit]] node should not
 appear, but it is useful in a subgraph (e.g., replacement for a node).
-Also, perhaps a [[Jump]] should get an exit number?  Not really clear.
 @
 To sequence these things,
 a~[[head]] is a [[first]] followed by zero or more [[middle]]s.
@@ -482,20 +487,17 @@ let to_blocks g = g
 let openz (bz, bs) = (bz, bs)
 @ 
 <<zipcfg.ml>>=
-let empty = Blocks.insert (Entry, Last (Exit 0)) Blocks.empty
+let empty = Blocks.insert (Entry, Last Exit) Blocks.empty
 
 let focus uid blocks =
   let (b, bs) = Blocks.focus blocks uid in
   unzip b, bs
 let entry blocks = focus entry_uid blocks
-let exit n g =
-  let is_exit b = match last (unzip b) with
-  | Exit n' -> n = n'
-  | _ -> false in
+let exit g =
+  let is_exit b = match last (unzip b) with Exit -> true | _ -> false in
   let (b, bs) = Blocks.focusp g is_exit in
   let (h, l) = goto_end (unzip b) in
   (End (h, l), bs)
-  
 
 let unfocus (bz, bs) = Blocks.insert (zip bz) bs
 <<zipcfg.ml>>=
@@ -508,7 +510,7 @@ let assertion    rtl g = consm (Assertion    rtl) g
 let stack_adjust rtl g = consm (Stack_adjust rtl) g
 
 let unreachable = function
-  | Last (Branch _ | Forbidden _ | Exit _) -> ()
+  | Last (Branch _ | Forbidden _ | Exit) -> ()
   | t ->
       let pr = Printf.eprintf in
       pr "warning: unreachable code?\n";
@@ -555,13 +557,12 @@ let entry_to_tail block =
 
 let exit_to_head block =
   match goto_end block with
-  | h, Exit _ -> h
+  | h, Exit -> h
   | _ -> impossf "unexpected non-exit"
 <<zipcfg.ml>>=
 let check_single_exit g =
   let check block found = match last (unzip block) with
-  | Exit 0 when not found -> true
-  | Exit _ -> impossf "multiple exits found where single exit expected"
+  | Exit when not found -> true
   | _ -> found in
   if not (Blocks.fold check g false) then
     impossf "graph does not have an exit"
@@ -578,12 +579,11 @@ let splice_before (focus, blocks) g =
     | Start (Entry, gnodes) ->
         let rec extend head gnodes = match gnodes with
         | Tail (mid, gnodes) -> extend (Head (head, mid)) gnodes
-        | Last (Exit n) ->
-            assert (n = 0);
+        | Last Exit ->
             after_head head, Blocks.union blocks gblocks
         | Last last ->
             let blocks = Blocks.insert (zip (End (head, last))) blocks in
-            let gexit, gblocks = exit 0 gblocks in
+            let gexit, gblocks = exit gblocks in
             after_head (exit_to_head gexit), Blocks.union blocks gblocks in
         extend head gnodes
     | _ -> impossf "ill-formed entry node" in
@@ -598,9 +598,9 @@ let splice_after (focus, blocks) g =
      if we have not reached the entry of g,
      make the entry of g the new tail *)
   let splice tail before_tail =
-    let gexit, gblocks = exit 0 g in
+    let gexit, gblocks = exit g in
     match goto_end gexit with
-    | gnodes, Exit 0 ->
+    | gnodes, Exit ->
         let rec extend tail gnodes = match gnodes with
         | Head (gnodes, mid) -> extend (Tail (mid, tail)) gnodes
         | First Entry -> before_tail tail, Blocks.union blocks gblocks
@@ -684,16 +684,12 @@ let fold_spans f g z =
   Blocks.fold block g z
 @ 
 <<zipcfg.ml>>=
-let followed_by g n g' = unimpf "graph stitching"
-let replace_focus gz g = unimpf "node replacement"
-@ 
-<<zipcfg.ml>>=
 let add_blocks blocks (focus, newblocks) =
   match focus with
-  | Start (Entry, Last (Branch _ | Forbidden _ | Exit _)) ->
+  | Start (Entry, Last (Branch _ | Forbidden _ | Exit)) ->
       let rec add block blocks = match goto_end (unzip block) with
-      | (First (Label _), Exit _) -> blocks
-      | (_, Exit _) -> impossf "exit contains nontrivial code"
+      | (First (Label _), Exit) -> blocks
+      | (_, Exit) -> impossf "exit contains nontrivial code"
       | _ -> Blocks.insert block blocks in
       Blocks.fold add newblocks blocks
   | Start (Entry, _) -> impossf "entry contains nontrivial code"
@@ -701,25 +697,25 @@ let add_blocks blocks (focus, newblocks) =
 @ 
 <<definitions of [[Rep]]'s public functions>>=
 let succs = function
-  | Exit    _ -> []
-  | Branch  (_, l) -> [fst l]
-  | Cbranch (_, t, f) -> [fst t; fst f]  (* order meets layout constraint *)
-  | Mbranch (_, edges) -> List.map fst edges
-  | Call    c -> List.map (fun e -> fst e.node) c.cal_contedges
+  | Exit                  -> []
+  | Branch  (_, l)        -> [fst l]
+  | Cbranch (_, t, f)     -> [fst t; fst f]  (* order meets layout constraint *)
+  | Mbranch (_, edges)    -> List.map fst edges
+  | Call    c             -> List.map (fun e -> fst e.node) c.cal_contedges
   | Cut     (_, edges, _) -> List.map (fun e -> fst e.node) edges
-  | Return  _ -> []
-  | Jump    _ -> []
+  | Return  _   -> []
+  | Jump    _   -> []
   | Forbidden _ -> []
 
 let iter_succs f = function
-  | Exit    _ -> ()
-  | Branch  (_, l) -> f (fst l)
-  | Cbranch (_, te, fe) -> f (fst te); f (fst fe)  (* order meets layout constraint *)
-  | Mbranch (_, edges) -> List.iter (fun e -> f (fst e)) edges
-  | Call    c -> List.iter (fun e -> f (fst e.node)) c.cal_contedges
+  | Exit                  -> ()
+  | Branch  (_, l)        -> f (fst l)
+  | Cbranch (_, te, fe)   -> f (fst te); f (fst fe)  (* order meets layout constraint *)
+  | Mbranch (_, edges)    -> List.iter (fun e -> f (fst e)) edges
+  | Call    c             -> List.iter (fun e -> f (fst e.node)) c.cal_contedges
   | Cut     (_, edges, _) -> List.iter (fun e -> f (fst e.node)) edges
-  | Return  _ -> ()
-  | Jump    _ -> ()
+  | Return  _   -> ()
+  | Jump    _   -> ()
   | Forbidden _ -> ()
 
 <<zipcfg.ml>>=
@@ -777,7 +773,7 @@ let fold_blocks f z bs = UM.fold (fun _ -> f) bs z
 let iter_blocks = UM.iter
 <<zipcfg.ml>>=
 let new_rtll rtl l = match l with
-| Exit    _ -> l
+| Exit -> l
 | Branch  (r, l) -> Branch (rtl, l)
 | Cbranch (r, t, f) -> Cbranch (rtl, t, f)
 | Mbranch (r, tgts) -> Mbranch (rtl, tgts)
@@ -793,7 +789,7 @@ let new_rtlm rtl m = match m with
 | Stack_adjust r -> Stack_adjust rtl
 <<zipcfg.ml>>=
 let map_rtll map l = match l with
-| Exit    _ -> l
+| Exit -> l
 | Branch  (r, l) -> Branch (map r, l)
 | Cbranch (r, t, f) -> Cbranch (map r, t, f)
 | Mbranch (r, tgts) -> Mbranch (map r, tgts)
@@ -840,7 +836,7 @@ let union_over_outedges node ~noflow ~flow =
   | Branch (_, l) -> noflow l
   | Jump _
   | Return _
-  | Exit _
+  | Exit 
   | Forbidden _ -> RSX.empty
   
 let iter_outedges node ~noflow ~flow =
@@ -853,7 +849,7 @@ let iter_outedges node ~noflow ~flow =
   | Branch (_, l) -> noflow l
   | Jump _
   | Return _
-  | Exit _
+  | Exit 
   | Forbidden _ -> ()
   
 let add_inedge_uses node regs =
@@ -863,7 +859,7 @@ let add_inedge_uses node regs =
   | Cut (_, _, uses) -> reg_add uses regs
   | Jump (_, uses, _) -> reg_add uses regs
   | Return (_, _, uses) -> reg_add uses regs
-  | Exit _ | Branch _ | Cbranch _ | Mbranch _ | Forbidden _ -> regs
+  | Exit | Branch _ | Cbranch _ | Mbranch _ | Forbidden _ -> regs
 
 let span_add spans rst = match spans with
 | Some ss -> Spans.fold_live_locs RSX.add ss rst
@@ -887,7 +883,7 @@ let is_executable = function Assertion _ -> false | _ -> true
 
 let nop = Rtl.par [] 
 let last_instr l = match l with
-| Exit    _ -> nop
+| Exit    -> nop
 | Branch  (r, _) -> r
 | Cbranch (r, _, _) -> r
 | Mbranch (r, _) -> r
@@ -919,14 +915,14 @@ let splice_in_forward head graph tail expanded =
   (match gf with Entry -> () | _ -> impossf "entry is not entry?!");
   let h, l = revapp head gt in
   match l with
-  | Exit 0 ->
+  | Exit ->
       must_be_empty gblocks;
       h, tail, expanded
   | _ ->
       unreachable tail;
-      let gexit, gblocks = exit 0 gblocks in
+      let gexit, gblocks = exit gblocks in
       let gh, gl = goto_end gexit in
-      (match gl with Exit 0 -> () | _ -> impossf "exit is not exit?!");
+      (match gl with Exit -> () | _ -> impossf "exit is not exit?!");
       gh, tail, (Blocks.union gblocks (Blocks.insert (zip (End (h, l))) expanded))
 
 let finish_splice_forward head graph expanded = 
@@ -954,7 +950,7 @@ let expand expand_middle expand_last graph =
 @ 
 <<zipcfg.ml>>=
 let single_middle m =
-  let block = (Entry, Tail (m, Last (Exit 0))) in
+  let block = (Entry, Tail (m, Last Exit)) in
   Blocks.insert block Blocks.empty
 
 let single_last l =
