@@ -88,7 +88,7 @@ clean:V:        dirs
                         -o -type f -exec rm '{}' \;
 
 clean.opt:V:    dirs
-                # for i in $SUBDIRS; do (cd $i && mk $MKFLAGS $target); done
+                for i in $SUBDIRS; do (cd $i && mk $MKFLAGS $target); done
                 find lib \
                         \( -name 'CVS'                  \
                         -o -name '.cvsignore'           \
