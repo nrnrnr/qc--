@@ -43,6 +43,7 @@ typedef enum { DEAD=0, REGISTER=1, OFFSET=2 } loctype;
 loctype  Cmm_loctype(location l);
 unsigned Cmm_as_register(location l);
 int      Cmm_as_offset  (location l);
+#define isdead(LOC) ((LOC).l == 0)
 @ 
 The [[pc_map_index]] and [[pc_map_entry]] structs below are used to
 access the PC map table and runtime data entries emitted by the
@@ -63,13 +64,13 @@ typedef struct cmm_pc_map_entry pc_map_entry;
 struct cmm_pc_map_entry {
   location   inalloc;          /* incoming dealloc point on stack (always offset) */
   location   outalloc;         /* outgoing dealloc point on stack (always offset) */
-  location   return_addressp;  /* always an offset??? */
+  location   return_addressp;  /* always an offset??? (dead in oldest frame) */
   struct sd *stackdata_table;
   Cmm_Word   num_registers;
   Cmm_Word   num_locals;
   Cmm_Word   num_spans;
   Cmm_Word   cont_block_size;
-  location   data[1]; /* registers, locals, continuations, spans */
+  location   data[2]; /* registers, locals, continuations, spans */
 };
 
 struct sd {
@@ -107,6 +108,8 @@ struct contblock {
 
 pc_map_entry* Cmm_lookup_entry(const Cmm_Codeptr caller);
 pc_map_entry* Cmm_empty_pcmap_entry;
+pc_map_entry* Cmm_thread_start_up_pcmap_entry;
+pc_map_entry* Cmm_thread_start_dn_pcmap_entry;
 void Cmm_show_map(); /* for debugging */
 void Cmm_show_map_entry(pc_map_entry *entry, int index, Cmm_Codeptr ra);
 @
@@ -141,6 +144,23 @@ static struct cmm_pc_map_entry empty = {
   0, 0, 0, 0, { MKDEAD }
 };
 pc_map_entry* Cmm_empty_pcmap_entry = &empty;
+
+static struct cmm_pc_map_entry startdn = {
+  MKOFFSET(0),
+  MKOFFSET(0),
+  MKDEAD,
+  &nostackdata,
+  0, 2, 0, 0, { MKOFFSET(0), MKOFFSET(sizeof(Cmm_Word)) }
+};
+static struct cmm_pc_map_entry startup = {
+  MKOFFSET(0),
+  MKOFFSET(0),
+  MKDEAD,
+  &nostackdata,
+  0, 2, 0, 0, { MKOFFSET(0), MKOFFSET(-sizeof(Cmm_Word)) }
+};
+pc_map_entry* Cmm_thread_start_up_pcmap_entry = &startup;
+pc_map_entry* Cmm_thread_start_dn_pcmap_entry = &startdn;
 
 <<pcmap.c>>=
 extern pc_map_index Cmm_pc_map[];

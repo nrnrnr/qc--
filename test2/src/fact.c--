@@ -1,0 +1,63 @@
+target byteorder little wordsize 32 ;
+
+export cmm_threadfun, run_thread, fact, cmm_stacktrace;
+import stacktrace;
+
+section "data" {
+  align 4;
+  comeback: bits32;
+}
+
+foreign "C" run_thread(bits32 k) {
+  bits32[comeback] = cutback;
+  cut to k() also cuts to cutback;
+  continuation cutback(n):
+    bits32 n;
+    foreign "C" return (n);
+}
+
+section "text" {
+
+  span 1 threadlabel {
+cmm_threadfun(bits32 p) {
+  bits32 n;
+  bits32 f, x;
+  f = bits32[p];
+  x = bits32[p+4];
+  n = foreign "C" f(x);
+  cut to bits32[comeback](n);
+}
+  }
+
+
+  span 1 fact_lbl {
+foreign "C" fact(bits32 n) {
+  if (n == 0) {
+    cmm_stacktrace();
+    foreign "C" return (1);
+  } else {
+    bits32 m;
+    m = foreign "C" fact(n - 1);
+    foreign "C" return (n * m);
+  }
+}
+
+  }
+
+ span 1 stacktrace_lbl {
+foreign "C" cmm_stacktrace() {
+  foreign "paranoid C" stacktrace(k) also cuts to k;
+  foreign "C" return;
+  continuation k():
+  foreign "C" return;
+}
+
+ }
+}
+
+
+section "data" {
+  fact_lbl : bits8[] "function fact(n, m)\0";
+  stacktrace_lbl : bits8[] "function cmm_stacktrace()\0";
+  threadlabel : bits8[] "function cmm_threadfun(4 deads)\0";
+}

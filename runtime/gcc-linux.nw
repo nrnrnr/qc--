@@ -13,40 +13,8 @@ stack frame on entry.
 #include "pcmap.h"
 #include <assert.h>
 #include <stdio.h>
-@ 
-We are done when we find a call site in our runtime data.
-<<gcc-linux.c>>=
-int
-cmm_caller(Cmm_Word* fp) {
-  pc_map_entry* entry;
-  assert(fp);
-  entry = Cmm_lookup_entry((const Cmm_Codeptr)*(fp));
-  return (entry != 0);
-}
-@ 
-<<gcc-linux.c>>=
-int
-reasonable(void *fp) {
-  return ((unsigned)fp >= 0xB0000000);
-}
-@
-I know how to restore EBP, but not the other regs.
-The [[qc--]] client needs to kill all regs before calling a C function.
-<<gcc-linux.c>>=
+
 #define EBP 9 /* r[5] */
-Cmm_Word*
-walk_foreign_frames(Cmm_Word* fp, Cmm_Word* regs)
-{
-  int tries = 0;
-  fp = (Cmm_Word*)regs[EBP];
-  do {
-    fp = (Cmm_Word*)*fp;
-    if (!reasonable(fp) || tries++ > 20)
-      return 0;
-  } while (!cmm_caller(fp + 1));
-  regs[EBP] = (unsigned)fp;
-  return fp+1;
-}
 @
 On initialization, the [[young_in_overflow]] pointer is the callee's
 deallocation point.    Because the x86 uses a frame pointer, we don't
@@ -57,12 +25,14 @@ void Cmm_init_c_frame(Cmm_Activation *a, char *young_in_overflow) {
   assert(a->regs[EBP]);
   ebp = *a->regs[EBP];
   a->vfp = (char *) ebp;
-  a->u.cwalk.tries = 0;
+  a->u.cwalk.tries = 0;   /* logging only */
 }
-
 extern struct cmm_activation_methods *Cmm_cmm_frame_methods;
-
-
+<<gcc-linux.c>>=
+@
+I know how to restore EBP, but not the other regs.
+The [[qc--]] client needs to kill all regs before calling a C function.
+<<gcc-linux.c>>=
 #define NOISY 0
 
 int Cmm_c_change_activation(Cmm_Activation *a) {
@@ -75,32 +45,21 @@ int Cmm_c_change_activation(Cmm_Activation *a) {
     fprintf(stderr, "C walk ended with a->vfp = 0\n");
     return 0;
   }
-#if 0
- {
-  Cmm_Word *myebp = a->vfp;
-  fprintf(stderr, "Leaving C activation; my ebp = %p, ra = %p, caller's EBP = %p\n",
-          myebp, myebp[1], myebp[0]);
-  for (i = 0; i < 3; i++) fprintf(stderr, "  arg[%d] = 0x%08x\n", i, myebp[i+2]);
- }
-#endif
-  for(i = 0; i < NUM_REGS; i++)
-    a->regs[i] = NULL;
+  <<possibly shout about our departure, showing arguments>>
   callerebp = *(Cmm_Word *)a->vfp;
-#if 0
-  fprintf(stderr, "walked to caller %%ebp == 0x%08x\n", callerebp);
-#endif
-  if (callerebp == 0 || !reasonable((void*)callerebp) || a->u.cwalk.tries++ > 20) {
-#if NOISY
-    fprintf(stderr, "finished C walk with callerebp = 0x%08x, tries = %d\n",
-            (unsigned)callerebp, a->u.cwalk.tries);
-#endif
+  <<possibly announce caller's ebp>>
+  if (callerebp == 0) {
+    <<possibly shout about finishing tries>>
     return 0;
   }
+  for(i = 0; i < NUM_REGS; i++)
+    a->regs[i] = NULL;
+  a->regs[EBP] = (Cmm_Word*)a->vfp;  /* point to location of caller's EBP */
   ra = ((Cmm_Codeptr *)a->vfp)[1];
+  a->pc = ra;  /* for debugging only */
   entry = Cmm_lookup_entry(ra);
   if (entry) {
     a->rtdata = entry;
-    a->pc = ra;  /* probably irrelevant */
     /* deallocation point = vfp + 8
        deallocation point = callervfp + entry->outalloc
 
@@ -109,7 +68,24 @@ int Cmm_c_change_activation(Cmm_Activation *a) {
     a->methods = Cmm_cmm_frame_methods;
   } else {
     a->vfp = (char *)callerebp;
-    a->pc  = ra;
   }
   return 1;
 }
+<<possibly shout about our departure, showing arguments>>=
+#if NOISY
+ {
+  Cmm_Word *myebp = (Cmm_Word*) a->vfp;
+  fprintf(stderr, "Leaving C activation; my ebp = %p, ra = %p, caller's EBP = %p\n",
+          (void*)myebp, (void*)myebp[1], (void*)myebp[0]);
+  for (i = 0; i < 3; i++) fprintf(stderr, "  arg[%d] = 0x%08x\n", i, myebp[i+2]);
+ }
+#endif
+<<possibly announce caller's ebp>>=
+#if 0
+  fprintf(stderr, "walked to caller %%ebp == 0x%08x\n", callerebp);
+#endif
+<<possibly shout about finishing tries>>=
+#if NOISY
+    fprintf(stderr, "finished C walk with callerebp = 0x%08x, tries = %d\n",
+            (unsigned)callerebp, a->u.cwalk.tries);
+#endif

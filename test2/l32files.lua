@@ -1,4 +1,5 @@
 Test.files = { "add.c--"
+             , { source = "altread.c--", argv='output/altread.1 /does-not-exist' }
              , "altret.c--"
              , { source="altret2.c--", stdin="altret2.0", rc=1 }
              , { source="altret3.c--", argv='src/altret3.c-- nonexists .' }
