@@ -35,7 +35,6 @@ This module need a whole bunch of other modules.
 <<ast2ir.ml>>=
 module A = Ast
 module E = Error
-module C = Check
 module R = Rtl
 module F = Fatenv
 module G = Fgraph
@@ -186,6 +185,13 @@ let rec toplevel env ir = function
 
 <<>>=
 let program env ir ds = true
+
+<<>>=
+let check env program =
+    let env        = Elab.Env.global env program            in
+    let env        = F.setDefaults env                      in
+    let env        = Elab.Check.global env program          in
+        env
 @
 
 The function [[ast2ir]] scans, parses, and checks a file before the
@@ -203,10 +209,8 @@ let ast2ir file =
             ( Srcmap.sync map 0 (file,1,1)
             ; let ast        = Parse.program scanner lexbuf in
               let env        = F.create map                 in
-                  E.ematch (C.checkProgram env ast) 
-                  ( function
-                  | env -> () (* start translation here *)
-                  )
+              let env        = check env ast                in
+                  E.Ok()
             )
         with
             | Parsing.Parse_error ->

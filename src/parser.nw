@@ -170,6 +170,8 @@ let escape      = ['\\' '\'' '"' 'a' 'b' 'f' 'n' 'r' 't' '?' ]
 
 let sign        = ['+' '-']
 let nat         = digit+
+let int         = '0' ['x' 'X'] hex+
+                | digit+        (* includes octal *)
 let frac        = nat '.' nat
 let exp         = ['e''E'] sign? nat
 let float       = frac exp? 
@@ -289,7 +291,7 @@ the reserved word [[pragma]] the [[PRAGMA]] token is returned by
                   in P.PRIMOP(s)
                 }
   | float       { fun map -> P.FLT (get lexbuf) }
-  | nat         { fun map -> P.INT (get lexbuf) }
+  | int         { fun map -> P.INT (get lexbuf) }
   
   | "/*"        { fun map -> comment1 lexbuf map }
   | cxxcomment  { fun map -> token lexbuf map (* skip comment *) }
@@ -305,23 +307,23 @@ the reserved word [[pragma]] the [[PRAGMA]] token is returned by
 % ------------------------------------------------------------------  
 
 The interpretation functions for escaped characters are not yet
-written. 
+written. Currently the string representation is returned.
 
 <<>>=
 and character = parse
     printable      "'"          { fun map -> 
-                                  let s = substr 1 (-1) (get lexbuf) in
+                                  let s = substr 0 (-1) (get lexbuf) in
                                   P.CHAR  (s)
                                 }
   
   | '\\' escape    "'"          { fun map -> 
-                                  let s = substr 1 (-1) (get lexbuf) in
+                                  let s = substr 0 (-1) (get lexbuf) in
                                   P.CHAR  (s)
                                 }
 
   
   | '\\' ['x' 'X'] hex+ "'"     { fun map -> 
-                                  let s = substr 2 (-1) (get lexbuf) in
+                                  let s = substr 0 (-1) (get lexbuf) in
                                   P.CHAR  (s)
                                 }
                                   
@@ -597,7 +599,7 @@ and line = parse
                         }
   | nat                 { fun map l -> 
                           
-                          (* inline the l' expression caused an
+                          (* inline'ing the l' expression caused an
                           int_of_string failure with ocamlopt *)
                           
                           let l' = int_of_string (get lexbuf)
@@ -783,12 +785,23 @@ let px ()  = (Parsing.symbol_start ())
 
 Integer literals are returned by the scanner as a [[string]] pair. 
 The ``ascii to integer'' function [[atoi]] returns the value by
-applying [[int_of_string]]].
+applying [[int_of_string]]]. Values starting with a [[0]] are
+expected to be in octal notation. Since [[int_of_strings]] treats
+these as decimal numbers, we prefix them with [[0o]]. The [[0x]]
+notation is recognized by [[int_of_string]] and requires no special
+treatment. 
  
 <<>>=
-let atoi x = try int_of_string x
-             with Failure _ -> assert false
+let atoi x =
+    try 
+        ( match String.length x with
+        | 0                           -> assert false
+        | n when x.[0] = '0' && n > 1 -> int_of_string ("0o"^x)
+        | _                           -> int_of_string x
+        )
+    with Failure _ -> Error.error ("syntax error: "^x)
 @
+  
 
 <<>>=
 let rev    = List.rev

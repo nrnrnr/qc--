@@ -63,8 +63,8 @@ of a value is always known, as is the type of a type-alias
 <<>>=
 type ty         = Types.ty
 type value      = Const.value
-
 @
+
 A value can denote different things: a label, a compile-time constant, a
 register, or a continuation. For constants their value is recorded.
 
@@ -178,23 +178,13 @@ them self in an error-binding for a type or value.  However, we want
 to detect any error after we have checked the static semantics by
 scanning the environment.  So we provide a function to flag an error
 in the environment; once this flag is set, it can't be un-set.  Setting
-it a second time does not produce a new environment.
+it a second time does not produce a new environment.  The function
+[[errorFlag]] returns [[true]], if an error was recored in the
+environment.
 
 <<>>=
 val flagError: env -> env
-@
- 
-
-When the check of the static semantic detects an error that does not
-lead to an [[Error.Error]] binding for a name in the environment
-
-The function [[errorfree]] checks whether a fat environment [[env]]
-binds any [[Error.Error]] value.  In case it does, it return
-[[Error.Error]] and [[Error.Ok()]] if the fat environment is
-error-free.
-
-<<>>=
-val errorfree       : env -> unit Error.error
+val errorFlag: env -> bool
 @
 
 For some opetional declarations in {\PAL} defaults exist. The
@@ -211,16 +201,34 @@ val setDefaults     : env -> env
 
 <<fatenv.ml>>=
 module E = Error
+@
 
+Name spaces are implemented as polymorphic functional maps from [[string]]
+to some value. The [[Map.Make]] functor must be provided with the
+structure of the key, i.e.~the [[string]] type.
+
+<<>>=
 module Comparable   = struct type t=string let compare=compare end
 module StrMap       = Map.Make(Comparable)
 
-<<>>=
 type scope      = Global | Local
+@
+
+Entries are annotated with some attributes: the source code position
+of the delaration, and the scope of the symbol. The scope is required
+by the functions in [[Elab]] which have to check that certain symbols
+have local scope. 
+
+<<>>=
 type attr       = Srcmap.reg * scope
 type endianness = Big | Little
 type ty         = Types.ty
 type value      = Const.value
+@
+
+Symbols for values describe different things.  Their [[denotation]]
+tells the detail.  Especially there are different [[kind]]s of labels
+in {\PAL}.
 
 <<>>=
 type kind       = Proc  of env option
@@ -233,6 +241,12 @@ and  denotation = Constant of value
                 | Import
                 | Register
                 | Continuation
+@
+
+Bindings for values are hold in [[venv]], and for types in [[tenv]]. 
+Each binding consists of a general attribute (see above) and an entry
+part.
+
 <<>>=
 and  ventry     = (denotation * ty) Error.error
 and  tentry     = ty                Error.error
@@ -240,6 +254,13 @@ and  tentry     = ty                Error.error
 <<>>=
 and  tenv           = (attr * tentry) StrMap.t
 and  venv           = (attr * ventry) StrMap.t
+@
+
+The [[target]] type captures informations about the target machine
+architecture. Initially all components in such a value are [[None]].
+During the elaboration of a source file they are filled. 
+
+<<>>=
 and  target         = { memsize:      int        option E.error
                       ; endianness:   endianness option E.error
                       ; word:         Types.ty   option E.error
@@ -248,6 +269,11 @@ and  target         = { memsize:      int        option E.error
                       ; float:        string     option E.error
                       ; charset:      string     option E.error
                       }
+@
+
+This is the implementation of a fat environment. When it is created
+the source map that is part of it must be provided.
+
 <<>>=
 and  env            = { tenv   :      tenv
                       ; venv   :      venv
@@ -276,9 +302,19 @@ let create map      = { tenv   = StrMap.empty
 \subsubsection{Sourcemap and error flag}
 % ------------------------------------------------------------------ 
 
+The fat environment holds the source map for the program being
+compiled. It is required to translate the annotations in the abstract
+syntax into meaningful file, line, column notation.
+
+The fat environment also holds an error flag.  Is is set at the first
+error found in the static semantics of a program.  The function
+[[flagError env]] sets the flag in the returned environment,
+[[errorFlag]] returns the flag's value in [[env]].
+
 <<>>=
 let srcmap env    = env.srcmap
-let flagError env = { env with error = true }
+let flagError env = if env.error then env else { env with error = true }
+let errorFlag env  = env.error
 @
 
 
@@ -295,7 +331,7 @@ be added into the same scope where the same name is already declared.
 
 
 A handy error printing function: [[r]] is a [[Srcmap.reg]] source code
-position that is used to decribe the place where the error is located. 
+position that is used to describe the place where the error is located. 
 
 <<>>=
 let error r env msg = E.errorRegionPrt (srcmap env,r) msg 
@@ -308,38 +344,38 @@ is also re-bound to [[Error]] to flag the problem.
 
 <<>>=
 let bindv name (reg,scope as attr) x env =
-    let add name x = {env with venv = StrMap.add name x env.venv} in
+    let add name x env = {env with venv = StrMap.add name x env.venv} in
     try 
         let (reg',scope' as attr'),_ = StrMap.find name env.venv in
         if scope' = scope then
             ( error reg  env ("re-declaration of value "^name)
             ; error reg' env ("previously declared here")
-            ; add name (attr',E.Error) (* re-bind orig. to Error *)
+            ; add name (attr',E.Error) (flagError env)
             )
         else
-            add name (attr,x)
+            add name (attr,x) env
     with
-        Not_found -> add name (attr,x)
+        Not_found -> add name (attr,x) env
 
 <<>>=
 let bindt name (reg,scope as attr) x env =
-    let add name x = {env with tenv = StrMap.add name x env.tenv} in
+    let add name x env = {env with tenv = StrMap.add name x env.tenv} in
     try 
         let (reg',scope' as attr'),_ = StrMap.find name env.tenv in
         if scope' = scope then
             ( error reg  env ("re-declaration of type "^name)
             ; error reg' env ("previously declared here")
-            ; add name (attr',E.Error) (* re-bind orig. to Error *)
+            ; add name (attr',E.Error) (flagError env) 
             )
         else
-            add name (attr,x) 
+            add name (attr,x) env
     with
-        Not_found -> add name (attr,x)
+        Not_found -> add name (attr,x) env
 @
 
 The following function [[rebindv name x env]] re-binds [[name]] to
 [[x]]. Since this is only intended to update the informations for an
-exsisting [[name]], [[name]] must be bound in [[env]] as a value. The
+existing [[name]], [[name]] must be bound in [[env]] as a value. The
 scope and source code location of the existing binding is re-used for
 the new binding.
 
@@ -396,12 +432,12 @@ The implementation maintains a record of type [[target]] for the target
 informations where each information is captured by an [[option]] type. 
 Once an information has been supplied the [[bind]] functions enforce
 that only the same fact can be entered again.  When an inconsistent
-update is attemped the target information is bound to [[Error]] and an
+update is attempted the target information is bound to [[Error]] and an
 error message is issued.
 
 The [[update]] function computes the value inside the target record
 based on an existing value and a new one. In case the target record
-was unset the new value is returned. Otherwise the new value must
+was un-set the new value is returned. Otherwise the new value must
 match the existing one, or an inconsistency was found. In the latter
 case [[Error]] is returned.
 
@@ -412,7 +448,7 @@ let update r env name old new' =
         | Some x as old when x = new' -> E.Ok(old) (* consistent   *)
         | Some x               -> 
             ( error r env ("inconsistent target specification for "^name)
-            ; E.Error                              (* inconsitent *)
+            ; E.Error                              (* inconsistent *)
             )
         | None                        -> E.Ok(Some new') (* set *)
         ) 
@@ -436,26 +472,6 @@ let findMemsize    env = env.target.memsize
 let findEndianness env = env.target.endianness
 @   
     
-% ------------------------------------------------------------------ 
-\subsubsection{Test for \texttt{Error}-bindings}
-% ------------------------------------------------------------------ 
-
-This function looks for [[Error]] bindings in the fat environment. It
-returns [[Error]] in case an [[Error]] binding is found, and [[Ok()]]
-otherwise. 
-
-<<>>=
-let errorfree env =
-    let combine key (attr,x) y = E.Implode.pair (x,y)    in
-    let free map = StrMap.fold combine map (E.Ok())      in
-        E.Implode.list 
-        [ free env.tenv
-        ; free env.venv
-        ; E.Implode.singleton env.target.memsize
-        ; E.Implode.singleton env.target.endianness
-        ]
-@
-
 % ------------------------------------------------------------------ 
 \subsubsection{Default-bindings}
 % ------------------------------------------------------------------ 

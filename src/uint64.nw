@@ -10,7 +10,7 @@
 
 This module provides unsigned operations on {\ocaml} [[int64]] values
 and some conversions. The operations just add a new interpretation to
-values of type [[int64]].
+values of type [[int64]] but no new type is introduced.
 
 
 % ------------------------------------------------------------------ 
@@ -24,12 +24,16 @@ converts between [[float]] and [[int64]] by maintaining the numerical
 value. This conversion maintains the bit patters and thus relates two
 very different numerical values.
 
-
+Primitive functions, called \textit{external}, are implemented in C,
+\textit{internal} functions use them and are implemented in {\ocaml}. 
 
 <<uint64.mli>>=
 <<external functions>>
 <<internal functions>>
 @
+
+Conversion to and from [[float]] values be re-interpretation of the
+bit-patterns.
 
 <<external functions>>=
 external of_float:   float -> int64                  = "uint64_f2i"
@@ -56,7 +60,23 @@ external div:        int64 -> int64 -> int64         = "uint64_div"
 external modu:       int64 -> int64 -> int64         = "uint64_mod"
 @
 
-Conversion functions.
+The [[of_string]] function parses a string into a [[int64]] value. 
+Unlike the corresponding function from [[Int64]] it uses the highest
+result bit as well and thus considers the result as an unsigned
+integer. Also unlike [[Int64.of_string]], it considers a number to be
+in octal notation, when it starts with a [[0]].
+
+\begin{quote}
+    \begin{tabular}{ll}
+        Prefix         & encoding \\
+        \hline
+        [[0x]], [[0X]] & hexadecimal \\
+        [[0o]], [[0O]] & octal       \\
+        [[0b]], [[0B]] & binary      \\
+        [[0]]          & octal       \\
+        else           & decimal     \\
+    \end{tabular}
+\end{quote}
 
 <<>>=
 external of_string:  string -> int64                 = "uint64_of_string"
@@ -83,9 +103,9 @@ val shr:             int -> int64 -> int64      (* shift right *)
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
 
-The implementation is done in C like the implementation of [[Int64]]. 
-It simply provides some additional operations in the same style as the
-[[Int64]] implementation. 
+The implementation is imostly done in C like the implementation of
+[[Int64]].  It simply provides some additional operations in the same
+style as the [[Int64]] implementation. 
 
 <<uint64.ml>>=
 module I = Int64
@@ -104,8 +124,8 @@ let ge  x y =    (gt x y) || (eq x y)
 @
 
 The shift-operations can be taken from the [[Int64]] module because
-they are the same for signed and unsigned values. This applies to many
-other operations as well.
+they are the same for signed and unsigned values.  This applies to
+many other operations as well.
 
 <<>>=
 let shl n x =    I.shift_left x n
@@ -225,7 +245,7 @@ static int parse_digit(char * p)
 
 A string number contains its radix implicitly. This function sets the
 [[base]] accordingly and returns an advanced [[p]] such that a header
-like [[0x]] is skipped.
+like [[0x]] is skipped. 
 
 <<>>=
 static char* parse_base (char *p, int *base)

@@ -50,6 +50,10 @@ syntactical freedom because the function can be easier written inline,
 covering multiple lines of source code.  For this reason function
 arguments will come last.
 
+% ------------------------------------------------------------------ 
+\subsubsection{Error functions}\label{sect:error-fun}
+% ------------------------------------------------------------------ 
+
 Combinators to deal with functions that do not naturally expect 
 values of type [[error]].
 
@@ -62,7 +66,15 @@ val ematchTriple: 'a error * 'b error * 'c error ->
 val ematchQuad  : 'a error * 'b error * 'c error * 'd error -> 
                    ('a * 'b * 'c * 'd -> 'e) -> 'e error
 val sequence    : 'a error -> ('a -> 'b error) -> 'b error
+val seq         : 'a error -> ('a -> 'b error) -> 'b error
+val seqPair     : 'a error * 'b error -> ('a * 'b -> 'c error) -> 'c error
+val seq'        : 'b -> 'a error -> ('a -> 'b) -> 'b 
 @
+
+% ------------------------------------------------------------------ 
+\subsubsection{Raising functions}
+% ------------------------------------------------------------------ 
+
 
 Raising combinators raise the constructors of an [[error]] value
 inside a complex value to the top-level.  A complex value is bad when
@@ -88,6 +100,10 @@ a pair when raising the constructor.
                   -> ('a * 'b * 'c * 'd) error
   end
 @
+
+% ------------------------------------------------------------------ 
+\subsubsection{Lowering functions}
+% ------------------------------------------------------------------ 
 
 Lowering functions take a complex [[error]] value and push the
 constructor from the top-level to the values inside the [[error]]
@@ -125,6 +141,11 @@ module Implode :
     val map :       ('a -> 'b error) -> 'a list               -> unit error
   end
 @
+
+
+% ------------------------------------------------------------------ 
+\subsubsection{Catching and Printing Errors}
+% ------------------------------------------------------------------ 
 
 At the point where an error occurs the first time the [[ErrorExn]]
 is raised.  When the exception is caught is is turned into an
@@ -344,8 +365,15 @@ let ematchQuad    x4 = ematch (Raise.quad x4)
 let sequence x f = match x with 
     | Ok x      -> f x
     | Error     -> Error
-@
 
+let seq' default x f = match x with
+    | Ok x      -> f x
+    | Error     -> default
+    
+let seq          = sequence
+let seqPair x2   = sequence (Raise.pair x2)
+@
+    
 % ------------------------------------------------------------------ 
 \subsubsection{Error reporting}
 % ------------------------------------------------------------------ 
