@@ -6,7 +6,7 @@
 % ---------------------------------------------------------------------------
 \section{Walking GCC-Linux Stack Frames}
 % ---------------------------------------------------------------------------
-This version of the gcc stack walker is based on the System~V AVI for
+This version of the gcc stack walker is based on the System~V ABI for
 the i386 platform.
 We
  assume that a frame pointer is
@@ -35,16 +35,27 @@ void Cmm_init_c_frame(Cmm_Activation *a, char *young_in_overflow) {
 extern struct cmm_activation_methods *Cmm_cmm_frame_methods;
 <<gcc-linux.c>>=
 @
-The ABI says that registers must be saved, but it does not say where.
-For this reason, we can restore only EBP---not the other regs.
+The most important information in the ABI is in Chapter~3, ``C~Stack
+Frame,'' page~3-42, Figure~3-47.
+(This information is slightly different in both placement and content
+from the draft ABI on the web.)
+
+The ABI says that the caller's EDI, ESI, and EBX must be saved, and it
+even says where to look for them on the stack, but there is no
+specified way to determine whether they have actually been saved on
+the stack or simply left untouched.
+In any case, it is crystal clear that \texttt{gcc} does not conform to
+this part of the specification.
+For this reason, we can restore only EBP---not the other registers.
 If it needs access to variables held in registers, a {\PAL} program
 will need to kill all registers, e.g., by using the [["paranoid C"]]
 convention to call into the run-time system.
 
 We identify the oldest activation by seeing a ``caller's EBP'' equal
 to zero.
-(This as claimed by the ``Process Initialization'' section of the
-``Operating-System Interface'' chapter of the ABI.)
+(This as claimed by the ``Process Stack and Registers'' part of the
+``Process Initialization'' section of the 
+``Operating-System Interface'' chapter of the ABI, pages 3-28 and 3-29.)
 <<gcc-linux.c>>=
 #define NOISY 0
 
