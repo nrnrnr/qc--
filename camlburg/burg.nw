@@ -3,9 +3,10 @@
 \section{Burg Code Generation}
 % ------------------------------------------------------------------ 
 
-This module implements the code generator for a Burg specification. The
-[[generate]] function writes the code to a provided channel and raises
-[[Error]] in the case of semantic errors in the specification. 
+This module implements the code generator that translates a Burg
+specification to {\ocaml}. The [[generate]] function writes the code to
+a provided channel and raises [[Error]] in the case of semantic errors
+in the specification. 
 
 <<burg.mli>>=
 exception Error of string
@@ -19,16 +20,16 @@ val generate: Spec.t -> fd:out_channel -> unit  (* Error *)
 <<burg.ml>>=
 module S         = Spec
 module C         = Code
-module StringMap = Map.Make(struct type t = string let compare = compare end)
-module StringSet = Set.Make(struct type t = string let compare = compare end)
-
 let rcsid = "$Id$"
 @
 
-We build several maps from strings to lists. If we cannot find a key in
-a map this is equivalent to a key mapped to the empty list.
+We build sets of strings and maps from strings to lists. If we cannot
+find a key in a map this is equivalent to a key mapped to the empty
+list.
 
 <<burg.ml>>=
+module StringSet = Set.Make(struct type t = string let compare = compare end)
+module StringMap = Map.Make(struct type t = string let compare = compare end)
 let lookup map x = try StringMap.find x map with Not_found -> [] 
 @
 
@@ -42,7 +43,6 @@ let error msg = raise (Error msg)
 
 I have banned the dirty code generation into a sub-module but I'm not
 sure this really works.
-
 
 <<burg.ml>>=
 <<sorting rules by cost>>
@@ -72,7 +72,7 @@ let cost_order x y = match x, y with
     | _                  -> assert false    (* can't happen *)
 @    
 
-We continue the cost order to rules, i.e.~we define an order that sorts
+We extend the cost order to rules, i.e.~we define an order that sorts
 rules by cost:
 
 <<sorting rules by cost>>=
@@ -80,18 +80,18 @@ let rule_order x y = cost_order x.S.cost y.S.cost
 @
 
 Normalized rules can be divded into two disjoint classes, depending on
-their right hand side:
+their right-hand side:
 
 \begin{itemize}
-\item A rule with only a non-terminal variable as a pattern is a chain rule. 
+\item A rule with a constructor at the top level matches constructors in
+      the subject tree.
+\item A rule with just a non-terminal variable as a pattern is a chain rule. 
       Since the left and the right hand side of a chain rule is a
       nonterminal, chain rules define a graph with nonterminals as
       nodes.
-\item A rule with a constructor at the top-level matches constructors in
-      the subject tree.
 \end{itemize}
 
-A possible third class is a rule with only a literal value, or a
+A possible third class is a rule with just a literal value, or a
 terminal variable matching literals in the subject tree. This case is
 syntactically excluded by the parser because it makes little sense from
 a semantic point of view.  
@@ -101,19 +101,18 @@ Each class of rules is treated differently for code generation. With
 build simultaneously two data structures, one for each class:
 
 \begin{itemize}
-\item A map from the right hand nonterminal of a chain rule to the
-      chain rules that have this non-terminal on their right hand side.
+\item A map from constructors to the rules using them.
+\item A map from the right-hand nonterminal of a chain rule to the
+      chain rules that have this non-terminal on their right-hand side.
       For example, the chain rules $x:y$, $x:z$, $a:b$, $a:y$ lead to
       the map $y \mapsto [a:y, x:y]$, $b \mapsto [a:b]$, $z \mapsto
       [x:z]$. 
-
-\item A map from constructors to the rules using them.
 \end{itemize}
 
 <<burg logic>>=
 type maps =
-    { chains:   S.rule list StringMap.t
-    ; cons:     S.rule list StringMap.t
+    { chains:   S.rule list StringMap.t (* rhs         :-> rules *)
+    ; cons:     S.rule list StringMap.t (* constructor :-> rules *)
     }
        
 let split = 
@@ -134,7 +133,7 @@ let split =
         List.fold_left add {chains = e; cons = e} 
 @
 
-At run-time, a polymorphic value is represented by a record that has a
+At run time, a polymorphic value is represented by a record that has a
 field for every nonterminal in the specification. The [[nonterms]]
 function collects the set of all nonterminals from a list of
 \emph{normalized} rules and returns them in a list.
@@ -145,8 +144,8 @@ let nonterms rules =
         StringSet.elements (List.fold_left add StringSet.empty rules)
 @
 
-[[Generate]] is the only exported function. It normalizes the rules,
-inferres the type of every constructor, collects all nonterminals, and
+[[Generate]] is the only function exported. It normalizes the rules,
+infers the type of every constructor, collects all nonterminals, and
 finally triggers code generation.
 
 We sort nonterminals such that names starting with an underscore come
@@ -162,9 +161,11 @@ let cmp x y =
     | _        -> compare x y
 
 let generate spec ~fd:chan =
-    let top def   = Pp.ppToFile chan 77 (Code.Print.toplevel def) in
-    let exp def   = Pp.ppToFile chan 77 (Code.Print.exp def) in
-    let tydecl d  = Pp.ppToFile chan 77 (Code.Print.tydecl d) in
+    let spec      = CodeGen.mangle spec in
+    let linewidth = 77 in
+    let top def   = Pp.ppToFile chan linewidth (Code.Print.toplevel def) in
+    let exp def   = Pp.ppToFile chan linewidth (Code.Print.exp def) in
+    let tydecl d  = Pp.ppToFile chan linewidth (Code.Print.tydecl d) in
     let rules     = Norm.rules spec.S.rules in
     let types     = try S.con_types rules with S.Error msg -> error msg in
     let nts       = List.sort cmp (nonterms rules) in
@@ -193,8 +194,63 @@ let generate spec ~fd:chan =
 \subsection{Code Generating Functions}
 % ------------------------------------------------------------------ 
 
-The functions in this section generate code by building their abstract
-syntax using the [[Code]] module.
+The functions in this section generate code by building abstract syntax
+using the [[Code]] module.
+
+Some identifiers from a Burg specification are used as identifiers in
+the generated code. Because we cannot guarantee that all names are legal
+names in Objective Caml, we mangle them.
+
+<<CodeGen>>=
+let ocaml_syntax: Mangler.spec =
+    { Mangler.preprocess = String.uncapitalize 
+    ; Mangler.replace    = (fun c -> c) 
+    ; Mangler.avoid      = (fun str -> str ^ "_")
+    ; Mangler.reserved   = 
+        [ "and"; "as"; "assert"; "begin"; "class"; "constraint"; "do";
+          "done"; "downto"; "else"; "end"; "exception"; "external";
+          "false"; "for"; "fun"; "function"; "functor"; "if"; "in";
+          "include"; "inherit"; "initializer"; "lazy"; "let"; "match";
+          "method"; "module"; "mutable"; "new"; "object"; "of"; "open";
+          "or"; "parser"; "private"; "rec"; "sig"; "struct"; "then";
+          "to"; "true"; "try"; "type"; "val"; "virtual"; "when";
+          "while"; "with"; "mod"; "land"; "lor"; "lxor"; "lsl"; "lsr";
+          "asr"]
+    }          
+@
+
+The [[mangle]] function mangles certain names in a [[Spec.t]] value such
+that they become legal Objective Caml names; others we don't touch:
+
+\begin{itemize}
+\item Names denoting nonterminals, because they show up in the generated
+      code as function names and record labels.
+\item We don't mangle variable names because they must be legal names
+      anyway.
+\item We don't mangle a constructor name like [[Foo]] because the user
+      knows that we will generate a function [[conFoo]] that he must
+      call. He thus better uses good constructor names; if we mangled
+      them the result would be unpredictable for the user.
+\end{itemize}
+
+<<CodeGen>>=
+let mangle spec =
+    let mangle = Mangler.mk ocaml_syntax in
+    let ty = function
+        | S.NonTerm(s)      -> S.NonTerm (mangle s)
+        | S.Term(_) as x    -> x in
+    let rec pattern = function
+        | S.Var(x,t)        -> S.Var(x, ty t)
+        | S.Con(c,pats)     -> S.Con(c, List.map pattern pats)
+        | S.Literal(_) as x -> x in
+    let rule r =
+        { S.nonterm = mangle  r.S.nonterm
+        ; S.pattern = pattern r.S.pattern
+        ; S.cost    = r.S.cost
+        ; S.code    = r.S.code
+        } in
+    { spec with S.rules = List.map rule spec.S.rules }  
+@
 
 First, here are some special cases of constructor functions for
 Objective Caml syntax.
@@ -206,20 +262,20 @@ let let' x e body   = C.let' [C.var' x, e] body
 let apply2 f x y    = C.apply (C.apply f x) y
 @
 
-The cost of a rule is a sum of integers an user-provided code. We
+The cost of a rule is a sum of integers and user-provided code. We
 optimize away the zeroes.
 
 <<CodeGen>>=
 let add x y = match x, y with
     | (C.Int 0), y -> y
     | x, (C.Int 0) -> x
-    | x, y       ->  C.apply (C.apply (C.id "+")  x) y
+    | x, y         -> C.apply (C.apply (C.id "+")  x) y
 
 let sum exps = List.fold_left add (C.Int 0) exps
 @
 
-[[Compose]] takes a list of function expressions $f_1, \ldots, f_n $ and
-an argument expression $a$ and creates a application: $f_1 (f_2
+[[Compose]] takes a list of function expressions $f_1, \ldots, f_n$,
+an argument expression $a$, and creates an application: $f_1 (f_2
 (\cdots(f_n~a))\cdots)$. The argument is passed to $f_n$ first and the
 result of that application to $f_{n-1}$ and so forth.  
 
@@ -274,7 +330,7 @@ let chain_fn src rule =
     and caction = path [camlburg;"action"]
     in
         C.fun' [C.var' x] 
-               (apply2 (C.id (upd rule.S.nonterm))
+               (apply2 (C.id (upd dst))
                        (C.record [ccost  , add (C.longid [nt;camlburg;cost]) c 
                                  ;caction, action (let' v (C.apply f C.unit)
                                                     a) 
@@ -282,9 +338,9 @@ let chain_fn src rule =
                        (C.id x))
 @                       
 
-When a nonterminal is updated, the nonterminals connected to this one by
-chain rules must be also updated. We want to update these chained
-nonterminals in an order, such that the nonterminal with the smallest
+When a nonterminal is updated, the nonterminals connected to it by
+chain rules must be updated, too. We want to update these chained
+nonterminals in such an order, that the nonterminal with the smallest
 additional costs ist updated first. This requires to sort the cain rules
 by their cost. 
 
@@ -296,22 +352,22 @@ by their cost.
         else
             (* composed chain_fn *) { x with number = nt }
 *)
+<<CodeGen>>=
 let update_fn src chainrules =
     let arg     = C.recordwith x [src, C.id nt]             
     and chns    = List.map (chain_fn src) (List.sort rule_order chainrules)
     in    
-        C.fun' [C.var' nt; C.var' x]
+        C.fun' [C.var' nt; C.var' x] 
                (C.if' (geq (C.longid [nt;camlburg;cost]) 
                            (C.longid [x;src;camlburg;cost]))
                       (C.id x)
-                      (compose chns arg))
-
+                      (compose chns arg)) 
+<<CodeGen>>=
 (*  
     let rec update_number = (* update_fn *) 
     and update_str = (* udpdate_fn *)
     and ...
 *)    
-
 let nonterms nts map =
     C.def (List.map (fun nt -> upd nt, update_fn nt (lookup map nt)) nts)
 @
@@ -490,13 +546,23 @@ let infdef nts =
 @
 
 Declare the record type [[nonterm]]. It has a type parameter for each
-field.
+field; [[typevars]] generates a list of parameter names from the list of
+fields.
 
 <<CodeGen>>=
+let typevars nts =
+    let rec loop i = function
+        | []      -> []
+        | nt::nts -> ("t" ^ string_of_int i) :: loop (i+1) nts
+    in
+        loop 0 nts
+
 let tydecl nts =
-    { C.params = nts
+    let tvs = typevars nts in
+    { C.params = tvs
     ; C.name   = "nonterm"
-    ; C.rep    = Some (C.typrod (List.map (fun x -> (false, x, C.tyvar x)) nts))
+    ; C.rep    = Some (C.typrod (List.map2 
+                            (fun x t -> (false, x, C.tyvar t)) nts tvs))
     }
 @
 

@@ -11,7 +11,7 @@
 \section{Rule Normalization}
 % ------------------------------------------------------------------ 
 
-In the C {\small IBURG} implementation the results of a match at
+In the C implementation of {\small IBURG} the results of a match at
 run-time are stored into the subject tree. This implementation strictly
 separates the subject tree and the result of a match and therefore no
 such possibility exists. This makes the implementation of nested
@@ -36,7 +36,7 @@ for rules and patterns:
 \end{center}
 
 A rule is a 4-tuple of its (nonterminal) type $t$, a pattern $p$, a cost
-$c$, and some action $a$. A pattern is either a variable $v:t$ of type
+$c$, and some action $a$. A pattern $p$ is either a variable $v:t$ of type
 $t$, a literal \t{l}, or a constructor $A$ with exactly one pattern $p$
 as its argument. 
 
@@ -60,8 +60,7 @@ to provide the variables $B(p)$ defines. If this is the first time we
 remove the sub-pattern $B(p)$, we introduce a new rule that defines the
 nonterminal $t_B$. This rule might not be normalized and thus must be
 considered subsequently. If we have removed the pattern $B(p)$ before,
-$t_B$ is already defined by a new rule and we simply have to find that
-type. 
+$t_B$ is already defined by a new rule and we simply have to find it.
 
 Here is the case where we introduce a new rule to define the nonterminal
 $t_B$ by a sub-pattern that we have removed from a rule.
@@ -94,7 +93,7 @@ val rules: Spec.rule list -> Spec.rule list
 
 The explanation of the normalization algorithm at the beginning of this
 module worked with a simplified rule and pattern syntax.  Rules really
-have two different kinds of (terminal and nonterminal) variables, and
+have two different kinds of variables (terminal and nonterminal), and
 constructors have zero or more arguments, not just one. 
 
 <<norm.ml>>=
@@ -119,12 +118,13 @@ let normalized rule =
 @        
 
 For generating new variables and their types we need a generator. An
-indentifier in a specification must start with a character. To avoid
-name clashes with existing names, generated names start with an
-underscore character, which is still legal in Objective Caml
-indentifiers. Function [[mkgen]] returns a name generator that generates
-names with a user supplied prefix; [[genty]] is a generator created by
-[[mkgen]] for new nonterminals.
+identifier in a specification must start with a character. To avoid name
+clashes with existing names, generated names start with an underscore
+character. 
+
+Function [[mkgen]] returns a name generator that generates names with a
+user-supplied prefix; [[genty]] is a generator created by [[mkgen]] for
+new nonterminals.
 
 <<norm.ml>>=
 let mkgen (n:int ref) = fun (prefix:string) ->
@@ -138,9 +138,9 @@ let genty  = mkgen (ref 1)  (* global generator for nonterms *)
 
 New rules are introduced for complex patterns in argument positions in
 other patterns. When the same complex pattern appears twice in a rule
-set we must avoid to create two new rules which each also would
-introduce new non-terminals. Therefore, new rules are remembered in a
-map that associates the pattern of the new rule with its nonterminal.
+set we must avoid to create two new rules. Therefore, new rules are
+remembered in a map that associates the pattern of the new rule with its
+nonterminal.
 
 <<norm.ml>>=
 module Types = Map.Make(struct type t=S.pattern let compare=S.cmp end)
@@ -161,13 +161,13 @@ let tupleval = function [p] -> C.id p   | ps -> C.Tuple(List.map C.id ps)
 
 
 Normalization is driven by the arguments of a constructor in a
-non-normalized rule. If such an argument is itself a construtor, it is
+non-normalized rule. If such an argument is itself a constructor, it is
 replaced by a variable. The [[norm]] function does this for a single
 argument [[arg]]. [[Norm]] receives the name of the outermost rule's
 constructor [[c]], the argument [[arg]], a triple with arguments, the
 current code, and the list of current rules.
 
-[[Norm]] returns also a triple: it puts the replacement for [[arg]] at
+[[Norm]] returns a triple: it puts the replacement for [[arg]] at
 the head of the list of arguments, code wrapped by a let-binding into
 the second component, and newly introduced rules into the last. 
 
@@ -176,8 +176,8 @@ might or might not have been created. If a rule exists, it is in
 [[types]], otherwise a new rule for a new non-terminal is added. In any
 case a new variable with the type of the new rule replaces [[arg]]
 
-The free variables in [[arg]] are bound by a let-binding that wraps the
-old [[code]]. A new rule defining [[t]] is introduced; its semantic
+The free variables in [[arg]] are bound by a [[let]]-binding that wraps
+the old [[code]]. A new rule defining [[t]] is introduced; its semantic
 action is to return all free variables found in [[arg]] as a tuple.
 
 <<norm.ml>>=
@@ -219,7 +219,7 @@ The normalization itself is done by folding [[norm]] over all
 constructor arguments. It receives and returns a triple: the first
 argument is the reversed list of new constructor arguments that replace
 the current list, the second is the new code for the current rule, and
-the third is the list of new rules. Inititially the list of new
+the third is the list of new rules. Initially the list of new
 arguments and rules are empty, and the current code from the rule is
 passed. 
 

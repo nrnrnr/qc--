@@ -70,12 +70,14 @@ lex.ml:		lex.mll
 ML =		pp.ml		\
 		srcmap.ml	\
 		code.ml		\
+		mangler.ml	\
 		spec.ml		\
 		parseerror.ml	\
 		parse.ml	\
 		lex.ml		\
 		norm.ml		\
 		burg.ml		\
+                noguardscheck.ml\
 		main.ml		\
 		
 MLI =		pp.mli		\
@@ -83,6 +85,7 @@ MLI =		pp.mli		\
 		burg.mli	\
 		code.mli	\
 		main.mli	\
+		mangler.mli	\
 		norm.mli	\
 		parse.mli	\
 		parseerror.mli	\
@@ -132,4 +135,4 @@ examples.opt:	iburg.cmx sample.cmx sampleclient.cmx
 # includes
 # ------------------------------------------------------------------ 
 
-include	DEPEND
+include	DEPEND.evaluating

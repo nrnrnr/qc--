@@ -1,0 +1,116 @@
+% vim:ts=8 sw=4 et:
+% $Id$
+%
+% I am aware that there is a similar module in ../src. This one has
+% better documentation. Maybe we could retire the other one? --CL
+
+% ------------------------------------------------------------------ 
+\section{Name Mangling}
+% ------------------------------------------------------------------ 
+
+A name mangler maps consistently strings to strings that obey a
+predefined syntax. For example, arbitrary strings can be mangled such
+that they become legal C-function names. The same string is always
+mangled in the same way.
+
+% ------------------------------------------------------------------ 
+\subsection{Interface}
+% ------------------------------------------------------------------ 
+
+The syntax of mangled names is implicitly defined by a record [[spec]] of
+functions.
+
+<<types>>=
+type spec =
+    { preprocess:     string -> string
+    ; replace:        char   -> char
+    ; reserved:       string list
+    ; avoid:          string -> string
+    }
+@
+
+\begin{enumerate}
+\item A name is first [[preprocess]]'ed in some unspecified way. This might
+      include limiting its length, or removing some prefix.
+
+\item In the resulting name all characters are passed through
+      [[replace]] to elimintate illegal chacacters.
+
+\item If the resulting name is a [[reserved]] name or was previously
+      used for a different name, this collision is
+      resolved by passing it repeatedly to [[avoid]]. 
+\end{enumerate}
+
+A mangler [[t]] takes a [[string]] and returns the mangled string. A
+mangler must be created before it can be used; it captures hidden state.
+
+<<types>>=
+type t = string -> string
+
+<<mangler.mli>>=
+<<types>>
+val mk:             spec -> t 
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Implementation}
+% ------------------------------------------------------------------ 
+
+A mangled name could end up as the same as the mangled name of another.
+To avoid this, a mangler remembers all mangled names as well as the map
+from names to mangled names. Reserved words are treated as if they were
+mangled names that therefore must be avoided.
+
+<<mangler.ml>>=
+<<types>>
+
+module StrCmp = struct type t = string let compare = compare end
+module StrSet = Set.Make(StrCmp)
+
+type state =
+    { mutable used:     StrSet.t
+    ; mangled:          (string, string) Hashtbl.t
+    }
+
+let unique state avoid str =
+    let rec loop str =
+        if   StrSet.mem str state.used
+        then loop (avoid str)
+        else str
+    in
+        loop str
+
+let map (f: char->char) str =
+    let str' = String.copy str in
+    let ()   = for i = 0 to String.length str - 1 do
+                str'.[i] <- f str'.[i]
+               done
+    in
+        str'
+
+let ($$) x f = f x (* x $$ f1 $$ f2 == f2 (f1 x) *)
+    
+let mk (spec: spec) = 
+    let state = 
+        { used     = List.fold_right StrSet.add spec.reserved StrSet.empty 
+        ; mangled  = Hashtbl.create 29 (* initial size - make parameter? *)
+        } in
+    fun str ->
+        try Hashtbl.find state.mangled str      (* if mangled before *)
+        with Not_found ->
+            let str' = str 
+                     $$ spec.preprocess         (*  1st transformation *)
+                     $$ map spec.replace        (*  2nd transformation *)
+                     $$ unique state spec.avoid (*  .. *)
+            in
+                ( state.used <- StrSet.add str' state.used
+                ; Hashtbl.add state.mangled str str'
+                ; str'
+                )
+@
+
+    
+
+
+    
+
