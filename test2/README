@@ -50,34 +50,87 @@ see testdrv.nw.
 Frequently asked questions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-When I create a new test case, how do I add it to the test suite?
-  * How to specify correct assembly?
-  * Can I pass arguments to a test program at run time?
+Q: When I create a new test case, how do I add it to the test suite?
 
-What existing tests are there and what do they represent?
-(How do I decide to which test I should add a new file?)
+A: First, add the c-- source files to the src directory along with any
+inputs you would like to pass to the program. If the new test is
+called "test" then you would add test.c-- and test.0 to the src
+directory. Then, select one or more test files to add your test to.
+Currently, there are test files for each backend, and one for the
+Tiger frontend. If the new test is applicable to all back-ends, then
+it should be added to all of the backend test files. If it is a test
+of the frontend, then it can be added to the dummy backend only. Once,
+the new test has been entered into the test file, record the outputs
+with the following command:
 
-Is there a special place for tests that don't run but that are
-intended to elicit error messages from the compiler? 
+> ../bin/qc-- testdrv.lua <test file>.tst src/test.c--.record
 
-When I change the compiler, if I expect it to produce identical
+This will create files with the extensions 1, 2, s, s1, and s2. Look
+over these files and submit them to the CVS repository.
+
+
+Q: What existing tests are there and what do they represent?
+
+A: Currently, there is a test file for each backend, one for trusted
+tests, and one for the Tiger frontend. The backend test files are
+named "all.<backend>.tst", and should contain all tests that can be
+run against the backend. The file "trusted.tst" contains trusted
+tests. These are tests for which the output of running the compiled
+program can be used to determine if the test is passed. Trusted tests
+may generate different assembly language, but still pass if their
+outputs are the same. The "tiger.tst" file contains test from the
+tiger frontend.
+
+
+Q: Is there a special place for tests that don't run but that are
+intended to elicit error messages from the compiler?
+
+A: These tests can be added to the dummy backend.
+
+
+Q: When I change the compiler, if I expect it to produce identical
 assembly code, what should I run?
 
-When I change the compiler, if I expect it to produce different
-assembly code that is semantically equivalent, what should I run?  If
+A: Run "mk" in the test directory to execute all of the test files. If
+you only want to test a specific backend then you may also run, for
+instance, "mk all.x86.tst".
+
+
+Q: When I change the compiler, if I expect it to produce different
+assembly code that is semantically equivalent, what should I run? If
 the tests compile and run OK, how do I tell the system that the new
 assembly language is right?
 
-What if a test requires more than one file?   For example, a .c-- file
-and a .c file?
+A: If you expect to produce different assembly code, then on the
+trusted tests can be used reliably. In this case run "mk trusted.tst".
+You will be notified of any non-fatal outputs that do not match, and
+you will be given command that you can run to inspect and update the
+differences.
 
-What should I do if I want to test an alternative compiler pass, such
-as an optimization pass or replacement register allocator?
-  * Do I need a new results directory?  If so, how should I pick its
-    name?
-  * How can I populate the results directory with the expected outcome
-    of running the test programs?  Can these expectations be shared across
-    results directories?
+Q: What if a test requires more than one file?
+
+A: Tests that require additional files can be configured by adding the
+additional sources to the "other" field in the test case. Instead of
+simply listing the c-- source file name, you would enter a line like:
+
+  { source="test.c--" other="other.c lib.a" }
+
+The "other" line is passed directly to gcc along with the assembly
+output from the c-- sources. The above line would result in this
+invocation of gcc:
+
+  gcc -o test test.s other.c lib.a
+
+
+Q: What should I do if I want to test an alternative compiler pass,
+such as an optimization pass or replacement register allocator?
+
+A: If your testing a new component of the compiler that will produce
+different assembly language, then you may want to setup a new results
+directory and record all of the outputs. If you only expect a few
+number of cases to produce different assembly, you may want to just
+setup alternate outputs for the few cases. In either case, a new test
+file will need to be setup for the tests.
 
 
 Things that are here
