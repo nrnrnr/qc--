@@ -311,9 +311,9 @@ instruction disappears. It is inserted when the value is used in
 a right-hand-side context.
 
 <<rules>>=
-ireg:       Fetch(ireg,width) {: ireg :}
-freg:       Fetch(freg,width) {: freg :}    
-dreg:       Fetch(dreg,width) {: dreg :} 
+ireg:       Fetch(icell,width) {: icell :}
+freg:       Fetch(fcell,width) {: fcell :}    
+dreg:       Fetch(dcell,width) {: dcell :} 
 @
 
 Applications.
@@ -350,8 +350,11 @@ freg:       App1("fneg", x, r1:freg)          {: app1 ftmp "fneg" x r1 :}
 freg:       App2("f2i",  x, r1:freg, r2:dreg) {: app2 itmp "f2i"  x r1 r2 :}
 freg:       App2("i2f",  x, r1:ireg, r2:dreg) {: app2 ftmp "i2f"  x r1 r2 :}
 freg:       App2("f2f",  x, r1:freg, r2:dreg) {: app2 ftmp "f2f"  x r1 r2 :}
-freg:       App2("fadd", x, r1:freg, r2:freg) {: app2 ftmp "fadd" x r1 r2 :}
-freg:       App2("fsub", x, r1:freg, r2:freg) {: app2 ftmp "fsub" x r1 r2 :}
+
+freg:       App3("fadd", x, r1:freg, r2:freg, c:dreg) 
+                                              {: app3 ftmp "fsub" x r1 r2 c :}
+freg:       App3("fsub", x, r1:freg, r2:freg, c:dreg) 
+                                              {: app3 ftmp "fadd" x r1 r2 c :}
 
 freg:       App3("fdiv", x, r1:freg, r2:freg, c:dreg) 
                                               {: app3 ftmp "fdiv" x r1 r2 c :}
@@ -412,48 +415,48 @@ mem:        Cell('m', agg, width, addr, ass)
             :}
 
 -- ireg == r/t (32) and g/v (8)
-ireg:       Cell('r', agg, width, const, ass)
+icell:      Cell('r', agg, width, const, ass)
             {: 
                 const >>= fun k ->
                 return (R.cell (U.assertion ass) 'r' agg width k) 
             :}
-ireg:       Cell('t', agg, width, const, ass)
+icell:      Cell('t', agg, width, const, ass)
             {: 
                 const >>= fun k ->
                 return (R.cell (U.assertion ass) 't' agg width k) 
             :}
-ireg:       Cell('g', agg, width, const, ass)
+icell:       Cell('g', agg, width, const, ass)
             {: 
                 const >>= fun k ->
                 return (R.cell (U.assertion ass) 'g' agg width k) 
             :}
-ireg:       Cell('v', agg, width, const, ass)
+icell:      Cell('v', agg, width, const, ass)
             {: 
                 const >>= fun k ->
                 return (R.cell (U.assertion ass) 'v' agg width k) 
             :}
 
 -- freg == f/u (32)
-freg:       Cell('f', agg, width, const, ass)
+fcell:      Cell('f', agg, width, const, ass)
             {: 
                 const >>= fun k ->
                 return (R.cell (U.assertion ass) 'f' agg width k) 
             :}
-freg:       Cell('u', agg, width, const, ass)
+fcell:      Cell('u', agg, width, const, ass)
             {: 
                 const >>= fun k ->
                 return (R.cell (U.assertion ass) 'u' agg width k) 
             :}
 
 -- dreg == d (2)
-dreg:       Cell('d', agg, width, const, ass)
+dcell:      Cell('d', agg, width, const, ass)
             {: 
                 const >>= fun k ->
                 return (R.cell (U.assertion ass) 'd' agg width k) 
             :}
 
 --
-creg:       Cell('c', agg, width, const, ass)
+ccell:      Cell('c', agg, width, const, ass)
             {: 
                 const >>= fun k ->
                 return (R.cell (U.assertion ass) 'c' agg width k) 
@@ -513,38 +516,48 @@ stmt:       Store(mem, freg, width)
                 freg >>= fun r ->
                 return (R.store m (R.fetch r width) width)
             :}
+
 -- r := r        
-stmt:       Store(left:ireg, right:ireg, width)
+stmt:       Store(left:icell, right:ireg, width)
             {:
                 left  >>= fun l ->
                 right >>= fun r ->
                 return (R.store l (R.fetch r width) width)
             :}    
 -- f := f
-stmt:       Store(left:freg, right:freg, width)
+stmt:       Store(left:fcell, right:freg, width)
+            {:
+                left  >>= fun l ->
+                right >>= fun r ->
+                return (R.store l (R.fetch r width) width)
+            :}    
+------------------------------------------------------------------
+stmt:       Store(left:icell, right:freg, width)
             {:
                 left  >>= fun l ->
                 right >>= fun r ->
                 return (R.store l (R.fetch r width) width)
             :}    
 
+
+------------------------------------------------------------------            
 -- c := t (assignment to PC is the only case in the Dummy target)
-stmt:       Store(creg, ireg, width) [1]
+stmt:       Store(ccell, ireg, width) [1]
             {:
-                creg  >>= fun c ->
+                ccell  >>= fun c ->
                 ireg  >>= fun r ->
                 return (R.store c (R.fetch r width) width)
             :}    
 -- c := k
-stmt:       Store(creg, const, width)
+stmt:       Store(ccell, const, width)
             {:
-                creg  >>= fun c ->
+                ccell  >>= fun c ->
                 const >>= fun k ->
                 return (R.store c k width)
             :}    
 
 -- d := d
-stmt:       Store(left:dreg, right:dreg, width)
+stmt:       Store(left:dcell, right:dreg, width)
             {:
                 left  >>= fun l ->
                 right >>= fun r ->
