@@ -1,0 +1,99 @@
+% l2h substitution PAL C--
+
+\providecommand\PAL{C$--$}
+
+\makeatletter
+\def\tabpar#1{\@tempdimc=\linewidth \advance\@tempdimc by -\@totalleftmargin
+   \advance\@tempdimc by -\leftmargin
+   \parbox{\@tempdimc}{\strut#1\strut}}
+\makeatother
+
+
+\section{Overview}
+
+Here's a somewhat lengthy suggestion about a structure for the code generator.
+\begin{enumerate} 
+\item 
+Find basic blocks
+\item 
+Add anonymous labels as needed to establish the invariant that every basic block
+begins with a label node.
+(This may be true already, except for the successor of a call.)
+\item 
+Attach to each node the set of {\PAL} variables live \emph{after} that node.
+Because each block begins with a label, we will have entry/exit liveness info.
+\item 
+\begin{tabbing}
+MM\=MM\=MM\=MM\=MM\=MM\=\kill
+For each basic block bb do\+\\
+  For each variable v such that\+\\
+    (a) v's live range intersects the block, and\\
+    (b) v is dead on entry to and exit from the block\-\\
+  do\+\\
+    for each def of v (assignment to v) do\+\\
+      \+\tabpar{\raggedright\hangindent=2em\hangafter=1
+        replace that def, and all the uses of that def,
+        with a fresh temporary (drawn from scratch space 
+        -- call must end a bb).  It is OK if the temporary has
+        multiple uses, provided they are all in the same basic block.
+        Each temporary must have exactly one def, however.}\-\\
+      \+\tabpar{\raggedright\hangindent=2em\hangafter=1
+        to each node in the live range of the new temporary, attach to
+        the node's attribute an indication that the variable has been
+        mapped to the temporary}\-\-\\
+    done\-\\
+  done\-\\
+done
+\end{tabbing}
+\item
+By solving a network flow problem, estimate the frequency of use of
+each label.
+The network flow problem comes from doing depth-first search from the
+entry node.
+\begin{itemize} 
+\item 
+A computed goto has equal probability of reaching all targets.
+\item  
+Any pair of backward or non-backward edges have equal probability of
+being taken.
+\item
+If a backward edge is paired with a non-backward edge, it is taken
+with probability~$.9$.
+\end{itemize}
+\item 
+Using the information about labels, estimate frequency of use of each remaining 
+  {\PAL} variable. Use these to sort the variables in priority order, most used first.
+\item 
+Using the liveness information, build an interference graph for the remaining 
+{\PAL} variables.
+\item 
+Using the priority order and the interference graph, assign registers from 
+the variable pool to the {\PAL} variables greedily until no more
+variables can be assigned to registers.
+Assign the remaining variables to slots in the stack frame (continuing to use
+the interference graph so as to reuse slots when possible).  Be careful of alignment.
+Substitute for variables in the control-flow graph as dictated by the assignments,
+and update attributes of nodes to record those assignments.
+\item 
+Run one or more lowering passes to eliminate all nodes except assignment 
+and control flow.
+\emph{This is the fuzzy bit.}
+\item 
+Over each basic block, run a pass of instruction selection, introducing def-once, 
+use-once temporaries from the scratch pool.
+\item 
+Optionally run local common-subexpression elimination over each basic block.
+\item 
+Optionally do many of  the steps above with extended basic blocks
+instead of ordinary basic blocks.
+\item 
+Run the register allocator, which maps one-def, many-use temporaries into 
+hardware registers from the scratch pool.
+\end{enumerate}
+We have machine code.
+
+
+
+
+
+
