@@ -124,13 +124,12 @@ main:
 	leal 12(%esp), %ecx
 	addl %eax,%ecx
 	movl (%ecx),%eax
-Linitialize_continuations_l33:
-Lproc_body_start_l32:
-	movl %ebx,8(%esp)
+Linitialize_continuations_l32:
+Lproc_body_start_l31:
 	call doread
 	.byte 0xe9
-	.long read_fail_R29-.-4
-Ljoin_l50:
+	.long C___R50-.-4
+Ljoin_l51:
 	leal success_read,%ecx
 	movl $-12,%edx
 	movl %ebx,8(%esp)
@@ -145,7 +144,7 @@ Ljoin_l50:
 Ljoin_l47:
 	call doread
 	.byte 0xe9
-	.long read_fail_R29-.-4
+	.long C___R43-.-4
 Ljoin_l44:
 	leal success_read,%ebx
 	movl $-12,%ecx
@@ -157,7 +156,7 @@ Ljoin_l44:
 	addl %edx,%ebx
 	movl %eax,(%ebx)
 	call printf
-Ljoin_l41:
+Ljoin_l40:
 	movl $0,%eax
 	leal 12(%esp), %ecx
 	movl $0,%edx
@@ -168,9 +167,15 @@ Ljoin_l41:
 	movl 8(%esp),%ebx
 	leal 12(%esp), %esp
 	ret
-read_fail_R29:
+C___R43:
+	movl 8(%esp),%ebx
+	jmp Ljoin_l52
+C___R50:
+	jmp Ljoin_l52
+Ljoin_l52:
 	leal fail_to_read,%ecx
 	movl $-12,%edx
+	movl %ebx,8(%esp)
 	leal 12(%esp), %ebx
 	addl %edx,%ebx
 	movl %ecx,(%ebx)
@@ -179,7 +184,7 @@ read_fail_R29:
 	addl %ecx,%ebx
 	movl %eax,(%ebx)
 	call printf
-Ljoin_l37:
+Ljoin_l36:
 	movl $1,%eax
 	leal 12(%esp), %ecx
 	movl $0,%edx
@@ -191,17 +196,17 @@ Ljoin_l37:
 	leal 12(%esp), %esp
 	ret
 .section .pcmap_data
-Lstackdata_l56:
+Lstackdata_l58:
 .long 0
 .section .pcmap
-.long Ljoin_l50
-.long Lframe_l57
+.long Ljoin_l51
+.long Lframe_l59
 .section .pcmap_data
-Lframe_l57:
+Lframe_l59:
 .long 0xfffffff4
 .long 0x80000004
 .long 0x80000000
-.long Lstackdata_l56
+.long Lstackdata_l58
 .long 0x80000008
 .long 0x80000004
 .long 0x80000000
@@ -220,13 +225,13 @@ Lframe_l57:
 .long 0
 .section .pcmap
 .long Ljoin_l47
-.long Lframe_l58
+.long Lframe_l60
 .section .pcmap_data
-Lframe_l58:
+Lframe_l60:
 .long 0xfffffff4
 .long 0x80000004
 .long 0x80000000
-.long Lstackdata_l56
+.long Lstackdata_l58
 .long 0x80000008
 .long 0x80000004
 .long 0x80000000
@@ -245,63 +250,63 @@ Lframe_l58:
 .long 0
 .section .pcmap
 .long Ljoin_l44
-.long Lframe_l59
-.section .pcmap_data
-Lframe_l59:
-.long 0xfffffff4
-.long 0x80000004
-.long 0x80000000
-.long Lstackdata_l56
-.long 0x80000008
-.long 0x80000004
-.long 0x80000000
-.long 0x80000000
-.long 0x40000007
-.long 0xfffffffc
-.long 0x40000009
-.long 0x40000009
-.long 0x4000000a
-.long 0x4000000a
-.long 0x4000000b
-.long 0x4000000b
-.long 0
-.long 0
-.long 0
-.long 0
-.section .pcmap
-.long Ljoin_l41
-.long Lframe_l60
-.section .pcmap_data
-Lframe_l60:
-.long 0xfffffff4
-.long 0x80000004
-.long 0x80000000
-.long Lstackdata_l56
-.long 0x80000008
-.long 0x80000004
-.long 0x80000000
-.long 0x80000000
-.long 0x40000007
-.long 0xfffffffc
-.long 0x40000009
-.long 0x40000009
-.long 0x4000000a
-.long 0x4000000a
-.long 0x4000000b
-.long 0x4000000b
-.long 0
-.long 0
-.long 0
-.long 0
-.section .pcmap
-.long Ljoin_l37
 .long Lframe_l61
 .section .pcmap_data
 Lframe_l61:
 .long 0xfffffff4
 .long 0x80000004
 .long 0x80000000
-.long Lstackdata_l56
+.long Lstackdata_l58
+.long 0x80000008
+.long 0x80000004
+.long 0x80000000
+.long 0x80000000
+.long 0x40000007
+.long 0xfffffffc
+.long 0x40000009
+.long 0x40000009
+.long 0x4000000a
+.long 0x4000000a
+.long 0x4000000b
+.long 0x4000000b
+.long 0
+.long 0
+.long 0
+.long 0
+.section .pcmap
+.long Ljoin_l40
+.long Lframe_l62
+.section .pcmap_data
+Lframe_l62:
+.long 0xfffffff4
+.long 0x80000004
+.long 0x80000000
+.long Lstackdata_l58
+.long 0x80000008
+.long 0x80000004
+.long 0x80000000
+.long 0x80000000
+.long 0x40000007
+.long 0xfffffffc
+.long 0x40000009
+.long 0x40000009
+.long 0x4000000a
+.long 0x4000000a
+.long 0x4000000b
+.long 0x4000000b
+.long 0
+.long 0
+.long 0
+.long 0
+.section .pcmap
+.long Ljoin_l36
+.long Lframe_l63
+.section .pcmap_data
+Lframe_l63:
+.long 0xfffffff4
+.long 0x80000004
+.long 0x80000000
+.long Lstackdata_l58
 .long 0x80000008
 .long 0x80000004
 .long 0x80000000

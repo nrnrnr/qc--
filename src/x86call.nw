@@ -322,6 +322,7 @@ let conv ~calleesaves ~jump ~altret name specs ~return_to cut =
                          else         (fun _ _ -> ra)
   ; C.ra_on_exit       = if jump then (fun _ b _ -> amem (addk (Block.base b) (-4)))
                          else         (fun _ b _ -> amem (addk (Block.base b) (-4)))
+  ; C.sp_on_unwind     = (fun exp -> RU.store sp exp)
   ; C.sp_on_jump       =
       if jump then (fun b _ -> RU.store sp (addk (Block.base b) (-4)))
       else (fun _ _ ->impossf "tail calls not supported by %s calling convention" name)
@@ -371,6 +372,7 @@ let cc auto return_to cut spec =
             C.ra_on_exit = if jump 
                            then (fun _ b _ -> amem (addk (Block.base b) (-4)))
                            else (fun _ _ _ -> ra)
+        ;   C.sp_on_unwind = (fun e -> RU.store sp e)
         }
 
 let c' ccname auto ~return_to cut = cc auto return_to cut

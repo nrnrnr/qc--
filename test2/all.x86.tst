@@ -12,6 +12,7 @@ Test.source  = "src"
 Test.files = { "add.c--"
              , "altret.c--"
              , "altret2.c--"
+             , { source="altret3.c--", argv='src/altret3.c-- nonexists .' }
              , "bits-bug.c--"
              , "bool.c--"
              , "blockcpy.c--"

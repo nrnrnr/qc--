@@ -300,6 +300,7 @@ let c ~return_to cut stage =
     ; C.ra_on_entry      = (fun _     -> R.fetch ra 32)
     ; C.where_to_save_ra = (fun _ t   -> Talloc.Multiple.loc t 't' 32)
     ; C.ra_on_exit       = (fun _ _ t -> ra)
+    ; C.sp_on_unwind     = (fun e   -> RU.store sp e)
     ; C.sp_on_jump       = (fun _ _ -> Rtl.null)
     }
 @
@@ -344,7 +345,8 @@ let c' ~return_to cut auto =
     <<callspec specification>> in
     let t = CS.to_call cut (rtn return_to) auto spec in
         { t with (* fix what callspec got wrong *)
-            C.ra_on_exit = (fun _ _ t -> ra)
+            C.ra_on_exit   = (fun _ _ t -> ra)
+        ;   C.sp_on_unwind = (fun e -> RU.store sp e)
         }
 @
 

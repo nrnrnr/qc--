@@ -14,6 +14,7 @@ val cconv :
 
 <<ia64call.ml>>=
 module R  = Rtl
+module RU = Rtlutil
 module RS = Register.Set
 @ 
 <<IA64 calling convention automata in Lua>>=
@@ -152,7 +153,9 @@ let rtn return_to k n ~ra =
 let c ~return_to cut auto =
   let spec = <<callspec specification>> in
   let t = CS.to_call cut (rtn return_to) (postprocess auto) spec
-  in { t with C.ra_on_exit = (fun _ _ t -> ra) }
+  in { t with C.ra_on_exit   = (fun _ _ t -> ra)
+     ;        C.sp_on_unwind = (fun e -> RU.store sp e)
+     }
 
 (*
   in t *)(*  { t with C.ra_on_exit = (fun _ _ _ -> R.reg (b 0)) } *)

@@ -309,6 +309,7 @@ let c ~return_to cut spec =
     ; C.ra_on_entry      = (fun _     -> R.fetch ra wordsize)
     ; C.where_to_save_ra = (fun _ t   -> Talloc.Multiple.loc t 't' wordsize)
     ; C.ra_on_exit       = (fun _ _ t -> ra)
+    ; C.sp_on_unwind     = (fun e -> RU.store sp e)
     ; C.sp_on_jump       = (fun _ _ -> Rtl.null)
     }
 
@@ -356,7 +357,9 @@ for the return address.
 <<alphacall.ml>>=
 let cc auto return_to cut spec =
     let t = CS.to_call cut (rtn return_to) auto spec in 
-        { t with C.ra_on_exit = (fun _ _ t -> ra) }
+        { t with C.ra_on_exit   = (fun _ _ t -> ra)
+        ;        C.sp_on_unwind = (fun e -> RU.store sp e)
+        }
 @
 
 Most variations we are interested in can be expressed in the

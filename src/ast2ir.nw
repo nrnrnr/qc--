@@ -233,10 +233,9 @@ module K = struct
   type 'i t =
     {         unwind_pc   : label       (* labels may or may not be used *)
     ;         cut_pc      : label
-    ;         return_pcs  : (convention * label) list
+    ; mutable return_pcs  : (convention * label list) list
     ;         escapes     : bool        (* properties of how it is used *)
     ;         cut_to      : bool
-(*  ;         returned_to : convention list *)
     ;         unwound_to  : bool
     ;         cut_in      : (Block.t -> Rtl.rtl) C.answer    (* move vals at cut (uses rep) *)
     ;         return_in   : (Block.t -> Rtl.rtl) C.answer    (* move vals at also returns *)
@@ -258,12 +257,10 @@ let mk to_cc name den rep base g ~cut_in ~return_in  =
   let ccname cc = (to_cc cc).C.name in
   { escapes     = den.FE.escapes
   ; cut_to      = den.FE.cut_to
-(*  ; returned_to = den.FE.returned_to *)
   ; unwound_to  = den.FE.unwound_to
   ; unwind_pc   = Idgen.ContEntry.unwind name
   ; cut_pc      = Idgen.ContEntry.cut    name
-  ; return_pcs  =
-      List.map (fun cc -> (ccname cc, Idgen.ContEntry.return name)) den.FE.returned_to
+  ; return_pcs  = <<set the return pcs>>
   ; rep         = rep
   ; base        = base
   ; convention  = den.FE.convention
@@ -273,6 +270,22 @@ let mk to_cc name den rep base g ~cut_in ~return_in  =
   ; spans       = []
   }
 @ 
+The unfortunate state of affairs is that we must generate an alternate return
+entry point for each call site that may make an alternate return to a continuation.
+To ensure that each entry point is used only once, we only add an entry label when
+we encounter each call site that makes an alternate return to this continuation.
+<<set the return pcs>>=
+List.map (fun cc -> (ccname cc,[])) den.FE.returned_to
+@
+<<definition of [[K.mk]], which initializes continuation information>>=
+let get_return_pc cc k =
+  let labels = try List.assoc cc.C.name k.return_pcs
+               with Not_found -> impossf "Unknown alt-return convention %s" cc.C.name in
+  let new_label = Idgen.ContEntry.return cc.C.name in
+  let new_entry = (cc.C.name, new_label :: labels) in
+  k.return_pcs <- new_entry :: (List.remove_assoc cc.C.name k.return_pcs);
+  new_label
+@
 It's a simple matter of finding the calling convention, running the
 automata, and building the rep and the continuation.
 <<function [[extend_cont]], for adding flow-graph info to continuations>>=
@@ -316,9 +329,7 @@ let continuations cc ast =
     { G.defs = RS.empty; G.kills = volregs;         G.node = entry k.K.unwind_pc } in
     (* defs are variables and so can't be a register set.  NEED ANOTHER MECHANISM *)
   let as_returns k =
-    let pc = try List.assoc cc.C.name k.K.return_pcs
-             with Not_found -> Impossible.impossible
-                                 ("Unknown alt-return call convention " ^ cc.C.name) in
+    let pc = K.get_return_pc cc k in
     let defs = k.K.return_in.C.regs in
     { G.defs = defs;     G.kills = volregs -- defs; G.node=entry pc   } in
   let contmap f = List.map (f << continuation) in
@@ -403,7 +414,7 @@ and generate_cut_to_entry k =
 If we return to a continuation, we must remember the overflow block.
 <<functions that translate statements, including [[stmts]]>>=
 and generate_return_to_entries k = 
-  let gen (ccname, label) =
+  let gen ccname label =
     let cc  = to_cc ccname in
     let in' = k.K.return_in in
     let ()  = add youngblocks cc.C.overflow_alloc.C.result_allocator in'.C.overflow in
@@ -413,19 +424,13 @@ and generate_return_to_entries k =
     G.instruction  g in'.C.shuffle   **>
     G.stack_adjust g in'.C.post_sp   **>
     k.K.succ) in
-  List.iter gen k.K.return_pcs
+  List.iter (fun (ccname, labels) -> List.iter (gen ccname) labels) k.K.return_pcs
 @ 
-BUG ALERT! THIS CODE IS MISSING A NECESSARY ASSERTION ON THE VALUE
-OF THE STACK POINTER.
-
-LET'S JUST ADMIT IT: THIS FEATURE IS NOT YET IMPLEMENTED.
 <<functions that translate statements, including [[stmts]]>>=
 and generate_unwind_to_entry k = 
-  Impossible.unimp "unwind to continuation";
-  let assign_unspecified_to args = R.par [] in (* BOGUS *)
-  G.set_succ (G.node_labeled g k.K.unwind_pc) (
-  G.assertion g (assign_unspecified_to formals) **>  (* in lieu of dataflow *)
-  k.K.succ) 
+  G.set_succ (G.node_labeled g k.K.unwind_pc)
+  (G.assertion g (proc_cc.C.sp_on_unwind proc_cc.C.stable_sp_loc) **>
+  k.K.succ)
 @
 
 % ------------------------------------------------------------------ 

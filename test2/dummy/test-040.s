@@ -30,11 +30,11 @@ section "text"
     {
         $r31 = ($r31+-24);
         $t1 = $r30;
-        Linitialize continuations:l19:
-        Lproc body start:l18:
+        Linitialize continuations:l17:
+        Lproc body start:l16:
         $r0 = sym@player;
         $c0, $r30 = sym@getMove, ($c0+4);
-        Ljoin:l32:
+        Ljoin:l34:
         $r31 = $r31;
         // the preceding node is merely asserted
         t = $r0;
@@ -46,23 +46,35 @@ section "text"
         t = bits32[sym@players];
         next = %modu[32]((next+1), t);
         $c0 = sym@finish;
-        c1:R8:
+        C--:R27:
         $r31 = $r31;
         // the preceding node is merely asserted
+        $c0 = sym@Ljoin@l36;
+        C--:R28:
+        $r31 = $r31;
+        // the preceding node is merely asserted
+        $c0 = sym@Ljoin@l35;
+        C--:R32:
+        $r31 = $r31;
+        // the preceding node is merely asserted
+        $c0 = sym@Ljoin@l36;
+        Ljoin:l36:
         t = bits32[bits32[(sym@player+12)]];
         $r0 = s;
         $c0, $r30 = t, ($c0+4);
-        Ljoin:l25:
+        Ljoin:l23:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@finish;
-        c2:R14:
+        C--:R33:
         $r31 = $r31;
         // the preceding node is merely asserted
+        $c0 = sym@Ljoin@l35;
+        Ljoin:l35:
         t = bits32[bits32[(sym@player+12)]];
         $r0 = sym@lit1;
         $c0, $r30 = t, ($c0+4);
-        Ljoin:l22:
+        Ljoin:l20:
         $r31 = $r31;
         // the preceding node is merely asserted
         $c0 = sym@finish;
