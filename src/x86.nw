@@ -35,6 +35,9 @@ val placevars : Ast2ir.proc -> Automaton.t
 module PX = Postexpander
 let (<:>) = PX.(<:>)
 let rtl r = PX.Rtl r
+
+let _ = Backplane.M.register "x86 invariant"
+    ["The x86 machine invariant.  For more explanation, see '<machine> invariant'."]
 @ 
 
 \subsection{Name and storage spaces}
@@ -269,10 +272,10 @@ let at32 = function
 We start our implementation with a function that provides binary
 operators in $L \mathrel{:=} L \oplus R$ form. 
 <<x86 postexpander>>=
-let llr op x y move = match at32 op with
-| "add" -> move <:> with_flags addflags x (Up.opr op) x y 32
-| "sub" -> move <:> with_flags subflags x (Up.opr op) x y 32
-| "mul" -> move <:> with_flags mulflags x (Up.opr op) x y 32
+let llr op x y = match at32 op with
+| "add" -> with_flags addflags x (Up.opr op) x y 32
+| "sub" -> with_flags subflags x (Up.opr op) x y 32
+| "mul" -> with_flags mulflags x (Up.opr op) x y 32
 @
 Division is rather painful on the x86.
 We have to place the dividend in the EDX:EAX register pair, and we have to represent
@@ -282,8 +285,10 @@ well as the expression representation of the register pair.
 I have tried to make [[regpairv]] fairly general; we won't know if this is a success
 until we try it with other versions of the x86 divide instruction.
 <<x86 postexpander>>=
-| ("div" | "mod") -> Unsupported.div_and_mod()
-| ("divu" | "quot" | "modu" | "rem") as opname ->
+| "mod" ->
+    let modexp = Rewrite.(mod) 32 (tempval x) (tempval y) in
+    PX.Expand.block (rtl (R.store (temploc x) modexp 32))
+| ("div" | "divu" | "quot" | "modu" | "rem") as opname ->
     let unsigned = opname =$= "divu" || opname =$= "modu" in
     let regpairv w hreg lreg =
       let rval  r = R.fetch (temploc r) w in
@@ -306,8 +311,14 @@ until we try it with other versions of the x86 divide instruction.
     let div = R.par [R.store eax (R.app (R.opr q [64;32]) [regpair; tempval y]) 32;
                      R.store edx (R.app (R.opr r [64;32]) [regpair; tempval y]) 32;
                      undefflags] in
-    let answer = if opname =$= "rem" || opname =$= "modu" then Rg.edx else Rg.eax in
-    move <:> move_rtl Rg.eax x <:> is <:> rtl div <:> move_rtl x answer
+    let finish = match opname with
+    | "rem" | "modu" -> move_rtl x Rg.edx
+    | "div" ->
+        let d = Rewrite.div' 32 ~dst:(R.reg x) (tempval x) (tempval y)
+                  ~quot:(tempval Rg.eax) ~rem:(tempval Rg.edx) in
+        PX.Expand.block d
+    | _ -> move_rtl x Rg.eax in
+    move_rtl Rg.eax x <:> is <:> rtl div <:> finish
 @ 
 Unsigned, extended multiplication is also painful---especially as we
 don't have any 64-bit temporaries!
@@ -324,7 +335,7 @@ the EDX:EAX register pair.
       R.par [regpairstore edx eax
                (R.app (R.opr "mulux" [32]) [R.fetch eax 32; tempval y]);
              muluxflags (R.fetch eax 32) (tempval y) 32] in
-    move <:> move_rtl Rg.eax x <:> rtl mulux <:> move_rtl x Rg.eax 
+    move_rtl Rg.eax x <:> rtl mulux <:> move_rtl x Rg.eax 
 @ 
 I don't know why it's safe to clobber ECX here.
 The problem would arise if the {\PAL} source mentioned ECX, perhaps
@@ -339,27 +350,28 @@ eliminating all those dead saves and restores.  So we live dangerously.
     let cl = R.fetch Rg.cl 8 in
     let sh = exp_with_flags (shflags shop) x (R.app (Up.opr op) [tempval x; cl])
               (tempval x) cl 32 in
-    move <:> move_rtl Rg.ecx y <:> sh
+    move_rtl Rg.ecx y <:> sh
 <<x86 postexpander>>=
-| ("and"|"or"|"xor") -> move <:> with_lflags x (Up.opr op) x y 32 
+| ("and"|"or"|"xor") -> with_lflags x (Up.opr op) x y 32 
 | _  ->
-    move <:>
     rtl (R.store (temploc x) (R.app (Up.opr op) [tempval x; tempval y]) (tempwidth x))
 @ 
+NOTE THERE IS NO REAL REASON THAT DIVISION SHOULD BE HANDLED AS LLR
+SINCE WE USE SPECIAL REGISTERS ANYWAY!  
 <<x86 postexpander>>=
 let binop ~dst op x y = match at32 op with
-| _     -> llr op dst y (move dst x)
+| _     -> move dst x <:> llr op dst y
 @ 
 Other operators are surely wrong.
 <<x86 postexpander>>=
-let inplace op x move = match at32 op with
+let inplace op x = match at32 op with
 | "neg" ->
-    move <:> rtl (R.par [R.store (temploc x) (R.app (Up.opr op) [tempval x]) 32;
+    rtl (R.par [R.store (temploc x) (R.app (Up.opr op) [tempval x]) 32;
                          negflags (tempval x) 32])
-| "lobits" -> move  (* lobits32 is identity *)
-| _ -> move <:> rtl (R.store (temploc x) (R.app (Up.opr op) [tempval x]) (tempwidth x))
+| "lobits" -> PX.Nop  (* lobits32 is identity *)
+| _ -> rtl (R.store (temploc x) (R.app (Up.opr op) [tempval x]) (tempwidth x))
 
-let unop ~dst op x = inplace op dst (move dst x)
+let unop ~dst op x = move dst x <:> inplace op dst
 
 let rtlop ~dst op args =
   rtl (R.store (temploc dst)

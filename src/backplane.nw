@@ -31,101 +31,115 @@ the stage. If it is possible to reach a stage without satisfying the expected
 properties of the stage, then the control flow is invalid. Validity of the
 control flow is verified in a static checking phase.
 
+
 \newcommand\vfb[1]
   {\vskip 0pt plus #1\baselineskip \penalty-200 \vskip 0pt plus -#1\baselineskip}
 
 \vfb4
 
 \setlongtables
+Each semantic property must be registered using the [[register]] function.
 The properties used in Quick~{\PAL} are as follows:
-\begin{longtable}[l]{@{\hskip1.5em}>{\ttfamily}lp{3in}@{}}
-sensible source&
-  The source code uses well-known operators and sensible variable sizes.
-  Presumably a back end advertises what these are.  
-  In the long run, we would like to make every operator ``well
-  known,'' by implementation in software if need be.
-  A~variable, on the other hand, is probably sensible only if it fits
-  in a word on the target machine.  For a first cut, 8-, 16-, and
-  32-bit variables should probably be considered sensible on a 32-bit
-  machine.  We also want 1-bit variables, although that may be
-  problematic for our first release.  
-  In the long run, our users might like us to simulate large variables
-  using, e.g., large arithmetic.
-  \par
-  This property is established by the \emph{front end}.
-  \\ 
-proper widths&
-  Every operator is specialzed at widths that are
-  appropriate to the target machine.  For example, on a 32-bit machine
-  that supports no smaller arithmetic, all operators
-  would be used at 32~bits.
-  (There may be an extension for [[sx]] and [[zx]] operators, which are
-  used to load narrow values into wide registers, and for the
-  [[lobits]] operator, which is used to store only part of a wide register.)
-  This property is established by the \emph{widener}.
-  \\ 
-no vars& 
-  No {\PAL} variable appears in any RTL.
+%\begin{longtable}[l]{@{\hskip1.5em}>{\ttfamily}lp{3in}@{}}
+<<registration of standard semantic properties>>=
+let _ = register "sensible source" [
+  "The source code uses well-known operators and sensible variable";
+  "sizes.  Presumably a back end advertises what these are.  In the";
+  "long run, we would like to make every operator ``well known,'' by";
+  "implementation in software if need be.  A~variable, on the other";
+  "hand, is probably sensible only if it fits in a word on the target";
+  "machine.  For a first cut, 8-, 16-, and 32-bit variables should";
+  "probably be considered sensible on a 32-bit machine.  We also want";
+  "1-bit variables, although that may be problematic for our first";
+  "release.  In the long run, our users might like us to simulate large";
+  "variables using, e.g., large arithmetic.";
+  "";
+  "This property is established by the \\emph{front end}.";
+]
+<<registration of standard semantic properties>>=
+let _ = register "proper widths" [
+  "Every operator is specialzed at widths that are appropriate to the";
+  "target machine.  For example, on a 32-bit machine that supports no";
+  "smaller arithmetic, all operators would be used at 32~bits.  (There";
+  "may be an extension for [[sx]] and [[zx]] operators, which are used";
+  "to load narrow values into wide registers, and for the [[lobits]]";
+  "operator, which is used to store only part of a wide register.)";
+  "This property is established by the \\emph{widener}.";
+]
 
-  This property is established by the \emph{variable placer}.
-  We imagine four variable placers:
-\begin{itemize}
-\item 
-The Fortran placer (a temporary expedient)
-\item
-Each variable goes into a temporary
-\item
-Each variable goes into a stack slot, from which an optimizer might
-one day promote it
-\item
-A few frequently used variables go into hardware registers, and the
-rest go onto the stack (the \texttt{lcc} placement)
-\end{itemize}
-  A variable placer may put a variable in the least significant
-  $k$~bits of an $n$-bit temporary.
-  \\ 
-\emph{machine} invariant& 
-  Each RTL, under an appropriate substitution, is
-  representable as a single instruction on the target machine.
-  Or possibly a more complicated invariant involving the nefarious
-  ``assember temporary'' as documented in
-  \url{~nr/papers/stack/three.tex} and to appear in the stack paper.
-  This property is established by a target-dependent \emph{code expander}.
-  \\ 
-no temps& 
-  No temporary register appears in any RTL.
-  This property is established by the \emph{register allocator}.
-  \\ 
-\rlap{no compile-time constants}&\mbox{}\break
-  No compile-time constant appears in any RTL.
-  This property is established by the \emph{stack-frame freezer}.
-  \\ 
-varmap& 
-  The [[varmap]] field in the [[proc]] is initialized.
-  This property should be established by the variable placer.
-  \\ 
-live sets&
-  The live set at each control-flow node (along each control-flow
-  edge?) is accurate.\\ 
-simple RHS&
-  At most one operator appears on the right-hand side of any RTL,
-  except possibly for an RTL that is representable as a single
-  instruction on the target machine.  This invariant might be further
-  elaborated; see one of the generic code expanders.\\
-linear code&
-  Every branch or call node in the control-flow graph has a \emph{linear successor}
-  identified.
-  Furthermore, these successors satisfy these properties:
-  \begin{itemize} 
-  \item 
-  Successors of call nodes are such that alternate returns work
-  correctly.
-  \item 
-  The ``false'' successor of every conditional branch is also its
-  inline successor.
-  \end{itemize}
-  \\
-\end{longtable}
+<<registration of standard semantic properties>>=
+let _ = register "no vars" [ 
+  "No {\\PAL} variable appears in any RTL.";
+  "";
+  "This property is established by the \\emph{variable placer}.";
+  "We imagine three variable placers:";
+  "  \\begin{itemize}";
+  "  \\item";
+  "  Each variable goes into a temporary";
+  "  \\item";
+  "  Each variable goes into a stack slot, from which an optimizer might";
+  "  one day promote it";
+  "  \\item";
+  "  A few frequently used variables go into hardware registers, and the";
+  "  rest go onto the stack (the \\texttt{lcc} placement)";
+  "  \\end{itemize}";
+  "A variable placer may put a variable in the least significant";
+  "$k$~bits of an $n$-bit temporary.";
+]
+@ 
+<<registration of standard semantic properties>>=
+let _ = register "<machine> invariant" [ 
+  "Each RTL, under an appropriate substitution, is";
+  "representable as a single instruction on the target machine.";
+  "(The true invariant is more complicated and is explained in the ";
+  "documentation for the [[Expander]] module.)";
+  "This property is established by a target-dependent \\emph{code expander}.";
+]
+<<registration of standard semantic properties>>=
+let _ = register "no temps" [ 
+  "No temporary register appears in any RTL.";
+  "This property is established by the \\emph{register allocator}.";
+]
+@ 
+% \\rlap{no late consts}&\mbox{}\break
+<<registration of standard semantic properties>>=
+let _ = register "no late consts" [
+  "No late compile-time constant appears in any RTL.";
+  "This property is established by the \\emph{stack-frame freezer}.";
+]
+<<registration of standard semantic properties>>=
+let _ = register "varmap" [ 
+  "The [[varmap]] field in the [[proc]] is initialized.";
+  "This property should be established by the variable placer.";
+]
+<<registration of standard semantic properties>>=
+let _ = register "liveness" [ 
+  "The live set at each control-flow node (along each control-flow";
+  "edge?) is accurate.";
+]
+<<registration of standard semantic properties>>=
+let _ = register "simple RHS" [
+  "At most one operator appears on the right-hand side of any RTL,";
+  "except possibly for an RTL that is representable as a single";
+  "instruction on the target machine.  This invariant might be further";
+  "elaborated; see one of the generic code expanders.";
+]
+<<registration of standard semantic properties>>=
+let _ = register "linear code" [
+  "Every branch or call node in the control-flow graph has a";
+  "\\emph{linear successor} identified.  Furthermore, these successors";
+  "satisfy these properties:";
+  "  \\begin{itemize} ";
+  "  \\item ";
+  "  Successors of call nodes are such that alternate returns work";
+  "  correctly.";
+  "  \\item ";
+  "  The ``false'' successor of every conditional branch is also its";
+  "  inline successor.";
+  "  \\end{itemize}";
+]
+@
+%% \end{longtable}
 @
 IT WOULD BE NICE TO AVOID THE FUNCTORIZATION BY MAKING EVERYTHING
 POLYMORPHIC IN THE TYPE OF PROCEDURE, BUT IT SEEMS NOT COMPLETELY
@@ -149,6 +163,8 @@ end
 module type S = sig
   type proc
   type 'a camlFunction = 'a -> proc -> bool
+  val register : property:string -> explanation:string list -> unit
+  val explain  : unit -> unit (* dump explanations *)
   <<stage type>>
   <<action type>>
 
@@ -474,6 +490,7 @@ let spSet_from_sSet name sSet =
                                      (live' * errors' -> live * errors)
     where create, destroy, use, live, and live' are of type string * string *)
 let (<<) f g = fun x -> f (g x)
+let validate c u d = List.iter (SS.iter propcheck) [c; u; d]
 let rec walk arg a =
     match a with
     | Seq aList ->
@@ -505,14 +522,15 @@ let rec walk arg a =
     | Ignore a -> walk arg a
     | Single {name = fnName; stateUsed = uses; stateCreated = creates;
               stateDestroyed = destroys; paramExpected = formal} ->
-     (match List.map (spSet_from_sSet fnName) [creates; destroys; uses] with
-      | [creates; destroys; uses] ->
-         (creates, destroys, uses,
-              fun (live', errors') ->
-            ((live' -- creates) ++ uses,
-             errors' @ (live' ** destroys) @ (creates ** destroys)
-                     @ (checkArg formal arg fnName)))
-      | _ -> assert false)
+        validate creates uses destroys;
+        (match List.map (spSet_from_sSet fnName) [creates; destroys; uses] with
+        | [creates; destroys; uses] ->
+            (creates, destroys, uses,
+             fun (live', errors') ->
+               ((live' -- creates) ++ uses,
+                errors' @ (live' ** destroys) @ (creates ** destroys)
+                        @ (checkArg formal arg fnName)))
+        | _ -> assert false)
     | Share (_, localArg, a) -> walk (Some localArg) a
 
 let stateErrors a =
@@ -536,8 +554,8 @@ let run main proc =
   | []   -> runProgram V.Nil proc main
   | errs -> let msg = String.concat "\n" (List.map error_string errs) in
             let pgm = printAction "  " main in
-            Impossible.impossible ("incorrect backplane configuration:\n" ^ msg
-                                   ^ "\n  ... program is:\n    " ^ pgm)
+            impossf "incorrect backplane configuration:\n%s\n  ... program is:\n    %s"
+              msg pgm
 @
 The backplane introduces three new types. A [[StageFn]] is the function that
 actually executes the compiler step represented by a stage. [[Stage]]'s include
@@ -545,9 +563,10 @@ the state property information that is associated with a [[StateFn]].
 [[Action]]'s, as before, are the types that indicate a control flow between
 these stages.
 @
-
 Putting it all together:
 <<backplane.ml>>=
+let impossf fmt = Printf.kprintf Impossible.impossible fmt
+
 module StringMod = struct
   type t = string
   let compare = compares
@@ -573,6 +592,7 @@ module Make (Arg : ARG) = struct
   type proc = Arg.proc
   type 'a camlFunction = 'a -> proc -> bool
 
+  <<property registration>>
   <<stage type>>
   <<action type>>
   <<error types>>
@@ -654,6 +674,9 @@ let init g =
   ; "stage",     V.efunc (action  **->>             action) id
   ; "run",       V.efunc (action  **-> proc **->>   V.bool) run
   ; "verbosity", V.efunc (V.bool  **->>             V.bool) verbosity
+  ; "register",  V.efunc (V.string **-> V.list V.string **->> V.unit)
+                                                            (fun p e -> register p e)
+  ; "explain",   V.efunc (V.unit **->> V.unit)              explain
   ] g
 @
 In order to use the Lua interpreter to control the backplane, we must
@@ -843,3 +866,35 @@ module M = Make(struct
     let lua_module_name = "Backplane"
     let lua_type_name = "new backplane action"
   end)
+@ 
+\subsection{Properties}
+
+<<property registration>>=
+let registry : (string, string list) Hashtbl.t = Hashtbl.create 12 
+
+let registered = Hashtbl.mem registry
+
+let register ~property ~explanation =
+  if registered property then
+    impossf "duplicate registration for backplane property '%s'" property;
+  Hashtbl.add registry property explanation
+
+let propcheck property =
+  if not (registered property) then
+    impossf "Compiler uses an unregistered semantic property '%s';\n\
+             For list of registered properties run\n  %s -e 'Backplane.explain()'\n"
+       property Sys.executable_name
+
+let explain () =
+  let pairs = Hashtbl.fold (fun p e t -> (p, e) :: t) registry [] in
+  let pairs = Sort.list (fun (x, _) (x', _) -> Pervasives.(<=) x x') pairs in
+  let print (x, ys) =
+    Printf.printf "\n\n%s:\n\n" x;
+    List.iter (fun s -> Printf.printf "  %s\n" s) ys in  (* need weird eta-expand *)
+  Printf.printf
+    "These semantic predicates are registered with the optimization backplane:";
+  List.iter print pairs
+
+<<registration of standard semantic properties>>
+@ 
+

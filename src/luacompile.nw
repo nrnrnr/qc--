@@ -720,7 +720,7 @@ function Opt.standard(backend, asm, B)
     , Opt.verb(Optimize.simplify_exps) or Stages.null
     , Opt.verb(backend.preopt)     or Stages.null
     , Opt.verb(backend.pic)        or Stages.null
-    , print_cfg
+    ----  , print_cfg -- diagnostics for Paul
     , Opt.verb(backend.expand)     or Stages.null
     , Opt.verb(backend.improve)    or Stages.null
     , Opt.verb(backend.liveness)   or Stages.null
@@ -735,6 +735,11 @@ end
 
 Liveness.liveness =
   Backplane.stage { name='liveness', creates='liveness', fn = Liveness.livenessfn }
+
+Backplane.register ('no dead assignments', {
+  'The program does not contain any dead assignments.',
+  'That is, the result of every instruction is used somewhere.',
+})
 
 Optimize.dead = 
   Backplane.stage { name='dead', creates={'no dead assignments'},
@@ -794,13 +799,6 @@ optimization backplane.
 function Compile.run_optimizer(self,proc)
     local B = self.B or error("missing backplane")
     -- verbose('running Compile.run_optimizer with ', whichB(B), '\n')
-
-    -- please keep the following until the bug is fixed
-    if B == Backplane then -- demo for a bug in the backplane
-        B.run(B.seq {Stages.assert('fish'),
-                   B.stage {fn=Stages.nullf, uses='fish'}}, proc)
-    end
-
     B.run(self.action, proc)
 end    
 @
