@@ -33,14 +33,15 @@ parameter is passed in.
 \subsection{Interface to Automaton}
 % ------------------------------------------------------------------ 
 
-The interface for the calling convention automata serves two purposes: 
-construction of automata and using them.  To keep {\qcc} as flexible
-as possible, automata for calling conventions are at least in
-principle constructed at run-time (of the compiler) and not
-hard-wired.  Once an automaton is defined, it is used by the code
-generator to find the locations parameters are passed to or from
-procedures and continuations.  Building and running an automaton is
-delegated to submodules.
+Calling conventions in the {\qcc} compiler are at least in prinicple
+constructed at run-time of the compiler.  An interface thus must
+provide methods to construct automata to represent calling
+conventions, and means to use them.  For the moment however, we like
+to hard-code some calling conventions in order to gain experience for
+the design of an interface to construct automata at run-time. For the
+time being, this interface only defines how an automaton is run but
+not, how it is defined.
+
 
 <<automaton.mli>>=
 <<basic types>>
@@ -122,62 +123,93 @@ val overflow: t -> overflow
 \subsubsection{Building an Automaton}
 % ------------------------------------------------------------------ 
 
-An interface to build an automaton systematically is postponed.
+An interface to build an automaton systematically is postponed. We
+provide some hard-coded automata here.
 
 <<signature build>>=
-(* empty *)
+val cc:         t           (* calling convention *)
+@
+
+<<unused>>=
+val globals:    t           (* global register placement *)
 @
 
 % ------------------------------------------------------------------ 
 \subsection{Dummy Implementation}
 % ------------------------------------------------------------------ 
 
+The following implementation can only represent very simple calling
+conventions that place every parameter into some memory location.  The
+implementation does not model a finite automaton, but only counter
+that keeps track of the memorory consumed for passing parameters. The
+implementation depends on the target's size of pointers and words and
+thus is by far too specific.
+
 <<automaton.ml>>=
-type ty       =     Types.ty * string option
-type location =     (Rtl.expr -> Rtl.effect)
+type ty         =  Types.ty * string option
+type location   =  (Rtl.expr -> Rtl.effect)
                     * Rtl.expr
-
-type t        =     { offset:       int
-                    }
-
-module Run = struct
-    module T = Types
-    <<module run>>
-end
-
-module Build = struct (* empty *) end
-
-<<module run>>=
-type overflow =     { size:  int
-                    ; align: int
-                    }
 
 let memsize     = 8  (* assumption for now, must be obtained from Fenv *)
 let pointer     = 32 (* ditto for pointer size *)
 let word        = 32
 let agg         = Rtl.BigEndian
 
+<<type t>>
 
-(* inventing names on the rtl level, like "sp" is problematic; may clash
-   with C-- variables *) 
-<<>>=
-let sp          = Rtl.Const(Rtl.Link("sp",pointer))       
-let offset k    = Rtl.Const(Rtl.Bits(Bits.of_int k word,word)) 
-let add         = ("add",[word])                          
-let sum x y     = Rtl.App (add,[x;y])                       
-let stack k w   = Rtl.Cell('m',agg,w,sum sp (offset k),-1)    
-let read  k w   = Rtl.Fetch(stack k w, w)                 
-let write k w   = fun e -> Rtl.Store(stack k w, e, w)    
+module Run = struct
+    module T = Types
+    <<module run>>
+end
 
-<<>>=
+module Build = struct
+    <<module build>>
+end 
+@
+
+An ``automaton'' [[t]] is a counter [[offset]] and two funtions [[read]]
+and [[write]]: 
+
+<<type t>>=
+type t        =     { offset:       int
+                    ; read:         (int -> int -> Rtl.expr)
+                    ; write:        (int -> int -> Rtl.expr -> Rtl.effect)
+                    }
+@
+
+The functions [[read]] and [[write]] provide access to values stored
+at some [[offset]] from a location only known to them.
+
+\begin{itemize}
+    \item [[read k w]] returns a [[w]] memsize value from offset [[k]].
+    \item [[write k w]] returns a function, that writes a [[w]] memsize
+          value to offset [[k]].
+\end{itemize}
+
+The two functions are sufficient to implement the [[next]] function,
+that returns a [[location]] for a [[ty]]:  the parameter is placed at
+the point the current offset points to and the offset is incremented
+by the size of the type.
+               
+<<module run>>=
 let next dfa (ty,hint) =
     let width = match ty with
         | T.Bits(n) when n mod memsize = 0 -> n 
         | _                                -> assert false in
     let words = width / memsize in
-    let loc   = (write dfa.offset words, read dfa.offset words) in
-    let dfa'  = { dfa with offset = dfa.offset + words } in
-        (loc, dfa')
+    let loc   = (dfa.write dfa.offset words, dfa.read dfa.offset words) in
+    let dfa   = { dfa with offset = dfa.offset + words } in
+        (loc, dfa)
+@
+
+The [[overflow]] function returns the amount of consumed memory. Since we
+don't care about alignment of the [[offset]], we always have an alignment
+of one. 
+
+<<module run>>=
+type overflow =     { size:  int
+                    ; align: int
+                    }
 
 <<>>=
 let overflow dfa = { size  = dfa.offset
@@ -185,3 +217,34 @@ let overflow dfa = { size  = dfa.offset
                    }
 @
 
+% ------------------------------------------------------------------ 
+\subsection{Dummy Automata}
+% ------------------------------------------------------------------ 
+
+<<module build>>=
+let offset k        = Rtl.Const(Rtl.Bits(Bits.of_int k word,word)) 
+let add             = ("add",[word])                          
+let sum x y         = Rtl.App (add,[x;y])                       
+
+let reg0 = Rtl.Cell ( 'r'
+                    , Rtl.Identity
+                    , word
+                    , Rtl.Const(Rtl.Bits(Bits.of_int 0 5,5))
+                    , -1
+                    ) 
+                        
+let sp              = Rtl.Fetch(reg0,word)
+let stack_sp k w    = Rtl.Cell('m',agg,w,sum sp (offset k),-1)    
+let read_sp  k w    = Rtl.Fetch(stack_sp k w, w)                 
+let write_sp k w    = fun e -> Rtl.Store(stack_sp k w, e, w)    
+@
+
+The following automaton places parameters relative to some link-time
+constant named ``sp ''.
+
+<<>>=
+let cc = { offset = 0
+         ; read   = read_sp
+         ; write  = write_sp
+         }
+@

@@ -87,7 +87,7 @@ let ast_of file =
 @
 
 % ------------------------------------------------------------------ 
-\paragraph{\texttt{-lex} command line option}
+\subsubsection{\texttt{-lex} command line option}
 % ------------------------------------------------------------------ 
 
 The [[lex]] function is a bit special because unlike most other
@@ -120,7 +120,11 @@ let lex file =
         )
 @
 
-\paragraph{\texttt{-asdl}} The [[asdl]] command exports the abstract syntax
+% ------------------------------------------------------------------ 
+\subsubsection{\texttt{-asdl} command line option}
+% ------------------------------------------------------------------ 
+
+The [[asdl]] command exports the abstract syntax
 of a a file in {\asdl} format to [[stdout]].
 
 <<>>=
@@ -130,8 +134,12 @@ let asdl file =
         
 @
 
-\paragraph{\texttt{-pp}} The [[pp]] command parses a file and pretty-prints
-it for a line [[width]] to [[stdout]].
+% ------------------------------------------------------------------ 
+\subsubsection{\texttt{-pp} command line option}
+% ------------------------------------------------------------------ 
+
+The [[pp]] command parses a file and pretty-prints it for a line
+[[width]] to [[stdout]].
 
 <<>>=
 let pp file width =
@@ -139,8 +147,12 @@ let pp file width =
         Astpp.ppToFile stdout width ast
 @
 
-\paragraph{\texttt{-check}} The [[check]] command parses a file and checks
-its static semantics. 
+
+% ------------------------------------------------------------------ 
+\subsubsection{\texttt{-check} command line option}
+% ------------------------------------------------------------------ 
+
+The [[check]] command parses a file and checks its static semantics. 
 
 <<>>=
 let check file = 
@@ -152,6 +164,44 @@ let check file =
             | true  -> 1
             | false -> 0
 @
+
+% ------------------------------------------------------------------ 
+\subsubsection{A dummy target}
+% ------------------------------------------------------------------ 
+
+<<>>=
+let dummy =     
+
+    let reg0 = Rtl.Cell ( 'r'
+                        , Rtl.Identity
+                        , 32
+                        , Rtl.Const(Rtl.Bits(Bits.of_int 0 5,5))
+                        , -1
+                        ) in
+    let conv = 
+        { Target.sp             = reg0
+        ; Target.proc_param     = Automaton.Build.cc 
+        ; Target.proc_result    = Automaton.Build.cc 
+        ; Target.cont_param     = Automaton.Build.cc
+        } in
+    let convmap = Target.StrMap.add "c--" conv Target.StrMap.empty
+    in             
+        { Target.name           = "dummy"
+        ; Target.byteorder      = Rtl.BigEndian
+        ; Target.wordsize       = 32
+        ; Target.pointersize    = 32
+        ; Target.memsize        = 8
+        ; Target.float          = "ieee754"
+        ; Target.charset        = "latin1"
+        ; Target.conv           = convmap
+        ; Target.globals        = Automaton.Build.cc (* bogus *)
+        ; Target.regmap         = Target.StrMap.empty
+        }
+@
+
+% ------------------------------------------------------------------ 
+\subsection{Dispatch over command line options}
+% ------------------------------------------------------------------ 
 
 The (exported) dispatch function just invokes the appropriate function
 that implements a command. The cases [[Help]] and [[Version]] are

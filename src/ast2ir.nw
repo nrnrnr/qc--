@@ -231,18 +231,22 @@ and lvalue env (target: Target.info) = function
     | A.Var(hint,x)            -> 
         let ((_,s),(denot,t)) = F.findv x env in 
             ( match denot with
-            | F.Register(r)    -> let width = bits t in 
-                                  Rtl.Var
-                                      ( x
-                                      , scope s
-                                      , r.F.index
-                                      , ( match r.F.rhint with 
-                                        | F.RReg s -> Some s
-                                        | F.RHint _
-                                        | F.RNone  -> None
-                                        )
-                                      , width
-                                      )
+            | F.Register(r)    -> 
+                let width = bits t in 
+                  ( match r.F.rhint with
+                  | F.RReg r ->
+                        ( try Target.StrMap.find r target.Target.regmap with 
+                        | Not_found -> assert false
+                        )
+                  | _        ->
+                      Rtl.Var
+                          ( x
+                          , scope s
+                          , r.F.index
+                          , width
+                          )
+                  )
+            
             | _                -> assert false (* impossible *)
             )
     | A.Mem(t,e,a)             -> let width = ty env t in
@@ -278,16 +282,19 @@ and variable (env: F.env) (target: Target.info) = function
             | F.Import(Some n) -> Rtl.Const(Rtl.Link(n, bits t))
             | F.Register(r)    -> 
                 let width = bits t in
-                let loc = Rtl.Var
-                  ( x
-                  , scope s
-                  , r.F.index
-                  , ( match r.F.rhint with 
-                    | F.RReg s  -> Some s
-                    | F.RHint _ -> None
-                    | F.RNone   -> None
-                    )
-                  , width
+                let loc = 
+                  ( match r.F.rhint with
+                  | F.RReg r ->
+                        ( try Target.StrMap.find r target.Target.regmap with 
+                        | Not_found -> assert false
+                        )
+                  | _        ->
+                      Rtl.Var
+                          ( x
+                          , scope s
+                          , r.F.index
+                          , width
+                          )
                   ) 
                 in Rtl.Fetch(loc,width)
                                   
