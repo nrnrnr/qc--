@@ -3,7 +3,7 @@
 \ifx\nointro\undefined
 This document contains a description of the responsibilities of a client of the Quick~{\PAL} Interpreter.
 \fi
-Additionally, a sample client implementation may be found at the bottom of this document.
+Additionally, we include the implementation of a sample client.
 
 % ----------------------------------------------------------------------------
 \interface{Interface for clients of the interpreter}
@@ -55,7 +55,8 @@ of: [["printf"]].
 
 To load a source file (in Lua style) into memory, [[load_assembly_unit]] should be called with the name of the source file (or source string).
 Note that code cannot be interpreted until it has been loaded into memory.
-[[load_assembly_unit]] returns 0 if and only if [[filename]] was successfully loaded.
+[[load_assembly_unit]] returns 0 if and only if the source code was able to
+load successfully.
 
 <<available exported C functions>>=
 int load_assembly_unit (char *s, assembly_unit_type source_type);
@@ -71,8 +72,8 @@ int load_assembly_unit (char *s, assembly_unit_type source_type);
 \paragraph{Examining Source Code}
 % ----------------------------------------------------------------------------
 
-To find the {\PAL} code associated with a certain {\PAL} label (be it a procedure, continuation, or simple code), call on [[cmm_find_export]] with the label in string form.
-Note that this function will only find the code for which you are looking if it has been previously loaded into memory using [[load_assembly_unit]], and if the code's assembly unit specified the label as an export (using the [[CMM.exports]] Lua function).
+To find the {\PAL} code associated with a certain {\PAL} label (be it a procedure, continuation, or other label), call on [[cmm_find_export]] with the label in string form.
+Note that this function will only find the label for which you are looking if its source code has previously been loaded into memory using [[load_assembly_unit]], and if the label was specified as an export (using the [[CMM.exports]] Lua function).
 
 <<available exported C functions>>=
 Cmm_Dataptr cmm_find_export (const char *arg);
@@ -156,16 +157,17 @@ The client's implementation is split across files [[client.h]] and
 @
 
 % ----------------------------------------------------------------------------
-\subsection{Using the Client}
+\subsection{Using the Client: Interactive Mode}
 % ----------------------------------------------------------------------------
 
-The interpreter client will present you with a [[>]] prompt.
-The following table describes the commands that the interpreter currently understands.\\
+The interpreter client will present you with a [[>]] prompt when in interactive
+mode.
+The following table describes the commands that the interpreter currently understands in this mode.\\
 \\
 \begin{tabularx}{\linewidth}{|l|X|}\hline
 [[verbosity]] & turns on extra debugging output
 \\\hline
-[[stacksize]] $[new_size]$ & gets and optionally sets the current {\PAL} stack size
+[[stacksize]] $[new\_size]$ & gets and optionally sets the current {\PAL} stack size
 \\\hline
 [[help]] & prints a list of available commands
 \\\hline
@@ -175,19 +177,21 @@ The following table describes the commands that the interpreter currently unders
 \\\hline
 [[disasm]] $\{label\}^{*}$ & disassembles (to stdout) the program bytecode chunks located at each of the labels listed
 \\\hline
-[[run]] $label [arg]$ & runs (interprets) the program bytecode chunk (should be a procedure) located at the given label, optionally passing $arg$ to the code as a parameter
+[[run]] $label$ $[arg]$ & runs (interprets) the program bytecode (should be a procedure) located at the given label, optionally passing $arg$ to the code as a parameter
 \\\hline
 \end{tabularx}
-Also note that the client takes command line arguments.
-Look in the source code or type [[qc--interp --h]] at the command line for information.
+For information about the client's command line mode, please see the section
+below on command-line argument handling.
+Alternatively, you may type [[qc--interp -h]] at the command line for
+information.
 
 % ----------------------------------------------------------------------------
 \subsection{Type Definitions}
 % ----------------------------------------------------------------------------
 
 To manage threads returned by the {\PAL} runtime system, we use a [[typedef]]'d structure: [[Cmm_TCB]].
-A [[Cmm_TCB]] ({\PAL} thread control block) contains the actual thread given us by the {\PAL} runtime system, pointers to the space handed off to the system for use as an activation stack, and a ``cookie'' that points to the limit of the thread's activation stack.
-We use this cookie to tell if we've gone off the end of a stack (perhaps by returning or unwinding from the oldest activation on the stack).
+A [[Cmm_TCB]] ({\PAL} thread control block) contains the actual thread given us by the {\PAL} runtime system, pointers to the space handed off to the runtime system for use as an activation stack, and a ``cookie'' that points to the limit of the thread's activation stack.
+We use this cookie to tell if we've gone off the end of a stack (which might have occurred as a result of returning or unwinding from the oldest activation on the stack).
 
 <<type definitions>>=
 typedef struct {
@@ -248,8 +252,8 @@ void TCB_free(Cmm_TCB *tcb) {
 % ----------------------------------------------------------------------------
 
 In this client, we register a couple of C functions with the interpreter: 
-a simple printing function (that takes a 16 bit [[int]], prints it, and 
-returns it) and it 32-bit sibling.
+a simple 16-bit printing function (that takes a 16 bit [[unsigned int]], 
+prints it, and returns it) and its 32-bit sibling.
 
 <<function prototypes>>=
 u_int16 cmmprint16(u_int16 i);
@@ -268,18 +272,19 @@ u_int32 cmmprint32(u_int32 i) {
 }
 @
 
-To register the functions, the client simply calls [[register_c_func]].
-We start with our user-defined C functions.
+To register the functions, the we call [[register_c_func]].
 
 <<register needed C functions with the interpreter>>=
   register_c_func("cmmprint16", (void *) cmmprint16, "u_int16:u_int16");
   register_c_func("cmmprint32", (void *) cmmprint32, "u_int32:u_int32");
 @ 
 
-We then proceed onward to a subset of functions in the C standard library.
-Note that [[printf]]'s implementation is somewhat of a hack to get around
-the interprer's lack of support for varargs functions.
-See [[ccall.nw]] for the details.
+We then proceed onward to a register a number of functions in the C standard 
+library.
+Note that [[printf]]'s implementation is a special case (otherwise, C functions
+may not be registered as varargs functions with the interpreter).
+As such, we register it with the special sig [["printf"]].
+See the [[ccall]] module for details about this.
 
 <<register needed C functions with the interpreter>>=
   register_c_func("putchar", (void *) putchar, "int:int" );
@@ -360,6 +365,7 @@ $<filename>$ & reads in source file [[<filename>]]
 \\\hline
 \end{tabularx}
 \\
+
 Note that if any source files are read in using command line arguments, the 
 interpreter goes ahead and tries to execute exported {\PAL} procedure [[main]]
 after loading all files.
@@ -469,7 +475,9 @@ of the arguments this client takes on the command line.
 \subsubsection{The Command Loop}
 % ----------------------------------------------------------------------------
 
-We loop: read characters in from [[stdin]] into a buffer until we reach a newline character or an [[EOF]].
+Assuming that no argument were given on the command line, we enter the 
+interactive mode loop: we read characters in from [[stdin]] into a buffer 
+until we reach a newline character or an [[EOF]].
 We then tokenize the line read in and act appropriately.
 
 <<loop and act according to user commands>>=

@@ -46,9 +46,21 @@ C code should include [[c-features.h]] or [[float-features.h]] as needed.
 #define _C_FEATURES_H
 
 #define __USE_ISOC99 1
+#include <string.h>
 
 #endif /* _C_FEATURES_H */
 @
+
+We write a dummy function in the implementation of [[c-features.c.c99]] so
+the C compiler does not complain when it finds an otherwise empty [[.c]] file.
+
+<<c-features.c.c99>>=
+void _dummy_function(void) {}
+@ 
+
+If the user is not using a C99-compliant compiler, we need to go ahead and
+declare and define [[strcasecmp]]; otherwise, it should be provided by the C 
+standard library.
 
 <<c-features.h.no-c99>>=
 #ifndef _C_FEATURES_H
@@ -62,9 +74,40 @@ fprintf(stderr, "WARNING: C99 operation '%s' not supported; further runtime " \
               , #op \
        )
 
+int strcasecmp(const char *s1, const char *s2);
+
 #endif /* _C_FEATURES_H */
 @
 
+<<c-features.c.no-c99>>=
+#include "c-features.h"
+
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+
+int strcasecmp(const char *s1, const char *s2) {
+  char     *u1 = (char *) malloc(sizeof(char) * (strlen(s1) + 1));
+  char     *u2 = (char *) malloc(sizeof(char) * (strlen(s2) + 2));
+  int       rc;
+  unsigned  i;
+
+  u1 = strcpy(u1, s1);
+  u2 = strcpy(u2, s2);
+
+  for (i = 0; i < strlen(u1); i++)
+    u1[i] = toupper(u1[i]);
+  for (i = 0; i < strlen(u2); i++)
+    u2[i] = toupper(u2[i]);
+
+  rc = strcmp(u1, u2);
+
+  free(u1);
+  free(u2);
+
+  return rc;
+}
+@ 
 
 % ----------------------------------------------------------------------------
 \subsection{IEC 60559 Extensions}

@@ -74,22 +74,27 @@ int    islive_uid(uid u);
 \subsection{Utility Functions}
 % ----------------------------------------------------------------------------
 
-Given a pointer to a thread, we construct a new [[uid]] by finding the next frame id to be issued in the thread and cast the thread pointer to a [[void *]].
+Given a pointer to a thread, we construct a new [[uid]] by finding the next 
+frame id to be issued in the thread and appropriately initializing a [[uid]]
+record.
 
 <<function definitions>>=
 uid new_uid(void *t) {
   thread *th = (thread *) t;
   uid     u;
 
-  u.thread = t;
+  u.thread = th;
   u.frame  = th->next_frame_id++;
 
   return u;
 }
 @ 
 
-When the death of a [[uid]] is signalled, we must add its [[frame_id]] to the [[dead_list]] of the [[thread]].
-Because [[interval_list_add]] expects as its last two arguments the bounds of integer range, we simply specify the range $[$[[u.frame]]$,$ [[u.frame]]$]$.
+When the death of a [[uid]] is signalled, we must add its [[frame_id]] to the
+[[dead_list]] of the [[thread]].
+Because [[interval_list_add]] expects as its last two arguments the bounds of
+a closed integer interval, we simply specify the range 
+$[$[[u.frame]]$,$ [[u.frame]]$]$.
 
 <<function definitions>>=
 void dies_uid(uid u) {
@@ -114,7 +119,8 @@ void   dies_uid_range(uid newest, uid oldest) {
 }
 @ 
 
-To determine if a [[uid]] is still live, we must simply check if its frame id is listed in the [[dead_list]] of the [[thread]] pointed to by its thread id.
+To determine if a [[uid]] is still live, we query the [[dead_list]] of the
+[[thread]] pointed to by its thread id.
 
 <<function definitions>>=
 int islive_uid(uid u) {

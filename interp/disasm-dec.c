@@ -786,7 +786,7 @@ void disassemble_instructions(FILE *fd, CMM_label *loc) {
 
     pc = next;
   }
-  /* return next; */
+
   return;
 }
 

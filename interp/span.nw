@@ -31,6 +31,12 @@ We construct PC (program counter) range tables from {\PAL} spans; at runtime,
 these tables may be queried to find the span value associated with a 
 particular PC and token.
 
+We create record type [[span]] to represent a span as a PC range associated
+with a [[CMM_label]].
+Note that this implies a restriction of our implementation of spans: we only
+allow spans to be associated with the values of labels, and not with arbitrary
+{\PAL} values.
+
 <<type definitions>>=
 typedef struct span_t {
   RAddr      pc_begin;
@@ -202,6 +208,17 @@ void span_table_begin(table t, unsigned tok, const char *lbl) {
     lua_gettable(L, -2);
   }
 
+  <<create new [[span]] object at [[sp]]; inject into [[tok]]'s span table>>
+
+  lua_pop(L, 2); /* pop this token's table as well as the overall span table */
+  assert(lua_gettop(L) == 0);
+}
+@ 
+
+When we create a new [[span]] record, we leave its [[pc_end]] member set to
+[[NULL]]; it will be properly initialized when the span is closed.
+
+<<create new [[span]] object at [[sp]]; inject into [[tok]]'s span table>>=
   /* create new span object */
   {
     sp = span_new();
@@ -226,12 +243,14 @@ void span_table_begin(table t, unsigned tok, const char *lbl) {
   /* store span object away */
   lua_pushusertag(L, (void *) sp, lua_span_tag);
   lua_rawseti(L, -2, lua_getn(L, -2) + 1);
+@ 
 
-  lua_pop(L, 2); /* pop this token's table as well as the overall span table */
+When a span is closed off, we use helper [[curr_span_within_get]] to grab the
+[[span]] record for the {\PAL} span that is being ended; we then set this
+record's [[pc_end]] field, and update our handle on which span we our
+currently in (using [[curr_span_within_set]]).
 
-  assert(lua_gettop(L) == 0);
-}
-
+<<function definitions>>=
 void span_table_end  (table t, unsigned tok) {
   span *curr_span_within = curr_span_within_get(tok);
 
@@ -256,9 +275,11 @@ void span_table_end  (table t, unsigned tok) {
 
 Helper functions [[curr_span_within_get]] and [[curr_span_within_set]]
 assist with keeping track of the smallest span we are currently enclosed
-within (given a specific token).
-They allow us to easily figure out which span we're closing when
-[[span_table_end]] is called.
+within (given a specific token); they allow us to easily figure out which span
+we're closing when [[span_table_end]] is called.
+Their implementations are not suprising and are pretty simple; we create them
+as standalone functions to simplify the calculations within the body of
+[[span_table_begin]] and [[span_table_end]].
 
 <<internal function prototypes>>=
 static span *curr_span_within_get(unsigned tok);
@@ -317,6 +338,10 @@ static void curr_span_within_set(unsigned tok, span *sp) {
 % ----------------------------------------------------------------------------
 \subsection{Runtime Span Lookup}
 % ----------------------------------------------------------------------------
+
+To find the value associated with a given token [[tok]] at a given PC
+[[real_pc]], we find the smallest span associated with [[real_pc]] and
+return value information from the [[span]] record we find.
 
 <<function definitions>>=
 unsigned span_find_value(unsigned real_pc, unsigned tok) {
@@ -378,7 +403,7 @@ the current program counter ([[real_pc]]).
   }
 @ 
 
-We must make sure that we have the smallest span associated with the given
+We also must make sure that we have the smallest span associated with the given
 PC, not just one that happens to enclose the given PC.
 
 <<retrieve information from [[last_matching_span]] and return>>=

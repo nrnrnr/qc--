@@ -29,7 +29,8 @@ typedef Cmm_Cont;
 % ----------------------------------------------------------------------------
 
 [[Cmm_CreateThread]] returns a {\PAL} continuation that will execute the {\PAL} call [[f(x)]], when run.
-[[Cmm_RunThread]] commences execution on a {\PAL} continuation (a suspended {\PAL} computation) as returned from [[Cmm_CreateThread]].
+[[Cmm_RunThread]] commences execution on a {\PAL} continuation (a suspended {\PAL} computation) as returned from [[Cmm_CreateThread]] or from 
+[[Cmm_GetUnwindCont]].
 
 <<function prototypes>>=
 Cmm_Cont       *Cmm_CreateThread(Cmm_Codeptr f, Cmm_Dataptr x, void *s,
@@ -106,7 +107,8 @@ The header file for the {\PAL} runtime system is contained within [[runtime.h]].
 #endif /* _RUNTIME_H */
 @ 
 
-We import a few values from other noweb documents; namely, the number of globals in the loaded {\PAL} code, the array in which the {\PAL} global values are actually stored, and the Lua tags we use to store [[span]] values and [[CMM_label]]s in Lua tables.
+We import a few global values from various modules of the interpreter; 
+namely, the number of globals in the loaded {\PAL} code, the array in which the {\PAL} global values are actually stored, and the Lua tags we use to store [[span]] values and [[CMM_label]]s in Lua tables.
 
 <<faux declarations for external definitions>>=
 extern int    num_globals;
@@ -259,15 +261,7 @@ Cmm_Cont *Cmm_CreateThread(Cmm_Codeptr f, Cmm_Dataptr x, void *s, unsigned n,
     void  **f_loc = ((void **) CMM_label_location(lbl_f));
     value  *x_loc = ((value *) CMM_label_location(lbl_x));
     
-    /*
-    void  **f_loc = ((void **) CMM_label_location((CMM_label *) lbl)) - 1;
-    value  *x_loc = ((value *) f_loc) - 1;
-    */
-
-    /* f */
     *f_loc = (void *) f;
-
-    /* x */
     if (x != NULL) {
       *x_loc = *((value *) x);
     }
@@ -290,7 +284,8 @@ Cmm_Cont *Cmm_RunThread (Cmm_Cont *k) {
 % ----------------------------------------------------------------------------
 
 Walking the stack is very easy, given our representation of activation stacks.
-Implementing most of these stack-walking functions is as simple as pointer arithmetic based on what we know of a thread's stack layout (see [[thread.nw]]).
+Implementing most of these stack-walking functions is as simple as pointer arithmetic based on what we know of a thread's stack layout (see the [[thread]]
+module for details).
 
 [[Cmm_YoungestActivation]] simply returns the newest activation record on
 the thread's stack (it should be located at [[t->stack_free - sizeof(activation)]]).
@@ -391,7 +386,8 @@ void *Cmm_FindStackData(const Cmm_Activation *a, unsigned n) {
 @ 
 
 [[Cmm_GetDescriptor]] must look up the given [[token]] in the Lua span table of the given activation's thread; moreover, it must look for the innermost (table entry with greatest index) value associated with the token.
-Fortunately, [[span.nw]] exports [[span_find_value]] to take care of the job.
+Fortunately, the [[span]] module exports [[span_find_value]] to take care of 
+the job.
 <<stack-walking functions>>=
 Cmm_Dataptr Cmm_GetDescriptor(const Cmm_Activation *a, Cmm_Word token) {
   return (Cmm_Dataptr) span_find_value((unsigned) a->pc, (unsigned) token);
@@ -403,8 +399,8 @@ that encapsulates the [[index]]th unwind continuation of the specified
 activation ([[a]]), where an [[index]] value of [[0]] retrieves the first
 unwind continuation noted at [[a]]'s call site.
 Note that it is an unchecked, runtime error to attempt to cut to a previously
-saved [[Cmm_Cont]] that points to an activation in the same thread as [[a]]
-and that is younger than [[a]], after the [[Cmm_Cont]] returned by
+saved [[Cmm_Cont]] that points to an activation that is (1) in the same thread
+as [[a]] and (2) is younger than [[a]], after the [[Cmm_Cont]] returned by
 [[Cmm_GetUnwindCont]] is cut to.
 \emph{Also note that the [[thread]] structure representing the thread in which [[a]] sits may not properly be freed, especially if [[Cmm_GetUnwindCont]] is used at some point.}
 <<stack-walking functions>>=
@@ -461,7 +457,7 @@ Cmm_Cont *Cmm_GetUnwindCont(const Cmm_Activation *a, Cmm_Word index) {
 
 We have full access to the global variables, so these three functions for accesing the global registers are easy to implement in their present form.
 We import [[int num_globals]] and the actual [[globals]] array from 
-[[interp.nw]]
+the [[interp]] module.
 
 <<global register functions>>=
 void *Cmm_FindGlobalVar(void *gp, int n) {

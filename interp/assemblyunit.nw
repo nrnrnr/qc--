@@ -34,10 +34,13 @@ This document contains the interface and implementation of {\PAL} assembly unit 
 \subsection{Data Structures}
 % ----------------------------------------------------------------------------
 
-To represent an assembly unit in the interpreter, we create the type [[assembly_unit]] to keep track of all information that is common to code in an assembly unit yet not global to the interpreter.
+To represent an assembly unit in the interpreter, we create the type
+[[assembly_unit]].
+This type allows us to keep track of all information that is common to code in
+an assembly unit yet not global to the interpreter.
 
 Note that we keep all [[assembly_unit]]s in an implicit chain (using the
-field [[next]]).  We have no way of finding the beginning of the chain, but
+field [[next]]).  We have no way of finding the beginning of such a chain, but
 the linking allows us to load in multiple assembly units at once and then
 properly relocate the [[RBlock]]s associated with each one just loaded (in
 the correct order).
@@ -58,7 +61,8 @@ typedef struct au {
 } assembly_unit;
 @
 
-To distinguish assembly unit source strings from assembly unit source files, we create the [[typedef]]'d [[enum]] type [[assembly_unit_type]].
+To distinguish assembly unit source strings from assembly unit source files,
+we create the [[typedef]]'d [[enum]] type [[assembly_unit_type]].
 
 <<type definitions>>=
 typedef enum {
@@ -84,13 +88,17 @@ void assembly_unit_free_all(void);
 
 Note that [[assembly_unit_new]] returns a pointer to an \emph{uninitialized} 
 [[assembly_unit]].
-
+The lower-level [[assembly_unit_new]] is \emph{not} to be confused with 
+function [[enter_new_assembly_unit]].
 
 % ----------------------------------------------------------------------------
 \subsection{Utility Functions}
 % ----------------------------------------------------------------------------
 
-To create a new [[assembly_unit]], we provide the function [[enter_new_assembly_unit]] to create and initialize a fresh [[struct]].
+To signal the entering of a new assembly unit, [[enter_new_assembly_unit]]
+should be called; it returns a pointer to a fresh, initialized
+[[assembly_unit]] and updates global variable [[unit]] to point to this
+[[assembly_unit]].
 
 <<function prototypes>>=
 assembly_unit *enter_new_assembly_unit(lua_State *L);
@@ -100,7 +108,10 @@ assembly_unit *enter_new_assembly_unit(lua_State *L);
 \subsection{Global Variables}
 % ----------------------------------------------------------------------------
 
-To reduce unnecessary parameter-passing through a myriad of functions, we maintain a global pointer to the [[assembly_unit]] representing the current assembly unit.
+To reduce unnecessary parameter-passing through a myriad of functions, we 
+maintain a global pointer to the [[assembly_unit]] representing the current
+assembly unit ([[unit]]).
+We also maintain a global table of all loaded [[assembly_unit]]s.
 
 <<global variable declarations>>=
 extern assembly_unit *unit;
@@ -173,8 +184,13 @@ void assembly_unit_free_all(void) {
 \subsection{Utility Functions}
 % ----------------------------------------------------------------------------
 
-To create and initialize an [[assembly_unit]] struct, we must make sure to create empty table references and default target-architecture values.
-We use the constants [[#define]]d in [[machine.h]] to initialize the architecture information.
+When we enter a new assembly unit, we must make sure to properly initialize
+a new [[assembly_unit]] record: we need to create empty table references, 
+default target-architecture values, etc.
+We use the constants [[#define]]d in [[machine.h]] to initialize the 
+architecture information to default values; these values may be updated by
+appropriate encoding functions in module [[encoding]] (examples include 
+[[lua_CMM_memsize]] and [[lua_CMM_byteorder]]).
 
 <<function definitions>>=
 assembly_unit *enter_new_assembly_unit(lua_State *L) {

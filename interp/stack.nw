@@ -34,7 +34,11 @@ Their free pointer is usually named $stack$ and points to the top stack element.
 \subsection{Value Stacks}
 % ----------------------------------------------------------------------------
 
-To ease the notational burden of casting a C [[value]] to the proper type and of accessing value stacks, we developed a few simple macros for use with value stacks.  Below are ``faux prototypes'' for these macros; that is, if these macros were implemented as functions, the functions would have the following prototypes:
+To ease the notational burden and to abstract away from some 
+representation-dependent details of accessing value stacks, we developed a few
+simple macros for use with value stacks.  Below are ``faux prototypes'' for 
+these macros; that is, if these macros were implemented as functions, the 
+functions would have the following prototypes:
 
 <<faux prototypes>>=
 value STACK_ELT(stack s, int i);
@@ -42,14 +46,25 @@ void  PUSH(value v, stack s);
 value POP (value v, stack s);
 void  UNDERFLOW_CHECK(stack s, int n);
 void  OVERFLOW_CHECK (stack s, int n);
+void  ASSERT_EMPTY   (stack s);
 @ 
 
-[[stack_elt]] simply returns the [[i]]th element of value stack [[s]], where [[STACK_ELT(s, 0)]] returns the top value on stack [[s]] and [[STACK_ELT(s, -1)]] returns the next-to-top value on the stack; return value is a legal lvalue.
-[[PUSH]] and [[POP]] push or pop a [[value]] atop a stack, performing underflow or overflow checks as necessary.
-[[UNDERFLOW_CHECK]] checks to make sure that the interpreter would not be accessing an array out-of-bounds if it were to pop [[n]] [[value]]s off stack [[s]], and [[OVERFLOW_CHECK]] checks for stack overflow resulting from [[n]] push operations.
+[[stack_elt]] simply returns the [[i]]th element of value stack [[s]], where
+[[STACK_ELT(s, 0)]] returns the top value on stack [[s]] and 
+[[STACK_ELT(s, -1)]] returns the next-to-top value on the stack.
+We additionally guarantee that calls to this macro evaluate to legal C lvalues.
 
-Helper function [[print_value_stack]] is mainly use for debugging purposes,
-and only output data when program verbosity is turned ON (see global variable
+[[PUSH]] and [[POP]] push or pop a [[value]] atop a value stack, performing 
+underflow or overflow checks as necessary.
+[[UNDERFLOW_CHECK]] checks to make sure that the interpreter would not be 
+accessing an array out-of-bounds if it were to pop [[n]] [[value]]s off stack 
+[[s]], and [[OVERFLOW_CHECK]] checks for stack overflow resulting from [[n]] 
+push operations.
+[[ASSERT_EMPTY]] asserts that the given value stack [[s]] is empty; if [[s]]
+is non-empty, a runtime interpreter error is signalled.
+
+Helper function [[print_value_stack]] is mainly used for debugging purposes,
+and only outputs data when program verbosity is turned ON (see global variable
 [[verbosity]] in [[interp.nw]]).
 
 <<function prototypes>>=
@@ -72,7 +87,10 @@ void  print_value_stack(stack s, sptr s_base, const char *s_name);
 \subsection{Utility Macros}
 % ----------------------------------------------------------------------------
 
-Presently, we maintain the convention that the free-space pointer of a [[value]] stack (e.g., [[values]]) points to the top stack value.  However, we provide a stack access macro that allows the rest of the code to be ignorant of how exactly we maintain our pointers to [[value]] stacks.
+Presently, we maintain the convention that the free-space pointer of a 
+[[value]] stack (e.g., [[values]]) points to the top stack value.  However, we
+provide a stack access macro that allows the rest of the code to be ignorant
+of how exactly we maintain our pointers to [[value]] stacks.
 
 <<macro definitions>>=
 /* STACK_ELT(S, I) evaluates to the value on stack S indexed by I, such that:
@@ -87,8 +105,13 @@ Presently, we maintain the convention that the free-space pointer of a [[value]]
 #define STACK_ELT(S, I)       ((S)[(I)])
 @ 
 
-We provide convenience macros and functions to perform such common stack operations as pushing, popping, checking for underflow or overflow, printing the contents of a stack, and asserting that a stack is empty.  
-Note that [[UNDERFLOW_CHECK]], [[OVERFLOW_CHECK]], and [[ASSERT_EMPTY]] all depend on our naming convention for stacks.
+We provide convenience macros and functions to perform such common value stack 
+operations as pushing, popping, checking for underflow or overflow, printing 
+the contents of a stack, and asserting that a stack is empty.  
+Note that [[UNDERFLOW_CHECK]], [[OVERFLOW_CHECK]], and [[ASSERT_EMPTY]] all 
+depend on our naming convention for the C variables representing a value stack.
+Note that a call to [[print_value_stack]] only has a noticeable effect if
+the [[verbosity]] flag declared in [[interp.h]] is turned on.
 
 <<macro definitions>>=
 /* PUSH(V, S) pushes value V onto value stack S and returns void */

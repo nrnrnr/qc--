@@ -29,15 +29,19 @@ This document contains the interface and implementation of {\PAL} threads.
 
 A {\PAL} thread may simply be realized as a separate activation stack.  
 
-For matters of $uid$ bookkeeping, we need to keep track of the next frame id to be handed out to a fresh activation as well as a list of dead frame id's.  
+For matters of $uid$ bookkeeping, we need to keep track of the next frame id
+to be handed out to a fresh activation, as well as a list of dead frame id's.  
 We use an [[interval_list]] to represent this list (see [[intervals.nw]]).  
 
 We maintain one stack internal to a thread; it is from this that we allocate
 space for [[activation]]s, local variables, and stackdata.
-Please see the section below on stack layout for more information about this stack.
+The allocation of this stack is the responsibility of the front-end runtime
+client of the interpreter, not the [[thread]] module itself.
+Please see the section below on stack layout for more information about this
+stack.
 
 Additionally, we include a program counter in the [[thread]] structure.
-The idea of this is that, in the runtime system, we might want to get some
+The idea of this is, in the runtime system, we might want to get some
 sort of ``handle'' on a resumption point of the youngest activation without
 yet changing the [[pc]] stored in this activation's actual [[activation]]
 record.
@@ -62,12 +66,12 @@ typedef struct thread thread;
 \subsection{Stack Layout}
 % ----------------------------------------------------------------------------
 
-Stackdata, locals, and activation information are all stored on a thread's one
-stack.
+Stackdata, locals, and activation information are all stored on a thread's
+single stack.
 
 \begin{verbatim}
 
- The stack in a sample non-suspended thread:
+ A diagram of the stack in a sample, non-suspended thread:
 
    |----------|<--- t->stack_base
    |          |
@@ -99,24 +103,26 @@ This is a diagram of a sample non-suspended thread's stack.  The top of the
 drawing represents the oldest end of the stack; growth is drawn toward the
 bottom.  (In our implementation, growth is directed toward increasing
 addresses.)
-  When creating space for a new frame on the stack, we create space for locals,
-then we create space for stackdata.  The activation record for a currently-
-running frame is not actually stored away on the stack until we must leave
-the frame for some reason (cut/call/etc.).  Until then, the activation record
-for the currently running frame is actually distributed across local C
-variables (in function [[run_interp]] of [[interp.nw]]).
+  When creating space for a new frame on the stack, we first carve out space
+for locals, and then we allocate space for stackdata.  The activation record 
+for a currently-running frame is not actually stored away on the stack until
+we must leave the frame for some reason (cut/call/etc.).  Until then, the
+activation record for the currently running frame is distributed across local C
+variables (in function [[run_interp]] of the [[interp]] module).
   When we must leave a frame or suspend a frame's thread (in order to return 
 control to the runtime system or to cut to another thread), we write the
-thread's youngest frame's activation record to the stack's extremum--just
-beyond the youngest frame's stackdata space (at [[t->stack_free]]).
-  If we simply made a {\PAL} call, we also create space for the new activation 
-frame's locals and stackdata, and continue onwards.
+activation record for the thread's youngest frame at the stack's extremum--just
+beyond the this frame's stackdata space (at [[t->stack_free]]).
+  If we left the frame to make a {\PAL} call, then we create space for the
+locals and stackdata of the callee's activation, and continue execution.
+When we resume the execution of a suspended thread, we pop the activation
+record of the suspended frame off the stack and resume execution.
 
+Note that all activations are of fixed size ([[sizeof(activation)]]). 
+Locals and stackdata space vary in size, depending on a specific activation's 
+needs (and on the memory alignment requirements of the host's architecture).
 
-All activations are of fixed size ([[sizeof(activation)]]). 
-Locals and stackdata space vary in size, depending on a specific activation's needs.
-
-Finally, a word on suspended threads.
+Finally, a few more words on suspended threads.
 A suspended thread is essentially one that is not presently running through
 the interpreter; in such a thread, the youngest activation \emph{is} present
 atop the thread's stack--but it is distinguishable from an ordinary activation.
@@ -132,8 +138,11 @@ a thread that transferred control to a C function or the runtime system.
 \subsection{Utility Functions}
 % ----------------------------------------------------------------------------
 
-Helper functions [[init_thread]] and [[find_thread]] assist in thread management.
-[[init_thread]] initializes the data members of a [[thread]] object, given a sufficient amount of pre-allocated stack space (this means that it is the
+Helper functions [[init_thread]] and [[find_thread]] assist in thread 
+management.
+
+[[init_thread]] initializes the data members of a [[thread]] object, given a 
+sufficient amount of pre-allocated stack space (this means that it is the
 front-end's responsibility to allocate stack space when it asks for a new 
 thread).
 [[find_thread]] returns the thread uniquely identified by some [[uid]].
@@ -167,7 +176,7 @@ It takes a bit of work to initialize a new thread.
 
 Given sufficient space in memory, we set up a stack for storing locals,
 stackdata, and activations.
-See the section above on stack layout for more information about how exactly
+See the section above on stack layout for more information on how exactly
 we allocate memory on the stack.
 
 We have to remember to initialize the [[thread]]'s fields, as well as set
@@ -196,8 +205,11 @@ thread *init_thread(CMM_label *lbl, void *stack_space, unsigned n) {
 }
 @
 
-When we initialize a thread, we start it off with an activation in a suspended state.
-The only difference between this suspended activation and a normal activation is that its [[kappa]] field (as well as its [[callee]] field) is left [[NULL]], for it was not called by any other activation.
+When we initialize a thread, we start it off with an activation in a
+suspended state.
+The only difference between this suspended activation and a normal activation
+is that its [[kappa]] field (as well as its [[callee]] field) is left [[NULL]],
+for it was not called by any other activation.
 
 <<set up first activation record>>= 
   assert(lbl != NULL);
@@ -236,7 +248,8 @@ The only difference between this suspended activation and a normal activation is
   }
 @ 
 
-Finally, we must allocate space for the local environment of the first activation to be run (the activation for procedure [[start]]).
+Finally, we must allocate space for the local environment of the first
+activation to be run (the activation for procedure [[start]]).
 This memory is taken off the thread [[t]]'s stack, in accordance with our
 stack layout convention.
 
@@ -257,8 +270,8 @@ stack layout convention.
 \subsection{Helper Functions}
 % ----------------------------------------------------------------------------
 
-Recall that the thread id of a given [[uid]] is actually a [[void *]] pointer to the thread to which the activation uniquely identified by the [[uid]] belongs.
-As such, it is rather easy to find a thread given a [[uid]].
+Recall that the thread id of a given [[uid]] is actually a pointer to the
+thread containing the activation uniquely identified by the [[uid]].
 
 <<function definitions>>=
 thread *find_thread(uid u) {

@@ -11,6 +11,11 @@ This document contains the interface and implementation of the mechanism that al
 This is the interface for the C calling mechanism, which is complicated by
 its inability to completely subvert the C type system.
 
+Clients need only know this: they must register all C functions they wish
+for {\PAL} code to be able to call, and that they may only register functions
+that have C type signatures that have been properly registered with this
+calling mechanism.
+
 <<ccall.h>>=
 #ifndef _CCALL_H
 #define _CCALL_H
@@ -58,25 +63,32 @@ table        c_func_table;
 \subsection{C Function Registration}
 % ----------------------------------------------------------------------------
 
-In order to call C functions from {\PAL} code in the interpreter, the C functions must be registered with the interpreter.
-We export a function [[register_c_func]] that may be used by a client's runtime system to register a C function with the interpreter.
-A signature ([[sig]]) of a C function is a string containing a comma-delimited list of the C types of the function's arguments, followed by a colon and the the function's return type.
-An explicit [[void]] should be used in the case of nullary functions, and [[pointer]] should be used in place of any pointers.
-For example, the signature for a C function that takes two [[int]]s and returns a [[double]] would be [["int,int:double"]].
+In order to call C functions from {\PAL} code in the interpreter, the C 
+functions must be registered with the interpreter.
+We export a function [[register_c_func]] that may be used by a client's
+runtime system to register a C function with the interpreter.
+A signature ([[sig]]) of a C function is a string containing a comma-delimited
+list of the C types of the function's arguments, followed by a colon and then
+the function's return type.
+An explicit [[void]] should be used in the case of nullary functions, and
+[[pointer]] should be used in place of any pointers.
+For example, the signature for a C function that takes two [[int]]s and
+returns a [[double]] would be [["int,int:double"]].
 
 <<function prototypes>>=
 void register_c_func(const char *name, void *f, const char *sig);
 @ 
 
 Note that C functions may \emph{not} be registered with the interpreter as
-varargs functions (they could be restricted to a fixed number of arguments
-and thus registered)--with the exception of [[printf]].
+varargs functions (although they could be restricted to a fixed number of 
+arguments and thus registered)---with the exception of [[printf]].
 Because of the extreme usefulness of [[printf]], we provide this one varargs
 C function, but it must be specially registered.
 To register [[printf]], a call must be made to [[register_c_func]] with a
 [[sig]] of simply [["printf"]].
 
-Internally, we use separate helper functions for each type of C function signature we are willing to call from a {\PAL} program.
+Internally, we use separate helper functions for each type of C function
+signature we are willing to call from a {\PAL} program.
 To register these callers, we use the [[register_c_sig]] helper function.
  
 <<internal function prototypes>>=
@@ -88,6 +100,10 @@ To internally register all known C signatures, we provide [[init_c_sigs]].
 <<function prototypes>>=
 void init_c_sigs(void);
 @ 
+
+Note that C functions may only be registered with this calling mechanism if
+their C type signatures have first been internally registered by this
+module.
 
 % ----------------------------------------------------------------------------
 \implementation{Calling C Functions from {\PAL}}
@@ -119,9 +135,13 @@ void init_c_sigs(void);
 \subsection{C Function Registration}
 % ----------------------------------------------------------------------------
 
-We provide the exported function [[register_c_func]] to allow clients to register C funtions with the interpreter for use in programs (with [[call]]s).
-Each time [[register_c_func]] is called, we make two entries in the global table [[c_func_table]].
-We associate the function's name (as a string) with a number in the global exports table, and we associate the number with a table that contains the function's signature and pointer in the C function table.
+We provide the exported function [[register_c_func]] to allow clients to
+register C funtions with the interpreter for use in programs (with [[call]]s).
+Each time [[register_c_func]] is called, we make two entries in the global
+table [[c_func_table]].
+We associate the function's name (as a string) with a number in the global
+exports table, and we associate the number with a table that contains the
+function's signature and pointer in the C function table.
 
 <<function definitions>>=
 void register_c_func(const char *name, void *f, const char *sig) {
@@ -204,7 +224,9 @@ void register_c_func(const char *name, void *f, const char *sig) {
 \subsection{C Signature Registration}
 % ----------------------------------------------------------------------------
 
-Internally, we use the [[register_c_sig]] function to register C function signatures (add a pointer to the signature's caller implementation to the Lua signature table).
+Internally, we use the [[register_c_sig]] function to register C function
+signatures (add a pointer to the signature's caller implementation to the Lua
+signature table).
 
 <<function definitions>>=
 static void register_c_sig(const char *sig, c_caller caller) {
@@ -218,7 +240,8 @@ static void register_c_sig(const char *sig, c_caller caller) {
 }
 @ 
 
-We use a series of iterated macro calls to register the signatures we know about.
+We use a series of iterated macro calls to register the signatures we know
+about.
 
 <<function definitions>>=
 void init_c_sigs(void) {
@@ -248,24 +271,47 @@ sptr c_caller_printf (sptr arguments, void *f);
 % ----------------------------------------------------------------------------
 
 We use a number of macros to implement our C calling mechanism.
-Due to constraints of the C type system, we are required to specially handle C functions with different numbers of arguments; for example, we define a family of macros for unary C functions, a family of macros for binary C functions, etc.
-For each of these macro families, we define four macros: one to generate a C function that implements a C caller, one to generate a function prototype for this function, one to register the C caller function with the interpreter, and finally one to call each of the previous three macros on all supported C function signatures within the family.
-The idea here is this: for each different type of C function that we want to be able to call from {\PAL}, we generate a C caller that will take a [[void *]] function pointer, cast it to the correct signature, and call it with the correct number of arguments.
-Note also that the C caller takes care of pushing and popping the correct number of values from the argument-passing stack when calling the C function and returning values from it.
-In order to deal with functions that return no value (are of return type [[void]]), we hack through with macros [[RETURNS_VAL]] and [[RETURNS_VOID]]; they essentially allow conditional text replacement in the C preprocessor.
-The idea is that a macro is handed off either [[RETURNS_VAL]] or [[RETURNS_VOID]].
-The macro may then pass 2 arguments to whichever of these two macros it receives; this macro call will be replaced by the first of the 2 arguments if [[RETURNS_VAL]] was the macro passed in, and it will be replaced by the second of the 2 arguments if [[RETURNS_VOID]] was the macro passed in.
+Due to constraints of the C type system, we are required to specially handle C
+functions with different numbers of arguments; for example, we define a family
+of macros for unary C functions, a family of macros for binary C functions, 
+etc.
+For each of these macro families, we define four macros: one to generate a C
+function that implements a C caller, one to generate a function prototype for
+this function, one to register the C caller function with the interpreter, and
+finally one to call each of the previous three macros on all supported C
+function signatures within the family.
+The idea here is this: for each different type of C function that we want to
+be able to call from {\PAL}, we generate a C caller that will take a
+[[void *]] function pointer, cast it to the correct signature, and call it
+with the correct number of arguments.
+Note also that the C caller takes care of pushing and popping the correct
+number of values from the argument-passing stack when calling the C function
+and returning values from it.
+In order to deal with functions that return no value (are of return type 
+[[void]]), we hack through with macros [[RETURNS_VAL]] and [[RETURNS_VOID]];
+ they essentially allow conditional text replacement in the C preprocessor.
+
+The idea is that a macro is handed off either [[RETURNS_VAL]] or 
+[[RETURNS_VOID]].
+The macro may then pass 2 arguments to whichever of these two macros it
+receives; this macro call will be replaced by the first of the 2 arguments if
+[[RETURNS_VAL]] was the macro passed in, and it will be replaced by the second
+of the 2 arguments if [[RETURNS_VOID]] was the macro passed in.
 
 <<macro definitions>>=
 #define RETURNS_VAL(X, Y)  X
 #define RETURNS_VOID(X, Y) Y
 @ 
 
-[[ITERATE_UNARY_C_CALLERS]], [[ITERATE_BINARY_C_CALLERS]], and company are the iterator macros mentioned above; each takes a macro name as its only argument and calls this macro with the C function signatures its family supports.
+[[ITERATE_UNARY_C_CALLERS]], [[ITERATE_BINARY_C_CALLERS]], and company are the
+iterator macros mentioned above; each takes a macro name as its only argument
+and calls this macro with the C function signatures its family supports.
 
 This is where additional supported C signatures should be added, if desired.
 
 <<macro definitions>>=
+typedef void *pointer;
+
 #define ITERATE_NULLARY_C_CALLERS(F) \
 F(void, RETURNS_VOID) \
 F(int,  RETURNS_VAL )
@@ -289,13 +335,12 @@ F(pointer, pointer, pointer, RETURNS_VAL ) \
 \
 F(int,     int,     void,    RETURNS_VOID)
 
-typedef void *pointer;
-
 #define ITERATE_FOURARY_C_CALLERS(F) \
 F(pointer, pointer, unsigned, pointer, pointer, RETURNS_VAL)
 @ 
 
-All C callers take two arguments, an argument-passing stack and a [[void *]] function pointer, and return a new pointer to the argument-passing stack.
+All C callers take two arguments, an argument-passing stack and a [[void *]]
+function pointer, and return a new pointer to the argument-passing stack.
 
 <<macro definitions>>=
 #define NULLARY_C_CALLER_PROTOTYPE(RETTY, RETURNS) \
@@ -311,7 +356,8 @@ sptr c_caller_##A##_##B##_##RETTY (sptr arguments, void *f);
 sptr c_caller_##A##_##B##_##C##_##D##_##RETTY (sptr arguments, void *f);
 @ 
 
-Registration of C callers involves a simple call to [[register_c_sig]]; this associates a C function signature with a C caller implementation.
+Registration of C callers involves a simple call to [[register_c_sig]]; this
+associates a C function signature with a C caller implementation.
 
 <<macro definitions>>=
 #define NULLARY_C_CALLER_REGISTRATION(RETTY, RETURNS) \
@@ -329,7 +375,11 @@ register_c_sig(#A "," #B "," #C "," #D ":" #RETTY, \
                c_caller_##A##_##B##_##C##_##D##_##RETTY);
 @ 
 
-The actual implementations of the C callers are simple functions that pop the correct number of arguments from the argument-passing stack, call the indicated C function with these arguments, push the C call's return values atop the argument-passing stack, and return a new pointer to the argument-passing stack.
+The actual implementations of the C callers are simple functions that pop the
+correct number of arguments from the argument-passing stack, call the
+indicated C function with these arguments, push the C call's return values
+atop the argument-passing stack, and return a new pointer to the
+argument-passing stack.
 
 <<macro definitions>>=
 #define NULLARY_C_CALLER(RETTY, RETURNS) \
@@ -375,7 +425,8 @@ sptr c_caller_##ARGATY##_##ARGBTY##_##ARGCTY##_##ARGDTY##_##RETTY \
 } }
 @
 
-Last but not least, we actually generate the implementations of the C callers with a call to each of the iterators.
+Last but not least, we actually generate the implementations of the C callers
+with a call to each of the iterators.
 
 <<function definitions>>=
 ITERATE_NULLARY_C_CALLERS(NULLARY_C_CALLER)
@@ -389,7 +440,8 @@ It breaks apart the format string and makes a number of successive calls
 to the real [[printf]], as necessary.
 
 To register this [[printf]], a client would call [[register_c_func]]
-with a user-picked name and the signature [["printf"]].
+with a user-picked name (likely [[printf]]) and the special signature
+[["printf"]].
 
 <<function definitions>>=
 sptr c_caller_printf (sptr arguments, void *f) {

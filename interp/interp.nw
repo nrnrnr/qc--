@@ -7,12 +7,8 @@
 \interface{[[interp]] : Interpreting Loaded Bytecode}
 % ----------------------------------------------------------------------------
 
-This section contains the interface of the interpreter.
-The interpreter's interfaces, as we present them, consist of type definitions, function prototypes, and ``faux prototypes'' for macros defined elsewhere.  
-The Quick~{\PAL} Interpreter also makes use of a number of external libraries not standard to C.  
-The New Jersey Machine-Code Toolkit is used to ease the burden of generating in-memory bytecode for interpreter instructions and managing relocatable addresses and labels.  
-The Lua C libraries allow us to use an embedded Lua interpreter within the C environment to ease the otherwise uninteresting task of parsing input files; additionally, they provide us with access to Lua tables, which are easily manipulated dynamic, associative arrays.  
-We will limit our discussion of these libraries to the extent to which we need to make use of them.
+This module actually performs the core bytecode interpreting of the
+interpreter.
 
 <<interp.h>>=
 #ifndef _INTERP_H
@@ -28,6 +24,7 @@ We will limit our discussion of these libraries to the extent to which we need t
 #include "label.h"
 #include "table.h"
 #include "thread.h"
+#include "c-features.h"
 
 <<constant definitions>>
 <<macro definitions>>
@@ -83,14 +80,14 @@ void mc_free_all(void);
 \paragraph{Encoding Helpers}
 % ----------------------------------------------------------------------------
 
-When it comes time to permanently relocate a relocatable blocks ([[RBlock]]), we make a call from a Lua code snippet to the helper function [[lua_relocate_block]], which takes a [[lua_State]], expects a pointer to an [[RBlock]] to be atop the Lua stack, permanently relocates this [[RBlock]], pops the pointer off the Lua stack, and returns 0.
+When it comes time to permanently relocate a relocatable block ([[RBlock]]), we call Lua-style helper function [[lua_relocate_block]], which: takes a [[lua_State *]], expects a pointer to an [[RBlock]] to be atop the Lua stack, permanently relocates this [[RBlock]], pops the pointer off the Lua stack, and returns 0.
 
 <<function prototypes>>=
 int    lua_relocate_block(lua_State *L);
 @
 
 Unfortunately, we must use a separate helper function to actually copy the contents of a relocated [[RBlock]] into their permanent memory location.
-For this, we use helper [[lua_copy_block_contents]], which takes a [[lua_State]], expects a pointer to an [[RBlock]] to be atop the Lua stack, copies the contents of this [[RBlock]] into its permanent location, pops the pointer off the stack, and returns 0.
+For this, we use helper [[lua_copy_block_contents]], which: takes a [[lua_State *]], expects a pointer to an [[RBlock]] to be atop the Lua stack, copies the contents of this [[RBlock]] into its permanent location, pops the pointer off the stack, and returns 0.
 
 <<function prototypes>>=
 int    lua_copy_block_contents(lua_State *L);
@@ -101,7 +98,7 @@ int    lua_copy_block_contents(lua_State *L);
 % ----------------------------------------------------------------------------
 
 To load an entire assembly unit into memory (i.e., generate bytecode for it and store the bytecode in memory), we create the main bytecode generation function [[load_assembly_unit]].
-This function takes a string with the name of the source file to be loaded as an assembly unit or the string to be loaded itself, and an indication of whether a filename or source string is being passed in; it returns an error code indicates success/failure.
+This function takes a string with the name of the source file to be loaded as an assembly unit or the string to be loaded itself, and an indication of whether a filename or source string is being passed in; it returns an error code indicating success or failure.
 
 <<function prototypes>>=
 int load_assembly_unit(char *s, assembly_unit_type source_type);
@@ -122,21 +119,21 @@ void run_interp(thread *t);
 \subsection{Starting it All}
 % ----------------------------------------------------------------------------
 
-Finally, we get to the main function that initializes the application: the [[cmm_interp_open]] function.
-This function takes two arguments that specify the respective sizes of the value and argument-passing stacks used in the interpreter.
+Finally, we get to the main function that initializes the interpreter: the [[cmm_interp_open]] function.
+This function takes two arguments that specify the sizes of the value stack and argument-passing space used in the interpreter.
 
 <<function prototypes>>=
 int cmm_interp_open(int valstack_size, int argspace_size);
 @ 
 
 [[cmm_interp_open]] starts up Lua and prepares for future encoding and interpreting, returning a non-zero [[int]] only if an error occurred.
-We make use of helper function [[check_value_types]] (from [[value.nw]]) to perform some assertions about the basic C types used in the interpreter's implementation; and we use [[init_interp]] to perform basic interpreter initialization (including operator registration, etc.).
+We internally use helper [[init_interp]] to perform basic interpreter initialization (including operator registration, etc.).
 
 <<internal function prototypes>>=
 static void init_interp(lua_State *L, int valstack_size, int argspace_size);
 @ 
 
-For the sake of this interpreter's implementation and execution, we also make sure that defined [[MEMSIZE]]s and [[PTRSIZE]]s will work with the current architecture.
+We also make sure that defined [[MEMSIZE]]s and [[PTRSIZE]]s will work with the current architecture.
 
 <<function prototypes>>=
 void   check_architecture(assembly_unit *au);
@@ -158,7 +155,7 @@ void cmm_interp_close(void);
 
 There are two major sorts of errors we expect to encounter during the interpreter's execution: errors occuring during the loading of assembly files, and errors occurring during the interpreting of bytecode in memory.
 We make use of the C standard library's [[setjmp]] and [[longjmp]] functions for error handling; they essentially allow us to perform non-local returns to two main sites.
-Whenever we must raise an error, we simply call helper function [[cmm_err]], which prints an appropriate message and then [[longjmp]]s to appropriate error-handling site (either the site of assembly file loading or the site of assembly file interpreting).
+Whenever we must raise an error, we simply call helper function [[cmm_err]], which prints an appropriate message and then [[longjmp]]s to the appropriate error-handling site (either the site of assembly file loading or the site of assembly file interpreting).
 This use of non-local return allows, for example, an interactive interpreter to continue execution even after attempting to load a bad source file or execute a successfully-loaded yet error-ridden program.
 
 [[cmm_err]] is given a error format string and a variable length argument list.
@@ -194,7 +191,8 @@ void cmm_assert(int assertion, const char *err_msg);
 @ 
 
 For specific matters of Lua errors, we are assisted by error handler [[lua_error_handle]].
-This function properly interpets Lua library error codes, acts appropriately (e.g., warning the user, exiting).
+This function properly interpets Lua library error codes and acts appropriately
+(perhaps by warning the user or exiting).
 
 <<function prototypes>>=
 void   lua_error_handle(int err_code, const char *fn);
@@ -209,12 +207,13 @@ stores to memory, it needs to know some basic facts about the machine on
 which it is running (for example, byte order).
 
 Helper function [[infer_architecture]] tries to infer as much about the machine
-on which it runs as is possible; and based on this information inferred,
+on which it runs as is possible; based on this information inferred,
 [[mem_aggregate]] is able to properly aggregate multiple unaligned bytes into
 an integer value.
 
-Helper function [[round_up]] takes a pointer and rounds it up so it is aligned
-to the current machine architecture's alignment requirement.
+Helper function [[round_up]] takes a pointer and rounds it up (in the direction
+of increasing memory addresses) so it is aligned to the current machine 
+architecture's alignment requirement.
 
 <<function prototypes>>=
 void      infer_architecture(void);
@@ -226,15 +225,17 @@ void     *round_up(void *);
 \implementation{Interpreting Loaded Bytecode}
 % ----------------------------------------------------------------------------
 
-This section contains the implementation of the Quick~{\PAL} Interpreter.
+This section contains the implementation of the interpreting core of the
+Quick~{\PAL} Interpreter.
 We begin with the SLED definition of the interpreter's instruction set and continue with the implementation of the functions and macros described in the last section.
 
 % ----------------------------------------------------------------------------
 \subsection{SLED Definition}
 % ----------------------------------------------------------------------------
 
-The following code implements an SLED description of the Quick~{\PAL} Interpreter's abstract machine.
-We create fields to represent the different segments of a bytecode (instruction code + arguments), and construct a pattern table from all the instructions we wish to include in the bytecode.  A few instructions from our interpreter's language have multiple versions in the table; this allows for allowing these instructions to take arguments of different bit widths.
+The following code implements a SLED description of the Quick~{\PAL} Interpreter's abstract machine.
+We create fields to represent the different segments of a bytecode (instruction code + arguments), and construct a pattern table from all the instructions we wish to include in the bytecode.  
+A few instructions from our interpreter's language have multiple versions in the table; this allows these instructions to take arguments of different bit widths.
 
 <<bytecode.sled>>=
 fields of bcode     (8) op      0:7
@@ -261,7 +262,8 @@ patterns
 @ 
 
 To add an instruction to the bytecode, one must simply add an instruction name to the [[op]] table above and increase the upper bound of [[op]]'s value range.
-We next define another set of patterns to ease constructor generation of similarly structure instructions.
+
+We next define another set of patterns to ease constructor generation of similarly structured instructions.
 
 <<bytecode.sled>>=
 patterns 
@@ -281,7 +283,6 @@ The [[relocatable]] and [[placeholder]] keywords allow us to specify that some a
 <<bytecode.sled>>=
 relocatable addr
 relocatable addr2
-relocatable addr3
 
 placeholder for bcode is PLACECODE
 placeholder for long  is bits32 = 0
@@ -305,7 +306,7 @@ constructors
   nullary
 @ 
 
-The conditional assembly present in the definition allows an instruction to be represented by multiple opcodes (each is accustomed to arguments of different bit-lengths) yet be connected with one NJ Machine-Code Toolkit constructor.
+The conditional assembly present in the definition allows an instruction to be represented by multiple opcodes (each instantiation expects to find arguments of different bit-lengths) yet be connected with one NJ Machine-Code Toolkit constructor.
 
 <<bytecode.sled>>=
 # conditional assembly
@@ -337,9 +338,9 @@ The conditional assembly present in the definition allows an instruction to be r
 \subsubsection{Initialization and Configuration}
 % ----------------------------------------------------------------------------
 
-The actual initial registration of operators occupies some of the body of helper function [[init_interp]].
-With some preprocessor exploitation, we are able to reuse the same operator definitions to both implement the operators as functions and to register these functions with the interpreter at runtime.
-\emph{NOTE: great care must be taken to make sure that the implementation operator definitions stay above the definition of [[init_interp]]; we redefine the same macros to do different things within [[init_interp]].}
+[[init_interp]] initializes global tables, allocates some globally-used memory,
+and initializes default-registered C function signatures and primitive
+arithmetic operators.
 
 <<utility functions>>=
 static void init_interp(lua_State *L, int valstack_size, int argspace_size) {
@@ -376,8 +377,11 @@ static void init_interp(lua_State *L, int valstack_size, int argspace_size) {
 }
 @ 
 
-To allocate memory for the value stack and argument-passing stack (which are re-used throughout all activations), we simply [[malloc]] memory.
-The sizes of these stacks are specified by arguments to the [[cmm_interp_open]] function.
+To allocate memory for the value stack and argument-passing space (which are
+re-used throughout the lifetime of the interpreter), we simply [[malloc]] 
+memory.
+The sizes of these stacks were originally specified by arguments to function 
+[[cmm_interp_open]].
 
 <<allocate memory for value stack>>=
   values_base        = (sptr) malloc(sizeof(value) * valstack_size);
@@ -396,7 +400,8 @@ The sizes of these stacks are specified by arguments to the [[cmm_interp_open]] 
 \subsubsection{Utility Functions}
 % ----------------------------------------------------------------------------
 
-The utility helper functions assist in error handling and performing some sanity checks on the [[typedef]]'d basic types.
+The utility helper functions assist with machine-dependent details and 
+error handling.
 
 <<utility functions>>=
 <<machine-dependent details>>
@@ -430,8 +435,11 @@ void infer_architecture(void) {
 }
 @ 
 
-Once we have inferred this byte-order information, helpers [[mem_aggregate]]
+Once we have inferred this byte-order information, helper [[mem_aggregate]]
 is able to properly order bytes so as to effectively allow multi-byte loads.
+[[mem_aggregate]] aggregates [[num_bytes]] number of bytes according to
+byte order [[bo]] from memory address [[a]], returning the resulting value
+as an [[unsigned int]].
 
 <<machine-dependent details>>=
 unsigned mem_aggregate(unsigned char *a, byte_order bo, unsigned num_bytes) {
@@ -477,7 +485,7 @@ fetch 16 using "mem_aggregate(%a,DEF_BYTE_ORDER,2)"
 fetch 32 using "mem_aggregate(%a,DEF_BYTE_ORDER,4)"
 @ 
 
-Finally, for all information we cannot accurately infer, we also define a few 
+Finally, for all information we cannot accurately infer, we define a few 
 constants in [[machine.h]] to provide information about the architecture on 
 which the interpreter is currently being run.
 
@@ -579,7 +587,9 @@ To help catch memory allocation errors, we provide macro [[mem_assert]].
                                          "<"__FILE__":%d>", __LINE__))
 @ 
 
-To allow failed assertions to generate better error messages, we provide [[cmm_assert]].
+To allow failed assertions to generate better error messages and to make it
+possible to recover from failed assertions, we provide [[cmm_assert]]--which
+in turn calls [[cmm_err]].
 
 <<macro definitions>>=
 #define cmm_assert(A, MSG) ((A) ? (void)0 : cmm_err(MSG))
@@ -589,8 +599,8 @@ To allow failed assertions to generate better error messages, we provide [[cmm_a
 \subsection{Bytecode Generation}
 % ----------------------------------------------------------------------------
 
-The main plan with bytecode generation is this: a Lua source file written using the functions listed in [[manual.nw]] is run using an embedded Lua interpreter that is extended with C functions implementing the {\PAL} Lua functions.  
-These C functions (in [[encoding.nw]]) are more or less wrappers for C encoding functions that are automatically generated when the SLED definition of the interprer's instruction set ([[bytecode.sled]]) is run through the NJ Machine-Code Toolkit. 
+The main plan with bytecode generation is this: a Lua source file written using the functions listed in the interpreter user guide ([[manual.nw]]) is run using an embedded Lua interpreter that is extended with C functions implementing the {\PAL} Lua functions.  
+These C functions (defined in the [[encoding]] module) are more or less wrappers for C encoding functions that are automatically generated when the SLED definition of the interprer's instruction set ([[bytecode.sled]]) is run through the NJ Machine-Code Toolkit. 
 These generated functions (in [[encode.c]]) emit bytecode into relocatable memory blocks ([[RBlock]]s), which we use to represent {\PAL} sections.
 
 % ----------------------------------------------------------------------------
@@ -599,8 +609,10 @@ These generated functions (in [[encode.c]]) emit bytecode into relocatable memor
 
 To ease interactions with the embedded Lua interpreter, we write a few helper functions.
 [[lua_error_handle]] simply checks an error code returned by one of Lua's API functions for interpreting Lua code (e.g., [[lua_dofile]], [[lua_dostring]]).  
-If an error occurred, it prints a (somewhat) helpful error message and causes a system exit with a non-zero error code.
-Otherwise, the function returns to its caller.
+If an error occurred from which we think we can recover, we call [[cmm_err]] with a (somewhat) helpful error message.
+If a seemingly horrible error occurred, we exit to the operating system with
+a non-zero exit code.
+Otherwise, if no error occurred, [[lua_error_handle]] returns to its caller.
 
 <<bytecode generation>>=
 void lua_error_handle(int err_code, const char *fn) {
@@ -632,7 +644,7 @@ void lua_error_handle(int err_code, const char *fn) {
 \paragraph{Allocation and Closures}
 % ----------------------------------------------------------------------------
 
-As a client of the toolkit, our code is obligated to define functions [[mc_alloc]] and [[mc_alloc_closure]]; these functions simply must allocate memory to be used by Toolkit-generated code as ``relocatable memory blocks.''  
+As a client of the toolkit, our code is obligated to define functions [[mc_alloc]] and [[mc_alloc_closure]]; these must allocate memory to be used by Toolkit-generated code.
 
 We use David Hanson's ``arenas'' for allocation; they allow for one-shot
 de-allocation.
@@ -705,8 +717,7 @@ void mc_free_all(void) {
 \paragraph{Bytecode Relocation}
 % ----------------------------------------------------------------------------
 
-When we are ready to assign permanent addresses to our relocatable blocks, we do so within Lua.  
-[[lua_relocate_block]] is the C function exported to Lua that implements this relocation.  
+[[lua_relocate_block]] is the C function exported to Lua that implements bytecode relocation.  
 It pops an [[RBlock]] off the Lua stack, uses [[mc_alloc]] to find enough contiguous space in memory to store the [[RBlock]], and calls Toolkit API function [[set_address]] to permanently relocate it.  
 The 0 return value tells Lua no values are being returned from [[lua_relocate_block]].
 
@@ -729,7 +740,10 @@ int lua_relocate_block(lua_State *L) {
   halt();
   set_block(oldbl);
 
-  /* THIS NEEDS A SLIGHTLY REVISED VERSION OF mclib.c */
+  /* THIS NEEDS A SLIGHTLY REVISED VERSION OF mclib.c 
+   * the original mclib.c, as distributed on the net does _not_ include a
+   * relocated_pool; this is our own addition
+   */
   loc = (void *) mc_alloc(block_size(bl), relocated_pool);
 
   set_address(bl, (unsigned) loc);
@@ -770,7 +784,7 @@ int lua_copy_block_contents(lua_State *L) {
 % ----------------------------------------------------------------------------
 
 Such functions in the API of the NJ Machine-Code Toolkit as [[apply_closure]] require error-handling functions that take a format string indicating the error and a variable number of arguments supplying values formatted by the string.
-The [[error]] function is taken from page 174 of Kernighan and Ritchie's \emph{The C Programming Language: Second Edition}.
+Our implementation of [[error]] is taken from page 174 of Kernighan and Ritchie's \emph{The C Programming Language: Second Edition}.
 
 <<bytecode generation>>=
 void error(char *fmt, ...) {
@@ -789,7 +803,6 @@ void error(char *fmt, ...) {
 \subsubsection{Loading an Assembly Unit}
 % ----------------------------------------------------------------------------
 
-To load an assembly unit, we make use of the functions defined above.
 As a side effect, [[load_assembly_unit]] changes the current assembly unit ([[unit]]) using the helper function [[enter_new_assembly_unit]].
 
 <<bytecode generation>>=
@@ -837,7 +850,7 @@ int load_assembly_unit(char *s, assembly_unit_type source_type) {
 \paragraph{Source File Encoding}
 % ----------------------------------------------------------------------------
 
-To run a Lua source file, we simply call the Lua API function [[lua_dofile]] and relegate error handling to [[lua_error_handle]].
+To run a Lua source file, we call Lua API function [[lua_dofile]] and relegate error handling to [[lua_error_handle]].
 
 <<run Lua source file [[s]]>>=
   lua_error_handle(lua_dofile(L, s), s);
@@ -849,7 +862,7 @@ To run a Lua source string, we call Lua API function [[lua_dostring]] and relega
   lua_error_handle(lua_dostring(L, s), s);
 @ 
 
-To run Lua source code on [[stdin]], we call [[lua_dofile]] with a [[NULL]] argument.
+To run Lua source code on [[stdin]], we call [[lua_dofile]] with a [[NULL]] argument (signifying that the Lua source code can be found on [[stdin]]).
 
 <<run Lua source code on [[stdin]]>>=
   lua_error_handle(lua_dofile(L, NULL), "<stdin>");
@@ -860,13 +873,12 @@ To run Lua source code on [[stdin]], we call [[lua_dofile]] with a [[NULL]] argu
 % ----------------------------------------------------------------------------
 
 Once we have finished emitting all bytecode into [[RBlock]]s, we are ready to assign permanent addresses to the [[RBlock]]s.
-Here, we run a snippet of Lua code that iterates through all values stored in the Lua section table ([[section_table]])--which should be a table of all [[RBlock]]s created during bytecode generation--and calls the Lua function [[relocate_block]] on each value.
-This Lua function is actually a C function registered with Lua: [[lua_relocate_block]].
+Here, we iterates through all values stored in the Lua section table ([[section_table]])--which should be a table of all [[RBlock]]s created during bytecode generation--and call the Lua function [[relocate_block]] on each value.
 
 Note that we loop through all assembly units starting at [[au]].
 This is done because we may have read in multiple assembly units (see
-function [[lua_CMM_new_assembly_unit]] in [[encoding.nw]]) and we need to
-properly relocate them in the correct order.
+function [[lua_CMM_new_assembly_unit]] in the [[encoding]] module) and we need
+to properly relocate them in the correct order.
 
 <<perform bytecode relocation>>=
   for (temp = au; temp != NULL; temp = temp->next) {
@@ -893,7 +905,7 @@ We must then make sure to apply all closures stored away in the C [[closures]] a
   closures_free = closures_base;
 @ 
 
-Finally, we must make sure to actually copy the contents of the relocated [[RBlock]]s into their permanent memory locations using a helper C function ([[lua_copy_block_contents]]) registered with Lua.
+Finally, we actually copy the contents of the relocated [[RBlock]]s into their permanent memory locations using Lua-style helper function ([[lua_copy_block_contents]]).
 
 <<perform bytecode relocation>>=
   for (temp = au; temp != NULL; temp = temp->next) {
@@ -916,7 +928,8 @@ Finally, we must make sure to actually copy the contents of the relocated [[RBlo
 \subsubsection{Initialization}
 % ----------------------------------------------------------------------------
 
-Finally, we get to the main part of the interpreter.  We start by initializing the internal state of the interpreter:
+Finally, we get to the main part of the interpreter.
+We start by initializing the internal state of the interpreter:
 
 <<initialize interpreter internals, given suspended thread [[t]]>>=
   /* pc    is kept in thread t        */
@@ -956,7 +969,6 @@ Finally, we get to the main part of the interpreter.  We start by initializing t
 @ 
 
 We copy out the stored, suspended state from [[act]] into local C variables for matters of efficiency (to reduce memory fetches).
-This means, though, that the stored activation information will become out-of-date as we proceed through interpreting; we must make sure to update it when we have to leave the activation for any reason (calls, cuts, etc.).
 
 Note that we get the current [[pc]] from the given [[thread]] and not from
 the [[activation]].
@@ -979,7 +991,8 @@ frame record.
   caller        = act->caller;
 @
 
-By now we should know how many globals are used in the source {\PAL} code; this number has been stored in the global C variable [[num_globals]].
+By now we should know how many globals are used in the source {\PAL} code;
+this number has been stored in the global C variable [[num_globals]].
 We [[malloc]] space for them.
 
 <<allocate memory for globals>>=
@@ -1027,14 +1040,15 @@ void run_interp(thread *t) {
 }
 @ 
 
-The bulk of the matching statement bodies follow from the operational semantics of the interpreter's instructions.
-For ease of understanding, the relevant operational rules are reproduced above each instruction's matching statement.
+The bulk of the matching statement's body follow from the operational semantics of the interpreter's instructions.
+For ease of understanding, the relevant operational rules are reproduced above each instruction's case in the matching statement.
 
 The one thing we must make sure to do in the body of our matching statement is to advance the program counter ([[pc]]) to the proper address in memory.
 The local C variable [[next]] is set to the address of the immediately next instruction, as stored in memory; control-flow instructions must do something more interesting than merely setting [[pc = next]], though.
 
+
 Literal value pushes, local/global stores and fetches are all straightforward.
-We push and pop values using our stack manipulation macros and functions (see [[value.nw]] and [[stack.nw]]), and use the [[locals]] and [[globals]] arrays for local and global operations.
+We push and pop values using our stack manipulation macros and functions (see modules [[value]] and [[stack]]), and use the [[locals]] and [[globals]] arrays for local and global operations.
 
 \useops{Literal}
 <<matching statement>>=
@@ -1060,7 +1074,7 @@ We push and pop values using our stack manipulation macros and functions (see [[
     | store_global(n)   => globals[n] = POP(values); pc = next;
 @ 
 
-Guarded local and global stores require a little more work; we must see if the expected boolean is true or false with a simple [[if]] statement.
+Guarded local and global stores require one more step; we must first see if the expected boolean is true or false with a simple [[if]] statement.
 
 \useops{Guarded-Store-Local-True}
 \useops{Guarded-Store-Local-False}
@@ -1089,7 +1103,7 @@ Either way, we must decrement the [[values]] pointer by 2 to simulate the poppin
 
 Memory space fetches, stores, and guarded stores are more complex.
 They theoretically involve correctly aggregating / breaking up data into small pieces, arranged by the specified byte-order.
-For now, we only support the natural byte-order of the machine on which the interpreter is running (i.e., little-endian byte-order on x86 machines).
+For now, we only support the natural byte-order of the machine on which the interpreter is running (e.g., little-endian byte-order on x86 machines).
 
 \useops{Fetch}
 \useops{Store}
@@ -1153,8 +1167,10 @@ aggregate / dis-aggregate data for unaligned multi-byte loads and stores.
 @ 
 
 The argument to the operator application instruction should be a pointer to an [[operator]] record.
-We simply dereference the function pointer stored within this record, and pass the function [[values]].
-Operator implementation functions return a new [[sptr]] so we set [[values]] to the result of this function call.
+We simply dereference the function pointer stored within this record, and pass
+[[values]] as an argument to this function.
+Operator implementation functions return a new [[sptr]] so we set [[values]] 
+to the result of this function call.
 
 \useops{ApplyOp}
 <<matching statement>>=
@@ -1168,6 +1184,8 @@ Operator implementation functions return a new [[sptr]] so we set [[values]] to 
 rounding mode atop the value stack.
 ``Storing'' a rounding mode involves popping a 2-bit value off the value stack
 and setting it to be the current hardware floating-point rounding mode.
+See the [[features]] module for information about C language support for
+manipulating the hardware rounding mode.
 
 <<matching statement>>=
     | FETCH_ROUND()     => switch (fegetround()) {
@@ -1214,7 +1232,7 @@ Fetching and storing from the argument space is not difficult.
                            PUSH(arguments[n], values); pc = next;
 @ 
 
-For goto and branches, we simply conditionally (or unconditionally in the case of goto) assign a new value to [[pc]].
+For goto and branches, we conditionally (or unconditionally in the case of goto) assign a new value to [[pc]].
 
 \useops{Goto}
 <<matching statement>>=
@@ -1252,6 +1270,9 @@ For goto and branches, we simply conditionally (or unconditionally in the case o
 
 \useops{PushSymbol}
 The encoding function [[lua_CMM_push_symbol]] writes a pointer to a [[CMM_label]] in memory; here, we must actually find the address or structure the label represents.
+We push simple labels atop the value stack as actual memory addresses (to allow
+label arithmetic); all other [[CMM_label]]s are pushed atop the stack as
+[[CMM_label]]s.
 <<matching statement>>=
     | PUSH_SYMBOL(s)    => {
                            CMM_label *lbl = (CMM_label *) s;
@@ -1468,8 +1489,9 @@ Retrieving [[call_helper]] and [[f]] simply involves some queries to Lua tables.
                            lua_pop(L, 3);   /* pop pointer and 2 tables */
 @
 
-We make a call to [[call_helper]], which takes care of arranging the argument stack.
-We simply pass the argument stack in and get it back out again (with the pointer to the top of the stack possibly altered).
+We make a call to [[call_helper]] to perform the C call.
+We simply pass the argument-passing space in and get it back out again
+(possibly with its contents altered).
 
 <<use [[call_helper]] to call [[f]]>>=
                            arguments = call_helper(arguments, f);
@@ -1477,7 +1499,7 @@ We simply pass the argument stack in and get it back out again (with the pointer
 
 {\PAL} tail calls are easier to implement than regular {\PAL} procedure calls because we need not save the activation record of the calling activation.
 In fact, we must effectively kill off the calling activation (we call [[dies_uid]] to signal the death of the activation).
-Once more, we pop a [[procedure]] struct pointer off the value stack for information about the callee.
+We pop a [[procedure *]] off the value stack to get the needed information about the callee.
 
 \useops{CMMTailCall}
 <<matching statement>>=
@@ -1510,7 +1532,7 @@ Once more, we pop a [[procedure]] struct pointer off the value stack for informa
 @ 
 
 Because the old activation dies, we can simply reuse the memory chunk it used on its thread's stack for [[locals]] and [[stackdata]].
-We do need to make sure, though, that there is enough room on this stack for the new activation in the case that the new activation needs more local stack memory than the dying one.
+We do need to make sure, though, that there is enough room on this stack for the new activation (in the case that the new activation needs more local stack memory than the dying one).
 
 <<reuse dead local memory for new activation>>=
                            caller        = caller;
@@ -1726,7 +1748,7 @@ Finally, restoring information from the destination activation is as simple as c
 As final matching cases, we interpret the structure-related instructions.
 First comes [[DEFINE_PROC]].
 Leaving a procedure definition as an instruction allows us to store a pointer to the procedure's activation record within all of its continuations.
-This lets us quickly cut to the continuation without unnecessarily winding down the call stack.
+This lets us quickly cut to the continuation without unnecessarily walking down the call stack.
 The argument to the [[DEFINE_PROC]] constructor should be a [[procedure *]].
 We need to store an activation pointer within each of the activations contained within the procedure.
 
@@ -1768,7 +1790,7 @@ when it is about to interpret a certain bytecode instruction.
 @ 
 
 % ----------------------------------------------------------------------------
-\subsection{Application Initialization}
+\subsection{Interpreter Interaction Initialization}
 % ----------------------------------------------------------------------------
 
 Next, we proceed onto our [[cmm_interp_open]] and [[cmm_interp_close]] functions.
@@ -1835,7 +1857,7 @@ Before using the NJ Machine-Code Toolkit encoding library, we must first prepare
 @ 
 
 To initialize the Lua interpreter, we must initialize transactions with the Lua C library.
-This is wrapped up in function [[init_lua_interp]], as defined in [[lualink.nw]].
+This is wrapped up in function [[init_lua_interp]], as defined in the [[lualink]] module.
 
 <<initialize a Lua interpreter>>=
   lua_interp = init_lua_interp();
@@ -1854,8 +1876,6 @@ Putting it all together, we have [[interp.m]], the C file with NJ Machine-Code T
 #include <stdlib.h>
 #include <stdarg.h>
 #include <math.h>
-#include <string.h>
-#include <ctype.h>
 #include <setjmp.h>
 
 #include "float-features.h"
@@ -1882,8 +1902,6 @@ Putting it all together, we have [[interp.m]], the C file with NJ Machine-Code T
 <<bytecode interpreting>>
 
 <<application initialization>>
-
-<<standard library extensions>>
 @ 
 
 % ----------------------------------------------------------------------------
@@ -1891,7 +1909,8 @@ Putting it all together, we have [[interp.m]], the C file with NJ Machine-Code T
 % ----------------------------------------------------------------------------
 
 We left out a few minor details from the previous sections.
-First come [[#define]] constants:
+First come [[#define]]'d constants:
+
 <<constant definitions>>=
 #define INVALID         (-1)
 @ 
@@ -1929,51 +1948,12 @@ value  *globals               = NULL;
 int     verbosity             = 0;
 @
 
-And finally a few functions that should be in the original C standard library
-anyway, but that are only in ISO C99.
-
-<<function prototypes>>=
-#ifndef strcasecmp
-
-int strcasecmp(const char *s1, const char *s2);
-
-#endif /* strcasecmp */
-@ 
-
-<<standard library extensions>>=
-#ifndef strcasecmp
-
-int strcasecmp(const char *s1, const char *s2) {
-  char     *u1 = (char *) malloc(sizeof(char) * (strlen(s1) + 1));
-  char     *u2 = (char *) malloc(sizeof(char) * (strlen(s2) + 2));
-  int       rc;
-  unsigned  i;
-
-  u1 = strcpy(u1, s1);
-  u2 = strcpy(u2, s2);
-
-  for (i = 0; i < strlen(u1); i++)
-    u1[i] = toupper(u1[i]);
-  for (i = 0; i < strlen(u2); i++)
-    u2[i] = toupper(u2[i]);
-
-  rc = strcmp(u1, u2);
-
-  free(u1);
-  free(u2);
-
-  return rc;
-}
-
-#endif /* strcasecmp */
-@ 
-
-
 % ----------------------------------------------------------------------------
 \paragraph{Shut Down}
 % ----------------------------------------------------------------------------
 
 Finally, we have to properly shut down the interpreter (this code sits in [[cmm_interp_close]]).
+
 <<gracefully shut down>>=
 
 /* free allocated space */

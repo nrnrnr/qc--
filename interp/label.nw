@@ -54,6 +54,10 @@ typedef struct {
 \subsection{Global Variables}
 % ----------------------------------------------------------------------------
 
+We maintain a global table to represent the namespace of exported symbols
+(could include {\PAL} symbols declared as exports as well as exported external
+symbols like properly registered C functions).
+
 <<global variable declarations>>=
 extern table exports_table;
 @ 
@@ -84,9 +88,19 @@ Note that [[CMM_label_new]] returns a pointer to an \emph{uninitialized}
 
 \paragraph{Manipulating [[CMM_label]]s}
 
-We provide a convenience macro for determining if a given [[CMM_label]] has yet been defined; that is, it returns 0 if and only if the [[CMM_label]]'s associated [[RAddr]] has not been tied down to a location within an [[RBlock]].
-Additionally, we provide a macro [[CMM_label_raddr]] that, given a [[CMM_label]], returns the [[RAddr]] to which it is tied.
+We provide a few convenience macros for observing [[CMM_label]]s, regardless
+of their ``label type''.
+
+[[CMM_label_defined]] returns 0 if and only if the [[RAddr]] associated with
+the given [[CMM_label]] has yet been tied down to a location within an 
+[[RBlock]].
+[[CMM_label_raddr]] returns the [[RAddr]] associated with a [[CMM_label]] and
+[[CMM_label_location]] returns the permanent relocation associated with a
+[[CMM_label]].
 Note that [[CMM_label_raddr]] returns a valid lvalue.
+Also note that it is an unchecked runtime error to use the value returned by
+[[CMM_label_location]] if the [[RAddr]] associated with the given
+[[CMM_label]] has not yet been permanently relocated.
 
 <<faux prototypes>>=
 int         CMM_label_defined(CMM_label *lbl);
@@ -96,14 +110,24 @@ bytecodeptr CMM_label_location(CMM_label *lbl);
 
 \paragraph{Finding a Label}
 
-[[get_label]] takes a [[lua_State]] and a string [[name]], expects this string to also be atop the Lua stack within the specified [[lua_State]], pops the string off the Lua stack, and returns the [[CMM_label]] structure associated with the label named [[name]].
-If this label was not previously defined, [[get_label]] creates a fresh [[CMM_label]] and links it with the string [[name]] for future queries.
+[[get_label]] takes a [[lua_State]] and a string [[name]], expects this string
+to also be atop the Lua stack within the specified [[lua_State]], pops the 
+string off the Lua stack, and returns the [[CMM_label]] structure associated
+with the label named [[name]].
+If this label was not previously defined, [[get_label]] creates a fresh
+[[CMM_label]] and links it with the string [[name]] for future queries.
+[[CMM_label]]s created in this way are temporarily initialized as
+[[CMM_LABEL]]s.
 
 <<function prototypes>>=
 CMM_label *get_label(lua_State *L, const char *name);
 @
 
-Once {\PAL} code has been loaded into memory, clients may use our exported function [[cmm_find_export]] to find the location associated with an exported {\PAL} label.
+Once {\PAL} code has been loaded into memory, clients may use our exported
+function [[cmm_find_export]] to find the location associated with an exported
+{\PAL} label.
+A [[NULL]] pointer is returned if the given string cannot be found in the
+exported symbol table.
 
 <<function prototypes>>=
 CMM_label *cmm_find_export(const char *arg);
@@ -168,7 +192,9 @@ void CMM_label_free_all(void) {
 \subsection{Utility Macros}
 % ----------------------------------------------------------------------------
 
-Macro [[CMM_label_defined]] simplifies testing whether or not a given [[CMM_label]] has yet been defined (i.e., tied down to a location in an [[RBlock]]).
+Macro [[CMM_label_defined]] simplifies testing whether or not a given
+[[CMM_label]] has yet been defined (i.e., tied down to a location in an
+[[RBlock]]).
 
 <<macro definitions>>=
 #define CMM_label_defined(LBL)                            \
@@ -181,9 +207,13 @@ Macro [[CMM_label_defined]] simplifies testing whether or not a given [[CMM_labe
  ((LBL)->ty == CMM_CFUNCTION))
 @
 
-Macro [[CMM_label_raddr]] returns the [[RAddr]] to which a [[CMM_label]] is tied, and [[CMM_label_location]] returns the location to which a [[CMM_label]] is tied.
+Macro [[CMM_label_raddr]] returns the [[RAddr]] to which a [[CMM_label]] is
+tied, and [[CMM_label_location]] returns the location to which a [[CMM_label]] 
+is tied.
 Note that the value returned by this macro is a valid lvalue.
-It is an unchecked runtime error (will likely lead to segfault) to get the [[CMM_label_raddr]] or [[CMM_label_location]] of a [[CMM_CFUNCTION]]-typed [[CMM_label]].
+It is an unchecked runtime error (will likely lead to segfault) to get the 
+[[CMM_label_raddr]] or [[CMM_label_location]] of a [[CMM_CFUNCTION]]-typed 
+[[CMM_label]].
 
 <<macro definitions>>=
 #define CMM_label_raddr(LBL) \
@@ -202,7 +232,8 @@ It is an unchecked runtime error (will likely lead to segfault) to get the [[CMM
 % ----------------------------------------------------------------------------
 
 [[get_label]] expects to see a string atop the Lua stack and leaves the Lua stack with one less item than it started with.
-We look to see if there is a value associated with [[name]] in the Lua label table.
+We look to see if there is a value associated with [[name]] in the Lua label 
+table.
 If there is a value attached with [[name]] in the table, we return it.
 
 <<function definitions>>=
@@ -253,11 +284,13 @@ If [[name]] has no non-nil value attached to it in the table, we create a new [[
 
 \paragraph{Exported Functions}
 
-To allow clients to find exported {\PAL} labels once code has been read into memory, we export the helper function [[cmm_find_export]].
-It simply looks in the global export table for the label.
+Exported function [[cmm_find_export]] finds a pointer to the location in
+program memory associated with the exported {\PAL} symbol [[arg]].
+We find the [[arg]] label by making a query to the Lua label table and making
+sure that the [[RAddr]] associated with the label has a valid permanent
+address.
+
 WARNING FIX [[unit]] is currently set here; this could break something.
-Exported function [[cmm_find_export]] finds a pointer to the location in program memory associated with the exported {\PAL} symbol [[arg]].
-We find the [[arg]] label by making a query to the Lua label table and making sure that the [[RAddr]] associated with the label has a valid permanent address.
 
 <<function definitions>>=
 CMM_label *cmm_find_export(const char *arg) {

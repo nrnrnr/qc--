@@ -8,14 +8,14 @@ This document contains the interface and implementation of a simple collection o
 \interface{[[intervals]] : Natural Number Sets}
 % ----------------------------------------------------------------------------
 
-This collection allows a client to efficiently maintain sets of natural
+This module allows a client to efficiently maintain sets of natural
 numbers, internally represented as closed intervals on non-negative integers.
 Note that this representation of intervals sees the set of intervals
 ${[3, 7], [8, 10]}$ as identical to ${[3, 10]}$, and does not allow negative
 numbers.
 
 Most of the functions contained herein are self-explanatory.
-Here is the interface to this collection:
+This module exports the following functions for use by clients:
 
 <<function prototypes>>=
 interval_list *interval_list_new   (void);
@@ -28,7 +28,7 @@ void           interval_list_print (interval_list *list);
 void           interval_list_print_file(interval_list *list, FILE *out_file);
 @ 
 
-For now, there is no way to remove an interval from the list.
+For now, there is no way to remove a range of integers from the list.
 [[interval_list_remove]] only allows a client to remove an individual number
 from the list.
 
@@ -52,7 +52,7 @@ if (interval_list_member(i, 12))        /* should print out the string      */
      printf("This works!  12 is in i!\n");
 
 interval_list_print(i);                 /* prints the intervals in the list */
-interval_list_print_file (i, out_file);  /* prints the intervals in the list
+interval_list_print_file (i, out_file); /* prints the intervals in the list
                                            to out_file */
 interval_list_free(i);                  /* frees the list                   */
 @ 
@@ -69,19 +69,12 @@ And now for the implementation:
 
 #include <stdio.h>
 
-typedef struct interval_list_t {
-  unsigned long lower;
-  unsigned long upper;
-
-  struct interval_list_t *next;
-} interval_list;
+<<type definitions>>
 
 <<function prototypes>>
 
 #endif /* _INTERVALS_H */
-@ 
-
-And the C code:
+@
 
 <<intervals.c>>=
 #include "intervals.h"
@@ -92,12 +85,52 @@ And the C code:
 #define min(X,Y) ((X) < (Y) ? (X) : (Y))
 #define max(X,Y) ((X) > (Y) ? (X) : (Y))
 
+<<function definitions>>
+@
+
+Note that this code has been substantially tested (we have used tests to
+achieve 100 per cent block coverage of the code implementing this module).
+ 
+% ----------------------------------------------------------------------------
+\subsection{Data Structures}
+% ----------------------------------------------------------------------------
+
+We represent interval lists as linked lists of pairs (lower and upper bounds):
+
+<<type definitions>>=
+typedef struct interval_list_t {
+  unsigned long lower;
+  unsigned long upper;
+
+  struct interval_list_t *next;
+} interval_list;
+@ 
+
+% ----------------------------------------------------------------------------
+\subsection{Constructors and Mutators}
+% ----------------------------------------------------------------------------
+
+We represent an empty list with a [[NULL]] pointer.
+
+<<function definitions>>=
 /* intervals are specified with inclusive endpoints (i.e., [lower, upper]) */
 
 interval_list *interval_list_new(void) {
   return NULL;
 }
+@ 
 
+Adding a new range of integers to an interval list is the trickiest part
+of this module.
+There is a great number of corner cases that we must handle specially; the
+code, admittedly, gets ugly.
+
+Note that we merge adjacent intervals; for example, adding the interval
+$[4, 6]$ to the interval list ${ [2, 3] }$ yields the resulting interval
+list: ${ [2, 6] }$.
+This is the reason for a number of ``[[- 1]]'' operations found in the code.
+
+<<function definitions>>=
 interval_list *interval_list_add(interval_list *list, unsigned long lower, 
                                  unsigned long upper)
 {
@@ -108,139 +141,176 @@ interval_list *interval_list_add(interval_list *list, unsigned long lower,
 
   for (temp = list, last = NULL; temp != NULL; last = temp, temp = temp->next)
   {
-
     /* If the upper index of the new interval is less than the lower index 
      * of an old interval-1, we want to insert this new interval into the 
-     * list */
+     * list at the current spot */
     if (upper < temp->lower - 1) {
 
-    /* If the lower end of the interval did not overlap with a previous
-     * interval, insert it, solo, into the list */
-    if (beg == NULL) {
-        new = (interval_list *) malloc(sizeof(interval_list));
-        assert(new != NULL);
-        new->next  = temp;
-        new->lower = lower;
-        new->upper = upper;
-        if (last == NULL)
-        return new;
-        else {
-        last->next = new;
-        return list;
-        }
+	  /* If the lower end of the new interval did not overlap with a previous
+	   * interval in the existing list, insert it, solo, into the list */
+	  if (beg == NULL) {
+        <<insert new interval between [[last]] and [[temp]] and return list>>
 
-        /* Otherwise, it did overlap with a predecesor (beg != NULL) */
-    } else {
-
-        /* expand the overlapping intervals to have the largest upper edge*/
+      /* Otherwise, it did overlap with a previous interval in the existing
+       * list (beg != NULL) */
+	  } else {
+        /* expand the overlapping intervals to have the largest upper edge */
         beg->upper = max(upper, last->upper);
 
-        /* Free all the smaller intervals between the start of the overlap 
-         * and the current (temp) node */
-        for (free_temp = beg->next, free_last = NULL; 
-            free_temp != NULL && free_temp != temp;
-            free_last = free_temp, free_temp = free_temp->next)
-        free(free_last);
+        <<free enveloped intervals from [[beg->next]] through [[last]]>>
 
         /* fix pointers */
         beg->next  = temp;
-
+		
         return list;
-    }
+	  }
     }
 
-    /* If the new interval is enveloped be an old interval, we do not pay
-     * attention to it; just return the old list */
+    /* If the new interval is completely enveloped by an old interval, we do
+     * not pay attention to it; just return the old list */
     if (lower >= temp->lower && upper <= temp->upper)
-    return list;
-
+	  return list;
 
     /* If the new interval overlaps with the current one, keep track of the
-     * overlap for the next iteration */
+     * overlap for the next iteration of the main for loop */
     if ((lower <= temp->lower - 1 || lower <= temp->upper + 1) && beg == NULL)
-    {
-    beg      = temp;
-    beg->lower = min (lower, temp->lower);
+	{
+	  beg      = temp;
+	  beg->lower = min (lower, temp->lower);
     }
   }
 
+  /* if we're down here and the new interval didn't overlap with any of the
+   * existing intervals, then the new lower bound is greater than the upper
+   * bound of the existing list's last interval */
   if (beg == NULL) {
-      new = (interval_list *) malloc(sizeof(interval_list));
-      assert(new != NULL);
-      new->next = NULL;
-      new->lower = lower;
-      new->upper = upper;
-      if (last == NULL)
-      return new;
-      else {
-      last->next = new;
-      return list;
-      }
+    <<append new interval to existing list after element [[last]]>>
+
+  /* otherwise, the new interval envelops the intervals from [[beg->next]]
+   * through the end of the existing list */
   } else {
-      for (free_temp = beg->next, free_last = NULL; 
-          free_temp != NULL && free_temp != temp;
-          free_last = free_temp, free_temp = free_temp->next)
-      free(free_last);
+    <<free enveloped intervals from [[beg->next]] through [[last]]>>
 
-      beg->next  = NULL;
-      beg->upper = max(last->upper, upper);
+	beg->next  = NULL;
+	beg->upper = max(last->upper, upper);
 
-      return list;
+	return list;
   }
 }
+@
 
+And now all of the missing bookkeeping:
+
+<<insert new interval between [[last]] and [[temp]] and return list>>= 
+        new = (interval_list *) malloc(sizeof(interval_list));
+        assert(new != NULL);
+
+        new->next  = temp;
+        new->lower = lower;
+        new->upper = upper;
+
+        if (last == NULL)
+		  return new;
+        else {
+		  last->next = new;
+		  return list;
+        }
+@
+
+<<free enveloped intervals from [[beg->next]] through [[last]]>>=
+        /* Free all the enveloped intervals between the start of the overlap 
+         * and the current (temp) node */
+        for (free_temp = beg->next, free_last = NULL; 
+			 free_temp != NULL && free_temp != temp;
+			 free_last = free_temp, free_temp = free_temp->next)
+		  free(free_last);
+@
+
+<<append new interval to existing list after element [[last]]>>=
+	new = (interval_list *) malloc(sizeof(interval_list));
+	assert(new != NULL);
+	new->next = NULL;
+	new->lower = lower;
+	new->upper = upper;
+	if (last == NULL)
+	  return new;
+	else {
+      last->next = new;
+      return list;
+	}
+@
+
+Removing a single integer from an interval list is easier than adding a range,
+but we must still watch out for the corner cases.
+
+<<function definitions>>=
 interval_list *interval_list_remove(interval_list *list, unsigned long i) {
     interval_list *last, *temp;
     interval_list *new;
 
-    for (temp = list, last = NULL; temp != NULL; last = temp, temp = temp->next)
+    for (temp = list, last = NULL; temp != NULL; 
+         last = temp, temp = temp->next)
     {
-    if (i == temp->lower && i == temp->upper) {
+      /* these 4 cases do not return to the loop; they return to the caller */
+      <<case : if [[i]] is both the lower and upper bound of [[temp]]>>
+      <<case : if [[i]] is exactly the lower bound of [[temp]]>>
+      <<case : if [[i]] is exactly the upper bound of [[temp]]>>
+      <<case : if [[i]] is otherwise contained within [[temp]]>>
+
+	  /* otherwise, we re-loop */
+	}
+
+    /* if we fall down here, [[i]] wasn't in the list to begin with and we
+     * simply return the original list unaltered */
+    return list;
+}
+@ 
+
+<<case : if [[i]] is both the lower and upper bound of [[temp]]>>=
+	  if (i == temp->lower && i == temp->upper) {
         if (last == NULL)
-        return temp->next;
+          return temp->next;
         last->next = temp->next;
         return list;
-    }
+	  }
+@
 
-    if (i == temp->lower) {
+<<case : if [[i]] is exactly the lower bound of [[temp]]>>=
+	  if (i == temp->lower) {
         temp->lower++;
         return list;
-    }
+	  }
+@
 
-    if (i == temp->upper) {
+<<case : if [[i]] is exactly the upper bound of [[temp]]>>=	  
+	  if (i == temp->upper) {
         temp->upper--;
         return list;
-    }
+	  }
+@
 
-    if (i > temp->lower && i < temp->upper) {
-
+<<case : if [[i]] is otherwise contained within [[temp]]>>=
+	  if (i > temp->lower && i < temp->upper) {
+		
         new = (interval_list *) malloc(sizeof(interval_list));
         assert(new != NULL);
         new->next   = temp->next;
         new->lower  = i + 1;
         new->upper  = temp->upper;
-
+		
         temp->next  = new;
         temp->upper = i - 1;
-
+		
         if (last == NULL)
           return temp;
-
+		
         return list;
-    }
-    }
+	  }
+@
 
-    return list;
-}
+There is nothing suprising with the deallocation function.
 
-int interval_list_member(interval_list *list, unsigned long i) {
-    for ( ; list != NULL; list = list->next)
-    if (i >= list->lower && i <= list->upper)
-        return 1;
-
-    return 0;
-}
-
+<<function definitions>>=
 void interval_list_free(interval_list *list) {
     interval_list *last;
 
@@ -250,7 +320,26 @@ void interval_list_free(interval_list *list) {
 
     free(last);
 }
+@ 
 
+% ----------------------------------------------------------------------------
+\subsection{Observers}
+% ----------------------------------------------------------------------------
+
+Given the structure of our representation, it is not difficult to determine
+whether a given non-negative number is a member of a given interval list.
+
+<<function definitions>>=
+int interval_list_member(interval_list *list, unsigned long i) {
+    for ( ; list != NULL; list = list->next)
+    if (i >= list->lower && i <= list->upper)
+        return 1;
+
+    return 0;
+}
+@ 
+
+<<function definitions>>=
 void interval_list_print(interval_list *list) {
     interval_list_print_file (list, stdout);
 }
@@ -261,8 +350,4 @@ void interval_list_print_file (interval_list *list, FILE *out_file) {
     for ( ; list != NULL; list = list->next)
     fprintf(out_file, "[%lu, %lu]\n", list->lower, list->upper);
 }
-
-@ 
-
-This code has been somewhat substantially tested (i.e., all lines of code
-were successfully executed somehow).
+@

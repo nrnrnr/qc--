@@ -33,7 +33,10 @@ The operational semantics for procedure-calling and continuation-calling instruc
 We create types [[procedure]] and [[continuation]] to encapsulate the necessary information for representing procedures and continuations.  
 Note that we use [[RAddr]]s to represent addresses in program memory, for these structures are used during the interpretation of the input Lua script before sections of program memory are permanently located at addresses.  
 An [[RAddr]] is a relocatable address and is defined by the NJ Machine-Code Toolkit.
-We must also make sure to store a copy of the uid of the continuation's activation; if a continuation were dead when we tried to cut to it, we would have to look at the continuation's [[u]] and not [[dest_act->u]], which may well have been overwritten by a live activation. 
+We must also make sure to store a copy of the uid of the continuation's
+activation; if a continuation is dead when we try to cut to it, we need to
+look at the continuation's [[u]] and not [[dest_act->u]], which may well have
+been overwritten by a live activation. 
 
 [[continuation]]s are chained together (through their [[next]] field) so all
 of a given procedure's continuations can be easily associated with it (see
@@ -93,7 +96,10 @@ structures.
 @
 
 To keep track of the current procedure, we use a global pointer.
-Note that this should be updated both at load-time \emph{and} at runtime.
+Note that this should be updated both at load-time \emph{and} at runtime,
+wherever possible.
+With debugging in mind, you can determine the name of the currently executing
+{\PAL} procedure by examining the string [[curr_proc->raddr->label->name]].
 
 <<global variable declarations>>=
 extern procedure *curr_proc;
@@ -110,6 +116,8 @@ procedure *curr_proc = NULL;
 We make use of Hanson's ``arenas'' (see \emph{C Interfaces and Implementations})
 to assist in allocating and de-allocating memory for control-flow related
 structures.
+We use one shared arena for [[procedure]]s, [[continuation]]s, and 
+[[annotations]] because they usually die all at once anyway.
 
 <<internal static variable definitions>>=
 static Arena_T controlflow_arena = NULL;

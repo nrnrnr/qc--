@@ -29,10 +29,10 @@ This document contains the interface and implementation of {\PAL} primitive oper
 
 We define the union type [[value]] to hold {\PAL} values.  
 The idea is that a {\PAL} value of type $b$ may be fetched from a C [[value v]] by accessing [[v.]]$b$.  
-Value stacks are represented in C as pointer-style [[value]] arrays, and generic data stacks are represented by pointer-style byte arrays.
+Similarly, a [[value]] may be projected to a C value of type $t$ by accessing
+[[v.]]$t$ (where $t$ is an appropriate type [[typedef]]'d in [[types.nw]]).
 
-For now, we have commented out a few members of the union, because those types
-are as of now unsupported.
+Value stacks are represented in C as pointer-style [[value]] arrays, and generic data stacks are represented by pointer-style byte arrays.
 
 <<type definitions>>=
 typedef union {
@@ -82,8 +82,9 @@ The only bit widths currently supported are: [[1]], [[2]], [[8]], [[16]],
 value to_CMM_value(unsigned v, unsigned width);
 @ 
 
-To perform some quick internal assertions about the [[value]] type, we provide
-helper [[check_value_types]].
+To perform some quick internal consistency assertions about the [[value]] type
+(and to verify assumptions made about this type), we provide helper 
+[[check_value_types]].
 
 <<function prototypes>>=
 void check_value_types(void);
@@ -171,7 +172,11 @@ void check_value_types (void) {
   assert(sizeof(s_int16) == 2);
   assert(sizeof(s_int32) == 4);
 
-  assert(sizeof(void *)   == sizeof(v.bits32));
+  /* make sure function pointers are of same size as data pointers */
+  assert(sizeof(void (*) (void)) == sizeof(void *));
+
+  /* make sure pointers are 32 bits */
+  assert(sizeof(void *)          == sizeof(v.bits32));
 }
 @
 
