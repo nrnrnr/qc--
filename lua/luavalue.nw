@@ -13,19 +13,32 @@ pairs so that Caml values can be mapped to Lua values and back again.
 <<signatures>>=
 module type S = sig
   type userdata
+  type info
   type value
     = Nil
     | Number   of float
     | String   of string
-    | Function of (state -> value list -> value list)
+    | Function of info * func
     | Userdata of userdata
     | Table    of table
-  and table = (value, value) Hashtbl.t
+  and func  = state -> value list -> value list
+  and table = (value, value) Thashtbl.t
   and state = { globals : table
               ; fallbacks : (string, value) Hashtbl.t
-              ; mutable callstack : string list
+              ; mutable callstack : activation list
+              ; mutable currentloc : Srcmap.location option (* supersedes top of stack *)
               }
+  and activation = info * Srcmap.location option
+
+  val caml_func : func -> value (* each result unique *)
+  val lua_func  : file:string -> linedefined:int -> func -> value
+  val info      : file:string -> linedefined:int -> info (* must NOT be reused *)
+  val eq        : value -> value -> bool
   val to_string : value -> string
+  val activation_strings : state -> activation -> string list
+  type objname = Fallback of string | Global of string | Element of string * value
+  val objname : state -> value -> objname option
+     (* 'fallback', 'global', or 'element', name *)
 @ 
 Lua tables are not quite like Caml tables, but they are close.
 <<signatures>>=
@@ -68,9 +81,10 @@ We won't see it.
   val list : 'a map -> 'a list map
 @ 
 If for some reason a Caml function operates on Lua values, we need an
-identity pair.
+identity pair.  We also enable functions that expect tables.
 <<signatures>>=
   val value  : value map
+  val table  : table map
 @
 Here is the support for converting functions.
 First, if one wants a Lua function to be curried (as the Caml
@@ -100,7 +114,7 @@ end
 it to some arguments.
 <<tests>>=
 let sub = (pfunc (string **-> int **-> int **-> result string)).embed String.sub
-let apply = function Function f -> fun args -> trim1 (f emptystate args)
+let apply = function Function (_, f) -> fun args -> trim1 (f emptystate args)
                    | v -> raise (Projection (v, "function"))
 let check = string.project (apply sub [string.embed "hello"; int.embed 0; int.embed 2])
 let _ = assert (check = "he")
@@ -114,7 +128,11 @@ let sg = ((func (string **-> value **-> runit)).embed setglobal : value)
 For the rest of the interface, we can make Lua values by supplying an
 appropriate [[userdata]] type.  
 <<signatures>>=
-module type USERDATA = sig type t val to_string : t -> string end
+module type USERDATA = sig
+  type t
+  val eq : t -> t -> bool
+  val to_string : t -> string
+end
 <<value.mli>>=
 <<signatures>>
 module Make (U : USERDATA) : S with type userdata = U.t
@@ -130,35 +148,107 @@ end
 I have to repeat the datatype definition.
 <<value toplevel>>=
 type userdata = U.t
+type info = int * string * int (* unique id, filename, linedefined *)
 type value
   = Nil
   | Number   of float
   | String   of string
-  | Function  of (state -> value list -> value list)
+  | Function of info * func
   | Userdata of userdata
   | Table    of table
-  and table = (value, value) Hashtbl.t
-  and state = { globals : table
-              ; fallbacks : (string, value) Hashtbl.t
-              ; mutable callstack : string list
-              }
+and func  = state -> value list -> value list
+and table = (value, value) Thashtbl.t
+and state = { globals : table
+            ; fallbacks : (string, value) Hashtbl.t
+            ; mutable callstack : activation list
+            ; mutable currentloc : Srcmap.location option (* supersedes top of stack *)
+            }
+and activation = info * Srcmap.location option
+@ 
+We need suitable equality.
+<<value toplevel>>=
+let eq x y = match x, y with
+| Nil,             Nil             -> true
+| Number x,        Number y        -> x = y
+| String x,        String y        -> x = y
+| Userdata x,      Userdata y      -> U.eq x y
+| Table x,         Table y         -> x == y
+| Function ((x, _, _), _), 
+           Function ((y, _, _), _) -> x = y
+| _,               _               -> false
+@ 
+Once we have equality, we can make tables.
+<<value toplevel>>=
 <<table definition>>
 @ 
-Now, for embedding and projection.  More repeats.
+To make this work, every function gets a unique id.  No exceptions.
 <<value toplevel>>=
-exception Projection of value * string
-type ('a,'b) ep = { embed : 'a -> 'b; project : 'b -> 'a }
-type 'a map  = ('a, value) ep
-type 'a mapf = ('a, value list -> value list) ep
+let info =
+  let n = ref 0 in
+  fun file line -> (n := !n + 1; (!n, file, line))
+let lua_func file line f = Function (info file line, f)
+let caml_func = lua_func "(OCaml)" (-1)
 @ 
 <<value toplevel>>=
 let to_string = function
   | Nil -> "nil"
   | Number x -> string_of_float x
   | String s -> s
-  | Function f -> "function"
+  | Function (_, _) -> "function"
   | Userdata u -> U.to_string u
   | Table t  -> "table"
+@ 
+<<value toplevel>>=
+type objname = Fallback of string | Global of string | Element of string * value
+let key_matching iter t v =
+  let r = ref None in
+  iter (fun k v' -> if eq v v' then r := Some k else ()) t;
+  !r
+let objname g v =
+  match key_matching Hashtbl.iter g.fallbacks v with
+  | Some s -> Some (Fallback s)
+  | None -> match key_matching Thashtbl.iter g.globals v with
+    | Some (String s) -> Some (Global s)
+    | _ ->
+        let r = ref None in
+        Thashtbl.iter (fun k v ->
+          match !r with
+          | None -> (match k, v with
+            | String n, Table t ->
+                (match key_matching Thashtbl.iter t v with
+                | Some v -> r := Some (Element (n, v))
+                | None -> ())
+            | _, _ -> ())
+          | Some _ -> ()) g.globals;
+        !r
+<<value toplevel>>=
+let activation_strings g ((uid, file, line) as info, current) =
+  let first tail = match objname g (Function (info, fun _ _ -> assert false)) with
+  | Some (Fallback n) -> "`" :: n :: "' fallback" :: tail
+  | Some (Global n)   -> "function " :: n :: tail
+  | Some (Element (t, String n)) -> "function " :: t :: "." :: n :: tail
+  | Some (Element (t, v))    -> "function " :: t :: "[" :: to_string v :: "]" :: tail
+  | None -> "unknown function" :: tail
+  in let last = match current with
+  | None -> " defined in file " :: file ::
+             (if line > 0 then [" at line "; string_of_int line ] else [])
+(*  | Some (f, l, c) when f = file ->
+      [" at line "; string_of_int l; " column "; string_of_int c]
+*)
+  | Some (f, l, c) ->
+      [" in file "; f; ", line "; string_of_int l; " column "; string_of_int c]
+  in match line with
+  | 0  -> "main of " :: file :: last
+  | -1 -> [file]
+  | _  -> first last
+@ 
+\subsection{Embedding and projection}
+Now, for embedding and projection.  More repeats.
+<<value toplevel>>=
+exception Projection of value * string
+type ('a,'b) ep = { embed : 'a -> 'b; project : 'b -> 'a }
+type 'a map  = ('a, value) ep
+type 'a mapf = ('a, value list -> value list) ep
 @
 Here are the embedding/projection pairs for the simple types.
 There are subtle mismatches between Caml types and Lua types, so I do
@@ -234,6 +324,9 @@ let list (ty : 'a map) =
 @
 <<value toplevel>>=
 let value = { embed = (fun x -> x); project = (fun x -> x) }
+let table = { embed = (fun x -> Table x)
+            ; project = (function Table t -> t | v -> raise (Projection (v, "table")))
+            }
 @ 
 Here is a simple function from one argument to one result.
 We implement the usual Lua game of ``adjusting'' the argument list.
@@ -244,12 +337,13 @@ let trim1 = function  (* trim list of arguments to a single argument *)
 
 let const f s = f
 let emptystate = 
- { globals = Hashtbl.create 0; fallbacks = Hashtbl.create 0; callstack = [] }
+ { globals = Table.create 0; fallbacks = Hashtbl.create 0; callstack = [];
+   currentloc = None }
 
 let (-->) arg result =
   { embed =   (fun f -> 
-               Function (fun _ args -> [result.embed (f (arg.project (trim1 args)))]))
-  ; project = function Function f -> 
+               caml_func (fun _ args -> [result.embed (f (arg.project (trim1 args)))]))
+  ; project = function Function (_, f) -> 
                           fun x -> result.project (trim1 (f emptystate [arg.embed x]))
                      | v -> raise (Projection (v, "function"))
   } 
@@ -288,14 +382,14 @@ let values : value list mapf =
   } 
 
 let pfunc (arrow : 'a mapf) : ('a map) =
-  { embed   = (fun (f : 'a) -> Function (fun s -> arrow.embed f))
-  ; project = (function Function f -> (arrow.project (f emptystate) : 'a)
+  { embed   = (fun (f : 'a) -> caml_func (fun s -> arrow.embed f))
+  ; project = (function Function (_, f) -> (arrow.project (f emptystate) : 'a)
                       | v -> raise (Projection (v, "function")))
   } 
 
 let func (arrow : 'a mapf) : ((state -> 'a) map) =
-  { embed   = (fun (f : state -> 'a) -> Function (fun s -> arrow.embed (f s)))
-  ; project = (function Function f -> (fun s -> arrow.project (f s) : state -> 'a)
+  { embed   = (fun (f : state -> 'a) -> caml_func (fun s -> arrow.embed (f s)))
+  ; project = (function Function (_, f) -> (fun s -> arrow.project (f s) : state -> 'a)
                       | v -> raise (Projection (v, "function")))
   } 
 @ 
@@ -303,14 +397,14 @@ Lua tables are very nearly Caml hash tables, except they never have
 multiple elements.
 <<table definition>>=
 module Table = struct
-  let create = Hashtbl.create
-  let find t k = try Hashtbl.find t k with Not_found -> Nil
+  let create = Thashtbl.create eq
+  let find t k = try Thashtbl.find t k with Not_found -> Nil
   let bind t k v =
-    Hashtbl.remove t k;
-    match v with Nil -> ()
-    | _ -> Hashtbl.add t k v
+    match v with
+    | Nil -> Thashtbl.remove t k
+    | _ -> Thashtbl.replace t k v
   let of_list l =
-    let t = Hashtbl.create (List.length l) in
+    let t = create (List.length l) in
     let _ = List.iter (fun (k, v) -> bind t (String k) v) l in
     t
 end

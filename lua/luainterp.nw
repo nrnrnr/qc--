@@ -26,14 +26,17 @@ module type INTERP = sig
   type state = Value.state
   type value = Value.value
   exception Error of string
-  val compile : Ast.chunk list -> state -> value list
+  val compile : srcdbg:(Srcmap.map * bool) -> Ast.chunk list -> state -> value list
   val test : unit -> (string * value list) list
   val fallbacks : unit -> state
   val error : state -> string -> unit  (* error fallback *)
 
-  val getglobal : state -> string -> value
-  val with_stack : string -> state -> ('a -> 'b) -> 'a -> 'b
+  val getglobal : state -> value -> value
+  val with_stack  : Value.info -> state -> ('a -> 'b) -> 'a -> 'b
   val fallback : string -> state -> value list -> value list
+
+  val setfallback : state -> string -> value -> value
+    (* sets fallback, returns previous one *)
 end
 <<lua.ml>>=
 module MkInterp (ZZZ : Ast.S) : INTERP (*with module Ast = ZZZ
@@ -73,11 +76,24 @@ let fbs =
   ] 
 let fallbacks () =
   let t = Hashtbl.create (List.length fbs) in
-  let _ = List.iter (fun (k, f) -> Hashtbl.add t k (V.Function f)) fbs in
+  let _ = List.iter (fun (k, f) -> Hashtbl.add t k (V.caml_func f)) fbs in
   { V.globals = V.Table.create 50
   ; V.fallbacks = t
   ; V.callstack = []
+  ; V.currentloc = None
   }
+@ 
+must be able to manage stack correctly
+<<interp toplevel>>=
+let currentloc_tostack g =
+  match g.V.callstack with
+  | (info, _) :: t -> g.V.callstack <- (info, g.V.currentloc) :: t
+  | [] -> ()
+
+let currentloc_fromstack g =
+  match g.V.callstack with
+  | (info, where) :: _ -> g.V.currentloc <- where
+  | [] -> ()
 @ 
 Fallbacks can't use the ordinary [[cpscall]] because this could lead
 to an infinite loop. 
@@ -92,12 +108,15 @@ let default_error_fallback g args =
   prerr_string "lua: ";
   prerr_endline msg;
   prerr_endline "Stack trace:";
-  List.iter (fun f -> prerr_string "  "; prerr_endline f) g.V.callstack;
+  currentloc_tostack g;
+  List.iter (fun a -> prerr_string "  ";
+             List.iter prerr_string (V.activation_strings g a);
+             prerr_endline "") g.V.callstack;
   raise (Error msg)
 
 let rec fallback fbname g args =
   let call f g args = match f with
-  | V.Function f -> f g args
+  | V.Function (_, f) -> f g args
   | v when fbname <> "function" -> fallback "function" g (v :: args)
   | v -> default_error_fallback g [V.String "`function' fallback not a function"] in
   let fbval = try Hashtbl.find g.V.fallbacks fbname
@@ -117,12 +136,16 @@ This problem has no counterpart in the C~version, in which it's up to
 each individual C~routine to worry about type mismatches.
 <<interp toplevel>>=
 let cpscall f args g k = match f with
-  | V.Function f ->
-      k (try (f g args) with V.Projection (v, what) -> <<projection error fallback>>)
+  | V.Function (_, f) ->
+      k (try (f g args) with
+         | V.Projection (v, what) -> <<projection error fallback>>
+         | Invalid_argument msg -> <<argument error fallback>>)
   | v -> k (fallback "function" g (v :: args))
 
 <<projection error fallback>>=
 fallback "error" g [V.String ("cannot convert value " ^ V.to_string v ^ " to " ^ what)]
+<<argument error fallback>>=
+fallback "error" g [V.String ("Function raised Invalid_argument " ^ msg)]
 @      
 To use a fallback or function call in a situation where we expect
 exactly one result, we adjust the results.
@@ -166,15 +189,6 @@ let concat x y g k =
       k (V.string.V.embed (x ^ y))
   with V.Projection (_, _) -> fb1 "concat" g [x; y] k
 <<interp toplevel>>=
-let eq x y = match x, y with
-| V.Nil,        V.Nil        -> true
-| V.Number x,   V.Number y   -> x = y
-| V.String x,   V.String y   -> x = y
-| V.Function x, V.Function y -> x == y
-| V.Userdata x, V.Userdata y -> x == y
-| V.Table x,    V.Table y    -> x == y
-| _,            _            -> false
-<<interp toplevel>>=
 let binop = function
   | A.Plus   -> arith "add" (+.)
   | A.Minus  -> arith "sub" (-.)
@@ -185,8 +199,8 @@ let binop = function
   | A.Le     -> order "le" (<=) (<=)
   | A.Gt     -> order "gt" (>)  (>)
   | A.Ge     -> order "ge" (>=) (>=)
-  | A.Eq     -> fun x y g k -> k (V.bool.V.embed (eq x y))
-  | A.Ne     -> fun x y g k -> k (V.bool.V.embed (not (eq x y)))
+  | A.Eq     -> fun x y g k -> k (V.bool.V.embed (V.eq x y))
+  | A.Ne     -> fun x y g k -> k (V.bool.V.embed (not (V.eq x y)))
   | A.And    -> assert false (* short circuit *)
   | A.Or     -> assert false (* short circuit *)
   | A.Concat -> concat
@@ -209,9 +223,9 @@ let settable g t key v = match t with
 | _ -> ignore (fallback "settable" g [t; key; v])
 
 <<interp toplevel>>=
-let getglobal g x =
-  match V.Table.find g.V.globals (V.String x) with
-  | V.Nil -> trim1 (fallback "getglobal" g [V.String x])
+let getglobal g k =
+  match V.Table.find g.V.globals k with
+  | V.Nil -> trim1 (fallback "getglobal" g [k])
   | v -> v
 <<interp toplevel>>=
 type var = Global | Local of int
@@ -227,7 +241,7 @@ let lookup rho x =
 
 let rec exp rho = function
   | A.Var x -> (match rho x with
-                | Global -> fun g l k -> k (getglobal g x)
+                | Global -> fun g l k -> k (getglobal g (V.String x))
                 | Local n -> fun g l k -> k (Array.get l n))
   | A.Lit v -> fun g l k -> k v
   | A.Index (tab, key) ->
@@ -305,67 +319,99 @@ let (_ : (string -> var) -> A.exp -> V.state -> V.value array -> (V.value -> 'an
 type answer = unit * string * bool
 let (pexp : (string -> var) -> A.exp -> V.state -> V.value array -> (V.value -> answer) -> answer) = exp
 
+let show_locals rho = ()
+(*
+  prerr_string "=============\n";
+  List.iter (fun x ->
+    List.iter prerr_string ([x; " is "] @
+                            match lookup rho x with
+                            | Local n -> [" local variable "; string_of_int n; "\n"]
+                            | Global -> ["global\n"])) rho;
+  prerr_endline ""
+*)
 
-let rec stmt rho = function
-  | A.WhileDo (cond, body) ->
-      let cond = exp (lookup rho) cond in
-      let body = block rho body in
-      fun theta ret ->
-        let rec loop g l =
-          cond g l (fun v -> if notnil v then body loop ret g l else theta g l)  in
-        loop
-  | A.RepeatUntil (body, cond) ->
-      let cond = exp (lookup rho) cond in
-      let body = block rho body in
-      fun theta ret ->
-        let rec loop g l =
-          body (fun g l -> cond g l (fun v -> 
-                if notnil v then loop g l else theta g l)) ret g l
-        in loop
-  | A.If (c, t, alts, f) ->
-      let alts = (c, t) :: alts in
-      let f = block rho (match f with None -> [] | Some ss -> ss) in
-      let add (cond, body) f =
+let rec extend rho = function
+  | A.Stmt' (_, s) -> extend rho s
+  | A.Local (vs, _) -> List.rev_append vs rho
+  | _ -> rho
+
+let compilers (srcmap, debug) =
+  let rec stmt rho = function
+    | A.Stmt' (charpos, s) ->
+        if debug then
+          let s = stmt rho s in
+          let where = Srcmap.location srcmap charpos in
+          fun theta ret g l ->
+            let n = g.V.currentloc in
+            let _ = g.V.currentloc <- Some where in
+            let restore () = g.V.currentloc <- n in
+            s (fun g l -> restore(); theta g l) (fun ans -> restore(); ans) g l
+              (* hard to maintain current line if exn raised ... *)
+        else
+          stmt rho s
+    | A.WhileDo (cond, body) ->
         let cond = exp (lookup rho) cond in
         let body = block rho body in
-        fun theta ret g l -> cond g l (fun v -> if notnil v then body theta ret g l
-                                                else f theta ret g l)  in
-      List.fold_right add alts f
-  | A.Return es ->
-      let es = explist (lookup rho) es in
-      fun theta ret g l -> es g l ret
-  | A.Local (vs, es) ->
-      stmt (List.rev_append vs rho) (A.Assign (List.map (fun x -> A.Lvar x) vs, es))
-  | A.Assign (vs, [A.Call c]) ->
-      assign (lvars (lookup rho) vs) (call c (lookup rho))
-  | A.Assign (vs, es) ->
-      assign (lvars (lookup rho) vs) (explist (lookup rho) es)
-  | A.Callstmt c -> fun theta ret g l -> call c (lookup rho) g l (fun _ -> theta g l)
-and block rho = function
-  | [] -> fun theta ret -> theta
-  | s :: ss -> fun theta ret -> stmt rho s (block rho ss theta ret) ret
-and lvar rho : A.lval -> V.state -> V.value array -> V.value -> unit = function
-  | A.Lvar x -> (match rho x with
-                 | Global  -> fun g l v -> V.Table.bind g.V.globals (V.String x) v
-                 | Local n -> fun g l v -> Array.set l n v)
-  | A.Lindex (t, key) ->
-      let t = exp rho t in
-      let key = exp rho key in
-      fun g l -> t g l (fun t -> key g l (fun key -> (fun v -> settable g t key v)))
-and lvars rho = function
-  | [] -> fun g l vs -> ()
-  | h :: t ->
-      let h = (lvar rho h : V.state -> V.value array -> V.value -> unit) in
-      let t = lvars rho t in
-      fun g l ->
-        let h = h g l in
-        let t = t g l in
-        fun vs ->
-          let hv, tv = match vs with h::t -> h, t | [] -> V.Nil, [] in (h hv; t tv)
-and assign left right =
-  fun theta ret g l ->
-    let left = left g l in
-    (right g l left; theta g l)
+        fun theta ret ->
+          let rec loop (g:V.state) l =
+            cond g l (fun v -> if notnil v then body loop ret g l else theta g l)  in
+          loop
+    | A.RepeatUntil (body, cond) ->
+        let cond = exp (lookup rho) cond in
+        let body = block rho body in
+        fun theta ret ->
+          let rec loop g l =
+            body (fun g l -> cond g l (fun v -> 
+                  if notnil v then theta g l else loop g l)) ret g l
+          in loop
+    | A.If (c, t, alts, f) ->
+        let alts = (c, t) :: alts in
+        let f = block rho (match f with None -> [] | Some ss -> ss) in
+        let add (cond, body) f =
+          let cond = exp (lookup rho) cond in
+          let body = block rho body in
+          fun theta ret g l -> cond g l (fun v -> if notnil v then body theta ret g l
+                                                  else f theta ret g l)  in
+        List.fold_right add alts f
+    | A.Return es ->
+        let es = explist (lookup rho) es in
+        fun theta ret g l -> es g l ret
+    | A.Local (vs, es) ->
+        show_locals (List.rev_append vs rho);
+        stmt (List.rev_append vs rho) (A.Assign (List.map (fun x -> A.Lvar x) vs, es))
+    | A.Assign (vs, [A.Call c]) ->
+        assign (lvars (lookup rho) vs) (call c (lookup rho))
+    | A.Assign (vs, es) ->
+        assign (lvars (lookup rho) vs) (explist (lookup rho) es)
+    | A.Callstmt c -> fun theta ret g l -> call c (lookup rho) g l (fun _ -> theta g l)
+  and block rho = function
+    | [] -> fun theta ret -> theta
+    | s :: ss -> fun theta ret -> stmt rho s (block (extend rho s) ss theta ret) ret
+  and lvar rho : A.lval -> V.state -> V.value array -> V.value -> unit = function
+    | A.Lvar x -> (match rho x with
+                   | Global  -> fun g l v -> V.Table.bind g.V.globals (V.String x) v
+                   | Local n -> fun g l v -> Array.set l n v)
+    | A.Lindex (t, key) ->
+        let t = exp rho t in
+        let key = exp rho key in
+        fun g l -> t g l (fun t -> key g l (fun key -> (fun v -> settable g t key v)))
+  and lvars rho = function
+    | [] -> fun g l vs -> ()
+    | h :: t ->
+        let h = (lvar rho h : V.state -> V.value array -> V.value -> unit) in
+        let t = lvars rho t in
+        fun g l ->
+          let h = h g l in
+          let t = t g l in
+          fun vs ->
+            let hv, tv = match vs with h::t -> h, t | [] -> V.Nil, [] in (h hv; t tv)
+  and assign left right =
+    fun theta ret g l ->
+      let left = left g l in
+      (right g l left; theta g l)
+  in stmt, block
+let stmt  s = fst (compilers s)
+let block s = snd (compilers s)
 @ 
 Function [[numlocals]] takes a sequence of statements and returns the
 maximum number of local variables declared on any path through that sequence.
@@ -373,6 +419,7 @@ maximum number of local variables declared on any path through that sequence.
 let rec numlocals = function
   | [] -> 0
   | h :: t -> numlocals t + match h with
+    | A.Stmt' (_, s)          -> numlocals [s]
     | A.Local (vs, es)        -> List.length vs
     | A.WhileDo     (_, body) -> numlocals body
     | A.RepeatUntil (body, _) -> numlocals body
@@ -386,18 +433,21 @@ let rec numlocals = function
 @ 
 Chunks are executed by compiling functions.
 <<interp toplevel>>=
-let with_stack s g f x =
-  let _ = g.V.callstack <- s :: g.V.callstack in
-  let pop () = g.V.callstack <- List.tl g.V.callstack in
+let with_stack info g f x =
+  let _ = currentloc_tostack g in
+  let _ = g.V.callstack <- (info, None) :: g.V.callstack in
+  let pop () = g.V.callstack <- List.tl g.V.callstack; currentloc_fromstack g in
   let answer = try f x with e -> (pop(); raise e) in
   let _ = pop() in
   answer
 
 let value_list = V.list V.value
-let lambda name args varargs body =
+let lambda srcdbg (file, line, col) args varargs body =
   let n = List.length args + (if varargs then 1 else 0) + numlocals body in
-  let rho = List.rev (if varargs then "arg" :: args else args) in
-  let body = block rho body in
+  let rho = let args' = List.rev args in if varargs then "arg" :: args' else args' in
+  let body = block srcdbg rho body in
+  let info = V.info file line in
+  info, 
   fun state argv ->
     let locals = Array.make n V.Nil in
     let rec walk n formals actuals = match formals with
@@ -406,10 +456,10 @@ let lambda name args varargs body =
           let a, a's = match actuals with [] -> V.Nil, [] | h :: t -> h, t in
           (Array.set locals n a; walk (n+1) fs a's)  in
     let _ = walk 0 args argv in
-    with_stack ("in function " ^ name) state
-      (body (fun g l -> []) (fun results -> results) state) locals 
+    with_stack info state
+      (body (fun g l -> []) (fun results -> results) state) locals
 
-let (_ : string -> string list -> bool -> A.block -> V.state -> V.value list -> V.value list) = lambda
+let (_ : Srcmap.map * bool -> Srcmap.location -> string list -> bool -> A.block -> V.info * V.func) = lambda
 @ 
 <<interp toplevel>>=
 let expname = function
@@ -419,37 +469,46 @@ let funname = function
   | A.Lvar v -> v
   | A.Lindex (e, A.Lit (V.String s)) -> expname e ^ "." ^ s
   | A.Lindex (e, e') -> expname e ^ "[" ^ expname e' ^ "]"
-let chunk = function
-  | A.Statement s -> stmt [] s
-  | A.Fundef (f, args, varargs, body) ->
-      let v = V.Function (lambda (funname f) args varargs body) in
-      stmt [] (A.Assign ([f], [A.Lit v]))
-  | A.Methdef (obj, meth, args, varargs, body) ->
-      let v = V.Function (lambda (expname obj ^ "." ^ meth) args varargs body) in
-      stmt [] (A.Assign ([A.Lindex (obj, A.Lit (V.String meth))], [A.Lit v]))
+let func (info, f) = V.Function (info, f)
+let chunk ((smap, dbg) as srcdbg) rho = function
+  | A.Statement s -> stmt srcdbg rho s
+  | A.Fundef (pos, f, args, varargs, body) ->
+      let v = func (lambda srcdbg (Srcmap.location smap pos) args varargs body) in
+      stmt srcdbg rho (A.Assign ([f], [A.Lit v]))
+  | A.Methdef (pos, obj, meth, args, varargs, body) ->
+      let args = "self" :: args in
+      let v = func (lambda srcdbg (Srcmap.location smap pos) args varargs body) in
+      stmt srcdbg rho (A.Assign ([A.Lindex (obj, A.Lit (V.String meth))], [A.Lit v]))
 
 let rec chunklocals = function
   | [] -> 0
   | A.Statement s :: t -> numlocals [s] + chunklocals t
   | _ :: t -> chunklocals t
 
+let extendchunk rho = function
+  | A.Statement s -> extend rho s
+  | _ -> rho
+
 let wrap f x = let l = f x in (prerr_string "function returned ";
                                prerr_int (List.length l);
                                prerr_endline " values";
                                l)
 
-let compile cs = 
+let compile srcdbg cs = 
   let locals = Array.make (chunklocals cs) V.Nil in
-  let rec chunks = function
+  let rec chunks rho = function
     | [] -> fun g -> []
     | h :: t ->
-        let h = chunk h in
-        let t = chunks t in
-        fun g -> h (fun g l -> t g) (fun results -> results) g locals
-  in chunks cs
+        let h' = chunk srcdbg rho h in
+        let t' = chunks (extendchunk rho h) t in
+        fun g -> h' (fun g l -> t' g) (fun results -> results) g locals
+  in chunks [] cs
 @ 
 <<interp toplevel>>=
-
+let setfallback g fbname fb =
+  let fb' = try Hashtbl.find g.V.fallbacks fbname with Not_found -> V.Nil in
+  let _ = Hashtbl.replace g.V.fallbacks fbname fb in
+  fb'
 @ 
 <<interp tests>>=  
 let nil = A.Lit V.Nil
@@ -458,9 +517,11 @@ let three = A.Lit (V.Number 3.0)
 let ret = A.Return ([nil; three])
 
 let state = 
-  { V.globals = V.Table.create 10; V.fallbacks = Hashtbl.create 10; V.callstack = [] }
+  { V.globals = V.Table.create 10; V.fallbacks = Hashtbl.create 10; V.callstack = [];
+    V.currentloc = None}
 
-let stmts l = compile (List.map (fun s -> A.Statement s) l)
+let bogusmap = Srcmap.mk ()
+let stmts l = compile (bogusmap, false) (List.map (fun s -> A.Statement s) l)
 
 let num n = A.Lit (V.Number (float n))
 let rtest = stmts [ret]
@@ -483,7 +544,7 @@ let test _ =
   ] 
 @ 
 <<lua.ml>>=
-module U = struct type t = unit let to_string () = "<userdata>" end
+module U = struct type t = unit let to_string () = "<userdata>" let eq = (=) end
 module V = Value.Make (U)
 module A = Ast.Make (V)
 module T = MkInterp (A)

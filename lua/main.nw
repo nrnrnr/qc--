@@ -3,7 +3,7 @@
 \section{Main loop for testing a standalone interpreter}
 
 <<main.ml>>=
-module Unit = struct type t = unit let to_string () = "<userdata>" end
+module Unit = struct type t = unit let to_string () = "<userdata>" let eq = (=) end
 module A = Ast.Make (Value.Make(Unit))
 module I = Lua.MkInterp (A)
 module P = Parse.Make (I.Ast)
@@ -13,6 +13,8 @@ let lex map buf = Scan.token buf map
 let state = I.fallbacks()
 let addlist = List.iter (fun (k, v) -> V.Table.bind state.V.globals (V.String k) v)
 let _ = addlist B.builtins
+let _ = addlist B.string_builtins
+let _ = addlist B.math_builtins
 let dumpstate = ref false
 let showresults =
   let rec loop n = function
@@ -44,7 +46,7 @@ let _ = args (List.tl (Array.to_list (Sys.argv)))
 let _ = if !dumpstate then
   begin
     print_endline "final state: ";
-    Hashtbl.iter (fun k v -> print_string "  ";
+    Thashtbl.iter (fun k v -> print_string "  ";
       print_string (V.to_string k); print_string " |-> ";
       print_endline (V.to_string v)) state.V.globals
   end

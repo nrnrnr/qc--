@@ -59,10 +59,10 @@ chunklist : /* empty */        { [] }
 	  | chunklist function_ { $2 :: $1 }
 	  ;
 
-function_     : FUNCTION funcname body  { $2 $3 };
+function_     : FUNCTION funcname body  { $2 $3 (Parsing.symbol_start()) };
 
-funcname  : var             { fun ((args, v), ss) -> A.Fundef ($1, args, v, ss) }
-	  | varexp ':' NAME { fun ((args, v), ss) -> A.Methdef ($1, $3, args, v, ss) }
+funcname  : var             { fun ((args, v), ss) w -> A.Fundef (w, $1, args, v, ss) }
+	  | varexp ':' NAME { fun ((args, v), ss) w -> A.Methdef (w, $1, $3, args, v, ss) }
           ;
 
 body :  '(' parlist ')' block END { ($2, $4 ) } ;
@@ -73,7 +73,8 @@ statlist : /* empty */         { [] }
 
 sc	 : /* empty */ { () } | ';' { () } ;
 
-stat   : IF expr1 THEN block elsepart END { let (a, e) = $5 in A.If ($2, $4, a, e) }
+stat   : stat_ { A.Stmt' (Parsing.symbol_start (), $1) }
+stat_  : IF expr1 THEN block elsepart END { let (a, e) = $5 in A.If ($2, $4, a, e) }
   /*
        | CASE expr1 OF case_body END
        | GLOBMATCH expr1 OF glob_body END
