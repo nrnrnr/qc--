@@ -575,12 +575,12 @@ let rec jumpStmt (cconv,e,args,targets (*unused*)) =
     let out   = actuals cc.C.call_actuals args in
     let jumpi = target.T.jump.T.embed (expr e) in
     let ()    = add_oldblock out.C.overflow    in  (* jump overflow = old *)
-    G.instruction g out.C.pre_sp                                  **>
-    G.instruction g out.C.shuffle                                 **>
-    G.instruction g restore_nvrs                                  **>
-    G.instruction g (R.store proc_cc.C.ra saved_ra pointersize)   **>
-    G.instruction g out.C.post_sp                                 **>
-    G.jump        g jumpi ~targets ~uses:(RS.union out.C.regs cc.C.nvregs)
+    G.stack_adjust g out.C.pre_sp                                  **>
+    G.instruction  g out.C.shuffle                                 **>
+    G.instruction  g restore_nvrs                                  **>
+    G.instruction  g (R.store proc_cc.C.ra saved_ra pointersize)   **>
+    G.instruction  g out.C.post_sp                                 **>
+    G.jump         g jumpi ~targets ~uses:(RS.union out.C.regs cc.C.nvregs)
 <<auxiliaries>>=
 let noregs = Register.Set.empty
 @
@@ -615,16 +615,16 @@ and callStmt (lhs,cconv, e, args, targets (*unused*), conts) succ =
   let conts = continuations cc conts false    in
   let () = add_youngblock out.C.overflow      in  (* outgoing overflow parms *)
   let () = add_youngblock in'.C.overflow      in  (* incoming overflow results *)
-  G.instruction g out.C.pre_sp                **>
-  G.instruction g out.C.shuffle               **>
-  G.instruction g out.C.post_sp               **>
-  G.call        g calli ~uses:out.C.regs ~defs:in'.C.regs ~kills:cc.C.volregs
-                        ~altrets:conts.returns ~unwinds_to:conts.unwinds
-                        ~cuts_to:conts.cuts ~aborts:conts.aborts ~spans:props  **>
-  G.assertion   g in'.C.insp              **>
-  G.instruction g in'.C.pre_sp            **>  (* DOUBTS ABOUT THIS *)
-  G.instruction g in'.C.shuffle           **>
-  G.instruction g in'.C.post_sp           **>
+  G.stack_adjust g out.C.pre_sp                **>
+  G.instruction  g out.C.shuffle               **>
+  G.instruction  g out.C.post_sp               **>
+  G.call         g calli ~uses:out.C.regs ~defs:in'.C.regs ~kills:cc.C.volregs
+                         ~altrets:conts.returns ~unwinds_to:conts.unwinds
+                         ~cuts_to:conts.cuts ~aborts:conts.aborts ~spans:props  **>
+  G.assertion    g in'.C.insp              **>
+  G.stack_adjust g in'.C.pre_sp            **>  (* DOUBTS ABOUT THIS *)
+  G.instruction  g in'.C.shuffle           **>
+  G.instruction  g in'.C.post_sp           **>
   succ
 <<auxiliaries>>=
 let ( **> ) f x = f ~succ:x
@@ -641,6 +641,10 @@ and returnStmt (cconv, kont, args) =
     let out = actuals cc.C.return_actuals args in
       (* WHAT ABOUT cc.C.epilog??  DO WE NEED ALTERNATE CONVENTION
          FOR ALTERNATE RETURN? *)
+let () =
+  let regstring (s, i, _) = Printf.sprintf "%c%d" s i in
+  let used = List.map regstring (RS.elements out.C.regs) in
+  Verbose.say 2 ["return statement uses regs: "; String.concat ", " used; "\n"] in
     let reti =
       match kont with
       | None       ->
@@ -650,12 +654,12 @@ and returnStmt (cconv, kont, args) =
           cc.C.return (k i) (k n) saved_ra in
           (* WHY IS THIS Bits.S AND NOT Bits.U ??? *)
     let () = add_oldblock out.C.overflow in  (* outgoing jump overflow = incoming *)
-    G.instruction g out.C.pre_sp            **>
-    G.instruction g out.C.shuffle           **>
+    G.stack_adjust g out.C.pre_sp            **>
+    G.instruction  g out.C.shuffle           **>
       (* SHOULD JUMP TO SHARED EPILOG HERE -- RESTORE REGS AND SP *)
-    G.instruction g restore_nvrs            **>
-    G.instruction g out.C.post_sp           **>
-    G.return      g reti ~uses:(RS.union out.C.regs cc.C.nvregs)
+    G.instruction  g restore_nvrs            **>
+    G.instruction  g out.C.post_sp           **>
+    G.return       g reti ~uses:(RS.union out.C.regs cc.C.nvregs)
 @ 
 A [[cut to]] instruction passes arguments according to a calling convention.
 Each continuation has its own overflow area. The [[copyout]] routine returns
@@ -709,9 +713,9 @@ and finish_compiling_continuation k =
 and generate_cut_to_entry k =
   let in' = k.K.cut_in in
   G.set_succ (G.node_labeled g k.K.cut_pc) (
-  G.instruction g in'.C.pre_sp   **>
-  G.instruction g in'.C.shuffle  **>
-  G.instruction g in'.C.post_sp  **>
+  G.stack_adjust g in'.C.pre_sp   **>
+  G.instruction  g in'.C.shuffle  **>
+  G.instruction  g in'.C.post_sp  **>
   k.K.succ)
 
 and generate_return_to_entry k = 
@@ -719,9 +723,9 @@ and generate_return_to_entry k =
   let in' = k.K.return_in in
   let () = add_youngblock in'.C.overflow in
   G.set_succ (G.node_labeled g k.K.return_pc) (
-  G.instruction g in'.C.pre_sp    **>
-  G.instruction g in'.C.shuffle   **>
-  G.instruction g in'.C.post_sp   **>
+  G.stack_adjust g in'.C.pre_sp    **>
+  G.instruction  g in'.C.shuffle   **>
+  G.instruction  g in'.C.post_sp   **>
   k.K.succ)
 
 and generate_unwind_to_entry k = 
@@ -841,12 +845,12 @@ let proc containing_spans (cconv,procname,args,procbody) =
     let initcont = G.node_labeled g (Idgen.label "initialize continuations") in
     let labeln node ~succ = (G.set_succ node succ; node) in
     let () = G.set_succ (G.entry g) (
-      G.instruction g in'.C.pre_sp    **>
-      G.instruction g in'.C.shuffle   **>
-      G.instruction g in'.C.post_sp   **>
-      G.instruction g save_ra         **>
-      G.instruction g save_nvrs       **>
-      labeln initcont                 **>
+      G.stack_adjust g in'.C.pre_sp    **>
+      G.instruction  g in'.C.shuffle   **>
+      G.instruction  g in'.C.post_sp   **>
+      G.instruction  g save_ra         **>
+      G.instruction  g save_nvrs       **>
+      labeln initcont                  **>
       bodies containing_spans procbody (G.exit g)) in
 
     let () = insert_init_cont_nodes contenv initcont in
@@ -859,7 +863,8 @@ let proc containing_spans (cconv,procname,args,procbody) =
         finish_compiling_continuation k;
         if k.K.escapes then Contn.rep k.K.rep :: blocks else blocks in
       Block.cathl_list pointersize (Strutil.Map.fold addblock contenv []) in
-
+    let priv =
+      Block.relative vfp "private" (aligned_mem ~align:proc_cc.C.sp_align) target in
     let i =    
         { Proc.symbol   = symbol
         ; Proc.cc       = proc_cc
@@ -869,7 +874,7 @@ let proc containing_spans (cconv,procname,args,procbody) =
         ; Proc.incoming = incoming   (* incoming   block *)   
         ; Proc.outgoing = outgoing   (* outgoing   block *)   
         ; Proc.stackd   = stackd     (* stack data block *)
-        ; Proc.priv     = Block.relative vfp "private" aligned_mem target
+        ; Proc.priv     = priv
         ; Proc.sp       = spblock
         ; Proc.eqns     = List.concat (!constraints)
         ; Proc.conts    = contblocks
@@ -878,9 +883,9 @@ let proc containing_spans (cconv,procname,args,procbody) =
         } in
     optimizer i (* runs optimizer, freezes, and assembles proc *)
 <<auxiliaries>>=
-let aligned_mem ~base target = 
+let aligned_mem ~align ~base target = 
   let memsize = target.T.memsize in
-  let t = AT.overflow memsize target.T.byteorder base Memalloc.Up 1 in
+  let t = AT.overflow memsize target.T.byteorder base Memalloc.Up align in
   let alloc ~width ~alignment ~hint =
     let alignment = width / memsize in
     t.AT.allocate width alignment hint

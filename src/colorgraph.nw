@@ -963,31 +963,26 @@ implementation.
 module CallVarMap = Map.Make (struct type t = G.node let compare = compare end)
 module VM = Proc.VarMap
 
-let applyColors cg ({Proc.cfg = cfg; Proc.target = target;
-		             Proc.varMap = vMap} as proc) =
-    let lookup = Target2.space target in
-    let subst = function
-      | temp when is_tmp target temp ->
-            (try RM.find temp cg.colorMap
-			 with Not_found -> Impossible.impossible "Uncolored temp")
-      | t -> t in
-
-	let new_placement var loc rst =
- 		match loc with
-		| Rtl.Private.Reg t when is_tmp target t ->
-			VM.add var (RM.find t cg.colorMap) rst
-		| _ -> rst in
-	let subst_rtl node call_varMap =
-		begin
-		    G.upd_instr node (Rtlutil.Subst2.reg ~map:subst)
-		  ; if G.is_call node 
-			then
-				CallVarMap.add node (VM.fold new_placement vMap VM.empty)
-					call_varMap
-			else call_varMap
-		end in
-        let _ = G.fold_fwd cfg subst_rtl CallVarMap.empty in
-        true
+let applyColors cg ({Proc.cfg = cfg; Proc.target = target; Proc.varMap = vMap}) =
+  let find ((s, i, _) as t) =
+    try RM.find t cg.colorMap
+    with
+      Not_found -> Impossible.impossible (Printf.sprintf "Uncolored temp %c%d" s i) in
+  let subst t = if is_tmp target t then find t else t in
+  let new_placement var loc rst =
+    match loc with
+    | Rtl.Private.Reg t when is_tmp target t -> VM.add var (find t) rst
+    | _ -> rst in
+  let subst_rtl node call_varMap =
+    begin
+      G.upd_instr node (Rtlutil.Subst2.reg ~map:subst);
+      if G.is_call node then
+        CallVarMap.add node (VM.fold new_placement vMap VM.empty) call_varMap
+      else
+        call_varMap
+    end in
+  let _ = G.fold_nodes subst_rtl CallVarMap.empty cfg in
+  true
 @
 
 %-------------------------------------------------------------------
@@ -1114,7 +1109,7 @@ let rewrite proc spillees =
 							| Some tmp -> tmp::tmps)
 			newTemps smPairs)
 	in
-		G.fold_fwd proc.Proc.cfg (updateNode smPairs) []
+		G.fold_nodes (updateNode smPairs) [] proc.Proc.cfg
 @
 
 
@@ -1201,7 +1196,6 @@ let ( ++ ) = RS.union
 module type GRAPH = sig
   type cfg
   type node
-  val fold_fwd : cfg  -> (node -> 'a -> 'a) -> 'a -> 'a
   val instr    : node -> Rtl.rtl
   val node_info_string : node -> string
   val defs : node -> Register.Set.t  (* includes kills!!! *)
@@ -1246,7 +1240,6 @@ module NewG : GRAPH with type node = Rtl.rtl Cfgx.M.node
   module G = Cfgx.M
   type node = Rtl.rtl G.node
   type cfg  = Rtl.rtl G.cfg
-  let fold_fwd _ _ _ = assert false
   let node_info_string n = "???"
 
   let nop = Rtl.par []
@@ -1598,8 +1591,8 @@ let printCGInfo param _ = print_cgInfo param; false
         let nnodes = Aux.foldri (fun i n ns -> (i, n) :: ns) nodes [] in
         let number node = fst (List.find (fun (i, n) -> G.eq node n) nnodes) in
         cfgSay ["CFG\n===\n"];
-        ( G.fold_fwd cfg
-            (fun node () ->
+        ( G.iter_nodes
+            (fun node ->
                 cfgSay [ string_of_int (number node)
                       ; ": "
                       ; Rtlutil.ToString.rtl (G.instr node)
@@ -1608,7 +1601,7 @@ let printCGInfo param _ = print_cgInfo param; false
                       ; G.node_info_string node
                       ; "\n"
                       ] )
-            ()) ;
+            cfg);
         cfgSay ["END CFG\n===\n"]
     let pCFG _ {Proc.cfg = cfg} = print_cfg cfg; false
 @

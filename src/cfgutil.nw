@@ -33,7 +33,7 @@ val fold_bwd:   cfg -> (node -> 'a -> 'a) -> 'a -> 'a
 val subst:      cfg -> (Rtl.rtl -> Rtl.rtl) -> unit
 val cfg2dot:    compress:bool -> name:string -> cfg -> string
 val emit    :   cfg -> (Rtl.rtl -> unit) -> (string -> unit) -> unit
-val new_cfg2dot:    compress:bool -> name:string -> Rtl.rtl Cfgx.M.t -> string
+val new_cfg2dot:    compress:bool -> live:bool -> name:string -> Rtl.rtl Cfgx.M.t -> string
 val new_cfg2ast: ('i -> Ast.stmt) -> 'i Cfgx.M.t -> name:string -> Ast.proc
 val new_emit  :   'i Cfgx.M.t -> ('i -> unit) -> (string -> unit) -> unit
 @
@@ -152,8 +152,10 @@ let extend_with preds nodes =
         add_predecessors (node :: visited) (preds node @ candidates) in
   add_predecessors nodes (List.flatten (List.map preds nodes))
 
-let new_cfg2dot ~compress ~name g =
+let new_cfg2dot ~compress ~live ~name g =
   let module G = Cfgx.M in
+  let module L = Cfgx.Live in
+  let () = if live then L.set_live g in
   let original_nodes = G.fold_nodes (fun x y -> x :: y) [] g in
   let nodes = extend_with G.preds original_nodes in
   let nodes = extend_with G.succs nodes in
@@ -174,7 +176,15 @@ let new_cfg2dot ~compress ~name g =
         | G.Impossible -> "<impossible>"
         | _ -> tag ^ "???" in
   let dotnode  node = nodename node ^ " [label=\"" ^ number_and_rtl node ^ "\"]" in
-  let edge_fwd from to' = nodename from ^ " -> " ^ nodename to'  ^ "\n" in
+  let liveness s =
+    let regstring (s, i, w) = Printf.sprintf "%c%d" s i in
+    String.concat ", " (List.map regstring (Register.Set.elements s)) in
+  let edge_fwd from to' =
+    let edge = nodename from ^ " -> " ^ nodename to' in
+    if live then
+      edge ^ "[label=\"" ^ liveness (L.live_in to') ^ "\"]\n"
+    else
+      edge ^ "\n" in
   let edge_bwd from to' = nodename to'  ^ " -> " ^ nodename from ^
                          "[dir=back,style=dotted]\n" in
   let edges_leaving node tail =

@@ -273,8 +273,8 @@ C.register_module "Asm"
   ; "ast"     , V.efunc (Map.outchan **-> V.result Map.asm) AstAsm.asm
   ; "dot"     , V.efunc (Map.outchan **-> V.result Map.asm) (Dotasm.asm ~compress:true)
   ; "big_dot"     , V.efunc (Map.outchan **-> V.result Map.asm) (Dotasm.asm ~compress:false)
-  ; "new_dot" , V.efunc (Map.outchan **-> V.result Map.new_asm) (Dotasm.new_asm ~compress:true)
-  ; "new_big_dot" , V.efunc (Map.outchan **-> V.result Map.new_asm) (Dotasm.new_asm ~compress:false)
+  ; "new_dot" , V.efunc (Map.outchan **-> V.result Map.new_asm) (Dotasm.new_asm ~compress:true ~live:false)
+  ; "new_big_dot" , V.efunc (Map.outchan **-> V.result Map.new_asm) (Dotasm.new_asm ~compress:false ~live:true)
   ; "asdl"    , V.efunc (Map.outchan **-> V.result Map.asm) Asdlasm.asm 
   ; "x86"     , V.efunc (Map.outchan **-> V.result Map.asm) (X86asm.make Cfgutil.emit)
   ; "new_x86" , V.efunc (Map.outchan **-> V.result Map.new_asm) (X86asm.make Cfgutil.new_emit)
@@ -381,7 +381,7 @@ C.register_module "Stages"
   ; "new_writedot", V.efunc (V.value **-> Map.new_proc **-> V.result V.bool)
       (fun _ proc -> 
         prerr_string
-          (Cfgutil.new_cfg2dot ~compress:true ~name:proc.Proc.symbol#mangled_text proc.Proc.cfg);
+          (Cfgutil.new_cfg2dot ~compress:true ~live:true ~name:proc.Proc.symbol#mangled_text proc.Proc.cfg);
         flush stderr;
         true)
   ]  g;

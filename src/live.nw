@@ -128,9 +128,16 @@ let ( ++  ) = RS.union
 let ( --  ) = RS.diff 
 let ( --* ) live killed =
   if RS.exists (fun x -> RS.mem x killed) live then
+    (*<complain of live variables in killed set>; live--killed *)
     Impossible.impossible "live variable is in killed set"
   else
     live 
+<<complain of live variables in killed set>>=
+let regstring (s, i, _) = Printf.sprintf "%c%d" s i in
+let bad = RS.elements (RS.filter (fun x -> RS.mem x killed) live) in
+let msg = "Live vars in killed set: " ^ String.concat ", " (List.map regstring bad) in
+prerr_string msg;
+prerr_string "\n"
 @ 
 The [[live_out]] function uses the cache.
 The [[new_live_out]] function computes the live-out set afresh; it is
@@ -171,23 +178,25 @@ be much more efficient to use a well-chosen order.
 <<liveness functions>>=
 let set_live g =
   G.iter_nodes (fun n -> (info n).cached_live_out <- RS.empty) g;
-  let changed     = ref false                           in
+  let nodes   = List.rev (G.postorder_dfs (fun x y -> x :: y) [] g) in
+  let changed = ref false                           in
   <<definition of [[update_cache]]>> in
   let rec loop n = (* would be sensible to choose a *good* order here *)
     ( changed := false
-    ; G.iter_nodes update_cache g
+    ; List.iter update_cache nodes
     ; if !changed then
         if n < 1000 then loop (n+1) 
         else Impossible.impossible "liveness didn't converge in 1000 iterations"
-    ; Verbose.say 2 ["set_live converged in "; string_of_int n; " iterations\n"]
+      else
+        Verbose.say 2 ["set_live converged in "; string_of_int n; " iterations\n"]
     ) in
-  loop 0
+  loop 1
 @
 To update the cache we call [[new_live_out]] and note whether anything
 has changed.
 <<definition of [[update_cache]]>>=
 let update_cache node =
-  let l  = new_live_out node in
+  let l    = new_live_out node in
   let info = info node in
   if RS.equal l info.cached_live_out then
     ()   (* changed := false *)

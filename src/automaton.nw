@@ -322,12 +322,15 @@ AUTOMATA CAN BE SPECIFIED IN CCL?
 <<exposed types>>
 type t = implementation
 
+let regstring (s, i, _) = Printf.sprintf "%c%d" s i 
+
 module R  = Rtl
 module RS = Register.Set
 module RM = Register.Map
 module RU = Rtlutil
 module B  = Block
 module M  = Memalloc
+let imposs = Impossible.impossible
 @
 All the work of the implementation is in the closures.
 <<automaton.ml>>=
@@ -352,9 +355,13 @@ To allocate, we align and increment the memory block.
 The address of the new location depends on the direction of stack growth.
 <<functions [[allocate]] and [[freeze]] for the overflow block>>=
 let allocate ~width ~alignment ~hint =
-  assert (width mod memsize = 0);
-  assert (max_alignment mod alignment = 0);
-  assert (not (state.frozen));
+  if width mod memsize <> 0 then
+    imposs (Printf.sprintf "width %d not multiple of memsize %d" width memsize);
+  if max_alignment mod alignment <> 0 then
+    imposs (Printf.sprintf
+              "max alignment %d not multiple of alignment %d" max_alignment alignment);
+  if state.frozen then
+    imposs "Allocation from a frozen overflow block";
   let size = width / memsize in
   let mem  = state.mem in
   let mem  = M.align mem alignment in
@@ -379,6 +386,9 @@ let no_overflow ~base ~max_alignment ~errormsg =
   let block = Block.relative base "return block" Block.at ~size:0 ~alignment:1 in
   { allocate = (fun ~width ~alignment ~hint -> Impossible.impossible errormsg)
   ; freeze   = (fun regs mems -> 
+let () =
+  let used = List.map regstring (RS.elements regs) in
+  Verbose.say 2 ["no_overflow automaton uses regs: "; String.concat ", " used; "\n"] in
      { overflow = block; regs_used = regs; mems_used = mems; align_state = 0 })
   } 
 @ 
@@ -434,6 +444,7 @@ let useregs regs ~errormsg next =
   let alloc ~width ~alignment ~hint =
     try
       let (_, _, w) as r = getreg state in
+(*let () = Verbose.say 2 ["useregs automaton got reg "; regstring r; "\n"] in*)
       if w = width then
         of_loc (R.reg r)
       else if w < width then
@@ -441,7 +452,11 @@ let useregs regs ~errormsg next =
       else
         Impossible.impossible (errormsg width state.avail)
     with Failure _ -> next.allocate width alignment hint in
-  let freeze regs mems = next.freeze (RS.union state.used regs) mems in
+  let freeze regs mems =
+let () =
+  let used = List.map regstring (RS.elements state.used) in
+  Verbose.say 2 ["useregs automaton uses regs: "; String.concat ", " used; "\n"] in
+    next.freeze (RS.union state.used regs) mems in
   { freeze = freeze; allocate = alloc }
 @ 
 

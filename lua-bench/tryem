@@ -74,6 +74,7 @@ function goodsize {
   esac
 }
 
+
 # 
 function longsize {
   case $1 in
@@ -140,17 +141,19 @@ do
   i="$base.lua"
   echo $i 1>&2
   truesize=`$thesize $base $size $size2`
+  # insert here:  for INTERP in $INTERPS; do ...
   interp=oclbench${INTERP}${PROFILE}.opt
-
+    # example: oclbench-vmstack-funcont-p.opt
+    # example: oclbench-nocomp-mlvar-nocont.opt
     if [ -r $i.Input ]; then
       input=$i.Input
     else
       input=/dev/null
     fi
+    format="version=$version base=$base size=$truesize size2=$size"
+    format="$format INTERP=$INTERP PROFILE=$PROFILE sec=%e memmax=%M memavg=%K"
     $TIME -f "at size $truesize, $interp took %e seconds" \
-    $TIME \
-       -f "version=$version base=$base size=$truesize size2=$size INTERP=$INTERP PROFILE=$PROFILE sec=%e memmax=%M memavg=%K" \
-       -o $i.stats -a \
+    $TIME -f "$format" -o $i.stats -a \
       <$input $interp $i $truesize $size2 > $i.out$INTERP$PROFILE || fail $interp $i
 
   case $base in

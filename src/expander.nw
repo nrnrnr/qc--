@@ -657,9 +657,12 @@ and assign left right w =
             to_hughes (Post.store a r (upassn assn)) @@ is' @@ is)
     | RP.Mem (_, _, _, _, _) ->
         Impossible.unimp "memory space other than 'm'"
-    | RP.Reg (space, i, w) -> (* computation *)
-        let r, is = to_temp (guess_context right) right in
-        to_hughes (Post.move ~dst:(space, i, w) ~src:r) @@ is
+    | RP.Reg dst -> (* computation *)
+        (match right with
+        | RP.Fetch (RP.Reg src, _) -> to_hughes (Post.move ~dst ~src)
+        | _ -> let r, is = to_temp (guess_context right) right in
+               to_hughes (Post.move ~dst ~src:r) @@ is
+        )
     | RP.Var (_,_,_) -> Impossible.impossible "variable passed to code expander"
     | RP.Slice (_,_,_) -> Impossible.unimp "slice"
 <<\emph{pattern [[->]] action} for low-bit store>>=
@@ -822,16 +825,19 @@ let new_cfg _ proc =
     match G.to_instr n with
     | None -> ()
     | Some i ->
-        match expand proc i with
-        | []     -> G.update_instr (fun _ -> R.par []) n
-        | [last] -> G.update_instr (fun _ -> last)     n
-        | last :: last_new :: preds ->
-            let last_new = G.instruction g last_new ~succ:(G.illegal g) in
-            let insert   = List.fold_left (fun next i -> G.instruction g i ~succ:next)
-                           last_new preds in
-            G.splice_before ~entry:insert ~exit:last_new n;
-            G.update_instr (fun _ -> last) n;
-            modified := true in
+        match G.kind n with G.Assertion | G.StackAdjust -> ()
+        | _ -> 
+          match expand proc i with
+          | []     -> G.update_instr (fun _ -> R.par []) n
+          | [last] -> G.update_instr (fun _ -> last)     n
+          | last :: last_new :: preds ->
+              let last_new = G.instruction g last_new ~succ:(G.illegal g) in
+              let insert   =
+                List.fold_left (fun next i -> G.instruction g i ~succ:next)
+                last_new preds in
+              G.splice_before ~entry:insert ~exit:last_new n;
+              G.update_instr (fun _ -> last) n;
+              modified := true in
   G.iter_nodes exp g;
   !modified
 @

@@ -327,7 +327,7 @@ module type S = sig
   type regs = Register.Set.t (* sets of regs for dataflow *)
   type 'i contedge = { kills:regs; defs:regs; node:'i node }
   type kind = (* all the kinds of nodes *)
-    | Join | Instruction | Branch | Cbranch | Mbranch
+    | Join | Instruction | StackAdjust | Branch | Cbranch | Mbranch
     | Jump  | Call | Return | CutTo
     | Entry | Exit | Assertion | Illegal | Impossible
   <<graph and node observers>>
@@ -436,13 +436,17 @@ The basic blocks are enumerated in no particular order.
 Within a basic block, we enumerate nodes in order.
 If the client mutates the graph, we make no guarantees about what
 nodes may be visited.
-We can also fold over the nodes in the layout order.
+We can also fold over the nodes in the layout order and in postorder
+depth-first search.
+Calling [[fold_layout]] may insert unconditional branches or reverse
+conditional branches in order to satisfy layout constraints.
 <<graph and node observers>>=
-val iter_nodes : ('i node -> unit)           -> 'i cfg -> unit
-val iter_heads : ('i node -> unit)           -> 'i cfg -> unit
-val fold_nodes : ('i node -> 'a -> 'a) -> 'a -> 'i cfg -> 'a
-val fold_heads : ('i node -> 'a -> 'a) -> 'a -> 'i cfg -> 'a
-val fold_layout: ('i node -> 'a -> 'a) -> 'a -> 'i cfg -> 'a
+val iter_nodes    : ('i node -> unit)           -> 'i cfg -> unit
+val iter_heads    : ('i node -> unit)           -> 'i cfg -> unit
+val fold_nodes    : ('i node -> 'a -> 'a) -> 'a -> 'i cfg -> 'a
+val fold_heads    : ('i node -> 'a -> 'a) -> 'a -> 'i cfg -> 'a
+val fold_layout   : ('i node -> 'a -> 'a) -> 'a -> 'i cfg -> 'a
+val postorder_dfs : ('i node -> 'a -> 'a) -> 'a -> 'i cfg -> 'a
 @ 
 \paragraph{Observing data flow}
 As noted above a node can contribute defs, uses, and kills to each
@@ -574,8 +578,12 @@ same point).
 @
 In most cases, when we create a node we supply its successors.
 The simple instruction is, well, simple.
+A [[stack_adjust]] is just like an instruction, except that the code
+expander and stack freezer know to treat it specially.
+(Don't expand it and use the unsafe simplifier.)
 <<graph and node constructors>>=
 val instruction  : 'i cfg -> 'i -> succ:'i node -> 'i node
+val stack_adjust : 'i cfg -> 'i -> succ:'i node -> 'i node
 val assertion    : 'i cfg -> 'i -> succ:'i node -> 'i node
 @ 
 \paragraph{Control-flow nodes}
@@ -623,7 +631,7 @@ module Make (X:X) : S with module X = X = struct
                              }
 
   type kind = (* all the kinds of nodes *)
-    | Join | Instruction | Branch | Cbranch | Mbranch
+    | Join | Instruction | StackAdjust | Branch | Cbranch | Mbranch
     | Jump  | Call | Return | CutTo
     | Entry | Exit | Assertion | Illegal | Impossible
   <<node type>>
@@ -658,6 +666,7 @@ ent& Entry\\
 exi& Exit\\
 joi& Join\\
 ins& Instruction\\
+sta& Stack adjustment\\
 ass& Assertion\\
 bra& Branch\\
 cbr& Conditional branch\\
@@ -691,8 +700,6 @@ fx    & Fork Extension
 nx    & Non-Branch/Fork Extension
 \end{tabular}
 \end{quote}
-
-
 <<node type>>=
 type ('i, 'n)     ent = { mutable ent_succ   : 'n 
                         ;         ent_nx     : X.nx
@@ -714,6 +721,11 @@ type ('i, 'n)     ins = { mutable ins_i      : 'i
                         ; mutable ins_pred   : 'n
                         ; mutable ins_succ   : 'n
                         ;         ins_nx     : X.nx
+                        }
+type ('i, 'n)     sta = { mutable sta_i      : 'i
+                        ; mutable sta_pred   : 'n
+                        ; mutable sta_succ   : 'n
+                        ;         sta_nx     : X.nx
                         }
 type ('i, 'n)     ass = { mutable ass_i      : 'i
                         ; mutable ass_pred   : 'n
@@ -792,6 +804,7 @@ type 'i node =
   | Exi of ('i, 'i node, 'i cfg)      exi  
   | Joi of ('i, 'i node, 'i cfg)      joi  
   | Ins of ('i, 'i node)              ins  
+  | Sta of ('i, 'i node)              sta
   | Ass of ('i, 'i node)              ass  
   | Bra of ('i, 'i node)              bra  
   | Cbr of ('i, 'i node)              cbr  
@@ -808,6 +821,7 @@ The observers are straightforward.
 let kind node = match node with
   | Joi _ -> Join
   | Ins _ -> Instruction
+  | Sta _ -> StackAdjust
   | Bra _ -> Branch
   | Cbr _ -> Cbranch
   | Mbr _ -> Mbranch
@@ -831,6 +845,7 @@ let is_fork node = match node with
 
 let to_instr node = match node with
   | Ins i -> Some i.ins_i
+  | Sta i -> Some i.sta_i
   | Ass a -> Some a.ass_i
   | Bra b -> Some b.bra_i
   | Cbr c -> Some c.cbr_i
@@ -872,6 +887,7 @@ let labels node = match node with
 <<graph and node observers implementation>>=
 let pred node = match node with
   | Ins i -> i.ins_pred
+  | Sta i -> i.sta_pred
   | Ass a -> a.ass_pred
   | Bra b -> b.bra_pred
   | Cbr c -> c.cbr_pred
@@ -909,6 +925,7 @@ let succ_n node n =
   match node with
   | Joi j -> single j.joi_succ n
   | Ins i -> single i.ins_succ n
+  | Sta i -> single i.sta_succ n
   | Ass a -> single a.ass_succ n
   | Bra b -> single b.bra_succ n
   | Jum j -> single j.jum_succ n
@@ -933,6 +950,7 @@ let succ_n node n =
 <<graph and node observers implementation>>=
 let succ node = match node with
   | Ins i -> i.ins_succ
+  | Sta i -> i.sta_succ
   | Ass a -> a.ass_succ
   | Joi j -> j.joi_succ
   | Bra b -> b.bra_succ
@@ -973,6 +991,7 @@ update the succ/pred list when changing a branch.
 <<graph and node observers implementation>>=
 let preds node = match node with
   | Ins i -> [i.ins_pred]
+  | Sta i -> [i.sta_pred]
   | Ass a -> [a.ass_pred]
   | Bra b -> [b.bra_pred]
   | Cbr c -> [c.cbr_pred]
@@ -991,6 +1010,7 @@ let preds node = match node with
 let succs node = match node with
   | Joi j -> [j.joi_succ]
   | Ins i -> [i.ins_succ]
+  | Sta i -> [i.sta_succ]
   | Ass a -> [a.ass_succ]
   | Bra b -> [b.bra_succ]
   | Jum j -> [j.jum_succ]
@@ -1046,6 +1066,7 @@ let fx node = match node with
 
 let nx node = match node with
   | Ins i -> i.ins_nx
+  | Sta i -> i.sta_nx
   | Ass a -> a.ass_nx
   | Bra b -> b.bra_nx
   | Jum j -> j.jum_nx
@@ -1058,20 +1079,21 @@ let entry cfg = cfg.entry
 let exit  cfg = cfg.exit
 @
 We have several functions to iterate or fold over the nodes of the graph.
-[[fold_heads]] folds over the entry node, the exit node, and the
+[[fold_heads]] folds over the entry node, the exit node (REALLY?), and the
 join points.
 [[fold_nodes]] folds over all the nodes in the cfg.
 <<graph and node observers implementation>>=
-let fold_over_preds f n zero = List.fold_right f (preds n) zero
-let fold_over_succs f n zero = List.fold_right f (succs n) zero
-
 let fold_heads f zero cfg = List.fold_right f (heads cfg) zero
+@ 
+The trick in [[fold_nodes]] is to visit every node \emph{without}
+taking the successor of the exit node.
+<<graph and node observers implementation>>=
 let fold_nodes f zero cfg =
-  let rec fold_bb f node zero =
-    if is_join node then zero
-    else fold_over_succs (fold_bb f) node (f node zero) in
-  fold_heads (fun head zero -> fold_bb f (succ head) (f head zero))
-             (f cfg.exit zero) cfg
+  let fold_over_nonjoin_succs f n zero =
+    List.fold_right (fun n z -> if is_join n then z else f n z) (succs n) zero in
+  let rec fold_bb node zero =
+    fold_over_nonjoin_succs fold_bb node (f node zero) in
+  fold_heads fold_bb (f cfg.exit zero) cfg
 
 let iter_nodes f = fold_nodes (fun n () -> f n) ()
 let iter_heads f = fold_heads (fun n () -> f n) ()
@@ -1101,7 +1123,7 @@ let cps_postorder_dfs g cons nil cont =
     next children acc visited in
   vnode (entry g) cont nil emptyset
 
-let postorder_dfs g cons nil =
+let postorder_dfs cons nil g =
   cps_postorder_dfs g cons nil (fun x _ -> x)
 @
 Edges may have control flow.
@@ -1112,17 +1134,18 @@ ACTION, WHICH IS WHERE THE LIVESETS REALLY MAKE SENSE ON THE EDGES.
 <<graph and node observers implementation>>=
 (* should this fn be defined on exi and ill?
    when there are cont edges, do we still need to cover the regular edges?*)
+let (++) = RS.union
 let union_over_outedges node ~noflow ~flow =
   let union_contedges ce =
-    Array.fold_left (fun r s -> RS.union r (flow s)) RS.empty ce in
+    Array.fold_left (fun r s -> r ++ flow s) RS.empty ce in
   match node with
   | Cal c -> union_contedges c.cal_contedges
   | Cut c -> union_contedges c.cut_contedges
-  | Cbr c -> RS.union (noflow c.cbr_true) (noflow c.cbr_true)
-  | Imp i -> RS.union (noflow i.imp_succ) (noflow i.imp_exit_succ)
-  | Mbr m ->
-    Array.fold_right (fun s -> RS.union (noflow s)) m.mbr_succs RS.empty
+  | Cbr c -> noflow c.cbr_true ++ noflow c.cbr_false
+  | Imp i -> noflow i.imp_succ ++ noflow i.imp_exit_succ
+  | Mbr m -> Array.fold_right (fun s -> (++) (noflow s)) m.mbr_succs RS.empty
   | Ins i -> noflow i.ins_succ
+  | Sta i -> noflow i.sta_succ
   | Ass a -> noflow a.ass_succ
   | Bra b -> noflow b.bra_succ
   | Jum j -> noflow j.jum_succ
@@ -1134,10 +1157,10 @@ let union_over_outedges node ~noflow ~flow =
   | Boot  -> imposs "union_over_outedges undefined on boot nodes"
   
 let add_inedge_uses node regs = match node with
-  | Cal c -> RS.union regs c.cal_uses
-  | Cut c -> RS.union regs c.cut_uses
-  | Jum j -> RS.union regs j.jum_uses
-  | Ret r -> RS.union regs r.ret_uses
+  | Cal c -> regs ++ c.cal_uses
+  | Cut c -> regs ++ c.cut_uses
+  | Jum j -> regs ++ j.jum_uses
+  | Ret r -> regs ++ r.ret_uses
   | _     -> regs
 @ 
 The only graph mutation occurs via the set successors functions. 
@@ -1221,6 +1244,7 @@ Call the appropriate continuation to update [[node]]'s successor.
 match node with
 | Joi j -> j.joi_succ <- single succ
 | Ins i -> i.ins_succ <- single succ
+| Sta i -> i.sta_succ <- single succ
 | Ass a -> a.ass_succ <- single succ
 | Jum j -> j.jum_succ <- single succ
 | Ret r -> r.ret_succ <- single succ
@@ -1267,6 +1291,7 @@ match old_succ with
 | Joi j -> j.joi_preds <- rem_1_list j.joi_preds
 | Exi e -> e.exi_preds <- rem_1_list e.exi_preds
 | Ins i -> i.ins_pred  <- (get_cfg old_succ).ill
+| Sta i -> i.sta_pred  <- (get_cfg old_succ).ill
 | Bra b -> b.bra_pred  <- (get_cfg old_succ).ill
 | Cbr c -> c.cbr_pred  <- (get_cfg old_succ).ill
 | Mbr m -> m.mbr_pred  <- (get_cfg old_succ).ill
@@ -1287,6 +1312,7 @@ let join_pred cur_preds = match cur_preds with
   | _       -> node::cur_preds in
 match succ with
 | Ins i -> i.ins_pred  <- node
+| Sta i -> i.sta_pred  <- node
 | Ass a -> a.ass_pred  <- node
 | Bra b -> b.bra_pred  <- node
 | Jum j -> j.jum_pred  <- node
@@ -1371,6 +1397,7 @@ let delete node =
 
 let update_instr upd node = match node with
   | Ins i -> i.ins_i <- upd i.ins_i
+  | Sta i -> i.sta_i <- upd i.sta_i
   | Ass a -> a.ass_i <- upd a.ass_i
   | Bra b -> b.bra_i <- upd b.bra_i
   | Jum j -> j.jum_i <- upd j.jum_i
@@ -1481,11 +1508,12 @@ let copy info transform cfg =
   let convert_contedges contedges = Array.map ce_lookup contedges in
   let convert node succ =
     match node with
-    | Ins i -> instruction new_cfg (transform i.ins_i) ~succ
-    | Ass a -> assertion   new_cfg (transform a.ass_i) ~succ
-    | Bra b -> branch      new_cfg ~target:(lookup b.bra_succ)
-    | Jum j -> jump        new_cfg (transform j.jum_i) ~uses:j.jum_uses
-                                   ~targets:[]
+    | Ins i -> instruction  new_cfg (transform i.ins_i) ~succ
+    | Sta i -> stack_adjust new_cfg (transform i.sta_i) ~succ
+    | Ass a -> assertion    new_cfg (transform a.ass_i) ~succ
+    | Bra b -> branch       new_cfg ~target:(lookup b.bra_succ)
+    | Jum j -> jump         new_cfg (transform j.jum_i) ~uses:j.jum_uses
+                                    ~targets:[]
     | Cbr c ->
       let (cond, _) = cfg.inst_info.branch.Ep.project c.cbr_i in
       cbranch new_cfg cond ~ifso:(lookup c.cbr_true)
@@ -1515,7 +1543,7 @@ let copy info transform cfg =
       let ent = mk_entry succ in
       (new_cfg.entry <- ent; ent)
     | Boot  -> undef "copy" "boot" in
-  let () = match postorder_dfs cfg convert new_cfg.ill with
+  let () = match postorder_dfs convert new_cfg.ill cfg with
            | Ent _ -> ()
            | _     -> imposs "postorder_dfs didn't end with entry node" in
   new_cfg
@@ -1582,6 +1610,15 @@ let instruction cfg i ~succ =
                 } in
   let ()  = set_succ ins ~succ:succ in
   ins
+
+let stack_adjust cfg i ~succ =
+  let sta = Sta { sta_i    = i
+                ; sta_pred = cfg.ill 
+                ; sta_succ = cfg.ill
+                ; sta_nx   = X.nx ()
+                } in
+  let ()  = set_succ sta ~succ:succ in
+  sta
 
 let assertion cfg i ~succ =
   let ass = Ass { ass_i    = i
@@ -1682,6 +1719,7 @@ types, where we know it is safe.
 let eq node node' = match node, node' with
   | Joi r, Joi r' -> r == r'
   | Ins r, Ins r' -> r == r'
+  | Sta r, Sta r' -> r == r'
   | Bra r, Bra r' -> r == r'
   | Cbr r, Cbr r' -> r == r'
   | Mbr r, Mbr r' -> r == r'
@@ -1736,6 +1774,8 @@ let merge_joins j1 j2 succ lpred = match j1, j2 with
 @
 
 Graph heads are defined as the entry node, the exit node, and the join points.
+WHY IS THE EXIT NODE A HEAD?  NR THINKS IT SHOULD NOT BE...  AND IT
+LOOKS AS IF IT ISN'T IN THE CODE?!
 <<graph utilities>>=
 let heads cfg =
   uniq (cfg.entry :: SM.fold (fun _ h rst -> h::rst) cfg.label_map [])
