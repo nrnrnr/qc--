@@ -1,4 +1,4 @@
-% -* mode: Noweb; noweb-code-mode: caml-mode -*-
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 % vim: ts=8 sw=4 et sts=4
 % Grades     ::=    "%%Grades:" Quality Importance Urgency
 % Quality    ::=    A|B|C|D|E
@@ -990,7 +990,7 @@ let freeze (p:Proc.t) =
         ()
 
 <<Make procedure>>=
-let proc env target optimizer asm (cconv,name,args,bdy) = 
+let proc env target optimizer (cconv,name,args,bdy) = 
     let symbol,scope = match F.findv name env with
                       | _,(F.Label(F.Proc (sym,scope)),_) -> sym,scope
                       | _                          -> assert false in
@@ -1067,9 +1067,7 @@ let proc env target optimizer asm (cconv,name,args,bdy) =
         ; Proc.eqns     = [Const2.equate sp outb] 
         ; Proc.conts    = conts
         } in
-    let () = optimizer i in
-        asm#cfg_instr i.Proc.cfg i.Proc.symbol
-        
+    optimizer i (* runs optimizer, freezes, and assembles proc *)
 @
         
 % ------------------------------------------------------------------ 
@@ -1280,7 +1278,7 @@ and section env target optimizer asm = function
     | A.SectionAt(x,_)     -> section env target optimizer asm x
     | A.Decl(d)            -> ()
     | A.Datum( d)          -> datum   env target asm d
-    | A.Procedure(p)       -> proc    env target optimizer asm p
+    | A.Procedure(p)       -> proc    env target optimizer p
     | A.SSpan ss           -> sspan   env target optimizer asm ss
 @            
 
@@ -1296,7 +1294,7 @@ let rec toplevel env target optimizer asm = function
             List.iter (section env target (*props*) optimizer asm) ss
     | A.TopDecl(d)        -> ()
     | A.TopProcedure(p)   -> let () = asm#section default_section  in 
-                              proc env target optimizer asm p
+                             proc env target optimizer p
 @
 
 

@@ -467,7 +467,7 @@ and code expanders are mixed together.
 Expand = Expand or {}
 
 Expand.stages = 
-    { placeVars = B.mk("placeVars",           Placevar.fortran)
+    { placeVars = B.mk("fortran variable placer", Placevar.fortran)
     , dummy     = B.mk("Dummyexpand.expand" , Dummyexpand.expand)
     , sparc     = B.mk("Sparcexpand.expand" , Sparcexpand.expand)
     , toy       = Expander.toy -- not an error (this is the new way)
@@ -514,7 +514,9 @@ function Opt.dummy(proc)
         { B.single(Expand.stages.placeVars)
         , B.single(Expand.stages.dummy)
         , Default.allocator
-        , B.single(B.mk("freeze", Driver.freeze))
+        , B.single(B.mk("freeze stack frame", Driver.freeze))
+        , B.single(B.mk("assemble procedure",
+                        Driver.proc_assembler(Driver.cmmasm(Driver.stdout)))) -- hack!
         }
     B.run(action, proc, {})
 end
@@ -525,7 +527,10 @@ function Opt.sparc(proc)
         { B.single(Expand.stages.placeVars)
         , B.single(Expand.stages.sparc)
         , Default.allocator
-        , B.single(B.mk("freeze", Driver.freeze))
+        , B.single(B.mk("freeze stack frame", Driver.freeze))
+        , B.single(B.mk("assemble procedure",
+                        Driver.proc_assembler(Targets.sparc_asm(Default.solaris,
+                                                                Driver.stdout)))) -- hack!
         }
     B.run(action, proc, {})
 end
@@ -534,7 +539,9 @@ function Opt.sparc_dbg (proc)
     local action = B.seq
         { B.single(Expand.stages.placeVars)
         -- , B.single(Expand.stages.sparc)
-        , B.single(B.mk("freeze", Driver.freeze))
+        , B.single(B.mk("freeze stack frame", Driver.freeze))
+        , B.single(B.mk("assemble procedure",
+                        Driver.proc_assembler(Driver.cmmasm(Driver.stdout)))) -- hack!
         }
     B.run(action, proc, {})
 end
@@ -585,7 +592,7 @@ function Targets.Toy.opt.apply(self, proc)
         { self.placer
         , self.expander
         , self.ralloc
-        , B.single(B.mk("freeze", Driver.freeze))
+        , B.single(B.mk("freeze stack frame", Driver.freeze))
         }
     B.run(action, proc, {})
 end
@@ -641,7 +648,7 @@ function Main.cc (target,file) -- compile file
     local ast = Driver.parse(file) 
     local asm = target.asm(Driver.stdout) 
     local env = Driver.check(ast,asm) -- asm is stored in env
-    local asm = Driver.compilec(target.opt, ast, target.id, env)
+    Driver.compilec(target.opt, ast, target.id, env)
     Driver.assemble(asm)
 end    
 
@@ -663,7 +670,7 @@ end
 
 CommandLineOption = CommandLineOption or { }
 
-function CommandLineOption.c     ()  Main.cc(Targets.Default,  Main.getfile()) end
+function CommandLineOption.oc    ()  Main.cc(Targets.Default,  Main.getfile()) end
 function CommandLineOption.dot   ()  Main.cc(Targets.Dot,      Main.getfile()) end
 function CommandLineOption.asdl  ()  Main.cc(Targets.Asdl,     Main.getfile()) end
 function CommandLineOption.pp    ()  Main.pp(Main.getfile())                   end
@@ -681,18 +688,26 @@ Stages.null = B.mk("empty stage", Stages.nullf)
 
 Backend = Backend or { }
 
-function Stages.cmmasm () 
-  Driver.cmmasm() -- must get args correct here
-end
-
 Backend.debug =     --- debugging back end
-  { widen     = Stages.null
-  , placevars = Placevar.fortran
+  { target    = Targets.dummy
+  , widen     = Stages.null
+  , placevars = B.single (B.mk("fortran variable placer", Placevar.fortran))
   , expand    = Expander.toy
   , liveness  = Stages.null
   , ralloc    = CG.color
-  , freeze    = Driver.freeze
-  , asm       = Stages.cmmasm
+  , freeze    = B.single (B.mk("freeze stack frame", Driver.freeze))
+  , asm       = Driver.cmmasm
+  }   
+
+Backend.old =     --- compatible with old back end
+  { target    = Targets.dummy
+  , widen     = Stages.null
+  , placevars = B.single(Expand.stages.placeVars)
+  , expand    = B.single(Expand.stages.dummy)
+  , liveness  = Stages.null
+  , ralloc    = Default.allocator
+  , freeze    = B.single (B.mk("freeze stack frame", Driver.freeze))
+  , asm       = Driver.cmmasm
   }   
 
 Opt = Opt or { }
@@ -709,25 +724,34 @@ function assembler_stage(asm)
 end
                 
 
-function Opt.standard(backend)
-  return B.seq
+function Opt.standard(backend, asm)
+  local x = B.seq
     { backend.widen      or Stages.null
     , backend.placevars  or Stages.null
     , backend.expand     or Stages.null
     , backend.liveness   or Stages.null
     , backend.ralloc     or Stages.null
     , backend.freeze     or Stages.null
-    , assembler_stage(backend.asm) -- needs fixing
+    , B.single(B.mk("assemble procedure", Driver.proc_assembler(asm)))
     } 
+  return x
+end
+
+function Main.run_optimizer(self, proc)
+  B.run(self.action, proc, {})
 end
 
 function Main.newcompile(backend, file)
     local ast = Driver.parse(file) 
     local asm = backend.asm(Driver.stdout) 
     local env = Driver.check(ast,asm) -- asm is stored in env
-    local opt = Opt.standard(backend)
-    Driver.compilec(opt, ast, nil and bogus, env)
+    local opt = { apply = Main.run_optimizer, action = Opt.standard(backend, asm) }
+    Driver.compilec(opt, ast, backend.target, env)
+    Driver.assemble(asm)
 end    
+
+backend = Backend.old
+function CommandLineOption.c ()  Main.newcompile(backend, Main.getfile()) end
 @
 % ------------------------------------------------------------------  
 \section{Manual Page}

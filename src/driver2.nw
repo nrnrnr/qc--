@@ -333,33 +333,36 @@ module Map = struct
 end
 
 let builtins =
-  [ "assemble"  , pf (Map.asm     **-> V.runit)            (fun asm -> asm#emit)
-  ; "check"     , pf (Map.ast     **-> Map.asm 
-                                  **-> V.result Map.env)   check
-  ; "emit_asdl" , pf (Map.ast     **-> V.runit)            emit_asdl
-  ; "parse"     , pf (V.string    **-> V.result Map.ast)   parse
-  ; "print"     , pf (Map.doc     **-> V.int **-> V.runit) print
-  ; "pretty"    , pf (Map.ast     **-> V.result Map.doc)   pretty
-  ; "scan"      , pf (V.string    **-> V.runit)            scan
-  ; "version"   , pf (V.unit      **-> V.runit)            version
-  ; "cmmasm"    , pf (Map.outchan **-> V.result Map.asm)   Asm.asm     
-  ; "astasm"    , pf (Map.outchan **-> V.result Map.asm)   Asm.asm (*alias*)
-  ; "dotasm"    , pf (Map.outchan **-> V.result Map.asm)   Dotasm.asm
-  ; "asdlasm"   , pf (Map.outchan **-> V.result Map.asm)   Asdlasm.asm
-  ; "sparcasm"  , pf (V.bool **-> Map.outchan 
-                             **-> V.result Map.asm)        Msparcasm.asm
-  ; "stdin"     , Map.inchan.V.embed                       stdin (* hack *)
-  ; "stdout"    , Map.outchan.V.embed                      stdout(* hack *)
-  ; "freeze"    , Map.stage.V.embed (fun v p -> Ast3ir.freeze p; true)
-  ; "compile"   , func (Map.optimize  **-> Map.ast  
-                                      **-> Map.target 
-                                      **-> Map.env 
-                                      **-> V.result Map.asm)
-                  (fun g opt -> compile (opt g))
-  ; "compilec"  , func (Map.optimize' **-> Map.ast  
-                                      **-> Map.target 
-                                      **-> Map.env 
-                                      **-> V.result Map.asm)
-                  (fun g opt -> compile (opt g))
+  [ "assemble"      , pf (Map.asm     **-> V.runit)            (fun asm -> asm#emit)
+  ; "proc_assembler", pf (Map.asm     **-> V.result Map.stage) 
+                        (fun asm v p -> 
+prerr_string "Calling asm#cfg_instr\n"; asm#cfg_instr p.Proc.cfg p.Proc.symbol; true)
+  ; "check"         , pf (Map.ast     **-> Map.asm 
+                                      **-> V.result Map.env)   check
+  ; "emit_asdl"     , pf (Map.ast     **-> V.runit)            emit_asdl
+  ; "parse"         , pf (V.string    **-> V.result Map.ast)   parse
+  ; "print"         , pf (Map.doc     **-> V.int **-> V.runit) print
+  ; "pretty"        , pf (Map.ast     **-> V.result Map.doc)   pretty
+  ; "scan"          , pf (V.string    **-> V.runit)            scan
+  ; "version"       , pf (V.unit      **-> V.runit)            version
+  ; "cmmasm"        , pf (Map.outchan **-> V.result Map.asm)   Asm.asm     
+  ; "astasm"        , pf (Map.outchan **-> V.result Map.asm)   Asm.asm (*alias*)
+  ; "dotasm"        , pf (Map.outchan **-> V.result Map.asm)   Dotasm.asm
+  ; "asdlasm"       , pf (Map.outchan **-> V.result Map.asm)   Asdlasm.asm
+  ; "sparcasm"      , pf (V.bool **-> Map.outchan 
+                                 **-> V.result Map.asm)        Msparcasm.asm
+  ; "stdin"         , Map.inchan.V.embed                       stdin (* hack *)
+  ; "stdout"        , Map.outchan.V.embed                      stdout(* hack *)
+  ; "freeze"        , Map.stage.V.embed (fun v p -> Ast3ir.freeze p; true)
+  ; "compile"       , func (Map.optimize  **-> Map.ast  
+                                          **-> Map.target 
+                                          **-> Map.env 
+                                          **-> V.result Map.asm)
+                      (fun g opt -> compile (opt g))
+  ; "compilec"      , func (Map.optimize' **-> Map.ast  
+                                          **-> Map.target 
+                                          **-> Map.env 
+                                          **-> V.result Map.asm)
+                      (fun g opt -> compile (opt g))
   ] 
 @  
