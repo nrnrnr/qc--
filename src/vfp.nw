@@ -37,6 +37,9 @@ All addressing expressions referring to data on the stack are written
 in the form $\mathtt{Fetch}(\vfp)+k$, where $k$~is a (possibly late) compile-time
 constant.\footnote
 {From here on, we omit the \texttt{Fetch}.}
+In particular, an addressing expression returned by the block
+abstraction is of
+the form \mbox{$\vfp+k$}.
 The stack pointer is never used in an addressing expression.
 \item
 The \vfp\ is immutable, so it never appears in an lvalue context.
@@ -45,9 +48,6 @@ We normally set $\sp$ by an assignment of the form
 \mbox{$\sp \gets \vfp + k$}, but we might also adjust the stack pointer by an
 assignment of the form 
 \mbox{$\sp \gets \sp + k$}.
-\item 
-All addressing expressions returned by the block abstraction are of
-the form $\vfp+k$.
 \end{itemize}
 
 At procedure entry, the calling convention dictates where the stack
@@ -88,8 +88,11 @@ we might want a somewhat different prolog.
 The epilog works similarly, by issuing a big shuffle for the
 nonvolatile registers and the return value.
 
-After the stack is frozen, we can compute at each node~$n$ the equation
+After the stack is frozen, we can compute for each node~$n$ the equation
 \mbox{$\vfp = \sp+k_n$}, where  $k_n$~may be different at each node.
+This equation holds on any edge flowing into~$n$:
+consistency is required at each join point.
+We compute $k_n$ as a forward dataflow problem.
 We know that $\vfp$~is immutable, and that on entry $\vfp=\sp$.
 We can therefore start at the entry node and propagate information
 forward.
@@ -111,13 +114,11 @@ halt with an assertion failure.
 We also need to check the equations for consistency at each join point
 in the control-flow graph.
 
-After we have $\vfp=\sp+k_n$ at each node, we can substitute
+After we have $\vfp=\sp+k_n$ on entry to each node, we can substitute
 appropriately for $\vfp$ and simplify.
 One hopes this step creates no additional work in the code expander.
 (In real life, we can probably combine the substitution and the
 computation. The code will appear in this file.) 
-
-
 
 
 Other notes:
