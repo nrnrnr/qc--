@@ -67,6 +67,7 @@ substitution. In that case the [[SubstExn]] is raised.
 
 <<subst>>=
 val subst  : subst -> tyscheme -> ty
+val empty  : subst
 @
 
 For debugging types and type schema can be pretty printed into
@@ -102,6 +103,7 @@ module Subst = Env.Make(struct type t=key let compare=compare end)
 open Subst
 
 type subst = int env
+let empty = Subst.empty 
 
 let unifyExn msg = raise UnifyExn
 let substExn ()  = raise SubstExn
@@ -123,7 +125,7 @@ let rec unify ts t sigma = match ts, t with
     | Bits(Var(x))   , Bits(y) when (domain x sigma) && 
                               (lookup x sigma) = y   -> sigma
     | Bits(Var(x))   , Bits(y)                       -> enter x y sigma
-    | Procedure(xs,x), Procedure(ys,y)  -> unify' (x::xs) (y::ys) sigma 
+    | Procedure(xs,x), Procedure(ys,y)  -> unify' (xs) (ys) sigma 
     | _              , _                             -> unifyExn "sorry"
 
 and unify' xs ys sigma = match xs, ys with

@@ -8,6 +8,7 @@ open Error
 type value =    | CharConst     of char
                 | IntConst      of int
                 | FloatConst    of float
+                | BoolConst     of bool
                 | ExprConst     of Ast.expr
 
 type kind       = Register
@@ -19,12 +20,11 @@ type kind       = Register
 type id         = string
 
 module ID       = struct type t=id let compare=compare end
-module Symbol   = Env.Make(ID) 
 module IDSet    = Set.Make(ID)
- 
+module Symbol   = Env.Make(ID)
 open Symbol
 
-(* implement warning for duplicate entries *)
+(* implement: error for duplicate entries *)
         
 type entry      = Types.ty * kind
 
@@ -100,6 +100,7 @@ module Print = struct
         | CharConst(c)  -> text "char("  ^^ text (Char.escaped c)  ^^ text ")"
         | IntConst(i)   -> text "int("   ^^ text (string_of_int i) ^^ text ")"
         | FloatConst(f) -> text "float(" ^^ text (string_of_float f) ^^ text ")"
+        | BoolConst(b)  -> text "bool("  ^^ text (if b then "t" else "f") ^^ text ")"
         | ExprConst(e)  -> text "<expr>"
 
     let ppKind = function
@@ -139,51 +140,94 @@ let proc args res   = Types.Procedure(args,res)
 let word            = bits 32
 let char            = bits 8
 
-let primEnv = enterList
-    [  "add"    , proc [bitsv 1; bitsv 1] (bitsv 1)
-    ;  "mult"   , proc [bitsv 1; bitsv 1] (bitsv 1)
-    ;  "eq"     , proc [bitsv 1; bitsv 1] bool
+let fst3 (x,_,_)    = x
+let snd3 (_,x,_)    = x
+let trd3 (_,_,x)    = x
+
+
+let add  = function
+    | [IntConst(x);IntConst(y)] -> IntConst(x+y)
+    | _                         -> assert false
+
+let mult  = function
+    | [IntConst(x);IntConst(y)] -> IntConst(x*y)
+    | _                         -> assert false
+
+let eq    = function
+    | [IntConst(x);IntConst(y)] -> BoolConst(x=y)
+    | _                         -> assert false
+
+let primOps = enterList
+    [  "add"    , (add  , proc [bitsv 1; bitsv 1] (bitsv 1))
+    ;  "mult"   , (mult , proc [bitsv 1; bitsv 1] (bitsv 1))
+    ;  "eq"     , (eq   , proc [bitsv 1; bitsv 1] bool)
     ] empty
     
-(* primitive operations *)
-    
-let add  x y = x + y
-let mult x y = x * y
-let eq   x y = x = y
+let dummy env   = bool, BoolConst(true), env 
+let atoi        = int_of_string
+let atof        = float_of_string
+let atoc s      = Char.code (String.get s 0)
 
+let rec evalFetch set env = function
+    | LValueAt(v,_) -> evalFetch set env v
+    | Mem (_,_,_)   -> fatalExn "memory access in const declaration"
+    | Var(n)        -> evalConst set env n
 
-let fetchTy id env v      = bool    
-let binOpTy id env l op r = bool
-let unOpTy  id env op e   = bool
-let primOpTy id env op es = bool
+and evalPrimOp set env op args = 
+    let env', xs = evalExprs set env args  in
+    let f, t     = try lookup op primOps with 
+    let xt       = List.map fst xs         in
+    let xv       = List.map snd xs         in
+    let sigma    = ( try Types.unify t (proc xt bool) Types.empty with 
+                   | Types.UnifyExn -> fatalExn "type mismatch"
+                   ) in
+    let rt       = ( match Types.subst sigma t with
+                   | Types.Procedure(_,r) -> r
+                   | _                    -> assert false
+                   ) in
+        rt, f xv, env'
 
-let rec exprTy id env = function
-    | ExprAt(e,_)             -> exprTy id env e
-    | Int( i, None)           -> word 
-    | Int( i, Some size)      -> bits size
-    | Float( f, None)         -> word 
-    | Float( f, Some size)    -> bits size
-    | Char( c, None)          -> char
-    | Char( c, Some size)     -> bits size
-    | Fetch(v)                -> fetchTy id env v
-    | BinOp(l,op,r)           -> binOpTy id env l op r
-    | UnOp(op,e)              -> unOpTy  id env op e
-    | PrimOp(op,es)           -> primOpTy id env op es
-    
+and evalExprs set env es = 
+    let rec loop set env acc = function
+        | []    -> env, List.rev acc
+        | e::es -> let t,x,env' = evalExpr set env e in
+                   loop set env' ((t,x)::acc) es
+    in
+        loop set env [] es
 
+and evalExpr set env = function 
+    | ExprAt(e,_)         -> evalExpr set env e 
+    | Int(i, None)        -> word     , IntConst(atoi i), env 
+    | Int(i, Some size)   -> bits size, IntConst(atoi i), env
+    | Float(f, None)      -> word     , FloatConst(atof f), env
+    | Float(f, Some size) -> bits size, FloatConst(atof f), env
+    | Char(c, None)       -> char     , IntConst(atoc c), env
+    | Char(c, Some size)  -> bits size, IntConst(atoc c), env
+    | Fetch(v)            -> evalFetch set env v
+    | BinOp(l,op,r)       -> evalPrimOp set env op [l;r]
+    | PrimOp(op,es)       -> evalPrimOp set env op (List.map snd es)
+    | UnOp(op,e)          -> dummy env
+         
 
-let rec evalConst id env = 
+and evalConst set env id = 
+    if IDSet.mem id set then fatalExn "circular const definition" else
     match lookup id env with
-    | (_,(Constant(ExprConst(e)) as c)) ->
-        let ty = exprTy id env e  in
-        enter id (ty,c) env
-    | x -> env
-    
-let eval env =
-    let keys     = fold (fun id e l -> id::l) env [] in
-    let f env id = evalConst id env in
-        foldl f env keys
+    | (_,(Constant(ExprConst(e)) as c)) -> 
+        let (t,x,env') = evalExpr (IDSet.add id set) env e
+        in (t,x, enter id (t,Constant(x)) env')
+    | (t, Constant(x))                  -> (t,x,env)
+    | x                                 -> 
+        fatalExn "access of non-constant id in const declaration"
 
+let eval env =
+    let rec accConst id entry l = 
+        ( match entry with
+        | _, Constant(ExprConst(_))   -> id::l
+        | _                           -> l
+        ) in
+    let keys = fold accConst env [] in
+    let eval env id = trd3 (evalConst IDSet.empty env id) in
+        foldl eval env keys    
 
 (* ------------------------------------------------------------------ *)
 
