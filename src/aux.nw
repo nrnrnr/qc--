@@ -38,6 +38,9 @@ val round_up_to : multiple_of:int -> int -> int
   (* round_up_to n k rounds k up to the nearest multiple of n.
      n must be positive and k must be nonnegative *)
 
+val foldri : (int -> 'a -> 'b -> 'b) -> 'a list -> 'b -> 'b
+  (* fold list elements right to left, passing index for List.nth *)
+
 module Option : sig 
     <<interface option>>
 end
@@ -215,3 +218,10 @@ let dely    y t = let x = lookupy y t in
 @
 <<aux.ml>>=
 let round_up_to ~multiple_of:n k = n * ((k+(n-1)) / n)
+let foldri f l z =
+  let rec next n = function
+    | [] -> z
+    | x :: xs -> f n x (next (n+1) xs) in
+  next 0 l
+
+    

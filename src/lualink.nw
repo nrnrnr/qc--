@@ -29,10 +29,11 @@ module Reloc             = Sledlib.MkReloc
 module MSparcRtlEncoder  = Msparcenc.Mk(Reloc)
 module MSparcRtlExpander = Sparcexpander.Make (Reloc) (MSparcRtlEncoder)
 
-module T1 = Lua.Lib.Combine.T3
+module T1 = Lua.Lib.Combine.T4
                 (DocType)                   (* T1.T1 *)
-                (AsmType)                   (* T1.T2 *)
-                (Luaiolib.T)                (* T1.T3 *)
+                (Luaiolib.T)                (* T1.T2 *)
+                (AsmType)                   (* T1.T3 *)
+                (NewAsmType)                (* T1.T4 *)
 
 module T    = Lua.Lib.Combine.T10           (* types *)
                 (T1)
@@ -50,8 +51,9 @@ module T    = Lua.Lib.Combine.T10           (* types *)
 module T1V = Lua.Lib.Lift (T1) (T.T1)
 
 module DocT        = T1V.T1
-module AsmT        = T1V.T2
-module LuaioT      = T1V.T3
+module LuaioT      = T1V.T2
+module AsmT        = T1V.T3
+module NewAsmT     = T1V.T4
 
 module AstT        = T.T2
 module EnvT        = T.T3
@@ -70,7 +72,7 @@ module L1 =
     (Luaiolib.Make (LuaioT))
     (IO (Luastrlib.M))
     (IO (Luamathlib.M))
-    (MakeLib (AsmT) (AstT) (EnvT) (ProcT) (TargetT) (NewProcT) (NewTargetT) (DocT) (LuaioT) (BlockT))
+    (MakeLib (AsmT) (NewAsmT) (AstT) (EnvT) (ProcT) (TargetT) (NewProcT) (NewTargetT) (DocT) (LuaioT) (BlockT))
     (Backplane.Make  (BackplaneT) (ProcT))
     (Colorgraph.Make (BackplaneT) (ColorgraphT) (ProcT))
     (Targets.MakeLib (TargetT))
@@ -114,8 +116,19 @@ so forth.
 module Asm       = Astasm.Make(Personality)
 module InterpAsm = Interpasm.Make(Interp)
 
+(* IT IS BOGUS TO HAVE TWO ASSEMBLY TYPES HERE.
+   INSTEAD WE SHOULD USE SOME FORM OF POLYMORPHISM,
+   WHICH SHOULD START WITH
+     type 'a t = 'a Asm3.assembler
+   AND CONTINUE FROM THERE *)
 module AsmType = struct
-    type 'a t       = Asm3.assembler
+    type 'a t       = Proc.t Asm3.assembler
+    let tname       = "asm"
+    let eq _        = fun x y -> x = y
+    let to_string _ = fun t -> "<asm>" 
+end
+module NewAsmType = struct
+    type 'a t       = Ast2ir.proc Asm3.assembler
     let tname       = "asm"
     let eq _        = fun x y -> x = y
     let to_string _ = fun t -> "<asm>" 
@@ -171,6 +184,8 @@ end
 
 module MakeLib
   (AsmV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a AsmType.t)
+  (NewAsmV : Lua.Lib.TYPEVIEW with type 'a t        = 'a NewAsmType.t
+                              and  type 'a combined = 'a AsmV.combined)
   (AstV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a AstType.t 
                               and  type 'a combined = 'a AsmV.combined)
   (EnvV    : Lua.Lib.TYPEVIEW with type 'a t        = 'a EnvType.t 
@@ -211,6 +226,7 @@ can call Lua functions while it is active.
 module Map = struct
     let ast       = AstV.makemap    V.userdata V.projection
     let asm       = AsmV.makemap    V.userdata V.projection
+    let new_asm   = NewAsmV.makemap    V.userdata V.projection
     let env       = EnvV.makemap    V.userdata V.projection
     let proc      = ProcV.makemap   V.userdata V.projection
     let new_proc  = NewProcV.makemap   V.userdata V.projection
@@ -231,6 +247,7 @@ let init g =
     [ "cmm"     , V.efunc (Map.outchan **-> V.result Map.asm) Asm.asm     
     ; "ast"     , V.efunc (Map.outchan **-> V.result Map.asm) Asm.asm
     ; "dot"     , V.efunc (Map.outchan **-> V.result Map.asm) Dotasm.asm
+    ; "new_dot" , V.efunc (Map.outchan **-> V.result Map.new_asm) Dotasm.new_asm
     ; "asdl"    , V.efunc (Map.outchan **-> V.result Map.asm) Asdlasm.asm 
     ; "x86"     , V.efunc (Map.outchan **-> V.result Map.asm) X86asm.make
     ; "interp"  , V.efunc (Map.outchan **-> V.result Map.asm) InterpAsm.asm

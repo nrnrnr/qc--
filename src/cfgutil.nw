@@ -36,6 +36,7 @@ val emit    :   cfg -> (Rtl.rtl -> 'a -> 'a)
                     -> (Symbol.t -> 'a -> 'a)
                     -> 'a
                     -> 'a
+val new_cfg2dot:    compress:bool -> name:string -> Rtl.rtl Cfgx.M.t -> string
 @
 
 \begin{itemize}
@@ -128,6 +129,36 @@ let cfg2dot ~compress ~name cfg =
   let dotedges = fold_bwd cfg (fun node rst -> edges_leaving node ^ rst) "" in
   let _ = Rtlutil.ToAST.verbosity oldv in
     dotOpenGraph ^ pagesize ^ compress ^ dotnodes ^ dotedges ^ dotCloseGraph
+
+let new_cfg2dot ~compress ~name g =
+  let module G = Cfgx.M in
+  let nodes = G.fold_nodes (fun x y -> x :: y) [] g in
+  let nnodes = Aux.foldri (fun i n ns -> (i, n) :: ns) nodes [] in
+  let number node = fst (List.find (fun (i, n) -> G.eq node n) nnodes) in
+  let nodename node = Printf.sprintf "\"N%d\"" (number node) in
+  let number_and_rtl node =
+    match G.to_instr node with
+    | Some rtl -> "N" ^ string_of_int (number node) ^ ": "
+                  ^ String.escaped (Rtlutil.ToReadableString.rtl rtl)
+    | None -> "N" ^ string_of_int (number node) in
+  let dotnode  node = nodename node ^ " [label=\"" ^ number_and_rtl node ^ "\"]" in
+  let edge_fwd from to' = nodename from ^ " -> " ^ nodename to'  ^ "\n" in
+  let edge_bwd from to' = nodename to'  ^ " -> " ^ nodename from ^
+                         "[dir=back,style=dotted]\n" in
+  let edges_leaving node tail =
+    let add_edge dir edges n = dir node n :: edges in
+    let fwd = List.fold_left (add_edge edge_fwd) tail (G.succs node) in
+    let all = List.fold_left (add_edge edge_bwd) fwd (G.preds node) in
+    all in
+  let oldv = Rtlutil.ToAST.verbosity Rtlutil.ToAST.Low in
+  let openg  = "digraph " ^ name ^ " {\n" in
+  let closeg = "}\n" in
+  let pagesize = "  size=\"8,10.5\"\n" in
+  let compress = if compress then "  ratio=compress\n" else "" in
+  let body = List.fold_right (fun n t -> edges_leaving n t)      nodes [closeg] in
+  let body = List.fold_right (fun n t -> dotnode n :: "\n" :: t) nodes body     in
+  let _ = Rtlutil.ToAST.verbosity oldv in
+  String.concat "" (openg :: pagesize :: compress :: body)
 @
 
         

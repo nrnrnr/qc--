@@ -325,6 +325,7 @@ module type S = sig
   type label = string
 
   type 'i cfg
+  type 'i t = 'i cfg
   type 'i node
   type regs = Register.Set.t (* sets of regs for dataflow *)
   type 'i contedge = { kills:regs; defs:regs; node:'i node }
@@ -353,9 +354,10 @@ Here are the constructors:
 \subsection{Observers}
 
 \paragraph{Observing nodes}
-We can ask about the kind of a node.
+We can ask about the kind of a node, and we can compare nodes for equality.
 <<graph and node observers>>=
 val kind       : 'i node -> kind
+val eq         : 'i node -> 'i node -> bool
 @ 
 We can also ask particular predicates that relate to the kind.
 <<graph and node observers>>=
@@ -626,6 +628,7 @@ module Make (X:X) : S with module X = X = struct
                 ; mutable label_map : 'i node SM.t
                 ;         mk_label  : label_supply
                 }
+  type 'i t = 'i cfg
 
   <<graph utilities>>
   <<graph and node observers implementation>>

@@ -1,3 +1,4 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
 
 % ------------------------------------------------------------------ 
 % Grades     ::=    "%%Grades:" Quality Importance Urgency
@@ -14,7 +15,8 @@ graph in \textsc{dot} format. The assember constructor receives the
 output channel for the assembler.
 
 <<dotasm.mli>>=
-val asm: out_channel -> Asm3.assembler
+val asm     : out_channel -> Proc.t      Asm3.assembler
+val new_asm : out_channel -> Ast2ir.proc Asm3.assembler
 @                      
 
 % ------------------------------------------------------------------ 
@@ -23,16 +25,15 @@ val asm: out_channel -> Asm3.assembler
 
 Most assembler directives do nothing. We are only interested in the
 control-flow-graphs that are part of an instruction. 
-
 <<dotasm.ml>>=
 module Asm = Asm3
-module G   = Cfg4
 
 exception Unsupported of string
 let unsupported msg = raise (Unsupported msg)
 
 <<Make>>
-let asm fd = new asm fd
+let asm     fd = new asm Cfgutil.cfg2dot     fd
+let new_asm fd = new asm Cfgutil.new_cfg2dot fd
 @
 
 
@@ -80,7 +81,7 @@ let spec =
 % ------------------------------------------------------------------ 
 
 <<Make>>=
-class asm (fd:out_channel) : Asm.assembler =
+class ['proc] asm cfg2dot (fd:out_channel) : ['proc] Asm.assembler =
 object (this)
     val mutable _section = "this can't happen"
 
@@ -104,11 +105,11 @@ object (this)
     method addloc n = ()
 
     (* instructions *)
-    method cfg_instr (proc:Proc.t) =
+    method cfg_instr (proc:'proc) =
         let cfg = proc.Proc.cfg 
         and s   = proc.Proc.symbol in
         let mangle  = Mangle.mk spec in
-        output_string fd (Cfgutil.cfg2dot true (mangle s#text) cfg)
+        output_string fd (cfg2dot ~compress:true ~name:(mangle s#text) cfg)
 
     method zeroes n = ()
     method value v = ()
