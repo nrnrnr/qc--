@@ -416,8 +416,8 @@ and comment = parse
   | _                           { fun map level ->
                                   comment lexbuf map level 
                                 }
-
 @
+
 % ------------------------------------------------------------------  
 \subsection{Strings}
 % ------------------------------------------------------------------  
@@ -498,7 +498,6 @@ body of the pragma that is enclosed by curly brackets.  Looking for
 the opening bracket takes place in the [[pragma2]] scanner context.
 
 <<scan.mll>>=
- 
 and pragma1 = parse
     eof                 { fun map -> P.EOF }
   | ws+                 { fun map -> pragma1 lexbuf map }
@@ -507,9 +506,9 @@ and pragma1 = parse
   | id                  { fun map -> 
                           let s  = get lexbuf in 
                           try ( match keyword s with 
-                              | _     -> pragma2 lexbuf map
+                              | _     -> pragma2 lexbuf map s
                               )
-                          with Not_found -> pragma2 lexbuf map 
+                          with Not_found -> pragma2 lexbuf map s
                         }
   | _                   { fun map -> 
                           error lexbuf map "id for pragma expected" 
@@ -517,18 +516,21 @@ and pragma1 = parse
 
 
 and pragma2 = parse
-    eof                 { fun map -> 
+    eof                 { fun map id -> 
                           error lexbuf map "pragma body expected" 
                         }
-  | ws+                 { fun map -> pragma2 lexbuf map }
-  | tab                 { fun map -> tab lexbuf map; pragma2 lexbuf map }
-  | nl                  { fun map -> nl  lexbuf map; pragma2 lexbuf map }
-  | '{'                 { fun map -> pragma3 lexbuf map 0 }
-  | _                   { fun map -> 
+  | ws+                 { fun map id -> pragma2 lexbuf map id }
+  | tab                 { fun map id -> tab lexbuf map; pragma2 lexbuf map id}
+  | nl                  { fun map id -> nl  lexbuf map; pragma2 lexbuf map id}
+  | '{'                 { fun map id -> 
+                          pragma3 lexbuf map 0 
+                        }
+  | _                   { fun map id -> 
                           error lexbuf map "pragma body expected" 
                         }
+@ 
 
-@ It is an error when the opening bracket is not found. Once it is
+It is an error when the opening bracket is not found. Once it is
 found the body of the pragma is skipped over in context [[pragma3]]. A
 body of a pragma must contain legal \C~tokens. We don't have to care
 for the details but must consider only the following cases:
@@ -544,7 +546,6 @@ for the details but must consider only the following cases:
 
 
 <<>>=
-
 and pragma3 = parse
     eof                         { fun map level ->
                                   error lexbuf map "unterminated pragma" 
@@ -584,7 +585,6 @@ and pragma3 = parse
   | _                           { fun map level ->
                                   pragma3 lexbuf map level 
                                 }
-
 @
 
 % ------------------------------------------------------------------ 
