@@ -112,7 +112,7 @@ instructions.
 
 <<head>>=
 let index r1 r2     = add (fetch r1) (fetch r2)         (* $r[r1] + $r[r2] *)
-let disp r1 imm     = add (fetch r1) (sx32 13 imm)      (* $r[r1] + simm13 *) 
+let disp r1 imm     = add (fetch r1)  imm               (* $r[r1] + simm13 *) 
 
 (* addr = index r1 r2 | disp r1 imm *)
 
@@ -125,8 +125,16 @@ let jmp  addr       = jmpl addr (rd 0)
 
 let mov  rc r       = r <-- rc              (* or' zero rc r *)
 let movr r1 r2      = r2 <-- fetch r1       (* or' zero (fetch r1) r2 *)
-let ret             = jmpl (disp (rd 7) (const 8 13)) (rd 0)
+let ret             = jmpl (disp (rd 7) (const 32 13)) (rd 0)
 let fmovs f1 f2     = f2 <-- fetch f1     
+@
+
+The following offset addresses a memory cell relativ to the frame
+pointer that is used to move data from floating-point registers to
+integer registers and vice versa.
+
+<<head>>=
+let mtmp            = add (fetch (rd 30)) (const 8 32)
 @
 
 % ------------------------------------------------------------------ 
@@ -184,8 +192,6 @@ let cost = function
     | false ->  C.inf_cost 
 @
 
-
-
 % ------------------------------------------------------------------ 
 \subsection{Code Expansion Rules}
 % ------------------------------------------------------------------ 
@@ -234,16 +240,22 @@ it.
 
 <<rules>>=
 const13:    Bits(b:bits) [{: cost (is_imm 13 b):}] 
-            {: return (R.bits (Bits.cast 13 b) 13) :}
+            {: return (R.bits b (Bits.width b))  :}
 
 reg:        const13 [1]
             {: 
                 const13 >>= fun k ->
                 itmp 32 >>= fun t ->
-                exec (or' zero (sx32 13 k) t) >>= fun () ->     (* set *)
+                exec (or' zero k t) >>= fun () ->     (* set *)
                 return t
             :}    
-reg:        const [1] {: error "cannot load large constants" :}
+reg:        const [1] 
+            {: 
+                (* error "cannot load large constants" *)
+                itmp 32 >>= fun t ->
+                exec (t <-- const) >>= fun () ->
+                return t
+            :}
 @
 
 Memory cells addresses are of either form: $\$r[r_1] + \$r[r_2]$, or
@@ -263,6 +275,17 @@ index:      Add(r1:reg, r2:reg)
                 r1 >>= fun r1 ->
                 r2 >>= fun r2 ->
                 return (index r1 r2)    (* exp m *)
+            :}
+
+reg:        Add(r1:reg, r2:reg) [1] -- escape for Add
+            {:
+                r1 >>= fun r1 -> 
+                r2 >>= fun r2 -> 
+                let fetches = List.map fetch [r1;r2] in
+                let exp     = R.app (R.opr "add" [32]) fetches in
+                itmp 32 >>= fun t ->
+                exec (t <-- exp) >>= fun () ->
+                return t
             :}
 
 addr:       reg     {: reg >>= fun r -> return (index (rd 0) r) :}
@@ -310,6 +333,13 @@ freg:       Fetch(mem, width) [1]
 
 @
 
+Fetches from registers.
+
+<<rules>>=
+reg:        Fetch(reg, width)  {: reg :}
+freg:       Fetch(freg, width) {: freg :}
+@
+
 We categorize operands into floating-point, boolean, and integer
 operands. We need this to decided when to use floating-point registers.
 
@@ -321,6 +351,9 @@ iop:        Op(opr) [{: cost (is_int_op opr) :}]
             {: U.opr opr :}
 
 bop:        Op(opr) [{: cost (is_bool_op opr) :}]
+            {: U.opr opr :}
+
+add:        Op(opr) [{: cost (is_add_op opr) :}]
             {: U.opr opr :}
 @
 
@@ -348,8 +381,14 @@ creg:       Cell('c', agg, width, k:const, ass)
 
 @
 
-Moves between registers. There seems to be no way to move data from
-integer to floating-point registers and vice versa. 
+Moves between registers. Data cannot be moved between integer and
+floating-point registers directly but has to go trough memory. I would
+like to use a fixed memory cell for this on the stack that is part of
+the frame layout. The problem is, that I cannot know the offset for this
+slot. A different possibility would be the introduction of temporaries
+that stand for memory locations. But this would cause changes in the
+register allocator. For the moment I assume that $\textit{fp}-8$ is
+reserved.
 
 <<rules>>=
 stmt:       Store(r1:reg, r2:reg, width) [1]
@@ -366,6 +405,35 @@ stmt:       Store(f1:freg, f2:freg, width) [1]
                 f2 >>= fun f2 ->
                 return (fmovs f2 f1)
             :}
+
+stmt:       Store(creg, reg, width) [1]
+            {:
+                creg >>= fun c ->
+                reg  >>= fun r ->
+                return (c <-- fetch r)
+            :}
+
+
+<<rules>>=
+reg:        freg [10] -- penality
+            {:
+                freg    >>= fun f ->
+                itmp 32 >>= fun t ->
+                exec (mem mtmp <-- fetch f) >>= fun () ->
+                exec (t <-- fetch (mem mtmp)) >>= fun () -> 
+                return t
+            :}
+
+freg:       reg [10] -- penality
+            {:
+                reg     >>= fun r ->
+                ftmp 32 >>= fun u ->
+                exec (mem mtmp <-- fetch r)  >>= fun () ->
+                exec (u <-- fetch (mem mtmp)) >>= fun () -> 
+                return u
+            :}
+            
+            
 @
 
 Small constants can be loaded directly.
@@ -375,7 +443,7 @@ stmt:       Store(reg, const13, width) [1]
             {:  
                 reg     >>= fun r ->
                 const13 >>= fun k ->
-                return (r <--  sx32 13 k)(* mov rc r *)
+                return (r <-- k)(* mov rc r *)
             :}    
 @            
 
@@ -420,6 +488,13 @@ freg:       App(fop, fregs) [1]
 <<rules>>=
 guard:      True()  {: return (R.bool true) :}
 guard:      False() {: return (R.bool false) :}
+guard:      App(bop, regs) 
+            {:
+                regs >>= fun rs ->
+                let fetches = List.map fetch rs in
+                let exp     = R.app bop fetches in
+                return exp
+            :}
 
 
 gstmt:      GStmt(guard,stmt)
