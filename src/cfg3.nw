@@ -173,6 +173,9 @@ val gm_cutto:   cfg -> Rtl.rtl -> conts     -> node
 val gm_call:    cfg -> Rtl.rtl -> conts -> succ:node -> node
 val gm_branch:  cfg -> Rtl.rtl -> ifso:node -> ifnot:node -> node
 
+(* delete node from cfg, ensures not (enumerated cfg) *)
+val gm_delete_assign:           node -> unit    (* req: node is assign node *)
+
 (* cfg mutators, ensures: not (enumerated cfg) *)
 (* all assignment insertions return the new node *)
 val gm_redirect_all:            src:node -> olddst:node -> newdst:node -> unit
@@ -182,6 +185,8 @@ val gm_insert_assign_between:   Rtl.rtl -> src:node -> dst:node -> node
 val gm_insert_dataflow_between: defs:locs -> uses:locs -> kills:locs ->
                                 src:node -> dst:node -> unit
 val gm_enumerate:               cfg -> unit (* post: enumerated cfg *)
+
+
 
 (* node observation *)
 val cfg:        node -> cfg
@@ -398,6 +403,22 @@ edge between [[src]] and [[dst]] exists.
 \item [[gm_enumerate: cfg -> unit]]:
 Establishes a numbering for all nodes of a {\cfg}; until a graph
 mutator is called the numbering is \emph{present}.
+
+\end{itemize}
+
+% ------------------------------------------------------------------ 
+\subsubsection{Deleting Nodes}
+% ------------------------------------------------------------------ 
+
+In general, nodes can not be deleted from a {\cfg}. The exceptions are
+[[assign]]-nodes.
+
+\begin{itemize}
+\item [[gm_delete_assign: node -> unit]]
+
+Deletes the [[assign]] node from its {\cfg}. It is a checked run-time
+error if [[node]] is not an assign-node. The predecessor of [[node]]
+becomes the predecessor of [[node]]'s successor and vice versa.
 
 \end{itemize}
 
@@ -703,8 +724,12 @@ let gm_enumerate (cfg:cfg) =
         ()
     else    
         cfg#enumerate
+
+let gm_delete_assign (node:node) =
+    let cfg = node#cfg in
+        cfg#delete node
 @    
- 
+
 Many node observations simply invoke a node's method. 
     
 <<implementation>>=
@@ -764,6 +789,7 @@ class type cfg = object
     
     method add:         node -> unit    (* add node to this; 
                                            est: enumerated = false *)
+    method delete:      node -> unit    (* remove node *)
     method enumerate:   unit            (* enumerate all node in this *)
     method enumerated:  bool            (* true, iff nodes are enumerated *)
     method enumeration: node array      (* req: enumerated *)
@@ -796,6 +822,12 @@ end
 \item [[add]] adds a node to this {\cfg}. This invalidates a potential 
       linerar order (i.e. enumeration) and causes [[enumerated]] to be
       [[false]].
+
+\item [[delete]] removes a node from this {\cfg}. This invalidates a
+      potential linerar order (i.e. enumeration) and causes
+      [[enumerated]] to be [[false]]. Calls the [[delete]] method of the
+      node which is responsible for unlinking itself from other nodes in
+      the {\cfg}.
 
 \item [[enumerate]] assigns numbers $1,2,\dots$ to the nodes in this
       {\cfg}. As a consequence, [[enumerated]] becomes true.
@@ -837,6 +869,7 @@ and node = object
     method add_label:   string -> unit  (* add alabel to this node *)
     method link_pred:   node -> unit    (* add    in-edge from to pred node *)
     method unlink_pred: node -> unit    (* remove in-edge from to pred node *) 
+    method unlink:      unit            (* unlink this from all other nodes *)
     method upd_succ:    (node -> node) -> unit (* redirect succs of this *)
     method set_rtl:     Rtl.rtl -> unit (* set rtl to new value *)
     (* 
@@ -872,6 +905,10 @@ end
       error to invoke this method if the [[cfg]] is not enumerated.
 \item [[succ]] are succeeding control-flow nodes. 
 
+\item [[unlink]] unlink this node from all adjacent nodes. Should not be
+      called directly but only from [[cfg]] to make sure it is removed
+      from the [[cfg]]'s data structures.
+
 \item [[pred]] are preceding control-flow nodes.
 \item [[link_pred]] informs this node that another node has become a
       predecessor of this node. 
@@ -894,12 +931,12 @@ end
       successor of [[this]] becomes the successor of the new node, which
       in turn becomes the new successor of [[this]].
 
-\item [[insert_assign_on_edges_from rtl before]] creates a new [[assign]] node from an
-      [[rtl]] and places it between [[this]] node and the node
-      [[before]]. The new node is returned. All edges leading from the
-      [[before]] node to [[this]] node lead through the new node afer
-      the method is completed. It is a checked run-time error if no edge
-      between [[before]] and [[this]] exists.
+\item [[insert_assign_on_edges_from rtl before]] creates a new
+      [[assign]] node from an [[rtl]] and places it between [[this]]
+      node and the node [[before]]. The new node is returned. All edges
+      leading from the [[before]] node to [[this]] node lead through the
+      new node afer the method is completed. It is a checked run-time
+      error if no edge between [[before]] and [[this]] exists.
 
 \item [[linorder]] provides constraints for the linear order of node. See
       section \ref{sect:cfg3:linorder} for details.
@@ -1162,6 +1199,12 @@ object (this)
         ( _id <- _id + 1
         ; _id
         )
+
+    method delete node =
+        ( _nodes <- NodeSet.remove node _nodes
+        ; _enumeration <- None
+        ; node#unlink
+        )
     
     (* test integrity of CFG *)
     method test =
@@ -1223,6 +1266,9 @@ object(this)
         
     method upd_succ map =               (* make virtual? *)
         ()
+
+    method unlink =
+        assert false    (* not defined in the general case! *)
     
     (* every node with more than one predecessor should be 
        labeled - do we want to check for this? *)
@@ -1461,6 +1507,31 @@ object (this)
             ; _succ#link_pred this
             ; assign
             )
+@
+
+To unlink an assign-node, we do:
+
+\begin{itemize}
+\item Find the single predecessor,
+\item redirect all outgoibg edges of the predecessor to our (single)
+      successor,
+\item unlink this node from our successor,
+\item make our predecessor a direct predecessor of our successor. 
+\end{itemize}
+
+This should leave this node unliked, except that this node still has a
+link to its successor, but is not linked from any other node.
+
+<<module X>>=    
+    method unlink =
+        let this = (this :> node) in
+        let pred = NodeSet.min_elt _pred                in
+        let ()   = assert (pred = NodeSet.max_elt _pred) in
+            ( pred#upd_succ (fun n -> if n = this then succ else n)
+            ; _succ#unlink_pred this
+            ; _succ#link_pred pred
+            )
+        
 
     method ast mangle target =
         let labels = super#ast mangle target in
