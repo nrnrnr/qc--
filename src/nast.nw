@@ -128,7 +128,7 @@ type 'e t' = {
 type assign  = (Ast.name_or_mem list * Ast.guarded list)
 type section = name * (Ast.expr, Ast.name_or_mem, assign) datum list
 type t = {
-    target   : Ast.arch list;
+    target   : Ast.arch marked list;
     imports  : (Ast.region * Ast.ty * Ast.import list) list;
     exports  : (Ast.region * Ast.export list) list;
     globals  : register list;
@@ -180,7 +180,7 @@ let rec decl r imports exports consts types regs archs data d k = match d with
   | A.Export (t,ee) -> k imports ((r,ee) :: exports) consts types regs archs data
   | A.Const d       -> k imports exports ((r,d) :: consts)  types regs archs data
   | A.Registers rs  -> k imports exports consts types (rs :: regs) archs data
-  | A.Target    t   -> k imports exports consts types regs (t :: archs) data
+  | A.Target    t   -> k imports exports consts types regs ((r, t) :: archs) data
   | A.Pragma        -> k imports exports consts types regs archs data
 @ 
 This is a generic lifting function.
@@ -321,11 +321,15 @@ let rec toplevel r imports exports consts types regs archs data t k =
       let t = A.Section(default_proc_section, [A.Procedure p]) in
       toplevel r imports exports consts types regs archs data t k
 
+let rflatten archs =
+  let add (r, archs) tail = List.fold_right (fun a t -> (r, a) :: t) archs tail in
+  List.fold_right add archs []
+
 let program ts =
   kmap toplevel (fun add t -> add t) Srcmap.null [] [] [] [] [] [] [] ts
     (fun ss imports exports consts types regs archs sdata ->
       let _ = if not (null sdata) then Impossible.impossible "some toplevel data" in
-      { target = List.flatten archs; imports = imports; exports = exports;
+      { target = rflatten archs; imports = imports; exports = exports;
         globals = List.flatten regs; sections = sdata;
         udecls = { types = types; constants = consts };
       })
