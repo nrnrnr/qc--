@@ -1,0 +1,47 @@
+/* Testing a bug in multiple assignment: the rhs must be evaluated before any
+ * assignments.
+ */
+target
+	byteorder little
+	wordsize 32
+	pointersize 32
+	memsize 8;
+
+export main;
+import printf;
+
+foreign "C" main(bits32 argc, "address" bits32 argv) {
+  bits32 x, hp;
+  bits32 a, b;
+  bits32 l_8;
+  stackdata { locals: bits32[4]; }
+  hp = locals;
+  bits32[hp] = 0;
+  bits32[hp+4] = 1;
+  bits32[hp+8] = 2;
+  bits32[hp+12] = 3;
+  x = 33;
+  a = 77;
+  b = 99;
+
+  l_8 = locals + 8;
+
+  foreign "C" printf("address" expected_before, locals, locals);
+  foreign "C" printf("address" actual, locals, hp, x, bits32[locals],
+                     bits32[locals+4], bits32[locals+8], bits32[locals+12]);
+
+  x, hp, bits32[hp], bits32[hp+4] = hp, hp+8, a, b;
+
+  foreign "C" printf("address" expected_after,  locals, l_8,  locals);
+  foreign "C" printf("address" actual, locals, hp, x, bits32[locals],
+                     bits32[locals+4], bits32[locals+8], bits32[locals+12]);
+  
+	foreign "C" return(0);
+}
+
+section "data" {
+	expected_before: bits8[] "(locals, %x) (hp, %x) (x, 21) (bits32[locals], 0) (bits32[locals+4], 1) (bits32[locals+8], 2) (bits32[locals+12], 3)\n\0";
+	expected_after: bits8[] "(locals, %x) (hp, %x) (x, %x) (bits32[locals], 77) (bits32[locals+4], 99) (bits32[locals+8], 2) (bits32[locals+12], 3)\n\0";
+
+	actual: bits8[] "(locals, %x) (hp, %x) (x, %x) (bits32[locals], %d) (bits32[locals+4], %d) (bits32[locals+8], %d) (bits32[locals+12], %d)\n\0";
+}

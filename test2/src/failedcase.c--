@@ -1,0 +1,40 @@
+/* We had a bug where a non-existent ``exit'' label was referenced. I believe this
+ * bug died with the old flow graph.
+ */
+
+target
+	byteorder little
+	wordsize 32
+	pointersize 32
+	memsize 8;
+
+export main;
+import printf;
+
+section "data" {
+	result: bits8[] "int: %d\n\0";
+}
+
+foreign "C" main(bits32 argc, "address" bits32 argv) {
+	bits32 r;
+
+	r = unresolved(1);
+    foreign "C" printf("address" result, r);
+	foreign "C" return(r);
+}
+
+//this function result in a linkage error
+unresolved(bits32 x) {
+	switch x {
+		case 1: {
+			return(0);
+		}
+		case 2: {
+			return(1);
+		}
+	}
+}
+
+/*
+vim:ts=4
+*/
