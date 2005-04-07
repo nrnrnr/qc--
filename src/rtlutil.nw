@@ -202,13 +202,18 @@ The implementation correctly accounts for cell sizes and now gives
 correct answers on registers, but it does not currently account for
 slices and may therefore claim two slices alias even if they are
 distinct slices of the same register.
+We have a special case, [[store_uses']] to check whether a location
+may alias with the locations used in a store (either the rhs or the
+addressing expression).
 <<rtlutil.mli>>=
 module MayAlias : sig
-  val regs  : Register.t -> Register.t -> bool   
-  val locs  : Rtl.loc -> Rtl.loc -> bool  (* useful to partially apply *)
-  val locs' : Rtl.Private.loc -> Rtl.Private.loc -> bool  (* partially apply *)
-  val exp   : Rtl.loc -> Rtl.exp -> bool  (* useful to partially apply *)
-  val exp'  : Rtl.Private.loc -> Rtl.Private.exp -> bool  (* partially apply *)
+  val regs   : Register.t -> Register.t -> bool   
+  val locs   : Rtl.loc -> Rtl.loc -> bool  (* useful to partially apply *)
+  val locs'  : Rtl.Private.loc -> Rtl.Private.loc -> bool (* partially apply *)
+  val exp    : Rtl.loc -> Rtl.exp -> bool  (* useful to partially apply *)
+  val exp'   : Rtl.Private.loc -> Rtl.Private.exp -> bool (* partially apply *)
+  val store_uses' :
+        Rtl.Private.loc -> (Rtl.Private.loc * Rtl.Private.exp * int) -> bool
 end
 @
 
@@ -1179,6 +1184,10 @@ Printf.eprintf "--> comparing stack slots %s+%d and %s+%d\n" sym n sym' n';
   let exp l =
     let alias = exp' (Down.loc l) in
     fun e -> alias (Down.exp e)
+
+
+  let store_uses' l (l', r', _) =
+    exp' l r' || match l' with RP.Mem (_, _, e, _) -> exp' l e | _ -> false
 end
 <<rtlutil.ml>>=
 @ 

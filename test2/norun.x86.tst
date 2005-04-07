@@ -10,10 +10,11 @@ Test.source  = "src"
 Test.files = { "eqasolve-000.c--"
              , "exp-002.c--"
              , "exp-003.c--"
-	     , "err-001.c--"
+             , "err-001.c--"
              , "err-000.c--"
              , "err-002.c--"
              , "infloop.c--"
+             , "nums.c--"
              }
 
 function norun(file) return { source = file, runnable="false" } end

@@ -2196,11 +2196,7 @@ let try_first_effect effects succ fail =
   let rec maybe bad = function
     | [] -> fail()
     | (l, r, w) :: rest ->
-        let alias (l', r', _) =
-          RU.MayAlias.exp' l r' ||
-          match l' with
-          | RP.Mem (_, _, e, _) -> RU.MayAlias.exp' l e
-          | _ -> false in
+        let alias = RU.MayAlias.store_uses' l in
         if not (List.exists alias bad || List.exists alias rest) then
           succ (l, r, w) (List.rev_append bad rest)
         else
