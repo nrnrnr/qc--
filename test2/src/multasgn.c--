@@ -26,22 +26,22 @@ foreign "C" main(bits32 argc, "address" bits32 argv) {
 
   l_8 = locals + 8;
 
-  foreign "C" printf("address" expected_before, locals, locals);
-  foreign "C" printf("address" actual, locals, hp, x, bits32[locals],
+  foreign "C" printf("address" expected_before);
+  foreign "C" printf("address" actual, hp - locals, x, bits32[locals],
                      bits32[locals+4], bits32[locals+8], bits32[locals+12]);
 
   x, hp, bits32[hp], bits32[hp+4] = hp, hp+8, a, b;
 
-  foreign "C" printf("address" expected_after,  locals, l_8,  locals);
-  foreign "C" printf("address" actual, locals, hp, x, bits32[locals],
+  foreign "C" printf("address" expected_after);
+  foreign "C" printf("address" actual, hp - locals, x - locals, bits32[locals],
                      bits32[locals+4], bits32[locals+8], bits32[locals+12]);
   
 	foreign "C" return(0);
 }
 
 section "data" {
-	expected_before: bits8[] "(locals, %x) (hp, %x) (x, 21) (bits32[locals], 0) (bits32[locals+4], 1) (bits32[locals+8], 2) (bits32[locals+12], 3)\n\0";
-	expected_after: bits8[] "(locals, %x) (hp, %x) (x, %x) (bits32[locals], 77) (bits32[locals+4], 99) (bits32[locals+8], 2) (bits32[locals+12], 3)\n\0";
+	expected_before: bits8[] "(hp, 0) (x, 21) (bits32[locals], 0) (bits32[locals+4], 1) (bits32[locals+8], 2) (bits32[locals+12], 3)\n\0";
+	expected_after: bits8[] "(hp, 8) (x, 0) (bits32[locals], 77) (bits32[locals+4], 99) (bits32[locals+8], 2) (bits32[locals+12], 3)\n\0";
 
-	actual: bits8[] "(locals, %x) (hp, %x) (x, %x) (bits32[locals], %d) (bits32[locals+4], %d) (bits32[locals+8], %d) (bits32[locals+12], %d)\n\0";
+	actual: bits8[] "(hp, %x) (x, %x) (bits32[locals], %d) (bits32[locals+4], %d) (bits32[locals+8], %d) (bits32[locals+12], %d)\n\0";
 }
