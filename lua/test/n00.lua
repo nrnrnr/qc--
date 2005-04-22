@@ -8,6 +8,10 @@ function g()
   return f()
 end
 
+function gg()
+  return g(), f()
+end
+
 x, y = g()
 
 print('testing multi-result call and return')
@@ -40,6 +44,9 @@ assert(x == 99 and y == 1 and z == 2)
 
 x, y, z = j(99)
 assert(x == 1 and y == 99 and z == nil)
+
+x, y, z, w = gg()
+assert(x == 1 and y == 1 and z == 2 and w == nil)
 
 
 print('OK')

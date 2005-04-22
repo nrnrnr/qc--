@@ -244,6 +244,7 @@ each individual C~routine to worry about type mismatches.
 Using [[with_stack]] here instead of in the definition of [[lambda]]
 ensures that we get a stack-trace entry even for Caml functions.
 \nwaddbox{apply : value -> state -> value list -> value list}
+\deeperbox{16pt}
 <<interp toplevel>>=
 let apply f g args = match f with
   | V.Function (info, f) ->
@@ -294,16 +295,14 @@ let proj_string g v =
   | Some (V.Element (s, v)) -> spr "'%s %s[%s]'" what s (V.to_string v)
   | None -> what
 @      
-To use a fallback or function call in a situation where we expect
+To use a fallback in a situation where we expect
 exactly one result, we adjust the results.
-We do this by maniupulating continuations. 
-\nwaddbox{trim1 : value list -> value}
 \nwaddbox{fb1   : string -> state -> value list -> value}
+\deeperbox{16pt}
 <<interp toplevel>>=
-let trim1 = function
+let fb1 name state args = match fallback name state args with
   | [] -> V.Nil
   | h :: t -> h
-let fb1 name state args = trim1 (fallback name state args)
 (*unboxval*)
 @ 
 \subsubsection{Implementations of the infix operators}
@@ -395,9 +394,9 @@ Tables are as you would expect, with fallbacks as required.
 let index g t key = match t with
 | V.Table t ->
     (match V.Table.find t key with
-    | V.Nil -> trim1 (fallback "index" g [V.Table t; key])
+    | V.Nil -> fb1 "index" g [V.Table t; key]
     | v -> v)
-| _ -> trim1 (fallback "gettable" g [t; key])
+| _ -> fb1 "gettable" g [t; key]
 
 let settable g t key v = match t with
 | V.Table t -> V.Table.bind t key v
@@ -410,7 +409,7 @@ Setting a global requires no fallback.
 <<interp toplevel>>=
 let getglobal g k =
   match V.Table.find g.V.globals k with
-  | V.Nil -> trim1 (fallback "getglobal" g [k])
+  | V.Nil -> fb1 "getglobal" g [k]
   | v -> v
 let setglobal g k v = V.Table.bind g.V.globals k v
 @ 
@@ -430,28 +429,35 @@ let rec getlocals locals n count =
 \subsection{Compilation}
 Compilation uses continuation-passing style, and to support type
 constraints, we define the type of continuation.
-A standard continuation takes an interpreter state (for globals,
-fallbacks, etc) and an array of locals and temporaries.
+A standard continuation takes an array that holds locals and
+temporaries.
+An extended continuation, which is used only in the case that the
+number of values used is not known until runtime, also takes a list of
+``extra results'' (every result beyond the first).
 <<compiler ((std))>>=
-type void = Void of void
-type a = void
+type a = A of a  (* used in place of type variable in type constraints *)
 type 'a cont  = V.value array -> 'a  (* for exp1 *)
 type 'a xcont = V.value list -> V.value array -> 'a  (* for exp, explist *)
-(*<definitions of [[exp]], [[explist]], and friends>*)
 @ 
 \subsubsection{Compiling expressions}
+We use two different expression compilers:
+in a context where exactly one value is expected, we use [[exp1]];
+in a context where the number of values expected could vary, we use
+[[exp]].
+The terms [[exp]] and [[exp1]] are taken from the grammar for Lua.
+
 To avoid allocation, we let locals and temporaries share one array.
-The semantics of [[exp]] are as follows:
+The semantics of [[exp1]] are as follows:
 \begin{itemize}
 \item
 As early parameters, it takes a function [[localref]],
-expression [[exp]], environment
+expression~[[e]], environment
 [[rho]], continuation [[theta]], and index [[loc]] (the location in
 the locals into which to put the result).
-The application of [[exp]] to these parameters constitutes ``compile time.''
+The application of [[exp1]] to these parameters constitutes ``compile time.''
 \item
 This function returns a new continuation: a dynamic function that maps
-global and local 
+local 
 state to answers, and as a side effect deposits the result of
 evaluating the expression in [[locals.(loc)]].
 The application of this nameless function to global and local state,
@@ -464,7 +470,7 @@ used at run time.
 We use this information to allocate a ``locals'' array of exactly the
 right size.
 \end{itemize}
-It is critically important that when [[exp]] calls itself recursively,
+It is critically important that when [[exp1]] calls itself recursively,
 the call not be hidden under a lambda.
 Otherwise, we could inadvertently delay compilation until run time,
 with possibly disastrous results (e.g., access of a nonexistent local).
@@ -564,14 +570,27 @@ location technique works.
         let op = unop op in
         exp1 rho e loc (fun l -> finish (op (getlocal l loc) g) l)
 @ 
-A call could be a function call or a method call; the details are
-delegated to function [[call]].
-If the call occurs in an expression context, its result list is adjusted to
-a single value, which is stored in [[loc]].
-We then continue with [[theta]].
+A call could be a function call or a method call.
+Because in the general case, a call can return multiple results, we
+delegate the compilation to [[exp]].
+Because \emph{this} call occurs in a single-result context, we pass
+[[exp]] a continuation that ignores any ``extra'' results.
 <<definitions of [[exp]], [[explist]], and friends>>=
     | A.Call c -> exp localref rho e loc (fun _ -> theta)
 in  exp1
+@ 
+When we compile an expression in a full, multi-result context, we
+[[finish]] with a \emph{list} of expressions.
+The first expression is written to [[loc]]; any remaining expressions
+are passed to [[theta]] before the local state.
+
+The only expression that can actually produce multiple results is a
+call.
+Any other expression is compiled by [[exp1]].
+The details are
+delegated to function [[call]], which is shared with the compiler for
+statements. 
+<<definitions of [[exp]], [[explist]], and friends>>=
 and exp localref rho e loc theta = 
   let finish  vs l = match vs with
   | v :: vs -> setlocal l loc v; theta vs l
@@ -582,6 +601,7 @@ and exp localref rho e loc theta =
 @ 
 Function [[explist]] compiles code to evaluate a list of expressions,
 each linked to the next by its continuation [[theta]].
+The last expression is compiled in a multi-result context.
 Function [[explist]] tracks the desired location of each result. 
 <<definitions of [[exp]], [[explist]], and friends>>=
 and explist localref rho es loc theta = match es with
@@ -643,17 +663,17 @@ let rec extend rho = function
 Here's where we compile an entire block.
 The function [[block_compiler]] is a sort of pre-compiler; it strings things together. 
 It returns two functions:
-[[bcomp]] can be used to compile a block, and afterward,
+[[bcomp]] can be used to compile a block, and afterward, 
 [[local_size]] can be used to find out how many locals are used in the
 block.
-\nwaddbox{exp1    : (int -> unit) -> (string -> var) -> A.exp      -> int -> a cont -> a cont}
-\nwaddbox{exp     : (int -> unit) -> (string -> var) -> A.exp      -> int -> a xcont -> a xcont}
-\nwaddbox{explist : (int -> unit) -> (string -> var) -> A.exp list -> int -> a xcont -> a xcont}
-\nwaddbox{block   : string list -> A.block -> a cont -> (value list -> a) -> a cont}
-\deeperbox{36pt}
+\nwaddbox{exp1    : (int -> unit) -> (string -> var) -> A.exp      -> int -> a  cont -> a cont}
+\nwaddbox{exp     : (int -> unit) -> (string -> var) -> A.exp      -> int -> a xcont -> a cont}
+\nwaddbox{explist : (int -> unit) -> (string -> var) -> A.exp list -> int -> a xcont -> a cont}
+\nwaddbox{block   : string list -> A.block -> 'a cont -> (value list -> 'a) -> 'a cont}
+\deeperbox{48pt}
 <<compiler ((std))>>=
 <<old debugging code>>
-let block_compiler srcmap g =
+let block_compiler srcmap g = 
   <<definitions of [[exp]], [[explist]], and friends>> in
   let high_local_limit = ref 0 in
   let localref n = if n >= !high_local_limit then high_local_limit := n+1 in
@@ -662,8 +682,7 @@ let block_compiler srcmap g =
       <<definitions of [[block]], [[stmt]], and friends>> in
 (*inboxval*)
       block
-  in  (bcomp: debug:bool -> string list -> A.block -> 'a cont -> (V.value list -> 'a)
-              -> 'a cont), local_size
+  in  bcomp, local_size
 @ 
 When compiling a statement, we provide two continuations: 
 a standard continuation [[theta]]
@@ -902,8 +921,6 @@ let lambda (src, debug) (file, line, col) args varargs body state =
           (Array.set locals n a; walk (n+1) fs a's)  in
     let _ = walk 0 args argv in
     body locals
-
-let (_ : Srcmap.map * bool -> Srcmap.location -> string list -> bool -> A.block -> V.state -> V.srcloc * V.func) = lambda
 (*unboxval*)
 @ 
 Chunk compilation is not too exciting.
@@ -942,7 +959,7 @@ let compile ~srcdbg cs g =
   fun () -> theta locals
 @ 
 \subsection{Some very simple tests}
-These tests are probably just about worthless at this stage, but early
+These tests are probably just about worthless now, but early
 in the game they were quite a help.
 <<interp tests>>=  
 let nil = A.Lit V.Nil
@@ -1073,7 +1090,7 @@ let funname = function
   | A.Lindex (e, e') -> expname e ^ "[" ^ expname e' ^ "]"
 
 (*
-let (_ : (string -> var) -> A.exp -> int -> 'a cont -> 'a cont) = exp' (fun _ -> ())
+let (_ : (string -> var) -> A.exp -> int -> 'a cont -> 'a cont) = exp' (fun _ -> ()) 
 
 let (pexp : (string -> var) -> A.exp -> int -> answer cont -> answer cont) = exp' (fun _ -> ())
 *)
