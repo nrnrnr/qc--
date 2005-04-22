@@ -435,8 +435,8 @@ fallbacks, etc) and an array of locals and temporaries.
 <<compiler ((std))>>=
 type void = Void of void
 type a = void
-type 'a cont = V.value array -> 'a
-type 'a kont = V.value array -> V.value list -> 'a  (* for expression *)
+type 'a cont  = V.value array -> 'a  (* for exp1 *)
+type 'a xcont = V.value list -> V.value array -> 'a  (* for exp, explist *)
 (*<definitions of [[exp]], [[explist]], and friends>*)
 @ 
 \subsubsection{Compiling expressions}
@@ -479,29 +479,26 @@ the location [[loc]] that is passed as a parameter.
 <<definitions of [[exp]], [[explist]], and friends>>=
 let append argv rest = match rest with [] -> argv | _ -> argv @ rest in
         (* optimizes common case *)
-let rec exp localref =
-  let rec exp rho e loc theta = 
-    let finish1 v  l = setlocal l loc v; theta [] l in
-    let finish  vs l = match vs with
-    | v :: vs -> setlocal l loc v; theta vs l
-    | []      -> setlocal l loc V.Nil; theta [] l in
+let rec exp1 localref =
+  let rec exp1 rho e loc theta = 
+    let finish v l = setlocal l loc v; theta l in
     match e with
     | A.Var x -> localref loc;
                  (match rho x with
-                  | Global  -> fun _ l -> finish1 (getglobal g (V.String x)) l
-                  | Local n -> fun _ l -> finish1 (getlocal l n) l)
+                  | Global  -> fun l -> finish (getglobal g (V.String x)) l
+                  | Local n -> fun l -> finish (getlocal l n) l)
 @ 
 A literal is straightforward.
 An indexing expression compiles the table and index into two
 locations, then builds a new continuation [[theta]], which fetches
 from these locations, computes the indexing expression, and finishes.
 <<definitions of [[exp]], [[explist]], and friends>>=
-    | A.Lit v -> localref loc; fun _ l -> finish1 v l
+    | A.Lit v -> localref loc; fun l -> finish v l
     | A.Index (tab, key) ->
         let tabloc = loc in
         let keyloc = loc + 1 in
-        let theta _ l = finish1 (index g (getlocal l tabloc) (getlocal l keyloc)) l in
-        exp rho tab tabloc (exp rho key keyloc theta) 
+        let theta l = finish (index g (getlocal l tabloc) (getlocal l keyloc)) l in
+        exp1 rho tab tabloc (exp1 rho key keyloc theta) 
 @ 
 In a table literal, the keys are static, but the values are dynamic.
 Luckily, however, we can bind away each value as soon as it is
@@ -524,22 +521,23 @@ Because lists always come first, we call [[listbind]] which then calls
           | [] -> bind theta bindings
           | h::t ->
               let theta = listbind (n +. 1.0) theta t in
-              let theta = fun vs l -> V.Table.bind (tbl l) (V.Number n) (getlocal l vloc);
-                                      theta vs l
-              in  exp rho h vloc theta
+              let theta = fun l -> V.Table.bind (tbl l) (V.Number n) (getlocal l vloc);
+                                   theta l
+              in  exp1 rho h vloc theta
+                (* PERHAPS FOR LAST ELEMENT IN LIST, SHOULD CAPTURE *ALL* RESULTS? *)
         and bind theta = function
           | [] -> theta
           | (n, h) :: t ->
               let theta = bind theta t in
-              let theta = fun vs l -> V.Table.bind (tbl l) (V.String n) (getlocal l vloc);
-                                      theta vs l
-              in  exp rho h vloc theta in
+              let theta = fun l -> V.Table.bind (tbl l) (V.String n) (getlocal l vloc);
+                                   theta l
+              in  exp1 rho h vloc theta in
         let size  = List.length bindings + List.length lists in
         let theta = listbind 1.0 theta lists in
-        fun vs l ->
+        fun l ->
           let t = V.Table.create size in
           setlocal l tabloc (V.Table t);
-          theta vs l
+          theta l
 @ 
 The short-circuit binary operators require special trickery.
 We use the [[short_circuit]] function to combine true and false
@@ -548,23 +546,23 @@ The standard binary operators provide a good illustration of how the
 location technique works.  
 <<definitions of [[exp]], [[explist]], and friends>>=
     | A.Binop (e1, op, e2) ->
-        let short_circuit theta_t theta_f = fun _ l ->
+        let short_circuit theta_t theta_f = fun l ->
           match getlocal l loc with
-          | V.Nil -> theta_f [] l
-          | _ ->     theta_t [] l in
+          | V.Nil -> theta_f l
+          | _ ->     theta_t l in
         ( match op with
-        | A.And -> exp rho e1 loc (short_circuit (exp rho e2 loc theta) theta)
-        | A.Or  -> exp rho e1 loc (short_circuit theta (exp rho e2 loc theta))
+        | A.And -> exp1 rho e1 loc (short_circuit (exp1 rho e2 loc theta) theta)
+        | A.Or  -> exp1 rho e1 loc (short_circuit theta (exp1 rho e2 loc theta))
         | _ ->
             let loc1 = loc in
             let loc2 = loc + 1 in
             let op = binop op in
-            exp rho e1 loc1 (
-            exp rho e2 loc2 (
-            fun _ l -> finish1 (op (getlocal l loc1) (getlocal l loc2) g) l)))
+            exp1 rho e1 loc1 (
+            exp1 rho e2 loc2 (
+            fun l -> finish (op (getlocal l loc1) (getlocal l loc2) g) l)))
     | A.Unop (op, e) ->
         let op = unop op in
-        exp rho e loc (fun _ l -> finish1 (op (getlocal l loc) g) l)
+        exp1 rho e loc (fun l -> finish (op (getlocal l loc) g) l)
 @ 
 A call could be a function call or a method call; the details are
 delegated to function [[call]].
@@ -572,32 +570,38 @@ If the call occurs in an expression context, its result list is adjusted to
 a single value, which is stored in [[loc]].
 We then continue with [[theta]].
 <<definitions of [[exp]], [[explist]], and friends>>=
-    | A.Call c ->
-        localref loc;
-        call localref c rho loc finish
-in  exp
+    | A.Call c -> exp localref rho e loc (fun _ -> theta)
+in  exp1
+and exp localref rho e loc theta = 
+  let finish  vs l = match vs with
+  | v :: vs -> setlocal l loc v; theta vs l
+  | []      -> setlocal l loc V.Nil; theta [] l in
+  match e with
+  | A.Call c -> localref loc; call localref c rho loc finish
+  | _ -> exp1 localref rho e loc (theta [])
 @ 
 Function [[explist]] compiles code to evaluate a list of expressions,
 each linked to the next by its continuation [[theta]].
 Function [[explist]] tracks the desired location of each result. 
 <<definitions of [[exp]], [[explist]], and friends>>=
 and explist localref rho es loc theta = match es with
-| [] -> theta
-| e :: es -> exp localref rho e loc (explist localref rho es (loc+1) theta)
+| [] -> theta []
+| [e] -> exp localref rho e loc theta
+| e :: es -> exp1 localref rho e loc (explist localref rho es (loc+1) theta) 
 @ 
 For a call we compile the function and its arguments, creating a
 continuation that pulls [[fv]] (the function value) and [[argv]] (the
 list of arguments) out of the locals, then uses [[apply]] to apply the
 function. 
 The [[theta]] passed in is a somewhat different one from the expression
-[[theta]]; in addition to the state, it takes the list of \emph{all}
+[[theta]]; before taking the state, it takes the list of \emph{all}
 values returned. 
 <<definitions of [[exp]], [[explist]], and friends>>=
 and call localref c rho loc theta = match c with
 | A.Funcall (f, args) ->
     let argcount = List.length args in
     let argloc = loc + 1 in
-    exp localref rho f loc (
+    exp1 localref rho f loc (
     explist localref rho args argloc
       (fun vs l ->
         let fv   = getlocal l loc in
@@ -613,13 +617,13 @@ the code is more elaborate, but the ideas are the same.
     let argloc   = selfloc + 1 in
     let argcount = List.length args + 1 in
     let meth     = V.String meth in
-    exp localref rho obj selfloc (
-    let theta_m = explist localref rho args argloc
-        (fun vs l ->
-          let fv = getlocal l loc in
-          let argv = getlocals l selfloc argcount in
-          theta (apply fv g (append argv vs)) l) in
-    fun vs l -> setlocal l mloc (index g (getlocal l selfloc) meth); theta_m vs l)
+    exp1 localref rho obj selfloc (
+      let theta_m = explist localref rho args argloc
+          (fun vs l ->
+            let fv = getlocal l loc in
+            let argv = getlocals l selfloc argcount in
+            theta (apply fv g (append argv vs)) l) in
+      fun l -> setlocal l mloc (index g (getlocal l selfloc) meth); theta_m l)
 @ 
 \subsubsection{Compiling statements}
 
@@ -642,8 +646,9 @@ It returns two functions:
 [[bcomp]] can be used to compile a block, and afterward,
 [[local_size]] can be used to find out how many locals are used in the
 block.
-\nwaddbox{exp     : (int -> unit) -> (string -> var) -> A.exp      -> int -> (value array -> value list -> 'a) -> (value list -> value array -> 'a)}
-\nwaddbox{explist : (int -> unit) -> (string -> var) -> A.exp list -> int -> (value array -> value list -> 'a) -> (value list -> value array -> 'a)}
+\nwaddbox{exp1    : (int -> unit) -> (string -> var) -> A.exp      -> int -> a cont -> a cont}
+\nwaddbox{exp     : (int -> unit) -> (string -> var) -> A.exp      -> int -> a xcont -> a xcont}
+\nwaddbox{explist : (int -> unit) -> (string -> var) -> A.exp list -> int -> a xcont -> a xcont}
 \nwaddbox{block   : string list -> A.block -> a cont -> (value list -> a) -> a cont}
 \deeperbox{36pt}
 <<compiler ((std))>>=
@@ -710,8 +715,8 @@ compilation, closing the recursive loop.
       let condloc = List.length rho in
       let body = block rho body goto_head ret in
       let loop =
-        exp localref (lookup rho) cond condloc
-          (fun _ l -> if notnil (getlocal l condloc) then body l else theta l) [] in
+        exp1 localref (lookup rho) cond condloc
+          (fun l -> if notnil (getlocal l condloc) then body l else theta l) in
       let _ = loop_cont := loop in
       loop
   | A.RepeatUntil (body, cond) ->
@@ -720,8 +725,8 @@ compilation, closing the recursive loop.
       let condloc = List.length rho in
       let body = block rho body goto_test ret in
       let loop =
-        exp localref (lookup rho) cond condloc
-          (fun _ l -> if notnil (getlocal l condloc) then theta l else body l) [] in
+        exp1 localref (lookup rho) cond condloc
+          (fun l -> if notnil (getlocal l condloc) then theta l else body l) in
       let _ = loop_test := loop in
       body
 @ 
@@ -734,8 +739,8 @@ into the abstract syntax.
       let condloc = List.length rho in
       let add (cond, body) f =
         let body = block rho body theta ret in
-        exp localref (lookup rho) cond condloc (
-          fun _ l -> if notnil (getlocal l condloc) then body l else f l) [] in
+        exp1 localref (lookup rho) cond condloc (
+          fun l -> if notnil (getlocal l condloc) then body l else f l) in
       List.fold_right add alts f
 @ 
 Returning compiles a list of expressions, supplying a static
@@ -746,7 +751,7 @@ passes them to the static return continuation.
       let loc = List.length rho in
       let result_count = List.length es in 
       explist localref (lookup rho) es loc 
-      (fun vs l -> ret (append (getlocals l loc result_count) vs)) []
+      (fun vs l -> ret (append (getlocals l loc result_count) vs))
 @ 
 A [[local]] declaration has the same dynamic effect as an assignment,
 which must be compiled in an extended compile-time environment.
@@ -764,9 +769,9 @@ This stuff probably needs better documentation.
       lvars localref (lookup rho) (List.length rho) vs (fun setlvs loc ->
         explist localref (lookup rho) es loc (fun vs l ->
           setlvs l (append (getlocals l loc rhscount) vs);
-          theta l) [])
+          theta l))
   | A.Callstmt c ->
-      call localref c (lookup rho) (List.length rho) (fun _ l -> theta l) []
+      call localref c (lookup rho) (List.length rho) (fun _ l -> theta l)
 @ 
 The [[block]] function compiles statements in sequence.
 It manages both the linking of continuations and the extension of the
@@ -812,10 +817,10 @@ and lvar localref rho lv lhsloc nextlvar =
       nextlvar setx lhsloc
   | A.Lindex (t, key) ->
       let keyloc = lhsloc + 1 in
-      let setidx = exp localref rho t lhsloc (exp localref rho key keyloc (fun _ l ->
+      let setidx = exp1 localref rho t lhsloc (exp1 localref rho key keyloc (fun l ->
             let t   = getlocal l lhsloc in
             let key = getlocal l keyloc in
-            (fun v -> settable g t key v))) [] in
+            (fun v -> settable g t key v))) in
       nextlvar setidx (lhsloc+2)
 <<definitions of [[block]], [[stmt]], and friends>>=
 and lvars localref rho loc lvs finish = match lvs with
