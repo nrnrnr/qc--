@@ -66,10 +66,10 @@ main:
 	addl %edx,%ecx
 	movl %eax,12(%esp)
 	movl %ecx,%eax
-	movl %edi,16(%esp)
-	movl %esi,20(%esp)
-	movl %ebp,24(%esp)
-	movl %ebx,28(%esp)
+	movl %ebx,16(%esp)
+	movl %ebp,20(%esp)
+	movl %esi,24(%esp)
+	movl %edi,28(%esp)
 	call f
 .Lcall_successor_l24:
 	leal nocut,%eax
@@ -90,10 +90,10 @@ main:
 	addl %edx,%ecx
 	movl 8(%esp),%edx
 	movl %edx,(%ecx)
-	movl 28(%esp),%ebx
-	movl 24(%esp),%ebp
-	movl 20(%esp),%esi
-	movl 16(%esp),%edi
+	movl 28(%esp),%edi
+	movl 24(%esp),%esi
+	movl 20(%esp),%ebp
+	movl 16(%esp),%ebx
 	leal 40(%esp), %esp
 	ret
 .Lcut_entry_l10:
@@ -117,10 +117,10 @@ main:
 	addl %edx,%ecx
 	movl 8(%esp),%edx
 	movl %edx,(%ecx)
-	movl 28(%esp),%ebx
-	movl 24(%esp),%ebp
-	movl 20(%esp),%esi
-	movl 16(%esp),%edi
+	movl 28(%esp),%edi
+	movl 24(%esp),%esi
+	movl 20(%esp),%ebp
+	movl 16(%esp),%ebx
 	leal 40(%esp), %esp
 	ret
 .section .pcmap_data
@@ -139,13 +139,13 @@ main:
 .long 3
 .long 0
 .long 1
-.long 7
-.long 0xfffffff4
-.long 9
-.long 0xfffffff0
-.long 10
-.long 0xffffffec
 .long 11
+.long 0xfffffff4
+.long 10
+.long 0xfffffff0
+.long 9
+.long 0xffffffec
+.long 7
 .long 0xffffffe8
 .long 0
 .long 0
@@ -164,13 +164,13 @@ main:
 .long 3
 .long 0
 .long 1
-.long 7
-.long 0xfffffff4
-.long 9
-.long 0xfffffff0
-.long 10
-.long 0xffffffec
 .long 11
+.long 0xfffffff4
+.long 10
+.long 0xfffffff0
+.long 9
+.long 0xffffffec
+.long 7
 .long 0xffffffe8
 .long 0
 .long 0
@@ -189,13 +189,13 @@ main:
 .long 3
 .long 0
 .long 1
-.long 7
-.long 0xfffffff4
-.long 9
-.long 0xfffffff0
-.long 10
-.long 0xffffffec
 .long 11
+.long 0xfffffff4
+.long 10
+.long 0xfffffff0
+.long 9
+.long 0xffffffec
+.long 7
 .long 0xffffffe8
 .long 0
 .long 0
@@ -214,13 +214,13 @@ main:
 .long 3
 .long 0
 .long 1
-.long 7
-.long 0xfffffff4
-.long 9
-.long 0xfffffff0
-.long 10
-.long 0xffffffec
 .long 11
+.long 0xfffffff4
+.long 10
+.long 0xfffffff0
+.long 9
+.long 0xffffffec
+.long 7
 .long 0xffffffe8
 .long 0
 .long 0

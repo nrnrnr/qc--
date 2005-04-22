@@ -348,10 +348,10 @@ stack_trace:
 	movl $-140,%edx
 	addl %edx,%ecx
 	movl %eax,(%ecx)
-	movl %edi,52(%esp)
-	movl %esi,56(%esp)
-	movl %ebp,60(%esp)
-	movl %ebx,64(%esp)
+	movl %ebx,52(%esp)
+	movl %ebp,56(%esp)
+	movl %esi,60(%esp)
+	movl %edi,64(%esp)
 	call printf
 .Lcall_successor_l24:
 	leal 140(%esp), %eax
@@ -371,10 +371,10 @@ stack_trace:
 	addl %ecx,%eax
 	movl 32(%esp),%ecx
 	movl %ecx,(%eax)
-	movl 64(%esp),%ebx
-	movl 60(%esp),%ebp
-	movl 56(%esp),%esi
-	movl 52(%esp),%edi
+	movl 64(%esp),%edi
+	movl 60(%esp),%esi
+	movl 56(%esp),%ebp
+	movl 52(%esp),%ebx
 	leal 140(%esp), %esp
 	ret
 .Lcut_entry_l13:
@@ -387,10 +387,10 @@ stack_trace:
 	addl %ecx,%eax
 	movl 32(%esp),%ecx
 	movl %ecx,(%eax)
-	movl 64(%esp),%ebx
-	movl 60(%esp),%ebp
-	movl 56(%esp),%esi
-	movl 52(%esp),%edi
+	movl 64(%esp),%edi
+	movl 60(%esp),%esi
+	movl 56(%esp),%ebp
+	movl 52(%esp),%ebx
 	leal 140(%esp), %esp
 	ret
 .section .pcmap_data
@@ -412,13 +412,13 @@ stack_trace:
 .long 2
 .long 2
 .long 1
-.long 7
-.long 0xffffffb4
-.long 9
-.long 0xffffffb0
-.long 10
-.long 0xffffffac
 .long 11
+.long 0xffffffb4
+.long 10
+.long 0xffffffb0
+.long 9
+.long 0xffffffac
+.long 7
 .long 0xffffffa8
 .long 0xffffff98
 .long 0xffffffa4
@@ -438,13 +438,13 @@ stack_trace:
 .long 2
 .long 2
 .long 1
-.long 7
-.long 0xffffffb4
-.long 9
-.long 0xffffffb0
-.long 10
-.long 0xffffffac
 .long 11
+.long 0xffffffb4
+.long 10
+.long 0xffffffb0
+.long 9
+.long 0xffffffac
+.long 7
 .long 0xffffffa8
 .long 0xffffff98
 .long 0xffffffa4
@@ -464,13 +464,13 @@ stack_trace:
 .long 2
 .long 2
 .long 1
-.long 7
-.long 0xffffffb4
-.long 9
-.long 0xffffffb0
-.long 10
-.long 0xffffffac
 .long 11
+.long 0xffffffb4
+.long 10
+.long 0xffffffb0
+.long 9
+.long 0xffffffac
+.long 7
 .long 0xffffffa8
 .long 0xffffff98
 .long 0xffffffa4
@@ -804,11 +804,11 @@ gp:
 	addl %eax,%ecx
 	movl 36(%esp),%eax
 	movl %eax,(%ecx)
-	movl %edi,40(%esp)
-	movl %esi,44(%esp)
+	movl %edx,40(%esp)
+	movl %ebx,44(%esp)
 	movl %ebp,48(%esp)
-	movl %ebx,52(%esp)
-	movl %edx,56(%esp)
+	movl %esi,52(%esp)
+	movl %edi,56(%esp)
 	call c_b
 .Lcall_successor_l73:
 	movl (%esp),%eax
@@ -823,12 +823,12 @@ gp:
 	leal 76(%esp), %ecx
 	movl $16,%edx
 	addl %edx,%ecx
-	movl 56(%esp),%edx
+	movl 40(%esp),%edx
 	movl %edx,(%ecx)
-	movl 52(%esp),%ebx
+	movl 56(%esp),%edi
+	movl 52(%esp),%esi
 	movl 48(%esp),%ebp
-	movl 44(%esp),%esi
-	movl 40(%esp),%edi
+	movl 44(%esp),%ebx
 	leal 92(%esp), %esp
 	ret
 .section .pcmap_data
@@ -842,20 +842,20 @@ gp:
 .Lframe_l80:
 .long 0x80000014
 .long 0xffffffb4
-.long 0xffffffec
+.long 0xffffffdc
 .long .Lstackdata_l79
 .long 4
 .long 5
 .long 2
 .long 1
-.long 7
+.long 11
+.long 0xffffffec
+.long 10
 .long 0xffffffe8
 .long 9
 .long 0xffffffe4
-.long 10
+.long 7
 .long 0xffffffe0
-.long 11
-.long 0xffffffdc
 .long 0xffffffb4
 .long 0xffffffd0
 .long 0xffffffb8

@@ -322,11 +322,11 @@ tail_from_c:
 .Lproc_body_start_l39:
 	movl %eax,32(%esp)
 	movl 12(%esp),%eax
-	movl %edx,36(%esp)
-	movl %ecx,40(%esp)
+	movl %ecx,36(%esp)
+	movl %edx,40(%esp)
 	call sp2
 .Lcall_successor_l50:
-	movl 40(%esp),%ecx
+	movl 36(%esp),%ecx
 	movl %eax,44(%esp)
 	movl 16(%esp),%eax
 	addl %eax,%ecx
@@ -377,7 +377,7 @@ tail_from_c:
 	leal 64(%esp), %ecx
 	movl $24,%edx
 	addl %edx,%ecx
-	movl 36(%esp),%edx
+	movl 40(%esp),%edx
 	movl %edx,(%ecx)
 	leal 88(%esp), %esp
 	ret
@@ -391,14 +391,14 @@ tail_from_c:
 .Lframe_l56:
 .long 0x8000001c
 .long 0xffffffc0
-.long 0xffffffe4
+.long 0xffffffe8
 .long .Lstackdata_l55
 .long 0
 .long 10
 .long 0
 .long 1
 .long 0
-.long 0xffffffe8
+.long 0xffffffe4
 .long 0xffffffd0
 .long 0xffffffd4
 .long 0xffffffd8
@@ -415,7 +415,7 @@ tail_from_c:
 .Lframe_l57:
 .long 0x8000001c
 .long 0xffffffc0
-.long 0xffffffe4
+.long 0xffffffe8
 .long .Lstackdata_l55
 .long 0
 .long 10
@@ -439,7 +439,7 @@ tail_from_c:
 .Lframe_l58:
 .long 0x8000001c
 .long 0xffffffc0
-.long 0xffffffe4
+.long 0xffffffe8
 .long .Lstackdata_l55
 .long 0
 .long 10

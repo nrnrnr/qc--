@@ -233,8 +233,8 @@ getword:
 .Lproc_body_start_l52:
 L.12:
 L.13:
-	movl %ecx,4(%esp)
-	movl %eax,8(%esp)
+	movl %eax,4(%esp)
+	movl %ecx,8(%esp)
 	call getchar
 .Lcall_successor_l71:
 	movl %eax,%ecx
@@ -256,13 +256,13 @@ L.13:
 	je .LL.12_l79
 	jmp L.15
 .LL.12_l79:
-	movl 4(%esp),%ecx
-	movl 8(%esp),%eax
+	movl 8(%esp),%ecx
+	movl 4(%esp),%eax
 	jmp L.12
 .LL.15_l80:
 	movl %ecx,12(%esp)
 L.15:
-	movl 8(%esp),%eax
+	movl 4(%esp),%eax
 	movl %eax,%ecx
 L.19:
 	leal 24(%esp), %edx
@@ -283,7 +283,7 @@ L.19:
 	movl 16(%esp),%ecx
 	movb %al,(%ecx)
 .Lbranch_target_l78:
-	movl 8(%esp),%eax
+	movl 4(%esp),%eax
 	cmpl %eax,%ecx
 	jbe L.20
 .Lbranch_target_l57:
@@ -291,7 +291,7 @@ L.19:
 	leal 24(%esp), %ecx
 	movl $0,%edx
 	addl %edx,%ecx
-	movl 4(%esp),%edx
+	movl 8(%esp),%edx
 	movl %edx,(%ecx)
 	leal 24(%esp), %esp
 	ret
@@ -300,7 +300,7 @@ L.20:
 	leal 24(%esp), %ecx
 	movl $0,%edx
 	addl %edx,%ecx
-	movl 4(%esp),%edx
+	movl 8(%esp),%edx
 	movl %edx,(%ecx)
 	leal 24(%esp), %esp
 	ret
@@ -319,7 +319,7 @@ L.17:
 .LL.19_l81:
 	movl %eax,12(%esp)
 	movl 16(%esp),%ecx
-	movl 8(%esp),%eax
+	movl 4(%esp),%eax
 	jmp L.19
 .section .pcmap_data
 .Lstackdata_l85:
@@ -331,13 +331,13 @@ L.17:
 .Lframe_l86:
 .long 0x80000004
 .long 0xffffffe8
-.long 0xffffffec
+.long 0xfffffff0
 .long .Lstackdata_l85
 .long 0
 .long 8
 .long 0
 .long 1
-.long 0xfffffff0
+.long 0xffffffec
 .long 0
 .long 0
 .long 0
@@ -353,13 +353,13 @@ L.17:
 .Lframe_l87:
 .long 0x80000004
 .long 0xffffffe8
-.long 0xffffffec
+.long 0xfffffff0
 .long .Lstackdata_l85
 .long 0
 .long 8
 .long 0
 .long 1
-.long 0xfffffff0
+.long 0xffffffec
 .long 0xfffffff4
 .long 0
 .long 0
@@ -375,13 +375,13 @@ L.17:
 .Lframe_l88:
 .long 0x80000004
 .long 0xffffffe8
-.long 0xffffffec
+.long 0xfffffff0
 .long .Lstackdata_l85
 .long 0
 .long 8
 .long 0
 .long 1
-.long 0xfffffff0
+.long 0xffffffec
 .long 0
 .long 0xfffffff8
 .long 0
@@ -397,13 +397,13 @@ L.17:
 .Lframe_l89:
 .long 0x80000004
 .long 0xffffffe8
-.long 0xffffffec
+.long 0xfffffff0
 .long .Lstackdata_l85
 .long 0
 .long 8
 .long 0
 .long 1
-.long 0xfffffff0
+.long 0xffffffec
 .long 0
 .long 0xfffffff8
 .long 0

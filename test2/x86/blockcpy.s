@@ -227,8 +227,8 @@ main:
 	addl %edx,%ecx
 	movl (%esp),%edx
 	movl %edx,(%ecx)
-	movl 8(%esp),%esi
 	movl 12(%esp),%edi
+	movl 8(%esp),%esi
 	leal 16(%esp), %esp
 	ret
 .section .pcmap_data
@@ -261,10 +261,10 @@ main:
 .long 0
 .long 0
 .long 1
-.long 10
-.long 0xfffffff8
 .long 11
 .long 0xfffffffc
+.long 10
+.long 0xfffffff8
 .long 0
 .section .pcmap
 .long .Lcall_successor_l34
@@ -279,10 +279,10 @@ main:
 .long 0
 .long 0
 .long 1
-.long 10
-.long 0xfffffff8
 .long 11
 .long 0xfffffffc
+.long 10
+.long 0xfffffff8
 .long 0
 .section .pcmap
 .long .Lcall_successor_l31
@@ -297,10 +297,10 @@ main:
 .long 0
 .long 0
 .long 1
-.long 10
-.long 0xfffffff8
 .long 11
 .long 0xfffffffc
+.long 10
+.long 0xfffffff8
 .long 0
 .section .pcmap
 .long .Lcall_successor_l28
@@ -315,9 +315,9 @@ main:
 .long 0
 .long 0
 .long 1
-.long 10
-.long 0xfffffff8
 .long 11
 .long 0xfffffffc
+.long 10
+.long 0xfffffff8
 .long 0
 .section .text

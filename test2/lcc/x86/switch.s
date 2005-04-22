@@ -1929,8 +1929,8 @@ limit:
 .Linitialize_continuations_l308:
 .Lproc_body_start_l307:
 	movl $-2147483648,%ecx
-	movl %ecx,12(%esp)
 	movl %eax,4(%esp)
+	movl %ecx,12(%esp)
 L.153:
 	movl 4(%esp),%eax
 	movl 12(%esp),%ecx
