@@ -32,6 +32,18 @@ module Add (MakeParser : Luaparser.MAKER) (I : Luainterp.S) = struct
       with Not_found -> V.Nil, V.Nil
     in [k; v]
 
+  let objname g v =
+    let tail = [] in
+    let ss = match V.objname g v with
+    | Some (V.Fallback n) -> "`" :: n :: "' fallback" :: tail
+    | Some (V.Global n)   -> "function " :: n :: tail
+    | Some (V.Element (t, V.String n)) -> "function " :: t :: "." :: n :: tail
+    | Some (V.Element (t, v))    -> "function " :: t :: "[" :: V.to_string v :: "]" :: tail
+    | None -> "unnamed " :: V.to_string v :: tail in
+    String.concat "" ss
+
+
+
   let luabaselib g =
     [ "dofile",      V.efunc (V.string **-> V.resultvs) (dofile g)
     ; "dostring",    V.efunc (V.string **-> V.resultvs) (dostring g)
@@ -40,6 +52,7 @@ module Add (MakeParser : Luaparser.MAKER) (I : Luainterp.S) = struct
     ; "next",        V.efunc (V.table **->  V.value **-> V.resultvs) next
     ; "nextvar",     V.efunc (V.value **->  V.resultvs) (fun x -> next g.V.globals x)
     ; "tostring",    V.efunc (V.value **->> V.string) V.to_string
+    ; "objname",     V.efunc (V.value **->> V.string) (objname g)
     ; "print",       V.caml_func 
                         (fun args ->
                           List.iter (fun x -> print_endline (V.to_string x)) args;
