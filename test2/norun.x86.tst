@@ -7,7 +7,8 @@ Test.asmdir = Test.asmdir or "x86"
 Ld.rtend = ""  --- don't need the run-time system
 -- source files live in src directory
 Test.source  = "src"
-Test.files = { "eqasolve-000.c--"
+Test.files = { "availexprs.c--"
+             , "eqasolve-000.c--"
              , "exp-002.c--"
              , "exp-003.c--"
              , "err-001.c--"

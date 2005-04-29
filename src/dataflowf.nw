@@ -219,8 +219,7 @@ We solve and rewrite in two passes: the first pass iterates to a fixed
 point to reach a dataflow solution, and the second pass uses that
 solution to rewrite the graph.
 
-The
-key job is done by [[propagate]], which propagates a fact of type~[['a]]
+The key job is done by [[propagate]], which propagates a fact of type~[['a]]
 between a head and tail.
 The tail is in final form; the head is still to be rewritten.
 <<definitions of exported functions>>=
@@ -231,40 +230,40 @@ let rec solve_and_rewrite fact comp in_fact graph changed =
   !exit_ref, gc
 and forward_rewrite (fact : 'a fact) comp entry_fact graph changed =
   let rec rewrite_blocks rewritten fresh changed : G.graph * bool = match fresh with
-  | [] -> G.of_block_list rewritten, changed
-  | b :: bs ->
-      let rec rewrite_next_block () =
-        let f, t = b in
-        let in' = match f with
-        | GR.Entry -> entry_fact
-        | GR.Label ((u, _), _, _) -> P.get fact.prop u in
-        propagate (GR.First f) in' t rewritten changed
-      and propagate :
-            GR.head -> 'a -> GR.tail -> GR.block list -> bool -> G.graph * bool =
-        fun h in' t rewritten changed -> match t with
-        | GR.Tail (m, t) -> (
-            Debug.eprintf "dataflow" "Rewriting middle node %s\n"
-              (Rtlutil.ToString.rtl (GR.mid_instr m));
-            match comp.middle_out in' m with
-            | Dataflow a -> propagate (GR.Head (h, m)) a t rewritten changed
-            | Rewrite g ->
-                Debug.eprintf "dataflow" "Rewriting middle node...\n";
-                let a, (g, _) = solve_and_rewrite fact comp in' g changed in
-                Debug.eprintf "dataflow" "Rewrite of middle node completed\n";
-                let h, t, rewritten = splice_in_forward h g t rewritten in
-                propagate h a t rewritten true)
-        | GR.Last l ->
-            match comp.last_outs in' l with
-            | Dataflow set ->
-                set (check_property_match fact);
-                let b = GR.zip (GR.End (h, l)) in
-                rewrite_blocks (b :: rewritten) bs changed
-            | Rewrite g ->
-                (* could test here that [[exits g = exits (GR.Entry, GR.Last l)]] *)
-                let a, (g, _) = solve_and_rewrite fact comp in' g changed in
-                let rewritten = splice_in_forward_last h g rewritten in
-                rewrite_blocks rewritten bs true in
-      rewrite_next_block () in
+    | []      -> G.of_block_list rewritten, changed
+    | b :: bs ->
+        let rec rewrite_next_block () =
+          let f, t = b in
+          let in' = match f with
+            | GR.Entry -> entry_fact
+            | GR.Label ((u, _), _, _) -> P.get fact.prop u in
+          propagate (GR.First f) in' t rewritten changed
+        and propagate :
+              GR.head -> 'a -> GR.tail -> GR.block list -> bool -> G.graph * bool =
+          fun h in' t rewritten changed -> match t with
+          | GR.Tail (m, t) -> (
+              Debug.eprintf "dataflow" "Rewriting middle node %s\n"
+                (Rtlutil.ToString.rtl (GR.mid_instr m));
+              match comp.middle_out in' m with
+              | Dataflow a -> propagate (GR.Head (h, m)) a t rewritten changed
+              | Rewrite g ->
+                  Debug.eprintf "dataflow" "Rewriting middle node...\n";
+                  let a, (g, _) = solve_and_rewrite fact comp in' g changed in
+                  Debug.eprintf "dataflow" "Rewrite of middle node completed\n";
+                  let h, t, rewritten = splice_in_forward h g t rewritten in
+                  propagate h a t rewritten true)
+          | GR.Last l ->
+              match comp.last_outs in' l with
+              | Dataflow set ->
+                  set (check_property_match fact);
+                  let b = GR.zip (GR.End (h, l)) in
+                  rewrite_blocks (b :: rewritten) bs changed
+              | Rewrite g ->
+                  (* could test here that [[exits g = exits (GR.Entry, GR.Last l)]] *)
+                  let a, (g, _) = solve_and_rewrite fact comp in' g changed in
+                  let rewritten = splice_in_forward_last h g rewritten in
+                  rewrite_blocks rewritten bs true in
+        rewrite_next_block () in
   rewrite_blocks [] (G.postorder_dfs graph) changed
 
 let forward_rewrite_solved (fact, comp) ~entry_fact g =
@@ -276,8 +275,9 @@ let forward_rewrite (fact, comp) ~entry_fact g =
 let eqfact fact a a' = (* poor man's approximation of equality *)
   not (fact.changed a a' or fact.changed a' a)
 let check_property_match fact u a =
-  let a' = P.get fact.prop u in
-  if not (eqfact fact a a') then
+  let old_a = P.get fact.prop u in
+  let new_a = fact.add_info a old_a in
+  if not (eqfact fact old_a new_a) then
     impossf "property '%s' changed after supposedly reaching fixed point"
             fact.fact_name
 @
