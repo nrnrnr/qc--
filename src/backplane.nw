@@ -655,12 +655,7 @@ let {V.embed = embed; V.project = project; V.is = is} =
 let ( **-> ) = V.( **-> )
 let ( **->> ) x y = x **-> V.result y 
 let proc    = T2.makemap V.userdata V.projection
-let stage_results =
-  let em (p, b) = [proc.V.embed p; V.bool.V.embed b] in
-  let pr = function [p; b] -> (proc.V.project p, V.bool.V.project b)
-    | l -> V.projection ((V.list V.value).V.embed l) "proc * bool" in
-  V.results em pr
-let stageFn = V.func (V.value **-> proc **-> stage_results)
+let stageFn = V.func (V.value **-> proc **-> V.resultpair proc V.bool)
 
 <<stage map>>
 
@@ -689,7 +684,7 @@ let init g =
   ; "share",     V.efunc (V.value **-> V.string **-> action **->> action) share
   ; "ignore",    V.efunc (action  **->>             action) ignore
   ; "stage",     V.efunc (action  **->>             action) id
-  ; "run",       V.efunc (action  **-> proc **->    stage_results) run
+  ; "run",       V.efunc (action  **-> proc **->    V.resultpair proc V.bool) run
   ; "verbosity", V.efunc (V.bool  **->>             V.bool) verbosity
   ; "register",  V.efunc (V.string **-> V.list V.string **->> V.unit)
                                                             (fun p e -> register p e)

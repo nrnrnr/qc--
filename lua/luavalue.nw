@@ -166,6 +166,7 @@ arguments by using the embedding/projection pair produced by
   val ( **-> ) : 'a map  -> 'b mapf -> ('a -> 'b) mapf
   val result   : 'a map  -> 'a mapf
   val resultvs : value list mapf                   (* functions returning value lists*)
+  val resultpair:'a map  -> 'b map  -> ('a * 'b)       mapf
   val dots_arrow:'a map  -> 'b map  -> ('a list -> 'b) mapf     (* varargs functions *)
   val results  : ('a -> value list) -> (value list -> 'a) -> 'a mapf  
                                     (* 'a represents multiple results (general case) *)
@@ -531,6 +532,15 @@ let (<<) f g = fun x -> f (g x)
 
 let result r = results (fun v -> [r.embed v]) (r.project << take1)
 let resultvs = results (fun l -> l) (fun l -> l)
+let resultpair a b =
+  let em (x, y) = [a.embed x; b.embed y] in
+  let pr vs =
+    let x, y = match vs with
+    | [] -> Nil, Nil
+    | [x] -> x, Nil
+    | x :: y :: _ -> x, y in
+    (a.project x, b.project y) in
+  results em pr
 
 (* other possibilities not exposed in interface *)
 let result2 r1 r2 = results (fun (v1, v2) -> [r1.embed v1; r2.embed v2])

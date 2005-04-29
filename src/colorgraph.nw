@@ -1537,12 +1537,7 @@ Embedding the functions in the Lua interpreter.
 <<graph coloring builtins>>=
 let proc = ProcT.makemap V.userdata V.projection
 let ( **-> ) = V.( **-> )
-let stage = 
-  let em (p, b) = [proc.V.embed p; V.bool.V.embed b] in
-  let pr = function [p; b] -> (proc.V.project p, V.bool.V.project b)
-    | l -> V.projection ((V.list V.value).V.embed l) "proc * bool" in
-  V.func (cgmap **-> proc **-> V.results em pr) 
-let stageFn  = stage.V.embed
+let stageFn = V.efunc (cgmap **-> proc **-> V.resultpair proc V.bool) 
 let graph_coloring_module =
   [ "build",            stageFn build
   ; "makeWorklist",     stageFn makeWorklist

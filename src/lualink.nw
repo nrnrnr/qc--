@@ -272,11 +272,6 @@ module Map = struct
              V.is = (fun _ -> true); (* more lies *)
            } 
 
-  let monotype_resultvs (args, result) =
-    [ty.V.embed result; (V.list ty).V.embed args] 
-  let monotype_results =
-    V.results monotype_resultvs (fun _ -> Impossible.unimp "project monotype") 
-
   let capabilities   =
     let module T = Target in
     let table l = V.Table (V.Table.of_list l) in
@@ -299,11 +294,7 @@ module Map = struct
   let channel       = InOutV.makemap     V.userdata V.projection
   let inchan        = Luaiolib.in'       channel    V.projection
   let outchan       = Luaiolib.out       channel    V.projection
-  let stage = 
-    let em (p, b) = [proc.V.embed p; V.bool.V.embed b] in
-    let pr = function [p; b] -> (proc.V.project p, V.bool.V.project b)
-      | l -> V.projection ((V.list V.value).V.embed l) "proc * bool" in
-    V.func (V.value **-> proc **-> V.results em pr) 
+  let stage         = V.func (V.value **-> proc **-> V.resultpair proc V.bool)
 
   let block         = BlockV.makemap     V.userdata V.projection
   let placement     = V.enum "placement" ["high", Block.High; "low", Block.Low]
@@ -658,8 +649,7 @@ C.register_module "Rtlop"
   [ "Emit", (V.record V.value).V.embed
       [ "creators", V.efunc (V.unit **->> V.unit) Rtlop.Emit.creators;
       ];
-    "mono", V.efunc (Map.opr **-> V.resultvs)
-          (fun t -> try Map.monotype_resultvs (Rtlop.mono t) with Not_found -> [V.Nil]);
+    "mono", V.efunc (Map.opr **-> V.resultpair (V.list Map.ty) Map.ty) Rtlop.mono;
     "print_shapes", V.efunc (V.unit **->> V.unit) Rtlop.print_shapes;
     "opnames", V.efunc (V.unit **->> V.list V.string)
          (fun () -> List.sort Pervasives.compare (Rtlop.opnames ()));
