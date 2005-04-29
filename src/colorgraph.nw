@@ -354,8 +354,7 @@ Additional information is also stored:
 \item [[spills]]    - short-living temps introduced for spilling (spill temps)
 \item [[spillMap]]  - map from the original temps to spill temps
 
-\item [[luaColorOverride]] - value set in Lua to override the standard register list
-\item [[allColors]] - list of all registers
+\item [[allColors]] - list of all hardware registers (or proxies therefor)
 \item [[colors]]    - map from register spaces to a list of available registers
 \item [[k]]         - the number of physical registers
 \end{itemize}
@@ -371,7 +370,7 @@ module CompareMoves = struct
 end
 module MoveSet = Set.Make (CompareMoves)
 module MoveMap = Map.Make (CompareMoves)
-type color = Register.t
+type color = Color.t
 type igNode = (tempList,Register.t) impListItem
 type moveWorklist = (moveList, move) impListGroup
 type tempWorklist = (tempList, Register.t) impListGroup
@@ -389,21 +388,17 @@ type 'a colorGraph = { mutable adjSet : EdgeSet.t
                      ; mutable tempLG : tempWorklist
                      ; mutable moveLG : moveWorklist
 
-                     ; mutable luaColorOverride : 'a
-                     ; mutable allColors : color list
-                     ; mutable colors : RS.t SpaceMap.t
+                     ; mutable allColors : Color.set
+                     ; mutable colors    : Color.set SpaceMap.t
                      ; mutable numUses   : int RM.t
                      ; mutable liveRange : int RM.t
                      ; mutable hi : int MoveMap.t
                      ; mutable k : int
                      }
 @
-
 [[cgInfo]] is the mutable data structure passed around the register allocator.
 A function with access to the target must be called to initialize the
 information about registers.
-[[clearCGInfo]] clears the data structure, leaving only the register lists.
-
 <<init cgInfo>>=
 let cgInfo = 
   let pre = ref None in
@@ -449,16 +444,17 @@ let cgInfo =
      ; spillMap = RM.empty
      ; moveLG = moveFn
 
-     ; luaColorOverride = V.Nil
      ; colors = SpaceMap.empty
-     ; allColors = []
+     ; allColors = CS.empty
      ; k = 0
      ; numUses   = RM.empty
      ; liveRange = RM.empty
      ; hi = MoveMap.empty
      }
-
-let allocatable cc = RS.elements (cc.C.pre_nvregs ++ cc.C.volregs)
+@ 
+[[clearCGInfo]] clears the data structure, leaving only the register lists.
+<<init cgInfo>>=
+let allocatable cc = CS.of_regs (cc.Call.pre_nvregs ++ cc.Call.volregs)
 let clearCGInfo cg (cfg, ({Proc.cc = colors} as proc)) = 
   let pre = ref None in
   let init = ref None in
@@ -506,45 +502,29 @@ let clearCGInfo cg (cfg, ({Proc.cc = colors} as proc)) =
   let () = cg.numUses   <- RM.empty in
   let () = cg.liveRange <- RM.empty in
   let () = cg.hi <- MoveMap.empty in
-  let () =
-  (match cg.luaColorOverride with
-   | V.Nil      -> ()
-   | V.Number x ->
-    let rec firstn n lst =
-      if n <= 0 then []
-      else (match lst with 
-      | [] -> []
-      | a::rst -> a :: firstn (n - 1) rst) in
-    cg.allColors <- firstn (V.int.V.project cg.luaColorOverride) cg.allColors
-   | _ -> cg.allColors <- (V.list register).V.project cg.luaColorOverride) in
-  
-  let () = cg.k <- List.length cg.allColors in
+  let () = cg.k <- CS.cardinal cg.allColors in
   ((cfg, proc), false)
 @
-
 We include two observers for the [[colorGraph]] type. [[possibleColors]]
 returns a list of the registers in which the argument temp could be placed.
 This list is cached for future lookup.
 This cache assumes that the space determines the available registers.
 [[regs_in_space]] returns the number of possible registers in which the
 argument temp could be placed.
-
 <<graph coloring types>>=
 let possibleColors target cg ((s,_,_) as tmp) =
     try SpaceMap.find s cg.colors
     with Not_found ->
-        if is_tmp target tmp 
-        then
-            let colSet = List.fold_left (fun set reg -> if Target.fits target s reg
-                                                        then RS.add reg set else set)
-                                        RS.empty cg.allColors in
+        if is_tmp target tmp then
+            let colSet = CS.filter (Color.fits target s) cg.allColors in
             let () = cg.colors <- SpaceMap.add s colSet cg.colors in
             colSet
-        else RS.singleton tmp
+        else
+            CS.singleton (Color.of_reg tmp)
  
 let regs_in_space target cg temp =
   if is_tmp target temp
-  then RS.cardinal (possibleColors target cg temp)
+  then CS.cardinal (possibleColors target cg temp)
   else cg.k
 @
 
@@ -565,13 +545,12 @@ The build stage requires that liveness analysis has been performed on the
 [[resetDegree]] resets the degree of a temp. It should not necessarily be reset to 0
 because the temp must interfere with registers in other register spaces.
 Instead, we set $degree[t] = K - R$, where $K$ is the total number of registers and
-$R$ is the number of registers in temp $t$'s register space.
+$R$~is the number of registers that could be used to color temp~$t$'s register space.
 
 The predicate [[interfere]] determines whether two registers interfere.
 <<build>>=
 let resetDegree target cg temp =
-    cg.degreeMap <-
-        RM.add temp (cg.k - (regs_in_space target cg temp)) cg.degreeMap
+  cg.degreeMap <- RM.add temp (cg.k - regs_in_space target cg temp) cg.degreeMap
 
 let interfere t1 t2 target cg =
    let c1 = RM.find t1 cg.regToClass in
@@ -585,7 +564,7 @@ let interfere (s1,_,_ as t1) (s2,_,_ as t2) target cg =
     RU.Eq.space s1 s2 ||
         let s1 = possibleColors target cg t1 in    
         let s2 = possibleColors target cg t2 in
-            not (RS.is_empty (RS.inter s1 s2))
+            not (CS.overlap s1 s2)
 (*
 *)
 @
@@ -929,9 +908,7 @@ let briggs move u v cg =
                    0 (uniq ((adjacent u.v cg) @ (adjacent v.v cg))) in
   if k < cg.k then true else (cg.hi <- MoveMap.add move.v (k - (cg.k - 1)) cg.hi; false)
 @
-
 [[getAlias]] returns the temp with which [[node]] has been coalesced.
-
 <<coalesce move>>=
 let rec getAlias node cg =
   try
@@ -940,10 +917,8 @@ let rec getAlias node cg =
     else node.v
   with Not_found -> Impossible.impossible "Not_found in Colorgraph.getAlias"
 @
-
 [[combine]] coalesces the temp [[v]] with the temp [[u]]. [[v]]'s neighbors
 and moves must be added to [[u]].
-
 <<coalesce move>>=
 let get m cg = RM.find (getAlias (RM.find m cg.regToItem) cg) cg.regToItem
 let combine target u v cg =
@@ -1067,7 +1042,6 @@ such color, we must spill the temp. After coloring the temps on the select
 stack, we assign colors to the coalesced nodes if there were no .
 
 The [[GraphColoring]] exception is raised if the graph is uncolorable.
-
 <<assignColors>>=
 exception GraphColoring
 
@@ -1088,7 +1062,6 @@ let assignColors cg (cfg, ({Proc.target = target} as proc)) =
            | _    -> () in
   ((cfg, proc), true)
 @
-
 [[colorTemp]] is responsible for coloring a single temp. The possible colors
 ([[okColors]]) are calculated by excluding colors that used by neighbors
 temps. If any colors remain, we color the temp with one of them; otherwise,
@@ -1096,28 +1069,27 @@ we must spill a temp.
 
 The choices of colors assigned and neighbors spilled is a policy
 decision, currently arbitrary.
-
 <<colorTemp>>=
 let colorLookup temp cmap =
   let t = getAlias (RM.find temp cg.regToItem) cg in
   if is_tmp target t
   then try RM.find t cmap
        with Not_found -> Impossible.impossible "colorLookup(): uncolored temp"
-  else t in
+  else Color.of_reg t in
 
 let colorTemp temp =
   let removeUsedColor colors adjTemp =
     let t = RM.find (getAlias adjTemp cg) cg.regToItem in
     if t.list=*= Colored || t.list=*= Precolored
-    then RS.remove (colorLookup t.v cg.colorMap) colors
+    then CS.remove (colorLookup t.v cg.colorMap) colors
     else colors in
   let possColors = possibleColors target cg temp.v in
   let okColors =
     List.fold_left removeUsedColor possColors (listMapFind temp.v cg.adjListMap) in
 
-  if RS.is_empty possColors
+  if CS.is_empty possColors
   then Impossible.impossible ("No hardware register available for " ^ (printReg temp.v))
-  else if RS.is_empty okColors
+  else if CS.is_empty okColors
   then begin
     if (RS.mem temp.v cg.spills)
     then begin
@@ -1127,7 +1099,7 @@ let colorTemp temp =
     end 
     else ilg_switch cg.tempLG Spilled temp
   end else begin
-    cg.colorMap <- RM.add temp.v (RS.choose okColors) cg.colorMap
+    cg.colorMap <- RM.add temp.v (CS.choose okColors) cg.colorMap
     ; ilg_switch cg.tempLG Colored temp
   end in
 @
@@ -1146,15 +1118,15 @@ let applyColors cg (cfg, ({Proc.target = target; Proc.var_map = vMap} as proc)) 
   let find (((s,_,_), i, _) as t) =
     try RM.find t cg.colorMap
     with Not_found -> imposs (Printf.sprintf "Uncolored temp %c%d" s i) in
-  let subst_reg t = if is_tmp target t then find t else t in
-  let rewrite_rtl = Rtlutil.Subst.reg ~map:subst_reg in
+  let subst_reg t = if is_tmp target t then find t else Color.of_reg t in
+  let rewrite_rtl = Color.subst subst_reg in
   let cfg =  G.map_rtls rewrite_rtl cfg in
   let rewrite_span_loc live_in l =
     let guard = function RP.Reg r -> is_tmp target r | _ -> false in
     let map l = match l with
       | RP.Reg tmp ->
           if RSX.mem (Register.Reg tmp) live_in then
-                RP.Reg (find tmp)
+                Color.reg (find tmp)
           else
             raise RTD.DeadValue
       | _      -> imposs "GC reg allocator emitting RT data: guard failed" in
@@ -1165,7 +1137,7 @@ let applyColors cg (cfg, ({Proc.target = target; Proc.var_map = vMap} as proc)) 
 @
 It's useful to have a generic function to replace temporaries in the spans.
 We parameterize this function over an update function that takes a set
-  of registers live_in to a node, as well as an rtl to rewrite.
+  of registers [[live_in]] to a node, as well as an rtl to rewrite.
 <<define span updating functions>>=
 let update_spans upd cfg =
   let block b = 
@@ -1404,10 +1376,8 @@ module Make (BackplaneT : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.M.actio
                                   and type 'a combined = 'a BackplaneT.combined)
        : Lua.Lib.USERCODE with type 'a userdata' = 'a BackplaneT.combined
 @
-
 A few convenience functions for handling lists. Perhaps the lists that use
 the set operations should be converted to register sets.
-
 <<list as set>>=
 let empty lst = match lst with
   | [] -> true
@@ -1423,15 +1393,14 @@ let listMapAdd value key listMap =
 
 <<colorgraph.ml>>=
 module AU  = Automatonutil
-module C   = Call
 module Dn  = Rtl.Dn
 module RTD = Runtimedata
 module R   = Register
 module RP  = Rtl.Private
 module RC  = Registerclass.RegisterClass
-module RM  = R.Map
-module RS  = R.Set
-module RSX = R.SetX
+module RM  = Register.Map
+module RS  = Register.Set
+module RSX = Register.SetX
 module RU  = Rtlutil
 let ( ++ ) = RS.union 
 let ( -- ) = RS.diff 
@@ -1467,6 +1436,48 @@ let usesl last =
 <<colorgraph.ml>>=
 let spill_slot_for proc ((_,_,ms), _, c)  =
   Automaton.allocate proc.Proc.priv (Cell.to_width ms c) "" 1
+module type COLOR = sig
+  type t 
+  type set
+  val reg : t -> Rtl.Private.loc 
+  val of_reg  : Register.t -> t
+  val fits   : ('a, 'b) Target.t -> Rtl.space -> t -> bool
+  val to_string : t -> string
+  val subst : (Register.t -> t) -> Rtl.rtl -> Rtl.rtl
+  module Set : sig
+    val empty : set
+    val singleton : t -> set
+    val of_list : t list -> set
+    val of_regs : Register.Set.t -> set
+
+    val remove : t -> set -> set
+    val filter : (t -> bool) -> set -> set
+
+    val is_empty : set -> bool
+    val choose   : set -> t
+    val cardinal : set -> int  (* can't work with infinite sets; must eliminate *)
+    val overlap : set -> set -> bool  (* true iff intersection is not empty *)
+  end
+end
+
+module RegColor : COLOR with type t = Register.t and type set = RS.t = struct
+  type t = Register.t
+  type set = RS.t
+  let reg r = RP.Reg r
+  let of_reg r = r
+  let fits = Target.fits
+  let to_string = RU.ToString.reg
+  let subst f = Rtlutil.Subst.reg ~map:f
+  module Set = struct
+    include RS
+    let of_list l = List.fold_left (fun set reg -> RS.add reg set) RS.empty l
+    let of_regs s = s
+    let overlap s1 s2 = RS.is_empty (RS.inter s1 s2)
+  end
+end
+
+module PreMake (Color : COLOR) = struct
+  module CS = Color.Set
 <<graph coloring types>>
 module GCT : Lua.Lib.USERTYPE with type 'a t = 'a colorGraph = struct
     type 'a t = 'a colorGraph
@@ -1479,7 +1490,7 @@ module Make (BackplaneT : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.M.actio
                                   and type 'a combined = 'a BackplaneT.combined)
             (ProcT : Lua.Lib.TYPEVIEW with type 'a t = Ast2ir.proc
                                       and  type 'a combined = 'a BackplaneT.combined)
-       : Lua.Lib.USERCODE with type 'a userdata' = 'a BackplaneT.combined =
+      : Lua.Lib.USERCODE with type 'a userdata' = 'a BackplaneT.combined =
   struct
     type 'a userdata' = 'a BackplaneT.combined
     module M (Interp : Lua.Lib.CORE
@@ -1496,6 +1507,11 @@ module Make (BackplaneT : Lua.Lib.TYPEVIEW with type 'a t = 'a Backplane.M.actio
           (* FIX -- register init code here? *)
     end
   end
+end
+
+
+module XXX = PreMake(RegColor)
+include XXX
 <<graph coloring builtins>>=
     let verb   = 18
     let cfgSay = Verbose.say verb
@@ -1542,10 +1558,15 @@ let graph_coloring_module =
   ; "applyColors",      stageFn applyColors
   ; "printCG",          stageFn printCGInfo
   ; "cgInfo",           cgmap.V.embed cgInfo
+(**** not used anywhere except maybe for debugging
   ; "setRegisters",     V.efunc (V.value **-> V.result V.unit)
-      (fun value -> cgInfo.luaColorOverride <- value
-  ; cgInfo.colors           <- SpaceMap.empty)
+      (fun value -> cgInfo.luaColorOverride <- value; cgInfo.colors <- SpaceMap.empty)
+*)
   ]
+@
+N.B. I've removed the infrastructure supporting [[setRegisters]].
+If it is restored, the correct way to do it is with dynamic type
+dispatch.  Also note I've moved some code into [[Aux.List.take]]. ---NR
 @
 
 \subsubsection{Lua startup code}
@@ -1626,7 +1647,7 @@ let regILists cgInfo =
        ]
 let regLists cgInfo =
        [ ("Spills", RS.elements cgInfo.spills)
-       ; ("AllColors", cgInfo.allColors)
+    (* ; ("AllColors", cgInfo.allColors) *)
        ]
 let moveILists cgInfo =
                 [ ("coalescedMoves", !(cgInfo.moveLG CoalescedMove))
@@ -1642,6 +1663,7 @@ record.
 
 <<print CGInfo>>=
 let printReg ((s,_,_), i, w) = Printf.sprintf "%c%d" s i
+let printColor = Color.to_string
 let printMove move = printReg (source move)
                    ^ " -> "
                    ^ printReg (dest move)
@@ -1655,6 +1677,7 @@ let printMap p1 p2 mapName sm =
                                   ]) sm
 let printStringMap mapName sm = printMap printReg (fun x -> x) mapName sm
 let printAliasMap  mapName am = printMap printReg printReg     mapName am
+let printColorMap  mapName am = printMap printReg printColor   mapName am
 @
 
 The [[print_cgInfo]] function prints the graph coloring information in a
@@ -1696,7 +1719,7 @@ let print_cgInfo cgInfo =
         cgSay ["    K: "; string_of_int cgInfo.k; "\n"];
         List.iter printMoveIlist (moveILists cgInfo);
         printAliasMap "aliasMap" cgInfo.aliasMap;
-        printAliasMap "colorMap" cgInfo.colorMap;
+        printColorMap "colorMap" cgInfo.colorMap;
         printStringMap "listMap"
             (RM.fold (fun r i map -> RM.add r (str_of_list i.list) map)
                      cgInfo.regToItem RM.empty);
@@ -1802,3 +1825,4 @@ let freezeStage = { Backplane.name = "freeze"
                   }
 *)
 @
+

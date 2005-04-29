@@ -34,6 +34,12 @@ val from: int -> upto:int -> int list
 
 val compare_list : ('a -> 'a -> int) -> 'a list -> 'a list -> int
 
+module List : sig
+    val take : int -> 'a list -> 'a list
+      (* take the first n elements of a list, or if there are fewer
+         than n elements, take the whole list (viva Haskell!) *)
+end
+
 module Option : sig 
     val is_some : 'a option -> bool
     val is_none : 'a option -> bool
@@ -137,3 +143,11 @@ let rec compare_list cmp x y = match x, y with
     match cmp x y with
     | 0 -> compare_list cmp xs ys
     | diff -> diff
+@ 
+<<aux.ml>>=
+module List = struct
+  let rec take n xs = match xs with
+  | [] -> []
+  | _ :: _ when n = 0 -> []
+  | x :: xs -> x :: take (n-1) xs
+end
