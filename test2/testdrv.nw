@@ -19,6 +19,7 @@ Test.diffs      = 0      -- number of test cases passed with diffs
 Test.curstat    = nil    -- nil, 'diff', or 'error' depending on outcome
 Test.verbose    = nil    -- provide detailed failure info
 Test.skip_files = nil    -- skip input source files
+Test.color      = nil    -- call asm files by -color.s, use Ralloc.color
 Test.on_error   = {}     -- error handlers
 Test.files      = {}     -- input source files
 Test.tst_file   = nil    -- name of config file
@@ -40,6 +41,7 @@ To spit out a command line, be a bit clever about variables.
 function Test.cmd_string(verbose)
   local v = (verbose and " -v") or ""
   local force = (Test.force and " Test.force=1") or ""
+  force = force .. (Test.color and " Test.color=1" or "")
   return format("%s%s%s testdrv.lua%s", Test.qc, Test.qcflags, v, force)
 end
 @ 
@@ -270,11 +272,19 @@ function Test.compile_file(file, i, txlimit)
   end
   Options.output = s_file
 
+  local original_ralloc = backend.ralloc
+  if Test.color then
+    -- if allocating, use graph coloring
+    backend.ralloc = original_ralloc and Ralloc.color
+  end
+
   Util.redirect_stdout(so)
   Util.redirect_stderr(se)
   local compiles_ok = Util.catch(Test.translate, file)
   Util.redirect_stdout()
   Util.redirect_stderr()
+
+  backend.ralloc = original_ralloc
 
   if not compiles_ok then
     Test.log("Compilation errors detected")
@@ -820,7 +830,8 @@ function Test.complete_test_table(files)
 
   Test.compute_filename(files, "md5sig", Test.asmdir, name, ".5")
 
-  Test.compute_filenames(files, "asm",    Test.asmdir,  files.source, ".s")
+  local dot_s = Test.color and "-color.s" or ".s"
+  Test.compute_filenames(files, "asm",    Test.asmdir,  files.source, dot_s)
   Test.compute_filenames(files, "asmout", files.outdir, files.source, ".s1")
   Test.compute_filenames(files, "asmerr", files.outdir, files.source, ".s2")
 

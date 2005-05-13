@@ -1,0 +1,670 @@
+.globl main
+.globl Cmm.global_area
+.globl Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY
+.section .data
+/* memory for global registers */
+Cmm.globalsig.aQOYZWMPACZAJaMABGMOZeCCPY:
+Cmm.global_area:
+.globl Cmm_stack_growth
+.section .data
+.align 4
+Cmm_stack_growth:
+.long 0xffffffff
+.section .text
+main:
+	leal -92(%esp), %esp
+	leal 92(%esp), %eax
+	movl $4,%ecx
+	addl %ecx,%eax
+	movl (%eax),%eax
+	leal 92(%esp), %eax
+	movl $8,%ecx
+	addl %ecx,%eax
+	movl (%eax),%eax
+	leal 92(%esp), %eax
+	movl (%eax),%eax
+	movl %eax,72(%esp)
+	movl %edi,68(%esp)
+	movl %esi,64(%esp)
+	movl %ebp,60(%esp)
+	movl %ebx,56(%esp)
+.Linitialize_continuations_l3:
+.Lproc_body_start_l2:
+	leal 92(%esp), %ebp
+	movl $-16,%eax
+	addl %eax,%ebp
+	movl $0,%eax
+	movl %eax,(%ebp)
+	movl $1,%ecx
+	movl $4,%edx
+	movl %ebp,%eax
+	addl %edx,%eax
+	movl %ecx,(%eax)
+	movl $2,%ecx
+	movl $8,%edx
+	movl %ebp,%eax
+	addl %edx,%eax
+	movl %ecx,(%eax)
+	movl $3,%ecx
+	movl $12,%edx
+	movl %ebp,%eax
+	addl %edx,%eax
+	movl %ecx,(%eax)
+	movl $33,%ebx
+	movl $77,%eax
+	movl %eax,48(%esp)
+	movl $99,%eax
+	movl %eax,52(%esp)
+	leal 92(%esp), %eax
+	movl $-16,%ecx
+	addl %ecx,%eax
+	movl $8,%ecx
+	addl %ecx,%eax
+	leal expected_before,%ecx
+	leal 92(%esp), %eax
+	movl $-92,%edx
+	addl %edx,%eax
+	movl %ecx,(%eax)
+	call printf
+.Lcall_successor_l16:
+	leal actual,%eax
+	movl %eax,44(%esp)
+	leal 92(%esp), %ecx
+	movl $-16,%eax
+	addl %eax,%ecx
+	movl %ebp,%eax
+	subl %ecx,%eax
+	movl %eax,36(%esp)
+	movl %ebx,28(%esp)
+	leal 92(%esp), %eax
+	movl $-16,%ecx
+	addl %ecx,%eax
+	movl (%eax),%ecx
+	leal 92(%esp), %eax
+	movl $-16,%edx
+	addl %edx,%eax
+	movl $4,%edx
+	addl %edx,%eax
+	movl (%eax),%edx
+	leal 92(%esp), %eax
+	movl $-16,%ebx
+	addl %ebx,%eax
+	movl $8,%ebx
+	addl %ebx,%eax
+	movl (%eax),%ebx
+	leal 92(%esp), %eax
+	movl $-16,%esi
+	addl %esi,%eax
+	movl $12,%esi
+	addl %esi,%eax
+	leal 92(%esp), %edi
+	movl $-68,%esi
+	addl %esi,%edi
+	movl (%eax),%eax
+	movl %eax,(%edi)
+	leal 92(%esp), %eax
+	movl $-72,%esi
+	addl %esi,%eax
+	movl %ebx,(%eax)
+	leal 92(%esp), %eax
+	movl $-76,%ebx
+	addl %ebx,%eax
+	movl %edx,(%eax)
+	leal 92(%esp), %eax
+	movl $-80,%edx
+	addl %edx,%eax
+	movl %ecx,(%eax)
+	leal 92(%esp), %eax
+	movl $-84,%ecx
+	addl %ecx,%eax
+	movl 28(%esp),%ecx
+	movl %ecx,(%eax)
+	leal 92(%esp), %eax
+	movl $-88,%ecx
+	addl %ecx,%eax
+	movl 36(%esp),%ecx
+	movl %ecx,(%eax)
+	leal 92(%esp), %eax
+	movl $-92,%ecx
+	addl %ecx,%eax
+	movl 44(%esp),%ecx
+	movl %ecx,(%eax)
+	call printf
+.Lcall_successor_l13:
+	movl %ebp,%ebx
+	movl 48(%esp),%eax
+	movl %eax,(%ebp)
+	movl $4,%ecx
+	movl %ebp,%eax
+	addl %ecx,%eax
+	movl 52(%esp),%ecx
+	movl %ecx,(%eax)
+	movl $8,%eax
+	addl %eax,%ebp
+	leal expected_after,%ecx
+	leal 92(%esp), %eax
+	movl $-92,%edx
+	addl %edx,%eax
+	movl %ecx,(%eax)
+	call printf
+.Lcall_successor_l10:
+	leal actual,%eax
+	movl %eax,40(%esp)
+	leal 92(%esp), %eax
+	movl $-16,%ecx
+	addl %ecx,%eax
+	subl %eax,%ebp
+	movl %ebp,32(%esp)
+	leal 92(%esp), %eax
+	movl $-16,%ecx
+	addl %ecx,%eax
+	subl %eax,%ebx
+	leal 92(%esp), %eax
+	movl $-16,%ecx
+	addl %ecx,%eax
+	movl (%eax),%ecx
+	leal 92(%esp), %eax
+	movl $-16,%edx
+	addl %edx,%eax
+	movl $4,%edx
+	addl %edx,%eax
+	movl (%eax),%edx
+	leal 92(%esp), %eax
+	movl $-16,%ebp
+	addl %ebp,%eax
+	movl $8,%ebp
+	addl %ebp,%eax
+	movl (%eax),%ebp
+	leal 92(%esp), %eax
+	movl $-16,%esi
+	addl %esi,%eax
+	movl $12,%esi
+	addl %esi,%eax
+	leal 92(%esp), %edi
+	movl $-68,%esi
+	addl %esi,%edi
+	movl (%eax),%eax
+	movl %eax,(%edi)
+	leal 92(%esp), %eax
+	movl $-72,%esi
+	addl %esi,%eax
+	movl %ebp,(%eax)
+	leal 92(%esp), %eax
+	movl $-76,%ebp
+	addl %ebp,%eax
+	movl %edx,(%eax)
+	leal 92(%esp), %eax
+	movl $-80,%edx
+	addl %edx,%eax
+	movl %ecx,(%eax)
+	leal 92(%esp), %eax
+	movl $-84,%ecx
+	addl %ecx,%eax
+	movl %ebx,(%eax)
+	leal 92(%esp), %eax
+	movl $-88,%ecx
+	addl %ecx,%eax
+	movl 32(%esp),%ecx
+	movl %ecx,(%eax)
+	leal 92(%esp), %eax
+	movl $-92,%ecx
+	addl %ecx,%eax
+	movl 40(%esp),%ecx
+	movl %ecx,(%eax)
+	call printf
+.Lcall_successor_l7:
+	movl $0,%eax
+	leal 92(%esp), %ecx
+	movl $0,%edx
+	addl %edx,%ecx
+	movl 72(%esp),%edx
+	movl %edx,(%ecx)
+	movl 68(%esp),%edi
+	movl 64(%esp),%esi
+	movl 60(%esp),%ebp
+	movl 56(%esp),%ebx
+	leal 92(%esp), %esp
+	ret
+.section .pcmap_data
+.Lstackdata_l23:
+.long 1
+.long 0xfffffff0
+.section .pcmap
+.long .Lcall_successor_l16
+.long .Lframe_l24
+.section .pcmap_data
+.Lframe_l24:
+.long 0x80000004
+.long 0xffffffa4
+.long 0xffffffec
+.long .Lstackdata_l23
+.long 4
+.long 7
+.long 0
+.long 1
+.long 11
+.long 0xffffffe8
+.long 10
+.long 0xffffffe4
+.long 9
+.long 0xffffffe0
+.long 7
+.long 0xffffffdc
+.long 0
+.long 0
+.long 0x40000007
+.long 0x40000009
+.long 0xffffffd4
+.long 0xffffffd8
+.long 0
+.long 0
+.section .pcmap
+.long .Lcall_successor_l13
+.long .Lframe_l25
+.section .pcmap_data
+.Lframe_l25:
+.long 0x80000004
+.long 0xffffffa4
+.long 0xffffffec
+.long .Lstackdata_l23
+.long 4
+.long 7
+.long 0
+.long 1
+.long 11
+.long 0xffffffe8
+.long 10
+.long 0xffffffe4
+.long 9
+.long 0xffffffe0
+.long 7
+.long 0xffffffdc
+.long 0
+.long 0
+.long 0
+.long 0x40000009
+.long 0xffffffd4
+.long 0xffffffd8
+.long 0
+.long 0
+.section .pcmap
+.long .Lcall_successor_l10
+.long .Lframe_l26
+.section .pcmap_data
+.Lframe_l26:
+.long 0x80000004
+.long 0xffffffa4
+.long 0xffffffec
+.long .Lstackdata_l23
+.long 4
+.long 7
+.long 0
+.long 1
+.long 11
+.long 0xffffffe8
+.long 10
+.long 0xffffffe4
+.long 9
+.long 0xffffffe0
+.long 7
+.long 0xffffffdc
+.long 0
+.long 0
+.long 0x40000007
+.long 0x40000009
+.long 0
+.long 0
+.long 0
+.long 0
+.section .pcmap
+.long .Lcall_successor_l7
+.long .Lframe_l27
+.section .pcmap_data
+.Lframe_l27:
+.long 0x80000004
+.long 0xffffffa4
+.long 0xffffffec
+.long .Lstackdata_l23
+.long 4
+.long 7
+.long 0
+.long 1
+.long 11
+.long 0xffffffe8
+.long 10
+.long 0xffffffe4
+.long 9
+.long 0xffffffe0
+.long 7
+.long 0xffffffdc
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.section .text
+.section .data
+expected_before:
+.byte 40
+.byte 104
+.byte 112
+.byte 44
+.byte 32
+.byte 48
+.byte 41
+.byte 32
+.byte 40
+.byte 120
+.byte 44
+.byte 32
+.byte 50
+.byte 49
+.byte 41
+.byte 32
+.byte 40
+.byte 98
+.byte 105
+.byte 116
+.byte 115
+.byte 51
+.byte 50
+.byte 91
+.byte 108
+.byte 111
+.byte 99
+.byte 97
+.byte 108
+.byte 115
+.byte 93
+.byte 44
+.byte 32
+.byte 48
+.byte 41
+.byte 32
+.byte 40
+.byte 98
+.byte 105
+.byte 116
+.byte 115
+.byte 51
+.byte 50
+.byte 91
+.byte 108
+.byte 111
+.byte 99
+.byte 97
+.byte 108
+.byte 115
+.byte 43
+.byte 52
+.byte 93
+.byte 44
+.byte 32
+.byte 49
+.byte 41
+.byte 32
+.byte 40
+.byte 98
+.byte 105
+.byte 116
+.byte 115
+.byte 51
+.byte 50
+.byte 91
+.byte 108
+.byte 111
+.byte 99
+.byte 97
+.byte 108
+.byte 115
+.byte 43
+.byte 56
+.byte 93
+.byte 44
+.byte 32
+.byte 50
+.byte 41
+.byte 32
+.byte 40
+.byte 98
+.byte 105
+.byte 116
+.byte 115
+.byte 51
+.byte 50
+.byte 91
+.byte 108
+.byte 111
+.byte 99
+.byte 97
+.byte 108
+.byte 115
+.byte 43
+.byte 49
+.byte 50
+.byte 93
+.byte 44
+.byte 32
+.byte 51
+.byte 41
+.byte 10
+.byte 0
+expected_after:
+.byte 40
+.byte 104
+.byte 112
+.byte 44
+.byte 32
+.byte 56
+.byte 41
+.byte 32
+.byte 40
+.byte 120
+.byte 44
+.byte 32
+.byte 48
+.byte 41
+.byte 32
+.byte 40
+.byte 98
+.byte 105
+.byte 116
+.byte 115
+.byte 51
+.byte 50
+.byte 91
+.byte 108
+.byte 111
+.byte 99
+.byte 97
+.byte 108
+.byte 115
+.byte 93
+.byte 44
+.byte 32
+.byte 55
+.byte 55
+.byte 41
+.byte 32
+.byte 40
+.byte 98
+.byte 105
+.byte 116
+.byte 115
+.byte 51
+.byte 50
+.byte 91
+.byte 108
+.byte 111
+.byte 99
+.byte 97
+.byte 108
+.byte 115
+.byte 43
+.byte 52
+.byte 93
+.byte 44
+.byte 32
+.byte 57
+.byte 57
+.byte 41
+.byte 32
+.byte 40
+.byte 98
+.byte 105
+.byte 116
+.byte 115
+.byte 51
+.byte 50
+.byte 91
+.byte 108
+.byte 111
+.byte 99
+.byte 97
+.byte 108
+.byte 115
+.byte 43
+.byte 56
+.byte 93
+.byte 44
+.byte 32
+.byte 50
+.byte 41
+.byte 32
+.byte 40
+.byte 98
+.byte 105
+.byte 116
+.byte 115
+.byte 51
+.byte 50
+.byte 91
+.byte 108
+.byte 111
+.byte 99
+.byte 97
+.byte 108
+.byte 115
+.byte 43
+.byte 49
+.byte 50
+.byte 93
+.byte 44
+.byte 32
+.byte 51
+.byte 41
+.byte 10
+.byte 0
+actual:
+.byte 40
+.byte 104
+.byte 112
+.byte 44
+.byte 32
+.byte 37
+.byte 120
+.byte 41
+.byte 32
+.byte 40
+.byte 120
+.byte 44
+.byte 32
+.byte 37
+.byte 120
+.byte 41
+.byte 32
+.byte 40
+.byte 98
+.byte 105
+.byte 116
+.byte 115
+.byte 51
+.byte 50
+.byte 91
+.byte 108
+.byte 111
+.byte 99
+.byte 97
+.byte 108
+.byte 115
+.byte 93
+.byte 44
+.byte 32
+.byte 37
+.byte 100
+.byte 41
+.byte 32
+.byte 40
+.byte 98
+.byte 105
+.byte 116
+.byte 115
+.byte 51
+.byte 50
+.byte 91
+.byte 108
+.byte 111
+.byte 99
+.byte 97
+.byte 108
+.byte 115
+.byte 43
+.byte 52
+.byte 93
+.byte 44
+.byte 32
+.byte 37
+.byte 100
+.byte 41
+.byte 32
+.byte 40
+.byte 98
+.byte 105
+.byte 116
+.byte 115
+.byte 51
+.byte 50
+.byte 91
+.byte 108
+.byte 111
+.byte 99
+.byte 97
+.byte 108
+.byte 115
+.byte 43
+.byte 56
+.byte 93
+.byte 44
+.byte 32
+.byte 37
+.byte 100
+.byte 41
+.byte 32
+.byte 40
+.byte 98
+.byte 105
+.byte 116
+.byte 115
+.byte 51
+.byte 50
+.byte 91
+.byte 108
+.byte 111
+.byte 99
+.byte 97
+.byte 108
+.byte 115
+.byte 43
+.byte 49
+.byte 50
+.byte 93
+.byte 44
+.byte 32
+.byte 37
+.byte 100
+.byte 41
+.byte 10
+.byte 0

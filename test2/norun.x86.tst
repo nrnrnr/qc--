@@ -3,6 +3,7 @@ backend.ralloc = backend.ralloc or Ralloc.color
 
 -- compare results with files in x86
 Test.asmdir = Test.asmdir or "x86"
+Test.color = nil -- don't bother trying graph coloring on these...
 
 Ld.rtend = ""  --- don't need the run-time system
 -- source files live in src directory

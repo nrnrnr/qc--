@@ -1,0 +1,1327 @@
+.globl tiger_main
+.globl Cmm.global_area
+.globl Cmm.globalsig.KcTMHeeQKYEMOaTAYRbSbWBXRQ
+.section .data
+/* memory for global registers */
+.align 4
+Cmm.globalsig.KcTMHeeQKYEMOaTAYRbSbWBXRQ:
+Cmm.global_area:
+.skip 4
+.globl Cmm_stack_growth
+.section .data
+.align 4
+Cmm_stack_growth:
+.long 0xffffffff
+.section .data
+.align 4
+Lgbl_49:
+.long 1
+.byte 10
+.byte 0
+Lgbl_57:
+.long 1
+.byte 32
+.byte 0
+Lgbl_42:
+.long 24
+.byte 112
+.byte 114
+.byte 105
+.byte 110
+.byte 116
+.byte 105
+.byte 110
+.byte 103
+.byte 32
+.byte 97
+.byte 114
+.byte 114
+.byte 97
+.byte 121
+.byte 32
+.byte 111
+.byte 102
+.byte 32
+.byte 115
+.byte 105
+.byte 122
+.byte 101
+.byte 58
+.byte 32
+.byte 0
+.section .text
+tiger_main:
+	leal -40(%esp), %esp
+	leal 40(%esp), %ecx
+	movl (%ecx),%ecx
+	movl %ecx,24(%esp)
+	movl %edi,20(%esp)
+	movl %esi,16(%esp)
+	movl %ebp,12(%esp)
+.Linitialize_continuations_l3:
+.Lproc_body_start_l2:
+	leal 40(%esp), %ecx
+	movl $-12,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
+.Lbranch_target_l53:
+	leal Cmm.global_area,%eax
+	movl (%eax),%eax
+	movl $48,%ecx
+	addl %ecx,%eax
+	leal space_end,%ecx
+	movl (%ecx),%ecx
+	cmpl %ecx,%eax
+	jg Lalc_gc_27
+Lalc_gc_27:
+	call tig_call_gc
+.Lcall_successor_l49:
+Lalc_28:
+	movl $48,%eax
+	leal Cmm.global_area,%ecx
+	movl (%ecx),%ecx
+	movl %eax,(%ecx)
+	leal Cmm.global_area,%eax
+	movl (%eax),%ecx
+	movl $4,%eax
+	addl %eax,%ecx
+	leal Cmm.global_area,%eax
+	movl (%eax),%eax
+	movl $48,%edx
+	addl %edx,%eax
+	leal Cmm.global_area,%edx
+	movl %eax,(%edx)
+	movl $10,%eax
+	movl %eax,(%ecx)
+	movl $1,%eax
+Linit_start_24:
+	movl $80,%esi
+	movl $4,%edx
+	movl %eax,%ebp
+	imull %edx,%ebp
+	movl %ecx,%edx
+	addl %ebp,%edx
+	movl %esi,(%edx)
+	movl $1,%edx
+	addl %edx,%eax
+.Lbranch_target_l54:
+	movl $11,%edx
+	cmpl %edx,%eax
+	jle Linit_start_24
+Linit_end_25:
+	leal 40(%esp), %eax
+	movl $-12,%edx
+	addl %edx,%eax
+	movl $4,%edx
+	addl %edx,%eax
+	movl %ecx,(%eax)
+	leal Cmm.global_area,%eax
+	movl (%eax),%ebp
+	leal 40(%esp), %ecx
+	movl $-12,%eax
+	addl %eax,%ecx
+	movl $4,%eax
+	addl %eax,%ecx
+	leal 40(%esp), %eax
+	movl $-40,%edx
+	addl %edx,%eax
+	movl (%ecx),%ecx
+	movl %ecx,(%eax)
+	movl $1,%ecx
+	leal 40(%esp), %eax
+	movl $-36,%edx
+	addl %edx,%eax
+	movl %ecx,(%eax)
+	movl $7,%ecx
+	leal 40(%esp), %eax
+	movl $-32,%edx
+	addl %edx,%eax
+	movl %ecx,(%eax)
+	call tig_bounds_check
+.Lcall_successor_l46:
+	leal Cmm.global_area,%eax
+	movl %ebp,(%eax)
+	movl $71,%ecx
+	leal 40(%esp), %eax
+	movl $-12,%edx
+	addl %edx,%eax
+	movl $4,%edx
+	addl %edx,%eax
+	movl (%eax),%eax
+	movl $8,%edx
+	addl %edx,%eax
+	movl %ecx,(%eax)
+	leal Cmm.global_area,%eax
+	movl (%eax),%ebp
+	leal 40(%esp), %ecx
+	movl $-12,%eax
+	addl %eax,%ecx
+	movl $4,%eax
+	addl %eax,%ecx
+	leal 40(%esp), %eax
+	movl $-40,%edx
+	addl %edx,%eax
+	movl (%ecx),%ecx
+	movl %ecx,(%eax)
+	movl $3,%ecx
+	leal 40(%esp), %eax
+	movl $-36,%edx
+	addl %edx,%eax
+	movl %ecx,(%eax)
+	movl $8,%ecx
+	leal 40(%esp), %eax
+	movl $-32,%edx
+	addl %edx,%eax
+	movl %ecx,(%eax)
+	call tig_bounds_check
+.Lcall_successor_l43:
+	leal Cmm.global_area,%eax
+	movl %ebp,(%eax)
+	movl $71,%ecx
+	leal 40(%esp), %eax
+	movl $-12,%edx
+	addl %edx,%eax
+	movl $4,%edx
+	addl %edx,%eax
+	movl (%eax),%eax
+	movl $16,%edx
+	addl %edx,%eax
+	movl %ecx,(%eax)
+	leal Cmm.global_area,%eax
+	movl (%eax),%ebp
+	leal 40(%esp), %ecx
+	movl $-12,%eax
+	addl %eax,%ecx
+	movl $4,%eax
+	addl %eax,%ecx
+	leal 40(%esp), %eax
+	movl $-40,%edx
+	addl %edx,%eax
+	movl (%ecx),%ecx
+	movl %ecx,(%eax)
+	movl $5,%ecx
+	leal 40(%esp), %eax
+	movl $-36,%edx
+	addl %edx,%eax
+	movl %ecx,(%eax)
+	movl $9,%ecx
+	leal 40(%esp), %eax
+	movl $-32,%edx
+	addl %edx,%eax
+	movl %ecx,(%eax)
+	call tig_bounds_check
+.Lcall_successor_l40:
+	leal Cmm.global_area,%eax
+	movl %ebp,(%eax)
+	movl $71,%ecx
+	leal 40(%esp), %eax
+	movl $-12,%edx
+	addl %edx,%eax
+	movl $4,%edx
+	addl %edx,%eax
+	movl (%eax),%eax
+	movl $24,%edx
+	addl %edx,%eax
+	movl %ecx,(%eax)
+	leal Cmm.global_area,%eax
+	movl (%eax),%ebp
+	leal 40(%esp), %ecx
+	movl $-12,%eax
+	addl %eax,%ecx
+	movl $4,%eax
+	addl %eax,%ecx
+	leal 40(%esp), %eax
+	movl $-40,%edx
+	addl %edx,%eax
+	movl (%ecx),%ecx
+	movl %ecx,(%eax)
+	movl $7,%ecx
+	leal 40(%esp), %eax
+	movl $-36,%edx
+	addl %edx,%eax
+	movl %ecx,(%eax)
+	movl $10,%ecx
+	leal 40(%esp), %eax
+	movl $-32,%edx
+	addl %edx,%eax
+	movl %ecx,(%eax)
+	call tig_bounds_check
+.Lcall_successor_l37:
+	leal Cmm.global_area,%eax
+	movl %ebp,(%eax)
+	movl $71,%ecx
+	leal 40(%esp), %eax
+	movl $-12,%edx
+	addl %edx,%eax
+	movl $4,%edx
+	addl %edx,%eax
+	movl (%eax),%eax
+	movl $32,%edx
+	addl %edx,%eax
+	movl %ecx,(%eax)
+	leal Cmm.global_area,%eax
+	movl (%eax),%ebp
+	leal 40(%esp), %ecx
+	movl $-12,%eax
+	addl %eax,%ecx
+	movl $4,%eax
+	addl %eax,%ecx
+	leal 40(%esp), %eax
+	movl $-40,%edx
+	addl %edx,%eax
+	movl (%ecx),%ecx
+	movl %ecx,(%eax)
+	movl $9,%ecx
+	leal 40(%esp), %eax
+	movl $-36,%edx
+	addl %edx,%eax
+	movl %ecx,(%eax)
+	movl $11,%ecx
+	leal 40(%esp), %eax
+	movl $-32,%edx
+	addl %edx,%eax
+	movl %ecx,(%eax)
+	call tig_bounds_check
+.Lcall_successor_l34:
+	leal Cmm.global_area,%eax
+	movl %ebp,(%eax)
+	movl $71,%ecx
+	leal 40(%esp), %eax
+	movl $-12,%edx
+	addl %edx,%eax
+	movl $4,%edx
+	addl %edx,%eax
+	movl (%eax),%eax
+	movl $40,%edx
+	addl %edx,%eax
+	movl %ecx,(%eax)
+	leal Cmm.global_area,%eax
+	movl (%eax),%ebp
+	leal Lgbl_42,%ecx
+	leal 40(%esp), %eax
+	movl $-40,%edx
+	addl %edx,%eax
+	movl %ecx,(%eax)
+	call tig_print
+.Lcall_successor_l31:
+	leal Cmm.global_area,%eax
+	movl %ebp,(%eax)
+	leal Cmm.global_area,%eax
+	movl (%eax),%ebp
+	leal Cmm.global_area,%eax
+	movl (%eax),%esi
+	leal 40(%esp), %ecx
+	movl $-12,%eax
+	addl %eax,%ecx
+	movl $4,%eax
+	addl %eax,%ecx
+	leal 40(%esp), %eax
+	movl $-40,%edx
+	addl %edx,%eax
+	movl (%ecx),%ecx
+	movl %ecx,(%eax)
+	call tig_sizea
+.Lcall_successor_l28:
+	leal Cmm.global_area,%ecx
+	movl %esi,(%ecx)
+	leal 40(%esp), %ecx
+	movl $-40,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
+	call tig_printi
+.Lcall_successor_l25:
+	leal Cmm.global_area,%eax
+	movl %ebp,(%eax)
+	leal Cmm.global_area,%eax
+	movl (%eax),%ebp
+	leal Lgbl_49,%ecx
+	leal 40(%esp), %eax
+	movl $-40,%edx
+	addl %edx,%eax
+	movl %ecx,(%eax)
+	call tig_print
+.Lcall_successor_l22:
+	leal Cmm.global_area,%eax
+	movl %ebp,(%eax)
+	movl $0,%ecx
+	leal 40(%esp), %eax
+	movl $-12,%edx
+	addl %edx,%eax
+	movl $8,%edx
+	addl %edx,%eax
+	movl %ecx,(%eax)
+Lloop_start_60:
+.Lbranch_target_l55:
+	leal 40(%esp), %eax
+	movl $-12,%ecx
+	addl %ecx,%eax
+	movl $8,%ecx
+	addl %ecx,%eax
+	movl (%eax),%ecx
+	movl $9,%eax
+	cmpl %eax,%ecx
+	jle Lloop_body_61
+Lloop_end_52:
+	leal Cmm.global_area,%eax
+	movl (%eax),%ebp
+	leal Lgbl_49,%ecx
+	leal 40(%esp), %eax
+	movl $-40,%edx
+	addl %edx,%eax
+	movl %ecx,(%eax)
+	call tig_print
+.Lcall_successor_l7:
+	leal Cmm.global_area,%ecx
+	movl %ebp,(%ecx)
+	leal 40(%esp), %ecx
+	movl $0,%edx
+	addl %edx,%ecx
+	movl 24(%esp),%edx
+	movl %edx,(%ecx)
+	movl 20(%esp),%edi
+	movl 16(%esp),%esi
+	movl 12(%esp),%ebp
+	leal 40(%esp), %esp
+	ret
+Lloop_body_61:
+	leal Cmm.global_area,%eax
+	movl (%eax),%ebp
+	leal Cmm.global_area,%eax
+	movl (%eax),%esi
+	leal 40(%esp), %eax
+	movl $-12,%ecx
+	addl %ecx,%eax
+	movl $4,%ecx
+	addl %ecx,%eax
+	movl (%eax),%ecx
+	leal 40(%esp), %eax
+	movl $-12,%edx
+	addl %edx,%eax
+	movl $8,%edx
+	addl %edx,%eax
+	leal 40(%esp), %edi
+	movl $-36,%edx
+	addl %edx,%edi
+	movl (%eax),%eax
+	movl %eax,(%edi)
+	movl $18,%eax
+	leal 40(%esp), %edi
+	movl $-32,%edx
+	addl %edx,%edi
+	movl %eax,(%edi)
+	leal 40(%esp), %eax
+	movl $-40,%edx
+	addl %edx,%eax
+	movl %ecx,(%eax)
+	call tig_bounds_check
+.Lcall_successor_l19:
+	leal Cmm.global_area,%eax
+	movl %esi,(%eax)
+	leal 40(%esp), %eax
+	movl $-12,%ecx
+	addl %ecx,%eax
+	movl $4,%ecx
+	addl %ecx,%eax
+	movl (%eax),%eax
+	leal 40(%esp), %ecx
+	movl $-12,%edx
+	addl %edx,%ecx
+	movl $8,%edx
+	addl %edx,%ecx
+	movl (%ecx),%ecx
+	movl $1,%edx
+	addl %edx,%ecx
+	movl $4,%edx
+	imull %edx,%ecx
+	addl %ecx,%eax
+	movl (%eax),%eax
+	call tig_chr
+.Lcall_successor_l16:
+	leal 40(%esp), %ecx
+	movl $-40,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
+	call tig_print
+.Lcall_successor_l13:
+	leal Cmm.global_area,%eax
+	movl %ebp,(%eax)
+	leal Cmm.global_area,%eax
+	movl (%eax),%ebp
+	leal Lgbl_57,%ecx
+	leal 40(%esp), %eax
+	movl $-40,%edx
+	addl %edx,%eax
+	movl %ecx,(%eax)
+	call tig_print
+.Lcall_successor_l10:
+	leal Cmm.global_area,%eax
+	movl %ebp,(%eax)
+	leal 40(%esp), %eax
+	movl $-12,%ecx
+	addl %ecx,%eax
+	movl $8,%ecx
+	addl %ecx,%eax
+	movl (%eax),%ecx
+	movl $1,%eax
+	addl %eax,%ecx
+	leal 40(%esp), %eax
+	movl $-12,%edx
+	addl %edx,%eax
+	movl $8,%edx
+	addl %edx,%eax
+	movl %ecx,(%eax)
+	jmp Lloop_start_60
+.section .pcmap_data
+.Lstackdata_l57:
+.long 1
+.long 0xfffffff4
+.section .pcmap
+.long .Lcall_successor_l49
+.long .Lframe_l58
+.section .pcmap_data
+.Lframe_l58:
+.long 0x80000004
+.long 0xffffffd8
+.long 0xfffffff0
+.long .Lstackdata_l57
+.long 3
+.long 32
+.long 2
+.long 1
+.long 11
+.long 0xffffffec
+.long 10
+.long 0xffffffe8
+.long 9
+.long 0xffffffe4
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long tiger_main_gc_data
+.section .pcmap
+.long .Lcall_successor_l46
+.long .Lframe_l59
+.section .pcmap_data
+.Lframe_l59:
+.long 0x80000004
+.long 0xffffffd8
+.long 0xfffffff0
+.long .Lstackdata_l57
+.long 3
+.long 32
+.long 2
+.long 1
+.long 11
+.long 0xffffffec
+.long 10
+.long 0xffffffe8
+.long 9
+.long 0xffffffe4
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0x40000009
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long tiger_main_gc_data
+.section .pcmap
+.long .Lcall_successor_l43
+.long .Lframe_l60
+.section .pcmap_data
+.Lframe_l60:
+.long 0x80000004
+.long 0xffffffd8
+.long 0xfffffff0
+.long .Lstackdata_l57
+.long 3
+.long 32
+.long 2
+.long 1
+.long 11
+.long 0xffffffec
+.long 10
+.long 0xffffffe8
+.long 9
+.long 0xffffffe4
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0x40000009
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long tiger_main_gc_data
+.section .pcmap
+.long .Lcall_successor_l40
+.long .Lframe_l61
+.section .pcmap_data
+.Lframe_l61:
+.long 0x80000004
+.long 0xffffffd8
+.long 0xfffffff0
+.long .Lstackdata_l57
+.long 3
+.long 32
+.long 2
+.long 1
+.long 11
+.long 0xffffffec
+.long 10
+.long 0xffffffe8
+.long 9
+.long 0xffffffe4
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0x40000009
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long tiger_main_gc_data
+.section .pcmap
+.long .Lcall_successor_l37
+.long .Lframe_l62
+.section .pcmap_data
+.Lframe_l62:
+.long 0x80000004
+.long 0xffffffd8
+.long 0xfffffff0
+.long .Lstackdata_l57
+.long 3
+.long 32
+.long 2
+.long 1
+.long 11
+.long 0xffffffec
+.long 10
+.long 0xffffffe8
+.long 9
+.long 0xffffffe4
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0x40000009
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long tiger_main_gc_data
+.section .pcmap
+.long .Lcall_successor_l34
+.long .Lframe_l63
+.section .pcmap_data
+.Lframe_l63:
+.long 0x80000004
+.long 0xffffffd8
+.long 0xfffffff0
+.long .Lstackdata_l57
+.long 3
+.long 32
+.long 2
+.long 1
+.long 11
+.long 0xffffffec
+.long 10
+.long 0xffffffe8
+.long 9
+.long 0xffffffe4
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0x40000009
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long tiger_main_gc_data
+.section .pcmap
+.long .Lcall_successor_l31
+.long .Lframe_l64
+.section .pcmap_data
+.Lframe_l64:
+.long 0x80000004
+.long 0xffffffd8
+.long 0xfffffff0
+.long .Lstackdata_l57
+.long 3
+.long 32
+.long 2
+.long 1
+.long 11
+.long 0xffffffec
+.long 10
+.long 0xffffffe8
+.long 9
+.long 0xffffffe4
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0x40000009
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long tiger_main_gc_data
+.section .pcmap
+.long .Lcall_successor_l28
+.long .Lframe_l65
+.section .pcmap_data
+.Lframe_l65:
+.long 0x80000004
+.long 0xffffffd8
+.long 0xfffffff0
+.long .Lstackdata_l57
+.long 3
+.long 32
+.long 2
+.long 1
+.long 11
+.long 0xffffffec
+.long 10
+.long 0xffffffe8
+.long 9
+.long 0xffffffe4
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0x40000009
+.long 0
+.long 0x4000000a
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long tiger_main_gc_data
+.section .pcmap
+.long .Lcall_successor_l25
+.long .Lframe_l66
+.section .pcmap_data
+.Lframe_l66:
+.long 0x80000004
+.long 0xffffffd8
+.long 0xfffffff0
+.long .Lstackdata_l57
+.long 3
+.long 32
+.long 2
+.long 1
+.long 11
+.long 0xffffffec
+.long 10
+.long 0xffffffe8
+.long 9
+.long 0xffffffe4
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0x40000009
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long tiger_main_gc_data
+.section .pcmap
+.long .Lcall_successor_l22
+.long .Lframe_l67
+.section .pcmap_data
+.Lframe_l67:
+.long 0x80000004
+.long 0xffffffd8
+.long 0xfffffff0
+.long .Lstackdata_l57
+.long 3
+.long 32
+.long 2
+.long 1
+.long 11
+.long 0xffffffec
+.long 10
+.long 0xffffffe8
+.long 9
+.long 0xffffffe4
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0x40000009
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long tiger_main_gc_data
+.section .pcmap
+.long .Lcall_successor_l7
+.long .Lframe_l68
+.section .pcmap_data
+.Lframe_l68:
+.long 0x80000004
+.long 0xffffffd8
+.long 0xfffffff0
+.long .Lstackdata_l57
+.long 3
+.long 32
+.long 2
+.long 1
+.long 11
+.long 0xffffffec
+.long 10
+.long 0xffffffe8
+.long 9
+.long 0xffffffe4
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0x40000009
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long tiger_main_gc_data
+.section .pcmap
+.long .Lcall_successor_l19
+.long .Lframe_l69
+.section .pcmap_data
+.Lframe_l69:
+.long 0x80000004
+.long 0xffffffd8
+.long 0xfffffff0
+.long .Lstackdata_l57
+.long 3
+.long 32
+.long 2
+.long 1
+.long 11
+.long 0xffffffec
+.long 10
+.long 0xffffffe8
+.long 9
+.long 0xffffffe4
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0x40000009
+.long 0
+.long 0x4000000a
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long tiger_main_gc_data
+.section .pcmap
+.long .Lcall_successor_l16
+.long .Lframe_l70
+.section .pcmap_data
+.Lframe_l70:
+.long 0x80000004
+.long 0xffffffd8
+.long 0xfffffff0
+.long .Lstackdata_l57
+.long 3
+.long 32
+.long 2
+.long 1
+.long 11
+.long 0xffffffec
+.long 10
+.long 0xffffffe8
+.long 9
+.long 0xffffffe4
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0x40000009
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long tiger_main_gc_data
+.section .pcmap
+.long .Lcall_successor_l13
+.long .Lframe_l71
+.section .pcmap_data
+.Lframe_l71:
+.long 0x80000004
+.long 0xffffffd8
+.long 0xfffffff0
+.long .Lstackdata_l57
+.long 3
+.long 32
+.long 2
+.long 1
+.long 11
+.long 0xffffffec
+.long 10
+.long 0xffffffe8
+.long 9
+.long 0xffffffe4
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0x40000009
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long tiger_main_gc_data
+.section .pcmap
+.long .Lcall_successor_l10
+.long .Lframe_l72
+.section .pcmap_data
+.Lframe_l72:
+.long 0x80000004
+.long 0xffffffd8
+.long 0xfffffff0
+.long .Lstackdata_l57
+.long 3
+.long 32
+.long 2
+.long 1
+.long 11
+.long 0xffffffec
+.long 10
+.long 0xffffffe8
+.long 9
+.long 0xffffffe4
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0x40000009
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long tiger_main_gc_data
+.section .text
+.section .data
+tiger_main_gc_data:
+.long 3
+.long 1
+.long 1
+.long 0
+.long 32
+.long 1
+.long 1
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 0
+.long 1
+.long 0
+.long 1

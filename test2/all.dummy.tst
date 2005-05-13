@@ -1,4 +1,5 @@
 backend = Backend.dummy
+Test.color = nil --- don't bother tracking separate results for dummy
 
 -- compare results with files in dummy
 Test.asmdir = Test.asmdir or "dummy"

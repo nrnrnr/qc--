@@ -19,11 +19,11 @@ interference graph with nodes for each of the temporaries and edges between
 temporaries that are live at the same time.
 
 Temporaries that interfere must be placed in different registers. This
-requirement reduces directly to the graph coloring goal of assigning
+requirement reduces directly to the graph-coloring goal of assigning
 different colors to nodes that share graph edges. Register allocation
 is carried out by performing graph coloring on the interference graph,
 with the hardware registers serving as the colors. If the graph cannot
-be colored, we spill the uncolorable temps to memory and attempt to color
+be colored, we spill the uncolorable temps to stack slots and attempt to color
 the new graph.
 
 % ------------------------------------------------------------------ 
@@ -42,6 +42,21 @@ whether two nodes are adjacent and of finding all neighbors of a node.
 In addition to building the graph, we also initialize the degree of each
 temp in the graph. The degree of a temp is the number of registers (both temps
 and hardware registers) with which the temp interferes.
+
+The degree is also overloaded to deal with register constraints.
+The trick is that we express register constraints by ensuring that
+each temporary interferes with registers that cannot hold it. But
+there's no need to actually put the edges in the graph---instead, you can
+pre-seed the degree of the temp to think it interferes with all those
+registers.\footnote
+{Provided you choose registers carefully when you name the specific
+hardware register.}
+The point is that all temp spaces agree on a single degree~$k$ that
+distinguishes high-degree from low-degree temps. There are surely other
+ways to achieve this goal, but they probably require modifying more of
+the algorithm. I think I picked up this technique from Tucker Taft back in
+153.
+
 
 Before the actual graph coloring process begins, temps are separated into
 worklists, based on their degree and whether they are involved in a move
@@ -509,8 +524,6 @@ We include two observers for the [[colorGraph]] type. [[possibleColors]]
 returns a list of the registers in which the argument temp could be placed.
 This list is cached for future lookup.
 This cache assumes that the space determines the available registers.
-[[regs_in_space]] returns the number of possible registers in which the
-argument temp could be placed.
 <<graph coloring types>>=
 let possibleColors target cg ((s,_,_) as tmp) =
     try SpaceMap.find s cg.colors
@@ -520,12 +533,21 @@ let possibleColors target cg ((s,_,_) as tmp) =
             let () = cg.colors <- SpaceMap.add s colSet cg.colors in
             colSet
         else
-            CS.singleton (Color.of_reg tmp)
- 
-let regs_in_space target cg temp =
-  if is_tmp target temp
-  then CS.cardinal (possibleColors target cg temp)
-  else cg.k
+          let _ = impossf "asked for possible colors of a h/w register" in
+          CS.singleton (Color.of_reg tmp)
+@ 
+[[degree_for_temp]] returns the initial degree for a temporary,
+which for an allocable temporary is the total number of registers less
+the number of registers in which the temporary could be placed.
+For a non-allocable temporary, the initial degree is zero.
+WHY? DOES THIS FORCE A NON-ALLOCABLE TEMPORARY TO BE A AUTOMATCIALLY A
+LOW-DEGREE NODE?
+<<graph coloring types>>=
+let degree_for_temp target cg temp =
+  if is_tmp target temp then
+    cg.k - CS.cardinal (possibleColors target cg temp)
+  else
+    0
 @
 
 
@@ -547,36 +569,42 @@ because the temp must interfere with registers in other register spaces.
 Instead, we set $degree[t] = K - R$, where $K$ is the total number of registers and
 $R$~is the number of registers that could be used to color temp~$t$'s register space.
 
-The predicate [[interfere]] determines whether two registers interfere.
+The predicate [[compete_for_registers]] determines whether two
+registers compete for hardware resources.
 <<build>>=
 let resetDegree target cg temp =
-  cg.degreeMap <- RM.add temp (cg.k - regs_in_space target cg temp) cg.degreeMap
+  cg.degreeMap <- RM.add temp (degree_for_temp target cg temp) cg.degreeMap
 
-let interfere t1 t2 target cg =
+let compete_for_registers t1 t2 target cg =  (* code from KH not yet used *)
    let c1 = RM.find t1 cg.regToClass in
    let c2 = RM.find t2 cg.regToClass in
    let competes = RC.may_alias c1 c2 in
    Debug.eprintf "colorgraph" "Interferes? %b\n" competes;
    competes
-(* JD MERGE
-*)
-let interfere (s1,_,_ as t1) (s2,_,_ as t2) target cg =
-    RU.Eq.space s1 s2 ||
-        let s1 = possibleColors target cg t1 in    
-        let s2 = possibleColors target cg t2 in
-            not (CS.overlap s1 s2)
-(*
-*)
-@
 
+let compete_for_registers (s1,_,_ as t1) (s2,_,_ as t2) target cg =
+  let aliases t cs = CS.exists (Color.may_alias (Color.of_reg t)) cs in
+  if not (is_tmp target t1) then
+    if not (is_tmp target t2) then
+      RU.MayAlias.regs t1 t2
+    else (* t2 is temporary, t1 is not *)
+      aliases t1 (possibleColors target cg t2)
+  else (* t1 is a temporary *)
+    if not (is_tmp target t2) then
+      aliases t2 (possibleColors target cg t1)
+    else (* both are temporaries *)
+      if RU.Eq.space s1 s2 then
+        true (* temporaries in the same space compete for registers *)
+      else
+        CS.overlap (possibleColors target cg t1) (possibleColors target cg t2)
+@
 We don't add an edge to the interference graph if it already exists or if
 the variables do not actually interfere (e.g. they are in non-intersecting register
 spaces). Also, we don't need to keep track of the neighbors of precolored temps.
-
 <<build>>=
 let addEdge target cg u v =
     if (not ((EdgeSet.mem (u, v) cg.adjSet) || (Register.eq u v))) &&
-       interfere u v target cg
+       compete_for_registers u v target cg
     then begin
         let () = cg.adjSet <- List.fold_right EdgeSet.add [(u, v); (v, u)] cg.adjSet in
         let addToAdjList t1 t2 =
@@ -677,7 +705,7 @@ let addInterference block =
             (let item = ilg_add cg.moveLG WorklistMove move in
              cg.moveListMap <- RS.fold (listMapAdd item) (defs ++ uses) cg.moveListMap;
              live -- uses)
-          | None -> imposs "non-move passed isMoveInstruction()"
+          | None -> impossf "non-move passed isMoveInstruction()"
         else
           live in
       vis_head h (add_and_upd live defs uses) in
@@ -1024,7 +1052,7 @@ let selectSpill cg (cfg, proc) =
       if cost' <. cost then (cost', t) else best in
     let (_, spillee) = ilg_fold cheaper lst (infinity, t) in
     if RS.mem spillee.v cg.spills then
-      imposs "Graph coloring ralloc chose to spill a previously spilled temp...."
+      impossf "Graph coloring ralloc chose to spill a previously spilled temp...."
     else
       ( ilg_switch cg.tempLG SimplifyWorklist spillee
       ; freezeMoves spillee cg
@@ -1117,7 +1145,7 @@ This exception indicates an error in the graph-coloring implementation.
 let applyColors cg (cfg, ({Proc.target = target; Proc.var_map = vMap} as proc)) =
   let find (((s,_,_), i, _) as t) =
     try RM.find t cg.colorMap
-    with Not_found -> imposs (Printf.sprintf "Uncolored temp %c%d" s i) in
+    with Not_found -> impossf "Uncolored temp %c%d" s i in
   let subst_reg t = if is_tmp target t then find t else Color.of_reg t in
   let rewrite_rtl = Color.subst subst_reg in
   let cfg =  G.map_rtls rewrite_rtl cfg in
@@ -1129,7 +1157,7 @@ let applyColors cg (cfg, ({Proc.target = target; Proc.var_map = vMap} as proc)) 
                 Color.reg (find tmp)
           else
             raise RTD.DeadValue
-      | _      -> imposs "GC reg allocator emitting RT data: guard failed" in
+      | _      -> impossf "GC reg allocator emitting RT data: guard failed" in
     Rtlutil.Subst.loc_of_loc ~guard ~map l in
   ( update_spans rewrite_span_loc cfg
   ; ((cfg, proc), true)
@@ -1287,7 +1315,7 @@ let updateLast spillee (last, loads, spillMap, spills, newTemps) =
   match updateInstr (fun map -> G.map_rtll map map last) (GR.last_instr last) spillee
                     (last, loads, spillMap, [], newTemps) with
   | (_, _, _, [], _) as x -> x
-  | _ -> imposs "GC reg allocator trying to spill from a last node" in
+  | _ -> impossf "GC reg allocator trying to spill from a last node" in
 
 let updateMiddle spillee (middle, loads, spillMap, spills, newTemps) =
   updateInstr (fun map -> G.map_rtlm map middle) (GR.mid_instr middle) spillee
@@ -1311,7 +1339,7 @@ let rewrite cfg ({Proc.target = target} as proc) spillees =
           if RSX.mem (Register.Reg tmp) live_in then
             Rtl.Dn.loc (AU.aloc (fst (RM.find tmp spillMap)) (Register.width tmp))
           else raise RTD.DeadValue
-      | _ -> imposs "guard failed" in
+      | _ -> impossf "guard failed" in
     Rtlutil.Subst.loc_of_loc ~guard ~map l in
   let () = update_spans rewrite_span_loc cfg in
   let blocks = G.to_blocks cfg in
@@ -1404,7 +1432,7 @@ module RSX = Register.SetX
 module RU  = Rtlutil
 let ( ++ ) = RS.union 
 let ( -- ) = RS.diff 
-let imposs = Impossible.impossible
+let impossf fmt = Printf.kprintf Impossible.impossible fmt
 
 let () = Debug.register "colorgraph" "generalized graph coloring allocator"
 <<imperative lists>>
@@ -1444,6 +1472,7 @@ module type COLOR = sig
   val fits   : ('a, 'b) Target.t -> Rtl.space -> t -> bool
   val to_string : t -> string
   val subst : (Register.t -> t) -> Rtl.rtl -> Rtl.rtl
+  val may_alias : t -> t -> bool  (* share hardware resources *)
   module Set : sig
     val empty : set
     val singleton : t -> set
@@ -1452,6 +1481,7 @@ module type COLOR = sig
 
     val remove : t -> set -> set
     val filter : (t -> bool) -> set -> set
+    val exists : (t -> bool) -> set -> bool
 
     val is_empty : set -> bool
     val choose   : set -> t
@@ -1468,6 +1498,7 @@ module RegColor : COLOR with type t = Register.t and type set = RS.t = struct
   let fits = Target.fits
   let to_string = RU.ToString.reg
   let subst f = Rtlutil.Subst.reg ~map:f
+  let may_alias = RU.MayAlias.regs
   module Set = struct
     include RS
     let of_list l = List.fold_left (fun set reg -> RS.add reg set) RS.empty l
