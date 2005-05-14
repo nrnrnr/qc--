@@ -334,7 +334,8 @@ the current state of the graph coloring.
                         involved in
 \item [[aliasMap]]    - when a move is coalesced, the coalesced temp must be
                         aliased to the temp we maintain in the graph
-\item [[colorMap]]    - map from temp to assigned color
+\item [[colorMap]]    - map from temp to assigned color (no h/w
+                        register is ever in the domain??)
 \end{itemize}
 
 Every temp is a member of exactly one of these lists:
@@ -1077,13 +1078,13 @@ let assignColors cg (cfg, ({Proc.target = target} as proc)) =
   Debug.eprintf "color" "color::assignColors()\n"; flush stderr;
   <<colorTemp>>
   let colorSelectStack () =
-      let () = ilg_iter colorTemp (!(cg.tempLG SelectStack)) in
-  if Aux.Option.is_some (!(cg.tempLG SelectStack))
-     then Impossible.impossible "Failed to color a temp?"   in
+    let () = ilg_iter colorTemp (!(cg.tempLG SelectStack)) in
+  if Aux.Option.is_some (!(cg.tempLG SelectStack)) then
+    Impossible.impossible "Failed to color a temp?"   in
   let colorCoalescedTemps () =
-      let setColor temp = 
-          cg.colorMap <- RM.add temp.v (colorLookup temp.v cg.colorMap) cg.colorMap in
-  ilg_iter setColor (!(cg.tempLG Coalesced)) in
+    let setColor temp = 
+      cg.colorMap <- RM.add temp.v (colorLookup temp.v cg.colorMap) cg.colorMap in
+    ilg_iter setColor (!(cg.tempLG Coalesced)) in
   let () = colorSelectStack () in
   let () = match !(cg.tempLG Spilled) with
            | None -> colorCoalescedTemps ()
@@ -1100,10 +1101,11 @@ decision, currently arbitrary.
 <<colorTemp>>=
 let colorLookup temp cmap =
   let t = getAlias (RM.find temp cg.regToItem) cg in
-  if is_tmp target t
-  then try RM.find t cmap
-       with Not_found -> Impossible.impossible "colorLookup(): uncolored temp"
-  else Color.of_reg t in
+  if is_tmp target t then
+    try RM.find t cmap
+    with Not_found -> impossf "colorLookup(): uncolored temp %s" (RU.ToString.reg temp)
+  else
+    Color.of_reg t in
 
 let colorTemp temp =
   let removeUsedColor colors adjTemp =
@@ -1115,21 +1117,23 @@ let colorTemp temp =
   let okColors =
     List.fold_left removeUsedColor possColors (listMapFind temp.v cg.adjListMap) in
 
-  if CS.is_empty possColors
-  then Impossible.impossible ("No hardware register available for " ^ (printReg temp.v))
-  else if CS.is_empty okColors
-  then begin
-    if (RS.mem temp.v cg.spills)
-    then begin
-      Cfgutil.print_cfg cfg;
-	    print_cgInfo cg;
-	    Impossible.impossible ("Spilling a spill temp: " ^ printReg temp.v)
-    end 
+  if CS.is_empty possColors then
+    impossf "No hardware register available for %s " (printReg temp.v)
+  else if CS.is_empty okColors then
+    if RS.mem temp.v cg.spills then <<complain of spilling a spill temp, then die>> 
     else ilg_switch cg.tempLG Spilled temp
-  end else begin
-    cg.colorMap <- RM.add temp.v (CS.choose okColors) cg.colorMap
-    ; ilg_switch cg.tempLG Colored temp
-  end in
+  else
+    begin
+      cg.colorMap <- RM.add temp.v (CS.choose okColors) cg.colorMap;
+      ilg_switch cg.tempLG Colored temp;
+    end in
+
+<<complain of spilling a spill temp, then die>>=
+begin
+  Cfgutil.print_cfg cfg;
+  print_cgInfo cg;
+  impossf "Spilling a spill temp: %s" (printReg temp.v);
+end 
 @
 
 %-------------------------------------------------------------------
