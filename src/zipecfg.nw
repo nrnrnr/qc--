@@ -1,0 +1,986 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% vim: ts=2 sw=2 et: 
+% Grades     ::=    "%%Grades:" Quality Importance Urgency
+% Quality    ::=    A|B|C|D|E
+% Importance ::=    Central|Subsystem|Peripheral
+% Urgency    ::=    Immediate|Soon|Later
+%
+% Example (at beginning of line): %%Grades: B Central Soon
+% 
+% $Id$
+
+% ------------------------------------------------------------------ 
+\section{Applicative Control-Flow Graph, Based on Huet's Zipper}
+% ------------------------------------------------------------------ 
+
+
+\citet{huet:zipper} describes a generalization of a tree that enables
+a program to focus on a single node while enabling the context (e.g.,
+parents) to be represented by an explicit, reified value (as opposed
+to being captured in an implicit continuation).
+We investigate this idea for a control-flow graph.
+
+Every graph has a single entry and zero or more exits.
+(For example, the graph for a procedure has no exits, the graph
+for an expanded instruction has one exit, and the graph for an
+expanded conditional branch has two exits.)
+A~[[graph]] is a set of basic blocks, one of which is distinguished as the
+entry block.
+Every other block is tagged by a
+unique id, which may correspond to a string label.\footnote
+{Maintaining a mapping between strings and unique ids is not the
+  responsibility of this module.}
+
+An exit is typically represented by explicit control flow to a unique id,
+which corresponds to a block in another graph.
+Exits also include special nodes that stop control flow, such as a
+``return'' node or a ``forbidden'' node.
+Finally, a graph may have at most one ``default exit,'' by which
+control flows out of the graph when not otherwise directed.
+A~default exit is useful only in a subgraph; because control may not
+fall off the end of a {\PAL} procedure, the graph for an entire
+procedure should not have a default exit.
+
+
+A~[[zgraph]] is a graph with the \emph{focus} on one particular node.
+It supports at least the following kinds of operations:
+\begin{itemize}
+\item
+When the focus is on the entry node, add a new node to the graph just
+before the entry node.
+This operation is the primary means of building graphs.
+\item
+Replace the node at the focus, plugging in a new graph in its place.
+\end{itemize}
+Here are some basic types and operations:
+<<zipcfg.mli>>=
+type uid = Unique.uid
+type label = uid * string
+
+type regs  = Register.SetX.t  (* sets of regs for dataflow *)
+type contedge = { kills:regs; defs:regs; node:label; assertion:Rtl.rtl }
+
+module Rep : sig
+  <<exposed types for [[Rep]] module>>
+  <<declarations of [[Rep]]'s public functions>>
+end
+
+type graph
+type zgraph
+
+val empty   : graph
+val entry   : graph -> zgraph           (* focus on entry node *)
+val exit    : graph -> zgraph           (* focus on default exit node *)
+val focus   : uid -> graph -> zgraph    (* focus on node with uid *)
+val unfocus : zgraph -> graph           (* lose focus *)
+@ 
+%%  Subgraph replacement:
+%%  we replace the node at the focus with a graph.
+%%  The number of exits in the replacement graph must be equal to the
+%%  number of successors of the focus node; otherwise it is a checked run-time
+%%  error. 
+%%  After replacement, the focus looks at the successor of the replacement
+%%  graph's entry node.
+%%  <zipcfg.mli>=
+%%  val replace_focus : zgraph -> graph -> zgraph
+@ 
+We can insert a single-entry, single-exit subgraph either before or
+after the current focus.
+If before, the focus must be on a [[middle]] or [[last]] node.
+If after, the focus must be on a [[first]] or [[middle]] node.
+The focus does not move.
+<<zipcfg.mli>>=
+val splice_before : zgraph -> graph -> zgraph
+val splice_after  : zgraph -> graph -> zgraph
+@ 
+Sometimes we just want to add blocks to an existing graph~[[g]].
+We do it by creating a fresh graph~[[gz]]; the focus should be on the
+entry node, which becomes unreachable.
+The exit node of the new graph should also be unreachable.
+The code is used in [[Ast2ir]] to add a continuation's prolog.
+
+This is pretty ugly; it's a consequence of our being willing to insert
+new nodes only following an entry node.  Maybe something less ugly is
+lurking somewhere.  
+<<zipcfg.mli>>=
+val add_blocks : graph -> zgraph -> graph
+@ 
+Building a graph.
+The entry plays a dual role here; every constructor effectively
+requires the focus be on the entry node and inserts a new node
+following the entry node.
+After insertion, the entry node remains the focus.
+
+Here we also introduce the [[nodes]] type, which is equal to
+[[zgraph -> zgraph]].
+The idea is that we represent a sequence of nodes~$L$ by a function
+that takes the successor~$S$ and produces the sequence~$LS$.
+This representation is inspired by John Hughes's similar
+representation of lists, which supports append in constant time.
+
+%%  When we add a node that can flow through to its successor, we insert
+%%  the node before the focus.
+%%  But when we add a node that cannot flow to its successor, we add it to
+%%  an unfocused graph.
+%%  In either case,  the new node becomes the new focus.
+<<zipcfg.mli>>=
+val uid : unit -> uid
+type machine = { goto    : label -> Rtl.rtl;
+                 cbranch : Rtl.exp * label -> Rtl.rtl;
+                 bnegate : Rtl.rtl -> Rtl.rtl;
+                 call    : Rtl.exp -> Rtl.rtl;
+                 forbidden : Rtl.rtl;
+               }
+
+type nodes   = zgraph -> zgraph (* sequence of nodes in Hughes's representation *)
+type cbranch = ifso:label -> ifnot:label -> nodes (* ability to branch conditionally *)
+
+val label        : machine -> label -> nodes  (* spans? *)
+val instruction  : Rtl.rtl -> nodes
+val stack_adjust : Rtl.rtl -> nodes
+val branch       : machine -> label -> nodes
+val jump         : Rtl.rtl -> uses:regs -> targets:string list -> nodes
+val cbranch      : machine -> Rtl.exp -> cbranch
+val mbranch      : Rtl.rtl -> targets:label list -> nodes
+val call         : machine -> Rtl.exp -> altrets:contedge list -> 
+                     unwinds_to:contedge list -> cuts_to:contedge list ->
+                     aborts:bool -> uses:regs -> defs:regs -> kills:regs ->
+                     reads:string list option -> writes:string list option ->
+                     spans:Spans.t option -> succ_assn:Rtl.rtl -> nodes
+val cut_to       : Rtl.rtl -> cuts_to:contedge list -> aborts:bool -> uses:regs -> nodes
+val return       : Rtl.rtl -> exit:int -> uses:regs -> nodes
+val forbidden    : machine -> nodes
+  (* control should not reach; causes checked RTE *)
+@ 
+As a convenience, we provide code generation for if-then-else and while-do.
+<<zipcfg.mli>>=
+val if_then_else : cbranch -> machine -> t:nodes -> f:nodes -> nodes
+val while_do     : cbranch -> machine -> body:nodes -> nodes
+@ 
+Sometimes we need to make the current focus (which must be the entry)
+a branch target to be used later.
+Calling [[make_target gz]] returns a new graph and a unique identifier
+to which the entry flows in.
+<<zipcfg.mli>>=
+val make_target : machine -> zgraph -> label * zgraph
+@ 
+Mutation---ugh!
+<<zipcfg.mli>>=
+val set_spans : zgraph -> Spans.t -> unit  (* set spans at focus *)
+@ 
+We can also make a graph out of a single [[middle]] or [[last]] node.
+<<zipcfg.mli>>=
+val single_middle : Rep.middle -> graph
+val single_last   : Rep.last   -> graph
+@ 
+\subsubsection{Exposure}
+
+A basic block is a [[first]] node, followed by zero or more [[middle]]
+nodes, followed by a [[last]] node.
+<<exposed types for [[Rep]] module>>=
+type 'a edgelist = 'a list (* could be array *)
+<<node types>>
+type first
+  = Entry
+  | Label of label * user * Spans.t option ref  (* user labels can't be deleted *)
+and user = User of bool  (* is label a user label? *)
+
+type middle
+  = Instruction  of Rtl.rtl
+  | Stack_adjust of Rtl.rtl
+
+type last
+  = Exit
+  | Branch  of Rtl.rtl * label
+  | Cbranch of Rtl.rtl * label * label    (* true, false *)
+  | Mbranch of Rtl.rtl * label edgelist (* possible successors *)
+  | Call    of call  
+  | Cut     of Rtl.rtl * contedge edgelist * regs  (* out edges, registers used *)
+  | Return  of exit_num * Rtl.rtl * regs
+  | Jump    of Rtl.rtl * regs * string list
+                   (* inst, registers used, targets *)
+  | Forbidden of Rtl.rtl (* cause a run-time error *)
+and exit_num = int
+@ In a complete graph for a procedure, the [[Exit]] node should not
+appear, but it is useful in a subgraph (e.g., replacement for a node).
+@
+To sequence these things,
+a~[[head]] is a [[first]] followed by zero or more [[middle]]s.
+A~[[tail]] is  zero or more [[middle]]s followed by a [[last]].
+<<exposed types for [[Rep]] module>>=
+type head = First of first | Head of head * middle
+type tail = Last  of last  | Tail of middle * tail
+@
+And now the zipper.
+In the future, we may well simplify these to just two cases.
+<<exposed types for [[Rep]] module>>=
+type zblock
+  = Start  of first * tail           (* focus on first *)
+  | Middle of head * middle * tail   (* focus on middle *)
+  | End    of head * last            (* focus on last *)
+@ An alternative would be to make [[type zblock = head * tail]], with
+focus on the first element of the tail.  Not sure if that is flexible
+enough, however---it is often useful to focus on a [[first]] node.
+
+Another alternative would be to inline the definitions of [[first]] and
+[[last]] into [[head]] and [[tail]], doing away with a level of
+indirection.
+But this would probably make it harder for clients to reason about
+nodes in isolation.
+@
+A block need not be in zipper form:
+<<exposed types for [[Rep]] module>>=
+type block = first * tail
+@ 
+We expose some utility functions:
+<<declarations of [[Rep]]'s public functions>>=
+val id  : block -> uid
+val blocklabel : block -> label option (* entry block has no label *)
+val fid : first -> uid
+val entry_uid : uid
+
+val zip   : zblock -> block
+val unzip : block  -> zblock
+
+val first      : zblock -> first
+val last       : zblock -> last
+val goto_start : zblock -> first * tail
+val goto_end   : zblock -> head  * last
+@ 
+A couple of ways to combine parts:
+<<declarations of [[Rep]]'s public functions>>=
+val ht_to_first : head -> tail -> first * tail
+val ht_to_last  : head -> tail -> head  * last
+@ 
+Access to the representation:
+<<zipcfg.mli>>=
+val to_blocks : graph -> Rep.block Unique.Map.t
+val of_blocks : Rep.block Unique.Map.t -> graph  (* cheap *)
+val of_block_list : Rep.block list -> graph  (* expensive *)
+val openz : zgraph -> Rep.zblock * Rep.block Unique.Map.t
+@ 
+We want to be able to scrutinize a single-entry, single-exit graph for
+splicing purposes. 
+There are two useful cases: the graph is a single block or it isn't.
+We use continuation-passing style
+<<zipcfg.mli>>=
+val prepare_for_splicing :
+  graph -> 
+  (Rep.tail -> 'answer) -> 
+  (entry:Rep.tail -> exit:Rep.head -> others:Rep.block Unique.Map.t -> 'answer) ->
+  'answer
+@
+Traversal: [[postorder_dfs]] returns a list of blocks reachable from
+the entry node.
+The postorder depth-first-search order means the list is in roughly
+first-to-last order, as suitable for use in a forward dataflow problem.
+<<zipcfg.mli>>=
+val postorder_dfs : graph -> Rep.block list
+@ 
+For layout, we fold over pairs of type [[block * label option]] in
+layout order.
+The [[label]], if any, identifies the block that will be the layout
+successor of the current block.
+This may be useful to help an emitter omit the final [[goto]] of a
+block that flows directly to its layout successor.
+<<zipcfg.mli>>=
+val fold_layout : (Rep.block -> label option -> 'a -> 'a) -> 'a -> graph -> 'a
+@ 
+We can also fold and iterate over blocks.
+<<zipcfg.mli>>=
+val fold_blocks : (Rep.block -> 'a -> 'a) -> 'a -> graph -> 'a
+val iter_blocks : (Rep.block -> unit) -> graph -> unit
+@ 
+<<zipcfg.mli>>=
+val expand : (Rep.middle -> graph) -> (Rep.last -> graph) -> graph -> graph
+@ 
+\paragraph{Observing nodes}
+Successors.
+<<declarations of [[Rep]]'s public functions>>=
+val succs : last -> uid list
+val fold_succs : (uid -> 'a -> 'a) -> last -> 'a -> 'a
+val iter_succs : (uid -> unit) -> last -> unit
+@
+<<declarations of [[Rep]]'s public functions>>=
+val mid_instr  : middle -> Rtl.rtl
+val last_instr : last -> Rtl.rtl  (* may be nop for, e.g., [[Exit]] *)
+@ 
+No [[first]] node is executable, some [[middle]] nodes are executable,
+and all [[last]] nodes are executable.
+<<declarations of [[Rep]]'s public functions>>=
+val is_executable : middle -> bool
+@ 
+<<zipcfg.mli>>=
+val iter_spans : (Spans.t -> unit) -> graph -> unit
+val fold_spans : (Spans.t -> 'a -> 'a) -> graph -> 'a -> 'a
+@ 
+Fold from first to last
+<<declarations of [[Rep]]'s public functions>>=
+val fold_fwd_block :
+  (first -> 'a -> 'a) -> (middle -> 'a -> 'a) -> (last -> 'a -> 'a) ->
+  block -> 'a -> 'a
+@ 
+<<zipcfg.mli>>=
+val iter_nodes :
+  (Rep.first -> unit) -> (Rep.middle -> unit) -> (Rep.last -> unit) -> graph -> unit
+val iter_rtls : (Rtl.rtl -> unit) -> graph -> unit
+@ 
+<<zipcfg.mli>>=
+val map_rtls : (Rtl.rtl -> Rtl.rtl) -> graph -> graph
+val map_nodes :
+  (Rep.first -> Rep.first) -> (Rep.middle -> Rep.middle) -> (Rep.last -> Rep.last) ->
+  graph -> graph
+@ 
+<<zipcfg.mli>>=
+val new_rtlm : Rtl.rtl -> Rep.middle -> Rep.middle
+val new_rtll : Rtl.rtl -> Rep.last   -> Rep.last
+val map_rtlm : (Rtl.rtl -> Rtl.rtl) -> Rep.middle -> Rep.middle
+val map_rtll :
+  map_rtl:(Rtl.rtl -> Rtl.rtl) -> map_assn:(Rtl.rtl -> Rtl.rtl) -> Rep.last -> Rep.last
+@ 
+\paragraph{Observing data flow}
+As noted above a node can contribute defs, uses, and kills to each
+outedge, and a non-join node may contribute uses to each inedge.
+The access to this information is carefully crafted to support
+liveness analysis and to provide for efficient implementation in the
+common case where there is no dataflow.
+
+The [[union_over_outedges]] function is written in continuation-passing
+style.  The [[noflow]] continuation is used in the common case when an
+edge bears no dataflow information; the [[flow]] continuation is used
+in the general case.  Clients must guarantee that
+[[noflow n = flow {node=n; defs=empty; kills=empty}]].
+<<zipcfg.mli>>=
+val union_over_outedges :
+  Rep.last -> noflow:(uid -> regs) -> flow:(contedge -> regs) -> regs
+@ Function [[union_over_outedges]] is good for backward problems; the
+corresponding function for forward problems is [[iter_outedges]].
+<<zipcfg.mli>>=
+val iter_outedges :
+  Rep.last -> noflow:(uid -> unit) -> flow:(contedge -> unit) -> unit
+@
+Calling [[add_inedge_uses n l]] returns the union of~[[l]] with any
+uses on the inedge to~[[n]].
+It is defined on \emph{all} nodes, because there are no uses on the
+inedges of a join point.
+In the common case, it returns its second argument.
+Calling [[add_live_spans n l]] returns the union of~[[l]] with any
+registers kept live in spans.
+Spans keep register live if they may be needed to walk the stack.
+<<zipcfg.mli>>=
+val add_inedge_uses : Rep.last  -> regs -> regs
+val add_live_spansl : Rep.last  -> regs -> regs
+val add_live_spansf : Rep.first -> regs -> regs
+@ 
+\clearpage
+\subsection{Implementation}
+<<zipcfg.ml>>=
+module R = Rtl
+module RSX = Register.SetX
+module U  = Unique
+module UM = Unique.Map
+module US = Unique.Set
+
+let impossf fmt = Printf.kprintf Impossible.impossible fmt
+let unimpf  fmt = Printf.kprintf Impossible.unimp      fmt
+let ( **> ) f x = f x
+
+type uid = U.uid
+type label = uid * string
+type machine = { goto    : label -> Rtl.rtl;
+                 cbranch : Rtl.exp * label -> Rtl.rtl;
+                 bnegate : Rtl.rtl -> Rtl.rtl;
+                 call    : Rtl.exp -> Rtl.rtl;
+                 forbidden : Rtl.rtl;
+               }
+
+let uid = U.uid
+@ 
+\paragraph{Nodes and basic blocks}
+It is OK to open [[Rep]] because the definition is sitting right
+here---this [[open]] does not create the stereotypical problem of a
+mysterious [[open]] from a separately compiled module.
+<<zipcfg.ml>>=
+type regs = Register.SetX.t (* sets of regs for dataflow *)
+type contedge = { kills:regs; defs:regs; node:label; assertion: Rtl.rtl }
+
+module Rep = struct
+  let entry_uid = U.distinguished_uid
+  <<exposed types for [[Rep]] module>>
+  <<definitions of [[Rep]]'s public functions>>
+end
+open Rep
+@ 
+<<node types>>=
+type call = {         cal_i          : Rtl.rtl
+            ;         cal_contedges  : contedge edgelist
+            ;         cal_spans      : Spans.t option
+            ; mutable cal_uses       : regs
+            ;         cal_altrets    : int
+            ;         cal_unwinds_to : int
+            ;         cal_cuts_to    : int
+            ;         cal_reads      : string list option
+            ;         cal_writes     : string list option
+            }
+@
+\paragraph{Block manipulations}
+<<definitions of [[Rep]]'s public functions>>=
+let fid = function Entry -> entry_uid | Label ((u, _), _, _) -> u
+let id (f, t) = fid f
+let blocklabel (f, t) = match f with
+| Entry -> None
+| Label (l, _, _) -> Some l
+@ 
+Convert block between forms.
+These functions are tail-recursive, so we can go as deep as we like
+without fear of stack overflow.  
+<<definitions of [[Rep]]'s public functions>>=
+let rec ht_to_first head tail = match head with
+  | First f -> f, tail
+  | Head (h, m) -> ht_to_first h (Tail (m, tail)) 
+
+let goto_start = function
+  | Start  (f, t)    -> f, t
+  | Middle (h, m, t) -> ht_to_first h (Tail (m, t))
+  | End    (h, l)    -> ht_to_first h (Last l)
+
+let rec ht_to_last head tail = match tail with
+| Last l -> head, l
+| Tail (m, t) -> ht_to_last (Head (head, m)) t 
+
+let goto_end = function
+  | Start  (f, t)    -> ht_to_last (First f) t
+  | Middle (h, m, t) -> ht_to_last (Head (h, m)) t
+  | End    (h, l)    -> h, l
+
+let zip = goto_start
+let unzip (n, ns) = Start (n, ns)
+<<definitions of [[Rep]]'s public functions>>=
+let rec lastt = function (Last l) -> l | Tail (_, t) -> lastt t 
+let last = function
+  | Start (f, t) -> lastt t
+  | Middle (h, m, t) -> lastt t
+  | End (h, l) -> l
+
+let first =
+  let rec first = function (First f) -> f | Head (h, _) -> first h in
+  function
+    | Start (f, t) -> f
+    | Middle (h, m, t) -> first h
+    | End (h, l) -> first h
+@ 
+\paragraph{Graph}
+For the graph, we want to be able to look up a block efficiently by
+its unique id.  
+For the time being, we use a list:
+<<zipcfg.ml>>=
+module type BLOCKS = sig
+  type t
+  val empty  : t
+  val insert : block -> t -> t
+  val find   : t -> uid -> block 
+  val focus  : t -> uid -> block * t
+  val focusp : t -> (block -> bool) -> block * t
+  val union  : t -> t -> t
+
+  val fold   : (block -> 'a -> 'a) -> t -> 'a -> 'a
+  val iter   : (block -> unit) -> t -> unit
+end
+
+module Blocks : BLOCKS with type t = block UM.t = struct
+  type t = block UM.t
+  let empty = UM.empty
+  let insert block = UM.add (id block) block 
+  let find blocks u = UM.find u blocks
+  let focusp blocks p = UM.splitp (fun _ b -> p b) blocks
+  let focus blocks u = UM.split u blocks
+  let union = UM.union
+  let fold f blocks z = UM.fold (fun _ b z -> f b z) blocks z
+  let iter = UM.iter
+end
+@ 
+<<zipcfg.ml>>=  
+type graph  = Blocks.t
+type zgraph = zblock * Blocks.t
+type nodes   = zgraph -> zgraph (* sequence of nodes in Hughes's representation *)
+type cbranch = ifso:label -> ifnot:label -> nodes (* ability to branch conditionally *)
+
+let of_blocks g = g
+let to_blocks g = g
+let openz (bz, bs) = (bz, bs)
+@ 
+<<zipcfg.ml>>=
+let empty = Blocks.insert (Entry, Last Exit) Blocks.empty
+
+let focus uid blocks =
+  let (b, bs) = Blocks.focus blocks uid in
+  unzip b, bs
+let entry blocks = focus entry_uid blocks
+let exit g =
+  let is_exit b = match last (unzip b) with Exit -> true | _ -> false in
+  let (b, bs) = Blocks.focusp g is_exit in
+  let (h, l) = goto_end (unzip b) in
+  (End (h, l), bs)
+
+let unfocus (bz, bs) = Blocks.insert (zip bz) bs
+<<zipcfg.ml>>=
+let consm middle g = match g with
+| (Start (Entry, tail), blocks) -> (Start (Entry, Tail (middle, tail)), blocks)
+| _ -> impossf "focus not on entry node"
+
+let instruction  rtl g = consm (Instruction  rtl) g
+let stack_adjust rtl g = consm (Stack_adjust rtl) g
+
+let unreachable = function
+  | Last (Branch _ | Forbidden _ | Exit) -> ()
+  | t ->
+      let pr s = Debug.eprintf "zipcfg" s in
+      pr "warning: unreachable code?\n";
+      let rec warn = function
+        | Tail (m, t) -> pr "  %s\n" (Rtlutil.ToString.rtl (mid_instr m)); warn t
+        | Last l -> pr "  %s\n"  (Rtlutil.ToString.rtl (last_instr l)) in
+      warn t
+
+let consl last g = match g with
+| (Start (Entry, tail), blocks) ->
+    unreachable tail;
+    (Start (Entry, Last last), blocks)
+| _ -> impossf "focus not on entry node"
+
+let branch machine target = consl (Branch (machine.goto target, target))
+let jump rtl ~uses ~targets  = consl (Jump (rtl, uses, targets))
+let cbranch machine =
+  let f = machine.cbranch in
+  fun exp ~ifso ~ifnot ->
+    let rtl = f (exp, ifso) in
+    consl (Cbranch (rtl, ifso, ifnot))
+let mbranch rtl ~targets     = consl (Mbranch (rtl, targets))
+let return  rtl ~exit ~uses  = consl (Return (exit, rtl, uses))
+let cut_to  rtl ~cuts_to ~aborts ~uses = consl (Cut (rtl, cuts_to, uses))
+let forbidden machine = consl (Forbidden machine.forbidden)
+@ 
+<<zipcfg.ml>>=
+let label' user tgt =
+  let goto = tgt.goto in
+  fun lbl g -> match g with
+  | (Start (Entry, tail), blocks) -> 
+      Start (Entry, Last (Branch (goto lbl, lbl))),
+      Blocks.insert (Label (lbl, user, ref None), tail) blocks
+  | _ -> impossf "focus not on entry node"
+let label        = label' (User true)
+let privatelabel = label' (User false)
+@ 
+<<zipcfg.ml>>=
+let entry_to_tail block =
+  match goto_start block with
+  | Entry, t -> t
+  | _ -> impossf "unexpected non-entry"
+
+let exit_to_head block =
+  match goto_end block with
+  | h, Exit -> h
+  | _ -> impossf "unexpected non-exit"
+<<zipcfg.ml>>=
+let check_single_exit g =
+  let check block found = match last (unzip block) with
+  | Exit when not found -> true
+  | _ -> found in
+  if not (Blocks.fold check g false) then
+    impossf "graph does not have an exit"
+@ 
+<<zipcfg.ml>>=
+let splice_before (focus, blocks) g =
+  (* first extend the head with the entry of g, then 
+     if we have not reached the exit of g,
+     make the exit of g the new head *)
+  check_single_exit g;
+  let splice head after_head =
+    let gentry, gblocks = entry g in
+    match gentry with
+    | Start (Entry, gnodes) ->
+        let rec extend head gnodes = match gnodes with
+        | Tail (mid, gnodes) -> extend (Head (head, mid)) gnodes
+        | Last Exit ->
+            after_head head, Blocks.union blocks gblocks
+        | Last last ->
+            let blocks = Blocks.insert (zip (End (head, last))) blocks in
+            let gexit, gblocks = exit gblocks in
+            after_head (exit_to_head gexit), Blocks.union blocks gblocks in
+        extend head gnodes
+    | _ -> impossf "ill-formed entry node" in
+  match focus with
+  | Start _ -> impossf "splicing before a first node"
+  | Middle (head, mid, tail) -> splice head (fun head -> Middle (head, mid, tail))
+  | End (head, last) -> splice head (fun head -> End (head, last))
+<<zipcfg.ml>>=
+let splice_after (focus, blocks) g =
+  check_single_exit g;
+  (* first extend the tail with the exit of g, then 
+     if we have not reached the entry of g,
+     make the entry of g the new tail *)
+  let splice tail before_tail =
+    let gexit, gblocks = exit g in
+    match goto_end gexit with
+    | gnodes, Exit ->
+        let rec extend tail gnodes = match gnodes with
+        | Head (gnodes, mid) -> extend (Tail (mid, tail)) gnodes
+        | First Entry -> before_tail tail, Blocks.union blocks gblocks
+        | First first ->
+            let blocks = Blocks.insert (zip (Start (first, tail))) blocks in
+            let gentry, gblocks = entry gblocks in
+            before_tail (entry_to_tail gentry), Blocks.union blocks gblocks in
+        extend tail gnodes
+    | _ -> impossf "ill-formed exit node" in
+  match focus with
+  | Start (first, tail) -> splice tail (fun tail -> Start (first, tail))
+  | Middle (head, mid, tail) -> splice tail (fun tail -> Middle (head, mid, tail))
+  | End (tail, last) -> impossf "splicing after a last node"
+<<zipcfg.ml>>=
+let make_target machine ((b, bs) as gz) = match b with
+| Start (Label (u, _, _), tail) -> u, gz
+| Start (Entry, Last (Branch (_, u))) -> u, gz
+| Start (Entry, _) ->
+    let lbl = (uid (), Idgen.label "branch target") in
+    let gz = branch machine lbl **> privatelabel machine lbl **> gz in
+    lbl, gz
+| _ -> impossf "focus not on entry"
+@ 
+<<zipcfg.ml>>=
+let if_then_else cbranch machine ~t ~f g =
+  let endif, g = make_target machine g in
+  let not,   g = make_target machine (f g) in
+  let        g = branch      machine endif g in
+  let so,    g = make_target machine (t g) in
+  cbranch ~ifso:so ~ifnot:not g
+<<zipcfg.ml>>=
+let while_do cbranch machine ~body g =
+  let lbl = (uid (), Idgen.label "loop head") in
+  let endwhile, g = make_target machine g in
+  let body,     g = make_target machine (body (branch machine lbl g)) in
+  let g = cbranch ~ifso:body ~ifnot:endwhile g in
+  label machine lbl g
+@ 
+<<zipcfg.ml>>=
+let call machine exp ~altrets ~unwinds_to ~cuts_to ~aborts
+               ~uses ~defs ~kills ~reads ~writes ~spans ~succ_assn succ =
+  let lbl = (uid (), Idgen.label "call successor") in
+  let succ_ce = { kills = kills; defs = defs; node = lbl; assertion = succ_assn } in
+  let edgelist = succ_ce :: List.flatten [altrets; unwinds_to; cuts_to] in
+  let call = 
+    { cal_i = machine.call exp; cal_contedges = edgelist; cal_spans = spans;
+      cal_uses = uses; cal_altrets = List.length altrets;
+      cal_unwinds_to = List.length unwinds_to; cal_cuts_to = List.length cuts_to;
+      cal_reads = reads; cal_writes = writes; } in
+  let succ = privatelabel machine lbl succ in
+  match succ with
+  | (Start (Entry, Last (Branch (_, lbl'))), blocks) when lbl' =*= lbl -> 
+      Start (Entry, Last (Call call)), blocks
+  | _ -> impossf "internal error in call constructor"
+@ 
+<<zipcfg.ml>>=
+let set_spans (bz, blocks) spans = match bz with
+| Start (Label (l, u, r), _) -> r := Some spans
+| _ -> impossf "setting spans on non-label"
+@ 
+<<zipcfg.ml>>=
+let iter_spans f g =
+  let span s = match s with Some s -> f s | None -> () in
+  let first = function Label (_, _, s) -> span (!s) | _ -> () in
+  let block (f, t) =
+    first f;
+    match lastt t with
+    | Call c -> span c.cal_spans
+    | _ -> () in
+  Blocks.iter block g
+@ 
+<<zipcfg.ml>>=
+let fold_spans f g z =
+  let span s z = match s with Some s -> f s z | None -> z in
+  let first f z = match f with Label (_, _, s) -> span (!s) z | _ -> z in
+  let block (f, t) z =
+    let z = first f z in
+    match lastt t with
+    | Call c -> span c.cal_spans z
+    | _ -> z in
+  Blocks.fold block g z
+@ 
+<<zipcfg.ml>>=
+let add_blocks blocks (focus, newblocks) =
+  match focus with
+  | Start (Entry, Last (Branch _ | Forbidden _ | Exit)) ->
+      let rec add block blocks = match goto_end (unzip block) with
+      | (First (Label _), Exit) -> blocks
+      | (_, Exit) -> impossf "exit contains nontrivial code"
+      | _ -> Blocks.insert block blocks in
+      Blocks.fold add newblocks blocks
+  | Start (Entry, _) -> impossf "entry contains nontrivial code"
+  | _ -> impossf "focus not on entry"
+@ 
+<<definitions of [[Rep]]'s public functions>>=
+let succs = function
+  | Exit                  -> []
+  | Branch  (_, l)        -> [fst l]
+  | Cbranch (_, t, f)     -> [fst f; fst t]  (* order meets layout constraint *)
+  | Mbranch (_, edges)    -> List.map fst edges
+  | Call    c             -> List.map (fun e -> fst e.node) c.cal_contedges
+  | Cut     (_, edges, _) -> List.map (fun e -> fst e.node) edges
+  | Return  _   -> []
+  | Jump    _   -> []
+  | Forbidden _ -> []
+
+let fold_succs f t z = match t with
+  | Exit                  -> z
+  | Branch  (_, l)        -> f (fst l) z
+  | Cbranch (_, te, fe)   -> f (fst te) (f (fst fe) z) (* order meets layout constraint *)
+  | Mbranch (_, edges)    -> List.fold_left (fun z e -> f (fst e) z) z edges
+  | Call    c             -> List.fold_left (fun z e -> f (fst e.node) z) z c.cal_contedges
+  | Cut     (_, edges, _) -> List.fold_left (fun z e -> f (fst e.node) z) z edges
+  | Return  _   -> z
+  | Jump    _   -> z
+  | Forbidden _ -> z
+
+let iter_succs f t = fold_succs (fun t () -> f t) t ()
+@
+<<zipcfg.ml>>=
+let postorder_dfs g =
+  let entry, blocks = entry g in
+  let rec vnode block cont acc visited =
+    let u = id block in
+    if US.mem u visited then
+      cont acc visited
+    else
+      vchildren block (get_children block) cont acc (US.add u visited)
+  and get_children block =
+    let uids = succs (last (unzip block)) in
+    (*List.map (Blocks.find blocks) uids*)
+    List.fold_left (fun rst bid -> try Blocks.find blocks bid :: rst
+                                   with Not_found -> rst) [] uids
+  and vchildren block children cont acc visited = 
+    let rec next children acc visited = match children with
+      | [] -> cont (block :: acc) visited
+      | n::rst -> vnode n (next rst) acc visited in
+    next children acc visited in
+  vnode (zip entry) (fun acc _visited -> acc) [] US.empty
+@ 
+<<zipcfg.ml>>=
+let fold_layout f z g =
+  let nextlabel (f, t) = match f with
+    | Entry -> impossf "entry as successor"
+    | Label (l, _, _) -> Some l in
+  let rec fold blocks z = match blocks with
+  | [] -> z
+  | [b] -> f b None z
+  | b1 :: b2 :: bs -> fold (b2 :: bs) (f b1 (nextlabel b2) z) in
+  fold (postorder_dfs g) z
+<<definitions of [[Rep]]'s public functions>>=
+let fold_fwd_block first middle last (f, t) z =
+  let z = first f z in
+  let rec tail t z = match t with
+  | Tail (m, t) -> tail t (middle m z)
+  | Last l      -> last l z in
+  tail t z
+<<zipcfg.ml>>=
+let iter_nodes first middle last g =
+  let block (f, t) =
+    let () = first f in
+    let rec tail t = match t with
+    | Tail (m, t) -> (middle m; tail t)
+    | Last l -> last l in
+    tail t in
+  UM.iter block g
+
+let iter_rtls rfun g =
+  iter_nodes
+    (fun f -> ()) (fun m -> rfun (mid_instr m)) (fun l -> rfun (last_instr l)) g
+@ 
+<<zipcfg.ml>>=
+let fold_blocks f z bs = UM.fold (fun _ -> f) bs z
+let iter_blocks = UM.iter
+<<zipcfg.ml>>=
+let new_rtll rtl l = match l with
+| Exit -> l
+| Branch  (r, l) -> Branch (rtl, l)
+| Cbranch (r, t, f) -> Cbranch (rtl, t, f)
+| Mbranch (r, tgts) -> Mbranch (rtl, tgts)
+| Call    c -> Call { c with cal_i = rtl }
+| Cut     (r, es, uses) -> Cut (rtl, es, uses)
+| Return  (i, r, uses) -> Return (i, rtl, uses)
+| Jump    (r, uses, tgts) -> Jump (rtl, uses, tgts)
+| Forbidden r -> Forbidden (rtl)
+
+let new_rtlm rtl m = match m with
+| Instruction r  -> Instruction rtl
+| Stack_adjust r -> Stack_adjust rtl
+<<zipcfg.ml>>=
+let map_rtll ~map_rtl ~map_assn l =
+  let map_ces ces =
+    List.map (fun ce -> { ce with assertion = map_assn ce.assertion }) ces in
+  match l with
+  | Exit -> l
+  | Branch  (r, l) -> Branch (map_rtl r, l)
+  | Cbranch (r, t, f) -> Cbranch (map_rtl r, t, f)
+  | Mbranch (r, tgts) -> Mbranch (map_rtl r, tgts)
+  | Call    c -> Call { c with cal_i = map_rtl c.cal_i ;
+                               cal_contedges = map_ces c.cal_contedges }
+  | Cut     (r, es, uses) -> Cut (map_rtl r, map_ces es, uses)
+  | Return  (i, r, uses) -> Return (i, map_rtl r, uses)
+  | Jump    (r, uses, tgts) -> Jump (map_rtl r, uses, tgts)
+  | Forbidden r -> Forbidden (map_rtl r)
+
+let map_rtlm map m = match m with
+| Instruction r  -> Instruction (map r)
+| Stack_adjust r -> Stack_adjust (map r)
+
+let map_rtls map g =
+  let block (f, t) =
+    let rec tail t = match t with
+    | Tail (m, t) -> Tail (map_rtlm map m, tail t)
+    | Last l -> Last (map_rtll ~map_rtl:map ~map_assn:map l) in
+    (f, tail t) in
+  UM.map block g
+
+<<zipcfg.ml>>=
+let map_nodes first middle last g =
+  let block (f, t) =
+    let rec tail t = match t with
+    | Tail (m, t) -> Tail (middle m, tail t)
+    | Last l -> Last (last l) in
+    (first f, tail t) in
+  UM.map block g
+@ 
+<<zipcfg.ml>>=
+(* should this fn be defined on exi and ill?
+   when there are cont edges, do we still need to cover the regular edges?*)
+let (++) = RSX.union
+let union_over_outedges node ~noflow ~flow =
+  let noflow (u, l) = noflow u in
+  let union_contedges ce = List.fold_left (fun r s -> r ++ flow s) RSX.empty ce in
+  match node with
+  | Call c -> union_contedges c.cal_contedges
+  | Cut (_, es, _) -> union_contedges es
+  | Cbranch (c, t, f) -> noflow t ++ noflow f
+  | Mbranch (_, ls) -> List.fold_left (fun r s -> r ++ noflow s) RSX.empty ls
+  | Branch (_, l) -> noflow l
+  | Jump _
+  | Return _
+  | Exit 
+  | Forbidden _ -> RSX.empty
+  
+let iter_outedges node ~noflow ~flow =
+  let noflow (u, l) = noflow u in
+  match node with
+  | Call c -> List.iter flow c.cal_contedges
+  | Cut (_, es, _) -> List.iter flow es
+  | Cbranch (c, t, f) -> (noflow t; noflow f)
+  | Mbranch (_, ls) -> List.iter noflow ls
+  | Branch (_, l) -> noflow l
+  | Jump _
+  | Return _
+  | Exit 
+  | Forbidden _ -> ()
+  
+let add_inedge_uses node regs =
+  let reg_add  = RSX.fold RSX.add in
+  match node with
+  | Call c -> reg_add c.cal_uses regs
+  | Cut (_, _, uses) -> reg_add uses regs
+  | Jump (_, uses, _) -> reg_add uses regs
+  | Return (_, _, uses) -> reg_add uses regs
+  | Exit | Branch _ | Cbranch _ | Mbranch _ | Forbidden _ -> regs
+
+let span_add spans rst = match spans with
+| Some ss -> Spans.fold_live_locs RSX.add ss rst
+| None    -> rst 
+
+let add_live_spansl node regs = match node with
+| Call c -> span_add c.cal_spans regs
+| _ -> regs
+
+let add_live_spansf node regs = match node with
+| Label (_, _, sp) -> span_add (!sp) regs
+| Entry -> regs
+@ 
+<<definitions of [[Rep]]'s public functions>>=
+let mid_instr m = match m with
+| Instruction  r -> r
+| Stack_adjust r -> r
+
+let is_executable _ = true
+
+let nop = Rtl.par [] 
+let last_instr l = match l with
+| Exit    -> nop
+| Branch  (r, _) -> r
+| Cbranch (r, _, _) -> r
+| Mbranch (r, _) -> r
+| Call    c -> c.cal_i  
+| Cut     (r, _, _) -> r
+| Return  (_, r, _) -> r
+| Jump    (r, _, _) -> r
+| Forbidden r -> r
+@ 
+<<zipcfg.ml>>=
+let of_block_list blocks =
+  List.fold_left (fun m b -> Blocks.insert b m) Blocks.empty blocks 
+@ 
+\paragraph{Splicing support}
+<<zipcfg.ml>>=
+let prepare_for_splicing graph single multi =
+  let gentry, gblocks = Blocks.focus graph entry_uid in
+  if UM.is_empty gblocks then
+    ((match last (unzip gentry) with Exit -> () | _ -> impossf "bad single block");
+     single (snd gentry)
+    )
+  else
+    let gexit, gblocks = exit gblocks in
+    let gh, gl = goto_end gexit in
+    (match gl with Exit -> () | _ -> impossf "exit is not exit?!");
+    multi ~entry:(snd gentry) ~exit:gh ~others:gblocks
+@ 
+\paragraph{Graph expansion}
+
+This probably duplicates some other splicing stuff.
+And I'm not too happy even with the local redundancy.
+<<zipcfg.ml>>=
+let must_be_empty g =
+  if not (UM.is_empty g) then
+    impossf "entry connects to exit, but there are more blocks"
+
+let splice_in_forward head graph tail expanded =
+  let single after_entry =
+    let new_head, last = ht_to_last head after_entry in
+    (match last with Exit -> () | _ -> impossf "exit expected");
+    new_head, tail, expanded in
+  let multi ~entry ~exit ~others =
+    exit, tail, Blocks.insert (ht_to_first head entry) (Blocks.union others expanded) in
+  prepare_for_splicing graph single multi
+
+let finish_splice_forward head graph expanded = 
+  let gentry, gblocks = entry graph in
+  let gf, gt = goto_start gentry in
+  (match gf with Entry -> () | _ -> impossf "entry is not entry?!");
+  Blocks.insert (ht_to_first head gt) (Blocks.union gblocks expanded)
+
+let expand expand_middle expand_last graph =
+  let expand_block block expanded =
+    let rec expand_tail h t expanded = match t with
+    | Tail (m, t) ->
+        let g = expand_middle m in
+        let h, t, expanded = splice_in_forward h g t expanded in
+        expand_tail h t expanded
+    | Last l ->
+        let g = expand_last l in
+        finish_splice_forward h g expanded in
+    let (f, t) = block in
+    expand_tail (First f) t expanded in
+  Blocks.fold expand_block graph empty
+@ 
+<<zipcfg.ml>>=
+let single_middle m =
+  let block = (Entry, Tail (m, Last Exit)) in
+  Blocks.insert block Blocks.empty
+
+let single_last l =
+  let block = (Entry, Last l) in
+  Blocks.insert block Blocks.empty
+@ 
