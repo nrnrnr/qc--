@@ -26,7 +26,7 @@ immediately after~[[r]].
 type t   (* a set of available expressions *)
 val forward : Rtl.rtl -> t -> t
 val invalidate : Register.SetX.t -> t -> t  (* anything that depends on the set *)
-val unknown : t  (* the unknown set *)
+val unknown : t  (* the unknown set (aka the infinite set: top) *)
 val join : t -> t -> t (* effectively set intersection *)
 val smaller : old:t -> new':t -> bool  (* has a set shrunk? (unknown at top) *)
 @ 
@@ -43,6 +43,10 @@ When calling [[subst_exp a ls e]], it is a checked run-time error for
 list [[ls]] to contain a location that is not available in~[[a]].
 <<avail.mli>>=
 val subst_exp : t -> Rtl.Private.loc list -> Rtl.Private.exp -> Rtl.Private.exp
+@ 
+We can print a set for debugging:
+<<avail.mli>>=
+val to_string : t -> string
 @ 
 
 
@@ -61,6 +65,8 @@ let debug = Debug.on "avail"
 @ 
 The implementation is designed to try to maximize sharing and minimize
 allocation, not for fast lookup.
+Notice the lattice inversion!
+A~``smaller'' fact has \emph{more} equalities!
 <<avail.ml>>=
 type t = Unknown | Known of (RP.loc * RP.exp) list
 let unknown = Unknown
@@ -168,3 +174,13 @@ let invalidate locs_killed t = match t with
     let alocs = List.map RU.MayAlias.locs' locs in
     let aexps = List.map RU.MayAlias.exp'  locs in
     Known (invalidate_pairs alocs aexps pairs)
+@ 
+<<avail.ml>>=
+let to_string = function
+  | Unknown -> "<?>"
+  | Known [] -> "<nothing-available>"
+  | Known les ->
+      let print (l, e) =
+        Printf.sprintf "\n  %s = %s"
+          (RU.ToString.loc (Up.loc l)) (RU.ToString.exp (Up.exp e)) in
+      String.concat "" (List.map print les)

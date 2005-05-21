@@ -4,6 +4,8 @@
 val decrement : name:string -> from:int -> to':int -> unit
 val remaining : unit -> int
 val set_limit : int -> unit
+val used : unit -> int
+val last : unit -> string
 @
 <<tx.ml>>=
 type t = { mutable limit : int; mutable remaining : int; mutable last : string; }
@@ -14,10 +16,17 @@ let _ = Reinit.at (fun () -> begin
   ts.last <- "<none>";
 end)
 
+let () = Debug.register "tx" "watch transaction counts"
+
 let set_limit n = ts.limit <- n; ts.remaining <- n
 let remaining () = ts.remaining
 let decrement ~name ~from ~to' =
+  Debug.eprintf "tx" "'%s' decrementing tx's from %d to %d (diff is %d)\n"
+    name from to' (from-to');
   assert (ts.remaining = from);
   ts.remaining <- to';
   ts.last <- name
+
+let used _ = ts.limit - ts.remaining
+let last _ = ts.last
 

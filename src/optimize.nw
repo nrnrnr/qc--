@@ -150,6 +150,7 @@ let collapse_branch_chains _ {Proc.cfg = cfg} =
 let collapse_branch_chains _ = Impossible.unimp "new optimizer"
 @
 <<optimize.ml>>=
+type limit = { mutable lim : int }
 let remove_nops _ (g, proc) =
   let changed = ref false in
   let is_nop rtl =
@@ -163,14 +164,17 @@ let remove_nops _ (g, proc) =
       | _ -> false in
     let RP.Rtl effs = Dn.rtl rtl in
     List.for_all unneeded effs in
+  let remaining = Tx.remaining() in
+  let tx = { lim = remaining } in
   let block (f, t) =
     let rec finish t h = match t with
     | GR.Last l -> GR.zip (GR.End (h, l))
-    | GR.Tail (m, t) when GR.is_executable m && is_nop (GR.mid_instr m) ->
-        (changed := true; finish t h)
+    | GR.Tail (m, t) when tx.lim > 0 && GR.is_executable m && is_nop (GR.mid_instr m) ->
+        (changed := true; tx.lim <- tx.lim - 1; finish t h)
     | GR.Tail (m, t) -> finish t (GR.Head (h, m)) in
     finish t (GR.First f) in
   let g = G.of_blocks (Unique.Map.map block (G.to_blocks g)) in
+  let () = if tx.lim < remaining then Tx.decrement "remove_nops" remaining tx.lim in
   (g, proc), !changed
 @ 
 <<optimize.ml>>=

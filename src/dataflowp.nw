@@ -95,9 +95,11 @@ val debug : ('a -> string) -> 'a pass -> 'a pass
 module G  = Zipcfg
 module GR = Zipcfg.Rep
 module P  = Unique.Prop
+module RS = Rtlutil.ToString
 module UA = Unique.Array
 let impossf fmt = Printf.kprintf Impossible.impossible fmt
 let unimpf  fmt = Printf.kprintf Impossible.unimp      fmt
+let dprintf fmt = Debug.eprintf "dataflow" fmt
 
 <<exported types>>
 <<utilities>>
@@ -131,8 +133,7 @@ let backward_anal (fact, comp) graph =
         let show_block (f, t) = match f with
         | GR.Entry -> "<entry>"
         | GR.Label ((_, l), _, _) -> l in
-        Debug.eprintf "dataflow" "Dataflow fact '%s' changed at block %s\n"
-          fact.fact_name (show_block b);
+        dprintf "Dataflow fact '%s' changed at block %s\n" fact.fact_name (show_block b);
         P.set fact.prop u block_in;
         match (fst b) with
         | GR.Entry -> () (* does not count as a change for fixed-point purposes *)
@@ -167,6 +168,7 @@ backward analysis on the modified computation.
 The tricky work is in the [[answer[lmf]]] functions.
 (HOW DO WE PROVE THAT IT IS SAFE TO USE THE SHARED MUTABLE STATE
 ASSOCIATED WITH THE ENTRY NODE?)
+\enlargethispage{2\baselineskip}
 <<definitions of exported functions>>=
 let rec solve_graph fact comp graph exit_fact =
   general_backward fact (comp_with_exit comp exit_fact) graph;
@@ -177,8 +179,7 @@ and general_backward fact comp graph =
     let block_in = 
       let rec head_in h out = match h with
         | GR.Head (h, m) ->
-            (Debug.eprintf "dataflow" "Solving middle node %s\n"
-               (Rtlutil.ToString.rtl (GR.mid_instr m));
+            (dprintf "Solving middle node %s\n" (RS.rtl (GR.mid_instr m));
              match comp.middle_in out m with
              | Dataflow a -> head_in h a
              | Rewrite g -> head_in h (solve_graph fact comp g out))
@@ -197,8 +198,7 @@ and general_backward fact comp graph =
         let show_block b = match fst b with
         | GR.Entry -> "<entry>"
         | GR.Label ((_, l), _, _) -> l in
-        Debug.eprintf "dataflow" "Dataflow fact '%s' changed at block %s\n"
-          fact.fact_name (show_block b);
+        dprintf "Dataflow fact '%s' changed at block %s\n" fact.fact_name (show_block b);
         P.set fact.prop u block_in;
         match (fst b) with
         | GR.Entry -> () (* does not count as a change for fixed-point purposes *)
@@ -240,23 +240,26 @@ and backward_rewrite (fact : 'a fact) comp graph changed =
         | Rewrite g ->
             let g, _ = solve_and_rewrite fact comp g fact.init_info changed in
             let a = P.get fact.prop GR.entry_uid in
-            let h, t, rewritten = splice_in_backward h g (GR.Last l) rewritten in
+            let t, rewritten = 
+              let t, g = G.splice_tail g (GR.Last l)  in
+              t, add_blocks (G.to_blocks g) rewritten in
             (* continue at entry of g *)
             propagate h a t rewritten true
       and propagate :
             GR.head -> 'a -> GR.tail -> GR.block list -> bool -> G.graph * bool =
         fun h out tail rewritten changed -> match h with
         | GR.Head (h, m) -> (
-            Debug.eprintf "dataflow" "Rewriting middle node %s\n"
-              (Rtlutil.ToString.rtl (GR.mid_instr m));
+            dprintf "Rewriting middle node %s\n" (RS.rtl (GR.mid_instr m));
             match comp.middle_in out m with
             | Dataflow a -> propagate h a (GR.Tail (m, tail)) rewritten changed
             | Rewrite g ->
-                Debug.eprintf "dataflow" "Rewriting middle node...\n";
+                dprintf "Rewriting middle node...\n";
                 let g, _ = solve_and_rewrite fact comp g out changed in
-                Debug.eprintf "dataflow" "Rewrite of middle node completed\n";
+                dprintf "Rewrite of middle node completed\n";
                 let a = P.get fact.prop GR.entry_uid in
-                let h, t, rewritten = splice_in_backward h g tail rewritten in
+                let t, rewritten = 
+                  let t, g = G.splice_tail g tail in
+                  t, add_blocks (G.to_blocks g) rewritten in
                 propagate h a t rewritten true)
         | GR.First f ->
             match comp.first_in out f with
@@ -276,45 +279,22 @@ let check_property_match fact a block =
   match (fst block) with
   | GR.Entry -> () (* needn't match *)
   | GR.Label _ -> 
-      let a' = P.get fact.prop (GR.id block) in
-      if not (eqfact fact a a') then
+      let old_a = P.get fact.prop (GR.id block) in
+      let new_a = fact.add_info a old_a in
+      if not (eqfact fact old_a new_a) then
         impossf "property changed after supposedly reaching fixed point" 
 @
 <<utilities>>=
 module UM = Unique.Map
-let rec revapp h t = match h with
-| GR.First f -> f, t
-| GR.Head (h, m) -> revapp h (GR.Tail (m, t))
-
-let must_be_empty g =
-  if not (UM.is_empty g) then
-    impossf "entry connects to exit, but there are more blocks"
-
 let add_blocks map list =
   let add _ b bs = b :: bs in
   UM.fold add map list
-
-let splice_in_backward head graph tail oldblocks =
-  let gexit, gblocks = G.openz (G.exit graph) in
-  let gh, gl = GR.goto_end gexit in
-  (match gl with GR.Exit -> () | _ -> impossf "exit is not exit?!");
-  let f, t = revapp gh tail in
-  match f with
-  | GR.Entry ->
-      must_be_empty gblocks;
-      head, t, oldblocks
-  | GR.Label _ ->
-      let gentry, gblocks = G.openz (G.entry (G.of_blocks gblocks)) in
-      match GR.zip gentry with
-      | GR.Entry, t -> head, t, ((f, t) :: add_blocks gblocks oldblocks)
-      | _ -> impossf "entry is not entry?!"
 @ 
 <<utilities>>=
 let ( << ) f g = fun x -> f (g x)
 <<definitions of exported functions>>=
 let debug s (f, comp) =
   let pr = Printf.eprintf in
-  let module RS = Rtlutil.ToString in
   let fact dir node a = pr "%s %s for %s = %s\n" f.fact_name dir node (s a) in
   let rewr node g = pr "%s rewrites %s to <not-shown>\n" comp.name node in
   let wrap f nodestring node =

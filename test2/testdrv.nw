@@ -262,7 +262,7 @@ function Test.compile_file(file, i, txlimit)
   Test.log("compiling %s -> %s%s", file, s_file,
            txlimit and format(" with transaction limit %d", txlimit) or "")
 
-  Cfg.Tx.set_limit(txlimit or (2^30 - 1))
+  Tx.set_limit(txlimit or (2^30 - 1))
   Driver.reinit()
   Options.stop_at(".s")
   if (i or 1) == 1 then
@@ -292,7 +292,7 @@ function Test.compile_file(file, i, txlimit)
   if Test.verbose or Debug.tx then
     Test.clear_status_line()
     print(format("Used %d optimization transactions; last was '%s'",
-                 Cfg.Tx.used(), Cfg.Tx.last()))
+                 Tx.used(), Tx.last()))
   end
 
   return s_file, so, se, compiles_ok
@@ -618,7 +618,7 @@ local i = 1
 while sources[i] do
   local file = sources[i]
   local s_file,  so,  se,  compiles_ok  = Test.compile_file(file, i)     -- on
-  txcounts[i] = Cfg.Tx.used()
+  txcounts[i] = Tx.used()
   local s_file0, so0, se0, compiles_ok0 = Test.compile_file(file, i, 0)  -- off
   off_ok = off_ok and compiles_ok0
   on_ok  = on_ok  and compiles_ok
@@ -728,8 +728,8 @@ Test.rename(bads,  badname)
 Test.clear_status_line()
 write('# runs ok with ', n, ' transactions; not ok with ', n+1, '\n')
 write('# good output on ', goodname, '; bad output on ', badname, '\n')
-write("# to see last bad (from '", Cfg.Tx.last(), "'), run\n")
-write(Test.qc, ' -e "Cfg.Tx.set_limit(', n+1, ')"\n')
+write("# to see last bad (from '", Tx.last(), "'), run\n")
+write(Test.qc, ' -e "Tx.set_limit(', n+1, ')"\n')
 @ 
 \paragraph{Reporting progress of isolation}
 We keep the poor user abreast of our progress.

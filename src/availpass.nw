@@ -30,11 +30,28 @@ let matcher = { P.embed = (fun a -> P.Avail a);
 
 let prop = Unique.Prop.prop matcher
 
+let _ = Debug.register "avail-changed" "show avail exps that change"
+
+let debug_smaller ~old ~new' =
+  let b = Avail.smaller ~old ~new' in
+  if b then
+    Printf.eprintf "** Available expressions have changed from %s\n** to new avail%s\n"
+      (Avail.to_string old) (Avail.to_string new');
+  b
+
+let debug_join a a' =
+  let a'' = Avail.join a a' in
+  Printf.eprintf "** Joined avails are %s\n" (Avail.to_string a'');
+  a''
+
+let smaller = if Debug.on "avail-changed" then debug_smaller else Avail.smaller
+let join    = if Debug.on "avail-changed" then debug_join    else Avail.join
+
 let fact = {
   D.fact_name = "available expressions";
   D.init_info = Avail.unknown;
-  D.add_info = Avail.join;
-  D.changed = Avail.smaller;
+  D.add_info = join;
+  D.changed = smaller;
   D.prop = prop;
 }
 

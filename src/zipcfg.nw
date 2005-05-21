@@ -43,7 +43,7 @@ procedure should not have a default exit.
 
 
 A~[[zgraph]] is a graph with the \emph{focus} on one particular node.
-This will support at least the following kinds of operations:
+It supports at least the following kinds of operations:
 \begin{itemize}
 \item
 When the focus is on the entry node, add a new node to the graph just
@@ -111,6 +111,13 @@ requires the focus be on the entry node and inserts a new node
 following the entry node.
 After insertion, the entry node remains the focus.
 
+Here we also introduce the [[nodes]] type, which is equal to
+[[zgraph -> zgraph]].
+The idea is that we represent a sequence of nodes~$L$ by a function
+that takes the successor~$S$ and produces the sequence~$LS$.
+This representation is inspired by John Hughes's similar
+representation of lists, which supports append in constant time.
+
 %%  When we add a node that can flow through to its successor, we insert
 %%  the node before the focus.
 %%  But when we add a node that cannot flow to its successor, we add it to
@@ -125,32 +132,30 @@ type machine = { goto    : label -> Rtl.rtl;
                  forbidden : Rtl.rtl;
                }
 
-val label        : machine -> label -> zgraph -> zgraph  (* spans? *)
-val instruction  : Rtl.rtl -> zgraph -> zgraph
-val stack_adjust : Rtl.rtl -> zgraph -> zgraph
-val branch       : machine -> label -> zgraph -> zgraph
-val jump         : Rtl.rtl -> uses:regs -> targets:string list -> zgraph -> zgraph
-val cbranch      : machine -> Rtl.exp -> ifso:label -> ifnot:label -> zgraph -> zgraph
-val mbranch      : Rtl.rtl -> targets:label list -> zgraph -> zgraph
+type nodes   = zgraph -> zgraph (* sequence of nodes in Hughes's representation *)
+type cbranch = ifso:label -> ifnot:label -> nodes (* ability to branch conditionally *)
+
+val label        : machine -> label -> nodes  (* spans? *)
+val instruction  : Rtl.rtl -> nodes
+val stack_adjust : Rtl.rtl -> nodes
+val branch       : machine -> label -> nodes
+val jump         : Rtl.rtl -> uses:regs -> targets:string list -> nodes
+val cbranch      : machine -> Rtl.exp -> cbranch
+val mbranch      : Rtl.rtl -> targets:label list -> nodes
 val call         : machine -> Rtl.exp -> altrets:contedge list -> 
                      unwinds_to:contedge list -> cuts_to:contedge list ->
                      aborts:bool -> uses:regs -> defs:regs -> kills:regs ->
                      reads:string list option -> writes:string list option ->
-                     spans:Spans.t option -> succ_assn:Rtl.rtl -> zgraph -> zgraph
-val cut_to       : Rtl.rtl -> cuts_to:contedge list -> aborts:bool ->
-                     uses:regs -> zgraph -> zgraph
-val return       : Rtl.rtl -> exit:int -> uses:regs -> zgraph -> zgraph
-val forbidden    : machine -> zgraph -> zgraph
+                     spans:Spans.t option -> succ_assn:Rtl.rtl -> nodes
+val cut_to       : Rtl.rtl -> cuts_to:contedge list -> aborts:bool -> uses:regs -> nodes
+val return       : Rtl.rtl -> exit:int -> uses:regs -> nodes
+val forbidden    : machine -> nodes
   (* control should not reach; causes checked RTE *)
 @ 
-As a convenience, we provide code generation for if-then-else.
+As a convenience, we provide code generation for if-then-else and while-do.
 <<zipcfg.mli>>=
-val if_then_else :
-      (ifso:label -> ifnot:label -> zgraph -> zgraph) -> machine ->
-        t:(zgraph->zgraph) -> f:(zgraph->zgraph) -> zgraph -> zgraph
-val while_do :
-      (ifso:label -> ifnot:label -> zgraph -> zgraph) -> machine ->
-        body:(zgraph->zgraph) -> zgraph -> zgraph
+val if_then_else : cbranch -> machine -> t:nodes -> f:nodes -> nodes
+val while_do     : cbranch -> machine -> body:nodes -> nodes
 @ 
 Sometimes we need to make the current focus (which must be the entry)
 a branch target to be used later.
@@ -247,6 +252,24 @@ A couple of ways to combine parts:
 val ht_to_first : head -> tail -> first * tail
 val ht_to_last  : head -> tail -> head  * last
 @ 
+We can splice a single-entry, single-exit graph onto a head or a tail.
+For a head, we have a head~[[h]] followed by a graph~[[g]].
+The entry node of~[[g]] gets joined to~[[h]], forming the entry into
+the new graph.  The exit of~[[g]] becomes the new head.
+For both arguments and results, the order of values is the order of
+control flow: before splicing, the head flows into the graph; after
+splicing, the graph flows into the head.
+Splicing a tail is the dual operation.
+(In order to maintain the order-means-control-flow convention, the
+orders are reversed.)
+<<zipcfg.mli>>=
+val splice_head : Rep.head -> graph -> graph * Rep.head
+val splice_tail : graph -> Rep.tail -> Rep.tail * graph
+@ 
+We can also splice a single-entry, no-exit graph into a head.
+<<zipcfg.mli>>=
+val splice_head_only : Rep.head -> graph -> graph
+@
 Access to the representation:
 <<zipcfg.mli>>=
 val to_blocks : graph -> Rep.block Unique.Map.t
@@ -449,6 +472,7 @@ let goto_end = function
   | End    (h, l)    -> h, l
 
 let zip = goto_start
+let zipht = ht_to_first
 let unzip (n, ns) = Start (n, ns)
 <<definitions of [[Rep]]'s public functions>>=
 let rec lastt = function (Last l) -> l | Tail (_, t) -> lastt t 
@@ -477,6 +501,7 @@ module type BLOCKS = sig
   val focus  : t -> uid -> block * t
   val focusp : t -> (block -> bool) -> block * t
   val union  : t -> t -> t
+        (* keep larger set on the right *)
 
   val fold   : (block -> 'a -> 'a) -> t -> 'a -> 'a
   val iter   : (block -> unit) -> t -> unit
@@ -497,6 +522,9 @@ end
 <<zipcfg.ml>>=  
 type graph  = Blocks.t
 type zgraph = zblock * Blocks.t
+type nodes   = zgraph -> zgraph (* sequence of nodes in Hughes's representation *)
+type cbranch = ifso:label -> ifnot:label -> nodes (* ability to branch conditionally *)
+
 let of_blocks g = g
 let to_blocks g = g
 let openz (bz, bs) = (bz, bs)
@@ -580,53 +608,6 @@ let check_single_exit g =
   if not (Blocks.fold check g false) then
     impossf "graph does not have an exit"
 @ 
-<<zipcfg.ml>>=
-let splice_before (focus, blocks) g =
-  (* first extend the head with the entry of g, then 
-     if we have not reached the exit of g,
-     make the exit of g the new head *)
-  check_single_exit g;
-  let splice head after_head =
-    let gentry, gblocks = entry g in
-    match gentry with
-    | Start (Entry, gnodes) ->
-        let rec extend head gnodes = match gnodes with
-        | Tail (mid, gnodes) -> extend (Head (head, mid)) gnodes
-        | Last Exit ->
-            after_head head, Blocks.union blocks gblocks
-        | Last last ->
-            let blocks = Blocks.insert (zip (End (head, last))) blocks in
-            let gexit, gblocks = exit gblocks in
-            after_head (exit_to_head gexit), Blocks.union blocks gblocks in
-        extend head gnodes
-    | _ -> impossf "ill-formed entry node" in
-  match focus with
-  | Start _ -> impossf "splicing before a first node"
-  | Middle (head, mid, tail) -> splice head (fun head -> Middle (head, mid, tail))
-  | End (head, last) -> splice head (fun head -> End (head, last))
-<<zipcfg.ml>>=
-let splice_after (focus, blocks) g =
-  check_single_exit g;
-  (* first extend the tail with the exit of g, then 
-     if we have not reached the entry of g,
-     make the entry of g the new tail *)
-  let splice tail before_tail =
-    let gexit, gblocks = exit g in
-    match goto_end gexit with
-    | gnodes, Exit ->
-        let rec extend tail gnodes = match gnodes with
-        | Head (gnodes, mid) -> extend (Tail (mid, tail)) gnodes
-        | First Entry -> before_tail tail, Blocks.union blocks gblocks
-        | First first ->
-            let blocks = Blocks.insert (zip (Start (first, tail))) blocks in
-            let gentry, gblocks = entry gblocks in
-            before_tail (entry_to_tail gentry), Blocks.union blocks gblocks in
-        extend tail gnodes
-    | _ -> impossf "ill-formed exit node" in
-  match focus with
-  | Start (first, tail) -> splice tail (fun tail -> Start (first, tail))
-  | Middle (head, mid, tail) -> splice tail (fun tail -> Middle (head, mid, tail))
-  | End (tail, last) -> impossf "splicing after a last node"
 <<zipcfg.ml>>=
 let make_target machine ((b, bs) as gz) = match b with
 | Start (Label (u, _, _), tail) -> u, gz
@@ -928,6 +909,57 @@ let prepare_for_splicing graph single multi =
     let gh, gl = goto_end gexit in
     (match gl with Exit -> () | _ -> impossf "exit is not exit?!");
     multi ~entry:(snd gentry) ~exit:gh ~others:gblocks
+@ 
+<<zipcfg.ml>>=
+let splice_head head g =
+  check_single_exit g;
+  let splice_one_block tail' = match ht_to_last head tail' with
+  | head, Exit -> Blocks.empty, head
+  | _ -> impossf "spliced graph without exit" in
+  let splice_many_blocks ~entry ~exit ~others =
+    Blocks.insert (zipht head entry) others, exit in
+  prepare_for_splicing g splice_one_block splice_many_blocks
+<<zipcfg.ml>>=
+let splice_tail g tail =
+  check_single_exit g;
+  let splice_one_block tail' =  (* return tail' .. tail *)
+    match ht_to_last (First Entry) tail' with
+    | head', Exit ->
+        (match ht_to_first head' tail with
+        | Entry, t -> (t, Blocks.empty)
+        | _ -> impossf "entry in; garbage out")
+    | _ -> impossf "spliced single block without Exit" in
+  let splice_many_blocks ~entry ~exit ~others =
+    (entry, Blocks.insert (zipht exit tail) others) in
+  prepare_for_splicing g splice_one_block splice_many_blocks
+@ 
+<<zipcfg.ml>>=
+let splice_before (focus, blocks) g =
+  match focus with
+  | Start _ -> impossf "splicing before a first node"
+  | Middle (head, mid, tail) -> 
+      let g, head = splice_head head g in
+      Middle (head, mid, tail), Blocks.union g blocks
+  | End (head, last) ->
+      let g, head = splice_head head g in
+      End (head, last), Blocks.union g blocks
+<<zipcfg.ml>>=
+let splice_after (focus, blocks) g =
+  match focus with
+  | Start (first, tail) ->
+      let tail, g = splice_tail g tail in
+      Start (first, tail), Blocks.union g blocks
+  | Middle (head, mid, tail) -> 
+      let tail, g = splice_tail g tail in
+      Middle (head, mid, tail), Blocks.union g blocks
+  | End (tail, last) -> impossf "splicing after a last node"
+@ 
+<<zipcfg.ml>>=
+let splice_head_only head graph =
+  let gentry, gblocks = Blocks.focus graph entry_uid in
+  match gentry with
+  | Entry, tail -> Blocks.insert (zipht head tail) gblocks
+  | _ -> impossf "splice graph does not start with entry"
 @ 
 \paragraph{Graph expansion}
 

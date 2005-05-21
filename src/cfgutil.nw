@@ -65,9 +65,11 @@ module UM = Unique.Map
 @
 <<cfgutil.ml>>=
 let block_name g uid =
-   match UM.find uid (G.to_blocks g) with
-   | GR.Entry, _ -> "<entry>"
-   | GR.Label ((_, l), _, _), _ -> l
+  try
+    (match UM.find uid (G.to_blocks g) with
+    | GR.Entry, _ -> "<entry>"
+    | GR.Label ((_, l), _, _), _ -> l)
+  with Not_found -> "<unknown-uid>"
 @
 <<cfgutil.ml>>=
 let print_block g (first, tail as block) =
@@ -102,9 +104,10 @@ let print_block g (first, tail as block) =
   pr_tail tail
 
 let print_cfg g =
-  let blocks = G.postorder_dfs g in
   let () = Printf.eprintf "\nBEGIN CFG\n" in
-  let () = List.iter (print_block g) blocks in
+  let () =
+    try List.iter (print_block g) (G.postorder_dfs g)
+    with Not_found -> Unique.Map.iter (print_block g) (G.to_blocks g) in
   let () = Printf.eprintf "END CFG\n" in
   flush stderr
 @

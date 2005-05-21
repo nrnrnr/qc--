@@ -44,7 +44,7 @@ val sequential : 'a -> Ast2ir.proc -> Ast2ir.proc * bool
 \subsection{Implementation}
 
 <<peephole.ml>>=
-module D  = Dataflowf
+module D  = Dataflowft
 module G  = Zipcfg
 module GR = Zipcfg.Rep
 module P  = Proc
@@ -91,15 +91,19 @@ let tx (g, proc) =
     else
       proc.P.target.T.is_instruction in
   <<propagation of available expressions and replacement of RTLs>>
-  { D.name = "peephole"; D.middle_out = middle_out; D.last_outs = last_outs }
+  { D.name = "peephole";
+    D.middle_out = D.limit_fun middle_out; D.last_outs = D.limit_fun last_outs }
+
+let _ = Debug.register "avail-dataflow" "computation of available expressions"
 
 let subst_forward v gproc =
-  let pass = D.a_t Availpass.analysis (tx gproc) in
+  let pass = D.a_t (D.limit_anal Availpass.analysis) (tx gproc) in
+  let pass = if Debug.on "avail-dataflow" then D.debug Avail.to_string pass else pass in
   Backplane.of_dataflow (D.forward_rewrite pass ~entry_fact:Avail.unknown) v gproc
 
 let sequential v (g,proc) =
-  let pass = D.a_t Availpass.analysis (tx (g,proc)) in
-  D.forward_anal Availpass.analysis Avail.unknown g;
+  let pass = D.a_t (D.limit_anal Availpass.analysis) (tx (g,proc)) in
+  D.forward_anal (D.limit_anal Availpass.analysis) Avail.unknown g;
   Backplane.of_dataflow (D.forward_rewrite_solved pass ~entry_fact:Avail.unknown)
                         v (g,proc)
 @ 

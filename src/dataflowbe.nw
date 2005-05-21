@@ -35,13 +35,13 @@ of which one element is a fact.
 Type parameter [['o]] is an output.
 \end{itemize}
 <<exported types>>=
-type 'a answer = Dataflow of 'a | Rewrite of Zipcfg.graph
+type 'a answer = Dataflow of 'a | Rewrite of Zipecfg.graph
 
 type ('i, 'o) computation =
  { name      : string;
-   last_in   : Zipcfg.Rep.last -> 'o;
-   middle_in : 'i -> Zipcfg.Rep.middle -> 'o;
-   first_in  : 'i -> Zipcfg.Rep.first -> 'o;
+   last_in   : Zipecfg.Rep.last -> 'o;
+   middle_in : 'i -> Zipecfg.Rep.middle -> 'o;
+   first_in  : 'i -> Zipecfg.Rep.first -> 'o;
  } 
 @ 
 From these elements we build several kinds of passes:
@@ -56,25 +56,25 @@ A fully general pass both computes a fact and rewrites the graph.
 \end{itemize}
 <<exported types>>=
 type 'a analysis       = 'a fact * ('a, 'a)                  computation
-type 'a transformation =           ('a, Zipcfg.graph option) computation
+type 'a transformation =           ('a, Zipecfg.graph option) computation
 type 'a pass           = 'a fact * ('a, 'a answer)           computation
 @ Still to come: composition operators.
 @
 WE NEED TO TRACK THINGS TO DISCOVER WHETHER THE GRAPH HAS CHANGED AS A
 RESULT OF RUNNING A PASS.
 @
-<<dataflowp.mli>>=
+<<dataflowbe.mli>>=
 <<exported types>>
 <<declarations of exported values>>
 @ 
 \paragraph{Analyses (the dataflow engine)}
 The analysis function sets properties on unique IDs.
 <<declarations of exported values>>=
-val backward_anal : 'a analysis -> Zipcfg.graph -> unit
+val backward_anal : 'a analysis -> Zipecfg.graph -> unit
 @ The rewrite pass sets properties and also rewrites the graph.
 The Boolean result tells if the graph changed.
 <<declarations of exported values>>=
-val backward_rewrite : 'a pass -> Zipcfg.graph -> Zipcfg.graph * bool
+val backward_rewrite : 'a pass -> Zipecfg.graph -> Zipecfg.graph * bool
 @ 
 \paragraph{Composition operators}
 Here we will make new passes from old ones.
@@ -91,9 +91,9 @@ val debug : ('a -> string) -> 'a pass -> 'a pass
 @
 \section{Implementation}
 
-<<dataflowp.ml>>=
-module G  = Zipcfg
-module GR = Zipcfg.Rep
+<<dataflowbe.ml>>=
+module G  = Zipecfg
+module GR = Zipecfg.Rep
 module P  = Unique.Prop
 module RS = Rtlutil.ToString
 module UA = Unique.Array
@@ -308,6 +308,14 @@ let splice_in_backward head graph tail oldblocks =
       match GR.zip gentry with
       | GR.Entry, t -> head, t, ((f, t) :: add_blocks gblocks oldblocks)
       | _ -> impossf "entry is not entry?!"
+
+let splice_in_backward head graph tail oldblocks =
+  let tail, graph = G.splice_tail graph tail in
+  (head, tail, add_blocks (G.to_blocks graph) oldblocks)
+
+type a = A of a
+let _ = (splice_in_backward :
+         a -> G.graph -> GR.tail -> G.Rep.block list -> a * GR.tail * G.Rep.block list)
 @ 
 <<utilities>>=
 let ( << ) f g = fun x -> f (g x)
