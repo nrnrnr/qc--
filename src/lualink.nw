@@ -614,9 +614,10 @@ C.register_module "Liveness"
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
 let live_dead =
+  let module D = Dataflowbt in
   let rset s = Printf.sprintf "{ %s }" (Register.SetX.to_string s) in
-  let dead = Dataflowp.a_t Live.live_in Dead.elim_assignments in
-  let dead = if Debug.on "dead" then Dataflowp.debug rset dead else dead in
+  let dead = D.a_t (D.limit_anal Live.live_in) (D.limit_tx Dead.elim_assignments) in
+  let dead = if Debug.on "dead" then D.debug rset dead else dead in
   dead in
 C.register_module "Optimize"
   [ "simplify_exps"         , Map.stage.V.embed Optimize.simplify_exps
@@ -626,7 +627,7 @@ C.register_module "Optimize"
   ; "trim_unreachable_code" , Map.stage.V.embed Optimize.trim_unreachable_code
   ; "peephole"              , Map.stage.V.embed Peephole.subst_forward
   ; "peepholes"             , Map.stage.V.embed Peephole.sequential
-  ; "deadfn"                , dataflow_stage (Dataflowp.backward_rewrite live_dead)
+  ; "deadfn"                , dataflow_stage (Dataflowbt.backward_rewrite live_dead)
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Placevar"

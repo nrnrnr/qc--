@@ -218,10 +218,10 @@ buffer.
 let rec files_nonwhite_equivalent f1 f2 =
   let finish answer = answer in
   try
-    let ch1 = open_in f1 in
+    let ch1 = try open_in f1 with _ -> open_in "/dev/null" in
     let finish answer = (close_in ch1; finish answer) in
     try
-      let ch2 = open_in f2 in
+      let ch2 = try open_in f2 with _ -> open_in "/dev/null" in
       let finish answer = (close_in ch2; finish answer) in
       finish (compare_channels ch1 ch2)
     with _ -> finish false

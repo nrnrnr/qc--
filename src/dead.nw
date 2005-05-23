@@ -36,9 +36,12 @@ We must not elimnate potentially dead stack adjustments!
 let last_in l = None
 let middle_in live m = match m with
 | GR.Instruction rtl -> (* don't eliminate dead stack adjustments or assertions *)
+    let is_dead r =
+      let r = Register.Reg r in
+      not (RS.exists (fun r' -> Register.contains r r') live) in
     all_regs_assigned rtl
       (fun regs ->
-        if List.for_all (fun r -> not (RS.mem (R.Reg r) live)) regs then
+        if List.for_all is_dead regs then
           (<<announce dead elimination>>; Some G.empty)
         else
           (<<announce dead non-elimination>>; None))
@@ -50,7 +53,7 @@ let first_in live f = None
 <<announce dead elimination>>=
 (if Debug.on "dead" then
   begin
-    epr "dead: scheduling dead assignment %s\n" (S.rtl rtl);
+    epr "dead: eliminating dead assignment %s\n" (S.rtl rtl);
     epr "dead: assigned to registers %s\n" (String.concat ", " (List.map S.reg regs));
     epr "dead: live = { %s }\n" (RS.to_string live);
   end)

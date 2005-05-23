@@ -27,6 +27,7 @@ Test.update     = Test.update  -- update differing files (default nil)
 Test.gen_args   = ""     -- additional arguments for generator
 Test.qc         = getenv("QC") or Sys.cmd or "../bin/qc--"
 Test.qcflags    = getenv("QCFLAGS") and (" " .. getenv("QCFLAGS")) or ""
+Test.txlimit    = nil    -- limit on transactions
 @ 
 We should use the test version of the run-time system:
 <<testdrv.lua>>=
@@ -100,7 +101,7 @@ boundaries.  Thanks, INRIA.
 function Test.rename(src, dest)
   local x, y = rename(src, dest)
   if not x and strfind(y, "cross-device") then
-    return execute("mv " .. src .. " " .. dst) == 0
+    return execute("mv " .. src .. " " .. dest) == 0
   else
     return x, y
   end
@@ -188,13 +189,13 @@ function Test.on_error[".s"](expected, output)
     execute(cmd)
   else
     local linecount = 10
-    local cmd = format([[if [ `wc -c < %s` -le %d ]; then
-        echo "Unexpected nonempty output follows:" ; sed 's/^/| /' %s
+    local cmd = format([[if [ `wc -l < %s` -le %d ]; then
+        echo "Unexpected nonempty output (`wc -c < %s` chars) follows:" ; sed 's/^/| /' %s
       else
         echo "Unexpected nonempty output; first %d lines follow:"
         head -%d %s | sed 's/^/| /'
         echo "  ..."
-      fi]], output, linecount, output, linecount, linecount, output)
+      fi]], output, linecount, output, output, linecount, linecount, output)
     execute(cmd)
   end
 end
@@ -258,12 +259,13 @@ function Test.compile_file(file, i, txlimit)
   local s_file = Test.temp_name(".s")
   local so = s_file .. "1"
   local se = s_file .. "2"
+  txlimit = txlimit or Test.txlimit
 
   Test.log("compiling %s -> %s%s", file, s_file,
            txlimit and format(" with transaction limit %d", txlimit) or "")
 
-  Tx.set_limit(txlimit or (2^30 - 1))
   Driver.reinit()
+  Tx.set_limit(txlimit or (2^30 - 1))
   Options.stop_at(".s")
   if (i or 1) == 1 then
     Options.globals = 1
@@ -644,6 +646,12 @@ else
   local e0 = eq(pse0, inputs.stderr) and "OK" or "not OK"
   local o  = pso and eq(pso, inputs.stdout)  and "useless" or "useful" 
   local e  = pse and eq(pse, inputs.stderr)  and "useless" or "useful" 
+
+  if o0 == 'not OK' then write('for stdout0, '); Test.on_error['.s'](inputs.stdout, pso0) end
+  if e0 == 'not OK' then write('for stderr0, '); Test.on_error['.s'](inputs.stderr, pse0) end
+  if o == 'useless' then write('for stdout, '); Test.on_error['.s'](inputs.stdout, pso) end
+  if e == 'useless' then write('for stderr, '); Test.on_error['.s'](inputs.stderr, pse) end
+
   CMD.error(format("asked to isolate optimizer bug, but outputs won't work: \n" ..
       "stdout0 %s; stderr0 %s; stdout %s; stderr %s\n", o0, e0, o, e))
 end
@@ -723,8 +731,8 @@ Here's our output.
 <<print [[n]] and write good and bad assembly files somewhere>>=
 local goodname = inputs.name .. "-good.s"
 local badname  = inputs.name .. "-bad.s"
-Test.rename(goods, goodname)
-Test.rename(bads,  badname)
+assert(Test.rename(goods, goodname))
+assert(Test.rename(bads,  badname))
 Test.clear_status_line()
 write('# runs ok with ', n, ' transactions; not ok with ', n+1, '\n')
 write('# good output on ', goodname, '; bad output on ', badname, '\n')

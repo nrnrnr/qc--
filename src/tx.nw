@@ -21,11 +21,14 @@ let () = Debug.register "tx" "watch transaction counts"
 let set_limit n = ts.limit <- n; ts.remaining <- n
 let remaining () = ts.remaining
 let decrement ~name ~from ~to' =
-  Debug.eprintf "tx" "'%s' decrementing tx's from %d to %d (diff is %d)\n"
-    name from to' (from-to');
   assert (ts.remaining = from);
-  ts.remaining <- to';
-  ts.last <- name
+  if from <> to' then
+    begin
+      Debug.eprintf "tx" "'%s' decrementing tx's from %d to %d (diff is %d)\n"
+        name from to' (from-to');
+      ts.remaining <- to';
+      ts.last <- name
+    end
 
 let used _ = ts.limit - ts.remaining
 let last _ = ts.last
