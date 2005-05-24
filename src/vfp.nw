@@ -137,7 +137,7 @@ val is_vfp   : Rtl.Private.loc -> bool
 val replace_with : sp:Rtl.loc -> Zipcfg.graph -> Zipcfg.graph * bool
 @ 
 <<vfp.ml>>=
-module D  = Dataflowf
+module D  = Dataflow
 module G  = Zipcfg
 module GR = Zipcfg.Rep
 module P  = Property
@@ -191,7 +191,7 @@ let replace_with ~sp =
   let sp_plus k = Dn.exp (sp_plus k) in
   <<supporting functions>> 
   let fact = fact (Dn.exp spval) in
-  let middle_out (vfp, k) m =
+  let middle_out (vfp, k) m txlim =
     <<definition of [[simp]], which is verbose>>
     let i = GR.mid_instr m in
     let down = Dn.rtl i in
@@ -202,7 +202,7 @@ let replace_with ~sp =
     else
       D.Dataflow (note_sp_changes down vfp k) in
 
-  let last_outs (vfp, k) l =
+  let last_outs (vfp, k) l txlim =
     let upd vfp rtl = Simplify.rtl (replace_vfp vfp rtl) in
     let set_succs (vfp, k as a) =
       let upd_cedges ces =
@@ -240,8 +240,9 @@ let replace_with ~sp =
       rewrite_assertions l (fun () -> D.Rewrite (G.single_last l))
     else rewrite_assertions l propagate in
   let repl =
-    { D.name = "replace vfp"; D.middle_out = middle_out; D.last_outs = last_outs; } in
-  D.forward_rewrite (fact, repl) ~entry_fact:(Dn.exp spval, 0)
+    { D.F.name = "replace vfp";
+      D.F.middle_out = middle_out; D.F.last_outs = last_outs; } in
+  D.F.rewrite (fact, repl) ~entry_fact:(Dn.exp spval, 0)
 @ 
 <<definition of [[simp]], which is verbose>>=
 let simp rtl =

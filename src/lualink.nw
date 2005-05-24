@@ -605,18 +605,20 @@ C.register_module "Expander"
   ; "sparc", Map.stage.V.embed Sparc.X.cfg
 *)
   ] g;
+@ 
+We make liveness a pass, not an analysis, so we can debug it :-)
 <<register modules to [[g]] in alphabetical order>>=
 let rset s = Printf.sprintf "{ %s }" (Register.SetX.to_string s) in
-let live = Dataflowp.anal Live.live_in in
-let live = if Debug.on "live" then Dataflowp.debug rset live else live in
+let live = Dataflow.B.anal Live.live_in in
+let live = if Debug.on "live" then Dataflow.B.debug rset live else live in
 C.register_module "Liveness"
-  [ "livenessfn", dataflow_stage (Dataflowp.backward_rewrite live)
+  [ "livenessfn", dataflow_stage (Dataflow.B.rewrite live)
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
 let live_dead =
-  let module D = Dataflowbt in
+  let module D = Dataflow.B in
   let rset s = Printf.sprintf "{ %s }" (Register.SetX.to_string s) in
-  let dead = D.a_t (D.limit_anal Live.live_in) (D.limit_tx Dead.elim_assignments) in
+  let dead = D.a_t Live.live_in Dead.elim_assignments in
   let dead = if Debug.on "dead" then D.debug rset dead else dead in
   dead in
 C.register_module "Optimize"
@@ -627,7 +629,7 @@ C.register_module "Optimize"
   ; "trim_unreachable_code" , Map.stage.V.embed Optimize.trim_unreachable_code
   ; "peephole"              , Map.stage.V.embed Peephole.subst_forward
   ; "peepholes"             , Map.stage.V.embed Peephole.sequential
-  ; "deadfn"                , dataflow_stage (Dataflowbt.backward_rewrite live_dead)
+  ; "deadfn"                , dataflow_stage (Dataflow.B.rewrite live_dead)
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Placevar"

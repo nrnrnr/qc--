@@ -12,14 +12,14 @@
 For dependency reasions, this module has to be split from the
 [[Avail]] module.
 <<availpass.mli>>=
-val analysis : Avail.t Dataflowf.analysis
+val analysis : Avail.t Dataflow.F.analysis
 @ 
 
 \subsection{Implementation}
 
 
 <<availpass.ml>>=
-module D  = Dataflowf
+module D  = Dataflow
 module G  = Zipcfg
 module GR = Zipcfg.Rep
 module P  = Property
@@ -65,9 +65,9 @@ let last_outs in' l set =
   G.iter_outedges l ~noflow:(fun u -> set u out) ~flow:set_edge 
 
 let comp = {
-  D.name = "avail";
-  D.middle_out = (fun a m -> Avail.forward (GR.mid_instr m) a);
-  D.last_outs = last_outs;
+  D.F.name = "avail";
+  D.F.middle_out = (fun a m -> Avail.forward (GR.mid_instr m) a);
+  D.F.last_outs = last_outs;
 }
 
 let analysis = fact, comp

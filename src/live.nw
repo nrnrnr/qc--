@@ -50,7 +50,7 @@ Here's the new stuff; what's below is old stuff.
 type uid = Zipcfg.uid
 type liveset = Register.SetX.t
 
-val live_in        : liveset Dataflowp.analysis  (* live in to each block *)
+val live_in        : liveset Dataflow.B.analysis  (* live in to each block *)
 val live_in_last   : Zipcfg.Rep.last -> liveset
 val live_in_middle : liveset -> Zipcfg.Rep.middle -> liveset
       (* map live out to live in *)
@@ -80,7 +80,7 @@ between the assignments.
 But if we perform liveness at the slice level, then promote the slices to registers, we
 will see that %eax remains live between the assignments.
 <<live.ml>>=
-module D   = Dataflowp
+module D   = Dataflow
 module G   = Zipcfg
 module GR  = Zipcfg.Rep
 module P   = Property
@@ -171,9 +171,9 @@ let live_in =
    D.init_info = RSX.empty;
    D.prop      = prop
  },
- { D.name      = "liveness";
-   D.last_in   = live_in_last;
-   D.middle_in = live_in_middle;
-   D.first_in  = live_in_first;
+ { D.B.name      = "liveness";
+   D.B.last_in   = live_in_last;
+   D.B.middle_in = live_in_middle;
+   D.B.first_in  = live_in_first;
  } 
 @ 
