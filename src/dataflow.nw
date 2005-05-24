@@ -233,6 +233,22 @@ let run dir name fact changed entry_fact do_block txlim blocks =
   init();
   iterate 1
 @ 
+And here's where we update with a new fact.
+<<utilities>>=
+let update fact changed =
+  let get = P.get fact.prop in
+  let set = P.set fact.prop in
+  fun u a ->
+    let old_a = get u in
+    let new_a = fact.add_info a old_a in
+      if fact.changed ~old:old_a ~new':new_a then
+        begin
+          Debug.eprintf "dataflow" "Dataflow fact changed at unknown uid\n";
+          set u new_a;
+          if Pervasives.(<>) u GR.entry_uid then (* no need to re-run on new entry *)
+            changed := true
+        end
+@ 
 
 \subsection{Backward problems}
 
@@ -504,21 +520,14 @@ We iterate until no more facts have changed.
 <<forward stuff>>=
 let run_anal (fact, comp) ~entry_fact graph =
   let changed = ref false in
-  let update u a =
-    let old_a = P.get fact.prop u in
-    let new_a = fact.add_info a old_a in
-    if fact.changed ~old:old_a ~new':new_a then
-      begin
-        Debug.eprintf "dataflow" "Dataflow fact changed at unknown uid\n";
-        P.set fact.prop u new_a;
-        changed := true
-      end in
+  let update = update fact changed in
   let set_successor_facts () b =
     let rec forward in' t = match t with
     | GR.Tail (m, t) -> forward (comp.middle_out in' m) t
     | GR.Last l -> comp.last_outs in' l update in
     let f, t = b in
-    let blockname = match f with GR.Entry -> "<entry>" | GR.Label ((_, l), _, _) -> l in
+    let blockname =
+      match f with GR.Entry -> "<entry>" | GR.Label ((_, l), _, _) -> l in
     Debug.eprintf "dataflow" "Setting successor fact of block %s\n" blockname;
     forward (P.get fact.prop (GR.fid f)) t in
 
@@ -545,15 +554,7 @@ let rec solve_graph fact comp txlim graph in_fact =
   txlim, !exit_fact_ref
 and general_forward fact comp txlim entry_fact graph =
   let changed = ref false in
-  let update u a =
-    let old_a = P.get fact.prop u in
-    let new_a = fact.add_info a old_a in
-    if fact.changed ~old:old_a ~new':new_a then
-      begin
-        Debug.eprintf "dataflow" "Dataflow fact changed at unknown uid\n";
-        P.set fact.prop u new_a;
-        changed := true
-      end in
+  let update = update fact changed in
   let set_successor_facts txlim b =
     let rec set_tail_facts txlim in' t = match t with
       | GR.Tail (m, t) ->
@@ -569,7 +570,7 @@ and general_forward fact comp txlim entry_fact graph =
           | Dataflow setter -> (setter update; txlim)
           | Rewrite g -> fst (solve_graph fact comp (txlim-1) g in') in
     let f, t = b in
-    let in' = match f with
+    let in' = match f with  (* CHANGE TO USE GR.id ? *)
     | GR.Entry -> entry_fact
     | GR.Label ((u, _), _, _) -> P.get fact.prop u in
     set_tail_facts txlim in' t in
