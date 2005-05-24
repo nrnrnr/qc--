@@ -1,0 +1,224 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+\section{Support for backward dataflow problems}
+
+
+A dataflow pass is based on a single dataflow fact of type~[['a]], but
+to describe a fully general pass requires not one but three type
+parameters:
+\begin{itemize}
+\item
+Type parameter [['a]] is the pass's dataflow fact.
+Values of type~[['a]] should form a lattice.
+\item
+Type parameter [['i]] is an input, from which it should be possible to
+derived the dataflow fact.
+For example, [['i]] might be equal to~[['a]], or it might be a tuple
+of which one element is~[['a]].
+\item
+Type parameter [['o]] is an output.
+For a pure analysis, [['o]] is equal to~[['a]].
+For a pure transformation, [['o]] is [[graph option]].
+For a combined analysis and transformation, [['o]] 
+is [['a answer]].
+\end{itemize}
+The dataflow engine computes a least solution to a set of dataflow
+equations defined by a pass.
+@
+<<dataflow.mli>>=
+<<exported types>>
+<<exported types>>=
+type uid = Zipcfg.uid
+type 'a answer = Dataflow of 'a | Rewrite of Zipcfg.graph
+
+type ('i, 'a, 'o) pass' =
+ { name      : string;
+   add_info  : 'a -> 'a -> 'a;  (* lattice join (least upper bound) *)
+   changed   : old:'a -> new':'a -> bool;  (* is new one bigger? *)
+   init_info : 'a;  (* lattice bottom element *)
+   last_in   : (uid -> 'i) -> Zipcfg.Rep.last -> 'o;
+   middle_in : 'i -> Zipcfg.Rep.middle -> 'o;
+   first_in  : 'i -> Zipcfg.Rep.first -> 'o;
+ } 
+
+type 'a analysis = ('a, 'a, 'a) pass'
+type 'a transformation = ('a, unit, Zipcfg.graph option) pass'
+type 'a pass = ('a, 'a, 'a answer) pass'
+<<dataflow.mli>>=
+val backward_anal : 'a analysis -> Zipcfg.graph -> (uid -> 'a)
+val backward_pass : 'a pass -> Zipcfg.graph -> (uid -> 'a)
+@ 
+<<dataflow.mli>>=
+val transformation :
+    name:string ->
+    last_in:((uid -> 'a) -> Zipcfg.Rep.last -> Zipcfg.graph option) ->
+    middle_in:('a -> Zipcfg.Rep.middle -> Zipcfg.graph option) ->
+    first_in:('a -> Zipcfg.Rep.first -> Zipcfg.graph option) ->
+    'a transformation
+@
+\section{Implementation}
+
+<<dataflow.ml>>=
+module G  = Zipcfg
+module GR = Zipcfg.Rep
+module UA = Unique.Array
+let impossf fmt = Printf.kprintf Impossible.impossible fmt
+let unimpf  fmt = Printf.kprintf Impossible.unimp      fmt
+
+<<exported types>>
+@ 
+Revised to use the new flow-graph traversal.
+We go from each head to the next join.
+<<dataflow.ml>>=
+let backward anal graph =
+  let blocks = List.rev (G.postorder_dfs graph) in
+  let map = UA.make (List.map GR.id blocks) anal.init_info in
+  let find = UA.get map in
+  let changed = ref false in
+  let block b =
+    let h, l = GR.goto_end (GR.unzip b) in
+    let out = anal.last_in find l in
+    let rec prev h out = match h with
+      | GR.Head (h, m) -> prev h (anal.middle_in out m)
+      | GR.First f -> anal.first_in out f in
+    let in' = prev h out in
+    let u = GR.id b in
+    let old_in = find u in
+    if anal.changed ~old:old_in ~new':in' then
+      begin
+        UA.set map u in';
+        changed := true
+      end in
+  let rec iterate n =
+    let () = changed := false in
+    let () = List.iter block blocks in
+    if !changed then
+      if n < 1000 then iterate (n + 1)
+      else impossf "%s didn't converge in %n iterations" anal.name n
+    else
+      ( Debug.eprintf anal.name "%s converted in %d iterations\n" anal.name n ;
+        find ) in
+  iterate 1
+let backward_anal = backward
+@ 
+In the general case we solve a graph in the context of a larger subgraph.
+<<dataflow.ml>>=
+let rec solve_graph anal outer graph exit_fact =
+  let last' map l = match l with
+  | GR.Exit -> Dataflow exit_fact
+  | _ -> anal.last_in map l in
+  let anal' = { anal with last_in = last' } in
+  general_backward anal' outer graph GR.entry_uid 
+and general_backward anal outer graph =
+  let blocks = List.rev (G.postorder_dfs graph) in
+  let map = UA.make (List.map GR.id blocks) anal.init_info in
+  let find u = try UA.get map u with Not_found -> outer u in
+  let solve_graph = solve_graph anal find in
+  <<definition of [[answer]]>>
+  let changed = ref false in
+  let block b =
+    let h, l = GR.goto_end (GR.unzip b) in
+    let out = answerl l in
+    let rec prev h out = match h with
+      | GR.Head (h, m) -> answerm out m (fun a -> prev h a)
+      | GR.First f -> answerf out f in
+    let in' = prev h out in
+    let u = GR.id b in
+    let old_in = find u in
+    if anal.changed ~old:old_in ~new':in' then
+      begin
+        UA.set map u in';
+        changed := true
+      end in
+  let rec iterate n =
+    let () = changed := false in
+    let () = List.iter block blocks in
+    if !changed then
+      if n < 1000 then iterate (n + 1)
+      else impossf "%s didn't converge in %n iterations" anal.name n
+    else
+      ( Debug.eprintf anal.name "%s converted in %d iterations\n" anal.name n ;
+        find ) in
+  iterate 1
+let backward_pass anal graph =
+  general_backward anal (fun _ -> raise Not_found) graph
+
+<<definition of [[answer]]>>=
+let answerf out f = match anal.first_in out f with
+| Dataflow a -> a
+| Rewrite g -> solve_graph g out in
+
+let answerm out m k = match anal.middle_in out m with
+| Dataflow a -> k a
+| Rewrite g -> solve_graph g out in
+
+let answerl l = match anal.last_in find l with
+| Dataflow a -> a
+| Rewrite g -> solve_graph g anal.init_info in
+@
+<<dataflow.ml>>=
+let transformation ~name ~last_in ~middle_in ~first_in = {
+  name = name;
+  add_info = (fun () () -> ()); changed = (fun ~old ~new' -> false); init_info = ();
+  last_in = last_in; middle_in = middle_in; first_in = first_in;
+}
+@
+\clearpage
+We're playing fast and loose with polymorphic equality---cyclic
+comparisons might not terminate.  
+<<odataflow.ml>>=
+module Test = struct
+  module G = struct
+    type  'i cfg  = G of ('i node * 'i node list) list
+    and 'i node = string * 'i cfg ref
+    let edges g = match g with G l -> l
+    let label (lbl, g) = lbl
+    let succs ((_, g) as n) = snd (List.find (fun (h, ts) -> (h =*= n)) (edges (!g)))
+    let entry (g:'i cfg) = (fst (List.hd (edges g)) : 'i node)
+    let is_join n = true
+    let iter_nodes f g = List.iter (fun (n, _) -> f n) (edges g)
+    let dotedges g =
+      let outedges ((n, _), succs) =
+        List.map (fun (n', _) -> ["  "; n; " -> "; n'; "\n"]) succs in
+      String.concat "" (List.concat (List.concat (List.map outedges (edges g))))
+    let of_edges es =
+      let g = ref (G []) in
+      let couple n = (n, g) in
+      g := G (List.map (fun (n, es) -> (couple n, List.map couple es)) es);
+      !g
+      
+  end
+  let dotgraph g (name, visitor) =
+    let add_label (n, _) labels =
+      ["  "; n; " [label=\""; string_of_int (List.length labels + 1); "\"]\n"]
+      :: labels in
+    let labels = String.concat "" (List.concat (visitor g add_label [])) in
+    let header = String.concat ""
+        ["  head[label=\""; name; "\" shape=box]\n";
+         "  head -> "; G.label (G.entry g); " [style=invis]\n"] in
+    List.iter print_string
+      ["digraph "; name; " {\n"; labels; header; G.dotedges g; "}\n\n"]
+
+  let edges = ["A", ["B"]; "B", ["C"; "D"]; "C", ["E"]; "D", ["DX"];
+               "DX", ["E"]; "E", ["F"]; "F", []]
+  let emit_dot () =
+    List.iter (dotgraph (G.of_edges edges))
+      [ "unnumbered", (fun _ _ l -> l)
+(*
+      ; "rev_postorder_dfs", rev_postorder_dfs
+      ; "rev_postorder_dfs_prime", rev_postorder_dfs'
+      ; "fwd_postorder_dfs", fwd_postorder_dfs
+      ; "bwd_postorder_dfs", bwd_postorder_dfs 
+      ; "fwd_postorder_dfs_cps", fwd_postorder_dfs_cps
+      ; "bwd_postorder_dfs_cps", bwd_postorder_dfs_cps 
+      ; "son_of_diasson_of_dias_postorder_dfs", son_of_dias_postorder_dfs
+      ; "nr_preorder_dfs", nr_preorder_dfs
+      ; "nr_preorder_bfs", nr_preorder_bfs
+*)
+      ] 
+end
+<<odataflow.mli>>=
+module Test : sig
+  val emit_dot : unit -> unit
+end
+@ 
