@@ -213,6 +213,27 @@ module F = struct
   <<forward stuff>>
 end
 @ 
+\subsection{Utilities}
+
+Here's a function to run an action on blocks until we reach a fixed point.
+<<utilities>>=
+let run dir name fact changed entry_fact do_block txlim blocks =
+  let init () = 
+    List.iter (fun b -> P.set fact.prop (GR.id b) fact.init_info) blocks;
+    P.set fact.prop GR.entry_uid entry_fact in
+  let rec iterate n =
+    let () = changed := false in
+    let txlim = List.fold_left do_block txlim blocks in
+    if !changed then
+      if n < 1000 then iterate (n + 1)  (* starts from original txlim *)
+      else impossf "%s didn't converge in %n %s iterations" name n dir
+    else
+      (Debug.eprintf name "%s converged in %d %s iterations\n" name n dir; txlim) in
+  Debug.eprintf name "starting %s dataflow pass %s\n" dir name;
+  init();
+  iterate 1
+@ 
+
 \subsection{Backward problems}
 
 In a backward problem, we compute \emph{in} facts from \emph{out}
@@ -228,7 +249,7 @@ We iterate until no more facts have changed.
 <<backward stuff>>=
 let run_anal (fact, comp) graph =
   let changed = ref false in
-  let set_block_fact b =
+  let set_block_fact () b =
     let h, l = GR.goto_end (GR.unzip b) in
     let block_in = (* 'in' fact for the block *)
       let rec head_in h out = match h with
@@ -249,20 +270,8 @@ let run_anal (fact, comp) graph =
         | GR.Entry -> () (* does not count as a change for fixed-point purposes *)
         | GR.Label _ -> changed := true
       end in
-  (* get blocks, initialize, and iterate to fixed point *)
   let blocks = List.rev (G.postorder_dfs graph) in
-  let init () = List.iter (fun b -> P.set fact.prop (GR.id b) fact.init_info) blocks in
-  let rec iterate n =
-    let () = changed := false in
-    let () = List.iter set_block_fact blocks in
-    if !changed then
-      if n < 1000 then iterate (n + 1)
-      else impossf "%s didn't converge in %n backward iterations" comp.name n
-    else
-      Debug.eprintf comp.name "%s converged in %d backward iterations\n" comp.name n in
-  Debug.eprintf comp.name "starting backward dataflow %s\n" comp.name;
-  init();
-  iterate 1
+  run "backward" comp.name fact changed fact.init_info set_block_fact () blocks
 @ 
 In the general case we solve a graph in the context of a larger subgraph.
 To do this, we need a locally modified computation that allows an
@@ -331,18 +340,7 @@ and general_backward fact comp txlim graph =
       end;
     txlim in
   let blocks = List.rev (G.postorder_dfs graph) in
-  let init () = List.iter (fun b -> P.set fact.prop (GR.id b) fact.init_info) blocks in
-  let rec iterate n =
-    let () = changed := false in
-    let txlim = List.fold_left set_block_fact txlim blocks in
-    if !changed then
-      if n < 1000 then iterate (n + 1)
-      else impossf "%s didn't converge in %n iterations" comp.name n
-    else
-      (Debug.eprintf comp.name "%s converged in %d iterations\n" comp.name n; txlim) in
-  Debug.eprintf comp.name "starting backward dataflow %s\n" comp.name;
-  init();
-  iterate 1
+  run "backward" comp.name fact changed fact.init_info set_block_fact txlim blocks
 @
 We solve and rewrite in two passes: the first pass iterates to a fixed
 point to reach a dataflow solution, and the second pass uses that
@@ -515,7 +513,7 @@ let run_anal (fact, comp) ~entry_fact graph =
         P.set fact.prop u new_a;
         changed := true
       end in
-  let set_successor_facts b =
+  let set_successor_facts () b =
     let rec forward in' t = match t with
     | GR.Tail (m, t) -> forward (comp.middle_out in' m) t
     | GR.Last l -> comp.last_outs in' l update in
@@ -524,22 +522,8 @@ let run_anal (fact, comp) ~entry_fact graph =
     Debug.eprintf "dataflow" "Setting successor fact of block %s\n" blockname;
     forward (P.get fact.prop (GR.fid f)) t in
 
-  (* get blocks, initialize, and iterate to fixed point *)
   let blocks = G.postorder_dfs graph in
-  let init () = 
-    List.iter (fun b -> P.set fact.prop (GR.id b) fact.init_info) blocks;
-    P.set fact.prop GR.entry_uid entry_fact in
-  let rec iterate n =
-    let () = changed := false in
-    let () = List.iter set_successor_facts blocks in
-    if !changed then
-      if n < 1000 then iterate (n + 1)
-      else impossf "%s didn't converge in %n iterations" comp.name n
-    else
-      Debug.eprintf comp.name "%s converged in %d iterations\n" comp.name n in
-  Debug.eprintf comp.name "starting forward dataflow %s\n" comp.name;
-  init();
-  iterate 1
+  run "forward" comp.name fact changed entry_fact set_successor_facts () blocks
 @ 
 In the general case we solve a graph in the context of a larger subgraph.
 To do this, we need a locally modified computation that allows an
@@ -590,19 +574,7 @@ and general_forward fact comp txlim entry_fact graph =
     | GR.Label ((u, _), _, _) -> P.get fact.prop u in
     set_tail_facts txlim in' t in
   let blocks = G.postorder_dfs graph in
-  let init () = List.iter (fun b -> P.set fact.prop (GR.id b) fact.init_info) blocks in
-  let rec iterate n =
-    let () = changed := false in
-    let txlim = List.fold_left set_successor_facts txlim blocks in
-    if !changed then
-      if n < 1000 then iterate (n + 1)
-      else impossf "%s didn't converge in %n iterations" comp.name n
-    else
-      (Debug.eprintf comp.name "%s converged in %d iterations\n" comp.name n;
-       txlim) in
-  Debug.eprintf comp.name "starting forward dataflow %s\n" comp.name;
-  init();
-  iterate 1
+  run "forward" comp.name fact changed entry_fact set_successor_facts txlim blocks
 @
 We solve and rewrite in two passes: the first pass iterates to a fixed
 point to reach a dataflow solution, and the second pass uses that
