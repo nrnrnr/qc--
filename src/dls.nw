@@ -471,7 +471,7 @@ let alloc_block prefs (blockmap, predmap) bid pred_ids =
         let () = setVarOut bid varOut in
         let () = match l' with GR.Call _ -> setCallIn bid midMap | _ -> () in
         let head = add_middle (add_middle head spills) reloads in
-        l', GR.zip (GR.End (head, l')) in
+        l', GR.zipht head (GR.Last l') in
   let last, block = alloc_tail varOutf live_outs (GR.First first) tail in
   let blockmap = UM.add bid block blockmap in
 
@@ -552,7 +552,7 @@ let cleanup cfg =
     let rec filt head tail = match tail with
       | GR.Tail (m, t) when is_copy m -> filt head t
       | GR.Tail (m, t)                -> filt (GR.Head (head, m)) t
-      | GR.Last l                     -> GR.zip (GR.End (head, l)) in
+      | GR.Last _                     -> GR.zipht head tail in
     filt (GR.First first) tail in
   G.of_blocks (UM.map filter_copies (G.to_blocks cfg)) in
 @
@@ -850,7 +850,7 @@ We update the successor's variable map to have each inconsistent temp in memory.
   let succ = UM.find succ_id blockmap in
   let first, tail = GR.goto_start (GR.unzip succ) in
   let tail = List.fold_left (fun tail i -> GR.Tail (i, tail)) tail nodes' in
-  let succ = GR.zip (GR.Start (first, tail)) in
+  let succ = GR.zipht (GR.First first) tail in
   let blockmap = UM.add succ_id succ blockmap in
 
   (* make the predecessors consistent *)
@@ -891,7 +891,7 @@ We update the successor's variable map to have each inconsistent temp in memory.
     let pred = UM.find pred_id blockmap in
     let head, last = GR.goto_end (GR.unzip pred) in
     let head = List.fold_left (fun head i -> GR.Head (head, i)) head nodes' in
-    let pred = GR.zip (GR.End (head, last)) in
+    let pred = GR.zipht head (GR.Last last) in
     let blockmap = UM.add pred_id pred blockmap in
 
     (*VM.print "new maps" pred_vm;*)
@@ -977,7 +977,7 @@ let shuffle_between blockmap predmap pred_id succ_id =
           let (cond, _) = proc.P.target.T.branch.T.project rtl in 
           GR.Cbranch (machine.G.cbranch (cond, lt), lt, lf)
       | _ -> impossf "DLS trying to shuffle_between with non-branch pred block" in
-    let blockmap = UM.add pred_id (GR.zip (GR.End (head, last))) blockmap in
+    let blockmap = UM.add pred_id (GR.zipht head (GR.Last last)) blockmap in
     blockmap, predmap in
 @
 To reconcile variable maps, we need to create move, store, and load rtl's.

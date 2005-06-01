@@ -389,17 +389,17 @@ let insert_init_cont_nodes contmap init_label g =
                               ~sds:sd_locs ~vars:(var_array ()) in
       let cut_g = G.focus (fst k.K.cut_pc) (G.unfocus g) in
       let () = G.set_spans cut_g spans in
-let blockname block =
-  match G.Rep.blocklabel block with
-  | Some (_, s) -> s
-  | None -> "<entry block>" in
-let focused_blockname g =
-  let b, _ = G.openz g in
-  let b = G.Rep.zip b in
-  blockname b in
+      let blockname block =
+        match G.Rep.blocklabel block with
+        | Some (_, s) -> s
+        | None -> "<entry block>" in
+      let focused_blockname g =
+        let b, _ = G.openz g in
+        let b = G.Rep.zip b in
+        blockname b in
       let pc_sp = { Mflow.new_pc = pc; Mflow.new_sp = sp } in
       let init = G.instruction (Contn.init_code k.K.rep pc_sp) (G.entry G.empty) in
-      G.splice_after g (G.unfocus init)
+      G.splice_focus_entry g (G.unfocus init)
     else
       g in
   G.unfocus (Strutil.Map.fold one_node contmap (G.focus (fst init_label) g))

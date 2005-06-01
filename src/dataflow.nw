@@ -234,6 +234,8 @@ let run dir name fact changed entry_fact do_block txlim blocks =
   iterate 1
 @ 
 And here's where we update with a new fact.
+If we want better diagnostics, we can pass the graph in as well, then
+use the graph to look up the uid and print a label.
 <<utilities>>=
 let update fact changed =
   let get = P.get fact.prop in
@@ -245,7 +247,7 @@ let update fact changed =
         begin
           Debug.eprintf "dataflow" "Dataflow fact changed at unknown uid\n";
           set u new_a;
-          if Pervasives.(<>) u GR.entry_uid then (* no need to re-run on new entry *)
+          if not (Unique.eq u GR.entry_uid) then (* no need to re-run on new entry *)
             changed := true
         end
 @ 
@@ -265,6 +267,7 @@ We iterate until no more facts have changed.
 <<backward stuff>>=
 let run_anal (fact, comp) graph =
   let changed = ref false in
+  let update = update fact changed in
   let set_block_fact () b =
     let h, l = GR.goto_end (GR.unzip b) in
     let block_in = (* 'in' fact for the block *)
@@ -272,20 +275,7 @@ let run_anal (fact, comp) graph =
         | GR.Head (h, m) -> head_in h (comp.middle_in out m)
         | GR.First f -> comp.first_in out f in
       head_in h (comp.last_in l) in
-    (* compare [[block_in]] with old fact and possibly update *)
-    let u = GR.id b in
-    let old_block_in = P.get fact.prop u in
-    if fact.changed ~old:old_block_in ~new':block_in then
-      begin
-        let show_block (f, t) = match f with
-        | GR.Entry -> "<entry>"
-        | GR.Label ((_, l), _, _) -> l in
-        dprintf "Dataflow fact '%s' changed at block %s\n" fact.fact_name (show_block b);
-        P.set fact.prop u block_in;
-        match (fst b) with
-        | GR.Entry -> () (* does not count as a change for fixed-point purposes *)
-        | GR.Label _ -> changed := true
-      end in
+    update (GR.id b) block_in in
   let blocks = List.rev (G.postorder_dfs graph) in
   run "backward" comp.name fact changed fact.init_info set_block_fact () blocks
 @ 
@@ -319,6 +309,7 @@ let rec solve_graph fact comp txlim graph exit_fact =
   txlim, answer
 and general_backward fact comp txlim graph =
   let changed = ref false in
+  let update = update fact changed in
   let set_block_fact txlim b =
     let txlim, block_in = 
       let rec head_in txlim h out = match h with
@@ -339,21 +330,7 @@ and general_backward fact comp txlim graph =
       | Rewrite g ->
           let txlim, a = solve_graph fact comp (txlim-1) g fact.init_info in
           head_in txlim h a in
-    let u = GR.id b in
-    let old_block_in = P.get fact.prop u in
-    let old_a = P.get fact.prop u in
-    let new_a = fact.add_info block_in old_a in
-    if fact.changed ~old:old_a ~new':new_a then
-      begin
-        let show_block b = match fst b with
-        | GR.Entry -> "<entry>"
-        | GR.Label ((_, l), _, _) -> l in
-        dprintf "Dataflow fact '%s' changed at block %s\n" fact.fact_name (show_block b);
-        P.set fact.prop u new_a;
-        match (fst b) with
-        | GR.Entry -> () (* does not count as a change for fixed-point purposes *)
-        | GR.Label _ -> changed := true
-      end;
+    update (GR.id b) block_in;
     txlim in
   let blocks = List.rev (G.postorder_dfs graph) in
   run "backward" comp.name fact changed fact.init_info set_block_fact txlim blocks
@@ -622,7 +599,7 @@ and forward_rewrite (fact : 'a fact) comp txlim graph entry_fact changed =
               match comp.last_outs in' l txlim with
               | Dataflow set ->
                   set (check_property_match fact);
-                  let b = GR.zip (GR.End (h, l)) in
+                  let b = GR.zip (h, GR.Last l) in
                   rewrite_blocks txlim (b :: rewritten) bs changed
               | Rewrite g ->
                   (* could test here that [[exits g = exits (GR.Entry, GR.Last l)]] *)
@@ -636,7 +613,8 @@ and forward_rewrite (fact : 'a fact) comp txlim graph entry_fact changed =
         rewrite_next_block txlim in
   rewrite_blocks txlim [] (G.postorder_dfs graph) changed
 
-let _ = Debug.register "rewrite-last" "show what happens when last node is rewritten forward"
+let _ =
+  Debug.register "rewrite-last" "show what happens when last node is rewritten forward"
 
 let rewrite_solved (fact, comp) ~entry_fact g =
   let txlim = Tx.remaining () in
