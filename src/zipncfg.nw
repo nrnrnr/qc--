@@ -42,14 +42,18 @@ fall off the end of a {\PAL} procedure, the graph for an entire
 procedure should not have a default exit.
 
 
-A~[[zgraph]] is a graph with the \emph{focus} on one particular edge.
+A~[[zgraph]] is a graph with the \emph{focus} on one particular node.
 It supports at least the following kinds of operations:
 \begin{itemize}
 \item
-Insert a new node at the focus, and maintain the focus on the current edge.
+When the focus is on the entry node, add a new node to the graph just
+before the entry node.
+This operation is the primary means of building graphs.
+\item
+Replace the node at the focus, plugging in a new graph in its place.
 \end{itemize}
 Here are some basic types and operations:
-<<zipecfg.mli>>=
+<<zipncfg.mli>>=
 type uid = Unique.uid
 type label = uid * string
 
@@ -65,9 +69,9 @@ type graph
 type zgraph
 
 val empty   : graph
-val entry   : graph -> zgraph           (* focus on edge out of entry node *)
-val exit    : graph -> zgraph           (* focus on edge into default exit node *)
-val focus   : uid -> graph -> zgraph    (* focus on edge out of node with uid *)
+val entry   : graph -> zgraph           (* focus on entry node *)
+val exit    : graph -> zgraph           (* focus on default exit node *)
+val focus   : uid -> graph -> zgraph    (* focus on node with uid *)
 val unfocus : zgraph -> graph           (* lose focus *)
 @ 
 %%  Subgraph replacement:
@@ -77,33 +81,35 @@ val unfocus : zgraph -> graph           (* lose focus *)
 %%  error. 
 %%  After replacement, the focus looks at the successor of the replacement
 %%  graph's entry node.
-%%  <zipcfg.mli>=
+%%  <zipncfg.mli>=
 %%  val replace_focus : zgraph -> graph -> zgraph
 @ 
-We can insert a single-entry, single-exit subgraph at
-the current focus.
-The new focus can be at either the entry edge or the exit edge.
-<<zipecfg.mli>>=
-val splice_focus_entry : zgraph -> graph -> zgraph
-val splice_focus_exit  : zgraph -> graph -> zgraph
+We can insert a single-entry, single-exit subgraph either before or
+after the current focus.
+If before, the focus must be on a [[middle]] or [[last]] node.
+If after, the focus must be on a [[first]] or [[middle]] node.
+The focus does not move.
+<<zipncfg.mli>>=
+val splice_before : zgraph -> graph -> zgraph
+val splice_after  : zgraph -> graph -> zgraph
 @ 
 Sometimes we just want to add blocks to an existing graph~[[g]].
 We do it by creating a fresh graph~[[gz]]; the focus should be on the
-edge leaving the entry node, which becomes unreachable.
+entry node, which becomes unreachable.
 The exit node of the new graph should also be unreachable.
 The code is used in [[Ast2ir]] to add a continuation's prolog.
 
 This is pretty ugly; it's a consequence of our being willing to insert
 new nodes only following an entry node.  Maybe something less ugly is
 lurking somewhere.  
-<<zipecfg.mli>>=
+<<zipncfg.mli>>=
 val add_blocks : graph -> zgraph -> graph
 @ 
 Building a graph.
 The entry plays a dual role here; every constructor effectively
-requires the focus be on the edge leaving the entry node and inserts a
-new node at that edge.
-After insertion, the focus remains on the edge leaving the entry node.
+requires the focus be on the entry node and inserts a new node
+following the entry node.
+After insertion, the entry node remains the focus.
 
 Here we also introduce the [[nodes]] type, which is equal to
 [[zgraph -> zgraph]].
@@ -111,7 +117,13 @@ The idea is that we represent a sequence of nodes~$L$ by a function
 that takes the successor~$S$ and produces the sequence~$LS$.
 This representation is inspired by John Hughes's similar
 representation of lists, which supports append in constant time.
-<<zipecfg.mli>>=
+
+%%  When we add a node that can flow through to its successor, we insert
+%%  the node before the focus.
+%%  But when we add a node that cannot flow to its successor, we add it to
+%%  an unfocused graph.
+%%  In either case,  the new node becomes the new focus.
+<<zipncfg.mli>>=
 val uid : unit -> uid
 type machine = { goto    : label -> Rtl.rtl;
                  cbranch : Rtl.exp * label -> Rtl.rtl;
@@ -141,24 +153,23 @@ val forbidden    : machine -> nodes
   (* control should not reach; causes checked RTE *)
 @ 
 As a convenience, we provide code generation for if-then-else and while-do.
-<<zipecfg.mli>>=
+<<zipncfg.mli>>=
 val if_then_else : cbranch -> machine -> t:nodes -> f:nodes -> nodes
 val while_do     : cbranch -> machine -> body:nodes -> nodes
 @ 
-Sometimes we need to make the current focus (which must be the edge
-leaving the entry)
+Sometimes we need to make the current focus (which must be the entry)
 a branch target to be used later.
 Calling [[make_target gz]] returns a new graph and a unique identifier
 to which the entry flows in.
-<<zipecfg.mli>>=
+<<zipncfg.mli>>=
 val make_target : machine -> zgraph -> label * zgraph
 @ 
 Mutation---ugh!
-<<zipecfg.mli>>=
-val set_spans : zgraph -> Spans.t -> unit  (* set spans at node preceding focus *)
+<<zipncfg.mli>>=
+val set_spans : zgraph -> Spans.t -> unit  (* set spans at focus *)
 @ 
 We can also make a graph out of a single [[middle]] or [[last]] node.
-<<zipecfg.mli>>=
+<<zipncfg.mli>>=
 val single_middle : Rep.middle -> graph
 val single_last   : Rep.last   -> graph
 @ 
@@ -200,10 +211,22 @@ A~[[tail]] is  zero or more [[middle]]s followed by a [[last]].
 type head = First of first | Head of head * middle
 type tail = Last  of last  | Tail of middle * tail
 @
-And now the zipper.  The focus is between the head and tail.
-Notice we cannot ever focus on an inter-block edge.
+And now the zipper.
+In the future, we may well simplify these to just two cases.
 <<exposed types for [[Rep]] module>>=
-type zblock = head * tail
+type zblock
+  = Start  of first * tail           (* focus on first *)
+  | Middle of head * middle * tail   (* focus on middle *)
+  | End    of head * last            (* focus on last *)
+@ An alternative would be to make [[type zblock = head * tail]], with
+focus on the first element of the tail.  Not sure if that is flexible
+enough, however---it is often useful to focus on a [[first]] node.
+
+Another alternative would be to inline the definitions of [[first]] and
+[[last]] into [[head]] and [[tail]], doing away with a level of
+indirection.
+But this would probably make it harder for clients to reason about
+nodes in isolation.
 @
 A block need not be in zipper form:
 <<exposed types for [[Rep]] module>>=
@@ -239,12 +262,16 @@ splicing, the graph flows into the head.
 Splicing a tail is the dual operation.
 (In order to maintain the order-means-control-flow convention, the
 orders are reversed.)
-<<zipecfg.mli>>=
+<<zipncfg.mli>>=
 val splice_head : Rep.head -> graph -> graph * Rep.head
 val splice_tail : graph -> Rep.tail -> Rep.tail * graph
 @ 
+We can also splice a single-entry, no-exit graph into a head.
+<<zipncfg.mli>>=
+val splice_head_only : Rep.head -> graph -> graph
+@
 Access to the representation:
-<<zipecfg.mli>>=
+<<zipncfg.mli>>=
 val to_blocks : graph -> Rep.block Unique.Map.t
 val of_blocks : Rep.block Unique.Map.t -> graph  (* cheap *)
 val of_block_list : Rep.block list -> graph  (* expensive *)
@@ -254,7 +281,7 @@ We want to be able to scrutinize a single-entry, single-exit graph for
 splicing purposes. 
 There are two useful cases: the graph is a single block or it isn't.
 We use continuation-passing style
-<<zipecfg.mli>>=
+<<zipncfg.mli>>=
 val prepare_for_splicing :
   graph -> 
   (Rep.tail -> 'answer) -> 
@@ -265,7 +292,7 @@ Traversal: [[postorder_dfs]] returns a list of blocks reachable from
 the entry node.
 The postorder depth-first-search order means the list is in roughly
 first-to-last order, as suitable for use in a forward dataflow problem.
-<<zipecfg.mli>>=
+<<zipncfg.mli>>=
 val postorder_dfs : graph -> Rep.block list
 @ 
 For layout, we fold over pairs of type [[block * label option]] in
@@ -274,15 +301,15 @@ The [[label]], if any, identifies the block that will be the layout
 successor of the current block.
 This may be useful to help an emitter omit the final [[goto]] of a
 block that flows directly to its layout successor.
-<<zipecfg.mli>>=
+<<zipncfg.mli>>=
 val fold_layout : (Rep.block -> label option -> 'a -> 'a) -> 'a -> graph -> 'a
 @ 
 We can also fold and iterate over blocks.
-<<zipecfg.mli>>=
+<<zipncfg.mli>>=
 val fold_blocks : (Rep.block -> 'a -> 'a) -> 'a -> graph -> 'a
 val iter_blocks : (Rep.block -> unit) -> graph -> unit
 @ 
-<<zipecfg.mli>>=
+<<zipncfg.mli>>=
 val expand : (Rep.middle -> graph) -> (Rep.last -> graph) -> graph -> graph
 @ 
 \paragraph{Observing nodes}
@@ -301,7 +328,7 @@ and all [[last]] nodes are executable.
 <<declarations of [[Rep]]'s public functions>>=
 val is_executable : middle -> bool
 @ 
-<<zipecfg.mli>>=
+<<zipncfg.mli>>=
 val iter_spans : (Spans.t -> unit) -> graph -> unit
 val fold_spans : (Spans.t -> 'a -> 'a) -> graph -> 'a -> 'a
 @ 
@@ -311,18 +338,18 @@ val fold_fwd_block :
   (first -> 'a -> 'a) -> (middle -> 'a -> 'a) -> (last -> 'a -> 'a) ->
   block -> 'a -> 'a
 @ 
-<<zipecfg.mli>>=
+<<zipncfg.mli>>=
 val iter_nodes :
   (Rep.first -> unit) -> (Rep.middle -> unit) -> (Rep.last -> unit) -> graph -> unit
 val iter_rtls : (Rtl.rtl -> unit) -> graph -> unit
 @ 
-<<zipecfg.mli>>=
+<<zipncfg.mli>>=
 val map_rtls : (Rtl.rtl -> Rtl.rtl) -> graph -> graph
 val map_nodes :
   (Rep.first -> Rep.first) -> (Rep.middle -> Rep.middle) -> (Rep.last -> Rep.last) ->
   graph -> graph
 @ 
-<<zipecfg.mli>>=
+<<zipncfg.mli>>=
 val new_rtlm : Rtl.rtl -> Rep.middle -> Rep.middle
 val new_rtll : Rtl.rtl -> Rep.last   -> Rep.last
 val map_rtlm : (Rtl.rtl -> Rtl.rtl) -> Rep.middle -> Rep.middle
@@ -341,12 +368,12 @@ style.  The [[noflow]] continuation is used in the common case when an
 edge bears no dataflow information; the [[flow]] continuation is used
 in the general case.  Clients must guarantee that
 [[noflow n = flow {node=n; defs=empty; kills=empty}]].
-<<zipecfg.mli>>=
+<<zipncfg.mli>>=
 val union_over_outedges :
   Rep.last -> noflow:(uid -> regs) -> flow:(contedge -> regs) -> regs
 @ Function [[union_over_outedges]] is good for backward problems; the
 corresponding function for forward problems is [[iter_outedges]].
-<<zipecfg.mli>>=
+<<zipncfg.mli>>=
 val iter_outedges :
   Rep.last -> noflow:(uid -> unit) -> flow:(contedge -> unit) -> unit
 @
@@ -358,14 +385,14 @@ In the common case, it returns its second argument.
 Calling [[add_live_spans n l]] returns the union of~[[l]] with any
 registers kept live in spans.
 Spans keep register live if they may be needed to walk the stack.
-<<zipecfg.mli>>=
+<<zipncfg.mli>>=
 val add_inedge_uses : Rep.last  -> regs -> regs
 val add_live_spansl : Rep.last  -> regs -> regs
 val add_live_spansf : Rep.first -> regs -> regs
 @ 
 \clearpage
 \subsection{Implementation}
-<<zipecfg.ml>>=
+<<zipncfg.ml>>=
 module R = Rtl
 module RSX = Register.SetX
 module U  = Unique
@@ -391,7 +418,7 @@ let uid = U.uid
 It is OK to open [[Rep]] because the definition is sitting right
 here---this [[open]] does not create the stereotypical problem of a
 mysterious [[open]] from a separately compiled module.
-<<zipecfg.ml>>=
+<<zipncfg.ml>>=
 type regs = Register.SetX.t (* sets of regs for dataflow *)
 type contedge = { kills:regs; defs:regs; node:label; assertion: Rtl.rtl }
 
@@ -430,28 +457,42 @@ let rec ht_to_first head tail = match head with
   | First f -> f, tail
   | Head (h, m) -> ht_to_first h (Tail (m, tail)) 
 
-let goto_start (h, t) = ht_to_first h t
+let goto_start = function
+  | Start  (f, t)    -> f, t
+  | Middle (h, m, t) -> ht_to_first h (Tail (m, t))
+  | End    (h, l)    -> ht_to_first h (Last l)
 
 let rec ht_to_last head tail = match tail with
 | Last l -> head, l
 | Tail (m, t) -> ht_to_last (Head (head, m)) t 
 
-let goto_end (h, t) = ht_to_last h t
+let goto_end = function
+  | Start  (f, t)    -> ht_to_last (First f) t
+  | Middle (h, m, t) -> ht_to_last (Head (h, m)) t
+  | End    (h, l)    -> h, l
 
 let zip = goto_start
-let unzip (n, ns) = (First n, ns)
+let zipht = ht_to_first
+let unzip (n, ns) = Start (n, ns)
 <<definitions of [[Rep]]'s public functions>>=
 let rec lastt = function (Last l) -> l | Tail (_, t) -> lastt t 
-let last (h, t) = lastt t
+let last = function
+  | Start (f, t) -> lastt t
+  | Middle (h, m, t) -> lastt t
+  | End (h, l) -> l
+
 let first =
   let rec first = function (First f) -> f | Head (h, _) -> first h in
-  fun (h, t) -> first h
+  function
+    | Start (f, t) -> f
+    | Middle (h, m, t) -> first h
+    | End (h, l) -> first h
 @ 
 \paragraph{Graph}
 For the graph, we want to be able to look up a block efficiently by
 its unique id.  
 For the time being, we use a list:
-<<zipecfg.ml>>=
+<<zipncfg.ml>>=
 module type BLOCKS = sig
   type t
   val empty  : t
@@ -478,7 +519,7 @@ module Blocks : BLOCKS with type t = block UM.t = struct
   let iter = UM.iter
 end
 @ 
-<<zipecfg.ml>>=  
+<<zipncfg.ml>>=  
 type graph  = Blocks.t
 type zgraph = zblock * Blocks.t
 type nodes   = zgraph -> zgraph (* sequence of nodes in Hughes's representation *)
@@ -488,7 +529,7 @@ let of_blocks g = g
 let to_blocks g = g
 let openz (bz, bs) = (bz, bs)
 @ 
-<<zipecfg.ml>>=
+<<zipncfg.ml>>=
 let empty = Blocks.insert (Entry, Last Exit) Blocks.empty
 
 let focus uid blocks =
@@ -499,11 +540,13 @@ let exit g =
   let is_exit b = match last (unzip b) with Exit -> true | _ -> false in
   let (b, bs) = Blocks.focusp g is_exit in
   let (h, l) = goto_end (unzip b) in
-  ((h, Last l), bs)
+  (End (h, l), bs)
 
 let unfocus (bz, bs) = Blocks.insert (zip bz) bs
-<<zipecfg.ml>>=
-let consm middle ((h, t), blocks) = ((h, Tail (middle, t)), blocks)
+<<zipncfg.ml>>=
+let consm middle g = match g with
+| (Start (Entry, tail), blocks) -> (Start (Entry, Tail (middle, tail)), blocks)
+| _ -> impossf "focus not on entry node"
 
 let instruction  rtl g = consm (Instruction  rtl) g
 let stack_adjust rtl g = consm (Stack_adjust rtl) g
@@ -518,7 +561,11 @@ let unreachable = function
         | Last l -> pr "  %s\n"  (Rtlutil.ToString.rtl (last_instr l)) in
       warn t
 
-let consl last ((head, tail), blocks) = unreachable tail; ((head, Last last), blocks)
+let consl last g = match g with
+| (Start (Entry, tail), blocks) ->
+    unreachable tail;
+    (Start (Entry, Last last), blocks)
+| _ -> impossf "focus not on entry node"
 
 let branch machine target = consl (Branch (machine.goto target, target))
 let jump rtl ~uses ~targets  = consl (Jump (rtl, uses, targets))
@@ -532,16 +579,18 @@ let return  rtl ~exit ~uses  = consl (Return (exit, rtl, uses))
 let cut_to  rtl ~cuts_to ~aborts ~uses = consl (Cut (rtl, cuts_to, uses))
 let forbidden machine = consl (Forbidden machine.forbidden)
 @ 
-<<zipecfg.ml>>=
+<<zipncfg.ml>>=
 let label' user tgt =
   let goto = tgt.goto in
-  fun lbl ((head, tail), blocks) ->
-    ((head, Last (Branch (goto lbl, lbl))),
-     Blocks.insert (Label (lbl, user, ref None), tail) blocks)
+  fun lbl g -> match g with
+  | (Start (Entry, tail), blocks) -> 
+      Start (Entry, Last (Branch (goto lbl, lbl))),
+      Blocks.insert (Label (lbl, user, ref None), tail) blocks
+  | _ -> impossf "focus not on entry node"
 let label        = label' (User true)
 let privatelabel = label' (User false)
 @ 
-<<zipecfg.ml>>=
+<<zipncfg.ml>>=
 let entry_to_tail block =
   match goto_start block with
   | Entry, t -> t
@@ -551,7 +600,7 @@ let exit_to_head block =
   match goto_end block with
   | h, Exit -> h
   | _ -> impossf "unexpected non-exit"
-<<zipecfg.ml>>=
+<<zipncfg.ml>>=
 let check_single_exit g =
   let check block found = match last (unzip block) with
   | Exit when not found -> true
@@ -559,24 +608,24 @@ let check_single_exit g =
   if not (Blocks.fold check g false) then
     impossf "graph does not have an exit"
 @ 
-<<zipecfg.ml>>=
+<<zipncfg.ml>>=
 let make_target machine ((b, bs) as gz) = match b with
-| First (Label (u, _, _)), _        -> u, gz
-| First Entry, Last (Branch (_, u)) -> u, gz
-| First Entry, _ ->
+| Start (Label (u, _, _), tail) -> u, gz
+| Start (Entry, Last (Branch (_, u))) -> u, gz
+| Start (Entry, _) ->
     let lbl = (uid (), Idgen.label "branch target") in
     let gz = branch machine lbl **> privatelabel machine lbl **> gz in
     lbl, gz
 | _ -> impossf "focus not on entry"
 @ 
-<<zipecfg.ml>>=
+<<zipncfg.ml>>=
 let if_then_else cbranch machine ~t ~f g =
   let endif, g = make_target machine g in
   let not,   g = make_target machine (f g) in
   let        g = branch      machine endif g in
   let so,    g = make_target machine (t g) in
   cbranch ~ifso:so ~ifnot:not g
-<<zipecfg.ml>>=
+<<zipncfg.ml>>=
 let while_do cbranch machine ~body g =
   let lbl = (uid (), Idgen.label "loop head") in
   let endwhile, g = make_target machine g in
@@ -584,7 +633,7 @@ let while_do cbranch machine ~body g =
   let g = cbranch ~ifso:body ~ifnot:endwhile g in
   label machine lbl g
 @ 
-<<zipecfg.ml>>=
+<<zipncfg.ml>>=
 let call machine exp ~altrets ~unwinds_to ~cuts_to ~aborts
                ~uses ~defs ~kills ~reads ~writes ~spans ~succ_assn succ =
   let lbl = (uid (), Idgen.label "call successor") in
@@ -597,16 +646,16 @@ let call machine exp ~altrets ~unwinds_to ~cuts_to ~aborts
       cal_reads = reads; cal_writes = writes; } in
   let succ = privatelabel machine lbl succ in
   match succ with
-  | (First Entry, Last (Branch (_, lbl'))), blocks when lbl' =*= lbl -> 
-      (First Entry, Last (Call call)), blocks
+  | (Start (Entry, Last (Branch (_, lbl'))), blocks) when lbl' =*= lbl -> 
+      Start (Entry, Last (Call call)), blocks
   | _ -> impossf "internal error in call constructor"
 @ 
-<<zipecfg.ml>>=
+<<zipncfg.ml>>=
 let set_spans (bz, blocks) spans = match bz with
-| First (Label (l, u, r)), _ -> r := Some spans
+| Start (Label (l, u, r), _) -> r := Some spans
 | _ -> impossf "setting spans on non-label"
 @ 
-<<zipecfg.ml>>=
+<<zipncfg.ml>>=
 let iter_spans f g =
   let span s = match s with Some s -> f s | None -> () in
   let first = function Label (_, _, s) -> span (!s) | _ -> () in
@@ -617,7 +666,7 @@ let iter_spans f g =
     | _ -> () in
   Blocks.iter block g
 @ 
-<<zipecfg.ml>>=
+<<zipncfg.ml>>=
 let fold_spans f g z =
   let span s z = match s with Some s -> f s z | None -> z in
   let first f z = match f with Label (_, _, s) -> span (!s) z | _ -> z in
@@ -628,16 +677,16 @@ let fold_spans f g z =
     | _ -> z in
   Blocks.fold block g z
 @ 
-<<zipecfg.ml>>=
+<<zipncfg.ml>>=
 let add_blocks blocks (focus, newblocks) =
   match focus with
-  | First Entry, Last (Branch _ | Forbidden _ | Exit) ->
+  | Start (Entry, Last (Branch _ | Forbidden _ | Exit)) ->
       let rec add block blocks = match goto_end (unzip block) with
-      | First (Label _), Exit -> blocks
-      | _, Exit -> impossf "exit contains nontrivial code"
+      | (First (Label _), Exit) -> blocks
+      | (_, Exit) -> impossf "exit contains nontrivial code"
       | _ -> Blocks.insert block blocks in
       Blocks.fold add newblocks blocks
-  | First Entry, _ -> impossf "entry contains nontrivial code"
+  | Start (Entry, _) -> impossf "entry contains nontrivial code"
   | _ -> impossf "focus not on entry"
 @ 
 <<definitions of [[Rep]]'s public functions>>=
@@ -665,7 +714,7 @@ let fold_succs f t z = match t with
 
 let iter_succs f t = fold_succs (fun t () -> f t) t ()
 @
-<<zipecfg.ml>>=
+<<zipncfg.ml>>=
 let postorder_dfs g =
   let entry, blocks = entry g in
   let rec vnode block cont acc visited =
@@ -686,7 +735,7 @@ let postorder_dfs g =
     next children acc visited in
   vnode (zip entry) (fun acc _visited -> acc) [] US.empty
 @ 
-<<zipecfg.ml>>=
+<<zipncfg.ml>>=
 let fold_layout f z g =
   let nextlabel (f, t) = match f with
     | Entry -> impossf "entry as successor"
@@ -703,7 +752,7 @@ let fold_fwd_block first middle last (f, t) z =
   | Tail (m, t) -> tail t (middle m z)
   | Last l      -> last l z in
   tail t z
-<<zipecfg.ml>>=
+<<zipncfg.ml>>=
 let iter_nodes first middle last g =
   let block (f, t) =
     let () = first f in
@@ -717,10 +766,10 @@ let iter_rtls rfun g =
   iter_nodes
     (fun f -> ()) (fun m -> rfun (mid_instr m)) (fun l -> rfun (last_instr l)) g
 @ 
-<<zipecfg.ml>>=
+<<zipncfg.ml>>=
 let fold_blocks f z bs = UM.fold (fun _ -> f) bs z
 let iter_blocks = UM.iter
-<<zipecfg.ml>>=
+<<zipncfg.ml>>=
 let new_rtll rtl l = match l with
 | Exit -> l
 | Branch  (r, l) -> Branch (rtl, l)
@@ -735,7 +784,7 @@ let new_rtll rtl l = match l with
 let new_rtlm rtl m = match m with
 | Instruction r  -> Instruction rtl
 | Stack_adjust r -> Stack_adjust rtl
-<<zipecfg.ml>>=
+<<zipncfg.ml>>=
 let map_rtll ~map_rtl ~map_assn l =
   let map_ces ces =
     List.map (fun ce -> { ce with assertion = map_assn ce.assertion }) ces in
@@ -763,7 +812,7 @@ let map_rtls map g =
     (f, tail t) in
   UM.map block g
 
-<<zipecfg.ml>>=
+<<zipncfg.ml>>=
 let map_nodes first middle last g =
   let block (f, t) =
     let rec tail t = match t with
@@ -772,7 +821,7 @@ let map_nodes first middle last g =
     (first f, tail t) in
   UM.map block g
 @ 
-<<zipecfg.ml>>=
+<<zipncfg.ml>>=
 (* should this fn be defined on exi and ill?
    when there are cont edges, do we still need to cover the regular edges?*)
 let (++) = RSX.union
@@ -843,12 +892,12 @@ let last_instr l = match l with
 | Jump    (r, _, _) -> r
 | Forbidden r -> r
 @ 
-<<zipecfg.ml>>=
+<<zipncfg.ml>>=
 let of_block_list blocks =
   List.fold_left (fun m b -> Blocks.insert b m) Blocks.empty blocks 
 @ 
 \paragraph{Splicing support}
-<<zipecfg.ml>>=
+<<zipncfg.ml>>=
 let prepare_for_splicing graph single multi =
   let gentry, gblocks = Blocks.focus graph entry_uid in
   if UM.is_empty gblocks then
@@ -861,16 +910,16 @@ let prepare_for_splicing graph single multi =
     (match gl with Exit -> () | _ -> impossf "exit is not exit?!");
     multi ~entry:(snd gentry) ~exit:gh ~others:gblocks
 @ 
-<<zipecfg.ml>>=
+<<zipncfg.ml>>=
 let splice_head head g =
   check_single_exit g;
   let splice_one_block tail' = match ht_to_last head tail' with
   | head, Exit -> Blocks.empty, head
   | _ -> impossf "spliced graph without exit" in
   let splice_many_blocks ~entry ~exit ~others =
-    Blocks.insert (zip (head, entry)) others, exit in
+    Blocks.insert (zipht head entry) others, exit in
   prepare_for_splicing g splice_one_block splice_many_blocks
-<<zipecfg.ml>>=
+<<zipncfg.ml>>=
 let splice_tail g tail =
   check_single_exit g;
   let splice_one_block tail' =  (* return tail' .. tail *)
@@ -881,22 +930,42 @@ let splice_tail g tail =
         | _ -> impossf "entry in; garbage out")
     | _ -> impossf "spliced single block without Exit" in
   let splice_many_blocks ~entry ~exit ~others =
-    (entry, Blocks.insert (zip (exit, tail)) others) in
+    (entry, Blocks.insert (zipht exit tail) others) in
   prepare_for_splicing g splice_one_block splice_many_blocks
-<<zipecfg.ml>>=
-let splice_focus_entry ((head, tail), blocks) g =
-  let tail, blocks' = splice_tail g tail in
-  ((head, tail), Blocks.union blocks' blocks)
-
-let splice_focus_exit ((head, tail), blocks) g =
-  let blocks', head = splice_head head g in
-  ((head, tail), Blocks.union blocks' blocks)
+@ 
+<<zipncfg.ml>>=
+let splice_before (focus, blocks) g =
+  match focus with
+  | Start _ -> impossf "splicing before a first node"
+  | Middle (head, mid, tail) -> 
+      let g, head = splice_head head g in
+      Middle (head, mid, tail), Blocks.union g blocks
+  | End (head, last) ->
+      let g, head = splice_head head g in
+      End (head, last), Blocks.union g blocks
+<<zipncfg.ml>>=
+let splice_after (focus, blocks) g =
+  match focus with
+  | Start (first, tail) ->
+      let tail, g = splice_tail g tail in
+      Start (first, tail), Blocks.union g blocks
+  | Middle (head, mid, tail) -> 
+      let tail, g = splice_tail g tail in
+      Middle (head, mid, tail), Blocks.union g blocks
+  | End (tail, last) -> impossf "splicing after a last node"
+@ 
+<<zipncfg.ml>>=
+let splice_head_only head graph =
+  let gentry, gblocks = Blocks.focus graph entry_uid in
+  match gentry with
+  | Entry, tail -> Blocks.insert (zipht head tail) gblocks
+  | _ -> impossf "splice graph does not start with entry"
 @ 
 \paragraph{Graph expansion}
 
 This probably duplicates some other splicing stuff.
 And I'm not too happy even with the local redundancy.
-<<zipecfg.ml>>=
+<<zipncfg.ml>>=
 let must_be_empty g =
   if not (UM.is_empty g) then
     impossf "entry connects to exit, but there are more blocks"
@@ -930,7 +999,7 @@ let expand expand_middle expand_last graph =
     expand_tail (First f) t expanded in
   Blocks.fold expand_block graph empty
 @ 
-<<zipecfg.ml>>=
+<<zipncfg.ml>>=
 let single_middle m =
   let block = (Entry, Tail (m, Last Exit)) in
   Blocks.insert block Blocks.empty
