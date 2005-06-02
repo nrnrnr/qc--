@@ -1,18 +1,13 @@
 
 DEVELOPER'S FAQ
 
-+ What needs to be done to add new files to the compiler?
+* What needs to be done to add new files to the compiler?
   
-  See the comments in mkfile. You have to make sure your sources are extracted
-  from their Noweb file and scanned for dependencies. Basically you have
-  to add them to the ML and MLI variables in the mkfile.      
-
-  Once the dependencies are recorded, just "mk foo.cmi" or "mk
-  foo.cmo" should extract the source code from foo.nw and compile it,
-  as well as any dependent file.
-    
-  If the module should be linked into the binary add foo.ml to the ML
-  variable in mkfile:
+  See the comments in mkfile. You have to make sure your sources are
+  extracted from their Noweb file and scanned for dependencies.
+  Basically you have to add them to the ML and MLI variables in the
+  mkfile.  When adding to ML, you must respect dependencies between
+  modules.  When adding to MLI, use alphabetical order.  In more detail,
 
     ML =            uint64.ml     \
                     impossible.ml \
@@ -27,6 +22,10 @@ DEVELOPER'S FAQ
   Every module that foo depends on must precede it in that list.  This
   means, high level modules go towards the end of the list.  Every
   time you modify the mkfile you have to do a "mk depend".
+
+  Once the dependencies are recorded, just "mk foo.cmi" or "mk
+  foo.cmo" should extract the source code from foo.nw and compile it,
+  as well as any dependent file.
     
   A non-standard case contains multiple modules in one noweb-file, say
   foo.nw provides foo.ml, foo.mli and bar.ml.  In this case you have
@@ -34,12 +33,12 @@ DEVELOPER'S FAQ
   The standard rules still deal with foo.ml and foo.mli.  Look at
   cmdline.ml as an example for such a rule.
 
-+ The compiler complains about inconsistencies of compiled interfaces. 
+* The compiler complains about inconsistencies of compiled interfaces.
   What can I do?
 
   Your dependencies are not up to date. Do a "mk depend" and try again.
 
-+ If something changes just in this directory, and we want to recompile, 
+* If something changes just in this directory, and we want to recompile, 
   what do we need to do short of running mk in the parent directory?
 
   The sub-directories in qc--/ in general depend on each other. In
@@ -49,7 +48,7 @@ DEVELOPER'S FAQ
   there is little need to step outside of this directory to build the
   compiler.  See the top of mkfile for more targets.
   
-+ How do I create documentation for my module foo.nw?
+* How do I create documentation for my module foo.nw?
 
   The mkfile provides useful rules for documentation:
 
