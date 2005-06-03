@@ -254,17 +254,6 @@ val to_blocks : graph -> Rep.block Unique.Map.t
 val of_blocks : Rep.block Unique.Map.t -> graph  (* cheap *)
 val of_block_list : Rep.block list -> graph  (* expensive *)
 val openz : zgraph -> Rep.zblock * Rep.block Unique.Map.t
-@ 
-We want to be able to scrutinize a single-entry, single-exit graph for
-splicing purposes. 
-There are two useful cases: the graph is a single block or it isn't.
-We use continuation-passing style
-<<zipcfg.mli>>=
-val prepare_for_splicing :
-  graph -> 
-  (Rep.tail -> 'answer) -> 
-  (entry:Rep.tail -> exit:Rep.head -> others:Rep.block Unique.Map.t -> 'answer) ->
-  'answer
 @
 Traversal: [[postorder_dfs]] returns a list of blocks reachable from
 the entry node.
@@ -854,6 +843,11 @@ let of_block_list blocks =
   List.fold_left (fun m b -> Blocks.insert b m) Blocks.empty blocks 
 @ 
 \paragraph{Splicing support}
+
+We want to be able to scrutinize a single-entry, single-exit graph for
+splicing purposes. 
+There are two useful cases: the graph is a single block or it isn't.
+We use continuation-passing style.
 <<zipcfg.ml>>=
 let prepare_for_splicing graph single multi =
   let gentry, gblocks = Blocks.focus graph entry_uid in
@@ -866,6 +860,12 @@ let prepare_for_splicing graph single multi =
     let gh, gl = goto_end gexit in
     (match gl with Exit -> () | _ -> impossf "exit is not exit?!");
     multi ~entry:(snd gentry) ~exit:gh ~others:gblocks
+
+let _ = (prepare_for_splicing :
+  graph -> 
+  (Rep.tail -> 'answer) -> 
+  (entry:Rep.tail -> exit:Rep.head -> others:Rep.block Unique.Map.t -> 'answer) ->
+  'answer)
 @ 
 <<zipcfg.ml>>=
 let splice_head head g =
@@ -910,38 +910,17 @@ let splice_head_only head graph =
 This probably duplicates some other splicing stuff.
 And I'm not too happy even with the local redundancy.
 <<zipcfg.ml>>=
-let must_be_empty g =
-  if not (UM.is_empty g) then
-    impossf "entry connects to exit, but there are more blocks"
-
-let splice_in_forward head graph tail expanded =
-  let single after_entry =
-    let new_head, last = ht_to_last head after_entry in
-    (match last with Exit -> () | _ -> impossf "exit expected");
-    new_head, tail, expanded in
-  let multi ~entry ~exit ~others =
-    exit, tail, Blocks.insert (ht_to_first head entry) (Blocks.union others expanded) in
-  prepare_for_splicing graph single multi
-
-let finish_splice_forward head graph expanded = 
-  let gentry, gblocks = entry graph in
-  let gf, gt = goto_start gentry in
-  (match gf with Entry -> () | _ -> impossf "entry is not entry?!");
-  Blocks.insert (ht_to_first head gt) (Blocks.union gblocks expanded)
-
 let expand expand_middle expand_last graph =
   let expand_block block expanded =
     let rec expand_tail h t expanded = match t with
     | Tail (m, t) ->
-        let g = expand_middle m in
-        let h, t, expanded = splice_in_forward h g t expanded in
-        expand_tail h t expanded
+        let g, h = splice_head h (expand_middle m) in
+        expand_tail h t (Blocks.union g expanded)
     | Last l ->
-        let g = expand_last l in
-        finish_splice_forward h g expanded in
+        Blocks.union (splice_head_only h (expand_last l)) expanded in
     let (f, t) = block in
     expand_tail (First f) t expanded in
-  Blocks.fold expand_block graph empty
+  Blocks.fold expand_block graph Blocks.empty 
 @ 
 <<zipcfg.ml>>=
 let single_middle m =

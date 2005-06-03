@@ -36,7 +36,7 @@ module type MAP = sig
     (* split k m = (find k m, remove k m) *)
   val splitp: (uid -> 'a -> bool) -> 'a t -> 'a * 'a t
     (* split based on predicate *)
-  val union : 'a t -> 'a t -> 'a t
+  val union : 'a t -> 'a t -> 'a t          (* keep larger set on the right *)
   val fold  : (uid -> 'a -> 'b -> 'b) -> 'a t -> 'b -> 'b
   val iter  : ('a -> unit) -> 'a t -> unit
   val size  : 'a t -> int
@@ -89,7 +89,7 @@ module Map : MAP = struct
   let union m m' =
     let add u v m =
       if mem u m then
-        raise (Invalid_argument "Unique.Map.union")
+        raise (Invalid_argument (Printf.sprintf "Unique.Map.union dup key %d" (fst u)))
       else
         add u v m in
     fold add m m'
