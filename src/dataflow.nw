@@ -206,6 +206,10 @@ module B = struct
   <<exported types for backward analyses>>
   <<backward utilities>>
   <<backward stuff>>
+
+
+  module XXX = struct <<backward, no txlim>> end
+
 end
 module F = struct
   <<exported types for forward analyses>>
@@ -250,6 +254,8 @@ let update fact changed =
           if not (Unique.eq u GR.entry_uid) then (* no need to re-run on new entry *)
             changed := true
         end
+
+let _ = (update : 'a fact -> bool ref -> G.uid -> 'a -> unit)
 @ 
 
 \subsection{Backward problems}
@@ -361,9 +367,8 @@ and backward_rewrite (fact : 'a fact) comp txlim graph changed =
           | Rewrite g ->
               let txlim, a, (g, _) =
                 solve_and_rewrite fact comp (txlim-1) g fact.init_info changed in
-              let t, rewritten = 
-                let t, g = G.splice_tail g (GR.Last l)  in
-                t, add_blocks (G.to_blocks g) rewritten in
+              let t, g = G.remove_entry g in
+              let rewritten = add_blocks (G.to_blocks g) rewritten in
               (* continue at entry of g *)
               propagate txlim h a t rewritten true
         and propagate : txlimit -> GR.head -> 'a -> GR.tail -> GR.block list -> bool ->
@@ -378,9 +383,8 @@ and backward_rewrite (fact : 'a fact) comp txlim graph changed =
                   let txlim, a, (g, _) =
                     solve_and_rewrite fact comp (txlim-1) g out changed in
                   dprintf "Rewrite of middle node completed\n";
-                  let t, rewritten = 
-                    let t, g = G.splice_tail g tail in
-                    t, add_blocks (G.to_blocks g) rewritten in
+                  let t, g = G.splice_tail g tail in
+                  let rewritten = add_blocks (G.to_blocks g) rewritten in
                   propagate txlim h a t rewritten true)
           | GR.First f ->
               match comp.first_in out f txlim with
@@ -699,3 +703,135 @@ let a_t (fact, comp) tx =
  { name = Printf.sprintf "%s and %s" comp.name tx.name;
    last_outs = last_outs; middle_out = middle_out;
  }
+@ 
+
+
+<<backward, no txlim>>=
+let comp_with_exit comp exit_fact =
+  let last_in l = match l with
+  | GR.Exit -> Dataflow exit_fact
+  | _ -> comp.last_in l in
+  { comp with last_in = last_in } 
+
+let run f c e d blocks = run "backward" "comp.name" f c e (fun () b -> d b) () blocks
+
+let rec solve_graph fact comp graph exit_fact =
+  general_backward fact (comp_with_exit comp exit_fact) graph;
+  P.get fact.prop GR.entry_uid 
+and general_backward fact comp graph =
+  let changed = ref false in
+  let update = update fact changed in
+  let set_block_fact b =
+    let block_in = 
+      let rec head_in h out = match h with
+        | GR.Head (h, m) ->
+            let a = match comp.middle_in out m with
+              | Dataflow a -> a
+              | Rewrite g -> solve_graph fact comp g out in
+            head_in h a
+        | GR.First f -> 
+            match comp.first_in out f with
+            | Dataflow a -> a
+            | Rewrite g -> solve_graph fact comp g out in
+      let h, l = GR.goto_end (GR.unzip b) in
+      let a = match comp.last_in l with
+        | Dataflow a -> a
+        | Rewrite g -> solve_graph fact comp g fact.init_info in
+      head_in h a in
+    update (GR.id b) block_in in
+  let blocks = List.rev (G.postorder_dfs graph) in
+  run fact changed fact.init_info set_block_fact blocks
+
+<<backward, no txlim>>=
+let rec solve_and_rewrite fact comp graph exit_fact changed =
+  let a = solve_graph fact comp graph exit_fact in          (* pass 1 *)
+  let g, c =                                                (* pass 2 *)
+    backward_rewrite fact (comp_with_exit comp exit_fact) graph changed  in
+  a, (g, c) 
+and backward_rewrite fact comp graph changed =
+  let rec rewrite_blocks rewritten fresh changed : G.graph * bool =
+    match fresh with
+    | [] -> G.of_block_list rewritten, changed
+    | b :: bs ->
+        let rec rewrite_next_block () =
+          let h, l = GR.goto_end (GR.unzip b) in
+          match comp.last_in l with
+          | Dataflow a -> propagate h a (GR.Last l) rewritten changed
+          | Rewrite g ->
+              let a, (g, _) =
+                solve_and_rewrite fact comp g fact.init_info changed in
+              let t, g = G.remove_entry g in
+              let rewritten = add_blocks (G.to_blocks g) rewritten in
+              (* continue at entry of g *)
+              propagate h a t rewritten true
+        and propagate : GR.head -> 'a -> GR.tail -> GR.block list -> bool ->
+                          G.graph * bool =
+          fun h out tail rewritten changed -> match h with
+          | GR.Head (h, m) -> (
+              match comp.middle_in out m with
+              | Dataflow a -> propagate h a (GR.Tail (m, tail)) rewritten changed
+              | Rewrite g ->
+                  let a, (g, _) =
+                    solve_and_rewrite fact comp g out changed in
+                  let t, g = G.splice_tail g tail in
+                  let rewritten = add_blocks (G.to_blocks g) rewritten in
+                  propagate h a t rewritten true)
+          | GR.First f ->
+              match comp.first_in out f with
+              | Dataflow a ->
+                  let b = (f, tail) in
+                  rewrite_blocks (b :: rewritten) bs changed
+              | Rewrite g -> impossf "rewriting a label in backward dataflow" in
+        rewrite_next_block () in
+    rewrite_blocks [] (List.rev (G.postorder_dfs graph)) changed
+
+
+<<backward, no txlim>>=
+module Unique = struct
+  module Map = struct
+    let empty = G.of_blocks Unique.Map.empty
+    let union g1 g2 = G.of_blocks (Unique.Map.union (G.to_blocks g1) (G.to_blocks g2))
+    let add k v g = G.of_blocks (Unique.Map.add k v (G.to_blocks g))
+  end
+end
+
+let rec solve_and_rewrite fact comp graph exit_fact =
+  let a = solve_graph fact comp graph exit_fact in          (* pass 1 *)
+  let g =                                                (* pass 2 *)
+    backward_rewrite fact (comp_with_exit comp exit_fact) graph in
+  a, g 
+and backward_rewrite fact comp graph =
+  let rec rewrite_blocks rewritten fresh =
+    match fresh with
+    | [] -> rewritten
+    | b :: bs ->
+        let rec rewrite_next_block () =
+          let h, l = GR.goto_end (GR.unzip b) in
+          match comp.last_in l with
+          | Dataflow a -> propagate h a (GR.Last l) rewritten
+          | Rewrite g ->
+              let a, g = solve_and_rewrite fact comp g fact.init_info in
+              let t, g = G.remove_entry g in
+              let rewritten = Unique.Map.union g rewritten in
+              (* continue at entry of g *)
+              propagate h a t rewritten 
+        and propagate : GR.head -> 'a -> GR.tail -> G.graph -> G.graph =
+          fun h out tail rewritten -> match h with
+          | GR.Head (h, m) -> (
+              match comp.middle_in out m with
+              | Dataflow a -> propagate h a (GR.Tail (m, tail)) rewritten 
+              | Rewrite g ->
+                  let a, g = solve_and_rewrite fact comp g out in
+                  let t, g = G.splice_tail g tail in
+                  let rewritten = Unique.Map.union g rewritten in
+                  propagate h a t rewritten)
+          | GR.First f ->
+              match comp.first_in out f with
+              | Dataflow a ->
+                  let b = (f, tail) in
+                  rewrite_blocks (Unique.Map.add (GR.id b) b rewritten) bs 
+              | Rewrite g -> impossf "rewriting a label in backward dataflow" in
+        rewrite_next_block () in
+    rewrite_blocks Unique.Map.empty (List.rev (G.postorder_dfs graph)) 
+
+

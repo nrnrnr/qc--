@@ -248,6 +248,11 @@ We can also splice a single-entry, no-exit graph into a head.
 <<zipcfg.mli>>=
 val splice_head_only : Rep.head -> graph -> graph
 @ 
+Finally, we can find the entry node of a graph and remove it, leaving
+a tail leading into the rest of the graph:
+<<zipcfg.mli>>=
+val remove_entry : graph -> Rep.tail * graph
+@ 
 Access to the representation:
 <<zipcfg.mli>>=
 val to_blocks : graph -> Rep.block Unique.Map.t
@@ -904,6 +909,13 @@ let splice_head_only head graph =
   match gentry with
   | Entry, tail -> Blocks.insert (zipht head tail) gblocks
   | _ -> impossf "splice graph does not start with entry"
+@ 
+<<zipcfg.ml>>=
+let remove_entry graph =
+  let gentry, gblocks = Blocks.focus graph entry_uid in
+  match gentry with
+  | Entry, tail -> tail, gblocks
+  | _ -> impossf "removing nonexistent entry"
 @ 
 \paragraph{Graph expansion}
 
