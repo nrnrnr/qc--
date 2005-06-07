@@ -538,6 +538,15 @@ before it is printed.
     | A.EmptyStmt      -> semi
     | A.CommentStmt(s) -> comment s
 
+    | A.LimitcheckStmt (cookie, cont)    ->
+        P.agrp begin
+        ~~ P.agrp (P.text "limitcheck" ^/ expr cookie)
+        ^/ begin match cont with
+           | None   -> P.empty
+           | Some e -> P.text "fails to" ^/ expr e
+           end
+        end
+
     | A.SwitchStmt (r,e,arms) -> 
         P.agrp begin
         ~~ P.agrp begin 

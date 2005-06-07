@@ -663,6 +663,9 @@
             | "ast_EmptyStmt" -> Ast.EmptyStmt
             | "ast_CommentStmt" -> let string1 = (StdPrimsUtil.sexp_rd_std_string s_) in
               Ast.CommentStmt(string1)
+            | "ast_LimitcheckStmt" -> let expr1 = (sexp_rd_expr s_) in
+              let expr_opt1 = (SexpPkl.rd_option sexp_rd_expr s_) in
+              Ast.LimitcheckStmt(expr1, expr_opt1)
             | _ -> (SexpPkl.die ()))
           (* end match *) in
         begin
@@ -1660,6 +1663,13 @@
             (SexpPkl.wr_lp s_);
             (SexpPkl.wr_sym "ast_CommentStmt" s_);
             (StdPrimsUtil.sexp_wr_std_string string1 s_);
+            (SexpPkl.wr_rp s_)
+          end
+        | (Ast.LimitcheckStmt(expr1, expr_opt1)) -> begin
+            (SexpPkl.wr_lp s_);
+            (SexpPkl.wr_sym "ast_LimitcheckStmt" s_);
+            (sexp_wr_expr expr1 s_);
+            (SexpPkl.wr_option sexp_wr_expr expr_opt1 s_);
             (SexpPkl.wr_rp s_)
           end)
       (* end match *)

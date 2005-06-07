@@ -47,6 +47,7 @@ type stmt =
   | Jump   of convention * exp * actual list * procname list
   | Cut    of convention * exp * actual list * flow 
   | Return of convention * (exp * exp) option * actual list
+  | Limitcheck of convention * exp * (exp * name) option (* (cookie,(failk,recname)) *)
 @ 
 Both compilation units and procedures can contain type and constant definitions.
 Because these are scoped, we accumulate these definitions in each
@@ -259,7 +260,17 @@ let rec stmt r s k =
   | A.ReturnStmt (cc, alt, a's) ->
       atomic (Return (convention cc, alt, List.map actual a's))
   | A.EmptyStmt
-  | A.CommentStmt _   -> k id accums in
+  | A.CommentStmt _   -> k id accums
+  | A.LimitcheckStmt (cookie, cont) -> 
+      let cc   = convention None in
+      match cont with
+      | None -> atomic (Limitcheck (cc, cookie, None))
+      | Some cont ->
+          (* construct continuation for recovery *)
+          let formals = [] in
+          let name = Idgen.label "overflow-recovery continuation" in
+          let stmt = cons (Limitcheck (cc, cookie, Some (cont, name))) in
+          k stmt {accums with ks = ((r, (name,cc,formals)) :: accums.ks)} in
 stmt r s k
 @ PERHAPS IT SHOULD BE POSSIBLE TO SET THE CALLING CONVENTION FOR CUT TO
 AND FOR CONTINUATION?

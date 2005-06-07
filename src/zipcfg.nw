@@ -145,6 +145,10 @@ As a convenience, we provide code generation for if-then-else and while-do.
 val if_then_else : cbranch -> machine -> t:nodes -> f:nodes -> nodes
 val while_do     : cbranch -> machine -> body:nodes -> nodes
 @ 
+A limitcheck is a degenerate form of [[if]] with a special label.
+<<zipcfg.mli>>=
+val limitcheck : cbranch -> machine -> t:nodes -> nodes
+@ 
 Sometimes we need to make the current focus (which must be the edge
 leaving the entry)
 a branch target to be used later.
@@ -171,8 +175,11 @@ type 'a edgelist = 'a list (* could be array *)
 <<node types>>
 type first
   = Entry
-  | Label of label * user * Spans.t option ref  (* user labels can't be deleted *)
-and user = User of bool  (* is label a user label? *)
+  | Label of label * labelkind * Spans.t option ref
+and labelkind
+  = Userlabel  (* user-written; cannot be deleted *)
+  | Genlabel   (* generated; can be deleted *)
+  | Limitlabel (* generated after limit check; cannot be deleted *)
 
 type middle
   = Instruction  of Rtl.rtl
@@ -538,19 +545,10 @@ let label' user tgt =
   fun lbl ((head, tail), blocks) ->
     ((head, Last (Branch (goto lbl, lbl))),
      Blocks.insert (Label (lbl, user, ref None), tail) blocks)
-let label        = label' (User true)
-let privatelabel = label' (User false)
+let label        = label' Userlabel
+let privatelabel = label' Genlabel
+let limitlabel   = label' Limitlabel
 @ 
-<<zipcfg.ml>>=
-let entry_to_tail block =
-  match goto_start block with
-  | Entry, t -> t
-  | _ -> impossf "unexpected non-entry"
-
-let exit_to_head block =
-  match goto_end block with
-  | h, Exit -> h
-  | _ -> impossf "unexpected non-exit"
 <<zipcfg.ml>>=
 let check_single_exit g =
   let check block found = match last (unzip block) with
@@ -576,6 +574,7 @@ let if_then_else cbranch machine ~t ~f g =
   let        g = branch      machine endif g in
   let so,    g = make_target machine (t g) in
   cbranch ~ifso:so ~ifnot:not g
+@ 
 <<zipcfg.ml>>=
 let while_do cbranch machine ~body g =
   let lbl = (uid (), Idgen.label "loop head") in
@@ -583,6 +582,13 @@ let while_do cbranch machine ~body g =
   let body,     g = make_target machine (body (branch machine lbl g)) in
   let g = cbranch ~ifso:body ~ifnot:endwhile g in
   label machine lbl g
+@ 
+<<zipcfg.ml>>=
+let limitcheck cbranch machine ~t g =
+  let endif = (uid (), Idgen.label "post-limitcheck label") in
+  let g = limitlabel machine endif g in
+  let so, g = make_target machine (t g) in
+  cbranch ~ifso:so ~ifnot:endif g
 @ 
 <<zipcfg.ml>>=
 let call machine exp ~altrets ~unwinds_to ~cuts_to ~aborts

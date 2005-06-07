@@ -38,18 +38,20 @@ type label    = string
 type linktime = Reloc.t
 
 type stmt =
-  | If     of exp * stmt list * stmt list
-  | Switch of range option * exp * (range list * stmt list) list
-  | Label  of label
-  | Cont   of name * convention * Fenv.variable kinded list
-  | Span   of (Bits.bits * linktime) * stmt list
-  | Assign of rtl
-  | Call   of loc kinded list * convention * exp * actual list * procname list
-            * name flow * name list option alias
-  | Goto   of exp * label list
-  | Jump   of convention * exp * actual list * procname list
-  | Cut    of convention * exp * actual list * name cflow 
-  | Return of convention * int * int * actual list
+  | If         of exp * stmt list * stmt list
+  | Switch     of range option * exp * (range list * stmt list) list
+  | Label      of label
+  | Cont       of name * convention * Fenv.variable kinded list
+  | Span       of (Bits.bits * linktime) * stmt list
+  | Assign     of rtl
+  | Call       of loc kinded list * convention * exp * actual list * procname list
+                * name flow * name list option alias
+  | Goto       of exp * label list
+  | Jump       of convention * exp * actual list * procname list
+  | Cut        of convention * exp * actual list * name cflow 
+  | Return     of convention * int * int * actual list
+  | Limitcheck of convention * exp * limitfailure option
+and limitfailure = { failcont : exp; reccont : exp; recname : name; }
 @
 <<elabstmt.mli>>=
 <<exposed types>>
@@ -135,7 +137,8 @@ let elab_functions validate srcmap r env =
     | N.Jump (conv, p, args, tgts)            -> jump conv p args tgts
     | N.Cut  (conv, k, args, flow)            -> cut conv k args flow
     | N.Prim (lhs, conv, p, args, flow)       -> prim lhs conv p args flow
-    | N.Return (conv, altcont, args)          -> return conv altcont args in
+    | N.Return (conv, altcont, args)          -> return conv altcont args
+    | N.Limitcheck (conv, cookie, cont)       -> limitcheck conv cookie cont in
     stmt s
   and stmts r reachable ss = 
     let rec stmts reachable = function
@@ -318,6 +321,21 @@ else
   errorf r
     "assignment has %d locations on the left but only %d expressions on the right"
     (List.length lhs) (List.length rhs)
+@ 
+A [[limitcheck]] just elaborates an expression or two.
+<<elaboration utilities>>=
+let limitcheck cconv cookie cont =
+  E.seq (exp cookie) (fun (cookie, cookiety) ->
+    insist_pointer "limit cookie" cookiety;
+    match cont with
+    | None -> Error.Ok (Limitcheck (cconv, cookie, None))
+    | Some (failk, recname) ->
+        let reck = A.Fetch (A.Name (None, recname, None)) in
+        E.ematch2 (exp failk) (exp reck) (fun (failk, fty) (reck, rty) ->
+          insist_pointer "overflow continuation" fty;
+          insist_pointer "automatically generated recovery continuation" rty;
+          let f = { failcont = failk; reccont = reck; recname = recname; } in
+          Limitcheck (cconv, cookie, Some f))) in
 @
 A [[goto]] statement must name all possible (local) targets [[ts]] for
 its code pointer expression [[e]].  Targets may be omitted only if the
@@ -579,6 +597,7 @@ let codelabels ss =
   | Goto   _ 
   | Jump   _ 
   | Cut    _ 
-  | Return _ -> labels in
+  | Return _
+  | Limitcheck _ -> labels in
   adds ss []
 

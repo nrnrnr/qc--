@@ -106,6 +106,7 @@ some of the usual suspects.
 <<utilities>>=
 let (<<) f g  = fun x -> f (g x) (* function composition *)
 let impossf x = Printf.kprintf Impossible.impossible x
+let unimpf x = Printf.kprintf Impossible.unimp x
 @ 
 The [[**>]] function is an infix, right-associative function that
 makes it easy to create sequences of flow-graph nodes.
@@ -534,9 +535,10 @@ and stmt' props s  succ =
   | S.Assign rtl           -> "Assign"
   | S.Call (lhs, cc, e, args, targets, conts, alias) -> "Call"
   | S.Goto (e, labels) -> "Goto"
-  | S.Jump (cc, e, args, targets) -> "Jump"
-  | S.Cut (cc, k, args, conts)    -> "Cut"
-  | S.Return (cc, i, n, args)     -> "Return");
+  | S.Jump (cc, e, args, targets)   -> "Jump"
+  | S.Cut (cc, k, args, conts)      -> "Cut"
+  | S.Return (cc, i, n, args)       -> "Return"
+  | S.Limitcheck (cc, cookie, cont) -> "Limitcheck");
   stmt props s succ
 <<functions that translate statements, including [[stmts]]>>=
 and stmt  props s  succ =
@@ -560,9 +562,10 @@ and stmt  props s  succ =
       | _ -> let instr   = target.T.goto.T.embed e in
              let targets = List.map (fun l -> (uid_of l, l)) labels in
              G.mbranch instr targets succ)
-  | S.Jump (cc, e, args, targets) -> jump cc e args targets succ
-  | S.Cut (cc, k, args, conts)    -> cut cc k args conts succ
-  | S.Return (cc, i, n, args)     -> return cc i n args succ
+  | S.Jump (cc, e, args, targets)   -> jump cc e args targets succ
+  | S.Cut (cc, k, args, conts)      -> cut cc k args conts succ
+  | S.Return (cc, i, n, args)       -> return cc i n args succ
+  | S.Limitcheck (cc, cookie, cont) -> limitcheck cc cookie cont
 @
 \paragraph{[[switch]] statements}
 
@@ -725,6 +728,28 @@ right away).
 But because the names used in each block are unique, it's just as
 safe, and perhaps easier, to send these constraints to the solver
 along with all the other constraints of this activation.
+@
+\paragraph{Stack-limit check}
+
+If the stack is exhausted, pass control to the continuation given.
+<<supporting functions for translating statements>>=
+and limitcheck cconv cookie cont =
+  let w  = W.exp vfp in
+  let cc = Call.get_cc target cconv in
+  let growth = cc.Call.stack_growth in
+  let younger = match growth with
+  | Memalloc.Down -> Rewrite.Ops.lt w
+  | Memalloc.Up -> Rewrite.Ops.gt w in
+  let extremum = unimpf "old end of stack frame" in
+  let overflows = younger vfp cookie in
+  G.limitcheck (G.cbranch machine overflows) machine (limitcheck_fails cconv cont) succ
+and limitcheck_fails cconv cont succ = match cont with
+| None -> G.forbidden machine succ
+| Some failure ->
+    let failflow = { S.caborts = true; S.ccuts = [failure.S.recname] } in
+    cut cconv failure.S.reccont [] failflow **>
+    contStmt2 failure.S.recname **>
+    succ
 @
 
 % ------------------------------------------------------------------ 

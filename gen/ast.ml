@@ -141,6 +141,7 @@
       | ReturnStmt of (conv option * altcont option * actual list)
       | EmptyStmt
       | CommentStmt of (StdPrims.std_string)
+      | LimitcheckStmt of (expr * expr option)
   
   and body =
         BodyAt of (body * region)
