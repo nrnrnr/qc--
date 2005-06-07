@@ -107,6 +107,7 @@ let _ = Array.iter (fun (str,tok) -> Hashtbl.add keywords str tok)
     ; ("else"           , P.ELSE)
     ; ("equal"          , P.EQUAL)
     ; ("export"         , P.EXPORT)
+    ; ("fails"          , P.FAILS)
     ; ("foreign"        , P.FOREIGN)
     ; ("goto"           , P.GOTO)
     ; ("if"             , P.IF)
@@ -114,6 +115,7 @@ let _ = Array.iter (fun (str,tok) -> Hashtbl.add keywords str tok)
     ; ("in"             , P.IN)
     ; ("invariant"      , P.INVARIANT)
     ; ("jump"           , P.JUMP)
+    ; ("limitcheck"     , P.LIMITCHECK)
     ; ("little"         , P.LITTLE)
     ; ("memsize"        , P.MEMSIZE)
     ; ("never"          , P.NEVER)
@@ -654,6 +656,7 @@ together with their positions.
     | P.EOF               -> "EOF"
     | P.EQUAL             -> "EQUAL"
     | P.EXPORT            -> "EXPORT"
+    | P.FAILS             -> "FAILS"
     | P.FOREIGN           -> "FOREIGN"
     | P.GOTO              -> "GOTO"
     | P.IF                -> "IF"
@@ -687,6 +690,7 @@ together with their positions.
     | P.TYPEDEF           -> "TYPEDEF" 
     | P.MEMSIZE           -> "MEMSIZE"
     | P.BYTEORDER         -> "BYTEORDER"
+    | P.LIMITCHECK        -> "LIMITCHECK"
     | P.LITTLE            -> "LITTLE"
     | P.BIG               -> "BIG"
     | P.CASE              -> "CASE"
@@ -792,10 +796,10 @@ let str2uint str =
 <<parse.mly>>=
 %token ABORTS ALIGN ALIGNED ALSO AS AMPERSAND BIG BYTEORDER CASE COLON CCOLON
 %token COMMA CONST CONTINUATION CUT CUTS DEFAULT DOTDOT ELSE EOF EQUAL
-%token EXPORT FOREIGN GOTO IF IMPORT IN INFIXOP INVARIANT JUMP LBRACE
-%token LBRACKET LITTLE LPAREN MEMSIZE NEVER PPERCENT RBRACE RBRACKET READS REGISTER
-%token RETURN RETURNS RPAREN SECTION SEMI SPAN STACKDATA SWITCH TARGET
-%token TARGETS TO TYPEDEF UNICODE UNWINDS WRITES
+%token EXPORT FAILS FOREIGN GOTO IF IMPORT IN INFIXOP INVARIANT JUMP LBRACE
+%token LBRACKET LIMITCHECK LITTLE LPAREN MEMSIZE NEVER PPERCENT RBRACE RBRACKET 
+%token READS REGISTER RETURN RETURNS RPAREN SECTION SEMI SPAN STACKDATA SWITCH 
+%token TARGET TARGETS TO TYPEDEF UNICODE UNWINDS WRITES
 %token WRDSIZE PTRSIZE FLOATREPR CHARSET
 
 /* pragmas */
@@ -1104,6 +1108,7 @@ stmt        :   SEMI                           { A.EmptyStmt          }
             |   CONTINUATION ID LPAREN cformals RPAREN COLON
                                                     {A.ContStmt($2,$4)}
             |   CUT TO expr actls flows SEMI        {A.CutStmt($3,$4, rev $5)  }
+            |   LIMITCHECK exprAt limitfailure SEMI {A.LimitcheckStmt($2,$3)  }
             |   conv JUMP exprAt       targets SEMI {A.JumpStmt($1  ,$3,[],$4) }
             |        JUMP exprAt       targets SEMI {A.JumpStmt(None,$2,[],$3) }
             |   conv JUMP exprAt actls targets SEMI {A.JumpStmt($1  ,$3,$4,$5) }
@@ -1115,6 +1120,9 @@ stmt        :   SEMI                           { A.EmptyStmt          }
             |   SWITCH srange expr LBRACE arms RBRACE  
                         {A.SwitchStmt($2,$3, rev $5)}
 
+<<parse.mly>>=
+limitfailure : FAILS TO exprAt {Some $3}
+            |  /**/            {None}
 <<parse.mly>>=
 srange      :   LBRACKET range RBRACKET        {Some $2}
             |   /**/                           {None}
