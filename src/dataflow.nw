@@ -257,6 +257,19 @@ let update fact changed =
 
 let _ = (update : 'a fact -> bool ref -> G.uid -> 'a -> unit)
 @ 
+<<utilities>>=
+let without_changing_entry fact go =
+  let restore =
+    try
+      let entry = P.get fact.prop GR.entry_uid in
+      fun () -> P.set fact.prop GR.entry_uid entry
+    with Not_found ->
+      fun () -> () in
+  let output = go () in
+  let answer = P.get fact.prop GR.entry_uid in
+  restore();
+  output, answer
+@ 
 
 \subsection{Backward problems}
 
@@ -303,16 +316,8 @@ ASSOCIATED WITH THE ENTRY NODE?)
 \enlargethispage{2\baselineskip}
 <<backward stuff>>=
 let rec solve_graph fact comp txlim graph exit_fact =
-  let restore =
-    try
-      let entry = P.get fact.prop GR.entry_uid in
-      fun () -> P.set fact.prop GR.entry_uid entry
-    with Not_found ->
-      fun () -> () in
-  let txlim = general_backward fact (comp_with_exit comp exit_fact) txlim graph in
-  let answer = P.get fact.prop GR.entry_uid in
-  restore();
-  txlim, answer
+  without_changing_entry fact (fun () ->
+    general_backward fact (comp_with_exit comp exit_fact) txlim graph)
 and general_backward fact comp txlim graph =
   let changed = ref false in
   let update = update fact changed in
