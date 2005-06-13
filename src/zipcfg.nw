@@ -173,13 +173,14 @@ nodes, followed by a [[last]] node.
 <<exposed types for [[Rep]] module>>=
 type 'a edgelist = 'a list (* could be array *)
 <<node types>>
-type first
-  = Entry
-  | Label of label * labelkind * Spans.t option ref
-and labelkind
+type labelkind
   = Userlabel  (* user-written; cannot be deleted *)
   | Genlabel   (* generated; can be deleted *)
   | Limitlabel (* generated after limit check; cannot be deleted *)
+
+type first
+  = Entry
+  | Label of label * labelkind * Spans.t option ref
 
 type middle
   = Instruction  of Rtl.rtl
@@ -220,6 +221,7 @@ We expose some utility functions:
 <<declarations of [[Rep]]'s public functions>>=
 val id  : block -> uid
 val blocklabel : block -> label option (* entry block has no label *)
+val blockkind  : block -> labelkind option (* entry block has no kind  *)
 val fid : first -> uid
 val entry_uid : uid
 
@@ -427,6 +429,9 @@ let id (f, t) = fid f
 let blocklabel (f, t) = match f with
 | Entry -> None
 | Label (l, _, _) -> Some l
+let blockkind (f, t) = match f with 
+| Entry -> None
+| Label (_, k, _) -> Some k
 @ 
 Convert block between forms.
 These functions are tail-recursive, so we can go as deep as we like

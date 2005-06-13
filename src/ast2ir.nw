@@ -44,6 +44,7 @@ will all go away once the new flow graph ([[Cfg]]) takes over the compiler.
 type tgt  = ((Rtl.exp -> Automaton.t), Call.t) Target.t
 type proc = Zipcfg.graph * (Automaton.t, unit, Call.t, tgt) Proc.t
 type old_proc = (Automaton.t, Rtl.rtl Cfgx.M.cfg, Call.t, tgt) Proc.t
+val set_headroom : int -> unit
 val translate :  tgt
                 -> proc Fenv.Clean.env'
                 -> optimizer: (proc -> unit)
@@ -142,6 +143,9 @@ once at top level and once inside each procedure.
 The first instantiation is visible here; the second appears in 
 [[<<definition of [[proc]], which translates one procedure>>]].
 <<ast2ir.ml>>=
+(* I have to choose the value  *)
+let headroom = ref 1024 
+let set_headroom n = headroom := n
 <<definition of type [[blocklists]]>>
 let translate target env ~optimizer ~defineglobals =
   let pointersize = target.T.pointersize in
@@ -971,6 +975,25 @@ THAN MAKE A LIST AND THEN CONCATENATE?
     Block.cathl_list pointersize blocks, g in
   let g = insert_init_cont_nodes contenv contlbl g in
 @ 
+\paragraph{the spilling automaton}
+The value [[space]] is an infinite supply of registers that stand for
+memory locations. We use those registers for spilling. The reason is that
+it helps us to build a private block with a better layout by register
+allocating those temporaries registers to stack locations.
+the alignment of the blxok should probably depend on the alignment of the
+stack pointer.
+we are going provide several spaces, wich will be chosen depending on the alignment
+<<definition of [[proc]], which translates one procedure>>=
+  let index = ref 0 in
+  let allocate = fun ~width -> fun ~alignment -> fun ~kind ->
+    let () = index := !index + 1 in 
+    let spaceId = char_of_int alignment in 
+    let cell = Cell.of_size target.Target.wordsize in
+    let space = (spaceId, target.Target.byteorder, cell) in
+    AT.of_loc (Rtl.reg (space, !index, Cell.to_count cell width))
+  and freeze arg = Impossible.impossible "You re not supposed to freeze this at"
+  in 
+@
 \paragraph{Building and optimizing the [[Proc.t]]}
 We take everything we know and combine it into a [[Proc.t]].
 Then function [[optimize]], which is passed in, runs the rest of the
@@ -997,8 +1020,14 @@ The main thing here is dealing with all the blocks.
         { C.callee = youngblocks.callee; 
           C.caller = youngblocks.caller; }
     ; Proc.stackd         = proc.N.stackmem     (* stack data block *)
+
     ; Proc.priv           = Block.relative vfp "private"
                             (aligned_mem ~align:proc_cc.C.sp_align) target 
+(*    
+    ; Proc.spillsb        = Block.relative vfp "private" (Block.at ~size:0 ~alignment:1)
+  
+    ; Proc.priv           = AT.of_methods {AT.allocate = allocate ; AT.freeze = freeze}
+  *)  
     ; Proc.sp             = Block.at proc_cc.C.stable_sp_loc 0 proc_cc.C.sp_align 
     ; Proc.eqns           = List.concat (!constraints)
     ; Proc.conts          = contblocks
@@ -1007,6 +1036,7 @@ The main thing here is dealing with all the blocks.
     ; Proc.var_map        = Array.make nvars None
     ; Proc.global_map     = global_map
     ; Proc.bodylbl        = bodylbl
+    ; Proc.headroom       = !headroom
     } in
 @ 
 Before running the optimizer, we trim away any unreachable code,

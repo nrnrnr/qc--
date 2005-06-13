@@ -60,6 +60,7 @@ module type Standard = sig
   val p :  count:int -> generator          (* predicate registers *)
   val w :               tgenerator         (* predicate temps *)
   val c :  count:int -> generator          (* control and special registers *)
+  val s :  int       -> tgenerator         (* stack-slots temporaries *)
   
   type 'a locations = 
     { pc:       'a
@@ -282,6 +283,9 @@ module Standard(A:sig val width: int end) = struct
   let u = tempspace 'u' ~forspace:'f' "floating-point temporaries"
   let v = tempspace 'v' ~forspace:'a' "address temporaries"
   let w = tempspace 'w' ~forspace:'p' "predicate temporaries"
+  
+  let s align = tempspace (char_of_int align) ~forspace:'m' 
+      (string_of_int align ^ " aligned stack-slots temporaries")
 
   type 'a locations = 
     { pc:       'a

@@ -256,6 +256,8 @@ module Subst: sig
     
     val reg_use:    map:(Register.t -> Register.t) -> Rtl.rtl -> Rtl.rtl
 
+    val reg_to_mem: map:(Register.t -> Rtl.Private.loc) -> Rtl.rtl -> Rtl.rtl
+
     module Fetch : sig   (* substitute for Fetch(l, w) *)
       val rtl:      guard:(Rtl.Private.loc -> bool) ->
                     fetch:(Rtl.Private.loc -> Rtl.width -> Rtl.Private.exp) ->
@@ -647,9 +649,15 @@ let reg_gen' map rtl loc' =
   let is_register = function RP.Reg _ -> true | _ -> false in
   loc' is_register map rtl
 
+let reg_to_mem_gen' map rtl loc' =
+  let map = function RP.Reg r -> map r | _ -> assert false in
+  let is_register = function RP.Reg _ -> true | _ -> false in
+  loc' is_register map rtl
+
 let reg' map rtl     = reg_gen' map rtl loc'
 let reg_def' map rtl = reg_gen' map rtl loc_def'
 let reg_use' map rtl = reg_gen' map rtl loc_use'
+let reg_to_mem' map rtl     = reg_to_mem_gen' map rtl loc'
 
 let exp        ~guard  ~map rtl = DownUp.rtl (exp' guard  map) rtl
 let exp_of_exp ~guard  ~map exp =
@@ -669,6 +677,7 @@ let aloc       ~guard  ~map rtl = DownUp.rtl (aloc guard  map) rtl
 let reg                ~map rtl = DownUp.rtl (reg'        map) rtl 
 let reg_def            ~map rtl = DownUp.rtl (reg_def'    map) rtl 
 let reg_use            ~map rtl = DownUp.rtl (reg_use'    map) rtl 
+let reg_to_mem         ~map rtl = DownUp.rtl (reg_to_mem' map) rtl
 @
 
 <<Subst>>=
