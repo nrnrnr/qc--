@@ -1,0 +1,165 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+
+% Grades     ::=    "%%Grades:" Quality Importance Urgency
+% Quality    ::=    A|B|C|D|E
+% Importance ::=    Central|Subsystem|Peripheral
+% Urgency    ::=    Immediate|Soon|Later
+%
+% Example (at beginning of line): %%Grades: B Central Soon
+
+%%Grades: A Peripheral Later
+
+% l2h substitution cfg CFG
+% l2h substitution dots ...
+% l2h substitution AST AST
+% l2h substitution ast AST
+% l2h substitution rtl RTL
+% l2h substitution ir IR
+% l2h substitution noweb NOWEB
+% l2h substitution qcc QC--
+% l2h substitution C C--
+% l2h substitution PAL C--
+% l2h substitution pal C--
+% l2h substitution asdl ASDL
+% l2h substitution ocaml OCaml
+% l2h substitution forall forall
+% l2h macro module 1 <a href="#$1.html"><tt>#1.nw</tt></a>
+
+% ------------------------------------------------------------------ 
+\section{Set of live locations}
+% ------------------------------------------------------------------ 
+
+Slices make liveness analysis is a bit tricky.
+To take the Pentium as an example, an assignment to [[EAX]] may be
+live not because [[EAX]] is used, but because [[AH]] is used.
+To track this kind of liveness, a simple
+set of registers are not particularly effective; 
+the assignment to [[EAX]] is dead only if [[EAX]] does not overlap
+with any live variable.
+To deal with the problem, we define the \emph{liveset} abstraction.
+
+A liveset is a set of locations in registers.
+Registers and slices may be added and removed, and we can make two
+kinds of tests:
+if every bit of a register location is in the set, that location is
+\emph{contained} in the set;
+if any bit of a register location is in the set, that location 
+\emph{overlaps with} the set.
+
+<<liveset.mli>>=
+type t 
+
+(* constructors *)
+val empty : t
+val add : Register.t -> t -> t
+val remove : Register.t -> t -> t
+
+val addx : Register.x -> t -> t
+val removex : Register.x -> t -> t
+
+val union : t -> t -> t   (* keep larger set on right *)
+val inter : t -> t -> t
+val diff  : t -> t -> t
+@
+
+% ------------------------------------------------------------------ 
+\section{Implementation}
+% ------------------------------------------------------------------ 
+
+<<liveset.ml>>=
+module Rg  = Register
+let impossf fmt = Printf.kprintf Impossible.impossible fmt
+@ 
+For each single register cell contained in the set, we map that cell
+to its intervals.  
+We special-case the whole register because it's common.
+<<liveset.ml>>=
+module BS = Bitset64
+
+type cell = Register.space * int
+
+module M = Map.Make(
+  struct
+    type t = cell
+    let compare (((xs,_,_),xi):t) (((ys,_,_),yi):t) =
+      let x = comparec xs ys in
+      if x <> 0 then x
+      else comparei xi yi
+  end)
+
+module B = struct
+  type t = All | Slice of BS.t
+  let inter x y = match x, y with
+  | All, y -> y
+  | x, All -> x
+  | Slice i, Slice j -> Slice (BS.inter i j)
+end
+
+type t = B.t M.t
+@ 
+<<liveset.ml>>=
+let empty = M.empty
+
+let for_each_cell (space, index, Rg.C c) f z =
+  let rec fold i c z = if c = 0 then z else fold (i+1) (c-1) (f (space, i) z) in
+  fold index c z
+    
+let add_cell cell map = M.add cell B.All map
+let add reg map = for_each_cell reg add_cell map
+
+let remove reg map = for_each_cell reg M.remove map
+
+let add_bits cell bits map =
+  try
+    match M.find cell map with
+    | B.All -> map  (* no change *)
+    | B.Slice bits' -> M.add cell (B.Slice (BS.union bits bits')) map
+  with Not_found -> M.add cell (B.Slice bits) map
+let add_b cell b map = match b with
+| B.Slice bits -> add_bits cell bits map
+| B.All -> 
+    try
+    match M.find cell map with
+    | B.All -> map  (* no change *)
+    | B.Slice _ -> M.add cell B.All map
+    with Not_found -> M.add cell B.All map
+
+
+let addx r map = match r with
+| Rg.Reg r -> add r map
+| Rg.Slice (w, lsb, (space, index, Rg.C 1)) ->
+    add_bits (space, index) (BS.single_range ~lsb ~width:w) map
+| Rg.Slice (w, lsb, (space, index, Rg.C _)) ->
+    impossf "slice of aggregate"
+
+let union small big = M.fold add_b small big
+
+let rec remove_b cell bits map = match bits with
+| B.All -> M.remove cell map
+| B.Slice bits -> remove_bits cell bits map 
+and remove_bits cell bits map = 
+  try
+    let bits' = match M.find cell map with
+    | B.Slice bits' -> bits'
+    | B.All ->
+        let ((_, _, cellinfo), _) = cell in
+        BS.single_range ~lsb:0 ~width:(Cell.size cellinfo) in
+    M.add cell (B.Slice (BS.diff bits' bits)) map
+  with Not_found -> map
+
+let removex r map = match r with
+| Rg.Reg r -> remove r map
+| Rg.Slice (w, lsb, (space, index, Rg.C 1)) ->
+    remove_bits (space, index) (BS.single_range ~lsb ~width:w) map
+| Rg.Slice (w, lsb, (space, index, Rg.C _)) ->
+    impossf "slice of aggregate"
+
+let diff haystack needle = M.fold remove_b needle haystack
+
+let inter map1 map2 =
+  let inter cell bits map =
+    try
+      let bits' = M.find cell map in
+      M.add cell (B.inter bits bits') map
+    with Not_found -> map in
+  M.fold inter map1 map2
