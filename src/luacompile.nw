@@ -577,35 +577,41 @@ function pr1(a,b) print("1:" .. (Caml.time() - start_time)) return b end
 function pr2(a,b) print("2:" .. (Caml.time() - start_time)) return b end
 function pr3(a,b) print("3:" .. (Caml.time() - start_time)) return b end
 
+Opt.standard_phases =
+  { 'intwiden', 'placevars', 'floatwiden', Optimize.simplify_exps, 'preopt', 'pic',
+    'expand', 'improve', 'liveness', 'ralloc', 'freeze', 'rmvfp', '*assemble',
+    '*emit_data' }
+
 function Opt.standard(backend, asm, B)
   if not B then error("Opt.standard called without backplane argument") end
   Stages.null = B.stage {name="empty stage", fn=Stages.nullf}
   local assemble  = Driver.proc_assembler(asm) 
   local emit_data = nil
-  if backend.emit_data then
-    emit_data = Opt.verb(B.stage { name = "emit_data", fn = backend.emit_data(asm)})
-  end
   print_cfg = B.stage {name="print cfg", fn=Debug.printcfg}
-  local x = B.seq
-    {
-      Opt.verb(backend.intwiden)   or Stages.null
-    , Opt.verb(backend.placevars)  or Stages.null
-    , Opt.verb(backend.floatwiden) or Stages.null
-    , Opt.verb(Optimize.simplify_exps) or Stages.null
-    , Opt.verb(backend.preopt)     or Stages.null
-    , Opt.verb(backend.pic)        or Stages.null
-    , Opt.verb(backend.expand)     or Stages.null
-           --- Optimize.validate could be appropriate here, provided the recognizer
-           --- can deal with temporaries...
-    , Opt.verb(backend.improve)    or Stages.null
-    , Opt.verb(backend.liveness)   or Stages.null
-    , Opt.verb(backend.ralloc)     or Stages.null
-    , Opt.verb(backend.freeze)     or Stages.null
-    , Opt.verb(backend.rmvfp)      or Stages.null
-    , Opt.verb(B.stage { name="assemble procedure", fn = assemble })
-    , emit_data or Stages.null
-    }
-  return x
+  local phasenames = backend.phases or Opt.standard_phases
+  local i, phase, phases = 1, phasenames[1], { }
+  while phase do
+    if type(phase) ~= 'string' then
+      tinsert(phases, phase)
+    elseif strfind(phase, '^%*') then
+      if phase == '*assemble' then
+        tinsert(phases,
+                B.stage { name="assemble procedure", fn = Driver.proc_assembler(asm) })
+      elseif phase == '*emit_data' then
+        if backend.emit_data then
+          tinsert(phases,
+                  Opt.verb(B.stage { name = "emit_data", fn = backend.emit_data(asm)}))
+        end
+      end
+    else
+      if backend[phase] then
+        tinsert(phases, Opt.verb(backend[phase]))
+      end
+    end
+    i = i + 1
+    phase = phasenames[i]
+  end
+  return B.seq (phases)
 end
 
 Liveness.liveness =
@@ -764,6 +770,10 @@ Backend.debug_interp.compile = Compile.file
 
 Backend.x86 =
   { target    = Targets.x86
+  , phases = { 'intwiden', 'placevars', 'floatwiden',
+               Optimize.simplify_exps, 'preopt',
+               'expand', 'improve', 'liveness', 'ralloc', 'freeze', 'rmvfp',
+               '*assemble', '*emit_data' }
   , intwiden  = Backplane.seq
                    { Widen.update_gamma_counts,
                      Widen.create_gamma,
