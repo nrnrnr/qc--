@@ -190,7 +190,7 @@ end
 Mips = {} or Mips
 Mips.layout = { creates='no late consts' }
 
-function Mips.layout["C"](dummy, proc)
+function Mips.layout["C"](_, proc)
     local blocks       = Stack.blocks(proc)
     blocks.oldblocks.callee   = Block.overlap_low(32,blocks.oldblocks.callee)
     blocks.oldblocks.caller   = Block.overlap_low(32,blocks.oldblocks.caller)
@@ -233,7 +233,7 @@ function Mips.layout["C"](dummy, proc)
     return 1
 end
 
-function Mips.layout["C'"](dummy, proc)
+function Mips.layout["C'"](_, proc)
     local blocks       = Stack.blocks(proc)
     blocks.oldblocks   = Block.overlap_low(32, blocks.oldblocks)  
     blocks.youngblocks = Block.overlap_low(32, blocks.youngblocks)
@@ -265,12 +265,12 @@ function Mips.layout["C'"](dummy, proc)
 end
 Mips.layout["c'"] = Mips.layout["C'"] 
 
-function Mips.layout.fn(dummy,proc) 
+function Mips.layout.fn(_,proc) 
     local cc = Stack.ccname(proc)
     if Mips.layout[cc] == nil then
         error("no layout for convention "..cc)
     else    
-        return Mips.layout[cc](dummy, proc)
+        return Mips.layout[cc](_, proc)
     end    
 end
 @
@@ -293,7 +293,7 @@ The following layout assumes the stack pointer does not move,
 i.e.~argument and result overflow blocks are allocated by the caller.
 
 <<stack-frame layout functions>>=
-function Alpha.layout["C"](dummy, proc)
+function Alpha.layout["C"](_, proc)
     local blocks              = Stack.blocks(proc)
     blocks.oldblocks.callee   = Block.overlap_low(64,blocks.oldblocks.callee)
     blocks.oldblocks.caller   = Block.overlap_low(64,blocks.oldblocks.caller)
@@ -341,7 +341,7 @@ Alpha.layout["cmm1"] = Alpha.layout["C"]
 Alpha.layout["cmm2"] = Alpha.layout["C"]
 Alpha.layout["cmm3"] = Alpha.layout["C"]
 
-function Alpha.layout["cmm3"](dummy, proc)
+function Alpha.layout["cmm3"](_, proc)
     local blocks       = Stack.blocks(proc)
     blocks.oldblocks   = Block.overlap(64,"high", blocks.oldblocks)  
     blocks.youngblocks = Block.overlap(64,"high", blocks.youngblocks)
@@ -382,12 +382,12 @@ function Alpha.layout["cmm3"](dummy, proc)
     return 1
 end
 
-function Alpha.layout.fn(dummy,proc) 
+function Alpha.layout.fn(_,proc) 
     local cc = Stack.ccname(proc)
     if Alpha.layout[cc] == nil then
         error("no layout for convention "..cc)
     else    
-        return Alpha.layout[cc](dummy, proc)
+        return Alpha.layout[cc](_, proc)
     end    
 end
 @
@@ -401,11 +401,11 @@ end
 Ia64 = Ia64 or {}
 Ia64.layout = { creates='no late consts' }
 
-function Ia64.layout.fn(dummy,proc) --- dispatch on cc name
-  return Ia64.layout[Stack.ccname(proc)](dummy, proc)
+function Ia64.layout.fn(value,proc) --- dispatch on cc name
+  return Ia64.layout[Stack.ccname(proc)](value, proc)
 end
 
-function Ia64.layout["C"](dummy,proc) --- really for a C convention only
+function Ia64.layout["C"](_,proc) --- really for a C convention only
     local blocks = Stack.blocks(proc)
     blocks.oldblocks.callee   = Block.overlap_high(64, blocks.oldblocks.callee)
     blocks.oldblocks.caller   = Block.overlap_low (64, blocks.oldblocks.caller)
@@ -436,11 +436,11 @@ end
 Sparc = Sparc or {}
 Sparc.layout = { creates='no late consts' }
 
-function Sparc.layout.fn(dummy,proc) --- dispatch on cc name
-  return Sparc.layout[Stack.ccname(proc)](dummy, proc)
+function Sparc.layout.fn(value,proc) --- dispatch on cc name
+  return Sparc.layout[Stack.ccname(proc)](value, proc)
 end
 
-function Sparc.layout["C"](dummy,proc) --- really for a C convention only
+function Sparc.layout["C"](_,proc) --- really for a C convention only
     local blocks = Stack.blocks(proc)
     blocks.oldblocks.callee   = Block.overlap_high(32, blocks.oldblocks.callee)
     blocks.oldblocks.caller   = Block.overlap_low (32, blocks.oldblocks.caller)
@@ -514,7 +514,7 @@ Sparc.layout["notail"] = Sparc.layout["C"]
 
 <<stack-frame layout functions>>=
 Interp = Interp or {}
-function Interp.layout(dummy, proc)
+function Interp.layout(_, proc)
     local blocks = Stack.blocks(proc)
     local layout =
         { blocks.continuations

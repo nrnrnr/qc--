@@ -906,17 +906,29 @@ We insert code from \module{luautil.nw}.
 <<Lua utility functions written in Lua>>
 <<list functions>>
 @ 
-Function [[tinsert]] inserts at the end of a list.
-Its interface is (partly) borrowed from Lua~4.0.
+Function [[tinsert]] inserts into a list.
+Its interface is borrowed from Lua~4.0.
 <<list functions>>=
-function tinsert(l, x)
+function tinsert(l, pos, x)
   local n = l.n
   if not n then
     local i = 1
     while l[i] do i = i + 1 end
     n = i - 1
   end
-  l[n+1] = x
+  if not x then
+    x = pos; pos = n+1
+  end
+  local i = n+1
+  while i > pos do l[i] = l[i-1]; i = i - 1 end
+  l[pos] = x
   l.n = n + 1
 end
 @
+<<list functions>>=
+function Util.indexof(l, x)
+  if type(l) ~= "table" then return nil end
+  local i = 1
+  while l[i] and l[i] ~= x do i = i + 1 end
+  if l[i] then return i end  
+end

@@ -149,9 +149,12 @@ type node = F of GR.first | M of GR.middle | L of GR.last
 let numbered_layout_nodes g =
   let add_block (f, t) next (i, nodes') =
     let (i, nodes') = (i+1, (i, F f) :: nodes') in
+    let is_next (u', _) = match next with
+    | Some (u, _) -> Unique.eq u u'
+    | None -> false in
     let rec tail t (i, nodes') = match t with
     | GR.Tail (m, t) -> tail t (i+1, (i, M m) :: nodes')
-    | GR.Last (GR.Branch (_, lbl)) when next =*= Some lbl -> (i, nodes') 
+    | GR.Last (GR.Branch (_, lbl)) when is_next lbl -> (i, nodes') 
     | GR.Last l      -> (i+1, (i, L l) :: nodes') in
     tail t (i, nodes') in
   let _, nodes' = G.fold_layout add_block (0, []) g in
