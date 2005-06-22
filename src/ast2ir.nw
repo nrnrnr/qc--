@@ -985,25 +985,36 @@ stack pointer.
 we are going provide several spaces, wich will be chosen depending on the alignment
 <<definition of [[proc]], which translates one procedure>>=
   let index = ref 0 in
-  let blocks = ref [] in
   let allocate = fun ~width -> fun ~alignment -> fun ~kind ->
     let () = index := !index + 1 in 
     let spaceId = char_of_int alignment in 
     let cell = Cell.of_size target.Target.wordsize in
-    let space = (spaceId, target.Target.byteorder, cell) in
-    let block = Block.relative vfp "spills block" Block.at ~size:width ~alignment:alignment in
-    let () = blocks := block :: !blocks in
-    AT.of_loc (Rtl.reg (space, !index, Cell.to_count cell width))
-  and freeze arg1 arg2 = 
-    let l = !blocks in
-    let () = blocks := [] in
-    { AT.overflow = Block.cathl_list target.Target.pointersize l 
-    ; AT.regs_used = RS.empty
-    ; AT.mems_used = []
-    ; AT.align_state = 1   (* oyh oyh oyh  *)
-    }
-
-in
+    let space = (spaceId, target.Target.byteorder, cell) in  
+    AT.of_loc (Rtl.reg (space, !index, Cell.to_count cell width)) 
+  and freeze arg = Impossible.impossible "you must not freeze this automaton" in
+ 
+  (*   
+     let index = ref 0 in
+     let blocks = ref [] in
+     let allocate = fun ~width -> fun ~alignment -> fun ~kind ->
+     let () = index := !index + 1 in 
+     let spaceId = char_of_int alignment in 
+     let cell = Cell.of_size target.Target.wordsize in
+     let space = (spaceId, target.Target.byteorder, cell) in
+     let block = Block.relative vfp "spills block" Block.at ~size:width ~alignment:alignment in
+     let () = blocks := block :: !blocks in
+     AT.of_loc (Rtl.reg (space, !index, Cell.to_count cell width))
+     and freeze arg1 arg2 = 
+     let l = !blocks in
+     let () = blocks := [] in
+     { AT.overflow = Block.cathl_list target.Target.pointersize l 
+     ; AT.regs_used = RS.empty
+     ; AT.mems_used = []
+     ; AT.align_state = 1   (* oyh oyh oyh  *)
+     }
+     
+     in
+   *)
 @ 
 \paragraph{Building and optimizing the [[Proc.t]]}
 We take everything we know and combine it into a [[Proc.t]].

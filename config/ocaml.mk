@@ -6,7 +6,7 @@
 # compiler and tools
 # ------------------------------------------------------------------ 
 
-OCAML =         ocaml
+OCAML =         ocaml 
 # OCAMLC imported from config.mk, so we can get .opt if available
 # OCAMLO imported from config.mk, so we can get .opt if available
 OCAMLTOP =      ocamlmktop

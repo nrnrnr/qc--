@@ -20,8 +20,8 @@ val blocks:
   (Block.t -> 'a) -> ('a list -> 'a) -> ((string * 'a) list -> 'a) ->
   Ast2ir.proc -> (string * 'a) list
 val freeze: Ast2ir.proc -> Block.t -> Ast2ir.proc
+val replace_slot_temporaries : Ast2ir.proc -> Ast2ir.proc * (string * Block.t) list
 @
-
 % ------------------------------------------------------------------ 
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
@@ -106,3 +106,167 @@ let eqns = List.map Rtleqn.to_string eqns in
 Impossible.impossible 
   ("for procedure " ^ p.Proc.symbol#original_text ^ "; can't solve these eqns:\n" ^
    String.concat "\n" eqns)
+@ 
+\section{Stack slot temporaries replacement}
+<<stack.ml>>=
+<<module alias and buildings>>
+  let replace_slot_temporaries (cfg,proc) =
+<<utility functions>>
+<<determine confined and unconfined sets of registers>>
+<<build a map holding the locations of the sets>>
+<<rewrite the control flow graph>>
+<<the final result>>
+@ 
+\subsection{module alias and buildings}
+<<module alias and buildings>>=
+module RU = Rtlutil
+module RS = Register.Set
+module RM = Register.Map
+module D = Dominator.LengauerTarjan(Dominator.ZipGraph)
+module OrderLabels : Map.OrderedType with type t = Zipcfg.label option = 
+struct 
+  type t = Zipcfg.label option 
+  let compare = Pervasives.compare
+end
+module LabelMap = Map.Make(OrderLabels)
+module LM = LabelMap
+module Z = Zipcfg
+module ZR = Zipcfg.Rep
+module MA = Memalloc
+module OrderSlotTemp : Map.OrderedType with type t = Register.t =
+struct 
+  type t = Register.t 
+  let compare = Pervasives.compare
+end
+module AllocMap = Map.Make(OrderSlotTemp) 
+@
+\subsection{utility functions}
+<<utility functions>>=
+    let target = proc.Proc.target in
+@ 
+\subsection{determine confined and unconfibed sets of registers}
+<<determine confined and unconfined sets of registers>>=
+
+  let domTree = D.dominatorTree cfg in
+
+  let labelMap = ref LabelMap.empty in
+
+  let buildMap tree = 
+    let rec build b tree =
+      match tree with
+          Dominator.Leaf (lbl,kind) -> labelMap := LM.add lbl b !labelMap  
+        | Dominator.Node (lbl,kind, sl) -> 
+            begin
+              labelMap := LM.add lbl b !labelMap ;
+              List.iter (build (not(kind =*= Some ZR.Limitlabel) && b) ) sl 
+            end in
+    build true tree in
+
+  let map = buildMap domTree in
+
+  (* now we compute the map from every temp in the graph to 
+     its confinedness *)
+
+  let iterRtls fct = function (f,t) ->
+    let rec iterRtls qqch = 
+      match qqch with 
+          ZR.Last last -> 
+            begin
+              match last with 
+                  ZR.Exit -> fct None
+                | ZR.Branch (rtl,label) -> fct (Some rtl)
+                | ZR.Cbranch (rtl,label1,label2) -> fct (Some rtl)
+                | ZR.Mbranch (rtl,edgelist) -> fct (Some rtl) 
+                | ZR.Call (call) -> fct None
+                | ZR.Cut (rtl,edgelist,regs) -> fct (Some rtl)
+                | ZR.Return (exit_num,rtl,regs) -> fct (Some rtl)
+                | ZR.Jump (rtl,regs,list) -> fct (Some rtl) 
+                | ZR.Forbidden (rtl) -> fct (Some rtl) 
+            end
+        | ZR.Tail (middle,tail) -> 
+            begin 
+              begin 
+                match middle with 
+                    ZR.Instruction (rtl) -> fct (Some rtl)
+                  | ZR.Stack_adjust (rtl) -> fct (Some rtl) 
+              end ;
+                iterRtls tail ;
+            end in
+    iterRtls t in
+ 
+  (* here we build the map from temps to boolean *)
+
+  let iterTemps b map = function Some rtl -> 
+    let (s1,s2,s3) = RU.ReadWriteKill.sets_promote rtl in
+    RS.fold  (fun reg -> RM.add reg b) (RS.union (RS.union s1 s2) s3) map 
+    | None -> map in
+  
+  let themap = Zipcfg.fold_blocks 
+    (fun block -> fun map -> iterRtls (iterTemps (LM.find (ZR.blocklabel block) !labelMap) map) block)
+    RM.empty cfg in
+
+  let unconfined = RM.fold 
+    (fun reg -> fun data -> fun set -> 
+      if data then set else RS.add reg set) 
+    themap RS.empty
+  and  confined = RM.fold 
+    (fun reg -> fun data -> fun set ->
+      if data then RS.add reg set else set) 
+    themap RS.empty in
+
+@    
+\subsection{build a map holding the locations of the sets}
+<<build a map holding the locations of the sets>>=
+
+  let bu = Memalloc.relative ~anchor:target.Target.vfp
+    ~dbg:"Unconfined slots block" Memalloc.Down
+  and bc = Memalloc.relative ~anchor:target.Target.vfp
+    ~dbg:"Confined slots block" Memalloc.Down in
+
+  let exCount = function Cell.C i -> i in
+
+  let m = AllocMap.empty in 
+
+  let extract_data = function ((name,_,_),_,count) ->
+    int_of_char name, count in
+
+  let m = RS.fold 
+    (fun stemp map -> 
+      let alignment, size = extract_data stemp in 
+      let slot = MA.align bu alignment in 
+      let slot = MA.allocate bu ~size:(exCount size) in 
+      AllocMap.add stemp slot map) unconfined m in
+      
+  let m = RS.fold 
+    (fun stemp map -> 
+      let alignment, size = extract_data stemp in
+      let slot = MA.align bc alignment in 
+      let slot = MA.allocate bc ~size:(exCount size) in
+      AllocMap.add stemp slot map) confined m in
+@ 
+\subsection{rewrite the control flow graph}
+<<rewrite the control flow graph>>=
+
+  let is_tmp (s,_,_) = Target.is_tmp target s in
+  let memSpace = Space.Standard32.m target.Target.byteorder [target.Target.wordsize] in
+
+  let guard = function RP.Reg r ->  is_tmp r | _ -> false 
+    
+  and map = function 
+    | RP.Reg (((name,_,_),_,count) as sst) -> 
+        let addr = MA.current (AllocMap.find sst m) in
+        let assertion = Rtl.aligned (int_of_char name) in 
+        let slot = Rtl.mem assertion memSpace.Space.space count addr in 
+        Rtl.Dn.loc slot 
+    | l -> l in
+  
+  let cfg = Zipcfg.map_rtls (RU.Subst.loc ~guard:guard ~map:map) cfg in 
+@ 
+\subsection{the final result}
+<<the final result>>=
+  let unconfined_block = ("unconfined", MA.freeze bu) 
+  and confined_block = ("confined", MA.freeze bc) in
+  
+  let blocklist = [unconfined_block ; confined_block] in
+  ((cfg, proc), blocklist) 
+@
