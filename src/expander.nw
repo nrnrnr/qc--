@@ -880,6 +880,22 @@ val store_pop_cvt : operator -> width -> addr:address -> assertion -> block
 val push_cvt_rm      : operator -> warg -> width -> addr:address -> assertion -> block
 val store_pop_cvt_rm : operator -> warg -> width -> addr:address -> assertion -> block
 @ 
+For back ends that use stack-slot temporaries, these operations have
+to be duplicated at different types.
+A~stack-slot temporary, which is identified by [[SlotTemp.is]]
+effectively carries with it an address and an 
+assertion.
+<<generic expansion operations for stack machines>>=
+module SlotTemp : sig
+  val is               : temp -> bool
+  val push             : temp -> block
+  val store_pop        : temp -> block
+  val push_cvt         : operator -> width -> temp -> block
+  val store_pop_cvt    : operator -> width -> temp -> block
+  val push_cvt_rm      : operator -> warg -> width -> temp -> block
+  val store_pop_cvt_rm : operator -> warg -> width -> temp -> block
+end
+@ 
 We can also imagine a whole bunch of stack operations:
 [[stack_copy]], [[dup]], [[exch]], [[pop]], and more.
  Luckily we don't need any of them for code expansion.
@@ -1166,6 +1182,16 @@ module Nostack (Address : sig type t val reg : temp -> t end) = struct
   let bc_stack _ ~ifso ~ifnot        = imposs "stack op on register machine"
   let stack_top_proxy = Rtl.reg (('\000', Rtl.Identity, Cell.of_size 0), 0, Rtl.C 0)
   let is_stack_top_proxy _ = false
+
+  module SlotTemp = struct
+    let is _ = false
+    let push _                   = imposs "stack op on register machine"
+    let store_pop _              = imposs "stack op on register machine"
+    let push_cvt _ _ _           = imposs "stack op on register machine"
+    let push_cvt_rm _ _ _ _      = imposs "stack op on register machine"
+    let store_pop_cvt _ _ _      = imposs "stack op on register machine"
+    let store_pop_cvt_rm _ _ _ _ = imposs "stack op on register machine"
+  end
 end
 @
 
@@ -1976,11 +2002,19 @@ and assign_room room left right w =
         | RP.Mem (_, _, _, _) ->
             Impossible.unimp "memory space other than 'm'"
         | RP.Reg dst -> (* computation *)
-            (match right with
-            | RP.Fetch (RP.Reg src, _) -> Post.move ~dst ~src
-            | _ -> let r, is = to_temp room (guess_context right) right in
-                   is <:> Post.move ~dst ~src:r
-            )
+            if Post.SlotTemp.is dst && looks_like_stack_rhs right then
+              match right with
+              | <<\emph{pattern [[->]] action} for push-convert, then store-pop to reg>>
+              | <<\emph{pattern [[->]] action} for converting store-pop to reg>>
+              | _ -> 
+                  let is = to_stack room right in
+                  is <:> Post.SlotTemp.store_pop dst
+            else
+              (match right with
+              | RP.Fetch (RP.Reg src, _) -> Post.move ~dst ~src
+              | _ -> let r, is = to_temp room (guess_context right) right in
+                     is <:> Post.move ~dst ~src:r
+              )
             (* ROUNDING --- narrow register *)
         | RP.Slice (w, lsb, RP.Reg r) ->
             let t, is = to_warg room icontext right in
@@ -2009,6 +2043,18 @@ RP.App ((("sx" | "zx"), [wsrc; wdst]) as op, [rhs]) ->
                                                | _ -> impossf "rm context" in
   let r, is'' = to_warg room (contextmap rcontext) rm in
   is <:> is' <:> is'' <:> Post.store_pop_cvt_rm op r wdst a (upassn assn)
+<<\emph{pattern [[->]] action} for converting store-pop to reg>>=
+RP.App ((("sx" | "zx"), [wsrc; wdst]) as op, [rhs]) ->
+  (* what goes wrong if wsrc is not the width of the stack? *)
+  let is = to_stack room rhs in
+  is <:> Post.SlotTemp.store_pop_cvt op wdst dst
+| RP.App ((("f2f" | "f2i" | "i2f"), [wsrc; wdst]) as op, [rhs; rm]) ->
+  (* what goes wrong if wsrc is not the width of the stack? *)
+  let is = to_stack room rhs in
+  let rcontext = match Post.arg_contexts op with [_; c] -> c
+                                               | _ -> impossf "rm context" in
+  let r, is'' = to_warg room (contextmap rcontext) rm in
+  is <:> is'' <:> Post.SlotTemp.store_pop_cvt_rm op r wdst dst
 <<\emph{pattern [[->]] action} for push-convert, then store-pop>>=
 RP.App ((("f2f"|"f2i"|"i2f"), [n; w]) as op,
         [RP.Fetch (RP.Mem ((_,agg,ms), c, srcaddr, srcassn), n'); rm]) ->
@@ -2020,6 +2066,32 @@ RP.App ((("f2f"|"f2i"|"i2f"), [n; w]) as op,
   let srca, is = address room srcaddr in
   is <:> is' <:> Post.push_cvt_rm op r n srca (upassn srcassn) <:>
   Post.store_pop a (upassn assn)
+| RP.App ((("f2f"|"f2i"|"i2f"), [n; w]) as op,
+        [RP.Fetch (RP.Reg src, n'); rm]) when Post.SlotTemp.is src ->
+  assert (n = n' && n' = Register.width src);
+  assert (agg =*= Post.byte_order);
+  let rcontext = match Post.arg_contexts op with [_; c] -> c
+                                               | _ -> impossf "rm context" in
+  let r, is = to_warg room (contextmap rcontext) rm in
+  is <:> Post.SlotTemp.push_cvt_rm op r n src <:> Post.store_pop a (upassn assn)
+<<\emph{pattern [[->]] action} for push-convert, then store-pop to reg>>=
+RP.App ((("f2f"|"f2i"|"i2f"), [n; w]) as op,
+        [RP.Fetch (RP.Mem ((_,agg,ms), c, srcaddr, srcassn), n'); rm]) ->
+  assert (n = n' && n' = Cell.to_width ms c);
+  assert (agg =*= Post.byte_order);
+  let rcontext = match Post.arg_contexts op with [_; c] -> c
+                                               | _ -> impossf "rm context" in
+  let r, is' = to_warg room (contextmap rcontext) rm in
+  let srca, is = address room srcaddr in
+  is <:> is' <:> Post.push_cvt_rm op r n srca (upassn srcassn) <:>
+  Post.SlotTemp.store_pop dst
+| RP.App ((("f2f"|"f2i"|"i2f"), [n; w]) as op,
+        [RP.Fetch (RP.Reg src, n'); rm]) when Post.SlotTemp.is src ->
+  assert (n = n' && n' = Register.width src);
+  let rcontext = match Post.arg_contexts op with [_; c] -> c
+                                               | _ -> impossf "rm context" in
+  let r, is = to_warg room (contextmap rcontext) rm in
+  is <:> Post.SlotTemp.push_cvt_rm op r n src <:> Post.SlotTemp.store_pop dst
 @ 
 A~splittable right-hand side looks like this: 
 \begin{quote}

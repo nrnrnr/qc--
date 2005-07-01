@@ -26,7 +26,7 @@ SUBDIRS =  cllib asdl gen lua rtl camlburg tools doc src runtime interp
 # Profiling requires a "mk clobber" in advance.
 #
 # for ocamlprof(1): mk P=count
-# for gprof(1):     mk P=prof all.opt
+# for gprof(1):     mk P=gprof all.opt
 # test coverage:    mk coverage         (this uses ocamlprof)
 #
 # Maybe we should introduce virtual targets for these and call mk(1)

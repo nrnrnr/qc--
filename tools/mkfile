@@ -8,15 +8,13 @@
 
 TOP    =    ..
 INTERP =    evaluating
-DEPEND =    DEPEND
 
 <$TOP/config/config.mk
-B = ${B:%tools/=%}
-B = `if [ -z "$B" ]; then echo "../"; else echo "$B"; fi`
-LIBDIR = ${B}lib
+
+DEPEND = ${B}DEPEND
+LIBDIR = ${B}../lib
 BINDIR = ../bin
 MANDIR = ../man
-B=""
 
 # ------------------------------------------------------------------ 
 # (high level) virtual targets
@@ -67,17 +65,17 @@ test:V:         nofake nofake.nw
 depend:V:       $DEPEND
 
 clean.opt:V:    
-	rm -f *.cmx *.o
-	rm -f *.cmxa *.a
+	rm -f $B*.cmx $B*.o
+	rm -f $B*.cmxa $B*.a
 
 clean:V:        clean.opt
-	rm -f *.cmi *.cmo
-	rm -f *.cma 
+	rm -f $B*.cmi $B*.cmo
+	rm -f $B*.cma 
 
 clobber:V: dep-clobber clean
 	rm -f *.output
-	rm -f *.ml *.mli
-	rm -f *.mly *.mll
+	rm -f $B*.ml $B*.mli
+	rm -f $B*.mly $B*.mll
 	rm -f *.aux *.log *.dvi *.tex *.inc *.toc
 	rm -f *.html
 	rm -f *.h *.c
@@ -105,6 +103,7 @@ OCAMLO_FLAGS = $OCAMLO_FLAGS -I $LIBDIR
 # ------------------------------------------------------------------ 
 
 ML  = ocamlscan.ml ocamlerror.ml
+ML  = ${ML:%.ml=$B%.ml}
 
 CMO = ${ML:%.ml=%.cmo}
 CMX = ${ML:%.ml=%.cmo}
@@ -140,10 +139,10 @@ grades:         grades.nw
 # extra rules for cases not covered by noweb.mk
 # ------------------------------------------------------------------ 
 
-ocamlscan.mll:  ocamlerror.nw
-	$NOTANGLE -R$target $prereq > $target
+${B}ocamlscan.mll:D:  ocamlerror.nw
+	$NOTANGLE -R"`basename $target`" $prereq > $target
 
-newer.inc:      newer.nw
+newer.inc:D:      newer.nw
 	$NOWEAVE -delay -autodefs c -index $prereq > $target
 
 # we compile and link in one go. CC and CFLAGS are defined in config/c.mk

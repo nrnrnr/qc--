@@ -773,6 +773,18 @@ let store_pop_cvt op w ~addr assn =
   let memval regval = R.app (Up.opr op) [regval; rounding_mode] in
   let store regval = R.store (R.mem assn mspace (mcount w) addr) (memval regval) w in
   rtl (st_pop_with store)
+@ 
+<<x86 postexpander>>=
+module SlotTemp = struct
+  let unimpf fmt = Printf.kprintf Impossible.unimp fmt
+  let is _ = false
+  let push src = impossf "push 80-bit float without conversion"
+  let store_pop dst = unimpf "store-pop"
+  let push_cvt op w src = unimpf "push-cvt"
+  let store_pop_cvt op w dst = unimpf "store-pop-cvt"
+  let push_cvt_rm op rm w src = unimpf "push-cvt"
+  let store_pop_cvt_rm op rm w dst = unimpf "store-pop-cvt"
+end
 <<x86 postexpander>>=
 let pushk _ = impossf "load 80-bit floating-point constant"
 let pushk_cvt _ _ _ = Impossible.unimp "load floating-point constant"
