@@ -1742,7 +1742,10 @@ and to_stack' room e =
     assert (agg =*= Post.byte_order);
     assert (w = Cell.to_width ms c);
     is <:> Post.push a (upassn assn)
-| RP.Fetch (RP.Reg (space, i, c), w) ->
+| RP.Fetch (RP.Reg src, w) when Post.SlotTemp.is src ->
+    assert (w = Register.width src);
+    Post.SlotTemp.push src
+| RP.Fetch (RP.Reg _, w) ->
     let slot = exchange_slot w in
     assign_slot room slot e w <:> to_stack room (fetch_slot slot w)
 | RP.Fetch _ ->
@@ -1809,6 +1812,17 @@ and restore_stack number_to_keep number_to_restore =
     let r, is' = to_warg room (contextmap rcontext) rm in
     let a, is  = address room addr in
     is <:> is' <:> Post.push_cvt_rm op r n a (upassn assn)
+| RP.App ((("sx"|"zx"), [n; w]) as op,
+          [RP.Fetch (RP.Reg src, n')]) when Post.SlotTemp.is src ->
+    assert (n = n' && n' = Register.width src);
+    Post.SlotTemp.push_cvt op n src
+| RP.App ((("f2f"|"f2i"|"i2f"), [n; w]) as op,
+          [RP.Fetch (RP.Reg src, n'); rm]) when Post.SlotTemp.is src ->
+    assert (n = n' && n' = Register.width src);
+    let rcontext = match Post.arg_contexts op with [_; c] -> c
+                                                 | _ -> impossf "rm context" in
+    let r, is = to_warg room (contextmap rcontext) rm in
+    is <:> Post.SlotTemp.push_cvt_rm op r n src
 @ 
 \subsubsection{Expanding RTLs}
 
