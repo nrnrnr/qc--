@@ -1,0 +1,471 @@
+This patch lets OCamlburg generate more imperative code in the hope to
+put less stress on the GC during the match process. I can't tell whether
+this is actually the case but would be grateful for some experience
+reports.
+
+To apply the patch, feed this file to patch(1):
+
+    patch < this_file.patch
+
+    
+-- Christian    
+
+? .burg.nw.swp
+? .code.nw.swp
+? .mkfile.swp
+? .sample.ml.swp
+? burg.pdf
+? imperative-records.patch
+Index: burg.nw
+===================================================================
+RCS file: /home/lair/nr/repositories/c--/qc--/camlburg/burg.nw,v
+retrieving revision 1.23
+diff -c -r1.23 burg.nw
+*** burg.nw	29 Aug 2003 12:03:59 -0000	1.23
+--- burg.nw	4 Jul 2005 13:04:54 -0000
+***************
+*** 191,197 ****
+  @
+  
+  % ------------------------------------------------------------------ 
+! \subsection{Code Generating Functions}
+  % ------------------------------------------------------------------ 
+  
+  The functions in this section generate code by building abstract syntax
+--- 191,197 ----
+  @
+  
+  % ------------------------------------------------------------------ 
+! \subsection{Code Generation Functions}
+  % ------------------------------------------------------------------ 
+  
+  The functions in this section generate code by building abstract syntax
+***************
+*** 252,263 ****
+--- 252,273 ----
+      { spec with S.rules = List.map rule spec.S.rules }  
+  @
+  
++ Here is an infix operator for the composition of functions; it's stolen
++ from the Haskell crowd. You can write [[f (g (h x))]] as 
++ [[f $$ g $$ h $$ x]].
++ 
++ <<CodeGen>>=
++ let ($$) f x = f x
++ @
++ 
++ 
+  First, here are some special cases of constructor functions for
+  Objective Caml syntax.
+  
+  <<CodeGen>>=
+  let action exp      = C.fun' [C.none] exp
+  let geq x y         = C.apply (C.apply (C.id ">=") x) y
++ let lt  x y         = C.apply (C.apply (C.id "<") x) y
+  let let' x e body   = C.let' [C.var' x, e] body
+  let apply2 f x y    = C.apply (C.apply f x) y
+  @
+***************
+*** 284,296 ****
+  @
+  
+  <<CodeGen>>=
+! let nt         = "nt"
+! let x          = "x"
+! let cost       = "cost"
+! let upd x      = "update_" ^ x
+! let arg n      = "arg" ^ (string_of_int n)
+! let camlburg   = "Camlburg"
+! let path xs    = String.concat "." xs  
+  @
+  
+  [[Choice]] puts its arguments into a list and applies [[choice]] to it.
+--- 294,309 ----
+  @
+  
+  <<CodeGen>>=
+! let nt           = "nt"
+! let x            = "x"
+! let cost         = "cost"
+! let upd x        = "update_" ^ x
+! let arg n        = "arg" ^ (string_of_int n)
+! let camlburg     = "Camlburg"
+! let path xs      = String.concat "." xs  
+! let burgpath x   = path ["Camlburg";x]
+! let seq          = C.seq
+! let thread x fns = seq $$ List.map (fun f -> C.apply f x) fns @ [x]
+  @
+  
+  [[Choice]] puts its arguments into a list and applies [[choice]] to it.
+***************
+*** 325,341 ****
+      and dst     = rule.S.nonterm
+      and c       = rule.S.cost
+      and a       = rule.S.code
+!     and f       = C.longid ["x";src;camlburg;"action"]
+!     and ccost   = path [camlburg;"cost"]
+!     and caction = path [camlburg;"action"]
+      in
+!         C.fun' [C.var' x] 
+!                (apply2 (C.id (upd dst))
+!                        (C.record [ccost  , add (C.longid [nt;camlburg;cost]) c 
+!                                  ;caction, action (let' v (C.apply f C.unit)
+!                                                     a) 
+!                                  ])
+!                        (C.id x))
+  @                       
+  
+  When a nonterminal is updated, the nonterminals connected to it by
+--- 338,353 ----
+      and dst     = rule.S.nonterm
+      and c       = rule.S.cost
+      and a       = rule.S.code
+!     and f       = C.longid [x;src;camlburg;"action"]
+!     and ccost   = burgpath "cost"
+!     and caction = burgpath "action"
+      in
+!         apply2 (C.id (upd dst))
+!                (C.record [ccost  , add (C.longid [nt;camlburg;cost]) c 
+!                          ;caction, action (let' v (C.apply f C.unit)
+!                                             a) 
+!                          ])
+!                (C.id x)
+  @                       
+  
+  When a nonterminal is updated, the nonterminals connected to it by
+***************
+*** 357,379 ****
+      let arg     = C.recordwith x [src, C.id nt]             
+      and chns    = List.map (chain_fn src) (List.sort rule_order chainrules)
+      in    
+!         C.fun' [C.var' nt; C.var' x] 
+!                (C.if' (geq (C.longid [nt;camlburg;cost]) 
+                             (C.longid [x;src;camlburg;cost]))
+!                       (C.id x)
+!                       (compose chns arg)) 
+  <<CodeGen>>=
+  (*  
+      let rec update_number = (* update_fn *) 
+      and update_str = (* udpdate_fn *)
+      and ...
+  *)    
+  let nonterms nts map =
+      C.def (List.map (fun nt -> upd nt, update_fn nt (lookup map nt)) nts)
+  @
+  
+  Below is some monadic code to deal with the following problem: we have
+! to refer to function arguments [[arg1]], [[arg2], and so on. Code that
+  refers to these arguments is derived from an argument list of a pattern
+  constructor. The number of an argument depends on the position in the
+  argument list we are looking at. Thus, the actual position must be
+--- 369,391 ----
+      let arg     = C.recordwith x [src, C.id nt]             
+      and chns    = List.map (chain_fn src) (List.sort rule_order chainrules)
+      in    
+!         C.fun' [C.var' nt; C.var' x] $$
+!                 C.if1 (lt  (C.longid [nt;camlburg;cost]) 
+                             (C.longid [x;src;camlburg;cost]))
+!                       (seq $$ C.update_rec (C.id x) src (C.id nt) :: chns)  
+  <<CodeGen>>=
+  (*  
+      let rec update_number = (* update_fn *) 
+      and update_str = (* udpdate_fn *)
+      and ...
+  *)    
++ 
+  let nonterms nts map =
+      C.def (List.map (fun nt -> upd nt, update_fn nt (lookup map nt)) nts)
+  @
+  
+  Below is some monadic code to deal with the following problem: we have
+! to refer to function arguments [[arg1]], [[arg2]], and so on. Code that
+  refers to these arguments is derived from an argument list of a pattern
+  constructor. The number of an argument depends on the position in the
+  argument list we are looking at. Thus, the actual position must be
+***************
+*** 476,484 ****
+          | _                  -> assert false (* impossible *)
+      in
+          C.record 
+!             [ path [camlburg;"cost"]  
+                  , sum (rulecost :: fst (mmap cost args 1))  
+!             ; path [camlburg;"action"]
+                  , action (C.let' (some (fst (mmap bind args 1))) r.S.code)
+              ]                         
+  @
+--- 488,496 ----
+          | _                  -> assert false (* impossible *)
+      in
+          C.record 
+!             [ burgpath "cost"  
+                  , sum (rulecost :: fst (mmap cost args 1))  
+!             ; burgpath "action"
+                  , action (C.let' (some (fst (mmap bind args 1))) r.S.code)
+              ]                         
+  @
+***************
+*** 516,522 ****
+                      (partition rules)
+                      []
+      in
+!         C.fun' argv (compose updates (C.id "inf"))
+  @
+  
+  The [[constructors]] function creates one function per pattern
+--- 528,536 ----
+                      (partition rules)
+                      []
+      in
+!         C.fun' argv $$
+!             let' "x" (C.apply (C.id "inf") C.unit) 
+!                 (thread (C.id "x") updates)
+  @
+  
+  The [[constructors]] function creates one function per pattern
+***************
+*** 542,548 ****
+      C.record (List.map (fun nt -> (nt, C.longid [camlburg;"infinity"])) nts)
+  
+  let infdef nts =
+!     C.def ["inf", inf nts]
+  @
+  
+  Declare the record type [[nonterm]]. Each nonterminal corresponds to a
+--- 556,562 ----
+      C.record (List.map (fun nt -> (nt, C.longid [camlburg;"infinity"])) nts)
+  
+  let infdef nts =
+!     C.def ["inf", C.fun' [] (inf nts)]
+  @
+  
+  Declare the record type [[nonterm]]. Each nonterminal corresponds to a
+***************
+*** 573,579 ****
+      let nt t = C.ty [t] "Camlburg.nt" in 
+      { C.params = tyvars 
+      ; C.name   = "nonterm"
+!     ; C.rep    = Some (C.typrod (List.map (fun (x,t)->(false, x, nt t)) pairs))
+      }
+  @
+  
+--- 587,593 ----
+      let nt t = C.ty [t] "Camlburg.nt" in 
+      { C.params = tyvars 
+      ; C.name   = "nonterm"
+!     ; C.rep    = Some (C.typrod (List.map (fun (x,t)->(true, x, nt t)) pairs))
+      }
+  @
+  
+Index: code.nw
+===================================================================
+RCS file: /home/lair/nr/repositories/c--/qc--/camlburg/code.nw,v
+retrieving revision 1.13
+diff -c -r1.13 code.nw
+*** code.nw	29 Aug 2003 11:40:59 -0000	1.13
+--- code.nw	4 Jul 2005 13:04:54 -0000
+***************
+*** 37,50 ****
+      | Apply         of (exp * exp)
+      | Fun           of (pat list * exp)
+      | Id            of string
+!     | If            of (exp * exp * exp)
+      | Int           of int
+      | Let           of ((pat * exp) list * exp)
+      | List          of exp list
+      | Raw           of (loc * string)
+      | Record        of (string * exp) list
+      | RecordWith    of (string * (string * exp) list)
+!     | RecordUpd     of (string * (string * exp) list)
+      | Seq           of exp list
+      | String        of string
+      | Char          of char
+--- 37,50 ----
+      | Apply         of (exp * exp)
+      | Fun           of (pat list * exp)
+      | Id            of string
+!     | If            of (exp * exp * exp option)
+      | Int           of int
+      | Let           of ((pat * exp) list * exp)
+      | List          of exp list
+      | Raw           of (loc * string)
+      | Record        of (string * exp) list
+      | RecordWith    of (string * (string * exp) list)
+!     | UpdateRec     of exp * string * exp   (* e1.str <- exp *)  
+      | Seq           of exp list
+      | String        of string
+      | Char          of char
+***************
+*** 74,86 ****
+  val id:         string -> exp
+  val longid:     string list -> exp
+  val if':        exp -> exp -> exp -> exp
+  val int:        int -> exp
+  val let':       ((pat * exp) list) -> exp -> exp
+  val list:       exp list -> exp
+  val raw:        loc -> string -> exp
+  val record:     (string * exp) list -> exp
+  val recordwith: string -> (string * exp) list -> exp
+! val recordupd:  string -> (string * exp) list -> exp
+  val seq:        exp list -> exp
+  val string:     string -> exp
+  val char:       char -> exp
+--- 74,87 ----
+  val id:         string -> exp
+  val longid:     string list -> exp
+  val if':        exp -> exp -> exp -> exp
++ val if1:        exp -> exp -> exp 
+  val int:        int -> exp
+  val let':       ((pat * exp) list) -> exp -> exp
+  val list:       exp list -> exp
+  val raw:        loc -> string -> exp
+  val record:     (string * exp) list -> exp
+  val recordwith: string -> (string * exp) list -> exp
+! val update_rec:  exp -> string -> exp -> exp 
+  val seq:        exp list -> exp
+  val string:     string -> exp
+  val char:       char -> exp
+***************
+*** 134,140 ****
+  let apply f x               = Apply(f,x)
+  let fun' pats body          = Fun(pats,body)
+  let id x                    = Id x
+! let if' guard left right    = If(guard, left, right)
+  let int x                   = Int x
+  let let' bindings body      = Let(bindings,body)
+  let list  es                = List es
+--- 135,142 ----
+  let apply f x               = Apply(f,x)
+  let fun' pats body          = Fun(pats,body)
+  let id x                    = Id x
+! let if' guard left right    = If(guard, left, Some right)
+! let if1 guard body          = If(guard, body, None)
+  let int x                   = Int x
+  let let' bindings body      = Let(bindings,body)
+  let list  es                = List es
+***************
+*** 142,148 ****
+  let raw loc code            = Raw(loc,code)
+  let record bindings         = Record bindings
+  let recordwith r bindings   = RecordWith(r,bindings)
+! let recordupd  r bindings   = RecordUpd(r,bindings)
+  let seq es                  = Seq(es)
+  let string s                = String s
+  let char c                  = Char c
+--- 144,150 ----
+  let raw loc code            = Raw(loc,code)
+  let record bindings         = Record bindings
+  let recordwith r bindings   = RecordWith(r,bindings)
+! let update_rec r field exp  = UpdateRec(r,field,exp)
+  let seq es                  = Seq(es)
+  let string s                = String s
+  let char c                  = Char c
+***************
+*** 257,263 ****
+      | Raw       (fragments)     -> raw fragments
+      | Record    (elements)      -> record elements
+      | RecordWith(r,binds)       -> recordwith r binds 
+!     | RecordUpd (r,binds)       -> recordupd  r binds 
+      | Seq       (exps)          -> seq exps
+      | String    (s)             -> P.text ("\"" ^ (String.escaped s) ^ "\"")
+      | Char      (c)             -> P.text ("'"^Char.escaped c^"'")
+--- 259,265 ----
+      | Raw       (fragments)     -> raw fragments
+      | Record    (elements)      -> record elements
+      | RecordWith(r,binds)       -> recordwith r binds 
+!     | UpdateRec (r,f,e)         -> update_record r f e
+      | Seq       (exps)          -> seq exps
+      | String    (s)             -> P.text ("\"" ^ (String.escaped s) ^ "\"")
+      | Char      (c)             -> P.text ("'"^Char.escaped c^"'")
+***************
+*** 276,284 ****
+  and list es = 
+      P.agrp (P.text "[" ^^ P.list (P.break ^^ P.text ";") exp es ^^ P.text "]") 
+  
+! and seq es = 
+!     P.agrp (P.list (P.text ";" ^^ P.break) exp es) 
+!     
+  and apply fexp e = 
+      let par e = match e with
+          | Fun _  | Let _ | Apply _ -> P.text "(" ^^ exp e ^^ P.text ")" 
+--- 278,292 ----
+  and list es = 
+      P.agrp (P.text "[" ^^ P.list (P.break ^^ P.text ";") exp es ^^ P.text "]") 
+  
+! and seq = function
+!     | []  -> P.empty
+!     | [e] -> exp e
+!     | es  -> P.agrp begin
+!                 ~~ P.text "(" 
+!                 ^^ P.list (P.text ";" ^^ P.break) exp es
+!                 ^^ P.text ")"
+!              end
+! 
+  and apply fexp e = 
+      let par e = match e with
+          | Fun _  | Let _ | Apply _ -> P.text "(" ^^ exp e ^^ P.text ")" 
+***************
+*** 286,291 ****
+--- 294,300 ----
+      let doc = match fexp with
+      | Apply(Id "+" ,e') -> exp e' ^/ P.text "+"  ^/ exp e
+      | Apply(Id ">=",e') -> exp e' ^/ P.text ">=" ^/ exp e
++     | Apply(Id "<",e')  -> exp e' ^/ P.text "<" ^/ exp e
+      | fexp              -> par fexp ^^ indent (par e)  
+      in
+          P.agrp doc
+***************
+*** 315,324 ****
+      let par e = P.text "(" ^^ exp e ^^ P.text ")" in
+          P.agrp (P.text x ^^ P.text " =" ^^ indent (par e)) 
+  
+- and recordupdate r (x,e) =
+-     let par e = P.text "(" ^^ exp e ^^ P.text ")" in
+-         P.agrp (P.text (r^"."^x) ^^ P.text " <-" ^^ indent (par e)) 
+- 
+  and record bindings =
+      P.agrp begin
+      ~~ P.text "{"
+--- 324,329 ----
+***************
+*** 333,346 ****
+      ^/ P.text "}"
+      end
+  
+- and recordupd r bindings =
+-     P.agrp begin
+-     ~~ P.text "(" 
+-     ^^ indent (P.list (P.text ";" ^^ P.break) (recordupdate r) bindings)
+-     ^^ P.text ";" ^/ P.text r   (* return updated record *)
+-     ^/ P.text ")" 
+-     end
+- 
+  and case e cases = 
+      let case (p,e) = P.agrp (pat p ^/ P.text "->" ^^ indent (exp e))
+      in
+--- 338,343 ----
+***************
+*** 365,372 ****
+      P.agrp begin
+      ~~ P.agrp (P.text "if" ^^ indent (exp cond) ^/ P.text "then") 
+      ^^ indent (exp e1)
+!     ^/ P.text "else" 
+!     ^^ indent (exp e2)
+      end
+  @
+  
+--- 362,376 ----
+      P.agrp begin
+      ~~ P.agrp (P.text "if" ^^ indent (exp cond) ^/ P.text "then") 
+      ^^ indent (exp e1)
+!     ^^ ( match e2 with
+!        | None    -> P.empty
+!        | Some e2 -> P.break ^^ P.text "else" ^^ indent (exp e2)
+!        )
+      end
++ 
++ 
++ and update_record r f e =
++         P.agrp (exp r ^^ P.text ("."^f) ^^ P.text " <-" ^^ indent (exp e)) 
++ 
+  @
+  
