@@ -2015,15 +2015,29 @@ and assign_room room left right w =
                       is <:> is' <:> Post.store a r (upassn assn))
         | RP.Mem (_, _, _, _) ->
             Impossible.unimp "memory space other than 'm'"
+        | RP.Reg dst when Post.SlotTemp.is dst -> (* store to a stack slot *)
+            (*<definition of [[split_assignment_slot]]>*)
+            (match right with
+            | <<\emph{pattern [[->]] action} for low-bit store to reg>>
+            | <<\emph{pattern [[->]] action} for splittable assignment to reg>>
+            | <<\emph{pattern [[->]] action} for doubling weird value operator to reg>>
+            | _ ->
+                if looks_like_stack_rhs right then
+                  match right with
+                  | <<\emph{pattern [[->]] action} for push-convert, then store-pop to reg>>
+                  | <<\emph{pattern [[->]] action} for converting store-pop to reg>>
+                  | _ -> 
+                      let is = to_stack room right in
+                      is <:> Post.SlotTemp.store_pop dst
+                else
+                  match right with
+                  | RP.Fetch (RP.Mem(('m', _, _), ct, addr, assn), w) ->
+                      let a, is = address room addr in
+                      is <:> Post.load dst a (upassn assn)
+                  | _ ->
+                      let r, is = to_temp room (guess_context right) right in
+                      is <:> Post.move dst r)
         | RP.Reg dst -> (* computation *)
-            if Post.SlotTemp.is dst && looks_like_stack_rhs right then
-              match right with
-              | <<\emph{pattern [[->]] action} for push-convert, then store-pop to reg>>
-              | <<\emph{pattern [[->]] action} for converting store-pop to reg>>
-              | _ -> 
-                  let is = to_stack room right in
-                  is <:> Post.SlotTemp.store_pop dst
-            else
               (match right with
               | RP.Fetch (RP.Reg src, _) -> Post.move ~dst ~src
               | _ -> let r, is = to_temp room (guess_context right) right in
@@ -2045,6 +2059,11 @@ RP.App (("lobits", [w; n]), [rhs]) ->
   let rhs = RP.Const (RP.Bits (Bits.Ops.zx Post.itempwidth b)) in
   let r, is = to_temp room icontext rhs in
   is <:> is' <:> Post.lostore a r w (upassn assn)
+<<\emph{pattern [[->]] action} for low-bit store to reg>>=
+RP.App (("lobits", [w; n]), [rhs]) ->
+  impossf "slot-temp := %%lobits(e)   [extend postexpander?]"
+| RP.Const (RP.Bits b) when w < Post.itempwidth ->
+  impossf "slot-temp := %%lobits(k)   [extend postexpander?]"
 <<\emph{pattern [[->]] action} for converting store-pop>>=
 RP.App ((("sx" | "zx"), [wsrc; wdst]) as op, [rhs]) ->
   (* what goes wrong if wsrc is not the width of the stack? *)
@@ -2131,6 +2150,20 @@ ALIGNMENT IS CONCERNED.
   let lsw = RP.Const (RP.Bits (BO.lobits lw b)) in
   let msw = RP.Const (RP.Bits (BO.lobits mw (BO.shrl b (Bits.U.of_int lw w)))) in
   split_assignment ~lsw ~lw ~msw ~mw
+<<\emph{pattern [[->]] action} for splittable assignment to reg>>=
+( RP.App (("or", [ww]), [RP.App (("zx", [nn;ww']), [lsw]);
+                          RP.App (("shl", [ww'']),
+                                  [RP.App (("zx", [dd;ww''']), [msw]);
+                                   RP.Const (RP.Bits nnb)])])
+| RP.App (("or", [ww]), [RP.App (("shl", [ww'']),
+                                  [RP.App (("zx", [dd;ww''']), [msw]);
+                                   RP.Const (RP.Bits nnb)]);
+                          RP.App (("zx", [nn;ww']), [lsw])])
+) when w > Post.itempwidth && ww = ww' && ww = ww''
+    && ww = ww''' && dd = ww - nn && BO.eq nnb (Bits.U.of_int nn ww) ->
+      impossf "splittable assignment to stack-slot temporary"
+| RP.Const (RP.Bits b) when w > Post.itempwidth ->
+      unimpf "assigned wide constant to stack-slot temporary"
 <<\emph{pattern [[->]] action} for doubling weird value operator>>=
 RP.App ((("mulx"|"mulux"), [nw]) as opr, [x; y]) when w = 2 * nw ->
   let xcon, ycon = match Post.arg_contexts opr with
@@ -2143,6 +2176,12 @@ RP.App ((("mulx"|"mulux"), [nw]) as opr, [x; y]) when w = 2 * nw ->
   let i3 = Post.dblop ~dsthi:thi ~dstlo:tlo opr tx ty in
   let v tmp = RP.Fetch (RP.Reg tmp, nw) in
   i1 <:> i2 <:> i3 <:> split_assignment ~lsw:(v tlo) ~lw:nw ~msw:(v thi) ~mw:nw
+| RP.App ((("mulx"|"mulux"), _), _) as e ->
+    impossf "unsupported extended multiply %s at width %d"
+      (RU.ToUnreadableString.exp (Up.exp e)) w
+<<\emph{pattern [[->]] action} for doubling weird value operator to reg>>=
+RP.App ((("mulx"|"mulux"), [nw]) as opr, [x; y]) when w = 2 * nw ->
+  impossf "extended multiply into stack-slot temporary"
 | RP.App ((("mulx"|"mulux"), _), _) as e ->
     impossf "unsupported extended multiply %s at width %d"
       (RU.ToUnreadableString.exp (Up.exp e)) w
