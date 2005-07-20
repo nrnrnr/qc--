@@ -2010,6 +2010,8 @@ and assign_room room left right w =
                       let a', is = address room addr' in
                       is <:> is' <:>
                       Post.block_copy a (upassn assn) a' (upassn assn') w
+                  | RP.Fetch (RP.Reg src, _) ->
+                      is' <:> Post.store a src (upassn assn)
                   | _ ->
                       let r, is = to_temp room (guess_context right) right in
                       is <:> is' <:> Post.store a r (upassn assn))
@@ -2034,6 +2036,7 @@ and assign_room room left right w =
                   | RP.Fetch (RP.Mem(('m', _, _), ct, addr, assn), w) ->
                       let a, is = address room addr in
                       is <:> Post.load dst a (upassn assn)
+                  | RP.Fetch (RP.Reg src, _) -> Post.move ~dst ~src
                   | _ ->
                       let r, is = to_temp room (guess_context right) right in
                       is <:> Post.move dst r)
