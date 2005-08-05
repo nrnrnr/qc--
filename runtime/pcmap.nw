@@ -109,14 +109,20 @@ enum ctypes { CHAR = 0, DOUBLE = 1, FLOAT = 2, INT = 3, LONGDOUBLE = 4, LONGINT 
 @ 
 Here is the address arithmetic that provides access to different parts
 of an entry.
+We do the address arithmetic using macros whose names end in~[[A]].
+We then provide a second set of macros that contain suitable casts.
+Using macros is a bit dodgy, but NR was worried about procedure-call
+overhead for the arithmetic.
 <<exported type, procedure, and macro declarations>>=
-#define registers(e)     ((struct reg*)((e)->data))
-#define locals(e)        (((e)->data) + 2 * (e)->num_registers)
-#define continuations(e) (struct conts *) (((e)->data) + 2 * (e)->num_registers \
-                                                 + (e)->num_locals)
-#define spans(e)         (((Cmm_Word*)(e)->data) + 2 * (e)->num_registers \
-                                                 + (e)->num_locals  \
-                                                 + (e)->cont_block_size)
+#define registersA(e)     ((e)->data)
+#define localsA(e)        (registersA(e)     + 2 * (e)->num_registers)
+#define continuationsA(e) (localsA(e)        +     (e)->num_locals)
+#define spansA(e)         (continuationsA(e) +     (e)->cont_block_size)
+
+#define registers(e)      ((struct reg*)registersA(e))
+#define locals(e)         ((location *)localsA(e))
+#define continuations(e)  ((struct conts *)continuationsA(e))
+#define spans(e)          ((Cmm_Word*)spansA(e))
 @
 Finally, here is where we get entries: we can look them up by PC, or
 we have special entries for unknown procedures (the empty entry) and
