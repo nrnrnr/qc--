@@ -994,7 +994,12 @@ let test _ =
 @
 \subsubsection{Client registration functions}
 <<interp registration>>=
-let register_globals l g = List.iter (fun (k, v) -> setglobal g (V.String k) v) l
+let register_global g k v =
+  match getglobal g k with
+  | V.Nil -> setglobal g k v
+  | _ -> Printf.kprintf failwith "Global variable '%s' is already set" (V.to_string k)
+
+let register_globals l g = List.iter (fun (k, v) -> register_global g (V.String k) v) l
 
 let register_module tabname members g =
   let t = getglobal g (V.String tabname) in
@@ -1003,8 +1008,12 @@ let register_module tabname members g =
   | V.Table t   -> t
   | _           -> catcherrorfallback g
                    [V.String ("Global value " ^ tabname ^ " is not (table or nil)")] in
-  let _ = setglobal g (V.String tabname) (V.Table t) in
-    List.iter (fun (k, v) -> V.Table.bind t (V.String k) v) members
+  let _ = register_global g (V.String tabname) (V.Table t) in
+  let bind (k, v) = match V.Table.find t (V.String k) with
+  | V.Nil -> V.Table.bind t (V.String k) v
+  | _ ->
+      Printf.kprintf failwith "Duplicate '%s' registered in module '%s'" k tabname in
+  List.iter bind members
 @ 
 \subsubsection{Utility functions}
 
