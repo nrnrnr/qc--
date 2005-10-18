@@ -571,11 +571,22 @@ function Opt.verb(stage) -- needs more work (want verbosity for each stage)
   end
 end  
 
+-- We capture the time at start up and provide a function to return the elapased time.
 start_time = Caml.time()
-function pr0(a,b) print("0:" .. (Caml.time() - start_time)) return b end
-function pr1(a,b) print("1:" .. (Caml.time() - start_time)) return b end
-function pr2(a,b) print("2:" .. (Caml.time() - start_time)) return b end
-function pr3(a,b) print("3:" .. (Caml.time() - start_time)) return b end
+function timeDiff()
+  return (Caml.time() - start_time)
+end
+
+-- A pseudo-macro that defines a function that returns the elapsed time,
+-- with the argument used in the output strings.
+-- The result of this macro: the defined function.
+function time(name)
+  local f = "function " .. name .. "(_, proc)\n" ..
+            "  print('" .. name .. ": ' .. timeDiff())\n" ..
+            "end"
+  dostring(f)
+  return ("return " .. name) -- Returning the newly defined function... ugh...
+end
 
 Opt.standard_phases =
   { 'intwiden', 'placevars', 'floatwiden', Optimize.simplify_exps, 'preopt', 'pic',
