@@ -581,17 +581,20 @@ end
 -- with the argument used in the output strings.
 -- The result of this macro: the defined function.
 function time(name)
-  local f = "function " .. name .. "(_, proc)\n" ..
+  local f = "function " .. name .. "_timer(_, proc)\n" ..
             "  print('" .. name .. ": ' .. timeDiff())\n" ..
+            "  return proc, nil\n" ..
             "end"
   dostring(f)
-  return ("return " .. name) -- Returning the newly defined function... ugh...
+  -- Returning the newly defined function... ugh...
+  return (dostring("return " .. name .. "_timer"))
 end
 
 Opt.standard_phases =
-  { 'intwiden', 'placevars', 'floatwiden', Optimize.simplify_exps, 'preopt', 'pic',
-    'expand', 'improve', 'liveness', 'ralloc', 'freeze', 'rmvfp', '*assemble',
-    '*emit_data' }
+  { 'intwiden', 'placevars', 'floatwiden', Optimize.simplify_exps, 'preopt', 'pic'
+  , 'expand', 'improve', 'liveness', 'ralloc', 'freeze', 'rmvfp', '*assemble'
+  , '*emit_data'
+  }
 
 function Opt.standard(backend, asm, B)
   if not B then error("Opt.standard called without backplane argument") end
@@ -608,15 +611,18 @@ function Opt.standard(backend, asm, B)
       if phase == '*assemble' then
         tinsert(phases,
                 B.stage { name="assemble procedure", fn = Driver.proc_assembler(asm) })
+        --tinsert(phases, time("assemble"))
       elseif phase == '*emit_data' then
         if backend.emit_data then
           tinsert(phases,
                   Opt.verb(B.stage { name = "emit_data", fn = backend.emit_data(asm)}))
+          --tinsert(phases, time("emit_data"))
         end
       end
     else
       if backend[phase] then
         tinsert(phases, Opt.verb(backend[phase]))
+        --tinsert(phases, time(phase))
       end
     end
     i = i + 1
