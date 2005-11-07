@@ -270,14 +270,8 @@ module WithType (T : USERTYPE) (L : BARECODE) : USERCODE with type 'a userdata' 
     type 'a also_t = 'a t
     let allnames = [T1.tname; T2.tname; T3.tname; T4.tname; T5.tname;
                     T6.tname; T7.tname; T8.tname; T9.tname; T10.tname]
-    let tname =
-      let add t ts =
-        if t = Unused.Type.tname then ts
-        else match ts with
-        | Some names -> Some (names ^ " or " ^ t)
-        | None -> Some t
-      in List.fold_right add allnames None
-    let tname = match tname with Some n -> n | None -> Unused.Type.tname
+    let tname = String.concat " or " (List.filter ((<>) Unused.Type.tname) allnames)
+    let tname = match tname with "" -> Unused.Type.tname | n -> n
 
     let eq eqvs x y = match x, y with
     | T1 x, T1 y -> T1.eq eqvs x y
