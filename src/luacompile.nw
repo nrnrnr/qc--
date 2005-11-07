@@ -528,8 +528,8 @@ function Interp.layout(_, proc)
         , Block.overlap_high(32, blocks.youngblocks.callee)
         }
     local block = Block.cat(32, layout)
-    Stack.freeze(proc, block)
-    return 1
+    proc = Stack.freeze(proc, block)
+    return proc, 1
 end
 @
 
@@ -689,8 +689,15 @@ function Compile.file(backend, emitglobals, file, out)
                 , action = Opt.standard(backend, asm, Backplane) 
                 , B = Backplane
                 }
---    Inspect.show('target = ', backend.target)
---    Inspect.show('opt = ', opt)
+    if Debug.driver then
+      Inspect.show('target = ', backend.target) write('\n')
+      Inspect.show('opt = ', opt) write('\n')
+      Inspect.show('emitglobals = ', emitglobals) write('\n')
+      Inspect.show('ast = ', ast) write('\n')
+      Inspect.show('asm = ', asm) write('\n')
+      Inspect.show('Options = ', Options) write('\n')
+    end
+
     Driver.compile(backend.target, opt, emitglobals, ast, asm,
                    Options.validate, Options.swap)
     if backend.emit then backend.emit(asm) end
@@ -702,7 +709,7 @@ and a procedure, then runs the given [[self.action]] in the
 optimization backplane.
 <<Lua compiler configuration>>=
 function Compile.run_optimizer(self,proc)
---  write('hello: Compile.run_optimizer\n')
+  -- write(_STDERR, 'hello: Compile.run_optimizer\n') 
     local B = self.B or error("missing backplane")
 --    write('got B\n')
 --    verbose('running Compile.run_optimizer with backplane ', tostring(B),
