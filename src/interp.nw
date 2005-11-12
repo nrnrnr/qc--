@@ -314,8 +314,11 @@ compiler.
 <<interp.ml>>=
 let target' = (* new style *)
       let spaces = [ Spaces.m ; Spaces.c ; Spaces.a ] in
+         let mincap = T.minimal_capabilities 32 in
       { T.name     = arch
-      ; T.capabilities      = T.incapable
+      ; T.capabilities      = {mincap with
+                                    T.operators = Rtl.Up.opr ("zx", [8; 32]) :: mincap.T.operators}
+    
       ; T.cc_specs = [ "C", ccspecs ; "C--", ccspecs ]
       ; T.cc_spec_to_auto   = (fun _ _ -> cc')
       ; T.is_instruction    = (fun _ -> true)   (* wildly optimistic *)

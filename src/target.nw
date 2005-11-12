@@ -366,11 +366,14 @@ can be applied to literals).
 \end{itemize}
 @
 An incapable back end has no capabilities whatever.
-IT WOULD BE GOOD TO HAVE A ``STANDARD'' BACK END THAT TAKES A NATURAL
-WIDTH (OR PERHAPS INT AND FLOATING WIDTHS?) AND RETURNS A CAPABILITY
-RECORD. 
 <<target.mli>>=
 val incapable : capabilities  (* the completely useless back end *)
+
+@
+[[minimal_capabilities]] returns a minimal set of capabilities, given the word size.
+<<target.mli>>=
+val minimal_capabilities: int -> capabilities
+
 @ 
 
 % ------------------------------------------------------------------ 
@@ -392,6 +395,72 @@ module RU = Rtlutil
 let impossf fmt = Printf.kprintf Impossible.impossible fmt
 let incapable = { operators = []; literals = []; litops = []; memory = []; itemps = [];
                   ftemps = []; block_copy = false; iwiden = false; fwiden = false; }
+let minimal_capabilities wordsize =
+	{ literals = [wordsize]
+        ; block_copy = false
+        ; itemps = [wordsize]
+        ; ftemps = []
+        ; iwiden = false
+        ; fwiden = false
+        ; litops = []
+	; memory = [wordsize]
+	; operators = List.map Rtl.Up.opr [
+                         "sx",      [ 1; wordsize]
+                       ; "zx",      [ 1; wordsize]
+                       ; "lobits",  [wordsize;  1]
+                       ; "lobits",  [wordsize; wordsize]
+                       ; "add",     [wordsize]
+                       ; "addc",    [wordsize]
+                       ; "and",     [wordsize]
+                       ; "borrow",  [wordsize]
+                       ; "carry",   [wordsize]
+                       ; "com",     [wordsize]
+                       ; "div",     [wordsize]
+                       ; "divu",    [wordsize]
+                       ; "false", []
+                       ; "mod",     [wordsize]
+                       ; "modu",    [wordsize]
+                       ; "mul",     [wordsize]
+                       ; "mulx",    [wordsize]
+                       ; "mulux",   [wordsize]
+                       ; "neg",     [wordsize]
+                       ; "or",      [wordsize]
+                       ; "quot",    [wordsize]
+                       ; "popcnt",  [wordsize]
+                       ; "rem",     [wordsize]
+                       ; "rotl",    [wordsize]
+                       ; "rotr",    [wordsize]
+                       ; "shl",     [wordsize]
+                       ; "shra",    [wordsize]
+                       ; "shrl",    [wordsize]
+                       ; "sub",     [wordsize]
+                       ; "subb",    [wordsize]
+                       ; "true", []
+                       ; "xor",     [wordsize]
+                       ; "eq",      [wordsize]
+                       ; "ge",      [wordsize]
+                       ; "geu",     [wordsize]
+                       ; "gt",      [wordsize]
+                       ; "gtu",     [wordsize]
+                       ; "le",      [wordsize]
+                       ; "leu",     [wordsize]
+                       ; "lt",      [wordsize]
+                       ; "ltu",     [wordsize]
+                       ; "ne",      [wordsize]
+
+                       ;  "add_overflows",  [wordsize]
+                       ;  "div_overflows",  [wordsize]
+                       ;  "mul_overflows",  [wordsize]
+                       ;  "mulu_overflows", [wordsize]
+                       ;  "quot_overflows", [wordsize]
+                       ;  "sub_overflows",  [wordsize]
+                       ; "not",     []
+                       ; "bool",    []
+                       ; "disjoin", []
+                       ; "conjoin", []
+                       ; "bit",     []
+                   ];}
+
 @
 <<target.ml>>=
 let space t s = 
