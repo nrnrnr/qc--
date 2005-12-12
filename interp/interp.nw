@@ -1421,8 +1421,7 @@ To save the caller's activation record, we simply use the next free [[activation
                            saved          = (actptr) t->stack_free;
                            t->stack_free  = round_up(
                                               ((actptr) t->stack_free) + 1);
-                           if (t->stack_free > t->stack_limit)
-                             cmm_err("ran out of stack space");
+                           mem_assert(t->stack_free <= t->stack_limit);
 
                            saved->pc            = next;
                            saved->locals        = locals;
@@ -1451,7 +1450,7 @@ When the matching statement is executed once more during the next cycle of the [
                            caller        = saved;
 
                            actptrptr     = t->stack_free;
-						   t->stack_free = round_up((void *)
+			   t->stack_free = round_up((void *)
                                                 ((actptr *)(t->stack_free)+1));
 
                            stackdata     = t->stack_free;
@@ -1469,7 +1468,7 @@ When the matching statement is executed once more during the next cycle of the [
                            /* CALLEE */
                            saved->callee = (actptr) locals_end;
 
-						   *actptrptr    = t->stack_free;
+			   *actptrptr    = t->stack_free;
                            u             = new_uid(t);
 @
 
@@ -1728,6 +1727,7 @@ We simply copy pointers to restore information from the activation record stored
                            locals_end     = caller->locals_end;
                            stackdata      = caller->stackdata;
                            stackdata_end  = caller->stackdata_end;
+                           name           = caller->name;
 
                            caller->callee = NULL;
 @
@@ -1754,7 +1754,7 @@ We restore state information from the destination activation and recover memory 
                            
                            if (dest_act->u.thread != u.thread) {
                                /* jump over to destination thread */
-                               t = find_thread(u);
+                               t = find_thread(dest_act->u);
                            } else if (dest_act->u.frame == u.frame) {
                                /* if we're here, then we're cutting to a
                                   continuation in the current activation */
