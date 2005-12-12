@@ -46,6 +46,7 @@ Cmm_Cont        Cmm_RunThread   (Cmm_Cont *k);
 Cmm_Activation  Cmm_YoungestActivation(const Cmm_Cont *k);
 int             Cmm_isOldestActivation(const Cmm_Activation *a);
 Cmm_Activation  Cmm_NextActivation(const Cmm_Activation *a);
+Cmm_Activation  Cmm_NextActivationUnsafe(const Cmm_Activation *a);
 int             Cmm_ChangeActivation(Cmm_Activation *a);
 void           *Cmm_FindLocalVar(const Cmm_Activation *a, unsigned n);
 unsigned        Cmm_LocalVarCount(const Cmm_Activation *a);
@@ -53,6 +54,9 @@ void           *Cmm_FindDeadLocalVar(const Cmm_Activation *a, unsigned n);
 void           *Cmm_FindStackLabel(const Cmm_Activation *a, unsigned n);
 Cmm_Dataptr     Cmm_GetDescriptor(const Cmm_Activation *a, Cmm_Word token);
 Cmm_Cont        Cmm_GetUnwindCont(const Cmm_Activation *a, Cmm_Word index);
+typedef void Cmm_Reloc;
+void Cmm_CopyFrames(Cmm_Cont* c, int num_frames, void *newstack, unsigned n,
+                    void **limitp, Cmm_Reloc **relocp);
 @ 
 
 % ----------------------------------------------------------------------------
@@ -341,8 +345,24 @@ at [[t->stack_base]]).
 int Cmm_isOldestActivation(const Cmm_Activation *a) {
   return (a->caller->caller == NULL);
 }
-@ 
+@
 
+[[Cmm_NextActivationUnsafe]] simply returns a pointer to the activation that
+is located just before the given activation's associated local variable space
+(at [[a->locals - sizeof(activation)]]).
+Note that this function does not in any way actually pop activations off
+the stack; it merely observes the next youngest activation.
+Unlike NextActivation, this will go all the way to the oldest activation.
+<<stack-walking functions>>=
+Cmm_Activation Cmm_NextActivationUnsafe(const Cmm_Activation *a) {
+  if (a->caller == NULL) {
+    fprintf(stderr, "[runtime sys.] already at oldest activation in thread\n");
+    runtime_sys_err();
+  }
+
+  return *(a->caller);
+}
+@ 
 [[Cmm_NextActivation]] simply returns a pointer to the activation that
 is located just before the given activation's associated local variable space
 (at [[a->locals - sizeof(activation)]]).
@@ -357,7 +377,8 @@ Cmm_Activation Cmm_NextActivation(const Cmm_Activation *a) {
 
   return *(a->caller);
 }
-@ 
+@
+ 
 
 [[Cmm_ChangeActivation]] does not prune the stack either, but instead 
 conditionally changes a given activation handle--depending on whether we
@@ -405,6 +426,214 @@ void *Cmm_FindDeadLocalVar(const Cmm_Activation *a, unsigned n) {
   } else {
     return NULL;
   }
+}
+@
+[[Cmm_CopyFrames]] copies frames from youngest to oldest on a stack.
+
+<<stack-walking functions>>=
+Cmm_Activation* Cmm_AllocFrame(int num_locals, int stackdata_size, void** stack_free, void* stack_limit)
+{
+    actptr* actptrptr;
+    void* stackdata;
+    void* stackdata_end;
+    void* locals;
+    void* locals_end;
+    Cmm_Activation* copy;
+
+    actptrptr     = *stack_free;
+    *stack_free = round_up((void *)((actptr *)(*stack_free)+1));
+    mem_assert(*stack_free <= stack_limit);
+
+    stackdata     = *stack_free;
+    *stack_free = round_up((void *) (((dataptr) *stack_free) + stackdata_size));
+    stackdata_end = (dataptr) (*stack_free);
+    mem_assert(*stack_free <= stack_limit);
+
+    locals        = *stack_free;
+    *stack_free = (vptr)(*stack_free) + num_locals;
+    locals_end    = (vptr) (*stack_free);
+    mem_assert(*stack_free <= stack_limit);                             
+
+    *actptrptr    = *stack_free;
+
+    copy  = (actptr) *stack_free;
+    *stack_free  = round_up(((actptr) *stack_free) + 1);
+    mem_assert(*stack_free <= stack_limit);
+
+    copy->locals = locals;
+    copy->locals_end = locals_end;
+    copy->stackdata = stackdata;
+    copy->stackdata_end = stackdata_end;
+    return copy;
+}
+
+static char* Cmm_underflow_handler =
+"CMM.imports({'printf'})\n\
+CMM.exports({'_Cmm_underflow_handler'})\n\
+CMM.section('_Cmm_underflow')\n\
+CMM.define_label('_Cmm_underflow_message')\n\
+CMM.data(8,{'0x43'})\n\
+CMM.data(8,{'0x6d'})\n\
+CMM.data(8,{'0x6d'})\n\
+CMM.data(8,{'0x5f'})\n\
+CMM.data(8,{'0x43'})\n\
+CMM.data(8,{'0x6f'})\n\
+CMM.data(8,{'0x70'})\n\
+CMM.data(8,{'0x79'})\n\
+CMM.data(8,{'0x46'})\n\
+CMM.data(8,{'0x72'})\n\
+CMM.data(8,{'0x61'})\n\
+CMM.data(8,{'0x6d'})\n\
+CMM.data(8,{'0x65'})\n\
+CMM.data(8,{'0x73'})\n\
+CMM.data(8,{'0x2d'})\n\
+CMM.data(8,{'0x67'})\n\
+CMM.data(8,{'0x65'})\n\
+CMM.data(8,{'0x6e'})\n\
+CMM.data(8,{'0x65'})\n\
+CMM.data(8,{'0x72'})\n\
+CMM.data(8,{'0x61'})\n\
+CMM.data(8,{'0x74'})\n\
+CMM.data(8,{'0x65'})\n\
+CMM.data(8,{'0x64'})\n\
+CMM.data(8,{'0x20'})\n\
+CMM.data(8,{'0x73'})\n\
+CMM.data(8,{'0x74'})\n\
+CMM.data(8,{'0x61'})\n\
+CMM.data(8,{'0x63'})\n\
+CMM.data(8,{'0x6b'})\n\
+CMM.data(8,{'0x20'})\n\
+CMM.data(8,{'0x75'})\n\
+CMM.data(8,{'0x6e'})\n\
+CMM.data(8,{'0x74'})\n\
+CMM.data(8,{'0x61'})\n\
+CMM.data(8,{'0x63'})\n\
+CMM.data(8,{'0x6b'})\n\
+CMM.data(8,{'0x20'})\n\
+CMM.data(8,{'0x75'})\n\
+CMM.data(8,{'0x6e'})\n\
+CMM.data(8,{'0x64'})\n\
+CMM.data(8,{'0x65'})\n\
+CMM.data(8,{'0x72'})\n\
+CMM.data(8,{'0x66'})\n\
+CMM.data(8,{'0x6c'})\n\
+CMM.data(8,{'0x6f'})\n\
+CMM.data(8,{'0x77'})\n\
+CMM.data(8,{'0x65'})\n\
+CMM.data(8,{'0x64'})\n\
+CMM.data(8,{'0x20'})\n\
+CMM.data(8,{'0x74'})\n\
+CMM.data(8,{'0x6f'})\n\
+CMM.data(8,{'0x20'})\n\
+CMM.data(8,{'0x68'})\n\
+CMM.data(8,{'0x61'})\n\
+CMM.data(8,{'0x6e'})\n\
+CMM.data(8,{'0x64'})\n\
+CMM.data(8,{'0x6c'})\n\
+CMM.data(8,{'0x65'})\n\
+CMM.data(8,{'0x72'})\n\
+CMM.data(8,{'0x2e'})\n\
+CMM.data(8,{'0xa'})\n\
+CMM.data(8,{'0x0'})\n\
+CMM.procedure ('_Cmm_underflow_handler',0,0,{  })\n\
+CMM.define_label('.Linitialize continuations:l4')\n\
+CMM.define_label('.Lproc body start:l3')\n\
+CMM.push_symbol('_Cmm_underflow_message')\n\
+CMM.store_arg(0)\n\
+CMM.push_symbol('printf')\n\
+CMM.call({}, {}, {}, 0) -- cuts, unwinds, returns, aborts\n\
+CMM.define_label('.Lcall successor:l8')\n\
+CMM.cmm_return(0,0)\n\
+CMM.end_procedure()\n\
+CMM.end_section()\n\
+";
+void Cmm_CopyFrames(Cmm_Cont* c, int num_frames, void *newstack, unsigned n,
+                    void **limitp, Cmm_Reloc **relocp)
+{
+  static bool underflow_handler_inited = 0;
+  static CMM_label *lbl_proc;
+
+  void* stack_free;
+  void* stack_limit;
+  /* save necessary info in activation record */
+  Cmm_Activation* caller = NULL, *a;
+  Cmm_Activation* copy = NULL;
+  Cmm_Activation oldest = Cmm_YoungestActivation(c);
+  int i, j;
+  thread* t;
+ 
+  /* If we haven't compiled the underflow handler, we need to do that. */
+  if (!underflow_handler_inited) {
+    load_assembly_unit(Cmm_underflow_handler, SRC_STRING);
+    lbl_proc = cmm_find_export("_Cmm_underflow_handler");
+    printf("underflow_handler_inited!\n");
+    underflow_handler_inited = 1;
+  }
+
+  /* Here, we insert the stub at the bottom of the new stack.  We have a
+   * special case; if we copy the oldest activation, then we also copy
+   * the stub at the bottom. */
+  if (Cmm_isOldestActivation(&oldest)) {
+    /* this is a kludge.  We are going to overwrite the whole stack,
+     * but we need the thread structure.*/
+    t = init_thread(lbl_proc, newstack, n);
+
+    stack_free = t->stack_base;
+    oldest = Cmm_NextActivationUnsafe(&oldest);  /* Copy the stub also. */
+    num_frames++;
+  } else {
+    t = init_thread(lbl_proc, newstack, n);
+    stack_free = t->stack_free;
+    caller = (actptr) t->stack_free - 1;
+  }
+  stack_limit = t->stack_limit;
+
+
+  /* Find the oldest frame to copy. */
+  for(j = 1; j < num_frames && !Cmm_isOldestActivation(&oldest); j++) {
+    assert(Cmm_ChangeActivation(&oldest));
+  }
+
+
+  /* Now, actually copy the frames. */
+  a = &oldest;
+  for(j = 0; j < num_frames; j++) {
+    printf("AllocFrame %x %x\n", stack_free, stack_limit);
+
+    copy = Cmm_AllocFrame(Cmm_LocalVarCount(a), a->stackdata_end - a->stackdata, &stack_free, stack_limit);
+
+    /* copy stack data */
+    assert(copy->stackdata_end - copy->stackdata == a->stackdata_end - a->stackdata);
+    memcpy(copy->stackdata, a->stackdata, copy->stackdata_end - copy->stackdata);
+
+    copy->pc            = a->pc;
+    copy->kappa         = a->kappa;
+    copy->u             = new_uid(t); /* can't copy a unique frame identifier.*/
+    copy->caller        = caller;
+    copy->name          = a->name;
+    copy->proc          = a->proc;
+
+    /* copy local variables. */
+    for(i = 0; i < Cmm_LocalVarCount(a); i++) {
+      int* dest = Cmm_FindLocalVar(copy, i);
+      int* src = Cmm_FindLocalVar(a, i);
+      assert(NULL != src);
+      assert(NULL != dest);
+      *dest = *src;
+      /*     Cmm_LocalVarWritten(copy, i); */
+    }
+
+    copy->callee = NULL;
+    if (caller) {
+      caller->callee = copy;
+    }
+    
+    caller = copy;
+    a = a->callee;
+  }
+
+  /* Modify the stack pointer of the continuation to point to the new stack. */
+  c->sp   = (void *) copy->stackdata;
 }
 @ 
 
