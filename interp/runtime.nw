@@ -570,6 +570,11 @@ void Cmm_CopyFrames(Cmm_Cont* c, int num_frames, void *newstack, unsigned n,
     underflow_handler_inited = 1;
   }
 
+  /* Find the oldest frame to copy. */
+  for(j = 1; j < num_frames && !Cmm_isOldestActivation(&oldest); j++) {
+    assert(Cmm_ChangeActivation(&oldest));
+  }
+
   /* Here, we insert the stub at the bottom of the new stack.  We have a
    * special case; if we copy the oldest activation, then we also copy
    * the stub at the bottom. */
@@ -587,13 +592,6 @@ void Cmm_CopyFrames(Cmm_Cont* c, int num_frames, void *newstack, unsigned n,
     caller = (actptr) t->stack_free - 1;
   }
   stack_limit = t->stack_limit;
-
-
-  /* Find the oldest frame to copy. */
-  for(j = 1; j < num_frames && !Cmm_isOldestActivation(&oldest); j++) {
-    assert(Cmm_ChangeActivation(&oldest));
-  }
-
 
   /* Now, actually copy the frames. */
   a = &oldest;
