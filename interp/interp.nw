@@ -1690,38 +1690,47 @@ We implement both return rules with one matching case.
 We simply copy pointers to restore information from the activation record stored at [[caller]].
 
 <<restore activation record stored at [[caller]]>>=
-                           L = caller->kappa->also_returns_to.L;
-                           lua_pushtable(L, caller->kappa->also_returns_to);
+                           if (NULL == caller->kappa) {
+			     if (name) {
+			       fprintf(stderr, "WARNING: returning from %s to a caller with NULL kappa.\n", name);
+			     } else {
+			       fprintf(stderr, "WARNING: returning to a caller with NULL kappa.\n");
+			     }
+			     pc = caller->pc;
+			   } else {
+			     L = caller->kappa->also_returns_to.L;
+			     lua_pushtable(L, caller->kappa->also_returns_to);
 
-                           /* we here assert that count = |returns| */
-                           cmm_assert(count == lua_getn(L, -1),
-                                      "continuation count in return stmt. "
-                                      "does not match number of return "
-                                      "continuations");
+			     /* we here assert that count = |returns| */
+			     cmm_assert(count == lua_getn(L, -1),
+				 "continuation count in return stmt. "
+				 "does not match number of return "
+				 "continuations");
 
-                           if (i == count) {
-                             pc = caller->pc;
-                           } else {
-                             CMM_label *lbl;
+			     if (i == count) {
+			       pc = caller->pc;
+			     } else {
+			       CMM_label *lbl;
 
-                             /* Lua tables 1-indexed; returns are 0-indexed */
-                             lua_rawgeti(L, -1, i + 1);
-                             if (!lua_isuserdata(L, -1) ||
-                                 lua_tag(L, -1) != lua_CMM_label_tag ||
-                                 (lbl = lua_touserdata(L, -1)) == NULL ||
-                                 !CMM_label_defined(lbl))
-                             {
-                               lua_pop(L, 2); /* pop bogus label, table */
-                               cmm_err("invalid call-site label");
-                             }
-                             lua_pop(L, 1); /* pop label */
+			       /* Lua tables 1-indexed; returns are 0-indexed */
+			       lua_rawgeti(L, -1, i + 1);
+			       if (!lua_isuserdata(L, -1) ||
+				   lua_tag(L, -1) != lua_CMM_label_tag ||
+				   (lbl = lua_touserdata(L, -1)) == NULL ||
+				   !CMM_label_defined(lbl))
+			       {
+				 lua_pop(L, 2); /* pop bogus label, table */
+				 cmm_err("invalid call-site label");
+			       }
+			       lua_pop(L, 1); /* pop label */
 
-                             cmm_assert(location_known(CMM_label_raddr(lbl)),
-                                        "cannot return to undefined "
-                                        "continuation");
-                             pc = CMM_label_location(lbl);
-                           }
-                           lua_pop(L, 1); /* pop table */
+			       cmm_assert(location_known(CMM_label_raddr(lbl)),
+				   "cannot return to undefined "
+				   "continuation");
+			       pc = CMM_label_location(lbl);
+			     }
+			     lua_pop(L, 1); /* pop table */
+			   }
 
                            locals         = caller->locals;
                            locals_end     = caller->locals_end;
