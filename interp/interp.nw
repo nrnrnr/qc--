@@ -110,6 +110,14 @@ int load_assembly_unit(char *s, assembly_unit_type source_type);
 The main interpreting of this application is done in the [[run_interp]] function.  
 Given a suspended {\PAL} thread at which to start program interpretation, [[run_interp]] executes program code stored as in-memory bytecode.
 
+[[run_interp_n]] runs up to num_bytecodes bytecodes and then saves the state of
+the interpreter on the stack.  It returns the number of bytecodes actually
+interpreted.  If the program finishes or fails, this will be less than the
+number of bytecodes requested.  [[run_interp_n]] takes a pointer to a pointer
+to a thread ([[thread **t1]]), because CUT could change the current thread, and
+the client will need to know about this in order to call [[run_interp_n]]
+again.
+
 <<function prototypes>>=
 void run_interp(thread *t);
 int run_interp_n(thread **t1, valstack* values1, int num_bytecodes);
