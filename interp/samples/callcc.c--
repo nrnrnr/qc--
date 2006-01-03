@@ -1,0 +1,76 @@
+target byteorder little
+       memsize     8
+       wordsize    32
+       pointersize 32
+;
+
+export main;
+
+import bits32 first_class_continuation;
+import bits32 cmmprint32;
+
+section "text" {
+  sum() {
+    bits32 i, acc;
+
+    bits32 cont;
+
+//    cmmprint32(cont);
+    cont = foreign "C" first_class_continuation( blah ) also cuts to blah;
+//    cmmprint32(cont);
+    cmmprint32(cont);
+    return (cont);
+
+    continuation blah():
+  
+      acc = 0;
+  loop:
+    acc = acc + i;
+    i = i + 1;
+    if (i < 2) {
+      goto loop;
+    }
+    return(acc);
+  }
+  
+
+  fact() {
+    bits32 i, acc;
+
+    bits32 cont;
+
+//    cmmprint32(cont);
+    cont = foreign "C" first_class_continuation( blah ) also cuts to blah;
+    cmmprint32(cont);
+    return (cont);
+
+    continuation blah():
+  
+    acc = 1;
+    i = 1;
+  loop2:
+    acc = acc * i;
+    i = i + 1;
+    if (i < 10) {
+      goto loop2;
+    }
+    cmmprint32(acc);
+    cont = foreign "C" first_class_continuation( blah ) also cuts to blah;
+    cmmprint32(cont);
+    return(cont);
+  }
+
+  main() {
+    bits32 fact_cont, sum_cont, cont;
+
+    fact_cont = fact();
+    sum_cont = sum();
+//    cmmprint32(fact_cont);
+//    cmmprint32(sum_cont);
+
+    cmmprint32(fact_cont);
+    cont = foreign "C" first_class_continuation( fact_cont );
+    cmmprint32(cont);
+    cut to cont() also aborts;
+  }
+}
