@@ -153,9 +153,12 @@ front-end's responsibility to allocate stack space when it asks for a new
 thread).
 [[find_thread]] returns the thread uniquely identified by some [[uid]].
 
+[[Cmm_AllocFrame]] is a utility function that allocates a frame on the stack.
+
 <<function prototypes>>=
 thread *init_thread(CMM_label *lbl, void *stack_space, unsigned n);
 thread *find_thread(uid u);
+activation* Cmm_AllocFrame(int num_locals, int stackdata_size, void** stack_free, void* stack_limit);
 @
 
 % ----------------------------------------------------------------------------
@@ -291,5 +294,43 @@ thread containing the activation uniquely identified by the [[uid]].
 thread *find_thread(uid u) {
   return (thread *) u.thread;
 }
+
+activation* Cmm_AllocFrame(int num_locals, int stackdata_size, void** stack_free, void* stack_limit)
+{
+    actptr* actptrptr;
+    void* stackdata;
+    void* stackdata_end;
+    void* locals;
+    void* locals_end;
+    activation* copy;
+
+    actptrptr     = *stack_free;
+    *stack_free = round_up((void *)((actptr *)(*stack_free)+1));
+    mem_assert(*stack_free <= stack_limit);
+
+    stackdata     = *stack_free;
+    *stack_free = round_up((void *) (((dataptr) *stack_free) + stackdata_size));
+    stackdata_end = (dataptr) (*stack_free);
+    mem_assert(*stack_free <= stack_limit);
+
+    locals        = *stack_free;
+    *stack_free = (vptr)(*stack_free) + num_locals;
+    locals_end    = (vptr) (*stack_free);
+    mem_assert(*stack_free <= stack_limit);                             
+
+    *actptrptr    = *stack_free;
+
+    copy  = (actptr) *stack_free;
+    *stack_free  = round_up(((actptr) *stack_free) + 1);
+    mem_assert(*stack_free <= stack_limit);
+
+    copy->locals = locals;
+    copy->locals_end = locals_end;
+    copy->stackdata = stackdata;
+    copy->stackdata_end = stackdata_end;
+    return copy;
+}
+
+
 @ 
 
