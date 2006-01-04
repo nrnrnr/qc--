@@ -73,6 +73,9 @@ single stack.
 
  A diagram of the stack in a sample, non-suspended thread:
 
+   |----------|<--- stack_space pointer given to init_thread.
+   | thread   |
+   | structure|
    |----------|<--- t->stack_base
    |          |
    | actptr_0 |
@@ -109,6 +112,11 @@ This is a diagram of a sample non-suspended thread's stack.  The top of the
 drawing represents the oldest end of the stack; growth is drawn toward the
 bottom.  (In our implementation, growth is directed toward increasing
 addresses.)
+
+Note that some space at the oldest end of the stack is reserved for the
+interpreter's thread structure.  Thus, t->stack_base is not the same as
+the stack_space pointer given to init_thread.
+
   When creating space for a new frame on the stack, we first carve out space
 for stackdata, and then we allocate space for locals.  The activation record 
 for a currently-running frame is not actually stored away on the stack until
