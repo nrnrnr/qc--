@@ -195,8 +195,12 @@ up the thread's first activation--in suspended state, of course.
 thread *init_thread(CMM_label *lbl, void *stack_space, unsigned n) {
   void   *stack_limit = (void *) (((u_int8 *) stack_space) + n);
 
-  thread *t = (thread *) malloc(sizeof(thread));
-  mem_assert(t);
+  /* Allocate the thread structure at the bottom of the stack.
+   * This fixes a memory leak.
+   */
+  thread *t = (thread *) stack_space;
+  stack_space = t + sizeof(*t);
+  mem_assert(stack_space < stack_limit);
 
   t->next_frame_id = 0;
   
