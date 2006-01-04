@@ -517,7 +517,6 @@ void Cmm_CopyFrames(Cmm_Cont* c, int num_frames, void *newstack, unsigned n,
   static bool underflow_handler_inited = 0;
   static CMM_label *lbl_proc;
 
-  void* stack_free;
   void* stack_limit;
   /* save necessary info in activation record */
   Cmm_Activation* caller = NULL, *a;
@@ -526,6 +525,8 @@ void Cmm_CopyFrames(Cmm_Cont* c, int num_frames, void *newstack, unsigned n,
   int i, j;
   thread* t;
  
+  Cmm_Cont* relocated_c;
+  
   /* If we haven't compiled the underflow handler, we need to do that. */
   if (!underflow_handler_inited) {
     load_assembly_unit(Cmm_underflow_handler, SRC_STRING);
@@ -547,27 +548,33 @@ void Cmm_CopyFrames(Cmm_Cont* c, int num_frames, void *newstack, unsigned n,
      * but we need the thread structure.*/
     t = init_thread(lbl_proc, newstack, n);
 
-    stack_free = t->stack_base;
+    t->stack_free = t->stack_base; /* clear the stack. */
     oldest = Cmm_NextActivationUnsafe(&oldest);  /* Copy the stub also. */
     num_frames++;
   } else {
     t = init_thread(lbl_proc, newstack, n);
-    stack_free = t->stack_free;
-    caller = (actptr) t->stack_free - 1;
+    caller = (actptr) t->stack_free - 1; /* caller is the stub */
   }
   stack_limit = t->stack_limit;
 
   /* Now, actually copy the frames. */
   a = &oldest;
   for(j = 0; j < num_frames; j++) {
-    printf("AllocFrame %x %x\n", stack_free, stack_limit);
+    printf("AllocFrame %x %x\n", t->stack_free, stack_limit);
 
-    copy = Cmm_AllocFrame(Cmm_LocalVarCount(a), a->stackdata_end - a->stackdata, &stack_free, stack_limit);
+    copy = Cmm_AllocFrame(Cmm_LocalVarCount(a), a->stackdata_end - a->stackdata, &(t->stack_free), stack_limit);
 
     /* copy stack data */
     assert(copy->stackdata_end - copy->stackdata == a->stackdata_end - a->stackdata);
     memcpy(copy->stackdata, a->stackdata, copy->stackdata_end - copy->stackdata);
-
+    
+    /* If c is a continuation in this stackdata, then we relocate it? */
+    /*
+    if (c >= a->stackdata && c < a->stackdata_end) {
+      relocated_c = copy->stackdata + (c - a->stackdata);
+    }*/
+      
+    
     copy->pc            = a->pc;
     copy->kappa         = a->kappa;
     copy->u             = new_uid(t); /* can't copy a unique frame identifier.*/
@@ -598,6 +605,19 @@ void Cmm_CopyFrames(Cmm_Cont* c, int num_frames, void *newstack, unsigned n,
   c->sp   = (void *) copy->stackdata;
 }
 @ 
+
+[[Cmm_MakeReturnContinuation]] returns the continuation after a returns.
+
+<<stack-walking functions>>=
+Cmm_Cont Cmm_MakeReturnContinuation(Cmm_Activation a)
+{
+  continuation c;
+  c.code = a.pc;
+  c.sp = a.stackdata;
+  return c;
+}
+
+@
 
 [[Cmm_FindStackLabel]] should return a pointer to the location in memory
 associated with the given activation's [[n]]th stackdata label.
