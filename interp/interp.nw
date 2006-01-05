@@ -111,16 +111,31 @@ The main interpreting of this application is done in the [[run_interp]] function
 Given a suspended {\PAL} thread at which to start program interpretation, [[run_interp]] executes program code stored as in-memory bytecode.
 
 [[run_interp_n]] runs up to num_bytecodes bytecodes and then saves the state of
-the interpreter on the stack.  It returns the number of bytecodes actually
-interpreted.  If the program finishes or fails, this will be less than the
-number of bytecodes requested.  [[run_interp_n]] takes a pointer to a pointer
-to a thread ([[thread **t1]]), because CUT could change the current thread, and
-the client will need to know about this in order to call [[run_interp_n]]
-again.
+the interpreter on the stack and in interp_state.  It returns the number of
+bytecodes actually interpreted.  If the program finishes or fails, this will be
+less than the number of bytecodes requested.  [[run_interp_n]] takes a pointer
+to a pointer to a thread ([[thread **t1]]), because CUT could change the
+current thread, and the client will need to know about this in order to call
+[[run_interp_n]] again.
+
+[[interp_state_new]] and [[interp_state_free]] allocate and deallocate
+interpreter "machine state" that is not stored on the stack.  This is the
+argument space and the value stack, corresponding to the registers of the
+interpreter "machine." The sizes are given by the arguments to [[cmm_open]].
+This allows clients to treat the interpreter state as an opaque type.
 
 <<function prototypes>>=
+typedef struct {
+  valstack values;
+  vptr arguments;
+  vptr arguments_limit;
+} interp_state;
+
+interp_state* interp_state_new();
+void interp_state_free(interp_state*);
+
 void run_interp(thread *t);
-int run_interp_n(thread **t1, valstack* values1, int num_bytecodes);
+int run_interp_n(thread **t1, interp_state* values1, int num_bytecodes);
 @ 
 
 % ----------------------------------------------------------------------------
@@ -389,9 +404,8 @@ static void init_interp(int valstack_size1, int argspace_size) {
   c_func_table.L         = L;
   c_sig_table.L          = L;
  
-  /* allocate globally used memory */
-  <<store size of value stack>>
-  <<allocate memory for argument-passing stack>>
+  /* store global constants */
+  <<store size of value stack and argument space>>
 
   /* register C function signatures */
   init_c_sigs();
@@ -401,23 +415,12 @@ static void init_interp(int valstack_size1, int argspace_size) {
 }
 @ 
 
-The value stack is allocated for each thread, so we simply store the value
-stack size in a global variable.
+The value stack and argument space are  allocated for each thread, so we simply
+store the sizes in global variables.
 
-<<store size of value stack>>=
+<<store size of value stack and argument space>>=
   valstack_size = valstack_size1;
-@
-
-To allocate memory for the argument-passing space (which is
-re-used throughout the lifetime of the interpreter), we simply [[malloc]] 
-memory.
-The sizes of this stack was originally specified by arguments to function 
-[[cmm_interp_open]].
-
-<<allocate memory for argument-passing stack>>=
-  arguments          = (vptr) malloc(sizeof(value) * argspace_size);
-  mem_assert(arguments);
-  arguments_limit    = arguments + argspace_size;
+  arguments_size = argspace_size;
 @
 
 % ----------------------------------------------------------------------------
@@ -1081,39 +1084,47 @@ For the main interpreting loop, we use the ``matching'' decoding feature of the 
 This code is pre-processed by the Toolkit and ends up in normal C format.
 
 <<bytecode interpreting>>=
-valstack valstack_new() {
-  valstack values;
+interp_state* interp_state_new() {
+  interp_state* s = malloc(sizeof(*s));
 
-  values.s_base      = (valsptr) malloc(sizeof(value) * valstack_size);
-  mem_assert(values.s_base);
-  values.s_limit     = values.s_base + valstack_size;
-  values.s_free      = values.s_base - 1;
+  s->values.s_base      = (valsptr) malloc(sizeof(value) * valstack_size);
+  mem_assert(s->values.s_base);
+  s->values.s_limit     = s->values.s_base + valstack_size;
+  s->values.s_free      = s->values.s_base - 1;
 
-  return values;
+  s->arguments = malloc(sizeof(value)*arguments_size);
+  mem_assert(s->arguments);
+  s->arguments_limit = s->arguments + arguments_size;
+
+  return s;
 }
 
-void valstack_free(valstack values) {
-  free(values.s_base);
+void interp_state_free(interp_state* s) {
+  free(s->values.s_base);
+  free(s->arguments);
+  free(s);
 }
 
 void run_interp(thread *t) {
-  valstack values = valstack_new();
+  interp_state* s = interp_state_new();
 
   /* we have to allocate memory for globals here */
   <<allocate memory for globals>>
 
   /* stress test */
-  while(run_interp_n(&t, &values, 1));
+  while(run_interp_n(&t, s, 1));
 
-  valstack_free(values);
+  interp_state_free(s);
 }
 
-int run_interp_n(thread **t1, valstack* values1, int num_bytecodes) {
+int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
   int            err_occurred = 0, 
                  done         = 0;
   unsigned char *next;
   int bytecode;
-  valstack values = *values1;
+  valstack values = s->values;
+  vptr arguments = s->arguments;
+  vptr arguments_limit = s->arguments_limit;
   thread* t = *t1;
 
   <<initialize interpreter internals, given suspended thread [[t]]>>
@@ -1147,7 +1158,7 @@ int run_interp_n(thread **t1, valstack* values1, int num_bytecodes) {
   }
 
   errorjmp_set = 0;
-  *values1 = values;
+  s->values = values;
   *t1 = t;
   return bytecode;
 }
@@ -2121,9 +2132,7 @@ First come [[#define]]'d constants:
 And then come global variables:
 
 <<global variable declarations>>=
-extern  vptr      arguments;
-extern  vptr      arguments_limit;
-
+extern  int       arguments_size;
 extern  int       valstack_size;
 
 extern  int       num_globals;
@@ -2136,9 +2145,8 @@ extern  int       verbosity;
 
 <<global variable definitions>>=
 int       valstack_size;
+int       arguments_size;
 
-vptr      arguments       = NULL;
-vptr      arguments_limit = NULL;
 int       max_args        = 0;
 
 int       num_globals     = INVALID;
@@ -2157,8 +2165,6 @@ Finally, we have to properly shut down the interpreter (this code sits in [[cmm_
 
 /* free allocated space */
 
-/* TODO: free value stacks? */
-free(arguments);         arguments     = NULL;
 free(globals);           globals       = NULL;
 
 free(closures_base);     closures_base = NULL; 
