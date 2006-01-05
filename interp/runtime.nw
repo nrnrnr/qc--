@@ -283,15 +283,14 @@ Cmm_Cont Cmm_CreateThread(Cmm_Codeptr f, Cmm_Dataptr x, void *s, unsigned n,
   return k;
 }
 
-Cmm_Cont Cmm_RunThread (Cmm_Cont *k) {
+static thread* GetThread(Cmm_Cont *k) {
+  thread *t;
   size_t  distance;
   actptr youngest;
-  thread *t;
-
+  
   /* make sure k is a valid continuation */
   check_cont(k);
-
-  /* find thread structure */
+   /* find thread structure */
   distance = (size_t)(round_up((dataptr)NULL + sizeof(actptr *)));
   youngest = *((actptr *)((dataptr)(k->sp) - distance));
   t = find_thread(youngest->u);
@@ -299,7 +298,15 @@ Cmm_Cont Cmm_RunThread (Cmm_Cont *k) {
   /* set thread context information */
   t->pc = k->code;
   t->stack_free = (void *) (youngest + 1);
-  run_interp(t);
+  
+  return t;
+}
+
+Cmm_Cont Cmm_RunThread (Cmm_Cont *k) {
+  /* make sure k is a valid continuation */
+  check_cont(k);
+
+  run_interp(GetThread(k));
 
   /* FIX this function should not return! */
   {
@@ -309,6 +316,33 @@ Cmm_Cont Cmm_RunThread (Cmm_Cont *k) {
 
     return k;
   }
+}
+
+void Cmm_RunThreads (Cmm_Cont* ks[], int n) {
+  int i, running;
+  thread** ts = (thread**)calloc(n, sizeof(*ts));
+  interp_state** vs = (interp_state*)calloc(n, sizeof(*vs));
+  
+  for(i = 0; i < n; i++) {
+    ts[i] = GetThread(ks[i]);
+    vs[i] = interp_state_new();
+  }
+  
+  running = 1;
+  while(running) {
+    running = 0;
+    for(i = 0; i < n; i++) {
+      if (NULL != ts[i]) {
+	running = 1;
+	if (1 != run_interp_n(&ts[i], vs[i], 1)) {
+	  interp_state_free(vs[i]);
+	  ts[i] = NULL;
+	}
+      }
+    }
+  }
+  free(ts);
+  free(vs);
 }
 @ 
 
