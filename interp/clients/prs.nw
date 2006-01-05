@@ -750,31 +750,43 @@ more than one {\PAL} thread.
 
 <<lookup and run procedure [[main]] in {\PAL} code>>=
 {
-  Cmm_Codeptr  loc = cmm_find_export("main");
-  Cmm_TCB     *tcb;
+#define NUM_THREADS 2
 
-  if (loc == NULL) {
-    fprintf(stderr, "error: cannot find procedure main\n");
-    exit(1);
+  Cmm_Codeptr  locs[NUM_THREADS];
+  Cmm_TCB     *tcbs[NUM_THREADS];
+  Cmm_Cont    *continuations[NUM_THREADS];
+  int i;
+
+  locs[0] = cmm_find_export("main");
+  locs[1] = cmm_find_export("stealer");
+
+  for(i = 0; i < NUM_THREADS; i++) {
+    if (locs[i] == NULL) {
+      fprintf(stderr, "error: cannot find procedure %d\n", i);
+      exit(1);
+    }
+    tcbs[i] = TCB_new();
+    /* start at loc, passing off globals_backup to C-- procedure "main" */
+    tcbs[i]->cont      = Cmm_CreateThread(locs[i], 
+                                    (void *) (&globals_backup), 
+                                    tcbs[i]->stack_space, 
+                                    tcbs[i]->stack_space_size, 
+                                    &(tcbs[i]->limit_cookie));
+    continuations[i] = &(tcbs[i]->cont);
   }
+
 
   /* allocate space to store globals backup */
   globals_backup = malloc(Cmm_GlobalSize());
   assert(globals_backup);
 
-  tcb            = TCB_new();
-
-  /* start at loc, passing off globals_backup to C-- procedure "main" */
-  tcb->cont      = Cmm_CreateThread(loc, 
-                                    (void *) (&globals_backup), 
-                                    tcb->stack_space, 
-                                    tcb->stack_space_size, 
-                                    &(tcb->limit_cookie));
-
-  tcb->cont      = Cmm_RunThread(&(tcb->cont));
+  Cmm_RunThreads(continuations, NUM_THREADS);
 
   free(globals_backup);
-  TCB_free(tcb);
+  for(i = 0; i < NUM_THREADS; i++) {
+    TCB_free(tcbs[i]);
+  }
+#undef NUM_THREADS
 }
 @ 
 

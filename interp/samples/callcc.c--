@@ -5,6 +5,7 @@ target byteorder little
 ;
 
 export main;
+export stealer;
 
 import bits32 first_class_continuation;
 import bits32 cmmprint32;
@@ -15,10 +16,8 @@ section "text" {
 
     bits32 cont;
 
-//    cmmprint32(cont);
     cont = foreign "C" first_class_continuation( blah ) also cuts to blah;
-//    cmmprint32(cont);
-    cmmprint32(cont);
+   // cmmprint32(cont);
     return (cont);
 
     continuation blah():
@@ -39,9 +38,8 @@ section "text" {
 
     bits32 cont;
 
-//    cmmprint32(cont);
     cont = foreign "C" first_class_continuation( blah ) also cuts to blah;
-    cmmprint32(cont);
+   // cmmprint32(cont);
     return (cont);
 
     continuation blah():
@@ -54,23 +52,31 @@ section "text" {
     if (i < 10) {
       goto loop2;
     }
-    cmmprint32(acc);
+    //cmmprint32(acc);
     cont = foreign "C" first_class_continuation( blah ) also cuts to blah;
-    cmmprint32(cont);
+    //cmmprint32(cont);
     return(cont);
   }
 
-  main() {
-    bits32 fact_cont, sum_cont, cont;
+  main(bits32 globals) {
+   bits32 fact_cont, sum_cont, cont;
 
     fact_cont = fact();
     sum_cont = sum();
-//    cmmprint32(fact_cont);
-//    cmmprint32(sum_cont);
 
-    cmmprint32(fact_cont);
+    //cmmprint32(fact_cont);
     cont = foreign "C" first_class_continuation( fact_cont );
-    cmmprint32(cont);
+    //cmmprint32(cont);
     cut to cont() also aborts;
+  }
+
+  stealer(bits32 globals) {
+    bits32 i;
+
+    i = 0;
+    top:
+      i = i + 1;
+      cmmprint32(i);
+      goto top;
   }
 }
