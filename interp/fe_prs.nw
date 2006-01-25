@@ -1,0 +1,260 @@
+\ifx\nointro\undefined
+\section{Introduction}
+
+\ifx\nointro\undefined
+
+This document contains the documentation for the ``front-end'' part of the C--
+interpreter supporting parallel-ready serial calls.  The functions here belong
+in the client, but they lie in bed here with the interpreter backend because
+of this mismatch between the interpreter and the compiler.
+
+The root of the problem is that with the compiler, the client can [[Cmm_CutTo]]
+a C-- continuation, which never returns.  With the interpreter, the client
+calls [[Cmm_RunThread]], which does return.  Thus, the scheduler for our concurrent
+interpreter must be tied together with the interpreter.
+\fi
+
+% ----------------------------------------------------------------------------
+\interface{[[fe_prs]] : Front-end for Parallel-ready Serial Calls}
+% ----------------------------------------------------------------------------
+
+% ----------------------------------------------------------------------------
+\subsection{Types}
+% ----------------------------------------------------------------------------
+
+[[Stealable_LL]] is a stack of continuations that are stealable.  To push, call
+[[Fe_StealMyReturnContinuation]].  To pop, call
+[[Fe_DontStealMyReturnContinuation]].
+
+[[TCB]] is a thread-control block.  It maintains all the thread state, along
+with a unique thread ID.
+
+[[ThreadsCLL]] is a doubly circularly-linked list for the scheduler, storing TCBs.
+
+<<type definitions>>=
+struct Stealable_LL {
+  Cmm_Cont* k;
+  struct Stealable_LL* next;
+};
+
+struct TCB {
+  thread* ts;
+  interp_state* vs;
+  void* stack_space;
+  unsigned stack_space_size;
+  void *limit_cookie;
+  int id;
+  struct Stealable_LL* stealable;
+};
+struct ThreadsCLL {
+  struct TCB tcb;
+  struct ThreadsCLL *next, *prev;
+};
+
+@
+% ----------------------------------------------------------------------------
+\implementation{[[fe_prs]] : Front-end for Parallel-ready Serial Calls}
+% ----------------------------------------------------------------------------
+
+<<fe_prs.h>>=
+#ifndef _FE_PRS_H
+#define _FE_PRS_H
+
+#include "runtime.h"
+
+<<type definitions>>
+<<function prototypes>>
+
+#endif /* _FE_PRS_H */
+@ 
+
+
+<<fe_prs.c>>=
+#include "fe_prs.h"
+#include "runtime.h"
+#include <stdlib.h>
+#include "interp.h"
+
+<<global variables>>
+<<tcb utility functions>>
+<<stealing functions>>
+<<scheduling functions>>
+@
+
+% ----------------------------------------------------------------------------
+\subsection{Global variables}
+% ----------------------------------------------------------------------------
+
+[[active_threads]] is a doubly circularly-linked list of TCBs for the scheduler.
+[[active_threads]] always points to the currently-running thread.
+
+[[num_active_threads]] tracks the number of running threads.
+
+[[next_thread_id]] is the next unique thread ID to assign.
+
+<<global variables>>=
+struct ThreadsCLL *active_threads = NULL;
+
+int num_active_threads = 0;
+int next_thread_id = 0;
+
+#define STACK_SIZE 4096
+
+@
+% ----------------------------------------------------------------------------
+\subsection{TCB utility functions}
+% ----------------------------------------------------------------------------
+
+[[TCB_new]] allocates a new TCB; [[TCB_free]] frees it.
+
+<<tcb utility functions>>=
+void TCB_free(struct TCB tcb) {
+  interp_state_free(tcb.vs);
+  while(tcb.stealable != NULL) {
+    struct Stealable_LL* tofree = tcb.stealable;
+    tcb.stealable = tcb.stealable->next;
+    free(tofree);
+  }
+  free(tcb.stack_space);
+}
+
+
+struct TCB TCB_new() {
+  struct TCB tcb;
+  tcb.ts = NULL;
+  tcb.vs = interp_state_new();
+  tcb.stealable = NULL;
+  tcb.id = next_thread_id++;
+  tcb.stack_space = malloc(STACK_SIZE);
+  tcb.stack_space_size = STACK_SIZE;
+
+  return tcb;
+}
+
+@
+% ----------------------------------------------------------------------------
+\subsection{Stealing functions}
+% ----------------------------------------------------------------------------
+
+Call [[Fe_StealMyReturnContinuation]] at the start of a function with a stealable
+return continuation, and call [[fe_DontStealMyReturnContinuation]] at the end.
+
+/* Example C--
+  prscall(bits32 g, bits32 x) {
+    foreign "C" Fe_StealMyReturnContinuation(r) also cuts to r;
+    g(x);
+    Fe_DontStealMyReturnContinuation(r);
+    return;
+    continuation r():
+      return;
+  }
+*/
+
+<<stealing functions>>=
+void Fe_StealMyReturnContinuation(Cmm_Cont* k) {
+  struct Stealable_LL* oldTop = active_threads->tcb.stealable;
+  active_threads->tcb.stealable = malloc(sizeof(*active_threads->tcb.stealable));
+  active_threads->tcb.stealable->next = oldTop;
+  active_threads->tcb.stealable-> k = k;
+}
+
+int Fe_DontStealMyReturnContinuation(Cmm_Cont* k) {
+  struct Stealable_LL* target, *next;
+
+  /* Find the relevant continuation. */
+  for(target = active_threads->tcb.stealable; target->k != k && target != NULL; target = target->next);
+  if (target == NULL) {
+    return 0;
+  }
+  target = target->next;
+
+  while(active_threads->tcb.stealable != target) {
+    next = active_threads->tcb.stealable->next;
+    free(active_threads->tcb.stealable);
+    active_threads->tcb.stealable = next;
+  }
+  return 1;
+}
+
+@
+% ----------------------------------------------------------------------------
+\subsection{Stealing functions}
+% ----------------------------------------------------------------------------
+
+[[Fe_AddTCB]] and [[Fe_AddThread]] make a thread runnable and adds it to the schedule.
+
+[[Fe_Go]] executes any runnable threads until none are left.
+
+<<scheduling functions>>=
+void Fe_AddTCB(struct TCB tcb) {
+  if (active_threads == NULL) {
+    active_threads = malloc(sizeof(*active_threads));
+    active_threads->next = active_threads;
+    active_threads->prev = active_threads;
+  } else {
+    struct ThreadsCLL* oldHead = active_threads;
+    active_threads = malloc(sizeof(*active_threads));
+    active_threads->next = oldHead->next;
+    active_threads->next->prev = active_threads;
+    active_threads->prev = oldHead;
+    active_threads->prev->next = active_threads;
+  }
+  active_threads->tcb = tcb;
+  num_active_threads++;
+  printf("Thread %d added, %d now\n", active_threads->tcb.id, num_active_threads);
+} 
+
+void Fe_AddThread(Cmm_Codeptr loc) {
+  struct TCB tcb = TCB_new();
+  Cmm_Cont k = Cmm_CreateThread(loc, NULL, tcb.stack_space,
+	tcb.stack_space_size, &tcb.limit_cookie);
+  tcb.ts = find_thread_c(&k);
+  Fe_AddTCB(tcb);
+}
+
+void Fe_Go() {
+  /* cmm_dump_exports(stdout); */ /* useful for debugging */
+  while(active_threads != NULL) {
+    /* printf("Thread %d: ", active_threads->tcb.id); */
+    if (1 != run_interp_n(&active_threads->tcb.ts, active_threads->tcb.vs, 1)) {
+      TCB_free(active_threads->tcb);
+
+      /* Since this thread is done, we want to remove it by
+         deleting the head of the circularly linked list. */
+      printf("Thread %d finished, %d left\n", active_threads->tcb.id, num_active_threads - 1);
+      if (active_threads->next == active_threads) {
+	/* Only one element */
+	free(active_threads);
+	active_threads = NULL;
+      } else {
+        struct ThreadsCLL* newHead = active_threads->prev;
+        newHead->next = active_threads->next;
+        newHead->next->prev = newHead;
+        free(active_threads);
+        active_threads = newHead;
+      }
+      num_active_threads--;
+    }
+
+
+    if (num_active_threads < 2) {
+      struct Stealable_LL* tosteal = active_threads->tcb.stealable;
+      if (tosteal != NULL) {
+      /* Steal a thread! */
+	Cmm_Cont k;
+	struct TCB tcb;
+
+        printf("Only %d threads, stealing\n",num_active_threads);
+        active_threads->tcb.stealable = tosteal->next;
+	k = Cmm_MakeReturnContinuation(tosteal->k);
+	tcb = TCB_new();
+	Cmm_CopyFrames(&k, 1, tcb.stack_space, tcb.stack_space_size, NULL, NULL);
+        tcb.ts = find_thread_c(&k);
+	Fe_AddTCB(tcb);
+      }
+    }
+    active_threads = active_threads->next;
+  }
+}
+@ 
+

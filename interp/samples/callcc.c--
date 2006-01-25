@@ -9,8 +9,19 @@ export stealer;
 
 import bits32 first_class_continuation;
 import bits32 cmmprint32;
+import bits32 Fe_StealMyReturnContinuation;
+import bits32 Fe_DontStealMyReturnContinuation;
 
 section "text" {
+  prscall(bits32 g, bits32 x) {
+    foreign "C" Fe_StealMyReturnContinuation(r) also cuts to r;
+    g(x);
+    Fe_DontStealMyReturnContinuation(r);
+    return;
+    continuation r():
+      return;
+  }
+
   sum() {
     bits32 i, acc;
 
@@ -59,7 +70,14 @@ section "text" {
   }
 
   main(bits32 globals) {
-   bits32 fact_cont, sum_cont, cont;
+   bits32 fact_cont, sum_cont, cont,i;
+
+    prscall(stealer, globals);
+    i = 0;
+    top2:
+      i = i - 1;
+      cmmprint32(i);
+      goto top2;
 
     fact_cont = fact();
     sum_cont = sum();

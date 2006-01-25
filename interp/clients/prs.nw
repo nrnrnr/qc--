@@ -69,29 +69,9 @@ Its implementation is split across files [[gc.h]] and [[gc.c]].
 <<garbage collection functions>>
 <<callcc functions>>
 <<interpreter interaction functions>>
-<<utility functions>>
 
 <<application driver>>
 @
-
-% ------------------------------------------------------------------ 
-\subsection{Type Definitions}
-% ------------------------------------------------------------------ 
-
-To manage threads returned by the {\PAL} runtime system, we use a [[typedef]]'d structure: [[Cmm_TCB]].
-A [[Cmm_TCB]] ({\PAL} thread control block) contains the actual thread given us by the {\PAL} runtime system, pointers to the space handed off to the system for use as an activation stack, and a ``cookie'' that points to the limit of the thread's activation stack.
-We use this cookie to tell if we've gone off the end of a stack (perhaps by returning or unwinding from the oldest activation on the stack).
-
-<<type definitions>>=
-typedef struct {
-  Cmm_Cont  cont;
-
-  void     *stack_space;
-  unsigned  stack_space_size;
-
-  void     *limit_cookie;
-} Cmm_TCB;
-@ 
 
 To manage heap-allocated space, we need to use special heap tags (to keep
 track of heap object sizes, etc.).
@@ -111,37 +91,6 @@ typedef struct {
 \subsection{Utility Functions}
 % ------------------------------------------------------------------ 
 
-We create a few helper functions to create and destroy [[Cmm_TCB]]s.
-
-<<function prototypes>>=
-Cmm_TCB *TCB_new(void);
-void     TCB_free(Cmm_TCB *tcb);
-@ 
-
-[[TCB_new]] allocates space for the interpreter to use as activation stack space; the space is of size [[stack_space]].
-
-<<utility functions>>=
-Cmm_TCB *TCB_new(void) {
-  Cmm_TCB     *tcb = (Cmm_TCB *) malloc(sizeof(Cmm_TCB));
-  assert(tcb != NULL);
-
-  tcb->stack_space       = (Cmm_Dataptr) malloc(STACK_SIZE);
-  mem_assert(tcb->stack_space);
-  tcb->stack_space_size  = STACK_SIZE;
-
-  return tcb;
-}
-@ 
-
-[[TCB_free]] frees the space [[TCB_new]] allocated for activation stack space.
-
-<<utility functions>>=
-void TCB_free(Cmm_TCB *tcb) {
-  free(tcb->stack_space);
-  free(tcb);
-}
-@ 
- 
 We also throw in a few macros to ease the notational burden of peeking into
 heap tags.
 
@@ -625,6 +574,8 @@ For testing purposes, we also make [[gc]] explicitly callable from {\PAL}.
   register_c_func("alloc",    (void(*)(void))alloc, "pointer,pointer:pointer");
   register_c_func("gc_helper",(void(*)(void))gc,    "pointer:void"           );
   register_c_func("first_class_continuation", (void(*)(void))first_class_continuation, "pointer:pointer");
+  register_c_func("Fe_StealMyReturnContinuation", (void(*)(void))Fe_StealMyReturnContinuation, "pointer:void");
+  register_c_func("Fe_DontStealMyReturnContinuation", (void(*)(void))Fe_DontStealMyReturnContinuation, "pointer:void");
   register_c_func("printf", (void(*)(void))printf, "printf");
 @
 
@@ -750,43 +701,8 @@ more than one {\PAL} thread.
 
 <<lookup and run procedure [[main]] in {\PAL} code>>=
 {
-#define NUM_THREADS 2
-
-  Cmm_Codeptr  locs[NUM_THREADS];
-  Cmm_TCB     *tcbs[NUM_THREADS];
-  Cmm_Cont    *continuations[NUM_THREADS];
-  int i;
-
-  locs[0] = cmm_find_export("main");
-  locs[1] = cmm_find_export("stealer");
-
-  for(i = 0; i < NUM_THREADS; i++) {
-    if (locs[i] == NULL) {
-      fprintf(stderr, "error: cannot find procedure %d\n", i);
-      exit(1);
-    }
-    tcbs[i] = TCB_new();
-    /* start at loc, passing off globals_backup to C-- procedure "main" */
-    tcbs[i]->cont      = Cmm_CreateThread(locs[i], 
-                                    (void *) (&globals_backup), 
-                                    tcbs[i]->stack_space, 
-                                    tcbs[i]->stack_space_size, 
-                                    &(tcbs[i]->limit_cookie));
-    continuations[i] = &(tcbs[i]->cont);
-  }
-
-
-  /* allocate space to store globals backup */
-  globals_backup = malloc(Cmm_GlobalSize());
-  assert(globals_backup);
-
-  Cmm_RunThreads(continuations, NUM_THREADS);
-
-  free(globals_backup);
-  for(i = 0; i < NUM_THREADS; i++) {
-    TCB_free(tcbs[i]);
-  }
-#undef NUM_THREADS
+  Fe_AddThread(cmm_find_export("main"));
+  Fe_Go();
 }
 @ 
 

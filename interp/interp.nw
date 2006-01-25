@@ -1037,6 +1037,7 @@ We start by initializing the internal state of the interpreter:
 
 We copy out the stored, suspended state from [[act]] into local C variables for matters of efficiency (to reduce memory fetches).
 
+\begin{quote}
 Note that we get the current [[pc]] from the given [[thread]] and not from
 the [[activation]].
 They might be different; if so, [[t->pc]] will be what we want.
@@ -1044,11 +1045,12 @@ To see why, remember that [[Cmm_GetUnwindCont]] (from the runtime system)
 might return a thread handle to the client; to do so, it must create a 
 [[thread]] with a different [[pc]] than is stored in its youngest activation's
 frame record. 
+\end{quote}
+DJP: No, I think this is wrong; Cmm_GetUnwindCont might return a _continuation_
+to the client with a different [[pc]] than is stored in its youngest activation's
+frame record.  We take [[pc]] from [[act]]..
 
 <<copy suspended state from [[act]] into local C variables>>=
-  /* we get pc from t */
-  pc            = t->pc;
-
   /* we get rest from act */
   locals        = act->locals;
   locals_end    = act->locals_end;
@@ -1058,6 +1060,7 @@ frame record.
   caller        = act->caller;
   name          = act->name;
   curr_proc     = act->proc;
+  pc            = act->pc;
 @
 
 By now we should know how many globals are used in the source {\PAL} code;
@@ -1144,6 +1147,7 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
                       name);
   } else {
     for (bytecode = 0; bytecode < num_bytecodes; bytecode++) {
+      /* disassemble_instruction(stdout, pc); */ /* Handy for debugging interp. */
       match [next] pc to
         <<matching statement>>
       | HALT              => {
@@ -1483,8 +1487,6 @@ To save the caller's activation record, we simply use the next free [[activation
                            saved->name          = name;
                            saved->proc          = curr_proc;
 
-						   /* also save pc in thread record */ 
-						   t->pc                = saved->pc;
 @
 
 We allocate memory for stackdata and locals from the thread's stack, create a fresh unique identifier using helper [[new_uid]], and set [[pc]] to the permanent address of the [[RAddr]] stored in [[proc]].
@@ -1552,8 +1554,6 @@ Unfortunately we cannot support an infinite number of C function types.
                              saved->name          = name;
                              saved->proc          = curr_proc;
 
-                             /* also save pc in t */
-                             t->pc                = saved->pc;
 
                              /* update info. to be used for stack traces */
                              caller = saved;
@@ -1904,8 +1904,6 @@ away [[next]] so that we do not end up in an infinite loop.
                                saved->name          = name;
                                saved->proc          = curr_proc;
 
-						       /* also save pc in thread record */ 
-						       t->pc                = saved->pc;
                                }
 @
 
@@ -1998,9 +1996,6 @@ when it is about to interpret a certain bytecode instruction.
       saved->caller        = caller;
       saved->name          = name;
       saved->proc          = curr_proc;
-
-      /* also save pc in thread record */ 
-      t->pc                = saved->pc;
     }
 @
 

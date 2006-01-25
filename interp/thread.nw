@@ -16,6 +16,7 @@ This document contains the interface and implementation of {\PAL} threads.
 #include "label.h"
 #include "types.h"
 #include "uid.h"
+#include "controlflow.h"
 
 <<type definitions>>
 <<function prototypes>>
@@ -40,12 +41,18 @@ client of the interpreter, not the [[thread]] module itself.
 Please see the section below on stack layout for more information about this
 stack.
 
+DJP: Previously, the thread structure contained the program counter, justified
+by the comment below.  I don't think this makes any sense; it should always be
+restored either from the continuation or from the activation.
+
+
+\quote{
 Additionally, we include a program counter in the [[thread]] structure.
 The idea of this is, in the runtime system, we might want to get some
 sort of ``handle'' on a resumption point of the youngest activation without
 yet changing the [[pc]] stored in this activation's actual [[activation]]
 record.
-
+}
 <<type definitions>>=
 struct thread {
   unsigned int   next_frame_id;
@@ -55,8 +62,6 @@ struct thread {
   void          *stack_free;
 
   interval_list *dead_list;
-
-  bytecodeptr    pc;
 };
 
 typedef struct thread thread;
@@ -155,17 +160,22 @@ a thread that transferred control to a C function or the runtime system.
 Helper functions [[init_thread]] and [[find_thread]] assist in thread 
 management.
 
-[[init_thread]] initializes the data members of a [[thread]] object, given a 
+[[init_thread]] initializes a new stack, given the label of a function to run, a 
 sufficient amount of pre-allocated stack space (this means that it is the
 front-end's responsibility to allocate stack space when it asks for a new 
 thread).
+[[init_thread]] returns a continuation.  Cutting to this continuation runs the
+given function on the new stack.  To get the underlying thread structure, call
+[[find_thread_c]] on this continuation.
+
 [[find_thread]] returns the thread uniquely identified by some [[uid]].
 
 [[Cmm_AllocFrame]] is a utility function that allocates a frame on the stack.
 
 <<function prototypes>>=
-thread *init_thread(CMM_label *lbl, void *stack_space, unsigned n);
+continuation init_thread(CMM_label *lbl, void *stack_space, unsigned n);
 thread *find_thread(uid u);
+thread *find_thread_c(continuation* k);
 activation* Cmm_AllocFrame(int num_locals, int stackdata_size, void** stack_free, void* stack_limit);
 @
 
@@ -200,8 +210,10 @@ We have to remember to initialize the [[thread]]'s fields, as well as set
 up the thread's first activation--in suspended state, of course.
 
 <<function definitions>>=
-thread *init_thread(CMM_label *lbl, void *stack_space, unsigned n) {
+continuation init_thread(CMM_label *lbl, void *stack_space, unsigned n) {
   void   *stack_limit = (void *) (((u_int8 *) stack_space) + n);
+  continuation k;
+  k.code = CMM_label_location(lbl);
 
   /* Allocate the thread structure at the bottom of the stack.
    * This fixes a memory leak.
@@ -220,9 +232,7 @@ thread *init_thread(CMM_label *lbl, void *stack_space, unsigned n) {
 
   <<set up first activation record>>
 
-  t->pc          = CMM_label_location(lbl);
-
-  return t;
+  return k;
 }
 @
 
@@ -272,6 +282,9 @@ for it was not called by any other activation.
 
     /* set up actptrptr */
     *actptrptr = act;
+
+    /* Set stack pointer */
+    k.sp               = stackdata;
   }
 @ 
 
@@ -302,9 +315,17 @@ stack layout convention.
 Recall that the thread id of a given [[uid]] is actually a pointer to the
 thread containing the activation uniquely identified by the [[uid]].
 
+[[find_thread]] returns the thread structure for a given [[uid]].
+[[find_thread_c]] returns the thread structure for a given continuation.
+
 <<function definitions>>=
 thread *find_thread(uid u) {
   return (thread *) u.thread;
+}
+
+thread *find_thread_c(continuation* k) {
+  actptr a = *((actptr*) k->sp - 1);
+  return find_thread(a->u);
 }
 
 activation* Cmm_AllocFrame(int num_locals, int stackdata_size, void** stack_free, void* stack_limit)
