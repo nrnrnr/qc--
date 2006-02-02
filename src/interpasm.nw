@@ -59,7 +59,11 @@ module New = struct
         let rec extract_offset l = match Rtl.Dn.loc l with
           | RP.Mem (_,_, e, _) ->
               (match Rtl.Dn.exp (Simplify.exp (Rtl.Up.exp e)) with
-               | RP.Const (RP.Bits n) -> Bits.U.to_int n
+               | RP.Fetch (vfp,_) when Vfp.is_vfp vfp -> 0
+               | RP.App(("add", _), [RP.Fetch (vfp,_); RP.Const (RP.Bits n)])
+                   when Vfp.is_vfp vfp -> Bits.U.to_int n
+               | RP.App(("add", _), [RP.Const (RP.Bits n); RP.Fetch (vfp,_)])
+                   when Vfp.is_vfp vfp -> Bits.U.to_int n
                | _ -> fail ())
           | _ -> fail () in
 
