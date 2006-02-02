@@ -126,7 +126,7 @@ The implementation of the {\PAL} runtime system is contained within [[runtime.c]
 
 <<runtime.c>>=
 #include "runtime.h"
-
+#include "underflowhandler.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
@@ -434,86 +434,7 @@ Cmm_Cont Cmm_MakeReturnContinuation(Cmm_Cont* k) {
 [[Cmm_CopyFrames]] copies frames from youngest to oldest on a stack.
 
 <<stack-walking functions>>=
-static char* Cmm_underflow_handler =
-"CMM.imports({'printf'})\n\
-CMM.exports({'_Cmm_underflow_handler'})\n\
-CMM.section('_Cmm_underflow')\n\
-CMM.define_label('_Cmm_underflow_message')\n\
-CMM.data(8,{'0x43'})\n\
-CMM.data(8,{'0x6d'})\n\
-CMM.data(8,{'0x6d'})\n\
-CMM.data(8,{'0x5f'})\n\
-CMM.data(8,{'0x43'})\n\
-CMM.data(8,{'0x6f'})\n\
-CMM.data(8,{'0x70'})\n\
-CMM.data(8,{'0x79'})\n\
-CMM.data(8,{'0x46'})\n\
-CMM.data(8,{'0x72'})\n\
-CMM.data(8,{'0x61'})\n\
-CMM.data(8,{'0x6d'})\n\
-CMM.data(8,{'0x65'})\n\
-CMM.data(8,{'0x73'})\n\
-CMM.data(8,{'0x2d'})\n\
-CMM.data(8,{'0x67'})\n\
-CMM.data(8,{'0x65'})\n\
-CMM.data(8,{'0x6e'})\n\
-CMM.data(8,{'0x65'})\n\
-CMM.data(8,{'0x72'})\n\
-CMM.data(8,{'0x61'})\n\
-CMM.data(8,{'0x74'})\n\
-CMM.data(8,{'0x65'})\n\
-CMM.data(8,{'0x64'})\n\
-CMM.data(8,{'0x20'})\n\
-CMM.data(8,{'0x73'})\n\
-CMM.data(8,{'0x74'})\n\
-CMM.data(8,{'0x61'})\n\
-CMM.data(8,{'0x63'})\n\
-CMM.data(8,{'0x6b'})\n\
-CMM.data(8,{'0x20'})\n\
-CMM.data(8,{'0x75'})\n\
-CMM.data(8,{'0x6e'})\n\
-CMM.data(8,{'0x74'})\n\
-CMM.data(8,{'0x61'})\n\
-CMM.data(8,{'0x63'})\n\
-CMM.data(8,{'0x6b'})\n\
-CMM.data(8,{'0x20'})\n\
-CMM.data(8,{'0x75'})\n\
-CMM.data(8,{'0x6e'})\n\
-CMM.data(8,{'0x64'})\n\
-CMM.data(8,{'0x65'})\n\
-CMM.data(8,{'0x72'})\n\
-CMM.data(8,{'0x66'})\n\
-CMM.data(8,{'0x6c'})\n\
-CMM.data(8,{'0x6f'})\n\
-CMM.data(8,{'0x77'})\n\
-CMM.data(8,{'0x65'})\n\
-CMM.data(8,{'0x64'})\n\
-CMM.data(8,{'0x20'})\n\
-CMM.data(8,{'0x74'})\n\
-CMM.data(8,{'0x6f'})\n\
-CMM.data(8,{'0x20'})\n\
-CMM.data(8,{'0x68'})\n\
-CMM.data(8,{'0x61'})\n\
-CMM.data(8,{'0x6e'})\n\
-CMM.data(8,{'0x64'})\n\
-CMM.data(8,{'0x6c'})\n\
-CMM.data(8,{'0x65'})\n\
-CMM.data(8,{'0x72'})\n\
-CMM.data(8,{'0x2e'})\n\
-CMM.data(8,{'0xa'})\n\
-CMM.data(8,{'0x0'})\n\
-CMM.procedure ('_Cmm_underflow_handler',0,0,{  })\n\
-CMM.define_label('.Linitialize continuations:l4')\n\
-CMM.define_label('.Lproc body start:l3')\n\
-CMM.push_symbol('_Cmm_underflow_message')\n\
-CMM.store_arg(0)\n\
-CMM.push_symbol('printf')\n\
-CMM.call({}, {}, {}, 0) -- cuts, unwinds, returns, aborts\n\
-CMM.define_label('.Lcall successor:l8')\n\
-CMM.cmm_return(0,0)\n\
-CMM.end_procedure()\n\
-CMM.end_section()\n\
-";
+
 void Cmm_CopyFrames(Cmm_Cont* c, int num_frames, void *newstack, unsigned n,
                     void **limitp, Cmm_Reloc **relocp)
 {
@@ -535,7 +456,7 @@ void Cmm_CopyFrames(Cmm_Cont* c, int num_frames, void *newstack, unsigned n,
   if (!underflow_handler_inited) {
     load_assembly_unit(Cmm_underflow_handler, SRC_STRING);
     lbl_proc = cmm_find_export("_Cmm_underflow_handler");
-    printf("underflow_handler_inited!\n");
+    assert(lbl_proc != NULL);
     underflow_handler_inited = 1;
   }
 

@@ -1,0 +1,23 @@
+target byteorder little
+       memsize     8
+       wordsize    32
+       pointersize 32
+;
+
+import bits32 printf;
+export bits32 _Cmm_underflow_handler;
+
+section "text" {
+  _Cmm_underflow_message: bits8[] "Cmm_CopyFrames-generated stack underflowed to handler.\n";
+  
+  _Cmm_underflow_handler() {
+    bits32 k;
+
+    k = c;
+    printf(_Cmm_underflow_message);
+    cut to k() also cuts to c;
+
+    continuation c():
+      cut to c();
+  }
+}

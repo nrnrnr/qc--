@@ -35,7 +35,7 @@ VERSION   = `date +%Y%m%d`
 TOP       = ..
 BINDIR    = $TOP/bin
 LIBDIR    = $TOP/lib
-QCC       = $TOP/bin/qc--.opt
+QCC       = $TOP/bin/qc--
 MODE      = user
 # change to MODE=developer to turn on Toolkit features
 
@@ -144,6 +144,7 @@ INTERPHDRS = activation.h \
              thread.h \
              types.h \
              uid.h \
+	     underflowhandler.h \
              util.h \
              value.h
 
@@ -176,6 +177,7 @@ INTERPSRCS = activation.c \
              table.c \
              thread.c \
              uid.c \
+	     underflowhandler.c \
 	     util.c \
              value.c
 
@@ -404,6 +406,15 @@ optest:V: opgen
 %-ops.c:D: %.ops opgen
 	./opgen $stem.ops > $target
 
+# ------------------------------------------------------------------ 
+# underflow handler
+# ------------------------------------------------------------------ 
+
+underflowhandler.qs: underflowhandler.c--
+	$QCC -interp -S underflowhandler.c--
+
+underflowhandler.c: underflowhandler.qs
+	echo -n "char* Cmm_underflow_handler=\"" > underflowhandler.c; sed -e 's/$/\\n\\/' -e 's/"/\\"/g' underflowhandler.qs >> underflowhandler.c; echo '";' >> underflowhandler.c
 
 #
 # -- end of mkfile --
