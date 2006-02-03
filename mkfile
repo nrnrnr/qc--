@@ -89,7 +89,7 @@ tools:V:        lib dirs
 tools.opt:V:    lib dirs
 	./mkdirs -opt $TOOLSSRC
 
-interp:V:       dirs 
+interp:V:       dirs qc--
 	./mkdirs interp
 doc:V:          dirs 
 	./mkdirs doc
