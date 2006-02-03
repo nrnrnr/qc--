@@ -1147,7 +1147,10 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
                       name);
   } else {
     for (bytecode = 0; bytecode < num_bytecodes; bytecode++) {
-      /* disassemble_instruction(stdout, pc); */ /* Handy for debugging interp. */
+      if (name) {
+        printf("%s: ",name);
+      }
+      disassemble_instruction(stdout, pc);  /* Handy for debugging interp */
       match [next] pc to
         <<matching statement>>
       | HALT              => {
@@ -1712,9 +1715,6 @@ We implement both return rules with one matching case.
                              /* reclaim dead space */
                              interval_list_free(t->dead_list);
                              t->stack_free = t->stack_base;
-
-                             /* we free t -- THIS COULD BE DANGEROUS? */
-                             free(t);
 
                              /*
                               printf("[returned from specified procedure].\n");
