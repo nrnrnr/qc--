@@ -98,24 +98,19 @@ let rtl t r =
           String.concat "->" (List.map string_of_int (argw @ [resw])) in
         (* like the widener, we give up on operations not in M *)
         let wss' = machine_widths opname in
-        let trivial_possible = match wss' with [] -> true | _ :: _ -> false in
-          (* ISN'T THIS COMPLETELY BOGUS? *)
         let op_possible wss =
-          List.exists (List.for_all2 (fun w w' -> w <= w') ws) wss in
+          (* An op is possible if some form exists where each argument is narrower than required.
+           * and if we have the right number of arguments. *)
+          try List.exists (List.for_all2 (fun w w' -> w <= w') ws) wss
+          with Invalid_argument _ -> false in
         if Debug.on "mvalidate" then
           (Printf.eprintf "Validating %%%s::%s..." opname (str_of_opty (opname, ws));
-           if trivial_possible then
-             Debug.eprintf "mvalidate" "trivially possible\n"
-           else if op_possible wss' then
+           if op_possible wss' then
              Debug.eprintf "mvalidate" "matches at %s\n"
                (xy_or_z str_of_opty (List.map (fun x -> (opname, x)) wss'))
            else Debug.eprintf "mvalidate" "impossible\n");
         if op_possible wss' then
            List.for_all exp es
-        else if trivial_possible then
-          (Printf.eprintf "I can hardly credit it -- operator %%%s is \
-                           trivially possible\n" opname;
-           List.for_all exp es)
         else
           let lit_wss = literal_widths opname in
           if op_possible lit_wss then
@@ -124,7 +119,8 @@ let rtl t r =
             reject "No acceptable widths for %%%s on target '%s'; \
                     asked for %s, target accepts %s" opname name 
               (str_of_opty (opname, ws))
-              (xy_or_z str_of_opty (List.map (fun x -> (opname, x)) wss'))
+              (match wss' with [] -> "nothing!"
+                   | _ -> xy_or_z str_of_opty (List.map (fun x -> (opname, x)) wss'))
     | RP.Const c -> const c
   and const c =
     let string c = Rtlutil.ToString.exp (Up.exp (RP.Const c)) in
