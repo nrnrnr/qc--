@@ -378,8 +378,29 @@ void interp_state_free(interp_state* s) {
   free(s);
 }
 
-void run_interp(thread *t) {
+void run_interp(continuation* k) {
   interp_state* s = interp_state_new();
+
+  /* stress test */
+  while(run_interp_n(k, s, 1));
+
+  interp_state_free(s);
+}
+
+int run_interp_n(continuation* k, interp_state* s, int num_bytecodes) {
+  int            err_occurred = 0, 
+                 done         = 0;
+  unsigned char *next;
+  int bytecode;
+  actptr       act;
+
+  assert(k != NULL);
+  assert(k->sp != NULL);
+  assert(k->code != NULL);
+  assert(s != NULL);
+  
+  thread* t = find_thread_c(k);
+  assert(t != NULL);
 
   /* we have to allocate memory for globals here */
     /* we know precisely how much to malloc for globals */
@@ -392,93 +413,38 @@ void run_interp(thread *t) {
       }
     }
 
-  /* stress test */
-  while(run_interp_n(&t, s, 1));
-
-  interp_state_free(s);
-}
-
-int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
-  int            err_occurred = 0, 
-                 done         = 0;
-  unsigned char *next;
-  int bytecode;
-  valstack values = s->values;
-  vptr arguments = s->arguments;
-  vptr arguments_limit = s->arguments_limit;
-  thread* t = *t1;
-
-    /* pc    is kept in thread t        */
-    /* V     is kept global             */
-    /* rho   is kept in thread t        */
-    /* sp    is kept in thread t        */
-    /* g     is kept global             */
-    /* sigma is left implicit!          */
-    /* A     is kept global             */
-    /* u     is kept in thread t        */
-    /* s     is kept in t->stack_X      */
-
-    actptr       act;
-    bytecodeptr  pc;
-    value       *locals;
-    value       *locals_end;
-    dataptr      stackdata;
-    dataptr      stackdata_end;
-    uid          u;
-
-    actptr       caller;
-    procedure   *curr_proc = NULL;
-    const char  *name = NULL;
-
-    assert(t != NULL);
-
-    /* pop off activation record */
-    t->stack_free = (void *) (((actptr) t->stack_free) - 1);
-    act = (actptr) t->stack_free;
-    mem_assert(act >= (actptr) t->stack_base);
-
-      /* we get rest from act */
-      locals        = act->locals;
-      locals_end    = act->locals_end;
-      stackdata     = act->stackdata;
-      stackdata_end = act->stackdata_end;
-      u             = act->u;
-      caller        = act->caller;
-      name          = act->name;
-      curr_proc     = act->proc;
-      pc            = act->pc;
+  /* The activation record is on the stack.  We fetch it through the stack pointer. */
+  act = actptr_from_sp(k->sp);
+  mem_assert(act >= (actptr)t->stack_base);
 
 
   errorjmp_set = 1;
   if (setjmp(errorjmp)) {
+    /* This is the exception handler.  If an error occurs, we long-jump here. */
     errorjmp_set = 0;
-    fprintf(stderr, "error: unrecoverable runtime error at PC 0x%x\n", (unsigned)pc);
-    if (name)
+    fprintf(stderr, "error: unrecoverable runtime error at PC 0x%x\n", (unsigned)act->pc);
+    if (act->name)
           fprintf(stderr, "| Stack trace:\n");
-      fprintf(stderr, "| 0: %s()\n", name);
-    if (caller)
-          activation_trace(caller);
+      fprintf(stderr, "| 0: %s()\n", act->name);
+    if (act->caller)
+          activation_trace(act->caller);
 
-    if (name)
+    if (act->name)
       fprintf(stderr, "Try disassembling '%s' to find relevant instructions\n",
-                      name);
+                      act->name);
   } else {
     for (bytecode = 0; bytecode < num_bytecodes; bytecode++) {
-      /* Handy for debugging interp */
       /*
-      if (name) {
-        printf("%s: ",name);
+      if (act->name) {
+        printf("%s: ",act->name);
       }
-      disassemble_instruction(stdout, pc);
-      */
-
-
+      disassemble_instruction(stdout, act->pc);*/  /* Handy for debugging interp */
 
 
 #line 101 "generated-code"
 
 { 
-  unsigned char * MATCH_p = pc;
+  unsigned char * MATCH_p = act->pc;
   
   #line 201 "generated-code"
   { 
@@ -488,7 +454,7 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
       { 
         next = (((MATCH_p) + 0));
         
-        #line 989 "interp.m"
+        #line 841 "interp.m"
         cmm_err("unsupported instruction encoutered");
         
         
@@ -505,10 +471,10 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
               unsigned p = MATCH_w_32_8 /* bits32 at 8 */;
               next = (((MATCH_p) + 5));
               
-              #line 970 "interp.m"
+              #line 822 "interp.m"
                {
-                                                 curr_proc = (procedure *) p;
-                                                 pc = next;
+                                                 act->proc = (procedure *) p;
+                                                 act->pc = next;
                                                  }
               
               
@@ -521,9 +487,9 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
             { 
               next = (((MATCH_p) + 1));
               
-              #line 974 "interp.m"
+              #line 826 "interp.m"
                {
-                                                 curr_proc = NULL;
+                                                 act->proc = NULL;
                                                  cmm_err("procedure missing return/jump statement");
                                                  }
               
@@ -543,13 +509,13 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
               unsigned v = MATCH_w_32_8 /* bits32 at 8 */;
               next = (((MATCH_p) + 6));
               
-              #line 471 "interp.m"
+              #line 437 "interp.m"
                if (width > 32) {  /* FIX this could be better */
                                                    width = sizeof(MP_T);
                                                  }
               
-                                                 PUSH(to_CMM_value(v, width), values); 
-                                                 pc = next;
+                                                 PUSH(to_CMM_value(v, width), s->values); 
+                                                 act->pc = next;
               
               
               #line 601 "generated-code" 
@@ -570,23 +536,23 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
               unsigned sz = MATCH_w_8_8 & 0xff /* bits8 at 8 */;
               next = (((MATCH_p) + 4));
               
-              #line 531 "interp.m"
+              #line 497 "interp.m"
                {
                                                  assert(bo == DEF_BYTE_ORDER);
                                                  assert(al == DEF_ALIGN);
                                                  if (sz <= 0 || sz > sizeof(value)*8)
                                                    cmm_err_wint("cannot fetch %d bits", sz);
-                                                 UNDERFLOW_CHECK(values, 3);
-                                                 if (STACK_ELT(values, -2).bool) {
+                                                 UNDERFLOW_CHECK(s->values, 3);
+                                                 if (STACK_ELT(s->values, -2).bool) {
                                                      {
-                                                       value *tostore       = (value *) STACK_ELT(values, -1).ptr;
+                                                       value *tostore       = (value *) STACK_ELT(s->values, -1).ptr;
               
                                                        cmm_assert(tostore != NULL, "attempted to STORE to address NULL");
-                                                       memcpy(tostore, &(STACK_ELT(values, 0)), sz / 8);
+                                                       memcpy(tostore, &(STACK_ELT(s->values, 0)), sz / 8);
                                                      }
                                                  }
-                                                 values.s_free -= 3;
-                                                 pc             = next;
+                                                 s->values.s_free -= 3;
+                                                 act->pc = next;
                                                  }
               
               
@@ -608,22 +574,22 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
               unsigned sz = MATCH_w_8_8 & 0xff /* bits8 at 8 */;
               next = (((MATCH_p) + 4));
               
-              #line 501 "interp.m"
+              #line 467 "interp.m"
                {
                                                  assert(bo == DEF_BYTE_ORDER);
                                                  assert(al == DEF_ALIGN);
                                                  if (sz <= 0 || sz > sizeof(value)*8)
                                                    cmm_err_wint("cannot fetch %d bits", sz);
                                                    {
-                                                     value *fetched       = (value *) STACK_ELT(values, 0).ptr;
+                                                     value *fetched       = (value *) STACK_ELT(s->values, 0).ptr;
                                                      value  v             = value_zero();
               
                                                      cmm_assert(fetched != NULL, "attempted to FETCH at address NULL");
               
                                                      memcpy((void *) &v, (const void *) fetched, sz / 8);
-                                                     STACK_ELT(values, 0) = v;
+                                                     STACK_ELT(s->values, 0) = v;
                                                    }
-                                                 pc = next;
+                                                 act->pc = next;
                                                  }
               
               
@@ -645,20 +611,20 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
               unsigned sz = MATCH_w_8_8 & 0xff /* bits8 at 8 */;
               next = (((MATCH_p) + 4));
               
-              #line 517 "interp.m"
+              #line 483 "interp.m"
                {
                                                  assert(bo == DEF_BYTE_ORDER);
                                                  assert(al == DEF_ALIGN);
                                                  if (sz <= 0 || sz > sizeof(value)*8)
                                                    cmm_err_wint("cannot fetch %d bits", sz);
                                                    {
-                                                     value *tostore       = (value *) STACK_ELT(values, -1).ptr;
+                                                     value *tostore       = (value *) STACK_ELT(s->values, -1).ptr;
               
                                                      cmm_assert(tostore != NULL, "attempted to STORE to address NULL");
-                                                     memcpy(tostore, &(STACK_ELT(values, 0)), sz / 8);
+                                                     memcpy(tostore, &(STACK_ELT(s->values, 0)), sz / 8);
                                                    }
-                                                 values.s_free -= 2;
-                                                 pc             = next;
+                                                 s->values.s_free -= 2;
+                                                 act->pc = next;
                                                  }
               
               
@@ -674,10 +640,10 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
               unsigned n = MATCH_w_8_8 & 0xff /* bits8 at 8 */;
               next = (((MATCH_p) + 2));
               
-              #line 563 "interp.m"
-               cmm_assert(arguments + n < arguments_limit,
+              #line 529 "interp.m"
+               cmm_assert(s->arguments + n < s->arguments_limit,
                                                         "invalid register index to argument space");
-                                                 PUSH(arguments[n], values); pc = next;
+                                                 PUSH(s->arguments[n], s->values); act->pc = next;
               
               
               #line 1001 "generated-code" 
@@ -692,10 +658,10 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
               unsigned n = MATCH_w_8_8 & 0xff /* bits8 at 8 */;
               next = (((MATCH_p) + 2));
               
-              #line 560 "interp.m"
-               cmm_assert(arguments + n < arguments_limit,
+              #line 526 "interp.m"
+               cmm_assert(s->arguments + n < s->arguments_limit,
                                                         "invalid register index to argument space");
-                                                 arguments[n] = POP(values); pc = next;
+                                                 s->arguments[n] = POP(s->values); act->pc = next;
               
               
               #line 1101 "generated-code" 
@@ -710,8 +676,8 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
               unsigned n = MATCH_w_8_8 & 0xff /* bits8 at 8 */;
               next = (((MATCH_p) + 2));
               
-              #line 479 "interp.m"
-                locals[n] = POP(values); pc = next;
+              #line 445 "interp.m"
+                act->locals[n] = POP(s->values); act->pc = next;
               
               
               #line 1201 "generated-code" 
@@ -726,8 +692,8 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
               unsigned n = MATCH_w_8_8 & 0xff /* bits8 at 8 */;
               next = (((MATCH_p) + 2));
               
-              #line 480 "interp.m"
-               globals[n] = POP(values); pc = next;
+              #line 446 "interp.m"
+               globals[n] = POP(s->values); act->pc = next;
               
               
               #line 1301 "generated-code" 
@@ -742,8 +708,8 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
               unsigned n = MATCH_w_8_8 & 0xff /* bits8 at 8 */;
               next = (((MATCH_p) + 2));
               
-              #line 477 "interp.m"
-               PUSH( locals[n], values); pc = next;
+              #line 443 "interp.m"
+               PUSH( act->locals[n], s->values); act->pc = next;
               
               
               #line 1401 "generated-code" 
@@ -758,8 +724,8 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
               unsigned n = MATCH_w_8_8 & 0xff /* bits8 at 8 */;
               next = (((MATCH_p) + 2));
               
-              #line 478 "interp.m"
-               PUSH(globals[n], values); pc = next;
+              #line 444 "interp.m"
+               PUSH(globals[n], s->values); act->pc = next;
               
               
               #line 1501 "generated-code" 
@@ -774,8 +740,8 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
               unsigned n = MATCH_w_16_8 & 0xffff /* bits16 at 8 */;
               next = (((MATCH_p) + 3));
               
-              #line 479 "interp.m"
-                locals[n] = POP(values); pc = next;
+              #line 445 "interp.m"
+                act->locals[n] = POP(s->values); act->pc = next;
               
               
               #line 1601 "generated-code" 
@@ -790,8 +756,8 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
               unsigned n = MATCH_w_16_8 & 0xffff /* bits16 at 8 */;
               next = (((MATCH_p) + 3));
               
-              #line 480 "interp.m"
-               globals[n] = POP(values); pc = next;
+              #line 446 "interp.m"
+               globals[n] = POP(s->values); act->pc = next;
               
               
               #line 1701 "generated-code" 
@@ -806,8 +772,8 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
               unsigned n = MATCH_w_16_8 & 0xffff /* bits16 at 8 */;
               next = (((MATCH_p) + 3));
               
-              #line 477 "interp.m"
-               PUSH( locals[n], values); pc = next;
+              #line 443 "interp.m"
+               PUSH( act->locals[n], s->values); act->pc = next;
               
               
               #line 1801 "generated-code" 
@@ -822,8 +788,8 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
               unsigned n = MATCH_w_16_8 & 0xffff /* bits16 at 8 */;
               next = (((MATCH_p) + 3));
               
-              #line 478 "interp.m"
-               PUSH(globals[n], values); pc = next;
+              #line 444 "interp.m"
+               PUSH(globals[n], s->values); act->pc = next;
               
               
               #line 1901 "generated-code" 
@@ -838,13 +804,13 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
               unsigned n = MATCH_w_8_8 & 0xff /* bits8 at 8 */;
               next = (((MATCH_p) + 2));
               
-              #line 481 "interp.m"
-               UNDERFLOW_CHECK(values, 2);
-                                                 if (STACK_ELT(values, -1).bool) {
-                                                   locals[n] = STACK_ELT(values, 0);
+              #line 447 "interp.m"
+               UNDERFLOW_CHECK(s->values, 2);
+                                                 if (STACK_ELT(s->values, -1).bool) {
+                                                   act->locals[n] = STACK_ELT(s->values, 0);
                                                  }
-                                                 values.s_free -= 2;
-                                                 pc             = next;
+                                                 s->values.s_free -= 2;
+                                                 act->pc = next;
               
               
               
@@ -860,13 +826,13 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
               unsigned n = MATCH_w_16_8 & 0xffff /* bits16 at 8 */;
               next = (((MATCH_p) + 3));
               
-              #line 481 "interp.m"
-               UNDERFLOW_CHECK(values, 2);
-                                                 if (STACK_ELT(values, -1).bool) {
-                                                   locals[n] = STACK_ELT(values, 0);
+              #line 447 "interp.m"
+               UNDERFLOW_CHECK(s->values, 2);
+                                                 if (STACK_ELT(s->values, -1).bool) {
+                                                   act->locals[n] = STACK_ELT(s->values, 0);
                                                  }
-                                                 values.s_free -= 2;
-                                                 pc             = next;
+                                                 s->values.s_free -= 2;
+                                                 act->pc = next;
               
               
               
@@ -882,13 +848,13 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
               unsigned n = MATCH_w_8_8 & 0xff /* bits8 at 8 */;
               next = (((MATCH_p) + 2));
               
-              #line 488 "interp.m"
-               UNDERFLOW_CHECK(values, 2);
-                                                 if (STACK_ELT(values, -1).bool) {
-                                                   globals[n] = STACK_ELT(values, 0);
+              #line 454 "interp.m"
+               UNDERFLOW_CHECK(s->values, 2);
+                                                 if (STACK_ELT(s->values, -1).bool) {
+                                                   globals[n] = STACK_ELT(s->values, 0);
                                                  }
-                                                 values.s_free -= 2;
-                                                 pc             = next;
+                                                 s->values.s_free -= 2;
+                                                 act->pc = next;
               
               
               #line 2201 "generated-code" 
@@ -903,13 +869,13 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
               unsigned n = MATCH_w_16_8 & 0xffff /* bits16 at 8 */;
               next = (((MATCH_p) + 3));
               
-              #line 488 "interp.m"
-               UNDERFLOW_CHECK(values, 2);
-                                                 if (STACK_ELT(values, -1).bool) {
-                                                   globals[n] = STACK_ELT(values, 0);
+              #line 454 "interp.m"
+               UNDERFLOW_CHECK(s->values, 2);
+                                                 if (STACK_ELT(s->values, -1).bool) {
+                                                   globals[n] = STACK_ELT(s->values, 0);
                                                  }
-                                                 values.s_free -= 2;
-                                                 pc             = next;
+                                                 s->values.s_free -= 2;
+                                                 act->pc = next;
               
               
               #line 2301 "generated-code" 
@@ -921,10 +887,10 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
             { 
               next = (((MATCH_p) + 1));
               
-              #line 566 "interp.m"
+              #line 532 "interp.m"
                { 
-                                                 value v = POP(values);
-                                                 pc      = (bytecodeptr) v.ptr;
+                                                 value v = POP(s->values);
+                                                 act->pc      = (bytecodeptr) v.ptr;
                                                  }
               
               
@@ -940,12 +906,12 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
               unsigned a = MATCH_w_32_8 /* bits32 at 8 */;
               next = (((MATCH_p) + 5));
               
-              #line 570 "interp.m"
+              #line 536 "interp.m"
                {
-                                                 value v = POP(values);
+                                                 value v = POP(s->values);
                                                  if (v.bool) {
-                                                   pc = (bytecodeptr) a;
-                                                 } else { pc = next; }
+                                                   act->pc = (bytecodeptr) a;
+                                                 } else { act->pc = next; }
                                                  }
               
               
@@ -961,12 +927,12 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
               unsigned a = MATCH_w_32_8 /* bits32 at 8 */;
               next = (((MATCH_p) + 5));
               
-              #line 576 "interp.m"
+              #line 542 "interp.m"
                {
-                                                 value v = POP(values);
+                                                 value v = POP(s->values);
                                                  if (!v.bool) {
-                                                   pc = (bytecodeptr) a;
-                                                 } else { pc = next; }
+                                                   act->pc = (bytecodeptr) a;
+                                                 } else { act->pc = next; }
                                                  }
               
               
@@ -985,10 +951,10 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
               unsigned b = MATCH_w_32_40 /* bits32 at 40 */;
               next = (((MATCH_p) + 9));
               
-              #line 582 "interp.m"
+              #line 548 "interp.m"
                {
-                                                 value v = POP(values);
-                                                 pc      = (bytecodeptr) (v.bool ? a : b);
+                                                 value v = POP(s->values);
+                                                 act->pc      = (bytecodeptr) (v.bool ? a : b);
                                                  }
               
               
@@ -1004,14 +970,14 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
               unsigned a = MATCH_w_32_8 /* bits32 at 8 */;
               next = (((MATCH_p) + 5));
               
-              #line 617 "interp.m"
+              #line 583 "interp.m"
                {
                                                  value        v;
                                                  CMM_label   *lbl;
               
-                                                 v    = POP(values);
+                                                 v    = POP(s->values);
                                                  lbl  = (CMM_label *) v.ptr;
-                                                 ASSERT_EMPTY(values);
+                                                 ASSERT_EMPTY(s->values);
                                                  if (lbl->ty == CMM_CFUNCTION) {
                                                                               {
                                                                               c_caller      call_helper;
@@ -1019,39 +985,18 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
                                                                               lua_State    *L = c_func_table.L;
                                                                               unsigned int  i = lbl->lbl.cfunc_id;
               
-                                                                              /* save current info in partial stack record */
-                                                                              {
-                                                                                actptr saved = (actptr) t->stack_free;
-                                                                                t->stack_free = round_up((void *) (saved + 1));
-                                                                                mem_assert(t->stack_free <= t->stack_limit);
-              
-                                                                                saved->pc            = pc;
-                                                                                saved->locals        = locals;
-                                                                                saved->locals_end    = locals_end;
-                                                                                saved->stackdata     = stackdata;
-                                                                                saved->stackdata_end = stackdata_end;
-                                                                                /* we set kappa to NULL to signify partiality */
-                                                                                saved->kappa         = NULL;
-                                                                                saved->callee        = NULL;
-                                                                                saved->u             = u;
-                                                                                saved->caller        = caller;
-                                                                                saved->name          = name;
-                                                                                saved->proc          = curr_proc;
-              
-              
-                                                                                /* update info. to be used for stack traces */
-                                                                                caller = saved;
-                                                                              }
+                                                                              act->pc = next;
               
                                                                                                          lua_pushtable(L, c_func_table);
                                                                                                          lua_rawgeti(L, -1, i);
                                                                                                          lua_pushstring(L, C_FUNC_NAME);
                                                                                                          lua_gettable(L, -2);
+                                                                                                         /* TODO (djp): I don't understand what this does.
                                                                                                          if (!lua_isstring(L, -1)) {
                                                                                                            name = NULL;
                                                                                                          } else {
                                                                                                            name = lua_tostring(L, -1);
-                                                                                                         }
+                                                                                                         } */
                                                                                    
                                                                                                          lua_pop(L, 3);  /* pop tables & retrieved value */
               
@@ -1082,24 +1027,8 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
                                                                                                          }
                                                                                                          lua_pop(L, 3);   /* pop pointer and 2 tables */
               
-                                                                                                         arguments = call_helper(arguments, f);
+                                                                                                         s->arguments = call_helper(s->arguments, f);
               
-                                                                              /* restore needed info from partial stack record */
-                                                                              {
-                                                                                actptr saved  = ((actptr) t->stack_free) - 1;
-                                                                                t->stack_free = (void *) saved;
-              
-                                                                                locals        = saved->locals;
-                                                                                locals_end    = saved->locals_end;
-                                                                                stackdata     = saved->stackdata;
-                                                                                stackdata_end = saved->stackdata_end;
-                                                                                u             = saved->u;
-                                                                                caller        = saved->caller;
-                                                                                name          = saved->name;
-                                                                                curr_proc     = saved->proc;
-                                                                              }
-              
-                                                                              pc = next;
                                                                               }
                                                  } else if (lbl->ty != CMM_PROCEDURE) {
                                                    if (lbl->ty == CMM_LABEL)
@@ -1110,63 +1039,34 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
                                                                 " and appears corrupted",(int)v.ptr);
                                                  } else {
                                                                               {
-                                                                                actptr       saved;
-                                                                                                            actptr      *actptrptr;
                                                                                 annotations *ann  = (annotations *) a;
                                                                                 procedure   *proc = lbl->lbl.proc;
               
                                                                                 assert(ann  != NULL);
                                                                                 assert(proc != NULL);
+                                                                                cmm_assert(location_known(proc->raddr),
+                                                                                         "cannot call undefined procedure");
+                                                                               
+                                                                                /* First, we set up the current activation. */
+                                                                                act->pc = next;
+                                                                                act->kappa = ann;
               
-                                                                                                           /* save necessary info in activation record */
-                                                                                                           saved          = (actptr) t->stack_free;
-                                                                                                           t->stack_free  = round_up(
-                                                                                                                              ((actptr) t->stack_free) + 1);
-                                                                                                           mem_assert(t->stack_free <= t->stack_limit);
+                                                                                /* Next, we allocate a new frame. */
+                                                                                act->callee   = Cmm_AllocFrameNext(proc->num_locals, proc->stackdata_size, act->stackdata,t->stack_limit);
+                                                                                act->callee->caller = act;
               
-                                                                                                           saved->pc            = next;
-                                                                                                           saved->locals        = locals;
-                                                                                                           saved->locals_end    = locals_end;
-                                                                                                           saved->stackdata     = stackdata;
-                                                                                                           saved->stackdata_end = stackdata_end;
-                                                                                                           saved->kappa         = ann;
-                                                                                                           saved->u             = u;
-                                                                                                                                   saved->caller        = caller;
-                                                                                                           saved->name          = name;
-                                                                                                           saved->proc          = curr_proc;
+                                                                                /* Now, we move to the new frame and set it up. */
+                                                                                act = act->callee;
+                                                                                act->u   = new_uid(t);
+                                                                                act->pc  = (bytecodeptr) location(proc->raddr);
+                                                                                act->proc =  proc;
+                                                                                act->name      = proc->raddr->label->name;
               
+                                                                                /* When the matching statement is executed once
+                                                                                 * more during the next cycle of the [[for]] loop,
+                                                                                 * {\PAL} code interpreting will seamlessly
+                                                                                 * continue at the next procedure. */
               
-                                                                                                          /* allocate memory, update state of the machine */
-                                                                                                           cmm_assert(location_known(proc->raddr),
-                                                                                                                      "cannot call undefined procedure");
-              
-                                                                                                           pc            = (bytecodeptr) location(proc->raddr);
-                                                                                                           caller        = saved;
-              
-                                                                                                           actptrptr     = t->stack_free;
-                                                                                                           t->stack_free = round_up((void *)
-                                                                                                                                ((actptr *)(t->stack_free)+1));
-              
-                                                                                                           stackdata     = t->stack_free;
-                                                                                                           t->stack_free = round_up(
-                                                                                                                         (void *) (((dataptr) t->stack_free) +
-                                                                                                                                   proc->stackdata_size));
-                                                                                                           stackdata_end = (dataptr) (t->stack_free);
-                                                                                                           mem_assert(t->stack_free <= t->stack_limit);
-              
-                                                                                                           locals        = t->stack_free;
-                                                                                                           t->stack_free = (vptr)(t->stack_free) + 
-                                                                                                                                                   proc->num_locals;
-                                                                                                           locals_end    = (vptr) (t->stack_free);
-                                                                                                           mem_assert(t->stack_free <= t->stack_limit);                             
-                                                                                                           /* CALLEE */
-                                                                                                           saved->callee = (actptr) locals_end;
-              
-                                                                                                           *actptrptr    = t->stack_free;
-                                                                                                           u             = new_uid(t);
-              
-                                                                                curr_proc = proc;
-                                                                                name      = proc->raddr->label->name;
                                                                               }
                                                  }
                                                  }
@@ -1181,44 +1081,40 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
             { 
               next = (((MATCH_p) + 1));
               
-              #line 782 "interp.m"
+              #line 682 "interp.m"
                {
                                                  value      v;
                                                  CMM_label *lbl;
                                                  procedure *proc;
-                                                                         actptr    *actptrptr;
               
-                                                 v    = POP(values);
+                                                 v    = POP(s->values);
                                                  lbl  = (CMM_label *) v.ptr;
-                                                 ASSERT_EMPTY(values);
-              
-                                                 cmm_assert(lbl->ty == CMM_PROCEDURE,
-                                                            "target label not a procedure");
+                                                 ASSERT_EMPTY(s->values);
                                                  proc = lbl->lbl.proc;
                                                  assert(proc != NULL);
               
+                                                 dies_uid(act->u);
+              
+                                                 /* Because the old activation dies, we can simply
+                                                  * reuse the memory chunk it used on its thread's
+                                                  * stack for [[stackdata]] and [[locals]].  To
+                                                  * accomplish this, we ask Cmm_AllocFrameNext for a
+                                                  * frame after the current frame's caller, i.e.,
+                                                  * replacing the current frame.
+                                                  */
+                                                 assert(act->caller != NULL); /* we should never be tailcalling from the stub. */
+                                                 act = Cmm_AllocFrameNext(proc->num_locals, proc->stackdata_size, act->caller->stackdata,t->stack_limit); 
+              
+                                                 cmm_assert(lbl->ty == CMM_PROCEDURE,
+                                                            "target label not a procedure");
+              
                                                  cmm_assert(location_known(proc->raddr),
                                                             "cannot call undefined procedure");
-                                                 pc   = (bytecodeptr) location(proc->raddr);
-              
-                                                                            caller        = caller;
-                                                                                                    stackdata_end = stackdata + proc->stackdata_size;
-              
-                                                                                                    locals        = round_up(stackdata_end);
-                                                                            locals_end    = locals + proc->num_locals;
-                                                                            t->stack_free = (void *) locals_end;
-                                                                            mem_assert(t->stack_free <= t->stack_limit);
-              
-                                                                                                    /* reset actptrptr */
-                                                                                                    actptrptr = ((void *) ((actptr *)stackdata - 1));
-                                                                                                    *actptrptr = t->stack_free;
-              
-                                                 /* deal with uid : */
-                                                 dies_uid(u);
-                                                 u = new_uid(t);
-              
-                                                 name      = proc->raddr->label->name;
-                                                 curr_proc = proc;
+                                                 /* We assign a new UID since this is a conceptually a new frame. */
+                                                 act->u = new_uid(t);
+                                                 act->name      = proc->raddr->label->name;
+                                                 act->proc = proc;
+                                                 act->pc   = (bytecodeptr) location(proc->raddr);
                                                  }
               
               
@@ -1237,19 +1133,18 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
               unsigned i = MATCH_w_8_8 & 0xff /* bits8 at 8 */;
               next = (((MATCH_p) + 3));
               
-              #line 820 "interp.m"
+              #line 716 "interp.m"
                { 
                                                  lua_State *L;
               
-                                                 ASSERT_EMPTY(values);
+                                                 ASSERT_EMPTY(s->values);
                                                  assert(i <= count);       /* this can't happen */
                                                  
                                                  /* FIX for now we allow walking off stack */
-                                                 if (stackdata == round_up((void *)
-                                                                  (((actptr *)(t->stack_base))+1))) {
+                                                 if (act->stackdata == round_up(
+                                                                  (actptr *)(t->stack_base)+1)) {
                                                    /* reclaim dead space */
                                                    interval_list_free(t->dead_list);
-                                                   t->stack_free = t->stack_base;
               
                                                    /*
                                                     printf("[returned from specified procedure].\n");
@@ -1260,18 +1155,16 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
                                                  }
               
                                                  /* reclaim dead space */
-                                                 t->stack_free = caller;
-              
-                                                                            if (NULL == caller->kappa) {
-                                                                              if (name) {
-                                                                                fprintf(stderr, "WARNING: returning from %s to a caller with NULL kappa.\n", name);
+                                                 dies_uid(act->u);
+                                                                            if (NULL == act->caller->kappa) {
+                                                                              if (act->name) {
+                                                                                fprintf(stderr, "WARNING: returning from %s to a caller with NULL kappa.\n", act->name);
                                                                               } else {
                                                                                 fprintf(stderr, "WARNING: returning to a caller with NULL kappa.\n");
                                                                               }
-                                                                              pc = caller->pc;
                                                                             } else {
-                                                                              L = caller->kappa->also_returns_to.L;
-                                                                              lua_pushtable(L, caller->kappa->also_returns_to);
+                                                                              L = act->caller->kappa->also_returns_to.L;
+                                                                              lua_pushtable(L, act->caller->kappa->also_returns_to);
               
                                                                               /* we here assert that count = |returns| */
                                                                               cmm_assert(count == lua_getn(L, -1),
@@ -1279,9 +1172,9 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
                                                                                   "does not match number of return "
                                                                                   "continuations");
               
-                                                                              if (i == count) {
-                                                                                pc = caller->pc;
-                                                                              } else {
+                                                                              if (i != count) {
+                                                                    /* We're returning to a non-standard return continuation.  Find
+                                                                     * out what it is, and put the pc in act->caller->pc. */
                                                                                 CMM_label *lbl;
               
                                                                                 /* Lua tables 1-indexed; returns are 0-indexed */
@@ -1299,23 +1192,15 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
                                                                                 cmm_assert(location_known(CMM_label_raddr(lbl)),
                                                                                     "cannot return to undefined "
                                                                                     "continuation");
-                                                                                pc = CMM_label_location(lbl);
-                                                                              }
+                                                                                act->caller->pc = CMM_label_location(lbl);
+                                                                              } /* else we're returning to the standard continuation, and
+                                                                                 * we don't have to do anything special. */
                                                                               lua_pop(L, 1); /* pop table */
                                                                             }
               
-                                                                            locals         = caller->locals;
-                                                                            locals_end     = caller->locals_end;
-                                                                            stackdata      = caller->stackdata;
-                                                                            stackdata_end  = caller->stackdata_end;
-                                                                            name           = caller->name;
+                                                                            act = act->caller;
+                                                                            act->callee = NULL;
               
-                                                                            caller->callee = NULL;
-              
-                                                 dies_uid(u);
-                                                 u = caller->u;
-              
-                                                 caller = caller->caller;
                                                  }
               
               
@@ -1328,77 +1213,44 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
             { 
               next = (((MATCH_p) + 1));
               
-              #line 899 "interp.m"
+              #line 784 "interp.m"
                {
                                                  value         v;
-                                                 /* CMM_label    *lbl; */
                                                  continuation *cont;
                                                  activation   *dest_act;
-                                                 bytecodeptr   cont_pc;
               
-                                                 v   = POP(values);
+                                                 v   = POP(s->values);
               
                                                  cont = (continuation *) v.ptr;
-              
-                                                 /* make sure cont is a valid cut continuation */
+                                                 /* make sure cont is a valid cut continuation
+                                                  * FIX: we _do not_ check UIDs; there is currently no way to do this */
                                                  check_cont(cont);
-                                                 /* FIX: we _do not_ check UIDs; there is currently no way to do this */
-              
-                                                 cont_pc  = cont->code;
-              
-                                                 /* the 'sp' pointer points to the beginning of stackdata-space; we cheat
-                                                  * and find the pointer to the activation record in the sizeof(actptr *) bytes
-                                                  * before this space... */
-                                                 dest_act = *((actptr *)(cont->sp) - 1);
-                                                                                {
-                                                                                /* save needed info in activation record */
-                                                                                actptr saved = (actptr) t->stack_free;
-                                                                                t->stack_free = round_up((void *) (saved + 1));
-                                                                                mem_assert(t->stack_free <= t->stack_limit);
-              
-                                                                                saved->pc            = next;
-                                                                                saved->locals        = locals;
-                                                                                saved->locals_end    = locals_end;
-                                                                                saved->stackdata     = stackdata;
-                                                                                saved->stackdata_end = stackdata_end;
-                                                                                /* we set kappa to NULL to signify partiality */
-                                                                                saved->kappa         = NULL;
-                                                                                saved->callee        = NULL;
-                                                                                saved->u             = u;
-                                                                                saved->caller        = caller;
-                                                                                saved->name          = name;
-                                                                                saved->proc          = curr_proc;
-              
-                                                                                }
                                                  
-                                                 if (dest_act->u.thread != u.thread) {
+                                                 /* Remember that [[pc]] is the current program counter and that we must store 
+                                                  * away [[next]] so that we do not end up in an infinite loop. */
+                                                 act->pc = next;
+                                                
+                                                 /* Here's the activation we're cutting to. */
+                                                 dest_act = actptr_from_sp(cont->sp);
+                                                 
+                                                 /* What kind of CUT is it? */
+                                                 if (dest_act->u.thread != act->u.thread) {
                                                      /* jump over to destination thread */
                                                      t = find_thread(dest_act->u);
-                                                 } else if (dest_act->u.frame == u.frame) {
+                                                 } else if (dest_act->u.frame == act->u.frame) {
                                                      /* if we're here, then we're cutting to a
                                                         continuation in the current activation */
                                                      /* FIX : for now, just treat like GOTO */
-                                                     pc = cont_pc;
+                                                     act->pc = cont->code;
                                                      continue;
                                                  }
               
                                                  /* <kill off activations above [[dest_act]] in [[t]]> */
                        
-                                                                            /* update state of machine */
-                                                                            pc            = cont_pc;
-                                                                            locals        = dest_act->locals;
-                                                                            locals_end    = dest_act->locals_end;
-                                                                            stackdata     = dest_act->stackdata;
-                                                                            stackdata_end = dest_act->stackdata_end;
-                                                                            u             = dest_act->u;
-                                                                            caller        = dest_act->caller;
-                                                                            name          = dest_act->name;
-                                                                            curr_proc     = dest_act->proc;
-              
-                                                                            dest_act->callee = NULL;
-              
-                                                 /* recover freed memory */
-                                                 t->stack_free     = dest_act;
+                                                 act           = dest_act; /* move into the new frame */
+                                                 act->pc       = cont->code;  /* we take the pc from continuation, not from the frame,
+                                                                            * since that is a return address. */
+                                                 act->callee   = NULL;     /* questionable.  Is this the right thing? */
                                                      }
               
               
@@ -1411,7 +1263,7 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
             { 
               next = (((MATCH_p) + 0));
               
-              #line 989 "interp.m"
+              #line 841 "interp.m"
               cmm_err("unsupported instruction encoutered");
               
               
@@ -1424,12 +1276,12 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
             { 
               unsigned MATCH_w_32_8 = 
                 (mem_aggregate((((MATCH_p) + 1)),DEF_BYTE_ORDER,4));
-              unsigned s = MATCH_w_32_8 /* bits32 at 8 */;
+              unsigned sym = MATCH_w_32_8 /* bits32 at 8 */;
               next = (((MATCH_p) + 5));
               
-              #line 586 "interp.m"
+              #line 552 "interp.m"
                {
-                                                 CMM_label *lbl = (CMM_label *) s;
+                                                 CMM_label *lbl = (CMM_label *) sym;
                                                  value      v   = value_zero();
               
                                                  assert(lbl != NULL);   /* this can't happen */
@@ -1453,11 +1305,11 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
                                                    break;
                                                  default:
                                                    cmm_err_wint("internal label error "
-                                                                "(corrupt label 0x%x)", s);
+                                                                "(corrupt label 0x%x)", sym);
                                                  }
               
-                                                 PUSH(v, values);
-                                                 pc = next;
+                                                 PUSH(v, (s->values));
+                                                 act->pc = next;
                                                  }
               
               
@@ -1473,12 +1325,12 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
               unsigned o = MATCH_w_32_8 /* bits32 at 8 */;
               next = (((MATCH_p) + 5));
               
-              #line 548 "interp.m"
-               values = (((operator *) o)->f)(values); 
+              #line 514 "interp.m"
+               s->values = (((operator *) o)->f)(s->values); 
                                                  /* REMOVE this print_value_stack call */
-                                                 print_value_stack(values.s_free, values.s_base, 
+                                                 print_value_stack(s->values.s_free, s->values.s_base, 
                                                                    "values");
-                                                 pc = next;
+                                                 act->pc = next;
               
               
               #line 3401 "generated-code" 
@@ -1490,9 +1342,9 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
             { 
               next = (((MATCH_p) + 1));
               
-              #line 553 "interp.m"
-               PUSH(to_CMM_value(cmm_getround(),2), values);
-                                                 pc = next;
+              #line 519 "interp.m"
+               PUSH(to_CMM_value(cmm_getround(),2), s->values);
+                                                 act->pc = next;
               
               
               #line 3501 "generated-code" 
@@ -1504,11 +1356,11 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
             { 
               next = (((MATCH_p) + 1));
               
-              #line 555 "interp.m"
+              #line 521 "interp.m"
                {
-                                                 value v  = POP(values);
+                                                 value v  = POP(s->values);
                                                  cmm_setround(v.bits2);
-                                                 pc       = next;
+                                                 act->pc = next;
                                                  }
               
               
@@ -1521,13 +1373,13 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
             { 
               next = (((MATCH_p) + 1));
               
-              #line 494 "interp.m"
+              #line 460 "interp.m"
                {
                                                  value v = value_zero();
-                                                 v.ptr   = (void *) stackdata;
-                                                 PUSH(v, values); 
+                                                 v.ptr   = (void *) act->stackdata;
+                                                 PUSH(v, s->values); 
               
-                                                 pc      = next;
+                                                 act->pc = next;
                                                  }
               
               
@@ -1540,14 +1392,14 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
             { 
               next = (((MATCH_p) + 1));
               
-              #line 978 "interp.m"
+              #line 830 "interp.m"
                {
                                                    int saved_verbosity = verbosity;
                                                    verbosity           = 1;
-                                                   print_value_stack(values.s_free, values.s_base,
+                                                   print_value_stack(s->values.s_free, s->values.s_base,
                                                                      "values");
                                                    verbosity           = saved_verbosity;
-                                                   pc                  = next;
+                                                   act->pc = next;
                                                  }
               
               
@@ -1560,7 +1412,7 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
             { 
               next = (((MATCH_p) + 1));
               
-              #line 986 "interp.m"
+              #line 838 "interp.m"
                {
                                            cmm_err("fell off end of a C-- section");
                                            }
@@ -1575,34 +1427,17 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
   } 
 }
 
-#line 991 "interp.m"
+#line 843 "interp.m"
 
       if (err_occurred || done) break;
     }
-        {
-          /* save needed info in activation record */
-          actptr saved = (actptr) t->stack_free;
-          t->stack_free = round_up((void *) (saved + 1));
-          mem_assert(t->stack_free <= t->stack_limit);
 
-          saved->pc            = pc;
-          saved->locals        = locals;
-          saved->locals_end    = locals_end;
-          saved->stackdata     = stackdata;
-          saved->stackdata_end = stackdata_end;
-          /* we set kappa to NULL to signify partiality */
-          saved->kappa         = NULL;
-          saved->callee        = NULL;
-          saved->u             = u;
-          saved->caller        = caller;
-          saved->name          = name;
-          saved->proc          = curr_proc;
-        }
+    /* Save the stack and code pointers here in k. */
+    k->sp = act->stackdata;
+    k->code = act->pc;
   }
 
   errorjmp_set = 0;
-  s->values = values;
-  *t1 = t;
   return bytecode;
 }
 

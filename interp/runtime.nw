@@ -282,7 +282,7 @@ Cmm_Cont Cmm_RunThread (Cmm_Cont *k) {
   /* make sure k is a valid continuation */
   check_cont(k);
 
-  run_interp(find_thread_c(k));
+  run_interp(k);
 
   /* FIX this function should not return! */
   {
@@ -403,7 +403,7 @@ If its [[locals]] pointer appears to be valid, we dereference it--offset by
 void *Cmm_FindDeadLocalVar(const Cmm_Activation *a, unsigned n) {
   thread *t = find_thread(a->u);
 
-  if ((void *) a->locals >= t->stack_free 
+  if ((void *) a->locals >= t->stack_base
       && (void *) a->locals < t->stack_limit)
   {
     return (void *) (a->locals + n);
@@ -442,14 +442,13 @@ void Cmm_CopyFrames(Cmm_Cont* c, int num_frames, void *newstack, unsigned n,
   static CMM_label *lbl_proc;
 
   void* stack_limit;
-  /* save necessary info in activation record */
-  Cmm_Activation* caller = NULL, *a;
-  Cmm_Activation* copy = NULL;
-  Cmm_Activation oldest = Cmm_YoungestActivation(c);
+  Cmm_Activation* src; 
+  Cmm_Activation* dst;
+  Cmm_Activation* dst_caller;
+  Cmm_Activation oldest; /* Oldest frame to copy */
   int i, j;
   thread* t;
-  Cmm_Cont underflow_cont;
- 
+  Cmm_Cont underflow_cont; 
   Cmm_Cont* relocated_c;
   
   /* If we haven't compiled the underflow handler, we need to do that. */
@@ -461,6 +460,7 @@ void Cmm_CopyFrames(Cmm_Cont* c, int num_frames, void *newstack, unsigned n,
   }
 
   /* Find the oldest frame to copy. */
+  oldest = Cmm_YoungestActivation(c);
   for(j = 1; j < num_frames && !Cmm_isOldestActivation(&oldest); j++) {
     assert(Cmm_ChangeActivation(&oldest));
   }
@@ -471,62 +471,70 @@ void Cmm_CopyFrames(Cmm_Cont* c, int num_frames, void *newstack, unsigned n,
   underflow_cont = init_thread(lbl_proc, newstack, n);
   t = find_thread_c(&underflow_cont);
   if (Cmm_isOldestActivation(&oldest)) {
-    /* this is a kludge.  We are going to overwrite the whole stack,
-     * but we need the thread structure.*/
-    t->stack_free = t->stack_base; /* clear the stack. */
+    dst_caller = NULL;
     oldest = Cmm_NextActivationUnsafe(&oldest);  /* Copy the stub also. */
     num_frames++;
   } else {
-    caller = (actptr) t->stack_free - 1; /* caller is the stub */
+    Cmm_Cont* target_k;
+
+    dst_caller = actptr_from_sp(underflow_cont.sp); /* caller is the stub */
+
+    /* Set the return continuation. */
+    target_k = (Cmm_Cont*)dst_caller->stackdata;
+    target_k->code = oldest.caller->pc;
+    target_k->sp = oldest.caller->stackdata;
   }
   stack_limit = t->stack_limit;
 
   /* Now, actually copy the frames. */
-  a = &oldest;
+  src = &oldest;
   for(j = 0; j < num_frames; j++) {
-    printf("AllocFrame %p %p\n", t->stack_free, stack_limit);
-
-    copy = Cmm_AllocFrame(Cmm_LocalVarCount(a), a->stackdata_end - a->stackdata, &(t->stack_free), stack_limit);
+    if (NULL !=dst_caller) {
+      dst = Cmm_AllocFrameNext(Cmm_LocalVarCount(src), src->stackdata_end - src->stackdata, dst_caller->stackdata, stack_limit);
+    } else {
+      dst = Cmm_AllocFrameFirst(Cmm_LocalVarCount(src), src->stackdata_end - src->stackdata, t->stack_base, stack_limit);
+    }
 
     /* copy stack data */
-    assert(copy->stackdata_end - copy->stackdata == a->stackdata_end - a->stackdata);
-    memcpy(copy->stackdata, a->stackdata, copy->stackdata_end - copy->stackdata);
+    assert(dst->stackdata_end - dst->stackdata == src->stackdata_end - src->stackdata);
+    memcpy(dst->stackdata, src->stackdata, dst->stackdata_end - dst->stackdata);
     
     /* If c is a continuation in this stackdata, then we relocate it? */
     /*
-    if (c >= a->stackdata && c < a->stackdata_end) {
-      relocated_c = copy->stackdata + (c - a->stackdata);
+    if (c >= src->stackdata && c < src->stackdata_end) {
+      relocated_c = copy->stackdata + (c - src->stackdata);
     }*/
       
     
-    copy->pc            = a->pc;
-    copy->kappa         = a->kappa;
-    copy->u             = new_uid(t); /* can't copy a unique frame identifier.*/
-    copy->caller        = caller;
-    copy->name          = a->name;
-    copy->proc          = a->proc;
+    dst->pc            = src->pc;
+    dst->kappa         = src->kappa;
+    dst->u             = new_uid(t); /* can't dst a unique frame identifier.*/
+    dst->caller        = dst_caller;
+    dst->name          = src->name;
+    dst->proc          = src->proc;
 
     /* copy local variables. */
-    for(i = 0; i < Cmm_LocalVarCount(a); i++) {
-      int* dest = Cmm_FindLocalVar(copy, i);
-      int* src = Cmm_FindLocalVar(a, i);
-      assert(NULL != src);
-      assert(NULL != dest);
-      *dest = *src;
-      /*     Cmm_LocalVarWritten(copy, i); */
+    for(i = 0; i < Cmm_LocalVarCount(src); i++) {
+      int* d = Cmm_FindLocalVar(dst, i);
+      int* s = Cmm_FindLocalVar(src, i);
+      assert(NULL != s);
+      assert(NULL != d);
+      *d = *s;
+      /*     Cmm_LocalVarWritten(dst, i); */
     }
 
-    copy->callee = NULL;
-    if (caller) {
-      caller->callee = copy;
+    dst->callee = NULL;
+    if (dst_caller) {
+      dst_caller->callee = dst;
     }
     
-    caller = copy;
-    a = a->callee;
+    dst_caller = dst;
+    src = src->callee;
   }
 
+  
   /* Modify the stack pointer of the continuation to point to the new stack. */
-  c->sp   = (void *) copy->stackdata;
+  c->sp   = (void *) dst->stackdata;
 }
 @
 

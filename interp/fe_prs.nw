@@ -38,6 +38,7 @@ struct Stealable_LL {
 };
 
 struct TCB {
+  Cmm_Cont k;
   thread* ts;
   interp_state* vs;
   void* stack_space;
@@ -206,17 +207,17 @@ void Fe_AddTCB(struct TCB tcb) {
 
 void Fe_AddThread(Cmm_Codeptr loc) {
   struct TCB tcb = TCB_new();
-  Cmm_Cont k = Cmm_CreateThread(loc, NULL, tcb.stack_space,
+  tcb.k = Cmm_CreateThread(loc, NULL, tcb.stack_space,
 	tcb.stack_space_size, &tcb.limit_cookie);
-  tcb.ts = find_thread_c(&k);
+  tcb.ts = find_thread_c(&tcb.k);
   Fe_AddTCB(tcb);
 }
 
 void Fe_Go() {
   /* cmm_dump_exports(stdout); */ /* useful for debugging */
   while(active_threads != NULL) {
-    /* printf("Thread %d: ", active_threads->tcb.id); */
-    if (1 != run_interp_n(&active_threads->tcb.ts, active_threads->tcb.vs, 1)) {
+    printf("Thread %d: ", active_threads->tcb.id);
+    if (1 != run_interp_n(&active_threads->tcb.k, active_threads->tcb.vs, 1)) {
       TCB_free(active_threads->tcb);
 
       /* Since this thread is done, we want to remove it by
@@ -241,15 +242,14 @@ void Fe_Go() {
       struct Stealable_LL* tosteal = active_threads->tcb.stealable;
       if (tosteal != NULL) {
       /* Steal a thread! */
-	Cmm_Cont k;
 	struct TCB tcb;
 
         printf("Only %d threads, stealing\n",num_active_threads);
         active_threads->tcb.stealable = tosteal->next;
-	k = Cmm_MakeReturnContinuation(tosteal->k);
 	tcb = TCB_new();
-	Cmm_CopyFrames(&k, 1, tcb.stack_space, tcb.stack_space_size, NULL, NULL);
-        tcb.ts = find_thread_c(&k);
+	tcb.k = Cmm_MakeReturnContinuation(tosteal->k);
+	Cmm_CopyFrames(&tcb.k, 1, tcb.stack_space, tcb.stack_space_size, NULL, NULL);
+        tcb.ts = find_thread_c(&tcb.k);
 	Fe_AddTCB(tcb);
       }
     }

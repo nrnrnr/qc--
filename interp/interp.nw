@@ -110,18 +110,15 @@ int load_assembly_unit(char *s, assembly_unit_type source_type);
 The main interpreting of this application is done in the [[run_interp]] function.  
 Given a suspended {\PAL} thread at which to start program interpretation, [[run_interp]] executes program code stored as in-memory bytecode.
 
-[[run_interp_n]] runs up to num_bytecodes bytecodes and then saves the state of
-the interpreter on the stack and in interp_state.  It returns the number of
+[[run_interp_n]] runs up to [[num_bytecodes]] bytecodes and then saves the state of
+the interpreter on the stack, in [[interp_state]], and in the continuation.  It returns the number of
 bytecodes actually interpreted.  If the program finishes or fails, this will be
-less than the number of bytecodes requested.  [[run_interp_n]] takes a pointer
-to a pointer to a thread ([[thread **t1]]), because CUT could change the
-current thread, and the client will need to know about this in order to call
-[[run_interp_n]] again.
+less than the number of bytecodes requested.
 
 [[interp_state_new]] and [[interp_state_free]] allocate and deallocate
-interpreter "machine state" that is not stored on the stack.  This is the
+interpreter ``machine state" that is not stored on the stack.  This is the
 argument space and the value stack, corresponding to the registers of the
-interpreter "machine." The sizes are given by the arguments to [[cmm_open]].
+interpreter ``machine." The sizes are given by the arguments to [[cmm_open]].
 This allows clients to treat the interpreter state as an opaque type.
 
 <<function prototypes>>=
@@ -134,8 +131,8 @@ typedef struct {
 interp_state* interp_state_new();
 void interp_state_free(interp_state*);
 
-void run_interp(thread *t);
-int run_interp_n(thread **t1, interp_state* values1, int num_bytecodes);
+void run_interp(continuation *k);
+int run_interp_n(continuation *k, interp_state* values1, int num_bytecodes);
 @ 
 
 % ----------------------------------------------------------------------------
@@ -999,70 +996,6 @@ Finally, we actually copy the contents of the relocated [[RBlock]]s into their p
 % ----------------------------------------------------------------------------
 
 Finally, we get to the main part of the interpreter.
-We start by initializing the internal state of the interpreter:
-
-<<initialize interpreter internals, given suspended thread [[t]]>>=
-  /* pc    is kept in thread t        */
-  /* V     is kept global             */
-  /* rho   is kept in thread t        */
-  /* sp    is kept in thread t        */
-  /* g     is kept global             */
-  /* sigma is left implicit!          */
-  /* A     is kept global             */
-  /* u     is kept in thread t        */
-  /* s     is kept in t->stack_X      */
-
-  actptr       act;
-  bytecodeptr  pc;
-  value       *locals;
-  value       *locals_end;
-  dataptr      stackdata;
-  dataptr      stackdata_end;
-  uid          u;
-
-  actptr       caller;
-  procedure   *curr_proc = NULL;
-  const char  *name = NULL;
-
-  assert(t != NULL);
-
-  /* pop off activation record */
-  t->stack_free = (void *) (((actptr) t->stack_free) - 1);
-  act = (actptr) t->stack_free;
-  mem_assert(act >= (actptr) t->stack_base);
-
-  <<copy suspended state from [[act]] into local C variables>>
-
-@ 
-
-We copy out the stored, suspended state from [[act]] into local C variables for matters of efficiency (to reduce memory fetches).
-
-\begin{quote}
-Note that we get the current [[pc]] from the given [[thread]] and not from
-the [[activation]].
-They might be different; if so, [[t->pc]] will be what we want.
-To see why, remember that [[Cmm_GetUnwindCont]] (from the runtime system)
-might return a thread handle to the client; to do so, it must create a 
-[[thread]] with a different [[pc]] than is stored in its youngest activation's
-frame record. 
-\end{quote}
-DJP: No, I think this is wrong; Cmm_GetUnwindCont might return a _continuation_
-to the client with a different [[pc]] than is stored in its youngest activation's
-frame record.  We take [[pc]] from [[act]]..
-
-<<copy suspended state from [[act]] into local C variables>>=
-  /* we get rest from act */
-  locals        = act->locals;
-  locals_end    = act->locals_end;
-  stackdata     = act->stackdata;
-  stackdata_end = act->stackdata_end;
-  u             = act->u;
-  caller        = act->caller;
-  name          = act->name;
-  curr_proc     = act->proc;
-  pc            = act->pc;
-@
-
 By now we should know how many globals are used in the source {\PAL} code;
 this number has been stored in the global C variable [[num_globals]].
 We [[malloc]] space for them.
@@ -1080,11 +1013,13 @@ We [[malloc]] space for them.
 @
 
 % ----------------------------------------------------------------------------
-\subsubsection{The Main Interpreting Loop}
+\subsubsection{[[interp_state]] utility functions}
 % ----------------------------------------------------------------------------
-
-For the main interpreting loop, we use the ``matching'' decoding feature of the New Jersey Machine-Code Toolkit.  
-This code is pre-processed by the Toolkit and ends up in normal C format.
+[[interp_state_new]] and [[interp_state_free]] allocate and deallocate
+interpreter ``machine state" that is not stored on the stack.  This is the
+argument space and the value stack, corresponding to the registers of the
+interpreter ``machine." The sizes are given by the arguments to [[cmm_open]].
+This allows clients to treat the interpreter state as an opaque type.
 
 <<bytecode interpreting>>=
 interp_state* interp_state_new() {
@@ -1108,50 +1043,69 @@ void interp_state_free(interp_state* s) {
   free(s);
 }
 
-void run_interp(thread *t) {
+@
+% ----------------------------------------------------------------------------
+\subsubsection{The Main Interpreting Loop}
+% ----------------------------------------------------------------------------
+
+For the main interpreting loop, we use the ``matching'' decoding feature of the New Jersey Machine-Code Toolkit.  
+This code is pre-processed by the Toolkit and ends up in normal C format.
+
+<<bytecode interpreting>>=
+void run_interp(continuation* k) {
   interp_state* s = interp_state_new();
 
-  /* we have to allocate memory for globals here */
-  <<allocate memory for globals>>
-
   /* stress test */
-  while(run_interp_n(&t, s, 1));
+  while(run_interp_n(k, s, 1));
 
   interp_state_free(s);
 }
 
-int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
+int run_interp_n(continuation* k, interp_state* s, int num_bytecodes) {
   int            err_occurred = 0, 
                  done         = 0;
   unsigned char *next;
   int bytecode;
-  valstack values = s->values;
-  vptr arguments = s->arguments;
-  vptr arguments_limit = s->arguments_limit;
-  thread* t = *t1;
+  actptr       act;
 
-  <<initialize interpreter internals, given suspended thread [[t]]>>
+  assert(k != NULL);
+  assert(k->sp != NULL);
+  assert(k->code != NULL);
+  assert(s != NULL);
+  
+  thread* t = find_thread_c(k);
+  assert(t != NULL);
+
+  /* we have to allocate memory for globals here */
+  <<allocate memory for globals>>
+
+  /* The activation record is on the stack.  We fetch it through the stack pointer. */
+  act = actptr_from_sp(k->sp);
+  mem_assert(act >= (actptr)t->stack_base);
+
 
   errorjmp_set = 1;
   if (setjmp(errorjmp)) {
+    /* This is the exception handler.  If an error occurs, we long-jump here. */
     errorjmp_set = 0;
-    fprintf(stderr, "error: unrecoverable runtime error at PC 0x%x\n", (unsigned)pc);
-    if (name)
+    fprintf(stderr, "error: unrecoverable runtime error at PC 0x%x\n", (unsigned)act->pc);
+    if (act->name)
 	  fprintf(stderr, "| Stack trace:\n");
-      fprintf(stderr, "| 0: %s()\n", name);
-    if (caller)
-	  activation_trace(caller);
+      fprintf(stderr, "| 0: %s()\n", act->name);
+    if (act->caller)
+	  activation_trace(act->caller);
 
-    if (name)
+    if (act->name)
       fprintf(stderr, "Try disassembling '%s' to find relevant instructions\n",
-                      name);
+                      act->name);
   } else {
     for (bytecode = 0; bytecode < num_bytecodes; bytecode++) {
-      if (name) {
-        printf("%s: ",name);
+      /*
+      if (act->name) {
+        printf("%s: ",act->name);
       }
-      disassemble_instruction(stdout, pc);  /* Handy for debugging interp */
-      match [next] pc to
+      disassemble_instruction(stdout, act->pc);*/  /* Handy for debugging interp */
+      match [next] act->pc to
         <<matching statement>>
       | HALT              => {
                              cmm_err("fell off end of a C-- section");
@@ -1161,12 +1115,13 @@ int run_interp_n(thread **t1, interp_state* s, int num_bytecodes) {
 
       if (err_occurred || done) break;
     }
-    <<save state to a new activation record on the stack>>
+
+    /* Save the stack and code pointers here in k. */
+    k->sp = act->stackdata;
+    k->code = act->pc;
   }
 
   errorjmp_set = 0;
-  s->values = values;
-  *t1 = t;
   return bytecode;
 }
 @ 
@@ -1187,22 +1142,22 @@ We push and pop values using our stack manipulation macros and functions (see mo
                              width = sizeof(MP_T);
                            }
 
-                           PUSH(to_CMM_value(v, width), values); 
-                           pc = next;
+                           PUSH(to_CMM_value(v, width), s->values); 
+                           act->pc = next;
 @  
 
 \useops{Fetch-Local}
 \useops{Fetch-Global}
 <<matching statement>>=
-    | fetch_local(n)    => PUSH( locals[n], values); pc = next;
-    | fetch_global(n)   => PUSH(globals[n], values); pc = next;
+    | fetch_local(n)    => PUSH( act->locals[n], s->values); act->pc = next;
+    | fetch_global(n)   => PUSH(globals[n], s->values); act->pc = next;
 @ 
 
 \useops{Store-Local}
 \useops{Store-Global}
 <<matching statement>>=
-    | store_local(n)    =>  locals[n] = POP(values); pc = next;
-    | store_global(n)   => globals[n] = POP(values); pc = next;
+    | store_local(n)    =>  act->locals[n] = POP(s->values); act->pc = next;
+    | store_global(n)   => globals[n] = POP(s->values); act->pc = next;
 @ 
 
 Guarded local and global stores require one more step; we must first see if the expected boolean is true or false with a simple [[if]] statement.
@@ -1217,19 +1172,19 @@ If we find the boolean is true, we store the top stack value (the value to be st
 Either way, we must decrement the [[values]] pointer by 2 to simulate the popping of 2 values off the value stack.
 
 <<matching statement>>=
-    | gstore_local(n)   => UNDERFLOW_CHECK(values, 2);
-                           if (STACK_ELT(values, -1).bool) {
-                             locals[n] = STACK_ELT(values, 0);
+    | gstore_local(n)   => UNDERFLOW_CHECK(s->values, 2);
+                           if (STACK_ELT(s->values, -1).bool) {
+                             act->locals[n] = STACK_ELT(s->values, 0);
                            }
-                           values.s_free -= 2;
-                           pc             = next;
+                           s->values.s_free -= 2;
+                           act->pc = next;
 
-    | gstore_global(n)  => UNDERFLOW_CHECK(values, 2);
-                           if (STACK_ELT(values, -1).bool) {
-                             globals[n] = STACK_ELT(values, 0);
+    | gstore_global(n)  => UNDERFLOW_CHECK(s->values, 2);
+                           if (STACK_ELT(s->values, -1).bool) {
+                             globals[n] = STACK_ELT(s->values, 0);
                            }
-                           values.s_free -= 2;
-                           pc             = next;
+                           s->values.s_free -= 2;
+                           act->pc = next;
 @ 
 
 [[FETCH_SP]] is an easy instruction to interpret.
@@ -1238,10 +1193,10 @@ We simply push the current value of [[stackdata]].
 <<matching statement>>=
     | FETCH_SP()        => {
                            value v = value_zero();
-                           v.ptr   = (void *) stackdata;
-                           PUSH(v, values); 
+                           v.ptr   = (void *) act->stackdata;
+                           PUSH(v, s->values); 
 
-                           pc      = next;
+                           act->pc = next;
                            }
 @ 
 
@@ -1260,7 +1215,7 @@ For now, we only support the natural byte-order of the machine on which the inte
                            if (sz <= 0 || sz > sizeof(value)*8)
                              cmm_err_wint("cannot fetch %d bits", sz);
                            <<fetch value from given address>>
-                           pc = next;
+                           act->pc = next;
                            }
     | STORE(sz,bo,al)   => {
                            assert(bo == DEF_BYTE_ORDER);
@@ -1268,20 +1223,20 @@ For now, we only support the natural byte-order of the machine on which the inte
                            if (sz <= 0 || sz > sizeof(value)*8)
                              cmm_err_wint("cannot fetch %d bits", sz);
                            <<store given value at given address>>
-                           values.s_free -= 2;
-                           pc             = next;
+                           s->values.s_free -= 2;
+                           act->pc = next;
                            }
     | GSTORE(sz,bo,al)  => {
                            assert(bo == DEF_BYTE_ORDER);
                            assert(al == DEF_ALIGN);
                            if (sz <= 0 || sz > sizeof(value)*8)
                              cmm_err_wint("cannot fetch %d bits", sz);
-                           UNDERFLOW_CHECK(values, 3);
-                           if (STACK_ELT(values, -2).bool) {
+                           UNDERFLOW_CHECK(s->values, 3);
+                           if (STACK_ELT(s->values, -2).bool) {
                              <<store given value at given address>>
                            }
-                           values.s_free -= 3;
-                           pc             = next;
+                           s->values.s_free -= 3;
+                           act->pc = next;
                            }
 @ 
 We only support fetches and stores in the machine's natural byte-order, so we
@@ -1289,21 +1244,21 @@ can simply use [[memcpy]] from [[<stdlib.h>]] and trust it to properly
 aggregate / dis-aggregate data for unaligned multi-byte loads and stores.
 <<fetch value from given address>>=
   {
-    value *fetched       = (value *) STACK_ELT(values, 0).ptr;
+    value *fetched       = (value *) STACK_ELT(s->values, 0).ptr;
     value  v             = value_zero();
 
     cmm_assert(fetched != NULL, "attempted to FETCH at address NULL");
 
     memcpy((void *) &v, (const void *) fetched, sz / 8);
-    STACK_ELT(values, 0) = v;
+    STACK_ELT(s->values, 0) = v;
   }
 @ 
 <<store given value at given address>>=
   {
-    value *tostore       = (value *) STACK_ELT(values, -1).ptr;
+    value *tostore       = (value *) STACK_ELT(s->values, -1).ptr;
 
     cmm_assert(tostore != NULL, "attempted to STORE to address NULL");
-    memcpy(tostore, &(STACK_ELT(values, 0)), sz / 8);
+    memcpy(tostore, &(STACK_ELT(s->values, 0)), sz / 8);
   }
 @ 
 The argument to the operator application instruction should be a pointer to an [[operator]] record.
@@ -1314,11 +1269,11 @@ Operator implementation functions return a new [[valstack]] so we set
 
 \useops{ApplyOp}
 <<matching statement>>=
-    | APPLY_OPERATOR(o) => values = (((operator *) o)->f)(values); 
+    | APPLY_OPERATOR(o) => s->values = (((operator *) o)->f)(s->values); 
                            /* REMOVE this print_value_stack call */
-                           print_value_stack(values.s_free, values.s_base, 
+                           print_value_stack(s->values.s_free, s->values.s_base, 
                                              "values");
-                           pc = next;
+                           act->pc = next;
 @
 ``Fetching'' a rounding mode pushes the current hardware floating-point 
 rounding mode atop the value stack.
@@ -1327,24 +1282,24 @@ and setting it to be the current hardware floating-point rounding mode.
 See the [[cmmfloat]] module for information about C language support for
 manipulating the hardware rounding mode.
 <<matching statement>>=
-    | FETCH_ROUND()     => PUSH(to_CMM_value(cmm_getround(),2), values);
-                           pc = next;
+    | FETCH_ROUND()     => PUSH(to_CMM_value(cmm_getround(),2), s->values);
+                           act->pc = next;
     | STORE_ROUND()     => {
-                           value v  = POP(values);
+                           value v  = POP(s->values);
                            cmm_setround(v.bits2);
-                           pc       = next;
+                           act->pc = next;
                            }
 @ 
 Fetching and storing from the argument space is not difficult.
 \useops{Push-Arg}
 \useops{Pop-Arg}
 <<matching statement>>=
-    | STORE_ARG(n)      => cmm_assert(arguments + n < arguments_limit,
+    | STORE_ARG(n)      => cmm_assert(s->arguments + n < s->arguments_limit,
                                   "invalid register index to argument space");
-                           arguments[n] = POP(values); pc = next;
-    | FETCH_ARG(n)      => cmm_assert(arguments + n < arguments_limit,
+                           s->arguments[n] = POP(s->values); act->pc = next;
+    | FETCH_ARG(n)      => cmm_assert(s->arguments + n < s->arguments_limit,
                                   "invalid register index to argument space");
-                           PUSH(arguments[n], values); pc = next;
+                           PUSH(s->arguments[n], s->values); act->pc = next;
 @ 
 
 For goto and branches, we conditionally (or unconditionally in the case of goto) assign a new value to [[pc]].
@@ -1352,8 +1307,8 @@ For goto and branches, we conditionally (or unconditionally in the case of goto)
 \useops{Goto}
 <<matching statement>>=
     | GOTO              => { 
-                           value v = POP(values);
-                           pc      = (bytecodeptr) v.ptr;
+                           value v = POP(s->values);
+                           act->pc      = (bytecodeptr) v.ptr;
                            }
 @ 
 \useops{CBranchT-True}
@@ -1362,24 +1317,24 @@ For goto and branches, we conditionally (or unconditionally in the case of goto)
 \useops{CBranchF-False}
 <<matching statement>>=
     | CBRANCHT(a)       => {
-                           value v = POP(values);
+                           value v = POP(s->values);
                            if (v.bool) {
-                             pc = (bytecodeptr) a;
-                           } else { pc = next; }
+                             act->pc = (bytecodeptr) a;
+                           } else { act->pc = next; }
                            }
     | CBRANCHF(a)       => {
-                           value v = POP(values);
+                           value v = POP(s->values);
                            if (!v.bool) {
-                             pc = (bytecodeptr) a;
-                           } else { pc = next; }
+                             act->pc = (bytecodeptr) a;
+                           } else { act->pc = next; }
                            }
 @ 
 \useops{BranchTF-True}
 \useops{BranchTF-False}
 <<matching statement>>=
     | BRANCHTF(a, b)    => {
-                           value v = POP(values);
-                           pc      = (bytecodeptr) (v.bool ? a : b);
+                           value v = POP(s->values);
+                           act->pc      = (bytecodeptr) (v.bool ? a : b);
                            }
 @ 
 
@@ -1389,8 +1344,8 @@ We push simple labels atop the value stack as actual memory addresses (to allow
 label arithmetic); all other [[CMM_label]]s are pushed atop the stack as
 [[CMM_label]]s.
 <<matching statement>>=
-    | PUSH_SYMBOL(s)    => {
-                           CMM_label *lbl = (CMM_label *) s;
+    | PUSH_SYMBOL(sym)    => {
+                           CMM_label *lbl = (CMM_label *) sym;
                            value      v   = value_zero();
 
                            assert(lbl != NULL);   /* this can't happen */
@@ -1414,11 +1369,11 @@ label arithmetic); all other [[CMM_label]]s are pushed atop the stack as
                              break;
                            default:
                              cmm_err_wint("internal label error "
-                                          "(corrupt label 0x%x)", s);
+                                          "(corrupt label 0x%x)", sym);
                            }
 
-                           PUSH(v, values);
-                           pc = next;
+                           PUSH(v, (s->values));
+                           act->pc = next;
                            }
 @ 
 
@@ -1429,9 +1384,9 @@ We implement both {\PAL} and foreign C procedure calls with one matching case.
                            value        v;
                            CMM_label   *lbl;
 
-                           v    = POP(values);
+                           v    = POP(s->values);
                            lbl  = (CMM_label *) v.ptr;
-                           ASSERT_EMPTY(values);
+                           ASSERT_EMPTY(s->values);
                            if (lbl->ty == CMM_CFUNCTION) {
                              <<perform C call>>
                            } else if (lbl->ty != CMM_PROCEDURE) {
@@ -1453,77 +1408,35 @@ We pop a pointer to a C [[procedure]] structure off the value stack, and derefer
 \useops{CMMCall}
 <<perform {\PAL} call>>=
                            {
-                             actptr       saved;
-							 actptr      *actptrptr;
                              annotations *ann  = (annotations *) a;
                              procedure   *proc = lbl->lbl.proc;
 
                              assert(ann  != NULL);
                              assert(proc != NULL);
-
-                             <<save current activation info in a stack record>>
-
-                             <<allocate and update memory for new activation>>
-
-                             curr_proc = proc;
-                             name      = proc->raddr->label->name;
-                           }
-@
-
-To save the caller's activation record, we simply use the next free [[activation]] location in thread [[t]]'s stack and copy over the necessary pointers and information.
-
-<<save current activation info in a stack record>>=
-                           /* save necessary info in activation record */
-                           saved          = (actptr) t->stack_free;
-                           t->stack_free  = round_up(
-                                              ((actptr) t->stack_free) + 1);
-                           mem_assert(t->stack_free <= t->stack_limit);
-
-                           saved->pc            = next;
-                           saved->locals        = locals;
-                           saved->locals_end    = locals_end;
-                           saved->stackdata     = stackdata;
-                           saved->stackdata_end = stackdata_end;
-                           saved->kappa         = ann;
-                           saved->u             = u;
-						   saved->caller        = caller;
-                           saved->name          = name;
-                           saved->proc          = curr_proc;
-
-@
-
-We allocate memory for stackdata and locals from the thread's stack, create a fresh unique identifier using helper [[new_uid]], and set [[pc]] to the permanent address of the [[RAddr]] stored in [[proc]].
-When the matching statement is executed once more during the next cycle of the [[for]] loop, {\PAL} code interpreting will seamlessly continue at the next procedure.
-
-<<allocate and update memory for new activation>>=
-                          /* allocate memory, update state of the machine */
-                           cmm_assert(location_known(proc->raddr),
+                             cmm_assert(location_known(proc->raddr),
                                       "cannot call undefined procedure");
+                            
+                             /* First, we set up the current activation. */
+                             act->pc = next;
+                             act->kappa = ann;
 
-                           pc            = (bytecodeptr) location(proc->raddr);
-                           caller        = saved;
+                             /* Next, we allocate a new frame. */
+                             act->callee   = Cmm_AllocFrameNext(proc->num_locals, proc->stackdata_size, act->stackdata,t->stack_limit);
+                             act->callee->caller = act;
 
-                           actptrptr     = t->stack_free;
-			   t->stack_free = round_up((void *)
-                                                ((actptr *)(t->stack_free)+1));
+                             /* Now, we move to the new frame and set it up. */
+                             act = act->callee;
+                             act->u   = new_uid(t);
+                             act->proc =  proc;
+                             act->name      = proc->raddr->label->name;
+                             act->pc  = (bytecodeptr) location(proc->raddr);
 
-                           stackdata     = t->stack_free;
-                           t->stack_free = round_up(
-                                         (void *) (((dataptr) t->stack_free) +
-                                                   proc->stackdata_size));
-                           stackdata_end = (dataptr) (t->stack_free);
-                           mem_assert(t->stack_free <= t->stack_limit);
+                             /* When the matching statement is executed once
+                              * more during the next cycle of the [[for]] loop,
+                              * {\PAL} code interpreting will seamlessly
+                              * continue at the next procedure. */
 
-                           locals        = t->stack_free;
-                           t->stack_free = (vptr)(t->stack_free) + 
-						                   proc->num_locals;
-                           locals_end    = (vptr) (t->stack_free);
-                           mem_assert(t->stack_free <= t->stack_limit);                             
-                           /* CALLEE */
-                           saved->callee = (actptr) locals_end;
-
-			   *actptrptr    = t->stack_free;
-                           u             = new_uid(t);
+                           }
 @
 
 C calls can be tricky to perform because we need to specially call any registered C function by casting a stored function pointer to the correct C type and dereferencing it.
@@ -1538,29 +1451,7 @@ Unfortunately we cannot support an infinite number of C function types.
                            lua_State    *L = c_func_table.L;
                            unsigned int  i = lbl->lbl.cfunc_id;
 
-                           /* save current info in partial stack record */
-                           {
-                             actptr saved = (actptr) t->stack_free;
-                             t->stack_free = round_up((void *) (saved + 1));
-                             mem_assert(t->stack_free <= t->stack_limit);
-
-                             saved->pc            = pc;
-                             saved->locals        = locals;
-                             saved->locals_end    = locals_end;
-                             saved->stackdata     = stackdata;
-                             saved->stackdata_end = stackdata_end;
-                             /* we set kappa to NULL to signify partiality */
-                             saved->kappa         = NULL;
-                             saved->callee        = NULL;
-                             saved->u             = u;
-                             saved->caller        = caller;
-                             saved->name          = name;
-                             saved->proc          = curr_proc;
-
-
-                             /* update info. to be used for stack traces */
-                             caller = saved;
-                           }
+                           act->pc = next;
 
                            <<[[name]] $\leftarrow$ name of C function>>
 
@@ -1569,22 +1460,6 @@ Unfortunately we cannot support an infinite number of C function types.
 
                            <<use [[call_helper]] to call [[f]]>>
 
-                           /* restore needed info from partial stack record */
-                           {
-                             actptr saved  = ((actptr) t->stack_free) - 1;
-                             t->stack_free = (void *) saved;
-
-                             locals        = saved->locals;
-                             locals_end    = saved->locals_end;
-                             stackdata     = saved->stackdata;
-                             stackdata_end = saved->stackdata_end;
-                             u             = saved->u;
-                             caller        = saved->caller;
-                             name          = saved->name;
-                             curr_proc     = saved->proc;
-                           }
-
-                           pc = next;
                            }
 @
 
@@ -1596,11 +1471,12 @@ information during stack traces.
                            lua_rawgeti(L, -1, i);
                            lua_pushstring(L, C_FUNC_NAME);
                            lua_gettable(L, -2);
+                           /* TODO (djp): I don't understand what this does.
                            if (!lua_isstring(L, -1)) {
                              name = NULL;
                            } else {
                              name = lua_tostring(L, -1);
-                           }
+                           } */
      
                            lua_pop(L, 3);  /* pop tables & retrieved value */
 @
@@ -1643,7 +1519,7 @@ We simply pass the argument-passing space in and get it back out again
 (possibly with its contents altered).
 
 <<use [[call_helper]] to call [[f]]>>=
-                           arguments = call_helper(arguments, f);
+                           s->arguments = call_helper(s->arguments, f);
 @ 
 
 {\PAL} tail calls are easier to implement than regular {\PAL} procedure calls because we need not save the activation record of the calling activation.
@@ -1656,47 +1532,36 @@ We pop a [[procedure *]] off the value stack to get the needed information about
                            value      v;
                            CMM_label *lbl;
                            procedure *proc;
-						   actptr    *actptrptr;
 
-                           v    = POP(values);
+                           v    = POP(s->values);
                            lbl  = (CMM_label *) v.ptr;
-                           ASSERT_EMPTY(values);
-
-                           cmm_assert(lbl->ty == CMM_PROCEDURE,
-                                      "target label not a procedure");
+                           ASSERT_EMPTY(s->values);
                            proc = lbl->lbl.proc;
                            assert(proc != NULL);
 
+                           dies_uid(act->u);
+
+                           /* Because the old activation dies, we can simply
+                            * reuse the memory chunk it used on its thread's
+                            * stack for [[stackdata]] and [[locals]].  To
+                            * accomplish this, we ask Cmm_AllocFrameNext for a
+                            * frame after the current frame's caller, i.e.,
+                            * replacing the current frame.
+                            */
+                           assert(act->caller != NULL); /* we should never be tailcalling from the stub. */
+                           act = Cmm_AllocFrameNext(proc->num_locals, proc->stackdata_size, act->caller->stackdata,t->stack_limit); 
+
+                           cmm_assert(lbl->ty == CMM_PROCEDURE,
+                                      "target label not a procedure");
+
                            cmm_assert(location_known(proc->raddr),
                                       "cannot call undefined procedure");
-                           pc   = (bytecodeptr) location(proc->raddr);
-
-                           <<reuse dead local memory for new activation>>
-
-                           /* deal with uid : */
-                           dies_uid(u);
-                           u = new_uid(t);
-
-                           name      = proc->raddr->label->name;
-                           curr_proc = proc;
+                           /* We assign a new UID since this is a conceptually a new frame. */
+                           act->u = new_uid(t);
+                           act->name      = proc->raddr->label->name;
+                           act->proc = proc;
+                           act->pc   = (bytecodeptr) location(proc->raddr);
                            }
-@ 
-
-Because the old activation dies, we can simply reuse the memory chunk it used on its thread's stack for [[stackdata]] and [[locals]].
-We do need to make sure, though, that there is enough room on this stack for the new activation (in the case that the new activation needs more local stack memory than the dying one).
-
-<<reuse dead local memory for new activation>>=
-                           caller        = caller;
-						   stackdata_end = stackdata + proc->stackdata_size;
-
-						   locals        = round_up(stackdata_end);
-                           locals_end    = locals + proc->num_locals;
-                           t->stack_free = (void *) locals_end;
-                           mem_assert(t->stack_free <= t->stack_limit);
-
-						   /* reset actptrptr */
-						   actptrptr = ((void *) ((actptr *)stackdata - 1));
-						   *actptrptr = t->stack_free;
 @ 
 
 We implement both return rules with one matching case.
@@ -1706,15 +1571,14 @@ We implement both return rules with one matching case.
     | RETURN(i, count)  => { 
                            lua_State *L;
 
-                           ASSERT_EMPTY(values);
+                           ASSERT_EMPTY(s->values);
                            assert(i <= count);       /* this can't happen */
                            
                            /* FIX for now we allow walking off stack */
-                           if (stackdata == round_up((void *)
-                                            (((actptr *)(t->stack_base))+1))) {
+                           if (act->stackdata == round_up(
+                                            (actptr *)(t->stack_base)+1)) {
                              /* reclaim dead space */
                              interval_list_free(t->dead_list);
-                             t->stack_free = t->stack_base;
 
                              /*
                               printf("[returned from specified procedure].\n");
@@ -1725,30 +1589,29 @@ We implement both return rules with one matching case.
                            }
 
                            /* reclaim dead space */
-                           t->stack_free = caller;
-
+                           dies_uid(act->u);
                            <<restore activation record stored at [[caller]]>>
 
-                           dies_uid(u);
-                           u = caller->u;
-
-                           caller = caller->caller;
                            }
 @ 
 
-We simply copy pointers to restore information from the activation record stored at [[caller]].
+If the [[caller]] has no [[kappa]] annotations, then we simply move to the
+[[caller]] frame (and print a warning).
+
+Otherwise, we check the annotation to determine the proper return continuation,
+  and we write its code pointer into [[act->caller->pc]].  Then we move to the
+  [[caller]] frame.
 
 <<restore activation record stored at [[caller]]>>=
-                           if (NULL == caller->kappa) {
-			     if (name) {
-			       fprintf(stderr, "WARNING: returning from %s to a caller with NULL kappa.\n", name);
+                           if (NULL == act->caller->kappa) {
+			     if (act->name) {
+			       fprintf(stderr, "WARNING: returning from %s to a caller with NULL kappa.\n", act->name);
 			     } else {
 			       fprintf(stderr, "WARNING: returning to a caller with NULL kappa.\n");
 			     }
-			     pc = caller->pc;
 			   } else {
-			     L = caller->kappa->also_returns_to.L;
-			     lua_pushtable(L, caller->kappa->also_returns_to);
+			     L = act->caller->kappa->also_returns_to.L;
+			     lua_pushtable(L, act->caller->kappa->also_returns_to);
 
 			     /* we here assert that count = |returns| */
 			     cmm_assert(count == lua_getn(L, -1),
@@ -1756,9 +1619,9 @@ We simply copy pointers to restore information from the activation record stored
 				 "does not match number of return "
 				 "continuations");
 
-			     if (i == count) {
-			       pc = caller->pc;
-			     } else {
+			     if (i != count) {
+                   /* We're returning to a non-standard return continuation.  Find
+                    * out what it is, and put the pc in act->caller->pc. */
 			       CMM_label *lbl;
 
 			       /* Lua tables 1-indexed; returns are 0-indexed */
@@ -1776,18 +1639,14 @@ We simply copy pointers to restore information from the activation record stored
 			       cmm_assert(location_known(CMM_label_raddr(lbl)),
 				   "cannot return to undefined "
 				   "continuation");
-			       pc = CMM_label_location(lbl);
-			     }
+			       act->caller->pc = CMM_label_location(lbl);
+			     } /* else we're returning to the standard continuation, and
+                                * we don't have to do anything special. */
 			     lua_pop(L, 1); /* pop table */
 			   }
 
-                           locals         = caller->locals;
-                           locals_end     = caller->locals_end;
-                           stackdata      = caller->stackdata;
-                           stackdata_end  = caller->stackdata_end;
-                           name           = caller->name;
-
-                           caller->callee = NULL;
+                           act = act->caller;
+                           act->callee = NULL;
 @
 
 Next comes the cut instruction, one of the most difficult to implement.
@@ -1800,138 +1659,52 @@ We restore state information from the destination activation and recover memory 
 <<matching statement>>=
     | CUT               => {
                            value         v;
-                           /* CMM_label    *lbl; */
                            continuation *cont;
                            activation   *dest_act;
-                           bytecodeptr   cont_pc;
 
-                           v   = POP(values);
+                           v   = POP(s->values);
 
-                           <<new style continuations set-up>>
-                           <<save current info in a partial stack record>>
+                           cont = (continuation *) v.ptr;
+                           /* make sure cont is a valid cut continuation
+                            * FIX: we _do not_ check UIDs; there is currently no way to do this */
+                           check_cont(cont);
                            
-                           if (dest_act->u.thread != u.thread) {
+                           /* Remember that [[pc]] is the current program counter and that we must store 
+                            * away [[next]] so that we do not end up in an infinite loop. */
+                           act->pc = next;
+                          
+                           /* Here's the activation we're cutting to. */
+                           dest_act = actptr_from_sp(cont->sp);
+                           
+                           /* What kind of CUT is it? */
+                           if (dest_act->u.thread != act->u.thread) {
                                /* jump over to destination thread */
                                t = find_thread(dest_act->u);
-                           } else if (dest_act->u.frame == u.frame) {
+                           } else if (dest_act->u.frame == act->u.frame) {
                                /* if we're here, then we're cutting to a
                                   continuation in the current activation */
                                /* FIX : for now, just treat like GOTO */
-                               pc = cont_pc;
+                               act->pc = cont->code;
                                continue;
                            }
 
                            /* <kill off activations above [[dest_act]] in [[t]]> */
  
-                           <<restore info from [[dest_act]]>>
-
-                           /* recover freed memory */
-                           t->stack_free     = dest_act;
+                           act           = dest_act; /* move into the new frame */
+                           act->pc       = cont->code;  /* we take the pc from continuation, not from the frame,
+                                                      * since that is a return address. */
+                           act->callee   = NULL;     /* questionable.  Is this the right thing? */
 	                       }
-@ 
-
-The new style code:
-
-<<new style continuations set-up>>=
-cont = (continuation *) v.ptr;
-
-/* make sure cont is a valid cut continuation */
-check_cont(cont);
-/* FIX: we _do not_ check UIDs; there is currently no way to do this */
-
-cont_pc  = cont->code;
-
-/* the 'sp' pointer points to the beginning of stackdata-space; we cheat
- * and find the pointer to the activation record in the sizeof(actptr *) bytes
- * before this space... */
-dest_act = *((actptr *)(cont->sp) - 1);
-@ 
-
-The old style code is left here for posterity...
-
-<<old style continuations set-up>>=
-                           lbl = (CMM_label *) v.ptr;
-                           ASSERT_EMPTY(values);
-
-                           cont = lbl->lbl.cont;
-                           cont_pc  = CMM_label_location(lbl);
-
-                           <<make sure [[cont]] is a valid cut continuation>>
-
-                           dest_act = cont->dest_act;
-@ 
-
-We make sure that [[cont]] is a valid cut continuation by checking to see if the [[uid]] uniquely identifying [[cont->dest_act]] is still live.
-Note that this is actually the main purpose of having [[uid]]s around in the interpreter.
-We also must ensure that [[cont->dest_act]] was listed as a valid ``also cuts to'' continuation in the caller of the activation we were in at the beginning of the matching statement.
-
-<<make sure [[cont]] is a valid cut continuation>>=
-                           assert(cont != NULL);
-                           assert(cont->dest_act != NULL);
-                           cmm_assert(islive_uid(cont->u),
-                                      "cannot cut to dead continuation");
-
-                           /* FIX : look in kappa annotations in activation 
-                              pointed to by called_by to make sure that
-                              cont_pc is in kappa.also_cuts_to
-                            */
 @
-
-If we are cutting to a continuation across different threads (or if we are 
-making a call out to a C function), we must make sure to save the cutting 
-activation's information in a partial record (partial because there are no 
-call-site annotations and the [[callee]] is set to [[NULL]]).
-Remember that [[pc]] is the current program counter and that we must store 
-away [[next]] so that we do not end up in an infinite loop.
-
-<<save current info in a partial stack record>>=
-                               {
-                               /* save needed info in activation record */
-                               actptr saved = (actptr) t->stack_free;
-                               t->stack_free = round_up((void *) (saved + 1));
-                               mem_assert(t->stack_free <= t->stack_limit);
-
-                               saved->pc            = next;
-                               saved->locals        = locals;
-                               saved->locals_end    = locals_end;
-                               saved->stackdata     = stackdata;
-                               saved->stackdata_end = stackdata_end;
-                               /* we set kappa to NULL to signify partiality */
-                               saved->kappa         = NULL;
-                               saved->callee        = NULL;
-                               saved->u             = u;
-                               saved->caller        = caller;
-                               saved->name          = name;
-                               saved->proc          = curr_proc;
-
-                               }
-@
-
 We next kill off all applications ``above'' [[dest_act]] in the activation chain of the destination thread.\footnote{When we say ``above'', we refer to the transitive closure of the following relation: a callee's activation is directly ``above'' its caller's activation if they are in the same thread.}
 
 <<kill off activations above [[dest_act]] in [[t]]>>=
                            /* FIX if callee is NULL what does that mean? */
                            assert(cont->dest_act->callee != NULL);
+                           /* TODO (djp).  killing off continuations.  we don't have stack_free.
                            dies_uid_range(
-                               (((actptr) (t->stack_free)) - 1)->u,
-                               (cont->dest_act->callee)->u);
-@
-
-Finally, restoring information from the destination activation is as simple as copying pointers and the old [[uid]].
-
-<<restore info from [[dest_act]]>>=
-                           /* update state of machine */
-                           pc            = cont_pc;
-                           locals        = dest_act->locals;
-                           locals_end    = dest_act->locals_end;
-                           stackdata     = dest_act->stackdata;
-                           stackdata_end = dest_act->stackdata_end;
-                           u             = dest_act->u;
-                           caller        = dest_act->caller;
-                           name          = dest_act->name;
-                           curr_proc     = dest_act->proc;
-
-                           dest_act->callee = NULL;
+                               (((actptr) t->stack_free)) - 1)->u,
+                               (cont->dest_act->callee)->u);*/
 @
 
 As final matching cases, we interpret the structure-related instructions.
@@ -1943,8 +1716,8 @@ We need to store an activation pointer within each of the activations contained 
 
 <<matching statement>>=
     | DEFINE_PROC(p)    => {
-                           curr_proc = (procedure *) p;
-                           pc = next;
+                           act->proc = (procedure *) p;
+                           act->pc = next;
                            }
 @ 
 
@@ -1952,7 +1725,7 @@ And its brother, [[END_PROC]].
 
 <<matching statement>>=
     | END_PROC()        => {
-                           curr_proc = NULL;
+                           act->proc = NULL;
                            cmm_err("procedure missing return/jump statement");
                            }
 @ 
@@ -1966,38 +1739,12 @@ when it is about to interpret a certain bytecode instruction.
     | BREAKPT()         => {
                              int saved_verbosity = verbosity;
                              verbosity           = 1;
-                             print_value_stack(values.s_free, values.s_base,
+                             print_value_stack(s->values.s_free, s->values.s_base,
                                                "values");
                              verbosity           = saved_verbosity;
-                             pc                  = next;
+                             act->pc = next;
                            }
 @ 
-
-% ----------------------------------------------------------------------------
-\subsubsection{Saving the interpreter state on the stack}
-% ----------------------------------------------------------------------------
-
-<<save state to a new activation record on the stack>>=
-    {
-      /* save needed info in activation record */
-      actptr saved = (actptr) t->stack_free;
-      t->stack_free = round_up((void *) (saved + 1));
-      mem_assert(t->stack_free <= t->stack_limit);
-
-      saved->pc            = pc;
-      saved->locals        = locals;
-      saved->locals_end    = locals_end;
-      saved->stackdata     = stackdata;
-      saved->stackdata_end = stackdata_end;
-      /* we set kappa to NULL to signify partiality */
-      saved->kappa         = NULL;
-      saved->callee        = NULL;
-      saved->u             = u;
-      saved->caller        = caller;
-      saved->name          = name;
-      saved->proc          = curr_proc;
-    }
-@
 
 % ----------------------------------------------------------------------------
 \subsection{Interpreter Interaction Initialization}
