@@ -1255,9 +1255,6 @@ let rec (<:::>) is cbranch = match cbranch with
 | PX.Exit b -> PX.Exit b
 | PX.Test (b, c) -> PX.Test (is <:> b, c)
 | PX.Shared (u, c) -> PX.Shared (u, is <:::> c) in
-@ 
-<<block-manipulation utilities>>=
-let block_concat l = List.fold_right (<:>) l PX.Nop in
 @
 \subsubsection{Printing code for debugging}
 Some debugging code is most helpful.
@@ -1313,7 +1310,6 @@ and compact_block b =
 Printing blocks:
 <<more printing functions for the internal [[D]] module>>=
 let rec pr_block ind b =
-  let exp = Rtlutil.ToString.exp in
   let rec pr = function
     | PX.Rtl r          -> eprintf "%s%s;\n" ind (rtl r)
     | PX.Seq (b, b')    -> pr b; pr b'
@@ -1609,7 +1605,7 @@ This fact is documented in the postexpander interface.
     if n <> n' then Impossible.impossible "ill-typed %zx(%lobits(...))";
     to_temp' room context (Dn.exp (Rewrite.zxlo n w (Up.exp x)))
 <<cases for sign extending or zero extending a narrow hardware register>>=
-| RP.App ((("sx"|"zx" as o), [n; w]), [RP.Fetch(r, _) as e]) when RU.is_hardware r ->
+| RP.App ((("sx"|"zx" as o), [n; w]), [RP.Fetch(r, _)]) when RU.is_hardware r ->
     let r = RU.to_hardware r in
     let t = alloc icontext w in
     let fill = if o == "sx" then PX.HighS else PX.HighZ in
@@ -1620,7 +1616,7 @@ we can see a weird value operator in two contexts: a weird result is
 extended or a normal result is used
 <<cases for narrow weird value operators>>=
 | RP.App ((("sx"|"zx") as xop, [n; w]),
-          [RP.App((("carry"|"borrow"), [w']) as wrdop, args) as e]) ->
+          [RP.App((("carry"|"borrow"), [w']) as wrdop, args)]) ->
     if n <> 1 then Impossible.impossible "ill-typed %sx/%zx(...)";
     let signed = xop =$= "sx" in
     let x, y, z, is = compile_weird_args room wrdop args in
@@ -1791,7 +1787,7 @@ let insist_rounding_mode arg =
     Unsupported.soft_rounding_mode()
 <<other generic expander functions>>=
 and save_stack room =
-  let number_to_push = Post.stack_depth - room in
+  let _number_to_push = Post.stack_depth - room in
   Impossible.unimp "saving an overflowing machine stack"
 and restore_stack number_to_keep number_to_restore =
   Impossible.unimp "restoring an overflowing machine stack"
@@ -2054,6 +2050,22 @@ and assign_room room left right w =
             impossf "back end advertises slice of non-HW in %s" (D.loc left)
         | RP.Var (_,_,_) | RP.Global(_,_,_) ->
             impossf "variable passed to code expander"
+@ 
+DANGER WILL ROBINSON!  Tripped this case when trying to store least
+significant 32~bits of a 64-bit floating-point value.
+But the case should have been an \emph{ordinary} store 
+where the right-hand side was picked up by 
+[[<<cases for extracting from a wide temporary>>]].
+So we'll have to have some way of distinguishing these cases, probably
+by having a look at the width (and comparing with something from
+postexpander). 
+A~good first step might be for the postexpander to advertise at what
+widths ordinary store and [[lostore]] are supported, 
+or in other words, when to use [[lostore]] and when to use
+[[extract]].
+These issues are undoubtedly complicated by the machines on which the
+answers depend on which set of registers you're talking about.
+Like the Pentium.
 <<\emph{pattern [[->]] action} for low-bit store>>=
 RP.App (("lobits", [w; n]), [rhs]) ->
   let r, is = to_temp room icontext rhs in
@@ -2183,7 +2195,7 @@ RP.App ((("mulx"|"mulux"), [nw]) as opr, [x; y]) when w = 2 * nw ->
     impossf "unsupported extended multiply %s at width %d"
       (RU.ToUnreadableString.exp (Up.exp e)) w
 <<\emph{pattern [[->]] action} for doubling weird value operator to reg>>=
-RP.App ((("mulx"|"mulux"), [nw]) as opr, [x; y]) when w = 2 * nw ->
+RP.App ((("mulx"|"mulux"), [nw]), [x; y]) when w = 2 * nw ->
   impossf "extended multiply into stack-slot temporary"
 | RP.App ((("mulx"|"mulux"), _), _) as e ->
     impossf "unsupported extended multiply %s at width %d"

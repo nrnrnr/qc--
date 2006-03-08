@@ -15,15 +15,14 @@ This is an assembler that emits ``AT\&T'' style assembly language for
 the PPC platform.
 It implements the
 [[Asm.assembler]] interface for assemblers in the {\qcc} compiler.
-@
-
+@ 
 The assembler constructor receives the output channel for the assembler. 
 <<ppcasm.mli>>=
-type node = Rtl.rtl Cfgx.M.node
 val make : 
-  ('cfg -> (node -> unit) -> (Rtl.rtl -> unit) -> (string -> unit) -> unit) ->
-  out_channel -> ('a, 'cfg, 'b, 'c) Proc.t Asm.assembler
-  (* pass Cfgutil.emit or Cfgutil.emit *)
+  (('a, 'b, 'c, 'd) Proc.t -> 'cfg -> (Zipcfg.Rep.call -> unit) -> 
+            (Rtl.rtl -> unit) -> (string -> unit) -> unit) ->
+  out_channel -> ('cfg * ('a, 'b, 'c, 'd) Proc.t) Asm.assembler
+  (* pass Cfgutil.emit *)
 @
 
 % ------------------------------------------------------------------ 
@@ -34,11 +33,11 @@ The implementation provides no surprises. It builds up an {\AST} and
 emits it to [[stdout]] when the [[emit]] method is called.
 
 <<ppcasm.ml>>=
+module G  = Zipcfg
+module GR = Zipcfg.Rep
 module SM = Strutil.Map
-module G  = Cfgx.M
 <<utilities>>
 <<definitions>>
-type node = Rtl.rtl Cfgx.M.node
 let make emitter fd = new asm emitter fd
 @
 <<utilities>>=
@@ -103,7 +102,8 @@ provides a private method for this.
 <<definitions>>=
 <<definition of [[manglespec]] (for the name mangler)>>
 
-class ['a, 'b, 'c, 'd] asm emitter fd : [('a, 'b, 'c, 'd) Proc.t] Asm.assembler = 
+class ['cfg, 'a, 'b, 'c, 'd] asm emitter fd
+  : ['cfg * ('a, 'b, 'c, 'd) Proc.t] Asm.assembler = 
 object (this)
     val         _fd       = fd
     val         _mangle  = (Mangle.mk spec)   
@@ -262,22 +262,20 @@ method private instruction rtl =
 
 method longjmp_size () = 4
 method private call node =
-  let longjmp node = fprintf _fd "\tb %s\n" (_mangle (G.label node)) in
-  let output_altret_jmps n =
-    let rec loop i =
-      if i > n then ()
-      else (longjmp (G.join_leading_to (G.succ_n node i)); loop (i+1))
-    in loop 1
-  in
-  match G.to_executable node with
-  | None     -> ()
-  | Some rtl -> this#instruction rtl;
-                output_altret_jmps (G.altrets node)
+  let longjmp edge = fprintf _fd "\tb %s\n" (_mangle (snd edge.G.node)) in
+  let rec output_altret_jumps n edges = (* emit n jumps *)
+    if n > 0 then
+      match edges with
+      | edge :: edges -> (longjmp edge; output_altret_jumps (n-1) edges) 
+      | [] -> Impossible.impossible "contedge count" in
+  begin
+    fprintf _fd "%s\n" (Ppcrec.M.to_asm node.GR.cal_i []);  (* NOTE BOGUS ARG [] *)
+    output_altret_jumps node.GR.cal_altrets (List.tl node.GR.cal_contedges);
+  end
 
-method cfg_instr proc = 
-  let cfg    = proc.Proc.cfg
-  and symbol = proc.Proc.symbol in
+method cfg_instr (cfg, proc) = 
+  let symbol = proc.Proc.symbol in
   let label l = this#label (try SM.find l _syms with Not_found -> this#local l) in
   this#label symbol;
-  (emitter cfg (this#call) (this#instruction) label : unit)
+  (emitter proc cfg (this#call) (this#instruction) label : unit)
 @

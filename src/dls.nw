@@ -99,7 +99,7 @@ type preferences = { varMap : VM.t
 @
 Printers are our debugging friends.
 <<define [[print_prefs]] to print preferences>>=
-let print_prefs msg prefs =
+let _print_prefs msg prefs =
   Printf.eprintf "%s\nPreferences VarMap:\n" msg;
   VM.print "" prefs.varMap;
   Printf.eprintf "Preferences RegQueue:\n";
@@ -169,7 +169,7 @@ queue.
 Note that this function is called after the node has been rewritten to replace all
 temps with hardware registers.
 <<updating preferences>>=
-let post_update_prefs node prefs outmap =
+let _post_update_prefs node prefs outmap =
   prefs in
 (*
 (*
@@ -819,8 +819,8 @@ We also update each variable map that is changed.
 <<define [[shuffle_around]] and [[shuffle_between]]>>=
 let shuffle_around blockmap predmap pred_id succ_id =
   let () = Debug.eprintf "dls" "shuffle_around\n" in
-  let pred = UM.find pred_id blockmap in
-  let succ = UM.find succ_id blockmap in
+  let _pred = UM.find pred_id blockmap in
+  let _succ = UM.find succ_id blockmap in
 
   let regs temp succ_reg (ts, loads as rst) =
     match (VM.var_locs' pred_vm temp).VM.reg with
@@ -912,7 +912,7 @@ let shuffle_between blockmap predmap pred_id succ_id =
             "DLS register allocator error in shuffle(): Temp" (printReg temp)
             "allocated in succ" (blockname succ) "but not pred" (blockname pred)
             "map in function" (proc.Proc.symbol#original_text) in
-  let fail () = VM.print "Pred VM:" pred_vm;
+  let _fail () = VM.print "Pred VM:" pred_vm;
                 VM.print "Succ VM:" succ_vm;
                 impossf "Varmap has temp in unexpected locations" in
   let regs temp succ_reg (ms, ls, ss as state_lsts) =
@@ -965,7 +965,7 @@ let shuffle_between blockmap predmap pred_id succ_id =
     let last =
       let machine = proc.Proc.machine in
       match last with
-      | GR.Branch  (rtl, (uid, _ as lbl))    ->
+      | GR.Branch  (rtl, (uid, _))    ->
           assert (U.eq uid succ_id);
           GR.Branch (machine.G.goto new_lbl, new_lbl)
       | GR.Cbranch (rtl, (uidt, _ as lt), (uidf, _ as lf)) ->

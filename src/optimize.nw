@@ -95,10 +95,10 @@ Then we remove the unreachable spans.
 I DON'T SEE WHERE UNREACHABLE SPANS ARE EVER REMOVED. 
 CAN THE OLD CODE SIMPLY BE REMOVED?
 <<optimize.ml>>=
-let trim_unreachable_code _ ({Proc.cfg = cfg} as proc) =
+let trim_unreachable_code _ {Proc.cfg = cfg} =
   let module IS = Set.Make (struct type t = int let compare x y = x - y end) in
   let nodes_from_entry =
-    let add_labels n lset = 
+    let _add_labels n lset = 
       if OG.is_join n then List.fold_right SS.add (OG.labels n) lset else lset in
     OG.postorder_dfs (fun n nset -> IS.add (OG.num n) nset)
                     IS.empty cfg in
@@ -156,7 +156,7 @@ let remove_nops _ (g, proc) =
   let is_nop rtl =
     let unneeded = function
       | (_, RP.Kill _) -> true
-      | (_, RP.Store (l, RP.Fetch(l', w'), w)) as r -> (* assert (w=w'); *)
+      | (_, RP.Store (l, RP.Fetch(l', w'), w)) -> (* assert (w=w'); *)
           if w<>w' then
             impossf "width of fetch and store don't match in %s" (RU.ToString.rtl rtl)
           else

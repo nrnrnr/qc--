@@ -146,25 +146,20 @@ let declmap decls =
     let add' map d       = List.fold_left (add d) map (S.defines d)    in
         List.fold_left add' IDMap.empty decls
 @
- 
 The [[succ]] function calculates all declarations a given declaration
 depends on with the help of [[S.uses]] and the previously calculated
 [[map]]:  [[S.uses]] returns the names used by [[x]] and the [[map]]
 translates these to the declarations for these names.
-
 <<functions>>=
 let succ map x =
-    let uses = S.uses x in
     let find map n = try IDMap.find n map with Not_found -> [] in
     List.concat (List.map (find map) (S.uses x))
 @
-
 The map [[m]] contains for every name the declarations that define
 this name.  Correct {\PAL} programs will use only one definition to
 define a name.  This algorithm is difficult to understand -- please
 refer to \emph{{\small ML} for the working Programmer}
 \cite{paulson:91:ml} by Paulson for an explanation. 
-
 <<functions>>=
 let sort decls =
     let m             = declmap decls                               in

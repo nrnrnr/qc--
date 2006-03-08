@@ -99,7 +99,7 @@ L.6:
 	movl (%ecx),%ecx
 	movl %ecx,(%eax)
 L.7:
-.Lbranch_target_l38:
+.Lbranch_target_l36:
 	movl $127,%eax
 	cmpl %eax,%edx
 	jle .LL.6_l42
@@ -110,7 +110,7 @@ L.11:
 	call getchar
 .Lcall_successor_l25:
 	movl %eax,%ecx
-.Lbranch_target_l34:
+.Lbranch_target_l40:
 	movl $-1,%edx
 	cmpl %edx,%eax
 	jne L.10
@@ -135,7 +135,7 @@ L.15:
 	addl %eax,%ecx
 	movl (%edx),%eax
 	movl %eax,(%ecx)
-.Lbranch_target_l39:
+.Lbranch_target_l35:
 	leal f_4,%eax
 	flds (%eax)
 	leal 112(%esp), %eax
@@ -148,7 +148,7 @@ L.15:
 	xorb $64,%ah
 	jz L.19
 .Lbranch_target_l18:
-.Lbranch_target_l35:
+.Lbranch_target_l39:
 	leal 112(%esp), %eax
 	movl $-88,%ecx
 	addl %ecx,%eax
@@ -172,7 +172,7 @@ L.15:
 	sahf
 	ja L.19
 .Lbranch_target_l17:
-.Lbranch_target_l36:
+.Lbranch_target_l38:
 	movl $32,%eax
 	movl 76(%esp),%edx
 	cmpl %eax,%edx
@@ -255,7 +255,7 @@ L.16:
 	movl $1,%eax
 	movl 76(%esp),%ecx
 	addl %eax,%ecx
-.Lbranch_target_l40:
+.Lbranch_target_l34:
 	movl $127,%eax
 	cmpl %eax,%ecx
 	jle .LL.15_l44

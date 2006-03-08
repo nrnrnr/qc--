@@ -29,6 +29,7 @@ type 'a proc =
     stackmem      : Block.t;
     stacklabels   : Rtl.exp list;
     code          : Elabstmt.stmt list;
+    basic_block   : bool;  (* procedure represents a basic block from source *)
   } 
 
 type 'a datum =
@@ -385,7 +386,6 @@ let program ~swap validate srcmap asm ast =
     let errorf r    = Printf.kprintf (fun s -> eprint r s; E.Error) in
     let findve r n  = E.catch (eprint r) (fun env -> snd (F.findv n env)) in
     let pointerty   = Types.Bits metrics.Metrics.pointersize in
-    let wordty      = Types.Bits metrics.Metrics.wordsize in
     let vfp         = Vfp.mk metrics.Metrics.wordsize in
     let memsize     = metrics.Metrics.memsize in
     let aligned     = Elabexp.aligned metrics in
@@ -438,7 +438,8 @@ let proc env spans p =
     Procedure
       { env = env; cc = p.N.cc; name = p.N.name; sym = sym; formals = formals;
         locals = List.map snd locals; continuations = conts; spans = spans;
-        stackmem = stackmem; stacklabels = stacklabels; code = code; }) in
+        stackmem = stackmem; stacklabels = stacklabels; code = code;
+        basic_block = false; }) in
 @ 
 A continuation knows its address (in the form of an empty, unaligned
 block).

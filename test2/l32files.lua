@@ -1,8 +1,10 @@
 Test.files = { "add.c--"
-             , { source = "altread.c--", argv='output/altread.1 /does-not-exist' }
+             , { source = "altread.c--", argv='output/altread.1 /does-not-exist',
+                 other= 'src/errno.c' }
              , "altret.c--"
              , { source="altret2.c--", stdin="altret2.0", rc=1 }
-             , { source="altret3.c--", argv='src/altret3.c-- nonexists .' }
+             , { source="altret3.c--", argv='src/altret3.c-- nonexists .',
+                 other='src/errno.c'  }
              , "arglist.c--"
              , "bits-bug.c--"
              , "bool.c--"
@@ -21,6 +23,7 @@ Test.files = { "add.c--"
              , "fadd.c--"
              , "failedcase.c--"
              , { source="fargres.c--", other='src/double.c' }
+-----             , "fcall.c--"
              , "float-000.c--"
              , "float-001.c--"
              , "float-001-hero.c--"

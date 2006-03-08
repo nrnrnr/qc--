@@ -305,7 +305,7 @@ insert_54:
 	addl %ecx,%eax
 	movl 20(%esp),%ecx
 	movl %ecx,(%eax)
-.Lbranch_target_l57:
+.Lbranch_target_l56:
 	leal 76(%esp), %eax
 	movl $-8,%ecx
 	addl %ecx,%eax
@@ -353,7 +353,7 @@ LifFalse_75:
 	leal Cmm.global_area,%ecx
 	movl 40(%esp),%edx
 	movl %edx,(%ecx)
-.Lbranch_target_l55:
+.Lbranch_target_l58:
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	je LifTrue_70
@@ -392,7 +392,7 @@ LifFalse_71:
 	leal Cmm.global_area,%ecx
 	movl 52(%esp),%edx
 	movl %edx,(%ecx)
-.Lbranch_target_l56:
+.Lbranch_target_l57:
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	jl LifTrue_66
@@ -503,7 +503,7 @@ LifEnd_72:
 	movl %eax,%edx
 	jmp LifEnd_76
 LifTrue_74:
-.Lbranch_target_l58:
+.Lbranch_target_l55:
 	leal Cmm.global_area,%eax
 	movl (%eax),%eax
 	movl $20,%ecx
@@ -1266,7 +1266,7 @@ isletter_40:
 	leal Cmm.global_area,%ecx
 	movl 24(%esp),%edx
 	movl %edx,(%ecx)
-.Lbranch_target_l143:
+.Lbranch_target_l154:
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	jge LifTrue_100
@@ -1297,18 +1297,18 @@ LifTrue_100:
 	leal Cmm.global_area,%ecx
 	movl 48(%esp),%edx
 	movl %edx,(%ecx)
-.Lbranch_target_l147:
+.Lbranch_target_l153:
 	movl $0,%ecx
 	cmpl %ecx,%eax
-	jle .Lbranch_target_l146
-.Lbranch_target_l145:
+	jle .Lbranch_target_l152
+.Lbranch_target_l151:
 	movl $0,%eax
-	jmp .Lbranch_target_l144
-.Lbranch_target_l146:
+	jmp .Lbranch_target_l150
+.Lbranch_target_l152:
 	movl $-1,%eax
-.Lbranch_target_l144:
+.Lbranch_target_l150:
 LifEnd_102:
-.Lbranch_target_l153:
+.Lbranch_target_l144:
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	jne LifTrue_126
@@ -1336,7 +1336,7 @@ LifFalse_127:
 	leal Cmm.global_area,%ecx
 	movl 88(%esp),%edx
 	movl %edx,(%ecx)
-.Lbranch_target_l148:
+.Lbranch_target_l149:
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	jge LifTrue_116
@@ -1367,18 +1367,18 @@ LifTrue_116:
 	leal Cmm.global_area,%ecx
 	movl 92(%esp),%edx
 	movl %edx,(%ecx)
-.Lbranch_target_l152:
+.Lbranch_target_l148:
 	movl $0,%ecx
 	cmpl %ecx,%eax
-	jle .Lbranch_target_l151
-.Lbranch_target_l150:
+	jle .Lbranch_target_l147
+.Lbranch_target_l146:
 	movl $0,%eax
-	jmp .Lbranch_target_l149
-.Lbranch_target_l151:
+	jmp .Lbranch_target_l145
+.Lbranch_target_l147:
 	movl $-1,%eax
-.Lbranch_target_l149:
+.Lbranch_target_l145:
 LifEnd_118:
-.Lbranch_target_l154:
+.Lbranch_target_l143:
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	jne LifTrue_122
@@ -1904,7 +1904,7 @@ Lloop_start_138:
 	leal Cmm.global_area,%ecx
 	movl 24(%esp),%edx
 	movl %edx,(%ecx)
-.Lbranch_target_l203:
+.Lbranch_target_l210:
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	jne LifTrue_135
@@ -1931,18 +1931,18 @@ LifTrue_135:
 	movl %ecx,(%edx)
 	call isletter_40
 .Lcall_successor_l193:
-.Lbranch_target_l207:
+.Lbranch_target_l209:
 	movl $0,%ecx
 	cmpl %ecx,%eax
-	je .Lbranch_target_l206
-.Lbranch_target_l205:
+	je .Lbranch_target_l208
+.Lbranch_target_l207:
 	movl $0,%eax
-	jmp .Lbranch_target_l204
-.Lbranch_target_l206:
+	jmp .Lbranch_target_l206
+.Lbranch_target_l208:
 	movl $-1,%eax
-.Lbranch_target_l204:
+.Lbranch_target_l206:
 LifEnd_137:
-.Lbranch_target_l209:
+.Lbranch_target_l204:
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	jne Lloop_body_139
@@ -1971,7 +1971,7 @@ Lloop_start_147:
 	leal Cmm.global_area,%ecx
 	movl 32(%esp),%edx
 	movl %edx,(%ecx)
-.Lbranch_target_l208:
+.Lbranch_target_l205:
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	jne LifTrue_144
@@ -1999,7 +1999,7 @@ LifTrue_144:
 	call isletter_40
 .Lcall_successor_l184:
 LifEnd_146:
-.Lbranch_target_l210:
+.Lbranch_target_l203:
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	jne Lloop_body_148

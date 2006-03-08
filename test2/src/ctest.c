@@ -1,6 +1,7 @@
 extern unsigned long long lladd(unsigned long long x, unsigned long long y);
 extern long long llsub(long long x, long long y);
 extern long long llmul(long long x, long long y);
+extern int printf(const char *fmt, ...);
 
 int main() {
   unsigned long long x;

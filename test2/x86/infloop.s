@@ -13,8 +13,8 @@ Cmm_stack_growth:
 .section .text
 f3:
 	leal -64(%esp), %esp
-	leal 64(%esp), %eax
-	movl (%eax),%eax
+	leal 64(%esp), %ecx
+	movl (%ecx),%eax
 .Linitialize_continuations_l3:
 .Lproc_body_start_l2:
 f3_label:

@@ -370,7 +370,7 @@ tiger_main:
 	jmp Ltry_end_48
 .Lunwind_entry_l37:
 .Lstart_of_continuation_code_l35:
-.Lbranch_target_l84:
+.Lbranch_target_l86:
 	movl $21,%eax
 	movl 20(%esp),%ecx
 	cmpl %eax,%ecx
@@ -441,18 +441,18 @@ Ltry_end_48:
 	jmp Ltry_end_67
 .Lunwind_entry_l43:
 .Lstart_of_continuation_code_l41:
-.Lbranch_target_l83:
+.Lbranch_target_l87:
 	movl $22,%eax
 	movl 40(%esp),%ecx
 	cmpl %eax,%ecx
 	je Lhandle_70
 Lskip_71:
-.Lbranch_target_l86:
+.Lbranch_target_l84:
 	movl $21,%eax
 	cmpl %eax,%ecx
 	je Lhandle_72
 Lskip_73:
-.Lbranch_target_l87:
+.Lbranch_target_l83:
 	movl $20,%eax
 	cmpl %eax,%ecx
 	je Lhandle_74

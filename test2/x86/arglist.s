@@ -84,7 +84,7 @@ f:
 	movl (%edx),%edx
 .Linitialize_continuations_l5:
 .Lproc_body_start_l4:
-.Lbranch_target_l45:
+.Lbranch_target_l40:
 	movl %eax,28(%esp)
 	leal numbers,%eax
 	movl (%eax),%eax
@@ -124,7 +124,7 @@ f:
 	call printf
 .Lcall_successor_l35:
 .Lbranch_target_l32:
-.Lbranch_target_l40:
+.Lbranch_target_l45:
 	leal numbers,%eax
 	movl $4,%ecx
 	addl %ecx,%eax
@@ -156,7 +156,7 @@ f:
 	call printf
 .Lcall_successor_l30:
 .Lbranch_target_l27:
-.Lbranch_target_l41:
+.Lbranch_target_l44:
 	leal numbers,%eax
 	movl $8,%ecx
 	addl %ecx,%eax
@@ -188,7 +188,7 @@ f:
 	call printf
 .Lcall_successor_l25:
 .Lbranch_target_l22:
-.Lbranch_target_l42:
+.Lbranch_target_l43:
 	leal numbers,%eax
 	movl $12,%ecx
 	addl %ecx,%eax
@@ -220,7 +220,7 @@ f:
 	call printf
 .Lcall_successor_l20:
 .Lbranch_target_l17:
-.Lbranch_target_l43:
+.Lbranch_target_l42:
 	leal numbers,%eax
 	movl $16,%ecx
 	addl %ecx,%eax
@@ -252,7 +252,7 @@ f:
 	call printf
 .Lcall_successor_l15:
 .Lbranch_target_l12:
-.Lbranch_target_l44:
+.Lbranch_target_l41:
 	leal numbers,%eax
 	movl $20,%ecx
 	addl %ecx,%eax
@@ -431,7 +431,7 @@ g:
 	movl (%edx),%edx
 .Linitialize_continuations_l57:
 .Lproc_body_start_l56:
-.Lbranch_target_l79:
+.Lbranch_target_l77:
 	movl %eax,16(%esp)
 	leal numbers,%eax
 	movl %eax,20(%esp)
@@ -479,7 +479,7 @@ g:
 	call printf
 .Lcall_successor_l72:
 .Lbranch_target_l69:
-.Lbranch_target_l77:
+.Lbranch_target_l79:
 	leal numbers,%eax
 	movl $16,%ecx
 	addl %ecx,%eax

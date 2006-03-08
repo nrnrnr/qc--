@@ -58,8 +58,8 @@ main:
 	movl $10,%eax
 	movl $11,%ecx
 .L.Lbranch_target_l38_l50:
-	movl %edx,52(%esp)
 	movl %eax,56(%esp)
+	movl %edx,52(%esp)
 	movl %ecx,%eax
 	jmp .Lbranch_target_l38
 .Lbranch_target_l46:

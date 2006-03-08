@@ -209,12 +209,12 @@ p:
 	addl %eax,%ecx
 	movl 72(%esp),%eax
 	movl %eax,(%ecx)
-.Lbranch_target_l13:
+.Lbranch_target_l11:
 	movl 8(%esp),%eax
 	cmpl %edx,%eax
 	jb L
 .Lbranch_target_l7:
-.Lbranch_target_l11:
+.Lbranch_target_l13:
 	cmpl %edx,%eax
 	jbe L
 .Lbranch_target_l6:

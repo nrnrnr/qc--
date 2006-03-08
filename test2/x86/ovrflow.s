@@ -109,7 +109,7 @@ test_ovrfl:
 .Lproc_body_start_l3:
 	movl %eax,20(%esp)
 	addl %ecx,%eax
-.Lbranch_target_l55:
+.Lbranch_target_l48:
 	movl %eax,24(%esp)
 	movl 20(%esp),%eax
 	addl %ecx,%eax
@@ -212,7 +212,7 @@ test_ovrfl:
 	movl %eax,%ecx
 	movl 20(%esp),%edx
 	imull %edx,%ecx
-.Lbranch_target_l48:
+.Lbranch_target_l55:
 	movl %edx,%eax
 	movl %ecx,24(%esp)
 	movl 40(%esp),%ecx
@@ -298,21 +298,21 @@ test_ovrfl:
 	call printf
 .Lcall_successor_l34:
 .Lbranch_target_l27:
-.Lbranch_target_l51:
+.Lbranch_target_l54:
 	movl $0,%eax
 	movl 40(%esp),%ecx
 	cmpl %eax,%ecx
-	jne .Lbranch_target_l50
+	jne .Lbranch_target_l53
 .L.Lbranch_target_l25_l56:
 	movl 20(%esp),%edx
 	jmp .Lbranch_target_l25
-.Lbranch_target_l50:
+.Lbranch_target_l53:
 	movl $-2147483648,%eax
 	movl 20(%esp),%edx
 	cmpl %eax,%edx
-	je .Lbranch_target_l49
+	je .Lbranch_target_l52
 	jmp .Lbranch_target_l26
-.Lbranch_target_l49:
+.Lbranch_target_l52:
 	movl $-1,%eax
 	cmpl %eax,%ecx
 	je .Lbranch_target_l25
@@ -327,13 +327,13 @@ test_ovrfl:
 .Lbranch_target_l25:
 	movl $99999,%eax
 .Lbranch_target_l24:
-.Lbranch_target_l53:
+.Lbranch_target_l51:
 	movl %eax,24(%esp)
 	movl $-2147483648,%eax
 	cmpl %eax,%edx
-	je .Lbranch_target_l52
+	je .Lbranch_target_l50
 	jmp .Lbranch_target_l19
-.Lbranch_target_l52:
+.Lbranch_target_l50:
 	movl $-1,%eax
 	cmpl %eax,%ecx
 	je .Lbranch_target_l23
@@ -421,7 +421,7 @@ test_ovrfl:
 	movl %eax,%ecx
 	movl 40(%esp),%edx
 	subl %edx,%ecx
-.Lbranch_target_l54:
+.Lbranch_target_l49:
 	subl %edx,%eax
 	jo .Lbranch_target_l14
 .Lbranch_target_l10:

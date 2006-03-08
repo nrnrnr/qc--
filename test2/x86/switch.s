@@ -161,45 +161,45 @@ sw:
 .Linitialize_continuations_l37:
 .Lproc_body_start_l36:
 .Lbranch_target_l60:
-.Lbranch_target_l64:
+.Lbranch_target_l72:
 	movl $1,%edx
 	cmpl %edx,%eax
 	je .Lbranch_target_l59
 .Lbranch_target_l55:
-.Lbranch_target_l66:
+.Lbranch_target_l71:
 	movl $2,%edx
 	cmpl %eax,%edx
-	jbe .Lbranch_target_l65
+	jbe .Lbranch_target_l70
 	jmp .Lbranch_target_l50
-.Lbranch_target_l65:
+.Lbranch_target_l70:
 	movl $3,%edx
 	cmpl %edx,%eax
 	jbe .Lbranch_target_l54
 .Lbranch_target_l50:
-.Lbranch_target_l67:
+.Lbranch_target_l69:
 	movl $4,%edx
 	cmpl %edx,%eax
 	je .Lbranch_target_l49
 .Lbranch_target_l45:
-.Lbranch_target_l72:
+.Lbranch_target_l68:
 	movl $5,%edx
 	cmpl %eax,%edx
-	jbe .Lbranch_target_l71
-	jmp .Lbranch_target_l70
-.Lbranch_target_l71:
+	jbe .Lbranch_target_l67
+	jmp .Lbranch_target_l66
+.Lbranch_target_l67:
 	movl $-1,%edx
 	cmpl %edx,%eax
 	jbe .Lbranch_target_l44
-.Lbranch_target_l70:
+.Lbranch_target_l66:
 	movl $0,%edx
 	cmpl %edx,%eax
 	je .Lbranch_target_l44
-.Lbranch_target_l69:
+.Lbranch_target_l65:
 	movl $-2147483648,%edx
 	cmpl %eax,%edx
-	jbe .Lbranch_target_l68
+	jbe .Lbranch_target_l64
 	jmp .Lbranch_target_l40
-.Lbranch_target_l68:
+.Lbranch_target_l64:
 	movl $-1,%edx
 	cmpl %edx,%eax
 	jbe .Lbranch_target_l44

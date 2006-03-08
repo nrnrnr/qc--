@@ -104,7 +104,7 @@ isdigit_41:
 	leal Cmm.global_area,%ecx
 	movl 44(%esp),%edx
 	movl %edx,(%ecx)
-.Lbranch_target_l28:
+.Lbranch_target_l32:
 	movl 32(%esp),%ecx
 	cmpl %eax,%ecx
 	jge LifTrue_54
@@ -150,16 +150,16 @@ LifTrue_54:
 	leal Cmm.global_area,%ecx
 	movl 64(%esp),%edx
 	movl %edx,(%ecx)
-.Lbranch_target_l32:
+.Lbranch_target_l31:
 	movl 52(%esp),%ecx
 	cmpl %eax,%ecx
-	jle .Lbranch_target_l31
-.Lbranch_target_l30:
-	movl $0,%eax
-	jmp .Lbranch_target_l29
-.Lbranch_target_l31:
-	movl $-1,%eax
+	jle .Lbranch_target_l30
 .Lbranch_target_l29:
+	movl $0,%eax
+	jmp .Lbranch_target_l28
+.Lbranch_target_l30:
+	movl $-1,%eax
+.Lbranch_target_l28:
 LifEnd_56:
 	leal 76(%esp), %ecx
 	movl $4,%edx
@@ -357,7 +357,7 @@ Lloop_start_70:
 	leal Cmm.global_area,%ecx
 	movl 12(%esp),%edx
 	movl %edx,(%ecx)
-.Lbranch_target_l55:
+.Lbranch_target_l60:
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	je LifTrue_67
@@ -401,7 +401,7 @@ LifFalse_68:
 LifTrue_67:
 	movl $1,%eax
 LifEnd_69:
-.Lbranch_target_l60:
+.Lbranch_target_l55:
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	jne Lloop_body_71
@@ -961,7 +961,7 @@ Lalc_88:
 	movl $8,%edx
 	addl %edx,%ecx
 	movl %eax,(%ecx)
-.Lbranch_target_l118:
+.Lbranch_target_l120:
 	leal 32(%esp), %eax
 	movl $-12,%ecx
 	addl %ecx,%eax
@@ -978,7 +978,7 @@ LifFalse_96:
 	movl %eax,%edx
 	jmp LifEnd_97
 LifTrue_95:
-.Lbranch_target_l120:
+.Lbranch_target_l118:
 	leal Cmm.global_area,%eax
 	movl (%eax),%eax
 	movl $12,%ecx
@@ -1198,7 +1198,7 @@ merge_82:
 	addl %ecx,%eax
 	movl 4(%esp),%ecx
 	movl %ecx,(%eax)
-.Lbranch_target_l146:
+.Lbranch_target_l150:
 	leal 88(%esp), %eax
 	movl $-12,%ecx
 	addl %ecx,%eax
@@ -1209,7 +1209,7 @@ merge_82:
 	cmpl %ecx,%eax
 	je LifTrue_116
 LifFalse_117:
-.Lbranch_target_l147:
+.Lbranch_target_l149:
 	leal 88(%esp), %eax
 	movl $-12,%ecx
 	addl %ecx,%eax
@@ -1240,7 +1240,7 @@ LifFalse_113:
 	cmpl %eax,%ecx
 	jl LifTrue_108
 LifFalse_109:
-.Lbranch_target_l150:
+.Lbranch_target_l146:
 	leal Cmm.global_area,%eax
 	movl (%eax),%eax
 	movl $12,%ecx
@@ -1321,7 +1321,7 @@ Lalc_106:
 	movl %ecx,(%eax)
 	jmp LifEnd_110
 LifTrue_108:
-.Lbranch_target_l149:
+.Lbranch_target_l147:
 	leal Cmm.global_area,%eax
 	movl (%eax),%eax
 	movl $12,%ecx
@@ -1869,7 +1869,7 @@ printint_83:
 	addl %ecx,%eax
 	movl 16(%esp),%ecx
 	movl %ecx,(%eax)
-.Lbranch_target_l202:
+.Lbranch_target_l203:
 	leal 92(%esp), %eax
 	movl $-8,%ecx
 	addl %ecx,%eax
@@ -1880,7 +1880,7 @@ printint_83:
 	cmpl %ecx,%eax
 	jl LifTrue_140
 LifFalse_141:
-.Lbranch_target_l203:
+.Lbranch_target_l202:
 	leal 92(%esp), %eax
 	movl $-8,%ecx
 	addl %ecx,%eax

@@ -250,7 +250,7 @@ nums_main:
 	movl (%eax),%eax
 .Linitialize_continuations_l93:
 .Lproc_body_start_l92:
-.Lbranch_target_l129:
+.Lbranch_target_l128:
 	leal executed_nums_main,%ecx
 	movl (%ecx),%ecx
 	movl $0,%edx
@@ -263,7 +263,7 @@ nums_main:
 	movl %eax,(%esp)
 	call prim491
 .Lcall_successor_l121:
-.Lbranch_target_l128:
+.Lbranch_target_l129:
 	leal fall_through,%eax
 	movsbl (%eax),%eax
 	movl $1,%ecx
@@ -2552,7 +2552,7 @@ fun_test__nums__6:
 	addl %edx,%ecx
 	fildq (%eax)
 	fistpq (%ecx)
-.Lbranch_target_l409:
+.Lbranch_target_l410:
 	leal 784(%esp), %eax
 	movl $-304,%ecx
 	addl %ecx,%eax
@@ -2565,13 +2565,13 @@ fun_test__nums__6:
 	fstsw %ax
 	andb $69,%ah
 	xorb $64,%ah
-	jz .Lbranch_target_l408
-.Lbranch_target_l407:
-	movl $0,%eax
-	jmp .Lbranch_target_l406
+	jz .Lbranch_target_l409
 .Lbranch_target_l408:
+	movl $0,%eax
+	jmp .Lbranch_target_l407
+.Lbranch_target_l409:
 	movl $1,%eax
-.Lbranch_target_l406:
+.Lbranch_target_l407:
 	movl $24,%ecx
 	shll %cl, %eax
 	movl $24,%ecx
@@ -2593,7 +2593,7 @@ fun_test__nums__6:
 	addl %edx,%ecx
 	fildq (%eax)
 	fistpq (%ecx)
-.Lbranch_target_l413:
+.Lbranch_target_l414:
 	leal 784(%esp), %eax
 	movl $-320,%ecx
 	addl %ecx,%eax
@@ -2606,13 +2606,13 @@ fun_test__nums__6:
 	fstsw %ax
 	andb $69,%ah
 	xorb $64,%ah
-	jz .Lbranch_target_l412
-.Lbranch_target_l411:
-	movl $0,%eax
-	jmp .Lbranch_target_l410
+	jz .Lbranch_target_l413
 .Lbranch_target_l412:
+	movl $0,%eax
+	jmp .Lbranch_target_l411
+.Lbranch_target_l413:
 	movl $1,%eax
-.Lbranch_target_l410:
+.Lbranch_target_l411:
 	movl $24,%ecx
 	shll %cl, %eax
 	movl $24,%ecx
@@ -2634,7 +2634,7 @@ fun_test__nums__6:
 	addl %edx,%ecx
 	fildq (%eax)
 	fistpq (%ecx)
-.Lbranch_target_l417:
+.Lbranch_target_l418:
 	leal 784(%esp), %eax
 	movl $-336,%ecx
 	addl %ecx,%eax
@@ -2647,13 +2647,13 @@ fun_test__nums__6:
 	fstsw %ax
 	andb $69,%ah
 	xorb $64,%ah
-	jz .Lbranch_target_l416
-.Lbranch_target_l415:
-	movl $0,%eax
-	jmp .Lbranch_target_l414
+	jz .Lbranch_target_l417
 .Lbranch_target_l416:
+	movl $0,%eax
+	jmp .Lbranch_target_l415
+.Lbranch_target_l417:
 	movl $1,%eax
-.Lbranch_target_l414:
+.Lbranch_target_l415:
 	movl $24,%ecx
 	shll %cl, %eax
 	movl $24,%ecx
@@ -2675,7 +2675,7 @@ fun_test__nums__6:
 	addl %edx,%ecx
 	fildq (%eax)
 	fistpq (%ecx)
-.Lbranch_target_l421:
+.Lbranch_target_l422:
 	leal 784(%esp), %eax
 	movl $-352,%ecx
 	addl %ecx,%eax
@@ -2689,13 +2689,13 @@ fun_test__nums__6:
 	fstsw %ax
 	andb $69,%ah
 	xorb $64,%ah
-	jz .Lbranch_target_l420
-.Lbranch_target_l419:
-	movl $0,%eax
-	jmp .Lbranch_target_l418
+	jz .Lbranch_target_l421
 .Lbranch_target_l420:
+	movl $0,%eax
+	jmp .Lbranch_target_l419
+.Lbranch_target_l421:
 	movl $1,%eax
-.Lbranch_target_l418:
+.Lbranch_target_l419:
 	movl $24,%ecx
 	shll %cl, %eax
 	movl $24,%ecx
@@ -2717,7 +2717,7 @@ fun_test__nums__6:
 	addl %edx,%ecx
 	fildq (%eax)
 	fistpq (%ecx)
-.Lbranch_target_l425:
+.Lbranch_target_l426:
 	leal 784(%esp), %eax
 	movl $-368,%ecx
 	addl %ecx,%eax
@@ -2730,13 +2730,13 @@ fun_test__nums__6:
 	fstsw %ax
 	andb $69,%ah
 	xorb $64,%ah
-	jz .Lbranch_target_l424
-.Lbranch_target_l423:
-	movl $0,%eax
-	jmp .Lbranch_target_l422
+	jz .Lbranch_target_l425
 .Lbranch_target_l424:
+	movl $0,%eax
+	jmp .Lbranch_target_l423
+.Lbranch_target_l425:
 	movl $1,%eax
-.Lbranch_target_l422:
+.Lbranch_target_l423:
 	movl $24,%ecx
 	shll %cl, %eax
 	movl $24,%ecx
@@ -3158,7 +3158,7 @@ fun_test__nums__6:
 	movl %eax,(%ecx)
 	call prim963
 .Lcall_successor_l399:
-.Lbranch_target_l426:
+.Lbranch_target_l406:
 	leal fall_through,%eax
 	movsbl (%eax),%eax
 	movl $1,%ecx
@@ -3419,7 +3419,7 @@ fun_test__nums__7:
 	movl $-4,%edx
 	addl %edx,%ecx
 	movl (%ecx),%ecx
-.Lbranch_target_l472:
+.Lbranch_target_l474:
 	leal fall_through,%edx
 	movsbl (%edx),%edx
 	movl %eax,20(%esp)
@@ -3582,7 +3582,7 @@ fun_test__nums__7:
 	movl %edx,(%eax)
 	call prim1042
 .Lcall_successor_l453:
-.Lbranch_target_l474:
+.Lbranch_target_l472:
 	leal fall_through,%eax
 	movsbl (%eax),%eax
 	movl $1,%ecx

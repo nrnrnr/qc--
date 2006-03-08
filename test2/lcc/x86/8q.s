@@ -45,7 +45,7 @@ L.3:
 	movl $1,%eax
 	movl 8(%esp),%ecx
 	addl %eax,%ecx
-.Lbranch_target_l16:
+.Lbranch_target_l17:
 	movl $15,%eax
 	cmpl %eax,%ecx
 	jl .LL.2_l18
@@ -66,7 +66,7 @@ L.7:
 	movl $1,%eax
 	movl 8(%esp),%ecx
 	addl %eax,%ecx
-.Lbranch_target_l17:
+.Lbranch_target_l16:
 	movl $8,%eax
 	cmpl %eax,%ecx
 	jl .LL.6_l19
@@ -129,7 +129,7 @@ L.14:
 	movl $2,%eax
 	movl %eax,8(%esp)
 	movl $0,%eax
-.Lbranch_target_l46:
+.Lbranch_target_l44:
 	movl %eax,12(%esp)
 	movl %edx,%eax
 	movl %ecx,16(%esp)
@@ -145,7 +145,7 @@ L.14:
 	cmpl %ecx,%eax
 	je .LL.18_l50
 .Lbranch_target_l39:
-.Lbranch_target_l43:
+.Lbranch_target_l47:
 	movl %edx,%eax
 	movl 4(%esp),%ecx
 	subl %ecx,%eax
@@ -165,7 +165,7 @@ L.14:
 	cmpl %ecx,%eax
 	je .LL.18_l49
 .Lbranch_target_l38:
-.Lbranch_target_l44:
+.Lbranch_target_l46:
 	movl %edx,%eax
 	movl 4(%esp),%ecx
 	addl %ecx,%eax
@@ -305,7 +305,7 @@ L.18:
 L.15:
 	movl $1,%eax
 	addl %eax,%edx
-.Lbranch_target_l47:
+.Lbranch_target_l43:
 	movl $8,%eax
 	cmpl %eax,%edx
 	jl .LL.14_l51
@@ -319,8 +319,8 @@ L.15:
 	leal 76(%esp), %esp
 	ret
 .LL.14_l51:
-	movl 16(%esp),%ecx
 	movl 4(%esp),%eax
+	movl 16(%esp),%ecx
 	jmp L.14
 .section .pcmap_data
 .Lstackdata_l55:

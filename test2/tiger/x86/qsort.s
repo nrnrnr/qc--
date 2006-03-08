@@ -2924,7 +2924,7 @@ lte_134:
 	addl %ecx,%eax
 	movl 16(%esp),%ecx
 	movl %ecx,(%eax)
-.Lbranch_target_l170:
+.Lbranch_target_l162:
 	leal 148(%esp), %eax
 	movl $-12,%ecx
 	addl %ecx,%eax
@@ -3045,7 +3045,7 @@ LifFalse_151:
 	leal Cmm.global_area,%eax
 	movl 132(%esp),%ecx
 	movl %ecx,(%eax)
-.Lbranch_target_l169:
+.Lbranch_target_l166:
 	leal 148(%esp), %eax
 	movl $-12,%ecx
 	addl %ecx,%eax
@@ -3069,13 +3069,13 @@ LifFalse_151:
 	movl (%eax),%eax
 	movl 116(%esp),%ecx
 	cmpl %eax,%ecx
-	jle .Lbranch_target_l168
-.Lbranch_target_l167:
+	jle .Lbranch_target_l165
+.Lbranch_target_l164:
 	movl $0,%eax
-	jmp .Lbranch_target_l166
-.Lbranch_target_l168:
+	jmp .Lbranch_target_l163
+.Lbranch_target_l165:
 	movl $-1,%eax
-.Lbranch_target_l166:
+.Lbranch_target_l163:
 	jmp LifEnd_152
 LifTrue_150:
 	leal Cmm.global_area,%eax
@@ -3233,16 +3233,16 @@ LifTrue_150:
 	leal Cmm.global_area,%ecx
 	movl 32(%esp),%edx
 	movl %edx,(%ecx)
-.Lbranch_target_l165:
+.Lbranch_target_l170:
 	movl $0,%ecx
 	cmpl %ecx,%eax
-	jle .Lbranch_target_l164
-.Lbranch_target_l163:
+	jle .Lbranch_target_l169
+.Lbranch_target_l168:
 	movl $0,%eax
-	jmp .Lbranch_target_l162
-.Lbranch_target_l164:
+	jmp .Lbranch_target_l167
+.Lbranch_target_l169:
 	movl $-1,%eax
-.Lbranch_target_l162:
+.Lbranch_target_l167:
 LifEnd_152:
 	leal 148(%esp), %ecx
 	movl $8,%edx
@@ -3486,7 +3486,7 @@ gt_135:
 	addl %ecx,%eax
 	movl 16(%esp),%ecx
 	movl %ecx,(%eax)
-.Lbranch_target_l208:
+.Lbranch_target_l200:
 	leal 148(%esp), %eax
 	movl $-12,%ecx
 	addl %ecx,%eax
@@ -3607,7 +3607,7 @@ LifFalse_166:
 	leal Cmm.global_area,%eax
 	movl 132(%esp),%ecx
 	movl %ecx,(%eax)
-.Lbranch_target_l207:
+.Lbranch_target_l204:
 	leal 148(%esp), %eax
 	movl $-12,%ecx
 	addl %ecx,%eax
@@ -3631,13 +3631,13 @@ LifFalse_166:
 	movl (%eax),%eax
 	movl 116(%esp),%ecx
 	cmpl %eax,%ecx
-	jg .Lbranch_target_l206
-.Lbranch_target_l205:
+	jg .Lbranch_target_l203
+.Lbranch_target_l202:
 	movl $0,%eax
-	jmp .Lbranch_target_l204
-.Lbranch_target_l206:
+	jmp .Lbranch_target_l201
+.Lbranch_target_l203:
 	movl $-1,%eax
-.Lbranch_target_l204:
+.Lbranch_target_l201:
 	jmp LifEnd_167
 LifTrue_165:
 	leal Cmm.global_area,%eax
@@ -3795,16 +3795,16 @@ LifTrue_165:
 	leal Cmm.global_area,%ecx
 	movl 32(%esp),%edx
 	movl %edx,(%ecx)
-.Lbranch_target_l203:
+.Lbranch_target_l208:
 	movl $0,%ecx
 	cmpl %ecx,%eax
-	jg .Lbranch_target_l202
-.Lbranch_target_l201:
+	jg .Lbranch_target_l207
+.Lbranch_target_l206:
 	movl $0,%eax
-	jmp .Lbranch_target_l200
-.Lbranch_target_l202:
+	jmp .Lbranch_target_l205
+.Lbranch_target_l207:
 	movl $-1,%eax
-.Lbranch_target_l200:
+.Lbranch_target_l205:
 LifEnd_167:
 	leal 148(%esp), %ecx
 	movl $8,%edx
@@ -4522,7 +4522,7 @@ partition_136:
 	movl (%eax),%eax
 	movl %eax,(%ecx)
 Lloop_start_198:
-.Lbranch_target_l262:
+.Lbranch_target_l271:
 	leal 128(%esp), %eax
 	movl $-16,%ecx
 	addl %ecx,%eax
@@ -4634,7 +4634,7 @@ Lloop_start_185:
 	movl %edx,(%ecx)
 	call lte_134
 .Lcall_successor_l256:
-.Lbranch_target_l260:
+.Lbranch_target_l273:
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	jne LifTrue_182
@@ -4642,7 +4642,7 @@ LifFalse_183:
 	movl $0,%eax
 	jmp LifEnd_184
 LifTrue_182:
-.Lbranch_target_l266:
+.Lbranch_target_l270:
 	leal 128(%esp), %eax
 	movl $-16,%ecx
 	addl %ecx,%eax
@@ -4656,15 +4656,15 @@ LifTrue_182:
 	addl %edx,%ecx
 	movl (%ecx),%ecx
 	cmpl %ecx,%eax
-	jl .Lbranch_target_l265
-.Lbranch_target_l264:
+	jl .Lbranch_target_l269
+.Lbranch_target_l268:
 	movl $0,%eax
-	jmp .Lbranch_target_l263
-.Lbranch_target_l265:
+	jmp .Lbranch_target_l267
+.Lbranch_target_l269:
 	movl $-1,%eax
-.Lbranch_target_l263:
-LifEnd_184:
 .Lbranch_target_l267:
+LifEnd_184:
+.Lbranch_target_l266:
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	jne Lloop_body_186
@@ -4705,7 +4705,7 @@ Lloop_start_192:
 	movl %edx,(%ecx)
 	call gt_135
 .Lcall_successor_l253:
-.Lbranch_target_l261:
+.Lbranch_target_l272:
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	jne LifTrue_189
@@ -4713,7 +4713,7 @@ LifFalse_190:
 	movl $0,%eax
 	jmp LifEnd_191
 LifTrue_189:
-.Lbranch_target_l271:
+.Lbranch_target_l265:
 	leal 128(%esp), %eax
 	movl $-16,%ecx
 	addl %ecx,%eax
@@ -4727,20 +4727,20 @@ LifTrue_189:
 	addl %edx,%ecx
 	movl (%ecx),%ecx
 	cmpl %ecx,%eax
-	jge .Lbranch_target_l270
-.Lbranch_target_l269:
+	jge .Lbranch_target_l264
+.Lbranch_target_l263:
 	movl $0,%eax
-	jmp .Lbranch_target_l268
-.Lbranch_target_l270:
+	jmp .Lbranch_target_l262
+.Lbranch_target_l264:
 	movl $-1,%eax
-.Lbranch_target_l268:
+.Lbranch_target_l262:
 LifEnd_191:
-.Lbranch_target_l272:
+.Lbranch_target_l261:
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	jne Lloop_body_193
 Lloop_end_187:
-.Lbranch_target_l273:
+.Lbranch_target_l260:
 	leal 128(%esp), %eax
 	movl $-16,%ecx
 	addl %ecx,%eax
@@ -5350,7 +5350,7 @@ tiger_main:
 	addl %eax,%edx
 	movl 4(%esp),%eax
 	movl %eax,(%edx)
-.Lbranch_target_l343:
+.Lbranch_target_l345:
 	leal Cmm.global_area,%eax
 	movl (%eax),%eax
 	leal 60(%esp), %edx
@@ -5464,7 +5464,7 @@ Lalc_47:
 	movl %edx,(%eax)
 	movl $1,%eax
 	addl %eax,%ecx
-.Lbranch_target_l345:
+.Lbranch_target_l343:
 	leal 60(%esp), %eax
 	movl $-12,%edx
 	addl %edx,%eax

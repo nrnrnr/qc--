@@ -238,7 +238,7 @@ L.13:
 	call getchar
 .Lcall_successor_l71:
 	movl %eax,%ecx
-.Lbranch_target_l75:
+.Lbranch_target_l78:
 	movl $-1,%edx
 	cmpl %edx,%eax
 	je .LL.15_l80
@@ -250,14 +250,14 @@ L.13:
 	movl %ecx,12(%esp)
 	call isletter
 .Lcall_successor_l67:
-.Lbranch_target_l76:
+.Lbranch_target_l77:
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	je .LL.12_l79
 	jmp L.15
 .LL.12_l79:
-	movl 8(%esp),%ecx
 	movl 4(%esp),%eax
+	movl 8(%esp),%ecx
 	jmp L.12
 .LL.15_l80:
 	movl %ecx,12(%esp)
@@ -274,7 +274,7 @@ L.19:
 	call isletter
 .Lcall_successor_l61:
 	movl %eax,%ecx
-.Lbranch_target_l77:
+.Lbranch_target_l76:
 	movl $0,%edx
 	cmpl %edx,%eax
 	jne L.16
@@ -282,7 +282,7 @@ L.19:
 	movl $0,%eax
 	movl 16(%esp),%ecx
 	movb %al,(%ecx)
-.Lbranch_target_l78:
+.Lbranch_target_l75:
 	movl 4(%esp),%eax
 	cmpl %eax,%ecx
 	jbe L.20
@@ -318,8 +318,8 @@ L.17:
 .Lcall_successor_l64:
 .LL.19_l81:
 	movl %eax,12(%esp)
-	movl 16(%esp),%ecx
 	movl 4(%esp),%eax
+	movl 16(%esp),%ecx
 	jmp L.19
 .section .pcmap_data
 .Lstackdata_l85:
@@ -423,12 +423,12 @@ isletter:
 	movl (%ecx),%ecx
 .Linitialize_continuations_l91:
 .Lproc_body_start_l90:
-.Lbranch_target_l104:
+.Lbranch_target_l103:
 	movl $65,%edx
 	cmpl %edx,%eax
 	jl L.30
 .Lbranch_target_l98:
-.Lbranch_target_l102:
+.Lbranch_target_l105:
 	movl $90,%edx
 	cmpl %edx,%eax
 	jg L.30
@@ -436,12 +436,12 @@ isletter:
 	movl $32,%edx
 	addl %edx,%eax
 L.30:
-.Lbranch_target_l105:
+.Lbranch_target_l102:
 	movl $97,%edx
 	cmpl %edx,%eax
 	jl L.32
 .Lbranch_target_l96:
-.Lbranch_target_l103:
+.Lbranch_target_l104:
 	movl $122,%edx
 	cmpl %edx,%eax
 	jg L.32
@@ -516,7 +516,7 @@ lookup:
 	movl $-4,%edx
 	addl %edx,%ecx
 	movl %eax,(%ecx)
-.Lbranch_target_l150:
+.Lbranch_target_l154:
 	leal 68(%esp), %eax
 	movl $-4,%ecx
 	addl %ecx,%eax
@@ -548,7 +548,7 @@ lookup:
 	leal 68(%esp), %esp
 	ret
 L.39:
-.Lbranch_target_l153:
+.Lbranch_target_l151:
 	leal 68(%esp), %eax
 	movl $-4,%ecx
 	addl %ecx,%eax
@@ -590,7 +590,7 @@ L.41:
 	leal 68(%esp), %esp
 	ret
 L.37:
-.Lbranch_target_l154:
+.Lbranch_target_l150:
 	leal next,%eax
 	movl (%eax),%eax
 	movl $2000,%ecx
@@ -669,7 +669,7 @@ L.43:
 	addl %ecx,%edx
 	movl 40(%esp),%eax
 	movl %eax,(%edx)
-.Lbranch_target_l151:
+.Lbranch_target_l153:
 	leal next,%eax
 	movl (%eax),%eax
 	movl $4,%ecx
@@ -953,18 +953,19 @@ tprint:
 	leal 36(%esp), %eax
 	movl $4,%ecx
 	addl %ecx,%eax
+	movl (%eax),%ecx
+	leal 36(%esp), %eax
 	movl (%eax),%eax
-	leal 36(%esp), %ecx
-	movl (%ecx),%ecx
 .Linitialize_continuations_l169:
 .Lproc_body_start_l168:
 .Lbranch_target_l185:
 	movl $0,%edx
-	cmpl %edx,%eax
+	cmpl %edx,%ecx
 	je .LL.66_l186
 .Lbranch_target_l181:
 	movl $4,%edx
 	movl %eax,12(%esp)
+	movl %ecx,%eax
 	addl %edx,%eax
 	leal 36(%esp), %edx
 	movl %eax,16(%esp)
@@ -977,7 +978,7 @@ tprint:
 	call tprint
 .Lcall_successor_l180:
 	leal i_68,%eax
-	movl 12(%esp),%ecx
+	movl 20(%esp),%ecx
 	movl (%ecx),%edx
 	movl %eax,24(%esp)
 	movl $12,%eax
@@ -1004,7 +1005,7 @@ tprint:
 	call printf
 .Lcall_successor_l177:
 	movl $8,%eax
-	movl 12(%esp),%ecx
+	movl 20(%esp),%ecx
 	addl %eax,%ecx
 	leal 36(%esp), %eax
 	movl $-36,%edx
@@ -1015,13 +1016,13 @@ tprint:
 .Lcall_successor_l174:
 	jmp L.66
 .LL.66_l186:
-	movl %ecx,20(%esp)
+	movl %eax,12(%esp)
 L.66:
 	movl $0,%eax
 	leal 36(%esp), %ecx
 	movl $0,%edx
 	addl %edx,%ecx
-	movl 20(%esp),%edx
+	movl 12(%esp),%edx
 	movl %edx,(%ecx)
 	leal 36(%esp), %esp
 	ret
@@ -1035,13 +1036,13 @@ L.66:
 .Lframe_l191:
 .long 0x80000004
 .long 0xffffffdc
-.long 0xfffffff0
+.long 0xffffffe8
 .long .Lstackdata_l190
 .long 0
 .long 2
 .long 0
 .long 1
-.long 0xffffffe8
+.long 0xfffffff0
 .long 0
 .long 0
 .section .pcmap
@@ -1051,13 +1052,13 @@ L.66:
 .Lframe_l192:
 .long 0x80000004
 .long 0xffffffdc
-.long 0xfffffff0
+.long 0xffffffe8
 .long .Lstackdata_l190
 .long 0
 .long 2
 .long 0
 .long 1
-.long 0xffffffe8
+.long 0xfffffff0
 .long 0
 .long 0
 .section .pcmap
@@ -1067,7 +1068,7 @@ L.66:
 .Lframe_l193:
 .long 0x80000004
 .long 0xffffffdc
-.long 0xfffffff0
+.long 0xffffffe8
 .long .Lstackdata_l190
 .long 0
 .long 2
@@ -1092,7 +1093,7 @@ strcmp:
 .Linitialize_continuations_l195:
 .Lproc_body_start_l194:
 L.72:
-.Lbranch_target_l210:
+.Lbranch_target_l209:
 	movl %eax,(%esp)
 	movsbl (%eax),%eax
 	movl %eax,4(%esp)
@@ -1102,7 +1103,7 @@ L.72:
 	cmpl %eax,%ecx
 	je L.71
 .Lbranch_target_l202:
-.Lbranch_target_l208:
+.Lbranch_target_l211:
 	movl (%esp),%eax
 	movsbl (%eax),%ecx
 	movl $0,%eax
@@ -1123,7 +1124,7 @@ L.72:
 	leal 52(%esp), %esp
 	ret
 L.76:
-.Lbranch_target_l211:
+.Lbranch_target_l208:
 	movl 8(%esp),%eax
 	movsbl (%eax),%ecx
 	movl $0,%eax
@@ -1166,7 +1167,7 @@ L.71:
 	movl $1,%ecx
 	movl %eax,12(%esp)
 	addl %ecx,%eax
-.Lbranch_target_l209:
+.Lbranch_target_l210:
 	movl 12(%esp),%ecx
 	movsbl (%ecx),%ecx
 	movl %eax,(%esp)

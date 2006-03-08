@@ -84,10 +84,11 @@ clobber:V:  clean
 	rm -f $NAME $LIBNAME
 	rm -f *.m *.i decode.fetch bytecode.sled
 	rm -f $INTERPHDRS $INTERPSRCS cmmfloat-*.c
+	rm -f underflowhandler.c-- underflowhandler.qs
 	rm -f $CLIENTHDRS $CLIENTSRCS
 	rm -f inspect.lua inspect.clua
 	rm -f mkfile.bak
-    rm -f booted-interp booted-interp.opt
+	rm -f booted-interp booted-interp.opt
 	(cd clients   ; mk clobber)
 	(cd libinclude ; mk clobber)
 
@@ -410,6 +411,9 @@ optest:V: opgen
 # ------------------------------------------------------------------ 
 # underflow handler
 # ------------------------------------------------------------------ 
+
+underflowhandler.c--:D: underflowhandler.nw
+	notangle -L -R$target $prereq > $target
 
 underflowhandler.qs: underflowhandler.c--
 	$QCC -interp -S underflowhandler.c--

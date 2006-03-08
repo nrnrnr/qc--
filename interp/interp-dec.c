@@ -1058,9 +1058,9 @@ int run_interp_n(continuation* k, interp_state* s, int num_bytecodes) {
                                                                                 /* Now, we move to the new frame and set it up. */
                                                                                 act = act->callee;
                                                                                 act->u   = new_uid(t);
-                                                                                act->pc  = (bytecodeptr) location(proc->raddr);
                                                                                 act->proc =  proc;
                                                                                 act->name      = proc->raddr->label->name;
+                                                                                act->pc  = (bytecodeptr) location(proc->raddr);
               
                                                                                 /* When the matching statement is executed once
                                                                                  * more during the next cycle of the [[for]] loop,

@@ -108,12 +108,12 @@ unresolved:
 .Linitialize_continuations_l21:
 .Lproc_body_start_l20:
 .Lbranch_target_l29:
-.Lbranch_target_l33:
+.Lbranch_target_l34:
 	movl $1,%edx
 	cmpl %edx,%eax
 	je .Lbranch_target_l28
 .Lbranch_target_l26:
-.Lbranch_target_l34:
+.Lbranch_target_l33:
 	movl $2,%edx
 	cmpl %edx,%eax
 	je .Lbranch_target_l25

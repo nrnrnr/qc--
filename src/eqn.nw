@@ -280,23 +280,23 @@ coefficient of zero does not appear in the result.
 let combine (k1:int) (sum1:sum) (sum2:sum) =
     let rec loop = function 
 	| []                 , [] -> []
-	| ((c1,x1)::s1 as x) , ((c2,x2)::s2 as y) when E.compare x1 x2 < 0 ->
+	| ((c1,x1)::s1 as _x) , ((c2,x2)::s2 as y) when E.compare x1 x2 < 0 ->
             let k = k1 * c1 in
             if k = 0 then loop (s1, y) else
             (k, x1) :: loop (s1, y) 
-	| ((c1,x1)::s1 as x) , ((c2,x2)::s2 as y) when E.compare x1 x2 = 0 -> 
+	| ((c1,x1)::s1) , ((c2,x2)::s2) when E.compare x1 x2 = 0 -> 
             let k = k1 * c1 + c2 in 
             if k = 0 then loop (s1, s2) else
 	    (k, x1) :: loop (s1, s2)
-	| ((c1,x1)::s1 as x) , ((c2,x2)::s2 as y)  (*   x1 > x2 *) ->
+	| ((c1,x1)::s1 as x) , ((c2,x2)::s2 as _y)  (*   x1 > x2 *) ->
             let k = c2 in
             if k = 0 then loop (x, s2) else
             (k, x2) :: loop (x, s2)
-	| ((c1,x1)::s1 as x) , [] ->
+	| ((c1,x1)::s1) , [] ->
             let k = k1 * c1 in
             if k = 0 then loop (s1, []) else
             (k, x1) :: loop (s1, [])
-	| []                 ,  ((c2,x2)::s2 as y) ->
+	| []                 ,  ((c2,x2)::s2) ->
             let k = c2 in
             if k = 0 then loop ([], s2) else
             (k, x2) :: loop ([], s2)
@@ -333,7 +333,7 @@ we need to know the variables in an equation.
 <<Make>>=
 let vars (sum:sum) =
   let rec loop vs = function
-    | (_, t as ct)::s ->
+    | (_, t)::s ->
        ( match E.variable t with
        | Some v -> loop (v::vs) s
        | _      -> loop vs s

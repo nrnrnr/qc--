@@ -779,7 +779,7 @@ main:
 	addl %edx,%ecx
 	movl (%eax),%eax
 	movl %eax,(%ecx)
-.Lbranch_target_l69:
+.Lbranch_target_l80:
 	leal 452(%esp), %eax
 	movl $-396,%ecx
 	addl %ecx,%eax
@@ -841,7 +841,7 @@ L.8:
 	addl %edx,%ecx
 	movl (%eax),%eax
 	movl %eax,(%ecx)
-.Lbranch_target_l72:
+.Lbranch_target_l77:
 	leal 452(%esp), %eax
 	movl $-388,%ecx
 	addl %ecx,%eax
@@ -903,7 +903,7 @@ L.12:
 	addl %edx,%ecx
 	movl (%eax),%eax
 	movl %eax,(%ecx)
-.Lbranch_target_l73:
+.Lbranch_target_l76:
 	leal 452(%esp), %eax
 	movl $-380,%ecx
 	addl %ecx,%eax
@@ -965,7 +965,7 @@ L.15:
 	addl %edx,%ecx
 	movl (%eax),%eax
 	movl %eax,(%ecx)
-.Lbranch_target_l74:
+.Lbranch_target_l75:
 	leal 452(%esp), %eax
 	movl $-372,%ecx
 	addl %ecx,%eax
@@ -1076,7 +1076,7 @@ L.18:
 	addl %edx,%ecx
 	fildq (%eax)
 	fistpq (%ecx)
-.Lbranch_target_l70:
+.Lbranch_target_l79:
 	leal 452(%esp), %eax
 	movl $-364,%ecx
 	addl %ecx,%eax
@@ -1138,7 +1138,7 @@ L.22:
 	addl %edx,%ecx
 	fildq (%eax)
 	fistpq (%ecx)
-.Lbranch_target_l75:
+.Lbranch_target_l74:
 	leal 452(%esp), %eax
 	movl $-348,%ecx
 	addl %ecx,%eax
@@ -1200,7 +1200,7 @@ L.26:
 	addl %edx,%ecx
 	fildq (%eax)
 	fistpq (%ecx)
-.Lbranch_target_l76:
+.Lbranch_target_l73:
 	leal 452(%esp), %eax
 	movl $-332,%ecx
 	addl %ecx,%eax
@@ -1262,7 +1262,7 @@ L.29:
 	addl %edx,%ecx
 	fildq (%eax)
 	fistpq (%ecx)
-.Lbranch_target_l77:
+.Lbranch_target_l72:
 	leal 452(%esp), %eax
 	movl $-316,%ecx
 	addl %ecx,%eax
@@ -1373,7 +1373,7 @@ L.32:
 	addl %edx,%ecx
 	fildq (%eax)
 	fistpq (%ecx)
-.Lbranch_target_l71:
+.Lbranch_target_l78:
 	leal 452(%esp), %eax
 	movl $-300,%ecx
 	addl %ecx,%eax
@@ -1435,7 +1435,7 @@ L.36:
 	addl %edx,%ecx
 	fildq (%eax)
 	fistpq (%ecx)
-.Lbranch_target_l78:
+.Lbranch_target_l71:
 	leal 452(%esp), %eax
 	movl $-284,%ecx
 	addl %ecx,%eax
@@ -1497,7 +1497,7 @@ L.40:
 	addl %edx,%ecx
 	fildq (%eax)
 	fistpq (%ecx)
-.Lbranch_target_l79:
+.Lbranch_target_l70:
 	leal 452(%esp), %eax
 	movl $-268,%ecx
 	addl %ecx,%eax
@@ -1559,7 +1559,7 @@ L.43:
 	addl %edx,%ecx
 	fildq (%eax)
 	fistpq (%ecx)
-.Lbranch_target_l80:
+.Lbranch_target_l69:
 	leal 452(%esp), %eax
 	movl $-252,%ecx
 	addl %ecx,%eax

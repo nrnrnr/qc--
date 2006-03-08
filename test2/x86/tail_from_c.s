@@ -144,7 +144,7 @@ sp2_help:
 	movl $6,%eax
 	movl %eax,36(%esp)
 	movl $7,%eax
-.Lbranch_target_l33:
+.Lbranch_target_l32:
 	movl %eax,40(%esp)
 	leal init_stack,%eax
 	movl (%eax),%eax
@@ -200,7 +200,7 @@ sp2_help:
 	addl %ecx,%eax
 	movl 40(%esp),%ecx
 	addl %ecx,%eax
-.Lbranch_target_l32:
+.Lbranch_target_l33:
 	movl $1,%eax
 	movl 8(%esp),%ecx
 	cmpl %eax,%ecx
@@ -467,7 +467,7 @@ main:
 	leal 48(%esp), %eax
 	movl $8,%ecx
 	addl %ecx,%eax
-	movl (%eax),%eax
+	movl (%eax),%ecx
 	leal 48(%esp), %eax
 	movl (%eax),%eax
 .Linitialize_continuations_l60:

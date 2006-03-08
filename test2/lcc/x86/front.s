@@ -97,7 +97,7 @@ nested:
 	movl (%edx),%edx
 .Linitialize_continuations_l41:
 .Lproc_body_start_l40:
-.Lbranch_target_l57:
+.Lbranch_target_l54:
 	movl %eax,(%esp)
 	movl $4,%eax
 	movl %ecx,4(%esp)
@@ -105,7 +105,7 @@ nested:
 	cmpl %eax,%ecx
 	jge .LL.6_l60
 .Lbranch_target_l48:
-.Lbranch_target_l52:
+.Lbranch_target_l59:
 	movl $114,%eax
 	movl 4(%esp),%ecx
 	cmpl %eax,%ecx
@@ -114,19 +114,19 @@ nested:
 .LL.6_l60:
 	movl 4(%esp),%ecx
 L.6:
-.Lbranch_target_l58:
+.Lbranch_target_l53:
 	movl $1,%eax
 	movl (%esp),%ecx
 	cmpl %eax,%ecx
 	jne .LL.8_l61
 .Lbranch_target_l47:
-.Lbranch_target_l53:
+.Lbranch_target_l58:
 	movl $104,%eax
 	movl 4(%esp),%ecx
 	cmpl %eax,%ecx
 	je L.9
 .Lbranch_target_l46:
-.Lbranch_target_l54:
+.Lbranch_target_l57:
 	movl $105,%eax
 	cmpl %eax,%ecx
 	je L.9
@@ -134,19 +134,19 @@ L.6:
 .LL.8_l61:
 	movl 4(%esp),%ecx
 L.8:
-.Lbranch_target_l59:
+.Lbranch_target_l52:
 	movl $2,%eax
 	movl (%esp),%ecx
 	cmpl %eax,%ecx
 	jne L.3
 .Lbranch_target_l45:
-.Lbranch_target_l55:
+.Lbranch_target_l56:
 	movl $111,%eax
 	movl 4(%esp),%ecx
 	cmpl %eax,%ecx
 	je L.9
 .Lbranch_target_l44:
-.Lbranch_target_l56:
+.Lbranch_target_l55:
 	movl $121,%eax
 	cmpl %eax,%ecx
 	jne L.3

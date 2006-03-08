@@ -1,5 +1,6 @@
 extern signed char      lits8[], lits8lim[];
 extern signed long long lits64[], lits64lim[];
+extern int printf(const char *fmt, ...);
 
 main(int argc, char *argv) {
   signed char *p;

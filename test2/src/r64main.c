@@ -1,3 +1,4 @@
+extern int printf(const char *fmt, ...);
 extern unsigned long long f(void);
 
 main(int argc, char **argv) {

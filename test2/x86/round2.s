@@ -36,15 +36,15 @@ main:
 	movl (%eax),%eax
 .Linitialize_continuations_l3:
 .Lproc_body_start_l2:
-	fnstcw 24(%esp)
-	movzwl 24(%esp),%ecx
+	fnstcw 16(%esp)
+	movzwl 16(%esp),%ecx
 	shll $20, %ecx
 	shrl $30, %ecx
 	movl $2,%edx
 	movl %eax,36(%esp)
 	leal 52(%esp), %eax
 	movl %eax,40(%esp)
-	movl $-24,%eax
+	movl $-32,%eax
 	movl %eax,44(%esp)
 	movl 40(%esp),%eax
 	movl %ecx,48(%esp)
@@ -52,16 +52,16 @@ main:
 	addl %ecx,%eax
 	movl %edx,(%eax)
 	leal 52(%esp), %eax
-	movl $-24,%ecx
+	movl $-32,%ecx
 	addl %ecx,%eax
 	fildl (%eax)
 	movl $3,%eax
 	leal 52(%esp), %ecx
-	movl $-24,%edx
+	movl $-32,%edx
 	addl %edx,%ecx
 	movl %eax,(%ecx)
 	leal 52(%esp), %eax
-	movl $-24,%ecx
+	movl $-32,%ecx
 	addl %ecx,%eax
 	fildl (%eax)
 	fdivp
@@ -69,10 +69,41 @@ main:
 	movl $-40,%ecx
 	addl %ecx,%eax
 	fstps (%eax)
+	fnstcw 24(%esp)
+	movzwl 24(%esp),%eax
+	andl $-3073,%eax
+	movl $1,%ecx
+	shll $10, %ecx
+	orl %ecx,%eax
+	movw %ax,24(%esp)
+	fldcw 24(%esp)
+	leal 52(%esp), %eax
+	movl $-40,%ecx
+	addl %ecx,%eax
+	flds (%eax)
+	leal 52(%esp), %eax
+	movl $-44,%ecx
+	addl %ecx,%eax
+	fistpl (%eax)
+	leal print_int,%eax
+	leal 52(%esp), %ecx
+	movl $-52,%edx
+	addl %edx,%ecx
+	movl %eax,(%ecx)
+	leal 52(%esp), %eax
+	movl $-44,%ecx
+	addl %ecx,%eax
+	leal 52(%esp), %ecx
+	movl $-48,%edx
+	addl %edx,%ecx
+	movl (%eax),%eax
+	movl %eax,(%ecx)
+	call printf
+.Lcall_successor_l16:
 	fnstcw 32(%esp)
 	movzwl 32(%esp),%eax
 	andl $-3073,%eax
-	movl $1,%ecx
+	movl $2,%ecx
 	shll $10, %ecx
 	orl %ecx,%eax
 	movw %ax,32(%esp)
@@ -99,46 +130,15 @@ main:
 	movl (%eax),%eax
 	movl %eax,(%ecx)
 	call printf
-.Lcall_successor_l16:
-	fnstcw 16(%esp)
-	movzwl 16(%esp),%eax
-	andl $-3073,%eax
-	movl $2,%ecx
-	shll $10, %ecx
-	orl %ecx,%eax
-	movw %ax,16(%esp)
-	fldcw 16(%esp)
-	leal 52(%esp), %eax
-	movl $-40,%ecx
-	addl %ecx,%eax
-	flds (%eax)
-	leal 52(%esp), %eax
-	movl $-44,%ecx
-	addl %ecx,%eax
-	fistpl (%eax)
-	leal print_int,%eax
-	leal 52(%esp), %ecx
-	movl $-52,%edx
-	addl %edx,%ecx
-	movl %eax,(%ecx)
-	leal 52(%esp), %eax
-	movl $-44,%ecx
-	addl %ecx,%eax
-	leal 52(%esp), %ecx
-	movl $-48,%edx
-	addl %edx,%ecx
-	movl (%eax),%eax
-	movl %eax,(%ecx)
-	call printf
 .Lcall_successor_l13:
-	fnstcw 18(%esp)
-	movzwl 18(%esp),%eax
+	fnstcw 30(%esp)
+	movzwl 30(%esp),%eax
 	andl $-3073,%eax
 	movl $0,%ecx
 	shll $10, %ecx
 	orl %ecx,%eax
-	movw %ax,18(%esp)
-	fldcw 18(%esp)
+	movw %ax,30(%esp)
+	fldcw 30(%esp)
 	leal 52(%esp), %eax
 	movl $-40,%ecx
 	addl %ecx,%eax
@@ -162,14 +162,14 @@ main:
 	movl %eax,(%ecx)
 	call printf
 .Lcall_successor_l10:
-	fnstcw 20(%esp)
-	movzwl 20(%esp),%eax
+	fnstcw 28(%esp)
+	movzwl 28(%esp),%eax
 	andl $-3073,%eax
 	movl $3,%ecx
 	shll $10, %ecx
 	orl %ecx,%eax
-	movw %ax,20(%esp)
-	fldcw 20(%esp)
+	movw %ax,28(%esp)
+	fldcw 28(%esp)
 	leal 52(%esp), %eax
 	movl $-40,%ecx
 	addl %ecx,%eax
@@ -193,14 +193,14 @@ main:
 	movl %eax,(%ecx)
 	call printf
 .Lcall_successor_l7:
-	fnstcw 22(%esp)
-	movzwl 22(%esp),%eax
+	fnstcw 26(%esp)
+	movzwl 26(%esp),%eax
 	andl $-3073,%eax
 	movl 48(%esp),%ecx
 	shll $10, %ecx
 	orl %ecx,%eax
-	movw %ax,22(%esp)
-	fldcw 22(%esp)
+	movw %ax,26(%esp)
+	fldcw 26(%esp)
 	movl $0,%eax
 	leal 52(%esp), %ecx
 	movl $0,%edx

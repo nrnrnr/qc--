@@ -160,7 +160,7 @@ mark_multiples_37:
 	movl (%eax),%eax
 	movl %eax,(%ecx)
 Lloop_start_50:
-.Lbranch_target_l31:
+.Lbranch_target_l30:
 	leal 108(%esp), %eax
 	movl $-12,%ecx
 	addl %ecx,%eax
@@ -245,7 +245,7 @@ Lloop_body_51:
 	leal Cmm.global_area,%ecx
 	movl 36(%esp),%edx
 	movl %edx,(%ecx)
-.Lbranch_target_l30:
+.Lbranch_target_l31:
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	jne LifTrue_47
@@ -795,7 +795,7 @@ tiger_main:
 	addl %eax,%edx
 	movl 4(%esp),%eax
 	movl %eax,(%edx)
-.Lbranch_target_l79:
+.Lbranch_target_l81:
 	leal Cmm.global_area,%eax
 	movl (%eax),%eax
 	leal 56(%esp), %edx
@@ -907,7 +907,7 @@ Linit_end_31:
 	addl %edx,%ecx
 	movl %eax,(%ecx)
 Lloop_start_68:
-.Lbranch_target_l81:
+.Lbranch_target_l79:
 	leal 56(%esp), %eax
 	movl $-16,%ecx
 	addl %ecx,%eax

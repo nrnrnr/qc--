@@ -104,7 +104,7 @@ canonrect:
 	movl (%edx),%edx
 .Linitialize_continuations_l20:
 .Lproc_body_start_l19:
-.Lbranch_target_l29:
+.Lbranch_target_l32:
 	movl %eax,(%esp)
 	movl (%ecx),%eax
 	movl %eax,4(%esp)
@@ -139,7 +139,7 @@ L.12:
 	addl %eax,%ecx
 	movl 20(%esp),%eax
 	movl %eax,(%ecx)
-.Lbranch_target_l30:
+.Lbranch_target_l31:
 	movl $4,%eax
 	movl %eax,24(%esp)
 	movl 12(%esp),%ecx
@@ -181,7 +181,7 @@ L.16:
 	addl %eax,%ecx
 	movl 40(%esp),%eax
 	movl %eax,(%ecx)
-.Lbranch_target_l31:
+.Lbranch_target_l30:
 	movl 12(%esp),%eax
 	movl (%eax),%ecx
 	movl $8,%eax
@@ -217,7 +217,7 @@ L.20:
 	addl %eax,%ecx
 	movl 56(%esp),%eax
 	movl %eax,(%ecx)
-.Lbranch_target_l32:
+.Lbranch_target_l29:
 	movl $4,%eax
 	movl %eax,60(%esp)
 	movl 12(%esp),%ecx
@@ -551,7 +551,7 @@ ptinrect:
 .Lproc_body_start_l65:
 	movl %eax,(%esp)
 	movl (%eax),%eax
-.Lbranch_target_l79:
+.Lbranch_target_l76:
 	movl %eax,4(%esp)
 	movl (%ecx),%eax
 	movl %ecx,8(%esp)
@@ -559,7 +559,7 @@ ptinrect:
 	cmpl %eax,%ecx
 	jl L.52
 .Lbranch_target_l72:
-.Lbranch_target_l76:
+.Lbranch_target_l79:
 	movl $8,%eax
 	movl %eax,12(%esp)
 	movl 8(%esp),%eax
@@ -574,7 +574,7 @@ ptinrect:
 	movl (%esp),%ecx
 	addl %eax,%ecx
 	movl (%ecx),%ecx
-.Lbranch_target_l77:
+.Lbranch_target_l78:
 	movl %eax,16(%esp)
 	movl 8(%esp),%eax
 	movl %ecx,20(%esp)
@@ -585,7 +585,7 @@ ptinrect:
 	cmpl %eax,%ecx
 	jl L.52
 .Lbranch_target_l70:
-.Lbranch_target_l78:
+.Lbranch_target_l77:
 	movl $12,%eax
 	movl %eax,24(%esp)
 	movl 8(%esp),%eax
@@ -1015,7 +1015,7 @@ main:
 .Lcall_successor_l129:
 	movl $0,%eax
 L.72:
-.Lbranch_target_l146:
+.Lbranch_target_l145:
 	movl $4,%ecx
 	cmpl %ecx,%eax
 	jb L.69
@@ -1246,7 +1246,7 @@ L.69:
 	movl %eax,(%ecx)
 	call ptinrect
 .Lcall_successor_l120:
-.Lbranch_target_l145:
+.Lbranch_target_l146:
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	jne L.76

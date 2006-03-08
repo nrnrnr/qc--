@@ -108,9 +108,9 @@ loop:
 	ret
 .Lloop_l17:
 	movl %edx,8(%esp)
-	movl %ecx,12(%esp)
-	movl %eax,%ecx
-	movl 12(%esp),%eax
+	movl %eax,24(%esp)
+	movl %ecx,%eax
+	movl 24(%esp),%ecx
 	movl 36(%esp),%edx
 	jmp loop
 .section .pcmap_data
@@ -154,8 +154,8 @@ loop:
 .section .text
 main:
 	leal -16(%esp), %esp
-	leal 16(%esp), %eax
-	movl (%eax),%eax
+	leal 16(%esp), %ecx
+	movl (%ecx),%eax
 .Linitialize_continuations_l24:
 .Lproc_body_start_l23:
 	leal -4(%esp), %esp

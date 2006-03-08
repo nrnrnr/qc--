@@ -212,7 +212,7 @@ g:
 	call printf
 .Lcall_successor_l23:
 .Lbranch_target_l20:
-.Lbranch_target_l30:
+.Lbranch_target_l32:
 	movl $0,%eax
 	movl 4(%esp),%ecx
 	cmpl %eax,%ecx
@@ -223,7 +223,7 @@ g:
 	cmpl %eax,%ecx
 	je .Lbranch_target_l16
 .Lbranch_target_l14:
-.Lbranch_target_l32:
+.Lbranch_target_l30:
 	movl $2,%eax
 	cmpl %eax,%ecx
 	je .Lbranch_target_l13
@@ -386,7 +386,7 @@ g_notail:
 	call printf
 .Lcall_successor_l54:
 .Lbranch_target_l51:
-.Lbranch_target_l61:
+.Lbranch_target_l63:
 	movl $0,%eax
 	movl 4(%esp),%ecx
 	cmpl %eax,%ecx
@@ -397,7 +397,7 @@ g_notail:
 	cmpl %eax,%ecx
 	je .Lbranch_target_l47
 .Lbranch_target_l45:
-.Lbranch_target_l63:
+.Lbranch_target_l61:
 	movl $2,%eax
 	cmpl %eax,%ecx
 	je .Lbranch_target_l44
@@ -539,7 +539,7 @@ f:
 	movl (%ecx),%ecx
 .Linitialize_continuations_l83:
 .Lproc_body_start_l82:
-.Lbranch_target_l115:
+.Lbranch_target_l114:
 	movl $0,%edx
 	cmpl %edx,%eax
 	jl .Lbranch_target_l110
@@ -548,7 +548,7 @@ f:
 	movl $-1,%edx
 	imull %edx,%eax
 .Lbranch_target_l109:
-.Lbranch_target_l114:
+.Lbranch_target_l115:
 	movl $2,%edx
 	cmpl %edx,%eax
 	jg .Lbranch_target_l108

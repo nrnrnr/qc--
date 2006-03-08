@@ -412,7 +412,7 @@ _Perl_hv_fetch:
 	movl (%edx),%edx
 .Linitialize_continuations_l105:
 .Lproc_body_start_l104:
-.Lbranch_target_l152:
+.Lbranch_target_l154:
 	movl %eax,8(%esp)
 	movl $0,%eax
 	movl %ecx,12(%esp)
@@ -466,7 +466,7 @@ _i_31:
 	movl (%ecx),%ecx
 	call *%ecx
 .Lcall_successor_l141:
-.Lbranch_target_l148:
+.Lbranch_target_l158:
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	je _i_35
@@ -519,13 +519,13 @@ _i_35:
 _i_33:
 	movl (%esp),%eax
 	movl (%eax),%ecx
-.Lbranch_target_l154:
+.Lbranch_target_l152:
 	movl (%ecx),%edx
 	movl $0,%eax
 	cmpl %eax,%edx
 	jne .L_i_37_l160
 .Lbranch_target_l130:
-.Lbranch_target_l149:
+.Lbranch_target_l157:
 	movl $0,%eax
 	movl 8(%esp),%edx
 	cmpl %eax,%edx
@@ -628,7 +628,7 @@ _i_45:
 	movl %ecx,84(%esp)
 	movl 80(%esp),%ecx
 	subl %ecx,%eax
-.Lbranch_target_l155:
+.Lbranch_target_l151:
 	movl $0,%ecx
 	movl %eax,68(%esp)
 	movl 76(%esp),%eax
@@ -654,12 +654,12 @@ _i_42:
 	addl %ecx,%eax
 	movl (%eax),%eax
 _i_50:
-.Lbranch_target_l158:
+.Lbranch_target_l148:
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	jne _i_47
 .Lbranch_target_l116:
-.Lbranch_target_l151:
+.Lbranch_target_l155:
 	movl $0,%eax
 	movl 8(%esp),%ecx
 	cmpl %eax,%ecx
@@ -714,7 +714,7 @@ _i_57:
 	leal 160(%esp), %esp
 	ret
 _i_47:
-.Lbranch_target_l156:
+.Lbranch_target_l150:
 	movl $4,%ecx
 	movl %eax,100(%esp)
 	addl %ecx,%eax
@@ -726,7 +726,7 @@ _i_47:
 	jmp _i_48
 _i_51:
 	movl $4,%eax
-.Lbranch_target_l157:
+.Lbranch_target_l149:
 	movl %eax,104(%esp)
 	movl 100(%esp),%eax
 	movl 104(%esp),%ecx
@@ -770,7 +770,7 @@ _i_53:
 	movl (%ecx),%ecx
 	call *%ecx
 .Lcall_successor_l120:
-.Lbranch_target_l150:
+.Lbranch_target_l156:
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	je _i_55
@@ -1136,7 +1136,7 @@ _Perl_hv_fetch_ent:
 	movl (%edx),%edx
 .Linitialize_continuations_l174:
 .Lproc_body_start_l173:
-.Lbranch_target_l236:
+.Lbranch_target_l239:
 	movl %eax,8(%esp)
 	movl $0,%eax
 	movl %ecx,12(%esp)
@@ -1158,7 +1158,7 @@ _Perl_hv_fetch_ent:
 	leal 200(%esp), %esp
 	ret
 _i_60:
-.Lbranch_target_l237:
+.Lbranch_target_l238:
 	movl $8,%eax
 	movl %eax,16(%esp)
 	movl %ecx,%eax
@@ -1190,7 +1190,7 @@ _i_60:
 	movl (%ecx),%ecx
 	call *%ecx
 .Lcall_successor_l224:
-.Lbranch_target_l231:
+.Lbranch_target_l244:
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	je _i_64
@@ -1241,7 +1241,7 @@ _i_60:
 	movl (%ecx),%ecx
 	call *%ecx
 .Lcall_successor_l211:
-.Lbranch_target_l232:
+.Lbranch_target_l243:
 	leal _PL_hv_fetch_ent_mh,%eax
 	movl $4,%ecx
 	addl %ecx,%eax
@@ -1300,13 +1300,13 @@ _i_64:
 _i_62:
 	movl (%esp),%eax
 	movl (%eax),%ecx
-.Lbranch_target_l238:
+.Lbranch_target_l237:
 	movl (%ecx),%edx
 	movl $0,%eax
 	cmpl %eax,%edx
 	jne .L_i_73_l246
 .Lbranch_target_l203:
-.Lbranch_target_l233:
+.Lbranch_target_l242:
 	movl $0,%eax
 	movl 4(%esp),%edx
 	cmpl %eax,%edx
@@ -1392,7 +1392,7 @@ _i_75:
 .L_i_73_l246:
 	movl %ecx,44(%esp)
 _i_73:
-.Lbranch_target_l239:
+.Lbranch_target_l236:
 	movl $8,%eax
 	movl 12(%esp),%ecx
 	movl %ecx,%edx
@@ -1444,7 +1444,7 @@ _i_78:
 	call *%ecx
 .Lcall_successor_l193:
 _i_79:
-.Lbranch_target_l240:
+.Lbranch_target_l235:
 	movl $0,%ecx
 	movl 8(%esp),%edx
 	cmpl %ecx,%edx
@@ -1466,7 +1466,7 @@ _i_86:
 	movl %ecx,104(%esp)
 	movl 100(%esp),%ecx
 	subl %ecx,%eax
-.Lbranch_target_l241:
+.Lbranch_target_l234:
 	movl $0,%ecx
 	movl %eax,108(%esp)
 	movl 96(%esp),%eax
@@ -1512,12 +1512,12 @@ _i_80:
 	addl %ecx,%eax
 	movl (%eax),%eax
 _i_91:
-.Lbranch_target_l244:
+.Lbranch_target_l231:
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	jne _i_88
 .Lbranch_target_l185:
-.Lbranch_target_l235:
+.Lbranch_target_l240:
 	movl $0,%eax
 	movl 4(%esp),%ecx
 	cmpl %eax,%ecx
@@ -1568,7 +1568,7 @@ _i_98:
 	leal 200(%esp), %esp
 	ret
 _i_88:
-.Lbranch_target_l242:
+.Lbranch_target_l233:
 	movl $4,%ecx
 	movl %eax,120(%esp)
 	addl %ecx,%eax
@@ -1581,7 +1581,7 @@ _i_88:
 	jmp _i_89
 _i_92:
 	movl $4,%eax
-.Lbranch_target_l243:
+.Lbranch_target_l232:
 	movl %eax,124(%esp)
 	movl 120(%esp),%ecx
 	movl %ecx,%eax
@@ -1638,7 +1638,7 @@ _i_94:
 	movl (%ecx),%ecx
 	call *%ecx
 .Lcall_successor_l189:
-.Lbranch_target_l234:
+.Lbranch_target_l241:
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	je _i_96
@@ -2224,7 +2224,7 @@ _i_hv_magic_check:
 	movl 4(%esp),%eax
 	movl %ecx,(%eax)
 _i_102:
-.Lbranch_target_l280:
+.Lbranch_target_l275:
 	movl $0,%ecx
 	movl 20(%esp),%eax
 	cmpl %ecx,%eax
@@ -2240,12 +2240,12 @@ _i_101:
 	movl $12,%ecx
 	addl %ecx,%eax
 	movsbl (%eax),%eax
-.Lbranch_target_l278:
+.Lbranch_target_l277:
 	movl $65,%ecx
 	cmpl %ecx,%eax
 	jl .L_i_104_l284
 .Lbranch_target_l271:
-.Lbranch_target_l275:
+.Lbranch_target_l280:
 	movl $90,%ecx
 	cmpl %ecx,%eax
 	jg .L_i_104_l283
@@ -2260,15 +2260,15 @@ _i_101:
 	addl %ecx,%eax
 	movsbl (%eax),%eax
 	movl $80,%ecx
-.Lbranch_target_l276:
+.Lbranch_target_l279:
 	cmpl %ecx,%eax
 	je _i_109
 .Lbranch_target_l269:
-.Lbranch_target_l277:
+.Lbranch_target_l278:
 	cmpl %ecx,%eax
 	jl .L_i_106_l282
 _i_110:
-.Lbranch_target_l279:
+.Lbranch_target_l276:
 	movl $83,%ecx
 	cmpl %ecx,%eax
 	je _i_109
@@ -2322,7 +2322,7 @@ _Perl_hv_store:
 	movl (%edx),%edx
 .Linitialize_continuations_l291:
 .Lproc_body_start_l290:
-.Lbranch_target_l347:
+.Lbranch_target_l349:
 	movl %eax,12(%esp)
 	movl $0,%eax
 	movl %ecx,16(%esp)
@@ -2393,7 +2393,7 @@ _i_112:
 	movl (%ecx),%ecx
 	call *%ecx
 .Lcall_successor_l334:
-.Lbranch_target_l341:
+.Lbranch_target_l355:
 	leal 212(%esp), %eax
 	movl $-8,%ecx
 	addl %ecx,%eax
@@ -2425,14 +2425,14 @@ _i_112:
 	movl (%edx),%edx
 	call *%edx
 .Lcall_successor_l330:
-.Lbranch_target_l342:
+.Lbranch_target_l354:
 	movl 24(%esp),%eax
 	movl (%eax),%ecx
 	movl $0,%edx
 	cmpl %edx,%ecx
 	jne _i_118
 .Lbranch_target_l327:
-.Lbranch_target_l343:
+.Lbranch_target_l353:
 	leal 212(%esp), %ecx
 	movl $-4,%edx
 	addl %edx,%ecx
@@ -2460,7 +2460,7 @@ _i_116:
 	movl %edx,40(%esp)
 	movl 24(%esp),%eax
 _i_114:
-.Lbranch_target_l349:
+.Lbranch_target_l347:
 	movl $0,%ecx
 	movl 12(%esp),%edx
 	cmpl %ecx,%edx
@@ -2480,7 +2480,7 @@ _i_126:
 	movl 60(%esp),%eax
 	movl 64(%esp),%ecx
 	subl %ecx,%eax
-.Lbranch_target_l350:
+.Lbranch_target_l346:
 	movl $0,%ecx
 	movl %eax,52(%esp)
 	movl 60(%esp),%eax
@@ -2501,13 +2501,13 @@ _i_125:
 	movsbl (%edx),%ecx
 	addl %ecx,%eax
 .L_i_126_l360:
-	movl 16(%esp),%ecx
 	movl 192(%esp),%edx
+	movl 16(%esp),%ecx
 	jmp _i_126
 .L_i_120_l358:
 	movl %edx,%eax
 _i_120:
-.Lbranch_target_l351:
+.Lbranch_target_l345:
 	movl 24(%esp),%ecx
 	movl (%ecx),%edx
 	movl %eax,12(%esp)
@@ -2603,7 +2603,7 @@ _i_128:
 	movl %eax,104(%esp)
 	movl (%eax),%eax
 _i_133:
-.Lbranch_target_l354:
+.Lbranch_target_l342:
 	movl %eax,108(%esp)
 	movl $0,%eax
 	movl %ecx,112(%esp)
@@ -2615,7 +2615,7 @@ _i_133:
 	movl (%eax),%eax
 	call *%eax
 .Lcall_successor_l308:
-.Lbranch_target_l345:
+.Lbranch_target_l351:
 	movl $8,%ecx
 	movl %eax,108(%esp)
 	movl (%esp),%edx
@@ -2706,7 +2706,7 @@ _i_141:
 	addl %eax,%ecx
 	movl 172(%esp),%eax
 	movl %ecx,(%eax)
-.Lbranch_target_l355:
+.Lbranch_target_l341:
 	movl $0,%eax
 	movl 112(%esp),%ecx
 	cmpl %eax,%ecx
@@ -2724,7 +2724,7 @@ _i_141:
 	addl %eax,%ecx
 	movl 180(%esp),%eax
 	movl %ecx,(%eax)
-.Lbranch_target_l346:
+.Lbranch_target_l350:
 	movl $12,%eax
 	movl %eax,184(%esp)
 	movl 24(%esp),%ecx
@@ -2760,7 +2760,7 @@ _i_142:
 	leal 228(%esp), %esp
 	ret
 _i_130:
-.Lbranch_target_l352:
+.Lbranch_target_l344:
 	movl $4,%eax
 	movl %eax,116(%esp)
 	movl %ecx,%eax
@@ -2773,7 +2773,7 @@ _i_130:
 	jmp _i_131
 _i_134:
 	movl $4,%eax
-.Lbranch_target_l353:
+.Lbranch_target_l343:
 	movl %eax,120(%esp)
 	movl 108(%esp),%ecx
 	movl %ecx,%eax
@@ -2818,7 +2818,7 @@ _i_136:
 	movl (%ecx),%ecx
 	call *%ecx
 .Lcall_successor_l316:
-.Lbranch_target_l344:
+.Lbranch_target_l352:
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	je _i_138
@@ -2827,9 +2827,9 @@ _i_131:
 	movl 108(%esp),%ecx
 	movl (%ecx),%ecx
 .L_i_133_l359:
-	movl %ecx,108(%esp)
-	movl %eax,%ecx
-	movl 108(%esp),%eax
+	movl %eax,112(%esp)
+	movl %ecx,%eax
+	movl 112(%esp),%ecx
 	movl 12(%esp),%edx
 	jmp _i_133
 _i_138:
@@ -3294,7 +3294,7 @@ _Perl_hv_store_ent:
 	movl (%edx),%edx
 .Linitialize_continuations_l374:
 .Lproc_body_start_l373:
-.Lbranch_target_l450:
+.Lbranch_target_l451:
 	movl %eax,8(%esp)
 	movl $0,%eax
 	movl %ecx,12(%esp)
@@ -3319,7 +3319,7 @@ _i_147:
 	movl %ecx,%eax
 	movl %eax,16(%esp)
 	movl (%eax),%eax
-.Lbranch_target_l451:
+.Lbranch_target_l450:
 	movl %eax,20(%esp)
 	movl $8,%eax
 	movl %eax,24(%esp)
@@ -3365,7 +3365,7 @@ _i_147:
 	movl (%ecx),%ecx
 	call *%ecx
 .Lcall_successor_l434:
-.Lbranch_target_l441:
+.Lbranch_target_l460:
 	leal 252(%esp), %eax
 	movl $-8,%ecx
 	addl %ecx,%eax
@@ -3378,7 +3378,7 @@ _i_147:
 	leal _PL_tainted,%eax
 	movl (%eax),%eax
 	movl (%eax),%eax
-.Lbranch_target_l442:
+.Lbranch_target_l459:
 	leal _PL_tainting,%ecx
 	movl (%ecx),%ecx
 	movl (%ecx),%ecx
@@ -3388,7 +3388,7 @@ _i_147:
 .Lbranch_target_l430:
 	movl 12(%esp),%ecx
 	movl %ecx,%edx
-.Lbranch_target_l443:
+.Lbranch_target_l458:
 	movl %eax,48(%esp)
 	movl $8,%eax
 	movl %eax,52(%esp)
@@ -3407,7 +3407,7 @@ _i_147:
 	movl (%ecx),%ecx
 	call *%ecx
 .Lcall_successor_l428:
-.Lbranch_target_l444:
+.Lbranch_target_l457:
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	je _i_156
@@ -3461,7 +3461,7 @@ _i_153:
 	movl (%ecx),%ecx
 	call *%ecx
 .Lcall_successor_l418:
-.Lbranch_target_l445:
+.Lbranch_target_l456:
 	movl $0,%eax
 	movl 48(%esp),%ecx
 	cmpl %eax,%ecx
@@ -3471,14 +3471,14 @@ _i_153:
 	leal _PL_tainted,%ecx
 	movl %eax,(%ecx)
 _i_158:
-.Lbranch_target_l452:
+.Lbranch_target_l449:
 	movl 20(%esp),%eax
 	movl (%eax),%ecx
 	movl $0,%edx
 	cmpl %edx,%ecx
 	jne _i_160
 .Lbranch_target_l414:
-.Lbranch_target_l446:
+.Lbranch_target_l455:
 	leal 252(%esp), %ecx
 	movl $-4,%edx
 	addl %edx,%ecx
@@ -3506,7 +3506,7 @@ _i_151:
 	movl %edx,36(%esp)
 	movl 20(%esp),%eax
 _i_149:
-.Lbranch_target_l453:
+.Lbranch_target_l448:
 	movl $8,%ecx
 	movl 12(%esp),%edx
 	movl %edx,%eax
@@ -3549,7 +3549,7 @@ _i_163:
 	call *%ecx
 .Lcall_successor_l410:
 _i_164:
-.Lbranch_target_l454:
+.Lbranch_target_l447:
 	movl $0,%ecx
 	movl 8(%esp),%edx
 	cmpl %ecx,%edx
@@ -3571,7 +3571,7 @@ _i_171:
 	movl %ecx,88(%esp)
 	movl 84(%esp),%ecx
 	subl %ecx,%eax
-.Lbranch_target_l455:
+.Lbranch_target_l446:
 	movl $0,%ecx
 	movl %eax,92(%esp)
 	movl 80(%esp),%eax
@@ -3598,7 +3598,7 @@ _i_170:
 .L_i_165_l464:
 	movl %eax,76(%esp)
 _i_165:
-.Lbranch_target_l456:
+.Lbranch_target_l445:
 	movl 20(%esp),%eax
 	movl (%eax),%ecx
 	movl $0,%eax
@@ -3696,7 +3696,7 @@ _i_173:
 	movl %eax,132(%esp)
 	movl (%eax),%eax
 _i_178:
-.Lbranch_target_l459:
+.Lbranch_target_l442:
 	movl %eax,136(%esp)
 	movl $0,%eax
 	movl %ecx,140(%esp)
@@ -3708,7 +3708,7 @@ _i_178:
 	movl (%eax),%eax
 	call *%eax
 .Lcall_successor_l391:
-.Lbranch_target_l448:
+.Lbranch_target_l453:
 	movl $8,%ecx
 	movl %eax,136(%esp)
 	movl (%esp),%edx
@@ -3811,7 +3811,7 @@ _i_186:
 	addl %eax,%ecx
 	movl 208(%esp),%eax
 	movl %ecx,(%eax)
-.Lbranch_target_l460:
+.Lbranch_target_l441:
 	movl $0,%eax
 	movl 140(%esp),%ecx
 	cmpl %eax,%ecx
@@ -3829,7 +3829,7 @@ _i_186:
 	addl %eax,%ecx
 	movl 216(%esp),%eax
 	movl %ecx,(%eax)
-.Lbranch_target_l449:
+.Lbranch_target_l452:
 	movl $12,%eax
 	movl %eax,220(%esp)
 	movl 20(%esp),%ecx
@@ -3862,7 +3862,7 @@ _i_187:
 	leal 264(%esp), %esp
 	ret
 _i_175:
-.Lbranch_target_l457:
+.Lbranch_target_l444:
 	movl $4,%eax
 	movl %eax,144(%esp)
 	movl %ecx,%eax
@@ -3875,7 +3875,7 @@ _i_175:
 	jmp _i_176
 _i_179:
 	movl $4,%eax
-.Lbranch_target_l458:
+.Lbranch_target_l443:
 	movl %eax,148(%esp)
 	movl 136(%esp),%ecx
 	movl %ecx,%eax
@@ -3929,7 +3929,7 @@ _i_181:
 	movl (%ecx),%ecx
 	call *%ecx
 .Lcall_successor_l399:
-.Lbranch_target_l447:
+.Lbranch_target_l454:
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	je _i_183
@@ -3938,9 +3938,9 @@ _i_176:
 	movl 136(%esp),%ecx
 	movl (%ecx),%ecx
 .L_i_178_l466:
-	movl %ecx,136(%esp)
-	movl %eax,%ecx
-	movl 136(%esp),%eax
+	movl %eax,140(%esp)
+	movl %ecx,%eax
+	movl 140(%esp),%ecx
 	movl 8(%esp),%edx
 	jmp _i_178
 _i_183:
@@ -4694,7 +4694,7 @@ _Perl_hv_delete:
 	movl (%edx),%edx
 .Linitialize_continuations_l485:
 .Lproc_body_start_l484:
-.Lbranch_target_l539:
+.Lbranch_target_l542:
 	movl %eax,8(%esp)
 	movl $0,%eax
 	movl %ecx,12(%esp)
@@ -4716,7 +4716,7 @@ _Perl_hv_delete:
 	leal 208(%esp), %esp
 	ret
 _i_192:
-.Lbranch_target_l540:
+.Lbranch_target_l541:
 	movl $8,%eax
 	movl %eax,16(%esp)
 	movl %ecx,%eax
@@ -4761,7 +4761,7 @@ _i_192:
 	movl (%ecx),%ecx
 	call *%ecx
 .Lcall_successor_l526:
-.Lbranch_target_l533:
+.Lbranch_target_l548:
 	leal 196(%esp), %eax
 	movl $-8,%ecx
 	addl %ecx,%eax
@@ -4800,7 +4800,7 @@ _i_192:
 	call *%ecx
 .Lcall_successor_l522:
 	movl %eax,%ecx
-.Lbranch_target_l534:
+.Lbranch_target_l547:
 	movl $0,%edx
 	cmpl %edx,%eax
 	je _i_196
@@ -4813,7 +4813,7 @@ _i_192:
 	movl (%edx),%edx
 	call *%edx
 .Lcall_successor_l518:
-.Lbranch_target_l535:
+.Lbranch_target_l546:
 	leal 196(%esp), %eax
 	movl $-4,%ecx
 	addl %ecx,%eax
@@ -4841,7 +4841,7 @@ _i_192:
 	movl (%ecx),%ecx
 	call *%ecx
 .Lcall_successor_l514:
-.Lbranch_target_l536:
+.Lbranch_target_l545:
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	je _i_200
@@ -4889,7 +4889,7 @@ _i_196:
 _i_194:
 	movl (%esp),%eax
 	movl (%eax),%ecx
-.Lbranch_target_l541:
+.Lbranch_target_l540:
 	movl (%ecx),%edx
 	movl $0,%eax
 	cmpl %eax,%edx
@@ -4920,7 +4920,7 @@ _i_208:
 	movl %ecx,72(%esp)
 	movl 68(%esp),%ecx
 	subl %ecx,%eax
-.Lbranch_target_l542:
+.Lbranch_target_l539:
 	movl $0,%ecx
 	movl %eax,56(%esp)
 	movl 64(%esp),%eax
@@ -4948,7 +4948,7 @@ _i_205:
 	movl %eax,88(%esp)
 	movl $1,%eax
 _i_213:
-.Lbranch_target_l548:
+.Lbranch_target_l533:
 	movl %eax,92(%esp)
 	movl $0,%eax
 	cmpl %eax,%ecx
@@ -4963,7 +4963,7 @@ _i_213:
 	leal 208(%esp), %esp
 	ret
 _i_210:
-.Lbranch_target_l543:
+.Lbranch_target_l538:
 	movl $4,%eax
 	movl %eax,96(%esp)
 	movl %ecx,%eax
@@ -4978,7 +4978,7 @@ _i_210:
 	jmp _i_211
 _i_214:
 	movl $4,%eax
-.Lbranch_target_l544:
+.Lbranch_target_l537:
 	movl %eax,104(%esp)
 	movl 100(%esp),%eax
 	movl 104(%esp),%ecx
@@ -5022,7 +5022,7 @@ _i_216:
 	movl (%ecx),%ecx
 	call *%ecx
 .Lcall_successor_l502:
-.Lbranch_target_l537:
+.Lbranch_target_l544:
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	je _i_218
@@ -5040,13 +5040,13 @@ _i_218:
 	movl (%eax),%ecx
 	movl 88(%esp),%edx
 	movl %ecx,(%edx)
-.Lbranch_target_l545:
+.Lbranch_target_l536:
 	movl $0,%ecx
 	movl 92(%esp),%eax
 	cmpl %ecx,%eax
 	je _i_220
 .Lbranch_target_l499:
-.Lbranch_target_l538:
+.Lbranch_target_l543:
 	movl (%edx),%eax
 	movl $0,%ecx
 	cmpl %ecx,%eax
@@ -5065,7 +5065,7 @@ _i_218:
 	subl %ecx,%eax
 	movl %eax,(%edx)
 _i_220:
-.Lbranch_target_l546:
+.Lbranch_target_l535:
 	movl $2,%eax
 	movl 8(%esp),%ecx
 	andl %eax,%ecx
@@ -5086,7 +5086,7 @@ _i_222:
 	call *%edx
 .Lcall_successor_l496:
 _i_223:
-.Lbranch_target_l547:
+.Lbranch_target_l534:
 	movl $32,%ecx
 	movl %eax,52(%esp)
 	movl 72(%esp),%edx
@@ -5154,8 +5154,8 @@ _i_207:
 	movsbl (%edx),%ecx
 	addl %ecx,%eax
 .L_i_208_l550:
-	movl 72(%esp),%ecx
 	movl 76(%esp),%edx
+	movl 72(%esp),%ecx
 	jmp _i_208
 .section .pcmap_data
 .Lstackdata_l553:
@@ -5495,7 +5495,7 @@ _Perl_hv_delete_ent:
 	movl (%edx),%edx
 .Linitialize_continuations_l563:
 .Lproc_body_start_l562:
-.Lbranch_target_l621:
+.Lbranch_target_l626:
 	movl %eax,8(%esp)
 	movl $0,%eax
 	movl %ecx,12(%esp)
@@ -5517,7 +5517,7 @@ _Perl_hv_delete_ent:
 	leal 232(%esp), %esp
 	ret
 _i_227:
-.Lbranch_target_l622:
+.Lbranch_target_l625:
 	movl $8,%eax
 	movl %eax,16(%esp)
 	movl %ecx,%eax
@@ -5562,7 +5562,7 @@ _i_227:
 	movl (%ecx),%ecx
 	call *%ecx
 .Lcall_successor_l608:
-.Lbranch_target_l615:
+.Lbranch_target_l632:
 	leal 220(%esp), %eax
 	movl $-8,%ecx
 	addl %ecx,%eax
@@ -5601,7 +5601,7 @@ _i_227:
 	call *%ecx
 .Lcall_successor_l604:
 	movl %eax,%ecx
-.Lbranch_target_l616:
+.Lbranch_target_l631:
 	movl $0,%edx
 	cmpl %edx,%eax
 	je _i_231
@@ -5616,7 +5616,7 @@ _i_227:
 	movl (%edx),%edx
 	call *%edx
 .Lcall_successor_l600:
-.Lbranch_target_l617:
+.Lbranch_target_l630:
 	leal 220(%esp), %eax
 	movl $-4,%ecx
 	addl %ecx,%eax
@@ -5644,7 +5644,7 @@ _i_227:
 	movl (%ecx),%ecx
 	call *%ecx
 .Lcall_successor_l596:
-.Lbranch_target_l618:
+.Lbranch_target_l629:
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	je _i_235
@@ -5692,7 +5692,7 @@ _i_231:
 _i_229:
 	movl (%esp),%eax
 	movl (%eax),%ecx
-.Lbranch_target_l623:
+.Lbranch_target_l624:
 	movl (%ecx),%edx
 	movl $0,%eax
 	cmpl %eax,%edx
@@ -5707,7 +5707,7 @@ _i_229:
 	leal 232(%esp), %esp
 	ret
 _i_237:
-.Lbranch_target_l624:
+.Lbranch_target_l623:
 	movl $8,%eax
 	movl %eax,56(%esp)
 	movl 12(%esp),%edx
@@ -5753,7 +5753,7 @@ _i_240:
 	call *%ecx
 .Lcall_successor_l584:
 _i_241:
-.Lbranch_target_l625:
+.Lbranch_target_l622:
 	movl $0,%ecx
 	movl 8(%esp),%edx
 	cmpl %ecx,%edx
@@ -5775,7 +5775,7 @@ _i_248:
 	movl %ecx,84(%esp)
 	movl 80(%esp),%ecx
 	subl %ecx,%eax
-.Lbranch_target_l626:
+.Lbranch_target_l621:
 	movl $0,%ecx
 	movl %eax,88(%esp)
 	movl 76(%esp),%eax
@@ -5827,7 +5827,7 @@ _i_242:
 	movl %eax,104(%esp)
 	movl $1,%eax
 _i_253:
-.Lbranch_target_l632:
+.Lbranch_target_l615:
 	movl %eax,108(%esp)
 	movl $0,%eax
 	cmpl %eax,%ecx
@@ -5842,7 +5842,7 @@ _i_253:
 	leal 232(%esp), %esp
 	ret
 _i_250:
-.Lbranch_target_l627:
+.Lbranch_target_l620:
 	movl $4,%eax
 	movl %eax,112(%esp)
 	movl %ecx,%eax
@@ -5858,7 +5858,7 @@ _i_250:
 	jmp _i_251
 _i_254:
 	movl $4,%eax
-.Lbranch_target_l628:
+.Lbranch_target_l619:
 	movl %eax,120(%esp)
 	movl 116(%esp),%ecx
 	movl %ecx,%eax
@@ -5915,7 +5915,7 @@ _i_256:
 	movl (%ecx),%ecx
 	call *%ecx
 .Lcall_successor_l580:
-.Lbranch_target_l619:
+.Lbranch_target_l628:
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	je _i_258
@@ -5933,13 +5933,13 @@ _i_258:
 	movl (%eax),%ecx
 	movl 104(%esp),%edx
 	movl %ecx,(%edx)
-.Lbranch_target_l629:
+.Lbranch_target_l618:
 	movl $0,%ecx
 	movl 108(%esp),%eax
 	cmpl %ecx,%eax
 	je _i_260
 .Lbranch_target_l577:
-.Lbranch_target_l620:
+.Lbranch_target_l627:
 	movl (%edx),%eax
 	movl $0,%ecx
 	cmpl %ecx,%eax
@@ -5958,7 +5958,7 @@ _i_258:
 	subl %ecx,%eax
 	movl %eax,(%edx)
 _i_260:
-.Lbranch_target_l630:
+.Lbranch_target_l617:
 	movl $2,%eax
 	movl 4(%esp),%ecx
 	andl %eax,%ecx
@@ -5979,7 +5979,7 @@ _i_262:
 	call *%edx
 .Lcall_successor_l574:
 _i_263:
-.Lbranch_target_l631:
+.Lbranch_target_l616:
 	movl $32,%ecx
 	movl %eax,52(%esp)
 	movl 60(%esp),%edx

@@ -153,7 +153,7 @@ putd:
 	movl (%ecx),%ecx
 .Linitialize_continuations_l34:
 .Lproc_body_start_l33:
-.Lbranch_target_l51:
+.Lbranch_target_l52:
 	movl $0,%edx
 	cmpl %edx,%eax
 	jge .LL.8_l53
@@ -177,7 +177,7 @@ putd:
 .LL.8_l53:
 	movl %ecx,16(%esp)
 L.8:
-.Lbranch_target_l52:
+.Lbranch_target_l51:
 	movl $10,%ecx
 	movl %eax,4(%esp)
 	movl 4(%esp),%edx
@@ -573,7 +573,7 @@ partition:
 	addl %ecx,%eax
 	movl (%eax),%eax
 L.22:
-.Lbranch_target_l122:
+.Lbranch_target_l119:
 	movl %eax,32(%esp)
 	movl 12(%esp),%eax
 	movl 20(%esp),%ecx
@@ -629,7 +629,7 @@ L.21:
 	movl $1,%eax
 	addl %eax,%ecx
 L.25:
-.Lbranch_target_l120:
+.Lbranch_target_l121:
 	movl $2,%eax
 	movl %eax,36(%esp)
 	movl %ecx,%eax
@@ -649,7 +649,7 @@ L.25:
 	movl 44(%esp),%ecx
 	subl %ecx,%eax
 L.28:
-.Lbranch_target_l121:
+.Lbranch_target_l120:
 	movl $2,%ecx
 	movl %eax,12(%esp)
 	shll %cl, %eax
@@ -660,7 +660,7 @@ L.28:
 	cmpl %ecx,%eax
 	jg L.27
 .Lbranch_target_l114:
-.Lbranch_target_l119:
+.Lbranch_target_l122:
 	movl 12(%esp),%eax
 	movl 20(%esp),%ecx
 	cmpl %eax,%ecx
@@ -712,9 +712,9 @@ L.28:
 	movl %edx,88(%esp)
 L.30:
 .LL.22_l125:
-	movl 88(%esp),%edx
-	movl 8(%esp),%ecx
 	movl 32(%esp),%eax
+	movl 8(%esp),%ecx
+	movl 88(%esp),%edx
 	jmp L.22
 L.27:
 	movl $1,%eax

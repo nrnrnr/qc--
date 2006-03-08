@@ -312,7 +312,6 @@ interpreter. The [[compile]] function receives a lua value such that it
 can call Lua functions while it is active.
 <<export goodies to Lua>>=
 let init g = 
-  let proc = Map.proc in
   let dataflow_stage d =
     let f _ (g, p) = let g, changed = d g in (g, p), changed in
     Map.stage.V.embed f in
@@ -326,8 +325,8 @@ C.register_module "Asm"
   ; "big_dot" , V.efunc (Map.outchan **->> Map.asm) 
                             (Dotasm.asm ~compress:false ~live:true)
   ; "x86" ,  V.efunc (Map.outchan **->> Map.asm) (X86asm.make Cfgutil.emit)
-(*
   ; "ppc",   V.efunc (Map.outchan **->> Map.asm) (Ppcasm.make Cfgutil.emit)
+(*
   ; "mips",  V.efunc (Map.outchan **->> Map.asm) (Mipsasm.make Cfgutil.emit)
   ; "alpha", V.efunc (Map.outchan **->> Map.asm) (Alphaasm.make Cfgutil.emit)
   ; "ia64",  V.efunc (Map.outchan **->> Map.asm) (Ia64asm.make Cfgutil.emit)
@@ -596,8 +595,8 @@ C.register_module "Debug"
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Expander"
   [ "x86f" , Map.stage.V.embed X86.X.cfg
-(*
   ; "ppc"  , Map.stage.V.embed Ppc.X.cfg
+(*
   ; "ia64f", Map.stage.V.embed Ia64.X.cfg
   ; "mips" , Map.stage.V.embed Mips.X.cfg
   ; "alpha", Map.stage.V.embed Alpha.X.cfg
@@ -634,8 +633,8 @@ C.register_module "Optimize"
 C.register_module "Placevar"
   [ "contextfn", V.efunc ((Map.proc --> Map.automaton) **->> Map.stage) Placevar.context
   ; "x86",     V.efunc (Map.proc **->> Map.automaton)       X86.placevars
-(*
   ; "ppc",     V.efunc (Map.proc **->> Map.automaton)       Ppc.placevars
+(*
   ; "mips",    V.efunc (Map.proc **->> Map.automaton)       Mips.placevars
   ; "ia64",    V.efunc (Map.proc **->> Map.automaton)       Ia64.placevars
   ; "sparc",   V.efunc (Map.proc **->> Map.automaton)       Sparc.placevars
@@ -711,8 +710,8 @@ C.register_module "Targets"
   [ "dummy32l", Map.target.V.embed Dummy.dummy32l'
   ; "dummy32b", Map.target.V.embed Dummy.dummy32b'
   ; "x86",      Map.target.V.embed X86.target
-(*
   ; "ppc",      Map.target.V.embed Ppc.target
+(*
   ; "mips",     Map.target.V.embed Mips.target
   ; "alpha",    Map.target.V.embed Alpha.target
   ; "ia64",     Map.target.V.embed Ia64.target
@@ -778,7 +777,7 @@ let create_gamma _ gp =
 
 let dpwiden _ (g, proc) = 
   let upd g r = if Widen.needs_widening proc.Proc.target r then g r else r in
-  let premature_optimization g =
+  let _premature_optimization g =
     let exists_rtl f g = Impossible.unimp "exists_rtl" in
     if exists_rtl (Widen.needs_widening proc.Proc.target) g then
       (G.map_rtls (upd (Widen.dpwiden (g, proc))) g, proc), true
@@ -822,16 +821,6 @@ C.register_module "Pic"
  [ "ppc", Map.stage.V.embed pic_ppc
  ; "x86", Map.stage.V.embed pic_x86
  ] g;
-
-  let namestring = function
-    | None -> "<no name>"
-    | Some n ->
-        match n with
-        | V.Fallback s -> s
-        | V.Global s -> s
-        | V.Element (s, V.String n) -> s ^ "." ^ n
-        | V.Element (s, V.Number x) -> s ^ "[" ^ string_of_int (int_of_float x) ^ "]"
-        | V.Element (s, _         ) -> s ^ ".?" in
 <<lua initialization>>=
 "Expander.x86 = { fn = Expander.x86f, uses = { 'proper widths', 'no vars' }, \
                   name = 'Expander.x86', creates = { 'x86 invariant' }, \

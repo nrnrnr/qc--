@@ -1,6 +1,7 @@
 target byteorder little;
 
-import printf, "read" as sysread, "open" as sysopen, close, errno, write, perror;
+import printf, "read" as sysread, "open" as sysopen, close, write, perror;
+import geterrno;
 export main;
 
 read(bits32 fd, bits32 buf, bits32 size) {
@@ -11,7 +12,9 @@ read(bits32 fd, bits32 buf, bits32 size) {
   } else { if rc == 0 {
     return <0/2>;
   } else {
-    return <1/2> (bits32[errno]);
+    bits32 errno;
+    errno = foreign "C" geterrno();
+    return <1/2> (errno);
   } }
 }
 
@@ -21,7 +24,9 @@ open(bits32 path, bits32 flags) {
   if rc `ge` 0 {
     return <1/1> (rc);
   } else {
-    return <0/1> (bits32[errno]);
+    bits32 errno;
+    errno = foreign "C" geterrno();
+    return <0/1> (errno);
   }
 }
 

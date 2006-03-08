@@ -60,303 +60,303 @@ zero:
 .byte 0
 .section .text
 test:
-	leal -132(%esp), %esp
-	leal 132(%esp), %ecx
+	leal -128(%esp), %esp
+	leal 128(%esp), %ecx
 	movl $4,%edx
 	addl %edx,%ecx
 	movl (%ecx),%ecx
-	leal 132(%esp), %edx
+	leal 128(%esp), %edx
 	movl (%edx),%edx
 .Linitialize_continuations_l4:
 .Lproc_body_start_l3:
+	movl %eax,56(%esp)
+	leal 128(%esp), %eax
 	movl %eax,60(%esp)
-	leal 132(%esp), %eax
+	movl $-100,%eax
 	movl %eax,64(%esp)
-	movl $-84,%eax
-	movl %eax,68(%esp)
-	movl 64(%esp),%eax
-	movl %ecx,72(%esp)
-	movl 68(%esp),%ecx
+	movl 60(%esp),%eax
+	movl %ecx,68(%esp)
+	movl 64(%esp),%ecx
 	addl %ecx,%eax
-	movl 72(%esp),%ecx
+	movl 68(%esp),%ecx
 	movl %ecx,(%eax)
-	leal 132(%esp), %eax
+	leal 128(%esp), %eax
+	movl %eax,72(%esp)
+	movl $-100,%eax
 	movl %eax,76(%esp)
-	movl $-84,%eax
-	movl %eax,80(%esp)
-	movl 76(%esp),%eax
-	movl 80(%esp),%ecx
+	movl 72(%esp),%eax
+	movl 76(%esp),%ecx
 	addl %ecx,%eax
 	fildl (%eax)
-	leal 132(%esp), %eax
-	movl $-84,%ecx
+	leal 128(%esp), %eax
+	movl $-100,%ecx
 	addl %ecx,%eax
-	movl 60(%esp),%ecx
+	movl 56(%esp),%ecx
 	movl %ecx,(%eax)
-	leal 132(%esp), %eax
+	leal 128(%esp), %eax
+	movl %eax,80(%esp)
+	movl $-100,%eax
 	movl %eax,84(%esp)
-	movl $-84,%eax
-	movl %eax,88(%esp)
-	movl 84(%esp),%eax
-	movl 88(%esp),%ecx
+	movl 80(%esp),%eax
+	movl 84(%esp),%ecx
 	addl %ecx,%eax
 	fildl (%eax)
 	fdivp
-	leal 132(%esp), %eax
-	movl $-112,%ecx
-	addl %ecx,%eax
-	fstps (%eax)
-	leal 132(%esp), %eax
-	movl $-112,%ecx
-	addl %ecx,%eax
-	flds (%eax)
-	leal 132(%esp), %eax
+	leal 128(%esp), %eax
 	movl $-108,%ecx
 	addl %ecx,%eax
-	fnstcw 56(%esp)
-	movzwl 56(%esp),%ecx
-	shll $20, %ecx
-	shrl $30, %ecx
-	fnstcw 54(%esp)
-	movl %eax,92(%esp)
-	movzwl 54(%esp),%eax
-	andl $-3073,%eax
-	movl %eax,96(%esp)
-	movl $1,%eax
-	shll $10, %eax
-	movl %ecx,100(%esp)
-	movl 96(%esp),%ecx
-	orl %eax,%ecx
-	movw %cx,54(%esp)
-	fldcw 54(%esp)
-	movl 92(%esp),%eax
-	fistpl (%eax)
-	fnstcw 52(%esp)
-	movzwl 52(%esp),%eax
-	andl $-3073,%eax
-	movl 100(%esp),%ecx
-	shll $10, %ecx
-	orl %ecx,%eax
-	movw %ax,52(%esp)
-	fldcw 52(%esp)
-	leal fmt,%eax
-	leal 132(%esp), %ecx
-	movl %eax,104(%esp)
-	movl $-132,%eax
-	addl %eax,%ecx
-	movl 104(%esp),%eax
-	movl %eax,(%ecx)
-	leal 132(%esp), %eax
-	movl $-112,%ecx
+	fstps (%eax)
+	leal 128(%esp), %eax
+	movl $-108,%ecx
 	addl %ecx,%eax
 	flds (%eax)
-	leal 132(%esp), %eax
-	movl $-128,%ecx
+	leal 128(%esp), %eax
+	movl $-104,%ecx
+	addl %ecx,%eax
+	fnstcw 36(%esp)
+	movzwl 36(%esp),%ecx
+	shll $20, %ecx
+	shrl $30, %ecx
+	fnstcw 34(%esp)
+	movl %eax,88(%esp)
+	movzwl 34(%esp),%eax
+	andl $-3073,%eax
+	movl %eax,92(%esp)
+	movl $1,%eax
+	shll $10, %eax
+	movl %ecx,96(%esp)
+	movl 92(%esp),%ecx
+	orl %eax,%ecx
+	movw %cx,34(%esp)
+	fldcw 34(%esp)
+	movl 88(%esp),%eax
+	fistpl (%eax)
+	fnstcw 32(%esp)
+	movzwl 32(%esp),%eax
+	andl $-3073,%eax
+	movl 96(%esp),%ecx
+	shll $10, %ecx
+	orl %ecx,%eax
+	movw %ax,32(%esp)
+	fldcw 32(%esp)
+	leal fmt,%eax
+	leal 128(%esp), %ecx
+	movl %eax,100(%esp)
+	movl $-128,%eax
+	addl %eax,%ecx
+	movl 100(%esp),%eax
+	movl %eax,(%ecx)
+	leal 128(%esp), %eax
+	movl $-108,%ecx
+	addl %ecx,%eax
+	flds (%eax)
+	leal 128(%esp), %eax
+	movl $-124,%ecx
 	addl %ecx,%eax
 	fstpl (%eax)
 	leal down,%eax
-	leal 132(%esp), %ecx
-	movl %eax,108(%esp)
-	movl $-120,%eax
-	addl %eax,%ecx
-	movl 108(%esp),%eax
-	movl %eax,(%ecx)
-	leal 132(%esp), %eax
-	movl $-108,%ecx
-	addl %ecx,%eax
-	leal 132(%esp), %ecx
-	movl %eax,112(%esp)
+	leal 128(%esp), %ecx
+	movl %eax,104(%esp)
 	movl $-116,%eax
 	addl %eax,%ecx
-	movl 112(%esp),%eax
+	movl 104(%esp),%eax
+	movl %eax,(%ecx)
+	leal 128(%esp), %eax
+	movl $-104,%ecx
+	addl %ecx,%eax
+	leal 128(%esp), %ecx
+	movl %eax,108(%esp)
+	movl $-112,%eax
+	addl %eax,%ecx
+	movl 108(%esp),%eax
 	movl (%eax),%eax
 	movl %eax,(%ecx)
-	movl %edx,116(%esp)
+	movl %edx,112(%esp)
 	call printf
 .Lcall_successor_l17:
-	leal 132(%esp), %eax
-	movl $-112,%ecx
-	addl %ecx,%eax
-	flds (%eax)
-	leal 132(%esp), %eax
+	leal 128(%esp), %eax
 	movl $-108,%ecx
 	addl %ecx,%eax
-	fnstcw 32(%esp)
-	movzwl 32(%esp),%ecx
+	flds (%eax)
+	leal 128(%esp), %eax
+	movl $-104,%ecx
+	addl %ecx,%eax
+	fnstcw 54(%esp)
+	movzwl 54(%esp),%ecx
 	shll $20, %ecx
 	shrl $30, %ecx
-	fnstcw 30(%esp)
-	movzwl 30(%esp),%edx
+	fnstcw 52(%esp)
+	movzwl 52(%esp),%edx
 	andl $-3073,%edx
-	movl %eax,120(%esp)
+	movl %eax,116(%esp)
 	movl $2,%eax
 	shll $10, %eax
 	orl %eax,%edx
-	movw %dx,30(%esp)
-	fldcw 30(%esp)
-	movl 120(%esp),%eax
+	movw %dx,52(%esp)
+	fldcw 52(%esp)
+	movl 116(%esp),%eax
 	fistpl (%eax)
-	fnstcw 28(%esp)
-	movzwl 28(%esp),%eax
+	fnstcw 50(%esp)
+	movzwl 50(%esp),%eax
 	andl $-3073,%eax
 	shll $10, %ecx
 	orl %ecx,%eax
-	movw %ax,28(%esp)
-	fldcw 28(%esp)
+	movw %ax,50(%esp)
+	fldcw 50(%esp)
 	leal fmt,%eax
-	leal 132(%esp), %ecx
-	movl $-132,%edx
+	leal 128(%esp), %ecx
+	movl $-128,%edx
 	addl %edx,%ecx
 	movl %eax,(%ecx)
-	leal 132(%esp), %eax
-	movl $-112,%ecx
+	leal 128(%esp), %eax
+	movl $-108,%ecx
 	addl %ecx,%eax
 	flds (%eax)
-	leal 132(%esp), %eax
-	movl $-128,%ecx
+	leal 128(%esp), %eax
+	movl $-124,%ecx
 	addl %ecx,%eax
 	fstpl (%eax)
 	leal up,%eax
-	leal 132(%esp), %ecx
-	movl $-120,%edx
+	leal 128(%esp), %ecx
+	movl $-116,%edx
 	addl %edx,%ecx
 	movl %eax,(%ecx)
-	leal 132(%esp), %eax
-	movl $-108,%ecx
+	leal 128(%esp), %eax
+	movl $-104,%ecx
 	addl %ecx,%eax
-	leal 132(%esp), %ecx
-	movl $-116,%edx
+	leal 128(%esp), %ecx
+	movl $-112,%edx
 	addl %edx,%ecx
 	movl (%eax),%eax
 	movl %eax,(%ecx)
 	call printf
 .Lcall_successor_l14:
-	leal 132(%esp), %eax
-	movl $-112,%ecx
-	addl %ecx,%eax
-	flds (%eax)
-	leal 132(%esp), %eax
+	leal 128(%esp), %eax
 	movl $-108,%ecx
 	addl %ecx,%eax
-	fnstcw 38(%esp)
-	movzwl 38(%esp),%ecx
+	flds (%eax)
+	leal 128(%esp), %eax
+	movl $-104,%ecx
+	addl %ecx,%eax
+	fnstcw 48(%esp)
+	movzwl 48(%esp),%ecx
 	shll $20, %ecx
 	shrl $30, %ecx
-	fnstcw 36(%esp)
-	movzwl 36(%esp),%edx
+	fnstcw 46(%esp)
+	movzwl 46(%esp),%edx
 	andl $-3073,%edx
-	movl %eax,124(%esp)
+	movl %eax,120(%esp)
 	movl $0,%eax
 	shll $10, %eax
 	orl %eax,%edx
-	movw %dx,36(%esp)
-	fldcw 36(%esp)
-	movl 124(%esp),%eax
+	movw %dx,46(%esp)
+	fldcw 46(%esp)
+	movl 120(%esp),%eax
 	fistpl (%eax)
-	fnstcw 34(%esp)
-	movzwl 34(%esp),%eax
+	fnstcw 44(%esp)
+	movzwl 44(%esp),%eax
 	andl $-3073,%eax
 	shll $10, %ecx
 	orl %ecx,%eax
-	movw %ax,34(%esp)
-	fldcw 34(%esp)
+	movw %ax,44(%esp)
+	fldcw 44(%esp)
 	leal fmt,%eax
-	leal 132(%esp), %ecx
-	movl $-132,%edx
+	leal 128(%esp), %ecx
+	movl $-128,%edx
 	addl %edx,%ecx
 	movl %eax,(%ecx)
-	leal 132(%esp), %eax
-	movl $-112,%ecx
+	leal 128(%esp), %eax
+	movl $-108,%ecx
 	addl %ecx,%eax
 	flds (%eax)
-	leal 132(%esp), %eax
-	movl $-128,%ecx
+	leal 128(%esp), %eax
+	movl $-124,%ecx
 	addl %ecx,%eax
 	fstpl (%eax)
 	leal nearest,%eax
-	leal 132(%esp), %ecx
-	movl $-120,%edx
+	leal 128(%esp), %ecx
+	movl $-116,%edx
 	addl %edx,%ecx
 	movl %eax,(%ecx)
-	leal 132(%esp), %eax
-	movl $-108,%ecx
+	leal 128(%esp), %eax
+	movl $-104,%ecx
 	addl %ecx,%eax
-	leal 132(%esp), %ecx
-	movl $-116,%edx
+	leal 128(%esp), %ecx
+	movl $-112,%edx
 	addl %edx,%ecx
 	movl (%eax),%eax
 	movl %eax,(%ecx)
 	call printf
 .Lcall_successor_l11:
-	leal 132(%esp), %eax
-	movl $-112,%ecx
-	addl %ecx,%eax
-	flds (%eax)
-	leal 132(%esp), %eax
+	leal 128(%esp), %eax
 	movl $-108,%ecx
 	addl %ecx,%eax
-	fnstcw 44(%esp)
-	movzwl 44(%esp),%ecx
+	flds (%eax)
+	leal 128(%esp), %eax
+	movl $-104,%ecx
+	addl %ecx,%eax
+	fnstcw 42(%esp)
+	movzwl 42(%esp),%ecx
 	shll $20, %ecx
 	shrl $30, %ecx
-	fnstcw 42(%esp)
-	movzwl 42(%esp),%edx
+	fnstcw 40(%esp)
+	movzwl 40(%esp),%edx
 	andl $-3073,%edx
-	movl %eax,128(%esp)
+	movl %eax,124(%esp)
 	movl $3,%eax
 	shll $10, %eax
 	orl %eax,%edx
-	movw %dx,42(%esp)
-	fldcw 42(%esp)
-	movl 128(%esp),%eax
+	movw %dx,40(%esp)
+	fldcw 40(%esp)
+	movl 124(%esp),%eax
 	fistpl (%eax)
-	fnstcw 40(%esp)
-	movzwl 40(%esp),%eax
+	fnstcw 38(%esp)
+	movzwl 38(%esp),%eax
 	andl $-3073,%eax
 	shll $10, %ecx
 	orl %ecx,%eax
-	movw %ax,40(%esp)
-	fldcw 40(%esp)
+	movw %ax,38(%esp)
+	fldcw 38(%esp)
 	leal fmt,%eax
-	leal 132(%esp), %ecx
-	movl $-132,%edx
+	leal 128(%esp), %ecx
+	movl $-128,%edx
 	addl %edx,%ecx
 	movl %eax,(%ecx)
-	leal 132(%esp), %eax
-	movl $-112,%ecx
+	leal 128(%esp), %eax
+	movl $-108,%ecx
 	addl %ecx,%eax
 	flds (%eax)
-	leal 132(%esp), %eax
-	movl $-128,%ecx
+	leal 128(%esp), %eax
+	movl $-124,%ecx
 	addl %ecx,%eax
 	fstpl (%eax)
 	leal zero,%eax
-	leal 132(%esp), %ecx
-	movl $-120,%edx
+	leal 128(%esp), %ecx
+	movl $-116,%edx
 	addl %edx,%ecx
 	movl %eax,(%ecx)
-	leal 132(%esp), %eax
-	movl $-108,%ecx
+	leal 128(%esp), %eax
+	movl $-104,%ecx
 	addl %ecx,%eax
-	leal 132(%esp), %ecx
-	movl $-116,%edx
+	leal 128(%esp), %ecx
+	movl $-112,%edx
 	addl %edx,%ecx
 	movl (%eax),%eax
 	movl %eax,(%ecx)
 	call printf
 .Lcall_successor_l8:
-	movl 60(%esp),%eax
+	movl 56(%esp),%eax
 	movl %eax,%ecx
-	movl 72(%esp),%edx
+	movl 68(%esp),%edx
 	addl %edx,%ecx
 	subl %edx,%eax
 	imull %eax,%ecx
-	leal 132(%esp), %eax
+	leal 128(%esp), %eax
 	movl $4,%ecx
 	addl %ecx,%eax
-	movl 116(%esp),%ecx
+	movl 112(%esp),%ecx
 	movl %ecx,(%eax)
-	leal 136(%esp), %esp
+	leal 132(%esp), %esp
 	ret
 .section .pcmap_data
 .Lstackdata_l23:
@@ -367,7 +367,7 @@ test:
 .section .pcmap_data
 .Lframe_l24:
 .long 0x80000008
-.long 0xffffff7c
+.long 0xffffff80
 .long 0xfffffff0
 .long .Lstackdata_l23
 .long 0
@@ -376,8 +376,8 @@ test:
 .long 1
 .long 0xffffffb8
 .long 0xffffffc4
-.long 0xffffff90
 .long 0xffffff94
+.long 0xffffff98
 .long 0
 .section .pcmap
 .long .Lcall_successor_l14
@@ -385,7 +385,7 @@ test:
 .section .pcmap_data
 .Lframe_l25:
 .long 0x80000008
-.long 0xffffff7c
+.long 0xffffff80
 .long 0xfffffff0
 .long .Lstackdata_l23
 .long 0
@@ -394,8 +394,8 @@ test:
 .long 1
 .long 0xffffffb8
 .long 0xffffffc4
-.long 0xffffff90
 .long 0xffffff94
+.long 0xffffff98
 .long 0
 .section .pcmap
 .long .Lcall_successor_l11
@@ -403,7 +403,7 @@ test:
 .section .pcmap_data
 .Lframe_l26:
 .long 0x80000008
-.long 0xffffff7c
+.long 0xffffff80
 .long 0xfffffff0
 .long .Lstackdata_l23
 .long 0
@@ -412,8 +412,8 @@ test:
 .long 1
 .long 0xffffffb8
 .long 0xffffffc4
-.long 0xffffff90
 .long 0xffffff94
+.long 0xffffff98
 .long 0
 .section .pcmap
 .long .Lcall_successor_l8
@@ -421,7 +421,7 @@ test:
 .section .pcmap_data
 .Lframe_l27:
 .long 0x80000008
-.long 0xffffff7c
+.long 0xffffff80
 .long 0xfffffff0
 .long .Lstackdata_l23
 .long 0
@@ -430,8 +430,8 @@ test:
 .long 1
 .long 0xffffffb8
 .long 0xffffffc4
-.long 0xffffff90
 .long 0xffffff94
+.long 0xffffff98
 .long 0
 .section .text
 main:

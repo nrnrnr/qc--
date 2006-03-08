@@ -62,7 +62,7 @@ tiger_main:
 	addl %eax,%edx
 	movl 12(%esp),%eax
 	movl %eax,(%edx)
-.Lbranch_target_l53:
+.Lbranch_target_l55:
 	leal Cmm.global_area,%eax
 	movl (%eax),%eax
 	movl $48,%edx
@@ -381,7 +381,7 @@ Linit_end_25:
 	addl %edx,%ecx
 	movl %eax,(%ecx)
 Lloop_start_60:
-.Lbranch_target_l55:
+.Lbranch_target_l53:
 	leal 120(%esp), %eax
 	movl $-12,%ecx
 	addl %ecx,%eax

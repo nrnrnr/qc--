@@ -102,14 +102,14 @@ let upd_pair_map upd t v m = RM.add t (upd (pair_map_find t m) v) m
 
 
 let empty            = (RM.empty, RM.empty)
-let remove_reg t r (vm, lm as maps) =
+let remove_reg t r (vm, lm) =
     let lm' = RM.remove r lm in
     try match (RM.find t vm).mem with
         | None   -> (RM.remove t vm, lm')
         | Some m as m'-> (RM.add t {reg = None; mem = m'} vm, lm')
     with Not_found -> Impossible.impossible "DLS: Tried to remove unknown reg"
 
-let remove_mem t _ (vm, lm as maps) =
+let remove_mem t _ (vm, lm) =
     try match (RM.find t vm).reg with
         | None   -> (RM.remove t vm, lm)
         | Some r as r' -> (RM.add t {reg = r'; mem = None} vm, lm)

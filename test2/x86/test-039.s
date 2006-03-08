@@ -220,8 +220,8 @@ loop:
 	subl %eax,%ecx
 .Lloop_l61:
 	movl %ecx,(%esp)
-	movl 8(%esp),%ecx
 	movl 4(%esp),%eax
+	movl 8(%esp),%ecx
 	jmp loop
 .Lbranch_target_l56:
 	movl %edx,%eax

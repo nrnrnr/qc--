@@ -168,7 +168,7 @@ compute_bit_58:
 	addl %ecx,%eax
 	movl 12(%esp),%ecx
 	movl %ecx,(%eax)
-.Lbranch_target_l26:
+.Lbranch_target_l43:
 	leal 124(%esp), %eax
 	movl $-8,%ecx
 	addl %ecx,%eax
@@ -190,7 +190,7 @@ LifFalse_61:
 	movl $0,%eax
 	jmp LifEnd_62
 LifTrue_60:
-.Lbranch_target_l30:
+.Lbranch_target_l42:
 	leal 124(%esp), %eax
 	movl $-8,%ecx
 	addl %ecx,%eax
@@ -207,20 +207,20 @@ LifTrue_60:
 	movl (%ecx),%eax
 	movl 20(%esp),%ecx
 	cmpl %eax,%ecx
-	jge .Lbranch_target_l29
-.Lbranch_target_l28:
+	jge .Lbranch_target_l41
+.Lbranch_target_l40:
 	movl $0,%eax
-	jmp .Lbranch_target_l27
-.Lbranch_target_l29:
+	jmp .Lbranch_target_l39
+.Lbranch_target_l41:
 	movl $-1,%eax
-.Lbranch_target_l27:
+.Lbranch_target_l39:
 LifEnd_62:
-.Lbranch_target_l31:
+.Lbranch_target_l38:
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	jne LifTrue_80
 LifFalse_81:
-.Lbranch_target_l32:
+.Lbranch_target_l37:
 	leal 124(%esp), %eax
 	movl $-8,%ecx
 	addl %ecx,%eax
@@ -267,12 +267,12 @@ LifTrue_64:
 	movl $-1,%eax
 .Lbranch_target_l33:
 LifEnd_66:
-.Lbranch_target_l37:
+.Lbranch_target_l32:
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	jne LifTrue_76
 LifFalse_77:
-.Lbranch_target_l38:
+.Lbranch_target_l31:
 	leal 124(%esp), %eax
 	movl $-8,%ecx
 	addl %ecx,%eax
@@ -294,7 +294,7 @@ LifFalse_69:
 	movl $0,%eax
 	jmp LifEnd_70
 LifTrue_68:
-.Lbranch_target_l42:
+.Lbranch_target_l30:
 	leal 124(%esp), %eax
 	movl $-8,%ecx
 	addl %ecx,%eax
@@ -311,15 +311,15 @@ LifTrue_68:
 	movl (%ecx),%eax
 	movl 84(%esp),%ecx
 	cmpl %eax,%ecx
-	jge .Lbranch_target_l41
-.Lbranch_target_l40:
+	jge .Lbranch_target_l29
+.Lbranch_target_l28:
 	movl $0,%eax
-	jmp .Lbranch_target_l39
-.Lbranch_target_l41:
+	jmp .Lbranch_target_l27
+.Lbranch_target_l29:
 	movl $-1,%eax
-.Lbranch_target_l39:
+.Lbranch_target_l27:
 LifEnd_70:
-.Lbranch_target_l43:
+.Lbranch_target_l26:
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	jne LifTrue_72
@@ -3075,7 +3075,7 @@ tiger_main:
 	addl %eax,%edx
 	movl 4(%esp),%eax
 	movl %eax,(%edx)
-.Lbranch_target_l234:
+.Lbranch_target_l235:
 	leal Cmm.global_area,%eax
 	movl (%eax),%eax
 	movl $1032,%edx
@@ -3124,7 +3124,7 @@ Linit_start_42:
 	movl $1,%eax
 	movl 20(%esp),%ecx
 	addl %eax,%ecx
-.Lbranch_target_l235:
+.Lbranch_target_l234:
 	movl $257,%eax
 	cmpl %eax,%ecx
 	jle .LLinit_start_42_l236

@@ -90,7 +90,7 @@ main:
 .Lproc_body_start_l5:
 	movl $0,%ecx
 L.8:
-.Lbranch_target_l27:
+.Lbranch_target_l26:
 	movl $2,%edx
 	movl %eax,8(%esp)
 	movl %ecx,%eax
@@ -126,7 +126,7 @@ L.5:
 	movl $0,%eax
 L.12:
 	movl $2,%ecx
-.Lbranch_target_l26:
+.Lbranch_target_l27:
 	movl %eax,%edx
 	movl %ecx,16(%esp)
 	movl %eax,20(%esp)
@@ -355,7 +355,7 @@ g:
 .Linitialize_continuations_l57:
 .Lproc_body_start_l56:
 L.35:
-.Lbranch_target_l75:
+.Lbranch_target_l74:
 	movl (%eax),%edx
 	movl %eax,8(%esp)
 	movl $0,%eax
@@ -376,7 +376,7 @@ L.35:
 L.32:
 	movl $0,%eax
 L.39:
-.Lbranch_target_l74:
+.Lbranch_target_l75:
 	movl $3,%edx
 	cmpl %edx,%eax
 	jb L.36

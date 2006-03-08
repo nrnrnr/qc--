@@ -30,17 +30,16 @@ Cmm_stack_growth:
 main:
 	leal -4(%esp), %esp
 	leal 4(%esp), %eax
-	movl (%eax),%eax
+	movl (%eax),%ecx
 .Linitialize_continuations_l8:
 .Lproc_body_start_l7:
+	movl $0,%eax
+	leal 4(%esp), %edx
+	movl %ecx,(%esp)
 	movl $0,%ecx
-	movl %eax,(%esp)
-	movl %ecx,%eax
-	leal 4(%esp), %ecx
-	movl $0,%edx
-	addl %edx,%ecx
-	movl (%esp),%edx
-	movl %edx,(%ecx)
+	addl %ecx,%edx
+	movl (%esp),%ecx
+	movl %ecx,(%edx)
 	leal 4(%esp), %esp
 	ret
 .section .text
@@ -324,7 +323,7 @@ f4:
 	addl %edx,%ecx
 	fildq (%eax)
 	fistpq (%ecx)
-.Lbranch_target_l90:
+.Lbranch_target_l88:
 	leal 36(%esp), %eax
 	movl $-20,%ecx
 	addl %ecx,%eax
@@ -344,7 +343,7 @@ f4:
 	xorb $64,%ah
 	jz L.31
 .Lbranch_target_l84:
-.Lbranch_target_l88:
+.Lbranch_target_l90:
 	movl $0,%eax
 	movl 28(%esp),%ecx
 	cmpl %eax,%ecx

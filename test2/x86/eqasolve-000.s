@@ -66,7 +66,7 @@ _main:
 	movl (%ecx),%ecx
 	call *%ecx
 .Lcall_successor_l79:
-.Lbranch_target_l89:
+.Lbranch_target_l96:
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	je _i_19
@@ -134,7 +134,7 @@ _i_19:
 	movl (%ecx),%ecx
 	call *%ecx
 .Lcall_successor_l57:
-.Lbranch_target_l90:
+.Lbranch_target_l95:
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	jne _i_23
@@ -174,14 +174,14 @@ _i_23:
 	movl (%ecx),%ecx
 	call *%ecx
 .Lcall_successor_l50:
-.Lbranch_target_l91:
+.Lbranch_target_l94:
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	jne _i_27
 .Lbranch_target_l47:
 	movl $1,%eax
 _i_33:
-.Lbranch_target_l96:
+.Lbranch_target_l89:
 	movl (%esp),%ecx
 	cmpl %ecx,%eax
 	jl _i_30
@@ -217,7 +217,7 @@ _i_30:
 	movl (%ecx),%ecx
 	call *%ecx
 .Lcall_successor_l46:
-.Lbranch_target_l92:
+.Lbranch_target_l93:
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	jne _i_34
@@ -266,12 +266,12 @@ _i_37:
 	call *%ecx
 .Lcall_successor_l36:
 	movl %eax,%ecx
-.Lbranch_target_l93:
+.Lbranch_target_l92:
 	movl $0,%edx
 	cmpl %edx,%eax
 	je _i_40
 .Lbranch_target_l33:
-.Lbranch_target_l94:
+.Lbranch_target_l91:
 	movl $64,%eax
 	cmpl %eax,%ecx
 	jne _i_43
@@ -333,7 +333,7 @@ _i_40:
 	movl (%ecx),%ecx
 	call *%ecx
 .Lcall_successor_l25:
-.Lbranch_target_l95:
+.Lbranch_target_l90:
 	movl $0,%ecx
 	cmpl %ecx,%eax
 	jne _i_46
