@@ -50,19 +50,18 @@ end
 module String : sig
   val foldr : (char -> 'a -> 'a) -> string -> 'a -> 'a
 end
-@
 
+type void = Void of void (* used as placeholder for polymorphic variable *)
+@
 Here is a substring extraction function inspired by Python's [[slice]].
 The parameters [[start]] and [[stop]] denote which part of [[str]]
 should be extracted; negative numbers can be used to reference the
 starting point from the end of the string rather than the beginning.  It
 is best to think about the [[start]] and [[stop]] indices as pointing
 between the characters; some examples makes this clear:
-
 <<aux.mli>>=
 val substr: int -> int -> string -> string
-@
-
+@ %
 \begin{quote}
 \begin{verbatim}
           h  e  l  l  o  _  w  o  r  l  d
@@ -76,14 +75,16 @@ val substr: int -> int -> string -> string
     substr (0) (3) "hello world"        ;; - : string = "hel"
 \end{verbatim}
 \end{quote}
+@
 
 
 
 % ------------------------------------------------------------------ 
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
-
 <<aux.ml>>=
+type void = Void of void (* used as placeholder for polymorphic variable *)
+
 module Option = struct
     let is_some = function Some _ -> true  | None -> false 
     let is_none = function Some _ -> false | None -> true
@@ -92,10 +93,10 @@ module Option = struct
         | None   -> x
     let map f = function Some x -> Some (f x) | None -> None
 end
-
+@ 
 <<aux.ml>>=
 let round_up_to ~multiple_of:n k = n * ((k+(n-1)) / n)
-
+@ 
 <<aux.ml>>=
 let foldri f l z =
   let rec next n = function
@@ -118,13 +119,13 @@ module String = struct
       if n < 0 then z else down_from (n-1) (f (String.get s n) z) in
     down_from (String.length s - 1) z
 end
-
+@
 <<aux.ml>>=
 let rec last = function
   | [] -> raise (Invalid_argument "empty list")
   | [x] -> x
   | x :: xs -> last xs
-
+@ 
 <<aux.ml>>=
 let rec map_partial f = function
   | [] -> []
@@ -132,8 +133,7 @@ let rec map_partial f = function
       match f x with
       | Some y -> y :: map_partial f xs
       | None -> map_partial f xs
-
-      
+@
 <<aux.ml>>=
 let rec compare_list cmp x y = match x, y with
 | [], [] -> 0

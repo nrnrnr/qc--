@@ -55,6 +55,14 @@ val program : swap:bool -> validator -> Srcmap.map -> 'a Asm.assembler -> Nast.t
 <<exposed types>>=
 type validator = Rtl.rtl -> string option
 @ 
+To make it possible to rewrite abstract syntax without paying an
+incredible burden in terms of tying recursive knots in types, we
+export this horrible [[rewrite]] function, 
+which is another name for [[Obj.magic]].
+Only a function that is actually polymorphic should be passed in.
+<<nelab.mli>>=
+val rewrite : (Aux.void compunit -> Aux.void compunit) -> ('a compunit -> 'a compunit)
+@ 
 % ------------------------------------------------------------------ 
 \section{Checking Static Semantics}
 % ------------------------------------------------------------------ 
@@ -131,17 +139,6 @@ denotation of that name includes its assembler symbol. Hence, this
 module reserves assembler symbols for these names and enters them into
 the fat environment.
 
-
-% ------------------------------------------------------------------ 
-\subsection{Interface}
-% ------------------------------------------------------------------ 
-
-@
-The static semantics of a [[program]] is checked by [[Check.check]]. 
-Any errors found are reported to stderr and the marked in the returned
-environment.
-<<nelab.mli>>=
-@
     
 % ------------------------------------------------------------------ 
 \subsection{Implementation -- The 30\,000 feet overview}
@@ -793,4 +790,5 @@ and init r ty i =
       else
         errorf r "initialized Unicode string must specify type bits16" in
 @ 
-
+<<nelab.ml>>=
+let rewrite = Obj.magic
