@@ -545,7 +545,7 @@ let ( *> ) = A.( *> )
 let globals base = 
   let width w = if      w <= 8  then 8  
                 else if w <= 16 then 16 
-                else Aux.round_up_to ~multiple_of:wordsize w in
+                else Auxfuns.round_up_to ~multiple_of:wordsize w in
   let align = function _ -> 8 in
   A.at mspace ~start:base (A.widen width *> A.align_to align *>
   A.overflow ~growth:Memalloc.Up ~max_alignment:16)
@@ -716,9 +716,9 @@ let placevars =
   let warn ~width ~alignment ~kind = () in
   let mk_stage ~temps =
     A.choice
-      [ is_float,                 A.widen (Aux.round_up_to ~multiple_of: 32)
+      [ is_float,                 A.widen (Auxfuns.round_up_to ~multiple_of: 32)
       ; (fun w h _ -> w <= 32),   A.widen (fun _ -> 32) *> temps 't'
-      ; A.is_any,                 A.widen (Aux.round_up_to ~multiple_of: 8)
+      ; A.is_any,                 A.widen (Auxfuns.round_up_to ~multiple_of: 8)
       ] in
   Placevar.mk_automaton ~warn ~vfp:target.T.vfp ~memspace:mspace mk_stage
 @ 

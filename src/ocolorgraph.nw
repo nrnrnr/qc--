@@ -610,7 +610,7 @@ let get_regs cfg =
 
 let build cg (cfg, ({Proc.target = target} as proc)) =
   Debug.eprintf "color" "color::build()\n"; flush stderr;
-  let () = if Aux.Option.is_some (!(cg.tempLG Initial)) then
+  let () = if Auxfuns.Option.is_some (!(cg.tempLG Initial)) then
     Impossible.impossible "Temps on initial list prematurely" in
   let regs = get_regs cfg in
   (*Debug.eprintf "color" "build regs: %s" (Register.Set.to_string regs);*)
@@ -1050,7 +1050,7 @@ let assignColors cg (cfg, ({Proc.target = target} as proc)) =
   <<colorTemp>>
   let colorSelectStack () =
       let () = ilg_iter colorTemp (!(cg.tempLG SelectStack)) in
-  if Aux.Option.is_some (!(cg.tempLG SelectStack))
+  if Auxfuns.Option.is_some (!(cg.tempLG SelectStack))
      then Impossible.impossible "Failed to color a temp?"   in
   let colorCoalescedTemps () =
       let setColor temp = 
@@ -1172,7 +1172,7 @@ let resetProgram cg (cfg, proc) =
   (* handle addition of new temps to the cfg (those in spilledTemps) *)
   let (cfg, newSpillMap, newTemps) = rewrite cfg proc (!(cg.tempLG Spilled)) in
   Debug.eprintf "color" "  color::resetProgram() -- done with rewrite\n"; flush stderr;
-  let () = if Aux.Option.is_some (!(cg.tempLG Initial))
+  let () = if Auxfuns.Option.is_some (!(cg.tempLG Initial))
            then Impossible.impossible "temps still on initial list" in
   let () = List.iter (fun t -> cg.spills <- RS.add t cg.spills) newTemps in
   let () = cg.spillMap <- RM.fold RM.add newSpillMap cg.spillMap         in
@@ -1205,7 +1205,7 @@ let resetProgram cg (cfg, proc) =
 The simple predicate [[haveSpilledTemps]] may be used to determine whether
 the graph-coloring algorithm has terminated.
 <<resetProgram>>=
-let haveSpilledTemps cg proc = (proc, Aux.Option.is_some (!(cg.tempLG Spilled)))
+let haveSpilledTemps cg proc = (proc, Auxfuns.Option.is_some (!(cg.tempLG Spilled)))
 @
 [[updateProgram]] removes coalesced moves from the \cfg. It may be desirable
 to call this stage even after graph coloring has succeeded in placing every
@@ -1570,7 +1570,7 @@ let graph_coloring_module =
 @
 N.B. I've removed the infrastructure supporting [[setRegisters]].
 If it is restored, the correct way to do it is with dynamic type
-dispatch.  Also note I've moved some code into [[Aux.List.take]]. ---NR
+dispatch.  Also note I've moved some code into [[Auxfuns.List.take]]. ---NR
 @
 
 \subsubsection{Lua startup code}

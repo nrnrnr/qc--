@@ -222,13 +222,13 @@ ranges of the arms.  An empty switch-statement is an error because no
 arm can match the value of the switch-expression at run-time.
 <<definitions of elaboration functions>>=
 let switch rg e arms =
-  let rg = E.Raise.option (Aux.Option.map range rg) in (* order matters *)
+  let rg = E.Raise.option (Auxfuns.Option.map range rg) in (* order matters *)
   let arms = E.Raise.list (List.map arm arms) in
   E.ematch3 (exp e) rg arms (fun (e, et) rg arms ->
     match et with
     | Types.Bool -> E.error "switch statement scrutinee is a Boolean"
     | Types.Bits w ->
-        let rg = Aux.Option.map (striprange w) rg in
+        let rg = Auxfuns.Option.map (striprange w) rg in
         let arms = striparms w arms in
         if null arms then E.error "empty switch statement"
         else Switch(rg, e, arms)) in
@@ -301,7 +301,7 @@ let assign lhs rhs =
   with Invalid_argument _ -> <<complain about length mismatch in assignment>> in
 <<elaboration utilities>>=
 let effect lhs (guard,rhs) =
-  let guard = Aux.Option.map exp guard in
+  let guard = Auxfuns.Option.map exp guard in
   E.seq2 (loc lhs) (exp rhs) (fun (loc, w) (e, ty) ->
     if Pervasives.(<>) ty (Types.Bits w) then
       errorf (Elabexp.loc_region r lhs)

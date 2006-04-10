@@ -286,7 +286,7 @@ module A = Automaton
 let ( *> ) = A.( *> )
 let globals base = 
   let width w = if   w <= 8 then 8 else if w <= 16 then 16 else if w <= 32 then 32
-                else Aux.round_up_to 64 w in
+                else Auxfuns.round_up_to 64 w in
   let align = function 8 -> 1 | 16 -> 2 | _ -> 4 in
   A.at mspace ~start:base 
    (A.widen width *> A.align_to align *>
@@ -467,9 +467,9 @@ let placevars =
           (Printf.sprintf "%d-bit variable kinded float but will go as integer" w) in
   let mk_stage ~temps =
     A.choice
-      [ is_float,               A.widen (Aux.round_up_to ~multiple_of:64) *> temps 'u';
+      [ is_float,               A.widen (Auxfuns.round_up_to ~multiple_of:64) *> temps 'u';
         (fun w h _ -> w <= 64), A.widen (fun _ -> 64) *> temps 't';
-        A.is_any,               A.widen (Aux.round_up_to ~multiple_of: 8);
+        A.is_any,               A.widen (Auxfuns.round_up_to ~multiple_of: 8);
       ] in
   Placevar.mk_automaton ~warn ~vfp:target.T.vfp ~memspace:target.T.memspace mk_stage
 @ 

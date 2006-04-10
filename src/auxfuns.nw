@@ -17,7 +17,7 @@ This module provides functions we found too useful to hide them in a
 specific module. They are usually small and generic and one could
 argue that we found them missing in {\ocaml} standard library.
 
-<<aux.mli>>=
+<<auxfuns.mli>>=
 val round_up_to : multiple_of:int -> int -> int
   (* round_up_to n k rounds k up to the nearest multiple of n.
      n must be positive and k must be nonnegative *)
@@ -59,7 +59,7 @@ should be extracted; negative numbers can be used to reference the
 starting point from the end of the string rather than the beginning.  It
 is best to think about the [[start]] and [[stop]] indices as pointing
 between the characters; some examples makes this clear:
-<<aux.mli>>=
+<<auxfuns.mli>>=
 val substr: int -> int -> string -> string
 @ %
 \begin{quote}
@@ -82,7 +82,7 @@ val substr: int -> int -> string -> string
 % ------------------------------------------------------------------ 
 \subsection{Implementation}
 % ------------------------------------------------------------------ 
-<<aux.ml>>=
+<<auxfuns.ml>>=
 type void = Void of void (* used as placeholder for polymorphic variable *)
 
 module Option = struct
@@ -94,10 +94,10 @@ module Option = struct
     let map f = function Some x -> Some (f x) | None -> None
 end
 @ 
-<<aux.ml>>=
+<<auxfuns.ml>>=
 let round_up_to ~multiple_of:n k = n * ((k+(n-1)) / n)
 @ 
-<<aux.ml>>=
+<<auxfuns.ml>>=
 let foldri f l z =
   let rec next n = function
     | [] -> z
@@ -112,7 +112,7 @@ let substr start stop str =
     let stop  = if stop  <= 0 then String.length str + stop  else stop  in
         String.sub str start (stop - start)
 @
-<<aux.ml>>=
+<<auxfuns.ml>>=
 module String = struct
   let foldr f s z =
     let rec down_from n z =
@@ -120,13 +120,13 @@ module String = struct
     down_from (String.length s - 1) z
 end
 @
-<<aux.ml>>=
+<<auxfuns.ml>>=
 let rec last = function
   | [] -> raise (Invalid_argument "empty list")
   | [x] -> x
   | x :: xs -> last xs
 @ 
-<<aux.ml>>=
+<<auxfuns.ml>>=
 let rec map_partial f = function
   | [] -> []
   | x :: xs ->
@@ -134,7 +134,7 @@ let rec map_partial f = function
       | Some y -> y :: map_partial f xs
       | None -> map_partial f xs
 @
-<<aux.ml>>=
+<<auxfuns.ml>>=
 let rec compare_list cmp x y = match x, y with
 | [], [] -> 0
 | [], _ :: _ -> -1
@@ -144,7 +144,7 @@ let rec compare_list cmp x y = match x, y with
     | 0 -> compare_list cmp xs ys
     | diff -> diff
 @ 
-<<aux.ml>>=
+<<auxfuns.ml>>=
 module List = struct
   let rec take n xs = match xs with
   | [] -> []

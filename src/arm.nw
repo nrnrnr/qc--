@@ -98,7 +98,7 @@ let placevars =
   let mk_stage ~temps =
     A.choice
       [ (fun w h _ -> w <= 32),   A.widen (fun _ -> 32) *> temps 't';
-        A.is_any,                 A.widen (Aux.round_up_to ~multiple_of: 8);
+        A.is_any,                 A.widen (Auxfuns.round_up_to ~multiple_of: 8);
       ] in
   Placevar.mk_automaton ~warn ~vfp ~memspace:mspace mk_stage
 @ 
@@ -409,7 +409,7 @@ TO Automaton.Standard32?
 let globals base = 
   let width w = if      w <= 8  then 8  
                 else if w <= 16 then 16 
-                else Aux.round_up_to 32 w in
+                else Auxfuns.round_up_to 32 w in
   let align = function 8 -> 1 | 16 -> 2 | _ -> 4 in
   A.at mspace ~start:base (A.widen width *> A.align_to align *>
   A.overflow ~growth:Memalloc.Up ~max_alignment:4)

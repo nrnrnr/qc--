@@ -61,7 +61,7 @@ export this horrible [[rewrite]] function,
 which is another name for [[Obj.magic]].
 Only a function that is actually polymorphic should be passed in.
 <<nelab.mli>>=
-val rewrite : (Aux.void compunit -> Aux.void compunit) -> ('a compunit -> 'a compunit)
+val rewrite : (Auxfuns.void compunit -> Auxfuns.void compunit) -> ('a compunit -> 'a compunit)
 @ 
 % ------------------------------------------------------------------ 
 \section{Checking Static Semantics}
@@ -469,9 +469,9 @@ Code [[F.import]] remembers the [[import as]] relationship.
 <<definitions of name-binding functions>>=
 let bind_and_remember_import env (r, ty, imports) = 
   let import env (foreign,name) =
-    let env = F.import r (Aux.Option.get name foreign) name env in
+    let env = F.import r (Auxfuns.Option.get name foreign) name env in
     let sym = F.symbol env name in
-    let den = FE.Import (Aux.Option.get name foreign, sym) in
+    let den = FE.Import (Auxfuns.Option.get name foreign, sym) in
     let ty  = <<convert optional importing [[ty]] as long as it is pointer size>> in
     F.bindv name (r, E.Raise.right (den, ty)) env in
   foldl import env imports in
@@ -648,7 +648,7 @@ match the actual type of an exported symbol.
 <<definitions of name-binding functions>>=
 let remember_export env (r, _, exports) = 
   let export env (name,foreign) =
-    F.export r name (Aux.Option.get name foreign) env in
+    F.export r name (Auxfuns.Option.get name foreign) env in
   foldl export env exports in
 @ 
 The only thing that can happen to the environment here is that it gets
@@ -738,14 +738,14 @@ and reserve_mem r ty size idata =
       match idata with
       | None ->
           if w mod memsize = 0 then
-            E.Ok (UninitializedData (Aux.Option.get 1 n * (w / memsize)))
+            E.Ok (UninitializedData (Auxfuns.Option.get 1 n * (w / memsize)))
           else
             errorf r "width %d of initialized data is not a multiple of memsize = %d"
               w memsize
       | Some i ->
           E.seq (init r (Types.Bits w) i) (fun inits ->
             let rcount = List.length inits in
-            let lcount = Aux.Option.get rcount n in
+            let lcount = Auxfuns.Option.get rcount n in
             if      rcount > lcount then errorf r "too many initial values"
             else if rcount < rcount then errorf r "too few initial values"
             else E.Ok (InitializedData inits)))
@@ -781,7 +781,7 @@ and init r ty i =
   | A.InitStr s ->
       let to_texpr c = Reloc.of_const (Bits.U.of_int (Char.code c) 8), 8 in
       if ty =*= T.Bits 8 then
-        E.Ok (Aux.String.foldr (fun c l -> to_texpr c :: l) s [])
+        E.Ok (Auxfuns.String.foldr (fun c l -> to_texpr c :: l) s [])
       else
         errorf r "initialized string must specify type bits8"
   | A.InitUStr(s) ->

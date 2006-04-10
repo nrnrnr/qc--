@@ -192,7 +192,7 @@ clean:V:        dirs
 	  \) -prune                       \
 	  -o -type f -exec rm '{}' \;
 	rm -f *.tar.gz        
-	rm -f config/aux/tst
+	rm -f config/auxdir/tst
 
 clean.opt:V:    dirs
 	for i in $SUBDIRS test2
@@ -210,7 +210,7 @@ clean.opt:V:    dirs
 	  -o -name '*.cmxa'               \
 	  \) -exec rm '{}' \;             
 	rm -f *.tar.gz        
-	rm -f config/aux/tst
+	rm -f config/auxdir/tst
 
 clobber:V:      dirs clean
 	for i in $SUBDIRS test2

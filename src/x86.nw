@@ -792,7 +792,7 @@ let pushk_cvt _ _ _ = Impossible.unimp "load floating-point constant"
 let stack_op op = match opclass op with
 | PX.Register -> impossf "passed register operator to stack_op"
 | PX.Stack(first, depth) -> (* by lucky accident, depth is arity *)
-    let positions = Aux.from 0 (depth-1) in
+    let positions = Auxfuns.from 0 (depth-1) in
     let positions = match first with PX.RightFirst -> positions
                                    | PX.LeftFirst  -> List.rev positions in
     let argvals = List.map (fun n -> ffetch (stregplus n)) positions in
@@ -871,7 +871,7 @@ let fpcmpopr = function
 
 let bc_stack op ~ifso ~ifnot = match op with
 | ("fordered"|"funordered"|"flt"|"fgt"|"fle"|"fge"|"feq"|"fne") as opname, [w] ->
-    let positions = Aux.from 0 1 in
+    let positions = Auxfuns.from 0 1 in
     let argvals = List.map (fun n -> ffetch (stregplus n)) positions in
     let result = R.app (R.opr "x86_fcmp" [w]) argvals in
     let next_st = stadd 2 in
@@ -997,7 +997,7 @@ let upexp   = Up.exp
 
 let ( *> ) = A.( *> )
 let globals base = 
-  let width w = if w <= 8 then 8 else if w <= 16 then 16 else Aux.round_up_to 32 w in
+  let width w = if w <= 8 then 8 else if w <= 16 then 16 else Auxfuns.round_up_to 32 w in
   let align = function 8 -> 1 | 16 -> 2 | _ -> 4 in
   A.at P.mspace ~start:base 
     (A.widen width *> A.align_to align *>
@@ -1206,9 +1206,9 @@ let placevars =
           (Printf.sprintf "%d-bit variable kinded float but will go as integer" w) in
   let mk_stage ~temps =
     A.choice
-      [ is_float,               A.widen (Aux.round_up_to ~multiple_of: 32); 
+      [ is_float,               A.widen (Auxfuns.round_up_to ~multiple_of: 32); 
         (fun w k a -> w <= 32), A.widen (fun _ -> 32) *> temps 't';
-        A.is_any,               A.widen (Aux.round_up_to ~multiple_of: 8);
+        A.is_any,               A.widen (Auxfuns.round_up_to ~multiple_of: 8);
       ] in
   Placevar.mk_automaton ~warn ~vfp:target.T.vfp ~memspace:P.mspace mk_stage
 @ 

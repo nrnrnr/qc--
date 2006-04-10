@@ -179,7 +179,7 @@ with them.}
 <<global register allocation>>=
 let globals base = 
     let width w     = if w <= 8 then 8 else if w <= 16 then 16 else
-                      Aux.round_up_to 32 w in
+                      Auxfuns.round_up_to 32 w in
         AN.at ~start:base mspace
               (AN.widen width 
                *> AN.align_to (function 8 -> 1 | 16 -> 2 | _ -> 4)
@@ -309,10 +309,10 @@ registers.
 <<calling convention>>=
 let simple =
     AN.choice
-        [ AN.is_kind "float",  AN.widen (Aux.round_up_to ~multiple_of:32) 
+        [ AN.is_kind "float",  AN.widen (Auxfuns.round_up_to ~multiple_of:32) 
                             *> AN.widths  [32]
                             *> AN.useregs fregs false
-        ; AN.is_any,         AN.widen (Aux.round_up_to ~multiple_of:32)
+        ; AN.is_any,         AN.widen (Auxfuns.round_up_to ~multiple_of:32)
                           *> AN.widths  [32]
                           *> AN.useregs regs false
         ] *> 
