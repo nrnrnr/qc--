@@ -1,0 +1,86 @@
+/*
+ * Daniel J. Peng
+ * overflowhandler.c--
+ *
+ * This file implements an overflow handler in pure C--.
+ *
+ * Here is the high-level overview of what happens when a stack limit check
+ * fails.
+ *
+ * 1) The function checks the stack limit and realizes it has insufficient
+ * stack space.
+ *
+ * 2) It cuts to the overflow handler, passing a recovery continuation, the
+ * size of the closure required to reinvoke the function, and a function that
+ * invokes the closure (the closure-invocation function).
+ *
+ * 3) The overflow handler (running on its own stack) allocates a closure and a
+ * continuation that invokes the closure on a new stack; it cuts to the
+ * recovery continuation.
+ * 
+ * 4) The recovery continuation fills in the closure with a pointer to the
+ * function, all its arguments, and a return continuation.  It then cuts to the
+ * closure-invocation continuation, invoking the function on a new stack.
+ *
+ * 5) The function runs.
+ *
+ * 6) The function returns to the closure-invocation function.
+ *
+ * 7) The closure-invocation function cuts to the return continuation on the
+ * original stack with the return values.
+ *
+ * 8) The return continuation returns those values to the calling function.
+ *
+ * Note that the recovery continuation, the return continuation, and the
+ * closure-invocation function must be customized for the types and numbers of
+ * the arguments and return values.
+ */
+ 
+target byteorder little;
+
+import bits32 malloc;
+import bits32 Cmm_CreateThread;
+
+export bits32 get_overflow_handler_on_new_stack;
+
+get_overflow_handler_on_this_stack(bits32 k) {
+/* get_overflow_handler_on_this_stack cuts to k with one argument:
+ * an overflowhandler continuation.
+ *
+ * k should be on a different stack.  Otherwise, it is an unchecked
+ * runtime error to cut to the overflowhandler, since this frame
+ * would promptly die.
+ */
+  bits32 recovers_to, closure_invoke_function, closure_size;
+
+  cut to k(overflowhandler) also cuts to overflowhandler;
+
+continuation overflowhandler(recovers_to, closure_invoke_function, closure_size):
+/* overflowhandler cuts to recovers_to with
+ *  1) a continuation
+ *  2) a pointer to closure_size bytes of memory.
+ * Cutting to the continuation causes closure_invoke_function to be run on a new
+ * stack with the pointer as the argument.
+ */
+  bits32 newstack;
+  
+  newstack = foreign "C" malloc(4096);
+  k = foreign "C" Cmm_CreateThread(closure_invoke_function, newstack, newstack+closure_size, 4096-closure_size);
+  cut to recovers_to(k, newstack) also cuts to overflowhandler;
+}
+
+get_overflow_handler_on_new_stack() {
+/*
+ * get_overflow_handler_on_new_stack returns an overflowhandler
+ * continuation on a new stack.
+ */
+  bits32 newstack, overflow, overflowhandler;
+
+  newstack = foreign "C" malloc(4096);
+  overflow = foreign "C" Cmm_CreateThread(get_overflow_handler_on_this_stack, k, newstack, 4096);
+  cut to overflow() also cuts to k;
+
+continuation k(overflowhandler):
+  return (overflowhandler);
+}
+

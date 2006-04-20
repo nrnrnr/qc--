@@ -1,0 +1,95 @@
+/*
+ * Daniel J. Peng
+ * overflow-client.c--
+ 
+ * This file shows a client that uses the overflow handler to reinvoke an
+ * overflowed function on a new stack.
+ *
+ * The client must provide:
+ *
+ * A recovery continuation that fills in a closure with the information
+ * needed to reinvoke the function on a new stack.  This usually includes
+ * all the arguments, a pointer to the function, and the return continuation.
+ *
+ * A closure invocation function that takes the closure as an argument
+ * and invokes the function using the arguments in the closure.  Hence, it must
+ * understand the closure layout and the function's calling convention (the
+ * number and types of all its arguments and return values).  Upon the
+ * function's return, it cuts to the return continuation with the return
+ * values as arguments.
+ *
+ * The closure invocation function is also responsible for freeing the
+ * new stack/closure.  Unfortunately, since it runs on the new stack, it
+ * cannot free it while running; it must delay freeing it somehow.
+ * 
+ * The return continuation simply takes its arguments and returns it
+ * to the caller on the old stack.
+ *
+ */
+target byteorder little;
+
+import bits32 init_overflow;
+import bits32 overflowhandler;
+
+import bits32 printf;
+import bits32 free;
+
+export bits32 main;
+
+section "data" {
+  stack_overflowed : bits32[] { 1::bits32 };
+  formatstring  : bits8[] { '%'::bits8, 'd'::bits8, '%'::bits8, 'd'::bits8, '\n'::bits8, 0::bits8 };
+  stack_to_free : bits32[] { 0::bits32 };
+}
+
+invokeclosure_takes3_returns2(bits32 closure) {
+  bits32 x,y, returns_to, f;
+
+  returns_to = bits32[closure];
+  f = bits32[closure+4];
+  x, y = f(bits32[closure+8],bits32[closure+12],bits32[closure+16]);
+
+  /* Delayed stack freeing */
+  if (0 != bits32[stack_to_free]) {
+      foreign "C" free(bits32[stack_to_free]);
+  }
+  bits32[stack_to_free] = closure;
+
+cut to returns_to(x, y);
+}
+
+functionthatoverflows(bits32 a, bits32 b, bits32 c) {
+  bits32 k,closure,x,y;
+
+  if (1 == bits32[stack_overflowed]) {
+    bits32[stack_overflowed] = 0;
+    cut to bits32[overflowhandler](invoke_on_new_stack, invokeclosure_takes3_returns2, 20) also cuts to invoke_on_new_stack;
+  }
+  
+  /* function body*/
+  x = a+b;
+  y = b+c;
+  return (x,y);
+
+continuation invoke_on_new_stack(k, closure):
+  bits32[closure] = return_from_new_stack;
+  bits32[closure+4] = functionthatoverflows;
+  bits32[closure+8] = a;
+  bits32[closure+12] = b;
+  bits32[closure+16] = c;
+  cut to k() also cuts to return_from_new_stack;
+continuation return_from_new_stack(x, y):
+  return(x, y);
+}
+
+main() {
+  bits32 x,y;
+  
+  init_overflow();
+
+  /* Call a function that overflows and printf the results. */
+  x,y = functionthatoverflows(1,2,3);
+  x = foreign "C" printf(formatstring,x,y);
+  return (0);
+}
+

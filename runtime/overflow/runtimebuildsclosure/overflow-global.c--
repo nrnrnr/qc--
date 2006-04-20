@@ -1,0 +1,42 @@
+/*
+ * Daniel J. Peng
+ * overflowhandler-globals.c--
+ *
+ * This implements a global overflow handler (as opposed to a thread-local
+ * overflow handler).
+ *
+ * After calling init_overflow(), overflowhandler will point to a continuation
+ * on a new stack that handles overflow.
+ */
+target byteorder little;
+
+export bits32 overflowhandler;
+export bits32 init_overflow;
+
+import bits32 get_overflow_handler_on_new_stack;
+
+section "data" {
+
+/* overflowhandler is the global continuation for overflow handling.  It runs
+ * on its own dedicated stack.  The continuation is initialized at the
+ * beginning of the program, and it is reused each time a function overflows.
+ *
+ * Ultimately, to guarantee atomicity, each OS thread should have its own
+ * overflow handler, and threads must not be preemptible when they are running
+ * the overflow handler.
+ */
+
+  overflowhandler: align 4; bits32;
+}
+
+
+init_overflow() {
+  /* Initialize overflowhandler global. */
+
+  bits32 k;
+
+  k = get_overflow_handler_on_new_stack();
+  bits32[overflowhandler] = k;
+  return;
+}
+
