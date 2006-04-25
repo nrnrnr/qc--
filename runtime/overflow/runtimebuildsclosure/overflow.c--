@@ -14,18 +14,28 @@
  * size of the closure required to reinvoke the function, and a function that
  * invokes the closure (the closure-invocation function).
  *
- * ....
+ * 3) The overflow handler builds a closure for the function using the runtime
+ *    interface.
+ *
+ * 4) The overflow handler invokes the closure on a new stack using the
+ *    closure-invocation function.
  *
  * 5) The function runs.
  *
  * 6) The function returns to the closure-invocation function.
  *
- * 7) The closure-invocation function cuts to the return continuation on the
- * original stack with the return values.
+ * 7) The closure-invocation function cuts to the freestack continuation to
+ *    free the stack.
  *
- * 8) The return continuation returns those values to the calling function.
+ * 8) The freestack continuation frees the stack and cuts back to the closure-
+ *    invocation function.
+ * 
+ * 9) The closure-invocation function cuts to the return continuation on the
+ *    original stack with the return values.
  *
- * Note that the recovery continuation, the return continuation, and the
+ * 10) The return continuation returns those values to the calling function.
+ *
+ * Note that the return continuation and the
  * closure-invocation function must be customized for the types and numbers of
  * the arguments and return values.
  */
