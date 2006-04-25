@@ -33,6 +33,7 @@
 target byteorder little;
 
 import bits32 malloc;
+import bits32 free;
 import bits32 Cmm_CreateThread;
 
 import bits32 getspan;
@@ -45,25 +46,34 @@ const SpanRets = 2;
 const SpanFP = 3;
 
 get_overflow_handler_on_this_stack(bits32 k) {
-/* get_overflow_handler_on_this_stack cuts to k with one argument:
- * an overflowhandler continuation.
+/* get_overflow_handler_on_this_stack cuts to k with two arguments:
+ * an overflowhandler continuation and a free-stack continuation.
  *
  * k should be on a different stack.  Otherwise, it is an unchecked
  * runtime error to cut to the overflowhandler, since this frame
  * would promptly die.
  */
   bits32 returns_to, closure_invoke_function, closure_size, body;
+  bits32 stack_to_free;
 
-  cut to k(overflowhandler) also cuts to overflowhandler;
+  stack_to_free = 0;
+  cut to k(overflowhandler, freestack) also cuts to overflowhandler
+                                       also cuts to freestack;
 
 continuation overflowhandler(returns_to, closure_invoke_function, body):
-  bits32 newstack, num_args, num_rets, closure, fp, i, temp;
+  bits32 newstack, num_args, num_rets, closure, fp, i, temp, stack;
 
   num_args = foreign "C" getspan(returns_to, SpanArgs);
   num_rets = foreign "C" getspan(returns_to, SpanRets);
   fp = foreign "C" getspan(returns_to, SpanFP);
 
-  closure = foreign "C" malloc(4096);
+  if (0 == stack_to_free) {
+    closure = foreign "C" malloc(4096);
+  } else {
+    closure = stack_to_free;
+    stack_to_free = 0;
+  }
+  
   bits32[closure] = returns_to;
   bits32[closure + 4] = fp;
   
@@ -82,7 +92,14 @@ loop:
 		      + num_args);
   newstack = closure + closure_size;
   k = foreign "C" Cmm_CreateThread(closure_invoke_function, closure, newstack, 4096-closure_size);
-  cut to k() also cuts to overflowhandler;
+  cut to k() also cuts to overflowhandler also cuts to freestack;
+
+continuation freestack(stack, k):
+  if (0 != stack_to_free) {
+    foreign "C" free(stack_to_free);
+  }
+  stack_to_free = stack;
+  cut to k() also cuts to overflowhandler also cuts to freestack;
 }
 
 get_overflow_handler_on_new_stack() {
@@ -90,13 +107,13 @@ get_overflow_handler_on_new_stack() {
  * get_overflow_handler_on_new_stack returns an overflowhandler
  * continuation on a new stack.
  */
-  bits32 newstack, overflow, overflowhandler;
+  bits32 newstack, overflow, overflowhandler, freestack;
 
   newstack = foreign "C" malloc(4096);
   overflow = foreign "C" Cmm_CreateThread(get_overflow_handler_on_this_stack, k, newstack, 4096);
   cut to overflow() also cuts to k;
 
-continuation k(overflowhandler):
-  return (overflowhandler);
+continuation k(overflowhandler, freestack):
+  return (overflowhandler, freestack);
 }
 

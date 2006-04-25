@@ -11,6 +11,7 @@
 target byteorder little;
 
 export bits32 overflowhandler;
+export bits32 freestack;
 export bits32 init_overflow;
 
 import bits32 get_overflow_handler_on_new_stack;
@@ -27,16 +28,18 @@ section "data" {
  */
 
   overflowhandler: align 4; bits32;
+  freestack: align 4; bits32;
 }
 
 
 init_overflow() {
   /* Initialize overflowhandler global. */
 
-  bits32 k;
+  bits32 k1, k2;
 
-  k = get_overflow_handler_on_new_stack();
-  bits32[overflowhandler] = k;
+  k1,k2 = get_overflow_handler_on_new_stack();
+  bits32[overflowhandler] = k1;
+  bits32[freestack] = k2;
   return;
 }
 
