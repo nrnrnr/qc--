@@ -1,0 +1,129 @@
+/*
+ * Daniel J. Peng
+ * overflowhandler.c--
+ *
+ * This file implements an overflow handler in pure C--.
+ *
+ * Here is the high-level overview of what happens when a stack limit check
+ * fails.
+ *
+ * 1) The function checks the stack limit and realizes it has insufficient
+ * stack space.
+ *
+ * 2) It cuts to the overflow handler, passing a recovery continuation, the
+ * size of the closure required to reinvoke the function, and a function that
+ * invokes the closure (the closure-invocation function).
+ *
+ * 3) The overflow handler builds a closure for the function using the runtime
+ *    interface.
+ *
+ * 4) The overflow handler invokes the closure on a new stack using the
+ *    closure-invocation function.
+ *
+ * 5) The function runs.
+ *
+ * 6) The function returns to the closure-invocation function.
+ *
+ * 7) The closure-invocation function cuts to the freestack continuation to
+ *    free the stack.
+ *
+ * 8) The freestack continuation frees the stack and cuts back to the closure-
+ *    invocation function.
+ * 
+ * 9) The closure-invocation function cuts to the return continuation on the
+ *    original stack with the return values.
+ *
+ * 10) The return continuation returns those values to the calling function.
+ *
+ * Note that the return continuation and the
+ * closure-invocation function must be customized for the types and numbers of
+ * the arguments and return values.
+ */
+ 
+target byteorder little;
+
+import bits32 malloc;
+import bits32 free;
+import bits32 Cmm_CreateThread;
+
+import bits32 getspan;
+import bits32 getlocal;
+
+export bits32 get_overflow_handler_on_new_stack;
+
+const SpanArgs = 1;
+const SpanRets = 2;
+const SpanFP = 3;
+
+get_overflow_handler_on_this_stack(bits32 k) {
+/* get_overflow_handler_on_this_stack cuts to k with two arguments:
+ * an overflowhandler continuation and a free-stack continuation.
+ *
+ * k should be on a different stack.  Otherwise, it is an unchecked
+ * runtime error to cut to the overflowhandler, since this frame
+ * would promptly die.
+ */
+  bits32 returns_to, closure_invoke_function, closure_size, body;
+  bits32 stack_to_free;
+
+  stack_to_free = 0;
+  cut to k(overflowhandler, freestack) also cuts to overflowhandler
+                                       also cuts to freestack;
+
+continuation overflowhandler(returns_to, closure_invoke_function, body):
+  bits32 newstack, num_args, num_rets, closure, fp, i, temp, stack;
+
+  num_args = foreign "C" getspan(returns_to, SpanArgs);
+  num_rets = foreign "C" getspan(returns_to, SpanRets);
+  fp = foreign "C" getspan(returns_to, SpanFP);
+
+  if (0 == stack_to_free) {
+    closure = foreign "C" malloc(4096);
+  } else {
+    closure = stack_to_free;
+    stack_to_free = 0;
+  }
+  
+  bits32[closure] = returns_to;
+  bits32[closure + 4] = fp;
+  
+  /* for(i = 0; i < num_args; i++) { closure[2+i] = getlocal(body, i); } */
+  i = 0;
+loop:
+  temp = foreign "C" getlocal(body, i);
+  bits32[closure + 4 * (2 + i)] = bits32[temp];
+  i = i + 1;
+  if (i < num_args) {
+    goto loop;
+  }
+  
+  closure_size = 4 * (1 /* return continuation */
+                      + 1 /* function pointer */
+		      + num_args);
+  newstack = closure + closure_size;
+  k = foreign "C" Cmm_CreateThread(closure_invoke_function, closure, newstack, 4096-closure_size);
+  cut to k() also cuts to overflowhandler also cuts to freestack;
+
+continuation freestack(stack, k):
+  if (0 != stack_to_free) {
+    foreign "C" free(stack_to_free);
+  }
+  stack_to_free = stack;
+  cut to k() also cuts to overflowhandler also cuts to freestack;
+}
+
+get_overflow_handler_on_new_stack() {
+/*
+ * get_overflow_handler_on_new_stack returns an overflowhandler
+ * continuation on a new stack.
+ */
+  bits32 newstack, overflow, overflowhandler, freestack;
+
+  newstack = foreign "C" malloc(4096);
+  overflow = foreign "C" Cmm_CreateThread(get_overflow_handler_on_this_stack, k, newstack, 4096);
+  cut to overflow() also cuts to k;
+
+continuation k(overflowhandler, freestack):
+  return (overflowhandler, freestack);
+}
+
