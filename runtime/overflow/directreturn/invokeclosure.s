@@ -1,10 +1,10 @@
-.globl invokeclosure_takes3_returns2
+.globl invokeclosure_takes5_returns4
 .globl abstract_memory_size
 .section .data
 abstract_memory_size: .word 12
 
 .section .text
-invokeclosure_takes3_returns2:
+invokeclosure_takes5_returns4:
         leal -70(%esp), %esp
 	/* We never return, so we don't need to save the base pointer. */
 
@@ -15,17 +15,23 @@ invokeclosure_takes3_returns2:
 .Lproc_body_start_l13:
         
 	/*Save register. */
-	movl %eax,4(%esp)  
+	movl %eax,8(%esp)  
+        
+	/* prepare for call */
+	leal -16(%esp), %esp
 	
         movl %eax,%ecx
 	/* 0(%ecx) is returns_to.  not used here. */
         movl 16(%ecx),%ebp  /* function (f) */
         movl 20(%ecx),%eax  /* argument 1 (a) */
         movl 24(%ecx),%esi /* argument 2 (b) */
-        movl 28(%ecx),%edi /* argument 3 (c) */
-        leal -8(%esp), %esp
         movl %esi,(%esp)
-        movl %edi,4(%esp)
+        movl 28(%ecx),%esi /* argument 3 (c) */
+        movl %esi,4(%esp)
+        movl 32(%ecx),%esi /* argument 4 (d) */
+        movl %esi,8(%esp)
+        movl 36(%ecx),%esi /* argument 5 (e) */
+        movl %esi,12(%esp)
         call *%ebp
 .Lcall_successor_l17:
 /* save abstract machine state */
@@ -39,24 +45,25 @@ invokeclosure_takes3_returns2:
 	movl %esp,58(%esp)
 
 /* copy overflow block */
-	movl 4(%esp), %eax  /* load closure */
+	movl 8(%esp), %eax  /* load closure */
 	movl 8(%eax), %edi /* dst overflow block */
-	leal 4(%esp), %esi    /* src overflow block */
+	movl %esp, %esi    /* src overflow block */
 	movl 12(%eax), %ecx /* overflow block size */
-	std
+	cld
 	rep movsd
-	
+
+
 /* now we can call functions or whatever */
 
 /* freestack cut */
-        movl 4(%esp),%edx    /* argument 1 (closure) */
+        movl 8(%esp),%edx    /* argument 1 (closure) */
         leal 20(%esp), %ebx /* argument 2 (k) */
         movl freestack,%eax
         movl 4(%eax), %esp; jmp *(%eax)
 .Lcut_entry_l11:
 .Lstart_of_continuation_code_l10:
 /* ok now we're going to modify the saved machine state */
-        movl 4(%esp),%eax  /* loads closure */
+        movl 8(%esp),%eax  /* loads closure */
 	movl 4(%eax),%ecx  /* old SP */
 	movl %ecx,58(%esp) /* replace new SP */
 

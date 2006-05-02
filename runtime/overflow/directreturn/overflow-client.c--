@@ -27,7 +27,7 @@ import bits32 freestack;
 import bits32 printf;
 import bits32 free;
 
-import bits32 invokeclosure_takes3_returns2;
+import bits32 invokeclosure_takes5_returns4;
 export bits32 main;
 
 const SpanArgs = 1;
@@ -41,35 +41,34 @@ section "data" {
 
 section "text" {
 
-span SpanArgs 3 {
-span SpanRets 2 {
+span SpanArgs 5 {
+span SpanRets 4 {
 span SpanFP functionthatoverflows {
 
-functionthatoverflows(bits32 a, bits32 b, bits32 c) {
-  bits32 k,closure,x,y;
+functionthatoverflows(bits32 a, bits32 b, bits32 c, bits32 d, bits32 e) {
 
   if (1 == bits32[stack_overflowed]) {
     bits32[stack_overflowed] = 0;
-    cut to bits32[overflowhandler](invokeclosure_takes3_returns2, body) also cuts to body;
+    cut to bits32[overflowhandler](invokeclosure_takes5_returns4, body) also cuts to body;
   }
   cut to body() also cuts to body;
 continuation body():  
   /* function body*/
-  x = a+b;
-  y = b+c;
-  return (x,y);
+  return (a+b,b+c,c+d,d+e);
 }
 
 }}}
 
 main() {
-  bits32 x,y;
+  bits32 y1,y2,y3,y4;
+  bits32 x;
   
   init_overflow();
 
   /* Call a function that overflows and printf the results. */
-  x,y = functionthatoverflows(1,2,3);
-  x = foreign "C" printf(formatstring,x,y);
+  y1,y2,y3,y4 = functionthatoverflows(1,2,3,4, 5);
+  x = foreign "C" printf(formatstring,y1,y2);
+  x = foreign "C" printf(formatstring,y3,y4);
   return (0);
 }
 
