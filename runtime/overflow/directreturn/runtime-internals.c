@@ -28,21 +28,22 @@ static Cmm_Word *locptr(const Cmm_Activation *a, location l) {
 
 void* getRA(Cmm_Cont* k) {
   Cmm_Activation a = Cmm_YoungestActivation(k);
-  printf("getRA %x\n", (Cmm_Codeptr*)locptr(&a, a.rtdata->return_addressp ));
   printf("getRA %x\n", *(Cmm_Codeptr*)locptr(&a, a.rtdata->return_addressp ));
   return *(Cmm_Codeptr*)locptr(&a, a.rtdata->return_addressp );
 }
 
 void* getSP(Cmm_Cont* k) {
+  /* getSP returns the incoming deallocation point for k's frame. */
   Cmm_Activation a = Cmm_YoungestActivation(k);
   printf("getSP %x\n", (Cmm_Codeptr*)locptr(&a, a.rtdata->inalloc ));
-  printf("getSP %x\n", *(Cmm_Codeptr*)locptr(&a, a.rtdata->inalloc ));
-  return (Cmm_Codeptr*)locptr(&a, a.rtdata->inalloc );  /* XXX HACK */
+  return (Cmm_Codeptr*)locptr(&a, a.rtdata->inalloc );
 }
 
 void* getOverflowBlock(Cmm_Cont* k) {
+  /* getOverflowBlock returns the address of the overflow block for k's frame's
+   * return values.  This is currently the incoming deallocation point, though
+   * I don't see any reason why the two should be necessarily be the same. */
   Cmm_Activation a = Cmm_YoungestActivation(k);
   printf("getOverflowBlock %x\n", (Cmm_Codeptr*)locptr(&a, a.rtdata->inalloc ));
-  printf("getOverflowBlock %x\n", *(Cmm_Codeptr*)locptr(&a, a.rtdata->inalloc ));
-  return (Cmm_Codeptr*)locptr(&a, a.rtdata->inalloc );  /* XXX HACK */
+  return (Cmm_Codeptr*)locptr(&a, a.rtdata->inalloc );
 }

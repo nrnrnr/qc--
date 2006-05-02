@@ -10,10 +10,6 @@
  * 1) The function checks the stack limit and realizes it has insufficient
  * stack space.
  *
- * 2) It cuts to the overflow handler, passing a recovery continuation, the
- * size of the closure required to reinvoke the function, and a function that
- * invokes the closure (the closure-invocation function).
- *
  * 3) The overflow handler builds a closure for the function using the runtime
  *    interface.
  *
@@ -35,9 +31,6 @@
  *
  * 10) The return continuation returns those values to the calling function.
  *
- * Note that the return continuation and the
- * closure-invocation function must be customized for the types and numbers of
- * the arguments and return values.
  */
  
 target byteorder little;
@@ -51,6 +44,8 @@ import bits32 getlocal;
 import bits32 getRA;
 import bits32 getSP;
 import bits32 getOverflowBlock;
+
+import bits32 invokeclosure;
 
 export bits32 get_overflow_handler_on_new_stack;
 
@@ -66,14 +61,14 @@ get_overflow_handler_on_this_stack(bits32 k) {
  * runtime error to cut to the overflowhandler, since this frame
  * would promptly die.
  */
-  bits32 returns_to, closure_invoke_function, closure_size, body;
+  bits32 closure_size, body;
   bits32 stack_to_free;
 
   stack_to_free = 0;
   cut to k(overflowhandler, freestack) also cuts to overflowhandler
                                        also cuts to freestack;
 
-continuation overflowhandler(closure_invoke_function, body):
+continuation overflowhandler(body):
   bits32 newstack, num_args, num_rets, closure, fp, i, temp, stack;
 
   num_args = foreign "C" getspan(body, SpanArgs);
@@ -95,12 +90,14 @@ continuation overflowhandler(closure_invoke_function, body):
   bits32[closure + 8] = temp;
   bits32[closure + 12] = num_rets - 2 /* eax and edx */; /* overflow block size */
   bits32[closure + 16] = fp;
+  bits32[closure + 20] = num_args;
+  bits32[closure + 24] = num_rets;
   
   /* for(i = 0; i < num_args; i++) { closure[2+i] = getlocal(body, i); } */
   i = 0;
 loop:
   temp = foreign "C" getlocal(body, i);
-  bits32[closure + 4 * (5 + i)] = bits32[temp];
+  bits32[closure + 4 * (7 + i)] = bits32[temp];
   i = i + 1;
   if (i < num_args) {
     goto loop;
@@ -114,7 +111,7 @@ loop:
 		      + num_args)
 		; 
   newstack = closure + closure_size;
-  k = foreign "C" Cmm_CreateThread(closure_invoke_function, closure, newstack, 4096-closure_size);
+  k = foreign "C" Cmm_CreateThread(invokeclosure, closure, newstack, 4096-closure_size);
   cut to k() also cuts to overflowhandler also cuts to freestack;
 
 continuation freestack(stack, k):
