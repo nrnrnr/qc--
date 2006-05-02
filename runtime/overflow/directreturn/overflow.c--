@@ -48,6 +48,9 @@ import bits32 Cmm_CreateThread;
 
 import bits32 getspan;
 import bits32 getlocal;
+import bits32 getRA;
+import bits32 getSP;
+import bits32 getOverflowBlock;
 
 export bits32 get_overflow_handler_on_new_stack;
 
@@ -70,12 +73,12 @@ get_overflow_handler_on_this_stack(bits32 k) {
   cut to k(overflowhandler, freestack) also cuts to overflowhandler
                                        also cuts to freestack;
 
-continuation overflowhandler(returns_to, closure_invoke_function, body):
+continuation overflowhandler(closure_invoke_function, body):
   bits32 newstack, num_args, num_rets, closure, fp, i, temp, stack;
 
-  num_args = foreign "C" getspan(returns_to, SpanArgs);
-  num_rets = foreign "C" getspan(returns_to, SpanRets);
-  fp = foreign "C" getspan(returns_to, SpanFP);
+  num_args = foreign "C" getspan(body, SpanArgs);
+  num_rets = foreign "C" getspan(body, SpanRets);
+  fp = foreign "C" getspan(body, SpanFP);
 
   if (0 == stack_to_free) {
     closure = foreign "C" malloc(4096);
@@ -84,22 +87,32 @@ continuation overflowhandler(returns_to, closure_invoke_function, body):
     stack_to_free = 0;
   }
   
-  bits32[closure] = returns_to;
-  bits32[closure + 4] = fp;
+  temp = foreign "C" getRA(body);
+  bits32[closure] = temp;
+  temp = foreign "C" getSP(body);
+  bits32[closure + 4] = temp;
+  temp = foreign "C" getOverflowBlock(body);
+  bits32[closure + 8] = temp;
+  bits32[closure + 12] = 5; /* overflow block size */
+  bits32[closure + 16] = fp;
   
   /* for(i = 0; i < num_args; i++) { closure[2+i] = getlocal(body, i); } */
   i = 0;
 loop:
   temp = foreign "C" getlocal(body, i);
-  bits32[closure + 4 * (2 + i)] = bits32[temp];
+  bits32[closure + 4 * (5 + i)] = bits32[temp];
   i = i + 1;
   if (i < num_args) {
     goto loop;
   }
   
-  closure_size = 4 * (1 /* return continuation */
+  closure_size = 4 * (1 /* RA */
+                      + 1 /* SP */
+		      + 1 /* overflow block */
+		      + 1 /* overflow block size */
                       + 1 /* function pointer */
-		      + num_args);
+		      + num_args)
+		; 
   newstack = closure + closure_size;
   k = foreign "C" Cmm_CreateThread(closure_invoke_function, closure, newstack, 4096-closure_size);
   cut to k() also cuts to overflowhandler also cuts to freestack;
