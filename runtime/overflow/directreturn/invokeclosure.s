@@ -15,7 +15,7 @@ invokeclosure_takes3_returns2:
 .Lproc_body_start_l13:
         
 	/*Save register. */
-	movl %eax,(%esp)  
+	movl %eax,4(%esp)  
 	
         movl %eax,%ecx
 	/* 0(%ecx) is returns_to.  not used here. */
@@ -39,7 +39,7 @@ invokeclosure_takes3_returns2:
 	movl %esp,58(%esp)
 
 /* copy overflow block */
-	movl (%esp), %eax  /* load closure */
+	movl 4(%esp), %eax  /* load closure */
 	movl 8(%eax), %edi /* dst overflow block */
 	leal 4(%esp), %esi    /* src overflow block */
 	movl 12(%eax), %ecx /* overflow block size */
@@ -49,14 +49,14 @@ invokeclosure_takes3_returns2:
 /* now we can call functions or whatever */
 
 /* freestack cut */
-        movl (%esp),%edx    /* argument 1 (closure) */
+        movl 4(%esp),%edx    /* argument 1 (closure) */
         leal 20(%esp), %ebx /* argument 2 (k) */
         movl freestack,%eax
         movl 4(%eax), %esp; jmp *(%eax)
 .Lcut_entry_l11:
 .Lstart_of_continuation_code_l10:
 /* ok now we're going to modify the saved machine state */
-        movl (%esp),%eax  /* loads closure */
+        movl 4(%esp),%eax  /* loads closure */
 	movl 4(%eax),%ecx  /* old SP */
 	movl %ecx,58(%esp) /* replace new SP */
 
