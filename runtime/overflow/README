@@ -1,0 +1,30 @@
+This directory contains demos of various overflow handlers.  Functions do limit
+checks to make sure they have enough stack space.  When an overflow limit check
+fails, we want to reinvoke the function on a new stack.
+
+Here is the evolution of the overflow handler:
+
+clientbuildsclosure/:
+
+	The client builds a closure for the overflowed function and supplies a
+	function that invokes the closure.  The overflow handler invokes that
+	function on a new stack.  Upon return, the closure-invocation function
+	cuts back to the original, overflowed frame with the return values.
+	The original, overflowed frame then returns those values to its caller.
+
+runtimebuildsclosure/:
+
+	The runtime builds the closure using the runtime local variable interface,
+	instead of the client.
+
+directreturn/:
+	
+	The closure-invocation function returns directly to the overflowed frame's
+	caller.  Moreover, the closure-invocation function is now generic and works
+	for all C-- calling convention functions.  So, the closure-invocation
+	function can be hidden behind the abstraction barrier.  Unfortunately, this
+	means it must be written in assembly.
+
+USAGE:
+	mk
+	./overflow
