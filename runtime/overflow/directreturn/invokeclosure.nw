@@ -1,0 +1,212 @@
+\section{Closure Invocation Function}
+
+@
+<<invokeclosure.s>>=
+.globl invokeclosure
+
+.section .text
+
+# Calling convention.
+.set numargs_passed_in_registers, 1
+
+<<definition of the closure structure>>
+<<definition of invokeclosure's frame structure>>
+<<definition of the continuation structure>>
+
+<<invokeclosure function implementation>>
+@
+\subsection{Interface}
+
+After a function [[f]] overflows, it cuts to the overflow handler.  The
+overflow handler builds a closure representing [[f]] and then calls the closure invocation
+function, [[invokeclosure]], on a new stack.  [[invokeclosure]] is responsible
+for reinvoking [[f]] from the closure, freeing the new stack, and returning
+[[f]]'s return values to [[f]]'s caller on the old stack.
+
+We need a different [[invokeclosure]] for each calling convention.
+[[invokeclosure]] must understand how to reinvoke [[f]] given the arguments in
+the closure.  It must know how to copy [[f]]'s overflow block back to [[f]]'s
+caller on the old stack.  Finally, it must also know what scratch register is
+available for it to save and restore machine state.
+
+This implementation of [[invokeclosure]] assumes the {\PAL} calling convention
+and that all arguments are 32 bits.
+
+To do all this, [[invokeclosure]] takes a pointer to a closure struct as its
+first argument (in [[%eax]]), which contains information beyond simply [[f]]
+and its arguments.  I describe this struct next:
+
+@
+<<definition of the closure structure>>=
+# Offsets within the closure struct.
+.set closure_ra_offset, 0
+.set closure_sp_offset, 4
+.set closure_overflowblock_offset, 8
+.set closure_overflowblocksize_offset, 12
+.set closure_function_offset, 16
+.set closure_numargs_offset, 20
+.set closure_numrets_offset, 24
+.set closure_args_offset, 28
+@
+
+Here is an equivalent pseudo-C definition for the closure struct:
+\begin{quote}
+[[
+foreign "C--" void invokeclosure(struct closure c);
+struct closure {
+  void *ra, *sp;
+  void *overflowblock;
+  int overflowblocksize;
+  void* function;
+  int numargs;
+  int numrets;
+  bits32 args[0];
+}
+]]
+\end{quote}
+\begin{description}
+\item[ra and sp] are the program counter and stack
+pointer that [[f]] on the old stack would have restored upon return.  [[sp]],
+in particular, is [[f]]'s incoming deallocation point.
+
+\item[overflowblock and overflowblocksize] 
+describe the overflow block where [[f]] would place its overflow return values
+on the old stack.  [[overflowblocksize]] describes its size in bytes.  For the {\PAL}
+calling convention, [[overflowblock]] is the same as [[sp]], but this will differ
+for different calling conventions.
+
+\item[function] gives the function pointer for [[f]].
+
+\item[numargs] gives the number of arguments for [[f]].  This is used to
+compute the number of overflow arguments that must be copied and passed to [[f]].
+
+\item[numrets] gives the number of return values for [[f]].  This is
+presently unused, but it is related to [[overflowblocksize]].
+
+\item[args] is an array of arguments for [[f]].  The length of the array
+is given by [[numargs]].
+\end{description}
+@
+\subsection{[[invokeclosure]] function implementation}
+
+<<invokeclosure function implementation>>=
+invokeclosure:
+        leal -70(%esp), %esp
+	# We never return, so we don't need to save the base pointer.
+
+	<<Initialize continuations.>>
+	<<Copy overflow argument block out of closure.>>
+	<<Copy register argument(s) into registers.>>
+	<<Call function.>>
+	<<Save machine state.>>
+	<<Copy overflow return block back to original stack.>>
+
+	/* We've now saved all the state we need, so we can do anything we want. */
+	<<Free the stack.>>
+
+	<<Modify the stored machine state to return to original caller.>>
+	<<Restore machine state.>>
+	<<Return to original caller.>>
+@
+<<Initialize continuations.>>=
+        leal .Lcut_entry_l11,%ebx /* we don't save EBX before use because we never return. */
+        movl %ebx,(completion_continuation_offset + continuation_pc_offset)(%esp)
+        movl %esp,(completion_continuation_offset + continuation_sp_offset)(%esp)
+@
+
+<<Copy overflow argument block out of closure.>>=
+	# Save closure in various places....
+	movl %eax,closure_offset(%esp)  
+        movl %eax,%ebx
+
+	#  Check if we need overflow argument space
+	movl closure_numargs_offset(%ebx), %ecx
+	cmpl $numargs_passed_in_registers, %ecx 
+	jl .Ldone_overflow_arguments
+
+	#  Allocate overflow argument space
+	subl $numargs_passed_in_registers, %ecx
+	movl $0, %eax
+	leal (%eax, %ecx, 4), %eax
+	subl %eax, %esp
+
+	# Copy overflow arguments into overflow argument block
+	movl %esp, %edi
+	leal (closure_args_offset+numargs_passed_in_registers*4)(%ebx), %esi
+	cld
+	rep movsd
+	
+.Ldone_overflow_arguments:
+@
+Register argument.  If the function takes no arguments, this
+dereferences [[closure_args_offset(%ebx)]], so make sure this is
+valid memory.
+<<Copy register argument(s) into registers.>>=
+        movl closure_args_offset     (%ebx),%eax
+@
+<<Call function.>>=
+        movl closure_function_offset (%ebx),%ebp
+        call *%ebp
+@
+<<Save machine state.>>=
+	movl %eax,(absmem_offset +  0)(%esp)
+	movl %ebx,(absmem_offset +  4)(%esp)
+#	movl %ecx,(absmem_offset +  8)(%esp) # WE DON'T SAVE ECX.
+	movl %edx,(absmem_offset + 12)(%esp)
+	movl %esi,(absmem_offset + 16)(%esp)
+	movl %edi,(absmem_offset + 20)(%esp)
+	movl %ebp,(absmem_offset + 24)(%esp)
+	movl %esp,(absmem_offset + 28)(%esp)
+@
+
+<<Copy overflow return block back to original stack.>>=
+	movl closure_offset(%esp), %eax                   # load closure
+	movl closure_overflowblock_offset(%eax), %edi     # dst overflow block
+	movl %esp, %esi                                   # src overflow block
+	movl closure_overflowblocksize_offset(%eax), %ecx # overflow block size
+	cld
+	rep movsd
+@
+
+<<Free the stack.>>=
+        movl closure_offset(%esp),%edx                  # argument 1 (closure)
+        leal completion_continuation_offset(%esp), %ebx # argument 2 (k)
+        movl freestack,%eax
+        movl continuation_sp_offset(%eax), %esp; jmp *(%eax)
+.Lcut_entry_l11:
+.Lstart_of_continuation_code_l10:
+@
+
+<<Modify the stored machine state to return to original caller.>>=
+        movl closure_offset(%esp), %eax         # loads closure
+	movl closure_sp_offset(%eax), %ecx      # old SP
+	movl %ecx, (absmem_offset+28)(%esp)     # replace new SP
+
+	movl closure_ra_offset(%eax), %ecx # old RA.  we keep this register.
+	
+<<Restore machine state.>>=
+# restore machine state
+	movl (absmem_offset +  0)(%esp), %eax
+	movl (absmem_offset +  4)(%esp), %ebx
+#	movl (absmem_offset +  8)(%esp), %ecx # WE DON'T SAVE ECX.
+	movl (absmem_offset + 12)(%esp), %edx
+	movl (absmem_offset + 16)(%esp), %esi
+	movl (absmem_offset + 20)(%esp), %edi
+	movl (absmem_offset + 24)(%esp), %ebp
+	movl (absmem_offset + 28)(%esp), %esp
+
+<<Return to original caller.>>=
+	jmp *%ecx
+@
+\subsection{Internal data structure definitions}
+<<definition of invokeclosure's frame structure>>=
+# Offsets from stack pointer.
+.set absmem_offset, 30
+.set completion_continuation_offset, 20
+.set closure_offset, 8
+@
+<<definition of the continuation structure>>=
+# Offsets within continuations.
+.set continuation_pc_offset, 0
+.set continuation_sp_offset, 4
+@
