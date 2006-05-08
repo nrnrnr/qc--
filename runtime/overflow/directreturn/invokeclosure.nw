@@ -71,7 +71,7 @@ in particular, is [[f]]'s incoming deallocation point.
 
 \item[overflowblock and overflowblocksize] 
 describe the overflow block where [[f]] would place its overflow return values
-on the old stack.  [[overflowblocksize]] describes its size in bytes.  For the {\PAL}
+on the old stack.  [[overflowblocksize]] describes its size in words.  For the {\PAL}
 calling convention, [[overflowblock]] is the same as [[sp]], but this will differ
 for different calling conventions.
 
@@ -91,43 +91,99 @@ is given by [[numargs]].
 
 <<invokeclosure function implementation>>=
 invokeclosure:
-        leal -70(%esp), %esp
-	# We never return, so we don't need to save the base pointer.
+	<<Lay out stack.>>
 
-	<<Initialize continuations.>>
-	<<Copy overflow argument block out of closure.>>
+	<<Allocate space for overflow return value block.>>
+	<<Allocate and copy overflow argument block out of closure.>>
 	<<Copy register argument(s) into registers.>>
 	<<Call function.>>
 	<<Save machine state.>>
 	<<Copy overflow return block back to original stack.>>
+	<<Deallocate space for overflow return value block.>>
 
 	/* We've now saved all the state we need, so we can do anything we want. */
 	<<Free the stack.>>
+	<<Restore callee-save registers from [[f]]'s frame on the old stack.>>
 
 	<<Modify the stored machine state to return to original caller.>>
 	<<Restore machine state.>>
 	<<Return to original caller.>>
 @
-<<Initialize continuations.>>=
-        leal .Lcut_entry_l11,%ebx /* we don't save EBX before use because we never return. */
-        movl %ebx,(completion_continuation_offset + continuation_pc_offset)(%esp)
-        movl %esp,(completion_continuation_offset + continuation_sp_offset)(%esp)
+
+We allocate an 11-word frame.  Two words for the completion continuation,
+eight words to save the machine state, and one word to save the argument.
+See [[definition of invokeclosure's frame structure]] for the actual
+frame layout.
+
+Since we need to stack-allocate space for [[f]]'s overflow return
+block and its size is only known at runtime, we will need to maintain
+a base pointer, [[%ebp]].  Local variables are accessed as positive
+offsets to [[%ebp]].
+
+Since we never return, we don't save [[%ebp]] and other callee-save registers
+before use.
+
+<<Lay out stack.>>=
+        leal -40(%esp), %ebp
+	movl %esp, %ebp
+
+	<<Initialize continuations.>>
+	<<Save argument to stack.>>
 @
-
-<<Copy overflow argument block out of closure.>>=
-	# Save closure in various places....
-	movl %eax,closure_offset(%esp)  
+<<Initialize continuations.>>=
+        leal .Lcompletion_continuation,%ebx
+        movl %ebx,(completion_continuation_offset + continuation_pc_offset)(%ebp)
+        movl %esp,(completion_continuation_offset + continuation_sp_offset)(%ebp)
+@
+<<Save argument to stack.>>=
+	movl %eax,closure_offset(%ebp)
         movl %eax,%ebx
+@
+At this point, [[%ebp]] and [[%esp]] are equal, and the stack looks like
+[[
+---------------
+|  Local      |
+|  Variables  |
+|             |    <------- %ebp
+---------------
+]]
+In these diagrams, stacks grow downwards, and addresses increase upwards.
 
-	#  Check if we need overflow argument space
+We next allocate space for the overflow return block.
+<<Allocate space for overflow return value block.>>=
+	movl closure_overflowblocksize_offset(%eax), %ecx # overflow block size in words
+	shll $2, %ecx
+	subl %ecx, %esp
+@
+Now, the stack looks like this:
+[[
+---------------
+|  Local      |
+|  Variables  |
+|             |    <------- %ebp
+---------------
+|             |
+| Overflow    |
+| Return      |
+| Block       |
+|             |    <-------- %esp
+---------------
+]]
+
+We next allocate space for the overflow argument block.
+<<Allocate and copy overflow argument block out of closure.>>=
+
+	#  Check if we need overflow argument space.  If not, skip this chunk.
+	#  Note that %ecx remains live until the rep movsd instruction; it
+	#  contains the count of the number of words to copy.
 	movl closure_numargs_offset(%ebx), %ecx
 	cmpl $numargs_passed_in_registers, %ecx 
 	jl .Ldone_overflow_arguments
 
 	#  Allocate overflow argument space
 	subl $numargs_passed_in_registers, %ecx
-	movl $0, %eax
-	leal (%eax, %ecx, 4), %eax
+	movl %ecx, %eax
+	shl $2, %eax
 	subl %eax, %esp
 
 	# Copy overflow arguments into overflow argument block
@@ -138,46 +194,122 @@ invokeclosure:
 	
 .Ldone_overflow_arguments:
 @
-Register argument.  If the function takes no arguments, this
-dereferences [[closure_args_offset(%ebx)]], so make sure this is
-valid memory.
+Now, the stack looks like this:
+[[
+---------------
+|  Local      |
+|  Variables  |
+|             |    <------- %ebp
+---------------
+|             |
+| Overflow    |
+| Return      |
+| Block       |
+|             |
+---------------
+|             |
+| Overflow    |
+| Argument    |
+| Block       |
+|             |    <-------- %esp
+---------------
+]]
+
+Next, we put the register argument into [[%eax]].  If the function takes no
+arguments, this dereferences [[closure_args_offset(%ebx)]], so make sure this
+is valid memory.
+
 <<Copy register argument(s) into registers.>>=
         movl closure_args_offset     (%ebx),%eax
 @
+Now, we finally call the function:
 <<Call function.>>=
-        movl closure_function_offset (%ebx),%ebp
-        call *%ebp
+        movl closure_function_offset (%ebx),%ebx
+        call *%ebx
 @
+In the {\PAL} calling convention, the callee is responsible for deallocating the overflow argument block.  Hence, the stack now looks like this:
+[[
+---------------
+|  Local      |
+|  Variables  |
+|             |    <------- %ebp
+---------------
+|             |
+| Overflow    |
+| Return      |
+| Block       |
+|             |    <-------- %esp
+---------------
+]]
+
+Next, we save the machine state.  We actually only need to save result
+registers [[%eax]] and [[%edx]].  We don't need to save callee-save
+(nonvolatile) registers because we don't use them, and our caller doesn't need
+us to save them because we never return.  We don't need to save volatile
+registers because, well, they're volatile.
+
+Here is a table of how the registers are used in the {\PAL} calling convention:
+
+\begin{tabular}{ll}
+[[%eax]] & volatile but used in the {\PAL} calling convention for the first result and first argument\\
+[[%ebx]] & nonvolatile\\
+[[%ecx]] & volatile\\
+[[%edx]] & volatile but used in the {\PAL} calling convention for the second result \\
+[[%esi]] & nonvolatile \\
+[[%edi]] & nonvolatile\\
+[[%ebp]] & nonvolatile\\
+[[%esp]] & nonvolatile and special \\
+\end{tabular}
 <<Save machine state.>>=
-	movl %eax,(absmem_offset +  0)(%esp)
-	movl %ebx,(absmem_offset +  4)(%esp)
-#	movl %ecx,(absmem_offset +  8)(%esp) # WE DON'T SAVE ECX.
-	movl %edx,(absmem_offset + 12)(%esp)
-	movl %esi,(absmem_offset + 16)(%esp)
-	movl %edi,(absmem_offset + 20)(%esp)
-	movl %ebp,(absmem_offset + 24)(%esp)
-	movl %esp,(absmem_offset + 28)(%esp)
+	movl %eax,(absmem_offset +  0)(%ebp)
+#	movl %ebx,(absmem_offset +  4)(%ebp)
+#	movl %ecx,(absmem_offset +  8)(%ebp)
+	movl %edx,(absmem_offset + 12)(%ebp)
+#	movl %esi,(absmem_offset + 16)(%ebp)
+#	movl %edi,(absmem_offset + 20)(%ebp)
+#	movl %ebp,(absmem_offset + 24)(%ebp)
+#	movl %esp,(absmem_offset + 28)(%ebp)
 @
 
 <<Copy overflow return block back to original stack.>>=
-	movl closure_offset(%esp), %eax                   # load closure
+	movl closure_offset(%ebp), %eax                   # load closure
 	movl closure_overflowblock_offset(%eax), %edi     # dst overflow block
 	movl %esp, %esi                                   # src overflow block
 	movl closure_overflowblocksize_offset(%eax), %ecx # overflow block size
 	cld
 	rep movsd
 @
+<<Deallocate space for overflow return value block.>>=
+	movl %ebp, %esp
+	# This is actually a no-op since the cut to completion_continuation will restore [[%esp]].
+@
+At this point, [[%ebp]] and [[%esp]] are equal again, and the stack looks like
+[[
+---------------
+|  Local      |
+|  Variables  |
+|             |    <------- %ebp
+---------------
+]]
 
+Now, we're going to [[cut to freestack(closure, completion_continuation) also cuts to completion_continuation]]:
 <<Free the stack.>>=
-        movl closure_offset(%esp),%edx                  # argument 1 (closure)
-        leal completion_continuation_offset(%esp), %ebx # argument 2 (k)
+        movl closure_offset(%ebp),%edx                  # argument 1 (closure)
+        leal completion_continuation_offset(%ebp), %ebx # argument 2 (k)
         movl freestack,%eax
         movl continuation_sp_offset(%eax), %esp; jmp *(%eax)
-.Lcut_entry_l11:
-.Lstart_of_continuation_code_l10:
+@
+
+Now, this cut away and back kills all callee-save registers; in particular, it kills
+[[%ebp]], so we no longer have a base pointer.  But since [[%ebp]] is equal to
+[[%esp]] now, anyway, we just use [[%esp]] instead.
+
+<<Restore callee-save registers from [[f]]'s frame on the old stack.>>=
+# NOT YET IMPLEMENTED.
 @
 
 <<Modify the stored machine state to return to original caller.>>=
+.Lcompletion_continuation:
         movl closure_offset(%esp), %eax         # loads closure
 	movl closure_sp_offset(%eax), %ecx      # old SP
 	movl %ecx, (absmem_offset+28)(%esp)     # replace new SP
@@ -187,12 +319,12 @@ valid memory.
 <<Restore machine state.>>=
 # restore machine state
 	movl (absmem_offset +  0)(%esp), %eax
-	movl (absmem_offset +  4)(%esp), %ebx
+#	movl (absmem_offset +  4)(%esp), %ebx
 #	movl (absmem_offset +  8)(%esp), %ecx # WE DON'T SAVE ECX.
 	movl (absmem_offset + 12)(%esp), %edx
-	movl (absmem_offset + 16)(%esp), %esi
-	movl (absmem_offset + 20)(%esp), %edi
-	movl (absmem_offset + 24)(%esp), %ebp
+#	movl (absmem_offset + 16)(%esp), %esi
+#	movl (absmem_offset + 20)(%esp), %edi
+#	movl (absmem_offset + 24)(%esp), %ebp
 	movl (absmem_offset + 28)(%esp), %esp
 
 <<Return to original caller.>>=
@@ -200,10 +332,10 @@ valid memory.
 @
 \subsection{Internal data structure definitions}
 <<definition of invokeclosure's frame structure>>=
-# Offsets from stack pointer.
-.set absmem_offset, 30
-.set completion_continuation_offset, 20
-.set closure_offset, 8
+# Offsets from base pointer %ebp.
+.set absmem_offset, 12
+.set completion_continuation_offset, 4
+.set closure_offset, 0
 @
 <<definition of the continuation structure>>=
 # Offsets within continuations.
