@@ -92,12 +92,13 @@ continuation overflowhandler(body):
   bits32[closure + 16] = fp;
   bits32[closure + 20] = num_args;
   bits32[closure + 24] = num_rets;
-  
+  bits32[closure + 28] = body;
+ 
   /* for(i = 0; i < num_args; i++) { closure[2+i] = getlocal(body, i); } */
   i = 0;
 loop:
   temp = foreign "C" getlocal(body, i);
-  bits32[closure + 4 * (7 + i)] = bits32[temp];
+  bits32[closure + 4 * (8 + i)] = bits32[temp];
   i = i + 1;
   if (i < num_args) {
     goto loop;
@@ -108,6 +109,9 @@ loop:
 		      + 1 /* overflow block */
 		      + 1 /* overflow block size */
                       + 1 /* function pointer */
+		      + 1 /* num_args */
+		      + 1 /* num_rets */
+		      + 1 /* body continuation */
 		      + num_args)
 		; 
   newstack = closure + closure_size;

@@ -46,7 +46,8 @@ and its arguments.  I describe this struct next:
 .set closure_function_offset, 16
 .set closure_numargs_offset, 20
 .set closure_numrets_offset, 24
-.set closure_args_offset, 28
+.set closure_body_continuation_offset, 28
+.set closure_args_offset, 32
 @
 
 Here is an equivalent pseudo-C definition for the closure struct:
@@ -60,6 +61,7 @@ struct closure {
   void* function;
   int numargs;
   int numrets;
+  Cmm_Cont* body;
   bits32 args[0];
 }
 ]]
@@ -85,6 +87,8 @@ presently unused, but it is related to [[overflowblocksize]].
 
 \item[args] is an array of arguments for [[f]].  The length of the array
 is given by [[numargs]].
+
+\item[body] is a continuation representing the body of [[f]] after the continuation.  We give [[body]] to the runtime stack-walking interface to extract information about where callee-save registers are stored.
 \end{description}
 @
 \subsection{[[invokeclosure]] function implementation}
@@ -144,7 +148,7 @@ At this point, [[%ebp]] and [[%esp]] are equal, and the stack looks like
 ---------------
 |  Local      |
 |  Variables  |
-|             |    <------- %ebp
+|             |    <------- %ebp, %esp
 ---------------
 ]]
 In these diagrams, stacks grow downwards, and addresses increase upwards.
@@ -262,12 +266,12 @@ Here is a table of how the registers are used in the {\PAL} calling convention:
 \end{tabular}
 <<Save machine state.>>=
 	movl %eax,(absmem_offset +  0)(%ebp)
-#	movl %ebx,(absmem_offset +  4)(%ebp)
-#	movl %ecx,(absmem_offset +  8)(%ebp)
-	movl %edx,(absmem_offset + 12)(%ebp)
-#	movl %esi,(absmem_offset + 16)(%ebp)
-#	movl %edi,(absmem_offset + 20)(%ebp)
-#	movl %ebp,(absmem_offset + 24)(%ebp)
+#	movl %ecx,(absmem_offset +  4)(%ebp)
+	movl %edx,(absmem_offset +  8)(%ebp)
+#	movl %ebx,(absmem_offset + 12)(%ebp)
+#	movl %ebp,(absmem_offset + 16)(%ebp)
+#	movl %esi,(absmem_offset + 20)(%ebp)
+#	movl %edi,(absmem_offset + 24)(%ebp)
 #	movl %esp,(absmem_offset + 28)(%ebp)
 @
 
@@ -288,7 +292,7 @@ At this point, [[%ebp]] and [[%esp]] are equal again, and the stack looks like
 ---------------
 |  Local      |
 |  Variables  |
-|             |    <------- %ebp
+|             |    <------- %ebp, %esp
 ---------------
 ]]
 
@@ -298,18 +302,35 @@ Now, we're going to [[cut to freestack(closure, completion_continuation) also cu
         leal completion_continuation_offset(%ebp), %ebx # argument 2 (k)
         movl freestack,%eax
         movl continuation_sp_offset(%eax), %esp; jmp *(%eax)
+.Lcompletion_continuation:
 @
 
 Now, this cut away and back kills all callee-save registers; in particular, it kills
 [[%ebp]], so we no longer have a base pointer.  But since [[%ebp]] is equal to
 [[%esp]] now, anyway, we just use [[%esp]] instead.
 
+Next, we must restore callee-save registers from [[f]]'s frame on the old
+stack.  We call a C function to restore these into the saved abstract
+machine state.  The signature is:
+[[
+struct absmem {
+  Cmm_Word eax, ecx, edx, ebx, ebp, esi, edi, esp;
+};
+
+void get_callee_save_registers(struct absmem* state, Cmm_Cont* body);
+]]
+
 <<Restore callee-save registers from [[f]]'s frame on the old stack.>>=
-# NOT YET IMPLEMENTED.
+	movl closure_offset(%esp), %eax
+        movl closure_body_continuation_offset(%eax), %eax
+	leal absmem_offset(%esp), %ecx
+	pushl %eax
+	pushl %ecx
+	call get_callee_save_registers
+	add $8, %esp
 @
 
 <<Modify the stored machine state to return to original caller.>>=
-.Lcompletion_continuation:
         movl closure_offset(%esp), %eax         # loads closure
 	movl closure_sp_offset(%eax), %ecx      # old SP
 	movl %ecx, (absmem_offset+28)(%esp)     # replace new SP
@@ -319,12 +340,12 @@ Now, this cut away and back kills all callee-save registers; in particular, it k
 <<Restore machine state.>>=
 # restore machine state
 	movl (absmem_offset +  0)(%esp), %eax
-#	movl (absmem_offset +  4)(%esp), %ebx
-#	movl (absmem_offset +  8)(%esp), %ecx # WE DON'T SAVE ECX.
-	movl (absmem_offset + 12)(%esp), %edx
-#	movl (absmem_offset + 16)(%esp), %esi
-#	movl (absmem_offset + 20)(%esp), %edi
-#	movl (absmem_offset + 24)(%esp), %ebp
+#	movl (absmem_offset +  4)(%esp), %ecx
+	movl (absmem_offset +  8)(%esp), %edx
+	movl (absmem_offset + 12)(%esp), %ebx
+	movl (absmem_offset + 16)(%esp), %ebp
+	movl (absmem_offset + 20)(%esp), %esi
+	movl (absmem_offset + 24)(%esp), %edi
 	movl (absmem_offset + 28)(%esp), %esp
 
 <<Return to original caller.>>=
