@@ -1,0 +1,125 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% vim: sw=4 ts=8 et:
+
+% Grades     ::=    "%%Grades:" Quality Importance Urgency
+% Quality    ::=    A|B|C|D|E
+% Importance ::=    Central|Subsystem|Peripheral
+% Urgency    ::=    Immediate|Soon|Later
+%
+% Please add grades for this module below. The line must start with % "%%".
+% 
+
+%%Grades: 
+
+% ------------------------------------------------------------------ 
+\section{Boxing}
+% ------------------------------------------------------------------ 
+Sometimes we need to store data in a context where an \rtl\ is expected.
+In these cases, we can enclose the fragment within an \rtl~$box$.
+A [[BOXER]] is a module that provides embedding ([[box]]) and projection
+  ([[unbox]]) functions for a particular type of data.
+<<BOXER type>>=
+module type BOXER = sig
+  type t
+  val box   : t -> rtl
+  val unbox : rtl -> t (* possible assertion failure *)
+end
+@
+We define a boxer for expressions and one for a list of expressions.
+We also have a boxer for guards.
+Even though a guard is just an \rtl\ expression, we treat this case specially because
+  some parts of the compiler make a distinction, such as the widener.
+We also provide a functor that combines two boxers;
+  there is a subtle restriction on the first argument to the functor: it may not
+  box values into an \rtl\ with multiple effects.
+The current implementation of [[ExpList]] is not a suitable first argument to
+  [[Combine]].
+THIS SHOULD BE FIXED.
+Finally, we have a boxing module that pairs a guard and an effect.
+<<box.mli>>=
+type rtl = Rtl.rtl
+<<BOXER type>>
+module Exp      : BOXER with type t = Rtl.exp
+module ExpList  : BOXER with type t = Rtl.exp list
+module Guard    : BOXER with type t = Rtl.exp
+module Combine (Box1 : BOXER) (Box2 : BOXER) : BOXER with type t = Box1.t * Box2.t
+module GuardExp : BOXER with type t = Rtl.exp * Rtl.exp
+@
+We provide a function [[assert_not_boxed]] that raises an assertion failure on any
+  \rtl\ that is the image of a boxing function.
+<<box.mli>>=
+val assert_not_boxed : rtl -> unit
+@
+We embed [[exp]]s in a store instruction.
+<<exp boxer>>=
+type t = R.exp
+let box e = R.store (R.reg (x, 0, (R.C 1))) e 32
+let unbox r = match Dn.rtl r with
+  | RP.Rtl [(RP.Const (RP.Bool true),
+             RP.Store (RP.Reg (('\000',_,_), _, _), e, 32))] -> Up.exp e
+  | _ -> assert false
+@
+We embed [[exp]]s in a parallel store instruction.
+<<explist boxer>>=
+type t = Rtl.exp list
+let box es = R.par (List.map Exp.box es)
+let unbox r = match Dn.rtl r with
+  | RP.Rtl gs -> List.map (fun g -> Exp.unbox (Up.rtl (RP.Rtl [g]))) gs
+@
+Some compiler components distinguish between expressions found as guards and
+  expressions found on the right-hand-side of an \rtl.
+Hence, we have a separate boxer for guards.
+<<guard boxer>>=
+type t = R.exp
+let box g = R.guard g (R.store (R.reg (x, 0, (R.C 1))) (R.bits (Bits.zero 32) 32) 32)
+let unbox r = match Dn.rtl r with
+  | RP.Rtl [(g, RP.Store (RP.Reg (('\000',_,_), _, _), _, 32))] -> Up.exp g
+  | _ -> assert false
+@
+Sometimes, it's useful to combine two boxing modules.
+The implementation assumes that the [[box]] function for the first
+  boxer does not produce \rtls\ with multiple effects.
+<<Combine>>=
+module Combine (Box1 : BOXER) (Box2 : BOXER) = struct
+  type t = Box1.t * Box2.t
+  let box (v1, v2) =
+    let b1 = Box1.box v1 in
+    let () = match Dn.rtl b1 with | RP.Rtl [_] -> () | _ -> assert false in
+    R.par [b1; Box2.box v2]
+  let unbox r = match Dn.rtl r with
+    | RP.Rtl (g::gs) ->
+        (Box1.unbox (Up.rtl (RP.Rtl [g])), Box2.unbox (Up.rtl (RP.Rtl gs)))
+    | _ -> assert false
+end
+@
+For now, we can get away with a simple check: does the reserved ``boxing'' space
+  appear on the left-hand-side of an assignment?
+<<[[assert_not_boxed]]>>=
+let assert_not_boxed r =
+  let check = function
+    | (_, RP.Store (RP.Reg (('\000',_,_), _, _), _, _)) -> assert false
+    | _ -> () in
+  match Dn.rtl r with
+  | RP.Rtl gs -> List.iter check gs
+@
+<<box.ml>>=
+module Dn = Rtl.Dn
+module R  = Rtl
+module RP = Rtl.Private
+module Up = Rtl.Up
+type rtl = R.rtl
+let x = (Space.Standard32.x R.LittleEndian [32]).Space.space
+<<BOXER type>>
+module Exp = struct
+  <<exp boxer>>
+end
+module ExpList = struct
+  <<explist boxer>>
+end
+module Guard = struct
+  <<guard boxer>>
+end
+<<Combine>>
+module GuardExp = Combine (Guard) (Exp)
+<<[[assert_not_boxed]]>>
+@
