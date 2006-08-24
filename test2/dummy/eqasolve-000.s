@@ -563,123 +563,130 @@ section "text"
         .Linitialize continuations:l6:
         .Lproc body start:l5:
         $r0 = bits32[sym@@i_18];
-        $c0, $r30 = bits32[sym@_osinit], ($c0+4);
-        .Lcall successor:l86:
+        $ 0 = bits32[sym@_osinit];
+        .Lcall successor:l93:
         $r0, $r1, $r2 = bits32[($r31+28)], 72, 1;
-        $c0, $r30 = bits32[sym@_xlbegin], ($c0+4);
-        .Lcall successor:l83:
+        $ 0 = bits32[sym@_xlbegin];
+        .Lcall successor:l90:
         $r0 = bits32[($r31+36)];
-        $c0, $r30 = bits32[sym@__setjmp], ($c0+4);
-        .Lcall successor:l80:
+        $ 0 = bits32[sym@__setjmp];
+        .Lcall successor:l87:
         @i_1 = $r0;
-        $c0 when %eq[32](@i_1, 0) = sym@@i_19;
-        .Lbranch target:l77:
+        .Lbranch target:l84:
+        $ 0 when %eq[32](@i_1, 0) = 0;
+        .Lbranch target:l83:
         $r0 = bits32[sym@@i_22];
-        $c0, $r30 = bits32[sym@_printf], ($c0+4);
-        .Lcall successor:l76:
-        $c0, $r30 = bits32[sym@_osfinish], ($c0+4);
-        .Lcall successor:l73:
+        $ 0 = bits32[sym@_printf];
+        .Lcall successor:l82:
+        $ 0 = bits32[sym@_osfinish];
+        .Lcall successor:l79:
         $r0 = 1;
-        $c0, $r30 = bits32[sym@_exit], ($c0+4);
-        .Lcall successor:l70:
+        $ 0 = bits32[sym@_exit];
+        .Lcall successor:l76:
         @i_19:
-        $c0, $r30 = bits32[sym@_xlinit], ($c0+4);
-        .Lcall successor:l67:
+        $ 0 = bits32[sym@_xlinit];
+        .Lcall successor:l73:
         $r0 = bits32[($r31+28)];
-        $c0, $r30 = bits32[sym@_xlend], ($c0+4);
-        .Lcall successor:l64:
+        $ 0 = bits32[sym@_xlend];
+        .Lcall successor:l70:
         $r0, $r1, $r2
             = bits32[($r31+28)], 72, bits32[bits32[sym@_true]];
-        $c0, $r30 = bits32[sym@_xlbegin], ($c0+4);
-        .Lcall successor:l61:
+        $ 0 = bits32[sym@_xlbegin];
+        .Lcall successor:l67:
         $r0 = bits32[($r31+36)];
-        $c0, $r30 = bits32[sym@__setjmp], ($c0+4);
-        .Lcall successor:l58:
+        $ 0 = bits32[sym@__setjmp];
+        .Lcall successor:l64:
         @i_2 = $r0;
-        $c0 when %ne[32](@i_2, 0) = sym@@i_23;
-        .Lbranch target:l55:
+        .Lbranch target:l61:
+        $ 0 when %ne[32](@i_2, 0) = 0;
+        .Lbranch target:l60:
         @i_3 = 0;
         $r0, $r1, $r2 = bits32[sym@@i_26], @i_3, @i_3;
-        $c0, $r30 = bits32[sym@_xlload], ($c0+4);
-        .Lcall successor:l54:
+        $ 0 = bits32[sym@_xlload];
+        .Lcall successor:l59:
         @i_23:
         $r0 = bits32[($r31+36)];
-        $c0, $r30 = bits32[sym@__setjmp], ($c0+4);
-        .Lcall successor:l51:
+        $ 0 = bits32[sym@__setjmp];
+        .Lcall successor:l56:
         @i_4 = $r0;
-        $c0 when %ne[32](@i_4, 0) = sym@@i_27;
-        .Lbranch target:l48:
+        .Lbranch target:l53:
+        $ 0 when %ne[32](@i_4, 0) = 0;
+        .Lbranch target:l52:
         @i_i = 1;
         @i_33:
-        $c0 when %lt[32](@i_i, @i_argc) = sym@@i_30;
+        .Lbranch target:l43:
+        $ 0 when %lt[32](@i_i, @i_argc) = 0;
         @i_30:
         $r0, $r1, $r2 = bits32[(%shl[32](@i_i, 2)+@i_argv)], 1, 0;
-        $c0, $r30 = bits32[sym@_xlload], ($c0+4);
-        .Lcall successor:l47:
+        $ 0 = bits32[sym@_xlload];
+        .Lcall successor:l51:
         @i_5 = $r0;
-        $c0 when %ne[32](@i_5, 0) = sym@@i_34;
-        .Lbranch target:l44:
+        .Lbranch target:l48:
+        $ 0 when %ne[32](@i_5, 0) = 0;
+        .Lbranch target:l47:
         $r0 = bits32[sym@@i_36];
-        $c0, $r30 = bits32[sym@_xlfail], ($c0+4);
-        .Lcall successor:l43:
+        $ 0 = bits32[sym@_xlfail];
+        .Lcall successor:l46:
         @i_34:
         @i_31:
         @i_i = (@i_i+1);
-        $c0 = sym@@i_33;
+        $ 0 = sym@@i_33;
         @i_27:
         $r0, $r1 = bits32[($r31+24)], 0;
-        $c0, $r30 = bits32[sym@_xlsave], ($c0+4);
-        .Lcall successor:l40:
+        $ 0 = bits32[sym@_xlsave];
+        .Lcall successor:l42:
         @i_38:
         @i_37:
         $r0 = bits32[($r31+36)];
-        $c0, $r30 = bits32[sym@__setjmp], ($c0+4);
-        .Lcall successor:l37:
+        $ 0 = bits32[sym@__setjmp];
+        .Lcall successor:l39:
         @i_6 = $r0;
         @i_i = @i_6;
-        $c0 when %eq[32](@i_6, 0) = sym@@i_40;
+        .Lbranch target:l36:
+        $ 0 when %eq[32](@i_6, 0) = 0;
+        .Lbranch target:l35:
+        $ 0 when %ne[32](@i_i, 64) = 0;
         .Lbranch target:l34:
-        $c0 when %ne[32](@i_i, 64) = sym@@i_43;
-        .Lbranch target:l33:
         $r0 = bits32[sym@@i_45];
-        $c0, $r30 = bits32[sym@_stdputstr], ($c0+4);
-        .Lcall successor:l32:
+        $ 0 = bits32[sym@_stdputstr];
+        .Lcall successor:l33:
         @i_43:
         bits32[(bits32[bits32[sym@_s_evalhook]]+8)] = 0;
         bits32[(bits32[bits32[sym@_s_applyhook]]+8)] = 0;
         bits32[sym@_xldebug] = 0;
-        $c0, $r30 = bits32[sym@_xlflush], ($c0+4);
-        .Lcall successor:l29:
+        $ 0 = bits32[sym@_xlflush];
+        .Lcall successor:l30:
         @i_40:
         $r0, $r1, $r2
             = bits32[(bits32[bits32[sym@_s_stdin]]+8)],
             bits32[($r31+24)], 0;
-        $c0, $r30 = bits32[sym@_xlread], ($c0+4);
-        .Lcall successor:l26:
+        $ 0 = bits32[sym@_xlread];
+        .Lcall successor:l27:
         @i_7 = $r0;
-        $c0 when %ne[32](@i_7, 0) = sym@@i_46;
+        .Lbranch target:l24:
+        $ 0 when %ne[32](@i_7, 0) = 0;
         @i_39:
         $r0 = bits32[($r31+28)];
-        $c0, $r30 = bits32[sym@_xlend], ($c0+4);
+        $ 0 = bits32[sym@_xlend];
         .Lcall successor:l17:
-        $c0, $r30 = bits32[sym@_osfinish], ($c0+4);
+        $ 0 = bits32[sym@_osfinish];
         .Lcall successor:l14:
         $r0 = 0;
-        $c0, $r30 = bits32[sym@_exit], ($c0+4);
+        $ 0 = bits32[sym@_exit];
         .Lcall successor:l11:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
         @i_46:
         $r0 = bits32[bits32[($r31+24)]];
-        $c0, $r30 = bits32[sym@_xleval], ($c0+4);
+        $ 0 = bits32[sym@_xleval];
         .Lcall successor:l23:
         @i_8 = $r0;
         bits32[($r31+24)] = @i_8;
         $r0 = bits32[bits32[($r31+24)]];
-        $c0, $r30 = bits32[sym@_stdprint], ($c0+4);
+        $ 0 = bits32[sym@_stdprint];
         .Lcall successor:l20:
-        $c0 = sym@@i_38;
+        $ 0 = sym@@i_38;
     }
 }
 
@@ -690,15 +697,15 @@ section "text"
         $r31 = ($r31+-24);
         @i_expr = $r0;
         $t1 = $r30;
-        .Linitialize continuations:l92:
-        .Lproc body start:l91:
+        .Linitialize continuations:l99:
+        .Lproc body start:l98:
         $r0, $r1, $r2
             = bits32[(bits32[bits32[sym@_s_stdout]]+8)], @i_expr, 1;
-        $c0, $r30 = bits32[sym@_xlprint], ($c0+4);
-        .Lcall successor:l99:
+        $ 0 = bits32[sym@_xlprint];
+        .Lcall successor:l106:
         $r0 = bits32[(bits32[bits32[sym@_s_stdout]]+8)];
-        $c0, $r30 = bits32[sym@_xlterpri], ($c0+4);
-        .Lcall successor:l96:
+        $ 0 = bits32[sym@_xlterpri];
+        .Lcall successor:l103:
         @i_48:
         $r31 = ($r31+24);
         $c0 = $t1;
@@ -712,11 +719,11 @@ section "text"
         $r31 = ($r31+-24);
         @i_str = $r0;
         $t1 = $r30;
-        .Linitialize continuations:l105:
-        .Lproc body start:l104:
+        .Linitialize continuations:l112:
+        .Lproc body start:l111:
         $r0, $r1 = bits32[(bits32[bits32[sym@_s_stdout]]+8)], @i_str;
-        $c0, $r30 = bits32[sym@_xlputstr], ($c0+4);
-        .Lcall successor:l109:
+        $ 0 = bits32[sym@_xlputstr];
+        .Lcall successor:l116:
         @i_49:
         $r31 = ($r31+24);
         $c0 = $t1;

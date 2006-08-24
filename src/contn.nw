@@ -48,13 +48,11 @@ type t
 
 val init_code     : t -> Mflow.cut_args -> Rtl.rtl
 val rep           : t -> Block.t     (* entire cont in memory; rep is address *)
-val with_overflow : ('a, 'b) Target.t -> overflow:Block.t -> t
+val with_overflow : ('a, 'b, 'c) Target.t -> overflow:Block.t -> t
 @
 
-The [[cutto]] function takes a pointer to the continuation ([[contn]])
-on the stack and returns an Rtl to make the cut.
-The function argument to [[cutto]] takes newpc * newsp and returns the Rtl
-for a cut.
+The [[cut_args]] function takes a pointer to the continuation ([[contn]])
+on the stack and returns the argument record that can be used to make the cut.
 The [[ovblock_exp]] function takes an expression that points to a continuation
 value, the memsize and pointersize of the machine, and the alignment of the overflow
 block. It returns the base address of the overflow block.
@@ -62,8 +60,7 @@ The [[get_contn]] function takes pointers to a pc * sp pair
 from a continuation and returns a pointer to the continuation.
 
 <<contn.mli>>=
-val cutto       : ('a, 'b) Target.t -> (Mflow.cut_args -> Rtl.rtl)
-                     -> contn:Rtl.exp -> Rtl.rtl
+val cut_args    : ('a, 'b, 'c) Target.t -> contn:Rtl.exp -> Mflow.cut_args
 val ovblock_exp : Rtl.exp -> int -> int -> int -> Rtl.exp
 val get_contn   : Rtl.exp * Rtl.exp -> Rtl.exp
 @
@@ -113,10 +110,10 @@ let with_overflow t ~overflow =
   let pc, sp = pc_sp (Block.base my_rep) t in
   { block = my_rep; sp = sp; pc = pc }
 
-let cutto t to_rtl ~contn =
+let cut_args t ~contn =
   let w = t.T.pointersize in
   let pc, sp = pc_sp contn t in
-  to_rtl {Mflow.new_pc=R.fetch pc w; Mflow.new_sp=R.fetch sp w}
+  {Mflow.new_pc=R.fetch pc w; Mflow.new_sp=R.fetch sp w}
 
 let get_contn (newpc, newsp) = newpc
 @

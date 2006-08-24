@@ -19,19 +19,20 @@ Consequently, targets must be described by an {\ocaml} value that can
 be passed at run-time (rather than by a module, which can not). 
 
 <<target.mli>>=
-<<type map>>
+<<map and machine types>>
+val boxmach : unit machine
 <<type cc>>
 <<auxiliary types used to define type [[t]]>>
 <<type t>>
 
 <<exported functions>>
-val space : ('au, 'cc) t -> Rtl.space -> Space.t
+val space : ('pr, 'au, 'cc) t -> Rtl.space -> Space.t
 @ The [[space]] function returns information about a particular space.
 It is a checked run-time error to ask about a space not on the list
 for the target.
 @ 
 <<type t>>=
-type ('automaton, 'cc) t = { <<components of [[t]]>> }
+type ('proc, 'automaton, 'cc) t = { <<components of [[t]]>> }
 @
 Every target has a descriptive name.
 <<components of [[t]]>>=
@@ -65,7 +66,6 @@ type 'automaton cc' =
     ; proc:         'automaton  (* pass parameter to a procedure      *)
     ; cont:         'automaton  (* pass parameter to a continuation   *)
     ; ret:          'automaton  (* return values                      *)
-    ; cutto  : Mflow.cut_args map    (* newpc * newsp map*)
     ; mutable allocatable:  Register.t list (* regs for reg-allocation            *)
     (* THIS TYPE SHOULD INCLUDE INFORMATION ABOUT ALTERNATE RETURN CONTINUATIONS,
        IN PARTICULAR, HOW BIG IS EACH SLOT, AND DOES IT HOLD AN INSTRUCTION OR
@@ -162,51 +162,6 @@ Code goes into the \emph{text} section, memory allocated for global
 registers goes into the [[data_section]].
 
 % ------------------------------------------------------------------ 
-\subsection{RTLs for the Control-Flow Graph}
-% ------------------------------------------------------------------ 
-
-The nodes in the control-flow graph (module \module{cfg}) contain
-{\rtl}s.  For example, a [[jump]] node takes an {\rtl} and not an
-expression for the target.  The construction of these {\rtl}s is target
-specific and so we provide [[embed]] functions in each target.
-For debugging of the {\cfg} we also like to re-construct the expressions
-from these {\rtl}s.  We provide matching [[project]] functions to obtain
-the original expressions \emph{if the supplied {\rtl}s} were constructed
-by the construction functions.  Any attempt to do otherwise results in
-an unchecked run-time error. 
-
-We can also negate the condition in a conditional-branch by calling
-[[bnegate]].
-
-The {\rtl}s do not have to represent machine instructions. It suffices
-to create {\rtl}s that the code expander can recognize as jumps, calls,
-and so on. 
-<<type map>>=
-type ('lo, 'hi) map'  = ('lo, 'hi) Ep.map
-      = { embed   : 'lo -> 'hi
-        ; project : 'hi -> 'lo
-        }
-type 'a map  = ('a, Rtl.rtl) map'
-@
-<<components of [[t]]>>=
-bnegate:        Rtl.rtl -> Rtl.rtl ;
-goto:           Rtl.exp map ;
-jump:           Rtl.exp map ;
-call:           Rtl.exp map ;
-return:         unit    map ;
-branch:         (Rtl.exp * Rtl.exp) map; (* condition, target *)
-@ The [[branch]] embedder takes expressions $(b, t)$ where $b$~is a
-Boolean condition and $t$~is the branch target.
-It produces an RTL that conditionally branches to the target.
-@ 
-The [[forbidden]] component is an RTL used to cause a run-time error.
-This RTL is used in places control should not reach, e.g., no arm of a
-switch statement matches the scrutinee.
-<<components of [[t]]>>=
-forbidden:      Rtl.rtl;   (* causes a run-time error *)
-@
-
-% ------------------------------------------------------------------ 
 \subsection{Identify Special Locations}
 % ------------------------------------------------------------------ 
 
@@ -250,8 +205,8 @@ The register allocator (see \module{ocolorgraph.nw}) needs
 target-specific informations about hardware registers and temporaries.
 In particular:
 <<exported functions>>=
-val is_tmp : ('au, 'cc) t -> Rtl.space -> bool  (* partially apply me *)
-val fits:    ('au, 'cc) t -> Rtl.space -> Register.t -> bool
+val is_tmp : ('pr, 'au, 'cc) t -> Rtl.space -> bool  (* partially apply me *)
+val fits:    ('pr, 'au, 'cc) t -> Rtl.space -> Register.t -> bool
 @
 \begin{itemize}
 \item [[fits t sp r]] is true, if (hardware) register [[r]] can hold any 
@@ -270,14 +225,6 @@ The first element of the pair is the number $n$ of registers.
 <<exported functions>>=
 val mk_reg_ix_map : Space.t list -> (int * int Register.Map.t)
 @
-When the register allocator (see ~module{linscan}) must spill, it has to
-create {\rtl}s that move values from registers to memory (spill) and
-vice versa (reloads).  Here are two functions to create such {\rtl}s:
-THE FIRST ARGUMENT ALMOST CERTAINLY SHOULD BE A [[Proc.t]].
-<<components of [[t]]>>=
-spill:  (Rtl.space -> Space.t) -> Register.t -> Automaton.loc -> Rtl.rtl list;
-reload: (Rtl.space -> Space.t) -> Register.t -> Automaton.loc -> Rtl.rtl list;
-@ 
 The RTLs should be returned in \emph{execution order}, i.e., the first
 element of the list is the first to be executed.  \emph{ALERT! Perhaps
 we ought to revisit these interfaces, since the role of the first
@@ -290,6 +237,69 @@ For optimization, we need to know what an instruction is.
 <<components of [[t]]>>=
 is_instruction: Rtl.rtl -> bool;
 @ 
+
+\subsection{Control-flow operations}
+Several modules, including the expander, need to produce control-flow instructions.
+For each target, we collect the control-flow functions in a [[machine]] record.
+The machine record is synthesized by the expander, which makes use of the functions
+  in the postexpander to fill out the machine record.
+<<map and machine types>>=
+type ('em, 'pr) map' = ('em, 'pr) Ep.pre_map =
+    { embed   : 'em
+    ; project : 'pr
+    }
+type brtl = Rtl.exp -> Rtl.rtl
+type ('a,'b) map  = ('a -> 'b -> brtl Dag.branch, Rtl.rtl -> 'b) map'
+type ('a,'b) mapc = ('a -> 'b -> brtl Dag.cbranch, Rtl.rtl -> 'b) map'
+
+type 'a machine = 'a Mflow.machine =
+  { bnegate:   Rtl.rtl -> Rtl.rtl
+  ; goto:      ('a, Rtl.exp) map
+  ; jump:      ('a, Rtl.exp) map
+  ; call:      ('a, Rtl.exp) map
+  ; branch:    ('a, Rtl.exp) mapc (* condition *)
+  ; retgt_br:  Rtl.rtl -> brtl Dag.cbranch
+  ; move:      'a -> src:Register.t -> dst:Register.t -> brtl Dag.block
+  ; spill:     'a -> Register.t -> Rtlutil.aloc -> brtl Dag.block
+  ; reload:    'a -> Rtlutil.aloc -> Register.t -> brtl Dag.block
+  ; cutto:     ('a, Mflow.cut_args) map    (* newpc * newsp map*)
+  ; return:    Rtl.rtl
+  ; forbidden: Rtl.rtl   (* causes a run-time error *)
+  }
+@
+<<components of [[t]]>>=
+machine : 'proc machine;
+@
+We also define a generic target record, which uses boxing to store the \rtl\ fragments.
+The branch negate operation of the boxed machine should never be called.
+Similarly, the [[return]] and [[forbidden]] \rtls\ are meaningless.
+<<boxed machine>>=
+let boxmach =
+  let fail _ = assert false in
+  let crmap = { embed = (fun () e -> (DG.Nop, Box.Exp.box e))
+              ; project = Box.Exp.unbox } in
+  let x = (Space.Standard32.x R.LittleEndian [32]).Space.space in
+  let bogus  = R.kill (R.reg (x, 0, (R.C 1))) in
+  { bnegate = (fun _ -> assert false)
+  ; goto = crmap
+  ; jump = crmap
+  ; call = crmap
+  ; cutto = { embed =
+                (fun _ ca -> (DG.Nop, Box.ExpList.box [ca.M.new_sp; ca.M.new_pc]))
+            ; project = (fun box -> match Box.ExpList.unbox box with
+                           | [sp; pc] -> {M.new_sp = sp; M.new_pc = pc}
+                           | _ -> assert false)}
+  ; branch = { embed   = (fun _ g -> DG.cond (fun _ -> Box.Guard.box g))
+             ; project = (fun box -> Box.Guard.unbox box)}
+  ; retgt_br  = fail
+  ; move      = fail
+  ; spill     = fail
+  ; reload    = fail
+  ; M.return  = bogus
+  ; forbidden = bogus
+  }
+@
+
 % ------------------------------------------------------------------
 \subsection{Code-generation assist}
 % ------------------------------------------------------------------
@@ -389,7 +399,6 @@ val incapable : capabilities  (* the completely useless back end *)
 [[minimal_capabilities]] returns a minimal set of capabilities, given the word size.
 <<target.mli>>=
 val minimal_capabilities: int -> capabilities
-
 @ 
 
 % ------------------------------------------------------------------ 
@@ -398,16 +407,18 @@ val minimal_capabilities: int -> capabilities
 
 The implementation does not hold any surprises. We use module [[Map]]
 to implement lookup tables for registers and calling conventions.
-
 <<target.ml>>=
+<<map and machine types>>
+module DG = Dag
+module M  = Mflow
 module R  = Rtl
 module S  = Space
 module RP = Rtl.Private
 module RU = Rtlutil
-<<type map>>
 <<type cc>>
 <<auxiliary types used to define type [[t]]>>
 <<type t>>
+<<boxed machine>>
 let impossf fmt = Printf.kprintf Impossible.impossible fmt
 let incapable = { operators = []; literals = []; litops = []; memory = []; itemps = [];
                   ftemps = []; block_copy = false; iwiden = false; fwiden = false; }

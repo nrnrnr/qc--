@@ -62,11 +62,13 @@ module OG = Cfgx.M
 module G  = Zipcfg
 module GR = Zipcfg.Rep
 module P  = Proc
+module PA = Preast2ir
 module RP = Rtl.Private
 module RU = Rtlutil
 module Dn = Rtl.Dn
 module Up = Rtl.Up
 module SS = Strutil.Set
+module T  = Target
 
 let impossf fmt = Printf.kprintf Impossible.impossible fmt
 let not_null = function [] -> false | _ :: _ -> true
@@ -184,7 +186,8 @@ let badrtl r =
     (*  Printf.eprintf "x86 rec says %s\n" (X86rec.M.to_asm r) *)
   
 let validate _ (g, proc) =
-  let check r = if not (proc.P.target.Target.is_instruction r) then badrtl r else () in
+  let PA.T tgt = proc.P.target in
+  let check r = if not (tgt.T.is_instruction r) then badrtl r else () in
   let first _ = () in
   let middle m = if GR.is_executable m then check (GR.mid_instr m) in
   let last l = check (GR.last_instr l) in

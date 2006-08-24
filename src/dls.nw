@@ -58,6 +58,7 @@ later.
 <<dls type declarations and utilities>>=
 module A  = Automaton
 module R  = Register
+module PA = Preast2ir
 module RP = Rtl.Private
 module Dn = Rtl.Dn
 module RU = Rtlutil
@@ -80,7 +81,7 @@ module T = Target
 <<printers>>
 module VM = Varmap
 
-type tgt = ((Rtl.exp -> Automaton.t), Call.t) Target.t
+type tgt = Ast2ir.tgt
 <<type declarations>>
 <<utilities>>
 @
@@ -352,7 +353,10 @@ let rpo_dfs cfg =
   G.of_blocks blockmap in
 @
 <<dls algorithm>>=
-let dls _ (cfg, ({Proc.cc = cc; Proc.target = tgt} as proc)) =
+let dls _ (cfg, ({Proc.cc = cc; Proc.target = PA.T tgt} as proc)) =
+  let machine = tgt.T.machine in
+  let l2e = proc.P.exp_of_lbl in
+  let m = (proc, machine, l2e) in
   let () = Debug.eprintf "dls" "DLS(%s)\n" proc.Proc.symbol#original_text in
   <<set up [[spillMap]]>>
   let ((cfg, proc), _) = Optimize.trim_unreachable_code () (cfg, proc) in
@@ -400,11 +404,11 @@ let alloc_block prefs (blockmap, predmap) bid pred_ids =
     | []    -> impossf "DLS: Block has no live_out sets" in
   <<define functions [[entry_inmap]] and [[label_inmap]] to help find the inmap>>
 
-  let add_middle head rtls_lst =
-    let add rtls head =
-      List.fold_right (fun r h -> GR.Head (h, GR.Instruction r)) rtls head in
-    List.fold_right add rtls_lst head in
-
+  let add_nodes shuffles (g : G.zgraph) =
+    let add_subgraph g block =
+      let (subg, _) = G.block2cfg m block in
+      G.splice_focus_exit g (G.unfocus subg) in
+    List.fold_left add_subgraph g shuffles in
   (* first: *)
   let () = Debug.eprintf "dls" "choosing varmaps for first\n" in
   let varOutf = match first with
@@ -424,14 +428,14 @@ let alloc_block prefs (blockmap, predmap) bid pred_ids =
 
   (* PREFS AREN'T PROPERLY THREADED HERE *)
   (* tail: *)
-  let rec alloc_tail inmap live_outs head tail =
+  let rec alloc_tail g inmap live_outs (*head*) tail =
     let (li, lo, live_outs) = match live_outs with
       | li::((lo::_) as rst) -> (li, lo, rst)
       | _ -> impossf "DLS: wrong number of live_out sets" in
     let live_in  = R.promote_rxset li in (* repeated promotion done here *)
     let live_out = R.promote_rxset lo in
     match tail with
-    | GR.Tail (m, t) ->
+    | GR.Tail (m, tail) ->
         let live_out_w_spans = live_out in
         let rtl = GR.mid_instr m in
         let () = Debug.eprintf "dls" "choosing varmaps for middle: %s\n"
@@ -444,12 +448,13 @@ let alloc_block prefs (blockmap, predmap) bid pred_ids =
                          ~defs ~uses ~live_in ~live_out ~live_out_w_spans in
         let () = if Debug.on "dls" then begin
                    Printf.eprintf "spills:";
-                   List.iter (fun s -> Printf.eprintf " %s"
-                     (String.concat " " (List.map Rtlutil.ToString.rtl s))) spills;
+                   let pr =
+                   Dag.pr_block (fun f -> RU.ToString.rtl (f (Rtl.bool true))) in
+                   List.iter (fun s -> Printf.eprintf " %s" (pr s)) spills;
                    Printf.eprintf "\n" end in
-        let m' = G.new_rtlm (rewrite_rtl tgt ~varIn ~varDefs rtl) m in
-        let head = add_middle (add_middle head spills) reloads in
-        alloc_tail varOut live_outs (GR.Head (head, m')) t
+        let ((head, t),blockmap) = G.openz (add_nodes reloads (add_nodes spills g)) in
+        let head = GR.Head (head, G.new_rtlm (rewrite_rtl tgt ~varIn ~varDefs rtl) m) in
+        alloc_tail (G.tozgraph ((head, t), blockmap)) varOut live_outs tail
     | GR.Last l ->
         let live_out_w_spans = R.promote_rxset (G.add_live_spansl l lo) in
         let rtl = GR.last_instr l in
@@ -469,11 +474,12 @@ let alloc_block prefs (blockmap, predmap) bid pred_ids =
           | _ -> l' in
         let () = setVarOut bid varOut in
         let () = match l' with GR.Call _ -> setCallIn bid midMap | _ -> () in
-        let head = add_middle (add_middle head spills) reloads in
-        l', GR.zipht head (GR.Last l') in
-  let last, block = alloc_tail varOutf live_outs (GR.First first) tail in
-  let blockmap = UM.add bid block blockmap in
 
+        let ((head, _),blockmap) = G.openz (add_nodes reloads (add_nodes spills g)) in
+        l', G.tozgraph ((head, GR.Last l'), blockmap) in
+  let last, g = alloc_tail (G.tozgraph ((GR.First first, GR.Last GR.Exit), blockmap))
+                               varOutf live_outs tail in
+  let blockmap = G.to_blocks (G.unfocus g) in
   let maps =
     List.fold_left (fun maps p ->
                     try ignore (getVarOut p); shuffle maps p bid with Not_found -> maps)
@@ -845,12 +851,10 @@ We update the successor's variable map to have each inconsistent temp in memory.
 @
 <<define [[shuffle_around]] and [[shuffle_between]]>>=
   (* make the successor consistent *)
-  let vm_out, nodes' = make_nodes' succ_vm loads in
+  let g = G.focus succ_id (G.of_blocks blockmap) in
+  let (vm_out, g) = add_updates succ_vm loads g in
+  let blockmap = G.to_blocks (G.unfocus g) in
   let succ = UM.find succ_id blockmap in
-  let first, tail = GR.goto_start (GR.unzip succ) in
-  let tail = List.fold_left (fun tail i -> GR.Tail (i, tail)) tail nodes' in
-  let succ = GR.zipht (GR.First first) tail in
-  let blockmap = UM.add succ_id succ blockmap in
 
   (* make the predecessors consistent *)
   (*
@@ -886,12 +890,10 @@ We update the successor's variable map to have each inconsistent temp in memory.
                      s::stores
                  | _ -> impossf "Unallocated temp in pred's outmap")
               temps [] in
-    let pred_vm, nodes' = make_nodes' pred_vm stores in
-    let pred = UM.find pred_id blockmap in
-    let head, last = GR.goto_end (GR.unzip pred) in
-    let head = List.fold_left (fun head i -> GR.Head (head, i)) head nodes' in
-    let pred = GR.zipht head (GR.Last last) in
-    let blockmap = UM.add pred_id pred blockmap in
+    let (head, last) = GR.goto_end (GR.unzip (UM.find pred_id blockmap)) in
+    let g = G.tozgraph ((head, GR.Last last), blockmap) in
+    let (pred_vm, g) = add_updates pred_vm stores g in
+    let blockmap = G.to_blocks (G.unfocus g) in
 
     (*VM.print "new maps" pred_vm;*)
     let () = setVarOut pred_id pred_vm in
@@ -935,22 +937,24 @@ let shuffle_between blockmap predmap pred_id succ_id =
   else
     let moves      = shuffle_moves moves in
     let shuffles   = List.concat [ stores ; moves ; loads] in
-    let vm, nodes' = make_nodes' pred_vm shuffles           in
 
     (* Make a new block containing all the shuffle instructions *)
     let (_, name as succ_lbl), succ_spans = match GR.goto_start (GR.unzip succ) with
       | GR.Label (lbl, _, spans), _ -> lbl, spans
       | GR.Entry,                 _ -> impossf "successor is entry block" in
-    let new_last = GR.Branch (proc.Proc.machine.G.goto succ_lbl, succ_lbl) in
+    (* Make a new block containing all the shuffle instructions *)
     let new_uid  = G.uid () in
     let new_lbl  = (new_uid, Idgen.label name) in
-    let rec add_middles tail middles = match middles with
-      | m :: rst -> add_middles (GR.Tail (m, tail)) rst
-      | [] -> (GR.Label (new_lbl, GR.Genlabel, succ_spans), tail) in
-    let new_block = add_middles (GR.Last new_last) nodes' in
+    let (b,r) = tgt.T.machine.T.goto.T.embed proc (l2e succ_lbl) in
+    let g = G.tozgraph ((GR.First (GR.Label (new_lbl, GR.Genlabel, succ_spans)),
+                         GR.Last (GR.Branch (r, succ_lbl))),
+                        blockmap) in
+    let (vm, g) = add_updates pred_vm shuffles g in
+    let (g,_) = G.block_before (proc, tgt.T.machine, l2e) b g in
+    let (new_block, blockmap) = G.openz g in
 
     (* Add the new block to the graph and fix the predmap *)
-    let blockmap  = UM.add new_uid new_block blockmap in
+    let blockmap  = UM.add new_uid (GR.zip new_block) blockmap in
     let () = setVarIn  new_uid pred_vm in
     let () = setVarOut new_uid succ_vm in
     let predmap =
@@ -962,21 +966,27 @@ let shuffle_between blockmap predmap pred_id succ_id =
     (* Note: [[last]] must be either a [[Branch]] or [[CBranch]];
              other variants should be handled elsewhere or not have successors. *)
     let (head, last) = GR.goto_end (GR.unzip pred) in
-    let last =
-      let machine = proc.Proc.machine in
+    let blockmap =
       match last with
       | GR.Branch  (rtl, (uid, _))    ->
           assert (U.eq uid succ_id);
-          GR.Branch (machine.G.goto new_lbl, new_lbl)
+          let (b,r) = machine.T.goto.T.embed proc (l2e new_lbl) in
+          let g = G.tozgraph ((head, GR.Last (GR.Branch (r, new_lbl))), blockmap) in
+          let (g,_) = G.block_before (proc, machine, l2e) b g in
+          G.to_blocks (G.unfocus g)
       | GR.Cbranch (rtl, (uidt, _ as lt), (uidf, _ as lf)) ->
           assert (U.eq uidt succ_id || U.eq uidf succ_id);
           let lt = if U.eq uidt succ_id then new_lbl else lt in
           let lf = if U.eq uidf succ_id then new_lbl else lf in
-          (* SHOULD BE A machine.cbranch.project *)
-          let (cond, _) = proc.P.target.T.branch.T.project rtl in 
-          GR.Cbranch (machine.G.cbranch (cond, lt), lt, lf)
+          let cbr = machine.T.retgt_br rtl in
+          let g = G.tozgraph ((GR.First GR.Entry, GR.Last (GR.Exit)), blockmap) in
+          let (g,_) = G.cbranch2cfg m cbr ~ifso:lt ~ifnot:lf g in
+          let (new_block, blockmap) =
+            match G.openz g with
+            | ((GR.First GR.Entry, tail), bm) -> ((head, tail), bm)
+            | _ -> Impossible.impossible "block not inserted at entry?" in
+          UM.add pred_id (GR.zip new_block) blockmap
       | _ -> impossf "DLS trying to shuffle_between with non-branch pred block" in
-    let blockmap = UM.add pred_id (GR.zipht head (GR.Last last)) blockmap in
     blockmap, predmap in
 @
 To reconcile variable maps, we need to create move, store, and load rtl's.
@@ -985,33 +995,29 @@ let make_reg_empty r vm =
   match VM.reg_contents vm r with
   | Some t -> VM.remove_reg t r vm
   | None   -> vm                 in
-let space = Target.space tgt in
 let move temp ((_,_,ms),_,c as dst) src =
-  let w = Cell.to_width ms c in
   ((fun vm -> VM.add_reg temp dst (make_reg_empty dst vm)),
-   [Rtl.store (Rtl.reg dst) (Rtl.fetch (Rtl.reg src) w) w]) in
+   tgt.T.machine.T.move proc ~src ~dst) in
 let store' temp src = 
   let () = Debug.eprintf "dls" "spilling %s from %s\n" (printReg temp) (printReg src) in
   let loc = get_spill_loc temp in
-  (tgt.Target.spill  space src loc) in
+  tgt.T.machine.T.spill proc src loc in
 let store temp src =
   let loc = get_spill_loc temp in
   ((fun vm -> VM.add_mem temp loc vm),
-   tgt.Target.spill  space src loc) in
+   tgt.T.machine.T.spill proc src loc) in
 let load' temp dst =
   let loc = get_spill_loc temp in
-  tgt.Target.reload space dst loc in
+  tgt.T.machine.T.reload proc loc dst in
 let load temp dst =
   let loc = get_spill_loc temp in
   ((fun vm -> VM.add_reg temp dst (make_reg_empty dst vm)),
-   tgt.Target.reload space dst loc) in
-let make_nodes' start_vm shuffles =
-  let rec make_node_lst (vm, rst) (upd_vm, rtls) =
-    match rtls with (* note: rtls is a list of parallel assts *)
-    | [r]   -> (upd_vm vm, GR.Instruction r :: rst)
-    | r::rs -> make_node_lst (vm, GR.Instruction r :: rst) (upd_vm, rs)
-    | []    -> impossf "empty rtl list for load, move, or store" in
-  List.fold_left make_node_lst (start_vm, []) shuffles in
+   tgt.T.machine.T.reload proc loc dst) in
+let add_updates start_vm shuffles (g : G.zgraph) =
+  let add_subgraph (vm, g) (upd_vm, block) =
+    let (subg, _) = G.block2cfg m block in
+    (upd_vm vm, G.splice_focus_exit g (G.unfocus subg)) in
+  List.fold_left add_subgraph (start_vm, g) shuffles in
 @
 %-------------------------------------------------------------------
 \subsection{Variable Maps for the Runtime System}

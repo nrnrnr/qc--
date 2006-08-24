@@ -57,10 +57,10 @@ run_thread:
 	addl %eax,%edx
 	movl (%edx),%eax
 	movl (%ecx),%ecx
-	movl %ebx,16(%esp)
-	movl %ebp,20(%esp)
-	movl %esi,24(%esp)
 	movl %edi,28(%esp)
+	movl %esi,24(%esp)
+	movl %ebp,20(%esp)
+	movl %ebx,16(%esp)
 	movl %eax, %esp; jmp *%ecx
 .Lcut_entry_l11:
 .Lstart_of_continuation_code_l10:
@@ -174,7 +174,8 @@ fact:
 	movl (%ecx),%ecx
 .Linitialize_continuations_l38:
 .Lproc_body_start_l37:
-.Lbranch_target_l53:
+.Lbranch_target_l50:
+.Lbranch_target_l54:
 	movl $0,%edx
 	cmpl %edx,%eax
 	je .Lbranch_target_l49
@@ -214,17 +215,17 @@ fact:
 	leal 16(%esp), %esp
 	ret
 .section .pcmap_data
-.Lstackdata_l57:
+.Lstackdata_l58:
 .long 0
 .section .pcmap
 .long .Lcall_successor_l43
-.long .Lframe_l58
+.long .Lframe_l59
 .section .pcmap_data
-.Lframe_l58:
+.Lframe_l59:
 .long 0x80000004
 .long 0xfffffff0
 .long 0xfffffff4
-.long .Lstackdata_l57
+.long .Lstackdata_l58
 .long 0
 .long 2
 .long 2
@@ -236,13 +237,13 @@ fact:
 .long fact_lbl
 .section .pcmap
 .long .Lcall_successor_l48
-.long .Lframe_l59
+.long .Lframe_l60
 .section .pcmap_data
-.Lframe_l59:
+.Lframe_l60:
 .long 0x80000004
 .long 0xfffffff0
 .long 0xfffffff4
-.long .Lstackdata_l57
+.long .Lstackdata_l58
 .long 0
 .long 2
 .long 2
@@ -257,8 +258,8 @@ cmm_stacktrace:
 	leal -32(%esp), %esp
 	leal 32(%esp), %eax
 	movl (%eax),%eax
-.Linitialize_continuations_l67:
-	leal .Lcut_entry_l64,%ecx
+.Linitialize_continuations_l68:
+	leal .Lcut_entry_l65,%ecx
 	leal 32(%esp), %edx
 	movl %eax,4(%esp)
 	movl $-8,%eax
@@ -271,7 +272,7 @@ cmm_stacktrace:
 	movl $-4,%edx
 	addl %edx,%ecx
 	movl %eax,(%ecx)
-.Lproc_body_start_l66:
+.Lproc_body_start_l67:
 	leal 32(%esp), %eax
 	movl $-8,%ecx
 	addl %ecx,%eax
@@ -279,12 +280,12 @@ cmm_stacktrace:
 	movl $-32,%edx
 	addl %edx,%ecx
 	movl %eax,(%ecx)
-	movl %ebx,8(%esp)
-	movl %ebp,12(%esp)
-	movl %esi,16(%esp)
 	movl %edi,20(%esp)
+	movl %esi,16(%esp)
+	movl %ebp,12(%esp)
+	movl %ebx,8(%esp)
 	call stacktrace
-.Lcall_successor_l72:
+.Lcall_successor_l73:
 	leal 32(%esp), %eax
 	movl $0,%ecx
 	addl %ecx,%eax
@@ -296,8 +297,8 @@ cmm_stacktrace:
 	movl 8(%esp),%ebx
 	leal 32(%esp), %esp
 	ret
-.Lcut_entry_l64:
-.Lstart_of_continuation_code_l63:
+.Lcut_entry_l65:
+.Lstart_of_continuation_code_l64:
 	leal 32(%esp), %eax
 	movl $0,%ecx
 	addl %ecx,%eax
@@ -310,17 +311,17 @@ cmm_stacktrace:
 	leal 32(%esp), %esp
 	ret
 .section .pcmap_data
-.Lstackdata_l78:
+.Lstackdata_l79:
 .long 0
 .section .pcmap
-.long .Lcall_successor_l72
-.long .Lframe_l79
+.long .Lcall_successor_l73
+.long .Lframe_l80
 .section .pcmap_data
-.Lframe_l79:
+.Lframe_l80:
 .long 0x80000004
 .long 0xffffffe0
 .long 0xffffffe4
-.long .Lstackdata_l78
+.long .Lstackdata_l79
 .long 4
 .long 0
 .long 2
@@ -337,14 +338,14 @@ cmm_stacktrace:
 .long 0
 .long stacktrace_lbl
 .section .pcmap
-.long .Lcut_entry_l64
-.long .Lframe_l80
+.long .Lcut_entry_l65
+.long .Lframe_l81
 .section .pcmap_data
-.Lframe_l80:
+.Lframe_l81:
 .long 0x80000004
 .long 0xffffffe0
 .long 0xffffffe4
-.long .Lstackdata_l78
+.long .Lstackdata_l79
 .long 4
 .long 0
 .long 2

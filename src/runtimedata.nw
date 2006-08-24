@@ -80,7 +80,7 @@ val upd_all_spans :
 @ 
 The run-time system needs to know how the registers are mapped to constants.
 <<runtimedata.mli>>=
-type tgt  = ((Rtl.exp -> Automaton.t), Call.t) Target.t
+type tgt  = Preast2ir.tgt
 val print_reg_map : tgt -> unit
 @
 After we have placed all the data in spans, we emit
@@ -99,7 +99,7 @@ val stackdata  : spans -> Rtl.loc list
 The compiler can emit data for the run-time system, such as the
 direction of stack growth.
 <<runtimedata.mli>>=
-val emit_global_properties : ('a, Call.t) Target.t -> 'c Asm.assembler -> unit
+val emit_global_properties : ('a, 'b, Call.t) Target.t -> 'c Asm.assembler -> unit
 @
 
 % ------------------------------------------------------------------ 
@@ -111,6 +111,7 @@ module B  = Bits
 module G  = Zipcfg
 module GR = Zipcfg.Rep
 module CT = Ctypes
+module PA = Preast2ir
 module RM = Register.Map
 module RS = Register.Set
 module R  = Rtl
@@ -123,7 +124,7 @@ module S  = Spans
 module T  = Target
 module IM = Map.Make (struct type t = int let compare = compare end)
 
-type tgt  = ((Rtl.exp -> Automaton.t), Call.t) Target.t
+type tgt   = Preast2ir.tgt
 type spans = S.t
 exception DeadValue
 
@@ -158,7 +159,7 @@ The stackdata spans ([[sd_spans]]) are emitted in a separate table.
 Then, for each stopping point, we emit the associated spans by calling
 [[emit_site_spans]].
 <<runtimedata.ml>>=
-let emit_as_asm target asm ~procsym cfg =
+let emit_as_asm (PA.T target) asm ~procsym cfg =
   <<gather the [[spans]] in order>>
   let wordsize   = target.T.wordsize in
   let to_bits  i = Bits.S.of_int i wordsize  in 
@@ -493,7 +494,7 @@ let stackdata  spans = (S.expose spans).S.sds
 @
 The run-time system needs to know how the register are mapped to constants.
 <<runtimedata.ml>>=
-let print_reg_map tgt =
+let print_reg_map (PA.T tgt) =
   let (n, map) = tgt.T.reg_ix_map in
   Printf.printf "Target has %d registers:\n" n;
   RM.iter (fun ((s,_,_),i,_) n -> Printf.printf "  %c[%d] -> %d\n" s i n) map

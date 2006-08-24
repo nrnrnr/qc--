@@ -17,7 +17,7 @@ they are temporaries---but we don't require this.
 type width = Rtl.width
 type exp   = Rtl.exp
 type loc   = Rtl.loc
-type block = Postexpander.block
+type block = exp Postexpander.block
 type temp  = Register.t
 <<rewrite.mli>>=
 <<exported type abbreviations>>
@@ -129,11 +129,11 @@ The recognizer should use the [[Bits.[SU].fits]] predicates.
 <<rewrite.ml>>=
 module B  = Bits
 module BO = Bits.Ops
-module PX = Postexpander
+module DG = Dag
 module R  = Rtl
 module RU = Rtlutil
 
-let (<:>) = PX.(<:>)
+let (<:>) = DG.(<:>)
 
 <<exported type abbreviations>>
 
@@ -171,7 +171,7 @@ let popcnt w ~dst x =
   if w <> 32 then
     Unsupported.popcnt ~notok:w ~ok:32;
   let u      = O.unsigned 32 in
-  let (@:=) l r = PX.Rtl (R.store l r 32) in
+  let (@:=) l r = DG.Rtl (R.store l r 32) in
   let (&)   l r = O._and 32 l r in
   let (>>)  l r = O.shrl 32 l (u r) in
   let (-)   l r = O.sub 32 l r in
@@ -465,14 +465,14 @@ int njdiv(int x, int y) {
 }
 <<rewrite.ml>>=
 let div2 w ~dst x y =
-  let return e = PX.Rtl (R.store dst e w) in
+  let return e = DG.Rtl (R.store dst e w) in
   let one  = O.signed w 1 in
   let zero = O.signed w 0 in
-  PX.If (PX.cond (O.ge w y zero),
-         PX.If (PX.cond (O.ge w x zero),
+  DG.If (DG.cond (O.ge w y zero),
+         DG.If (DG.cond (O.ge w x zero),
                 return (O.quot w x y),
                 return (O.sub w (O.quot w (O.add w x one) y) one)),
-         PX.If (PX.cond (O.gt w x zero),
+         DG.If (DG.cond (O.gt w x zero),
                 return (O.sub w (O.quot w (O.sub w x one) y) one),
                 return (O.quot w x y)))
 
@@ -490,14 +490,14 @@ int njfast (int x, int y) {
 }
 <<rewrite.ml>>=
 let div1_3 w ~dst x y =
-  let return e = PX.Rtl (R.store dst e w) in
+  let return e = DG.Rtl (R.store dst e w) in
   let one  = O.signed w 1 in
   let zero = O.signed w 0 in
-  PX.If (PX.cond (O.ge w (O.xor w x y) zero),
+  DG.If (DG.cond (O.ge w (O.xor w x y) zero),
          return (O.quot w x y),
-  PX.If (PX.cond (O.ge w y zero),
+  DG.If (DG.cond (O.ge w y zero),
          return (O.sub w (O.quot w (O.add w x one) y) one),
-  PX.If (PX.cond (O.eq w x zero),
+  DG.If (DG.cond (O.eq w x zero),
          return zero,
          return (O.sub w (O.quot w (O.sub w x one) y) one))))
 
@@ -513,8 +513,8 @@ int m3div (int x, int y) {
 }
 <<rewrite.ml>>=
 let div' w ~dst x y ~quot ~rem =
-  let return e = PX.Rtl (R.store dst e w) in
-  PX.If (PX.cond (O.conjoin (O.lt w (O.xor w x y) (O.signed w 0))
+  let return e = DG.Rtl (R.store dst e w) in
+  DG.If (DG.cond (O.conjoin (O.lt w (O.xor w x y) (O.signed w 0))
                             (O.ne w rem (O.signed w 0))),
          return (O.sub w quot (O.signed w 1)),
          return quot)

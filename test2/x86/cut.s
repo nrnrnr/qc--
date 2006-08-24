@@ -66,10 +66,10 @@ main:
 	addl %edx,%ecx
 	movl %eax,12(%esp)
 	movl %ecx,%eax
-	movl %ebx,16(%esp)
-	movl %ebp,20(%esp)
-	movl %esi,24(%esp)
 	movl %edi,28(%esp)
+	movl %esi,24(%esp)
+	movl %ebp,20(%esp)
+	movl %ebx,16(%esp)
 	call f
 .Lcall_successor_l24:
 	leal nocut,%eax

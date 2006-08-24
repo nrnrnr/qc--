@@ -27,8 +27,9 @@ val replace_slot_temporaries : Ast2ir.proc -> Ast2ir.proc * (string * Block.t) l
 % ------------------------------------------------------------------ 
 
 <<stack.ml>>=
-module Target = Target
-module RP     = Rtl.Private
+module PA = Preast2ir
+module T  = Target
+module RP = Rtl.Private
 @
 [[blocks]] builds a list table of (named) blocks taken from the actual
 procedure.  This table will be passed to the Lua function that actually
@@ -44,7 +45,8 @@ stack pointer points into the frame.
 let blocks' frozen_block block list table (g, p) =
     let blockspair p = table [ "callee", list (List.map block p.Call.callee)
                              ; "caller", list (List.map block p.Call.caller) ] in
-    let vfp = p.Proc.target.Target.vfp in
+    let PA.T tgt = p.Proc.target in
+    let vfp = tgt.T.vfp in
         [ "sp"            , block p.Proc.sp
         ; "vfp"           , block (Block.at vfp 0 (Block.alignment p.Proc.sp))
         ; "oldblocks"     , blockspair p.Proc.oldblocks
@@ -57,7 +59,8 @@ let blocks' frozen_block block list table (g, p) =
 let blocks x = blocks' (fun a -> (Automaton.freeze a).Automaton.overflow) x
 
 let freeze' apply_to_proc (g, p) (stack:Block.t) = 
-    let pointer  = p.Proc.target.Target.pointersize in            
+    let PA.T tgt = p.Proc.target in
+    let pointer  = tgt.T.pointersize in            
     let eqns     = p.Proc.eqns @ Block.constraints stack in
     let solution = 
         try Rtleqn.solve pointer eqns 
@@ -142,7 +145,7 @@ module AllocMap = Map.Make(OrderSlotTemp)
 @
 \subsection{utility functions}
 <<utility functions>>=
-    let target = proc.Proc.target in
+  let PA.T target = proc.Proc.target in
 @ 
 \subsection{determine confined and unconfibed sets of registers}
 <<determine confined and unconfined sets of registers>>=
@@ -218,9 +221,9 @@ module AllocMap = Map.Make(OrderSlotTemp)
 \subsection{build a map holding the locations of the sets}
 <<build a map holding the locations of the sets>>=
 
-  let bu = Memalloc.relative ~anchor:target.Target.vfp
+  let bu = Memalloc.relative ~anchor:target.T.vfp
     ~dbg:"Unconfined slots block" Memalloc.Down
-  and bc = Memalloc.relative ~anchor:target.Target.vfp
+  and bc = Memalloc.relative ~anchor:target.T.vfp
     ~dbg:"Confined slots block" Memalloc.Down in
 
   let exCount = function Cell.C i -> i in
@@ -245,8 +248,8 @@ module AllocMap = Map.Make(OrderSlotTemp)
 \subsection{rewrite the control flow graph}
 <<rewrite the control flow graph>>=
 
-  let is_tmp (s,_,_) = Target.is_tmp target s in
-  let memSpace = Space.Standard32.m target.Target.byteorder [target.Target.wordsize] in
+  let is_tmp (s,_,_) = T.is_tmp target s in
+  let memSpace = Space.Standard32.m target.T.byteorder [target.T.wordsize] in
 
   let guard = function RP.Reg r ->  is_tmp r | _ -> false 
     

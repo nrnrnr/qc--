@@ -19,6 +19,7 @@ The implementation is against the ``new'' control-flow graph module
 module G   = Zipcfg
 module GR  = Zipcfg.Rep
 module P   = Proc
+module PA  = Preast2ir
 module E   = Interpemitrtl
 module T   = Target
 module RP  = Rtl.Private
@@ -54,8 +55,10 @@ let first f () = match f with
 
 let middle m () = E.rtl print (GR.mid_instr m) in
 
-let last l () = match l with
-| GR.Call call ->
+let last l () =
+  let PA.T tgt = Interp.target' in
+  match l with
+  | GR.Call call ->
         let rec sublist lst i length = 
            let helper lst i length = match lst with
                | []        -> []
@@ -71,12 +74,12 @@ let last l () = match l with
         let spans   = match call.GR.cal_spans with
         | Some ss -> RTD.user_spans ss
         | None -> [] in
-        let succs   = GR.succs l     in
-        let returns = sublist succs 0                nreturns
-        and cuts    = sublist succs nreturns         ncuts
-        and unwinds = sublist succs (nreturns+ncuts) nunwinds
-        and aborts  = List.length succs > nreturns + 1 + nunwinds + ncuts
-        and e       = Interp.target'.T.call.T.project (GR.last_instr l) in
+        let succs    = GR.succs l     in
+        let returns  = sublist succs 0                nreturns
+        and cuts     = sublist succs nreturns         ncuts
+        and unwinds  = sublist succs (nreturns+ncuts) nunwinds
+        and aborts   = List.length succs > nreturns + 1 + nunwinds + ncuts in
+        let e        = tgt.T.machine.T.call.T.project (GR.last_instr l) in
 
         let string_of_annotation lst = String.concat "," (List.map quoted_label lst) in
         begin
@@ -94,7 +97,7 @@ let last l () = match l with
     (* FIX cut to is not being translated well *)
     | GR.Cut (rtl, edges, regs) ->
         ( E.rtl print rtl
-        ; ( let e  = Interp.target'.T.call.T.project rtl in
+        ; ( let e  = tgt.T.machine.T.call.T.project rtl in
             let e = (match Rtl.Dn.exp e with
               | Rtl.Private.Fetch (Rtl.Private.Mem (_,_,exp,_), _) -> Rtl.Up.exp exp
               | _ -> e) in
@@ -102,7 +105,7 @@ let last l () = match l with
         ; printf "CMM.cut()\n"
         )
     | GR.Cbranch (rtl, t, f) ->
-        let (g,_) = Interp.target'.T.branch.T.project rtl in
+        let g = tgt.T.machine.T.branch.T.project rtl in
             ( E.exp print g
             ; printf "CMM.cbrancht('%s')\n" (snd t)
             )
@@ -110,12 +113,12 @@ let last l () = match l with
         (match successor with
         | Some (u', l) when Unique.eq u u' -> ()
         | _ ->
-            let e = Interp.target'.T.goto.T.project rtl in
+            let e = tgt.T.machine.T.goto.T.project rtl in
             ( E.exp print e
             ; printf "CMM.goto()\n"
             ))
     | GR.Mbranch (rtl, _) ->
-        let e = Interp.target'.T.goto.T.project rtl in
+        let e = tgt.T.machine.T.goto.T.project rtl in
         ( E.exp print e
         ; printf "CMM.goto()\n"
         )
@@ -125,7 +128,7 @@ let last l () = match l with
         printf "CMM.cmm_return(%d,%d)\n" exit exit
 
     | GR.Jump (rtl, _, _) ->
-        let e = Interp.target'.T.jump.T.project rtl in
+        let e = tgt.T.machine.T.jump.T.project rtl in
             ( E.exp print e
             ; printf "CMM.cmm_tail_call()\n"
             )

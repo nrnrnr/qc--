@@ -21,8 +21,8 @@ divmod:
 	movl (%edx),%edx
 .Linitialize_continuations_l4:
 .Lproc_body_start_l3:
-	movl %eax,(%esp)
 	movl %ecx,4(%esp)
+	movl %eax,(%esp)
 	movl (%esp),%ecx
 	movl %ecx,%eax
 	movl %edx,8(%esp)

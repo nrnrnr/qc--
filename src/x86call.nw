@@ -8,7 +8,7 @@ The parameters represent the machine instructions to implement
 <<x86call.mli>>=
 val cconv :
   return_to:(Rtl.exp -> Rtl.rtl) ->
-  Mflow.cut_args Target.map ->
+  (unit, Mflow.cut_args) Target.map ->
   string -> Automaton.cc_spec ->
   Call.t
 @ 
@@ -393,7 +393,6 @@ let conv ~preserved ~jump ~struct' ~altret name specs ~return_to cut =
   ; C.pre_nvregs       = nvregs          (* registers preserved across calls *)
   ; C.volregs          = volregs         (* registers not preserved across calls *)
   ; C.saved_nvr        = saved_nvr
-  ; C.cutto            = cut
   ; C.return           = return
   } 
 @ 
@@ -445,7 +444,6 @@ let thread cut specs =
   ; C.pre_nvregs       = RS.empty        (* registers preserved across calls *)
   ; C.volregs          = allregs         (* registers not preserved across calls *)
   ; C.saved_nvr        = saved_nvr
-  ; C.cutto            = cut
   ; C.return           = (fun _ _ ~ra -> impossf "return in C-- thread convention")
   } 
 @

@@ -48,6 +48,7 @@ module D  = Dataflow.F
 module G  = Zipcfg
 module GR = Zipcfg.Rep
 module P  = Proc
+module PA = Preast2ir
 module RP = Rtl.Private
 module RU = Rtlutil
 module Dn = Rtl.Dn
@@ -75,6 +76,7 @@ Two key functions are wrapped for debugging:
 \end{itemize}
 <<peephole.ml>>=
 let tx (g, proc) =
+  let PA.T tgt = proc.P.target in
   let replace =
     if debug then
       (fun rtl old ->
@@ -85,11 +87,11 @@ let tx (g, proc) =
       (fun rtl _ -> rtl) in
   let ok =
     if debug then
-      (fun i -> if proc.P.target.T.is_instruction i then true
+      (fun i -> if tgt.T.is_instruction i then true
                 else (Printf.eprintf "### rejected substitution %s\n"
                            (ToString.rtl i); false))
     else
-      proc.P.target.T.is_instruction in
+      tgt.T.is_instruction in
   <<propagation of available expressions and replacement of RTLs>>
   { D.name = "peephole"; D.middle_out = middle_out; D.last_outs = last_outs }
 

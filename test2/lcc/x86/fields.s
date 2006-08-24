@@ -171,8 +171,8 @@ main:
 	andl %eax,%edx
 	leal i,%eax
 	movl (%eax),%eax
-	movl %ecx,64(%esp)
 	movl %eax,68(%esp)
+	movl %ecx,64(%esp)
 	movl 64(%esp),%eax
 	movl %eax,%ecx
 	movl 68(%esp),%eax
@@ -476,7 +476,8 @@ f1:
 	orl %ecx,%eax
 	movl 12(%esp),%ecx
 	movl %eax,(%ecx)
-.Lbranch_target_l49:
+.Lbranch_target_l46:
+.Lbranch_target_l50:
 	movl (%ecx),%eax
 	movl $60,%edx
 	andl %edx,%eax
@@ -545,17 +546,17 @@ L.30:
 	leal 48(%esp), %esp
 	ret
 .section .pcmap_data
-.Lstackdata_l53:
+.Lstackdata_l54:
 .long 0
 .section .pcmap
 .long .Lcall_successor_l44
-.long .Lframe_l54
+.long .Lframe_l55
 .section .pcmap_data
-.Lframe_l54:
+.Lframe_l55:
 .long 0x80000004
 .long 0xffffffd0
 .long 0xffffffe8
-.long .Lstackdata_l53
+.long .Lstackdata_l54
 .long 0
 .long 7
 .long 0
@@ -570,13 +571,13 @@ L.30:
 .long 0
 .section .pcmap
 .long .Lcall_successor_l41
-.long .Lframe_l55
+.long .Lframe_l56
 .section .pcmap_data
-.Lframe_l55:
+.Lframe_l56:
 .long 0x80000004
 .long 0xffffffd0
 .long 0xffffffe8
-.long .Lstackdata_l53
+.long .Lstackdata_l54
 .long 0
 .long 7
 .long 0
@@ -598,16 +599,17 @@ f2:
 	movl (%eax),%eax
 	leal 24(%esp), %ecx
 	movl (%ecx),%ecx
-.Linitialize_continuations_l57:
-.Lproc_body_start_l56:
-.Lbranch_target_l67:
+.Linitialize_continuations_l58:
+.Lproc_body_start_l57:
+.Lbranch_target_l65:
+.Lbranch_target_l69:
 	leal i,%edx
 	movl (%edx),%edx
 	movl %eax,4(%esp)
 	movl $0,%eax
 	cmpl %eax,%edx
 	jne L.42
-.Lbranch_target_l63:
+.Lbranch_target_l64:
 	movl $1,%eax
 	jmp L.43
 L.42:
@@ -635,7 +637,7 @@ L.43:
 	addl %edx,%eax
 	movl %ecx,(%eax)
 	call f1
-.Lcall_successor_l62:
+.Lcall_successor_l63:
 	movl 4(%esp),%eax
 	movl (%eax),%ecx
 	movl $-61,%edx
@@ -652,17 +654,17 @@ L.43:
 	leal 24(%esp), %esp
 	ret
 .section .pcmap_data
-.Lstackdata_l71:
+.Lstackdata_l73:
 .long 0
 .section .pcmap
-.long .Lcall_successor_l62
-.long .Lframe_l72
+.long .Lcall_successor_l63
+.long .Lframe_l74
 .section .pcmap_data
-.Lframe_l72:
+.Lframe_l74:
 .long 0x80000004
 .long 0xffffffe8
 .long 0xfffffffc
-.long .Lstackdata_l71
+.long .Lstackdata_l73
 .long 0
 .long 5
 .long 0

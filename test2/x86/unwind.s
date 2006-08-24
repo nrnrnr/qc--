@@ -17,8 +17,8 @@ unwind_test:
 	movl (%ecx),%ecx
 .Linitialize_continuations_l12:
 .Lproc_body_start_l11:
-	movl %eax,(%esp)
 	movl %ecx,4(%esp)
+	movl %eax,(%esp)
 	call g
 .Lcall_successor_l17:
 	movl $0,%eax
@@ -91,10 +91,10 @@ g:
 	movl $-32,%edx
 	addl %edx,%ecx
 	movl %eax,(%ecx)
-	movl %ebx,8(%esp)
-	movl %ebp,12(%esp)
-	movl %esi,16(%esp)
 	movl %edi,20(%esp)
+	movl %esi,16(%esp)
+	movl %ebp,12(%esp)
+	movl %ebx,8(%esp)
 	call do_unwind
 .Lcall_successor_l36:
 	int $3

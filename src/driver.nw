@@ -64,9 +64,10 @@ val compile :
 \subsection{Caml Implementation}
 % ------------------------------------------------------------------ 
 <<driver.ml>>=
-module E = Error
-module M = Metrics
-module T = Target
+module E  = Error
+module M  = Metrics
+module PA = Preast2ir
+module T  = Target
 <<driver.ml>>=
 let version () =
     ( This.name     stdout 
@@ -166,7 +167,7 @@ let metrics_ok src tgt =
 let elab ~swap validate (map,ast) asm =
   Nelab.program ~swap validate map asm (Nast.program ast)
 
-let compile target opt exportglobals src asm validate swap =
+let compile (PA.T target) opt exportglobals src asm validate swap =
   let validate = if validate then Mvalidate.rtl target else (fun _ -> None) in
   let abort () = Error.error "compilation aborted because of errors" in
   let as_ok = function Error.Ok x -> x | Error.Error -> abort () in
@@ -175,7 +176,7 @@ let compile target opt exportglobals src asm validate swap =
       if Fenv.Dirty.errorFlag env then
         abort ()
       else
-        Ast2ir.translate target (Fenv.clean env) opt exportglobals compunit
+        Ast2ir.translate (PA.T target) (Fenv.clean env) opt exportglobals compunit
     else
       Error.error "metrics of source code don't match the target"))
 @

@@ -50,7 +50,8 @@ tiger_main:
 	movl 12(%esp),%eax
 	movl %eax,(%edx)
 Lloop_start_25:
-.Lbranch_target_l17:
+.Lbranch_target_l14:
+.Lbranch_target_l18:
 	leal 52(%esp), %eax
 	movl $-12,%edx
 	addl %edx,%eax
@@ -140,22 +141,22 @@ Lloop_body_26:
 	movl $8,%edx
 	addl %edx,%ecx
 	movl %eax,(%ecx)
-.LLloop_start_25_l18:
+.LLloop_start_25_l19:
 	movl 24(%esp),%ecx
 	jmp Lloop_start_25
 .section .pcmap_data
-.Lstackdata_l20:
+.Lstackdata_l21:
 .long 1
 .long 0xfffffff4
 .section .pcmap
 .long .Lcall_successor_l7
-.long .Lframe_l21
+.long .Lframe_l22
 .section .pcmap_data
-.Lframe_l21:
+.Lframe_l22:
 .long 0x80000004
 .long 0xffffffcc
 .long 0xffffffe4
-.long .Lstackdata_l20
+.long .Lstackdata_l21
 .long 0
 .long 7
 .long 2
@@ -172,13 +173,13 @@ Lloop_body_26:
 .long tiger_main_gc_data
 .section .pcmap
 .long .Lcall_successor_l13
-.long .Lframe_l22
+.long .Lframe_l23
 .section .pcmap_data
-.Lframe_l22:
+.Lframe_l23:
 .long 0x80000004
 .long 0xffffffcc
 .long 0xffffffe4
-.long .Lstackdata_l20
+.long .Lstackdata_l21
 .long 0
 .long 7
 .long 2
@@ -195,13 +196,13 @@ Lloop_body_26:
 .long tiger_main_gc_data
 .section .pcmap
 .long .Lcall_successor_l10
-.long .Lframe_l23
+.long .Lframe_l24
 .section .pcmap_data
-.Lframe_l23:
+.Lframe_l24:
 .long 0x80000004
 .long 0xffffffcc
 .long 0xffffffe4
-.long .Lstackdata_l20
+.long .Lstackdata_l21
 .long 0
 .long 7
 .long 2

@@ -46,7 +46,7 @@ main:
 	movl 36(%esp),%ecx
 	movl %ecx,(%edx)
 	call down
-.Lcall_successor_l20:
+.Lcall_successor_l21:
 	leal -8(%esp), %esp
 	leal 68(%esp), %ecx
 	movl $-4,%edx
@@ -68,8 +68,9 @@ main:
 	movl 48(%esp),%ecx
 	movl %ecx,(%edx)
 	call down
-.Lcall_successor_l17:
-.Lbranch_target_l24:
+.Lcall_successor_l18:
+.Lbranch_target_l15:
+.Lbranch_target_l25:
 	movl 32(%esp),%ecx
 	cmpl %eax,%ecx
 	je .Lbranch_target_l14
@@ -135,18 +136,18 @@ main:
 	leal 60(%esp), %esp
 	ret
 .section .pcmap_data
-.Lstackdata_l27:
+.Lstackdata_l28:
 .long 1
 .long 0xfffffffc
 .section .pcmap
-.long .Lcall_successor_l20
-.long .Lframe_l28
+.long .Lcall_successor_l21
+.long .Lframe_l29
 .section .pcmap_data
-.Lframe_l28:
+.Lframe_l29:
 .long 0x80000004
 .long 0xffffffc4
 .long 0xffffffd8
-.long .Lstackdata_l27
+.long .Lstackdata_l28
 .long 0
 .long 4
 .long 0
@@ -157,14 +158,14 @@ main:
 .long 0
 .long 0
 .section .pcmap
-.long .Lcall_successor_l17
-.long .Lframe_l29
+.long .Lcall_successor_l18
+.long .Lframe_l30
 .section .pcmap_data
-.Lframe_l29:
+.Lframe_l30:
 .long 0x80000004
 .long 0xffffffc4
 .long 0xffffffd8
-.long .Lstackdata_l27
+.long .Lstackdata_l28
 .long 0
 .long 4
 .long 0
@@ -176,13 +177,13 @@ main:
 .long 0
 .section .pcmap
 .long .Lcall_successor_l9
-.long .Lframe_l30
+.long .Lframe_l31
 .section .pcmap_data
-.Lframe_l30:
+.Lframe_l31:
 .long 0x80000004
 .long 0xffffffc4
 .long 0xffffffd8
-.long .Lstackdata_l27
+.long .Lstackdata_l28
 .long 0
 .long 4
 .long 0
@@ -194,13 +195,13 @@ main:
 .long 0
 .section .pcmap
 .long .Lcall_successor_l13
-.long .Lframe_l31
+.long .Lframe_l32
 .section .pcmap_data
-.Lframe_l31:
+.Lframe_l32:
 .long 0x80000004
 .long 0xffffffc4
 .long 0xffffffd8
-.long .Lstackdata_l27
+.long .Lstackdata_l28
 .long 0
 .long 4
 .long 0
@@ -225,12 +226,13 @@ down:
 	movl (%edx),%eax
 	leal 48(%esp), %edx
 	movl (%edx),%edx
-.Linitialize_continuations_l33:
-.Lproc_body_start_l32:
-.Lbranch_target_l41:
+.Linitialize_continuations_l34:
+.Lproc_body_start_l33:
+.Lbranch_target_l39:
+.Lbranch_target_l43:
 	cmpl %eax,%ecx
-	jb .Lbranch_target_l37
-.Lbranch_target_l35:
+	jb .Lbranch_target_l38
+.Lbranch_target_l36:
 	leal 48(%esp), %eax
 	movl $-4,%ecx
 	addl %ecx,%eax
@@ -249,7 +251,7 @@ down:
 	movl %edx,(%ecx)
 	leal 56(%esp), %esp
 	ret
-.Lbranch_target_l37:
+.Lbranch_target_l38:
 	movl %eax,4(%esp)
 	leal down,%eax
 	movl %ecx,8(%esp)

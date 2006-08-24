@@ -44,7 +44,8 @@ main:
 	movl $-8,%ecx
 	addl %ecx,%eax
 	movl (%eax),%eax
-.Lbranch_target_l12:
+.Lbranch_target_l9:
+.Lbranch_target_l13:
 	movl $1,%ecx
 	cmpl %ecx,%eax
 	je .Lbranch_target_l8
@@ -65,17 +66,17 @@ main:
 	leal 12(%esp), %esp
 	ret
 .section .pcmap_data
-.Lstackdata_l16:
+.Lstackdata_l17:
 .long 0
 .section .pcmap
 .long .Lcall_successor_l7
-.long .Lframe_l17
+.long .Lframe_l18
 .section .pcmap_data
-.Lframe_l17:
+.Lframe_l18:
 .long 0x80000004
 .long 0xfffffff4
 .long 0xfffffffc
-.long .Lstackdata_l16
+.long .Lstackdata_l17
 .long 0
 .long 3
 .long 0

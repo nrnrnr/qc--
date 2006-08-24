@@ -25,7 +25,8 @@ main:
 	movl (%edx),%edx
 .Linitialize_continuations_l5:
 .Lproc_body_start_l4:
-.Lbranch_target_l22:
+.Lbranch_target_l19:
+.Lbranch_target_l23:
 	movl %eax,16(%esp)
 	movl $1,%eax
 	movl %ecx,20(%esp)
@@ -34,7 +35,7 @@ main:
 	ja .Lbranch_target_l18
 .Lbranch_target_l14:
 	movl $10,%eax
-.L.Lbranch_target_l13_l23:
+.L.Lbranch_target_l13_l24:
 	movl %edx,36(%esp)
 	jmp .Lbranch_target_l13
 .Lbranch_target_l18:
@@ -98,17 +99,17 @@ main:
 	leal 60(%esp), %esp
 	ret
 .section .pcmap_data
-.Lstackdata_l26:
+.Lstackdata_l27:
 .long 0
 .section .pcmap
 .long .Lcall_successor_l17
-.long .Lframe_l27
+.long .Lframe_l28
 .section .pcmap_data
-.Lframe_l27:
+.Lframe_l28:
 .long 0x80000004
 .long 0xffffffc4
 .long 0xffffffe8
-.long .Lstackdata_l26
+.long .Lstackdata_l27
 .long 0
 .long 5
 .long 0
@@ -121,13 +122,13 @@ main:
 .long 0
 .section .pcmap
 .long .Lcall_successor_l12
-.long .Lframe_l28
+.long .Lframe_l29
 .section .pcmap_data
-.Lframe_l28:
+.Lframe_l29:
 .long 0x80000004
 .long 0xffffffc4
 .long 0xffffffe8
-.long .Lstackdata_l26
+.long .Lstackdata_l27
 .long 0
 .long 5
 .long 0
@@ -140,13 +141,13 @@ main:
 .long 0
 .section .pcmap
 .long .Lcall_successor_l9
-.long .Lframe_l29
+.long .Lframe_l30
 .section .pcmap_data
-.Lframe_l29:
+.Lframe_l30:
 .long 0x80000004
 .long 0xffffffc4
 .long 0xffffffe8
-.long .Lstackdata_l26
+.long .Lstackdata_l27
 .long 0
 .long 5
 .long 0
@@ -200,8 +201,8 @@ sp:
 	leal -24(%esp), %esp
 	leal 24(%esp), %ecx
 	movl (%ecx),%ecx
-.Linitialize_continuations_l31:
-.Lproc_body_start_l30:
+.Linitialize_continuations_l32:
+.Lproc_body_start_l31:
 	movl $0,%edx
 	movl %ecx,(%esp)
 	leal 24(%esp), %ecx
@@ -243,16 +244,17 @@ sphelp:
 	movl (%edx),%eax
 	leal 48(%esp), %edx
 	movl (%edx),%edx
-.Linitialize_continuations_l42:
-.Lproc_body_start_l41:
-.Lbranch_target_l51:
+.Linitialize_continuations_l43:
+.Lproc_body_start_l42:
+.Lbranch_target_l49:
+.Lbranch_target_l53:
 	movl %eax,4(%esp)
 	movl $0,%eax
 	movl %ecx,8(%esp)
 	movl (%esp),%ecx
 	cmpl %eax,%ecx
-	je .Lbranch_target_l47
-.Lbranch_target_l45:
+	je .Lbranch_target_l48
+.Lbranch_target_l46:
 	movl $1,%eax
 	movl %eax,28(%esp)
 	movl %ecx,%eax
@@ -288,7 +290,7 @@ sphelp:
 	movl %edx,(%ecx)
 	leal 48(%esp), %esp
 	jmp sphelp
-.Lbranch_target_l47:
+.Lbranch_target_l48:
 	movl 8(%esp),%eax
 	movl %edx,12(%esp)
 	movl 4(%esp),%edx

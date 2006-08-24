@@ -37,10 +37,10 @@ nest:
 	movl $-32,%edx
 	addl %edx,%ecx
 	movl %eax,(%ecx)
-	movl %ebx,8(%esp)
-	movl %ebp,12(%esp)
-	movl %esi,16(%esp)
 	movl %edi,20(%esp)
+	movl %esi,16(%esp)
+	movl %ebp,12(%esp)
+	movl %ebx,8(%esp)
 	call trace
 .Lcall_successor_l15:
 	movl $0,%eax

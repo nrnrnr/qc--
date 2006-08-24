@@ -16,17 +16,20 @@ module Spaces : sig
   val f : Space.t
   val u : Space.t
 end
-module Post : Postexpander.S
-module X    : Expander.S
-val target : Ast2ir.tgt
+module Post   : Postexpander.S
+module X      : Expander.S
+val target    : Ast2ir.tgt
 val placevars : Ast2ir.proc -> Automaton.t
 @ 
 <<ppc.ml>>=
 module A  = Automaton
 module B  = Bits
 module BO = Bits.Ops
+module DG = Dag
+module PA = Preast2ir
 module R  = Rtl
 module RP = Rtl.Private
+module RS = Register.Set
 module Up = Rtl.Up
 module Dn = Rtl.Dn
 module RO = Rewrite.Ops
@@ -34,20 +37,23 @@ module RU = Rtlutil
 module PX = Postexpander
 module T  = Target
 
-let rtl r = PX.Rtl r
-let (<:>) = PX.(<:>)
+let rtl r = DG.Rtl r
+let (<:>) = DG.(<:>)
 <<spaces>>
+let pc_lhs = nia
+let pc_rhs = cia
+module F = Mflow.MakeStandard (
+  struct
+    let pc_lhs = pc_lhs
+    let pc_rhs = pc_rhs
+    let ra_reg = creg 5
+    let ra_offset = 4
+  end)
+<<registers>>
 module Post = struct
   <<ppc postexpander>>
 end
 module X = Expander.IntFloatAddr (Post)
-module F = Mflow.MakeStandard (
-  struct
-    let pc_lhs = Post.pc_lhs
-    let pc_rhs = Post.pc_rhs
-    let ra_reg = creg 5
-    let ra_offset = 4
-  end)
 <<calling conventions>>
 <<target spec>>
 <<variable placer>>
@@ -163,12 +169,12 @@ let clr_xer_flag fl = function
 \section{Post Expander}
 % ---------------------------------------------------------------------------
 <<ppc postexpander>>=
+let pc_lhs = pc_lhs
+let pc_rhs = pc_rhs
 let byte_order = R.BigEndian
 let exchange_alignment = 4
 let wordsize = 32
 let memsize  = 8
-let pc_lhs = nia
-let pc_rhs = cia
 module Address = struct
   type t = Rtl.exp
   let reg r = R.fetch (R.reg r) (Register.width r)
@@ -415,8 +421,8 @@ Branch and call rtls.
 <<ppc postexpander>>=
 let br ~tgt = rtl (R.store lr (tval tgt) wordsize),
               R.store pc_lhs (R.fetch lr wordsize) wordsize
-let b ~tgt  = PX.Nop, R.store pc_lhs (Up.const tgt) wordsize
-@ 
+let b ~tgt  = DG.Nop, R.store pc_lhs (Up.const tgt) wordsize
+@
 Conditional branches are encoded as a comparison against the
 appropriate bit in the CR register. With this scheme, the opposite
 condition can be derived by changing the guard operator.
@@ -448,12 +454,21 @@ let bc_setup opr x y = match opr with
 
 let bc x ((opr, ws) as op) y ~ifso ~ifnot =
   assert (ws =*= [wordsize]);
+  let brtl cond tgt = R.guard cond (R.store pc_lhs tgt 32) in
   match xer_condition opr with
-  | None -> PX.Test (PX.Nop, (R.app (Up.opr op) [tval x; tval y], ifso, ifnot))
+  | None -> DG.Test (DG.Nop, (brtl (R.app (Up.opr op) [tval x; tval y]), ifso, ifnot))
   | Some tst ->
-      PX.Test (bc_setup opr x y,
-               (R.app (R.opr tst []) [R.fetch xer wordsize], ifso, ifnot))
-
+      DG.Test (bc_setup opr x y, (brtl (R.app (R.opr tst []) [R.fetch xer wordsize]),
+               ifso, ifnot))
+let bc_guard x ((opr, ws) as op) y =
+  assert (ws =*= [wordsize]);
+  match xer_condition opr with
+  | None     -> (DG.Nop,           (R.app (Up.opr op)    [tval x; tval y]))
+  | Some tst -> (bc_setup opr x y, (R.app (R.opr tst []) [R.fetch xer wordsize]))
+let bc_of_guard (setup, guard) ~ifso ~ifnot =
+  let brtl cond tgt = R.guard cond (R.store pc_lhs tgt 32) in
+  DG.Test (setup, (brtl guard, ifso, ifnot))
+  
 let negate = function
   | "ne"            -> "eq"
   | "eq"            -> "ne"
@@ -484,24 +499,24 @@ let bnegate r = match Dn.rtl r with
 @ 
 Call instructions are the same as branches with some additional effects.
 <<ppc postexpander>>=
-let call_with branch ~tgt ~others =
-  let b, rtl = branch ~tgt in b, R.par (rtl :: List.map Up.effect others)
-let call  = call_with b
-let callr = call_with br
+let call  = b
+let callr = br
 
-let cut_to = function
-  | [RP.Store(pc, tgt, w); restore_stack] ->
-      let effects = [RP.Store(pc, RP.Fetch(Dn.loc lr, w), w); restore_stack] in
-      rtl (R.store lr (Up.exp tgt) w), R.par (List.map Up.effect effects)
-  | effects -> PX.Nop, R.par (List.map Up.effect effects)
+(* THIS IS SUSPECT -- WHY ARE WE SETTING THE LINK REGISTER? *)
+let cut_to {Mflow.new_sp = sp'; Mflow.new_pc = pc'} =
+  let effs = [R.store pc_lhs (R.fetch lr wordsize) wordsize; R.store sp sp' wordsize] in
+  rtl (R.store lr pc' wordsize), R.par effs
 @ 
+The [[return]] instruction is standard, and we don't yet have the proper [[forbidden]]
+instruction.
+<<ppc postexpander>>=
+let return = fmach.Mflow.return
+let forbidden = Rtl.par [] (* BOGUS: NEEDS TO BE A REAL FAULTING INSTRUCTION *)
+@
 We want to prevent the expander from messing with the rtl [[pc := lr]]
 which is a return from procedure call.
 <<ppc postexpander>>=
-let don't_touch_me = function
-  | [ RP.Store(l, RP.Fetch(r, _), _) ]
-    when RU.Eq.loc l (Dn.loc pc_lhs) && RU.Eq.loc r (Dn.loc lr) -> true
-  | _ -> false
+let don't_touch_me _ = false
 @ 
 Stack operations...
 <<ppc postexpander>>=
@@ -533,17 +548,17 @@ Here's a quick ASCII diagram:
 
 <<calling conventions>>=
 module C  = Call
-module RS = Register.Set
 @ 
 Integer registers r0 is not used because of the restrictions on the arguments
 of load/store instructions, r1 is the stack pointer,
 r2 is reserved for position-independent code,
 r3-r12 are volatile, and r13-r31 are non-volatile. For floating point,
 registers f1-f13 are volatile, and f14-131 are not.
-<<calling conventions>>=
+<<registers>>=
 let sp_reg = (rspace, 1, R.C 1)
 let sp     = R.reg sp_reg
 let vfp    = Vfp.mk 32
+let fmach = F.machine sp
 
 let regset s l = RS.of_list (List.map (fun r-> (s,r,R.C 1)) l)
 let vregs   = regset rspace [2;3;4;5;6;7;8;9;10;11;12]
@@ -628,7 +643,6 @@ let cconv name specs =
   ; C.pre_nvregs       = nvolregs
   ; C.volregs          = volregs
   ; C.saved_nvr        = saved_nvr
-  ; C.cutto            = F.cutto sp
   ; C.return           = (fun k n ~ra -> R.store nia (R.fetch lr ws) ws)
   ; C.ra_on_entry      = (fun b     -> R.fetch lr ws)
 (*  ; C.where_to_save_ra = (fun e t     -> Post.mem R.none ws sp_8) *)
@@ -798,58 +812,47 @@ The actual [[Target.t]] for the PPC backend.
 <<target spec>>=
 let target =
   let spaces = [ Spaces.m; Spaces.r; Spaces.t; Spaces.c; Spaces.f; Spaces.u ] in
-  { T.name = "ppc"
-  ; T.memspace = mspace
-  ; T.max_unaligned_load  = R.C 1
-  ; T.forbidden = Rtl.par []    (* BOGUS: NEEDS TO BE A REAL FAULTING INSTRUCTION *)
- (* basic metrics and spaces are OK *)
-  ; T.byteorder   = Post.byte_order  
-  ; T.wordsize    = Post.wordsize
-  ; T.pointersize = Post.wordsize
-  ; T.vfp         = Space.Standard32.vfp
-  ; T.alignment = 1
-  ; T.memsize = Post.memsize
-  ; T.spaces = spaces
-  ; T.reg_ix_map          = T.mk_reg_ix_map spaces
-  ; T.distinct_addr_sp = false
-
-  (* Does the PPC really implement IEEE 754?  I think so *)
-  ; T.float = Float.ieee754
-
-  (* spill and reload are believed OK *)
-  ; T.spill  = spill
-  ; T.reload = reload
-
-  (* control flow is solid, except [[cutto]] is a lie *)
-  ; T.bnegate = Post.bnegate
-  ; T.goto    = F.goto
-  ; T.jump    = F.jump
-  ; T.call    = F.call
-  ; T.return  = F.return
-  ; T.branch  = F.branch
-
-  ; T.cc_specs         = []      (* added by lua code *)
-  ; T.cc_spec_to_auto  = cconv
-
-  ; T.is_instruction = Ppcrec.M.is_instruction
-  ; T.tx_ast = (fun secs -> secs)
-  ; T.capabilities   = { T.operators = List.map Up.opr Post.machine_env;
-                         T.litops = [];
-                         T.literals = [32;64]; T.memory = [8;32];
-                         T.block_copy = false; T.itemps = [32]; T.ftemps = [];
-                         T.iwiden = true; T.fwiden = false; }
-  (* global or hardware registers *)
-  ; T.globals  = globals
-  ; T.rounding_mode = rmode
-  ; T.named_locs   = Strutil.assoc2map 
-                     ["IEEE 754 rounding mode", rmode
-                     ;"IEEE 754 rounding results", rresults
-                     ]
-  
-  (* bogosity *)
-  ; T.data_section = "data" (* NOT REALLY A PROPERTY OF THE TARGET MACHINE... *)
-  ; T.charset = "latin1" (* THIS IS NONSENSE!! NOT A PROPERTY OF THE MACHINE?? *)
-  } 
+  PA.T { T.name = "ppc"
+       ; T.memspace = mspace
+       ; T.max_unaligned_load  = R.C 1
+      (* basic metrics and spaces are OK *)
+       ; T.byteorder   = Post.byte_order  
+       ; T.wordsize    = Post.wordsize
+       ; T.pointersize = Post.wordsize
+       ; T.vfp         = Space.Standard32.vfp
+       ; T.alignment = 1
+       ; T.memsize = Post.memsize
+       ; T.spaces = spaces
+       ; T.reg_ix_map          = T.mk_reg_ix_map spaces
+       ; T.distinct_addr_sp = false
+   
+       (* Does the PPC really implement IEEE 754?  I think so *)
+       ; T.float = Float.ieee754
+   
+       (* control flow is solid, except [[cutto]] is a lie *)
+       ; T.machine = X.machine
+       ; T.cc_specs         = []      (* added by lua code *)
+       ; T.cc_spec_to_auto  = cconv
+   
+       ; T.is_instruction = Ppcrec.M.is_instruction
+       ; T.tx_ast = (fun secs -> secs)
+       ; T.capabilities   = { T.operators = List.map Up.opr Post.machine_env;
+                              T.litops = [];
+                              T.literals = [32;64]; T.memory = [8;32];
+                              T.block_copy = false; T.itemps = [32]; T.ftemps = [];
+                              T.iwiden = true; T.fwiden = false; }
+       (* global or hardware registers *)
+       ; T.globals  = globals
+       ; T.rounding_mode = rmode
+       ; T.named_locs   = Strutil.assoc2map 
+                          ["IEEE 754 rounding mode", rmode
+                          ;"IEEE 754 rounding results", rresults
+                          ]
+       
+       (* bogosity *)
+       ; T.data_section = "data" (* NOT REALLY A PROPERTY OF THE TARGET MACHINE... *)
+       ; T.charset = "latin1" (* THIS IS NONSENSE!! NOT A PROPERTY OF THE MACHINE?? *)
+       } 
 @ 
 % ---------------------------------------------------------------------------
 \section{Variable Placer}

@@ -49,7 +49,8 @@ main:
 	movl (%ecx),%ecx
 .Linitialize_continuations_l3:
 .Lproc_body_start_l2:
-.Lbranch_target_l14:
+.Lbranch_target_l11:
+.Lbranch_target_l15:
 	movl $1,%edx
 	cmpl %edx,%eax
 	ja .Lbranch_target_l10
@@ -77,17 +78,17 @@ main:
 	leal 12(%esp), %esp
 	ret
 .section .pcmap_data
-.Lstackdata_l18:
+.Lstackdata_l19:
 .long 0
 .section .pcmap
 .long .Lcall_successor_l7
-.long .Lframe_l19
+.long .Lframe_l20
 .section .pcmap_data
-.Lframe_l19:
+.Lframe_l20:
 .long 0x80000004
 .long 0xfffffff4
 .long 0xfffffffc
-.long .Lstackdata_l18
+.long .Lstackdata_l19
 .long 0
 .long 3
 .long 0

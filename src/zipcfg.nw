@@ -113,41 +113,37 @@ This representation is inspired by John Hughes's similar
 representation of lists, which supports append in constant time.
 <<zipcfg.mli>>=
 val uid : unit -> uid
-type machine = { goto    : label -> Rtl.rtl;
-                 cbranch : Rtl.exp * label -> Rtl.rtl;
-                 bnegate : Rtl.rtl -> Rtl.rtl;
-                 call    : Rtl.exp -> Rtl.rtl;
-                 forbidden : Rtl.rtl;
-               }
+type exp_of_lbl = label -> Rtl.exp (* exp of code label *)
+type 'a machine = 'a * 'a Mflow.machine * exp_of_lbl (* useful pairing *)
+type nodes      = zgraph -> zgraph (* sequence of nodes in Hughes's representation *)
+type cbranch    = ifso:label -> ifnot:label -> nodes (* ability to branch conditionally *)
 
-type nodes   = zgraph -> zgraph (* sequence of nodes in Hughes's representation *)
-type cbranch = ifso:label -> ifnot:label -> nodes (* ability to branch conditionally *)
-
-val label        : machine -> label -> nodes  (* spans? *)
+val label        : 'a machine -> label -> nodes  (* spans? *)
 val instruction  : Rtl.rtl -> nodes
 val stack_adjust : Rtl.rtl -> nodes
-val branch       : machine -> label -> nodes
-val jump         : Rtl.rtl -> uses:regs -> targets:string list -> nodes
-val cbranch      : machine -> Rtl.exp -> cbranch
-val mbranch      : Rtl.rtl -> targets:label list -> nodes
-val call         : machine -> Rtl.exp -> altrets:contedge list -> 
+val branch       : 'a machine -> label -> nodes
+val jump         : 'a machine -> Rtl.exp -> uses:regs -> targets:string list -> nodes
+val cbranch      : 'a machine -> Rtl.exp -> cbranch
+val mbranch      : 'a machine -> Rtl.exp -> targets:label list -> nodes
+val call         : 'a machine -> Rtl.exp -> altrets:contedge list -> 
                      unwinds_to:contedge list -> cuts_to:contedge list ->
                      aborts:bool -> uses:regs -> defs:regs -> kills:regs ->
                      reads:string list option -> writes:string list option ->
                      spans:Spans.t option -> succ_assn:Rtl.rtl -> nodes
-val cut_to       : Rtl.rtl -> cuts_to:contedge list -> aborts:bool -> uses:regs -> nodes
+val cut_to       : 'a machine -> Mflow.cut_args -> cuts_to:contedge list ->
+                              aborts:bool -> uses:regs -> nodes
 val return       : Rtl.rtl -> exit:int -> uses:regs -> nodes
-val forbidden    : machine -> nodes
+val forbidden    : 'a machine -> nodes
   (* control should not reach; causes checked RTE *)
 @ 
 As a convenience, we provide code generation for if-then-else and while-do.
 <<zipcfg.mli>>=
-val if_then_else : cbranch -> machine -> t:nodes -> f:nodes -> nodes
-val while_do     : cbranch -> machine -> body:nodes -> nodes
+val if_then_else : 'a machine -> cbranch -> t:nodes -> f:nodes -> nodes
+val while_do     : 'a machine -> cbranch -> body:nodes -> nodes
 @ 
 A limitcheck is a degenerate form of [[if]] with a special label.
 <<zipcfg.mli>>=
-val limitcheck : cbranch -> machine -> t:nodes -> nodes
+val limitcheck : 'a machine -> cbranch -> t:nodes -> nodes
 @ 
 Sometimes we need to make the current focus (which must be the edge
 leaving the entry)
@@ -155,7 +151,7 @@ a branch target to be used later.
 Calling [[make_target gz]] returns a new graph and a unique identifier
 to which the entry flows in.
 <<zipcfg.mli>>=
-val make_target : machine -> zgraph -> label * zgraph
+val make_target : 'a machine -> zgraph -> label * zgraph
 @ 
 Mutation---ugh!
 <<zipcfg.mli>>=
@@ -194,8 +190,7 @@ type last
   | Call    of call  
   | Cut     of Rtl.rtl * contedge edgelist * regs  (* out edges, registers used *)
   | Return  of exit_num * Rtl.rtl * regs
-  | Jump    of Rtl.rtl * regs * string list
-                   (* inst, registers used, targets *)
+  | Jump    of Rtl.rtl * regs * string list  (* inst, registers used, targets *)
   | Forbidden of Rtl.rtl (* cause a run-time error *)
 and exit_num = int
 @ In a complete graph for a procedure, the [[Exit]] node should not
@@ -268,6 +263,7 @@ val to_blocks : graph -> Rep.block Unique.Map.t
 val of_blocks : Rep.block Unique.Map.t -> graph  (* cheap *)
 val of_block_list : Rep.block list -> graph  (* expensive *)
 val openz : zgraph -> Rep.zblock * Rep.block Unique.Map.t
+val tozgraph : Rep.zblock * Rep.block Unique.Map.t -> zgraph
 @
 Traversal: [[postorder_dfs]] returns a list of blocks reachable from
 the entry node.
@@ -371,29 +367,38 @@ val add_inedge_uses : Rep.last  -> regs -> regs
 val add_live_spansl : Rep.last  -> regs -> regs
 val add_live_spansf : Rep.first -> regs -> regs
 @ 
+
+\paragraph{Conversion from a DAG}
+Parts of the compiler work with DAG's for convenience, but eventually we need to
+  convert the DAGs to CFGs.
+<<zipcfg.mli>>=
+val block_before : 'a machine -> (Rtl.exp -> Rtl.rtl) Dag.block -> zgraph ->
+                     (zgraph * bool)
+val block2cfg    : 'a machine -> (Rtl.exp -> Rtl.rtl) Dag.block -> (zgraph * bool)
+val cbranch2cfg  : 'a machine -> (Rtl.exp -> Rtl.rtl) Dag.cbranch ->
+                     ifso:label -> ifnot:label -> zgraph -> (zgraph * bool)
+@
+
 \clearpage
 \subsection{Implementation}
 <<zipcfg.ml>>=
-module R = Rtl
+module DG  = Dag
+module M   = Mflow
+module R   = Rtl
 module RSX = Register.SetX
-module U  = Unique
-module UM = Unique.Map
-module US = Unique.Set
+module U   = Unique
+module UM  = Unique.Map
+module US  = Unique.Set
 
 let impossf fmt = Printf.kprintf Impossible.impossible fmt
 let unimpf  fmt = Printf.kprintf Impossible.unimp      fmt
 let ( **> ) f x = f x
 
-type uid = U.uid
-type label = uid * string
-type machine = { goto    : label -> Rtl.rtl;
-                 cbranch : Rtl.exp * label -> Rtl.rtl;
-                 bnegate : Rtl.rtl -> Rtl.rtl;
-                 call    : Rtl.exp -> Rtl.rtl;
-                 forbidden : Rtl.rtl;
-               }
-
-let uid = U.uid
+type uid        = U.uid
+type label      = uid * string
+type exp_of_lbl = label -> Rtl.exp (* exp of code label *)
+type 'a machine = 'a * 'a Mflow.machine * exp_of_lbl (* useful pairing *)
+let uid         = U.uid
 @ 
 \paragraph{Nodes and basic blocks}
 It is OK to open [[Rep]] because the definition is sitting right
@@ -498,7 +503,8 @@ type cbranch = ifso:label -> ifnot:label -> nodes (* ability to branch condition
 
 let of_blocks g = g
 let to_blocks g = g
-let openz (bz, bs) = (bz, bs)
+let openz z = z
+let tozgraph z = z
 @ 
 <<zipcfg.ml>>=
 let empty = Blocks.insert (Entry, Last Exit) Blocks.empty
@@ -531,28 +537,42 @@ let unreachable = function
       warn t
 
 let consl last ((head, tail), blocks) = unreachable tail; ((head, Last last), blocks)
-
-let branch machine target = consl (Branch (machine.goto target, target))
-let jump rtl ~uses ~targets  = consl (Jump (rtl, uses, targets))
-let cbranch machine =
-  let f = machine.cbranch in
-  fun exp ~ifso ~ifnot ->
-    let rtl = f (exp, ifso) in
-    consl (Cbranch (rtl, ifso, ifnot))
-let mbranch rtl ~targets     = consl (Mbranch (rtl, targets))
-let return  rtl ~exit ~uses  = consl (Return (exit, rtl, uses))
-let cut_to  rtl ~cuts_to ~aborts ~uses = consl (Cut (rtl, cuts_to, uses))
-let forbidden machine = consl (Forbidden machine.forbidden)
-@ 
+@
+<<mutually recursive graph construction>>=
+let rec consl' m b last ((head, tail), blocks) =
+  unreachable tail;
+  fst (block_before m b ((head, Last last), blocks))
+and branch (p, machine, l2e as m) target =
+  let (b, r) = machine.M.goto.M.embed p (l2e target) in
+  consl' m b (Branch (r, target))
+and jump (p, machine, l2e as m) e ~uses ~targets =
+  let (b, r) = machine.M.jump.M.embed p e in
+  consl' m b (Jump (r, uses, targets))
+@
+<<mutually recursive graph construction>>=
+and cbranch (p, machine,l2e as m) guard ~ifso ~ifnot succ =
+  let cbr = machine.M.branch.M.embed p guard in
+  fst (cbranch2cfg m cbr ~ifso ~ifnot succ)
+and mbranch (p, machine, l2e as m) e ~targets ((head, tail), blocks) =
+  let (b, r) = machine.M.goto.M.embed p e in
+  unreachable tail;
+  fst (block_before m b ((head, Last (Mbranch (r, targets))), blocks))
+and cut_to (p, machine, l2e as m) cut_args ~cuts_to ~aborts ~uses =
+  let (b, r) = machine.M.cutto.M.embed p cut_args in
+  consl' m b (Cut (r, cuts_to, uses))
 <<zipcfg.ml>>=
-let label' user tgt =
-  let goto = tgt.goto in
-  fun lbl ((head, tail), blocks) ->
-    ((head, Last (Branch (goto lbl, lbl))),
-     Blocks.insert (Label (lbl, user, ref None), tail) blocks)
-let label        = label' Userlabel
-let privatelabel = label' Genlabel
-let limitlabel   = label' Limitlabel
+let return  rtl ~exit ~uses  = consl (Return (exit, rtl, uses))
+let forbidden (_, machine,_) = consl (Forbidden machine.M.forbidden)
+@ 
+<<mutually recursive graph construction>>=
+and label' user (p, machine, l2e as m) lbl ((head, tail), blocks) =
+  let (b, r) = machine.M.goto.M.embed p (l2e lbl) in
+  fst (block_before m b ((head, Last (Branch (r, lbl))),
+       Blocks.insert (Label (lbl, user, ref None), tail) blocks))
+<<mutually recursive graph construction>>=
+and label        x = label' Userlabel x
+and privatelabel x = label' Genlabel x
+and limitlabel   x = label' Limitlabel x
 @ 
 <<zipcfg.ml>>=
 let check_single_exit g =
@@ -562,8 +582,8 @@ let check_single_exit g =
   if not (Blocks.fold check g false) then
     impossf "graph does not have an exit"
 @ 
-<<zipcfg.ml>>=
-let make_target machine ((b, bs) as gz) = match b with
+<<mutually recursive graph construction>>=
+and make_target machine ((b, bs) as gz) = match b with
 | First (Label (u, _, _)), _        -> u, gz
 | First Entry, Last (Branch (_, u)) -> u, gz
 | First Entry, _ ->
@@ -572,44 +592,45 @@ let make_target machine ((b, bs) as gz) = match b with
     lbl, gz
 | _ -> impossf "focus not on entry"
 @ 
-<<zipcfg.ml>>=
-let if_then_else cbranch machine ~t ~f g =
+<<mutually recursive graph construction>>=
+and if_then_else machine cbranch ~t ~f g =
   let endif, g = make_target machine g in
   let not,   g = make_target machine (f g) in
   let        g = branch      machine endif g in
   let so,    g = make_target machine (t g) in
   cbranch ~ifso:so ~ifnot:not g
 @ 
-<<zipcfg.ml>>=
-let while_do cbranch machine ~body g =
+<<mutually recursive graph construction>>=
+and while_do machine cbranch ~body g =
   let lbl = (uid (), Idgen.label "loop head") in
   let endwhile, g = make_target machine g in
   let body,     g = make_target machine (body (branch machine lbl g)) in
   let g = cbranch ~ifso:body ~ifnot:endwhile g in
   label machine lbl g
 @ 
-<<zipcfg.ml>>=
-let limitcheck cbranch machine ~t g =
+<<mutually recursive graph construction>>=
+and limitcheck machine cbranch ~t g =
   let endif = (uid (), Idgen.label "post-limitcheck label") in
   let g = limitlabel machine endif g in
   let so, g = make_target machine (t g) in
   cbranch ~ifso:so ~ifnot:endif g
 @ 
-<<zipcfg.ml>>=
-let call machine exp ~altrets ~unwinds_to ~cuts_to ~aborts
+<<mutually recursive graph construction>>=
+and call (p, machine,l2e as m) exp ~altrets ~unwinds_to ~cuts_to ~aborts
                ~uses ~defs ~kills ~reads ~writes ~spans ~succ_assn succ =
   let lbl = (uid (), Idgen.label "call successor") in
   let succ_ce = { kills = kills; defs = defs; node = lbl; assertion = succ_assn } in
   let edgelist = succ_ce :: List.flatten [altrets; unwinds_to; cuts_to] in
+  let (b, r) = machine.M.call.M.embed p exp in
   let call = 
-    { cal_i = machine.call exp; cal_contedges = edgelist; cal_spans = spans;
+    { cal_i = r; cal_contedges = edgelist; cal_spans = spans;
       cal_uses = uses; cal_altrets = List.length altrets;
       cal_unwinds_to = List.length unwinds_to; cal_cuts_to = List.length cuts_to;
       cal_reads = reads; cal_writes = writes; } in
-  let succ = privatelabel machine lbl succ in
+  let succ = privatelabel m lbl succ in
   match succ with
   | (First Entry, Last (Branch (_, lbl'))), blocks when lbl' =*= lbl -> 
-      (First Entry, Last (Call call)), blocks
+      fst (block_before m b ((First Entry, Last (Call call)), blocks))
   | _ -> impossf "internal error in call constructor"
 @ 
 <<zipcfg.ml>>=
@@ -796,8 +817,8 @@ let union_over_outedges node ~noflow ~flow =
   | Cbranch (c, t, f) -> noflow t ++ noflow f
   | Mbranch (_, ls) -> List.fold_left (fun r s -> r ++ noflow s) RSX.empty ls
   | Branch (_, l) -> noflow l
+  | Return (_, _, regs) -> regs 
   | Jump _
-  | Return _
   | Exit 
   | Forbidden _ -> RSX.empty
   
@@ -954,3 +975,68 @@ let single_last l =
   let block = (Entry, Last l) in
   Blocks.insert block Blocks.empty
 @ 
+
+\paragraph{DAG conversion}
+
+The following functions convert DAGs to graph fragments.
+The conversion functions also return a boolean value that indicates whether
+  the graph is modified during the conversion.
+
+There's probably a better way to do this:
+  I'm polluting the namespace and exposing my mutable variable...
+  hence, this code is not re-entrant.
+Free reference [[modified]] is set only if a new node is added to the graph.
+IT MAY BE NECESSARY TO REASSOCIATE TO AVOID REPLACING INSTRUCTION $i$
+WITH $i; \mathtt{Nop}$. 
+<<zipcfg.ml>>=
+let modified = ref false
+<<mutually recursive graph construction>>=
+and block_before' m block succ =
+  let rec before b = match b with
+  | DG.Seq (DG.Nop, b) -> before b
+  | DG.Seq (b, DG.Nop) -> before b
+  | DG.Rtl i        -> modified := true; instruction i succ
+  | DG.Seq (b, b')  -> block_before' m b (before b')
+  | DG.If (c, t, f) ->
+     if_then_else m (cbranch2cfg' m c) ~t:(block_before' m t) ~f:(block_before' m f)
+                   succ
+  | DG.While (c, b) -> while_do m (cbranch2cfg' m c) ~body:(block_before' m b) succ
+  | DG.Nop -> succ in
+  before block 
+and block2cfg' machine block = block_before' machine block (entry empty)
+@
+N.B. the sharing works only for a DAG---the graph must be acyclic.
+(Guaranteed by the rep.)
+<<mutually recursive graph construction>>=
+and cbranch2cfg' (_, _, l2e as machine) c ~ifso ~ifnot succ =
+  let nodemap = ref DG.empty in
+  let rec cbi (br, tk, fk) succ =
+    let tlbl, succ = cbr tk succ in
+    let flbl, succ = cbr fk succ in
+    consl (Cbranch (br (l2e tlbl), tlbl, flbl)) succ
+  and cbr c succ = match c with
+    | DG.Exit p        -> (if p then ifso else ifnot), succ
+    | DG.Test   (b, i) -> make_target machine (block_before' machine b (cbi i succ))
+    | DG.Shared (u, c) -> shared u c succ
+  and shared u c succ =
+    try DG.lookup u (!nodemap), succ with
+    | Not_found ->
+        let lbl, succ = cbr c succ in
+        nodemap := DG.insert u lbl (!nodemap);
+        (lbl, succ) in
+  modified := true;
+  let lbl, g = cbr c succ in
+  branch machine lbl g
+and block_before m b s =
+  modified := false;
+  (block_before' m b s, !modified)
+and block2cfg m b =
+  modified := false;
+  (block2cfg' m b, !modified)
+and cbranch2cfg m c ~ifso ~ifnot s =
+  modified := false;
+  (cbranch2cfg' m c ifso ifnot s, !modified)
+@
+<<zipcfg.ml>>=
+<<mutually recursive graph construction>>
+@

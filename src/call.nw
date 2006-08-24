@@ -198,7 +198,6 @@ type t = (* part of a calling convention *)
 (*  ; alt_return_table : node list -> node *)
   (* these next two encapsulate knowledge of which reg. is sp *)
   ; replace_vfp    : Zipcfg.graph -> Zipcfg.graph * bool
-  ; cutto          : Mflow.cut_args Target.map    (* newpc * newsp map*)
   } 
 @ N.B. the [[pre_nvregs]] are all possible nonvolatile registers.
 The actual nonvolatile registers are those [[pre_nvregs]] that are not
@@ -290,30 +289,30 @@ type valpass = unit -> Automaton.t
 We also now have some code to allow the registration of new calling conventions
 from Lua.
 <<call.mli>>=
-type tgt = ((Rtl.exp -> Automaton.t), t) Target.t
+type 'a tgt = ('a, (Rtl.exp -> Automaton.t), t) Target.t
 
 val register_cc : 
-    tgt -> string -> call:Automaton.stage ->
+    'a tgt -> string -> call:Automaton.stage ->
     results:Automaton.stage ->
     cutto:Automaton.stage -> unit
 
 (* val get_cc : ('a, 'cc) Target.t -> string -> 'cc *)
-val get_cc : ('a, 'cc) Target.t -> string -> 'cc
+val get_cc : ('p, 'a, 'cc) Target.t -> string -> 'cc
 @
 
 We provide a general mechanism for analyzing calling convention automata.
 <<call.mli>>=
-val dump_proc      : tgt -> string -> types -> unit
-val dump_return    : tgt -> string -> types -> unit
-val dump_cutto     : tgt -> string -> types -> unit
-val paths_proc     : tgt -> string -> types -> unit
-val paths_return   : tgt -> string -> types -> unit
-val paths_cutto    : tgt -> string -> types -> unit
-val summary_proc   : tgt -> string -> types -> unit
-val summary_return : tgt -> string -> types -> unit
-val summary_cutto  : tgt -> string -> types -> unit
+val dump_proc      : 'a tgt -> string -> types -> unit
+val dump_return    : 'a tgt -> string -> types -> unit
+val dump_cutto     : 'a tgt -> string -> types -> unit
+val paths_proc     : 'a tgt -> string -> types -> unit
+val paths_return   : 'a tgt -> string -> types -> unit
+val paths_cutto    : 'a tgt -> string -> types -> unit
+val summary_proc   : 'a tgt -> string -> types -> unit
+val summary_return : 'a tgt -> string -> types -> unit
+val summary_cutto  : 'a tgt -> string -> types -> unit
 
-val path_2_in_overflow : tgt -> string -> unit
+val path_2_in_overflow : 'a tgt -> string -> unit
 @ 
 Diagnostic procedures.
 Both look up a convention in a target by name.
@@ -323,9 +322,9 @@ a value may occupy more than one location.
 The second prints this information in suitable diagnostic form.
 <<call.mli>>=
 val run_cc_on_sig_and_return :
-  (Automaton.cc_spec -> Automaton.stage) -> tgt -> string -> types -> string list list
+  (Automaton.cc_spec -> Automaton.stage) -> 'a tgt -> string -> types -> string list list
 val run_cc_on_sig_and_print :
-  (Automaton.cc_spec -> Automaton.stage) -> tgt -> string -> types -> unit
+  (Automaton.cc_spec -> Automaton.stage) -> 'a tgt -> string -> types -> unit
 @ 
 
 \subsection{Implementation}
@@ -394,7 +393,7 @@ let incoming ~growth ~sp ~mkauto ~autosp ~postsp ~insp types formals =
 
 Some utilities.  DOCO HERE.
 <<call.ml>>=
-type tgt = ((Rtl.exp -> Automaton.t), t) Target.t
+type 'a tgt = ('a, (Rtl.exp -> Automaton.t), t) Target.t
 
 let add_cc specs name ~call ~results ~cutto = 
   let base = List.remove_assoc name specs in
@@ -422,15 +421,18 @@ let dump what autofun target ccname =
             A.at ~start:(R.bits (Bits.zero wordsize) wordsize) 
                   target.Target.memspace  automaton)
         
-let dump_proc    = dump Automatongraph.print (fun s -> s.A.call)
-let dump_return  = dump Automatongraph.print (fun s -> s.A.results)
-let dump_cutto   = dump Automatongraph.print (fun s -> s.A.cutto)
-let paths_proc   = dump Automatongraph.paths (fun s -> s.A.call)
-let paths_return = dump Automatongraph.paths (fun s -> s.A.results)
-let paths_cutto  = dump Automatongraph.paths (fun s -> s.A.cutto)
-let summary_proc   = dump (Automatongraph.summary ~what:"parameters") (fun s -> s.A.call)
-let summary_return = dump (Automatongraph.summary ~what:"results")    (fun s -> s.A.results)
-let summary_cutto  = dump (Automatongraph.summary ~what:"cont parms") (fun s -> s.A.cutto)
+let dump_proc    x = dump Automatongraph.print (fun s -> s.A.call) x
+let dump_return  x = dump Automatongraph.print (fun s -> s.A.results) x
+let dump_cutto   x = dump Automatongraph.print (fun s -> s.A.cutto) x
+let paths_proc   x = dump Automatongraph.paths (fun s -> s.A.call) x
+let paths_return x = dump Automatongraph.paths (fun s -> s.A.results) x
+let paths_cutto  x = dump Automatongraph.paths (fun s -> s.A.cutto) x
+let summary_proc x =
+  dump (Automatongraph.summary ~what:"parameters") (fun s -> s.A.call) x
+let summary_return x =
+  dump (Automatongraph.summary ~what:"results")    (fun s -> s.A.results) x
+let summary_cutto  x =
+  dump (Automatongraph.summary ~what:"cont parms") (fun s -> s.A.cutto) x
 @ 
 
 And now we generate signatures that cause 1 and 2 parameters, respectively,

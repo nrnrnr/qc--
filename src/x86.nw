@@ -31,6 +31,8 @@ Note especially the use of the [[X86regs]] module, internally known as~[[Rg]].
 <<x86.ml>>=
 module A  = Automaton
 module C  = Context
+module DG = Dag
+module PA = Preast2ir
 module PX = Postexpander
 module R  = Rtl
 module RP = Rtl.Private
@@ -39,6 +41,7 @@ module Up = Rtl.Up
 module Dn = Rtl.Dn
 module Rg = X86regs
 module RO = Rewrite.Ops
+module T  = Target
 
 let impossf fmt = Printf.kprintf Impossible.impossible fmt
 let unimpf  fmt = Printf.kprintf Impossible.unimp      fmt
@@ -76,20 +79,72 @@ The rounding mode is a standard register.
 let {SS.pc = pc; SS.cc = eflags} = SS.locations Spaces.c
 let rounding_model = R.regx Rg.fpround
 let rounding_mode  = R.fetch rounding_model 2
-
-module Post = struct
-  <<x86 postexpander>>
-end
-@ 
+@
+We begin with some utility functions.
+It might be nice to place these functions in the postexpander, but they're useful
+  for invoking [[MFlow]], which we use to help define the postexpander.
+<<x86.ml>>=
+let tempwidth     = Register.width
+let temploc t     = R.reg t
+let tempval t     = R.fetch (temploc t) (tempwidth t)
+@
 Here is information about memory.
 We ought to find a good way to tie this information into the target
 metrics, so as to avoid duplication and potential inconsistency.
-<<x86 postexpander>>=
+<<x86.ml>>=
 let byte_order = Spaces.bo
-let exchange_alignment = 4  (* not required, but faster *)
 let mcell  = Cell.of_size 8
-let mspace = ('m', byte_order, mcell)
 let mcount = Cell.to_count mcell
+let mspace = ('m', byte_order, mcell)
+let mem addr      = R.mem R.none mspace (R.C 4) addr  (* single word in memory *)
+let exchange_alignment = 4  (* not required, but faster *)
+
+let pc        = pc
+let esp       = temploc Rg.esp
+let espval    = tempval Rg.esp
+let add       = Rtlutil.add 32
+let sub x y   = RO.sub 32 x y
+let const n   = RO.signed 32 n
+let fetch l   = R.fetch l 32
+let store' l r = R.store l r 32
+let pop_with f = (* rtl got by popping (f e), where e is top of stack *)
+  let top = fetch (mem espval) in
+  R.par [ f top; store' esp (add espval (const 4)) ]
+
+let push' e = (* effect of pushing e *)
+  let next_sp = sub espval (const 4) in
+  R.par [ store' (mem next_sp) e; store' esp next_sp ]
+@ 
+We now build the standard control flow.
+<<x86.ml>>=
+module TY = Types
+let (-->) = TY.proc 
+module FS = Mflow.MakeStandard (
+  struct
+     let pc_lhs = pc
+     let pc_rhs = pc
+     let ra_reg =
+       temploc (('?', Rtl.Identity, Cell.of_size 0), 99, R.C 1) (* not used *)
+     let ra_offset = 33                       (* not used *)
+  end)
+module F = struct
+  include FS
+  let fmach = FS.machine esp
+  let call =
+    { T.embed = (fun _ e -> (DG.Nop, R.par [R.store pc e 32; push' (fetch pc)]))
+    ; T.project = (fun r -> match Dn.rtl r with
+                   | RP.Rtl [(_, RP.Store(_, e, _)); _; _] -> Up.exp e
+                   | _ -> Impossible.impossible (Printf.sprintf "projected non-call: %s"
+                                                                (RU.ToString.rtl r)))
+    }
+  let return = pop_with (fun ra -> store' pc ra)
+end
+@
+The postexpander is defined below.
+<<x86.ml>>=
+module Post = struct
+  <<x86 postexpander>>
+end
 @ 
 These synonyms, which are required by the postexpander interface, are a nuisance.
 <<x86 postexpander>>=
@@ -99,6 +154,11 @@ type address   = Rtl.exp
 type width     = Rtl.width
 type assertion = Rtl.assertion
 type operator  = Rtl.Private.opr
+@
+Some of the values used for [[MFlow]] need to be copied into the postexpander.
+<<x86 postexpander>>=
+let byte_order         = byte_order
+let exchange_alignment = exchange_alignment
 @
 The postexpander sometimes needs to allocate a temporary.
 <<x86 postexpander>>=
@@ -150,14 +210,9 @@ But the postexpander deals primarily with temporaries and blocks.
 Here are some functions to help smooth over the differences.
 Here are some utility functions for computing locations, values, and widths.
 <<x86 postexpander>>= 
-let (<:>) = PX.(<:>)
-let rtl r = PX.Rtl r
-
-let tempwidth     = Register.width
-let temploc t     = R.reg t
-let tempval t     = R.fetch (temploc t) (tempwidth t)
+let (<:>) = DG.(<:>)
+let rtl r = DG.Rtl r
 let tempstore t e = rtl (R.store (temploc t) e (tempwidth t))
-let mem addr      = R.mem R.none mspace (R.C 4) addr  (* single word in memory *)
 @ 
 And another for doing shifts.  Parameter [[op]] should be, e.g., [[RO.shl]].
 N.B.~This is actually acceptable as an instruction, since the Pentium
@@ -239,7 +294,7 @@ Register-register moves involve only integer registers, so life is
 easy and good.  Because [[move]] is used a lot inside the postexpander,
 we do a little premature optimization.
 <<x86 postexpander>>=
-let move ~dst ~src = if Register.eq dst src then PX.Nop else tempstore dst (tempval src)
+let move ~dst ~src = if Register.eq dst src then DG.Nop else tempstore dst (tempval src)
 @ 
 Because there's only one size of temporary in this back end, we don't
 need [[extract]] or [[aggregate]].
@@ -420,8 +475,8 @@ plus the instructions needed to get the value into the register.
 COULD THIS FUNCTION BE A CANDIDATE FOR A GENERAL POSTEXPANDER UTILITY?
 <<x86 postexpander>>=
 let weird_tmp tmp z = match z with
-| PX.WTemp (Register.Reg t)             -> t, PX.Nop
-| PX.WTemp (Register.Slice (w, 0, t))   -> t, PX.Nop
+| PX.WTemp (Register.Reg t)             -> t, DG.Nop
+| PX.WTemp (Register.Slice (w, 0, t))   -> t, DG.Nop
 | PX.WTemp (Register.Slice (w, lsb, t)) -> 
     tmp, move tmp t <:> tempstore tmp (RO.shrl 32 (tempval tmp) (RO.unsigned 32 lsb))
 | PX.WBits b -> tmp, tempstore tmp (R.bits (Bits.Ops.zx 32 b) 32)
@@ -469,7 +524,7 @@ let wrdrop ~dst:(fill, dt) op x y z =
   shift Rg.eax RO.shrl 8 <:>         (* shift carry into bit 0 of eax *)
   tempstore dt (R.fetch eax 32) <:>
   match fill with
-  | PX.HighAny -> PX.Nop
+  | PX.HighAny -> DG.Nop
   | PX.HighZ   -> shift dt RO.shl 31 <:> shift dt RO.shrl 31  (* zxlo *)
   | PX.HighS   -> shift dt RO.shl 31 <:> shift dt RO.shra 31  (* sxlo *)
 @ 
@@ -546,47 +601,35 @@ let pc_rhs = pc
 There are some hairy semantics attached to some Pentium jump
 instructions, but I~think we can stick with the simple ones for now. 
 <<x86 postexpander>>=
-let br ~tgt = PX.Nop, R.store pc_lhs (tempval tgt) 32
-let b  ~tgt = PX.Nop, R.store pc_lhs (Up.const tgt) 32
+let br ~tgt = DG.Nop, R.store pc_lhs (tempval tgt) 32
+let b  ~tgt = DG.Nop, R.store pc_lhs (Up.const tgt) 32
 @ 
-The call instructions came from us, so we can rely on the single extra
-effects pushing the program counter. 
+The call instructions have an extra effect: pushing the program counter.
 <<x86 postexpander>>=
 let effects = List.map Up.effect
-let call  ~tgt ~others =
-  PX.Nop, R.par (R.store pc_lhs (Up.const tgt) 32 :: effects others)
-let callr ~tgt ~others =
-  PX.Nop, R.par (R.store pc_lhs (tempval tgt)  32 :: effects others)
+let call  ~tgt =
+  DG.Nop, R.par [R.store pc_lhs (Up.const tgt) 32 ; push' (fetch pc)]
+let callr ~tgt =
+  DG.Nop, R.par [R.store pc_lhs (tempval tgt)  32 ; push' (fetch pc)]
 @ 
 The [[cut to]] is our own little conspiracy:
 it encapsulates two instructions, and the recognizer emits them as an
 atomic pair. 
 <<x86 postexpander>>=
-let cut_to effs = PX.Nop, R.par (effects effs)
-@ 
-We don't touch anything that pops the PC.
-That means the return instruction!
+let cut_to cut_args = F.fmach.T.cutto.T.embed () cut_args
+@
 <<x86 postexpander>>=
-let don't_touch_me = 
-  let lowpc  = Dn.loc pc in
-  let ( =$ ) = Register.eq in
-  let ( =/ ) = RU.Eq.loc in
-  function
-  | [ RP.Store (pc', _, _)
-    ; RP.Store (RP.Reg sp, RP.App (("add", [32]), [RP.Fetch (RP.Reg sp2, _);
-                                                      RP.Const (RP.Bits b)]), _)] ->
-      pc' =/ lowpc && sp =$ Rg.esp && sp2 =$ Rg.esp && Bits.S.to_int b = 4
-  | [ RP.Store (pc', (RP.App (("x86_idt_pc", []),[RP.Const (RP.Bits _)])), 32)
-    ; RP.Store (RP.Mem (('m', _, _), RP.C 4,
-                        RP.App(("sub",[32]),
-                               [RP.Fetch (RP.Reg esp, 32);
-                                RP.Const (RP.Bits b)]), _), RP.Fetch (pc'', 32), 32)
-    ; RP.Store (RP.Reg esp', RP.App (("sub",[32]), [RP.Fetch (RP.Reg esp'', 32);
-                                              RP.Const (RP.Bits b')]),
-                32)] -> 
-        pc' =/ lowpc && pc'' =/ lowpc && esp =$ Rg.esp && esp' =$ Rg.esp &&
-        esp'' =$ Rg.esp && Bits.U.to_int b = 4 && Bits.U.to_int b' = 4
-  | _ -> false
+let return    = F.return
+
+let interrupt n = (* very approximate *)
+  let handler = R.app (R.opr "x86_idt_pc" []) [RO.unsigned 32 n] in
+  R.par [store' pc handler; push' (R.fetch pc 32)]
+let () = Rtlop.add_operator ~name:"x86_idt_pc" ~result_is_float:false
+                            ([TY.fixbits 32] --> TY.fixbits 32)
+let forbidden = interrupt 3
+@
+<<x86 postexpander>>=
+let don't_touch_me _ = false
 @
 To implement comparisons, we define new operators that are private
 to the $x$86 architecture. 
@@ -611,17 +654,30 @@ and so one, would jump.
 let cmp x y =
   R.store eflags (R.app (R.opr "x86_subflags" [32]) [tempval x; tempval y]) 32
 
+let brtl cond tgt = R.guard cond (R.store pc_lhs tgt 32)
 let bc_x86_cond x86opname = R.app (R.opr x86opname [32]) [R.fetch eflags 32]
-let bc_x86 x86opname ~ifso ~ifnot = (bc_x86_cond x86opname, ifso, ifnot)
+let bc_x86 x86opname ~ifso ~ifnot = (brtl (bc_x86_cond x86opname), ifso, ifnot)
 
 let bc x (opr, ws) y ~ifso ~ifnot =
   assert (ws =*= [32]);
   match opr with
   | "div_overflows" | "quot_overflows" ->
       let ov = Rewrite.div_overflows 32 (tempval x) (tempval y) in
-      PX.Expand.cbranch (PX.Test (PX.Nop, (ov, ifso, ifnot)))
-  | _ ->
-      PX.Test (cmpfun opr x y, bc_x86 (cmpopr opr) ifso ifnot)
+      (*PX.Expand.cbranch DG.Test (DG.Nop, (ov, ifso, ifnot)))*)
+      PX.Expand.cbranch' ov ifso ifnot
+  | _ -> DG.Test (cmpfun opr x y, bc_x86 (cmpopr opr) ifso ifnot)
+let bc_guard x (opr, ws) y =
+  assert (ws =*= [32]);
+  match opr with
+  | "div_overflows" | "quot_overflows" ->
+      (DG.Nop, R.app (R.opr opr ws) [tempval x; tempval y])
+  | _ -> (cmpfun opr x y, bc_x86_cond (cmpopr opr))
+let bc_of_guard (setup, guard) ~ifso ~ifnot =
+  match Dn.exp guard with
+  | RP.App ((("div_overflows" | "quot_overflows"), _), [x;y]) ->
+      let ov = Rewrite.div_overflows 32 (Up.exp x) (Up.exp y) in
+      PX.Expand.cbranch' ov ifso ifnot
+  | _ -> DG.Test (setup, (brtl guard, ifso, ifnot))
 
 let bnegate r = match Dn.rtl r with
 | RP.Rtl [RP.App((cop, [32]), [RP.Fetch (flags, 32)]), RP.Store (pc, tgt, 32)]
@@ -884,10 +940,10 @@ let bc_stack op ~ifso ~ifnot = match op with
         let clear_extra     = logic R.store Rg.ah (RO._and 8 ah_val (int8 0x45)) in
         let xor_with_eq_pat = logic R.store Rg.ah (RO.xor  8 ah_val (int8 0x40)) in
         (* at this point, ZF = 0 iff the flags showed floating eq *)
-        PX.Test (setcc <:> fstsw <:> clear_extra <:> xor_with_eq_pat,
+       DG.Test (setcc <:> fstsw <:> clear_extra <:> xor_with_eq_pat,
                  bc_x86 (fpcmpopr opname) ifso ifnot)
     | _ ->
-        PX.Test (setcc <:> fstsw <:> sahf, bc_x86 (fpcmpopr opname) ifso ifnot))
+       DG.Test (setcc <:> fstsw <:> sahf, bc_x86 (fpcmpopr opname) ifso ifnot))
 | _ -> impossf "strange operator in x86 bc_stack"
 @ 
 The general block copy is implemented with the ``[[x86_repmovs]]''
@@ -929,63 +985,17 @@ let block_copy ~dst dassn ~src sassn w =
 @
 \subsection{Building the target}
 With the postexpander in place, we can build a target.
-We begin with more utility functions
-<<x86.ml>>=
-module P = Post
-let pc        = pc
-let espval    = P.tempval X86regs.esp
-let add       = Rtlutil.add 32
-let sub x y   = RO.sub 32 x y
-let const n   = RO.signed 32 n
-let mem       = P.mem
-let fetch l   = R.fetch l 32
-let store l r = R.store l r 32
-@ 
-These functions help with instructions that push and pop.
-<<x86.ml>>=
-let pop_with f = (* rtl got by popping (f e), where e is top of stack *)
-  let top = fetch (P.mem espval) in
-  R.par [ f top; store P.esp (add espval (const 4)) ]
-
-let push e = (* effect of pushing e *)
-  let next_sp = sub espval (const 4) in
-  R.par [ store (mem next_sp) e; store P.esp next_sp ]
-@ 
-We now build the standard control flow.
-<<x86.ml>>=
-module T  = Target
-module TY = Types
-let (-->) = TY.proc 
-module FS = Mflow.MakeStandard (
-  struct
-     let pc_lhs = P.pc_lhs
-     let pc_rhs = P.pc_rhs
-     let ra_reg =
-       P.temploc (('?', Rtl.Identity, Cell.of_size 0), 99, R.C 1) (* not used *)
-     let ra_offset = 33                       (* not used *)
-  end)
-module F = struct
-  include FS
-  let call =
-    { T.embed = (fun e -> R.par [FS.goto.T.embed e; push (fetch pc)])
-    ; T.project = FS.call.T.project (* should be OK *)
-    }
-  let return = 
-    { T.embed = (fun () -> pop_with (fun ra -> store pc ra))
-    ; T.project = (fun r  -> Impossible.unimp "projected return")
-    }
-end
-@      
 There's no science here---just a lot of goo.
 The [[Target.t]] abstraction could use some thought.
 <<x86.ml>>=
+module P = Post
 module X = Expander.IntFloatAddr (Post)
 (* expansion here once caused infinite loop *)
 let spill_expand p r = [r]
 let spill  p t l =
-  spill_expand p (Automaton.store l (P.tempval t) (P.tempwidth t))
+  spill_expand p (Automaton.store l (tempval t) (tempwidth t))
 let reload p t l =
-  spill_expand p (R.store (P.temploc t) (Automaton.fetch l (P.tempwidth t)) (P.tempwidth t))
+  spill_expand p (R.store (temploc t) (Automaton.fetch l (tempwidth t)) (tempwidth t))
 @ 
 Parts of the target record are reasonable.
 Parts are lies.
@@ -999,29 +1009,23 @@ let ( *> ) = A.( *> )
 let globals base = 
   let width w = if w <= 8 then 8 else if w <= 16 then 16 else Auxfuns.round_up_to 32 w in
   let align = function 8 -> 1 | 16 -> 2 | _ -> 4 in
-  A.at P.mspace ~start:base 
+  A.at mspace ~start:base 
     (A.widen width *> A.align_to align *>
      A.overflow ~growth:Memalloc.Up ~max_alignment:4)
 
-let interrupt n = (* very approximate *)
-  let handler = R.app (R.opr "x86_idt_pc" []) [RO.unsigned 32 n] in
-  R.par [store pc handler; push (R.fetch pc 32)]
-let () = Rtlop.add_operator ~name:"x86_idt_pc" ~result_is_float:false
-                            ([TY.fixbits 32] --> TY.fixbits 32)
-
-let target =
+let fmach = F.machine esp
+let tgt =
   let spaces = [Spaces.m; Spaces.r; Spaces.t; Spaces.c] in
   { T.name = "x86"
-  ; T.memspace = P.mspace
+  ; T.memspace = mspace
   ; T.max_unaligned_load = R.C 4
-  ; T.forbidden = interrupt 3
   (* basic metrics and spaces are OK *)
   ; T.byteorder   = P.byte_order  
   ; T.wordsize    = 32
   ; T.pointersize = 32
   ; T.vfp         = SS.vfp
   ; T.alignment = 1
-  ; T.memsize   = Cell.to_width P.mcell (R.C 1)
+  ; T.memsize   = Cell.to_width mcell (R.C 1)
   ; T.spaces = spaces
   ; T.reg_ix_map          = T.mk_reg_ix_map spaces
   ; T.distinct_addr_sp = false
@@ -1029,23 +1033,14 @@ let target =
   (* Does the Pentium really implement IEEE 754?  I think so *)
   ; T.float = Float.ieee754
 
-  (* spill and reload are believed OK *)
-  ; T.spill  = spill
-  ; T.reload = reload
-
   (* control flow is solid, except [[cutto]] is a lie *)
-  ; T.bnegate = F.bnegate eflags
-  ; T.goto    = F.goto
-  ; T.jump    = F.jump
-  ; T.call    = F.call
-  ; T.return  = F.return
-  ; T.branch  = F.branch
+  ; T.machine = X.machine
 
   ; T.cc_specs         = A.init_cc
   ; T.cc_spec_to_auto  = X86call.cconv 
-                           ~return_to:(fun ra -> 
-                                         pop_with (fun ra -> store pc ra))
-                           (F.cutto P.esp)
+                           ~return_to:(fun ra -> pop_with (fun ra -> store' pc ra))
+                           { T.embed = fmach.T.cutto.T.embed
+                           ; T.project = fmach.T.cutto.T.project}
 
   ; T.is_instruction = X86rec.M.is_instruction
   ; T.tx_ast = (fun secs -> secs)
@@ -1174,8 +1169,9 @@ let target =
   ; T.data_section = "data" (* NOT REALLY A PROPERTY OF THE TARGET MACHINE... *)
   ; T.charset = "latin1" (* THIS IS NONSENSE!! NOT A PROPERTY OF THE MACHINE?? *)
   } 
+let target = PA.T tgt
 
-type tgt  = ((Rtl.exp -> Automaton.t), Call.t) Target.t
+type tgt  = Ast2ir.tgt
 @ 
 \subsection{Variable placement}
 The machine accepts only three widths of floating-point variables: 32,
@@ -1210,7 +1206,7 @@ let placevars =
         (fun w k a -> w <= 32), A.widen (fun _ -> 32) *> temps 't';
         A.is_any,               A.widen (Auxfuns.round_up_to ~multiple_of: 8);
       ] in
-  Placevar.mk_automaton ~warn ~vfp:target.T.vfp ~memspace:P.mspace mk_stage
+  Placevar.mk_automaton ~warn ~vfp:tgt.T.vfp ~memspace:mspace mk_stage
 @ 
 \section{Tentative example Lua code}
 

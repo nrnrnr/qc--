@@ -11,20 +11,20 @@ Support for block copies.
 Problem: what if we do and do not know about aliasing?
 <<bcopy.mli>>=
 val block_copy :
-  ('a, 'b) Target.t -> (int -> Rtl.loc) -> 
+  ('a, 'b, 'c) Target.t -> (int -> Rtl.loc) -> 
   dst:Rtl.exp -> Rtl.assertion -> src:Rtl.exp -> Rtl.assertion -> Rtl.width ->
-  Postexpander.block
+  Rtl.exp Postexpander.block
 @ 
 This code is stolen from \texttt{lcc}. 
 <<bcopy.ml>>=
 module C  = Cell
-module Px = Postexpander
+module DG = Dag
 module R  = Rtl
 module RO = Rewrite.Ops
 module RU = Rtlutil
 module T  = Target
 
-let (<:>) = Px.(<:>)
+let (<:>) = DG.(<:>)
 
 let rec block_copy target talloc ~dst dassn doff ~src sassn soff width =
   let wordsize = target.T.wordsize in
@@ -42,15 +42,15 @@ let rec block_copy target talloc ~dst dassn doff ~src sassn soff width =
   assert (max_unaligned_load > 0);
   let rec copy doff soff count =
     if count = 0 then
-      Px.Nop
+      DG.Nop
     else if count < intcount then
       let rec fraction bit off =
         if bit >= intcount then
-          Px.Nop
+          DG.Nop
         else
           let this_part =
             if bit land count = 0 then
-              Px.Nop
+              DG.Nop
             else
               unroll bit (doff+off) (soff+off) bit in
           this_part <:> fraction (bit lsl 1) (off+bit) in
@@ -69,16 +69,16 @@ let rec block_copy target talloc ~dst dassn doff ~src sassn soff width =
       let dregv = R.fetch dreg wordsize in
       let sregv = R.fetch sreg wordsize in
       let tmpv  = R.fetch tmp  wordsize in
-      Px.Rtl (R.store sreg (addk src rounded_down) wordsize) <:>
-      Px.Rtl (R.store dreg dst wordsize) <:>
-      Px.Rtl (R.store tmp (addk dregv rounded_down) wordsize) <:>
-      Px.While (Px.cond (RO.gt wordsize tmpv dregv),
-                Px.Rtl (R.store tmp (addk tmpv (-loop_stride)) wordsize) <:>
+      DG.Rtl (R.store sreg (addk src rounded_down) wordsize) <:>
+      DG.Rtl (R.store dreg dst wordsize) <:>
+      DG.Rtl (R.store tmp (addk dregv rounded_down) wordsize) <:>
+      DG.While (DG.cond (RO.gt wordsize tmpv dregv),
+                DG.Rtl (R.store tmp (addk tmpv (-loop_stride)) wordsize) <:>
                 block_copy target talloc
                   ~dst:tmpv  (R.shift_multiple loop_stride dassn) doff
                   ~src:sregv (R.shift_multiple loop_stride sassn) (soff-loop_stride)
                   (to_bits loop_stride) <:>
-                Px.Rtl (R.store sreg (addk sregv (-loop_stride)) wordsize))
+                DG.Rtl (R.store sreg (addk sregv (-loop_stride)) wordsize))
   and unroll k soff doff count =
     if k > max_unaligned_load && (k > salign || k > dalign) then
       unroll (max_unaligned_load) soff doff count
@@ -94,18 +94,18 @@ let rec block_copy target talloc ~dst dassn doff ~src sassn soff width =
           fetch k (soff+i)   tmp1 <:>
           store k (doff+i)   tmp1
         else
-          Px.Nop in
+          DG.Nop in
       loop 0
   and fetch count off tmp =
     let addr = R.mem (R.shift off sassn) mspace (R.C count) (addk src off) in
     let v = R.fetch addr (to_bits count) in
     let v = if count = intcount then v else RO.sx (to_bits count) wordsize v in
-    Px.Rtl (R.store tmp v wordsize)
+    DG.Rtl (R.store tmp v wordsize)
   and store count off tmp =
     let addr = R.mem (R.shift off dassn) mspace (R.C count) (addk dst off) in
     let v = R.fetch tmp (to_bits count) in
     let v = if count = intcount then v else RO.lobits wordsize (to_bits count) v in
-    Px.Rtl (R.store addr v wordsize) in
+    DG.Rtl (R.store addr v wordsize) in
   let R.C count = C.to_count mcell width in
   copy doff soff count
 

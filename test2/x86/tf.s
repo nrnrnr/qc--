@@ -83,6 +83,7 @@ main:
 	movl (%eax),%eax
 .Linitialize_continuations_l3:
 .Lproc_body_start_l2:
+.Lbranch_target_l14:
 .Lbranch_target_l13:
 	leal truth,%ecx
 .Lbranch_target_l11:
@@ -122,17 +123,17 @@ main:
 	leal 32(%esp), %esp
 	ret
 .section .pcmap_data
-.Lstackdata_l20:
+.Lstackdata_l21:
 .long 0
 .section .pcmap
 .long .Lcall_successor_l7
-.long .Lframe_l21
+.long .Lframe_l22
 .section .pcmap_data
-.Lframe_l21:
+.Lframe_l22:
 .long 0x80000004
 .long 0xffffffe0
 .long 0xffffffec
-.long .Lstackdata_l20
+.long .Lstackdata_l21
 .long 0
 .long 4
 .long 0

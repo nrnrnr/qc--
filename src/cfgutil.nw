@@ -11,15 +11,15 @@
 \section{Control-Flow Graph Utilities}
 % ------------------------------------------------------------------ 
 
-The \module{cfg3} module provides the essential functionality for
+The \module{zipcfg} module provides the essential functionality for
 control-flow graphs ({\cfg}s). In order to separate essential
 functionality from nice-to-have functionality this module provides
 additional functions on {\cfg}s whose implementation do not require
-knowledge of the internal details of \module{cfg3}.
+knowledge of the internal details of \module{zipcfg}.
 <<cfgutil.mli>>=
 val cfg2dot : compress:bool -> live:bool -> name:string -> Zipcfg.graph -> string
 val cfg2ast : (Rtl.rtl -> Ast.stmt) -> Zipcfg.graph -> name:string -> Ast.proc
-val emit    : ('a, 'b, 'c, 'd) Proc.t -> Zipcfg.graph ->
+val emit    : Ast2ir.basic_proc -> Zipcfg.graph ->
                 (Zipcfg.Rep.call -> unit) -> (Rtl.rtl -> unit) ->
                 (string -> unit) -> unit
 val block_name : Zipcfg.graph -> Zipcfg.uid -> string
@@ -58,9 +58,13 @@ WHAT DO [[cfg2ast]] AND [[emit]] DO? PLEASE EXPLAIN THE PARAMETERS. --CL
 
 <<cfgutil.ml>>=
 module A  = Ast 
+module DG = Dag
 module G  = Zipcfg
 module GR = Zipcfg.Rep
 module OG = Cfgx.M 
+module P  = Proc
+module PA = Preast2ir
+module T  = Target
 module UM = Unique.Map 
 @
 <<cfgutil.ml>>=
@@ -117,6 +121,12 @@ let matches next = match next with
 | Some (u, l) -> (fun (u', l') -> Unique.eq u u')
 
 let emit proc cfg call_emit rtl_emit sym_emit =
+  let PA.T tgt = proc.P.target in
+  let rec seq_emit = function  (* emit sequence of RTLs only *)
+    | DG.Rtl r -> rtl_emit r
+    | DG.Seq (a, b) -> seq_emit a; seq_emit b
+    | DG.Nop -> ()
+    | DG.If _ | DG.While _ -> Impossible.impossible "expected linear code sequence" in
   let block b next () =
     let first f () = match f with
     | GR.Entry -> ()
@@ -126,8 +136,11 @@ let emit proc cfg call_emit rtl_emit sym_emit =
         rtl_emit (GR.mid_instr m) in
     let last l () = match l with
     | GR.Branch (_, tgt) when matches next tgt -> ()
-    | GR.Cbranch (_, _, ftgt) when not (matches next ftgt) ->
-        (rtl_emit (GR.last_instr l); rtl_emit (proc.Proc.machine.G.goto ftgt))
+    | GR.Cbranch (_, ttgt, ftgt) when not (matches next ftgt) ->
+        rtl_emit (GR.last_instr l);
+        let (b, r) = tgt.T.machine.T.goto.T.embed proc (proc.P.exp_of_lbl ftgt) in
+        seq_emit b;
+        rtl_emit r
     | GR.Call c -> call_emit c
     | _ -> rtl_emit (GR.last_instr l) in
     GR.fold_fwd_block first middle last b () in

@@ -1,0 +1,24 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% vim: ts=8 sw=4 et sts=4
+% Grades     ::=    "%%Grades:" Quality Importance Urgency
+% Quality    ::=    A|B|C|D|E
+% Importance ::=    Central|Subsystem|Peripheral
+% Urgency    ::=    Immediate|Soon|Later
+%
+% Example (at beginning of line): %%Grades: B Central Soon
+
+\section{Target and proc definitions}
+
+This code is in a separate module to make it easier to avoid circular dependencies.
+<<type defs>>=
+type tgt  = T of (basic_proc, (Rtl.exp -> Automaton.t), Call.t) Target.t
+and basic_proc = (Automaton.t, unit, Call.t, tgt) Proc.t
+type proc = Zipcfg.graph * basic_proc
+type old_proc = (Automaton.t, Rtl.rtl Cfgx.M.cfg, Call.t, tgt) Proc.t
+@
+<<preast2ir.mli>>=
+<<type defs>>
+val tgt : basic_proc -> (basic_proc, (Rtl.exp -> Automaton.t), Call.t) Target.t
+<<preast2ir.ml>>=
+<<type defs>>
+let tgt {Proc.target = T t} = t

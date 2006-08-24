@@ -84,7 +84,8 @@ tryout:
 	movl (%ecx),%ecx
 .Linitialize_continuations_l21:
 .Lproc_body_start_l20:
-.Lbranch_target_l32:
+.Lbranch_target_l29:
+.Lbranch_target_l33:
 	movl $1,%edx
 	movl %eax,8(%esp)
 	andl %edx,%eax
@@ -119,17 +120,17 @@ tryout:
 	leal 20(%esp), %esp
 	ret
 .section .pcmap_data
-.Lstackdata_l35:
+.Lstackdata_l36:
 .long 0
 .section .pcmap
 .long .Lcall_successor_l25
-.long .Lframe_l36
+.long .Lframe_l37
 .section .pcmap_data
-.Lframe_l36:
+.Lframe_l37:
 .long 0x80000004
 .long 0xffffffec
 .long 0xfffffffc
-.long .Lstackdata_l35
+.long .Lstackdata_l36
 .long 0
 .long 2
 .long 0

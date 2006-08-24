@@ -22,6 +22,7 @@ module I : Lua.INTERP
 <<lualink.ml>>=
 module G  = Zipcfg
 module GR = Zipcfg.Rep
+module PA = Preast2ir
 
 <<Linking QC-- Types>>
 
@@ -136,8 +137,8 @@ end
 module TargetType = struct
     type 'a t       = Ast2ir.tgt
     let tname       = "target"
-    let eq _        = fun x y -> x.Target.name =$= y.Target.name
-    let to_string _ = fun t -> "<target " ^ t.Target.name ^ ">" 
+    let eq _        = fun (PA.T x) (PA.T y) -> x.Target.name =$= y.Target.name
+    let to_string _ = fun (PA.T t) -> "<target " ^ t.Target.name ^ ">" 
 end
 module DocType = struct
     type 'a t       = Pp.doc
@@ -398,7 +399,7 @@ For information on how we represent registers in Lua, see \module{register.nw}.
 <<register modules to [[g]] in alphabetical order>>=
 let module A = Automaton in
 <<embedding/projection pairs for calling conventions>>
-let register_cc t name tbl = 
+let register_cc (PA.T t) name tbl = 
   let getfield f = stage.V.project (V.Table.find tbl (V.String f)) in
   Call.register_cc t name ~call:(getfield "call")
      ~results:(getfield "results") ~cutto:(getfield "cutto") in
@@ -527,7 +528,7 @@ C.register_module "DLS"
   ] g;
 @
 <<register modules to [[g]] in alphabetical order>>=
-let new_ok target (map,ast) asm =
+let new_ok (PA.T target) (map,ast) asm =
   match Nelab.program ~swap:false (Mvalidate.rtl target) map asm (Nast.program ast) with
   | Error.Error -> false
   | Error.Ok (env, _) -> not (Fenv.Dirty.errorFlag env) in
@@ -552,6 +553,7 @@ C.register_module "Driver"
   ; "reinit"    , V.efunc (V.unit  **->> V.unit)  Reinit.reset
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
+let wrap_tgt f (PA.T t) = f t in
 let dump f =
   let mktuplelist t = 
     let field f = V.Table.find t (V.String f) in
@@ -559,14 +561,14 @@ let dump f =
     let al      = (V.default 1 V.int).V.project (field "aligned") in
     let widths  = (V.list V.int).V.project (field "widths") in
     List.map (fun w -> (w, ty, al)) widths in
-  let luafun target ccname types = f target ccname 
+  let luafun target ccname types = wrap_tgt f target ccname 
                                     (List.flatten (List.map mktuplelist types))
   in
   V.efunc (Map.target **-> V.string **-> (V.list V.table) **->> V.unit)
     luafun
 in
 
-let run_cc_wrap f tgt cc tys =
+let run_cc_wrap f (PA.T tgt) cc tys =
   let unaligned (w, k) = (w, k, 1) in
   f (fun s -> s.Automaton.call) tgt cc (List.map unaligned tys) in
 
@@ -582,7 +584,7 @@ C.register_module "Debug"
   ; "dump_return",  dump Call.dump_return
   ; "dump_cutto" ,  dump Call.dump_cutto
   ; "path_2_in_overflow", V.efunc (Map.target **-> V.string **->> V.unit)
-                          Call.path_2_in_overflow
+                          (wrap_tgt Call.path_2_in_overflow)
   ; "run_cc_on_args", V.efunc (Map.target **-> V.string **->
                                listpair V.int V.string **->> V.unit)
                       (run_cc_wrap Call.run_cc_on_sig_and_print)
@@ -689,7 +691,7 @@ C.register_module "Stages"
       (fun v (g,proc) -> Backplane.of_dataflow proc.Proc.cc.Call.replace_vfp v (g,proc))
   ]  g;
 <<register modules to [[g]] in alphabetical order>>=
-let metrics t =
+let metrics (PA.T t) =
   let module T = Target in
   let em f = f.V.embed in
   [ "byteorder",   em byteorder t.T.byteorder;
@@ -701,9 +703,9 @@ let metrics t =
   ] in
 C.register_module "Target"
   [ "capabilities", V.efunc (Map.target **->> Map.capabilities)
-                                 (fun (t:Ast2ir.tgt) -> t.Target.capabilities);
+                                 (fun (PA.T t) -> t.Target.capabilities);
     "metrics",      V.efunc (Map.target **->> V.record V.value) metrics;
-    "name",         V.efunc (Map.target **->> V.string) (fun t -> t.Target.name);
+    "name",         V.efunc (Map.target **->> V.string) (fun (PA.T t) -> t.Target.name);
   ] g;
 <<register modules to [[g]] in alphabetical order>>=
 C.register_module "Targets"
@@ -729,7 +731,7 @@ C.register_module "Unsupported"
  ] g;
 <<register modules to [[g]] in alphabetical order>>=
 let floats ws _ (g, proc) =
-  let rml = proc.Proc.target.Target.rounding_mode in
+  let rml = (PA.tgt proc).Target.rounding_mode in
   let rm  = Rtlutil.fetch rml in
   let g   = G.map_rtls (Widen.float ~rm ws) g in
   (g, proc), true in
@@ -763,7 +765,7 @@ let width_cost _ (g, proc) =
   (g, proc), false in
 
 let update_gamma_counts _ (g, proc) =
-  let update = Widen.update_gamma_counts proc.Proc.target in
+  let update = Widen.update_gamma_counts (PA.tgt proc) in
   Widen.init_gamma_counts ();
   G.iter_rtls update g;
   (g, proc), false in
@@ -776,18 +778,19 @@ let create_gamma _ gp =
   Widen.create_gamma(); (gp, true) in
 
 let dpwiden _ (g, proc) = 
-  let upd g r = if Widen.needs_widening proc.Proc.target r then g r else r in
+  let upd g r = if Widen.needs_widening (PA.tgt proc) r then g r else r in
   let _premature_optimization g =
     let exists_rtl f g = Impossible.unimp "exists_rtl" in
-    if exists_rtl (Widen.needs_widening proc.Proc.target) g then
+    if exists_rtl (Widen.needs_widening (PA.tgt proc)) g then
       (G.map_rtls (upd (Widen.dpwiden (g, proc))) g, proc), true
     else
       (g, proc), false in
   (G.map_rtls (upd (Widen.dpwiden (g, proc))) g, proc), true in
 
 let widenlocs _ (g, proc) =
-  let upd g r = if Widen.needs_widening proc.Proc.target r then g r else r in
-  (G.map_rtls (upd (Widen.widenlocs proc.Proc.target)) g, proc), true in
+  let tgt = PA.tgt proc in
+  let upd g r = if Widen.needs_widening tgt r then g r else r in
+  (G.map_rtls (upd (Widen.widenlocs tgt)) g, proc), true in
 
 C.register_module "Widen" 
  [ "x86_floats",          Map.stage.V.embed (floats [80])

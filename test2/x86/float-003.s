@@ -55,6 +55,7 @@ main:
 	addl %edx,%ecx
 	movl %eax,(%ecx)
 	movl $1,%eax
+.Lbranch_target_l10:
 .Lbranch_target_l8:
 	leal fmt,%ecx
 	leal 40(%esp), %edx
@@ -86,17 +87,17 @@ main:
 	leal 40(%esp), %esp
 	ret
 .section .pcmap_data
-.Lstackdata_l16:
+.Lstackdata_l17:
 .long 0
 .section .pcmap
 .long .Lcall_successor_l7
-.long .Lframe_l17
+.long .Lframe_l18
 .section .pcmap_data
-.Lframe_l17:
+.Lframe_l18:
 .long 0x80000004
 .long 0xffffffd8
 .long 0xfffffff8
-.long .Lstackdata_l16
+.long .Lstackdata_l17
 .long 0
 .long 4
 .long 0

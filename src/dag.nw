@@ -1,0 +1,310 @@
+% -*- mode: Noweb; noweb-code-mode: caml-mode -*-
+% vim: ts=2 sw=2 et: 
+% Grades     ::=    "%%Grades:" Quality Importance Urgency
+% Quality    ::=    A|B|C|D|E
+% Importance ::=    Central|Subsystem|Peripheral
+% Urgency    ::=    Immediate|Soon|Later
+%
+% Example (at beginning of line): %%Grades: B Central Soon
+% 
+% $Id$
+
+% ------------------------------------------------------------------ 
+\section{Directed Acyclic Graph}
+% ------------------------------------------------------------------ 
+
+Control-flow graphs are nice, but sometimes we want something simpler: a DAG.
+
+\subsection{Interface}
+
+Working with the mutable control-flow graph is awkward and
+error-prone.
+We therefore define some special, immutable types to represent
+fragments of the flow graph (subgraphs) both before and after expansion.
+What kind of fragment we have depends on what sort of flow-graph node
+we are expanding.
+\begin{itemize}
+\item
+A node that represents straight-line control flow is expanded into a
+[[block]].
+A~[[block]] represents a subgraph with a single entry and single exit.
+\item
+A~node that represents unconditional control transfer  (including
+unconditional branch,  multiway branch, call, return, [[cut to]], etc.)
+is expanded
+into a [[branch]].
+The [[branch]] consists of a (possibly empty) [[block]] followed by an
+RTL.
+The trailing RTL is always the control-transfer instruction.
+A  subgraph represented by a [[branch]] has a single entry, and while
+it may have multiple 
+exits, all those exits are reached by the same instruction: the final
+RTL.
+\item
+A conditional branch is expanded into a [[cbranch]].
+This subgraph is somewhat more complicated because it has \emph{two}
+exits, which are designated by the Boolean values [[true]] and
+[[false]].
+The subgraph represents decision logic \emph{only}; its sole job
+ is to decide on one of the two exits.\footnote
+{Later in compilation, the peephole optimizer may combine computation
+with decision.}
+
+Unlike the unconditional or multiway branches, the [[cbranch]] can
+have multiple internal nodes that reach one or both of the exits.
+This happens any time the condition involves the short-circuit Boolean
+operators [[%conjoin]] or [[%disjoin]].
+
+Unlike the other subgraphs, the [[cbranch]] can represent a DAG, not
+just a tree---hence the [[Shared]] node.
+\end{itemize}
+<<abstract types for dags>>=
+type uid
+@
+Type parameter [['a]] is instantiated with a conditional branch.
+This may be represented as...
+late in the game: [[exp -> rtl]] when we're waiting to plug in a
+target address;
+early in the game: [[exp]] when we're carrying only a guard.
+(Talk about input and output dags.)
+<<types for dags>>=
+type 'a block = Rtl   of Rtl.rtl
+              | Seq   of 'a block * 'a block
+              | If    of 'a cbranch * 'a block * 'a block
+              | While of 'a cbranch * 'a block
+              | Nop
+(* block ending in branch, including multiway branch *)
+and  'a branch  = 'a block * Rtl.rtl
+and  'a cbranch = Exit   of bool
+                | Test   of 'a block * 'a cbinst
+                | Shared of uid * 'a cbranch  (* don't duplicate this node *)
+and  'a cbinst  = 'a * 'a cbranch * 'a cbranch
+@
+Since the only purpose of a conditional branch is to reach
+one of the two exits, there is never any straight-line code that
+intervenes between a conditional branch and the exit.
+And it's possible that a conditional branch is simplified to
+unconditional; that's what a bare [[Exit]]  means.
+@
+Each of the constructors and types  above has a particular meaning,
+which we explain here.
+We also explain  under what conditions each construct is deemed to
+satisfy the machine invariant. 
+\begin{itemize}
+\item [[Rtl]] wraps a \emph{non-branching} RTL.
+It satisfies the machine invariant if the RTL  can be represented by a single
+instruction on the target machine, with this exception:
+\begin{itemize}
+\item
+\label{sec:optimism}
+An RTL may be representible as a single instruction only under the
+optimistic assumption that a late compile-time constant is ``small.''
+If the assumption is violated, it must be possible for the recognizer
+to emit a sequence of instructions that together implement the RTL.
+Either this sequence can be generated without using an additional
+register, or else the recognizer will have to reserve a
+register for this purpose.
+\end{itemize}
+@
+\item
+An [[rtl]] in a [[branch]] pair represents an unconditional
+control-transfer instruction.
+It satisfies the machine invariant if it can be represented by a
+single instruction on the target 
+machine, with these exceptions:
+\begin{itemize}
+\item
+If the target machine has delayed control-transfer instructions
+(branch\slash call\slash etc), we may use a single RTL to represent an atomic
+two-instruction package consisting of the control transfer and the
+instruction in the delay slot.
+We do this because at present, we have no other way to constrain
+layout.
+@
+\item
+For implementing [[cut to]], we use a single RTL that represents two
+instructions: one that adjusts the stack pointer and one that
+branches.
+We need to package these atomically because once the stack pointer has
+been adjusted, the internal assumptions of the compiler are no longer
+valid.
+For example, it is not safe to spill a register after the stack
+pointer has been adjusted.
+We therefore treat the two instructions as an atomic unit by packaging
+them as one RTL.
+\end{itemize}
+@
+\item
+A [[Seq]] node represents a sequence of instructions and executes
+first the left half, then the right.
+@
+\item
+A [[If]] node makes a decision and executes one of its two blocks,
+depending on the outcome of the condition.
+The decision is represented by a [[cbranch]] node.
+@
+\item
+The [[While]] node corresponds to a C-style [[while]] statement:
+as long as the decision is for the [[true]] exit, it executes the body.
+@
+\item
+[[Nop]] represents an empty sequence of instructions.
+[[Nop]] may be useful in [[If]], as the first part of a [[branch]],
+and in various places in the 
+generic expander.
+@
+\item
+A [[branch]] represents a [[block]] that is followed by a branch
+instruction, which is represented by an RTL that satisfies the machine
+invariant for branch instructions as described above.
+Typically the [[block]] is empty, or it computes the address used in
+the branch.
+@
+\item
+A [[cbranch]] represents the ability to make a decision:
+\begin{itemize}
+\item
+An [[Exit]] node makes the decision for the exit identified by the
+Boolean.
+\item
+A [[Test]] node makes the decision by executing a 
+[[block]], then a
+conditional-branch instruction.
+Typically the [[block]] sets condition codes.
+\item
+A [[Shared]] node wraps another node with a unique identifier, which
+keeps it from being duplicated when the [[cbranch]] tree is converted
+to a flow graph.
+A~[[Shared]] node can be created only by the [[shared]] function
+exported by the [[Postexpander]] interface.
+Typically, [[Shared]] nodes are created only by the generic expander,
+when it compiles [[%conjoin]] and [[%disjoin]].
+But if a postexpander should use a [[cbranch]] in two different
+contexts, it should apply [[shared]] first.
+\end{itemize}
+@
+\item
+A [[cbinst]] represents a conditional-branch
+instruction.
+The [[exp]] must be a Boolean expression.
+If [[cbinst = (exp, t, f)]], its semantics are that if [[exp]] is
+true, execution continues with~[[t]]; otherwise it
+continues with~[[f]].
+To satisfy the machine invariant,
+the [[cbinst]] must satisfy two properties:
+\begin{itemize}
+\item
+If [[target.branch.embed]] is applied to the [[exp]] and a label, it
+produces an RTL that can be represented as a single conditional-branch
+instruction on the target machine.
+\item
+The resulting RTL can be changed with [[bnegate]] and still be
+representable as a single instruction on the target machine.
+\end{itemize} 
+\end{itemize}
+@
+An example may help with the conditional branch.
+If the source code contains
+\begin{verbatim}
+if (n == 1 `disjoin` n == 2) {
+  ...
+} else {
+  ...
+}
+\end{verbatim}
+The generic expander may translate the [[if]] expression to the
+following conditional branch:
+\begin{verbatim}
+  Test (Nop, (n == 1, Exit true, Test (Nop, (n == 2, Exit true, Exit false))))
+\end{verbatim}
+On many machines this subgraph would be expanded further with the help
+of the postexpander.
+For example, each [[Nop]] might be replaced by a compare instruction,
+and the equality tests might be replaced by tests of the condition codes.
+@
+Sequential composition of blocks is very useful.
+It eliminates [[Nop]].
+<<exported utility functions for dags>>=
+val (<:>) : 'a block -> 'a block -> 'a block
+val pr_block : ('a -> string) -> 'a block -> string
+@ 
+<<dag.mli>>=
+<<abstract types for dags>>
+<<types for dags>>
+<<exported utility functions for dags>>
+@
+The [[shared]] function makes a node shared, so that it will not be
+duplicated on conversion to a flow graph.
+The [[shared]] function guarantees uniqueness of the identifier, and
+it avoids wrapping [[Shared]] in [[Shared]].
+<<exported utility functions for dags>>=
+val shared : 'a cbranch -> 'a cbranch
+@
+To convert a condition for use in [[If]] or [[While]], use [[cond]]. 
+<<exported utility functions for dags>>=
+val cond : 'a -> 'a cbranch
+@
+
+\subsection{Implementation}
+<<implementation of utility functions for dags>>=
+let (<:>) b b' = match b, b' with
+| Nop, b' -> b'
+| b, Nop  -> b
+| _, _    -> Seq (b, b')
+@
+To help deal with expansion of DAGs containing [[Shared]] nodes, 
+we provide support for a set of nodes.
+<<exported utility functions for dags>>=
+type 'a nodeset
+val empty : 'a nodeset
+val lookup : uid -> 'a nodeset -> 'a   (* raises Not_found *)
+val insert : uid -> 'a -> 'a nodeset -> 'a nodeset
+@
+<<implementation of utility functions for dags>>=
+type 'a nodeset = (uid * 'a) list
+let empty = []
+let lookup = List.assoc
+let insert i x l = (i, x) :: l
+@ 
+I'm defining a module here to contain the namespace.
+Why don't I just use lambda? Value restriction.
+<<implementation of utility functions for dags>>=
+module Shared = struct
+  let n = Reinit.ref 0
+  let shared c = match c with
+    | Shared _ -> c
+    | _ -> (n := !n + 1; Shared (!n, c))
+end
+let shared = Shared.shared
+<<implementation of utility functions for dags>>=
+let cond g = Test (Nop, (g, Exit true, Exit false))
+@
+
+<<dag.ml>>=
+module RU = Rtlutil
+module TS = RU.ToString
+type uid = int
+<<types for dags>>
+<<implementation of utility functions for dags>>
+
+let sprintf = Printf.sprintf
+
+let rec pr_block pr = function
+  | Rtl r -> TS.rtl r
+  | Seq (b1, b2) -> pr_block pr b1 ^ pr_block pr b2
+  | If (c, t, f) -> sprintf "if (%s) { %s; } else { %s; }" 
+                       (pr_cbranch pr c) (pr_block pr t) (pr_block pr f)
+  | While (c, b) -> sprintf "while (%s) { %s; }" (pr_cbranch pr c) (pr_block pr b)
+  | Nop -> "<nop>"
+and pr_cbranch pr c = match c with
+| Exit p        -> if p then "true" else "false"
+| Shared (_, c) -> sprintf "[%s]" (pr_cbranch pr c)
+| Test (Nop, c) -> pr_cbi pr c
+| Test (b, c)   -> sprintf "{%s; %s}" (pr_block pr b) (pr_cbi pr c)
+and pr_cbi pr c = match c with
+| a, Exit true,  Exit false -> pr a
+| a, Exit false, Exit true  -> sprintf "!(%s)" (pr a)
+| a, Exit true,  p -> sprintf "(%s || %s)" (pr a) (pr_cbranch pr p)
+| a, p, Exit false -> sprintf "(%s && %s)" (pr a) (pr_cbranch pr p)
+| a, p, q -> sprintf "(%s ? %s : %s)" (pr a) (pr_cbranch pr p) (pr_cbranch pr q)
+@ 

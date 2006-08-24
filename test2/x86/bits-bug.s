@@ -94,7 +94,8 @@ callee:
 	movl (%ecx),%ecx
 .Linitialize_continuations_l18:
 .Lproc_body_start_l17:
-.Lbranch_target_l32:
+.Lbranch_target_l29:
+.Lbranch_target_l33:
 	movl $-1420500317,%edx
 	cmpl %edx,%eax
 	jne .Lbranch_target_l28
@@ -135,17 +136,17 @@ callee:
 	leal 16(%esp), %esp
 	ret
 .section .pcmap_data
-.Lstackdata_l36:
+.Lstackdata_l37:
 .long 0
 .section .pcmap
 .long .Lcall_successor_l22
-.long .Lframe_l37
+.long .Lframe_l38
 .section .pcmap_data
-.Lframe_l37:
+.Lframe_l38:
 .long 0x80000004
 .long 0xfffffff0
 .long 0xfffffff8
-.long .Lstackdata_l36
+.long .Lstackdata_l37
 .long 0
 .long 1
 .long 0
@@ -154,13 +155,13 @@ callee:
 .long 0
 .section .pcmap
 .long .Lcall_successor_l27
-.long .Lframe_l38
+.long .Lframe_l39
 .section .pcmap_data
-.Lframe_l38:
+.Lframe_l39:
 .long 0x80000004
 .long 0xfffffff0
 .long 0xfffffff8
-.long .Lstackdata_l36
+.long .Lstackdata_l37
 .long 0
 .long 1
 .long 0

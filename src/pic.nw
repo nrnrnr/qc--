@@ -143,6 +143,7 @@ val transform : import:(Symbol.t -> Rtl.loc) ->
 <<pic.ml>>=
 module G  = Zipcfg
 module GR = Zipcfg.Rep
+module PA = Preast2ir
 module R  = Rtl
 module RP = Rtl.Private
 module Dn = Rtl.Dn
@@ -213,16 +214,17 @@ RTL.
 
 THE READS AND WRITES ANNOTATIONS ON THIS CALL COULD POSSIBLY BE BETTER...
 <<insert PC load and well-known label into CFG>>=
-  let rtl  = load_wkr (Rtl.reg wkr)
-  and reti = proc.Proc.target.T.return.T.embed ()
-  and endlbl = (G.uid(), ends#original_text)
-  and machine = proc.Proc.machine in
+  let PA.T tgt = proc.Proc.target in
+  let rtl  = load_wkr (Rtl.reg wkr) in
+  let reti = tgt.T.machine.Mflow.return in
+  let endlbl = (G.uid(), ends#original_text) in
+  let machine = proc, tgt.T.machine, proc.Proc.exp_of_lbl in
   let wkln = G.label machine (G.uid(), wkl#original_text)
   and caln = G.label machine (G.uid(), cals#original_text)
   and endn = G.label machine endlbl
   and rset = Register.SetX.empty in
   let br   = G.branch machine endlbl in
-  let call = G.call machine (R.codesym cals proc.Proc.target.T.pointersize) 
+  let call = G.call machine (R.codesym cals tgt.T.pointersize) 
       ~altrets:[] ~unwinds_to:[] ~cuts_to:[]
       ~aborts:false ~uses:rset ~defs:rset ~kills:rset ~reads:None
       ~writes:None ~spans:None ~succ_assn:(Rtl.par []) in

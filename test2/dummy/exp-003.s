@@ -1596,10 +1596,10 @@ section "text"
         $t1 = $r30;
         .Linitialize continuations:l36:
         .Lproc body start:l35:
-        $c0 when %ne[32](bits32[bits32[sym@_PL_he_root]], 0)
-            = sym@@i_21;
+        .Lbranch target:l43:
+        $ 0 when %ne[32](bits32[bits32[sym@_PL_he_root]], 0) = 0;
         .Lbranch target:l42:
-        $c0, $r30 = bits32[sym@@i_more_he], ($c0+4);
+        $ 0 = bits32[sym@@i_more_he];
         .Lcall successor:l41:
         @i_21:
         @i_@1i_1 = bits32[sym@_PL_he_root];
@@ -1618,8 +1618,8 @@ section "text"
         $r31 = ($r31+-24);
         @i_p = $r0;
         $t1 = $r30;
-        .Linitialize continuations:l48:
-        .Lproc body start:l47:
+        .Linitialize continuations:l49:
+        .Lproc body start:l48:
         bits32[@i_p] = bits32[bits32[sym@_PL_he_root]];
         bits32[sym@_PL_he_root] = @i_p;
         @i_23:
@@ -1634,18 +1634,19 @@ section "text"
     {
         $r31 = ($r31+-24);
         $t1 = $r30;
-        .Linitialize continuations:l56:
-        .Lproc body start:l55:
+        .Linitialize continuations:l57:
+        .Lproc body start:l56:
         $r0 = 1008;
-        $c0, $r30 = bits32[sym@_Perl_safemalloc], ($c0+4);
-        .Lcall successor:l61:
+        $ 0 = bits32[sym@_Perl_safemalloc];
+        .Lcall successor:l63:
         @i_@5i_1 = $r0;
         bits32[sym@_PL_he_root] = @i_@5i_1;
         @i_@3i_he = bits32[bits32[sym@_PL_he_root]];
         @i_@4i_heend = (@i_@3i_he+996);
         @i_26:
-        $c0 when %ltu[32](@i_@3i_he, @i_@4i_heend) = sym@@i_25;
-        .Lbranch target:l58:
+        .Lbranch target:l60:
+        $ 0 when %ltu[32](@i_@3i_he, @i_@4i_heend) = 0;
+        .Lbranch target:l59:
         bits32[@i_@3i_he] = 0;
         @i_24:
         $r31 = ($r31+24);
@@ -1653,7 +1654,7 @@ section "text"
         @i_25:
         bits32[@i_@3i_he] = (@i_@3i_he+12);
         @i_@3i_he = (@i_@3i_he+12);
-        $c0 = sym@@i_26;
+        $ 0 = sym@@i_26;
     }
 }
 
@@ -1664,18 +1665,18 @@ section "text"
         $r31 = ($r31+-24);
         @i_str, @i_len, @i_hash = $r0, $r1, $r2;
         $t1 = $r30;
-        .Linitialize continuations:l67:
-        .Lproc body start:l66:
+        .Linitialize continuations:l69:
+        .Lproc body start:l68:
         @i_@9i_1 = 1;
         $r0 = %mul[32](@i_@9i_1, ((@i_len+8)+@i_@9i_1));
-        $c0, $r30 = bits32[sym@_Perl_safemalloc], ($c0+4);
-        .Lcall successor:l75:
+        $ 0 = bits32[sym@_Perl_safemalloc];
+        .Lcall successor:l77:
         @i_@10i_2 = $r0;
         @i_@8i_k = @i_@10i_2;
         @i_@7i_hek = @i_@8i_k;
         $r0, $r1, $r2 = @i_str, (@i_@7i_hek+8), %mul[32](1, @i_len);
-        $c0, $r30 = bits32[sym@_Perl_my_bcopy], ($c0+4);
-        .Lcall successor:l72:
+        $ 0 = bits32[sym@_Perl_my_bcopy];
+        .Lcall successor:l74:
         bits8[(@i_len+(@i_@7i_hek+8))] = 0;
         bits32[(@i_@7i_hek+4)] = @i_len;
         bits32[@i_@7i_hek] = @i_hash;
@@ -1692,11 +1693,11 @@ section "text"
         $r31 = ($r31+-24);
         @i_hek = $r0;
         $t1 = $r30;
-        .Linitialize continuations:l81:
-        .Lproc body start:l80:
+        .Linitialize continuations:l83:
+        .Lproc body start:l82:
         $r0, $r1, $r2 = (@i_hek+8), bits32[(@i_hek+4)], bits32[@i_hek];
-        $c0, $r30 = bits32[sym@_Perl_unsharepvn], ($c0+4);
-        .Lcall successor:l85:
+        $ 0 = bits32[sym@_Perl_unsharepvn];
+        .Lcall successor:l87:
         @i_29:
         $r31 = ($r31+24);
         $c0 = $t1;
@@ -1710,30 +1711,32 @@ section "text"
         $r31 = ($r31+-24);
         @i_hv, @i_key, @i_klen, @i_lval = $r0, $r1, $r2, $r3;
         $t1 = $r30;
-        .Linitialize continuations:l91:
-        .Lproc body start:l90:
-        $c0 when %ne[32](@i_hv, 0) = sym@@i_31;
-        .Lbranch target:l130:
+        .Linitialize continuations:l93:
+        .Lproc body start:l92:
+        .Lbranch target:l141:
+        $ 0 when %ne[32](@i_hv, 0) = 0;
+        .Lbranch target:l140:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
         @i_31:
-        $c0 when %eq[32](%and[32](bits32[(@i_hv+8)], 32768), 0)
-            = sym@@i_33;
-        .Lbranch target:l128:
+        .Lbranch target:l138:
+        $ 0 when %eq[32](%and[32](bits32[(@i_hv+8)], 32768), 0) = 0;
+        .Lbranch target:l137:
         $r0, $r1 = @i_hv, 80;
-        $c0, $r30 = bits32[sym@_Perl_mg_find], ($c0+4);
-        .Lcall successor:l127:
+        $ 0 = bits32[sym@_Perl_mg_find];
+        .Lcall successor:l136:
         @i_@16i_1 = $r0;
-        $c0 when %eq[32](@i_@16i_1, 0) = sym@@i_35;
-        .Lbranch target:l124:
-        $c0, $r30 = bits32[sym@_Perl_sv_newmortal], ($c0+4);
-        .Lcall successor:l123:
+        .Lbranch target:l133:
+        $ 0 when %eq[32](@i_@16i_1, 0) = 0;
+        .Lbranch target:l132:
+        $ 0 = bits32[sym@_Perl_sv_newmortal];
+        .Lcall successor:l131:
         @i_@17i_2 = $r0;
         @i_@15i_sv = @i_@17i_2;
         $r0, $r1, $r2, $r3 = @i_hv, @i_@15i_sv, @i_key, @i_klen;
-        $c0, $r30 = bits32[sym@_Perl_mg_copy], ($c0+4);
-        .Lcall successor:l120:
+        $ 0 = bits32[sym@_Perl_mg_copy];
+        .Lcall successor:l128:
         @i_@18i_3 = bits32[sym@_PL_hv_fetch_sv];
         bits32[@i_@18i_3] = @i_@15i_sv;
         $r0 = @i_@18i_3;
@@ -1742,26 +1745,27 @@ section "text"
         @i_35:
         @i_33:
         @i_@12i_xhv = bits32[@i_hv];
-        $c0 when %ne[32](bits32[@i_@12i_xhv], 0) = sym@@i_37;
-        .Lbranch target:l116:
-        $c0 when %eq[32](@i_lval, 0) = sym@@i_39;
-        .Lbranch target:l115:
+        .Lbranch target:l124:
+        $ 0 when %ne[32](bits32[@i_@12i_xhv], 0) = 0;
+        .Lbranch target:l123:
+        $ 0 when %eq[32](@i_lval, 0) = 0;
+        .Lbranch target:l122:
         $r0
             =
             %mul[32](1,
             (%shl[32](%shl[32]((bits32[(@i_@12i_xhv+8)]+1), 2), 1)-16));
-        $c0, $r30 = bits32[sym@_Perl_safemalloc], ($c0+4);
-        .Lcall successor:l114:
+        $ 0 = bits32[sym@_Perl_safemalloc];
+        .Lcall successor:l121:
         @i_@20i_5 = $r0;
         bits32[@i_@12i_xhv] = @i_@20i_5;
         $r0, $r1, $r2
             = bits32[@i_@12i_xhv], 0,
             %mul[32](1,
             (%shl[32](%shl[32]((bits32[(@i_@12i_xhv+8)]+1), 2), 1)-16));
-        $c0, $r30 = bits32[sym@_memset], ($c0+4);
-        .Lcall successor:l111:
+        $ 0 = bits32[sym@_memset];
+        .Lcall successor:l118:
         @i_40:
-        $c0 = sym@@i_37;
+        $ 0 = sym@@i_37;
         @i_39:
         $r0 = 0;
         $r31 = ($r31+24);
@@ -1774,8 +1778,9 @@ section "text"
         @i_45:
         @i_@26i_8 = @i_@23i_i_PeRlHaSh;
         @i_@23i_i_PeRlHaSh = (@i_@26i_8-1);
-        $c0 when %ne[32](@i_@26i_8, 0) = sym@@i_44;
-        .Lbranch target:l107:
+        .Lbranch target:l114:
+        $ 0 when %ne[32](@i_@26i_8, 0) = 0;
+        .Lbranch target:l113:
         @i_@13i_hash = @i_@24i_hash_PeRlHaSh;
         @i_42:
         @i_@14i_entry
@@ -1785,19 +1790,20 @@ section "text"
             2)+
                 bits32[@i_@12i_xhv])];
         @i_50:
-        $c0 when %ne[32](@i_@14i_entry, 0) = sym@@i_47;
-        .Lbranch target:l102:
-        $c0 when %eq[32](@i_lval, 0) = sym@@i_57;
-        .Lbranch target:l101:
+        .Lbranch target:l105:
+        $ 0 when %ne[32](@i_@14i_entry, 0) = 0;
+        .Lbranch target:l104:
+        $ 0 when %eq[32](@i_lval, 0) = 0;
+        .Lbranch target:l103:
         $r0 = 0;
-        $c0, $r30 = bits32[sym@_Perl_newSV], ($c0+4);
-        .Lcall successor:l100:
+        $ 0 = bits32[sym@_Perl_newSV];
+        .Lcall successor:l102:
         @i_@30i_12 = $r0;
         @i_@15i_sv = @i_@30i_12;
         $r0, $r1, $r2, $r3, $r4
             = @i_hv, @i_key, @i_klen, @i_@15i_sv, @i_@13i_hash;
-        $c0, $r30 = bits32[sym@_Perl_hv_store], ($c0+4);
-        .Lcall successor:l97:
+        $ 0 = bits32[sym@_Perl_hv_store];
+        .Lcall successor:l99:
         @i_@31i_13 = $r0;
         $r0 = @i_@31i_13;
         $r31 = ($r31+24);
@@ -1807,26 +1813,29 @@ section "text"
         $r31 = ($r31+24);
         $c0 = $t1;
         @i_47:
-        $c0
+        .Lbranch target:l112:
+        $ 0
             when
             %eq[32](bits32[bits32[(@i_@14i_entry+4)]], @i_@13i_hash)
-            = sym@@i_51;
+            = 0;
         @i_51:
         @i_@28i_10 = 4;
-        $c0
+        .Lbranch target:l111:
+        $ 0
             when
             %eq[32](bits32[(bits32[(@i_@14i_entry+@i_@28i_10)]+
                 @i_@28i_10)],
-            @i_klen) = sym@@i_53;
+            @i_klen) = 0;
         @i_53:
         $r0, $r1, $r2 = (bits32[(@i_@14i_entry+4)]+8), @i_key, @i_klen;
-        $c0, $r30 = bits32[sym@_Perl_my_memcmp], ($c0+4);
-        .Lcall successor:l106:
+        $ 0 = bits32[sym@_Perl_my_memcmp];
+        .Lcall successor:l110:
         @i_@29i_11 = $r0;
-        $c0 when %eq[32](@i_@29i_11, 0) = sym@@i_55;
+        .Lbranch target:l107:
+        $ 0 when %eq[32](@i_@29i_11, 0) = 0;
         @i_48:
         @i_@14i_entry = bits32[@i_@14i_entry];
-        $c0 = sym@@i_50;
+        $ 0 = sym@@i_50;
         @i_55:
         $r0 = (@i_@14i_entry+8);
         $r31 = ($r31+24);
@@ -1838,7 +1847,7 @@ section "text"
             =
             (%mul[32](33, @i_@24i_hash_PeRlHaSh)+
                 %sx[8,32](bits8[@i_@25i_7]));
-        $c0 = sym@@i_45;
+        $ 0 = sym@@i_45;
     }
 }
 
@@ -1849,45 +1858,48 @@ section "text"
         $r31 = ($r31+-24);
         @i_hv, @i_keysv, @i_lval, @i_hash = $r0, $r1, $r2, $r3;
         $t1 = $r30;
-        .Linitialize continuations:l136:
-        .Lproc body start:l135:
-        $c0 when %ne[32](@i_hv, 0) = sym@@i_60;
-        .Lbranch target:l189:
+        .Linitialize continuations:l147:
+        .Lproc body start:l146:
+        .Lbranch target:l212:
+        $ 0 when %ne[32](@i_hv, 0) = 0;
+        .Lbranch target:l211:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
         @i_60:
-        $c0 when %eq[32](%and[32](bits32[(@i_hv+8)], 32768), 0)
-            = sym@@i_62;
-        .Lbranch target:l187:
+        .Lbranch target:l209:
+        $ 0 when %eq[32](%and[32](bits32[(@i_hv+8)], 32768), 0) = 0;
+        .Lbranch target:l208:
         $r0, $r1 = @i_hv, 80;
-        $c0, $r30 = bits32[sym@_Perl_mg_find], ($c0+4);
-        .Lcall successor:l186:
+        $ 0 = bits32[sym@_Perl_mg_find];
+        .Lcall successor:l207:
         @i_@37i_1 = $r0;
-        $c0 when %eq[32](@i_@37i_1, 0) = sym@@i_64;
-        .Lbranch target:l183:
-        $c0, $r30 = bits32[sym@_Perl_sv_newmortal], ($c0+4);
-        .Lcall successor:l182:
+        .Lbranch target:l204:
+        $ 0 when %eq[32](@i_@37i_1, 0) = 0;
+        .Lbranch target:l203:
+        $ 0 = bits32[sym@_Perl_sv_newmortal];
+        .Lcall successor:l202:
         @i_@38i_2 = $r0;
         @i_@36i_sv = @i_@38i_2;
         $r0 = @i_keysv;
-        $c0, $r30 = bits32[sym@_Perl_newSVsv], ($c0+4);
-        .Lcall successor:l179:
+        $ 0 = bits32[sym@_Perl_newSVsv];
+        .Lcall successor:l199:
         @i_@39i_3 = $r0;
         $r0 = @i_@39i_3;
-        $c0, $r30 = bits32[sym@_Perl_sv_2mortal], ($c0+4);
-        .Lcall successor:l176:
+        $ 0 = bits32[sym@_Perl_sv_2mortal];
+        .Lcall successor:l196:
         @i_@40i_4 = $r0;
         @i_keysv = @i_@40i_4;
         $r0, $r1, $r2, $r3 = @i_hv, @i_@36i_sv, @i_keysv, -2;
-        $c0, $r30 = bits32[sym@_Perl_mg_copy], ($c0+4);
-        .Lcall successor:l173:
-        $c0 when %ne[32](bits32[bits32[(sym@_PL_hv_fetch_ent_mh+4)]], 0)
-            = sym@@i_66;
-        .Lbranch target:l170:
+        $ 0 = bits32[sym@_Perl_mg_copy];
+        .Lcall successor:l193:
+        .Lbranch target:l190:
+        $ 0 when %ne[32](bits32[bits32[(sym@_PL_hv_fetch_ent_mh+4)]], 0)
+            = 0;
+        .Lbranch target:l189:
         $r0 = 12;
-        $c0, $r30 = bits32[sym@_Perl_safemalloc], ($c0+4);
-        .Lcall successor:l169:
+        $ 0 = bits32[sym@_Perl_safemalloc];
+        .Lcall successor:l188:
         @i_@42i_5 = $r0;
         @i_@41i_k = @i_@42i_5;
         bits32[(sym@_PL_hv_fetch_ent_mh+4)] = @i_@41i_k;
@@ -1902,47 +1914,49 @@ section "text"
         @i_64:
         @i_62:
         @i_@32i_xhv = bits32[@i_hv];
-        $c0 when %ne[32](bits32[@i_@32i_xhv], 0) = sym@@i_73;
-        .Lbranch target:l165:
-        $c0 when %eq[32](@i_lval, 0) = sym@@i_75;
-        .Lbranch target:l164:
+        .Lbranch target:l184:
+        $ 0 when %ne[32](bits32[@i_@32i_xhv], 0) = 0;
+        .Lbranch target:l183:
+        $ 0 when %eq[32](@i_lval, 0) = 0;
+        .Lbranch target:l182:
         $r0
             =
             %mul[32](1,
             (%shl[32](%shl[32]((bits32[(@i_@32i_xhv+8)]+1), 2), 1)-16));
-        $c0, $r30 = bits32[sym@_Perl_safemalloc], ($c0+4);
-        .Lcall successor:l163:
+        $ 0 = bits32[sym@_Perl_safemalloc];
+        .Lcall successor:l181:
         @i_@44i_7 = $r0;
         bits32[@i_@32i_xhv] = @i_@44i_7;
         $r0, $r1, $r2
             = bits32[@i_@32i_xhv], 0,
             %mul[32](1,
             (%shl[32](%shl[32]((bits32[(@i_@32i_xhv+8)]+1), 2), 1)-16));
-        $c0, $r30 = bits32[sym@_memset], ($c0+4);
-        .Lcall successor:l160:
+        $ 0 = bits32[sym@_memset];
+        .Lcall successor:l178:
         @i_76:
-        $c0 = sym@@i_73;
+        $ 0 = sym@@i_73;
         @i_75:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
         @i_73:
-        $c0 when %eq[32](%and[32](bits32[(@i_keysv+8)], 262144), 0)
-            = sym@@i_78;
-        .Lbranch target:l156:
+        .Lbranch target:l174:
+        $ 0 when %eq[32](%and[32](bits32[(@i_keysv+8)], 262144), 0) = 0;
+        .Lbranch target:l173:
         @i_@47i_9 = @i_keysv;
         bits32[($r31+24)] = bits32[(bits32[@i_@47i_9]+4)];
         @i_@46i_77 = bits32[bits32[@i_@47i_9]];
-        $c0 = sym@@i_79;
+        $ 0 = sym@@i_79;
         @i_78:
         $r0, $r1 = @i_keysv, bits32[($r31+24)];
-        $c0, $r30 = bits32[sym@_Perl_sv_2pv], ($c0+4);
-        .Lcall successor:l155:
+        $ 0 = bits32[sym@_Perl_sv_2pv];
+        .Lcall successor:l172:
         @i_@48i_10 = $r0;
         @i_@46i_77 = @i_@48i_10;
         @i_79:
         @i_@33i_key = @i_@46i_77;
-        $c0 when %ne[32](@i_hash, 0) = sym@@i_80;
+        .Lbranch target:l169:
+        $ 0 when %ne[32](@i_hash, 0) = 0;
         @i_82:
         @i_@49i_s_PeRlHaSh = @i_@33i_key;
         @i_@50i_i_PeRlHaSh = bits32[bits32[($r31+24)]];
@@ -1950,11 +1964,12 @@ section "text"
         @i_86:
         @i_@53i_12 = @i_@50i_i_PeRlHaSh;
         @i_@50i_i_PeRlHaSh = (@i_@53i_12-1);
-        $c0 when %ne[32](@i_@53i_12, 0) = sym@@i_85;
-        .Lbranch target:l152:
+        .Lbranch target:l168:
+        $ 0 when %ne[32](@i_@53i_12, 0) = 0;
+        .Lbranch target:l167:
         @i_hash = @i_@51i_hash_PeRlHaSh;
         @i_83:
-        $c0 = sym@@i_80;
+        $ 0 = sym@@i_80;
         @i_85:
         @i_@52i_11 = @i_@49i_s_PeRlHaSh;
         @i_@49i_s_PeRlHaSh = (@i_@52i_11+1);
@@ -1962,7 +1977,7 @@ section "text"
             =
             (%mul[32](33, @i_@51i_hash_PeRlHaSh)+
                 %sx[8,32](bits8[@i_@52i_11]));
-        $c0 = sym@@i_86;
+        $ 0 = sym@@i_86;
         @i_80:
         @i_@34i_entry
             =
@@ -1970,18 +1985,19 @@ section "text"
             2)+
                 bits32[@i_@32i_xhv])];
         @i_91:
-        $c0 when %ne[32](@i_@34i_entry, 0) = sym@@i_88;
-        .Lbranch target:l147:
-        $c0 when %eq[32](@i_lval, 0) = sym@@i_98;
-        .Lbranch target:l146:
+        .Lbranch target:l159:
+        $ 0 when %ne[32](@i_@34i_entry, 0) = 0;
+        .Lbranch target:l158:
+        $ 0 when %eq[32](@i_lval, 0) = 0;
+        .Lbranch target:l157:
         $r0 = 0;
-        $c0, $r30 = bits32[sym@_Perl_newSV], ($c0+4);
-        .Lcall successor:l145:
+        $ 0 = bits32[sym@_Perl_newSV];
+        .Lcall successor:l156:
         @i_@57i_16 = $r0;
         @i_@36i_sv = @i_@57i_16;
         $r0, $r1, $r2, $r3 = @i_hv, @i_keysv, @i_@36i_sv, @i_hash;
-        $c0, $r30 = bits32[sym@_Perl_hv_store_ent], ($c0+4);
-        .Lcall successor:l142:
+        $ 0 = bits32[sym@_Perl_hv_store_ent];
+        .Lcall successor:l153:
         @i_@58i_17 = $r0;
         $r0 = @i_@58i_17;
         $r31 = ($r31+24);
@@ -1991,26 +2007,29 @@ section "text"
         $r31 = ($r31+24);
         $c0 = $t1;
         @i_88:
-        $c0 when %eq[32](bits32[bits32[(@i_@34i_entry+4)]], @i_hash)
-            = sym@@i_92;
+        .Lbranch target:l166:
+        $ 0 when %eq[32](bits32[bits32[(@i_@34i_entry+4)]], @i_hash)
+            = 0;
         @i_92:
         @i_@55i_14 = 4;
-        $c0
+        .Lbranch target:l165:
+        $ 0
             when
             %eq[32](bits32[(bits32[(@i_@34i_entry+@i_@55i_14)]+
                 @i_@55i_14)],
-            bits32[bits32[($r31+24)]]) = sym@@i_94;
+            bits32[bits32[($r31+24)]]) = 0;
         @i_94:
         $r0, $r1, $r2
             = (bits32[(@i_@34i_entry+4)]+8), @i_@33i_key,
             bits32[bits32[($r31+24)]];
-        $c0, $r30 = bits32[sym@_Perl_my_memcmp], ($c0+4);
-        .Lcall successor:l151:
+        $ 0 = bits32[sym@_Perl_my_memcmp];
+        .Lcall successor:l164:
         @i_@56i_15 = $r0;
-        $c0 when %eq[32](@i_@56i_15, 0) = sym@@i_96;
+        .Lbranch target:l161:
+        $ 0 when %eq[32](@i_@56i_15, 0) = 0;
         @i_89:
         @i_@34i_entry = bits32[@i_@34i_entry];
-        $c0 = sym@@i_91;
+        $ 0 = sym@@i_91;
         @i_96:
         $r0 = @i_@34i_entry;
         $r31 = ($r31+24);
@@ -2025,36 +2044,40 @@ section "text"
         $r31 = ($r31+-24);
         @i_hv, @i_needs_copy, @i_needs_store = $r0, $r1, $r2;
         $t1 = $r30;
-        .Linitialize continuations:l195:
-        .Lproc body start:l194:
+        .Linitialize continuations:l218:
+        .Lproc body start:l217:
         @i_@59i_mg = bits32[(bits32[@i_hv]+20)];
         bits32[@i_needs_copy] = 0;
         bits32[@i_needs_store] = 1;
         @i_102:
-        $c0 when %ne[32](@i_@59i_mg, 0) = sym@@i_101;
+        .Lbranch target:l220:
+        $ 0 when %ne[32](@i_@59i_mg, 0) = 0;
         @i_100:
         $r31 = ($r31+24);
         $c0 = $t1;
         @i_101:
         @i_@60i_1 = %sx[8,32](bits8[(@i_@59i_mg+12)]);
-        $c0 when %lt[32](@i_@60i_1, 65) = sym@@i_104;
-        .Lbranch target:l199:
-        $c0 when %gt[32](@i_@60i_1, 90) = sym@@i_104;
-        .Lbranch target:l198:
+        .Lbranch target:l226:
+        $ 0 when %lt[32](@i_@60i_1, 65) = 0;
+        .Lbranch target:l225:
+        $ 0 when %gt[32](@i_@60i_1, 90) = 0;
+        .Lbranch target:l224:
         bits32[@i_needs_copy] = 1;
         @i_@61i_108 = %sx[8,32](bits8[(@i_@59i_mg+12)]);
         @i_@63i_3 = 80;
-        $c0 when %eq[32](@i_@61i_108, @i_@63i_3) = sym@@i_109;
-        .Lbranch target:l197:
-        $c0 when %lt[32](@i_@61i_108, @i_@63i_3) = sym@@i_106;
+        .Lbranch target:l223:
+        $ 0 when %eq[32](@i_@61i_108, @i_@63i_3) = 0;
+        .Lbranch target:l222:
+        $ 0 when %lt[32](@i_@61i_108, @i_@63i_3) = 0;
         @i_110:
-        $c0 when %eq[32](@i_@61i_108, 83) = sym@@i_109;
+        .Lbranch target:l221:
+        $ 0 when %eq[32](@i_@61i_108, 83) = 0;
         @i_109:
         bits32[@i_needs_store] = 0;
         @i_106:
         @i_104:
         @i_@59i_mg = bits32[@i_@59i_mg];
-        $c0 = sym@@i_102;
+        $ 0 = sym@@i_102;
     }
 }
 
@@ -2066,38 +2089,42 @@ section "text"
         @i_hv, @i_key, @i_klen, @i_val, @i_hash
             = $r0, $r1, $r2, $r3, $r4;
         $t1 = $r30;
-        .Linitialize continuations:l206:
-        .Lproc body start:l205:
-        $c0 when %ne[32](@i_hv, 0) = sym@@i_112;
-        .Lbranch target:l252:
+        .Linitialize continuations:l233:
+        .Lproc body start:l232:
+        .Lbranch target:l293:
+        $ 0 when %ne[32](@i_hv, 0) = 0;
+        .Lbranch target:l292:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
         @i_112:
         @i_@68i_1 = @i_hv;
         @i_@64i_xhv = bits32[@i_@68i_1];
-        $c0 when %eq[32](%and[32](bits32[(@i_@68i_1+8)], 57344), 0)
-            = sym@@i_114;
-        .Lbranch target:l250:
+        .Lbranch target:l290:
+        $ 0 when %eq[32](%and[32](bits32[(@i_@68i_1+8)], 57344), 0) = 0;
+        .Lbranch target:l289:
         $r0, $r1, $r2 = @i_hv, bits32[($r31+24)], bits32[($r31+28)];
-        $c0, $r30 = bits32[sym@@i_hv_magic_check], ($c0+4);
-        .Lcall successor:l249:
-        $c0 when %eq[32](bits32[bits32[($r31+24)]], 0) = sym@@i_116;
-        .Lbranch target:l246:
+        $ 0 = bits32[sym@@i_hv_magic_check];
+        .Lcall successor:l288:
+        .Lbranch target:l285:
+        $ 0 when %eq[32](bits32[bits32[($r31+24)]], 0) = 0;
+        .Lbranch target:l284:
         $r0, $r1, $r2, $r3 = @i_hv, @i_val, @i_key, @i_klen;
-        $c0, $r30 = bits32[sym@_Perl_mg_copy], ($c0+4);
-        .Lcall successor:l245:
-        $c0 when %ne[32](bits32[@i_@64i_xhv], 0) = sym@@i_118;
-        .Lbranch target:l242:
-        $c0 when %ne[32](bits32[bits32[($r31+28)]], 0) = sym@@i_118;
-        .Lbranch target:l241:
+        $ 0 = bits32[sym@_Perl_mg_copy];
+        .Lcall successor:l283:
+        .Lbranch target:l280:
+        $ 0 when %ne[32](bits32[@i_@64i_xhv], 0) = 0;
+        .Lbranch target:l279:
+        $ 0 when %ne[32](bits32[bits32[($r31+28)]], 0) = 0;
+        .Lbranch target:l278:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
         @i_118:
         @i_116:
         @i_114:
-        $c0 when %ne[32](@i_hash, 0) = sym@@i_120;
+        .Lbranch target:l276:
+        $ 0 when %ne[32](@i_hash, 0) = 0;
         @i_122:
         @i_@71i_s_PeRlHaSh = @i_key;
         @i_@72i_i_PeRlHaSh = @i_klen;
@@ -2105,11 +2132,12 @@ section "text"
         @i_126:
         @i_@75i_3 = @i_@72i_i_PeRlHaSh;
         @i_@72i_i_PeRlHaSh = (@i_@75i_3-1);
-        $c0 when %ne[32](@i_@75i_3, 0) = sym@@i_125;
-        .Lbranch target:l239:
+        .Lbranch target:l275:
+        $ 0 when %ne[32](@i_@75i_3, 0) = 0;
+        .Lbranch target:l274:
         @i_hash = @i_@73i_hash_PeRlHaSh;
         @i_123:
-        $c0 = sym@@i_120;
+        $ 0 = sym@@i_120;
         @i_125:
         @i_@74i_2 = @i_@71i_s_PeRlHaSh;
         @i_@71i_s_PeRlHaSh = (@i_@74i_2+1);
@@ -2117,24 +2145,25 @@ section "text"
             =
             (%mul[32](33, @i_@73i_hash_PeRlHaSh)+
                 %sx[8,32](bits8[@i_@74i_2]));
-        $c0 = sym@@i_126;
+        $ 0 = sym@@i_126;
         @i_120:
-        $c0 when %ne[32](bits32[@i_@64i_xhv], 0) = sym@@i_128;
-        .Lbranch target:l238:
+        .Lbranch target:l273:
+        $ 0 when %ne[32](bits32[@i_@64i_xhv], 0) = 0;
+        .Lbranch target:l272:
         $r0
             =
             %mul[32](1,
             (%shl[32](%shl[32]((bits32[(@i_@64i_xhv+8)]+1), 2), 1)-16));
-        $c0, $r30 = bits32[sym@_Perl_safemalloc], ($c0+4);
-        .Lcall successor:l237:
+        $ 0 = bits32[sym@_Perl_safemalloc];
+        .Lcall successor:l271:
         @i_@77i_5 = $r0;
         bits32[@i_@64i_xhv] = @i_@77i_5;
         $r0, $r1, $r2
             = bits32[@i_@64i_xhv], 0,
             %mul[32](1,
             (%shl[32](%shl[32]((bits32[(@i_@64i_xhv+8)]+1), 2), 1)-16));
-        $c0, $r30 = bits32[sym@_memset], ($c0+4);
-        .Lcall successor:l234:
+        $ 0 = bits32[sym@_memset];
+        .Lcall successor:l268:
         @i_128:
         @i_@67i_oentry
             =
@@ -2143,25 +2172,26 @@ section "text"
         @i_@65i_i = 1;
         @i_@66i_entry = bits32[@i_@67i_oentry];
         @i_133:
-        $c0 when %ne[32](@i_@66i_entry, 0) = sym@@i_130;
-        .Lbranch target:l224:
-        $c0, $r30 = bits32[sym@@i_new_he], ($c0+4);
-        .Lcall successor:l223:
+        .Lbranch target:l255:
+        $ 0 when %ne[32](@i_@66i_entry, 0) = 0;
+        .Lbranch target:l254:
+        $ 0 = bits32[sym@@i_new_he];
+        .Lcall successor:l253:
         @i_@82i_10 = $r0;
         @i_@66i_entry = @i_@82i_10;
-        $c0 when %eq[32](%and[32](bits32[(@i_hv+8)], 536870912), 0)
-            = sym@@i_140;
-        .Lbranch target:l220:
+        .Lbranch target:l250:
+        $ 0 when %eq[32](%and[32](bits32[(@i_hv+8)], 536870912), 0) = 0;
+        .Lbranch target:l249:
         $r0, $r1, $r2 = @i_key, @i_klen, @i_hash;
-        $c0, $r30 = bits32[sym@_Perl_share_hek], ($c0+4);
-        .Lcall successor:l219:
+        $ 0 = bits32[sym@_Perl_share_hek];
+        .Lcall successor:l248:
         @i_@83i_11 = $r0;
         bits32[(@i_@66i_entry+4)] = @i_@83i_11;
-        $c0 = sym@@i_141;
+        $ 0 = sym@@i_141;
         @i_140:
         $r0, $r1, $r2 = @i_key, @i_klen, @i_hash;
-        $c0, $r30 = bits32[sym@@i_save_hek], ($c0+4);
-        .Lcall successor:l216:
+        $ 0 = bits32[sym@@i_save_hek];
+        .Lcall successor:l245:
         @i_@84i_12 = $r0;
         bits32[(@i_@66i_entry+4)] = @i_@84i_12;
         @i_141:
@@ -2170,47 +2200,52 @@ section "text"
         bits32[@i_@67i_oentry] = @i_@66i_entry;
         @i_@85i_13 = (@i_@64i_xhv+12);
         bits32[@i_@85i_13] = (bits32[@i_@85i_13]+1);
-        $c0 when %eq[32](@i_@65i_i, 0) = sym@@i_142;
-        .Lbranch target:l213:
+        .Lbranch target:l242:
+        $ 0 when %eq[32](@i_@65i_i, 0) = 0;
+        .Lbranch target:l241:
         @i_@86i_14 = (@i_@64i_xhv+4);
         bits32[@i_@86i_14] = (bits32[@i_@86i_14]+1);
-        $c0
+        .Lbranch target:l240:
+        $ 0
             when
             %leu[32](bits32[(@i_@64i_xhv+12)], bits32[(@i_@64i_xhv+8)])
-            = sym@@i_144;
-        .Lbranch target:l212:
+            = 0;
+        .Lbranch target:l239:
         $r0 = @i_hv;
-        $c0, $r30 = bits32[sym@@i_hsplit], ($c0+4);
-        .Lcall successor:l211:
+        $ 0 = bits32[sym@@i_hsplit];
+        .Lcall successor:l238:
         @i_144:
         @i_142:
         $r0 = (@i_@66i_entry+8);
         $r31 = ($r31+24);
         $c0 = $t1;
         @i_130:
-        $c0 when %eq[32](bits32[bits32[(@i_@66i_entry+4)]], @i_hash)
-            = sym@@i_134;
+        .Lbranch target:l265:
+        $ 0 when %eq[32](bits32[bits32[(@i_@66i_entry+4)]], @i_hash)
+            = 0;
         @i_134:
         @i_@80i_8 = 4;
-        $c0
+        .Lbranch target:l264:
+        $ 0
             when
             %eq[32](bits32[(bits32[(@i_@66i_entry+@i_@80i_8)]+
                 @i_@80i_8)],
-            @i_klen) = sym@@i_136;
+            @i_klen) = 0;
         @i_136:
         $r0, $r1, $r2 = (bits32[(@i_@66i_entry+4)]+8), @i_key, @i_klen;
-        $c0, $r30 = bits32[sym@_Perl_my_memcmp], ($c0+4);
-        .Lcall successor:l231:
+        $ 0 = bits32[sym@_Perl_my_memcmp];
+        .Lcall successor:l263:
         @i_@81i_9 = $r0;
-        $c0 when %eq[32](@i_@81i_9, 0) = sym@@i_138;
+        .Lbranch target:l260:
+        $ 0 when %eq[32](@i_@81i_9, 0) = 0;
         @i_131:
         @i_@65i_i = 0;
         @i_@66i_entry = bits32[@i_@66i_entry];
-        $c0 = sym@@i_133;
+        $ 0 = sym@@i_133;
         @i_138:
         $r0 = bits32[(@i_@66i_entry+8)];
-        $c0, $r30 = bits32[sym@_Perl_sv_free], ($c0+4);
-        .Lcall successor:l228:
+        $ 0 = bits32[sym@_Perl_sv_free];
+        .Lcall successor:l259:
         bits32[(@i_@66i_entry+8)] = @i_val;
         $r0 = (@i_@66i_entry+8);
         $r31 = ($r31+24);
@@ -2225,87 +2260,93 @@ section "text"
         $r31 = ($r31+-24);
         @i_hv, @i_keysv, @i_val, @i_hash = $r0, $r1, $r2, $r3;
         $t1 = $r30;
-        .Linitialize continuations:l258:
-        .Lproc body start:l257:
-        $c0 when %ne[32](@i_hv, 0) = sym@@i_147;
-        .Lbranch target:l321:
+        .Linitialize continuations:l299:
+        .Lproc body start:l298:
+        .Lbranch target:l381:
+        $ 0 when %ne[32](@i_hv, 0) = 0;
+        .Lbranch target:l380:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
         @i_147:
         @i_@94i_1 = @i_hv;
         @i_@88i_xhv = bits32[@i_@94i_1];
-        $c0 when %eq[32](%and[32](bits32[(@i_@94i_1+8)], 57344), 0)
-            = sym@@i_149;
-        .Lbranch target:l319:
+        .Lbranch target:l378:
+        $ 0 when %eq[32](%and[32](bits32[(@i_@94i_1+8)], 57344), 0) = 0;
+        .Lbranch target:l377:
         $r0, $r1, $r2 = @i_hv, bits32[($r31+28)], bits32[($r31+32)];
-        $c0, $r30 = bits32[sym@@i_hv_magic_check], ($c0+4);
-        .Lcall successor:l318:
-        $c0 when %eq[32](bits32[bits32[($r31+28)]], 0) = sym@@i_151;
-        .Lbranch target:l315:
+        $ 0 = bits32[sym@@i_hv_magic_check];
+        .Lcall successor:l376:
+        .Lbranch target:l373:
+        $ 0 when %eq[32](bits32[bits32[($r31+28)]], 0) = 0;
+        .Lbranch target:l372:
         @i_@97i_save_taint = bits32[bits32[sym@_PL_tainted]];
-        $c0 when %eq[32](bits32[bits32[sym@_PL_tainting]], 0)
-            = sym@@i_153;
-        .Lbranch target:l314:
+        .Lbranch target:l371:
+        $ 0 when %eq[32](bits32[bits32[sym@_PL_tainting]], 0) = 0;
+        .Lbranch target:l370:
         @i_@99i_2 = @i_keysv;
-        $c0 when %eq[32](%and[32](bits32[(@i_@99i_2+8)], 57344), 0)
-            = sym@@i_156;
-        .Lbranch target:l313:
+        .Lbranch target:l369:
+        $ 0 when %eq[32](%and[32](bits32[(@i_@99i_2+8)], 57344), 0) = 0;
+        .Lbranch target:l368:
         $r0 = @i_@99i_2;
-        $c0, $r30 = bits32[sym@_Perl_sv_tainted], ($c0+4);
-        .Lcall successor:l312:
+        $ 0 = bits32[sym@_Perl_sv_tainted];
+        .Lcall successor:l367:
         @i_@100i_3 = $r0;
-        $c0 when %eq[32](@i_@100i_3, 0) = sym@@i_156;
-        .Lbranch target:l309:
+        .Lbranch target:l364:
+        $ 0 when %eq[32](@i_@100i_3, 0) = 0;
+        .Lbranch target:l363:
         @i_@98i_155 = 1;
-        $c0 = sym@@i_157;
+        $ 0 = sym@@i_157;
         @i_156:
         @i_@98i_155 = 0;
         @i_157:
         bits32[sym@_PL_tainted] = @i_@98i_155;
         @i_153:
         $r0 = @i_keysv;
-        $c0, $r30 = bits32[sym@_Perl_newSVsv], ($c0+4);
-        .Lcall successor:l308:
+        $ 0 = bits32[sym@_Perl_newSVsv];
+        .Lcall successor:l362:
         @i_@101i_4 = $r0;
         $r0 = @i_@101i_4;
-        $c0, $r30 = bits32[sym@_Perl_sv_2mortal], ($c0+4);
-        .Lcall successor:l305:
+        $ 0 = bits32[sym@_Perl_sv_2mortal];
+        .Lcall successor:l359:
         @i_@102i_5 = $r0;
         @i_keysv = @i_@102i_5;
         $r0, $r1, $r2, $r3 = @i_hv, @i_val, @i_keysv, -2;
-        $c0, $r30 = bits32[sym@_Perl_mg_copy], ($c0+4);
-        .Lcall successor:l302:
-        $c0 when %eq[32](@i_@97i_save_taint, 0) = sym@@i_158;
-        .Lbranch target:l299:
+        $ 0 = bits32[sym@_Perl_mg_copy];
+        .Lcall successor:l356:
+        .Lbranch target:l353:
+        $ 0 when %eq[32](@i_@97i_save_taint, 0) = 0;
+        .Lbranch target:l352:
         bits32[sym@_PL_tainted] = 1;
         @i_158:
-        $c0 when %ne[32](bits32[@i_@88i_xhv], 0) = sym@@i_160;
-        .Lbranch target:l298:
-        $c0 when %ne[32](bits32[bits32[($r31+32)]], 0) = sym@@i_160;
-        .Lbranch target:l297:
+        .Lbranch target:l351:
+        $ 0 when %ne[32](bits32[@i_@88i_xhv], 0) = 0;
+        .Lbranch target:l350:
+        $ 0 when %ne[32](bits32[bits32[($r31+32)]], 0) = 0;
+        .Lbranch target:l349:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
         @i_160:
         @i_151:
         @i_149:
-        $c0 when %eq[32](%and[32](bits32[(@i_keysv+8)], 262144), 0)
-            = sym@@i_163;
-        .Lbranch target:l295:
+        .Lbranch target:l347:
+        $ 0 when %eq[32](%and[32](bits32[(@i_keysv+8)], 262144), 0) = 0;
+        .Lbranch target:l346:
         @i_@104i_6 = @i_keysv;
         bits32[($r31+24)] = bits32[(bits32[@i_@104i_6]+4)];
         @i_@103i_162 = bits32[bits32[@i_@104i_6]];
-        $c0 = sym@@i_164;
+        $ 0 = sym@@i_164;
         @i_163:
         $r0, $r1 = @i_keysv, bits32[($r31+24)];
-        $c0, $r30 = bits32[sym@_Perl_sv_2pv], ($c0+4);
-        .Lcall successor:l294:
+        $ 0 = bits32[sym@_Perl_sv_2pv];
+        .Lcall successor:l345:
         @i_@105i_7 = $r0;
         @i_@103i_162 = @i_@105i_7;
         @i_164:
         @i_@89i_key = @i_@103i_162;
-        $c0 when %ne[32](@i_hash, 0) = sym@@i_165;
+        .Lbranch target:l342:
+        $ 0 when %ne[32](@i_hash, 0) = 0;
         @i_167:
         @i_@106i_s_PeRlHaSh = @i_@89i_key;
         @i_@107i_i_PeRlHaSh = bits32[bits32[($r31+24)]];
@@ -2313,11 +2354,12 @@ section "text"
         @i_171:
         @i_@110i_9 = @i_@107i_i_PeRlHaSh;
         @i_@107i_i_PeRlHaSh = (@i_@110i_9-1);
-        $c0 when %ne[32](@i_@110i_9, 0) = sym@@i_170;
-        .Lbranch target:l291:
+        .Lbranch target:l341:
+        $ 0 when %ne[32](@i_@110i_9, 0) = 0;
+        .Lbranch target:l340:
         @i_hash = @i_@108i_hash_PeRlHaSh;
         @i_168:
-        $c0 = sym@@i_165;
+        $ 0 = sym@@i_165;
         @i_170:
         @i_@109i_8 = @i_@106i_s_PeRlHaSh;
         @i_@106i_s_PeRlHaSh = (@i_@109i_8+1);
@@ -2325,24 +2367,25 @@ section "text"
             =
             (%mul[32](33, @i_@108i_hash_PeRlHaSh)+
                 %sx[8,32](bits8[@i_@109i_8]));
-        $c0 = sym@@i_171;
+        $ 0 = sym@@i_171;
         @i_165:
-        $c0 when %ne[32](bits32[@i_@88i_xhv], 0) = sym@@i_173;
-        .Lbranch target:l290:
+        .Lbranch target:l339:
+        $ 0 when %ne[32](bits32[@i_@88i_xhv], 0) = 0;
+        .Lbranch target:l338:
         $r0
             =
             %mul[32](1,
             (%shl[32](%shl[32]((bits32[(@i_@88i_xhv+8)]+1), 2), 1)-16));
-        $c0, $r30 = bits32[sym@_Perl_safemalloc], ($c0+4);
-        .Lcall successor:l289:
+        $ 0 = bits32[sym@_Perl_safemalloc];
+        .Lcall successor:l337:
         @i_@112i_11 = $r0;
         bits32[@i_@88i_xhv] = @i_@112i_11;
         $r0, $r1, $r2
             = bits32[@i_@88i_xhv], 0,
             %mul[32](1,
             (%shl[32](%shl[32]((bits32[(@i_@88i_xhv+8)]+1), 2), 1)-16));
-        $c0, $r30 = bits32[sym@_memset], ($c0+4);
-        .Lcall successor:l286:
+        $ 0 = bits32[sym@_memset];
+        .Lcall successor:l334:
         @i_173:
         @i_@92i_oentry
             =
@@ -2351,25 +2394,26 @@ section "text"
         @i_@90i_i = 1;
         @i_@91i_entry = bits32[@i_@92i_oentry];
         @i_178:
-        $c0 when %ne[32](@i_@91i_entry, 0) = sym@@i_175;
-        .Lbranch target:l276:
-        $c0, $r30 = bits32[sym@@i_new_he], ($c0+4);
-        .Lcall successor:l275:
+        .Lbranch target:l321:
+        $ 0 when %ne[32](@i_@91i_entry, 0) = 0;
+        .Lbranch target:l320:
+        $ 0 = bits32[sym@@i_new_he];
+        .Lcall successor:l319:
         @i_@117i_16 = $r0;
         @i_@91i_entry = @i_@117i_16;
-        $c0 when %eq[32](%and[32](bits32[(@i_hv+8)], 536870912), 0)
-            = sym@@i_185;
-        .Lbranch target:l272:
+        .Lbranch target:l316:
+        $ 0 when %eq[32](%and[32](bits32[(@i_hv+8)], 536870912), 0) = 0;
+        .Lbranch target:l315:
         $r0, $r1, $r2 = @i_@89i_key, bits32[bits32[($r31+24)]], @i_hash;
-        $c0, $r30 = bits32[sym@_Perl_share_hek], ($c0+4);
-        .Lcall successor:l271:
+        $ 0 = bits32[sym@_Perl_share_hek];
+        .Lcall successor:l314:
         @i_@118i_17 = $r0;
         bits32[(@i_@91i_entry+4)] = @i_@118i_17;
-        $c0 = sym@@i_186;
+        $ 0 = sym@@i_186;
         @i_185:
         $r0, $r1, $r2 = @i_@89i_key, bits32[bits32[($r31+24)]], @i_hash;
-        $c0, $r30 = bits32[sym@@i_save_hek], ($c0+4);
-        .Lcall successor:l268:
+        $ 0 = bits32[sym@@i_save_hek];
+        .Lcall successor:l311:
         @i_@119i_18 = $r0;
         bits32[(@i_@91i_entry+4)] = @i_@119i_18;
         @i_186:
@@ -2378,49 +2422,54 @@ section "text"
         bits32[@i_@92i_oentry] = @i_@91i_entry;
         @i_@120i_19 = (@i_@88i_xhv+12);
         bits32[@i_@120i_19] = (bits32[@i_@120i_19]+1);
-        $c0 when %eq[32](@i_@90i_i, 0) = sym@@i_187;
-        .Lbranch target:l265:
+        .Lbranch target:l308:
+        $ 0 when %eq[32](@i_@90i_i, 0) = 0;
+        .Lbranch target:l307:
         @i_@121i_20 = (@i_@88i_xhv+4);
         bits32[@i_@121i_20] = (bits32[@i_@121i_20]+1);
-        $c0
+        .Lbranch target:l306:
+        $ 0
             when
             %leu[32](bits32[(@i_@88i_xhv+12)], bits32[(@i_@88i_xhv+8)])
-            = sym@@i_189;
-        .Lbranch target:l264:
+            = 0;
+        .Lbranch target:l305:
         $r0 = @i_hv;
-        $c0, $r30 = bits32[sym@@i_hsplit], ($c0+4);
-        .Lcall successor:l263:
+        $ 0 = bits32[sym@@i_hsplit];
+        .Lcall successor:l304:
         @i_189:
         @i_187:
         $r0 = @i_@91i_entry;
         $r31 = ($r31+24);
         $c0 = $t1;
         @i_175:
-        $c0 when %eq[32](bits32[bits32[(@i_@91i_entry+4)]], @i_hash)
-            = sym@@i_179;
+        .Lbranch target:l331:
+        $ 0 when %eq[32](bits32[bits32[(@i_@91i_entry+4)]], @i_hash)
+            = 0;
         @i_179:
         @i_@115i_14 = 4;
-        $c0
+        .Lbranch target:l330:
+        $ 0
             when
             %eq[32](bits32[(bits32[(@i_@91i_entry+@i_@115i_14)]+
                 @i_@115i_14)],
-            bits32[bits32[($r31+24)]]) = sym@@i_181;
+            bits32[bits32[($r31+24)]]) = 0;
         @i_181:
         $r0, $r1, $r2
             = (bits32[(@i_@91i_entry+4)]+8), @i_@89i_key,
             bits32[bits32[($r31+24)]];
-        $c0, $r30 = bits32[sym@_Perl_my_memcmp], ($c0+4);
-        .Lcall successor:l283:
+        $ 0 = bits32[sym@_Perl_my_memcmp];
+        .Lcall successor:l329:
         @i_@116i_15 = $r0;
-        $c0 when %eq[32](@i_@116i_15, 0) = sym@@i_183;
+        .Lbranch target:l326:
+        $ 0 when %eq[32](@i_@116i_15, 0) = 0;
         @i_176:
         @i_@90i_i = 0;
         @i_@91i_entry = bits32[@i_@91i_entry];
-        $c0 = sym@@i_178;
+        $ 0 = sym@@i_178;
         @i_183:
         $r0 = bits32[(@i_@91i_entry+8)];
-        $c0, $r30 = bits32[sym@_Perl_sv_free], ($c0+4);
-        .Lcall successor:l280:
+        $ 0 = bits32[sym@_Perl_sv_free];
+        .Lcall successor:l325:
         bits32[(@i_@91i_entry+8)] = @i_val;
         $r0 = @i_@91i_entry;
         $r31 = ($r31+24);
@@ -2435,44 +2484,49 @@ section "text"
         $r31 = ($r31+-24);
         @i_hv, @i_key, @i_klen, @i_flags = $r0, $r1, $r2, $r3;
         $t1 = $r30;
-        .Linitialize continuations:l327:
-        .Lproc body start:l326:
-        $c0 when %ne[32](@i_hv, 0) = sym@@i_192;
-        .Lbranch target:l371:
+        .Linitialize continuations:l387:
+        .Lproc body start:l386:
+        .Lbranch target:l446:
+        $ 0 when %ne[32](@i_hv, 0) = 0;
+        .Lbranch target:l445:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
         @i_192:
-        $c0 when %eq[32](%and[32](bits32[(@i_hv+8)], 32768), 0)
-            = sym@@i_194;
-        .Lbranch target:l369:
+        .Lbranch target:l443:
+        $ 0 when %eq[32](%and[32](bits32[(@i_hv+8)], 32768), 0) = 0;
+        .Lbranch target:l442:
         $r0, $r1, $r2 = @i_hv, bits32[($r31+24)], bits32[($r31+28)];
-        $c0, $r30 = bits32[sym@@i_hv_magic_check], ($c0+4);
-        .Lcall successor:l368:
-        $c0 when %eq[32](bits32[bits32[($r31+24)]], 0) = sym@@i_196;
-        .Lbranch target:l365:
+        $ 0 = bits32[sym@@i_hv_magic_check];
+        .Lcall successor:l441:
+        .Lbranch target:l438:
+        $ 0 when %eq[32](bits32[bits32[($r31+24)]], 0) = 0;
+        .Lbranch target:l437:
         $r0, $r1, $r2, $r3 = @i_hv, @i_key, @i_klen, 1;
-        $c0, $r30 = bits32[sym@_Perl_hv_fetch], ($c0+4);
-        .Lcall successor:l364:
+        $ 0 = bits32[sym@_Perl_hv_fetch];
+        .Lcall successor:l436:
         @i_@132i_1 = $r0;
         @i_@129i_svp = @i_@132i_1;
-        $c0 when %eq[32](@i_@132i_1, 0) = sym@@i_196;
-        .Lbranch target:l361:
+        .Lbranch target:l433:
+        $ 0 when %eq[32](@i_@132i_1, 0) = 0;
+        .Lbranch target:l432:
         @i_@128i_sv = bits32[@i_@129i_svp];
         $r0 = @i_@128i_sv;
-        $c0, $r30 = bits32[sym@_Perl_mg_clear], ($c0+4);
-        .Lcall successor:l360:
-        $c0 when %ne[32](bits32[bits32[($r31+28)]], 0) = sym@@i_198;
-        .Lbranch target:l357:
+        $ 0 = bits32[sym@_Perl_mg_clear];
+        .Lcall successor:l431:
+        .Lbranch target:l428:
+        $ 0 when %ne[32](bits32[bits32[($r31+28)]], 0) = 0;
+        .Lbranch target:l427:
         $r0, $r1 = @i_@128i_sv, 112;
-        $c0, $r30 = bits32[sym@_Perl_mg_find], ($c0+4);
-        .Lcall successor:l356:
+        $ 0 = bits32[sym@_Perl_mg_find];
+        .Lcall successor:l426:
         @i_@133i_2 = $r0;
-        $c0 when %eq[32](@i_@133i_2, 0) = sym@@i_200;
-        .Lbranch target:l353:
+        .Lbranch target:l423:
+        $ 0 when %eq[32](@i_@133i_2, 0) = 0;
+        .Lbranch target:l422:
         $r0, $r1 = @i_@128i_sv, 112;
-        $c0, $r30 = bits32[sym@_Perl_sv_unmagic], ($c0+4);
-        .Lcall successor:l352:
+        $ 0 = bits32[sym@_Perl_sv_unmagic];
+        .Lcall successor:l421:
         $r0 = @i_@128i_sv;
         $r31 = ($r31+24);
         $c0 = $t1;
@@ -2484,8 +2538,9 @@ section "text"
         @i_196:
         @i_194:
         @i_@123i_xhv = bits32[@i_hv];
-        $c0 when %ne[32](bits32[@i_@123i_xhv], 0) = sym@@i_202;
-        .Lbranch target:l347:
+        .Lbranch target:l416:
+        $ 0 when %ne[32](bits32[@i_@123i_xhv], 0) = 0;
+        .Lbranch target:l415:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
@@ -2497,8 +2552,9 @@ section "text"
         @i_208:
         @i_@138i_4 = @i_@135i_i_PeRlHaSh;
         @i_@135i_i_PeRlHaSh = (@i_@138i_4-1);
-        $c0 when %ne[32](@i_@138i_4, 0) = sym@@i_207;
-        .Lbranch target:l345:
+        .Lbranch target:l413:
+        $ 0 when %ne[32](@i_@138i_4, 0) = 0;
+        .Lbranch target:l412:
         @i_@125i_hash = @i_@136i_hash_PeRlHaSh;
         @i_205:
         @i_@127i_oentry
@@ -2509,65 +2565,71 @@ section "text"
         @i_@126i_entry = bits32[@i_@127i_oentry];
         @i_@124i_i = 1;
         @i_213:
-        $c0 when %ne[32](@i_@126i_entry, 0) = sym@@i_210;
-        .Lbranch target:l330:
+        .Lbranch target:l391:
+        $ 0 when %ne[32](@i_@126i_entry, 0) = 0;
+        .Lbranch target:l390:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
         @i_210:
-        $c0
+        .Lbranch target:l411:
+        $ 0
             when
             %eq[32](bits32[bits32[(@i_@126i_entry+4)]], @i_@125i_hash)
-            = sym@@i_214;
+            = 0;
         @i_214:
         @i_@140i_6 = 4;
-        $c0
+        .Lbranch target:l410:
+        $ 0
             when
             %eq[32](bits32[(bits32[(@i_@126i_entry+@i_@140i_6)]+
                 @i_@140i_6)],
-            @i_klen) = sym@@i_216;
+            @i_klen) = 0;
         @i_216:
         $r0, $r1, $r2 = (bits32[(@i_@126i_entry+4)]+8), @i_key, @i_klen;
-        $c0, $r30 = bits32[sym@_Perl_my_memcmp], ($c0+4);
-        .Lcall successor:l344:
+        $ 0 = bits32[sym@_Perl_my_memcmp];
+        .Lcall successor:l409:
         @i_@141i_7 = $r0;
-        $c0 when %eq[32](@i_@141i_7, 0) = sym@@i_218;
+        .Lbranch target:l406:
+        $ 0 when %eq[32](@i_@141i_7, 0) = 0;
         @i_211:
         @i_@124i_i = 0;
         @i_@127i_oentry = @i_@126i_entry;
         @i_@126i_entry = bits32[@i_@127i_oentry];
-        $c0 = sym@@i_213;
+        $ 0 = sym@@i_213;
         @i_218:
         bits32[@i_@127i_oentry] = bits32[@i_@126i_entry];
-        $c0 when %eq[32](@i_@124i_i, 0) = sym@@i_220;
-        .Lbranch target:l341:
-        $c0 when %ne[32](bits32[@i_@127i_oentry], 0) = sym@@i_220;
-        .Lbranch target:l340:
+        .Lbranch target:l405:
+        $ 0 when %eq[32](@i_@124i_i, 0) = 0;
+        .Lbranch target:l404:
+        $ 0 when %ne[32](bits32[@i_@127i_oentry], 0) = 0;
+        .Lbranch target:l403:
         @i_@142i_8 = (@i_@123i_xhv+4);
         bits32[@i_@142i_8] = (bits32[@i_@142i_8]-1);
         @i_220:
-        $c0 when %eq[32](%and[32](@i_flags, 2), 0) = sym@@i_222;
-        .Lbranch target:l339:
+        .Lbranch target:l402:
+        $ 0 when %eq[32](%and[32](@i_flags, 2), 0) = 0;
+        .Lbranch target:l401:
         @i_@128i_sv = 0;
-        $c0 = sym@@i_223;
+        $ 0 = sym@@i_223;
         @i_222:
         $r0 = bits32[(@i_@126i_entry+8)];
-        $c0, $r30 = bits32[sym@_Perl_sv_mortalcopy], ($c0+4);
-        .Lcall successor:l338:
+        $ 0 = bits32[sym@_Perl_sv_mortalcopy];
+        .Lcall successor:l400:
         @i_@143i_9 = $r0;
         @i_@128i_sv = @i_@143i_9;
         @i_223:
-        $c0 when %ne[32](@i_@126i_entry, bits32[(@i_@123i_xhv+32)])
-            = sym@@i_224;
-        .Lbranch target:l335:
+        .Lbranch target:l397:
+        $ 0 when %ne[32](@i_@126i_entry, bits32[(@i_@123i_xhv+32)]) = 0;
+        .Lbranch target:l396:
         @i_@144i_10 = (@i_hv+8);
         bits32[@i_@144i_10]
             = %or[32](bits32[@i_@144i_10], 0x40000000::bits32);
-        $c0 = sym@@i_225;
+        $ 0 = sym@@i_225;
         @i_224:
         $r0, $r1 = @i_hv, @i_@126i_entry;
-        $c0, $r30 = bits32[sym@_Perl_hv_free_ent], ($c0+4);
-        .Lcall successor:l334:
+        $ 0 = bits32[sym@_Perl_hv_free_ent];
+        .Lcall successor:l395:
         @i_225:
         @i_@145i_11 = (@i_@123i_xhv+12);
         bits32[@i_@145i_11] = (bits32[@i_@145i_11]-1);
@@ -2581,7 +2643,7 @@ section "text"
             =
             (%mul[32](33, @i_@136i_hash_PeRlHaSh)+
                 %sx[8,32](bits8[@i_@137i_3]));
-        $c0 = sym@@i_208;
+        $ 0 = sym@@i_208;
     }
 }
 
@@ -2592,44 +2654,49 @@ section "text"
         $r31 = ($r31+-24);
         @i_hv, @i_keysv, @i_flags, @i_hash = $r0, $r1, $r2, $r3;
         $t1 = $r30;
-        .Linitialize continuations:l377:
-        .Lproc body start:l376:
-        $c0 when %ne[32](@i_hv, 0) = sym@@i_227;
-        .Lbranch target:l425:
+        .Linitialize continuations:l452:
+        .Lproc body start:l451:
+        .Lbranch target:l517:
+        $ 0 when %ne[32](@i_hv, 0) = 0;
+        .Lbranch target:l516:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
         @i_227:
-        $c0 when %eq[32](%and[32](bits32[(@i_hv+8)], 32768), 0)
-            = sym@@i_229;
-        .Lbranch target:l423:
+        .Lbranch target:l514:
+        $ 0 when %eq[32](%and[32](bits32[(@i_hv+8)], 32768), 0) = 0;
+        .Lbranch target:l513:
         $r0, $r1, $r2 = @i_hv, bits32[($r31+28)], bits32[($r31+32)];
-        $c0, $r30 = bits32[sym@@i_hv_magic_check], ($c0+4);
-        .Lcall successor:l422:
-        $c0 when %eq[32](bits32[bits32[($r31+28)]], 0) = sym@@i_231;
-        .Lbranch target:l419:
+        $ 0 = bits32[sym@@i_hv_magic_check];
+        .Lcall successor:l512:
+        .Lbranch target:l509:
+        $ 0 when %eq[32](bits32[bits32[($r31+28)]], 0) = 0;
+        .Lbranch target:l508:
         $r0, $r1, $r2, $r3 = @i_hv, @i_keysv, 1, @i_hash;
-        $c0, $r30 = bits32[sym@_Perl_hv_fetch_ent], ($c0+4);
-        .Lcall successor:l418:
+        $ 0 = bits32[sym@_Perl_hv_fetch_ent];
+        .Lcall successor:l507:
         @i_@155i_1 = $r0;
         @i_@149i_entry = @i_@155i_1;
-        $c0 when %eq[32](@i_@155i_1, 0) = sym@@i_231;
-        .Lbranch target:l415:
+        .Lbranch target:l504:
+        $ 0 when %eq[32](@i_@155i_1, 0) = 0;
+        .Lbranch target:l503:
         @i_@152i_sv = bits32[(@i_@149i_entry+8)];
         $r0 = @i_@152i_sv;
-        $c0, $r30 = bits32[sym@_Perl_mg_clear], ($c0+4);
-        .Lcall successor:l414:
-        $c0 when %ne[32](bits32[bits32[($r31+32)]], 0) = sym@@i_233;
-        .Lbranch target:l411:
+        $ 0 = bits32[sym@_Perl_mg_clear];
+        .Lcall successor:l502:
+        .Lbranch target:l499:
+        $ 0 when %ne[32](bits32[bits32[($r31+32)]], 0) = 0;
+        .Lbranch target:l498:
         $r0, $r1 = @i_@152i_sv, 112;
-        $c0, $r30 = bits32[sym@_Perl_mg_find], ($c0+4);
-        .Lcall successor:l410:
+        $ 0 = bits32[sym@_Perl_mg_find];
+        .Lcall successor:l497:
         @i_@156i_2 = $r0;
-        $c0 when %eq[32](@i_@156i_2, 0) = sym@@i_235;
-        .Lbranch target:l407:
+        .Lbranch target:l494:
+        $ 0 when %eq[32](@i_@156i_2, 0) = 0;
+        .Lbranch target:l493:
         $r0, $r1 = @i_@152i_sv, 112;
-        $c0, $r30 = bits32[sym@_Perl_sv_unmagic], ($c0+4);
-        .Lcall successor:l406:
+        $ 0 = bits32[sym@_Perl_sv_unmagic];
+        .Lcall successor:l492:
         $r0 = @i_@152i_sv;
         $r31 = ($r31+24);
         $c0 = $t1;
@@ -2641,28 +2708,30 @@ section "text"
         @i_231:
         @i_229:
         @i_@146i_xhv = bits32[@i_hv];
-        $c0 when %ne[32](bits32[@i_@146i_xhv], 0) = sym@@i_237;
-        .Lbranch target:l401:
+        .Lbranch target:l487:
+        $ 0 when %ne[32](bits32[@i_@146i_xhv], 0) = 0;
+        .Lbranch target:l486:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
         @i_237:
-        $c0 when %eq[32](%and[32](bits32[(@i_keysv+8)], 262144), 0)
-            = sym@@i_240;
-        .Lbranch target:l399:
+        .Lbranch target:l484:
+        $ 0 when %eq[32](%and[32](bits32[(@i_keysv+8)], 262144), 0) = 0;
+        .Lbranch target:l483:
         @i_@158i_3 = @i_keysv;
         bits32[($r31+24)] = bits32[(bits32[@i_@158i_3]+4)];
         @i_@157i_239 = bits32[bits32[@i_@158i_3]];
-        $c0 = sym@@i_241;
+        $ 0 = sym@@i_241;
         @i_240:
         $r0, $r1 = @i_keysv, bits32[($r31+24)];
-        $c0, $r30 = bits32[sym@_Perl_sv_2pv], ($c0+4);
-        .Lcall successor:l398:
+        $ 0 = bits32[sym@_Perl_sv_2pv];
+        .Lcall successor:l482:
         @i_@159i_4 = $r0;
         @i_@157i_239 = @i_@159i_4;
         @i_241:
         @i_@148i_key = @i_@157i_239;
-        $c0 when %ne[32](@i_hash, 0) = sym@@i_242;
+        .Lbranch target:l479:
+        $ 0 when %ne[32](@i_hash, 0) = 0;
         @i_244:
         @i_@160i_s_PeRlHaSh = @i_@148i_key;
         @i_@161i_i_PeRlHaSh = bits32[bits32[($r31+24)]];
@@ -2670,11 +2739,12 @@ section "text"
         @i_248:
         @i_@164i_6 = @i_@161i_i_PeRlHaSh;
         @i_@161i_i_PeRlHaSh = (@i_@164i_6-1);
-        $c0 when %ne[32](@i_@164i_6, 0) = sym@@i_247;
-        .Lbranch target:l395:
+        .Lbranch target:l478:
+        $ 0 when %ne[32](@i_@164i_6, 0) = 0;
+        .Lbranch target:l477:
         @i_hash = @i_@162i_hash_PeRlHaSh;
         @i_245:
-        $c0 = sym@@i_242;
+        $ 0 = sym@@i_242;
         @i_247:
         @i_@163i_5 = @i_@160i_s_PeRlHaSh;
         @i_@160i_s_PeRlHaSh = (@i_@163i_5+1);
@@ -2682,7 +2752,7 @@ section "text"
             =
             (%mul[32](33, @i_@162i_hash_PeRlHaSh)+
                 %sx[8,32](bits8[@i_@163i_5]));
-        $c0 = sym@@i_248;
+        $ 0 = sym@@i_248;
         @i_242:
         @i_@150i_oentry
             =
@@ -2691,65 +2761,71 @@ section "text"
         @i_@149i_entry = bits32[@i_@150i_oentry];
         @i_@147i_i = 1;
         @i_253:
-        $c0 when %ne[32](@i_@149i_entry, 0) = sym@@i_250;
-        .Lbranch target:l380:
+        .Lbranch target:l456:
+        $ 0 when %ne[32](@i_@149i_entry, 0) = 0;
+        .Lbranch target:l455:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
         @i_250:
-        $c0 when %eq[32](bits32[bits32[(@i_@149i_entry+4)]], @i_hash)
-            = sym@@i_254;
+        .Lbranch target:l476:
+        $ 0 when %eq[32](bits32[bits32[(@i_@149i_entry+4)]], @i_hash)
+            = 0;
         @i_254:
         @i_@166i_8 = 4;
-        $c0
+        .Lbranch target:l475:
+        $ 0
             when
             %eq[32](bits32[(bits32[(@i_@149i_entry+@i_@166i_8)]+
                 @i_@166i_8)],
-            bits32[bits32[($r31+24)]]) = sym@@i_256;
+            bits32[bits32[($r31+24)]]) = 0;
         @i_256:
         $r0, $r1, $r2
             = (bits32[(@i_@149i_entry+4)]+8), @i_@148i_key,
             bits32[bits32[($r31+24)]];
-        $c0, $r30 = bits32[sym@_Perl_my_memcmp], ($c0+4);
-        .Lcall successor:l394:
+        $ 0 = bits32[sym@_Perl_my_memcmp];
+        .Lcall successor:l474:
         @i_@167i_9 = $r0;
-        $c0 when %eq[32](@i_@167i_9, 0) = sym@@i_258;
+        .Lbranch target:l471:
+        $ 0 when %eq[32](@i_@167i_9, 0) = 0;
         @i_251:
         @i_@147i_i = 0;
         @i_@150i_oentry = @i_@149i_entry;
         @i_@149i_entry = bits32[@i_@150i_oentry];
-        $c0 = sym@@i_253;
+        $ 0 = sym@@i_253;
         @i_258:
         bits32[@i_@150i_oentry] = bits32[@i_@149i_entry];
-        $c0 when %eq[32](@i_@147i_i, 0) = sym@@i_260;
-        .Lbranch target:l391:
-        $c0 when %ne[32](bits32[@i_@150i_oentry], 0) = sym@@i_260;
-        .Lbranch target:l390:
+        .Lbranch target:l470:
+        $ 0 when %eq[32](@i_@147i_i, 0) = 0;
+        .Lbranch target:l469:
+        $ 0 when %ne[32](bits32[@i_@150i_oentry], 0) = 0;
+        .Lbranch target:l468:
         @i_@168i_10 = (@i_@146i_xhv+4);
         bits32[@i_@168i_10] = (bits32[@i_@168i_10]-1);
         @i_260:
-        $c0 when %eq[32](%and[32](@i_flags, 2), 0) = sym@@i_262;
-        .Lbranch target:l389:
+        .Lbranch target:l467:
+        $ 0 when %eq[32](%and[32](@i_flags, 2), 0) = 0;
+        .Lbranch target:l466:
         @i_@152i_sv = 0;
-        $c0 = sym@@i_263;
+        $ 0 = sym@@i_263;
         @i_262:
         $r0 = bits32[(@i_@149i_entry+8)];
-        $c0, $r30 = bits32[sym@_Perl_sv_mortalcopy], ($c0+4);
-        .Lcall successor:l388:
+        $ 0 = bits32[sym@_Perl_sv_mortalcopy];
+        .Lcall successor:l465:
         @i_@169i_11 = $r0;
         @i_@152i_sv = @i_@169i_11;
         @i_263:
-        $c0 when %ne[32](@i_@149i_entry, bits32[(@i_@146i_xhv+32)])
-            = sym@@i_264;
-        .Lbranch target:l385:
+        .Lbranch target:l462:
+        $ 0 when %ne[32](@i_@149i_entry, bits32[(@i_@146i_xhv+32)]) = 0;
+        .Lbranch target:l461:
         @i_@170i_12 = (@i_hv+8);
         bits32[@i_@170i_12]
             = %or[32](bits32[@i_@170i_12], 0x40000000::bits32);
-        $c0 = sym@@i_265;
+        $ 0 = sym@@i_265;
         @i_264:
         $r0, $r1 = @i_hv, @i_@149i_entry;
-        $c0, $r30 = bits32[sym@_Perl_hv_free_ent], ($c0+4);
-        .Lcall successor:l384:
+        $ 0 = bits32[sym@_Perl_hv_free_ent];
+        .Lcall successor:l460:
         @i_265:
         @i_@171i_13 = (@i_@146i_xhv+12);
         bits32[@i_@171i_13] = (bits32[@i_@171i_13]-1);
@@ -2766,104 +2842,112 @@ section "text"
         $r31 = ($r31+-24);
         @i_hv, @i_key, @i_klen = $r0, $r1, $r2;
         $t1 = $r30;
-        .Linitialize continuations:l431:
-        .Lproc body start:l430:
-        $c0 when %ne[32](@i_hv, 0) = sym@@i_267;
-        .Lbranch target:l474:
+        .Linitialize continuations:l523:
+        .Lproc body start:l522:
+        .Lbranch target:l582:
+        $ 0 when %ne[32](@i_hv, 0) = 0;
+        .Lbranch target:l581:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
         @i_267:
-        $c0 when %eq[32](%and[32](bits32[(@i_hv+8)], 32768), 0)
-            = sym@@i_269;
-        .Lbranch target:l472:
+        .Lbranch target:l579:
+        $ 0 when %eq[32](%and[32](bits32[(@i_hv+8)], 32768), 0) = 0;
+        .Lbranch target:l578:
         $r0, $r1 = @i_hv, 80;
-        $c0, $r30 = bits32[sym@_Perl_mg_find], ($c0+4);
-        .Lcall successor:l471:
+        $ 0 = bits32[sym@_Perl_mg_find];
+        .Lcall successor:l577:
         @i_@176i_1 = $r0;
-        $c0 when %eq[32](@i_@176i_1, 0) = sym@@i_271;
-        .Lbranch target:l468:
-        $c0, $r30 = bits32[sym@_Perl_sv_newmortal], ($c0+4);
-        .Lcall successor:l467:
+        .Lbranch target:l574:
+        $ 0 when %eq[32](@i_@176i_1, 0) = 0;
+        .Lbranch target:l573:
+        $ 0 = bits32[sym@_Perl_sv_newmortal];
+        .Lcall successor:l572:
         @i_@177i_2 = $r0;
         @i_@175i_sv = @i_@177i_2;
         $r0, $r1, $r2, $r3 = @i_hv, @i_@175i_sv, @i_key, @i_klen;
-        $c0, $r30 = bits32[sym@_Perl_mg_copy], ($c0+4);
-        .Lcall successor:l464:
+        $ 0 = bits32[sym@_Perl_mg_copy];
+        .Lcall successor:l569:
         $r0, $r1 = @i_@175i_sv, 112;
-        $c0, $r30 = bits32[sym@_Perl_mg_find], ($c0+4);
-        .Lcall successor:l461:
+        $ 0 = bits32[sym@_Perl_mg_find];
+        .Lcall successor:l566:
         @i_@178i_3 = $r0;
         $r0, $r1 = @i_@175i_sv, @i_@178i_3;
-        $c0, $r30 = bits32[sym@_Perl_magic_existspack], ($c0+4);
-        .Lcall successor:l458:
-        $c0 when %ne[32](@i_@175i_sv, 0) = sym@@i_280;
-        .Lbranch target:l455:
+        $ 0 = bits32[sym@_Perl_magic_existspack];
+        .Lcall successor:l563:
+        .Lbranch target:l560:
+        $ 0 when %ne[32](@i_@175i_sv, 0) = 0;
+        .Lbranch target:l559:
         @i_@179i_279 = 0;
-        $c0 = sym@@i_281;
+        $ 0 = sym@@i_281;
         @i_280:
-        $c0 when %eq[32](%and[32](bits32[(@i_@175i_sv+8)], 262144), 0)
-            = sym@@i_282;
-        .Lbranch target:l454:
+        .Lbranch target:l558:
+        $ 0 when %eq[32](%and[32](bits32[(@i_@175i_sv+8)], 262144), 0)
+            = 0;
+        .Lbranch target:l557:
         @i_@186i_4 = bits32[sym@_PL_Xpv];
         @i_@187i_5 = bits32[@i_@175i_sv];
         bits32[@i_@186i_4] = @i_@187i_5;
-        $c0 when %eq[32](@i_@187i_5, 0) = sym@@i_284;
-        .Lbranch target:l453:
+        .Lbranch target:l556:
+        $ 0 when %eq[32](@i_@187i_5, 0) = 0;
+        .Lbranch target:l555:
         @i_@188i_6 = bits32[@i_@186i_4];
         @i_@189i_7 = %sx[8,32](bits8[bits32[@i_@188i_6]]);
         @i_@190i_8 = 48;
-        $c0 when %gt[32](@i_@189i_7, @i_@190i_8) = sym@@i_287;
-        .Lbranch target:l452:
+        .Lbranch target:l554:
+        $ 0 when %gt[32](@i_@189i_7, @i_@190i_8) = 0;
+        .Lbranch target:l553:
         @i_@191i_9 = bits32[(@i_@188i_6+4)];
-        $c0 when %gtu[32](@i_@191i_9, 1) = sym@@i_287;
-        .Lbranch target:l451:
-        $c0 when %eq[32](@i_@191i_9, 0) = sym@@i_284;
-        .Lbranch target:l450:
-        $c0 when %eq[32](@i_@189i_7, @i_@190i_8) = sym@@i_284;
+        .Lbranch target:l552:
+        $ 0 when %gtu[32](@i_@191i_9, 1) = 0;
+        .Lbranch target:l551:
+        $ 0 when %eq[32](@i_@191i_9, 0) = 0;
+        .Lbranch target:l550:
+        $ 0 when %eq[32](@i_@189i_7, @i_@190i_8) = 0;
         @i_287:
         @i_@181i_273 = 1;
-        $c0 = sym@@i_285;
+        $ 0 = sym@@i_285;
         @i_284:
         @i_@181i_273 = 0;
         @i_285:
         @i_@180i_278 = @i_@181i_273;
-        $c0 = sym@@i_283;
+        $ 0 = sym@@i_283;
         @i_282:
-        $c0 when %eq[32](%and[32](bits32[(@i_@175i_sv+8)], 65536), 0)
-            = sym@@i_288;
-        .Lbranch target:l449:
-        $c0 when %eq[32](bits32[(bits32[@i_@175i_sv]+12)], 0)
-            = sym@@i_290;
-        .Lbranch target:l448:
+        .Lbranch target:l549:
+        $ 0 when %eq[32](%and[32](bits32[(@i_@175i_sv+8)], 65536), 0)
+            = 0;
+        .Lbranch target:l548:
+        $ 0 when %eq[32](bits32[(bits32[@i_@175i_sv]+12)], 0) = 0;
+        .Lbranch target:l547:
         @i_@183i_277 = 1;
-        $c0 = sym@@i_291;
+        $ 0 = sym@@i_291;
         @i_290:
         @i_@183i_277 = 0;
         @i_291:
         @i_@182i_276 = @i_@183i_277;
-        $c0 = sym@@i_289;
+        $ 0 = sym@@i_289;
         @i_288:
-        $c0 when %eq[32](%and[32](bits32[(@i_@175i_sv+8)], 131072), 0)
-            = sym@@i_292;
-        .Lbranch target:l447:
-        $c0
+        .Lbranch target:l546:
+        $ 0 when %eq[32](%and[32](bits32[(@i_@175i_sv+8)], 131072), 0)
+            = 0;
+        .Lbranch target:l545:
+        $ 0
             when
             %eq[2](%fcmp[32](bits32[(bits32[@i_@175i_sv]+16)],
             bits32[bits32[sym@@f_296]]),
-            %float_eq[]()) = sym@@i_294;
-        .Lbranch target:l446:
+            %float_eq[]()) = 0;
+        .Lbranch target:l544:
         @i_@185i_275 = 1;
-        $c0 = sym@@i_295;
+        $ 0 = sym@@i_295;
         @i_294:
         @i_@185i_275 = 0;
         @i_295:
         @i_@184i_274 = @i_@185i_275;
-        $c0 = sym@@i_293;
+        $ 0 = sym@@i_293;
         @i_292:
         $r0 = @i_@175i_sv;
-        $c0, $r30 = bits32[sym@_Perl_sv_2bool], ($c0+4);
-        .Lcall successor:l445:
+        $ 0 = bits32[sym@_Perl_sv_2bool];
+        .Lcall successor:l543:
         @i_@192i_10 = $r0;
         @i_@184i_274 = @i_@192i_10;
         @i_293:
@@ -2879,8 +2963,9 @@ section "text"
         @i_271:
         @i_269:
         @i_@172i_xhv = bits32[@i_hv];
-        $c0 when %ne[32](bits32[@i_@172i_xhv], 0) = sym@@i_297;
-        .Lbranch target:l441:
+        .Lbranch target:l539:
+        $ 0 when %ne[32](bits32[@i_@172i_xhv], 0) = 0;
+        .Lbranch target:l538:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
@@ -2892,8 +2977,9 @@ section "text"
         @i_303:
         @i_@197i_12 = @i_@194i_i_PeRlHaSh;
         @i_@194i_i_PeRlHaSh = (@i_@197i_12-1);
-        $c0 when %ne[32](@i_@197i_12, 0) = sym@@i_302;
-        .Lbranch target:l439:
+        .Lbranch target:l536:
+        $ 0 when %ne[32](@i_@197i_12, 0) = 0;
+        .Lbranch target:l535:
         @i_@173i_hash = @i_@195i_hash_PeRlHaSh;
         @i_300:
         @i_@174i_entry
@@ -2903,32 +2989,36 @@ section "text"
             2)+
                 bits32[@i_@172i_xhv])];
         @i_308:
-        $c0 when %ne[32](@i_@174i_entry, 0) = sym@@i_305;
-        .Lbranch target:l434:
+        .Lbranch target:l527:
+        $ 0 when %ne[32](@i_@174i_entry, 0) = 0;
+        .Lbranch target:l526:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
         @i_305:
-        $c0
+        .Lbranch target:l534:
+        $ 0
             when
             %eq[32](bits32[bits32[(@i_@174i_entry+4)]], @i_@173i_hash)
-            = sym@@i_309;
+            = 0;
         @i_309:
         @i_@199i_14 = 4;
-        $c0
+        .Lbranch target:l533:
+        $ 0
             when
             %eq[32](bits32[(bits32[(@i_@174i_entry+@i_@199i_14)]+
                 @i_@199i_14)],
-            @i_klen) = sym@@i_311;
+            @i_klen) = 0;
         @i_311:
         $r0, $r1, $r2 = (bits32[(@i_@174i_entry+4)]+8), @i_key, @i_klen;
-        $c0, $r30 = bits32[sym@_Perl_my_memcmp], ($c0+4);
-        .Lcall successor:l438:
+        $ 0 = bits32[sym@_Perl_my_memcmp];
+        .Lcall successor:l532:
         @i_@200i_15 = $r0;
-        $c0 when %eq[32](@i_@200i_15, 0) = sym@@i_313;
+        .Lbranch target:l529:
+        $ 0 when %eq[32](@i_@200i_15, 0) = 0;
         @i_306:
         @i_@174i_entry = bits32[@i_@174i_entry];
-        $c0 = sym@@i_308;
+        $ 0 = sym@@i_308;
         @i_313:
         $r0 = 1;
         $r31 = ($r31+24);
@@ -2940,7 +3030,7 @@ section "text"
             =
             (%mul[32](33, @i_@195i_hash_PeRlHaSh)+
                 %sx[8,32](bits8[@i_@196i_11]));
-        $c0 = sym@@i_303;
+        $ 0 = sym@@i_303;
     }
 }
 
@@ -2951,113 +3041,121 @@ section "text"
         $r31 = ($r31+-24);
         @i_hv, @i_keysv, @i_hash = $r0, $r1, $r2;
         $t1 = $r30;
-        .Linitialize continuations:l480:
-        .Lproc body start:l479:
-        $c0 when %ne[32](@i_hv, 0) = sym@@i_316;
-        .Lbranch target:l533:
+        .Linitialize continuations:l588:
+        .Lproc body start:l587:
+        .Lbranch target:l659:
+        $ 0 when %ne[32](@i_hv, 0) = 0;
+        .Lbranch target:l658:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
         @i_316:
-        $c0 when %eq[32](%and[32](bits32[(@i_hv+8)], 32768), 0)
-            = sym@@i_318;
-        .Lbranch target:l531:
+        .Lbranch target:l656:
+        $ 0 when %eq[32](%and[32](bits32[(@i_hv+8)], 32768), 0) = 0;
+        .Lbranch target:l655:
         $r0, $r1 = @i_hv, 80;
-        $c0, $r30 = bits32[sym@_Perl_mg_find], ($c0+4);
-        .Lcall successor:l530:
+        $ 0 = bits32[sym@_Perl_mg_find];
+        .Lcall successor:l654:
         @i_@206i_1 = $r0;
-        $c0 when %eq[32](@i_@206i_1, 0) = sym@@i_320;
-        .Lbranch target:l527:
-        $c0, $r30 = bits32[sym@_Perl_sv_newmortal], ($c0+4);
-        .Lcall successor:l526:
+        .Lbranch target:l651:
+        $ 0 when %eq[32](@i_@206i_1, 0) = 0;
+        .Lbranch target:l650:
+        $ 0 = bits32[sym@_Perl_sv_newmortal];
+        .Lcall successor:l649:
         @i_@207i_2 = $r0;
         @i_@205i_sv = @i_@207i_2;
         $r0 = @i_keysv;
-        $c0, $r30 = bits32[sym@_Perl_newSVsv], ($c0+4);
-        .Lcall successor:l523:
+        $ 0 = bits32[sym@_Perl_newSVsv];
+        .Lcall successor:l646:
         @i_@208i_3 = $r0;
         $r0 = @i_@208i_3;
-        $c0, $r30 = bits32[sym@_Perl_sv_2mortal], ($c0+4);
-        .Lcall successor:l520:
+        $ 0 = bits32[sym@_Perl_sv_2mortal];
+        .Lcall successor:l643:
         @i_@209i_4 = $r0;
         @i_keysv = @i_@209i_4;
         $r0, $r1, $r2, $r3 = @i_hv, @i_@205i_sv, @i_keysv, -2;
-        $c0, $r30 = bits32[sym@_Perl_mg_copy], ($c0+4);
-        .Lcall successor:l517:
+        $ 0 = bits32[sym@_Perl_mg_copy];
+        .Lcall successor:l640:
         $r0, $r1 = @i_@205i_sv, 112;
-        $c0, $r30 = bits32[sym@_Perl_mg_find], ($c0+4);
-        .Lcall successor:l514:
+        $ 0 = bits32[sym@_Perl_mg_find];
+        .Lcall successor:l637:
         @i_@210i_5 = $r0;
         $r0, $r1 = @i_@205i_sv, @i_@210i_5;
-        $c0, $r30 = bits32[sym@_Perl_magic_existspack], ($c0+4);
-        .Lcall successor:l511:
-        $c0 when %ne[32](@i_@205i_sv, 0) = sym@@i_329;
-        .Lbranch target:l508:
+        $ 0 = bits32[sym@_Perl_magic_existspack];
+        .Lcall successor:l634:
+        .Lbranch target:l631:
+        $ 0 when %ne[32](@i_@205i_sv, 0) = 0;
+        .Lbranch target:l630:
         @i_@211i_328 = 0;
-        $c0 = sym@@i_330;
+        $ 0 = sym@@i_330;
         @i_329:
-        $c0 when %eq[32](%and[32](bits32[(@i_@205i_sv+8)], 262144), 0)
-            = sym@@i_331;
-        .Lbranch target:l507:
+        .Lbranch target:l629:
+        $ 0 when %eq[32](%and[32](bits32[(@i_@205i_sv+8)], 262144), 0)
+            = 0;
+        .Lbranch target:l628:
         @i_@218i_6 = bits32[sym@_PL_Xpv];
         @i_@219i_7 = bits32[@i_@205i_sv];
         bits32[@i_@218i_6] = @i_@219i_7;
-        $c0 when %eq[32](@i_@219i_7, 0) = sym@@i_333;
-        .Lbranch target:l506:
+        .Lbranch target:l627:
+        $ 0 when %eq[32](@i_@219i_7, 0) = 0;
+        .Lbranch target:l626:
         @i_@220i_8 = bits32[@i_@218i_6];
         @i_@221i_9 = %sx[8,32](bits8[bits32[@i_@220i_8]]);
         @i_@222i_10 = 48;
-        $c0 when %gt[32](@i_@221i_9, @i_@222i_10) = sym@@i_336;
-        .Lbranch target:l505:
+        .Lbranch target:l625:
+        $ 0 when %gt[32](@i_@221i_9, @i_@222i_10) = 0;
+        .Lbranch target:l624:
         @i_@223i_11 = bits32[(@i_@220i_8+4)];
-        $c0 when %gtu[32](@i_@223i_11, 1) = sym@@i_336;
-        .Lbranch target:l504:
-        $c0 when %eq[32](@i_@223i_11, 0) = sym@@i_333;
-        .Lbranch target:l503:
-        $c0 when %eq[32](@i_@221i_9, @i_@222i_10) = sym@@i_333;
+        .Lbranch target:l623:
+        $ 0 when %gtu[32](@i_@223i_11, 1) = 0;
+        .Lbranch target:l622:
+        $ 0 when %eq[32](@i_@223i_11, 0) = 0;
+        .Lbranch target:l621:
+        $ 0 when %eq[32](@i_@221i_9, @i_@222i_10) = 0;
         @i_336:
         @i_@213i_322 = 1;
-        $c0 = sym@@i_334;
+        $ 0 = sym@@i_334;
         @i_333:
         @i_@213i_322 = 0;
         @i_334:
         @i_@212i_327 = @i_@213i_322;
-        $c0 = sym@@i_332;
+        $ 0 = sym@@i_332;
         @i_331:
-        $c0 when %eq[32](%and[32](bits32[(@i_@205i_sv+8)], 65536), 0)
-            = sym@@i_337;
-        .Lbranch target:l502:
-        $c0 when %eq[32](bits32[(bits32[@i_@205i_sv]+12)], 0)
-            = sym@@i_339;
-        .Lbranch target:l501:
+        .Lbranch target:l620:
+        $ 0 when %eq[32](%and[32](bits32[(@i_@205i_sv+8)], 65536), 0)
+            = 0;
+        .Lbranch target:l619:
+        $ 0 when %eq[32](bits32[(bits32[@i_@205i_sv]+12)], 0) = 0;
+        .Lbranch target:l618:
         @i_@215i_326 = 1;
-        $c0 = sym@@i_340;
+        $ 0 = sym@@i_340;
         @i_339:
         @i_@215i_326 = 0;
         @i_340:
         @i_@214i_325 = @i_@215i_326;
-        $c0 = sym@@i_338;
+        $ 0 = sym@@i_338;
         @i_337:
-        $c0 when %eq[32](%and[32](bits32[(@i_@205i_sv+8)], 131072), 0)
-            = sym@@i_341;
-        .Lbranch target:l500:
-        $c0
+        .Lbranch target:l617:
+        $ 0 when %eq[32](%and[32](bits32[(@i_@205i_sv+8)], 131072), 0)
+            = 0;
+        .Lbranch target:l616:
+        $ 0
             when
             %eq[2](%fcmp[32](bits32[(bits32[@i_@205i_sv]+16)],
             bits32[bits32[sym@@f_296]]),
-            %float_eq[]()) = sym@@i_343;
-        .Lbranch target:l499:
+            %float_eq[]()) = 0;
+        .Lbranch target:l615:
         @i_@217i_324 = 1;
-        $c0 = sym@@i_344;
+        $ 0 = sym@@i_344;
         @i_343:
         @i_@217i_324 = 0;
         @i_344:
         @i_@216i_323 = @i_@217i_324;
-        $c0 = sym@@i_342;
+        $ 0 = sym@@i_342;
         @i_341:
         $r0 = @i_@205i_sv;
-        $c0, $r30 = bits32[sym@_Perl_sv_2bool], ($c0+4);
-        .Lcall successor:l498:
+        $ 0 = bits32[sym@_Perl_sv_2bool];
+        .Lcall successor:l614:
         @i_@224i_12 = $r0;
         @i_@216i_323 = @i_@224i_12;
         @i_342:
@@ -3073,28 +3171,30 @@ section "text"
         @i_320:
         @i_318:
         @i_@201i_xhv = bits32[@i_hv];
-        $c0 when %ne[32](bits32[@i_@201i_xhv], 0) = sym@@i_345;
-        .Lbranch target:l494:
+        .Lbranch target:l610:
+        $ 0 when %ne[32](bits32[@i_@201i_xhv], 0) = 0;
+        .Lbranch target:l609:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
         @i_345:
-        $c0 when %eq[32](%and[32](bits32[(@i_keysv+8)], 262144), 0)
-            = sym@@i_348;
-        .Lbranch target:l492:
+        .Lbranch target:l607:
+        $ 0 when %eq[32](%and[32](bits32[(@i_keysv+8)], 262144), 0) = 0;
+        .Lbranch target:l606:
         @i_@226i_13 = @i_keysv;
         bits32[($r31+24)] = bits32[(bits32[@i_@226i_13]+4)];
         @i_@225i_347 = bits32[bits32[@i_@226i_13]];
-        $c0 = sym@@i_349;
+        $ 0 = sym@@i_349;
         @i_348:
         $r0, $r1 = @i_keysv, bits32[($r31+24)];
-        $c0, $r30 = bits32[sym@_Perl_sv_2pv], ($c0+4);
-        .Lcall successor:l491:
+        $ 0 = bits32[sym@_Perl_sv_2pv];
+        .Lcall successor:l605:
         @i_@227i_14 = $r0;
         @i_@225i_347 = @i_@227i_14;
         @i_349:
         @i_@202i_key = @i_@225i_347;
-        $c0 when %ne[32](@i_hash, 0) = sym@@i_350;
+        .Lbranch target:l602:
+        $ 0 when %ne[32](@i_hash, 0) = 0;
         @i_352:
         @i_@228i_s_PeRlHaSh = @i_@202i_key;
         @i_@229i_i_PeRlHaSh = bits32[bits32[($r31+24)]];
@@ -3102,11 +3202,12 @@ section "text"
         @i_356:
         @i_@232i_16 = @i_@229i_i_PeRlHaSh;
         @i_@229i_i_PeRlHaSh = (@i_@232i_16-1);
-        $c0 when %ne[32](@i_@232i_16, 0) = sym@@i_355;
-        .Lbranch target:l488:
+        .Lbranch target:l601:
+        $ 0 when %ne[32](@i_@232i_16, 0) = 0;
+        .Lbranch target:l600:
         @i_hash = @i_@230i_hash_PeRlHaSh;
         @i_353:
-        $c0 = sym@@i_350;
+        $ 0 = sym@@i_350;
         @i_355:
         @i_@231i_15 = @i_@228i_s_PeRlHaSh;
         @i_@228i_s_PeRlHaSh = (@i_@231i_15+1);
@@ -3114,7 +3215,7 @@ section "text"
             =
             (%mul[32](33, @i_@230i_hash_PeRlHaSh)+
                 %sx[8,32](bits8[@i_@231i_15]));
-        $c0 = sym@@i_356;
+        $ 0 = sym@@i_356;
         @i_350:
         @i_@203i_entry
             =
@@ -3123,32 +3224,36 @@ section "text"
             2)+
                 bits32[@i_@201i_xhv])];
         @i_361:
-        $c0 when %ne[32](@i_@203i_entry, 0) = sym@@i_358;
-        .Lbranch target:l483:
+        .Lbranch target:l592:
+        $ 0 when %ne[32](@i_@203i_entry, 0) = 0;
+        .Lbranch target:l591:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
         @i_358:
-        $c0 when %eq[32](bits32[bits32[(@i_@203i_entry+4)]], @i_hash)
-            = sym@@i_362;
+        .Lbranch target:l599:
+        $ 0 when %eq[32](bits32[bits32[(@i_@203i_entry+4)]], @i_hash)
+            = 0;
         @i_362:
         @i_@234i_18 = 4;
-        $c0
+        .Lbranch target:l598:
+        $ 0
             when
             %eq[32](bits32[(bits32[(@i_@203i_entry+@i_@234i_18)]+
                 @i_@234i_18)],
-            bits32[bits32[($r31+24)]]) = sym@@i_364;
+            bits32[bits32[($r31+24)]]) = 0;
         @i_364:
         $r0, $r1, $r2
             = (bits32[(@i_@203i_entry+4)]+8), @i_@202i_key,
             bits32[bits32[($r31+24)]];
-        $c0, $r30 = bits32[sym@_Perl_my_memcmp], ($c0+4);
-        .Lcall successor:l487:
+        $ 0 = bits32[sym@_Perl_my_memcmp];
+        .Lcall successor:l597:
         @i_@235i_19 = $r0;
-        $c0 when %eq[32](@i_@235i_19, 0) = sym@@i_366;
+        .Lbranch target:l594:
+        $ 0 when %eq[32](@i_@235i_19, 0) = 0;
         @i_359:
         @i_@203i_entry = bits32[@i_@203i_entry];
-        $c0 = sym@@i_361;
+        $ 0 = sym@@i_361;
         @i_366:
         $r0 = 1;
         $r31 = ($r31+24);
@@ -3163,8 +3268,8 @@ section "text"
         $r31 = ($r31+-24);
         @i_hv = $r0;
         $t1 = $r30;
-        .Linitialize continuations:l539:
-        .Lproc body start:l538:
+        .Linitialize continuations:l665:
+        .Lproc body start:l664:
         @i_@236i_xhv = bits32[@i_hv];
         @i_@244i_oldsize = (bits32[(@i_@236i_xhv+8)]+1);
         @i_@237i_newsize = %shl[32](@i_@244i_oldsize, 1);
@@ -3175,38 +3280,40 @@ section "text"
             =
             %mul[32](1,
             (%shl[32](%shl[32](@i_@237i_newsize, 2), @i_@245i_1)-16));
-        $c0, $r30 = bits32[sym@_Perl_safemalloc], ($c0+4);
-        .Lcall successor:l561:
+        $ 0 = bits32[sym@_Perl_safemalloc];
+        .Lcall successor:l695:
         @i_@246i_2 = $r0;
         @i_@239i_a = @i_@246i_2;
-        $c0 when %ne[32](@i_@239i_a, 0) = sym@@i_369;
-        .Lbranch target:l558:
+        .Lbranch target:l692:
+        $ 0 when %ne[32](@i_@239i_a, 0) = 0;
+        .Lbranch target:l691:
         bits32[sym@_PL_nomemok] = 0;
-        $c0 = sym@@i_368;
+        $ 0 = sym@@i_368;
         @i_369:
         $r0, $r1, $r2
             = bits32[@i_@236i_xhv], @i_@239i_a,
             %mul[32](1, %shl[32](@i_@244i_oldsize, 2));
-        $c0, $r30 = bits32[sym@_Perl_my_bcopy], ($c0+4);
-        .Lcall successor:l557:
-        $c0 when %lt[32](@i_@244i_oldsize, 64) = sym@@i_371;
+        $ 0 = bits32[sym@_Perl_my_bcopy];
+        .Lcall successor:l690:
+        .Lbranch target:l687:
+        $ 0 when %lt[32](@i_@244i_oldsize, 64) = 0;
         @i_373:
-        $c0 when %ne[32](bits32[bits32[sym@_PL_nice_chunk]], 0)
-            = sym@@i_376;
-        .Lbranch target:l554:
+        .Lbranch target:l686:
+        $ 0 when %ne[32](bits32[bits32[sym@_PL_nice_chunk]], 0) = 0;
+        .Lbranch target:l685:
         bits32[sym@_PL_nice_chunk] = bits32[@i_@236i_xhv];
         bits32[sym@_PL_nice_chunk_size]
             = (%shl[32](%shl[32](@i_@244i_oldsize, 2), 1)-16);
-        $c0 = sym@@i_372;
+        $ 0 = sym@@i_372;
         @i_376:
         $r0 = bits32[@i_@236i_xhv];
-        $c0, $r30 = bits32[sym@_Perl_safefree], ($c0+4);
-        .Lcall successor:l553:
-        $c0 = sym@@i_372;
+        $ 0 = bits32[sym@_Perl_safefree];
+        .Lcall successor:l684:
+        $ 0 = sym@@i_372;
         @i_371:
         $r0 = bits32[@i_@236i_xhv];
-        $c0, $r30 = bits32[sym@_Perl_safefree], ($c0+4);
-        .Lcall successor:l550:
+        $ 0 = bits32[sym@_Perl_safefree];
+        .Lcall successor:l681:
         @i_372:
         @i_@247i_3 = 0;
         bits32[sym@_PL_nomemok] = @i_@247i_3;
@@ -3216,8 +3323,8 @@ section "text"
             @i_@247i_3,
             %mul[32](1,
             %shl[32]((@i_@237i_newsize-@i_@244i_oldsize), @i_@249i_5));
-        $c0, $r30 = bits32[sym@_memset], ($c0+4);
-        .Lcall successor:l547:
+        $ 0 = bits32[sym@_memset];
+        .Lcall successor:l678:
         @i_@250i_6 = (@i_@237i_newsize-1);
         @i_@237i_newsize = @i_@250i_6;
         bits32[(@i_@236i_xhv+8)] = @i_@250i_6;
@@ -3225,49 +3332,54 @@ section "text"
         @i_@240i_aep = @i_@239i_a;
         @i_@238i_i = 0;
         @i_381:
-        $c0 when %lt[32](@i_@238i_i, @i_@244i_oldsize) = sym@@i_378;
+        .Lbranch target:l667:
+        $ 0 when %lt[32](@i_@238i_i, @i_@244i_oldsize) = 0;
         @i_368:
         $r31 = ($r31+24);
         $c0 = $t1;
         @i_378:
-        $c0 when %ne[32](bits32[@i_@240i_aep], 0) = sym@@i_382;
+        .Lbranch target:l675:
+        $ 0 when %ne[32](bits32[@i_@240i_aep], 0) = 0;
         @i_382:
         @i_@241i_bep = (%shl[32](@i_@244i_oldsize, 2)+@i_@240i_aep);
         @i_@243i_oentry = @i_@240i_aep;
         @i_@242i_entry = bits32[@i_@240i_aep];
         @i_387:
-        $c0 when %ne[32](@i_@242i_entry, 0) = sym@@i_384;
-        .Lbranch target:l542:
-        $c0 when %ne[32](bits32[@i_@240i_aep], 0) = sym@@i_392;
-        .Lbranch target:l541:
+        .Lbranch target:l670:
+        $ 0 when %ne[32](@i_@242i_entry, 0) = 0;
+        .Lbranch target:l669:
+        $ 0 when %ne[32](bits32[@i_@240i_aep], 0) = 0;
+        .Lbranch target:l668:
         @i_@253i_9 = (@i_@236i_xhv+4);
         bits32[@i_@253i_9] = (bits32[@i_@253i_9]-1);
         @i_392:
         @i_379:
         @i_@238i_i = (@i_@238i_i+1);
         @i_@240i_aep = (@i_@240i_aep+4);
-        $c0 = sym@@i_381;
+        $ 0 = sym@@i_381;
         @i_384:
-        $c0
+        .Lbranch target:l674:
+        $ 0
             when
             %eq[32](%and[32](bits32[bits32[(@i_@242i_entry+4)]],
             @i_@237i_newsize),
-            @i_@238i_i) = sym@@i_388;
-        .Lbranch target:l544:
+            @i_@238i_i) = 0;
+        .Lbranch target:l673:
         bits32[@i_@243i_oentry] = bits32[@i_@242i_entry];
         bits32[@i_@242i_entry] = bits32[@i_@241i_bep];
-        $c0 when %ne[32](bits32[@i_@241i_bep], 0) = sym@@i_390;
-        .Lbranch target:l543:
+        .Lbranch target:l672:
+        $ 0 when %ne[32](bits32[@i_@241i_bep], 0) = 0;
+        .Lbranch target:l671:
         @i_@252i_8 = (@i_@236i_xhv+4);
         bits32[@i_@252i_8] = (bits32[@i_@252i_8]+1);
         @i_390:
         bits32[@i_@241i_bep] = @i_@242i_entry;
-        $c0 = sym@@i_385;
+        $ 0 = sym@@i_385;
         @i_388:
         @i_@243i_oentry = @i_@242i_entry;
         @i_385:
         @i_@242i_entry = bits32[@i_@243i_oentry];
-        $c0 = sym@@i_387;
+        $ 0 = sym@@i_387;
     }
 }
 
@@ -3278,69 +3390,75 @@ section "text"
         $r31 = ($r31+-24);
         @i_hv, @i_newmax = $r0, $r1;
         $t1 = $r30;
-        .Linitialize continuations:l567:
-        .Lproc body start:l566:
+        .Linitialize continuations:l701:
+        .Lproc body start:l700:
         @i_@254i_xhv = bits32[@i_hv];
         @i_@262i_oldsize = (bits32[(@i_@254i_xhv+8)]+1);
         @i_@255i_newsize = @i_newmax;
         @i_@263i_1 = @i_newmax;
-        $c0 when %ne[32](@i_@255i_newsize, @i_@263i_1) = sym@@i_397;
-        .Lbranch target:l599:
-        $c0 when %gt[32](@i_@263i_1, @i_@262i_oldsize) = sym@@i_399;
+        .Lbranch target:l746:
+        $ 0 when %ne[32](@i_@255i_newsize, @i_@263i_1) = 0;
+        .Lbranch target:l745:
+        $ 0 when %gt[32](@i_@263i_1, @i_@262i_oldsize) = 0;
         @i_399:
-        $c0
+        .Lbranch target:l744:
+        $ 0
             when
             %ne[32](%and[32](@i_@255i_newsize,
             (%com[32](@i_@255i_newsize)+1)),
-            @i_@255i_newsize) = sym@@i_398;
-        .Lbranch target:l598:
-        $c0 when %ge[32](@i_@255i_newsize, @i_newmax) = sym@@i_401;
-        .Lbranch target:l597:
+            @i_@255i_newsize) = 0;
+        .Lbranch target:l743:
+        $ 0 when %ge[32](@i_@255i_newsize, @i_newmax) = 0;
+        .Lbranch target:l742:
         @i_@255i_newsize = %shl[32](@i_@255i_newsize, 1);
         @i_401:
-        $c0 when %ge[32](@i_@255i_newsize, @i_newmax) = sym@@i_403;
+        .Lbranch target:l741:
+        $ 0 when %ge[32](@i_@255i_newsize, @i_newmax) = 0;
         @i_403:
         @i_@258i_a = bits32[@i_@254i_xhv];
-        $c0 when %eq[32](@i_@258i_a, 0) = sym@@i_405;
-        .Lbranch target:l596:
+        .Lbranch target:l740:
+        $ 0 when %eq[32](@i_@258i_a, 0) = 0;
+        .Lbranch target:l739:
         @i_@266i_4 = 1;
         bits32[sym@_PL_nomemok] = @i_@266i_4;
         $r0
             =
             %mul[32](1,
             (%shl[32](%shl[32](@i_@255i_newsize, 2), @i_@266i_4)-16));
-        $c0, $r30 = bits32[sym@_Perl_safemalloc], ($c0+4);
-        .Lcall successor:l595:
+        $ 0 = bits32[sym@_Perl_safemalloc];
+        .Lcall successor:l738:
         @i_@267i_5 = $r0;
         @i_@258i_a = @i_@267i_5;
-        $c0 when %ne[32](@i_@258i_a, 0) = sym@@i_407;
-        .Lbranch target:l592:
+        .Lbranch target:l735:
+        $ 0 when %ne[32](@i_@258i_a, 0) = 0;
+        .Lbranch target:l734:
         bits32[sym@_PL_nomemok] = 0;
-        $c0 = sym@@i_394;
+        $ 0 = sym@@i_394;
         @i_407:
         $r0, $r1, $r2
             = bits32[@i_@254i_xhv], @i_@258i_a,
             %mul[32](1, %shl[32](@i_@262i_oldsize, 2));
-        $c0, $r30 = bits32[sym@_Perl_my_bcopy], ($c0+4);
-        .Lcall successor:l591:
-        $c0 when %lt[32](@i_@262i_oldsize, 64) = sym@@i_409;
+        $ 0 = bits32[sym@_Perl_my_bcopy];
+        .Lcall successor:l733:
+        .Lbranch target:l730:
+        $ 0 when %lt[32](@i_@262i_oldsize, 64) = 0;
         @i_411:
-        $c0 when %ne[32](bits32[bits32[sym@_PL_nice_chunk]], 0)
-            = sym@@i_414;
-        .Lbranch target:l588:
+        .Lbranch target:l729:
+        $ 0 when %ne[32](bits32[bits32[sym@_PL_nice_chunk]], 0) = 0;
+        .Lbranch target:l728:
         bits32[sym@_PL_nice_chunk] = bits32[@i_@254i_xhv];
         bits32[sym@_PL_nice_chunk_size]
             = (%shl[32](%shl[32](@i_@262i_oldsize, 2), 1)-16);
-        $c0 = sym@@i_410;
+        $ 0 = sym@@i_410;
         @i_414:
         $r0 = bits32[@i_@254i_xhv];
-        $c0, $r30 = bits32[sym@_Perl_safefree], ($c0+4);
-        .Lcall successor:l587:
-        $c0 = sym@@i_410;
+        $ 0 = bits32[sym@_Perl_safefree];
+        .Lcall successor:l727:
+        $ 0 = sym@@i_410;
         @i_409:
         $r0 = bits32[@i_@254i_xhv];
-        $c0, $r30 = bits32[sym@_Perl_safefree], ($c0+4);
-        .Lcall successor:l584:
+        $ 0 = bits32[sym@_Perl_safefree];
+        .Lcall successor:l724:
         @i_410:
         @i_@268i_6 = 0;
         bits32[sym@_PL_nomemok] = @i_@268i_6;
@@ -3350,83 +3468,89 @@ section "text"
             @i_@268i_6,
             %mul[32](1,
             %shl[32]((@i_@255i_newsize-@i_@262i_oldsize), @i_@270i_8));
-        $c0, $r30 = bits32[sym@_memset], ($c0+4);
-        .Lcall successor:l581:
-        $c0 = sym@@i_406;
+        $ 0 = bits32[sym@_memset];
+        .Lcall successor:l721:
+        $ 0 = sym@@i_406;
         @i_405:
         $r0
             =
             %mul[32](1,
             (%shl[32](%shl[32](@i_@255i_newsize, 2), 1)-16));
-        $c0, $r30 = bits32[sym@_Perl_safemalloc], ($c0+4);
-        .Lcall successor:l578:
+        $ 0 = bits32[sym@_Perl_safemalloc];
+        .Lcall successor:l718:
         @i_@271i_9 = $r0;
         @i_@258i_a = @i_@271i_9;
         $r0, $r1, $r2
             = @i_@258i_a, 0,
             %mul[32](1,
             (%shl[32](%shl[32](@i_@255i_newsize, 2), 1)-16));
-        $c0, $r30 = bits32[sym@_memset], ($c0+4);
-        .Lcall successor:l575:
+        $ 0 = bits32[sym@_memset];
+        .Lcall successor:l715:
         @i_406:
         @i_@272i_10 = (@i_@255i_newsize-1);
         @i_@255i_newsize = @i_@272i_10;
         bits32[(@i_@254i_xhv+8)] = @i_@272i_10;
         bits32[@i_@254i_xhv] = @i_@258i_a;
-        $c0 when %ne[32](bits32[(@i_@254i_xhv+4)], 0) = sym@@i_416;
+        .Lbranch target:l712:
+        $ 0 when %ne[32](bits32[(@i_@254i_xhv+4)], 0) = 0;
         @i_416:
         @i_@259i_aep = @i_@258i_a;
         @i_@256i_i = 0;
         @i_421:
-        $c0 when %lt[32](@i_@256i_i, @i_@262i_oldsize) = sym@@i_418;
+        .Lbranch target:l703:
+        $ 0 when %lt[32](@i_@256i_i, @i_@262i_oldsize) = 0;
         @i_418:
-        $c0 when %ne[32](bits32[@i_@259i_aep], 0) = sym@@i_422;
+        .Lbranch target:l711:
+        $ 0 when %ne[32](bits32[@i_@259i_aep], 0) = 0;
         @i_422:
         @i_@261i_oentry = @i_@259i_aep;
         @i_@260i_entry = bits32[@i_@259i_aep];
         @i_427:
-        $c0 when %ne[32](@i_@260i_entry, 0) = sym@@i_424;
-        .Lbranch target:l570:
-        $c0 when %ne[32](bits32[@i_@259i_aep], 0) = sym@@i_432;
-        .Lbranch target:l569:
+        .Lbranch target:l706:
+        $ 0 when %ne[32](@i_@260i_entry, 0) = 0;
+        .Lbranch target:l705:
+        $ 0 when %ne[32](bits32[@i_@259i_aep], 0) = 0;
+        .Lbranch target:l704:
         @i_@277i_15 = (@i_@254i_xhv+4);
         bits32[@i_@277i_15] = (bits32[@i_@277i_15]-1);
         @i_432:
         @i_419:
         @i_@256i_i = (@i_@256i_i+1);
         @i_@259i_aep = (@i_@259i_aep+4);
-        $c0 = sym@@i_421;
+        $ 0 = sym@@i_421;
         @i_424:
         @i_@274i_12
             =
             %and[32](bits32[bits32[(@i_@260i_entry+4)]],
             @i_@255i_newsize);
         @i_@257i_j = @i_@274i_12;
-        $c0 when %eq[32](@i_@274i_12, @i_@256i_i) = sym@@i_428;
-        .Lbranch target:l572:
+        .Lbranch target:l710:
+        $ 0 when %eq[32](@i_@274i_12, @i_@256i_i) = 0;
+        .Lbranch target:l709:
         @i_@257i_j = (@i_@257i_j-@i_@256i_i);
         bits32[@i_@261i_oentry] = bits32[@i_@260i_entry];
         @i_@275i_13 = bits32[(%shl[32](@i_@257i_j, 2)+@i_@259i_aep)];
         bits32[@i_@260i_entry] = @i_@275i_13;
-        $c0 when %ne[32](@i_@275i_13, 0) = sym@@i_430;
-        .Lbranch target:l571:
+        .Lbranch target:l708:
+        $ 0 when %ne[32](@i_@275i_13, 0) = 0;
+        .Lbranch target:l707:
         @i_@276i_14 = (@i_@254i_xhv+4);
         bits32[@i_@276i_14] = (bits32[@i_@276i_14]+1);
         @i_430:
         bits32[(%shl[32](@i_@257i_j, 2)+@i_@259i_aep)] = @i_@260i_entry;
-        $c0 = sym@@i_425;
+        $ 0 = sym@@i_425;
         @i_428:
         @i_@261i_oentry = @i_@260i_entry;
         @i_425:
         @i_@260i_entry = bits32[@i_@261i_oentry];
-        $c0 = sym@@i_427;
+        $ 0 = sym@@i_427;
         @i_398:
         @i_@255i_newsize
             =
             %and[32](@i_@255i_newsize,
             %com[32](%and[32](@i_@255i_newsize,
             (%com[32](@i_@255i_newsize)+1))));
-        $c0 = sym@@i_399;
+        $ 0 = sym@@i_399;
         @i_397:
         @i_394:
         $r31 = ($r31+24);
@@ -3440,16 +3564,16 @@ section "text"
     {
         $r31 = ($r31+-24);
         $t1 = $r30;
-        .Linitialize continuations:l605:
-        .Lproc body start:l604:
+        .Linitialize continuations:l752:
+        .Lproc body start:l751:
         $r0 = 0;
-        $c0, $r30 = bits32[sym@_Perl_newSV], ($c0+4);
-        .Lcall successor:l616:
+        $ 0 = bits32[sym@_Perl_newSV];
+        .Lcall successor:l763:
         @i_@280i_1 = $r0;
         @i_@278i_hv = @i_@280i_1;
         $r0, $r1 = @i_@278i_hv, 11;
-        $c0, $r30 = bits32[sym@_Perl_sv_upgrade], ($c0+4);
-        .Lcall successor:l613:
+        $ 0 = bits32[sym@_Perl_sv_upgrade];
+        .Lcall successor:l760:
         @i_@279i_xhv = bits32[@i_@278i_hv];
         @i_@282i_3 = (@i_@278i_hv+8);
         bits32[@i_@282i_3] = %and[32](bits32[@i_@282i_3], -67371009);
@@ -3461,8 +3585,8 @@ section "text"
         bits32[(@i_@279i_xhv+4)] = 0;
         bits32[(@i_@279i_xhv+36)] = 0;
         $r0 = @i_@278i_hv;
-        $c0, $r30 = bits32[sym@_Perl_hv_iterinit], ($c0+4);
-        .Lcall successor:l610:
+        $ 0 = bits32[sym@_Perl_hv_iterinit];
+        .Lcall successor:l757:
         $r0 = @i_@278i_hv;
         $r31 = ($r31+24);
         $c0 = $t1;
@@ -3476,42 +3600,46 @@ section "text"
         $r31 = ($r31+-24);
         @i_ohv = $r0;
         $t1 = $r30;
-        .Linitialize continuations:l622:
-        .Lproc body start:l621:
-        $c0 when %eq[32](@i_ohv, 0) = sym@@i_437;
-        .Lbranch target:l643:
+        .Linitialize continuations:l769:
+        .Lproc body start:l768:
+        .Lbranch target:l796:
+        $ 0 when %eq[32](@i_ohv, 0) = 0;
+        .Lbranch target:l795:
         @i_@288i_436 = bits32[(bits32[@i_ohv]+8)];
-        $c0 = sym@@i_438;
+        $ 0 = sym@@i_438;
         @i_437:
         @i_@288i_436 = 0;
         @i_438:
         @i_@286i_hv_max = @i_@288i_436;
-        $c0 when %eq[32](@i_ohv, 0) = sym@@i_440;
-        .Lbranch target:l642:
+        .Lbranch target:l794:
+        $ 0 when %eq[32](@i_ohv, 0) = 0;
+        .Lbranch target:l793:
         @i_@289i_439 = bits32[(bits32[@i_ohv]+4)];
-        $c0 = sym@@i_441;
+        $ 0 = sym@@i_441;
         @i_440:
         @i_@289i_439 = 0;
         @i_441:
         @i_@287i_hv_fill = @i_@289i_439;
-        $c0, $r30 = bits32[sym@_Perl_newHV], ($c0+4);
-        .Lcall successor:l641:
+        $ 0 = bits32[sym@_Perl_newHV];
+        .Lcall successor:l792:
         @i_@290i_1 = $r0;
         @i_@285i_hv = @i_@290i_1;
         @i_443:
-        $c0 when %eq[32](@i_@286i_hv_max, 0) = sym@@i_445;
-        .Lbranch target:l638:
-        $c0
+        .Lbranch target:l789:
+        $ 0 when %eq[32](@i_@286i_hv_max, 0) = 0;
+        .Lbranch target:l788:
+        $ 0
             when
             %geu[32]((@i_@286i_hv_max+1), %shl[32](@i_@287i_hv_fill, 1))
-            = sym@@i_442;
+            = 0;
         @i_442:
         @i_@286i_hv_max = %shrl[32](@i_@286i_hv_max, 1);
-        $c0 = sym@@i_443;
+        $ 0 = sym@@i_443;
         @i_445:
         bits32[(bits32[@i_@285i_hv]+8)] = @i_@286i_hv_max;
-        $c0 when %ne[32](@i_@287i_hv_fill, 0) = sym@@i_446;
-        .Lbranch target:l637:
+        .Lbranch target:l787:
+        $ 0 when %ne[32](@i_@287i_hv_fill, 0) = 0;
+        .Lbranch target:l786:
         $r0 = @i_@285i_hv;
         $r31 = ($r31+24);
         $c0 = $t1;
@@ -3519,16 +3647,17 @@ section "text"
         @i_@293i_hv_riter = bits32[(bits32[@i_ohv]+28)];
         @i_@294i_hv_eiter = bits32[(bits32[@i_ohv]+32)];
         $r0 = @i_ohv;
-        $c0, $r30 = bits32[sym@_Perl_hv_iterinit], ($c0+4);
-        .Lcall successor:l635:
+        $ 0 = bits32[sym@_Perl_hv_iterinit];
+        .Lcall successor:l784:
         @i_449:
         $r0 = @i_ohv;
-        $c0, $r30 = bits32[sym@_Perl_hv_iternext], ($c0+4);
-        .Lcall successor:l628:
+        $ 0 = bits32[sym@_Perl_hv_iternext];
+        .Lcall successor:l776:
         @i_@301i_9 = $r0;
         @i_@292i_entry = @i_@301i_9;
-        $c0 when %ne[32](@i_@301i_9, 0) = sym@@i_448;
-        .Lbranch target:l625:
+        .Lbranch target:l773:
+        $ 0 when %ne[32](@i_@301i_9, 0) = 0;
+        .Lbranch target:l772:
         bits32[(bits32[@i_ohv]+28)] = @i_@293i_hv_riter;
         bits32[(bits32[@i_ohv]+32)] = @i_@294i_hv_eiter;
         $r0 = @i_@285i_hv;
@@ -3540,8 +3669,9 @@ section "text"
         @i_@298i_6 = 8;
         bits32[sym@_PL_Sv] = bits32[(@i_@292i_entry+@i_@298i_6)];
         @i_@299i_7 = bits32[bits32[sym@_PL_Sv]];
-        $c0 when %eq[32](@i_@299i_7, 0) = sym@@i_452;
-        .Lbranch target:l632:
+        .Lbranch target:l781:
+        $ 0 when %eq[32](@i_@299i_7, 0) = 0;
+        .Lbranch target:l780:
         @i_@300i_8 = (@i_@299i_7+4);
         bits32[@i_@300i_8] = (bits32[@i_@300i_8]+1);
         @i_452:
@@ -3549,9 +3679,9 @@ section "text"
             = @i_@285i_hv, (@i_@297i_5+@i_@298i_6),
             bits32[(@i_@297i_5+@i_@296i_4)], bits32[bits32[sym@_PL_Sv]],
             bits32[bits32[(@i_@292i_entry+4)]];
-        $c0, $r30 = bits32[sym@_Perl_hv_store], ($c0+4);
-        .Lcall successor:l631:
-        $c0 = sym@@i_449;
+        $ 0 = bits32[sym@_Perl_hv_store];
+        .Lcall successor:l779:
+        $ 0 = sym@@i_449;
     }
 }
 
@@ -3562,23 +3692,25 @@ section "text"
         $r31 = ($r31+-24);
         @i_hv, @i_entry = $r0, $r1;
         $t1 = $r30;
-        .Linitialize continuations:l649:
-        .Lproc body start:l648:
-        $c0 when %ne[32](@i_entry, 0) = sym@@i_454;
+        .Linitialize continuations:l802:
+        .Lproc body start:l801:
+        .Lbranch target:l833:
+        $ 0 when %ne[32](@i_entry, 0) = 0;
         @i_454:
         @i_@302i_val = bits32[(@i_entry+8)];
-        $c0 when %eq[32](@i_@302i_val, 0) = sym@@i_456;
-        .Lbranch target:l675:
-        $c0 when %ne[32](%and[32](bits32[(@i_@302i_val+8)], 255), 13)
-            = sym@@i_456;
-        .Lbranch target:l674:
-        $c0
+        .Lbranch target:l832:
+        $ 0 when %eq[32](@i_@302i_val, 0) = 0;
+        .Lbranch target:l831:
+        $ 0 when %ne[32](%and[32](bits32[(@i_@302i_val+8)], 255), 13)
+            = 0;
+        .Lbranch target:l830:
+        $ 0
             when
             %eq[32](bits32[(bits32[(bits32[@i_@302i_val]+28)]+32)], 0)
-            = sym@@i_459;
-        .Lbranch target:l673:
+            = 0;
+        .Lbranch target:l829:
         @i_@303i_458 = 0;
-        $c0 = sym@@i_460;
+        $ 0 = sym@@i_460;
         @i_459:
         @i_@305i_2 = 28;
         @i_@303i_458
@@ -3587,47 +3719,48 @@ section "text"
                 @i_@305i_2)];
         @i_460:
         @i_@306i_3 = 0;
-        $c0 when %eq[32](@i_@303i_458, @i_@306i_3) = sym@@i_456;
-        .Lbranch target:l672:
-        $c0 when %eq[32](bits32[(bits32[@i_hv]+40)], @i_@306i_3)
-            = sym@@i_456;
-        .Lbranch target:l671:
+        .Lbranch target:l828:
+        $ 0 when %eq[32](@i_@303i_458, @i_@306i_3) = 0;
+        .Lbranch target:l827:
+        $ 0 when %eq[32](bits32[(bits32[@i_hv]+40)], @i_@306i_3) = 0;
+        .Lbranch target:l826:
         @i_@307i_4 = bits32[sym@_PL_sub_generation];
         bits32[@i_@307i_4] = (bits32[@i_@307i_4]+1);
         @i_456:
         $r0 = @i_@302i_val;
-        $c0, $r30 = bits32[sym@_Perl_sv_free], ($c0+4);
-        .Lcall successor:l670:
+        $ 0 = bits32[sym@_Perl_sv_free];
+        .Lcall successor:l825:
         @i_@308i_5 = 4;
-        $c0
+        .Lbranch target:l822:
+        $ 0
             when
             %ne[32](bits32[(bits32[(@i_entry+@i_@308i_5)]+@i_@308i_5)],
-            -2) = sym@@i_461;
-        .Lbranch target:l667:
+            -2) = 0;
+        .Lbranch target:l821:
         $r0 = bits32[(bits32[(@i_entry+4)]+8)];
-        $c0, $r30 = bits32[sym@_Perl_sv_free], ($c0+4);
-        .Lcall successor:l666:
+        $ 0 = bits32[sym@_Perl_sv_free];
+        .Lcall successor:l820:
         $r0 = bits32[(@i_entry+4)];
-        $c0, $r30 = bits32[sym@_Perl_safefree], ($c0+4);
-        .Lcall successor:l663:
-        $c0 = sym@@i_462;
+        $ 0 = bits32[sym@_Perl_safefree];
+        .Lcall successor:l817:
+        $ 0 = sym@@i_462;
         @i_461:
-        $c0 when %eq[32](%and[32](bits32[(@i_hv+8)], 536870912), 0)
-            = sym@@i_463;
-        .Lbranch target:l660:
+        .Lbranch target:l814:
+        $ 0 when %eq[32](%and[32](bits32[(@i_hv+8)], 536870912), 0) = 0;
+        .Lbranch target:l813:
         $r0 = bits32[(@i_entry+4)];
-        $c0, $r30 = bits32[sym@_Perl_unshare_hek], ($c0+4);
-        .Lcall successor:l659:
-        $c0 = sym@@i_464;
+        $ 0 = bits32[sym@_Perl_unshare_hek];
+        .Lcall successor:l812:
+        $ 0 = sym@@i_464;
         @i_463:
         $r0 = bits32[(@i_entry+4)];
-        $c0, $r30 = bits32[sym@_Perl_safefree], ($c0+4);
-        .Lcall successor:l656:
+        $ 0 = bits32[sym@_Perl_safefree];
+        .Lcall successor:l809:
         @i_464:
         @i_462:
         $r0 = @i_entry;
-        $c0, $r30 = bits32[sym@@i_del_he], ($c0+4);
-        .Lcall successor:l653:
+        $ 0 = bits32[sym@@i_del_he];
+        .Lcall successor:l806:
         @i_453:
         $r31 = ($r31+24);
         $c0 = $t1;
@@ -3641,24 +3774,26 @@ section "text"
         $r31 = ($r31+-24);
         @i_hv, @i_entry = $r0, $r1;
         $t1 = $r30;
-        .Linitialize continuations:l681:
-        .Lproc body start:l680:
-        $c0 when %ne[32](@i_entry, 0) = sym@@i_466;
+        .Linitialize continuations:l839:
+        .Lproc body start:l838:
+        .Lbranch target:l869:
+        $ 0 when %ne[32](@i_entry, 0) = 0;
         @i_466:
         @i_@310i_1 = 8;
         @i_@311i_2 = bits32[(@i_entry+@i_@310i_1)];
-        $c0
+        .Lbranch target:l868:
+        $ 0
             when
             %ne[32](%and[32](bits32[(@i_@311i_2+@i_@310i_1)], 255), 13)
-            = sym@@i_468;
-        .Lbranch target:l706:
-        $c0
+            = 0;
+        .Lbranch target:l867:
+        $ 0
             when
             %eq[32](bits32[(bits32[(bits32[@i_@311i_2]+28)]+32)], 0)
-            = sym@@i_471;
-        .Lbranch target:l705:
+            = 0;
+        .Lbranch target:l866:
         @i_@309i_470 = 0;
-        $c0 = sym@@i_472;
+        $ 0 = sym@@i_472;
         @i_471:
         @i_@312i_3 = 28;
         @i_@309i_470
@@ -3667,47 +3802,48 @@ section "text"
                 @i_@312i_3)];
         @i_472:
         @i_@313i_4 = 0;
-        $c0 when %eq[32](@i_@309i_470, @i_@313i_4) = sym@@i_468;
-        .Lbranch target:l704:
-        $c0 when %eq[32](bits32[(bits32[@i_hv]+40)], @i_@313i_4)
-            = sym@@i_468;
-        .Lbranch target:l703:
+        .Lbranch target:l865:
+        $ 0 when %eq[32](@i_@309i_470, @i_@313i_4) = 0;
+        .Lbranch target:l864:
+        $ 0 when %eq[32](bits32[(bits32[@i_hv]+40)], @i_@313i_4) = 0;
+        .Lbranch target:l863:
         @i_@314i_5 = bits32[sym@_PL_sub_generation];
         bits32[@i_@314i_5] = (bits32[@i_@314i_5]+1);
         @i_468:
         $r0 = bits32[(@i_entry+8)];
-        $c0, $r30 = bits32[sym@_Perl_sv_2mortal], ($c0+4);
-        .Lcall successor:l702:
+        $ 0 = bits32[sym@_Perl_sv_2mortal];
+        .Lcall successor:l862:
         @i_@315i_6 = 4;
-        $c0
+        .Lbranch target:l859:
+        $ 0
             when
             %ne[32](bits32[(bits32[(@i_entry+@i_@315i_6)]+@i_@315i_6)],
-            -2) = sym@@i_473;
-        .Lbranch target:l699:
+            -2) = 0;
+        .Lbranch target:l858:
         $r0 = bits32[(bits32[(@i_entry+4)]+8)];
-        $c0, $r30 = bits32[sym@_Perl_sv_2mortal], ($c0+4);
-        .Lcall successor:l698:
+        $ 0 = bits32[sym@_Perl_sv_2mortal];
+        .Lcall successor:l857:
         $r0 = bits32[(@i_entry+4)];
-        $c0, $r30 = bits32[sym@_Perl_safefree], ($c0+4);
-        .Lcall successor:l695:
-        $c0 = sym@@i_474;
+        $ 0 = bits32[sym@_Perl_safefree];
+        .Lcall successor:l854:
+        $ 0 = sym@@i_474;
         @i_473:
-        $c0 when %eq[32](%and[32](bits32[(@i_hv+8)], 536870912), 0)
-            = sym@@i_475;
-        .Lbranch target:l692:
+        .Lbranch target:l851:
+        $ 0 when %eq[32](%and[32](bits32[(@i_hv+8)], 536870912), 0) = 0;
+        .Lbranch target:l850:
         $r0 = bits32[(@i_entry+4)];
-        $c0, $r30 = bits32[sym@_Perl_unshare_hek], ($c0+4);
-        .Lcall successor:l691:
-        $c0 = sym@@i_476;
+        $ 0 = bits32[sym@_Perl_unshare_hek];
+        .Lcall successor:l849:
+        $ 0 = sym@@i_476;
         @i_475:
         $r0 = bits32[(@i_entry+4)];
-        $c0, $r30 = bits32[sym@_Perl_safefree], ($c0+4);
-        .Lcall successor:l688:
+        $ 0 = bits32[sym@_Perl_safefree];
+        .Lcall successor:l846:
         @i_476:
         @i_474:
         $r0 = @i_entry;
-        $c0, $r30 = bits32[sym@@i_del_he], ($c0+4);
-        .Lcall successor:l685:
+        $ 0 = bits32[sym@@i_del_he];
+        .Lcall successor:l843:
         @i_465:
         $r31 = ($r31+24);
         $c0 = $t1;
@@ -3721,31 +3857,33 @@ section "text"
         $r31 = ($r31+-24);
         @i_hv = $r0;
         $t1 = $r30;
-        .Linitialize continuations:l712:
-        .Lproc body start:l711:
-        $c0 when %ne[32](@i_hv, 0) = sym@@i_478;
+        .Linitialize continuations:l875:
+        .Lproc body start:l874:
+        .Lbranch target:l890:
+        $ 0 when %ne[32](@i_hv, 0) = 0;
         @i_478:
         @i_@317i_1 = @i_hv;
         @i_@316i_xhv = bits32[@i_@317i_1];
         $r0 = @i_@317i_1;
-        $c0, $r30 = bits32[sym@@i_hfreeentries], ($c0+4);
-        .Lcall successor:l724:
+        $ 0 = bits32[sym@@i_hfreeentries];
+        .Lcall successor:l889:
         bits32[(@i_@316i_xhv+4)] = 0;
         bits32[(@i_@316i_xhv+12)] = 0;
-        $c0 when %eq[32](bits32[@i_@316i_xhv], 0) = sym@@i_480;
-        .Lbranch target:l721:
+        .Lbranch target:l886:
+        $ 0 when %eq[32](bits32[@i_@316i_xhv], 0) = 0;
+        .Lbranch target:l885:
         $r0, $r1, $r2
             = bits32[@i_@316i_xhv], 0,
             %shl[32]((bits32[(@i_@316i_xhv+8)]+1), 2);
-        $c0, $r30 = bits32[sym@_memset], ($c0+4);
-        .Lcall successor:l720:
+        $ 0 = bits32[sym@_memset];
+        .Lcall successor:l884:
         @i_480:
-        $c0 when %eq[32](%and[32](bits32[(@i_hv+8)], 32768), 0)
-            = sym@@i_482;
-        .Lbranch target:l717:
+        .Lbranch target:l881:
+        $ 0 when %eq[32](%and[32](bits32[(@i_hv+8)], 32768), 0) = 0;
+        .Lbranch target:l880:
         $r0 = @i_hv;
-        $c0, $r30 = bits32[sym@_Perl_mg_clear], ($c0+4);
-        .Lcall successor:l716:
+        $ 0 = bits32[sym@_Perl_mg_clear];
+        .Lcall successor:l879:
         @i_482:
         @i_477:
         $r31 = ($r31+24);
@@ -3760,12 +3898,14 @@ section "text"
         $r31 = ($r31+-24);
         @i_hv = $r0;
         $t1 = $r30;
-        .Linitialize continuations:l730:
-        .Lproc body start:l729:
+        .Linitialize continuations:l896:
+        .Lproc body start:l895:
         @i_@321i_oentry = 0;
-        $c0 when %ne[32](@i_hv, 0) = sym@@i_485;
+        .Lbranch target:l910:
+        $ 0 when %ne[32](@i_hv, 0) = 0;
         @i_485:
-        $c0 when %ne[32](bits32[bits32[@i_hv]], 0) = sym@@i_487;
+        .Lbranch target:l909:
+        $ 0 when %ne[32](bits32[bits32[@i_hv]], 0) = 0;
         @i_487:
         @i_@322i_riter = 0;
         @i_@324i_1 = @i_hv;
@@ -3773,30 +3913,33 @@ section "text"
         @i_@319i_array = bits32[bits32[@i_@324i_1]];
         @i_@320i_entry = bits32[@i_@319i_array];
         @i_489:
-        $c0 when %eq[32](@i_@320i_entry, 0) = sym@@i_493;
-        .Lbranch target:l739:
+        .Lbranch target:l908:
+        $ 0 when %eq[32](@i_@320i_entry, 0) = 0;
+        .Lbranch target:l907:
         @i_@321i_oentry = @i_@320i_entry;
         @i_@320i_entry = bits32[@i_@320i_entry];
         $r0, $r1 = @i_hv, @i_@321i_oentry;
-        $c0, $r30 = bits32[sym@_Perl_hv_free_ent], ($c0+4);
-        .Lcall successor:l738:
+        $ 0 = bits32[sym@_Perl_hv_free_ent];
+        .Lcall successor:l906:
         @i_493:
-        $c0 when %ne[32](@i_@320i_entry, 0) = sym@@i_489;
-        .Lbranch target:l735:
+        .Lbranch target:l903:
+        $ 0 when %ne[32](@i_@320i_entry, 0) = 0;
+        .Lbranch target:l902:
         @i_@326i_3 = (@i_@322i_riter+1);
         @i_@322i_riter = @i_@326i_3;
-        $c0 when %le[32](@i_@326i_3, @i_@323i_max) = sym@@i_497;
+        .Lbranch target:l901:
+        $ 0 when %le[32](@i_@326i_3, @i_@323i_max) = 0;
         @i_491:
         $r0 = @i_hv;
-        $c0, $r30 = bits32[sym@_Perl_hv_iterinit], ($c0+4);
-        .Lcall successor:l734:
+        $ 0 = bits32[sym@_Perl_hv_iterinit];
+        .Lcall successor:l900:
         @i_484:
         $r31 = ($r31+24);
         $c0 = $t1;
         @i_497:
         @i_@320i_entry
             = bits32[(%shl[32](@i_@322i_riter, 2)+@i_@319i_array)];
-        $c0 = sym@@i_489;
+        $ 0 = sym@@i_489;
     }
 }
 
@@ -3807,35 +3950,37 @@ section "text"
         $r31 = ($r31+-24);
         @i_hv = $r0;
         $t1 = $r30;
-        .Linitialize continuations:l745:
-        .Lproc body start:l744:
-        $c0 when %ne[32](@i_hv, 0) = sym@@i_500;
+        .Linitialize continuations:l916:
+        .Lproc body start:l915:
+        .Lbranch target:l934:
+        $ 0 when %ne[32](@i_hv, 0) = 0;
         @i_500:
         @i_@328i_1 = @i_hv;
         @i_@327i_xhv = bits32[@i_@328i_1];
         $r0 = @i_@328i_1;
-        $c0, $r30 = bits32[sym@@i_hfreeentries], ($c0+4);
-        .Lcall successor:l760:
+        $ 0 = bits32[sym@@i_hfreeentries];
+        .Lcall successor:l933:
         $r0 = bits32[@i_@327i_xhv];
-        $c0, $r30 = bits32[sym@_Perl_safefree], ($c0+4);
-        .Lcall successor:l757:
-        $c0 when %eq[32](bits32[(bits32[@i_hv]+40)], 0) = sym@@i_502;
-        .Lbranch target:l754:
+        $ 0 = bits32[sym@_Perl_safefree];
+        .Lcall successor:l930:
+        .Lbranch target:l927:
+        $ 0 when %eq[32](bits32[(bits32[@i_hv]+40)], 0) = 0;
+        .Lbranch target:l926:
         $r0 = bits32[(bits32[@i_hv]+40)];
-        $c0, $r30 = bits32[sym@_Perl_safefree], ($c0+4);
-        .Lcall successor:l753:
+        $ 0 = bits32[sym@_Perl_safefree];
+        .Lcall successor:l925:
         bits32[(bits32[@i_hv]+40)] = 0;
         @i_502:
         bits32[@i_@327i_xhv] = 0;
         bits32[(@i_@327i_xhv+8)] = 7;
         bits32[(@i_@327i_xhv+4)] = 0;
         bits32[(@i_@327i_xhv+12)] = 0;
-        $c0 when %eq[32](%and[32](bits32[(@i_hv+8)], 32768), 0)
-            = sym@@i_504;
-        .Lbranch target:l750:
+        .Lbranch target:l922:
+        $ 0 when %eq[32](%and[32](bits32[(@i_hv+8)], 32768), 0) = 0;
+        .Lbranch target:l921:
         $r0 = @i_hv;
-        $c0, $r30 = bits32[sym@_Perl_mg_clear], ($c0+4);
-        .Lcall successor:l749:
+        $ 0 = bits32[sym@_Perl_mg_clear];
+        .Lcall successor:l920:
         @i_504:
         @i_499:
         $r31 = ($r31+24);
@@ -3850,29 +3995,31 @@ section "text"
         $r31 = ($r31+-24);
         @i_hv = $r0;
         $t1 = $r30;
-        .Linitialize continuations:l766:
-        .Lproc body start:l765:
-        $c0 when %ne[32](@i_hv, 0) = sym@@i_507;
-        .Lbranch target:l777:
+        .Linitialize continuations:l940:
+        .Lproc body start:l939:
+        .Lbranch target:l953:
+        $ 0 when %ne[32](@i_hv, 0) = 0;
+        .Lbranch target:l952:
         $r0 = bits32[sym@@i_509];
-        $c0, $r30 = bits32[sym@_Perl_croak], ($c0+4);
-        .Lcall successor:l776:
+        $ 0 = bits32[sym@_Perl_croak];
+        .Lcall successor:l951:
         @i_507:
         @i_@329i_xhv = bits32[@i_hv];
         @i_@330i_entry = bits32[(@i_@329i_xhv+32)];
-        $c0 when %eq[32](@i_@330i_entry, 0) = sym@@i_510;
-        .Lbranch target:l773:
-        $c0
+        .Lbranch target:l948:
+        $ 0 when %eq[32](@i_@330i_entry, 0) = 0;
+        .Lbranch target:l947:
+        $ 0
             when
             %eq[32](%and[32](bits32[(@i_hv+8)], 0x40000000::bits32), 0)
-            = sym@@i_510;
-        .Lbranch target:l772:
+            = 0;
+        .Lbranch target:l946:
         @i_@331i_1 = (@i_hv+8);
         bits32[@i_@331i_1]
             = %and[32](bits32[@i_@331i_1], 0xffffffffbfffffff::bits32);
         $r0, $r1 = @i_hv, @i_@330i_entry;
-        $c0, $r30 = bits32[sym@_Perl_hv_free_ent], ($c0+4);
-        .Lcall successor:l771:
+        $ 0 = bits32[sym@_Perl_hv_free_ent];
+        .Lcall successor:l945:
         @i_510:
         bits32[(@i_@329i_xhv+28)] = -1;
         bits32[(@i_@329i_xhv+32)] = 0;
@@ -3889,125 +4036,131 @@ section "text"
         $r31 = ($r31+-24);
         @i_hv = $r0;
         $t1 = $r30;
-        .Linitialize continuations:l783:
-        .Lproc body start:l782:
-        $c0 when %ne[32](@i_hv, 0) = sym@@i_513;
-        .Lbranch target:l857:
+        .Linitialize continuations:l959:
+        .Lproc body start:l958:
+        .Lbranch target:l1047:
+        $ 0 when %ne[32](@i_hv, 0) = 0;
+        .Lbranch target:l1046:
         $r0 = bits32[sym@@i_509];
-        $c0, $r30 = bits32[sym@_Perl_croak], ($c0+4);
-        .Lcall successor:l856:
+        $ 0 = bits32[sym@_Perl_croak];
+        .Lcall successor:l1045:
         @i_513:
         @i_@337i_1 = @i_hv;
         @i_@332i_xhv = bits32[@i_@337i_1];
         @i_@338i_2 = bits32[(@i_@332i_xhv+32)];
         @i_@333i_entry = @i_@338i_2;
         @i_@334i_oldentry = @i_@338i_2;
-        $c0 when %eq[32](%and[32](bits32[(@i_@337i_1+8)], 32768), 0)
-            = sym@@i_518;
-        .Lbranch target:l853:
+        .Lbranch target:l1042:
+        $ 0 when %eq[32](%and[32](bits32[(@i_@337i_1+8)], 32768), 0)
+            = 0;
+        .Lbranch target:l1041:
         $r0, $r1 = @i_hv, 80;
-        $c0, $r30 = bits32[sym@_Perl_mg_find], ($c0+4);
-        .Lcall successor:l852:
+        $ 0 = bits32[sym@_Perl_mg_find];
+        .Lcall successor:l1040:
         @i_@339i_3 = $r0;
         @i_@336i_517 = @i_@339i_3;
-        $c0 = sym@@i_519;
+        $ 0 = sym@@i_519;
         @i_518:
         @i_@336i_517 = 0;
         @i_519:
         @i_@335i_mg = @i_@336i_517;
-        $c0 when %eq[32](@i_@336i_517, 0) = sym@@i_515;
-        .Lbranch target:l849:
-        $c0, $r30 = bits32[sym@_Perl_sv_newmortal], ($c0+4);
-        .Lcall successor:l848:
+        .Lbranch target:l1037:
+        $ 0 when %eq[32](@i_@336i_517, 0) = 0;
+        .Lbranch target:l1036:
+        $ 0 = bits32[sym@_Perl_sv_newmortal];
+        .Lcall successor:l1035:
         @i_@342i_5 = $r0;
         @i_@341i_key = @i_@342i_5;
-        $c0 when %eq[32](@i_@333i_entry, 0) = sym@@i_520;
-        .Lbranch target:l845:
-        $c0 when %eq[32]((bits32[(@i_@333i_entry+4)]+8), 0)
-            = sym@@i_524;
-        .Lbranch target:l844:
+        .Lbranch target:l1032:
+        $ 0 when %eq[32](@i_@333i_entry, 0) = 0;
+        .Lbranch target:l1031:
+        $ 0 when %eq[32]((bits32[(@i_@333i_entry+4)]+8), 0) = 0;
+        .Lbranch target:l1030:
         @i_@345i_6 = 4;
-        $c0
+        .Lbranch target:l1029:
+        $ 0
             when
             %ne[32](bits32[(bits32[(@i_@333i_entry+@i_@345i_6)]+
                 @i_@345i_6)],
-            -2) = sym@@i_526;
-        .Lbranch target:l843:
+            -2) = 0;
+        .Lbranch target:l1028:
         @i_@344i_522 = bits32[(bits32[(@i_@333i_entry+4)]+8)];
-        $c0 = sym@@i_527;
+        $ 0 = sym@@i_527;
         @i_526:
         @i_@346i_7 = 4;
         @i_@347i_8 = bits32[(@i_@333i_entry+@i_@346i_7)];
         $r0, $r1 = (@i_@347i_8+8), bits32[(@i_@347i_8+@i_@346i_7)];
-        $c0, $r30 = bits32[sym@_Perl_newSVpv], ($c0+4);
-        .Lcall successor:l842:
+        $ 0 = bits32[sym@_Perl_newSVpv];
+        .Lcall successor:l1027:
         @i_@348i_9 = $r0;
         $r0 = @i_@348i_9;
-        $c0, $r30 = bits32[sym@_Perl_sv_2mortal], ($c0+4);
-        .Lcall successor:l839:
+        $ 0 = bits32[sym@_Perl_sv_2mortal];
+        .Lcall successor:l1024:
         @i_@349i_10 = $r0;
         @i_@344i_522 = @i_@349i_10;
         @i_527:
         @i_@343i_523 = @i_@344i_522;
-        $c0 = sym@@i_525;
+        $ 0 = sym@@i_525;
         @i_524:
         @i_@343i_523 = bits32[sym@_PL_sv_undef];
         @i_525:
         $r0, $r1 = @i_@341i_key, @i_@343i_523;
-        $c0, $r30 = bits32[sym@_Perl_sv_setsv], ($c0+4);
-        .Lcall successor:l836:
+        $ 0 = bits32[sym@_Perl_sv_setsv];
+        .Lcall successor:l1021:
         @i_@351i_11 = 4;
         @i_@352i_12 = bits32[(@i_@333i_entry+@i_@351i_11)];
-        $c0 when %eq[32]((@i_@352i_12+8), 0) = sym@@i_529;
-        .Lbranch target:l833:
-        $c0 when %ne[32](bits32[(@i_@352i_12+@i_@351i_11)], -2)
-            = sym@@i_529;
-        .Lbranch target:l832:
+        .Lbranch target:l1018:
+        $ 0 when %eq[32]((@i_@352i_12+8), 0) = 0;
+        .Lbranch target:l1017:
+        $ 0 when %ne[32](bits32[(@i_@352i_12+@i_@351i_11)], -2) = 0;
+        .Lbranch target:l1016:
         @i_@350i_528 = bits32[(bits32[(@i_@333i_entry+4)]+8)];
-        $c0 = sym@@i_530;
+        $ 0 = sym@@i_530;
         @i_529:
         @i_@350i_528 = 0;
         @i_530:
         $r0 = @i_@350i_528;
-        $c0, $r30 = bits32[sym@_Perl_sv_free], ($c0+4);
-        .Lcall successor:l831:
-        $c0 = sym@@i_521;
+        $ 0 = bits32[sym@_Perl_sv_free];
+        .Lcall successor:l1015:
+        $ 0 = sym@@i_521;
         @i_520:
-        $c0, $r30 = bits32[sym@@i_new_he], ($c0+4);
-        .Lcall successor:l828:
+        $ 0 = bits32[sym@@i_new_he];
+        .Lcall successor:l1012:
         @i_@355i_13 = $r0;
         @i_@333i_entry = @i_@355i_13;
         bits32[(@i_@332i_xhv+32)] = @i_@355i_13;
         $r0, $r1, $r2 = @i_@333i_entry, 0, 12;
-        $c0, $r30 = bits32[sym@_memset], ($c0+4);
-        .Lcall successor:l825:
+        $ 0 = bits32[sym@_memset];
+        .Lcall successor:l1009:
         $r0 = 12;
-        $c0, $r30 = bits32[sym@_Perl_safemalloc], ($c0+4);
-        .Lcall successor:l822:
+        $ 0 = bits32[sym@_Perl_safemalloc];
+        .Lcall successor:l1006:
         @i_@356i_14 = $r0;
         @i_@353i_k = @i_@356i_14;
         $r0, $r1, $r2 = @i_@353i_k, 0, 12;
-        $c0, $r30 = bits32[sym@_memset], ($c0+4);
-        .Lcall successor:l819:
+        $ 0 = bits32[sym@_memset];
+        .Lcall successor:l1003:
         @i_@354i_hek = @i_@353i_k;
         bits32[(@i_@333i_entry+4)] = @i_@354i_hek;
         @i_@357i_15 = 4;
         bits32[(bits32[(@i_@333i_entry+@i_@357i_15)]+@i_@357i_15)] = -2;
         @i_521:
         $r0, $r1, $r2 = @i_hv, @i_@335i_mg, @i_@341i_key;
-        $c0, $r30 = bits32[sym@_Perl_magic_nextpack], ($c0+4);
-        .Lcall successor:l816:
-        $c0
+        $ 0 = bits32[sym@_Perl_magic_nextpack];
+        .Lcall successor:l1000:
+        .Lbranch target:l997:
+        $ 0
             when
             %eq[32](%and[32](bits32[(@i_@341i_key+8)], 118423552), 0)
-            = sym@@i_531;
-        .Lbranch target:l813:
+            = 0;
+        .Lbranch target:l996:
         @i_@358i_16 = 4;
         bits32[(bits32[(@i_@333i_entry+@i_@358i_16)]+@i_@358i_16)] = -2;
         bits32[sym@_PL_Sv] = @i_@341i_key;
         @i_@359i_17 = bits32[bits32[sym@_PL_Sv]];
-        $c0 when %eq[32](@i_@359i_17, 0) = sym@@i_534;
-        .Lbranch target:l812:
+        .Lbranch target:l995:
+        $ 0 when %eq[32](@i_@359i_17, 0) = 0;
+        .Lbranch target:l994:
         @i_@360i_18 = (@i_@359i_17+4);
         bits32[@i_@360i_18] = (bits32[@i_@360i_18]+1);
         @i_534:
@@ -4017,32 +4170,34 @@ section "text"
         $r31 = ($r31+24);
         $c0 = $t1;
         @i_531:
-        $c0 when %eq[32](bits32[(@i_@333i_entry+8)], 0) = sym@@i_535;
-        .Lbranch target:l810:
+        .Lbranch target:l992:
+        $ 0 when %eq[32](bits32[(@i_@333i_entry+8)], 0) = 0;
+        .Lbranch target:l991:
         $r0 = bits32[(@i_@333i_entry+8)];
-        $c0, $r30 = bits32[sym@_Perl_sv_free], ($c0+4);
-        .Lcall successor:l809:
+        $ 0 = bits32[sym@_Perl_sv_free];
+        .Lcall successor:l990:
         @i_535:
         $r0 = bits32[(@i_@333i_entry+4)];
-        $c0, $r30 = bits32[sym@_Perl_safefree], ($c0+4);
-        .Lcall successor:l806:
+        $ 0 = bits32[sym@_Perl_safefree];
+        .Lcall successor:l987:
         $r0 = @i_@333i_entry;
-        $c0, $r30 = bits32[sym@@i_del_he], ($c0+4);
-        .Lcall successor:l803:
+        $ 0 = bits32[sym@@i_del_he];
+        .Lcall successor:l984:
         bits32[(@i_@332i_xhv+32)] = 0;
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
         @i_515:
-        $c0 when %ne[32](bits32[@i_@332i_xhv], 0) = sym@@i_537;
-        .Lbranch target:l799:
+        .Lbranch target:l980:
+        $ 0 when %ne[32](bits32[@i_@332i_xhv], 0) = 0;
+        .Lbranch target:l979:
         $r0
             =
             %mul[32](1,
             (%shl[32](%shl[32]((bits32[(@i_@332i_xhv+8)]+1), 2), 1)-
                 16));
-        $c0, $r30 = bits32[sym@_Perl_safemalloc], ($c0+4);
-        .Lcall successor:l798:
+        $ 0 = bits32[sym@_Perl_safemalloc];
+        .Lcall successor:l978:
         @i_@362i_20 = $r0;
         bits32[@i_@332i_xhv] = @i_@362i_20;
         $r0, $r1, $r2
@@ -4050,37 +4205,41 @@ section "text"
             %mul[32](1,
             (%shl[32](%shl[32]((bits32[(@i_@332i_xhv+8)]+1), 2), 1)-
                 16));
-        $c0, $r30 = bits32[sym@_memset], ($c0+4);
-        .Lcall successor:l795:
+        $ 0 = bits32[sym@_memset];
+        .Lcall successor:l975:
         @i_537:
-        $c0 when %eq[32](@i_@333i_entry, 0) = sym@@i_542;
-        .Lbranch target:l792:
+        .Lbranch target:l972:
+        $ 0 when %eq[32](@i_@333i_entry, 0) = 0;
+        .Lbranch target:l971:
         @i_@333i_entry = bits32[@i_@333i_entry];
         @i_542:
-        $c0 when %eq[32](@i_@333i_entry, 0) = sym@@i_541;
+        .Lbranch target:l968:
+        $ 0 when %eq[32](@i_@333i_entry, 0) = 0;
         @i_541:
         @i_@364i_22 = (@i_@332i_xhv+28);
         bits32[@i_@364i_22] = (bits32[@i_@364i_22]+1);
-        $c0
+        .Lbranch target:l970:
+        $ 0
             when
             %leu[32](bits32[(@i_@332i_xhv+28)],
-            bits32[(@i_@332i_xhv+8)]) = sym@@i_544;
-        .Lbranch target:l791:
+            bits32[(@i_@332i_xhv+8)]) = 0;
+        .Lbranch target:l969:
         bits32[(@i_@332i_xhv+28)] = -1;
         @i_543:
-        $c0 when %eq[32](@i_@334i_oldentry, 0) = sym@@i_546;
-        .Lbranch target:l790:
-        $c0
+        .Lbranch target:l967:
+        $ 0 when %eq[32](@i_@334i_oldentry, 0) = 0;
+        .Lbranch target:l966:
+        $ 0
             when
             %eq[32](%and[32](bits32[(@i_hv+8)], 0x40000000::bits32), 0)
-            = sym@@i_546;
-        .Lbranch target:l789:
+            = 0;
+        .Lbranch target:l965:
         @i_@367i_25 = (@i_hv+8);
         bits32[@i_@367i_25]
             = %and[32](bits32[@i_@367i_25], 0xffffffffbfffffff::bits32);
         $r0, $r1 = @i_hv, @i_@334i_oldentry;
-        $c0, $r30 = bits32[sym@_Perl_hv_free_ent], ($c0+4);
-        .Lcall successor:l788:
+        $ 0 = bits32[sym@_Perl_hv_free_ent];
+        .Lcall successor:l964:
         @i_546:
         bits32[(@i_@332i_xhv+32)] = @i_@333i_entry;
         $r0 = @i_@333i_entry;
@@ -4091,7 +4250,7 @@ section "text"
             =
             bits32[(%shl[32](bits32[(@i_@332i_xhv+28)], 2)+
                 bits32[@i_@332i_xhv])];
-        $c0 = sym@@i_542;
+        $ 0 = sym@@i_542;
     }
 }
 
@@ -4102,23 +4261,25 @@ section "text"
         $r31 = ($r31+-24);
         @i_entry, @i_retlen = $r0, $r1;
         $t1 = $r30;
-        .Linitialize continuations:l863:
-        .Lproc body start:l862:
+        .Linitialize continuations:l1053:
+        .Lproc body start:l1052:
         @i_@368i_1 = 4;
-        $c0
+        .Lbranch target:l1063:
+        $ 0
             when
             %ne[32](bits32[(bits32[(@i_entry+@i_@368i_1)]+@i_@368i_1)],
-            -2) = sym@@i_549;
-        .Lbranch target:l871:
+            -2) = 0;
+        .Lbranch target:l1062:
         @i_@372i_2 = 8;
-        $c0
+        .Lbranch target:l1061:
+        $ 0
             when
             %eq[32](%and[32](bits32[(bits32[(bits32[(@i_entry+4)]+
                 @i_@372i_2)]+
                 @i_@372i_2)],
             262144),
-            0) = sym@@i_552;
-        .Lbranch target:l870:
+            0) = 0;
+        .Lbranch target:l1060:
         @i_@373i_3 = 4;
         @i_@374i_4 = (@i_entry+@i_@373i_3);
         @i_@375i_5 = 8;
@@ -4128,11 +4289,11 @@ section "text"
                 @i_@373i_3)];
         @i_@371i_551
             = bits32[bits32[bits32[(bits32[@i_@374i_4]+@i_@375i_5)]]];
-        $c0 = sym@@i_553;
+        $ 0 = sym@@i_553;
         @i_552:
         $r0, $r1 = bits32[(bits32[(@i_entry+4)]+8)], bits32[($r31+24)];
-        $c0, $r30 = bits32[sym@_Perl_sv_2pv], ($c0+4);
-        .Lcall successor:l869:
+        $ 0 = bits32[sym@_Perl_sv_2pv];
+        .Lcall successor:l1059:
         @i_@376i_6 = $r0;
         @i_@371i_551 = @i_@376i_6;
         @i_553:
@@ -4158,30 +4319,32 @@ section "text"
         $r31 = ($r31+-24);
         @i_entry = $r0;
         $t1 = $r30;
-        .Linitialize continuations:l877:
-        .Lproc body start:l876:
+        .Linitialize continuations:l1069:
+        .Lproc body start:l1068:
         @i_@378i_1 = 4;
-        $c0
+        .Lbranch target:l1085:
+        $ 0
             when
             %ne[32](bits32[(bits32[(@i_entry+@i_@378i_1)]+@i_@378i_1)],
-            -2) = sym@@i_555;
-        .Lbranch target:l891:
+            -2) = 0;
+        .Lbranch target:l1084:
         $r0 = bits32[(bits32[(@i_entry+4)]+8)];
-        $c0, $r30 = bits32[sym@_Perl_sv_mortalcopy], ($c0+4);
-        .Lcall successor:l890:
+        $ 0 = bits32[sym@_Perl_sv_mortalcopy];
+        .Lcall successor:l1083:
         @i_@379i_2 = $r0;
         $r0 = @i_@379i_2;
         $r31 = ($r31+24);
         $c0 = $t1;
         @i_555:
         @i_@381i_3 = 4;
-        $c0
+        .Lbranch target:l1079:
+        $ 0
             when
             %eq[32](bits32[(bits32[(@i_entry+@i_@381i_3)]+@i_@381i_3)],
-            0) = sym@@i_559;
-        .Lbranch target:l886:
+            0) = 0;
+        .Lbranch target:l1078:
         @i_@380i_558 = (bits32[(@i_entry+4)]+8);
-        $c0 = sym@@i_560;
+        $ 0 = sym@@i_560;
         @i_559:
         @i_@380i_558 = bits32[sym@@i_557];
         @i_560:
@@ -4189,12 +4352,12 @@ section "text"
         $r0, $r1
             = @i_@380i_558,
             bits32[(bits32[(@i_entry+@i_@382i_4)]+@i_@382i_4)];
-        $c0, $r30 = bits32[sym@_Perl_newSVpv], ($c0+4);
-        .Lcall successor:l885:
+        $ 0 = bits32[sym@_Perl_newSVpv];
+        .Lcall successor:l1077:
         @i_@383i_5 = $r0;
         $r0 = @i_@383i_5;
-        $c0, $r30 = bits32[sym@_Perl_sv_2mortal], ($c0+4);
-        .Lcall successor:l882:
+        $ 0 = bits32[sym@_Perl_sv_2mortal];
+        .Lcall successor:l1074:
         @i_@384i_6 = $r0;
         $r0 = @i_@384i_6;
         $r31 = ($r31+24);
@@ -4209,40 +4372,42 @@ section "text"
         $r31 = ($r31+-24);
         @i_hv, @i_entry = $r0, $r1;
         $t1 = $r30;
-        .Linitialize continuations:l897:
-        .Lproc body start:l896:
-        $c0 when %eq[32](%and[32](bits32[(@i_hv+8)], 32768), 0)
-            = sym@@i_562;
-        .Lbranch target:l915:
+        .Linitialize continuations:l1091:
+        .Lproc body start:l1090:
+        .Lbranch target:l1112:
+        $ 0 when %eq[32](%and[32](bits32[(@i_hv+8)], 32768), 0) = 0;
+        .Lbranch target:l1111:
         $r0, $r1 = @i_hv, 80;
-        $c0, $r30 = bits32[sym@_Perl_mg_find], ($c0+4);
-        .Lcall successor:l914:
+        $ 0 = bits32[sym@_Perl_mg_find];
+        .Lcall successor:l1110:
         @i_@385i_1 = $r0;
-        $c0 when %eq[32](@i_@385i_1, 0) = sym@@i_564;
-        .Lbranch target:l911:
-        $c0, $r30 = bits32[sym@_Perl_sv_newmortal], ($c0+4);
-        .Lcall successor:l910:
+        .Lbranch target:l1107:
+        $ 0 when %eq[32](@i_@385i_1, 0) = 0;
+        .Lbranch target:l1106:
+        $ 0 = bits32[sym@_Perl_sv_newmortal];
+        .Lcall successor:l1105:
         @i_@387i_2 = $r0;
         @i_@386i_sv = @i_@387i_2;
         @i_@388i_3 = 4;
-        $c0
+        .Lbranch target:l1102:
+        $ 0
             when
             %ne[32](bits32[(bits32[(@i_entry+@i_@388i_3)]+@i_@388i_3)],
-            -2) = sym@@i_566;
-        .Lbranch target:l907:
+            -2) = 0;
+        .Lbranch target:l1101:
         $r0, $r1, $r2, $r3
             = @i_hv, @i_@386i_sv, bits32[(bits32[(@i_entry+4)]+8)], -2;
-        $c0, $r30 = bits32[sym@_Perl_mg_copy], ($c0+4);
-        .Lcall successor:l906:
-        $c0 = sym@@i_567;
+        $ 0 = bits32[sym@_Perl_mg_copy];
+        .Lcall successor:l1100:
+        $ 0 = sym@@i_567;
         @i_566:
         @i_@389i_4 = 4;
         @i_@390i_5 = bits32[(@i_entry+@i_@389i_4)];
         $r0, $r1, $r2, $r3
             = @i_hv, @i_@386i_sv, (@i_@390i_5+8),
             bits32[(@i_@390i_5+@i_@389i_4)];
-        $c0, $r30 = bits32[sym@_Perl_mg_copy], ($c0+4);
-        .Lcall successor:l903:
+        $ 0 = bits32[sym@_Perl_mg_copy];
+        .Lcall successor:l1097:
         @i_567:
         $r0 = @i_@386i_sv;
         $r31 = ($r31+24);
@@ -4262,27 +4427,28 @@ section "text"
         $r31 = ($r31+-24);
         @i_hv, @i_key, @i_retlen = $r0, $r1, $r2;
         $t1 = $r30;
-        .Linitialize continuations:l921:
-        .Lproc body start:l920:
+        .Linitialize continuations:l1118:
+        .Lproc body start:l1117:
         $r0 = @i_hv;
-        $c0, $r30 = bits32[sym@_Perl_hv_iternext], ($c0+4);
-        .Lcall successor:l934:
+        $ 0 = bits32[sym@_Perl_hv_iternext];
+        .Lcall successor:l1132:
         @i_@392i_1 = $r0;
         @i_@391i_he = @i_@392i_1;
-        $c0 when %ne[32](@i_@392i_1, 0) = sym@@i_569;
-        .Lbranch target:l931:
+        .Lbranch target:l1129:
+        $ 0 when %ne[32](@i_@392i_1, 0) = 0;
+        .Lbranch target:l1128:
         $r0 = 0;
         $r31 = ($r31+24);
         $c0 = $t1;
         @i_569:
         $r0, $r1 = @i_@391i_he, @i_retlen;
-        $c0, $r30 = bits32[sym@_Perl_hv_iterkey], ($c0+4);
-        .Lcall successor:l929:
+        $ 0 = bits32[sym@_Perl_hv_iterkey];
+        .Lcall successor:l1126:
         @i_@393i_2 = $r0;
         bits32[@i_key] = @i_@393i_2;
         $r0, $r1 = @i_hv, @i_@391i_he;
-        $c0, $r30 = bits32[sym@_Perl_hv_iterval], ($c0+4);
-        .Lcall successor:l926:
+        $ 0 = bits32[sym@_Perl_hv_iterval];
+        .Lcall successor:l1123:
         @i_@394i_3 = $r0;
         $r0 = @i_@394i_3;
         $r31 = ($r31+24);
@@ -4297,11 +4463,11 @@ section "text"
         $r31 = ($r31+-24);
         @i_hv, @i_gv, @i_how = $r0, $r1, $r2;
         $t1 = $r30;
-        .Linitialize continuations:l940:
-        .Lproc body start:l939:
+        .Linitialize continuations:l1138:
+        .Lproc body start:l1137:
         $r0, $r1, $r2, $r3, $r4 = @i_hv, @i_gv, @i_how, 0, 0;
-        $c0, $r30 = bits32[sym@_Perl_sv_magic], ($c0+4);
-        .Lcall successor:l944:
+        $ 0 = bits32[sym@_Perl_sv_magic];
+        .Lcall successor:l1142:
         @i_571:
         $r31 = ($r31+24);
         $c0 = $t1;
@@ -4315,11 +4481,11 @@ section "text"
         $r31 = ($r31+-24);
         @i_sv, @i_len, @i_hash = $r0, $r1, $r2;
         $t1 = $r30;
-        .Linitialize continuations:l950:
-        .Lproc body start:l949:
+        .Linitialize continuations:l1148:
+        .Lproc body start:l1147:
         $r0, $r1, $r2 = @i_sv, @i_len, @i_hash;
-        $c0, $r30 = bits32[sym@_Perl_share_hek], ($c0+4);
-        .Lcall successor:l955:
+        $ 0 = bits32[sym@_Perl_share_hek];
+        .Lcall successor:l1153:
         @i_@395i_1 = $r0;
         $r0 = (@i_@395i_1+8);
         $r31 = ($r31+24);
@@ -4334,8 +4500,8 @@ section "text"
         $r31 = ($r31+-24);
         @i_str, @i_len, @i_hash = $r0, $r1, $r2;
         $t1 = $r30;
-        .Linitialize continuations:l961:
-        .Lproc body start:l960:
+        .Linitialize continuations:l1159:
+        .Lproc body start:l1158:
         @i_@399i_i = 1;
         @i_@400i_found = 0;
         @i_@396i_xhv = bits32[bits32[bits32[sym@_PL_strtab]]];
@@ -4345,57 +4511,64 @@ section "text"
                 bits32[@i_@396i_xhv]);
         @i_@397i_entry = bits32[@i_@398i_oentry];
         @i_577:
-        $c0 when %ne[32](@i_@397i_entry, 0) = sym@@i_574;
+        .Lbranch target:l1166:
+        $ 0 when %ne[32](@i_@397i_entry, 0) = 0;
         @i_574:
-        $c0 when %eq[32](bits32[bits32[(@i_@397i_entry+4)]], @i_hash)
-            = sym@@i_578;
+        .Lbranch target:l1183:
+        $ 0 when %eq[32](bits32[bits32[(@i_@397i_entry+4)]], @i_hash)
+            = 0;
         @i_578:
         @i_@402i_2 = 4;
-        $c0
+        .Lbranch target:l1182:
+        $ 0
             when
             %eq[32](bits32[(bits32[(@i_@397i_entry+@i_@402i_2)]+
                 @i_@402i_2)],
-            @i_len) = sym@@i_580;
+            @i_len) = 0;
         @i_580:
         $r0, $r1, $r2 = (bits32[(@i_@397i_entry+4)]+8), @i_str, @i_len;
-        $c0, $r30 = bits32[sym@_Perl_my_memcmp], ($c0+4);
-        .Lcall successor:l978:
+        $ 0 = bits32[sym@_Perl_my_memcmp];
+        .Lcall successor:l1181:
         @i_@403i_3 = $r0;
-        $c0 when %eq[32](@i_@403i_3, 0) = sym@@i_582;
+        .Lbranch target:l1178:
+        $ 0 when %eq[32](@i_@403i_3, 0) = 0;
         @i_575:
         @i_@399i_i = 0;
         @i_@398i_oentry = @i_@397i_entry;
         @i_@397i_entry = bits32[@i_@398i_oentry];
-        $c0 = sym@@i_577;
+        $ 0 = sym@@i_577;
         @i_582:
         @i_@400i_found = 1;
         @i_@404i_4 = (@i_@397i_entry+8);
         @i_@405i_5 = (bits32[@i_@404i_4]+-12);
         bits32[@i_@404i_4] = @i_@405i_5;
-        $c0 when %ne[32](@i_@405i_5, 0) = sym@@i_576;
-        .Lbranch target:l975:
+        .Lbranch target:l1177:
+        $ 0 when %ne[32](@i_@405i_5, 0) = 0;
+        .Lbranch target:l1176:
         bits32[@i_@398i_oentry] = bits32[@i_@397i_entry];
-        $c0 when %eq[32](@i_@399i_i, 0) = sym@@i_586;
-        .Lbranch target:l974:
-        $c0 when %ne[32](bits32[@i_@398i_oentry], 0) = sym@@i_586;
-        .Lbranch target:l973:
+        .Lbranch target:l1175:
+        $ 0 when %eq[32](@i_@399i_i, 0) = 0;
+        .Lbranch target:l1174:
+        $ 0 when %ne[32](bits32[@i_@398i_oentry], 0) = 0;
+        .Lbranch target:l1173:
         @i_@406i_6 = (@i_@396i_xhv+4);
         bits32[@i_@406i_6] = (bits32[@i_@406i_6]-1);
         @i_586:
         $r0 = bits32[(@i_@397i_entry+4)];
-        $c0, $r30 = bits32[sym@_Perl_safefree], ($c0+4);
-        .Lcall successor:l972:
+        $ 0 = bits32[sym@_Perl_safefree];
+        .Lcall successor:l1172:
         $r0 = @i_@397i_entry;
-        $c0, $r30 = bits32[sym@@i_del_he], ($c0+4);
-        .Lcall successor:l969:
+        $ 0 = bits32[sym@@i_del_he];
+        .Lcall successor:l1169:
         @i_@407i_7 = (@i_@396i_xhv+12);
         bits32[@i_@407i_7] = (bits32[@i_@407i_7]-1);
         @i_576:
-        $c0 when %ne[32](@i_@400i_found, 0) = sym@@i_588;
-        .Lbranch target:l966:
+        .Lbranch target:l1165:
+        $ 0 when %ne[32](@i_@400i_found, 0) = 0;
+        .Lbranch target:l1164:
         $r0 = bits32[sym@@i_590];
-        $c0, $r30 = bits32[sym@_Perl_warn], ($c0+4);
-        .Lcall successor:l965:
+        $ 0 = bits32[sym@_Perl_warn];
+        .Lcall successor:l1163:
         @i_588:
         @i_573:
         $r31 = ($r31+24);
@@ -4410,8 +4583,8 @@ section "text"
         $r31 = ($r31+-24);
         @i_str, @i_len, @i_hash = $r0, $r1, $r2;
         $t1 = $r30;
-        .Linitialize continuations:l984:
-        .Lproc body start:l983:
+        .Linitialize continuations:l1189:
+        .Lproc body start:l1188:
         @i_@411i_i = 1;
         @i_@412i_found = 0;
         @i_@408i_xhv = bits32[bits32[bits32[sym@_PL_strtab]]];
@@ -4421,39 +4594,44 @@ section "text"
                 bits32[@i_@408i_xhv]);
         @i_@409i_entry = bits32[@i_@410i_oentry];
         @i_595:
-        $c0 when %ne[32](@i_@409i_entry, 0) = sym@@i_592;
+        .Lbranch target:l1207:
+        $ 0 when %ne[32](@i_@409i_entry, 0) = 0;
         @i_592:
-        $c0 when %eq[32](bits32[bits32[(@i_@409i_entry+4)]], @i_hash)
-            = sym@@i_596;
+        .Lbranch target:l1213:
+        $ 0 when %eq[32](bits32[bits32[(@i_@409i_entry+4)]], @i_hash)
+            = 0;
         @i_596:
         @i_@414i_2 = 4;
-        $c0
+        .Lbranch target:l1212:
+        $ 0
             when
             %eq[32](bits32[(bits32[(@i_@409i_entry+@i_@414i_2)]+
                 @i_@414i_2)],
-            @i_len) = sym@@i_598;
+            @i_len) = 0;
         @i_598:
         $r0, $r1, $r2 = (bits32[(@i_@409i_entry+4)]+8), @i_str, @i_len;
-        $c0, $r30 = bits32[sym@_Perl_my_memcmp], ($c0+4);
-        .Lcall successor:l1001:
+        $ 0 = bits32[sym@_Perl_my_memcmp];
+        .Lcall successor:l1211:
         @i_@415i_3 = $r0;
-        $c0 when %eq[32](@i_@415i_3, 0) = sym@@i_600;
+        .Lbranch target:l1208:
+        $ 0 when %eq[32](@i_@415i_3, 0) = 0;
         @i_593:
         @i_@411i_i = 0;
         @i_@409i_entry = bits32[@i_@409i_entry];
-        $c0 = sym@@i_595;
+        $ 0 = sym@@i_595;
         @i_600:
         @i_@412i_found = 1;
         @i_594:
-        $c0 when %ne[32](@i_@412i_found, 0) = sym@@i_602;
-        .Lbranch target:l998:
-        $c0, $r30 = bits32[sym@@i_new_he], ($c0+4);
-        .Lcall successor:l997:
+        .Lbranch target:l1206:
+        $ 0 when %ne[32](@i_@412i_found, 0) = 0;
+        .Lbranch target:l1205:
+        $ 0 = bits32[sym@@i_new_he];
+        .Lcall successor:l1204:
         @i_@416i_4 = $r0;
         @i_@409i_entry = @i_@416i_4;
         $r0, $r1, $r2 = @i_str, @i_len, @i_hash;
-        $c0, $r30 = bits32[sym@@i_save_hek], ($c0+4);
-        .Lcall successor:l994:
+        $ 0 = bits32[sym@@i_save_hek];
+        .Lcall successor:l1201:
         @i_@417i_5 = $r0;
         bits32[(@i_@409i_entry+4)] = @i_@417i_5;
         bits32[(@i_@409i_entry+8)] = 0;
@@ -4461,18 +4639,20 @@ section "text"
         bits32[@i_@410i_oentry] = @i_@409i_entry;
         @i_@418i_6 = (@i_@408i_xhv+12);
         bits32[@i_@418i_6] = (bits32[@i_@418i_6]+1);
-        $c0 when %eq[32](@i_@411i_i, 0) = sym@@i_604;
-        .Lbranch target:l991:
+        .Lbranch target:l1198:
+        $ 0 when %eq[32](@i_@411i_i, 0) = 0;
+        .Lbranch target:l1197:
         @i_@419i_7 = (@i_@408i_xhv+4);
         bits32[@i_@419i_7] = (bits32[@i_@419i_7]+1);
-        $c0
+        .Lbranch target:l1196:
+        $ 0
             when
             %leu[32](bits32[(@i_@408i_xhv+12)],
-            bits32[(@i_@408i_xhv+8)]) = sym@@i_606;
-        .Lbranch target:l990:
+            bits32[(@i_@408i_xhv+8)]) = 0;
+        .Lbranch target:l1195:
         $r0 = bits32[bits32[sym@_PL_strtab]];
-        $c0, $r30 = bits32[sym@@i_hsplit], ($c0+4);
-        .Lcall successor:l989:
+        $ 0 = bits32[sym@@i_hsplit];
+        .Lcall successor:l1194:
         @i_606:
         @i_604:
         @i_602:

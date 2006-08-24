@@ -49,10 +49,10 @@ main:
 	movl $-8,%eax
 	addl %eax,%ecx
 	movl (%ecx),%eax
-	movl %ebx,8(%esp)
-	movl %ebp,12(%esp)
-	movl %esi,16(%esp)
 	movl %edi,20(%esp)
+	movl %esi,16(%esp)
+	movl %ebp,12(%esp)
+	movl %ebx,8(%esp)
 	movl 4(%esp),%ecx
 	movl %ecx, %esp; jmp *%eax
 .Lcut_entry_l7:

@@ -55,10 +55,10 @@ run_thread:
 	addl %eax,%edx
 	movl (%edx),%eax
 	movl (%ecx),%ecx
-	movl %ebx,16(%esp)
-	movl %ebp,20(%esp)
-	movl %esi,24(%esp)
 	movl %edi,28(%esp)
+	movl %esi,24(%esp)
+	movl %ebp,20(%esp)
+	movl %ebx,16(%esp)
 	movl %eax, %esp; jmp *%ecx
 .Lcut_entry_l8:
 .Lstart_of_continuation_code_l7:

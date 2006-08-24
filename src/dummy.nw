@@ -37,6 +37,7 @@ val dummy32b':  Ast2ir.tgt
 <<dummy.ml>>=
 module AN       = Automaton
 module C        = Call
+module PA       = Preast2ir
 module R        = Rtl
 module RP       = Rtl.Private
 module RU       = Rtlutil
@@ -94,7 +95,9 @@ module Make(A: ARCH) = struct
 
     let ccspecs = {AN.call=CC.simple; AN.results=CC.simple; AN.cutto=CC.simple}
         (* the new-style target *)
-    let target' : ((Rtl.exp -> Automaton.t), Call.t) Target.t = 
+    let fmach = Flow.machine sp
+    let target' = 
+      let PA.T x86_tgt = X86.target in
       let spaces  = [ Spaces.m 
                     ; Spaces.c 
                     ; Spaces.r 
@@ -111,7 +114,7 @@ module Make(A: ARCH) = struct
         ; T.tx_ast = (fun secs -> secs)
 (* Using the same M as x86 so that tests don't fail.
    Not sure what the right M is for dummy. KR *)
-        ; T.capabilities = X86.target.T.capabilities
+        ; T.capabilities = x86_tgt.T.capabilities
         ; T.byteorder    = A.byte_order
         ; T.wordsize     = A.wordsize
         ; T.pointersize  = A.pointersize
@@ -130,21 +133,27 @@ module Make(A: ARCH) = struct
         ; T.spaces       = spaces
         ; T.reg_ix_map   = T.mk_reg_ix_map spaces
         ; T.distinct_addr_sp = false
-        ; T.bnegate      = Flow.bnegate eflags
-        ; T.goto         = Flow.goto
-        ; T.jump         = Flow.jump
-        ; T.call         = Flow.call 
-        ; T.return       = Flow.return
-        ; T.branch       = Flow.branch
-        ; T.forbidden    =
-            Rtl.store (Rtl.mem Rtl.none mspace (Rtl.C 1) (Rtl.bits (Bits.zero 32) 32))
-                         (Rtl.bits (Bits.zero 8) 8) 8
-        ; T.spill        = Spill.spill
-        ; T.reload       = Spill.reload
+        ; T.machine = { T.bnegate     = fmach.T.bnegate
+                      ; T.goto        = fmach.T.goto
+                      ; T.jump        = fmach.T.jump
+                      ; T.call        = fmach.T.call 
+                      ; T.cutto       = cutto
+                      ; Mflow.return  = fmach.Mflow.return
+                      ; T.branch      = fmach.T.branch
+                      ; T.move        = (fun _ -> assert false)
+                      ; T.spill       = (fun _ -> assert false)
+                      ; T.reload      = (fun _ -> assert false)
+                      ; T.retgt_br    = fmach.T.retgt_br
+                      ; T.forbidden   =
+                          Rtl.store (Rtl.mem Rtl.none mspace (Rtl.C 1)
+                                            (Rtl.bits (Bits.zero 32) 32))
+                                    (Rtl.bits (Bits.zero 8) 8) 8
+                      }
         (* bogus *)
         ; T.charset      = "latin1" 
         ; T.data_section = "data"
         }
+    let target' = PA.T target'
 end
 
 module Dummy32l = Make(struct
@@ -215,10 +224,10 @@ module Flow = Mflow.MakeStandard
     end)
 
 let cutto =                 
-    { T.embed   = (fun { Mflow.new_pc=newpc
-                       ; Mflow.new_sp=newsp
-                       } ->
-                       Rtl.par [assign (reg 31) newsp; assign pc newpc])
+    { T.embed   = (fun _ { Mflow.new_pc=newpc
+                         ; Mflow.new_sp=newsp
+                         } ->
+                         (Dag.Nop, Rtl.par [assign (reg 31) newsp; assign pc newpc]))
     ; T.project = (fun r -> match Dn.rtl r with
                     | RP.Rtl [ (_, RP.Store(_, nsp, _)) 
                              ; (_, RP.Store(_, npc, _))] -> 
@@ -405,7 +414,6 @@ let conv name jump specs =
   ; C.pre_nvregs       = nvolregs    (* registers preserved across calls *)
   ; C.volregs          = volregs     (* registers not preserved across calls *)
   ; C.saved_nvr        = saved_nvr
-  ; C.cutto            = cutto
   ; C.return           = return
   ; C.ra_on_entry      = (fun _     -> R.fetch ra A.wordsize)
   ; C.where_to_save_ra = (fun _ t   -> Talloc.Multiple.loc t 't' A.wordsize)

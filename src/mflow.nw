@@ -56,6 +56,54 @@ individual basis.
 
 <<mflow.mli>>=
 <<signatures>>
+@
+The nodes in the control-flow graph (module \module{cfg}) contain
+{\rtl}s.  For example, a [[jump]] node takes an {\rtl} and not an
+expression for the target.  The construction of these {\rtl}s is target
+specific and so we provide [[embed]] functions in each target.
+For debugging of the {\cfg} we also like to re-construct the expressions
+from these {\rtl}s.  We provide matching [[project]] functions to obtain
+the original expressions \emph{if the supplied {\rtl}s} were constructed
+by the construction functions.  Any attempt to do otherwise results in
+an unchecked run-time error. 
+
+We can also negate the condition in a conditional-branch by calling
+[[bnegate]].
+
+The {\rtl}s do not have to represent machine instructions. It suffices
+to create {\rtl}s that the code expander can recognize as jumps, calls,
+and so on. 
+<<signatures>>=
+type ('em, 'pr) map' = ('em, 'pr) Ep.pre_map =
+    { embed   : 'em
+    ; project : 'pr
+    }
+type brtl = Rtl.exp -> Rtl.rtl
+type ('a,'b) map  = ('a -> 'b -> brtl Dag.branch,  Rtl.rtl -> 'b) map'
+type ('a,'b) mapc = ('a -> 'b -> brtl Dag.cbranch, Rtl.rtl -> 'b) map'
+
+type cut_args = { new_sp : Rtl.exp; new_pc : Rtl.exp }
+type 'a machine =
+  { bnegate:   Rtl.rtl -> Rtl.rtl
+  ; goto:      ('a, Rtl.exp) map
+  ; jump:      ('a, Rtl.exp) map
+  ; call:      ('a, Rtl.exp) map
+  ; branch:    ('a, Rtl.exp) mapc (* condition *)
+  ; retgt_br:  Rtl.rtl -> brtl Dag.cbranch
+  ; move:      'a -> src:Register.t -> dst:Register.t -> brtl Dag.block
+  ; spill:     'a -> Register.t     -> Rtlutil.aloc   -> brtl Dag.block
+  ; reload:    'a -> Rtlutil.aloc   -> Register.t     -> brtl Dag.block
+  ; cutto:     ('a, cut_args) map    (* newpc * newsp map*)
+  ; return:    Rtl.rtl
+  ; forbidden: Rtl.rtl   (* causes a run-time error *)
+  }
+@ The [[branch]] embedder takes expressions $(b, t)$ where $b$~is a
+Boolean condition and $t$~is the branch target.
+It produces an RTL that conditionally branches to the target.
+ 
+The [[forbidden]] component is an RTL used to cause a run-time error.
+This RTL is used in places control should not reach, e.g., no arm of a
+switch statement matches the scrutinee.
 <<signatures>>=
 module type PC = sig
   val pc_lhs : Rtl.loc
@@ -64,27 +112,22 @@ module type PC = sig
   val ra_offset : int   (* at call, ra_reg  := PC + ra_offset *)
 end
 
-type cut_args = { new_sp : Rtl.exp; new_pc : Rtl.exp }
-
-module type S = sig (* see types Target.t and Target.map for doco *)
-  type 'a map = ('a, Rtl.rtl) Ep.map
-  val bnegate : Rtl.loc -> Rtl.rtl -> Rtl.rtl
-  val goto    : Rtl.exp map
-  val jump    : Rtl.exp map
-  val cutto   : sp:Rtl.loc -> cut_args map  (* assumes sp and pc same width *)
+module type S = sig
+  val machine : sp:Rtl.loc -> 'a machine
     (* N.B. sp is a dynamic argument because it could differ among call conventions *)
-  val call    : Rtl.exp map
-  val return  : unit map
-  val branch  : (Rtl.exp * Rtl.exp) map  (* probably should also be record *)
 end
+@
 <<mflow.mli>>=
 module MakeStandard (Pc : PC) : S
 @ 
 <<mflow.ml>>=
 <<signatures>>
+module DG = Dag
 module RU = Rtlutil
 module R  = Rtl
 module RP = Rtl.Private
+module Up   = Rtl.Up
+module Down = Rtl.Dn
 let ( =/  ) = RU.Eq.loc
 let ( =// ) = RU.Eq.exp
 
@@ -94,9 +137,6 @@ module MakeStandard (P : PC) = struct
 end
 @ 
 <<standard machine-level control flow>>=
-module Up   = Rtl.Up
-module Down = Rtl.Dn
-
 let w = RU.Width.loc P.pc_lhs
 let downrtl = R.Dn.rtl
 let uploc   = R.Up.loc
@@ -130,18 +170,20 @@ let cmpneg w ~cop ~fetch =
                | [r] -> r
                | _ -> Impossible.impossible "negation of multiple arguments")
   | _      -> RP.App (("not", [w]), fetch)
-let bnegate bool_flags r = match Down.rtl r with
+let bnegate r = match Down.rtl r with
   | RP.Rtl [RP.App((cop, [w1]), [RP.Fetch (flags, w2)]), RP.Store (pc, tgt, w3)]
-    when pc =/ Down.loc P.pc_lhs && flags =/ Down.loc bool_flags
-      && w1 = w && w2 = w && w3 = w ->
+    when pc =/ Down.loc P.pc_lhs && w1 = w && w2 = w && w3 = w ->
       Up.rtl (RP.Rtl [cmpneg w ~cop ~fetch:[RP.Fetch (flags, w)],
                                RP.Store (pc, tgt, w)])
   | _ -> Impossible.impossible "ill-formed conditional branch"
 <<standard machine-level control flow>>=
-let goto = { Ep.embed   = (fun e -> R.store P.pc_lhs e w)
-           ; Ep.project = (fun r -> match downrtl r with
-                                   | RP.Rtl [(_, RP.Store(_, e, _))] -> upexp e
-                                   | _ -> Impossible.impossible "projected non-goto")
+let gotor = { Ep.embed   = (fun e -> R.store P.pc_lhs e w)
+            ; Ep.project = (fun r -> match downrtl r with
+                                    | RP.Rtl [(_, RP.Store(_, e, _))] -> upexp e
+                                    | _ -> Impossible.impossible "projected non-goto")
+            } 
+let goto = { Ep.embed   = (fun _ e -> (DG.Nop, gotor.Ep.embed e))
+           ; Ep.project = gotor.Ep.project
            } 
 let jump = goto
 @ 
@@ -151,9 +193,9 @@ This convention will be necessary at least until we have recognizers
 that cope with associative-commutative operators.
 <<standard machine-level control flow>>=
 let cutto ~sp =
-  { Ep.embed   = (fun {new_sp=new_sp; new_pc=new_pc} -> 
+  { Ep.embed   = (fun _ {new_sp=new_sp; new_pc=new_pc} -> 
                    let assign loc e = Rtl.store loc e w in
-                   Rtl.par [assign P.pc_lhs new_pc; assign sp new_sp])
+                   (DG.Nop, Rtl.par [assign P.pc_lhs new_pc; assign sp new_sp]))
   ; Ep.project = (fun r -> match downrtl r with
                            | RP.Rtl [ (_, RP.Store(_,  npc, _))
                                     ; (_, RP.Store(_ , nsp, _))] ->
@@ -165,24 +207,30 @@ let ra_val =
   let pc = R.fetch P.pc_rhs w in
   RU.addk w pc P.ra_offset
 
-let call = { Ep.embed   = (fun e -> R.par [R.store P.pc_lhs e w;
-                                          R.store P.ra_reg ra_val w])
-           ; Ep.project = (fun r -> match downrtl r with
-                                   | RP.Rtl [(_, RP.Store(_, e, _)); _] -> upexp e
-                                   | _ -> Impossible.impossible "projected non-call")
+let call = { Ep.embed   = (fun _ e -> (DG.Nop, R.par [R.store P.pc_lhs e w;
+                                                    R.store P.ra_reg ra_val w]))
+           ; Ep.project =
+              (fun r -> match downrtl r with
+                 | RP.Rtl [(_, RP.Store(_, e, _)); _] -> upexp e
+                 | _ -> Impossible.impossible (Printf.sprintf "projected non-call: %s"
+                                                              (RU.ToString.rtl r)))
            } 
 <<standard machine-level control flow>>=
-let return = 
-    { Ep.embed   = (fun () -> R.store P.pc_lhs (R.fetch P.ra_reg w) w)
-    ; Ep.project = (fun r  -> match downrtl r with
-                  | RP.Rtl [(_, RP.Store(_, _, _))] -> ()
-                  | _ -> Impossible.impossible "projected non-return"
-                  )
-    }              
+let return = R.store P.pc_lhs (R.fetch P.ra_reg w) w
 <<standard machine-level control flow>>=
 let branch =
-  { Ep.embed   = (fun (cond, tgt) -> R.guard cond (goto.Ep.embed tgt))
+  { Ep.embed   = (fun _ cond ->
+                    DG.cond (fun tgt -> R.guard cond (gotor.Ep.embed tgt)))
   ; Ep.project = (fun r -> match downrtl r with
-                          | RP.Rtl [(b, RP.Store(_, e, _))] -> (upexp b, upexp e)
+                          | RP.Rtl [(b, RP.Store(_, _, _))] -> upexp b
                           | _ -> Impossible.impossible "projected non-branch")
   } 
+@
+<<standard machine-level control flow>>=
+let forbidden = R.kill P.pc_lhs
+<<standard machine-level control flow>>=
+let machine ~sp =
+  let fail _ = assert false in
+  { bnegate = bnegate; goto = goto; jump = jump; call = call; cutto = cutto sp;
+    retgt_br = fail; spill = fail; reload = fail; move = fail;
+    return = return; branch = branch; forbidden = forbidden }

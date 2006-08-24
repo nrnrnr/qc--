@@ -13,7 +13,7 @@
 
 %
 % Todo: define rounding mode register (names: fp_mode) in space 'c';
-% extend 'location' locaion type. Since 'c' is 32 bits wide, but the
+% extend 'location' location type. Since 'c' is 32 bits wide, but the
 % rounding mode only 2 bits wide, we take slices: RP.slice (2, 0,
 % fp_mode) when using it.
 %
@@ -50,17 +50,19 @@ and exactly one width is supported.
 module type Standard = sig
   type generator  = Rtl.aggregation -> Rtl.width list -> t
   type tgenerator = Rtl.aggregation -> Rtl.width      -> t
-  val m :               generator          (* standard 8-bit memory *)
-  val r :  count:int -> generator          (* registers *)
-  val t :               tgenerator         (* register temps *)
-  val f :  count:int -> generator          (* floats *)
-  val u :               tgenerator         (* float temps *)
-  val a :  count:int -> generator          (* address registers *)
-  val v :               tgenerator         (* address temps *)
-  val p :  count:int -> generator          (* predicate registers *)
-  val w :               tgenerator         (* predicate temps *)
-  val c :  count:int -> generator          (* control and special registers *)
-  val s :  int       -> tgenerator         (* stack-slots temporaries *)
+  val m   :               generator          (* standard 8-bit memory *)
+  val r   :  count:int -> generator          (* registers *)
+  val t   :               tgenerator         (* register temps *)
+  val f   :  count:int -> generator          (* floats *)
+  val u   :               tgenerator         (* float temps *)
+  val a   :  count:int -> generator          (* address registers *)
+  val v   :               tgenerator         (* address temps *)
+  val p   :  count:int -> generator          (* predicate registers *)
+  val w   :               tgenerator         (* predicate temps *)
+  val c   :  count:int -> generator          (* control and special registers *)
+  val vf  :               generator          (* virtual frame pointer *)
+  val x   :               generator          (* boxed rtls *)
+  val s   :  int       -> tgenerator         (* stack-slots temporaries *)
   
   type 'a locations = 
     { pc:       'a
@@ -265,6 +267,25 @@ module Standard(A:sig val width: int end) = struct
     ; indexlimit    = Some count
     ; widths        = ws
     ; classification = Fixed
+    } 
+
+  let vf agg ws =
+    let doc = "virtual frame pointer" in
+    checked { space          = ('V', agg, Cell.of_size A.width)
+            ; doc            = doc
+            ; indexwidth     = 1
+            ; indexlimit     = Some 1
+            ; widths         = ws
+            ; classification = Fixed
+            } 
+
+  let x agg ws = checked 
+    { space          = ('\000', agg, Cell.of_size A.width)
+    ; doc            = "boxed rtls"
+    ; indexwidth     = 1
+    ; indexlimit     = Some 1
+    ; widths         = ws
+    ; classification = Reg
     } 
 
   let tempspace letter ~forspace doc agg w = checked 

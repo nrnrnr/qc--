@@ -348,10 +348,10 @@ stack_trace:
 	movl $-140,%edx
 	addl %edx,%ecx
 	movl %eax,(%ecx)
-	movl %ebx,52(%esp)
-	movl %ebp,56(%esp)
-	movl %esi,60(%esp)
 	movl %edi,64(%esp)
+	movl %esi,60(%esp)
+	movl %ebp,56(%esp)
+	movl %ebx,52(%esp)
 	call printf
 .Lcall_successor_l24:
 	leal 140(%esp), %eax
@@ -804,11 +804,11 @@ gp:
 	addl %eax,%ecx
 	movl 36(%esp),%eax
 	movl %eax,(%ecx)
-	movl %edx,40(%esp)
-	movl %ebx,44(%esp)
-	movl %ebp,48(%esp)
-	movl %esi,52(%esp)
 	movl %edi,56(%esp)
+	movl %esi,52(%esp)
+	movl %ebp,48(%esp)
+	movl %ebx,44(%esp)
+	movl %edx,40(%esp)
 	call c_b
 .Lcall_successor_l73:
 	movl (%esp),%eax

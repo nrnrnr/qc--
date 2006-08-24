@@ -25,6 +25,7 @@ main:
 	movl (%eax),%eax
 .Linitialize_continuations_l3:
 .Lproc_body_start_l2:
+.Lbranch_target_l9:
 .Lbranch_target_l6:
 	movl $0,%ecx
 	movl %eax,(%esp)

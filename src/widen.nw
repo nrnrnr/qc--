@@ -31,7 +31,7 @@ val dpwiden : Ast2ir.proc -> Rtl.rtl -> Rtl.rtl
 @ Before running the integer widener, [[widenlocs]] should be called
 to make each store and fetch an acceptable width.
 <<widen.mli>>=
-val widenlocs : ('a, 'b) Target.t -> Rtl.rtl -> Rtl.rtl
+val widenlocs : ('a, 'b, 'c) Target.t -> Rtl.rtl -> Rtl.rtl
 @ 
 Check if widths are less than the target width.  The [[lualink.nw]]
 file uses [[Doesn't_need_widening]] to avoid updating RTLs that don't
@@ -39,7 +39,7 @@ need integer widening.  The [[needs_widening]] function is called to
 determine if an RTL needs integer widening.
 <<widen.mli>>=
 exception Doesn't_need_widening
-val needs_widening : ('a, 'b) Target.t -> Rtl.rtl -> bool
+val needs_widening : ('a, 'b, 'c) Target.t -> Rtl.rtl -> bool
 @ 
 [[init_gamma_counts]] and [[update_gamma_counts]] are used by
 [[lualink.nw]] to count the context in which local variables are used
@@ -51,7 +51,7 @@ width of widened locations---unlike the fill type hints, this needs to
 be accurate.
 <<widen.mli>>=
 val init_gamma_counts : unit -> unit
-val update_gamma_counts : ('a, 'b) Target.t -> Rtl.rtl -> unit
+val update_gamma_counts : ('a, 'b, 'c) Target.t -> Rtl.rtl -> unit
 val create_gamma : unit -> unit
 @ 
 
@@ -70,7 +70,8 @@ val app_count : Rtl.rtl -> int
 
 \subsection{Floating-point widener}
 <<widen.ml>>=
-module R = Rtl
+module PA = Preast2ir
+module R  = Rtl
 module RP = Rtl.Private
 module RU = Rtlutil
 
@@ -1454,7 +1455,7 @@ simply fixes up any code in an addressing expression that might need
 widening. 
 <<widen.ml>>=
 let dpwiden (g,proc) r =
-  let t           = proc.Proc.target in
+  let PA.T t      = proc.Proc.target in
   let targetwidth = t.Target.wordsize in
   let ptrwidth    = t.Target.pointersize in
   let rm          =
