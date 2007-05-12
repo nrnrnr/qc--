@@ -325,9 +325,12 @@ representation is meant to be human-, but not necessarily
 machine-readable. 
 <<rtlutil.mli>>=
 module ToUnreadableString: sig
-    val rtl: Rtl.rtl -> string
-    val exp: Rtl.exp -> string
-    val agg: Rtl.aggregation -> string
+    val regx: Register.x -> string
+    val reg:  Register.t -> string
+    val rtl:  Rtl.rtl -> string
+    val exp:  Rtl.exp -> string
+    val loc:  Rtl.loc -> string
+    val agg:  Rtl.aggregation -> string
 end
 module ToString: sig
     val reg: Register.t -> string
@@ -1071,6 +1074,18 @@ let rtl r =
 let exp e =
     let pp = exp (R.Dn.exp e) in
         Pp.ppToString 66 (* line width *) pp
+
+let reg' ((sp,agg,ms),i,R.C c) =
+  tuple [char sp; int i; str (sprintf "C %d" c)]
+let reg r =
+  Pp.ppToString 66 (P.agrp (reg' r))
+
+
+let regx r = match r with
+  | Rg.Reg r -> Pp.ppToString 66 (P.agrp (reg' r))
+  | Rg.Slice (w, lsb, r) -> 
+      Pp.ppToString 66 (P.agrp (  reg' r ^^ str "@" ^^ int lsb ^^ str ":" ^^ int w))
+
 @
 
 \subsection{Aliasing}
