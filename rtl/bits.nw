@@ -226,7 +226,7 @@ val to_int64:   t -> int64                      (* Overflow *)
 @ 
 We can also observe whether a value fits in~[[n]] unsigned bits.
 N.B. this is an observation of the value, not just the width.
-<<interface S>>=
+<<interface U>>=
 val fits : width -> t -> bool    (* fits w b == (b = zxlo w b) *)
 @
 
@@ -455,8 +455,9 @@ let zx k (b,w) =
         (n, k)
 
 let lobits k (b, w) =
-  assert (k <= w);
-  (sx64 b k, k)
+  if k <= w then (sx64 b k, k)
+  else (Printf.eprintf "lobits error: k: %d, w: %d\n" k w;
+        Impossible.impossible "lobits: k > w")
 
 let shra (b,w) (b',w') =
     let n  = zx64 b w in
