@@ -377,6 +377,7 @@ let conv ~preserved ~jump ~struct' ~altret name specs ~return_to cut =
 
   ; C.stack_growth     = Memalloc.Down
   ; C.stable_sp_loc    = std_sp_location
+  ; C.jump_tgt_reg     = Rtl.reg edx
   ; C.replace_vfp      = Vfp.replace_with ~sp
   ; C.sp_align         = 4               (* alignment of stack pointer at call/cut *)
   ; C.ra_on_entry      = const (R.fetch ra 32)   (* where return address is on entry *)
@@ -434,6 +435,7 @@ let thread cut specs =
   ; C.results    = { C.in' = noreturn; C.out = noreturn }
   ; C.stack_growth     = Memalloc.Down
   ; C.stable_sp_loc    = std_sp_location
+  ; C.jump_tgt_reg     = Rtl.reg edx
   ; C.replace_vfp      = Vfp.replace_with ~sp
   ; C.sp_align         = 4               (* alignment of stack pointer at call/cut *)
   ; C.ra_on_entry      = const (R.fetch ra 32)   (* where return address is on entry *)
@@ -538,7 +540,19 @@ function X86.layout["C"](dummy,proc) --- really for a C convention only
     local blocks = Stack.blocks(proc)
     local slots
     -- proc, slots = Stack.replace_slot_temporaries(proc)
-    blocks.ra = Block.relative(blocks.vfp, "return address", 4, 4)
+    blocks.ra          = Block.relative(blocks.vfp, "return address", 4, 4)
+
+		-- We need to leave space for the return address on each tail call.
+    local i, block = 1, blocks.oldblocks.callee[1]
+    while block do
+      local tailcall_ra =
+        Block.relative(blocks.vfp, "tail call return address" .. i, 4, 4)
+      blocks.oldblocks.callee[i] = Block.cat(32, {blocks.oldblocks.callee[i],
+                                                  tailcall_ra}) 
+      i = i + 1
+      block = blocks.oldblocks.callee[i]
+    end
+
     
     -- OVERLAP_HIGH CONSIDERED SUSPECT
     blocks.oldblocks.callee   = Block.overlap_high(32, blocks.oldblocks.callee)
@@ -553,9 +567,9 @@ function X86.layout["C"](dummy,proc) --- really for a C convention only
     -- procedure, which might introduce strange alignment requirements.
     local pre_ra_tail = Block.cat(32, { blocks.ra, blocks.vfp })
     local ra_tail     = Block.overlap_high(32, {pre_ra_tail, blocks.oldblocks.callee})
-    local old_end   = Block.cat(32, { blocks.oldblocks.caller
-                                    , ra_tail
-                                    })
+    local old_end     = Block.cat(32, { blocks.oldblocks.caller
+                                      , ra_tail
+                                      })
     local young_end = Block.cat(32, { blocks.youngblocks.caller
                                     , blocks.sp
                                     , blocks.youngblocks.callee
@@ -602,9 +616,22 @@ function X86.layout["C--"](dummy,proc)
     end
 
     blocks.ra = Block.relative(blocks.vfp, "return address", 4, 4)
+
     -- first old block is always the incoming parms
     blocks.oldblocks.callee[1] =
                     Block.cat(32, {blocks.oldblocks.callee[1], blocks.ra, blocks.vfp})
+
+		-- We need to leave space for the return address on each tail call.
+    local i, block = 2, blocks.oldblocks.callee[2]
+    while block do
+      local tailcall_ra =
+        Block.relative(blocks.vfp, "tail call return address" .. i, 4, 4)
+      blocks.oldblocks.callee[i] = Block.cat(32, {blocks.oldblocks.callee[i],
+                                                  tailcall_ra}) 
+      i = i + 1
+      block = blocks.oldblocks.callee[i]
+    end
+
     blocks.oldblocks.caller    = Block.overlap_low (32, blocks.oldblocks.caller)
     blocks.oldblocks.callee    = Block.overlap_high(32, blocks.oldblocks.callee)
     blocks.youngblocks.caller  = Block.overlap_low (32, blocks.youngblocks.caller)

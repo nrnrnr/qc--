@@ -616,14 +616,15 @@ and jump ~stack cconv e args targets g =
     let out     = actuals cc.C.call_parms.C.out args in
     let ra_out  = cc.C.ra_on_exit saved_ra out.C.overflow temps in
     let jump_sp = cc.C.sp_on_jump out.C.overflow temps in
-    let () =
-      add oldblocks cc.C.overflow_alloc.C.parameter_deallocator out.C.overflow in
+    let () = add oldblocks cc.C.overflow_alloc.C.parameter_deallocator out.C.overflow in
     stack_adjust   out.C.pre_sp                                  **>
     G.instruction  out.C.shuffle                                 **>
     G.instruction  restore_nvrs                                  **>
     G.instruction  (RU.store ra_out (RU.fetch saved_ra))         **>
+    G.instruction  (RU.store cc.C.jump_tgt_reg e)                **>
     stack_adjust   jump_sp                                       **>
-    G.jump         m e ~targets ~uses:(rsx (RS.union out.C.regs nvregs)) **>
+    G.jump         m (RU.fetch cc.C.jump_tgt_reg) ~targets
+                   ~uses:(rsx (RS.union out.C.regs nvregs)) **>
     g
 @
 \paragraph{Calls}

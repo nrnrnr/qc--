@@ -292,6 +292,7 @@ let where_to_save_ra t = fun ra_on_entry temp -> match style t with
 
 let to_call ~cutto ~return auto t =
     <<it's impossible for the stack pointer to be a useful register too>>;
+    let volregs = Register.Set.diff t.all_regs t.nv_regs in
     { C.name           = t.name
     ; C.overflow_alloc = t.overflow
     ; C.call_parms     = {C.in'=prolog       t auto; C.out=call_actuals t auto}
@@ -300,6 +301,7 @@ let to_call ~cutto ~return auto t =
     
     ; C.stack_growth     = t.stack_growth
     ; C.stable_sp_loc    = std_sp_location (wordsize t)
+    ; C.jump_tgt_reg     = Rtl.reg (Register.Set.choose volregs)
     ; C.replace_vfp      = Vfp.replace_with ~sp:(R.reg t.sp)
     ; C.sp_align         = t.sp_align
     ; C.ra_on_entry      = ra_on_entry t
@@ -308,7 +310,7 @@ let to_call ~cutto ~return auto t =
     ; C.sp_on_unwind     = (fun _   -> Rtl.null)
     ; C.sp_on_jump       = (fun _ _ -> Rtl.null)
     ; C.pre_nvregs       = t.nv_regs
-    ; C.volregs          = Register.Set.diff t.all_regs t.nv_regs
+    ; C.volregs          = volregs
     ; C.saved_nvr        = t.save_nvr
     ; C.return           = return
     }
