@@ -58,6 +58,7 @@ Test.files = { "add.c--"
              , { name='taddov', source='tadd.c--', argv='536870912 536870912', rc=1 }
              , "tail.c--"
              , "tail_from_c.c--"
+             , "tailbug.c--"
              , { source = {'tail2.c--', 'call3.c--'} }
              , { source = {'tailnot.c--', 'call3.c--'} }
              , 'test-039.c--'
