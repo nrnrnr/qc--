@@ -46,7 +46,7 @@ call3:
 	addl %edx,%ecx
 	movl 20(%esp),%edx
 	movl %edx,(%ecx)
+	movl (%esp),%edx
 	leal 28(%esp), %esp
-	movl -28(%esp),%ecx
-	jmp *%ecx
+	jmp *%edx
 .section .text

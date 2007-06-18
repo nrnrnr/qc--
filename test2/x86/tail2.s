@@ -214,17 +214,17 @@ main:
 .section .text
 .section .text
 down:
-	leal -48(%esp), %esp
-	leal 48(%esp), %ecx
+	leal -52(%esp), %esp
+	leal 52(%esp), %ecx
 	movl $4,%edx
 	addl %edx,%ecx
 	movl (%ecx),%ecx
-	leal 48(%esp), %edx
+	leal 52(%esp), %edx
 	movl %eax,(%esp)
 	movl $8,%eax
 	addl %eax,%edx
 	movl (%edx),%eax
-	leal 48(%esp), %edx
+	leal 52(%esp), %edx
 	movl (%edx),%edx
 .Linitialize_continuations_l34:
 .Lproc_body_start_l33:
@@ -233,13 +233,13 @@ down:
 	cmpl %eax,%ecx
 	jb .Lbranch_target_l38
 .Lbranch_target_l36:
-	leal 48(%esp), %eax
-	movl $-4,%ecx
+	leal 52(%esp), %eax
+	movl $-8,%ecx
 	addl %ecx,%eax
 	movl (%esp),%ecx
 	subl %eax,%ecx
 	movl %ecx,%eax
-	leal 48(%esp), %ecx
+	leal 52(%esp), %ecx
 	movl %ecx,36(%esp)
 	movl $8,%ecx
 	movl %ecx,40(%esp)
@@ -249,13 +249,13 @@ down:
 	addl %edx,%ecx
 	movl 20(%esp),%edx
 	movl %edx,(%ecx)
-	leal 56(%esp), %esp
+	leal 60(%esp), %esp
 	ret
 .Lbranch_target_l38:
 	movl %eax,4(%esp)
 	leal down,%eax
 	movl %ecx,8(%esp)
-	leal 48(%esp), %ecx
+	leal 52(%esp), %ecx
 	movl %ecx,12(%esp)
 	movl $0,%ecx
 	movl %ecx,16(%esp)
@@ -268,7 +268,7 @@ down:
 	movl $1,%ecx
 	movl 8(%esp),%edx
 	addl %ecx,%edx
-	leal 48(%esp), %ecx
+	leal 52(%esp), %ecx
 	movl %ecx,24(%esp)
 	movl $4,%ecx
 	movl %ecx,28(%esp)
@@ -278,18 +278,20 @@ down:
 	addl %edx,%ecx
 	movl 32(%esp),%edx
 	movl %edx,(%ecx)
-	leal 48(%esp), %ecx
+	leal 52(%esp), %ecx
 	movl $8,%edx
 	addl %edx,%ecx
 	movl 4(%esp),%edx
 	movl %edx,(%ecx)
-	leal 48(%esp), %ecx
+	leal 52(%esp), %ecx
 	movl $-4,%edx
 	addl %edx,%ecx
 	movl 20(%esp),%edx
 	movl %edx,(%ecx)
-	leal 44(%esp), %esp
-	jmp call3
+	leal call3,%ecx
+	movl %ecx,%edx
+	leal 48(%esp), %esp
+	jmp *%edx
 .section .text
 .section .data
 pgood:

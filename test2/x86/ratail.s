@@ -12,21 +12,21 @@ Cmm_stack_growth:
 .long 0xffffffff
 .section .text
 g:
-	leal -32(%esp), %esp
-	leal 32(%esp), %eax
+	leal -36(%esp), %esp
+	leal 36(%esp), %eax
 	movl $4,%ecx
 	addl %ecx,%eax
 	movl (%eax),%eax
-	leal 32(%esp), %ecx
+	leal 36(%esp), %ecx
 	movl $8,%edx
 	addl %edx,%ecx
 	movl (%ecx),%ecx
-	leal 32(%esp), %edx
+	leal 36(%esp), %edx
 	movl (%edx),%edx
 .Linitialize_continuations_l5:
 .Lproc_body_start_l4:
 	movl %ecx,(%esp)
-	leal 32(%esp), %ecx
+	leal 36(%esp), %ecx
 	movl %ecx,4(%esp)
 	movl $-4,%ecx
 	movl %ecx,8(%esp)
@@ -38,7 +38,7 @@ g:
 	movl %edx,(%ecx)
 	movl $10,%ecx
 	addl %ecx,%edx
-	leal 32(%esp), %ecx
+	leal 36(%esp), %ecx
 	movl %ecx,16(%esp)
 	movl $0,%ecx
 	movl %ecx,20(%esp)
@@ -48,13 +48,15 @@ g:
 	addl %edx,%ecx
 	movl 24(%esp),%edx
 	movl %edx,(%ecx)
-	leal 32(%esp), %ecx
+	leal 36(%esp), %ecx
 	movl $-8,%edx
 	addl %edx,%ecx
 	movl 12(%esp),%edx
 	movl %edx,(%ecx)
-	leal 24(%esp), %esp
-	jmp gt
+	leal gt,%ecx
+	movl %ecx,%edx
+	leal 28(%esp), %esp
+	jmp *%edx
 .section .text
 .section .text
 gt:
@@ -70,8 +72,8 @@ gt:
 	movl (%edx),%eax
 	leal 20(%esp), %edx
 	movl (%edx),%edx
-.Linitialize_continuations_l15:
-.Lproc_body_start_l14:
+.Linitialize_continuations_l16:
+.Lproc_body_start_l15:
 	movl %eax,4(%esp)
 	movl (%esp),%eax
 	addl %ecx,%eax
@@ -103,8 +105,8 @@ main:
 	movl (%eax),%eax
 	leal 16(%esp), %eax
 	movl (%eax),%eax
-.Linitialize_continuations_l25:
-.Lproc_body_start_l24:
+.Linitialize_continuations_l26:
+.Lproc_body_start_l25:
 	movl $10,%ecx
 	leal 16(%esp), %edx
 	movl %eax,8(%esp)
@@ -117,7 +119,7 @@ main:
 	addl %edx,%ecx
 	movl %eax,(%ecx)
 	call g
-.Lcall_successor_l32:
+.Lcall_successor_l33:
 	leal fmt,%ecx
 	leal 16(%esp), %edx
 	movl %eax,12(%esp)
@@ -130,7 +132,7 @@ main:
 	movl 12(%esp),%ecx
 	movl %ecx,(%eax)
 	call printf
-.Lcall_successor_l29:
+.Lcall_successor_l30:
 	movl $0,%eax
 	leal 16(%esp), %ecx
 	movl $0,%edx
@@ -140,17 +142,17 @@ main:
 	leal 16(%esp), %esp
 	ret
 .section .pcmap_data
-.Lstackdata_l39:
+.Lstackdata_l40:
 .long 0
 .section .pcmap
-.long .Lcall_successor_l32
-.long .Lframe_l40
+.long .Lcall_successor_l33
+.long .Lframe_l41
 .section .pcmap_data
-.Lframe_l40:
+.Lframe_l41:
 .long 0x80000004
 .long 0xfffffff0
 .long 0xfffffff8
-.long .Lstackdata_l39
+.long .Lstackdata_l40
 .long 0
 .long 3
 .long 0
@@ -160,14 +162,14 @@ main:
 .long 0
 .long 0
 .section .pcmap
-.long .Lcall_successor_l29
-.long .Lframe_l41
+.long .Lcall_successor_l30
+.long .Lframe_l42
 .section .pcmap_data
-.Lframe_l41:
+.Lframe_l42:
 .long 0x80000004
 .long 0xfffffff0
 .long 0xfffffff8
-.long .Lstackdata_l39
+.long .Lstackdata_l40
 .long 0
 .long 3
 .long 0

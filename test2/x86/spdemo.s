@@ -198,14 +198,14 @@ fmt:
 .byte 0
 .section .text
 sp:
-	leal -24(%esp), %esp
-	leal 24(%esp), %ecx
+	leal -28(%esp), %esp
+	leal 28(%esp), %ecx
 	movl (%ecx),%ecx
 .Linitialize_continuations_l32:
 .Lproc_body_start_l31:
 	movl $0,%edx
 	movl %ecx,(%esp)
-	leal 24(%esp), %ecx
+	leal 28(%esp), %ecx
 	movl %ecx,4(%esp)
 	movl $-4,%ecx
 	movl %ecx,8(%esp)
@@ -216,19 +216,21 @@ sp:
 	movl 12(%esp),%edx
 	movl %edx,(%ecx)
 	movl $1,%ecx
-	leal 24(%esp), %edx
+	leal 28(%esp), %edx
 	movl %ecx,16(%esp)
 	movl $0,%ecx
 	addl %ecx,%edx
 	movl 16(%esp),%ecx
 	movl %ecx,(%edx)
-	leal 24(%esp), %ecx
+	leal 28(%esp), %ecx
 	movl $-8,%edx
 	addl %edx,%ecx
 	movl (%esp),%edx
 	movl %edx,(%ecx)
-	leal 16(%esp), %esp
-	jmp sphelp
+	leal sphelp,%ecx
+	movl %ecx,%edx
+	leal 20(%esp), %esp
+	jmp *%edx
 .section .text
 .section .text
 sphelp:
@@ -244,17 +246,17 @@ sphelp:
 	movl (%edx),%eax
 	leal 48(%esp), %edx
 	movl (%edx),%edx
-.Linitialize_continuations_l43:
-.Lproc_body_start_l42:
-.Lbranch_target_l49:
-.Lbranch_target_l53:
+.Linitialize_continuations_l44:
+.Lproc_body_start_l43:
+.Lbranch_target_l50:
+.Lbranch_target_l54:
 	movl %eax,4(%esp)
 	movl $0,%eax
 	movl %ecx,8(%esp)
 	movl (%esp),%ecx
 	cmpl %eax,%ecx
-	je .Lbranch_target_l48
-.Lbranch_target_l46:
+	je .Lbranch_target_l49
+.Lbranch_target_l47:
 	movl $1,%eax
 	movl %eax,28(%esp)
 	movl %ecx,%eax
@@ -288,9 +290,11 @@ sphelp:
 	addl %edx,%ecx
 	movl 12(%esp),%edx
 	movl %edx,(%ecx)
+	leal sphelp,%ecx
+	movl %ecx,%edx
 	leal 48(%esp), %esp
-	jmp sphelp
-.Lbranch_target_l48:
+	jmp *%edx
+.Lbranch_target_l49:
 	movl 8(%esp),%eax
 	movl %edx,12(%esp)
 	movl 4(%esp),%edx

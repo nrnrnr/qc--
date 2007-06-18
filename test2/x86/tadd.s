@@ -630,16 +630,18 @@ tagged_add:
 	addl %edx,%ecx
 	movl 28(%esp),%edx
 	movl %edx,(%ecx)
+	leal raise,%ecx
+	movl %ecx,%edx
 	leal 44(%esp), %esp
-	jmp raise
+	jmp *%edx
 .section .text
 .section .text
 tag:
 	leal -4(%esp), %esp
 	leal 4(%esp), %ecx
 	movl (%ecx),%ecx
-.Linitialize_continuations_l81:
-.Lproc_body_start_l80:
+.Linitialize_continuations_l82:
+.Lproc_body_start_l81:
 	movl $1,%edx
 	movl %ecx,(%esp)
 	movl %edx,%ecx
@@ -659,8 +661,8 @@ untag:
 	leal -4(%esp), %esp
 	leal 4(%esp), %ecx
 	movl (%ecx),%ecx
-.Linitialize_continuations_l91:
-.Lproc_body_start_l90:
+.Linitialize_continuations_l92:
+.Lproc_body_start_l91:
 	movl $1,%edx
 	movl %ecx,(%esp)
 	movl %edx,%ecx
@@ -677,8 +679,8 @@ untag:
 raise:
 	movl %esp,%ecx
 	movl (%ecx),%ecx
-.Linitialize_continuations_l101:
-.Lproc_body_start_l100:
+.Linitialize_continuations_l102:
+.Lproc_body_start_l101:
 	movl %eax,%edx
 	leal Cmm.global_area,%eax
 	movl (%eax),%eax

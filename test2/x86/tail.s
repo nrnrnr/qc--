@@ -226,8 +226,10 @@ down:
 	addl %edx,%ecx
 	movl 16(%esp),%edx
 	movl %edx,(%ecx)
+	leal down,%ecx
+	movl %ecx,%edx
 	leal 36(%esp), %esp
-	jmp down
+	jmp *%edx
 .section .text
 .section .data
 pcmp:
