@@ -70,5 +70,7 @@ We apply the input function to each of the locations we need to maintain live.
 <<spans.ml>>=
 let fold_live_locs f spans z =
   let fold = Rtlutil.Fold.RegX.loc f in
-  fold spans.inalloc (fold spans.outalloc (fold spans.ra z))
+  let foldcsreg z = function (_, Some l) -> fold l z | (_, None) -> z in
+  List.fold_left foldcsreg (fold spans.inalloc (fold spans.outalloc (fold spans.ra z)))
+                           spans.csregs
 @

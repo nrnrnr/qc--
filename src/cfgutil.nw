@@ -24,6 +24,10 @@ val emit    : Ast2ir.basic_proc -> Zipcfg.graph ->
                 (string -> unit) -> unit
 val block_name : Zipcfg.graph -> Zipcfg.uid -> string
 val print_cfg: Zipcfg.graph -> unit
+val pr_first : Zipcfg.Rep.first  -> unit
+val pr_mid   : Zipcfg.Rep.middle -> unit
+val pr_last  : Zipcfg.graph -> Zipcfg.Rep.last -> unit
+val pr_last' : Zipcfg.Rep.last -> unit
 
 type node = F of Zipcfg.Rep.first | M of Zipcfg.Rep.middle | L of Zipcfg.Rep.last
 val numbered_layout_nodes : Zipcfg.graph -> (int * node) list
@@ -76,35 +80,36 @@ let block_name g uid =
   with Not_found -> "<unknown-uid>"
 @
 <<cfgutil.ml>>=
-let print_block g (first, tail) =
-  let pr = Printf.eprintf in
-  begin
-    match first with
-    | GR.Entry -> pr "<entry>\n"
-    | GR.Label ((u, l), _, _) -> pr "%s:\n" l
-  end;
-  let lasttype = function
-    | GR.Exit        -> "exit"
-    | GR.Branch    _ -> "branch"
-    | GR.Cbranch   _ -> "cbranch"
-    | GR.Mbranch   _ -> "mbranch"
-    | GR.Call      _ -> "call"
-    | GR.Cut       _ -> "cut"
-    | GR.Return    _ -> "return"
-    | GR.Jump      _ -> "jump"
-    | GR.Forbidden  _ -> "forbidden" in
-  let pr_mid m = match m with
-    | GR.Instruction  r
-    | GR.Stack_adjust r -> pr "%s\n" (Rtlutil.ToString.rtl r) in
+let pr = Printf.eprintf
+let pr_first = function
+  | GR.Entry -> pr "<entry>\n"
+  | GR.Label ((_, l), _, _) -> pr "%s:\n" l
+let pr_mid m = match m with
+  | GR.Instruction  r
+  | GR.Stack_adjust r -> pr "%s\n" (Rtlutil.ToString.rtl r)
+let lasttype = function
+  | GR.Exit        -> "exit"
+  | GR.Branch    _ -> "branch"
+  | GR.Cbranch   _ -> "cbranch"
+  | GR.Mbranch   _ -> "mbranch"
+  | GR.Call      _ -> "call"
+  | GR.Cut       _ -> "cut"
+  | GR.Return    _ -> "return"
+  | GR.Jump      _ -> "jump"
+  | GR.Forbidden  _ -> "forbidden"
+let pr_last g l =
   let succ_names l = String.concat " " (List.map (block_name g) (GR.succs l)) in
-  let pr_last l =
-    pr "<%s> %s [%s]\n" (lasttype l) (Rtlutil.ToString.rtl (GR.last_instr l))
-                        (succ_names l) in
+  pr "<%s> %s [%s]\n" (lasttype l) (Rtlutil.ToString.rtl (GR.last_instr l))
+                      (succ_names l)
+let pr_last' l =
+  pr "<%s> %s\n" (lasttype l) (Rtlutil.ToString.rtl (GR.last_instr l))
+let print_block g (first, tail) =
+  pr_first first;
   let rec pr_tail = function
     | GR.Tail (m, tail) ->
         pr_mid m; pr_tail tail
     | GR.Last GR.Exit -> pr "<exit>\n"
-    | GR.Last l -> pr_last l in
+    | GR.Last l -> pr_last g l in
   pr_tail tail
 
 let print_cfg g =

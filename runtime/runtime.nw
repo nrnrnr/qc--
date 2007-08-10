@@ -284,9 +284,9 @@ static int normal_change(Cmm_Activation *a) {
   calleedata = a->rtdata;
 
   vfp = a->vfp;
+  a->pc      = *(Cmm_Codeptr*)locptr(a, calleedata->return_addressp);
   update_saved_regs(a, a);
   <<possibly shout about caller's EBP>>
-  a->pc      = *(Cmm_Codeptr*)locptr(a, calleedata->return_addressp);
   callerdata = Cmm_lookup_entry(a->pc);
   a->rtdata  = callerdata;
 
@@ -396,7 +396,7 @@ Cmm_Cont* Cmm_MakeUnwindCont(Cmm_Activation *a, Cmm_Word index, ...) {
   <<write variadic parameters into [[block->vars]]>>
 
   /* We initialize unknown registers to a bogus (but clearly live) address:
-     that of the activation.  Otherwise, assembly code dereference 0. */
+     that of the activation.  Otherwise, assembly code dereferences 0. */
   for (i = 0; i < NUM_REGS; i++)
     if (a->regs[i] == NULL)
       a->regs[i] = (Cmm_Word *)a;
