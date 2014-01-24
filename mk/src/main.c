@@ -232,6 +232,8 @@ main(int argc, char **argv)
 				mk(tail->s);
 			else {
 				addrules(head, tail, strdup9(""), VIR, mkinline, 0);
+                dumpr("extended rules", rules);
+                dumpr("metarules", metarules);
 				mk(head->s);
 			}
 		}
