@@ -67,7 +67,7 @@ parse(char *f, int fd, int varoverride)
 			while(waitup(-3, &pid) >= 0)
 				;
 			if(pid != 0){
-				fprintf(stderr, "bad include program status\n");
+				fprintf(stderr, "bad include program status: %s\n", p);
 				Exit();
 			}
 			break;
