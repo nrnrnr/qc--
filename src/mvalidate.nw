@@ -64,7 +64,7 @@ let rtl t r =
     | RP.Reg((s,_,cell),_,c) ->
         reg s (Cell.to_width cell c)
           (sprintf "Space '%c' not found in target '%s'")
-          (sprintf "Space '%c' only supports width %s; asked for %d")
+          (sprintf "Space '%c' supports only width %s; asked for %d")
     | RP.Var(x,_,n) -> n <= w || n mod t.Target.memsize == 0 
       || reject 
           "variable %s of type bits%d should either be at most %d bits wide or else have a width a multiple of %d bits" x n w t.Target.memsize
@@ -73,7 +73,7 @@ let rtl t r =
           n = 2 || reject "System.rounding_mode must be 2 bits, not %d" n
         else
           reg 'r' n (fun c s -> imposs "Space 'r' must be available")
-            (fun c -> sprintf "Globals only available at %s bits; asked for %d bits")
+            (fun c -> sprintf "Unnamed globals available only at %s bits; asked for %d bits.\n  (If this variable is named, please send a bug report.)")
     | RP.Slice(n,_,l)  -> loc l (* what to check here? *)
   and exp e = exp' None e
   and exp' litcontext e =
