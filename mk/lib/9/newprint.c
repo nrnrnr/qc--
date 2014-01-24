@@ -8,7 +8,7 @@ newprint - replacement print functions using stdio
 #include <stdarg.h>
 #include <assert.h>
 
-#define SIZE    8192
+#define SIZE    81920
 
 int
 sprint(char *buf, char *fmt, ...)

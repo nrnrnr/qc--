@@ -45,7 +45,7 @@ exportenv(Envy *e)
 {
 	int i;
 	char **p;
-	char buf[8192];
+	char buf[81920];
 
 	p = 0;
 	for(i = 0; e->name; e++, i++) {
@@ -67,7 +67,7 @@ dirtime(char *dir, char *path)
 	struct dirent *dp;
 	Dir d;
 	void *t;
-	char buf[8192];
+	char buf[81920];
 
 	dirp = opendir(dir);
 	if(dirp) {
