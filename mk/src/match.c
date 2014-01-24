@@ -22,7 +22,7 @@ match(char *name, char *template, char *stem)
 	if(!PERCENT(*template))
 		return 0;
 	n = strlen(name)-strlen(template+1);
-	if (strcmp(template+1, name+n))
+	if (n < 0 || strcmp(template+1, name+n))
 		return 0;
 	strncpy(stem, name, n);
 	stem[n] = 0;
