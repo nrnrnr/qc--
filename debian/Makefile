@@ -48,7 +48,7 @@ install: bin/qc--.opt manual
 # we would like to include it. 
 
 manual:
-	cd doc; wget http://www.cminusminus.org/rsync/dist/c--manual.pdf
+	cd doc; wget http://www.cs.tufts.edu/~nr/c--/rsync/dist/c--manual.pdf
 	
 debian:	mkfile
 	dch -v `cat src/DATE` "nightly build"
