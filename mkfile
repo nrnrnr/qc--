@@ -1,5 +1,5 @@
 # ------------------------------------------------------------------ 
-# $Id$
+# $Id: mkfile,v 1.84 2006-04-10 21:28:53 nr Exp $
 # ------------------------------------------------------------------ 
 
 NAME =          qc--
@@ -44,7 +44,7 @@ SUBDIRS =  cllib asdl gen lua rtl camlburg tools doc src runtime interp
 # clobber:      remove all non-source file
 #
 # test:         run test suite
-# install:      simple-minded install to $prefix, need to call 'all' first
+# install:      simple-minded install to $prefix; need to call 'all' first
 # coverage:     show how much code is covered by the test suite
 
 
@@ -268,6 +268,8 @@ FILES:D:          clobber
 	  -o -path "./man/*"         \
 	  -o -path "./lib/*"         \
 	  -o -path "./lua-bench/*"   \
+	  -o -path "./lua-uniq/*"    \
+	  -o -path "./config/aux/*"  \
 	  -o -name "*.tar*"          \
 	  -o -type l                 \
 	  \) -prune                  \
