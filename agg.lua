@@ -1,3 +1,4 @@
+-- Aggregations to be used for profiling
 local f = loadfile('caml-agg.lua') or assert(loadfile('../caml-agg.lua'))
 f()
 f = loadfile('caml-hand-agg.lua') or assert(loadfile('../caml-hand-agg.lua'))
