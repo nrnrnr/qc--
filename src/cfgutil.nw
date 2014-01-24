@@ -33,14 +33,13 @@ type node = F of Zipcfg.Rep.first | M of Zipcfg.Rep.middle | L of Zipcfg.Rep.las
 val numbered_layout_nodes : Zipcfg.graph -> (int * node) list
 (* val delete : Zipcfg.zgraph -> Zipcfg.graph --- delete focus *)
 @
-WHAT DO [[cfg2ast]] AND [[emit]] DO? PLEASE EXPLAIN THE PARAMETERS. --CL
+WHAT DOES [[cfg2ast]] DO? PLEASE EXPLAIN THE PARAMETERS. --CL
 \begin{itemize}
 \item [[limit]], [[first]]: node numbers for {\cfg} traversing functions 
       in \module{cfg3}.
       
 \item [[fold_fwd]], [[fold_bwd]]: work as their counterparts in [[Cfg]]
-      except that they cover the entire {\cfg}. Note, that the [[cfg]]'s
-      nodes must be enumerated.
+      except that they cover the entire {\cfg}. 
 
 \item [[subst]] substitutes {\rtl}s in all nodes of a [[cfg]].       
 
@@ -48,9 +47,14 @@ WHAT DO [[cfg2ast]] AND [[emit]] DO? PLEASE EXPLAIN THE PARAMETERS. --CL
        The parameter [[compress]] tells \texttt{dot} to compress the
       output graph to fit on one sheet of paper (\texttt{ratio=compress}).
 
-\item [[emit]]: Fold over {\cfg} in enumeration order and pass {\rtl}s
-      and symbols to the provided functions. Enumerates the {\cfg} if it is
-      not already enumerated.
+\item [[emit]]: Fold over {\cfg} in reverse postorder (actually using
+  the [[Zipcfg.fold_layout]] function) and pass {\rtl}s
+  (instructions to be emitted)
+      and symbols (labels to be defined) to the functions provided. 
+  For some scary reason, a special function is necessary to emit the
+  instructions associated with a call node (probably to ensure that
+  the instruction stream carries the magic needed to support alternate
+  returns). 
 
 \item [[find_join_node]]: Find the join node with the given label, or return
       the illegal node if no such node can be found.
