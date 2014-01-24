@@ -1,0 +1,58 @@
+for i = 2, 15 do
+  aggregate('caml_apply*', 'caml_apply' .. i)
+end
+
+for i = 2, 15 do
+  aggregate('caml_tuplify*', 'caml_tuplify' .. i)
+end
+
+aggregate ('caml_curry*', {
+             "caml_curry3_2", 
+             "caml_curry4_3", 
+             "caml_curry3_1", 
+             "caml_curry5_1", 
+             "caml_curry7_1", 
+             "caml_curry2", 
+             "caml_curry2_1", 
+             "caml_curry6", 
+             "caml_curry7", 
+             "caml_curry4_2", 
+             "caml_curry4_1", 
+             "caml_curry8_7", 
+             "caml_curry3", 
+             "caml_curry6_1", 
+             "caml_curry8_3", 
+             "caml_curry5_3", 
+             "caml_curry14_13", 
+             "caml_curry8", 
+             "caml_curry8_1", 
+             "caml_curry7_6", 
+             "caml_curry8_6", 
+             "caml_curry7_2", 
+             "caml_curry5", 
+             "caml_curry6_5", 
+             "caml_curry7_3", 
+             "caml_curry8_2", 
+             "caml_curry5_4", 
+             "caml_curry7_4", 
+             "caml_curry14_8", 
+             "caml_curry14_1", 
+             "caml_curry14_3", 
+             "caml_curry14_10", 
+             "caml_curry14_2", 
+             "caml_curry7_5", 
+             "caml_curry6_2", 
+             "caml_curry14_6", 
+             "caml_curry8_4", 
+             "caml_curry6_3", 
+             "caml_curry14_11", 
+             "caml_curry14_12", 
+             "caml_curry5_2", 
+             "caml_curry14_4", 
+             "caml_curry6_4", 
+             "caml_curry14_5", 
+             "caml_curry14_9", 
+             "caml_curry4", 
+             "caml_curry14_7", 
+             "caml_curry8_5", 
+             "caml_curry14", })
