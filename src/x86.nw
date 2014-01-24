@@ -958,6 +958,7 @@ let i2f_64_80 = ("i2f", [64; 80])
 let f2i_80_64 = ("f2i", [80; 64])
 let block_copy ~dst dassn ~src sassn w =
   match w with
+  | 0 -> DG.Nop
   | 16 | 8 ->
       let t = talloc 't' 32 in
       zxload t src w sassn <:> lostore dst t w dassn
@@ -1163,7 +1164,9 @@ let tgt =
   ; T.globals  = globals
   ; T.rounding_mode = rounding_model
   ; T.named_locs   = Strutil.assoc2map 
-                     ["IEEE 754 rounding mode",    rounding_model]
+                     ["IEEE 754 rounding mode",    rounding_model;
+                      "%esi",  R.reg Rg.esi;
+                     ]
   
   (* bogosity *)
   ; T.data_section = "data" (* NOT REALLY A PROPERTY OF THE TARGET MACHINE... *)
