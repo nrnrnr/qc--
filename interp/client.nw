@@ -132,6 +132,8 @@ The client's implementation is split across files [[client.h]] and
 #include <stdio.h>
 #include <signal.h>
 #include <setjmp.h>
+#include <unistd.h>
+       /* unistd.h needed for getopt */
 #include "runtime.h"
 #include "types.h"
 
@@ -383,20 +385,11 @@ interpreter goes ahead and tries to execute exported {\PAL} procedure [[main]]
 after loading all files.
 
 We use POSIX library facility [[getopt]] to ease the work of argument checking.
-So the compiler will not complain, we declare the global variables
-that [[getopt]] uses (and we need).
-
-<<function prototypes>>=
-extern int getopt(int, char **, char *);
-@ 
-
+Because the \texttt{-ansi} option somehow prevents gcc from declaring
+[[optopt]], [[opterr]], and [[optind]], we declare them here.
 <<global variable definitions>>=
-extern char *optarg;
-extern int   optind;
-extern char  optopt;
-extern int   opterr;
+extern int optind, optopt, opterr;
 @ 
-
 <<process command line arguments>>=
   {
     int   i;
@@ -440,10 +433,8 @@ Once files are loaded, we look for procedure [[main]] and try to run it.
         <<run code at address [[loc]] with possible arg [[arg_int_p]]>>
       }
 @ 
-
 Processing command line options is not very interesting if done with the
 help of [[getopt]].
-
 <<process next command line option>>=
       c = getopt(argc, argv, "hve");
 
